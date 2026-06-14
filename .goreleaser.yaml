@@ -1,7 +1,7 @@
 # goreleaser config for bashy — pure-Go Bash 5.3 drop-in.
 # Builds static (CGO_ENABLED=0) binaries for the 6 supported platforms.
-# NOTE: bashy depends on the qiangli/sh fork via `replace => ../sh`, so CI must
-# check out github.com/qiangli/sh into a sibling ../sh before running this.
+# NOTE: bashy depends on the qiangli/sh fork via `replace => ../sh`. CI runs
+# ./scripts/bootstrap-siblings.sh first to clone it next door at the pinned SHA.
 version: 2
 
 before:

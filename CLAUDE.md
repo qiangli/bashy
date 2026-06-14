@@ -41,10 +41,13 @@ replace mvdan.cc/sh/v3 => ../sh
 ```
 
 Inside the `dhnt/` umbrella, `../sh` is the `sh` submodule. In a standalone
-clone, clone `github.com/qiangli/sh` next to this repo as `./sh`. This mirrors
-how `outpost` and `ycode` consume the fork — keep the sibling SHA coordinated;
-drift in the `sh` engine is what the umbrella's pinned submodules guard
-against.
+clone, run `./scripts/bootstrap-siblings.sh` — it clones `github.com/qiangli/sh`
+next to this repo as `../sh` at the SHA pinned in `.sibling-pins` (and leaves
+an umbrella-mounted submodule alone). CI does the same before building. This
+mirrors how `outpost` and `ycode` consume the fork — keep the sibling SHA
+coordinated; the umbrella's `script/sync.sh` auto-bumps `.sibling-pins` when it
+pulls a new `sh`, so standalone CI builds against the same SHA the monorepo
+does.
 
 ## Build / test / lint
 

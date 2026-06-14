@@ -11,26 +11,21 @@ jobs:
   goreleaser:
     runs-on: ubuntu-latest
     steps:
-      # bashy resolves the sh engine via `replace mvdan.cc/sh/v3 => ../sh`,
-      # so check both repos out as flat siblings under the workspace.
-      - name: Checkout bashy
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          path: bashy
           fetch-depth: 0
-      - name: Checkout sh engine (sibling)
-        uses: actions/checkout@v4
-        with:
-          repository: qiangli/sh
-          path: sh
+      # bashy resolves the sh engine via `replace mvdan.cc/sh/v3 => ../sh`.
+      # Clone it next door at the SHA pinned in .sibling-pins.
+      - name: Bootstrap sibling deps (../sh)
+        shell: bash
+        run: ./scripts/bootstrap-siblings.sh
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version-file: go.mod
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           version: '~> v2'
           args: release --clean
-          workdir: bashy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

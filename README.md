@@ -58,8 +58,9 @@ go install github.com/qiangli/bashy@latest
 ```sh
 git clone https://github.com/qiangli/bashy
 cd bashy
-# bashy resolves the sh engine as a flat sibling; clone it next door:
-git clone https://github.com/qiangli/sh ../sh
+# bashy resolves the sh engine as a flat sibling. This clones it next door
+# (../sh) at the SHA pinned in .sibling-pins:
+./scripts/bootstrap-siblings.sh
 make build          # -> bin/bashy
 ```
 

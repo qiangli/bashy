@@ -1,7 +1,7 @@
 name: test
 on:
   push:
-    branches: [master, main]
+    branches: [main, master]
   pull_request:
 
 jobs:
@@ -11,26 +11,18 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      # bashy resolves the sh engine via `replace mvdan.cc/sh/v3 => ../sh`,
-      # so check both repos out as flat siblings under the workspace.
-      - name: Checkout bashy
-        uses: actions/checkout@v4
-        with:
-          path: bashy
-      - name: Checkout sh engine (sibling)
-        uses: actions/checkout@v4
-        with:
-          repository: qiangli/sh
-          path: sh
+      - uses: actions/checkout@v4
+      # bashy resolves the sh engine via `replace mvdan.cc/sh/v3 => ../sh`.
+      # Clone it next door at the SHA pinned in .sibling-pins.
+      - name: Bootstrap sibling deps (../sh)
+        shell: bash
+        run: ./scripts/bootstrap-siblings.sh
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version-file: go.mod
       - name: Build
-        working-directory: bashy
         run: go build ./...
       - name: Test
-        working-directory: bashy
         run: go test ./...
       - name: Vet
-        working-directory: bashy
         run: go vet ./...
