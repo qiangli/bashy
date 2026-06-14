@@ -1,0 +1,36 @@
+name: release
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      # bashy resolves the sh engine via `replace mvdan.cc/sh/v3 => ../sh`,
+      # so check both repos out as flat siblings under the workspace.
+      - name: Checkout bashy
+        uses: actions/checkout@v4
+        with:
+          path: bashy
+          fetch-depth: 0
+      - name: Checkout sh engine (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: qiangli/sh
+          path: sh
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: '~> v2'
+          args: release --clean
+          workdir: bashy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

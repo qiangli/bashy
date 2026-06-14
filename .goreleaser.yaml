@@ -1,0 +1,50 @@
+# goreleaser config for bashy — pure-Go Bash 5.3 drop-in.
+# Builds static (CGO_ENABLED=0) binaries for the 6 supported platforms.
+# NOTE: bashy depends on the qiangli/sh fork via `replace => ../sh`, so CI must
+# check out github.com/qiangli/sh into a sibling ../sh before running this.
+version: 2
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: bashy
+    main: .
+    binary: bashy
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X 'main.bashVersion=5.3.0(1)-bashy-{{ .Version }}'
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: bashy
+    name_template: "bashy-{{ .Os }}-{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  github:
+    owner: qiangli
+    name: bashy
+
+changelog:
+  use: github
+  sort: asc
