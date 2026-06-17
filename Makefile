@@ -45,12 +45,13 @@ dist:
 BASH_TEST_TIMEOUT := 60
 
 # Tests known to time out due to feature gaps we don't plan to implement:
-#   coproc  — full coprocess support (bashy subshells are goroutines,
-#             no kernel coproc pipes)
-#   jobs    — job control / kernel job table (same goroutine constraint)
+#   jobs    — job control / kernel job table (goroutine-subshell constraint)
 #   trap    — signal trap subset that requires the missing job control
 # Skipping these saves ~60s each on every `make test-bash` run.
-BASH_TEST_SKIP := coproc jobs trap
+# (coproc was un-skipped once the sh fork implemented the coproc lifecycle —
+#  synthetic per-runner PID so wait/kill $COPROC_PID resolve, signal-death
+#  status, and fd reuse/close→-1; needs the xcase helper above.)
+BASH_TEST_SKIP := jobs trap
 
 # Tests whose bash run-* helper strips lines starting with `expect ` from
 # the captured output before diffing against the .right file. The
@@ -170,6 +171,7 @@ test-bash-helpers:
 	@cd $(BASH_TESTS_DIR) && \
 		[ -f recho ] || cc -o recho ../support/recho.c 2>/dev/null; \
 		[ -f zecho ] || cc -o zecho ../support/zecho.c 2>/dev/null; \
+		[ -f xcase ] || cc -o xcase ../support/xcase.c 2>/dev/null; \
 		[ -f ../config.h ] || for i in $$(seq 1 128); do \
 			printf '/* stub config.h line %03d for heredoc5.sub */\n' $$i; \
 		done > ../config.h; \
