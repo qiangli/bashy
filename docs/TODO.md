@@ -6,7 +6,7 @@
   - `run-minimal` excluded (a `run-all`-style meta-runner, no stable `.right`). `execscript` skipped with a reason (host-dependent: bash binary path + system error wording + exec/`.`-on-directory exit codes; needs `test`-style normalization to measure).
   Reliable scoreboard = `make test-bash` under a clean PATH (`PATH=/bin:/usr/bin:$(dirname $(which go))`; the ycode shell wrapper shadows `sh` and false-fails). weave sandboxes need the external/bash-5.3 fixture symlink prepped (it's a gitignored symlink) or workers can't measure and gates false-pass.
 
-**Remaining 4 failing fixtures (now visible on the scoreboard):** dollars (76), exp-tests (47), glob-test (85), input-test (stdin/source fd — no-fork constraint). (histexpand FLIPPED to PASS 2026-06-18 — full history-expansion engine + parser `!`-empty-pipeline + extglob `+(...)`/`*(...)`; history fixture stays PASS.)
+**Remaining 4 failing fixtures (now visible on the scoreboard):** dollars (47), exp-tests (18), glob-test (77), input-test (stdin/source fd — no-fork constraint). (Ratchet 2026-06-18 via a 5-tool race: dollars 76→47 + exp-tests 47→18 — `$@`/`$*` word-splitting, `$*`/`${*@Q}` IFS-join, `${!name[*]}` indirect keys [claude]; glob-test 85→77 [gemini]. histexpand FLIPPED earlier — history-expansion engine + parser `!` + extglob.)
 **Skipped (3, with reasons):** jobs (gate-truncation ceiling: ~61s wall-clock vs 25s alarm + disown stable-job-number refactor), trap (SIGCHLD coalescing vs the 6-count + startup-ignored-signal detection), execscript (host-dependent output).
 
 ---
