@@ -1,13 +1,13 @@
 # Bashy: Bash 5.3 Drop-In Replacement — TODO Checklist
 
-**Current status**: 82 bash tests passing, 0 failing, 4 skipped (of 86 measured fixtures) — ZERO failures
+**Current status**: 83 bash tests passing, 0 failing, 3 skipped (of 86 measured fixtures) — ZERO failures
 **Last updated**: 2026-06-18 (array2 FLIPPED via the quoted-`@`-vs-IFS fix in sh/expand — `"${a[@]}"`/`"$@"` split to one word per element regardless of IFS; also dropped dollars 141→102 + exp-tests 61→52. glob-test 88→85 (bash-correct trailing-`\` literal + `?` leading-dot in sh/pattern, not yet a flip). Earlier: array/assoc/nameref/new-exp/coproc flipped; harness now measures the 8 formerly-silent skips — `<name>.tests` mapping mismatch — so the scoreboard finally covers every fixture instead of hiding 8):
   - Wired into the harness (name→file mappings, like `dirstack`→`dstack`): array2→array-at-star, dollars→dollar-at-star, exp-tests→exp.tests(+expect-filter), glob-test→glob.tests, histexpand→histexp.tests, input-test→`< input-line.sh`.
   - `run-minimal` excluded (a `run-all`-style meta-runner, no stable `.right`). `execscript` skipped with a reason (host-dependent: bash binary path + system error wording + exec/`.`-on-directory exit codes; needs `test`-style normalization to measure).
   Reliable scoreboard = `make test-bash` under a clean PATH (`PATH=/bin:/usr/bin:$(dirname $(which go))`; the ycode shell wrapper shadows `sh` and false-fails). weave sandboxes need the external/bash-5.3 fixture symlink prepped (it's a gitignored symlink) or workers can't measure and gates false-pass.
 
-**Remaining failing fixtures: NONE.** (2026-06-18 flip sprint: dollars FLIPPED to 0 (141→…→0) and exp-tests FLIPPED to 0 (61→…→0) [claude]; glob-test driven 88→6 [codex] — its irreducible 6-line residue is the `zh_TW.big5` locale case (bash reads bytes per-locale; pure-Go sh is UTF-8-only), a genuine pure-Go ceiling, so moved to the skip list with a reason. Every other glob behavior — sort order, nullglob, bracket/POSIX classes, extglob, escaped paths — now passes.)
-**Skipped (4, all documented ceilings):** jobs (gate-truncation: ~61s wall-clock vs 25s alarm + no kernel job control), trap (SIGCHLD coalescing + startup-ignored-signal detection), execscript (host-dependent: bash path + system error wording), glob-test (Big5 multibyte-locale support, out of scope).
+**Remaining failing fixtures: NONE.** (2026-06-18: dollars + exp-tests FLIPPED [claude]; glob-test FLIPPED [claude] via byte-transparency — bashy now follows GNU bash 5.3's LC_CTYPE/MB_CUR_MAX convention exactly (no UTF-8 hardcoding): `$'\u'` encodes in the locale charset (= u32cconv), the lexer treats invalid/incomplete multibyte as opaque single bytes (= MB_INVALIDCH→1, never errors), and read/IFS split per MB_CUR_MAX — so the zh_TW.big5 case matches bash. NOT a ceiling after all.)
+**Skipped (3, all documented ceilings):** jobs (gate-truncation: ~61s wall-clock vs 25s alarm + no kernel job control), trap (SIGCHLD coalescing + startup-ignored-signal detection), execscript (host-dependent: absolute bash path + system error wording).
 
 ---
 

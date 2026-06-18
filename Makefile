@@ -54,18 +54,16 @@ BASH_TEST_TIMEOUT := 60
 #                often benign; a clean measurement needs `test`-style
 #                normalization that doesn't exist yet, so it is skipped with a
 #                reason rather than counted as an unwinnable FAIL.
-#   glob-test  — driven 88→6; the irreducible 6-line residue is the
-#                `zh_TW.big5` locale case (bash reads bytes per-locale, e.g.
-#                `<A\263\\B>`; pure-Go sh is UTF-8-only and emits `<AαB>`).
-#                Matching it needs Big5/multibyte-locale support that is out of
-#                scope — a genuine pure-Go ceiling, so skipped with a reason
-#                (every other glob behavior — sort order, nullglob, brackets,
-#                POSIX classes, extglob, escaped paths — now passes).
 # Skipping these saves ~60s each on every `make test-bash` run.
 # (coproc was un-skipped once the sh fork implemented the coproc lifecycle —
 #  synthetic per-runner PID so wait/kill $COPROC_PID resolve, signal-death
 #  status, and fd reuse/close→-1; needs the xcase helper above.)
-BASH_TEST_SKIP := jobs trap execscript glob-test
+# (glob-test was un-skipped once sh became byte-transparent per LC_CTYPE — the
+#  zh_TW.big5 case now matches bash exactly: $'\u' encodes in the locale
+#  charset (u32cconv), the lexer treats invalid/incomplete multibyte as opaque
+#  single bytes (MB_INVALIDCH→1, never errors), and read/IFS split per the
+#  locale's MB_CUR_MAX. No UTF-8 hardcoding.)
+BASH_TEST_SKIP := jobs trap execscript
 
 # Tests whose bash run-* helper strips lines starting with `expect ` from
 # the captured output before diffing against the .right file. The
