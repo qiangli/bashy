@@ -6,7 +6,7 @@
   - `run-minimal` excluded (a `run-all`-style meta-runner, no stable `.right`). `execscript` skipped with a reason (host-dependent: bash binary path + system error wording + exec/`.`-on-directory exit codes; needs `test`-style normalization to measure).
   Reliable scoreboard = `make test-bash` under a clean PATH (`PATH=/bin:/usr/bin:$(dirname $(which go))`; the ycode shell wrapper shadows `sh` and false-fails). weave sandboxes need the external/bash-5.3 fixture symlink prepped (it's a gitignored symlink) or workers can't measure and gates false-pass.
 
-**Remaining 5 failing fixtures (now visible on the scoreboard):** dollars (102), exp-tests (52), glob-test (85), histexpand (~38, partial work parked on a branch), input-test (stdin/source fd — no-fork constraint).
+**Remaining 5 failing fixtures (now visible on the scoreboard):** dollars (76), exp-tests (47), glob-test (85), histexpand (~14, partial parked on agent/weave-issue-111 — residue is a syntax/parser `!`-negation limit + a `history`-fixture regression to resolve before merge), input-test (stdin/source fd — no-fork constraint).
 **Skipped (3, with reasons):** jobs (gate-truncation ceiling: ~61s wall-clock vs 25s alarm + disown stable-job-number refactor), trap (SIGCHLD coalescing vs the 6-count + startup-ignored-signal detection), execscript (host-dependent output).
 
 ---
