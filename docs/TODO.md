@@ -1,14 +1,13 @@
 # Bashy: Bash 5.3 Drop-In Replacement — TODO Checklist
 
-**Current status**: 72 bash tests passing, 4 failing, 11 skipped
-**Last updated**: 2026-06-14 (two weave rounds, diff reductions on the 4 deep fixtures — no PASS flip yet, all 4 still fail but are closer to 0):
-  - nameref 631->576 — array-element nameref assignment (#87)
-  - new-exp 225->163 — indirect @Q/@A/@a composition (#88) + @A/@a array-aware declare format (#91)
-  - assoc 243->216 — deterministic bash-ordered alias/assoc output, flap fixed (#89)
-  - array: REJECTED a candidate (#90) that netted 184->170 but regressed arith + quotearray (PASS->FAIL) by broadening expand/arith.go; array stays 184. A scoped array23.sub arith-subscript-error fix is future work.
-  Reliable scoreboard = /tmp/scoreboard.sh (must export BASH_TSTOUT; match Makefile FILTER_EXPECT/CAT_V). `make test-bash` is unreliable under the ycode shell wrapper. weave sandboxes need the external/bash-5.3 fixture symlink prepped (it's a gitignored symlink) or workers can't measure and gates false-pass.
+**Current status**: 77 bash tests passing, 6 failing, 3 skipped (of 86 measured fixtures)
+**Last updated**: 2026-06-17 (array/assoc/nameref/new-exp all FLIPPED to PASS in earlier rounds; coproc landed; harness now measures the 8 formerly-silent skips — `<name>.tests` mapping mismatch — so the scoreboard finally covers every fixture instead of hiding 8):
+  - Wired into the harness (name→file mappings, like `dirstack`→`dstack`): array2→array-at-star, dollars→dollar-at-star, exp-tests→exp.tests(+expect-filter), glob-test→glob.tests, histexpand→histexp.tests, input-test→`< input-line.sh`.
+  - `run-minimal` excluded (a `run-all`-style meta-runner, no stable `.right`). `execscript` skipped with a reason (host-dependent: bash binary path + system error wording + exec/`.`-on-directory exit codes; needs `test`-style normalization to measure).
+  Reliable scoreboard = `make test-bash` under a clean PATH (`PATH=/bin:/usr/bin:$(dirname $(which go))`; the ycode shell wrapper shadows `sh` and false-fails). weave sandboxes need the external/bash-5.3 fixture symlink prepped (it's a gitignored symlink) or workers can't measure and gates false-pass.
 
-**Remaining 4 failing fixtures (reliable scoreboard diff lines):** array(184), assoc(216), nameref(576), new-exp(163)
+**Remaining 6 failing fixtures (now visible on the scoreboard):** array2, dollars, exp-tests, glob-test, histexpand, input-test — see the Tier-3 triage section below.
+**Skipped (3, with reasons):** jobs (gate-truncation ceiling: ~61s wall-clock vs 25s alarm + disown stable-job-number refactor), trap (SIGCHLD coalescing vs the 6-count + startup-ignored-signal detection), execscript (host-dependent output).
 
 ---
 
