@@ -6,7 +6,7 @@
   - `run-minimal` excluded (a `run-all`-style meta-runner, no stable `.right`). `execscript` skipped with a reason (host-dependent: bash binary path + system error wording + exec/`.`-on-directory exit codes; needs `test`-style normalization to measure).
   Reliable scoreboard = `make test-bash` under a clean PATH (`PATH=/bin:/usr/bin:$(dirname $(which go))`; the ycode shell wrapper shadows `sh` and false-fails). weave sandboxes need the external/bash-5.3 fixture symlink prepped (it's a gitignored symlink) or workers can't measure and gates false-pass.
 
-**Remaining 3 failing fixtures (now visible on the scoreboard):** dollars (27), exp-tests (15), glob-test (65). (2026-06-18 ratchet: glob-test 77→65 [opencode, go-test-gated], exp-tests 18→15 [claude]; dollars holding at 27. input-test/histexpand flipped earlier. glob-test residue = bracket/POSIX-class refactor, done carefully under the go-test gate.)
+**Remaining 3 failing fixtures (now visible on the scoreboard):** dollars (23), exp-tests (13), glob-test (54). (2026-06-18 ratchet: glob-test 65→54 [codex], dollars 27→23 + exp-tests 15→13 [claude], all go-test-gated. input-test/histexpand flipped earlier. Each remaining fixture has shrunk steadily — glob-test from 88, dollars from 141, exp-tests from 61 — last diff-lines are the hardest.)
 **Skipped (3, with reasons):** jobs (gate-truncation ceiling: ~61s wall-clock vs 25s alarm + disown stable-job-number refactor), trap (SIGCHLD coalescing vs the 6-count + startup-ignored-signal detection), execscript (host-dependent output).
 
 ---

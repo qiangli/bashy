@@ -9,4 +9,4 @@
 #
 # Format: <name>=<sha>. When bumping sh in the umbrella's script/sync.sh, the
 # SHA here is bumped to match — sync.sh automates this.
-sh=9775a922eefa08c6f8717717701e23c8c47efa49
+sh=80fbbc8e37a82ae3f939ee956929727f8c005c7c
