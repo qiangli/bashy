@@ -1,12 +1,12 @@
 # Bashy: Bash 5.3 Drop-In Replacement — TODO Checklist
 
-**Current status**: 79 bash tests passing, 4 failing, 3 skipped (of 86 measured fixtures)
+**Current status**: 80 bash tests passing, 3 failing, 3 skipped (of 86 measured fixtures)
 **Last updated**: 2026-06-18 (array2 FLIPPED via the quoted-`@`-vs-IFS fix in sh/expand — `"${a[@]}"`/`"$@"` split to one word per element regardless of IFS; also dropped dollars 141→102 + exp-tests 61→52. glob-test 88→85 (bash-correct trailing-`\` literal + `?` leading-dot in sh/pattern, not yet a flip). Earlier: array/assoc/nameref/new-exp/coproc flipped; harness now measures the 8 formerly-silent skips — `<name>.tests` mapping mismatch — so the scoreboard finally covers every fixture instead of hiding 8):
   - Wired into the harness (name→file mappings, like `dirstack`→`dstack`): array2→array-at-star, dollars→dollar-at-star, exp-tests→exp.tests(+expect-filter), glob-test→glob.tests, histexpand→histexp.tests, input-test→`< input-line.sh`.
   - `run-minimal` excluded (a `run-all`-style meta-runner, no stable `.right`). `execscript` skipped with a reason (host-dependent: bash binary path + system error wording + exec/`.`-on-directory exit codes; needs `test`-style normalization to measure).
   Reliable scoreboard = `make test-bash` under a clean PATH (`PATH=/bin:/usr/bin:$(dirname $(which go))`; the ycode shell wrapper shadows `sh` and false-fails). weave sandboxes need the external/bash-5.3 fixture symlink prepped (it's a gitignored symlink) or workers can't measure and gates false-pass.
 
-**Remaining 4 failing fixtures (now visible on the scoreboard):** dollars (47), exp-tests (18), glob-test (77), input-test (stdin/source fd — no-fork constraint). (Ratchet 2026-06-18 via a 5-tool race: dollars 76→47 + exp-tests 47→18 — `$@`/`$*` word-splitting, `$*`/`${*@Q}` IFS-join, `${!name[*]}` indirect keys [claude]; glob-test 85→77 [gemini]. histexpand FLIPPED earlier — history-expansion engine + parser `!` + extglob.)
+**Remaining 3 failing fixtures (now visible on the scoreboard):** dollars (27), exp-tests (18), glob-test (77). (input-test FLIPPED 2026-06-18 — sourced `read` now shares the parent's buffered stdin [codex]; it was NOT a real-fork ceiling. dollars 47→27 [claude]. glob-test residue parked: a `pattern/` candidate reduced it −2 but regressed 14 sh unit tests incl. a `${a//[[:}` char-drop — needs the bracket/POSIX refactor done right. exp-tests holding at 18.)
 **Skipped (3, with reasons):** jobs (gate-truncation ceiling: ~61s wall-clock vs 25s alarm + disown stable-job-number refactor), trap (SIGCHLD coalescing vs the 6-count + startup-ignored-signal detection), execscript (host-dependent output).
 
 ---
