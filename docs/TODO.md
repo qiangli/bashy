@@ -1,12 +1,12 @@
 # Bashy: Bash 5.3 Drop-In Replacement — TODO Checklist
 
-**Current status**: 78 bash tests passing, 5 failing, 3 skipped (of 86 measured fixtures)
+**Current status**: 79 bash tests passing, 4 failing, 3 skipped (of 86 measured fixtures)
 **Last updated**: 2026-06-18 (array2 FLIPPED via the quoted-`@`-vs-IFS fix in sh/expand — `"${a[@]}"`/`"$@"` split to one word per element regardless of IFS; also dropped dollars 141→102 + exp-tests 61→52. glob-test 88→85 (bash-correct trailing-`\` literal + `?` leading-dot in sh/pattern, not yet a flip). Earlier: array/assoc/nameref/new-exp/coproc flipped; harness now measures the 8 formerly-silent skips — `<name>.tests` mapping mismatch — so the scoreboard finally covers every fixture instead of hiding 8):
   - Wired into the harness (name→file mappings, like `dirstack`→`dstack`): array2→array-at-star, dollars→dollar-at-star, exp-tests→exp.tests(+expect-filter), glob-test→glob.tests, histexpand→histexp.tests, input-test→`< input-line.sh`.
   - `run-minimal` excluded (a `run-all`-style meta-runner, no stable `.right`). `execscript` skipped with a reason (host-dependent: bash binary path + system error wording + exec/`.`-on-directory exit codes; needs `test`-style normalization to measure).
   Reliable scoreboard = `make test-bash` under a clean PATH (`PATH=/bin:/usr/bin:$(dirname $(which go))`; the ycode shell wrapper shadows `sh` and false-fails). weave sandboxes need the external/bash-5.3 fixture symlink prepped (it's a gitignored symlink) or workers can't measure and gates false-pass.
 
-**Remaining 5 failing fixtures (now visible on the scoreboard):** dollars (76), exp-tests (47), glob-test (85), histexpand (~14, partial parked on agent/weave-issue-111 — residue is a syntax/parser `!`-negation limit + a `history`-fixture regression to resolve before merge), input-test (stdin/source fd — no-fork constraint).
+**Remaining 4 failing fixtures (now visible on the scoreboard):** dollars (76), exp-tests (47), glob-test (85), input-test (stdin/source fd — no-fork constraint). (histexpand FLIPPED to PASS 2026-06-18 — full history-expansion engine + parser `!`-empty-pipeline + extglob `+(...)`/`*(...)`; history fixture stays PASS.)
 **Skipped (3, with reasons):** jobs (gate-truncation ceiling: ~61s wall-clock vs 25s alarm + disown stable-job-number refactor), trap (SIGCHLD coalescing vs the 6-count + startup-ignored-signal detection), execscript (host-dependent output).
 
 ---
