@@ -63,7 +63,7 @@ BASH_TEST_TIMEOUT := 60
 #  charset (u32cconv), the lexer treats invalid/incomplete multibyte as opaque
 #  single bytes (MB_INVALIDCH→1, never errors), and read/IFS split per the
 #  locale's MB_CUR_MAX. No UTF-8 hardcoding.)
-BASH_TEST_SKIP := jobs trap execscript
+BASH_TEST_SKIP := jobs execscript
 
 # Tests whose bash run-* helper strips lines starting with `expect ` from
 # the captured output before diffing against the .right file. The

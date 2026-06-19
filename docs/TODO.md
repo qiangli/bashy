@@ -1,13 +1,14 @@
 # Bashy: Bash 5.3 Drop-In Replacement — TODO Checklist
 
-**Current status**: 83 bash tests passing, 0 failing, 3 skipped (of 86 measured fixtures) — ZERO failures
+**Current status**: 84 bash tests passing, 0 failing, 2 skipped (of 86 measured fixtures) — ZERO failures
 **Last updated**: 2026-06-18 (array2 FLIPPED via the quoted-`@`-vs-IFS fix in sh/expand — `"${a[@]}"`/`"$@"` split to one word per element regardless of IFS; also dropped dollars 141→102 + exp-tests 61→52. glob-test 88→85 (bash-correct trailing-`\` literal + `?` leading-dot in sh/pattern, not yet a flip). Earlier: array/assoc/nameref/new-exp/coproc flipped; harness now measures the 8 formerly-silent skips — `<name>.tests` mapping mismatch — so the scoreboard finally covers every fixture instead of hiding 8):
   - Wired into the harness (name→file mappings, like `dirstack`→`dstack`): array2→array-at-star, dollars→dollar-at-star, exp-tests→exp.tests(+expect-filter), glob-test→glob.tests, histexpand→histexp.tests, input-test→`< input-line.sh`.
   - `run-minimal` excluded (a `run-all`-style meta-runner, no stable `.right`). `execscript` skipped with a reason (host-dependent: bash binary path + system error wording + exec/`.`-on-directory exit codes; needs `test`-style normalization to measure).
   Reliable scoreboard = `make test-bash` under a clean PATH (`PATH=/bin:/usr/bin:$(dirname $(which go))`; the ycode shell wrapper shadows `sh` and false-fails). weave sandboxes need the external/bash-5.3 fixture symlink prepped (it's a gitignored symlink) or workers can't measure and gates false-pass.
 
 **Remaining failing fixtures: NONE.** (2026-06-18: dollars + exp-tests FLIPPED [claude]; glob-test FLIPPED [claude] via byte-transparency — bashy now follows GNU bash 5.3's LC_CTYPE/MB_CUR_MAX convention exactly (no UTF-8 hardcoding): `$'\u'` encodes in the locale charset (= u32cconv), the lexer treats invalid/incomplete multibyte as opaque single bytes (= MB_INVALIDCH→1, never errors), and read/IFS split per MB_CUR_MAX — so the zh_TW.big5 case matches bash. NOT a ceiling after all.)
-**Skipped (3, all documented ceilings):** jobs (gate-truncation: ~61s wall-clock vs 25s alarm + no kernel job control), trap (SIGCHLD coalescing + startup-ignored-signal detection), execscript (host-dependent: absolute bash path + system error wording).
+**trap FLIPPED 2026-06-18** [claude] — bashy now matches bash exactly: startup-ignored signals can't be re-trapped (`trap.c`: `trap '' SIG` → real SIG_IGN + startup `unix.Sigaction` snapshot of inherited SIG_IGN), and the SIGCHLD trap fires once per reaped child (`jobs.c:waitchld`), not per-coalesced-OS-signal. NOT a ceiling.
+**Skipped (2):** jobs (per-fixture timeout — ~1380s of sleeps, ~61s foreground min vs the 60s harness cap; PLUS fg/bg/suspend stop-resume of goroutine-subshells needs real process groups — a partial pure-Go limit, scoping pass pending), execscript (cross-repo: sh exec/source-lookup exit codes 126/127 + bashy main.go CLI flag-parsing + script-not-found wording; not host-locked after all — deferred to a dedicated sh+bashy sprint).
 
 ---
 
