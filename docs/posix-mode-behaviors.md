@@ -98,4 +98,4 @@ Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ 
 - [x] **73.** The unset builtin with the -v option specified returns a fatal error if it attempts to unset a readonly or non-unsettable variable, which causes a non-interactive shell to exit. 
 - [x] **74.** When asked to unset a variable that appears in an assignment statement preceding the command, the unset builtin attempts to unset a variable of the same name in the current or previous scope as well. This implements the required "if an assigned variable is further modified by the utility, the modifications made by the utility shall persist" behavior. 
 - [x] **75.** The arrival of SIGCHLD when a trap is set on SIGCHLD does not interrupt the wait builtin and cause it to return immediately. The trap command is run once for each child that exits. 
-- [!] **76.** Bash removes an exited background process's status from the list of such statuses after the wait builtin returns it. 
+- [x] **76.** Bash removes an exited background process's status from the list of such statuses after the wait builtin returns it. 
