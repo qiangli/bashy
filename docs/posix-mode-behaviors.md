@@ -28,7 +28,7 @@ Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ 
 - [!] **3.** Alias expansion is always enabled, even in non-interactive shells. 
 - [ ] **4.** Reserved words appearing in a context where reserved words are recognized do not undergo alias expansion. 
 - [!] **5.** Alias expansion is performed when initially parsing a command substitution. The default (non-posix) mode generally defers it, when enabled, until the command substitution is executed. This means that command substitution will not expand aliases that are defined after the command substitution is initially parsed (e.g., as part of a function definition). 
-- [!] **6.** The time reserved word may be used by itself as a simple command. When used in this way, it displays timing statistics for the shell and its completed children. The TIMEFORMAT variable controls the format of the timing information. 
+- [x] **6.** The time reserved word may be used by itself as a simple command. When used in this way, it displays timing statistics for the shell and its completed children. The TIMEFORMAT variable controls the format of the timing information. 
 - [x] **7.** The parser does not recognize time as a reserved word if the next token begins with a -. 
 - [x] **8.** When parsing and expanding a $@{@} expansion that appears within double quotes, single quotes are no longer special and cannot be used to quote a closing brace or other special character, unless the operator is one of those defined to perform pattern removal. In this case, they do not have to appear as matched pairs. 
 - [x] **9.** When parsing $() command substitutions containing here-documents, the parser does not allow a here-document to be delimited by the closing right parenthesis. The newline after the here-document delimiter is required. ignore 
@@ -42,7 +42,7 @@ Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ 
 - [x] **17.** Command substitutions don't set the ? special parameter. The exit status of a simple command without a command word is still the exit status of the last command substitution that occurred while evaluating the variable assignments and redirections in that command, but that does not happen until after all of the assignments and redirections. 
 - [x] **18.** Literal tildes that appear as the first character in elements of the PATH variable are not expanded as described above under Tilde Expansion. 
 - [x] **19.** Command lookup finds posix special builtins before shell functions, including output printed by the type and command builtins. 
-- [!] **20.** Even if a shell function whose name contains a slash was defined before entering posix mode, the shell will not execute a function whose name contains one or more slashes. 
+- [x] **20.** Even if a shell function whose name contains a slash was defined before entering posix mode, the shell will not execute a function whose name contains one or more slashes. 
 - [ ] **21.** When a command in the hash table no longer exists, Bash will re-search $PATH to find the new location. This is also available with shopt -s checkhash. 
 - [ ] **22.** Bash will not insert a command without the execute bit set into the command hash table, even if it returns it as a (last-ditch) result from a $PATH search. 
 - [ ] **23.** The message printed by the job control code and builtins when a job exits with a non-zero status is `Done(status)'. 
@@ -92,7 +92,7 @@ Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ 
 - [x] **67.** The test builtin's -t unary primary requires an argument. Historical versions of test made the argument optional in certain cases, and Bash attempts to accommodate those for backwards compatibility. 
 - [x] **68.** The trap builtin displays signal names without the leading SIG. 
 - [x] **69.** The trap builtin doesn't check the first argument for a possible signal specification and revert the signal handling to the original disposition if it is, unless that argument consists solely of digits and is a valid signal number. If users want to reset the handler for a given signal to the original disposition, they should use - as the first argument. 
-- [!] **70.** trap -p without arguments displays signals whose dispositions are set to SIG_DFL and those that were ignored when the shell started, not just trapped signals. 
+- [x] **70.** trap -p without arguments displays signals whose dispositions are set to SIG_DFL and those that were ignored when the shell started, not just trapped signals. 
 - [x] **71.** The type and command builtins will not report a non-executable file as having been found, though the shell will attempt to execute such a file if it is the only so-named file found in $PATH. 
 - [x] **72.** The ulimit builtin uses a block size of 512 bytes for the -c and -f options. 
 - [x] **73.** The unset builtin with the -v option specified returns a fatal error if it attempts to unset a readonly or non-unsettable variable, which causes a non-interactive shell to exit. 
