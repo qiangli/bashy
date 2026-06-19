@@ -44,26 +44,27 @@ dist:
 
 BASH_TEST_TIMEOUT := 60
 
-# Tests known to time out / be unmeasurable due to feature gaps or host
-# dependence we don't plan to implement:
-#   jobs       — job control / kernel job table (goroutine-subshell constraint)
-#   trap       — signal trap subset that requires the missing job control
-#   execscript — exec-replacement / `.`-on-directory exit codes plus host-
-#                dependent output (the absolute bash binary path and system
-#                error-message wording). Its run-* helper warns the diff is
-#                often benign; a clean measurement needs `test`-style
-#                normalization that doesn't exist yet, so it is skipped with a
-#                reason rather than counted as an unwinnable FAIL.
-# Skipping these saves ~60s each on every `make test-bash` run.
-# (coproc was un-skipped once the sh fork implemented the coproc lifecycle —
-#  synthetic per-runner PID so wait/kill $COPROC_PID resolve, signal-death
-#  status, and fd reuse/close→-1; needs the xcase helper above.)
-# (glob-test was un-skipped once sh became byte-transparent per LC_CTYPE — the
-#  zh_TW.big5 case now matches bash exactly: $'\u' encodes in the locale
-#  charset (u32cconv), the lexer treats invalid/incomplete multibyte as opaque
-#  single bytes (MB_INVALIDCH→1, never errors), and read/IFS split per the
-#  locale's MB_CUR_MAX. No UTF-8 hardcoding.)
-BASH_TEST_SKIP := jobs execscript
+# The ONE fixture still skipped:
+#   jobs — its run takes ~1380s of real sleeps (~61s foreground minimum) vs
+#          the 60s per-test cap, AND fg/bg/suspend stop-resume of goroutine
+#          subshells needs real process groups (a partial pure-Go limit). A
+#          timeout bump + a scoping pass (how much is reachable without real
+#          fork) is the open work; until then it's skipped, not an FAIL.
+# Skipping it saves the per-test cap wait on every `make test-bash` run.
+# Everything else now PASSES. Recently un-skipped, each by matching bash 5.3
+# exactly (inspect the reference before calling a fixture a "ceiling"):
+# (coproc — sh implemented the coproc lifecycle: synthetic per-runner PID so
+#  wait/kill $COPROC_PID resolve, signal-death status, fd reuse/close→-1.)
+# (glob-test — sh became byte-transparent per LC_CTYPE: $'\u' encodes in the
+#  locale charset (u32cconv), the lexer treats invalid/incomplete multibyte as
+#  opaque single bytes (MB_INVALIDCH→1, never errors), read/IFS split per
+#  MB_CUR_MAX. No UTF-8 hardcoding.)
+# (trap — startup-ignored signals can't be re-trapped (trap.c: real SIG_IGN +
+#  sigaction snapshot); SIGCHLD trap fires once per reaped child (jobs.c).)
+# (execscript — exec exit codes 126/127, command_not_found_handle, exec/`.`-on-
+#  directory wording, EXIT-trap-in-subshell, BASH_SUBSHELL, expand_aliases;
+#  needed the execscript→exec.right harness mapping added above.)
+BASH_TEST_SKIP := jobs
 
 # Tests whose bash run-* helper strips lines starting with `expect ` from
 # the captured output before diffing against the .right file. The
@@ -109,6 +110,7 @@ test-bash: build test-bash-helpers
 			if [ "$$name" = "glob-test" ]; then test_file="glob.tests"; right_file="glob.right"; fi; \
 			if [ "$$name" = "histexpand" ]; then test_file="histexp.tests"; right_file="histexp.right"; fi; \
 			if [ "$$name" = "input-test" ]; then test_file="input-line.sh"; right_file="input.right"; fi; \
+			if [ "$$name" = "execscript" ]; then test_file="execscript"; right_file="exec.right"; fi; \
 			if [ ! -f "$$test_file" ] || [ ! -f "$$right_file" ]; then \
 				skipped=$$((skipped + 1)); \
 				continue; \

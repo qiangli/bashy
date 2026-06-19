@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/term"
@@ -34,6 +35,7 @@ var (
 	login     = flag.Bool("login", false, "act as a login shell")
 	pretty    = flag.Bool("pretty-print", false, "pretty-print shell input")
 	forceI    = flag.Bool("i", false, "force the shell to run interactively")
+	oneCmd    = flag.Bool("t", false, "exit after reading and executing one command")
 	optsOn    multiFlag
 	optsOff   multiFlag
 	setOff    multiFlag
@@ -245,6 +247,10 @@ func main() {
 	}
 }
 
+// defaultPathValue mirrors bash's DEFAULT_PATH_VALUE (config-top.h): the
+// value PATH is given at startup when it is unset in the environment.
+const defaultPathValue = "/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:."
+
 func newRunner() (*interp.Runner, error) {
 	// Increment SHLVL from parent environment.
 	shlvl := 0
@@ -263,15 +269,21 @@ func newRunner() (*interp.Runner, error) {
 	envVars = append(envVars, bashVersionVars()...)
 	envVars = append(envVars, fmt.Sprintf("SHLVL=%d", shlvl))
 
+	// Bash startup runs set_if_not("PATH", DEFAULT_PATH_VALUE)
+	// (variables.c): if PATH is absent from the environment, it is given
+	// a compiled-in default so commands are still found. An explicitly
+	// empty PATH ("PATH=") is left as-is.
+	if _, ok := os.LookupEnv("PATH"); !ok {
+		envVars = append(envVars, "PATH="+defaultPathValue)
+	}
+
 	env := expand.ListEnviron(envVars...)
 	var r *interp.Runner
 	var err error
-	// bash defaults to expanding aliases ONLY in interactive shells.
-	// For `-c CMD` and script invocations the user must `shopt -s
-	// expand_aliases` explicitly. Treat a tty-attached stdin as
-	// interactive; otherwise leave alias expansion off, matching
-	// bash's startup behaviour.
-	interactive := *command == "" && flag.NArg() == 0 && term.IsTerminal(int(os.Stdin.Fd()))
+	// bash defaults to expanding aliases in interactive shells. A
+	// forced-interactive invocation (`-i script`) is interactive even
+	// when stdin is not a tty.
+	interactive := *forceI || (*command == "" && flag.NArg() == 0 && term.IsTerminal(int(os.Stdin.Fd())))
 	opts := []interp.RunnerOption{
 		interp.Interactive(interactive),
 		interp.CommandString(*command != ""),
@@ -1343,6 +1355,9 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 		for _, stmt := range stmts {
 			lastErr = r.Run(ctx, stmt)
 			if r.Exited() {
+				if err := r.Run(ctx, &syntax.File{}); err != nil && lastErr == nil {
+					lastErr = err
+				}
 				return lastErr
 			}
 			if next := r.StdinFile(); next != nil && next != current {
@@ -1422,6 +1437,9 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 					}
 					cursor = advancePastLine(src, int(stmt.End().Line()))
 					if r.Exited() {
+						if err := r.Run(ctx, &syntax.File{}); err != nil && runErr == nil {
+							runErr = err
+						}
 						return runErr
 					}
 					if r.LangVariant() != parseLang {
@@ -1557,6 +1575,9 @@ func runStatementStream(
 				}
 				cursor = advancePastLine(src, int(stmt.End().Line()))
 				if r.Exited() {
+					if err := r.Run(ctx, &syntax.File{}); err != nil && runErr == nil {
+						runErr = err
+					}
 					return runErr
 				}
 				if r.LangVariant() != parseLang {
@@ -2343,12 +2364,20 @@ func nthLine(src []byte, n int) string {
 	return ""
 }
 
+// runPath opens and executes a script file, mirroring bash's
+// open_shell_script (shell.c). Diagnostics and exit codes match bash:
+//   - missing file  -> "<argv0>: <name>: No such file or directory" (127)
+//   - a directory   -> "<script>: <script>: Is a directory"          (126)
+//   - a binary file  -> "<script>: <script>: cannot execute binary file" (126)
+//
+// Before the file is opened the error prefix is the shell name (argv0);
+// once opened, $0 becomes the script path and is used as the prefix.
 func runPath(r *interp.Runner, path string) error {
-	if info, err := os.Stat(path); err == nil && info.IsDir() {
-		return fmt.Errorf("%s: %s: Is a directory", path, path)
-	}
+	shellName := os.Args[0]
+	orig := path
 	f, err := os.Open(path)
 	if err != nil {
+		// Bash falls back to a $PATH search for a bare (no-slash) name.
 		if !strings.Contains(path, "/") {
 			if resolved, lerr := interp.LookPathDir(r.Dir, r.Env, path); lerr == nil {
 				path = resolved
@@ -2356,15 +2385,64 @@ func runPath(r *interp.Runner, path string) error {
 			}
 		}
 		if err != nil {
-			return err
+			if os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "%s: %s: No such file or directory\n", shellName, orig)
+				return interp.ExitStatus(127)
+			}
+			fmt.Fprintf(os.Stderr, "%s: %s: %s\n", shellName, orig, fileErrorReason(err))
+			return interp.ExitStatus(126)
 		}
 	}
 	defer f.Close()
-	if data, _ := io.ReadAll(io.LimitReader(f, 512)); bytes.Contains(data, []byte{0}) {
-		return fmt.Errorf("%s: cannot execute binary file", path)
+	// $0 is now the script path; bash reports the remaining errors with it.
+	if info, serr := f.Stat(); serr == nil && info.IsDir() {
+		fmt.Fprintf(os.Stderr, "%s: %s: Is a directory\n", path, path)
+		return interp.ExitStatus(126)
+	}
+	sample := make([]byte, 80)
+	n, _ := f.Read(sample)
+	if checkBinaryFileSample(sample[:n]) {
+		fmt.Fprintf(os.Stderr, "%s: %s: cannot execute binary file\n", path, path)
+		return interp.ExitStatus(126)
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
 	return run(r, f, path)
+}
+
+// checkBinaryFileSample mirrors bash's check_binary_file (general.c).
+func checkBinaryFileSample(sample []byte) bool {
+	if len(sample) >= 4 && sample[0] == 0x7f && sample[1] == 'E' && sample[2] == 'L' && sample[3] == 'F' {
+		return true
+	}
+	nline := 1
+	if len(sample) >= 2 && sample[0] == '#' && sample[1] == '!' {
+		nline = 2
+	}
+	for _, c := range sample {
+		if c == '\n' {
+			nline--
+			if nline == 0 {
+				return false
+			}
+		}
+		if c == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// fileErrorReason renders a non-ENOENT open error the way bash's
+// file_error does: the bare strerror text (e.g. "Permission denied").
+func fileErrorReason(err error) string {
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		msg := errno.Error()
+		if len(msg) > 0 {
+			return strings.ToUpper(msg[:1]) + msg[1:]
+		}
+	}
+	return err.Error()
 }
