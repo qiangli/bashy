@@ -1,6 +1,6 @@
 # Bashy: Bash 5.3 Drop-In Replacement — TODO Checklist
 
-**Current status**: 85 bash tests passing, 0 failing, 1 skipped (of 86 measured fixtures) — ZERO failures, only `jobs` left
+**Current status**: 🎉 86 bash tests passing, 0 failing, 0 skipped (of 86 measured fixtures) — **100% bash-5.3 compliance**
 **Last updated**: 2026-06-18 (array2 FLIPPED via the quoted-`@`-vs-IFS fix in sh/expand — `"${a[@]}"`/`"$@"` split to one word per element regardless of IFS; also dropped dollars 141→102 + exp-tests 61→52. glob-test 88→85 (bash-correct trailing-`\` literal + `?` leading-dot in sh/pattern, not yet a flip). Earlier: array/assoc/nameref/new-exp/coproc flipped; harness now measures the 8 formerly-silent skips — `<name>.tests` mapping mismatch — so the scoreboard finally covers every fixture instead of hiding 8):
   - Wired into the harness (name→file mappings, like `dirstack`→`dstack`): array2→array-at-star, dollars→dollar-at-star, exp-tests→exp.tests(+expect-filter), glob-test→glob.tests, histexpand→histexp.tests, input-test→`< input-line.sh`.
   - `run-minimal` excluded (a `run-all`-style meta-runner, no stable `.right`). `execscript` skipped with a reason (host-dependent: bash binary path + system error wording + exec/`.`-on-directory exit codes; needs `test`-style normalization to measure).
@@ -9,7 +9,8 @@
 **Remaining failing fixtures: NONE.** (2026-06-18: dollars + exp-tests FLIPPED [claude]; glob-test FLIPPED [claude] via byte-transparency — bashy now follows GNU bash 5.3's LC_CTYPE/MB_CUR_MAX convention exactly (no UTF-8 hardcoding): `$'\u'` encodes in the locale charset (= u32cconv), the lexer treats invalid/incomplete multibyte as opaque single bytes (= MB_INVALIDCH→1, never errors), and read/IFS split per MB_CUR_MAX — so the zh_TW.big5 case matches bash. NOT a ceiling after all.)
 **trap FLIPPED 2026-06-18** [claude] — startup-ignored signals can't be re-trapped (`trap.c`: real SIG_IGN + `unix.Sigaction` snapshot); SIGCHLD trap fires once per reaped child (`jobs.c:waitchld`).
 **execscript FLIPPED 2026-06-18** [claude WIP salvaged + codex finish, cross-repo] — exec/run exit codes 126 (EX_NOEXEC) vs 127 (EX_NOTFOUND), `command_not_found_handle` hook, exec/`.`-on-directory wording (sh interp); `bash -i`→`expand_aliases=on` + EOF EXIT-trap cleanup (bashy main.go); EXIT-trap-in-subshell + BASH_SUBSHELL nesting. NOT host-locked after all. (Also added the execscript→exec.right harness mapping that had silently skipped it.)
-**Skipped (1):** jobs — per-fixture timeout (~1380s of sleeps, ~61s foreground min vs the 60s harness cap) PLUS fg/bg/suspend stop-resume of goroutine-subshells needs real process groups (a partial pure-Go limit). Needs a timeout bump + scoping pass to see how far pure-Go reaches.
+**jobs FLIPPED 2026-06-19** [claude Phase-1 salvaged + codex Phase-2, the final lap] — real process-group job control on unix: `setpgid` backgrounded external jobs, `Wait4(WUNTRACED|WCONTINUED)` stopped-state tracking, `kill -STOP/-CONT` + `fg`/`bg` resume, jobs-list `Stopped` rendering, `suspend` refusal messages. All OS code in sh's `*_unix.go` — mirrors bash's own `jobs.c` (unix) / `nojobs.c` (elsewhere) split, so unix-gated is bash-faithful, not a compromise. Phase 1 (builtin logic: wait-on-done-pid, fg/bg/disown jobspec + options, rendering) caught + fixed an `assoc` regression via the full-suite gate. Needs `BASH_TEST_TIMEOUT_JOBS`. NOT a ceiling.
+**Skipped: NONE.** Every bash-5.3 fixture passes.
 
 ---
 

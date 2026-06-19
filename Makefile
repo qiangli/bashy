@@ -43,28 +43,27 @@ dist:
 	done
 
 BASH_TEST_TIMEOUT := 60
+# jobs runs a long sequence of real backgrounded sleeps (job-control timing);
+# it needs more than the default per-test cap even with working `kill` reaping.
+BASH_TEST_TIMEOUT_JOBS := 120
 
-# The ONE fixture still skipped:
-#   jobs — its run takes ~1380s of real sleeps (~61s foreground minimum) vs
-#          the 60s per-test cap, AND fg/bg/suspend stop-resume of goroutine
-#          subshells needs real process groups (a partial pure-Go limit). A
-#          timeout bump + a scoping pass (how much is reachable without real
-#          fork) is the open work; until then it's skipped, not an FAIL.
-# Skipping it saves the per-test cap wait on every `make test-bash` run.
-# Everything else now PASSES. Recently un-skipped, each by matching bash 5.3
-# exactly (inspect the reference before calling a fixture a "ceiling"):
-# (coproc — sh implemented the coproc lifecycle: synthetic per-runner PID so
-#  wait/kill $COPROC_PID resolve, signal-death status, fd reuse/close→-1.)
-# (glob-test — sh became byte-transparent per LC_CTYPE: $'\u' encodes in the
-#  locale charset (u32cconv), the lexer treats invalid/incomplete multibyte as
-#  opaque single bytes (MB_INVALIDCH→1, never errors), read/IFS split per
-#  MB_CUR_MAX. No UTF-8 hardcoding.)
-# (trap — startup-ignored signals can't be re-trapped (trap.c: real SIG_IGN +
-#  sigaction snapshot); SIGCHLD trap fires once per reaped child (jobs.c).)
+# NOTHING is skipped — the full bash-5.3 suite passes (86/86). Each fixture was
+# closed by matching bash 5.3 EXACTLY (inspect the reference before calling a
+# fixture a "ceiling"):
+# (coproc — coproc lifecycle: synthetic per-runner PID so wait/kill $COPROC_PID
+#  resolve, signal-death status, fd reuse/close→-1.)
+# (glob-test — byte-transparent per LC_CTYPE: $'\u' encodes in the locale charset
+#  (u32cconv), the lexer treats invalid/incomplete multibyte as opaque single
+#  bytes (MB_INVALIDCH→1, never errors), read/IFS split per MB_CUR_MAX.)
+# (trap — startup-ignored signals can't be re-trapped; SIGCHLD trap fires once
+#  per reaped child (jobs.c:waitchld).)
 # (execscript — exec exit codes 126/127, command_not_found_handle, exec/`.`-on-
-#  directory wording, EXIT-trap-in-subshell, BASH_SUBSHELL, expand_aliases;
-#  needed the execscript→exec.right harness mapping added above.)
-BASH_TEST_SKIP := jobs
+#  directory wording, EXIT-trap-in-subshell, BASH_SUBSHELL, expand_aliases.)
+# (jobs — real process-group job control on unix (setpgid + Wait4 WUNTRACED
+#  stopped-state + kill -STOP/-CONT + fg/bg + suspend messages), all in sh's
+#  *_unix.go; needs the longer BASH_TEST_TIMEOUT_JOBS above. Mirrors bash's own
+#  jobs.c (unix) / nojobs.c (elsewhere) split.)
+BASH_TEST_SKIP :=
 
 # Tests whose bash run-* helper strips lines starting with `expect ` from
 # the captured output before diffing against the .right file. The
@@ -135,7 +134,9 @@ test-bash: build test-bash-helpers
 				perl -e 'setpgrp; exec @ARGV' $$THIS_SH ./$$test_file >$$BASH_TSTRAW 2>&1 & \
 			fi; \
 			test_pid=$$!; \
-			( sleep $(BASH_TEST_TIMEOUT) && kill -KILL -- -$$test_pid 2>/dev/null ) & \
+			per_test_timeout=$(BASH_TEST_TIMEOUT); \
+			if [ "$$name" = "jobs" ]; then per_test_timeout=$(BASH_TEST_TIMEOUT_JOBS); fi; \
+			( sleep $$per_test_timeout && kill -KILL -- -$$test_pid 2>/dev/null ) & \
 			timer_pid=$$!; \
 			wait $$test_pid 2>/dev/null; \
 			rc=$$?; \
