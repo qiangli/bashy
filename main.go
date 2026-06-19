@@ -27,27 +27,28 @@ import (
 )
 
 var (
-	command   = flag.String("c", "", "command to be executed")
-	version   = flag.Bool("version", false, "print version and exit")
-	posix     = flag.Bool("posix", false, "POSIX mode")
-	norc      = flag.Bool("norc", false, "do not read ~/.bashyrc")
-	noprofile = flag.Bool("noprofile", false, "do not read /etc/profile or ~/.bashy_profile")
-	login     = flag.Bool("login", false, "act as a login shell")
-	pretty    = flag.Bool("pretty-print", false, "pretty-print shell input")
-	forceI    = flag.Bool("i", false, "force the shell to run interactively")
-	readStdin = flag.Bool("s", false, "read commands from standard input")
-	oneCmd    = flag.Bool("t", false, "exit after reading and executing one command")
-	dumpStrs  = flag.Bool("dump-strings", false, "dump translatable strings and exit")
-	dumpPO    = flag.Bool("dump-po-strings", false, "dump translatable strings in PO format and exit")
-	dumpShort = flag.Bool("D", false, "dump translatable strings and exit")
-	verbose   = flag.Bool("verbose", false, "echo shell input lines as they are read")
-	noediting = flag.Bool("noediting", false, "disable readline editing")
-	debugger  = flag.Bool("debugger", false, "enable debugger profile")
-	debug     = flag.Bool("debug", false, "enable debugger profile")
-	optsOn    multiFlag
-	optsOff   multiFlag
-	setOff    multiFlag
-	shoptOff  multiFlag
+	command    = flag.String("c", "", "command to be executed")
+	version    = flag.Bool("version", false, "print version and exit")
+	posix      = flag.Bool("posix", false, "POSIX mode")
+	norc       = flag.Bool("norc", false, "do not read ~/.bashyrc")
+	noprofile  = flag.Bool("noprofile", false, "do not read /etc/profile or ~/.bashy_profile")
+	login      = flag.Bool("login", false, "act as a login shell")
+	restricted = flag.Bool("restricted", false, "run as a restricted shell")
+	pretty     = flag.Bool("pretty-print", false, "pretty-print shell input")
+	forceI     = flag.Bool("i", false, "force the shell to run interactively")
+	readStdin  = flag.Bool("s", false, "read commands from standard input")
+	oneCmd     = flag.Bool("t", false, "exit after reading and executing one command")
+	dumpStrs   = flag.Bool("dump-strings", false, "dump translatable strings and exit")
+	dumpPO     = flag.Bool("dump-po-strings", false, "dump translatable strings in PO format and exit")
+	dumpShort  = flag.Bool("D", false, "dump translatable strings and exit")
+	verbose    = flag.Bool("verbose", false, "echo shell input lines as they are read")
+	noediting  = flag.Bool("noediting", false, "disable readline editing")
+	debugger   = flag.Bool("debugger", false, "enable debugger profile")
+	debug      = flag.Bool("debug", false, "enable debugger profile")
+	optsOn     multiFlag
+	optsOff    multiFlag
+	setOff     multiFlag
+	shoptOff   multiFlag
 )
 
 // multiFlag collects repeated string values for a flag, e.g. -o opt.
@@ -136,6 +137,7 @@ func splitCombinedShortFlags(args []string) []string {
 		'v': "verbose",
 		'x': "xtrace",
 		'p': "privileged",
+		'r': "restricted",
 	}
 	out := make([]string, 0, len(args))
 	out = append(out, args[0])
@@ -413,6 +415,12 @@ func collectSetArgs() []string {
 	for _, name := range optsOn {
 		out = append(out, "-o", name)
 	}
+	// Bash also enters restricted mode via the `--restricted` long option
+	// or when invoked as `rbash` (argv[0]); `-r` already arrives as
+	// `-o restricted` via splitCombinedShortFlags.
+	if *restricted || isRestrictedName() {
+		out = append(out, "-o", "restricted")
+	}
 	if *verbose {
 		out = append(out, "-o", "verbose")
 	}
@@ -438,6 +446,17 @@ func invocationVerbose() bool {
 		}
 	}
 	return false
+}
+
+// isRestrictedName reports whether bashy was invoked under a name that bash
+// treats as a restricted shell, i.e. argv[0]'s base name is "rbash" (a
+// leading '-' for a login shell is stripped first, mirroring bash).
+func isRestrictedName() bool {
+	if len(os.Args) == 0 {
+		return false
+	}
+	base := filepath.Base(strings.TrimPrefix(os.Args[0], "-"))
+	return base == "rbash"
 }
 
 // isLoginShell returns true if bashy was invoked as a login shell.
