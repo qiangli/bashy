@@ -347,6 +347,10 @@ func newRunner() (*interp.Runner, error) {
 	if *posix {
 		opts = append(opts, interp.Params("-o", "posix"))
 	}
+	// When invoked as the AgentOS shell `bashy`, inject the coreutils
+	// pure-Go userland + `yc` verbs as in-process commands. No-op for the
+	// pure `bash` drop-in. See agentos.go.
+	opts = wireAgentOS(opts)
 	r, err = interp.New(opts...)
 	if err != nil {
 		return nil, err

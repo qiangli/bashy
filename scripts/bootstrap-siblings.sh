@@ -25,6 +25,7 @@ fi
 repo_url() {
     case "$1" in
         sh) echo "https://github.com/qiangli/sh.git" ;;
+        coreutils) echo "https://github.com/qiangli/coreutils.git" ;;
         *) echo "bootstrap-siblings: no repo URL for '$1'" >&2; return 1 ;;
     esac
 }

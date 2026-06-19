@@ -1,12 +1,14 @@
-# Pinned commit SHA for the sibling-path replace target in go.mod (../sh).
-# scripts/bootstrap-siblings.sh reads this file and clones the sibling at the
-# listed SHA, so standalone clones of bashy (and CI) build without external
-# setup.
+# Pinned commit SHAs for the sibling-path replace targets in go.mod
+# (../sh, ../coreutils). scripts/bootstrap-siblings.sh reads this file and
+# clones each sibling at the listed SHA, so standalone clones of bashy (and
+# CI) build without external setup. coreutils itself replaces ../sh, which
+# resolves to the same flat sibling.
 #
-# Inside the dhnt umbrella the sibling already exists as a submodule
-# (dhnt/sh) — the bootstrap script detects it and leaves it alone, so there
-# is still exactly one copy.
+# Inside the dhnt umbrella the siblings already exist as submodules
+# (dhnt/sh, dhnt/coreutils) — the bootstrap script detects them and leaves
+# them alone, so there is still exactly one copy of each.
 #
-# Format: <name>=<sha>. When bumping sh in the umbrella's script/sync.sh, the
-# SHA here is bumped to match — sync.sh automates this.
+# Format: <name>=<sha>. When bumping a sibling in the umbrella's
+# script/sync.sh, the SHA here is bumped to match — sync.sh automates this.
 sh=a543f69f966206ad9a3d616bd826278f3a812a80
+coreutils=2e8a47f4540416b3126613b784facd3615022d7b
