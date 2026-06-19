@@ -25,9 +25,9 @@ Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ 
 
 - [x] **1.** Bash ensures that the POSIXLY_CORRECT variable is set. 
 - [ ] **2.** Bash reads and executes the posix startup files ($ENV) rather than the normal Bash files (Bash Startup Files. 
-- [!] **3.** Alias expansion is always enabled, even in non-interactive shells. 
+- [x] **3.** Alias expansion is always enabled, even in non-interactive shells. 
 - [ ] **4.** Reserved words appearing in a context where reserved words are recognized do not undergo alias expansion. 
-- [!] **5.** Alias expansion is performed when initially parsing a command substitution. The default (non-posix) mode generally defers it, when enabled, until the command substitution is executed. This means that command substitution will not expand aliases that are defined after the command substitution is initially parsed (e.g., as part of a function definition). 
+- [x] **5.** Alias expansion is performed when initially parsing a command substitution. The default (non-posix) mode generally defers it, when enabled, until the command substitution is executed. This means that command substitution will not expand aliases that are defined after the command substitution is initially parsed (e.g., as part of a function definition). 
 - [x] **6.** The time reserved word may be used by itself as a simple command. When used in this way, it displays timing statistics for the shell and its completed children. The TIMEFORMAT variable controls the format of the timing information. 
 - [x] **7.** The parser does not recognize time as a reserved word if the next token begins with a -. 
 - [x] **8.** When parsing and expanding a $@{@} expansion that appears within double quotes, single quotes are no longer special and cannot be used to quote a closing brace or other special character, unless the operator is one of those defined to perform pattern removal. In this case, they do not have to appear as matched pairs. 
