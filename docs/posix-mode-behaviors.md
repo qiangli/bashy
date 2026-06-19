@@ -73,7 +73,7 @@ Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ 
 - [x] **48.** When the alias builtin displays alias definitions, it does not display them with a leading alias unless the -p option is supplied. 
 - [ ] **49.** The bg builtin uses the required format to describe each job placed in the background, which does not include an indication of whether the job is the current or previous job. 
 - [x] **50.** When the cd builtin is invoked in logical mode, and the pathname constructed from $PWD and the directory name supplied as an argument does not refer to an existing directory, cd will fail instead of falling back to physical mode. 
-- [!] **51.** When the cd builtin cannot change a directory because the length of the pathname constructed from $PWD and the directory name supplied as an argument exceeds PATH_MAX when canonicalized, cd will attempt to use the supplied directory name. 
+- [x] **51.** When the cd builtin cannot change a directory because the length of the pathname constructed from $PWD and the directory name supplied as an argument exceeds PATH_MAX when canonicalized, cd will attempt to use the supplied directory name. 
 - [x] **52.** When the xpg_echo option is enabled, Bash does not attempt to interpret any arguments to echo as options. echo displays each argument after converting escape sequences. 
 - [x] **53.** The export and readonly builtin commands display their output in the format required by posix. 
 - [ ] **54.** When listing the history, the fc builtin does not include an indication of whether or not a history entry has been modified. 
