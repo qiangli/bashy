@@ -24,7 +24,7 @@ history / startup-file harnesses (Phase 2). Deviations cluster into:
 Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ ]` not yet probed.
 
 - [x] **1.** Bash ensures that the POSIXLY_CORRECT variable is set. 
-- [ ] **2.** Bash reads and executes the posix startup files ($ENV) rather than the normal Bash files (Bash Startup Files. 
+- [x] **2.** Bash reads and executes the posix startup files ($ENV) rather than the normal Bash files (Bash Startup Files. 
 - [x] **3.** Alias expansion is always enabled, even in non-interactive shells. 
 - [x] **4.** Reserved words appearing in a context where reserved words are recognized do not undergo alias expansion. 
 - [x] **5.** Alias expansion is performed when initially parsing a command substitution. The default (non-posix) mode generally defers it, when enabled, until the command substitution is executed. This means that command substitution will not expand aliases that are defined after the command substitution is initially parsed (e.g., as part of a function definition). 
@@ -44,7 +44,7 @@ Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ 
 - [x] **19.** Command lookup finds posix special builtins before shell functions, including output printed by the type and command builtins. 
 - [x] **20.** Even if a shell function whose name contains a slash was defined before entering posix mode, the shell will not execute a function whose name contains one or more slashes. 
 - [x] **21.** When a command in the hash table no longer exists, Bash will re-search $PATH to find the new location. This is also available with shopt -s checkhash. 
-- [ ] **22.** Bash will not insert a command without the execute bit set into the command hash table, even if it returns it as a (last-ditch) result from a $PATH search. 
+- [x] **22.** Bash will not insert a command without the execute bit set into the command hash table, even if it returns it as a (last-ditch) result from a $PATH search. 
 - [ ] **23.** The message printed by the job control code and builtins when a job exits with a non-zero status is `Done(status)'. 
 - [ ] **24.** The message printed by the job control code and builtins when a job is stopped is `Stopped(signame)', where signame is, for example, SIGTSTP. 
 - [ ] **25.** If the shell is interactive, Bash does not perform job notifications between executing commands in lists separated by ; or newline. Non-interactive shells print status messages after a foreground job in a list completes. 
