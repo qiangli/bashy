@@ -235,6 +235,10 @@ func splitCombinedShortFlags(args []string) []string {
 }
 
 func main() {
+	// AgentOS front-door subcommands (e.g. `bashy weave …`) are handled
+	// before any bash flag parsing, since they carry their own flags. No-op
+	// for the pure `bash` drop-in. See agentos.go.
+	maybeRunAgentOSSubcommand()
 	preflightInvocationErrors(os.Args)
 	// bash accepts POSIX-style combined short flags (`-ce 'cmd'`,
 	// `-eu`, etc.). Go's flag package doesn't, so pre-split any

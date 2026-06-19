@@ -12,6 +12,7 @@ import (
 
 	_ "github.com/qiangli/coreutils/cmds/all"
 	coreutilsshell "github.com/qiangli/coreutils/shell"
+	"github.com/qiangli/coreutils/pkg/weave"
 )
 
 // This file is what makes one build behave as two binaries:
@@ -38,6 +39,28 @@ func isAgentOSShell() bool {
 	base := filepath.Base(strings.TrimPrefix(os.Args[0], "-"))
 	base = strings.TrimSuffix(base, ".exe")
 	return base == "bashy"
+}
+
+// maybeRunAgentOSSubcommand dispatches AgentOS front-door subcommands that
+// are not shell scripts — currently `bashy weave …`, the re-homed
+// multi-agent workspace orchestrator. Only the AgentOS `bashy` binary offers
+// them; the pure `bash` drop-in falls through and treats the argument as a
+// script path, exactly like bash. Call it at the very top of main(), before
+// flag parsing, since the subcommand has its own flags. It os.Exit()s when
+// it handles the invocation and returns otherwise.
+func maybeRunAgentOSSubcommand() {
+	if !isAgentOSShell() || len(os.Args) < 2 {
+		return
+	}
+	switch os.Args[1] {
+	case "weave":
+		cmd := weave.NewWeaveCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 }
 
 // wireAgentOS appends the coreutils ExecHandler so any registered tool

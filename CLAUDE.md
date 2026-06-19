@@ -4,9 +4,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`bashy` is a pure-Go **Bash 5.3 drop-in** — a single static binary that runs
-Bash scripts and interactive sessions with the same flags and semantics as
-`bash` 5.3. It is the user-facing shell; the interpreter engine lives in the
+This repo builds **two binaries from one package**, differentiated at runtime
+by argv[0] (busybox style):
+
+- **`bash`** — a pure-Go **Bash 5.3 drop-in**: runs Bash scripts and
+  interactive sessions with the same flags and semantics as `bash` 5.3,
+  resolving external commands through `PATH` exactly as bash does. **The
+  compliance harness drives this name (`bin/bash`), so the conformance work
+  measures the pure drop-in — nothing AgentOS touches it.**
+- **`bashy`** — the **AgentOS shell**: the same binary, but it wires the
+  coreutils `shell.Handler()` ExecHandler so the pure-Go userland
+  (cat/ls/grep/…) and the `yc` code-intel verbs run in-process, uniformly
+  across Linux/macOS/Windows.
+
+The split lives in `agentos.go`: `isAgentOSShell()` keys off argv[0] (or the
+`BASHY_AGENTOS` env override) and `wireAgentOS()` appends the ExecHandler only
+for `bashy`. Shell builtins (echo/pwd/test/…) are handled by the interpreter
+before the ExecHandler, so they are never shadowed — only external-command
+names are intercepted. `make build` produces both `bin/bashy` and `bin/bash`.
+
+The interpreter engine lives in the
 [`qiangli/sh`](https://github.com/qiangli/sh) fork of `mvdan.cc/sh` (published
 as the Go module `mvdan.cc/sh/v3`), which carries the unmerged Bash 5.3
 interpreter patches.
@@ -30,29 +47,39 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
 - `prompt.go` — Bash prompt escape expansion (`\u`, `\h`, `\w`, `\D{}`, …).
 - `version.go` — `bashVersion` (a `var`, stampable via
   `-ldflags "-X main.bashVersion=..."`) and the `BASH`/`BASH_VERSION` env vars.
+- `agentos.go` — the `bash`-vs-`bashy` split: `isAgentOSShell()` +
+  `wireAgentOS()`, which inject the coreutils ExecHandler for the AgentOS
+  shell only. `newRunner()` calls `wireAgentOS(opts)` just before
+  `interp.New`. Also `maybeRunAgentOSSubcommand()` (called first in `main()`)
+  dispatches AgentOS front-door subcommands — currently **`bashy weave …`**,
+  the re-homed multi-agent workspace orchestrator (`coreutils/pkg/weave`,
+  `NewWeaveCmd()`). `ycode weave` is deprecated in favor of it. Only the
+  `bashy` binary offers these; `bash` treats the arg as a script path.
 - `main_test.go` — CLI-level tests.
 
 ## Module wiring
 
-`go.mod` requires `mvdan.cc/sh/v3` and resolves it as a flat sibling:
+`go.mod` requires two flat-sibling deps, resolved by `replace`:
 
 ```
-replace mvdan.cc/sh/v3 => ../sh
+replace mvdan.cc/sh/v3              => ../sh
+replace github.com/qiangli/coreutils => ../coreutils
 ```
 
-Inside the `dhnt/` umbrella, `../sh` is the `sh` submodule. In a standalone
-clone, run `./scripts/bootstrap-siblings.sh` — it clones `github.com/qiangli/sh`
-next to this repo as `../sh` at the SHA pinned in `.sibling-pins` (and leaves
-an umbrella-mounted submodule alone). CI does the same before building. This
-mirrors how `outpost` and `ycode` consume the fork — keep the sibling SHA
-coordinated; the umbrella's `script/sync.sh` auto-bumps `.sibling-pins` when it
-pulls a new `sh`, so standalone CI builds against the same SHA the monorepo
-does.
+`../sh` is the interpreter engine; `../coreutils` is the AgentOS hub that
+supplies the pure-Go userland + `yc` verbs the `bashy` binary injects (only
+`agentos.go` imports it). Inside the `dhnt/` umbrella, both are submodules. In
+a standalone clone, run `./scripts/bootstrap-siblings.sh` — it clones
+`github.com/qiangli/{sh,coreutils}` next to this repo at the SHAs pinned in
+`.sibling-pins` (and leaves umbrella-mounted submodules alone). CI does the
+same before building. coreutils itself replaces `../sh`, which resolves to the
+same flat sibling. Keep the sibling SHAs coordinated; the umbrella's
+`script/sync.sh` auto-bumps `.sibling-pins`.
 
 ## Build / test / lint
 
 ```sh
-make build              # -> bin/bashy (also copies to bin/bash for the harness)
+make build              # -> bin/bashy (AgentOS) + bin/bash (pure drop-in; same binary, argv[0] differs)
 make test               # go test ./...
 make test-bash          # drive bin/bash against bash's own 5.3 test suite
 make test-bash-list     # list available fixtures

@@ -4,13 +4,16 @@ go 1.25.0
 
 require (
 	github.com/qiangli/coreutils v0.0.0
-	golang.org/x/term v0.42.0
+	golang.org/x/term v0.44.0
 	mvdan.cc/sh/v3 v3.13.1
 )
 
 require (
+	github.com/creack/pty/v2 v2.0.1 // indirect
 	github.com/ergochat/readline v0.1.3 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/odvcencio/gotreesitter v0.16.0 // indirect
+	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
