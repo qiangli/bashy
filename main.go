@@ -35,7 +35,15 @@ var (
 	login     = flag.Bool("login", false, "act as a login shell")
 	pretty    = flag.Bool("pretty-print", false, "pretty-print shell input")
 	forceI    = flag.Bool("i", false, "force the shell to run interactively")
+	readStdin = flag.Bool("s", false, "read commands from standard input")
 	oneCmd    = flag.Bool("t", false, "exit after reading and executing one command")
+	dumpStrs  = flag.Bool("dump-strings", false, "dump translatable strings and exit")
+	dumpPO    = flag.Bool("dump-po-strings", false, "dump translatable strings in PO format and exit")
+	dumpShort = flag.Bool("D", false, "dump translatable strings and exit")
+	verbose   = flag.Bool("verbose", false, "echo shell input lines as they are read")
+	noediting = flag.Bool("noediting", false, "disable readline editing")
+	debugger  = flag.Bool("debugger", false, "enable debugger profile")
+	debug     = flag.Bool("debug", false, "enable debugger profile")
 	optsOn    multiFlag
 	optsOff   multiFlag
 	setOff    multiFlag
@@ -160,7 +168,7 @@ func splitCombinedShortFlags(args []string) []string {
 			out = append(out, "-o", "braceexpand")
 			continue
 		}
-		if a == "-i" {
+		if a == "-i" || a == "-s" || a == "-D" {
 			// Invocation-only flag, not a set option.
 			out = append(out, a)
 			continue
@@ -188,7 +196,7 @@ func splitCombinedShortFlags(args []string) []string {
 		}
 		allKnown := true
 		for j := 1; j < len(a); j++ {
-			if _, ok := shortToOpt[a[j]]; !ok && a[j] != 'c' && a[j] != 'i' {
+			if _, ok := shortToOpt[a[j]]; !ok && a[j] != 'c' && a[j] != 'i' && a[j] != 's' && a[j] != 'D' {
 				allKnown = false
 				break
 			}
@@ -206,8 +214,13 @@ func splitCombinedShortFlags(args []string) []string {
 			}
 		}
 		for _, c := range bools {
-			if c == 'i' {
+			if c == 'i' || c == 's' || c == 'D' {
 				out = append(out, "-i")
+				if c == 's' {
+					out[len(out)-1] = "-s"
+				} else if c == 'D' {
+					out[len(out)-1] = "-D"
+				}
 				continue
 			}
 			out = append(out, "-o", shortToOpt[c])
@@ -287,6 +300,7 @@ func newRunner() (*interp.Runner, error) {
 	opts := []interp.RunnerOption{
 		interp.Interactive(interactive),
 		interp.CommandString(*command != ""),
+		interp.StandardInput(*command == "" && (flag.NArg() == 0 || *readStdin)),
 		interp.WithLoginShell(isLoginShell()),
 		interp.StdIO(os.Stdin, os.Stdout, os.Stderr),
 		interp.Env(env),
@@ -399,6 +413,9 @@ func collectSetArgs() []string {
 	for _, name := range optsOn {
 		out = append(out, "-o", name)
 	}
+	if *verbose {
+		out = append(out, "-o", "verbose")
+	}
 	for _, name := range setOff {
 		out = append(out, "+o", name)
 	}
@@ -409,6 +426,18 @@ func collectSetArgs() []string {
 		out = append(out, "+O", name)
 	}
 	return out
+}
+
+func invocationVerbose() bool {
+	if *verbose {
+		return true
+	}
+	for _, name := range optsOn {
+		if name == "verbose" {
+			return true
+		}
+	}
+	return false
 }
 
 // isLoginShell returns true if bashy was invoked as a login shell.
@@ -481,6 +510,16 @@ func runAll() error {
 		}
 		return prettyPrintPath(flag.Arg(0))
 	}
+	if *dumpStrs || *dumpShort || *dumpPO {
+		po := *dumpPO
+		if *command != "" {
+			return dumpTranslatableStrings(strings.NewReader(*command), "-c", po)
+		}
+		if flag.NArg() == 0 || *readStdin {
+			return dumpTranslatableStrings(os.Stdin, "", po)
+		}
+		return dumpTranslatableStringsPath(flag.Arg(0), po)
+	}
 	if *command != "" {
 		// BASH_EXECUTION_STRING holds the literal -c argument, per
 		// bash. Set on the process env BEFORE constructing the
@@ -525,7 +564,10 @@ func runAll() error {
 			return run(r, strings.NewReader(*command), argv0)
 		})
 	}
-	if flag.NArg() == 0 {
+	if flag.NArg() == 0 || *readStdin {
+		if *readStdin {
+			interp.Params(append([]string{"--"}, flag.Args()...)...)(r)
+		}
 		if term.IsTerminal(int(os.Stdin.Fd())) {
 			loadStartupFiles(r, true)
 			return runWithLoginLogout(r, func() error {
@@ -1240,6 +1282,69 @@ func prettyPrintPath(path string) error {
 	return prettyPrint(f, path)
 }
 
+func dumpTranslatableStringsPath(path string, po bool) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return dumpTranslatableStrings(f, path, po)
+}
+
+func dumpTranslatableStrings(reader io.Reader, name string, po bool) error {
+	src, err := io.ReadAll(reader)
+	if err != nil {
+		return err
+	}
+	parser := syntax.NewParser(syntax.Variant(syntax.LangBash))
+	file, err := parser.Parse(bytes.NewReader(src), name)
+	if err != nil {
+		return err
+	}
+	for _, entry := range translatableStrings(file) {
+		if po {
+			line := int(entry.pos.Line())
+			if name == "-c" {
+				line = 0
+			}
+			fmt.Fprintf(os.Stdout, "#: %s:%d\nmsgid %s\nmsgstr \"\"\n", dumpSourceName(name), line, entry.text)
+			continue
+		}
+		fmt.Fprintln(os.Stdout, entry.text)
+	}
+	return nil
+}
+
+func dumpSourceName(name string) string {
+	if name == "" {
+		return "stdin"
+	}
+	return name
+}
+
+type translatableString struct {
+	pos  syntax.Pos
+	text string
+}
+
+func translatableStrings(node syntax.Node) []translatableString {
+	var entries []translatableString
+	syntax.Walk(node, func(n syntax.Node) bool {
+		dq, ok := n.(*syntax.DblQuoted)
+		if !ok || !dq.Dollar {
+			return true
+		}
+		clone := *dq
+		clone.Dollar = false
+		var buf bytes.Buffer
+		if err := syntax.NewPrinter().Print(&buf, &clone); err == nil {
+			entries = append(entries, translatableString{pos: dq.Pos(), text: buf.String()})
+		}
+		return true
+	})
+	return entries
+}
+
 func prettyPrint(reader io.Reader, name string) error {
 	src, err := io.ReadAll(reader)
 	if err != nil {
@@ -1284,6 +1389,12 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	src, err := io.ReadAll(reader)
 	if err != nil {
 		return err
+	}
+	if invocationVerbose() {
+		os.Stderr.Write(src)
+		if len(src) == 0 || src[len(src)-1] != '\n' {
+			fmt.Fprintln(os.Stderr)
+		}
 	}
 	src = quoteParamReplBackquotes(src)
 	src = staticAliasExpand(src)
