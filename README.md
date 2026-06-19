@@ -2,24 +2,34 @@
 
 `bashy` is a single static binary that runs Bash scripts and interactive
 sessions. It is written entirely in Go (no CGo, no system Bash required) and
-aims to be a faithful **drop-in replacement for `bash` 5.3** — same command
-line flags, same script semantics, same `$BASH_VERSION`.
+is a **drop-in replacement for `bash` 5.3** — same command-line flags, same
+script semantics, same `$BASH_VERSION` — that **passes GNU Bash's own 5.3 test
+suite** (every runnable fixture; see Status below).
 
 It is built on the [`qiangli/sh`](https://github.com/qiangli/sh) fork of
 [`mvdan.cc/sh`](https://github.com/mvdan/sh), which carries the Bash 5.3
 interpreter work. `bashy` is the user-facing shell; `sh` is the library.
 
-> **Status:** active development. Compliance against Bash's own 5.3 test suite
-> is currently **72 passing / 4 failing / 11 skipped** (see `docs/TODO.md`).
-> The 11 skipped fixtures depend on kernel job control / coprocesses, which a
-> pure-Go goroutine-based runner cannot fully emulate.
+> **Status:** `bashy` passes **100% of GNU Bash's own 5.3 test suite** — every
+> measured fixture (86/86: 0 failing, 0 skipped) on Linux and macOS (see
+> [`docs/TODO.md`](docs/TODO.md)). That includes job control, coprocesses,
+> signal traps, and locale-aware (non-UTF-8) globbing — features the early
+> goroutine-based runner couldn't do, now implemented.
+>
+> **Known limitations:** arithmetic uses the native int width, so 64-bit
+> values on 32-bit builds (`GOARCH=386`) truncate (a 64-bit-int migration is
+> tracked); and Windows builds and runs but its full test-suite run is still
+> being verified. As in Bash itself (`jobs.c` vs `nojobs.c`), OS-level job
+> control is a Unix feature.
 
 ## Why
 
 - **No dependencies.** One binary. No `bash`, no shared libraries, no package
   manager. Drop it on any host (including minimal containers and Windows) and
   run your scripts.
-- **Cross-platform.** The same shell semantics on Linux, macOS, and Windows.
+- **Cross-platform.** The same shell semantics on Linux and macOS (verified
+  against Bash's test suite); Windows builds and runs, with full verification
+  in progress.
 - **Embeddable lineage.** The engine underneath (`mvdan.cc/sh`) is a mature,
   widely-used Go shell library, so behaviour is well-tested and hackable.
 
@@ -97,13 +107,22 @@ non-interactive shells.
 
 ## Compatibility notes
 
-`bashy` is a pure-Go runner: subshells are goroutines, not `fork()`. As a
-result, features that require a real kernel job-control table or coprocess
-pipes (`jobs`/`fg`/`bg` semantics, `coproc`, some signal-trap edge cases) are
-stubbed or unsupported and report a clear hint. Everything else — parameter
-expansion, arrays and associative arrays, namerefs, `[[ ]]`, arithmetic, here
-documents, brace/tilde/glob expansion, traps, `printf`, `read`, prompt escapes
-— targets Bash 5.3 behaviour and is verified against Bash's own test suite.
+`bashy` is a pure-Go runner: subshells are goroutines rather than `fork()`,
+and process substitutions use real named pipes. Job control
+(`jobs`/`fg`/`bg`/`kill %n`/`suspend` with stopped-state tracking),
+coprocesses, and signal traps are implemented and pass Bash's test suite on
+Unix. Mirroring Bash's own design (`jobs.c` on Unix, `nojobs.c` elsewhere),
+the OS-level job-control machinery is Unix-only; on other platforms it
+degrades exactly as a no-job-control Bash does.
+
+Two known gaps: arithmetic currently uses the native int width (64-bit on
+64-bit platforms), so very large values on 32-bit builds truncate — a tracked
+int64 migration; and the Windows test-suite run is still being verified.
+Everything else — parameter expansion, arrays and associative arrays,
+namerefs, `[[ ]]`, arithmetic, here documents, brace/tilde/glob expansion
+(locale-aware, including non-UTF-8 charsets such as Big5/Shift-JIS), traps,
+`printf`, `read`, prompt escapes — matches Bash 5.3 and is verified against
+Bash's own test suite.
 
 ## Development
 

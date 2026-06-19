@@ -10,7 +10,12 @@ BASHY := $(BIN_DIR)/bash
 # Stamp a real version onto release builds. Override on the command line, e.g.
 #   make build VERSION=v0.1.0
 VERSION ?= dev
-LDFLAGS := -X 'main.bashVersion=5.3.0(1)-bashy-$(VERSION)'
+# -s -w strip the symbol table and DWARF debug info; with -trimpath (below)
+# this drops the binary ~30% (≈7.8M → ≈5.4M). A pure-Go bash can't reach C
+# bash's ~1.2M — the Go runtime/GC (~2.3M) plus the interpreter and the
+# x/text CJK charset tables (Big5/Shift-JIS, needed for locale-correct globs)
+# set a floor around 5M.
+LDFLAGS := -s -w -X 'main.bashVersion=5.3.0(1)-bashy-$(VERSION)'
 
 # Platforms for `make dist` (goreleaser handles real releases; this is a
 # local cross-compile sanity check).
@@ -19,12 +24,12 @@ PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 win
 ## build: Build the bashy binary into bin/
 build:
 	@mkdir -p $(BIN_DIR)
-	go build -ldflags "$(LDFLAGS)" -o $(BIN) .
+	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) .
 	@cp $(BIN) $(BASHY)
 
 ## install: go install bashy into GOBIN
 install:
-	go install -ldflags "$(LDFLAGS)" .
+	go install -trimpath -ldflags "$(LDFLAGS)" .
 
 ## test: Run all Go tests
 test:
@@ -39,7 +44,7 @@ dist:
 		out=$(BIN_DIR)/dist/bashy-$$os-$$arch$$ext; \
 		echo "building $$out..."; \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch \
-			go build -ldflags "$(LDFLAGS)" -o $$out . || exit 1; \
+			go build -trimpath -ldflags "$(LDFLAGS)" -o $$out . || exit 1; \
 	done
 
 BASH_TEST_TIMEOUT := 60
