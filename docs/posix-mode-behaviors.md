@@ -23,7 +23,7 @@ history / startup-file harnesses (Phase 2). Deviations cluster into:
 
 Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ ]` not yet probed.
 
-- [!] **1.** Bash ensures that the POSIXLY_CORRECT variable is set. 
+- [x] **1.** Bash ensures that the POSIXLY_CORRECT variable is set. 
 - [ ] **2.** Bash reads and executes the posix startup files ($ENV) rather than the normal Bash files (Bash Startup Files. 
 - [ ] **3.** Alias expansion is always enabled, even in non-interactive shells. 
 - [ ] **4.** Reserved words appearing in a context where reserved words are recognized do not undergo alias expansion. 
@@ -35,7 +35,7 @@ Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ 
 - [ ] **10.** Redirection operators do not perform filename expansion on the word in a redirection unless the shell is interactive. 
 - [ ] **11.** Redirection operators do not perform word splitting on the word in a redirection. 
 - [x] **12.** Function names may not be the same as one of the posix special builtins. 
-- [ ] **13.** Tilde expansion is only performed on assignments preceding a command name, rather than on all assignment statements on the line. 
+- [x] **13.** Tilde expansion is only performed on assignments preceding a command name, rather than on all assignment statements on the line. 
 - [!] **14.** While variable indirection is available, it may not be applied to the # and ? special parameters. 
 - [ ] **15.** Expanding the * special parameter in a pattern context where the expansion is double-quoted does not treat the $* as if it were double-quoted. 
 - [ ] **16.** A double quote character (") is treated specially when it appears in a backquoted command substitution in the body of a here-document that undergoes expansion. That means, for example, that a backslash preceding a double quote character will escape it and the backslash will be removed. 
@@ -55,45 +55,45 @@ Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ 
 - [ ] **30.** The default history file is ~/.sh_history (this is the default value the shell assigns to $HISTFILE). 
 - [ ] **31.** The ! character does not introduce history expansion within a double-quoted string, even if the histexpand option is enabled. 
 - [ ] **32.** When printing shell function definitions (e.g., by type), Bash does not print the function reserved word unless necessary. 
-- [!] **33.** Non-interactive shells exit if a syntax error in an arithmetic expansion results in an invalid expression. 
+- [x] **33.** Non-interactive shells exit if a syntax error in an arithmetic expansion results in an invalid expression. 
 - [x] **34.** Non-interactive shells exit if a parameter expansion error occurs. 
-- [!] **35.** If a posix special builtin returns an error status, a non-interactive shell exits. The fatal errors are those listed in the posix standard, and include things like passing incorrect options, redirection errors, variable assignment errors for assignments preceding the command name, and so on. 
+- [x] **35.** If a posix special builtin returns an error status, a non-interactive shell exits. The fatal errors are those listed in the posix standard, and include things like passing incorrect options, redirection errors, variable assignment errors for assignments preceding the command name, and so on. 
 - [x] **36.** A non-interactive shell exits with an error status if a variable assignment error occurs when no command name follows the assignment statements. A variable assignment error occurs, for example, when trying to assign a value to a readonly variable. 
 - [ ] **37.** A non-interactive shell exits with an error status if a variable assignment error occurs in an assignment statement preceding a special builtin, but not with any other simple command. For any other simple command, the shell aborts execution of that command, and execution continues at the top level ("the shell shall not perform any further processing of the command in which the error occurred"). 
 - [x] **38.** A non-interactive shell exits with an error status if the iteration variable in a for statement or the selection variable in a select statement is a readonly variable or has an invalid name. 
 - [x] **39.** Non-interactive shells exit if filename in . filename is not found. 
-- [!] **40.** Non-interactive shells exit if there is a syntax error in a script read with the . or source builtins, or in a string processed by the eval builtin. 
+- [x] **40.** Non-interactive shells exit if there is a syntax error in a script read with the . or source builtins, or in a string processed by the eval builtin. 
 - [!] **41.** Non-interactive shells exit if the export, readonly or unset builtin commands get an argument that is not a valid identifier, and they are not operating on shell functions. These errors force an exit because these are special builtins. 
-- [ ] **42.** Assignment statements preceding posix special builtins persist in the shell environment after the builtin completes. 
-- [ ] **43.** The command builtin does not prevent builtins that take assignment statements as arguments from expanding them as assignment statements; when not in posix mode, declaration commands lose their assignment statement expansion properties when preceded by command. 
-- [ ] **44.** Enabling posix mode has the effect of setting the inherit_errexit option, so subshells spawned to execute command substitutions inherit the value of the -e option from the parent shell. When the inherit_errexit option is not enabled, Bash clears the -e option in such subshells. 
+- [x] **42.** Assignment statements preceding posix special builtins persist in the shell environment after the builtin completes. 
+- [x] **43.** The command builtin does not prevent builtins that take assignment statements as arguments from expanding them as assignment statements; when not in posix mode, declaration commands lose their assignment statement expansion properties when preceded by command. 
+- [x] **44.** Enabling posix mode has the effect of setting the inherit_errexit option, so subshells spawned to execute command substitutions inherit the value of the -e option from the parent shell. When the inherit_errexit option is not enabled, Bash clears the -e option in such subshells. 
 - [x] **45.** Enabling posix mode has the effect of setting the shift_verbose option, so numeric arguments to shift that exceed the number of positional parameters will result in an error message. 
 - [ ] **46.** Enabling posix mode has the effect of setting the interactive_comments option (Comments). 
-- [ ] **47.** The . and source builtins do not search the current directory for the filename argument if it is not found by searching PATH. 
-- [!] **48.** When the alias builtin displays alias definitions, it does not display them with a leading alias unless the -p option is supplied. 
+- [x] **47.** The . and source builtins do not search the current directory for the filename argument if it is not found by searching PATH. 
+- [x] **48.** When the alias builtin displays alias definitions, it does not display them with a leading alias unless the -p option is supplied. 
 - [ ] **49.** The bg builtin uses the required format to describe each job placed in the background, which does not include an indication of whether the job is the current or previous job. 
 - [ ] **50.** When the cd builtin is invoked in logical mode, and the pathname constructed from $PWD and the directory name supplied as an argument does not refer to an existing directory, cd will fail instead of falling back to physical mode. 
 - [ ] **51.** When the cd builtin cannot change a directory because the length of the pathname constructed from $PWD and the directory name supplied as an argument exceeds PATH_MAX when canonicalized, cd will attempt to use the supplied directory name. 
 - [ ] **52.** When the xpg_echo option is enabled, Bash does not attempt to interpret any arguments to echo as options. echo displays each argument after converting escape sequences. 
-- [!] **53.** The export and readonly builtin commands display their output in the format required by posix. 
+- [x] **53.** The export and readonly builtin commands display their output in the format required by posix. 
 - [ ] **54.** When listing the history, the fc builtin does not include an indication of whether or not a history entry has been modified. 
 - [ ] **55.** The default editor used by fc is ed. 
 - [ ] **56.** fc treats extra arguments as an error instead of ignoring them. 
 - [ ] **57.** If there are too many arguments supplied to fc -s, fc prints an error message and returns failure. 
-- [!] **58.** The output of kill -l prints all the signal names on a single line, separated by spaces, without the SIG prefix. 
-- [!] **59.** The kill builtin does not accept signal names with a SIG prefix. 
+- [x] **58.** The output of kill -l prints all the signal names on a single line, separated by spaces, without the SIG prefix. 
+- [x] **59.** The kill builtin does not accept signal names with a SIG prefix. 
 - [ ] **60.** The kill builtin returns a failure status if any of the pid or job arguments are invalid or if sending the specified signal to any of them fails. In default mode, kill returns success if the signal was successfully sent to any of the specified processes. 
 - [ ] **61.** The printf builtin uses double (via strtod) to convert arguments corresponding to floating point conversion specifiers, instead of long double if it's available. The L length modifier forces printf to use long double if it's available. 
 - [ ] **62.** The pwd builtin verifies that the value it prints is the same as the current directory, even if it is not asked to check the file system with the -P option. 
 - [ ] **63.** The read builtin may be interrupted by a signal for which a trap has been set. If Bash receives a trapped signal while executing read, the trap handler executes and read returns an exit status greater than 128. 
 - [x] **64.** When the set builtin is invoked without options, it does not display shell function names and definitions. 
 - [x] **65.** When the set builtin is invoked without options, it displays variable values without quotes, unless they contain shell metacharacters, even if the result contains nonprinting characters. 
-- [ ] **66.** The test builtin compares strings using the current locale when evaluating the < and > binary operators. 
-- [ ] **67.** The test builtin's -t unary primary requires an argument. Historical versions of test made the argument optional in certain cases, and Bash attempts to accommodate those for backwards compatibility. 
-- [!] **68.** The trap builtin displays signal names without the leading SIG. 
+- [x] **66.** The test builtin compares strings using the current locale when evaluating the < and > binary operators. 
+- [x] **67.** The test builtin's -t unary primary requires an argument. Historical versions of test made the argument optional in certain cases, and Bash attempts to accommodate those for backwards compatibility. 
+- [x] **68.** The trap builtin displays signal names without the leading SIG. 
 - [ ] **69.** The trap builtin doesn't check the first argument for a possible signal specification and revert the signal handling to the original disposition if it is, unless that argument consists solely of digits and is a valid signal number. If users want to reset the handler for a given signal to the original disposition, they should use - as the first argument. 
 - [ ] **70.** trap -p without arguments displays signals whose dispositions are set to SIG_DFL and those that were ignored when the shell started, not just trapped signals. 
-- [ ] **71.** The type and command builtins will not report a non-executable file as having been found, though the shell will attempt to execute such a file if it is the only so-named file found in $PATH. 
+- [x] **71.** The type and command builtins will not report a non-executable file as having been found, though the shell will attempt to execute such a file if it is the only so-named file found in $PATH. 
 - [ ] **72.** The ulimit builtin uses a block size of 512 bytes for the -c and -f options. 
 - [x] **73.** The unset builtin with the -v option specified returns a fatal error if it attempts to unset a readonly or non-unsettable variable, which causes a non-interactive shell to exit. 
 - [ ] **74.** When asked to unset a variable that appears in an assignment statement preceding the command, the unset builtin attempts to unset a variable of the same name in the current or previous scope as well. This implements the required "if an assigned variable is further modified by the utility, the modifications made by the utility shall persist" behavior. 
