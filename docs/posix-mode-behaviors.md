@@ -36,7 +36,7 @@ Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ 
 - [ ] **11.** Redirection operators do not perform word splitting on the word in a redirection. 
 - [x] **12.** Function names may not be the same as one of the posix special builtins. 
 - [x] **13.** Tilde expansion is only performed on assignments preceding a command name, rather than on all assignment statements on the line. 
-- [!] **14.** While variable indirection is available, it may not be applied to the # and ? special parameters. 
+- [x] **14.** While variable indirection is available, it may not be applied to the # and ? special parameters. 
 - [ ] **15.** Expanding the * special parameter in a pattern context where the expansion is double-quoted does not treat the $* as if it were double-quoted. 
 - [ ] **16.** A double quote character (") is treated specially when it appears in a backquoted command substitution in the body of a here-document that undergoes expansion. That means, for example, that a backslash preceding a double quote character will escape it and the backslash will be removed. 
 - [x] **17.** Command substitutions don't set the ? special parameter. The exit status of a simple command without a command word is still the exit status of the last command substitution that occurred while evaluating the variable assignments and redirections in that command, but that does not happen until after all of the assignments and redirections. 
@@ -63,7 +63,7 @@ Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ 
 - [x] **38.** A non-interactive shell exits with an error status if the iteration variable in a for statement or the selection variable in a select statement is a readonly variable or has an invalid name. 
 - [x] **39.** Non-interactive shells exit if filename in . filename is not found. 
 - [x] **40.** Non-interactive shells exit if there is a syntax error in a script read with the . or source builtins, or in a string processed by the eval builtin. 
-- [!] **41.** Non-interactive shells exit if the export, readonly or unset builtin commands get an argument that is not a valid identifier, and they are not operating on shell functions. These errors force an exit because these are special builtins. 
+- [x] **41.** Non-interactive shells exit if the export, readonly or unset builtin commands get an argument that is not a valid identifier, and they are not operating on shell functions. These errors force an exit because these are special builtins. 
 - [x] **42.** Assignment statements preceding posix special builtins persist in the shell environment after the builtin completes. 
 - [x] **43.** The command builtin does not prevent builtins that take assignment statements as arguments from expanding them as assignment statements; when not in posix mode, declaration commands lose their assignment statement expansion properties when preceded by command. 
 - [x] **44.** Enabling posix mode has the effect of setting the inherit_errexit option, so subshells spawned to execute command substitutions inherit the value of the -e option from the parent shell. When the inherit_errexit option is not enabled, Bash clears the -e option in such subshells. 
