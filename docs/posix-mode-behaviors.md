@@ -28,6 +28,20 @@ An earlier harness over-reported "12 deviate"; the double-check resolved each:
 - #58 (`kill -l`): INFO — signal SET is OS-specific (Darwin lacks
   SIGSTKFLT/SIGPWR/realtime RTMIN..RTMAX); the POSIX single-line format matches.
 
+## Phase 2 seed harness (2026-06-19) — `scripts/posix-parity-pty.sh`
+
+`scripts/posix-parity-pty.sh` starts the PTY-required interactive coverage. It
+drives `bin/bashy --posix -i` through Python's `pty` module and compares against
+docker `bash:5.3 bash --posix -i`, with a `BASH_REF=/path/to/bash` override for
+local smoke testing. The initial probe set is deliberately small: interactive
+alias expansion, POSIX PS1 expansion, interactive comments, and visible
+`set -o posix` state.
+
+The harness uses sentinel-delimited output and terminal-control normalization so
+readline redraws, prompts, and cursor-position queries do not pollute probe
+results. It follows the Phase 1 rule of comparing observable stdout plus
+success/fail while ignoring non-mandated wording.
+
 ### Known bash-parity follow-up (NOT a POSIX gap)
 - **`BASH_EXECUTION_STRING` is exported** by bashy (`os.Setenv` in `main.go`);
   real bash keeps it a **non-exported** shell var. It's bash-specific (not POSIX),
