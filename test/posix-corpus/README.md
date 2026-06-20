@@ -48,10 +48,16 @@ shells (a different language; cannot parse the corpus).
 
 ## Sections covered (`xcu-*.sh`)
 
-2.2 quoting · 2.5 special parameters · 2.6 word/parameter expansion ·
-2.7 redirection · 2.9 compound commands · 2.11 trap · 2.13 pattern matching ·
-2.14 special built-ins · `test`/`[` operators · POSIX arithmetic ·
-command substitution. (Plus earlier ad-hoc behavior probes.)
+Shell Command Language: 2.2 quoting · 2.4 reserved words/functions · 2.5 special
+parameters · 2.6 word expansions (2.6.1 tilde · 2.6 parameter expansion ·
+2.6.3 field splitting · 2.6.6 pathname/globbing · command substitution) ·
+2.7 redirection · 2.9 compound commands + lists + pipelines · 2.11 trap ·
+2.13 pattern matching · 2.14 special built-ins.
+
+Built-in utilities: `cd`/`pwd`/`OLDPWD` · `read` · `printf` · `test`/`[` ·
+`getopts` · `set` (`-f`/`-u`/`--`) · `umask` · `break`/`continue` (with levels) ·
+`eval`/`export`/`readonly`/`unset`/`shift`/`return`/`:` · POSIX arithmetic.
+(Plus earlier ad-hoc behavior probes.)
 
 Current: **0 deviations**; bashy vs bash 5.3 and vs zsh = 100%; the only AMBIGs
 are bash/ksh extensions (`${v:off:len}` substring, `base#n` arithmetic) that strict
