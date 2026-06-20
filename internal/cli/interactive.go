@@ -113,6 +113,7 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 		Stderr:            stderr,
 		PS1:               func() string { return getPrompt("PS1") },
 		PS2:               func() string { return getPrompt("PS2") },
+		VimMode:           r.VimMode, // `set -o vi` switches to vi editing (re-read each prompt)
 		HistoryFile:       histFile,
 		HistoryLimit:      1000,
 		HistorySearchFold: true,

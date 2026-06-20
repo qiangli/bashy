@@ -30,3 +30,5 @@ replace mvdan.cc/sh/v3 => ../sh
 // as ../sh: the coreutils submodule inside the dhnt umbrella, or a sibling
 // clone of github.com/qiangli/coreutils standalone.
 replace github.com/qiangli/coreutils => ../coreutils
+
+replace github.com/ergochat/readline => ../readline
