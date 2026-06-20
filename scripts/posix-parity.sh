@@ -21,7 +21,11 @@
 #
 # Usage: scripts/posix-parity.sh   (needs bin/bashy built + docker)
 # Exit: 0 iff every non-INFO probe matches.
-set -u
+# NB: deliberately NO `set -u`. The shell-under-test (bashy/sh) has a
+# long-standing nounset bug — under `set -u`, assigning to a not-yet-set array
+# element (`arr[$i]=…`) falsely errors "unbound variable", whereas real bash 5.3
+# accepts it. This harness is interpreted by that shell, so `set -u` aborts it.
+# Tracked as a separate sh conformance bug; does not affect the probes below.
 BASHY=${BASHY:-./bin/bashy}
 
 # Container runtime that provides the bash 5.3 oracle. Defaults to `docker`,
