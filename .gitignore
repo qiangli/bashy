@@ -1,5 +1,6 @@
 bin/
 /bashy
+/bash
 
 # Bash 5.3 compliance fixtures are a local, gitignored symlink into a bash
 # source tree (only its tests/ dir is used). Each developer points this at
