@@ -558,12 +558,6 @@ func runAll() error {
 		}
 		return dumpTranslatableStringsPath(flag.Arg(0), po)
 	}
-	if *command != "" {
-		// BASH_EXECUTION_STRING holds the literal -c argument, per
-		// bash. Set on the process env BEFORE constructing the
-		// runner so its captured env includes the value.
-		os.Setenv("BASH_EXECUTION_STRING", *command)
-	}
 	if *command != "" && bashConditionalParseError(*command) {
 		return interp.ExitStatus(2)
 	}
@@ -573,6 +567,13 @@ func runAll() error {
 	r, err := newRunner()
 	if err != nil {
 		return err
+	}
+	if *command != "" {
+		assign := "BASH_EXECUTION_STRING=" + singleQuote(*command)
+		p := syntax.NewParser()
+		if prog, perr := p.Parse(strings.NewReader(assign), "bes-init"); perr == nil {
+			_ = r.Run(context.Background(), prog)
+		}
 	}
 
 	if *command != "" {
@@ -1467,6 +1468,13 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	}
 	ctx := context.Background()
 	r.Reset()
+	if *command != "" {
+		assign := "BASH_EXECUTION_STRING=" + singleQuote(*command)
+		p := syntax.NewParser()
+		if prog, perr := p.Parse(strings.NewReader(assign), "bes-init"); perr == nil {
+			_ = r.Run(ctx, prog)
+		}
+	}
 	if err := interp.WithBashSource(src)(r); err != nil {
 		return err
 	}
