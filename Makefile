@@ -15,36 +15,42 @@ VERSION ?= dev
 # bash's ~1.2M — the Go runtime/GC (~2.3M) plus the interpreter and the
 # x/text CJK charset tables (Big5/Shift-JIS, needed for locale-correct globs)
 # set a floor around 5M.
-LDFLAGS := -s -w -X 'main.bashVersion=5.3.0(1)-bashy-$(VERSION)'
+LDFLAGS := -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$(VERSION)'
 
 # Platforms for `make dist` (goreleaser handles real releases; this is a
 # local cross-compile sanity check).
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 
-## build: Build the bashy binary into bin/
+## build: Build both independent binaries into bin/ (bash = pure drop-in from
+## cmd/bash; bashy = AgentOS shell from cmd/bashy). They share the cli core but
+## are separate compilations — bash's import graph never includes coreutils.
 build:
 	@mkdir -p $(BIN_DIR)
-	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) .
-	@cp $(BIN) $(BASHY)
+	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BASHY) ./cmd/bash
+	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy
 
-## install: go install bashy into GOBIN
+## install: go install both binaries into GOBIN
 install:
-	go install -trimpath -ldflags "$(LDFLAGS)" .
+	go install -trimpath -ldflags "$(LDFLAGS)" ./cmd/bash ./cmd/bashy
 
 ## test: Run all Go tests
 test:
 	go test ./...
 
 ## dist: Cross-compile static binaries for all release platforms into bin/dist/
+## (both bash and bashy; goreleaser handles real releases, this is a local
+## cross-compile sanity check).
 dist:
 	@mkdir -p $(BIN_DIR)/dist
 	@for plat in $(PLATFORMS); do \
 		os=$${plat%/*}; arch=$${plat#*/}; \
 		ext=; [ "$$os" = windows ] && ext=.exe; \
-		out=$(BIN_DIR)/dist/bashy-$$os-$$arch$$ext; \
-		echo "building $$out..."; \
-		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch \
-			go build -trimpath -ldflags "$(LDFLAGS)" -o $$out . || exit 1; \
+		for name in bash bashy; do \
+			out=$(BIN_DIR)/dist/$$name-$$os-$$arch$$ext; \
+			echo "building $$out..."; \
+			CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch \
+				go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/$$name || exit 1; \
+		done; \
 	done
 
 BASH_TEST_TIMEOUT := 60

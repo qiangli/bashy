@@ -10,14 +10,30 @@ before:
 
 builds:
   - id: bashy
-    main: .
+    main: ./cmd/bashy
     binary: bashy
     env:
       - CGO_ENABLED=0
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X 'main.bashVersion=5.3.0(1)-bashy-{{ .Version }}'
+      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ .Version }}'
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+  - id: bash
+    main: ./cmd/bash
+    binary: bash
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ .Version }}'
     goos:
       - linux
       - darwin
@@ -28,7 +44,18 @@ builds:
 
 archives:
   - id: bashy
+    ids: [bashy]
     name_template: "bashy-{{ .Os }}-{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+  - id: bash
+    ids: [bash]
+    name_template: "bash-{{ .Os }}-{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:
       - goos: windows

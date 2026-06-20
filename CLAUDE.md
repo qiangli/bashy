@@ -4,24 +4,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-This repo builds **two binaries from one package**, differentiated at runtime
-by argv[0] (busybox style):
+This repo builds **two independent binaries** that share a common shell core
+(`internal/cli`) but are **separate compilations** — each has its own `main`
+package under `cmd/`, so their import graphs are disjoint:
 
-- **`bash`** — a pure-Go **Bash 5.3 drop-in**: runs Bash scripts and
-  interactive sessions with the same flags and semantics as `bash` 5.3,
-  resolving external commands through `PATH` exactly as bash does. **The
-  compliance harness drives this name (`bin/bash`), so the conformance work
-  measures the pure drop-in — nothing AgentOS touches it.**
-- **`bashy`** — the **AgentOS shell**: the same binary, but it wires the
-  coreutils `shell.Handler()` ExecHandler so the pure-Go userland
-  (cat/ls/grep/…) and the `yc` code-intel verbs run in-process, uniformly
-  across Linux/macOS/Windows.
+- **`bash`** (`cmd/bash`) — a pure-Go **Bash 5.3 drop-in**: runs Bash scripts
+  and interactive sessions with the same flags and semantics as `bash` 5.3,
+  resolving external commands through `PATH` exactly as bash does. Its import
+  graph **never includes coreutils** or any AgentOS surface, so it stays lean
+  (~8 MB vs. bashy's ~40 MB). **The compliance harness drives `bin/bash`, so
+  the conformance work measures this pure drop-in.**
+- **`bashy`** (`cmd/bashy`) — the **AgentOS system shell**: the same shell core
+  plus the coreutils `shell.Handler()` ExecHandler (pure-Go userland
+  cat/ls/grep/… and the `yc` code-intel verbs, in-process across
+  Linux/macOS/Windows) and the front-door subcommands (`bashy weave …`,
+  `bashy podman …`). It is the self-contained bootstrapper for a whole
+  unix-like userland (bash + coreutils + pkg + external tools).
 
-The split lives in `agentos.go`: `isAgentOSShell()` keys off argv[0] (or the
-`BASHY_AGENTOS` env override) and `wireAgentOS()` appends the ExecHandler only
-for `bashy`. Shell builtins (echo/pwd/test/…) are handled by the interpreter
-before the ExecHandler, so they are never shadowed — only external-command
-names are intercepted. `make build` produces both `bin/bashy` and `bin/bash`.
+The AgentOS surface is injected, not branched at runtime: `internal/cli`
+exposes two no-op hook vars (`AgentOSDispatch`, `AgentOSWireExec`); `cmd/bashy`
+sets them to `internal/agentos.{Dispatch,WireExec}` in its `init()`, while
+`cmd/bash` leaves the defaults. Because the coreutils import lives only in
+`internal/agentos` (imported only by `cmd/bashy`), the `bash` binary cannot
+pull it in. `make build` produces both `bin/bash` and `bin/bashy`. (Historical
+note: this used to be one binary split by argv[0] via `isAgentOSShell()`; it is
+now a structural cmd/ split — see docs/agentos-substrate-extraction-plan.md.)
 
 The interpreter engine lives in the
 [`qiangli/sh`](https://github.com/qiangli/sh) fork of `mvdan.cc/sh` (published
@@ -35,27 +42,29 @@ arrays, namerefs, `[[ ]]`, arithmetic, builtins, …) live in `mvdan.cc/sh/v3`'s
 `interp`/`expand`/`syntax` packages. A feature that needs an interpreter
 change is edited in `../sh`; this repo measures it via `make test-bash`.
 
-### Source files (package `main`, repo root)
+### Source layout
 
-- `main.go` — entry point: flag parsing, runner setup, script/command/stdin
-  dispatch, startup-file loading, bash-format parse-error remapping, static
-  alias expansion.
-- `interactive.go` — readline-backed interactive loop (delegates to
-  `mvdan.cc/sh/v3/interactive`).
-- `forced_interactive.go` — minimal readline emulation for `bash -i` with a
-  non-TTY stdin (history, C-r/C-p, multi-line accumulation).
-- `prompt.go` — Bash prompt escape expansion (`\u`, `\h`, `\w`, `\D{}`, …).
-- `version.go` — `bashVersion` (a `var`, stampable via
-  `-ldflags "-X main.bashVersion=..."`) and the `BASH`/`BASH_VERSION` env vars.
-- `agentos.go` — the `bash`-vs-`bashy` split: `isAgentOSShell()` +
-  `wireAgentOS()`, which inject the coreutils ExecHandler for the AgentOS
-  shell only. `newRunner()` calls `wireAgentOS(opts)` just before
-  `interp.New`. Also `maybeRunAgentOSSubcommand()` (called first in `main()`)
-  dispatches AgentOS front-door subcommands — currently **`bashy weave …`**,
-  the re-homed multi-agent workspace orchestrator (`coreutils/pkg/weave`,
-  `NewWeaveCmd()`). `ycode weave` is deprecated in favor of it. Only the
-  `bashy` binary offers these; `bash` treats the arg as a script path.
-- `main_test.go` — CLI-level tests.
+- `cmd/bash/main.go` — pure drop-in entry point: `cli.Main()`, no AgentOS imports.
+- `cmd/bashy/main.go` — AgentOS entry point: wires `internal/agentos` hooks into
+  `internal/cli`, then `cli.Main()`.
+- `internal/cli/` — the shared shell core (`package cli`):
+  - `main.go` — `Main()`: flag parsing, runner setup, script/command/stdin
+    dispatch, startup-file loading, bash-format parse-error remapping, static
+    alias expansion; defines the `AgentOSDispatch`/`AgentOSWireExec` hook vars.
+  - `interactive.go` — readline-backed interactive loop (delegates to
+    `mvdan.cc/sh/v3/interactive`).
+  - `forced_interactive.go` — minimal readline emulation for `bash -i` with a
+    non-TTY stdin (history, C-r/C-p, multi-line accumulation).
+  - `prompt.go` — Bash prompt escape expansion (`\u`, `\h`, `\w`, `\D{}`, …)
+    plus posix parameter/`!!` prompt expansion (uses `Runner.LiveVar`).
+  - `version.go` — `bashVersion` (a `var`, stampable via
+    `-ldflags "-X github.com/qiangli/bashy/internal/cli.bashVersion=..."`).
+  - `main_test.go` — CLI-level tests.
+- `internal/agentos/agentos.go` — the AgentOS wiring (imports coreutils):
+  `WireExec()` (coreutils ExecHandler) and `Dispatch()` (front-door subcommands
+  `bashy weave …` via `coreutils/pkg/weave`, `bashy podman …` via
+  `coreutils/external/podman` — a shell-out to an installed podman). Imported
+  only by `cmd/bashy`.
 
 ## Module wiring
 
@@ -79,7 +88,7 @@ same flat sibling. Keep the sibling SHAs coordinated; the umbrella's
 ## Build / test / lint
 
 ```sh
-make build              # -> bin/bashy (AgentOS) + bin/bash (pure drop-in; same binary, argv[0] differs)
+make build              # -> bin/bash (pure drop-in, cmd/bash) + bin/bashy (AgentOS, cmd/bashy) — two independent binaries
 make test               # go test ./...
 make test-bash          # drive bin/bash against bash's own 5.3 test suite
 make test-bash-list     # list available fixtures

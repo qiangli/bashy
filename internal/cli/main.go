@@ -2,7 +2,7 @@
 // See LICENSE for licensing information
 
 // bashy is a Bash 5.3 compatible shell built on top of [interp].
-package main
+package cli
 
 import (
 	"bufio"
@@ -234,11 +234,22 @@ func splitCombinedShortFlags(args []string) []string {
 	return out
 }
 
-func main() {
+// AgentOSDispatch and AgentOSWireExec are the injection points for the AgentOS
+// surface. The pure `bash` drop-in (cmd/bash) leaves them at their no-op
+// defaults, so its import graph never touches coreutils. The `bashy` system
+// shell (cmd/bashy) sets them to the internal/agentos implementations. This is
+// what keeps the two binaries independent.
+var (
+	AgentOSDispatch                                                  = func() {}
+	AgentOSWireExec func([]interp.RunnerOption) []interp.RunnerOption = func(o []interp.RunnerOption) []interp.RunnerOption { return o }
+)
+
+// Main is the shell entry point, shared by cmd/bash and cmd/bashy.
+func Main() {
 	// AgentOS front-door subcommands (e.g. `bashy weave …`) are handled
 	// before any bash flag parsing, since they carry their own flags. No-op
-	// for the pure `bash` drop-in. See agentos.go.
-	maybeRunAgentOSSubcommand()
+	// for the pure `bash` drop-in (the default AgentOSDispatch).
+	AgentOSDispatch()
 	preflightInvocationErrors(os.Args)
 	// bash accepts POSIX-style combined short flags (`-ce 'cmd'`,
 	// `-eu`, etc.). Go's flag package doesn't, so pre-split any
@@ -351,10 +362,10 @@ func newRunner() (*interp.Runner, error) {
 	if *posix {
 		opts = append(opts, interp.Params("-o", "posix"))
 	}
-	// When invoked as the AgentOS shell `bashy`, inject the coreutils
-	// pure-Go userland + `yc` verbs as in-process commands. No-op for the
-	// pure `bash` drop-in. See agentos.go.
-	opts = wireAgentOS(opts)
+	// For the AgentOS shell `bashy`, inject the coreutils pure-Go userland +
+	// `yc` verbs as in-process commands. No-op for the pure `bash` drop-in
+	// (the default AgentOSWireExec).
+	opts = AgentOSWireExec(opts)
 	r, err = interp.New(opts...)
 	if err != nil {
 		return nil, err
