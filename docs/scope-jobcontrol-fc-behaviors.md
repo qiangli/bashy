@@ -48,8 +48,8 @@ is sh unit tests (drive `fcBuiltin` directly), not `-c` probes.
 |---|---|---|---|
 | 23 | job-exit message format is `Done(status)` | **TRACTABLE** | posix-gate `formatJob` (`builtin.go:5012`): nonzero-exit Done → `Done(N)`. Format change; unit-testable + harness-probeable via `jobs`. |
 | 24 | stopped-job message is `Stopped(signame)` | **TRACTABLE (unix)** | posix-gate `formatJob` Stopped → `Stopped(SIG…)`. Reachable only where a job can actually stop (unix Wait4 WUNTRACED — the `*_unix.go` path); format unit-testable. |
-| 25 | interactive: no job notify between `;`/newline list commands; non-interactive prints status after a fg job | **CEILING-ish** | Async inter-prompt notification timing on the goroutine model; not deterministically probeable. Document; revisit only if the async notifier is reworked. |
-| 26 | interactive: defer bg status to next prompt | **CEILING-ish** | Same async-timing class as #25. |
+| 25 | interactive: no job notify between `;`/newline list commands; non-interactive prints status after a fg job | **TRACTABLE** (corrected — was wrongly "ceiling") | The interactive async-timing half isn't deterministically probeable, BUT the POSIX-relevant clause is the **non-interactive** one, and it IS `-c`-testable. Source `jobs.c:4613` + `:4625`: in DEFAULT `-c` mode a foreground *external* command killed by a fatal signal prints to stderr `bash: line N: <pid> <signal desc> [(core dumped)] <cmd>`; POSIX `-c` mode takes the skip-notify branch (defers to wait/jobs). bashy prints **nothing** in default → gap in default mode. Implement in sh via `*exec.ExitError`/`syscall.WaitStatus.Signaled()`+`.Signal()`. |
+| 26 | interactive: defer bg status to next prompt | **TRACTABLE** (corrected) | Same non-interactive signal-notification path as #25 — one fix covers both. |
 | 27 | permanently remove jobs from the table after notifying via wait/jobs | **VERIFY** | sh `removeFinishedJobs` already does this — confirm against oracle and assert; likely already conformant. |
 | 49 | bg builtin format omits current/previous indication | **TRACTABLE** | `bg` output uses the same `formatJob` path; posix-gate the marker so bg omits the `+`/`-` current/previous indicator. Harness-probeable. |
 
@@ -79,3 +79,43 @@ in-sandbox); the orchestrator verifies end-to-end via the PTY harness +
 job model — they are the only two of the ten that lack a deterministic probe.
 That leaves **8 of 10** remaining behaviors tractable in one two-issue fleet
 round.
+
+## CORRECTION (2026-06-20): "ceiling" was premature — checked the bash source
+
+The earlier draft labelled #25/#26 (and treated #28) as pure-Go ceilings. That
+was wrong: inspecting the GNU bash 5.3 reference implementation shows all three
+have concrete, implementable mechanics. (Recurring lesson: never call something
+a ceiling without reading the reference first.)
+
+### #25/#26 — non-interactive signal-death notification (source: jobs.c notify_of_job_status)
+Oracle matrix, foreground external command killed by signal, `bash -c` (default):
+
+| signal | default `-c` stderr | posix `-c` |
+|---|---|---|
+| SEGV | `bash: line N: <pid> Segmentation fault (core dumped) <cmd>` | (none) |
+| ABRT | `bash: line N: <pid> Aborted (core dumped) <cmd>` | (none) |
+| FPE  | `bash: line N: <pid> Arithmetic exception (core dumped) <cmd>` | (none) |
+| ILL  | `bash: line N: <pid> Illegal instruction (core dumped) <cmd>` | (none) |
+| BUS  | `bash: line N: <pid> Bus error (core dumped) <cmd>` | (none) |
+| TERM | `Terminated <cmd>` (bare — IS_FOREGROUND branch, no prefix/coredump) | (none) |
+| INT / PIPE / QUIT | (none — suppressed) | (none) |
+
+So: DEFAULT mode prints the signal description (most fatal signals with
+`(core dumped)`; SIGTERM bare; SIGINT/SIGPIPE suppressed); POSIX `-c` suppresses
+all (defers to wait/jobs). **bashy prints nothing in either mode → real gap in
+DEFAULT mode.** `-c`-testable, implementable in sh.
+
+### #28 — vi `v` (edit-and-execute) command
+NOT a fundamental ceiling. `github.com/ergochat/readline@v0.1.3` already ships a
+vi mode (`vim.go`: `opVim`, movement/insert/delete/change/replace) — it simply
+lacks the `v` edit-and-execute command. Closing #28 is a **library-level**
+change: add the `v` handler in a vendored copy (`sh/libs/readline/` per sh
+CLAUDE.md's local-vendoring rule, with CREDITS) or wire it at the bashy
+interactive layer. POSIX detail: in posix the `v` command invokes `vi` directly;
+non-posix checks `$VISUAL`/`$EDITOR` first.
+
+### Revised standing
+**0 true ceilings.** All 3 remaining behaviors are implementable: #25/#26 as one
+sh change (default-mode signal notification), #28 as a readline library/wiring
+change. The "73/76, 3 ceilings" framing is retired — it's 73/76 with 3 tractable
+items (one sh fix + one library feature).
