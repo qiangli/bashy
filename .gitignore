@@ -10,3 +10,8 @@ external/bash-5.3
 .claude/
 .aider*
 .agents/
+
+# Prior-art reference clones for studying/adapting POSIX shell behavior.
+# Local only, never committed (we adapt algorithms into Go with attribution,
+# we do not redistribute upstream sources). Policy: docs/priorart-policy.md
+/priorart/
