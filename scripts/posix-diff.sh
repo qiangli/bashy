@@ -45,7 +45,7 @@ CORPUS=$(cd "$CORPUS" && pwd)
 if ! $OCI image exists "$IMAGE" 2>/dev/null; then
   echo "posix-diff: building $IMAGE (bash:5.3 + dash + yash)…" >&2
   bd=$(mktemp -d)
-  printf 'FROM bash:5.3\nRUN apk add --no-cache dash yash\n' > "$bd/Containerfile"
+  printf 'FROM bash:5.3\nRUN apk add --no-cache dash yash zsh mksh\n' > "$bd/Containerfile"
   $OCI build -q -t "$IMAGE" "$bd" >&2 || { echo "posix-diff: image build failed" >&2; exit 2; }
   rm -rf "$bd"
 fi
@@ -69,8 +69,14 @@ trap 'rm -f "$BIN"' EXIT
 # every shell file-arg in a fresh cwd, identical environment.
 $OCI run --rm -i -v "$BIN:/bashy:ro" -v "$CORPUS:/corpus:ro" "$IMAGE" bash -s <<'INCONTAINER'
 set -u
-ORACLES="bash53 dash yash"
-declare -A CMD=( [bash53]="bash --posix" [dash]="dash" [yash]="yash --posix" )
+# Oracle shells, all native to the image. Strict-POSIX: dash, yash. Korn family
+# (shares bash's array/substring/case-mod extensions, so it disambiguates
+# "bash-only" vs "ksh-lineage" AMBIGs): mksh. Emulated POSIX: zsh via
+# `--emulate sh` (a 4th independent vote; emulation, so it may have edge quirks).
+# csh/tcsh are deliberately absent — they are not POSIX shells (different
+# language; cannot run the corpus).
+ORACLES="bash53 dash yash mksh zsh"
+declare -A CMD=( [bash53]="bash --posix" [dash]="dash" [yash]="yash --posix" [mksh]="mksh" [zsh]="zsh --emulate sh" )
 
 # runShell CMD  — copies $SCRIPT into a fresh cwd, runs CMD on it, echoes
 # "ok|<output>" or "err|<output>" (stderr folded in; exact exit code ignored).
