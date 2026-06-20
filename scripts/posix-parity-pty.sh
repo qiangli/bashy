@@ -92,6 +92,21 @@ PROBES = [
         ],
     ),
     Probe(
+        30,
+        "POSIX default HISTFILE is ~/.sh_history",
+        # #30: in posix mode the default $HISTFILE is ~/.sh_history. Unset the
+        # harness HISTFILE override so we observe the shell's own default.
+        ['printf "hf=%s\\n" "${HISTFILE-UNSET}"'],
+        env={"HISTFILE": None},
+    ),
+    Probe(
+        31,
+        "POSIX ! no history expansion in double quotes",
+        # #31: in posix mode, ! does not introduce history expansion inside a
+        # double-quoted string even with histexpand on, so this prints x!!y.
+        ['echo "x!!y"'],
+    ),
+    Probe(
         0,
         "interactive shell reports posix option state",
         [
@@ -113,7 +128,9 @@ def base_env(extra):
         "PS1": PROMPT,
     }
     env.update(extra)
-    return env
+    # A probe may set a base key to None to UNSET it (e.g. to observe the
+    # shell's own default for HISTFILE rather than the harness override).
+    return {k: v for k, v in env.items() if v is not None}
 
 
 def env_cmd(env):
@@ -330,7 +347,7 @@ def run_probe(cmd, probe):
         return "", "err", f"write failed: {exc}"
 
     end_marker = f"@@@X:{probe.num}:".encode()
-    raw = first + read_available(master, sel, proc, time.time() + 6.0, end_marker)
+    raw = first + read_available(master, sel, proc, time.time() + 10.0, end_marker)
     terminate(proc)
     text = strip_terminal_noise(raw)
 
@@ -361,11 +378,25 @@ def run_probe(cmd, probe):
     return normalize_output(body, sent_lines), ok, ""
 
 
+def run_probe_retry(cmd, probe, attempts=3):
+    # Spawning a fresh container per probe occasionally cold-starts slowly and
+    # the sentinels miss the read window ("missing sentinel"/"before prompt").
+    # Those are transient infra hiccups, not behavior differences — retry a few
+    # times before trusting an error verdict.
+    out, ok, note = run_probe(cmd, probe)
+    transient = ("sentinel", "before prompt", "missing prompt", "missing rendered prompt")
+    for _ in range(attempts - 1):
+        if not note or not any(t in note for t in transient):
+            break
+        out, ok, note = run_probe(cmd, probe)
+    return out, ok, note
+
+
 def compare():
     results = []
     for probe in PROBES:
-        by_out, by_ok, by_note = run_probe(bashy_cmd(probe), probe)
-        bh_out, bh_ok, bh_note = run_probe(ref_cmd(probe), probe)
+        by_out, by_ok, by_note = run_probe_retry(bashy_cmd(probe), probe)
+        bh_out, bh_ok, bh_note = run_probe_retry(ref_cmd(probe), probe)
         results.append((probe, by_out, by_ok, by_note, bh_out, bh_ok, bh_note))
     return results
 

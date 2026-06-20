@@ -54,9 +54,19 @@ bash does not import `PS1` from the environment, so the prompt is neutralized by
 assigning a strippable sentinel **in-session**, and prompt probes set their PS1
 in-session and capture the rendered prompt before a marker echo.
 
-Status of the seed probes — **4 match / 0 diff** (`scripts/posix-parity-pty.sh`):
+Status of the probes — **6 match / 0 diff** (`scripts/posix-parity-pty.sh`):
 - **#3 (interactive alias expansion)** — MATCH.
 - **#46 (interactive comments enabled)** — MATCH.
+- **#30 (default `$HISTFILE`=`~/.sh_history`)** — MATCH (fixed). Interactive
+  `--posix` now runs a real `HISTFILE=~/.sh_history` assignment at startup so
+  scripts see it (non-exported, like bash); non-interactive `-c` leaves it
+  unset, matching bash. `r.Vars` is only an output mirror, so the value must be
+  assigned through the runner to reach the live scope.
+- **#31 (`!` no history-expansion in double quotes)** — MATCH (already conformant).
+- Harness: probes that hit a transient container cold-start ("missing sentinel")
+  now retry up to 3× before trusting an error verdict; per-probe read deadline
+  bumped to 10s. A probe may set a base env key to `None` to unset it (used by
+  #30 to observe the shell's own `$HISTFILE` default).
 - **#29 (PS1 parameter + `!!` expansion)** — MATCH (fixed). Two parts:
   1. bashy's interactive prompt read `PS1` from the read-only initial env, so an
      in-session `PS1=...` never took effect. Fixed via the new
@@ -115,8 +125,8 @@ Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ 
 - [ ] **27.** Bash permanently removes jobs from the jobs table after notifying the user of their termination via the wait or jobs builtins. It removes the job from the jobs list after notifying the user of its termination, but the status is still available via wait, as long as wait is supplied a pid argument. 
 - [ ] **28.** The vi editing mode will invoke the vi editor directly when the v command is run, instead of checking $VISUAL and $EDITOR. 
 - [x] **29.** Prompt expansion enables the posix PS1 and PS2 expansions of ! to the history number and !! to !, and Bash performs parameter expansion on the values of PS1 and PS2 regardless of the setting of the promptvars option. (PTY-probed; see Phase 2.) 
-- [ ] **30.** The default history file is ~/.sh_history (this is the default value the shell assigns to $HISTFILE). 
-- [ ] **31.** The ! character does not introduce history expansion within a double-quoted string, even if the histexpand option is enabled. 
+- [x] **30.** The default history file is ~/.sh_history (this is the default value the shell assigns to $HISTFILE). (PTY-probed; fixed — interactive `--posix` now assigns `$HISTFILE=~/.sh_history`.) 
+- [x] **31.** The ! character does not introduce history expansion within a double-quoted string, even if the histexpand option is enabled. (PTY-probed; already conformant.) 
 - [x] **32.** When printing shell function definitions (e.g., by type), Bash does not print the function reserved word unless necessary. 
 - [x] **33.** Non-interactive shells exit if a syntax error in an arithmetic expansion results in an invalid expression. 
 - [x] **34.** Non-interactive shells exit if a parameter expansion error occurs. 

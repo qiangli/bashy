@@ -48,6 +48,12 @@ func setHistCmd(r *interp.Runner, n int) {
 	}
 }
 
+// singleQuote wraps s as a single POSIX shell word with no expansion, escaping
+// embedded single quotes the standard '\'' way.
+func singleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
 func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) error {
 	lang := syntax.LangBash
 	if *posix {
@@ -74,8 +80,27 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 
 	histFile := r.Env.Get("HISTFILE").String()
 	if histFile == "" {
+		// Bash assigns a default to $HISTFILE: ~/.sh_history in POSIX mode
+		// (behavior #30), ~/.bash_history otherwise. bashy keeps its own
+		// ~/.bashy_history name for the non-posix default but matches the
+		// required ~/.sh_history under --posix.
+		name := ".bashy_history"
+		if *posix {
+			name = ".sh_history"
+		}
 		if home, _ := os.UserHomeDir(); home != "" {
-			histFile = filepath.Join(home, ".bashy_history")
+			histFile = filepath.Join(home, name)
+		}
+		// Expose the default to scripts as a (non-exported) shell variable, as
+		// bash does, by running a real assignment through the runner: r.Vars is
+		// only an output mirror (cleared at Reset), so the value must land in
+		// the live variable scope to be visible to ${HISTFILE}.
+		if histFile != "" {
+			assign := "HISTFILE=" + singleQuote(histFile)
+			p := syntax.NewParser(syntax.Variant(lang))
+			if prog, perr := p.Parse(strings.NewReader(assign), "histfile-init"); perr == nil {
+				_ = r.Run(context.Background(), prog)
+			}
 		}
 	}
 
