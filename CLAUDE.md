@@ -165,6 +165,7 @@ itself, which is pure Go).
 - `handoff-bashy-2026-06.md` — most recent session-handoff notes (read when picking up cold).
 - `bash-gap-analysis.md` — ungated bash semantics gap analysis behind the failing fixtures.
 - `plan-bashy-drop-in.md` / `plan-cmd-bashy.md` / `plan-bash53-roadmap-agentic.md` — phase plans; each phase lands as a checkbox in `TODO.md`.
+- `scope-jobcontrol-fc-behaviors.md` — feasibility scoping of the remaining POSIX-mode job-control (#23–27,#49) + fc (#54–57) behaviors: TRACTABLE vs VERIFY vs CEILING, with the next two-issue fleet round.
 - `plan-dynvar.md`, `plan-error-format-pass.md`, `plan-punted-builtins.md` — scoped sub-plans for specific clusters of fixture failures.
 - `json-output.md` — bashy's opt-in `set --json` / `declare --json` structured-output extensions.
 - `bash.md`, `agentic-extensions.md` — background references, not active plans.

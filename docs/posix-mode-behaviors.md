@@ -118,11 +118,11 @@ Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ 
 - [x] **20.** Even if a shell function whose name contains a slash was defined before entering posix mode, the shell will not execute a function whose name contains one or more slashes. 
 - [x] **21.** When a command in the hash table no longer exists, Bash will re-search $PATH to find the new location. This is also available with shopt -s checkhash. 
 - [x] **22.** Bash will not insert a command without the execute bit set into the command hash table, even if it returns it as a (last-ditch) result from a $PATH search. 
-- [ ] **23.** The message printed by the job control code and builtins when a job exits with a non-zero status is `Done(status)'. 
-- [ ] **24.** The message printed by the job control code and builtins when a job is stopped is `Stopped(signame)', where signame is, for example, SIGTSTP. 
-- [ ] **25.** If the shell is interactive, Bash does not perform job notifications between executing commands in lists separated by ; or newline. Non-interactive shells print status messages after a foreground job in a list completes. 
-- [ ] **26.** If the shell is interactive, Bash waits until the next prompt before printing the status of a background job that changes status or a foreground job that terminates due to a signal. Non-interactive shells print status messages after a foreground job completes. 
-- [ ] **27.** Bash permanently removes jobs from the jobs table after notifying the user of their termination via the wait or jobs builtins. It removes the job from the jobs list after notifying the user of its termination, but the status is still available via wait, as long as wait is supplied a pid argument. 
+- [ ] **23.** The message printed by the job control code and builtins when a job exits with a non-zero status is `Done(status)'. (scoped TRACTABLE — posix Done(N) format in formatJob; see scope-jobcontrol-fc-behaviors.md)
+- [ ] **24.** The message printed by the job control code and builtins when a job is stopped is `Stopped(signame)', where signame is, for example, SIGTSTP. (scoped TRACTABLE/unix — posix Stopped(signame) format)
+- [ ] **25.** If the shell is interactive, Bash does not perform job notifications between executing commands in lists separated by ; or newline. Non-interactive shells print status messages after a foreground job in a list completes. (scoped CEILING — async inter-prompt notify timing, pure-Go goroutine model)
+- [ ] **26.** If the shell is interactive, Bash waits until the next prompt before printing the status of a background job that changes status or a foreground job that terminates due to a signal. Non-interactive shells print status messages after a foreground job completes. (scoped CEILING — async bg-status timing)
+- [ ] **27.** Bash permanently removes jobs from the jobs table after notifying the user of their termination via the wait or jobs builtins. It removes the job from the jobs list after notifying the user of its termination, but the status is still available via wait, as long as wait is supplied a pid argument. (scoped VERIFY — sh removeFinishedJobs likely already conformant)
 - [ ] **28.** The vi editing mode will invoke the vi editor directly when the v command is run, instead of checking $VISUAL and $EDITOR. 
 - [x] **29.** Prompt expansion enables the posix PS1 and PS2 expansions of ! to the history number and !! to !, and Bash performs parameter expansion on the values of PS1 and PS2 regardless of the setting of the promptvars option. (PTY-probed; see Phase 2.) 
 - [x] **30.** The default history file is ~/.sh_history (this is the default value the shell assigns to $HISTFILE). (PTY-probed; fixed — interactive `--posix` now assigns `$HISTFILE=~/.sh_history`.) 
@@ -144,15 +144,15 @@ Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ 
 - [x] **46.** Enabling posix mode has the effect of setting the interactive_comments option (Comments). 
 - [x] **47.** The . and source builtins do not search the current directory for the filename argument if it is not found by searching PATH. 
 - [x] **48.** When the alias builtin displays alias definitions, it does not display them with a leading alias unless the -p option is supplied. 
-- [ ] **49.** The bg builtin uses the required format to describe each job placed in the background, which does not include an indication of whether the job is the current or previous job. 
+- [ ] **49.** The bg builtin uses the required format to describe each job placed in the background, which does not include an indication of whether the job is the current or previous job. (scoped TRACTABLE — bg omit current/previous marker)
 - [x] **50.** When the cd builtin is invoked in logical mode, and the pathname constructed from $PWD and the directory name supplied as an argument does not refer to an existing directory, cd will fail instead of falling back to physical mode. 
 - [x] **51.** When the cd builtin cannot change a directory because the length of the pathname constructed from $PWD and the directory name supplied as an argument exceeds PATH_MAX when canonicalized, cd will attempt to use the supplied directory name. 
 - [x] **52.** When the xpg_echo option is enabled, Bash does not attempt to interpret any arguments to echo as options. echo displays each argument after converting escape sequences. 
 - [x] **53.** The export and readonly builtin commands display their output in the format required by posix. 
-- [ ] **54.** When listing the history, the fc builtin does not include an indication of whether or not a history entry has been modified. 
-- [ ] **55.** The default editor used by fc is ed. 
-- [ ] **56.** fc treats extra arguments as an error instead of ignoring them. 
-- [ ] **57.** If there are too many arguments supplied to fc -s, fc prints an error message and returns failure. 
+- [ ] **54.** When listing the history, the fc builtin does not include an indication of whether or not a history entry has been modified. (scoped VERIFY — fc -l already omits modified flag)
+- [ ] **55.** The default editor used by fc is ed. (scoped TRACTABLE — posix default editor ed, currently vi)
+- [ ] **56.** fc treats extra arguments as an error instead of ignoring them. (scoped TRACTABLE — fc extra-args error)
+- [ ] **57.** If there are too many arguments supplied to fc -s, fc prints an error message and returns failure. (scoped TRACTABLE — fc -s too-many-args error)
 - [x] **58.** The output of kill -l prints all the signal names on a single line, separated by spaces, without the SIG prefix. 
 - [x] **59.** The kill builtin does not accept signal names with a SIG prefix. 
 - [x] **60.** The kill builtin returns a failure status if any of the pid or job arguments are invalid or if sending the specified signal to any of them fails. In default mode, kill returns success if the signal was successfully sent to any of the specified processes. 
