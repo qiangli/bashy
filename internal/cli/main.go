@@ -568,13 +568,8 @@ func runAll() error {
 	if err != nil {
 		return err
 	}
-	if *command != "" {
-		assign := "BASH_EXECUTION_STRING=" + singleQuote(*command)
-		p := syntax.NewParser()
-		if prog, perr := p.Parse(strings.NewReader(assign), "bes-init"); perr == nil {
-			_ = r.Run(context.Background(), prog)
-		}
-	}
+	// NB: BASH_EXECUTION_STRING is assigned inside run() AFTER r.Reset() (which
+	// clears the variable scope); setting it here would be wiped by that Reset.
 
 	if *command != "" {
 		// Bash 5.3 syntax: `bash -c COMMAND [argv0 [arg1 arg2 …]]`.
