@@ -11,11 +11,64 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"mvdan.cc/sh/v3/shell"
 )
 
-// expandPrompt expands Bash-style prompt escape sequences in s.
-// See Bash manual section 6.9 "Controlling the Prompt".
-func expandPrompt(s string, env func(string) string, cmdNum, histNum int) string {
+// expandPrompt expands Bash-style prompt escape sequences in s, then performs
+// parameter/arithmetic expansion on the result, and — in posix mode — the
+// posix bare-`!` history expansions. See Bash manual section 6.9 "Controlling
+// the Prompt" and the "Bash POSIX Mode" item on PS1/PS2 (#29): bash performs
+// parameter expansion on PS1/PS2 regardless of promptvars, and in posix mode a
+// bare `!` expands to the history number and `!!` to a literal `!`.
+//
+// Order matches bash: backslash escapes are decoded first (so `\!` -> history
+// number and `\$` -> $/# survive), then word expansion runs (so `$!` -> last
+// bg pid, `${v}` -> value, `$((..))` -> n), then the posix bare-`!` pass runs
+// on what remains (so the `!` in `$!` is already consumed and not re-touched).
+func expandPrompt(s string, env func(string) string, cmdNum, histNum int, posix bool) string {
+	decoded := decodePromptEscapes(s, env, cmdNum, histNum)
+	// Parameter/arithmetic expansion (promptvars is effectively always on for
+	// us; posix forces it). shell.Expand uses Document semantics (no field
+	// splitting). Command substitution needs a runner it doesn't have here, so
+	// fall back to the unexpanded form on any parse/expand error rather than
+	// dropping the prompt.
+	if env != nil {
+		if expanded, err := shell.Expand(decoded, env); err == nil {
+			decoded = expanded
+		}
+	}
+	if posix {
+		decoded = posixBangExpand(decoded, histNum)
+	}
+	return decoded
+}
+
+// posixBangExpand applies the posix-mode prompt rule: `!!` -> `!`, and a bare
+// `!` -> the history number.
+func posixBangExpand(s string, histNum int) string {
+	if !strings.ContainsRune(s, '!') {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] != '!' {
+			b.WriteByte(s[i])
+			continue
+		}
+		if i+1 < len(s) && s[i+1] == '!' {
+			b.WriteByte('!')
+			i++
+		} else {
+			b.WriteString(strconv.Itoa(histNum))
+		}
+	}
+	return b.String()
+}
+
+// decodePromptEscapes expands the backslash escape sequences (\u, \h, \w, \!,
+// \$, …) in s. It is the first stage of expandPrompt.
+func decodePromptEscapes(s string, env func(string) string, cmdNum, histNum int) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
 		if s[i] != '\\' {

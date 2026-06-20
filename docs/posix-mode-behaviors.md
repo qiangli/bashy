@@ -54,22 +54,28 @@ bash does not import `PS1` from the environment, so the prompt is neutralized by
 assigning a strippable sentinel **in-session**, and prompt probes set their PS1
 in-session and capture the rendered prompt before a marker echo.
 
-Status of the seed probes:
+Status of the seed probes — **4 match / 0 diff** (`scripts/posix-parity-pty.sh`):
 - **#3 (interactive alias expansion)** — MATCH.
 - **#46 (interactive comments enabled)** — MATCH.
-- **#29 (PS1 parameter + `!!` expansion)** — DIFF, real gap. Fixing this surfaced
-  and fixed a prerequisite bug first: bashy's interactive prompt read `PS1` from
-  the read-only initial env, so an in-session `PS1=...` never took effect. Now
-  fixed via the new `interp.Runner.LiveVar` accessor wired into `interactive.go`'s
-  `getPrompt`. The remaining #29 work is in `prompt.go`'s `expandPrompt`: in posix
-  mode it must additionally perform **parameter expansion** on PS1/PS2 and expand
-  bare **`!`→history number / `!!`→`!`** (today it only decodes backslash escapes).
-- meta posix-state smoke probe (num 0) — occasionally flaky under sequential
-  container startup; not one of the 76 behaviors.
+- **#29 (PS1 parameter + `!!` expansion)** — MATCH (fixed). Two parts:
+  1. bashy's interactive prompt read `PS1` from the read-only initial env, so an
+     in-session `PS1=...` never took effect. Fixed via the new
+     `interp.Runner.LiveVar` accessor wired into `interactive.go`'s `getPrompt`.
+  2. `prompt.go`'s `expandPrompt` now matches bash's pipeline: decode backslash
+     escapes → parameter/arithmetic expansion (both modes, via `shell.Expand`) →
+     in posix mode, bare **`!`→history number / `!!`→`!`**. Order verified against
+     the oracle: `$!` stays the bg pid (param expansion consumes the `!` before
+     the posix bare-`!` pass), and `\$ `→`$`/`#` (euid) survives.
+- meta posix-state smoke probe (num 0) — passes; not one of the 76 behaviors.
 
-Related bashy follow-up (not posix-specific): bashy treats an explicitly-empty
-`PS1=` as unset and falls back to its default `\u@\h:\w\$` prompt, whereas bash
-renders an empty prompt.
+Known minor gaps (tracked, not blocking #29):
+- Command substitution `$(...)` in PS1 is not expanded (the interactive prompt
+  path has no runner for it; `shell.Expand` does param/arith only). The prompt
+  falls back to the unexpanded form rather than erroring.
+- bashy treats an explicitly-empty `PS1=` as unset and falls back to its default
+  `\u@\h:\w\$` prompt, whereas bash renders an empty prompt.
+- The `${var@P}` operator is handled entirely inside `sh` (`expand.defaultPromptExpand`),
+  separate from this interactive path; its bare-`!`→`1` is not posix-gated there.
 
 ### Known bash-parity follow-up (NOT a POSIX gap)
 - **`BASH_EXECUTION_STRING` is exported** by bashy (`os.Setenv` in `main.go`);
@@ -108,7 +114,7 @@ Status legend: `[x]` matches bash --posix · `[!]` deviates (fix in `sh`) · `[ 
 - [ ] **26.** If the shell is interactive, Bash waits until the next prompt before printing the status of a background job that changes status or a foreground job that terminates due to a signal. Non-interactive shells print status messages after a foreground job completes. 
 - [ ] **27.** Bash permanently removes jobs from the jobs table after notifying the user of their termination via the wait or jobs builtins. It removes the job from the jobs list after notifying the user of its termination, but the status is still available via wait, as long as wait is supplied a pid argument. 
 - [ ] **28.** The vi editing mode will invoke the vi editor directly when the v command is run, instead of checking $VISUAL and $EDITOR. 
-- [ ] **29.** Prompt expansion enables the posix PS1 and PS2 expansions of ! to the history number and !! to !, and Bash performs parameter expansion on the values of PS1 and PS2 regardless of the setting of the promptvars option. 
+- [x] **29.** Prompt expansion enables the posix PS1 and PS2 expansions of ! to the history number and !! to !, and Bash performs parameter expansion on the values of PS1 and PS2 regardless of the setting of the promptvars option. (PTY-probed; see Phase 2.) 
 - [ ] **30.** The default history file is ~/.sh_history (this is the default value the shell assigns to $HISTFILE). 
 - [ ] **31.** The ! character does not introduce history expansion within a double-quoted string, even if the histexpand option is enabled. 
 - [x] **32.** When printing shell function definitions (e.g., by type), Bash does not print the function reserved word unless necessary. 

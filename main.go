@@ -316,7 +316,7 @@ func newRunner() (*interp.Runner, error) {
 			envGet := func(name string) string {
 				return r.Env.Get(name).String()
 			}
-			return expandPrompt(s, envGet, 0, 0)
+			return expandPrompt(s, envGet, 0, 0, *posix)
 		}),
 	}
 	// Reuse interp.Params to apply set-options requested on the

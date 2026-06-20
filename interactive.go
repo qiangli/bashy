@@ -69,7 +69,7 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 			val = defaultPS
 		}
 		envGet := func(name string) string { return r.LiveVar(name).String() }
-		return expandPrompt(val, envGet, cmdNum, cmdNum)
+		return expandPrompt(val, envGet, cmdNum, cmdNum, *posix)
 	}
 
 	histFile := r.Env.Get("HISTFILE").String()
