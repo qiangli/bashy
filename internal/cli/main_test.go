@@ -628,3 +628,86 @@ func TestForcedInteractiveReverseSearch(t *testing.T) {
 		t.Errorf("history file clobbered at exit:\n got: %q\nwant: %q", string(data), content)
 	}
 }
+
+func TestBashExecutionStringNotExported(t *testing.T) {
+	if val, ok := os.LookupEnv("BASH_EXECUTION_STRING"); ok {
+		t.Cleanup(func() {
+			os.Setenv("BASH_EXECUTION_STRING", val)
+		})
+		os.Unsetenv("BASH_EXECUTION_STRING")
+	}
+
+	origCommand := *command
+	*command = `echo "v=[$BASH_EXECUTION_STRING]"`
+	t.Cleanup(func() {
+		*command = origCommand
+	})
+
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStdout := os.Stdout
+	os.Stdout = pw
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+	})
+
+	r, err := newRunner()
+	if err != nil {
+		pw.Close()
+		t.Fatal(err)
+	}
+
+	err = run(r, strings.NewReader(*command), "bash")
+	pw.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, pr); err != nil {
+		t.Fatal(err)
+	}
+
+	got := strings.TrimSpace(buf.String())
+	want := `v=[echo "v=[$BASH_EXECUTION_STRING]"]`
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	pr2, pw2, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = pw2
+
+	r2, err := newRunner()
+	if err != nil {
+		pw2.Close()
+		t.Fatal(err)
+	}
+
+	err = run(r2, strings.NewReader("env"), "bash")
+	pw2.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var buf2 bytes.Buffer
+	if _, err := io.Copy(&buf2, pr2); err != nil {
+		t.Fatal(err)
+	}
+
+	envOutput := buf2.String()
+	found := false
+	for _, line := range strings.Split(envOutput, "\n") {
+		if strings.HasPrefix(line, "BASH_EXECUTION_STRING=") {
+			found = true
+			break
+		}
+	}
+	if found {
+		t.Errorf("BASH_EXECUTION_STRING was exported to env:\n%s", envOutput)
+	}
+}
