@@ -23,6 +23,17 @@ BASHY=${BASHY:-./bin/bashy}
 export BASHY
 export BASH_REF=${BASH_REF:-}
 
+# Container runtime for the bash 5.3 oracle (same convention as
+# scripts/posix-parity.sh): default docker, fall back to `ycode podman`.
+# Ignored when BASH_REF points at a local bash binary.
+OCI=${OCI:-}
+if [ -z "$OCI" ] && [ -z "$BASH_REF" ]; then
+  if command -v docker >/dev/null 2>&1; then OCI=docker
+  elif command -v ycode  >/dev/null 2>&1; then OCI="ycode podman"
+  fi
+fi
+export OCI
+
 exec python3 - "$@" <<'PY'
 import os
 import pty
@@ -35,16 +46,21 @@ import time
 
 BASHY = os.environ.get("BASHY", "./bin/bashy")
 BASH_REF = os.environ.get("BASH_REF", "")
+# Container runtime command (e.g. "docker" or "ycode podman"), space-split.
+OCI = os.environ.get("OCI", "docker").split()
 PROMPT = "@@@PROMPT@@@ "
 
 
 class Probe:
-    def __init__(self, num, name, lines=None, env=None, initial_prompt=False, info=""):
+    def __init__(self, num, name, lines=None, env=None, prompt_ps1=None, info=""):
         self.num = num
         self.name = name
         self.lines = lines or []
         self.env = env or {}
-        self.initial_prompt = initial_prompt
+        # When set, this probe assigns PS1 to this value IN-SESSION and captures
+        # the resulting rendered prompt (real bash does not import PS1 from the
+        # environment for interactive shells, so it must be set interactively).
+        self.prompt_ps1 = prompt_ps1
         self.info = info
 
 
@@ -59,12 +75,14 @@ PROBES = [
     ),
     Probe(
         29,
-        "POSIX PS1 history/bang/parameter expansion",
-        env={
-            "PVAR": "VALUE",
-            "PS1": "P! !! ${PVAR}> ",
-        },
-        initial_prompt=True,
+        "POSIX PS1 parameter + !! expansion",
+        # POSIX behavior #29: in posix mode bash performs parameter expansion on
+        # PS1 and expands !! -> ! (and ! -> history number). We test the
+        # deterministic parts: ${PVAR} -> VALUE and !! -> ! . The bare !
+        # (history number) is omitted because it depends on per-shell history
+        # counting, which is not a POSIX-mandated value.
+        env={"PVAR": "VALUE"},
+        prompt_ps1="q:${PVAR}:!!>",
     ),
     Probe(
         46,
@@ -115,9 +133,16 @@ def ref_cmd(probe):
         return env_cmd(env) + [BASH_REF, "--noprofile", "--norc", "--posix", "-i"]
     docker_env = []
     for key, value in env.items():
+        if key == "PATH":
+            # The bash:5.3 image keeps bash and its docker-entrypoint.sh in
+            # /usr/local/bin; restricting PATH to the bashy side's /usr/bin:/bin
+            # would hide them and the container fails to start. Use the image's
+            # default PATH for the oracle (it still contains /bin/grep etc., so
+            # the probes resolve the same external commands).
+            value = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         docker_env.extend(["-e", f"{key}={value}"])
     return [
-        "docker",
+        *OCI,
         "run",
         "--rm",
         "-i",
@@ -181,13 +206,19 @@ def normalize_prompt(text):
     return text
 
 
-def read_available(master, sel, proc, deadline, stop=None):
+def read_available(master, sel, proc, deadline, stop=None, idle=None):
+    # Read until `deadline`, or until `stop` bytes are seen, or — when `idle`
+    # is set — until the stream has produced nothing for `idle` seconds after
+    # having produced something (useful to settle on a prompt we can't predict).
     out = bytearray()
+    last_data = None
     while time.time() < deadline:
         timeout = max(0.0, min(0.05, deadline - time.time()))
         events = sel.select(timeout)
         if not events:
             if proc.poll() is not None:
+                break
+            if idle is not None and last_data is not None and (time.time() - last_data) >= idle:
                 break
             continue
         for _key, _mask in events:
@@ -198,6 +229,7 @@ def read_available(master, sel, proc, deadline, stop=None):
             if not chunk:
                 return bytes(out)
             out.extend(chunk)
+            last_data = time.time()
             # bashy's readline asks the terminal for cursor position. Answer
             # with a stable top-left coordinate so prompt redraw can continue.
             if b"\x1b[6n" in chunk:
@@ -246,29 +278,50 @@ def run_probe(cmd, probe):
     except FileNotFoundError as exc:
         return "", "err", f"missing command: {exc.filename}"
 
-    deadline = time.time() + 4.0
-    first = read_available(master, sel, proc, deadline, PROMPT.encode())
+    # Let the shell start and print its first (default) prompt. The oracle's
+    # prompt is not our sentinel, so don't key off PROMPT here — just settle
+    # until the startup output goes idle.
+    first = read_available(master, sel, proc, time.time() + 6.0, stop=None, idle=0.4)
     first_text = strip_terminal_noise(first)
-    if proc.poll() is not None and PROMPT not in first_text and not probe.initial_prompt:
+    if proc.poll() is not None:
         return normalize_output(first_text, []), "err", "shell exited before prompt"
 
-    if probe.initial_prompt:
-        if proc.poll() is not None:
-            return normalize_prompt(first), "err", "shell exited before prompt"
-        prompt_out = normalize_prompt(first)
-        if not prompt_out:
-            return prompt_out, "err", "missing prompt"
+    if probe.prompt_ps1:
+        # Set PS1 in-session, then echo a marker. The rendered prompt is the
+        # text printed immediately before the marker command's echo.
+        marker = "@@@PE@@@"
+        script = f"PS1='{probe.prompt_ps1}'\necho {marker}\nexit\n"
         try:
-            os.write(master, b"exit\n")
-        except OSError:
-            pass
-        read_available(master, sel, proc, time.time() + 1.0)
+            os.write(master, script.encode())
+        except OSError as exc:
+            terminate(proc)
+            return "", "err", f"write failed: {exc}"
+        raw = read_available(master, sel, proc, time.time() + 6.0, stop=marker.encode())
         terminate(proc)
+        text = strip_terminal_noise(raw)
+        # The stream after `PS1=...` is: <renderedPrompt>echo @@@PE@@@\n@@@PE@@@.
+        # Grab the rendered prompt = text on the line that contains the echoed
+        # `echo @@@PE@@@` command, before that command.
+        prompt_out = ""
+        for line in text.split("\n"):
+            idx = line.find(f"echo {marker}")
+            if idx > 0:
+                prompt_out = line[:idx].strip()
+                break
+        if not prompt_out:
+            return "", "err", "missing rendered prompt"
         return prompt_out, "ok", ""
 
     begin = f"printf '@@@P:{probe.num}@@@\\n'"
     end = f"printf '@@@X:{probe.num}:%s@@@\\n' \"$?\""
-    sent_lines = [begin, *probe.lines, end, "exit"]
+    # Neutralize the prompt in BOTH shells by assigning a fixed, strippable
+    # sentinel in-session (real bash does not import PS1 from the environment
+    # for interactive shells, so it must be set this way). normalize_output()
+    # strips the PROMPT sentinel and drops readline's echo of each typed line.
+    # NB: an *empty* PS1 is not usable here — bash renders no prompt, but bashy
+    # treats empty as unset and falls back to its default \u@\h:\w\$ prompt.
+    prompt_reset = [f"PS1='{PROMPT}'", "PS2='> '"]
+    sent_lines = [*prompt_reset, begin, *probe.lines, end, "exit"]
     script = "\n".join(sent_lines) + "\n"
     try:
         os.write(master, script.encode())
@@ -277,7 +330,7 @@ def run_probe(cmd, probe):
         return "", "err", f"write failed: {exc}"
 
     end_marker = f"@@@X:{probe.num}:".encode()
-    raw = first + read_available(master, sel, proc, time.time() + 4.0, end_marker)
+    raw = first + read_available(master, sel, proc, time.time() + 6.0, end_marker)
     terminate(proc)
     text = strip_terminal_noise(raw)
 

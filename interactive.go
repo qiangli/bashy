@@ -60,11 +60,15 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 		if ps == "PS2" {
 			defaultPS = "> "
 		}
-		val := r.Env.Get(ps).String()
+		// Read PS1/PS2 from the LIVE variable scope, not r.Env: r.Env holds
+		// only the initial environment, so an in-session `PS1=...` (re)assignment
+		// would otherwise never reach the prompt. POSIX behavior #29 (parameter
+		// expansion on PS1/PS2 in posix mode) depends on this too.
+		val := r.LiveVar(ps).String()
 		if val == "" {
 			val = defaultPS
 		}
-		envGet := func(name string) string { return r.Env.Get(name).String() }
+		envGet := func(name string) string { return r.LiveVar(name).String() }
 		return expandPrompt(val, envGet, cmdNum, cmdNum)
 	}
 

@@ -24,6 +24,17 @@
 set -u
 BASHY=${BASHY:-./bin/bashy}
 
+# Container runtime that provides the bash 5.3 oracle. Defaults to `docker`,
+# but auto-falls back to `ycode podman` (the embedded rootless Podman on dev
+# machines that have no Docker). Override with OCI="..." for anything else.
+OCI=${OCI:-}
+if [ -z "$OCI" ]; then
+  if command -v docker >/dev/null 2>&1; then OCI=docker
+  elif command -v ycode  >/dev/null 2>&1; then OCI="ycode podman"
+  else echo "error: no container runtime (need docker or ycode podman)" >&2; exit 2
+  fi
+fi
+
 # Run bashy in a clean, minimal environment so host variables (API keys, etc.)
 # don't leak into its `export`/`set` listings while the docker bash sees a
 # pristine env — that asymmetry is a harness artifact, not a real difference.
@@ -76,7 +87,7 @@ done
 
 # --- run bash 5.3 in one docker container, stdout + exit marker per probe ---
 PROBES=$(for i in "${!NUMS[@]}"; do printf '%s\t%s\n' "$i" "${SCRIPTS[$i]}"; done)
-RAW=$(printf '%s\n' "$PROBES" | docker run --rm -i -e HOME=/tmp bash:5.3 bash -c '
+RAW=$(printf '%s\n' "$PROBES" | $OCI run --rm -i -e HOME=/tmp bash:5.3 bash -c '
   tab=$(printf "\t")
   while IFS="$tab" read -r idx script; do
     echo "@@@P:$idx@@@"

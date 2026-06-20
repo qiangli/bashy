@@ -42,6 +42,35 @@ readline redraws, prompts, and cursor-position queries do not pollute probe
 results. It follows the Phase 1 rule of comparing observable stdout plus
 success/fail while ignoring non-mandated wording.
 
+### Phase 2 progress (2026-06-19, cont.)
+
+Oracle runtime: the harness now auto-detects the container runtime and falls
+back to **`ycode podman`** when `docker` is absent (`OCI=` env override; same
+convention added to `posix-parity.sh`). On this dev box there is no Docker, so
+`ycode podman run bash:5.3` is the live oracle. Two harness fixes were needed:
+(1) the `bash:5.3` image keeps `bash`/`docker-entrypoint.sh` in `/usr/local/bin`,
+so the oracle must not have its PATH narrowed to `/usr/bin:/bin`; (2) interactive
+bash does not import `PS1` from the environment, so the prompt is neutralized by
+assigning a strippable sentinel **in-session**, and prompt probes set their PS1
+in-session and capture the rendered prompt before a marker echo.
+
+Status of the seed probes:
+- **#3 (interactive alias expansion)** — MATCH.
+- **#46 (interactive comments enabled)** — MATCH.
+- **#29 (PS1 parameter + `!!` expansion)** — DIFF, real gap. Fixing this surfaced
+  and fixed a prerequisite bug first: bashy's interactive prompt read `PS1` from
+  the read-only initial env, so an in-session `PS1=...` never took effect. Now
+  fixed via the new `interp.Runner.LiveVar` accessor wired into `interactive.go`'s
+  `getPrompt`. The remaining #29 work is in `prompt.go`'s `expandPrompt`: in posix
+  mode it must additionally perform **parameter expansion** on PS1/PS2 and expand
+  bare **`!`→history number / `!!`→`!`** (today it only decodes backslash escapes).
+- meta posix-state smoke probe (num 0) — occasionally flaky under sequential
+  container startup; not one of the 76 behaviors.
+
+Related bashy follow-up (not posix-specific): bashy treats an explicitly-empty
+`PS1=` as unset and falls back to its default `\u@\h:\w\$` prompt, whereas bash
+renders an empty prompt.
+
 ### Known bash-parity follow-up (NOT a POSIX gap)
 - **`BASH_EXECUTION_STRING` is exported** by bashy (`os.Setenv` in `main.go`);
   real bash keeps it a **non-exported** shell var. It's bash-specific (not POSIX),
