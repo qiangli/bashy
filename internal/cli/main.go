@@ -1410,6 +1410,20 @@ done
 	return err
 }
 
+// bashyParseOpts builds the parser options for a requested language. A
+// LangPOSIX request is translated to LangBash + PosixMode(true): bashy is a
+// bash drop-in, and `bash --posix` keeps bash grammar (arrays, ${v:off:len},
+// ${v^^}, …) while applying only POSIX *behavioral* parse rules. The stricter
+// LangPOSIX grammar would silently drop those bash extensions. Any other
+// requested variant is passed through unchanged. extra options are appended.
+func bashyParseOpts(reqLang syntax.LangVariant, extra ...syntax.ParserOption) []syntax.ParserOption {
+	variant, posix := reqLang, false
+	if reqLang == syntax.LangPOSIX {
+		variant, posix = syntax.LangBash, true
+	}
+	return append([]syntax.ParserOption{syntax.Variant(variant), syntax.PosixMode(posix)}, extra...)
+}
+
 func run(r *interp.Runner, reader io.Reader, name string) error {
 	if reader == nil {
 		return nil
@@ -1489,8 +1503,8 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	// r.Run(prog) would. The -c case (`*command != ""`) skips
 	// recovery; bash also fails -c entirely on parse error.
 	parseOnce := func(chunk []byte, parseLang syntax.LangVariant) (*syntax.File, syntax.ParseError, bool) {
-		f, perr := syntax.NewParser(syntax.Variant(parseLang), syntax.HeredocEOFWarning(hdocWarn),
-			syntax.HeredocComsubWarning(comsubWarn)).
+		f, perr := syntax.NewParser(bashyParseOpts(parseLang, syntax.HeredocEOFWarning(hdocWarn),
+			syntax.HeredocComsubWarning(comsubWarn))...).
 			Parse(bytes.NewReader(chunk), name)
 		if perr == nil {
 			return f, syntax.ParseError{}, false
@@ -1715,8 +1729,8 @@ func runStatementStream(
 	cursor := 0
 	for cursor < len(src) {
 		parseLang := r.LangVariant()
-		parser := syntax.NewParser(syntax.Variant(parseLang), syntax.HeredocEOFWarning(hdocWarn),
-			syntax.HeredocComsubWarning(comsubWarn))
+		parser := syntax.NewParser(bashyParseOpts(parseLang, syntax.HeredocEOFWarning(hdocWarn),
+			syntax.HeredocComsubWarning(comsubWarn))...)
 		restart := false
 		chunk := paddedChunk(src, cursor, len(src))
 		for stmt, err := range parser.StmtsSeq(bytes.NewReader(chunk)) {
@@ -1763,7 +1777,7 @@ func runStatementStream(
 						start := lineStart(src, errLine)
 						if start > cursor {
 							prefix := paddedChunk(src, cursor, start)
-							prefixParser := syntax.NewParser(syntax.Variant(parseLang), syntax.HeredocEOFWarning(hdocWarn))
+							prefixParser := syntax.NewParser(bashyParseOpts(parseLang, syntax.HeredocEOFWarning(hdocWarn))...)
 							for stmt, perr := range prefixParser.StmtsSeq(bytes.NewReader(prefix)) {
 								if stmt != nil {
 									if err := r.Run(ctx, stmt); err != nil {

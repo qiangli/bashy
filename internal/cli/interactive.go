@@ -55,10 +55,11 @@ func singleQuote(s string) string {
 }
 
 func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) error {
+	// Always bash grammar (drop-in); --posix applies POSIX *behavioral* parse
+	// rules via PosixMode, not the stricter LangPOSIX grammar that would drop
+	// bash extensions (arrays, ${v:off:len}, ${v^^}). See run() in main.go.
 	lang := syntax.LangBash
-	if *posix {
-		lang = syntax.LangPOSIX
-	}
+	posixMode := *posix
 
 	var cmdNum int
 	getPrompt := func(ps string) string {
@@ -97,7 +98,7 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 		// the live variable scope to be visible to ${HISTFILE}.
 		if histFile != "" {
 			assign := "HISTFILE=" + singleQuote(histFile)
-			p := syntax.NewParser(syntax.Variant(lang))
+			p := syntax.NewParser(syntax.Variant(lang), syntax.PosixMode(posixMode))
 			if prog, perr := p.Parse(strings.NewReader(assign), "histfile-init"); perr == nil {
 				_ = r.Run(context.Background(), prog)
 			}
@@ -108,6 +109,7 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 	return interactive.Run(context.Background(), interactive.Options{
 		Runner:            r,
 		Lang:              lang,
+		PosixMode:         posixMode,
 		Stdin:             stdin,
 		Stdout:            stdout,
 		Stderr:            stderr,
@@ -121,7 +123,7 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 		EOFPrompt:         "exit",
 		PreCommand: func(ctx context.Context, r *interp.Runner) {
 			if pc := r.Env.Get("PROMPT_COMMAND").String(); pc != "" {
-				pcp := syntax.NewParser(syntax.Variant(lang))
+				pcp := syntax.NewParser(syntax.Variant(lang), syntax.PosixMode(posixMode))
 				if prog, err := pcp.Parse(strings.NewReader(pc), "PROMPT_COMMAND"); err == nil {
 					_ = r.Run(ctx, prog)
 				}
