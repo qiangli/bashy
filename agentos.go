@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 
 	_ "github.com/qiangli/coreutils/cmds/all"
+	"github.com/qiangli/coreutils/external/podman"
 	coreutilsshell "github.com/qiangli/coreutils/shell"
 	"github.com/qiangli/coreutils/pkg/weave"
 )
@@ -42,12 +44,13 @@ func isAgentOSShell() bool {
 }
 
 // maybeRunAgentOSSubcommand dispatches AgentOS front-door subcommands that
-// are not shell scripts — currently `bashy weave …`, the re-homed
-// multi-agent workspace orchestrator. Only the AgentOS `bashy` binary offers
-// them; the pure `bash` drop-in falls through and treats the argument as a
-// script path, exactly like bash. Call it at the very top of main(), before
-// flag parsing, since the subcommand has its own flags. It os.Exit()s when
-// it handles the invocation and returns otherwise.
+// are not shell scripts — `bashy weave …` (the re-homed multi-agent workspace
+// orchestrator) and `bashy podman …` (a transparent shell-out to an installed
+// podman). Only the AgentOS `bashy` binary offers them; the pure `bash`
+// drop-in falls through and treats the argument as a script path, exactly like
+// bash. Call it at the very top of main(), before flag parsing, since the
+// subcommand has its own flags. It os.Exit()s when it handles the invocation
+// and returns otherwise.
 func maybeRunAgentOSSubcommand() {
 	if !isAgentOSShell() || len(os.Args) < 2 {
 		return
@@ -60,6 +63,11 @@ func maybeRunAgentOSSubcommand() {
 			os.Exit(1)
 		}
 		os.Exit(0)
+	case "podman":
+		// Shell-out pass-through to an externally installed podman (Layer 2 of
+		// the AgentOS substrate plan): no embedded engine, no fork — the
+		// caller's env (CONTAINER_HOST etc.) is inherited verbatim.
+		os.Exit(podman.Run(context.Background(), os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	}
 }
 
