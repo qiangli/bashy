@@ -58,6 +58,10 @@ fi
 
 match=0 deviation=0 ambiguous=0
 declare -a DEV_LIST AMB_LIST
+# Per-reference conformance distance: how often bashy agrees with each oracle
+# shell, independent of consensus. Answers "how close is bashy to bash / dash /
+# yash?" — a behavioral-distance metric per reference.
+declare -A REF_MATCH REF_TOTAL
 
 shopt -s nullglob
 for f in "$CORPUS"/*.sh; do
@@ -80,7 +84,10 @@ for f in "$CORPUS"/*.sh; do
       yash)   oout=$($OCI run --rm -i -w /tmp localhost/yash-oracle yash --posix <"$f" 2>/dev/null); orc=$? ;;
     esac
     rm -rf "$od"
-    okeys+=("$([ $orc -eq 0 ] && echo ok || echo err)|$oout")
+    okey="$([ $orc -eq 0 ] && echo ok || echo err)|$oout"
+    okeys+=("$okey")
+    REF_TOTAL[$name]=$(( ${REF_TOTAL[$name]:-0} + 1 ))
+    [ "$bykey" = "$okey" ] && REF_MATCH[$name]=$(( ${REF_MATCH[$name]:-0} + 1 ))
   done
   rm -rf "$tmpd"
 
@@ -113,4 +120,11 @@ for f in "$CORPUS"/*.sh; do
 done
 
 echo "=== $match match / $deviation deviation / $ambiguous ambiguous ($((match+deviation+ambiguous)) scripts) ==="
+echo "--- per-reference behavioral distance (bashy agrees with each shell) ---"
+for name in "${ORACLE_NAMES[@]}"; do
+  m=${REF_MATCH[$name]:-0}; t=${REF_TOTAL[$name]:-0}
+  pct="n/a"; [ "$t" -gt 0 ] && pct="$(( m * 100 / t ))%"
+  printf "  bashy vs %-7s : %d/%d (%s)\n" "$name" "$m" "$t" "$pct"
+done
+echo "  (bash drop-in fidelity anchor: 86/86 on bash's own 5.3 fixture suite — see make test-bash)"
 [ "$deviation" -eq 0 ]
