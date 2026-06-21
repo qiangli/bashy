@@ -88,7 +88,26 @@ def run_case(bashy, code):
         except subprocess.TimeoutExpired:
             return '<timeout>', 124
 
+def extract(outdir, files):
+    """Write each case's CODE to outdir/<suite>__<n>.sh (skip ones with no code).
+    Used by oils-diff.sh to feed Oils case code through the live differential
+    harness instead of comparing to Oils' baked-in (version-drifting) expected."""
+    os.makedirs(outdir, exist_ok=True)
+    n = 0
+    for path in files:
+        suite = os.path.basename(path).replace('.test.sh', '')
+        for i, c in enumerate(parse(path)):
+            code = c['code'].strip()
+            if not code:
+                continue
+            open(os.path.join(outdir, f"{suite}__{i:03d}.sh"), 'w').write(code + '\n')
+            n += 1
+    print(f"extracted {n} case scripts to {outdir}")
+    return 0
+
 def main():
+    if sys.argv[1] == '--extract':
+        return extract(sys.argv[2], sys.argv[3:])
     bashy = sys.argv[1]
     total = passed = failed = skipped = 0
     fails = []

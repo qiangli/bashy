@@ -83,7 +83,10 @@ declare -A CMD=( [bash53]="bash --posix" [dash]="dash" [yash]="yash --posix" [mk
 runShell() {
   local d out rc
   d=$(mktemp -d); cp "$SCRIPT" "$d/s"
-  out=$(cd "$d" && eval "$1 s" 2>&1); rc=$?
+  # Per-case timeout (busybox; all shells run in-container): a hanging case
+  # (infinite loop, blocking read, etc.) must not stall the whole run. A
+  # timeout shows as a non-zero exit, comparable across shells.
+  out=$(cd "$d" && eval "timeout 10 $1 s" </dev/null 2>&1); rc=$?
   rm -rf "$d"
   printf '%s|%s' "$([ "$rc" -eq 0 ] && echo ok || echo err)" "$out"
 }
