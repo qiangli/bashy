@@ -21,12 +21,14 @@ import (
 
 	_ "github.com/qiangli/coreutils/cmds/all"
 	"github.com/qiangli/coreutils/external/podman"
+	"github.com/qiangli/coreutils/pkg/secrets"
 	"github.com/qiangli/coreutils/pkg/weave"
 	coreutilsshell "github.com/qiangli/coreutils/shell"
 )
 
 // Dispatch handles AgentOS front-door subcommands that are not shell scripts —
-// `bashy weave …` (the multi-agent workspace orchestrator) and `bashy podman …`
+// `bashy weave …` (the multi-agent workspace orchestrator), `bashy secrets …`
+// (cloudbox-managed API keys/tokens for the shell), and `bashy podman …`
 // (a transparent shell-out to an installed podman). It is wired into the shell
 // core via cli.AgentOSDispatch and runs before any bash flag parsing, since the
 // subcommands carry their own flags. It os.Exit()s when it handles the
@@ -38,6 +40,13 @@ func Dispatch() {
 	switch os.Args[1] {
 	case "weave":
 		cmd := weave.NewWeaveCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "secrets":
+		cmd := secrets.NewSecretsCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
