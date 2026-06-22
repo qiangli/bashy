@@ -240,7 +240,7 @@ func splitCombinedShortFlags(args []string) []string {
 // shell (cmd/bashy) sets them to the internal/agentos implementations. This is
 // what keeps the two binaries independent.
 var (
-	AgentOSDispatch                                                  = func() {}
+	AgentOSDispatch                                                   = func() {}
 	AgentOSWireExec func([]interp.RunnerOption) []interp.RunnerOption = func(o []interp.RunnerOption) []interp.RunnerOption { return o }
 )
 
@@ -289,13 +289,12 @@ func newRunner() (*interp.Runner, error) {
 	}
 	shlvl++
 
+	// Inherit the full environment, INCLUDING $OLDPWD. bash (and every
+	// other POSIX shell) carries an inherited OLDPWD through so `cd -`
+	// works in a fresh shell; stripping it made `cd -` fail where bash
+	// succeeds (oils builtin-cd differential, all 5 oracle shells agree).
 	envVars := make([]string, 0, len(os.Environ())+len(bashVersionVars()))
-	for _, env := range os.Environ() {
-		if strings.HasPrefix(env, "OLDPWD=") {
-			continue
-		}
-		envVars = append(envVars, env)
-	}
+	envVars = append(envVars, os.Environ()...)
 	envVars = append(envVars, bashVersionVars()...)
 	envVars = append(envVars, fmt.Sprintf("SHLVL=%d", shlvl))
 

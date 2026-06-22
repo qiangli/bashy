@@ -14,14 +14,18 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-func TestNewRunnerIgnoresInheritedOLDPWD(t *testing.T) {
+func TestNewRunnerInheritsOLDPWD(t *testing.T) {
+	// bash (and every POSIX shell) carries an inherited $OLDPWD through so
+	// `cd -` works in a fresh shell. Stripping it was a non-conformance
+	// (oils builtin-cd differential vs all 5 oracle shells).
 	t.Setenv("OLDPWD", "/tmp")
 	r, err := newRunner()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := r.Env.Get("OLDPWD"); got.IsSet() {
-		t.Fatalf("OLDPWD inherited into runner as %q", got.String())
+	got := r.Env.Get("OLDPWD")
+	if !got.IsSet() || got.String() != "/tmp" {
+		t.Fatalf("OLDPWD not inherited into runner: set=%v val=%q", got.IsSet(), got.String())
 	}
 }
 

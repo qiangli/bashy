@@ -96,6 +96,7 @@ BASH_TEST_CAT_V := printf
 test-bash: build test-bash-helpers
 	@echo "Running bash 5.3 test suite against bashy ($(BASH_TEST_TIMEOUT)s timeout per test)..."
 	@BASHY_ABS=$$(pwd)/$(BASHY); cd $(BASH_TESTS_DIR) && \
+		unset OLDPWD && \
 		export THIS_SH=$$BASHY_ABS && \
 		export BUILD_DIR=$$PWD/.. && \
 		export PATH=$$PWD:/usr/bin:/bin:/usr/local/bin && \
