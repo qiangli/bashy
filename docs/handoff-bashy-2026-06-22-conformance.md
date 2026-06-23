@@ -1,9 +1,58 @@
-# Handoff — conformance next step (2026-06-22)
+# Handoff — conformance next step (2026-06-22, updated 2026-06-23)
 
-One-line: **bash-5.3 is done (86/86, 100%, default mode). The remaining
-conformance work is the POSIX / VSC-PCTS cert pre-flight — pick up the
-`vsc-pcts-readiness.md` checklist, starting with the POSIX-mode breadth
-sweep.** This note is the next instruction for the agent picking up cold.
+One-line: **bash-5.3 is done (86/86, 100%, default mode). Drop-in fidelity is
+now a COMMITTED, repeatable metric (`scripts/bash-fidelity.sh`, baseline
+941/1105 = 85%); the weave fleet is actively clearing its backlog. Pick up
+**round 2** (below) — re-assign param-expansion, finish `[[ ]]`, run
+array/declare/redirect.**
+
+## UPDATE 2026-06-23 — breadth metric shipped + weave round 1 landed
+
+The three "next step" items below are now ADDRESSED:
+- **Breadth sweep → committed metric.** `scripts/bash-fidelity.sh` is a 2-way
+  (our `bash` vs real bash:5.3), per-case-isolated drop-in fidelity probe —
+  the high-signal complement to the 5-shell consensus (which masks bash-only
+  gaps as "ambiguous"). Baseline **164 diffs / 1105 = 85%**. This replaces the
+  ad-hoc "~86%" with a reproducible number + a triaged backlog (~25 scopes:
+  arith/array/dbracket/declare/var-op/redirect/…).
+- **`<<${a}` DECIDED: do not fix.** It's a deliberate upstream mvdan/sh parser
+  strictness (6 `langErr` tests assert it; even Oils' own OSH rejects it; bash
+  itself *warns*). Diverging the streaming parser for a bash-discouraged edge
+  case isn't worth it. Goes in the declared-limitations list.
+- **Oils mining → low-signal beyond the curated set** (Oils-harness-var
+  artifacts: `$TMP`/`$SH`/argv.py). `bash-fidelity.sh` is the better frontier.
+
+**Weave round 1 (3 workers, disjoint sh files, gated 86/0): fidelity 164 → 159
+(+5).** codex→`expand/arith.go` (arith gaps; salvaged — uncommitted at submit);
+claude→`interp/test.go` (2 `[[ ]]` tilde cases + diagnosed the other 11 with
+verified patches → **`docs/dbracket-fidelity-round2.md`**); aider→`expand/param.go`
+STALLED (0 edits/55m — wrong tool for the hard `${x@Q/@P/@a}` cluster).
+Landed: sh `1608a824`, bashy pin, umbrella `72ede1d`.
+
+## ROUND 2 (next — drive these via the weave fleet, gate each 86/0)
+
+1. **`[[ ]]` — finish the 11 cases** in `docs/dbracket-fidelity-round2.md`. Most
+   have VERIFIED patches; several are blocked only on a coordinated
+   `interp/interp_test.go` assertion update (e.g. `=~` regex wording, case 005).
+   The orchestrator can apply the ready ones directly. Files: `interp/test.go`,
+   `syntax/parser.go`, `pattern/`, `interp/runner.go` — NOT disjoint, sequence them.
+2. **param-expansion (re-assign)** — `expand/param.go`, the `${x@Q/@P/@a}`
+   transform operators + `${x:-y}` family. aider failed; give it to **codex or
+   claude** (deep). 17 cases.
+3. **The rest of the backlog** — array (`expand/param.go`+`interp/vars.go`),
+   declare/`assign-extended` (`interp/builtin.go`), redirect (`interp/runner.go`),
+   word-split, getopts, brace-expansion. Triage from a fresh
+   `bash-fidelity.sh` run; group by sh source FILE (disjoint), one agent per file.
+
+Reminder: fixes live in **`sh`**; run weave on `sh`; the authoritative gate is
+**bashy `make test-bash` 86/0 + `bash-fidelity.sh` re-measure**, run by the
+orchestrator at merge (workers self-verify with `go test ./interp -run
+TestRunnerRun$ ./expand ./syntax` + `gosh`). NEVER touch `docs/` from a worker.
+
+---
+
+(Original 2026-06-22 note follows — the VSC-PCTS cert pre-flight is still the
+strategic frame; the breadth-sweep item is now the bash-fidelity campaign above.)
 
 ## Where we are (verified)
 
