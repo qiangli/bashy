@@ -21,6 +21,7 @@ import (
 
 	_ "github.com/qiangli/coreutils/cmds/all"
 	"github.com/qiangli/coreutils/external/podman"
+	"github.com/qiangli/coreutils/pkg/dag"
 	"github.com/qiangli/coreutils/pkg/secrets"
 	"github.com/qiangli/coreutils/pkg/weave"
 	coreutilsshell "github.com/qiangli/coreutils/shell"
@@ -28,8 +29,9 @@ import (
 
 // Dispatch handles AgentOS front-door subcommands that are not shell scripts —
 // `bashy weave …` (the multi-agent workspace orchestrator), `bashy secrets …`
-// (cloudbox-managed API keys/tokens for the shell), and `bashy podman …`
-// (a transparent shell-out to an installed podman). It is wired into the shell
+// (cloudbox-managed API keys/tokens for the shell), `bashy dag …` (the
+// agent-first markdown DAG task runner), and `bashy podman …` (a transparent
+// shell-out to an installed podman). It is wired into the shell
 // core via cli.AgentOSDispatch and runs before any bash flag parsing, since the
 // subcommands carry their own flags. It os.Exit()s when it handles the
 // invocation and returns otherwise.
@@ -52,6 +54,13 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
+	case "dag":
+		// The agent-first DAG task runner: markdown-defined targets run as a
+		// dependency graph. dag.ExitCodeOf recovers the stable weavecli exit
+		// code from the cobra error so agents get a meaningful status.
+		cmd := dag.NewDagCmd()
+		cmd.SetArgs(os.Args[2:])
+		os.Exit(dag.ExitCodeOf(cmd.Execute()))
 	case "podman":
 		// Shell-out pass-through to an externally installed podman (Layer 2 of
 		// the AgentOS substrate plan): no embedded engine, no fork — the
