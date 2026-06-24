@@ -16,9 +16,10 @@ bashy dag --json test       # machine-readable envelope for an agent
 ```
 
 Targets carry `Requires:` (dependency edges), `Sources:`/`Generates:`
-(reserved for the P1.5 fingerprint/up-to-date skip) and `Effects:` (reserved
-for the P2 effect-cap contract). P1 runs them in topological order through the
-in-process shell.
+(content-fingerprint up-to-date skip — `bashy dag build` no-ops when nothing
+changed; `--force`/`-B` re-runs) and `Effects:` (capability cap, recorded in
+the attestation; `Ensure:` postconditions are enforced too). Targets run in
+topological order through the in-process shell — add `-j N` for parallel.
 
 ## Tasks
 
