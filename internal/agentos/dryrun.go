@@ -25,9 +25,15 @@ import (
 // dryRunFlag is registered here (in agentos, imported only by cmd/bashy), so the
 // pure `bash` drop-in never sees `--dry-run` — bashy-only, also inert under
 // --posix (see WireExec).
-var dryRunFlag = flag.Bool("dry-run", false,
+// dryRunFlag is the bashy-only --dryrun (consistent with `set -o dryrun`),
+// registered here (in agentos, imported only by cmd/bashy) so the pure bash
+// drop-in never sees it; also inert under --posix (see WireExec).
+var dryRunFlag = flag.Bool("dryrun", false,
 	"bashy: print external commands without running them (xtrace without side effects). "+
 		"With DHNT_AGENT, emit a JSON manifest (commands present/missing + file destructions) — a preflight/security check.")
+
+// dryRunRequested reports whether --dryrun was passed at startup.
+func dryRunRequested() bool { return *dryRunFlag }
 
 // reporter is shared by the exec + open handlers for one dry run.
 type dryRunReporter struct {
@@ -124,8 +130,8 @@ func (r *dryRunReporter) truncate(stderr io.Writer, path string, size int64) {
 func dryRunHandler(r *dryRunReporter) func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 	return func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 		return func(ctx context.Context, args []string) error {
-			if len(args) == 0 {
-				return next(ctx, args)
+			if len(args) == 0 || !interp.HandlerCtx(ctx).DryRun() {
+				return next(ctx, args) // dry-run off (or `set +o dryrun`): execute
 			}
 			r.command(ctx, args)
 			return nil // skip execution, report success
@@ -140,6 +146,9 @@ func dryRunHandler(r *dryRunReporter) func(interp.ExecHandlerFunc) interp.ExecHa
 func dryRunOpenHandler(r *dryRunReporter) interp.OpenHandlerFunc {
 	def := interp.DefaultOpenHandler()
 	return func(ctx context.Context, path string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
+		if !interp.HandlerCtx(ctx).DryRun() {
+			return def(ctx, path, flag, perm) // dry-run off: real open
+		}
 		if flag&(os.O_WRONLY|os.O_RDWR|os.O_CREATE|os.O_TRUNC|os.O_APPEND) == 0 {
 			return def(ctx, path, flag, perm) // read-only: open the real file
 		}

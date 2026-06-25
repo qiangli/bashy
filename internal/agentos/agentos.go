@@ -77,20 +77,25 @@ func Dispatch() {
 // by the interpreter before the ExecHandler runs, so they are never shadowed —
 // only external-command names (ls, cat, grep, yc, …) are intercepted.
 func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
-	// --dry-run (bashy-only, inert under --posix): the print-and-skip handler
-	// goes FIRST in the chain so it intercepts every external command (incl.
-	// coreutils tools) and short-circuits execution.
-	if *dryRunFlag && !posix {
-		if weavecli.IsAgent() {
-			// Agent mode emits a clean JSON manifest on stdout; suppress the
-			// script's own stdout so only the manifest comes through.
-			opts = append(opts, interp.StdIO(os.Stdin, io.Discard, os.Stderr))
-		}
-		r := newReporter(os.Stdout)
-		// OpenHandler catches `>` truncations (records, never writes); the exec
-		// handler prints+skips external commands and reports rm destructions.
-		opts = append(opts, interp.OpenHandler(dryRunOpenHandler(r)))
-		return append(opts, interp.ExecHandlers(dryRunHandler(r), coreutilsshell.Handler()))
+	// --dry-run (bashy-only, inert under --posix). The handlers are installed
+	// whenever NOT in posix mode (they no-op when dry-run is off) so the runtime
+	// `set -o dryrun` toggle works even without the flag. EnableDryRunOption
+	// makes the engine recognize `set -o dryrun`; the pure bash drop-in never
+	// passes it, so it rejects the option exactly like Bash.
+	if posix {
+		return append(opts, interp.ExecHandlers(coreutilsshell.Handler()))
 	}
-	return append(opts, interp.ExecHandlers(coreutilsshell.Handler()))
+	initial := dryRunRequested()
+	if initial && weavecli.IsAgent() {
+		// Agent mode emits a clean JSON manifest on stdout; suppress the
+		// script's own stdout so only the manifest comes through.
+		opts = append(opts, interp.StdIO(os.Stdin, io.Discard, os.Stderr))
+	}
+	opts = append(opts, interp.EnableDryRunOption(initial))
+	r := newReporter(os.Stdout)
+	// OpenHandler catches `>` truncations (records, never writes); the exec
+	// handler prints+skips external commands and reports rm destructions. Both
+	// no-op when HandlerContext.DryRun() is false.
+	opts = append(opts, interp.OpenHandler(dryRunOpenHandler(r)))
+	return append(opts, interp.ExecHandlers(dryRunHandler(r), coreutilsshell.Handler()))
 }
