@@ -1474,6 +1474,16 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 			fmt.Fprintln(os.Stderr, msg)
 			return interp.ExitStatus(2)
 		}
+		// Same idea, generalized to the other parse errors bash reports as a
+		// fatal "syntax error near unexpected token `X'" and aborts the whole
+		// input on (a `case` with no subject word, a loop/`if`/`case` reserved
+		// word used outside its construct). Unlike our statement recovery, bash
+		// runs nothing on the offending line; aborting up front matches that.
+		// unexpectedTokenAbort returns ok=false for everything else.
+		if msg, ok := unexpectedTokenAbort(perr, src, errPrefix); ok {
+			fmt.Fprintln(os.Stderr, msg)
+			return interp.ExitStatus(2)
+		}
 	}
 	// Bash 5.3 treats `<<EOF\n...` running off the end of the file as a
 	// warning (not an error) and uses whatever was read up to EOF as
@@ -2392,6 +2402,110 @@ func insideUnclosedArith(src string, pos syntax.Pos) bool {
 	open := strings.Count(prefix, "((")
 	close := strings.Count(prefix, "))")
 	return open > close
+}
+
+// unexpectedTokenAbort recognises the parse errors bash 5.3 reports as a fatal
+// "syntax error near unexpected token `X'" and aborts the whole input on
+// (status 2) — the up-front sibling of syntax.DbracketParseError, for the
+// non-`[[ ]]` shapes. It renders the two-line bash diagnostic:
+//
+//	<prefix>: line N: syntax error near unexpected token `X'
+//	<prefix>: line N: `<offending source line>'
+//
+// Returns ok=false for any other ParseError so the recovery path is unchanged.
+func unexpectedTokenAbort(err error, src []byte, prefix string) (string, bool) {
+	var pe syntax.ParseError
+	if !errors.As(err, &pe) {
+		return "", false
+	}
+	token, ok := unexpectedTokenName(string(src), pe)
+	if !ok {
+		return "", false
+	}
+	line := int(pe.Pos.Line())
+	// bash reads-parses-executes one complete command (terminated by a newline)
+	// at a time, so any complete statement on an EARLIER line runs before it
+	// reaches — and aborts on — the offending one. Aborting the whole input up
+	// front would wrongly skip that output, so only fire when nothing executable
+	// precedes the error line. (Clauses on the SAME line as the error are part
+	// of the failing parse unit and never run, exactly as in bash.)
+	if completeStmtBeforeLine(src, line) {
+		return "", false
+	}
+	msg := fmt.Sprintf("%s: line %d: syntax error near unexpected token `%s'", prefix, line, token)
+	if srcLine := nthLine(src, line); srcLine != "" {
+		msg += fmt.Sprintf("\n%s: line %d: `%s'", prefix, line, srcLine)
+	}
+	return msg, true
+}
+
+// unexpectedTokenName returns the token bash names in its "unexpected token"
+// diagnostic for the parse errors unexpectedTokenAbort handles, or ok=false
+// when pe is some other error. Two families:
+//
+//   - a `case` with no subject word (`case` / `case x` followed by a non-word):
+//     bash names the token it found instead — a `newline` for `case<newline>`;
+//   - a loop/`if`/`case` reserved word (`do`, `done`, `then`, `elif`, `fi`,
+//     `esac`, `;;`) used outside the construct it belongs to: bash names the
+//     reserved word itself.
+//
+// Inside an open command substitution bash reports the matching-`)' variant
+// instead, so those are declined here and left to the recovery path.
+func unexpectedTokenName(src string, pe syntax.ParseError) (string, bool) {
+	text := pe.Text
+	if kw, ok := reservedWordOnlyError(text); ok {
+		if commandSubstOpenBefore([]byte(src), pe.Pos) {
+			return "", false
+		}
+		// done/esac/;; have a recovery-path rewrite to the matching-`)' wording
+		// whenever the source merely contains a `$(`; leave those to it so this
+		// abort doesn't clash with established behavior.
+		switch kw {
+		case "done", "esac", ";;":
+			if strings.Contains(src, "$(") {
+				return "", false
+			}
+		}
+		return kw, true
+	}
+	if text == "`case` must be followed by a word" ||
+		(strings.HasPrefix(text, "`case ") && strings.Contains(text, "must be followed by `in`")) {
+		tok := offendingTokenAfter(src, pe.Pos, tokensToSkip(text))
+		if tok == "" {
+			tok = "newline"
+		}
+		return tok, true
+	}
+	return "", false
+}
+
+// completeStmtBeforeLine reports whether src has a complete statement that ends
+// on a line strictly before errLine — i.e. a command bash would have run before
+// reaching the offending line. It parses up to the first parse error (the
+// statement stream stops there) and checks the statements yielded along the way.
+func completeStmtBeforeLine(src []byte, errLine int) bool {
+	parser := syntax.NewParser(syntax.Variant(syntax.LangBash))
+	for stmt, err := range parser.StmtsSeq(bytes.NewReader(src)) {
+		if stmt != nil && int(stmt.End().Line()) < errLine {
+			return true
+		}
+		if err != nil {
+			break
+		}
+	}
+	return false
+}
+
+// reservedWordOnlyError reports whether text is one of the engine's
+// "%#q can only be used …" diagnostics for a misplaced loop/`if`/`case`
+// reserved word, returning the bare keyword (without the `%#q` backticks).
+func reservedWordOnlyError(text string) (string, bool) {
+	for _, kw := range []string{"do", "done", "then", "elif", "fi", "esac", ";;"} {
+		if strings.HasPrefix(text, "`"+kw+"` can only be used ") {
+			return kw, true
+		}
+	}
+	return "", false
 }
 
 // tokensToSkip returns how many words must be skipped past pe.Pos in
