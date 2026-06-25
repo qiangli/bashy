@@ -9,6 +9,7 @@ require (
 )
 
 require (
+	github.com/benhoyt/goawk v1.31.0 // indirect
 	github.com/creack/pty/v2 v2.0.1 // indirect
 	github.com/ergochat/readline v0.1.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
