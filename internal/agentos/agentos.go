@@ -86,7 +86,11 @@ func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 			// script's own stdout so only the manifest comes through.
 			opts = append(opts, interp.StdIO(os.Stdin, io.Discard, os.Stderr))
 		}
-		return append(opts, interp.ExecHandlers(dryRunHandler(os.Stdout), coreutilsshell.Handler()))
+		r := newReporter(os.Stdout)
+		// OpenHandler catches `>` truncations (records, never writes); the exec
+		// handler prints+skips external commands and reports rm destructions.
+		opts = append(opts, interp.OpenHandler(dryRunOpenHandler(r)))
+		return append(opts, interp.ExecHandlers(dryRunHandler(r), coreutilsshell.Handler()))
 	}
 	return append(opts, interp.ExecHandlers(coreutilsshell.Handler()))
 }

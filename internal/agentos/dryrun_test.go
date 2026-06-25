@@ -4,10 +4,36 @@
 package agentos
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"mvdan.cc/sh/v3/expand"
 )
+
+func TestAnalyzeDestroy(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(dir, "build", "sub"), 0o755)
+	_ = os.WriteFile(filepath.Join(dir, "build", "a.o"), []byte("aaaa"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "build", "sub", "b.o"), []byte("bb"), 0o644)
+
+	if d := analyzeDestroy("rm", []string{"rm", "-rf", "build"}, dir); d == nil ||
+		d.Files != 2 || d.Bytes != 6 || !d.Recursive {
+		t.Fatalf("rm -rf build: %+v", d)
+	}
+	if d := analyzeDestroy("rm", []string{"rm", "build"}, dir); d != nil {
+		t.Errorf("rm on a dir without -r destroys nothing, got %+v", d)
+	}
+	if d := analyzeDestroy("rm", []string{"rm", filepath.Join(dir, "build", "a.o")}, dir); d == nil || d.Files != 1 {
+		t.Errorf("rm single file: %+v", d)
+	}
+	if analyzeDestroy("rm", []string{"rm", "-rf", "ghost"}, dir) != nil {
+		t.Error("rm of a missing path destroys nothing")
+	}
+	if analyzeDestroy("ls", []string{"ls", "-la"}, dir) != nil {
+		t.Error("non-rm command is not destructive")
+	}
+}
 
 func TestShQuote(t *testing.T) {
 	cases := map[string]string{
