@@ -145,11 +145,11 @@ test-bash: build test-bash-helpers
 				mkdir -p "$$test_tmp"; \
 			fi; \
 			if [ "$$name" = "input-test" ]; then \
-				perl -e 'setpgrp; exec @ARGV' $$THIS_SH >$$BASH_TSTRAW 2>&1 <./input-line.sh & \
+				BASH_SETPGRP=1 $$THIS_SH >$$BASH_TSTRAW 2>&1 <./input-line.sh & \
 			elif [ -n "$$test_tmp" ]; then \
-				TMPDIR=$$test_tmp perl -e 'setpgrp; exec @ARGV' $$THIS_SH ./$$test_file >$$BASH_TSTRAW 2>&1 & \
+				TMPDIR=$$test_tmp BASH_SETPGRP=1 $$THIS_SH ./$$test_file >$$BASH_TSTRAW 2>&1 & \
 			else \
-				perl -e 'setpgrp; exec @ARGV' $$THIS_SH ./$$test_file >$$BASH_TSTRAW 2>&1 & \
+				BASH_SETPGRP=1 $$THIS_SH ./$$test_file >$$BASH_TSTRAW 2>&1 & \
 			fi; \
 			test_pid=$$!; \
 			per_test_timeout=$(BASH_TEST_TIMEOUT); \

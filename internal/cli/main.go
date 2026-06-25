@@ -248,6 +248,11 @@ var (
 
 // Main is the shell entry point, shared by cmd/bash and cmd/bashy.
 func Main() {
+	// Optionally put ourselves in a new process group (BASH_SETPGRP) so the
+	// bash 5.3 test harness can reap our whole process tree with
+	// `kill -- -<pid>` — no external setsid/perl wrapper needed. No-op when
+	// the env var is unset (i.e. always, outside the harness).
+	maybeNewProcessGroup()
 	// AgentOS front-door subcommands (e.g. `bashy weave …`) are handled
 	// before any bash flag parsing, since they carry their own flags. No-op
 	// for the pure `bash` drop-in (the default AgentOSDispatch).
