@@ -15,6 +15,7 @@ package agentos
 
 import (
 	"context"
+	"io"
 	"os"
 
 	"mvdan.cc/sh/v3/interp"
@@ -24,6 +25,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/dag"
 	"github.com/qiangli/coreutils/pkg/secrets"
 	"github.com/qiangli/coreutils/pkg/weave"
+	"github.com/qiangli/coreutils/pkg/weavecli"
 	coreutilsshell "github.com/qiangli/coreutils/shell"
 )
 
@@ -74,6 +76,17 @@ func Dispatch() {
 // core via cli.AgentOSWireExec. Shell builtins (echo, pwd, test, …) are handled
 // by the interpreter before the ExecHandler runs, so they are never shadowed —
 // only external-command names (ls, cat, grep, yc, …) are intercepted.
-func WireExec(opts []interp.RunnerOption) []interp.RunnerOption {
+func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
+	// --dry-run (bashy-only, inert under --posix): the print-and-skip handler
+	// goes FIRST in the chain so it intercepts every external command (incl.
+	// coreutils tools) and short-circuits execution.
+	if *dryRunFlag && !posix {
+		if weavecli.IsAgent() {
+			// Agent mode emits a clean JSON manifest on stdout; suppress the
+			// script's own stdout so only the manifest comes through.
+			opts = append(opts, interp.StdIO(os.Stdin, io.Discard, os.Stderr))
+		}
+		return append(opts, interp.ExecHandlers(dryRunHandler(os.Stdout), coreutilsshell.Handler()))
+	}
 	return append(opts, interp.ExecHandlers(coreutilsshell.Handler()))
 }

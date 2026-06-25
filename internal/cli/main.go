@@ -240,8 +240,10 @@ func splitCombinedShortFlags(args []string) []string {
 // shell (cmd/bashy) sets them to the internal/agentos implementations. This is
 // what keeps the two binaries independent.
 var (
-	AgentOSDispatch                                                   = func() {}
-	AgentOSWireExec func([]interp.RunnerOption) []interp.RunnerOption = func(o []interp.RunnerOption) []interp.RunnerOption { return o }
+	AgentOSDispatch = func() {}
+	// posix is passed so AgentOS extensions (e.g. --dry-run) stay inert under
+	// --posix and absent from the pure bash drop-in.
+	AgentOSWireExec func([]interp.RunnerOption, bool) []interp.RunnerOption = func(o []interp.RunnerOption, _ bool) []interp.RunnerOption { return o }
 )
 
 // Main is the shell entry point, shared by cmd/bash and cmd/bashy.
@@ -364,7 +366,7 @@ func newRunner() (*interp.Runner, error) {
 	// For the AgentOS shell `bashy`, inject the coreutils pure-Go userland +
 	// `yc` verbs as in-process commands. No-op for the pure `bash` drop-in
 	// (the default AgentOSWireExec).
-	opts = AgentOSWireExec(opts)
+	opts = AgentOSWireExec(opts, *posix)
 	r, err = interp.New(opts...)
 	if err != nil {
 		return nil, err
