@@ -1463,6 +1463,18 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	if *command != "" {
 		errPrefix += ": -c"
 	}
+	// A malformed `[[ ]]` conditional is a parse error bash aborts the whole
+	// script on (status 2), with a specific diagnostic — unlike the
+	// statement-by-statement recovery we apply to most parse errors. Detect it
+	// up front via the shared engine helper and abort with bash's exact
+	// wording. DbracketParseError returns ok=false for any non-`[[ ]]` parse
+	// error, so the recovery path below is unchanged for everything else.
+	if _, perr := syntax.NewParser(syntax.Variant(lang)).Parse(bytes.NewReader(src), name); perr != nil {
+		if msg, ok := syntax.DbracketParseError(perr, src, errPrefix); ok {
+			fmt.Fprintln(os.Stderr, msg)
+			return interp.ExitStatus(2)
+		}
+	}
 	// Bash 5.3 treats `<<EOF\n...` running off the end of the file as a
 	// warning (not an error) and uses whatever was read up to EOF as
 	// the body. Wire that behaviour through the parser so the
