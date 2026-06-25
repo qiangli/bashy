@@ -82,7 +82,12 @@ set -u
 runShell() {
   local d out rc
   d=$(mktemp -d); cp "$2" "$d/s"
-  out=$(cd "$d" && env -i HOME="$d" TMP="$d" PATH="$PATH" SH="$1" \
+  # $SH is the Oils convention for "which shell am I" — spec cases branch on it
+  # (e.g. `case $SH in bash*) exit ;; esac` to skip shell-specific behavior).
+  # ours is a bash DROP-IN, so it must be identified as bash here; otherwise the
+  # bash-specific guards fire for the bash reference but not for ours, producing
+  # a divergence that is the harness's shell-label, not a behavior difference.
+  out=$(cd "$d" && env -i HOME="$d" TMP="$d" PATH="$PATH" SH=bash \
         timeout 10 "$1" ./s </dev/null 2>&1); rc=$?
   rm -rf "$d"
   # Each runShell call mints its OWN mktemp dir, so bash and ours get different
