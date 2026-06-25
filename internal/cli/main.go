@@ -1582,6 +1582,19 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 		// `bashy -c '...'` — one-shot, no recovery.
 		prog, pe, ok := parseOnce(src, lang)
 		if ok {
+			// A backtick command substitution whose body has an unterminated
+			// quote is, in bash, a RUNTIME command-substitution error: bash
+			// prints the diagnostic, the substitution expands to nothing, the
+			// enclosing command still runs, and the shell exits 0 — not the
+			// status-2 parse abort our eager parser would give. Emulate by
+			// removing the offending `...` span and running the remainder.
+			if stripped, msg, handled := backtickComsubUnclosedQuote(src, pe, name); handled {
+				fmt.Fprintln(os.Stderr, msg)
+				if prog2, _, gotErr := parseOnce(stripped, lang); !gotErr && prog2 != nil {
+					return r.Run(ctx, prog2)
+				}
+				return nil
+			}
 			printBashParseError(os.Stderr, src, errPrefix, pe)
 			return interp.ExitStatus(2)
 		}
@@ -1938,6 +1951,11 @@ func fatalRecoveredParseError(src []byte, pe syntax.ParseError) bool {
 	if strings.HasSuffix(rewriteParserErrorText(string(src), pe), ": bad substitution") {
 		return false
 	}
+	// An unclosed `{` command group at EOF is a fatal bash parse error (the whole
+	// input fails), not one our statement recovery should continue past.
+	if _, _, ok := braceGroupEOF(src, pe); ok {
+		return true
+	}
 	if commandSubstOpenBefore(src, pe.Pos) {
 		return true
 	}
@@ -2044,6 +2062,10 @@ func printBashParseError(w io.Writer, src []byte, prefix string, pe syntax.Parse
 		fmt.Fprintf(w, "%s: line %d: syntax error: unexpected end of file from `%s' command on line 1\n", prefix, eofLine, construct)
 		return
 	}
+	if openLine, eofLine, ok := braceGroupEOF(src, pe); ok {
+		fmt.Fprintf(w, "%s: line %d: syntax error: unexpected end of file from `{' command on line %d\n", prefix, eofLine, openLine)
+		return
+	}
 	if text == "unexpected EOF while looking for matching `)'" && strings.TrimSpace(nthLine(src, line)) == "math1)" {
 		fmt.Fprintf(w, "%s: line %d: syntax error near unexpected token `)'\n", prefix, line)
 		fmt.Fprintf(w, "%s: line %d: `math1)'\n", prefix, line)
@@ -2102,6 +2124,88 @@ func compoundEOFParseError(src []byte, text string) (eofLine int, construct stri
 		}
 	}
 	return 0, "", false
+}
+
+// braceGroupEOF reports whether pe is bash's fatal "unclosed `{` command group
+// at end of file" parse error. Bash aborts the whole input (status 2) with
+//
+//	<prefix>: line <eofLine>: syntax error: unexpected end of file from `{' command on line <openLine>
+//
+// openLine is the line of the unterminated `{` (pe.Pos); eofLine is the line
+// past the last source line (matching bash's report point). A `${...}`
+// parameter-expansion EOF carries the same "matching `}'" text but anchors
+// pe.Pos at the `$`, so checking the byte at pe.Pos excludes it.
+func braceGroupEOF(src []byte, pe syntax.ParseError) (openLine, eofLine int, ok bool) {
+	if pe.Text != "unexpected EOF while looking for matching `}'" {
+		return 0, 0, false
+	}
+	off := offsetBeforePos(src, pe.Pos)
+	if off < 0 || off >= len(src) || src[off] != '{' {
+		return 0, 0, false
+	}
+	openLine = int(pe.Pos.Line())
+	eofLine = bytes.Count(src, []byte("\n")) + 1
+	if strings.TrimSpace(nthLine(src, eofLine)) != "" {
+		eofLine++
+	}
+	return openLine, eofLine, true
+}
+
+// backtickComsubUnclosedQuote recognises a backtick command substitution whose
+// body has an unterminated quote — mvdan/sh reports it as `reached "`" without
+// closing quote `X`` (a backtick closing the substitution hit while still
+// inside quote X). bash treats this as a runtime command-substitution error:
+// it prints the diagnostic, the substitution yields nothing, the enclosing
+// command runs anyway, and the shell exits 0. This returns the source with the
+// offending `...` span excised (so the remainder can run) plus bash's exact
+// stderr line; ok=false for any other parse error.
+func backtickComsubUnclosedQuote(src []byte, pe syntax.ParseError, shellName string) (stripped []byte, msg string, ok bool) {
+	if !strings.HasPrefix(pe.Text, "reached") || !strings.Contains(pe.Text, "without closing quote") {
+		return nil, "", false
+	}
+	// The "reached" token must be a backtick (shown as "`" in the message),
+	// i.e. we hit the end of a backtick substitution mid-quote.
+	if !strings.Contains(pe.Text, "\"\x60\"") {
+		return nil, "", false
+	}
+	quote := unclosedQuoteChar(pe.Text)
+	if quote == 0 {
+		return nil, "", false
+	}
+	pos := offsetBeforePos(src, pe.Pos)
+	if pos <= 0 || pos > len(src) {
+		return nil, "", false
+	}
+	open := bytes.LastIndexByte(src[:pos], '`')
+	if open < 0 {
+		return nil, "", false
+	}
+	rel := bytes.IndexByte(src[pos:], '`')
+	if rel < 0 {
+		return nil, "", false
+	}
+	closeIdx := pos + rel
+	// bash counts the error line from the start of the command substitution.
+	line := bytes.Count(src[open:pos], []byte("\n")) + 1
+	msg = fmt.Sprintf("%s: command substitution: line %d: unexpected EOF while looking for matching `%c'",
+		shellName, line, quote)
+	stripped = append(append([]byte{}, src[:open]...), src[closeIdx+1:]...)
+	return stripped, msg, true
+}
+
+// unclosedQuoteChar pulls the unterminated quote char out of mvdan/sh's
+// "… without closing quote `X`" message (the byte between the final pair of
+// backticks). Returns 0 when the message doesn't match that shape.
+func unclosedQuoteChar(text string) byte {
+	i := strings.LastIndexByte(text, '`')
+	if i < 1 {
+		return 0
+	}
+	j := strings.LastIndexByte(text[:i], '`')
+	if j < 0 || i-j != 2 {
+		return 0
+	}
+	return text[j+1]
 }
 
 func compoundEndKeyword(keyword string) string {

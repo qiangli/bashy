@@ -651,6 +651,111 @@ func TestRunUnexpectedTokenAbort(t *testing.T) {
 	}
 }
 
+// TestRunBraceGroupEOFAbort pins bash 5.3's fatal "unclosed `{` command group
+// at end of file" abort. A here-document delimited by EOF swallows the closing
+// `}`, leaving the brace group opened on line 9 unterminated; bash warns about
+// the here-document, then reports the unterminated group and exits 2 WITHOUT
+// running the swallowed body. Our statement recovery used to re-parse and run
+// that body instead, so this guards the up-front fatal classification.
+func TestRunBraceGroupEOFAbort(t *testing.T) {
+	src := "# c1\n# c2\n# c3\n# c4\n# c5\n# c6\n# c7\n# c8\nfun() {\n  cat << \"$@\"\nhi\n1 2\n}\nfun 1 2\n"
+	var stdout, stderr bytes.Buffer
+	r, err := interp.New(
+		interp.StdIO(nil, &stdout, &stderr),
+		interp.Env(expand.ListEnviron()),
+		interp.WithBashCompatErrors(true),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStderr := os.Stderr
+	readStderr, writeStderr, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = writeStderr
+	defer func() {
+		os.Stderr = oldStderr
+		readStderr.Close()
+	}()
+	runErr := run(r, strings.NewReader(src), "./s")
+	writeStderr.Close()
+	globalStderr, readErr := io.ReadAll(readStderr)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	var es interp.ExitStatus
+	if !errors.As(runErr, &es) || es != 2 {
+		t.Fatalf("want ExitStatus(2), got %v", runErr)
+	}
+	if stdout.String() != "" {
+		t.Fatalf("want no stdout (body must not run), got %q", stdout.String())
+	}
+	wantErr := "./s: line 14: warning: here-document at line 10 delimited by end-of-file (wanted `$@')\n" +
+		"./s: line 15: syntax error: unexpected end of file from `{' command on line 9\n"
+	if string(globalStderr) != wantErr {
+		t.Fatalf("stderr mismatch\nwant:\n%q\ngot:\n%q", wantErr, string(globalStderr))
+	}
+}
+
+// TestRunBacktickComsubUnclosedQuote pins bash 5.3's quirk for a backtick
+// command substitution with an unterminated quote in its body: bash reports a
+// runtime "command substitution" error, the substitution expands to nothing,
+// the enclosing `echo` still runs (one empty line), and the shell exits 0 — not
+// the status-2 parse abort our eager parser would otherwise emit.
+func TestRunBacktickComsubUnclosedQuote(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cmd  string
+	}{
+		{"plain", "echo `echo \"`"},
+		{"backslashes", "echo `echo \\\\\\\\\"`"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			origCommand := *command
+			*command = tc.cmd
+			t.Cleanup(func() { *command = origCommand })
+
+			var stdout bytes.Buffer
+			r, err := interp.New(
+				interp.StdIO(nil, &stdout, io.Discard),
+				interp.Env(expand.ListEnviron()),
+				interp.CommandString(true),
+				interp.WithBashCompatErrors(true),
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			oldStderr := os.Stderr
+			readStderr, writeStderr, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			os.Stderr = writeStderr
+			defer func() {
+				os.Stderr = oldStderr
+				readStderr.Close()
+			}()
+			runErr := run(r, strings.NewReader(*command), "bash")
+			writeStderr.Close()
+			globalStderr, readErr := io.ReadAll(readStderr)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if runErr != nil {
+				t.Fatalf("want nil (exit 0, bash-correct), got %v", runErr)
+			}
+			if stdout.String() != "\n" {
+				t.Fatalf("want one empty line on stdout, got %q", stdout.String())
+			}
+			wantErr := "bash: command substitution: line 1: unexpected EOF while looking for matching `\"'\n"
+			if string(globalStderr) != wantErr {
+				t.Fatalf("stderr mismatch\nwant:\n%q\ngot:\n%q", wantErr, string(globalStderr))
+			}
+		})
+	}
+}
+
 // runForcedInteractiveInput drives runForcedInteractiveExec with raw
 // input bytes (including readline control keys) on a pipe replacing
 // os.Stdin, returning the runner's stdout.
