@@ -93,6 +93,12 @@ for SCRIPT in /corpus/*.sh; do
   base=$(basename "$SCRIPT")
   ref=$(runShell bash "$SCRIPT")
   ours=$(runShell /ours "$SCRIPT")
+  # Normalize the $0/argv0 the harness invokes each shell with: bash runs as
+  # "bash", ours is mounted+run as "/ours", so error prefixes read
+  # "bash: line N:" vs "/ours: line N:". That is the binary NAME, not a
+  # behavior difference — fold ours's name onto bash's so the comparison
+  # measures shell behavior, not how this script invoked the binary.
+  ours="${ours//\/ours/bash}"
   if [ "$ref" = "$ours" ]; then
     match=$((match+1))
   else
