@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -556,6 +557,89 @@ func TestRunNestedBadSubstRecoveryContinues(t *testing.T) {
 	wantErr := "./new-exp.tests: line 2: ${$(($#-1))}: bad substitution\n"
 	if string(globalStderr) != wantErr {
 		t.Fatalf("stderr mismatch\nwant:\n%q\ngot:\n%q", wantErr, string(globalStderr))
+	}
+}
+
+// TestRunUnexpectedTokenAbort pins bash 5.3's fatal "syntax error near
+// unexpected token `X'" abort for a malformed case (no subject word) and a
+// loop reserved word used outside a loop: bash runs nothing on the offending
+// line and exits 2, where our generic recovery used to run the line's prefix
+// and continue. The guard subtest confirms a complete statement on an earlier
+// line still runs first (bash reads-parses-executes one command at a time).
+func TestRunUnexpectedTokenAbort(t *testing.T) {
+	tests := []struct {
+		name       string
+		src        string
+		wantOut    string
+		wantErr    string
+		wantStatus interp.ExitStatus
+	}{
+		{
+			name:       "case-missing-subject",
+			src:        "case\nin esac\n",
+			wantStatus: 2,
+			wantErr: "./s: line 1: syntax error near unexpected token `newline'\n" +
+				"./s: line 1: `case'\n",
+		},
+		{
+			name:       "keyword-out-of-loop-via-cmdsub",
+			src:        "$(echo f)$(echo or) i in a b c; do echo $i; done\necho status=$?\n",
+			wantStatus: 2,
+			wantErr: "./s: line 1: syntax error near unexpected token `do'\n" +
+				"./s: line 1: `$(echo f)$(echo or) i in a b c; do echo $i; done'\n",
+		},
+		{
+			name:    "prior-line-statement-runs-first",
+			src:     "echo hi\ncase\nin esac\n",
+			wantOut: "hi\n",
+			// Earlier-line `echo hi` runs; the up-front abort is declined and
+			// the case error falls to the recovery path, which runs line 3's
+			// `in` as a command (status 127), matching the pre-existing path.
+			// (The "in: command not found" lands on the runner's own stderr,
+			// not the os.Stderr the parse-error diagnostics use.)
+			wantStatus: 127,
+			wantErr: "./s: line 2: syntax error near unexpected token `case'\n" +
+				"./s: line 2: `case'\n",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			r, err := interp.New(
+				interp.StdIO(nil, &stdout, &stderr),
+				interp.Env(expand.ListEnviron()),
+				interp.WithBashCompatErrors(true),
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			oldStderr := os.Stderr
+			readStderr, writeStderr, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			os.Stderr = writeStderr
+			defer func() {
+				os.Stderr = oldStderr
+				readStderr.Close()
+			}()
+			runErr := run(r, strings.NewReader(tc.src), "./s")
+			writeStderr.Close()
+			globalStderr, readErr := io.ReadAll(readStderr)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			var es interp.ExitStatus
+			if !errors.As(runErr, &es) || es != tc.wantStatus {
+				t.Fatalf("want ExitStatus(%d), got %v", tc.wantStatus, runErr)
+			}
+			if stdout.String() != tc.wantOut {
+				t.Fatalf("stdout mismatch\nwant:\n%q\ngot:\n%q", tc.wantOut, stdout.String())
+			}
+			if string(globalStderr) != tc.wantErr {
+				t.Fatalf("stderr mismatch\nwant:\n%q\ngot:\n%q", tc.wantErr, string(globalStderr))
+			}
+		})
 	}
 }
 
