@@ -57,6 +57,12 @@ BASH_TEST_TIMEOUT := 60
 # jobs runs a long sequence of real backgrounded sleeps (job-control timing);
 # it needs more than the default per-test cap even with working `kill` reaping.
 BASH_TEST_TIMEOUT_JOBS := 120
+# Per-fixture memory cap (KB) enforced by scripts/memwatch.sh. macOS does NOT
+# honor `ulimit -v`, so an unbounded-allocation fixture (e.g. intl/unicode1.sub)
+# can balloon to 100+ GB before the wall-clock timeout fires. The watchdog
+# SIGKILLs the fixture's process group past this RSS, turning an OOM into a
+# graceful fixture failure. 4 GB is far above any legitimate fixture.
+BASH_TEST_MEM_KB := 4194304
 
 # NOTHING is skipped — the full bash-5.3 suite passes (86/86). Each fixture was
 # closed by matching bash 5.3 EXACTLY (inspect the reference before calling a
@@ -150,10 +156,13 @@ test-bash: build test-bash-helpers
 			if [ "$$name" = "jobs" ]; then per_test_timeout=$(BASH_TEST_TIMEOUT_JOBS); fi; \
 			( sleep $$per_test_timeout && kill -KILL -- -$$test_pid 2>/dev/null ) & \
 			timer_pid=$$!; \
+			sh $(CURDIR)/scripts/memwatch.sh $$test_pid $(BASH_TEST_MEM_KB) & \
+			mem_pid=$$!; \
 			wait $$test_pid 2>/dev/null; \
 			rc=$$?; \
 			kill -KILL -- -$$test_pid 2>/dev/null; \
 			kill $$timer_pid 2>/dev/null; wait $$timer_pid 2>/dev/null; \
+			kill $$mem_pid 2>/dev/null; wait $$mem_pid 2>/dev/null; \
 			case " $(BASH_TEST_FILTER_EXPECT) " in \
 				*" $$name "*) \
 					grep -av '^expect' <$$BASH_TSTRAW >$$BASH_TSTOUT 2>/dev/null || : ;; \
