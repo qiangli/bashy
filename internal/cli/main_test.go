@@ -543,19 +543,27 @@ func TestRunNestedBadSubstRecoveryContinues(t *testing.T) {
 	if readErr != nil {
 		t.Fatal(readErr)
 	}
-	if err == nil {
-		t.Fatal("expected recovered parse error status")
+	// A nested bad substitution (`${$(($#-1))}`) is a RUNTIME expansion error in
+	// bash, not a parse error: bash prints "bad substitution" to stderr, the
+	// offending command is abandoned, the script CONTINUES, and the final exit
+	// status is the last command's (0 here). Verified identical to bash 5.3
+	// (stdout "<a>\n<b>\n", exit 0, the bad-subst diagnostic on stderr). Earlier
+	// the engine modeled this as a recovered *parse* error (non-nil run() return
+	// + diagnostic on os.Stderr); the engine was made more bash-faithful (runtime
+	// expansion error on the runner's own stderr, run() returns nil / exit 0).
+	if err != nil {
+		t.Fatalf("want nil (exit 0, bash-correct), got err: %v", err)
 	}
 	wantOut := "<a>\n<b>\n"
 	if stdout.String() != wantOut {
 		t.Fatalf("stdout mismatch\nwant:\n%q\ngot:\n%q\nstderr:\n%s", wantOut, stdout.String(), stderr.String())
 	}
-	if stderr.Len() != 0 {
-		t.Fatalf("unexpected runner stderr: %s", stderr.String())
-	}
 	wantErr := "./new-exp.tests: line 2: ${$(($#-1))}: bad substitution\n"
-	if string(globalStderr) != wantErr {
-		t.Fatalf("stderr mismatch\nwant:\n%q\ngot:\n%q", wantErr, string(globalStderr))
+	if stderr.String() != wantErr {
+		t.Fatalf("runner stderr mismatch\nwant:\n%q\ngot:\n%q", wantErr, stderr.String())
+	}
+	if len(globalStderr) != 0 {
+		t.Fatalf("unexpected os.Stderr output: %q", string(globalStderr))
 	}
 }
 
