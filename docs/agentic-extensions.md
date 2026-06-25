@@ -183,30 +183,49 @@ for embedders (CI, agents, dev tools) and is cheap to implement.
 
 ---
 
-## 7. Dry-run / `--explain` mode
+## 7. Dry-run mode — ✅ SHIPPED (`--dryrun` / `set -o dryrun`)
 
-**Why an agent cares.** Show me what *would* happen before I let the shell
-do it. Useful for: code review (LLM proposes a script, user reviews the
-explanation), incremental approval flows, and writing tests against
-"what should the shell do?" without side effects.
+**Why an agent cares.** Show me what *would* happen before I let the shell do
+it — every external command, which dependencies are missing, and exactly which
+files an `rm -rf` / `>` would destroy. Code review, incremental approval, CI
+preflight, and a destructive-op safety net for agent-generated scripts.
 
-**Surface.**
-- Bashy CLI flag `--dry-run`: parse the script and print one line per
-  command that would execute (expanded args, after substitutions), without
-  running anything.
-- Alternative builtin `command --explain foo`: report how `foo` would be
-  resolved (alias / function / builtin / hashed / PATH search hit).
+**Shipped surface** (full doc: `docs/dryrun.md`):
+- `bashy --dryrun script.sh` (and `-c`): "xtrace without side effects" —
+  builtins/assignments/expansions run; external commands print `+ argv` and are
+  **skipped** (return 0).
+- `set -o dryrun` / `set +o dryrun`: runtime toggle (dry-run only part of a
+  script). One spelling `dryrun` across the flag, the option, and `dag --dryrun`.
+- **Agent mode** (`DHNT_AGENT=1`): a JSON-lines manifest on stdout — `command`
+  events (present/missing dependency check), `destroy` events (`rm` → files +
+  bytes, walked read-only from the real FS), `truncate` events (`>` clobber).
 
-**Implementation sketch.**
-- `--dry-run` flips a flag in the Runner. Every leaf-command entry point
-  prints `[+ would-run] cmd args...` and skips execution. Builtins and
-  side-effecting expansions (`$(cmd)`) are special: `$(cmd)` still has to
-  evaluate or substitution can't happen — flag this in the dry-run output.
-- `command --explain` reuses the existing `typeMatches` helper in
-  `builtin.go` and emits the resolution chain.
+**How it's wired** (no engine rewrite, conformance-safe):
+- A print-and-skip `interp.ExecHandler` + an `interp.OpenHandler` (catches
+  `O_TRUNC`, returns a discard handle so `>` never truncates). Both no-op when
+  `HandlerContext.DryRun()` is false. `internal/agentos/dryrun.go`.
+- `set -o dryrun` is a **gated** non-POSIX option (`interp.EnableDryRunOption`,
+  passed only by bashy and not under `--posix`); `bash`/`gosh`/`--posix` reject
+  it like real Bash, and `Reset` snapshots/restores it. Bash 5.3 suite stays
+  **86/86** — the option is invisible to the pure drop-in.
 
-**Risk/cost.** M. Honest dry-run is hard because of `$(...)` and `${var:=default}`
-side effects; document the semantics explicitly. `--explain` is S.
+**Risk/cost.** Done. The honest-semantics caveat from the original sketch holds:
+skipped commands return 0, so dry-run is **linear-path accurate, branch/loop
+approximate** (an `if cmd` takes the success branch; `for x in $(ls)` doesn't
+iterate).
+
+**Follow-ups (roadmap):**
+- **Static all-branches audit** — parse the AST and enumerate commands in *every*
+  branch (not just the executed linear path); the complete dependency/security
+  view, immune to the branch-approximation caveat above.
+- **Stage-2 in-memory CoW VFS twin** — a lazy copy-on-write overlay so cumulative
+  effects simulate (an `rm` then a later `ls` reflects it) and the run can emit a
+  final created/deleted/modified diff.
+- **More destructive ops** — `mv` / `dd` / `truncate` join `rm` in
+  `analyzeDestroy` (one `case` each); today only `rm` is expanded.
+- **`dag --dryrun=commands`** — have dag run *local* target bodies through the
+  bashy dry-run handler to show the resolved commands per target (complements
+  dag's plan-level `--dryrun`).
 
 ---
 
