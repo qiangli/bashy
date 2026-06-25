@@ -85,6 +85,11 @@ runShell() {
   out=$(cd "$d" && env -i HOME="$d" TMP="$d" PATH="$PATH" SH="$1" \
         timeout 10 "$1" ./s </dev/null 2>&1); rc=$?
   rm -rf "$d"
+  # Each runShell call mints its OWN mktemp dir, so bash and ours get different
+  # $d values; any test that echoes a $TMP/$HOME path would then differ purely
+  # on the random dir name. Fold the per-run dir onto a constant so the
+  # comparison measures behavior, not the harness's tmp path.
+  out="${out//$d/TMPDIR}"
   printf '%s|%s' "$([ "$rc" -eq 0 ] && echo ok || echo err)" "$out"
 }
 
