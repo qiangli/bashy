@@ -124,11 +124,12 @@ func TestPrintBashParseErrorCompoundEOF(t *testing.T) {
 func TestPrintBashParseErrorArrayCompatibility(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name string
-		src  string
-		pos  syntax.Pos
-		text string
-		want string
+		name       string
+		src        string
+		pos        syntax.Pos
+		text       string
+		incomplete bool
+		want       string
 	}{
 		{
 			name: "array assignment after command word",
@@ -168,14 +169,36 @@ func TestPrintBashParseErrorArrayCompatibility(t *testing.T) {
 			text: "`~` must be followed by an expression",
 			want: "bash: -c: line 1: ~ : arithmetic syntax error: operand expected (error token is \"~ \")\n",
 		},
+		{
+			// `a[` — an array subscript running off the end of the input.
+			// bash reports the matching-`]' EOF wording and omits the
+			// source-line echo (array-assign__006).
+			name:       "unterminated array subscript",
+			src:        `a[`,
+			pos:        syntax.NewPos(1, 1, 2),
+			text:       "`[` must be followed by an expression",
+			incomplete: true,
+			want:       "bash: -c: line 1: unexpected EOF while looking for matching `]'\n",
+		},
+		{
+			// A stray `)` where bash expects a command: bash names it as a
+			// generic unexpected token, with the source-line echo (array__005).
+			name: "stray close paren",
+			src:  `)`,
+			pos:  syntax.NewPos(0, 1, 1),
+			text: "`)` can only be used to close a subshell",
+			want: "bash: -c: line 1: syntax error near unexpected token `)'\n" +
+				"bash: -c: line 1: `)'\n",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			var buf bytes.Buffer
 			printBashParseError(&buf, []byte(test.src), "bash: -c", syntax.ParseError{
-				Pos:  test.pos,
-				Text: test.text,
+				Pos:        test.pos,
+				Text:       test.text,
+				Incomplete: test.incomplete,
 			})
 			if got := buf.String(); got != test.want {
 				t.Fatalf("printBashParseError mismatch\nwant:\n%q\ngot:\n%q", test.want, got)
@@ -648,6 +671,71 @@ func TestRunUnexpectedTokenAbort(t *testing.T) {
 				t.Fatalf("stderr mismatch\nwant:\n%q\ngot:\n%q", tc.wantErr, string(globalStderr))
 			}
 		})
+	}
+}
+
+// TestRunStrayCloseParenAborts pins bash 5.3's handling of array__005:
+//
+//	a=(
+//	1
+//	&
+//	'2 3'
+//	)
+//	argv.py "${a[@]}"
+//
+// bash recovers from the mid-array `&` (a control operator) — reporting it and
+// running the following `'2 3'` as a command (status 127) — but the stray `)`
+// is a FATAL parse error: bash names it as a generic unexpected token and
+// aborts the whole input (status 2), so the trailing `argv.py` line never runs.
+// Our generic statement recovery used to rewrite the `)` to "`)` can only be
+// used to close a subshell" and run the trailing line; this guards both the
+// bash wording and the abort. Verified byte-for-byte against bash 5.3.
+func TestRunStrayCloseParenAborts(t *testing.T) {
+	src := "a=(\n1\n&\n'2 3'\n)\nargv.py \"${a[@]}\"\n"
+	var stdout, stderr bytes.Buffer
+	r, err := interp.New(
+		interp.StdIO(nil, &stdout, &stderr),
+		interp.Env(expand.ListEnviron()),
+		interp.WithBashCompatErrors(true),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStderr := os.Stderr
+	readStderr, writeStderr, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = writeStderr
+	defer func() {
+		os.Stderr = oldStderr
+		readStderr.Close()
+	}()
+	runErr := run(r, strings.NewReader(src), "./s")
+	writeStderr.Close()
+	globalStderr, readErr := io.ReadAll(readStderr)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	var es interp.ExitStatus
+	if !errors.As(runErr, &es) || es != 2 {
+		t.Fatalf("want ExitStatus(2) (fatal abort at `)`), got %v", runErr)
+	}
+	// argv.py never runs (aborted) — so stdout is empty and the runner's
+	// stderr holds only the `'2 3'` command-not-found from the recovered line.
+	if stdout.String() != "" {
+		t.Fatalf("stdout should be empty (trailing line aborted), got %q", stdout.String())
+	}
+	wantRunnerErr := "./s: line 4: 2 3: command not found\n"
+	if stderr.String() != wantRunnerErr {
+		t.Fatalf("runner stderr mismatch\nwant:\n%q\ngot:\n%q", wantRunnerErr, stderr.String())
+	}
+	wantParseErr := "./s: line 3: syntax error near unexpected token `&'\n" +
+		"./s: line 3: `&'\n" +
+		"./s: line 5: syntax error near unexpected token `)'\n" +
+		"./s: line 5: `)'\n"
+	if string(globalStderr) != wantParseErr {
+		t.Fatalf("parse-error stderr mismatch\nwant:\n%q\ngot:\n%q", wantParseErr, string(globalStderr))
 	}
 }
 
