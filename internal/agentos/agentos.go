@@ -18,11 +18,13 @@ import (
 	"io"
 	"os"
 
+	"github.com/spf13/cobra"
 	"mvdan.cc/sh/v3/interp"
 
 	_ "github.com/qiangli/coreutils/cmds/all"
 	"github.com/qiangli/coreutils/external/podman"
 	"github.com/qiangli/coreutils/pkg/dag"
+	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/secrets"
 	"github.com/qiangli/coreutils/pkg/weave"
 	"github.com/qiangli/coreutils/pkg/weavecli"
@@ -68,6 +70,29 @@ func Dispatch() {
 		// the AgentOS substrate plan): no embedded engine, no fork — the
 		// caller's env (CONTAINER_HOST etc.) is inherited verbatim.
 		os.Exit(podman.Run(context.Background(), os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	case "jobs", "fg", "bg", "kill":
+		// Real-PID job control over detached background jobs (`foo &`). The
+		// in-shell fg/bg/jobs builtins can't own the controlling terminal
+		// (subshells are goroutines), so the supported path is these
+		// subcommands operating on the shared coreutils/pkg/jobs registry —
+		// the same model outpost ships. WireExec records each `foo &` PID via
+		// WithBgPidCallback below.
+		var cmd *cobra.Command
+		switch os.Args[1] {
+		case "jobs":
+			cmd = jobs.JobsCommand()
+		case "fg":
+			cmd = jobs.FgCommand()
+		case "bg":
+			cmd = jobs.BgCommand()
+		case "kill":
+			cmd = jobs.KillCommand()
+		}
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	}
 }
 
@@ -82,6 +107,13 @@ func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 	// `set -o dryrun` toggle works even without the flag. EnableDryRunOption
 	// makes the engine recognize `set -o dryrun`; the pure bash drop-in never
 	// passes it, so it rejects the option exactly like Bash.
+	//
+	// Record each detached `foo &` real OS PID in the shared coreutils/pkg/jobs
+	// registry so `bashy jobs/fg/bg/kill` (Dispatch above) can manage it — the
+	// same real-PID model outpost uses. Harmless in posix mode (recording only).
+	opts = append(opts, interp.WithBgPidCallback(func(pid int) {
+		_ = jobs.DefaultRegistry().Record(pid, "(detached)")
+	}))
 	if posix {
 		return append(opts, interp.ExecHandlers(coreutilsshell.Handler()))
 	}
