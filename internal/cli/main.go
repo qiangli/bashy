@@ -1951,6 +1951,13 @@ func fatalRecoveredParseError(src []byte, pe syntax.ParseError) bool {
 	if strings.HasSuffix(rewriteParserErrorText(string(src), pe), ": bad substitution") {
 		return false
 	}
+	// A stray `)` where bash expects a command is a fatal bash parse error:
+	// bash aborts the whole input (status 2) rather than recovering past it
+	// and running the following lines. (Earlier-line statements still run;
+	// only the input from this error onward is abandoned, matching bash.)
+	if pe.Text == "`)` can only be used to close a subshell" {
+		return true
+	}
 	// An unclosed `{` command group at EOF is a fatal bash parse error (the whole
 	// input fails), not one our statement recovery should continue past.
 	if _, _, ok := braceGroupEOF(src, pe); ok {
@@ -2243,6 +2250,20 @@ func arithForHeader(src string) (string, bool) {
 func rewriteParserErrorText(src string, pe syntax.ParseError) string {
 	if text, ok := declareInvalidIdentifierText(src, pe); ok {
 		return text
+	}
+	// An unterminated array subscript running off the end of the input
+	// (`a[`, `a[5 + `): our parser reports "`[` must be followed by an
+	// expression" (an incomplete parse), but bash reports the matching-`]'
+	// EOF wording and omits the source-line echo. Mirror bash.
+	if pe.Incomplete && pe.Text == "`[` must be followed by an expression" {
+		return "unexpected EOF while looking for matching `]'"
+	}
+	// A stray `)` where bash expects a command: our parser reports "`)` can
+	// only be used to close a subshell"; bash reports it as a generic
+	// unexpected-token error (and aborts the whole input — see
+	// fatalRecoveredParseError).
+	if pe.Text == "`)` can only be used to close a subshell" {
+		return "syntax error near unexpected token `)'"
 	}
 	if strings.Contains(pe.Text, "nested parameter expansions") {
 		if subst := nestedBadSubstSource(src, pe.Pos); subst != "" {
