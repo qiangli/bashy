@@ -11,6 +11,18 @@ Our 43-case clean-room corpus reported **0 deviations**. yash's **1840-testcase*
 POSIX suite found **435 cases bash 5.3 passes but bashy fails**. Small corpora
 hide the truth — real baselines need the *full* upstream suites.
 
+## Progress log
+
+- **2026-06-25 — invoked-as-`sh` → POSIX mode** (cli fix). Root cause: bashy
+  didn't enter POSIX mode when argv[0] is `sh`, but yash's framework runs every
+  test by invoking the shell *as sh* — so bashy ran them all non-POSIX and
+  failed the POSIX-specific behaviors. One fix: **bashy 72% → 78%**, **bash-gap
+  435 → 321** (`error-p` 171→112, `alias-p` 50→30), make test-bash held 86/86.
+  Remaining gap leaders: error-p 112, umask-p 58, alias-p 30, option/quote/redir.
+
+The numbers in the tables below are the **pre-fix baseline** (the starting point
+the progress log measures against).
+
 ## yash POSIX (-p) suite — per-shell pass rate (1840 testcases)
 
 Job-control/signal tests (sig*, bg/fg/job/kill/wait/testtty/async — need a TTY +
