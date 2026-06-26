@@ -101,29 +101,42 @@ drop-in, and the conformance harness only measures `bin/bash`.)
 ## Known completeness gaps (tracked — not conformance/shadowing issues)
 
 These builtins are present and classify correctly (so they're not the
-shadow/strict-drop-in problem above), but are partially implemented. None
-shadows a *working* external, so there's nothing to defer to — they're genuine
-in-process-model / completion-programming gaps to *complete*, not to gate.
+shadow/strict-drop-in problem above), but are partially implemented. **None is
+POSIX** — bash documents all three under "Bash Builtin Commands", not the
+Bourne/POSIX set — so they have **zero POSIX-conformance impact**; this is purely
+bash-drop-in fidelity. And none shadows a *working* external, so there's nothing
+to defer to (gating is irrelevant) — they're gaps to *complete*, not to gate.
 
-- **`compgen` — missing action flags.** Supports `-A <type>`, `-V`, `-P`, `-X`,
-  `-o`, `-a`, `-b`, `-k`; **rejects** `-W <wordlist>` (complete from a literal
-  IFS-split list — the most common completion idiom), and the convenience
-  shorthands `-c` (commands), `-f` (files), `-v` (variables), `-d` (dirs),
-  `-e` (exported), `-g` (groups), `-j` (jobs), `-s` (services), `-u` (users).
-  The `-c/-f/-v/-d/-e/-g/-j/-s/-u` set is **mechanical** (each maps to an
-  `-A <type>`, like `-a/-b/-k`); `-W` is a **distinct mode** (split + prefix-
-  filter the word list). Tracked at the engine's reject point:
-  `sh/interp/builtin.go` `case "compgen"` default arm.
-- **`bind` — silent no-op.** `bind -l`/`-v`/`-P` return 0 with empty output
-  (bash lists readline functions/bindings). Readline key-binding is inert for
-  the in-process engine; low priority (interactive-only, no external to defer
-  to). Same family as the documented interactive job-control limitation.
-- **`disown` — benign no-op.** The engine sends no SIGHUP-on-exit to goroutine
-  "jobs", so there's nothing to dodge; observable behavior matches bash.
+Cross-checked against both references:
 
-These are *completeness* follow-ups (especially `compgen -W`/`-c`/`-f`, which
-real completion scripts use), distinct from the strict-drop-in shadowing work
-above which is complete.
+| builtin | bash 5.3 | Oils/OSH | ours | verdict |
+|---|---|---|---|---|
+| `compgen` | full (`complete.def`; `-W`/`-c` verified working) | functional | partial — no `-W/-c/-f/…` | **real gap vs both** — complete it |
+| `bind` | full (`bind.def`) | functional (`readline_osh.py`) | no-op | gap, but readline/interactive — low priority |
+| `disown` | yes (`jobs.def`) | **omitted entirely** | no-op | **non-issue** — ours ≥ OSH, which has no disown |
+
+- **`compgen` — missing action flags (the one worth doing).** Supports
+  `-A <type>`, `-V`, `-P`, `-X`, `-o`, `-a`, `-b`, `-k`; **rejects** `-W <wordlist>`
+  (complete from a literal IFS-split list — the most common completion idiom, and
+  verified working in bash 5.3: `compgen -W "alpha beta" a` → `alpha`), and the
+  convenience shorthands `-c` (commands), `-f` (files), `-v` (variables), `-d`
+  (dirs), `-e` (exported), `-g` (groups), `-j` (jobs), `-s` (services), `-u`
+  (users). The `-c/-f/-v/-d/-e/-g/-j/-s/-u` set is **mechanical** (each maps to an
+  `-A <type>`, like `-a/-b/-k`); `-W` is a **distinct mode** (split + prefix-filter
+  the word list). bash AND OSH both implement these, so ours trails both. Tracked
+  at the engine reject point: `sh/interp/builtin.go` `case "compgen"` default arm.
+- **`bind` — silent no-op.** `bind -l`/`-v`/`-P` return 0 with empty output (bash
+  + OSH both list readline functions/bindings). Readline key-binding is inert for
+  the in-process engine; low priority (interactive-only). Same family as the
+  documented interactive job-control limitation.
+- **`disown` — benign no-op, NOT a gap.** The engine sends no SIGHUP-on-exit to
+  goroutine "jobs", so there's nothing to dodge; observable behavior matches bash,
+  and OSH omits `disown` altogether — so ours already meets-or-beats a serious
+  bash-compat shell here.
+
+So the one real *completeness* follow-up is **`compgen -W`/`-c`/`-f`** (used by
+real completion scripts) — distinct from, and lower priority than, the strict-
+drop-in shadowing work above, which is complete.
 
 ## Run it
 
