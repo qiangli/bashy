@@ -16,3 +16,7 @@ external/bash-5.3
 # Local only, never committed (we adapt algorithms into Go with attribution,
 # we do not redistribute upstream sources). Policy: docs/priorart-policy.md
 /priorart/
+
+# yash GPL test-suite clone cache (never vendored)
+.yash-tests/
+bin/.bashy-linux-*
