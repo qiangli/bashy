@@ -562,4 +562,4 @@ replace github.com/perses/perses => github.com/qiangli/perses v0.0.0-20260426190
 
 replace github.com/ergochat/readline => ../readline
 
-replace github.com/ollama/ollama => ../ycode/external/ollama
+replace github.com/ollama/ollama => ../coreutils/external/ollama/src
