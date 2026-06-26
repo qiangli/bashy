@@ -31,6 +31,14 @@ set -u
 CORPUS=${1:-test/posix-corpus}
 IMAGE=${POSIX_SHELLS_IMAGE:-localhost/posix-shells}
 
+# The image's Containerfile and the oracle panel are both overridable, so the
+# same harness drives a broader set of shells (see scripts/multishell-diff.sh).
+# Defaults preserve the original Alpine bash-5.3 5-oracle panel exactly, so
+# existing callers (oils-diff.sh) are unchanged.
+SHELLS_DOCKERFILE=${SHELLS_DOCKERFILE:-$'FROM bash:5.3\nRUN apk add --no-cache dash yash zsh mksh\n'}
+# ORACLE_SPEC: "name:cmd|name:cmd|…". The FIRST entry is the consensus anchor.
+ORACLE_SPEC=${ORACLE_SPEC:-'bash53:bash --posix|dash:dash|yash:yash --posix|mksh:mksh|zsh:zsh --emulate sh'}
+
 OCI=${OCI:-}
 if [ -z "$OCI" ]; then
   if command -v docker >/dev/null 2>&1; then OCI=docker
@@ -41,11 +49,11 @@ fi
 [ -d "$CORPUS" ] || { echo "posix-diff: corpus dir '$CORPUS' not found (run from repo root)" >&2; exit 2; }
 CORPUS=$(cd "$CORPUS" && pwd)
 
-# Ensure the combined oracle image (bash 5.3 + dash + yash, one alpine env).
+# Ensure the combined oracle image (one shared userland for all oracles).
 if ! $OCI image exists "$IMAGE" 2>/dev/null; then
-  echo "posix-diff: building $IMAGE (bash:5.3 + dash + yash)…" >&2
+  echo "posix-diff: building ${IMAGE} ..." >&2
   bd=$(mktemp -d)
-  printf 'FROM bash:5.3\nRUN apk add --no-cache dash yash zsh mksh\n' > "$bd/Containerfile"
+  printf '%b' "$SHELLS_DOCKERFILE" > "$bd/Containerfile"
   $OCI build -q -t "$IMAGE" "$bd" >&2 || { echo "posix-diff: image build failed" >&2; exit 2; }
   rm -rf "$bd"
 fi
@@ -67,16 +75,23 @@ trap 'rm -f "$BIN"' EXIT
 
 # Run the whole comparison inside the image: bashy (mounted) + native oracles,
 # every shell file-arg in a fresh cwd, identical environment.
-$OCI run --rm -i -v "$BIN:/bashy:ro" -v "$CORPUS:/corpus:ro" "$IMAGE" bash -s <<'INCONTAINER'
+$OCI run --rm -i -e ORACLE_SPEC="$ORACLE_SPEC" -v "$BIN:/bashy:ro" -v "$CORPUS:/corpus:ro" "$IMAGE" bash -s <<'INCONTAINER'
 set -u
-# Oracle shells, all native to the image. Strict-POSIX: dash, yash. Korn family
-# (shares bash's array/substring/case-mod extensions, so it disambiguates
-# "bash-only" vs "ksh-lineage" AMBIGs): mksh. Emulated POSIX: zsh via
-# `--emulate sh` (a 4th independent vote; emulation, so it may have edge quirks).
-# csh/tcsh are deliberately absent — they are not POSIX shells (different
-# language; cannot run the corpus).
-ORACLES="bash53 dash yash mksh zsh"
-declare -A CMD=( [bash53]="bash --posix" [dash]="dash" [yash]="yash --posix" [mksh]="mksh" [zsh]="zsh --emulate sh" )
+# Oracle panel, parsed from ORACLE_SPEC ("name:cmd|name:cmd|…"). All shells are
+# native to the image so they share one userland (busybox coreutils, $HOME),
+# isolating SHELL behavior. The first entry is the consensus anchor. Strict-POSIX
+# shells (dash, ash, posh, yash) and the Korn/zsh family disambiguate "bash-only"
+# vs portable behavior. csh/tcsh are deliberately absent — not POSIX shells.
+ORACLES=""
+declare -A CMD=()
+_IFS_SAVE=$IFS; IFS='|'
+for _spec in $ORACLE_SPEC; do
+  _name=${_spec%%:*}; _cmd=${_spec#*:}
+  ORACLES="$ORACLES $_name"; CMD[$_name]=$_cmd
+done
+IFS=$_IFS_SAVE
+ORACLES=${ORACLES# }
+REF=${ORACLES%% *}   # consensus anchor = first oracle
 
 # runShell CMD  — copies $SCRIPT into a fresh cwd, runs CMD on it, echoes
 # "ok|<output>" or "err|<output>" (stderr folded in; exact exit code ignored).
@@ -99,7 +114,7 @@ for SCRIPT in /corpus/*.sh; do
   declare -A okey=()
   for n in $ORACLES; do okey[$n]=$(runShell "${CMD[$n]}"); done
 
-  agree=1; first="${okey[bash53]}"
+  agree=1; first="${okey[$REF]}"
   for n in $ORACLES; do [ "${okey[$n]}" = "$first" ] || agree=0; done
   for n in $ORACLES; do
     REF_TOTAL[$n]=$(( ${REF_TOTAL[$n]:-0} + 1 ))

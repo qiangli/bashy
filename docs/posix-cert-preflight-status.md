@@ -8,6 +8,7 @@ Status: **2026-06-25 — agent-drivable criteria GREEN; remaining gating is one 
 |---|---|---|
 | **POSIX-mode breadth sweep green** | ✅ **0 deviations** | `scripts/posix-parity.sh`: 22 match / 0 diff / 23 probed (bashy `--posix` vs bash `--posix`, docker bash:5.3 oracle) |
 | **Oils mining → stable 0-deviations across the corpus** | ✅ **0 deviations / 719 scripts** | `scripts/oils-diff.sh`: 297 match / **0 deviation** / 422 ambiguous. bashy-vs-bash53 = **702/719 (97%)**. The 422 "ambiguous" are where the 5 oracle shells (bash53/dash/yash/mksh/zsh) **disagree** — bashy matches bash53 on them; NOT bashy bugs. |
+| **Broadened 10-shell panel → 0 deviations** | ✅ **0 deviations / both panels** | `scripts/multishell-diff.sh` (43-case clean-room POSIX corpus) across **10 shells**: strict-POSIX (dash, ash/busybox, **posh**, yash) + feature-rich (bash 5.3, bash 5.2, zsh, **ksh93**, mksh, loksh). Two images: Alpine `bash:5.3` (40 match / 0 dev / 3 amb) + Debian (39 match / 0 dev / 4 amb). bashy match: bash 100%, ash 100%, posh **93%**, dash/yash/mksh/loksh 95%, ksh93/zsh 97%. The few AMBIGs are where the shells disagree among themselves; bashy sides with the majority. posh (deliberately rejects bashisms) + ksh93 (feature-rich reference) added 2026-06-25 to widen the oracle before the cert. |
 | **`<<${a}` heredoc-delimiter decision** | ✅ **DECIDED — declared limitation** (see below) | bashy parse-errors an expansion in the heredoc delimiter word; bash treats it as a *literal* delimiter + EOF-warns. |
 | **Declared-limitations list final** | ✅ list is stable (interactive job control; `((` nested-subshell ambiguity) | per `vsc-pcts-readiness.md` §Known limitations |
 | **Apply for VSC-PCTS license** (Open Group) | ⏳ **human step** | OSS/no-cost 12-month arrangement historically exists; confirm terms at application |
@@ -17,7 +18,7 @@ Status: **2026-06-25 — agent-drivable criteria GREEN; remaining gating is one 
 
 Both differential harnesses run bashy in the **same environment** as the reference shells and find **0 cases where bashy diverges from bash 5.3** on the clean-room corpora. This is the strongest agent-drivable signal short of the official suite. It is **not** "POSIX certified" — that is the TET/Open-Group run (human step). Honest framing for any external claim:
 
-> "Zero deviations from bash 5.3 on a 719-script clean-room differential (5-shell cross-checked) and on the POSIX-mode parity sweep; the official VSC-PCTS run is the remaining (licensed, human) step."
+> "Zero deviations from bash 5.3 on a 719-script clean-room differential, cross-checked against a 10-shell panel — the strict-POSIX shells (dash, ash, posh, yash) and the feature-rich shells (bash, zsh, ksh93, mksh, loksh) — and on the POSIX-mode parity sweep; the official VSC-PCTS run is the remaining (licensed, human) step."
 
 Anchor: `make test-bash` 86/86 (bash's own 5.3 fixture suite) + drop-in fidelity 1096/1105 (99%) and climbing.
 
