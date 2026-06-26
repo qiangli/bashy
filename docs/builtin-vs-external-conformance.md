@@ -98,6 +98,33 @@ adds an in-process coreutils fallback so `ls`/`cat`/… resolve without PATH on
 minimal hosts — that is an AgentOS feature of `bashy`, NOT the pure `bin/bash`
 drop-in, and the conformance harness only measures `bin/bash`.)
 
+## Known completeness gaps (tracked — not conformance/shadowing issues)
+
+These builtins are present and classify correctly (so they're not the
+shadow/strict-drop-in problem above), but are partially implemented. None
+shadows a *working* external, so there's nothing to defer to — they're genuine
+in-process-model / completion-programming gaps to *complete*, not to gate.
+
+- **`compgen` — missing action flags.** Supports `-A <type>`, `-V`, `-P`, `-X`,
+  `-o`, `-a`, `-b`, `-k`; **rejects** `-W <wordlist>` (complete from a literal
+  IFS-split list — the most common completion idiom), and the convenience
+  shorthands `-c` (commands), `-f` (files), `-v` (variables), `-d` (dirs),
+  `-e` (exported), `-g` (groups), `-j` (jobs), `-s` (services), `-u` (users).
+  The `-c/-f/-v/-d/-e/-g/-j/-s/-u` set is **mechanical** (each maps to an
+  `-A <type>`, like `-a/-b/-k`); `-W` is a **distinct mode** (split + prefix-
+  filter the word list). Tracked at the engine's reject point:
+  `sh/interp/builtin.go` `case "compgen"` default arm.
+- **`bind` — silent no-op.** `bind -l`/`-v`/`-P` return 0 with empty output
+  (bash lists readline functions/bindings). Readline key-binding is inert for
+  the in-process engine; low priority (interactive-only, no external to defer
+  to). Same family as the documented interactive job-control limitation.
+- **`disown` — benign no-op.** The engine sends no SIGHUP-on-exit to goroutine
+  "jobs", so there's nothing to dodge; observable behavior matches bash.
+
+These are *completeness* follow-ups (especially `compgen -W`/`-c`/`-f`, which
+real completion scripts use), distinct from the strict-drop-in shadowing work
+above which is complete.
+
 ## Run it
 
 ```sh
