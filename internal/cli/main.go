@@ -283,6 +283,11 @@ func Main() {
 	// flag we know about) into individual `-X -Y -Z` args.
 	os.Args = splitCombinedShortFlags(os.Args)
 	flag.Parse()
+	// Invoked as `sh` → POSIX mode, like bash. Set the flag so every downstream
+	// consumer (runner -o posix, prompt expansion, AgentOS wiring) honors it.
+	if invokedAsSh() {
+		*posix = true
+	}
 	if *version {
 		fmt.Printf("GNU bash, version %s\n", bashVersion)
 		return
@@ -507,6 +512,21 @@ func isRestrictedName() bool {
 	}
 	base := filepath.Base(strings.TrimPrefix(os.Args[0], "-"))
 	return base == "rbash"
+}
+
+// invokedAsSh reports whether bashy was invoked under the name "sh" (argv[0]'s
+// base name, leading '-' stripped for a login shell). bash enters POSIX mode in
+// this case — man bash: "If bash is invoked with the name sh, it tries to mimic
+// the startup behavior of historical versions of sh as closely as possible,
+// while conforming to the POSIX standard as well." Tools and test harnesses
+// (e.g. yash's suite) invoke the shell-under-test as `sh` expecting POSIX
+// semantics, so honoring this is load-bearing for POSIX conformance.
+func invokedAsSh() bool {
+	if len(os.Args) == 0 {
+		return false
+	}
+	base := filepath.Base(strings.TrimPrefix(os.Args[0], "-"))
+	return base == "sh"
 }
 
 // isLoginShell returns true if bashy was invoked as a login shell.
