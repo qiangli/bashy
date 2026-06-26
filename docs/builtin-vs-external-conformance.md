@@ -52,26 +52,37 @@ suid helper too. All others are functional.)
 job-display refinements are recognized; see `vsc-pcts-readiness.md` for the
 interactive job-control limitation. Everything scriptable behaves as bash.)
 
-## nohup / setsid — builtin in `bin/bashy`, external in `bin/bash`
+## Full shadow audit — the 4 fork builtins gated in the strict drop-in
 
-The qiangli/sh fork implements `nohup` and `setsid` as builtins (stock bash has
-neither — they're external commands). This is needed for the **AgentOS shell
-`bin/bashy`** and outpost's in-process matrix shell, where `nohup foo &` must
-survive a closed SSH session and an external `nohup` over a goroutine "job"
-can't provide that. So:
+A complete audit of all 65 engine builtins (every `IsBuiltin` name, `type -t` vs
+bash 5.3) found **exactly 4** that bash 5.3 does NOT have as builtins, so the
+pure `bin/bash` drop-in disables them via `cli.SuppressedForkBuiltins`
+(`interp.WithDisabledBuiltins`, the programmatic `enable -n`). `cmd/bashy` clears
+the list to KEEP them. Every other builtin that shadows a standard external
+(`echo`,`printf`,`test`,`[`,`kill`,`pwd`,`true`,`false`,`command`,`type`,`umask`,
+`read`,`getopts`,…) is **bash-faithful** — bash builtins them too, so the shadow
+matches bash and needs no gating.
 
-- **`bin/bashy` keeps them as builtins** (`type nohup` → `builtin`). A superset.
-- **`bin/bash` (the pure drop-in) disables them** via `interp.WithDisabledBuiltins`
-  (the programmatic `enable -n`) so `type nohup` → `file` and `nohup foo` runs
-  the real `/usr/bin/nohup` — **byte-identical to bash 5.3** (and on macOS, where
-  `setsid` doesn't exist, `type setsid` → "not found", matching macOS bash).
-- **Users of `bin/bashy` can opt out** per-command with the bash-native
-  `enable -n nohup` — restoring the external command.
+| Gated builtin | Why the fork added it | What `bin/bash` does instead |
+|---|---|---|
+| `nohup` | in-process detach over a closed SSH session | runs `/usr/bin/nohup` (the real one) |
+| `setsid` | same (new session for a goroutine "job") | runs `/usr/bin/setsid`; "not found" on macOS — **matching macOS bash** |
+| `newgrp` | a non-functional stub (`not supported`) — can't switch group in-process | runs `/usr/bin/newgrp`, which **actually works**, like bash |
+| `strmatch` | an engine-only pattern-match builtin bash never had | "not found" — the drop-in carries no non-bash command |
 
-The mechanism is `cli.SuppressedForkBuiltins` (the names `bin/bash` disables;
-`cmd/bashy` clears it). The fork also promotes `disown`/`kill` to builtins — but
-**bash 5.3 has those as builtins too**, so they match in both binaries and need
-no suppression. Tested both paths: `sh/interp` `TestDisabledBuiltinNohupFalls
+Notes:
+- **`newgrp` was the real find**: ours's stub *shadowed the working external*, so
+  `bin/bash newgrp staff` errored where bash switches group. Gating fixes both the
+  classification AND the functionality.
+- **`strmatch`** doesn't shadow any external (no `/usr/bin/strmatch`); disabling
+  the user-facing builtin does NOT affect the internal `[[ ]]` matcher (a direct
+  Go call, verified).
+- **`disown`/`kill`** are fork builtins too, but **bash 5.3 has them as builtins
+  as well**, so they match in both binaries and need no suppression.
+- **Users of `bin/bashy` opt out** per-command with the bash-native
+  `enable -n <name>` — restoring the external command.
+
+Tested both paths: `sh/interp` `TestDisabledBuiltinNohupFalls
 ThroughToExternal` (external/disabled + Reset-survival + it runs the command) and
 `TestNohupNoTTYInheritsStdio` / `TestNohupChildIsInNewSession` (builtin behavior +
 the new-session hangup-survival mechanism).

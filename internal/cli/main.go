@@ -246,12 +246,23 @@ var (
 	AgentOSWireExec func([]interp.RunnerOption, bool) []interp.RunnerOption = func(o []interp.RunnerOption, _ bool) []interp.RunnerOption { return o }
 
 	// SuppressedForkBuiltins names the qiangli/sh fork's extra builtins that the
-	// pure `bash` drop-in disables so they resolve to the real external command
-	// like bash 5.3 (and report "not found" where absent, e.g. setsid on macOS).
-	// The `bashy` AgentOS shell clears this in its init() to keep them as
-	// builtins — outpost's in-process matrix shell needs `nohup foo &` to survive
-	// a closed SSH session, which an external nohup over a goroutine job can't do.
-	SuppressedForkBuiltins = []string{"nohup", "setsid"}
+	// pure `bash` drop-in disables so its command table matches bash 5.3 exactly.
+	// bash 5.3 has NONE of these as builtins (source-verified: no matching .def);
+	// disabling them makes the name resolve to the real external command (or
+	// "not found" where absent, e.g. setsid on macOS), byte-identical to bash:
+	//   - nohup, setsid: the fork builtins them for in-process detach over a
+	//     closed SSH session; the drop-in defers to /usr/bin/{nohup,setsid}.
+	//   - newgrp: the fork builtin is a non-functional stub ("not supported")
+	//     that shadows the WORKING external /usr/bin/newgrp — the drop-in defers
+	//     to the real one, which actually switches group like bash.
+	//   - strmatch: an engine-only builtin bash never had; the drop-in carries
+	//     no non-bash command. (The internal `[[ ]]` matcher is a direct Go call,
+	//     unaffected by disabling the user-facing builtin.)
+	// The `bashy` AgentOS shell clears this in its init() to KEEP them — outpost's
+	// in-process matrix shell needs `nohup foo &` to survive a closed SSH session,
+	// which an external nohup over a goroutine job can't do. Users opt out per
+	// command with the bash-native `enable -n <name>`.
+	SuppressedForkBuiltins = []string{"nohup", "setsid", "newgrp", "strmatch"}
 )
 
 // Main is the shell entry point, shared by cmd/bash and cmd/bashy.
