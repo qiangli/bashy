@@ -15,8 +15,13 @@ package agentos
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"mvdan.cc/sh/v3/interp"
@@ -81,7 +86,40 @@ func Dispatch() {
 		// caller's env (CONTAINER_HOST etc.) is inherited verbatim.
 		os.Exit(podman.Run(context.Background(), os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	case "ollama":
-		cmd := ollama.NewOllamaCmd(ollama.CmdOptions{})
+		cmd := ollama.NewOllamaCmd(ollama.CmdOptions{
+			RunEmbeddedServe: func(ctx context.Context) error {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return err
+				}
+				dataDir := filepath.Join(home, ".agents", "bashy", "observability", "inference")
+				comp := ollama.NewOllamaComponent(nil, dataDir)
+				if err := comp.Start(ctx); err != nil {
+					return err
+				}
+
+				baseURL := comp.BaseURL()
+				if baseURL == "" {
+					baseURL = ollama.DefaultURL()
+				}
+				fmt.Printf("Ollama server listening on %s\n", baseURL)
+				fmt.Println("Press Ctrl-C to stop.")
+
+				sigCh := make(chan os.Signal, 1)
+				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+				defer signal.Stop(sigCh)
+
+				select {
+				case <-sigCh:
+					fmt.Println("\nShutting down...")
+				case <-ctx.Done():
+				}
+
+				stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer stopCancel()
+				return comp.Stop(stopCtx)
+			},
+		})
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
