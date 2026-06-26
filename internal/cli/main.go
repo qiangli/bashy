@@ -129,14 +129,23 @@ func splitCombinedShortFlags(args []string) []string {
 	// Map of bash short-flag letters to their long set-option name.
 	shortToOpt := map[byte]string{
 		'a': "allexport",
+		'b': "notify",
 		'e': "errexit",
 		'f': "noglob",
+		'h': "hashall",
+		'k': "keyword",
+		'm': "monitor",
 		'n': "noexec",
 		'u': "nounset",
 		'v': "verbose",
 		'x': "xtrace",
 		'p': "privileged",
 		'r': "restricted",
+		'C': "noclobber",
+		'E': "errtrace",
+		'H': "histexpand",
+		'P': "physical",
+		'T': "functrace",
 	}
 	out := make([]string, 0, len(args))
 	out = append(out, args[0])
@@ -168,6 +177,15 @@ func splitCombinedShortFlags(args []string) []string {
 		if a == "-B" {
 			out = append(out, "-o", "braceexpand")
 			continue
+		}
+		// `+<short>` (e.g. +m, +e, +x) disables a set option, the command-line
+		// mirror of `set +<short>`. bash accepts the full +abefhkmnptuvxBCEHPT
+		// set; map any known short option to its long name and disable it.
+		if len(a) == 2 && a[0] == '+' {
+			if opt, ok := shortToOpt[a[1]]; ok {
+				out = append(out, "-bashy-plus-o", opt)
+				continue
+			}
 		}
 		if a == "-i" || a == "-s" || a == "-D" {
 			// Invocation-only flag, not a set option.
