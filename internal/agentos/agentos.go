@@ -4,7 +4,7 @@
 // Package agentos holds the AgentOS wiring that turns the shell core into the
 // `bashy` system shell: the coreutils ExecHandler (so the pure-Go userland and
 // `yc` code-intel verbs run in-process) and the front-door subcommands
-// (`bashy weave …`, `bashy podman …`).
+// (`bashy weave …`, `bashy otel …`, `bashy podman …`).
 //
 // It is imported ONLY by cmd/bashy — never by cmd/bash. That is what keeps the
 // two binaries independent: the pure `bash` drop-in's import graph never pulls
@@ -22,6 +22,8 @@ import (
 	"mvdan.cc/sh/v3/interp"
 
 	_ "github.com/qiangli/coreutils/cmds/all"
+	"github.com/qiangli/coreutils/external/ollama"
+	"github.com/qiangli/coreutils/external/otel/otelcli"
 	"github.com/qiangli/coreutils/external/podman"
 	"github.com/qiangli/coreutils/pkg/dag"
 	"github.com/qiangli/coreutils/pkg/jobs"
@@ -32,7 +34,8 @@ import (
 )
 
 // Dispatch handles AgentOS front-door subcommands that are not shell scripts —
-// `bashy weave …` (the multi-agent workspace orchestrator), `bashy secrets …`
+// `bashy weave …` (the multi-agent workspace orchestrator), `bashy otel …`
+// (the all-in-one observability stack), `bashy secrets …`
 // (cloudbox-managed API keys/tokens for the shell), `bashy dag …` (the
 // agent-first markdown DAG task runner), and `bashy podman …` (a transparent
 // shell-out to an installed podman). It is wired into the shell
@@ -65,11 +68,25 @@ func Dispatch() {
 		cmd := dag.NewDagCmd()
 		cmd.SetArgs(os.Args[2:])
 		os.Exit(dag.ExitCodeOf(cmd.Execute()))
+	case "otel":
+		cmd := otelcli.NewCommand()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "podman":
 		// Shell-out pass-through to an externally installed podman (Layer 2 of
 		// the AgentOS substrate plan): no embedded engine, no fork — the
 		// caller's env (CONTAINER_HOST etc.) is inherited verbatim.
 		os.Exit(podman.Run(context.Background(), os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	case "ollama":
+		cmd := ollama.NewOllamaCmd(ollama.CmdOptions{})
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "jobs", "fg", "bg", "kill":
 		// Real-PID job control over detached background jobs (`foo &`). The
 		// in-shell fg/bg/jobs builtins can't own the controlling terminal

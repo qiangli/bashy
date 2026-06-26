@@ -28,7 +28,6 @@ import (
 
 var (
 	command    = flag.String("c", "", "command to be executed")
-	version    = flag.Bool("version", false, "print version and exit")
 	posix      = flag.Bool("posix", false, "POSIX mode")
 	norc       = flag.Bool("norc", false, "do not read ~/.bashyrc")
 	noprofile  = flag.Bool("noprofile", false, "do not read /etc/profile or ~/.bashy_profile")
@@ -277,6 +276,10 @@ func Main() {
 	// for the pure `bash` drop-in (the default AgentOSDispatch).
 	AgentOSDispatch()
 	preflightInvocationErrors(os.Args)
+	if len(os.Args) > 1 && os.Args[1] == "--version" {
+		fmt.Printf("GNU bash, version %s\n", bashVersion)
+		return
+	}
 	// bash accepts POSIX-style combined short flags (`-ce 'cmd'`,
 	// `-eu`, etc.). Go's flag package doesn't, so pre-split any
 	// bare `-XYZ` argument (where every char is a single-letter
@@ -287,10 +290,6 @@ func Main() {
 	// consumer (runner -o posix, prompt expansion, AgentOS wiring) honors it.
 	if invokedAsSh() {
 		*posix = true
-	}
-	if *version {
-		fmt.Printf("GNU bash, version %s\n", bashVersion)
-		return
 	}
 	err := runAll()
 	var es interp.ExitStatus
@@ -2208,7 +2207,7 @@ func braceGroupEOF(src []byte, pe syntax.ParseError) (openLine, eofLine int, ok 
 
 // backtickComsubUnclosedQuote recognises a backtick command substitution whose
 // body has an unterminated quote — mvdan/sh reports it as `reached "`" without
-// closing quote `X`` (a backtick closing the substitution hit while still
+// closing quote `X` (a backtick closing the substitution hit while still
 // inside quote X). bash treats this as a runtime command-substitution error:
 // it prints the diagnostic, the substitution yields nothing, the enclosing
 // command runs anyway, and the shell exits 0. This returns the source with the
