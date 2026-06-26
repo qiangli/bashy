@@ -111,20 +111,22 @@ Cross-checked against both references:
 
 | builtin | bash 5.3 | Oils/OSH | ours | verdict |
 |---|---|---|---|---|
-| `compgen` | full (`complete.def`; `-W`/`-c` verified working) | functional | partial — no `-W/-c/-f/…` | **real gap vs both** — complete it |
+| `compgen` | full (`complete.def`) | functional | **full** — `-W` + all action flags; exit codes match | **DONE** (one cosmetic dedup) |
 | `bind` | full (`bind.def`) | functional (`readline_osh.py`) | no-op | gap, but readline/interactive — low priority |
 | `disown` | yes (`jobs.def`) | **omitted entirely** | no-op | **non-issue** — ours ≥ OSH, which has no disown |
 
-- **`compgen` — missing action flags (the one worth doing).** Supports
-  `-A <type>`, `-V`, `-P`, `-X`, `-o`, `-a`, `-b`, `-k`; **rejects** `-W <wordlist>`
-  (complete from a literal IFS-split list — the most common completion idiom, and
-  verified working in bash 5.3: `compgen -W "alpha beta" a` → `alpha`), and the
-  convenience shorthands `-c` (commands), `-f` (files), `-v` (variables), `-d`
-  (dirs), `-e` (exported), `-g` (groups), `-j` (jobs), `-s` (services), `-u`
-  (users). The `-c/-f/-v/-d/-e/-g/-j/-s/-u` set is **mechanical** (each maps to an
-  `-A <type>`, like `-a/-b/-k`); `-W` is a **distinct mode** (split + prefix-filter
-  the word list). bash AND OSH both implement these, so ours trails both. Tracked
-  at the engine reject point: `sh/interp/builtin.go` `case "compgen"` default arm.
+- **`compgen` — DONE.** Now implements `-W <wordlist>` (literal IFS-split list,
+  the most common idiom) and all the action shorthands `-c` (commands), `-f`
+  (files), `-d` (dirs), `-e` (exported), `-g` (groups), `-j` (jobs), `-s`
+  (services), `-u` (users), `-v` (variables) — alongside the pre-existing
+  `-A/-V/-P/-X/-o/-a/-b/-k`. Both exit-code contracts also fixed (no candidates →
+  1, invalid action → 2). Verified byte-identical to bash 5.3 across all flags in
+  the container diff, with **one intentional cosmetic deviation**: `compgen -c`
+  dedups a name that is both a builtin and on PATH (e.g. `true`), where bash lists
+  it twice — consistent with this runner's existing sorted+deduped compgen output.
+  Implemented in `sh/interp/builtin.go` (`compgenWordList`/`compgenFiles`/
+  `compgenCommands`/`compgenEtc` + the `-e` case in `compgenNames`); regression
+  test `TestCompgenActionFlags`.
 - **`bind` — silent no-op.** `bind -l`/`-v`/`-P` return 0 with empty output (bash
   + OSH both list readline functions/bindings). Readline key-binding is inert for
   the in-process engine; low priority (interactive-only). Same family as the
@@ -134,9 +136,13 @@ Cross-checked against both references:
   and OSH omits `disown` altogether — so ours already meets-or-beats a serious
   bash-compat shell here.
 
-So the one real *completeness* follow-up is **`compgen -W`/`-c`/`-f`** (used by
-real completion scripts) — distinct from, and lower priority than, the strict-
-drop-in shadowing work above, which is complete.
+With `compgen` now complete, the remaining items are both low-priority and
+interactive: `bind` (a no-op until a readline keybinding bridge exists) and the
+`compgen`/`complete` → readline `AutoComplete` bridge in `sh/interactive` that
+would make tab-completion actually appear in outpost's matrix shell + `/ssh`
+(ergochat/readline supports it; `interactive.Options` doesn't wire it yet). The
+engine *data* layer for completion is now in place; the readline *bridge* is the
+follow-on that makes it user-visible.
 
 ## Run it
 
