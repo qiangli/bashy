@@ -363,6 +363,10 @@ func newRunner() (*interp.Runner, error) {
 	interactive := *forceI || (*command == "" && flag.NArg() == 0 && term.IsTerminal(int(os.Stdin.Fd())))
 	opts := []interp.RunnerOption{
 		interp.Interactive(interactive),
+		// bashy is a standalone shell (one Runner per process), so mirror the
+		// umask builtin onto the process umask — external commands (mkdir, …)
+		// then honour it, as a real shell does (POSIX umask-p conformance).
+		interp.MirrorUmask(true),
 		interp.CommandString(*command != ""),
 		interp.StandardInput(*command == "" && (flag.NArg() == 0 || *readStdin)),
 		interp.WithLoginShell(isLoginShell()),
