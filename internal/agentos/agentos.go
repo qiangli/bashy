@@ -59,6 +59,15 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
+	case "sprint":
+		// Plan/handoff layer (cross-repo), peer to `weave` (per-repo
+		// execution). Shares the AgentOS state root; user-global board.
+		cmd := weave.NewSprintCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "secrets":
 		cmd := secrets.NewSecretsCmd()
 		cmd.SetArgs(os.Args[2:])
