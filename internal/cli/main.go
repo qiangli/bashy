@@ -1777,9 +1777,12 @@ func runStatementStream(
 		for stmt, err := range parser.StmtsSeq(bytes.NewReader(chunk)) {
 			if stmt != nil {
 				flushWarnings()
-				if err := r.Run(ctx, stmt); err != nil {
-					runErr = err
-				}
+				// The script's exit status is the LAST executed statement's,
+				// like bash — always overwrite, so a successful command resets a
+				// prior failure (e.g. `[[ 1 -le 0 ]]` then `true` exits 0). A
+				// guarded `if err != nil` would leave the last *failing* status
+				// stuck, diverging from bash for any stream-routed script.
+				runErr = r.Run(ctx, stmt)
 				cursor = advancePastLine(src, int(stmt.End().Line()))
 				if r.Exited() {
 					if err := r.Run(ctx, &syntax.File{}); err != nil && runErr == nil {
