@@ -18,6 +18,11 @@ import (
 func init() {
 	cli.AgentOSDispatch = agentos.Dispatch
 	cli.AgentOSWireExec = agentos.WireExec
+	// Keep the fork's nohup/setsid builtins: the in-process matrix shell needs
+	// `nohup foo &` to outlive a closed SSH session, which an external nohup
+	// over a goroutine job can't provide. (The pure `bash` drop-in suppresses
+	// them for strict bash 5.3 fidelity.)
+	cli.SuppressedForkBuiltins = nil
 }
 
 func main() { cli.Main() }

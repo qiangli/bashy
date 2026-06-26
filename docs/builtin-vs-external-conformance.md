@@ -16,13 +16,12 @@ pure drop-in) and real **bash 5.3** in the same container PATH, across every
 POSIX special + regular built-in, the bash 5.3 extensions, and a sample of real
 externals.
 
-**Result (2026-06-25): 55/57 names classify identically to bash 5.3.** The only
-two differences are the additive fork builtins below.
-
-| Outcome | Names |
-|---|---|
-| **Identical to bash 5.3** (`builtin`/`file`/`keyword`) | all POSIX special + regular built-ins, all bash extensions, and every external sampled (`ls`,`grep`,`sed`,`awk`,`cat`,`env`,`which`,`sort`,`head`,`tail` → `file`) |
-| **Intentional, additive delta** | `nohup`, `setsid` — **builtin** in `bin/bash`, **file** in stock bash |
+**Result (2026-06-25): 72/72 names classify identically to bash 5.3 — ZERO
+disagreements.** Every POSIX special + regular built-in, every bash extension,
+and every external sampled (`ls`,`grep`,`sed`,`awk`,`cat`,`env`,`which`,`sort`,
+`head`,`tail` → `file`) matches bash 5.3 exactly — including `nohup`/`setsid`,
+which the pure `bin/bash` drop-in disables (see below) so they resolve to the
+external command like bash.
 
 ## POSIX special built-ins (special semantics) — all present, all `builtin`
 
@@ -53,15 +52,29 @@ suid helper too. All others are functional.)
 job-display refinements are recognized; see `vsc-pcts-readiness.md` for the
 interactive job-control limitation. Everything scriptable behaves as bash.)
 
-## Fork additions — the 2 documented deltas
+## nohup / setsid — builtin in `bin/bashy`, external in `bin/bash`
 
-`nohup`, `setsid` are **builtins in `bin/bash`** (and the matrix shell / `outpost`
-SSH) where stock bash leaves them external. This is **additive**: it lets
-`nohup foo &` / `setsid foo` survive a closed SSH session in the in-process
-interpreter (which has no child shell process to outlive the connection). The
-qiangli/sh fork also promotes `disown`/`kill` to first-class builtins for the
-same reason. A script that relied on `type nohup` reporting `file` would see
-`builtin` — the only observable difference, and intentional.
+The qiangli/sh fork implements `nohup` and `setsid` as builtins (stock bash has
+neither — they're external commands). This is needed for the **AgentOS shell
+`bin/bashy`** and outpost's in-process matrix shell, where `nohup foo &` must
+survive a closed SSH session and an external `nohup` over a goroutine "job"
+can't provide that. So:
+
+- **`bin/bashy` keeps them as builtins** (`type nohup` → `builtin`). A superset.
+- **`bin/bash` (the pure drop-in) disables them** via `interp.WithDisabledBuiltins`
+  (the programmatic `enable -n`) so `type nohup` → `file` and `nohup foo` runs
+  the real `/usr/bin/nohup` — **byte-identical to bash 5.3** (and on macOS, where
+  `setsid` doesn't exist, `type setsid` → "not found", matching macOS bash).
+- **Users of `bin/bashy` can opt out** per-command with the bash-native
+  `enable -n nohup` — restoring the external command.
+
+The mechanism is `cli.SuppressedForkBuiltins` (the names `bin/bash` disables;
+`cmd/bashy` clears it). The fork also promotes `disown`/`kill` to builtins — but
+**bash 5.3 has those as builtins too**, so they match in both binaries and need
+no suppression. Tested both paths: `sh/interp` `TestDisabledBuiltinNohupFalls
+ThroughToExternal` (external/disabled + Reset-survival + it runs the command) and
+`TestNohupNoTTYInheritsStdio` / `TestNohupChildIsInNewSession` (builtin behavior +
+the new-session hangup-survival mechanism).
 
 ## Everything else is external
 
@@ -78,5 +91,5 @@ drop-in, and the conformance harness only measures `bin/bash`.)
 
 ```sh
 cd bashy && make build && scripts/verify-builtins.sh
-# → "55+ names checked; 2 disagreement(s) (expected: nohup, setsid)"
+# → "72 names checked; 0 disagreement(s)"
 ```

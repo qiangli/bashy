@@ -10,10 +10,12 @@
 # semantics (a redirection/assignment error is fatal; assignments persist). So a
 # faithful bash drop-in must agree with bash on which names are built in.
 #
-# Expected: every name agrees EXCEPT the two additive fork builtins (nohup,
-# setsid), which bin/bash implements as builtins (so `nohup foo &` survives a
-# closed SSH session) where stock bash leaves them external. That delta is
-# intentional and additive — documented in docs/builtin-vs-external-conformance.md.
+# Expected: ZERO disagreements. bin/bash matches bash 5.3 exactly — including
+# nohup/setsid, which the fork implements as builtins but bin/bash disables (via
+# cli.SuppressedForkBuiltins → interp.WithDisabledBuiltins) so they resolve to
+# the external command like bash. They stay builtins only in bin/bashy (where
+# `nohup foo &` must survive a closed SSH session). See
+# docs/builtin-vs-external-conformance.md.
 #
 # Usage: scripts/verify-builtins.sh   (needs bin/bash built + an OCI runtime)
 set -u
@@ -44,5 +46,5 @@ $OCI run --rm -i -v "$OURS:/ours:ro" -v "$TC:/tc.sh:ro" "$IMAGE" sh -c '
   d=$(paste /tmp/b.txt /tmp/o.txt | awk -F"\t" "{ if (\$2!=\$4) print \"  \" \$1 \": bash=\" \$2 \" / ours=\" \$4 }")
   printf "%s\n" "${d:-  (none)}"
   c=$(printf "%s\n" "$d" | grep -c .)
-  echo "=== $n names checked; $c disagreement(s) (expected: 2 — nohup, setsid additive fork builtins) ==="
+  echo "=== $n names checked; $c disagreement(s) (expected: 0 — bin/bash matches bash 5.3 exactly; nohup/setsid are builtins only in bin/bashy) ==="
 '

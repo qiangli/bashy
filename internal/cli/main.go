@@ -244,6 +244,14 @@ var (
 	// posix is passed so AgentOS extensions (e.g. --dry-run) stay inert under
 	// --posix and absent from the pure bash drop-in.
 	AgentOSWireExec func([]interp.RunnerOption, bool) []interp.RunnerOption = func(o []interp.RunnerOption, _ bool) []interp.RunnerOption { return o }
+
+	// SuppressedForkBuiltins names the qiangli/sh fork's extra builtins that the
+	// pure `bash` drop-in disables so they resolve to the real external command
+	// like bash 5.3 (and report "not found" where absent, e.g. setsid on macOS).
+	// The `bashy` AgentOS shell clears this in its init() to keep them as
+	// builtins — outpost's in-process matrix shell needs `nohup foo &` to survive
+	// a closed SSH session, which an external nohup over a goroutine job can't do.
+	SuppressedForkBuiltins = []string{"nohup", "setsid"}
 )
 
 // Main is the shell entry point, shared by cmd/bash and cmd/bashy.
@@ -372,6 +380,12 @@ func newRunner() (*interp.Runner, error) {
 	// `yc` verbs as in-process commands. No-op for the pure `bash` drop-in
 	// (the default AgentOSWireExec).
 	opts = AgentOSWireExec(opts, *posix)
+	// Strict drop-in: disable the fork's extra builtins (nohup/setsid) so the
+	// pure `bash` binary resolves them to the real external commands like bash
+	// 5.3. The AgentOS `bashy` shell clears SuppressedForkBuiltins to keep them.
+	if len(SuppressedForkBuiltins) > 0 {
+		opts = append(opts, interp.WithDisabledBuiltins(SuppressedForkBuiltins...))
+	}
 	r, err = interp.New(opts...)
 	if err != nil {
 		return nil, err
