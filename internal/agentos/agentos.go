@@ -27,6 +27,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 
 	_ "github.com/qiangli/coreutils/cmds/all"
+	"github.com/qiangli/coreutils/external/kopia"
 	"github.com/qiangli/coreutils/external/loom"
 	"github.com/qiangli/coreutils/external/ollama"
 	"github.com/qiangli/coreutils/external/otel/otelcli"
@@ -120,6 +121,15 @@ func Dispatch() {
 		// The mesh object/blob store (S3 gateway): run SeaweedFS as a managed
 		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
 		cmd := seaweedfs.NewSeaweedfsCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "kopia":
+		// The mesh snapshot-backup repository server: run Kopia as a managed
+		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
+		cmd := kopia.NewKopiaCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
