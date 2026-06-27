@@ -21,13 +21,26 @@ LDFLAGS := -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-
 # local cross-compile sanity check).
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 
+# Embed tags: bashy embeds the coreutils podman engine's helper binaries
+# (podman/vfkit/gvproxy) when their gitignored .gz blobs exist (built by
+# coreutils/scripts/embed-*.sh). Each tag is added only if its blob is present,
+# so a fresh checkout builds lean (bashy podman falls back to a host podman) and
+# a host that ran the embed scripts gets a fully self-contained `bashy podman`.
+# Only cmd/bashy gets these — cmd/bash never imports the engine.
+EMBED_DIR := ../coreutils/external/podman/engine
+BASHY_TAGS := $(strip \
+	$(if $(wildcard $(EMBED_DIR)/podman_embed/podman.gz),embed_podman) \
+	$(if $(wildcard $(EMBED_DIR)/vfkit_embed/vfkit.gz),embed_vfkit) \
+	$(if $(wildcard $(EMBED_DIR)/gvproxy_embed/gvproxy.gz),embed_gvproxy))
+
 ## build: Build both independent binaries into bin/ (bash = pure drop-in from
 ## cmd/bash; bashy = AgentOS shell from cmd/bashy). They share the cli core but
 ## are separate compilations — bash's import graph never includes coreutils.
 build:
 	@mkdir -p $(BIN_DIR)
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BASHY) ./cmd/bash
-	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy
+	@echo "building bashy$(if $(BASHY_TAGS), with embeds: $(BASHY_TAGS),) ..."
+	go build -trimpath $(if $(BASHY_TAGS),-tags "$(BASHY_TAGS)",) -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy
 
 ## install: go install both binaries into GOBIN
 install:
