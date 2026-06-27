@@ -1,9 +1,18 @@
 # VSC-PCTS readiness — cert-run pre-flight for bashy
 
-Status: **pre-flight (2026-06-21).** Companion to `plan-posix-conformance.md`
-(strategy/scope) — this doc is the concrete checklist + current-evidence
-snapshot for an actual VSC-PCTS run. It does not repeat the conformance
-strategy; read that plan first.
+Status: **pre-flight (2026-06-21; updated 2026-06-27).** Companion to
+`plan-posix-conformance.md` (strategy/scope) — this doc is the concrete checklist
++ current-evidence snapshot for an actual VSC-PCTS run. It does not repeat the
+conformance strategy; read that plan first.
+
+**2026-06-27 — the declaration + handoff are now written.** Two new companion
+docs split the "before the license" from the "during the licensed run":
+- `conformance-statement.md` — the public claim: scope, mode, evidence table,
+  final declared-limitations list, and the verbatim claim framing.
+- `posix-cert-handoff-runbook.md` — the turnkey procedure for the human-gated
+  steps (license application, TET3/VSXgen build, SUT wiring, journal triage).
+Single aggregate scoreboard added: `scripts/posix-certdryrun.sh` runs every
+conformance harness and prints one PASS/FAIL/PENDING table + verdict.
 
 ## What VSC-PCTS is
 
@@ -31,6 +40,10 @@ the wrong binaries.** Run bashy in **POSIX mode** (invoked as `sh`, or
 Strong foundation — necessary, not yet proven-sufficient against the cert:
 
 - **`make test-bash` 86/0** — full bash 5.3 fixture suite, green (default mode).
+- **`scripts/posix-parity.sh` 38 match / 0 diff / 1 info / 39 probed** —
+  `bashy --posix` ≡ `bash 5.3 --posix` (widened 2026-06-27 from 23 live probes;
+  batches 2–3 converted prose-asserted behaviors into mechanical probes, all
+  MATCH — see `posix-mode-behaviors.md`).
 - **5-oracle same-env differential** (`scripts/posix-diff.sh`, oracles: bash 5.3
   / dash / yash / mksh / zsh) and the **Oils live-differential**
   (`scripts/oils-diff.sh`): **0 deviations** on the clean-room XCU corpus
@@ -68,20 +81,26 @@ bash-fidelity warrants relaxing the parser before the run.
 
 ## Pre-flight checklist (in order)
 
-- [ ] **Finish the conformance plan's Phase 0–1** (scope doc + POSIX-mode
+- [x] **Finish the conformance plan's Phase 0–1** (scope doc + POSIX-mode
       baseline) per `plan-posix-conformance.md`.
-- [ ] **POSIX-mode breadth sweep** — our 86/0 is *default* mode; add a
-      posix-mode fixture/differential pass (`scripts/posix-parity.sh` is the
-      seed) so we are not blind to posix-mode-only behavior the cert hits.
-- [ ] **Finish Oils mining** (remaining ~116 suites) → drive the differential to
-      stable 0-deviations across the whole corpus; fix what surfaces.
-- [ ] **Resolve the `<<${a}` decision.**
+- [x] **POSIX-mode breadth sweep** — `scripts/posix-parity.sh` widened to 39
+      mechanically-testable behaviors (38 match / 0 diff / 1 info); the rest are
+      interactive/filesystem/host-specific by construction.
+- [x] **Finish Oils mining** → `scripts/oils-diff.sh` at 0 deviations (719
+      scripts); folded into `scripts/posix-certdryrun.sh`.
+- [x] **Resolve the `<<${a}` decision** — declared limitation (see
+      `conformance-statement.md` §Declared limitations).
+- [x] **Write the conformance statement + cert handoff runbook** —
+      `conformance-statement.md` + `posix-cert-handoff-runbook.md`.
+- [ ] **Finish the PENDING free-suite harnesses** — `dash-posix-suite.sh`,
+      `modernish-suite.sh`, `austin-defects.sh`; triage each to 0 so
+      `scripts/posix-certdryrun.sh` is VERDICT: CLEAN with no PENDING.
 - [ ] **Apply for the VSC-PCTS license** (Open Group; human step). Confirm
-      current terms + deliverables.
+      current terms + deliverables. → `posix-cert-handoff-runbook.md` Step 1.
 - [ ] **Stand up TET + wire bashy as the SUT** in POSIX mode (`sh` invocation);
-      scope the scenario to shell + builtins.
+      scope the scenario to shell + builtins. → runbook Steps 2–3.
 - [ ] **Dry-run; triage results** into: real bug (fix, gated 86/0) /
-      declared-limitation (JC, `((`) / scope-excluded (utility).
+      declared-limitation (JC, `((`) / scope-excluded (utility). → runbook Steps 4–5.
 - [ ] **Decide dual-mode JC P1+** based on measured interactive-JC coverage.
 
 ## Go / no-go

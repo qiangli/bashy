@@ -28,11 +28,28 @@ target, not the POSIX spec. They split into two buckets, and only one is a
 Net: the conformance-relevant Phase-1 set is done; remaining interactive items
 (notably #28) are parity-polish, not gaps.
 
-## Phase 1 results (2026-06-19) — `scripts/posix-parity.sh` vs bash 5.3 `--posix`
+## Phase 1 results (2026-06-19; harness widened 2026-06-27) — `scripts/posix-parity.sh` vs bash 5.3 `--posix`
 
-**Final (hardened harness): 22 match / 0 diff / 1 info of 23 mechanically-testable
-behaviors → Phase 1 conformant.** The ~53 remaining behaviors need interactive /
-job-control / history / startup-file harnesses (**Phase 2, PTY-required — pending**).
+**Current (widened harness): 38 match / 0 diff / 1 info of 39 mechanically-testable
+behaviors → Phase 1 conformant.** The remaining behaviors need interactive /
+job-control / history / startup-file harnesses (**PTY-required**, partly covered
+by `scripts/posix-parity-pty.sh`) or are filesystem/host-state-dependent.
+
+**2026-06-27 widening (cert-readiness pass).** The original harness had 23 live
+`-c` probes; many of the 76 behaviors were marked `[x]` *by prose / unit-test
+assertion* rather than by a mechanical probe. Per the cert principle "you cannot
+claim conformance you cannot verify," batches 2–3 added live probes for behaviors
+that are testable non-interactively without filesystem mutation: **#4, #5, #6,
+#8, #13, #32, #37, #42, #43, #52, #60, #61, #62, #66, #67, #69**. All MATCH bash
+5.3 `--posix` (no new findings) — notably the discriminating ones: #6 (bare
+`time` as a simple command), #37 (assignment error preceding a special builtin
+exits a non-interactive shell), #42 (assignment preceding a special builtin
+persists), #43 (`command` preserves declaration-builtin assignment), #69 (`trap`
+first-arg signal-spec rule). Behaviors still relying on assertion are genuinely
+interactive (job notification timing, `fc` editor, vi `v`), filesystem-stateful
+(`. `/`source` search path, `cd` logical-mode fallback, hash table), or
+host-specific (`ulimit` block size, `kill -l` signal set, `printf` long double) —
+out of the mechanically-testable set by construction.
 
 The harness measures POSIX **conformance** (semantic), not byte-exact bash mimicry:
 per probe it compares **stdout** + **success/fail** (exit 0 vs not), deliberately

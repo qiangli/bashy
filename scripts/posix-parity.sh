@@ -81,6 +81,28 @@ add  65 'xx=hello; set | grep "^xx="'
 add  68 'trap "echo x" INT; trap -p INT'
 add  73 'readonly rv=1; unset -v rv; echo after'
 
+# --- batch 2 (2026-06-27): convert prose-asserted behaviors into live probes ---
+# Each compares stdout + success/fail vs bash 5.3 --posix; a DIFF is a real
+# finding to triage. These cover behaviors previously marked [x]-by-assertion
+# in docs/posix-mode-behaviors.md but not exercised by a mechanical probe.
+add   4 'alias do=BAD; for i in x y; do echo $i; done'
+add   5 'alias g=echo; v=$(g hi); echo "$v"'
+add   6 'time; echo "rc=$?"'
+add  32 'f() { :; }; type f'
+add  37 'readonly r=1; r=2 :; echo after'
+add  42 'x=1 :; echo "x=[$x]"'
+add  43 'command export ce=1; echo "ce=[$ce]"'
+add  52 'shopt -s xpg_echo 2>/dev/null; echo "p\tq"'
+add  66 '[ a \< b ]; echo "rc=$?"'
+add  67 '[ -t ]; echo "rc=$?"'
+add  69 'trap - 2; trap 2 EXIT 2>&1 | head -1; echo "rc=$?"'
+# --- batch 3 (2026-06-27) ---
+add   8 'set -- "x}y"; printf "%s\n" "${@}"'
+add  13 'HOME=/H; v=~/x; echo "$v"'
+add  60 'kill -0 99999999 2>/dev/null; echo "rc=$?"'
+add  61 'printf "%.6f\n" 0.5'
+add  62 'cd /; pwd'
+
 # --- run bashy locally: capture stdout + success/fail (discard diagnostics) ---
 declare -a BY_OUT BY_OK
 for i in "${!NUMS[@]}"; do
