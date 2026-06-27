@@ -75,7 +75,7 @@ run_panel() { # panel-label image "label=cmd …"
       command -v "$cmd" >/dev/null 2>&1 || { echo "  $label: (not found)"; continue; }
       ok=0; er=0; vf="/out/$PANEL.$label.verdicts"; [ -d /out ] && : > "$vf"
       for t in $TESTS; do
-        timeout 8 busybox ash run-test.sh "$cmd" "$t" >/dev/null 2>&1
+        timeout -s KILL 8 busybox ash run-test.sh "$cmd" "$t" >/dev/null 2>&1
         trs="${t%.tst}.trs"; [ -f "$trs" ] || continue
         o=$(grep -c "^%%% OK\[" "$trs" 2>/dev/null); ok=$((ok + ${o:-0}))
         e=$(grep -c "^%%% ERROR\[" "$trs" 2>/dev/null); er=$((er + ${e:-0}))
