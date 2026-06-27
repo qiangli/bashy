@@ -27,6 +27,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 
 	_ "github.com/qiangli/coreutils/cmds/all"
+	"github.com/qiangli/coreutils/external/loom"
 	"github.com/qiangli/coreutils/external/ollama"
 	"github.com/qiangli/coreutils/external/otel/otelcli"
 	"github.com/qiangli/coreutils/external/podman"
@@ -94,6 +95,16 @@ func Dispatch() {
 		// the AgentOS substrate plan): no embedded engine, no fork — the
 		// caller's env (CONTAINER_HOST etc.) is inherited verbatim.
 		os.Exit(podman.Run(context.Background(), os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	case "loom":
+		// The mesh git forge: run Gitea as a managed external binary (binmgr
+		// downloads/verifies/caches it; not compiled in). bashy is the "OS of
+		// binaries" host; outpost exposes it over the mesh.
+		cmd := loom.NewLoomCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "ollama":
 		cmd := ollama.NewOllamaCmd(ollama.CmdOptions{
 			RunEmbeddedServe: func(ctx context.Context) error {
