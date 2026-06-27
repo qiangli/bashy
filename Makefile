@@ -1,4 +1,4 @@
-.PHONY: build install test test-bash test-bash-list test-bash-helpers dist tidy clean help
+.PHONY: build build-bash build-bashy install test test-bash test-bash-run test-bash-parallel test-bash-list test-bash-helpers dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -123,6 +123,12 @@ BASH_TEST_CAT_V := printf
 ## Builds only the lean bin/bash drop-in (not the 259MB embed-heavy bin/bashy).
 ## Iterate fast on a subset with TESTS="name ...", e.g. make test-bash TESTS="comsub varenv".
 test-bash: build-bash test-bash-helpers
+	@$(MAKE) --no-print-directory test-bash-run
+
+## test-bash-run: the fixture loop only (no build). Used by `test-bash` (which
+## builds first) and by scripts/test-bash-parallel.sh (builds once, then fans
+## the loop out over fixture groups). Honors TESTS="name ..." like test-bash.
+test-bash-run:
 	@echo "Running bash 5.3 test suite against bashy ($(BASH_TEST_TIMEOUT)s timeout per test)..."
 	@BASHY_ABS=$$(pwd)/$(BASHY); cd $(BASH_TESTS_DIR) && \
 		unset OLDPWD && \
@@ -221,6 +227,12 @@ test-bash: build-bash test-bash-helpers
 		echo ""; \
 		echo "Results: $$passed passed, $$failed failed, $$skipped skipped, $$timeout_count timed out"; \
 		echo ""
+
+## test-bash-parallel: Run the bash 5.3 suite in parallel fixture groups (builds
+## bin/bash once, then fans the loop out over JOBS groups). JOBS defaults to the
+## CPU count; on a big box use e.g. `make test-bash-parallel JOBS=20`.
+test-bash-parallel: build-bash test-bash-helpers
+	@JOBS=$(JOBS) BASH_TESTS_DIR=$(BASH_TESTS_DIR) BASH_TEST_SKIP="$(BASH_TEST_SKIP)" scripts/test-bash-parallel.sh
 
 ## test-bash-list: List all available bash 5.3 tests
 test-bash-list:
