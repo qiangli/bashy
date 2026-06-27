@@ -119,6 +119,18 @@ BASH_TEST_CAT_V := printf
 # and that fd 0 is a terminal. Normalize only those host-dependent lines
 # below so the fixture still checks bashy's test builtin behaviour.
 
+## test-yash: yash POSIX (-p) conformance scoreboard — the yash analogue of test-bash.
+## Runs every shell-agnostic *-p.tst against bashy AND real bash in one container,
+## per testcase, and lists the BASHY-SPECIFIC failures (bash passes, bashy fails) —
+## the genuine bugs to fix. Job-control/signal suites excluded (goroutine ceiling).
+## Output dir via YASH_OUT (default /tmp/yash-scoreboard); failures in <dir>/failures.txt.
+test-yash:
+	@scripts/yash-scoreboard.sh $(YASH_OUT)
+
+## test-yash-list: print the current bashy-specific yash failure list (suite line desc).
+test-yash-list: test-yash
+	@cat $${YASH_OUT:-/tmp/yash-scoreboard}/failures.txt
+
 ## test-bash: Run bash 5.3 native test suite against bashy (with per-test timeout).
 ## Builds only the lean bin/bash drop-in (not the 259MB embed-heavy bin/bashy).
 ## Iterate fast on a subset with TESTS="name ...", e.g. make test-bash TESTS="comsub varenv".
