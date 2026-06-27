@@ -36,9 +36,17 @@ BASHY_TAGS := $(strip \
 ## build: Build both independent binaries into bin/ (bash = pure drop-in from
 ## cmd/bash; bashy = AgentOS shell from cmd/bashy). They share the cli core but
 ## are separate compilations — bash's import graph never includes coreutils.
-build:
+build: build-bash build-bashy
+
+## build-bash: Build only the pure drop-in (cmd/bash -> bin/bash). This is all
+## the conformance harness needs; it skips the embed-heavy bin/bashy build.
+build-bash:
 	@mkdir -p $(BIN_DIR)
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BASHY) ./cmd/bash
+
+## build-bashy: Build the AgentOS shell (cmd/bashy -> bin/bashy), embedding the
+## podman engine blobs when present (large binary; not needed for test-bash).
+build-bashy:
 	@echo "building bashy$(if $(BASHY_TAGS), with embeds: $(BASHY_TAGS),) ..."
 	go build -trimpath $(if $(BASHY_TAGS),-tags "$(BASHY_TAGS)",) -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy
 
@@ -111,8 +119,10 @@ BASH_TEST_CAT_V := printf
 # and that fd 0 is a terminal. Normalize only those host-dependent lines
 # below so the fixture still checks bashy's test builtin behaviour.
 
-## test-bash: Run bash 5.3 native test suite against bashy (with per-test timeout)
-test-bash: build test-bash-helpers
+## test-bash: Run bash 5.3 native test suite against bashy (with per-test timeout).
+## Builds only the lean bin/bash drop-in (not the 259MB embed-heavy bin/bashy).
+## Iterate fast on a subset with TESTS="name ...", e.g. make test-bash TESTS="comsub varenv".
+test-bash: build-bash test-bash-helpers
 	@echo "Running bash 5.3 test suite against bashy ($(BASH_TEST_TIMEOUT)s timeout per test)..."
 	@BASHY_ABS=$$(pwd)/$(BASHY); cd $(BASH_TESTS_DIR) && \
 		unset OLDPWD && \
@@ -125,6 +135,7 @@ test-bash: build test-bash-helpers
 		for runner in run-*; do \
 			case "$$runner" in run-all|run-minimal) continue ;; esac; \
 			name=$${runner#run-}; \
+			if [ -n "$(TESTS)" ]; then case " $(TESTS) " in *" $$name "*) ;; *) continue ;; esac; fi; \
 			test_file="$$name.tests"; \
 			right_file="$$name.right"; \
 			if [ "$$name" = "dirstack" ]; then \

@@ -112,8 +112,30 @@ exits the subshell in posix mode). Deferred until modeled carefully — it is lo
 value and higher risk than the clean wins, and the cluster is partly cases where
 bash ITSELF varies by context (some delta cases may not be bashy-only on closer
 inspection). Re-derive the exact per-case delta (file-mode, matching yash's
-framework invocation) before any retry. `alias-p` (~30, syntax/lexer alias
-substitution positions) remains a separate, cleaner sub-target.
+framework invocation) before any retry.
+
+## 4. yash alias-p cluster — **DEFERRED** (architecturally deep) + one salvaged fix
+
+Real divergence confirmed: `alias b=' '; b if true; then echo ok; fi` should
+print `ok` (bash), bashy errors `b: command not found` / `` `then` can only be
+used in an `if` ``; likewise alias-to-here-document (`alias a='cat <<'`) and
+alias values that expand to reserved words / operators (`if`/`do`/`;;`/`<<`/`(`).
+
+**Root cause is architectural:** this `sh` fork expands aliases mostly **at
+runtime, after the script has already parsed** — too late for an alias whose
+value introduces a *grammar token* (`if`, `do`, `<<`, `(`, `;;`). Real bash
+expands aliases in the **lexer at parse time**, so the produced tokens are seen
+by the grammar. Closing this cluster properly needs **parser-integrated alias
+expansion** — a substantial design change, the same depth class as §3, not a
+grind. A codex attempt (2026-06-27) bolted on a 249-line runtime *pre-pass*
+(`PreparseAliases`) but it (a) only fixed ~half the positions, (b) was wired
+only into `cmd/gosh`, NOT bashy's `internal/cli`, so it wouldn't even reach the
+drop-in, and (c) is a lexical band-aid, not the real mechanism. **Not merged.**
+
+**Salvaged (clean, gated):** the one independently-correct piece — bash accepts
+`--` as an `alias` option terminator (`alias -- name=val`), bashy rejected it
+(`alias: --: invalid option`). Fixed in `interp/builtin.go` (the `alias` builtin
+now strips a leading `--`, also after `-p`). Verified vs bash; gated 86/86.
 
 ## Non-bugs confirmed by the sweep (record, do not chase)
 
