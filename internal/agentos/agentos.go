@@ -32,10 +32,12 @@ import (
 	"github.com/qiangli/coreutils/external/ollama"
 	"github.com/qiangli/coreutils/external/otel/otelcli"
 	"github.com/qiangli/coreutils/external/podman"
+	"github.com/qiangli/coreutils/external/rclone"
 	"github.com/qiangli/coreutils/external/seaweedfs"
 	"github.com/qiangli/coreutils/external/zot"
 	"github.com/qiangli/coreutils/pkg/dag"
 	"github.com/qiangli/coreutils/pkg/jobs"
+	"github.com/qiangli/coreutils/pkg/mirror"
 	"github.com/qiangli/coreutils/pkg/secrets"
 	"github.com/qiangli/coreutils/pkg/weave"
 	"github.com/qiangli/coreutils/pkg/weavecli"
@@ -130,6 +132,26 @@ func Dispatch() {
 		// The mesh snapshot-backup repository server: run Kopia as a managed
 		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
 		cmd := kopia.NewKopiaCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "rclone":
+		// Transparent passthrough to a binmgr-managed rclone (MIT) — the transfer
+		// engine + a NAS-style file server (`rclone serve …`). Not compiled in.
+		cmd := rclone.NewRcloneCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "mirror":
+		// Continuous one-way directory mirror (Syncthing's architecture, all
+		// permissive parts: rjeczalik/notify MIT recursive watch + rclone MIT
+		// transfer; our own orchestration). Node B keeps a live replica of a dir
+		// on node A — over the mesh, point --dest at the replica's exposed rclone.
+		cmd := mirror.NewMirrorCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
