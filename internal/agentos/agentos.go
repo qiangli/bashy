@@ -31,6 +31,7 @@ import (
 	"github.com/qiangli/coreutils/external/ollama"
 	"github.com/qiangli/coreutils/external/otel/otelcli"
 	"github.com/qiangli/coreutils/external/podman"
+	"github.com/qiangli/coreutils/external/zot"
 	"github.com/qiangli/coreutils/pkg/dag"
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/secrets"
@@ -100,6 +101,15 @@ func Dispatch() {
 		// downloads/verifies/caches it; not compiled in). bashy is the "OS of
 		// binaries" host; outpost exposes it over the mesh.
 		cmd := loom.NewLoomCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "zot":
+		// The mesh OCI registry (images + Ollama models): run Zot as a managed
+		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
+		cmd := zot.NewZotCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
