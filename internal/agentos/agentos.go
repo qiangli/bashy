@@ -14,14 +14,8 @@
 package agentos
 
 import (
-	"context"
-	"fmt"
 	"io"
 	"os"
-	"os/signal"
-	"path/filepath"
-	"syscall"
-	"time"
 
 	"github.com/spf13/cobra"
 	"mvdan.cc/sh/v3/interp"
@@ -31,7 +25,7 @@ import (
 	"github.com/qiangli/coreutils/external/loom"
 	"github.com/qiangli/coreutils/external/ollama"
 	"github.com/qiangli/coreutils/external/otel/otelcli"
-	"github.com/qiangli/coreutils/external/podman"
+	podmanengine "github.com/qiangli/coreutils/external/podman/engine"
 	"github.com/qiangli/coreutils/external/rclone"
 	"github.com/qiangli/coreutils/external/seaweedfs"
 	"github.com/qiangli/coreutils/external/zot"
@@ -96,10 +90,16 @@ func Dispatch() {
 		}
 		os.Exit(0)
 	case "podman":
-		// Shell-out pass-through to an externally installed podman (Layer 2 of
-		// the AgentOS substrate plan): no embedded engine, no fork — the
-		// caller's env (CONTAINER_HOST etc.) is inherited verbatim.
-		os.Exit(podman.Run(context.Background(), os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+		// Managed, ISOLATED in-process podman (embeds the qiangli/podman fork):
+		// pass-through to the embedded binary with CONTAINER_HOST pointed at
+		// bashy's own `bashy` machine socket, so images/containers never collide
+		// with a host or ycode engine. $BASHY_PODMAN_SYSTEM=1 defers to host podman.
+		cmd := podmanengine.NewPodmanCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "loom":
 		// The mesh git forge: run Gitea as a managed external binary (binmgr
 		// downloads/verifies/caches it; not compiled in). bashy is the "OS of
@@ -158,40 +158,10 @@ func Dispatch() {
 		}
 		os.Exit(0)
 	case "ollama":
-		cmd := ollama.NewOllamaCmd(ollama.CmdOptions{
-			RunEmbeddedServe: func(ctx context.Context) error {
-				home, err := os.UserHomeDir()
-				if err != nil {
-					return err
-				}
-				dataDir := filepath.Join(home, ".agents", "bashy", "observability", "inference")
-				comp := ollama.NewOllamaComponent(nil, dataDir)
-				if err := comp.Start(ctx); err != nil {
-					return err
-				}
-
-				baseURL := comp.BaseURL()
-				if baseURL == "" {
-					baseURL = ollama.DefaultURL()
-				}
-				fmt.Printf("Ollama server listening on %s\n", baseURL)
-				fmt.Println("Press Ctrl-C to stop.")
-
-				sigCh := make(chan os.Signal, 1)
-				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-				defer signal.Stop(sigCh)
-
-				select {
-				case <-sigCh:
-					fmt.Println("\nShutting down...")
-				case <-ctx.Done():
-				}
-
-				stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer stopCancel()
-				return comp.Stop(stopCtx)
-			},
-		})
+		// Managed, ISOLATED ollama: own bashy-owned port (never 11434), models
+		// under ~/.agents/bashy/ollama — never the host's ~/.ollama. Reached over
+		// the mesh by the `ollama` service name.
+		cmd := ollama.NewManagedOllamaCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
