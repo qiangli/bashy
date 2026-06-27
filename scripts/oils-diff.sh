@@ -19,7 +19,7 @@ OILS="$HERE/priorart/oils"
 
 OCI=${OCI:-}
 if [ -z "$OCI" ]; then
-  command -v docker >/dev/null 2>&1 && OCI=docker || { command -v ycode >/dev/null 2>&1 && OCI="ycode podman"; }
+  command -v docker >/dev/null 2>&1 && OCI=docker || { command -v bashy >/dev/null 2>&1 && OCI="bashy podman"; }
 fi
 [ -n "$OCI" ] || { echo "oils-diff: need a container runtime" >&2; exit 2; }
 

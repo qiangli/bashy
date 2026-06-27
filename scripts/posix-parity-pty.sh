@@ -24,12 +24,12 @@ export BASHY
 export BASH_REF=${BASH_REF:-}
 
 # Container runtime for the bash 5.3 oracle (same convention as
-# scripts/posix-parity.sh): default docker, fall back to `ycode podman`.
+# scripts/posix-parity.sh): default docker, fall back to `bashy podman`.
 # Ignored when BASH_REF points at a local bash binary.
 OCI=${OCI:-}
 if [ -z "$OCI" ] && [ -z "$BASH_REF" ]; then
   if command -v docker >/dev/null 2>&1; then OCI=docker
-  elif command -v ycode  >/dev/null 2>&1; then OCI="ycode podman"
+  elif command -v bashy  >/dev/null 2>&1; then OCI="bashy podman"
   fi
 fi
 export OCI
@@ -46,7 +46,7 @@ import time
 
 BASHY = os.environ.get("BASHY", "./bin/bashy")
 BASH_REF = os.environ.get("BASH_REF", "")
-# Container runtime command (e.g. "docker" or "ycode podman"), space-split.
+# Container runtime command (e.g. "docker" or "bashy podman"), space-split.
 OCI = os.environ.get("OCI", "docker").split()
 PROMPT = "@@@PROMPT@@@ "
 

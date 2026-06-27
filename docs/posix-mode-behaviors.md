@@ -85,9 +85,9 @@ success/fail while ignoring non-mandated wording.
 ### Phase 2 progress (2026-06-19, cont.)
 
 Oracle runtime: the harness now auto-detects the container runtime and falls
-back to **`ycode podman`** when `docker` is absent (`OCI=` env override; same
+back to **`bashy podman`** when `docker` is absent (`OCI=` env override; same
 convention added to `posix-parity.sh`). On this dev box there is no Docker, so
-`ycode podman run bash:5.3` is the live oracle. Two harness fixes were needed:
+`bashy podman run bash:5.3` is the live oracle. Two harness fixes were needed:
 (1) the `bash:5.3` image keeps `bash`/`docker-entrypoint.sh` in `/usr/local/bin`,
 so the oracle must not have its PATH narrowed to `/usr/bin:/bin`; (2) interactive
 bash does not import `PS1` from the environment, so the prompt is neutralized by

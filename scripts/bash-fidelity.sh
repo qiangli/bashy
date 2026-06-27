@@ -32,10 +32,10 @@ OILS="$HERE/priorart/oils"
 OCI=${OCI:-}
 if [ -z "$OCI" ]; then
   if command -v docker >/dev/null 2>&1; then OCI=docker
-  elif command -v ycode >/dev/null 2>&1; then OCI="ycode podman"
+  elif command -v bashy >/dev/null 2>&1; then OCI="bashy podman"
   fi
 fi
-[ -n "$OCI" ] || { echo "bash-fidelity: need a container runtime (docker / ycode podman)" >&2; exit 2; }
+[ -n "$OCI" ] || { echo "bash-fidelity: need a container runtime (docker / bashy podman)" >&2; exit 2; }
 
 IMAGE=localhost/posix-shells-oils
 if ! $OCI image exists "$IMAGE" 2>/dev/null; then

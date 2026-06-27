@@ -22,7 +22,7 @@ set -u
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 BIN="$HERE/bin/bash"
 [ -x "$BIN" ] || { echo "build bin/bash first (make build)" >&2; exit 2; }
-OCI=${OCI:-$(command -v podman || command -v docker || echo "ycode podman")}
+OCI=${OCI:-$(command -v podman || command -v docker || echo "bashy podman")}
 IMAGE=${IMAGE:-bash:5.3}
 
 # Cross-compile a linux ours for the container.

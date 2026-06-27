@@ -17,7 +17,7 @@ by a fatal signal, bashy now writes a status line and:
 This gating mirrors GNU bash 5.3 `jobs.c notify_of_job_status` and is the
 POSIX-relevant content of #25/#26 ("non-interactive shells print status messages
 after a foreground job completes; interactive shells defer"). Verified against
-the bash 5.3 oracle (`ycode podman run bash:5.3`): posix-suppress, INT-suppress,
+the bash 5.3 oracle (`bashy podman run bash:5.3`): posix-suppress, INT-suppress,
 default-print all MATCH.
 
 ## The format gaps (non-POSIX-mandated; tracked)

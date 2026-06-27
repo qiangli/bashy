@@ -29,13 +29,13 @@
 BASHY=${BASHY:-./bin/bashy}
 
 # Container runtime that provides the bash 5.3 oracle. Defaults to `docker`,
-# but auto-falls back to `ycode podman` (the embedded rootless Podman on dev
+# but auto-falls back to `bashy podman` (the embedded rootless Podman on dev
 # machines that have no Docker). Override with OCI="..." for anything else.
 OCI=${OCI:-}
 if [ -z "$OCI" ]; then
   if command -v docker >/dev/null 2>&1; then OCI=docker
-  elif command -v ycode  >/dev/null 2>&1; then OCI="ycode podman"
-  else echo "error: no container runtime (need docker or ycode podman)" >&2; exit 2
+  elif command -v bashy  >/dev/null 2>&1; then OCI="bashy podman"
+  else echo "error: no container runtime (need docker or bashy podman)" >&2; exit 2
   fi
 fi
 

@@ -1,6 +1,6 @@
 # Scoping: remaining POSIX-mode job-control (#23–27, #49) and fc (#54–57) behaviors
 
-Scoped 2026-06-20 against the bash 5.3 oracle (`ycode podman run bash:5.3`) and
+Scoped 2026-06-20 against the bash 5.3 oracle (`bashy podman run bash:5.3`) and
 the sh implementation (`interp/builtin.go` job code, `interp/history.go` fc).
 Classifies each remaining behavior as **TRACTABLE** (implement + probe now),
 **VERIFY** (sh likely already conformant — confirm + assert), or **CEILING**

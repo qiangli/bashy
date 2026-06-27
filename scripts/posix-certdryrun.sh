@@ -18,9 +18,9 @@
 #
 # Usage:  scripts/posix-certdryrun.sh [suite ...]
 #   No args: run all known suites. With args: run only the named ones.
-#   OCI="ycode podman" forwarded to container-based suites.
+#   OCI="bashy podman" forwarded to container-based suites.
 # Requires: bin/bash + bin/bashy built; a container runtime for the differential
-#   suites (docker or ycode podman, auto-detected by each sub-harness).
+#   suites (docker or bashy podman, auto-detected by each sub-harness).
 set -u
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 cd "$HERE" || exit 2

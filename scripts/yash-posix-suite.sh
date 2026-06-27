@@ -20,7 +20,7 @@
 #   No arg: just print per-shell pass rates.
 #   With outdir: also write <panel>.<shell>.verdicts (lines "<file> <n> OK|ERROR")
 #                for the pairwise/triage analysis.
-# Requires: a container runtime (docker / ycode podman) + Go + git.
+# Requires: a container runtime (docker / bashy podman) + Go + git.
 set -u
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 cd "$HERE" || exit 2
@@ -29,9 +29,9 @@ YT="$HERE/.yash-tests"   # gitignored clone cache
 
 OCI=${OCI:-}
 if [ -z "$OCI" ]; then
-  command -v docker >/dev/null 2>&1 && OCI=docker || { command -v ycode >/dev/null 2>&1 && OCI="ycode podman"; }
+  command -v docker >/dev/null 2>&1 && OCI=docker || { command -v bashy >/dev/null 2>&1 && OCI="bashy podman"; }
 fi
-[ -n "$OCI" ] || { echo "yash-suite: need docker or ycode podman" >&2; exit 2; }
+[ -n "$OCI" ] || { echo "yash-suite: need docker or bashy podman" >&2; exit 2; }
 
 # Clone yash (shallow) for its tests/ — never committed.
 if [ ! -d "$YT/tests" ]; then

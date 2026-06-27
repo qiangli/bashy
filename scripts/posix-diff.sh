@@ -24,7 +24,7 @@
 # fair same-environment number.
 #
 # Usage: scripts/posix-diff.sh [corpus-dir]   (run from the bashy repo root)
-# Requires: a container runtime (docker or `ycode podman`) + Go.
+# Requires: a container runtime (docker or `bashy podman`) + Go.
 # Exit 0 iff zero DEVIATIONs.
 
 set -u
@@ -42,10 +42,10 @@ ORACLE_SPEC=${ORACLE_SPEC:-'bash53:bash --posix|dash:dash|yash:yash --posix|mksh
 OCI=${OCI:-}
 if [ -z "$OCI" ]; then
   if command -v docker >/dev/null 2>&1; then OCI=docker
-  elif command -v ycode >/dev/null 2>&1; then OCI="ycode podman"
+  elif command -v bashy >/dev/null 2>&1; then OCI="bashy podman"
   fi
 fi
-[ -n "$OCI" ] || { echo "posix-diff: need a container runtime (docker / ycode podman)" >&2; exit 2; }
+[ -n "$OCI" ] || { echo "posix-diff: need a container runtime (docker / bashy podman)" >&2; exit 2; }
 [ -d "$CORPUS" ] || { echo "posix-diff: corpus dir '$CORPUS' not found (run from repo root)" >&2; exit 2; }
 CORPUS=$(cd "$CORPUS" && pwd)
 

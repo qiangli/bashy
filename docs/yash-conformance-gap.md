@@ -77,7 +77,7 @@ boundary. Grind these together against the in-container oracle.
 
 ```sh
 # Re-run the suite with a per-case verdict dump:
-OCI="ycode podman" scripts/yash-posix-suite.sh /tmp/yv
+OCI="bashy podman" scripts/yash-posix-suite.sh /tmp/yv
 
 # Cases where bashy ERRORs but bash 5.3 passes (alpine panel):
 norm() { sed -E 's/^%%% (OK|ERROR)\[[^]]*\]: ([^ ]+): .*/\2 \1/' "$1" | grep -E ' (OK|ERROR)$'; }
@@ -88,7 +88,7 @@ join <(norm /tmp/yv/alpine.bash53.verdicts | sort) \
 
 The yash checkout is a gitignored runtime clone (`.yash-tests/`, GPL — never
 vendored). The individual `*-p.tst` case bodies are the spec for each assertion;
-read the failing case there, reproduce it against `docker/ycode podman run
+read the failing case there, reproduce it against `docker/bashy podman run
 bash:5.3 bash --posix`, then fix in `../sh`.
 
 ## Triage discipline (per case)

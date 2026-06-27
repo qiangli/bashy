@@ -46,7 +46,7 @@ standalone-utility test.
 - Build them in a **Linux container** (the suite assumes a POSIX/Linux build
   host; this also keeps the dev machine clean). Mirror the existing pattern:
   the differential harnesses already build container images via
-  `docker` / `ycode podman` — reuse that runtime.
+  `docker` / `bashy podman` — reuse that runtime.
 - Pin the build in a script (suggested `scripts/vsc-tet-build.sh`, not yet
   written — it depends on the licensed tarball layout) so the run is
   reproducible. Keep the licensed tarball **out of git** (gitignored cache,
