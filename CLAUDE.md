@@ -62,9 +62,21 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
   - `main_test.go` — CLI-level tests.
 - `internal/agentos/agentos.go` — the AgentOS wiring (imports coreutils):
   `WireExec()` (coreutils ExecHandler) and `Dispatch()` (front-door subcommands
-  `bashy weave …` via `coreutils/pkg/weave`, `bashy podman …` via
-  `coreutils/external/podman` — a shell-out to an installed podman). Imported
-  only by `cmd/bashy`.
+  `bashy weave …` via `coreutils/pkg/weave`; `bashy podman …` via
+  `coreutils/external/podman/engine` — the **embedded, isolated** in-process
+  podman engine, `CONTAINER_HOST` pinned to a private `bashy` machine, never the
+  host/ycode one; `bashy ollama …` via `coreutils/external/ollama`'s
+  `NewManagedOllamaCmd` — isolated daemon, own port/models; plus `bashy
+  act-runner`, `loom`, `zot`, `seaweedfs`, `kopia`). Imported only by `cmd/bashy`,
+  so the lean `bash` binary never links any of it.
+  - **Embed tags:** the `Makefile` adds `-tags embed_podman/embed_vfkit/
+    embed_gvproxy` to the `cmd/bashy` build for whichever
+    `../coreutils/external/podman/engine/*_embed/*.gz` blobs exist (built by
+    `coreutils/scripts/embed-*.sh`). With the blobs, `bashy podman` is fully
+    self-contained (no host podman); without them it falls back to a PATH podman.
+    `cmd/bash` never gets these tags. Embedding the engine makes `bin/bashy` large
+    (~259 MB with blobs); `bin/bash` stays ~5.7 MB. See
+    dhnt/docs/local-p2p-cicd.md + agentos-substrate-extraction-plan.md.
 
 ## Module wiring
 
