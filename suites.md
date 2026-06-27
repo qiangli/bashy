@@ -11,7 +11,7 @@ runs its own corpus, sharing no state with the others. They contend only for
 CPU / podman / memory, never for logic, so they parallelize freely:
 
 ```bash
-bashy dag suites.md -j8              # whole matrix in parallel, locally
+bashy dag suites.md -j8 -k           # whole matrix in parallel, locally (-k: one failure does not halt the rest)
 bashy dag suites.md gotest test-bash # just a subset
 bashy dag suites.md -j4 yash         # one suite (still runs its deps: none)
 ```
