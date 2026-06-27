@@ -35,6 +35,7 @@ var (
 	restricted = flag.Bool("restricted", false, "run as a restricted shell")
 	pretty     = flag.Bool("pretty-print", false, "pretty-print shell input")
 	forceI     = flag.Bool("i", false, "force the shell to run interactively")
+	plusI      = flag.Bool("bashy-plus-i", false, "force the shell non-interactive (`+i`); internal")
 	readStdin  = flag.Bool("s", false, "read commands from standard input")
 	oneCmd     = flag.Bool("t", false, "exit after reading and executing one command")
 	dumpStrs   = flag.Bool("dump-strings", false, "dump translatable strings and exit")
@@ -190,6 +191,21 @@ func splitCombinedShortFlags(args []string) []string {
 		if a == "-i" || a == "-s" || a == "-D" {
 			// Invocation-only flag, not a set option.
 			out = append(out, a)
+			continue
+		}
+		if a == "+i" {
+			// bash accepts `+i` (the off-form of `-i`): it requests a
+			// non-interactive shell. Without this it was mistaken for a
+			// script path ("+i: No such file or directory"), which broke
+			// every invocation of the form `bashy +i ...` — notably the
+			// entire yash signal-disposition suite (sig*-p), invoked as
+			// `bashy +i +m`.
+			out = append(out, "-bashy-plus-i")
+			continue
+		}
+		if a == "+s" || a == "+D" {
+			// Off-form of the other invocation-only flags; bash accepts
+			// them as no-ops here.
 			continue
 		}
 		if len(a) == 2 && a[0] == '-' {
@@ -360,7 +376,7 @@ func newRunner() (*interp.Runner, error) {
 	// bash defaults to expanding aliases in interactive shells. A
 	// forced-interactive invocation (`-i script`) is interactive even
 	// when stdin is not a tty.
-	interactive := *forceI || (*command == "" && flag.NArg() == 0 && term.IsTerminal(int(os.Stdin.Fd())))
+	interactive := *forceI || (!*plusI && *command == "" && flag.NArg() == 0 && term.IsTerminal(int(os.Stdin.Fd())))
 	opts := []interp.RunnerOption{
 		interp.Interactive(interactive),
 		// bashy is a standalone shell (one Runner per process), so mirror the
