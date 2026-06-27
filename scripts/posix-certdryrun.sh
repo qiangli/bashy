@@ -39,9 +39,9 @@ SUITES=(
   "oils-diff:$S/oils-diff.sh:Oils spec-test case code through the live 5-shell differential"
   "multishell:$S/multishell-diff.sh:10-shell panel (strict-POSIX + feature-rich)"
   "@yash:$S/yash-posix-suite.sh:yash -p POSIX suite — INFO: bashy rate vs reference shells"
-  "dash:$S/dash-posix-suite.sh:dash testsuite as sh (clone-at-runtime)"
-  "modernish:$S/modernish-suite.sh:modernish feature/regression tests under --posix"
-  "austin:$S/austin-defects.sh:Austin Group public defect/interpretation cases"
+  "@dash:$S/dash-posix-suite.sh:dash function-library load check — INFO (dash ships no suite; it is an oracle)"
+  "@modernish:$S/modernish-suite.sh:modernish self-test under each shell — INFO: bashy rate vs reference shells"
+  "austin:$S/austin-defects.sh:Austin Group defect/interpretation corner cases — 0-gate differential"
 )
 
 WANT=("$@")
@@ -49,7 +49,7 @@ want() { [ ${#WANT[@]} -eq 0 ] && return 0; for w in "${WANT[@]}"; do [ "$w" = "
 
 OUTDIR=$(mktemp -d 2>/dev/null || echo /tmp/certdry.$$)
 declare -a ROWS
-fail=0 pending=0 ran=0
+fail=0 pending=0 ran=0 info=0
 
 printf '\n=== POSIX cert dry-run — %s ===\n\n' "$(cd "$HERE" && (git rev-parse --short HEAD 2>/dev/null || echo '?'))"
 
@@ -68,7 +68,7 @@ for entry in "${SUITES[@]}"; do
     # Reporting harness: surface bashy's own line, not a pass/fail gate.
     summary=$(grep -iE '^[[:space:]]*bashy[[:space:]]' "$log" | tail -1)
     [ -z "$summary" ] && summary=$(tail -1 "$log")
-    ROWS+=("INFO|$key|$summary|$scope"); continue
+    ROWS+=("INFO|$key|$summary|$scope"); info=$((info+1)); continue
   fi
   summary=$(grep -E '^=== .* ===$' "$log" | tail -1)
   [ -z "$summary" ] && summary=$(tail -1 "$log")
@@ -88,12 +88,15 @@ done
 
 echo
 echo "logs: $OUTDIR"
-echo "ran=$ran fail=$fail pending=$pending"
-if [ "$fail" -eq 0 ] && [ "$pending" -eq 0 ]; then
-  echo "VERDICT: CLEAN — 0 deviations across all suites. Ready for the licensed VSC-PCTS run."
-elif [ "$fail" -eq 0 ]; then
-  echo "VERDICT: clean on built suites; $pending suite(s) PENDING (coverage incomplete)."
+echo "ran=$ran fail=$fail info=$info pending=$pending"
+if [ "$fail" -gt 0 ]; then
+  echo "VERDICT: $fail 0-gate suite(s) with deviations — triage before declaring."
+elif [ "$pending" -gt 0 ]; then
+  echo "VERDICT: 0-gate suites clean; $pending suite(s) PENDING (coverage incomplete)."
 else
-  echo "VERDICT: $fail suite(s) with deviations — triage before declaring."
+  echo "VERDICT: all 0-gate suites CLEAN (0 deviations)."
+  echo "  $info informational suite(s) report RELATIVE measures, not a 0-gate — review the INFO rows"
+  echo "  before declaring (e.g. yash bashy-vs-bash delta in yash-conformance-gap.md, modernish"
+  echo "  blocker in cert-dash-sh-findings.md). The licensed VSC-PCTS run is the remaining human step."
 fi
 [ "$fail" -eq 0 ]

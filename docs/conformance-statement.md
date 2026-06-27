@@ -61,7 +61,20 @@ All measured on the `bash` drop-in binary, re-runnable via
 | `posix-diff.sh` | clean-room XCU corpus, 5-oracle same-env differential | **0 deviations** |
 | `oils-diff.sh` | Oils spec-test case code through the live differential | **0 deviations** |
 | `multishell-diff.sh` | 10-shell panel (dash/ash/posh/yash + bash/zsh/ksh93/mksh/loksh) | **0 deviations** |
-| `yash-posix-suite.sh` | yash's `-p` POSIX suite (strictest-shell suite; relative measure) | **bashy 90% vs bash53 95%** — ~105-case tail under triage |
+| `yash-posix-suite.sh` | yash's `-p` POSIX suite (strictest-shell suite; relative measure) | **bashy 90% vs bash53 95%** — 112-case tail under triage |
+| `austin-defects.sh` | clean-room Austin-Group corner-case differential (37 probes) | **37 match / 0 diff** |
+| `dash-posix-suite.sh` | dash's shipped function-library load check (dash has no suite — oracle) | **bashy 8/8** (tracks dash/ash; bash 6/8) |
+| `modernish-suite.sh` | modernish self-test (~389 tests) under each shell | **blocked by one `sh` parse bug** (`let --`) — see below |
+
+**The modernish row is a found bug, not a gap in scope.** modernish's init-time
+fatal-bug self-test contains `let --`; bashy's `sh` engine **parse-errors `let
+--` when read from a file** (it parses fine via `-c`, and `true --`/`: --` parse
+fine — so it is a narrow, `let`-specific parse-path inconsistency), which aborts
+modernish's init so none of its ~389 tests run. bash treats `let --` as a runtime
+arithmetic error and parses it. This is a real `../sh` parser fix (tracked, WS3);
+once fixed the harness lights up automatically. Notably bashy is *closer* to
+clearing modernish's init than dash or yash (which fail its broader fatal-bug
+battery outright).
 
 **The yash row is the honest frontier.** The clean-room / Oils / multishell
 corpora are at 0 deviations, but they sample behavior; yash's own suite is the

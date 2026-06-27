@@ -20,3 +20,9 @@ external/bash-5.3
 # yash GPL test-suite clone cache (never vendored)
 .yash-tests/
 bin/.bashy-linux-*
+
+# dash upstream clone cache (never vendored; dash ships no test suite — used as oracle)
+.dash-tests/
+
+# modernish (MIT) feature/regression suite clone cache (never vendored)
+.modernish-tests/
