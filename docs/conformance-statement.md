@@ -63,7 +63,7 @@ All measured on the `bash` drop-in binary, re-runnable via
 | `multishell-diff.sh` | 10-shell panel (dash/ash/posh/yash + bash/zsh/ksh93/mksh/loksh) | **0 deviations** |
 | `yash-posix-suite.sh` | yash's `-p` POSIX suite (strictest-shell suite; relative measure) | **bashy 90% vs bash53 95%** — 112-case tail under triage |
 | `austin-defects.sh` | clean-room Austin-Group corner-case differential (37 probes) | **37 match / 0 diff** |
-| `dash-posix-suite.sh` | dash's shipped function-library load check (dash has no suite — oracle) | **bashy 8/8** (tracks dash/ash; bash 6/8) |
+| `dash-posix-suite.sh` | dash's shipped function-library load check (dash has no suite — oracle) | **bashy 6/8** (now matches bash; rejects ash brace-less bodies as of the syntax fix) |
 | `modernish-suite.sh` | modernish self-test (~389 tests) under each shell | **blocked by one `sh` parse bug** (`let --`) — see below |
 
 **The modernish row is a found bug, not a gap in scope.** modernish's init-time

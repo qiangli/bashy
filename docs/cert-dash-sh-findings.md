@@ -74,20 +74,51 @@ paths, matching bash. Narrow, high-leverage: one fix unblocks the full
 bash reference: `let --` → bash evaluates the arithmetic expression `--` (pre-decrement
 with no operand) → runtime error, `let` returns non-zero; it does **not** parse-error.
 
-## 2. (reserved) — yash-suite root causes
+## 2. dash brace-less function body — **FIXED** (sh `syntax/parser.go`)
 
-The yash delta (112 cases) is tracked separately in `yash-conformance-gap.md`;
-its two dominant root causes (error-p "assignment error in subshell" ×~36;
-alias-p substitution positions ×~30) graduate into this file once a single
-underlying `../sh` fix is identified and verified for each cluster.
+`f() exec echo hi` (a simple-command function body) — bash REJECTS it
+("syntax error near unexpected token"), bashy ACCEPTED it (the dash/ash/mksh
+extension). For a faithful bash drop-in, bash mode must require the body be a
+compound command. **Fixed 2026-06-27:** `funcDecl` now does a token-lookahead
+(`startsCompoundCommand`) and, in `langBashLike` (LangBash|LangBats), errors if
+the body does not begin a compound command (`{…}`, `(…)`, if/for/while/until/
+case/select, `((…))`, `[[…]]`). Verified vs bash 5.3: rejects `exec/echo/declare/
+let/time/coproc/! true/cat|head` bodies, accepts all compound forms. POSIX/mksh/
+zsh keep the extension (matches those real shells). Gated: syntax `go test`
+delta 0, `make test-bash` 86/86.
+
+## 3. yash error-p cluster — **DEFERRED** (arcane, context-dependent; not one root cause)
+
+My initial read ("posix-mode assignment error should exit for all command
+classes — one fix flips ~36 cases") was **wrong**, and the 86/86 gate caught the
+over-broad fix attempt (it broke `errors7.sub`). The true behavior is a genuine
+bash corner with **input-source × subshell × command-class** dependence:
+
+- `bash --posix -c 'readonly a=a; a=b echo x; …'` → **exits** (no continuation).
+- `bash --posix` reading the SAME script from **stdin**, main shell → **continues**
+  (prints the trailing command — ksh93 emulation).
+- `bash --posix` in a **subshell** `(a=b echo x; echo not reached)` → the
+  **subshell exits** (yash `test_assign_s` expects exactly `0`); bashy continues.
+- `bash -o posix ./errors7.sub` (named file, main shell) → **continues**, and
+  bash's own test fixture comments say so verbatim: *"strict conformance implies
+  that we exit … ksh93 doesn't do that. we more-or-less emulate the ksh93
+  behavior."* (`external/bash-5.3/tests/errors7.sub`).
+
+So there is **no single root cause**; matching bash requires modeling its
+input-source/subshell-specific exit decision, and any fix MUST keep `errors7.sub`
+green (it encodes the deliberate ksh93 main-shell continuation). The one clearly
+reproducible bashy divergence is the **subshell** case (bashy continues where bash
+exits the subshell in posix mode). Deferred until modeled carefully — it is lower
+value and higher risk than the clean wins, and the cluster is partly cases where
+bash ITSELF varies by context (some delta cases may not be bashy-only on closer
+inspection). Re-derive the exact per-case delta (file-mode, matching yash's
+framework invocation) before any retry. `alias-p` (~30, syntax/lexer alias
+substitution positions) remains a separate, cleaner sub-target.
 
 ## Non-bugs confirmed by the sweep (record, do not chase)
 
-- **dash brace-less function body** — `login () exec login "$@"` (no `{ }`):
-  bashy *accepts* it (tracks dash/ash), bash *rejects* it (6/8 on
-  `dash-posix-suite.sh`). This is a deliberate ash-compatible superset, not a
-  POSIX gap — POSIX requires the function body be a compound command, and both
-  behaviors are defensible. Leave as-is.
+- **FTL_ASGNBIERR** (`t=ok; t=bug command -@`) — bashy correctly reverts the temp
+  assignment after the errored regular builtin (`[ok]`), matching bash. Not a bug.
 - **Austin-Group corner cases** — `austin-defects.sh` 37/37 match bash 5.3
   `--posix` (IFS edges, parameter-expansion longest/shortest, arithmetic
   truncate-toward-zero + signed `%`, `&&` short-circuit, special-vs-regular
