@@ -1,6 +1,6 @@
 # Cross-shell conformance baselines (yash POSIX suite + the full-suite plan)
 
-Status: **2026-06-25.** Baselines from running yash's POSIX (`-p`) suite against
+Status: **2026-06-27.** Baselines from running yash's POSIX (`-p`) suite against
 bashy + 10 reference shells (`scripts/yash-posix-suite.sh`). These are the
 **tracking baselines** for the future "100% on top of bash 5.3" / per-shell
 compatibility work — NOT marketing figures (see Claim discipline below).
@@ -12,6 +12,17 @@ POSIX suite found **435 cases bash 5.3 passes but bashy fails**. Small corpora
 hide the truth — real baselines need the *full* upstream suites.
 
 ## Progress log
+
+- **2026-06-27 — yash 90% + the `+i` unblock.** Full verified baseline:
+  **`go test ./...` ALL PASS · `make test-bash` 86/86 (100%) · yash canonical
+  90%** (1667 OK / 180 ERROR of 1847, signals/JC excluded) **· Oils drop-in
+  fidelity 100%** (1103/1103 match, 0 diff vs bash:5.3). Canonical yash
+  **78% → 90%** via the conformance sprint (cd/quote/param/trap/dot/command/simple
+  clusters) **plus the `+i` CLI-flag fix** — bashy rejected `+i` as a script path,
+  so the entire `sig*-p` disposition suite errored at startup (≈2160 spurious
+  "gaps" that were a flag-parse bug, not the goroutine-not-fork ceiling). A
+  baseline-run regression — sh `60ffa800` ("ENOENT for PATH-unset") being
+  over-broad — was bisected and reverted. SHAs: sh `0e0f104f`, bashy `809f83a`.
 
 - **2026-06-25 — invoked-as-`sh` → POSIX mode** (cli fix). Root cause: bashy
   didn't enter POSIX mode when argv[0] is `sh`, but yash's framework runs every
