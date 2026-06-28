@@ -21,27 +21,33 @@ LDFLAGS := -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-
 # local cross-compile sanity check).
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 
-# Embed tags: bashy embeds the coreutils podman engine's helper binaries
-# (podman/vfkit/gvproxy) when their gitignored .gz blobs exist (built by
-# coreutils/scripts/embed-*.sh). Each tag is added only if its blob is present,
-# so a fresh checkout builds lean (bashy podman falls back to a host podman) and
-# a host that ran the embed scripts gets a fully self-contained `bashy podman`.
-# Only cmd/bashy gets these — cmd/bash never imports the engine.
+# Build profile (cmd/bashy only — cmd/bash is always the pure drop-in). The
+# DEFAULT is the lean worker — shell + coreutils userland + git + dag + `bashy go`
+# — which cross-compiles to EVERY platform with CGO_ENABLED=0 (this is what gets
+# released). Two opt-in, unix-only, heavier host layers:
+#   BASHY_ENGINES=1  container/LLM engines (bashy podman/ollama) + their embedded
+#                    helper blobs when present (podman/vfkit/gvproxy .gz built by
+#                    coreutils/scripts/embed-*.sh). cgo, btrfs/MLX — unix only.
+#   BASHY_OBS=1      observability stack (bashy otel): ~193 MB of OpenTelemetry
+#                    Collector + VictoriaMetrics/Logs + Jaeger + Perses + k8s/aws.
+# `make build-host` turns on both.
 EMBED_DIR := ../coreutils/external/podman/engine
-# bashy_obs: the `bashy otel` observability stack (OpenTelemetry Collector +
-# VictoriaMetrics/Logs + Jaeger + Perses + k8s/aws SDKs) is ~193 MB — a mesh-HOST
-# concern, off by default so the worker binary stays lean (~121 MB / 47 MB on
-# Windows). Opt in for a host build with `make build BASHY_OBS=1`.
-BASHY_TAGS := $(strip \
+ENGINE_TAGS := $(if $(BASHY_ENGINES),bashy_engines \
 	$(if $(wildcard $(EMBED_DIR)/podman_embed/podman.gz),embed_podman) \
 	$(if $(wildcard $(EMBED_DIR)/vfkit_embed/vfkit.gz),embed_vfkit) \
-	$(if $(wildcard $(EMBED_DIR)/gvproxy_embed/gvproxy.gz),embed_gvproxy) \
-	$(if $(BASHY_OBS),bashy_obs))
+	$(if $(wildcard $(EMBED_DIR)/gvproxy_embed/gvproxy.gz),embed_gvproxy))
+BASHY_TAGS := $(strip $(ENGINE_TAGS) $(if $(BASHY_OBS),bashy_obs))
 
 ## build: Build both independent binaries into bin/ (bash = pure drop-in from
 ## cmd/bash; bashy = AgentOS shell from cmd/bashy). They share the cli core but
 ## are separate compilations — bash's import graph never includes coreutils.
+## Default is the LEAN worker; use `make build-host` for the full unix host shell.
 build: build-bash build-bashy
+
+## build-host: Full unix host bashy — engines (bashy podman/ollama, + embed blobs
+## if present) and the observability stack (bashy otel). Not cross-platform.
+build-host:
+	$(MAKE) build BASHY_ENGINES=1 BASHY_OBS=1
 
 ## build-bash: Build only the pure drop-in (cmd/bash -> bin/bash). This is all
 ## the conformance harness needs; it skips the embed-heavy bin/bashy build.

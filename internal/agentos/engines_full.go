@@ -1,7 +1,7 @@
 // Copyright (c) 2025 qiangli
 // See LICENSE for licensing information
 
-//go:build !windows
+//go:build bashy_engines && !windows
 
 package agentos
 
@@ -12,10 +12,12 @@ import (
 	podmanengine "github.com/qiangli/coreutils/external/podman/engine"
 )
 
-// dispatchEngine handles the container/LLM engine subcommands that are only
-// available on unix hosts. Kept in a !windows-tagged file so the cgo +
-// platform-specific backends they pull in (podman's btrfs/devmapper storage
-// drivers, ollama's Apple MLX) never enter the Windows build graph.
+// dispatchEngine (host build, -tags bashy_engines on a unix host) wires the
+// container/LLM engine subcommands `bashy podman` / `bashy ollama`. They embed
+// cgo + platform-specific backends (podman's btrfs/devmapper storage drivers,
+// ollama's Apple MLX) and a heavy dep tree, so they are OPT-IN: excluded from
+// the default lean worker (which cross-compiles to every platform with
+// CGO_ENABLED=0) and from every Windows build.
 func dispatchEngine(arg string) {
 	switch arg {
 	case "podman":

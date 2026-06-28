@@ -45,10 +45,10 @@ go build -trimpath -ldflags "$LDFLAGS" -o bin/bashy ./cmd/bashy
 ```
 
 ### build-host
-Build the full host bashy with the observability stack (`bashy otel` →
-OpenTelemetry Collector + VictoriaMetrics/Logs + Jaeger + Perses; ~193 MB extra)
-via `-tags bashy_obs`. Use this only for a node that hosts the obs pipeline; the
-default `build` is the lean worker.
+Build the full **unix host** bashy: the container/LLM engines (`bashy
+podman`/`ollama`, `-tags bashy_engines`, cgo + btrfs/MLX) and the observability
+stack (`bashy otel`, `-tags bashy_obs`, ~193 MB). Not cross-platform — use only
+on a host node; the default `build` is the lean cross-platform worker.
 Generates: bin/bashy
 Effects: write
 
@@ -57,7 +57,7 @@ set -e
 mkdir -p bin
 VERSION="${VERSION:-dev}"
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}'"
-go build -trimpath -tags bashy_obs -ldflags "$LDFLAGS" -o bin/bashy ./cmd/bashy
+go build -trimpath -tags "bashy_engines bashy_obs" -ldflags "$LDFLAGS" -o bin/bashy ./cmd/bashy
 ```
 
 ### install

@@ -8,7 +8,9 @@ jobs:
   test:
     strategy:
       matrix:
-        # windows deferred: sh's killSig + cgo/MLX need a windows-build pass
+        # ubuntu+macos run the test suite; the lean cmd/bashy is cross-built for
+        # windows in the build step. Running the shell suite ON windows is
+        # deferred (the interactive/forced-tty tests assume a unix env).
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
@@ -21,12 +23,21 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      # internal/agentos + cmd/bashy embed podman/ollama, which need system
-      # C libs (btrfs/gpgme/devmapper) + cgo; that full AgentOS build is an
-      # integration concern tested separately. CI covers the shell core:
-      # the bash 5.3 drop-in (cmd/bash) + the shared CLI (internal/cli).
-      - name: Build + vet + test (shell core)
+      # The DEFAULT lean cmd/bashy (shell + coreutils userland + git + dag +
+      # bashy go) is pure-Go and cross-compiles everywhere. The heavy host layers
+      # — engines (bashy podman/ollama, -tags bashy_engines, cgo+btrfs/MLX, unix)
+      # and obs (bashy otel, -tags bashy_obs) — are opt-in and built separately.
+      - name: Build + vet + test (shell core + lean agentos)
+        shell: bash
         run: |
-          go build ./cmd/bash ./internal/cli
-          go vet ./cmd/bash ./internal/cli
-          go test ./internal/cli
+          go build ./cmd/bash ./cmd/bashy ./internal/...
+          go vet  ./cmd/bash ./cmd/bashy ./internal/...
+          go test ./internal/cli ./internal/agentos
+      - name: Cross-build lean cmd/bashy for every release platform (CGO_ENABLED=0)
+        shell: bash
+        run: |
+          for osarch in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            os=${osarch%/*}; arch=${osarch#*/}
+            echo "cmd/bashy $os/$arch (lean)..."
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -o /dev/null ./cmd/bashy
+          done

@@ -21,6 +21,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 
 	_ "github.com/qiangli/coreutils/cmds/all"
+	"github.com/qiangli/coreutils/external/act"
 	"github.com/qiangli/coreutils/external/gotoolchain"
 	"github.com/qiangli/coreutils/external/kopia"
 	"github.com/qiangli/coreutils/external/loom"
@@ -135,6 +136,16 @@ func Dispatch() {
 		// The mesh snapshot-backup repository server: run Kopia as a managed
 		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
 		cmd := kopia.NewKopiaCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "act":
+		// Run GitHub Actions locally via a binmgr-managed nektos/act (MIT, not
+		// compiled in) — test CI on a mesh node before pushing. Needs a container
+		// engine (bashy podman, unix host). Transparent passthrough.
+		cmd := act.NewActCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
