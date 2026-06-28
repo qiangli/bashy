@@ -77,6 +77,19 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
     `cmd/bash` never gets these tags. Embedding the engine makes `bin/bashy` large
     (~259 MB with blobs); `bin/bash` stays ~5.7 MB. See
     dhnt/docs/local-p2p-cicd.md + agentos-substrate-extraction-plan.md.
+  - **Core vs ext / the `bashy_obs` tag:** the default `cmd/bashy` is the **lean
+    worker** — shell + coreutils userland + git + dag + `bashy go`
+    (self-provisioning Go toolchain via `coreutils/external/gotoolchain` on
+    binmgr's tree-mode `Ensure`) + weave/secrets/jobs/mirror. It cross-compiles
+    everywhere (~121 MB unix, **~47 MB Windows** — podman/ollama are `!windows`
+    gated in `engines_{unix,windows}.go`). The **observability stack**
+    (`bashy otel` → OpenTelemetry Collector + VictoriaMetrics/Logs + Jaeger +
+    Perses + k8s/aws, measured at **193 MB**) is a mesh-HOST concern, split out
+    behind `-tags bashy_obs` (`obs_{full,stub}.go`); `make build BASHY_OBS=1`
+    restores it. The binmgr-managed externals (loom/zot/seaweedfs/kopia/rclone)
+    are already download-on-demand, not compiled in. Rule of thumb: a worker
+    essential that's pure-Go + cross-platform is **core**; a heavy host service
+    is **ext** (build-tag or binmgr download).
 
 ## Module wiring
 
