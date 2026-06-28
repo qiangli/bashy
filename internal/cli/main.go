@@ -334,6 +334,11 @@ var (
 	// --posix and absent from the pure bash drop-in.
 	AgentOSWireExec func([]interp.RunnerOption, bool) []interp.RunnerOption = func(o []interp.RunnerOption, _ bool) []interp.RunnerOption { return o }
 
+	// AgentOSPreamble returns shell source defining default functions/aliases
+	// (e.g. `docker() { … bashy podman … }`) registered BEFORE user startup files
+	// so the user can override them. No-op for the pure `bash` drop-in.
+	AgentOSPreamble = func() string { return "" }
+
 	// SuppressedForkBuiltins names the qiangli/sh fork's extra builtins that the
 	// pure `bash` drop-in disables so its command table matches bash 5.3 exactly.
 	// bash 5.3 has NONE of these as builtins (source-verified: no matching .def);
@@ -523,7 +528,30 @@ func newRunner() (*interp.Runner, error) {
 	// register it as a shell function so child invocations see the
 	// caller's exported functions.
 	importBashFuncs(r)
+	// AgentOS default functions (e.g. `docker` -> `bashy podman`), defined before
+	// user rc so they can be overridden.
+	registerDefaultFuncs(r, AgentOSPreamble())
 	return r, nil
+}
+
+// registerDefaultFuncs parses preamble shell source and registers each function
+// declaration on the runner — defaults the user can later redefine in an rc file.
+func registerDefaultFuncs(r *interp.Runner, src string) {
+	if strings.TrimSpace(src) == "" {
+		return
+	}
+	file, err := syntax.NewParser().Parse(strings.NewReader(src), "")
+	if err != nil {
+		return
+	}
+	if r.Funcs == nil {
+		r.Funcs = make(map[string]*syntax.Stmt)
+	}
+	for _, stmt := range file.Stmts {
+		if fn, ok := stmt.Cmd.(*syntax.FuncDecl); ok && fn.Name != nil {
+			r.Funcs[fn.Name.Value] = fn.Body
+		}
+	}
 }
 
 func parseInheritedFds(s string) []int {

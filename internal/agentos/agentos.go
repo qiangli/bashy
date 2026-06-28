@@ -38,6 +38,15 @@ import (
 	coreutilsshell "github.com/qiangli/coreutils/shell"
 )
 
+// Preamble returns shell source defining AgentOS default functions, registered
+// before user startup files (so they can be overridden in an rc). Currently a
+// `docker` shim routing to the managed, isolated `bashy podman` engine — so
+// `docker …` works with no Docker Desktop / system docker on the node. `command`
+// bypasses the function itself so the external bashy binary (on PATH) is run.
+func Preamble() string {
+	return `docker() { command bashy podman "$@"; }`
+}
+
 // Dispatch handles AgentOS front-door subcommands that are not shell scripts —
 // `bashy weave …` (the multi-agent workspace orchestrator), `bashy otel …`
 // (the all-in-one observability stack), `bashy secrets …`
