@@ -11,8 +11,8 @@ Status: **2026-06-25 — agent-drivable criteria GREEN; remaining gating is one 
 | **Broadened 10-shell panel → 0 deviations** | ✅ **0 deviations / both panels** | `scripts/multishell-diff.sh` (43-case clean-room POSIX corpus) across **10 shells**: strict-POSIX (dash, ash/busybox, **posh**, yash) + feature-rich (bash 5.3, bash 5.2, zsh, **ksh93**, mksh, loksh). Two images: Alpine `bash:5.3` (40 match / 0 dev / 3 amb) + Debian (39 match / 0 dev / 4 amb). bashy match: bash 100%, ash 100%, posh **93%**, dash/yash/mksh/loksh 95%, ksh93/zsh 97%. The few AMBIGs are where the shells disagree among themselves; bashy sides with the majority. posh (deliberately rejects bashisms) + ksh93 (feature-rich reference) added 2026-06-25 to widen the oracle before the cert. |
 | **`<<${a}` heredoc-delimiter decision** | ✅ **DECIDED — declared limitation** (see below) | bashy parse-errors an expansion in the heredoc delimiter word; bash treats it as a *literal* delimiter + EOF-warns. |
 | **Declared-limitations list final** | ✅ list is stable (interactive job control; `((` nested-subshell ambiguity) | per `vsc-pcts-readiness.md` §Known limitations |
-| **Apply for VSC-PCTS license** (Open Group) | ⏳ **human step** | OSS/no-cost 12-month arrangement historically exists; confirm terms at application |
-| **Stand up TET + wire bashy as SUT (POSIX mode)** | ⏳ **human/infra step** | scope scenario to shell + builtins |
+| **Apply for VSC-PCTS license** (Open Group) | 📨 **SUBMITTED 2026-06-28** — Open Group ticket **#279890**, awaiting countersignature + suite access | Signed VSC-PCTS2016 OSS v1.4 agreement emailed to obconformance@opengroup.org for the bashy project. 12-month clock starts when they email suite access, **not** at submission. |
+| **Stand up TET + wire bashy as SUT (POSIX mode)** | ⏳ **ready** — `scripts/vsc-tet-build.sh` skeleton in place; runs when the licensed tarball lands | scope scenario to shell + builtins |
 
 ## What "0 deviations" means here (claim discipline)
 
