@@ -22,6 +22,7 @@ import (
 
 	_ "github.com/qiangli/coreutils/cmds/all"
 	"github.com/qiangli/coreutils/external/act"
+	"github.com/qiangli/coreutils/external/gh"
 	"github.com/qiangli/coreutils/external/gotoolchain"
 	"github.com/qiangli/coreutils/external/kopia"
 	"github.com/qiangli/coreutils/external/loom"
@@ -146,6 +147,15 @@ func Dispatch() {
 		// compiled in) — test CI on a mesh node before pushing. Needs a container
 		// engine (bashy podman, unix host). Transparent passthrough.
 		cmd := act.NewActCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "gh":
+		// The GitHub CLI (cli/cli, MIT) via binmgr — open PRs, trigger/watch the
+		// real github runs, `gh api`. With act+go+git it closes the CI/CD loop.
+		cmd := gh.NewGhCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
