@@ -30,20 +30,48 @@ pristine upstream gosh                3 / 86
   the minimal `gosh` PoC lacks: bash flag parsing, startup-file loading, prompt
   expansion, history (`histexpand`/`history`), `bind`, etc.
 
-## POSIX-mode parity vs bash 5.3 (`posix-parity.sh`, 39 probes)
+## POSIX-mode parity vs bash 5.3 — all shells IN the Linux container
 
-Each probe is run through the shell-under-test in POSIX mode and diffed against a
-real `bash 5.3` oracle (here provided by `bashy podman bash:5.3` — no Docker).
+The cleanest comparison runs **every** shell inside the same `bash:5.3` Linux
+container as the reference, removing all host/OS skew (the candidate-on-macOS /
+oracle-in-Linux asymmetry of the host harness). 39 probes, reference =
+`bash 5.3 --posix`, container = linux/aarch64:
 
-| Shell (POSIX mode) | Match / Diff |
+| Shell (POSIX mode, in-container) | Match / 39 |
 |---|---|
-| **bashy** (`--posix`) | **38 / 0** (1 info-only) — effectively perfect bash parity |
-| **gosh — fork** (`--posix`) | **34 / 4** |
-| **zsh** (sh-emulation, `ARGV0=sh zsh`) | **21 / 17** |
+| bash 5.3 (self-check) | 39 / 39 |
+| **bashy** `--posix` | **38 / 39** (only #58 — see below) |
+| **gosh — fork** `--posix` | **34 / 39** |
+| **gosh — upstream** `--posix` (parse-only) | **12 / 39** |
+| dash | 27 / 39 |
+| zsh (sh-emulation, `ARGV0=sh`) | 19 / 39 |
 
-> Note: the `--posix` flag on `gosh` is a **fork addition** — pristine upstream
-> `gosh` rejects it (`flag provided but not defined: -posix`), so upstream `gosh`
-> cannot be measured in POSIX mode at all without it.
+> The `--posix` flag on `gosh` is a **fork addition** — pristine upstream `gosh`
+> rejects it (`flag provided but not defined: -posix`). And even *with* the flag,
+> upstream gosh is only **12/39**: the flag is parse-only (LangPOSIX), because
+> upstream interp has **no POSIX runtime mode** (its `set -o` table has no `posix`
+> entry). The 22-point gap from 12 → 34 is our fork's `interp.WithPosixMode`.
+
+### bashy's one miss — probe #58 `kill -l` (disclosure for the upstream PR)
+
+Even in-container (same Linux/aarch64 as the reference), bashy is 38/39 — #58
+still differs, and it is **not** a mac-vs-Linux artifact. bashy's pure-Go
+`kill -l` lists a portable signal subset and OMITS the Linux-specific
+`SIGSTKFLT`/`SIGPWR` and the realtime signals `RTMIN..RTMAX` that bash shows on
+Linux:
+
+```
+bash:  HUP INT … TERM STKFLT CHLD … PWR SYS RTMIN RTMIN+1 … RTMAX   (64 signals)
+bashy: HUP INT … TERM        CHLD … SYS                              (no STKFLT/PWR/RTMIN..RTMAX)
+```
+
+So #58 is a genuine — small, fixable — completeness gap in the `kill` builtin's
+signal table (have the Go `kill -l` emit the full host signal list incl.
+realtime signals), **not** an OS quirk. The POSIX-mandated single-line *format*
+is correct; only the platform-specific signal-set *contents* differ. Worth
+disclosing up front: a reviewer running `kill -l` will see it. (The host harness
+marks #58 `INFO` and excludes it, which is why a host run reads "38 / 0 (1
+info)"; the in-container run shows the honest 38/39 with the real reason.)
 
 ## yash POSIX corpus (`make test-yash`, bashy only)
 
