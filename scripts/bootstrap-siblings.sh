@@ -37,6 +37,7 @@ while IFS= read -r line; do
     esac
     name=${line%%=*}
     sha=${line#*=}
+    sha=$(printf %s "$sha" | tr -d '[:space:]')  # strip CR (CRLF) / stray whitespace
     if [ -z "$name" ] || [ -z "$sha" ] || [ "$name" = "$sha" ]; then
         echo "bootstrap-siblings: malformed line: $line" >&2
         exit 1

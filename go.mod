@@ -1,6 +1,6 @@
 module github.com/qiangli/bashy
 
-go 1.26.2
+go 1.26.4
 
 require (
 	github.com/qiangli/coreutils v0.0.0
