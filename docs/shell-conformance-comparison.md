@@ -52,26 +52,18 @@ oracle-in-Linux asymmetry of the host harness). 39 probes, reference =
 > upstream interp has **no POSIX runtime mode** (its `set -o` table has no `posix`
 > entry). The 22-point gap from 12 → 34 is our fork's `interp.WithPosixMode`.
 
-### bashy's one miss — probe #58 `kill -l` (disclosure for the upstream PR)
+### Probe #58 `kill -l` — fixed (sh `7f5871d6`)
 
-Even in-container (same Linux/aarch64 as the reference), bashy is 38/39 — #58
-still differs, and it is **not** a mac-vs-Linux artifact. bashy's pure-Go
-`kill -l` lists a portable signal subset and OMITS the Linux-specific
-`SIGSTKFLT`/`SIGPWR` and the realtime signals `RTMIN..RTMAX` that bash shows on
-Linux:
+bashy's `kill -l` now lists the full Linux signal set — `SIGSTKFLT`/`SIGPWR` and
+the realtime signals `SIGRTMIN..SIGRTMAX` (named `RTMIN+n`/`RTMAX-n` like bash) —
+**matching glibc Linux bash byte-for-byte** (verified vs Debian glibc 2.41).
+Against a glibc `bash` the in-container score is the clean **39/39**.
 
-```
-bash:  HUP INT … TERM STKFLT CHLD … PWR SYS RTMIN RTMIN+1 … RTMAX   (64 signals)
-bashy: HUP INT … TERM        CHLD … SYS                              (no STKFLT/PWR/RTMIN..RTMAX)
-```
-
-So #58 is a genuine — small, fixable — completeness gap in the `kill` builtin's
-signal table (have the Go `kill -l` emit the full host signal list incl.
-realtime signals), **not** an OS quirk. The POSIX-mandated single-line *format*
-is correct; only the platform-specific signal-set *contents* differ. Worth
-disclosing up front: a reviewer running `kill -l` will see it. (The host harness
-marks #58 `INFO` and excludes it, which is why a host run reads "38 / 0 (1
-info)"; the in-container run shows the honest 38/39 with the real reason.)
+The table above uses the official `bash:5.3` image, which is alpine/**musl**
+(SIGRTMIN=35) — bashy, a static pure-Go binary with no libc, follows the standard
+**glibc** convention (SIGRTMIN=34), so against the musl oracle one realtime
+boundary signal still differs (38/39). That residual is purely a musl-vs-glibc
+libc convention, not a bashy gap.
 
 ## yash POSIX corpus (`make test-yash`, bashy only)
 
