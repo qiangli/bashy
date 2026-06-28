@@ -257,8 +257,9 @@ test-bash-list:
 # heredoc5.sub round-trips $(BUILD_DIR)/config.h (needs 4096 < size <
 # 65536) and version.h (512 < size < 4096) through here-documents. They
 # are bash build artifacts absent from the vendored source tree, so
-# generate deterministic stubs of the right sizes. y.tab.c ships with
-# the source tree and needs no stub.
+# generate deterministic stubs of the right sizes. Some trimmed fixture
+# copies also omit y.tab.c and examples/loadables/Makefile, which the
+# heredoc and glob-bracket tests read as source/build artifacts.
 test-bash-helpers:
 	@cd $(BASH_TESTS_DIR) && \
 		[ -f recho ] || cc -o recho ../support/recho.c 2>/dev/null; \
@@ -270,6 +271,25 @@ test-bash-helpers:
 		[ -f ../version.h ] || for i in $$(seq 1 16); do \
 			printf '/* stub version.h line %03d for heredoc5.sub */\n' $$i; \
 		done > ../version.h; \
+		[ -f ../y.tab.c ] || for i in $$(seq 1 2048); do \
+			printf '/* stub y.tab.c line %04d for heredoc5.sub */\n' $$i; \
+		done > ../y.tab.c; \
+		if [ ! -f ../examples/loadables/Makefile ]; then \
+			mkdir -p ../examples/loadables; \
+			{ \
+				echo 'CC = cc'; \
+				echo 'SHOBJ_STATUS = supported'; \
+				echo 'SHOBJ_CC = cc'; \
+				echo 'SHOBJ_CFLAGS = -fPIC'; \
+				echo 'SHOBJ_LD = cc'; \
+				case "$$(uname -s)" in \
+					Darwin) echo 'SHOBJ_LDFLAGS = -shared -undefined dynamic_lookup' ;; \
+					*) echo 'SHOBJ_LDFLAGS = -shared' ;; \
+				esac; \
+				echo 'SHOBJ_XLDFLAGS ='; \
+				echo 'SHOBJ_LIBS ='; \
+			} > ../examples/loadables/Makefile; \
+		fi; \
 		true
 
 ## tidy: Run go mod tidy, gofmt, and go vet
