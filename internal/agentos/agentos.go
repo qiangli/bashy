@@ -24,7 +24,6 @@ import (
 	"github.com/qiangli/coreutils/external/gotoolchain"
 	"github.com/qiangli/coreutils/external/kopia"
 	"github.com/qiangli/coreutils/external/loom"
-	"github.com/qiangli/coreutils/external/otel/otelcli"
 	"github.com/qiangli/coreutils/external/rclone"
 	"github.com/qiangli/coreutils/external/seaweedfs"
 	"github.com/qiangli/coreutils/external/zot"
@@ -56,6 +55,12 @@ func Dispatch() {
 	// platform-tagged dispatchEngine so the rest of AgentOS (shell, git, dag,
 	// weave, the binmgr-managed externals) cross-compiles to Windows.
 	dispatchEngine(os.Args[1])
+	// The observability stack (`bashy otel`) compiles in the OpenTelemetry
+	// Collector + VictoriaMetrics/Logs + Jaeger + Perses + k8s/aws SDKs (~193 MB,
+	// 60% of the binary). It is a mesh-HOST service, not a worker need, so it is
+	// excluded from the default lean build and gated behind dispatchObs: present
+	// only under `-tags bashy_obs`; the default stub points the user at a host.
+	dispatchObs(os.Args[1])
 	switch os.Args[1] {
 	case "weave":
 		cmd := weave.NewWeaveCmd()
@@ -93,13 +98,6 @@ func Dispatch() {
 		// what lets a bare node `bashy go build/test`. Pure-Go + cross-platform,
 		// so it stays in the shared switch (not engine-gated).
 		cmd := gotoolchain.NewGoCmd()
-		cmd.SetArgs(os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
-		}
-		os.Exit(0)
-	case "otel":
-		cmd := otelcli.NewCommand()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)

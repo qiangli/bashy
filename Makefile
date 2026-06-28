@@ -28,10 +28,15 @@ PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 win
 # a host that ran the embed scripts gets a fully self-contained `bashy podman`.
 # Only cmd/bashy gets these — cmd/bash never imports the engine.
 EMBED_DIR := ../coreutils/external/podman/engine
+# bashy_obs: the `bashy otel` observability stack (OpenTelemetry Collector +
+# VictoriaMetrics/Logs + Jaeger + Perses + k8s/aws SDKs) is ~193 MB — a mesh-HOST
+# concern, off by default so the worker binary stays lean (~121 MB / 47 MB on
+# Windows). Opt in for a host build with `make build BASHY_OBS=1`.
 BASHY_TAGS := $(strip \
 	$(if $(wildcard $(EMBED_DIR)/podman_embed/podman.gz),embed_podman) \
 	$(if $(wildcard $(EMBED_DIR)/vfkit_embed/vfkit.gz),embed_vfkit) \
-	$(if $(wildcard $(EMBED_DIR)/gvproxy_embed/gvproxy.gz),embed_gvproxy))
+	$(if $(wildcard $(EMBED_DIR)/gvproxy_embed/gvproxy.gz),embed_gvproxy) \
+	$(if $(BASHY_OBS),bashy_obs))
 
 ## build: Build both independent binaries into bin/ (bash = pure drop-in from
 ## cmd/bash; bashy = AgentOS shell from cmd/bashy). They share the cli core but
