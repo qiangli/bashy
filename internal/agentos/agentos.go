@@ -23,9 +23,7 @@ import (
 	_ "github.com/qiangli/coreutils/cmds/all"
 	"github.com/qiangli/coreutils/external/kopia"
 	"github.com/qiangli/coreutils/external/loom"
-	"github.com/qiangli/coreutils/external/ollama"
 	"github.com/qiangli/coreutils/external/otel/otelcli"
-	podmanengine "github.com/qiangli/coreutils/external/podman/engine"
 	"github.com/qiangli/coreutils/external/rclone"
 	"github.com/qiangli/coreutils/external/seaweedfs"
 	"github.com/qiangli/coreutils/external/zot"
@@ -51,6 +49,12 @@ func Dispatch() {
 	if len(os.Args) < 2 {
 		return
 	}
+	// The container/LLM engines (`bashy podman`, `bashy ollama`) embed cgo +
+	// platform-specific backends (podman's btrfs/devmapper drivers, ollama's
+	// Apple MLX) and only build on unix hosts — they are split into a
+	// platform-tagged dispatchEngine so the rest of AgentOS (shell, git, dag,
+	// weave, the binmgr-managed externals) cross-compiles to Windows.
+	dispatchEngine(os.Args[1])
 	switch os.Args[1] {
 	case "weave":
 		cmd := weave.NewWeaveCmd()
@@ -84,17 +88,6 @@ func Dispatch() {
 		os.Exit(dag.ExitCodeOf(cmd.Execute()))
 	case "otel":
 		cmd := otelcli.NewCommand()
-		cmd.SetArgs(os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
-		}
-		os.Exit(0)
-	case "podman":
-		// Managed, ISOLATED in-process podman (embeds the qiangli/podman fork):
-		// pass-through to the embedded binary with CONTAINER_HOST pointed at
-		// bashy's own `bashy` machine socket, so images/containers never collide
-		// with a host or ycode engine. $BASHY_PODMAN_SYSTEM=1 defers to host podman.
-		cmd := podmanengine.NewPodmanCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
@@ -152,16 +145,6 @@ func Dispatch() {
 		// transfer; our own orchestration). Node B keeps a live replica of a dir
 		// on node A — over the mesh, point --dest at the replica's exposed rclone.
 		cmd := mirror.NewMirrorCmd()
-		cmd.SetArgs(os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
-		}
-		os.Exit(0)
-	case "ollama":
-		// Managed, ISOLATED ollama: own bashy-owned port (never 11434), models
-		// under ~/.agents/bashy/ollama — never the host's ~/.ollama. Reached over
-		// the mesh by the `ollama` service name.
-		cmd := ollama.NewManagedOllamaCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)

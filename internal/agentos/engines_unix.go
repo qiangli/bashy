@@ -1,0 +1,43 @@
+// Copyright (c) 2025 qiangli
+// See LICENSE for licensing information
+
+//go:build !windows
+
+package agentos
+
+import (
+	"os"
+
+	"github.com/qiangli/coreutils/external/ollama"
+	podmanengine "github.com/qiangli/coreutils/external/podman/engine"
+)
+
+// dispatchEngine handles the container/LLM engine subcommands that are only
+// available on unix hosts. Kept in a !windows-tagged file so the cgo +
+// platform-specific backends they pull in (podman's btrfs/devmapper storage
+// drivers, ollama's Apple MLX) never enter the Windows build graph.
+func dispatchEngine(arg string) {
+	switch arg {
+	case "podman":
+		// Managed, ISOLATED in-process podman (embeds the qiangli/podman fork):
+		// pass-through to the embedded binary with CONTAINER_HOST pointed at
+		// bashy's own `bashy` machine socket, so images/containers never collide
+		// with a host or ycode engine. $BASHY_PODMAN_SYSTEM=1 defers to host podman.
+		cmd := podmanengine.NewPodmanCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "ollama":
+		// Managed, ISOLATED ollama: own bashy-owned port (never 11434), models
+		// under ~/.agents/bashy/ollama — never the host's ~/.ollama. Reached over
+		// the mesh by the `ollama` service name.
+		cmd := ollama.NewManagedOllamaCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+}
