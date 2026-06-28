@@ -983,6 +983,9 @@ func staticAliasExpand(src []byte, posix bool) []byte {
 				text = repl
 				repl = expandStaticAliasLine(text, aliases)
 			}
+			if reordered := reorderForInName(repl); reordered != repl {
+				repl = reordered
+			}
 			if repl != origText {
 				changed = true
 			}
@@ -1090,9 +1093,7 @@ func parseStaticAliases(s string) map[string]string {
 				break
 			}
 			if name, value, ok := strings.Cut(arg, "="); ok && validAliasName(name) {
-				if !strings.Contains(value, "\\\n") {
-					aliases[name] = value
-				}
+				aliases[name] = value
 			}
 			s = s[n:]
 			continue
@@ -1111,9 +1112,7 @@ func parseStaticAliases(s string) map[string]string {
 			break
 		}
 		if name != "let" {
-			if !strings.Contains(value, "\\\n") {
-				aliases[name] = value
-			}
+			aliases[name] = value
 		}
 		s = rest[n:]
 	}
@@ -1215,10 +1214,19 @@ func expandStaticAliasLine(s string, aliases map[string]string) string {
 				value = repl
 			}
 		}
-		if !shouldStaticExpandAlias(s, start, k, value) {
+		// A NAME immediately followed by `(` is a function definition. The
+		// interpreter never alias-expands a function-name word, so it must be
+		// resolved textually (`alias f='func'; f()` -> `func()`).
+		funcDef := k < len(s) && s[k] == '('
+		if !funcDef && !shouldStaticExpandAlias(s, start, k, value) {
 			i = k
 			continue
 		}
+		// Resolve an alias used as the function name inside the value
+		// (`alias def='f()' f='func'` -> `def` -> `func()`). Seed the seen
+		// set with this alias's own name so a self-recursive value
+		// (`alias g='g( '`) keeps its name rather than looping.
+		value = staticExpandFuncDefNameSeen(value, aliases, map[string]bool{name: true})
 		if start == 0 && k < len(s) && s[k] == ')' && !aliasNeedsClosingParen(value) {
 			i = k
 			continue
@@ -1244,7 +1252,7 @@ func expandStaticAliasLine(s string, aliases map[string]string) string {
 		// trigger the rule.
 		chainBlank := endsWithBlank(value) && quotesBalanced(value)
 		cmdPos := valueLeavesCommandPos(value)
-		seen := map[string]bool{name: true}
+		forInDo := valueLeavesForInDoPos(value)
 		for chainBlank {
 			nextStart := i
 			for nextStart < len(s) && (s[nextStart] == ' ' || s[nextStart] == '\t') {
@@ -1264,17 +1272,42 @@ func expandStaticAliasLine(s string, aliases map[string]string) string {
 			if cmdPos && isReservedWordName(nextName) {
 				break
 			}
-			nextValue, ok := aliases[nextName]
-			if !ok || seen[nextName] {
+			// After a `for NAME` header the words `in` and `do` are the loop
+			// keywords, recognized before alias substitution; an alias of that
+			// name (`alias do=';'`) is therefore NOT expanded here
+			// (yash "inapplicable alias substitution of do"). Advance past the
+			// keyword so the outer scan does not re-substitute it via the
+			// command-anywhere path either.
+			if forInDo && (nextName == "in" || nextName == "do") {
+				i = nextEnd
 				break
 			}
-			seen[nextName] = true
+			nextValue, ok := aliases[nextName]
+			if !ok {
+				break
+			}
+			// The replacement text is itself reprocessed for alias
+			// substitution at its leading word (POSIX): if the value's first
+			// word is another alias it is expanded too, chaining until the
+			// leading word is no longer an alias (`alias bar=baz baz=quux`:
+			// `foo bar` with `foo='echo '` -> `echo quux`, not `echo baz`).
+			// The recursion guard is seeded with this source word's own name
+			// so a self-referential value (`alias a='a b'`) and a cycle
+			// (`qfoo->qbar->qbaz->quux->qfoo`) terminate at the repeated name.
+			// Each chained word is a DISTINCT source word with a FRESH guard,
+			// so the same alias name may still be expanded again at the next
+			// position (`alias e='echo ' c='cat '`: `e c c cat` ->
+			// `echo cat cat cat`).
+			if staticLeadingWordIsAlias(nextValue, aliases) && !valueIsFuncDef(nextValue) {
+				nextValue = staticDeepExpand(nextValue, aliases, map[string]bool{nextName: true}, false)
+			}
 			b.WriteString(s[i:nextStart])
 			b.WriteString(nextValue)
 			last = nextEnd
 			i = nextEnd
 			chainBlank = endsWithBlank(nextValue) && quotesBalanced(nextValue)
 			cmdPos = valueLeavesCommandPos(nextValue)
+			forInDo = valueLeavesForInDoPos(nextValue)
 		}
 	}
 	if last == 0 {
@@ -1282,6 +1315,191 @@ func expandStaticAliasLine(s string, aliases map[string]string) string {
 	}
 	b.WriteString(s[last:])
 	return b.String()
+}
+
+// staticLeadingWordIsAlias reports whether value's first word is a defined
+// alias name. It gates the recursive staticDeepExpand so the common case — a
+// value whose body is a plain command — is left untouched for the interpreter.
+func staticLeadingWordIsAlias(value string, aliases map[string]string) bool {
+	j := 0
+	for j < len(value) && (value[j] == ' ' || value[j] == '\t') {
+		j++
+	}
+	k := j
+	for k < len(value) && isAliasNameChar(value[k]) {
+		k++
+	}
+	if k == j {
+		return false
+	}
+	_, ok := aliases[value[j:k]]
+	return ok
+}
+
+// staticDeepExpand reprocesses value (sitting at command position) for alias
+// substitution exactly as bash does after it splices an alias body in place:
+// the leading word is expanded when it is an alias not already being expanded
+// (the recursion guard in active); and when an expanded value ends in an
+// unquoted blank the next word is expanded too, chaining as long as each value
+// keeps ending in a blank.
+//
+// When a NESTED expansion's leading word is an alias blocked by the guard
+// (`alias echo='e x x ' e='echo '`: expanding echo's body reaches e -> echo,
+// already active), it is backslash-escaped so the interpreter — which would
+// otherwise expand it again — treats it as the final command word. A
+// top-level self-reference (`alias f='f '`, nested=false) is left bare: there
+// the leading word is a literal command/function name, and a backslash would
+// break a `\f ()` function-definition header.
+func staticDeepExpand(value string, aliases map[string]string, active map[string]bool, nested bool) string {
+	var b strings.Builder
+	rest := value
+	expandNext := true
+	leading := true
+	for len(rest) > 0 {
+		w := 0
+		for w < len(rest) && (rest[w] == ' ' || rest[w] == '\t') {
+			w++
+		}
+		b.WriteString(rest[:w])
+		rest = rest[w:]
+		if len(rest) == 0 {
+			break
+		}
+		e := 0
+		for e < len(rest) && isAliasNameChar(rest[e]) {
+			e++
+		}
+		if e == 0 {
+			b.WriteByte(rest[0])
+			rest = rest[1:]
+			expandNext = false
+			leading = false
+			continue
+		}
+		word := rest[:e]
+		rest = rest[e:]
+		val, isAlias := aliases[word]
+		switch {
+		case expandNext && isAlias && !isReservedWordName(word) && !active[word]:
+			next := make(map[string]bool, len(active)+1)
+			for n := range active {
+				next[n] = true
+			}
+			next[word] = true
+			b.WriteString(staticDeepExpand(val, aliases, next, true))
+			expandNext = endsWithBlank(val) && quotesBalanced(val)
+		default:
+			if nested && leading && isAlias && active[word] {
+				b.WriteByte('\\')
+			}
+			b.WriteString(word)
+			expandNext = false
+		}
+		leading = false
+	}
+	return b.String()
+}
+
+// reorderForInName rewrites a `for in NAME ...` header into the equivalent
+// `for NAME in ...`. Such a header only arises from POSIX alias substitution
+// interleaving the `in` keyword and the loop name: with
+// `alias f=' for ' w=' in ' in=' x '`, `f w in 1` expands textually to
+// `for in x 1`, which bash assembles at the token level as `for x in 1`.
+// A literal `for in NAME` is never valid otherwise, so the rewrite only
+// affects this alias case (and runs only on alias-bearing input).
+func reorderForInName(s string) string {
+	for i := 0; i+3 <= len(s); {
+		// `for` must be a word at command position.
+		if !(s[i] == 'f' && s[i+1] == 'o' && s[i+2] == 'r') {
+			i++
+			continue
+		}
+		if i > 0 && isAliasNameChar(s[i-1]) {
+			i++
+			continue
+		}
+		if !staticForAtCommandPos(s, i) {
+			i++
+			continue
+		}
+		q := i + 3
+		r := q
+		for r < len(s) && (s[r] == ' ' || s[r] == '\t') {
+			r++
+		}
+		// Require `in` as the next word.
+		if r == q || !(r+2 <= len(s) && s[r] == 'i' && s[r+1] == 'n' &&
+			(r+2 == len(s) || s[r+2] == ' ' || s[r+2] == '\t')) {
+			i++
+			continue
+		}
+		ns := r + 2
+		for ns < len(s) && (s[ns] == ' ' || s[ns] == '\t') {
+			ns++
+		}
+		ne := ns
+		for ne < len(s) && isAliasNameChar(s[ne]) {
+			ne++
+		}
+		name := s[ns:ne]
+		if ne == ns || name == "in" || name == "do" {
+			i++
+			continue
+		}
+		s = s[:q] + " " + name + " in" + s[ne:]
+		i = q + 1 + len(name) + 3
+	}
+	return s
+}
+
+// staticForAtCommandPos reports whether the `for` token at position i is in
+// command position (line start or after a command separator).
+func staticForAtCommandPos(s string, i int) bool {
+	j := i
+	for j > 0 && (s[j-1] == ' ' || s[j-1] == '\t') {
+		j--
+	}
+	if j == 0 {
+		return true
+	}
+	switch s[j-1] {
+	case ';', '&', '|', '(', '\n':
+		return true
+	}
+	return false
+}
+
+// valueLeavesForInDoPos reports whether, after splicing value, the parser sits
+// in a `for NAME` header where the next word `in` or `do` is the loop keyword
+// (so an alias of that name is not substituted). It matches a value whose
+// trailing tokens are `for <name>` with the name as the final token.
+func valueLeavesForInDoPos(value string) bool {
+	fields := strings.Fields(value)
+	n := len(fields)
+	return n >= 2 && fields[n-2] == "for" && validAliasName(fields[n-1])
+}
+
+// valueIsFuncDef reports whether value begins with a function definition: a
+// leading NAME (optionally blank-separated) immediately followed by `(`. It
+// distinguishes `f()` / `f ()` (a function definition) from `a=() ...` (an
+// array assignment that merely contains parentheses).
+func valueIsFuncDef(value string) bool {
+	j := 0
+	for j < len(value) && (value[j] == ' ' || value[j] == '\t') {
+		j++
+	}
+	k := j
+	for k < len(value) && isAliasNameChar(value[k]) {
+		k++
+	}
+	if k == j {
+		return false
+	}
+	m := k
+	for m < len(value) && (value[m] == ' ' || value[m] == '\t') {
+		m++
+	}
+	return m < len(value) && value[m] == '('
 }
 
 // endsWithBlank reports whether s ends in a POSIX <blank> (space or tab),
@@ -1300,7 +1518,7 @@ func staticAliasAnywhere(value string) bool {
 func shouldStaticExpandAlias(line string, start, end int, value string) bool {
 	trim := strings.TrimSpace(value)
 	switch trim {
-	case "case", "(", "{", "}":
+	case "case", "(", ")", "{", "}":
 		return true
 	}
 	// A keyword alias whose value begins with a reserved word
@@ -1310,6 +1528,25 @@ func shouldStaticExpandAlias(line string, start, end int, value string) bool {
 	// multi-line early-return below, since case/esac keyword aliases
 	// commonly carry a leading newline in their value.
 	if startsWithReservedWord(trim) {
+		return true
+	}
+	// A value that is itself a function definition (`alias def='f()'`) forms a
+	// function definition once spliced; the interpreter never re-expands
+	// aliases at a function-name position, so it must be handled textually
+	// here. This is narrower than "contains ()": an array assignment such as
+	// `alias foo='a=() ...'` is NOT a function definition and is left to the
+	// interpreter (so its multi-line value is not spliced, keeping line
+	// numbers intact for runtime diagnostics).
+	if valueIsFuncDef(value) {
+		return true
+	}
+	// A value ending in an unquoted blank (`alias e='echo '`, `alias f='f '`)
+	// triggers the POSIX trailing-blank rule: the following word is itself
+	// alias-expanded. Splice it so the chain in expandStaticAliasLine runs.
+	// A value carrying an embedded newline (a line-continuation alias such as
+	// `alias echo='\<newline>echo\<newline> '`) is left for the interpreter,
+	// which already handles its multi-line expansion correctly.
+	if endsWithBlank(value) && quotesBalanced(value) && !strings.Contains(value, "\n") {
 		return true
 	}
 	if strings.Contains(value, "$(") && strings.Count(value, "$(") > strings.Count(value, ")") {
@@ -1345,12 +1582,12 @@ func shouldStaticExpandAlias(line string, start, end int, value string) bool {
 		return true
 	}
 	if trim == "" {
-		// A blank alias (`alias b=' '`) expands to nothing; it still must
-		// be substituted away when the following word is a reserved word
-		// so the parser recognizes the reserved word in command position
-		// (`b if ...`, `b while ...`, `al for ...`).
-		rest := strings.TrimLeft(line[end:], " \t")
-		return startsWithReservedWord(rest)
+		// An empty/blank alias (`alias a=` or `alias b=' '`) at command
+		// position is always substituted away (POSIX): the word is removed,
+		// and the following word — whether a reserved word (`b if ...`), an
+		// ordinary command (`a echo foo`), or nothing at all (a trailing
+		// `| a` that becomes a pipe continuation) — takes its place.
+		return true
 	}
 	return false
 }
@@ -1480,6 +1717,44 @@ func staticAliasHeredocPrefix(value string, aliases map[string]string) (string, 
 		return "", false
 	}
 	return value[:j] + repl + value[k:], true
+}
+
+// staticExpandFuncDefName resolves an alias used as the name in a function
+// definition carried inside an alias value (`alias def='f()' f='func'`: the
+// value `f()` becomes `func()`). The name is the leading word of the value,
+// it must be immediately followed (after optional blanks) by `(`, and it is
+// resolved recursively so a chain of name aliases collapses fully.
+func staticExpandFuncDefNameSeen(value string, aliases map[string]string, seen map[string]bool) string {
+	j := 0
+	for j < len(value) && (value[j] == ' ' || value[j] == '\t') {
+		j++
+	}
+	k := j
+	for k < len(value) && isAliasNameChar(value[k]) {
+		k++
+	}
+	if k == j {
+		return value
+	}
+	m := k
+	for m < len(value) && (value[m] == ' ' || value[m] == '\t') {
+		m++
+	}
+	if m >= len(value) || value[m] != '(' {
+		return value
+	}
+	name := value[j:k]
+	// A self- or mutually-recursive name alias (`alias g='g( '`) keeps its
+	// own name as the function name, matching POSIX recursion suppression.
+	if seen[name] {
+		return value
+	}
+	repl, ok := aliases[name]
+	if !ok {
+		return value
+	}
+	seen[name] = true
+	return value[:j] + staticExpandFuncDefNameSeen(repl, aliases, seen) + value[k:]
 }
 
 func aliasNeedsClosingParen(value string) bool {
