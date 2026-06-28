@@ -349,7 +349,7 @@ func TestStaticAliasExpand(t *testing.T) {
 		`raw again'`,
 		"",
 	}, "\n")
-	if got := string(staticAliasExpand([]byte(src))); got != want {
+	if got := string(staticAliasExpand([]byte(src), false)); got != want {
 		t.Fatalf("staticAliasExpand mismatch\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }

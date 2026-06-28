@@ -933,13 +933,17 @@ func quoteParamReplBackquotes(src []byte) []byte {
 	return out.Bytes()
 }
 
-func staticAliasExpand(src []byte) []byte {
+func staticAliasExpand(src []byte, posix bool) []byte {
 	if !bytes.Contains(src, []byte("alias ")) {
 		return src
 	}
 	lines := bytes.SplitAfter(src, []byte("\n"))
 	aliases := make(map[string]string)
-	expandAliases := false
+	// In POSIX mode (e.g. invoked as `sh`), alias expansion is enabled
+	// for non-interactive shells too, so the textual pre-pass must run
+	// even without an explicit `shopt -s expand_aliases`/`set -o posix`
+	// in the source.
+	expandAliases := posix
 	var out bytes.Buffer
 	changed := false
 	inSingleCommand := false
@@ -1193,6 +1197,14 @@ func expandStaticAliasLine(s string, aliases map[string]string) string {
 			continue
 		}
 		name := s[j:k]
+		// In command position a reserved word is recognized as such
+		// before alias substitution (POSIX): an alias whose NAME is a
+		// reserved word is not expanded here, so the parser sees the
+		// keyword.
+		if isReservedWordName(name) {
+			i = k
+			continue
+		}
 		value, ok := aliases[name]
 		if !ok {
 			i = k
@@ -1221,8 +1233,20 @@ func expandStaticAliasLine(s string, aliases map[string]string) string {
 		b.WriteString(s[last:start])
 		b.WriteString(s[start:j])
 		b.WriteString(value)
-		if strings.TrimSpace(value) == "" {
-			nextStart := k
+		last = k
+		i = k
+		// Trailing-blank rule (POSIX): when an alias value ends in an
+		// UNQUOTED blank, the word that follows is itself subject to
+		// alias substitution. Chain this for as long as each expanded
+		// value ends in a blank, guarding against infinite recursion.
+		// A value with an unbalanced quote (`alias foo="echo 'x: "`)
+		// leaves the trailing blank inside a quote, so it does not
+		// trigger the rule.
+		chainBlank := endsWithBlank(value) && quotesBalanced(value)
+		cmdPos := valueLeavesCommandPos(value)
+		seen := map[string]bool{name: true}
+		for chainBlank {
+			nextStart := i
 			for nextStart < len(s) && (s[nextStart] == ' ' || s[nextStart] == '\t') {
 				nextStart++
 			}
@@ -1230,25 +1254,40 @@ func expandStaticAliasLine(s string, aliases map[string]string) string {
 			for nextEnd < len(s) && isAliasNameChar(s[nextEnd]) {
 				nextEnd++
 			}
-			if nextEnd > nextStart {
-				if nextValue, ok := aliases[s[nextStart:nextEnd]]; ok &&
-					shouldStaticExpandAlias(s, start, nextEnd, nextValue) {
-					b.WriteString(s[k:nextStart])
-					b.WriteString(nextValue)
-					last = nextEnd
-					i = nextEnd
-					continue
-				}
+			if nextEnd == nextStart {
+				break
 			}
+			nextName := s[nextStart:nextEnd]
+			// In command position a reserved word is recognized as such
+			// before alias substitution, so an alias whose NAME is a
+			// reserved word (`alias for=echo`) is NOT expanded there.
+			if cmdPos && isReservedWordName(nextName) {
+				break
+			}
+			nextValue, ok := aliases[nextName]
+			if !ok || seen[nextName] {
+				break
+			}
+			seen[nextName] = true
+			b.WriteString(s[i:nextStart])
+			b.WriteString(nextValue)
+			last = nextEnd
+			i = nextEnd
+			chainBlank = endsWithBlank(nextValue) && quotesBalanced(nextValue)
+			cmdPos = valueLeavesCommandPos(nextValue)
 		}
-		last = k
-		i = k
 	}
 	if last == 0 {
 		return s
 	}
 	b.WriteString(s[last:])
 	return b.String()
+}
+
+// endsWithBlank reports whether s ends in a POSIX <blank> (space or tab),
+// which triggers the trailing-blank alias-substitution rule.
+func endsWithBlank(s string) bool {
+	return strings.HasSuffix(s, " ") || strings.HasSuffix(s, "\t")
 }
 
 func staticAliasAnywhere(value string) bool {
@@ -1264,6 +1303,15 @@ func shouldStaticExpandAlias(line string, start, end int, value string) bool {
 	case "case", "(", "{", "}":
 		return true
 	}
+	// A keyword alias whose value begins with a reserved word
+	// (`alias i='if echo'`, `alias e='\n esac ...'`, `alias def='f()'`)
+	// must be expanded at command position so the parser recognizes the
+	// reserved word / compound-command keyword. Checked before the
+	// multi-line early-return below, since case/esac keyword aliases
+	// commonly carry a leading newline in their value.
+	if startsWithReservedWord(trim) {
+		return true
+	}
 	if strings.Contains(value, "$(") && strings.Count(value, "$(") > strings.Count(value, ")") {
 		return true
 	}
@@ -1271,6 +1319,12 @@ func shouldStaticExpandAlias(line string, start, end int, value string) bool {
 		return true
 	}
 	if strings.HasPrefix(trim, "#") {
+		return true
+	}
+	// A `;;` case-clause terminator in the value (`alias eb='\n echo B;; '`)
+	// only makes sense spliced into the surrounding `case`, so it must be
+	// expanded textually even when the value spans multiple lines.
+	if strings.Contains(value, ";;") {
 		return true
 	}
 	if strings.Contains(value, "\n") && !strings.Contains(value, "<<") {
@@ -1291,8 +1345,120 @@ func shouldStaticExpandAlias(line string, start, end int, value string) bool {
 		return true
 	}
 	if trim == "" {
+		// A blank alias (`alias b=' '`) expands to nothing; it still must
+		// be substituted away when the following word is a reserved word
+		// so the parser recognizes the reserved word in command position
+		// (`b if ...`, `b while ...`, `al for ...`).
 		rest := strings.TrimLeft(line[end:], " \t")
-		return strings.HasPrefix(rest, "for ") || strings.HasPrefix(rest, "case ")
+		return startsWithReservedWord(rest)
+	}
+	return false
+}
+
+// reservedWords are the shell reserved words / compound-command keywords
+// that are only recognized in command position. An alias whose value (at
+// command position) or whose following word (after a blank alias) is one
+// of these must be textually substituted so the parser sees the keyword.
+var reservedWords = []string{
+	"if", "then", "elif", "else", "fi",
+	"for", "in", "do", "done",
+	"while", "until",
+	"case", "esac",
+	"{", "}", "!",
+	"select", "function", "time", "coproc",
+	"[[", "]]",
+}
+
+// isReservedWordName reports whether s is exactly a shell reserved word.
+func isReservedWordName(s string) bool {
+	for _, w := range reservedWords {
+		if s == w {
+			return true
+		}
+	}
+	return false
+}
+
+// quotesBalanced reports whether s has balanced single/double quotes, so a
+// trailing blank in s is a real (unquoted) word separator rather than part
+// of an open quoted string.
+func quotesBalanced(s string) bool {
+	inSingle, inDouble, escaped := false, false, false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if !inSingle && inDouble && c == '\\' {
+			escaped = true
+			continue
+		}
+		switch c {
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		}
+	}
+	return !inSingle && !inDouble
+}
+
+// valueLeavesCommandPos reports whether, after splicing an alias value into
+// the input, the word that follows is in command position (where reserved
+// words are recognized). A blank value keeps command position; a value
+// ending in a command separator or a command-introducing reserved word
+// also does; anything else (a partial simple command) does not.
+func valueLeavesCommandPos(value string) bool {
+	t := strings.TrimRight(value, " \t")
+	if t == "" {
+		return true
+	}
+	switch t[len(t)-1] {
+	case ';', '&', '|', '(', '\n':
+		return true
+	}
+	k := len(t)
+	for k > 0 && isAliasNameChar(t[k-1]) {
+		k--
+	}
+	switch t[k:] {
+	case "then", "do", "else", "elif", "if", "while", "until", "{", "!":
+		return true
+	}
+	return false
+}
+
+// startsWithReservedWord reports whether s begins with a reserved word
+// that is delimited by a blank, a metacharacter, or end-of-string (so
+// `iffy` is not mistaken for `if`).
+func startsWithReservedWord(s string) bool {
+	s = strings.TrimLeft(s, " \t")
+	for _, w := range reservedWords {
+		if !strings.HasPrefix(s, w) {
+			continue
+		}
+		rest := s[len(w):]
+		if rest == "" {
+			return true
+		}
+		c := rest[0]
+		// A reserved word ends at a blank or shell metacharacter.
+		// Punctuation reserved words (`{`, `(`, `!`, `[[`) need no
+		// delimiter; the alphabetic ones do, so `forx` stays a word.
+		if isAliasNameChar(w[0]) {
+			if c == ' ' || c == '\t' || c == '\n' || c == ';' ||
+				c == '&' || c == '|' || c == '(' || c == ')' ||
+				c == '<' || c == '>' {
+				return true
+			}
+			continue
+		}
+		return true
 	}
 	return false
 }
@@ -1347,7 +1513,46 @@ func staticAliasCommandStart(s string, i int) (start, prefixEnd int, ok bool) {
 			return i, i + 2, true
 		}
 	}
+	// A word that begins right after a command-introducing token —
+	// `then`/`do`/`else`/`elif`/`if`/`while`/`until` or `(`/`!`/`&`/`|`/`;`
+	// — is in command position, so an alias there must be recognized
+	// (e.g. `then begin` with `alias begin='{'`).
+	if (isAliasNameChar(s[i]) || s[i] == '{' || s[i] == '}') &&
+		(s[i-1] == ' ' || s[i-1] == '\t') && precededByCommandIntroducer(s, i) {
+		return i, i, true
+	}
 	return 0, 0, false
+}
+
+// precededByCommandIntroducer reports whether the token ending just
+// before the blanks at position i is one that introduces a command word
+// (so the word at i is in command position for alias recognition).
+func precededByCommandIntroducer(s string, i int) bool {
+	j := i
+	for j > 0 && (s[j-1] == ' ' || s[j-1] == '\t') {
+		j--
+	}
+	if j == 0 {
+		return true
+	}
+	switch s[j-1] {
+	case ';', '&', '|', '(', '!':
+		// Note: a bare newline is intentionally NOT an introducer here.
+		// Words at the start of a physical line are already handled as
+		// command position by the per-line scan; treating a value-
+		// internal newline as one would wrongly re-expand a reserved
+		// word terminator like `done`/`fi` that is also an alias.
+		return true
+	}
+	k := j
+	for k > 0 && isAliasNameChar(s[k-1]) {
+		k--
+	}
+	switch s[k:j] {
+	case "then", "do", "else", "elif", "if", "while", "until":
+		return true
+	}
+	return false
 }
 
 func validAliasName(s string) bool {
@@ -1595,7 +1800,7 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	// `source`. An upfront dump of the whole input here would double the
 	// echo and miss sourced-file lines, so leave it to the runner.
 	src = quoteParamReplBackquotes(src)
-	src = staticAliasExpand(src)
+	src = staticAliasExpand(src, *posix || optsEnabled("posix"))
 	// Bash 5.3's `<file>: line N: …` prefix shape, with `: -c`
 	// inserted when running via `-c`. argv0 (the first positional
 	// after the -c command) is the file-name in -c mode; otherwise
