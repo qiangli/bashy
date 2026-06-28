@@ -120,6 +120,62 @@ func preflightInvocationErrors(args []string) {
 	}
 }
 
+// stripIgnoredOperandHyphen drops the single leading `-` (or, in `-c`
+// mode, a `--`) operand that bash ignores between the options and the
+// command/script operand. Bash's parse_shell_options stops at the first
+// non-option, then skips a lone `-` before taking the `-c` command string
+// or the script file (main.c). Go's flag package instead lets `-c` swallow
+// the immediately-following `-`/`--` as its value, so `bin/bash -c - 'echo x'`
+// and `bin/bash -c -- 'echo x'` would run `-`/`--` as the command, and a lone
+// `bin/bash -` would treat `-` as a script file. Removing that token here
+// makes Go's parse match bash:
+//
+//	-c -  CMD   -> -c CMD          (single hyphen ignored)
+//	-c -- CMD   -> -c CMD          (double hyphen ends options)
+//	-           -> (read stdin)    (lone hyphen ignored)
+//
+// args includes argv[0]. Value-taking options (`-o`, `-O`, `--rcfile`,
+// `--init-file`) consume their following token; `-c` does not (its command is
+// an operand in bash). Any other token starting with `-` is treated as a
+// boolean option.
+func stripIgnoredOperandHyphen(args []string) []string {
+	valueOpt := map[string]bool{
+		"-o": true, "-O": true, "--rcfile": true, "--init-file": true,
+		"-bashy-plus-o": true, "-bashy-plus-O": true,
+	}
+	sawC := false
+	for i := 1; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			// End of options. In `-c` mode this `--` precedes the command
+			// string; drop it so Go's `-c` binds to the real command.
+			// Without `-c`, Go's flag parser already handles `--`.
+			if sawC {
+				return append(append([]string{}, args[:i]...), args[i+1:]...)
+			}
+			return args
+		case a == "-":
+			// A lone hyphen at the operand position: bash ignores it.
+			return append(append([]string{}, args[:i]...), args[i+1:]...)
+		case strings.HasPrefix(a, "-"):
+			if a == "-c" {
+				sawC = true
+				continue
+			}
+			if valueOpt[a] {
+				i++ // skip this option's value token
+			}
+			continue
+		default:
+			// First real operand (command string or script file): nothing
+			// to strip.
+			return args
+		}
+	}
+	return args
+}
+
 // splitCombinedShortFlags rewrites bash-style short / combined
 // short flags into the long-form names our `flag` parser knows.
 // `-ce 'cmd'` becomes `-o errexit -c 'cmd'`, `-eu` becomes
@@ -319,6 +375,9 @@ func Main() {
 	// bare `-XYZ` argument (where every char is a single-letter
 	// flag we know about) into individual `-X -Y -Z` args.
 	os.Args = splitCombinedShortFlags(os.Args)
+	// Drop the leading `-`/`--` operand bash ignores before the command or
+	// script (e.g. `-c - 'echo x'`, `-c -- 'echo x'`, a lone `-`).
+	os.Args = stripIgnoredOperandHyphen(os.Args)
 	flag.Parse()
 	// Invoked as `sh` → POSIX mode, like bash. Set the flag so every downstream
 	// consumer (runner -o posix, prompt expansion, AgentOS wiring) honors it.
@@ -339,6 +398,17 @@ func Main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// stdinArgv0Option returns a RunnerOption that fixes $0 to argv[0] for the
+// stdin / `-s` / interactive invocation forms (no `-c`, no script-file
+// operand), mirroring bash. For the `-c` and script-file forms it is a no-op,
+// since those set $0 from the command-name operand or the script path.
+func stdinArgv0Option() interp.RunnerOption {
+	if *command == "" && (flag.NArg() == 0 || *readStdin) {
+		return interp.WithArgv0(os.Args[0])
+	}
+	return func(*interp.Runner) error { return nil }
 }
 
 // defaultPathValue mirrors bash's DEFAULT_PATH_VALUE (config-top.h): the
@@ -386,6 +456,11 @@ func newRunner() (*interp.Runner, error) {
 		interp.CommandString(*command != ""),
 		interp.StandardInput(*command == "" && (flag.NArg() == 0 || *readStdin)),
 		interp.WithLoginShell(isLoginShell()),
+		// bash reports $0 as the name the shell was invoked with (argv[0])
+		// for the stdin / `-s` / interactive forms, where no script file
+		// supplies it. The `-c` and script paths set their own $0 (the
+		// command name operand or the script path) via run()'s name arg.
+		stdinArgv0Option(),
 		interp.StdIO(os.Stdin, os.Stdout, os.Stderr),
 		interp.Env(env),
 		interp.WithBashCompatErrors(true),
@@ -526,18 +601,6 @@ func collectSetArgs() []string {
 		out = append(out, "+O", name)
 	}
 	return out
-}
-
-func invocationVerbose() bool {
-	if *verbose {
-		return true
-	}
-	for _, name := range optsOn {
-		if name == "verbose" {
-			return true
-		}
-	}
-	return false
 }
 
 // isRestrictedName reports whether bashy was invoked under a name that bash
@@ -1526,12 +1589,11 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	if err != nil {
 		return err
 	}
-	if invocationVerbose() {
-		os.Stderr.Write(src)
-		if len(src) == 0 || src[len(src)-1] != '\n' {
-			fmt.Fprintln(os.Stderr)
-		}
-	}
+	// `set -v` / `-o verbose` echo each input line to stderr as it is read.
+	// The interpreter does this per statement via verboseStmt (gated on the
+	// verbose option + bash source), which also covers lines read by `.` /
+	// `source`. An upfront dump of the whole input here would double the
+	// echo and miss sourced-file lines, so leave it to the runner.
 	src = quoteParamReplBackquotes(src)
 	src = staticAliasExpand(src)
 	// Bash 5.3's `<file>: line N: …` prefix shape, with `: -c`

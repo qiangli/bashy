@@ -232,6 +232,7 @@ func runForcedInteractiveExec(r *interp.Runner) error {
 		isearch      bool
 		isearchStr   string
 		exited       bool
+		lastErr      error // exit status of the most recently run command
 	)
 
 	saveHistory := func() {
@@ -289,7 +290,7 @@ func runForcedInteractiveExec(r *interp.Runner) error {
 			return
 		}
 		pending = ""
-		_ = r.Run(context.Background(), file)
+		lastErr = r.Run(context.Background(), file)
 		if r.Exited() {
 			exited = true
 		}
@@ -352,5 +353,8 @@ func runForcedInteractiveExec(r *interp.Runner) error {
 		fmt.Fprintf(os.Stderr, "%sexit\n", ps1)
 	}
 	saveHistory()
-	return nil
+	// An interactive shell exits with the status of the last command it ran
+	// (bash). r.Run returns that status as an interp.ExitStatus error, or nil
+	// when the last command succeeded.
+	return lastErr
 }
