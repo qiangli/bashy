@@ -22,6 +22,8 @@ import (
 
 	_ "github.com/qiangli/coreutils/cmds/all"
 	"github.com/qiangli/coreutils/external/act"
+	"github.com/qiangli/coreutils/external/clang"
+	"github.com/qiangli/coreutils/external/cmake"
 	"github.com/qiangli/coreutils/external/gh"
 	"github.com/qiangli/coreutils/external/gotoolchain"
 	"github.com/qiangli/coreutils/external/kopia"
@@ -109,6 +111,25 @@ func Dispatch() {
 		// what lets a bare node `bashy go build/test`. Pure-Go + cross-platform,
 		// so it stays in the shared switch (not engine-gated).
 		cmd := gotoolchain.NewGoCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "cmake":
+		// Self-provisioning CMake (binmgr download -> verify -> cache; no system
+		// CMake needed). Pure-Go fetch + cross-platform, same shape as bashy go.
+		cmd := cmake.NewCmakeCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "clang":
+		// Self-provisioning Clang toolchain: the standalone llvm-mingw on Windows
+		// (binmgr), the system clang on macOS/Linux. The compiler half of the
+		// self-contained cross-platform build userland (cmake is the other half).
+		cmd := clang.NewClangCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
