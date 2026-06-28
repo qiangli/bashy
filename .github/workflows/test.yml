@@ -7,11 +7,12 @@ on:
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
-        # ubuntu+macos run the test suite; the lean cmd/bashy is cross-built for
-        # windows in the build step. Running the shell suite ON windows is
-        # deferred (the interactive/forced-tty tests assume a unix env).
-        os: [ubuntu-latest, macos-latest]
+        # Windows is a real target (classgo staging runs on it). It builds the
+        # lean cmd/bash + cmd/bashy and test-runs internal/agentos; internal/cli's
+        # readline/forced-tty tests are deferred there (they hang without a PTY).
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +33,12 @@ jobs:
         run: |
           go build ./cmd/bash ./cmd/bashy ./internal/...
           go vet  ./cmd/bash ./cmd/bashy ./internal/...
-          go test ./internal/cli ./internal/agentos
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # internal/cli's readline / forced-interactive tests hang without a PTY
+            go test ./internal/agentos
+          else
+            go test ./internal/cli ./internal/agentos
+          fi
       - name: Cross-build lean cmd/bashy for every release platform (CGO_ENABLED=0)
         shell: bash
         run: |
