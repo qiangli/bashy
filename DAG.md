@@ -26,7 +26,11 @@ topological order through the in-process shell — add `-j N` for parallel.
 ### build
 Build both independent binaries into bin/ (bash = pure drop-in from cmd/bash;
 bashy = AgentOS shell from cmd/bashy). Separate compilations — bash's import
-graph never includes coreutils.
+graph never includes coreutils. This is the **lean worker** bashy: shell +
+coreutils userland + git + dag + `bashy go` (self-provisioning Go toolchain) +
+weave; ~121 MB unix, ~47 MB Windows (it cross-compiles everywhere — podman/ollama
+are !windows-gated, the otel observability stack is off by default). For a host
+build with the observability stack, use `build-host`.
 Sources: cmd/, internal/, go.mod, go.sum
 Generates: bin/bash, bin/bashy
 Effects: write
@@ -38,6 +42,22 @@ VERSION="${VERSION:-dev}"
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}'"
 go build -trimpath -ldflags "$LDFLAGS" -o bin/bash  ./cmd/bash
 go build -trimpath -ldflags "$LDFLAGS" -o bin/bashy ./cmd/bashy
+```
+
+### build-host
+Build the full host bashy with the observability stack (`bashy otel` →
+OpenTelemetry Collector + VictoriaMetrics/Logs + Jaeger + Perses; ~193 MB extra)
+via `-tags bashy_obs`. Use this only for a node that hosts the obs pipeline; the
+default `build` is the lean worker.
+Generates: bin/bashy
+Effects: write
+
+```bash
+set -e
+mkdir -p bin
+VERSION="${VERSION:-dev}"
+LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}'"
+go build -trimpath -tags bashy_obs -ldflags "$LDFLAGS" -o bin/bashy ./cmd/bashy
 ```
 
 ### install
