@@ -21,6 +21,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 
 	_ "github.com/qiangli/coreutils/cmds/all"
+	"github.com/qiangli/coreutils/external/gotoolchain"
 	"github.com/qiangli/coreutils/external/kopia"
 	"github.com/qiangli/coreutils/external/loom"
 	"github.com/qiangli/coreutils/external/otel/otelcli"
@@ -86,6 +87,17 @@ func Dispatch() {
 		cmd := dag.NewDagCmd()
 		cmd.SetArgs(os.Args[2:])
 		os.Exit(dag.ExitCodeOf(cmd.Execute()))
+	case "go":
+		// Self-provisioning Go toolchain (check → download from go.dev →
+		// sha256-verify → cache → exec). No embedding, no system Go: this is
+		// what lets a bare node `bashy go build/test`. Pure-Go + cross-platform,
+		// so it stays in the shared switch (not engine-gated).
+		cmd := gotoolchain.NewGoCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "otel":
 		cmd := otelcli.NewCommand()
 		cmd.SetArgs(os.Args[2:])
