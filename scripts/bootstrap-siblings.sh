@@ -53,4 +53,6 @@ while IFS= read -r line; do
     echo "bootstrap-siblings: cloning $url -> $target @ ${sha:0:12}"
     git clone --quiet "$url" "$target"
     git -C "$target" checkout --quiet "$sha"
+    # siblings may have their own submodules (e.g. coreutils -> ollama/podman forks)
+    git -C "$target" submodule update --init --recursive --quiet 2>/dev/null || true
 done < "$pins"
