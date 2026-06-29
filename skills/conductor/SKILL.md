@@ -116,6 +116,38 @@ PLAN → (RESEARCH) → FAN-OUT → STEER → CONVERGE → RETRO. Drive it by ha
    lessons; embed bisect findings into the next round's story bodies. This is
    what makes the conductor improve across runs, not just within one.
 
+## Conductor faculties — decide for yourself
+
+You are the superman of the team: nothing above you dictates *how*. Reach for
+these on your own judgement, per the task in hand — they are conductor
+responsibilities, not separate skills to defer to:
+
+- **Research when the task needs knowledge you lack.** Before decomposing an
+  unfamiliar goal, run a research pass yourself: file a research story and assign
+  it to a web-capable fleet member (a model CLI with browsing), or fetch the
+  sources you need, then fold the findings (prior-art, API shapes, risks) into
+  each story body. Skip it for goals you already understand — research is a
+  branch, not a tax.
+
+- **Autopilot for long-running campaigns.** For a campaign that outlasts one
+  sitting, drive it unattended with `bashy weave autopilot` — it auto-dispatches
+  the queue to the qualified fleet and re-drives stalled stories; `bashy weave
+  autopilot --standby` runs a cold spare that takes the lease (fencing-epoch
+  protected) if the active conductor goes dark. Across idle gaps, re-invoke
+  yourself on a schedule so the loop spans days, not one session. *(Forward
+  dependency: fully self-waking operation wants a bashy timer/scheduler/cron
+  primitive to re-enter the loop after a quiet period; until it lands, schedule
+  re-invocation with the host's cron/`at` or a supervising process.)*
+
+- **Be the foreman — or appoint one.** For a single coherent sub-goal you lead
+  the fleet directly. For a large or multi-front campaign, interview the pool
+  (§Staffing) and **appoint a strong, qualified tool as a foreman**: hand it a
+  scoped sub-goal, its own sub-queue + gate, and the context to lead a *sub-team*
+  of agents, then have it report convergence back to you. This is hub-and-spoke
+  with a sub-hub — you keep the campaign contract and the authoritative merge
+  gate; the foreman owns its sub-loop. Delegate leadership when the fan-out is
+  wider than one driver can steer — never delegate the merge gate.
+
 ## Scheduling strategy
 
 Maximize velocity per token, not just "run agents in parallel":

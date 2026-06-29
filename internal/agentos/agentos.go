@@ -14,11 +14,14 @@
 package agentos
 
 import (
+	"fmt"
 	"io"
 	"os"
 
 	"github.com/spf13/cobra"
 	"mvdan.cc/sh/v3/interp"
+
+	"github.com/qiangli/bashy/skills"
 
 	_ "github.com/qiangli/coreutils/cmds/all"
 	"github.com/qiangli/coreutils/external/act"
@@ -105,6 +108,11 @@ func Dispatch() {
 		cmd := dag.NewDagCmd()
 		cmd.SetArgs(os.Args[2:])
 		os.Exit(dag.ExitCodeOf(cmd.Execute()))
+	case "skills":
+		// Surface the tier-2 workspace skills embedded in the binary (self-
+		// contained — no source tree needed). `bashy skills [list]` lists them;
+		// `bashy skills show <name> [--reference]` prints the content.
+		os.Exit(dispatchSkills(os.Args[2:]))
 	case "go":
 		// Self-provisioning Go toolchain (check → download from go.dev →
 		// sha256-verify → cache → exec). No embedding, no system Go: this is
@@ -235,6 +243,38 @@ func Dispatch() {
 		}
 		os.Exit(0)
 	}
+}
+
+// dispatchSkills implements `bashy skills`: list embedded skills, or print one.
+//
+//	bashy skills [list]
+//	bashy skills show <name> [--reference]
+func dispatchSkills(args []string) int {
+	if len(args) == 0 || args[0] == "list" {
+		for _, n := range skills.Names() {
+			fmt.Println(n)
+		}
+		return 0
+	}
+	if args[0] == "show" && len(args) >= 2 {
+		name := args[1]
+		ref := len(args) > 2 && (args[2] == "--reference" || args[2] == "-r")
+		var body string
+		var ok bool
+		if ref {
+			body, ok = skills.Reference(name)
+		} else {
+			body, ok = skills.Body(name)
+		}
+		if !ok {
+			fmt.Fprintf(os.Stderr, "bashy skills: %q not found\n", name)
+			return 1
+		}
+		fmt.Print(body)
+		return 0
+	}
+	fmt.Fprintln(os.Stderr, "usage: bashy skills [list | show <name> [--reference]]")
+	return 2
 }
 
 // WireExec appends the coreutils ExecHandler so any registered tool resolves
