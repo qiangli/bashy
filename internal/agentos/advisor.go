@@ -77,11 +77,18 @@ type spaceProbe struct {
 type advisor struct {
 	agent bool // agent mode: emit a JSON line instead of human prose
 	probe spaceProbe
+	mem   *memory // accumulated history (the "time" axis); may be nil in tests
+	netfp string  // network fingerprint of the current environment
 }
 
-// newAdvisor builds the advisor with production probes.
+// newAdvisor builds the advisor with production probes and memory.
 func newAdvisor() *advisor {
-	return &advisor{agent: weavecli.IsAgent(), probe: defaultSpaceProbe()}
+	return &advisor{
+		agent: weavecli.IsAgent(),
+		probe: defaultSpaceProbe(),
+		mem:   newMemory(),
+		netfp: networkFingerprint(),
+	}
 }
 
 // advisorEnabled reports whether the advisor should run: on in agent mode, or
@@ -128,10 +135,29 @@ func advisorHandler(a *advisor) func(interp.ExecHandlerFunc) interp.ExecHandlerF
 				return err
 			}
 			status, ok := exitStatusOf(err)
-			if !ok || status == 0 {
-				return err // success (or a non-exit error): say nothing
+			if !ok {
+				return err // a non-exit error (e.g. interrupt): say nothing
 			}
-			if h := a.advise(handlerDir(ctx), args, status); h != nil {
+			key := loopKey(args)
+			if status == 0 {
+				// Success clears the loop counter and records host
+				// reachability under the current network fingerprint, so a
+				// later failure elsewhere can be diagnosed against this memory.
+				if a.mem != nil {
+					a.mem.clearFail(key)
+					if networkTools[baseName(args[0])] {
+						if host := extractNetworkTarget(args); host != "" {
+							a.mem.recordSuccess(host, a.netfp)
+						}
+					}
+				}
+				return err
+			}
+			n := 1
+			if a.mem != nil {
+				n = a.mem.recordFail(key)
+			}
+			if h := applyLoop(a.advise(handlerDir(ctx), args, status), baseName(args[0]), n); h != nil {
 				a.emit(handlerStderr(ctx), args[0], status, h)
 			}
 			return err
@@ -233,12 +259,24 @@ func (a *advisor) adviseNetwork(name string, args []string) *hint {
 	if a.probe.resolveHost(host) {
 		return nil // it resolves from here — not this problem
 	}
-	loc := localityUnknown
-	if a.probe.locality != nil {
-		loc = a.probe.locality()
+	const suggest = "reach it via the tunnel or its public/VPN address; retrying LAN probes (IP scans, mDNS) will keep failing."
+
+	// History upgrade: if we reached this host before from a DIFFERENT network,
+	// the cause is concrete (the machine moved), not a guess.
+	if a.mem != nil && a.netfp != "" {
+		if rec, ok := a.mem.priorSuccess(host); ok && rec.NetFP != "" && rec.NetFP != a.netfp {
+			return &hint{
+				dimension: "network",
+				retryable: false,
+				text: fmt.Sprintf("%q was reachable before from a different network but does not resolve here — this machine has moved off its network.",
+					host),
+				suggest: suggest,
+			}
+		}
 	}
+
 	where := "you may be off its network"
-	if loc == localityRemote {
+	if a.probe.locality != nil && a.probe.locality() == localityRemote {
 		where = "this machine is currently remote (off the LAN)"
 	}
 	return &hint{
@@ -246,7 +284,7 @@ func (a *advisor) adviseNetwork(name string, args []string) *hint {
 		retryable: false,
 		text: fmt.Sprintf("%q looks like a LAN-only address (mDNS/private) and does not resolve from here — %s.",
 			host, where),
-		suggest: "reach it via the tunnel or its public/VPN address; retrying LAN probes (IP scans, mDNS) will keep failing.",
+		suggest: suggest,
 	}
 }
 
