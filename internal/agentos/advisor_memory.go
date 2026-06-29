@@ -253,28 +253,52 @@ func applyLoop(base *hint, cmd string, n int) *hint {
 	return base
 }
 
-// networkFingerprint hashes the machine's current non-loopback subnets into a
-// short, stable identifier. The same Wi-Fi/LAN yields the same fingerprint;
-// moving to another network changes it. Empty on error (history then degrades
+// virtualIfacePrefixes are interface-name prefixes for virtual/overlay devices
+// (containers, VPNs, bridges) whose subnets come and go independently of which
+// physical network the machine is on. Including them would make the fingerprint
+// flap (e.g. a docker bridge toggling) and produce false "moved network" hints,
+// so they are excluded.
+var virtualIfacePrefixes = []string{
+	"docker", "br-", "veth", "virbr", "vmnet", "vboxnet", "tun", "tap", "utun",
+	"wg", "tailscale", "zt", "ham", "cni", "flannel", "calico", "kube",
+}
+
+// networkFingerprint hashes the machine's current physical-network subnets into
+// a short, stable identifier. The same Wi-Fi/LAN yields the same fingerprint;
+// moving to another network changes it. Loopback, link-local, down, and virtual
+// (container/VPN/bridge) interfaces are excluded so the signal tracks the real
+// network, not transient overlays. Empty on error (history then degrades
 // gracefully to the live-probe hint).
 func networkFingerprint() string {
-	addrs, err := net.InterfaceAddrs()
+	ifaces, err := net.Interfaces()
 	if err != nil {
 		return ""
 	}
 	var nets []string
-	for _, a := range addrs {
-		ipn, ok := a.(*net.IPNet)
-		if !ok {
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
 			continue
 		}
-		ip := ipn.IP
-		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		if isVirtualIface(iface.Name) {
 			continue
 		}
-		// Mask to the network so per-host bits don't perturb the fingerprint.
-		network := net.IPNet{IP: ip.Mask(ipn.Mask), Mask: ipn.Mask}
-		nets = append(nets, network.String())
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			ipn, ok := a.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			ip := ipn.IP
+			if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+				continue
+			}
+			// Mask to the network so per-host bits don't perturb the print.
+			network := net.IPNet{IP: ip.Mask(ipn.Mask), Mask: ipn.Mask}
+			nets = append(nets, network.String())
+		}
 	}
 	if len(nets) == 0 {
 		return ""
@@ -282,4 +306,14 @@ func networkFingerprint() string {
 	sort.Strings(nets)
 	sum := sha256.Sum256([]byte(strings.Join(nets, ",")))
 	return hex.EncodeToString(sum[:8])
+}
+
+func isVirtualIface(name string) bool {
+	lower := strings.ToLower(name)
+	for _, p := range virtualIfacePrefixes {
+		if strings.HasPrefix(lower, p) {
+			return true
+		}
+	}
+	return false
 }

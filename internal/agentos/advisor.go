@@ -31,6 +31,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,34 +44,29 @@ import (
 // "loom-v2" envelope; kept distinct because this is a different shape).
 const adviceSchemaVersion = "bashy-advice-v1"
 
-// localityVerdict is the coarse network-location signal. It only flavors the
-// network hint's wording; the trigger itself uses the concrete per-target
-// resolvability probe, which is far more reliable than abstract locality.
-type localityVerdict string
-
-const (
-	localityHomeLAN localityVerdict = "home-lan"
-	localityRemote  localityVerdict = "remote"
-	localityUnknown localityVerdict = "unknown"
-)
-
 // spaceProbe holds the (injectable) sensors of the ambient environment, so the
 // pattern library is unit-testable without touching the real host. Production
 // wiring is defaultSpaceProbe(); tests substitute their own funcs.
+//
+// Note there is deliberately no abstract "home-lan vs remote" locality sensor:
+// a private IP is given out by coffee-shop Wi-Fi too, so absolute locality is
+// not reliably knowable on the host. The honest, concrete signals are whether a
+// specific target resolves (resolveHost) and whether the network fingerprint
+// matches where the host was last reached (see advisor_memory.go) — those carry
+// the network dimension without guessing.
 type spaceProbe struct {
 	// resolveHost reports whether host resolves to an address from here.
 	resolveHost func(host string) bool
 	// diskFor returns free bytes and read-only state for the filesystem
 	// backing dir (ok=false when unknown / unsupported platform).
 	diskFor func(dir string) (freeBytes uint64, readOnly bool, ok bool)
-	// availRAM returns available memory in bytes (ok=false when unknown).
+	// availRAM returns available memory in bytes (ok=false when unknown /
+	// unsupported platform — currently Linux via /proc/meminfo).
 	availRAM func() (uint64, bool)
 	// pathExists reports whether name exists relative to dir.
 	pathExists func(dir, name string) bool
 	// repoRoot returns the VCS top-level at or above dir, if any.
 	repoRoot func(dir string) (string, bool)
-	// locality is the coarse network-location verdict.
-	locality func() localityVerdict
 }
 
 // advisor is the configured supervisor instance.
@@ -91,17 +87,18 @@ func newAdvisor() *advisor {
 	}
 }
 
-// advisorEnabled reports whether the advisor should run: on in agent mode, or
-// opt-in for humans via BASHY_ADVISOR (anything but empty/"0"/"false").
+// advisorEnabled reports whether the advisor should run. BASHY_ADVISOR is the
+// explicit control: an off-ish value ("0"/"false"/"off"/"no") force-disables it
+// even in agent mode; an on-ish value force-enables it. Unset, it defaults on
+// in agent mode and off for interactive humans.
 func advisorEnabled() bool {
-	if weavecli.IsAgent() {
+	switch strings.ToLower(os.Getenv("BASHY_ADVISOR")) {
+	case "0", "false", "off", "no":
+		return false // explicit off wins, even under DHNT_AGENT
+	case "1", "true", "on", "yes":
 		return true
 	}
-	switch strings.ToLower(os.Getenv("BASHY_ADVISOR")) {
-	case "", "0", "false", "off", "no":
-		return false
-	}
-	return true
+	return weavecli.IsAgent()
 }
 
 // hint is one piece of advice for a failed command.
@@ -275,15 +272,11 @@ func (a *advisor) adviseNetwork(name string, args []string) *hint {
 		}
 	}
 
-	where := "you may be off its network"
-	if a.probe.locality != nil && a.probe.locality() == localityRemote {
-		where = "this machine is currently remote (off the LAN)"
-	}
 	return &hint{
 		dimension: "network",
 		retryable: false,
-		text: fmt.Sprintf("%q looks like a LAN-only address (mDNS/private) and does not resolve from here — %s.",
-			host, where),
+		text: fmt.Sprintf("%q looks like a LAN-only address (mDNS/private) and does not resolve from here — you may be off its network.",
+			host),
 		suggest: suggest,
 	}
 }
@@ -471,11 +464,10 @@ func extractNetworkTarget(args []string) string {
 func defaultSpaceProbe() spaceProbe {
 	return spaceProbe{
 		resolveHost: defaultResolveHost,
-		diskFor:     probeDisk, // platform files: advisor_unix.go / advisor_other.go
-		availRAM:    probeRAM,  // platform files
+		diskFor:     probeDisk, // advisor_unix.go / advisor_other.go
+		availRAM:    probeRAM,  // advisor_ram_linux.go / advisor_ram_other.go
 		pathExists:  defaultPathExists,
 		repoRoot:    defaultRepoRoot,
-		locality:    func() localityVerdict { return localityUnknown },
 	}
 }
 
@@ -484,6 +476,29 @@ func defaultResolveHost(host string) bool {
 	defer cancel()
 	addrs, err := net.DefaultResolver.LookupHost(ctx, host)
 	return err == nil && len(addrs) > 0
+}
+
+// parseMemAvailable extracts the MemAvailable value (in bytes) from the bytes
+// of a /proc/meminfo file. The line is "MemAvailable:   <N> kB". Kept here
+// (untagged) so it is unit-testable on any platform; only the Linux probeRAM
+// calls it. Returns ok=false if the field is absent or malformed.
+func parseMemAvailable(meminfo []byte) (uint64, bool) {
+	for line := range strings.SplitSeq(string(meminfo), "\n") {
+		rest, found := strings.CutPrefix(line, "MemAvailable:")
+		if !found {
+			continue
+		}
+		fields := strings.Fields(rest) // e.g. ["1234567", "kB"]
+		if len(fields) == 0 {
+			return 0, false
+		}
+		kb, err := strconv.ParseUint(fields[0], 10, 64)
+		if err != nil {
+			return 0, false
+		}
+		return kb * 1024, true
+	}
+	return 0, false
 }
 
 func defaultPathExists(dir, name string) bool {

@@ -18,14 +18,12 @@ func healthyProbe() spaceProbe {
 		availRAM:    func() (uint64, bool) { return 0, false },
 		pathExists:  func(string, string) bool { return true },
 		repoRoot:    func(string) (string, bool) { return "/repo", true },
-		locality:    func() localityVerdict { return localityHomeLAN },
 	}
 }
 
-func TestAdviseNetworkHostGoneRemote(t *testing.T) {
+func TestAdviseNetworkHostUnresolvable(t *testing.T) {
 	p := healthyProbe()
 	p.resolveHost = func(string) bool { return false } // .local no longer resolves
-	p.locality = func() localityVerdict { return localityRemote }
 	a := &advisor{probe: p}
 
 	h := a.advise("/repo", []string{"ssh", "user@host.local"}, 255)
@@ -36,7 +34,7 @@ func TestAdviseNetworkHostGoneRemote(t *testing.T) {
 		t.Errorf("dimension = %q, want network", h.dimension)
 	}
 	if h.retryable {
-		t.Error("a LAN route while remote must be retryable=false")
+		t.Error("a LAN route that won't resolve must be retryable=false")
 	}
 	if !strings.Contains(h.text, "host.local") {
 		t.Errorf("hint should name the target: %q", h.text)
@@ -179,6 +177,68 @@ func TestExtractNetworkTarget(t *testing.T) {
 	for _, tt := range tests {
 		if got := extractNetworkTarget(tt.args); got != tt.want {
 			t.Errorf("extractNetworkTarget(%v) = %q, want %q", tt.args, got, tt.want)
+		}
+	}
+}
+
+func TestAdviseComputeReportsRAM(t *testing.T) {
+	// When availRAM is known, the OOM hint includes the figure.
+	p := healthyProbe()
+	p.availRAM = func() (uint64, bool) { return 512 << 20, true } // 512 MiB
+	a := &advisor{probe: p}
+	h := a.advise("/repo", []string{"go", "test", "./..."}, 137)
+	if h == nil || h.dimension != "compute" {
+		t.Fatalf("expected compute hint, got %+v", h)
+	}
+	if !strings.Contains(h.text, "512.0 MB") {
+		t.Errorf("hint should report available RAM: %q", h.text)
+	}
+}
+
+func TestParseMemAvailable(t *testing.T) {
+	meminfo := []byte("MemTotal:       16331868 kB\nMemFree:          123456 kB\nMemAvailable:    2097152 kB\nBuffers:           1000 kB\n")
+	got, ok := parseMemAvailable(meminfo)
+	if !ok {
+		t.Fatal("expected MemAvailable to parse")
+	}
+	if want := uint64(2097152) * 1024; got != want {
+		t.Errorf("parseMemAvailable = %d, want %d", got, want)
+	}
+	if _, ok := parseMemAvailable([]byte("MemTotal: 100 kB\n")); ok {
+		t.Error("missing MemAvailable should yield ok=false")
+	}
+	if _, ok := parseMemAvailable([]byte("MemAvailable: notanumber kB\n")); ok {
+		t.Error("malformed MemAvailable should yield ok=false")
+	}
+}
+
+func TestIsVirtualIface(t *testing.T) {
+	virtual := []string{"docker0", "br-abc123", "veth1234", "utun3", "tailscale0", "wg0", "vmnet8"}
+	real := []string{"en0", "eth0", "wlan0", "enp3s0"}
+	for _, n := range virtual {
+		if !isVirtualIface(n) {
+			t.Errorf("isVirtualIface(%q) = false, want true", n)
+		}
+	}
+	for _, n := range real {
+		if isVirtualIface(n) {
+			t.Errorf("isVirtualIface(%q) = true, want false", n)
+		}
+	}
+}
+
+func TestAdvisorEnabledControl(t *testing.T) {
+	t.Setenv("DHNT_AGENT", "") // ensure agent mode is not implied by env
+	for _, v := range []string{"0", "false", "off", "no"} {
+		t.Setenv("BASHY_ADVISOR", v)
+		if advisorEnabled() {
+			t.Errorf("BASHY_ADVISOR=%q should disable the advisor", v)
+		}
+	}
+	for _, v := range []string{"1", "true", "on", "yes"} {
+		t.Setenv("BASHY_ADVISOR", v)
+		if !advisorEnabled() {
+			t.Errorf("BASHY_ADVISOR=%q should enable the advisor", v)
 		}
 	}
 }

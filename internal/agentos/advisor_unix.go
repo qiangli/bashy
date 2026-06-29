@@ -20,11 +20,3 @@ func probeDisk(dir string) (freeBytes uint64, readOnly bool, ok bool) {
 	ro := st.Flags&1 != 0
 	return free, ro, true
 }
-
-// probeRAM is best-effort: reliable available-memory accounting differs per
-// unix and would need cgo or /proc parsing. The compute hint already fires on
-// the strong exit-137 signal, so returning unknown here just omits the byte
-// count from the message.
-func probeRAM() (uint64, bool) {
-	return 0, false
-}

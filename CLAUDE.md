@@ -69,6 +69,14 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
   `NewManagedOllamaCmd` — isolated daemon, own port/models; plus `bashy
   act-runner`, `loom`, `zot`, `seaweedfs`, `kopia`). Imported only by `cmd/bashy`,
   so the lean `bash` binary never links any of it.
+  - `internal/agentos/advisor*.go` — the **space-time advisor**: a non-intrusive
+    post-exec `ExecHandler` middleware that, only when a command fails, appends one
+    advisory hint explaining a space-determined failure (wrong cwd, host gone
+    remote, OOM, full/read-only disk) so an agent stops the doomed retry loop. Has
+    its own memory (per-session doomed-loop counter + a persisted host-success
+    ledger keyed by a network fingerprint). Agent-mode/`BASHY_ADVISOR` gated, off
+    in `--posix`, never linked into `cmd/bash`. Self-contained — depends on no
+    other feature. See `docs/space-time-advisor.md`.
   - **Embed tags:** the `Makefile` adds `-tags embed_podman/embed_vfkit/
     embed_gvproxy` to the `cmd/bashy` build for whichever
     `../coreutils/external/podman/engine/*_embed/*.gz` blobs exist (built by
@@ -224,6 +232,7 @@ itself, which is pure Go).
 - `scope-jobcontrol-fc-behaviors.md` — feasibility scoping of the remaining POSIX-mode job-control (#23–27,#49) + fc (#54–57) behaviors: TRACTABLE vs VERIFY vs CEILING, with the next two-issue fleet round.
 - `plan-dynvar.md`, `plan-error-format-pass.md`, `plan-punted-builtins.md` — scoped sub-plans for specific clusters of fixture failures.
 - `json-output.md` — bashy's opt-in `set --json` / `declare --json` structured-output extensions.
+- `space-time-advisor.md` — the shipped space-time advisor: non-intrusive error-time hints (cwd/network/compute/disk + doomed-loop + network-fingerprint host memory) that steer agentic tools off doomed retries. Self-contained feature doc (dimensions, env vars, `bashy-advice-v1` JSON schema, scope/non-goals).
 - `bash.md`, `agentic-extensions.md` — background references, not active plans.
 
 POSIX-conformance frontier (the active layer now that bash-5.3 is 86/86 — driven via `suites.md` + `DAG.md`):
