@@ -120,12 +120,32 @@ same flat sibling. Keep the sibling SHAs coordinated; the umbrella's
 
 ```sh
 make build              # -> bin/bash (pure drop-in, cmd/bash) + bin/bashy (AgentOS, cmd/bashy) — two independent binaries
+make build-host         # full unix host build (= BASHY_ENGINES=1 BASHY_OBS=1 + embed blobs)
 make test               # go test ./...
-make test-bash          # drive bin/bash against bash's own 5.3 test suite
-make test-bash-list     # list available fixtures
+make test-bash          # drive bin/bash against bash's own 5.3 test suite (serial)
+make test-bash-parallel # same suite fanned out across cores — the canonical 86/86 gate
+make test-bash-list     # list available fixtures with per-fixture PASS/FAIL/TIME/SKIP
 make dist               # cross-compile static binaries for all 6 platforms
 make tidy               # go mod tidy + gofmt -s -w . + go vet ./...
 ```
+
+Beyond the bash-5.3 fixture gate, the broader conformance matrix (engine
+unit tests, POSIX-mode parity, the XCU/Oils/Austin/multi-shell differentials,
+and the yash POSIX scoreboard) is driven via the `bashy dag` task runner — the
+agent-first dogfood of the Makefile:
+
+```sh
+bashy dag suites.md -j8 -k          # whole conformance matrix in parallel (-k: don't halt on first failure)
+bashy dag suites.md test-bash yash  # a subset of suites
+bashy dag --list                    # what `make help` shows, as DAG targets (see DAG.md)
+bashy dag --json test               # machine-readable envelope for an agent
+```
+
+`suites.md` and `DAG.md` are literate task files: each `###` heading is a
+target with `Requires:`/`Sources:`/`Effects:` metadata, run in topological
+order through the in-process shell. `suites.md` is the conformance matrix
+(only `test-bash` is a hard 0/1 gate; the differentials are INFO probes);
+`DAG.md` mirrors the Makefile's build/test/lint targets.
 
 Under finer-grained `go`:
 
@@ -153,11 +173,15 @@ unchecked item. After completing it, check it off, run `go test ./...` and
 
 The goal is **PASS-count flips**: `make test-bash-list` prints per-fixture
 PASS/FAIL/TIME/SKIP, and the headline three-tuple at the top of `docs/TODO.md`
-(currently `72 passing, 4 failing, 11 skipped`) is the scoreboard. A change
+is the scoreboard. As of 2026-06 the bash-5.3 fixture suite is at **86 passing,
+0 failing, 0 skipped (100% of 86 measured fixtures)** — so the active frontier
+has shifted to the broader POSIX-conformance matrix in `suites.md` (the yash
+POSIX scoreboard is the headline conformance-frontier metric there). A change
 that flips a fixture FAIL → PASS without regressing anything else is worth
 shipping; cleanup that doesn't move the count isn't the priority. Most flips
 require a change in `../sh` (interp/expand/syntax) plus, sometimes, the CLI
-glue here.
+glue here. Always re-read the live headline in `docs/TODO.md` rather than
+trusting any count quoted here.
 
 **Scoreboard reliability.** `make test-bash` is unreliable when the ycode
 shell wrapper shadows `sh` in `PATH` (see the gotcha above). To measure
@@ -201,6 +225,13 @@ itself, which is pure Go).
 - `plan-dynvar.md`, `plan-error-format-pass.md`, `plan-punted-builtins.md` — scoped sub-plans for specific clusters of fixture failures.
 - `json-output.md` — bashy's opt-in `set --json` / `declare --json` structured-output extensions.
 - `bash.md`, `agentic-extensions.md` — background references, not active plans.
+
+POSIX-conformance frontier (the active layer now that bash-5.3 is 86/86 — driven via `suites.md` + `DAG.md`):
+
+- `plan-posix-conformance.md` — plan of record for the POSIX-mode conformance push (the differential suites + yash scoreboard).
+- `conformance-statement.md` — the standing conformance claim; `shell-conformance-comparison.md` / `cross-shell-conformance-baseline.md` — bashy vs other shells.
+- `posix-mode-behaviors.md` — catalogued `--posix` behaviors; `builtin-vs-external-conformance.md` — builtin/external divergence notes.
+- `posix-cert-handoff-runbook.md`, `posix-cert-preflight-status.md`, `fidelity-ceiling-assessment.md` — VSC-PCTS certification runbook + status + the hard-ceiling assessment.
 
 Per-fixture cluster analyses + blocker ledgers (snapshots — diff line-counts and PASS/FAIL claims in them are dated, re-measure before trusting):
 
