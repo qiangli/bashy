@@ -49,19 +49,69 @@ func newNudger(mem *memory) *nudger {
 }
 
 // onAudit is the [interp.WithAuditHandler] callback. It fires once per simple
-// command (post-expansion); we act only on watched builtins, once per session.
+// command (post-expansion); we act only on watched tools, once per session.
+// Builtins (cd/pushd/popd) get the awd nudge; external search tools (grep/find)
+// get an argv-conditioned routing hint toward --agentic / the yc code-intel verbs.
 func (n *nudger) onAudit(ev interp.AuditEvent) {
-	if !ev.IsBuiltin || len(ev.Args) == 0 {
+	if len(ev.Args) == 0 {
 		return
 	}
-	suggest, ok := nudgeRules[ev.Args[0]]
-	if !ok {
+	name := ev.Args[0]
+	var suggest string
+	if ev.IsBuiltin {
+		suggest = nudgeRules[name]
+	} else {
+		suggest = routingHint(name, ev.Args)
+	}
+	if suggest == "" {
 		return
 	}
-	if n.mem != nil && !n.mem.firstHint("builtin:"+ev.Args[0]) {
+	if n.mem != nil && !n.mem.firstHint("nudge:"+name) {
 		return // already nudged for this tool this session
 	}
-	n.emit(ev.Args[0], suggest)
+	n.emit(name, suggest)
+}
+
+// routingHint suggests a faster/structural path for legacy search tools, based
+// only on the argv (no behavior change). Empty when there's nothing to suggest.
+func routingHint(name string, args []string) string {
+	switch name {
+	case "grep":
+		if hasArg(args, "--agentic") || !hasRecursiveFlag(args) {
+			return ""
+		}
+		return "repo-wide grep also walks ignored noise (node_modules/.git/vendor). Add `--agentic` to skip it, or use `yc refs <symbol>` / `yc repomap` for structural, token-budgeted code search."
+	case "find":
+		if hasArg(args, "--agentic") {
+			return ""
+		}
+		return "find walks ignored directories too. Add `--agentic` to skip .gitignore/node_modules, or use `yc symbols` / `yc repomap` to map the codebase."
+	}
+	return ""
+}
+
+func hasArg(args []string, want string) bool {
+	for _, a := range args[1:] {
+		if a == want {
+			return true
+		}
+	}
+	return false
+}
+
+// hasRecursiveFlag reports whether grep was asked to recurse (-r/-R, long forms,
+// or a combined short cluster like -rn).
+func hasRecursiveFlag(args []string) bool {
+	for _, a := range args[1:] {
+		switch a {
+		case "-r", "-R", "--recursive", "--dereference-recursive":
+			return true
+		}
+		if len(a) > 1 && a[0] == '-' && a[1] != '-' && strings.ContainsAny(a, "rR") {
+			return true
+		}
+	}
+	return false
 }
 
 // nudgeLine is the agent-mode JSON shape (one line on stderr).

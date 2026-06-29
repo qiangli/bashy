@@ -73,6 +73,45 @@ func TestNudgeHumanModeProse(t *testing.T) {
 	}
 }
 
+func TestRoutingHintGrepFind(t *testing.T) {
+	// grep -r → routing hint; grep without recursion or with --agentic → none.
+	if routingHint("grep", []string{"grep", "-r", "foo", "."}) == "" {
+		t.Error("recursive grep should get a routing hint")
+	}
+	if routingHint("grep", []string{"grep", "-rn", "foo", "."}) == "" {
+		t.Error("combined -rn should count as recursive")
+	}
+	if routingHint("grep", []string{"grep", "foo", "file"}) != "" {
+		t.Error("non-recursive grep should get no hint")
+	}
+	if routingHint("grep", []string{"grep", "-r", "--agentic", "foo", "."}) != "" {
+		t.Error("grep already using --agentic should get no hint")
+	}
+	// find → hint unless already --agentic.
+	if routingHint("find", []string{"find", ".", "-name", "x"}) == "" {
+		t.Error("find should get a routing hint")
+	}
+	if routingHint("find", []string{"find", ".", "--agentic"}) != "" {
+		t.Error("find already using --agentic should get no hint")
+	}
+	if routingHint("ls", []string{"ls", "-r"}) != "" {
+		t.Error("unrelated tools get no routing hint")
+	}
+}
+
+func TestRoutingHintEmittedViaAudit(t *testing.T) {
+	n, buf := newTestNudger(t, true)
+	n.onAudit(interp.AuditEvent{IsBuiltin: false, Args: []string{"grep", "-r", "x", "."}})
+	if !strings.Contains(buf.String(), "yc refs") {
+		t.Errorf("expected a grep routing hint mentioning yc, got %q", buf.String())
+	}
+	// rate-limited once per session
+	n.onAudit(interp.AuditEvent{IsBuiltin: false, Args: []string{"grep", "-r", "y", "."}})
+	if strings.Count(buf.String(), "\n") != 1 {
+		t.Error("grep routing hint should fire once per session")
+	}
+}
+
 func TestHintsEnabledControl(t *testing.T) {
 	t.Setenv("DHNT_AGENT", "")
 	// BASHY_AGENTIC master kill beats everything.

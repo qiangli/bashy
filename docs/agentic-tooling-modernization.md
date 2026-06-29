@@ -170,6 +170,15 @@ token tax.
 - `ifconfig`/`netstat` → `ip`/`ss` (and they'd feed the advisor's network
   dimension).
 
+## Shipped
+
+- **`awd` builtin** (sh, gated) — ephemeral alter-working-directory.
+- **Nudge subsystem** (bashy) — reactive advisor + proactive `cd`/`pushd`→`awd`
+  hints, shared session memory, rate-limited, `BASHY_AGENTIC`/`BASHY_HINTS` off-switches.
+- **Opt-in `--agentic` search** (coreutils `grep`/`find`) — `.gitignore` + noise-dir
+  filter via `pkg/ignore`, stderr transparency line, byte-identical without the flag;
+  plus a `grep -r`/`find` → `--agentic`/`yc refs`/`yc repomap` routing nudge.
+
 ## Prioritized shortlist
 
 1. **`awd` builtin** — smallest, highest daily value; closes the loop with the
