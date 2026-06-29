@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"mvdan.cc/sh/v3/interp"
@@ -45,12 +46,40 @@ import (
 )
 
 // Preamble returns shell source defining AgentOS default functions, registered
-// before user startup files (so they can be overridden in an rc). Currently a
-// `docker` shim routing to the managed, isolated `bashy podman` engine — so
-// `docker …` works with no Docker Desktop / system docker on the node. `command`
-// bypasses the function itself so the external bashy binary (on PATH) is run.
+// before user startup files (so they can be overridden in an rc). It is the
+// `docker` → `bashy podman` shim plus bare-name shims for the front-door verbs,
+// so `weave …`, `schedule …`, `gh …` work without the `bashy ` prefix. `command`
+// bypasses the function so the external bashy binary runs (no recursion).
+//
+// Shadowing policy (a function shadows a same-named PATH binary):
+//   - Native verbs + identical drop-in passthroughs (which provision/exec the
+//     real tool, +extras) shadow ALWAYS.
+//   - Version-sensitive provisioners (go/cmake/clang) shadow ONLY in agent mode,
+//     where auto-provisioning + loud errors help; a human's installed toolchain
+//     wins in a regular shell. Reach bashy's explicitly with `bashy go …`.
+//   - `time` (a bash keyword) and the job-control builtins (jobs/fg/bg/kill) are
+//     never shimmed.
+//
+// Every shim is overridable: `unset -f <name>` (or redefine it) falls back to
+// PATH, and a specific on-disk binary is always reachable by absolute path
+// (e.g. /usr/local/bin/gh).
 func Preamble() string {
-	return `docker() { command bashy podman "$@"; }`
+	var b strings.Builder
+	b.WriteString(`docker() { command bashy podman "$@"; }` + "\n")
+	always := []string{
+		"weave", "sprint", "dag", "schedule", "secrets", "skills",
+		"gh", "act", "rclone", "podman", "ollama",
+		"loom", "zot", "seaweedfs", "kopia", "mirror",
+	}
+	for _, v := range always {
+		fmt.Fprintf(&b, "%s() { command bashy %s \"$@\"; }\n", v, v)
+	}
+	if weavecli.IsAgent() {
+		for _, v := range []string{"go", "cmake", "clang"} {
+			fmt.Fprintf(&b, "%s() { command bashy %s \"$@\"; }\n", v, v)
+		}
+	}
+	return b.String()
 }
 
 // Dispatch handles AgentOS front-door subcommands that are not shell scripts —

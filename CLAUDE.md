@@ -77,6 +77,13 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
     ledger keyed by a network fingerprint). Agent-mode/`BASHY_ADVISOR` gated, off
     in `--posix`, never linked into `cmd/bash`. Self-contained — depends on no
     other feature. See `docs/space-time-advisor.md`.
+  - **Bare-name verb shims** (`Preamble()`): front-door verbs are exposed without
+    the `bashy ` prefix via overridable shell functions (`weave(){ command bashy
+    weave "$@"; }`, …). Shadowing policy: native verbs + identical drop-in
+    passthroughs (gh/act/rclone/podman/ollama/loom/zot/seaweedfs/kopia/mirror)
+    always shimmed; version-sensitive provisioners (go/cmake/clang) only in agent
+    mode; `time` (keyword) and jobs/fg/bg/kill (builtins) never. Override with
+    `unset -f <name>`; reach a specific binary by absolute path.
   - **Embed tags:** the `Makefile` adds `-tags embed_podman/embed_vfkit/
     embed_gvproxy` to the `cmd/bashy` build for whichever
     `../coreutils/external/podman/engine/*_embed/*.gz` blobs exist (built by
