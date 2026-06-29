@@ -182,6 +182,13 @@ token tax.
   (default/`-p`/`-v`/`-f`/`-o`/`-a`), coexists with the bash `time` keyword (reach
   via `command time`/`\time`); agentic `--budget DUR --todo TEXT` surfaces a TODO
   (JSON in agent mode) when a step overruns. Conductor self-dependency.
+- **`sed`** (coreutils `cmds/sed`) — GNU sed drop-in. Engine vendored from
+  rwtodd/Go.Sed (MIT, `internal/gosed`) — full command set (s/y/d/p/n/N/D/P/
+  hold-space/branching/a/i/c/ranges) — adapted for GNU semantics: patterns via
+  `pkg/bre` (BRE default, ERE under `-E/-r` — same translator as grep), `s///`
+  with GNU `\1`/`&` replacements + `i`/`m` flags, `-n/-e/-f/-i[SUFFIX]/-s`.
+  Pattern back-refs / `\<\>` fail loudly (RE2 can't express them). The BRE
+  translator was extracted from grep into shared `pkg/bre`.
 - **`bashy schedule`** (coreutils `pkg/schedule`) — modern cron (`--cron` via
   robfig/cron, `--every`, `--at`) with a JSON store + `daemon`/`tick`; agentic
   `--prompt`/`--context` delivered to the fired command as `BASHY_SCHEDULE_*`, so
