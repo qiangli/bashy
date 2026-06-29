@@ -1,0 +1,317 @@
+---
+name: conductor
+description: >-
+  Conduct a fleet of agentic coding CLIs (claude, codex, opencode, aider, …) to
+  reach a VERIFIED goal — decompose → isolate → gate → converge, looping until a
+  verifier passes — acting as the single conductor over `bashy sprint`
+  (plan/continuity) and `bashy weave` (per-repo isolated execution). Use when a
+  goal decomposes into many independent, gateable units: a deterministic failing
+  test suite (the canonical case), a port/migration, a broad mechanical refactor,
+  a conformance push, a coverage drive — with a fast repro and a regression guard
+  to protect. NOT for a one- or two-edit fix (do it inline) or a goal with no
+  way to verify "done" (define a gate, or stabilize a flaky suite, first).
+---
+
+# conductor — drive a fleet of agent CLIs to a verified goal
+
+You are the **conductor**. You never write the fix. You read the goal, set the
+contract, decompose, file stories, build the isolation + gates, launch and
+monitor the fleet, salvage killed runs, gate every merge, and iterate. The agents
+do all analysis and code; you own the *loop* and the *truth*.
+
+**One principle governs everything: the queue and the measured numbers are the
+only truth.** A worker's prose or commit message is a lead until the gate
+reproduces it. Echo measured numbers verbatim; never accept "submitted" as
+"done" — re-measure against the goal.
+
+This file is the actionable checklist. The full narrative — the four isolation
+traps in depth, convergence details, and two worked campaigns — lives in the
+bundled `reference.md`; read it before your first campaign.
+
+## The goal is the contract
+
+A conductor run is **done** iff three checks hold — the *same* contract for every
+tool, so a strong model, a weak model, and a deterministic runner are all judged
+identically and results converge regardless of who did the work:
+
+1. **goal-met** — the goal verifier exits 0. The verifier is whatever proves the
+   goal: `go test ./...` / a target test suite green / `make`, a linter, a custom
+   gate, or (default) "all queued work merged". For goals with no exit-coded
+   check ("the docs read clearly", "the refactor is simpler"), use **judge mode**
+   (below) — a model verdict, defaulting to "not met" when unsure.
+2. **converged** — no open/unmerged work remains in the queue.
+3. **reviewed** — an *independent* post-convergence check passes (a regression
+   gate, so a merged combination that breaks the tree is caught before accept;
+   defaults to re-running the goal verifier on the merged tree).
+
+"Until done" means you re-invoke the conductor until all three pass — there is no
+loop construct, the contract *is* the loop condition. An unmet goal is **not a
+crash**: surface the failing checks as **blockers**, record them in the
+continuity note, and exit cleanly. Each run makes progress; you re-invoke to
+continue.
+
+## Effect cap (blast radius)
+
+A conductor run may **read, write, reach the network, spend tokens, and burn
+wall-clock** — and **must not destroy**: no `git add -A`, no `rm -rf`, no force
+push, no dependency-pin/submodule bump without explicit human OK. The fleet
+writes inside isolated workspaces; convergence is a sequential, gated, reviewable
+merge. Keep the blast radius bounded by construction, not vigilance.
+
+## Preconditions (verify before starting)
+
+1. A goal with a **measurable acceptance** you can name, run, and score
+   (per-case pass/fail for a suite; an exit-coded gate otherwise).
+2. A **fast single-unit repro** against the built artifact, runnable in a
+   workspace with no heavy infra. If absent, BUILD IT FIRST — it is the biggest
+   multiplier on agent throughput.
+3. A **regression guard** — what must not break (the same suite's passing cases,
+   a second suite, or a smoke gate).
+4. Enough independent units that decomposition beats inline fixing.
+
+## Hierarchy (the vocabulary)
+
+**Campaign → Sprint → Story → Run**
+
+- **Campaign** — the durable goal; acceptance is one measured predicate; spans
+  many sprints; carries a continuity record + a single conductor lease. Anchor:
+  `bashy sprint` epic + baton.
+- **Sprint** — one bounded gated pass (backlog → fleet → gate → converge), each
+  re-baselined on the prior's merged result. Anchor: a `bashy sprint` card.
+- **Story** — one independently-deliverable, root-cause-coherent unit with its
+  own target acceptance + verify gate; scope-disjoint from siblings. Anchor: a
+  `bashy weave` issue.
+- **Run** — one execution of a story by one tool in one isolated workspace; a
+  story may take several runs (reassign / re-drive / salvage). Anchor: a `bashy
+  weave start`.
+
+Invariant at every level: an *acceptance* (measured predicate) + a *gate* (the
+command that decides it); done only on a reproduced measurement; convergence
+always ends with a **re-measure on the merged tree**.
+
+## The phase loop
+
+PLAN → (RESEARCH) → FAN-OUT → STEER → CONVERGE → RETRO. Drive it by hand with
+`bashy weave` / `bashy sprint`:
+
+1. **PLAN** — decompose the goal into disjoint-scope stories, file them in the
+   queue (`bashy weave add … --priority p0`). Optional cheap-agent estimates.
+2. **RESEARCH** *(only when complex)* — if the queue is large, research
+   approaches / prior-art / risks first. Simple goals skip it.
+3. **FAN-OUT** *(routed by parallel-safety — see Scheduling)* — fan out to a
+   **fleet** (one agent per story, isolated workspaces) **only when the work is
+   many AND disjoint**; a single story or shared-source work routes to
+   **sequential** (one worker grinding + resuming).
+4. **STEER** — watch and unblock, proactively: `bashy weave list`, `… log N`,
+   inject keystrokes with `bashy weave say N "<msg>"`. Judge each worker against
+   the GOAL, not its state — a `submitted`/exited worker has often done only part
+   (headless tools especially exit after a couple of easy fixes, often
+   uncommitted). Re-measure before trusting "submitted"; resume with an
+   explicitly-iterative prompt (measure → fix next cluster → gate → commit →
+   repeat) until the goal holds or each remainder is a documented blocker.
+5. **CONVERGE** — wait, then merge **verified** work back: `bashy weave wait`
+   then `bashy weave pull`; re-run the goal verifier on the merged tree by hand
+   before trusting it.
+6. **RETRO** — capture the tool report card (which CLI did well on what) + any
+   lessons; embed bisect findings into the next round's story bodies. This is
+   what makes the conductor improve across runs, not just within one.
+
+## Scheduling strategy
+
+Maximize velocity per token, not just "run agents in parallel":
+
+1. **Route by parallel-safety, not scale.** Fleet *only when* tasks are many AND
+   disjoint (non-overlapping source). A single task, or any set sharing an
+   implementation, runs **sequentially**. Parallel agents on shared code each
+   rewrite the same functions differently and **collide irreconcilably at merge**
+   — costing more than one agent doing it in sequence. A flip-in-isolation is not
+   a flip-when-integrated.
+2. **Assign by capability.** Strongest-fit tool per story (the RETRO report
+   card): deep multi-file → strongest model; tightly-pinned surgical edit →
+   one-shot tool; verification/judging → a separate reviewer. Pick the *cheapest
+   qualified* tool that clears the story's difficulty; cascade up on
+   stuck/regression.
+3. **Hard single-feature task = sequential grind with resume.** Decompose into
+   bite-size, commit each reduction, resume until done (e.g. 143→32→10→0). Agents
+   often hit the watchdog mid-work with an *uncommitted* fix — recover it and
+   resume; don't discard.
+4. **Race, don't merge, competing attempts.** To explore approaches to one hard
+   problem, run agents in separate workspaces and take the single **furthest**
+   result — never merge two independent attempts at the same feature.
+5. **Gate every merge on the FULL guard, not the per-task measure.** A task can
+   pass its own gate while breaking a sibling that shares code (CONVERGE/REVIEW
+   exist for exactly this).
+
+## Staffing — pick the conductor and the fleet (before the loop)
+
+Staff both **objectively** (don't guess who's good) under a standing **human
+override** (any human may pin/force/exclude any choice).
+
+- **The conductor** — the one durably-assigned role; needs *orchestration*
+  competence (decompose, gate, salvage, judge evidence, never trust "submitted"),
+  a scarcer skill than writing a fix. Qualify it harder: run a candidate as a
+  trial conductor on a small real multi-issue round and score **convergence + a
+  clean gate** (the same predicate the campaign uses); a tool that can't drive a
+  round to green fails the bar even if it writes code. One conductor holds the
+  lease (`bashy weave baton take --as <you>` / `bashy sprint take`); re-write the
+  baton/continuity after every action so any handoff resumes cleanly.
+- **The fleet** — a pool qualified for **capability**, not pre-assigned a title.
+  Per-story roles (coder / tester / reviewer / release / …) are the conductor's
+  *runtime* decision: story → role → cheapest-capable tool. Qualify the pool with
+  cheap gates first, stopping as soon as a tool is disqualified:
+  1. **Assignable now** — `bashy weave fleet` (on PATH and not cooling down).
+  2. **Launch contract valid** — `bashy weave fleet interview --live` (catches a
+     CLI that renamed/drifted flags).
+  3. **Smoke test** — one trivial prompt ("reply with exactly: OK"); a tool that
+     emits nothing or instant-exits is dead weight.
+  4. **Capability rating** — the carry-forward report card + prior-sprint
+     outcomes; rates *what a tool can do*, not a title.
+- **Backup conductor + self-handoff.** Designate the trial runner-up as backup.
+  Hand off *before going dark* (token exhaustion / rate-limit): at a stable
+  point `bashy sprint handoff --to <backup@host>` (checkpoints + releases the
+  lease) and the backup resumes from continuity — the log is the state. A forced
+  `weave take --force` bumps the fencing epoch so a revived old conductor can't
+  double-drive. Track your own budget and checkpoint often; provider APIs don't
+  yet expose remaining-quota, so proactive handoff + frequent checkpoints are the
+  mitigation.
+
+## The loop (operational)
+
+### 1. Read the harness
+Establish the **scoring contract** (how one unit reports pass/fail), the **fast
+single-unit repro**, and **which artifact** the canonical scoreboard measures
+(build + gate that same one, same env/filters/skips). For a suite, name the two
+roles: *target* (turn green) and *guard* (keep green).
+
+### 2. Measure the baseline
+Record the **actionable failing/unmet set** (units + one-liners) and the
+**passing count** (guard anchor). **Filter out non-actionable** items
+(environment-specific, flaky, upstream-default, platform-ceiling) — often by
+differencing against a reference oracle. Note **environment-divergent** units so
+a run's local gate doesn't false-pass; re-verify them canonically at the end.
+
+### 3. Group by root cause (not raw count)
+Cluster by the code path that fixes them. A big cluster with ONE root cause stays
+ONE story (don't shard a fix). A grab-bag of singles groups by sub-mechanism.
+Size each story to ~30 min of agent work; split bigger ones. Note clusters that
+share a source file — they parallelize but **merge sequentially** (§9).
+
+### 4. Sprint + stories
+```sh
+bashy sprint add "<goal>" --acceptance "<target green AND guard green>" --column doing --epic <name>
+bashy sprint take <id> --as conductor ;  bashy sprint checkpoint <id> --continuity "<baseline+plan>"
+bashy weave add "<story>" --priority p0 --points 8 --tool <tool> --verify "$(cat gate.sh)" --body "$(cat story.md)"
+bashy sprint link <id> --repo <repo> --task <issue>
+bashy weave baton take --as <you>        # single-driver lock; re-write it after every action
+```
+**Story body** (in order): SETUP (workspace + isolation rules) · single-unit repro
+· GOAL with exact unit ids + one-line each · root-cause hypothesis (file) · SCOPE
+(disjoint dir allowlist) · GATE · commit discipline (named files, never `git add
+-A`) · blockers escape (commit partial + `<TOPIC>-BLOCKERS.md` after 3 tries).
+**Specificity drives yield** — paste exact units + the repro; embed prior bisect
+findings so the next agent skips the trap.
+
+### 5. Isolation (build BEFORE launching — four traps)
+1. **Shared mutable dependency** the build resolves through a path weave shares
+   across workspaces (a `replace => ../dep`, a submodule, a symlink): give each
+   workspace a **private copy**, repoint the build via the manifest's redirect,
+   and `git update-index --skip-worktree <manifest>` so the branch keeps the
+   shared path while the build uses the private copy; exclude the private dir.
+2. **Gitignored test data** isn't in the clone — **copy** it per workspace (copy,
+   not symlink; in-tree-writing runners race a shared dir).
+3. **RED baseline**: a clean workspace scoring below canonical (missing
+   artifacts/locale/helpers) — gate on "no NEW failure beyond the known baseline"
+   OR make the workspace env canonical (stub the missing pieces, guarded as a
+   no-op in the real tree). Adopt the agent's stub-fix if it produces one.
+4. **Sandbox scratch pollution**: tools write caches/litter; commit **named
+   source paths** only, exclude the scratch dirs.
+
+### 6. The verify gate (`--verify`, three clauses)
+```
+<build the artifact>       || exit 2          # 1. it builds
+<run each target unit>     ; assert all PASS  # 2. the goal is met
+<run the regression guard> ; assert no NEW failure beyond the known baseline  # 3. nothing broke
+```
+Clause 3 is **non-negotiable**: a gate of only "new units pass" misses guard
+regressions, and broad changes routinely close targets while nicking a passer.
+The conductor STILL re-runs the guard in the real repo post-merge.
+
+### 7. Launch
+Match tools to stories by the report card, hardest to strongest. Pre-seed each
+tool's trust/permission cache, set watchdogs, background each:
+```sh
+bashy weave start --resume --issue N --max-runtime 45m --mem-limit 12g -- <tool> <recipe> "<body>" &
+```
+**Smoke-test every tool on a trivial prompt first** — assume some of the fleet is
+dead weight. Report card (carry-forward, update with evidence): **codex** =
+workhorse, honest, fast, best default; **claude** = strongest deep/multi-file,
+often hits the cap mid-fix (salvage it); **opencode** = only tight-scoped on a
+clean base, can no-op with exit 0; **aider/others** = verify before trusting,
+several wash out in practice.
+
+### 8. Monitor — event-driven, actively
+One backgrounded wait per story; act on every wake (NOT host `sleep` loops):
+```sh
+bashy weave wait --issue N --timeout 50m &
+```
+- **submitted/killed** → measure against the GOAL; "submitted" ≠ done.
+- **salvage watchdog kills** — uncommitted diffs are usually real progress;
+  build, measure, commit named files, gate.
+- **reassign / work-steal** — finished/dead agent gets the next story; a no-op
+  story gets re-driven with a sharper prompt or a different tool.
+- **blocked on a prompt** → answer (`weave say N "1"`) after confirming the block
+  is live (a child in a TTY wait), not stale scrollback.
+- NEVER measure the suite on the host while agents compile — load makes per-test
+  timeouts flake into phantom regressions.
+
+### 9. Converge — sequential gated merge on a review branch
+No push / no dependency-pin bump without explicit human OK.
+1. Source-only patch from each run's private workspace (`git diff base..HEAD --
+   <source-dirs>`; never scratch).
+2. `git apply --3way`; shared-file stories merge cleanly when sequential —
+   resolve conflicts by **combining** fix-sets.
+3. Apply non-dependency commits by named path; leave unrelated edits alone.
+4. **Re-gate**: rebuild against the merged dependency, run the **guard in the
+   real repo**, re-measure every merged target. Watch for **cross-cluster
+   ripple** (stories that each pass in isolation can drop a case via interaction)
+   — bisect any guard regression against the pre-merge commit.
+
+### 10. Iterate
+Re-run the goal against the **merged** branch to get the shrinking remainder;
+re-divide and re-sprint on the cleaner base (workspaces now clone the merged
+state → true-green baseline; embed each round's bisect findings into the next
+round's bodies). Repeat until the actionable set is empty; verify
+environment-divergent units + ripple canonically in a final pass.
+
+## Bounding & judge mode
+
+- **Bounded, not open-ended.** Cap rounds (stop the moment the contract holds)
+  and stop cleanly if a spend probe reports over-budget (delegate measurement to
+  `bashy weave cost --total` or your real cost source). Over-budget is a stop
+  condition, not a contract failure.
+- **Judge mode** (goals with no exit-coded verifier): gather evidence (a summary
+  of the merged work + recent history) and ask an agent CLI whether the goal is
+  *fully* achieved, defaulting to "not met" when unsure. The convergence gate
+  stays deterministic; only the goal-met clause becomes a model verdict.
+
+## Anti-patterns (each costs a round)
+- `sleep`-loop monitoring instead of `bashy weave wait`.
+- A gate demanding absolute green against a RED in-workspace base.
+- `git add -A` in a sandboxed workspace (commits a giant scratch cache).
+- One change spanning many subsystems broadly — closes targets, regresses the
+  guard. Keep fixes surgical; gate the guard every time.
+- Assuming all fleet tools work — smoke-test; let strong tools absorb the rest.
+- Merging all stories at once without per-story re-gate.
+- Chasing non-actionable failures.
+- Fanning out shared-source work in parallel (collides at merge) — sequence it.
+
+## Command quick-reference
+```sh
+bashy sprint add/take/checkpoint/link/handoff/show <id>
+bashy weave add --priority --points --tool --verify --body
+bashy weave start --no-spawn --issue N        # allocate, then set up §5 isolation
+bashy weave start --resume  --issue N -- <tool> "<body>"
+bashy weave list / status N / log N -f / fleet / baton / cost --total
+bashy weave wait --issue N --timeout 50m &
+bashy weave say N "<msg>" / kill N --yes / salvage N / pull N / prune --stale --yes
+```

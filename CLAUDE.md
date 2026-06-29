@@ -252,6 +252,18 @@ Weave-round verification + retro reports (historical, not load-bearing):
 
 - `QA-REPORT-R10.md`, `JUDGE-REPORT-R6.md`, `JUDGE-REPORT-R7.md`, `SPRINT-R10-RETRO-DRAFT.md`.
 
+## Skills
+
+`skills/` holds the tier-2 **workspace** agentic skills bashy ships (the
+userland is tier 1, clusters tier 3). Each is a self-contained Anthropic skill
+(`SKILL.md` actionable checklist + optional `reference.md` deep companion),
+brand-neutral and driven by bashy's own tools:
+
+- `skills/conductor/` — drive a fleet of agent CLIs to a verified goal over
+  `bashy sprint` + `bashy weave` (decompose → isolate → gate → converge, loop
+  until a verifier passes); TDD-at-fleet-scale is the canonical mode. Consolidated
+  from the former umbrella `docs/skills/tdd-fleet` + ycode's `ycode-conductor`.
+
 ## Plans
 
 Always save a copy of all implementation plans in `docs/`. Use a descriptive
