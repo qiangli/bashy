@@ -92,6 +92,9 @@ func newAdvisor() *advisor {
 // even in agent mode; an on-ish value force-enables it. Unset, it defaults on
 // in agent mode and off for interactive humans.
 func advisorEnabled() bool {
+	if agenticDisabled() {
+		return false // BASHY_AGENTIC master kill
+	}
 	switch strings.ToLower(os.Getenv("BASHY_ADVISOR")) {
 	case "0", "false", "off", "no":
 		return false // explicit off wins, even under DHNT_AGENT

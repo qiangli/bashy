@@ -61,23 +61,38 @@ type memoryFile struct {
 // memory holds the advisor's accumulated knowledge. All methods are safe for
 // concurrent use (subshells/pipelines run ExecHandler in parallel goroutines).
 type memory struct {
-	mu    sync.Mutex
-	path  string // "" disables persistence
-	nowFn func() int64
-	hosts map[string]hostRecord
-	fails map[string]int // session-only: loop key -> consecutive failures
+	mu     sync.Mutex
+	path   string // "" disables persistence
+	nowFn  func() int64
+	hosts  map[string]hostRecord
+	fails  map[string]int  // session-only: loop key -> consecutive failures
+	hinted map[string]bool // session-only: proactive-hint keys already shown
 }
 
 // newMemory builds the memory and loads any persisted ledger (best-effort).
 func newMemory() *memory {
 	m := &memory{
-		path:  defaultMemoryPath(),
-		nowFn: func() int64 { return time.Now().Unix() },
-		hosts: map[string]hostRecord{},
-		fails: map[string]int{},
+		path:   defaultMemoryPath(),
+		nowFn:  func() int64 { return time.Now().Unix() },
+		hosts:  map[string]hostRecord{},
+		fails:  map[string]int{},
+		hinted: map[string]bool{},
 	}
 	m.load()
 	return m
+}
+
+// firstHint reports whether key has not been hinted this session, marking it so
+// subsequent calls return false. This is the once-per-(tool,session) rate-limit
+// that keeps proactive nudges from becoming ignorable noise.
+func (m *memory) firstHint(key string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.hinted[key] {
+		return false
+	}
+	m.hinted[key] = true
+	return true
 }
 
 // defaultMemoryPath returns the persisted-ledger path, or "" to disable

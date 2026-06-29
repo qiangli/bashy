@@ -14,10 +14,11 @@ import (
 func newTestMemory(t *testing.T) *memory {
 	t.Helper()
 	return &memory{
-		path:  filepath.Join(t.TempDir(), "hosts.json"),
-		nowFn: func() int64 { return 1000 },
-		hosts: map[string]hostRecord{},
-		fails: map[string]int{},
+		path:   filepath.Join(t.TempDir(), "hosts.json"),
+		nowFn:  func() int64 { return 1000 },
+		hosts:  map[string]hostRecord{},
+		fails:  map[string]int{},
+		hinted: map[string]bool{},
 	}
 }
 

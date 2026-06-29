@@ -271,16 +271,25 @@ func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 	// no-op when HandlerContext.DryRun() is false.
 	opts = append(opts, interp.OpenHandler(dryRunOpenHandler(r)))
 
-	// The space-time advisor (non-intrusive, error-time hints). As the OUTERMOST
-	// ExecHandler middleware it sees the final exit of every external/coreutils
-	// command and, on a non-zero exit, appends one advisory line explaining a
-	// space-determined failure (wrong cwd, host gone remote, OOM, full/ro disk)
-	// — so an agent stops the doomed retry loop. It always returns the exit
-	// unchanged. Installed only when enabled (agent mode or BASHY_ADVISOR) so an
-	// ordinary interactive session is untouched; never in posix mode / cmd/bash.
-	if advisorEnabled() {
-		return append(opts, interp.ExecHandlers(
-			advisorHandler(newAdvisor()), dryRunHandler(r), coreutilsshell.Handler()))
+	// The nudge subsystem (non-intrusive). Two halves sharing one session memory:
+	//   - advisor (reactive): OUTERMOST ExecHandler middleware; on a command's
+	//     non-zero exit, appends one advisory line explaining a space-determined
+	//     failure (wrong cwd, host gone remote, OOM, full/ro disk) so an agent
+	//     stops the doomed retry loop. Always returns the exit unchanged.
+	//   - nudger (proactive): a WithAuditHandler callback; when an agent uses a
+	//     legacy builtin (cd/pushd/popd) it emits one rate-limited hint toward the
+	//     better counterpart (`awd`). Never alters the command.
+	// Both are stderr-only, gated (agent mode / BASHY_ADVISOR / BASHY_HINTS, with
+	// BASHY_AGENTIC as master kill), and never active in posix mode / cmd/bash.
+	if advisorEnabled() || hintsEnabled() {
+		a := newAdvisor()
+		if hintsEnabled() {
+			opts = append(opts, interp.WithAuditHandler(newNudger(a.mem).onAudit))
+		}
+		if advisorEnabled() {
+			return append(opts, interp.ExecHandlers(
+				advisorHandler(a), dryRunHandler(r), coreutilsshell.Handler()))
+		}
 	}
 	return append(opts, interp.ExecHandlers(dryRunHandler(r), coreutilsshell.Handler()))
 }
