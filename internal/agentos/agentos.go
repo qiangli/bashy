@@ -37,6 +37,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/dag"
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/mirror"
+	"github.com/qiangli/coreutils/pkg/schedule"
 	"github.com/qiangli/coreutils/pkg/secrets"
 	"github.com/qiangli/coreutils/pkg/weave"
 	"github.com/qiangli/coreutils/pkg/weavecli"
@@ -113,6 +114,16 @@ func Dispatch() {
 		// contained — no source tree needed). `bashy skills [list]` lists them;
 		// `bashy skills show <name> [--reference]` prints the content.
 		os.Exit(dispatchSkills(os.Args[2:]))
+	case "schedule":
+		// Modern cron: run commands on a cron/interval/at schedule from a
+		// self-contained store + optional daemon, with an agentic prompt/context
+		// delivered to the fired command. The host cron/crontab are untouched.
+		cmd := schedule.NewScheduleCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "go":
 		// Self-provisioning Go toolchain (check → download from go.dev →
 		// sha256-verify → cache → exec). No embedding, no system Go: this is

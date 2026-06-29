@@ -133,11 +133,13 @@ responsibilities, not separate skills to defer to:
   sitting, drive it unattended with `bashy weave autopilot` — it auto-dispatches
   the queue to the qualified fleet and re-drives stalled stories; `bashy weave
   autopilot --standby` runs a cold spare that takes the lease (fencing-epoch
-  protected) if the active conductor goes dark. Across idle gaps, re-invoke
-  yourself on a schedule so the loop spans days, not one session. *(Forward
-  dependency: fully self-waking operation wants a bashy timer/scheduler/cron
-  primitive to re-enter the loop after a quiet period; until it lands, schedule
-  re-invocation with the host's cron/`at` or a supervising process.)*
+  protected) if the active conductor goes dark. To span idle gaps, **self-wake
+  with `bashy schedule`** — schedule your own re-entry carrying the next
+  instruction, e.g. `bashy schedule add --every 30m --prompt "re-drive stalled
+  stories, then converge" -- bashy weave autopilot` (the prompt arrives as
+  `BASHY_SCHEDULE_PROMPT`). That makes the loop span days without a human in the
+  seat. Use `command time --budget <dur> --todo "<next step>"` to wrap a step
+  whose overrun should leave you a TODO rather than stall silently.
 
 - **Be the foreman — or appoint one.** For a single coherent sub-goal you lead
   the fleet directly. For a large or multi-front campaign, interview the pool

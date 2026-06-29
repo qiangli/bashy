@@ -178,6 +178,14 @@ token tax.
 - **Opt-in `--agentic` search** (coreutils `grep`/`find`) — `.gitignore` + noise-dir
   filter via `pkg/ignore`, stderr transparency line, byte-identical without the flag;
   plus a `grep -r`/`find` → `--agentic`/`yc refs`/`yc repomap` routing nudge.
+- **`time`** (coreutils `cmds/time`) — pure-Go GNU `/usr/bin/time` drop-in
+  (default/`-p`/`-v`/`-f`/`-o`/`-a`), coexists with the bash `time` keyword (reach
+  via `command time`/`\time`); agentic `--budget DUR --todo TEXT` surfaces a TODO
+  (JSON in agent mode) when a step overruns. Conductor self-dependency.
+- **`bashy schedule`** (coreutils `pkg/schedule`) — modern cron (`--cron` via
+  robfig/cron, `--every`, `--at`) with a JSON store + `daemon`/`tick`; agentic
+  `--prompt`/`--context` delivered to the fired command as `BASHY_SCHEDULE_*`, so
+  a conductor self-wakes a long-running campaign. Host `cron`/`crontab` untouched.
 
 ## Prioritized shortlist
 
