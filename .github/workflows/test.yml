@@ -15,13 +15,13 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # bashy resolves the sh engine via `replace mvdan.cc/sh/v3 => ../sh`.
       # Clone it next door at the SHA pinned in .sibling-pins.
       - name: Bootstrap sibling deps (../sh)
         shell: bash
         run: ./scripts/bootstrap-siblings.sh
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       # The DEFAULT lean cmd/bashy (shell + coreutils userland + git + dag +
