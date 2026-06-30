@@ -32,6 +32,10 @@ var dryRunFlag = flag.Bool("dryrun", false,
 	"bashy: print external commands without running them (xtrace without side effects). "+
 		"With BASHY_AGENTIC, emit a JSON manifest (commands present/missing + file destructions) — a preflight/security check.")
 
+func init() {
+	flag.BoolVar(dryRunFlag, "dry-run", false, "bashy: alias for --dryrun")
+}
+
 // dryRunRequested reports whether --dryrun was passed at startup.
 func dryRunRequested() bool { return *dryRunFlag }
 

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -221,6 +222,39 @@ func TestDefaultCommandArgv0(t *testing.T) {
 		if got := defaultCommandArgv0(test.arg0); got != test.want {
 			t.Fatalf("defaultCommandArgv0(%q) = %q, want %q", test.arg0, got, test.want)
 		}
+	}
+}
+
+func TestSplitCombinedShortFlagsLoginCommand(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "single login",
+			args: []string{"bashy", "-l", "-c", "echo ok"},
+			want: []string{"bashy", "-login", "-c", "echo ok"},
+		},
+		{
+			name: "combined login command",
+			args: []string{"bashy", "-lc", "echo ok"},
+			want: []string{"bashy", "-login", "-c", "echo ok"},
+		},
+		{
+			name: "combined login errexit command",
+			args: []string{"bashy", "-lec", "echo ok"},
+			want: []string{"bashy", "-login", "-o", "errexit", "-c", "echo ok"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := splitCombinedShortFlags(test.args); !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("splitCombinedShortFlags(%q) = %q, want %q", test.args, got, test.want)
+			}
+		})
 	}
 }
 

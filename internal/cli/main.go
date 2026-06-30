@@ -244,6 +244,10 @@ func splitCombinedShortFlags(args []string) []string {
 				continue
 			}
 		}
+		if a == "-l" {
+			out = append(out, "-login")
+			continue
+		}
 		if a == "-i" || a == "-s" || a == "-D" {
 			// Invocation-only flag, not a set option.
 			out = append(out, a)
@@ -287,7 +291,7 @@ func splitCombinedShortFlags(args []string) []string {
 		}
 		allKnown := true
 		for j := 1; j < len(a); j++ {
-			if _, ok := shortToOpt[a[j]]; !ok && a[j] != 'c' && a[j] != 'i' && a[j] != 's' && a[j] != 'D' {
+			if _, ok := shortToOpt[a[j]]; !ok && a[j] != 'c' && a[j] != 'l' && a[j] != 'i' && a[j] != 's' && a[j] != 'D' {
 				allKnown = false
 				break
 			}
@@ -305,6 +309,10 @@ func splitCombinedShortFlags(args []string) []string {
 			}
 		}
 		for _, c := range bools {
+			if c == 'l' {
+				out = append(out, "-login")
+				continue
+			}
 			if c == 'i' || c == 's' || c == 'D' {
 				out = append(out, "-i")
 				if c == 's' {
