@@ -65,6 +65,40 @@ func TestPrintCommandGroupFormat(t *testing.T) {
 	}
 }
 
+func TestVerbSynopsisCoversEveryVerb(t *testing.T) {
+	// Every shimmed verb (incl. docker + the agent-mode provisioners) must have
+	// a one-line synopsis, so `commands -v` never shows a bare verb.
+	all := append([]string{"docker"}, alwaysShimVerbs...)
+	all = append(all, agentModeShimVerbs...)
+	for _, v := range all {
+		if strings.TrimSpace(verbSynopsis[v]) == "" {
+			t.Errorf("verb %q has no synopsis in verbSynopsis", v)
+		}
+	}
+}
+
+func TestPrintCommandSynopsesFormat(t *testing.T) {
+	var b bytes.Buffer
+	syn := func(n string) string {
+		if n == "weave" {
+			return "the orchestrator"
+		}
+		return ""
+	}
+	printCommandSynopses(&b, "verbs", []string{"weave", "x"}, syn)
+	out := b.String()
+	if !strings.Contains(out, "verbs (2):") {
+		t.Errorf("missing header: %q", out)
+	}
+	if !strings.Contains(out, "weave") || !strings.Contains(out, "the orchestrator") {
+		t.Errorf("synopsis line missing: %q", out)
+	}
+	// A name with no synopsis still prints (bare), not "name  ".
+	if !strings.Contains(out, "\n  x\n") {
+		t.Errorf("bare name (no synopsis) should still appear: %q", out)
+	}
+}
+
 func TestPrintCommandGroupWraps(t *testing.T) {
 	// Many long names must wrap to multiple indented lines, not one huge line.
 	names := make([]string, 40)

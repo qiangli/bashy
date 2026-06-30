@@ -26,15 +26,18 @@ import (
 const commandsSchemaVersion = "bashy-commands-v1"
 
 func dispatchCommands(args []string) int {
-	asJSON := false
+	asJSON, verbose := false, false
 	for _, a := range args {
 		switch a {
 		case "--json":
 			asJSON = true
+		case "-v", "--verbose":
+			verbose = true
 		case "-h", "--help":
-			fmt.Println("usage: commands [--json]")
+			fmt.Println("usage: commands [-v] [--json]")
 			fmt.Println("List the supported command surface: shell builtins, the coreutils")
 			fmt.Println("userland, and bashy's front-door verbs.")
+			fmt.Println("  -v  also show each coreutils tool's and verb's one-line synopsis")
 			return 0
 		default:
 			fmt.Fprintf(os.Stderr, "commands: unknown option %q\n", a)
@@ -45,13 +48,46 @@ func dispatchCommands(args []string) int {
 	builtins, core, verbs := commandsCatalog()
 
 	if asJSON {
-		b, _ := json.Marshal(map[string]any{
+		out := map[string]any{
 			"schema_version": commandsSchemaVersion,
 			"builtins":       builtins,
 			"coreutils":      core,
 			"verbs":          verbs,
-		})
+		}
+		if verbose {
+			// Additive: a flat name→synopsis map for the described commands
+			// (builtins have none in the fork, so they are omitted here).
+			syn := map[string]string{}
+			for _, n := range core {
+				if t := tool.Lookup(n); t != nil && t.Synopsis != "" {
+					syn[n] = t.Synopsis
+				}
+			}
+			for _, n := range verbs {
+				if s := verbSynopsis[n]; s != "" {
+					syn[n] = s
+				}
+			}
+			out["synopses"] = syn
+		}
+		b, _ := json.Marshal(out)
 		fmt.Println(string(b))
+		return 0
+	}
+
+	if verbose {
+		// Builtins stay a compact list — they're standard and `help <name>`
+		// describes them; the descriptive value is in the coreutils + verb sets.
+		printCommandGroup(os.Stdout, "shell builtins — standard; `help <name>` for details", builtins)
+		printCommandSynopses(os.Stdout, "coreutils userland", core, func(n string) string {
+			if t := tool.Lookup(n); t != nil {
+				return t.Synopsis
+			}
+			return ""
+		})
+		printCommandSynopses(os.Stdout, "bashy verbs (front-door, bare-name shims)", verbs, func(n string) string {
+			return verbSynopsis[n]
+		})
 		return 0
 	}
 
@@ -59,6 +95,33 @@ func dispatchCommands(args []string) int {
 	printCommandGroup(os.Stdout, "coreutils userland", core)
 	printCommandGroup(os.Stdout, "bashy verbs (front-door, bare-name shims)", verbs)
 	return 0
+}
+
+// verbSynopsis describes the front-door verb shims (the coreutils tools carry
+// their own Synopsis; builtins are standard). Brand-neutral, one line each.
+var verbSynopsis = map[string]string{
+	"docker":    "alias for `bashy podman` (isolated in-process container engine)",
+	"podman":    "embedded, isolated in-process container engine",
+	"ollama":    "managed local LLM runtime (isolated daemon, own port/models)",
+	"weave":     "per-repo multi-agent workspace orchestrator",
+	"sprint":    "cross-repo plan/continuity board (peer to weave)",
+	"dag":       "agent-first markdown DAG task runner",
+	"schedule":  "modern cron: run a command on a cron/interval/at schedule",
+	"secrets":   "managed API-key/token vault for the shell",
+	"skills":    "list/show the embedded tier-2 workspace skills",
+	"run":       "run a command, emit a structured result envelope (+advisor hints)",
+	"commands":  "list the supported command surface (builtins, coreutils, verbs)",
+	"gh":        "GitHub CLI (managed external)",
+	"act":       "run GitHub Actions locally (managed external)",
+	"rclone":    "cloud-storage transfer + file server (managed external)",
+	"mirror":    "continuous one-way directory mirror (over the mesh)",
+	"loom":      "mesh git forge — Gitea (managed external)",
+	"zot":       "mesh OCI registry for images + models (managed external)",
+	"seaweedfs": "mesh object/blob store with S3 gateway (managed external)",
+	"kopia":     "mesh snapshot-backup repository server (managed external)",
+	"go":        "self-provisioning Go toolchain (download → verify → cache → exec)",
+	"cmake":     "self-provisioning CMake build toolchain",
+	"clang":     "self-provisioning clang/LLVM toolchain",
 }
 
 // commandsCatalog gathers the three command sources, each sorted: shell
@@ -76,6 +139,26 @@ func commandsCatalog() (builtins, core, verbs []string) {
 	}
 	sort.Strings(verbs)
 	return builtins, core, verbs
+}
+
+// printCommandSynopses prints "name — synopsis" lines under a titled header,
+// names left-aligned to a common width for scannability.
+func printCommandSynopses(w io.Writer, title string, names []string, syn func(string) string) {
+	fmt.Fprintf(w, "%s (%d):\n", title, len(names))
+	width := 0
+	for _, n := range names {
+		if len(n) > width {
+			width = len(n)
+		}
+	}
+	for _, n := range names {
+		if s := syn(n); s != "" {
+			fmt.Fprintf(w, "  %-*s  %s\n", width, n, s)
+		} else {
+			fmt.Fprintf(w, "  %s\n", n)
+		}
+	}
+	fmt.Fprintln(w)
 }
 
 // printCommandGroup prints a titled, count-prefixed, wrapped column block.
