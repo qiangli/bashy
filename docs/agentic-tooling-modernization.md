@@ -231,6 +231,15 @@ token tax.
   write fluently) rather than reimplementing ast-grep's `foo($A)` pattern-compiler
   (a large project that would risk silent mis-matches).
 
+- **`fetch` / `tokens` / `clip` (coreutils) + `doctor` (verb)** — the four tools
+  distilled from the prior-art slash-command survey (`docs/slash-command-priorart-survey.md`):
+  `fetch` (URL/REST client via resty + `--md` HTML→markdown + `--json`),
+  `tokens` (exact BPE count via tiktoken, `--fast` heuristic), `clip` (system
+  clipboard; the documented no-shell-out exception), and `doctor` (environment
+  self-diagnostic — PATH/sh shadowing, stale binary, engine, agent mode, bin
+  cache). Everything else the surveyed agentic CLIs expose is already covered or
+  is agentic-REPL state out of a shell's scope.
+
 ## Decided against: per-tool `--json`
 
 Per-tool `--json` (ls/stat/df/du/wc) was **dropped**: agents parse plain text

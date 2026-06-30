@@ -102,11 +102,14 @@ are few.
 - **session / model / UI / auth / mcp / hooks / plugins / extensions** —
   agentic-REPL state owned by the driving tool, out of bashy's scope by design.
 
-## Recommendation
+## Recommendation — SHIPPED (2026-06-30)
 
-Add **`fetch`** and **`tokens`** as coreutils tools and **`doctor`** as a verb
-(all `--json`/`BASHY_AGENTIC`-aware, brand-neutral, pure-Go, permissive deps).
-`clip` is an optional convenience. Everything else the five tools expose is
+All four were implemented: **`fetch`** + **`tokens`** + **`clip`** as coreutils
+tools and **`doctor`** as a verb (all `--json`/`BASHY_AGENTIC`-aware,
+brand-neutral, permissive deps: resty.dev/v3, JohannesKaufmann/html-to-markdown,
+tiktoken-go/tokenizer, atotto/clipboard). `clip` shells out to the OS clipboard
+utility — the one documented exception, since there is no pure-Go path.
+Everything else the five tools expose is
 either already covered by bashy's verbs/`yc`/coreutils or correctly out of scope
 — confirming the design line: **bashy is the shell the agent runs in, so it
 absorbs reusable capabilities and leaves session/model/UI/LLM affordances to the

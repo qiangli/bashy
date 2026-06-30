@@ -66,9 +66,13 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
   `coreutils/external/podman/engine` — the **embedded, isolated** in-process
   podman engine, `CONTAINER_HOST` pinned to a private `bashy` machine, never a
   shared host one; `bashy ollama …` via `coreutils/external/ollama`'s
-  `NewManagedOllamaCmd` — isolated daemon, own port/models; plus `bashy
-  act-runner`, `loom`, `zot`, `seaweedfs`, `kopia`). Imported only by `cmd/bashy`,
-  so the lean `bash` binary never links any of it.
+  `NewManagedOllamaCmd` — isolated daemon, own port/models; plus `bashy run`
+  (result envelope), `commands` (command-surface lister), `doctor` (environment
+  self-diagnostic), `act-runner`, `loom`, `zot`, `seaweedfs`, `kopia`). Imported
+  only by `cmd/bashy`, so the lean `bash` binary never links any of it. The
+  coreutils userland also carries the agentic tools `fetch` (REST/URL client),
+  `tokens` (LLM token counter), and `clip` (system clipboard) — see
+  `docs/slash-command-priorart-survey.md`.
   - `internal/agentos/advisor*.go` — the **space-time advisor**: a non-intrusive
     post-exec `ExecHandler` middleware that, only when a command fails, appends one
     advisory hint explaining a space-determined failure (wrong cwd, host gone
@@ -79,8 +83,9 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
     other feature. See `docs/space-time-advisor.md`.
   - **Bare-name verb shims** (`Preamble()`): front-door verbs are exposed without
     the `bashy ` prefix via overridable shell functions (`weave(){ command bashy
-    weave "$@"; }`, …). Shadowing policy: native verbs + identical drop-in
-    passthroughs (gh/act/rclone/podman/ollama/loom/zot/seaweedfs/kopia/mirror)
+    weave "$@"; }`, …). Shadowing policy: native verbs (weave/sprint/dag/run/
+    commands/doctor/schedule/secrets/skills) + identical drop-in passthroughs
+    (gh/act/rclone/podman/ollama/loom/zot/seaweedfs/kopia/mirror)
     always shimmed; version-sensitive provisioners (go/cmake/clang) only in agent
     mode; `time` (keyword) and jobs/fg/bg/kill (builtins) never. Override with
     `unset -f <name>`; reach a specific binary by absolute path.
