@@ -63,19 +63,28 @@ import (
 // Every shim is overridable: `unset -f <name>` (or redefine it) falls back to
 // PATH, and a specific on-disk binary is always reachable by absolute path
 // (e.g. /usr/local/bin/gh).
-func Preamble() string {
-	var b strings.Builder
-	b.WriteString(`docker() { command bashy podman "$@"; }` + "\n")
-	always := []string{
-		"weave", "sprint", "dag", "schedule", "secrets", "skills", "run",
+// alwaysShimVerbs are the front-door verbs exposed as bare-name shell functions
+// unconditionally: bashy-native verbs + identical drop-in passthroughs.
+// agentModeShimVerbs are version-sensitive provisioners, shimmed only in agent
+// mode (a human's own go/cmake/clang on PATH wins otherwise). `commands` (the
+// surface lister) is itself shimmed so it is reachable bare.
+var (
+	alwaysShimVerbs = []string{
+		"weave", "sprint", "dag", "schedule", "secrets", "skills", "run", "commands",
 		"gh", "act", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 	}
-	for _, v := range always {
+	agentModeShimVerbs = []string{"go", "cmake", "clang"}
+)
+
+func Preamble() string {
+	var b strings.Builder
+	b.WriteString(`docker() { command bashy podman "$@"; }` + "\n")
+	for _, v := range alwaysShimVerbs {
 		fmt.Fprintf(&b, "%s() { command bashy %s \"$@\"; }\n", v, v)
 	}
 	if weavecli.IsAgent() {
-		for _, v := range []string{"go", "cmake", "clang"} {
+		for _, v := range agentModeShimVerbs {
 			fmt.Fprintf(&b, "%s() { command bashy %s \"$@\"; }\n", v, v)
 		}
 	}
@@ -159,6 +168,12 @@ func Dispatch() {
 		// by default (meta trails on stderr); --capture embeds the streams in one
 		// stdout record. Returns the command's own exit status.
 		os.Exit(dispatchRun(os.Args[2:]))
+	case "commands":
+		// Discovery: list the whole supported command surface — shell builtins,
+		// the in-process coreutils userland, and the bare-name front-door verbs —
+		// which are otherwise invisible to compgen/type (the handler intercepts
+		// them before PATH). --json for a structured catalog.
+		os.Exit(dispatchCommands(os.Args[2:]))
 	case "go":
 		// Self-provisioning Go toolchain (check → download from go.dev →
 		// sha256-verify → cache → exec). No embedding, no system Go: this is
