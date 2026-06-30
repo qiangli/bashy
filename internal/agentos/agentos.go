@@ -70,7 +70,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "dag", "schedule", "secrets", "skills", "run", "commands",
+		"weave", "sprint", "dag", "schedule", "secrets", "skills", "run", "commands", "doctor",
 		"gh", "act", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 	}
@@ -168,6 +168,10 @@ func Dispatch() {
 		// by default (meta trails on stderr); --capture embeds the streams in one
 		// stdout record. Returns the command's own exit status.
 		os.Exit(dispatchRun(os.Args[2:]))
+	case "doctor":
+		// Environment self-diagnostic: PATH/sh shadowing, a stale bashy on PATH,
+		// toolchain + container engine, agent mode, bin cache. Advisory.
+		os.Exit(dispatchDoctor(os.Args[2:]))
 	case "commands":
 		// Discovery: list the whole supported command surface — shell builtins,
 		// the in-process coreutils userland, and the bare-name front-door verbs —

@@ -115,6 +115,7 @@ var verbSynopsis = map[string]string{
 	"skills":    "list/show the embedded tier-2 workspace skills",
 	"run":       "run a command, emit a structured result envelope (+advisor hints)",
 	"commands":  "list the supported command surface (builtins, coreutils, verbs)",
+	"doctor":    "diagnose the bashy environment (PATH/sh, engine, agent mode, bin cache)",
 	"gh":        "GitHub CLI (managed external)",
 	"act":       "run GitHub Actions locally (managed external)",
 	"rclone":    "cloud-storage transfer + file server (managed external)",
