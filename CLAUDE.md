@@ -154,6 +154,8 @@ and the yash POSIX scoreboard) is driven via the `bashy dag` task runner — the
 agent-first dogfood of the Makefile:
 
 ```sh
+./bashy dag build                   # fresh checkout bootstrap: builds bin/bashy if needed
+./bashy dag install                 # install bash/bashy into GOBIN; after this `bashy dag ...` works
 bashy dag suites.md -j8 -k          # whole conformance matrix in parallel (-k: don't halt on first failure)
 bashy dag suites.md test-bash yash  # a subset of suites
 bashy dag --list                    # what `make help` shows, as DAG targets (see DAG.md)
@@ -165,6 +167,10 @@ target with `Requires:`/`Sources:`/`Effects:` metadata, run in topological
 order through the in-process shell. `suites.md` is the conformance matrix
 (only `test-bash` is a hard 0/1 gate; the differentials are INFO probes);
 `DAG.md` mirrors the Makefile's build/test/lint targets.
+Inside DAG target bodies, use `"$BASHY" ...` for recursive bashy calls. Mirroring
+GNU Bash's `BASH`/`BASH_ARGV0` split, `bashy dag` injects `BASHY`/`BASHY_EXE`
+as the resolved executable path and `BASHY_ARGV0` as the raw argv0 string, so
+targets do not drift to a stale PATH binary.
 
 Under finer-grained `go`:
 

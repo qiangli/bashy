@@ -1,4 +1,4 @@
-.PHONY: build build-bash build-bashy install test test-bash test-bash-run test-bash-parallel test-bash-list test-bash-helpers dist tidy clean help
+.PHONY: dag build build-bash build-bashy install test test-bash test-bash-run test-bash-parallel test-bash-list test-bash-helpers dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -37,6 +37,10 @@ ENGINE_TAGS := $(if $(BASHY_ENGINES),bashy_engines \
 	$(if $(wildcard $(EMBED_DIR)/vfkit_embed/vfkit.gz),embed_vfkit) \
 	$(if $(wildcard $(EMBED_DIR)/gvproxy_embed/gvproxy.gz),embed_gvproxy))
 BASHY_TAGS := $(strip $(ENGINE_TAGS) $(if $(BASHY_OBS),bashy_obs))
+
+## dag: Bootstrap/run the repo-local DAG runner. Pass ARGS="build", ARGS="test", etc.
+dag:
+	@./bashy dag $(if $(ARGS),$(ARGS),--list)
 
 ## build: Build both independent binaries into bin/ (bash = pure drop-in from
 ## cmd/bash; bashy = AgentOS shell from cmd/bashy). They share the cli core but

@@ -74,6 +74,15 @@ cd bashy
 make build          # -> bin/bashy
 ```
 
+For a fresh checkout that wants to dogfood the DAG runner before `bashy` is on
+`PATH`, use the repo-local bootstrap launcher:
+
+```sh
+./bashy dag build
+./bashy dag install   # installs bash/bashy into GOBIN; then `bashy dag ...` works
+make dag ARGS=build   # equivalent bootstrap path if you prefer make
+```
+
 ## Usage
 
 ```sh

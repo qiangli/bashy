@@ -29,7 +29,10 @@ YT="$HERE/.yash-tests"   # gitignored clone cache
 
 OCI=${OCI:-}
 if [ -z "$OCI" ]; then
-  command -v docker >/dev/null 2>&1 && OCI=docker || { command -v bashy >/dev/null 2>&1 && OCI="bashy podman"; }
+  if command -v docker >/dev/null 2>&1; then OCI=docker
+  elif [ -n "${BASHY:-}" ]; then OCI="$BASHY podman"
+  elif command -v bashy >/dev/null 2>&1; then OCI="bashy podman"
+  fi
 fi
 [ -n "$OCI" ] || { echo "yash-suite: need docker or bashy podman" >&2; exit 2; }
 

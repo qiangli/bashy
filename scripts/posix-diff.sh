@@ -42,6 +42,7 @@ ORACLE_SPEC=${ORACLE_SPEC:-'bash53:bash --posix|dash:dash|yash:yash --posix|mksh
 OCI=${OCI:-}
 if [ -z "$OCI" ]; then
   if command -v docker >/dev/null 2>&1; then OCI=docker
+  elif [ -n "${BASHY:-}" ]; then OCI="$BASHY podman"
   elif command -v bashy >/dev/null 2>&1; then OCI="bashy podman"
   fi
 fi

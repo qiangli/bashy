@@ -10,6 +10,13 @@ hashed up-to-date skip, topological execution.
 Local bodies run **identically on Linux/macOS/Windows** (in-process shell +
 coreutils — no PATH variance).
 
+When a target body needs to invoke bashy again, prefer `"$BASHY" ...` over a
+bare `bashy ...`. Mirroring GNU Bash's `BASH`/`BASH_ARGV0` split, the runner
+injects `BASHY` and `BASHY_EXE` as the resolved executable path for the current
+`bashy dag` process, and `BASHY_ARGV0` as the raw argv0 string. Recursive
+DAG/tool calls should use `"$BASHY"` so they stay on the same binary version
+instead of whichever `bashy` happens to be first on `PATH`.
+
 ```bash
 bashy dag --list                 # show targets (+ --json for machine output)
 bashy dag build                  # run "build" and its dependencies

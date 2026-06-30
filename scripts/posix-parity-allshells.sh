@@ -17,6 +17,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OCI=${OCI:-}
 if [ -z "$OCI" ]; then
   if command -v docker >/dev/null 2>&1; then OCI=docker
+  elif [ -n "${BASHY:-}" ]; then OCI="$BASHY podman"
   elif command -v bashy >/dev/null 2>&1; then OCI="bashy podman"
   else echo "error: need docker or bashy podman" >&2; exit 2; fi
 fi

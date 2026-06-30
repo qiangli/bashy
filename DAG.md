@@ -9,11 +9,23 @@ The agent-first equivalent of this repo's `Makefile`, runnable with the
 `bashy dag` task runner this repo's AgentOS shell ships:
 
 ```bash
-bashy dag --list            # what `make help` showed
-bashy dag build             # build both binaries
-bashy dag test              # go test ./...
-bashy dag --json test       # machine-readable envelope for an agent
+./bashy dag --list           # fresh checkout bootstrap: builds bin/bashy if needed
+./bashy dag build            # build both binaries
+./bashy dag install          # install bash/bashy into GOBIN, after which `bashy dag ...` works
+make dag ARGS=build          # make-based bootstrap wrapper around ./bashy dag
+bashy dag test               # once installed/on PATH: go test ./...
+bashy dag --json test        # machine-readable envelope for an agent
 ```
+
+Chicken/egg note: `bashy dag ...` requires the operating system to find a
+`bashy` executable first. From a fresh source checkout, use the repo-local
+`./bashy` launcher; it builds `bin/bashy` if missing and then re-execs it.
+Inside target bodies, call `"$BASHY" ...` when you need bashy itself. Mirroring
+GNU Bash's `BASH`/`BASH_ARGV0` split, the DAG runner sets `BASHY`/`BASHY_EXE`
+to the resolved executable path for the `argv[0]` that launched the run, and
+`BASHY_ARGV0` to the raw argv0 string. Recursive calls should use `"$BASHY"`
+so they stay on the same binary version instead of a stale `bashy` elsewhere on
+`PATH`.
 
 Targets carry `Requires:` (dependency edges), `Sources:`/`Generates:`
 (content-fingerprint up-to-date skip — `bashy dag build` no-ops when nothing

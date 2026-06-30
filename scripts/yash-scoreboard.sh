@@ -15,7 +15,12 @@ OUT=${1:-/tmp/yash-scoreboard}
 mkdir -p "$OUT"
 
 OCI=${OCI:-}
-command -v docker >/dev/null 2>&1 && OCI=docker || { command -v bashy >/dev/null 2>&1 && OCI="bashy podman"; }
+if [ -z "$OCI" ]; then
+  if command -v docker >/dev/null 2>&1; then OCI=docker
+  elif [ -n "${BASHY:-}" ]; then OCI="$BASHY podman"
+  elif command -v bashy >/dev/null 2>&1; then OCI="bashy podman"
+  fi
+fi
 [ -n "$OCI" ] || { echo "need docker or bashy podman" >&2; exit 2; }
 
 ARCH=$(uname -m); case "$ARCH" in aarch64|arm64) GOARCH=arm64;; *) GOARCH=amd64;; esac

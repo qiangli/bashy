@@ -1,5 +1,4 @@
 bin/
-/bashy
 /bash
 
 # Bash 5.3 compliance fixtures are a local, gitignored symlink into a bash

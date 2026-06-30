@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+bin="$here/bin/bashy"
+
+if [ ! -x "$bin" ] || [ "${BASHY_BOOTSTRAP_REBUILD:-0}" = 1 ]; then
+	mkdir -p "$here/bin"
+	version="${VERSION:-dev}"
+	ldflags="-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${version}"
+	echo "bashy bootstrap: building $bin" >&2
+	(
+		cd "$here"
+		go build -trimpath -ldflags "$ldflags" -o "$bin" ./cmd/bashy
+	)
+fi
+
+exec "$bin" "$@"

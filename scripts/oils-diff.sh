@@ -19,7 +19,10 @@ OILS="$HERE/priorart/oils"
 
 OCI=${OCI:-}
 if [ -z "$OCI" ]; then
-  command -v docker >/dev/null 2>&1 && OCI=docker || { command -v bashy >/dev/null 2>&1 && OCI="bashy podman"; }
+  if command -v docker >/dev/null 2>&1; then OCI=docker
+  elif [ -n "${BASHY:-}" ]; then OCI="$BASHY podman"
+  elif command -v bashy >/dev/null 2>&1; then OCI="bashy podman"
+  fi
 fi
 [ -n "$OCI" ] || { echo "oils-diff: need a container runtime" >&2; exit 2; }
 
@@ -29,6 +32,7 @@ if ! $OCI image exists localhost/posix-shells-oils 2>/dev/null; then
   bd=$(mktemp -d)
   mkdir -p "$bd/bin"
   for h in argv.py sh_init.py; do
+    [ -f "$OILS/spec/bin/$h" ] || continue
     sed '1s|.*|#!/usr/bin/env python3|' "$OILS/spec/bin/$h" > "$bd/bin/$h"; chmod +x "$bd/bin/$h"
   done
   cat > "$bd/Containerfile" <<EOF
