@@ -189,6 +189,11 @@ token tax.
   with GNU `\1`/`&` replacements + `i`/`m` flags, `-n/-e/-f/-i[SUFFIX]/-s`.
   Pattern back-refs / `\<\>` fail loudly (RE2 can't express them). The BRE
   translator was extracted from grep into shared `pkg/bre`.
+- **`xargs`** (coreutils `cmds/xargs`) — GNU-subset xargs (structure credited to
+  u-root, BSD-3). `-0`, `-n`, `-I` (replace-str), `-P` (parallel), `-r`, `-E`
+  (eof-str), `-d` (delimiter), `-t`; GNU default quote/backslash word splitting;
+  child stdin = null device; GNU exit codes (123/124/125/126/127). `-p` (needs a
+  tty) fails loudly. Parallel output is flushed atomically per-invocation.
 - **`bashy schedule`** (coreutils `pkg/schedule`) — modern cron (`--cron` via
   robfig/cron, `--every`, `--at`) with a JSON store + `daemon`/`tick`; agentic
   `--prompt`/`--context` delivered to the fired command as `BASHY_SCHEDULE_*`, so
