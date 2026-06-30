@@ -234,7 +234,7 @@ adds:
   immediately followed by one command, scoped to a single list);
 - a non-fatal **stderr hint** ("note: `env -C DIR cmd` runs one command in DIR
   without changing the shell's cwd") — advisory only, never rewrites the user's
-  command, modeled on ycode's agent-mode hint engine (stderr suggestions).
+  command, modeled on an agent-mode hint engine (stderr suggestions).
 
 **Recommended execution:** dogfood it through the weave/conductor machinery (the
 conformance campaign proved it) — natural stories are *sh-exec-seam*,

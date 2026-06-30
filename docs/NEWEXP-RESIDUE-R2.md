@@ -114,7 +114,7 @@ This document clusters the remaining ~275 lines of failures observed in the `new
 *   **Description:** Differences in prompt expansion (`\w`, `\W`) caused by `bashy` not abbreviating the home directory to `~` in this sandbox environment.
 *   **Evidence:**
     ```
-    < argv[1] = <^A[0]/Users/qiangli/.../tests$ >
+    < argv[1] = <^A[0]/home/user/.../tests$ >
     ---
     > argv[1] = <^A[0]~$ >
     ```

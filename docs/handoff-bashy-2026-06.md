@@ -1,7 +1,7 @@
 # Handoff — bashy bash-5.3 compatibility push
 
 **Last touched:** 2026-06-06 by an Opus 4.7 session  
-**Branch:** `master`, 122 commits ahead of `origin/master`, **DO NOT PUSH** without explicit user authorization (see `~/.claude/projects/-Users-qiangli-projects-poc-dhnt-sh/memory/feedback_bashy_goal.md`)  
+**Branch:** `master`, 122 commits ahead of `origin/master`, **DO NOT PUSH** without explicit user authorization  
 **Score at handoff:** `make test-bash` → **34 passed, 40 failed, 13 skipped, 0 timed out** (74 runnable)
 
 ## The single goal
@@ -24,7 +24,7 @@ For per-test investigation, the bash-flavored loop I used:
 
 ```sh
 cd external/bash-5.3/tests
-BASHY=/Users/qiangli/projects/poc/dhnt/sh/bin/bashy
+BASHY="$(git rev-parse --show-toplevel)/bin/bashy"
 export THIS_SH=$BASHY
 export PATH=$PWD:/usr/bin:/bin
 $BASHY ./TEST.tests > /tmp/raw 2>&1

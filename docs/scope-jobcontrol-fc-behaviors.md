@@ -55,9 +55,9 @@ is sh unit tests (drive `fcBuiltin` directly), not `-c` probes.
 
 job-control cluster scope is **`interp/builtin.go` job functions** (+
 `*_unix.go` for #24) — one disjoint work unit, **separate from fc**. NOTE: this
-is the exact code outpost consumes (`bgjobs.go` via `WithBgPidCallback`); any
-merge here must additionally gate on `outpost go build ./... + go test
-./internal/agent/shell -run 'Job|Bg|Reg'`, not just bashy `make test-bash`.
+is shared `sh` code consumed via the `WithBgPidCallback` hook by other
+consumers too; any merge here must additionally gate on their build/job tests,
+not just bashy `make test-bash`.
 
 ## Recommended next round (fleet, two disjoint issues)
 
@@ -68,8 +68,8 @@ merge here must additionally gate on `outpost go build ./... + go test
 2. **job-state posix format (#23/#24/#49, verify #27)** — scope
    `interp/builtin.go` (+`*_unix.go`). Oracle targets: `Done(N)`,
    `Stopped(signame)`, bg marker omission. Gate: sh `go test` + new unit tests
-   + **outpost build/job tests**. Capability match: **claude** (deeper, the
-   shared/ outpost-consumed path).
+   + **downstream consumers' build/job tests**. Capability match: **claude**
+   (deeper, the shared `sh` job-control path).
 
 Both deliver via sh unit tests asserting the format strings (no podman needed
 in-sandbox); the orchestrator verifies end-to-end via the PTY harness +

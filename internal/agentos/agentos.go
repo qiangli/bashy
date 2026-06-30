@@ -94,7 +94,7 @@ func Preamble() string {
 // Dispatch handles AgentOS front-door subcommands that are not shell scripts —
 // `bashy weave …` (the multi-agent workspace orchestrator), `bashy otel …`
 // (the all-in-one observability stack), `bashy secrets …`
-// (cloudbox-managed API keys/tokens for the shell), `bashy dag …` (the
+// (managed API keys/tokens for the shell), `bashy dag …` (the
 // agent-first markdown DAG task runner), and `bashy podman …` (a transparent
 // shell-out to an installed podman). It is wired into the shell
 // core via cli.AgentOSDispatch and runs before any bash flag parsing, since the
@@ -112,7 +112,7 @@ func Dispatch() {
 	dispatchEngine(os.Args[1])
 	// The observability stack (`bashy otel`) compiles in the OpenTelemetry
 	// Collector + VictoriaMetrics/Logs + Jaeger + Perses + k8s/aws SDKs (~193 MB,
-	// 60% of the binary). It is a mesh-HOST service, not a worker need, so it is
+	// 60% of the binary). It is a host-only service, not a worker need, so it is
 	// excluded from the default lean build and gated behind dispatchObs: present
 	// only under `-tags bashy_obs`; the default stub points the user at a host.
 	dispatchObs(os.Args[1])
@@ -205,9 +205,9 @@ func Dispatch() {
 		}
 		os.Exit(0)
 	case "loom":
-		// The mesh git forge: run Gitea as a managed external binary (binmgr
+		// Git forge: run Gitea as a managed external binary (binmgr
 		// downloads/verifies/caches it; not compiled in). bashy is the "OS of
-		// binaries" host; outpost exposes it over the mesh.
+		// binaries" host.
 		cmd := loom.NewLoomCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
@@ -215,7 +215,7 @@ func Dispatch() {
 		}
 		os.Exit(0)
 	case "zot":
-		// The mesh OCI registry (images + Ollama models): run Zot as a managed
+		// OCI registry (images + Ollama models): run Zot as a managed
 		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
 		cmd := zot.NewZotCmd()
 		cmd.SetArgs(os.Args[2:])
@@ -224,7 +224,7 @@ func Dispatch() {
 		}
 		os.Exit(0)
 	case "seaweedfs":
-		// The mesh object/blob store (S3 gateway): run SeaweedFS as a managed
+		// Object/blob store (S3 gateway): run SeaweedFS as a managed
 		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
 		cmd := seaweedfs.NewSeaweedfsCmd()
 		cmd.SetArgs(os.Args[2:])
@@ -233,7 +233,7 @@ func Dispatch() {
 		}
 		os.Exit(0)
 	case "kopia":
-		// The mesh snapshot-backup repository server: run Kopia as a managed
+		// Snapshot-backup repository server: run Kopia as a managed
 		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
 		cmd := kopia.NewKopiaCmd()
 		cmd.SetArgs(os.Args[2:])
@@ -243,7 +243,7 @@ func Dispatch() {
 		os.Exit(0)
 	case "act":
 		// Run GitHub Actions locally via a binmgr-managed nektos/act (MIT, not
-		// compiled in) — test CI on a mesh node before pushing. Needs a container
+		// compiled in) — test CI on a host node before pushing. Needs a container
 		// engine (bashy podman, unix host). Transparent passthrough.
 		cmd := act.NewActCmd()
 		cmd.SetArgs(os.Args[2:])
@@ -273,7 +273,7 @@ func Dispatch() {
 		// Continuous one-way directory mirror (Syncthing's architecture, all
 		// permissive parts: rjeczalik/notify MIT recursive watch + rclone MIT
 		// transfer; our own orchestration). Node B keeps a live replica of a dir
-		// on node A — over the mesh, point --dest at the replica's exposed rclone.
+		// on node A — point --dest at the replica's exposed rclone.
 		cmd := mirror.NewMirrorCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
@@ -285,7 +285,7 @@ func Dispatch() {
 		// in-shell fg/bg/jobs builtins can't own the controlling terminal
 		// (subshells are goroutines), so the supported path is these
 		// subcommands operating on the shared coreutils/pkg/jobs registry —
-		// the same model outpost ships. WireExec records each `foo &` PID via
+		// the shared real-PID model. WireExec records each `foo &` PID via
 		// WithBgPidCallback below.
 		var cmd *cobra.Command
 		switch os.Args[1] {
@@ -352,7 +352,7 @@ func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 	//
 	// Record each detached `foo &` real OS PID in the shared coreutils/pkg/jobs
 	// registry so `bashy jobs/fg/bg/kill` (Dispatch above) can manage it — the
-	// same real-PID model outpost uses. Harmless in posix mode (recording only).
+	// shared real-PID job-control model. Harmless in posix mode (recording only).
 	opts = append(opts, interp.WithBgPidCallback(func(pid int) {
 		_ = jobs.DefaultRegistry().Record(pid, "(detached)")
 	}))

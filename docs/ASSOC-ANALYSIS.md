@@ -21,7 +21,7 @@ This document clusters the failures observed in the `assoc.tests` fixture and it
     panic: interface conversion: syntax.ArithmExpr is nil, not *syntax.Word
     goroutine 1 [running]:
     mvdan.cc/sh/v3/interp.(*Runner).assignVal(0xe7bc6c32708, {0xe7bc6ba05e0, 0x6}, {0x1, 0x0, 0x0, 0x0, 0x0, 0x0, {0x0, ...}, ...}, ...)
-        /Users/qiangli/projects/poc/ai/sh/interp/vars.go:659 +0xd30
+        ../sh/interp/vars.go:659 +0xd30
     ```
     (Observed in `assoc11.sub`, `assoc12.sub`, `assoc14.sub`, and `assoc15.sub`).
 *   **Suspected Region:** `interp/vars.go` (specifically the type assertion in `assignVal`).

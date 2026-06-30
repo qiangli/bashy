@@ -139,7 +139,7 @@ Cross-checked against both references:
 With `compgen` now complete, the remaining items are both low-priority and
 interactive: `bind` (a no-op until a readline keybinding bridge exists) and the
 `compgen`/`complete` → readline `AutoComplete` bridge in `sh/interactive` that
-would make tab-completion actually appear in outpost's matrix shell + `/ssh`
+would make tab-completion actually appear in an interactive remote-shell session
 (ergochat/readline supports it; `interactive.Options` doesn't wire it yet). The
 engine *data* layer for completion is now in place; the readline *bridge* is the
 follow-on that makes it user-visible.

@@ -28,7 +28,7 @@ like `exit`.
 
 - Add `loginShell bool` field to `Runner` (`interp/api.go`).
 - Add `WithLoginShell(bool)` `RunnerOption` so embedders (cmd/bashy
-  interactive mode, outpost SSH session attach) can opt in.
+  interactive mode, a remote-shell session attach) can opt in.
 - `case "logout":` becomes:
   - If `!r.loginShell`: return failure with the bash-compatible message.
   - Otherwise: reuse the same code path as `case "exit":` (accept 0 or 1
@@ -40,7 +40,7 @@ like `exit`.
 
 The flag is a single bool; bash also tracks "interactive" separately
 (`$-` contains `i`). We're not modeling interactive vs. login distinction
-here — outpost cares about login (it owns the session lifetime).
+here — a login-shell embedder cares about login (it owns the session lifetime).
 Future-proof by using a flag rather than baking the assumption into the
 exit code path.
 
@@ -75,7 +75,7 @@ The bare `umask` (no args) prints `0022` regardless of the actual mask.
 
 The umask is applied **only** to file-creation calls routed through the
 runner. A custom `OpenHandler` that bypasses the runner's `open` method
-(e.g., outpost middleware that calls `os.OpenFile` directly) won't have
+(e.g., embedder middleware that calls `os.OpenFile` directly) won't have
 the umask applied. That's a deliberate limit: we're modeling shell
 umask, not system umask. Document on the field.
 
@@ -103,22 +103,22 @@ gaps:
 2. If the underlying real PID was stopped (e.g. an external SIGSTOP),
    `<-bg.done` blocks forever because the process never finishes.
 
-### Why we are not copying outpost's `outpost fg`
+### Why the in-shell `fg` differs from a cross-process detached-jobs `fg`
 
-`outpost fg <pid>` (cmd/outpost/jobs.go) is a **different abstraction**:
+A cross-process detached-jobs `fg` (as a separate session agent might build on
+the `WithBgPidCallback` hook) is a **different abstraction**:
 - It reads a persistent on-disk registry of detached PIDs populated via
-  `WithBgPidCallback` — pids that survived the original SSH session.
+  `WithBgPidCallback` — pids that survived the original session.
 - It polls `syscall.Kill(pid, 0)` every 250 ms because the proc ref is
   gone; the OS exit status cannot be captured.
-- It always returns 0 on natural exit (the comment in the file calls
-  this out explicitly: "the OS exit status is not captured — this is the
-  qiangli/sh detached process trade-off").
+- It always returns 0 on natural exit (the OS exit status is not captured —
+  the detached-process trade-off of an in-process runner).
 
 The in-shell builtin has strictly more information: the `bgProc` struct
 with its `done` channel and `exit` pointer. Polling and dropping the
 exit status here would be a regression. The two implementations stay
-separate by design — outpost's is for cross-process detached jobs; ours
-is for in-process bgProcs.
+separate by design — the detached variant is for cross-process detached jobs;
+ours is for in-process bgProcs.
 
 ### Design (implementing in this batch)
 
@@ -141,7 +141,7 @@ is for in-process bgProcs.
 Without process group / terminal control (the in-process shell has no
 controlling TTY of its own), `fg` cannot truly "reattach" stdio the way
 bash does. The implementation only waits + propagates exit. Embedders
-that need real TTY reattach (interactive `cmd/bashy`, outpost SSH
+that need real TTY reattach (interactive `cmd/bashy`, a remote-shell
 session takeover) will need a `WithFgHandler` middleware in a later
 batch; not in scope here.
 
@@ -263,10 +263,10 @@ general answer.
 
 - `bind` (readline keybindings) — irrelevant outside `cmd/bashy`
   interactive mode; punt.
-- `caller` / `help` — local has stubs; not blocking outpost.
+- `caller` / `help` — local has stubs; not blocking any embedder.
 - `compgen` / `complete` / `compopt` — local stubs are fine; programmable
-  completion is genuinely an SSH-client concern.
+  completion is genuinely an interactive-client concern.
 - `enable -n` (disable builtin) — local tracks it via
-  `r.disabledBuiltins`; works for what outpost needs.
+  `r.disabledBuiltins`; works for what embedders need.
 - `times` — local has the stub; the `time CMD` form already works via
   `syntax.TimeClause`.

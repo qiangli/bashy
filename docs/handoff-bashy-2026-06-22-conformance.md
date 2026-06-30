@@ -101,8 +101,8 @@ Human / non-agent steps (flag to the owner, do **not** block on them):
 ## Guardrails (do not skip)
 
 - **Every change is gated on the FULL `make test-bash` 86/0** — measure under a
-  clean PATH (`PATH=/bin:/usr/bin:$(dirname $(which go))`; the ycode shell
-  wrapper shadows `sh` and false-fails) and with the `external/bash-5.3`
+  clean PATH (`PATH=/bin:/usr/bin:$(dirname $(which go))`; a wrapper shim in
+  PATH can shadow `sh` and false-fail) and with the `external/bash-5.3`
   fixture symlink present (gitignored — a missing symlink false-passes).
 - **Declared limitations stay declared, don't "fix" them blind:** interactive
   terminal job control (goroutine-not-fork) and the `((cmd)||(cmd))` spacing

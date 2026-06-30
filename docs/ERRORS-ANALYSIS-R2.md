@@ -16,12 +16,12 @@ cd external/bash-5.3/tests && \
 symlink:
 
 ```
-external -> /Users/qiangli/projects/poc/ai/sh/external
+external -> ../sh/external
 ```
 
 The kernel resolves `tests/../../../bin/bashy` *physically*: it traverses the
-symlink into `/Users/qiangli/projects/poc/ai/sh/external/bash-5.3/tests` first,
-so `../../..` climbs to `/Users/qiangli/projects/poc/ai/sh`, and the binary
+symlink into `../sh/external/bash-5.3/tests` first,
+so `../../..` climbs to `../sh`, and the binary
 that actually runs is **that** repo's `bin/bashy` — built May 26
 (5,664,034 bytes, predating commit `9a2115d2` "syntax+interp: defer invalid
 select names"). The stale binary aborts the whole fixture at parse time on
@@ -644,4 +644,4 @@ everything else stays in `interp/` + `expand/`.
 **Process note for whoever picks this up**: measure with
 `THIS_SH=$(pwd -P)/bin/bashy` (or via `make test-bash`) — never through
 `external/...//../../..` relative paths, or you will be benchmarking
-`/Users/qiangli/projects/poc/ai/sh`'s stale binary again.
+`../sh`'s stale binary again.

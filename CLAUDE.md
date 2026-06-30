@@ -64,8 +64,8 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
   `WireExec()` (coreutils ExecHandler) and `Dispatch()` (front-door subcommands
   `bashy weave …` via `coreutils/pkg/weave`; `bashy podman …` via
   `coreutils/external/podman/engine` — the **embedded, isolated** in-process
-  podman engine, `CONTAINER_HOST` pinned to a private `bashy` machine, never the
-  host/ycode one; `bashy ollama …` via `coreutils/external/ollama`'s
+  podman engine, `CONTAINER_HOST` pinned to a private `bashy` machine, never a
+  shared host one; `bashy ollama …` via `coreutils/external/ollama`'s
   `NewManagedOllamaCmd` — isolated daemon, own port/models; plus `bashy
   act-runner`, `loom`, `zot`, `seaweedfs`, `kopia`). Imported only by `cmd/bashy`,
   so the lean `bash` binary never links any of it.
@@ -90,8 +90,7 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
     `coreutils/scripts/embed-*.sh`). With the blobs, `bashy podman` is fully
     self-contained (no host podman); without them it falls back to a PATH podman.
     `cmd/bash` never gets these tags. Embedding the engine makes `bin/bashy` large
-    (~259 MB with blobs); `bin/bash` stays ~5.7 MB. See
-    dhnt/docs/local-p2p-cicd.md + agentos-substrate-extraction-plan.md.
+    (~259 MB with blobs); `bin/bash` stays ~5.7 MB.
   - **Core vs ext / build profiles:** the default `cmd/bashy` is the **lean
     worker** — shell + coreutils userland + git + dag + `bashy go`
     (self-provisioning Go toolchain via `coreutils/external/gotoolchain` on
@@ -123,13 +122,13 @@ replace github.com/qiangli/coreutils => ../coreutils
 
 `../sh` is the interpreter engine; `../coreutils` is the AgentOS hub that
 supplies the pure-Go userland + `yc` verbs the `bashy` binary injects (only
-`agentos.go` imports it). Inside the `dhnt/` umbrella, both are submodules. In
+`agentos.go` imports it). In a parent monorepo both are submodules. In
 a standalone clone, run `./scripts/bootstrap-siblings.sh` — it clones
 `github.com/qiangli/{sh,coreutils}` next to this repo at the SHAs pinned in
-`.sibling-pins` (and leaves umbrella-mounted submodules alone). CI does the
+`.sibling-pins` (and leaves any submodule mounts alone). CI does the
 same before building. coreutils itself replaces `../sh`, which resolves to the
-same flat sibling. Keep the sibling SHAs coordinated; the umbrella's
-`script/sync.sh` auto-bumps `.sibling-pins`.
+same flat sibling. Keep the sibling SHAs coordinated; a parent monorepo's
+sync tooling auto-bumps `.sibling-pins`.
 
 ## Build / test / lint
 
@@ -170,10 +169,10 @@ go test ./...
 go test -run TestMain ./...
 ```
 
-### Local-env PATH gotcha (ycode shim)
+### Local-env PATH gotcha (wrapper shim)
 
-If your `PATH` puts a `ycode` shim in front of `sh` (common on the dev
-machine — `which sh` returns a `…/ycode-wrap/…/bin/sh`), Go tests that fork a
+If your `PATH` puts a wrapper shim in front of `sh` (some agentic dev tools
+install one — `which sh` returns a `…/wrap/…/bin/sh`), Go tests that fork a
 real shell can misbehave. Run the suite with a clean `PATH`:
 
 ```sh
@@ -198,8 +197,8 @@ require a change in `../sh` (interp/expand/syntax) plus, sometimes, the CLI
 glue here. Always re-read the live headline in `docs/TODO.md` rather than
 trusting any count quoted here.
 
-**Scoreboard reliability.** `make test-bash` is unreliable when the ycode
-shell wrapper shadows `sh` in `PATH` (see the gotcha above). To measure
+**Scoreboard reliability.** `make test-bash` is unreliable when a wrapper
+shim shadows `sh` in `PATH` (see the gotcha above). To measure
 reliably, drive `bin/bash` directly with the same environment the Makefile
 sets up — export `BASH_TSTOUT`/`BASH_TSTRAW` to temp files,
 `THIS_SH=$(pwd)/bin/bash`, a clean `PATH` (`$PWD:/usr/bin:/bin`), and mirror
@@ -268,8 +267,7 @@ brand-neutral and driven by bashy's own tools:
 
 - `skills/conductor/` — drive a fleet of agent CLIs to a verified goal over
   `bashy sprint` + `bashy weave` (decompose → isolate → gate → converge, loop
-  until a verifier passes); TDD-at-fleet-scale is the canonical mode. Consolidated
-  from the former umbrella `docs/skills/tdd-fleet` + ycode's `ycode-conductor`.
+  until a verifier passes); TDD-at-fleet-scale is the canonical mode.
 
 ## Plans
 

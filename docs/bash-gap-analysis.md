@@ -1,8 +1,8 @@
 # Bashy vs. GNU Bash 5.3 — Comprehensive Gap Analysis
 
 Date: 2026-05-26
-Reference bash sources: `/Users/qiangli/projects/poc/ai/sh/external/bash-5.3/`
-Bashy sources: `/Users/qiangli/projects/poc/ai/sh/interp/`, `/Users/qiangli/projects/poc/ai/sh/syntax/`, `/Users/qiangli/projects/poc/ai/sh/expand/`, `/Users/qiangli/projects/poc/ai/sh/cmd/bashy/`
+Reference bash sources: `../sh/external/bash-5.3/`
+Bashy sources: `../sh/interp/`, `../sh/syntax/`, `../sh/expand/`, `../sh/cmd/bashy/`
 
 ## Executive Summary
 

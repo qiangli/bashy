@@ -21,10 +21,10 @@ import (
 func dispatchEngine(arg string) {
 	switch arg {
 	case "podman":
-		// Managed, ISOLATED in-process podman (embeds the qiangli/podman fork):
+		// Managed, ISOLATED in-process podman (embeds a podman fork):
 		// pass-through to the embedded binary with CONTAINER_HOST pointed at
 		// bashy's own `bashy` machine socket, so images/containers never collide
-		// with a host or ycode engine. $BASHY_PODMAN_SYSTEM=1 defers to host podman.
+		// with a host engine. $BASHY_PODMAN_SYSTEM=1 defers to host podman.
 		cmd := podmanengine.NewPodmanCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
@@ -33,8 +33,8 @@ func dispatchEngine(arg string) {
 		os.Exit(0)
 	case "ollama":
 		// Managed, ISOLATED ollama: own bashy-owned port (never 11434), models
-		// under ~/.agents/bashy/ollama — never the host's ~/.ollama. Reached over
-		// the mesh by the `ollama` service name.
+		// under ~/.agents/bashy/ollama — never the host's ~/.ollama. Reached by
+		// the `ollama` service name.
 		cmd := ollama.NewManagedOllamaCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {

@@ -21,7 +21,7 @@ func dispatchEngine(arg string) {
 	case "podman", "ollama":
 		fmt.Fprintf(os.Stderr,
 			"bashy %s: the container/LLM engines are not in this build "+
-				"(rebuild with -tags bashy_engines on a unix host, or run them on a host node in the mesh)\n", arg)
+				"(rebuild with -tags bashy_engines on a unix host, or run them on a host node)\n", arg)
 		os.Exit(1)
 	}
 }
