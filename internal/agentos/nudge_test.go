@@ -113,7 +113,7 @@ func TestRoutingHintEmittedViaAudit(t *testing.T) {
 }
 
 func TestHintsEnabledControl(t *testing.T) {
-	t.Setenv("DHNT_AGENT", "")
+	t.Setenv("BASHY_AGENTIC", "")
 	// BASHY_AGENTIC master kill beats everything.
 	t.Setenv("BASHY_AGENTIC", "0")
 	t.Setenv("BASHY_HINTS", "on")

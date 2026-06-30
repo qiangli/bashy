@@ -228,7 +228,7 @@ func TestIsVirtualIface(t *testing.T) {
 }
 
 func TestAdvisorEnabledControl(t *testing.T) {
-	t.Setenv("DHNT_AGENT", "") // ensure agent mode is not implied by env
+	t.Setenv("BASHY_AGENTIC", "") // ensure agent mode is not implied by env
 	for _, v := range []string{"0", "false", "off", "no"} {
 		t.Setenv("BASHY_ADVISOR", v)
 		if advisorEnabled() {

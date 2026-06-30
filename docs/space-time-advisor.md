@@ -19,7 +19,7 @@ what worked under which conditions, **and** sees every command in the retry loop
 - **Never blocks.** It is a post-exec `ExecHandler` middleware that returns the
   underlying exit status unchanged and only writes one extra line. Worst case it
   adds a wrong hint — advisory, ignorable.
-- **Opt-in / off by default for humans.** Active in agent mode (`DHNT_AGENT`) or
+- **Opt-in / off by default for humans.** Active in agent mode (`BASHY_AGENTIC`) or
   when `BASHY_ADVISOR` is set on-ish. Silent in an ordinary interactive session.
 - **Never in the drop-in.** It lives in `internal/agentos` (imported only by
   `cmd/bashy`) and is inert under `--posix`, so `bin/bash` never links or runs it.
@@ -90,7 +90,7 @@ Schema is versioned (`bashy-advice-v1`); fields: `schema_version`, `kind`
 
 | Variable | Effect |
 |----------|--------|
-| `DHNT_AGENT` | agent mode: advisor on, JSON output (set by weave / agent harnesses) |
+| `BASHY_AGENTIC` | agent mode: advisor on, JSON output (set by weave / agent harnesses) |
 | `BASHY_ADVISOR` | explicit control: `0`/`false`/`off`/`no` force-disable (even in agent mode); `1`/`true`/`on`/`yes` force-enable; unset ⇒ on in agent mode, off for humans |
 | `BASHY_ADVISOR_NOMEM` | `1`/`true`/`yes`/`on` disables the persisted host ledger (the in-memory session layer still works) |
 | `BASHY_ADVISOR_STATE` | override the ledger path (default `<user-cache>/bashy/advisor/hosts.json`) |

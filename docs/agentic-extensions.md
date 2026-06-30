@@ -196,7 +196,7 @@ preflight, and a destructive-op safety net for agent-generated scripts.
   **skipped** (return 0).
 - `set -o dryrun` / `set +o dryrun`: runtime toggle (dry-run only part of a
   script). One spelling `dryrun` across the flag, the option, and `dag --dryrun`.
-- **Agent mode** (`DHNT_AGENT=1`): a JSON-lines manifest on stdout — `command`
+- **Agent mode** (`BASHY_AGENTIC=1`): a JSON-lines manifest on stdout — `command`
   events (present/missing dependency check), `destroy` events (`rm` → files +
   bytes, walked read-only from the real FS), `truncate` events (`>` clobber).
 

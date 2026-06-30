@@ -8,6 +8,22 @@ shadowed, augmented, or left alone — and the default-behavior policy that deci
 Companion to `docs/space-time-advisor.md` (the advisor is the *reactive* half of
 the same "nudge" subsystem proposed here).
 
+## Agent mode: one env, `BASHY_AGENTIC`
+
+There is a **single** agent-mode switch — **`BASHY_AGENTIC`** (matching the
+`--agentic` flag family). Truthy ⇒ agent mode: the agentic verbs
+(`weave`/`dag`/`schedule`) emit their JSON envelope and the advisor/nudge/`time`
+hints turn on; off/unset ⇒ human defaults. The older `DHNT_AGENT` / `YCODE_AGENT`
+envs were **removed** — bashy is standalone, brand-neutral OSS, so its surface is
+`BASHY_*` only (`weavecli.IsAgent()` reads just `BASHY_AGENTIC`).
+
+Per-command knobs override the env (the escape hatch for pipelines):
+`--json` forces JSON, **`--json=false`** / **`--plain`** force text even under
+`BASHY_AGENTIC` (so `weave list --json=false | grep …` works), `--quiet` trims to
+the result line. Precedence: explicit `--json(=true/false)` > `--plain` >
+`--quiet` > `BASHY_AGENTIC` > tty auto-detect. Plain GNU tools (`ls`, `grep`,
+`cat`, …) never emit JSON regardless of the env — only the agentic verbs do.
+
 ## Prime invariant — help, don't obstruct
 
 > **bashy features must help other agentic tools succeed, never stand in their

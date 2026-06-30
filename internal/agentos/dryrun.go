@@ -30,7 +30,7 @@ import (
 // drop-in never sees it; also inert under --posix (see WireExec).
 var dryRunFlag = flag.Bool("dryrun", false,
 	"bashy: print external commands without running them (xtrace without side effects). "+
-		"With DHNT_AGENT, emit a JSON manifest (commands present/missing + file destructions) — a preflight/security check.")
+		"With BASHY_AGENTIC, emit a JSON manifest (commands present/missing + file destructions) — a preflight/security check.")
 
 // dryRunRequested reports whether --dryrun was passed at startup.
 func dryRunRequested() bool { return *dryRunFlag }

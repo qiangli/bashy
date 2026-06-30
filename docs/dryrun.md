@@ -43,7 +43,7 @@ hi
 - `# ⚠ DESTROYS N file(s), <size>` for `rm` (and `# ⚠ TRUNCATES existing <size>`
   for a `>` clobber), with a sample of the affected paths.
 
-### Agent mode (`DHNT_AGENT=1`)
+### Agent mode (`BASHY_AGENTIC=1`)
 
 A clean **JSON-lines manifest** on stdout (the script's own stdout is suppressed),
 one event per distinct command plus destructive-op events — a dependency/security

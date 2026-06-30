@@ -97,7 +97,7 @@ func advisorEnabled() bool {
 	}
 	switch strings.ToLower(os.Getenv("BASHY_ADVISOR")) {
 	case "0", "false", "off", "no":
-		return false // explicit off wins, even under DHNT_AGENT
+		return false // explicit off wins, even under BASHY_AGENTIC
 	case "1", "true", "on", "yes":
 		return true
 	}
