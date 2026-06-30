@@ -205,6 +205,16 @@ token tax.
   paths via `pkg/ignore` (+ a transparency line) for repo orientation without
   the dependency-tree noise. (`view` was dropped — `cat -n` already numbers lines.)
 
+- **`yc query`** (coreutils `cmds/yc`) — **structural search** via tree-sitter
+  queries (S-expression patterns with `@captures`), the ast-grep-class addition.
+  `yc query --lang go '(function_declaration name: (identifier) @fn)' [path]`
+  matches the AST (not text) across the 9 treesitter languages, pure-Go, reusing
+  `pkg/treesitter` + the binding's Query API. Grammar-specific (`--lang` required
+  for a dir, inferred for a single file); invalid queries fail loudly. We expose
+  tree-sitter's query language (which ast-grep compiles down to, and which LLMs
+  write fluently) rather than reimplementing ast-grep's `foo($A)` pattern-compiler
+  (a large project that would risk silent mis-matches).
+
 ## Decided against: per-tool `--json`
 
 Per-tool `--json` (ls/stat/df/du/wc) was **dropped**: agents parse plain text
