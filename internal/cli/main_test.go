@@ -247,6 +247,16 @@ func TestSplitCombinedShortFlagsLoginCommand(t *testing.T) {
 			args: []string{"bashy", "-lec", "echo ok"},
 			want: []string{"bashy", "-login", "-o", "errexit", "-c", "echo ok"},
 		},
+		{
+			name: "short h is hashall not help",
+			args: []string{"bashy", "-h"},
+			want: []string{"bashy", "-o", "hashall"},
+		},
+		{
+			name: "combined short h is hashall not help",
+			args: []string{"bashy", "-ehc", "echo ok"},
+			want: []string{"bashy", "-o", "errexit", "-o", "hashall", "-c", "echo ok"},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
