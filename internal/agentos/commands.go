@@ -27,26 +27,35 @@ const commandsSchemaVersion = "bashy-commands-v1"
 
 func dispatchCommands(args []string) int {
 	asJSON, verbose := weavecli.IsAgent(), false // JSON by default under $BASHY_AGENTIC
+	agentic := false
 	for _, a := range args {
 		switch a {
 		case "--json", "--json=true":
 			asJSON = true
 		case "--json=false", "--plain":
 			asJSON = false
+		case "--agentic":
+			agentic = true
 		case "-v", "--verbose":
 			verbose = true
 		case "-h", "--help":
-			fmt.Println("usage: commands [-v] [--json|--plain]")
+			fmt.Println("usage: commands [-v] [--json|--plain|--agentic]")
 			fmt.Println("List the supported command surface: shell builtins, the coreutils")
 			fmt.Println("userland, and bashy's front-door verbs.")
 			fmt.Println("  -v             also show each coreutils tool's and verb's synopsis")
 			fmt.Println("  --json         machine-readable (default under $BASHY_AGENTIC)")
 			fmt.Println("  --json=false   force text even under $BASHY_AGENTIC (alias --plain)")
+			fmt.Println("  --agentic      compact agent-oriented discovery and safety guide")
 			return 0
 		default:
 			fmt.Fprintf(os.Stderr, "commands: unknown option %q\n", a)
 			return 2
 		}
+	}
+
+	if agentic {
+		printAgenticCommands(os.Stdout)
+		return 0
 	}
 
 	builtins, core, verbs := commandsCatalog()
@@ -99,6 +108,25 @@ func dispatchCommands(args []string) int {
 	printCommandGroup(os.Stdout, "coreutils userland", core)
 	printCommandGroup(os.Stdout, "bashy verbs (front-door, bare-name shims)", verbs)
 	return 0
+}
+
+func printAgenticCommands(w io.Writer) {
+	fmt.Fprint(w, `agentic bashy commands:
+  bashy help dryrun              explain dry-run safety mode and JSON manifest
+  BASHY_AGENTIC=1 bashy --dry-run script.sh
+                                  preview external commands, rm, and truncation as JSON-lines
+  bashy --dry-run -c 'commands'  human-readable dry-run preview
+  bashy run --capture -- command structured command result envelope
+  bashy doctor                   diagnose PATH, shell, engine, and agent environment
+  bashy commands -v              full command surface with synopses
+  bashy dag --list               list markdown DAG targets
+  bashy podman ...               Podman-compatible isolated container engine
+
+dry-run JSON entry kinds:
+  command   external command availability and resolved path
+  destroy   destructive rm target count, bytes, and sample paths
+  truncate  redirection clobber of an existing file
+`)
 }
 
 // verbSynopsis describes the front-door verb shims (the coreutils tools carry

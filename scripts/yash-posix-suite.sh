@@ -54,7 +54,7 @@ build_image localhost/posix-shells-deb $'FROM debian:stable-slim\nRUN apt-get up
 # Cross-compile bashy to the container arch.
 ARCH=$($OCI run --rm localhost/posix-shells-broad uname -m | tr -d '\r')
 case "$ARCH" in aarch64|arm64) GOARCH=arm64;; x86_64|amd64) GOARCH=amd64;; *) echo "bad arch $ARCH" >&2; exit 2;; esac
-BIN="$HERE/bin/.bashy-linux-yash"
+BIN="$HERE/bin/.bashy-linux-yash-$$"
 echo "yash-suite: building linux/$GOARCH bashy…" >&2
 GOOS=linux GOARCH="$GOARCH" go build -o "$BIN" ./cmd/bash || exit 2
 trap 'rm -f "$BIN"' EXIT
@@ -92,3 +92,4 @@ echo "##### yash POSIX (-p) suite vs bashy + reference shells #####"
 run_panel alpine localhost/posix-shells-broad "bashy=/bashy bash53=bash dash=dash ash=/bin/ash yash=yash mksh=mksh loksh=ksh zsh=zsh"
 run_panel debian localhost/posix-shells-deb "bashy=/bashy bash52=bash dash=dash posh=posh ksh93=ksh mksh=mksh zsh=zsh"
 [ -n "$OUTDIR" ] && echo "verdicts written to $OUTDIR/ (<panel>.<shell>.verdicts)"
+exit 0

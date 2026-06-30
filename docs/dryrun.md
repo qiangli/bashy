@@ -12,7 +12,10 @@ regression** to bash 5.3 conformance (86/86) — see [Design](#design).
 
 ```sh
 bashy --dryrun script.sh              # dry-run the whole script
+bashy --dry-run script.sh             # alias; preferred in agent-facing docs
 bashy --dryrun -c '<commands>'
+bashy --dry-run -c '<commands>'
+bashy help dryrun                     # focused help for this feature
 
 # Runtime toggle — dry-run only part of a script:
 set -o dryrun                          # external commands now print + skip
@@ -20,8 +23,8 @@ rm -rf build                           # reported, not run
 set +o dryrun                          # back to real execution
 ```
 
-`set -o dryrun` / `set +o dryrun` flip dry-run mid-script. The flag and the
-option share the one spelling **`dryrun`** (matching `dag --dryrun`).
+`set -o dryrun` / `set +o dryrun` flip dry-run mid-script. `--dryrun` and
+`--dry-run` are aliases; both enable the same bashy-only extension.
 
 ## What it shows
 

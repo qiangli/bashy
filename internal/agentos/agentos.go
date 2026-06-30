@@ -117,6 +117,8 @@ func Dispatch() {
 	// only under `-tags bashy_obs`; the default stub points the user at a host.
 	dispatchObs(os.Args[1])
 	switch os.Args[1] {
+	case "help":
+		os.Exit(dispatchHelp(os.Args[2:]))
 	case "weave":
 		cmd := weave.NewWeaveCmd()
 		cmd.SetArgs(os.Args[2:])

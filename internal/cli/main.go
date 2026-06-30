@@ -89,6 +89,9 @@ Shell options:
 	-ilrsD or -c command or -O shopt_option		(invocation only)
 	-abefhkmnptuvxBCEHPT or -o option
 `)
+	if extra := AgentOSUsage(); extra != "" {
+		fmt.Fprint(os.Stderr, extra)
+	}
 }
 
 func preflightInvocationErrors(args []string) {
@@ -346,6 +349,10 @@ var (
 	// (e.g. `docker() { … bashy podman … }`) registered BEFORE user startup files
 	// so the user can override them. No-op for the pure `bash` drop-in.
 	AgentOSPreamble = func() string { return "" }
+
+	// AgentOSUsage returns bashy-only usage text appended to `--help`. The pure
+	// bash drop-in leaves it empty so its help stays close to GNU Bash.
+	AgentOSUsage = func() string { return "" }
 
 	// SuppressedForkBuiltins names the qiangli/sh fork's extra builtins that the
 	// pure `bash` drop-in disables so its command table matches bash 5.3 exactly.

@@ -67,7 +67,7 @@ case "$ARCH" in
   x86_64|amd64)  GOARCH=amd64 ;;
   *) echo "posix-diff: unsupported container arch '$ARCH'" >&2; exit 2 ;;
 esac
-BIN="$PWD/bin/.bashy-linux-posixdiff"
+BIN="$PWD/bin/.bashy-linux-posixdiff-$$"
 mkdir -p "$(dirname "$BIN")"
 echo "posix-diff: building linux/$GOARCH bashy…" >&2
 GOOS=linux GOARCH="$GOARCH" go build -o "$BIN" ./cmd/bash || { echo "posix-diff: bashy build failed" >&2; exit 2; }

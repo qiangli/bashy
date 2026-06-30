@@ -4,6 +4,7 @@
 package agentos
 
 import (
+	"flag"
 	"os"
 	"path/filepath"
 	"testing"
@@ -32,6 +33,15 @@ func TestAnalyzeDestroy(t *testing.T) {
 	}
 	if analyzeDestroy("ls", []string{"ls", "-la"}, dir) != nil {
 		t.Error("non-rm command is not destructive")
+	}
+}
+
+func TestDryRunAliasRegistered(t *testing.T) {
+	if flag.Lookup("dryrun") == nil {
+		t.Fatal("--dryrun flag is not registered")
+	}
+	if flag.Lookup("dry-run") == nil {
+		t.Fatal("--dry-run alias is not registered")
 	}
 }
 

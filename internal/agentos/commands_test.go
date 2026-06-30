@@ -112,3 +112,28 @@ func TestPrintCommandGroupWraps(t *testing.T) {
 		t.Errorf("expected wrapped output across multiple lines, got %d newlines", lines)
 	}
 }
+
+func TestAgenticCommandsMentionsDryRun(t *testing.T) {
+	var b bytes.Buffer
+	printAgenticCommands(&b)
+	out := b.String()
+	for _, want := range []string{
+		"bashy help dryrun",
+		"BASHY_AGENTIC=1 bashy --dry-run",
+		"destroy",
+		"truncate",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("agentic commands help missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestUsageMentionsAgenticDryRun(t *testing.T) {
+	out := Usage()
+	for _, want := range []string{"--dryrun", "--dry-run", "BASHY_AGENTIC=1", "bashy help dryrun"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("usage missing %q:\n%s", want, out)
+		}
+	}
+}
