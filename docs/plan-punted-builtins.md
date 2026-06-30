@@ -1,9 +1,8 @@
 # Plan: punted builtins (coproc / fg / umask / logout)
 
-After the merge of bashy's Phase 3-8 work onto qiangli/sh master, local's
+After the merge of bashy's Phase 3-8 work onto the `sh` fork's master, the
 explicit implementations for `fg`/`bg`/`jobs`/`fc`/`umask`/`logout`/etc.
-took precedence over qiangli's outpost-aware "unsupported in this shell — …"
-hints. The merged spot-check tests and `TestUnsupportedHints` were trimmed
+took precedence over the earlier "unsupported in this shell — …" hints. The merged spot-check tests and `TestUnsupportedHints` were trimmed
 accordingly. This document captures the design work needed to bring four
 of those builtins from "merged but minimal" to "actually correct".
 

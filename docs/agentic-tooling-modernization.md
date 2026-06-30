@@ -181,8 +181,8 @@ token tax.
   agent log-follow (diff-on-change).
 - `man` → `tldr`-class (terse, example-first — fewer tokens).
 - `du`/`df` → visual/`--json` (dust/duf-class).
-- `curl`/`wget` → `httpie`-class with `--json` (ycode already has
-  `yc browser fetch` — promote).
+- `curl`/`wget` → `httpie`-class with structured output (an HTTP-fetch verb
+  fits the agentic toolset).
 - `ifconfig`/`netstat` → `ip`/`ss` (and they'd feed the advisor's network
   dimension).
 

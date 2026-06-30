@@ -47,7 +47,7 @@ agent ssh-proxy stanza in `~/.ssh/config` (`ProxyCommand …`).
 A `--mesh` body runs in the **remote host's** shell, so the "identical on every
 platform" guarantee — which covers *local* bodies — does not extend to it. When
 the remote is a Windows host reached through an agent shell with a **minimal
-PATH** (e.g. an outpost ssh session, whose PATH is essentially just the agent's
+PATH** (e.g. a remote agent ssh session, whose PATH is essentially just the agent's
 own directory — `C:\Windows\System32` is **not** on it), a bare
 `cmd`/`curl`/`tar`/`nvidia-smi` reports `executable file not found in $PATH`.
 
@@ -60,8 +60,8 @@ minimal PATH can't help:
 - or a **native backslash absolute path** (`C:\path\to\tool.exe`). Forward-slash
   (`/c/...`) and msys-style paths do **not** resolve in this shell.
 
-To stage files, prefer **scp** (e.g. `outpost scp <file> <host>:<dest>`, or stock
-`scp` through an `ssh-proxy` stanza) over fetching inside the body — copy the
+To stage files, prefer **scp** (e.g. `scp <file> <host>:<dest>`, optionally
+through an `ssh-proxy` stanza) over fetching inside the body — copy the
 binary/inputs over, then launch via `"$COMSPEC" /c` or a full path. Pure-Go
 coreutils builtins (`cat`, `ls`, `grep`, …) work regardless — they resolve
 in-process, not via PATH.

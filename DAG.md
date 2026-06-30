@@ -103,16 +103,35 @@ done
 ```
 
 ### test-bash
-Run the Bash 5.3 native test suite against the freshly built `bin/bash`. The
-130-line compliance harness (per-fixture timeouts, expect-line filtering,
-cat -v transforms, C helper compilation) stays in the Makefile — this target
-runs `build` first, then delegates to it. Re-home into pure dag bodies once the
-harness is factored into a script.
+**GNU Bash 5.3 compatibility test** — the canonical conformance gate. Runs
+Bash's own 5.3 test suite against the freshly built `bin/bash` (the pure
+drop-in); the headline is the PASS-count three-tuple (currently **86/86**, 0
+fail, 0 skip). The 130-line compliance harness (per-fixture timeouts,
+expect-line filtering, cat -v transforms, C helper compilation) stays in the
+Makefile — this target runs `build` first, then delegates to it. Use
+`make test-bash-parallel` for the cores-fanned-out form (the canonical gate).
+Re-home into pure dag bodies once the harness is factored into a script.
 Requires: build
 Effects: write
 
 ```bash
 make test-bash
+```
+
+### yash
+**yash POSIX (`-p`) conformance test** — the POSIX-conformance frontier metric
+(an INFO probe, not a 0/1 gate). Cross-builds the pure `cmd/bash` for the
+container arch, clones yash's GPL test suite into a gitignored cache
+(`.yash-tests/`, never vendored), and runs the testee in POSIX mode across two
+oracle panels (alpine: bash 5.3/dash/ash/yash/mksh/loksh/zsh; debian adds
+posh/ksh93), reporting bashy's pass rate vs each. Needs a container engine
+(`bashy podman` on a unix host, or docker). As of 2026-06-29: **bashy 96%**
+(alpine 1763/1826, debian 1777/1838) — ahead of bash (95% / 94%) and tied with
+mksh for best. See `docs/cross-shell-conformance-baseline.md`.
+Effects: write
+
+```bash
+scripts/yash-posix-suite.sh
 ```
 
 ### tidy

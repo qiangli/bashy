@@ -1,5 +1,13 @@
 # yash POSIX-suite conformance gap — triage worklist
 
+> **Update 2026-06-29 — re-measured at 96%.** A fresh `scripts/yash-posix-suite.sh`
+> run puts **bashy at 96% on both panels** (alpine **1763 OK / 63 ERROR of 1826**,
+> debian **1777 / 61 of 1838**) — pass rate now **≥ bash** (alpine 95%, debian
+> 94%) and tied with mksh for best. The ERROR tail fell **160 → ~61** since the
+> 2026-06-27 table below. The cluster worklist below remains the map for the
+> residual tail; re-run the suite to regenerate exact per-case verdicts before
+> picking the next cluster (the table/counts here are the 2026-06-27 snapshot).
+
 Status: **measured 2026-06-27** (alpine panel, `scripts/yash-posix-suite.sh`).
 This is the concrete long-tail worklist behind the conformance statement's "yash
 row." It converts the headline "bashy 90% vs bash 5.3 95%" into the exact cases

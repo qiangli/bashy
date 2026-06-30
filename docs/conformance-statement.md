@@ -61,7 +61,7 @@ All measured on the `bash` drop-in binary, re-runnable via
 | `posix-diff.sh` | clean-room XCU corpus, 5-oracle same-env differential | **0 deviations** |
 | `oils-diff.sh` | Oils spec-test case code through the live differential | **0 deviations** |
 | `multishell-diff.sh` | 10-shell panel (dash/ash/posh/yash + bash/zsh/ksh93/mksh/loksh) | **0 deviations** |
-| `yash-posix-suite.sh` | yash's `-p` POSIX suite (strictest-shell suite; relative measure) | **bashy 90% vs bash53 95%** — 112-case tail under triage |
+| `yash-posix-suite.sh` | yash's `-p` POSIX suite (strictest-shell suite; relative measure) | **bashy 96% (≥ bash) — 2026-06-29** (alpine 1763/1826 vs bash53 95%; debian 1777/1838 vs bash52 94%); ~61-case tail under triage |
 | `austin-defects.sh` | clean-room Austin-Group corner-case differential (37 probes) | **37 match / 0 diff** |
 | `dash-posix-suite.sh` | dash's shipped function-library load check (dash has no suite — oracle) | **bashy 6/8** (now matches bash; rejects ash brace-less bodies as of the syntax fix) |
 | `modernish-suite.sh` | modernish self-test (~389 tests) under each shell | **blocked by one `sh` parse bug** (`let --`) — see below |
@@ -78,12 +78,11 @@ battery outright).
 
 **The yash row is the honest frontier.** The clean-room / Oils / multishell
 corpora are at 0 deviations, but they sample behavior; yash's own suite is the
-strictest POSIX shell's adversarial suite, where even bash/dash sit at ~95% and
-bashy is at ~90% (on par with zsh 91% / ksh93 90%, behind bash/dash/mksh 95–96%).
-The 112 cases where bashy errors but bash 5.3 passes are the concrete remaining
-work — clustered and root-caused in **`yash-conformance-gap.md`** (the delta is
-really a handful of root causes: ~36 are one "assignment error in a subshell"
-pattern, ~30 are alias-substitution edge positions). This is the long tail the
+strictest POSIX shell's adversarial suite, where even bash/dash sit at ~94–95%.
+As of 2026-06-29 bashy is at **96%** — at parity-or-better with bash (95%/94%)
+and tied with mksh for best of the panel, ahead of dash/zsh 91% / ksh93 90%. The
+~61-case ERROR tail (down from 160) is the concrete remaining work — clustered
+and root-caused in **`yash-conformance-gap.md`** (a handful of root causes). This is the long tail the
 differential corpora did not reach, and exactly what the licensed VSC-PCTS run
 would surface; closing it is gated on the same 86/86 no-regression discipline as
 every other fix.

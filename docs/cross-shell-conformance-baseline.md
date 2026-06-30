@@ -1,6 +1,6 @@
 # Cross-shell conformance baselines (yash POSIX suite + the full-suite plan)
 
-Status: **2026-06-27.** Baselines from running yash's POSIX (`-p`) suite against
+Status: **2026-06-29.** Baselines from running yash's POSIX (`-p`) suite against
 bashy + 10 reference shells (`scripts/yash-posix-suite.sh`). These are the
 **tracking baselines** for the future "100% on top of bash 5.3" / per-shell
 compatibility work — NOT marketing figures (see Claim discipline below).
@@ -12,6 +12,17 @@ POSIX suite found **435 cases bash 5.3 passes but bashy fails**. Small corpora
 hide the truth — real baselines need the *full* upstream suites.
 
 ## Progress log
+
+- **2026-06-29 — yash 96% (re-measure, both panels).** Fresh
+  `scripts/yash-posix-suite.sh` run, testee in POSIX mode, signals/JC excluded:
+  **bashy 96%** on both oracle panels — alpine **1763 OK / 63 ERROR of 1826**
+  (vs bash 5.3 95%, 1758/77), debian **1777 OK / 61 ERROR of 1838** (vs bash 5.2
+  94%, 1754/93). bashy's pass rate now **equals-or-leads bash** and ties mksh
+  (96%) for best of the panel; it beats dash/zsh (91%), ksh93 (90%), loksh
+  (94%), posh (68%). The ERROR tail fell **160 → ~61** vs the 2026-06-27
+  measurement — the conformance sprints since then landed. `go test ./...` +
+  `make test-bash` 86/86 still green. This is the posix-RELATIVE frontier metric
+  (distinct from the stricter absolute non-POSIX `measure-yash3` floor).
 
 - **2026-06-27 — yash 90% + the `+i` unblock.** Full verified baseline:
   **`go test ./...` ALL PASS · `make test-bash` 86/86 (100%) · yash canonical
