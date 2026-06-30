@@ -6,6 +6,7 @@ package agentos
 import (
 	"bytes"
 	"io"
+	"runtime"
 	"testing"
 )
 
@@ -40,6 +41,9 @@ func TestRunStreamMode(t *testing.T) {
 }
 
 func TestRunSignaledIsNonLossy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX signals on Windows; signaled-status encoding is unix-only")
+	}
 	env, status := runCommand([]string{"sh", "-c", "kill -KILL $$"}, true, nil, nil)
 	if !env.Signaled {
 		t.Error("a SIGKILL'd process should report signaled=true")
