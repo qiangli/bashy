@@ -354,10 +354,10 @@ var (
 	//     unaffected by disabling the user-facing builtin.)
 	//   - awd: bashy's "alter working directory" agentic builtin; bash never had
 	//     it, so the drop-in resolves the name externally ("command not found").
-	// The `bashy` AgentOS shell clears this in its init() to KEEP them — outpost's
-	// in-process matrix shell needs `nohup foo &` to survive a closed SSH session,
-	// which an external nohup over a goroutine job can't do. Users opt out per
-	// command with the bash-native `enable -n <name>`.
+	// The `bashy` AgentOS shell clears this in its init() to KEEP them — an
+	// in-process embedded shell needs `nohup foo &` to survive a closed remote
+	// session, which an external nohup over a goroutine job can't do. Users opt
+	// out per command with the bash-native `enable -n <name>`.
 	SuppressedForkBuiltins = []string{"nohup", "setsid", "newgrp", "strmatch", "awd"}
 )
 
