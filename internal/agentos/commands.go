@@ -26,18 +26,22 @@ import (
 const commandsSchemaVersion = "bashy-commands-v1"
 
 func dispatchCommands(args []string) int {
-	asJSON, verbose := false, false
+	asJSON, verbose := weavecli.IsAgent(), false // JSON by default under $BASHY_AGENTIC
 	for _, a := range args {
 		switch a {
-		case "--json":
+		case "--json", "--json=true":
 			asJSON = true
+		case "--json=false", "--plain":
+			asJSON = false
 		case "-v", "--verbose":
 			verbose = true
 		case "-h", "--help":
-			fmt.Println("usage: commands [-v] [--json]")
+			fmt.Println("usage: commands [-v] [--json|--plain]")
 			fmt.Println("List the supported command surface: shell builtins, the coreutils")
 			fmt.Println("userland, and bashy's front-door verbs.")
-			fmt.Println("  -v  also show each coreutils tool's and verb's one-line synopsis")
+			fmt.Println("  -v             also show each coreutils tool's and verb's synopsis")
+			fmt.Println("  --json         machine-readable (default under $BASHY_AGENTIC)")
+			fmt.Println("  --json=false   force text even under $BASHY_AGENTIC (alias --plain)")
 			return 0
 		default:
 			fmt.Fprintf(os.Stderr, "commands: unknown option %q\n", a)
