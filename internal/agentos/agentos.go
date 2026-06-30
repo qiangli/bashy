@@ -67,7 +67,7 @@ func Preamble() string {
 	var b strings.Builder
 	b.WriteString(`docker() { command bashy podman "$@"; }` + "\n")
 	always := []string{
-		"weave", "sprint", "dag", "schedule", "secrets", "skills",
+		"weave", "sprint", "dag", "schedule", "secrets", "skills", "run",
 		"gh", "act", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 	}
@@ -153,6 +153,12 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
+	case "run":
+		// Wrap a command and emit a structured result envelope (bashy-run-v1)
+		// bundling exit/signal/duration/cwd + the advisor's hints. Streams live
+		// by default (meta trails on stderr); --capture embeds the streams in one
+		// stdout record. Returns the command's own exit status.
+		os.Exit(dispatchRun(os.Args[2:]))
 	case "go":
 		// Self-provisioning Go toolchain (check → download from go.dev →
 		// sha256-verify → cache → exec). No embedding, no system Go: this is

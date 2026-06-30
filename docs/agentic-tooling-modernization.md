@@ -199,6 +199,23 @@ token tax.
   `--prompt`/`--context` delivered to the fired command as `BASHY_SCHEDULE_*`, so
   a conductor self-wakes a long-running campaign. Host `cron`/`crontab` untouched.
 
+## Decided against: per-tool `--json`
+
+Per-tool `--json` (ls/stat/df/du/wc) was **dropped**: agents parse plain text
+fine in-context (the brittle-parsing case — programmatic `awk`/`cut` pipelines —
+is the rarer path), and JSON output is *more* tokens per datum, not fewer. The
+real byte-savers are noise-filtering (`--agentic`, shipped) and budgeting
+(repomap), not the format. Replaced by one generic mechanism:
+
+- **`bashy run`** (bashy `internal/agentos/run.go`) — wrap any command and emit a
+  `bashy-run-v1` envelope bundling the result with bashy's agentic meta
+  (non-lossy exit/signal, duration, cwd, and the space-time advisor's hints as
+  structured data). Default **streams (tee)** — output goes live, a compact meta
+  line trails on **stderr** (stdout stays pure/pipeable); **`--capture`** emits
+  one stdout record embedding stdout/stderr (for logging/transport). Returns the
+  command's own exit status. Reachable as the front-door `bashy run` or the bare
+  `run` shim. The value is the *meta*, not reformatting output.
+
 ## Prioritized shortlist
 
 1. **`awd` builtin** — smallest, highest daily value; closes the loop with the
