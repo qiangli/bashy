@@ -118,6 +118,7 @@ func printAgenticCommands(w io.Writer) {
   bashy --dry-run -c 'commands'  human-readable dry-run preview
   bashy run --capture -- command structured command result envelope
   bashy doctor                   diagnose PATH, shell, engine, and agent environment
+  bashy git ...                   embedded pure-Go git client
   bashy commands -v              full command surface with synopses
   bashy dag --list               list markdown DAG targets
   bashy podman ...               Podman-compatible isolated container engine
@@ -144,6 +145,7 @@ var verbSynopsis = map[string]string{
 	"run":       "run a command, emit a structured result envelope (+advisor hints)",
 	"commands":  "list the supported command surface (builtins, coreutils, verbs)",
 	"doctor":    "diagnose the bashy environment (PATH/sh, engine, agent mode, bin cache)",
+	"git":       "embedded pure-Go git client (clone, status, commit, push, diff, log)",
 	"gh":        "GitHub CLI (managed external)",
 	"act":       "run GitHub Actions locally (managed external)",
 	"rclone":    "cloud-storage transfer + file server (managed external)",

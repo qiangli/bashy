@@ -25,7 +25,13 @@ func TestPreambleDefinesDocker(t *testing.T) {
 	if len(funcs) == 0 || funcs[0] != "docker" {
 		t.Fatalf("preamble should define a docker function, got %v", funcs)
 	}
-	if !strings.Contains(src, "bashy podman") {
-		t.Fatalf("docker should route to `bashy podman`: %q", src)
+	if !strings.Contains(src, " podman ") {
+		t.Fatalf("docker should route to bashy's podman subcommand: %q", src)
+	}
+	if !strings.Contains(src, "git()") {
+		t.Fatalf("preamble should define a git function: %q", src)
+	}
+	if strings.Contains(src, "command bashy ") {
+		t.Fatalf("preamble should bind shims to the current executable, not PATH bashy: %q", src)
 	}
 }

@@ -71,7 +71,7 @@ import (
 var (
 	alwaysShimVerbs = []string{
 		"weave", "sprint", "dag", "schedule", "secrets", "skills", "run", "commands", "doctor",
-		"gh", "act", "rclone", "podman", "ollama",
+		"git", "gh", "act", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 	}
 	agentModeShimVerbs = []string{"go", "cmake", "clang"}
@@ -79,16 +79,34 @@ var (
 
 func Preamble() string {
 	var b strings.Builder
-	b.WriteString(`docker() { command bashy podman "$@"; }` + "\n")
+	self := bashySelfPath()
+	fmt.Fprintf(&b, "docker() { command %s podman \"$@\"; }\n", shellQuote(self))
 	for _, v := range alwaysShimVerbs {
-		fmt.Fprintf(&b, "%s() { command bashy %s \"$@\"; }\n", v, v)
+		fmt.Fprintf(&b, "%s() { command %s %s \"$@\"; }\n", v, shellQuote(self), v)
 	}
 	if weavecli.IsAgent() {
 		for _, v := range agentModeShimVerbs {
-			fmt.Fprintf(&b, "%s() { command bashy %s \"$@\"; }\n", v, v)
+			fmt.Fprintf(&b, "%s() { command %s %s \"$@\"; }\n", v, shellQuote(self), v)
 		}
 	}
 	return b.String()
+}
+
+func bashySelfPath() string {
+	if exe, err := os.Executable(); err == nil && exe != "" {
+		return exe
+	}
+	if len(os.Args) > 0 && os.Args[0] != "" {
+		return os.Args[0]
+	}
+	return "bashy"
+}
+
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 // Dispatch handles AgentOS front-door subcommands that are not shell scripts —
@@ -174,6 +192,15 @@ func Dispatch() {
 		// Environment self-diagnostic: PATH/sh shadowing, a stale bashy on PATH,
 		// toolchain + container engine, agent mode, bin cache. Advisory.
 		os.Exit(dispatchDoctor(os.Args[2:]))
+	case "git":
+		// Embedded pure-Go git client for the common clone/edit/commit/push
+		// workflow and read/inspect verbs. Never shells out to system git.
+		cmd := gitCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "commands":
 		// Discovery: list the whole supported command surface — shell builtins,
 		// the in-process coreutils userland, and the bare-name front-door verbs —
