@@ -199,6 +199,12 @@ token tax.
   `--prompt`/`--context` delivered to the fired command as `BASHY_SCHEDULE_*`, so
   a conductor self-wakes a long-running campaign. Host `cron`/`crontab` untouched.
 
+- **`tree`** (coreutils `cmds/tree`) — recursive box-drawing listing + dir/file
+  summary. Defaults match classic tree (hides dot-files); `-a` shows all, `-L N`
+  limits depth, `-d` dirs-only. Opt-in `--agentic` skips `.gitignore`d + noise
+  paths via `pkg/ignore` (+ a transparency line) for repo orientation without
+  the dependency-tree noise. (`view` was dropped — `cat -n` already numbers lines.)
+
 ## Decided against: per-tool `--json`
 
 Per-tool `--json` (ls/stat/df/du/wc) was **dropped**: agents parse plain text
