@@ -450,7 +450,7 @@ func newRunner() (*interp.Runner, error) {
 	// works in a fresh shell; stripping it made `cd -` fail where bash
 	// succeeds (oils builtin-cd differential, all 5 oracle shells agree).
 	envVars := make([]string, 0, len(os.Environ())+len(bashVersionVars()))
-	envVars = append(envVars, os.Environ()...)
+	envVars = append(envVars, shellStartupEnv(os.Environ())...)
 	envVars = append(envVars, bashVersionVars()...)
 	envVars = append(envVars, fmt.Sprintf("SHLVL=%d", shlvl))
 

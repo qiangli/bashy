@@ -75,12 +75,72 @@ Phase 1 should use the lowest-risk available runtime per platform:
   available. If the current embedded/vfkit path is present, prefer it.
 - Linux: use managed Podman when feasible, otherwise host podman/docker. Rootless
   support should be diagnosed explicitly.
-- Windows: use Docker-compatible fallback only if a runtime is already present.
-  A fully managed Windows container engine is out of scope for the first pass,
-  but `bashy podman doctor` must explain that honestly.
+- Windows: reuse upstream Podman's machine stack instead of inventing a
+  separate backend. The vendored provider path already supports WSL and Hyper-V,
+  but the bashy build must be the remote-machine/client form, not the unix
+  in-process libpod form:
+
+  ```sh
+  GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+    go build -tags 'bashy_engines remote containers_image_openpgp' ./cmd/bashy
+  ```
+
+  `remote` keeps unix-only in-process libpod out of the Windows binary.
+  `containers_image_openpgp` avoids the cgo-only gpgme signing dependency.
+  A Windows build with only `bashy_engines` intentionally keeps the current
+  clear stub instead of failing in upstream unix-only packages.
+
+  The first Windows enablement patch wires `bashy podman` for that explicit tag
+  set, adds real Windows memory/disk probes for machine sizing, and downloads
+  the upstream Podman remote-client archive on demand via `binmgr`.
 
 Longer term, the managed package may include full tree assets, helper binaries,
 and VM support using binmgr's tree extraction mode.
+
+## Windows Podman Backend Notes
+
+The upstream code already has the pieces bashy needs:
+
+- `pkg/machine/provider/platform_windows.go`: provider selection, defaulting to
+  WSL with Hyper-V as another supported provider.
+- `pkg/machine/wsl` and `pkg/machine/hyperv`: machine lifecycle backends.
+- `pkg/machine/machine_windows.go`: named-pipe API forwarding and
+  `win-sshproxy.exe` launch logic.
+- `pkg/machine/gvproxy_windows.go`: Windows network helper integration.
+
+The bashy/coreutils integration should therefore adapt those upstream paths
+through `github.com/qiangli/coreutils/pkg/oci/machine` instead of copying a
+second backend into bashy.
+
+Implemented first slice:
+
+- Windows engine build dispatch:
+  `-tags 'bashy_engines remote containers_image_openpgp'`.
+- Managed Podman remote-client download/cache through `binmgr`, verified from
+  the release `shasums`.
+- Whole-tree extraction on Windows so `podman.exe`, `gvproxy.exe`, and
+  `win-sshproxy.exe` are cached together.
+- Child PATH prepending so Podman can find the helper binaries beside the
+  managed client.
+- Git-Bash/Cygwin-style shell path presentation on Windows:
+  `C:\Users\name` is exposed as `/c/Users/name`, while bashy's syscall layer
+  converts `/c/...` back to Windows paths.
+
+Remaining runtime work:
+
+- Add `bashy podman doctor` checks for WSL2 availability, Hyper-V availability,
+  Windows virtualization support, and whether the current user can use the
+  chosen provider.
+- Prove `podman machine init/start` on both Windows hosts. Non-mutating
+  `podman machine list` works on `lj2ivy`; a machine has not been initialized in
+  this patch.
+- Add a fallback that builds helper binaries from the vendored Podman source
+  when a release archive is unavailable and Go is present.
+- Teach `bashy podman path` to report the provider, helper locations, machine
+  socket/pipe, and whether it is using embedded, managed, or host bits.
+- Validate Windows path/volume behavior. The first supported contract can mount
+  the current working directory into `/workspace`; full absolute path argument
+  translation can follow later.
 
 ## Container Fallback For Missing Commands
 
