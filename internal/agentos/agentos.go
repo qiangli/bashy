@@ -72,11 +72,12 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "dag", "schedule", "secrets", "skills", "run", "commands", "doctor",
+		"weave", "sprint", "dag", "schedule", "secrets", "skills", "run", "commands", "doctor", "self",
 		"git", "gh", "act", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 	}
-	agentModeShimVerbs = []string{"go", "cmake", "clang"}
+	agentModeShimVerbs   = []string{"go", "cmake", "clang"}
+	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade"}
 )
 
 func Preamble() string {
@@ -194,6 +195,26 @@ func Dispatch() {
 		// Environment self-diagnostic: PATH/sh shadowing, a stale bashy on PATH,
 		// toolchain + container engine, agent mode, bin cache. Advisory.
 		os.Exit(dispatchDoctor(os.Args[2:]))
+	case "self":
+		// Self-management: fetch/cache release binaries and explicitly install a
+		// selected candidate. This is the bashy-side migration of outpost's
+		// direct release-bootstrap lane, without touching outpost itself.
+		cmd := selfCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "bootstrap", "upgrade":
+		// Hidden transitional aliases. They keep old muscle memory/scripts
+		// functional while `bashy self ...` becomes the documented surface.
+		cmd := selfCmd()
+		cmd.Use = os.Args[1]
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "git":
 		// Embedded pure-Go git client for the common clone/edit/commit/push
 		// workflow and read/inspect verbs. Never shells out to system git.

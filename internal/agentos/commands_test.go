@@ -25,9 +25,14 @@ func TestCommandsCatalogSources(t *testing.T) {
 		}
 	}
 	// Front-door verbs + the docker→podman shim + the lister itself.
-	for _, want := range []string{"weave", "run", "commands", "docker"} {
+	for _, want := range []string{"weave", "run", "commands", "docker", "self"} {
 		if !slices.Contains(verbs, want) {
 			t.Errorf("verbs missing %q", want)
+		}
+	}
+	for _, hidden := range hiddenFrontDoorVerbs {
+		if slices.Contains(verbs, hidden) {
+			t.Errorf("hidden verb %q should not appear in the default catalog", hidden)
 		}
 	}
 	// Each group is sorted.
@@ -35,6 +40,18 @@ func TestCommandsCatalogSources(t *testing.T) {
 		if !slices.IsSorted(g) {
 			t.Errorf("group not sorted: %v", g)
 		}
+	}
+}
+
+func TestHiddenVerbsCatalog(t *testing.T) {
+	hidden := hiddenVerbsCatalog()
+	for _, want := range []string{"bootstrap", "upgrade"} {
+		if !slices.Contains(hidden, want) {
+			t.Errorf("hidden catalog missing %q", want)
+		}
+	}
+	if !slices.IsSorted(hidden) {
+		t.Errorf("hidden verbs not sorted: %v", hidden)
 	}
 }
 
@@ -70,6 +87,7 @@ func TestVerbSynopsisCoversEveryVerb(t *testing.T) {
 	// a one-line synopsis, so `commands -v` never shows a bare verb.
 	all := append([]string{"docker"}, alwaysShimVerbs...)
 	all = append(all, agentModeShimVerbs...)
+	all = append(all, hiddenFrontDoorVerbs...)
 	for _, v := range all {
 		if strings.TrimSpace(verbSynopsis[v]) == "" {
 			t.Errorf("verb %q has no synopsis in verbSynopsis", v)
@@ -120,6 +138,7 @@ func TestAgenticCommandsMentionsDryRun(t *testing.T) {
 	for _, want := range []string{
 		"bashy help dryrun",
 		"bashy fetch --json URL",
+		"bashy self fetch",
 		"BASHY_AGENTIC=1 bashy --dry-run",
 		"destroy",
 		"truncate",
@@ -132,7 +151,7 @@ func TestAgenticCommandsMentionsDryRun(t *testing.T) {
 
 func TestUsageMentionsAgenticDryRun(t *testing.T) {
 	out := Usage()
-	for _, want := range []string{"--dryrun", "--dry-run", "BASHY_AGENTIC=1", "bashy help dryrun"} {
+	for _, want := range []string{"--dryrun", "--dry-run", "BASHY_AGENTIC=1", "bashy help dryrun", "bashy self fetch"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("usage missing %q:\n%s", want, out)
 		}

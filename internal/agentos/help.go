@@ -20,6 +20,7 @@ Bashy front-door help:
 	bashy help dryrun		show dry-run examples and JSON manifest fields
 	bashy commands --agentic	show agent-oriented command discovery
 	bashy doctor			diagnose shell/runtime environment
+	bashy self fetch		fetch/cache a released bashy binary
 	bashy git --help		show embedded git subcommands
 	bashy fetch --help		show built-in download/REST client
 `
@@ -57,6 +58,7 @@ Common agent entry points:
   BASHY_AGENTIC=1 bashy --dry-run script.sh
   bashy commands --agentic
   bashy doctor
+  bashy self fetch
   bashy git status
   bashy fetch --json https://example.com
 `)

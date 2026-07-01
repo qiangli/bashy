@@ -27,7 +27,7 @@ const commandsSchemaVersion = "bashy-commands-v1"
 
 func dispatchCommands(args []string) int {
 	asJSON, verbose := weavecli.IsAgent(), false // JSON by default under $BASHY_AGENTIC
-	agentic := false
+	agentic, all := false, false
 	for _, a := range args {
 		switch a {
 		case "--json", "--json=true":
@@ -36,16 +36,19 @@ func dispatchCommands(args []string) int {
 			asJSON = false
 		case "--agentic":
 			agentic = true
+		case "--all":
+			all = true
 		case "-v", "--verbose":
 			verbose = true
 		case "-h", "--help":
-			fmt.Println("usage: commands [-v] [--json|--plain|--agentic]")
+			fmt.Println("usage: commands [-v] [--json|--plain|--agentic|--all]")
 			fmt.Println("List the supported command surface: shell builtins, the coreutils")
 			fmt.Println("userland, and bashy's front-door verbs.")
 			fmt.Println("  -v             also show each coreutils tool's and verb's synopsis")
 			fmt.Println("  --json         machine-readable (default under $BASHY_AGENTIC)")
 			fmt.Println("  --json=false   force text even under $BASHY_AGENTIC (alias --plain)")
 			fmt.Println("  --agentic      compact agent-oriented discovery and safety guide")
+			fmt.Println("  --all          include hidden compatibility aliases")
 			return 0
 		default:
 			fmt.Fprintf(os.Stderr, "commands: unknown option %q\n", a)
@@ -59,6 +62,11 @@ func dispatchCommands(args []string) int {
 	}
 
 	builtins, core, verbs := commandsCatalog()
+	hidden := hiddenVerbsCatalog()
+	if all {
+		verbs = append(verbs, hidden...)
+		sort.Strings(verbs)
+	}
 
 	if asJSON {
 		out := map[string]any{
@@ -66,6 +74,9 @@ func dispatchCommands(args []string) int {
 			"builtins":       builtins,
 			"coreutils":      core,
 			"verbs":          verbs,
+		}
+		if all {
+			out["hidden_verbs"] = hidden
 		}
 		if verbose {
 			// Additive: a flat name→synopsis map for the described commands
@@ -118,6 +129,7 @@ func printAgenticCommands(w io.Writer) {
   bashy --dry-run -c 'commands'  human-readable dry-run preview
   bashy run --capture -- command structured command result envelope
   bashy doctor                   diagnose PATH, shell, engine, and agent environment
+  bashy self fetch               fetch/cache a released bashy binary
   bashy git ...                   embedded pure-Go git client
   bashy fetch --json URL          built-in URL/REST client with status envelope
   bashy commands -v              full command surface with synopses
@@ -146,6 +158,9 @@ var verbSynopsis = map[string]string{
 	"run":       "run a command, emit a structured result envelope (+advisor hints)",
 	"commands":  "list the supported command surface (builtins, coreutils, verbs)",
 	"doctor":    "diagnose the bashy environment (PATH/sh, engine, agent mode, bin cache)",
+	"self":      "fetch/cache/install a released bashy binary",
+	"bootstrap": "hidden alias for bashy self",
+	"upgrade":   "hidden alias for bashy self",
 	"git":       "embedded pure-Go git client (clone, status, commit, push, diff, log)",
 	"gh":        "GitHub CLI (managed external)",
 	"act":       "run GitHub Actions locally (managed external)",
@@ -175,6 +190,12 @@ func commandsCatalog() (builtins, core, verbs []string) {
 	}
 	sort.Strings(verbs)
 	return builtins, core, verbs
+}
+
+func hiddenVerbsCatalog() []string {
+	verbs := append([]string(nil), hiddenFrontDoorVerbs...)
+	sort.Strings(verbs)
+	return verbs
 }
 
 // printCommandSynopses prints "name — synopsis" lines under a titled header,

@@ -1,0 +1,185 @@
+// Copyright (c) 2026 qiangli
+// See LICENSE for licensing information
+
+package agentos
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+
+	"github.com/spf13/cobra"
+
+	"github.com/qiangli/coreutils/pkg/binmgr"
+)
+
+const bashyReleaseRepo = "qiangli/bashy"
+
+func selfCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "self",
+		Short: "Manage bashy's own released binary",
+		Long: `bashy self fetches and caches a released bashy binary using the same
+download -> checksum -> cache path as bashy's managed external tools.
+
+It does not replace the running executable unless you explicitly install to a
+destination path.`,
+		SilenceUsage: true,
+	}
+	cmd.AddCommand(selfFetchCmd(), selfInstallCmd())
+	return cmd
+}
+
+func selfFetchCmd() *cobra.Command {
+	var version string
+	cmd := &cobra.Command{
+		Use:   "fetch",
+		Short: "Download and cache a released bashy binary",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			path, err := ensureBashyRelease(cmd.Context(), version)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), path)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&version, "version", envOr("BASHY_SELF_VERSION", "latest"), "Release tag to fetch (default latest)")
+	return cmd
+}
+
+func selfInstallCmd() *cobra.Command {
+	var version string
+	cmd := &cobra.Command{
+		Use:   "install [path]",
+		Short: "Install a released bashy binary to a target path",
+		Long: `Install a cached release binary to PATH. With no path, install next to the
+currently running executable. The target is written via a same-directory temp
+file and rename.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := ""
+			if len(args) == 1 {
+				target = args[0]
+			}
+			cached, err := ensureBashyRelease(cmd.Context(), version)
+			if err != nil {
+				return err
+			}
+			target, err = resolveSelfInstallTarget(target)
+			if err != nil {
+				return err
+			}
+			if err := installExecutable(cached, target); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "installed %s\n", target)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&version, "version", envOr("BASHY_SELF_VERSION", "latest"), "Release tag to install (default latest)")
+	return cmd
+}
+
+func ensureBashyRelease(ctx context.Context, version string) (string, error) {
+	tool, err := resolveBashyRelease(ctx, version)
+	if err != nil {
+		return "", err
+	}
+	return binmgr.Ensure(ctx, tool)
+}
+
+func resolveBashyRelease(ctx context.Context, version string) (binmgr.Tool, error) {
+	if strings.TrimSpace(version) == "" {
+		version = "latest"
+	}
+	return binmgr.ResolveGitHub(ctx, binmgr.GitHubSpec{
+		Name:       "bashy",
+		Repo:       bashyReleaseRepo,
+		Version:    version,
+		Member:     releaseBinaryName(),
+		AssetMatch: bashyArchiveMatch,
+	})
+}
+
+func releaseBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return "bashy.exe"
+	}
+	return "bashy"
+}
+
+func bashyArchiveMatch(name, goos, goarch string) bool {
+	n := strings.ToLower(name)
+	if !strings.HasPrefix(n, "bashy-") {
+		return false
+	}
+	if !strings.Contains(n, strings.ToLower(goos)) {
+		return false
+	}
+	return strings.Contains(n, strings.ToLower(goarch))
+}
+
+func resolveSelfInstallTarget(target string) (string, error) {
+	if strings.TrimSpace(target) != "" {
+		return filepath.Abs(target)
+	}
+	exe, err := os.Executable()
+	if err != nil || exe == "" {
+		return "", errors.New("cannot resolve current executable; pass an install path")
+	}
+	return exe, nil
+}
+
+func installExecutable(src, dst string) error {
+	if src == "" || dst == "" {
+		return errors.New("source and destination are required")
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	removeTmp := true
+	defer func() {
+		if removeTmp {
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if _, err := io.Copy(tmp, in); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpName, 0o755); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, dst); err != nil {
+		return err
+	}
+	removeTmp = false
+	return nil
+}
+
+func envOr(name, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+		return v
+	}
+	return fallback
+}
