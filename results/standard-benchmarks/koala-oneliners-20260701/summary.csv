@@ -1,0 +1,9 @@
+shell,script,rc,seconds
+bashy,sort,0,0.046360
+bashy,wf,0,0.225505
+bashy,top-n,0,0.216754
+bashy,nfa-regex,2,0.005681
+gnu,sort,0,0.037413
+gnu,wf,0,0.052431
+gnu,top-n,0,0.046606
+gnu,nfa-regex,0,1.151355
