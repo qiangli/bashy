@@ -4,6 +4,11 @@ set -eu
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 bin="$here/bin/bashy"
 
+bootstrap_bashy=${BASHY:-}
+if [ -z "$bootstrap_bashy" ] && command -v bashy >/dev/null 2>&1; then
+	bootstrap_bashy=$(command -v bashy)
+fi
+
 if [ ! -x "$bin" ] || [ "${BASHY_BOOTSTRAP_REBUILD:-0}" = 1 ]; then
 	mkdir -p "$here/bin"
 	version="${VERSION:-dev}"
@@ -11,7 +16,11 @@ if [ ! -x "$bin" ] || [ "${BASHY_BOOTSTRAP_REBUILD:-0}" = 1 ]; then
 	echo "bashy bootstrap: building $bin" >&2
 	(
 		cd "$here"
-		go build -trimpath -ldflags "$ldflags" -o "$bin" ./cmd/bashy
+		if [ -n "$bootstrap_bashy" ] && [ -x "$bootstrap_bashy" ]; then
+			"$bootstrap_bashy" go build -trimpath -ldflags "$ldflags" -o "$bin" ./cmd/bashy
+		else
+			go build -trimpath -ldflags "$ldflags" -o "$bin" ./cmd/bashy
+		fi
 	)
 fi
 

@@ -106,6 +106,10 @@ while IFS= read -r line; do
         echo "bootstrap-siblings: $name -> $(git_head_short "$target") (already present, leaving alone)"
         continue
     fi
+    if [ -e "$target" ]; then
+        echo "bootstrap-siblings: $name already exists without .git, leaving alone"
+        continue
+    fi
 
     url=$(repo_url "$name")
     echo "bootstrap-siblings: cloning $url -> $target @ ${sha:0:12}"

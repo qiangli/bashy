@@ -65,6 +65,27 @@ go install github.com/qiangli/bashy@latest
 
 ### From source
 
+If `bashy` is already installed on the outpost, the source build can dogfood
+bashy's own tool surface: no host `git`, `curl`, `wget`, or `make` required.
+`bashy git` gets the sources, `scripts/bootstrap-siblings.sh` uses `bashy git`
+for sibling checkouts, and `./bashy dag build` runs the build through `bashy go`
+(bashy's self-provisioning Go front end):
+
+```sh
+bashy git clone https://github.com/qiangli/bashy
+cd bashy
+./scripts/bootstrap-siblings.sh
+./bashy dag build          # -> bin/bash and bin/bashy
+./bashy dag install        # optional: install into GOBIN
+```
+
+On a host build of bashy with the container engine enabled, the same checkout can
+also be built inside a container with the host filesystem mounted through
+`bashy podman`; use that lane when the outpost should not depend on host build
+packages beyond the already-installed bashy.
+
+The traditional host-tool path also works:
+
 ```sh
 git clone https://github.com/qiangli/bashy
 cd bashy
@@ -74,8 +95,8 @@ cd bashy
 make build          # -> bin/bashy
 ```
 
-For a fresh checkout that wants to dogfood the DAG runner before `bashy` is on
-`PATH`, use the repo-local bootstrap launcher:
+For a fresh checkout that wants to dogfood the DAG runner before this checkout's
+new `bin/bashy` exists, use the repo-local bootstrap launcher:
 
 ```sh
 ./bashy dag build

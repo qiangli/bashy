@@ -10,22 +10,32 @@ The agent-first equivalent of this repo's `Makefile`, runnable with the
 
 ```bash
 ./bashy dag --list           # fresh checkout bootstrap: builds bin/bashy if needed
-./bashy dag build            # build both binaries
+./bashy dag build            # build both binaries through bashy go
 ./bashy dag install          # install bash/bashy into GOBIN, after which `bashy dag ...` works
 make dag ARGS=build          # make-based bootstrap wrapper around ./bashy dag
-bashy dag test               # once installed/on PATH: go test ./...
+bashy dag test               # once installed/on PATH: bashy go test ./...
 bashy dag --json test        # machine-readable envelope for an agent
 ```
 
 Chicken/egg note: `bashy dag ...` requires the operating system to find a
 `bashy` executable first. From a fresh source checkout, use the repo-local
-`./bashy` launcher; it builds `bin/bashy` if missing and then re-execs it.
+`./bashy` launcher; it builds `bin/bashy` if missing and then re-execs it. If an
+older bashy is already installed, the launcher uses that binary's `bashy go`
+front end to build the checkout-local binary. Otherwise it falls back to a host
+Go toolchain, which is the only external dependency needed for a first build
+from already-present source.
 Inside target bodies, call `"$BASHY" ...` when you need bashy itself. Mirroring
 GNU Bash's `BASH`/`BASH_ARGV0` split, the DAG runner sets `BASHY`/`BASHY_EXE`
 to the resolved executable path for the `argv[0]` that launched the run, and
 `BASHY_ARGV0` to the raw argv0 string. Recursive calls should use `"$BASHY"`
 so they stay on the same binary version instead of a stale `bashy` elsewhere on
 `PATH`.
+
+Outpost note: once a released bashy is installed, a patch build can stay inside
+bashy's own surface: `bashy git` for source checkout, `./bashy dag build` for
+the native build through `bashy go`, and `bashy podman run -v "$PWD:/work" -w
+/work ...` for containerized build/test lanes when the host should only provide
+the already-installed bashy.
 
 Targets carry `Requires:` (dependency edges), `Sources:`/`Generates:`
 (content-fingerprint up-to-date skip — `bashy dag build` no-ops when nothing
@@ -38,8 +48,10 @@ topological order through the in-process shell — add `-j N` for parallel.
 ### build
 Build both independent binaries into bin/ (bash = pure drop-in from cmd/bash;
 bashy = AgentOS shell from cmd/bashy). Separate compilations — bash's import
-graph never includes coreutils. This is the **lean worker** bashy: shell +
-coreutils userland + git + dag + `bashy go` (self-provisioning Go toolchain) +
+graph never includes coreutils. The recipe invokes `"$BASHY" go build`, so an
+installed or checkout-local bashy owns the Go toolchain path. This is the
+**lean worker** bashy: shell + coreutils userland + git + dag + `bashy go`
+(self-provisioning Go toolchain) +
 weave; ~121 MB unix, ~47 MB Windows (it cross-compiles everywhere — podman/ollama
 are !windows-gated, the otel observability stack is off by default). For a host
 build with the observability stack, use `build-host`.
@@ -51,9 +63,10 @@ Effects: write
 set -e
 mkdir -p bin
 VERSION="${VERSION:-dev}"
+BASHY_EXE="${BASHY:-bashy}"
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}'"
-go build -trimpath -ldflags "$LDFLAGS" -o bin/bash  ./cmd/bash
-go build -trimpath -ldflags "$LDFLAGS" -o bin/bashy ./cmd/bashy
+"$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o bin/bash  ./cmd/bash
+"$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o bin/bashy ./cmd/bashy
 ```
 
 ### build-host
@@ -68,8 +81,9 @@ Effects: write
 set -e
 mkdir -p bin
 VERSION="${VERSION:-dev}"
+BASHY_EXE="${BASHY:-bashy}"
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}'"
-go build -trimpath -tags "bashy_engines bashy_obs" -ldflags "$LDFLAGS" -o bin/bashy ./cmd/bashy
+"$BASHY_EXE" go build -trimpath -tags "bashy_engines bashy_obs" -ldflags "$LDFLAGS" -o bin/bashy ./cmd/bashy
 ```
 
 ### install
@@ -78,8 +92,9 @@ Effects: write
 
 ```bash
 VERSION="${VERSION:-dev}"
+BASHY_EXE="${BASHY:-bashy}"
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}'"
-go install -trimpath -ldflags "$LDFLAGS" ./cmd/bash ./cmd/bashy
+"$BASHY_EXE" go install -trimpath -ldflags "$LDFLAGS" ./cmd/bash ./cmd/bashy
 ```
 
 ### test
@@ -87,7 +102,8 @@ Run all Go tests.
 Effects: read
 
 ```bash
-go test ./...
+BASHY_EXE="${BASHY:-bashy}"
+"$BASHY_EXE" go test ./...
 ```
 
 ### dist
@@ -101,6 +117,7 @@ Effects: write
 set -e
 mkdir -p bin/dist
 VERSION="${VERSION:-dev}"
+BASHY_EXE="${BASHY:-bashy}"
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}'"
 for plat in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
   os=${plat%/*}; arch=${plat#*/}; ext=""
@@ -109,7 +126,7 @@ for plat in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 wind
     out="bin/dist/${name}-${os}-${arch}${ext}"
     echo "building $out..."
     CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-      go build -trimpath -ldflags "$LDFLAGS" -o "$out" "./cmd/${name}"
+      "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "$out" "./cmd/${name}"
   done
 done
 ```
@@ -152,9 +169,10 @@ Effects: write
 
 ```bash
 set -e
-go mod tidy
-gofmt -s -w .
-go vet ./...
+BASHY_EXE="${BASHY:-bashy}"
+"$BASHY_EXE" go mod tidy
+"$BASHY_EXE" go fmt ./...
+"$BASHY_EXE" go vet ./...
 ```
 
 ### clean
