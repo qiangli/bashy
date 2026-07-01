@@ -5,6 +5,7 @@ package agentos
 
 import (
 	"bytes"
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -149,9 +150,63 @@ func TestAgenticCommandsMentionsDryRun(t *testing.T) {
 	}
 }
 
+func TestGNUCoreutilsReportTracksGaps(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "")
+	builtins, core, _ := commandsCatalog()
+	report := gnuCoreutilsReport(core, builtins)
+
+	if report.Summary.UpstreamCommands == 0 {
+		t.Fatal("expected GNU upstream inventory")
+	}
+	if !slices.Contains(report.BashyNative, "ls") {
+		t.Fatalf("expected implemented GNU command ls in native set: %#v", report.BashyNative)
+	}
+	if !slices.Contains(report.Missing, "timeout") {
+		t.Fatalf("expected missing GNU command timeout in missing set: %#v", report.Missing)
+	}
+	if !slices.Contains(report.CoveredByBuiltins, "printf") || !slices.Contains(report.CoveredByBuiltins, "test") {
+		t.Fatalf("expected printf/test to be tracked as bash builtin coverage: %#v", report.CoveredByBuiltins)
+	}
+	if !gnuGapHas(report.Not100Conformant, "ls") {
+		t.Fatalf("expected implemented but uncertified GNU command in not_100_conformant: %#v", report.Not100Conformant)
+	}
+	if !slices.Contains(report.NonGNUExtras, "grep") || !slices.Contains(report.NonGNUExtras, "yc") {
+		t.Fatalf("expected non-GNU bashy extras: %#v", report.NonGNUExtras)
+	}
+}
+
+func TestCommandsJSONIncludesGNUReport(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "")
+	var b bytes.Buffer
+	builtins, core, verbs := commandsCatalog()
+	report := gnuCoreutilsReport(core, builtins)
+	out := map[string]any{
+		"schema_version": commandsSchemaVersion,
+		"builtins":       builtins,
+		"coreutils":      core,
+		"verbs":          verbs,
+		"gnu_coreutils":  report,
+	}
+	if err := json.NewEncoder(&b).Encode(out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(b.String(), `"not_100_conformant"`) || !strings.Contains(b.String(), `"missing"`) {
+		t.Fatalf("json report missing GNU gap fields: %s", b.String())
+	}
+}
+
+func gnuGapHas(items []gnuCoreutilsGap, name string) bool {
+	for _, item := range items {
+		if item.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func TestUsageMentionsAgenticDryRun(t *testing.T) {
 	out := Usage()
-	for _, want := range []string{"--dryrun", "--dry-run", "BASHY_AGENTIC=1", "bashy help dryrun", "bashy self fetch"} {
+	for _, want := range []string{"--dryrun", "--dry-run", "BASHY_AGENTIC=1", "bashy help dryrun", "bashy commands --gnu", "GNU coreutils parity", "bashy self fetch"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("usage missing %q:\n%s", want, out)
 		}

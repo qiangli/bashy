@@ -97,6 +97,40 @@ Live inventory from `./bin/bashy commands --json`:
 
 ## GNU Coreutils Command-Level Gap
 
+Current user-facing command:
+
+```text
+bashy commands --gnu
+bashy commands --json --gnu
+```
+
+Intent: make the GNU coreutils gap visible to both humans and agents with as
+little trial and error as possible. The report is deliberately conservative:
+until a command has a reproducible GNU coreutils option/behavior conformance
+score, an implemented GNU command is listed under `not_100_conformant`.
+
+Scope: this is a native coreutils parity report only. Bashy's shell and builtin
+layer is GNU Bash 5.3 compatible and POSIX conformant; do not interpret
+coreutils gaps as shell conformance gaps.
+
+How to read the report:
+
+- `missing`: GNU command names not implemented by bashy's native coreutils
+  registry.
+- `covered_by_bash_builtins`: GNU names that are absent as external coreutils
+  commands but already covered by Bash 5.3-compatible builtins, such as `kill`,
+  `printf`, and `test`. These are not counted as coreutils gaps.
+- `not_100_conformant`: GNU command names that bashy's native coreutils layer
+  implements but has not yet certified against a GNU coreutils compatibility
+  harness.
+- `non_gnu_extras`: useful bashy commands outside GNU coreutils; they do not
+  count toward GNU parity.
+
+Release goal: every bashy release should reduce either coreutils `missing` or
+coreutils `not_100_conformant`, and the JSON output gives agents a stable metric
+to track. Bash builtins are handled by the separate GNU Bash 5.3 compatibility
+and POSIX conformance scores, which are already green.
+
 GNU upstream buildable program inventory:
 
 ```text

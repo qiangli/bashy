@@ -19,6 +19,7 @@ Bashy AgentOS extensions:
 Bashy front-door help:
 	bashy help dryrun		show dry-run examples and JSON manifest fields
 	bashy commands --agentic	show agent-oriented command discovery
+	bashy commands --gnu		show GNU coreutils parity/gap inventory
 	bashy doctor			diagnose shell/runtime environment
 	bashy self fetch		fetch/cache a released bashy binary
 	bashy git --help		show embedded git subcommands
@@ -36,8 +37,7 @@ func dispatchHelp(args []string) int {
 		printDryRunHelp(os.Stdout)
 		return 0
 	case "commands":
-		fmt.Fprintln(os.Stdout, "usage: bashy commands [-v] [--json|--plain|--agentic]")
-		fmt.Fprintln(os.Stdout, "Use `bashy commands --agentic` for agent-oriented discovery.")
+		printCommandsHelp(os.Stdout)
 		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "bashy help: unknown topic %q\n", args[0])
@@ -57,10 +57,51 @@ Common agent entry points:
   bashy --dry-run -c 'rm -rf build'
   BASHY_AGENTIC=1 bashy --dry-run script.sh
   bashy commands --agentic
+  bashy commands --gnu
+  bashy commands --json --gnu
   bashy doctor
   bashy self fetch
   bashy git status
   bashy fetch --json https://example.com
+`)
+}
+
+func printCommandsHelp(w io.Writer) {
+	fmt.Fprint(w, `usage:
+  bashy commands
+  bashy commands -v
+  bashy commands --agentic
+  bashy commands --gnu
+  bashy commands --json --gnu
+
+Intent:
+  bashy commands is the command-surface map for humans and agents. Use it when
+  you need to know what bashy can run internally before falling through to PATH.
+  The shell and builtin layer is GNU Bash 5.3 compatible and POSIX conformant;
+  --gnu reports only the separate native coreutils gap.
+
+Modes:
+  default        list shell builtins, bashy in-process coreutils, and front-door verbs
+  -v             include one-line synopses for coreutils and bashy verbs
+  --agentic      compact agent guide for dry-run, run envelopes, doctor, git, fetch, dag
+  --gnu          GNU coreutils parity inventory and gap scoreboard
+  --json --gnu   machine-readable release metric for tracking coreutils gap closure
+
+GNU parity fields:
+  missing                 GNU command names not implemented in bashy native coreutils
+  covered_by_bash_builtins GNU names already covered by Bash 5.3-compatible builtins
+                           and not counted as coreutils gaps, e.g. kill/printf/test
+  not_100_conformant      bashy native coreutils names without a recorded GNU
+                           coreutils conformance certificate
+  non_gnu_extras          useful bashy tools outside GNU coreutils, e.g. grep/sed/tree/yc
+
+Notes:
+  --gnu is intentionally conservative. A command listed as not_100_conformant
+  may work well for common cases, but bashy's coreutils layer has not yet
+  recorded a full GNU option/behavior conformance score for it. Bash builtins
+  are treated as covered by the GNU Bash 5.3 compatibility and POSIX conformance
+  suites. The goal is for each release to reduce missing and not_100_conformant
+  coreutils counts.
 `)
 }
 

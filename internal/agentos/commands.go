@@ -27,7 +27,7 @@ const commandsSchemaVersion = "bashy-commands-v1"
 
 func dispatchCommands(args []string) int {
 	asJSON, verbose := weavecli.IsAgent(), false // JSON by default under $BASHY_AGENTIC
-	agentic, all := false, false
+	agentic, all, gnu := false, false, false
 	for _, a := range args {
 		switch a {
 		case "--json", "--json=true":
@@ -38,10 +38,12 @@ func dispatchCommands(args []string) int {
 			agentic = true
 		case "--all":
 			all = true
+		case "--gnu", "--gnu-coreutils", "--coreutils-gaps":
+			gnu = true
 		case "-v", "--verbose":
 			verbose = true
 		case "-h", "--help":
-			fmt.Println("usage: commands [-v] [--json|--plain|--agentic|--all]")
+			fmt.Println("usage: commands [-v] [--json|--plain|--agentic|--all|--gnu]")
 			fmt.Println("List the supported command surface: shell builtins, the coreutils")
 			fmt.Println("userland, and bashy's front-door verbs.")
 			fmt.Println("  -v             also show each coreutils tool's and verb's synopsis")
@@ -49,6 +51,7 @@ func dispatchCommands(args []string) int {
 			fmt.Println("  --json=false   force text even under $BASHY_AGENTIC (alias --plain)")
 			fmt.Println("  --agentic      compact agent-oriented discovery and safety guide")
 			fmt.Println("  --all          include hidden compatibility aliases")
+			fmt.Println("  --gnu          include GNU coreutils parity/gap inventory")
 			return 0
 		default:
 			fmt.Fprintf(os.Stderr, "commands: unknown option %q\n", a)
@@ -63,6 +66,7 @@ func dispatchCommands(args []string) int {
 
 	builtins, core, verbs := commandsCatalog()
 	hidden := hiddenVerbsCatalog()
+	gnuReport := gnuCoreutilsReport(core, builtins)
 	if all {
 		verbs = append(verbs, hidden...)
 		sort.Strings(verbs)
@@ -77,6 +81,9 @@ func dispatchCommands(args []string) int {
 		}
 		if all {
 			out["hidden_verbs"] = hidden
+		}
+		if gnu {
+			out["gnu_coreutils"] = gnuReport
 		}
 		if verbose {
 			// Additive: a flat name→synopsis map for the described commands
@@ -112,12 +119,18 @@ func dispatchCommands(args []string) int {
 		printCommandSynopses(os.Stdout, "bashy verbs (front-door, bare-name shims)", verbs, func(n string) string {
 			return verbSynopsis[n]
 		})
+		if gnu {
+			printGNUCoreutilsReport(os.Stdout, gnuReport)
+		}
 		return 0
 	}
 
 	printCommandGroup(os.Stdout, "shell builtins", builtins)
 	printCommandGroup(os.Stdout, "coreutils userland", core)
 	printCommandGroup(os.Stdout, "bashy verbs (front-door, bare-name shims)", verbs)
+	if gnu {
+		printGNUCoreutilsReport(os.Stdout, gnuReport)
+	}
 	return 0
 }
 
@@ -236,3 +249,112 @@ func printCommandGroup(w io.Writer, title string, names []string) {
 	}
 	fmt.Fprintln(w)
 }
+
+type gnuCoreutilsSummary struct {
+	UpstreamCommands         int `json:"upstream_commands"`
+	BashyNativeCommands      int `json:"bashy_native_commands"`
+	MissingCommands          int `json:"missing_commands"`
+	CoveredByBashBuiltins    int `json:"covered_by_bash_builtins"`
+	Not100Conformant         int `json:"not_100_conformant"`
+	NonGNUExtras             int `json:"non_gnu_extras"`
+	CertifiedFullyConformant int `json:"certified_fully_conformant"`
+}
+
+type gnuCoreutilsGap struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Reason string `json:"reason"`
+}
+
+type gnuCoreutilsInventory struct {
+	Summary           gnuCoreutilsSummary `json:"summary"`
+	Upstream          []string            `json:"upstream"`
+	BashyNative       []string            `json:"bashy_native"`
+	Missing           []string            `json:"missing"`
+	CoveredByBuiltins []string            `json:"covered_by_bash_builtins"`
+	Not100Conformant  []gnuCoreutilsGap   `json:"not_100_conformant"`
+	NonGNUExtras      []string            `json:"non_gnu_extras"`
+}
+
+func gnuCoreutilsReport(core, builtins []string) gnuCoreutilsInventory {
+	upstream := append([]string(nil), gnuCoreutilsCommands...)
+	sort.Strings(upstream)
+	coreSet := sliceSet(core)
+	builtinSet := sliceSet(builtins)
+	certified := sliceSet(gnuCoreutilsFullyConformant)
+
+	var native, missing, covered []string
+	var not100 []gnuCoreutilsGap
+	for _, name := range upstream {
+		switch {
+		case coreSet[name]:
+			native = append(native, name)
+			if !certified[name] {
+				not100 = append(not100, gnuCoreutilsGap{
+					Name:   name,
+					Status: "unverified",
+					Reason: "bashy implements this GNU command name, but no GNU coreutils option/behavior conformance certification is recorded yet",
+				})
+			}
+		case builtinSet[name]:
+			covered = append(covered, name)
+		default:
+			missing = append(missing, name)
+		}
+	}
+
+	upSet := sliceSet(upstream)
+	var extras []string
+	for _, name := range core {
+		if !upSet[name] {
+			extras = append(extras, name)
+		}
+	}
+	sort.Strings(native)
+	sort.Strings(missing)
+	sort.Strings(covered)
+	sort.Strings(extras)
+	sort.Slice(not100, func(i, j int) bool { return not100[i].Name < not100[j].Name })
+
+	return gnuCoreutilsInventory{
+		Summary: gnuCoreutilsSummary{
+			UpstreamCommands:         len(upstream),
+			BashyNativeCommands:      len(native),
+			MissingCommands:          len(missing),
+			CoveredByBashBuiltins:    len(covered),
+			Not100Conformant:         len(not100),
+			NonGNUExtras:             len(extras),
+			CertifiedFullyConformant: len(gnuCoreutilsFullyConformant),
+		},
+		Upstream:          upstream,
+		BashyNative:       native,
+		Missing:           missing,
+		CoveredByBuiltins: covered,
+		Not100Conformant:  not100,
+		NonGNUExtras:      extras,
+	}
+}
+
+func printGNUCoreutilsReport(w io.Writer, r gnuCoreutilsInventory) {
+	fmt.Fprintf(w, "GNU coreutils parity (%d upstream):\n", r.Summary.UpstreamCommands)
+	fmt.Fprintf(w, "  bashy native: %d\n", r.Summary.BashyNativeCommands)
+	fmt.Fprintf(w, "  missing: %d\n", r.Summary.MissingCommands)
+	fmt.Fprintf(w, "  covered by bash builtins: %d\n", r.Summary.CoveredByBashBuiltins)
+	fmt.Fprintf(w, "  not 100%% conformant/certified: %d\n", r.Summary.Not100Conformant)
+	fmt.Fprintf(w, "  non-GNU bashy extras: %d\n\n", r.Summary.NonGNUExtras)
+	printCommandGroup(w, "GNU commands missing from bashy native coreutils", r.Missing)
+	printCommandGroup(w, "GNU commands covered by bash builtins", r.CoveredByBuiltins)
+	if len(r.Not100Conformant) > 0 {
+		names := make([]string, 0, len(r.Not100Conformant))
+		for _, gap := range r.Not100Conformant {
+			names = append(names, gap.Name)
+		}
+		printCommandGroup(w, "GNU commands implemented but not yet certified 100% conformant", names)
+	}
+	printCommandGroup(w, "bashy coreutils extras outside GNU coreutils", r.NonGNUExtras)
+}
+
+// gnuCoreutilsFullyConformant records command names that have been certified
+// against a GNU coreutils option/behavior harness. Keep this conservative: an
+// empty list is better than claiming conformance without a reproducible score.
+var gnuCoreutilsFullyConformant = []string{}
