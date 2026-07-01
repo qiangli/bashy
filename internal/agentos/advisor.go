@@ -184,25 +184,93 @@ func exitStatusOf(err error) (int, bool) {
 func (a *advisor) advise(dir string, args []string, status int) *hint {
 	name := baseName(args[0])
 
-	// 1. CWD — most specific: a relative path argument that doesn't exist here
+	// 1. Stateful rerun — a generated script may have already been tested once,
+	//    so a second verifier run can fail on existing outputs.
+	if h := a.adviseStatefulRerun(dir, name, args); h != nil {
+		return h
+	}
+	// 2. CWD — most specific: a relative path argument that doesn't exist here
 	//    but does exist at the repo root ⇒ wrong working directory.
 	if h := a.adviseCWD(dir, args); h != nil {
 		return h
 	}
-	// 2. Network — a network tool failing to reach a LAN-ish target that does
+	// 3. Network — a network tool failing to reach a LAN-ish target that does
 	//    not resolve from here ⇒ off its network; use the tunnel/public route.
 	if h := a.adviseNetwork(name, args); h != nil {
 		return h
 	}
-	// 3. Compute — exit 137 (SIGKILL) on a memory-heavy tool ⇒ likely OOM.
+	// 4. Compute — exit 137 (SIGKILL) on a memory-heavy tool ⇒ likely OOM.
 	if h := a.adviseCompute(name, status); h != nil {
 		return h
 	}
-	// 4. Disk — the filesystem backing $PWD is nearly full or read-only.
+	// 5. Disk — the filesystem backing $PWD is nearly full or read-only.
 	if h := a.adviseDisk(dir, name); h != nil {
 		return h
 	}
 	return nil
+}
+
+// ---- case 0: stateful rerun / non-idempotent generated script ----
+
+func (a *advisor) adviseStatefulRerun(dir, name string, args []string) *hint {
+	if a.probe.pathExists == nil {
+		return nil
+	}
+	switch name {
+	case "mkdir":
+		if hasMkdirParentsFlag(args) {
+			return nil
+		}
+		for _, arg := range args[1:] {
+			if arg == "" || strings.HasPrefix(arg, "-") {
+				continue
+			}
+			if a.probe.pathExists(dir, arg) {
+				return &hint{
+					dimension: "state",
+					retryable: false,
+					text: fmt.Sprintf("%q already exists in the current directory; this often means a generated script was tested once and then rerun by the verifier.",
+						arg),
+					suggest: "make the script idempotent (for example `mkdir -p ...`) or reset generated outputs before rerunning; retrying unchanged will keep failing.",
+				}
+			}
+		}
+	case "ln":
+		// `ln SRC DEST` fails if DEST already exists. Options and multi-source
+		// forms are intentionally ignored to keep this hint conservative.
+		var operands []string
+		for _, arg := range args[1:] {
+			if arg == "" || strings.HasPrefix(arg, "-") {
+				continue
+			}
+			operands = append(operands, arg)
+		}
+		if len(operands) == 2 && a.probe.pathExists(dir, operands[1]) {
+			return &hint{
+				dimension: "state",
+				retryable: false,
+				text: fmt.Sprintf("%q already exists; a non-idempotent link/create step may be running for the second time.",
+					operands[1]),
+				suggest: "remove or replace the existing output intentionally, or make the script check before linking.",
+			}
+		}
+	}
+	return nil
+}
+
+func hasMkdirParentsFlag(args []string) bool {
+	for _, arg := range args[1:] {
+		if arg == "--parents" {
+			return true
+		}
+		if strings.HasPrefix(arg, "--") {
+			continue
+		}
+		if len(arg) > 1 && arg[0] == '-' && strings.ContainsRune(arg[1:], 'p') {
+			return true
+		}
+	}
+	return false
 }
 
 // ---- case 1: wrong working directory ----

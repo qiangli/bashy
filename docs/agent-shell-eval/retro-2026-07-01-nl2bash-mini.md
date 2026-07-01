@@ -107,6 +107,14 @@ Product backlog from this retro:
     native usage output is available.
 - Tightened rate-limit/API detection so Claude warning-only
   `allowed_warning` rate-limit events are not counted as API failures.
+- Added advisor stateful-rerun hints for common non-idempotent generated-script
+  failures such as `mkdir test` when `test/` already exists. The hint tells
+  agents to make the script idempotent (`mkdir -p`) or reset generated outputs
+  before rerunning.
+- Added benchmark coreutils gap tracking. The harness now records likely
+  `missing-command`, `missing-option`, and `unsupported-regex-feature` signals
+  into per-run logs and `results/agent-shell-coreutils-gaps.jsonl`; the tracking
+  policy lives in `docs/agent-shell-eval/coreutils-gap-log.md`.
 
 ## Conductor Retro
 

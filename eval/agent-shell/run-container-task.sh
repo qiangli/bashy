@@ -175,6 +175,68 @@ chmod +x "$work/.verify.sh"
 verifier_exit=0
 "$bin_dir/eval-shell" /workspace/.verify.sh /workspace >"$logs/verify.out" 2>"$logs/verify.stderr" || verifier_exit=$?
 
+gap_log="$logs/coreutils-gaps.jsonl"
+campaign_gap_log="$repo/results/agent-shell-coreutils-gaps.jsonl"
+gap_count=$(python3 - "$run_id" "$task" "$tool" "$env_name" "$logs" "$gap_log" "$campaign_gap_log" <<'PY'
+import glob, json, os, re, sys
+
+run_id, task, tool, shell_arm, logs, gap_log, campaign_gap_log = sys.argv[1:]
+patterns = [
+    ("unsupported-regex-feature", re.compile(r"(?P<command>\w+): .*back-reference .*not supported", re.I)),
+    ("missing-option", re.compile(r"(?P<command>\w+): (?:unrecognized|unknown|invalid) option ['\"]?(?P<option>--?[A-Za-z0-9][A-Za-z0-9_-]*)", re.I)),
+    ("missing-command", re.compile(r"(?P<command>[A-Za-z0-9_.+-]+): command not found", re.I)),
+    ("missing-command", re.compile(r"exec: [\"'](?P<command>[^\"']+)[\"']: executable file not found", re.I)),
+]
+sources = []
+for name in ("verify.out", "verify.stderr", "container-shell.tsv"):
+    path = os.path.join(logs, name)
+    if os.path.exists(path):
+        sources.append(path)
+sources.extend(sorted(glob.glob(os.path.join(logs, "tool-combined-attempt-*.log"))))
+seen = set()
+rows = []
+for path in sources:
+    try:
+        text = open(path, errors="replace").read()
+    except OSError:
+        continue
+    for line_no, line in enumerate(text.splitlines(), 1):
+        for kind, rx in patterns:
+            m = rx.search(line)
+            if not m:
+                continue
+            command = m.groupdict().get("command", "")
+            option = m.groupdict().get("option", "")
+            key = (kind, command, option, line.strip())
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append({
+                "schema_version": "bashy-benchmark-gap-v1",
+                "run_id": run_id,
+                "task_id": task,
+                "tool": tool,
+                "shell_arm": shell_arm,
+                "kind": kind,
+                "command": command,
+                "option": option,
+                "source": os.path.basename(path),
+                "line": line_no,
+                "message": line.strip(),
+            })
+if rows:
+    os.makedirs(os.path.dirname(gap_log), exist_ok=True)
+    os.makedirs(os.path.dirname(campaign_gap_log), exist_ok=True)
+    with open(gap_log, "w") as f:
+        for row in rows:
+            f.write(json.dumps(row, sort_keys=True) + "\n")
+    with open(campaign_gap_log, "a") as f:
+        for row in rows:
+            f.write(json.dumps(row, sort_keys=True) + "\n")
+print(len(rows))
+PY
+)
+
 finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 end_epoch=$(date +%s)
 wall_time_sec=$((end_epoch - start_epoch))
@@ -295,8 +357,8 @@ case "$tool" in
     ;;
 esac
 
-printf '{"run_id":"%s","task_id":"%s","tool":"%s","shell_arm":"%s","image":"%s","valid":"%s","started_at":"%s","finished_at":"%s","wall_time_sec":%s,"success":%s,"tool_exit":%s,"verifier_exit":%s,"failure_mode":"%s","tool_call_count":%s,"bash_command_invocations":%s,"retry_count":%s,"retry_sleep_sec":%s,"rate_limit_or_api_error_count":%s,"token_usage_excerpt":"%s","workspace":"%s","log_dir":"%s"}\n' \
-  "$run_id" "$task" "$tool" "$env_name" "$image" "$valid" "$started_at" "$finished_at" "$wall_time_sec" "$success" "$tool_exit" "$verifier_exit" "$failure_mode" "$tool_call_count" "$command_count" "$retry_count" "$retry_sleep_sec" "$rate_limit_count" "$token_usage" "$work" "$logs" >>"$out"
+printf '{"run_id":"%s","task_id":"%s","tool":"%s","shell_arm":"%s","image":"%s","valid":"%s","started_at":"%s","finished_at":"%s","wall_time_sec":%s,"success":%s,"tool_exit":%s,"verifier_exit":%s,"failure_mode":"%s","tool_call_count":%s,"bash_command_invocations":%s,"retry_count":%s,"retry_sleep_sec":%s,"rate_limit_or_api_error_count":%s,"coreutils_gap_count":%s,"token_usage_excerpt":"%s","workspace":"%s","log_dir":"%s"}\n' \
+  "$run_id" "$task" "$tool" "$env_name" "$image" "$valid" "$started_at" "$finished_at" "$wall_time_sec" "$success" "$tool_exit" "$verifier_exit" "$failure_mode" "$tool_call_count" "$command_count" "$retry_count" "$retry_sleep_sec" "$rate_limit_count" "$gap_count" "$token_usage" "$work" "$logs" >>"$out"
 
 summary="$repo/docs/agent-shell-eval/test-$run_id.md"
 cat >"$summary" <<SUMMARY
@@ -313,6 +375,7 @@ cat >"$summary" <<SUMMARY
 - Retries: $retry_count
 - Retry sleep: ${retry_sleep_sec}s
 - Rate-limit/API error signals: $rate_limit_count
+- Coreutils gap signals: $gap_count
 - Logs: $logs
 
 ## Verifier
@@ -326,6 +389,12 @@ $(sed -n '1,120p' "$logs/verify.stderr" 2>/dev/null)
 
 \`\`\`text
 $(sed -n '1,120p' "$logs/container-shell.tsv" 2>/dev/null)
+\`\`\`
+
+## Coreutils Gap Signals
+
+\`\`\`json
+$(sed -n '1,120p' "$gap_log" 2>/dev/null)
 \`\`\`
 
 ## Notes

@@ -41,6 +41,35 @@ func TestAdviseNetworkHostUnresolvable(t *testing.T) {
 	}
 }
 
+func TestAdviseStatefulRerunMkdirExisting(t *testing.T) {
+	p := healthyProbe()
+	p.pathExists = func(dir, name string) bool {
+		return dir == "/repo" && name == "test"
+	}
+	a := &advisor{probe: p}
+	h := a.advise("/repo", []string{"mkdir", "test"}, 1)
+	if h == nil || h.dimension != "state" {
+		t.Fatalf("expected stateful rerun hint, got %+v", h)
+	}
+	if h.retryable {
+		t.Error("stateful rerun should be retryable=false")
+	}
+	if !strings.Contains(h.suggest, "mkdir -p") {
+		t.Errorf("mkdir hint should suggest idempotency: %q", h.suggest)
+	}
+}
+
+func TestAdviseStatefulRerunMkdirPNoHint(t *testing.T) {
+	p := healthyProbe()
+	p.pathExists = func(dir, name string) bool {
+		return dir == "/repo" && name == "test"
+	}
+	a := &advisor{probe: p}
+	if h := a.advise("/repo", []string{"mkdir", "-p", "test"}, 1); h != nil {
+		t.Fatalf("mkdir -p should not trigger rerun hint, got %+v", h)
+	}
+}
+
 func TestAdviseNetworkResolvesNoHint(t *testing.T) {
 	// Same command, but the host resolves from here (home LAN): no hint.
 	a := &advisor{probe: healthyProbe()}
