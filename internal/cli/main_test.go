@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 
+	_ "github.com/qiangli/coreutils/cmds/all"
+	coreutilsshell "github.com/qiangli/coreutils/shell"
+
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
@@ -483,7 +486,8 @@ func TestRunQuotedEmptyHeredocEOFKeepsBody(t *testing.T) {
 	}
 	r, err := interp.New(
 		interp.StdIO(nil, &stdout, &stderr),
-		interp.Env(expand.ListEnviron("PATH=/usr/bin:/bin")),
+		interp.Env(expand.ListEnviron("PATH=/no-host-tools")),
+		interp.ExecHandlers(coreutilsshell.Handler()),
 		interp.WithBashCompatErrors(true),
 	)
 	if err != nil {
@@ -1009,38 +1013,43 @@ func TestBashExecutionStringNotExported(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
-	pr2, pw2, err := os.Pipe()
+	var childEnv []string
+	r2, err := interp.New(
+		interp.StdIO(nil, io.Discard, io.Discard),
+		interp.Env(expand.ListEnviron(os.Environ()...)),
+		interp.CommandString(true),
+		interp.ExecHandlers(func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
+			return func(ctx context.Context, args []string) error {
+				if len(args) > 0 && args[0] == "capture-env" {
+					interp.HandlerCtx(ctx).Env.Each(func(name string, vr expand.Variable) bool {
+						if vr.Exported {
+							childEnv = append(childEnv, name+"="+vr.String())
+						}
+						return true
+					})
+					return nil
+				}
+				return next(ctx, args)
+			}
+		}),
+		interp.WithBashCompatErrors(true),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	os.Stdout = pw2
 
-	r2, err := newRunner()
-	if err != nil {
-		pw2.Close()
+	if err := run(r2, strings.NewReader("capture-env"), "bash"); err != nil {
 		t.Fatal(err)
 	}
 
-	err = run(r2, strings.NewReader("env"), "bash")
-	pw2.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var buf2 bytes.Buffer
-	if _, err := io.Copy(&buf2, pr2); err != nil {
-		t.Fatal(err)
-	}
-
-	envOutput := buf2.String()
 	found := false
-	for _, line := range strings.Split(envOutput, "\n") {
+	for _, line := range childEnv {
 		if strings.HasPrefix(line, "BASH_EXECUTION_STRING=") {
 			found = true
 			break
 		}
 	}
 	if found {
-		t.Errorf("BASH_EXECUTION_STRING was exported to env:\n%s", envOutput)
+		t.Errorf("BASH_EXECUTION_STRING was exported to child env:\n%s", strings.Join(childEnv, "\n"))
 	}
 }

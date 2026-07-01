@@ -31,6 +31,9 @@ func TestPreambleDefinesDocker(t *testing.T) {
 	if !strings.Contains(src, "git()") {
 		t.Fatalf("preamble should define a git function: %q", src)
 	}
+	if !strings.Contains(src, "sh()") || !strings.Contains(src, " --posix ") {
+		t.Fatalf("preamble should define sh as current bashy in POSIX mode: %q", src)
+	}
 	if strings.Contains(src, "command bashy ") {
 		t.Fatalf("preamble should bind shims to the current executable, not PATH bashy: %q", src)
 	}

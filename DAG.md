@@ -64,9 +64,12 @@ set -e
 mkdir -p bin
 VERSION="${VERSION:-dev}"
 BASHY_EXE="${BASHY:-bashy}"
+goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
+ext=""
+[ "$goos" = windows ] && ext=.exe
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}'"
-"$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o bin/bash  ./cmd/bash
-"$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o bin/bashy ./cmd/bashy
+"$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "bin/bash${ext}"  ./cmd/bash
+"$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "bin/bashy${ext}" ./cmd/bashy
 ```
 
 ### build-host
@@ -82,8 +85,11 @@ set -e
 mkdir -p bin
 VERSION="${VERSION:-dev}"
 BASHY_EXE="${BASHY:-bashy}"
+goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
+ext=""
+[ "$goos" = windows ] && ext=.exe
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}'"
-"$BASHY_EXE" go build -trimpath -tags "bashy_engines bashy_obs" -ldflags "$LDFLAGS" -o bin/bashy ./cmd/bashy
+"$BASHY_EXE" go build -trimpath -tags "bashy_engines bashy_obs" -ldflags "$LDFLAGS" -o "bin/bashy${ext}" ./cmd/bashy
 ```
 
 ### install

@@ -49,7 +49,7 @@ func setHistCmd(r *interp.Runner, n int) {
 }
 
 // singleQuote wraps s as a single POSIX shell word with no expansion, escaping
-// embedded single quotes the standard '\'' way.
+// embedded single quotes using the standard POSIX shell escaping pattern.
 func singleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

@@ -84,6 +84,7 @@ func Preamble() string {
 	var b strings.Builder
 	self := bashySelfPath()
 	fmt.Fprintf(&b, "docker() { command %s podman \"$@\"; }\n", shellQuote(self))
+	fmt.Fprintf(&b, "sh() { command %s --posix \"$@\"; }\n", shellQuote(self))
 	for _, v := range alwaysShimVerbs {
 		fmt.Fprintf(&b, "%s() { command %s %s \"$@\"; }\n", v, shellQuote(self), v)
 	}
