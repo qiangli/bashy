@@ -21,6 +21,64 @@ if [ ! -f "$pins" ]; then
     exit 1
 fi
 
+detect_bashy() {
+    if [ -n "${BASHY:-}" ] && [ -x "$BASHY" ]; then
+        printf '%s\n' "$BASHY"
+        return 0
+    fi
+    if [ -x "$root/bin/bashy" ]; then
+        printf '%s\n' "$root/bin/bashy"
+        return 0
+    fi
+    if command -v bashy >/dev/null 2>&1; then
+        command -v bashy
+        return 0
+    fi
+    return 1
+}
+
+BASHY_EXE=$(detect_bashy || true)
+
+git_head_short() {
+    repo=$1
+    if [ -n "$BASHY_EXE" ]; then
+        (cd "$repo" && "$BASHY_EXE" git rev-parse --short HEAD)
+        return
+    fi
+    git -C "$repo" rev-parse --short HEAD
+}
+
+git_clone() {
+    url=$1
+    target=$2
+    if [ -n "$BASHY_EXE" ]; then
+        "$BASHY_EXE" git clone --quiet "$url" "$target" >/dev/null
+        return
+    fi
+    git clone --quiet "$url" "$target"
+}
+
+git_checkout() {
+    repo=$1
+    sha=$2
+    if [ -n "$BASHY_EXE" ]; then
+        (cd "$repo" && "$BASHY_EXE" git checkout "$sha" >/dev/null)
+        return
+    fi
+    git -C "$repo" checkout --quiet "$sha"
+}
+
+git_submodule_update() {
+    repo=$1
+    if command -v git >/dev/null 2>&1; then
+        git -C "$repo" submodule update --init --recursive --quiet 2>/dev/null || true
+        return
+    fi
+    if [ -f "$repo/.gitmodules" ]; then
+        echo "bootstrap-siblings: host git unavailable; skipping optional submodule update for $repo" >&2
+    fi
+}
+
 # repo URL per dep name; if you add a new sibling, append here.
 repo_url() {
     case "$1" in
@@ -45,14 +103,16 @@ while IFS= read -r line; do
 
     target=$root/../$name
     if [ -e "$target/.git" ]; then
-        echo "bootstrap-siblings: $name -> $(cd "$target" && git rev-parse --short HEAD) (already present, leaving alone)"
+        echo "bootstrap-siblings: $name -> $(git_head_short "$target") (already present, leaving alone)"
         continue
     fi
 
     url=$(repo_url "$name")
     echo "bootstrap-siblings: cloning $url -> $target @ ${sha:0:12}"
-    git clone --quiet "$url" "$target"
-    git -C "$target" checkout --quiet "$sha"
-    # siblings may have their own submodules (e.g. coreutils -> ollama/podman forks)
-    git -C "$target" submodule update --init --recursive --quiet 2>/dev/null || true
+    git_clone "$url" "$target"
+    git_checkout "$target" "$sha"
+    # Siblings may have their own submodules (e.g. coreutils -> ollama/podman forks).
+    # They are not needed for the default lean build; host-layer DAG targets can
+    # materialize them later when a task actually needs those sources.
+    git_submodule_update "$target"
 done < "$pins"

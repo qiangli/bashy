@@ -51,7 +51,18 @@ OUTDIR=$(mktemp -d 2>/dev/null || echo /tmp/certdry.$$)
 declare -a ROWS
 fail=0 pending=0 ran=0 info=0
 
-printf '\n=== POSIX cert dry-run — %s ===\n\n' "$(cd "$HERE" && (git rev-parse --short HEAD 2>/dev/null || echo '?'))"
+git_head_short() {
+  if [ -n "${BASHY:-}" ] && [ -x "$BASHY" ]; then
+    "$BASHY" git rev-parse --short HEAD 2>/dev/null && return 0
+  fi
+  if [ -x "$HERE/bin/bashy" ]; then
+    "$HERE/bin/bashy" git rev-parse --short HEAD 2>/dev/null && return 0
+  fi
+  git rev-parse --short HEAD 2>/dev/null && return 0
+  echo '?'
+}
+
+printf '\n=== POSIX cert dry-run — %s ===\n\n' "$(git_head_short)"
 
 for entry in "${SUITES[@]}"; do
   key=${entry%%:*}; rest=${entry#*:}; script=${rest%%:*}; scope=${rest#*:}
