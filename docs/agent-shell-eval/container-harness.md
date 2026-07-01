@@ -10,13 +10,16 @@ runtime itself to make the selected shell unavoidable.
 
 ## Arms
 
-### bashy-agentos-container
+### bashy-current
 
 - Evaluated shell: `/usr/local/bin/bashy`.
+- Image tag: `bashy-agent-shell:bashy-current`.
 - Do not use this repo's `bin/bash`; it is only the pure Bash 5.3 drop-in.
 - `/bin/sh` and `/bin/bash`, if present, should point to wrappers that log and
   exec `/usr/local/bin/bashy`.
 - Agent mode: `DHNT_AGENT=1`, `BASHY_ADVISOR=1`.
+- Record the exact `bashy --version` output for every preflight because this
+  arm tracks the current development build, not a fixed release tag.
 
 ### gnu-bash53-container
 
@@ -30,14 +33,14 @@ runtime itself to make the selected shell unavoidable.
 
 The current lean `bin/bashy` build reports:
 
-```text
-bashy podman: the container/LLM engines are not in this build
-```
+The default release-style `bin/bashy` build is intentionally lean. If
+`bashy podman` reports that the container/LLM engines are not in this build,
+use a host build with engines enabled before running the container harness.
 
 Before the next valid run, use one of:
 
 ```sh
-make build-host
+make build-bashy BASHY_ENGINES=1 VERSION=eval-$(git rev-parse --short=12 HEAD)
 bin/bashy podman info
 ```
 
@@ -55,10 +58,9 @@ or dispatch the evaluation to a host node whose `bashy` includes the
 
 ## Next Harness Work
 
-- Add `eval/agent-shell/containers/bashy.Containerfile`.
-- Add `eval/agent-shell/containers/gnu-bash53.Containerfile`.
-- Add a shell wrapper that logs argv/cwd/exit and execs the arm shell.
-- Run the agent CLI inside the container, not on the host.
-- Mount task workspace at `/workspace` and results at `/results`.
-- Disable startup files unless a task explicitly tests startup behavior.
-
+- Keep `bashy-current` as the live development arm and preserve fixed release
+  tags only for historical replay.
+- Add more tasks that expose bashy differentiators, especially shell-check,
+  on-demand fallback, advisor hints, and self-build workflows.
+- Add per-run retro notes that convert bashy shortcomings into concrete product
+  work.

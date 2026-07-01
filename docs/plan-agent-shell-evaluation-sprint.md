@@ -67,12 +67,12 @@ Sub-questions:
 
 ## Arms
 
-### bashy-agentos-container
+### bashy-current container
 
 Representative environment:
 
 ```sh
-EVAL_ENV=bashy-agentos-container
+EVAL_ENV=bashy-current
 SHELL=/usr/local/bin/bashy
 PATH=/usr/local/bin:/usr/bin:/bin
 DHNT_AGENT=1
@@ -112,7 +112,7 @@ Preflight requirements:
 ```sh
 bin/bashy podman info
 bin/bashy podman build -f eval/agent-shell/containers/bashy.Containerfile \
-  -t bashy-agent-shell:bashy .
+  -t bashy-agent-shell:bashy-current .
 bin/bashy podman build -f eval/agent-shell/containers/gnu-bash53.Containerfile \
   -t bashy-agent-shell:gnu-bash53 .
 ```
@@ -158,7 +158,7 @@ Record one JSONL row per attempted run:
   "task_id": "...",
   "bucket": "standard-shell|repo-devops|bashy-differentiator",
   "tool": "codex|claude|agy|opencode|aider",
-  "env": "bashy-agentos-container|gnu-bash53-container",
+  "env": "bashy-current|gnu-bash53-container",
   "attempt": 1,
   "started_at": "...",
   "finished_at": "...",

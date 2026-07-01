@@ -186,3 +186,47 @@ Harness/product fixes made locally during the sprint:
 - Tightened retry/error matching and future token-summary recording.
 
 No `opencode` or `aider` runs were performed.
+
+## 2026-07-01 Current Baseline
+
+Documented in:
+
+- [`current-baseline.md`](current-baseline.md)
+- [`results-2026-07-01-current-baseline.md`](results-2026-07-01-current-baseline.md)
+- [`retro-2026-07-01-current-baseline.md`](retro-2026-07-01-current-baseline.md)
+
+Scope:
+
+- Shell arms: current `bashy` development build vs `GNU Bash 5.3`.
+- Agent tools: `codex`, `claude`, `agy`.
+- Excluded pending approval: `opencode`, `aider`.
+- Tasks: `wrong-cwd-recovery`, `dryrun-safe-edit`.
+- Execution: host agent orchestration, task shell commands through
+  `bin/bashy podman run` into the selected shell container.
+
+Preflight:
+
+```text
+bashy=GNU bash, version 5.3.0(1)-bashy-eval-8736b4a7fbdd
+gnu=GNU bash, version 5.3.0(2)-release (aarch64-unknown-linux-gnu)
+container_preflight=pass
+bashy_image=bashy-agent-shell:bashy-current
+gnu_image=bashy-agent-shell:gnu-bash53
+```
+
+Valid product-comparison result:
+
+| Shell arm | Valid runs | Passes | Pass rate | Total wall time | Median wall time | Tool calls | Bash invocations | Retries |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| bashy-current | 6 | 6 | 100% | 223s | 35.0s | 61 | 36 | 0 |
+| GNU Bash 5.3 | 6 | 6 | 100% | 303s | 37.5s | 59 | 40 | 0 |
+
+Main observations:
+
+- Both arms passed all valid runs.
+- bashy-current was faster in aggregate, mostly from `agy` on
+  `dryrun-safe-edit` (`27s` vs `122s`).
+- The safety-oriented dry-run task needs a stricter verifier; final state alone
+  does not prove the agent used dry-run before destructive execution.
+- Harness fixes made before the run: added `bashy-current`, added `autoconf` to
+  the GNU control image, and sanitized copied Bash build artifacts.

@@ -11,7 +11,7 @@ max_retries=1
 
 usage() {
   cat <<'USAGE'
-usage: eval/agent-shell/run-container-task.sh --task NAME --env bashy-v0.4.0|gnu-bash53 --tool codex|claude|agy [--out FILE] [--run-base DIR]
+usage: eval/agent-shell/run-container-task.sh --task NAME --env bashy-current|bashy-v0.4.0|gnu-bash53 --tool codex|claude|agy [--out FILE] [--run-base DIR]
 USAGE
 }
 
@@ -40,6 +40,7 @@ if [[ ! -x "$task_dir/setup.sh" || ! -x "$task_dir/verify.sh" || ! -f "$task_dir
 fi
 
 case "$env_name" in
+  bashy-current) image=bashy-agent-shell:bashy-current ;;
   bashy-v0.4.0) image=bashy-agent-shell:bashy-v0.4.0 ;;
   gnu-bash53) image=bashy-agent-shell:gnu-bash53 ;;
   *) printf 'unknown env: %s\n' "$env_name" >&2; exit 2 ;;
@@ -107,7 +108,7 @@ prompt_body=$(sed \
   "$task_dir/prompt.md")
 
 prompt=$(cat <<PROMPT
-You are participating in a shell benchmark comparing bashy v0.4.0 against GNU Bash 5.3.
+You are participating in a shell benchmark comparing current bashy against GNU Bash 5.3.
 
 Critical execution rule:
 - Run task shell commands only through this wrapper: $bin_dir/eval-shell
