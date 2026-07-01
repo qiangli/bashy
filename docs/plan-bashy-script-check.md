@@ -42,6 +42,8 @@ Dependency policy flags:
 - `--no-source`: do not follow `source`/`.` includes; report them as unknown
   unless already loaded.
 - `--source-root DIR`: resolve relative sourced files from a known project root.
+- `--max-depth N`: recursion guard for sourced scripts and statically resolved
+  script executions.
 
 Managed GNU coreutils fallback:
 
@@ -188,8 +190,17 @@ Phase 2: static command extraction.
 - Walk the AST and collect simple commands, pipelines, command substitutions,
   process substitutions, functions, aliases where statically resolvable, and
   `source`/`.` includes.
+- Recursively analyze scripts reached from the entry scripts:
+  - `source file` and `. file`;
+  - statically resolved shell script executions such as `./scripts/build.sh`,
+    `bash scripts/build.sh`, `bashy scripts/build.sh`, and `sh scripts/build.sh`;
+  - executable files with a shell shebang when the path is static and readable.
 - Maintain shell state for function definitions and local aliases within the
   same file.
+- Track an analyzed-file set by canonical path to avoid loops, and stop at
+  `--max-depth` with a warning instead of recursing forever.
+- Preserve the caller/callee edge so reports can explain where a command came
+  from: entry script -> sourced file -> nested script.
 - Mark dynamically computed command names separately:
 
 ```text
@@ -230,6 +241,28 @@ script.sh:20:3 error   timeout 5 cmd        missing in bashy; strict-system forb
 script.sh:31:3 info    $tool --version      dynamic command name; cannot prove closure
 ```
 
+At the end, always print a closure inventory:
+
+```text
+command inventory:
+  bashy native:
+    cp        coreutils/cp
+    echo      builtin
+    git       bashy verb
+  system PATH:
+    python3   /usr/bin/python3
+    perl      /usr/bin/perl
+  container fallback:
+    timeout   gnu-coreutils:9.11
+  not found:
+    deployctl
+```
+
+The `system PATH` section must include the full resolved path for each command
+because this is the evidence that the script is not self-contained. The
+`not found` section is the set of commands that would fail at runtime with
+`command not found` under the selected policy and environment.
+
 JSON output should be stable for agents:
 
 ```json
@@ -238,12 +271,36 @@ JSON output should be stable for agents:
   "mode": "bashy",
   "summary": {
     "commands": 12,
+    "files_analyzed": 3,
     "bashy_native": 8,
     "container": 1,
     "system": 2,
+    "not_found": 1,
     "dynamic": 1,
     "errors": 1,
     "warnings": 2
+  },
+  "files": [
+    {"path": "script.sh", "role": "entry"},
+    {"path": "lib/common.sh", "role": "source", "from": "script.sh"}
+  ],
+  "inventory": {
+    "bashy_native": [
+      {"name": "cp", "kind": "coreutil"},
+      {"name": "echo", "kind": "builtin"}
+    ],
+    "system": [
+      {"name": "python3", "path": "/usr/bin/python3"}
+    ],
+    "container": [
+      {"name": "timeout", "image": "gnu-coreutils:9.11"}
+    ],
+    "not_found": [
+      {"name": "deployctl"}
+    ],
+    "dynamic": [
+      {"span": "script.sh:31:3", "text": "$tool"}
+    ]
   },
   "diagnostics": []
 }
@@ -265,6 +322,9 @@ Initial code family:
 - `BASHY0401`: option coverage unknown because no manifest exists.
 - `BASHY0500`: dynamic command name cannot be proven.
 - `BASHY0600`: sourced file not found or not analyzed.
+- `BASHY0601`: recursive script analysis exceeded `--max-depth`.
+- `BASHY0700`: command found on system PATH; report full path.
+- `BASHY0701`: command not found in bashy, container fallback, or system PATH.
 
 ## Implementation Sprint Plan
 
@@ -273,7 +333,11 @@ Initial code family:
 - Add `bashy check` front-door command.
 - Parse files and report Bash/POSIX syntax errors.
 - Walk AST and collect command invocations with source locations.
+- Recursively analyze sourced scripts and statically resolved shell-script
+  executions.
 - Resolve against live builtins/coreutils/verbs from existing registries.
+- Emit final command inventory grouped by bashy-native, container fallback,
+  system PATH with full paths, dynamic, and not found.
 - Emit plain and JSON reports.
 - Add fixtures for valid bash, invalid syntax, POSIX mode rejection, dynamic
   command names, functions, aliases, and sourced files.
@@ -376,4 +440,3 @@ Success metrics:
 - script closure: percentage of real bashy project scripts that pass
   `bashy check --strict-system`;
 - fallback reduction: number of script commands requiring container/host PATH.
-
