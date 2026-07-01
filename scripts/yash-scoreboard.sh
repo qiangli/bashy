@@ -29,9 +29,9 @@ GOOS=linux GOARCH=$GOARCH go build -o bin/.bashy-full ./cmd/bash || exit 2
 
 RAW="$OUT/verdicts.raw"
 echo "running yash -p corpus (bashy + bash, per case)…" >&2
-$OCI podman ps -aq 2>/dev/null | xargs -r $OCI podman rm -f >/dev/null 2>&1 || true
+$OCI ps -aq 2>/dev/null | xargs -r $OCI rm -f >/dev/null 2>&1 || true
 # shellcheck disable=SC2016
-$OCI run --rm -v "$ROOT/.yash-tests/tests:/yt:ro" -v "$ROOT/bin/.bashy-full:/bashy:ro" \
+if ! $OCI run --rm -v "$ROOT/.yash-tests/tests:/yt:ro" -v "$ROOT/bin/.bashy-full:/bashy:ro" \
   localhost/posix-shells-broad busybox ash -c '
   export LANG=C; cp -r /yt /work 2>/dev/null; cd /work
   for f in *-p.tst; do
@@ -42,10 +42,18 @@ $OCI run --rm -v "$ROOT/.yash-tests/tests:/yt:ro" -v "$ROOT/bin/.bashy-full:/bas
       timeout -s KILL 8 busybox ash run-test.sh "$sh" "$f" >/dev/null 2>&1
       trs="${f%.tst}.trs"; [ -f "$trs" ] || continue
       # format: %%% OK[PASSED]: suite-p.tst:LINE: description
-      sed -nE "s/^%%% (OK|ERROR)\[[A-Z]*\]: ([^ ]*\.tst):([0-9]+): (.*)/\2|\3|$lbl|\1|\4/p" "$trs"
+      sed -nE "s/^%%% (OK|ERROR)\[[^]]*\]: ([^ ]*\.tst):([0-9]+): (.*)/\2|\3|$lbl|\1|\4/p" "$trs"
     done
   done
-' > "$RAW" 2>/dev/null
+' > "$RAW"
+then
+  echo "yash-scoreboard: oracle runtime failed: $OCI run localhost/posix-shells-broad ..." >&2
+  exit 2
+fi
+if [ ! -s "$RAW" ]; then
+  echo "yash-scoreboard: no verdicts produced; check image localhost/posix-shells-broad and mounted yash tests" >&2
+  exit 2
+fi
 
 # host-side: tally + bashy-specific failures (bash OK, bashy ERROR)
 awk -F'|' '

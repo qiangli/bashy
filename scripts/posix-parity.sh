@@ -114,13 +114,24 @@ done
 
 # --- run bash 5.3 in one docker container, stdout + exit marker per probe ---
 PROBES=$(for i in "${!NUMS[@]}"; do printf '%s\t%s\n' "$i" "${SCRIPTS[$i]}"; done)
-RAW=$(printf '%s\n' "$PROBES" | $OCI run --rm -i -e HOME=/tmp bash:5.3 bash -c '
+if ! RAW=$(printf '%s\n' "$PROBES" | $OCI run --rm -i -e HOME=/tmp bash:5.3 bash -c '
   tab=$(printf "\t")
   while IFS="$tab" read -r idx script; do
     echo "@@@P:$idx@@@"
     bash --posix -c "$script" 2>/dev/null
     echo "@@@X:$idx:$?@@@"
   done')
+then
+  echo "posix-parity: oracle runtime failed: $OCI run bash:5.3 ..." >&2
+  exit 2
+fi
+case "$RAW" in
+  *"@@@P:"*"@@@X:"*) ;;
+  *)
+    echo "posix-parity: oracle runtime produced no probe markers: $OCI run bash:5.3 ..." >&2
+    exit 2
+    ;;
+esac
 declare -a BH_OUT BH_OK
 cur=""
 while IFS= read -r line; do
