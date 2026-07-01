@@ -1,2 +1,0 @@
-sort: write failed: write |1-dup: broken pipe
-grep: back-reference \1 is not supported (RE2 has no back-references)

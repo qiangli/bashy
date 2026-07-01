@@ -11,6 +11,12 @@ external/bash-5.3
 .aider*
 .agents/
 
+# Runtime/eval output can contain local paths, command transcripts, provider
+# metadata, or secrets from failures. Keep raw runs local; commit sanitized
+# summaries under docs/ or another reviewed location instead.
+results/*
+!results/README.md
+
 # Prior-art reference clones for studying/adapting POSIX shell behavior.
 # Local only, never committed (we adapt algorithms into Go with attribution,
 # we do not redistribute upstream sources). Policy: docs/priorart-policy.md
