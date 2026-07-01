@@ -5,6 +5,7 @@ package agentos
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -31,7 +32,33 @@ It does not replace the running executable unless you explicitly install to a
 destination path.`,
 		SilenceUsage: true,
 	}
-	cmd.AddCommand(selfFetchCmd(), selfInstallCmd())
+	cmd.AddCommand(selfFetchCmd(), selfInstallCmd(), selfCheckCmd())
+	return cmd
+}
+
+func selfCheckCmd() *cobra.Command {
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "check",
+		Short: "Check the self-contained bashy bootstrap/build path",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			checks := collectSelfChecks()
+			warns := countDoctorWarnings(checks)
+			if asJSON {
+				b, _ := json.Marshal(map[string]any{
+					"schema_version": "bashy-self-check-v1",
+					"checks":         checks,
+					"warnings":       warns,
+				})
+				fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return nil
+			}
+			printDoctorChecks(cmd.OutOrStdout(), checks, "bashy self check")
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit JSON")
 	return cmd
 }
 

@@ -4,9 +4,12 @@
 package agentos
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -80,5 +83,47 @@ func TestInstallExecutable(t *testing.T) {
 		if info.Mode().Perm()&0o111 == 0 {
 			t.Fatalf("installed file is not executable: %v", info.Mode())
 		}
+	}
+}
+
+func TestSelfCheckCommandPlainAndJSON(t *testing.T) {
+	cmd := selfCmd()
+	var plain bytes.Buffer
+	cmd.SetOut(&plain)
+	cmd.SetErr(&plain)
+	cmd.SetArgs([]string{"check"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("self check: %v\n%s", err, plain.String())
+	}
+	if !strings.Contains(plain.String(), "embedded git") || !strings.Contains(plain.String(), "bashy self check") {
+		t.Fatalf("self check output missing bootstrap checks:\n%s", plain.String())
+	}
+
+	cmd = selfCmd()
+	var js bytes.Buffer
+	cmd.SetOut(&js)
+	cmd.SetErr(&js)
+	cmd.SetArgs([]string{"check", "--json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("self check --json: %v\n%s", err, js.String())
+	}
+	var payload struct {
+		SchemaVersion string        `json:"schema_version"`
+		Checks        []doctorCheck `json:"checks"`
+	}
+	if err := json.Unmarshal(js.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid self check json: %v\n%s", err, js.String())
+	}
+	if payload.SchemaVersion != "bashy-self-check-v1" {
+		t.Fatalf("schema = %q", payload.SchemaVersion)
+	}
+	var sawManagedGo bool
+	for _, c := range payload.Checks {
+		if c.Name == "managed go" && c.Status == "ok" {
+			sawManagedGo = true
+		}
+	}
+	if !sawManagedGo {
+		t.Fatalf("self check JSON missing managed go check: %#v", payload.Checks)
 	}
 }

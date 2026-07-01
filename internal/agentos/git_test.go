@@ -355,3 +355,121 @@ func TestGitUnimplementedVerbsError(t *testing.T) {
 		t.Errorf("bare git: err=%v out:\n%s", err, out)
 	}
 }
+
+func TestGitBootstrapRemoteWorkflow(t *testing.T) {
+	rootDir := t.TempDir()
+	origin := filepath.Join(rootDir, "origin")
+	clone := filepath.Join(rootDir, "clone")
+
+	run := func(t *testing.T, cwd string, args ...string) (string, error) {
+		t.Helper()
+		prev, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("getwd: %v", err)
+		}
+		if cwd != "" {
+			if err := os.Chdir(cwd); err != nil {
+				t.Fatalf("chdir %s: %v", cwd, err)
+			}
+		}
+		defer func() { _ = os.Chdir(prev) }()
+
+		cmd := gitCmd()
+		buf := &bytes.Buffer{}
+		cmd.SetOut(buf)
+		cmd.SetErr(buf)
+		cmd.SetArgs(args)
+		err = cmd.Execute()
+		return buf.String(), err
+	}
+	commitFile := func(t *testing.T, cwd, name, body, msg string) {
+		t.Helper()
+		full := filepath.Join(cwd, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", name, err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+		if out, err := run(t, cwd, "add", "-A"); err != nil {
+			t.Fatalf("add -A: %v\n%s", err, out)
+		}
+		if out, err := run(t, cwd, "commit", "-m", msg, "--author-name", "T", "--author-email", "t@e"); err != nil {
+			t.Fatalf("commit %q: %v\n%s", msg, err, out)
+		}
+	}
+
+	if out, err := run(t, "", "init", origin); err != nil {
+		t.Fatalf("init origin: %v\n%s", err, out)
+	}
+	commitFile(t, origin, "README.md", "main\n", "main seed")
+	if out, err := run(t, origin, "checkout", "-b", "topic"); err != nil {
+		t.Fatalf("checkout -b topic: %v\n%s", err, out)
+	}
+	commitFile(t, origin, "topic.txt", "topic\n", "topic seed")
+
+	shallowClone := filepath.Join(rootDir, "shallow")
+	out, err := run(t, "", "clone", "--quiet", "--depth", "1", origin, shallowClone)
+	if err == nil || !strings.Contains(err.Error(), "shallow") {
+		t.Fatalf("local shallow clone should report transport shallow limitation, err=%v out=%s", err, out)
+	}
+
+	out, err = run(t, "", "clone", "--quiet", "--branch", "topic", "--single-branch", origin, clone)
+	if err != nil {
+		t.Fatalf("clone topic: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Cloned into") {
+		t.Fatalf("clone output missing success message:\n%s", out)
+	}
+	out, err = run(t, clone, "branch")
+	if err != nil {
+		t.Fatalf("branch in clone: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "* topic") {
+		t.Fatalf("clone did not check out topic branch:\n%s", out)
+	}
+	sha, err := run(t, clone, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatalf("rev-parse HEAD: %v\n%s", err, sha)
+	}
+	out, err = run(t, clone, "checkout", strings.TrimSpace(sha))
+	if err != nil {
+		t.Fatalf("checkout detached SHA: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "detached") {
+		t.Fatalf("checkout SHA should report detached HEAD:\n%s", out)
+	}
+	out, err = run(t, clone, "checkout", "-B", "topic-reset")
+	if err != nil {
+		t.Fatalf("checkout -B: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Reset branch") {
+		t.Fatalf("checkout -B output:\n%s", out)
+	}
+
+	if out, err := run(t, origin, "checkout", "-B", "later"); err != nil {
+		t.Fatalf("checkout -B later: %v\n%s", err, out)
+	}
+	commitFile(t, origin, "later.txt", "later\n", "later seed")
+	out, err = run(t, clone, "fetch", "--no-tags", "origin", "later:later")
+	if err != nil {
+		t.Fatalf("fetch refspec: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Fetched from origin") && !strings.Contains(out, "Already up to date") {
+		t.Fatalf("fetch output missing success message:\n%s", out)
+	}
+	out, err = run(t, clone, "branch")
+	if err != nil {
+		t.Fatalf("branch after fetch: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "later") {
+		t.Fatalf("fetched refspec did not create local later branch:\n%s", out)
+	}
+	out, err = run(t, clone, "checkout", "later")
+	if err != nil {
+		t.Fatalf("checkout fetched branch: %v\n%s", err, out)
+	}
+	if body, err := os.ReadFile(filepath.Join(clone, "later.txt")); err != nil || string(body) != "later\n" {
+		t.Fatalf("fetched branch worktree mismatch body=%q err=%v", body, err)
+	}
+}

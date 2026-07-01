@@ -11,9 +11,12 @@ package agentos
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/qiangli/coreutils/pkg/binmgr"
@@ -47,17 +50,33 @@ func dispatchDoctor(args []string) int {
 		}
 	}
 
-	var checks []doctorCheck
+	checks := collectDoctorChecks()
+
+	warns := countDoctorWarnings(checks)
+
+	if asJSON {
+		b, _ := json.Marshal(map[string]any{
+			"schema_version": doctorSchemaVersion,
+			"checks":         checks,
+			"warnings":       warns,
+		})
+		fmt.Println(string(b))
+		return 0
+	}
+
+	printDoctorChecks(os.Stdout, checks, "bashy doctor")
+	return 0
+}
+
+func collectDoctorChecks() []doctorCheck {
+	checks := collectSelfChecks()
 	add := func(name, status, detail string) {
 		checks = append(checks, doctorCheck{name, status, detail})
 	}
 
-	// 1. This binary.
+	// `bashy` on PATH — a different one first means the bare verb shims +
+	// `command bashy` resolve to a stale build (a footgun we hit in practice).
 	exe, _ := os.Executable()
-	add("bashy binary", "info", fmt.Sprintf("%s (%s/%s, %s)", exe, runtime.GOOS, runtime.GOARCH, runtime.Version()))
-
-	// 2. `bashy` on PATH — a different one first means the bare verb shims +
-	//    `command bashy` resolve to a STALE build (a footgun we hit in practice).
 	if lp, err := exec.LookPath("bashy"); err == nil && exe != "" && lp != exe {
 		add("PATH: bashy", "warn", fmt.Sprintf("a different bashy is first on PATH (%s); this process is %s — bare verb shims will use the PATH one", lp, exe))
 	} else if err == nil {
@@ -66,8 +85,8 @@ func dispatchDoctor(args []string) int {
 		add("PATH: bashy", "info", "not on PATH (run by absolute path)")
 	}
 
-	// 3. `sh` on PATH — a wrapper shim shadowing it breaks `make test-bash` and
-	//    forked-shell tests; the documented fix is a clean PATH.
+	// `sh` on PATH — a wrapper shim shadowing it breaks `make test-bash` and
+	// forked-shell tests; the documented fix is a clean PATH.
 	if lp, err := exec.LookPath("sh"); err == nil {
 		if strings.Contains(lp, "wrap") || strings.Contains(lp, "shim") || (lp != "/bin/sh" && lp != "/usr/bin/sh") {
 			add("PATH: sh", "warn", fmt.Sprintf("sh resolves to %s — may be a wrapper shim; use a clean PATH (/bin:/usr/bin) for forked-shell work", lp))
@@ -78,21 +97,21 @@ func dispatchDoctor(args []string) int {
 		add("PATH: sh", "warn", "no sh on PATH")
 	}
 
-	// 4. Go toolchain (for `bashy go` consumers / building).
+	// Host Go is optional now that `bashy go` exists; still useful to report
+	// because tests may accidentally pick it up.
 	if lp, err := exec.LookPath("go"); err == nil {
-		add("go toolchain", "ok", lp)
+		add("host go", "info", lp)
 	} else {
-		add("go toolchain", "info", "no host go on PATH (use `bashy go`)")
+		add("host go", "info", "no host go on PATH (use `bashy go`)")
 	}
 
-	// 5. Agent mode.
 	if weavecli.IsAgent() {
 		add("agent mode", "info", "ON (BASHY_AGENTIC truthy → JSON defaults)")
 	} else {
 		add("agent mode", "info", "off (set BASHY_AGENTIC=1 for JSON defaults)")
 	}
 
-	// 6. Container engine reachability (best-effort, advisory).
+	// Container engine reachability (best-effort, advisory).
 	switch {
 	case os.Getenv("CONTAINER_HOST") != "" || os.Getenv("DOCKER_HOST") != "":
 		add("container engine", "info", "a CONTAINER_HOST/DOCKER_HOST is set")
@@ -105,8 +124,26 @@ func dispatchDoctor(args []string) int {
 			add("container engine", "info", "none detected (bashy podman needs an engine build / host)")
 		}
 	}
+	return checks
+}
 
-	// 7. Bin cache for binmgr-managed externals.
+func collectSelfChecks() []doctorCheck {
+	var checks []doctorCheck
+	add := func(name, status, detail string) {
+		checks = append(checks, doctorCheck{name, status, detail})
+	}
+
+	exe, _ := os.Executable()
+	if exe == "" {
+		add("bashy binary", "warn", "cannot resolve current executable")
+	} else {
+		add("bashy binary", "info", fmt.Sprintf("%s (%s/%s, %s)", exe, runtime.GOOS, runtime.GOARCH, runtime.Version()))
+	}
+	add("embedded git", "ok", "bashy git is compiled in and never falls back to system git")
+	add("dag runner", "ok", "bashy dag is compiled in")
+	add("managed go", "ok", "bashy go is compiled in; host go is optional")
+	add("release target", "ok", fmt.Sprintf("%s/%s member %s", runtime.GOOS, runtime.GOARCH, releaseBinaryName()))
+
 	if dir, err := binmgr.CacheDir(); err == nil {
 		st := "ok"
 		detail := dir
@@ -116,31 +153,105 @@ func dispatchDoctor(args []string) int {
 		add("bin cache", st, detail)
 	}
 
+	if root, ok := findBashySourceRoot("."); ok {
+		add("source tree", "ok", root)
+		addSiblingLayoutChecks(&checks, root)
+	} else {
+		add("source tree", "info", "not running inside a bashy source checkout")
+	}
+	return checks
+}
+
+func addSiblingLayoutChecks(checks *[]doctorCheck, root string) {
+	add := func(name, status, detail string) {
+		*checks = append(*checks, doctorCheck{name, status, detail})
+	}
+	pinsPath := filepath.Join(root, ".sibling-pins")
+	data, err := os.ReadFile(pinsPath)
+	if err != nil {
+		add("sibling pins", "warn", ".sibling-pins missing; standalone self-build cannot pin sibling repos")
+		return
+	}
+	pins := parseSiblingPins(string(data))
+	if len(pins) == 0 {
+		add("sibling pins", "warn", ".sibling-pins has no active pins")
+		return
+	}
+	names := make([]string, 0, len(pins))
+	missing := make([]string, 0)
+	for name := range pins {
+		names = append(names, name)
+		if _, err := os.Stat(filepath.Join(filepath.Dir(root), name, "go.mod")); err != nil {
+			missing = append(missing, name)
+		}
+	}
+	sort.Strings(names)
+	sort.Strings(missing)
+	add("sibling pins", "ok", strings.Join(names, ", "))
+	if len(missing) == 0 {
+		add("sibling repos", "ok", "all pinned siblings exist next to bashy")
+		return
+	}
+	add("sibling repos", "warn", "missing next to bashy: "+strings.Join(missing, ", "))
+}
+
+func findBashySourceRoot(start string) (string, bool) {
+	dir, err := filepath.Abs(start)
+	if err != nil {
+		return "", false
+	}
+	for {
+		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil && strings.Contains(string(data), "module github.com/qiangli/bashy") {
+			return dir, true
+		}
+		next := filepath.Dir(dir)
+		if next == dir {
+			return "", false
+		}
+		dir = next
+	}
+}
+
+func parseSiblingPins(src string) map[string]string {
+	pins := map[string]string{}
+	for _, line := range strings.Split(src, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		name, sha, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		name = strings.TrimSpace(name)
+		sha = strings.TrimSpace(sha)
+		if name != "" && sha != "" {
+			pins[name] = sha
+		}
+	}
+	return pins
+}
+
+func countDoctorWarnings(checks []doctorCheck) int {
 	warns := 0
 	for _, c := range checks {
 		if c.Status == "warn" {
 			warns++
 		}
 	}
+	return warns
+}
 
-	if asJSON {
-		b, _ := json.Marshal(map[string]any{
-			"schema_version": doctorSchemaVersion,
-			"checks":         checks,
-			"warnings":       warns,
-		})
-		fmt.Println(string(b))
-		return 0
-	}
-
+func printDoctorChecks(w io.Writer, checks []doctorCheck, title string) {
 	mark := map[string]string{"ok": "✓", "warn": "⚠", "info": "ⓘ"}
 	for _, c := range checks {
-		fmt.Printf("  %s  %-18s %s\n", mark[c.Status], c.Name, c.Detail)
+		fmt.Fprintf(w, "  %s  %-18s %s\n", mark[c.Status], c.Name, c.Detail)
 	}
+	warns := countDoctorWarnings(checks)
 	if warns == 0 {
-		fmt.Println("\nbashy doctor: no warnings.")
+		fmt.Fprintf(w, "\n%s: no warnings.\n", title)
 	} else {
-		fmt.Printf("\nbashy doctor: %d warning(s) above.\n", warns)
+		fmt.Fprintf(w, "\n%s: %d warning(s) above.\n", title, warns)
 	}
-	return 0
 }

@@ -471,20 +471,28 @@ func gitFetchCmd() *cobra.Command {
 		username string
 		password string
 		sshKey   string
+		noTags   bool
 	)
 	cmd := &cobra.Command{
-		Use:   "fetch [remote]",
+		Use:   "fetch [remote] [refspec...]",
 		Short: "Download objects and refs from a remote",
-		Args:  cobra.MaximumNArgs(1),
+		Args:  cobra.ArbitraryArgs,
 		Example: `  bashy git fetch
-  bashy git fetch origin`,
+  bashy git fetch origin
+  bashy git fetch --no-tags ../workspace feature:feature`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			remoteName := ""
 			if len(args) > 0 {
 				remoteName = args[0]
 			}
+			var refspecs []string
+			if len(args) > 1 {
+				refspecs = args[1:]
+			}
 			result, err := outgit.Fetch(outgit.FetchOptions{
-				Remote: remoteName,
+				Remote:   remoteName,
+				RefSpecs: refspecs,
+				NoTags:   noTags,
 				Auth: outgit.AuthConfig{
 					Username: username,
 					Password: password,
@@ -501,6 +509,7 @@ func gitFetchCmd() *cobra.Command {
 	cmd.Flags().StringVar(&username, "username", "", "Username for HTTPS basic auth")
 	cmd.Flags().StringVar(&password, "password", "", "Password/token for HTTPS basic auth")
 	cmd.Flags().StringVar(&sshKey, "ssh-key", "", "Path to SSH private key (ssh:// remotes)")
+	cmd.Flags().BoolVar(&noTags, "no-tags", false, "Do not fetch tags")
 	return cmd
 }
 
@@ -546,17 +555,23 @@ func gitBranchCmd() *cobra.Command {
 }
 
 func gitCheckoutCmd() *cobra.Command {
-	var create bool
+	var create, force bool
 	cmd := &cobra.Command{
 		Use:   "checkout <branch>",
-		Short: "Switch to a branch (optionally create it)",
+		Short: "Switch to a branch, create/reset it, or detach to a revision",
 		Args:  cobra.ExactArgs(1),
 		Example: `  bashy git checkout main
-  bashy git checkout -b feature-x      # create and switch`,
+  bashy git checkout -b feature-x      # create and switch
+  bashy git checkout -B feature-x      # create/reset and switch
+  bashy git checkout <commit-sha>      # detached HEAD`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if create && force {
+				return fmt.Errorf("checkout: -b and -B are mutually exclusive")
+			}
 			result, err := outgit.Checkout(outgit.CheckoutOptions{
 				Branch: args[0],
 				Create: create,
+				Force:  force,
 			})
 			if err != nil {
 				return err
@@ -566,6 +581,7 @@ func gitCheckoutCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVarP(&create, "branch", "b", false, "Create the branch before switching")
+	cmd.Flags().BoolVarP(&force, "force-branch", "B", false, "Create or reset the branch before switching")
 	return cmd
 }
 
