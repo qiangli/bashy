@@ -72,7 +72,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "dag", "schedule", "secrets", "skills", "run", "commands", "doctor", "self",
+		"weave", "sprint", "dag", "schedule", "secrets", "skills", "run", "commands", "doctor", "self", "check",
 		"git", "gh", "act", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 	}
@@ -196,6 +196,10 @@ func Dispatch() {
 		// Environment self-diagnostic: PATH/sh shadowing, a stale bashy on PATH,
 		// toolchain + container engine, agent mode, bin cache. Advisory.
 		os.Exit(dispatchDoctor(os.Args[2:]))
+	case "check":
+		// Static script preflight: syntax, recursive command inventory, and
+		// bashy/system/container/not-found resolution.
+		os.Exit(dispatchCheck(os.Args[2:]))
 	case "self":
 		// Self-management: fetch/cache release binaries and explicitly install a
 		// selected candidate. This is the bashy-side migration of outpost's
