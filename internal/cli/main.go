@@ -486,7 +486,7 @@ func newRunner() (*interp.Runner, error) {
 		interp.StdIO(os.Stdin, os.Stdout, os.Stderr),
 		interp.Env(env),
 		interp.WithBashCompatErrors(true),
-		interp.WithInheritedFds(parseInheritedFds(os.Getenv(interp.BashyInheritedFdsEnv))),
+		interp.WithInheritedFds(startupInheritedFds()),
 		interp.PromptExpand(func(s string) string {
 			envGet := func(name string) string {
 				return r.Env.Get(name).String()
@@ -583,6 +583,13 @@ func parseInheritedFds(s string) []int {
 		}
 	}
 	return fds
+}
+
+func startupInheritedFds() []int {
+	if fds := parseInheritedFds(os.Getenv(interp.BashyInheritedFdsEnv)); len(fds) > 0 {
+		return fds
+	}
+	return discoverInheritedFds()
 }
 
 // importBashFuncs scans os.Environ() for entries matching

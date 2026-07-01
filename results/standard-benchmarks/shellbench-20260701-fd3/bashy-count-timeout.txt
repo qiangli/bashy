@@ -1,0 +1,5 @@
+-------------------------------------------------------------
+name                                               /usr/local/bin/bashy
+-------------------------------------------------------------
+count.sh: posix                                    bash: line 153: !: unbound variable
+/usr/local/bin/bashy: line 4: 3: Bad file descriptor

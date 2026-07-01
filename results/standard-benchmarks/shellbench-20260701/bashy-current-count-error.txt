@@ -1,0 +1,11 @@
+-------------------------------------------------------------
+name                                               /usr/local/bin/bashy
+-------------------------------------------------------------
+count.sh: posix                                    
+[ERROR] /usr/local/bin/bashy: line 4: 3: Bad file descriptor     error 
+count.sh: typeset -i                               
+[ERROR] /usr/local/bin/bashy: line 4: 3: Bad file descriptor     error 
+count.sh: increment                                
+[ERROR] /usr/local/bin/bashy: line 4: 3: Bad file descriptor     error 
+-------------------------------------------------------------
+* count: number of executions per second

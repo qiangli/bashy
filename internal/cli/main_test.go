@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -18,6 +19,24 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
 )
+
+func TestStartupInheritedFdsDiscoversOpenFD(t *testing.T) {
+	t.Setenv(interp.BashyInheritedFdsEnv, "")
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	defer w.Close()
+
+	fd := int(r.Fd())
+	if fd < 3 {
+		t.Fatalf("test pipe fd = %d, want >= 3", fd)
+	}
+	if !slices.Contains(startupInheritedFds(), fd) {
+		t.Fatalf("startupInheritedFds() did not include open fd %d", fd)
+	}
+}
 
 func TestNewRunnerInheritsOLDPWD(t *testing.T) {
 	// bash (and every POSIX shell) carries an inherited $OLDPWD through so

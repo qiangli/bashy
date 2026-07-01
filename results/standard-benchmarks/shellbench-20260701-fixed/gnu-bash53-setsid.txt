@@ -1,0 +1,12 @@
+-------------------------------------------------------------
+name                                               /usr/local/bin/bash
+-------------------------------------------------------------
+count.sh: posix                                       766,803 
+count.sh: typeset -i                                  732,262 
+count.sh: increment                                   955,145 
+output.sh: echo                                       586,811 
+output.sh: printf                                     560,357 
+output.sh: print                                   
+[ERROR] /usr/local/bin/bash: line 17: print: command not found     error 
+-------------------------------------------------------------
+* count: number of executions per second

@@ -1,0 +1,11 @@
+-------------------------------------------------------------
+name                                               /usr/local/bin/bashy
+-------------------------------------------------------------
+count.sh: posix                                         error 
+count.sh: typeset -i                                    error 
+count.sh: increment                                     error 
+output.sh: echo                                         error 
+output.sh: printf                                       error 
+output.sh: print                                        error 
+-------------------------------------------------------------
+* count: number of executions per second

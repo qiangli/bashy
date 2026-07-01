@@ -1,0 +1,4 @@
+-------------------------------------------------------------
+name                                               /usr/local/bin/bashy
+-------------------------------------------------------------
+count.sh: posix                                    /usr/local/bin/bashy: line 4: 3: Bad file descriptor
