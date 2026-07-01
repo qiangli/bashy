@@ -175,6 +175,27 @@ func TestGNUCoreutilsReportTracksGaps(t *testing.T) {
 	}
 }
 
+func TestCommandFeatureReportGrepKnownGap(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "")
+	builtins, core, verbs := commandsCatalog()
+	info := commandFeatureReport("grep", builtins, core, verbs, hiddenVerbsCatalog(), gnuCoreutilsReport(core, builtins))
+	if info["class"] != "coreutils" || info["available"] != true {
+		t.Fatalf("unexpected grep feature report: %#v", info)
+	}
+	if _, ok := info["known_gaps"]; !ok {
+		t.Fatalf("grep report should include known gaps: %#v", info)
+	}
+}
+
+func TestCommandFeatureReportMissingGNUCoreutil(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "")
+	builtins, core, verbs := commandsCatalog()
+	info := commandFeatureReport("timeout", builtins, core, verbs, hiddenVerbsCatalog(), gnuCoreutilsReport(core, builtins))
+	if info["class"] != "gnu-coreutils-missing" && info["class"] != "coreutils" {
+		t.Fatalf("unexpected timeout feature report: %#v", info)
+	}
+}
+
 func TestCommandsJSONIncludesGNUReport(t *testing.T) {
 	t.Setenv("BASHY_AGENTIC", "")
 	var b bytes.Buffer

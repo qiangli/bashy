@@ -27,7 +27,8 @@ const commandsSchemaVersion = "bashy-commands-v1"
 
 func dispatchCommands(args []string) int {
 	asJSON, verbose := weavecli.IsAgent(), false // JSON by default under $BASHY_AGENTIC
-	agentic, all, gnu := false, false, false
+	agentic, all, gnu, features := false, false, false, false
+	var query string
 	for _, a := range args {
 		switch a {
 		case "--json", "--json=true":
@@ -40,22 +41,34 @@ func dispatchCommands(args []string) int {
 			all = true
 		case "--gnu", "--gnu-coreutils", "--coreutils-gaps":
 			gnu = true
+		case "--features":
+			features = true
+			asJSON = true
 		case "-v", "--verbose":
 			verbose = true
 		case "-h", "--help":
-			fmt.Println("usage: commands [-v] [--json|--plain|--agentic|--all|--gnu]")
+			fmt.Println("usage: commands [COMMAND] [-v] [--json|--plain|--agentic|--all|--gnu|--features]")
 			fmt.Println("List the supported command surface: shell builtins, the coreutils")
 			fmt.Println("userland, and bashy's front-door verbs.")
+			fmt.Println("  COMMAND        show one command's class/resolver/synopsis")
 			fmt.Println("  -v             also show each coreutils tool's and verb's synopsis")
 			fmt.Println("  --json         machine-readable (default under $BASHY_AGENTIC)")
 			fmt.Println("  --json=false   force text even under $BASHY_AGENTIC (alias --plain)")
 			fmt.Println("  --agentic      compact agent-oriented discovery and safety guide")
 			fmt.Println("  --all          include hidden compatibility aliases")
 			fmt.Println("  --gnu          include GNU coreutils parity/gap inventory")
+			fmt.Println("  --features     machine-readable one-command feature/gap report")
 			return 0
 		default:
-			fmt.Fprintf(os.Stderr, "commands: unknown option %q\n", a)
-			return 2
+			if strings.HasPrefix(a, "-") {
+				fmt.Fprintf(os.Stderr, "commands: unknown option %q\n", a)
+				return 2
+			}
+			if query != "" {
+				fmt.Fprintf(os.Stderr, "commands: only one COMMAND query is supported\n")
+				return 2
+			}
+			query = a
 		}
 	}
 
@@ -70,6 +83,22 @@ func dispatchCommands(args []string) int {
 	if all {
 		verbs = append(verbs, hidden...)
 		sort.Strings(verbs)
+	}
+	if query != "" || features {
+		info := commandFeatureReport(query, builtins, core, verbs, hidden, gnuReport)
+		if asJSON {
+			b, _ := json.Marshal(info)
+			fmt.Println(string(b))
+			if info["class"] == "not-found" {
+				return 1
+			}
+			return 0
+		}
+		printCommandFeature(os.Stdout, info)
+		if info["class"] == "not-found" {
+			return 1
+		}
+		return 0
 	}
 
 	if asJSON {
@@ -141,11 +170,16 @@ func printAgenticCommands(w io.Writer) {
                                   preview external commands, rm, and truncation as JSON-lines
   bashy --dry-run -c 'commands'  human-readable dry-run preview
   bashy run --capture -- command structured command result envelope
+  bashy run --check -- script.sh
+                                  preflight a script, then run it with one JSON envelope
   bashy doctor                   diagnose PATH, shell, engine, and agent environment
+  bashy check --agent --script script.sh
+                                  JSON syntax + recursive command inventory preflight
   bashy self fetch               fetch/cache a released bashy binary
   bashy git ...                   embedded pure-Go git client
   bashy fetch --json URL          built-in URL/REST client with status envelope
   bashy commands -v              full command surface with synopses
+  bashy commands grep --features  one-command resolver/capability/gap report
   bashy dag --list               list markdown DAG targets
   bashy podman ...               Podman-compatible isolated container engine
 
@@ -154,6 +188,76 @@ dry-run JSON entry kinds:
   destroy   destructive rm target count, bytes, and sample paths
   truncate  redirection clobber of an existing file
 `)
+}
+
+func commandFeatureReport(name string, builtins, core, verbs, hidden []string, gnu gnuCoreutilsInventory) map[string]any {
+	out := map[string]any{
+		"schema_version": commandsSchemaVersion,
+		"name":           name,
+		"class":          "not-found",
+		"resolver":       "not-found",
+		"available":      false,
+	}
+	if name == "" {
+		out["error"] = "COMMAND is required with --features"
+		return out
+	}
+	switch {
+	case containsString(builtins, name):
+		out["class"], out["resolver"], out["available"] = "builtin", "bash-builtin", true
+	case containsString(core, name):
+		out["class"], out["resolver"], out["available"] = "coreutils", "bashy-in-process", true
+		if t := tool.Lookup(name); t != nil && t.Synopsis != "" {
+			out["synopsis"] = t.Synopsis
+		}
+	case containsString(verbs, name):
+		out["class"], out["resolver"], out["available"] = "verb", "bashy-front-door", true
+		if s := verbSynopsis[name]; s != "" {
+			out["synopsis"] = s
+		}
+	case containsString(hidden, name):
+		out["class"], out["resolver"], out["available"], out["hidden"] = "verb", "bashy-front-door", true, true
+		if s := verbSynopsis[name]; s != "" {
+			out["synopsis"] = s
+		}
+	case containsString(gnu.Missing, name):
+		out["class"] = "gnu-coreutils-missing"
+		out["resolver"] = "managed-container-or-system"
+		out["gnu_coreutils_status"] = "missing-from-bashy-native"
+	case containsString(gnu.CoveredByBuiltins, name):
+		out["class"], out["resolver"], out["available"] = "builtin", "bash-builtin", true
+		out["gnu_coreutils_status"] = "covered-by-bash-builtin"
+	}
+	for _, gap := range gnu.Not100Conformant {
+		if gap.Name == name {
+			out["gnu_coreutils_status"] = gap.Status
+			out["gnu_coreutils_gap"] = gap.Reason
+			break
+		}
+	}
+	if name == "grep" {
+		out["known_gaps"] = []string{"BRE/ERE back-references are not supported by the current RE2-backed implementation"}
+		out["agent_hint"] = "avoid grep patterns with back-references, or use a GNU grep fallback/container for those scripts"
+	}
+	return out
+}
+
+func printCommandFeature(w io.Writer, info map[string]any) {
+	fmt.Fprintf(w, "%s: %s via %s\n", info["name"], info["class"], info["resolver"])
+	if s, ok := info["synopsis"].(string); ok && s != "" {
+		fmt.Fprintf(w, "  %s\n", s)
+	}
+	if gap, ok := info["gnu_coreutils_gap"].(string); ok && gap != "" {
+		fmt.Fprintf(w, "  GNU coreutils gap: %s\n", gap)
+	}
+	if hint, ok := info["agent_hint"].(string); ok && hint != "" {
+		fmt.Fprintf(w, "  agent hint: %s\n", hint)
+	}
+}
+
+func containsString(items []string, want string) bool {
+	i := sort.SearchStrings(items, want)
+	return i < len(items) && items[i] == want
 }
 
 // verbSynopsis describes the front-door verb shims (the coreutils tools carry

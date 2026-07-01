@@ -13,7 +13,7 @@ import (
 )
 
 func TestRunCaptureMode(t *testing.T) {
-	env, status := runCommand(testHelperCommand("capture"), true, nil, nil)
+	env, status := runCommand(testHelperCommand("capture"), true, false, nil, nil)
 	if status != 3 || env.Exit != 3 {
 		t.Errorf("exit = %d/%d, want 3", status, env.Exit)
 	}
@@ -27,7 +27,7 @@ func TestRunCaptureMode(t *testing.T) {
 
 func TestRunStreamMode(t *testing.T) {
 	var out, errb bytes.Buffer
-	env, status := runCommand(testHelperCommand("stream"), false, &out, &errb)
+	env, status := runCommand(testHelperCommand("stream"), false, false, &out, &errb)
 	if status != 0 {
 		t.Errorf("exit = %d, want 0", status)
 	}
@@ -46,7 +46,7 @@ func TestRunSignaledIsNonLossy(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("no POSIX signals on Windows; signaled-status encoding is unix-only")
 	}
-	env, status := runCommand([]string{"sh", "-c", "kill -KILL $$"}, true, nil, nil)
+	env, status := runCommand([]string{"sh", "-c", "kill -KILL $$"}, true, false, nil, nil)
 	if !env.Signaled {
 		t.Error("a SIGKILL'd process should report signaled=true")
 	}
@@ -56,9 +56,24 @@ func TestRunSignaledIsNonLossy(t *testing.T) {
 }
 
 func TestRunMissingCommand(t *testing.T) {
-	_, status := runCommand([]string{"definitely-not-a-real-cmd-xyz"}, false, io.Discard, io.Discard)
+	_, status := runCommand([]string{"definitely-not-a-real-cmd-xyz"}, false, false, io.Discard, io.Discard)
 	if status != 127 {
 		t.Errorf("missing command exit = %d, want 127", status)
+	}
+}
+
+func TestRunCheckBlocksBadScript(t *testing.T) {
+	dir := t.TempDir()
+	script := dir + "/bad.sh"
+	if err := os.WriteFile(script, []byte("definitely-not-a-real-cmd-xyz\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env, status := runCommand([]string{script}, true, true, nil, nil)
+	if status != 1 || env.Exit != 1 {
+		t.Fatalf("status=%d exit=%d, want 1", status, env.Exit)
+	}
+	if env.Check == nil || env.Check.Summary.Errors == 0 {
+		t.Fatalf("missing check errors in envelope: %#v", env.Check)
 	}
 }
 

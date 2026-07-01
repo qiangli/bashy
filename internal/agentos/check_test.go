@@ -130,6 +130,21 @@ func TestCheckSyntaxError(t *testing.T) {
 	}
 }
 
+func TestCheckAgentModeSetsJSONFriendlyMode(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "s.sh")
+	if err := os.WriteFile(script, []byte("echo ok\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report := newCheckAnalyzer(checkOptions{mode: "bashy", agent: true, maxDepth: 8}).run([]string{script})
+	if report.Mode != "bashy+agent" {
+		t.Fatalf("mode = %q, want bashy+agent", report.Mode)
+	}
+	if report.Summary.Errors != 0 || report.Summary.BashyNative == 0 {
+		t.Fatalf("unexpected report: %#v", report.Summary)
+	}
+}
+
 func invHas(items []checkInvItem, name, path string) bool {
 	for _, item := range items {
 		if item.Name == name && (path == "" || item.Path == path) {

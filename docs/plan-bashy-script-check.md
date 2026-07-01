@@ -23,7 +23,7 @@ through to the system or to a managed GNU coreutils fallback container.
 Primary checker:
 
 ```text
-bashy check [--mode bash53|posix|bashy] [--json] [--strict-system] SCRIPT...
+bashy check [--mode bash53|posix|bashy] [--json|--agent] [--script PATH] [--cwd DIR] [--strict-system] SCRIPT...
 ```
 
 Mode meanings:
@@ -37,6 +37,12 @@ Mode meanings:
 Dependency policy flags:
 
 - `--strict-system`: fail any command that would execute through host `PATH`.
+- `--agent`: emit the stable JSON report shape and mark the report mode as
+  agent-oriented.
+- `--script PATH`: name a script explicitly, useful when agents prefer flags
+  over positional operands.
+- `--cwd DIR`: analyze relative script/source paths from a specific working
+  directory.
 - `--allow-system NAME[,NAME...]`: permit specific host commands.
 - `--allow-container`: allow fallback to managed GNU coreutils container.
 - `--no-source`: do not follow `source`/`.` includes; report them as unknown
@@ -44,6 +50,17 @@ Dependency policy flags:
 - `--source-root DIR`: resolve relative sourced files from a known project root.
 - `--max-depth N`: recursion guard for sourced scripts and statically resolved
   script executions.
+
+One-shot preflight + execution envelope:
+
+```text
+bashy run --check --capture -- SCRIPT [ARGS...]
+```
+
+This embeds the `bashy-check-v1` report in the `bashy-run-v1` result envelope
+and skips execution if static preflight finds errors. It is the preferred agent
+workflow when a generated script should be checked and run with one structured
+result.
 
 Managed GNU coreutils fallback:
 

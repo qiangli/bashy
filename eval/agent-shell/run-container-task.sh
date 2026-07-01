@@ -157,7 +157,7 @@ while :; do
   esac
 
   cat "$attempt_log".* >"$logs/tool-combined-attempt-$attempt.log" 2>/dev/null || true
-  rate_limit_hits=$(grep -Eic 'rate[ _-]?limit.*(denied|blocked|error|exceeded)|429|overloaded|quota exceeded|api error:|timed out|timeout waiting' "$logs/tool-combined-attempt-$attempt.log" 2>/dev/null || true)
+  rate_limit_hits=$(grep -Eic 'rate[ _-]?limit.*(denied|blocked|error|exceeded)|"api_error_status":"?[45][0-9][0-9]|429|overloaded|quota exceeded|api error:|timeout waiting' "$logs/tool-combined-attempt-$attempt.log" 2>/dev/null || true)
   rate_limit_count=$((rate_limit_count + rate_limit_hits))
   if [[ "$tool_exit" -eq 0 || "$attempt" -gt "$max_retries" || "$rate_limit_hits" -eq 0 ]]; then
     break
@@ -200,10 +200,72 @@ esac
 token_usage="not_parsed"
 case "$tool" in
   codex)
-    token_usage=$(grep -h '"turn.completed"' "$logs"/tool-attempt-*.jsonl 2>/dev/null | tail -n 1 | sed -E 's/.*"usage":(\{.*\})\}$/\1/' | sed 's/"/\\"/g' || true)
+    token_usage=$(python3 - "$logs" <<'PY' || true
+import glob, json, sys
+logs = sys.argv[1]
+usage = None
+for path in sorted(glob.glob(f"{logs}/tool-attempt-*.jsonl")):
+    for line in open(path, errors="replace"):
+        if '"turn.completed"' not in line:
+            continue
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        usage = obj.get("usage") or usage
+summary = json.dumps(usage if usage is not None else "not_parsed", separators=(",", ":"))
+print(json.dumps(summary)[1:-1])
+PY
+)
     ;;
   claude)
-    token_usage=$(grep -h '"type":"result"' "$logs"/tool-attempt-*.jsonl 2>/dev/null | tail -n 1 | sed -E 's/.*"total_cost_usd":([0-9.]+).*"usage":\{([^}]*)\}.*/total_cost_usd=\1/' | sed 's/"/\\"/g' || true)
+    token_usage=$(python3 - "$logs" <<'PY' || true
+import glob, json, sys
+logs = sys.argv[1]
+result = None
+for path in sorted(glob.glob(f"{logs}/tool-attempt-*.jsonl")):
+    for line in open(path, errors="replace"):
+        if '"type":"result"' not in line:
+            continue
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        if obj.get("type") == "result":
+            result = obj
+if result is None:
+    summary = "not_parsed"
+else:
+    usage = result.get("usage") or {}
+    summary = {
+        "total_cost_usd": result.get("total_cost_usd"),
+        "input_tokens": usage.get("input_tokens"),
+        "cache_creation_input_tokens": usage.get("cache_creation_input_tokens"),
+        "cache_read_input_tokens": usage.get("cache_read_input_tokens"),
+        "output_tokens": usage.get("output_tokens"),
+        "model_usage": result.get("modelUsage"),
+    }
+summary = json.dumps(summary, separators=(",", ":"))
+print(json.dumps(summary)[1:-1])
+PY
+)
+    ;;
+  agy)
+    token_usage=$(python3 - "$logs" <<'PY' || true
+import glob, json, math, os, sys
+logs = sys.argv[1]
+chars = 0
+for pattern in ("tool-attempt-*.out", "tool-attempt-*.stderr"):
+    for path in glob.glob(os.path.join(logs, pattern)):
+        try:
+            chars += len(open(path, errors="replace").read())
+        except OSError:
+            pass
+summary = {"estimated_transcript_tokens": math.ceil(chars / 4), "method": "chars_div_4"}
+summary = json.dumps(summary, separators=(",", ":"))
+print(json.dumps(summary)[1:-1])
+PY
+)
     ;;
 esac
 success=false

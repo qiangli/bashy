@@ -23,10 +23,12 @@ const checkSchemaVersion = "bashy-check-v1"
 type checkOptions struct {
 	mode           string
 	json           bool
+	agent          bool
 	strictSystem   bool
 	allowContainer bool
 	noSource       bool
 	sourceRoot     string
+	cwd            string
 	maxDepth       int
 }
 
@@ -114,6 +116,9 @@ func dispatchCheck(args []string) int {
 		switch {
 		case a == "--json":
 			opts.json = true
+		case a == "--agent" || a == "--agentic":
+			opts.agent = true
+			opts.json = true
 		case a == "--strict-system":
 			opts.strictSystem = true
 		case a == "--allow-container":
@@ -123,7 +128,7 @@ func dispatchCheck(args []string) int {
 		case a == "-h" || a == "--help":
 			printCheckUsage(os.Stdout)
 			return 0
-		case a == "--mode" || a == "--source-root" || a == "--max-depth":
+		case a == "--mode" || a == "--source-root" || a == "--cwd" || a == "--script" || a == "--max-depth":
 			if i+1 >= len(args) {
 				fmt.Fprintf(os.Stderr, "check: %s requires an argument\n", a)
 				return 2
@@ -134,6 +139,10 @@ func dispatchCheck(args []string) int {
 				opts.mode = args[i]
 			case "--source-root":
 				opts.sourceRoot = args[i]
+			case "--cwd":
+				opts.cwd = args[i]
+			case "--script":
+				scripts = append(scripts, args[i])
 			case "--max-depth":
 				var n int
 				if _, err := fmt.Sscanf(args[i], "%d", &n); err != nil || n < 0 {
@@ -146,6 +155,10 @@ func dispatchCheck(args []string) int {
 			opts.mode = strings.TrimPrefix(a, "--mode=")
 		case strings.HasPrefix(a, "--source-root="):
 			opts.sourceRoot = strings.TrimPrefix(a, "--source-root=")
+		case strings.HasPrefix(a, "--cwd="):
+			opts.cwd = strings.TrimPrefix(a, "--cwd=")
+		case strings.HasPrefix(a, "--script="):
+			scripts = append(scripts, strings.TrimPrefix(a, "--script="))
 		case strings.HasPrefix(a, "--max-depth="):
 			var n int
 			v := strings.TrimPrefix(a, "--max-depth=")
@@ -169,6 +182,12 @@ func dispatchCheck(args []string) int {
 		fmt.Fprintf(os.Stderr, "check: unsupported --mode %q\n", opts.mode)
 		return 2
 	}
+	if opts.cwd != "" {
+		if err := os.Chdir(opts.cwd); err != nil {
+			fmt.Fprintf(os.Stderr, "check: --cwd: %v\n", err)
+			return 2
+		}
+	}
 	report := newCheckAnalyzer(opts).run(scripts)
 	if opts.json {
 		b, _ := json.MarshalIndent(report, "", "  ")
@@ -183,8 +202,9 @@ func dispatchCheck(args []string) int {
 }
 
 func printCheckUsage(w io.Writer) {
-	fmt.Fprintln(w, "usage: bashy check [--mode bash53|posix|bashy] [--json] [--strict-system] SCRIPT...")
+	fmt.Fprintln(w, "usage: bashy check [--mode bash53|posix|bashy] [--json|--agent] [--script PATH] [--cwd DIR] [--strict-system] SCRIPT...")
 	fmt.Fprintln(w, "Statically check shell scripts for syntax, recursive script references, and command resolution.")
+	fmt.Fprintln(w, "Agent mode emits JSON suitable for preflight: command inventory, system/container/not-found resolution, and diagnostics.")
 }
 
 func newCheckAnalyzer(opts checkOptions) *checkAnalyzer {
@@ -204,6 +224,9 @@ func newCheckAnalyzer(opts checkOptions) *checkAnalyzer {
 		SchemaVersion: checkSchemaVersion,
 		Mode:          opts.mode,
 		ByFile:        map[string][]checkDiag{},
+	}
+	if opts.agent {
+		a.report.Mode = opts.mode + "+agent"
 	}
 	return a
 }

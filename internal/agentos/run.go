@@ -23,6 +23,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -36,21 +37,23 @@ type runHint struct {
 }
 
 type runEnvelope struct {
-	Schema     string    `json:"schema_version"`
-	Argv       []string  `json:"argv"`
-	Cwd        string    `json:"cwd"`
-	Exit       int       `json:"exit"`
-	Signaled   bool      `json:"signaled,omitempty"`
-	DurationMs int64     `json:"duration_ms"`
-	Stdout     string    `json:"stdout,omitempty"` // populated only with --capture
-	Stderr     string    `json:"stderr,omitempty"` // populated only with --capture
-	Hints      []runHint `json:"hints,omitempty"`
+	Schema     string       `json:"schema_version"`
+	Argv       []string     `json:"argv"`
+	Cwd        string       `json:"cwd"`
+	Exit       int          `json:"exit"`
+	Signaled   bool         `json:"signaled,omitempty"`
+	DurationMs int64        `json:"duration_ms"`
+	Stdout     string       `json:"stdout,omitempty"` // populated only with --capture
+	Stderr     string       `json:"stderr,omitempty"` // populated only with --capture
+	Hints      []runHint    `json:"hints,omitempty"`
+	Check      *checkReport `json:"check,omitempty"`
 }
 
 // dispatchRun implements `bashy run`. It runs before shell flag parsing, so it
 // uses the process stdio/cwd/env directly.
 func dispatchRun(args []string) int {
 	capture := false
+	check := false
 	i := 0
 	for ; i < len(args); i++ {
 		a := args[i]
@@ -64,6 +67,8 @@ func dispatchRun(args []string) int {
 		switch a {
 		case "--capture":
 			capture = true
+		case "--check":
+			check = true
 		default:
 			fmt.Fprintf(os.Stderr, "bashy run: unknown option %q\n", a)
 			return 2
@@ -71,11 +76,11 @@ func dispatchRun(args []string) int {
 	}
 	argv := args[i:]
 	if len(argv) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: bashy run [--capture] [--] command [args...]")
+		fmt.Fprintln(os.Stderr, "usage: bashy run [--capture] [--check] [--] command [args...]")
 		return 2
 	}
 
-	env, status := runCommand(argv, capture, os.Stdout, os.Stderr)
+	env, status := runCommand(argv, capture, check, os.Stdout, os.Stderr)
 	b, _ := json.Marshal(env)
 	if capture {
 		fmt.Fprintln(os.Stdout, string(b)) // the record IS the output
@@ -88,8 +93,19 @@ func dispatchRun(args []string) int {
 // runCommand executes argv and returns its result envelope + exit status. In
 // stream mode the command's stdout/stderr go to liveOut/liveErr; with capture
 // they are buffered into the envelope instead.
-func runCommand(argv []string, capture bool, liveOut, liveErr io.Writer) (runEnvelope, int) {
+func runCommand(argv []string, capture bool, check bool, liveOut, liveErr io.Writer) (runEnvelope, int) {
 	cwd, _ := os.Getwd()
+	var report *checkReport
+	if check {
+		if script := scriptArgForCheck(argv); script != "" {
+			r := newCheckAnalyzer(checkOptions{mode: "bashy", agent: true, maxDepth: 8}).run([]string{script})
+			report = &r
+			if r.Summary.Errors > 0 {
+				env := runEnvelope{Schema: runSchemaVersion, Argv: argv, Cwd: cwd, Exit: 1, Check: report}
+				return env, 1
+			}
+		}
+	}
 	c := exec.Command(argv[0], argv[1:]...)
 	var ob, eb bytes.Buffer
 	if capture {
@@ -112,6 +128,7 @@ func runCommand(argv []string, capture bool, liveOut, liveErr io.Writer) (runEnv
 		Exit:       status,
 		Signaled:   signaled,
 		DurationMs: time.Since(start).Milliseconds(),
+		Check:      report,
 	}
 	// Reuse the space-time advisor's pattern library for the hint, as structured
 	// data rather than a stderr prose line.
@@ -122,4 +139,25 @@ func runCommand(argv []string, capture bool, liveOut, liveErr io.Writer) (runEnv
 		env.Stdout, env.Stderr = ob.String(), eb.String()
 	}
 	return env, status
+}
+
+func scriptArgForCheck(argv []string) string {
+	if len(argv) == 0 {
+		return ""
+	}
+	switch argv[0] {
+	case "bash", "bashy", "sh":
+		for _, arg := range argv[1:] {
+			if arg == "-c" || arg == "--command" {
+				return ""
+			}
+			if strings.HasPrefix(arg, "-") {
+				continue
+			}
+			return arg
+		}
+		return ""
+	default:
+		return argv[0]
+	}
 }

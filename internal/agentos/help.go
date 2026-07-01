@@ -19,6 +19,9 @@ Bashy AgentOS extensions:
 Bashy front-door help:
 	bashy help dryrun		show dry-run examples and JSON manifest fields
 	bashy commands --agentic	show agent-oriented command discovery
+	bashy check --agent --script X	validate script syntax and command closure as JSON
+	bashy run --check --capture -- X	preflight a script, then run with one JSON envelope
+	bashy commands grep --features	show one-command capability/gap report
 	bashy commands --gnu		show GNU coreutils parity/gap inventory
 	bashy doctor			diagnose shell/runtime environment
 	bashy self fetch		fetch/cache a released bashy binary
@@ -57,6 +60,9 @@ Common agent entry points:
   bashy --dry-run -c 'rm -rf build'
   BASHY_AGENTIC=1 bashy --dry-run script.sh
   bashy commands --agentic
+  bashy check --agent --script script.sh
+  bashy run --check --capture -- script.sh
+  bashy commands grep --features
   bashy commands --gnu
   bashy commands --json --gnu
   bashy doctor
@@ -70,6 +76,7 @@ func printCommandsHelp(w io.Writer) {
 	fmt.Fprint(w, `usage:
   bashy commands
   bashy commands -v
+  bashy commands grep --features
   bashy commands --agentic
   bashy commands --gnu
   bashy commands --json --gnu
@@ -83,6 +90,7 @@ Intent:
 Modes:
   default        list shell builtins, bashy in-process coreutils, and front-door verbs
   -v             include one-line synopses for coreutils and bashy verbs
+  COMMAND --features machine-readable one-command resolver/capability/gap report
   --agentic      compact agent guide for dry-run, run envelopes, doctor, git, fetch, dag
   --gnu          GNU coreutils parity inventory and gap scoreboard
   --json --gnu   machine-readable release metric for tracking coreutils gap closure
