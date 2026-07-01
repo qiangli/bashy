@@ -14,7 +14,11 @@ func TestCheckRecursiveInventory(t *testing.T) {
 	main := filepath.Join(dir, "main.sh")
 	lib := filepath.Join(dir, "lib.sh")
 	nested := filepath.Join(dir, "nested.sh")
-	bin := filepath.Join(dir, "hostcmd")
+	hostName := "hostcmd"
+	if runtime.GOOS == "windows" {
+		hostName += ".cmd"
+	}
+	bin := filepath.Join(dir, hostName)
 
 	write := func(path, body string, mode os.FileMode) {
 		t.Helper()
