@@ -180,5 +180,7 @@ Each batch retro should answer:
 
 ## Current Next Step
 
-Run Batch 0, then use its retro to harden the download/cache/result-doc loop
-before adapting IBM NL2Bash.
+Batch 0 (ShellBench smoke), Batch 0.5 (Koala oneliners smoke), and Batch 1
+(IBM NL2Bash mini) have run. Next: run a read-only IBM `bash_2` diagnostic
+mini, filtering out privileged/system-mutating tasks and keeping the matrix
+under the 30-minute cap.
