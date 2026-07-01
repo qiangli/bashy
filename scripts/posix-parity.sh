@@ -19,7 +19,7 @@
 # signal set differs Darwin vs Linux) are marked INFO and excluded from the
 # pass/fail count — only the POSIX-relevant aspect (format) is asserted.
 #
-# Usage: scripts/posix-parity.sh   (needs bin/bashy built + docker)
+# Usage: scripts/posix-parity.sh   (needs bin/bashy built + docker or bashy podman)
 # Exit: 0 iff every non-INFO probe matches.
 # NB: deliberately NO `set -u`. The shell-under-test (bashy/sh) has a
 # long-standing nounset bug — under `set -u`, assigning to a not-yet-set array
@@ -27,16 +27,136 @@
 # accepts it. This harness is interpreted by that shell, so `set -u` aborts it.
 # Tracked as a separate sh conformance bug; does not affect the probes below.
 BASHY=${BASHY:-./bin/bashy}
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+cd "$ROOT" || exit 2
+
+TMP_BASHY_PODMAN=
+cleanup() {
+  [ -n "$TMP_BASHY_PODMAN" ] && rm -f "$TMP_BASHY_PODMAN"
+}
+trap cleanup EXIT
+
+run_with_timeout() {
+  local seconds=$1 pid elapsed
+  shift
+  "$@" &
+  pid=$!
+  elapsed=0
+  while kill -0 "$pid" >/dev/null 2>&1; do
+    if [ "$elapsed" -ge "$seconds" ]; then
+      kill "$pid" >/dev/null 2>&1 || true
+      wait "$pid" >/dev/null 2>&1 || true
+      return 124
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+  wait "$pid"
+}
+
+oci_works() {
+  # Keep the probe cheap and deterministic. The image used by the harness is the
+  # same one tested here, so a pass means the oracle path is genuinely usable.
+  run_with_timeout "${BASHY_POSIX_PARITY_RUN_TIMEOUT:-120}" "$1" run --rm bash:5.3 bash -c 'echo ok' >/dev/null 2>&1
+}
+
+start_or_init_bashy_machine() {
+  local start_timeout init_timeout
+  start_timeout=${BASHY_POSIX_PARITY_START_TIMEOUT:-180}
+  init_timeout=${BASHY_POSIX_PARITY_INIT_TIMEOUT:-900}
+
+  run_with_timeout "$start_timeout" "$1" podman machine start bashy >/dev/null 2>&1 && return 0
+
+  run_with_timeout "$init_timeout" "$1" podman machine init --memory 3072 --disk-size 20 bashy >/dev/null 2>&1 ||
+    run_with_timeout "$init_timeout" "$1" podman machine init bashy >/dev/null 2>&1 ||
+    true
+
+  run_with_timeout "$start_timeout" "$1" podman machine start bashy >/dev/null 2>&1
+}
+
+stop_foreign_active_machines() {
+  [ "${BASHY_POSIX_PARITY_STOP_FOREIGN_MACHINE:-1}" = 1 ] || return 1
+  local stopped=1 name running
+  while read -r name running; do
+    [ -n "$name" ] || continue
+    [ "$name" != "bashy" ] || continue
+    [ "$running" = "true" ] || continue
+    echo "posix-parity: stopping active non-bashy podman machine $name so the isolated bashy oracle can start" >&2
+    run_with_timeout "${BASHY_POSIX_PARITY_STOP_TIMEOUT:-120}" "$1" podman machine stop "$name" >/dev/null 2>&1 && stopped=0
+  done < <("$1" podman machine list 2>/dev/null | awk 'NR > 1 { print $1, $NF }')
+  return "$stopped"
+}
+
+recreate_bashy_machine() {
+  [ "${BASHY_POSIX_PARITY_RECREATE_BASHY_MACHINE:-1}" = 1 ] || return 1
+  echo "posix-parity: recreating isolated bashy podman machine after failed readiness checks" >&2
+  run_with_timeout "${BASHY_POSIX_PARITY_STOP_TIMEOUT:-120}" "$1" podman machine stop bashy >/dev/null 2>&1 || true
+  run_with_timeout "${BASHY_POSIX_PARITY_RM_TIMEOUT:-180}" "$1" podman machine rm --force --save-image bashy >/dev/null 2>&1 || true
+  start_or_init_bashy_machine "$1" >/dev/null 2>&1
+}
+
+bashy_podman_works() {
+  [ -n "$1" ] && [ -x "$1" ] || return 1
+  "$1" podman --help >/dev/null 2>&1 || return 1
+  run_with_timeout "${BASHY_POSIX_PARITY_RUN_TIMEOUT:-120}" "$1" podman run --rm bash:5.3 bash -c 'echo ok' >/dev/null 2>&1 && return 0
+  [ "${BASHY_POSIX_PARITY_AUTO_MACHINE:-1}" = 1 ] || return 1
+  echo "posix-parity: bashy podman is present but no oracle backend is ready; trying machine start/init..." >&2
+  start_or_init_bashy_machine "$1" >/dev/null 2>&1 || true
+  run_with_timeout "${BASHY_POSIX_PARITY_RUN_TIMEOUT:-120}" "$1" podman run --rm bash:5.3 bash -c 'echo ok' >/dev/null 2>&1 && return 0
+
+  stop_foreign_active_machines "$1" || true
+  start_or_init_bashy_machine "$1" >/dev/null 2>&1 || true
+  run_with_timeout "${BASHY_POSIX_PARITY_RUN_TIMEOUT:-120}" "$1" podman run --rm bash:5.3 bash -c 'echo ok' >/dev/null 2>&1 && return 0
+
+  recreate_bashy_machine "$1" || true
+  run_with_timeout "${BASHY_POSIX_PARITY_RUN_TIMEOUT:-120}" "$1" podman run --rm bash:5.3 bash -c 'echo ok' >/dev/null 2>&1
+}
+
+build_temp_engine_bashy() {
+  mkdir -p "$ROOT/bin"
+  TMP_BASHY_PODMAN="$ROOT/bin/.bashy-podman-$$"
+  echo "posix-parity: building temporary engine-capable bashy for oracle runtime..." >&2
+  case "$(go env GOOS 2>/dev/null || uname | tr '[:upper:]' '[:lower:]')" in
+    windows)
+      GOFLAGS_TAGS="bashy_engines remote containers_image_openpgp"
+      ;;
+    *)
+      GOFLAGS_TAGS="bashy_engines containers_image_openpgp"
+      ;;
+  esac
+  env GOCACHE="${GOCACHE:-/tmp/bashy-posix-parity-gocache}" \
+    go build -tags "$GOFLAGS_TAGS" -o "$TMP_BASHY_PODMAN" ./cmd/bashy || return 1
+  printf '%s\n' "$TMP_BASHY_PODMAN"
+}
+
+resolve_bashy_podman() {
+  local b built
+  for b in "${BASHY:-}" "$ROOT/bin/bashy" "$(command -v bashy 2>/dev/null || true)"; do
+    [ -n "$b" ] || continue
+    if bashy_podman_works "$b"; then
+      printf '%s podman\n' "$b"
+      return 0
+    fi
+  done
+  built=$(build_temp_engine_bashy) || return 1
+  if bashy_podman_works "$built"; then
+    printf '%s podman\n' "$built"
+    return 0
+  fi
+  echo "posix-parity: temporary engine bashy built, but its podman backend could not run bash:5.3" >&2
+  echo "posix-parity: automatic machine start/init was attempted; set BASHY_POSIX_PARITY_AUTO_MACHINE=0 to disable that behavior" >&2
+  return 1
+}
 
 # Container runtime that provides the bash 5.3 oracle. Defaults to `docker`,
 # but auto-falls back to `bashy podman` (the embedded rootless Podman on dev
 # machines that have no Docker). Override with OCI="..." for anything else.
 OCI=${OCI:-}
 if [ -z "$OCI" ]; then
-  if command -v docker >/dev/null 2>&1; then OCI=docker
-  elif [ -n "${BASHY:-}" ]; then OCI="$BASHY podman"
-  elif command -v bashy  >/dev/null 2>&1; then OCI="bashy podman"
-  else echo "error: no container runtime (need docker or bashy podman)" >&2; exit 2
+  if command -v docker >/dev/null 2>&1 && oci_works docker; then
+    OCI=docker
+  else
+    OCI=$(resolve_bashy_podman) || { echo "error: no working container runtime (need docker or bashy podman)" >&2; exit 2; }
   fi
 fi
 
