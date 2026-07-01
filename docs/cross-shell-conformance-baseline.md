@@ -1,6 +1,6 @@
 # Cross-shell conformance baselines (yash POSIX suite + the full-suite plan)
 
-Status: **2026-06-29.** Baselines from running yash's POSIX (`-p`) suite against
+Status: **2026-07-01.** Baselines from running yash's POSIX (`-p`) suite against
 bashy + 10 reference shells (`scripts/yash-posix-suite.sh`). These are the
 **tracking baselines** for the future "100% on top of bash 5.3" / per-shell
 compatibility work — NOT marketing figures (see Claim discipline below).
@@ -12,6 +12,15 @@ POSIX suite found **435 cases bash 5.3 passes but bashy fails**. Small corpora
 hide the truth — real baselines need the *full* upstream suites.
 
 ## Progress log
+
+- **2026-07-01 — yash 96% confirmed on novicortex.** Reran the full
+  cross-shell yash POSIX (`-p`) suite on `novicortex.local` using host Podman
+  and a locally cross-built linux/arm64 `cmd/bash` testee. Verdict files are in
+  `~/tests/bashy/out/yash-20260701-073350` on novicortex. Results are unchanged
+  from the 2026-06-29 baseline: alpine **bashy 1763 OK / 63 ERROR of 1826**
+  (96%; bash 5.3 1758/77 = 95%), debian **bashy 1777 OK / 61 ERROR of 1838**
+  (96%; bash 5.2 1754/93 = 94%). This is the larger conformance frontier; the
+  39-case `scripts/posix-parity.sh` probe is only a smoke/parity subset.
 
 - **2026-06-29 — yash 96% (re-measure, both panels).** Fresh
   `scripts/yash-posix-suite.sh` run, testee in POSIX mode, signals/JC excluded:
