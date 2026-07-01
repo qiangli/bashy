@@ -119,6 +119,7 @@ func TestAgenticCommandsMentionsDryRun(t *testing.T) {
 	out := b.String()
 	for _, want := range []string{
 		"bashy help dryrun",
+		"bashy fetch --json URL",
 		"BASHY_AGENTIC=1 bashy --dry-run",
 		"destroy",
 		"truncate",

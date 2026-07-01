@@ -119,6 +119,7 @@ func printAgenticCommands(w io.Writer) {
   bashy run --capture -- command structured command result envelope
   bashy doctor                   diagnose PATH, shell, engine, and agent environment
   bashy git ...                   embedded pure-Go git client
+  bashy fetch --json URL          built-in URL/REST client with status envelope
   bashy commands -v              full command surface with synopses
   bashy dag --list               list markdown DAG targets
   bashy podman ...               Podman-compatible isolated container engine

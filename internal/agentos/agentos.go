@@ -14,6 +14,7 @@
 package agentos
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -43,6 +44,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/weave"
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	coreutilsshell "github.com/qiangli/coreutils/shell"
+	"github.com/qiangli/coreutils/tool"
 )
 
 // Preamble returns shell source defining AgentOS default functions, registered
@@ -337,6 +339,34 @@ func Dispatch() {
 		}
 		os.Exit(0)
 	}
+	if tool.Lookup(os.Args[1]) != nil {
+		os.Exit(dispatchCoreutilsTool(os.Args[1], os.Args[2:], tool.Stdio{
+			In:  os.Stdin,
+			Out: os.Stdout,
+			Err: os.Stderr,
+		}))
+	}
+}
+
+func dispatchCoreutilsTool(name string, args []string, stdio tool.Stdio) int {
+	t := tool.Lookup(name)
+	if t == nil {
+		fmt.Fprintf(stdio.Err, "bashy: %s: No such command\n", name)
+		return 127
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stdio.Err, "bashy: %s: %v\n", name, err)
+		return 1
+	}
+	rc := &tool.RunContext{
+		Ctx:   context.Background(),
+		Dir:   dir,
+		Env:   os.Environ(),
+		FS:    tool.NewLocalFS(),
+		Stdio: stdio,
+	}
+	return t.Run(rc, args)
 }
 
 // dispatchSkills implements `bashy skills`: list embedded skills, or print one.

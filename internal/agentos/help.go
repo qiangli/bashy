@@ -21,6 +21,7 @@ Bashy front-door help:
 	bashy commands --agentic	show agent-oriented command discovery
 	bashy doctor			diagnose shell/runtime environment
 	bashy git --help		show embedded git subcommands
+	bashy fetch --help		show built-in download/REST client
 `
 }
 
@@ -57,6 +58,7 @@ Common agent entry points:
   bashy commands --agentic
   bashy doctor
   bashy git status
+  bashy fetch --json https://example.com
 `)
 }
 
