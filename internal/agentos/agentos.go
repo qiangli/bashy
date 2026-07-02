@@ -36,13 +36,17 @@ import (
 	"github.com/qiangli/coreutils/external/rclone"
 	"github.com/qiangli/coreutils/external/seaweedfs"
 	"github.com/qiangli/coreutils/external/zot"
+	"github.com/qiangli/coreutils/pkg/agentcmd"
+	"github.com/qiangli/coreutils/pkg/chat"
 	"github.com/qiangli/coreutils/pkg/dag"
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/mirror"
 	"github.com/qiangli/coreutils/pkg/schedule"
+	"github.com/qiangli/coreutils/pkg/sdlc"
 	"github.com/qiangli/coreutils/pkg/secrets"
 	"github.com/qiangli/coreutils/pkg/weave"
 	"github.com/qiangli/coreutils/pkg/weavecli"
+	"github.com/qiangli/coreutils/pkg/webinspect"
 	coreutilsshell "github.com/qiangli/coreutils/shell"
 	"github.com/qiangli/coreutils/tool"
 )
@@ -72,7 +76,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "dag", "schedule", "secrets", "skills", "run", "commands", "doctor", "self", "check",
+		"weave", "sprint", "chat", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "run", "commands", "doctor", "self", "check",
 		"git", "gh", "act", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 	}
@@ -152,6 +156,38 @@ func Dispatch() {
 		// Plan/handoff layer (cross-repo), peer to `weave` (per-repo
 		// execution). Shares the AgentOS state root; user-global board.
 		cmd := weave.NewSprintCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "chat":
+		// General agent invocation primitive for humans and workflow commands:
+		// resolve a role/agent, build one instruction, and run it unattended.
+		cmd := chat.NewChatCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "agent":
+		cmd := agentcmd.NewAgentCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "sdlc":
+		// Workflow control plane: intake/deployment/approval boundary that
+		// delegates implementation planning and sprint execution to agents.
+		cmd := sdlc.NewSDLCCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "web":
+		cmd := webinspect.NewWebCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
