@@ -24,7 +24,10 @@ TDIR=${BASH_TESTS_DIR:-external/bash-5.3/tests}
 FIX=()
 while IFS= read -r x; do [ -n "$x" ] && FIX+=("$x"); done < <(
   cd "$TDIR" && for r in run-*; do
-    case "$r" in run-all|run-minimal) continue;; esac; echo "${r#run-}"; done | sort)
+    if [ "$r" != run-all ] && [ "$r" != run-minimal ]; then
+      echo "${r#run-}"
+    fi
+  done | sort)
 n=${#FIX[@]}
 [ "$n" -gt 0 ] || { echo "test-bash-parallel: no fixtures found in $TDIR" >&2; exit 2; }
 [ "$JOBS" -gt "$n" ] && JOBS=$n
