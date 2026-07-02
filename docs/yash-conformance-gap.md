@@ -1,5 +1,28 @@
 # yash POSIX-suite conformance gap — triage worklist
 
+> **Update 2026-07-02 — the "gap" is largely a MEASUREMENT ARTIFACT; bashy is at bash-parity.**
+> Re-measured every `-p` cluster against a *genuine* bash oracle (macOS bash
+> 5.3.15 + Linux bash 5.2) using yash's own `run-test.sh` (drive with
+> `bash -O expand_aliases`; the `.tst` sets `posix=` so the testee runs as
+> `sh`). Computing the true delta — cases where **bashy FAILS but bash PASSES**
+> (`comm -23` of each shell's failing set) — collapses the headline "112-case
+> gap" to **essentially one real bug**:
+> - **error-p (36)**: bash fails all 36 *identically* to bashy — the "assignment
+>   error … kills non-interactive shell" cases are input-mode dependent; the
+>   harness feeds via **stdin** where bash (ksh93-emulation) *continues*. NOT a
+>   delta. Do not "fix" these — it would diverge bashy FROM bash.
+> - **alias-p / trap-p**: bashy fails *fewer* cases than bash → at/above parity.
+> - **The lone genuine delta was `redir-p:246`** (`exec 3<&-` then `<&3`),
+>   **Linux-only** (the Go runtime holds OS fd 3, so the redirect re-dupped a
+>   live runtime fd instead of erroring). **FIXED 2026-07-02** in `../sh`
+>   (`interp` now tracks logically-closed inherited fds in `r.fdClosedTable`);
+>   gated serial `make test-bash` 86/86 + `redir-p` cluster 0 deltas on Linux.
+>
+> **Method rule:** always classify a yash "delta" as bashy-FAILS-but-bash-PASSES
+> against a real bash oracle before treating it as a bug — and measure on
+> **Linux** (a macOS-only run misses Linux-Go-runtime-fd bugs like redir-p:246).
+> The cluster table below is a stale 2026-06-27 snapshot kept for history.
+
 > **Update 2026-06-29 — re-measured at 96%.** A fresh `scripts/yash-posix-suite.sh`
 > run puts **bashy at 96% on both panels** (alpine **1763 OK / 63 ERROR of 1826**,
 > debian **1777 / 61 of 1838**) — pass rate now **≥ bash** (alpine 95%, debian
