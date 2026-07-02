@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>bashy SDLC Workflow</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f7f4;
+      --ink: #1f2933;
+      --muted: #5d6775;
+      --line: #b9c0c9;
+      --panel: #ffffff;
+      --trigger: #d9f0ff;
+      --sdlc: #e7f8e1;
+      --agent: #fff1d5;
+      --qa: #f1e8ff;
+      --human: #ffe3e3;
+      --deploy: #dff7f2;
+      --fail: #ffe6d5;
+      --shadow: 0 18px 45px rgba(31, 41, 51, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+
+    main {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }
+
+    header {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 46px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .lede {
+      max-width: 860px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    button {
+      border: 1px solid #cfd5dc;
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      padding: 8px 12px;
+      font: inherit;
+    }
+
+    button[aria-pressed="true"] {
+      background: #1f2933;
+      border-color: #1f2933;
+      color: #fff;
+    }
+
+    .stage {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid #d7dce2;
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      padding: 26px;
+    }
+
+    .lane-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(145px, 1fr));
+      gap: 18px;
+      align-items: start;
+    }
+
+    .lane {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .lane-title {
+      min-height: 34px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .node {
+      position: relative;
+      min-height: 124px;
+      border: 1px solid #cdd5dd;
+      border-radius: 8px;
+      padding: 14px;
+      background: #fff;
+      display: grid;
+      align-content: start;
+      gap: 7px;
+    }
+
+    .node[data-kind="trigger"] { background: var(--trigger); }
+    .node[data-kind="sdlc"] { background: var(--sdlc); }
+    .node[data-kind="agent"] { background: var(--agent); }
+    .node[data-kind="qa"] { background: var(--qa); }
+    .node[data-kind="human"] { background: var(--human); }
+    .node[data-kind="deploy"] { background: var(--deploy); }
+    .node[data-kind="fail"] { background: var(--fail); }
+
+    .node h2 {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .node p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .tag {
+      width: fit-content;
+      border: 1px solid rgba(31, 41, 51, 0.18);
+      border-radius: 999px;
+      padding: 2px 7px;
+      color: #2f3a45;
+      font-size: 11px;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.55);
+    }
+
+    .arrow {
+      display: grid;
+      place-items: center;
+      min-height: 28px;
+      color: #667280;
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .loop {
+      grid-column: 2 / 5;
+      border: 2px dashed #d38a4d;
+      border-radius: 8px;
+      background: #fff8f0;
+      padding: 14px;
+      color: #70461f;
+      font-size: 14px;
+    }
+
+    .loop strong {
+      color: #4f2f13;
+    }
+
+    .details {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .panel {
+      border: 1px solid #d7dce2;
+      border-radius: 8px;
+      background: #fff;
+      padding: 18px;
+    }
+
+    .panel h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    ol,
+    ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    li + li {
+      margin-top: 7px;
+    }
+
+    code {
+      border-radius: 5px;
+      background: #eef1f4;
+      padding: 1px 5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .optional-off [data-optional="true"] {
+      opacity: 0.35;
+      filter: grayscale(0.3);
+    }
+
+    .failure-off .loop,
+    .failure-off [data-kind="fail"] {
+      display: none;
+    }
+
+    @media (max-width: 980px) {
+      .lane-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .lane {
+        grid-template-columns: 118px 1fr;
+        align-items: start;
+      }
+
+      .lane-title {
+        padding-top: 12px;
+      }
+
+      .arrow {
+        justify-content: start;
+        padding-left: 132px;
+      }
+
+      .loop {
+        grid-column: auto;
+      }
+
+      .details {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>bashy SDLC Workflow</h1>
+      <p class="lede">
+        The scheduler or trigger is intentionally simple: it claims eligible work
+        from any intake source, extracts a request pointer, calls <code>bashy sdlc</code>,
+        watches state, and gates the next step. For public repositories, the
+        recommended default is a local Loom control plane for private orchestration,
+        with GitHub used for source control and external deployment handoff.
+      </p>
+      <div class="toolbar" aria-label="Diagram controls">
+        <button type="button" id="toggleOptional" aria-pressed="true">Show optional gates</button>
+        <button type="button" id="toggleFailures" aria-pressed="true">Show reject/fail loops</button>
+      </div>
+    </header>
+
+    <section class="stage" id="diagram" aria-label="SDLC process graph">
+      <div class="lane-grid">
+        <div class="lane">
+          <div class="lane-title">Intake</div>
+          <article class="node" data-kind="human">
+            <span class="tag">User</span>
+            <h2>File request</h2>
+            <p>Any intake adapter: GitHub Issues, Jira, local file, ticket system, API, chat, or queue.</p>
+          </article>
+          <div class="arrow">↓</div>
+          <article class="node" data-kind="trigger">
+            <span class="tag">Trigger</span>
+            <h2>Claim and extract pointer</h2>
+            <p>Scheduled job or event trigger deduplicates, marks in-progress, and passes an id, URL, path, or payload pointer.</p>
+          </article>
+        </div>
+
+        <div class="lane">
+          <div class="lane-title">Coordination</div>
+          <article class="node" data-kind="sdlc">
+            <span class="tag">bashy sdlc</span>
+            <h2>Create lifecycle run</h2>
+            <p>Records reference id, request pointer, routing, gates, validation targets, deployment targets, and audit evidence.</p>
+          </article>
+          <div class="arrow">↓</div>
+          <article class="node" data-kind="sdlc">
+            <span class="tag">Delegate</span>
+            <h2>Call conductor</h2>
+            <p>Composes the conductor brief from the request and SDLC boundary.</p>
+          </article>
+        </div>
+
+        <div class="lane">
+          <div class="lane-title">Implementation</div>
+          <article class="node" data-kind="agent">
+            <span class="tag">LLM conductor</span>
+            <h2>Analyze and sprint</h2>
+            <p>Plans, assigns work, edits code, reviews, tests, commits, and reports staging evidence.</p>
+          </article>
+          <div class="arrow">↓</div>
+          <article class="node" data-kind="agent">
+            <span class="tag">Loop</span>
+            <h2>Resolve issue</h2>
+            <p>Repeats implementation work until the request is done or blocked with evidence.</p>
+          </article>
+        </div>
+
+        <div class="lane">
+          <div class="lane-title">Validation</div>
+          <article class="node" data-kind="qa" data-optional="true">
+            <span class="tag">Optional QA</span>
+            <h2>Smoke and accept</h2>
+            <p>Trigger runs deterministic smoke checks and may assign QA. Rejection returns to the conductor.</p>
+          </article>
+          <div class="arrow">↓</div>
+          <article class="node" data-kind="human" data-optional="true">
+            <span class="tag">Optional UAT</span>
+            <h2>User approval</h2>
+            <p>Human approval is explicit and tied to the SDLC reference id.</p>
+          </article>
+        </div>
+
+        <div class="lane">
+          <div class="lane-title">Release</div>
+          <article class="node" data-kind="deploy">
+            <span class="tag">Trigger</span>
+            <h2>Deploy</h2>
+            <p>After required gates pass for the same reference id, the trigger invokes the configured deployment adapter.</p>
+          </article>
+          <div class="arrow">↓</div>
+          <article class="node" data-kind="deploy">
+            <span class="tag">Done</span>
+            <h2>Verify and close</h2>
+            <p>Destination verification closes the reference. Failure routes rollback or another conductor loop.</p>
+          </article>
+        </div>
+
+        <div class="loop">
+          <strong>Reject/fail loop:</strong>
+          conductor failure, QA rejection, user rejection, smoke failure, deployment failure,
+          or rollback need returns the same SDLC reference to the conductor with new evidence.
+          The trigger does not decide the fix; it routes the next iteration.
+        </div>
+      </div>
+    </section>
+
+    <section class="details">
+      <article class="panel">
+        <h2>Happy Path</h2>
+        <ol>
+          <li>User, tool, or external system files a request in any configured intake source.</li>
+          <li>Trigger claims eligible work, avoids duplicate processing, extracts a request pointer, and calls <code>bashy sdlc</code>.</li>
+          <li><code>bashy sdlc</code> creates a local lifecycle reference and invokes the configured conductor.</li>
+          <li>The LLM conductor analyzes the request, runs a sprint, validates changes, commits work, and reports done.</li>
+          <li>Trigger runs deterministic staging smoke checks, then optionally assigns QA. QA accepts or rejects.</li>
+          <li>Trigger optionally requests human UAT approval. Approval is explicit.</li>
+          <li>Trigger deploys through the configured destination adapter.</li>
+          <li>Trigger verifies the destination, records evidence, and marks the SDLC reference resolved.</li>
+        </ol>
+      </article>
+
+      <article class="panel">
+        <h2>Role Boundaries</h2>
+        <ul>
+          <li><strong>Trigger:</strong> deterministic scheduler/router; no architectural decisions.</li>
+          <li><strong>SDLC:</strong> lifecycle state, request pointer, gate status, validation routing, deployment routing.</li>
+          <li><strong>Conductor:</strong> LLM agent that owns planning, implementation, tests, and sprint loops.</li>
+          <li><strong>QA/User:</strong> optional validation gates that can accept, reject, or request changes.</li>
+          <li><strong>Deploy:</strong> starts only after configured gates pass for the same reference id, regardless of destination type.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="details">
+      <article class="panel">
+        <h2>Local Control Plane</h2>
+        <ul>
+          <li><strong>Loom:</strong> local/private forge for mirrored issues, comments, CI state, and SDLC evidence.</li>
+          <li><strong>GitHub:</strong> public source control plus integration with external deployment systems.</li>
+          <li><strong>bashy sdlc:</strong> bridge from private intake to conductor, QA, approval, rollout, and resolution.</li>
+          <li><strong>Security:</strong> keep subscription-backed agent execution and runtime logs off public GitHub Actions by default.</li>
+        </ul>
+      </article>
+
+      <article class="panel">
+        <h2>Recommended Additions</h2>
+        <ul>
+          <li><strong>Claiming:</strong> mark intake items in-progress before invoking a conductor to prevent duplicate runs.</li>
+          <li><strong>Idempotency:</strong> every action should be keyed by the SDLC reference id and safe to retry.</li>
+          <li><strong>Evidence:</strong> store logs, test output, smoke results, approval notes, deploy ids, and destination checks.</li>
+          <li><strong>Timeouts:</strong> conductor, QA, approval, and deployment should have explicit timeout states.</li>
+          <li><strong>Adapters:</strong> intake and deployment should be pluggable; the lifecycle contract stays the same.</li>
+          <li><strong>Rollback:</strong> failed destination verification should route either rollback or forward-fix as policy.</li>
+        </ul>
+      </article>
+
+      <article class="panel">
+        <h2>State Model</h2>
+        <ul>
+          <li><code>new</code> -> request discovered but not claimed.</li>
+          <li><code>claimed</code> -> trigger owns this cycle.</li>
+          <li><code>implementing</code> -> conductor sprint is running.</li>
+          <li><code>ready_for_qa</code> -> implementation reports done with evidence.</li>
+          <li><code>approved</code> -> required QA/UAT gates passed.</li>
+          <li><code>deploying</code> -> rollout in progress.</li>
+          <li><code>resolved</code> or <code>rejected</code> or <code>blocked</code> -> terminal or waiting state.</li>
+        </ul>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const diagram = document.querySelector("#diagram");
+    const optional = document.querySelector("#toggleOptional");
+    const failures = document.querySelector("#toggleFailures");
+
+    optional.addEventListener("click", () => {
+      const pressed = optional.getAttribute("aria-pressed") === "true";
+      optional.setAttribute("aria-pressed", String(!pressed));
+      diagram.classList.toggle("optional-off", pressed);
+    });
+
+    failures.addEventListener("click", () => {
+      const pressed = failures.getAttribute("aria-pressed") === "true";
+      failures.setAttribute("aria-pressed", String(!pressed));
+      diagram.classList.toggle("failure-off", pressed);
+    });
+  </script>
+</body>
+</html>
