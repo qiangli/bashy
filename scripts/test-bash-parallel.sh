@@ -30,25 +30,54 @@ while IFS= read -r x; do [ -n "$x" ] && FIX+=("$x"); done < <(
   done | sort)
 n=${#FIX[@]}
 [ "$n" -gt 0 ] || { echo "test-bash-parallel: no fixtures found in $TDIR" >&2; exit 2; }
-[ "$JOBS" -gt "$n" ] && JOBS=$n
+
+# SERIAL fixtures: stateful history-expansion tests read/write $HOME/.bash_history
+# and are timing-sensitive; run concurrently they flake (histexpand FAILs under
+# -parallel but PASSes serial). Isolating HOME per group reduced but did not
+# eliminate the race, so pin them to a serial tail — deterministic, and only ~2
+# fixtures so wall time is unaffected. Keep this list minimal and evidence-based.
+SERIAL_NAMES=" histexpand history "
+PAR_FIX=(); SER_FIX=()
+for name in "${FIX[@]}"; do
+  case "$SERIAL_NAMES" in *" $name "*) SER_FIX+=("$name");; *) PAR_FIX+=("$name");; esac
+done
+pn=${#PAR_FIX[@]}
+[ "$JOBS" -gt "$pn" ] && JOBS=$pn
+[ "$JOBS" -ge 1 ] || JOBS=1
 
 OUT=$(mktemp -d 2>/dev/null || echo /tmp/tbp.$$); trap 'rm -rf "$OUT"' EXIT
-echo "test-bash-parallel: $n fixtures across $JOBS parallel groups (round-robin)"
+echo "test-bash-parallel: $n fixtures ($pn across $JOBS parallel groups, ${#SER_FIX[@]} serial)"
 
-# Round-robin assign fixtures to per-group files (avoids bash-3.2 set -u array
-# quirks), then launch a `test-bash-run` per group against the built bin/bash.
+# Round-robin assign the parallel fixtures to per-group files (avoids bash-3.2
+# set -u array quirks), then launch a `test-bash-run` per group.
 i=0
-for name in "${FIX[@]}"; do echo "$name" >>"$OUT/grp.$(( i % JOBS ))"; i=$(( i + 1 )); done
+for name in "${PAR_FIX[@]}"; do echo "$name" >>"$OUT/grp.$(( i % JOBS ))"; i=$(( i + 1 )); done
 
 start=$(date +%s 2>/dev/null || echo 0)
 for g in $(seq 0 $((JOBS - 1))); do
   [ -f "$OUT/grp.$g" ] || continue
   grp=$(tr '\n' ' ' <"$OUT/grp.$g")
-  ( make --no-print-directory test-bash-run \
+  # Per-group HOME/HISTFILE isolation: the history fixtures (histexpand, history)
+  # read/write $HOME/.bash_history; round-robin places them in DIFFERENT groups,
+  # so a shared HOME makes them race and flake (histexpand FAILs under -parallel
+  # but PASSes serial). A private, empty HOME per group also means no ~/.inputrc
+  # or ~/.bashrc bleeds in — strictly more hermetic than the ambient HOME.
+  mkdir -p "$OUT/home.$g"
+  ( HOME="$OUT/home.$g" HISTFILE="$OUT/home.$g/.bash_history" \
+    make --no-print-directory test-bash-run \
        TESTS="$grp" BASH_TEST_SKIP="${BASH_TEST_SKIP:-}" \
        >"$OUT/g$g.out" 2>&1 ) &
 done
 wait
+
+# Serial tail: the stateful history fixtures, one at a time, own private HOME.
+if [ "${#SER_FIX[@]}" -gt 0 ]; then
+  mkdir -p "$OUT/home.serial"
+  HOME="$OUT/home.serial" HISTFILE="$OUT/home.serial/.bash_history" \
+    make --no-print-directory test-bash-run \
+       TESTS="${SER_FIX[*]}" BASH_TEST_SKIP="${BASH_TEST_SKIP:-}" \
+       >"$OUT/gserial.out" 2>&1
+fi
 end=$(date +%s 2>/dev/null || echo 0)
 
 # Aggregate the per-group "Results: P passed, F failed, S skipped, T timed out".
