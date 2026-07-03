@@ -10,6 +10,7 @@ external/bash-5.3
 .claude/
 .aider*
 .agents/
+.gfy-out/
 
 # Runtime/eval output can contain local paths, command transcripts, provider
 # metadata, or secrets from failures. Keep raw runs local; commit sanitized

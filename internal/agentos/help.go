@@ -18,6 +18,7 @@ Bashy AgentOS extensions:
 
 Bashy front-door help:
 	bashy help dryrun		show dry-run examples and JSON manifest fields
+	bashy context --json		show exact bashy path and agent capabilities
 	bashy commands --agentic	show agent-oriented command discovery
 	bashy check --agent --script X	validate script syntax and command closure as JSON
 	bashy run --check --capture -- X	preflight a script, then run with one JSON envelope
@@ -58,7 +59,8 @@ Topics:
   commands  discover bashy command surfaces
 
 Common agent entry points:
-  bashy --dry-run -c 'rm -rf build'
+	bashy --dry-run -c 'rm -rf build'
+  bashy context --json
   BASHY_AGENTIC=1 bashy --dry-run script.sh
   bashy commands --agentic
   bashy check --agent --script script.sh

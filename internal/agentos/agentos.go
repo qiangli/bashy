@@ -83,7 +83,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "chat", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "run", "commands", "doctor", "self", "check",
+		"weave", "sprint", "chat", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "run", "commands", "context", "doctor", "self", "check",
 		"git", "gh", "act", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 	}
@@ -258,6 +258,10 @@ func Dispatch() {
 		// Environment self-diagnostic: PATH/sh shadowing, a stale bashy on PATH,
 		// toolchain + container engine, agent mode, bin cache. Advisory.
 		os.Exit(dispatchDoctor(os.Args[2:]))
+	case "context":
+		// First-hop agent context: one compact JSON record with the exact bashy
+		// path, mode flags, cwd, and recommended discovery/safety commands.
+		os.Exit(dispatchContext(os.Args[2:]))
 	case "check":
 		// Static script preflight: syntax, recursive command inventory, and
 		// bashy/system/container/not-found resolution.

@@ -166,6 +166,7 @@ func dispatchCommands(args []string) int {
 func printAgenticCommands(w io.Writer) {
 	fmt.Fprint(w, `agentic bashy commands:
   bashy help dryrun              explain dry-run safety mode and JSON manifest
+  bashy context --json           first-hop context: exact bashy path + capabilities
   BASHY_AGENTIC=1 bashy --dry-run script.sh
                                   preview external commands, rm, and truncation as JSON-lines
   bashy --dry-run -c 'commands'  human-readable dry-run preview
@@ -280,6 +281,7 @@ var verbSynopsis = map[string]string{
 	"skills":    "list/show the embedded tier-2 workspace skills",
 	"run":       "run a command, emit a structured result envelope (+advisor hints)",
 	"commands":  "list the supported command surface (builtins, coreutils, verbs)",
+	"context":   "print first-hop agent context: exact bashy path and capabilities",
 	"doctor":    "diagnose the bashy environment (PATH/sh, engine, agent mode, bin cache)",
 	"check":     "statically check shell scripts for bashy/system command closure",
 	"self":      "fetch/cache/install a released bashy binary",

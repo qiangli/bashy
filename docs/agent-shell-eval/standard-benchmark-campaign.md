@@ -180,7 +180,9 @@ Each batch retro should answer:
 
 ## Current Next Step
 
-Batch 0 (ShellBench smoke), Batch 0.5 (Koala oneliners smoke), and Batch 1
-(IBM NL2Bash mini) have run. Next: run a read-only IBM `bash_2` diagnostic
-mini, filtering out privileged/system-mutating tasks and keeping the matrix
-under the 30-minute cap.
+Batch 0 (ShellBench smoke), Batch 0.5 (Koala oneliners smoke), Batch 1
+(IBM NL2Bash mini), and the 2026-07-03 bashy agentic-feature slice have run.
+Next: add a harder agentic slice where bashy should reduce search work, then
+run the read-only IBM `bash_2` diagnostic mini, filtering out
+privileged/system-mutating tasks and keeping each matrix under the 30-minute
+cap.

@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 task=
+task_dir_override=
 env_name=
 tool=
 out=results/agent-shell-container.jsonl
@@ -11,13 +12,14 @@ max_retries=1
 
 usage() {
   cat <<'USAGE'
-usage: eval/agent-shell/run-container-task.sh --task NAME --env bashy-current|bashy-v0.4.0|gnu-bash53 --tool codex|claude|agy [--out FILE] [--run-base DIR]
+usage: eval/agent-shell/run-container-task.sh --task NAME --env bashy-current|bashy-v0.4.0|gnu-bash53 --tool codex|claude|agy [--task-dir DIR] [--out FILE] [--run-base DIR]
 USAGE
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --task) task=$2; shift 2 ;;
+    --task-dir) task_dir_override=$2; shift 2 ;;
     --env) env_name=$2; shift 2 ;;
     --tool) tool=$2; shift 2 ;;
     --out) out=$2; shift 2 ;;
@@ -34,8 +36,11 @@ if [[ -z "$task" || -z "$env_name" || -z "$tool" ]]; then
 fi
 
 task_dir="$repo/eval/agent-shell/tasks/$task"
+if [[ -n "$task_dir_override" ]]; then
+  task_dir=$task_dir_override
+fi
 if [[ ! -x "$task_dir/setup.sh" || ! -x "$task_dir/verify.sh" || ! -f "$task_dir/prompt.md" ]]; then
-  printf 'invalid task: %s\n' "$task" >&2
+  printf 'invalid task: %s (%s)\n' "$task" "$task_dir" >&2
   exit 2
 fi
 
@@ -58,6 +63,7 @@ if [[ ! -x "$repo/bin/bashy" ]]; then
 fi
 
 mkdir -p "$run_base" "$(dirname "$out")"
+run_base=$(cd "$run_base" && pwd -P)
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-$task-$env_name-$tool-$$"
 run_root="$run_base/$run_id"
 work="$run_root/work"
@@ -71,6 +77,19 @@ cat >"$bin_dir/eval-shell" <<'WRAP'
 #!/bin/bash
 set -euo pipefail
 
+usage() {
+  cat >&2 <<'USAGE'
+usage:
+  eval-shell --shell 'COMMANDS'       run COMMANDS with the selected shell's -lc
+  eval-shell --script /workspace/x.sh run a script path inside the container
+  eval-shell --bashy ARGS...          run bashy front-door ARGS in bashy images
+  eval-shell --dry-run /workspace/x.sh
+                                      bashy-current dry-run JSON manifest
+  eval-shell --check /workspace/x.sh  bashy-current script preflight JSON
+  eval-shell --raw ARGS...            pass raw argv to the selected image
+USAGE
+}
+
 host_pwd=$PWD
 case "$host_pwd" in
   "$EVAL_WORK") container_pwd=/workspace ;;
@@ -78,11 +97,65 @@ case "$host_pwd" in
   *) container_pwd=/workspace ;;
 esac
 
-printf '%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$host_pwd" "$container_pwd" "$*" >>"${EVAL_COMMAND_LOG:?}"
+mode=raw
+case "${1:-}" in
+  --shell)
+    shift
+    [ "$#" -eq 1 ] || { usage; exit 2; }
+    mode=shell
+    argv=(-lc "$1")
+    ;;
+  --script)
+    shift
+    [ "$#" -eq 1 ] || { usage; exit 2; }
+    mode=script
+    argv=("$1")
+    ;;
+  --bashy)
+    shift
+    [ "$#" -gt 0 ] || { usage; exit 2; }
+    mode=bashy
+    argv=("$@")
+    ;;
+  --dry-run|--dryrun)
+    shift
+    [ "$#" -eq 1 ] || { usage; exit 2; }
+    mode=dry-run
+    argv=(-lc "BASHY_AGENTIC=1 /usr/local/bin/bashy --dry-run '$1'")
+    ;;
+  --check)
+    shift
+    [ "$#" -eq 1 ] || { usage; exit 2; }
+    mode=check
+    argv=(check --agent --script "$1")
+    ;;
+  --raw)
+    shift
+    [ "$#" -gt 0 ] || { usage; exit 2; }
+    mode=raw
+    argv=("$@")
+    ;;
+  -h|--help)
+    usage
+    exit 0
+    ;;
+  "")
+    usage
+    exit 2
+    ;;
+  *)
+    argv=("$@")
+    ;;
+esac
+
+printf '%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$host_pwd" "$container_pwd" "$mode" "${argv[*]}" >>"${EVAL_COMMAND_LOG:?}"
 exec "${BASHY_HOST:?}" podman run --rm \
   -v "${EVAL_WORK:?}:/workspace:rw" \
   -w "$container_pwd" \
-  "${EVAL_IMAGE:?}" "$@"
+  -e BASHY_EVAL_WORKSPACE=/workspace \
+  -e BASHY_EVAL_PROJECT_ROOT=/workspace \
+  -e "BASHY_EVAL_INITIAL_CWD=$container_pwd" \
+  "${EVAL_IMAGE:?}" "${argv[@]}"
 WRAP
 chmod +x "$bin_dir/eval-shell"
 
@@ -107,6 +180,43 @@ prompt_body=$(sed \
   -e "s#__ENV_NAME__#$env_name#g" \
   "$task_dir/prompt.md")
 
+task_manifest=
+if [[ -f "$work/.benchmark/task.json" ]]; then
+  task_manifest=$(sed -n '1,220p' "$work/.benchmark/task.json")
+else
+  task_manifest='{}'
+fi
+
+benchmark_context=$(cat <<CTX
+{
+  "schema_version": "bashy-agent-shell-benchmark-context-v1",
+  "shell_arm": "$env_name",
+  "container_image": "$image",
+  "host_workspace": "$work",
+  "container_workspace": "/workspace",
+  "initial_host_cwd": "$initial_cwd",
+  "initial_container_cwd": "${initial_cwd/#$work/\/workspace}",
+  "project_root": "/workspace",
+  "eval_shell": "$bin_dir/eval-shell",
+  "task_manifest_path": "/workspace/.benchmark/task.json",
+  "wrapper_examples": [
+    "$bin_dir/eval-shell --shell 'cd /workspace && find . -maxdepth 3 -type f | sort'",
+    "$bin_dir/eval-shell --script /workspace/scripts/example.sh",
+    "$bin_dir/eval-shell --dry-run /workspace/scripts/prune-cache.sh",
+    "$bin_dir/eval-shell --check /workspace/scripts/prune-cache.sh",
+    "$bin_dir/eval-shell --bashy context --json"
+  ]
+}
+CTX
+)
+
+context_hint=
+if [[ "$env_name" == bashy-current* ]]; then
+  context_hint="- In bashy-current, bashy context is already summarized below; call $bin_dir/eval-shell --bashy context --json only if the provided context is insufficient."
+else
+  context_hint="- In GNU Bash 5.3, there is no bashy context command; inspect task files directly and avoid shell/container environment probes unless a task command fails."
+fi
+
 prompt=$(cat <<PROMPT
 You are participating in a shell benchmark comparing current bashy against GNU Bash 5.3.
 
@@ -114,8 +224,30 @@ Critical execution rule:
 - Run task shell commands only through this wrapper: $bin_dir/eval-shell
 - The wrapper executes inside the selected container image: $image
 - You may edit files in the workspace directly if needed, but every shell command used to inspect, run, test, or verify the task must go through the wrapper.
+- Use only these wrapper forms for task shell work:
+  - $bin_dir/eval-shell --shell 'COMMANDS'
+  - $bin_dir/eval-shell --script /workspace/path/to/script.sh
+  - $bin_dir/eval-shell --dry-run /workspace/path/to/script.sh (bashy-current only)
+  - $bin_dir/eval-shell --check /workspace/path/to/script.sh (bashy-current only)
+  - $bin_dir/eval-shell --bashy context --json (bashy-current only)
 - Do not use the host /bin/bash, /bin/sh, zsh, Python, Ruby, Node, or other host interpreters for task work.
+- Do not call bash, sh, /bin/bash, /usr/local/bin/bash, or inspect the wrapper implementation.
+- The shell wrapper and container runtime are already verified. Do not inspect shell binaries, OS files, PATH, env, uname, ldd, or container internals unless a task command fails and that inspection is directly needed.
+- For command labels, use echo or printf '%s\n' LABEL. A printf format string
+  beginning with '-' is parsed as an option by bash printf.
+$context_hint
+- The workspace is synthetic benchmark scratch, not a git repository. Do not run git commands unless the task explicitly asks for git.
 - If a command fails due to an API/rate-limit/tooling issue, report it plainly and retry only after a short wait.
+
+Benchmark context (authoritative; use this before probing):
+\`\`\`json
+$benchmark_context
+\`\`\`
+
+Task manifest:
+\`\`\`json
+$task_manifest
+\`\`\`
 
 $prompt_body
 PROMPT
@@ -172,8 +304,11 @@ done
 
 cp "$task_dir/verify.sh" "$work/.verify.sh"
 chmod +x "$work/.verify.sh"
+printf '%s\n' "$env_name" >"$work/.eval-env"
+mkdir -p "$work/.eval-logs"
+cp "$logs/container-shell.tsv" "$work/.eval-logs/container-shell.tsv" 2>/dev/null || :
 verifier_exit=0
-"$bin_dir/eval-shell" /workspace/.verify.sh /workspace >"$logs/verify.out" 2>"$logs/verify.stderr" || verifier_exit=$?
+"$bin_dir/eval-shell" --raw /workspace/.verify.sh /workspace /workspace/.eval-logs >"$logs/verify.out" 2>"$logs/verify.stderr" || verifier_exit=$?
 
 gap_log="$logs/coreutils-gaps.jsonl"
 campaign_gap_log="$repo/results/agent-shell-coreutils-gaps.jsonl"
@@ -242,8 +377,10 @@ end_epoch=$(date +%s)
 wall_time_sec=$((end_epoch - start_epoch))
 
 command_count=0
+verifier_command_count=0
 if [[ -f "$logs/container-shell.tsv" ]]; then
-  command_count=$(wc -l <"$logs/container-shell.tsv" | tr -d ' ')
+  verifier_command_count=$(awk -F '\t' '$4 == "raw" && $5 ~ /^\/workspace\/\.verify\.sh/ { n++ } END { print n + 0 }' "$logs/container-shell.tsv")
+  command_count=$(awk -F '\t' '!( $4 == "raw" && $5 ~ /^\/workspace\/\.verify\.sh/ ) { n++ } END { print n + 0 }' "$logs/container-shell.tsv")
 fi
 
 tool_call_count=0
@@ -357,10 +494,10 @@ case "$tool" in
     ;;
 esac
 
-printf '{"run_id":"%s","task_id":"%s","tool":"%s","shell_arm":"%s","image":"%s","valid":"%s","started_at":"%s","finished_at":"%s","wall_time_sec":%s,"success":%s,"tool_exit":%s,"verifier_exit":%s,"failure_mode":"%s","tool_call_count":%s,"bash_command_invocations":%s,"retry_count":%s,"retry_sleep_sec":%s,"rate_limit_or_api_error_count":%s,"coreutils_gap_count":%s,"token_usage_excerpt":"%s","workspace":"%s","log_dir":"%s"}\n' \
-  "$run_id" "$task" "$tool" "$env_name" "$image" "$valid" "$started_at" "$finished_at" "$wall_time_sec" "$success" "$tool_exit" "$verifier_exit" "$failure_mode" "$tool_call_count" "$command_count" "$retry_count" "$retry_sleep_sec" "$rate_limit_count" "$gap_count" "$token_usage" "$work" "$logs" >>"$out"
+printf '{"run_id":"%s","task_id":"%s","tool":"%s","shell_arm":"%s","image":"%s","valid":"%s","started_at":"%s","finished_at":"%s","wall_time_sec":%s,"success":%s,"tool_exit":%s,"verifier_exit":%s,"failure_mode":"%s","tool_call_count":%s,"bash_command_invocations":%s,"verifier_shell_invocations":%s,"retry_count":%s,"retry_sleep_sec":%s,"rate_limit_or_api_error_count":%s,"coreutils_gap_count":%s,"token_usage_excerpt":"%s","workspace":"%s","log_dir":"%s"}\n' \
+  "$run_id" "$task" "$tool" "$env_name" "$image" "$valid" "$started_at" "$finished_at" "$wall_time_sec" "$success" "$tool_exit" "$verifier_exit" "$failure_mode" "$tool_call_count" "$command_count" "$verifier_command_count" "$retry_count" "$retry_sleep_sec" "$rate_limit_count" "$gap_count" "$token_usage" "$work" "$logs" >>"$out"
 
-summary="$repo/docs/agent-shell-eval/test-$run_id.md"
+summary="$logs/summary.md"
 cat >"$summary" <<SUMMARY
 # Agent Shell Evaluation Test: $run_id
 
