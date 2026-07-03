@@ -102,8 +102,8 @@ func TestRoutingHintGrepFind(t *testing.T) {
 func TestRoutingHintEmittedViaAudit(t *testing.T) {
 	n, buf := newTestNudger(t, true)
 	n.onAudit(interp.AuditEvent{IsBuiltin: false, Args: []string{"grep", "-r", "x", "."}})
-	if !strings.Contains(buf.String(), "yc refs") {
-		t.Errorf("expected a grep routing hint mentioning yc, got %q", buf.String())
+	if !strings.Contains(buf.String(), "find-references") {
+		t.Errorf("expected a grep routing hint mentioning find-references, got %q", buf.String())
 	}
 	// rate-limited once per session
 	n.onAudit(interp.AuditEvent{IsBuiltin: false, Args: []string{"grep", "-r", "y", "."}})

@@ -24,6 +24,7 @@ Bashy front-door help:
 	bashy commands grep --features	show one-command capability/gap report
 	bashy commands --gnu		show GNU coreutils parity/gap inventory
 	bashy doctor			diagnose shell/runtime environment
+	bashy serve [socket]		warm session: reuse one process for repeated -c calls
 	bashy self fetch		fetch/cache a released bashy binary
 	bashy git --help		show embedded git subcommands
 	bashy fetch --help		show built-in download/REST client

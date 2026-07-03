@@ -20,7 +20,8 @@ func TestCommandsCatalogSources(t *testing.T) {
 		t.Errorf("builtins missing core entries: %v", builtins)
 	}
 	// The coreutils userland — invisible to compgen, the reason this exists.
-	for _, want := range []string{"cat", "ls", "grep", "tree", "yc"} {
+	// (code-intel is exposed as flat first-class verbs since the yc flatten.)
+	for _, want := range []string{"cat", "ls", "grep", "tree", "list-symbols"} {
 		if !slices.Contains(core, want) {
 			t.Errorf("coreutils userland missing %q", want)
 		}
@@ -170,7 +171,7 @@ func TestGNUCoreutilsReportTracksGaps(t *testing.T) {
 	if !gnuGapHas(report.Not100Conformant, "ls") {
 		t.Fatalf("expected implemented but uncertified GNU command in not_100_conformant: %#v", report.Not100Conformant)
 	}
-	if !slices.Contains(report.NonGNUExtras, "grep") || !slices.Contains(report.NonGNUExtras, "yc") {
+	if !slices.Contains(report.NonGNUExtras, "grep") || !slices.Contains(report.NonGNUExtras, "list-symbols") {
 		t.Fatalf("expected non-GNU bashy extras: %#v", report.NonGNUExtras)
 	}
 }
