@@ -11,5 +11,5 @@
 # Format: <name>=<sha>. When bumping a sibling in the umbrella's
 # script/sync.sh, the SHA here is bumped to match — sync.sh automates this.
 sh=031b9104f9a9ece1aa4abfa8fe565451b5d32fe2
-coreutils=f00c7a744201d56ed4c8af84bb52140748c665b0
+coreutils=03b23fe56a25b00726a7125ef696694b364f50be
 readline=d29dca5d747044b347dd31b7eb32cb9835af96d6
