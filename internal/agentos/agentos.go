@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/cobra"
 	"mvdan.cc/sh/v3/interp"
 
+	"github.com/qiangli/bashy/internal/agentos/session"
 	"github.com/qiangli/bashy/skills"
 
 	_ "github.com/qiangli/coreutils/cmds/all"
@@ -130,6 +131,13 @@ func Dispatch() {
 	if len(os.Args) < 2 {
 		return
 	}
+	// Warm-session hot path: when $BASHY_SESSION points at a live `bashy serve`
+	// listener and this is a simple `bashy -c "…"` invocation, forward it to the
+	// warm process (skips the per-call process/package init). A dead or absent
+	// session falls through to normal in-process execution — never stranded.
+	if exit, handled := session.Route(); handled {
+		os.Exit(exit)
+	}
 	// The container/LLM engines (`bashy podman`, `bashy ollama`) embed cgo +
 	// platform-specific backends (podman's btrfs/devmapper drivers, ollama's
 	// Apple MLX) and only build on unix hosts — they are split into a
@@ -145,6 +153,18 @@ func Dispatch() {
 	switch os.Args[1] {
 	case "help":
 		os.Exit(dispatchHelp(os.Args[2:]))
+	case "serve":
+		// Warm session: one already-initialized process serves many
+		// `bashy -c "…"` calls. Optional socket path arg overrides the default.
+		socket := ""
+		if len(os.Args) > 2 {
+			socket = os.Args[2]
+		}
+		if err := session.Serve(socket); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy serve:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "weave":
 		cmd := weave.NewWeaveCmd()
 		cmd.SetArgs(os.Args[2:])
