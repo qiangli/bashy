@@ -181,6 +181,8 @@ func printAgenticCommands(w io.Writer) {
   bashy commands -v              full command surface with synopses
   bashy commands grep --features  one-command resolver/capability/gap report
   bashy dag --list               list markdown DAG targets
+  bashy graph-impact SYMBOL      code-graph blast radius: what's coupled to a symbol
+  bashy graph-hotspots           most-connected symbols (refactor / orientation targets)
   bashy podman ...               Podman-compatible isolated container engine
 
 dry-run JSON entry kinds:

@@ -27,6 +27,12 @@ import (
 	"github.com/qiangli/bashy/skills"
 
 	_ "github.com/qiangli/coreutils/cmds/all"
+	// Code-knowledge-graph verbs (graph-build/impact/query/…). Registered here —
+	// NOT via cmds/all — so gfy's document-parsing deps land in `bashy` only,
+	// never the bare cmd/coreutils multicall binary or the cmd/bash drop-in. They
+	// reach the front door + in-shell ExecHandler through the tool registry
+	// (agentos.go dispatch fallthrough), like the list-symbols/repo-map verbs.
+	_ "github.com/qiangli/coreutils/cmds/graph"
 	"github.com/qiangli/coreutils/external/act"
 	"github.com/qiangli/coreutils/external/clang"
 	"github.com/qiangli/coreutils/external/cmake"

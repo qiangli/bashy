@@ -16,7 +16,9 @@ package under `cmd/`, so their import graphs are disjoint:
   the conformance work measures this pure drop-in.**
 - **`bashy`** (`cmd/bashy`) — the **AgentOS system shell**: the same shell core
   plus the coreutils `shell.Handler()` ExecHandler (pure-Go userland
-  cat/ls/grep/… and the code-intel verbs (list-symbols/search-symbols/find-references/repo-map/ast-query), in-process across
+  cat/ls/grep/… , the code-intel verbs (list-symbols/search-symbols/find-references/repo-map/ast-query),
+  and the code-knowledge-graph verbs (graph-build/graph-stats/graph-neighbors/graph-impact/graph-path/graph-hotspots/graph-query,
+  gfy-backed, model-free), in-process across
   Linux/macOS/Windows) and the front-door subcommands (`bashy weave …`,
   `bashy podman …`). It is the self-contained bootstrapper for a whole
   unix-like userland (bash + coreutils + pkg + external tools).
