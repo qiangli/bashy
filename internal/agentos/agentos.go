@@ -3,7 +3,7 @@
 
 // Package agentos holds the AgentOS wiring that turns the shell core into the
 // `bashy` system shell: the coreutils ExecHandler (so the pure-Go userland and
-// `yc` code-intel verbs run in-process) and the front-door subcommands
+// the code-intel verbs run in-process) and the front-door subcommands
 // (`bashy weave …`, `bashy otel …`, `bashy podman …`).
 //
 // It is imported ONLY by cmd/bashy — never by cmd/bash. That is what keeps the
@@ -467,7 +467,7 @@ func dispatchSkills(args []string) int {
 // in-process (pure-Go-first) before PATH lookup. It is wired into the shell
 // core via cli.AgentOSWireExec. Shell builtins (echo, pwd, test, …) are handled
 // by the interpreter before the ExecHandler runs, so they are never shadowed —
-// only external-command names (ls, cat, grep, yc, …) are intercepted.
+// only external-command names (ls, cat, grep, list-symbols, …) are intercepted.
 func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 	// --dry-run (bashy-only, inert under --posix). The handlers are installed
 	// whenever NOT in posix mode (they no-op when dry-run is off) so the runtime

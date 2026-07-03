@@ -16,7 +16,7 @@ package under `cmd/`, so their import graphs are disjoint:
   the conformance work measures this pure drop-in.**
 - **`bashy`** (`cmd/bashy`) — the **AgentOS system shell**: the same shell core
   plus the coreutils `shell.Handler()` ExecHandler (pure-Go userland
-  cat/ls/grep/… and the `yc` code-intel verbs, in-process across
+  cat/ls/grep/… and the code-intel verbs (list-symbols/search-symbols/find-references/repo-map/ast-query), in-process across
   Linux/macOS/Windows) and the front-door subcommands (`bashy weave …`,
   `bashy podman …`). It is the self-contained bootstrapper for a whole
   unix-like userland (bash + coreutils + pkg + external tools).
@@ -126,7 +126,7 @@ replace github.com/qiangli/coreutils => ../coreutils
 ```
 
 `../sh` is the interpreter engine; `../coreutils` is the AgentOS hub that
-supplies the pure-Go userland + `yc` verbs the `bashy` binary injects (only
+supplies the pure-Go userland + code-intel verbs the `bashy` binary injects (only
 `agentos.go` imports it). In a parent monorepo both are submodules. In
 a standalone clone, run `./scripts/bootstrap-siblings.sh` — it clones
 `github.com/qiangli/{sh,coreutils}` next to this repo at the SHAs pinned in

@@ -51,7 +51,7 @@ func newNudger(mem *memory) *nudger {
 // onAudit is the [interp.WithAuditHandler] callback. It fires once per simple
 // command (post-expansion); we act only on watched tools, once per session.
 // Builtins (cd/pushd/popd) get the awd nudge; external search tools (grep/find)
-// get an argv-conditioned routing hint toward --agentic / the yc code-intel verbs.
+// get an argv-conditioned routing hint toward --agentic / the code-intel verbs.
 func (n *nudger) onAudit(ev interp.AuditEvent) {
 	if len(ev.Args) == 0 {
 		return
@@ -80,12 +80,12 @@ func routingHint(name string, args []string) string {
 		if hasArg(args, "--agentic") || !hasRecursiveFlag(args) {
 			return ""
 		}
-		return "repo-wide grep also walks ignored noise (node_modules/.git/vendor). Add `--agentic` to skip it, or use `yc refs <symbol>` / `yc repomap` for structural, token-budgeted code search."
+		return "repo-wide grep also walks ignored noise (node_modules/.git/vendor). Add `--agentic` to skip it, or use `find-references <symbol>` / `repo-map` for structural, token-budgeted code search."
 	case "find":
 		if hasArg(args, "--agentic") {
 			return ""
 		}
-		return "find walks ignored directories too. Add `--agentic` to skip .gitignore/node_modules, or use `yc symbols` / `yc repomap` to map the codebase."
+		return "find walks ignored directories too. Add `--agentic` to skip .gitignore/node_modules, or use `list-symbols` / `repo-map` to map the codebase."
 	}
 	return ""
 }

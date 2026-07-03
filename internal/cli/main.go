@@ -527,7 +527,7 @@ func newRunner() (*interp.Runner, error) {
 		opts = append(opts, interp.Params("-o", "posix"))
 	}
 	// For the AgentOS shell `bashy`, inject the coreutils pure-Go userland +
-	// `yc` verbs as in-process commands. No-op for the pure `bash` drop-in
+	// the code-intel verbs as in-process commands. No-op for the pure `bash` drop-in
 	// (the default AgentOSWireExec).
 	opts = AgentOSWireExec(opts, *posix)
 	// Strict drop-in: disable the fork's extra builtins (nohup/setsid) so the
