@@ -49,6 +49,13 @@ type contextCaps struct {
 	CommandFeatures   bool `json:"command_features"`
 	InProcessGit      bool `json:"in_process_git"`
 	InProcessUserland bool `json:"in_process_userland"`
+	// Code-knowledge graph (graph-impact/neighbors/hotspots/query): navigate a
+	// repo's structure without a grep dance. Knowledge graph
+	// (graph-note/recall/observe/pitfalls): a durable, shared per-repo "agentic
+	// wiki" other agents' findings accrue into. Advertised here so agents discover
+	// them on the first hop instead of re-deriving by search.
+	CodeGraph      bool `json:"code_graph"`
+	KnowledgeGraph bool `json:"knowledge_graph"`
 }
 
 type contextCommand struct {
@@ -123,6 +130,8 @@ func collectContext() contextReport {
 			CommandFeatures:   true,
 			InProcessGit:      true,
 			InProcessUserland: true,
+			CodeGraph:         true,
+			KnowledgeGraph:    true,
 		},
 		RecommendedCommands: []contextCommand{
 			{Purpose: "preview destructive script safely", Command: bashyPath + " --dry-run SCRIPT"},
@@ -130,6 +139,8 @@ func collectContext() contextReport {
 			{Purpose: "script preflight", Command: bashyPath + " check --agent --script SCRIPT"},
 			{Purpose: "preflight plus captured run envelope", Command: bashyPath + " run --check --capture -- SCRIPT"},
 			{Purpose: "one command capability lookup", Command: bashyPath + " commands COMMAND --features"},
+			{Purpose: "what code is coupled to a symbol (skip the grep dance)", Command: bashyPath + " graph-impact SYMBOL"},
+			{Purpose: "recall/leave shared repo knowledge for other agents", Command: bashyPath + " graph-recall QUERY"},
 		},
 		Notes: []string{
 			"This record is intended to replace ad hoc probes such as env, uname, file, and bashy --help.",
