@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/qiangli/coreutils/external/registry"
 	"github.com/qiangli/coreutils/external/sphere"
 	"github.com/qiangli/coreutils/pkg/binmgr"
 	"github.com/qiangli/coreutils/pkg/weavecli"
@@ -165,6 +166,11 @@ func addToolSurfaceChecks(checks *[]doctorCheck) {
 	for _, ext := range doctorExternals {
 		st, detail := externalToolStatus(ext)
 		add("ext: "+ext, st, detail)
+	}
+	// declarative registry CLIs (tier 5/6: doctl, …) — same network-free status.
+	for _, e := range registry.All() {
+		st, detail := externalToolStatus(e.Name)
+		add(fmt.Sprintf("ext: %s (t%d)", e.Name, e.Tier), st, detail)
 	}
 
 	// sphere tier (tier 4) — peer-direct pooled inference/compute via the outpost

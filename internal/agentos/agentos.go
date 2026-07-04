@@ -43,6 +43,7 @@ import (
 	"github.com/qiangli/coreutils/external/kubectl"
 	"github.com/qiangli/coreutils/external/loom"
 	"github.com/qiangli/coreutils/external/rclone"
+	"github.com/qiangli/coreutils/external/registry"
 	"github.com/qiangli/coreutils/external/seaweedfs"
 	"github.com/qiangli/coreutils/external/sphere"
 	"github.com/qiangli/coreutils/external/tessaro"
@@ -108,6 +109,11 @@ func Preamble() string {
 		for _, v := range agentModeShimVerbs {
 			fmt.Fprintf(&b, "%s() { command %s %s \"$@\"; }\n", v, shellQuote(self), v)
 		}
+	}
+	// Declarative managed-external registry (tier-5/6 client CLIs: doctl, …) —
+	// bare-name shims too, so `doctl …` resolves to `bashy doctl …`.
+	for _, v := range registry.Names() {
+		fmt.Fprintf(&b, "%s() { command %s %s \"$@\"; }\n", v, shellQuote(self), v)
 	}
 	return b.String()
 }
@@ -500,6 +506,16 @@ func Dispatch() {
 			Out: os.Stdout,
 			Err: os.Stderr,
 		}))
+	}
+	// Declarative managed-external registry (tier-5/6 client CLIs). A registry
+	// verb self-provisions (download → verify → cache → exec) and passes through.
+	if e, ok := registry.Lookup(os.Args[1]); ok {
+		cmd := e.NewCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	}
 	// Unknown first token — not a front-door verb, engine/obs command, or a
 	// registered coreutils tool. When it is a BARE command NAME (not an option,

@@ -19,6 +19,7 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 
+	"github.com/qiangli/coreutils/external/registry"
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	"github.com/qiangli/coreutils/tool"
 )
@@ -307,6 +308,16 @@ var verbSynopsis = map[string]string{
 	"login":     "sign in to Tessaro — pair this machine with the portal",
 }
 
+// merge the declarative registry's synopses into verbSynopsis so registry CLIs
+// (doctl, …) carry a synopsis in `bashy commands` without a hand-maintained line.
+func init() {
+	for _, e := range registry.All() {
+		if verbSynopsis[e.Name] == "" {
+			verbSynopsis[e.Name] = e.Synopsis
+		}
+	}
+}
+
 // commandsCatalog gathers the three command sources, each sorted: shell
 // builtins, the coreutils userland, and the front-door verb shims (the
 // agent-mode-only provisioners are included only in agent mode, mirroring the
@@ -320,6 +331,7 @@ func commandsCatalog() (builtins, core, verbs []string) {
 	if weavecli.IsAgent() {
 		verbs = append(verbs, agentModeShimVerbs...)
 	}
+	verbs = append(verbs, registry.Names()...) // declarative managed-external CLIs
 	sort.Strings(verbs)
 	return builtins, core, verbs
 }
