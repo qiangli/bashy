@@ -6,6 +6,7 @@ package agentos
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -24,14 +25,20 @@ func TestCollectContextIncludesBashyPathAndCapabilities(t *testing.T) {
 	if !report.Capabilities.DryRun || !report.Capabilities.CheckAgentJSON || !report.Capabilities.CommandFeatures {
 		t.Fatalf("missing expected capabilities: %#v", report.Capabilities)
 	}
+	// The recommended commands must embed the absolute bashy path (cross-platform:
+	// a Windows path is C:\… not /…, so check containment of BashyPath, not a
+	// leading slash).
+	if report.BashyPath == "" || !filepath.IsAbs(report.BashyPath) {
+		t.Fatalf("bashy_path should be absolute, got %q", report.BashyPath)
+	}
 	var sawPathInCommand bool
 	for _, cmd := range report.RecommendedCommands {
-		if cmd.Command != "" && cmd.Command[0] == '/' {
+		if strings.Contains(cmd.Command, report.BashyPath) {
 			sawPathInCommand = true
 		}
 	}
 	if !sawPathInCommand {
-		t.Fatalf("recommended commands should include absolute bashy path: %#v", report.RecommendedCommands)
+		t.Fatalf("recommended commands should include the absolute bashy path %q: %#v", report.BashyPath, report.RecommendedCommands)
 	}
 }
 
