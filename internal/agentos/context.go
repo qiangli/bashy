@@ -39,11 +39,13 @@ type contextReport struct {
 	// Tools maps common CLI names to their resolved PATH location — replaces
 	// per-tool `which X` probes. Only tools actually found are listed.
 	Tools map[string]string `json:"tools,omitempty"`
-	// Environment lists EVERY environment variable name. The value is shown for a
-	// curated safe allowlist (paths/locale/shell/toolchain); for every other var
-	// the value is "<redacted>" (or "" if empty) so an agent sees a secret's
-	// EXISTENCE without its value.
-	Environment map[string]string `json:"environment,omitempty"`
+	// Environment holds only the vars whose VALUE is safe to show (curated
+	// allowlist: paths/locale/shell/toolchain). Every other var's value is hidden;
+	// their NAMES go in EnvironmentRedacted as a single comma-joined list — far
+	// cheaper in tokens than a per-var "<redacted>" map — so an agent still sees
+	// which vars (including secrets) are SET, without their values.
+	Environment         map[string]string `json:"environment,omitempty"`
+	EnvironmentRedacted string            `json:"environment_redacted,omitempty"`
 }
 
 type contextMode struct {
@@ -181,12 +183,12 @@ func collectContext() contextReport {
 		},
 		Notes: []string{
 			"Replaces first-hop probes: `system` = uname/hostname/id, `tools` = which/tool discovery, `environment` = env — an agent need not run env/uname/hostname/id/which itself.",
-			"environment lists every var NAME: the value is shown for safe names (paths/locale/shell/toolchain) and `<redacted>` for all others, so a secret's existence is visible but not its value.",
+			"environment shows values only for safe names (paths/locale/shell/toolchain); environment_redacted is a comma-joined list of the remaining var NAMES (values hidden) — a secret's existence is visible, not its value.",
 			"Use the reported bashy_path for explicit bashy feature calls.",
 		},
-		Tools:       detectTools(),
-		Environment: collectEnvironment(),
+		Tools: detectTools(),
 	}
+	report.Environment, report.EnvironmentRedacted = collectEnvironment()
 	if len(os.Args) > 0 {
 		report.Argv0 = os.Args[0]
 	}
@@ -255,30 +257,30 @@ func detectContainer() string {
 	return ""
 }
 
-// collectEnvironment lists every env var, showing the value only for a curated
-// safe allowlist and redacting the rest (so an agent sees which vars — including
-// secrets — are SET, without leaking their values).
-func collectEnvironment() map[string]string {
-	out := map[string]string{}
+// collectEnvironment splits the environment into (shown, redacted): shown maps
+// each safe var to its value; redacted is a sorted, comma-joined list of the
+// NAMES whose values are hidden — one compact string instead of a per-var
+// "<redacted>" entry, so the token cost is a name list, not a padded map.
+func collectEnvironment() (map[string]string, string) {
+	shown := map[string]string{}
+	var redacted []string
 	for _, kv := range os.Environ() {
 		i := strings.IndexByte(kv, '=')
 		if i <= 0 {
 			continue
 		}
 		name, val := kv[:i], kv[i+1:]
-		switch {
-		case envValueSafe(name):
-			out[name] = val
-		case val != "":
-			out[name] = "<redacted>"
-		default:
-			out[name] = ""
+		if envValueSafe(name) {
+			shown[name] = val
+		} else {
+			redacted = append(redacted, name)
 		}
 	}
-	if len(out) == 0 {
-		return nil
+	sort.Strings(redacted)
+	if len(shown) == 0 {
+		shown = nil
 	}
-	return out
+	return shown, strings.Join(redacted, ",")
 }
 
 func envValueSafe(name string) bool {
@@ -350,10 +352,14 @@ func printContextPlain(r contextReport) {
 		fmt.Printf("  %s: %s\n", c.Purpose, c.Command)
 	}
 	if len(r.Environment) > 0 {
-		fmt.Printf("environment (%d vars; real value for safe names, else <redacted>):\n", len(r.Environment))
+		fmt.Printf("environment (%d shown; real value for safe names):\n", len(r.Environment))
 		for _, k := range sortedKeys(r.Environment) {
 			fmt.Printf("  %s=%s\n", k, r.Environment[k])
 		}
+	}
+	if r.EnvironmentRedacted != "" {
+		n := strings.Count(r.EnvironmentRedacted, ",") + 1
+		fmt.Printf("environment_redacted (%d, values hidden): %s\n", n, r.EnvironmentRedacted)
 	}
 }
 

@@ -5,26 +5,34 @@ package agentos
 
 import (
 	"os"
+	"slices"
+	"strings"
 	"testing"
 )
 
 func TestCollectEnvironmentRedaction(t *testing.T) {
-	t.Setenv("HOME", "/home/x")            // allowlisted -> real value
-	t.Setenv("FAKE_API_KEY", "sekret")     // sensitive-shaped -> redacted
-	t.Setenv("RANDOM_UNLISTED_VAR", "val") // not allowlisted -> redacted
-	t.Setenv("EMPTY_ONE", "")              // empty -> present, empty
-	env := collectEnvironment()
-	if env["HOME"] != "/home/x" {
-		t.Errorf("HOME (allowlisted) should show real value, got %q", env["HOME"])
+	t.Setenv("HOME", "/home/x")            // allowlisted -> shown with value
+	t.Setenv("FAKE_API_KEY", "sekret")     // sensitive-shaped -> name-only in redacted
+	t.Setenv("RANDOM_UNLISTED_VAR", "val") // not allowlisted -> name-only in redacted
+	shown, redacted := collectEnvironment()
+	if shown["HOME"] != "/home/x" {
+		t.Errorf("HOME (allowlisted) should show real value, got %q", shown["HOME"])
 	}
-	if env["FAKE_API_KEY"] != "<redacted>" {
-		t.Errorf("secret-shaped var must be redacted, got %q", env["FAKE_API_KEY"])
+	if _, ok := shown["FAKE_API_KEY"]; ok {
+		t.Error("a secret must never appear in the shown map")
 	}
-	if env["RANDOM_UNLISTED_VAR"] != "<redacted>" {
-		t.Errorf("unlisted var must be redacted (default-deny), got %q", env["RANDOM_UNLISTED_VAR"])
+	names := strings.Split(redacted, ",")
+	for _, want := range []string{"FAKE_API_KEY", "RANDOM_UNLISTED_VAR"} {
+		if !slices.Contains(names, want) {
+			t.Errorf("redacted list should name %q; got %q", want, redacted)
+		}
 	}
-	if v, ok := env["EMPTY_ONE"]; !ok || v != "" {
-		t.Errorf("empty var should be present with empty value, got %q ok=%v", v, ok)
+	if slices.Contains(names, "HOME") {
+		t.Errorf("HOME (shown) must not be in the redacted names; got %q", redacted)
+	}
+	// The whole point: no per-var "<redacted>" padding — just names.
+	if strings.Contains(redacted, "<redacted>") {
+		t.Errorf("redacted list should be bare names, not padded values: %q", redacted)
 	}
 }
 
