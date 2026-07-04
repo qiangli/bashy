@@ -38,7 +38,9 @@ import (
 	"github.com/qiangli/coreutils/external/cmake"
 	"github.com/qiangli/coreutils/external/gh"
 	"github.com/qiangli/coreutils/external/gotoolchain"
+	"github.com/qiangli/coreutils/external/helm"
 	"github.com/qiangli/coreutils/external/kopia"
+	"github.com/qiangli/coreutils/external/kubectl"
 	"github.com/qiangli/coreutils/external/loom"
 	"github.com/qiangli/coreutils/external/rclone"
 	"github.com/qiangli/coreutils/external/seaweedfs"
@@ -86,6 +88,7 @@ var (
 		"weave", "sprint", "chat", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "run", "commands", "context", "doctor", "self", "check", "verify",
 		"git", "gh", "act", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
+		"kubectl", "helm",
 	}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang"}
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade"}
@@ -401,6 +404,25 @@ func Dispatch() {
 		// Transparent passthrough to a binmgr-managed rclone (MIT) — the transfer
 		// engine + a NAS-style file server (`rclone serve …`). Not compiled in.
 		cmd := rclone.NewRcloneCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "kubectl":
+		// Kubernetes CLI (Apache-2.0) via binmgr (dl.k8s.io) — targets the DKS
+		// cluster by default (external/kube: KUBECONFIG → outpost's DKS kubeconfig).
+		cmd := kubectl.NewKubectlCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "helm":
+		// Helm — the kubernetes package manager (Apache-2.0) via binmgr
+		// (get.helm.sh) — installs charts onto the DKS cluster (same default
+		// kubeconfig as `bashy kubectl`).
+		cmd := helm.NewHelmCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)

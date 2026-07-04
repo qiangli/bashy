@@ -174,6 +174,7 @@ func addToolSurfaceChecks(checks *[]doctorCheck) {
 var doctorExternals = []string{
 	"podman", "ollama", "gh", "act", "rclone",
 	"loom", "zot", "seaweedfs", "kopia",
+	"kubectl", "helm",
 	"go", "cmake", "clang",
 }
 

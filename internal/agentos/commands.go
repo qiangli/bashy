@@ -300,6 +300,8 @@ var verbSynopsis = map[string]string{
 	"go":        "self-provisioning Go toolchain (download → verify → cache → exec)",
 	"cmake":     "self-provisioning CMake build toolchain",
 	"clang":     "self-provisioning clang/LLVM toolchain",
+	"kubectl":   "Kubernetes CLI for the DKS cluster (managed external, Apache-2.0)",
+	"helm":      "Helm chart installer for the DKS cluster (managed external, Apache-2.0)",
 }
 
 // commandsCatalog gathers the three command sources, each sorted: shell
