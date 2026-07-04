@@ -39,6 +39,13 @@ jobs:
           else
             go test ./internal/cli ./internal/agentos
           fi
+      # E2E: build the real bashy binary on THIS OS and confirm every command
+      # `bashy commands` advertises actually dispatches (no "No such command" /
+      # "not in this build" / "No such file"). Runs on macOS AND Windows — the
+      # cross-platform half of the command-support guarantee.
+      - name: E2E command dispatch (all listed verbs run on this OS)
+        shell: bash
+        run: go test -tags e2e -run TestE2EAllListedCommandsDispatch ./internal/agentos
       - name: Cross-build lean cmd/bashy for every release platform (CGO_ENABLED=0)
         shell: bash
         run: |

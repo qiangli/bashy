@@ -29,16 +29,17 @@ import (
 //	Tier 4  none available → point at install or a paired host node — never a
 //	        rebuild.
 func dispatchEngine(arg string) {
-	switch arg {
+	name := engineAlias(arg) // `bashy docker` -> podman engine
+	switch name {
 	case "podman", "ollama":
-		bin := resolveEngineBinary(arg)
+		bin := resolveEngineBinary(name)
 		if bin == "" {
-			bin = provisionEngine(arg)
+			bin = provisionEngine(name)
 		}
 		if bin != "" {
 			os.Exit(execEnginePassthrough(bin, os.Args[2:]))
 		}
-		fmt.Fprint(os.Stderr, engineNotFoundMessage(arg))
+		fmt.Fprint(os.Stderr, engineNotFoundMessage(name))
 		os.Exit(127)
 	}
 }

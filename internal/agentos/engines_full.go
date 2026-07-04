@@ -19,6 +19,7 @@ import (
 // the default lean worker (which cross-compiles to every platform with
 // CGO_ENABLED=0) and from every Windows build.
 func dispatchEngine(arg string) {
+	arg = engineAlias(arg) // `bashy docker` -> podman engine
 	switch arg {
 	case "podman":
 		// Managed, ISOLATED in-process podman (embeds a podman fork):
