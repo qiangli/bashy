@@ -113,13 +113,32 @@ local SDLC resolves source change -> push main -> GitHub Pages deploys -> SDLC v
 That is simpler and safer than a public GitHub-hosted workflow calling a local
 agent subscription.
 
-## Design Gaps To Close
+## Design Gaps — status (updated 2026-07-03)
 
-- Add first-class GitHub-to-Loom issue mirroring, so public issues can be copied
-  into local/private SDLC state without running the conductor inside GitHub.
-- Add Loom issue selection to `bashy sdlc tick`, so the trigger can pass an issue
-  id instead of an issue file.
-- Add a durable trigger daemon profile that combines `schedule`, issue selection,
-  SDLC invocation, QA assignment, approval routing, rollout, verify, and resolve.
-- Add a deployment adapter interface for GitHub Pages, static hosting, SSH,
-  Kubernetes, DigitalOcean, AWS, and similar targets.
+Closed by the label-driven SDLC work (`coreutils/pkg/sdlc/`):
+
+- **GitHub issue intake — DONE.** `--intake-provider github` now really fetches
+  and selects the next eligible issue (`github_intake.go` `nextGitHubIssue` /
+  `SelectNextIssue`), label-aware and priority-ordered, PR-skipping. Reserved
+  label families in `labels.go` (`sdlc:*` lifecycle + `deploy:*` baton).
+- **Issue selection in `bashy sdlc tick` — DONE.** `Prepare` auto-selects when no
+  `--issue` is passed (`intake_wire.go`), gated by `sdlc:go`
+  (`intake_require_initiate`, default true), claiming `sdlc:in-progress` so a
+  concurrent tick can't double-pick. Empty queue = a clean `idle` no-op.
+- **Durable trigger daemon — DONE.** `bashy sdlc service {start,status,stop,run}`
+  (`service.go`) is the always-on loop, supervised by outpost as an opt-in
+  `conf.BashyService` (`Command: ["sdlc","service"]`) with self-heal auto-install.
+- **Deploy adapter / baton — DONE.** `PromoteByLabel` applies `deploy:<env>` (the
+  trigger for the deploy GitHub Action — `github_write.go`), gated by the
+  `prod_approval` policy (`promote.go` `RequiresApproval`); `RunDeployTarget`
+  (`deploy_local.go`) makes `TargetConfig.{Command,Healthcheck,Rollback}`
+  executable for the direct/local path. `sdlc resolve` closes the board
+  (`SyncGitHubResolution`: clear claim → `sdlc:done` → close).
+
+Still open:
+
+- First-class GitHub↔Loom issue *mirroring* (copy public issues into private
+  Loom state). The GitHub fetch + private-execution split exists; a two-way
+  mirror is the remaining nicety.
+- Richer deployment adapters (SSH, Kubernetes/Argo, AWS) beyond GitHub-Pages /
+  the label-baton + local-command paths.
