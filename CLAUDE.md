@@ -110,8 +110,14 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
     `CGO_ENABLED=0`** (~121 MB unix, ~47 MB Windows) — this is what GoReleaser
     ships. Two opt-in, unix-only, heavier **host** layers, both default-EXCLUDED
     so the worker stays lean and portable:
-    - `-tags bashy_engines` (`engines_{full,stub}.go`) — the container/LLM engines
-      `bashy podman`/`ollama` (cgo + btrfs/MLX). Always excluded on Windows.
+    - `-tags bashy_engines` (`engines_{full,stub}.go`) — the *in-process linked*
+      container/LLM engines `bashy podman`/`ollama` (cgo + btrfs/MLX). Always
+      excluded on Windows. In the default lean build the stub does NOT error —
+      per the settled dispatch ladder (docs/bashy-execution-path.md: exec,
+      never link) it falls through to **Tier 3**: resolve a host/binmgr-cached
+      `podman`/`ollama` and exec it transparently (no rebuild), or, if none is
+      found, point to install/a paired host node — so a `bashy commands` verb
+      always runs without a rebuild step.
     - `-tags bashy_obs` (`obs_{full,stub}.go`) — the observability stack
       `bashy otel` (OpenTelemetry Collector + VictoriaMetrics/Logs + Jaeger +
       Perses + k8s/aws, **193 MB**).
