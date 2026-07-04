@@ -284,6 +284,7 @@ var verbSynopsis = map[string]string{
 	"context":   "print first-hop agent context: exact bashy path and capabilities",
 	"doctor":    "diagnose the bashy environment (PATH/sh, engine, agent mode, bin cache)",
 	"check":     "statically check shell scripts for bashy/system command closure",
+	"verify":    "run formal test batteries: compat/conformance/compliance/benchmark",
 	"self":      "fetch/cache/install a released bashy binary",
 	"bootstrap": "hidden alias for bashy self",
 	"upgrade":   "hidden alias for bashy self",

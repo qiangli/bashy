@@ -83,7 +83,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "chat", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "run", "commands", "context", "doctor", "self", "check",
+		"weave", "sprint", "chat", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "run", "commands", "context", "doctor", "self", "check", "verify",
 		"git", "gh", "act", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 	}
@@ -266,6 +266,16 @@ func Dispatch() {
 		// Static script preflight: syntax, recursive command inventory, and
 		// bashy/system/container/not-found resolution.
 		os.Exit(dispatchCheck(os.Args[2:]))
+	case "verify":
+		// Formal test batteries as subcommands: compat (bash-5.3) / conformance
+		// (yash POSIX) / compliance (Open Group VSC-PCTS, stub) / benchmark. Runs
+		// from a bashy source checkout; suites are fetched at runtime or supplied.
+		cmd := verifyCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "self":
 		// Self-management: fetch/cache release binaries and explicitly install a
 		// selected candidate. This is the bashy-side migration of outpost's
