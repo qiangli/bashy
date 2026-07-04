@@ -112,6 +112,69 @@ func featureAvailable(bin, name string) (bool, string) {
 	return info["available"] == true && class != "not-found", class
 }
 
+// TestE2EDoctor is the first e2e: build the real binary and run `bashy doctor`,
+// the environment self-diagnostic. It must emit its JSON envelope, sweep the
+// coreutils userland + every managed external, and exit 0 (warnings are allowed —
+// doctor is advisory). This is the fast canary before the fuller dispatch sweep.
+func TestE2EDoctor(t *testing.T) {
+	bin := bashyBinary(t)
+
+	// JSON envelope: schema + a non-empty check list including the tool-surface sweep.
+	out, code := runBashy(bin, "doctor", "--json")
+	if code != 0 {
+		t.Fatalf("`bashy doctor --json` exited %d:\n%s", code, out)
+	}
+	var env struct {
+		Schema string `json:"schema_version"`
+		Checks []struct {
+			Name   string `json:"name"`
+			Status string `json:"status"`
+			Detail string `json:"detail"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal([]byte(out), &env); err != nil {
+		t.Fatalf("decode doctor json: %v\n%s", err, out)
+	}
+	if env.Schema != "bashy-doctor-v1" {
+		t.Errorf("doctor schema_version = %q, want bashy-doctor-v1", env.Schema)
+	}
+	if len(env.Checks) == 0 {
+		t.Fatal("doctor emitted no checks")
+	}
+
+	byName := map[string]string{} // name -> status
+	for _, c := range env.Checks {
+		byName[c.Name] = c.Status
+		if c.Status != "ok" && c.Status != "warn" && c.Status != "info" {
+			t.Errorf("doctor check %q has invalid status %q", c.Name, c.Status)
+		}
+	}
+	// The command-surface sweep must be present and healthy.
+	if s, ok := byName["coreutils userland"]; !ok {
+		t.Error("doctor is missing the 'coreutils userland' check")
+	} else if s != "ok" {
+		t.Errorf("'coreutils userland' status = %q, want ok", s)
+	}
+	if _, ok := byName["front-door verbs"]; !ok {
+		t.Error("doctor is missing the 'front-door verbs' check")
+	}
+	// Every managed external must be reported (each 'ext: <name>').
+	for _, ext := range []string{"podman", "ollama", "gh", "loom", "go"} {
+		if _, ok := byName["ext: "+ext]; !ok {
+			t.Errorf("doctor is missing the 'ext: %s' check", ext)
+		}
+	}
+
+	// Plain (human) form must also render and exit 0.
+	plain, code := runBashy(bin, "doctor")
+	if code != 0 {
+		t.Fatalf("`bashy doctor` exited %d:\n%s", code, plain)
+	}
+	if !strings.Contains(plain, "coreutils userland") || !strings.Contains(plain, "ext: ollama") {
+		t.Errorf("plain doctor output missing tool-surface sweep:\n%s", plain)
+	}
+}
+
 // TestE2EAllListedCommandsDispatch runs the real binary and checks every command
 // `bashy commands` prints:
 //   - coreutils tools: recognized+available per the binary (all of them), plus a

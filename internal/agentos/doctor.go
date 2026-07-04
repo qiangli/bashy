@@ -21,6 +21,7 @@ import (
 
 	"github.com/qiangli/coreutils/pkg/binmgr"
 	"github.com/qiangli/coreutils/pkg/weavecli"
+	"github.com/qiangli/coreutils/tool"
 )
 
 const doctorSchemaVersion = "bashy-doctor-v1"
@@ -124,7 +125,81 @@ func collectDoctorChecks() []doctorCheck {
 			add("container engine", "info", "none detected (bashy podman needs an engine build / host)")
 		}
 	}
+
+	addToolSurfaceChecks(&checks)
 	return checks
+}
+
+// addToolSurfaceChecks reports the two command surfaces `bashy commands` exposes
+// beyond builtins: the in-process coreutils userland (one line — they share the
+// bashy build, so there is no per-tool version) and each managed external / engine
+// with its RESOLVED version, WITHOUT provisioning anything (a diagnostic must not
+// trigger a download). A missing external is `info`, not `warn` — it provisions on
+// first use by design.
+func addToolSurfaceChecks(checks *[]doctorCheck) {
+	add := func(name, status, detail string) {
+		*checks = append(*checks, doctorCheck{name, status, detail})
+	}
+
+	// coreutils userland — verify every registered tool is dispatchable (the
+	// runtime mirror of the commands-support unit test).
+	names := tool.Names()
+	unregistered := make([]string, 0)
+	for _, n := range names {
+		if tool.Lookup(n) == nil {
+			unregistered = append(unregistered, n)
+		}
+	}
+	if len(unregistered) == 0 {
+		add("coreutils userland", "ok", fmt.Sprintf("%d pure-Go tools, all registered + dispatchable in-process", len(names)))
+	} else {
+		add("coreutils userland", "warn", fmt.Sprintf("%d tools; %d not dispatchable: %s", len(names), len(unregistered), strings.Join(unregistered, ", ")))
+	}
+
+	// front-door verbs surface count.
+	_, _, verbs := commandsCatalog()
+	add("front-door verbs", "ok", fmt.Sprintf("%d verbs reachable (bashy <verb> / bare shim)", len(verbs)))
+
+	// managed externals + engines — resolved version if present, else on-demand.
+	for _, ext := range doctorExternals {
+		st, detail := externalToolStatus(ext)
+		add("ext: "+ext, st, detail)
+	}
+}
+
+// doctorExternals is the set of managed-external / engine verbs `bashy commands`
+// advertises that resolve to a downloaded-or-host binary (not the in-process
+// userland). mirror is omitted — it is built on the rclone external, not its own
+// binary.
+var doctorExternals = []string{
+	"podman", "ollama", "gh", "act", "rclone",
+	"loom", "zot", "seaweedfs", "kopia",
+	"go", "cmake", "clang",
+}
+
+// externalToolStatus reports how an external would resolve today, network-free:
+// a host binary on PATH, an already-cached managed binary (with its version when
+// the cache layout carries one), else on-demand provisioning.
+func externalToolStatus(name string) (status, detail string) {
+	if lp, err := exec.LookPath(name); err == nil && lp != "" {
+		return "ok", "on PATH: " + lp
+	}
+	root, err := binmgr.CacheDir()
+	if err == nil {
+		// Versioned layout (ResolveGitHub/Ensure): <root>/<name>/<version>/<bin>.
+		if dirs, _ := filepath.Glob(filepath.Join(root, name, "*")); len(dirs) > 0 {
+			for _, d := range dirs {
+				if fi, e := os.Stat(d); e == nil && fi.IsDir() {
+					return "ok", "cached " + filepath.Base(d)
+				}
+			}
+		}
+		// Flat single-file layout (ProvisionManaged): <root>/<name>.
+		if fi, e := os.Stat(filepath.Join(root, name)); e == nil && !fi.IsDir() {
+			return "ok", "cached (bashy engine blob)"
+		}
+	}
+	return "info", "provisions on first use"
 }
 
 func collectSelfChecks() []doctorCheck {
