@@ -69,3 +69,45 @@ func TestDockerAliasIsHandled(t *testing.T) {
 		}
 	}
 }
+
+// TestOllamaCloudGate pins the self-hosted default: cloud model / signin requests
+// are refused (bashy ollama is the isolated local runtime) unless opted in, while
+// local operations always pass through.
+func TestOllamaCloudGate(t *testing.T) {
+	cloud := [][]string{
+		{"run", "glm-5.2:cloud"},
+		{"run", "glm-5.2:cloud", "hello"},
+		{"signin"},
+		{"signout"},
+		{"pull", "gpt-oss:120b-cloud"},
+	}
+	for _, args := range cloud {
+		if _, isCloud := ollamaCloudTarget(args); !isCloud {
+			t.Errorf("ollamaCloudTarget(%v) = not cloud, want cloud", args)
+		}
+	}
+	local := [][]string{
+		{"run", "qwen2.5:0.5b"},
+		{"list"},
+		{"ps"},
+		{"pull", "llama3.2"},
+		{"serve"},
+		{"--version"},
+		nil,
+	}
+	for _, args := range local {
+		if tgt, isCloud := ollamaCloudTarget(args); isCloud {
+			t.Errorf("ollamaCloudTarget(%v) = cloud(%q), want local", args, tgt)
+		}
+	}
+
+	// Default: a cloud request is blocked.
+	if blocked, msg := ollamaCloudGate([]string{"run", "glm-5.2:cloud"}); !blocked || msg == "" {
+		t.Errorf("cloud request not blocked by default (blocked=%v)", blocked)
+	}
+	// Opt-in: the escape hatch lets it through.
+	t.Setenv("BASHY_OLLAMA_ALLOW_CLOUD", "1")
+	if blocked, _ := ollamaCloudGate([]string{"run", "glm-5.2:cloud"}); blocked {
+		t.Error("BASHY_OLLAMA_ALLOW_CLOUD=1 should allow cloud requests")
+	}
+}

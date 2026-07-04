@@ -32,6 +32,12 @@ func dispatchEngine(arg string) {
 	name := engineAlias(arg) // `bashy docker` -> podman engine
 	switch name {
 	case "podman", "ollama":
+		if name == "ollama" {
+			if blocked, msg := ollamaCloudGate(os.Args[2:]); blocked {
+				fmt.Fprint(os.Stderr, msg)
+				os.Exit(2)
+			}
+		}
 		bin := resolveEngineBinary(name)
 		if bin == "" {
 			bin = provisionEngine(name)

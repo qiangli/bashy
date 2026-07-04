@@ -35,7 +35,12 @@ func dispatchEngine(arg string) {
 	case "ollama":
 		// Managed, ISOLATED ollama: own bashy-owned port (never 11434), models
 		// under ~/.agents/bashy/ollama — never the host's ~/.ollama. Reached by
-		// the `ollama` service name.
+		// the `ollama` service name. Cloud (:cloud / signin) is gated: bashy ollama
+		// is self-hosted, so ollama.com sign-in is opt-in only.
+		if blocked, msg := ollamaCloudGate(os.Args[2:]); blocked {
+			os.Stderr.WriteString(msg)
+			os.Exit(2)
+		}
 		cmd := ollama.NewManagedOllamaCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
