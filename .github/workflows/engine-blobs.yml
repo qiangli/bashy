@@ -1,0 +1,59 @@
+name: engine-blobs
+
+# Build bashy's permissive engine blobs (podman/vfkit/gvproxy, Apache-2.0) FROM
+# SOURCE and publish them to the release as <name>-<goos>-<goarch>.gz, which the
+# lean binary fetches on demand for the self-contained engines
+# (internal/agentos/engines_stub.go). See docs/licensing-supply-chain-policy.md.
+#
+# DECOUPLED from release.yml on purpose: this runs AFTER a release is published,
+# so a blob build failing here can NEVER block the shippable bash/bashy release.
+# fail-fast:false so one platform's failure doesn't stop the others.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "release tag to attach blobs to (e.g. v0.9.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  blobs:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14   # darwin/arm64 — proven
+          - runner: macos-13   # darwin/amd64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Bootstrap siblings (coreutils + podman source)
+        shell: bash
+        run: |
+          ./scripts/bootstrap-siblings.sh
+          # embed-podman.sh builds podman from the coreutils podman submodule
+          git -C ../coreutils submodule update --init --depth 1 external/podman/src || true
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Build + publish engine blobs (from permissive source)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.event.release.tag_name || github.event.inputs.tag }}"
+          ./scripts/publish-engine-blobs.sh "$TAG"
+
+# Matrix extensions (add once darwin CI is validated):
+#   - linux/amd64,arm64: ubuntu-24.04 / ubuntu-24.04-arm — needs the podman cgo
+#     build deps (libgpgme-dev, libbtrfs-dev, libassuan-dev, pkg-config) installed
+#     before publish-engine-blobs.sh (vfkit is macOS-only, so linux = podman+gvproxy).
+#   - windows: podman is remote/mesh (Tier 4), not a local blob; if a
+#     podman-remote client blob is wanted, build it on the self-hosted
+#     lj2ivy/puppy runners with -tags 'remote containers_image_openpgp'.
