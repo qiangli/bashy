@@ -298,6 +298,17 @@ filename (e.g. `docs/plan-feature-name.md`).
 
 ## Third-Party Libraries
 
-- **Permissive licenses only**: MIT, BSD, Apache 2.0, or equivalent. No GPL/LGPL.
-- **Pure Go only**: no CGo, no C dependencies (the `cc` invocation in
+Full policy: `docs/licensing-supply-chain-policy.md`. In brief:
+
+- **Compiled-in / embedded / linked / vendored → permissive only**: MIT, BSD,
+  Apache 2.0. No GPL/LGPL/MPL/SSPL/BSL/proprietary — nothing whose license could
+  propagate. Record each in `THIRD_PARTY_LICENSES`.
+- **Pure Go only** for the core: no CGo, no C deps (the `cc` in
   `test-bash-helpers` builds Bash's own test helpers, not bashy).
+- **Runtime download + exec ≠ bundling**: tools bashy downloads and runs as
+  separate processes (podman/ollama/gh/loom/act/…, and fetched test suites) are
+  not bundled — separate programs on their own licenses, no propagation. Prefer
+  permissive anyway.
+- **Required + no permissive substitute → build from permissive source** via the
+  self-provisioning toolchain (`bashy go`/`cmake`/`clang`), in CI or on demand —
+  never ship a non-permissive prebuilt.
