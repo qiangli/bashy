@@ -6,17 +6,15 @@
 package agentos
 
 import (
-	"compress/gzip"
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
+
+	"github.com/qiangli/coreutils/pkg/binmgr"
 )
 
 // dispatchEngine (lean build). The container/LLM engines are not LINKED into this
@@ -45,101 +43,45 @@ func dispatchEngine(arg string) {
 	}
 }
 
-// provisionEngine fetches a bashy-built, permissive engine blob from bashy's own
-// release into the binmgr cache and returns its path — the self-contained Tier-2
-// rung. Best-effort: returns "" (→ the install/mesh message) when no such asset
-// exists yet or the fetch fails, so there is never a regression. For podman it
-// also pulls the VM helpers (vfkit/gvproxy) it needs on macOS.
+// provisionEngine resolves a missing engine via the SHARED binmgr pipeline
+// (cache → fetch bashy's permissive blob → build from source) — the same process
+// outpost and Tessaro apps use, standalone (no paired host assumed). Returns "" so
+// dispatch falls to the install/mesh message when nothing is available.
 func provisionEngine(name string) string {
-	binDir := engineCacheDir()
-	if binDir == "" {
+	path, err := binmgr.ProvisionManaged(context.Background(), engineSpec(name))
+	if err != nil {
 		return ""
+	}
+	return path
+}
+
+// engineSpec builds the ManagedSpec for a bashy engine: fetch its permissive blob
+// from bashy's release into bashy's engine cache. podman on macOS also provisions
+// the vfkit/gvproxy VM helpers it needs. (A Build hook — build from source when no
+// blob exists — is added per engine as those recipes are wired.)
+func engineSpec(name string) binmgr.ManagedSpec {
+	spec := binmgr.ManagedSpec{
+		Name:        name,
+		DestDir:     engineCacheDir(),
+		ReleaseRepo: engineReleaseRepo(),
+		Log:         func(m string) { fmt.Fprintln(os.Stderr, m) },
 	}
 	if name == "podman" && runtime.GOOS == "darwin" {
-		for _, helper := range []string{"gvproxy", "vfkit"} {
-			if !isExecutable(filepath.Join(binDir, helper)) {
-				_, _ = fetchReleaseBlob(helper, binDir) // best-effort; podman machine init needs them
-			}
+		spec.Deps = []binmgr.ManagedSpec{
+			{Name: "gvproxy", ReleaseRepo: spec.ReleaseRepo},
+			{Name: "vfkit", ReleaseRepo: spec.ReleaseRepo},
 		}
 	}
-	dest, err := fetchReleaseBlob(name, binDir)
-	if err != nil {
-		return ""
-	}
-	return dest
+	return spec
 }
 
-// fetchReleaseBlob downloads <name>-<goos>-<goarch>.gz from the latest bashy
-// release, gunzips it into binDir/<name>, marks it executable, and returns the
-// path. Self-contained (net/http + gzip); no third-party dependency.
-func fetchReleaseBlob(name, binDir string) (string, error) {
-	asset := fmt.Sprintf("%s-%s-%s.gz", name, runtime.GOOS, runtime.GOARCH)
-	url := latestReleaseAssetURL("qiangli/bashy", asset)
-	if url == "" {
-		return "", fmt.Errorf("no release asset %s", asset)
+// engineReleaseRepo is the repo whose release carries bashy's permissive engine
+// blobs. Overridable via $BASHY_ENGINE_REPO for forks/mirrors.
+func engineReleaseRepo() string {
+	if r := strings.TrimSpace(os.Getenv("BASHY_ENGINE_REPO")); r != "" {
+		return r
 	}
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		return "", err
-	}
-	fmt.Fprintf(os.Stderr, "bashy %s: fetching bashy's permissive %s (built from source, gitignored cache)\n", name, name)
-	client := &http.Client{Timeout: 5 * time.Minute}
-	resp, err := client.Get(url)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("http %d", resp.StatusCode)
-	}
-	gz, err := gzip.NewReader(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	defer gz.Close()
-	dest := filepath.Join(binDir, name)
-	tmp := dest + ".partial"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
-	if err != nil {
-		return "", err
-	}
-	if _, err := io.Copy(f, gz); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return "", err
-	}
-	f.Close()
-	if err := os.Rename(tmp, dest); err != nil { // atomic install
-		os.Remove(tmp)
-		return "", err
-	}
-	return dest, nil
-}
-
-func latestReleaseAssetURL(repo, assetName string) string {
-	client := &http.Client{Timeout: 20 * time.Second}
-	resp, err := client.Get("https://api.github.com/repos/" + repo + "/releases/latest")
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return ""
-	}
-	var rel struct {
-		Assets []struct {
-			Name string `json:"name"`
-			URL  string `json:"browser_download_url"`
-		} `json:"assets"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return ""
-	}
-	for _, a := range rel.Assets {
-		if a.Name == assetName {
-			return a.URL
-		}
-	}
-	return ""
+	return "qiangli/bashy"
 }
 
 // resolveEngineBinary finds a usable engine binary — the host $PATH first (Tier 3),
