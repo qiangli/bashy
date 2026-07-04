@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -50,11 +51,10 @@ func dispatchEngine(arg string) {
 // exists yet or the fetch fails, so there is never a regression. For podman it
 // also pulls the VM helpers (vfkit/gvproxy) it needs on macOS.
 func provisionEngine(name string) string {
-	cb, err := os.UserCacheDir()
-	if err != nil {
+	binDir := engineCacheDir()
+	if binDir == "" {
 		return ""
 	}
-	binDir := filepath.Join(cb, "bashy", "bin")
 	if name == "podman" && runtime.GOOS == "darwin" {
 		for _, helper := range []string{"gvproxy", "vfkit"} {
 			if !isExecutable(filepath.Join(binDir, helper)) {
@@ -150,12 +150,25 @@ func resolveEngineBinary(name string) string {
 	if p, err := exec.LookPath(name); err == nil && p != "" && !sameFile(p, self) {
 		return p
 	}
-	if cb, err := os.UserCacheDir(); err == nil {
-		if cand := filepath.Join(cb, "bashy", "bin", name); isExecutable(cand) {
+	if dir := engineCacheDir(); dir != "" {
+		if cand := filepath.Join(dir, name); isExecutable(cand) {
 			return cand
 		}
 	}
 	return ""
+}
+
+// engineCacheDir is bashy's managed-binary cache — $BASHY_BIN_CACHE if set (as
+// binmgr honors it), else <UserCacheDir>/bashy/bin.
+func engineCacheDir() string {
+	if d := strings.TrimSpace(os.Getenv("BASHY_BIN_CACHE")); d != "" {
+		return d
+	}
+	cb, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(cb, "bashy", "bin")
 }
 
 func sameFile(a, b string) bool {
