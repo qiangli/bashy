@@ -264,8 +264,53 @@ func runVerifyConformance(root string, args []string) int {
 		fmt.Fprintf(os.Stderr, "verify conformance: missing %s\n", script)
 		return 1
 	}
-	fmt.Fprintln(os.Stderr, "verify conformance: yash POSIX (-p) suite — auto-clones yash (GPL, gitignored) + builds the shell panel; needs docker or bashy podman…")
-	return runHarness(root, script, args...)
+	// Auto-resolve a container runtime so an agent isn't stuck: docker, else a
+	// podman on PATH, else the binmgr-cached podman — starting the machine if it's
+	// stopped. The script's own detection only knew docker/bashy-podman; passing a
+	// resolved OCI removes that wall.
+	oci, err := ensureContainerRuntime()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "verify conformance: %v\n", err)
+		return 2
+	}
+	fmt.Fprintf(os.Stderr, "verify conformance: yash POSIX (-p) suite via %s — auto-clones yash (GPL, gitignored) + builds the shell panel…\n", oci)
+	return runHarnessEnv(root, []string{"OCI=" + oci}, script, args...)
+}
+
+// ensureContainerRuntime finds a usable OCI runtime and makes sure it's ready
+// (starts a stopped podman VM). Returns the command the harness should use as
+// $OCI, or an actionable error — so `verify conformance/benchmark` "just runs"
+// for any agent that has a runtime installed, instead of a bare "need docker".
+func ensureContainerRuntime() (string, error) {
+	if _, err := exec.LookPath("docker"); err == nil {
+		return "docker", nil
+	}
+	oci := ""
+	if p, err := exec.LookPath("podman"); err == nil {
+		oci = p
+	} else if cb, err := os.UserCacheDir(); err == nil {
+		// binmgr caches bashy's own podman here (same tree as vfkit/gvproxy).
+		if cand := filepath.Join(cb, "bashy", "bin", "podman"); isExecutable(cand) {
+			oci = cand
+		}
+	}
+	if oci == "" {
+		return "", fmt.Errorf("no container runtime found — install docker or podman (macOS: also `podman machine init`), then retry")
+	}
+	// A stopped podman VM makes every command fail; start it once.
+	if err := exec.Command(oci, "info").Run(); err != nil {
+		fmt.Fprintln(os.Stderr, "verify: container runtime not responding — starting the podman machine…")
+		if serr := exec.Command(oci, "machine", "start").Run(); serr != nil {
+			return "", fmt.Errorf("podman machine is not running and could not be started (try: %s machine start): %v", oci, serr)
+		}
+		fmt.Fprintf(os.Stderr, "verify: podman machine started — stop it with `%s machine stop` when done to free CPU\n", oci)
+	}
+	return oci, nil
+}
+
+func isExecutable(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0
 }
 
 // --- compliance: official POSIX (Open Group VSC-PCTS) — STUB ---
@@ -328,8 +373,15 @@ func runVerifyBenchmark(root string, args []string) int {
 // --- shared ---
 
 func runHarness(dir, bin string, args ...string) int {
+	return runHarnessEnv(dir, nil, bin, args...)
+}
+
+func runHarnessEnv(dir string, extraEnv []string, bin string, args ...string) int {
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = dir
+	if len(extraEnv) > 0 {
+		cmd.Env = append(os.Environ(), extraEnv...)
+	}
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
