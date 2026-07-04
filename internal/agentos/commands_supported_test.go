@@ -4,6 +4,8 @@
 package agentos
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -67,6 +69,30 @@ func TestDockerAliasIsHandled(t *testing.T) {
 		if got := engineAlias(n); got != n {
 			t.Errorf("engineAlias(%q) = %q, want unchanged", n, got)
 		}
+	}
+}
+
+// TestMissingCommandToken pins which first-token forms report GNU/POSIX
+// "command not found" (a bare, non-existent command name) vs. keep bash
+// script-file semantics (options, paths, existing files).
+func TestMissingCommandToken(t *testing.T) {
+	for _, name := range []string{"helm", "kubectl", "definitely-not-real"} {
+		if !isMissingCommandToken(name) {
+			t.Errorf("isMissingCommandToken(%q) = false, want true (bare missing command)", name)
+		}
+	}
+	for _, name := range []string{"-c", "--posix", "+i", "./script.sh", "/usr/bin/env", "a/b", ""} {
+		if isMissingCommandToken(name) {
+			t.Errorf("isMissingCommandToken(%q) = true, want false (option/path)", name)
+		}
+	}
+	// An existing file keeps script-file semantics (not "command not found").
+	f := filepath.Join(t.TempDir(), "realfile")
+	if err := os.WriteFile(f, []byte("echo hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if isMissingCommandToken(f) {
+		t.Errorf("isMissingCommandToken(%q) = true, want false (existing file)", f)
 	}
 }
 

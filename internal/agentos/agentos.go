@@ -448,6 +448,39 @@ func Dispatch() {
 			Err: os.Stderr,
 		}))
 	}
+	// Unknown first token — not a front-door verb, engine/obs command, or a
+	// registered coreutils tool. When it is a BARE command NAME (not an option,
+	// path, or existing file), the bashy front-door is being asked to run a
+	// command, so report it with the convention agents expect — GNU bash 5.3 /
+	// POSIX.2 `command not found`, exit 127 (execute_cmd.c: EX_NOTFOUND) — rather
+	// than falling through to the script-file open ("No such file or directory").
+	// Options, paths, and real script files still flow to normal bash handling,
+	// so the pure `bash` drop-in semantics are untouched.
+	if isMissingCommandToken(os.Args[1]) {
+		fmt.Fprintf(os.Stderr, "%s: %s: command not found\n", os.Args[0], os.Args[1])
+		os.Exit(127)
+	}
+}
+
+// isMissingCommandToken reports whether a first CLI token should be reported as a
+// missing COMMAND (GNU/POSIX "command not found", 127) rather than a missing
+// script file (bash's "No such file or directory"): a bare name that is not a
+// shell option (- or + prefixed), carries no path separator, and does not exist
+// on disk. Existing files and explicit paths keep bash script-file semantics.
+func isMissingCommandToken(name string) bool {
+	if name == "" {
+		return false
+	}
+	if c := name[0]; c == '-' || c == '+' {
+		return false // shell options are the drop-in's job
+	}
+	if strings.ContainsRune(name, '/') || strings.ContainsRune(name, os.PathSeparator) {
+		return false // a path → bash script-file semantics
+	}
+	if _, err := os.Stat(name); err == nil {
+		return false // an existing file → run as a script (bash semantics)
+	}
+	return true
 }
 
 func dispatchCoreutilsTool(name string, args []string, stdio tool.Stdio) int {
