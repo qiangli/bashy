@@ -302,6 +302,7 @@ var verbSynopsis = map[string]string{
 	"clang":     "self-provisioning clang/LLVM toolchain",
 	"kubectl":   "Kubernetes CLI for the DKS cluster (managed external, Apache-2.0)",
 	"helm":      "Helm chart installer for the DKS cluster (managed external, Apache-2.0)",
+	"sphere":    "peer-direct pooled p2p inference/compute — the sphere tier (via outpost)",
 }
 
 // commandsCatalog gathers the three command sources, each sorted: shell

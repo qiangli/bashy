@@ -44,6 +44,7 @@ import (
 	"github.com/qiangli/coreutils/external/loom"
 	"github.com/qiangli/coreutils/external/rclone"
 	"github.com/qiangli/coreutils/external/seaweedfs"
+	"github.com/qiangli/coreutils/external/sphere"
 	"github.com/qiangli/coreutils/external/zot"
 	"github.com/qiangli/coreutils/pkg/agentcmd"
 	"github.com/qiangli/coreutils/pkg/chat"
@@ -88,7 +89,7 @@ var (
 		"weave", "sprint", "chat", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "run", "commands", "context", "doctor", "self", "check", "verify",
 		"git", "gh", "act", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
-		"kubectl", "helm",
+		"kubectl", "helm", "sphere",
 	}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang"}
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade"}
@@ -423,6 +424,17 @@ func Dispatch() {
 		// (get.helm.sh) — installs charts onto the DKS cluster (same default
 		// kubeconfig as `bashy kubectl`).
 		cmd := helm.NewHelmCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "sphere":
+		// Sphere tier (tier 4): peer-direct pooled p2p inference/compute. Thin
+		// front-door that execs the outpost mesh agent at runtime — NO build
+		// dependency on outpost (bashy stays the standalone keystone). Without
+		// outpost there is no p2p sphere.
+		cmd := sphere.NewSphereCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)

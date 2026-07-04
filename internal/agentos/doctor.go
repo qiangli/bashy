@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/qiangli/coreutils/external/sphere"
 	"github.com/qiangli/coreutils/pkg/binmgr"
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	"github.com/qiangli/coreutils/tool"
@@ -164,6 +165,15 @@ func addToolSurfaceChecks(checks *[]doctorCheck) {
 	for _, ext := range doctorExternals {
 		st, detail := externalToolStatus(ext)
 		add("ext: "+ext, st, detail)
+	}
+
+	// sphere tier (tier 4) — peer-direct pooled inference/compute via the outpost
+	// mesh agent (exec'd at runtime, not linked). info (not warn) when absent:
+	// it's a separate agent, optional to userland.
+	if p, ok := sphere.ResolveOutpost(); ok {
+		add("sphere (tier 4)", "ok", "mesh agent ready: "+p)
+	} else {
+		add("sphere (tier 4)", "info", "not joined — pool compute across your machines at https://tessaro.sh (adds this host via outpost)")
 	}
 }
 
