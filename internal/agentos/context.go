@@ -7,27 +7,43 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
+
+	"golang.org/x/term"
 )
+
+func isTerminal(f *os.File) bool {
+	return term.IsTerminal(int(f.Fd()))
+}
 
 const contextSchemaVersion = "bashy-context-v1"
 
 type contextReport struct {
-	SchemaVersion       string            `json:"schema_version"`
-	BashyPath           string            `json:"bashy_path"`
-	Argv0               string            `json:"argv0,omitempty"`
-	CWD                 string            `json:"cwd"`
-	InitialCWD          string            `json:"initial_cwd,omitempty"`
-	ProjectRoot         string            `json:"project_root,omitempty"`
-	WorkspaceMount      string            `json:"workspace_mount,omitempty"`
-	Mode                contextMode       `json:"mode"`
-	Runtime             contextRuntime    `json:"runtime"`
-	Capabilities        contextCaps       `json:"capabilities"`
-	RecommendedCommands []contextCommand  `json:"recommended_commands"`
-	Notes               []string          `json:"notes,omitempty"`
-	Environment         map[string]string `json:"environment,omitempty"`
+	SchemaVersion       string           `json:"schema_version"`
+	BashyPath           string           `json:"bashy_path"`
+	Argv0               string           `json:"argv0,omitempty"`
+	CWD                 string           `json:"cwd"`
+	InitialCWD          string           `json:"initial_cwd,omitempty"`
+	ProjectRoot         string           `json:"project_root,omitempty"`
+	WorkspaceMount      string           `json:"workspace_mount,omitempty"`
+	Mode                contextMode      `json:"mode"`
+	Runtime             contextRuntime   `json:"runtime"`
+	System              contextSystem    `json:"system"`
+	Capabilities        contextCaps      `json:"capabilities"`
+	RecommendedCommands []contextCommand `json:"recommended_commands"`
+	Notes               []string         `json:"notes,omitempty"`
+	// Tools maps common CLI names to their resolved PATH location — replaces
+	// per-tool `which X` probes. Only tools actually found are listed.
+	Tools map[string]string `json:"tools,omitempty"`
+	// Environment lists EVERY environment variable name. The value is shown for a
+	// curated safe allowlist (paths/locale/shell/toolchain); for every other var
+	// the value is "<redacted>" (or "" if empty) so an agent sees a secret's
+	// EXISTENCE without its value.
+	Environment map[string]string `json:"environment,omitempty"`
 }
 
 type contextMode struct {
@@ -38,7 +54,26 @@ type contextMode struct {
 type contextRuntime struct {
 	GOOS   string `json:"goos"`
 	GOARCH string `json:"goarch"`
+	NumCPU int    `json:"num_cpu"`
 	Shell  string `json:"shell,omitempty"`
+}
+
+// contextSystem is the uname/hostname/identity block — replaces `uname -a`,
+// `hostname`, `id`, and container-detection probes.
+type contextSystem struct {
+	Hostname      string `json:"hostname,omitempty"`
+	Sysname       string `json:"sysname,omitempty"`        // uname -s (Darwin/Linux/…)
+	KernelRelease string `json:"kernel_release,omitempty"` // uname -r
+	KernelVersion string `json:"kernel_version,omitempty"` // uname -v
+	Machine       string `json:"machine,omitempty"`        // uname -m
+	User          string `json:"user,omitempty"`
+	UID           int    `json:"uid"`
+	EUID          int    `json:"euid"`
+	IsRoot        bool   `json:"is_root"`
+	Home          string `json:"home,omitempty"`
+	TempDir       string `json:"temp_dir,omitempty"`
+	StdinTTY      bool   `json:"stdin_tty"`
+	Container     string `json:"container,omitempty"` // docker|podman|kubernetes|""
 }
 
 type contextCaps struct {
@@ -120,8 +155,10 @@ func collectContext() contextReport {
 		Runtime: contextRuntime{
 			GOOS:   runtime.GOOS,
 			GOARCH: runtime.GOARCH,
+			NumCPU: runtime.NumCPU(),
 			Shell:  os.Getenv("SHELL"),
 		},
+		System: collectSystem(),
 		Capabilities: contextCaps{
 			DryRun:            true,
 			AgentJSONLines:    true,
@@ -143,32 +180,197 @@ func collectContext() contextReport {
 			{Purpose: "recall/leave shared repo knowledge for other agents", Command: bashyPath + " graph-recall QUERY"},
 		},
 		Notes: []string{
-			"This record is intended to replace ad hoc probes such as env, uname, file, and bashy --help.",
+			"Replaces first-hop probes: `system` = uname/hostname/id, `tools` = which/tool discovery, `environment` = env — an agent need not run env/uname/hostname/id/which itself.",
+			"environment lists every var NAME: the value is shown for safe names (paths/locale/shell/toolchain) and `<redacted>` for all others, so a secret's existence is visible but not its value.",
 			"Use the reported bashy_path for explicit bashy feature calls.",
 		},
-		Environment: map[string]string{},
+		Tools:       detectTools(),
+		Environment: collectEnvironment(),
 	}
 	if len(os.Args) > 0 {
 		report.Argv0 = os.Args[0]
 	}
-	for _, name := range []string{"BASHY_AGENTIC", "BASHY_ADVISOR", "DHNT_AGENT"} {
-		if v, ok := os.LookupEnv(name); ok {
-			report.Environment[name] = v
-		}
-	}
-	if len(report.Environment) == 0 {
-		report.Environment = nil
-	}
 	return report
 }
 
+// collectSystem gathers uname/hostname/identity info (replacing uname -a,
+// hostname, id, container probes).
+func collectSystem() contextSystem {
+	sysname, release, version, machine := unameInfo()
+	if sysname == "" {
+		sysname = strings.Title(runtime.GOOS) // windows fallback (no uname)
+	}
+	if machine == "" {
+		machine = runtime.GOARCH
+	}
+	host, _ := os.Hostname()
+	home, _ := os.UserHomeDir()
+	return contextSystem{
+		Hostname:      host,
+		Sysname:       sysname,
+		KernelRelease: release,
+		KernelVersion: version,
+		Machine:       machine,
+		User:          firstNonEmpty(os.Getenv("USER"), os.Getenv("LOGNAME")),
+		UID:           os.Getuid(),
+		EUID:          os.Geteuid(),
+		IsRoot:        os.Geteuid() == 0,
+		Home:          home,
+		TempDir:       os.TempDir(),
+		StdinTTY:      isTerminal(os.Stdin),
+		Container:     detectContainer(),
+	}
+}
+
+// detectTools resolves the location of common CLIs so agents skip `which X`.
+func detectTools() map[string]string {
+	names := []string{
+		"git", "go", "python3", "python", "node", "npm", "pnpm", "yarn", "bun",
+		"docker", "podman", "kubectl", "make", "cmake", "cc", "gcc", "clang",
+		"rustc", "cargo", "java", "ruby", "jq", "rg", "fd", "gh", "curl", "wget",
+		"brew", "bash", "zsh", "fish", "tmux",
+	}
+	out := map[string]string{}
+	for _, n := range names {
+		if p, err := exec.LookPath(n); err == nil {
+			out[n] = p
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func detectContainer() string {
+	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+		return "kubernetes"
+	}
+	if _, err := os.Stat("/run/.containerenv"); err == nil {
+		return "podman"
+	}
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return "docker"
+	}
+	return ""
+}
+
+// collectEnvironment lists every env var, showing the value only for a curated
+// safe allowlist and redacting the rest (so an agent sees which vars — including
+// secrets — are SET, without leaking their values).
+func collectEnvironment() map[string]string {
+	out := map[string]string{}
+	for _, kv := range os.Environ() {
+		i := strings.IndexByte(kv, '=')
+		if i <= 0 {
+			continue
+		}
+		name, val := kv[:i], kv[i+1:]
+		switch {
+		case envValueSafe(name):
+			out[name] = val
+		case val != "":
+			out[name] = "<redacted>"
+		default:
+			out[name] = ""
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func envValueSafe(name string) bool {
+	if envLooksSensitive(name) {
+		return false
+	}
+	return safeEnvNames[strings.ToUpper(name)]
+}
+
+// envLooksSensitive is a defense-in-depth denylist: even if a name were added to
+// the allowlist, a secret-shaped name is never shown.
+func envLooksSensitive(name string) bool {
+	u := strings.ToUpper(name)
+	for _, p := range []string{"KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL", "PRIVATE", "SIGNING", "APIKEY", "PASSPHRASE"} {
+		if strings.Contains(u, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// safeEnvNames: env vars whose VALUE is safe to show (non-secret, useful for an
+// agent to orient) — paths, locale, shell, terminal, toolchain roots. Everything
+// else is redacted. Matched case-insensitively.
+var safeEnvNames = map[string]bool{
+	// identity / shell / dirs
+	"HOME": true, "USER": true, "LOGNAME": true, "SHELL": true, "SHLVL": true,
+	"PWD": true, "OLDPWD": true, "TMPDIR": true, "HOSTNAME": true, "HOST": true,
+	"COMPUTERNAME": true, "OS": true,
+	// locale
+	"LANG": true, "LANGUAGE": true, "TZ": true, "LC_ALL": true, "LC_CTYPE": true,
+	"LC_MESSAGES": true, "LC_COLLATE": true, "LC_NUMERIC": true, "LC_TIME": true,
+	"LC_MONETARY": true,
+	// search paths
+	"PATH": true, "MANPATH": true, "INFOPATH": true, "FPATH": true,
+	// terminal / editor prefs
+	"TERM": true, "TERM_PROGRAM": true, "TERM_PROGRAM_VERSION": true, "COLORTERM": true,
+	"LINES": true, "COLUMNS": true, "EDITOR": true, "VISUAL": true, "PAGER": true, "MANPAGER": true,
+	// toolchain roots (non-secret)
+	"GOPATH": true, "GOROOT": true, "GOBIN": true, "GOOS": true, "GOARCH": true,
+	"GOMODCACHE": true, "GOCACHE": true, "GO111MODULE": true, "CGO_ENABLED": true,
+	"CARGO_HOME": true, "RUSTUP_HOME": true, "JAVA_HOME": true, "ANDROID_HOME": true,
+	"PYENV_ROOT": true, "RBENV_ROOT": true, "NVM_DIR": true, "NODE_ENV": true,
+	"VIRTUAL_ENV": true, "CONDA_PREFIX": true, "CONDA_DEFAULT_ENV": true,
+	// xdg dirs
+	"XDG_CONFIG_HOME": true, "XDG_CACHE_HOME": true, "XDG_DATA_HOME": true,
+	"XDG_STATE_HOME": true, "XDG_RUNTIME_DIR": true,
+	// display / arch
+	"DISPLAY": true, "WAYLAND_DISPLAY": true, "PROCESSOR_ARCHITECTURE": true,
+	"NUMBER_OF_PROCESSORS": true,
+	// bashy/dhnt own (non-secret markers)
+	"BASHY_AGENTIC": true, "BASHY_ADVISOR": true, "BASHY_SESSION": true,
+	"BASHY_EPISODE": true, "BASHY_AGENT": true, "BASHY_AGENT_ID": true, "DHNT_AGENT": true,
+}
+
 func printContextPlain(r contextReport) {
+	s := r.System
 	fmt.Printf("bashy_path=%s\n", r.BashyPath)
 	fmt.Printf("cwd=%s\n", r.CWD)
+	fmt.Printf("host=%s  %s %s (%s)  cpus=%d\n", s.Hostname, s.Sysname, s.KernelRelease, s.Machine, r.Runtime.NumCPU)
+	fmt.Printf("user=%s uid=%d euid=%d root=%t  shell=%s  tty=%t%s\n",
+		s.User, s.UID, s.EUID, s.IsRoot, r.Runtime.Shell, s.StdinTTY, containerSuffix(s.Container))
 	fmt.Printf("agentic=%t advisor=%t\n", r.Mode.Agentic, r.Mode.Advisor)
-	for _, c := range r.RecommendedCommands {
-		fmt.Printf("%s: %s\n", c.Purpose, c.Command)
+	if len(r.Tools) > 0 {
+		fmt.Printf("tools: %s\n", strings.Join(sortedKeys(r.Tools), " "))
 	}
+	fmt.Println("recommended:")
+	for _, c := range r.RecommendedCommands {
+		fmt.Printf("  %s: %s\n", c.Purpose, c.Command)
+	}
+	if len(r.Environment) > 0 {
+		fmt.Printf("environment (%d vars; real value for safe names, else <redacted>):\n", len(r.Environment))
+		for _, k := range sortedKeys(r.Environment) {
+			fmt.Printf("  %s=%s\n", k, r.Environment[k])
+		}
+	}
+}
+
+func sortedKeys(m map[string]string) []string {
+	ks := make([]string, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	sort.Strings(ks)
+	return ks
+}
+
+func containerSuffix(c string) string {
+	if c == "" {
+		return ""
+	}
+	return "  container=" + c
 }
 
 func envTruthy(name string) bool {
