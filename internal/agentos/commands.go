@@ -303,6 +303,8 @@ var verbSynopsis = map[string]string{
 	"kubectl":   "Kubernetes CLI for the DKS cluster (managed external, Apache-2.0)",
 	"helm":      "Helm chart installer for the DKS cluster (managed external, Apache-2.0)",
 	"sphere":    "peer-direct pooled p2p inference/compute — the sphere tier (via outpost)",
+	"tessaro":   "Tessaro account: sign in/out, status, open the portal (via outpost)",
+	"login":     "sign in to Tessaro — pair this machine with the portal",
 }
 
 // commandsCatalog gathers the three command sources, each sorted: shell

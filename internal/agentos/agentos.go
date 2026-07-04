@@ -45,6 +45,7 @@ import (
 	"github.com/qiangli/coreutils/external/rclone"
 	"github.com/qiangli/coreutils/external/seaweedfs"
 	"github.com/qiangli/coreutils/external/sphere"
+	"github.com/qiangli/coreutils/external/tessaro"
 	"github.com/qiangli/coreutils/external/zot"
 	"github.com/qiangli/coreutils/pkg/agentcmd"
 	"github.com/qiangli/coreutils/pkg/chat"
@@ -89,7 +90,7 @@ var (
 		"weave", "sprint", "chat", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "run", "commands", "context", "doctor", "self", "check", "verify",
 		"git", "gh", "act", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
-		"kubectl", "helm", "sphere",
+		"kubectl", "helm", "sphere", "tessaro", "login",
 	}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang"}
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade"}
@@ -435,6 +436,24 @@ func Dispatch() {
 		// dependency on outpost (bashy stays the standalone keystone). Without
 		// outpost there is no p2p sphere.
 		cmd := sphere.NewSphereCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "tessaro":
+		// Account / front-door: sign in/out, status, open the portal. Execs the
+		// outpost agent at runtime (same exec-never-link discipline as sphere);
+		// `tessaro open` works even without it.
+		cmd := tessaro.NewTessaroCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "login":
+		// Shortcut for `bashy tessaro login` — pair this machine with Tessaro.
+		cmd := tessaro.NewLoginCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
