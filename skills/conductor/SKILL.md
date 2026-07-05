@@ -102,6 +102,14 @@ PLAN → (RESEARCH) → FAN-OUT → STEER → CONVERGE → RETRO. Drive it by ha
    **fleet** (one agent per story, isolated workspaces) **only when the work is
    many AND disjoint**; a single story or shared-source work routes to
    **sequential** (one worker grinding + resuming).
+   - **Pre-flight the fleet's AUTH-readiness first: `bashy weave fleet --auth`.**
+     A tool can be installed and "available" on PATH yet **not signed in** — it
+     then stalls its worker silently until the idle-timeout (the agy-sign-in
+     trap). `--auth` live-probes each tool and reports `ready` / `needs-login`
+     (with a hint) / `stale-contract`; **drop any `needs-login` tool from this
+     round** (or sign it in) rather than dispatching it into a stall. Launch each
+     survivor with the explicit headless form — never `--tool` bare, which hangs
+     at the trust prompt: `weave start --issue N -- bash -c '<headless> "$WEAVE_ISSUE_BODY"'`.
 4. **STEER** — watch and unblock, proactively: `bashy weave list`, `… log N`,
    inject keystrokes with `bashy weave say N "<msg>"`. Judge each worker against
    the GOAL, not its state — a `submitted`/exited worker has often done only part
