@@ -357,3 +357,53 @@ bashy weave list / status N / log N -f / fleet / baton / cost --total
 bashy weave wait --issue N --timeout 50m &
 bashy weave say N "<msg>" / kill N --yes / salvage N / pull N / prune --stale --yes
 ```
+
+## Foreman — the steerable session (Boss → Foreman → Worker)
+
+A **conductor** fans a *whole backlog* out to parallel isolated workers, then
+converges. A **foreman** is the complementary primitive for when the work is
+**one live session that must be steered incrementally** — a single long-running
+agent (or a small serial chain) you (the human **Boss**) or an outer conductor
+adjusts mid-flight, rather than a fleet you batch-launch and gate. Pick foreman
+when the task is exploratory, interactive, or a single cohesive build that
+benefits from real-time correction; pick the fleet when the task decomposes into
+many independent, gateable units.
+
+`bashy foreman` is a **persistent, steerable session** over the same one-shot
+runner as `bashy chat` (chat = the degenerate one-turn foreman, `foreman
+--once`). One session, two co-equal drive surfaces sharing one on-disk state
+(`~/.bashy/foreman/<id>/` = `state.json` + append-only `commands` queue +
+`ctl.sock` + `log` — server-less, inspectable, resumable, mirroring weave's
+model):
+
+- **Human drive (a TTY):** `bashy foreman [run <dag.md>]` → a readline REPL
+  holding the session; typed lines are steering (`tell …`, `status`, `pause`,
+  `resume`, `skip`, `stop`) or a plain message to the agent.
+- **Agent drive (control channel):** a detached session + a control socket
+  (generalized from weave's per-worker `ctl/*.sock`/`say`), driven from any
+  process — an outer conductor, a cron, another foreman:
+
+```sh
+bashy foreman start [--detach] [run <dag.md>] --goal "<…>"   # begin a session
+bashy foreman tell <id> "<msg>"          # inject a steering message (like weave say)
+bashy foreman status <id> [--json] / list # reconciled state: idle|working|blocked|done
+bashy foreman pause|resume|skip|prio|stop <id>
+```
+
+Verbs and effect (the ycode Boss-control set, re-homed here): `pause` (finish the
+current step → idle), `resume`, `stop` (cancel the current turn → exit cleanly),
+`skip` (drop the current step, pick the next), `prio <target> p1|p2|p3` (re-rank a
+backlog step), `tell <msg>` (freeform steer — interpret in context), `status`
+(read-only). A `run <dag.md>` session drives a `bashy dag` task graph as its
+backlog, pausing for steer between steps; `skip`/`prio` act on dag targets.
+
+**When the Boss types a control intent in chat** ("pause for now", "skip this and
+do X next"), append the equivalent verb to the session's `commands` queue for the
+audit trail, then apply it — same as the CLI path, one reconciled state.
+
+**Foreman vs. conductor:** a conductor may *drive a foreman* as one of its
+workers (an outer loop steering an inner live session via `foreman tell`), and a
+foreman may *launch a weave fleet* for a sub-batch. They compose; the choice per
+layer is "batch-and-gate" (fleet) vs. "hold-and-steer" (foreman). Both obey the
+same effect cap and the same "measured numbers are the only truth" principle —
+`foreman status` is a lead until a gate reproduces it.

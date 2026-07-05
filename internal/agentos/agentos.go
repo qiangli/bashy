@@ -33,6 +33,13 @@ import (
 	// reach the front door + in-shell ExecHandler through the tool registry
 	// (agentos.go dispatch fallthrough), like the list-symbols/repo-map verbs.
 	_ "github.com/qiangli/coreutils/cmds/graph"
+	// Foreman — the steerable agent session (start/tell/status/pause/…, the
+	// `chat` parent elevated to a persistent session). Registered here — NOT via
+	// cmds/all — because it imports pkg/foreman → pkg/dag, which would form an
+	// import cycle with pkg/dag's tests if listed in cmds/all. It is an AgentOS
+	// front-door verb like weave/dag/chat; reachable as `bashy foreman` through
+	// the tool-registry dispatch fallthrough.
+	_ "github.com/qiangli/coreutils/cmds/foreman"
 	"github.com/qiangli/coreutils/external/act"
 	"github.com/qiangli/coreutils/external/clang"
 	"github.com/qiangli/coreutils/external/cmake"
@@ -88,7 +95,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "chat", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "run", "commands", "context", "doctor", "self", "check", "verify",
+		"weave", "sprint", "chat", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "run", "commands", "context", "doctor", "self", "check", "verify",
 		"git", "gh", "act", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
