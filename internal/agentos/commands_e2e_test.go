@@ -351,7 +351,7 @@ func TestSkillsAddVerifyE2E(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	frontmatter := "---\nname: port-check\ndescription: example dual-bundle skill\nmetadata:\n  requires: \"os=linux,darwin,windows\"\n---\n# port-check\n"
+	frontmatter := "---\nname: port-check\ndescription: example dual-bundle skill\nmetadata:\n  requires: \"os=linux,darwin,windows\"\n  check-tests: \"true\"\n---\n# port-check\n"
 	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(frontmatter), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -373,6 +373,16 @@ func TestSkillsAddVerifyE2E(t *testing.T) {
 	stdout, _, code = run("skills", "verify", "port-check")
 	if code != 0 || !strings.Contains(stdout, "valid: true") {
 		t.Fatalf("verify (exit %d):\n%s", code, stdout)
+	}
+
+	// P2: run the skill — contract binds to metadata check-tests, the
+	// attestation is stored in the isolated store, exit 0 iff Valid.
+	stdout, _, code = run("skills", "run", "port-check")
+	if code != 0 || !strings.Contains(stdout, "valid: true") || !strings.Contains(stdout, "passed: gereeni") {
+		t.Fatalf("run (exit %d):\n%s", code, stdout)
+	}
+	if _, err := os.Stat(filepath.Join(store, "attest", "port-check.jsonl")); err != nil {
+		t.Fatalf("attestation not stored: %v", err)
 	}
 
 	// Broken canonical face: loud refusal, nothing installed.
