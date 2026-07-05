@@ -322,3 +322,74 @@ func TestSkillsE2E(t *testing.T) {
 		t.Fatal("skills show no-such-skill exited 0")
 	}
 }
+
+// TestSkillsAddVerifyE2E drives the P1 verified-admission loop end to end
+// against an isolated store ($BASHY_SKILLS_DIR): author a dual-bundle
+// skill, add it, see it env-gated in list, verify it, and confirm the
+// admission gate refuses a broken canonical face.
+func TestSkillsAddVerifyE2E(t *testing.T) {
+	bin := bashyBinary(t)
+	store := t.TempDir()
+	env := "BASHY_SKILLS_DIR=" + store
+
+	run := func(args ...string) (string, string, int) {
+		cmd := exec.Command(bin, args...)
+		cmd.Env = append(os.Environ(), "BASHY_AGENTIC=1", env)
+		cmd.Stdin = strings.NewReader("")
+		var out, errb strings.Builder
+		cmd.Stdout, cmd.Stderr = &out, &errb
+		err := cmd.Run()
+		code := 0
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		}
+		return out.String(), errb.String(), code
+	}
+
+	src := t.TempDir()
+	dir := filepath.Join(src, "port-check")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	frontmatter := "---\nname: port-check\ndescription: example dual-bundle skill\nmetadata:\n  requires: \"os=linux,darwin,windows\"\n---\n# port-check\n"
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(frontmatter), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	canon := "sokilili demo efefecato reada wurite fini enisure gereeni fini fini\n"
+	if err := os.WriteFile(filepath.Join(dir, "skill.dhnt"), []byte(canon), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, code := run("skills", "add", dir)
+	if code != 0 || !strings.Contains(stdout, "identity: h") {
+		t.Fatalf("add (exit %d):\n%s", code, stdout)
+	}
+
+	stdout, _, code = run("skills", "list")
+	if code != 0 || !contains(strings.Fields(stdout), "port-check") {
+		t.Fatalf("list after add (exit %d):\n%s", code, stdout)
+	}
+
+	stdout, _, code = run("skills", "verify", "port-check")
+	if code != 0 || !strings.Contains(stdout, "valid: true") {
+		t.Fatalf("verify (exit %d):\n%s", code, stdout)
+	}
+
+	// Broken canonical face: loud refusal, nothing installed.
+	bad := filepath.Join(src, "bad-face")
+	if err := os.MkdirAll(bad, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bad, "SKILL.md"), []byte("---\nname: bad-face\ndescription: x\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bad, "skill.dhnt"), []byte("NOT canonical\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, code := run("skills", "add", bad); code == 0 {
+		t.Fatal("bad-face admitted")
+	}
+	if _, err := os.Stat(filepath.Join(store, "bad-face")); err == nil {
+		t.Fatal("bad-face installed despite gate failure")
+	}
+}

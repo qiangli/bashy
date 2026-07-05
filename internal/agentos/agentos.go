@@ -257,12 +257,18 @@ func Dispatch() {
 		// The env-gated skills catalog (coreutils/pkg/skills): `list` shows
 		// only skills applicable at this host's space-time coordinate,
 		// `probe` prints the coordinate, `show` prints a skill (stdout
-		// byte-identical; verdict on stderr). Sources: the embedded ring
-		// (below) + the host-local store (~/.config/bashy/skills).
-		cmd := coreskills.NewSkillsCmd(
+		// byte-identical; verdict on stderr), `add`/`verify` run the
+		// verified-admission gate. Sources: the embedded ring (below) +
+		// the host-local store (~/.config/bashy/skills; $BASHY_SKILLS_DIR
+		// overrides — tests and multi-store setups).
+		skillsOpts := []coreskills.Option{
 			coreskills.WithSource(coreskills.EmbedSource(skills.FS, coreskills.RingEmbedded)),
 			coreskills.WithHostVersion("bashy", cli.BashyVersion()),
-		)
+		}
+		if dir := os.Getenv("BASHY_SKILLS_DIR"); dir != "" {
+			skillsOpts = append(skillsOpts, coreskills.WithConfigDir(dir))
+		}
+		cmd := coreskills.NewSkillsCmd(skillsOpts...)
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy skills:", err)
