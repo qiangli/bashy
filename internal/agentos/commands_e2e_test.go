@@ -403,3 +403,76 @@ func TestSkillsAddVerifyE2E(t *testing.T) {
 		t.Fatal("bad-face installed despite gate failure")
 	}
 }
+
+// TestSkillsAdaptE2E drives the P3 contribution loop through the real
+// binary with a fake script repair agent: baseline fails, the agent
+// proposes a fixing step, the fix is verified/folded/saved, and a plain
+// re-run heals via the overlay after drift.
+func TestSkillsAdaptE2E(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake repair agent is a shell script")
+	}
+	bin := bashyBinary(t)
+	store, work, src := t.TempDir(), t.TempDir(), t.TempDir()
+	flag := filepath.Join(work, "flag.txt")
+
+	dir := filepath.Join(src, "demo-heal")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fm := "---\nname: demo-heal\ndescription: self-healing example\nmetadata:\n  check-tests: \"test -f " + flag + "\"\n---\n# demo-heal\n"
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(fm), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	canon := "sokilili demo efefecato reada wurite fini enisure gereeni fini fini\n"
+	if err := os.WriteFile(filepath.Join(dir, "skill.dhnt"), []byte(canon), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	agent := filepath.Join(src, "fake-agent.sh")
+	reply := "<dhnt>sokilili demo efefecato reada wurite fini sotepo one faceto fini enisure gereeni fini fini</dhnt>\n" +
+		"<meta>\nstep-faceto: echo healed > " + flag + "\n</meta>\n"
+	if err := os.WriteFile(agent, []byte("#!/bin/sh\nprintf '%s' '"+strings.ReplaceAll(reply, "'", "'\\''")+"'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	run := func(args ...string) (string, string, int) {
+		cmd := exec.Command(bin, args...)
+		cmd.Dir = work
+		cmd.Env = append(os.Environ(), "BASHY_AGENTIC=1", "BASHY_SKILLS_DIR="+store)
+		cmd.Stdin = strings.NewReader("")
+		var out, errb strings.Builder
+		cmd.Stdout, cmd.Stderr = &out, &errb
+		err := cmd.Run()
+		code := 0
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		}
+		return out.String(), errb.String(), code
+	}
+
+	if _, _, code := run("skills", "add", dir); code != 0 {
+		t.Fatal("add failed")
+	}
+	stdout, stderr, code := run("skills", "run", "demo-heal", "--adapt", "--repair-agent", agent)
+	if code != 0 || !strings.Contains(stdout, "outcome: repaired") {
+		t.Fatalf("adapt (exit %d):\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	// Drift: remove the artifact; a PLAIN run heals via the overlay.
+	if err := os.Remove(flag); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code = run("skills", "run", "demo-heal")
+	if code != 0 || !strings.Contains(stdout, "valid: true") || !strings.Contains(stderr, "learned version") {
+		t.Fatalf("overlay rerun (exit %d):\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	// Promote renders the review bundle from the learned version.
+	out := filepath.Join(work, "bundle")
+	if stdout, _, code = run("skills", "promote", "demo-heal", "--out", out); code != 0 {
+		t.Fatalf("promote (exit %d): %s", code, stdout)
+	}
+	promo, err := os.ReadFile(filepath.Join(out, "PROMOTION.md"))
+	if err != nil || !strings.Contains(string(promo), "preserved from base: **true**") {
+		t.Fatalf("PROMOTION.md: %v", err)
+	}
+}
