@@ -549,7 +549,7 @@ func TestSkillsStandaloneSurfacesE2E(t *testing.T) {
 		names[s.Name] = true
 		verified[s.Name] = s.Verified
 	}
-	if !names["conductor"] || !names["go-repo-health"] || !names["team-tip"] {
+	if !names["conductor"] || !names["go-repo-health"] || !names["team-tip"] || !names["bashy"] {
 		t.Fatalf("context skills: %+v", report.Skills)
 	}
 	if !verified["go-repo-health"] || verified["team-tip"] {
