@@ -162,8 +162,8 @@ func TestGNUCoreutilsReportTracksGaps(t *testing.T) {
 	if !slices.Contains(report.BashyNative, "ls") {
 		t.Fatalf("expected implemented GNU command ls in native set: %#v", report.BashyNative)
 	}
-	if !slices.Contains(report.Missing, "timeout") {
-		t.Fatalf("expected missing GNU command timeout in missing set: %#v", report.Missing)
+	if !slices.Contains(report.Missing, "factor") {
+		t.Fatalf("expected missing GNU command factor in missing set: %#v", report.Missing)
 	}
 	if !slices.Contains(report.CoveredByBuiltins, "printf") || !slices.Contains(report.CoveredByBuiltins, "test") {
 		t.Fatalf("expected printf/test to be tracked as bash builtin coverage: %#v", report.CoveredByBuiltins)
@@ -191,9 +191,9 @@ func TestCommandFeatureReportGrepKnownGap(t *testing.T) {
 func TestCommandFeatureReportMissingGNUCoreutil(t *testing.T) {
 	t.Setenv("BASHY_AGENTIC", "")
 	builtins, core, verbs := commandsCatalog()
-	info := commandFeatureReport("timeout", builtins, core, verbs, hiddenVerbsCatalog(), gnuCoreutilsReport(core, builtins))
+	info := commandFeatureReport("factor", builtins, core, verbs, hiddenVerbsCatalog(), gnuCoreutilsReport(core, builtins))
 	if info["class"] != "gnu-coreutils-missing" && info["class"] != "coreutils" {
-		t.Fatalf("unexpected timeout feature report: %#v", info)
+		t.Fatalf("unexpected factor feature report: %#v", info)
 	}
 }
 

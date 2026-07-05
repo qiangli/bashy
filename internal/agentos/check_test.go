@@ -79,13 +79,13 @@ func TestCheckStrictSystemTurnsSystemResolutionIntoError(t *testing.T) {
 func TestCheckAllowContainerClassifiesMissingGNUCoreutil(t *testing.T) {
 	dir := t.TempDir()
 	script := filepath.Join(dir, "s.sh")
-	if err := os.WriteFile(script, []byte("timeout 1 echo ok\n"), 0o644); err != nil {
+	if err := os.WriteFile(script, []byte("factor 12\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
 	report := newCheckAnalyzer(checkOptions{mode: "bashy", allowContainer: true, maxDepth: 8}).run([]string{script})
-	if report.Summary.Container != 1 || !invHas(report.Inventory.Container, "timeout", "") {
-		t.Fatalf("timeout should be container-resolvable: summary=%#v inventory=%#v", report.Summary, report.Inventory)
+	if report.Summary.Container != 1 || !invHas(report.Inventory.Container, "factor", "") {
+		t.Fatalf("factor should be container-resolvable: summary=%#v inventory=%#v", report.Summary, report.Inventory)
 	}
 	if report.Summary.NotFound != 0 {
 		t.Fatalf("not_found = %d, want 0", report.Summary.NotFound)
