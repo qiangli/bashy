@@ -1,0 +1,7 @@
+# Staged cross-built binaries COPY'd into the eval/bench images at build time.
+# Large, reproducible from source — never commit.
+*-linux-amd64
+*-linux-arm64
+*-darwin-amd64
+*-darwin-arm64
+bash-5.3/
