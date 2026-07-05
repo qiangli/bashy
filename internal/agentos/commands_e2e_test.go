@@ -267,3 +267,58 @@ func contains(s []string, v string) bool {
 	}
 	return false
 }
+
+// runBashyStd is runBashy with stdout and stderr separated — needed by the
+// skills show byte-compat contract (content on stdout, verdict on stderr).
+func runBashyStd(bin string, args ...string) (stdout, stderr string, code int) {
+	cmd := exec.Command(bin, args...)
+	cmd.Env = append(os.Environ(), "BASHY_AGENTIC=1")
+	cmd.Stdin = strings.NewReader("")
+	var out, errb strings.Builder
+	cmd.Stdout, cmd.Stderr = &out, &errb
+	err := cmd.Run()
+	if ee, ok := err.(*exec.ExitError); ok {
+		code = ee.ExitCode()
+	}
+	return out.String(), errb.String(), code
+}
+
+// TestSkillsE2E drives the env-gated skills catalog end to end: list shows
+// the embedded conductor (ungated → applicable everywhere), probe emits a
+// parseable coordinate, and show keeps skill content on stdout with the
+// verdict annotation on stderr.
+func TestSkillsE2E(t *testing.T) {
+	bin := bashyBinary(t)
+
+	stdout, _, code := runBashyStd(bin, "skills", "list")
+	if code != 0 || !contains(strings.Fields(stdout), "conductor") {
+		t.Fatalf("skills list (exit %d):\n%s", code, stdout)
+	}
+
+	stdout, _, code = runBashyStd(bin, "skills", "probe", "--json")
+	if code != 0 {
+		t.Fatalf("skills probe --json exit %d:\n%s", code, stdout)
+	}
+	var probe struct {
+		Probes     map[string]string `json:"probes"`
+		ContextKey string            `json:"context_key"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &probe); err != nil {
+		t.Fatalf("probe json: %v\n%s", err, stdout)
+	}
+	if probe.Probes["os"] == "" || probe.Probes["arch"] == "" || !strings.HasPrefix(probe.ContextKey, "c") {
+		t.Fatalf("probe = %+v", probe)
+	}
+
+	stdout, stderr, code := runBashyStd(bin, "skills", "show", "conductor")
+	if code != 0 || !strings.HasPrefix(stdout, "---\n") || strings.Contains(stdout, "ring=") {
+		t.Fatalf("skills show stdout not byte-clean (exit %d): %.120q", code, stdout)
+	}
+	if !strings.Contains(stderr, "ring=embedded") {
+		t.Fatalf("skills show stderr missing verdict: %q", stderr)
+	}
+
+	if _, _, code := runBashyStd(bin, "skills", "show", "no-such-skill"); code == 0 {
+		t.Fatal("skills show no-such-skill exited 0")
+	}
+}

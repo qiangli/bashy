@@ -3,7 +3,10 @@
 
 package cli
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 // bashVersion identifies bashy as a Bash 5.3 compatible shell. It is a var,
 // not a const, so a release build can stamp in a real tag/build string via
@@ -19,6 +22,18 @@ const (
 	bashVerMinor = "3"
 	bashVerPatch = "0"
 )
+
+// BashyVersion returns bashy's own release version ("0.9.1") extracted
+// from the stamped bashVersion suffix ("5.3.0(1)-bashy-v0.9.1"), or ""
+// for an unstamped/dev build. Consumers (the skills host-version probe)
+// treat "" as "omit".
+func BashyVersion() string {
+	_, v, ok := strings.Cut(bashVersion, "-bashy-v")
+	if !ok || v == "" || v == "dev" {
+		return ""
+	}
+	return v
+}
 
 // bashVersionVars returns the environment variables that identify bashy
 // as a Bash 5.3 compatible shell.

@@ -24,6 +24,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 
 	"github.com/qiangli/bashy/internal/agentos/session"
+	"github.com/qiangli/bashy/internal/cli"
 	"github.com/qiangli/bashy/skills"
 
 	_ "github.com/qiangli/coreutils/cmds/all"
@@ -63,6 +64,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/schedule"
 	"github.com/qiangli/coreutils/pkg/sdlc"
 	"github.com/qiangli/coreutils/pkg/secrets"
+	coreskills "github.com/qiangli/coreutils/pkg/skills"
 	"github.com/qiangli/coreutils/pkg/weave"
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	"github.com/qiangli/coreutils/pkg/webinspect"
@@ -252,10 +254,21 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		os.Exit(dag.ExitCodeOf(cmd.Execute()))
 	case "skills":
-		// Surface the tier-2 workspace skills embedded in the binary (self-
-		// contained — no source tree needed). `bashy skills [list]` lists them;
-		// `bashy skills show <name> [--reference]` prints the content.
-		os.Exit(dispatchSkills(os.Args[2:]))
+		// The env-gated skills catalog (coreutils/pkg/skills): `list` shows
+		// only skills applicable at this host's space-time coordinate,
+		// `probe` prints the coordinate, `show` prints a skill (stdout
+		// byte-identical; verdict on stderr). Sources: the embedded ring
+		// (below) + the host-local store (~/.config/bashy/skills).
+		cmd := coreskills.NewSkillsCmd(
+			coreskills.WithSource(coreskills.EmbedSource(skills.FS, coreskills.RingEmbedded)),
+			coreskills.WithHostVersion("bashy", cli.BashyVersion()),
+		)
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy skills:", err)
+			os.Exit(coreskills.ExitCode(err))
+		}
+		os.Exit(0)
 	case "schedule":
 		// Modern cron: run commands on a cron/interval/at schedule from a
 		// self-contained store + optional daemon, with an agentic prompt/context
@@ -578,38 +591,6 @@ func dispatchCoreutilsTool(name string, args []string, stdio tool.Stdio) int {
 		Stdio: stdio,
 	}
 	return t.Run(rc, args)
-}
-
-// dispatchSkills implements `bashy skills`: list embedded skills, or print one.
-//
-//	bashy skills [list]
-//	bashy skills show <name> [--reference]
-func dispatchSkills(args []string) int {
-	if len(args) == 0 || args[0] == "list" {
-		for _, n := range skills.Names() {
-			fmt.Println(n)
-		}
-		return 0
-	}
-	if args[0] == "show" && len(args) >= 2 {
-		name := args[1]
-		ref := len(args) > 2 && (args[2] == "--reference" || args[2] == "-r")
-		var body string
-		var ok bool
-		if ref {
-			body, ok = skills.Reference(name)
-		} else {
-			body, ok = skills.Body(name)
-		}
-		if !ok {
-			fmt.Fprintf(os.Stderr, "bashy skills: %q not found\n", name)
-			return 1
-		}
-		fmt.Print(body)
-		return 0
-	}
-	fmt.Fprintln(os.Stderr, "usage: bashy skills [list | show <name> [--reference]]")
-	return 2
 }
 
 // WireExec appends the coreutils ExecHandler so any registered tool resolves
