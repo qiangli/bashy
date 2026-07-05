@@ -111,7 +111,10 @@ PLAN → (RESEARCH) → FAN-OUT → STEER → CONVERGE → RETRO. Drive it by ha
      survivor with the explicit headless form — never `--tool` bare, which hangs
      at the trust prompt: `weave start --issue N -- bash -c '<headless> "$WEAVE_ISSUE_BODY"'`.
 4. **STEER** — watch and unblock, proactively: `bashy weave list`, `… log N`,
-   inject keystrokes with `bashy weave say N "<msg>"`. Judge each worker against
+   and let the **gate broker** auto-clear interactive blocks (`weave wait --issue
+   N --broker` classifies a live gate and routes trust→keystroke / OAuth→`browser
+   login` / else→human); inject keystrokes manually with `bashy weave say N
+   "<msg>"` only for non-gate questions. Judge each worker against
    the GOAL, not its state — a `submitted`/exited worker has often done only part
    (headless tools especially exit after a couple of easy fixes, often
    uncommitted). Re-measure before trusting "submitted"; resume with an
@@ -301,8 +304,13 @@ bashy weave wait --issue N --timeout 50m &
   build, measure, commit named files, gate.
 - **reassign / work-steal** — finished/dead agent gets the next story; a no-op
   story gets re-driven with a sharper prompt or a different tool.
-- **blocked on a prompt** → answer (`weave say N "1"`) after confirming the block
-  is live (a child in a TTY wait), not stale scrollback.
+- **blocked on a gate** → the **gate broker** handles it: run `bashy weave wait
+  --issue N --broker` and it classifies the live PTY block *by type* and routes it
+  automatically — trust prompt → keystroke (`weave say`), browser-OAuth →
+  `bashy browser login <url>`, device-code/api-key/unresolvable → escalates to you
+  through the foreman. You only answer what the broker escalates. (Manual fallback
+  — a normal clarifying question, not an auth gate — is still `weave say N "<msg>"`
+  after confirming the block is live, a child in a TTY wait, not stale scrollback.)
 - NEVER measure the suite on the host while agents compile — load makes per-test
   timeouts flake into phantom regressions.
 
@@ -354,7 +362,7 @@ bashy weave add --priority --points --tool --verify --body
 bashy weave start --no-spawn --issue N        # allocate, then set up §5 isolation
 bashy weave start --resume  --issue N -- <tool> "<body>"
 bashy weave list / status N / log N -f / fleet / baton / cost --total
-bashy weave wait --issue N --timeout 50m &
+bashy weave wait --issue N --timeout 50m [--broker] &   # --broker: auto-route live gates
 bashy weave say N "<msg>" / kill N --yes / salvage N / pull N / prune --stale --yes
 ```
 
