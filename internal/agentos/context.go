@@ -58,6 +58,9 @@ type contextReport struct {
 type contextMode struct {
 	Agentic bool `json:"agentic"`
 	Advisor bool `json:"advisor"`
+	// Agent is the detected driving agent ("claude", "codex", …) from
+	// the env markers each agentic tool sets; empty when none detected.
+	Agent string `json:"agent,omitempty"`
 }
 
 type contextRuntime struct {
@@ -161,46 +164,55 @@ func collectContext() contextReport {
 			Agentic: envTruthy("BASHY_AGENTIC") || envTruthy("DHNT_AGENT"),
 			Advisor: envTruthy("BASHY_ADVISOR"),
 		},
-		Runtime: contextRuntime{
-			GOOS:   runtime.GOOS,
-			GOARCH: runtime.GOARCH,
-			NumCPU: runtime.NumCPU(),
-			Shell:  os.Getenv("SHELL"),
-		},
-		System: collectSystem(),
-		Capabilities: contextCaps{
-			DryRun:            true,
-			AgentJSONLines:    true,
-			RunEnvelope:       true,
-			CheckAgentJSON:    true,
-			CommandFeatures:   true,
-			InProcessGit:      true,
-			InProcessUserland: true,
-			CodeGraph:         true,
-			KnowledgeGraph:    true,
-		},
-		RecommendedCommands: []contextCommand{
-			{Purpose: "preview destructive script safely", Command: bashyPath + " --dry-run SCRIPT"},
-			{Purpose: "agent-readable dry-run manifest", Command: "BASHY_AGENTIC=1 " + bashyPath + " --dry-run SCRIPT"},
-			{Purpose: "script preflight", Command: bashyPath + " check --agent --script SCRIPT"},
-			{Purpose: "preflight plus captured run envelope", Command: bashyPath + " run --check --capture -- SCRIPT"},
-			{Purpose: "one command capability lookup", Command: bashyPath + " commands COMMAND --features"},
-			{Purpose: "what code is coupled to a symbol (skip the grep dance)", Command: bashyPath + " graph-impact SYMBOL"},
-			{Purpose: "recall/leave shared repo knowledge for other agents", Command: bashyPath + " graph-recall QUERY"},
-			{Purpose: "skills applicable on this host (read one: skills show NAME; run attested: skills run NAME)", Command: bashyPath + " skills list"},
-		},
-		Notes: []string{
-			"Replaces first-hop probes: `system` = uname/hostname/id, `tools` = which/tool discovery, `environment` = env — an agent need not run env/uname/hostname/id/which itself.",
-			"environment shows values only for safe names (paths/locale/shell/toolchain); environment_redacted is a comma-joined list of the remaining var NAMES (values hidden) — a secret's existence is visible, not its value.",
-			"Use the reported bashy_path for explicit bashy feature calls.",
-		},
-		Tools: detectTools(),
 	}
+	if agent, ok := coreskills.DetectAgent(); ok {
+		report.Mode.Agent = agent
+	}
+	report = fillContext(report, bashyPath)
 	report.Skills = coreskills.Applicable(skillsOptions()...)
 	report.Environment, report.EnvironmentRedacted = collectEnvironment()
 	if len(os.Args) > 0 {
 		report.Argv0 = os.Args[0]
 	}
+	return report
+}
+
+// fillContext completes the static sections of the report.
+func fillContext(report contextReport, bashyPath string) contextReport {
+	report.Runtime = contextRuntime{
+		GOOS:   runtime.GOOS,
+		GOARCH: runtime.GOARCH,
+		NumCPU: runtime.NumCPU(),
+		Shell:  os.Getenv("SHELL"),
+	}
+	report.System = collectSystem()
+	report.Capabilities = contextCaps{
+		DryRun:            true,
+		AgentJSONLines:    true,
+		RunEnvelope:       true,
+		CheckAgentJSON:    true,
+		CommandFeatures:   true,
+		InProcessGit:      true,
+		InProcessUserland: true,
+		CodeGraph:         true,
+		KnowledgeGraph:    true,
+	}
+	report.RecommendedCommands = []contextCommand{
+		{Purpose: "preview destructive script safely", Command: bashyPath + " --dry-run SCRIPT"},
+		{Purpose: "agent-readable dry-run manifest", Command: "BASHY_AGENTIC=1 " + bashyPath + " --dry-run SCRIPT"},
+		{Purpose: "script preflight", Command: bashyPath + " check --agent --script SCRIPT"},
+		{Purpose: "preflight plus captured run envelope", Command: bashyPath + " run --check --capture -- SCRIPT"},
+		{Purpose: "one command capability lookup", Command: bashyPath + " commands COMMAND --features"},
+		{Purpose: "what code is coupled to a symbol (skip the grep dance)", Command: bashyPath + " graph-impact SYMBOL"},
+		{Purpose: "recall/leave shared repo knowledge for other agents", Command: bashyPath + " graph-recall QUERY"},
+		{Purpose: "skills applicable on this host (read one: skills show NAME; run attested: skills run NAME)", Command: bashyPath + " skills list"},
+	}
+	report.Notes = []string{
+		"Replaces first-hop probes: `system` = uname/hostname/id, `tools` = which/tool discovery, `environment` = env — an agent need not run env/uname/hostname/id/which itself.",
+		"environment shows values only for safe names (paths/locale/shell/toolchain); environment_redacted is a comma-joined list of the remaining var NAMES (values hidden) — a secret's existence is visible, not its value.",
+		"Use the reported bashy_path for explicit bashy feature calls.",
+	}
+	report.Tools = detectTools()
 	return report
 }
 

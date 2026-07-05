@@ -15,6 +15,7 @@ package agentos
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
@@ -128,6 +129,70 @@ func Preamble() string {
 	return b.String()
 }
 
+// The shell→agent capability manifest (a structured INSIDE_EMACS; an
+// unoccupied niche per the 2026-07 survey): every child of any bashy
+// process — a shell session's commands, an agent CLI the user launches
+// from a bashy login shell, a weave/foreman-launched worker — inherits
+// one env var saying what this shell can do and what to call first.
+// Set in init (agentos links only into cmd/bashy; the lean cmd/bash
+// drop-in never carries it). Static string: zero startup cost.
+func init() {
+	os.Setenv("BASHY_AGENT_MANIFEST",
+		`v1 shell=agentic first-hop="bashy context --json" skills="bashy skills list" guide="bashy skills show bashy"`)
+}
+
+// maybeAdvertiseSkillHint is L1 of the advertisement ladder: when an
+// agentic tool is driving (env markers), the repo has no agent config
+// at all, and we have not hinted here before — one stderr line pointing
+// at the bashy skill. Zero writes to the repo; the once-per-repo marker
+// lives in the skills store.
+func maybeAdvertiseSkillHint() {
+	agent, ok := coreskills.DetectAgent()
+	if !ok {
+		return
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	root := cwd
+	for d := cwd; ; d = filepath.Dir(d) {
+		if _, err := os.Stat(filepath.Join(d, ".git")); err == nil {
+			root = d
+			break
+		}
+		if filepath.Dir(d) == d {
+			break
+		}
+	}
+	store := os.Getenv("BASHY_SKILLS_DIR")
+	if store == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return
+		}
+		store = filepath.Join(home, ".config", "bashy", "skills")
+	}
+	sum := fmt.Sprintf("%x", sha256.Sum256([]byte(root)))[:16]
+	mark := filepath.Join(store, "hints", sum)
+	if _, err := os.Stat(mark); err == nil {
+		return // this repo was evaluated before (hinted, or already configured)
+	}
+	configured := false
+	for _, marker := range []string{"CLAUDE.md", "AGENTS.md", "GEMINI.md", ".claude", ".agents", ".cursor", ".goosehints", filepath.Join(".github", "copilot-instructions.md")} {
+		if _, err := os.Stat(filepath.Join(root, marker)); err == nil {
+			configured = true // the repo already speaks agent — no hint
+			break
+		}
+	}
+	if !configured {
+		fmt.Fprintf(os.Stderr, "bashy: %s detected, and this repo has no agent config — bashy is an agentic shell with a built-in guide: `bashy skills show bashy` (install for your agent: `bashy skills export bashy --user`; this hint shows once per repo)\n", agent)
+	}
+	if err := os.MkdirAll(filepath.Dir(mark), 0o755); err == nil {
+		_ = os.WriteFile(mark, []byte(root+"\n"), 0o644)
+	}
+}
+
 func bashySelfPath() string {
 	if exe, err := os.Executable(); err == nil && exe != "" {
 		return exe
@@ -157,6 +222,28 @@ func shellQuote(s string) string {
 func Dispatch() {
 	if len(os.Args) < 2 {
 		return
+	}
+	// L1 of the skills advertisement ladder: agent driving + agent-naive
+	// repo + not hinted here before → one stderr pointer. Zero repo writes.
+	maybeAdvertiseSkillHint()
+	// L2.5 (orchestrator channel): freshly created weave workspaces are
+	// bashy-owned space-time — stock each with the agent skill surface
+	// before any agent brand launches. $BASHY_WEAVE_SKILLS extends the
+	// set (comma-separated) or disables it (0/none/off).
+	weave.ProvisionWorkspace = func(workspace string, stderr io.Writer) {
+		names := []string{"bashy"}
+		switch v := os.Getenv("BASHY_WEAVE_SKILLS"); v {
+		case "0", "none", "off":
+			return
+		case "":
+		default:
+			for _, n := range strings.Split(v, ",") {
+				if n = strings.TrimSpace(n); n != "" && n != "bashy" {
+					names = append(names, n)
+				}
+			}
+		}
+		coreskills.Provision(workspace, names, stderr, skillsOptions()...)
 	}
 	// Warm-session hot path: when $BASHY_SESSION points at a live `bashy serve`
 	// listener and this is a simple `bashy -c "…"` invocation, forward it to the

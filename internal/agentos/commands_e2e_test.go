@@ -556,3 +556,91 @@ func TestSkillsStandaloneSurfacesE2E(t *testing.T) {
 		t.Fatalf("verified flags: %+v", report.Skills)
 	}
 }
+
+// TestSkillsAdvertisementLadderE2E drives the ladder through the real
+// binary: the L1 once-per-repo hint (agent detected + agent-naive repo),
+// its suppression in configured repos, the L2 export verb with the
+// ownership marker, and the shell→agent manifest env from the preamble.
+func TestSkillsAdvertisementLadderE2E(t *testing.T) {
+	bin := bashyBinary(t)
+	store := t.TempDir()
+
+	// Neutralize every agent marker inherited from THIS harness (the e2e
+	// itself may run under an agentic tool), then add back per case.
+	neutral := []string{
+		"CLAUDECODE=", "CLAUDE_CODE_ENTRYPOINT=", "CODEX_SANDBOX=", "CODEX_THREAD_ID=",
+		"GEMINI_CLI=", "CURSOR_AGENT=", "CURSOR_TRACE_ID=", "GOOSE_TERMINAL=",
+		"OPENCODE_CLIENT=", "CLINE_ACTIVE=", "AGENT=", "AI_AGENT=",
+	}
+	run := func(dir string, extraEnv []string, args ...string) (string, string, int) {
+		cmd := exec.Command(bin, args...)
+		cmd.Dir = dir
+		env := append(os.Environ(), neutral...)
+		cmd.Env = append(append(env, "BASHY_SKILLS_DIR="+store), extraEnv...)
+		cmd.Stdin = strings.NewReader("")
+		var out, errb strings.Builder
+		cmd.Stdout, cmd.Stderr = &out, &errb
+		err := cmd.Run()
+		code := 0
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		}
+		return out.String(), errb.String(), code
+	}
+
+	// L1: agent-naive repo → one hint, then silence.
+	naive := t.TempDir()
+	if err := exec.Command("git", "-C", naive, "init", "-q").Run(); err != nil {
+		t.Skip("git unavailable")
+	}
+	agentEnv := []string{"CLAUDECODE=1"}
+	_, stderr, _ := run(naive, agentEnv, "skills", "list")
+	if !strings.Contains(stderr, "bashy skills show bashy") {
+		t.Fatalf("no L1 hint:\n%s", stderr)
+	}
+	_, stderr, _ = run(naive, agentEnv, "skills", "list")
+	if strings.Contains(stderr, "bashy skills show bashy") {
+		t.Fatalf("hint repeated:\n%s", stderr)
+	}
+
+	// Configured repo → never hints.
+	configured := t.TempDir()
+	if err := exec.Command("git", "-C", configured, "init", "-q").Run(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configured, "AGENTS.md"), []byte("# agents\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr, _ = run(configured, agentEnv, "skills", "list")
+	if strings.Contains(stderr, "bashy skills show bashy") {
+		t.Fatalf("hinted in a configured repo:\n%s", stderr)
+	}
+
+	// No agent driving → never hints.
+	quiet := t.TempDir()
+	if err := exec.Command("git", "-C", quiet, "init", "-q").Run(); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr, _ = run(quiet, nil, "skills", "list")
+	if strings.Contains(stderr, "bashy skills show bashy") {
+		t.Fatalf("hinted without an agent:\n%s", stderr)
+	}
+
+	// L2: export the bashy skill to a directory, with ownership marker.
+	out := filepath.Join(t.TempDir(), "skills")
+	stdout, _, code := run(t.TempDir(), nil, "skills", "export", "bashy", "--to", out)
+	if code != 0 || !strings.Contains(stdout, "exported: ") {
+		t.Fatalf("export (exit %d): %s", code, stdout)
+	}
+	for _, f := range []string{"SKILL.md", ".bashy-export.json"} {
+		if _, err := os.Stat(filepath.Join(out, "bashy", f)); err != nil {
+			t.Fatalf("export missing %s", f)
+		}
+	}
+
+	// L3 seed: the preamble exports the shell→agent manifest.
+	stdout, _, code = run(t.TempDir(), nil, "-c", `printf %s "$BASHY_AGENT_MANIFEST"`)
+	if code != 0 || !strings.Contains(stdout, "first-hop") {
+		t.Fatalf("manifest (exit %d): %q", code, stdout)
+	}
+}
