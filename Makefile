@@ -146,6 +146,17 @@ test-yash:
 test-yash-list: test-yash
 	@cat $${YASH_OUT:-/tmp/yash-scoreboard}/failures.txt
 
+## test-zsh: zsh-own-suite scoreboard (Tier 0 of the zsh ladder) — runs zsh 5.9's
+## Test/*.ztst (non-interactive classes A B C D E W Z) against bashy AND real zsh
+## through the same runner (tools/ztst); real zsh defines the valid denominator.
+## INFO metric, not a gate. Output dir via ZSH_OUT (default /tmp/zsh-scoreboard).
+test-zsh:
+	@scripts/zsh-scoreboard.sh $(ZSH_OUT)
+
+## test-zsh-list: print the current zsh-own-suite failure list (file:line desc).
+test-zsh-list: test-zsh
+	@cat $${ZSH_OUT:-/tmp/zsh-scoreboard}/failures.txt
+
 ## test-bash: Run bash 5.3 native test suite against bashy (with per-test timeout).
 ## Builds only the lean bin/bash drop-in (not the 259MB embed-heavy bin/bashy).
 ## Iterate fast on a subset with TESTS="name ...", e.g. make test-bash TESTS="comsub varenv".

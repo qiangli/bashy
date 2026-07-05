@@ -25,6 +25,9 @@ results/*
 
 # yash GPL test-suite clone cache (never vendored)
 .yash-tests/
+
+# zsh test-suite clone cache (never vendored; scored via scripts/zsh-scoreboard.sh)
+.zsh-tests/
 bin/.bashy-linux-*
 
 # dash upstream clone cache (never vendored; dash ships no test suite — used as oracle)

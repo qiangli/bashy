@@ -84,10 +84,19 @@ Tools: go
 scripts/yash-posix-suite.sh
 ```
 
+### zsh
+zsh-own-suite scoreboard (Tier 0 of the zsh-compatibility ladder) — zsh 5.9's
+`Test/*.ztst`, non-interactive classes, bashy vs real zsh through the same
+runner. INFO (never a gate; never quote a bare "N% zsh compatible" from it).
+Tools: go zsh
+```bash
+scripts/zsh-scoreboard.sh
+```
+
 ### all
 Aggregate goal — depends on every suite, so `bashy dag suites.md` (default) runs
 the full matrix. With `-jN` the independent suites fan out across N slots.
-Requires: gotest test-bash parity xcu-diff oils-diff multishell austin yash
+Requires: gotest test-bash parity xcu-diff oils-diff multishell austin yash zsh
 ```bash
 echo "all conformance suites complete"
 ```
