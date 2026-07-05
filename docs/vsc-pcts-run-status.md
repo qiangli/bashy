@@ -1,8 +1,48 @@
 # VSC-PCTS conformance run — live status + resumable recipe
 
-Status: **harness built + running; 2 systemic bugs fixed; 19 fails remain.**
-Updated 2026-07-04. This is the durable record of the official POSIX VSC-PCTS
-run against bashy so the campaign resumes without re-deriving anything.
+Status: **harness built + running; the bashy-only fails are down to a single
+interactive declared-limitation.** Updated 2026-07-05. This is the durable
+record of the official POSIX VSC-PCTS run against bashy so the campaign resumes
+without re-deriving anything.
+
+## 2026-07-05 — differential campaign: 5 real bashy bugs fixed
+
+Running bash 5.3 (built from source) as the SUT through the *identical* TET
+harness separated real bashy bugs from suite/environment artifacts. Of the
+bashy-only fails, **five deterministic bugs were root-caused, fixed, regression-
+tested, and confirmed FAIL→PASS in the licensed harness** (`make test-bash`
+stayed 86/86 throughout):
+
+- **#396** — a partly-quoted here-doc delimiter (`<<''EOF`) must suppress body
+  expansion; `unquotedWordBytes` clobbered its quotedness flag across word
+  parts (fix: `syntax/parser.go`).
+- **#671** — `set -e` wrongly exited on a for/while/until/case whose final body
+  command was the errexit-exempt left operand of `&&`/`||` (fix: `interp/runner.go`).
+- **#378** — file-creating redirects opened at base mode 0644 instead of bash's
+  0666, dropping a umask-permitted group/other-write bit (fix: `interp/runner.go`).
+- **#621** — `exec CMD N>file` left the redirect fd close-on-exec (and reshuffled
+  fds in unspecified map order), so a descriptor never reached CMD; fix places
+  them collision-safely with a private-fd pass (fix: `interp/os_unix.go`).
+- **#575** — a literal trailing `[` in a globbing path component (`d*[` matching
+  a directory named `dir[`) was mistranslated as an unterminated bracket
+  (fix: `expand/expand.go`).
+
+The remaining bashy-only fail is **#643**, an interactive `expect`/pty test
+(readonly vars driven through a spawned interactive `sh`, matching a `$ ` prompt
+after each line). It exercises the goroutine-subshell/readline interactive
+surface — the same class the scenario already excludes for `sh_12` — and is a
+**declared limitation** for the conformance statement, not a defect in the shell
+language semantics. (A bounded partial improvement to the readline cursor-
+position (DSR) query — which otherwise blocks forever on a non-responding pty —
+was prototyped but not landed; the full interactive flow also needs a POSIX-mode
+prompt default and pty-init hardening, tracked as future interactive work.)
+
+All other remaining fails are **shared with bash 5.3** in the same harness, i.e.
+suite/build-environment artifacts rather than bashy bugs.
+
+---
+
+### Original snapshot (2026-07-04, superseded above)
 
 ## What exists now (all working)
 
