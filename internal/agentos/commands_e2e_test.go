@@ -476,3 +476,83 @@ func TestSkillsAdaptE2E(t *testing.T) {
 		t.Fatalf("PROMOTION.md: %v", err)
 	}
 }
+
+// TestSkillsStandaloneSurfacesE2E: the standalone-first surfaces — the
+// embedded reference dual-bundle skill is env-gated + runnable, a shared
+// catalog dir ($BASHY_SKILLS_PATH — a cloned skills repo) is a read-only
+// ring, and `bashy context` advertises applicable skills first-hop.
+func TestSkillsStandaloneSurfacesE2E(t *testing.T) {
+	bin := bashyBinary(t)
+	store, shared := t.TempDir(), t.TempDir()
+
+	sdir := filepath.Join(shared, "team-tip")
+	if err := os.MkdirAll(sdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sdir, "SKILL.md"),
+		[]byte("---\nname: team-tip\ndescription: from the shared catalog\n---\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	run := func(args ...string) (string, int) {
+		cmd := exec.Command(bin, args...)
+		cmd.Env = append(os.Environ(), "BASHY_AGENTIC=1",
+			"BASHY_SKILLS_DIR="+store, "BASHY_SKILLS_PATH="+shared)
+		cmd.Stdin = strings.NewReader("")
+		out, err := cmd.CombinedOutput()
+		code := 0
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		}
+		return string(out), code
+	}
+
+	// go-repo-health: embedded, gated on has=go (present here — the e2e
+	// builds with go), dual bundle.
+	out, code := run("skills", "list", "--json", "--all")
+	if code != 0 {
+		t.Fatalf("list: %s", out)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
+		t.Fatalf("json: %v\n%s", err, out)
+	}
+	found := map[string]map[string]any{}
+	for _, r := range rows {
+		found[r["name"].(string)] = r
+	}
+	if r := found["go-repo-health"]; r == nil || r["applicable"] != true || r["identity"] == nil {
+		t.Fatalf("go-repo-health row: %+v", found["go-repo-health"])
+	}
+	if r := found["team-tip"]; r == nil || r["ring"] != "shared" {
+		t.Fatalf("team-tip row: %+v", found["team-tip"])
+	}
+
+	// context advertises applicable skills (L1 progressive disclosure).
+	out, code = run("context", "--json")
+	if code != 0 {
+		t.Fatalf("context: %s", out)
+	}
+	var report struct {
+		Skills []struct {
+			Name     string `json:"name"`
+			Verified bool   `json:"verified"`
+			Ring     string `json:"ring"`
+		} `json:"skills"`
+	}
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("context json: %v", err)
+	}
+	names := map[string]bool{}
+	verified := map[string]bool{}
+	for _, s := range report.Skills {
+		names[s.Name] = true
+		verified[s.Name] = s.Verified
+	}
+	if !names["conductor"] || !names["go-repo-health"] || !names["team-tip"] {
+		t.Fatalf("context skills: %+v", report.Skills)
+	}
+	if !verified["go-repo-health"] || verified["team-tip"] {
+		t.Fatalf("verified flags: %+v", report.Skills)
+	}
+}

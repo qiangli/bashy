@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -257,18 +258,10 @@ func Dispatch() {
 		// The env-gated skills catalog (coreutils/pkg/skills): `list` shows
 		// only skills applicable at this host's space-time coordinate,
 		// `probe` prints the coordinate, `show` prints a skill (stdout
-		// byte-identical; verdict on stderr), `add`/`verify` run the
-		// verified-admission gate. Sources: the embedded ring (below) +
-		// the host-local store (~/.config/bashy/skills; $BASHY_SKILLS_DIR
-		// overrides — tests and multi-store setups).
-		skillsOpts := []coreskills.Option{
-			coreskills.WithSource(coreskills.EmbedSource(skills.FS, coreskills.RingEmbedded)),
-			coreskills.WithHostVersion("bashy", cli.BashyVersion()),
-		}
-		if dir := os.Getenv("BASHY_SKILLS_DIR"); dir != "" {
-			skillsOpts = append(skillsOpts, coreskills.WithConfigDir(dir))
-		}
-		cmd := coreskills.NewSkillsCmd(skillsOpts...)
+		// byte-identical; verdict on stderr), `add`/`verify`/`learn` run
+		// the admission gates, `run` executes + attests, `promote`
+		// renders the review bundle. Sources: see skillsOptions.
+		cmd := coreskills.NewSkillsCmd(skillsOptions()...)
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy skills:", err)
@@ -597,6 +590,28 @@ func dispatchCoreutilsTool(name string, args []string, stdio tool.Stdio) int {
 		Stdio: stdio,
 	}
 	return t.Run(rc, args)
+}
+
+// skillsOptions assembles the skill catalog's sources, standalone-first
+// ("cloud as a thin replaceable relay" — the mechanism needs no control
+// plane): the embedded ring compiled into bashy, then any shared catalog
+// dirs from $BASHY_SKILLS_PATH (path-list of git clones / synced folders,
+// read-only), with the host-local store last (~/.config/bashy/skills;
+// $BASHY_SKILLS_DIR overrides) so local installs/learning shadow all.
+func skillsOptions() []coreskills.Option {
+	opts := []coreskills.Option{
+		coreskills.WithSource(coreskills.EmbedSource(skills.FS, coreskills.RingEmbedded)),
+		coreskills.WithHostVersion("bashy", cli.BashyVersion()),
+	}
+	for _, dir := range filepath.SplitList(os.Getenv("BASHY_SKILLS_PATH")) {
+		if dir != "" {
+			opts = append(opts, coreskills.WithSource(coreskills.SharedDirSource(dir)))
+		}
+	}
+	if dir := os.Getenv("BASHY_SKILLS_DIR"); dir != "" {
+		opts = append(opts, coreskills.WithConfigDir(dir))
+	}
+	return opts
 }
 
 // WireExec appends the coreutils ExecHandler so any registered tool resolves

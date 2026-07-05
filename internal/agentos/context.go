@@ -14,6 +14,8 @@ import (
 	"strings"
 
 	"golang.org/x/term"
+
+	coreskills "github.com/qiangli/coreutils/pkg/skills"
 )
 
 func isTerminal(f *os.File) bool {
@@ -46,6 +48,11 @@ type contextReport struct {
 	// which vars (including secrets) are SET, without their values.
 	Environment         map[string]string `json:"environment,omitempty"`
 	EnvironmentRedacted string            `json:"environment_redacted,omitempty"`
+	// Skills is the L1 progressive-disclosure surface of the env-gated skill
+	// catalog: only skills applicable at THIS host's coordinate, name +
+	// one-liner (bodies via `bashy skills show`). Verified = the skill
+	// carries a machine-checkable contract (dhnt dual bundle).
+	Skills []coreskills.Advertised `json:"skills,omitempty"`
 }
 
 type contextMode struct {
@@ -180,6 +187,7 @@ func collectContext() contextReport {
 			{Purpose: "one command capability lookup", Command: bashyPath + " commands COMMAND --features"},
 			{Purpose: "what code is coupled to a symbol (skip the grep dance)", Command: bashyPath + " graph-impact SYMBOL"},
 			{Purpose: "recall/leave shared repo knowledge for other agents", Command: bashyPath + " graph-recall QUERY"},
+			{Purpose: "skills applicable on this host (read one: skills show NAME; run attested: skills run NAME)", Command: bashyPath + " skills list"},
 		},
 		Notes: []string{
 			"Replaces first-hop probes: `system` = uname/hostname/id, `tools` = which/tool discovery, `environment` = env — an agent need not run env/uname/hostname/id/which itself.",
@@ -188,6 +196,7 @@ func collectContext() contextReport {
 		},
 		Tools: detectTools(),
 	}
+	report.Skills = coreskills.Applicable(skillsOptions()...)
 	report.Environment, report.EnvironmentRedacted = collectEnvironment()
 	if len(os.Args) > 0 {
 		report.Argv0 = os.Args[0]
@@ -346,6 +355,16 @@ func printContextPlain(r contextReport) {
 	fmt.Printf("agentic=%t advisor=%t\n", r.Mode.Agentic, r.Mode.Advisor)
 	if len(r.Tools) > 0 {
 		fmt.Printf("tools: %s\n", strings.Join(sortedKeys(r.Tools), " "))
+	}
+	if len(r.Skills) > 0 {
+		fmt.Println("skills (applicable here; read: bashy skills show NAME):")
+		for _, s := range r.Skills {
+			mark := ""
+			if s.Verified {
+				mark = " [verified]"
+			}
+			fmt.Printf("  %s%s: %s\n", s.Name, mark, s.Description)
+		}
 	}
 	fmt.Println("recommended:")
 	for _, c := range r.RecommendedCommands {
