@@ -52,6 +52,7 @@ import (
 	"github.com/qiangli/coreutils/external/kopia"
 	"github.com/qiangli/coreutils/external/kubectl"
 	"github.com/qiangli/coreutils/external/loom"
+	"github.com/qiangli/coreutils/external/node"
 	"github.com/qiangli/coreutils/external/rclone"
 	"github.com/qiangli/coreutils/external/registry"
 	"github.com/qiangli/coreutils/external/seaweedfs"
@@ -104,7 +105,7 @@ var (
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
 	}
-	agentModeShimVerbs   = []string{"go", "cmake", "clang"}
+	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn"}
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade"}
 )
 
@@ -453,6 +454,28 @@ func Dispatch() {
 		// (binmgr), the system clang on macOS/Linux. The compiler half of the
 		// self-contained cross-platform build userland (cmake is the other half).
 		cmd := clang.NewClangCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "node", "npm", "npx", "pnpm", "yarn":
+		// Self-provisioning Node.js ecosystem (binmgr download from nodejs.org →
+		// verify via SHASUMS256 → cache → exec; pnpm/yarn via the bundled corepack).
+		// Pure-Go fetch + cross-platform, same shape as bashy go — no system Node.
+		var cmd *cobra.Command
+		switch os.Args[1] {
+		case "node":
+			cmd = node.NewNodeCmd()
+		case "npm":
+			cmd = node.NewNpmCmd()
+		case "npx":
+			cmd = node.NewNpxCmd()
+		case "pnpm":
+			cmd = node.NewPnpmCmd()
+		case "yarn":
+			cmd = node.NewYarnCmd()
+		}
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
