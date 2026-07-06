@@ -49,6 +49,7 @@ import (
 	"github.com/qiangli/coreutils/external/gh"
 	"github.com/qiangli/coreutils/external/gotoolchain"
 	"github.com/qiangli/coreutils/external/helm"
+	"github.com/qiangli/coreutils/external/java"
 	"github.com/qiangli/coreutils/external/kopia"
 	"github.com/qiangli/coreutils/external/kubectl"
 	"github.com/qiangli/coreutils/external/loom"
@@ -56,6 +57,7 @@ import (
 	"github.com/qiangli/coreutils/external/node"
 	"github.com/qiangli/coreutils/external/python"
 	"github.com/qiangli/coreutils/external/rclone"
+	"github.com/qiangli/coreutils/external/rust"
 	"github.com/qiangli/coreutils/external/registry"
 	"github.com/qiangli/coreutils/external/seaweedfs"
 	"github.com/qiangli/coreutils/external/sphere"
@@ -107,7 +109,7 @@ var (
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
 	}
-	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise"}
+	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "java", "javac", "mvn"}
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade"}
 )
 
@@ -506,6 +508,42 @@ func Dispatch() {
 		// checksum-verified by binmgr. The power-user layer over the native
 		// provisioners (.tool-versions / mise.toml, the long tail of languages).
 		cmd := mise.NewMiseCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "cargo", "rustc", "rustup", "rust":
+		// Self-provisioning Rust via the official rustup-init (sha256 sidecar
+		// verified), into a bashy-owned CARGO_HOME/RUSTUP_HOME. No system Rust.
+		var cmd *cobra.Command
+		switch os.Args[1] {
+		case "cargo":
+			cmd = rust.NewCargoCmd()
+		case "rustc":
+			cmd = rust.NewRustcCmd()
+		case "rustup":
+			cmd = rust.NewRustupCmd()
+		case "rust":
+			cmd = rust.NewRustCmd()
+		}
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "java", "javac", "mvn":
+		// Self-provisioning Temurin JDK (Adoptium API → checksum → tree extract)
+		// + Apache Maven (sha512-verified), JAVA_HOME wired. No system Java.
+		var cmd *cobra.Command
+		switch os.Args[1] {
+		case "java":
+			cmd = java.NewJavaCmd()
+		case "javac":
+			cmd = java.NewJavacCmd()
+		case "mvn":
+			cmd = java.NewMvnCmd()
+		}
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
