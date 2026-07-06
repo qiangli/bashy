@@ -319,6 +319,7 @@ var verbSynopsis = map[string]string{
 	"javac":     "self-provisioning Temurin JDK compiler (Adoptium, verified)",
 	"mvn":       "Apache Maven, auto-provisioned with its JDK (sha512-verified)",
 	"git-scm":   "real git (git-for-windows MinGit on Windows; system git on unix), verified",
+	"curl":      "curl (platform curl; pinned+verified curl.se/windows on a bare Windows node)",
 	"kubectl":   "Kubernetes CLI for the DKS cluster (managed external, Apache-2.0)",
 	"helm":      "Helm chart installer for the DKS cluster (managed external, Apache-2.0)",
 	"sphere":    "peer-direct pooled p2p inference/compute — the sphere tier (via outpost)",

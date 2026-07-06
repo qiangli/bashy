@@ -46,6 +46,7 @@ import (
 	"github.com/qiangli/coreutils/external/act"
 	"github.com/qiangli/coreutils/external/clang"
 	"github.com/qiangli/coreutils/external/cmake"
+	"github.com/qiangli/coreutils/external/curlbin"
 	"github.com/qiangli/coreutils/external/gh"
 	"github.com/qiangli/coreutils/external/gitscm"
 	"github.com/qiangli/coreutils/external/gotoolchain"
@@ -110,7 +111,7 @@ var (
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
 	}
-	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "java", "javac", "mvn", "git-scm"}
+	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "java", "javac", "mvn", "git-scm", "curl"}
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade"}
 )
 
@@ -528,6 +529,15 @@ func Dispatch() {
 		case "rust":
 			cmd = rust.NewRustCmd()
 		}
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "curl":
+		// Platform curl (built into Windows 10+, universal on unix); a pinned,
+		// checksum-verified curl.se/windows build on a bare Windows node.
+		cmd := curlbin.NewCurlCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
