@@ -290,7 +290,7 @@ var verbSynopsis = map[string]string{
 	"self":      "fetch/cache/install a released bashy binary",
 	"bootstrap": "hidden alias for bashy self",
 	"upgrade":   "hidden alias for bashy self",
-	"git":       "embedded pure-Go git client (clone, status, commit, push, diff, log)",
+	"git":       "real git (git-for-windows MinGit on Windows; system git on unix), verified; `outpost git` is the pure-Go bootstrap client",
 	"gh":        "GitHub CLI (managed external)",
 	"act":       "run GitHub Actions locally (managed external)",
 	"rclone":    "cloud-storage transfer + file server (managed external)",

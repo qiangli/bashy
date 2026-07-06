@@ -420,10 +420,14 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
-	case "git":
-		// Embedded pure-Go git client for the common clone/edit/commit/push
-		// workflow and read/inspect verbs. Never shells out to system git.
-		cmd := gitCmd()
+	case "git", "git-scm":
+		// `bashy git` is the REAL, full git — git-for-windows MinGit on Windows,
+		// system git on unix — provisioned + checksum-verified. It gives one
+		// consistent, complete git across platforms (the pure-Go coreutils client
+		// was a subset: no `version`, no full checkout flow). The pure-Go light
+		// client lives on as `outpost git`, for BOOTSTRAPPING a bare node that has
+		// outpost but no real git yet. `git-scm` is an explicit synonym.
+		cmd := gitscm.NewGitSCMCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
@@ -538,16 +542,6 @@ func Dispatch() {
 		// Platform curl (built into Windows 10+, universal on unix); a pinned,
 		// checksum-verified curl.se/windows build on a bare Windows node.
 		cmd := curlbin.NewCurlCmd()
-		cmd.SetArgs(os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
-		}
-		os.Exit(0)
-	case "git-scm":
-		// Real git (git-for-windows MinGit on Windows; system git on unix),
-		// checksum-verified. For consumers needing more than the pure-Go
-		// `bashy git` subset — e.g. the act_runner host executor's checkout flow.
-		cmd := gitscm.NewGitSCMCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
