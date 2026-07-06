@@ -44,6 +44,7 @@ import (
 	// the tool-registry dispatch fallthrough.
 	_ "github.com/qiangli/coreutils/cmds/foreman"
 	"github.com/qiangli/coreutils/external/act"
+	"github.com/qiangli/coreutils/external/actrunner"
 	"github.com/qiangli/coreutils/external/clang"
 	"github.com/qiangli/coreutils/external/cmake"
 	"github.com/qiangli/coreutils/external/curlbin"
@@ -107,7 +108,7 @@ import (
 var (
 	alwaysShimVerbs = []string{
 		"weave", "sprint", "chat", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "run", "commands", "context", "doctor", "self", "check", "verify",
-		"git", "gh", "act", "rclone", "podman", "ollama",
+		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
 	}
@@ -606,6 +607,18 @@ func Dispatch() {
 		// compiled in) — test CI on a host node before pushing. Needs a container
 		// engine (bashy podman, unix host). Transparent passthrough.
 		cmd := act.NewActCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "act-runner":
+		// Gitea act_runner (MIT, binmgr-managed) — the PERSISTENT mesh CI daemon
+		// that registers against loom/Gitea and dials OUT (NAT-friendly), distinct
+		// from `bashy act` (nektos/act, one-shot local). `register --sandbox` +
+		// `daemon --docker-host <bashy podman sock>` gives the tier-3 sandbox
+		// executor: `runs-on: sandbox` jobs run in an OCI container.
+		cmd := actrunner.NewCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
