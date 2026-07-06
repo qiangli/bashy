@@ -47,6 +47,7 @@ import (
 	"github.com/qiangli/coreutils/external/clang"
 	"github.com/qiangli/coreutils/external/cmake"
 	"github.com/qiangli/coreutils/external/gh"
+	"github.com/qiangli/coreutils/external/gitscm"
 	"github.com/qiangli/coreutils/external/gotoolchain"
 	"github.com/qiangli/coreutils/external/helm"
 	"github.com/qiangli/coreutils/external/java"
@@ -109,7 +110,7 @@ var (
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
 	}
-	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "java", "javac", "mvn"}
+	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "java", "javac", "mvn", "git-scm"}
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade"}
 )
 
@@ -527,6 +528,16 @@ func Dispatch() {
 		case "rust":
 			cmd = rust.NewRustCmd()
 		}
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "git-scm":
+		// Real git (git-for-windows MinGit on Windows; system git on unix),
+		// checksum-verified. For consumers needing more than the pure-Go
+		// `bashy git` subset — e.g. the act_runner host executor's checkout flow.
+		cmd := gitscm.NewGitSCMCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
