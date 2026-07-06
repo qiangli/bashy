@@ -52,7 +52,9 @@ import (
 	"github.com/qiangli/coreutils/external/kopia"
 	"github.com/qiangli/coreutils/external/kubectl"
 	"github.com/qiangli/coreutils/external/loom"
+	"github.com/qiangli/coreutils/external/mise"
 	"github.com/qiangli/coreutils/external/node"
+	"github.com/qiangli/coreutils/external/python"
 	"github.com/qiangli/coreutils/external/rclone"
 	"github.com/qiangli/coreutils/external/registry"
 	"github.com/qiangli/coreutils/external/seaweedfs"
@@ -105,7 +107,7 @@ var (
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
 	}
-	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn"}
+	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise"}
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade"}
 )
 
@@ -476,6 +478,34 @@ func Dispatch() {
 		case "yarn":
 			cmd = node.NewYarnCmd()
 		}
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "python", "pip", "uv":
+		// Self-provisioning Python ecosystem via astral-sh/uv (one verified binary
+		// that provisions CPython): python -> `uv run python`, pip -> `uv pip`.
+		// Download → sha256-verify → cache → exec; no system Python.
+		var cmd *cobra.Command
+		switch os.Args[1] {
+		case "python":
+			cmd = python.NewPythonCmd()
+		case "pip":
+			cmd = python.NewPipCmd()
+		case "uv":
+			cmd = python.NewUvCmd()
+		}
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "mise":
+		// Polyglot runtime/version manager (jdx/mise) — managed external binary,
+		// checksum-verified by binmgr. The power-user layer over the native
+		// provisioners (.tool-versions / mise.toml, the long tail of languages).
+		cmd := mise.NewMiseCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
