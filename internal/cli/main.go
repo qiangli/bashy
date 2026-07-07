@@ -179,6 +179,85 @@ func stripIgnoredOperandHyphen(args []string) []string {
 	return args
 }
 
+// relocatePendingCommandFlag makes `-c` behave as in bash: `-c` only marks
+// that a command string is pending (shell.c: want_pending_command); option
+// parsing continues past it, and the command string is the first NON-OPTION
+// argument found after all options (shell.c: command_execution_string =
+// argv[arg_index] after the option loop). Go's flag package instead binds
+// `-c` to the immediately following token, so `bash -c -l 'cmd'` — the exact
+// shape Claude Code uses to generate its shell snapshot — swallowed `-l` as
+// the command string and ran the real command as $0 ("-l: command not
+// found", exit 127). Rewrite argv so `-c` sits directly before the first
+// non-option argument; downstream parsing then matches bash:
+//
+//	-c -l CMD      -> -l -c CMD
+//	-lc -e CMD     -> -l -e -c CMD   (c pulled out of the cluster)
+//	-c -o opt CMD  -> -o opt -c CMD
+//	-c CMD         -> -c CMD         (unchanged)
+//
+// A `--` or lone `-` ends the option scan (the command string follows); `-c`
+// is inserted before it and stripIgnoredOperandHyphen drops the hyphen
+// operand as usual. If no operand follows at all, `-c` lands last and
+// preflightInvocationErrors reports bash's "-c: option requires an argument".
+func relocatePendingCommandFlag(args []string) []string {
+	sawC := false
+	i := 1
+	for i < len(args) {
+		a := args[i]
+		if len(a) < 2 || a == "--" || (a[0] != '-' && a[0] != '+') {
+			break
+		}
+		if a == "-c" {
+			args = append(append([]string{}, args[:i]...), args[i+1:]...)
+			sawC = true
+			continue
+		}
+		isCluster := a[0] == '-' && a[1] != '-' && isShortFlagCluster(a[1:])
+		if isCluster && strings.ContainsRune(a[1:], 'c') {
+			// Pull the pending-command flag out of the cluster and
+			// reprocess whatever remains of it.
+			args = append([]string{}, args...)
+			args[i] = "-" + strings.ReplaceAll(a[1:], "c", "")
+			sawC = true
+			if args[i] == "-" {
+				args = append(args[:i], args[i+1:]...)
+			}
+			continue
+		}
+		// Value-taking options keep their value token, including a
+		// cluster whose trailing flag takes a value (`-eo pipefail`).
+		switch {
+		case a == "-o" || a == "-O" || a == "+o" || a == "+O" ||
+			a == "--rcfile" || a == "--init-file":
+			i += 2
+		case isCluster && (a[len(a)-1] == 'o' || a[len(a)-1] == 'O'):
+			i += 2
+		default:
+			i++
+		}
+	}
+	if !sawC {
+		return args
+	}
+	out := make([]string, 0, len(args)+1)
+	out = append(out, args[:i]...)
+	out = append(out, "-c")
+	out = append(out, args[i:]...)
+	return out
+}
+
+// isShortFlagCluster reports whether s (an option token without its leading
+// hyphen) consists solely of ASCII letters, i.e. could be a bash combined
+// short-flag cluster.
+func isShortFlagCluster(s string) bool {
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
 // splitCombinedShortFlags rewrites bash-style short / combined
 // short flags into the long-form names our `flag` parser knows.
 // `-ce 'cmd'` becomes `-o errexit -c 'cmd'`, `-eu` becomes
@@ -387,6 +466,11 @@ func Main() {
 	// before any bash flag parsing, since they carry their own flags. No-op
 	// for the pure `bash` drop-in (the default AgentOSDispatch).
 	AgentOSDispatch()
+	// bash keeps parsing options after `-c`; the command string is the first
+	// non-option argument (`bash -c -l 'cmd'` is a login shell running cmd —
+	// the shape Claude Code uses). Reorder argv so Go's value-taking `-c`
+	// binds to the real command string.
+	os.Args = relocatePendingCommandFlag(os.Args)
 	preflightInvocationErrors(os.Args)
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		fmt.Printf("GNU bash, version %s\n", bashVersion)

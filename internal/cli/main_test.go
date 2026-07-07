@@ -1072,3 +1072,36 @@ func TestBashExecutionStringNotExported(t *testing.T) {
 		t.Errorf("BASH_EXECUTION_STRING was exported to child env:\n%s", strings.Join(childEnv, "\n"))
 	}
 }
+
+func TestRelocatePendingCommandFlag(t *testing.T) {
+	cases := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"plain -c untouched", []string{"bash", "-c", "echo hi"}, []string{"bash", "-c", "echo hi"}},
+		{"claude shape: -c -l", []string{"bash", "-c", "-l", "echo hi"}, []string{"bash", "-l", "-c", "echo hi"}},
+		{"options after -c with value", []string{"bash", "-c", "-o", "pipefail", "echo hi"}, []string{"bash", "-o", "pipefail", "-c", "echo hi"}},
+		{"cluster with c then option", []string{"bash", "-lc", "-e", "echo hi"}, []string{"bash", "-l", "-e", "-c", "echo hi"}},
+		{"cluster reduces to nothing", []string{"bash", "-c", "-c", "echo hi"}, []string{"bash", "-c", "echo hi"}},
+		{"no operand: -c lands last", []string{"bash", "-c", "-l"}, []string{"bash", "-l", "-c"}},
+		{"double dash ends options", []string{"bash", "-c", "-l", "--", "-weird"}, []string{"bash", "-l", "-c", "--", "-weird"}},
+		{"value cluster keeps value", []string{"bash", "-c", "-eo", "pipefail", "echo hi"}, []string{"bash", "-eo", "pipefail", "-c", "echo hi"}},
+		{"no -c untouched", []string{"bash", "-l", "script.sh", "-c"}, []string{"bash", "-l", "script.sh", "-c"}},
+		{"script operand stops scan", []string{"bash", "script.sh", "-c", "arg"}, []string{"bash", "script.sh", "-c", "arg"}},
+		{"args after command string", []string{"bash", "-c", "-l", "echo $0", "name", "a1"}, []string{"bash", "-l", "-c", "echo $0", "name", "a1"}},
+	}
+	for _, tc := range cases {
+		got := relocatePendingCommandFlag(append([]string{}, tc.in...))
+		if len(got) != len(tc.want) {
+			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
+				break
+			}
+		}
+	}
+}
