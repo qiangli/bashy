@@ -129,22 +129,28 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
 
 ## Module wiring
 
-`go.mod` requires two flat-sibling deps, resolved by `replace`:
+`go.mod` requires three flat-sibling deps, resolved by `replace`:
 
 ```
-replace mvdan.cc/sh/v3              => ../sh
+replace mvdan.cc/sh/v3               => ../sh
 replace github.com/qiangli/coreutils => ../coreutils
+replace github.com/ergochat/readline => ../readline
 ```
 
 `../sh` is the interpreter engine; `../coreutils` is the AgentOS hub that
 supplies the pure-Go userland + code-intel verbs the `bashy` binary injects (only
-`agentos.go` imports it). In a parent monorepo both are submodules. In
-a standalone clone, run `./scripts/bootstrap-siblings.sh` — it clones
-`github.com/qiangli/{sh,coreutils}` next to this repo at the SHAs pinned in
+`agentos.go` imports it); `../readline` is the ergochat/readline fork the
+interactive loop uses (the module path keeps the upstream name — the flat-layout
+convention is about the sibling dir, not the module string). In a parent
+monorepo all three are submodules. In
+a standalone clone, run `./scripts/bootstrap-siblings.sh` — it clones each
+sibling next to this repo at the SHAs pinned in
 `.sibling-pins` (and leaves any submodule mounts alone). CI does the
 same before building. coreutils itself replaces `../sh`, which resolves to the
 same flat sibling. Keep the sibling SHAs coordinated; a parent monorepo's
-sync tooling auto-bumps `.sibling-pins`.
+sync tooling auto-bumps `.sibling-pins`. (go.mod also carries further
+`../coreutils/...`-internal replaces for the embedded podman/ollama/otel
+engines — those ride the coreutils pin, not `.sibling-pins`.)
 
 ## Build / test / lint
 
@@ -155,6 +161,9 @@ make test               # go test ./...
 make test-bash          # drive bin/bash against bash's own 5.3 test suite (serial)
 make test-bash-parallel # same suite fanned out across cores — the canonical 86/86 gate
 make test-bash-list     # list available fixtures with per-fixture PASS/FAIL/TIME/SKIP
+make test-yash          # yash POSIX (-p) scoreboard — the headline conformance-frontier metric
+make test-yash-list     # print the current bashy-specific yash failure list
+make test-zsh           # zsh-own-suite Tier-0 scoreboard (tools/ztst runner; INFO metric, not a gate)
 make dist               # cross-compile static binaries for all 6 platforms
 make tidy               # go mod tidy + gofmt -s -w . + go vet ./...
 ```
@@ -269,6 +278,8 @@ POSIX-conformance frontier (the active layer now that bash-5.3 is 86/86 — driv
 - `conformance-statement.md` — the standing conformance claim; `shell-conformance-comparison.md` / `cross-shell-conformance-baseline.md` — bashy vs other shells.
 - `posix-mode-behaviors.md` — catalogued `--posix` behaviors; `builtin-vs-external-conformance.md` — builtin/external divergence notes.
 - `posix-cert-handoff-runbook.md`, `posix-cert-preflight-status.md`, `fidelity-ceiling-assessment.md` — VSC-PCTS certification runbook + status + the hard-ceiling assessment.
+- `yash-conformance-gap.md` — the yash-scoreboard failure analysis behind the headline number in `docs/TODO.md`.
+- `zsh-scoreboard.md` — the zsh Tier-0 own-suite baseline (`make test-zsh`, `tools/ztst` runner); INFO metric, not a gate.
 
 Per-fixture cluster analyses + blocker ledgers (snapshots — diff line-counts and PASS/FAIL claims in them are dated, re-measure before trusting):
 
@@ -283,13 +294,20 @@ Weave-round verification + retro reports (historical, not load-bearing):
 ## Skills
 
 `skills/` holds the tier-2 **workspace** agentic skills bashy ships (the
-userland is tier 1, clusters tier 3). Each is a self-contained Anthropic skill
+userland is tier 1, clusters tier 3). They are **compiled into the `bashy`
+binary** via the `//go:embed` directive in `skills/embed.go` (surfaced by
+`bashy skills`), so adding a skill means dropping its directory here AND adding
+it to that directive. Each is a self-contained Anthropic skill
 (`SKILL.md` actionable checklist + optional `reference.md` deep companion),
 brand-neutral and driven by bashy's own tools:
 
+- `skills/bashy/` — how to drive bashy itself as an agent (start with
+  `bashy context --json`; dry-run/check/run envelopes; code-intel verbs).
 - `skills/conductor/` — drive a fleet of agent CLIs to a verified goal over
   `bashy sprint` + `bashy weave` (decompose → isolate → gate → converge, loop
   until a verifier passes); TDD-at-fleet-scale is the canonical mode.
+- `skills/go-repo-health/` — the reference dual-bundle skill (`SKILL.md` +
+  `skill.dhnt`): attested build-ok ∧ tests-green gate for a Go repo.
 
 ## Plans
 
