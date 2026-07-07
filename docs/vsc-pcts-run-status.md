@@ -1,9 +1,77 @@
 # VSC-PCTS conformance run — live status + resumable recipe
 
-Status: **harness built + running; the bashy-only fails are down to a single
-interactive declared-limitation.** Updated 2026-07-05. This is the durable
+Status: **campaign complete — every bashy-only conformance bug fixed (incl.
+#643); all residual fails are shared with certified bash 5.3 in the identical
+non-root harness.** Updated 2026-07-05. This is the durable
 record of the official POSIX VSC-PCTS run against bashy so the campaign resumes
-without re-deriving anything.
+without re-deriving anything. Remaining: the final scored run (default timers,
+sh_12/sh_13 isolated) + the human Open Group submission step.
+
+## 2026-07-07 — regression re-run: baseline reproduced with a fresh SUT
+
+A fresh `cmd/bash` build (bashy `51dc0c2` + sh `4e89440c`) re-run through the
+identical harness reproduced the final baseline: **358 PASS / 5 FAIL**, fail set
+`{379,421,450,458,520}` — July 5's set plus #379, the documented GA11-ctime
+flapper (#379/#450 trade places across runs). Zero new assertion fails; all
+seven campaign fixes hold. Journal `0090e`.
+
+**Launcher contract (learned the hard way — the July-5 launcher script was
+deleted, and reconstructing it without these invariants silently measures the
+wrong thing).** A cert-valid run needs ALL THREE:
+
+1. **Run `tcc` as the non-root tester** (uid 1009 via `runuser -u tester`) —
+   root silently invalidates every permission-based assertion.
+2. **Prepend `/opt/vscbin` to `PATH`** (holds `sh -> /opt/sut/sh`). The tset
+   sources invoke the inner shell as plain `sh script` resolved from PATH, NOT
+   from `TET_EXEC_TOOL` — without this the suite scores `/usr/bin/sh` (dash)
+   and reports a deterministic 14-fail set that looks like pre-fix bashy.
+3. `TET_EXEC_TOOL=/opt/sut/sh` in `tetexec.cfg` (drives the `.ex` test-case
+   scripts themselves).
+
+Reference launcher: `/vsc/run-full.sh` in the `vsc-build` container (runs the
+whole `posix` scenario in bounded parts — shell, sh_12 isolated, cmd, upe,
+sdo, xopen — so a hang in sh_12's interactive TPs can't stall the rest).
+Sanity check before trusting any journal: `head -1 <journal>` must show
+uid 1009, and a quick probe that the SUT is what answers:
+`runuser -u tester -- env PATH=/opt/vscbin:$PATH sh -c 'echo $BASH_VERSION'`
+must print the bashy version string (dash prints an empty line). Wall-clock
+is NOT a reliable tell (~70s quiet vs ~200s loaded, both under bashy).
+
+## 2026-07-07 — first ENTIRE-suite sweep (shell + sh_12 + all utilities)
+
+Beyond the shell scenario, the whole `posix` scenario ran for the first time,
+as a per-tset bounded sweep (`/vsc/run-utils2.sh`, 10-min cap per tset — a
+single part-level timeout does NOT work: the `diff` tset alone burned 3.5h of
+a 4h budget). Results by part:
+
+- **shell (sh_04–11+13), journal `0090e`**: 358 PASS / 5 FAIL — the July-5
+  baseline reproduced with a fresh SUT (see the regression section above).
+- **sh_12 isolated, journal `0091e`**: **completes in ~12 min — no hang**
+  (the readline DSR-deadline fix appears to have unblocked the pty flow):
+  42 PASS / 12 FAIL / 5 UNSUPPORTED / 3 UNTESTED. The 12 fails are the
+  trap/signal/interactive/special-builtin-error family (assertions
+  #709 #712 #714 #718 #720 #739 #753 #757 #759 #761 #762 #765) — the
+  declared-limitation class, now enumerated precisely.
+- **utilities (posix_cmd/upe/sdo/xopen, 100 tsets)**: sweep totals
+  2947 PASS / 516 FAIL / 392 UNRESOLVED / 1313 UNSUPPORTED (plus the first
+  17 cmd tsets from the part-mode journal `0093be`: 961/194). These score
+  the container's Debian/GNU toolchain UNDER bashy as the orchestrating
+  shell — context, not bashy's cert scope. Big fail/unresolved blocks are
+  environment or GNU-vs-POSIX divergence: `bc` 106F (GNU bc grammar),
+  `pax` 139F, `at` 89U (no atd), `ex`/`vi`/`more`/`talk` mass-UNRESOLVED
+  (no tty). Five tsets hit the 10-min cap: `diff` (hangs in its TET BUILD
+  phase — unexplained, makefile itself is instant), `ed`, `kill`,
+  `crontab`, `fc` (fc is bashy's own builtin — worth a look).
+- **`sh` tset inside posix_cmd (bashy as the `sh` utility), journal
+  `0134be`**: 41 PASS / 7 FAIL / 192 UNSUPPORTED. The 7: GA26 (#5),
+  `sh -s` (#46), PATH_MAX (#59), `-c`/`-s` stdin handling (#67 #68),
+  syntax-error-in-subshell exit (#244), async-events default (#801).
+  Not yet triaged real-bug vs declared vs environment — the next
+  per-assertion analysis target.
+
+Journals for the sweep live in the container at `/opt/tet/vsc/results/`
+(`*be` = build+execute journals); per-tset logs in `/vsc/logs2/`; the
+per-tset ledger is `/vsc/utils2-progress`.
 
 ## 2026-07-05 (final) — every bashy-only conformance bug fixed
 
