@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# uutils test-suite scoreboard — runs the MIT-licensed uutils/coreutils
+# uutils test-suite scoreboard --- runs the MIT-licensed uutils/coreutils
 # test suite (tests/by-util/*.rs via cargo) against the pure-Go
 # coreutils MULTICALL binary built from ../coreutils. That binary serves
 # the same tool registry bashy mounts in-process, and the suite's
-# supported external-binary override (UUTESTS_BINARY_PATH — designed for
+# supported external-binary override (UUTESTS_BINARY_PATH --- designed for
 # e.g. WASI binaries) accepts it directly because the invocation shape
-# (`coreutils <util> args…`) is identical.
+# (`coreutils <util> args---`) is identical.
 #
-# INFO scoreboard (like yash/zsh) — never a 0/1 gate: plenty of uutils
+# INFO scoreboard (like yash/zsh) --- never a 0/1 gate: plenty of uutils
 # cases assert uutils-specific diagnostics or extensions beyond the GNU
 # manual, so 100% is not the target; the trend is the signal.
 #
@@ -22,7 +22,7 @@ THREADS=${THREADS:-8}
 mkdir -p "$OUT"
 
 [ -d "$UU/tests/by-util" ] || {
-  echo "uutils clone not found at $UU (reference/ is gitignored — clone github.com/uutils/coreutils there)" >&2
+  echo "uutils clone not found at $UU (reference/ is gitignored --- clone github.com/uutils/coreutils there)" >&2
   exit 2
 }
 command -v cargo >/dev/null 2>&1 || { echo "need cargo (rust toolchain)" >&2; exit 2; }
@@ -32,24 +32,24 @@ command -v cargo >/dev/null 2>&1 || { echo "need cargo (rust toolchain)" >&2; ex
 if [ -n "${SUT:-}" ]; then
   [ -x "$SUT" ] || { echo "SUT not executable: $SUT" >&2; exit 2; }
 else
-  echo "building ../coreutils multicall…" >&2
+  echo "building ../coreutils multicall---" >&2
   ( cd ../coreutils && go build -trimpath -o bin/coreutils ./cmd/coreutils ) || exit 2
   SUT=$(cd ../coreutils && pwd)/bin/coreutils
 fi
 
-echo "building uutils test harness (cargo; first build is slow)…" >&2
+echo "building uutils test harness (cargo; first build is slow)---" >&2
 ( cd "$UU" && cargo test --features unix --test tests --no-run >/dev/null 2>&1 ) || {
   echo "cargo test harness build failed" >&2
   exit 2
 }
 
 RAW="$OUT/run.txt"
-echo "running uutils suite against $SUT…" >&2
+echo "running uutils suite against $SUT---" >&2
 ( cd "$UU" && UUTESTS_BINARY_PATH="$SUT" cargo test --features unix --test tests -- --test-threads="$THREADS" ) >"$RAW" 2>&1 &
 SUITE_PID=$!
 
 # Memory watchdog: a conformance run must never take the host down (a
-# runaway tool once did, via an unguarded huge allocation — see shuf's
+# runaway tool once did, via an unguarded huge allocation --- see shuf's
 # host-OOM guard). If the suite's process group exceeds MEMCAP_MB of
 # resident memory, kill it and report, rather than swapping the host to
 # death.
@@ -59,7 +59,7 @@ while kill -0 "$SUITE_PID" 2>/dev/null; do
   RSS_MB=$(ps -ax -o pgid=,rss= | awk -v pg="$(ps -o pgid= -p $SUITE_PID | tr -d ' ')" \
     '$1 == pg { s += $2 } END { print int(s/1024) }')
   if [ "${RSS_MB:-0}" -gt "$MEMCAP_MB" ]; then
-    echo "watchdog: suite exceeded ${MEMCAP_MB}MB RSS (${RSS_MB}MB) — killing" >&2
+    echo "watchdog: suite exceeded ${MEMCAP_MB}MB RSS (${RSS_MB}MB) --- killing" >&2
     kill -TERM -- -"$(ps -o pgid= -p $SUITE_PID | tr -d ' ')" 2>/dev/null
     sleep 2
     kill -KILL -- -"$(ps -o pgid= -p $SUITE_PID | tr -d ' ')" 2>/dev/null
