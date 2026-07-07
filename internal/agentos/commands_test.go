@@ -162,8 +162,8 @@ func TestGNUCoreutilsReportTracksGaps(t *testing.T) {
 	if !slices.Contains(report.BashyNative, "ls") {
 		t.Fatalf("expected implemented GNU command ls in native set: %#v", report.BashyNative)
 	}
-	if !slices.Contains(report.Missing, "factor") {
-		t.Fatalf("expected missing GNU command factor in missing set: %#v", report.Missing)
+	if !slices.Contains(report.Missing, "coreutils") {
+		t.Fatalf("expected missing GNU command coreutils in missing set: %#v", report.Missing)
 	}
 	if !slices.Contains(report.CoveredByBuiltins, "printf") || !slices.Contains(report.CoveredByBuiltins, "test") {
 		t.Fatalf("expected printf/test to be tracked as bash builtin coverage: %#v", report.CoveredByBuiltins)
