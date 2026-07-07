@@ -89,7 +89,7 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
   - **Bare-name verb shims** (`Preamble()`): front-door verbs are exposed without
     the `bashy ` prefix via overridable shell functions (`weave(){ command bashy
     weave "$@"; }`, …). Shadowing policy: native verbs (weave/sprint/dag/run/
-    commands/doctor/schedule/secrets/skills) + identical drop-in passthroughs
+    commands/doctor/schedule/secrets/skills/kb) + identical drop-in passthroughs
     (gh/act/rclone/podman/ollama/loom/zot/seaweedfs/kopia/mirror)
     always shimmed; version-sensitive provisioners (go/cmake/clang) only in agent
     mode; `time` (keyword) and jobs/fg/bg/kill (builtins) never. Override with

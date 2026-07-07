@@ -94,8 +94,14 @@ always ends with a **re-measure on the merged tree**.
 PLAN → (RESEARCH) → FAN-OUT → STEER → CONVERGE → RETRO. Drive it by hand with
 `bashy weave` / `bashy sprint`:
 
-1. **PLAN** — decompose the goal into disjoint-scope stories, file them in the
-   queue (`bashy weave add … --priority p0`). Optional cheap-agent estimates.
+1. **PLAN** — **check the host kb first: `bashy kb search <goal terms>`** —
+   the collective memory of every agent on this host across all repos; known
+   traps it returns go into story bodies as KNOWN TRAPS, and if nothing
+   relevant exists note what you'd expect to find (you'll contribute it at
+   RETRO). Then decompose the goal into disjoint-scope stories, file them in
+   the queue (`bashy weave add … --priority p0`). Optional cheap-agent
+   estimates. (Workers get their own kb check for free: `weave start` drops
+   KB.md into each workspace.)
 2. **RESEARCH** *(only when complex)* — if the queue is large, research
    approaches / prior-art / risks first. Simple goals skip it.
 3. **FAN-OUT** *(routed by parallel-safety — see Scheduling)* — fan out to a
@@ -124,8 +130,13 @@ PLAN → (RESEARCH) → FAN-OUT → STEER → CONVERGE → RETRO. Drive it by ha
    then `bashy weave pull`; re-run the goal verifier on the merged tree by hand
    before trusting it.
 6. **RETRO** — capture the tool report card (which CLI did well on what) + any
-   lessons; embed bisect findings into the next round's story bodies. This is
-   what makes the conductor improve across runs, not just within one.
+   lessons; embed bisect findings into the next round's story bodies. **Close
+   the kb loop: `bashy kb retro <terms>`** — validate pages that proved out
+   (`bashy kb validate <slug> --evidence "<gate cmd/commit>"`), supersede
+   what proved wrong, add the campaign's durable lessons (distilled strategy
+   + failures-as-guardrails, never transcripts; NOOP when nothing durable).
+   This is what makes the conductor — and every other agent on the host —
+   improve across runs, not just within one.
 
 ## Conductor faculties — decide for yourself
 

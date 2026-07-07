@@ -393,6 +393,16 @@ traps). Repeat until the actionable failing set is empty; verify the
 environment-divergent cases and any cross-cluster ripple in the canonical
 environment in a final consolidation pass.
 
+At round end, write the durable residue into the **host kb** (`bashy kb`) —
+the collective memory of all agents on this host across all repos. Campaign
+notes die with the campaign; the kb is where the cross-campaign lessons live
+(the tool report card patterns above are exactly this genre). `bashy kb retro
+<terms>` structures the decision: add / update / supersede / validate / noop —
+distilled strategy with evidence, failures phrased as guardrails, never
+transcripts. Workers already saw the relevant pages (weave drops KB.md into
+each workspace), so a validated kb page is knowledge the NEXT campaign's
+fleet gets for free.
+
 ---
 
 ## Anti-patterns (each costs a round)

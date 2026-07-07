@@ -70,6 +70,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/chat"
 	"github.com/qiangli/coreutils/pkg/dag"
 	"github.com/qiangli/coreutils/pkg/jobs"
+	"github.com/qiangli/coreutils/pkg/kb"
 	"github.com/qiangli/coreutils/pkg/mirror"
 	"github.com/qiangli/coreutils/pkg/schedule"
 	"github.com/qiangli/coreutils/pkg/sdlc"
@@ -107,7 +108,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "chat", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "run", "commands", "context", "doctor", "self", "check", "verify",
+		"weave", "sprint", "chat", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "run", "commands", "context", "doctor", "self", "check", "verify",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -361,6 +362,19 @@ func Dispatch() {
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy skills:", err)
 			os.Exit(coreskills.ExitCode(err))
+		}
+		os.Exit(0)
+	case "kb":
+		// The host-shared knowledge base (coreutils/pkg/kb): the collective
+		// memory of all agents on this host across all repos — OKF-style
+		// wiki pages under ~/.bashy/kb. The loop: `search` before a task,
+		// `add` when nothing relevant exists, `retro` (update/supersede/
+		// validate) after the task completes.
+		cmd := kb.NewKBCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy kb:", err)
+			os.Exit(1)
 		}
 		os.Exit(0)
 	case "schedule":

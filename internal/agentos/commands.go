@@ -281,6 +281,7 @@ var verbSynopsis = map[string]string{
 	"schedule":  "modern cron: run a command on a cron/interval/at schedule",
 	"secrets":   "managed API-key/token vault for the shell",
 	"skills":    "tier-2 workspace skills, env-gated: list applicable here, probe the coordinate, show one",
+	"kb":        "host-shared knowledge base: search before a task, add/retro after (all agents, all repos)",
 	"run":       "run a command, emit a structured result envelope (+advisor hints)",
 	"commands":  "list the supported command surface (builtins, coreutils, verbs)",
 	"context":   "print first-hop agent context: exact bashy path and capabilities",
