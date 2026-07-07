@@ -27,9 +27,15 @@ mkdir -p "$OUT"
 }
 command -v cargo >/dev/null 2>&1 || { echo "need cargo (rust toolchain)" >&2; exit 2; }
 
-echo "building ../coreutils multicall…" >&2
-( cd ../coreutils && go build -trimpath -o bin/coreutils ./cmd/coreutils ) || exit 2
-SUT=$(cd ../coreutils && pwd)/bin/coreutils
+# SUT override: point at a prebuilt multicall binary (e.g. one scp'd to
+# a bench box) instead of building ../coreutils here.
+if [ -n "${SUT:-}" ]; then
+  [ -x "$SUT" ] || { echo "SUT not executable: $SUT" >&2; exit 2; }
+else
+  echo "building ../coreutils multicall…" >&2
+  ( cd ../coreutils && go build -trimpath -o bin/coreutils ./cmd/coreutils ) || exit 2
+  SUT=$(cd ../coreutils && pwd)/bin/coreutils
+fi
 
 echo "building uutils test harness (cargo; first build is slow)…" >&2
 ( cd "$UU" && cargo test --features unix --test tests --no-run >/dev/null 2>&1 ) || {
