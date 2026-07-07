@@ -93,10 +93,22 @@ Tools: go zsh
 scripts/zsh-scoreboard.sh
 ```
 
+### uutils
+uutils test-suite scoreboard — the MIT uutils/coreutils suite (cargo,
+`UUTESTS_BINARY_PATH` override) run against the pure-Go coreutils multicall
+from ../coreutils, the same tool registry bashy mounts in-process. INFO (many
+cases assert uutils-specific diagnostics/extensions, so 100% is not the
+target). Needs cargo + the gitignored clone at
+../coreutils/reference/uutils-coreutils.
+Tools: go cargo
+```bash
+scripts/uutils-scoreboard.sh
+```
+
 ### all
 Aggregate goal — depends on every suite, so `bashy dag suites.md` (default) runs
 the full matrix. With `-jN` the independent suites fan out across N slots.
-Requires: gotest test-bash parity xcu-diff oils-diff multishell austin yash zsh
+Requires: gotest test-bash parity xcu-diff oils-diff multishell austin yash zsh uutils
 ```bash
 echo "all conformance suites complete"
 ```

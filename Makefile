@@ -157,6 +157,19 @@ test-zsh:
 test-zsh-list: test-zsh
 	@cat $${ZSH_OUT:-/tmp/zsh-scoreboard}/failures.txt
 
+## test-uutils: uutils test-suite scoreboard — runs the MIT-licensed
+## uutils/coreutils test suite (via cargo + its UUTESTS_BINARY_PATH override)
+## against the pure-Go coreutils multicall from ../coreutils (the same tool
+## registry bashy mounts in-process). INFO metric, not a gate — many cases
+## assert uutils-specific diagnostics. Needs cargo + the gitignored clone at
+## ../coreutils/reference/uutils-coreutils. Output dir via UUTILS_OUT.
+test-uutils:
+	@scripts/uutils-scoreboard.sh $(UUTILS_OUT)
+
+## test-uutils-list: print the current uutils-suite failure list (module::case).
+test-uutils-list: test-uutils
+	@cat $${UUTILS_OUT:-/tmp/uutils-scoreboard}/failures.txt
+
 ## test-bash: Run bash 5.3 native test suite against bashy (with per-test timeout).
 ## Builds only the lean bin/bash drop-in (not the 259MB embed-heavy bin/bashy).
 ## Iterate fast on a subset with TESTS="name ...", e.g. make test-bash TESTS="comsub varenv".
