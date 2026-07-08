@@ -397,6 +397,11 @@ func Dispatch() {
 		// Environment self-diagnostic: PATH/sh shadowing, a stale bashy on PATH,
 		// toolchain + container engine, agent mode, bin cache. Advisory.
 		os.Exit(dispatchDoctor(os.Args[2:]))
+	case "install-agent":
+		// Wire a coding agent (claude/opencode/aider/gemini/copilot) to use
+		// bashy as its shell; --check verifies, --uninstall reverses. See
+		// docs/agent-adoption/matrix.md for per-agent verification status.
+		os.Exit(dispatchInstallAgent(os.Args[2:]))
 	case "context":
 		// First-hop agent context: one compact JSON record with the exact bashy
 		// path, mode flags, cwd, and recommended discovery/safety commands.

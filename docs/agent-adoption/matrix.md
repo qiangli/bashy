@@ -14,11 +14,18 @@ yet exercised.
 | Agent | Shell selection | Invocation shape | Status (2026-07-07) |
 |---|---|---|---|
 | Claude Code | `CLAUDE_CODE_SHELL` env (settings.json `env` block); unix only | `bash -c env` (probe), `bash -c -l '<snapshot script>'` (rc snapshot), then per-command | **E2E PASS** — headless `claude -p` session ran its Bash tool through bashy end-to-end, snapshot generation included |
-| Aider | `$SHELL` | `pexpect.spawn(shell, ["-i","-c",cmd])` under a PTY | **shape PASS** (`-i -c` parses + runs); PTY-session E2E pending |
-| Codex CLI | none (PATH shim: `bash` resolved via execvp) | `bash -lc 'cmd'` | **shape PASS**; live PATH-shim run pending |
-| OpenCode | `opencode.json` `"shell": {"path", "args"}` | configured shell `-c` | **unverified** (config exists upstream; recipe pending live run) |
-| Gemini CLI / Copilot CLI | none (PATH shim on unix) | `bash -c 'cmd'` | **shape PASS** (plain `-c` is the conformance-suite baseline) |
+| OpenCode | `opencode.json` `"shell": "<path>"` — a plain **string** (an object `{path,args}` form fails config validation; verified v1.17.10) | configured shell `-c` | **E2E PASS** — `opencode run` executed through bashy (`$0=bash`, `$BASH_VERSION` set) |
+| Aider | `$SHELL` | `pexpect.spawn(shell, ["-i","-c",cmd])` under a PTY | **PTY-shape PASS** — exact spawn replayed via aider's own pexpect (PTY, `-i -c`), correct output + exit 0; live LLM session not exercised |
+| Codex CLI | **none on macOS** — spawns `/bin/zsh` by **absolute path** (verified v0.142.5: `argv0=/bin/zsh zsh=5.9`), so neither config nor a PATH shim reaches it | zsh, not bash | **BLOCKED (macOS)** — upstream-only (portable-bash backend beside their ZshFork); Linux behavior unverified |
+| Gemini CLI / Copilot CLI | none (PATH shim on unix) | `bash -c 'cmd'` | **shape PASS** + shim mechanism verified (`PATH=~/.bashy/shims` resolves bashy); live agent run pending |
 | Cline / Cursor | VS Code terminal profile | interactive + shell-integration escape injection | **deferred** — requires VS Code shell-integration script compat |
+
+Wiring is automated by **`bashy install-agent <agent> [--project] [--check]
+[--uninstall]`** (`internal/agentos/installagent.go`): claude/opencode get
+config-file writes (JSON-merge, atomic, reversible), gemini/copilot get
+`~/.bashy/shims/{bash,sh}`, aider gets `SHELL=` guidance, codex reports the
+upstream status. `--check` probes the agent's exact invocation shape,
+including Claude Code's `-c -l` snapshot shape.
 
 ## Findings
 
@@ -58,11 +65,27 @@ An existing Claude-Code-generated snapshot (93 lines: `unalias -a`,
 and after F1 the *generation* path (running the snapshot-builder script via
 `-c -l`) works too, proven by the E2E run.
 
+### F4 — OpenCode config is a string, live-verified
+
+Research suggested `"shell": {"path", "args"}`; v1.17.10 validates `shell`
+as a plain string. With `"shell": "<bashy bash>"` a live `opencode run`
+executed its command through bashy. The first attempt timed out on model
+latency — not a shell hang; the retry completed normally.
+
+### F5 — Codex CLI is not reachable from the outside (macOS)
+
+codex-cli 0.142.5 executes commands in `/bin/zsh` (absolute path, zsh 5.9)
+— the earlier "spawns `bash -lc` via execvp" understanding is outdated. No
+config key, no PATH shim. The route is an upstream PR (a portable-bash
+backend beside their patched-zsh "ZshFork" — precedent that they ship
+alternate shell backends). Linux behavior unverified.
+
 ## Next verifications
 
-1. Live aider session with `SHELL=` pointing at bashy (PTY + pexpect).
-2. Live OpenCode run with `shell.path` config.
-3. Live Codex CLI run behind a PATH-shim dir.
-4. Windows: `CLAUDE_CODE_GIT_BASH_PATH` → `bash.exe` experiment on a
+1. Live aider LLM session with `SHELL=` pointing at bashy (shape already
+   replayed under aider's own pexpect).
+2. Live Gemini/Copilot CLI runs behind the shim dir.
+3. Windows: `CLAUDE_CODE_GIT_BASH_PATH` → `bash.exe` experiment on a
    Windows fleet host.
+4. Codex CLI on Linux (does it use bash there?).
 5. VS Code shell-integration injection script tolerance (gates Cline/Cursor).

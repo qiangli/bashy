@@ -25,6 +25,7 @@ Bashy front-door help:
 	bashy commands grep --features	show one-command capability/gap report
 	bashy commands --gnu		show GNU coreutils parity/gap inventory
 	bashy doctor			diagnose shell/runtime environment
+	bashy install-agent <agent>	wire claude/opencode/aider/... to use bashy as their shell
 	bashy serve [socket]		warm session: reuse one process for repeated -c calls
 	bashy self fetch		fetch/cache a released bashy binary
 	bashy git --help		show embedded git subcommands
