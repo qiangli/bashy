@@ -7,12 +7,16 @@ description: >-
   task. Two loops: MENTOR (turn your private memory / in-context recall into
   reconciled kb pages other agents inherit) and MENTEE (consume the kb before
   a task, then validate-through-use so candidate knowledge becomes team
-  knowledge). Use when an agent holds durable knowledge others on this host
-  will need (operational rules, gotchas, orientation, runbooks), or when
-  onboarding onto unfamiliar ground. NOT for session-scoped scratch, facts
-  derivable from the repo (code, git history, CLAUDE.md), or bulk-copying a
-  private memory store verbatim — kb pages are distilled strategy, never
-  transcripts.
+  knowledge). The transfer is BETWEEN agentic tools — mentor agent of one
+  tool, mentee agents of any tool, over the tool-neutral kb — and is
+  INITIATED by a human user or an agentic orchestrator
+  (conductor/foreman/sprint), never self-started mid-task. Use when asked to
+  share durable knowledge others on this host will need (operational rules,
+  gotchas, orientation, runbooks), or when onboarding onto unfamiliar
+  ground. NOT for self-initiated single-fact write-backs (that is the
+  ordinary kb add/retro loop), session-scoped scratch, facts derivable from
+  the repo (code, git history, CLAUDE.md), or bulk-copying a private memory
+  store verbatim — kb pages are distilled strategy, never transcripts.
 ---
 
 # knowledge-transfer — one agent trains the others, via `bashy kb`
@@ -21,6 +25,17 @@ You are moving knowledge between minds. The medium is the host knowledge base
 (`bashy kb` — the team wiki every agent on this host shares); the discipline
 is an agile team's: the mentor distills, the wiki carries, and knowledge only
 becomes *team* knowledge when a second developer uses it successfully.
+
+**The actors.** This is a cross-TOOL transfer: the mentor is an agent of one
+tool (Claude Code, ycode, codex, …), the mentees are agents of ANY tool —
+the kb is the neutral ground between them. You do not start a transfer
+campaign on your own initiative: a **human user** asks for it ("share what
+you know about X with the team"), or an **agentic orchestrator**
+(conductor/foreman/sprint) schedules it as a step — e.g. priming the kb
+before a fleet campaign so every spawned worker's KB.md injection carries
+the mentor's knowledge. Mid-task, self-initiated contributions of a single
+fresh lesson are NOT this skill — that is the ordinary `kb add`/`kb retro`
+loop.
 
 **Three rules govern everything:**
 
