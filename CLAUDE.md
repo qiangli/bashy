@@ -309,6 +309,14 @@ brand-neutral and driven by bashy's own tools:
   until a verifier passes); TDD-at-fleet-scale is the canonical mode.
 - `skills/go-repo-health/` — the reference dual-bundle skill (`SKILL.md` +
   `skill.dhnt`): attested build-ok ∧ tests-green gate for a Go repo.
+- `skills/knowledge-transfer/` — agent-to-agent knowledge transfer via
+  `bashy kb`: the MENTOR loop (distill private memory / in-context recall
+  into reconciled candidate pages; select durable+team-relevant+non-derivable;
+  redaction gate; `xfer:<source>` idempotence tags; procedures route to
+  `skills learn`, prose to kb) and the MENTEE loop (search-before-task →
+  validate-through-use → pointers-not-copies localization). Hard rules:
+  transferred ≠ validated (a second agent promotes), kb reads foreign stores
+  but never writes them.
 
 ## Plans
 

@@ -15,7 +15,7 @@ import (
 	"strings"
 )
 
-//go:embed all:conductor all:go-repo-health all:bashy
+//go:embed all:conductor all:go-repo-health all:bashy all:knowledge-transfer
 var FS embed.FS
 
 // Names returns every embedded skill directory name (those with a SKILL.md),
