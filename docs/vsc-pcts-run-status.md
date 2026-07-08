@@ -7,6 +7,54 @@ record of the official POSIX VSC-PCTS run against bashy so the campaign resumes
 without re-deriving anything. Remaining: the final scored run (default timers,
 sh_12/sh_13 isolated) + the human Open Group submission step.
 
+## 2026-07-08 — shell holds/improves + FIRST utils sweep scored against the bashy coreutils userland
+
+SUT rebuilt from bashy `e0b9bf6` + sh `4e89440c` + coreutils `d483e5e`
+(the post-uutils-parity coreutils: option abbreviation, chcon, hidden
+GNU spellings, --time words). Launcher `/vsc/run-night8.sh`; ledgers
+`night8-progress` / `utils3-progress`, logs `/vsc/logs3/`, journals
+`0197be`–`0298be`.
+
+**Shell — no regression, slightly better.**
+- shell_no12 (journal `0197be`): **368 PASS / 5 FAIL** / 5 UNRES / 33
+  UNSUP / 25 UNTESTED — vs the 358/5 July-7 baseline: +10 passes, fail
+  count unchanged (the known residual family, all shared with certified
+  bash 5.3).
+- sh_12 (journal `0198be`): **43 PASS / 12 FAIL** / 5 UNSUP / 3 UNTESTED
+  — vs 42/12: +1 pass, the same declared-limitation trap/signal set.
+
+**Utilities — first-ever scoring of OUR userland.** Prior sweeps scored
+the container's Debian/GNU toolchain; this run prepended `/opt/cushim`
+(the coreutils multicall + 135 symlinks) to the suite PATH, so PCTS
+scored bashy's pure-Go tools wherever a name exists (GNU fills the rest).
+100 tsets, same per-tset 10-min caps as the utils2 GNU arm:
+
+| arm | PASS | FAIL | UNRESOLVED | UNSUPPORTED |
+|---|---|---|---|---|
+| bashy userland (utils3) | 2551 | 912 | 354 | 1341 |
+| GNU baseline (utils2)   | 2947 | 516 | 392 | 1313 |
+
+86.6% of GNU's pass count. The fail delta (+396) is CONCENTRATED — six
+commands carry over half of it:
+
+- sed +69, grep +59 (regex/text-engine depth: pkg/bre + sed feature
+  grammar — one root system, ~130 of the delta)
+- find +51 (`-exec`/`-ok` are NO-list + primary edge semantics)
+- ls +20, expr +18, xargs +18, pr +17, env +16 (env COMMAND is
+  NO-list; PCTS tests exactly that), id +12, od +9, mkdir +8, rm +7
+- ~35 further tsets at +1..+6 (long-tail semantic edges); identical to
+  GNU on getconf/getopts/true/false/time/who and the cap-limited
+  diff/ed/stty/more/crontab
+- not comparable: at/batch/tail (cap artifacts differ between arms),
+  kill (bashy builtin scores via sh, not the shim), patch (fixture
+  collateral)
+
+Reading: the July uutils-parity campaign closed the GNU *option
+surface*; PCTS measures POSIX *runtime semantics*, which is a different
+axis — the userland's next conformance frontier. The NO-list "↻ revisit"
+entries (env COMMAND, find -exec) are now data-justified under the
+command-wrapper exception: PCTS charges them ~67 fails.
+
 ## 2026-07-07 — regression re-run: baseline reproduced with a fresh SUT
 
 A fresh `cmd/bash` build (bashy `51dc0c2` + sh `4e89440c`) re-run through the
