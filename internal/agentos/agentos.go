@@ -71,6 +71,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/dag"
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/kb"
+	"github.com/qiangli/coreutils/pkg/meet"
 	"github.com/qiangli/coreutils/pkg/mirror"
 	"github.com/qiangli/coreutils/pkg/schedule"
 	"github.com/qiangli/coreutils/pkg/sdlc"
@@ -108,7 +109,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "chat", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "run", "commands", "context", "doctor", "self", "check", "verify",
+		"weave", "sprint", "chat", "meet", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "run", "commands", "context", "doctor", "self", "check", "verify",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -310,6 +311,16 @@ func Dispatch() {
 		cmd := chat.NewChatCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "meet":
+		// Multi-participant deliberation session: agentic CLIs + a human take
+		// turns; a dedicated notes-only secretary keeps and files the minutes.
+		cmd := meet.NewMeetCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy meet:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
