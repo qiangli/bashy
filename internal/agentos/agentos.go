@@ -71,6 +71,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/dag"
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/kb"
+	"github.com/qiangli/coreutils/pkg/capability"
 	"github.com/qiangli/coreutils/pkg/meet"
 	"github.com/qiangli/coreutils/pkg/mirror"
 	"github.com/qiangli/coreutils/pkg/schedule"
@@ -109,7 +110,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "chat", "meet", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "run", "commands", "context", "doctor", "self", "check", "verify",
+		"weave", "sprint", "chat", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "run", "commands", "context", "doctor", "self", "check", "verify",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -328,6 +329,16 @@ func Dispatch() {
 		cmd := agentcmd.NewAgentCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "capability":
+		// The living agent (tool:model) × capability matrix behind
+		// capability-routed delegation — the routing table for `chat --capability`.
+		cmd := capability.NewCapabilityCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy capability:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
