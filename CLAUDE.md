@@ -269,6 +269,7 @@ itself, which is pure Go).
 - `scope-jobcontrol-fc-behaviors.md` — feasibility scoping of the remaining POSIX-mode job-control (#23–27,#49) + fc (#54–57) behaviors: TRACTABLE vs VERIFY vs CEILING, with the next two-issue fleet round.
 - `plan-dynvar.md`, `plan-error-format-pass.md`, `plan-punted-builtins.md` — scoped sub-plans for specific clusters of fixture failures.
 - `json-output.md` — bashy's opt-in `set --json` / `declare --json` structured-output extensions.
+- `command-atlas.md` — the Command Atlas: the multi-axis agent-facing catalog of the whole command surface (classical group + execution tier + capability + idiom axes). Tables live in `coreutils/pkg/atlas` (coverage-test-ratcheted against `tool.Names()`); the bashy merge layer is `internal/agentos/atlas.go`; views via `bashy commands --view tier|group|capabilities`, `--tier/--group/--cap` filters, `--idioms`, `--atlas` (`bashy-atlas-v1`). Adding a verb/tool = add its atlas entry (the tests name what you forgot).
 - `space-time-advisor.md` — the shipped space-time advisor: non-intrusive error-time hints (cwd/network/compute/disk + doomed-loop + network-fingerprint host memory) that steer agentic tools off doomed retries. Self-contained feature doc (dimensions, env vars, `bashy-advice-v1` JSON schema, scope/non-goals).
 - `bash.md`, `agentic-extensions.md` — background references, not active plans.
 

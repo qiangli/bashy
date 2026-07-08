@@ -29,8 +29,55 @@ const commandsSchemaVersion = "bashy-commands-v1"
 func dispatchCommands(args []string) int {
 	asJSON, verbose := weavecli.IsAgent(), false // JSON by default under $BASHY_AGENTIC
 	agentic, all, gnu, features := false, false, false, false
+	var view, tierFilter, groupFilter, capFilter string
+	idioms, atlasFull := false, false
 	var query string
-	for _, a := range args {
+	// valued reads a "--flag value" / "--flag=value" option; ok=false means
+	// the value is missing (usage error, already reported).
+	valued := func(a, name string, i *int) (string, bool, bool) {
+		if a == name {
+			if *i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "commands: %s requires a value\n", name)
+				return "", false, true
+			}
+			*i++
+			return args[*i], true, true
+		}
+		if strings.HasPrefix(a, name+"=") {
+			return strings.TrimPrefix(a, name+"="), true, true
+		}
+		return "", false, false
+	}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if v, ok, matched := valued(a, "--view", &i); matched {
+			if !ok {
+				return 2
+			}
+			view = v
+			continue
+		}
+		if v, ok, matched := valued(a, "--tier", &i); matched {
+			if !ok {
+				return 2
+			}
+			tierFilter = v
+			continue
+		}
+		if v, ok, matched := valued(a, "--group", &i); matched {
+			if !ok {
+				return 2
+			}
+			groupFilter = v
+			continue
+		}
+		if v, ok, matched := valued(a, "--cap", &i); matched {
+			if !ok {
+				return 2
+			}
+			capFilter = v
+			continue
+		}
 		switch a {
 		case "--json", "--json=true":
 			asJSON = true
@@ -45,10 +92,15 @@ func dispatchCommands(args []string) int {
 		case "--features":
 			features = true
 			asJSON = true
+		case "--idioms":
+			idioms = true
+		case "--atlas":
+			atlasFull = true
 		case "-v", "--verbose":
 			verbose = true
 		case "-h", "--help":
 			fmt.Println("usage: commands [COMMAND] [-v] [--json|--plain|--agentic|--all|--gnu|--features]")
+			fmt.Println("                [--view VIEW] [--tier T] [--group G] [--cap C] [--idioms] [--atlas]")
 			fmt.Println("List the supported command surface: shell builtins, the coreutils")
 			fmt.Println("userland, and bashy's front-door verbs.")
 			fmt.Println("  COMMAND        show one command's class/resolver/synopsis")
@@ -59,6 +111,13 @@ func dispatchCommands(args []string) int {
 			fmt.Println("  --all          include hidden compatibility aliases")
 			fmt.Println("  --gnu          include GNU coreutils parity/gap inventory")
 			fmt.Println("  --features     machine-readable one-command feature/gap report")
+			fmt.Println("Command Atlas views (docs/command-atlas.md):")
+			fmt.Printf("  --view VIEW    classic | %s\n", strings.Join(atlasViews, " | "))
+			fmt.Println("  --tier T       filter by execution tier (userland/workspace/sandbox/…)")
+			fmt.Println("  --group G      filter by functional group (fileutils/code-intel/…)")
+			fmt.Println("  --cap C        filter by agentic capability (json/read-only/…)")
+			fmt.Println("  --idioms       curated composites: commands naturally used together")
+			fmt.Println("  --atlas        full per-command atlas records (machine surface)")
 			return 0
 		default:
 			if strings.HasPrefix(a, "-") {
@@ -71,6 +130,16 @@ func dispatchCommands(args []string) int {
 			}
 			query = a
 		}
+	}
+
+	if view == "classic" {
+		view = "" // explicit alias for the default output
+	}
+	if view != "" || tierFilter != "" || groupFilter != "" || capFilter != "" || idioms || atlasFull {
+		return dispatchAtlas(atlasRequest{
+			view: view, tier: tierFilter, group: groupFilter, cap: capFilter,
+			idioms: idioms, full: atlasFull, asJSON: asJSON, all: all, verbose: verbose,
+		})
 	}
 
 	if agentic {
@@ -182,6 +251,8 @@ func printAgenticCommands(w io.Writer) {
   bashy fetch --json URL          built-in URL/REST client with status envelope
   bashy commands -v              full command surface with synopses
   bashy commands grep --features  one-command resolver/capability/gap report
+  bashy commands --view tier     the Command Atlas by execution tier; --atlas for records
+  bashy commands --idioms        commands naturally used together (composites)
   bashy dag --list               list markdown DAG targets
   bashy graph-impact SYMBOL      code-graph blast radius: what's coupled to a symbol
   bashy graph-hotspots           most-connected symbols (refactor / orientation targets)
@@ -209,21 +280,25 @@ func commandFeatureReport(name string, builtins, core, verbs, hidden []string, g
 	switch {
 	case containsString(builtins, name):
 		out["class"], out["resolver"], out["available"] = "builtin", "bash-builtin", true
+		atlasFeatureFields(out, name, "builtin", false)
 	case containsString(core, name):
 		out["class"], out["resolver"], out["available"] = "coreutils", "bashy-in-process", true
 		if t := tool.Lookup(name); t != nil && t.Synopsis != "" {
 			out["synopsis"] = t.Synopsis
 		}
+		atlasFeatureFields(out, name, "coreutils", false)
 	case containsString(verbs, name):
 		out["class"], out["resolver"], out["available"] = "verb", "bashy-front-door", true
 		if s := verbSynopsis[name]; s != "" {
 			out["synopsis"] = s
 		}
+		atlasFeatureFields(out, name, "verb", false)
 	case containsString(hidden, name):
 		out["class"], out["resolver"], out["available"], out["hidden"] = "verb", "bashy-front-door", true, true
 		if s := verbSynopsis[name]; s != "" {
 			out["synopsis"] = s
 		}
+		atlasFeatureFields(out, name, "verb", true)
 	case containsString(gnu.Missing, name):
 		out["class"] = "gnu-coreutils-missing"
 		out["resolver"] = "managed-container-or-system"
