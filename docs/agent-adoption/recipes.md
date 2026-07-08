@@ -1,11 +1,19 @@
 # Agent adoption recipes — use bashy as your agent's shell
 
+**Automatic for bashy-launched agents.** `bashy meet`/`chat`/`weave`/`sdlc` spawn
+agents through the `coreutils/pkg/chat` launcher, which force-injects the shell
+env (`PATH=~/.bashy/shims:…`, `SHELL=<bashy>`, `CLAUDE_CODE_SHELL=<bashy>`) into
+every child — so agents you launch *through bashy* already run their shell under
+bashy (on by default; `BASHY_FORCE_AGENT_SHELL=0` disables). `install-agent` below
+is for making it durable when you launch the agent **directly**.
+
 One command wires a coding agent to run its shell commands through bashy:
 
 ```sh
 bashy install-agent            # status of every known agent
-bashy install-agent <agent>    # wire it (claude | opencode | aider | gemini | copilot)
-bashy install-agent <agent> --check      # verify the wiring + the agent's exact invocation shape
+bashy install-agent <agent>    # wire it (claude | opencode | aider | gemini | copilot | agy | codex)
+bashy install-agent <agent> --check      # verify the wiring + the agent's exact invocation shape (free)
+bashy install-agent <agent> --probe      # verify LIVE: run the agent once, confirm bashy handled its shell
 bashy install-agent <agent> --uninstall  # reverse it
 ```
 
@@ -54,21 +62,42 @@ SHELL=/path/to/bashy aider
 
 `bashy install-agent aider --check` probes the `-i -c` shape.
 
-## Gemini CLI / Copilot CLI (shim mechanism verified)
+## Gemini CLI / Copilot CLI / Antigravity `agy` (shim mechanism verified)
 
-Both spawn a bare `bash` resolved via PATH on unix.
-`bashy install-agent gemini` (or `copilot`) writes `~/.bashy/shims/{bash,sh}`
-symlinks; launch the agent with the shim dir prepended:
+All spawn a bare `bash -c` resolved via PATH on unix (gemini-family
+`run_shell_command`, `shell:false`, never reads `$SHELL`).
+`bashy install-agent gemini` (or `copilot`, or `agy`) writes
+`~/.bashy/shims/{bash,sh,zsh}` symlinks; launch with the shim dir prepended:
 
 ```sh
-PATH="$HOME/.bashy/shims:$PATH" gemini
+PATH="$HOME/.bashy/shims:$PATH" agy
 ```
 
-## Codex CLI (blocked on macOS)
+(The launcher does this automatically for `bashy meet`/`chat`/`weave`.)
 
-codex-cli (verified v0.142.5) executes commands in `/bin/zsh` by absolute
-path on macOS — no config key, no PATH shim reaches it. Tracked as upstream
-work (a portable-bash backend beside codex's ZshFork). Linux unverified.
+## Codex CLI (reachable via the login shell — invasive)
+
+codex reads the **`/etc/passwd` login shell** (`getpwuid_r` `pw_shell`), not
+`$SHELL`/PATH/config, and keys the shell type on the filename stem, then runs
+`<shell> -lc` (verified from `codex-rs/shell-command/src/shell_detect.rs`). So the
+lever is `chsh` to a bash/zsh-named bashy shim:
+
+```sh
+bashy install-agent codex          # writes ~/.bashy/shims/bash -> bashy, prints the recipe
+echo "$HOME/.bashy/shims/bash" | sudo tee -a /etc/shells   # once
+chsh -s "$HOME/.bashy/shims/bash"  # or: bashy install-agent codex --yes (after the /etc/shells line)
+```
+
+This changes the login shell for **all** sessions (Terminal, ssh) — it is the
+one invasive recipe. For text-only agent turns (e.g. `bashy meet`) codex's shell
+is moot, so this is only needed when codex will actually run shell commands.
+DYLD interposition is blocked (SIP + hardened runtime).
+
+## Codex CLI on Linux
+
+Same login-shell mechanism; the fallback chain differs (`get_shell_path` tries
+`which(bash/zsh)` before the hardcoded `/bin/*`), so a PATH shim can also win when
+the passwd shell type doesn't match. `chsh` remains the robust lever.
 
 ## Cline / Cursor (deferred)
 

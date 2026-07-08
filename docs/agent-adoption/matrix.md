@@ -16,16 +16,27 @@ yet exercised.
 | Claude Code | `CLAUDE_CODE_SHELL` env (settings.json `env` block); unix only | `bash -c env` (probe), `bash -c -l '<snapshot script>'` (rc snapshot), then per-command | **E2E PASS** — headless `claude -p` session ran its Bash tool through bashy end-to-end, snapshot generation included |
 | OpenCode | `opencode.json` `"shell": "<path>"` — a plain **string** (an object `{path,args}` form fails config validation; verified v1.17.10) | configured shell `-c` | **E2E PASS** — `opencode run` executed through bashy (`$0=bash`, `$BASH_VERSION` set) |
 | Aider | `$SHELL` | `pexpect.spawn(shell, ["-i","-c",cmd])` under a PTY | **PTY-shape PASS** — exact spawn replayed via aider's own pexpect (PTY, `-i -c`), correct output + exit 0; live LLM session not exercised |
-| Codex CLI | **none on macOS** — spawns `/bin/zsh` by **absolute path** (verified v0.142.5: `argv0=/bin/zsh zsh=5.9`), so neither config nor a PATH shim reaches it | zsh, not bash | **BLOCKED (macOS)** — upstream-only (portable-bash backend beside their ZshFork); Linux behavior unverified |
-| Gemini CLI / Copilot CLI | none (PATH shim on unix) | `bash -c 'cmd'` | **shape PASS** + shim mechanism verified (`PATH=~/.bashy/shims` resolves bashy); live agent run pending |
+| Codex CLI | **login shell** — reads `/etc/passwd` `pw_shell` (getpwuid_r), NOT `$SHELL`/PATH/config, and derives the shell TYPE from the filename stem, then runs `<shell> -lc` (verified from `codex-rs/shell-command/src/shell_detect.rs`) | `<login-shell> -lc 'cmd'` | **REACHABLE via `chsh`** (was "blocked") — set the login shell to a bash/zsh-named bashy shim; `bashy install-agent codex` writes the shim + prints the (invasive, global) `chsh` recipe. DYLD interposition blocked (SIP + hardened runtime) |
+| Gemini CLI / Copilot CLI / Antigravity (`agy`) | none (PATH shim on unix) | bare **`bash -c 'cmd'`** via PATH (`shell:false`; `gemini-cli/.../shell-utils.ts:698`, never reads `$SHELL`); interactive-PTY path → login shell | **shape PASS** + shim mechanism verified (`PATH=~/.bashy/shims` resolves bashy); `install-agent {gemini,copilot,agy}` |
 | Cline / Cursor | VS Code terminal profile | interactive + shell-integration escape injection | **deferred** — requires VS Code shell-integration script compat |
 
-Wiring is automated by **`bashy install-agent <agent> [--project] [--check]
-[--uninstall]`** (`internal/agentos/installagent.go`): claude/opencode get
-config-file writes (JSON-merge, atomic, reversible), gemini/copilot get
-`~/.bashy/shims/{bash,sh}`, aider gets `SHELL=` guidance, codex reports the
-upstream status. `--check` probes the agent's exact invocation shape,
-including Claude Code's `-c -l` snapshot shape.
+**Two layers now force bashy:**
+
+1. **The launcher (automatic).** `coreutils/pkg/chat` `execRunner` — the shared
+   spawn path for `bashy chat`/`meet`/`weave`/`sdlc` — injects a bashy-shell env
+   into every agent it launches: `PATH=~/.bashy/shims:…` (bare-name `bash`/`sh`/
+   `zsh` → bashy; catches agy + opencode-unconfigured), `SHELL=<bashy>` (aider),
+   `CLAUDE_CODE_SHELL=<bashy>` (claude). On by default; `BASHY_FORCE_AGENT_SHELL=0`
+   disables. codex is the exception (reads `/etc/passwd`, not env) — see below.
+   `bashy meet start --dry-run` reports each participant's routing status.
+2. **`bashy install-agent <agent> [--project] [--check] [--probe] [--uninstall]
+   [--yes]`** (`internal/agentos/installagent.go`) — makes the wiring durable for
+   direct/interactive use: claude/opencode get config-file writes (JSON-merge,
+   atomic, reversible), gemini/copilot/**agy** get `~/.bashy/shims/{bash,sh,zsh}`,
+   aider gets `SHELL=` guidance, **codex** gets a bash-named shim + the `chsh`
+   recipe (`--yes` attempts `chsh`; never sudo-edits `/etc/shells`). `--check`
+   probes the exact invocation shape (free); **`--probe`** runs the agent LIVE and
+   asserts bashy handled its shell (one LLM call).
 
 ## Findings
 
@@ -72,13 +83,22 @@ as a plain string. With `"shell": "<bashy bash>"` a live `opencode run`
 executed its command through bashy. The first attempt timed out on model
 latency — not a shell hang; the retry completed normally.
 
-### F5 — Codex CLI is not reachable from the outside (macOS)
+### F5 — Codex CLI is reachable via the LOGIN shell (corrected 2026-07-08)
 
-codex-cli 0.142.5 executes commands in `/bin/zsh` (absolute path, zsh 5.9)
-— the earlier "spawns `bash -lc` via execvp" understanding is outdated. No
-config key, no PATH shim. The route is an upstream PR (a portable-bash
-backend beside their patched-zsh "ZshFork" — precedent that they ship
-alternate shell backends). Linux behavior unverified.
+Reading the codex-rs source (`shell-command/src/shell_detect.rs`,
+`core/src/shell.rs`) corrects the earlier "blocked" conclusion. codex resolves
+its shell from the **`/etc/passwd` login shell** (`getpwuid_r` `pw_shell`) — it
+does **not** read `$SHELL` (a `SHELL=… codex exec …` probe still ran `/bin/zsh
+-lc`, verified). It derives the shell TYPE from the filename stem
+(`detect_shell_type`: a path ending in `bash`→Bash, `zsh`→Zsh) and runs
+`<shell> -lc`. So the lever is `chsh` to a **bash/zsh-named** bashy shim
+(`~/.bashy/shims/bash → bashy`), added to `/etc/shells`. `bashy install-agent
+codex` writes the shim and prints the (invasive — global login shell) recipe.
+DYLD interposition stays unusable (codex has hardened runtime + no
+`allow-dyld-environment-variables`, and SIP strips `DYLD_*` for `/bin/*`). The
+launcher can't fix codex per-process (it ignores env), so it's the one agent that
+needs this durable step; for text-only turns (e.g. `bashy meet`) codex's shell is
+moot.
 
 ## Next verifications
 
