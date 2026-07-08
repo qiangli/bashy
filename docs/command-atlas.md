@@ -67,7 +67,7 @@ bucket is split into honest functional groups.
 | `shellutils` | arch, at, atq, atrm, batch, cal, chroot, crontab, date, duration, echo, env, expr, factor, false, groups, hostid, hostname, id, logname, ncal, nice, nohup, nproc, ntp, pathchk, pinky, printenv, pwd, runcon, seq, sleep, sntp, stdbuf, stty, time, timeout, true, tty, tz, uname, uptime, users, watch, which, who, whoami, yes |
 | `code-intel` | ast-query, find-references, list-symbols, repo-map, search-symbols, graph-build, graph-forget, graph-hotspots, graph-impact, graph-link, graph-neighbors, graph-note, graph-notes, graph-observe, graph-path, graph-pitfalls, graph-query, graph-recall, graph-stats |
 | `net` | browser, fetch, web, curl |
-| `orchestration` | weave, sprint, dag, foreman, sdlc, chat, agent, schedule, act, act-runner, mirror |
+| `orchestration` | weave, sprint, dag, foreman, sdlc, chat, meet, agent, schedule, act, act-runner, mirror |
 | `knowledge` | kb, skills |
 | `engines` | podman, docker, ollama, sphere |
 | `forge` | git, git-scm, gh, loom |
@@ -93,7 +93,7 @@ cluster (your own DKS).
 
 | tier | commands |
 |---|---|
-| `userland` | everything not listed below — the whole coreutils userland, code-intel, kb/skills, chat/agent/schedule/mirror, git/gh, storage, toolchains, platform, net (default tier) |
+| `userland` | everything not listed below — the whole coreutils userland, code-intel, kb/skills, chat/meet/agent/schedule/mirror, git/gh, storage, toolchains, platform, net (default tier) |
 | `workspace` | weave, sprint, dag, loom, sdlc |
 | `sandbox` | podman, docker, act, act-runner |
 | `sphere` | sphere, ollama |
@@ -121,7 +121,7 @@ is omitted when unsure (absence is *unknown*, not *no*).
 | `needs-network` | requires network to function (beyond first provision) | fetch, browser, ntp, sntp; git, gh, rclone, ollama, sphere, kubectl, helm, secrets, tessaro, login, registry CLIs |
 | `needs-pairing` | requires a Tessaro-paired machine / cloudbox token | sphere, tessaro, login, secrets |
 | `self-provisioning` | download → verify → cache → exec on first use | all toolchain provisioners, git/git-scm/gh/curl, rclone, loom, zot, seaweedfs, kopia, act, act-runner, kubectl, helm, mise, uv, registry CLIs |
-| `spawns-processes` | executes external processes (documented command-wrapper exception or managed external) | xargs, timeout, time, watch, nice, nohup, chroot, runcon, stdbuf, at, batch; run, chat; every managed external / provisioner |
+| `spawns-processes` | executes external processes (documented command-wrapper exception or managed external) | xargs, timeout, time, watch, nice, nohup, chroot, runcon, stdbuf, at, batch; run, chat, meet; every managed external / provisioner |
 | `daemon` | starts or manages a long-running service | ollama, loom, zot, seaweedfs, kopia, act-runner, mirror, podman, docker, foreman |
 
 Deferred (roadmap, not shipped): `deterministic` — claiming byte-stable
