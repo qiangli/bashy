@@ -1393,7 +1393,7 @@ func expandStaticAliasLine(s string, aliases map[string]string) string {
 		chainBlank := endsWithBlank(value) && quotesBalanced(value)
 		cmdPos := valueLeavesCommandPos(value)
 		forInDo := valueLeavesForInDoPos(value)
-		for chainBlank {
+		for chainBlank || cmdPos {
 			nextStart := i
 			for nextStart < len(s) && (s[nextStart] == ' ' || s[nextStart] == '\t') {
 				nextStart++
@@ -1409,7 +1409,8 @@ func expandStaticAliasLine(s string, aliases map[string]string) string {
 			// In command position a reserved word is recognized as such
 			// before alias substitution, so an alias whose NAME is a
 			// reserved word (`alias for=echo`) is NOT expanded there.
-			if cmdPos && isReservedWordName(nextName) {
+			if (cmdPos || staticAliasBlocksReservedFollower(value, nextName)) &&
+				isReservedWordName(nextName) && !staticAliasAllowsReservedFollower(value, nextName) {
 				break
 			}
 			// After a `for NAME` header the words `in` and `do` are the loop
@@ -1455,6 +1456,23 @@ func expandStaticAliasLine(s string, aliases map[string]string) string {
 	}
 	b.WriteString(s[last:])
 	return b.String()
+}
+
+func staticAliasBlocksReservedFollower(value, name string) bool {
+	trim := strings.TrimLeft(value, " \t\r\n")
+	return name == "in" && (strings.HasPrefix(trim, "case ") ||
+		strings.HasPrefix(trim, "case\t") || strings.HasPrefix(trim, "case\n"))
+}
+
+func staticAliasAllowsReservedFollower(value, name string) bool {
+	trim := strings.TrimLeft(value, " \t\r\n")
+	if strings.HasPrefix(trim, "for ") || strings.HasPrefix(trim, "for\t") || strings.HasPrefix(trim, "for\n") {
+		return name == "for"
+	}
+	if strings.HasPrefix(trim, "case ") || strings.HasPrefix(trim, "case\t") || strings.HasPrefix(trim, "case\n") {
+		return name == "case"
+	}
+	return false
 }
 
 // staticLeadingWordIsAlias reports whether value's first word is a defined
@@ -2548,6 +2566,9 @@ func runStatementStream(
 				// stuck, diverging from bash for any stream-routed script.
 				runErr = r.Run(ctx, stmt)
 				cursor = advancePastLine(src, int(stmt.End().Line()))
+				if consumed := r.ConsumedSourceOffset(); consumed > cursor {
+					cursor = consumed
+				}
 				if r.Exited() {
 					if err := r.Run(ctx, &syntax.File{}); err != nil && runErr == nil {
 						runErr = err

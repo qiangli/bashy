@@ -441,6 +441,42 @@ func TestStaticAliasExpand(t *testing.T) {
 	}
 }
 
+func TestStaticAliasExpandPosixCompoundFollowers(t *testing.T) {
+	t.Parallel()
+
+	src := strings.Join([]string{
+		"alias forx='for x in 1; ' fory='for y in 2; do echo $y;' for='",
+		" do' dn='",
+		" done'",
+		"forx for echo $x; dn",
+		"fory dn",
+		"alias c='case a ' case='",
+		" in a) :' in=",
+		"c case X; echo A; esac",
+		"c in a) echo B; esac",
+		"",
+	}, "\n")
+	want := strings.Join([]string{
+		"alias forx='for x in 1; ' fory='for y in 2; do echo $y;' for='",
+		" do' dn='",
+		" done'",
+		"for x in 1;  ",
+		" do echo $x; ",
+		" done",
+		"for y in 2; do echo $y; ",
+		" done",
+		"alias c='case a ' case='",
+		" in a) :' in=",
+		"case a  ",
+		" in a) : X; echo A; esac",
+		"case a  in a) echo B; esac",
+		"",
+	}, "\n")
+	if got := string(staticAliasExpand([]byte(src), true)); got != want {
+		t.Fatalf("staticAliasExpand posix compound mismatch\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestQuoteParamReplBackquotes(t *testing.T) {
 	t.Parallel()
 	src := []byte("printf '%s\\n' ${qpath//`printf '%s' \"\\\\\\\\\"`/}\n")
