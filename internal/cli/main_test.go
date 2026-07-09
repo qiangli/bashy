@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"io"
 	"os"
 	"path/filepath"
@@ -50,6 +51,26 @@ func TestNewRunnerInheritsOLDPWD(t *testing.T) {
 	got := r.Env.Get("OLDPWD")
 	if !got.IsSet() || got.String() != "/tmp" {
 		t.Fatalf("OLDPWD not inherited into runner: set=%v val=%q", got.IsSet(), got.String())
+	}
+}
+
+func TestShouldRunInteractiveForDashSWithArgs(t *testing.T) {
+	oldCommand, oldForceI, oldPlusI, oldReadStdin := *command, *forceI, *plusI, *readStdin
+	oldFlags := flag.CommandLine
+	t.Cleanup(func() {
+		*command, *forceI, *plusI, *readStdin = oldCommand, oldForceI, oldPlusI, oldReadStdin
+		flag.CommandLine = oldFlags
+	})
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	*command, *forceI, *plusI, *readStdin = "", false, false, true
+	if err := flag.CommandLine.Parse([]string{"one", "two", "three"}); err != nil {
+		t.Fatal(err)
+	}
+	if !shouldRunInteractive(true) {
+		t.Fatal("bash -s arg... with terminal stdin should be interactive")
+	}
+	if shouldRunInteractive(false) {
+		t.Fatal("bash -s arg... with non-terminal stdin should not be interactive without -i")
 	}
 }
 

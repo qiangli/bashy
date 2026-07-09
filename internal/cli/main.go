@@ -517,6 +517,10 @@ func stdinArgv0Option() interp.RunnerOption {
 	return func(*interp.Runner) error { return nil }
 }
 
+func shouldRunInteractive(stdinTTY bool) bool {
+	return *forceI || (!*plusI && *command == "" && (flag.NArg() == 0 || *readStdin) && stdinTTY)
+}
+
 // defaultPathValue mirrors bash's DEFAULT_PATH_VALUE (config-top.h): the
 // value PATH is given at startup when it is unset in the environment.
 const defaultPathValue = "/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:."
@@ -552,7 +556,7 @@ func newRunner() (*interp.Runner, error) {
 	// bash defaults to expanding aliases in interactive shells. A
 	// forced-interactive invocation (`-i script`) is interactive even
 	// when stdin is not a tty.
-	interactive := *forceI || (!*plusI && *command == "" && flag.NArg() == 0 && term.IsTerminal(int(os.Stdin.Fd())))
+	interactive := shouldRunInteractive(term.IsTerminal(int(os.Stdin.Fd())))
 	opts := []interp.RunnerOption{
 		interp.Interactive(interactive),
 		// bashy is a standalone shell (one Runner per process), so mirror the
