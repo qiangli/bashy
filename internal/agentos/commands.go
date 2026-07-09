@@ -111,7 +111,7 @@ func dispatchCommands(args []string) int {
 			fmt.Println("  --all          include hidden compatibility aliases")
 			fmt.Println("  --gnu          include GNU coreutils parity/gap inventory")
 			fmt.Println("  --features     machine-readable one-command feature/gap report")
-			fmt.Println("Command Atlas views (docs/command-atlas.md):")
+			fmt.Println("Command Atlas views:")
 			fmt.Printf("  --view VIEW    classic | %s\n", strings.Join(atlasViews, " | "))
 			fmt.Println("  --tier T       filter by execution tier (userland/workspace/sandbox/…)")
 			fmt.Println("  --group G      filter by functional group (fileutils/code-intel/…)")

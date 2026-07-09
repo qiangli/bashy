@@ -330,7 +330,7 @@ func printAtlasFiltered(w io.Writer, records []atlasRecord, filter map[string]st
 }
 
 func printAtlasRecords(w io.Writer, records []atlasRecord) {
-	fmt.Fprintf(w, "command atlas (%d commands; docs/command-atlas.md):\n", len(records))
+	fmt.Fprintf(w, "command atlas (%d commands):\n", len(records))
 	width := 0
 	for _, r := range records {
 		if len(r.Name) > width {
