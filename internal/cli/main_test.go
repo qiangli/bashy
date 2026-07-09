@@ -477,6 +477,15 @@ func TestStaticAliasExpandPosixCompoundFollowers(t *testing.T) {
 	}
 }
 
+func TestStaticAliasExpandIgnoresQuotedCommandSubstitution(t *testing.T) {
+	t.Parallel()
+
+	src := "alias echo=')'\nf() { bracket \"$(echo x)\"; }\n"
+	if got := string(staticAliasExpand([]byte(src), true)); got != src {
+		t.Fatalf("staticAliasExpand changed quoted command substitution\ngot:  %q\nwant: %q", got, src)
+	}
+}
+
 func TestQuoteParamReplBackquotes(t *testing.T) {
 	t.Parallel()
 	src := []byte("printf '%s\\n' ${qpath//`printf '%s' \"\\\\\\\\\"`/}\n")

@@ -1942,7 +1942,7 @@ func staticAliasCommandStart(s string, i int) (start, prefixEnd int, ok bool) {
 	case ';', '{':
 		return i, i + 1, true
 	case '$':
-		if i+1 < len(s) && s[i+1] == '(' {
+		if i+1 < len(s) && s[i+1] == '(' && !staticInDoubleQuoteAt(s, i) {
 			return i, i + 2, true
 		}
 	}
@@ -1955,6 +1955,32 @@ func staticAliasCommandStart(s string, i int) (start, prefixEnd int, ok bool) {
 		return i, i, true
 	}
 	return 0, 0, false
+}
+
+func staticInDoubleQuoteAt(s string, off int) bool {
+	inSingle, inDouble, escaped := false, false, false
+	for i := 0; i < off && i < len(s); i++ {
+		c := s[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if !inSingle && inDouble && c == '\\' {
+			escaped = true
+			continue
+		}
+		switch c {
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		}
+	}
+	return inDouble
 }
 
 // precededByCommandIntroducer reports whether the token ending just
