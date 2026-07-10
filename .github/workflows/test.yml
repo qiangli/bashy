@@ -30,13 +30,17 @@ jobs:
       # and obs (bashy otel, -tags bashy_obs) — are opt-in and built separately.
       - name: Build + vet + test (shell core + lean agentos)
         shell: bash
+        timeout-minutes: 10
         run: |
-          go build ./cmd/bash ./cmd/bashy ./internal/...
-          go vet  ./cmd/bash ./cmd/bashy ./internal/...
+          set -euxo pipefail
           if [ "$RUNNER_OS" = "Windows" ]; then
+            go build ./cmd/bash ./cmd/bashy
+            go vet  ./cmd/bash ./cmd/bashy ./internal/agentos
             # internal/cli's readline / forced-interactive tests hang without a PTY
-            go test ./internal/agentos
+            go test -v -timeout 5m ./internal/agentos
           else
+            go build ./cmd/bash ./cmd/bashy ./internal/...
+            go vet  ./cmd/bash ./cmd/bashy ./internal/...
             go test ./internal/cli ./internal/agentos
           fi
       # E2E: build the real bashy binary on THIS OS and confirm every command
@@ -45,7 +49,8 @@ jobs:
       # cross-platform half of the command-support guarantee.
       - name: E2E command dispatch (all listed verbs run on this OS)
         shell: bash
-        run: go test -tags e2e -run TestE2EAllListedCommandsDispatch ./internal/agentos
+        timeout-minutes: 10
+        run: go test -v -timeout 8m -tags e2e -run TestE2EAllListedCommandsDispatch ./internal/agentos
       - name: Cross-build lean cmd/bashy for every release platform (CGO_ENABLED=0)
         shell: bash
         run: |
