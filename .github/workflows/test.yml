@@ -106,5 +106,8 @@ jobs:
         run: make test-bash-helpers
       - name: bash-5.3 no-regression ratchet
         shell: bash
-        timeout-minutes: 15
+        # Serial on a 2-core runner is slower than on a dev box; 15m killed it
+        # mid-suite. The suite is ~83 fixtures (coproc/jobs/trap skipped) with a
+        # 60s per-fixture ceiling, so bound generously.
+        timeout-minutes: 30
         run: ./scripts/ci-bash53-gate.sh
