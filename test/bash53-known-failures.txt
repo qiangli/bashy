@@ -16,14 +16,14 @@
 #
 # One fixture per line. Blank lines and #-comments ignored. Keep sorted.
 #
-# cause: sh 6560a097 "interp: close remaining yash posix shell gaps"
-execscript
+# (execscript FIXED 2026-07-10: startup-inherited SIGINT from the
+#  backgrounded harness no longer appears as a hard-ignored trap listing;
+#  explicit BASHY_HARD_IGNORE propagation still preserves child hard ignores.)
 # (comsub FIXED 2026-07-10: POSIX command-substitution parsing now lets aliases
 #  expand inside "$(...)" and provide the closing ')', matching bash 5.3.)
 # cause: sh 8693093d "interp: tighten posix conformance edge cases"
 errors
 # (func FIXED 2026-07-10: restored the posix-gated special-builtin function-name
 #  error — POSIX interpretation 383 — that sh 80ce66ff wrongly removed.)
-# cause: a syntax/let change in the same range (bisect predicate needs the
-#        expect-filter transform; re-confirm the exact commit before fixing)
-varenv
+# (varenv already PASSes under the expect-filtered bash53 harness as of
+#  2026-07-10; stale baseline entry removed.)
