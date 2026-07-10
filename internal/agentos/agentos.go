@@ -60,20 +60,22 @@ import (
 	"github.com/qiangli/coreutils/external/node"
 	"github.com/qiangli/coreutils/external/python"
 	"github.com/qiangli/coreutils/external/rclone"
-	"github.com/qiangli/coreutils/external/rust"
 	"github.com/qiangli/coreutils/external/registry"
+	"github.com/qiangli/coreutils/external/rust"
 	"github.com/qiangli/coreutils/external/seaweedfs"
 	"github.com/qiangli/coreutils/external/sphere"
 	"github.com/qiangli/coreutils/external/tessaro"
 	"github.com/qiangli/coreutils/external/zot"
 	"github.com/qiangli/coreutils/pkg/agentcmd"
+	"github.com/qiangli/coreutils/pkg/capability"
 	"github.com/qiangli/coreutils/pkg/chat"
 	"github.com/qiangli/coreutils/pkg/dag"
+	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/kb"
-	"github.com/qiangli/coreutils/pkg/capability"
 	"github.com/qiangli/coreutils/pkg/meet"
 	"github.com/qiangli/coreutils/pkg/mirror"
+	"github.com/qiangli/coreutils/pkg/principal"
 	"github.com/qiangli/coreutils/pkg/schedule"
 	"github.com/qiangli/coreutils/pkg/sdlc"
 	"github.com/qiangli/coreutils/pkg/secrets"
@@ -110,7 +112,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "chat", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "run", "commands", "context", "doctor", "self", "check", "verify",
+		"weave", "sprint", "chat", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "self", "check", "verify",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -399,6 +401,15 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
+	case "tools", "models", "agents", "people", "whois":
+		// The fleet registry (coreutils/pkg/fleet) and the principal
+		// resolver over it (coreutils/pkg/principal). A `tool` is an
+		// agentic CLI harness, a `model` an inference backend, an `agent`
+		// a named tool:model binding, a `person` a human. Rings merge
+		// embedded baseline → shared dirs → org overlay → local store, so
+		// an operator's own entry always wins. `whois` resolves any name
+		// across all of them — plus hosts — and says how to reach it.
+		runFleet(os.Args[1], os.Args[2:])
 	case "schedule":
 		// Modern cron: run commands on a cron/interval/at schedule from a
 		// self-contained store + optional daemon, with an agentic prompt/context
@@ -859,6 +870,39 @@ func skillsOptions() []coreskills.Option {
 		opts = append(opts, coreskills.WithConfigDir(dir))
 	}
 	return opts
+}
+
+// runFleet dispatches one of the fleet registry nouns. The catalog is
+// standalone-first: the compiled-in baseline answers every read with no
+// store, no shared dir, and no cloudbox. $BASHY_FLEET_DIR (and the
+// per-noun $BASHY_{TOOLS,MODELS,AGENTS}_DIR / _PATH) are read inside the
+// package, so nothing needs wiring here.
+func runFleet(noun string, args []string) {
+	var cmd *cobra.Command
+	exit := fleet.ExitCode
+	switch noun {
+	case "tools":
+		cmd = fleet.NewToolsCmd()
+	case "models":
+		cmd = fleet.NewModelsCmd()
+	case "agents":
+		cmd = fleet.NewAgentsCmd()
+	case "people":
+		cmd = principal.NewPeopleCmd()
+	case "whois":
+		// whois adds exit 3 for an ambiguous name — neither "missing" nor a
+		// usage error, and the caller must qualify the query to proceed.
+		cmd, exit = principal.NewWhoisCmd(), principal.ExitCode
+	default:
+		fmt.Fprintln(os.Stderr, "bashy: unknown fleet noun:", noun)
+		os.Exit(2)
+	}
+	cmd.SetArgs(args)
+	if err := cmd.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "bashy %s: %v\n", noun, err)
+		os.Exit(exit(err))
+	}
+	os.Exit(0)
 }
 
 // WireExec appends the coreutils ExecHandler so any registered tool resolves
