@@ -32,9 +32,40 @@ SKIP="coproc jobs trap"
   exit 2
 }
 
-# make test-bash exits non-zero on any FAIL/TIME (by design). We WANT the full
-# per-fixture listing regardless, so capture it and never let make's exit abort.
-out=$(make test-bash BASH_TEST_SKIP="$SKIP" 2>&1) || true
+# Run the suite to a LOG FILE in the background and reap it as soon as the
+# "Results:" line lands — never wait for make's natural exit.
+#
+# WHY. make test-bash spawns a per-fixture watchdog + timeout `sleep` in the
+# background. Those can outlive the fixture and keep a captured pipe (`$(...)` or
+# `tee`) open, so a capture hangs AFTER the suite has already finished and printed
+# Results — the documented "hangs on exit after writing Results" behavior. In CI
+# that presented as a 30-minute timeout with ZERO fixture lines: the suite ran,
+# the capture never returned. Redirecting to a file (not a pipe) and polling the
+# file sidesteps it and, as a bonus, gives live diagnostics — a genuine hang now
+# shows the last fixture printed before the deadline instead of nothing.
+logf=$(mktemp)
+trap 'rm -f "$logf"' EXIT
+: > "$logf"
+make test-bash BASH_TEST_SKIP="$SKIP" BASH_TEST_TIMEOUT="${CI_BASH_TEST_TIMEOUT:-30}" \
+  > "$logf" 2>&1 &
+mpid=$!
+deadline=$(( $(date +%s) + ${CI_GATE_DEADLINE:-1200} ))   # 20 min hard cap
+last=""
+while :; do
+  if grep -q '^Results:' "$logf"; then break; fi
+  kill -0 "$mpid" 2>/dev/null || break                    # make exited on its own
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    echo "gate: deadline reached before Results line; last fixture seen:" >&2
+    grep -E '^  (PASS|FAIL|TIME|SKIP)  ' "$logf" | tail -1 >&2
+    break
+  fi
+  # surface progress so a hang is visible in the CI log
+  cur=$(grep -cE '^  (PASS|FAIL|TIME|SKIP)  ' "$logf")
+  [ "$cur" != "$last" ] && { tail -1 "$logf"; last=$cur; }
+  sleep 3
+done
+kill "$mpid" 2>/dev/null; wait "$mpid" 2>/dev/null        # reap make; stray timers self-expire
+out=$(cat "$logf")
 
 # Actual non-PASS set = every FAIL or TIME line. (SKIP is not a failure.)
 actual=$(printf '%s\n' "$out" | awk '/^  (FAIL|TIME)  /{print $2}' | sort -u)
