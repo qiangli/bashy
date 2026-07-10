@@ -1,0 +1,28 @@
+# bash-5.3 fixtures known to FAIL — the no-regression ratchet baseline.
+#
+# scripts/ci-bash53-gate.sh runs the bash-5.3 suite and compares the actual
+# non-PASS set against this file:
+#
+#   * a fixture that fails but is NOT listed here  -> a NEW regression, CI fails.
+#   * a fixture listed here that now PASSES         -> progress; CI fails and tells
+#     you to DELETE its line, so the baseline only ever shrinks and can never
+#     drift stale (the same trap the gate itself was added to close).
+#
+# The goal is an empty file. Every entry is a known bug with a named cause, all
+# introduced between sh 0e0f104f (the 86/86 baseline, 2026-06-27) and d5a1bdc2
+# while pushing the yash/POSIX conformance frontier — the bash-5.3 gate was
+# silently exiting 0, so the collateral damage accumulated unseen. Delete each
+# line as its fix lands.
+#
+# One fixture per line. Blank lines and #-comments ignored. Keep sorted.
+#
+# cause: sh 6560a097 "interp: close remaining yash posix shell gaps"
+comsub
+execscript
+# cause: sh 8693093d "interp: tighten posix conformance edge cases"
+errors
+# cause: sh 80ce66ff "interp: close posix alias and function gaps"
+func
+# cause: a syntax/let change in the same range (bisect predicate needs the
+#        expect-filter transform; re-confirm the exact commit before fixing)
+varenv

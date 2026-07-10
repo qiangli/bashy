@@ -59,3 +59,52 @@ jobs:
             echo "cmd/bashy $os/$arch (lean)..."
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -o /dev/null ./cmd/bashy
           done
+
+  # The bash-5.3 conformance gate. Runs the real fixture suite against the pure
+  # cmd/bash drop-in and fails on any NEW regression vs test/bash53-known-failures.txt
+  # (a shrinking ratchet — see scripts/ci-bash53-gate.sh). This is the CI arm of
+  # the discipline that, until 2026-07-10, was enforced only by a human eyeballing
+  # the Results line — which let four POSIX-frontier commits silently drop the
+  # suite from 86/86 to 79/86. Linux only: one measured SUT is enough, and the
+  # fixtures' .right files are version-specific to the fetched source.
+  bash53-gate:
+    runs-on: ubuntu-latest
+    # ADVISORY on first landing. The baseline in test/bash53-known-failures.txt
+    # was measured on Darwin/arm64; CI is Linux/glibc, where locale collation and
+    # readdir order can diverge. The 5 baselined failures are interpreter
+    # regressions that reproduce anywhere, but an unknown Linux-only fixture
+    # difference would trip the gate. So the first real Linux run REPORTS the
+    # actual fail-set without failing the workflow; reconcile the baseline against
+    # it, then delete this line to make the gate enforce.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - name: Bootstrap sibling deps (../sh, ../coreutils, ../readline)
+        shell: bash
+        run: ./scripts/bootstrap-siblings.sh
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      # The bash-5.3 tests/ tree is a gitignored symlink locally. Fetch the exact
+      # upstream source the committed .right files were measured against
+      # (bash-5.3-rc2), pinned by sha256, and symlink it. Downloading + running a
+      # test suite is not bundling — see CLAUDE.md Third-Party Libraries.
+      - name: Fetch pinned bash-5.3-rc2 source (for the fixture tree)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          url=https://ftp.gnu.org/gnu/bash/bash-5.3-rc2.tar.gz
+          sha=e7d04057ffc37442f12a99f841733dd26bb8e34964bcaf999e15ce66a3dfb480
+          curl -fsSL --retry 3 -o /tmp/bash-5.3-rc2.tar.gz "$url"
+          echo "$sha  /tmp/bash-5.3-rc2.tar.gz" | sha256sum -c -
+          mkdir -p external
+          tar -xzf /tmp/bash-5.3-rc2.tar.gz -C /tmp
+          ln -sfn /tmp/bash-5.3-rc2 external/bash-5.3
+          test -d external/bash-5.3/tests
+      - name: Build the recho/zecho fixture helpers
+        shell: bash
+        run: make test-bash-helpers
+      - name: bash-5.3 no-regression ratchet
+        shell: bash
+        timeout-minutes: 15
+        run: ./scripts/ci-bash53-gate.sh
