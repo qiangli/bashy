@@ -4,7 +4,9 @@
 package agentos
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"slices"
 	"strings"
@@ -20,17 +22,17 @@ func captureCommands(t *testing.T, args ...string) (string, int) {
 		t.Fatalf("pipe: %v", err)
 	}
 	os.Stdout = w
+	var sb bytes.Buffer
+	done := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(&sb, r)
+		done <- err
+	}()
 	code := dispatchCommands(args)
 	w.Close()
 	os.Stdout = prev
-	var sb strings.Builder
-	buf := make([]byte, 64<<10)
-	for {
-		n, err := r.Read(buf)
-		sb.Write(buf[:n])
-		if err != nil {
-			break
-		}
+	if err := <-done; err != nil {
+		t.Fatalf("read stdout: %v", err)
 	}
 	return sb.String(), code
 }
