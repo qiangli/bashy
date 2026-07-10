@@ -508,7 +508,7 @@ func TestRunRetriesPosixAfterParsedPrefix(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	r, err := interp.New(
 		interp.StdIO(nil, &stdout, &stderr),
-		interp.Env(expand.ListEnviron()),
+		interp.Env(expand.ListEnviron("PATH="+defaultPathValue)),
 		interp.WithBashCompatErrors(true),
 	)
 	if err != nil {
@@ -538,7 +538,7 @@ func TestRunKeepsBashConditionalAfterRuntimePosix(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	r, err := interp.New(
 		interp.StdIO(nil, &stdout, &stderr),
-		interp.Env(expand.ListEnviron()),
+		interp.Env(expand.ListEnviron("PATH="+defaultPathValue)),
 		interp.WithBashCompatErrors(true),
 	)
 	if err != nil {
