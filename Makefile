@@ -277,7 +277,13 @@ test-bash-run:
 		done; \
 		echo ""; \
 		echo "Results: $$passed passed, $$failed failed, $$skipped skipped, $$timeout_count timed out"; \
-		echo ""
+		echo ""; \
+		[ "$$failed" -eq 0 ] && [ "$$timeout_count" -eq 0 ]
+# ^ THE GATE. Until 2026-07-10 this recipe ended at `echo ""`, so `make test-bash`
+# exited 0 no matter how many fixtures failed — the "mandatory 86/86 gate before
+# any release" was enforced only by a human reading the Results line, and a
+# regression from 86/86 to 79/86 sat on main unnoticed. A skipped fixture
+# (BASH_TEST_SKIP) is not a failure; a FAIL or a TIME is.
 
 ## test-bash-parallel: Run the bash 5.3 suite in parallel fixture groups (builds
 ## bin/bash once, then fans the loop out over JOBS groups). JOBS defaults to the
