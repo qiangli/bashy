@@ -31,7 +31,6 @@ GOOS=linux GOARCH=$GOARCH go build -o bin/.bashy-full ./cmd/bash || exit 2
 
 RAW="$OUT/verdicts.raw"
 echo "running yash -p corpus (bashy + bash, per case)…" >&2
-$OCI ps -aq 2>/dev/null | xargs -r $OCI rm -f >/dev/null 2>&1 || true
 # shellcheck disable=SC2016
 if ! $OCI run --rm -v "$ROOT/.yash-tests/tests:/yt:ro" -v "$ROOT/bin/.bashy-full:/bashy:ro" \
   localhost/posix-shells-broad busybox ash -c '
@@ -80,7 +79,7 @@ awk -F'|' '
   END{
     okc=0; erc=0;
     for(k in by){ if(by[k]=="OK")okc++; else erc++ }
-    print "=== yash -p scoreboard (bashy) ===";
+    print "=== yash -p scoreboard (bashy) ===" > "/dev/stderr";
     printf "bashy: %d pass / %d fail (of %d)  = %d%%\n", okc, erc, okc+erc, (okc+erc?okc*100/(okc+erc):0) > "/dev/stderr";
     n=0;
     for(k in by){ if(by[k]=="ERROR" && ba[k]=="OK"){ split(k,a,"|"); print a[1], a[2], desc[k]; n++ } }
