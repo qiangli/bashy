@@ -21,8 +21,8 @@ comsub
 execscript
 # cause: sh 8693093d "interp: tighten posix conformance edge cases"
 errors
-# cause: sh 80ce66ff "interp: close posix alias and function gaps"
-func
+# (func FIXED 2026-07-10: restored the posix-gated special-builtin function-name
+#  error — POSIX interpretation 383 — that sh 80ce66ff wrongly removed.)
 # cause: a syntax/let change in the same range (bisect predicate needs the
 #        expect-filter transform; re-confirm the exact commit before fixing)
 varenv
