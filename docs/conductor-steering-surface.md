@@ -72,16 +72,19 @@ Then:
 
 ## Layer 3 — `bashy browser`: the browser surface (the auth unblocker)
 
-Port ycode's browser subsystem into coreutils/bashy — `pkg/browser` (transport-
-shaped dispatcher), `mcpservers/browsermcp`, the shell builtin, and the ~16
-`browser_*` verbs (navigate/click/type/eval/extract/cookies_get/storage_get/
-screenshot/keyboard/tabs/…). Keep **both transports** so it's dependency-free:
-- **CDP → the user's real Chrome** (`--remote-debugging-port`) — reuses their
-  existing logins; ideal for OAuth. A small pure-Go CDP/websocket client (or
-  ycode's) — nothing vendored, no headless binary required.
-- **The live browser extension** (the "ycode browser ext") — moved in so it runs
-  under `bashy browser` with zero ycode dependency, giving access to the user's
-  live session/cookies where CDP can't reach.
+**Shipped** (2026-07-10): ycode's browser subsystem is now `coreutils/pkg/browser`
+(transport-shaped dispatcher) with three modes and the `browser_*` verbs
+(navigate/click/type/eval/extract/cookies_get/storage_get/screenshot/keyboard/
+tabs/…). The feature was fully removed from ycode; ycode delegates to bashy.
+Both transports are kept so it's dependency-free:
+- **CDP → the user's real Chrome** (`probe` mode, `--remote-debugging-port`) —
+  reuses their existing logins; ideal for OAuth. Pure-Go CDP/websocket client,
+  nothing vendored, no headless binary required. (`solo` mode launches its own
+  headless Chrome.)
+- **The live browser extension** (`live` mode, `pkg/browser/live` — migrated
+  verbatim from ycode) — runs under `bashy browser hub` with zero ycode
+  dependency, giving access to the user's live session/cookies where CDP can't
+  reach.
 
 The unblocking primitive: **`bashy browser login <oauth-url>`** — open the URL in
 the user's session, detect completion (redirect / token), extract the token or
