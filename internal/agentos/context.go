@@ -96,9 +96,9 @@ type contextCaps struct {
 	CommandFeatures   bool `json:"command_features"`
 	InProcessGit      bool `json:"in_process_git"`
 	InProcessUserland bool `json:"in_process_userland"`
-	// Code-knowledge graph (graph-impact/neighbors/hotspots/query): navigate a
+	// Code-knowledge graph (graph impact/neighbors/hotspots/query): navigate a
 	// repo's structure without a grep dance. Knowledge graph
-	// (graph-note/recall/observe/pitfalls): a durable, shared per-repo "agentic
+	// (graph note/recall/observe/pitfalls): a durable, shared per-repo "agentic
 	// wiki" other agents' findings accrue into. Advertised here so agents discover
 	// them on the first hop instead of re-deriving by search.
 	CodeGraph      bool `json:"code_graph"`
@@ -203,8 +203,8 @@ func fillContext(report contextReport, bashyPath string) contextReport {
 		{Purpose: "script preflight", Command: bashyPath + " check --agent --script SCRIPT"},
 		{Purpose: "preflight plus captured run envelope", Command: bashyPath + " run --check --capture -- SCRIPT"},
 		{Purpose: "one command capability lookup", Command: bashyPath + " commands COMMAND --features"},
-		{Purpose: "what code is coupled to a symbol (skip the grep dance)", Command: bashyPath + " graph-impact SYMBOL"},
-		{Purpose: "recall/leave shared repo knowledge for other agents", Command: bashyPath + " graph-recall QUERY"},
+		{Purpose: "what code is coupled to a symbol (skip the grep dance)", Command: bashyPath + " graph impact SYMBOL"},
+		{Purpose: "recall/leave shared repo knowledge for other agents", Command: bashyPath + " graph recall QUERY"},
 		{Purpose: "skills applicable on this host (read one: skills show NAME; run attested: skills run NAME)", Command: bashyPath + " skills list"},
 	}
 	report.Notes = []string{

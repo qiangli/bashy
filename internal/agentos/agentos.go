@@ -30,11 +30,11 @@ import (
 	"github.com/qiangli/bashy/skills"
 
 	_ "github.com/qiangli/coreutils/cmds/all"
-	// Code-knowledge-graph verbs (graph-build/impact/query/…). Registered here —
-	// NOT via cmds/all — so gfy's document-parsing deps land in `bashy` only,
-	// never the bare cmd/coreutils multicall binary or the cmd/bash drop-in. They
-	// reach the front door + in-shell ExecHandler through the tool registry
-	// (agentos.go dispatch fallthrough), like the list-symbols/repo-map verbs.
+	// Code-knowledge-graph verb (graph build/impact/query/… as subcommands of one
+	// `graph` tool). Registered here — NOT via cmds/all — so gfy's document-parsing
+	// deps land in `bashy` only, never the bare cmd/coreutils multicall binary or
+	// the cmd/bash drop-in. It reaches the front door + in-shell ExecHandler through
+	// the tool registry (agentos.go dispatch fallthrough), like list-symbols/repo-map.
 	_ "github.com/qiangli/coreutils/cmds/graph"
 	// Foreman — the steerable agent session (start/tell/status/pause/…, the
 	// `chat` parent elevated to a persistent session). Registered here — NOT via

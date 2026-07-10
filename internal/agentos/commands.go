@@ -254,8 +254,8 @@ func printAgenticCommands(w io.Writer) {
   bashy commands --view tier     the Command Atlas by execution tier; --atlas for records
   bashy commands --idioms        commands naturally used together (composites)
   bashy dag --list               list markdown DAG targets
-  bashy graph-impact SYMBOL      code-graph blast radius: what's coupled to a symbol
-  bashy graph-hotspots           most-connected symbols (refactor / orientation targets)
+  bashy graph impact SYMBOL      code-graph blast radius: what's coupled to a symbol
+  bashy graph hotspots           most-connected symbols (refactor / orientation targets)
   bashy podman ...               Podman-compatible isolated container engine
 
 dry-run JSON entry kinds:
