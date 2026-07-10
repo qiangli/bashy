@@ -67,6 +67,20 @@ done
 kill "$mpid" 2>/dev/null; wait "$mpid" 2>/dev/null        # reap make; stray timers self-expire
 out=$(cat "$logf")
 
+# An INCOMPLETE run must never be scored. If the suite did not reach its
+# "Results:" line (a fixture hung past its per-test timeout — this happens on
+# Linux for fixtures that FAIL on macOS, e.g. a comsub/exec parse regression that
+# infinite-loops), the fixtures that never ran would look "fixed" and emit a
+# bogus PROGRESS report. Refuse: report the likely-hung fixture and exit
+# inconclusive. The gate can only score a run that finished.
+if ! grep -q '^Results:' "$logf"; then
+  echo "gate: INCONCLUSIVE — the suite did not finish (no Results line)." >&2
+  echo "gate: last fixture with a verdict (the hang is the NEXT one in run-* order):" >&2
+  printf '%s\n' "$out" | grep -E '^  (PASS|FAIL|TIME|SKIP)  ' | tail -1 | sed 's/^/  /' >&2
+  echo "gate: cannot score a partial run; fix the hang (or skip that fixture) first." >&2
+  exit 2
+fi
+
 # Actual non-PASS set = every FAIL or TIME line. (SKIP is not a failure.)
 actual=$(printf '%s\n' "$out" | awk '/^  (FAIL|TIME)  /{print $2}' | sort -u)
 # Baseline, stripped of comments/blanks.
