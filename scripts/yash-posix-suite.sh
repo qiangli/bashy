@@ -7,11 +7,13 @@
 # cache (.yash-tests/) and NEVER vendors it into the repo — the same posture as
 # the bash-5.3 fixture symlink. The harness script itself is permissive.
 #
-# Scope: only the *-p.tst files (yash's POSIX, shell-agnostic tests — they run
-# the testee as `sh`/POSIX mode). The job-control + signal tests (sig*, bg/fg/
-# job/kill/wait/testtty/async) need a controlling TTY + yash's checkfg C helper
-# and hang headlessly — the same scope as bashy's documented interactive-JC
-# limitation — so they are excluded uniformly for ALL shells (apples-to-apples).
+# Scope: only the shell-only *-p.tst cases (yash's POSIX, shell-agnostic tests —
+# they run the testee as `sh`/POSIX mode). The job-control + signal files need a
+# controlling TTY + yash's checkfg C helper and hang headlessly, so they are
+# excluded uniformly for ALL shells (apples-to-apples). Individual cases that
+# assert userland tools rather than shell behavior are also excluded:
+#   ppid-p.tst:5        depends on the container's ps(1) implementation
+#   simple-p.tst:290/299 depend on Alpine BusyBox sh argv0 applet dispatch
 #
 # The framework is driven under `busybox ash` (consistent, full testcase count;
 # bash-as-runner truncates, dash-as-runner trips on $LINENO under set -u).
@@ -69,6 +71,12 @@ run_panel() { # panel-label image "label=cmd …"
   $OCI run --rm $OUTMOUNT -e LANG=C -e PANEL="$1" -e SPECS="$3" \
     -v "$TESTS_DIR:/yt:ro" -v "$BIN:/bashy:ro" "$2" busybox ash -c '
     export LANG=C; cp -r /yt /work; cd /work
+    excluded_case() {
+      case "$1:$2" in
+        ppid-p.tst:5|simple-p.tst:290|simple-p.tst:299) return 0;;
+      esac
+      return 1
+    }
     TESTS=""; for t in *-p.tst; do
       case "$t" in sig*|bg-p.tst|fg-p.tst|job-p.tst|kill*-p.tst|wait-p.tst|testtty-p.tst|async-p.tst) continue;; esac
       TESTS="$TESTS $t"
@@ -80,18 +88,24 @@ run_panel() { # panel-label image "label=cmd …"
       for t in $TESTS; do
         timeout -s KILL 8 busybox ash run-test.sh "$cmd" "$t" >/dev/null 2>&1
         trs="${t%.tst}.trs"; [ -f "$trs" ] || continue
-        o=$(grep -cE "^%%% (OK\[|ERROR\[PASSED_UNEXPECTEDLY\])" "$trs" 2>/dev/null); ok=$((ok + ${o:-0}))
-        e=$(grep -c "^%%% ERROR\[FAILED\]" "$trs" 2>/dev/null); er=$((er + ${e:-0}))
+        casevf="/tmp/$PANEL.$label.$$.$trs.verdicts"
+        sed -nE \
+          -e "s/^%%% OK\[[^]]*\]: [^:]+:([0-9]+):.*/$t \1 OK/p" \
+          -e "s/^%%% ERROR\[PASSED_UNEXPECTEDLY\]: [^:]+:([0-9]+):.*/$t \1 OK/p" \
+          -e "s/^%%% ERROR\[FAILED\]: [^:]+:([0-9]+):.*/$t \1 ERROR/p" \
+          "$trs" | while read -r f line status; do
+            excluded_case "$f" "$line" && continue
+            printf "%s %s %s\n" "$f" "$line" "$status"
+          done > "$casevf"
+        o=$(grep -c " OK$" "$casevf" 2>/dev/null); ok=$((ok + ${o:-0}))
+        e=$(grep -c " ERROR$" "$casevf" 2>/dev/null); er=$((er + ${e:-0}))
         if [ -d /out ]; then
-          sed -nE \
-            -e "s/^%%% OK\[[^]]*\]: [^:]+:([0-9]+):.*/$t \1 OK/p" \
-            -e "s/^%%% ERROR\[PASSED_UNEXPECTEDLY\]: [^:]+:([0-9]+):.*/$t \1 OK/p" \
-            -e "s/^%%% ERROR\[FAILED\]: [^:]+:([0-9]+):.*/$t \1 ERROR/p" \
-            "$trs" >> "$vf"
+          cat "$casevf" >> "$vf"
           if [ "$label" = bashy ] && [ "${e:-0}" -gt 0 ]; then
             cp "$trs" "/out/$PANEL.$label.$trs"
           fi
         fi
+        rm -f "$casevf"
       done
       tot=$((ok+er)); pct="n/a"; [ "$tot" -gt 0 ] && pct="$((ok*100/tot))%"
       printf "  %-8s OK=%-4d ERROR=%-4d -> %s pass (of %d)\n" "$label" "$ok" "$er" "$pct" "$tot"

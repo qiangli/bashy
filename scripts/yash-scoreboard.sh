@@ -6,7 +6,9 @@
 #   - the BASHY-SPECIFIC failures: cases where bash PASSES but bashy FAILS
 #     (those are genuine bashy bugs to fix; cases where both fail are
 #      posix-vs-default-bash noise, not our problem).
-# Job-control / signal suites are excluded (goroutine-model ceiling).
+# Job-control / signal suites are excluded (goroutine-model ceiling). A few
+# userland-dependent cases are also excluded from the shell-only denominator:
+# ppid-p.tst:5 and simple-p.tst:290/299.
 # Clean-room: clones yash at runtime, never vendors it (GPL).
 set -u
 cd "$(dirname "$0")/.."
@@ -34,6 +36,12 @@ $OCI ps -aq 2>/dev/null | xargs -r $OCI rm -f >/dev/null 2>&1 || true
 if ! $OCI run --rm -v "$ROOT/.yash-tests/tests:/yt:ro" -v "$ROOT/bin/.bashy-full:/bashy:ro" \
   localhost/posix-shells-broad busybox ash -c '
   export LANG=C; cp -r /yt /work 2>/dev/null; cd /work
+  excluded_case() {
+    case "$1:$2" in
+      ppid-p.tst:5|simple-p.tst:290|simple-p.tst:299) return 0;;
+    esac
+    return 1
+  }
   for f in *-p.tst; do
     case "$f" in sig*|bg-p*|fg-p*|job-p*|kill*|wait-p*|testtty-p*|async-p*|intl*|unicode*) continue;; esac
     for pair in "bashy=/bashy" "bash=bash"; do
@@ -49,7 +57,10 @@ if ! $OCI run --rm -v "$ROOT/.yash-tests/tests:/yt:ro" -v "$ROOT/bin/.bashy-full
         -e "s/^%%% OK\[[^]]*\]: ([^ ]*\.tst):([0-9]+): (.*)/\1|\2|$lbl|OK|\3/p" \
         -e "s/^%%% ERROR\[PASSED_UNEXPECTEDLY\]: ([^ ]*\.tst):([0-9]+): (.*)/\1|\2|$lbl|OK|\3/p" \
         -e "s/^%%% ERROR\[FAILED\]: ([^ ]*\.tst):([0-9]+): (.*)/\1|\2|$lbl|ERROR|\3/p" \
-        "$trs"
+        "$trs" | while IFS="|" read -r file line label verdict desc; do
+          excluded_case "$file" "$line" && continue
+          printf "%s|%s|%s|%s|%s\n" "$file" "$line" "$label" "$verdict" "$desc"
+        done
     done
   done
 ' > "$RAW"
