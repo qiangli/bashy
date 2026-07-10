@@ -75,6 +75,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/kb"
 	"github.com/qiangli/coreutils/pkg/meet"
+	"github.com/qiangli/coreutils/pkg/supervise"
 	"github.com/qiangli/coreutils/pkg/mirror"
 	"github.com/qiangli/coreutils/pkg/principal"
 	"github.com/qiangli/coreutils/pkg/schedule"
@@ -325,6 +326,20 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy meet:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "supervise":
+		// Conductor-as-a-verb: one supervisor agent drives a fleet of workers
+		// against a goal decomposed into GATED tasks, in the current working
+		// tree (the in-place counterpart to `bashy weave`'s isolated
+		// workspaces). Each task's gate is a shell command the orchestrator runs
+		// itself — the verdict is objective, not the agent's claim. See
+		// dhnt/docs/agentic-design-pattern-gaps.md.
+		cmd := supervise.NewSuperviseCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy supervise:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
