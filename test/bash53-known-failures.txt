@@ -17,8 +17,9 @@
 # One fixture per line. Blank lines and #-comments ignored. Keep sorted.
 #
 # cause: sh 6560a097 "interp: close remaining yash posix shell gaps"
-comsub
 execscript
+# (comsub FIXED 2026-07-10: POSIX command-substitution parsing now lets aliases
+#  expand inside "$(...)" and provide the closing ')', matching bash 5.3.)
 # cause: sh 8693093d "interp: tighten posix conformance edge cases"
 errors
 # (func FIXED 2026-07-10: restored the posix-gated special-builtin function-name

@@ -2447,10 +2447,14 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 				}
 			} else {
 				for _, stmt := range prog.Stmts {
+					prevCursor := cursor
 					if err := r.Run(ctx, stmt); err != nil {
 						runErr = err
 					}
-					cursor = advancePastLine(src, int(stmt.End().Line()))
+					cursor = stmtEndCursor(src, stmt)
+					if consumed := r.ConsumedSourceOffset(); consumed > prevCursor {
+						cursor = consumed
+					}
 					if r.Exited() {
 						if err := r.Run(ctx, &syntax.File{}); err != nil && runErr == nil {
 							runErr = err
@@ -2474,6 +2478,14 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 		// (because we prepended newlines), so find the next '\n' at
 		// or after the start of that line in src.
 		errLine := int(pe.Pos.Line())
+		if r.RunAliasExpandedSourceLine(ctx, errLine) {
+			if consumed := r.ConsumedSourceOffset(); consumed > cursor {
+				cursor = consumed
+			} else {
+				cursor = advancePastLine(src, errLine)
+			}
+			continue
+		}
 		newCursor := advancePastLine(src, errLine)
 		if retryLang := r.LangVariant(); retryLang != parseLang && newCursor > cursor {
 			if retryStart <= cursor || retryStart > newCursor {
@@ -2590,9 +2602,10 @@ func runStatementStream(
 				// prior failure (e.g. `[[ 1 -le 0 ]]` then `true` exits 0). A
 				// guarded `if err != nil` would leave the last *failing* status
 				// stuck, diverging from bash for any stream-routed script.
+				prevCursor := cursor
 				runErr = r.Run(ctx, stmt)
-				cursor = advancePastLine(src, int(stmt.End().Line()))
-				if consumed := r.ConsumedSourceOffset(); consumed > cursor {
+				cursor = stmtEndCursor(src, stmt)
+				if consumed := r.ConsumedSourceOffset(); consumed > prevCursor {
 					cursor = consumed
 				}
 				if r.Exited() {
@@ -2608,6 +2621,16 @@ func runStatementStream(
 			}
 			if err != nil {
 				if pe, ok := bashRecoverableParseError(err); ok {
+					errLine := int(pe.Pos.Line())
+					if r.RunAliasExpandedSourceLine(ctx, errLine) {
+						if consumed := r.ConsumedSourceOffset(); consumed > cursor {
+							cursor = consumed
+						} else {
+							cursor = advancePastLine(src, errLine)
+						}
+						restart = true
+						break
+					}
 					text := rewriteParserErrorText(string(src), pe)
 					if reportLine, resumeLine, ok := heredocBodyBadSubstRecovery(src, pe, text); ok {
 						hdocWarnings = hdocWarnings[:0]
@@ -2697,6 +2720,13 @@ func advancePastLine(src []byte, line int) int {
 		}
 	}
 	return len(src)
+}
+
+func stmtEndCursor(src []byte, stmt *syntax.Stmt) int {
+	if stmt == nil || !stmt.End().IsValid() {
+		return 0
+	}
+	return advancePastLine(src, int(stmt.End().Line()))
 }
 
 func lineStart(src []byte, line int) int {
