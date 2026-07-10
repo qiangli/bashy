@@ -42,7 +42,14 @@ if ! $OCI run --rm -v "$ROOT/.yash-tests/tests:/yt:ro" -v "$ROOT/bin/.bashy-full
       timeout -s KILL 8 busybox ash run-test.sh "$sh" "$f" >/dev/null 2>&1
       trs="${f%.tst}.trs"; [ -f "$trs" ] || continue
       # format: %%% OK[PASSED]: suite-p.tst:LINE: description
-      sed -nE "s/^%%% (OK|ERROR)\[[^]]*\]: ([^ ]*\.tst):([0-9]+): (.*)/\2|\3|$lbl|\1|\4/p" "$trs"
+      # ERROR[PASSED_UNEXPECTEDLY] means the shell passed an upstream TODO
+      # case; for bashy conformance triage, classify it as OK rather than a
+      # behavioral failure.
+      sed -nE \
+        -e "s/^%%% OK\[[^]]*\]: ([^ ]*\.tst):([0-9]+): (.*)/\1|\2|$lbl|OK|\3/p" \
+        -e "s/^%%% ERROR\[PASSED_UNEXPECTEDLY\]: ([^ ]*\.tst):([0-9]+): (.*)/\1|\2|$lbl|OK|\3/p" \
+        -e "s/^%%% ERROR\[FAILED\]: ([^ ]*\.tst):([0-9]+): (.*)/\1|\2|$lbl|ERROR|\3/p" \
+        "$trs"
     done
   done
 ' > "$RAW"

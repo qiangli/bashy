@@ -80,10 +80,17 @@ run_panel() { # panel-label image "label=cmd …"
       for t in $TESTS; do
         timeout -s KILL 8 busybox ash run-test.sh "$cmd" "$t" >/dev/null 2>&1
         trs="${t%.tst}.trs"; [ -f "$trs" ] || continue
-        o=$(grep -c "^%%% OK\[" "$trs" 2>/dev/null); ok=$((ok + ${o:-0}))
-        e=$(grep -c "^%%% ERROR\[" "$trs" 2>/dev/null); er=$((er + ${e:-0}))
+        o=$(grep -cE "^%%% (OK\[|ERROR\[PASSED_UNEXPECTEDLY\])" "$trs" 2>/dev/null); ok=$((ok + ${o:-0}))
+        e=$(grep -c "^%%% ERROR\[FAILED\]" "$trs" 2>/dev/null); er=$((er + ${e:-0}))
         if [ -d /out ]; then
-          grep -E "^%%% (OK|ERROR)\[" "$trs" 2>/dev/null | sed -E "s/^%%% (OK|ERROR)\[([0-9]+)\].*/$t \2 \1/" >> "$vf"
+          sed -nE \
+            -e "s/^%%% OK\[[^]]*\]: [^:]+:([0-9]+):.*/$t \1 OK/p" \
+            -e "s/^%%% ERROR\[PASSED_UNEXPECTEDLY\]: [^:]+:([0-9]+):.*/$t \1 OK/p" \
+            -e "s/^%%% ERROR\[FAILED\]: [^:]+:([0-9]+):.*/$t \1 ERROR/p" \
+            "$trs" >> "$vf"
+          if [ "$label" = bashy ] && [ "${e:-0}" -gt 0 ]; then
+            cp "$trs" "/out/$PANEL.$label.$trs"
+          fi
         fi
       done
       tot=$((ok+er)); pct="n/a"; [ "$tot" -gt 0 ] && pct="$((ok*100/tot))%"
