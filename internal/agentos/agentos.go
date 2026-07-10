@@ -70,6 +70,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/capability"
 	"github.com/qiangli/coreutils/pkg/chat"
 	"github.com/qiangli/coreutils/pkg/dag"
+	"github.com/qiangli/coreutils/pkg/fanout"
 	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/kb"
@@ -112,7 +113,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "chat", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "self", "check", "verify",
+		"weave", "sprint", "chat", "meet", "fanout", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "self", "check", "verify",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -324,6 +325,18 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy meet:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "fanout":
+		// Shared-context parallel agents (the blackboard pattern): fan N
+		// instances out concurrently against one evolving board, each with a
+		// different instruction and a scoped view. See
+		// dhnt/docs/agentic-design-pattern-gaps.md.
+		cmd := fanout.NewFanoutCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy fanout:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
