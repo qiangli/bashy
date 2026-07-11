@@ -203,6 +203,8 @@ if [ -d "$dir/.git" ]; then
   "$BASHY_EXE" git -C "$dir" reset --hard HEAD
   "$BASHY_EXE" git -C "$dir" -c core.autocrlf=false pull --ff-only
   "$BASHY_EXE" git -C "$dir" -c core.autocrlf=false checkout -f HEAD
+elif [ -d "$dir/tests" ]; then
+  :
 elif [ -n "$repo" ]; then
   if [ -e "$dir" ] && [ ! -d "$dir/tests" ]; then
     echo "test-bash-data: $dir exists but does not contain tests" >&2
@@ -216,8 +218,6 @@ elif [ -n "$repo" ]; then
   "$BASHY_EXE" git -c core.autocrlf=false clone "$repo" "$dir"
   "$BASHY_EXE" git -C "$dir" config core.autocrlf false
   "$BASHY_EXE" git -C "$dir" -c core.autocrlf=false checkout -f HEAD
-elif [ -d "$dir/tests" ]; then
-  :
 else
   echo "test-bash-data: missing $dir/tests; set BASH53_TESTDATA_REPO to a git testdata repo" >&2
   exit 2
@@ -400,12 +400,12 @@ while [ "$i" -le "$chunks" ]; do
       if [ -n "$item_list_target" ]; then
         items=$(tr '\n' ' ' <"$outdir/group-$i")
         set +e
-        ssh "$remote" "cd '$remote_dir' && if [ -x ./bashy ]; then b=./bashy; elif [ -x ./bin/bashy.exe ]; then b=./bin/bashy.exe; else b=./bin/bashy; fi; export $item_env='$items'; \"\$b\" dag '$target'" >"$outdir/chunk-$i.out" 2>&1
+        ssh "$remote" "cd '$remote_dir' && if [ -x ./bashy ]; then b=./bashy; elif [ -x ./bin/bashy.exe ]; then b=./bin/bashy.exe; else b=./bin/bashy; fi; export BASH53_TESTDATA_REPO='${BASH53_TESTDATA_REPO:-}' $item_env='$items'; \"\$b\" dag '$target'" >"$outdir/chunk-$i.out" 2>&1
         rc=$?
         set -e
       else
         set +e
-        ssh "$remote" "cd '$remote_dir' && if [ -x ./bashy ]; then b=./bashy; elif [ -x ./bin/bashy.exe ]; then b=./bin/bashy.exe; else b=./bin/bashy; fi; CHUNK='$i/$chunks' \"\$b\" dag '$target'" >"$outdir/chunk-$i.out" 2>&1
+        ssh "$remote" "cd '$remote_dir' && if [ -x ./bashy ]; then b=./bashy; elif [ -x ./bin/bashy.exe ]; then b=./bin/bashy.exe; else b=./bin/bashy; fi; BASH53_TESTDATA_REPO='${BASH53_TESTDATA_REPO:-}' CHUNK='$i/$chunks' \"\$b\" dag '$target'" >"$outdir/chunk-$i.out" 2>&1
         rc=$?
         set -e
       fi
@@ -660,21 +660,26 @@ for host in "$@"; do
       if [ -d \"\$dir/.git\" ]; then
         if command -v git >/dev/null 2>&1; then
           (cd \"\$dir\" && git fetch origin --quiet && git checkout \"\$sha\")
+        elif command -v outpost >/dev/null 2>&1; then
+          (cd \"\$dir\" && outpost git fetch origin && outpost git reset --hard \"\$sha\")
         elif [ -n \"\$seed_cmd\" ]; then
           (cd \"\$dir\" && \"\$seed_cmd\" git fetch origin --quiet && \"\$seed_cmd\" git checkout \"\$sha\")
         else
-          echo \"fleet prepare: cannot update \$name without git or bashy git\" >&2
+          echo \"fleet prepare: cannot update \$name without git, outpost git, or bashy git\" >&2
           exit 127
         fi
       else
         if command -v git >/dev/null 2>&1; then
           git clone \"\$url\" \"\$dir\"
           (cd \"\$dir\" && git checkout \"\$sha\")
+        elif command -v outpost >/dev/null 2>&1; then
+          outpost git clone \"\$url\" \"\$dir\"
+          (cd \"\$dir\" && outpost git reset --hard \"\$sha\")
         elif [ -n \"\$seed_cmd\" ]; then
           \"\$seed_cmd\" git clone \"\$url\" \"\$dir\"
           (cd \"\$dir\" && \"\$seed_cmd\" git checkout \"\$sha\")
         else
-          echo \"fleet prepare: cannot clone \$name without git or bashy git\" >&2
+          echo \"fleet prepare: cannot clone \$name without git, outpost git, or bashy git\" >&2
           exit 127
         fi
       fi
@@ -698,6 +703,21 @@ for host in "$@"; do
         break
       fi
     done
+    refresh_latest_seed() {
+      if [ -n \"\$seed\" ] && \"\$seed\" self install --version latest \"bin/bashy\$ext\" >/dev/null 2>&1; then
+        seed=\"./bin/bashy\$ext\"
+        return 0
+      fi
+      if command -v outpost >/dev/null 2>&1 && outpost bashy --install-dir bin >/dev/null 2>&1; then
+        seed=\"./bin/bashy\$ext\"
+        return 0
+      fi
+      if fetch_release_seed latest; then
+        seed=\"./bin/bashy\$ext\"
+        return 0
+      fi
+      return 1
+    }
     if [ \"\$mode\" = release ]; then
       if [ -n \"\$seed\" ] && \"\$seed\" self install --version \"\$ref\" \"bin/bashy\$ext\" >/dev/null 2>&1; then
         seed=\"./bin/bashy\$ext\"
@@ -711,6 +731,7 @@ for host in "$@"; do
       \"\$seed\" --version
       exit 0
     fi
+    refresh_latest_seed || true
     if [ \"\$ref\" != HEAD ]; then
       if command -v git >/dev/null 2>&1; then
         git fetch --all --tags --quiet || true
@@ -775,6 +796,7 @@ BASHY_EXE="${BASHY:-bashy}"
 novicortex_dir="${NOVICORTEX_DIR:-/Users/noviadmin/projects/poc/dhnt/bashy}"
 puppy_dir="${PUPPY_DIR:-C:/Users/liqiang/tests/bashy-self/bashy}"
 lj2ivy_dir="${LJ2IVY_DIR:-C:/Users/Lern/tests/bashy-self/bashy}"
+BASH53_TESTDATA_REPO="${BASH53_TESTDATA_REPO:-https://github.com/qiangli/bash53-testdata}" \
 HOSTS="${HOSTS:-local novicortex.local=$novicortex_dir puppy=$puppy_dir lj2ivy=$lj2ivy_dir}" \
 CHUNKS="${CHUNKS:-8}" \
 "$BASHY_EXE" dag test-bash-chunks
