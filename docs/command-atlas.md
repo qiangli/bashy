@@ -1,8 +1,10 @@
 # The bashy Command Atlas
 
-Status: design + shipped views (2026-07-08). Companion code:
-`coreutils/pkg/atlas` (the catalog), `bashy/internal/agentos/atlas.go` (the
-merge layer), `bashy commands --view/--atlas/--idioms` (the views).
+Status: design + shipped views (2026-07-08); default surface reorganized
+by-how-it-runs + `graph`/`ast` collapsed to single subcommand-bearing verbs
+(2026-07-10). Companion code: `coreutils/pkg/atlas` (the catalog),
+`bashy/internal/agentos/{atlas,commands_sections}.go` (the merge + default
+grouping), `bashy commands --view/--atlas/--idioms` (the views).
 
 ## 1. Why an atlas
 
@@ -34,9 +36,13 @@ Design rules:
 1. **Curated, never inferred.** Every group/tier/cap assignment is a hand-set
    table entry, kept honest by coverage tests (a new tool that lacks an atlas
    entry fails the build). No flag-scraping heuristics.
-2. **Additive.** The default `bashy commands` text and JSON output
-   (`bashy-commands-v1`) stay byte-identical. Atlas views carry their own
-   schema id (`bashy-atlas-v1`).
+2. **Schema-stable, presentation-free.** The default `bashy commands` **`--json`**
+   (`bashy-commands-v1`) stays byte-identical — its keys (`builtins`/`coreutils`/
+   `verbs`) are a guarded contract. The default **human text** is the
+   by-how-it-runs surface (§1); it is a rendering over the same records, not a
+   schema, so it may be reorganized without a version bump (`-v --json` adds a
+   `sections` object mirroring it). Atlas views carry their own schema id
+   (`bashy-atlas-v1`).
 3. **Closed vocabularies.** Groups, tiers, and caps are fixed lists; an
    unknown value in a filter is an exit-2 error that prints the vocabulary,
    and an unknown value in the tables is a test failure.
@@ -86,7 +92,20 @@ Notes: `foreman` is both an in-process tool and a front-door verb — one atlas
 entry (group `orchestration`). `echo`/`false`/`pwd`/`true` exist in the
 coreutils registry but resolve as builtins; in merged views they appear under
 `shell`, and their coreutils atlas entries (group `shellutils`) serve
-non-shell consumers (multicall, MCP).
+non-shell consumers (multicall, MCP). `ast` and `graph` (group `code-intel`)
+are each a **single command with subcommands** (`ast symbols/search/refs/map/
+query`; `graph build/stats/neighbors/impact/path/hotspots/query · note/link/
+observe/forget/recall/notes/pitfalls`) — one atlas entry each, dispatched
+in-process.
+
+The **default `bashy commands` surface** groups the userland further than
+these groups: `fileutils`/`textutils`/`shellutils` tools split into
+*coreutils* (name ∈ the canonical GNU coreutils set — the same list behind
+`--gnu`) vs *classic* (jq/awk/sed/grep/find/tree/… — bundled but not GNU
+coreutils), both under the in-process *builtins* umbrella; the `code-intel`/
+`orchestration`/`knowledge`/`net` in-process tools render under *agent/ext*
+with the front-door verbs. This is a presentation split derived from group +
+GNU membership, not a new atlas axis.
 
 ### 2.2 Tier lens
 
@@ -194,8 +213,10 @@ contract with catalog metadata.
 
 ## 4. The views
 
-All additive. Default `bashy commands` text and `--json` remain
-byte-identical (`bashy-commands-v1`); atlas views emit `bashy-atlas-v1`.
+Default `bashy commands` **`--json`** stays schema-stable
+(`bashy-commands-v1`; `-v --json` additively carries a `sections` object of the
+by-how-it-runs grouping); the default human text is that same five-section
+surface (§1). Atlas views emit `bashy-atlas-v1`.
 
 ```
 bashy commands --view tier          # grouped by execution tier, counts per tier
