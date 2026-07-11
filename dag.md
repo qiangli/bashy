@@ -532,6 +532,65 @@ PLAN_FILE="${PLAN_FILE:-bin/bash53-chunks.plan.tsv}" \
 "$BASHY_EXE" dag dag-fanout
 ```
 
+### test-bash-fleet-check
+Check that the standard distributed Bash 5.3 test fleet is reachable and that
+each remote checkout exposes a usable bashy binary. Override remote paths with
+`NOVICORTEX_DIR=...`, `PUPPY_DIR=...`, or `LJ2IVY_DIR=...`; override the full
+fleet with `HOSTS=...`.
+Effects: read, net
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+repo="$("$BASHY_EXE" pwd)"
+novicortex_dir="${NOVICORTEX_DIR:-/Users/noviadmin/projects/poc/dhnt/bashy}"
+puppy_dir="${PUPPY_DIR:-C:/Users/liqiang/tests/bashy-self/bashy}"
+lj2ivy_dir="${LJ2IVY_DIR:-C:/Users/Lern/tests/bashy-self/bashy}"
+hosts="${HOSTS:-local novicortex.local=$novicortex_dir puppy=$puppy_dir lj2ivy=$lj2ivy_dir}"
+set -- $hosts
+for host in "$@"; do
+  remote_dir="$repo"
+  case "$host" in
+    *=*) remote="${host%%=*}"; remote_dir="${host#*=}" ;;
+    *) remote="$host" ;;
+  esac
+  if [ "$remote" = local ]; then
+    "$BASHY_EXE" -c 'echo local ok'
+  else
+    ssh "$remote" "cd '$remote_dir' && if [ -x ./bashy ]; then b=./bashy; elif [ -x ./bin/bashy.exe ]; then b=./bin/bashy.exe; else b=./bin/bashy; fi; \"\$b\" -c 'echo $remote ok'"
+  fi
+done
+```
+
+### test-bash-chunks-fleet
+Run the GNU Bash 5.3 chunked suite through the standard four-host development
+fleet. The default layout uses 8 chunks, assigned round-robin so each host gets
+2 chunks:
+
+- local dragon checkout
+- `novicortex.local`
+- `puppy`
+- `lj2ivy`
+
+Each remote entry points at that host's bashy checkout. Override any path with
+`NOVICORTEX_DIR=...`, `PUPPY_DIR=...`, or `LJ2IVY_DIR=...`; override the whole
+fleet with `HOSTS=...`. The remote checkouts must already contain the source,
+sibling repos, external Bash 5.3 test data, and a usable `./bashy`,
+`./bin/bashy`, or `./bin/bashy.exe`.
+Requires: build, test-bash-data, test-bash-fleet-check
+Effects: write, net
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+novicortex_dir="${NOVICORTEX_DIR:-/Users/noviadmin/projects/poc/dhnt/bashy}"
+puppy_dir="${PUPPY_DIR:-C:/Users/liqiang/tests/bashy-self/bashy}"
+lj2ivy_dir="${LJ2IVY_DIR:-C:/Users/Lern/tests/bashy-self/bashy}"
+HOSTS="${HOSTS:-local novicortex.local=$novicortex_dir puppy=$puppy_dir lj2ivy=$lj2ivy_dir}" \
+CHUNKS="${CHUNKS:-8}" \
+"$BASHY_EXE" dag test-bash-chunks
+```
+
 ### test-bash-chunks-tune
 Tune GNU Bash 5.3 chunk assignments with bounded repeated fanout runs. Each
 round replans from the latest `bin/bash53-durations.tsv`, and the best observed
