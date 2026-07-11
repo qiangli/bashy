@@ -44,6 +44,16 @@ func main() {
 	if chunk == "" {
 		chunk = os.Getenv("CHUNK")
 	}
+	if v := os.Getenv("BASH53_TIMEOUT"); v != "" {
+		parsed, err := time.ParseDuration(v)
+		dieIf(err)
+		timeout = parsed
+	}
+	if v := os.Getenv("BASH53_JOBS_TIMEOUT"); v != "" {
+		parsed, err := time.ParseDuration(v)
+		dieIf(err)
+		jobsTimeout = parsed
+	}
 
 	root, err := os.Getwd()
 	dieIf(err)
@@ -95,11 +105,14 @@ func main() {
 		if f.Name == "jobs" {
 			perTestTimeout = jobsTimeout
 		}
+		start := time.Now()
 		result, err := runFixture(root, testsDir, bashPath, f, perTestTimeout)
+		elapsed := time.Since(start)
 		if err != nil {
 			failed++
 			fmt.Printf("  FAIL  %s\n", f.Name)
 			fmt.Printf("        %v\n", err)
+			fmt.Printf("DURATION\t%s\t%.3f\n", f.Name, elapsed.Seconds())
 			continue
 		}
 		switch result {
@@ -111,6 +124,7 @@ func main() {
 			failed++
 		}
 		fmt.Printf("  %-5s %s\n", result, f.Name)
+		fmt.Printf("DURATION\t%s\t%.3f\n", f.Name, elapsed.Seconds())
 	}
 
 	fmt.Println()

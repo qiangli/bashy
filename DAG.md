@@ -272,6 +272,287 @@ ext=""
 "$BASHY_EXE" go run ./tools/bash53suite -tests-dir external/bash-5.3/tests -bash "bin/bash${ext}"
 ```
 
+### dag-fanout
+Run any DAG target as deterministic chunks and aggregate result lines. There
+are two modes:
+
+- Chunk-aware mode: target honors `CHUNK=I/N`.
+- Item-aware mode: set `ITEM_LIST_TARGET=<target-that-lists-items>` and
+  `ITEM_ENV=<env-var-for-space-separated-items>`. Fanout assigns item groups to
+  chunks, using `DURATIONS_FILE` when present for greedy duration-balanced
+  packing. Set `PLAN_FILE` to reuse a saved chunk assignment; set `REPLAN=1`
+  to ignore the saved plan and write a fresh one from current durations.
+
+Set `TARGET=<dag-target>`, `CHUNKS=N`, and optionally
+`HOSTS="local puppy=C:/Users/liqiang/poc/dhnt/bashy lj2ivy=/path/to/bashy"` to
+spread chunks round-robin across hosts. A host named `local` runs in this
+checkout; any other host is invoked through ssh. `host=/path` entries set the
+remote checkout path, otherwise the local checkout path is reused. Remote hosts
+must already have the source checkout, bashy binary, and any target-specific
+substrate ready.
+Effects: write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+target="${TARGET:?set TARGET to a chunk-aware DAG target, for example TARGET=test-bash-chunk}"
+chunks="${CHUNKS:-12}"
+hosts="${HOSTS:-local}"
+item_list_target="${ITEM_LIST_TARGET:-}"
+item_env="${ITEM_ENV:-ITEMS}"
+durations_file="${DURATIONS_FILE:-}"
+plan_file="${PLAN_FILE:-}"
+replan="${REPLAN:-}"
+case "$chunks" in ''|*[!0-9]*) echo "CHUNKS must be a positive integer" >&2; exit 2;; esac
+[ "$chunks" -gt 0 ] || { echo "CHUNKS must be > 0" >&2; exit 2; }
+repo="$("$BASHY_EXE" pwd)"
+outdir="bin/dag-fanout-${target}"
+rm -rf "$outdir"
+mkdir -p "$outdir"
+if [ -n "$item_list_target" ]; then
+  if [ -n "${FANOUT_ITEMS:-}" ]; then
+    printf '%s\n' $FANOUT_ITEMS >"$outdir/items"
+  else
+    "$BASHY_EXE" dag "$item_list_target" | awk 'NF && $1 != "==>" { print $1 }' >"$outdir/items"
+  fi
+  [ -s "$outdir/items" ] || { echo "dag-fanout: no items from $item_list_target" >&2; exit 2; }
+  i=1
+  while [ "$i" -le "$chunks" ]; do : >"$outdir/group-$i"; i=$((i + 1)); done
+  use_plan=0
+  if [ -n "$plan_file" ] && [ -f "$plan_file" ] && [ "$replan" != 1 ]; then
+    awk -v chunks="$chunks" -v outdir="$outdir" '
+      NR == FNR { wanted[$1] = 1; total++; next }
+      $1 ~ /^[0-9]+$/ && $1 >= 1 && $1 <= chunks && wanted[$2] {
+        print $2 >> (outdir "/group-" $1)
+        if (!assigned[$2]) assigned_count++
+        assigned[$2] = 1
+      }
+      END {
+        for (item in wanted) if (!assigned[item]) missing++
+        if (missing || assigned_count != total) exit 1
+      }
+    ' "$outdir/items" "$plan_file" && use_plan=1 || use_plan=0
+  fi
+  if [ "$use_plan" != 1 ]; then
+    i=1
+    while [ "$i" -le "$chunks" ]; do : >"$outdir/group-$i"; i=$((i + 1)); done
+  while IFS= read -r item; do
+    dur=1
+    if [ -n "$durations_file" ] && [ -f "$durations_file" ]; then
+      found=$(awk -v item="$item" '$1 == item { print $2; found=1; exit } END { if (!found) print "" }' "$durations_file")
+      [ -n "$found" ] && dur="$found"
+    fi
+    printf '%s\t%s\n' "$dur" "$item"
+  done <"$outdir/items" | sort -nr >"$outdir/items.weighted"
+  awk -v chunks="$chunks" -v outdir="$outdir" '
+    BEGIN {
+      for (i = 1; i <= chunks; i++) load[i] = 0
+    }
+    {
+      dur = $1 + 0
+      item = $2
+      best = 1
+      for (i = 2; i <= chunks; i++) if (load[i] < load[best]) best = i
+      print item >> (outdir "/group-" best)
+      load[best] += dur
+    }
+  ' "$outdir/items.weighted"
+  fi
+  : >"$outdir/plan.tsv"
+  i=1
+  while [ "$i" -le "$chunks" ]; do
+    awk -v chunk="$i" '{ print chunk "\t" $1 }' "$outdir/group-$i" >>"$outdir/plan.tsv"
+    i=$((i + 1))
+  done
+  if [ -n "$plan_file" ] && [ "$replan" = 1 ]; then
+    mkdir -p "$(dirname "$plan_file")"
+    cp "$outdir/plan.tsv" "$plan_file"
+  fi
+fi
+set -- $hosts
+host_count=$#
+[ "$host_count" -gt 0 ] || { echo "HOSTS must not be empty" >&2; exit 2; }
+i=1
+while [ "$i" -le "$chunks" ]; do
+  idx=$(( (i - 1) % host_count + 1 ))
+  eval "host=\${$idx}"
+  (
+    remote_dir="$repo"
+    case "$host" in
+      *=*) remote="${host%%=*}"; remote_dir="${host#*=}" ;;
+      *) remote="$host" ;;
+    esac
+    if [ "$remote" = local ]; then
+      if [ -n "$item_list_target" ]; then
+        items=$(tr '\n' ' ' <"$outdir/group-$i")
+        export "$item_env=$items"
+        set +e
+        "$BASHY_EXE" dag "$target" >"$outdir/chunk-$i.out" 2>&1
+        rc=$?
+        set -e
+      else
+        set +e
+        CHUNK="$i/$chunks" "$BASHY_EXE" dag "$target" >"$outdir/chunk-$i.out" 2>&1
+        rc=$?
+        set -e
+      fi
+    else
+      if [ -n "$item_list_target" ]; then
+        items=$(tr '\n' ' ' <"$outdir/group-$i")
+        set +e
+        ssh "$remote" "cd '$remote_dir' && if [ -x ./bashy ]; then b=./bashy; elif [ -x ./bin/bashy.exe ]; then b=./bin/bashy.exe; else b=./bin/bashy; fi; export $item_env='$items'; \"\$b\" dag '$target'" >"$outdir/chunk-$i.out" 2>&1
+        rc=$?
+        set -e
+      else
+        set +e
+        ssh "$remote" "cd '$remote_dir' && if [ -x ./bashy ]; then b=./bashy; elif [ -x ./bin/bashy.exe ]; then b=./bin/bashy.exe; else b=./bin/bashy; fi; CHUNK='$i/$chunks' \"\$b\" dag '$target'" >"$outdir/chunk-$i.out" 2>&1
+        rc=$?
+        set -e
+      fi
+    fi
+    echo "$rc" >"$outdir/chunk-$i.status"
+  ) &
+  i=$((i + 1))
+done
+wait || true
+cat "$outdir"/chunk-*.out
+bad=0
+for status in "$outdir"/chunk-*.status; do
+  [ "$(cat "$status")" = 0 ] || bad=1
+done
+set +e
+awk '
+  /^Results:/ {
+    p += $2; f += $4; s += $6; t += $8; seen++
+  }
+  END {
+    printf("\nChunk aggregate: %d passed, %d failed, %d skipped, %d timed out (%d chunks)\n", p, f, s, t, seen)
+    if (seen == 0 || f != 0 || t != 0) exit 1
+  }
+' "$outdir"/chunk-*.out
+aggregate=$?
+set -e
+if [ -n "$durations_file" ]; then
+  awk '$1 == "DURATION" { print $2 "\t" $3 }' "$outdir"/chunk-*.out >"$outdir/durations.new"
+  [ -s "$outdir/durations.new" ] && cp "$outdir/durations.new" "$durations_file"
+fi
+[ "$aggregate" -eq 0 ] || exit "$aggregate"
+[ "$bad" -eq 0 ]
+```
+
+### dag-fanout-tune
+Run a generic fanout target repeatedly until chunking settles or `MAX_ROUNDS`
+is reached. Each round replans from the duration profile left by the previous
+round, records wall time, and saves the best assignment to `PLAN_FILE` for
+normal future runs. Set `SETTLE_ROUNDS=N` to stop after N rounds without a new
+best wall time.
+Effects: write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+target="${TARGET:?set TARGET to a DAG target, for example TARGET=test-bash}"
+chunks="${CHUNKS:-12}"
+max_rounds="${MAX_ROUNDS:-3}"
+settle_rounds="${SETTLE_ROUNDS:-2}"
+plan_file="${PLAN_FILE:-bin/dag-fanout-${target}.plan.tsv}"
+outdir="bin/dag-fanout-tune-${target}"
+case "$max_rounds" in ''|*[!0-9]*) echo "MAX_ROUNDS must be a positive integer" >&2; exit 2;; esac
+case "$settle_rounds" in ''|*[!0-9]*) echo "SETTLE_ROUNDS must be a positive integer" >&2; exit 2;; esac
+[ "$max_rounds" -gt 0 ] || { echo "MAX_ROUNDS must be > 0" >&2; exit 2; }
+[ "$settle_rounds" -gt 0 ] || { echo "SETTLE_ROUNDS must be > 0" >&2; exit 2; }
+rm -rf "$outdir"
+mkdir -p "$outdir"
+best_wall=""
+best_round=0
+quiet_rounds=0
+overall=0
+round=1
+while [ "$round" -le "$max_rounds" ]; do
+  start=$(date +%s)
+  round_plan="$outdir/round-$round.plan.tsv"
+  set +e
+  TARGET="$target" CHUNKS="$chunks" HOSTS="${HOSTS:-local}" \
+  ITEM_LIST_TARGET="${ITEM_LIST_TARGET:-}" ITEM_ENV="${ITEM_ENV:-ITEMS}" \
+  FANOUT_ITEMS="${FANOUT_ITEMS:-}" DURATIONS_FILE="${DURATIONS_FILE:-}" \
+  PLAN_FILE="$round_plan" REPLAN=1 "$BASHY_EXE" dag dag-fanout
+  rc=$?
+  set -e
+  end=$(date +%s)
+  wall=$((end - start))
+  echo "$round	$wall	$rc" >>"$outdir/rounds.tsv"
+  cp -R "bin/dag-fanout-${target}" "$outdir/round-$round"
+  improved=0
+  if [ -z "$best_wall" ]; then
+    improved=1
+  elif awk -v wall="$wall" -v best="$best_wall" 'BEGIN { exit !(wall < best) }'; then
+    improved=1
+  fi
+  if [ "$improved" = 1 ]; then
+    best_wall="$wall"
+    best_round="$round"
+    quiet_rounds=0
+    cp "$round_plan" "$outdir/best.plan.tsv"
+  else
+    quiet_rounds=$((quiet_rounds + 1))
+  fi
+  [ "$rc" = 0 ] || overall="$rc"
+  echo "Tune round $round: ${wall}s (exit $rc, best round $best_round at ${best_wall}s)"
+  [ "$quiet_rounds" -lt "$settle_rounds" ] || break
+  round=$((round + 1))
+done
+if [ -f "$outdir/best.plan.tsv" ]; then
+  mkdir -p "$(dirname "$plan_file")"
+  cp "$outdir/best.plan.tsv" "$plan_file"
+fi
+echo "Tune best: round $best_round at ${best_wall}s; saved $plan_file"
+exit "$overall"
+```
+
+### test-bash-chunks
+Run the GNU Bash 5.3 suite through the generic DAG fanout target. Set
+`CHUNKS=16` or higher to spread fixtures across workers. `BASH53_TIMEOUT=55s`
+can be used for a sub-minute exploratory run while the known timeout fixtures
+are still unfixed; the canonical single-process gate keeps its default 60s
+timeout. Set `HOSTS="local puppy"` only when the remote host can run the target
+noninteractively.
+Requires: build, test-bash-data
+Effects: write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+mkdir -p bin
+TARGET="${TARGET:-test-bash}" \
+ITEM_LIST_TARGET="${ITEM_LIST_TARGET:-test-bash-list}" \
+ITEM_ENV="${ITEM_ENV:-TESTS}" \
+FANOUT_ITEMS="${FANOUT_ITEMS:-${TESTS:-}}" \
+DURATIONS_FILE="${DURATIONS_FILE:-bin/bash53-durations.tsv}" \
+PLAN_FILE="${PLAN_FILE:-bin/bash53-chunks.plan.tsv}" \
+"$BASHY_EXE" dag dag-fanout
+```
+
+### test-bash-chunks-tune
+Tune GNU Bash 5.3 chunk assignments with bounded repeated fanout runs. Each
+round replans from the latest `bin/bash53-durations.tsv`, and the best observed
+assignment is saved to `bin/bash53-chunks.plan.tsv` for `test-bash-chunks`.
+Set `MAX_ROUNDS=5`, `SETTLE_ROUNDS=2`, `CHUNKS=8`, and optionally `HOSTS=...`.
+Requires: build, test-bash-data
+Effects: write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+mkdir -p bin
+TARGET="${TARGET:-test-bash}" \
+ITEM_LIST_TARGET="${ITEM_LIST_TARGET:-test-bash-list}" \
+ITEM_ENV="${ITEM_ENV:-TESTS}" \
+FANOUT_ITEMS="${FANOUT_ITEMS:-${TESTS:-}}" \
+DURATIONS_FILE="${DURATIONS_FILE:-bin/bash53-durations.tsv}" \
+PLAN_FILE="${PLAN_FILE:-bin/bash53-chunks.plan.tsv}" \
+"$BASHY_EXE" dag dag-fanout-tune
+```
+
 ### test-bash-container
 Run the GNU Bash 5.3 conformance gate in a Linux container through `bashy
 podman`. This is the cross-platform release lane for Windows hosts: bashy
