@@ -905,9 +905,9 @@ BASHY_EXE="${BASHY:-bashy}"
 
 ### test-bash-container-prepare
 Prepare the GNU Bash 5.3 container-normalized lane once per host. This builds
-the host-architecture Linux testee and harness and validates the container
-engine before fanout starts.
-Requires: test-bash-data, test-podman
+the host-architecture Linux testee and harness and validates the current
+bashy's container surface before fanout starts.
+Requires: test-bash-data
 Effects: write
 
 ```bash
@@ -924,6 +924,8 @@ harness="bin/bash53suite-linux-${host_goarch}"
 mkdir -p "$testee_dir"
 GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 "$BASHY_EXE" go build -trimpath -o "$testee" ./cmd/bash
 GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 "$BASHY_EXE" go build -trimpath -o "$harness" ./tools/bash53suite
+oci="${BASH53_OCI:-$BASHY_EXE podman}"
+$oci info >/dev/null
 ```
 
 ### test-bash-container-run
@@ -938,16 +940,15 @@ host_goos="$("$BASHY_EXE" go env GOOS)"
 host_goarch="$("$BASHY_EXE" go env GOARCH)"
 ext=""
 [ "$host_goos" = windows ] && ext=.exe
-engine="bin/bashy-podman-test${ext}"
 testee_dir="bin/bash-linux-${host_goarch}"
 testee="${testee_dir}/bash"
 harness="bin/bash53suite-linux-${host_goarch}"
-[ -x "$engine" ] || { echo "missing $engine; run bashy dag test-bash-container-prepare" >&2; exit 2; }
 [ -x "$testee" ] || { echo "missing $testee; run bashy dag test-bash-container-prepare" >&2; exit 2; }
 [ -x "$harness" ] || { echo "missing $harness; run bashy dag test-bash-container-prepare" >&2; exit 2; }
 repo="$("$BASHY_EXE" pwd)"
 tests_root="$(cd external/bash-5.3 && pwd -P)"
-"$engine" podman run --rm \
+oci="${BASH53_OCI:-$BASHY_EXE podman}"
+$oci run --rm \
   -v "$repo:/work" \
   -v "$tests_root:/bash53" \
   -w /work \
