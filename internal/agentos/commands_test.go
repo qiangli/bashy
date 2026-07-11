@@ -26,10 +26,17 @@ func TestCommandsCatalogSources(t *testing.T) {
 			t.Errorf("coreutils userland missing %q", want)
 		}
 	}
-	// Front-door verbs + the docker→podman shim + the lister itself.
+	// Front-door verbs + the docker->podman shim + the lister itself.
 	for _, want := range []string{"weave", "run", "commands", "docker", "self"} {
 		if !slices.Contains(verbs, want) {
 			t.Errorf("verbs missing %q", want)
+		}
+	}
+	// Toolchain provisioners are listed because `bashy go`, `bashy clang`, etc.
+	// are callable even when the Preamble leaves bare names to PATH.
+	for _, want := range []string{"go", "cmake", "clang", "node", "python", "curl"} {
+		if !slices.Contains(verbs, want) {
+			t.Errorf("toolchain/provisioner verb missing %q", want)
 		}
 	}
 	for _, hidden := range hiddenFrontDoorVerbs {
@@ -57,11 +64,13 @@ func TestHiddenVerbsCatalog(t *testing.T) {
 	}
 }
 
-func TestCommandsCatalogAgentModeAddsProvisioners(t *testing.T) {
+func TestCommandsCatalogAlwaysListsProvisioners(t *testing.T) {
 	t.Setenv("BASHY_AGENTIC", "")
 	_, _, human := commandsCatalog()
-	if slices.Contains(human, "go") {
-		t.Error("go should not be shimmed (listed) outside agent mode")
+	for _, want := range []string{"go", "cmake", "clang"} {
+		if !slices.Contains(human, want) {
+			t.Errorf("human catalog should list callable provisioner %q", want)
+		}
 	}
 	t.Setenv("BASHY_AGENTIC", "1")
 	_, _, agent := commandsCatalog()

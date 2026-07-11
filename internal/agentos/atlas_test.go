@@ -90,16 +90,21 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 	}
 }
 
-// Without agent mode the provisioners are not shimmed and must be absent —
-// the atlas mirrors the Preamble, not a superset of it.
-func TestAtlasRespectsAgentMode(t *testing.T) {
+// Without includeHidden, hidden compatibility aliases must be absent. Toolchain
+// provisioners remain present because the atlas describes the callable bashy
+// front door, not only the bare-name Preamble shims.
+func TestAtlasHidesHiddenAliasesByDefault(t *testing.T) {
 	t.Setenv("BASHY_AGENTIC", "")
+	seenCargo := false
 	for _, r := range liveAtlas(false) {
 		if r.Name == "cargo" {
-			t.Fatalf("agent-mode provisioner %q present without $BASHY_AGENTIC", r.Name)
+			seenCargo = true
 		}
 		if r.Hidden {
 			t.Fatalf("hidden verb %q present without includeHidden", r.Name)
 		}
+	}
+	if !seenCargo {
+		t.Fatal("cargo provisioner missing from default atlas")
 	}
 }

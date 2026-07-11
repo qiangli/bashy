@@ -422,9 +422,7 @@ func commandsCatalog() (builtins, core, verbs []string) {
 	core = tool.Names() // Names() already sorts; be defensive
 	sort.Strings(core)
 	verbs = append([]string{"docker"}, alwaysShimVerbs...)
-	if weavecli.IsAgent() {
-		verbs = append(verbs, agentModeShimVerbs...)
-	}
+	verbs = append(verbs, agentModeShimVerbs...)
 	verbs = append(verbs, registry.Names()...) // declarative managed-external CLIs
 	sort.Strings(verbs)
 	return builtins, core, verbs

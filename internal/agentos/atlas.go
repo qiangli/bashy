@@ -109,9 +109,11 @@ func applyEntry(r *atlasRecord, e atlas.Entry) {
 	r.Group, r.Tier, r.Subclass, r.Caps, r.AliasOf = e.Group, e.Tier, e.Subclass, e.Caps, e.AliasOf
 }
 
-// liveAtlas assembles the full merged catalog for the current mode
-// (agent-mode provisioners included only under $BASHY_AGENTIC, mirroring the
-// Preamble), optionally with the hidden compatibility aliases.
+// liveAtlas assembles the full merged catalog for the bashy front door,
+// optionally with the hidden compatibility aliases. Toolchain provisioners are
+// always listed here because `bashy go`, `bashy clang`, etc. are callable even
+// when the Preamble leaves bare `go`/`clang` to the user's PATH outside agent
+// mode.
 func liveAtlas(includeHidden bool) []atlasRecord {
 	builtins, core, verbs := commandsCatalog()
 	var hidden []string
