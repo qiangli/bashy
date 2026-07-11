@@ -640,6 +640,53 @@ for host in "$@"; do
       [ -f bin/bash ] && cp bin/bash \"bin/bash\$ext\"
       chmod +x \"bin/bashy\$ext\" \"bin/bash\$ext\" 2>/dev/null || true
     }
+    sync_sibling() {
+      name=\"\$1\"
+      sha=\"\$2\"
+      dir=\"../\$name\"
+      case \"\$name\" in
+        sh) url=https://github.com/qiangli/sh.git ;;
+        coreutils) url=https://github.com/qiangli/coreutils.git ;;
+        readline) url=https://github.com/qiangli/readline.git ;;
+        *) return 0 ;;
+      esac
+      seed_cmd=
+      if [ -n \"\$seed\" ]; then
+        case \"\$seed\" in
+          ./*) seed_cmd=\"\$root/\${seed#./}\" ;;
+          *) seed_cmd=\"\$seed\" ;;
+        esac
+      fi
+      if [ -d \"\$dir/.git\" ]; then
+        if command -v git >/dev/null 2>&1; then
+          (cd \"\$dir\" && git fetch origin --quiet && git checkout \"\$sha\")
+        elif [ -n \"\$seed_cmd\" ]; then
+          (cd \"\$dir\" && \"\$seed_cmd\" git fetch origin --quiet && \"\$seed_cmd\" git checkout \"\$sha\")
+        else
+          echo \"fleet prepare: cannot update \$name without git or bashy git\" >&2
+          exit 127
+        fi
+      else
+        if command -v git >/dev/null 2>&1; then
+          git clone \"\$url\" \"\$dir\"
+          (cd \"\$dir\" && git checkout \"\$sha\")
+        elif [ -n \"\$seed_cmd\" ]; then
+          \"\$seed_cmd\" git clone \"\$url\" \"\$dir\"
+          (cd \"\$dir\" && \"\$seed_cmd\" git checkout \"\$sha\")
+        else
+          echo \"fleet prepare: cannot clone \$name without git or bashy git\" >&2
+          exit 127
+        fi
+      fi
+    }
+    sync_siblings() {
+      [ -f .sibling-pins ] || return 0
+      while IFS='=' read -r name sha; do
+        case \"\$name\" in ''|\#*) continue ;; esac
+        [ -n \"\$sha\" ] || continue
+        sync_sibling \"\$name\" \"\$sha\"
+      done <.sibling-pins
+    }
     seed=
     for candidate in ./bin/bashy\$ext ./bashy bashy; do
       case \"\$candidate\" in
@@ -676,6 +723,8 @@ for host in "$@"; do
         exit 127
       fi
     fi
+    root=\"\$(pwd)\"
+    sync_siblings
     if [ -n \"\$seed\" ]; then
       BASHY=\"\$seed\" \"\$seed\" dag build VERSION=\"\$ref\"
       fix_windows_ext
