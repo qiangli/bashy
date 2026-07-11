@@ -34,7 +34,7 @@ import (
 	// `graph` tool). Registered here — NOT via cmds/all — so gfy's document-parsing
 	// deps land in `bashy` only, never the bare cmd/coreutils multicall binary or
 	// the cmd/bash drop-in. It reaches the front door + in-shell ExecHandler through
-	// the tool registry (agentos.go dispatch fallthrough), like list-symbols/repo-map.
+	// the tool registry (agentos.go dispatch fallthrough), like ast/graph.
 	_ "github.com/qiangli/coreutils/cmds/graph"
 	// Foreman — the steerable agent session (start/tell/status/pause/…, the
 	// `chat` parent elevated to a persistent session). Registered here — NOT via
@@ -937,7 +937,7 @@ func runFleet(noun string, args []string) {
 // in-process (pure-Go-first) before PATH lookup. It is wired into the shell
 // core via cli.AgentOSWireExec. Shell builtins (echo, pwd, test, …) are handled
 // by the interpreter before the ExecHandler runs, so they are never shadowed —
-// only external-command names (ls, cat, grep, list-symbols, …) are intercepted.
+// only external-command names (ls, cat, grep, ast, …) are intercepted.
 func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 	// --dry-run (bashy-only, inert under --posix). The handlers are installed
 	// whenever NOT in posix mode (they no-op when dry-run is off) so the runtime

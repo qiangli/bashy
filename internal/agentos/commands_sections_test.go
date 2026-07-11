@@ -49,7 +49,7 @@ func TestClassSectionsTaxonomy(t *testing.T) {
 	// Agent/ext by venue — including in-process agent tools (graph, code-intel,
 	// foreman) that resolve as coreutils-class but belong with the verbs.
 	agentAt := func(venue, name string) bool { return has(s.Agent[venue], name) }
-	for _, name := range []string{"graph", "list-symbols", "foreman", "chat", "meet", "kb", "skills"} {
+	for _, name := range []string{"graph", "ast", "foreman", "chat", "meet", "kb", "skills"} {
 		if !agentAt(atlas.TierUserland, name) {
 			t.Errorf("agent/userland missing %q", name)
 		}

@@ -13,7 +13,7 @@ real handler:
 | Class | Backed by | Verified against |
 |-------|-----------|------------------|
 | **builtins** (`cd`, `export`, `read`, …) | interpreter builtin set | `interp.BuiltinNames()` |
-| **coreutils** (`ls`/`grep`/`sed`/… + code-intel `list-symbols`/… + graph verbs) | in-process `tool.Lookup` registry | `tool.Lookup(name) != nil` |
+| **coreutils** (`ls`/`grep`/`sed`/… + code-intel `ast` + `graph`) | in-process `tool.Lookup` registry | `tool.Lookup(name) != nil` |
 | **front-door verbs** (`weave`/`sprint`/`podman`/`ollama`/`docker`/`gh`/…) | dispatch switch + engine ladder | verb has a synopsis; live `--help` / feature probe |
 
 ## Bug found and fixed
@@ -67,7 +67,7 @@ command dispatches:
   test never pulls hundreds of MB of upstream tooling.
 
 Probe-design notes (why the first cut false-positived): `--help` is **not**
-universal — path-taking tools (`list-symbols`) treat `--help` as a path
+universal — path-taking tools (`ast symbols`) treat `--help` as a path
 argument, and `time` is a shell keyword — so per-tool coreutils checks use the
 feature report, not `--help`; and `runBashy` feeds **empty stdin** so
 stdin-reading tools (`cat`/`wc`/…) never hang.

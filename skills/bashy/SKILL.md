@@ -38,8 +38,8 @@ for later calls.
 ## Navigate code without the grep dance
 
 - `bashy graph impact SYMBOL` — what code is coupled to a symbol.
-- `bashy list-symbols PATH` / `bashy search-symbols PATTERN` /
-  `bashy find-references SYMBOL` / `bashy repo-map` — treesitter-backed,
+- `bashy ast symbols PATH` / `bashy ast search PATTERN` /
+  `bashy ast refs SYMBOL` / `bashy ast map` — treesitter-backed,
   model-free.
 - Shared repo memory (an agentic wiki other agents' findings accrue
   into): `bashy graph recall QUERY` to read; `bashy graph note` /

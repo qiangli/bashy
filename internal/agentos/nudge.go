@@ -80,12 +80,12 @@ func routingHint(name string, args []string) string {
 		if hasArg(args, "--agentic") || !hasRecursiveFlag(args) {
 			return ""
 		}
-		return "repo-wide grep also walks ignored noise (node_modules/.git/vendor). Add `--agentic` to skip it, or use `find-references <symbol>` / `repo-map` for structural, token-budgeted code search."
+		return "repo-wide grep also walks ignored noise (node_modules/.git/vendor). Add `--agentic` to skip it, or use `ast refs <symbol>` / `ast map` for structural, token-budgeted code search."
 	case "find":
 		if hasArg(args, "--agentic") {
 			return ""
 		}
-		return "find walks ignored directories too. Add `--agentic` to skip .gitignore/node_modules, or use `list-symbols` / `repo-map` to map the codebase."
+		return "find walks ignored directories too. Add `--agentic` to skip .gitignore/node_modules, or use `ast symbols` / `ast map` to map the codebase."
 	}
 	return ""
 }

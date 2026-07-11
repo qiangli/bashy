@@ -16,7 +16,7 @@ package under `cmd/`, so their import graphs are disjoint:
   the conformance work measures this pure drop-in.**
 - **`bashy`** (`cmd/bashy`) — the **AgentOS system shell**: the same shell core
   plus the coreutils `shell.Handler()` ExecHandler (pure-Go userland
-  cat/ls/grep/… , the code-intel verbs (list-symbols/search-symbols/find-references/repo-map/ast-query),
+  cat/ls/grep/… , the `ast` code-intel command (ast symbols/search/refs/map/query),
   the `graph` verb's code-knowledge-graph read subcommands (graph build/stats/neighbors/impact/path/hotspots/query,
   gfy-backed, model-free), and its knowledge-graph CONTRIBUTION subcommands
   (graph note/link/observe/forget write · graph recall/notes/pitfalls read —

@@ -70,7 +70,7 @@ bucket is split into honest functional groups.
 | `fileutils` | basename, chcon, chgrp, chmod, chown, clip, cp, dd, df, dir, dircolors, dirname, du, find, install, link, ln, ls, mkdir, mkfifo, mknod, mktemp, mv, readlink, realpath, rm, rmdir, shred, stat, sync, tar, touch, tree, truncate, unlink, vdir |
 | `textutils` | awk, b2sum, base32, base64, basenc, cat, cksum, cmp, comm, csplit, cut, diff, expand, fmt, fold, grep, gunzip, gzip, head, hexdump, join, jq, md5sum, more, nl, numfmt, od, paste, pr, ptx, sed, sha1sum, sha224sum, sha256sum, sha384sum, sha512sum, shuf, sort, split, strings, sum, tac, tail, tee, tokens, tr, tsort, unexpand, uniq, wc, xargs, zcat |
 | `shellutils` | arch, at, atq, atrm, batch, cal, chroot, crontab, date, duration, echo, env, expr, factor, false, groups, hostid, hostname, id, logname, ncal, nice, nohup, nproc, ntp, pathchk, pinky, printenv, pwd, runcon, seq, sleep, sntp, stdbuf, stty, time, timeout, true, tty, tz, uname, uptime, users, watch, which, who, whoami, yes |
-| `code-intel` | ast-query, find-references, list-symbols, repo-map, search-symbols, graph |
+| `code-intel` | ast, graph |
 | `net` | browser, fetch, web, curl |
 | `orchestration` | weave, sprint, dag, foreman, sdlc, chat, meet, agent, schedule, act, act-runner, mirror |
 | `knowledge` | kb, skills |
@@ -117,12 +117,12 @@ is omitted when unsure (absence is *unknown*, not *no*).
 
 | cap | meaning | seeded on (evidence) |
 |---|---|---|
-| `json` | has a structured-output mode (`--json` or native equivalent) | tools: browser, fetch, duration, tz, ntp, sntp, tokens, foreman, the 19 code-intel verbs; verbs: weave, sprint, dag, sdlc, schedule, skills, kb, chat, agent, web, run, commands, context, check (verified flags); kubectl (native `-o json`) |
+| `json` | has a structured-output mode (`--json` or native equivalent) | tools: browser, fetch, duration, tz, ntp, sntp, tokens, foreman, ast, graph; verbs: weave, sprint, dag, sdlc, schedule, skills, kb, chat, agent, web, run, commands, context, check (verified flags); kubectl (native `-o json`) |
 | `dry-run` | participates in the bashy dry-run manifest (`docs/dryrun.md`) | rm (destroy kind); redirection truncation is shell-level |
 | `destructive` | can irreversibly delete/overwrite user data | rm, dd, shred, truncate |
-| `read-only` | never mutates the filesystem (conservative) | cat, cmp, comm, df, diff, du, grep, head, hexdump, ls, od, readlink, realpath, stat, strings, tac, tail, tokens, tree, wc, which + the code-intel read verbs |
+| `read-only` | never mutates the filesystem (conservative) | cat, cmp, comm, df, diff, du, grep, head, hexdump, ls, od, readlink, realpath, stat, strings, tac, tail, tokens, tree, wc, which + `ast` (all subcommands are structural reads) |
 | `cached` | keeps a persistent on-disk cache | graph (`.agents/bashy/graph.json`); self (bin cache); every `self-provisioning` verb (binmgr cache) |
-| `budget` | token-budget-aware output | tokens, repo-map (`--budget`) |
+| `budget` | token-budget-aware output | tokens, ast map (`--budget`) |
 | `needs-network` | requires network to function (beyond first provision) | fetch, browser, ntp, sntp; git, gh, rclone, ollama, sphere, kubectl, helm, secrets, tessaro, login, registry CLIs |
 | `needs-pairing` | requires a Tessaro-paired machine / cloudbox token | sphere, tessaro, login, secrets |
 | `self-provisioning` | download → verify → cache → exec on first use | all toolchain provisioners, git/git-scm/gh/curl, rclone, loom, zot, seaweedfs, kopia, act, act-runner, kubectl, helm, mise, uv, registry CLIs |
