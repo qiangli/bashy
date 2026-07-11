@@ -182,20 +182,129 @@ for plat in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 wind
 done
 ```
 
+### test-bash-data
+Ensure the optional GNU Bash 5.3 fixture data is present. This is external GPL
+test data, not bashy source and not a build/runtime dependency. bashy does not
+vendor it and does not hard-code a default download URL. Set
+`BASH53_TESTDATA_REPO` to a public GPL-compatible testdata repo when a runner
+needs to hydrate the suite; the target clones it into the gitignored
+`external/bash-5.3` directory on first use and pulls with `--ff-only` when it is
+already a git checkout. Existing non-git fixture trees are accepted for local
+development, but missing fixtures fail loudly.
+Effects: write, net
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+dir=external/bash-5.3
+repo="${BASH53_TESTDATA_REPO:-}"
+if [ -d "$dir/.git" ]; then
+  "$BASHY_EXE" git -C "$dir" config core.autocrlf false
+  "$BASHY_EXE" git -C "$dir" -c core.autocrlf=false pull --ff-only
+  "$BASHY_EXE" git -C "$dir" -c core.autocrlf=false checkout -f HEAD
+elif [ -n "$repo" ]; then
+  if [ -e "$dir" ] && [ ! -d "$dir/tests" ]; then
+    echo "test-bash-data: $dir exists but does not contain tests" >&2
+    exit 2
+  fi
+  if [ -e "$dir" ] && [ ! -d "$dir/.git" ]; then
+    echo "test-bash-data: $dir exists but is not a git checkout; remove it or leave BASH53_TESTDATA_REPO unset" >&2
+    exit 2
+  fi
+  "$BASHY_EXE" mkdir -p external
+  "$BASHY_EXE" git -c core.autocrlf=false clone "$repo" "$dir"
+  "$BASHY_EXE" git -C "$dir" config core.autocrlf false
+  "$BASHY_EXE" git -C "$dir" -c core.autocrlf=false checkout -f HEAD
+elif [ -d "$dir/tests" ]; then
+  :
+else
+  echo "test-bash-data: missing $dir/tests; set BASH53_TESTDATA_REPO to a git testdata repo" >&2
+  exit 2
+fi
+```
+
 ### test-bash
 **GNU Bash 5.3 compatibility test** — the canonical conformance gate. Runs
-Bash's own 5.3 test suite against the freshly built `bin/bash` (the pure
-drop-in); the headline is the PASS-count three-tuple (currently **86/86**, 0
-fail, 0 skip). The 130-line compliance harness (per-fixture timeouts,
-expect-line filtering, cat -v transforms, C helper compilation) stays in the
-Makefile — this target runs `build` first, then delegates to it. Use
-`make test-bash-parallel` for the cores-fanned-out form (the canonical gate).
-Re-home into pure dag bodies once the harness is factored into a script.
-Requires: build
+the externally supplied GNU Bash 5.3 GPL test suite against the freshly built
+`bin/bash` (the pure drop-in); the headline is the PASS-count three-tuple
+(currently **86/86**, 0 fail, 0 skip). The harness is bashy-native, not
+make-based: it uses `"$BASHY" go run ./tools/bash53suite`, so it works on hosts
+where bashy provides the Go toolchain and no system make is installed. Use
+`TESTS="comsub varenv"` for a subset, or `CHUNK=1/4` to run one deterministic
+distributed shard.
+Requires: build, test-bash-data
 Effects: write
 
 ```bash
-make test-bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+goos="$("$BASHY_EXE" go env GOOS)"
+ext=""
+[ "$goos" = windows ] && ext=.exe
+"$BASHY_EXE" go run ./tools/bash53suite -tests-dir external/bash-5.3/tests -bash "bin/bash${ext}"
+```
+
+### test-bash-list
+List the GNU Bash 5.3 fixtures known to the bashy-native harness.
+Requires: test-bash-data
+Effects: read
+
+```bash
+BASHY_EXE="${BASHY:-bashy}"
+"$BASHY_EXE" go run ./tools/bash53suite -tests-dir external/bash-5.3/tests -list
+```
+
+### test-bash-chunk
+Run one GNU Bash 5.3 distributed chunk. Set `CHUNK=I/N`, for example
+`CHUNK=2/6 bashy dag test-bash-chunk`; optional `TESTS="..."` still narrows the
+fixture set before chunking.
+Requires: build, test-bash-data
+Effects: write
+
+```bash
+set -e
+: "${CHUNK:?set CHUNK=I/N, for example CHUNK=1/4}"
+BASHY_EXE="${BASHY:-bashy}"
+goos="$("$BASHY_EXE" go env GOOS)"
+ext=""
+[ "$goos" = windows ] && ext=.exe
+"$BASHY_EXE" go run ./tools/bash53suite -tests-dir external/bash-5.3/tests -bash "bin/bash${ext}"
+```
+
+### test-bash-container
+Run the GNU Bash 5.3 conformance gate in a Linux container through `bashy
+podman`. This is the cross-platform release lane for Windows hosts: bashy
+cross-builds the pure `cmd/bash` testee and the bashy-native harness for Linux,
+then runs the external GPL fixture data inside a Linux userspace with `gcc`
+available for Bash's small helper programs. Set `BASH53_TESTDATA_REPO` to
+hydrate the gitignored fixture tree; set `TESTS="..."` or `CHUNK=I/N` for
+subset/distributed runs.
+Requires: test-bash-data, test-podman
+Effects: write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+host_goos="$("$BASHY_EXE" go env GOOS)"
+host_goarch="$("$BASHY_EXE" go env GOARCH)"
+ext=""
+[ "$host_goos" = windows ] && ext=.exe
+engine="bin/bashy-podman-test${ext}"
+testee_dir="bin/bash-linux-${host_goarch}"
+testee="${testee_dir}/bash"
+harness="bin/bash53suite-linux-${host_goarch}"
+[ -f "$testee_dir" ] && rm -f "$testee_dir"
+mkdir -p "$testee_dir"
+GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 "$BASHY_EXE" go build -trimpath -o "$testee" ./cmd/bash
+GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 "$BASHY_EXE" go build -trimpath -o "$harness" ./tools/bash53suite
+repo="$("$BASHY_EXE" pwd)"
+"$engine" podman run --rm \
+  -v "$repo:/work" \
+  -w /work \
+  -e TESTS="${TESTS:-}" \
+  -e CHUNK="${CHUNK:-}" \
+  docker.io/library/gcc:14-bookworm \
+  "./$harness" -tests-dir external/bash-5.3/tests -bash "./$testee"
 ```
 
 ### yash
