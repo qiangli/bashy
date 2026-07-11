@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -32,7 +33,7 @@ It does not replace the running executable unless you explicitly install to a
 destination path.`,
 		SilenceUsage: true,
 	}
-	cmd.AddCommand(selfFetchCmd(), selfInstallCmd(), selfCheckCmd())
+	cmd.AddCommand(selfFetchCmd(), selfBuildCmd(), selfInstallCmd(), selfCheckCmd())
 	return cmd
 }
 
@@ -83,25 +84,43 @@ func selfFetchCmd() *cobra.Command {
 
 func selfInstallCmd() *cobra.Command {
 	var version string
+	var source bool
 	cmd := &cobra.Command{
 		Use:   "install [path]",
-		Short: "Install a released bashy binary to a target path",
-		Long: `Install a cached release binary to PATH. With no path, install next to the
-currently running executable. The target is written via a same-directory temp
-file and rename.`,
+		Short: "Install bashy to a target path",
+		Long: `Install bashy to PATH. By default this installs a cached release binary.
+Pass --source to build from the current source checkout first. With no path,
+install next to the currently running executable. The target is written via a
+same-directory temp file and rename.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target := ""
 			if len(args) == 1 {
 				target = args[0]
 			}
-			cached, err := ensureBashyRelease(cmd.Context(), version)
+			target, err := resolveSelfInstallTarget(target)
 			if err != nil {
 				return err
 			}
-			target, err = resolveSelfInstallTarget(target)
-			if err != nil {
-				return err
+			cached := ""
+			if source {
+				if !cmd.Flags().Changed("version") {
+					version = "dev"
+				}
+				tmpDir, err := os.MkdirTemp("", "bashy-self-build-*")
+				if err != nil {
+					return err
+				}
+				defer os.RemoveAll(tmpDir)
+				cached = filepath.Join(tmpDir, releaseBinaryName())
+				if err := buildSelfBinary(cmd.Context(), cached, version); err != nil {
+					return err
+				}
+			} else {
+				cached, err = ensureBashyRelease(cmd.Context(), version)
+				if err != nil {
+					return err
+				}
 			}
 			if err := installExecutable(cached, target); err != nil {
 				return err
@@ -111,7 +130,58 @@ file and rename.`,
 		},
 	}
 	cmd.Flags().StringVar(&version, "version", envOr("BASHY_SELF_VERSION", "latest"), "Release tag to install (default latest)")
+	cmd.Flags().BoolVar(&source, "source", false, "Build from the current source checkout instead of installing a release")
 	return cmd
+}
+
+func selfBuildCmd() *cobra.Command {
+	var version string
+	cmd := &cobra.Command{
+		Use:   "build [path]",
+		Short: "Build bashy from the current source checkout",
+		Long: `Build bashy from the current source checkout using this bashy binary's
+managed Go toolchain. With no path, writes bin/bashy or bin/bashy.exe.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := selfBuildDefaultTarget()
+			if len(args) == 1 {
+				target = args[0]
+			}
+			target, err := filepath.Abs(target)
+			if err != nil {
+				return err
+			}
+			if err := buildSelfBinary(cmd.Context(), target, version); err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), target)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&version, "version", envOr("BASHY_SELF_BUILD_VERSION", "dev"), "Version suffix for the built binary")
+	return cmd
+}
+
+func selfBuildDefaultTarget() string {
+	return filepath.Join("bin", releaseBinaryName())
+}
+
+func buildSelfBinary(ctx context.Context, target, version string) error {
+	if strings.TrimSpace(version) == "" {
+		version = "dev"
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
+	exe, err := os.Executable()
+	if err != nil || exe == "" {
+		return errors.New("cannot resolve current executable for managed Go build")
+	}
+	ldflags := "-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-" + version
+	c := exec.CommandContext(ctx, exe, "go", "build", "-trimpath", "-ldflags", ldflags, "-o", target, "./cmd/bashy")
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	return c.Run()
 }
 
 func ensureBashyRelease(ctx context.Context, version string) (string, error) {

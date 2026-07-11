@@ -726,7 +726,11 @@ for host in "$@"; do
     root=\"\$(pwd)\"
     sync_siblings
     if [ -n \"\$seed\" ]; then
-      BASHY=\"\$seed\" \"\$seed\" dag build VERSION=\"\$ref\"
+      if \"\$seed\" self build \"bin/bashy\$ext\" --version \"\$ref\" >/dev/null 2>&1; then
+        \"./bin/bashy\$ext\" dag build VERSION=\"\$ref\"
+      else
+        BASHY=\"\$seed\" \"\$seed\" dag build VERSION=\"\$ref\"
+      fi
       fix_windows_ext
     elif command -v go >/dev/null 2>&1; then
       LDFLAGS=\"-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-\$ref\"

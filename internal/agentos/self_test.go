@@ -47,6 +47,19 @@ func TestReleaseBinaryName(t *testing.T) {
 	}
 }
 
+func TestSelfBuildDefaultTarget(t *testing.T) {
+	got := selfBuildDefaultTarget()
+	if runtime.GOOS == "windows" {
+		if got != filepath.Join("bin", "bashy.exe") {
+			t.Fatalf("selfBuildDefaultTarget on windows = %q", got)
+		}
+		return
+	}
+	if got != filepath.Join("bin", "bashy") {
+		t.Fatalf("selfBuildDefaultTarget = %q", got)
+	}
+}
+
 func TestResolveSelfInstallTargetExplicit(t *testing.T) {
 	dir := t.TempDir()
 	got, err := resolveSelfInstallTarget(filepath.Join(dir, "bashy-new"))
@@ -125,5 +138,31 @@ func TestSelfCheckCommandPlainAndJSON(t *testing.T) {
 	}
 	if !sawManagedGo {
 		t.Fatalf("self check JSON missing managed go check: %#v", payload.Checks)
+	}
+}
+
+func TestSelfCommandIncludesBuildAndSourceInstall(t *testing.T) {
+	cmd := selfCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"build", "--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("self build --help: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "current source checkout") {
+		t.Fatalf("self build help missing source wording:\n%s", out.String())
+	}
+
+	cmd = selfCmd()
+	out.Reset()
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"install", "--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("self install --help: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "--source") {
+		t.Fatalf("self install help missing --source:\n%s", out.String())
 	}
 }
