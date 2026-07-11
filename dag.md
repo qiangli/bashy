@@ -225,15 +225,42 @@ fi
 ```
 
 ### test-bash
-**GNU Bash 5.3 compatibility test** — the canonical conformance gate. Runs
+**GNU Bash 5.3 baremetal compatibility test** — the canonical native host
+conformance gate. Runs
 the externally supplied GNU Bash 5.3 GPL test suite against the freshly built
 `bin/bash` (the pure drop-in); the headline is the PASS-count three-tuple
 (currently **86/86**, 0 fail, 0 skip). The harness is bashy-native, not
 make-based: it uses `"$BASHY" go run ./tools/bash53suite`, so it works on hosts
 where bashy provides the Go toolchain and no system make is installed. Use
 `TESTS="comsub varenv"` for a subset, or `CHUNK=1/4` to run one deterministic
-distributed shard.
+distributed shard. Use this lane when host OS behavior is part of the coverage;
+use `test-bash-container` / `test-bash-chunks-container` for heterogeneous fleet
+throughput.
 Requires: build, test-bash-data
+Effects: write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+goos="$("$BASHY_EXE" go env GOOS)"
+ext=""
+[ "$goos" = windows ] && ext=.exe
+"$BASHY_EXE" go run ./tools/bash53suite -tests-dir external/bash-5.3/tests -bash "bin/bash${ext}"
+```
+
+### test-bash-prepare
+Prepare the native Bash 5.3 baremetal lane once per host for chunked fanout.
+Requires: build, test-bash-data
+Effects: write
+
+```bash
+:
+```
+
+### test-bash-run
+Run the native Bash 5.3 harness against an already prepared checkout. This is
+the chunk worker leaf used by `test-bash-chunks`; it deliberately has no build
+dependency so fanout does not rebuild the same checkout concurrently.
 Effects: write
 
 ```bash
@@ -289,7 +316,9 @@ spread chunks round-robin across hosts. A host named `local` runs in this
 checkout; any other host is invoked through ssh. `host=/path` entries set the
 remote checkout path, otherwise the local checkout path is reused. Remote hosts
 must already have the source checkout, bashy binary, and any target-specific
-substrate ready.
+substrate ready. Set `PREP_TARGET=<dag-target>` to run a setup target once per
+participating host before chunk workers start; use this for builds, container
+engine checks, and test-data hydration that must not race per chunk.
 Effects: write
 
 ```bash
@@ -303,6 +332,7 @@ item_env="${ITEM_ENV:-ITEMS}"
 durations_file="${DURATIONS_FILE:-}"
 plan_file="${PLAN_FILE:-}"
 replan="${REPLAN:-}"
+prep_target="${PREP_TARGET:-}"
 case "$chunks" in ''|*[!0-9]*) echo "CHUNKS must be a positive integer" >&2; exit 2;; esac
 [ "$chunks" -gt 0 ] || { echo "CHUNKS must be > 0" >&2; exit 2; }
 repo="$("$BASHY_EXE" pwd)"
@@ -372,6 +402,30 @@ fi
 set -- $hosts
 host_count=$#
 [ "$host_count" -gt 0 ] || { echo "HOSTS must not be empty" >&2; exit 2; }
+if [ -n "$prep_target" ]; then
+  prep_i=1
+  for host in "$@"; do
+    remote_dir="$repo"
+    case "$host" in
+      *=*) remote="${host%%=*}"; remote_dir="${host#*=}" ;;
+      *) remote="$host" ;;
+    esac
+    echo "dag-fanout: preparing $remote with $prep_target"
+    if [ "$remote" = local ]; then
+      "$BASHY_EXE" dag "$prep_target" >"$outdir/prep-$prep_i.out" 2>&1 || {
+        cat "$outdir/prep-$prep_i.out"
+        exit 1
+      }
+    else
+      ssh "$remote" "cd '$remote_dir' && if [ -x ./bashy ]; then b=./bashy; elif [ -x ./bin/bashy.exe ]; then b=./bin/bashy.exe; else b=./bin/bashy; fi; BASH53_TESTDATA_REPO='${BASH53_TESTDATA_REPO:-}' \"\$b\" dag '$prep_target'" >"$outdir/prep-$prep_i.out" 2>&1 || {
+        cat "$outdir/prep-$prep_i.out"
+        exit 1
+      }
+    fi
+    cat "$outdir/prep-$prep_i.out"
+    prep_i=$((prep_i + 1))
+  done
+fi
 i=1
 while [ "$i" -le "$chunks" ]; do
   idx=$(( (i - 1) % host_count + 1 ))
@@ -473,6 +527,7 @@ while [ "$round" -le "$max_rounds" ]; do
   round_plan="$outdir/round-$round.plan.tsv"
   set +e
   TARGET="$target" CHUNKS="$chunks" HOSTS="${HOSTS:-local}" \
+  PREP_TARGET="${PREP_TARGET:-}" \
   ITEM_LIST_TARGET="${ITEM_LIST_TARGET:-}" ITEM_ENV="${ITEM_ENV:-ITEMS}" \
   FANOUT_ITEMS="${FANOUT_ITEMS:-}" DURATIONS_FILE="${DURATIONS_FILE:-}" \
   PLAN_FILE="$round_plan" REPLAN=1 "$BASHY_EXE" dag dag-fanout
@@ -510,12 +565,13 @@ exit "$overall"
 ```
 
 ### test-bash-chunks
-Run the GNU Bash 5.3 suite through the generic DAG fanout target. Set
-`CHUNKS=16` or higher to spread fixtures across workers. `BASH53_TIMEOUT=55s`
-can be used for a sub-minute exploratory run while the known timeout fixtures
-are still unfixed; the canonical single-process gate keeps its default 60s
-timeout. Set `HOSTS="local puppy"` only when the remote host can run the target
-noninteractively.
+Run the GNU Bash 5.3 suite through the generic DAG fanout target on the native
+host OS. This is the baremetal lane: use it when platform behavior is part of
+the test. For heterogeneous fleet capacity, prefer `test-bash-chunks-container`.
+Set `CHUNKS=16` or higher to spread fixtures across workers. `BASH53_TIMEOUT=55s`
+can be used for exploratory runs; the canonical single-process gate keeps its
+default 60s timeout. Set `HOSTS="local puppy"` only when the remote host can run
+the target noninteractively and the host OS variance is intentional.
 Requires: build, test-bash-data
 Effects: write
 
@@ -523,7 +579,8 @@ Effects: write
 set -e
 BASHY_EXE="${BASHY:-bashy}"
 mkdir -p bin
-TARGET="${TARGET:-test-bash}" \
+TARGET="${TARGET:-test-bash-run}" \
+PREP_TARGET="${PREP_TARGET:-test-bash-prepare}" \
 ITEM_LIST_TARGET="${ITEM_LIST_TARGET:-test-bash-list}" \
 ITEM_ENV="${ITEM_ENV:-TESTS}" \
 FANOUT_ITEMS="${FANOUT_ITEMS:-${TESTS:-}}" \
@@ -773,9 +830,10 @@ done
 ```
 
 ### test-bash-chunks-fleet
-Run the GNU Bash 5.3 chunked suite through the standard four-host development
-fleet. The default layout uses 8 chunks, assigned round-robin so each host gets
-2 chunks:
+Run the GNU Bash 5.3 chunked suite through the standard development fleet using
+the container-normalized lane. The default layout uses 8 chunks, assigned
+round-robin so each host gets 2 chunks when the full four-host fleet is
+available:
 
 - local dragon checkout
 - `novicortex.local`
@@ -784,9 +842,11 @@ fleet. The default layout uses 8 chunks, assigned round-robin so each host gets
 
 Each remote entry points at that host's bashy checkout. `test-bash-fleet-prepare`
 ensures a usable bashy exists first; the remote checkouts must still contain the
-source, sibling repos, and external Bash 5.3 test data. Override any path with
-`NOVICORTEX_DIR=...`, `PUPPY_DIR=...`, or `LJ2IVY_DIR=...`; override the whole
-fleet with `HOSTS=...`.
+source, sibling repos, external Bash 5.3 test data, and a working container
+substrate. Override any path with `NOVICORTEX_DIR=...`, `PUPPY_DIR=...`, or
+`LJ2IVY_DIR=...`; override the whole fleet with `HOSTS=...`. Use
+`TARGET=test-bash` with `dag-fanout` directly when native baremetal behavior is
+the coverage goal.
 Requires: build, test-bash-data, test-bash-fleet-check
 Effects: write, net
 
@@ -799,7 +859,7 @@ lj2ivy_dir="${LJ2IVY_DIR:-C:/Users/Lern/tests/bashy-self/bashy}"
 BASH53_TESTDATA_REPO="${BASH53_TESTDATA_REPO:-https://github.com/qiangli/bash53-testdata}" \
 HOSTS="${HOSTS:-local novicortex.local=$novicortex_dir puppy=$puppy_dir lj2ivy=$lj2ivy_dir}" \
 CHUNKS="${CHUNKS:-8}" \
-"$BASHY_EXE" dag test-bash-chunks
+"$BASHY_EXE" dag test-bash-chunks-container
 ```
 
 ### test-bash-chunks-tune
@@ -814,7 +874,8 @@ Effects: write
 set -e
 BASHY_EXE="${BASHY:-bashy}"
 mkdir -p bin
-TARGET="${TARGET:-test-bash}" \
+TARGET="${TARGET:-test-bash-run}" \
+PREP_TARGET="${PREP_TARGET:-test-bash-prepare}" \
 ITEM_LIST_TARGET="${ITEM_LIST_TARGET:-test-bash-list}" \
 ITEM_ENV="${ITEM_ENV:-TESTS}" \
 FANOUT_ITEMS="${FANOUT_ITEMS:-${TESTS:-}}" \
@@ -830,8 +891,44 @@ cross-builds the pure `cmd/bash` testee and the bashy-native harness for Linux,
 then runs the external GPL fixture data inside a Linux userspace with `gcc`
 available for Bash's small helper programs. Set `BASH53_TESTDATA_REPO` to
 hydrate the gitignored fixture tree; set `TESTS="..."` or `CHUNK=I/N` for
-subset/distributed runs.
+subset/distributed runs. This is the default lane for heterogeneous fleet
+throughput because every host contributes a Linux container rather than its
+native filesystem/process semantics.
+Requires: test-bash-container-prepare
+Effects: write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+"$BASHY_EXE" dag test-bash-container-run
+```
+
+### test-bash-container-prepare
+Prepare the GNU Bash 5.3 container-normalized lane once per host. This builds
+the host-architecture Linux testee and harness and validates the container
+engine before fanout starts.
 Requires: test-bash-data, test-podman
+Effects: write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+host_goos="$("$BASHY_EXE" go env GOOS)"
+host_goarch="$("$BASHY_EXE" go env GOARCH)"
+ext=""
+[ "$host_goos" = windows ] && ext=.exe
+testee_dir="bin/bash-linux-${host_goarch}"
+testee="${testee_dir}/bash"
+harness="bin/bash53suite-linux-${host_goarch}"
+[ -f "$testee_dir" ] && rm -f "$testee_dir"
+mkdir -p "$testee_dir"
+GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 "$BASHY_EXE" go build -trimpath -o "$testee" ./cmd/bash
+GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 "$BASHY_EXE" go build -trimpath -o "$harness" ./tools/bash53suite
+```
+
+### test-bash-container-run
+Run the GNU Bash 5.3 container harness against an already prepared checkout.
+This is the chunk worker leaf used by `test-bash-chunks-container`.
 Effects: write
 
 ```bash
@@ -845,18 +942,64 @@ engine="bin/bashy-podman-test${ext}"
 testee_dir="bin/bash-linux-${host_goarch}"
 testee="${testee_dir}/bash"
 harness="bin/bash53suite-linux-${host_goarch}"
-[ -f "$testee_dir" ] && rm -f "$testee_dir"
-mkdir -p "$testee_dir"
-GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 "$BASHY_EXE" go build -trimpath -o "$testee" ./cmd/bash
-GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 "$BASHY_EXE" go build -trimpath -o "$harness" ./tools/bash53suite
+[ -x "$engine" ] || { echo "missing $engine; run bashy dag test-bash-container-prepare" >&2; exit 2; }
+[ -x "$testee" ] || { echo "missing $testee; run bashy dag test-bash-container-prepare" >&2; exit 2; }
+[ -x "$harness" ] || { echo "missing $harness; run bashy dag test-bash-container-prepare" >&2; exit 2; }
 repo="$("$BASHY_EXE" pwd)"
+tests_root="$(cd external/bash-5.3 && pwd -P)"
 "$engine" podman run --rm \
   -v "$repo:/work" \
+  -v "$tests_root:/bash53" \
   -w /work \
   -e TESTS="${TESTS:-}" \
   -e CHUNK="${CHUNK:-}" \
+  -e BASH53_TIMEOUT="${BASH53_TIMEOUT:-}" \
+  -e BASH53_JOBS_TIMEOUT="${BASH53_JOBS_TIMEOUT:-}" \
   docker.io/library/gcc:14-bookworm \
-  "./$harness" -tests-dir external/bash-5.3/tests -bash "./$testee"
+  "./$harness" -tests-dir /bash53/tests -bash "./$testee"
+```
+
+### test-bash-chunks-container
+Run GNU Bash 5.3 compatibility chunks in the container-normalized lane. This is
+the fleet-safe target for heterogeneous hosts: each worker runs the same Linux
+container substrate, while the native `test-bash-chunks` target remains
+available for explicit baremetal OS coverage.
+Requires: test-bash-data
+Effects: write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+mkdir -p bin
+TARGET="${TARGET:-test-bash-container-run}" \
+PREP_TARGET="${PREP_TARGET:-test-bash-container-prepare}" \
+ITEM_LIST_TARGET="${ITEM_LIST_TARGET:-test-bash-list}" \
+ITEM_ENV="${ITEM_ENV:-TESTS}" \
+FANOUT_ITEMS="${FANOUT_ITEMS:-${TESTS:-}}" \
+DURATIONS_FILE="${DURATIONS_FILE:-bin/bash53-container-durations.tsv}" \
+PLAN_FILE="${PLAN_FILE:-bin/bash53-container-chunks.plan.tsv}" \
+"$BASHY_EXE" dag dag-fanout
+```
+
+### test-bash-chunks-container-tune
+Tune GNU Bash 5.3 container-normalized chunk assignments. This should be used
+for fleet throughput tuning; use `test-bash-chunks-tune` only for native
+baremetal timing.
+Requires: test-bash-data
+Effects: write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+mkdir -p bin
+TARGET="${TARGET:-test-bash-container-run}" \
+PREP_TARGET="${PREP_TARGET:-test-bash-container-prepare}" \
+ITEM_LIST_TARGET="${ITEM_LIST_TARGET:-test-bash-list}" \
+ITEM_ENV="${ITEM_ENV:-TESTS}" \
+FANOUT_ITEMS="${FANOUT_ITEMS:-${TESTS:-}}" \
+DURATIONS_FILE="${DURATIONS_FILE:-bin/bash53-container-durations.tsv}" \
+PLAN_FILE="${PLAN_FILE:-bin/bash53-container-chunks.plan.tsv}" \
+"$BASHY_EXE" dag dag-fanout-tune
 ```
 
 ### yash
@@ -873,6 +1016,61 @@ Effects: write
 
 ```bash
 scripts/yash-posix-suite.sh
+```
+
+### yash-list
+List chunkable yash POSIX suite files. The GPL yash test checkout remains a
+gitignored runtime cache; this target only prints file basenames for DAG fanout.
+Effects: write, net
+
+```bash
+scripts/yash-posix-suite.sh --list
+```
+
+### yash-chunk
+Run one chunk of the yash POSIX INFO suite. `YASH_TESTS` is normally supplied by
+`dag-fanout`; set it manually for local triage, for example
+`YASH_TESTS="alias-p arith-p" bashy dag yash-chunk`.
+Effects: write
+
+```bash
+scripts/yash-posix-suite.sh "${YASH_OUT:-}"
+```
+
+### yash-chunks
+Run the yash POSIX INFO suite through generic DAG fanout. Completion is the
+success criterion: yash failures are measured and reported by the suite, but
+they are not a 0/1 gate for this repo.
+Effects: write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+mkdir -p bin
+TARGET="${TARGET:-yash-chunk}" \
+ITEM_LIST_TARGET="${ITEM_LIST_TARGET:-yash-list}" \
+ITEM_ENV="${ITEM_ENV:-YASH_TESTS}" \
+FANOUT_ITEMS="${FANOUT_ITEMS:-${YASH_TESTS:-}}" \
+DURATIONS_FILE="${DURATIONS_FILE:-bin/yash-durations.tsv}" \
+PLAN_FILE="${PLAN_FILE:-bin/yash-chunks.plan.tsv}" \
+"$BASHY_EXE" dag dag-fanout
+```
+
+### yash-chunks-tune
+Tune yash POSIX INFO suite chunk assignments with bounded repeated fanout runs.
+Effects: write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+mkdir -p bin
+TARGET="${TARGET:-yash-chunk}" \
+ITEM_LIST_TARGET="${ITEM_LIST_TARGET:-yash-list}" \
+ITEM_ENV="${ITEM_ENV:-YASH_TESTS}" \
+FANOUT_ITEMS="${FANOUT_ITEMS:-${YASH_TESTS:-}}" \
+DURATIONS_FILE="${DURATIONS_FILE:-bin/yash-durations.tsv}" \
+PLAN_FILE="${PLAN_FILE:-bin/yash-chunks.plan.tsv}" \
+"$BASHY_EXE" dag dag-fanout-tune
 ```
 
 ### tidy

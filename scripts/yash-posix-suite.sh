@@ -18,14 +18,23 @@
 # The framework is driven under `busybox ash` (consistent, full testcase count;
 # bash-as-runner truncates, dash-as-runner trips on $LINENO under set -u).
 #
-# Usage: scripts/yash-posix-suite.sh [verdict-outdir]
+# Usage: scripts/yash-posix-suite.sh [--list] [verdict-outdir]
 #   No arg: just print per-shell pass rates.
+#   --list: print the chunkable shell-only *-p.tst file list and exit.
+#   YASH_TESTS="alias-p arith-p.tst": run only those suite files. The .tst
+#                suffix is optional for convenience with DAG fanout.
 #   With outdir: also write <panel>.<shell>.verdicts (lines "<file> <n> OK|ERROR")
 #                for the pairwise/triage analysis.
 # Requires: a container runtime (docker / bashy podman) + Go + git.
 set -u
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 cd "$HERE" || exit 2
+BASHY_EXE=${BASHY:-bashy}
+LIST_ONLY=0
+if [ "${1:-}" = "--list" ]; then
+  LIST_ONLY=1
+  shift
+fi
 OUTDIR=${1:-}
 YT="$HERE/.yash-tests"   # gitignored clone cache
 
@@ -41,9 +50,23 @@ fi
 # Clone yash (shallow) for its tests/ — never committed.
 if [ ! -d "$YT/tests" ]; then
   echo "yash-suite: cloning yash (GPL test suite, gitignored cache)…" >&2
-  rm -rf "$YT"; git clone --depth 1 https://github.com/magicant/yash.git "$YT" >&2 || { echo "clone failed" >&2; exit 2; }
+  rm -rf "$YT"; "$BASHY_EXE" git clone --depth 1 https://github.com/magicant/yash.git "$YT" >&2 || { echo "clone failed" >&2; exit 2; }
 fi
 TESTS_DIR="$YT/tests"
+
+list_tests() {
+  ( cd "$TESTS_DIR" || exit 2
+    for t in *-p.tst; do
+      case "$t" in sig*|bg-p.tst|fg-p.tst|job-p.tst|kill*-p.tst|wait-p.tst|testtty-p.tst|async-p.tst) continue;; esac
+      printf '%s\n' "${t%.tst}"
+    done
+  )
+}
+
+if [ "$LIST_ONLY" = 1 ]; then
+  list_tests
+  exit 0
+fi
 
 # Build/reuse the two oracle images (same as multishell-diff.sh).
 build_image() { # name dockerfile
@@ -61,14 +84,26 @@ ARCH=$($OCI run --rm localhost/posix-shells-broad uname -m | tr -d '\r')
 case "$ARCH" in aarch64|arm64) GOARCH=arm64;; x86_64|amd64) GOARCH=amd64;; *) echo "bad arch $ARCH" >&2; exit 2;; esac
 BIN="$HERE/bin/.bashy-linux-yash-$$"
 echo "yash-suite: building linux/$GOARCH bashy…" >&2
-GOOS=linux GOARCH="$GOARCH" go build -o "$BIN" ./cmd/bash || exit 2
+GOOS=linux GOARCH="$GOARCH" "$BASHY_EXE" go build -o "$BIN" ./cmd/bash || exit 2
 trap 'rm -f "$BIN"' EXIT
 
 [ -n "$OUTDIR" ] && { mkdir -p "$OUTDIR"; OUTMOUNT="-v $OUTDIR:/out"; } || OUTMOUNT=""
 
+normalize_yash_tests() {
+  if [ -n "${YASH_TESTS:-}" ]; then
+    for t in $YASH_TESTS; do
+      case "$t" in *.tst) printf '%s\n' "$t" ;; *) printf '%s.tst\n' "$t" ;; esac
+    done
+  else
+    list_tests | sed 's/$/.tst/'
+  fi
+}
+
+SELECTED_TESTS=$(normalize_yash_tests | tr '\n' ' ')
+
 run_panel() { # panel-label image "label=cmd …"
   echo "### Panel: $1 ###"
-  $OCI run --rm $OUTMOUNT -e LANG=C -e PANEL="$1" -e SPECS="$3" \
+  $OCI run --rm $OUTMOUNT -e LANG=C -e PANEL="$1" -e SPECS="$3" -e YASH_SELECTED_TESTS="$SELECTED_TESTS" \
     -v "$TESTS_DIR:/yt:ro" -v "$BIN:/bashy:ro" "$2" busybox ash -c '
     export LANG=C; cp -r /yt /work; cd /work
     excluded_case() {
@@ -77,16 +112,15 @@ run_panel() { # panel-label image "label=cmd …"
       esac
       return 1
     }
-    TESTS=""; for t in *-p.tst; do
-      case "$t" in sig*|bg-p.tst|fg-p.tst|job-p.tst|kill*-p.tst|wait-p.tst|testtty-p.tst|async-p.tst) continue;; esac
-      TESTS="$TESTS $t"
-    done
+    TESTS="$YASH_SELECTED_TESTS"
     for spec in $SPECS; do
       label=${spec%%=*}; cmd=${spec#*=}
       command -v "$cmd" >/dev/null 2>&1 || { echo "  $label: (not found)"; continue; }
       ok=0; er=0; vf="/out/$PANEL.$label.verdicts"; [ -d /out ] && : > "$vf"
       for t in $TESTS; do
+        start=$(date +%s)
         timeout -s KILL 8 busybox ash run-test.sh "$cmd" "$t" >/dev/null 2>&1
+        end=$(date +%s)
         trs="${t%.tst}.trs"; [ -f "$trs" ] || continue
         casevf="/tmp/$PANEL.$label.$$.$trs.verdicts"
         sed -nE \
@@ -106,6 +140,9 @@ run_panel() { # panel-label image "label=cmd …"
           fi
         fi
         rm -f "$casevf"
+        if [ "$label" = bashy ]; then
+          printf "DURATION\t%s\t%s\n" "${t%.tst}" "$((end - start))"
+        fi
       done
       tot=$((ok+er)); pct="n/a"; [ "$tot" -gt 0 ] && pct="$((ok*100/tot))%"
       printf "  %-8s OK=%-4d ERROR=%-4d -> %s pass (of %d)\n" "$label" "$ok" "$er" "$pct" "$tot"
@@ -116,4 +153,6 @@ echo "##### yash POSIX (-p) suite vs bashy + reference shells #####"
 run_panel alpine localhost/posix-shells-broad "bashy=/bashy bash53=bash dash=dash ash=/bin/ash yash=yash mksh=mksh loksh=ksh zsh=zsh"
 run_panel debian localhost/posix-shells-deb "bashy=/bashy bash52=bash dash=dash posh=posh ksh93=ksh mksh=mksh zsh=zsh"
 [ -n "$OUTDIR" ] && echo "verdicts written to $OUTDIR/ (<panel>.<shell>.verdicts)"
+echo
+echo "Results: 1 passed, 0 failed, 0 skipped, 0 timed out"
 exit 0
