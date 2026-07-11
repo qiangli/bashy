@@ -7,9 +7,14 @@ merge layer), `bashy commands --view/--atlas/--idioms` (the views).
 ## 1. Why an atlas
 
 Bashy's command surface (~250 unique names) reaches agents through one flat
-catalog: `bashy commands` reports shell builtins, the in-process coreutils
-userland, and the front-door verbs. That is the *classical* lens — what a
-command **is**. Agents planning work need more lenses:
+catalog. `bashy commands` groups it by **how each command runs**: a *builtins*
+umbrella (shell builtins · in-process GNU coreutils · in-process classic tools —
+all zero-fork), the exec'd downloaded *externals*, and bashy's native *agent*
+features by execution venue. The underlying class taxonomy
+(`builtin`/`coreutils`/`verb`, §4) is unchanged — the default grouping derives
+from it plus the GNU-coreutils set (coreutils vs classic) and Subclass/Tier. That
+is the *classical* lens — what a command **is** and how it runs. Agents planning
+work need more lenses:
 
 - **where it runs** — the execution tier (userland / workspace / sandbox /
   sphere / cluster / cloud / account, per `dhnt` execution-tiers vocabulary);

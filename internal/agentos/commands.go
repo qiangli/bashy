@@ -101,8 +101,10 @@ func dispatchCommands(args []string) int {
 		case "-h", "--help":
 			fmt.Println("usage: commands [COMMAND] [-v] [--json|--plain|--agentic|--all|--gnu|--features]")
 			fmt.Println("                [--view VIEW] [--tier T] [--group G] [--cap C] [--idioms] [--atlas]")
-			fmt.Println("List the supported command surface: shell builtins, the coreutils")
-			fmt.Println("userland, and bashy's front-door verbs.")
+			fmt.Println("List the supported command surface, grouped by how each command runs:")
+			fmt.Println("a builtins umbrella (shell builtins · in-process GNU coreutils · in-process")
+			fmt.Println("classic tools), the exec'd downloaded externals, and bashy's native agent")
+			fmt.Println("features by execution venue.")
 			fmt.Println("  COMMAND        show one command's class/resolver/synopsis")
 			fmt.Println("  -v             also show each coreutils tool's and verb's synopsis")
 			fmt.Println("  --json         machine-readable (default under $BASHY_AGENTIC)")
@@ -199,34 +201,21 @@ func dispatchCommands(args []string) int {
 				}
 			}
 			out["synopses"] = syn
+			// The by-how-it-runs grouping the human view renders (builtins
+			// umbrella {shell/coreutils/classic} · external · agent-by-venue).
+			// Verbose-only, so the default v1 --json schema stays stable.
+			out["sections"] = classSections(all)
 		}
 		b, _ := json.Marshal(out)
 		fmt.Println(string(b))
 		return 0
 	}
 
-	if verbose {
-		// Builtins stay a compact list — they're standard and `help <name>`
-		// describes them; the descriptive value is in the coreutils + verb sets.
-		printCommandGroup(os.Stdout, "shell builtins — standard; `help <name>` for details", builtins)
-		printCommandSynopses(os.Stdout, "coreutils userland", core, func(n string) string {
-			if t := tool.Lookup(n); t != nil {
-				return t.Synopsis
-			}
-			return ""
-		})
-		printCommandSynopses(os.Stdout, "bashy verbs (front-door, bare-name shims)", verbs, func(n string) string {
-			return verbSynopsis[n]
-		})
-		if gnu {
-			printGNUCoreutilsReport(os.Stdout, gnuReport)
-		}
-		return 0
-	}
-
-	printCommandGroup(os.Stdout, "shell builtins", builtins)
-	printCommandGroup(os.Stdout, "coreutils userland", core)
-	printCommandGroup(os.Stdout, "bashy verbs (front-door, bare-name shims)", verbs)
+	// The default surface is organized by how a command runs: a "builtins"
+	// umbrella (shell / coreutils / classic — all in-process, no fork), the
+	// exec'd externals, and bashy's native agent features partitioned by venue.
+	// See commands_sections.go. -v adds one-line synopses.
+	printClassSections(os.Stdout, verbose, all)
 	if gnu {
 		printGNUCoreutilsReport(os.Stdout, gnuReport)
 	}
