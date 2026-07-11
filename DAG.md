@@ -112,6 +112,49 @@ BASHY_EXE="${BASHY:-bashy}"
 "$BASHY_EXE" go test ./...
 ```
 
+### test-podman
+Build a platform-appropriate bashy Podman engine binary and smoke-test the
+container path. This target is intentionally runnable on every platform:
+Linux/macOS run the engine build directly; Windows builds the WSL-backed remote
+engine (`bashy_engines remote containers_image_openpgp`). If the host substrate
+is not ready yet (for example Windows has just enabled WSL/VMP and needs a
+reboot), the target reports a SKIP with the reason instead of failing unrelated
+DAG runs.
+Effects: write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+goos="$("$BASHY_EXE" go env GOOS)"
+ext=""
+[ "$goos" = windows ] && ext=.exe
+tags="bashy_engines"
+[ "$goos" = windows ] && tags="bashy_engines remote containers_image_openpgp"
+
+if [ -d ../coreutils/.git ]; then
+  git -C ../coreutils submodule update --init external/ollama/src external/podman/src || true
+fi
+
+mkdir -p bin
+engine="bin/bashy-podman-test${ext}"
+"$BASHY_EXE" go build -trimpath -tags "$tags" -o "$engine" ./cmd/bashy
+
+machine_list="bin/bashy-podman-machine-list.txt"
+info_log="bin/bashy-podman-info.txt"
+"$engine" podman machine list >"$machine_list"
+if "$engine" podman info >"$info_log" 2>&1; then
+  "$engine" podman run --rm docker.io/library/alpine:3.20 sh -c 'echo bashy-podman-ok'
+else
+  if grep -Eiq 'wsl2 setup|reboot windows|automatic setup failed|cannot connect to podman|no podman found|not ready' "$info_log"; then
+    echo "SKIP: bashy podman substrate is not ready on this host"
+    sed -n '1,80p' "$info_log"
+    exit 0
+  fi
+  cat "$info_log"
+  exit 1
+fi
+```
+
 ### dist
 Cross-compile static binaries for all release platforms into bin/dist/ (both
 bash and bashy; a local cross-compile sanity check — goreleaser does real
