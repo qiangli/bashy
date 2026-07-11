@@ -178,6 +178,7 @@ issues="$(
 			.[] |
 			select(([.labels[].name] | index("repair-running") | not)) |
 			select(([.labels[].name] | index("repair-done") | not)) |
+			select(([.labels[].name] | index("repair-failed") | not)) |
 			select(([.labels[].name] | index("repair-paused") | not)) |
 			[.number, .url] | @tsv
 		' |
