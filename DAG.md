@@ -118,8 +118,10 @@ container path. This target is intentionally runnable on every platform:
 Linux/macOS run the engine build directly; Windows builds the WSL-backed remote
 engine (`bashy_engines remote containers_image_openpgp`). If the host substrate
 is not ready yet (for example Windows has just enabled WSL/VMP and needs a
-reboot), the target reports a SKIP with the reason instead of failing unrelated
-DAG runs.
+reboot, or Hyper-V is selected but not enabled), the target reports a SKIP with
+the reason instead of failing unrelated DAG runs. Set
+`CONTAINERS_MACHINE_PROVIDER=hyperv` to exercise Hyper-V on Windows instead of
+the default WSL provider.
 Effects: write
 
 ```bash
@@ -145,7 +147,7 @@ info_log="bin/bashy-podman-info.txt"
 if "$engine" podman info >"$info_log" 2>&1; then
   "$engine" podman run --rm docker.io/library/alpine:3.20 sh -c 'echo bashy-podman-ok'
 else
-  if grep -Eiq 'wsl2 setup|reboot windows|automatic setup failed|cannot connect to podman|no podman found|not ready' "$info_log"; then
+  if grep -Eiq 'wsl2 setup|reboot windows|automatic setup failed|cannot connect to podman|no podman found|not ready|hyper-?v|elevat|administrator' "$info_log"; then
     echo "SKIP: bashy podman substrate is not ready on this host"
     sed -n '1,80p' "$info_log"
     exit 0
