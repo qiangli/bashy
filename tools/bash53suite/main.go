@@ -279,7 +279,6 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 		args = append(args, "./"+filepath.ToSlash(f.Test))
 	}
 	cmd := exec.CommandContext(ctx, bashPath, args...)
-	cmd.Args[0] = "bash"
 	configureProcess(cmd)
 	cmd.Dir = testsDir
 	if stdin != nil {
@@ -331,22 +330,29 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 	if bytes.Equal(got, want) {
 		return "PASS", nil
 	}
+	writeDebugOutput(f.Name, want, got)
 	return "FAIL", fmt.Errorf("output differs from %s\n%s", f.Right, firstDiff(want, got))
 }
 
 func fixtureEnv(root, testsDir, bashPath, name string) []string {
 	env := os.Environ()
-	out := make([]string, 0, len(env)+8)
+	out := make([]string, 0, len(env)+10)
 	for _, kv := range env {
 		if strings.HasPrefix(kv, "OLDPWD=") {
 			continue
 		}
 		out = append(out, kv)
 	}
+	tmpBase := os.TempDir()
+	rawPath := filepath.Join(tmpBase, fmt.Sprintf("bashy-tstraw-%d", os.Getpid()))
+	outPath := filepath.Join(tmpBase, fmt.Sprintf("bashy-tstout-%d", os.Getpid()))
 	out = append(out,
 		"THIS_SH="+bashPath,
+		"_="+bashPath,
 		"BUILD_DIR="+filepath.Dir(testsDir),
-		"PATH="+testsDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"PATH="+strings.Join([]string{testsDir, "/usr/bin", "/bin", "/usr/local/bin"}, string(os.PathListSeparator)),
+		"BASH_TSTRAW="+rawPath,
+		"BASH_TSTOUT="+outPath,
 		"BASH_SETPGRP=1",
 	)
 	if name == "read" {
@@ -453,6 +459,18 @@ func firstDiff(want, got []byte) string {
 		}
 	}
 	return "        outputs differ"
+}
+
+func writeDebugOutput(name string, want, got []byte) {
+	dir := os.Getenv("BASH53_DEBUG_DIR")
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(dir, name+".want"), want, 0o644)
+	_ = os.WriteFile(filepath.Join(dir, name+".got"), got, 0o644)
 }
 
 func trimDiffLine(b []byte) string {
