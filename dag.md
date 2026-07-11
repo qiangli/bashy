@@ -537,6 +537,7 @@ Check that the standard distributed Bash 5.3 test fleet is reachable and that
 each remote checkout exposes a usable bashy binary. Override remote paths with
 `NOVICORTEX_DIR=...`, `PUPPY_DIR=...`, or `LJ2IVY_DIR=...`; override the full
 fleet with `HOSTS=...`.
+Requires: test-bash-fleet-prepare
 Effects: read, net
 
 ```bash
@@ -557,8 +558,143 @@ for host in "$@"; do
   if [ "$remote" = local ]; then
     "$BASHY_EXE" -c 'echo local ok'
   else
-    ssh "$remote" "cd '$remote_dir' && if [ -x ./bashy ]; then b=./bashy; elif [ -x ./bin/bashy.exe ]; then b=./bin/bashy.exe; else b=./bin/bashy; fi; \"\$b\" -c 'echo $remote ok'"
+    ssh "$remote" "cd '$remote_dir' && if [ -f ./bin/bashy.exe ]; then b=./bin/bashy.exe; elif [ -f ./bin/bashy ]; then b=./bin/bashy; else b=./bashy; fi; echo '$remote using' \"\$b\"; \"\$b\" -c 'echo $remote ok'"
   fi
+done
+```
+
+### test-bash-fleet-prepare
+Prepare the standard distributed Bash 5.3 test fleet. `FLEET_REF=latest` or a
+version tag like `v0.4.1` installs a released bashy seed where possible.
+`FLEET_REF=HEAD`, a branch, or a commit hash builds `bin/bashy` and `bin/bash`
+from the remote checkout; source refs are checked out without force-resetting
+the worktree. By default, `FLEET_REF` is the local commit hash, so remotes do
+not silently test stale checkouts. Override remote paths with
+`NOVICORTEX_DIR=...`, `PUPPY_DIR=...`, or `LJ2IVY_DIR=...`; override the full
+fleet with `HOSTS=...`.
+Requires: build
+Effects: write, net
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+repo="$("$BASHY_EXE" pwd)"
+fleet_ref="${FLEET_REF:-$(git rev-parse HEAD 2>/dev/null || echo HEAD)}"
+novicortex_dir="${NOVICORTEX_DIR:-/Users/noviadmin/projects/poc/dhnt/bashy}"
+puppy_dir="${PUPPY_DIR:-C:/Users/liqiang/tests/bashy-self/bashy}"
+lj2ivy_dir="${LJ2IVY_DIR:-C:/Users/Lern/tests/bashy-self/bashy}"
+hosts="${HOSTS:-local novicortex.local=$novicortex_dir puppy=$puppy_dir lj2ivy=$lj2ivy_dir}"
+set -- $hosts
+for host in "$@"; do
+  remote_dir="$repo"
+  case "$host" in
+    *=*) remote="${host%%=*}"; remote_dir="${host#*=}" ;;
+    *) remote="$host" ;;
+  esac
+  if [ "$remote" = local ]; then
+    "$BASHY_EXE" dag build VERSION="$fleet_ref"
+    continue
+  fi
+  ssh "$remote" "cd '$remote_dir'
+    FLEET_REF='$fleet_ref'
+    set -e
+    ref=\"\${FLEET_REF:-HEAD}\"
+    mode=source
+    case \"\$ref\" in latest|v[0-9]*) mode=release ;; esac
+    ext=
+    case \"\$(uname -s 2>/dev/null || echo unknown)\" in Windows*) ext=.exe ;; esac
+    mkdir -p bin
+    fetch_release_seed() {
+      want=\"\$1\"
+      os=\"\$(uname -s 2>/dev/null || echo unknown)\"
+      arch=\"\$(uname -m 2>/dev/null || echo unknown)\"
+      case \"\$os\" in
+        Darwin*) os=darwin ;;
+        Linux*) os=linux ;;
+        Windows*) os=windows ;;
+        *) echo \"fleet prepare: unsupported release os \$os\" >&2; return 1 ;;
+      esac
+      case \"\$arch\" in
+        x86_64|amd64) arch=amd64 ;;
+        arm64|aarch64) arch=arm64 ;;
+        *) echo \"fleet prepare: unsupported release arch \$arch\" >&2; return 1 ;;
+      esac
+      suffix=tar.gz
+      [ \"\$os\" = windows ] && suffix=zip
+      archive=\"bin/bashy-release.\$suffix\"
+      if [ \"\$want\" = latest ]; then
+        url=\"https://github.com/qiangli/bashy/releases/latest/download/bashy-\$os-\$arch.\$suffix\"
+      else
+        url=\"https://github.com/qiangli/bashy/releases/download/\$want/bashy-\$os-\$arch.\$suffix\"
+      fi
+      command -v curl >/dev/null 2>&1 || return 1
+      command -v tar >/dev/null 2>&1 || return 1
+      curl -fsSL -o \"\$archive\" \"\$url\"
+      tar -xf \"\$archive\" -C bin
+      chmod +x \"bin/bashy\$ext\" 2>/dev/null || true
+      [ -f \"bin/bashy\$ext\" ]
+    }
+    fix_windows_ext() {
+      [ -n \"\$ext\" ] || return 0
+      [ -f bin/bashy ] && cp bin/bashy \"bin/bashy\$ext\"
+      [ -f bin/bash ] && cp bin/bash \"bin/bash\$ext\"
+      chmod +x \"bin/bashy\$ext\" \"bin/bash\$ext\" 2>/dev/null || true
+    }
+    seed=
+    for candidate in ./bin/bashy\$ext ./bashy bashy; do
+      case \"\$candidate\" in
+        ./*) [ -f \"\$candidate\" ] || continue ;;
+        *) command -v \"\$candidate\" >/dev/null 2>&1 || continue ;;
+      esac
+      if \"\$candidate\" --version >/dev/null 2>&1; then
+        seed=\"\$candidate\"
+        break
+      fi
+    done
+    if [ \"\$mode\" = release ]; then
+      if [ -n \"\$seed\" ] && \"\$seed\" self install --version \"\$ref\" \"bin/bashy\$ext\" >/dev/null 2>&1; then
+        seed=\"./bin/bashy\$ext\"
+      elif command -v outpost >/dev/null 2>&1; then
+        outpost bashy --install-dir bin >/dev/null
+        seed=\"./bin/bashy\$ext\"
+      elif fetch_release_seed \"\$ref\"; then
+        seed=\"./bin/bashy\$ext\"
+      fi
+      [ -n \"\$seed\" ] || { echo \"fleet prepare: no released bashy seed for \$ref\" >&2; exit 127; }
+      \"\$seed\" --version
+      exit 0
+    fi
+    if [ \"\$ref\" != HEAD ]; then
+      if command -v git >/dev/null 2>&1; then
+        git fetch --all --tags --quiet || true
+        git checkout \"\$ref\"
+      elif [ -n \"\$seed\" ]; then
+        \"\$seed\" git fetch --all --tags --quiet || true
+        \"\$seed\" git checkout \"\$ref\"
+      else
+        echo \"fleet prepare: cannot checkout \$ref without git or bashy git\" >&2
+        exit 127
+      fi
+    fi
+    if [ -n \"\$seed\" ]; then
+      BASHY=\"\$seed\" \"\$seed\" dag build VERSION=\"\$ref\"
+      fix_windows_ext
+    elif command -v go >/dev/null 2>&1; then
+      LDFLAGS=\"-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-\$ref\"
+      go build -trimpath -ldflags \"\$LDFLAGS\" -o \"bin/bashy\$ext\" ./cmd/bashy
+      \"./bin/bashy\$ext\" dag build VERSION=\"\$ref\"
+      fix_windows_ext
+    elif command -v outpost >/dev/null 2>&1; then
+      outpost bashy --install-dir bin >/dev/null
+      \"./bin/bashy\$ext\" dag build VERSION=\"\$ref\"
+      fix_windows_ext
+    elif fetch_release_seed latest; then
+      \"./bin/bashy\$ext\" dag build VERSION=\"\$ref\"
+      fix_windows_ext
+    else
+      echo \"fleet prepare: no bashy seed, go, outpost, or release download path available\" >&2
+      exit 127
+    fi"
 done
 ```
 
@@ -572,11 +708,11 @@ fleet. The default layout uses 8 chunks, assigned round-robin so each host gets
 - `puppy`
 - `lj2ivy`
 
-Each remote entry points at that host's bashy checkout. Override any path with
+Each remote entry points at that host's bashy checkout. `test-bash-fleet-prepare`
+ensures a usable bashy exists first; the remote checkouts must still contain the
+source, sibling repos, and external Bash 5.3 test data. Override any path with
 `NOVICORTEX_DIR=...`, `PUPPY_DIR=...`, or `LJ2IVY_DIR=...`; override the whole
-fleet with `HOSTS=...`. The remote checkouts must already contain the source,
-sibling repos, external Bash 5.3 test data, and a usable `./bashy`,
-`./bin/bashy`, or `./bin/bashy.exe`.
+fleet with `HOSTS=...`.
 Requires: build, test-bash-data, test-bash-fleet-check
 Effects: write, net
 
