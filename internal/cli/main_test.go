@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -22,6 +23,9 @@ import (
 )
 
 func TestStartupInheritedFdsDiscoversOpenFD(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("startup fd discovery is Unix fd-table behavior; Windows handles are not enumerable the same way")
+	}
 	t.Setenv(interp.BashyInheritedFdsEnv, "")
 	r, w, err := os.Pipe()
 	if err != nil {

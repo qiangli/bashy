@@ -26,7 +26,7 @@ func TestRunSessionCommand(t *testing.T) {
 		{"echo", "echo hi", "hi\n", 0},
 		{"exit-code", "echo x; exit 4", "x\n", 4},
 		{"coreutils-printf", "printf '%s-%s' a b", "a-b", 0},
-		{"pipe", "printf 'l1\\nl2\\n' | grep l2", "l2\n", 0},
+		{"pipe", "printf 'l1\\nl2\\n' | { read first; read second; echo \"$second\"; }", "l2\n", 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
