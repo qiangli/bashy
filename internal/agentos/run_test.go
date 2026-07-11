@@ -62,6 +62,47 @@ func TestRunMissingCommand(t *testing.T) {
 	}
 }
 
+func TestRunMarksChildAgentic(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "0")
+	env, status := runCommand(testHelperCommand("env"), true, false, nil, nil)
+	if status != 0 {
+		t.Fatalf("exit = %d, want 0", status)
+	}
+	if env.Stdout != "1" {
+		t.Fatalf("BASHY_AGENTIC in child = %q, want 1", env.Stdout)
+	}
+}
+
+func TestRunCommandEnvSetsAgentic(t *testing.T) {
+	t.Parallel()
+
+	got := runCommandEnv([]string{"PATH=/bin", "BASHY_AGENTIC=0", "BASHY_AGENTIC=old"})
+	want := []string{"PATH=/bin", "BASHY_AGENTIC=1", "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never"}
+	if len(got) != len(want) {
+		t.Fatalf("wrong env length: want %d, got %d: %#v", len(want), len(got), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("env[%d]: want %q, got %q", i, want[i], got[i])
+		}
+	}
+}
+
+func TestRunCommandEnvPreservesExplicitGitPromptEnv(t *testing.T) {
+	t.Parallel()
+
+	got := runCommandEnv([]string{"GIT_TERMINAL_PROMPT=1", "GCM_INTERACTIVE=always"})
+	want := []string{"GIT_TERMINAL_PROMPT=1", "GCM_INTERACTIVE=always", "BASHY_AGENTIC=1"}
+	if len(got) != len(want) {
+		t.Fatalf("wrong env length: want %d, got %d: %#v", len(want), len(got), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("env[%d]: want %q, got %q", i, want[i], got[i])
+		}
+	}
+}
+
 func TestRunCheckBlocksBadScript(t *testing.T) {
 	dir := t.TempDir()
 	script := dir + "/bad.sh"
@@ -89,6 +130,9 @@ func TestRunCommandHelper(t *testing.T) {
 		os.Exit(3)
 	case "stream":
 		os.Stdout.WriteString("hi\n")
+		os.Exit(0)
+	case "env":
+		os.Stdout.WriteString(os.Getenv("BASHY_AGENTIC"))
 		os.Exit(0)
 	}
 	os.Exit(2)

@@ -107,6 +107,7 @@ func runCommand(argv []string, capture bool, check bool, liveOut, liveErr io.Wri
 		}
 	}
 	c := exec.Command(argv[0], argv[1:]...)
+	c.Env = runCommandEnv(os.Environ())
 	var ob, eb bytes.Buffer
 	if capture {
 		c.Stdout, c.Stderr = &ob, &eb
@@ -139,6 +140,43 @@ func runCommand(argv []string, capture bool, check bool, liveOut, liveErr io.Wri
 		env.Stdout, env.Stderr = ob.String(), eb.String()
 	}
 	return env, status
+}
+
+func runCommandEnv(env []string) []string {
+	env = setEnv(env, "BASHY_AGENTIC", "1")
+	env = setEnvDefault(env, "GIT_TERMINAL_PROMPT", "0")
+	env = setEnvDefault(env, "GCM_INTERACTIVE", "never")
+	return env
+}
+
+func setEnv(env []string, name, value string) []string {
+	prefix := name + "="
+	out := make([]string, 0, len(env)+1)
+	replaced := false
+	for _, kv := range env {
+		if strings.HasPrefix(kv, prefix) {
+			if !replaced {
+				out = append(out, prefix+value)
+				replaced = true
+			}
+			continue
+		}
+		out = append(out, kv)
+	}
+	if !replaced {
+		out = append(out, prefix+value)
+	}
+	return out
+}
+
+func setEnvDefault(env []string, name, value string) []string {
+	prefix := name + "="
+	for _, kv := range env {
+		if strings.HasPrefix(kv, prefix) {
+			return env
+		}
+	}
+	return append(env, prefix+value)
 }
 
 func scriptArgForCheck(argv []string) string {
