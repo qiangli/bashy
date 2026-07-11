@@ -200,6 +200,7 @@ dir=external/bash-5.3
 repo="${BASH53_TESTDATA_REPO:-}"
 if [ -d "$dir/.git" ]; then
   "$BASHY_EXE" git -C "$dir" config core.autocrlf false
+  "$BASHY_EXE" git -C "$dir" reset --hard HEAD
   "$BASHY_EXE" git -C "$dir" -c core.autocrlf=false pull --ff-only
   "$BASHY_EXE" git -C "$dir" -c core.autocrlf=false checkout -f HEAD
 elif [ -n "$repo" ]; then
