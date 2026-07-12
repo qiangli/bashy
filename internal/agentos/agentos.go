@@ -73,6 +73,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/gate"
 	"github.com/qiangli/coreutils/pkg/handoff"
+	"github.com/qiangli/coreutils/pkg/issue"
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/kb"
 	"github.com/qiangli/coreutils/pkg/lexicon"
@@ -116,7 +117,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "handoff", "resume", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "gate", "conform",
+		"weave", "sprint", "issue", "handoff", "resume", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "gate", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -353,6 +354,40 @@ func Dispatch() {
 		lcmd.SetArgs(os.Args[2:])
 		if err := lcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy lexicon:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "issue":
+		// THE Plan-stage intake verb: the project's issue register -- GitHub Issues
+		// without GitHub.
+		//
+		// bashy could track work an agent was ACTIVELY DOING (weave: a per-machine
+		// queue with a workspace, a branch and a verify command) and what a conductor
+		// was planning RIGHT NOW (sprint). It could not record a bug nobody has
+		// triaged, a requirement nobody has scheduled, or a feature somebody merely
+		// asked for -- so those lived as bullets in docs/TODO.md: invisible to every
+		// verb, unqueryable, impossible to close.
+		//
+		// `sdlc issue` LOOKED like this and wasn't: SaveLocalIssue writes {timestamp,
+		// title, body} into .bashy/GENERATED/ and has no counterpart anywhere in the
+		// tree -- no List, no Load, no Close. A drop box, not a register.
+		//
+		// The store is COMMITTED (.bashy/issues/, source not scratch), because a
+		// requirement must travel with the clone, show up in a diff, survive the
+		// machine it was typed on, and need no forge to exist.
+		icmd := issue.NewIssueCmd(func() (string, error) {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return "", err
+			}
+			if r := detectProjectRoot(cwd); r != "" {
+				return r, nil
+			}
+			return cwd, nil
+		})
+		icmd.SetArgs(os.Args[2:])
+		if err := icmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy issue:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
