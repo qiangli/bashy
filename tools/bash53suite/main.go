@@ -28,13 +28,14 @@ type fixture struct {
 
 func main() {
 	var testsDir, bashPath, tests, chunk string
-	var listOnly bool
+	var listOnly, shared bool
 	var timeout, jobsTimeout time.Duration
 	flag.StringVar(&testsDir, "tests-dir", "external/bash-5.3/tests", "bash 5.3 tests directory")
 	flag.StringVar(&bashPath, "bash", "bin/bash", "bash-compatible binary under test")
 	flag.StringVar(&tests, "tests", "", "space-separated fixture names to run")
 	flag.StringVar(&chunk, "chunk", "", "run one distributed chunk, as 1/N")
 	flag.BoolVar(&listOnly, "list", false, "list fixture names and exit")
+	flag.BoolVar(&shared, "shared-tree", false, "run in the source fixture tree instead of a private copy (unsafe: leaks platform-built helpers across venues and races concurrent chunks)")
 	flag.DurationVar(&timeout, "timeout", 60*time.Second, "per-fixture timeout")
 	flag.DurationVar(&jobsTimeout, "jobs-timeout", 120*time.Second, "jobs fixture timeout")
 	flag.Parse()
@@ -75,6 +76,18 @@ func main() {
 	}
 	if _, err := os.Stat(bashPath); err != nil {
 		die("bash under test not found: %s: %v", bashPath, err)
+	}
+
+	// Run against a private copy of the corpus, never the shared source tree.
+	// See hermeticTree: the helpers are built into the tree, so sharing it lets
+	// one venue's binaries poison another's run.
+	if !shared {
+		privateTests, cleanup, err := hermeticTree(testsDir)
+		if err != nil {
+			die("hermetic fixture tree: %v", err)
+		}
+		defer cleanup()
+		testsDir = privateTests
 	}
 	if err := prepareFixtures(testsDir); err != nil {
 		die("prepare fixtures: %v", err)
@@ -220,22 +233,94 @@ func parseChunk(chunk string) (int, int, error) {
 	return idx, total, nil
 }
 
+// hermeticTree copies the fixture corpus into a private per-run directory and
+// returns the path of the copied tests/ dir.
+//
+// The fixture tree is shared, mutable state: the corpus lives in a bind-mounted
+// bash source tree, and the C helpers (recho/zecho/xcase) are built INTO it. Two
+// runs of different venues therefore fight over one file — a container run writes
+// ELF helpers into the host's tree, a host run writes Mach-O ones back, and each
+// leaves the other executing a binary for the wrong platform. Every fixture that
+// uses recho then reports a conformance FAILURE that is really an infrastructure
+// failure (measured: 47/86 vs 77/86 on the same Linux container, decided purely by
+// which platform built the helpers last). Two chunks sharing a host race the same
+// way. A private copy per run removes the shared state entirely, and keeps the
+// suite from writing into the user's bash source tree at all.
+func hermeticTree(srcTests string) (string, func(), error) {
+	work, err := os.MkdirTemp("", "bash53-")
+	if err != nil {
+		return "", nil, err
+	}
+	cleanup := func() { os.RemoveAll(work) }
+	srcRoot := filepath.Dir(srcTests)
+	for _, dir := range []string{"tests", "support"} {
+		src := filepath.Join(srcRoot, dir)
+		if _, err := os.Stat(src); err != nil {
+			continue // support/ is optional; tests/ is validated by the caller
+		}
+		if err := copyTree(src, filepath.Join(work, dir)); err != nil {
+			cleanup()
+			return "", nil, fmt.Errorf("copy %s: %w", dir, err)
+		}
+	}
+	return filepath.Join(work, "tests"), cleanup, nil
+}
+
+func copyTree(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil // the corpus has no meaningful symlinks; skip rather than dangle
+		}
+		in, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+		_, err = io.Copy(out, in)
+		return err
+	})
+}
+
 func prepareFixtures(testsDir string) error {
 	support := filepath.Join(testsDir, "..", "support")
 	for _, helper := range []string{"recho", "zecho", "xcase"} {
 		dst := filepath.Join(testsDir, exeName(helper))
-		if _, err := os.Stat(dst); err == nil {
-			continue
-		}
 		src := filepath.Join(support, helper+".c")
 		if _, err := os.Stat(src); err != nil {
 			continue
 		}
-		if cc, err := exec.LookPath("cc"); err == nil {
-			cmd := exec.Command(cc, "-o", dst, src)
-			if out, err := cmd.CombinedOutput(); err != nil {
-				return fmt.Errorf("build %s: %v\n%s", helper, err, out)
-			}
+		// Always build: the tree is a fresh private copy, so a pre-existing binary
+		// can only be one copied in from the source tree — i.e. built for whichever
+		// platform ran last. Never trust it. A missing compiler is a hard refusal,
+		// not a silent skip that surfaces later as `recho: command not found`
+		// masquerading as a conformance failure.
+		cc, err := exec.LookPath("cc")
+		if err != nil {
+			return fmt.Errorf("tool.missing: no `cc` to build the bash test helper %q; "+
+				"the fixtures cannot run without it (this is an environment refusal, not a test failure)", helper)
+		}
+		if out, err := exec.Command(cc, "-o", dst, src).CombinedOutput(); err != nil {
+			return fmt.Errorf("build %s: %v\n%s", helper, err, out)
 		}
 	}
 	parent := filepath.Dir(testsDir)
