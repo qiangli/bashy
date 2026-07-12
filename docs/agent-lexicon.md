@@ -79,6 +79,61 @@ vocabulary.**
 
 Three registries, generated and maintained. Zero projection into the channels an agent actually reads.
 
+## The marker: `[[term]]` — and where it belongs
+
+A term needs to **stand out**, the way `/` marks a slash command as "not a plain word". That instinct is
+right. But the *location* of the marker is the whole design, and getting it wrong reinvents the problem.
+
+### A sigil in the conversation defeats the purpose
+
+If the user must type `/handoff this to /codex`, we have rebuilt slash commands: per-tool, non-portable,
+and requiring the human to remember an exact syntax. Worse, it breaks the very thing that makes jargon
+*jargon* — **inside the circle it is used unmarked.** Nobody in a standup says "slash-handoff". The point
+is that you say "handoff this to codex" and everyone simply gets it.
+
+### The marker belongs in the ARTIFACTS
+
+> **Marked in writing → recognised unmarked in speech.**
+
+This is how humans learn jargon: you see it **defined and emphasised** in the onboarding doc, then you
+hear it plain in the standup. The marker's job is not to trigger a command. Its job is to **teach the
+term set** and to make every mention **machine-detectable** in the corpus an agent already ingests —
+skills, kb pages, project docs, handoff briefs, issue bodies, `CLAUDE.md`/`AGENTS.md`.
+
+### The notation is `[[term]]`, and it already exists here — do not invent one
+
+| why | |
+|---|---|
+| **already the convention in this ecosystem** | the kb roadmap specifies `[[wikilinks]]`; the agent memory system already links with `[[name]]` |
+| **zero collision with shell syntax** — and this is decisive, because **bashy IS a shell** | `/`, `#`, `$`, `@`, `!`, `%` all mean something to bash. `[[` appears only inside a test expression, never in prose |
+| **LLMs have seen millions of examples** | MediaWiki, Obsidian, Roam — recognition is free, no teaching required |
+| **trivially detectable, renders in Markdown, namespaces cleanly** | `[[handoff]]` · `[[agent:codex]]` · `[[verb:gate]]` |
+
+### The loop
+
+| where | form | job |
+|---|---|---|
+| **artifacts** (docs, skills, kb, briefs, issues) | `[[handoff]]`, `[[codex]]` | **teach** the term set; make mentions detectable; link to the definition |
+| **always-on tier** (`AGENTS.md`, `context --json`) | the precedence sentence + ~15 terms + the resolver | **seed** the agent's working memory on the first hop |
+| **conversation** | plain `handoff this to codex` | **use** it — unmarked, like a human |
+| **when unsure** | `bashy lexicon resolve handoff` | **look it up** — a name is resolved, never memorised |
+
+And the marker remains available as an **escape hatch**: if an agent mis-resolves, a human can
+disambiguate by writing `[[handoff]] this to [[codex]]`. **Optional emphasis, never required syntax** —
+strictly better than a sigil you are obliged to type.
+
+### What the marker buys, concretely
+
+1. **Onboarding without a lecture.** `bashy lexicon scan` can walk the project's artifacts, collect every
+   `[[term]]`, and check it against the registries — so the term set is *derived from how the team
+   actually writes*, not from a list someone maintains.
+2. **A falsifiable glossary.** A `[[term]]` that resolves to nothing is a broken link, and broken links
+   are *findable*. A plain-prose glossary can rot silently; a linked one cannot.
+3. **Definition-at-point.** In any artifact an agent reads, the marked term can carry its own resolution
+   — the kb page, the atlas entry, the binding — so the agent does not have to guess *or* look up.
+4. **It composes with what already exists.** kb pages, memory links, and skill bodies all speak this
+   notation already. The lexicon is not a new syntax; it is the same one, pointed at the registries.
+
 ## Design: one term store, three projections
 
 **Do not write a glossary. Project the registries you already keep.**
@@ -147,6 +202,10 @@ registry, and *looked up* — never baked into a prompt.
 
 ## What NOT to build
 
+- ❌ **A required sigil in the prompt** (`/handoff`, `@codex`). It rebuilds slash commands — per-tool,
+  non-portable — and it breaks the property that *makes* jargon useful: inside the circle, it is used
+  **unmarked**. The marker belongs in the artifacts that TEACH the term, not in the sentence that USES
+  it. Keep `[[term]]` available as optional emphasis; never require it.
 - ❌ **A hand-written glossary file.** Stale on the first registry change. If it is not generated, do not
   ship it.
 - ❌ **The whole registry in context** — as prose or as N tools. It *degrades* grounding.
