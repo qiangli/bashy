@@ -1,0 +1,179 @@
+# The agent lexicon — teaching a fleet of tools your jargon
+
+Status: **design (2026-07-12), SOTA-grounded.** No code yet.
+
+## The problem
+
+Mid-session, a user says:
+
+> **"handoff this to codex."**
+
+In this circle, neither word means what the dictionary says:
+
+- **"handoff"** is not the English word. It is `bashy handoff` — a verb with precise semantics (capture the
+  in-flight working tree, release the lease, dispatch).
+- **"codex"** is not "OpenAI's product". It is *an agent binding on **this host***: a CLI tool plus a
+  specific bound model, as registered in the fleet registry. On another machine the same word denotes a
+  different binding.
+
+This is jargon: inside the circle it needs no explanation, and outside it is meaningless or — worse —
+plausibly wrong. The agent must resolve both referents **without the user re-explaining**, and it must
+work across tools that will never agree on a config format.
+
+## What the research says (July 2026)
+
+**The problem is 20% glossary and 80% precedence + lookup.** Two findings reframed the design:
+
+1. **A hand-written `GLOSSARY.md` is the known dead end.** It is stale the moment a host's registry
+   changes. The entire data-catalog industry (DataHub, OpenMetadata, Collibra) exists because that
+   failed. The mature operating model is: *the glossary **lives in the registry**, is **linked to the live
+   assets it names**, and is **served to agents** — never hand-maintained.*
+
+2. **Stuffing vocabulary into context actively harms grounding.** Tool-selection accuracy degrades past
+   **~15–20 tools in active rotation**, and near-synonymous names are the top failure mode (Microsoft
+   Research measured **775 tool-name collisions** across MCP servers; `search` collides across 32).
+   *More vocabulary in context ≠ better resolution.*
+
+**The strongest grounding primitive available is a generated `enum` in a tool schema.** A single tool
+
+```jsonc
+bashy_handoff(to: { "enum": ["codex", "claude", "opencode-glm4"] })   // ← generated from the fleet registry
+```
+
+makes "codex" a **schema token, not an English word**. The model structurally cannot name a binding that
+does not exist on this host, and MCP's `tools/list_changed` re-derives the enum when the registry
+changes. No prompt engineering, no synonym table. This is the mechanism; everything else is a fallback
+for clients that cannot do MCP.
+
+**`SKILL.md` is now genuinely cross-vendor** (Claude Code, Codex, OpenCode, Cursor, Gemini CLI, Copilot,
+Goose, Amp — under Linux Foundation governance), and its spec explicitly says the `description` field
+*"should include specific keywords that help agents identify relevant tasks."* That ~100-token,
+always-in-context field **is the officially-sanctioned lexicon slot** in every tool we care about.
+
+**`AGENTS.md` is the neutral always-on layer** (60k+ repos; read by Codex, Cursor, Aider, Copilot,
+Gemini, Zed, Devin; Claude Code via `CLAUDE.md`). There is **no portable slash-command format** and
+there never will be — do not build one.
+
+### The 20-year-old prior art maps exactly
+
+- **SKOS** gives the label model: `prefLabel` (`bashy handoff`), `altLabel` ("hand it off", "pass it
+  to"), `hiddenLabel` (legacy names, misspellings), and — the killer field — **`scopeNote`**, which is
+  *precisely* the slot for the hard part: *"within this workspace, 'handoff' never means the English
+  word."*
+- **TBX (ISO 30042)** gives **concept-orientation**, and it dissolves the dynamic-referent problem
+  outright: the **concept** is *an agent binding (tool × model, host-scoped)*; **"codex" is merely a
+  term that denotes it on this host.** Term ≠ concept is the whole trick.
+- **DDD's ubiquitous language**, restated for 2026: it *"must now be machine-readable, constraining how
+  an LLM interprets words within a bounded context."* **The repo/host IS the bounded context.**
+
+## What bashy already has, and never projects
+
+This is the key realisation: **the term base already exists. It has simply never been shown to anyone as
+vocabulary.**
+
+| half of the lexicon | where it already lives | shape |
+|---|---|---|
+| **verbs** (`handoff`, `weave`, `gate`, `meet`, `sprint`) | the **Command Atlas** (`coreutils/pkg/atlas`) | name + synopsis + SDLC stage + group + effects — curated, closed-vocabulary, ratcheted at init |
+| **agent bindings** (`codex`, `claude`, `opencode-glm4`) | the **fleet registry** (`bashy agents` — "named `tool:model` bindings, the enlistable unit") | live, host-specific, already a registry |
+| **capabilities** (`conductor`, `knowledge-transfer`) | **`bashy skills`** | already `SKILL.md`, already exported to `.claude/skills` and `.agents/skills` |
+
+Three registries, generated and maintained. Zero projection into the channels an agent actually reads.
+
+## Design: one term store, three projections
+
+**Do not write a glossary. Project the registries you already keep.**
+
+### The store (M4) — SKOS/TBX-shaped, mostly generated
+
+```
+concept:   verb:handoff                       │  concept:  binding:codex@this-host
+prefLabel: "bashy handoff"                    │  prefLabel:"codex"
+altLabel:  ["handoff", "hand it off",         │  altLabel: ["codex cli"]
+            "pass it to"]                     │  definition: generated — tool=codex, model=…
+definition: (from the atlas synopsis)         │  scopeNote: "an agent binding ON THIS HOST,
+scopeNote: "In this workspace this is the     │              not a product. Resolve, never assume."
+            bashy verb, never the English     │  status:    live (from the fleet registry)
+            word."                            │
+```
+
+**Generated:** every concept, `prefLabel`, `definition`, and status — from the atlas and the fleet
+registry. **Hand-written:** only `altLabel` (the colloquialisms a team actually says) and `scopeNote`
+(the precedence rule). That ratio is the point: the parts that go stale are generated; the parts that
+need judgment are tiny.
+
+### Projection 1 — a generated `enum` in a tool schema *(hard grounding; the mechanism)*
+
+One MCP tool per verb with a `to:`/`agent:` parameter whose `enum` is generated from the fleet registry,
+refreshed via `tools/list_changed`. **Name it `bashy_handoff`, not `handoff`** — MCP has no formal
+namespace, the spec's disambiguation guidance is only SHOULD-level, and a distinct name does more
+grounding work than any description. Expose **few** tools (stay under the ~15–20 degradation cliff):
+prefer one `bashy_run(verb: enum[…])` over twenty per-verb tools.
+
+### Projection 2 — a managed block in `AGENTS.md` *(always-on, universal)*
+
+`bashy lexicon --emit agents-md` writes a **fenced, regenerated** block:
+
+- **the precedence rule, in one sentence** — *"In this workspace, these words are bashy verbs and agent
+  bindings, never their English senses."*
+- ~15 highest-value terms (not the whole registry — see the degradation cliff)
+- **the resolver command**: `bashy lexicon resolve <term> --json`
+
+Generated, never hand-written. Short, because this tier is paid for on **every turn**.
+
+### Projection 3 — a `bashy-lexicon` skill *(on-demand, cross-vendor, ~100 tokens resident)*
+
+A `SKILL.md` whose **`description` carries the trigger words** ("handoff, resume, weave, gate, sprint,
+meet, conductor, codex, the fleet — in this workspace these are bashy verbs and agent bindings, not
+English words") and whose **body delegates resolution to the live registry** rather than restating it.
+
+That split is the whole architecture: **the description does mention-detection; the body does entity
+resolution against the registry.** It is the only way a *dynamic* vocabulary fits in a *static*
+always-on tier — and it is exactly what progressive disclosure is for.
+
+## The resolver is the 80%
+
+```
+$ bashy lexicon resolve codex --json
+{ "term": "codex", "concept": "binding:codex",
+  "kind": "agent-binding", "host": "dragon-2.local",
+  "tool": "codex", "model": "…", "status": "live",
+  "scope_note": "an agent binding ON THIS HOST, not a product",
+  "use": "bashy handoff --to codex" }
+```
+
+**A name is resolved by a lookup, never memorised.** That is the one sentence worth stealing from the
+agent-naming stack (A2A Agent Cards, ANS, DNS-AID): a card is published by the agent, collected by a
+registry, and *looked up* — never baked into a prompt.
+
+## What NOT to build
+
+- ❌ **A hand-written glossary file.** Stale on the first registry change. If it is not generated, do not
+  ship it.
+- ❌ **The whole registry in context** — as prose or as N tools. It *degrades* grounding.
+- ❌ **A portable slash-command abstraction.** `.claude/commands/` vs Codex prompts vs Cursor rules vs
+  aider `/cmd` are irreconcilable, and skills already subsumed them.
+- ❌ **MCP `resources` as the vocabulary channel.** Application-controlled by spec; most clients never
+  auto-inject them. Structurally cannot be an always-on tier.
+- ❌ **Load-bearing semantics in optional `SKILL.md` frontmatter** (`allowed-tools`, `paths`) — silently
+  ignored by most clients. Only `name`, `description` and the body portably exist.
+
+## Anti-bloat check (the atlas asks this of every new verb)
+
+> *Which SDLC stage does `lexicon` serve that nothing else already does?*
+
+**`cross`.** And what it does that nothing else does: it **projects** three existing registries (atlas,
+fleet, skills) into the three channels agents actually read. It introduces **no new source of truth** —
+which is the test it has to pass. If it ever starts *storing* vocabulary rather than *projecting* it, it
+has become the hand-written glossary we said not to build.
+
+It also **merges with an existing obligation**: the coherence pass already owes a rewrite of
+`bashy/AGENTS.md` (a 4-line stub today, read **first** by several tools) and `coreutils/AGENTS.md` (a
+divergent doc that never mentions the contract). The lexicon block is the *content* that rewrite was
+missing.
+
+## Sources
+
+MCP tools spec + `tools/list_changed`; Microsoft Research, *Tool-Space Interference in the MCP Era* (775
+name collisions); Agent Skills spec + client showcase (agentskills.io, Linux Foundation AAIF);
+agents.md; W3C SKOS; ISO 30042 (TBX); DataHub/OpenMetadata MCP glossary servers; A2A Agent Cards, ANS
+(arXiv 2505.10609), DNS-AID; *Tool-to-Agent Retrieval* (arXiv 2511.01854).
