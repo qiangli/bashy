@@ -13,9 +13,11 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	"golang.org/x/term"
 
+	"github.com/qiangli/coreutils/pkg/handoff"
 	coreskills "github.com/qiangli/coreutils/pkg/skills"
 )
 
@@ -38,7 +40,17 @@ type contextReport struct {
 	System              contextSystem    `json:"system"`
 	Capabilities        contextCaps      `json:"capabilities"`
 	RecommendedCommands []contextCommand `json:"recommended_commands"`
-	Notes               []string         `json:"notes,omitempty"`
+	// PendingHandoffs is work someone left for whoever comes next — possibly a
+	// different tool, possibly a different machine, possibly a teammate.
+	//
+	// This is the discoverability half of `bashy handoff`, and it is the half that
+	// has to be right. `resume` runs COLD: the agent invoking it has no memory of
+	// the handoff, was very likely not the tool that wrote it, and cannot be
+	// TOLD to look — nobody is there to tell it. So the pending work must surface
+	// on the FIRST call an agent makes, which is this one. A handoff that nobody
+	// finds is a handoff that did not happen.
+	PendingHandoffs []contextHandoff `json:"pending_handoffs,omitempty"`
+	Notes           []string         `json:"notes,omitempty"`
 	// Tools maps common CLI names to their resolved PATH location — replaces
 	// per-tool `which X` probes. Only tools actually found are listed.
 	Tools map[string]string `json:"tools,omitempty"`
@@ -105,6 +117,19 @@ type contextCaps struct {
 	// them on the first hop instead of re-deriving by search.
 	CodeGraph      bool `json:"code_graph"`
 	KnowledgeGraph bool `json:"knowledge_graph"`
+}
+
+// contextHandoff is a pending handoff, summarised. Deliberately a SUMMARY, not
+// the record: an agent orienting itself needs to know that work is waiting, who
+// left it and what it was — not to have a full diff dumped into its context
+// window. `bashy resume` reads the record.
+type contextHandoff struct {
+	ID         string `json:"id"`
+	From       string `json:"from"`
+	CreatedAt  string `json:"created_at"`
+	Brief      string `json:"brief"`
+	NextAction string `json:"next_action,omitempty"`
+	Resume     string `json:"resume"` // the exact command to continue it
 }
 
 type contextCommand struct {
@@ -215,8 +240,67 @@ func fillContext(report contextReport, bashyPath string) contextReport {
 		"environment shows values only for safe names (paths/locale/shell/toolchain); environment_redacted is a comma-joined list of the remaining var NAMES (values hidden) — a secret's existence is visible, not its value.",
 		"Use the reported bashy_path for explicit bashy feature calls.",
 	}
+	report.PendingHandoffs = pendingHandoffs(report.ProjectRoot, report.CWD, bashyPath)
+	if len(report.PendingHandoffs) > 0 {
+		report.Notes = append(report.Notes,
+			fmt.Sprintf("%d pending handoff(s) for this project: someone left work for whoever came next. "+
+				"Read pending_handoffs and continue with the `resume` command shown there BEFORE starting anything new — "+
+				"they may have been mid-way through the very thing you are about to begin.",
+				len(report.PendingHandoffs)))
+		report.RecommendedCommands = append(report.RecommendedCommands, contextCommand{
+			Purpose: "continue work someone handed off (any tool, any machine)",
+			Command: bashyPath + " resume",
+		})
+	}
 	report.Tools = detectTools()
 	return report
+}
+
+// pendingHandoffs finds work left for a successor. It is deliberately
+// FAIL-QUIET: a broken or unreadable handoff store must never stop `bashy
+// context` from answering, because context is the first call an agent makes and
+// breaking it strands every tool.
+func pendingHandoffs(projectRoot, cwd, bashyPath string) []contextHandoff {
+	root := projectRoot
+	if root == "" {
+		root = cwd
+	}
+	recs, err := handoff.Pending(handoff.DefaultDir(), handoff.ProjectRoots(root))
+	if err != nil || len(recs) == 0 {
+		return nil
+	}
+	out := make([]contextHandoff, 0, len(recs))
+	for _, r := range recs {
+		from := r.From.Name
+		if from == "" {
+			from = string(r.From.Kind)
+		}
+		if r.From.Host != "" {
+			from = strings.TrimSpace(from + "@" + r.From.Host)
+		}
+		out = append(out, contextHandoff{
+			ID:         r.ID,
+			From:       from,
+			CreatedAt:  r.CreatedAt.Format(time.RFC3339),
+			Brief:      firstParagraph(r.Continuity),
+			NextAction: r.NextAction,
+			Resume:     bashyPath + " resume " + r.ID,
+		})
+	}
+	return out
+}
+
+// firstParagraph keeps the orientation cheap: enough to know what is waiting,
+// not so much that reading `context --json` costs what reading the record would.
+func firstParagraph(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.Index(s, "\n\n"); i > 0 {
+		s = s[:i]
+	}
+	if len(s) > 280 {
+		s = s[:277] + "..."
+	}
+	return s
 }
 
 // collectSystem gathers uname/hostname/identity info (replacing uname -a,
