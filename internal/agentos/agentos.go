@@ -71,6 +71,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/chat"
 	"github.com/qiangli/coreutils/pkg/dag"
 	"github.com/qiangli/coreutils/pkg/fleet"
+	"github.com/qiangli/coreutils/pkg/handoff"
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/kb"
 	"github.com/qiangli/coreutils/pkg/meet"
@@ -113,7 +114,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "chat", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "verify",
+		"weave", "sprint", "handoff", "resume", "chat", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "verify",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -306,6 +307,30 @@ func Dispatch() {
 		cmd := weave.NewSprintCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "handoff", "resume":
+		// Portable session handoff. Every agentic tool has a /resume, and every one
+		// of them is a prison: it reads that tool's private transcript store, on
+		// that machine, in that tool. bashy is the SHELL underneath all of them, so
+		// it is the one layer that can write a session record which OUTLIVES the
+		// tool that made it — and the record is an ARTIFACT (a self-contained diff +
+		// untracked files carried by content + the brief), never a pointer, so it
+		// travels: scp, mesh, an issue comment.
+		//
+		// The piece nothing else had is the IN-FLIGHT WORKING TREE. sprint handoff,
+		// weave baton and the cloudbox session lease all record PROSE, so a
+		// successor inherited a narrative, not a diff.
+		var hcmd *cobra.Command
+		if os.Args[1] == "handoff" {
+			hcmd = handoff.NewHandoffCmd()
+		} else {
+			hcmd = handoff.NewResumeCmd()
+		}
+		hcmd.SetArgs(os.Args[2:])
+		if err := hcmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy "+os.Args[1]+":", err)
 			os.Exit(1)
 		}
 		os.Exit(0)

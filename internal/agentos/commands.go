@@ -344,6 +344,8 @@ var verbSynopsis = map[string]string{
 	"ollama":     "managed local LLM runtime (isolated daemon, own port/models)",
 	"weave":      "per-repo multi-agent workspace orchestrator",
 	"sprint":     "cross-repo plan/continuity board (peer to weave)",
+	"handoff":    "pause this session and hand the work to another agent, a scheduler, or tomorrow",
+	"resume":     "pick up a handed-off session — any tool, any machine",
 	"chat":       "invoke an agent with a single unattended instruction",
 	"meet":       "multi-participant deliberation session with a notes-only secretary",
 	"supervise":  "drive a fleet against a goal of gated tasks, judged by a supervisor (conductor-as-a-verb)",
