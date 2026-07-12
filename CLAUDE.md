@@ -164,6 +164,26 @@ sync tooling auto-bumps `.sibling-pins`. (go.mod also carries further
 `../coreutils/...`-internal replaces for the embedded podman/ollama/otel
 engines — those ride the coreutils pin, not `.sibling-pins`.)
 
+**Bumping a sibling means bumping `.sibling-pins` in the same breath.**
+`.sibling-pins` is the only sibling source CI ever sees — it has no umbrella, so
+it clones each sibling at the pinned SHA. A local build **cannot** catch a stale
+pin: the umbrella mounts the live siblings as submodules, so the pins are never
+consulted here. The build passes locally against the new sibling while CI builds
+the old one and fails with a mystifying `no required module provides package` for
+code that plainly exists. (That is exactly how a stale coreutils pin broke every
+build for a dozen commits — the packages CI couldn't find had been added to
+coreutils *after* the pinned SHA.)
+
+Because push time is the only honest moment to notice, `scripts/hooks/pre-push`
+refuses a push while a pin disagrees with its sibling's HEAD. It is a no-op in a
+standalone clone (no siblings to compare), names the drifting sibling, and is
+bypassable with `git push --no-verify`. Install it with `make hooks` — or just
+run `./scripts/bootstrap-siblings.sh`, which now sets `core.hooksPath` for you.
+To resync after bumping a sibling: `./scripts/update-sibling-pins.sh`, then
+commit the pins with the change that needs them. Push the sibling to its own
+origin too — CI clones the pin from GitHub, so a SHA that exists only on your
+machine fails there as well.
+
 ## Build / test / lint
 
 ```sh

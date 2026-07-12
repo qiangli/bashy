@@ -290,6 +290,11 @@ test-bash-helpers:
 		fi; \
 		true
 
+## hooks: Install the committed git hooks (pre-push .sibling-pins drift gate)
+hooks:
+	git config core.hooksPath scripts/hooks
+	@echo "hooks: core.hooksPath -> scripts/hooks (bypass a hook with 'git push --no-verify')"
+
 ## tidy: Run go mod tidy, gofmt, and go vet
 tidy:
 	go mod tidy
