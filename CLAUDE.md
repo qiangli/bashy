@@ -283,18 +283,39 @@ require a change in `../sh` (interp/expand/syntax) plus, sometimes, the CLI
 glue here. Always re-read the live headline in `docs/TODO.md` rather than
 trusting any count quoted here.
 
-**Scoreboard reliability.** `make test-bash` is unreliable when a wrapper
-shim shadows `sh` in `PATH` (see the gotcha above). To measure
-reliably, drive `bin/bash` directly with the same environment the Makefile
-sets up — export `BASH_TSTOUT`/`BASH_TSTRAW` to temp files,
-`THIS_SH=$(pwd)/bin/bash`, a clean `PATH` (`$PWD:/usr/bin:/bin`), and mirror
-the Makefile's per-fixture transforms: `BASH_TEST_FILTER_EXPECT` (strip
-`expect `-prefixed lines before diff) and `BASH_TEST_CAT_V` (pipe through
-`cat -v` for control-char fixtures like `printf`). `BASH_TEST_SKIP`
-(`coproc jobs trap`) covers fixtures that hang on the goroutine-subshell /
-no-kernel-job-control constraint. A diff that ignores these transforms will
-false-positive; a checkout missing the `external/bash-5.3` fixture symlink
-(gitignored) will false-pass because the fixtures aren't there to run.
+**Scoreboard reliability.** There is exactly **one fixture runner**:
+`tools/bash53suite`. `make test-bash`, `make test-bash-parallel` and every
+`bashy dag` chunk target drive that same binary — which is what makes
+"chunked == serial" a checkable claim. (Until 2026-07-12 the Makefile
+implemented a *second* runner in shell whose watchdog silently failed to kill a
+wedged fixture; that hung CI for 20 minutes a run, and `continue-on-error: true`
+reported it green while the gate went unmeasured for ~10 merges. Do not
+reintroduce a second runner.)
+
+The harness owns what the shell loop used to bolt on: the per-fixture transforms
+(`expect`-line filtering, `cat -v` for control-char fixtures like `printf`), a
+4 GB memory cap, a per-fixture timeout that always terminates, and a **private
+per-run tree** — its own copy of the corpus plus its own `HOME` and `TMPDIR`. That
+last part is load-bearing: the C helpers (`recho`/`zecho`/`xcase`) are built *into*
+the fixture tree, so a shared tree lets a container run's ELF binaries poison a
+native run (and vice versa) — measured at 47/86 vs 77/86 on the same container,
+decided only by who built the helpers last. Private `TMPDIR` likewise kills the
+`histexpand`/`history` cross-chunk race (they share `$TMPDIR/newhistory`).
+
+Two things still bite:
+
+- **A wrapper shim shadowing `sh` in `PATH`** (see the gotcha above) — run with a
+  clean `PATH` (`PATH=/bin:/usr/bin:$(dirname $(which go))`).
+- **A missing `external/bash-5.3` symlink false-*passes*** — the fixtures simply
+  aren't there to run. The CI gate refuses a run with zero PASS lines for exactly
+  this reason.
+
+`BASH_TEST_SKIP` (and the harness's `-skip`) still exists for local iteration, but
+**CI refuses any skipped fixture** (`scripts/ci-bash53-gate.sh`): a skip is silent
+coverage loss, and the ratchet cannot see it (a SKIP is not a FAIL). That is how
+this gate failed before — `coproc`, `jobs` and `trap` were skipped *because they
+hung*, so CI stayed green while three fixtures went unmeasured. Nothing is skipped
+today; all 86 run.
 
 ### Bash 5.3 fixtures (gitignored symlink)
 

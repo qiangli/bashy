@@ -55,6 +55,20 @@ if [ "$(printf '%s\n' "$out" | grep -c '^  PASS  ')" -eq 0 ]; then
   exit 2
 fi
 
+# NOTHING MAY BE SKIPPED IN CI. BASH_TEST_SKIP is a local iteration convenience;
+# in CI a skip is silent coverage loss, and the ratchet below cannot see it (a
+# SKIP is not a FAIL). That is exactly how this gate failed before: coproc, jobs
+# and trap were skipped because they HUNG, so the gate reported green while three
+# fixtures went unmeasured for months. If a fixture genuinely cannot run in CI,
+# say so HERE, in a reviewed diff — never by exporting a variable.
+skipped=$(printf '%s\n' "$out" | grep -c '^  SKIP  ' || true)
+if [ "$skipped" -ne 0 ]; then
+  echo "gate: $skipped fixture(s) SKIPPED — CI must measure the whole suite. Refusing to pass." >&2
+  printf '%s\n' "$out" | grep '^  SKIP  ' >&2
+  echo "gate: unset BASH_TEST_SKIP, or justify the skip in scripts/ci-bash53-gate.sh." >&2
+  exit 2
+fi
+
 # Actual non-PASS set = every FAIL or TIME line. (SKIP is not a failure.)
 actual=$(printf '%s\n' "$out" | awk '/^  (FAIL|TIME)  /{print $2}' | sort -u)
 baseline=$(grep -vE '^\s*(#|$)' "$BASELINE" | tr -d ' ' | sort -u)
