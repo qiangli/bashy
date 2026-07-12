@@ -45,14 +45,29 @@ strict discipline (§Claim discipline):
       bashy) 2026-06-28, countersigned Andrew Josey (VP Standards &
       Certification, The Open Group) **2026-07-03**. Licensed Product per
       Schedule 1 = bashy, `https://github.com/qiangli/bashy`.
-- [ ] **Suite access email + tarball received** ← external blocker. This email
-      is what **starts the 12-month clock** (§License terms), so record its date.
-- [ ] TET run against the licensed suite; SUT = bashy in `--posix` mode.
+- [x] **Suite access + tarball received** — suite in hand by **2026-07-04**
+      (VSC-PCTS2016-3.1 + TET3.6-lite + VSXgen4.11). The suite-access email is
+      what **started the 12-month clock** (§License terms) — see that section for
+      the term/destroy dates.
+- [x] **TET run against the licensed suite; SUT = bashy in `--posix` mode.**
+      Harness + results: `docs/vsc-pcts-run-status.md` (the durable record).
+      Shell campaign complete — every bashy-only conformance bug fixed; residual
+      fails are shared with certified bash 5.3 in the identical non-root harness.
+- [ ] **Utils fail-delta campaign** ← the active workstream. The first sweep to
+      score *our* userland (2026-07-08) put it at 86.6% of GNU's pass count; the
+      delta is concentrated (regex/text-engine depth in `pkg/bre` ≈130; the
+      data-justified NO-list lift — `find -exec`, `xargs`, `env COMMAND` ≈90;
+      then a long tail). Plan of record: the `posix-100-conformance-campaign-plan`
+      kb page. "100%" is defined as **zero fails that certified bash 5.3 / GNU
+      don't also share** — not literal 100% PASS.
+- [ ] Final scored run (default timers, sh_12/sh_13 isolated).
 - [ ] Conformance statement finalized (`docs/conformance-statement.md`).
+- [ ] **Open Group submission** — the human step (journal + conformance
+      statement + declared limitations). Not agent-completable.
 
 **Cert is NOT a v1.0.0 blocker.** v1.0.0 ships with cert *pending* and the
 honest differential claim; certification is a follow-on badge (§Claim
-discipline). The 12-month VSC clock starts when the suite lands, not now.
+discipline).
 
 ### License terms (binding — read before touching the suite or publishing a number)
 
@@ -68,12 +83,26 @@ maintainer's private storage. The terms that constrain engineering work:
   as the gitignored `external/bash-5.3` symlink.
 - **No publishing results, no "passed" claim, without prior written consent** of
   The Open Group (§1). This binds *even after a clean run* — a green PCTS score
-  is not publishable on its own. Get written consent first, or say nothing.
+  is not publishable on its own.
+
+  ⚠️ **Consent REQUESTED, not yet granted (as of 2026-07-11).** This repo is
+  public and already carries PCTS results (`vsc-pcts-run-status.md` is the
+  detailed one; tallies/assertion IDs also appear in `TODO.md`, this file,
+  `posix-cert-preflight-status.md`, `conformance-statement.md`,
+  `vsc-pcts-readiness.md`). We have asked The Open Group (ticket #279890) for
+  written consent to publish them for the OSS project. **Until they reply, do
+  not ADD new PCTS disclosure** — no PCTS numbers in the README, release notes,
+  CHANGELOG, HN/launch copy, or any external post, and no "passes the Open Group
+  suite" claim anywhere. Our own measurements (bash-5.3 fixtures, yash,
+  differentials, 10-shell panel) are unaffected and stay publishable.
 - **No certification-program trademarks.** The license grants zero rights to the
   Open Group cert marks/badges.
 - **Term: 12 months** from the email telling us how to obtain the suites (not
-  from countersignature). Within **10 days** of the term ending we must **destroy
-  the Test Suites** unless The Open Group says in writing we may retain them.
+  from countersignature). That email landed in **early July 2026** — the suite
+  was in hand by 2026-07-04 — so the clock is **running**, expiring **~July
+  2027**. (Fill in the exact email date; it sets the deadline.) Within **10
+  days** of the term ending we must **destroy the Test Suites** unless The Open
+  Group says in writing we may retain them.
   The suite may also carry a disabling device that trips at expiry — do not
   tamper with it, and don't leave data you care about only inside a suite tree.
 - **Feedback is assigned to The Open Group** (§4 Rights In Data): any data,
