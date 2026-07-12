@@ -336,6 +336,14 @@ itself, which is pure Go).
 
 `docs/` holds the planning + status corpus. Load-bearing entries:
 
+- `philosophy.md` — **the thesis: LOCAL FIRST.** "bashy is all an agent needs" — the whole
+  SDLC loop (issue → weave → gate → judge → dag) closes on ONE machine with NO network,
+  and that claim is *enforced*, not asserted: `pkg/atlas/localfirst_test.go` fails the
+  build if a loop verb starts declaring the `net` effect. The air-gapped room is a TEST,
+  not a market (if it works there it works on the plane, in the outage, and on hotel
+  wifi). Three pillars (compatibility → capability → agency), six venues (venue 1 is a
+  complete product, not a fallback), and what the philosophy FORBIDS. Read before any
+  feature that reaches for a hosted service.
 - `TODO.md` — phase checklist + current PASS/FAIL/SKIP headline. Always read first.
 - `report-bash53-test-status.md` — per-fixture status snapshot from the bash 5.3 suite.
 - `handoff-bashy-2026-06.md` — most recent session-handoff notes (read when picking up cold).
