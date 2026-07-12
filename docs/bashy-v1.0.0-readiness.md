@@ -50,20 +50,24 @@ strict discipline (§Claim discipline):
       what **started the 12-month clock** (§License terms) — see that section for
       the term/destroy dates.
 - [x] **TET run against the licensed suite; SUT = bashy in `--posix` mode.**
-      Harness + results: `docs/vsc-pcts-run-status.md` (the durable record).
-      Shell campaign complete — every bashy-only conformance bug fixed; residual
-      fails are shared with certified bash 5.3 in the identical non-root harness.
-- [ ] **Utils fail-delta campaign** ← the active workstream. The first sweep to
-      score *our* userland (2026-07-08) put it at 86.6% of GNU's pass count; the
-      delta is concentrated (regex/text-engine depth in `pkg/bre` ≈130; the
-      data-justified NO-list lift — `find -exec`, `xargs`, `env COMMAND` ≈90;
-      then a long tail). Plan of record: the `posix-100-conformance-campaign-plan`
-      kb page. "100%" is defined as **zero fails that certified bash 5.3 / GNU
-      don't also share** — not literal 100% PASS.
-- [ ] Final scored run (default timers, sh_12/sh_13 isolated).
+      The shell-scenario campaign is complete. *(Results are not recorded in this
+      public repo — see `docs/vsc-pcts-run-status.md` for why. The durable run
+      record, harness runbook, and campaign plan are held privately.)*
+- [ ] **Utilities fail-delta campaign** ← the active workstream. Two known
+      engineering fronts, both stateable without suite results because they are
+      our own code: **(a)** regex/text-engine depth — `pkg/bre`, driving `sed`
+      and `grep`; **(b)** the NO-list lift — `find -exec`/`-ok`, `xargs`,
+      `env COMMAND`, `nice`, `nohup`, which exec a utility directly by argv and
+      so do *not* breach "never shell out"; one shared argv-runner routed through
+      Tier-1 dispatch serves them all. Then a per-command long tail.
+- [ ] Final scored run (default timers).
 - [ ] Conformance statement finalized (`docs/conformance-statement.md`).
 - [ ] **Open Group submission** — the human step (journal + conformance
       statement + declared limitations). Not agent-completable.
+
+The bar for this campaign is **zero fails that certified bash 5.3 / GNU do not
+also share** — not literal 100% PASS. Chasing raw GNU parity is a moving target,
+and PCTS charges some behaviors that exceed POSIX.
 
 **Cert is NOT a v1.0.0 blocker.** v1.0.0 ships with cert *pending* and the
 honest differential claim; certification is a follow-on badge (§Claim
@@ -85,16 +89,17 @@ maintainer's private storage. The terms that constrain engineering work:
   The Open Group (§1). This binds *even after a clean run* — a green PCTS score
   is not publishable on its own.
 
-  ⚠️ **Consent REQUESTED, not yet granted (as of 2026-07-11).** This repo is
-  public and already carries PCTS results (`vsc-pcts-run-status.md` is the
-  detailed one; tallies/assertion IDs also appear in `TODO.md`, this file,
-  `posix-cert-preflight-status.md`, `conformance-statement.md`,
-  `vsc-pcts-readiness.md`). We have asked The Open Group (ticket #279890) for
-  written consent to publish them for the OSS project. **Until they reply, do
-  not ADD new PCTS disclosure** — no PCTS numbers in the README, release notes,
-  CHANGELOG, HN/launch copy, or any external post, and no "passes the Open Group
-  suite" claim anywhere. Our own measurements (bash-5.3 fixtures, yash,
-  differentials, 10-shell panel) are unaffected and stay publishable.
+  ⚠️ **Results REMOVED from this public repo; consent REQUESTED, not yet granted
+  (2026-07-11).** Between 2026-07-04 and 2026-07-11 this repo published PCTS
+  tallies and assertion identifiers without that consent. On noticing, we removed
+  them and asked The Open Group (ticket #279890) for written consent to
+  republish for the OSS project. **Until they reply: no PCTS results anywhere
+  public** — not in this file, `TODO.md`, `conformance-statement.md`, the README,
+  release notes, CHANGELOG, launch copy, or any external post; and never a
+  "certified" / "passes the Open Group suite" claim. Our own measurements
+  (bash-5.3 fixtures, yash, the differential + 10-shell panels, POSIX-mode
+  parity) are unaffected and stay publishable — they are what the public claims
+  rest on.
 - **No certification-program trademarks.** The license grants zero rights to the
   Open Group cert marks/badges.
 - **Term: 12 months** from the email telling us how to obtain the suites (not

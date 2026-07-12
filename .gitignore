@@ -41,8 +41,13 @@ bin/.bashy-linux-*
 # a "passed" claim without their prior written consent. The harness stages it in
 # $HOME/.cache/vsc-pcts (outside the repo); these rules just make an accidental
 # in-tree copy uncommittable. Ditto the signed license agreement (personal data).
-VSC-PCTS*
-vsc-pcts*/
+# NOTE: match suite ARTIFACTS only — a bare `VSC-PCTS*` also swallows our own
+# docs (git is case-insensitive on macOS), which silently un-stages them.
+/testsuites/
+/vsc-pcts/
+VSC-PCTS*.tar.gz
+VSC-PCTS*.tgz
+VSC-PCTS*.zip
 *VSC-PCTS*.pdf
 tet3/
 vsxgen/
