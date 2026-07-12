@@ -27,7 +27,7 @@ strict discipline (§Claim discipline):
 | Signal | Current | Source |
 |---|---|---|
 | Bash 5.3 fixture suite | **86/86** (100% of measured) | `make test-bash` (serial, the hard gate) |
-| yash POSIX `-p` suite | **96%** (best of 10-shell panel, tied mksh) | `bashy dag DAG.md yash` |
+| yash POSIX `-p` suite | **96%** (best of 10-shell panel, tied mksh) | `bashy dag dag.md yash` |
 | Drop-in fidelity | **99%** (1096/1105) | drop-in-fidelity campaign |
 | Clean-room differential | **0 deviations / 719 scripts** vs bash 5.3 | `scripts/oils-diff.sh` |
 | 10-shell panel | **0 deviations** (strict-POSIX + feature-rich) | `scripts/multishell-diff.sh` |
@@ -40,13 +40,46 @@ strict discipline (§Claim discipline):
 - [x] License application submitted — Open Group **#279890** (2026-06-28).
 - [x] Declared-limitations list final (§Declared limitations).
 - [x] TET harness skeleton ready (`scripts/vsc-tet-build.sh`).
-- [ ] **Open Group countersignature + suite tarball received** ← external blocker.
+- [x] **Open Group countersignature received** — VSC-PCTS2016 Test Suite
+      Time-Limited License Agreement v1.4.OSS, signed Qiang Li (Maintainer,
+      bashy) 2026-06-28, countersigned Andrew Josey (VP Standards &
+      Certification, The Open Group) **2026-07-03**. Licensed Product per
+      Schedule 1 = bashy, `https://github.com/qiangli/bashy`.
+- [ ] **Suite access email + tarball received** ← external blocker. This email
+      is what **starts the 12-month clock** (§License terms), so record its date.
 - [ ] TET run against the licensed suite; SUT = bashy in `--posix` mode.
 - [ ] Conformance statement finalized (`docs/conformance-statement.md`).
 
 **Cert is NOT a v1.0.0 blocker.** v1.0.0 ships with cert *pending* and the
 honest differential claim; certification is a follow-on badge (§Claim
 discipline). The 12-month VSC clock starts when the suite lands, not now.
+
+### License terms (binding — read before touching the suite or publishing a number)
+
+The executed agreement is **not in this repo** and must not be committed: it is
+a signed two-party contract carrying the maintainer's home address, phone,
+email, and both parties' signatures, and this repo is public. It lives in the
+maintainer's private storage. The terms that constrain engineering work:
+
+- **The Test Suites are not redistributable.** No use/copy/modify/distribute
+  outside the license, no sublicense/rent/lease, no reverse-engineering, no
+  export. **Never commit the tarball, its extracted tree, or TET binaries** —
+  keep them outside the repo or behind a `.gitignore` entry, the same discipline
+  as the gitignored `external/bash-5.3` symlink.
+- **No publishing results, no "passed" claim, without prior written consent** of
+  The Open Group (§1). This binds *even after a clean run* — a green PCTS score
+  is not publishable on its own. Get written consent first, or say nothing.
+- **No certification-program trademarks.** The license grants zero rights to the
+  Open Group cert marks/badges.
+- **Term: 12 months** from the email telling us how to obtain the suites (not
+  from countersignature). Within **10 days** of the term ending we must **destroy
+  the Test Suites** unless The Open Group says in writing we may retain them.
+  The suite may also carry a disabling device that trips at expiry — do not
+  tamper with it, and don't leave data you care about only inside a suite tree.
+- **Feedback is assigned to The Open Group** (§4 Rights In Data): any data,
+  suggestions, or written material we send them about running the suite becomes
+  theirs. Send bug reports knowing that.
+- Use is limited to **testing bashy for conformance to IEEE Std 1003.1-2016**.
 
 ## Workstream 2 — benchmark-driven agentic uplift
 
@@ -114,6 +147,12 @@ and watch token budget.
 - ❌ Do **not** say "100% POSIX compatible" or "POSIX certified" until the
   official VSC-PCTS/TET run completes. 86/86 is *our measured fixtures*, not
   total POSIX fidelity.
+- ❌ Do **not** publish a VSC-PCTS score, pass rate, or any "passes the Open
+  Group suite" claim **even after a clean run** — the license forbids disclosing
+  results or claiming a pass without The Open Group's **prior written consent**
+  (§License terms). This is a contract term, not a style preference. The
+  differential/yash/fixture numbers above are ours to publish; PCTS numbers are
+  not.
 - Agentic uplift: state it only with the benchmark evidence behind it (arm,
   task count, verifier, sample) — self-reports are not evidence.
 

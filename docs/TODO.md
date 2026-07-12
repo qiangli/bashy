@@ -1,7 +1,7 @@
 # Bashy: Bash 5.3 Drop-In Replacement — TODO Checklist
 
 **Current status**: 🎉 86 bash tests passing, 0 failing, 0 skipped (of 86 measured fixtures) — **100% bash-5.3 compliance**
-**POSIX frontier**: yash `-p` conformance suite **96%** (confirmed 2026-07-01 on novicortex; ≥ bash 5.3/5.2, tied with mksh for best of the 10-shell panel) — run `bashy dag DAG.md yash`; details in `docs/cross-shell-conformance-baseline.md` + `docs/yash-conformance-gap.md`
+**POSIX frontier**: yash `-p` conformance suite **96%** (confirmed 2026-07-01 on novicortex; ≥ bash 5.3/5.2, tied with mksh for best of the 10-shell panel) — run `bashy dag dag.md yash`; details in `docs/cross-shell-conformance-baseline.md` + `docs/yash-conformance-gap.md`
 **Last updated**: 2026-06-18 (array2 FLIPPED via the quoted-`@`-vs-IFS fix in sh/expand — `"${a[@]}"`/`"$@"` split to one word per element regardless of IFS; also dropped dollars 141→102 + exp-tests 61→52. glob-test 88→85 (bash-correct trailing-`\` literal + `?` leading-dot in sh/pattern, not yet a flip). Earlier: array/assoc/nameref/new-exp/coproc flipped; harness now measures the 8 formerly-silent skips — `<name>.tests` mapping mismatch — so the scoreboard finally covers every fixture instead of hiding 8):
   - Wired into the harness (name→file mappings, like `dirstack`→`dstack`): array2→array-at-star, dollars→dollar-at-star, exp-tests→exp.tests(+expect-filter), glob-test→glob.tests, histexpand→histexp.tests, input-test→`< input-line.sh`.
   - `run-minimal` excluded (a `run-all`-style meta-runner, no stable `.right`). `execscript` skipped with a reason (host-dependent: bash binary path + system error wording + exec/`.`-on-directory exit codes; needs `test`-style normalization to measure).

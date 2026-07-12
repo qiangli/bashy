@@ -33,7 +33,7 @@ sets them to `internal/agentos.{Dispatch,WireExec}` in its `init()`, while
 `internal/agentos` (imported only by `cmd/bashy`), the `bash` binary cannot
 pull it in. `make build` produces both `bin/bash` and `bin/bashy`. (Historical
 note: this used to be one binary split by argv[0] via `isAgentOSShell()`; it is
-now a structural cmd/ split — see docs/agentos-substrate-extraction-plan.md.)
+now a structural cmd/ split.)
 
 The interpreter engine lives in the
 [`qiangli/sh`](https://github.com/qiangli/sh) fork of `mvdan.cc/sh` (published
@@ -78,6 +78,17 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
   coreutils userland also carries the agentic tools `fetch` (REST/URL client),
   `tokens` (LLM token counter), and `clip` (system clipboard) — see
   `docs/slash-command-priorart-survey.md`.
+  - **The agent-facing envelope verbs** live beside it as one file each, and are
+    the intended entry points for an agentic tool driving bashy (see
+    `skills/bashy/`): `context.go` (`bashy context --json` — machine-readable
+    host/session/capability snapshot, the *first* call an agent makes), `run.go`
+    (result envelope), `dryrun.go` + `check.go` (`--dry-run` / script check
+    before execution), `verify.go`, `commands.go` + `atlas.go` (the Command
+    Atlas lister), `doctor.go` (environment self-diagnostic), `nudge.go`,
+    `installagent.go` (`bashy install-agent` — point an agent CLI's shell at
+    bashy), `git.go`/`git_verbs.go`, `self.go`. Adding a verb means touching its
+    file **and** its atlas entry — the coverage tests and the CI e2e dispatch
+    gate both fail otherwise.
   - `internal/agentos/advisor*.go` — the **space-time advisor**: a non-intrusive
     post-exec `ExecHandler` middleware that, only when a command fails, appends one
     advisory hint explaining a space-determined failure (wrong cwd, host gone
@@ -113,8 +124,9 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
     - `-tags bashy_engines` (`engines_{full,stub}.go`) — the *in-process linked*
       container/LLM engines `bashy podman`/`ollama` (cgo + btrfs/MLX). Always
       excluded on Windows. In the default lean build the stub does NOT error —
-      per the settled dispatch ladder (docs/bashy-execution-path.md: exec,
-      never link) it falls through to **Tier 3**: resolve a host/binmgr-cached
+      per the settled dispatch ladder (Tier 0 shell → 1 pure-Go userland →
+      2 managed engine, **exec'd, never linked** → 3 PATH fallback → 4 mesh
+      delegate) it falls through to **Tier 3**: resolve a host/binmgr-cached
       `podman`/`ollama` and exec it transparently (no rebuild), or, if none is
       found, point to install/a paired host node — so a `bashy commands` verb
       always runs without a rebuild step.
@@ -156,7 +168,9 @@ engines — those ride the coreutils pin, not `.sibling-pins`.)
 
 ```sh
 make build              # -> bin/bash (pure drop-in, cmd/bash) + bin/bashy (AgentOS, cmd/bashy) — two independent binaries
+make build-bash         # only bin/bash — all the conformance harness needs (skips the embed-heavy bashy build)
 make build-host         # full unix host build (= BASHY_ENGINES=1 BASHY_OBS=1 + embed blobs)
+make install            # go install both binaries into GOBIN
 make test               # go test ./...
 make test-bash          # drive bin/bash against bash's own 5.3 test suite (serial)
 make test-bash-parallel # same suite fanned out across cores — the canonical 86/86 gate
@@ -164,9 +178,23 @@ make test-bash-list     # list available fixtures with per-fixture PASS/FAIL/TIM
 make test-yash          # yash POSIX (-p) scoreboard — the headline conformance-frontier metric
 make test-yash-list     # print the current bashy-specific yash failure list
 make test-zsh           # zsh-own-suite Tier-0 scoreboard (tools/ztst runner; INFO metric, not a gate)
+make test-uutils        # uutils/coreutils suite vs the pure-Go multicall (INFO metric; needs cargo)
 make dist               # cross-compile static binaries for all 6 platforms
 make tidy               # go mod tidy + gofmt -s -w . + go vet ./...
+make help               # every target with its `## ` doc line
 ```
+
+**Running a single test.** Two axes, depending on what you're iterating on:
+
+```sh
+make test-bash TESTS="comsub varenv"      # only those bash-5.3 fixtures (also honored by test-bash-parallel)
+make test-bash-run TESTS="comsub"         # the fixture loop WITHOUT rebuilding bin/bash
+go test -run TestPromptExpand ./internal/cli   # one Go test
+go test -run TestDoctor -v ./internal/agentos
+```
+
+`TESTS=` is the fast inner loop for conformance work — the full serial suite is
+minutes, one fixture is seconds.
 
 Beyond the bash-5.3 fixture gate, the broader conformance matrix (engine
 unit tests, POSIX-mode parity, the XCU/Oils/Austin/multi-shell differentials,
@@ -178,15 +206,24 @@ agent-first dogfood of the Makefile:
 ./bashy dag install                 # install bash/bashy into GOBIN; after this `bashy dag ...` works
 bashy dag suites.md -j8 -k          # whole conformance matrix in parallel (-k: don't halt on first failure)
 bashy dag suites.md test-bash yash  # a subset of suites
-bashy dag --list                    # what `make help` shows, as DAG targets (see DAG.md)
+bashy dag --list                    # what `make help` shows, as DAG targets (see dag.md)
 bashy dag --json test               # machine-readable envelope for an agent
 ```
 
-`suites.md` and `DAG.md` are literate task files: each `###` heading is a
+`./bashy` (repo root) is a POSIX-sh bootstrap: it builds `bin/bashy` on first
+use (preferring an already-installed `bashy` to compile itself) and then execs
+it, so a fresh checkout can run `./bashy dag …` with nothing but Go on the box.
+Once `make install` has run, drop the `./` and use the PATH binary.
+
+`suites.md` and `dag.md` are literate task files: each `###` heading is a
 target with `Requires:`/`Sources:`/`Effects:` metadata, run in topological
 order through the in-process shell. `suites.md` is the conformance matrix
 (only `test-bash` is a hard 0/1 gate; the differentials are INFO probes);
-`DAG.md` mirrors the Makefile's build/test/lint targets.
+`dag.md` mirrors the Makefile's build/test/lint targets and adds the chunked /
+fleet / container conformance lanes (`test-bash-chunks`, `test-bash-chunks-fleet`,
+`test-bash-chunks-container`, `yash-chunks`) that the Makefile has no equivalent
+for. **The file is `dag.md`, lowercase** — `DAG.md` only resolves on a
+case-insensitive filesystem (macOS) and breaks on Linux/CI.
 Inside DAG target bodies, use `"$BASHY" ...` for recursive bashy calls. Mirroring
 GNU Bash's `BASH`/`BASH_ARGV0` split, `bashy dag` injects `BASHY`/`BASHY_EXE`
 as the resolved executable path and `BASHY_ARGV0` as the raw argv0 string, so
@@ -199,6 +236,24 @@ go build ./...
 go test ./...
 go test -run TestMain ./...
 ```
+
+### Before pushing (what CI will run)
+
+`.github/workflows/test.yml` runs a **3-OS matrix (ubuntu / macOS / windows)**,
+and the Windows leg is the one that catches things a local unix run cannot:
+
+- build + vet + `go test ./internal/agentos` on all three (Windows skips
+  `internal/cli` — its readline / forced-interactive tests hang without a PTY);
+- an **e2e dispatch gate** — `go test -tags e2e -run
+  TestE2EAllListedCommandsDispatch ./internal/agentos` asserts every verb
+  `bashy commands` advertises actually runs on that OS. Adding a verb without an
+  atlas entry or a working stub fails here;
+- a **cross-build of the lean `cmd/bashy` for all 6 release platforms** with
+  `CGO_ENABLED=0`.
+
+So before pushing, at minimum cross-build for Windows (`CGO_ENABLED=0
+GOOS=windows GOARCH=amd64 go build ./cmd/bashy`) plus `go test ./...`. Running
+the workflow under `bashy act` does **not** cover this — act is Linux-only.
 
 ### Local-env PATH gotcha (wrapper shim)
 
@@ -273,7 +328,7 @@ itself, which is pure Go).
 - `space-time-advisor.md` — the shipped space-time advisor: non-intrusive error-time hints (cwd/network/compute/disk + doomed-loop + network-fingerprint host memory) that steer agentic tools off doomed retries. Self-contained feature doc (dimensions, env vars, `bashy-advice-v1` JSON schema, scope/non-goals).
 - `bash.md`, `agentic-extensions.md` — background references, not active plans.
 
-POSIX-conformance frontier (the active layer now that bash-5.3 is 86/86 — driven via `suites.md` + `DAG.md`):
+POSIX-conformance frontier (the active layer now that bash-5.3 is 86/86 — driven via `suites.md` + `dag.md`):
 
 - `plan-posix-conformance.md` — plan of record for the POSIX-mode conformance push (the differential suites + yash scoreboard).
 - `conformance-statement.md` — the standing conformance claim; `shell-conformance-comparison.md` / `cross-shell-conformance-baseline.md` — bashy vs other shells.
@@ -281,6 +336,10 @@ POSIX-conformance frontier (the active layer now that bash-5.3 is 86/86 — driv
 - `posix-cert-handoff-runbook.md`, `posix-cert-preflight-status.md`, `fidelity-ceiling-assessment.md` — VSC-PCTS certification runbook + status + the hard-ceiling assessment.
 - `yash-conformance-gap.md` — the yash-scoreboard failure analysis behind the headline number in `docs/TODO.md`.
 - `zsh-scoreboard.md` — the zsh Tier-0 own-suite baseline (`make test-zsh`, `tools/ztst` runner); INFO metric, not a gate.
+- `chunked-fleet-conformance-plan.md` — the chunked/fleet/container conformance lanes in `dag.md` (`test-bash-chunks*`, `yash-chunks*`): chunk count is a corpus property pinned in a committed manifest, and the authoritative run stays single-host + unchunked (`test-bash` 86/86 serial is the release gate) — campaign mode never speaks for it.
+- `ci-failure-autorepair-plan.md` + `config/ci-failure-conductor.env` + `scripts/ci-failure-{router,conductor,gate}.sh` — the `.github/workflows/ci-failure-report.yml` lane that routes a CI failure to a conductor run.
+- `bashy-v1.0.0-readiness.md` — the release-readiness ledger.
+- `agent-adoption/matrix.md` — which agentic CLIs are verified running on bashy as their shell (the `force-agent-shell` skill's evidence base).
 
 Per-fixture cluster analyses + blocker ledgers (snapshots — diff line-counts and PASS/FAIL claims in them are dated, re-measure before trusting):
 
@@ -317,6 +376,11 @@ brand-neutral and driven by bashy's own tools:
   validate-through-use → pointers-not-copies localization). Hard rules:
   transferred ≠ validated (a second agent promotes), kb reads foreign stores
   but never writes them.
+- `skills/force-agent-shell/` — attested check that agentic CLIs route their
+  shell commands through bashy (so the pure-Go userland, the advisor, and OTel
+  apply to everything an agent runs). Run as a convergence gate before an
+  unattended fleet run: `bashy skills run force-agent-shell` (exit 0 iff the
+  contract holds); wiring is `bashy install-agent <agent>` (`--check` to verify).
 
 ## Plans
 

@@ -1,6 +1,7 @@
 # `bashy dag` — markdown-defined dependency DAG
 
-`bashy dag` runs targets defined as headings in a markdown file (`DAG.md`) as a
+`bashy dag` runs targets defined as headings in a markdown file (`dag.md` at the
+repo root, or any file you pass) as a
 real dependency graph — an agent-first replacement for `make`. Each target is a
 heading + optional metadata lines (`Requires:`/`Inputs:`/`Sources:`/`Generates:`/
 `Host:`) + a fenced code block run through the in-process shell + coreutils
@@ -40,7 +41,7 @@ git clone … && cmake -B build … && cmake --build build
 ````
 
 ```bash
-bashy dag --mesh DAG.md build-on-node
+bashy dag --mesh dag.md build-on-node
 ```
 
 It is **control-plane only**: the body is fed to the remote over an exec

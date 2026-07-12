@@ -35,3 +35,14 @@ bin/.bashy-linux-*
 
 # modernish (MIT) feature/regression suite clone cache (never vendored)
 .modernish-tests/
+
+# Licensed VSC-PCTS2016 suite (The Open Group) — NOT redistributable: the license
+# forbids copying/distributing the Test Suites, and forbids publishing results or
+# a "passed" claim without their prior written consent. The harness stages it in
+# $HOME/.cache/vsc-pcts (outside the repo); these rules just make an accidental
+# in-tree copy uncommittable. Ditto the signed license agreement (personal data).
+VSC-PCTS*
+vsc-pcts*/
+*VSC-PCTS*.pdf
+tet3/
+vsxgen/
