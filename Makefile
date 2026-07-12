@@ -10,12 +10,21 @@ BASHY := $(BIN_DIR)/bash
 # Stamp a real version onto release builds. Override on the command line, e.g.
 #   make build VERSION=v0.1.0
 VERSION ?= dev
+BUILD_ID ?= $(shell if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+		id=$$(git describe --tags --exact-match HEAD 2>/dev/null || git rev-parse --short=7 HEAD 2>/dev/null); \
+		if [ -n "$$id" ]; then \
+			if ! git diff --quiet --ignore-submodules -- 2>/dev/null || ! git diff --cached --quiet --ignore-submodules -- 2>/dev/null; then \
+				id="$$id-dirty"; \
+			fi; \
+			printf '%s' "$$id"; \
+		fi; \
+	fi)
 # -s -w strip the symbol table and DWARF debug info; with -trimpath (below)
 # this drops the binary ~30% (≈7.8M → ≈5.4M). A pure-Go bash can't reach C
 # bash's ~1.2M — the Go runtime/GC (~2.3M) plus the interpreter and the
 # x/text CJK charset tables (Big5/Shift-JIS, needed for locale-correct globs)
 # set a floor around 5M.
-LDFLAGS := -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$(VERSION)'
+LDFLAGS := -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$(VERSION)' -X 'github.com/qiangli/bashy/internal/cli.buildID=$(BUILD_ID)'
 
 # The Go FIPS 140-3 module version selected by the build-fips target (see
 # `go tool` / go.dev/doc/security/fips140). v1.0.0 holds CMVP certificate #5247.

@@ -17,6 +17,12 @@ import (
 // it when overriding so compliance checks still match.
 var bashVersion = "5.3.0(1)-bashy"
 
+// buildID is stamped by the Makefile from Git metadata. It is intentionally
+// separate from bashVersion so the Bash-compatible version value keeps the
+// exact shape parsed by fixtures and scripts. Source tarballs without .git leave
+// this empty.
+var buildID string
+
 const (
 	bashVerMajor = "5"
 	bashVerMinor = "3"
@@ -33,6 +39,19 @@ func BashyVersion() string {
 		return ""
 	}
 	return v
+}
+
+// BuildID returns the stamped Git build identifier, usually an exact release tag
+// or a short commit SHA with an optional "-dirty" suffix.
+func BuildID() string {
+	return strings.TrimSpace(buildID)
+}
+
+func bashVersionLine() string {
+	if id := BuildID(); id != "" {
+		return bashVersion + " (" + id + ")"
+	}
+	return bashVersion
 }
 
 // bashVersionVars returns the environment variables that identify bashy

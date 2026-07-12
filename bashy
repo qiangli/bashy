@@ -12,7 +12,16 @@ fi
 if [ ! -x "$bin" ] || [ "${BASHY_BOOTSTRAP_REBUILD:-0}" = 1 ]; then
 	mkdir -p "$here/bin"
 	version="${VERSION:-dev}"
-	ldflags="-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${version}"
+	build_id=""
+	if [ -e "$here/.git" ] && git -C "$here" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		build_id=$(git -C "$here" describe --tags --exact-match HEAD 2>/dev/null || git -C "$here" rev-parse --short=7 HEAD 2>/dev/null || true)
+		if [ -n "$build_id" ]; then
+			if ! git -C "$here" diff --quiet --ignore-submodules -- 2>/dev/null || ! git -C "$here" diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+				build_id="${build_id}-dirty"
+			fi
+		fi
+	fi
+	ldflags="-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${version} -X github.com/qiangli/bashy/internal/cli.buildID=${build_id}"
 	echo "bashy bootstrap: building $bin" >&2
 	(
 		cd "$here"
