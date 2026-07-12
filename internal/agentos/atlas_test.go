@@ -33,14 +33,32 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 	if len(records) == 0 {
 		t.Fatal("empty atlas catalog")
 	}
+	stages := map[string]bool{}
+	for _, s := range atlas.Stages() {
+		stages[s] = true
+	}
+
 	byName := map[string]atlasRecord{}
 	for _, r := range records {
 		byName[r.Name] = r
+		// An empty classification means the name resolved in NEITHER the atlas
+		// nor the registry — i.e. a front-door command was shipped without an
+		// atlas entry. This used to be undetectable: verbAtlasRecord filled in
+		// GroupPlatform/TierUserland, which are *valid* values, so the checks
+		// below passed and the omission was invisible. `fanout` lived here.
+		if r.Group == "" || r.Tier == "" {
+			t.Errorf("%s: NO ATLAS ENTRY — add it to coreutils/pkg/atlas "+
+				"(and answer: which SDLC stage does it serve that nothing else does?)", r.Name)
+			continue
+		}
 		if !groups[r.Group] {
 			t.Errorf("%s: group %q not in vocabulary", r.Name, r.Group)
 		}
 		if !tiers[r.Tier] {
 			t.Errorf("%s: tier %q not in vocabulary", r.Name, r.Tier)
+		}
+		if !stages[r.Stage] {
+			t.Errorf("%s: sdlc stage %q not in vocabulary %v", r.Name, r.Stage, atlas.Stages())
 		}
 		for _, c := range r.Caps {
 			if !caps[c] {

@@ -30,6 +30,7 @@ type atlasRecord struct {
 	Subclass string   `json:"subclass,omitempty"`
 	Group    string   `json:"group"`
 	Tier     string   `json:"tier"`
+	Stage    string   `json:"sdlc"` // SDLC stage: plan|code|test|deploy|cross
 	Resolver string   `json:"resolver"`
 	Caps     []string `json:"caps,omitempty"`
 	Effects  []string `json:"effects,omitempty"`
@@ -55,7 +56,8 @@ func atlasCatalog(builtins, core, verbs, hidden []string) []atlasRecord {
 	for _, n := range builtins {
 		add(atlasRecord{
 			Name: n, Class: "builtin", Group: atlas.GroupShell,
-			Tier: atlas.TierUserland, Resolver: "bash-builtin",
+			Tier: atlas.TierUserland, Stage: atlas.StageCross,
+			Resolver: "bash-builtin",
 		})
 	}
 	for _, n := range core {
@@ -92,9 +94,20 @@ func verbAtlasRecord(name string, hidden bool) atlasRecord {
 		applyEntry(&r, atlas.RegistryEntry(e.Tier))
 		return r
 	}
-	// Unknown to both tables: keep it visible rather than dropping it —
-	// the coverage test fails on this state so it cannot persist silently.
-	r.Group, r.Tier = atlas.GroupPlatform, atlas.TierUserland
+	// Unknown to both tables. Keep it VISIBLE, but do not invent a
+	// classification for it.
+	//
+	// This branch used to assign GroupPlatform/TierUserland with a comment
+	// claiming "the coverage test fails on this state so it cannot persist
+	// silently". It did not: those are *valid* vocabulary values, and the
+	// coverage test only checked that group/tier were in-vocabulary — so an
+	// unclassified verb sailed through wearing a fabricated classification.
+	// `fanout` shipped that way and nobody could see it. The fallback defeated
+	// the very test it invoked as its justification.
+	//
+	// Leaving these empty makes the state observable, and the bashy-side
+	// coverage ratchet now fails on it by name.
+	r.Group, r.Tier, r.Stage = "", "", ""
 	return r
 }
 
@@ -103,11 +116,15 @@ func fillFromAtlas(r *atlasRecord) {
 		applyEntry(r, e)
 		return
 	}
-	r.Group, r.Tier = atlas.GroupPlatform, atlas.TierUserland
+	// Shell builtins are deliberately absent from the atlas — the embedding
+	// shell owns that set (see the atlas package doc) — so this fallback is
+	// legitimate here, unlike the verb path. A builtin serves every stage.
+	r.Group, r.Tier, r.Stage = atlas.GroupPlatform, atlas.TierUserland, atlas.StageCross
 }
 
 func applyEntry(r *atlasRecord, e atlas.Entry) {
 	r.Group, r.Tier, r.Subclass, r.Caps, r.AliasOf = e.Group, e.Tier, e.Subclass, e.Caps, e.AliasOf
+	r.Stage = e.Stage
 	r.Effects = e.Effects
 }
 
@@ -128,7 +145,7 @@ func liveAtlas(includeHidden bool) []atlasRecord {
 // --- the views ---------------------------------------------------------------
 
 // atlasViews are the non-classic --view values.
-var atlasViews = []string{"tier", "group", "capabilities", "effects"}
+var atlasViews = []string{"tier", "group", "sdlc", "capabilities", "effects"}
 
 // atlasGroupDisplayOrder is the presentation order for the group view:
 // classical userland first, then the extended groups.
@@ -152,7 +169,7 @@ var tierSynopsis = map[string]string{
 }
 
 type atlasRequest struct {
-	view    string // "", "tier", "group", "capabilities", "effects"
+	view    string // "", "tier", "group", "sdlc", "capabilities", "effects"
 	tier    string // filters (ANDed when several are given)
 	group   string
 	cap     string
@@ -264,6 +281,11 @@ func dispatchAtlas(req atlasRequest) int {
 		printAtlasCaps(os.Stdout, records)
 	case req.view == "effects":
 		printAtlasEffects(os.Stdout, records)
+	case req.view == "sdlc":
+		// The spine: plan → code → test → deploy (+ cross). Reading this view is
+		// how you SEE the shape of the surface — which is how the Code stage was
+		// found to carry six overlapping verbs while the Test stage carried none.
+		printAtlasByKey(os.Stdout, records, atlas.Stages(), "sdlc ", func(r atlasRecord) string { return r.Stage })
 	case req.full:
 		printAtlasRecords(os.Stdout, records)
 	default: // "tier"

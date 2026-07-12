@@ -346,7 +346,6 @@ var verbSynopsis = map[string]string{
 	"sprint":     "cross-repo plan/continuity board (peer to weave)",
 	"chat":       "invoke an agent with a single unattended instruction",
 	"meet":       "multi-participant deliberation session with a notes-only secretary",
-	"fanout":     "run parallel agents against one shared context (the blackboard pattern)",
 	"supervise":  "drive a fleet against a goal of gated tasks, judged by a supervisor (conductor-as-a-verb)",
 	"capability": "living agent (tool:model) × capability matrix for routing",
 	"foreman":    "drive a persistent, steerable agent session (chat elevated)",

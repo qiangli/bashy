@@ -59,6 +59,7 @@ Each command has one record:
 | `subclass` | refines `verb` only: `provisioner` \| `managed-external` \| `""` |
 | `group` | functional lens, one group per command (§2.1) |
 | `tier` | execution-tier lens (§2.2) |
+| `sdlc` | **SDLC-stage lens (§2.2a) — mandatory for every verb; `addVerb` panics without one** |
 | `resolver` | existing: `bash-builtin` \| `bashy-in-process` \| `bashy-front-door` \| `managed-container-or-system` |
 | `caps` | agentic capability flags (§2.3) |
 | `effects` | security/privacy/governance effects (§2.5) — **mandatory, ≥1 per command** |
@@ -129,6 +130,45 @@ cluster (your own DKS).
 The tier means "the tier this command operates/fronts", not "where the binary
 runs" (every binary runs in userland). `foreman` stays `userland`: it manages
 a session on this node; the workspaces it drives are weave's.
+
+### 2.2a SDLC lens — the spine
+
+`plan → code → test → deploy`, plus `cross` for the commands that serve every
+stage (the userland, knowledge, identity, diagnostics). One stage per command.
+
+| stage | meaning | commands |
+|---|---|---|
+| `plan` | decide what to build | sprint, meet |
+| `code` | build it | weave, chat, foreman, agent, the toolchains (go/cargo/npm/…) |
+| `test` | decide pass/fail | check, verify, act, act-runner |
+| `deploy` | ship it | sdlc, kubectl, helm, sphere, tier-4+ registry CLIs |
+| `cross` | serves every stage | the userland, dag, kb, skills, secrets, doctor, git, … |
+
+**This axis exists to ask one question of every new verb: *which stage do you
+serve that nothing else already does?*** It is not decoration. bashy's agentic
+surface grew piecemeal until the **Code stage carried six overlapping verbs**
+(weave, supervise, foreman, chat, fanout, `sdlc delegate`) while the **Test
+stage carried none** — the gate was spelled four incompatible ways across four
+packages. Nobody could see that, because there was no axis on which to see it.
+
+Two rules keep it honest:
+
+1. **A stage is mandatory for a verb, enforced at init.** `atlas.addVerb` panics
+   without one, so a verb that cannot answer the question cannot start the
+   binary. This is deliberately harsher than a coverage test, because a test can
+   be defaulted around — and this one was. `bashy`'s `verbAtlasRecord` used to
+   invent `GroupPlatform`/`TierUserland` for any verb missing an entry; those are
+   *valid* values, so the coverage test passed and the omission was invisible.
+   **`fanout` shipped that way** — zero callers, zero skills, no atlas entry — and
+   the ratchet meant to catch it was the very thing being defeated. It was
+   deleted 2026-07-12 when the axis landed and it had no answer to give.
+2. **Do not pave over a hole to make the table look tidy.** `dag` is `cross`, not
+   `test`: it is a make-replacement that runs build, test *and* deploy targets.
+   Filing it under `test` would make the Test stage look populated while the gate
+   remained missing. The thin `test` column is the finding, not a defect in the
+   axis — `bashy gate` is what fills it.
+
+View it with `bashy commands --view sdlc`.
 
 ### 2.3 Capability vocabulary
 

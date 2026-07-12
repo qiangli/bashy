@@ -70,7 +70,6 @@ import (
 	"github.com/qiangli/coreutils/pkg/capability"
 	"github.com/qiangli/coreutils/pkg/chat"
 	"github.com/qiangli/coreutils/pkg/dag"
-	"github.com/qiangli/coreutils/pkg/fanout"
 	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/kb"
@@ -114,7 +113,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "chat", "meet", "fanout", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "verify",
+		"weave", "sprint", "chat", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "verify",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -343,18 +342,14 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
-	case "fanout":
-		// Shared-context parallel agents (the blackboard pattern): fan N
-		// instances out concurrently against one evolving board, each with a
-		// different instruction and a scoped view. See
-		// dhnt/docs/agentic-design-pattern-gaps.md.
-		cmd := fanout.NewFanoutCmd()
-		cmd.SetArgs(os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy fanout:", err)
-			os.Exit(1)
-		}
-		os.Exit(0)
+	// `fanout` was removed 2026-07-12 by the Command Atlas SDLC ratchet, which
+	// asks every front-door verb: which stage do you serve that nothing else
+	// already does? fanout had no answer. It shipped with zero callers, zero
+	// skills, zero docs telling anyone to use it, and no atlas entry at all —
+	// and its own design doc conceded the collapse: "at which point this *is*
+	// weave with a shared seed, and the runner should delegate to weave."
+	// N agents deliberating over one shared context is `bashy meet`; N agents
+	// working in parallel is `bashy weave`. There was no third thing.
 	case "agent":
 		cmd := agentcmd.NewAgentCmd()
 		cmd.SetArgs(os.Args[2:])
