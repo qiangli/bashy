@@ -75,13 +75,13 @@ import (
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/kb"
 	"github.com/qiangli/coreutils/pkg/meet"
-	"github.com/qiangli/coreutils/pkg/supervise"
 	"github.com/qiangli/coreutils/pkg/mirror"
 	"github.com/qiangli/coreutils/pkg/principal"
 	"github.com/qiangli/coreutils/pkg/schedule"
 	"github.com/qiangli/coreutils/pkg/sdlc"
 	"github.com/qiangli/coreutils/pkg/secrets"
 	coreskills "github.com/qiangli/coreutils/pkg/skills"
+	"github.com/qiangli/coreutils/pkg/supervise"
 	"github.com/qiangli/coreutils/pkg/weave"
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	"github.com/qiangli/coreutils/pkg/webinspect"
@@ -114,7 +114,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "chat", "meet", "fanout", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "self", "check", "verify",
+		"weave", "sprint", "chat", "meet", "fanout", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "verify",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -458,6 +458,11 @@ func Dispatch() {
 		// Environment self-diagnostic: PATH/sh shadowing, a stale bashy on PATH,
 		// toolchain + container engine, agent mode, bin cache. Advisory.
 		os.Exit(dispatchDoctor(os.Args[2:]))
+	case "audit":
+		// The compliance audit trail: tail recent records, verify the hash chain
+		// (tamper-evidence), or export an evidence bundle. Reads the log written
+		// by the audit ExecHandler middleware (opt-in via BASHY_AUDIT).
+		os.Exit(dispatchAudit(os.Args[2:]))
 	case "install-agent":
 		// Wire a coding agent (claude/opencode/aider/gemini/copilot) to use
 		// bashy as its shell; --check verifies, --uninstall reverses. See
@@ -977,15 +982,23 @@ func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 	//     better counterpart (`awd`). Never alters the command.
 	// Both are stderr-only, gated (agent mode / BASHY_ADVISOR / BASHY_HINTS, with
 	// BASHY_AGENTIC as master kill), and never active in posix mode / cmd/bash.
+	// Compose the ExecHandler middleware chain, OUTERMOST first. Audit is
+	// outermost so it records the final outcome after every other middleware has
+	// run; the advisor is next (it reads the exit to advise); dry-run and the
+	// coreutils userland handler are innermost.
+	var mws []func(interp.ExecHandlerFunc) interp.ExecHandlerFunc
+	if aw := newAuditWriter(); aw != nil {
+		mws = append(mws, auditHandler(aw, auditActor(), auditHost()))
+	}
 	if advisorEnabled() || hintsEnabled() {
 		a := newAdvisor()
 		if hintsEnabled() {
 			opts = append(opts, interp.WithAuditHandler(newNudger(a.mem).onAudit))
 		}
 		if advisorEnabled() {
-			return append(opts, interp.ExecHandlers(
-				advisorHandler(a), dryRunHandler(r), coreutilsshell.Handler()))
+			mws = append(mws, advisorHandler(a))
 		}
 	}
-	return append(opts, interp.ExecHandlers(dryRunHandler(r), coreutilsshell.Handler()))
+	mws = append(mws, dryRunHandler(r), coreutilsshell.Handler())
+	return append(opts, interp.ExecHandlers(mws...))
 }
