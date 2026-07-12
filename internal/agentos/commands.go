@@ -346,6 +346,8 @@ var verbSynopsis = map[string]string{
 	"sprint":     "cross-repo plan/continuity board (peer to weave)",
 	"handoff":    "pause this session and hand the work to another agent, a scheduler, or tomorrow",
 	"resume":     "pick up a handed-off session — any tool, any machine",
+	"invoke":     "invoke ONE agent, ONCE, on one instruction (the primitive every orchestrator is built on)",
+	"conform":    "bashy's OWN fidelity batteries: compat/conformance/compliance/benchmark",
 	"chat":       "invoke an agent with a single unattended instruction",
 	"meet":       "multi-participant deliberation session with a notes-only secretary",
 	"supervise":  "drive a fleet against a goal of gated tasks, judged by a supervisor (conductor-as-a-verb)",

@@ -91,7 +91,7 @@ func suiteRegistry() []suiteSpec {
 func verifyCmd() *cobra.Command {
 	var list bool
 	cmd := &cobra.Command{
-		Use:   "verify [suite] [flags]",
+		Use:   "conform [suite] [flags]",
 		Short: "run bashy's formal test batteries (compat/conformance/compliance/benchmark)",
 		Long: "verify runs bashy's formal test batteries. The four suites are a precision\n" +
 			"ladder — compatibility (vs GNU bash), conformance (measured vs POSIX suites),\n" +

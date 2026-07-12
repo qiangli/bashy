@@ -114,13 +114,13 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "handoff", "resume", "chat", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "verify",
+		"weave", "sprint", "handoff", "resume", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
 	}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "java", "javac", "mvn", "git-scm", "curl"}
-	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade"}
+	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "chat", "verify"}
 )
 
 func Preamble() string {
@@ -334,9 +334,17 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
-	case "chat":
-		// General agent invocation primitive for humans and workflow commands:
-		// resolve a role/agent, build one instruction, and run it unattended.
+	case "invoke", "chat":
+		// Invoke ONE agent, ONCE, on one instruction — the primitive that unifies
+		// the heterogeneous agent CLIs (resolve the tool, inject identity, force
+		// bashy as its shell). Every orchestrator is built on it: sdlc, foreman and
+		// meet all call it; only weave bypasses it (it drives a PTY).
+		//
+		// Renamed from `chat` 2026-07-12, because chat does not chat. Its own
+		// synopsis always said "invoke an agent with a single unattended
+		// instruction" — no conversation, no back-and-forth, no session. The name
+		// misled an agent into thinking it was a session, which is what `foreman`
+		// actually is. `chat` remains a hidden alias; nothing breaks.
 		cmd := chat.NewChatCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
@@ -496,10 +504,17 @@ func Dispatch() {
 		// Static script preflight: syntax, recursive command inventory, and
 		// bashy/system/container/not-found resolution.
 		os.Exit(dispatchCheck(os.Args[2:]))
-	case "verify":
-		// Formal test batteries as subcommands: compat (bash-5.3) / conformance
-		// (yash POSIX) / compliance (Open Group VSC-PCTS, stub) / benchmark. Runs
-		// from a bashy source checkout; suites are fetched at runtime or supplied.
+	case "conform", "verify":
+		// BASHY'S OWN fidelity batteries: compat (GNU Bash 5.3) / conformance (yash
+		// POSIX) / compliance (Open Group VSC-PCTS, stub) / benchmark. Runs from a
+		// bashy source checkout.
+		//
+		// Renamed from `verify` 2026-07-12. It had claimed the most general word in
+		// the vocabulary for the narrowest possible thing: verifying BASHY ITSELF. A
+		// project that ADOPTS bashy would never run these against its own code, yet
+		// `bashy verify` is exactly what such a project would reach for to ask "does
+		// my code pass?" — and get bash's conformance suites instead. `verify`
+		// remains a hidden alias; the general pass/fail question is `bashy gate`.
 		cmd := verifyCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {

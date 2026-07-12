@@ -389,8 +389,10 @@ benefits from real-time correction; pick the fleet when the task decomposes into
 many independent, gateable units.
 
 `bashy foreman` is a **persistent, steerable session** over the same one-shot
-runner as `bashy chat` (chat = the degenerate one-turn foreman, `foreman
---once`). One session, two co-equal drive surfaces sharing one on-disk state
+runner as `bashy invoke` (invoke = the degenerate one-turn foreman, `foreman
+--once`; it was called `chat` until 2026-07-12, which misled agents into thinking
+it held a conversation — it does not: it invokes ONE agent, ONCE, on one
+instruction). One session, two co-equal drive surfaces sharing one on-disk state
 (`~/.bashy/foreman/<id>/` = `state.json` + append-only `commands` queue +
 `ctl.sock` + `log` — server-less, inspectable, resumable, mirroring weave's
 model):
