@@ -29,7 +29,7 @@ const commandsSchemaVersion = "bashy-commands-v1"
 func dispatchCommands(args []string) int {
 	asJSON, verbose := weavecli.IsAgent(), false // JSON by default under $BASHY_AGENTIC
 	agentic, all, gnu, features := false, false, false, false
-	var view, tierFilter, groupFilter, capFilter string
+	var view, tierFilter, groupFilter, capFilter, effectFilter string
 	idioms, atlasFull := false, false
 	var query string
 	// valued reads a "--flag value" / "--flag=value" option; ok=false means
@@ -78,6 +78,13 @@ func dispatchCommands(args []string) int {
 			capFilter = v
 			continue
 		}
+		if v, ok, matched := valued(a, "--effect", &i); matched {
+			if !ok {
+				return 2
+			}
+			effectFilter = v
+			continue
+		}
 		switch a {
 		case "--json", "--json=true":
 			asJSON = true
@@ -118,6 +125,7 @@ func dispatchCommands(args []string) int {
 			fmt.Println("  --tier T       filter by execution tier (userland/workspace/sandbox/…)")
 			fmt.Println("  --group G      filter by functional group (fileutils/code-intel/…)")
 			fmt.Println("  --cap C        filter by agentic capability (json/read-only/…)")
+			fmt.Println("  --effect E     filter by security effect (destroy/cred/priv/remote/net/…)")
 			fmt.Println("  --idioms       curated composites: commands naturally used together")
 			fmt.Println("  --atlas        full per-command atlas records (machine surface)")
 			return 0
@@ -137,9 +145,9 @@ func dispatchCommands(args []string) int {
 	if view == "classic" {
 		view = "" // explicit alias for the default output
 	}
-	if view != "" || tierFilter != "" || groupFilter != "" || capFilter != "" || idioms || atlasFull {
+	if view != "" || tierFilter != "" || groupFilter != "" || capFilter != "" || effectFilter != "" || idioms || atlasFull {
 		return dispatchAtlas(atlasRequest{
-			view: view, tier: tierFilter, group: groupFilter, cap: capFilter,
+			view: view, tier: tierFilter, group: groupFilter, cap: capFilter, effect: effectFilter,
 			idioms: idioms, full: atlasFull, asJSON: asJSON, all: all, verbose: verbose,
 		})
 	}

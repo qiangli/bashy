@@ -32,6 +32,7 @@ type atlasRecord struct {
 	Tier     string   `json:"tier"`
 	Resolver string   `json:"resolver"`
 	Caps     []string `json:"caps,omitempty"`
+	Effects  []string `json:"effects,omitempty"`
 	Synopsis string   `json:"synopsis,omitempty"`
 	Hidden   bool     `json:"hidden,omitempty"`
 	AliasOf  string   `json:"alias_of,omitempty"`
@@ -107,6 +108,7 @@ func fillFromAtlas(r *atlasRecord) {
 
 func applyEntry(r *atlasRecord, e atlas.Entry) {
 	r.Group, r.Tier, r.Subclass, r.Caps, r.AliasOf = e.Group, e.Tier, e.Subclass, e.Caps, e.AliasOf
+	r.Effects = e.Effects
 }
 
 // liveAtlas assembles the full merged catalog for the bashy front door,
@@ -126,7 +128,7 @@ func liveAtlas(includeHidden bool) []atlasRecord {
 // --- the views ---------------------------------------------------------------
 
 // atlasViews are the non-classic --view values.
-var atlasViews = []string{"tier", "group", "capabilities"}
+var atlasViews = []string{"tier", "group", "capabilities", "effects"}
 
 // atlasGroupDisplayOrder is the presentation order for the group view:
 // classical userland first, then the extended groups.
@@ -150,10 +152,11 @@ var tierSynopsis = map[string]string{
 }
 
 type atlasRequest struct {
-	view    string // "", "tier", "group", "capabilities"
+	view    string // "", "tier", "group", "capabilities", "effects"
 	tier    string // filters (ANDed when several are given)
 	group   string
 	cap     string
+	effect  string
 	idioms  bool
 	full    bool // --atlas: full records
 	asJSON  bool
@@ -162,14 +165,15 @@ type atlasRequest struct {
 }
 
 type atlasJSON struct {
-	SchemaVersion string            `json:"schema_version"`
-	View          string            `json:"view,omitempty"`
-	Filter        map[string]string `json:"filter,omitempty"`
-	Tiers         []string          `json:"tiers,omitempty"`
-	Groups        []string          `json:"groups,omitempty"`
-	Capabilities  []string          `json:"capabilities,omitempty"`
-	Commands      []atlasRecord     `json:"commands,omitempty"`
-	Idioms        []atlas.Idiom     `json:"idioms,omitempty"`
+	SchemaVersion   string            `json:"schema_version"`
+	View            string            `json:"view,omitempty"`
+	Filter          map[string]string `json:"filter,omitempty"`
+	Tiers           []string          `json:"tiers,omitempty"`
+	Groups          []string          `json:"groups,omitempty"`
+	Capabilities    []string          `json:"capabilities,omitempty"`
+	SecurityEffects []string          `json:"security_effects,omitempty"`
+	Commands        []atlasRecord     `json:"commands,omitempty"`
+	Idioms          []atlas.Idiom     `json:"idioms,omitempty"`
 }
 
 // dispatchAtlas renders the Command Atlas views. Unknown vocabulary values
@@ -196,6 +200,11 @@ func dispatchAtlas(req atlasRequest) int {
 			req.cap, strings.Join(atlas.Capabilities(), " "))
 		return 2
 	}
+	if req.effect != "" && !containsString(atlas.Effects(), req.effect) {
+		fmt.Fprintf(os.Stderr, "commands: unknown effect %q (effects: %s)\n",
+			req.effect, strings.Join(atlas.Effects(), " "))
+		return 2
+	}
 
 	if req.idioms {
 		if req.asJSON {
@@ -218,18 +227,22 @@ func dispatchAtlas(req atlasRequest) int {
 	if req.cap != "" {
 		filter["cap"] = req.cap
 	}
+	if req.effect != "" {
+		filter["effect"] = req.effect
+	}
 	if len(filter) > 0 {
-		records = filterAtlas(records, req.tier, req.group, req.cap)
+		records = filterAtlas(records, req.tier, req.group, req.cap, req.effect)
 	}
 
 	if req.asJSON {
 		out := atlasJSON{
-			SchemaVersion: atlasSchemaVersion,
-			View:          req.view,
-			Tiers:         atlas.Tiers(),
-			Groups:        atlas.Groups(),
-			Capabilities:  atlas.Capabilities(),
-			Commands:      records,
+			SchemaVersion:   atlasSchemaVersion,
+			View:            req.view,
+			Tiers:           atlas.Tiers(),
+			Groups:          atlas.Groups(),
+			Capabilities:    atlas.Capabilities(),
+			SecurityEffects: atlas.Effects(),
+			Commands:        records,
 		}
 		if len(filter) > 0 {
 			out.Filter = filter
@@ -249,6 +262,8 @@ func dispatchAtlas(req atlasRequest) int {
 		printAtlasByKey(os.Stdout, records, atlasGroupDisplayOrder, "", func(r atlasRecord) string { return r.Group })
 	case req.view == "capabilities":
 		printAtlasCaps(os.Stdout, records)
+	case req.view == "effects":
+		printAtlasEffects(os.Stdout, records)
 	case req.full:
 		printAtlasRecords(os.Stdout, records)
 	default: // "tier"
@@ -257,7 +272,7 @@ func dispatchAtlas(req atlasRequest) int {
 	return 0
 }
 
-func filterAtlas(records []atlasRecord, tier, group, capability string) []atlasRecord {
+func filterAtlas(records []atlasRecord, tier, group, capability, effect string) []atlasRecord {
 	var out []atlasRecord
 	for _, r := range records {
 		if tier != "" && r.Tier != tier {
@@ -267,6 +282,9 @@ func filterAtlas(records []atlasRecord, tier, group, capability string) []atlasR
 			continue
 		}
 		if capability != "" && !containsString(r.Caps, capability) {
+			continue
+		}
+		if effect != "" && !containsString(r.Effects, effect) {
 			continue
 		}
 		out = append(out, r)
@@ -310,9 +328,27 @@ func printAtlasCaps(w io.Writer, records []atlasRecord) {
 	}
 }
 
+// printAtlasEffects buckets commands by security effect, in the closed-vocab
+// order, so an operator can see at a glance which commands can destroy data,
+// touch credentials, reach another host, and so on.
+func printAtlasEffects(w io.Writer, records []atlasRecord) {
+	byEff := map[string][]string{}
+	for _, r := range records {
+		for _, e := range r.Effects {
+			byEff[e] = append(byEff[e], r.Name)
+		}
+	}
+	for _, e := range atlas.Effects() {
+		if len(byEff[e]) == 0 {
+			continue
+		}
+		printCommandGroup(w, e, byEff[e])
+	}
+}
+
 func printAtlasFiltered(w io.Writer, records []atlasRecord, filter map[string]string) {
 	var parts []string
-	for _, k := range []string{"tier", "group", "cap"} {
+	for _, k := range []string{"tier", "group", "cap", "effect"} {
 		if v := filter[k]; v != "" {
 			parts = append(parts, k+"="+v)
 		}
@@ -343,6 +379,9 @@ func printAtlasRecords(w io.Writer, records []atlasRecord) {
 		line := fmt.Sprintf("  %-*s  %s/%s", width, r.Name, r.Tier, r.Group)
 		if len(r.Caps) > 0 {
 			line += " [" + strings.Join(r.Caps, ",") + "]"
+		}
+		if len(r.Effects) > 0 {
+			line += " {" + strings.Join(r.Effects, ",") + "}"
 		}
 		if r.AliasOf != "" {
 			line += " → " + r.AliasOf
@@ -379,6 +418,9 @@ func atlasFeatureFields(out map[string]any, name string, class string, hidden bo
 	out["group"], out["tier"] = r.Group, r.Tier
 	if len(r.Caps) > 0 {
 		out["caps"] = r.Caps
+	}
+	if len(r.Effects) > 0 {
+		out["effects"] = r.Effects
 	}
 	if r.Subclass != "" {
 		out["subclass"] = r.Subclass

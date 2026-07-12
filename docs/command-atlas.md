@@ -61,6 +61,7 @@ Each command has one record:
 | `tier` | execution-tier lens (§2.2) |
 | `resolver` | existing: `bash-builtin` \| `bashy-in-process` \| `bashy-front-door` \| `managed-container-or-system` |
 | `caps` | agentic capability flags (§2.3) |
+| `effects` | security/privacy/governance effects (§2.5) — **mandatory, ≥1 per command** |
 | `hidden` | `true` for `bootstrap`/`upgrade` (shown only with `--all`) |
 | `alias_of` | `podman` for `docker`; empty otherwise |
 
@@ -153,6 +154,50 @@ GNU-conformant output needs the fidelity harness
 (`dhnt/docs/coreutils-fidelity-perf-harness-spec.md`) as recorded evidence,
 exactly like the empty `gnuCoreutilsFullyConformant` list.
 
+### 2.5 Security-effect vocabulary
+
+Where `caps` describe what a command is *for*, `effects` describe what it can
+*do* to the machine, the data, or the outside world — the security / privacy /
+governance lens. This axis differs from `caps` in one load-bearing way: it is
+**mandatory and fail-closed**. Every entry declares at least one effect, the
+coverage ratchet fails the build on any command with none, and `EffPure` is the
+explicit "considered, benign" declaration — so a new command can never slip in
+unclassified. `caps` omit-when-unsure; `effects` must decide.
+
+The first six atoms mirror the dhnt skill-CNL effect lattice
+(`coreutils/pkg/skills` → `github.com/dhnt/dhnt/skills`); the last five are the
+finer distinctions a shell an agent drives needs. A future policy engine
+projects the 11 onto the dhnt 6 for skill-cap compatibility.
+
+| effect | meaning | examples |
+|---|---|---|
+| `pure` | deterministic, no governed side effect (exclusive — never combined) | true, false, echo, seq, expr, basename |
+| `read` | reads filesystem / host state / input data (the privacy surface) | cat, ls, grep, stat, env, printenv |
+| `write` | mutates the filesystem or host state | cp, mv, sed, tee, mkdir, graph |
+| `destroy` | can **irreversibly** lose data | rm, dd, shred, truncate, unlink |
+| `net` | opens a network connection (egress / exfiltration surface) | fetch, browser, git, curl, kubectl |
+| `exec` | spawns a process bashy no longer governs | xargs, find, awk, env, chroot, all agent-spawning verbs |
+| `cred` | reads or writes credentials / secrets | secrets, gh, git, `env`/`printenv` (emit the whole env) |
+| `priv` | changes privilege, ownership, or a security label | chmod, chown, chgrp, chcon, runcon, chroot, mknod |
+| `remote` | executes on **another host** (crosses the machine boundary) | dag (mesh), sphere, mirror, rclone, kubectl, helm, doctl |
+| `persist` | leaves something that **outlives the session** | crontab, at, batch, nohup, schedule, every daemon, self/upgrade |
+| `spend` | incurs metered cost (paid inference, pooled compute, cloud) | chat, meet, supervise, weave, sphere, ollama |
+
+Load-bearing classification notes:
+
+- **`env`/`printenv` carry `cred`.** They emit the whole environment, secrets
+  included — which is exactly why the context-redaction allowlist must cover
+  them, not just `bashy context --json`.
+- **`exec` marks the governance boundary.** Once a command spawns an external
+  process, the pure-Go userland, the advisor, and the audit hook do not reach
+  across the `execve`. The agent-orchestration verbs (weave/chat/meet/…) and the
+  toolchain provisioners (npm/pip/… run install scripts) are all `exec`.
+- **`dag` is `remote`.** A `Host:`-tagged target body is piped to a remote
+  `bash -s` (`coreutils/pkg/dag/exec_mesh.go`) — arbitrary remote execution
+  driven by a markdown file. It was previously tagged only `json`.
+- Registry CLIs derive effects from tier: a tier-4+ provider CLI (doctl) is
+  `remote`; a tier-2 local tool (ripgrep) is `exec`+`net` but **not** remote.
+
 ### 2.4 Idioms — the composite lens
 
 Idioms are a **separate top-level curated list**, not a per-command
@@ -222,17 +267,19 @@ surface (§1). Atlas views emit `bashy-atlas-v1`.
 bashy commands --view tier          # grouped by execution tier, counts per tier
 bashy commands --view group         # the functional-group lens
 bashy commands --view capabilities  # per-cap command lists
+bashy commands --view effects       # per-security-effect command lists (§2.5)
 bashy commands --view classic       # explicit alias for the default output
 bashy commands --tier workspace     # filter to one tier (implies tier view)
 bashy commands --group code-intel   # filter to one group
 bashy commands --cap json           # filter to one capability
+bashy commands --effect destroy     # filter to one security effect (cred/priv/remote/…)
 bashy commands --idioms             # the curated composite/idiom list
 bashy commands --atlas              # full per-command records (the machine surface)
 ```
 
 - Flags accept `--flag value` and `--flag=value`.
-- Unknown tier/group/cap → exit 2, with the closed vocabulary printed so an
-  agent can self-correct in one round trip.
+- Unknown tier/group/cap/effect → exit 2, with the closed vocabulary printed so
+  an agent can self-correct in one round trip.
 - `--json` composes with every view; `--all` adds hidden verbs
   (`"hidden":true`); agent mode (`$BASHY_AGENTIC`) defaults to JSON as today.
 - `bashy commands NAME --features` gains additive keys: `group`, `tier`,
@@ -251,9 +298,11 @@ bashy commands --atlas              # full per-command records (the machine surf
  "capabilities": ["json","dry-run","destructive","read-only","cached","budget",
                   "needs-network","needs-pairing","self-provisioning",
                   "spawns-processes","daemon"],
+ "security_effects": ["cred","destroy","exec","net","persist","priv","pure",
+                      "read","remote","spend","write"],
  "commands": [
    {"name":"grep","class":"coreutils","group":"textutils","tier":"userland",
-    "resolver":"bashy-in-process","caps":["read-only"],"synopsis":"…"},
+    "resolver":"bashy-in-process","caps":["read-only"],"effects":["read"],"synopsis":"…"},
    {"name":"weave","class":"verb","group":"orchestration","tier":"workspace",
     "resolver":"bashy-front-door","caps":["json"],"synopsis":"…"},
    {"name":"docker","class":"verb","group":"engines","tier":"sandbox",
