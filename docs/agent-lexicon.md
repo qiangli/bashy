@@ -79,6 +79,39 @@ vocabulary.**
 
 Three registries, generated and maintained. Zero projection into the channels an agent actually reads.
 
+## The sigil already exists, and it is the word `bashy`
+
+*(User, 2026-07-12 — and it is a better answer than inventing punctuation.)*
+
+> **"bashy handoff this to codex"**
+
+No new syntax, nothing to teach, nothing to remember. The word that already names the tool declares that
+**everything after it is bashy vocabulary**. It is the natural disambiguator, and it was there all along.
+
+Pair it with the **enum** and the ambiguity disappears entirely: `handoff --to` accepts only the agent
+tools that exist on *this* host — `codex | claude | opencode | agy | aider`. In that position "codex"
+**cannot** mean OpenAI's product, because **that is not a legal value**. The word is grounded *by
+construction*, not by persuasion:
+
+```
+$ bashy handoff --to codex   →  handing to codex-gpt-5.5
+$ bashy handoff --to gpt5    →  "gpt5" is not an agent on this host.
+                                Valid: agy, aider, claude, codex, opencode
+```
+
+A closed value set grounds a word harder than any description can — and unlike a glossary it **cannot go
+stale, because it IS the registry**. This is the same mechanism the research named as the strongest
+available (a generated `enum` in a tool schema); the insight is that bashy can have it *today*, at the
+CLI, without waiting for an MCP server.
+
+**So there are three levels of marking, in increasing explicitness — and only the first is required:**
+
+| level | form | when |
+|---|---|---|
+| **plain** | `handoff this to codex` | inside the circle. Resolved by the precedence rule + the lexicon. |
+| **prefixed** | `bashy handoff this to codex` | when the context is ambiguous. **`bashy` is the sigil.** |
+| **marked** | `[[handoff]] this to [[codex]]` | in written artifacts, and when a human must force a resolution. |
+
 ## The marker: `[[term]]` — and where it belongs
 
 A term needs to **stand out**, the way `/` marks a slash command as "not a plain word". That instinct is
@@ -105,9 +138,26 @@ skills, kb pages, project docs, handoff briefs, issue bodies, `CLAUDE.md`/`AGENT
 | why | |
 |---|---|
 | **already the convention in this ecosystem** | the kb roadmap specifies `[[wikilinks]]`; the agent memory system already links with `[[name]]` |
-| **zero collision with shell syntax** — and this is decisive, because **bashy IS a shell** | `/`, `#`, `$`, `@`, `!`, `%` all mean something to bash. `[[` appears only inside a test expression, never in prose |
 | **LLMs have seen millions of examples** | MediaWiki, Obsidian, Roam — recognition is free, no teaching required |
 | **trivially detectable, renders in Markdown, namespaces cleanly** | `[[handoff]]` · `[[agent:codex]]` · `[[verb:gate]]` |
+
+> ⚠️ **A claim I made and the scanner falsified on its first run.** I wrote that `[[ ]]` has *"zero
+> collision with shell syntax"*. That is true of **bash parsing prose** — and **false of a shell
+> project's DOCS**, which are full of bash:
+>
+> ```
+> [[:alpha:]]      a POSIX character class
+> [[ -z "$x" ]]    a test expression
+> [[match]]        a TOML section header in an example
+> ```
+>
+> `bashy lexicon scan` matched all three on its first run. The marker survives, but the token had to be
+> tightened (letter-initial, no spaces, at most one namespace) **and code has to be stripped before
+> scanning** — a `[[term]]` inside a code block is a code sample, not a mention. In a project whose
+> subject matter *is* the shell, that distinction is the difference between a useful scan and noise.
+>
+> This is exactly why the marker's falsifiability matters: the tool caught its own author's error before
+> a human did.
 
 ### The loop
 

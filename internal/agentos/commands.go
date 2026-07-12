@@ -346,6 +346,7 @@ var verbSynopsis = map[string]string{
 	"sprint":     "cross-repo plan/continuity board (peer to weave)",
 	"handoff":    "pause this session and hand the work to another agent, a scheduler, or tomorrow",
 	"resume":     "pick up a handed-off session — any tool, any machine",
+	"lexicon":    "what do this project's words mean HERE? (verbs + agent bindings, projected)",
 	"gate":       "does this project pass? (the one command that decides)",
 	"invoke":     "invoke ONE agent, ONCE, on one instruction (the primitive every orchestrator is built on)",
 	"conform":    "bashy's OWN fidelity batteries: compat/conformance/compliance/benchmark",

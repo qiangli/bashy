@@ -75,6 +75,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/handoff"
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/kb"
+	"github.com/qiangli/coreutils/pkg/lexicon"
 	"github.com/qiangli/coreutils/pkg/meet"
 	"github.com/qiangli/coreutils/pkg/mirror"
 	"github.com/qiangli/coreutils/pkg/principal"
@@ -115,7 +116,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "handoff", "resume", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "gate", "conform",
+		"weave", "sprint", "handoff", "resume", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "gate", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -332,6 +333,26 @@ func Dispatch() {
 		hcmd.SetArgs(os.Args[2:])
 		if err := hcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy "+os.Args[1]+":", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "lexicon":
+		// The project's jargon, PROJECTED from the registries that already define it.
+		// A user says "handoff this to codex": neither word means what the dictionary
+		// says -- handoff is a bashy verb, and codex is an agent binding ON THIS HOST
+		// (a CLI tool plus a bound model), which denotes something else on another
+		// machine.
+		//
+		// It stores NOTHING. Verbs come from the Command Atlas, bindings from the
+		// fleet registry. Only two things are hand-written, because a machine cannot
+		// infer them: what the team actually SAYS, and the precedence rule. The
+		// moment this starts storing vocabulary rather than projecting it, it has
+		// become the hand-written glossary that always goes stale.
+		lexicon.Synopses = verbSynopsis
+		lcmd := lexicon.NewLexiconCmd()
+		lcmd.SetArgs(os.Args[2:])
+		if err := lcmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy lexicon:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
