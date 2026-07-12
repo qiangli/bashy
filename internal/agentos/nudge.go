@@ -45,7 +45,7 @@ type nudger struct {
 
 // newNudger shares the advisor's memory so hint rate-limiting is per session.
 func newNudger(mem *memory) *nudger {
-	return &nudger{agent: weavecli.IsAgent(), mem: mem, w: os.Stderr}
+	return &nudger{agent: weavecli.IsAgentDriven(), mem: mem, w: os.Stderr}
 }
 
 // onAudit is the [interp.WithAuditHandler] callback. It fires once per simple
@@ -164,5 +164,5 @@ func hintsEnabled() bool {
 	case "1", "true", "on", "yes":
 		return true
 	}
-	return weavecli.IsAgent()
+	return weavecli.IsAgentDriven()
 }

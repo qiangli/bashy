@@ -80,7 +80,7 @@ type advisor struct {
 // newAdvisor builds the advisor with production probes and memory.
 func newAdvisor() *advisor {
 	return &advisor{
-		agent: weavecli.IsAgent(),
+		agent: weavecli.IsAgentDriven(),
 		probe: defaultSpaceProbe(),
 		mem:   newMemory(),
 		netfp: networkFingerprint(),
@@ -101,7 +101,7 @@ func advisorEnabled() bool {
 	case "1", "true", "on", "yes":
 		return true
 	}
-	return weavecli.IsAgent()
+	return weavecli.IsAgentDriven()
 }
 
 // hint is one piece of advice for a failed command.

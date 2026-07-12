@@ -135,6 +135,15 @@ func Preamble() string {
 	for _, v := range alwaysShimVerbs {
 		fmt.Fprintf(&b, "%s() { command %s %s \"$@\"; }\n", v, shellQuote(self), v)
 	}
+	// IsAgent (== BASHY_AGENTIC), deliberately NOT IsAgentDriven. `bashy go` does not
+	// wrap the host toolchain — it DOWNLOADS AND PINS ITS OWN. Shimming `go` is right
+	// when bashy orchestrated the run and owns the environment (a weave worker must
+	// build against a pinned toolchain). It is WRONG in a human's Claude session, where
+	// it would shadow the Go the developer actually installed and quietly fetch a
+	// different version to build their project with.
+	//
+	// A machine at the wheel earns better HINTS. Only bashy orchestrating the run earns
+	// a different WORLD.
 	if weavecli.IsAgent() {
 		for _, v := range agentModeShimVerbs {
 			fmt.Fprintf(&b, "%s() { command %s %s \"$@\"; }\n", v, shellQuote(self), v)
