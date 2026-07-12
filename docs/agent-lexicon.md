@@ -184,6 +184,45 @@ strictly better than a sigil you are obliged to type.
 4. **It composes with what already exists.** kb pages, memory links, and skill bodies all speak this
    notation already. The lexicon is not a new syntax; it is the same one, pointed at the registries.
 
+## Cross-tool validation (2026-07-12) — it works, and the test earned a fix
+
+The only test that counts: does a **cold session of a foreign tool**, reading nothing but `AGENTS.md`,
+resolve the jargon? Asked of `codex` and `opencode`, in this repo, with no other context:
+
+> *Someone says to you: "handoff this to claude". In THIS project, what exactly do they mean?*
+
+**Round 1 — the meaning landed; the syntax did not.**
+
+Both tools resolved the *hard* part perfectly. Neither mistook "claude" for Anthropic's product:
+
+| | codex | opencode |
+|---|---|---|
+| "claude" | *"the local Claude CLI binding: `claude-fable` or `claude-opus`"* ✅ | *"The `claude` CLI **on this host**, bound to claude-fable (fable) or claude-opus (opus)"* ✅ |
+| "handoff" | *"pause this session and transfer the work to another agent, scheduler, or future session"* ✅ | ✅ |
+| **command** | `bashy handoff claude` ❌ | `handoff claude` ❌ |
+
+**Both guessed the invocation wrong, and in the same way** — no `--to`. The block taught **meaning** but
+not **usage**, so each had to invent the flag. A vocabulary that tells an agent what a word *means* but
+not how to *say* it has done half a job.
+
+**The fix was two lines** — teach the sentence, not just the words:
+
+```
+The sentence this vocabulary exists for, and its exact form:
+
+    "handoff this to codex"   →   bashy handoff --to codex -m "<why, for the successor>"
+    "resume it"                →   bashy resume
+```
+
+**Round 2 — both exact:**
+
+| | codex | opencode |
+|---|---|---|
+| **command** | `bashy handoff --to claude -m "<why, for the successor>"` ✅ | `bashy handoff --to claude -m "<why, for the successor>"` ✅ |
+
+Two lines of always-on context, and two foreign tools now speak the project's jargon correctly on their
+first breath. **That is the whole feature, validated.**
+
 ## Design: one term store, three projections
 
 **Do not write a glossary. Project the registries you already keep.**

@@ -13,6 +13,11 @@ this machine. Resolve it; do not assume.
 
     bashy lexicon resolve <term> --json     # what does this word mean HERE?
 
+The sentence this vocabulary exists for, and its exact form:
+
+    "handoff this to codex"   →   bashy handoff --to codex -m "<why, for the successor>"
+    "resume it"                →   bashy resume
+
 **Agent tools** (host-specific — each names a CLI *with the model bound to it here*;
 the SAME word denotes a different binding on another machine):
 
