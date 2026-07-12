@@ -138,9 +138,16 @@ fi
 end=$(date +%s 2>/dev/null || echo 0)
 
 # Aggregate the per-group "Results: P passed, F failed, S skipped, T timed out".
-P=0 F=0 S=0 T=0
+P=0 F=0 S=0 T=0 SEEN=0 MISSING=0
 for f in "$OUT"/g*.out; do
   line=$(grep -E '^Results:' "$f" | tail -1)
+  if [ -z "$line" ]; then
+    echo "test-bash-parallel: missing Results line in $f" >&2
+    sed -n '1,120p' "$f" >&2
+    MISSING=$((MISSING + 1))
+    continue
+  fi
+  SEEN=$((SEEN + 1))
   set -- $(printf '%s\n' "$line" | grep -oE '[0-9]+' | head -4)
   P=$((P + ${1:-0})); F=$((F + ${2:-0})); S=$((S + ${3:-0})); T=$((T + ${4:-0}))
 done
@@ -151,4 +158,4 @@ fails=$(grep -hE '^  (FAIL|TIME)  ' "$OUT"/g*.out 2>/dev/null | sort -u)
 
 echo
 echo "Results: $P passed, $F failed, $S skipped, $T timed out  (${JOBS} groups, $((end - start))s)"
-[ "$F" -eq 0 ] && [ "$T" -eq 0 ]
+[ "$SEEN" -gt 0 ] && [ "$MISSING" -eq 0 ] && [ "$F" -eq 0 ] && [ "$T" -eq 0 ]
