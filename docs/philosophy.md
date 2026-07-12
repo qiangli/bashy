@@ -6,7 +6,21 @@
 > whether it passes, judge whether it is any good, build it, and ship it — **on one
 > machine, with no network, no account, no forge, and no cloud.**
 
-That is the whole thesis. Everything else in this repo is a consequence of it.
+## 0. Why this follows from what bashy *is*
+
+bashy is the **narrow waist** between an agent and the machine. Bash is that waist for
+humans — everything above it and everything below it need only agree on the one thin
+interface in the middle — and every agentic tool already speaks it, because they were all
+trained on it. It is the one interface an agent never has to be taught.
+
+Which makes bashy the **irreducible floor**: not the only tool an agent uses, but the one
+it can never *not* have — the universal fallback from which it can reach everything else.
+
+**Local-first is not a separate principle. It is what "irreducible" means when you say it
+out loud.** A floor that depends on something reachable-or-not is not a floor; it is a
+client of somebody else's floor. "The one interface an agent can never *not* have" and
+"needs a working network" are contradictory statements, and this document is about taking
+the first one seriously.
 
 ---
 
@@ -26,8 +40,8 @@ isn't — and that moment is never chosen by you. It is:
 
 **If it works in the air-gapped room, it works everywhere else.** So the air-gap is the
 test we run — and the network is the *extension* we allow, never the *foundation* we
-assume. This is the same stance the wider system takes ("cloud as a thin, replaceable
-relay"), pushed down to the one layer that has no excuse: the shell.
+assume. The cloud is a relay: useful, and replaceable. The shell is the floor, and a floor
+does not get to have dependencies.
 
 ## 2. The claim is falsifiable, and it is enforced
 
@@ -175,7 +189,6 @@ That is the whole difference between a tool you own and a tool you rent.
 
 ---
 
-*Companions: [`execution-tiers.md`](../../docs/execution-tiers.md) (the six venues in
-full), [`command-atlas.md`](command-atlas.md) (the effect axis this philosophy is
-enforced through), [`licensing-supply-chain-policy.md`](licensing-supply-chain-policy.md)
-(the dependency rules).*
+*Companions: [`command-atlas.md`](command-atlas.md) — the effect axis this philosophy is
+enforced through; [`licensing-supply-chain-policy.md`](licensing-supply-chain-policy.md) —
+the dependency rules that keep the binary self-contained.*
