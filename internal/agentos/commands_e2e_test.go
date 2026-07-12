@@ -74,8 +74,12 @@ func bashyBinary(t *testing.T) string {
 }
 
 func runBashy(bin string, args ...string) (string, int) {
+	return runBashyEnv(bin, nil, args...)
+}
+
+func runBashyEnv(bin string, env []string, args ...string) (string, int) {
 	cmd := exec.Command(bin, args...)
-	cmd.Env = append(os.Environ(), "BASHY_AGENTIC=1")
+	cmd.Env = append(append(os.Environ(), "BASHY_AGENTIC=1"), env...)
 	cmd.Stdin = strings.NewReader("") // empty stdin so stdin-reading tools never hang
 	out, err := cmd.CombinedOutput()
 	code := 0
@@ -228,7 +232,7 @@ func TestE2EAllListedCommandsDispatch(t *testing.T) {
 
 	// Native front-door verbs (safe, side-effect-free `--help`) + engine verbs
 	// (docker/podman/ollama — the regression class) are really invoked.
-	native := set("weave", "sprint", "chat", "agent", "sdlc", "web", "dag",
+	native := set("weave", "sprint", "claim", "chat", "agent", "sdlc", "web", "dag",
 		"schedule", "secrets", "skills", "run", "commands", "context", "doctor",
 		"self", "check", "verify", "git")
 	engine := set("podman", "ollama", "docker")
@@ -247,6 +251,25 @@ func TestE2EAllListedCommandsDispatch(t *testing.T) {
 			if ok, class := featureAvailable(bin, v); !ok {
 				t.Errorf("verb %q is listed but dispatch does not recognize it (class=%s)", v, class)
 			}
+		}
+	}
+}
+
+func TestE2EClaimDispatches(t *testing.T) {
+	bin := bashyBinary(t)
+	env := []string{"BASHY_COORD_DIR=" + t.TempDir(), "BASHY_EPISODE=test-claim-dispatch"}
+
+	for _, args := range [][]string{
+		{"claim"},
+		{"claim", "list"},
+		{"claim", "release"},
+	} {
+		out, code := runBashyEnv(bin, env, args...)
+		if code != 0 {
+			t.Fatalf("`bashy %s` exited %d:\n%s", strings.Join(args, " "), code, out)
+		}
+		if s := unsupportedSignal(out); s != "" {
+			t.Fatalf("`bashy %s` hit unsupported signal %q:\n%s", strings.Join(args, " "), s, out)
 		}
 	}
 }

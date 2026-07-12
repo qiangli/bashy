@@ -80,6 +80,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/lexicon"
 	"github.com/qiangli/coreutils/pkg/meet"
 	"github.com/qiangli/coreutils/pkg/mirror"
+	"github.com/qiangli/coreutils/pkg/policy/coord"
 	"github.com/qiangli/coreutils/pkg/principal"
 	"github.com/qiangli/coreutils/pkg/schedule"
 	"github.com/qiangli/coreutils/pkg/sdlc"
@@ -118,7 +119,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "issue", "handoff", "resume", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "gate", "judge", "conform",
+		"weave", "sprint", "issue", "handoff", "resume", "claim", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "gate", "judge", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -344,6 +345,20 @@ func Dispatch() {
 		hcmd.SetArgs(os.Args[2:])
 		if err := hcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy "+os.Args[1]+":", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "claim":
+		cmd := coord.NewClaimCmd(func() []string {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return nil
+			}
+			return handoff.ProjectRoots(projectRootOf(cwd))
+		})
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy claim:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
