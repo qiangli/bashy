@@ -27,12 +27,13 @@ type fixture struct {
 }
 
 func main() {
-	var testsDir, bashPath, tests, chunk string
+	var testsDir, bashPath, tests, skip, chunk string
 	var listOnly, shared bool
 	var timeout, jobsTimeout time.Duration
 	flag.StringVar(&testsDir, "tests-dir", "external/bash-5.3/tests", "bash 5.3 tests directory")
 	flag.StringVar(&bashPath, "bash", "bin/bash", "bash-compatible binary under test")
 	flag.StringVar(&tests, "tests", "", "space-separated fixture names to run")
+	flag.StringVar(&skip, "skip", "", "space-separated fixture names to skip (BASH_TEST_SKIP)")
 	flag.StringVar(&chunk, "chunk", "", "run one distributed chunk, as 1/N")
 	flag.BoolVar(&listOnly, "list", false, "list fixture names and exit")
 	flag.BoolVar(&shared, "shared-tree", false, "run in the source fixture tree instead of a private copy (unsafe: leaks platform-built helpers across venues and races concurrent chunks)")
@@ -44,6 +45,9 @@ func main() {
 	}
 	if chunk == "" {
 		chunk = os.Getenv("CHUNK")
+	}
+	if skip == "" {
+		skip = os.Getenv("BASH_TEST_SKIP")
 	}
 	if v := os.Getenv("BASH53_TIMEOUT"); v != "" {
 		parsed, err := time.ParseDuration(v)
@@ -93,12 +97,64 @@ func main() {
 		}
 		defer cleanup()
 		testsDir = privateTests
+
+		// Give the run a private, empty HOME *and TMPDIR* inside that tree.
+		//
+		// The history fixtures are stateful and share files by name. Chunking
+		// strides fixtures across chunks, so `histexpand` and `history` can land
+		// in DIFFERENT chunks that run CONCURRENTLY on one host — and then they
+		// clobber each other. scripts/test-bash-parallel.sh worked around this
+		// with a per-group HOME plus a serial tail; that fix lived in the fan-out
+		// script, so a chunked/distributed dag run — which never goes through that
+		// script — inherited the race.
+		//
+		// HOME alone is NOT enough, which is the trap here: the fixtures write
+		// `$TMPDIR/newhistory` and `$TMPDIR/foohist-*` (grep history.tests), so
+		// with a private HOME but a shared TMPDIR they still clobber one another —
+		// measured: `history` FAILs concurrently with `histexpand`, PASSes alone.
+		// TMPDIR is the actual shared state, and any fixture writing there would
+		// race the same way.
+		//
+		// Anchoring both in the per-run private tree removes the race by
+		// construction: every chunk process, wherever it runs, gets its own. No
+		// weld and no serial tail is needed, and the ambient ~/.bashrc / ~/.inputrc
+		// stop bleeding into a conformance run as a bonus.
+		home := filepath.Join(filepath.Dir(privateTests), "home")
+		tmp := filepath.Join(filepath.Dir(privateTests), "tmp")
+		for _, d := range []string{home, tmp} {
+			if err := os.MkdirAll(d, 0o755); err != nil {
+				die("private run dirs: %v", err)
+			}
+		}
+		os.Setenv("HOME", home)
+		os.Setenv("HISTFILE", filepath.Join(home, ".bash_history"))
+		os.Setenv("TMPDIR", tmp)
 	}
 	if err := prepareFixtures(testsDir); err != nil {
 		die("prepare fixtures: %v", err)
 	}
 
+	var passed, failed, skipped, timedOut int
+
 	selected := selectFixtures(fixtures, wordSet(tests), chunk)
+	// BASH_TEST_SKIP: a skipped fixture is NOT a failure, but it must be counted
+	// and printed — an unreported skip is how a suite quietly stops covering
+	// something. (Until 2026-07-12 this knob was honored only by the shell loop;
+	// after the loop was retired the Makefile still passed it and the harness
+	// silently ignored it, which is precisely the bug class this work exists to
+	// kill.)
+	if skips := wordSet(skip); len(skips) > 0 {
+		var keep []fixture
+		for _, f := range selected {
+			if skips[f.Name] {
+				skipped++
+				fmt.Printf("  SKIP  %s\n", f.Name)
+				continue
+			}
+			keep = append(keep, f)
+		}
+		selected = keep
+	}
 	if len(selected) == 0 {
 		die("no fixtures selected")
 	}
@@ -109,7 +165,6 @@ func main() {
 	}
 	fmt.Println(")...")
 
-	var passed, failed, skipped, timedOut int
 	for _, f := range selected {
 		if _, err := os.Stat(filepath.Join(testsDir, f.Test)); err != nil {
 			skipped++

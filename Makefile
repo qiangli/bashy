@@ -197,7 +197,8 @@ test-bash-run: $(BIN_DIR)/bash53suite
 	@BASH53_TIMEOUT=$(BASH_TEST_TIMEOUT)s \
 	 BASH53_JOBS_TIMEOUT=$(BASH_TEST_TIMEOUT_JOBS)s \
 	 BASH53_MEM_KB=$(BASH_TEST_MEM_KB) \
-	 $(BIN_DIR)/bash53suite -tests-dir $(BASH_TESTS_DIR) -bash $(BASHY) -tests "$(TESTS)"
+	 $(BIN_DIR)/bash53suite -tests-dir $(BASH_TESTS_DIR) -bash $(BASHY) \
+	   -tests "$(TESTS)" -skip "$(BASH_TEST_SKIP)"
 
 ## bin/bash53suite: the ONE fixture runner. `bashy dag` drives the same binary,
 ## so `make test-bash` and a chunked/distributed dag run are the same program —
