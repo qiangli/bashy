@@ -17,6 +17,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/qiangli/bashy/internal/cli"
 	"github.com/qiangli/coreutils/pkg/handoff"
 	coreskills "github.com/qiangli/coreutils/pkg/skills"
 )
@@ -81,6 +82,7 @@ type contextRuntime struct {
 	GOARCH  string `json:"goarch"`
 	NumCPU  int    `json:"num_cpu"`
 	Shell   string `json:"shell,omitempty"`
+	Build   string `json:"build,omitempty"`
 	FIPS140 bool   `json:"fips140"` // the validated crypto module is active (built GOFIPS140 and/or GODEBUG=fips140=on)
 }
 
@@ -211,6 +213,7 @@ func fillContext(report contextReport, bashyPath string) contextReport {
 		GOARCH:  runtime.GOARCH,
 		NumCPU:  runtime.NumCPU(),
 		Shell:   os.Getenv("SHELL"),
+		Build:   cli.BuildID(),
 		FIPS140: fips140.Enabled(),
 	}
 	report.System = collectSystem()

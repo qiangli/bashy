@@ -67,7 +67,16 @@ BASHY_EXE="${BASHY:-bashy}"
 goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
 ext=""
 [ "$goos" = windows ] && ext=.exe
-LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}'"
+BUILD_ID=""
+if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BUILD_ID=$(git describe --tags --exact-match HEAD 2>/dev/null || git rev-parse --short=7 HEAD 2>/dev/null || true)
+  if [ -n "$BUILD_ID" ]; then
+    if ! git diff --quiet --ignore-submodules -- 2>/dev/null || ! git diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+      BUILD_ID="${BUILD_ID}-dirty"
+    fi
+  fi
+fi
+LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}'"
 "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "bin/bash${ext}"  ./cmd/bash
 "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "bin/bashy${ext}" ./cmd/bashy
 ```
@@ -88,7 +97,16 @@ BASHY_EXE="${BASHY:-bashy}"
 goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
 ext=""
 [ "$goos" = windows ] && ext=.exe
-LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}'"
+BUILD_ID=""
+if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BUILD_ID=$(git describe --tags --exact-match HEAD 2>/dev/null || git rev-parse --short=7 HEAD 2>/dev/null || true)
+  if [ -n "$BUILD_ID" ]; then
+    if ! git diff --quiet --ignore-submodules -- 2>/dev/null || ! git diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+      BUILD_ID="${BUILD_ID}-dirty"
+    fi
+  fi
+fi
+LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}'"
 "$BASHY_EXE" go build -trimpath -tags "bashy_engines bashy_obs" -ldflags "$LDFLAGS" -o "bin/bashy${ext}" ./cmd/bashy
 ```
 
@@ -99,7 +117,16 @@ Effects: write
 ```bash
 VERSION="${VERSION:-dev}"
 BASHY_EXE="${BASHY:-bashy}"
-LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}'"
+BUILD_ID=""
+if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BUILD_ID=$(git describe --tags --exact-match HEAD 2>/dev/null || git rev-parse --short=7 HEAD 2>/dev/null || true)
+  if [ -n "$BUILD_ID" ]; then
+    if ! git diff --quiet --ignore-submodules -- 2>/dev/null || ! git diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+      BUILD_ID="${BUILD_ID}-dirty"
+    fi
+  fi
+fi
+LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}'"
 "$BASHY_EXE" go install -trimpath -ldflags "$LDFLAGS" ./cmd/bash ./cmd/bashy
 ```
 
@@ -169,7 +196,16 @@ set -e
 mkdir -p bin/dist
 VERSION="${VERSION:-dev}"
 BASHY_EXE="${BASHY:-bashy}"
-LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}'"
+BUILD_ID=""
+if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BUILD_ID=$(git describe --tags --exact-match HEAD 2>/dev/null || git rev-parse --short=7 HEAD 2>/dev/null || true)
+  if [ -n "$BUILD_ID" ]; then
+    if ! git diff --quiet --ignore-submodules -- 2>/dev/null || ! git diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+      BUILD_ID="${BUILD_ID}-dirty"
+    fi
+  fi
+fi
+LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}'"
 for plat in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
   os=${plat%/*}; arch=${plat#*/}; ext=""
   [ "$os" = windows ] && ext=.exe
@@ -811,7 +847,16 @@ for host in "$@"; do
       fi
       fix_windows_ext
     elif command -v go >/dev/null 2>&1; then
-      LDFLAGS=\"-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-\$ref\"
+      build_id=\"\"
+      if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        build_id=\$(git describe --tags --exact-match HEAD 2>/dev/null || git rev-parse --short=7 HEAD 2>/dev/null || true)
+        if [ -n \"\$build_id\" ]; then
+          if ! git diff --quiet --ignore-submodules -- 2>/dev/null || ! git diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+            build_id=\"\$build_id-dirty\"
+          fi
+        fi
+      fi
+      LDFLAGS=\"-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-\$ref -X github.com/qiangli/bashy/internal/cli.buildID=\$build_id\"
       go build -trimpath -ldflags \"\$LDFLAGS\" -o \"bin/bashy\$ext\" ./cmd/bashy
       \"./bin/bashy\$ext\" dag build VERSION=\"\$ref\"
       fix_windows_ext

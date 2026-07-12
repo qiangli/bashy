@@ -177,11 +177,37 @@ func buildSelfBinary(ctx context.Context, target, version string) error {
 	if err != nil || exe == "" {
 		return errors.New("cannot resolve current executable for managed Go build")
 	}
-	ldflags := "-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-" + version
+	ldflags := "-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-" + version +
+		" -X github.com/qiangli/bashy/internal/cli.buildID=" + selfBuildID(ctx)
 	c := exec.CommandContext(ctx, exe, "go", "build", "-trimpath", "-ldflags", ldflags, "-o", target, "./cmd/bashy")
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	return c.Run()
+}
+
+func selfBuildID(ctx context.Context) string {
+	if _, err := os.Stat(".git"); err != nil {
+		return ""
+	}
+	if err := exec.CommandContext(ctx, "git", "rev-parse", "--is-inside-work-tree").Run(); err != nil {
+		return ""
+	}
+	out, err := exec.CommandContext(ctx, "git", "describe", "--tags", "--exact-match", "HEAD").Output()
+	if err != nil {
+		out, err = exec.CommandContext(ctx, "git", "rev-parse", "--short=7", "HEAD").Output()
+	}
+	if err != nil {
+		return ""
+	}
+	id := strings.TrimSpace(string(out))
+	if id == "" {
+		return ""
+	}
+	if exec.CommandContext(ctx, "git", "diff", "--quiet", "--ignore-submodules", "--").Run() != nil ||
+		exec.CommandContext(ctx, "git", "diff", "--cached", "--quiet", "--ignore-submodules", "--").Run() != nil {
+		id += "-dirty"
+	}
+	return id
 }
 
 func ensureBashyRelease(ctx context.Context, version string) (string, error) {
