@@ -79,6 +79,21 @@ git_submodule_update() {
     fi
 }
 
+# Point git at the committed hooks, so the pre-push .sibling-pins drift gate is
+# live in every clone that bootstraps (a guard nobody installs guards nothing).
+# Leaves a hooksPath the user has already chosen alone; harmless in CI, which
+# never pushes.
+install_hooks() {
+    if ! git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        return 0
+    fi
+    if [ -n "$(git -C "$root" config --local --get core.hooksPath || true)" ]; then
+        return 0
+    fi
+    git -C "$root" config core.hooksPath scripts/hooks
+    echo "bootstrap-siblings: core.hooksPath -> scripts/hooks (pre-push pin gate)"
+}
+
 # repo URL per dep name; if you add a new sibling, append here.
 repo_url() {
     case "$1" in
@@ -120,3 +135,5 @@ while IFS= read -r line; do
     # materialize them later when a task actually needs those sources.
     git_submodule_update "$target"
 done < "$pins"
+
+install_hooks

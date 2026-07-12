@@ -1,0 +1,61 @@
+#!/bin/sh
+# pre-push — .sibling-pins drift gate.
+#
+# .sibling-pins is the only sibling source CI ever sees: a standalone clone has
+# no siblings, so scripts/bootstrap-siblings.sh clones each one at the pinned
+# SHA. Inside the umbrella the siblings are submodules and the pins are never
+# consulted — which means a LOCAL BUILD CANNOT CATCH A STALE PIN. It builds the
+# live sibling and passes; CI builds the pinned one and fails ~10 minutes later
+# with a mystifying "no required module provides package" for code that plainly
+# exists. That is how a stale coreutils pin broke every build for a dozen
+# commits. Push time is the only honest moment to notice.
+#
+# Install once per clone (`make hooks`, or bootstrap-siblings.sh does it for you):
+#   git config core.hooksPath scripts/hooks
+# Bypass in an emergency with: git push --no-verify
+set -eu
+
+cd "$(git rev-parse --show-toplevel)"
+pins=.sibling-pins
+[ -f "$pins" ] || exit 0
+
+drift=''
+while IFS= read -r line; do
+    case "$line" in
+        '' | '#'*) continue ;;
+    esac
+    name=${line%%=*}
+    pinned=${line#*=}
+    pinned=$(printf %s "$pinned" | tr -d '[:space:]') # strip CR (CRLF) / stray whitespace
+    [ -n "$name" ] && [ -n "$pinned" ] && [ "$name" != "$pinned" ] || continue
+
+    dir=../$name
+    # A standalone clone has no siblings to compare against — nothing to police.
+    [ -e "$dir/.git" ] || continue
+    actual=$(git -C "$dir" rev-parse HEAD 2>/dev/null) || continue
+    [ "$pinned" = "$actual" ] && continue
+
+    if [ -z "$drift" ]; then
+        echo "pre-push: .sibling-pins is stale — CI would build the wrong sibling." >&2
+        echo >&2
+        drift=yes
+    fi
+    printf '  %-10s pinned %s\n' "$name" "$(printf %s "$pinned" | cut -c1-12)" >&2
+    printf '  %-10s actual %s  (%s HEAD)\n' '' "$(printf %s "$actual" | cut -c1-12)" "$dir" >&2
+    echo >&2
+done < "$pins"
+
+[ -n "$drift" ] || exit 0
+
+cat >&2 <<'EOF'
+Fix (resync the pins to the sibling HEADs, then commit them with your change):
+
+  ./scripts/update-sibling-pins.sh
+  git commit -am 'chore: bump .sibling-pins'
+
+The sibling commit must also be pushed to its own origin — CI clones the pin
+from GitHub, so a SHA that exists only on this machine fails there too.
+
+Bypass (you are certain CI has the sibling it needs): git push --no-verify
+EOF
+exit 1
