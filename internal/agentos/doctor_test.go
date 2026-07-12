@@ -1,6 +1,7 @@
 package agentos
 
 import (
+	"crypto/fips140"
 	"encoding/json"
 	"io"
 	"os"
@@ -98,6 +99,29 @@ func TestCollectSelfChecksIncludesBootstrapSurface(t *testing.T) {
 		if !ok {
 			t.Fatalf("collectSelfChecks missing %q in %#v", name, checks)
 		}
+	}
+}
+
+// The FIPS 140-3 check is always reported (ok when active, info when not), so an
+// operator can always see the crypto-validation state — never a silent gap.
+func TestDoctorReportsFIPSState(t *testing.T) {
+	var found *doctorCheck
+	for i, c := range collectDoctorChecks() {
+		if c.Name == "FIPS 140-3" {
+			found = &collectDoctorChecks()[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("doctor does not report a FIPS 140-3 check")
+	}
+	// Whatever the build, the status must be one of the two we emit.
+	if found.Status != "ok" && found.Status != "info" {
+		t.Fatalf("FIPS check status = %q, want ok|info", found.Status)
+	}
+	// runtime.fips140 in the context report agrees with fips140.Enabled().
+	if (found.Status == "ok") != fips140.Enabled() {
+		t.Fatalf("FIPS check status %q disagrees with fips140.Enabled()=%v", found.Status, fips140.Enabled())
 	}
 }
 

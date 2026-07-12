@@ -17,6 +17,10 @@ VERSION ?= dev
 # set a floor around 5M.
 LDFLAGS := -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$(VERSION)'
 
+# The Go FIPS 140-3 module version selected by the build-fips target (see
+# `go tool` / go.dev/doc/security/fips140). v1.0.0 holds CMVP certificate #5247.
+GOFIPS140_VERSION ?= v1.0.0
+
 # Platforms for `make dist` (goreleaser handles real releases; this is a
 # local cross-compile sanity check).
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
@@ -64,6 +68,16 @@ build-bash:
 build-bashy:
 	@echo "building bashy$(if $(BASHY_TAGS), with embeds: $(BASHY_TAGS),) ..."
 	go build -trimpath $(if $(BASHY_TAGS),-tags "$(BASHY_TAGS)",) -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy
+
+## build-fips: Build both binaries against the Go FIPS 140-3 validated crypto
+## module (CMVP #5247). Run with GODEBUG=fips140=on for FedRAMP/CMMC/gov use.
+## Do NOT use fips140=only for a general shell — it rejects MD5 (breaks md5sum).
+## Pure-Go, CGO_ENABLED=0: no BoringCrypto, no OpenSSL, no cgo.
+build-fips:
+	@mkdir -p $(BIN_DIR)
+	@echo "building with the Go FIPS 140-3 module (GOFIPS140=$(GOFIPS140_VERSION)) ..."
+	GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(LDFLAGS)" -o $(BASHY) ./cmd/bash
+	GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath $(if $(BASHY_TAGS),-tags "$(BASHY_TAGS)",) -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy
 
 ## install: go install both binaries into GOBIN
 install:

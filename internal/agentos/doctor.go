@@ -9,6 +9,7 @@
 package agentos
 
 import (
+	"crypto/fips140"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -75,6 +76,15 @@ func collectDoctorChecks() []doctorCheck {
 	checks := collectSelfChecks()
 	add := func(name, status, detail string) {
 		checks = append(checks, doctorCheck{name, status, detail})
+	}
+
+	// FIPS 140-3: whether the Go validated cryptographic module (CMVP #5247) is
+	// active. "ok" when on; "info" (not "warn") when off, because FIPS is only
+	// required in specific regulated deployments — its absence is not a fault.
+	if fips140.Enabled() {
+		add("FIPS 140-3", "ok", "validated crypto module active (Go Cryptographic Module)")
+	} else {
+		add("FIPS 140-3", "info", "not active; build with `make build-fips` and run with GODEBUG=fips140=on for FedRAMP/CMMC")
 	}
 
 	// `bashy` on PATH — a different one first means the bare verb shims +

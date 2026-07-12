@@ -4,6 +4,7 @@
 package agentos
 
 import (
+	"crypto/fips140"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -64,10 +65,11 @@ type contextMode struct {
 }
 
 type contextRuntime struct {
-	GOOS   string `json:"goos"`
-	GOARCH string `json:"goarch"`
-	NumCPU int    `json:"num_cpu"`
-	Shell  string `json:"shell,omitempty"`
+	GOOS    string `json:"goos"`
+	GOARCH  string `json:"goarch"`
+	NumCPU  int    `json:"num_cpu"`
+	Shell   string `json:"shell,omitempty"`
+	FIPS140 bool   `json:"fips140"` // the validated crypto module is active (built GOFIPS140 and/or GODEBUG=fips140=on)
 }
 
 // contextSystem is the uname/hostname/identity block — replaces `uname -a`,
@@ -180,10 +182,11 @@ func collectContext() contextReport {
 // fillContext completes the static sections of the report.
 func fillContext(report contextReport, bashyPath string) contextReport {
 	report.Runtime = contextRuntime{
-		GOOS:   runtime.GOOS,
-		GOARCH: runtime.GOARCH,
-		NumCPU: runtime.NumCPU(),
-		Shell:  os.Getenv("SHELL"),
+		GOOS:    runtime.GOOS,
+		GOARCH:  runtime.GOARCH,
+		NumCPU:  runtime.NumCPU(),
+		Shell:   os.Getenv("SHELL"),
+		FIPS140: fips140.Enabled(),
 	}
 	report.System = collectSystem()
 	report.Capabilities = contextCaps{
