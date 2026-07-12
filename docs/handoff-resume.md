@@ -79,47 +79,54 @@ rotting in an unattributed dirty tree.
 ### 4. Hand to an autonomous scheduler *(shipped, via `schedule --prompt`)*
 The brief arrives *with* the job, so the future agent wakes up with the task in hand.
 
-### 5. **Team handoff: User A hands off with Codex, User B resumes with Claude** *(NOT YET — see below)*
-The corporate case, and the one that makes this a product rather than a convenience: an issue is
-handed off by one engineer and picked up by another, on a different machine, in a different tool,
-possibly the same day.
+### 5. **Team handoff: User A hands off with Codex, User B resumes with Claude** *(the next step)*
+One engineer hands off an issue; a teammate picks it up — different person, different machine,
+different tool.
+
+**Scope, stated precisely (user, 2026-07-12):** *the same trust boundary.* One team, hosts they **own
+or share**, the same repos. This is not a multi-tenant or cross-organisation case, and reading it as
+one leads to the wrong design (see below).
 
 ## What the team case needs that v1 does not have
 
-v1 assumes **one person, many tools and machines**: the store is host-local (`~/.bashy/handoff/`), and
-the record travels by whatever means you choose. The team case is **many people**, and it surfaces four
-requirements — none of which the record format blocks, which is the point of the artifact rule:
+v1 assumes **one person, many tools and machines**: the store is host-local (`~/.bashy/handoff/`) and
+the record travels by whatever means you choose. The team case is **many people inside one trust
+boundary**, which is a smaller change than it first appears. Two requirements, not four:
 
-1. **A shared transport.** Today a record is a file you move yourself. For a team it must land where
-   the *issue* lives. Three candidates, in increasing order of coupling:
-   - **the forge** — attach the record to the issue (a comment or an artifact). This is the natural
-     home: the handoff is *about* an issue, and `bashy sdlc` already drives issue lifecycles through
-     labels and comments. Zero new infrastructure.
-   - **the repo** — commit the record under a known path. Simple, auditable, versioned; but it puts
-     working-tree diffs into history, which is usually wrong.
-   - **cloudbox** — a shared store with real auth. Most capable, most coupled; breaks standalone-first.
+1. **A shared store.** B's machine must be able to *see* A's record. Because the hosts are the team's
+   own, this is exactly what the mesh already is — the store becomes shared rather than host-local. No
+   new infrastructure, no forge coupling, no auth model to invent. (Attaching a record to the *issue*
+   in the forge remains attractive when the handoff is issue-shaped and `bashy sdlc` is already
+   driving the lifecycle — but it is an option, not a prerequisite.)
 
-   The forge is almost certainly right, and it composes with `sdlc` rather than duplicating it.
+2. **A shared single-claim guarantee.** The record is stamped `ResumedAt`/`ResumedBy` so it cannot be
+   picked up twice — but that stamp is **local**. Two colleagues resuming the same handoff
+   *concurrently* need a **shared** lease. This is the same coordination primitive already planned
+   (`bashy claim`), pointed at the shared store rather than a new mechanism. Without it, the team case
+   reproduces the very collision this whole line of work exists to prevent — only now between *people*
+   rather than sessions.
 
-2. **Identity that means something across people.** `From`/`ResumedBy` already carry a
-   `principal.Ref` (tool, agent, episode, host). For a team it must resolve to a *person*, not just a
-   tool on a host — otherwise "who handed this to me?" has no answer.
+Identity is already adequate: `From`/`ResumedBy` carry a `principal.Ref` (tool, agent, episode, host),
+and within a team that is enough to answer "who handed this to me, and from where?".
 
-3. **A single-claim guarantee.** The record is stamped `ResumedAt`/`ResumedBy` so it cannot be picked
-   up twice — but that stamp is local. Two colleagues resuming the same handoff *concurrently* need a
-   **shared** claim, which is exactly the coordination work already planned (a lease over the shared
-   store). Without it, the team case reproduces the very collision this whole line of work exists to
-   prevent — only now between *people*.
+### The mistake worth not making: redaction is NOT a gate here
 
-4. **Redaction, and it is not optional.** **A handoff record contains real source code** — the diff,
-   and whole untracked files. In a corporate setting that is an IP and secrets surface: an in-flight
-   diff can trivially contain an API key an engineer was mid-way through wiring up. Sharing a record
-   with another person is therefore a *disclosure*, and it must be treated as one. The atlas already
-   classifies both verbs with the `read` effect for this reason. A shared transport **must not ship
-   before the redaction pass** — the ordering is a safety property, not a preference.
+An earlier draft of this doc argued that a handoff record contains real source — the diff, and whole
+untracked files — so sharing one is a *disclosure*, and therefore a shared transport must not ship
+before a redaction pass.
 
-**Sequencing implication:** the shared transport is not the hard part; the *claim* and the *redaction*
-are. Build them first, and the team case falls out of the same record format that already works.
+**That is wrong under the actual trust model, and it would have delayed the feature for nothing.**
+Within one team, on hosts they own, sharing the same repos, the diff contains source those people
+**already have access to**. It crosses no boundary. Secrets hygiene still matters in general — an API
+key half-wired into an in-flight diff is bad wherever it goes, and would be just as bad committed —
+but it is *not a new exposure created by the handoff*, and it must not gate the transport.
+
+The redaction requirement is real **only** if the scope ever widens to a boundary the team does not
+already share: a contractor, another org, a public issue tracker. Reintroduce it *then*, not now.
+
+**Sequencing implication:** the shared store is easy; the **shared claim** is the real work — and it is
+work already planned for other reasons. The team case then falls out of the record format that already
+works.
 
 ## Non-goals
 
