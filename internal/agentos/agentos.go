@@ -71,6 +71,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/chat"
 	"github.com/qiangli/coreutils/pkg/dag"
 	"github.com/qiangli/coreutils/pkg/fleet"
+	"github.com/qiangli/coreutils/pkg/gate"
 	"github.com/qiangli/coreutils/pkg/handoff"
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/kb"
@@ -114,7 +115,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "handoff", "resume", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "conform",
+		"weave", "sprint", "handoff", "resume", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "gate", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -331,6 +332,21 @@ func Dispatch() {
 		hcmd.SetArgs(os.Args[2:])
 		if err := hcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy "+os.Args[1]+":", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "gate":
+		// THE Test verb. Before it, the Test stage was EMPTY -- not because nobody
+		// tested, but because the gate (the command that decides pass/fail) was
+		// spelled four incompatible ways across four packages: weave's suite-gate
+		// file, sdlc's healthcheck: key, supervise's :: string, and a dag target
+		// that happens to fail. All four mean the same thing -- run a command, let
+		// its exit status be the verdict. They never disagreed about semantics, only
+		// about where the command lives. This is the one place it lives.
+		gcmd := gate.NewGateCmd()
+		gcmd.SetArgs(os.Args[2:])
+		if err := gcmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy gate:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)

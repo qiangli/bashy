@@ -1,0 +1,8 @@
+# The gate: does bashy pass? One command per line; stops at the first failure.
+#
+# NOTE this spans repos: `make test-bash` builds cmd/bash, which compiles ../sh.
+# A per-repo gate could not express that — which is why a gate is defined per
+# PROJECT, and a project is a path set.
+go build ./...
+go test ./internal/... ./tools/...
+make test-bash
