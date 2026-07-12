@@ -348,6 +348,7 @@ var verbSynopsis = map[string]string{
 	"resume":     "pick up a handed-off session — any tool, any machine",
 	"lexicon":    "what do this project's words mean HERE? (verbs + agent bindings, projected)",
 	"gate":       "does this project pass? (the one command that decides)",
+	"judge":      "is this work any good? the semantic twin of gate (plan/code review, test triage)",
 	"issue":      "the project's issue register: bugs, features, requirements — GitHub Issues without GitHub",
 	"invoke":     "invoke ONE agent, ONCE, on one instruction (the primitive every orchestrator is built on)",
 	"conform":    "bashy's OWN fidelity batteries: compat/conformance/compliance/benchmark",

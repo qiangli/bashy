@@ -75,6 +75,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/handoff"
 	"github.com/qiangli/coreutils/pkg/issue"
 	"github.com/qiangli/coreutils/pkg/jobs"
+	"github.com/qiangli/coreutils/pkg/judge"
 	"github.com/qiangli/coreutils/pkg/kb"
 	"github.com/qiangli/coreutils/pkg/lexicon"
 	"github.com/qiangli/coreutils/pkg/meet"
@@ -117,7 +118,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "issue", "handoff", "resume", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "gate", "conform",
+		"weave", "sprint", "issue", "handoff", "resume", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "audit", "self", "check", "gate", "judge", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -388,6 +389,23 @@ func Dispatch() {
 		icmd.SetArgs(os.Args[2:])
 		if err := icmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy issue:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "judge":
+		// gate's SEMANTIC twin. gate asks "does it PASS" -- mechanical, reproducible,
+		// safe to block a merge on. judge asks "is it GOOD" -- an LLM opinion, and so
+		// advisory unless the caller says --gate. Together they are what the conductor
+		// playbook keeps saying in prose: SANDBOX-GREEN IS NOT MERGEABLE.
+		//
+		// bashy could VERIFY but not JUDGE. `weave review` sounds like this and isn't
+		// (it re-runs the verify command in a clean-room clone, never launching an
+		// agent). The role existed as ad-hoc prompting -- docs/JUDGE-REPORT-R6.md and
+		// friends are its artifacts. This is the verb behind them.
+		jcmd := judge.NewJudgeCmd()
+		jcmd.SetArgs(os.Args[2:])
+		if err := jcmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy judge:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
