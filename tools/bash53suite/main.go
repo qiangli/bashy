@@ -55,6 +55,11 @@ func main() {
 		dieIf(err)
 		jobsTimeout = parsed
 	}
+	if v := os.Getenv("BASH53_MEM_KB"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		dieIf(err)
+		memCapKB = parsed
+	}
 
 	root, err := os.Getwd()
 	dieIf(err)
@@ -301,6 +306,55 @@ func copyTree(src, dst string) error {
 	})
 }
 
+// memCapKB is the per-fixture RSS ceiling, summed over the fixture's whole
+// process group. 4 GB is far above any legitimate fixture.
+var memCapKB = 4 * 1024 * 1024
+
+// watchMemory kills the fixture's process group if its total RSS exceeds capKB.
+// It is a backstop, not a limit to tune: a fixture that trips it has a bug.
+func watchMemory(pid, capKB int, stop <-chan struct{}) {
+	if capKB <= 0 || runtime.GOOS == "windows" {
+		return // no portable process-group RSS on Windows; the timeout still applies
+	}
+	tick := time.NewTicker(500 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-tick.C:
+			if groupRSSKB(pid) > capKB {
+				killProcessTree(pid)
+				return
+			}
+		}
+	}
+}
+
+// groupRSSKB sums the resident set size of every process in pid's process group.
+// The fixture is its own group leader (SysProcAttr.Setpgid), so the group id is
+// the pid, and this catches children the fixture forked.
+func groupRSSKB(pid int) int {
+	out, err := exec.Command("ps", "ax", "-o", "pgid=,rss=").Output()
+	if err != nil {
+		return 0
+	}
+	total := 0
+	for line := range strings.Lines(string(out)) {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		if gid, err := strconv.Atoi(fields[0]); err != nil || gid != pid {
+			continue
+		}
+		if rss, err := strconv.Atoi(fields[1]); err == nil {
+			total += rss
+		}
+	}
+	return total
+}
+
 func prepareFixtures(testsDir string) error {
 	support := filepath.Join(testsDir, "..", "support")
 	for _, helper := range []string{"recho", "zecho", "xcase"} {
@@ -395,6 +449,15 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 	go func() { done <- cmd.Wait() }()
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
+
+	// Memory watchdog (ported from scripts/memwatch.sh, which the shell fixture
+	// loop ran alongside every fixture). macOS does not honor `ulimit -v`, so an
+	// unbounded-allocation fixture (intl/unicode1.sub is the known one) can
+	// balloon to 100+ GB and wedge the host long before the wall-clock timeout
+	// fires. Killing past a hard RSS cap turns an OOM into a graceful TIME.
+	memStop := make(chan struct{})
+	defer close(memStop)
+	go watchMemory(cmd.Process.Pid, memCapKB, memStop)
 
 	var runErr error
 	timedOut := false

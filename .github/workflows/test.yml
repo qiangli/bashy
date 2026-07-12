@@ -69,14 +69,13 @@ jobs:
   # fixtures' .right files are version-specific to the fetched source.
   bash53-gate:
     runs-on: ubuntu-latest
-    # ADVISORY on first landing. The baseline in test/bash53-known-failures.txt
-    # was measured on Darwin/arm64; CI is Linux/glibc, where locale collation and
-    # readdir order can diverge. The 5 baselined failures are interpreter
-    # regressions that reproduce anywhere, but an unknown Linux-only fixture
-    # difference would trip the gate. So the first real Linux run REPORTS the
-    # actual fail-set without failing the workflow; reconcile the baseline against
-    # it, then delete this line to make the gate enforce.
-    continue-on-error: true
+    # ENFORCING as of 2026-07-12. This was `continue-on-error: true` ("advisory on
+    # first landing... then delete this line"), and the line was never deleted. The
+    # cost was not theoretical: the gate hung on every run (the old shell fixture
+    # loop's watchdog could not kill its fixture, so the capture blocked until the
+    # 1200s deadline), exited INCONCLUSIVE, and continue-on-error reported it GREEN.
+    # For ~10 merges the conformance gate did not run, and a trap regression
+    # (86/86 -> 85/86) walked in unnoticed. An advisory gate is not a gate.
     steps:
       - uses: actions/checkout@v7
       - name: Bootstrap sibling deps (../sh, ../coreutils, ../readline)
@@ -104,10 +103,32 @@ jobs:
       - name: Build the recho/zecho fixture helpers
         shell: bash
         run: make test-bash-helpers
+      # The fixtures exercise locale-dependent globbing, collation and multibyte
+      # handling, and they name these five locales explicitly. Without them,
+      # glob-test/intl fail for want of a locale — an ENVIRONMENT failure that
+      # would otherwise be scored as a conformance failure and baselined as a
+      # phantom bug. Provide the environment; measure the shell.
+      - name: Generate the locales the bash-5.3 fixtures require
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y locales
+          sudo tee -a /etc/locale.gen >/dev/null <<'EOF'
+          en_US.UTF-8 UTF-8
+          de_DE.UTF-8 UTF-8
+          ru_RU.CP1251 CP1251
+          zh_TW BIG5
+          zh_HK BIG5-HKSCS
+          EOF
+          sudo locale-gen
+          locale -a
+
       - name: bash-5.3 no-regression ratchet
         shell: bash
-        # Serial on a 2-core runner is slower than on a dev box; 15m killed it
-        # mid-suite. The suite is ~83 fixtures (coproc/jobs/trap skipped) with a
-        # 60s per-fixture ceiling, so bound generously.
-        timeout-minutes: 30
+        # All 86 fixtures, nothing skipped. Serial wall is ~3-5 min (278s on a dev
+        # box; `jobs` alone is 112s of it and is indivisible). A 2-core runner is
+        # slower, so bound at 10 — but a hang can no longer eat the budget: the Go
+        # harness always terminates and always prints Results.
+        timeout-minutes: 10
         run: ./scripts/ci-bash53-gate.sh

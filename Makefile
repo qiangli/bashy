@@ -179,111 +179,49 @@ test-bash: build-bash test-bash-helpers
 ## test-bash-run: the fixture loop only (no build). Used by `test-bash` (which
 ## builds first) and by scripts/test-bash-parallel.sh (builds once, then fans
 ## the loop out over fixture groups). Honors TESTS="name ..." like test-bash.
-test-bash-run:
-	@echo "Running bash 5.3 test suite against bashy ($(BASH_TEST_TIMEOUT)s timeout per test)..."
-	@BASHY_ABS=$$(pwd)/$(BASHY); cd $(BASH_TESTS_DIR) && \
-		unset OLDPWD && \
-		export THIS_SH=$$BASHY_ABS && \
-		export BUILD_DIR=$$PWD/.. && \
-		export PATH=$$PWD:/usr/bin:/bin:/usr/local/bin && \
-		export BASH_TSTOUT=$${TMPDIR:-/tmp}/bashy-tstout-$$$$ && \
-		export BASH_TSTRAW=$${TMPDIR:-/tmp}/bashy-tstraw-$$$$ && \
-		passed=0 && failed=0 && skipped=0 && timeout_count=0 && \
-		for runner in run-*; do \
-			case "$$runner" in run-all|run-minimal) continue ;; esac; \
-			name=$${runner#run-}; \
-			if [ -n "$(TESTS)" ]; then case " $(TESTS) " in *" $$name "*) ;; *) continue ;; esac; fi; \
-			test_file="$$name.tests"; \
-			right_file="$$name.right"; \
-			if [ "$$name" = "dirstack" ]; then \
-				test_file="dstack.tests"; \
-				right_file="dstack.right"; \
-			fi; \
-			if [ "$$name" = "precedence" ]; then \
-				right_file="prec.right"; \
-			fi; \
-			if [ "$$name" = "array2" ]; then test_file="array-at-star"; right_file="array2.right"; fi; \
-			if [ "$$name" = "dollars" ]; then test_file="dollar-at-star"; right_file="dollar.right"; fi; \
-			if [ "$$name" = "exp-tests" ]; then test_file="exp.tests"; right_file="exp.right"; fi; \
-			if [ "$$name" = "glob-test" ]; then test_file="glob.tests"; right_file="glob.right"; fi; \
-			if [ "$$name" = "histexpand" ]; then test_file="histexp.tests"; right_file="histexp.right"; fi; \
-			if [ "$$name" = "input-test" ]; then test_file="input-line.sh"; right_file="input.right"; fi; \
-			if [ "$$name" = "execscript" ]; then test_file="execscript"; right_file="exec.right"; fi; \
-			if [ ! -f "$$test_file" ] || [ ! -f "$$right_file" ]; then \
-				skipped=$$((skipped + 1)); \
-				continue; \
-			fi; \
-			case " $(BASH_TEST_SKIP) " in \
-				*" $$name "*) \
-					skipped=$$((skipped + 1)); \
-					printf "  SKIP  %s\n" "$$name"; \
-					continue ;; \
-			esac; \
-			test_tmp=; \
-			if [ "$$name" = "read" ]; then \
-				test_tmp=$${TMPDIR:-/tmp}/bashy-read-$$$$; \
-				rm -rf "$$test_tmp"; \
-				mkdir -p "$$test_tmp"; \
-			fi; \
-			if [ "$$name" = "input-test" ]; then \
-				BASH_SETPGRP=1 $$THIS_SH >$$BASH_TSTRAW 2>&1 <./input-line.sh & \
-			elif [ -n "$$test_tmp" ]; then \
-				TMPDIR=$$test_tmp BASH_SETPGRP=1 $$THIS_SH ./$$test_file >$$BASH_TSTRAW 2>&1 & \
-			else \
-				BASH_SETPGRP=1 $$THIS_SH ./$$test_file >$$BASH_TSTRAW 2>&1 & \
-			fi; \
-			test_pid=$$!; \
-			per_test_timeout=$(BASH_TEST_TIMEOUT); \
-			if [ "$$name" = "jobs" ]; then per_test_timeout=$(BASH_TEST_TIMEOUT_JOBS); fi; \
-			( sleep $$per_test_timeout && kill -KILL -- -$$test_pid 2>/dev/null ) & \
-			timer_pid=$$!; \
-			sh $(CURDIR)/scripts/memwatch.sh $$test_pid $(BASH_TEST_MEM_KB) & \
-			mem_pid=$$!; \
-			wait $$test_pid 2>/dev/null; \
-			rc=$$?; \
-			kill -KILL -- -$$test_pid 2>/dev/null; \
-			kill $$timer_pid 2>/dev/null; wait $$timer_pid 2>/dev/null; \
-			kill $$mem_pid 2>/dev/null; wait $$mem_pid 2>/dev/null; \
-			case " $(BASH_TEST_FILTER_EXPECT) " in \
-				*" $$name "*) \
-					grep -av '^expect' <$$BASH_TSTRAW >$$BASH_TSTOUT 2>/dev/null || : ;; \
-				*) \
-					cp $$BASH_TSTRAW $$BASH_TSTOUT 2>/dev/null || : ;; \
-			esac; \
-			case " $(BASH_TEST_CAT_V) " in \
-				*" $$name "*) \
-					cat -v <$$BASH_TSTOUT >$$BASH_TSTRAW 2>/dev/null && cp $$BASH_TSTRAW $$BASH_TSTOUT 2>/dev/null || : ;; \
-			esac; \
-			if [ "$$name" = "test" ]; then \
-				perl -0pi -e 's/^chmod: .*?test\.setgid:.*\n(t -g \/tmp\/test\.setgid\n)1\n/$${1}0\n/mg; s/^chmod: .*?test\.setuid:.*\n(t -u \/tmp\/test\.setuid\n)1\n/$${1}0\n/mg; s/(t -n xx -a -z "" -a -t 0 -a -t\n)1\n/$${1}0\n/g' $$BASH_TSTOUT 2>/dev/null || :; \
-			fi; \
-			if [ $$rc -eq 137 ] 2>/dev/null; then \
-				timeout_count=$$((timeout_count + 1)); \
-				printf "  TIME  %s\n" "$$name"; \
-			elif diff -q $$BASH_TSTOUT $$right_file > /dev/null 2>&1; then \
-				passed=$$((passed + 1)); \
-				printf "  PASS  %s\n" "$$name"; \
-			else \
-				failed=$$((failed + 1)); \
-				printf "  FAIL  %s\n" "$$name"; \
-				if [ "$$name" = "read" ]; then \
-					diff -u $$right_file $$BASH_TSTOUT 2>/dev/null | sed -n '1,120p'; \
-				fi; \
-			fi; \
-			if [ -n "$$test_tmp" ]; then \
-				rm -rf "$$test_tmp"; \
-			fi; \
-			rm -f $$BASH_TSTOUT $$BASH_TSTRAW; \
-		done; \
-		echo ""; \
-		echo "Results: $$passed passed, $$failed failed, $$skipped skipped, $$timeout_count timed out"; \
-		echo ""; \
-		[ "$$failed" -eq 0 ] && [ "$$timeout_count" -eq 0 ]
-# ^ THE GATE. Until 2026-07-10 this recipe ended at `echo ""`, so `make test-bash`
-# exited 0 no matter how many fixtures failed — the "mandatory 86/86 gate before
-# any release" was enforced only by a human reading the Results line, and a
-# regression from 86/86 to 79/86 sat on main unnoticed. A skipped fixture
-# (BASH_TEST_SKIP) is not a failure; a FAIL or a TIME is.
+test-bash-run: $(BIN_DIR)/bash53suite
+	@BASH53_TIMEOUT=$(BASH_TEST_TIMEOUT)s \
+	 BASH53_JOBS_TIMEOUT=$(BASH_TEST_TIMEOUT_JOBS)s \
+	 BASH53_MEM_KB=$(BASH_TEST_MEM_KB) \
+	 $(BIN_DIR)/bash53suite -tests-dir $(BASH_TESTS_DIR) -bash $(BASHY) -tests "$(TESTS)"
+
+## bin/bash53suite: the ONE fixture runner. `bashy dag` drives the same binary,
+## so `make test-bash` and a chunked/distributed dag run are the same program —
+## which is what makes "chunked == serial" a checkable claim rather than a hope.
+$(BIN_DIR)/bash53suite: tools/bash53suite/*.go
+	@mkdir -p $(BIN_DIR)
+	@go build -o $@ ./tools/bash53suite
+
+# --- retired: the shell fixture loop -----------------------------------------
+# Until 2026-07-12 this file implemented a SECOND fixture runner in shell: a
+# per-fixture background job, a `sleep N && kill -KILL -- -$pid` watchdog, a
+# memwatch.sh sidecar, and the .right diffing. It is gone, and its guards live
+# in tools/bash53suite (skip list, 4GB memory cap, HOME isolation, the expect /
+# cat -v transforms, the whole-suite deadline).
+#
+# Why it had to go, not just be tidied:
+#
+#  1. Its watchdog was broken. `kill -KILL -- -$test_pid` targets a PROCESS
+#     GROUP that only exists if the testee honored BASH_SETPGRP, and the kill
+#     was `2>/dev/null`, so when that assumption failed the watchdog failed
+#     SILENTLY and `wait` blocked forever. That is the 20-minute CI hang. The Go
+#     harness sets Setpgid from the PARENT, so the testee's cooperation is
+#     irrelevant, and it always prints a Results line.
+#  2. Two runners meant "chunked vs serial" compared two different PROGRAMS, so
+#     the equality property that makes distributed conformance trustworthy was
+#     vacuous. A trap regression (86/86 -> 85/86) rode into main because the one
+#     gate that would have caught it was the one that hung.
+#
+# The old loop, for the record (do not resurrect):
+#   for runner in run-*; do ... & test_pid=$!; \
+#     ( sleep $per_test_timeout && kill -KILL -- -$test_pid 2>/dev/null ) & \
+#     sh scripts/memwatch.sh $test_pid $(BASH_TEST_MEM_KB) & \
+#     wait $test_pid; ... diff $BASH_TSTOUT $right_file ...
+# -----------------------------------------------------------------------------
+.PHONY: test-bash-run-legacy
+test-bash-run-legacy:
+	@echo "the shell fixture loop was retired 2026-07-12; use test-bash-run (see Makefile)" >&2
+	@exit 2
 
 ## test-bash-parallel: Run the bash 5.3 suite in parallel fixture groups (builds
 ## bin/bash once, then fans the loop out over JOBS groups). JOBS defaults to the
