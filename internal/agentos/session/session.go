@@ -44,13 +44,19 @@ type Response struct {
 }
 
 // DefaultSocket returns the per-user default session socket path.
+//
+// The fallback is deliberately uid-qualified. os.TempDir() is a world-writable
+// shared directory, so an unqualified "bashy/session.sock" under it is a name
+// another user can win a race for (or plant a symlink at) — secureSocketDir
+// then refuses to serve, but only because the path is per-uid can each user
+// have a session at all.
 func DefaultSocket() string {
 	if s := os.Getenv("BASHY_SESSION"); s != "" {
 		return s
 	}
 	dir, err := os.UserCacheDir()
 	if err != nil || dir == "" {
-		dir = os.TempDir()
+		return filepath.Join(os.TempDir(), fmt.Sprintf("bashy-%d", os.Getuid()), "session.sock")
 	}
 	return filepath.Join(dir, "bashy", "session.sock")
 }
@@ -58,6 +64,12 @@ func DefaultSocket() string {
 // Serve starts the warm session listener on socket (default DefaultSocket()).
 // It blocks until interrupted, then removes the socket. It refuses to start if
 // a live session is already listening on that path.
+//
+// Security: the warm session executes arbitrary shell commands for whoever
+// connects, so it is exactly as privileged as the shell itself. Three controls,
+// in increasing order of authority: an owner-only directory (secureSocketDir),
+// an owner-only socket (listenSecure), and a kernel-supplied peer-uid check on
+// every connection (authorizePeer, in handle).
 func Serve(socket string) error {
 	if socket == "" {
 		socket = DefaultSocket()
@@ -65,12 +77,12 @@ func Serve(socket string) error {
 	if dialable(socket) {
 		return fmt.Errorf("a bashy session is already listening on %s", socket)
 	}
+	if err := secureSocketDir(socket); err != nil {
+		return err
+	}
 	// Clear any stale socket left by a crashed server.
 	_ = os.Remove(socket)
-	if err := os.MkdirAll(filepath.Dir(socket), 0o755); err != nil {
-		return fmt.Errorf("session dir: %w", err)
-	}
-	ln, err := net.Listen("unix", socket)
+	ln, err := listenSecure(socket)
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", socket, err)
 	}
@@ -106,6 +118,14 @@ func Serve(socket string) error {
 // handle runs one request on the warm runner and writes the response back.
 func handle(conn net.Conn) {
 	defer conn.Close()
+	// Authorize BEFORE decoding. The request is an untrusted gob from an
+	// unauthenticated peer, and it carries the command, the working directory and
+	// the environment we would otherwise run with — so establishing who is asking
+	// is the first thing to do, not the last.
+	if err := authorizePeer(conn); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy session: rejected connection:", err)
+		return
+	}
 	var req Request
 	if err := gob.NewDecoder(conn).Decode(&req); err != nil {
 		return
