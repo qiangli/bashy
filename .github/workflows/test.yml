@@ -119,13 +119,15 @@ jobs:
           sudo tee -a /etc/locale.gen >/dev/null <<'EOF'
           en_US.UTF-8 UTF-8
           de_DE.UTF-8 UTF-8
-          fr_FR ISO-8859-1
+          fr_FR.ISO-8859-1 ISO-8859-1
           ru_RU.CP1251 CP1251
           zh_TW BIG5
           zh_HK BIG5-HKSCS
           EOF
           sudo locale-gen
           locale -a
+          locale -a | grep -i '^fr_FR'
+          LC_ALL=fr_FR.ISO8859-1 locale charmap
 
       - name: bash-5.3 no-regression ratchet
         shell: bash
