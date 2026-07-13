@@ -85,20 +85,31 @@ jobs:
         with:
           go-version-file: go.mod
       # The bash-5.3 tests/ tree is a gitignored symlink locally. Fetch the exact
-      # upstream source the committed .right files were measured against
-      # (bash-5.3-rc2), pinned by sha256, and symlink it. Downloading + running a
-      # test suite is not bundling — see CLAUDE.md Third-Party Libraries.
-      - name: Fetch pinned bash-5.3-rc2 source (for the fixture tree)
+      # upstream source the engine targets — the bash-5.3 RELEASE, matching the
+      # local external/bash-5.3 symlink — pinned by sha256, and symlink it.
+      # Downloading + running a test suite is not bundling — see CLAUDE.md
+      # Third-Party Libraries.
+      #
+      # This was bash-5.3-rc2 until 2026-07-13, which made CI measure a
+      # different conformance target than every local run: rc2's
+      # valid_function_word accepted quoted/procsub-shaped function names
+      # ("allow quotes for now") and its tests/func.right encodes that, but
+      # the release reverted it (W_HASDOLLAR -> W_HASDOLLAR|W_QUOTED), so the
+      # func fixture demanded opposite behaviors on CI vs a dev box (run
+      # 29267773644: want "<(:)" vs the engine's correct released-5.3
+      # "not a valid identifier" diagnostic). Keep this pin and the local
+      # symlink pointing at the SAME upstream snapshot.
+      - name: Fetch pinned bash-5.3 release source (for the fixture tree)
         shell: bash
         run: |
           set -euxo pipefail
-          url=https://ftp.gnu.org/gnu/bash/bash-5.3-rc2.tar.gz
-          sha=e7d04057ffc37442f12a99f841733dd26bb8e34964bcaf999e15ce66a3dfb480
-          curl -fsSL --retry 3 -o /tmp/bash-5.3-rc2.tar.gz "$url"
-          echo "$sha  /tmp/bash-5.3-rc2.tar.gz" | sha256sum -c -
+          url=https://ftp.gnu.org/gnu/bash/bash-5.3.tar.gz
+          sha=0d5cd86965f869a26cf64f4b71be7b96f90a3ba8b3d74e27e8e9d9d5550f31ba
+          curl -fsSL --retry 3 -o /tmp/bash-5.3.tar.gz "$url"
+          echo "$sha  /tmp/bash-5.3.tar.gz" | sha256sum -c -
           mkdir -p external
-          tar -xzf /tmp/bash-5.3-rc2.tar.gz -C /tmp
-          ln -sfn /tmp/bash-5.3-rc2 external/bash-5.3
+          tar -xzf /tmp/bash-5.3.tar.gz -C /tmp
+          ln -sfn /tmp/bash-5.3 external/bash-5.3
           test -d external/bash-5.3/tests
       - name: Build the recho/zecho fixture helpers
         shell: bash
