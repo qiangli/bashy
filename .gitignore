@@ -51,3 +51,5 @@ VSC-PCTS*.zip
 *VSC-PCTS*.pdf
 tet3/
 vsxgen/
+*.exe
+/bashy
