@@ -28,6 +28,12 @@ keeps work isolated, and keeps you the reviewer rather than the author. Hold to 
 it is a means, not the end.** You are accountable for the outcome, and sometimes delegation
 cannot deliver it:
 
+- **the matter is critical** — a delegate's mistake would be too costly to risk, so you do
+  it yourself. There is **no fixed list of what is critical; you decide** (a release or a
+  tag, a security-sensitive change, the machinery the fleet itself runs on, an irreversible
+  step, a change whose error would cascade). Judging criticality is itself the steward's
+  call — do not wait to be told a thing is critical, and do not hand a critical thing to an
+  agent because "stewards delegate";
 - the tool that lets you delegate is itself broken, and **only you can restore it**;
 - a blocker only you can clear (a coordination call, a repo-hygiene fix, a release step,
   finalizing a commit an agent left behind);
