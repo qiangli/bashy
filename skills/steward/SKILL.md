@@ -248,10 +248,13 @@ not one:
    so a cold successor in a different tool needs nothing else. Do **not** try to launch the
    successor; just park the seat and tell the human it is ready.
 2. **The human starts the successor; it pulls the seat.** The human opens the new tool
-   (codex, claude, …) *interactively* and asks it to run `bashy resume [-m "<steer>"]`.
-   `resume` finds the parked handoff, shows the human's pickup steer first, then the role,
-   then the continuity, and stamps `resumed_by`. The successor loads the skill and assumes
-   the seat. **Verify it took:** `resumed_by` is set on the record — no stamp, no handoff.
+   (codex, claude, …) *interactively* and asks it to run **`bashy resume --claim [-m
+   "<steer>"]`**. Bare `bashy resume` is READ-ONLY — it shows the current seat and whether
+   it is claimed, and can be run any number of times with no side effect; only `--claim`
+   applies the work and stamps `resumed_by`. The successor loads the skill and assumes the
+   seat. **Verify it took:** run `bashy resume` again — it reports `CLAIMED by <tool>` (no
+   stamp, no handoff). `bashy resume --all` shows the full register with each record's
+   status (current/resumed/superseded/cancelled/stale).
 
 The split is deliberate: it puts the interactive launch in the only hands that can do it
 (the human's), and leaves the incumbent doing what it *can* — a thorough, portable record.
