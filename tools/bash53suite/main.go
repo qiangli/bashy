@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -27,15 +28,17 @@ type fixture struct {
 }
 
 func main() {
-	var testsDir, bashPath, tests, skip, chunk string
-	var listOnly, shared bool
+	var testsDir, bashPath, tests, skip, chunk, chunksManifest string
+	var listOnly, chunkCountOnly, shared bool
 	var timeout, jobsTimeout time.Duration
 	flag.StringVar(&testsDir, "tests-dir", "external/bash-5.3/tests", "bash 5.3 tests directory")
 	flag.StringVar(&bashPath, "bash", "bin/bash", "bash-compatible binary under test")
 	flag.StringVar(&tests, "tests", "", "space-separated fixture names to run")
 	flag.StringVar(&skip, "skip", "", "space-separated fixture names to skip (BASH_TEST_SKIP)")
 	flag.StringVar(&chunk, "chunk", "", "run one distributed chunk, as 1/N")
+	flag.StringVar(&chunksManifest, "chunks-manifest", "chunks.json", "stable bash 5.3 chunk manifest")
 	flag.BoolVar(&listOnly, "list", false, "list fixture names and exit")
+	flag.BoolVar(&chunkCountOnly, "chunk-count", false, "print pinned chunk_count from the chunk manifest and exit")
 	flag.BoolVar(&shared, "shared-tree", false, "run in the source fixture tree instead of a private copy (unsafe: leaks platform-built helpers across venues and races concurrent chunks)")
 	flag.DurationVar(&timeout, "timeout", 60*time.Second, "per-fixture timeout")
 	flag.DurationVar(&jobsTimeout, "jobs-timeout", 120*time.Second, "jobs fixture timeout")
@@ -48,6 +51,16 @@ func main() {
 	}
 	if skip == "" {
 		skip = os.Getenv("BASH_TEST_SKIP")
+	}
+	if v := os.Getenv("BASH53_CHUNKS_MANIFEST"); v != "" {
+		chunksManifest = v
+	}
+	if chunkCountOnly {
+		manifest, err := loadChunkManifest(chunksManifest)
+		dieIf(err)
+		dieIf(validateChunkManifestHeader(manifest))
+		fmt.Println(manifest.ChunkCount)
+		return
 	}
 	if v := os.Getenv("BASH53_TIMEOUT"); v != "" {
 		parsed, err := time.ParseDuration(v)
@@ -136,7 +149,13 @@ func main() {
 
 	var passed, failed, skipped, timedOut int
 
-	selected := selectFixtures(fixtures, wordSet(tests), chunk)
+	var manifest *chunkManifest
+	if chunk != "" {
+		manifest, err = loadChunkManifest(chunksManifest)
+		dieIf(err)
+		dieIf(validateChunkManifest(manifest, fixtures))
+	}
+	selected := selectFixtures(fixtures, wordSet(tests), chunk, manifest)
 	// BASH_TEST_SKIP: a skipped fixture is NOT a failure, but it must be counted
 	// and printed — an unreported skip is how a suite quietly stops covering
 	// something. (Until 2026-07-12 this knob was honored only by the shell loop;
@@ -252,7 +271,7 @@ func fixtureFiles(name string) (string, string) {
 	return test, right
 }
 
-func selectFixtures(fixtures []fixture, tests map[string]bool, chunk string) []fixture {
+func selectFixtures(fixtures []fixture, tests map[string]bool, chunk string, manifest *chunkManifest) []fixture {
 	var selected []fixture
 	for _, f := range fixtures {
 		if len(tests) != 0 && !tests[f.Name] {
@@ -265,11 +284,138 @@ func selectFixtures(fixtures []fixture, tests map[string]bool, chunk string) []f
 	}
 	idx, total, err := parseChunk(chunk)
 	dieIf(err)
+	if manifest == nil {
+		die("chunk %s requested without a chunk manifest", chunk)
+	}
+	if total != manifest.ChunkCount {
+		die("chunk %s does not match manifest chunk_count %d", chunk, manifest.ChunkCount)
+	}
+	wanted := manifest.fixtureNamesForChunk(idx)
 	var out []fixture
-	for i, f := range selected {
-		if i%total == idx-1 {
+	for _, f := range selected {
+		if wanted[f.Name] {
 			out = append(out, f)
 		}
+	}
+	return out
+}
+
+type chunkManifest struct {
+	SchemaVersion int                 `json:"schema_version"`
+	Suite         string              `json:"suite"`
+	ChunkCount    int                 `json:"chunk_count"`
+	Measurement   manifestMeasurement `json:"measurement"`
+	Chunks        []manifestChunk     `json:"chunks"`
+}
+
+type manifestMeasurement struct {
+	MeasuredAt     string `json:"measured_at"`
+	Runner         string `json:"runner"`
+	Command        string `json:"command"`
+	Result         string `json:"result"`
+	DurationSource string `json:"duration_source"`
+}
+
+type manifestChunk struct {
+	ID       int               `json:"id"`
+	Seconds  float64           `json:"duration_seconds"`
+	Fixtures []manifestFixture `json:"fixtures"`
+}
+
+type manifestFixture struct {
+	Name    string  `json:"name"`
+	Seconds float64 `json:"duration_seconds"`
+}
+
+func loadChunkManifest(path string) (*chunkManifest, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open chunk manifest %s: %w", path, err)
+	}
+	defer f.Close()
+	var manifest chunkManifest
+	dec := json.NewDecoder(f)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&manifest); err != nil {
+		return nil, fmt.Errorf("decode chunk manifest %s: %w", path, err)
+	}
+	return &manifest, nil
+}
+
+func validateChunkManifest(manifest *chunkManifest, fixtures []fixture) error {
+	if err := validateChunkManifestHeader(manifest); err != nil {
+		return err
+	}
+	if len(manifest.Chunks) != manifest.ChunkCount {
+		return fmt.Errorf("chunk manifest has %d chunks, want %d", len(manifest.Chunks), manifest.ChunkCount)
+	}
+	seenChunks := make(map[int]bool, manifest.ChunkCount)
+	seenFixtures := make(map[string]int, len(fixtures))
+	for _, chunk := range manifest.Chunks {
+		if chunk.ID < 1 || chunk.ID > manifest.ChunkCount {
+			return fmt.Errorf("chunk manifest has invalid chunk id %d", chunk.ID)
+		}
+		if seenChunks[chunk.ID] {
+			return fmt.Errorf("chunk manifest repeats chunk id %d", chunk.ID)
+		}
+		seenChunks[chunk.ID] = true
+		if len(chunk.Fixtures) == 0 {
+			return fmt.Errorf("chunk manifest chunk %d has no fixtures", chunk.ID)
+		}
+		for _, f := range chunk.Fixtures {
+			if f.Name == "" {
+				return fmt.Errorf("chunk manifest chunk %d has an empty fixture name", chunk.ID)
+			}
+			seenFixtures[f.Name]++
+			if seenFixtures[f.Name] > 1 {
+				return fmt.Errorf("chunk manifest fixture %q appears more than once", f.Name)
+			}
+		}
+	}
+	known := make(map[string]bool, len(fixtures))
+	for _, f := range fixtures {
+		known[f.Name] = true
+		if seenFixtures[f.Name] != 1 {
+			return fmt.Errorf("chunk manifest fixture %q appears %d times, want exactly once", f.Name, seenFixtures[f.Name])
+		}
+	}
+	for name := range seenFixtures {
+		if !known[name] {
+			return fmt.Errorf("chunk manifest includes unknown fixture %q", name)
+		}
+	}
+	return nil
+}
+
+func validateChunkManifestHeader(manifest *chunkManifest) error {
+	if manifest == nil {
+		return fmt.Errorf("nil chunk manifest")
+	}
+	if manifest.SchemaVersion != 1 {
+		return fmt.Errorf("unsupported chunk manifest schema_version %d", manifest.SchemaVersion)
+	}
+	if manifest.Suite != "bash-5.3" {
+		return fmt.Errorf("chunk manifest suite = %q, want bash-5.3", manifest.Suite)
+	}
+	if manifest.ChunkCount <= 0 {
+		return fmt.Errorf("chunk manifest chunk_count must be positive")
+	}
+	return nil
+}
+
+func (m *chunkManifest) fixtureNamesForChunk(id int) map[string]bool {
+	out := make(map[string]bool)
+	if m == nil {
+		return out
+	}
+	for _, chunk := range m.Chunks {
+		if chunk.ID != id {
+			continue
+		}
+		for _, f := range chunk.Fixtures {
+			out[f.Name] = true
+		}
+		return out
 	}
 	return out
 }

@@ -251,14 +251,11 @@ test-bash-run-legacy:
 ## bin/bash once, then fans the loop out over JOBS groups). JOBS defaults to the
 ## CPU count; on a big box use e.g. `make test-bash-parallel JOBS=20`.
 test-bash-parallel: build-bash test-bash-helpers
-	@JOBS=$(JOBS) BASH_TESTS_DIR=$(BASH_TESTS_DIR) BASH_TEST_SKIP="$(BASH_TEST_SKIP)" scripts/test-bash-parallel.sh
+	@JOBS=$(JOBS) BASH_TESTS_DIR=$(BASH_TESTS_DIR) BASH_TEST_SKIP="$(BASH_TEST_SKIP)" /bin/bash scripts/test-bash-parallel.sh
 
 ## test-bash-list: List all available bash 5.3 tests
-test-bash-list:
-	@cd $(BASH_TESTS_DIR) && for runner in run-*; do \
-		[ "$$runner" = "run-all" ] && continue; \
-		echo "$${runner#run-}"; \
-	done
+test-bash-list: $(BIN_DIR)/bash53suite
+	@$(BIN_DIR)/bash53suite -tests-dir $(BASH_TESTS_DIR) -list
 
 ## test-bash-helpers: Build helper programs needed by bash tests
 # heredoc5.sub round-trips $(BUILD_DIR)/config.h (needs 4096 < size <

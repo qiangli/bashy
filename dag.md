@@ -268,7 +268,7 @@ the externally supplied GNU Bash 5.3 GPL test suite against the freshly built
 (currently **86/86**, 0 fail, 0 skip). The harness is bashy-native, not
 make-based: it uses `"$BASHY" go run ./tools/bash53suite`, so it works on hosts
 where bashy provides the Go toolchain and no system make is installed. Use
-`TESTS="comsub varenv"` for a subset, or `CHUNK=1/4` to run one deterministic
+`TESTS="comsub varenv"` for a subset, or `CHUNK=1/8` to run one manifest-pinned
 distributed shard. Use this lane when host OS behavior is part of the coverage;
 use `test-bash-container` / `test-bash-chunks-container` for heterogeneous fleet
 throughput.
@@ -320,14 +320,14 @@ BASHY_EXE="${BASHY:-bashy}"
 
 ### test-bash-chunk
 Run one GNU Bash 5.3 distributed chunk. Set `CHUNK=I/N`, for example
-`CHUNK=2/6 bashy dag test-bash-chunk`; optional `TESTS="..."` still narrows the
-fixture set before chunking.
+`CHUNK=2/8 bashy dag test-bash-chunk`. `N` must match the pinned
+`chunk_count` in `chunks.json`; fleet capacity never changes fixture membership.
 Requires: build, test-bash-data
 Effects: write
 
 ```bash
 set -e
-: "${CHUNK:?set CHUNK=I/N, for example CHUNK=1/4}"
+: "${CHUNK:?set CHUNK=I/N, for example CHUNK=1/8}"
 BASHY_EXE="${BASHY:-bashy}"
 goos="$("$BASHY_EXE" go env GOOS)"
 ext=""
@@ -604,10 +604,12 @@ exit "$overall"
 Run the GNU Bash 5.3 suite through the generic DAG fanout target on the native
 host OS. This is the baremetal lane: use it when platform behavior is part of
 the test. For heterogeneous fleet capacity, prefer `test-bash-chunks-container`.
-Set `CHUNKS=16` or higher to spread fixtures across workers. `BASH53_TIMEOUT=55s`
-can be used for exploratory runs; the canonical single-process gate keeps its
-default 60s timeout. Set `HOSTS="local puppy"` only when the remote host can run
-the target noninteractively and the host OS variance is intentional.
+Chunk membership and chunk count come from committed `chunks.json`; `HOSTS`
+controls only how many manifest chunks run concurrently and where they are
+placed. `BASH53_TIMEOUT=55s` can be used for exploratory runs; the canonical
+single-process gate keeps its default 60s timeout. Set `HOSTS="local puppy"`
+only when the remote host can run the target noninteractively and the host OS
+variance is intentional.
 Requires: build, test-bash-data
 Effects: write
 
@@ -615,13 +617,14 @@ Effects: write
 set -e
 BASHY_EXE="${BASHY:-bashy}"
 mkdir -p bin
+pinned_chunks="$("$BASHY_EXE" go run ./tools/bash53suite -chunk-count)"
+if [ -n "${CHUNKS:-}" ] && [ "$CHUNKS" != "$pinned_chunks" ]; then
+  echo "test-bash-chunks: CHUNKS=$CHUNKS conflicts with chunks.json chunk_count=$pinned_chunks" >&2
+  exit 2
+fi
 TARGET="${TARGET:-test-bash-run}" \
 PREP_TARGET="${PREP_TARGET:-test-bash-prepare}" \
-ITEM_LIST_TARGET="${ITEM_LIST_TARGET:-test-bash-list}" \
-ITEM_ENV="${ITEM_ENV:-TESTS}" \
-FANOUT_ITEMS="${FANOUT_ITEMS:-${TESTS:-}}" \
-DURATIONS_FILE="${DURATIONS_FILE:-bin/bash53-durations.tsv}" \
-PLAN_FILE="${PLAN_FILE:-bin/bash53-chunks.plan.tsv}" \
+CHUNKS="$pinned_chunks" \
 "$BASHY_EXE" dag dag-fanout
 ```
 
@@ -876,9 +879,8 @@ done
 
 ### test-bash-chunks-fleet
 Run the GNU Bash 5.3 chunked suite through the standard development fleet using
-the container-normalized lane. The default layout uses 8 chunks, assigned
-round-robin so each host gets 2 chunks when the full four-host fleet is
-available:
+the container-normalized lane. The committed `chunks.json` manifest defines the
+8 chunks; the fleet only decides how many of those chunks can run concurrently.
 
 - local dragon checkout
 - `novicortex.local`
@@ -903,15 +905,15 @@ puppy_dir="${PUPPY_DIR:-C:/Users/liqiang/tests/bashy-self/bashy}"
 lj2ivy_dir="${LJ2IVY_DIR:-C:/Users/Lern/tests/bashy-self/bashy}"
 BASH53_TESTDATA_REPO="${BASH53_TESTDATA_REPO:-https://github.com/qiangli/bash53-testdata}" \
 HOSTS="${HOSTS:-local novicortex.local=$novicortex_dir puppy=$puppy_dir lj2ivy=$lj2ivy_dir}" \
-CHUNKS="${CHUNKS:-8}" \
 "$BASHY_EXE" dag test-bash-chunks-container
 ```
 
 ### test-bash-chunks-tune
 Tune GNU Bash 5.3 chunk assignments with bounded repeated fanout runs. Each
 round replans from the latest `bin/bash53-durations.tsv`, and the best observed
-assignment is saved to `bin/bash53-chunks.plan.tsv` for `test-bash-chunks`.
-Set `MAX_ROUNDS=5`, `SETTLE_ROUNDS=2`, `CHUNKS=8`, and optionally `HOSTS=...`.
+assignment is saved to `bin/bash53-chunks.plan.tsv` for manual review before
+updating committed `chunks.json`. Set `MAX_ROUNDS=5`, `SETTLE_ROUNDS=2`, and
+optionally `HOSTS=...`.
 Requires: build, test-bash-data
 Effects: write
 
@@ -935,8 +937,8 @@ podman`. This is the cross-platform release lane for Windows hosts: bashy
 cross-builds the pure `cmd/bash` testee and the bashy-native harness for Linux,
 then runs the external GPL fixture data inside a Linux userspace with `gcc`
 available for Bash's small helper programs. Set `BASH53_TESTDATA_REPO` to
-hydrate the gitignored fixture tree; set `TESTS="..."` or `CHUNK=I/N` for
-subset/distributed runs. This is the default lane for heterogeneous fleet
+hydrate the gitignored fixture tree; set `TESTS="..."` or a manifest-valid
+`CHUNK=I/N` for subset/distributed runs. This is the default lane for heterogeneous fleet
 throughput because every host contributes a Linux container rather than its
 native filesystem/process semantics.
 Requires: test-bash-container-prepare
@@ -1009,7 +1011,8 @@ $oci run --rm \
 Run GNU Bash 5.3 compatibility chunks in the container-normalized lane. This is
 the fleet-safe target for heterogeneous hosts: each worker runs the same Linux
 container substrate, while the native `test-bash-chunks` target remains
-available for explicit baremetal OS coverage.
+available for explicit baremetal OS coverage. Chunk membership and chunk count
+come from committed `chunks.json`.
 Requires: test-bash-data
 Effects: write
 
@@ -1017,13 +1020,14 @@ Effects: write
 set -e
 BASHY_EXE="${BASHY:-bashy}"
 mkdir -p bin
+pinned_chunks="$("$BASHY_EXE" go run ./tools/bash53suite -chunk-count)"
+if [ -n "${CHUNKS:-}" ] && [ "$CHUNKS" != "$pinned_chunks" ]; then
+  echo "test-bash-chunks-container: CHUNKS=$CHUNKS conflicts with chunks.json chunk_count=$pinned_chunks" >&2
+  exit 2
+fi
 TARGET="${TARGET:-test-bash-container-run}" \
 PREP_TARGET="${PREP_TARGET:-test-bash-container-prepare}" \
-ITEM_LIST_TARGET="${ITEM_LIST_TARGET:-test-bash-list}" \
-ITEM_ENV="${ITEM_ENV:-TESTS}" \
-FANOUT_ITEMS="${FANOUT_ITEMS:-${TESTS:-}}" \
-DURATIONS_FILE="${DURATIONS_FILE:-bin/bash53-container-durations.tsv}" \
-PLAN_FILE="${PLAN_FILE:-bin/bash53-container-chunks.plan.tsv}" \
+CHUNKS="$pinned_chunks" \
 "$BASHY_EXE" dag dag-fanout
 ```
 
