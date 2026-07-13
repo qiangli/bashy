@@ -185,19 +185,24 @@ repo_path_for() {
 
 latest_failure_text() {
 	local issue="$1"
+	# jq `first(...)` emits at most one line, so no `| head` — a downstream
+	# `head` closing the pipe early would SIGPIPE gh under `set -e -o pipefail`.
 	gh issue view "$issue" -R "$collector" --json body,comments --jq '
-		([.body] + [.comments[].body]) |
-		reverse[] |
-		select(test("- Source repo:")) |
-		.
-	' | head -n1
+		first(
+			([.body] + [.comments[].body]) |
+			reverse[] |
+			select(test("- Source repo:"))
+		) // empty
+	'
 }
 
 field_from_text() {
-	local name="$1" text="$2"
-	printf '%s\n' "$text" |
-		sed -nE "s/^[[:space:]]*-[[:space:]]*${name}:[[:space:]]*//p" |
-		head -n1
+	local name="$1" text="$2" out
+	# Capture fully, then take the first line via parameter expansion — a
+	# `sed | head` pipeline SIGPIPEs sed when head closes early (pipefail+e).
+	out="$(printf '%s\n' "$text" |
+		sed -nE "s/^[[:space:]]*-[[:space:]]*${name}:[[:space:]]*//p")"
+	printf '%s\n' "${out%%$'\n'*}"
 }
 
 lease_is_stale() {
