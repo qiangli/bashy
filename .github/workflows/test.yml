@@ -104,10 +104,12 @@ jobs:
         shell: bash
         run: make test-bash-helpers
       # The fixtures exercise locale-dependent globbing, collation and multibyte
-      # handling, and they name these five locales explicitly. Without them,
+      # handling, and they name these six locales explicitly. Without them,
       # glob-test/intl fail for want of a locale — an ENVIRONMENT failure that
       # would otherwise be scored as a conformance failure and baselined as a
       # phantom bug. Provide the environment; measure the shell.
+      # (intl/unicode1.sub prints "you do not have the fr_FR.ISO8859-1 locale
+      # installed" and fails when fr_FR.ISO8859-1 is missing — it was.)
       - name: Generate the locales the bash-5.3 fixtures require
         shell: bash
         run: |
@@ -117,6 +119,7 @@ jobs:
           sudo tee -a /etc/locale.gen >/dev/null <<'EOF'
           en_US.UTF-8 UTF-8
           de_DE.UTF-8 UTF-8
+          fr_FR.ISO8859-1 ISO-8859-1
           ru_RU.CP1251 CP1251
           zh_TW BIG5
           zh_HK BIG5-HKSCS
