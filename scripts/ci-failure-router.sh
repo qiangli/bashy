@@ -19,22 +19,79 @@ prompt_template="${DHNT_CI_CONDUCTOR_PROMPT:-$script_dir/ci-failure-conductor-br
 
 usage() {
 	cat <<'EOF'
-usage: ci-failure-router.sh [--once] [--dry-run]
+usage: ci-failure-router.sh [--once] [--dry-run] [--issue NUMBER]
 
 Cheap deterministic CI failure router. Claims collector issues, chooses the
 on-shift premium conductor, writes a handoff brief, and launches the conductor.
 EOF
 }
 
+die() {
+	echo "ci-failure-router: $*" >&2
+	exit 1
+}
+
 dry_run=0
+target_issue=""
 while (($#)); do
 	case "$1" in
 		--once) shift ;;
 		--dry-run) dry_run=1; shift ;;
+		--issue)
+			[[ $# -ge 2 ]] || die "--issue requires a collector issue number"
+			target_issue="$2"
+			shift 2
+			;;
 		-h|--help) usage; exit 0 ;;
 		*) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
 	esac
 done
+
+require_command() {
+	local cmd="$1" hint="$2"
+	command -v "$cmd" >/dev/null 2>&1 || die "missing required command '$cmd'. $hint"
+}
+
+preflight() {
+	local auth_output
+	local shift_hours
+
+	require_command gh "Install GitHub CLI on the repair host."
+	require_command jq "Install jq on the repair host."
+	require_command bashy "Install bashy on the repair host and ensure it is on PATH."
+
+	[[ -f "$prompt_template" ]] || die "missing conductor prompt template: $prompt_template"
+	[[ -d "$dhnt_root" ]] || die "DHNT_CI_ROOT does not exist: $dhnt_root"
+	shift_hours="${DHNT_CI_SHIFT_HOURS:-1}"
+	[[ "$shift_hours" =~ ^[0-9]+$ && "$shift_hours" -gt 0 ]] ||
+		die "DHNT_CI_SHIFT_HOURS must be a positive integer, got '$shift_hours'."
+
+	if [[ -z "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]]; then
+		auth_output="$(gh auth status 2>&1)" || die "no GH_TOKEN/GITHUB_TOKEN is set and gh is not authenticated. Configure a token with Metadata:Read and Issues:Read+Write on $collector."
+	else
+		auth_output="$(gh auth status 2>&1 || true)"
+	fi
+
+	gh api "repos/${collector}" >/dev/null ||
+		die "GitHub token cannot read $collector metadata. Grant Metadata:Read on the collector repo. gh auth status: $auth_output"
+
+	gh label list -R "$collector" --limit 1 >/dev/null ||
+		die "GitHub token cannot read $collector labels. Grant Issues:Read+Write; label access is required before repair claims."
+
+	gh issue list -R "$collector" --state open --limit 1 >/dev/null ||
+		die "GitHub token cannot read $collector issues. Grant Issues:Read+Write on the collector repo."
+
+	if [[ -n "$target_issue" ]]; then
+		gh issue view "$target_issue" -R "$collector" --json number,state,labels >/dev/null ||
+			die "GitHub token cannot read target collector issue #$target_issue in $collector. Check the repository_dispatch payload and Issues:Read permission."
+	fi
+
+	if ! bashy commands chat >/dev/null 2>&1; then
+		die "bashy does not expose the 'chat' conductor launcher on this host; router cannot start repair sessions."
+	fi
+}
+
+preflight
 
 if ! mkdir "$lockdir" 2>/dev/null; then
 	echo "ci-failure-router: another router is already running ($lockdir)"
@@ -65,7 +122,8 @@ ensure_labels() {
 	local label color desc
 	while IFS='|' read -r label color desc; do
 		gh label create "$label" -R "$collector" --color "$color" --description "$desc" >/dev/null 2>&1 ||
-			gh label edit "$label" -R "$collector" --color "$color" --description "$desc" >/dev/null
+			gh label edit "$label" -R "$collector" --color "$color" --description "$desc" >/dev/null ||
+			die "GitHub token cannot create/edit label '$label' in $collector. Grant Issues:Read+Write on the collector repo."
 	done <<'EOF'
 repair-running|FBCA04|Automated repair attempt is running
 repair-done|0E8A16|Automated repair converged and closed the issue
@@ -234,15 +292,24 @@ EOF
 }
 
 claimable_issues() {
-	gh issue list -R "$collector" --state open --label ci-failure --limit 100 \
-		--json number,url,labels \
-		--jq '.[] | [.number, .url, ([.labels[].name] | join(","))] | @tsv'
+	if [[ -n "$target_issue" ]]; then
+		gh issue view "$target_issue" -R "$collector" \
+			--json number,url,labels,state \
+			--jq 'select(.state == "OPEN") | [.number, .url, ([.labels[].name] | join(","))] | @tsv'
+	else
+		gh issue list -R "$collector" --state open --label ci-failure --limit 100 \
+			--json number,url,labels \
+			--jq '.[] | [.number, .url, ([.labels[].name] | join(","))] | @tsv'
+	fi
 }
 
 run_issue() {
 	local issue="$1" issue_url="$2" labels="$3" text source_repo workflow branch sha run_url run_id repo_path roster conductor workers shift_index shift_hours state_dir brief stale code instruction
 	RUN_ISSUE_CLAIMED=0
 
+	if ! has_label "$labels" ci-failure; then
+		return 0
+	fi
 	if has_label "$labels" repair-done || has_label "$labels" repair-paused || has_label "$labels" repair-failed; then
 		return 0
 	fi

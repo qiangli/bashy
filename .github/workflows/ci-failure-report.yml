@@ -4,16 +4,25 @@ on:
   workflow_run:
     workflows: [test, release, engine-blobs]
     types: [completed]
+  repository_dispatch:
+    types: [ci-failure-filed]
+  workflow_dispatch:
+    inputs:
+      collector_issue:
+        description: Collector issue number to route
+        required: true
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   report:
-    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' }}
     runs-on: ubuntu-latest
     env:
       COLLECTOR_REPO: qiangli/dhnt-ci-failures
+      REPAIR_DISPATCH_EVENT: ci-failure-filed
       GH_TOKEN: ${{ secrets.CI_FAILURE_TOKEN }}
       SOURCE_REPO: ${{ github.repository }}
       WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
@@ -25,9 +34,42 @@ jobs:
       EVENT_NAME: ${{ github.event.workflow_run.event }}
       ACTOR: ${{ github.event.workflow_run.actor.login }}
     steps:
-      - name: Report missing token
+      - name: Preflight collector token
+        shell: bash
         if: ${{ env.GH_TOKEN == '' }}
-        run: echo "::warning::CI_FAILURE_TOKEN is not configured; skipping CI failure report"
+        run: |
+          echo "::error::CI_FAILURE_TOKEN is not configured. Sync the dhnt-ci-failures-token secret with collector repo Metadata:Read, Issues:Read+Write, and Contents:Write for repair dispatch."
+          exit 1
+
+      - name: Preflight collector permissions
+        if: ${{ env.GH_TOKEN != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error::$1"
+            exit 1
+          }
+
+          ensure_label() {
+            local name="$1" color="$2" desc="$3"
+            gh label create "$name" --repo "$COLLECTOR_REPO" --color "$color" --description "$desc" >/dev/null 2>&1 ||
+              gh label edit "$name" --repo "$COLLECTOR_REPO" --color "$color" --description "$desc" >/dev/null ||
+              fail "CI_FAILURE_TOKEN cannot create/edit collector label '$name'. Grant Issues:Read+Write on ${COLLECTOR_REPO}."
+          }
+
+          gh api "repos/${COLLECTOR_REPO}" >/dev/null ||
+            fail "CI_FAILURE_TOKEN cannot read ${COLLECTOR_REPO} metadata. Grant Metadata:Read on the collector repo."
+
+          gh label list --repo "$COLLECTOR_REPO" --limit 1 >/dev/null ||
+            fail "CI_FAILURE_TOKEN cannot read collector labels. Grant Issues:Read+Write on ${COLLECTOR_REPO}; missing label access keeps auto-repair dark."
+
+          gh issue list --repo "$COLLECTOR_REPO" --limit 1 >/dev/null ||
+            fail "CI_FAILURE_TOKEN cannot read collector issues. Grant Issues:Read+Write on ${COLLECTOR_REPO}."
+
+          ensure_label ci-failure D93F0B "Filed CI failure"
+          ensure_label automated 5319E7 "Created by automation"
 
       - name: Create or update collector issue
         if: ${{ env.GH_TOKEN != '' }}
@@ -64,11 +106,109 @@ jobs:
 
           if [[ -n "$issue" ]]; then
             gh issue comment "$issue" --repo "$COLLECTOR_REPO" --body-file "$body"
+            issue_number="$issue"
           else
-            gh issue create \
-              --repo "$COLLECTOR_REPO" \
-              --title "$title" \
-              --body-file "$body" \
-              --label ci-failure \
-              --label automated
+            issue_url="$(
+              gh issue create \
+                --repo "$COLLECTOR_REPO" \
+                --title "$title" \
+                --body-file "$body" \
+                --label ci-failure \
+                --label automated
+            )"
+            issue_number="${issue_url##*/}"
           fi
+
+          gh api \
+            --method POST \
+            "repos/${COLLECTOR_REPO}/dispatches" \
+            -f event_type="$REPAIR_DISPATCH_EVENT" \
+            -f "client_payload[source_repo]=$SOURCE_REPO" \
+            -f "client_payload[workflow]=$WORKFLOW_NAME" \
+            -f "client_payload[branch]=$HEAD_BRANCH" \
+            -f "client_payload[sha]=$HEAD_SHA" \
+            -f "client_payload[run_id]=$RUN_ID" \
+            -f "client_payload[run_url]=$RUN_URL" \
+            -f "client_payload[collector_issue]=$issue_number" ||
+            {
+              cat >&2 <<EOF
+          ::error::CI_FAILURE_TOKEN filed collector issue #${issue_number}, but could not dispatch ${REPAIR_DISPATCH_EVENT} to ${COLLECTOR_REPO}.
+          Grant Contents:Write on the collector repo so repository_dispatch can wake the repair router.
+          EOF
+              exit 1
+            }
+
+          gh issue comment "$issue_number" \
+              --repo "$COLLECTOR_REPO" \
+              --body "Auto-repair dispatch sent: \`${REPAIR_DISPATCH_EVENT}\` for run \`${RUN_ID}\`."
+
+  repair:
+    if: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch' }}
+    runs-on: [self-hosted, dhnt-repair]
+    concurrency:
+      group: ci-failure-repair-${{ github.event.client_payload.collector_issue || inputs.collector_issue }}
+      cancel-in-progress: false
+    env:
+      COLLECTOR_REPO: qiangli/dhnt-ci-failures
+      COLLECTOR_ISSUE: ${{ github.event.client_payload.collector_issue || inputs.collector_issue }}
+      SOURCE_REPO: ${{ github.event.client_payload.source_repo }}
+      FAILED_RUN_ID: ${{ github.event.client_payload.run_id }}
+      HEAD_BRANCH: ${{ github.event.client_payload.branch }}
+      GH_TOKEN: ${{ secrets.CI_FAILURE_TOKEN || github.token }}
+      DHNT_CI_REPAIR_ROUTER: ${{ vars.DHNT_CI_REPAIR_ROUTER }}
+    steps:
+      - name: Preflight repair dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error::$1"
+            exit 1
+          }
+
+          ensure_label() {
+            local name="$1" color="$2" desc="$3"
+            gh label create "$name" --repo "$COLLECTOR_REPO" --color "$color" --description "$desc" >/dev/null 2>&1 ||
+              gh label edit "$name" --repo "$COLLECTOR_REPO" --color "$color" --description "$desc" >/dev/null ||
+              fail "repair token cannot create/edit collector label '$name'; grant Issues:Read+Write on ${COLLECTOR_REPO}."
+          }
+
+          [[ -n "${COLLECTOR_ISSUE:-}" ]] ||
+            fail "repository_dispatch is missing client_payload.collector_issue; repair router cannot select a filed CI-failure issue."
+          [[ -n "${GH_TOKEN:-}" ]] ||
+            fail "No repair token is available. Configure CI_FAILURE_TOKEN on the collector repo or grant this workflow issues:write."
+
+          command -v gh >/dev/null ||
+            fail "GitHub CLI is missing on the dhnt-repair runner."
+          command -v bashy >/dev/null ||
+            fail "bashy is missing on the dhnt-repair runner."
+
+          gh api "repos/${COLLECTOR_REPO}" >/dev/null ||
+            fail "repair token cannot read ${COLLECTOR_REPO} metadata."
+          ensure_label ci-failure D93F0B "Filed CI failure"
+          gh issue view "$COLLECTOR_ISSUE" --repo "$COLLECTOR_REPO" --json number,state >/dev/null ||
+            fail "repair token cannot read collector issue #${COLLECTOR_ISSUE}; grant Issues:Read."
+          gh issue edit "$COLLECTOR_ISSUE" --repo "$COLLECTOR_REPO" --add-label ci-failure >/dev/null ||
+            fail "repair token cannot edit collector issue labels; grant Issues:Read+Write. Without this, repair claims stay silent."
+
+      - name: Run repair router
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          router="${DHNT_CI_REPAIR_ROUTER:-}"
+          if [[ -z "$router" ]]; then
+            if [[ -x "scripts/ci-failure-router.sh" ]]; then
+              router="scripts/ci-failure-router.sh"
+            else
+              router="/Users/qiangli/projects/poc/dhnt/bashy/scripts/ci-failure-router.sh"
+            fi
+          fi
+
+          if [[ ! -x "$router" ]]; then
+            echo "::error::CI failure repair router is not executable at '$router'. Set repository variable DHNT_CI_REPAIR_ROUTER to the checked-out bashy router path on the dhnt-repair runner."
+            exit 1
+          fi
+
+          "$router" --once --issue "$COLLECTOR_ISSUE"

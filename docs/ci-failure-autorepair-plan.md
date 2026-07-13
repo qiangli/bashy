@@ -214,3 +214,42 @@ Refactor the current dispatcher into:
 
 The existing 5-minute `bashy schedule` job should call the router. A future
 cloudbox webhook can call the same router immediately after a failed workflow.
+
+## Current Wiring
+
+The source repo workflow `.github/workflows/ci-failure-report.yml` is the
+collector edge. On a failed `workflow_run`, it now:
+
+- preflights `CI_FAILURE_TOKEN` against the collector repo;
+- creates or updates the `ci-failure` issue in `qiangli/dhnt-ci-failures`;
+- sends repository dispatch event `ci-failure-filed` to the collector repo with
+  the collector issue number and failed run metadata.
+
+The collector-side repair runner handles `repository_dispatch` event
+`ci-failure-filed` in `.github/workflows/ci-failure-report.yml`. It must run on
+a self-hosted runner labeled `dhnt-repair`, preflight the repair token, and run:
+
+```sh
+scripts/ci-failure-router.sh --once --issue "$COLLECTOR_ISSUE"
+```
+
+If the collector repo does not contain the scripts checkout, set repository
+variable `DHNT_CI_REPAIR_ROUTER` to the absolute path of
+`scripts/ci-failure-router.sh` on the `dhnt-repair` runner.
+
+The router then claims the issue with `repair-running`, writes the local brief,
+launches the on-shift conductor, and gives the conductor the gated merge helper:
+
+```sh
+scripts/ci-failure-gate.sh "$FAILED_RUN_ID" "$HEAD_BRANCH"
+```
+
+Required token scopes for `CI_FAILURE_TOKEN` on `qiangli/dhnt-ci-failures`:
+
+- Metadata: read;
+- Issues: read/write, including label access;
+- Contents: write, so `repository_dispatch` can wake the repair runner.
+
+The repair runner also needs a token usable by `scripts/ci-failure-gate.sh` in
+the source repo with Actions: read, so the conductor can wait for the replacement
+CI run instead of silently failing after the repair push.
