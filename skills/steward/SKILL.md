@@ -222,18 +222,21 @@ attached session — NOT a background `codex exec`/`--print`/one-shot run, which
 the human and so cannot steward anything. Before you step out, confirm the human can
 actually reach the new steward.
 
-**Steward vs. conductor — why the interactive rule is not universal.** They are different
-seats:
-- **steward** = the human's continuous point of contact and accountable lead. Human-facing
-  by definition → **must be interactive**.
-- **conductor** = the *autonomous* execution loop (decompose → isolate → gate → converge,
-  looping until a verifier passes; see the `conductor` skill). Its safety is the **gate**,
-  not human dialogue → it **may run headless / in the background**.
+**Steward vs. conductor — two axes: SCOPE and MODE.** They are different seats:
+- **steward** = **host-wide** + **interactive, always**. The accountable lead and the
+  human's continuous point of contact across *every* project on the machine. Human-facing
+  by definition, so a steward is never headless.
+- **conductor** = **project-scoped** + **headless OR interactive**. It drives *one* project
+  — which may be a superproject/umbrella spanning several repos — through the execution
+  loop (decompose → isolate → gate → converge, until a verifier passes; see the `conductor`
+  skill). Its safety is the **gate**, not human dialogue, so it runs equally well in the
+  background or attended.
 
-You *launch* a conductor to drive a job to a gate; you do **not** *become* one. So: a
-conductor task can be handed to a headless worker; a **steward seat cannot**. When someone
-says "hand off your work," settle two things before acting — **task or seat**, and if seat,
-**steward (interactive) or conductor (headless-ok)**.
+The steward owns the whole host and stays with the human; it **launches** conductors (one
+per project) and gates their results — it does **not** *become* one. So a conductor run
+can go to a headless worker; a **steward seat cannot**. When someone says "hand off your
+work," settle two things first: **task or seat**, and if seat, **steward (host-wide,
+interactive) or conductor (project-scoped, headless-ok)**.
 
 If someone asks you to "hand off your work," clarify **task or seat** before you act — the
 word "work" reads as a task, but they may mean the seat. Two mistakes to avoid: handing the
