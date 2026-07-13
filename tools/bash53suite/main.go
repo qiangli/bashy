@@ -690,6 +690,8 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 	if err != nil {
 		return "FAIL", err
 	}
+	got = normalizeHostSignalOrder(f.Name, got)
+	want = normalizeHostSignalOrder(f.Name, want)
 	if bytes.Equal(got, want) {
 		return "PASS", nil
 	}
@@ -739,6 +741,49 @@ func normalizeOutput(name string, raw []byte) []byte {
 		out = normalizeTestFixture(out)
 	}
 	return out
+}
+
+// Fixtures whose .right bakes in the SIGNAL NUMBERING of the host it was
+// recorded on. `trap -p` lists traps in signal-number order, and the numbers are
+// not portable: SIGUSR1 is 10 on Linux (below SIGTERM's 15) but 30 on Darwin
+// (above it). exec.right was recorded where SIGTERM sorts first, so on Linux it
+// lists SIGTERM before SIGUSR1 while every bash running there — GNU bash 5.3-rc2
+// included, verified by building it and diffing it against exec.right through
+// this very harness — emits SIGUSR1 first. run-execscript says as much in its own
+// banner: "warning: UNIX versions number signals differently."
+//
+// So this is normalized on BOTH sides, want and got alike, and it only REORDERS
+// lines within a contiguous trap listing. A trap line that should not be there,
+// or one that is missing, still diffs — which is what matters, since that is the
+// exact shape of the regression the baseline once carried (a spurious
+// `trap -- '' SIGINT` from a startup-inherited hard ignore).
+var sortTrapListings = wordSet("execscript")
+
+func normalizeHostSignalOrder(name string, in []byte) []byte {
+	if !sortTrapListings[name] {
+		return in
+	}
+	isTrap := func(b []byte) bool { return bytes.HasPrefix(b, []byte("trap -- ")) }
+	lines := bytes.SplitAfter(in, []byte("\n"))
+	for i := 0; i < len(lines); {
+		if !isTrap(lines[i]) {
+			i++
+			continue
+		}
+		j := i
+		for j < len(lines) && isTrap(lines[j]) {
+			j++
+		}
+		// Every line in the block must carry its "\n", or sorting would move
+		// the unterminated final line out of last position and fuse two lines.
+		if block := lines[i:j]; bytes.HasSuffix(block[len(block)-1], []byte("\n")) {
+			sort.Slice(block, func(a, b int) bool {
+				return bytes.Compare(block[a], block[b]) < 0
+			})
+		}
+		i = j
+	}
+	return bytes.Join(lines, nil)
 }
 
 func removeExpectLines(in []byte) []byte {

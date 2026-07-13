@@ -159,3 +159,43 @@ func repoRoot(t *testing.T) string {
 		dir = next
 	}
 }
+
+// normalizeHostSignalOrder must reorder a trap listing without ever changing
+// which trap lines are present — the regression it has to stay blind to is an
+// ORDER difference (SIGUSR1 sorts below SIGTERM on Linux, above it on Darwin),
+// and the regression it must still catch is an EXTRA or MISSING trap line, which
+// is the shape of the spurious `trap -- '' SIGINT` the baseline once carried.
+func TestNormalizeHostSignalOrder(t *testing.T) {
+	linux := "this is bashenv\n" +
+		"trap -- 'echo EXIT' EXIT\n" +
+		"trap -- 'echo USR1' SIGUSR1\n" +
+		"trap -- '' SIGTERM\n" +
+		"USR1\n"
+	darwin := "this is bashenv\n" +
+		"trap -- 'echo EXIT' EXIT\n" +
+		"trap -- '' SIGTERM\n" +
+		"trap -- 'echo USR1' SIGUSR1\n" +
+		"USR1\n"
+
+	gotLinux := string(normalizeHostSignalOrder("execscript", []byte(linux)))
+	gotDarwin := string(normalizeHostSignalOrder("execscript", []byte(darwin)))
+	if gotLinux != gotDarwin {
+		t.Fatalf("host signal order not normalized:\nlinux:  %q\ndarwin: %q", gotLinux, gotDarwin)
+	}
+
+	// An extra trap line must still diff.
+	extra := "this is bashenv\n" +
+		"trap -- 'echo EXIT' EXIT\n" +
+		"trap -- '' SIGINT\n" +
+		"trap -- 'echo USR1' SIGUSR1\n" +
+		"trap -- '' SIGTERM\n" +
+		"USR1\n"
+	if got := string(normalizeHostSignalOrder("execscript", []byte(extra))); got == gotLinux {
+		t.Fatal("a spurious trap line was normalized away; it must still diff")
+	}
+
+	// Other fixtures are untouched.
+	if got := string(normalizeHostSignalOrder("trap", []byte(linux))); got != linux {
+		t.Fatalf("non-execscript fixture was rewritten: %q", got)
+	}
+}
