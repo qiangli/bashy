@@ -6,9 +6,25 @@ branch="${2:-}"
 timeout="${DHNT_CI_GATE_TIMEOUT:-25m}"
 poll="${DHNT_CI_GATE_POLL:-20s}"
 
+die() {
+	echo "ci-failure-gate: $*" >&2
+	exit 1
+}
+
+preflight() {
+	command -v gh >/dev/null 2>&1 || die "missing required command 'gh'. Install GitHub CLI on the repair host."
+	command -v jq >/dev/null 2>&1 || die "missing required command 'jq'. Install jq on the repair host."
+	[[ "$failed_run_id" =~ ^[0-9]+$ ]] || die "failed run id must be numeric, got '$failed_run_id'."
+	[[ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]] || gh auth status >/dev/null 2>&1 ||
+		die "no GH_TOKEN/GITHUB_TOKEN is set and gh is not authenticated. Configure a token that can read source-repo Actions runs."
+}
+
 if [[ -z "$branch" || "$branch" == "null" ]]; then
 	branch="$(git branch --show-current 2>/dev/null || true)"
 fi
+[[ -n "$branch" ]] || die "branch is empty and could not be inferred from git."
+
+preflight
 
 duration_seconds() {
 	local raw="$1" n unit
@@ -39,6 +55,9 @@ latest_newer_run() {
 			.[0] // empty
 		'
 }
+
+gh run view "$failed_run_id" --json databaseId,url >/dev/null ||
+	die "GitHub token cannot read failed run $failed_run_id. Grant Actions:Read on the source repo before waiting for repair CI."
 
 while :; do
 	if (( SECONDS - start_seconds > timeout_seconds )); then
