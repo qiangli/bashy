@@ -132,11 +132,12 @@ duty — not an afterthought.**
   *candidate*, not truth, until you confirm it. You review kb entries for accuracy, and you
   have the authority to **overwrite or supersede** a wrong one. Supersede, don't silently
   delete — keep the trail.
-- **Prefer the kb over private, local memory.** Per-agent, per-session scratch (an agent's
-  own memory dirs, session-state folders, repo-local scratch) is host- and session-bound:
-  it does **not travel to other hosts** and is easily lost. Route anything worth keeping to
-  `bashy kb`, which is shared, durable, and the preferred store. If a piece of knowledge
-  matters beyond this session, it belongs in the kb.
+- **Prefer the kb over gitignored, local scratch.** Treat any gitignored, per-repo, or
+  per-session folder (an agent's own memory dirs, session-state dirs, generated scratch) as
+  **transient — it may be gone the next session**, and it does not travel to other hosts.
+  Durable knowledge lives in the host knowledge base (a **home-directory** store, not a repo
+  folder) or in **committed** source. If a piece of knowledge matters beyond this session,
+  it does not belong in a gitignored folder — put it in the kb.
 
 ## The traps — each is easy to hit and expensive to undo
 
