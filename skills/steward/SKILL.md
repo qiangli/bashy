@@ -195,9 +195,28 @@ line deliberately — and cross back.
 status/log/attach/say/gate/judge/pull/salvage/reverify/kill/abandon/prune) · `bashy gate`
 (does it pass) · `bashy judge` (is it good) · `bashy agents` / `bashy whois` (which agent
 can do this, and at what cost) · `bashy claim` (who holds this project) · `bashy handoff`
-/ `bashy resume` (pass work across tools and machines) · `bashy kb` (the host's collective
-memory — **yours to own, vet, and promote**; prefer it over private local scratch that
-does not travel).
+/ `bashy resume` (pass work across tools and machines; `handoff --as <role>` hands off the
+**seat**, not just the task — see below) · `bashy kb` (the host's collective memory —
+**yours to own, vet, and promote**; prefer it over private local scratch that does not
+travel).
+
+## Handing off — the task, or the seat
+
+There are two different things you can hand off, and confusing them wastes a successor's
+time. Say which one you mean:
+
+- **The task** — "here is what I was doing and where I left it." A plain
+  `bashy handoff -m "…" --next "…"` (optionally `--to <tool>`) captures the continuity
+  brief plus the in-flight diff. The successor does *that work*; you (or whoever) remain
+  the steward.
+- **The seat (the role)** — "you are now the steward." `bashy handoff --as steward --to
+  <tool>` passes the *role*: the successor loads the steward skill, becomes the accountable
+  lead, and **decides how to drive** — including whether to delegate the work back to you.
+  Use this when you are stepping out of the driver's seat, not just delegating a job.
+
+If someone asks you to "hand off your work," clarify **task or seat** before you act — the
+word "work" reads as a task, but they may mean the seat. Handing the seat and then
+continuing to steward the work yourself is the mistake to avoid.
 
 ## The one line to remember
 
