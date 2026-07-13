@@ -344,6 +344,19 @@ func TestSkillsE2E(t *testing.T) {
 	if _, _, code := runBashyStd(bin, "skills", "show", "no-such-skill"); code == 0 {
 		t.Fatal("skills show no-such-skill exited 0")
 	}
+
+	stdout, stderr, code = runBashyStd(bin, "conductor")
+	if code != 0 || !strings.Contains(stdout, "name: conductor") {
+		t.Fatalf("skill-name fallthrough stdout (exit %d): %.120q", code, stdout)
+	}
+	if !strings.Contains(stderr, "ring=embedded") {
+		t.Fatalf("skill-name fallthrough stderr missing verdict: %q", stderr)
+	}
+
+	stdout, stderr, code = runBashyStd(bin, "definitely-not-a-skill")
+	if code != 127 || stdout != "" || !strings.Contains(stderr, "command not found") {
+		t.Fatalf("missing skill fallthrough = code %d stdout %.80q stderr %.120q", code, stdout, stderr)
+	}
 }
 
 // TestSkillsAddVerifyE2E drives the P1 verified-admission loop end to end
