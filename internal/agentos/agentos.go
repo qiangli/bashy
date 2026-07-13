@@ -52,7 +52,6 @@ import (
 	"github.com/qiangli/coreutils/external/gitscm"
 	"github.com/qiangli/coreutils/external/gotoolchain"
 	"github.com/qiangli/coreutils/external/helm"
-	"github.com/qiangli/coreutils/external/java"
 	"github.com/qiangli/coreutils/external/kopia"
 	"github.com/qiangli/coreutils/external/kubectl"
 	"github.com/qiangli/coreutils/external/loom"
@@ -124,7 +123,7 @@ var (
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
 	}
-	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "java", "javac", "mvn", "git-scm", "curl"}
+	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "git-scm", "curl"}
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "chat", "verify"}
 )
 
@@ -777,23 +776,6 @@ func Dispatch() {
 		// Platform curl (built into Windows 10+, universal on unix); a pinned,
 		// checksum-verified curl.se/windows build on a bare Windows node.
 		cmd := curlbin.NewCurlCmd()
-		cmd.SetArgs(os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
-		}
-		os.Exit(0)
-	case "java", "javac", "mvn":
-		// Self-provisioning Temurin JDK (Adoptium API → checksum → tree extract)
-		// + Apache Maven (sha512-verified), JAVA_HOME wired. No system Java.
-		var cmd *cobra.Command
-		switch os.Args[1] {
-		case "java":
-			cmd = java.NewJavaCmd()
-		case "javac":
-			cmd = java.NewJavacCmd()
-		case "mvn":
-			cmd = java.NewMvnCmd()
-		}
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)

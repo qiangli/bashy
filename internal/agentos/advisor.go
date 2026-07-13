@@ -358,7 +358,7 @@ var heavyTools = map[string]bool{
 	"go": true, "make": true, "ninja": true, "bazel": true, "cmake": true,
 	"cc": true, "gcc": true, "g++": true, "clang": true, "clang++": true,
 	"ld": true, "lld": true, "rustc": true, "cargo": true,
-	"javac": true, "java": true, "node": true, "npm": true, "pnpm": true,
+	"node": true, "npm": true, "pnpm": true,
 	"yarn": true, "webpack": true, "tsc": true, "jest": true,
 	"pytest": true, "python": true, "python3": true,
 }
