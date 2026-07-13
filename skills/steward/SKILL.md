@@ -238,6 +238,24 @@ can go to a headless worker; a **steward seat cannot**. When someone says "hand 
 work," settle two things first: **task or seat**, and if seat, **steward (host-wide,
 interactive) or conductor (project-scoped, headless-ok)**.
 
+**The two-step protocol — the incumbent prepares, the human starts the successor.** You
+cannot launch an interactive successor on someone else's behalf: a background launch is
+headless by definition, and so cannot hold the seat. A seat handoff is therefore two moves,
+not one:
+
+1. **Incumbent prepares + parks.** `bashy handoff --as steward -m "<full brief>" --next
+   "<first action>"`. Prepare a COMPLETE record — state, open work, gotchas, tools, fleet —
+   so a cold successor in a different tool needs nothing else. Do **not** try to launch the
+   successor; just park the seat and tell the human it is ready.
+2. **The human starts the successor; it pulls the seat.** The human opens the new tool
+   (codex, claude, …) *interactively* and asks it to run `bashy resume [-m "<steer>"]`.
+   `resume` finds the parked handoff, shows the human's pickup steer first, then the role,
+   then the continuity, and stamps `resumed_by`. The successor loads the skill and assumes
+   the seat. **Verify it took:** `resumed_by` is set on the record — no stamp, no handoff.
+
+The split is deliberate: it puts the interactive launch in the only hands that can do it
+(the human's), and leaves the incumbent doing what it *can* — a thorough, portable record.
+
 If someone asks you to "hand off your work," clarify **task or seat** before you act — the
 word "work" reads as a task, but they may mean the seat. Two mistakes to avoid: handing the
 seat and then continuing to steward the work yourself; and handing the seat to a headless
