@@ -2,14 +2,16 @@
 id: a6950eafd93e
 kind: bug
 title: 'bashy claim was never wired: no atlas entry, no dispatch, and the refusal points at a nonexistent `bashy claims`'
-status: triaged
+status: closed
 stage: code
 priority: p1
 refs:
     - ../coreutils
 reporter: qiangli
 created: 2026-07-12T22:55:18.511712Z
-weave: 12
+closed: 2026-07-13T00:02:14.075436Z
+resolution: fixed
+closed_by: codex-l
 ---
 
 ## Symptom

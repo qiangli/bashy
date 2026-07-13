@@ -2,12 +2,15 @@
 id: 37107ad005c0
 kind: bug
 title: 'bashy resume does not mark a record taken: a resumed handoff still shows in --list and can be grabbed twice'
-status: open
+status: closed
 priority: p1
 refs:
     - ../coreutils
 reporter: qiangli
 created: 2026-07-12T23:32:07.100452Z
+closed: 2026-07-12T23:41:05.568412Z
+resolution: declined
+closed_by: qiangli
 ---
 
 ## Observed
@@ -51,3 +54,7 @@ handoff is "available" until proven taken, and nothing ever proves it.
     go test ./pkg/handoff/
     # a resumed record disappears from `resume --list` and appears under `--list --all`
     # marked taken; a second `resume` of it is refused.
+
+## Resolution
+
+NOT A BUG (verified). The record in --list had resumed_at:(none) = pending, correctly shown. resume stamps ResumedAt in-place (Save overwrites by ID); Pending() filters it. I diagnosed from a hunch without testing. Real adjacent gap, if wanted: no `--list --all` to see WHO took a record.

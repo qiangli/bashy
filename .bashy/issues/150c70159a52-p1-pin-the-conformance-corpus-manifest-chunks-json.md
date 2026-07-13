@@ -2,12 +2,14 @@
 id: 150c70159a52
 kind: task
 title: 'P1: pin the conformance corpus manifest (chunks.json) so chunked runs are reproducible'
-status: triaged
+status: closed
 stage: test
 priority: p0
 reporter: qiangli
 created: 2026-07-12T22:58:50.548754Z
-weave: 11
+closed: 2026-07-13T00:05:14.791953Z
+resolution: fixed
+closed_by: codex-k
 ---
 
 GOAL OF THE CAMPAIGN: run the whole conformance matrix in MINUTES, not hours. Today

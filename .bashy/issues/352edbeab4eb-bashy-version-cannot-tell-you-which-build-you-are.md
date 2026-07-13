@@ -2,12 +2,14 @@
 id: 352edbeab4eb
 kind: feature
 title: bashy --version cannot tell you WHICH build you are running
-status: triaged
+status: closed
 stage: code
 priority: p2
 reporter: qiangli
 created: 2026-07-12T22:58:18.388268Z
-weave: 13
+closed: 2026-07-12T23:46:03.910859Z
+resolution: fixed
+closed_by: codex-m
 ---
 
 ## Motivation (from real use, today)
