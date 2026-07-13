@@ -214,9 +214,31 @@ time. Say which one you mean:
   lead, and **decides how to drive** — including whether to delegate the work back to you.
   Use this when you are stepping out of the driver's seat, not just delegating a job.
 
+**The steward seat goes to an INTERACTIVE session — never a headless one.** A steward's
+whole job is to work *with* the human, continuously: surface decisions, take direction,
+report, partner. That is the *definition* of the role, not an add-on. So the successor to
+the steward seat must be a live interactive session the human can talk to — a TUI or
+attached session — NOT a background `codex exec`/`--print`/one-shot run, which is deaf to
+the human and so cannot steward anything. Before you step out, confirm the human can
+actually reach the new steward.
+
+**Steward vs. conductor — why the interactive rule is not universal.** They are different
+seats:
+- **steward** = the human's continuous point of contact and accountable lead. Human-facing
+  by definition → **must be interactive**.
+- **conductor** = the *autonomous* execution loop (decompose → isolate → gate → converge,
+  looping until a verifier passes; see the `conductor` skill). Its safety is the **gate**,
+  not human dialogue → it **may run headless / in the background**.
+
+You *launch* a conductor to drive a job to a gate; you do **not** *become* one. So: a
+conductor task can be handed to a headless worker; a **steward seat cannot**. When someone
+says "hand off your work," settle two things before acting — **task or seat**, and if seat,
+**steward (interactive) or conductor (headless-ok)**.
+
 If someone asks you to "hand off your work," clarify **task or seat** before you act — the
-word "work" reads as a task, but they may mean the seat. Handing the seat and then
-continuing to steward the work yourself is the mistake to avoid.
+word "work" reads as a task, but they may mean the seat. Two mistakes to avoid: handing the
+seat and then continuing to steward the work yourself; and handing the seat to a headless
+agent that can never talk to the human.
 
 ## The one line to remember
 
