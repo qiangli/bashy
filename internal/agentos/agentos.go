@@ -167,7 +167,7 @@ func Preamble() string {
 // drop-in never carries it). Static string: zero startup cost.
 func init() {
 	os.Setenv("BASHY_AGENT_MANIFEST",
-		`v1 shell=agentic first-hop="bashy context --json" skills="bashy skills list" guide="bashy skills show bashy"`)
+		`v1 shell=agentic first-hop="bashy context --json" skills="bashy skills list" guide="bashy skills show bashy|bashy bashy"`)
 }
 
 // maybeAdvertiseSkillHint is L1 of the advertisement ladder: when an
@@ -976,6 +976,15 @@ func Dispatch() {
 		}
 		os.Exit(0)
 	}
+	if isEmbeddedSkillName(os.Args[1]) {
+		cmd := coreskills.NewSkillsCmd(skillsOptions()...)
+		cmd.SetArgs([]string{"show", os.Args[1]})
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy skills:", err)
+			os.Exit(coreskills.ExitCode(err))
+		}
+		os.Exit(0)
+	}
 	// Unknown first token — not a front-door verb, engine/obs command, or a
 	// registered coreutils tool. When it is a BARE command NAME (not an option,
 	// path, or existing file), the bashy front-door is being asked to run a
@@ -1009,6 +1018,15 @@ func isMissingCommandToken(name string) bool {
 		return false // an existing file → run as a script (bash semantics)
 	}
 	return true
+}
+
+func isEmbeddedSkillName(name string) bool {
+	for _, skillName := range skills.Names() {
+		if skillName == name {
+			return true
+		}
+	}
+	return false
 }
 
 func dispatchCoreutilsTool(name string, args []string, stdio tool.Stdio) int {
