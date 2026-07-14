@@ -350,7 +350,7 @@ var verbSynopsis = map[string]string{
 	"lexicon":    "what do this project's words mean HERE? (verbs + agent bindings, projected)",
 	"gate":       "does this project pass? (the one command that decides)",
 	"pair":       "two agents + a gate: one proposes, one BREAKS it (writes the failing test) — a proof, not an opinion",
-	"judge":      "prose review by a panel (superseded by `pair`, which acts instead of opining)",
+	"judge":      "panel verdict on work with NO gate to run (a plan, a design). For code, use `pair` — it acts",
 	"issue":      "the project's issue register: bugs, features, requirements — GitHub Issues without GitHub",
 	"invoke":     "invoke ONE agent, ONCE, on one instruction (the primitive every orchestrator is built on)",
 	"conform":    "bashy's OWN fidelity batteries: compat/conformance/compliance/benchmark",

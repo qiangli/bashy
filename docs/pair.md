@@ -220,4 +220,28 @@ An acting pair needs write authority in its workspace
 (`BASHY_ALLOW_UNSAFE_AGENT_LAUNCH=1`, or run it inside `bashy weave` where the isolation is
 structural). A `refute` pair does not — it never touches the tree.
 
-`bashy judge` still works, as an alias. It is the prose-only path. Reach for `pair` instead.
+## `judge` is still its own verb
+
+**`pair` did not replace `judge`. Both exist, independently.** `bashy judge` still runs the
+original `pkg/judge` panel — N reviewers, combined verdict, unchanged. Nothing was aliased and
+nothing was deleted.
+
+This is worth stating plainly because the commits that introduced `pair`
+(coreutils `36f9ed9`, bashy `da681ec`) claim otherwise. They say *"judge stays as an alias"*
+and *"net new verbs: ZERO."* **Both are false** — the alias was described and never wired.
+An assertion made in the commit message of the very tool built to catch assertions made
+without evidence. It is left in the history rather than force-pushed over, because a
+correction you can read is worth more than a history that looks clean.
+
+The verb count went **+1**, deliberately, and stays there for now:
+
+| verb | runs | when to reach for it |
+|---|---|---|
+| **`pair`** | `pkg/pair` | **default.** The pair acts; its finding is executable, so the gate settles it |
+| `judge` | `pkg/judge` | a panel verdict on something with no gate to run — a plan, a design, prose |
+
+They genuinely do different jobs, which is the honest reason to keep both: `judge` can review a
+thing that cannot be executed. `pair` cannot — its whole value is that the gate can run what
+the pair wrote. Collapsing `judge` into `pair --role refute` is possible (that role is exactly
+judge-without-the-panel) and may happen later; it would mean repointing weave's in-process
+`judge.RunReader`/`RunRecorder` hooks. Not today.
