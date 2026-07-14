@@ -393,6 +393,7 @@ POSIX-conformance frontier (the active layer now that bash-5.3 is 86/86 — driv
 - `ci-failure-autorepair-plan.md` + `config/ci-failure-conductor.env` + `scripts/ci-failure-{router,conductor,gate}.sh` — the `.github/workflows/ci-failure-report.yml` lane that routes a CI failure to a conductor run.
 - `bashy-v1.0.0-readiness.md` — the release-readiness ledger.
 - `agent-adoption/matrix.md` — which agentic CLIs are verified running on bashy as their shell (the `force-agent-shell` skill's evidence base).
+- `harness-ab-deepseek.md` — **the three-harness A/B** (ycode vs opencode vs aider, one model, one task, one gate). All three converge; the differences were in the HARNESS, and two were ours. Headline finding: **all three exit 0 when they fail** — a harness's exit code carries no information, so run the gate. Also why aider is retired from the API-key lane (it cannot discover the files a task needs — architecture, not quality) and why opencode is KEPT (the cross-check against a first-party bug). Read before any harness-selection or fleet-routing decision.
 
 Per-fixture cluster analyses + blocker ledgers (snapshots — diff line-counts and PASS/FAIL claims in them are dated, re-measure before trusting):
 
