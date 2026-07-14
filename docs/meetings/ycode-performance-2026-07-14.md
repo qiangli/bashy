@@ -3,8 +3,19 @@
 *2026-07-14. Participants: Sable (claude:fable5), Beatrix (claude:opus4.8),
 Arlo (codex:gpt-5.5), Omar (codex:gpt5.6-sol). Secretary: Claude Code.*
 
-**Outcome: 37% of ycode's wall clock was being spent re-deriving an answer it
-already had. Fixed. 85s → 55s, and the flaky gate failure went with it.**
+**Outcome: 85s → 42.6s (a 50% cut), 22 tool calls → 5, and the flaky gate failure
+is gone. THREE bugs, and the meeting only found the first one. The other two were
+found by putting a proxy on the wire and reading what the model actually received.**
+
+| | wall | gate | tool calls |
+|---|---|---|---|
+| original | **85s** | 1 of 3 **FAIL** | **22** (16 bash: `base64`, `xxd`, hexdump) |
+| + preactivation memo | 55s | 3/3 | — |
+| + routing gate | 42.6s | 3/3 | 10–12 |
+| **+ distill gate** | **42.6s** | **3/3** | **5** — identical every run |
+
+Five calls is the minimal correct sequence: read the spec, read the stub, write the
+function, run the tests.
 
 ---
 
@@ -122,6 +133,63 @@ The classifier was second-guessing a message whose keywords had already answered
 it was buying anything, and across three runs it says no: **3/3 pass, where the old
 path passed 2/3.**
 
+## THE BIG ONE — which the meeting did NOT find
+
+After the meeting's fix landed, I put a **counting proxy in front of the API** and
+read what the model was actually being sent. This was sitting in the tool result:
+
+```
+[... 755 characters omitted ...]
+```
+
+`RouteContent` classifies a `read_file` result over 2000 chars as `RoutePartial` —
+**keep the head, keep the tail, DELETE THE MIDDLE** (`session/routing.go:84-93`,
+`partialContent` at `:165`). And it was called **unconditionally** from
+`distillResults`: on turn 1, of an empty conversation, against a 64K-token window
+with about 600 tokens used.
+
+So the model asked for the test file it had been told to implement against, and we
+handed it back **with the test cases — the entire specification — cut out of the
+middle.** Its next seventeen turns:
+
+```
+cat → sed ranges → python → awk → base64 → base64|xxd → xxd hexdump → awk|tee
+```
+
+**It was not flailing. It was doing exactly what anyone does when handed a document
+with the middle torn out.** Then we charged it seventeen round-trips to work around
+us.
+
+**Context management is a response to a context PROBLEM.** Below the soft threshold
+there is no problem, and saving 800 characters costs the agent its ability to read.
+
+## And the second opinion found the half I missed
+
+codex:gpt-5.5, asked to *refute* the fix:
+
+> *"The second instance is not another RouteContent; it is `DistillToolOutput` still
+> running below pressure. It has no pressure check, no default read_file exemption...
+> If the principle is 'don't damage tool observations without pressure', this path
+> violates it too."*
+
+He was right. My gate skipped `RouteContent` and then **still** called
+`DistillToolOutput`, which head/tails at **1000 chars** for a non-caching provider.
+The measurement had improved enough to hide it — 85s → 42.6s, no more `xxd`, gate
+3/3. **It looked fixed.**
+
+> **A measurement that improves is not the same as a cause that is gone.**
+
+## What actually found these
+
+Not code review — I had read `routing.go` and it looked reasonable. Not the L4 panel,
+which produced four good hypotheses and missed this one entirely. **A proxy on the
+wire, and reading what the model received.**
+
+The panel was still worth holding: it found the 37% preactivation waste, it killed
+two hypotheses (system-prompt rebuild, streaming) by reading opencode's source, and
+Omar's correction stopped me sizing a fix against a fiction. But the decisive
+evidence came from the wire, not from four L4 agents reasoning about source.
+
 ## What is left, and what it is NOT
 
 **Remaining gap: 1.8×. It is TURN COUNT.** ycode took 8–20 turns across the post-fix
@@ -159,9 +227,12 @@ because of a self-inflicted surface is not a capability worth sharing.
 |---|---|---|
 | 1 | Memo preactivation on the user message | **DONE** — `ycode 27ea6d8` |
 | 2 | `YCODE_PERF=1` per-turn timing on stderr | **DONE** — it cost one run to find 41 seconds. Keep it. |
-| 3 | Measure turn count: why does ycode take 8–20 turns where opencode takes fewer? | open — the whole remaining gap |
-| 4 | Measure the *serialized schema bytes* per request, both harnesses | open — **measure before touching** |
-| 5 | Decide whether the tool-routing cascade should exist at all | open — strategic, blocked on #4 |
+| 3 | Measure turn count | **DONE** — and it found the real bug. 25 turns → 5 calls. |
+| 4 | Gate content routing on actual context pressure | **DONE** — `ycode 4604f07` |
+| 5 | Gate distillation too (the half I missed) | **DONE** — `ycode 801e207` |
+| 6 | Measure the *serialized schema bytes* per request | open — the proxy now reports it: ycode sends **10 tools / 6.2KB** per request, NOT 111. The router works. The "111 tools" theory is DEAD. |
+| 7 | Audit every other place that trims/summarizes/excludes with no pressure check | **open — highest value.** Two identical bugs found; assume a third. grep: `softTrim`, `summarizeContent`, `RouteExcluded`, `CheckContextHealth`. |
+| 8 | Decide whether the tool-routing cascade should exist at all | open — strategic |
 | — | ~~System-prompt rebuild~~ | **killed in meeting** — opencode does it too |
 | — | ~~Streaming~~ | **killed in meeting** — both stream |
 | — | ~~Go-vs-Node~~ | **killed in the brief** — identical on a trivial prompt |
