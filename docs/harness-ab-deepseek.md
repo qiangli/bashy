@@ -177,3 +177,63 @@ Error: exec: "aider-deepseek-v4-pro": executable file not found in $PATH
 bashy did not say *"unknown agent"*. It fell through to exec'ing the agent's NAME as a
 binary. That is the absence-of-evidence shape again, in bashy's own resolver: an
 unknown agent should be an error, not a filename. Small, but worth a fix.
+
+## Round 3 — after deleting three of the five context mechanisms (2026-07-14)
+
+`ycode c3f4b1c`: **−1,249 / +410**. RouteContent/ApplyRoute, DistillToolOutput and
+MaskOldObservationsBudget deleted outright; PruneMessages KEPT (see below); compaction
+and emergency flush kept. Everything now gates on the token count the **provider
+reports**, not a 4-chars-per-token guess.
+
+| harness | gate | wall (each) | mean |
+|---|---|---|---|
+| **ycode** | **3 / 3 PASS** | 54s · 46s · 44s | **48.0s** |
+| opencode | **1 / 3 PASS** | 59s(F) · 44s(P) · 53s(F) | 52.0s |
+
+**Deleting 1,249 lines of "context defense" made it FASTER.** The gap is not just
+closed, it is inverted: ycode is now ahead of opencode on mean wall time *and* three
+times more reliable.
+
+### The whole arc
+
+| ycode build | wall | gate | tool calls |
+|---|---|---|---|
+| original | **85s** | 1/3 | 22 (16 bash: `base64`, `xxd`, hexdump) |
+| + context fixes | 54.7s | 3/3 | 5 |
+| **+ deletion** | **48.0s** | **3/3** | 5 |
+
+### Caveats, stated rather than buried
+
+N=3, and the wall-time ranges OVERLAP (ycode 44–54s, opencode 44–59s). On **speed**,
+read this as *parity, maybe slightly ahead* — not a decisive win.
+
+The **gate** result is the robust one. opencode failed 2 of 3 in BOTH independent runs
+today, and **exited 0 every single time it failed**. That is the round-1 headline,
+confirmed twice more:
+
+> A harness's exit code carries no information. Run the gate.
+
+### What the second opinion changed
+
+The plan was to delete FOUR. codex:gpt-5.5, asked to refute it, saved one:
+
+> Compaction is an **LLM call**. Delete the cheap layer and every pressure event on a
+> long non-caching session — deepseek, kimi, the whole API-key lane — pays for a full
+> summarization round-trip. Dropping a stale tool result costs nothing.
+
+He was right, so `PruneMessages` stayed, re-gated on the real count. He also found two
+holes that would have shipped: the one-turn **lag** (the provider's count describes the
+PREVIOUS request; 90K reported + a 200KB tool result = a 140K request against a 128K
+window) and the **resume hole** (a session loaded from disk has no in-memory count, so
+"nothing to compact" would sail past the window — a success state reached by the ABSENCE
+of a measurement). Both are now tests named after the objections.
+
+### The thing that made it all possible was already there, unwritten
+
+`ConversationMessage.Usage` has always existed and serialized to JSON. **Nothing ever
+wrote it.** Every reference in the tree was a read or a struct copy, so `msg.Usage` was
+permanently nil — which also means the session indexer and the SQL writer have reported
+**zero tokens for every session ever recorded**.
+
+The exact number the entire context layer needed was in every API response, and we threw
+it away — then built five layers of guessing on top of the hole.
