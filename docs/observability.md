@@ -2,6 +2,34 @@
 
 *Shipped 2026-07-14. bashy emits, and the stack that receives it is Victoria-only.*
 
+> **2026-07-14, end-to-end verification against a live stack — read this first.**
+> The claims below ("bashy emits", "ycode records", the query verbs) were written
+> before anyone ran the whole path against a real store. Doing so found three bugs,
+> two of which meant the plane did not actually work:
+>
+> 1. **`bashy otel serve` panics at init.** VictoriaLogs and VictoriaTraces both link
+>    `app/.../logsql`, which registers the same global flag (`search.maxQueryLen`), so
+>    linking two Victoria stores into one process collides *before `main()`*. The
+>    in-process stack cannot start today. This is exactly what the build doctrine
+>    (`docs/bashy-build-architecture.md`: *engines never linked; exec'd as separate
+>    processes*) warns against. **Unfixed — needs the exec-not-link redesign.** The
+>    verification below ran the three stores as separate containers behind a
+>    route-mirroring proxy to get around it.
+> 2. **The query default pointed at a store's own port** (`8428`), not the proxy
+>    (`31415`), so every verb 404'd out of the box. *Fixed* (coreutils `ea0cc46`).
+> 3. **Every trace verb returned a false "0 matches."** The verbs queried a flat
+>    attribute schema; the real VictoriaTraces prefixes everything
+>    (`span_attr:`, `resource_attr:`, `event:event_attr:<name>:<idx>`). *Fixed and
+>    now verified live* (coreutils `0c79aca`, ycode `d20df52`).
+>
+> After the fixes, bashy emitting its own spans through the proxy:
+> `otel failed → 1x ls exit 2 duration=67ms`; `otel guessed → 1x GUESS-default-rate
+> context.tokens amount=6482`; `otel bounds → 1x iterations limit=25 actual=25`; and
+> ycode read 6 spans back with `cmd.exit_code` reachable by its bare name.
+>
+> The lesson is the doc's own thesis turned on the doc: **a telemetry plane nobody
+> queried end-to-end is a plane that reports "0 matches" and means "I never looked."**
+
 Two halves, and until this date only one existed:
 
 | | before | after |
