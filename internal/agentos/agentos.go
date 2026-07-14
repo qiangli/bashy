@@ -1165,5 +1165,28 @@ func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 // says "verified" about something that cannot run is worse than no probe at all.
 func liveProbeAgent(ctx context.Context, agent string, timeout time.Duration) (string, string, bool) {
 	status, note := chat.ProbeAgent(ctx, agent, timeout)
+
+	// Feed the verdict back into the capability matrix, because the router's
+	// operability gate was measuring the wrong thing: capability.Operable() is
+	// exec.LookPath — "the binary is on disk". agy sat in that matrix at
+	// operability 1.0 across 8 samples while rejecting its own model flag on every
+	// single run. A binary on disk is not an operable agent, and until now nothing
+	// in the fleet could tell the difference.
+	//
+	// Record against the CANONICAL binding, never the nickname the caller typed.
+	// The matrix is keyed by tool:model precisely so that every name for an agent
+	// folds into one row — write `opencode-kimi-k2.7-code` instead of
+	// `opencode:kimi-k2.7-code` and you have fragmented one agent's evidence
+	// across two rows, which is the thing MatrixKey exists to prevent.
+	//
+	// Best-effort: an unwritable matrix must not fail the verification the
+	// operator actually asked for.
+	key := agent
+	if a, ok := fleet.New().Agent(agent); ok {
+		key = a.MatrixKey()
+	}
+	if err := capability.RecordProbe(key, status.OK()); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not record probe result for %s: %v\n", key, err)
+	}
 	return string(status), note, status.OK()
 }
