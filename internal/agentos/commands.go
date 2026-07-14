@@ -375,6 +375,7 @@ var verbSynopsis = map[string]string{
 	"commands":   "list the supported command surface (builtins, coreutils, verbs)",
 	"context":    "print first-hop agent context: exact bashy path and capabilities",
 	"doctor":     "diagnose the bashy environment (PATH/sh, engine, agent mode, bin cache)",
+	"otel":       "query OTEL telemetry with bounded agent-readable summaries",
 	"audit":      "the tamper-evident command audit trail: status/tail/verify/export",
 	"check":      "statically check shell scripts for bashy/system command closure",
 	"verify":     "run formal test batteries: compat/conformance/compliance/benchmark",

@@ -8,6 +8,10 @@ package agentos
 import (
 	"fmt"
 	"os"
+
+	"github.com/spf13/cobra"
+
+	"github.com/qiangli/coreutils/pkg/otelquery"
 )
 
 // dispatchObs (default lean build) reports that the observability stack is not
@@ -16,9 +20,19 @@ import (
 // host binary with `-tags bashy_obs`, or run otel on a host node.
 func dispatchObs(arg string) {
 	if arg == "otel" {
-		fmt.Fprintln(os.Stderr,
-			"bashy otel: the observability stack is not in this build "+
-				"(rebuild with -tags bashy_obs, or run it on a host node)")
-		os.Exit(1)
+		cmd := otelquery.NewCommand()
+		cmd.AddCommand(&cobra.Command{
+			Use:   "serve",
+			Short: "Start the embedded OTEL stack (requires -tags bashy_obs)",
+			RunE: func(cmd *cobra.Command, args []string) error {
+				return fmt.Errorf("the observability stack is not in this build (rebuild with -tags bashy_obs, or run it on a host node)")
+			},
+		})
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy otel:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
 	}
 }

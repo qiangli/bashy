@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/qiangli/coreutils/external/otel/otelcli"
+	"github.com/qiangli/coreutils/pkg/otelquery"
 )
 
 // dispatchObs (full build, -tags bashy_obs) wires the all-in-one observability
@@ -18,6 +19,7 @@ import (
 func dispatchObs(arg string) {
 	if arg == "otel" {
 		cmd := otelcli.NewCommand()
+		otelquery.AddCommands(cmd)
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
