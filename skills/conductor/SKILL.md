@@ -388,14 +388,13 @@ when the task is exploratory, interactive, or a single cohesive build that
 benefits from real-time correction; pick the fleet when the task decomposes into
 many independent, gateable units.
 
-`bashy foreman` is a **persistent, steerable session** over the same one-shot
-runner as `bashy invoke` (invoke = the degenerate one-turn foreman, `foreman
---once`; it was called `chat` until 2026-07-12, which misled agents into thinking
-it held a conversation — it does not: it invokes ONE agent, ONCE, on one
-instruction). One session, two co-equal drive surfaces sharing one on-disk state
-(`~/.bashy/foreman/<id>/` = `state.json` + append-only `commands` queue +
-`ctl.sock` + `log` — server-less, inspectable, resumable, mirroring weave's
-model):
+`bashy foreman` is a **persistent, steerable session**. `bashy invoke` is the
+degenerate one-turn case (it was called `chat` until 2026-07-12, which misled
+agents into thinking it held a conversation — it does not: it invokes ONE agent,
+ONCE, on one instruction). One session, two co-equal drive surfaces sharing one
+on-disk state (`~/.bashy/foreman/<id>/` = `state.json` + append-only `commands`
+queue + `ctl.sock` + `log` — server-less, inspectable, resumable, mirroring
+weave's model):
 
 - **Human drive (a TTY):** `bashy foreman [run <dag.md>]` → a readline REPL
   holding the session; typed lines are steering (`tell …`, `status`, `pause`,
@@ -406,10 +405,31 @@ model):
 
 ```sh
 bashy foreman start [--detach] [run <dag.md>] --goal "<…>"   # begin a session
-bashy foreman tell <id> "<msg>"          # inject a steering message (like weave say)
+bashy foreman tell <id> "<msg>"          # steer the LIVE agent (same wire as weave say)
 bashy foreman status <id> [--json] / list # reconciled state: idle|working|blocked|done
 bashy foreman pause|resume|skip|prio|stop <id>
 ```
+
+### `tell` steers a live agent — CHECK that it did
+
+`tell` holds the agent open and types the message at it mid-turn. But an agent
+whose tool declares no interactive launch cannot be held open, and there `tell`
+falls back to **replaying** the conversation into a fresh one-shot. Both produce
+an answer. They are not the same act: a replay cannot interrupt anything, because
+by the time it lands the previous agent has exited.
+
+`status --json` says which happened, and **you must read it** rather than assume:
+
+```sh
+bashy foreman status <id> --json | jq '{steering, steer_why_not}'
+# {"steering": true,  "steer_why_not": null}          → the message reached a running agent
+# {"steering": false, "steer_why_not": "…no interactive launch (steer_exec)"}
+#                                                      → it was replayed. You did not interrupt anything.
+```
+
+If you needed to *correct an agent mid-flight* and `steering` is false, your
+correction arrived after the fact. Re-issue it as the next instruction rather than
+assuming it was absorbed.
 
 Verbs and effect (the ycode Boss-control set, re-homed here): `pause` (finish the
 current step → idle), `resume`, `stop` (cancel the current turn → exit cleanly),
