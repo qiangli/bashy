@@ -20,21 +20,58 @@ the over-spend the whole abstraction exists to make visible.
 ## The ladder
 
 Every rung below was **live-probed** (`bashy agents verify --live`) — it launches
-and answers. 19 of 20 agents pass; `opencode:kimi-k2.7-code` fails on opencode's own
-opaque `UnknownError` (it fails standalone too).
+and answers. **21 of 21 agents pass.**
 
-| band | Anthropic (claude) | OpenAI (codex) | Google (agy) | DeepSeek (aider) | Moonshot (aider) |
+| band | Anthropic (claude) | OpenAI (codex) | Google (agy) | DeepSeek (ycode · opencode) | Moonshot (ycode · opencode) |
 |---|---|---|---|---|---|
 | **L4** steward | `fable5` · `opus4.8` | `gpt5.6-sol` · `gpt-5.5` | — | — | — |
-| **L3** conductor | ↑ | `gpt5.6-terra` | `gemini3.1` ⚠ | `deepseek-v4-pro` ⚠ | — |
-| **L2** coding | `sonnet5` | `gpt5.6-luna` | `gemini3.5-flash` | `deepseek-v4-flash` | `kimi-k2.6` · `kimi-k2.7-code` |
+| **L3** conductor | ↑ | `gpt5.6-terra` | — | `deepseek-v4-pro` ✅ | — |
+| **L2** coding | `sonnet5` | `gpt5.6-luna` | `gemini3.1` ⬇ · `gemini3.5-flash` | `deepseek-v4-flash` | `kimi-k2.6` · `kimi-k2.7-code` |
 | **L1** QA | `haiku4.5` | `gpt5.3-spark` · `gpt5.4-mini` | `gemini3.5-flash-low` | `deepseek-chat` | — |
 
-⚠ **`gemini3.1` and `deepseek-v4-pro` are the two open questions.** They are their
-vendors' *reasoning* tiers, pegged L3 as a **declared guess**, and **nobody has run
-either as a conductor**. They are the only rungs where the L2-vs-L3 answer changes
-who is allowed to conduct — so they are the first two candidates for the ladder
-bake-off.
+*(aider is gone from the table: retired from the fleet 2026-07-14 — it cannot
+discover the files a task refers to, so it cannot be delegated to. The tool still
+works when named explicitly. See `harness-ab-deepseek.md`.)*
+
+## The two open questions have been ANSWERED — both were run as conductors
+
+This section used to say `gemini3.1` and `deepseek-v4-pro` were "declared guesses"
+and "nobody has run either as a conductor". Both have now been run, on the same
+two-repo task, and measured on the same axis.
+
+**The metric that separated them: total tool calls vs DISTINCT tool calls.** A
+conductor that cannot converge re-reads the same file forever; the repeat ratio
+shows it in one number.
+
+| conductor | calls | distinct | **repeat ratio** | plan? | delegated? | recovered from failure? |
+|---|---|---|---|---|---|---|
+| `agy:gemini3.1` | 377 | 40 | **9.4×** | never | no — coded it itself | **never** |
+| `opencode:deepseek-v4-pro` | 19 | 16 | **1.2×** | yes, unprompted | yes — explicitly | **yes, unprompted** |
+
+**`gemini3.1` → L2 (⬇ from L3).** It read the same file **26 times**, looped for
+forty minutes, produced no plan, and edited a tree it had been told not to touch. It
+took three operator interventions to become useful. Once corrected it investigated
+well and delegated correctly — **which is the L2 profile exactly.** `band_source:
+operator`.
+
+> **The confound is recorded, not buried.** `gemini3.1` is reachable through ONE
+> harness (agy), whose own registry gives it the fleet's lowest tool-use score. This
+> run cannot separate "the model cannot hold a conductor loop" from "agy's loop
+> detection is weak". Hence `operator` — an owner's judgment — and explicitly **NOT
+> `measured`**. To settle it: run `gemini3.1` under a second harness (ycode reaches
+> gemini directly) on the same task.
+
+**`deepseek-v4-pro` → L3 CONFIRMED (✅).** As `opencode:deepseek-v4-pro` it decomposed a
+seven-gate goal into six weave issues *unprompted*, staffed four workers in parallel,
+self-recovered from a failed start without being told, and renamed a misleadingly-named
+test after being shown the problem — **catching a false claim in its comment that I had
+only half-noticed.** Its one real weakness is that it *stops* (goes idle rather than
+pushing through). Prefer that to an agent that never stops.
+
+Also worth recording: **the registry was already disagreeing with itself about
+gemini3.1.** Its `quality: 0.80` sat *below* `sonnet5` (0.85, L2) and beside
+`kimi-k2.7-code` (0.82, L2). The band was the outlier in its own record; the run only
+showed which half was wrong.
 
 Confirmed by the operator's lived experience: **`opus4.8` and `gpt-5.5` serve both
 conductor AND steward** (hence L4), and **Kimi is a coder** (L2). Anthropic and

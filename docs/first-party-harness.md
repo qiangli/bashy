@@ -29,7 +29,8 @@ ycode:deepseek-v4-pro    ycode:deepseek-v4-flash    ycode:deepseek-chat
 ycode:kimi-k2.7-code     ycode:kimi-k2.6
 ```
 
-**Fleet: 26 of 26 agents live** — every binding, every provider, every harness.
+**Fleet: 21 of 21 agents live** — every binding, every provider, every harness.
+*(21, not 26: aider was retired from the lane on 2026-07-14 — see below.)*
 
 *(An earlier version of this line said "it reaches kimi, which opencode cannot."
 That was also wrong: opencode reaches kimi fine. The registry had the wrong provider
@@ -145,19 +146,104 @@ The claude preseed has always merged. This one did not, and nobody noticed **bec
 the failure surfaced as somebody else's bug.** It now merges, refuses to overwrite a
 config it cannot parse, and never overrules a permission the project set itself.
 
-## Still owed
+## Still owed — nothing. All four shipped 2026-07-14.
 
-1. **Steering.** Expose ycode's bus as a control socket → `supports_say: true`.
-   Note this is now *parity work*, not a differentiator: all five third-party
-   harnesses already steer. ycode is the only one that does not.
-2. **Token streaming.** Trivial with your own loop (`stream=true`); impossible
-   through a CLI. It closes the gap `meet observe` currently has.
-3. **Evidence by construction.** Tool calls become structured events instead of
-   scraped stdout — which is what the fleet-evidence invariant has been asking for
-   all along.
-4. **The A/B.** `ycode:deepseek-v4-pro` vs `aider:deepseek-v4-pro` vs
-   `opencode:deepseek-v4-pro` — same model, three harnesses, one gate. Anything that
-   differs **is the harness**. Needs write authority.
+This section used to list four things. Here is what happened to each.
 
-Until (4) runs, ycode's harness scores in the registry are priors like everyone
-else's. **Live-probed is not the same as good.**
+### 1. Steering — DONE, and it never needed the bus
+
+ycode steers. It always did. It is a bubbletea TUI reading stdin, so bashy's pty
+control socket reaches it exactly as it reaches codex and opencode. Measured
+through the real socket (`STEER_TOOL=ycode go test ./pkg/agentpty -run
+TestSteerLive`): `STEERED_OK`, **echoed AND answered**.
+
+The registry said `supports_say: false`, with a comment asserting the bus had to
+be exposed first. Both were written without ever launching `ycode` interactively
+and typing at it. **All six harnesses steer.**
+
+### 2. Token streaming — superseded by something better
+
+Not a delta stream: a **turn boundary**. See below.
+
+### 3. Evidence by construction — DONE, and it is the differentiator
+
+`--events <path>` emits NDJSON on **both** paths (one-shot and TUI):
+
+```
+{"type":"turn.start","data":{"prompt":"..."}}
+{"type":"tool.call","data":{"name":"read_file","input":{...}}}
+{"type":"turn.end","data":{"status":"ok","text":"the answer"}}
+```
+
+`turn.end.text` equals exactly what `--print` writes to stdout — a consumer
+compares them, and if they disagree one of us is lying.
+
+**This is the thing no third-party CLI can give us.** Everywhere else, bashy decides
+a turn is over by watching for **25 seconds of silence** (`chat.Session.WaitIdle`) —
+wrong for an agent that pauses to think, wrong for one that renders a spinner, and
+a 25-second tax on every turn. ycode just *says* when it is done, and bashy believes
+it, because that is a fact the agent reported rather than a silence bashy interpreted.
+
+Live, through `chat.Session`, on a real steerable session:
+
+```
+turn ended after 8.3s          (before: 172s — it never ended, it timed out)
+Turn() = "example.com/probe"   (before: a raw ANSI terminal scrape)
+```
+
+`tool.call` arrives as **structured data**, which is what the fleet-evidence rule has
+been asking for from the beginning.
+
+**Not yet reached:** server mode. When `ycode serve` is running the agent loop lives
+in the server process, which never sees the client's `--events`. Closing that means a
+sink on the server side — a different design, not a missing call. Recorded in
+`ycode/internal/wireevents`.
+
+### 4. The A/B — RAN. And ycode did not win.
+
+`bashy/docs/harness-ab-deepseek.md`. One model (`deepseek-v4-pro`), one task, one gate,
+three harnesses:
+
+| harness | wall | gate | code |
+|---|---|---|---|
+| **opencode** | **25s** | PASS | +23 |
+| aider | 68s | PASS | +38 |
+| **ycode** | 110s | PASS | +53 |
+
+**ycode was the slowest and wrote the most code.** Say that plainly, because the case
+for a first-party harness was never "it wins a bake-off" — it is the event channel
+above, and that is worth having on its own.
+
+The A/B earned its keep anyway: it found **two harness bugs, both ours.**
+
+- **ycode had no write authority.** It produced NOTHING and exited 0. The obvious
+  reading — "deepseek can't do this" — would have been a false verdict about a MODEL.
+  It said so itself: *"I have the implementation ready, but I don't have
+  workspace-write permissions in this environment to write the file."* Every other
+  harness gets an approval-gate kill-switch; ycode's `--danger-skip-permissions`
+  existed and the registry never used it.
+
+- **aider never read the spec** — *"test file (not provided)... we need to deduce."*
+  It only sees files explicitly added to the chat. **Retired from the lane** (2026-07-14):
+  not on quality (it passed), on architecture. `bashy invoke` hands an agent a TASK, not
+  a file list, because a conductor does not know which files a task will touch. An agent
+  that must be told its files up front cannot be delegated to — only assisted.
+
+And the finding that outlives all of it:
+
+> **All three harnesses exited 0 when they failed.** Three harnesses, two catastrophic
+> failures, zero non-zero exits. A pipeline gating on `$?` would have merged both.
+> **A harness's exit code is not evidence. Run the gate.**
+
+## Where this leaves the lane
+
+- **subscription models** (claude, codex, agy) → **the vendor's CLI**. The CLI *is* the
+  product: flat-rate billing, day-one model support, a loop the vendor tunes. Owning it
+  is pure loss.
+- **API-key models** (deepseek, moonshot/kimi) → **ycode** for anything a conductor
+  delegates, because of the event channel. **opencode stays** as the cross-check —
+  harness monoculture is the risk a first-party harness *creates*, and a second
+  implementation is the only real answer to it. **aider is retired.**
+
+Harness scores in the registry are still priors, with one exception: aider's `tool-use`
+is now measured (0.7 → 0.4). **Live-probed is still not the same as good.**

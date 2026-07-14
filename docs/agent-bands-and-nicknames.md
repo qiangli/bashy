@@ -22,14 +22,19 @@ it binds and carries none of its own.
 
 ```
 $ bashy agents list
-NAME                     NICK     BAND  TOOL      MODEL           RELIAB  RESOLVES  RING
-agy-gemini3.1            Anouk    L3    agy       gemini3.1       medium  yes       embedded
-aider-deepseek-v4        Basil    L2    aider     deepseek-v4     medium  yes       embedded
-claude-fable5            Sable    L4    claude    fable5          high    yes       embedded
-claude-opus4.8           Beatrix  L3    claude    opus4.8         high    yes       embedded
-codex-gpt-5.5            Arlo     L3    codex     gpt-5.5         high    yes       embedded
-opencode-kimi-k2.7-code  Zadie    L2    opencode  kimi-k2.7-code  medium  yes       embedded
+NAME                      NICK     BAND  TOOL      MODEL            RELIAB      RESOLVES  RING
+agy-gemini3.1             Anouk    L2~   agy       gemini3.1        medium      yes       embedded
+claude-fable5             Sable    L4~   claude    fable5           high        yes       embedded
+claude-opus4.8            Beatrix  L4~   claude    opus4.8          high        yes       embedded
+codex-gpt-5.5             Arlo     L4~   codex     gpt-5.5          high        yes       embedded
+codex-gpt5.6-terra        Rufus    L3~   codex     gpt5.6-terra     unmeasured  yes       embedded
+opencode-deepseek-v4-pro  Ingrid   L3~   opencode  deepseek-v4-pro  medium      yes       embedded
+ycode-deepseek-v4-pro     Elif     L3~   ycode     deepseek-v4-pro  unmeasured  yes       embedded
 ```
+
+The `~` on every band means `band_source` is **not `measured`** — it is a declared
+guess or an operator's judgment. **Nothing in this fleet is `measured` yet**, and the
+tilde is there so nobody quotes a guess as a measurement.
 
 **Bands are normalized across providers.** A vendor's own tier ladder is never mapped
 positionally: if a provider ships four tiers and its best model performs at the L1
@@ -54,11 +59,11 @@ and, the payoff — a meeting that seats itself:
 
 ```
 $ bashy meet start --min-band 3 --topic "should the cache be write-through?"
-seating 3 of 8 agents at band L3+:
-  Sable      claude:fable5          L4  high
-  Beatrix    claude:opus4.8         L3  high
-  Arlo       codex:gpt-5.5          L3  high
-skipped: agy-gemini3.1 (L3) — not routable: not installed
+seating 3 of 21 agents at band L3+:
+  Sable      claude:fable5              L4  high
+  Beatrix    claude:opus4.8             L4  high
+  Ingrid     opencode:deepseek-v4-pro   L3  medium
+skipped: agy-gemini3.1 (L2) — below the requested band
 ```
 
 Two things that are deliberate:

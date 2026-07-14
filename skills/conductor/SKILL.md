@@ -1,7 +1,7 @@
 ---
 name: conductor
 description: >-
-  Conduct a fleet of agentic coding CLIs (claude, codex, opencode, aider, …) to
+  Conduct a fleet of agentic coding CLIs (claude, codex, opencode, ycode, agy) to
   reach a VERIFIED goal — decompose → isolate → gate → converge, looping until a
   verifier passes — acting as the single conductor over `bashy sprint`
   (plan/continuity) and `bashy weave` (per-repo isolated execution). Use when a
@@ -299,11 +299,35 @@ tool's trust/permission cache, set watchdogs, background each:
 bashy weave start --resume --issue N --max-runtime 45m --mem-limit 12g -- <tool> <recipe> "<body>" &
 ```
 **Smoke-test every tool on a trivial prompt first** — assume some of the fleet is
-dead weight. Report card (carry-forward, update with evidence): **codex** =
-workhorse, honest, fast, best default; **claude** = strongest deep/multi-file,
-often hits the cap mid-fix (salvage it); **opencode** = only tight-scoped on a
-clean base, can no-op with exit 0; **aider/others** = verify before trusting,
-several wash out in practice.
+dead weight.
+
+> ### THE EXIT CODE IS NOT EVIDENCE. RUN THE GATE.
+>
+> Measured in a three-harness A/B (one model, one task, one gate): **all three
+> harnesses exited 0 when they failed.** One had no write permission and produced
+> nothing — exit 0. One never read the spec and wrote wrong code — exit 0. Every
+> passing run — exit 0. **Three harnesses, two catastrophic failures, zero non-zero
+> exits.**
+>
+> A conductor that trusts `$?` merges both. Never mark a story done on an exit code.
+> The gate is the only thing that knows.
+
+**Report card** (carry-forward; update with evidence, not with impressions):
+
+| tool | as a WORKER | as a CONDUCTOR |
+|---|---|---|
+| **codex** | workhorse — honest, fast, best default | not measured |
+| **claude** | strongest deep/multi-file; often hits the cap mid-fix (salvage it) | steward-grade (L4) |
+| **opencode** | fastest, leanest diff in the A/B; historically can no-op with exit 0 — **verify the diff** | **good.** Decomposed a 7-gate goal into 6 issues unprompted, staffed 4 workers in parallel, self-recovered from a failed start. Repeat ratio **1.2×**. Weakness: it *stops* (goes idle) rather than pushing through — drive it. |
+| **ycode** | first-party; slowest, writes the most code | not measured. Its edge is the **event channel** — it reports `turn.start`/`tool.call`/`turn.end`, so a turn's end is a fact rather than a silence you interpret. |
+| **agy** | fine coder once corrected | **NO. Do not ask it to lead.** Measured: **377 tool calls, 40 distinct (9.4× repeat)** — read one file 26 times, looped forty minutes, produced no plan, never recovered. Demoted to L2. |
+| **aider** | ~~—~~ | **RETIRED from the fleet.** It only sees files explicitly added to the chat, so it cannot discover the files a task refers to. A conductor hands out a TASK, not a file list. Still works if a human names it: `bashy invoke --agent aider:deepseek-v4-pro`. |
+
+**The loop metric is the cheapest conductor health check you have:** total tool calls
+÷ distinct tool calls. Above ~3× and the agent is grinding, not converging. Break it
+with `bashy foreman interrupt <id>` (ESC) — a queued message will NOT reach an agent
+stuck in a loop, because it only reads its queue between turns and that turn is never
+going to end.
 
 ### 8. Monitor — event-driven, actively
 One backgrounded wait per story; act on every wake (NOT host `sleep` loops):

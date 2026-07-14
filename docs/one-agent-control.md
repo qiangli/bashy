@@ -40,7 +40,7 @@ back.
 ```go
 sess, err := chat.Start(ctx, "Ada", chat.SessionOptions{Prompt: q, Cwd: dir})
 sess.Say("stop — you are off the agenda")   // arrives as keystrokes, mid-turn
-sess.WaitIdle(ctx, 25*time.Second)          // the turn ends on silence
+sess.WaitIdle(ctx, 25*time.Second)          // races the tool's turn.end against silence
 text := sess.Turn()                          // what it said since the last mark
 sess.Close()
 ```
@@ -138,7 +138,7 @@ this project has made six times in a day.
 A queued message is only read when the turn **ends** — which is fine, right up
 until the turn is never going to end.
 
-Supervising a live agy conductor: **224 tool calls, 22 of them distinct.** It read
+Supervising a live agy conductor: **377 tool calls, 40 of them distinct (9.4x repeat).** It read
 the same file 26 times, looped for forty minutes, and my queued correction sat
 unread the whole time while it edited a tree I had explicitly told it not to touch.
 No amount of `tell` could have reached it. The agent was never going to pause long
@@ -182,17 +182,17 @@ authorization decision, and it wedges an unattended run exactly as hard as one.
 
 A headless turn ends when the process exits — an exact boundary, for free.
 
-A live turn has **no boundary at all**. The agent just stops typing. So it ends on
-silence (`WaitIdle`), which means every turn pays a quiet period on the way out
-plus a TUI's startup on the way in. On a four-seat, three-round meeting that is
-minutes of pure waiting. A pty also merges stdout and stderr, so the tool's own
-chrome lands inside the captured answer.
+A live turn under a **third-party CLI** has **no boundary at all**. The agent just
+stops typing. So it ends on silence (`WaitIdle`), which means every turn pays a quiet
+period on the way out plus a TUI's startup on the way in. On a four-seat, three-round
+meeting that is minutes of pure waiting. A pty also merges stdout and stderr, so the
+tool's own chrome lands inside the captured answer.
 
 So a chair who wants to interrupt asks for it and pays for it. This is the honest
 trade, and it is stated in the flag's own help text.
 
-It is also the sharpest argument for the **first-party harness**: with a real event
-stream, a turn's end is a *fact the agent reports*, not a silence we interpret.
+**A tool that reports its turns escapes all of this**, and that is the sharpest
+argument for a first-party harness — see below.
 
 ## The bug this found
 
@@ -209,11 +209,52 @@ nothing else would have.
 > A steerable session cannot be resolved from a fallback. If the tool is not in the
 > catalog, there is no interactive launch — say so.
 
+## The turn boundary is real now — for one tool
+
+A tool that declares `events_arg:` in the registry is handed an NDJSON stream and
+**tells bashy when its turn is over**:
+
+```
+{"type":"turn.start","data":{"prompt":"..."}}
+{"type":"tool.call","data":{"name":"read_file","input":{...}}}
+{"type":"turn.end","data":{"status":"ok","text":"the answer"}}
+```
+
+`Session.WaitIdle` **races the report against the guess** and takes whichever arrives.
+When the report wins, `Turn()` returns the answer the agent *asserted* — not bytes
+scraped off a pty and passed through `SanitizeTurn`, which spends its life guessing
+which of stdout+stderr was the answer.
+
+Live, on a real steerable ycode session:
+
+```
+turn ended after 8.3s          (before: 172s — it never ended, it timed out)
+Turn() = "example.com/probe"   (before: a raw ANSI terminal scrape)
+```
+
+**Today exactly one tool earns this: ycode.** That is the whole point of having a
+first-party harness, and it is not "it wins a bake-off" — it lost that (see
+`harness-ab-deepseek.md`).
+
+**When a tool declares an event channel and does not deliver one, bashy SAYS SO** —
+once per session, on stderr:
+
+```
+chat: Elif: declared an event channel but reported no turn.end —
+      falling back to the SILENCE heuristic (a turn is GUESSED, not reported)
+```
+
+A capability that quietly does not work is the exact failure this whole line of work
+exists to stamp out. The fallback is correct; a *silent* fallback would not be.
+
 ## Still owed
 
-- **ycode's control socket.** All five third-party harnesses steer; the first-party
-  one does not. This is parity work now, not a differentiator.
-- **A real turn boundary.** `WaitIdle` is a heuristic and is named like one. An
-  agent that pauses long enough looks finished; one that streams a spinner never
-  does. Certainty about what an agent *did* comes from the artifacts it left, not
-  the shape of its output.
+- **Server mode has no wire.** When `ycode serve` is running, the agent loop lives in
+  the SERVER process, which never sees the client's `--events`. Closing that means a
+  sink on the server side — a different design, not a missing call. (I wrote a bus
+  bridge for it, got it building, and deleted it: it hung off the CLIENT's App, so it
+  would have subscribed to a bus that carries nothing. It compiled, it read like a
+  feature, and it did nothing.)
+- **Every other harness still guesses.** claude, codex, agy and opencode have no event
+  channel and never will — they are somebody else's CLI. The silence heuristic is the
+  honest answer there, and it says so out loud when it is being used.
