@@ -11,8 +11,25 @@ through bashy; **shape** = the agent's exact argv shape verified against
 `bin/bash` side-by-side with GNU bash; **unverified** = recipe designed, not
 yet exercised.
 
+**ycode was missing from this table until 2026-07-14, and that was the sharpest
+irony in the repo.** bashy ships a `force-agent-shell` skill that ATTESTS that
+Claude Code, OpenCode and Aider route their shell commands through bashy — and
+the FIRST-PARTY harness, the one this contract exists to justify, quietly ran
+its own `interp.New()` with a security handler and nothing else. Every command
+it ran forked out to PATH: no pure-Go userland (bashy's whole Tier-1 thesis is
+IN-PROCESS, zero forks), no telemetry, no advisor, no audit.
+
+It does not spawn bashy as a subprocess — it EMBEDS the same exec chain
+(`coreutils/shell.Handler()` + `telemetry.ExecMiddleware`), which is the
+stronger form of the same contract. Note it has TWO `interp.New()` sites
+(`runtime/bash/interpreter.go` and `runtime/bash/persistent.go`); wiring only
+one produced exactly the symptom of a broken middleware — linked, correct, and
+never firing. Both are wired. Two constructors of one thing is one more than
+can be kept in step.
+
 | Agent | Shell selection | Invocation shape | Status (2026-07-07) |
 |---|---|---|---|
+| **ycode** (first-party) | none — it EMBEDS bashy's exec chain in-process | `interp.ExecHandlers(telemetry, security, coreutils userland)` | **E2E PASS (2026-07-14)** — ycode's own interpreter now runs bashy's chain: pure-Go userland in-process, OTel spans, advisor, audit. Verified by `TestYcodeShellEmitsAnExecSpan`. |
 | Claude Code | `CLAUDE_CODE_SHELL` env (settings.json `env` block); unix only | `bash -c env` (probe), `bash -c -l '<snapshot script>'` (rc snapshot), then per-command | **E2E PASS** — headless `claude -p` session ran its Bash tool through bashy end-to-end, snapshot generation included |
 | OpenCode | `opencode.json` `"shell": "<path>"` — a plain **string** (an object `{path,args}` form fails config validation; verified v1.17.10) | configured shell `-c` | **E2E PASS** — `opencode run` executed through bashy (`$0=bash`, `$BASH_VERSION` set) |
 | Aider | `$SHELL` | `pexpect.spawn(shell, ["-i","-c",cmd])` under a PTY | **PTY-shape PASS** — exact spawn replayed via aider's own pexpect (PTY, `-i -c`), correct output + exit 0; live LLM session not exercised |

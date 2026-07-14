@@ -237,3 +237,42 @@ permanently nil — which also means the session indexer and the SQL writer have
 
 The exact number the entire context layer needed was in every API response, and we threw
 it away — then built five layers of guessing on top of the hole.
+
+---
+
+## Postscript, 2026-07-14: ycode did it too
+
+This document's headline finding — **"ALL THREE HARNESSES EXIT 0 WHEN THEY FAIL — a
+harness's exit code is not evidence, run the gate"** — was written about opencode and
+aider.
+
+**ycode did it too.**
+
+```go
+for i := 0; i < maxToolIterations; i++ { ... }   // 25
+a.printSessionSummary()
+return nil          // <- exit 0. Truncated mid-work. No warning. No answer.
+```
+
+Every path where the agent actually FINISHES returns from inside the loop (a turn with no
+tool calls). **Falling out the bottom means we stopped it** — and that was reported as
+success, in the one harness whose entire justification is that it REPORTS its turns instead
+of leaving them to be guessed at.
+
+It cost a real exam. `glm-5.2` was asked to refute a design plan. It ran to **exactly 25
+turns twice**, was cut off mid-investigation both times, **exited 0 both times**, and
+produced no findings. I was one step from writing *"cannot conduct"* against a model that
+was doing nothing wrong.
+
+Worse: the event channel lied too. The deferred `turn.end` emit hard-coded
+`Status: "ok"` on **every** return — including the error returns. The event channel is the
+whole reason a first-party harness is worth having (`docs/first-party-harness.md`): bashy
+believes `turn.end` because it is a fact the agent REPORTS rather than a silence bashy
+interprets. **A channel that says "ok" when the run failed is worse than no channel — it
+launders a failure into a fact, and every consumer downstream inherits the lie.**
+
+Both fixed: truncation exits non-zero, says so in the model's channel *and* the operator's,
+and emits `BoundHit("iterations", 25, 25)`. `turn.end` reports the real status.
+
+**The finding survives, and now it indicts us:** a harness's exit code carries no
+information *until someone makes it carry some.* See `docs/absence-of-evidence.md`.
