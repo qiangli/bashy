@@ -30,7 +30,9 @@ func dispatchObs(arg string) {
 		})
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy otel:", err)
+			if !otelquery.ErrorAlreadyPrinted(err) {
+				fmt.Fprintln(os.Stderr, "bashy otel:", err)
+			}
 			os.Exit(1)
 		}
 		os.Exit(0)

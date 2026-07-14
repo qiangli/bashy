@@ -22,6 +22,9 @@ func dispatchObs(arg string) {
 		otelquery.AddCommands(cmd)
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
+			if !otelquery.ErrorAlreadyPrinted(err) {
+				cmd.PrintErrln("bashy otel:", err)
+			}
 			os.Exit(1)
 		}
 		os.Exit(0)
