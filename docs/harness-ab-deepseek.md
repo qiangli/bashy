@@ -125,3 +125,55 @@ ycode. On this evidence:
   campaign that a "model failure" was an instrument failure, and it is the reason
   the A/B was worth running at all: *anything that differs IS the harness* — and
   the harness, more often than not, is us.
+
+---
+
+## Round 2 — after the context fixes (2026-07-14)
+
+Same task, same model (`deepseek-v4-pro`), same gate, **3 runs each**, run against the
+rebuilt ycode (`de0ff1d`) verified on PATH. The seed's `.agents/ycode/qacache/` was
+**deleted per run** — it held a cached answer, and leaving it in would have handed
+ycode a result and timed it as if it had derived one.
+
+| harness | runs | **gate** | wall (each) | mean |
+|---|---|---|---|---|
+| **ycode** | 3 | **3 / 3 PASS** | 48s · 49s · 67s | **54.7s** |
+| opencode | 3 | **1 / 3 PASS** | 46s(F) · 68s(F) · 45s(P) | 53.0s |
+| aider | 3 | — | did not run | — |
+
+**The performance gap is gone: 2.8× → 1.03×.** ycode is now at parity with opencode on
+wall time, and *ahead of it on correctness*.
+
+### The reliability result is the bigger one
+
+**opencode failed the gate on 2 of 3 runs — and exited 0 both times.**
+
+```
+opencode run1  exit=0  gate=FAIL   Wrap("hi", 10) -> nil, want ["hi"]
+opencode run2  exit=0  gate=FAIL
+opencode run3  exit=0  gate=PASS
+```
+
+It wrote real, plausible code and got an edge case wrong, then reported success. This
+is the round-1 headline, reconfirmed on a second task: **a harness's exit code carries
+no information. Run the gate.** Had we trusted exit codes, opencode would read 3/3.
+
+### An honest caveat about the number
+
+An earlier post-fix measurement gave **42.6s**. This one gives **54.7s** for the same
+code. The difference is the qacache: this run deletes it, the earlier ones did not.
+**54.7s is the cache-free number and it is the one to quote.** N=3 with a 48–67s spread
+— the variance is real and the 1.03× should be read as "parity", not as a precise ratio.
+
+### aider
+
+`aider-deepseek-v4-pro` no longer resolves — the retirement landed. But note *how* it
+failed:
+
+```
+Error: exec: "aider-deepseek-v4-pro": executable file not found in $PATH
+```
+
+bashy did not say *"unknown agent"*. It fell through to exec'ing the agent's NAME as a
+binary. That is the absence-of-evidence shape again, in bashy's own resolver: an
+unknown agent should be an error, not a filename. Small, but worth a fix.
