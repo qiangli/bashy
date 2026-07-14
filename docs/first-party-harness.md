@@ -29,7 +29,12 @@ ycode:deepseek-v4-pro    ycode:deepseek-v4-flash    ycode:deepseek-chat
 ycode:kimi-k2.7-code     ycode:kimi-k2.6
 ```
 
-**It reaches kimi, which opencode cannot.** Fleet is now 24 of 25 live.
+**Fleet: 26 of 26 agents live** — every binding, every provider, every harness.
+
+*(An earlier version of this line said "it reaches kimi, which opencode cannot."
+That was also wrong: opencode reaches kimi fine. The registry had the wrong provider
+id — opencode calls it `moonshotai`, not `moonshot` — and opencode died on an opaque
+UnknownError that named nothing. I blamed the tool; the typo was ours.)*
 
 ## Why this is the right line
 
@@ -42,24 +47,41 @@ The vendor CLIs also remain the **cross-check** against a first-party bug — wh
 is the real answer to the harness-monoculture risk. Keeping *aider* was never the
 answer; keeping *diversity of implementation* is.
 
-## What the third-party harnesses cannot do
+## RETRACTED: "the third-party harnesses cannot be steered"
 
-The decisive argument is not that opencode and aider are buggy. It is that they are
-**architecturally incapable** of what this fleet is built around.
+**This document originally argued that aider and opencode were *architecturally
+incapable* of steering, and that this was the decisive case for a first-party
+harness. That was wrong, and it was wrong because I never tested it.**
 
-| harness | steerable? |
+All five are steerable. Measured, through the real control socket:
+
+| harness | steer |
 |---|---|
-| claude | **yes** |
-| codex · agy · aider · opencode | **no** |
+| claude | `STEERED_OK` |
+| codex | `STEERED_OK ×3` |
+| agy | `STEERED_OK ×54` |
+| opencode | `STEERED_OK ×7` |
+| aider | `STEERED_OK ×93` |
 
-`bashy meet say` — a chair correcting a rambling participant mid-turn — reaches
-**exactly one of five harnesses.** `weave say` likewise. Effect caps are enforced at
-*launch* (argv), because with a black box you cannot refuse the fifth write *in
-flight*. Attestation evidence is **scraped from stdout and guessed at.**
+I had only ever tested the launch **in the registry** — `opencode run`,
+`aider --message` — which are one-shots with nothing to interrupt. Their interactive
+launches (`opencode`, `aider` with no `--message`) accept a steer perfectly well. I
+wrote down a conclusion about a launch I had not attempted, which is the exact
+failure this fleet keeps making.
 
-None of that is fixable in someone else's CLI. All of it is trivial in a loop you
-own — which is why `supports_say: false` on ycode is a **wiring job**, not a wall:
-the bus is already there.
+## So what IS the case for ycode?
+
+The honest one, with the false argument removed:
+
+- **Evidence by construction.** Tool calls as structured events, not stdout scraped
+  and guessed at. This is what the fleet-evidence invariant has been asking for.
+- **Token streaming.** `stream=true` in a loop you own; impossible through a CLI.
+- **No contract drift.** Five dead bindings in one day came from other people's CLIs
+  changing their flags, model ids and provider names underneath us.
+- **In-flight effect caps.** Refuse the fifth write, not just the launch.
+
+That is still a strong case. It is **not** the case I made, and the difference
+matters: a capability gap would have been decisive on its own. These are trade-offs.
 
 ## And ycode gets the headless contract right
 
@@ -100,12 +122,34 @@ ids:
 ```
 
 That was the **fourth** dead binding of the day, and `agents verify --live` caught
-it within sixty seconds of ycode being registered.
+it within sixty seconds of ycode being registered. The **fifth** was the same shape:
+opencode wants `moonshotai/kimi-k2.7-code`, and the registry said `moonshot/`.
+
+One model, three spellings, all live:
+
+```
+aider (litellm)  moonshot/kimi-k2.7-code
+opencode         moonshotai/kimi-k2.7-code
+ycode            kimi-k2.7-code
+```
+
+## And bashy was destroying opencode's config
+
+`ApplyTrustPreseed` did a blind `os.WriteFile` of a permissions-only blob over any
+existing `opencode.json` — **taking the project's `provider` block with it.**
+opencode reads its model *endpoints* from that file, so bashy silently deleted the
+configuration the agent needed, and the agent then failed with a server error
+pointing nowhere near the cause.
+
+The claude preseed has always merged. This one did not, and nobody noticed **because
+the failure surfaced as somebody else's bug.** It now merges, refuses to overwrite a
+config it cannot parse, and never overrules a permission the project set itself.
 
 ## Still owed
 
-1. **Steering.** Expose ycode's bus as a control socket → `supports_say: true`, and
-   `meet say` / `weave say` start working for API models. This is the whole point.
+1. **Steering.** Expose ycode's bus as a control socket → `supports_say: true`.
+   Note this is now *parity work*, not a differentiator: all five third-party
+   harnesses already steer. ycode is the only one that does not.
 2. **Token streaming.** Trivial with your own loop (`stream=true`); impossible
    through a CLI. It closes the gap `meet observe` currently has.
 3. **Evidence by construction.** Tool calls become structured events instead of
