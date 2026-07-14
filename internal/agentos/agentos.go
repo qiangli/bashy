@@ -75,6 +75,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/handoff"
 	"github.com/qiangli/coreutils/pkg/issue"
 	"github.com/qiangli/coreutils/pkg/jobs"
+	"github.com/qiangli/coreutils/pkg/telemetry"
 	"github.com/qiangli/coreutils/pkg/judge"
 	"github.com/qiangli/coreutils/pkg/kb"
 	"github.com/qiangli/coreutils/pkg/lexicon"
@@ -1141,6 +1142,16 @@ func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 	// run; the advisor is next (it reads the exit to advise); dry-run and the
 	// coreutils userland handler are innermost.
 	var mws []func(interp.ExecHandlerFunc) interp.ExecHandlerFunc
+
+	// Telemetry is OUTERMOST — outside even audit — so its span covers the true
+	// wall-clock and the final exit of everything below it, middleware included.
+	//
+	// It is a no-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set: no span, no allocation,
+	// no wrapper. bashy could already RUN an observability stack (`bashy otel`) and fed
+	// it NOTHING — a collector with no data, and the one tier of the whole stack that
+	// was invisible while every other service (ycode, outpost, cloudbox, loom) reported.
+	mws = append(mws, telemetry.ExecMiddleware)
+
 	if aw := newAuditWriter(); aw != nil {
 		mws = append(mws, auditHandler(aw, auditActor(), auditHost()))
 	}

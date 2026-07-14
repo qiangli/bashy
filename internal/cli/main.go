@@ -420,6 +420,18 @@ func splitCombinedShortFlags(args []string) []string {
 // what keeps the two binaries independent.
 var (
 	AgentOSDispatch = func() {}
+
+	// AgentOSShutdown runs immediately before the shell exits, on EVERY exit path.
+	//
+	// A shell exits with os.Exit, and os.Exit DOES NOT RUN DEFERRED FUNCTIONS. So a
+	// `defer shutdown()` in main() is dead code in a shell — which is exactly how the
+	// first version of bashy's OTel wiring shipped: it built, five unit tests passed
+	// against an in-memory recorder, and a real collector received ZERO BYTES, because
+	// the batch span processor was never flushed.
+	//
+	// A test that mocks the emitter proves the emitter was CALLED. It does not prove the
+	// data arrived. Only an exit hook does, in a program that exits like this one.
+	AgentOSShutdown = func() {}
 	// posix is passed so AgentOS extensions (e.g. --dry-run) stay inert under
 	// --posix and absent from the pure bash drop-in.
 	AgentOSWireExec func([]interp.RunnerOption, bool) []interp.RunnerOption = func(o []interp.RunnerOption, _ bool) []interp.RunnerOption { return o }
@@ -491,19 +503,28 @@ func Main() {
 		*posix = true
 	}
 	err := runAll()
+
+	// Flush telemetry on EVERY exit path. os.Exit skips defers; this is the only hook
+	// that runs. A no-op unless OTel is exporting.
+	exit := func(code int) {
+		AgentOSShutdown()
+		os.Exit(code)
+	}
+
 	var es interp.ExitStatus
 	if errors.As(err, &es) {
-		os.Exit(int(es))
+		exit(int(es))
 	}
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "invalid option: ") {
 			name := strings.Trim(err.Error()[len("invalid option: "):], `"`)
 			fmt.Fprintf(os.Stderr, "bash: line 0: %s: invalid shell option name\n", name)
-			os.Exit(2)
+			exit(2)
 		}
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		exit(1)
 	}
+	AgentOSShutdown()
 }
 
 // stdinArgv0Option returns a RunnerOption that fixes $0 to argv[0] for the
