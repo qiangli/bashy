@@ -231,8 +231,154 @@ because of a self-inflicted surface is not a capability worth sharing.
 | 4 | Gate content routing on actual context pressure | **DONE** — `ycode 4604f07` |
 | 5 | Gate distillation too (the half I missed) | **DONE** — `ycode 801e207` |
 | 6 | Measure the *serialized schema bytes* per request | open — the proxy now reports it: ycode sends **10 tools / 6.2KB** per request, NOT 111. The router works. The "111 tools" theory is DEAD. |
-| 7 | Audit every other place that trims/summarizes/excludes with no pressure check | **open — highest value.** Two identical bugs found; assume a third. grep: `softTrim`, `summarizeContent`, `RouteExcluded`, `CheckContextHealth`. |
-| 8 | Decide whether the tool-routing cascade should exist at all | open — strategic |
+| 7 | Audit every other place that trims/summarizes/excludes with no pressure check | **DONE — found FOUR more.** See below. `ycode de0ff1d` |
+| 8 | Decide whether the tool-routing cascade should exist at all | **open — and the audit answered it.** See "34 lines". |
 | — | ~~System-prompt rebuild~~ | **killed in meeting** — opencode does it too |
 | — | ~~Streaming~~ | **killed in meeting** — both stream |
 | — | ~~Go-vs-Node~~ | **killed in the brief** — identical on a trivial prompt |
+
+
+---
+
+# The audit — and the four it found
+
+The instruction was: *"two identical bugs found; assume a third."* There were four.
+A codex second opinion found one, a ratchet test found two, and **the user's question
+found one** by refusing to accept a number I had not checked.
+
+## 1. The budget was a global constant
+
+Every consumer of the context machinery divided by the package-level
+`CompactionThreshold` — a flat **100_000** — regardless of which model was on the
+other end. `ContextBudgetForProvider` had computed the right numbers all along and
+stored them on `Runtime.contextBudget`. **Nothing read them.**
+
+For a model at or under 64K, all three layers land OUTSIDE the window:
+
+| | fires at | usable on a 64K model |
+|---|---|---|
+| soft trim | 60,000 | 48,000 — **125%, never fires** |
+| hard clear | 80,000 | 48,000 — **167%, never fires** |
+| compaction | 100,000 | 48,000 — **208%, never fires** |
+
+Dead code that reports *"context: healthy"* right up to the API error.
+
+**And I got the model wrong.** I said deepseek was 64K. ycode's table says **128K** —
+I had quoted the spec sheet instead of reading `api/capabilities.go`. So the
+catastrophic version of this is a live TRAP, not a live FIRE. What is true for the
+model we actually benchmark: **compaction is unreachable (100K vs 98K usable), and
+trimming fires 3× too late** (60K where the correct line is 20.5K) — on a *non-caching*
+provider, where every one of those tokens is re-billed at full price every single turn.
+
+## 2. The reserve did not cover the reply it exists to reserve for
+
+The user's question, and it was the right one: *"could it be a request parameter, not
+a hard limit?"*
+
+Yes — and following it exposed the bug. A 128K window **reserves 30,000** tokens while
+`MaxOutputTokenCap` asks for up to **32,000**. Fill the usable window, request the
+reply, and the request exceeds the window by the exact amount the reserve was supposed
+to hold. Worse, on a 32K model we asked for a 32K reply — **the entire window**.
+
+> You cannot reserve your way out of asking for too much. `max_tokens` is a request
+> parameter; ask for less.
+
+`max_tokens` is now derived from the window, and the reserve is derived from *it* —
+one number, so the two cannot disagree.
+
+## 3. The exemption list was inert — codex found this
+
+`ExemptFromMasking` keys on `ContentBlock.Name`. **Neither tool-result construction
+site ever set `Name`.** So the lookup was always false, the list protected nothing, and
+every observation — `read_file` included — was maskable.
+
+The unit test passed. It passed because **the test fixture set `Name`** and production
+could not.
+
+> A green test against a fixture production cannot produce is not evidence.
+
+## 4. An unset budget read as a FULL WINDOW — the ratchet found this, inside my own fix
+
+A zero-value `ContextBudget` has `SoftTrimAt() == 0`, so `chars/4 >= 0` is true for
+**every** conversation including an empty one. A missing budget silently switched
+content damage back on for everything.
+
+**This is the original bug, hiding inside the fix for it.** Damaging the model's
+observations is the aggressive act; it must never be reached by the ABSENCE of a
+number.
+
+## Also: "conservative"
+
+An unknown model was assumed to have a **200K** window — the largest we support — and
+the comment called that *"conservative default"*. It is the least conservative choice
+available: point ycode at a local 8K model and it packs 100K tokens in. Guess low and
+you pay for some avoidable compaction; guess high and nothing works. Unknown now means
+**small**.
+
+## The ratchet
+
+`session/budget_reachable_test.go` fails the build if any threshold ever again sits
+outside the window it claims to protect. **It found two of the four above on its first
+run** — including one in the "correct" implementation I was about to trust: an 8K
+window reserved 8,000 tokens, leaving **zero usable**.
+
+---
+
+# 34 lines
+
+The user asked what claude / codex / opencode actually do. opencode's source is in
+`priorart/`, so this is measured, not remembered.
+
+| | window from | reserve | mechanisms | LOC |
+|---|---|---|---|---|
+| **opencode** | model registry (`model.limit.context`) | `min(20K, maxOutputTokens)` — **one** config knob | **ONE**: compact on overflow | **34** |
+| **codex** | model config (`model_context_window()`) | — | compact; trims history only *"to fit context window"* | — |
+| **ycode** | **a hardcoded switch table** | a magic table (8/16/30/40K) | **FIVE**: route · distill · mask · soft-trim · hard-clear · compact | **~600** |
+
+opencode's entire context management is `session/overflow.ts`, and it is 34 lines:
+
+```ts
+const reserved = cfg.compaction?.reserved ?? Math.min(20_000, maxOutputTokens(model))
+return Math.max(0, context - maxOutputTokens(model))     // usable
+...
+return count >= usable(input)                            // isOverflow
+```
+
+**That is the whole thing.** No routing. No distillation. No masking. No soft trim. No
+hard clear. One question — *are you over?* — and one answer — *then compact.*
+
+It also gates on `tokens.total`: **the real count the API reports back.** ycode
+*estimates* at 4-chars-per-token. That is *why* ycode needs ratios and soft/hard tiers
+— it does not trust its own numbers, so it hedges with layers, and every layer is a
+place to be wrong.
+
+**Five mechanisms, ~600 lines, and every one of them was broken.** I have spent this
+work fixing bugs in code that should not exist.
+
+## On making it configurable per role / band
+
+The user asked whether window and reserve should be configurable per role
+(steward/conductor/coder/tester) and per band (L1–L4).
+
+**Nobody does this. Not one of the three.** And it is not an oversight — **band and
+window are orthogonal.** A band is a capability peg for *routing*: which agent gets the
+job. A window is a property of the *model*. An L1 coder on opus has 200K; an L4 steward
+on a small local model has 8K. Sizing a context window by an agent's seniority is like
+sizing a truck's fuel tank by the driver's job title.
+
+What shipped is the knob opencode has, and no more:
+
+- **`contextWindow`** — the window comes from a hardcoded table, and a table goes stale
+  every time a provider ships a model. One number, no rebuild.
+- **`contextReserved`** — opencode's `compaction.reserved`. The reserve is a
+  consequence of the request *we* choose to make, so it is the one number an operator
+  has standing to set.
+
+## What this leaves
+
+The strategic question (agenda item 8) is no longer a hunch. **Delete four of the five
+mechanisms.** opencode is faster than ycode with 34 lines and none of them. Every bug
+in this document is in machinery whose only justification was a 111-tool surface that
+the proxy has already shown does not exist (10 tools, 6.2KB per request).
+
+The next honest step is not another fix. It is a deletion.
