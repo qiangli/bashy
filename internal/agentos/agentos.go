@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"mvdan.cc/sh/v3/interp"
@@ -1068,7 +1069,11 @@ func runFleet(noun string, args []string) {
 	case "models":
 		cmd = fleet.NewModelsCmd()
 	case "agents":
-		cmd = fleet.NewAgentsCmd()
+		// `agents verify --live` actually launches each agent. The launcher lives
+		// in pkg/chat, which reads the fleet registry — so the registry cannot
+		// import it, and the binary is the one place both are in scope. The
+		// registry declares the hole; here is where it gets filled.
+		cmd = fleet.NewAgentsCmd(fleet.WithLiveProbe(liveProbeAgent))
 	case "people":
 		cmd = principal.NewPeopleCmd()
 	case "whois":
@@ -1150,4 +1155,15 @@ func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 	}
 	mws = append(mws, dryRunHandler(r), coreutilsshell.Handler())
 	return append(opts, interp.ExecHandlers(mws...))
+}
+
+// liveProbeAgent is the launcher behind `bashy agents verify --live`.
+//
+// It is a thin adapter, and the thinness is the point: it hands the work to
+// chat.ProbeAgent, which drives the SAME Invoke path a real turn takes. A probe
+// with its own launch logic could pass while production failed — and a probe that
+// says "verified" about something that cannot run is worse than no probe at all.
+func liveProbeAgent(ctx context.Context, agent string, timeout time.Duration) (string, string, bool) {
+	status, note := chat.ProbeAgent(ctx, agent, timeout)
+	return string(status), note, status.OK()
 }
