@@ -75,12 +75,12 @@ import (
 	"github.com/qiangli/coreutils/pkg/handoff"
 	"github.com/qiangli/coreutils/pkg/issue"
 	"github.com/qiangli/coreutils/pkg/jobs"
-	"github.com/qiangli/coreutils/pkg/telemetry"
 	"github.com/qiangli/coreutils/pkg/judge"
 	"github.com/qiangli/coreutils/pkg/kb"
 	"github.com/qiangli/coreutils/pkg/lexicon"
 	"github.com/qiangli/coreutils/pkg/meet"
 	"github.com/qiangli/coreutils/pkg/mirror"
+	"github.com/qiangli/coreutils/pkg/pair"
 	"github.com/qiangli/coreutils/pkg/policy/coord"
 	"github.com/qiangli/coreutils/pkg/principal"
 	"github.com/qiangli/coreutils/pkg/schedule"
@@ -88,6 +88,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/secrets"
 	coreskills "github.com/qiangli/coreutils/pkg/skills"
 	"github.com/qiangli/coreutils/pkg/supervise"
+	"github.com/qiangli/coreutils/pkg/telemetry"
 	"github.com/qiangli/coreutils/pkg/weave"
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	"github.com/qiangli/coreutils/pkg/webinspect"
@@ -120,7 +121,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "issue", "handoff", "resume", "claim", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "judge", "conform",
+		"weave", "sprint", "issue", "handoff", "resume", "claim", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -417,16 +418,36 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
-	case "judge":
-		// gate's SEMANTIC twin. gate asks "does it PASS" -- mechanical, reproducible,
-		// safe to block a merge on. judge asks "is it GOOD" -- an LLM opinion, and so
-		// advisory unless the caller says --gate. Together they are what the conductor
-		// playbook keeps saying in prose: SANDBOX-GREEN IS NOT MERGEABLE.
+	case "pair":
+		// gate's SEMANTIC twin, and the successor to `judge`.
 		//
-		// bashy could VERIFY but not JUDGE. `weave review` sounds like this and isn't
-		// (it re-runs the verify command in a clean-room clone, never launching an
-		// agent). The role existed as ad-hoc prompting -- docs/JUDGE-REPORT-R6.md and
-		// friends are its artifacts. This is the verb behind them.
+		// judge could only TALK: it read a diff and returned approve/revise/reject. That
+		// ceiling is why it needed a PANEL -- three opinions voting, because one opinion
+		// is unreliable and nothing could check it.
+		//
+		// A pair ACTS. Give the second agent the keyboard and its finding stops being a
+		// claim and becomes a thing that RUNS:
+		//
+		//     "this breaks on empty input"          -> a claim. Someone must adjudicate it.
+		//     a test that FAILS on empty input      -> a proof. The gate reads it.
+		//
+		// The regress collapses. You do not need three models to vote on whether a bug is
+		// real when the bug is executable -- you need one exit code. That is why `pair`
+		// subsumes `judge` rather than sitting beside it, and why `judge`'s read-only
+		// shackle comes off: judge had to be read-only because it could APPROVE, and an
+		// agent that can both write and approve will fix the code and bless its own fix.
+		// A pair may never approve. Only the gate may. So it can safely have the keyboard.
+		pcmd := pair.NewPairCmd()
+		pcmd.SetArgs(os.Args[2:])
+		if err := pcmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy pair:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "judge":
+		// Kept as an alias so the steward skill, weave, and any script keep working. It
+		// maps to the one role that behaves the way judge did: prose, no keyboard, an
+		// unverified claim. Reach for `pair --role break` instead.
 		jcmd := judge.NewJudgeCmd()
 		jcmd.SetArgs(os.Args[2:])
 		if err := jcmd.Execute(); err != nil {

@@ -39,11 +39,11 @@ var venueOrder = []string{
 
 // commandSections is the `bashy commands` surface grouped by execution class.
 type commandSections struct {
-	Shell     []string            `json:"shell"`      // bash builtins
-	Coreutils []string            `json:"coreutils"`  // GNU coreutils, in-process
-	Classic   []string            `json:"classic"`    // other classic tools, in-process
-	External  []string            `json:"external"`   // downloaded + exec'd
-	Agent     map[string][]string `json:"agent"`      // venue -> native agentic verbs
+	Shell     []string            `json:"shell"`     // bash builtins
+	Coreutils []string            `json:"coreutils"` // GNU coreutils, in-process
+	Classic   []string            `json:"classic"`   // other classic tools, in-process
+	External  []string            `json:"external"`  // downloaded + exec'd
+	Agent     map[string][]string `json:"agent"`     // venue -> native agentic verbs
 }
 
 // agentToolGroups are the atlas groups whose in-process tools are bashy's own
