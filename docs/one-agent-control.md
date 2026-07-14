@@ -104,6 +104,80 @@ would have escaped it.
 **`judge`** and **`sdlc`** keep using `Invoke`, and should: a judge asks one
 question and returns a verdict, read-only, with nothing to interrupt.
 
+## What "steered" means — and what it does not
+
+`foreman tell` now reports which of two things happened:
+
+```
+→ <id>: steered  (delivered to the running agent, mid-turn)
+→ <id>: accepted (no live agent — this STARTS a turn)
+```
+
+**`steered` means the line reached a running agent. It does NOT mean the agent
+dropped what it was doing.**
+
+That distinction is not pedantry, it is observed behaviour. Steering a live agy
+conductor mid-turn, its TUI showed:
+
+```
+▸ CHANGE OF DIRECTION — read this before you write any code...
+  Press up to edit queued messages
+```
+
+The message arrived while agy was working. agy chose to **queue** it and finish
+its current turn first — which is also what claude does, and is a perfectly
+defensible policy for a tool that is halfway through an edit.
+
+So the contract is: **the control plane guarantees delivery; the tool decides what
+to do with it.** Anything stronger would be a claim about five third-party TUIs we
+do not own, and writing that down without testing each one is the exact mistake
+this project has made six times in a day.
+
+### And a word in the ear is not enough
+
+A queued message is only read when the turn **ends** — which is fine, right up
+until the turn is never going to end.
+
+Supervising a live agy conductor: **224 tool calls, 22 of them distinct.** It read
+the same file 26 times, looped for forty minutes, and my queued correction sat
+unread the whole time while it edited a tree I had explicitly told it not to touch.
+No amount of `tell` could have reached it. The agent was never going to pause long
+enough to listen.
+
+So there is a second verb, and it is a **keystroke**, not a sentence:
+
+```sh
+bashy foreman interrupt <id>              # ESC — breaks a tool loop
+bashy foreman key <id> esc|enter|ctrl-c
+```
+
+`agentpty` always had two frame kinds — `TextFrame` (a sentence, typed) and
+`VerbatimFrame` (a key, pressed). foreman only ever used one. Sent at the wedged
+agy, ESC broke the loop, it read the queued steer, and it switched to weave.
+
+A key routes on the control path and never takes the session mutex — which the very
+turn it is interrupting is holding. And there is no *"queue a keystroke for the next
+agent"*: a keypress without something to press it at is meaningless, and pretending
+otherwise would be the same lie in a new costume.
+
+### The gate that was a questionnaire
+
+The instant ESC broke that loop, agy stopped dead on this:
+
+```
+How's the CLI experience so far?
+ [1] Good  [2] Fine  [3] Bad  [0] Skip
+```
+
+An agent forty minutes into a campaign cannot answer a survey. Nothing in the fleet
+knew how to skip it, so it would have sat there until the watchdog killed it — and
+**the kill would have been reported as a timeout.** A wedged run blamed on the
+model, caused by a vendor asking for a star rating.
+
+`GateNag` now classifies and dismisses it with `0` (Skip — never *answered*; putting
+words in the operator's mouth is not ours to do). A questionnaire is not an
+authorization decision, and it wedges an unattended run exactly as hard as one.
+
 ## Why `--steerable` is a flag and not the default
 
 A headless turn ends when the process exits — an exact boundary, for free.
