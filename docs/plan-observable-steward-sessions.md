@@ -111,6 +111,38 @@ every room always has:
 - **live attach**: `observe` (read-only, N clients), `tell` (interject), `say` (steer a
   live turn).
 
+## What `bashy meet` already provides (the head start — assessed 2026-07-15)
+
+The room construct is NOT a from-scratch build. `coreutils/pkg/meet` already has the hard
+part, and — crucially — its design is already transport-agnostic *at the data level*:
+
+- **The two-channel model IS the room state model, done right.** `transcript.jsonl` is the
+  RECORD (append-only, one sanitized `Event` per completed turn — the canonical state, what
+  minutes and prompt-context are built from). `live.jsonl` is the VIEW (ephemeral,
+  line-granular, derived, safe to lose — every line also lands whole in the transcript). Record
+  vs view is exactly the split a surface-independent room needs.
+- **Multi-observer already works.** `observe` tails those files; "any number of observers can
+  attach to the same meeting at once" (`observe.go`). Room identity exists (`room.go` — the
+  ROOM number you attach by). `say`/`steer` exist.
+- **The state is clean JSONL, not a PTY.** The channels are structured events on disk, not a
+  terminal capture — so a second transport is an adapter over the SAME events, not a rewrite.
+
+So the real gaps are narrow and known:
+
+1. **A network surface.** Today `observe` tails a *local file*; a web/mobile/remote client
+   cannot. The fix is a thin adapter that streams the SAME `transcript`+`live` events over
+   **WebSocket** — a new surface over existing state, the JSONL event schema already being the
+   protocol. This is S2 below, and it is the load-bearing new work.
+2. **Work mode.** meet is *council* mode (bounded planning meeting; `engine.go`'s turn guard
+   says "a participant in a planning meeting… one concise turn"). The open-ended 1:1
+   human↔steward session is a new *mode* of the same room, not a new construct.
+3. **The 1:1 base case.** meet convenes N-agent councils; a two-participant open-ended room
+   (a human + one agent) is the shape to add.
+
+Net: the record/view state, room identity, multi-observer, and steering are DONE. The build is
+(a) a WebSocket surface over the existing event channels, and (b) a work mode + the 1:1 shape.
+That is a much smaller, better-grounded scope than "build a room."
+
 ## Build order (NOT a local-then-remote layering)
 
 The sequencing is by *construct*, not by *reach* — the protocol is the foundation, and every
