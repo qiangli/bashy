@@ -425,7 +425,16 @@ func Dispatch() {
 		// cross-repo, todo is per HOST/USER and NOT committed (~/.bashy/todo/<owner>/).
 		// Reuses the issue register's record format; --owner keeps steward/fixer/human
 		// lists separate under one tool.
-		tcmd := todo.NewTodoCmd()
+		tcmd := todo.NewTodoCmd(func() (string, error) {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return "", err
+			}
+			if r := detectProjectRoot(cwd); r != "" {
+				return r, nil
+			}
+			return cwd, nil
+		})
 		tcmd.SetArgs(os.Args[2:])
 		if err := tcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy todo:", err)
