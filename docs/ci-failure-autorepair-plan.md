@@ -1,11 +1,18 @@
 # DHNT CI Failure Auto-Repair Plan
 
+> **Superseded by** the umbrella `docs/ci-failure-autofix-pipeline.md`, which is
+> the plan of record: it keeps this router/fixer/gate/handoff design but replaces
+> the trigger (cloudbox webhook + outpost `/admin/repair` + `schedule` pull, not a
+> self-hosted runner) and the selection (a **band ladder** L2→L3→human, not a fixed
+> premium model). Read that first. This doc is kept for the role/handoff detail.
+
 ## Goal
 
 Failed CI should become a managed repair queue, not a page a human has to
-poll. The system should keep cheap deterministic work cheap, wake premium
-conductor models only when there is real repair work, and run code-changing
-agents in isolated workspaces so they do not clobber a live checkout.
+poll. The system should keep cheap deterministic work cheap, launch a
+band-appropriate **fixer** only when there is real repair work, and run
+code-changing agents in isolated workspaces so they do not clobber a live
+checkout.
 
 ## Roles
 
@@ -21,20 +28,25 @@ Responsibilities:
   `repair-done`.
 - Parse source repo, workflow, branch, SHA, failed run id, and failed run URL.
 - Acquire a local lock/lease.
-- Choose the on-shift conductor from the configured shift roster.
+- Choose the on-shift fixer from the configured shift roster.
 - Create a machine-readable handoff brief.
-- Launch exactly one premium conductor session when claimable work exists.
+- Launch exactly one fixer session when claimable work exists.
 
-### Conductor
+### Fixer
 
-The conductor is a premium agent model, currently `codex` or `claude`. It owns
-orchestration, evidence, and convergence. It should not do polling chores.
+The fixer is the **band-selected agent** that repairs one failing gate — attempt 1
+at L2 (cheapest sufficient), attempt 2 at L3 (diagnosis); past the ladder it escalates
+to a human (an L4 frontier model is not spent unattended). It owns the bounded fix,
+evidence, and convergence for that one failure. A CI/CD fix does not need the full SDLC
+`conductor` (decompose → delegate a fleet → converge); the conductor is the *escalation
+target* for the rare fix that turns out to need orchestration. The fixer should not do
+polling chores — the router does.
 
 Responsibilities:
 
 - Read the router handoff brief and collector issue.
 - Check for an existing active or stale repair lease.
-- Recover state if the previous conductor disappeared.
+- Recover state if the previous fixer disappeared.
 - Use `bashy weave` as the default isolated execution substrate.
 - Assign workers only after defining measurable gates.
 - Merge only through verified `weave pull` or an equivalent gated path.
@@ -43,17 +55,17 @@ Responsibilities:
 
 ### Workers
 
-Workers are agentic coding tools selected by the conductor. They operate inside
+Workers are agentic coding tools selected by the fixer. They operate inside
 weave workspaces, not the live source checkout.
 
 Default pools:
 
-- Even shift conductor `codex`: workers `claude, agy, opencode, aider`
-- Odd shift conductor `claude`: workers `codex, agy, opencode, aider`
+- Even shift fixer `codex`: workers `claude, agy, opencode, aider`
+- Odd shift fixer `claude`: workers `codex, agy, opencode, aider`
 
 ## Shift Roster
 
-Conductors work in configurable shifts. Hour parity is only the default.
+Fixers work in configurable shifts. Hour parity is only the default.
 
 Configuration:
 
@@ -66,24 +78,24 @@ Selection:
 
 ```text
 shift_index = floor(unix_time / (DHNT_CI_SHIFT_HOURS * 3600))
-conductor = DHNT_CI_SHIFT_ROSTER[shift_index % len(DHNT_CI_SHIFT_ROSTER)]
+fixer = DHNT_CI_SHIFT_ROSTER[shift_index % len(DHNT_CI_SHIFT_ROSTER)]
 ```
 
 Examples:
 
 - `DHNT_CI_SHIFT_HOURS=1`: codex and claude alternate hourly.
-- `DHNT_CI_SHIFT_HOURS=2`: each conductor works a 2-hour block.
+- `DHNT_CI_SHIFT_HOURS=2`: each fixer works a 2-hour block.
 - `DHNT_CI_SHIFT_HOURS=8`: three human-style shifts are possible if the roster
-  has three conductors.
+  has three fixers.
 
 ## Handoff Protocol
 
-A conductor must leave a handoff note before ending a shift or stopping work.
+A fixer must leave a handoff note before ending a shift or stopping work.
 This is a gate, not a courtesy.
 
 Minimum handoff fields:
 
-- `conductor`: active conductor name.
+- `fixer`: active fixer name.
 - `shift_started_at`: timestamp.
 - `shift_ends_at`: timestamp.
 - `collector_issue`: issue URL/number.
@@ -101,7 +113,7 @@ Minimum handoff fields:
 The handoff note should be written to both:
 
 - the collector issue comment thread, for durable shared state;
-- local repair state, for fast recovery by the dragon scheduler/conductor.
+- local repair state, for fast recovery by the dragon scheduler/fixer.
 
 Suggested local path:
 
@@ -111,7 +123,7 @@ Suggested local path:
 
 ## Incoming Recovery Gate
 
-Before starting new work, an incoming conductor must run a recovery gate.
+Before starting new work, an incoming fixer must run a recovery gate.
 
 Recovery gate:
 
@@ -132,8 +144,8 @@ Recovery gate:
    - pause as unsafe;
    - mark failed with blocker.
 
-If the previous conductor was disrupted and no handoff exists, the incoming
-conductor must first write a recovery summary before assigning or editing.
+If the previous fixer was disrupted and no handoff exists, the incoming
+fixer must first write a recovery summary before assigning or editing.
 
 Recovery summary must answer:
 
@@ -144,7 +156,7 @@ Recovery summary must answer:
 - Is there committed but unmerged work?
 - What is the safest next action?
 
-Only after this summary may the conductor launch workers or merge work.
+Only after this summary may the fixer launch workers or merge work.
 
 ## Execution Substrate
 
@@ -176,16 +188,16 @@ The auto-repair system must enforce:
 - Do not start repair if the live repo is dirty unless explicitly allowed.
 - Do not merge without a passing verify/review gate.
 - Do not retry a failed auto-repair indefinitely.
-- Do not allow two conductors to own the same collector issue.
-- Do not allow an incoming conductor to continue stale work without writing a
+- Do not allow two fixers to own the same collector issue.
+- Do not allow an incoming fixer to continue stale work without writing a
   recovery summary.
 
-## Desired Router To Conductor Prompt
+## Desired Router To Fixer Prompt
 
-The router should launch the selected conductor with a brief like:
+The router should launch the selected fixer with a brief like:
 
 ```text
-You are the on-shift DHNT CI repair conductor.
+You are the on-shift DHNT CI repair fixer.
 
 Use bashy and bashy weave. Do not edit the live checkout directly except through
 verified weave pull. You are responsible for recovery, orchestration, evidence,
@@ -208,8 +220,8 @@ Before ending:
 Refactor the current dispatcher into:
 
 - `ci-failure-router.sh`: cheap deterministic polling, claiming, shift
-  selection, and conductor launch.
-- `ci-failure-conductor-brief.md`: prompt template for the premium conductor.
+  selection, and fixer launch.
+- `ci-failure-fixer-brief.md`: prompt template for the fixer.
 - `ci-failure-handoff-schema.json`: optional schema for local handoff files.
 
 The existing 5-minute `bashy schedule` job should call the router. A future
@@ -238,7 +250,7 @@ variable `DHNT_CI_REPAIR_ROUTER` to the absolute path of
 `scripts/ci-failure-router.sh` on the `dhnt-repair` runner.
 
 The router then claims the issue with `repair-running`, writes the local brief,
-launches the on-shift conductor, and gives the conductor the gated merge helper:
+launches the on-shift fixer, and gives the fixer the gated merge helper:
 
 ```sh
 scripts/ci-failure-gate.sh "$FAILED_RUN_ID" "$HEAD_BRANCH"
@@ -251,5 +263,5 @@ Required token scopes for `CI_FAILURE_TOKEN` on `qiangli/dhnt-ci-failures`:
 - Contents: write, so `repository_dispatch` can wake the repair runner.
 
 The repair runner also needs a token usable by `scripts/ci-failure-gate.sh` in
-the source repo with Actions: read, so the conductor can wait for the replacement
+the source repo with Actions: read, so the fixer can wait for the replacement
 CI run instead of silently failing after the repair push.

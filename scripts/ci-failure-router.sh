@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "$0")" && pwd)"
 repo_root="$(cd -- "$script_dir/.." && pwd)"
-config="${DHNT_CI_CONDUCTOR_CONFIG:-$repo_root/config/ci-failure-conductor.env}"
+config="${DHNT_CI_FIXER_CONFIG:-$repo_root/config/ci-failure-fixer.env}"
 
 if [[ -f "$config" ]]; then
 	# shellcheck disable=SC1090
@@ -15,14 +15,14 @@ dhnt_root="${DHNT_CI_ROOT:-/Users/qiangli/projects/poc/dhnt}"
 limit="${DHNT_CI_LIMIT:-1}"
 handoff_root="${DHNT_CI_HANDOFF_DIR:-$HOME/.bashy/ci-repair}"
 lockdir="${DHNT_CI_ROUTER_LOCKDIR:-/tmp/dhnt-ci-failure-router.lock}"
-prompt_template="${DHNT_CI_CONDUCTOR_PROMPT:-$script_dir/ci-failure-conductor-brief.md}"
+prompt_template="${DHNT_CI_FIXER_PROMPT:-$script_dir/ci-failure-fixer-brief.md}"
 
 usage() {
 	cat <<'EOF'
 usage: ci-failure-router.sh [--once] [--dry-run] [--issue NUMBER]
 
 Cheap deterministic CI failure router. Claims collector issues, chooses the
-on-shift premium conductor, writes a handoff brief, and launches the conductor.
+on-shift fixer, writes a handoff brief, and launches the fixer.
 EOF
 }
 
@@ -60,7 +60,7 @@ preflight() {
 	require_command jq "Install jq on the repair host."
 	require_command bashy "Install bashy on the repair host and ensure it is on PATH."
 
-	[[ -f "$prompt_template" ]] || die "missing conductor prompt template: $prompt_template"
+	[[ -f "$prompt_template" ]] || die "missing fixer prompt template: $prompt_template"
 	[[ -d "$dhnt_root" ]] || die "DHNT_CI_ROOT does not exist: $dhnt_root"
 	shift_hours="${DHNT_CI_SHIFT_HOURS:-1}"
 	[[ "$shift_hours" =~ ^[0-9]+$ && "$shift_hours" -gt 0 ]] ||
@@ -87,7 +87,7 @@ preflight() {
 	fi
 
 	if ! bashy commands chat >/dev/null 2>&1; then
-		die "bashy does not expose the 'chat' conductor launcher on this host; router cannot start repair sessions."
+		die "bashy does not expose the 'chat' fixer launcher on this host; router cannot start repair sessions."
 	fi
 }
 
@@ -148,7 +148,7 @@ lease_file_for() {
 }
 
 active_roster() {
-	local shift_hours roster_csv shift_index count idx conductor workers
+	local shift_hours roster_csv shift_index count idx fixer workers
 	shift_hours="${DHNT_CI_SHIFT_HOURS:-1}"
 	roster_csv="${DHNT_CI_SHIFT_ROSTER:-codex,claude}"
 	IFS=',' read -ra roster <<<"$roster_csv"
@@ -159,14 +159,14 @@ active_roster() {
 	fi
 	shift_index="$(( $(now_epoch) / (shift_hours * 3600) ))"
 	idx="$(( shift_index % count ))"
-	conductor="${roster[$idx]}"
-	conductor="${conductor//[[:space:]]/}"
-	case "$conductor" in
+	fixer="${roster[$idx]}"
+	fixer="${fixer//[[:space:]]/}"
+	case "$fixer" in
 		codex) workers="${DHNT_CI_EVEN_WORKERS:-claude,agy,opencode,aider}" ;;
 		claude) workers="${DHNT_CI_ODD_WORKERS:-codex,agy,opencode,aider}" ;;
 		*) workers="${DHNT_CI_WORKERS:-codex,claude,agy,opencode,aider}" ;;
 	esac
-	printf '%s|%s|%s|%s\n' "$conductor" "$workers" "$shift_index" "$shift_hours"
+	printf '%s|%s|%s|%s\n' "$fixer" "$workers" "$shift_index" "$shift_hours"
 }
 
 # ── Band escalation ─────────────────────────────────────────────────────────
@@ -204,10 +204,10 @@ band_for_attempt() {
 	fi
 }
 
-# select_band_conductor BAND → the most-reliable OPERABLE agent at exactly BAND,
+# select_band_fixer BAND → the most-reliable OPERABLE agent at exactly BAND,
 # via the shipped `bashy agents --band`. Falls back to min-band, then the shift
-# roster's conductor, so a missing band machinery never dead-ends a repair.
-select_band_conductor() {
+# roster's fixer, so a missing band machinery never dead-ends a repair.
+select_band_fixer() {
 	local band="$1" name roster
 	name="$(bashy agents list --band "$band" --json 2>/dev/null | jq -r '
 		[ .[] | select(.resolves == true) ]
@@ -318,13 +318,13 @@ lease_is_stale() {
 }
 
 write_lease() {
-	local issue="$1" conductor="$2" workers="$3" shift_index="$4" shift_hours="$5" source_repo="$6" run_id="$7" state_dir lease shift_end
+	local issue="$1" fixer="$2" workers="$3" shift_index="$4" shift_hours="$5" source_repo="$6" run_id="$7" state_dir lease shift_end
 	state_dir="$(state_dir_for "$issue")"
 	lease="$(lease_file_for "$issue")"
 	mkdir -p "$state_dir"
 	shift_end="$(( (shift_index + 1) * shift_hours * 3600 ))"
 	jq -n \
-		--arg conductor "$conductor" \
+		--arg fixer "$fixer" \
 		--arg workers "$workers" \
 		--arg collector "$collector" \
 		--arg issue "$issue" \
@@ -334,12 +334,12 @@ write_lease() {
 		--argjson started_epoch "$(now_epoch)" \
 		--argjson shift_index "$shift_index" \
 		--argjson shift_ends_epoch "$shift_end" \
-		'{conductor:$conductor,workers:$workers,collector:$collector,issue:($issue|tonumber),source_repo:$source_repo,run_id:$run_id,started_at:$started_at,started_epoch:$started_epoch,shift_index:$shift_index,shift_ends_epoch:$shift_ends_epoch}' \
+		'{fixer:$fixer,workers:$workers,collector:$collector,issue:($issue|tonumber),source_repo:$source_repo,run_id:$run_id,started_at:$started_at,started_epoch:$started_epoch,shift_index:$shift_index,shift_ends_epoch:$shift_ends_epoch}' \
 		>"$lease"
 }
 
 write_brief() {
-	local issue="$1" issue_url="$2" source_repo="$3" workflow="$4" branch="$5" sha="$6" run_url="$7" run_id="$8" repo_path="$9" conductor="${10}" workers="${11}" stale="${12}" state_dir brief
+	local issue="$1" issue_url="$2" source_repo="$3" workflow="$4" branch="$5" sha="$6" run_url="$7" run_id="$8" repo_path="$9" fixer="${10}" workers="${11}" stale="${12}" state_dir brief
 	state_dir="$(state_dir_for "$issue")"
 	brief="$state_dir/brief.md"
 	mkdir -p "$state_dir"
@@ -356,7 +356,7 @@ write_brief() {
 - SHA: $sha
 - Failed run: $run_url
 - Failed run id: $run_id
-- On-shift conductor: $conductor
+- On-shift fixer: $fixer
 - Worker pool: $workers
 - Repair mode: ${DHNT_CI_REPAIR_MODE:-weave}
 - Handoff directory: $state_dir
@@ -405,7 +405,7 @@ claimable_issues() {
 }
 
 run_issue() {
-	local issue="$1" issue_url="$2" labels="$3" text source_repo workflow branch sha run_url run_id repo_path roster conductor workers shift_index shift_hours state_dir brief stale code instruction attempt band next
+	local issue="$1" issue_url="$2" labels="$3" text source_repo workflow branch sha run_url run_id repo_path roster fixer workers shift_index shift_hours state_dir brief stale code instruction attempt band next
 	RUN_ISSUE_CLAIMED=0
 
 	if ! has_label "$labels" ci-failure; then
@@ -453,28 +453,28 @@ run_issue() {
 		RUN_ISSUE_CLAIMED=1
 		return 0
 	fi
-	conductor="$(select_band_conductor "$band")"
+	fixer="$(select_band_fixer "$band")"
 	roster="$(active_roster)"
 	IFS='|' read -r _ workers shift_index shift_hours <<<"$roster"
 
 	if (( dry_run )); then
-		printf 'issue=%s repo=%s attempt=%s band=L%s conductor=%s workers=%s timebox=%s stale=%s\n' \
-			"$issue" "$repo_path" "$attempt" "$band" "$conductor" "$workers" "${DHNT_CI_BAND_TIMEBOX:-30m}" "$stale"
+		printf 'issue=%s repo=%s attempt=%s band=L%s fixer=%s workers=%s timebox=%s stale=%s\n' \
+			"$issue" "$repo_path" "$attempt" "$band" "$fixer" "$workers" "${DHNT_CI_BAND_TIMEBOX:-30m}" "$stale"
 		RUN_ISSUE_CLAIMED=1
 		return 0
 	fi
 
-	write_lease "$issue" "$conductor" "$workers" "$shift_index" "$shift_hours" "$source_repo" "$run_id"
-	brief="$(write_brief "$issue" "$issue_url" "$source_repo" "$workflow" "$branch" "$sha" "$run_url" "$run_id" "$repo_path" "$conductor" "$workers" "$stale")"
+	write_lease "$issue" "$fixer" "$workers" "$shift_index" "$shift_hours" "$source_repo" "$run_id"
+	brief="$(write_brief "$issue" "$issue_url" "$source_repo" "$workflow" "$branch" "$sha" "$run_url" "$run_id" "$repo_path" "$fixer" "$workers" "$stale")"
 	RUN_ISSUE_CLAIMED=1
 
 	gh issue edit "$issue" -R "$collector" --add-label repair-running >/dev/null
-	gh issue comment "$issue" -R "$collector" --body "Auto-repair claimed on $(hostname). **Attempt $attempt at band L$band** — conductor \`$conductor\`, timebox \`${DHNT_CI_BAND_TIMEBOX:-30m}\`. Workers: \`$workers\`. Brief: \`$brief\`."
+	gh issue comment "$issue" -R "$collector" --body "Auto-repair claimed on $(hostname). **Attempt $attempt at band L$band** — fixer \`$fixer\`, timebox \`${DHNT_CI_BAND_TIMEBOX:-30m}\`. Workers: \`$workers\`. Brief: \`$brief\`."
 
 	instruction="$(cat "$prompt_template")"
 	set +e
 	bashy chat \
-		--agent "$conductor" \
+		--agent "$fixer" \
 		--cwd "$repo_path" \
 		--sandbox "${DHNT_CI_SANDBOX:-danger-full-access}" \
 		--timeout "${DHNT_CI_BAND_TIMEBOX:-30m}" \
@@ -485,7 +485,7 @@ run_issue() {
 
 	# The SUPERVISOR gate decides pass/fail — never the session exit code.
 	if run_gate "$repo_path"; then
-		gh issue comment "$issue" -R "$collector" --body "**Gate GREEN** after attempt $attempt (band L$band, conductor \`$conductor\`). Proof: the supervisor's own \`bashy gate\` passed on \`$repo_path\` (session exit was $code — not trusted). Conductor owns final merge/closure."
+		gh issue comment "$issue" -R "$collector" --body "**Gate GREEN** after attempt $attempt (band L$band, fixer \`$fixer\`). Proof: the supervisor's own \`bashy gate\` passed on \`$repo_path\` (session exit was $code — not trusted). Fixer owns final merge/closure."
 		gh issue edit "$issue" -R "$collector" --add-label repair-done --remove-label repair-running >/dev/null 2>&1 || true
 	else
 		bump_attempt "$issue"
@@ -494,7 +494,7 @@ run_issue() {
 		if [[ "$next" == human ]]; then
 			notify_human "$issue" "$source_repo" "gate still RED after band L$band (session exit $code / timebox ${DHNT_CI_BAND_TIMEBOX:-30m})"
 		else
-			gh issue comment "$issue" -R "$collector" --body "**Escalating.** Gate still RED after attempt $attempt (band L$band, conductor \`$conductor\`, session exit $code / timebox ${DHNT_CI_BAND_TIMEBOX:-30m}). The next tick runs band L$next."
+			gh issue comment "$issue" -R "$collector" --body "**Escalating.** Gate still RED after attempt $attempt (band L$band, fixer \`$fixer\`, session exit $code / timebox ${DHNT_CI_BAND_TIMEBOX:-30m}). The next tick runs band L$next."
 		fi
 	fi
 }
