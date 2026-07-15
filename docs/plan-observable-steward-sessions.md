@@ -26,6 +26,13 @@ root room to watch the steward think; drills into a sub-room to watch codex; `te
 interject at either level. "Leave the steward running in the background" is just: *the human
 detaches from the room; the agents keep meeting in it.*
 
+**The room is symmetric — it is the place where everyone meets.** A human joins a room the
+same way an agent does: both are *participants* who contribute, observe, and steer as peers.
+There is no "human operates a tool" and no "tool reports to human" — there is a shared space
+and who is in it. That symmetry is the whole point: the room is the commons where humans and
+agents on the mesh convene (many threads, one fabric). The human/agent distinction is a fact
+about a participant, not about the substrate.
+
 ## What this dissolves
 
 The earlier draft proposed a **bridge** (B1–B3) to wire fleet-run events *into* a meeting as a
