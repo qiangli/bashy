@@ -73,7 +73,6 @@ import (
 	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/gate"
 	"github.com/qiangli/coreutils/pkg/handoff"
-	"github.com/qiangli/coreutils/pkg/issue"
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/judge"
 	"github.com/qiangli/coreutils/pkg/kb"
@@ -122,7 +121,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "issue", "todo", "handoff", "resume", "claim", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -385,56 +384,15 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
-	case "issue":
-		// THE Plan-stage intake verb: the project's issue register -- GitHub Issues
-		// without GitHub.
-		//
-		// bashy could track work an agent was ACTIVELY DOING (weave: a per-machine
-		// queue with a workspace, a branch and a verify command) and what a conductor
-		// was planning RIGHT NOW (sprint). It could not record a bug nobody has
-		// triaged, a requirement nobody has scheduled, or a feature somebody merely
-		// asked for -- so those lived as bullets in docs/TODO.md: invisible to every
-		// verb, unqueryable, impossible to close.
-		//
-		// `sdlc issue` LOOKED like this and wasn't: SaveLocalIssue writes {timestamp,
-		// title, body} into .bashy/GENERATED/ and has no counterpart anywhere in the
-		// tree -- no List, no Load, no Close. A drop box, not a register.
-		//
-		// The store is COMMITTED (.bashy/issues/, source not scratch), because a
-		// requirement must travel with the clone, show up in a diff, survive the
-		// machine it was typed on, and need no forge to exist.
-		icmd := issue.NewIssueCmd(func() (string, error) {
-			cwd, err := os.Getwd()
-			if err != nil {
-				return "", err
-			}
-			if r := detectProjectRoot(cwd); r != "" {
-				return r, nil
-			}
-			return cwd, nil
-		})
-		icmd.SetArgs(os.Args[2:])
-		if err := icmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy issue:", err)
-			os.Exit(1)
-		}
-		os.Exit(0)
 	case "todo":
-		// The steward's host-scoped personal task list (coreutils/pkg/todo) — level 1
-		// of the tracking hierarchy: issue is per-repo and COMMITTED, sprint is
-		// cross-repo, todo is per HOST/USER and NOT committed (~/.bashy/todo/<owner>/).
-		// Reuses the issue register's record format; --owner keeps steward/fixer/human
-		// lists separate under one tool.
-		tcmd := todo.NewTodoCmd(func() (string, error) {
-			cwd, err := os.Getwd()
-			if err != nil {
-				return "", err
-			}
-			if r := detectProjectRoot(cwd); r != "" {
-				return r, nil
-			}
-			return cwd, nil
-		})
+		// THE task tracker. Auto-detected scope: inside a git repo → THAT repo's
+		// docs/todo/ (committed, the structured replacement for an ad-hoc TODO.md);
+		// otherwise the personal host list (~/.bashy/todo/<owner>/). --base-dir shows
+		// another repo's list without cd; --user forces the host list. It subsumes the
+		// old `issue` register (removed) as the single per-repo/per-host tracker;
+		// `weave add --from-todo` seeds a run from a repo todo. The record format (YAML-
+		// frontmatter markdown) is shared with the model in coreutils/pkg/issue.
+		tcmd := todo.NewTodoCmd()
 		tcmd.SetArgs(os.Args[2:])
 		if err := tcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy todo:", err)

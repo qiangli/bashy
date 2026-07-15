@@ -351,7 +351,7 @@ var verbSynopsis = map[string]string{
 	"gate":       "does this project pass? (the one command that decides)",
 	"pair":       "two agents + a gate: one proposes, one BREAKS it (writes the failing test) — a proof, not an opinion",
 	"judge":      "panel verdict on work with NO gate to run (a plan, a design). For code, use `pair` — it acts",
-	"issue":      "the project's issue register: bugs, features, requirements — GitHub Issues without GitHub",
+	"todo":       "task list, git-repo aware: this repo's committed docs/todo/ (or a --base-dir), else the host's ~/.bashy/todo/",
 	"invoke":     "invoke ONE agent, ONCE, on one instruction (the primitive every orchestrator is built on)",
 	"conform":    "bashy's OWN fidelity batteries: compat/conformance/compliance/benchmark",
 	"chat":       "invoke an agent with a single unattended instruction",
