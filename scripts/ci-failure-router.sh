@@ -234,11 +234,35 @@ run_gate() {
 }
 
 notify_human() {
-	local issue="$1" source_repo="$2" reason="$3"
+	local issue="$1" source_repo="$2" reason="$3" esc_repo title existing collector_url body
 	gh issue comment "$issue" -R "$collector" --body "**Human escalation.** Auto-repair for \`$source_repo\` exhausted the band ladder (\`${DHNT_CI_BAND_LADDER:-2,3}\`): $reason. Per policy the frontier band (L4) is not spent unattended — a human should take it from here."
 	gh issue edit "$issue" -R "$collector" --add-label repair-failed --remove-label repair-running >/dev/null 2>&1 || true
-	# P4 seam: when DHNT_CI_HUMAN_NOTIFY=email, cloudbox SendMail delivers the same
-	# notice out-of-band. Left as a comment-only default until the webhook lands.
+
+	# P4 — GitHub escalation repo as the human queue. Filing an issue in a repo
+	# the humans watch delivers the notification for free (GitHub watch → email/
+	# mobile) and the issue is TUI-workable (point `gh`/a TUI at the repo). The
+	# same auto-fix pipeline can later be duplicated onto this repo. No SMTP/Gmail.
+	esc_repo="${DHNT_CI_ESCALATION_REPO:-}"
+	[[ -z "$esc_repo" ]] && return 0
+	title="Escalation: $source_repo CI auto-repair needs a human"
+	collector_url="$(gh issue view "$issue" -R "$collector" --json url --jq .url 2>/dev/null)"
+	body="Auto-repair could not fix \`$source_repo\` after the band ladder (\`${DHNT_CI_BAND_LADDER:-2,3}\`).
+
+- Reason: $reason
+- Collector issue: $collector_url
+- Repair host: $(hostname)
+
+A human should pick this up — point your TUI at this repo and work the issue."
+	# One open escalation per source-repo failure thread — dedup by title.
+	existing="$(TITLE="$title" gh issue list -R "$esc_repo" --state open --json number,title \
+		--jq '.[] | select(.title == env.TITLE) | .number' 2>/dev/null | head -n1)"
+	if [[ -n "$existing" ]]; then
+		gh issue comment "$existing" -R "$esc_repo" --body "$body" >/dev/null 2>&1 || true
+	else
+		gh label create escalation -R "$esc_repo" --color B60205 --description "Needs a human" >/dev/null 2>&1 || true
+		gh issue create -R "$esc_repo" --title "$title" --body "$body" --label escalation --label automated >/dev/null 2>&1 ||
+			gh issue create -R "$esc_repo" --title "$title" --body "$body" >/dev/null 2>&1 || true
+	fi
 }
 
 repo_path_for() {
