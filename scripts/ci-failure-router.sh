@@ -277,16 +277,30 @@ select_band_fixer() {
 	printf '%s' "$result"
 }
 
-# run_gate REPO_PATH → 0 GREEN / non-zero RED. The SUPERVISOR's own verdict,
-# never the worker's exit code (the absence-of-evidence law: a session that exits
-# 0 is not proof the build is fixed).
+# run_gate REPO_PATH [RUN_ID BRANCH] → 0 GREEN / non-zero RED. The SUPERVISOR's
+# own verdict, never the worker's exit code (the absence-of-evidence law: a
+# session that exits 0 is not proof the build is fixed).
+#
+# A LOCAL `bashy gate` alone is NOT sufficient for a CI failure: it runs on THIS
+# host's OS, so it is BLIND to an OS-specific break — a Windows-only failure is
+# green on a macOS repair host, and the router would then falsely mark the issue
+# repair-done. So when the failed CI run id + branch are known, the AUTHORITATIVE
+# verdict is a NEWER CI run passing across every OS (ci-failure-gate.sh waits for
+# it); the local gate is only a cheap pre-check that fails fast before the wait.
+# Both must pass. Set DHNT_CI_SKIP_REMOTE_GATE=1 to fall back to the local gate
+# alone (documented weakness — only for hosts with no network to the forge).
 run_gate() {
-	local repo_path="$1"
+	local repo_path="$1" run_id="${2:-}" branch="${3:-}"
 	if [[ -n "${DHNT_CI_GATE_CMD:-}" ]]; then
-		( cd "$repo_path" && eval "$DHNT_CI_GATE_CMD" ) >/dev/null 2>&1
+		( cd "$repo_path" && eval "$DHNT_CI_GATE_CMD" ) >/dev/null 2>&1 || return 1
 	else
-		bashy gate --json --cwd "$repo_path" >/dev/null 2>&1
+		bashy gate --json --cwd "$repo_path" >/dev/null 2>&1 || return 1
 	fi
+	if [[ -n "$run_id" && -n "$branch" && -x "$script_dir/ci-failure-gate.sh" && "${DHNT_CI_SKIP_REMOTE_GATE:-0}" != 1 ]]; then
+		# A green run NEWER than the one that failed is the only cross-OS proof.
+		( cd "$repo_path" && "$script_dir/ci-failure-gate.sh" "$run_id" "$branch" ) >/dev/null 2>&1 || return 1
+	fi
+	return 0
 }
 
 notify_human() {
@@ -560,8 +574,8 @@ run_issue() {
 	# Escalation triggers on a RED supervisor gate OR the timebox — a fixer that did
 	# not converge in its box is escalation-worthy on its own, independent of the
 	# gate. The gate is the SUPERVISOR's own verdict, never the session exit code.
-	if (( timed_out == 0 )) && run_gate "$repo_path"; then
-		gh issue comment "$issue" -R "$collector" --body "**Gate GREEN** after attempt $attempt (band L$band, fixer \`$fixer_binding\`). Proof: the supervisor's own \`bashy gate\` passed on \`$repo_path\` (session exit was $code — not trusted). Fixer owns final merge/closure."
+	if (( timed_out == 0 )) && run_gate "$repo_path" "$run_id" "$branch"; then
+		gh issue comment "$issue" -R "$collector" --body "**Gate GREEN** after attempt $attempt (band L$band, fixer \`$fixer_binding\`). Proof: local \`bashy gate\` passed AND a newer cross-OS CI run on \`$branch\` went green (authoritative — a local gate alone is blind to OS-specific breaks). Session exit was $code — not trusted. Fixer owns final merge/closure."
 		gh issue edit "$issue" -R "$collector" --add-label repair-done --remove-label repair-running >/dev/null 2>&1 || true
 	else
 		bump_attempt "$issue"
