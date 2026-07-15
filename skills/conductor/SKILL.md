@@ -24,6 +24,18 @@ only truth.** A worker's prose or commit message is a lead until the gate
 reproduces it. Echo measured numbers verbatim; never accept "submitted" as
 "done" — re-measure against the goal.
 
+**Run the gate YOURSELF, and read the verdict from bashy — never from the
+worker's output.** The primitive is `bashy gate --command '<gate>' --json`: it
+*runs* the gate and emits a `bashy-gate-v1` verdict (`"passed": true/false`),
+which a worker cannot fake. Do NOT grep the agent's stdout/log for the result —
+a worker echoes your brief, and your brief names the success string, so its log
+will contain `[gate] PASS` (or your equivalent) as *text the agent quoted*, not
+as a gate that ran. That exact false-positive fires a "converged" on a worker
+that changed nothing. The verdict must come from a command you ran, not a string
+you found. (This is the runtime face of the fleet-evidence-invariant: a success
+state must be reached by evidence you produced, never by the absence — or the
+echo — of the worker's.)
+
 This file is the actionable checklist. The full narrative — the four isolation
 traps in depth, convergence details, and two worked campaigns — lives in the
 bundled `reference.md`; read it before your first campaign.
