@@ -204,21 +204,77 @@ band_for_attempt() {
 	fi
 }
 
-# select_band_fixer BAND → the most-reliable OPERABLE agent at exactly BAND,
-# via the shipped `bashy agents --band`. Falls back to min-band, then the shift
-# roster's fixer, so a missing band machinery never dead-ends a repair.
+# select_band_fixer BAND → the fixer for this attempt as "name|binding|kind|reliability".
+# Fixers are NEVER dedicated: the pool is `bashy agents` at BAND, optionally narrowed
+# by DHNT_CI_FIXER_TOOLS (tool allowlist, e.g. "codex,claude") and DHNT_CI_FIXER_AGENTS
+# (agent-name allowlist). Cost lane: prefer flat-cost SUBSCRIPTIONS; fall to metered
+# API keys only when DHNT_CI_FIXER_ALLOW_METERED=1 (urgent) or no subscription agent
+# resolves at the band. The pick rotates ROUND-ROBIN across the chosen pool via a
+# persisted index — not random, which can hammer one rate-limited account twice
+# running. Falls back to min-band, then the shift roster, so a repair never dead-ends.
 select_band_fixer() {
-	local band="$1" name roster
-	name="$(bashy agents list --band "$band" --json 2>/dev/null | jq -r '
-		[ .[] | select(.resolves == true) ]
-		| sort_by( ({"high":0,"medium":1,"unmeasured":2,"low":3}[.reliability] // 4) )
-		| (.[0].name // empty)' 2>/dev/null)"
-	[[ -n "$name" ]] && { printf '%s' "$name"; return 0; }
-	name="$(bashy agents list --min-band "$band" --json 2>/dev/null | jq -r '
-		[ .[] | select(.resolves == true) ] | (.[0].name // empty)' 2>/dev/null)"
-	[[ -n "$name" ]] && { printf '%s' "$name"; return 0; }
-	roster="$(active_roster)"
-	printf '%s' "${roster%%|*}"
+	local band="$1" issue="${2:-}" tools_filter agents_filter allow_metered candidates n idx rr_file pick roster result affinity_file stored_band stored_info
+	# Repo affinity (avoid clobbering): a given issue/repo stays with the SAME fixer
+	# while it still fits the current band — no mid-repair agent swap, so two agents
+	# never fight over one repo's weave workspace. Escalation to a NEW band reassigns
+	# deliberately (a handoff governed by the recovery gate, not a clobber).
+	if [[ -n "$issue" ]]; then
+		affinity_file="$(state_dir_for "$issue")/fixer-affinity"
+		if [[ -r "$affinity_file" ]]; then
+			stored_band="$(sed -n 1p "$affinity_file" 2>/dev/null)"
+			stored_info="$(sed -n 2p "$affinity_file" 2>/dev/null)"
+			if [[ "$stored_band" == "$band" && -n "$stored_info" ]]; then
+				printf '%s' "$stored_info"
+				return 0
+			fi
+		fi
+	fi
+	tools_filter="${DHNT_CI_FIXER_TOOLS:-}"
+	agents_filter="${DHNT_CI_FIXER_AGENTS:-}"
+	allow_metered="${DHNT_CI_FIXER_ALLOW_METERED:-0}"
+
+	candidates="$(bashy agents list --band "$band" --json 2>/dev/null | \
+		DHNT_CI_FIXER_TOOLS="$tools_filter" \
+		DHNT_CI_FIXER_AGENTS="$agents_filter" \
+		DHNT_CI_FIXER_ALLOW_METERED="$allow_metered" jq -r '
+		((env.DHNT_CI_FIXER_TOOLS // "") | split(",") | map(select(length > 0))) as $tf
+		| ((env.DHNT_CI_FIXER_AGENTS // "") | split(",") | map(select(length > 0))) as $nf
+		| ((env.DHNT_CI_FIXER_ALLOW_METERED // "0") | tonumber) as $metered
+		| [ .[]
+			| select(.resolves == true)
+			| select(($tf | length) == 0 or (.tool as $t | $tf | index($t)))
+			| select(($nf | length) == 0 or (.name as $x | $nf | index($x))) ] as $all
+		| ($all | map(select(.kind == "subscription"))) as $subs
+		| (if ($subs | length) > 0 then $subs elif $metered == 1 then $all else $subs end) as $pool
+		| $pool | sort_by(.binding) | .[]
+		| [.name, .binding, (.kind // "?"), (.reliability // "?")] | @tsv' 2>/dev/null)"
+
+	if [[ -z "$candidates" ]]; then
+		candidates="$(bashy agents list --min-band "$band" --json 2>/dev/null | jq -r '
+			[ .[] | select(.resolves == true) ] | sort_by(.binding) | .[]
+			| [.name, .binding, (.kind // "?"), (.reliability // "?")] | @tsv' 2>/dev/null)"
+	fi
+	if [[ -z "$candidates" ]]; then
+		roster="$(active_roster)"
+		printf '%s|%s|subscription|unknown' "${roster%%|*}" "${roster%%|*}"
+		return 0
+	fi
+
+	n="$(printf '%s\n' "$candidates" | grep -c .)"
+	rr_file="$handoff_root/fixer-rr-index"
+	mkdir -p "$(dirname "$rr_file")"
+	idx=0
+	[[ -r "$rr_file" ]] && idx="$(cat "$rr_file" 2>/dev/null || echo 0)"
+	[[ "$idx" =~ ^[0-9]+$ ]] || idx=0
+	printf '%s' "$(( (idx + 1) % 1000000 ))" >"$rr_file"
+	pick="$(printf '%s\n' "$candidates" | sed -n "$(( (idx % n) + 1 ))p")"
+	result="$(printf '%s' "$pick" | tr '\t' '|')"
+	# Pin this (issue, band) to the chosen fixer so retries reuse it (affinity).
+	if [[ -n "$issue" ]]; then
+		mkdir -p "$(dirname "$affinity_file")"
+		printf '%s\n%s\n' "$band" "$result" >"$affinity_file"
+	fi
+	printf '%s' "$result"
 }
 
 # run_gate REPO_PATH → 0 GREEN / non-zero RED. The SUPERVISOR's own verdict,
@@ -323,19 +379,24 @@ write_lease() {
 	lease="$(lease_file_for "$issue")"
 	mkdir -p "$state_dir"
 	shift_end="$(( (shift_index + 1) * shift_hours * 3600 ))"
-	jq -n \
-		--arg fixer "$fixer" \
-		--arg workers "$workers" \
-		--arg collector "$collector" \
-		--arg issue "$issue" \
-		--arg source_repo "$source_repo" \
-		--arg run_id "$run_id" \
-		--arg started_at "$(now_iso)" \
-		--argjson started_epoch "$(now_epoch)" \
-		--argjson shift_index "$shift_index" \
-		--argjson shift_ends_epoch "$shift_end" \
-		'{fixer:$fixer,workers:$workers,collector:$collector,issue:($issue|tonumber),source_repo:$source_repo,run_id:$run_id,started_at:$started_at,started_epoch:$started_epoch,shift_index:$shift_index,shift_ends_epoch:$shift_ends_epoch}' \
-		>"$lease"
+	# bashy's pure-Go jq does not support --arg/--argjson (only env.VAR), so pass
+	# the lease fields through the environment (same fix as select_band_fixer).
+	CIL_FIXER="$fixer" CIL_WORKERS="$workers" CIL_COLLECTOR="$collector" \
+	CIL_ISSUE="$issue" CIL_SOURCE_REPO="$source_repo" CIL_RUN_ID="$run_id" \
+	CIL_STARTED_AT="$(now_iso)" CIL_STARTED_EPOCH="$(now_epoch)" \
+	CIL_SHIFT_INDEX="$shift_index" CIL_SHIFT_ENDS="$shift_end" \
+	jq -n '{
+		fixer: env.CIL_FIXER,
+		workers: env.CIL_WORKERS,
+		collector: env.CIL_COLLECTOR,
+		issue: (env.CIL_ISSUE | tonumber),
+		source_repo: env.CIL_SOURCE_REPO,
+		run_id: env.CIL_RUN_ID,
+		started_at: env.CIL_STARTED_AT,
+		started_epoch: (env.CIL_STARTED_EPOCH | tonumber),
+		shift_index: (env.CIL_SHIFT_INDEX | tonumber),
+		shift_ends_epoch: (env.CIL_SHIFT_ENDS | tonumber)
+	}' >"$lease"
 }
 
 write_brief() {
@@ -406,6 +467,7 @@ claimable_issues() {
 
 run_issue() {
 	local issue="$1" issue_url="$2" labels="$3" text source_repo workflow branch sha run_url run_id repo_path roster fixer workers shift_index shift_hours state_dir brief stale code instruction attempt band next
+	local fixer_info fixer_binding fixer_kind fixer_reliab timebox timebox_s timed_out why
 	RUN_ISSUE_CLAIMED=0
 
 	if ! has_label "$labels" ci-failure; then
@@ -453,13 +515,17 @@ run_issue() {
 		RUN_ISSUE_CLAIMED=1
 		return 0
 	fi
-	fixer="$(select_band_fixer "$band")"
+	fixer_info="$(select_band_fixer "$band" "$issue")"
+	IFS='|' read -r fixer fixer_binding fixer_kind fixer_reliab <<<"$fixer_info"
+	[[ -n "$fixer" ]] || fixer="$fixer_binding"
 	roster="$(active_roster)"
 	IFS='|' read -r _ workers shift_index shift_hours <<<"$roster"
+	timebox="${DHNT_CI_BAND_TIMEBOX:-30m}"
+	timebox_s="$(duration_seconds "$timebox")"
 
 	if (( dry_run )); then
-		printf 'issue=%s repo=%s attempt=%s band=L%s fixer=%s workers=%s timebox=%s stale=%s\n' \
-			"$issue" "$repo_path" "$attempt" "$band" "$fixer" "$workers" "${DHNT_CI_BAND_TIMEBOX:-30m}" "$stale"
+		printf 'issue=%s repo=%s attempt=%s band=L%s fixer=%s binding=%s kind=%s workers=%s timebox=%s stale=%s\n' \
+			"$issue" "$repo_path" "$attempt" "$band" "$fixer" "$fixer_binding" "$fixer_kind" "$workers" "$timebox" "$stale"
 		RUN_ISSUE_CLAIMED=1
 		return 0
 	fi
@@ -469,50 +535,93 @@ run_issue() {
 	RUN_ISSUE_CLAIMED=1
 
 	gh issue edit "$issue" -R "$collector" --add-label repair-running >/dev/null
-	gh issue comment "$issue" -R "$collector" --body "Auto-repair claimed on $(hostname). **Attempt $attempt at band L$band** — fixer \`$fixer\`, timebox \`${DHNT_CI_BAND_TIMEBOX:-30m}\`. Workers: \`$workers\`. Brief: \`$brief\`."
+	# Tracking: the canonical tool:model binding (+ kind/reliability) is recorded on
+	# the issue so every repair is attributable to a specific agent/model.
+	gh issue comment "$issue" -R "$collector" --body "Auto-repair claimed on $(hostname). **Attempt $attempt at band L$band** — fixer \`$fixer_binding\` (kind: \`$fixer_kind\`, reliability: \`$fixer_reliab\`), timebox \`$timebox\`. Workers: \`$workers\`. Brief: \`$brief\`."
 
 	instruction="$(cat "$prompt_template")"
+	# Hard timebox. `bashy chat --timeout` is the graceful ceiling; the OUTER
+	# `timeout` is the guarantee that the escalation path always runs — a wedged
+	# session is force-killed after the box (+30s grace), so L2 can never silently
+	# hold the slot past its limit. Exit 124/137 = the ceiling fired (not converged).
 	set +e
-	bashy chat \
+	timeout -k 30 "$timebox_s" bashy chat \
 		--agent "$fixer" \
 		--cwd "$repo_path" \
 		--sandbox "${DHNT_CI_SANDBOX:-danger-full-access}" \
-		--timeout "${DHNT_CI_BAND_TIMEBOX:-30m}" \
+		--timeout "$timebox" \
 		--file "$brief" \
 		--instruction "$instruction"
 	code=$?
 	set -e
+	timed_out=0
+	[[ "$code" == 124 || "$code" == 137 ]] && timed_out=1
 
-	# The SUPERVISOR gate decides pass/fail — never the session exit code.
-	if run_gate "$repo_path"; then
-		gh issue comment "$issue" -R "$collector" --body "**Gate GREEN** after attempt $attempt (band L$band, fixer \`$fixer\`). Proof: the supervisor's own \`bashy gate\` passed on \`$repo_path\` (session exit was $code — not trusted). Fixer owns final merge/closure."
+	# Escalation triggers on a RED supervisor gate OR the timebox — a fixer that did
+	# not converge in its box is escalation-worthy on its own, independent of the
+	# gate. The gate is the SUPERVISOR's own verdict, never the session exit code.
+	if (( timed_out == 0 )) && run_gate "$repo_path"; then
+		gh issue comment "$issue" -R "$collector" --body "**Gate GREEN** after attempt $attempt (band L$band, fixer \`$fixer_binding\`). Proof: the supervisor's own \`bashy gate\` passed on \`$repo_path\` (session exit was $code — not trusted). Fixer owns final merge/closure."
 		gh issue edit "$issue" -R "$collector" --add-label repair-done --remove-label repair-running >/dev/null 2>&1 || true
 	else
 		bump_attempt "$issue"
 		next="$(band_for_attempt "$(read_attempt "$issue")")"
 		gh issue edit "$issue" -R "$collector" --remove-label repair-running >/dev/null 2>&1 || true
-		if [[ "$next" == human ]]; then
-			notify_human "$issue" "$source_repo" "gate still RED after band L$band (session exit $code / timebox ${DHNT_CI_BAND_TIMEBOX:-30m})"
+		if (( timed_out )); then
+			why="**timed out** after \`$timebox\` (hard ceiling; fixer \`$fixer_binding\` did not converge)"
 		else
-			gh issue comment "$issue" -R "$collector" --body "**Escalating.** Gate still RED after attempt $attempt (band L$band, fixer \`$fixer\`, session exit $code / timebox ${DHNT_CI_BAND_TIMEBOX:-30m}). The next tick runs band L$next."
+			why="gate still RED (fixer \`$fixer_binding\`, session exit $code)"
+		fi
+		if [[ "$next" == human ]]; then
+			notify_human "$issue" "$source_repo" "$why after band L$band"
+		else
+			gh issue comment "$issue" -R "$collector" --body "**Escalating.** Attempt $attempt (band L$band) $why. The next tick runs band L$next."
 		fi
 	fi
 }
 
 ensure_labels
 
+# Concurrency: when a shared change breaks the whole fleet (e.g. a Go-version bump
+# across sh/coreutils/outpost/bashy/ycode), each repo is a SEPARATE collector issue
+# with its own timebox. Spawning one fixer PER repo in parallel keeps the wall-clock
+# at one timebox instead of N × timebox; round-robin fixer selection spreads the
+# concurrent load across rate-limited subscriptions. DHNT_CI_CONCURRENCY=1 (default)
+# is the sequential path; >1 spawns up to that many fixers, each running the full
+# run_issue lifecycle in the background. Per-issue claiming (the repair-running label
+# + lease) keeps two fixers off the same issue, and the global router lock serialises
+# invocations so total concurrency never exceeds the cap.
+concurrency="${DHNT_CI_CONCURRENCY:-1}"
+[[ "$concurrency" =~ ^[0-9]+$ && "$concurrency" -gt 0 ]] || concurrency=1
+
 processed=0
+pids=()
 while IFS=$'\t' read -r issue issue_url labels; do
 	[[ -z "$issue" ]] && continue
-	RUN_ISSUE_CLAIMED=0
-	run_issue "$issue" "$issue_url" "$labels"
-	if (( RUN_ISSUE_CLAIMED )); then
+	if (( concurrency > 1 )); then
+		run_issue "$issue" "$issue_url" "$labels" &
+		pids+=("$!")
 		processed="$((processed + 1))"
-	fi
-	if (( processed >= limit )); then
-		break
+		if (( processed >= concurrency )); then
+			break
+		fi
+	else
+		RUN_ISSUE_CLAIMED=0
+		run_issue "$issue" "$issue_url" "$labels"
+		if (( RUN_ISSUE_CLAIMED )); then
+			processed="$((processed + 1))"
+		fi
+		if (( processed >= limit )); then
+			break
+		fi
 	fi
 done < <(claimable_issues)
+
+# Concurrency mode: wait for every spawned fixer so the global lock is held for the
+# whole batch (one timebox), not released while fixers are still running.
+for pid in "${pids[@]:-}"; do
+	[[ -n "$pid" ]] && wait "$pid" 2>/dev/null || true
+done
 
 if (( processed == 0 )); then
 	echo "ci-failure-router: no claimable CI failure issues"
