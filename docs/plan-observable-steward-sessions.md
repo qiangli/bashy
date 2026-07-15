@@ -33,6 +33,44 @@ and who is in it. That symmetry is the whole point: the room is the commons wher
 agents on the mesh convene (many threads, one fabric). The human/agent distinction is a fact
 about a participant, not about the substrate.
 
+## The room is a first-class construct — and transport-agnostic by design
+
+`room` is a **key bashy construct**, a peer of the shell and the fleet — NOT a mode of
+`meet`, and NOT a local/TUI feature. This is a hard design rule, because the tempting
+mistake is to build it as "a TUI you attach to locally" and bolt remote on later. That is
+backwards. Bake in the wrong assumption and every surface after the first fights it.
+
+A room is defined by two things only, both surface-independent:
+
+1. **State** — its identity, participant set, and append-only transcript. This lives
+   somewhere addressable (a host, later a mesh location); it is not tied to any terminal.
+2. **A protocol** — the events a participant sends (contribute / steer / join / leave) and
+   receives (transcript deltas, presence, state). One protocol, spoken by every surface.
+
+Everything a *human* uses to be in a room — a local TUI, a remote CLI, a **web UI**, a
+**mobile app** — is a **participation surface**: a client that speaks the room protocol and
+renders it. They are equal citizens, designed in from the start:
+
+| surface | how it speaks the protocol | for |
+|---|---|---|
+| local TUI | in-process / same-host attach | the operator at the machine |
+| remote CLI | the protocol over the mesh/tunnel | an operator on another box |
+| **web UI** (Periscope) | the protocol over WebSocket through the portal | anyone with a browser, no install |
+| **mobile app** | the same protocol over the same WebSocket | remote participation from a phone |
+
+This is exactly the dhnt mobile stance: a phone is a **client into the mesh**, not a node —
+and *participating in a room* is precisely that client role. A human on a phone joins the same
+room a local TUI and three agents are already in, and contributes/observes/steers as a peer.
+
+The transports already exist and must be REUSED, not reinvented: same-host attach for local;
+the matrix tunnel + the portal's fleet-state stream for cross-machine and web; the same
+WebSocket for mobile. The room protocol rides these; it does not invent a new one.
+
+**Design consequence:** the very first cut must put the protocol/state at the core and make
+even the local TUI *a client of it* — so the web and mobile surfaces are additional clients,
+never a re-architecture. If the local TUI reaches into room internals directly, remote is
+already lost.
+
 ## What this dissolves
 
 The earlier draft proposed a **bridge** (B1–B3) to wire fleet-run events *into* a meeting as a
@@ -73,27 +111,39 @@ every room always has:
 - **live attach**: `observe` (read-only, N clients), `tell` (interject), `say` (steer a
   live turn).
 
-## Layers (recast)
+## Build order (NOT a local-then-remote layering)
 
-**L0 — the root room.** The human↔steward conversation runs as a room, not a pipe
-(`meet start --non-interactive` is the closest existing entry; it needs an open-ended,
-non-council mode). The steward's narration and each delegated run's lifecycle
-(`launched codex on OTLP-fix` · `files changed 17` · `GATE passed=true`) are contributions in
-the room or its children. A human `observe`s from a second terminal; `tell`/`say` interject.
-This delivers everything asked, on one host, with no new transport.
+The sequencing is by *construct*, not by *reach* — the protocol is the foundation, and every
+surface (including the local TUI) is a client of it from day one. This is deliberately not
+"ship local, add remote later," which is the trap the transport-agnostic rule forbids.
+
+**S1 — the room core: state + protocol.** Define the room construct — identity, participant
+set, append-only transcript — and the event protocol (contribute / steer / join / leave /
+transcript-delta / presence). This is the load-bearing piece; get it surface-independent and
+everything else is a client. The human↔steward conversation becomes a room here (an
+open-ended *work*-mode room, distinct from `meet`'s bounded council). Run-lifecycle events
+(`launched codex` · `files changed 17` · `GATE passed=true`) and steward narration are
+contributions; sub-rooms per worker nest under it.
 
   Discipline preserved: the `GATE` contribution is the SUPERVISOR's `bashy gate --json`
-  verdict, never the worker's echoed prose (see `skills/conductor/SKILL.md` — a worker's log
+  verdict, never the worker's echoed prose (`skills/conductor/SKILL.md` — a worker's log
   quotes the success string from its brief).
 
-**L1 — modes + structure.** A room can run in *work* mode (open-ended, the steward drives) or
-*council* mode (bounded rounds → minutes, today's `meet`). Sub-rooms per worker give `show`
-rosters and per-worker coverage; `close` on a work room files a decision log (what was
-delegated, to whom, verified how, merged or not) — the audit trail.
+**S2 — the first two clients, proving the protocol is surface-independent.** The **local
+TUI** (`observe`/`tell`/`say` as clients of the protocol, not reaching into internals) AND a
+**WebSocket endpoint** exposing the same protocol. Two surfaces from the start is what keeps
+the core honest — if only the local TUI exists, the abstraction rots toward it.
 
-**L2 — remote / multi-user.** `observe` is same-host (reads the room transcript). Off-host
-humans attach by streaming the room UP to the portal's existing fleet-state plane and
-rendering it in Periscope. Reuses transport already built; no new protocol.
+**S3 — the remote/web/mobile surfaces, which are now just more clients.** A browser
+(Periscope) and the mobile app speak the S2 WebSocket protocol over the portal + matrix
+tunnel — cross-machine, no install, remote participation. Because S1/S2 were built
+surface-independent, these are *additions*, not a re-architecture. `close` on a work room
+files a decision log (what was delegated, to whom, verified how) — the audit trail, available
+to every surface equally.
+
+**Modes, orthogonal to surfaces:** a room runs in *work* mode (open-ended, a driver leads) or
+*council* mode (bounded rounds → minutes, today's `meet`). Modes are room behavior; surfaces
+are how you attach. The two never entangle.
 
 ## The correlation payoff (ties to `bashy otel ui`)
 
@@ -113,8 +163,12 @@ stores.
 - Detach + reattach (`resume`) loses nothing; the agents kept working while detached.
 - A work-mode room needs no `converge`/minutes to be valid (open-ended is a first-class mode).
 
-## Not in scope
+## Reuse, don't reinvent
 
-A bespoke pub/sub or web UI — L0/L1 reuse meet's transcript + `observe`; L2 reuses the portal
-stream. The genuinely new work is generalizing `meet` from *bounded council* to *persistent
-room with modes*, and making the human↔agent channel one of those rooms instead of a pipe.
+The room protocol rides transports that already exist — same-host attach, the matrix tunnel,
+the portal's fleet-state stream, WebSocket — it does not invent a new one. The genuinely new
+work is three things: (1) the **room construct** itself (state + surface-independent protocol)
+as a first-class bashy concept; (2) generalizing `meet` from a *bounded council* into one
+*mode* of a persistent room; and (3) making the human↔agent channel a room instead of a pipe.
+The web (Periscope) and mobile surfaces are not out of scope — they are the point — but they
+are *clients of the protocol*, built after and on top of it, never a second architecture.
