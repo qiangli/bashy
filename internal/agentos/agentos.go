@@ -89,6 +89,7 @@ import (
 	coreskills "github.com/qiangli/coreutils/pkg/skills"
 	"github.com/qiangli/coreutils/pkg/supervise"
 	"github.com/qiangli/coreutils/pkg/telemetry"
+	"github.com/qiangli/coreutils/pkg/todo"
 	"github.com/qiangli/coreutils/pkg/weave"
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	"github.com/qiangli/coreutils/pkg/webinspect"
@@ -121,7 +122,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "issue", "handoff", "resume", "claim", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
+		"weave", "sprint", "issue", "todo", "handoff", "resume", "claim", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -415,6 +416,19 @@ func Dispatch() {
 		icmd.SetArgs(os.Args[2:])
 		if err := icmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy issue:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "todo":
+		// The steward's host-scoped personal task list (coreutils/pkg/todo) — level 1
+		// of the tracking hierarchy: issue is per-repo and COMMITTED, sprint is
+		// cross-repo, todo is per HOST/USER and NOT committed (~/.bashy/todo/<owner>/).
+		// Reuses the issue register's record format; --owner keeps steward/fixer/human
+		// lists separate under one tool.
+		tcmd := todo.NewTodoCmd()
+		tcmd.SetArgs(os.Args[2:])
+		if err := tcmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy todo:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
