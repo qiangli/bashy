@@ -89,17 +89,19 @@ maintainer's private storage. The terms that constrain engineering work:
   The Open Group (§1). This binds *even after a clean run* — a green PCTS score
   is not publishable on its own.
 
-  ⚠️ **Results REMOVED from this public repo; consent REQUESTED, not yet granted
-  (2026-07-11).** Between 2026-07-04 and 2026-07-11 this repo published PCTS
-  tallies and assertion identifiers without that consent. On noticing, we removed
-  them and asked The Open Group (ticket #279890) for written consent to
-  republish for the OSS project. **Until they reply: no PCTS results anywhere
-  public** — not in this file, `TODO.md`, `conformance-statement.md`, the README,
-  release notes, CHANGELOG, launch copy, or any external post; and never a
-  "certified" / "passes the Open Group suite" claim. Our own measurements
-  (bash-5.3 fixtures, yash, the differential + 10-shell panels, POSIX-mode
-  parity) are unaffected and stay publishable — they are what the public claims
-  rest on.
+  ✅ **CONSENT GRANTED 2026-07-16 (ticket #280298) — SCOPED.** Between 2026-07-04
+  and 2026-07-11 this repo published PCTS tallies + assertion identifiers without
+  consent; on noticing we removed them and asked The Open Group. They have now
+  granted permission to publish results **"for the purposes of conformance work,
+  limited to the relevant tests related to the shell utility, other existing
+  requirements unchanged."** So: **shell-scenario results MAY be published**
+  (`shell_no12`, `sh_12`). **The coreutils/utilities sweep results remain
+  withheld** — "the shell utility" does not clearly cover the utility programs;
+  a scope follow-up on the ticket is needed before publishing those. And the
+  standing bars are **unchanged**: never a "certified" / "POSIX certified" /
+  "passes the Open Group suite" claim, no Open Group mark/badge, and the suite is
+  never redistributed. Our own measurements (bash-5.3 fixtures, yash, the
+  differential + 10-shell panels, POSIX-mode parity) were always unaffected.
 - **No certification-program trademarks.** The license grants zero rights to the
   Open Group cert marks/badges.
 - **Term: 12 months** from the email telling us how to obtain the suites (not
