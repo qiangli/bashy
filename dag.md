@@ -1142,3 +1142,144 @@ Effects: destroy
 ```bash
 rm -rf bin
 ```
+
+### build-bash
+Build ONLY `bin/bash` — the pure Bash 5.3 drop-in from cmd/bash (import graph
+never includes coreutils; ~5.7 MB). All the conformance harness needs. Uses
+`"$BASHY" go build` so the toolchain path is bashy-owned.
+Sources: cmd/bash, internal/cli, go.mod, go.sum
+Generates: bin/bash
+Effects: write
+
+```bash
+set -e
+mkdir -p bin
+BASHY_EXE="${BASHY:-bashy}"
+BUILD_ID=""
+if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BUILD_ID=$(git rev-parse --short=7 HEAD 2>/dev/null || true)
+fi
+"$BASHY_EXE" go build -trimpath -ldflags "-s -w -X 'github.com/qiangli/bashy/internal/cli.buildID=$BUILD_ID'" -o bin/bash ./cmd/bash
+echo "built bin/bash (pure drop-in)"
+```
+
+### build-bashy
+Build ONLY `bin/bashy` — the AgentOS shell from cmd/bashy. Set BASHY_TAGS to add
+embed tags (embed_podman/…). Lean worker by default.
+Sources: cmd/bashy, internal, go.mod, go.sum
+Generates: bin/bashy
+Effects: write
+
+```bash
+set -e
+mkdir -p bin
+BASHY_EXE="${BASHY:-bashy}"
+BUILD_ID=""
+if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BUILD_ID=$(git rev-parse --short=7 HEAD 2>/dev/null || true)
+fi
+tags=""
+[ -n "${BASHY_TAGS:-}" ] && tags="-tags ${BASHY_TAGS}"
+"$BASHY_EXE" go build -trimpath $tags -ldflags "-s -w -X 'github.com/qiangli/bashy/internal/cli.buildID=$BUILD_ID'" -o bin/bashy ./cmd/bashy
+echo "built bin/bashy (AgentOS)"
+```
+
+### build-fips
+Build both binaries against the Go FIPS 140-3 Cryptographic Module
+(GOFIPS140=v1.0.0). Pure-Go, no cgo/BoringCrypto. Use GODEBUG=fips140=on at
+runtime (keeps md5sum working), not fips140=only.
+Sources: cmd, internal, go.mod, go.sum
+Generates: bin/bash, bin/bashy
+Effects: write
+
+```bash
+set -e
+mkdir -p bin
+BASHY_EXE="${BASHY:-bashy}"
+V="${GOFIPS140_VERSION:-v1.0.0}"
+echo "building with the Go FIPS 140-3 module (GOFIPS140=$V) ..."
+GOFIPS140="$V" "$BASHY_EXE" go build -trimpath -o bin/bash ./cmd/bash
+tags=""; [ -n "${BASHY_TAGS:-}" ] && tags="-tags ${BASHY_TAGS}"
+GOFIPS140="$V" "$BASHY_EXE" go build -trimpath $tags -o bin/bashy ./cmd/bashy
+echo "built bin/{bash,bashy} in FIPS mode"
+```
+
+### test-bash-helpers
+Compile the recho/zecho/xcase C helpers the bash-5.3 suite needs (the only place
+`cc` is invoked — for test fixtures, not for bashy). Also stubs external/config.h.
+Requires: test-bash-data
+Sources: external/bash-5.3
+Effects: write
+
+```bash
+set -e
+D="${BASH_TESTS_DIR:-external/bash-5.3/tests}"
+cd "$D"
+[ -f recho ] || cc -o recho ../support/recho.c 2>/dev/null || true
+[ -f zecho ] || cc -o zecho ../support/zecho.c 2>/dev/null || true
+[ -f xcase ] || cc -o xcase ../support/xcase.c 2>/dev/null || true
+[ -f ../config.h ] || for i in $(seq 1 128); do printf '/* stub config.h line %03d */\n' "$i"; done > ../config.h
+echo "test-bash-helpers: recho/zecho/xcase + config.h ready"
+```
+
+### test-bash-parallel
+The **canonical 86/86 gate** — the bash-5.3 fixture suite fanned across cores via
+the single `tools/bash53suite` runner. Same runner as `test-bash`; parallel is
+the fast path. JOBS overrides the worker count.
+Requires: build-bash, test-bash-helpers
+Sources: tools/bash53suite, external/bash-5.3
+Effects: write
+
+```bash
+set -e
+JOBS="${JOBS:-}" BASH_TESTS_DIR="${BASH_TESTS_DIR:-external/bash-5.3/tests}" BASH_TEST_SKIP="${BASH_TEST_SKIP:-}" /bin/bash scripts/test-bash-parallel.sh
+```
+
+### test-uutils
+uutils/coreutils suite vs the pure-Go multicall (INFO metric; needs cargo).
+Sources: scripts/uutils-scoreboard.sh
+Effects: write, net
+
+```bash
+set -e
+scripts/uutils-scoreboard.sh "${UUTILS_OUT:-}"
+```
+
+### test-zsh
+zsh-own-suite Tier-0 scoreboard (tools/ztst runner; INFO metric, not a gate).
+Sources: scripts/zsh-scoreboard.sh
+Effects: write
+
+```bash
+set -e
+scripts/zsh-scoreboard.sh "${ZSH_OUT:-}"
+```
+
+### hooks
+Install the git pre-push hook (pin-drift guard). Bypass with `git push --no-verify`.
+Effects: write
+
+```bash
+git config core.hooksPath scripts/hooks
+echo "hooks: core.hooksPath -> scripts/hooks (bypass with 'git push --no-verify')"
+```
+
+### test-uutils-list
+Print the current uutils failure list (INFO; the -list companion to test-uutils).
+Sources: scripts/uutils-scoreboard.sh
+Effects: read
+
+```bash
+set -e
+scripts/uutils-scoreboard.sh --list "${UUTILS_OUT:-}"
+```
+
+### test-zsh-list
+Print the current bashy-specific zsh failure list (INFO; companion to test-zsh).
+Sources: scripts/zsh-scoreboard.sh
+Effects: read
+
+```bash
+set -e
+scripts/zsh-scoreboard.sh --list "${ZSH_OUT:-}"
+```
