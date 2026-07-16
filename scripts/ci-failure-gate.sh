@@ -46,10 +46,13 @@ start_seconds="$SECONDS"
 timeout_seconds="$(duration_seconds "$timeout")"
 
 latest_newer_run() {
+	# $failed_run_id is validated numeric in preflight, so interpolating it into the
+	# program is injection-safe — and it avoids `jq --argjson`, which bashy's pure-Go
+	# jq does not support (this helper runs under the bashy shell in the repair loop).
 	gh run list --branch "$branch" --limit 20 \
 		--json databaseId,status,conclusion,workflowName,headSha,url,createdAt |
-		jq -r --argjson failed "$failed_run_id" '
-			[.[] | select(.databaseId > $failed)] |
+		jq -r '
+			[.[] | select(.databaseId > '"$failed_run_id"')] |
 			sort_by(.databaseId) |
 			reverse |
 			.[0] // empty
