@@ -98,12 +98,11 @@ package calls that store "a prison" it won't touch). So `delegate self`:
   - **SHIPPED — `--model` transplant.** `delegate self --model opus` forks your live
     session AND swaps the model (fresh eyes on the same context); plain `delegate self`
     inherits the session's model (the optional `--model {model}` drops out).
-  - **Remaining — first-party brief-less fork on ycode.** ycode's sessions live in
-    `ycode serve` (WS); the headless `ycode --print` is stateless with no
-    `--resume/--fork` flag and no session-id env for children. A true ycode self-fork
-    needs a ycode-side feature: headless session persistence + a `--resume/--fork` on
-    the prompt path + a `YCODE_SESSION_ID` env — a distinct ycode build. (claude
-    already delivers true brief-less fork, so this is completeness, not the core.)
+  - **SHIPPED — first-party brief-less fork on ycode.** ycode now ships a headless
+    context-inheriting fork (`--fork <id>`, a stable session store at
+    `~/.agents/ycode/sessions`, and `YCODE_SESSION_ID`), built via a delegated codex
+    run. Its tool spec has a fork_exec/session_env, so `delegate self` under a ycode
+    steward forks the live session — the first-party harness thesis paying off.
   - **Remaining — scope inheritance & held channel.** The fork currently gets full
     scope via `--dangerously-skip-permissions` (same as any launch); exact
     caller-scope inheritance is a refinement. A held, steerable channel to the fork is
