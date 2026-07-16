@@ -109,6 +109,23 @@ package calls that store "a prison" it won't touch). So `delegate self`:
     the existing `foreman` / `chat.Session` primitive (the steward mode already uses
     it); surfacing it as `delegate --session` is optional sugar — steering a fork means
     re-resuming the fork's NEW session id.
+
+### The ROLE-BLEED gotcha (observed 2026-07-16, first production use)
+
+`delegate self` inherits the parent's *whole* context — including a strongly
+established ROLE. Forking a long steward session to do a *different-role worker* task
+(build tool X) failed: the fork continued **being the steward** — it produced a status
+report about the campaign instead of doing the worker directive, and committed nothing.
+The directive's "you are a worker, not the steward" was overridden by ~100 turns of
+inherited steward identity.
+
+Lesson, and the rule going forward: **`delegate self` is for CONTINUING what you are
+doing** (same role, more of it, in parallel) — *not* for spawning a differently-roled
+worker on a scoped task. For a scoped worker task, use a **fresh briefed agent in weave**
+(a new session with only the brief has no conflicting role). The context that makes the
+fork valuable ("no re-briefing") is the same context that makes it wrong for a role
+switch. A future mitigation: a `--fresh-role`/`--as <role>` that forks the *working
+context* (files, findings) while resetting the *identity/role* preamble.
 - Atlas: `delegate` is a new verb → needs an atlas Entry (Stage/Group/Tier/Caps) + a
   security Effect + coverage/e2e-dispatch entries. `self`/`--model` are flags, no
   extra atlas work.
