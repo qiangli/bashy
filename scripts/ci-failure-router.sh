@@ -89,6 +89,19 @@ preflight() {
 	if ! bashy commands chat >/dev/null 2>&1; then
 		die "bashy does not expose the 'chat' fixer launcher on this host; router cannot start repair sessions."
 	fi
+
+	# Version-skew guard. Fixer selection filters agents by their `kind`
+	# (subscription vs api). A STALE `bashy` on PATH that predates that field
+	# reports it null for every agent, the subscription filter matches nothing,
+	# and selection silently falls through to the L4 (fable5) roster — the one
+	# agent policy reserves for never-unattended. That is invisible without this
+	# check (a wrong pick, not an error). Assert the PATH bashy actually emits a
+	# real kind before we trust its selection. (Cost: one local `agents list`.)
+	local kinds
+	kinds="$(bashy agents list --json 2>/dev/null | jq -r '[.[] | select(.kind == "subscription" or .kind == "api")] | length' 2>/dev/null)"
+	if [[ -z "$kinds" || "$kinds" == "0" ]]; then
+		die "the 'bashy' on PATH does not report agent 'kind' (subscription/api), so fixer selection would silently degrade to the L4 fallback. This is usually a STALE install: run 'make install' in bashy/ so the PATH binary matches the built one. (bashy: $(command -v bashy 2>/dev/null))"
+	fi
 }
 
 preflight
