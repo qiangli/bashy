@@ -353,6 +353,7 @@ var verbSynopsis = map[string]string{
 	"judge":      "panel verdict on work with NO gate to run (a plan, a design). For code, use `pair` — it acts",
 	"todo":       "task list, git-repo aware: this repo's committed docs/todo/ (or a --base-dir), else the host's ~/.bashy/todo/",
 	"invoke":     "invoke ONE agent, ONCE, on one instruction (the primitive every orchestrator is built on)",
+	"delegate":   "hand a task to an agent — another one, or YOURSELF (same tool, run detached to stay responsive)",
 	"conform":    "bashy's OWN fidelity batteries: compat/conformance/compliance/benchmark",
 	"chat":       "invoke an agent with a single unattended instruction",
 	"meet":       "multi-participant deliberation session with a notes-only secretary",

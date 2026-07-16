@@ -121,7 +121,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "invoke", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "invoke", "delegate", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -463,6 +463,18 @@ func Dispatch() {
 		// misled an agent into thinking it was a session, which is what `foreman`
 		// actually is. `chat` remains a hidden alias; nothing breaks.
 		cmd := chat.NewChatCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "delegate":
+		// The ergonomic front for handing a task to an agent — a DIFFERENT one, or
+		// YOURSELF (the same tool, run detached to stay responsive). The lightweight
+		// one-shot over the same primitive `invoke` uses; the steward's default verb.
+		// Heavier ISOLATED work routes to `weave`/the conductor. See
+		// bashy/docs/delegate-verb-design.md.
+		cmd := chat.NewDelegateCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)

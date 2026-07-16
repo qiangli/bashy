@@ -80,13 +80,20 @@ package calls that store "a prison" it won't touch). So `delegate self`:
 
 ## Build sketch (phased)
 
-- **P1** — `delegate` as the ergonomic verb over `invoke`/`weave` for the *different-
-  agent* case (mostly aliasing + argument routing; atlas entry + synopsis + e2e
-  dispatch). Cheap.
-- **P2** — `delegate self` for harnesses with a native fork (claude/codex): resolve
-  the caller's tool+model, invoke the native fork with the directive, run detached.
+- **P1 — SHIPPED.** `delegate` is a real verb: `bashy delegate <agent|self> <instruction>`
+  over the same `chat.Invoke` primitive `invoke` uses. `self` resolves the current tool
+  via `fleet.DetectTool()` and delegates to a same-tool instance, run detached. Atlas
+  entry (orchestration / code / json+spawns-processes; net+exec+spend effects), synopsis,
+  agentos dispatch + shim, e2e dispatch gate. The **steward skill** now encodes
+  delegate-mode as the default operating loop (fork-yourself-first, keep-the-channel-open,
+  route-by-complexity, queue-when-overloaded).
+- **P2** — `delegate self` invokes the harness's NATIVE context-fork where one exists
+  (`claude --fork-session` / `codex fork`) so the spawn inherits the live conversation,
+  not just the same tool. Today `self` is a fresh same-tool instance (task = brief);
+  true context inheritance is this phase.
 - **P3** — first-party brief-less self-fork on ycode via its session/event channel;
-  scope inheritance; `--model` context-transplant to a different model.
+  scope inheritance; `--model` context-transplant to a different model; a held live
+  channel (`chat.Session`) the steward steers, surfaced as a `delegate --session` mode.
 - Atlas: `delegate` is a new verb → needs an atlas Entry (Stage/Group/Tier/Caps) + a
   security Effect + coverage/e2e-dispatch entries. `self`/`--model` are flags, no
   extra atlas work.
