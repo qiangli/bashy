@@ -87,13 +87,29 @@ package calls that store "a prison" it won't touch). So `delegate self`:
   agentos dispatch + shim, e2e dispatch gate. The **steward skill** now encodes
   delegate-mode as the default operating loop (fork-yourself-first, keep-the-channel-open,
   route-by-complexity, queue-when-overloaded).
-- **P2** — `delegate self` invokes the harness's NATIVE context-fork where one exists
-  (`claude --fork-session` / `codex fork`) so the spawn inherits the live conversation,
-  not just the same tool. Today `self` is a fresh same-tool instance (task = brief);
-  true context inheritance is this phase.
-- **P3** — first-party brief-less self-fork on ycode via its session/event channel;
-  scope inheritance; `--model` context-transplant to a different model; a held live
-  channel (`chat.Session`) the steward steers, surfaced as a `delegate --session` mode.
+- **P2 — SHIPPED.** `delegate self` invokes the harness's NATIVE context-fork: a
+  `fork_exec` template + `{session}` token + `session_env` threaded through
+  fleet.Tool → agentlaunch → chat. **claude** forks for real
+  (`claude --resume {session} --fork-session --dangerously-skip-permissions -p {prompt}`,
+  session from `CLAUDE_CODE_SESSION_ID`) — verified live. **codex deliberately does
+  NOT**: its only headless option (`exec resume`) APPENDS to the parent thread, which
+  would corrupt the steward's own session, so codex falls back to a fresh instance.
+- **P3 — PARTIAL.**
+  - **SHIPPED — `--model` transplant.** `delegate self --model opus` forks your live
+    session AND swaps the model (fresh eyes on the same context); plain `delegate self`
+    inherits the session's model (the optional `--model {model}` drops out).
+  - **Remaining — first-party brief-less fork on ycode.** ycode's sessions live in
+    `ycode serve` (WS); the headless `ycode --print` is stateless with no
+    `--resume/--fork` flag and no session-id env for children. A true ycode self-fork
+    needs a ycode-side feature: headless session persistence + a `--resume/--fork` on
+    the prompt path + a `YCODE_SESSION_ID` env — a distinct ycode build. (claude
+    already delivers true brief-less fork, so this is completeness, not the core.)
+  - **Remaining — scope inheritance & held channel.** The fork currently gets full
+    scope via `--dangerously-skip-permissions` (same as any launch); exact
+    caller-scope inheritance is a refinement. A held, steerable channel to the fork is
+    the existing `foreman` / `chat.Session` primitive (the steward mode already uses
+    it); surfacing it as `delegate --session` is optional sugar — steering a fork means
+    re-resuming the fork's NEW session id.
 - Atlas: `delegate` is a new verb → needs an atlas Entry (Stage/Group/Tier/Caps) + a
   security Effect + coverage/e2e-dispatch entries. `self`/`--model` are flags, no
   extra atlas work.
