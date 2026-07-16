@@ -426,6 +426,26 @@ write_lease() {
 	}' >"$lease"
 }
 
+# invalidate_stale_run_state ISSUE CURRENT_RUN_ID → reset the per-issue escalation
+# state (attempt count, fixer affinity, lease) when the collector's LATEST failure is
+# a DIFFERENT (newer) run than the one the stored lease was chasing. Without this, a
+# fresh failure inherits the previous failure's attempt count + pinned fixer and the
+# ladder keeps escalating against a SHA whose break may already be fixed — the
+# fd10fd3 stale-lease bug, where the router exhausted the band ladder chasing a
+# failure that no longer existed. A new failure must start fresh at band 1.
+invalidate_stale_run_state() {
+	local issue="$1" current_run_id="$2" lease stored_run_id dir
+	lease="$(lease_file_for "$issue")"
+	[[ -r "$lease" ]] || return 0
+	stored_run_id="$(jq -r '.run_id // empty' "$lease" 2>/dev/null)"
+	[[ -n "$stored_run_id" && -n "$current_run_id" ]] || return 0
+	if [[ "$stored_run_id" != "$current_run_id" ]]; then
+		dir="$(state_dir_for "$issue")"
+		rm -f "$(attempt_file_for "$issue")" "$dir/fixer-affinity" "$lease" 2>/dev/null || true
+		gh issue comment "$issue" -R "$collector" --body "Auto-repair: a NEWER failure (run \`$current_run_id\`) superseded the run the previous attempts chased (\`$stored_run_id\`). Reset escalation state — this failure starts fresh at band 1." >/dev/null 2>&1 || true
+	fi
+}
+
 write_brief() {
 	local issue="$1" issue_url="$2" source_repo="$3" workflow="$4" branch="$5" sha="$6" run_url="$7" run_id="$8" repo_path="$9" fixer="${10}" workers="${11}" stale="${12}" state_dir brief
 	state_dir="$(state_dir_for "$issue")"
@@ -532,6 +552,12 @@ run_issue() {
 		gh issue edit "$issue" -R "$collector" --add-label repair-paused >/dev/null
 		return 0
 	fi
+
+	# If the collector's latest failure is a NEWER run than the last attempt chased,
+	# the escalation state (attempt/affinity/lease) is stale — reset it so this
+	# failure starts fresh at band 1 instead of inheriting a ladder aimed at an
+	# already-superseded (possibly already-fixed) SHA.
+	invalidate_stale_run_state "$issue" "$run_id"
 
 	# Band escalation: attempt N runs at the ladder's Nth band. Past the ladder,
 	# stop and notify a human rather than spend the frontier band unattended.
