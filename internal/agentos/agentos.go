@@ -84,6 +84,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/principal"
 	"github.com/qiangli/coreutils/pkg/schedule"
 	"github.com/qiangli/coreutils/pkg/sdlc"
+	"github.com/qiangli/coreutils/pkg/search"
 	"github.com/qiangli/coreutils/pkg/secrets"
 	coreskills "github.com/qiangli/coreutils/pkg/skills"
 	"github.com/qiangli/coreutils/pkg/supervise"
@@ -121,7 +122,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "search", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -550,6 +551,16 @@ func Dispatch() {
 		os.Exit(0)
 	case "web":
 		cmd := webinspect.NewWebCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "search":
+		// Web search (query → cited results) via a provider ladder — the
+		// find-things primitive `bashy sota` builds on. See
+		// dhnt docs/bashy-sota-research-design.md.
+		cmd := search.NewSearchCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
