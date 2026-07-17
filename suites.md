@@ -105,6 +105,19 @@ Tools: go cargo
 scripts/uutils-scoreboard.sh
 ```
 
+### chat-smoke
+`bashy chat` interactive-launcher smoke — drives the governed native launch under
+a real pty against an installed agent and asserts the whole contract (native
+launch · live-sessions registry · mid-turn steer · capture tee · clean teardown).
+INFO, and deliberately OUTSIDE `all`: it needs an installed third-party agent and
+a real pty, so it SKIPs cleanly on a headless CI box. Run it on a dev machine with
+`make smoke-chat` (or `bashy dag suites.md chat-smoke`); override the agent with
+`AGENT=codex-gpt-5.5`.
+Tools: python3
+```bash
+scripts/chat-smoke.sh
+```
+
 ### all
 Aggregate goal — depends on every suite, so `bashy dag suites.md` (default) runs
 the full matrix. With `-jN` the independent suites fan out across N slots.

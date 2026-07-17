@@ -193,6 +193,13 @@ test-uutils:
 test-uutils-list: test-uutils
 	@cat $${UUTILS_OUT:-/tmp/uutils-scoreboard}/failures.txt
 
+## smoke-chat: drive `bashy chat` interactive under a real pty against an installed
+## agent — asserts the governed-launcher contract (native launch · registry · steer
+## · capture tee · teardown). INFO, never a gate: SKIPs cleanly without an agent or
+## a pty (headless CI). Pass an agent as the first arg: make smoke-chat AGENT=codex-gpt-5.5.
+smoke-chat:
+	@scripts/chat-smoke.sh $(AGENT)
+
 ## test-bash: Run bash 5.3 native test suite against bashy (with per-test timeout).
 ## Builds only the lean bin/bash drop-in (not the 259MB embed-heavy bin/bashy).
 ## Iterate fast on a subset with TESTS="name ...", e.g. make test-bash TESTS="comsub varenv".
