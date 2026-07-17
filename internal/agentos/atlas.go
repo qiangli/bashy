@@ -154,7 +154,8 @@ var atlasGroupDisplayOrder = []string{
 	atlas.GroupShellutils, atlas.GroupCodeIntel, atlas.GroupNet,
 	atlas.GroupOrch, atlas.GroupKnowledge, atlas.GroupEngines,
 	atlas.GroupForge, atlas.GroupToolchains, atlas.GroupStorage,
-	atlas.GroupClusterCloud, atlas.GroupPlatform, atlas.GroupAccount,
+	atlas.GroupClusterCloud, atlas.GroupPlatform, atlas.GroupDiagnostics,
+	atlas.GroupAccount,
 }
 
 // tierSynopsis mirrors the locked one-liners in dhnt docs/execution-tiers.md.
