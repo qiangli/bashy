@@ -121,7 +121,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "invoke", "delegate", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -463,6 +463,16 @@ func Dispatch() {
 		// misled an agent into thinking it was a session, which is what `foreman`
 		// actually is. `chat` remains a hidden alias; nothing breaks.
 		cmd := chat.NewChatCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "coach":
+		// Run ONE agent under the LLM-free auto-coach: watch its tool.call stream
+		// and, when it loops, ESC it out and tell it to deliver. A report channel,
+		// never an author. See dhnt docs/live-agent-coaching-design.md (P0).
+		cmd := chat.NewCoachCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
