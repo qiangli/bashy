@@ -39,11 +39,12 @@ var venueOrder = []string{
 
 // commandSections is the `bashy commands` surface grouped by execution class.
 type commandSections struct {
-	Shell     []string            `json:"shell"`     // bash builtins
-	Coreutils []string            `json:"coreutils"` // GNU coreutils, in-process
-	Classic   []string            `json:"classic"`   // other classic tools, in-process
-	External  []string            `json:"external"`  // downloaded + exec'd
-	Agent     map[string][]string `json:"agent"`     // venue -> native agentic verbs
+	Shell       []string            `json:"shell"`       // bash builtins
+	Coreutils   []string            `json:"coreutils"`   // GNU coreutils, in-process
+	Classic     []string            `json:"classic"`     // other classic tools, in-process
+	External    []string            `json:"external"`    // downloaded + exec'd
+	Diagnostics []string            `json:"diagnostics"` // check/diagnose/verify family
+	Agent       map[string][]string `json:"agent"`       // venue -> native agentic verbs
 }
 
 // agentToolGroups are the atlas groups whose in-process tools are bashy's own
@@ -83,9 +84,14 @@ func classSections(all bool) commandSections {
 			// Downloaded, exec'd binaries (managed externals + toolchain
 			// provisioners) are "not ours, we just run them"; everything else
 			// is a native bashy feature, placed by its venue.
-			if r.Subclass == atlas.SubclassManagedExternal || r.Subclass == atlas.SubclassProvisioner {
+			switch {
+			case r.Group == atlas.GroupDiagnostics:
+				// The check/diagnose/verify family, surfaced as its own section
+				// rather than scattered across the venue partition.
+				s.Diagnostics = append(s.Diagnostics, r.Name)
+			case r.Subclass == atlas.SubclassManagedExternal || r.Subclass == atlas.SubclassProvisioner:
 				s.External = append(s.External, r.Name)
-			} else {
+			default:
 				s.Agent[r.Tier] = append(s.Agent[r.Tier], r.Name)
 			}
 		}
@@ -114,6 +120,12 @@ func printClassSections(w io.Writer, verbose, all bool) {
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "external — provisioned + exec'd downloaded binaries (%d):\n", len(s.External))
 	printSubSection(w, "", s.External, verbose, syn)
+
+	if len(s.Diagnostics) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "diagnostics — check / diagnose / verify (%d):\n", len(s.Diagnostics))
+		printSubSection(w, "", s.Diagnostics, verbose, syn)
+	}
 
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "bashy agent/ext — native features, by venue:")
