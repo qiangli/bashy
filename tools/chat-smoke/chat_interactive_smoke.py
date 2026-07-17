@@ -132,9 +132,11 @@ def main():
     if sid:
         steer = sh("chat", "steer", sid, "noop smoke; no action needed")
         checks["steered"] = "steered" in steer
-        # 4) capture tee: the session's log_path exists and has grown
+        # 4) capture tee: the member card's log_path exists and has grown.
+        # Cards live in the host room (~/.bashy/room/members), $BASHY_ROOM_DIR aware.
+        room = os.environ.get("BASHY_ROOM_DIR") or os.path.expanduser("~/.bashy/room")
         sz = -1
-        for rf in glob.glob(os.path.expanduser("~/.bashy/sessions/*.json")):
+        for rf in glob.glob(os.path.join(room, "members", "*.json")):
             try:
                 d = json.load(open(rf))
             except Exception:
