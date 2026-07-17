@@ -18,6 +18,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/qiangli/bashy/internal/cli"
+	"github.com/qiangli/coreutils/pkg/chat"
 	"github.com/qiangli/coreutils/pkg/handoff"
 	coreskills "github.com/qiangli/coreutils/pkg/skills"
 )
@@ -119,6 +120,11 @@ type contextCaps struct {
 	// them on the first hop instead of re-deriving by search.
 	CodeGraph      bool `json:"code_graph"`
 	KnowledgeGraph bool `json:"knowledge_graph"`
+	// CoachReflex: the LLM-free loop-detection reflex is auto-attached to every
+	// weave/invoke/delegate run (off with BASHY_NO_COACH). Advertised so an agent
+	// knows its delegated work is loop-protected without invoking anything — the
+	// coach is a property of delegation, not a verb to remember.
+	CoachReflex bool `json:"coach_reflex"`
 }
 
 // contextHandoff is a pending handoff, summarised. Deliberately a SUMMARY, not
@@ -227,6 +233,7 @@ func fillContext(report contextReport, bashyPath string) contextReport {
 		InProcessUserland: true,
 		CodeGraph:         true,
 		KnowledgeGraph:    true,
+		CoachReflex:       chat.ReflexEnabled(),
 	}
 	report.RecommendedCommands = []contextCommand{
 		{Purpose: "preview destructive script safely", Command: bashyPath + " --dry-run SCRIPT"},
