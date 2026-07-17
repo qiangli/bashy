@@ -142,12 +142,20 @@ func printSubSection(w io.Writer, label string, names []string, verbose bool, sy
 				width = len(n)
 			}
 		}
+		// Continuation lines of a multi-line synopsis hang under the description
+		// column, so a wrapped description stays aligned instead of falling back
+		// to column 0.
+		pad := strings.Repeat(" ", len(indent)+width+2)
 		for _, n := range names {
-			if d := syn(n); d != "" {
-				fmt.Fprintf(w, "%s%-*s  %s\n", indent, width, n, d)
-			} else {
+			d := syn(n)
+			if d == "" {
 				fmt.Fprintf(w, "%s%s\n", indent, n)
+				continue
 			}
+			if strings.Contains(d, "\n") {
+				d = strings.ReplaceAll(d, "\n", "\n"+pad)
+			}
+			fmt.Fprintf(w, "%s%-*s  %s\n", indent, width, n, d)
 		}
 		return
 	}
