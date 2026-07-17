@@ -356,6 +356,7 @@ var verbSynopsis = map[string]string{
 	"delegate":   "hand a task to an agent — another one, or YOURSELF (same tool, run detached to stay responsive)",
 	"coach":      "run an agent under an LLM-free auto-coach that ESCs it out of doomed tool-loops and tells it to deliver",
 	"search":     "web search (query → cited results) via a provider ladder (tavily/brave/serper) — the find-things primitive",
+	"sota":       "research the current state of the art: ground a synthesis agent in real bashy-search sources (cite only those), or --hitchhike on the agent's own subscription web search",
 	"conform":    "bashy's OWN fidelity batteries: compat/conformance/compliance/benchmark",
 	"chat":       "invoke an agent with a single unattended instruction",
 	"meet":       "multi-participant deliberation session with a notes-only secretary",
