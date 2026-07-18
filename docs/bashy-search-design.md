@@ -267,6 +267,55 @@ type Result struct {
 3. **Fan-out ranking** — when `--all` fans across lanes, how are cross-lane
    scores made comparable (content BM25-ish vs symbol exactness vs kb match)?
 
+## SOTA validation & grounding (2026-07, via `bashy sota`)
+
+Web-grounded research (8 sources, Brave-grounded) confirms this design sits where
+the field actually is, and sharpens two points.
+
+**The field converged where we did.** Production code search is a **two-stage
+retrieve-then-rank** shape: a trigram index for candidate generation, then an
+explicit **re-rank** over match quality, symbol-ness, file-kind, and repo/author
+signals (Zoekt, GitHub Blackbird). The 2026 move for *agent* use is "grep's
+replacement is three tools" — **lexical + structural (tree-sitter) + resolved
+call-graph** — which is exactly this doc's **router over grep/ast/graph**. Every
+weight signal here is a real production signal: GitHub ranks by **file-kind +
+is-symbol**; Sourcegraph boosts **repos you recently contributed to** (our
+recency/working-set prior); Cursor trains on **LLM-ranked relevance from real
+sessions** (our learned working-set / hit-feedback). Sources:
+`github.blog/…/new-code-search`, `sourcegraph.com/docs/code-search/features`,
+`zzet.org/gortex/grep-replacement-for-ai-agents`.
+
+**It's a crossover, not an absolute.** Zoekt/Sourcegraph/Blackbird index at
+**billions of lines / millions of repos** — the index-only regime this doc
+already concedes. A single repo is MB–GB, far below the crossover, where
+ripgrep already scans in ms — so "no code index for single-repo" is correct
+*for its stated scope*, not dogma. Index **freshness is a documented pain** (HN:
+pushed a repo, still unindexed a day later), which is the flip side of our
+always-current scan.
+
+**Ranking is a *measured* win, not polish** — one (vendor, unreplicated) number:
+BM25 R@5 55.1% vs ripgrep 17.3% at 3–50× fewer tokens [gortex]. Directional, but
+it points at the rank layer as the agentic-cost lever, not the scan.
+
+**The local single-repo ranking eval is a genuine gap.** The corpus is
+thin-to-silent on exactly our priors (recency/centrality/working-set/query-
+expansion for *local* search) — everyone published solves the *cross-repo scale*
+problem. bashy would be first to ship (and could publish) that eval.
+
+**Web-grounding corollary — rank the union.** An A/B of the *same* sota question
+grounded on **Brave** vs a self-hosted **SearXNG** (added as the ladder's keyless
+rung, `coreutils 7cdb7f8`): Brave returned **8/8 on-topic** (relevance-ranked
+index) but vendor-skewed; SearXNG returned **3/8 on-topic + 5/8 noise** (raw
+metasearch, unranked) yet surfaced **two unique on-topic sources Brave missed**
+(Moderne "Trigrep", an AST-symbol MCP tool). Perf: SearXNG ~1.7 s/query + a
+tens-of-seconds container start vs Brave ~0.85 s stateless. Lesson, one level up
+from the local design: a relevance-ranked source beats raw metasearch for
+*precision*; metasearch wins on *coverage*; so the right use is **merge
+keyed ∪ SearXNG then dedupe + relevance-rank the union** — never concatenate raw.
+The same expand→scan→**rank** shape, applied to web grounding. (SearXNG stays the
+off-by-default second source; see `docs/licensing-supply-chain-policy.md` §2 for
+the AGPL download+exec discipline.)
+
 ## References
 
 - `pkg/search/local.go` — the shipped P0b scan this refines.
