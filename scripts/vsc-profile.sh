@@ -124,8 +124,12 @@ if [ "$profile" = cert ] || [ "$profile" = reference ]; then
   [ "$sut_command" = sh ] || die "$profile profile requires the SUT to resolve as sh on PATH"
 fi
 
+[ -n "$sut_command" ] || die "SUT command name is required"
+case "$sut_command" in
+  */*) die "SUT command must be a command name, not a path" ;;
+esac
 sut_path=$(PATH=${PATH:-} command -v "$sut_command" 2>/dev/null || true)
-[ -n "$sut_path" ] || die "SUT command not found on PATH: $sut_command"
+[ -n "$sut_path" ] || die "SUT command not found on PATH"
 
 if [ "$profile" = campaign ]; then
   certifiable=false
@@ -134,9 +138,6 @@ else
   certifiable=true
   notice='certification-shaped profile'
 fi
-
-start_context=$(uname -srm 2>/dev/null | tr '\n' ' ')
-end_context=$start_context
 
 printf 'vsc_profile=%s\n' "$profile"
 printf 'certifiable=%s\n' "$certifiable"
@@ -147,9 +148,7 @@ printf 'repeat=%s\n' "$repeat"
 printf 'cache=%s\n' "$cache"
 printf 'retries=%s\n' "$retries"
 printf 'sut_command=%s\n' "$sut_command"
-printf 'sut_path=%s\n' "$sut_path"
-printf 'context_start=%s\n' "$start_context"
-printf 'context_end=%s\n' "$end_context"
+printf 'sut_resolved=true\n'
 
 if [ -n "$atom_file" ]; then
   printf 'atoms_begin\n'

@@ -79,10 +79,16 @@ func TestVSCReferenceProfilePreservesSingleAtomOrder(t *testing.T) {
 		"workers=1",
 		"chunks=1",
 		"sut_command=sh",
+		"sut_resolved=true",
 		"atoms_begin\nsh_1/assertion-001\nsh_1/assertion-002\natoms_end",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+	for _, leaked := range []string{"sut_path=", "context_start=", "context_end="} {
+		if strings.Contains(out, leaked) {
+			t.Fatalf("output leaked private field %q:\n%s", leaked, out)
 		}
 	}
 }
@@ -108,9 +114,15 @@ func TestVSCCampaignProfileDeclaresNonCertifiable(t *testing.T) {
 		"NOT CERTIFIABLE",
 		"workers=4",
 		"chunks=8",
+		"sut_resolved=true",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+	for _, leaked := range []string{"sut_path=", "context_start=", "context_end="} {
+		if strings.Contains(out, leaked) {
+			t.Fatalf("output leaked private field %q:\n%s", leaked, out)
 		}
 	}
 }
