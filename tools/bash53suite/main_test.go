@@ -188,6 +188,20 @@ func TestJSONOutputIsOneValidDocument(t *testing.T) {
 	}
 }
 
+func TestJSONRunnerUsesBASH53Runner(t *testing.T) {
+	t.Setenv("BASH53_RUNNER", "container-amd64-deadbeef")
+	testsDir, bashPath := makePassingSuite(t, []string{"alpha"})
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--json", "--shared-tree", "--tests-dir", testsDir, "--bash", bashPath}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("run exit = %d, stderr:\n%s", code, stderr.String())
+	}
+	report := decodeSingleReport(t, stdout.Bytes())
+	if got, want := report.Context.Runner, "container-amd64-deadbeef"; got != want {
+		t.Fatalf("context.runner = %q, want BASH53_RUNNER value %q", got, want)
+	}
+}
+
 func TestJSONChunkMetadataAndSelection(t *testing.T) {
 	testsDir, bashPath := makePassingSuite(t, []string{"alpha", "beta"})
 	manifestPath := filepath.Join(t.TempDir(), "chunks.json")
@@ -359,7 +373,7 @@ func repoRoot(t *testing.T) string {
 // which trap lines are present — the regression it has to stay blind to is an
 // ORDER difference (SIGUSR1 sorts below SIGTERM on Linux, above it on Darwin),
 // and the regression it must still catch is an EXTRA or MISSING trap line, which
-// is the shape of the spurious `trap -- '' SIGINT` the baseline once carried.
+// is the shape of the spurious `trap -- ” SIGINT` the baseline once carried.
 func TestNormalizeHostSignalOrder(t *testing.T) {
 	linux := "this is bashenv\n" +
 		"trap -- 'echo EXIT' EXIT\n" +

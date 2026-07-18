@@ -985,6 +985,7 @@ set -e
 BASHY_EXE="${BASHY:-bashy}"
 host_goos="$("$BASHY_EXE" go env GOOS)"
 host_goarch="$("$BASHY_EXE" go env GOARCH)"
+runner="${BASH53_RUNNER:-container-${host_goarch}-$(printf '%s' "$(hostname)" | sha256sum | cut -c1-8)}"
 ext=""
 [ "$host_goos" = windows ] && ext=.exe
 testee_dir="bin/bash-linux-${host_goarch}"
@@ -1003,6 +1004,7 @@ $oci run --rm \
   -e CHUNK="${CHUNK:-}" \
   -e BASH53_TIMEOUT="${BASH53_TIMEOUT:-}" \
   -e BASH53_JOBS_TIMEOUT="${BASH53_JOBS_TIMEOUT:-}" \
+  -e BASH53_RUNNER="$runner" \
   docker.io/library/gcc:14-bookworm \
   "./$harness" -tests-dir /bash53/tests -bash "./$testee"
 ```
