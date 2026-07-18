@@ -32,7 +32,11 @@ GOOS=linux GOARCH=$GOARCH go build -o bin/.bashy-full ./cmd/bash || exit 2
 RAW="$OUT/verdicts.raw"
 echo "running yash -p corpus (bashy + bash, per case)…" >&2
 # shellcheck disable=SC2016
-if ! $OCI run --rm -v "$ROOT/.yash-tests/tests:/yt:ro" -v "$ROOT/bin/.bashy-full:/bashy:ro" \
+# Mounted at /sh, not /bashy: the binary enters strict POSIX mode only when its
+# argv[0] base name is `sh` (invokedAsSh, internal/cli/main.go). Measuring the
+# POSIX scoreboard through a testee named `bashy` would silently exercise the
+# non-strict path. The result LABEL stays "bashy" so the tally schema is unchanged.
+if ! $OCI run --rm -v "$ROOT/.yash-tests/tests:/yt:ro" -v "$ROOT/bin/.bashy-full:/sh:ro" \
   localhost/posix-shells-broad busybox ash -c '
   export LANG=C; cp -r /yt /work 2>/dev/null; cd /work
   excluded_case() {
@@ -43,7 +47,7 @@ if ! $OCI run --rm -v "$ROOT/.yash-tests/tests:/yt:ro" -v "$ROOT/bin/.bashy-full
   }
   for f in *-p.tst; do
     case "$f" in sig*|bg-p*|fg-p*|job-p*|kill*|wait-p*|testtty-p*|async-p*|intl*|unicode*) continue;; esac
-    for pair in "bashy=/bashy" "bash=bash"; do
+    for pair in "bashy=/sh" "bash=bash"; do
       lbl=${pair%%=*}; sh=${pair#*=}
       command -v "$sh" >/dev/null 2>&1 || [ -x "$sh" ] || continue
       timeout -s KILL 8 busybox ash run-test.sh "$sh" "$f" >/dev/null 2>&1

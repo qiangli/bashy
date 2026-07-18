@@ -635,6 +635,16 @@ func newRunner() (*interp.Runner, error) {
 	if *posix {
 		opts = append(opts, interp.Params("-o", "posix"))
 	}
+	// argv[0]=="sh" asks for a *POSIX sh*, not "bash in posix mode": the caller
+	// picked the historical name, so the stricter POSIX-mandated semantics apply
+	// (assignment errors are fatal in any command word, function names may not
+	// shadow special builtins, regular builtins are PATH-gated, bare `return` in
+	// a trap action yields the pre-trap $?). Deliberately NOT engaged by
+	// `--posix`, `-o posix`, SHELLOPTS=posix or POSIXLY_CORRECT — non-strict
+	// posix mode stays byte-identical to bash 5.3.
+	if invokedAsSh() {
+		opts = append(opts, interp.WithStrictPosix(true))
+	}
 	// For the AgentOS shell `bashy`, inject the coreutils pure-Go userland +
 	// the code-intel verbs as in-process commands. No-op for the pure `bash` drop-in
 	// (the default AgentOSWireExec).
