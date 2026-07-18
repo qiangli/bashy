@@ -1,6 +1,8 @@
 # Plan: POSIX conformance for bashy
 
-Status: **planning / Phase 0–1 kickoff** (2026-06-19).
+Status: **historical plan.** Shell conformance phases have advanced through the
+licensed VSC-PCTS shell scenario; the active frontier is utilities campaign
+feasibility, certification-claim discipline, and the separate coreutils track.
 
 ## The reframe: conformance ≠ behavioral parity
 
@@ -49,12 +51,10 @@ Std 1003.1 (POSIX.1-2017) XCU** spec. Three facts shape this work:
   defect/interpretation cases. Triage → fix in sh.
 
 ### Phase 3 — Official VSC-PCTS2016 (formal certification)
-- Apply for the free open-source license from The Open Group
-  (https://posix.opengroup.org/testsuites.html) → build **TET3 + VSXgen** →
-  configure `sh`→bashy → run the **shell + builtin** subset (not full
-  utilities) → parse journals (PASS/FAIL/UNSUPPORTED/UNTESTED/FIP) → triage.
-- **After Phases 1–2** — don't start the 12-month license clock or the heavy
-  TET3 build until bashy is already close.
+- License/TET setup and the shell scenario have run; public-safe state is in
+  `vsc-pcts-run-status.md`.
+- Certification submission, any certification mark, and the utilities arm are
+  separate. Utilities results remain withheld pending scope follow-up.
 
 ### Phase 4 — Fix loop (throughout)
 - Deviations → issues → fix in sh → gate on the bash-5.3 suite (no regression)

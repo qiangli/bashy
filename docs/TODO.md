@@ -3,9 +3,9 @@
 **Current status**: 🎉 86 bash tests passing, 0 failing, 0 skipped (of 86 measured fixtures) — **100% bash-5.3 compliance**
 **POSIX frontier**: yash `-p` conformance suite **96%** (confirmed 2026-07-01 on novicortex; ≥ bash 5.3/5.2, tied with mksh for best of the 10-shell panel) — run `bashy dag dag.md yash`; details in `docs/cross-shell-conformance-baseline.md` + `docs/yash-conformance-gap.md`
 
-**VSC-PCTS UTILITIES campaign (the active cert front, 2026-07-17)** — the yash suite is at bash-parity CEILING (do not chase it); the real frontier is the utilities arm: **86.6%** (2551 PASS / 912 FAIL vs GNU 2947/516), delta concentrated in six commands (`docs/coreutils-posix-conformance-2026-07-08.md`; private record `dhnt/docs/vsc-pcts/run-status.md`). Driven by a two-agent fleet (codex conductor, steward-verified merges) via the host-room control surface.
-  - **`pkg/bre` regex cluster CLOSED (sed+grep, ~130 PCTS fails — the largest single delta): 5 flips + 1 parity lock**, all in `../coreutils/pkg/bre`, each independently gate-verified: `RE_DUP_MAX` intervals (`65dce2e`) · bracket validation (`b3de4d3`) · anchor parity (`b5fbf7a`) · back-ref edges (`7bc67cd`) · collating/equivalence classes (`4dca9f6`) · ERE/BRE operator lock (`b852d57`).
-  - **In flight**: `expr` (+18, `cmds/expr`). **Next**: `ls/xargs/od/mkdir/rm` (+7..+20, non-NO-list). **PENDING USER DECISION**: `find -exec` (+51) is a NO-list reversal — do not implement without explicit go-ahead.
+**VSC-PCTS UTILITIES campaign (the active cert front, 2026-07-17)** — utilities-suite results remain withheld pending scope consent. Public updates may cite our own code changes and freely licensed harnesses only; no VSC-PCTS utilities tallies, assertion identifiers, raw journals, or private run-record pointers belong in this public repo.
+  - **`pkg/bre` regex cluster CLOSED (sed+grep): 5 flips + 1 parity lock**, all in `../coreutils/pkg/bre`, each independently gate-verified: `RE_DUP_MAX` intervals (`65dce2e`) · bracket validation (`b3de4d3`) · anchor parity (`b5fbf7a`) · back-ref edges (`7bc67cd`) · collating/equivalence classes (`4dca9f6`) · ERE/BRE operator lock (`b852d57`).
+  - **In flight**: `expr` (`cmds/expr`). **Next**: `ls/xargs/od/mkdir/rm` (non-NO-list). **PENDING USER DECISION**: `find -exec` is a NO-list reversal — do not implement without explicit go-ahead.
   - **Stewardship handed to `codex-gpt5.6-sol` 2026-07-17** — full runbook in `dhnt/docs/steward-handover-2026-07-17.md` (the steward loop, commit/pin/refresh workflow, room control surface, disciplines, watches). Claude is observer/assistant.
 **Last updated**: 2026-06-18 (array2 FLIPPED via the quoted-`@`-vs-IFS fix in sh/expand — `"${a[@]}"`/`"$@"` split to one word per element regardless of IFS; also dropped dollars 141→102 + exp-tests 61→52. glob-test 88→85 (bash-correct trailing-`\` literal + `?` leading-dot in sh/pattern, not yet a flip). Earlier: array/assoc/nameref/new-exp/coproc flipped; harness now measures the 8 formerly-silent skips — `<name>.tests` mapping mismatch — so the scoreboard finally covers every fixture instead of hiding 8):
   - Wired into the harness (name→file mappings, like `dirstack`→`dstack`): array2→array-at-star, dollars→dollar-at-star, exp-tests→exp.tests(+expect-filter), glob-test→glob.tests, histexpand→histexp.tests, input-test→`< input-line.sh`.
@@ -174,7 +174,8 @@
 
 ### P9: POSIX Compliance
 
-- [ ] Obtain Open Group VSX-PCTS test suite license
+- [x] Obtain Open Group VSC-PCTS test suite license; licensed materials remain
+      outside git and utilities results remain withheld pending scope follow-up
 - [ ] Create tests/posix/ with POSIX shell compliance tests
 - [ ] ShellSpec integration for portability testing
 - [ ] POSIX mode (set -o posix) behavioral differences

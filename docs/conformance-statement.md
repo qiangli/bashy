@@ -1,11 +1,9 @@
 # bashy — POSIX conformance statement
 
-Status: **draft for the public declaration** (2026-06-27). This is the document
-that backs the "bashy is POSIX-conformant" claim. It states the scope, the mode
-in which conformance is asserted, the evidence, the declared limitations, and the
-exact framing of the claim. Companion docs: `plan-posix-conformance.md`
-(strategy), `vsc-pcts-readiness.md` (cert pre-flight), `posix-cert-handoff-runbook.md`
-(the licensed run).
+Status: **public conformance statement, partially shipped.** The licensed
+VSC-PCTS shell scenario has run and its public-safe status lives in
+`vsc-pcts-run-status.md`; certification submission and any Open Group mark remain
+separate. Utilities results remain withheld pending scope follow-up.
 
 ## What is being claimed
 
@@ -16,9 +14,10 @@ built-ins**, and matches GNU Bash 5.3 in POSIX mode (`--posix` / `set -o posix`
 shell conformance corpus we can run**.
 
 This is a strong, honestly-bounded claim — **not** a statement that bashy holds
-an Open Group POSIX certification mark. Certification is the licensed VSC-PCTS
-run under TET; that is the remaining human/legal step (see the handoff runbook).
-The discipline here matters: *we claim only conformance we can verify.*
+an Open Group POSIX certification mark. Running the licensed VSC-PCTS shell
+scenario is evidence; certification is a separate Open Group submission and
+approval process. The discipline here matters: *we claim only conformance we can
+verify and are permitted to publish.*
 
 ## Scope
 
@@ -135,9 +134,9 @@ mode — the mode the cert exercises.
 > clean-room XCU corpus, an Oils spec-test differential, a 10-shell conformance
 > panel, and the POSIX-mode behavior sweep. On yash's stricter own suite it
 > tracks the mid-pack of POSIX shells (~90%, near zsh/ksh93) with a known
-> ~105-case tail under active triage. The official Open Group VSC-PCTS
-> certification run (licensed, under TET) is the remaining human step; the
-> declared limitations above are stated up front.
+> ~105-case tail under active triage. The licensed Open Group VSC-PCTS shell
+> scenario has run, but certification submission and any certification mark
+> remain separate; the declared limitations above are stated up front.
 
 When the yash tail is closed and the PENDING free-suite harnesses
 (`dash`/`modernish`/`austin`) report 0, drop the "~105-case tail" clause and the

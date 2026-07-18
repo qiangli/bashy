@@ -75,7 +75,8 @@ path; ownership must remain explicit and non-overlapping.
 
 ## Discipline (unchanged, load-bearing)
 - **Never shell out** from the userland; the NO-list verbs exec by argv, not a shell.
-- **PCTS results are not published** without The Open Group's written consent (pending)
-  — no suite tallies/assertion ids in these world-readable repos.
+- **PCTS results are published only within written consent.** Shell-utility
+  results are covered by the scoped 2026-07-16 grant; utilities-sweep results
+  remain withheld pending follow-up.
 - **The gate is evidence, never a status label** — a fixer that exits 0 is not a pass;
   run the differential.

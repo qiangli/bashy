@@ -180,15 +180,14 @@ and watch token budget.
 - ✅ "Zero deviations from Bash 5.3 across a 719-script clean-room differential,
   cross-checked against a 10-shell panel; 86/86 on Bash's own 5.3 fixture suite;
   yash POSIX suite 96% (best of the panel)."
-- ❌ Do **not** say "100% POSIX compatible" or "POSIX certified" until the
-  official VSC-PCTS/TET run completes. 86/86 is *our measured fixtures*, not
+- ❌ Do **not** say "100% POSIX compatible" or "POSIX certified" until Open
+  Group certification is actually granted. 86/86 is *our measured fixtures*, not
   total POSIX fidelity.
 - ❌ Do **not** publish a VSC-PCTS score, pass rate, or any "passes the Open
-  Group suite" claim **even after a clean run** — the license forbids disclosing
-  results or claiming a pass without The Open Group's **prior written consent**
-  (§License terms). This is a contract term, not a style preference. The
-  differential/yash/fixture numbers above are ours to publish; PCTS numbers are
-  not.
+  Group suite" claim outside the 2026-07-16 scoped consent. Shell-scenario
+  results may be published only within that grant; utilities results remain
+  withheld pending scope follow-up. The differential/yash/fixture numbers above
+  are ours to publish.
 - Agentic uplift: state it only with the benchmark evidence behind it (arm,
   task count, verifier, sample) — self-reports are not evidence.
 

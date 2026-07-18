@@ -1,11 +1,9 @@
 # POSIX cert handoff runbook — the licensed VSC-PCTS run
 
-Status: **handoff (2026-06-27).** This is the turnkey procedure for the parts of
-POSIX certification an agent **cannot** do: the license application to The Open
-Group and the TET/VSXgen run. It assumes the agent-drivable pre-flight is GREEN
-(`scripts/posix-certdryrun.sh` clean — see `conformance-statement.md`). Read
-`vsc-pcts-readiness.md` (go/no-go) and `plan-posix-conformance.md` (strategy)
-first.
+Status: **historical handoff / rerun procedure.** The license and shell-scenario
+harness steps have been executed; retain this as the public-safe rerun and
+triage procedure. Certification submission and utilities-campaign scope remain
+separate.
 
 > **Do not start here until the dry-run is clean.** Pulling the 12-month license
 > before the free suites are at 0 deviations wastes the clock — the licensed run
@@ -47,10 +45,9 @@ standalone-utility test.
   host; this also keeps the dev machine clean). Mirror the existing pattern:
   the differential harnesses already build container images via
   `docker` / `bashy podman` — reuse that runtime.
-- Pin the build in a script (suggested `scripts/vsc-tet-build.sh`, not yet
-  written — it depends on the licensed tarball layout) so the run is
-  reproducible. Keep the licensed tarball **out of git** (gitignored cache,
-  same posture as the yash/bash-5.3 fixtures).
+- Pin the build in `scripts/vsc-tet-build.sh` so the run is reproducible. Keep
+  the licensed tarball **out of git** (gitignored cache, same posture as the
+  yash/bash-5.3 fixtures).
 
 ## Step 3 — Wire bashy as the SUT in POSIX mode
 

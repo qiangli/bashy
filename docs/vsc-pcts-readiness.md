@@ -1,9 +1,9 @@
 # VSC-PCTS readiness — cert-run pre-flight for bashy
 
-Status: **pre-flight (2026-06-21; updated 2026-06-27).** Companion to
-`plan-posix-conformance.md` (strategy/scope) — this doc is the concrete checklist
-+ current-evidence snapshot for an actual VSC-PCTS run. It does not repeat the
-conformance strategy; read that plan first.
+Status: **historical pre-license readiness checklist.** Superseded for current
+licensed-run state by `vsc-pcts-run-status.md` as of 2026-07-16; keep this doc
+for scope, pre-flight rationale, and the distinction between agent-drivable
+evidence and authoritative certification.
 
 **2026-06-27 — the declaration + handoff are now written.** Two new companion
 docs split the "before the license" from the "during the licensed run":
@@ -95,12 +95,13 @@ bash-fidelity warrants relaxing the parser before the run.
 - [ ] **Finish the PENDING free-suite harnesses** — `dash-posix-suite.sh`,
       `modernish-suite.sh`, `austin-defects.sh`; triage each to 0 so
       `scripts/posix-certdryrun.sh` is VERDICT: CLEAN with no PENDING.
-- [ ] **Apply for the VSC-PCTS license** (Open Group; human step). Confirm
-      current terms + deliverables. → `posix-cert-handoff-runbook.md` Step 1.
-- [ ] **Stand up TET + wire bashy as the SUT** in POSIX mode (`sh` invocation);
-      scope the scenario to shell + builtins. → runbook Steps 2–3.
-- [ ] **Dry-run; triage results** into: real bug (fix, gated 86/0) /
-      declared-limitation (JC, `((`) / scope-excluded (utility). → runbook Steps 4–5.
+- [x] **Apply for the VSC-PCTS license** (Open Group; human step). Current
+      public-safe state lives in `vsc-pcts-run-status.md`; licensed materials
+      remain outside the repository.
+- [x] **Stand up TET + wire bashy as the SUT** in POSIX mode (`sh` invocation);
+      shell-scenario status is recorded in `vsc-pcts-run-status.md`.
+- [ ] **Certification submission / mark decision** remains separate from having
+      run the licensed suite. No Open Group certification claim is made.
 - [ ] **Decide dual-mode JC P1+** based on measured interactive-JC coverage.
 
 ## Go / no-go
