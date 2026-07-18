@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"testing"
 )
@@ -111,6 +115,197 @@ func TestManifestChunkSelectionIgnoresFleetSizeModulo(t *testing.T) {
 	if !sameStrings(got, want) {
 		t.Fatalf("selected fixtures = %v, want %v", got, want)
 	}
+}
+
+func TestShardSelectionDeterministicFromDiscoveryOrder(t *testing.T) {
+	testsDir, bashPath := makePassingSuite(t, []string{"zeta", "alpha", "middle"})
+	args := []string{"--json", "--shared-tree", "--tests-dir", testsDir, "--bash", bashPath, "--of", "2", "--shard", "0"}
+	runNames := func() []string {
+		var stdout, stderr bytes.Buffer
+		if code := run(args, &stdout, &stderr); code != 0 {
+			t.Fatalf("run exit = %d, stderr:\n%s", code, stderr.String())
+		}
+		report := decodeSingleReport(t, stdout.Bytes())
+		return verdictNames(report.Verdicts)
+	}
+	first := runNames()
+	second := runNames()
+	if got, want := first, []string{"alpha", "zeta"}; !sameStringsInOrder(got, want) {
+		t.Fatalf("first shard = %v, want %v", got, want)
+	}
+	if got, want := second, first; !sameStringsInOrder(got, want) {
+		t.Fatalf("repeated shard = %v, want %v", got, want)
+	}
+}
+
+func TestShardOfOneSelectsAll(t *testing.T) {
+	fixtures := fixturesFromNames([]string{"a", "b", "c", "d"})
+	selected := shardFixtures(fixtures, 1, 0)
+	if got, want := fixtureNamesInOrder(selected), fixtureNamesInOrder(fixtures); !sameStringsInOrder(got, want) {
+		t.Fatalf("selected fixtures = %v, want %v", got, want)
+	}
+}
+
+func TestTwoShardsAreCompleteAndDisjoint(t *testing.T) {
+	fixtures := fixturesFromNames([]string{"a", "b", "c", "d", "e"})
+	left := shardFixtures(fixtures, 2, 0)
+	right := shardFixtures(fixtures, 2, 1)
+	seen := map[string]int{}
+	for _, group := range [][]fixture{left, right} {
+		for _, f := range group {
+			seen[f.Name]++
+		}
+	}
+	if len(seen) != len(fixtures) {
+		t.Fatalf("partition covers %d fixtures, want %d: %v", len(seen), len(fixtures), seen)
+	}
+	for _, f := range fixtures {
+		if seen[f.Name] != 1 {
+			t.Fatalf("fixture %q appears %d times, want exactly once", f.Name, seen[f.Name])
+		}
+	}
+}
+
+func TestJSONOutputIsOneValidDocument(t *testing.T) {
+	testsDir, bashPath := makePassingSuite(t, []string{"alpha"})
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--json", "--shared-tree", "--tests-dir", testsDir, "--bash", bashPath}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("run exit = %d, stderr:\n%s", code, stderr.String())
+	}
+	report := decodeSingleReport(t, stdout.Bytes())
+	if report.SchemaVersion != 1 || report.Suite != "bash-5.3" {
+		t.Fatalf("report identity = schema %d suite %q", report.SchemaVersion, report.Suite)
+	}
+	if report.Infrastructure.Status != "ok" || len(report.Infrastructure.PreflightErrors) != 0 {
+		t.Fatalf("infrastructure = %+v", report.Infrastructure)
+	}
+	if len(report.Verdicts) != 1 || report.Verdicts[0].Name != "alpha" || report.Verdicts[0].Verdict != "passed" {
+		t.Fatalf("verdicts = %+v", report.Verdicts)
+	}
+	if report.Summary != (jsonSummary{Passed: 1}) {
+		t.Fatalf("summary = %+v", report.Summary)
+	}
+}
+
+func TestJSONChunkMetadataAndSelection(t *testing.T) {
+	testsDir, bashPath := makePassingSuite(t, []string{"alpha", "beta"})
+	manifestPath := filepath.Join(t.TempDir(), "chunks.json")
+	writeTestFile(t, manifestPath, `{
+  "schema_version": 1,
+  "suite": "bash-5.3",
+  "chunk_count": 2,
+  "measurement": {},
+  "chunks": [
+    {"id": 1, "fixtures": [{"name": "beta"}]},
+    {"id": 2, "fixtures": [{"name": "alpha"}]}
+  ]
+}`)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"--json", "--shared-tree", "--tests-dir", testsDir, "--bash", bashPath,
+		"--chunk", "1/2", "--chunks-manifest", manifestPath,
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("run exit = %d, stderr:\n%s", code, stderr.String())
+	}
+	report := decodeSingleReport(t, stdout.Bytes())
+	if report.Chunk != (jsonChunk{Index: 1, Of: 2}) {
+		t.Fatalf("chunk = %+v, want index 1 of 2", report.Chunk)
+	}
+	if len(report.Verdicts) != 1 || report.Verdicts[0].Name != "beta" {
+		t.Fatalf("verdicts = %+v, want beta only", report.Verdicts)
+	}
+}
+
+func TestJSONInfrastructureFailureHasNoVerdicts(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--json", "--tests-dir", t.TempDir(), "--bash", filepath.Join(t.TempDir(), "missing-bash")}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("run exit = %d, want 2; stderr:\n%s", code, stderr.String())
+	}
+	report := decodeSingleReport(t, stdout.Bytes())
+	if report.Infrastructure.Status != "failed" || len(report.Infrastructure.PreflightErrors) == 0 {
+		t.Fatalf("infrastructure = %+v", report.Infrastructure)
+	}
+	if len(report.Verdicts) != 0 {
+		t.Fatalf("verdicts = %+v, want empty", report.Verdicts)
+	}
+	if report.Summary != (jsonSummary{}) {
+		t.Fatalf("summary = %+v, want zero values", report.Summary)
+	}
+}
+
+func fixtureNamesInOrder(fixtures []fixture) []string {
+	out := make([]string, 0, len(fixtures))
+	for _, f := range fixtures {
+		out = append(out, f.Name)
+	}
+	return out
+}
+
+func verdictNames(verdicts []jsonVerdict) []string {
+	out := make([]string, 0, len(verdicts))
+	for _, verdict := range verdicts {
+		out = append(out, verdict.Name)
+	}
+	return out
+}
+
+func sameStringsInOrder(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func makePassingSuite(t *testing.T, names []string) (string, string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper uses a POSIX shell script")
+	}
+	dir := t.TempDir()
+	testsDir := filepath.Join(dir, "tests")
+	if err := os.MkdirAll(testsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names {
+		writeTestFile(t, filepath.Join(testsDir, "run-"+name), "")
+		writeTestFile(t, filepath.Join(testsDir, name+".tests"), name+"\n")
+		writeTestFile(t, filepath.Join(testsDir, name+".right"), name+"\n")
+	}
+	bashPath := filepath.Join(dir, "fake-bash")
+	writeTestFile(t, bashPath, "#!/bin/sh\ncat \"$1\"\n")
+	if err := os.Chmod(bashPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return testsDir, bashPath
+}
+
+func writeTestFile(t *testing.T, path, contents string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func decodeSingleReport(t *testing.T, data []byte) jsonReport {
+	t.Helper()
+	dec := json.NewDecoder(bytes.NewReader(data))
+	var report jsonReport
+	if err := dec.Decode(&report); err != nil {
+		t.Fatalf("decode report: %v\nstdout: %s", err, data)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		t.Fatalf("stdout contains more than one JSON document: %v\nstdout: %s", err, data)
+	}
+	return report
 }
 
 func fixturesFromNames(names []string) []fixture {

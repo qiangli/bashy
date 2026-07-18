@@ -28,21 +28,93 @@ type fixture struct {
 }
 
 func main() {
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+type jsonReport struct {
+	SchemaVersion  int                `json:"schema_version"`
+	Suite          string             `json:"suite"`
+	Chunk          jsonChunk          `json:"chunk"`
+	RunID          string             `json:"run_id"`
+	Context        jsonContext        `json:"context"`
+	Infrastructure jsonInfrastructure `json:"infrastructure"`
+	Verdicts       []jsonVerdict      `json:"verdicts"`
+	Summary        jsonSummary        `json:"summary"`
+}
+
+type jsonChunk struct {
+	Index int `json:"index"`
+	Of    int `json:"of"`
+}
+
+type jsonContext struct {
+	Runner     string `json:"runner"`
+	Commit     string `json:"commit"`
+	StartedAt  string `json:"started_at"`
+	FinishedAt string `json:"finished_at"`
+	HostOS     string `json:"host_os"`
+	HostArch   string `json:"host_arch"`
+	BashPath   string `json:"bash_path"`
+}
+
+type jsonInfrastructure struct {
+	Status          string   `json:"status"`
+	PreflightErrors []string `json:"preflight_errors"`
+}
+
+type jsonVerdict struct {
+	Name            string  `json:"name"`
+	Verdict         string  `json:"verdict"`
+	DurationSeconds float64 `json:"duration_seconds"`
+}
+
+type jsonSummary struct {
+	Passed   int `json:"passed"`
+	Failed   int `json:"failed"`
+	Skipped  int `json:"skipped"`
+	TimedOut int `json:"timed_out"`
+}
+
+func run(args []string, stdout, stderr io.Writer) int {
 	var testsDir, bashPath, tests, skip, chunk, chunksManifest string
-	var listOnly, chunkCountOnly, shared bool
+	var listOnly, chunkCountOnly, shared, jsonOutput bool
+	var shard, of int
 	var timeout, jobsTimeout time.Duration
-	flag.StringVar(&testsDir, "tests-dir", "external/bash-5.3/tests", "bash 5.3 tests directory")
-	flag.StringVar(&bashPath, "bash", "bin/bash", "bash-compatible binary under test")
-	flag.StringVar(&tests, "tests", "", "space-separated fixture names to run")
-	flag.StringVar(&skip, "skip", "", "space-separated fixture names to skip (BASH_TEST_SKIP)")
-	flag.StringVar(&chunk, "chunk", "", "run one distributed chunk, as 1/N")
-	flag.StringVar(&chunksManifest, "chunks-manifest", "chunks.json", "stable bash 5.3 chunk manifest")
-	flag.BoolVar(&listOnly, "list", false, "list fixture names and exit")
-	flag.BoolVar(&chunkCountOnly, "chunk-count", false, "print pinned chunk_count from the chunk manifest and exit")
-	flag.BoolVar(&shared, "shared-tree", false, "run in the source fixture tree instead of a private copy (unsafe: leaks platform-built helpers across venues and races concurrent chunks)")
-	flag.DurationVar(&timeout, "timeout", 60*time.Second, "per-fixture timeout")
-	flag.DurationVar(&jobsTimeout, "jobs-timeout", 120*time.Second, "jobs fixture timeout")
-	flag.Parse()
+	jsonOutput = jsonFlagRequested(args)
+	started := time.Now().UTC()
+	report := newJSONReport(started)
+
+	flags := flag.NewFlagSet("bash53suite", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	flags.StringVar(&testsDir, "tests-dir", "external/bash-5.3/tests", "bash 5.3 tests directory")
+	flags.StringVar(&bashPath, "bash", "bin/bash", "bash-compatible binary under test")
+	flags.StringVar(&tests, "tests", "", "space-separated fixture names to run")
+	flags.StringVar(&skip, "skip", "", "space-separated fixture names to skip (BASH_TEST_SKIP)")
+	flags.StringVar(&chunk, "chunk", "", "run one distributed chunk, as 1/N")
+	flags.StringVar(&chunksManifest, "chunks-manifest", "chunks.json", "stable bash 5.3 chunk manifest")
+	flags.IntVar(&of, "of", 1, "number of deterministic shards")
+	flags.IntVar(&shard, "shard", 0, "zero-based deterministic shard index")
+	flags.BoolVar(&jsonOutput, "json", jsonOutput, "emit one JSON result document")
+	flags.BoolVar(&listOnly, "list", false, "list fixture names and exit")
+	flags.BoolVar(&chunkCountOnly, "chunk-count", false, "print pinned chunk_count from the chunk manifest and exit")
+	flags.BoolVar(&shared, "shared-tree", false, "run in the source fixture tree instead of a private copy (unsafe: leaks platform-built helpers across venues and races concurrent chunks)")
+	flags.DurationVar(&timeout, "timeout", 60*time.Second, "per-fixture timeout")
+	flags.DurationVar(&jobsTimeout, "jobs-timeout", 120*time.Second, "jobs fixture timeout")
+	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			if !jsonOutput {
+				return 0
+			}
+			return infrastructureFailure(true, stdout, stderr, &report, err)
+		}
+		return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+	}
+	explicitShard := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "of" || f.Name == "shard" {
+			explicitShard = true
+		}
+	})
 	if tests == "" {
 		tests = os.Getenv("TESTS")
 	}
@@ -55,49 +127,77 @@ func main() {
 	if v := os.Getenv("BASH53_CHUNKS_MANIFEST"); v != "" {
 		chunksManifest = v
 	}
+	if jsonOutput && (listOnly || chunkCountOnly) {
+		return infrastructureFailure(true, stdout, stderr, &report, fmt.Errorf("--json is not supported with --list or --chunk-count"))
+	}
 	if chunkCountOnly {
 		manifest, err := loadChunkManifest(chunksManifest)
-		dieIf(err)
-		dieIf(validateChunkManifestHeader(manifest))
-		fmt.Println(manifest.ChunkCount)
-		return
+		if err != nil {
+			return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+		}
+		if err := validateChunkManifestHeader(manifest); err != nil {
+			return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+		}
+		fmt.Fprintln(stdout, manifest.ChunkCount)
+		return 0
+	}
+	if chunk != "" && explicitShard {
+		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("--chunk is mutually exclusive with --of/--shard"))
+	}
+	if of < 1 || shard < 0 || shard >= of {
+		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("invalid shard %d of %d", shard, of))
 	}
 	if v := os.Getenv("BASH53_TIMEOUT"); v != "" {
 		parsed, err := time.ParseDuration(v)
-		dieIf(err)
+		if err != nil {
+			return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+		}
 		timeout = parsed
 	}
 	if v := os.Getenv("BASH53_JOBS_TIMEOUT"); v != "" {
 		parsed, err := time.ParseDuration(v)
-		dieIf(err)
+		if err != nil {
+			return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+		}
 		jobsTimeout = parsed
 	}
 	if v := os.Getenv("BASH53_MEM_KB"); v != "" {
 		parsed, err := strconv.Atoi(v)
-		dieIf(err)
+		if err != nil {
+			return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+		}
 		memCapKB = parsed
 	}
 
 	root, err := os.Getwd()
-	dieIf(err)
+	if err != nil {
+		return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+	}
 	testsDir, err = filepath.Abs(testsDir)
-	dieIf(err)
+	if err != nil {
+		return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+	}
 	bashPath, err = filepath.Abs(bashPath)
-	dieIf(err)
+	if err != nil {
+		return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+	}
+	report.Context.BashPath = bashPath
 
 	fixtures, err := discoverFixtures(testsDir)
-	dieIf(err)
+	if err != nil {
+		return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+	}
 	if listOnly {
 		for _, f := range fixtures {
-			fmt.Println(f.Name)
+			fmt.Fprintln(stdout, f.Name)
 		}
-		return
+		return 0
 	}
 	if len(fixtures) == 0 {
-		die("no bash 5.3 fixtures found in %s", testsDir)
+		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("no bash 5.3 fixtures found in %s", testsDir))
 	}
 	if _, err := os.Stat(bashPath); err != nil {
-		die("bash under test not found: %s: %v", bashPath, err)
+		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("bash under test not found: %s: %v", bashPath, err))
 	}
 
 	// Run against a private copy of the corpus, never the shared source tree.
@@ -106,7 +206,7 @@ func main() {
 	if !shared {
 		privateTests, cleanup, err := hermeticTree(testsDir)
 		if err != nil {
-			die("hermetic fixture tree: %v", err)
+			return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("hermetic fixture tree: %v", err))
 		}
 		defer cleanup()
 		testsDir = privateTests
@@ -136,7 +236,7 @@ func main() {
 		tmp := filepath.Join(filepath.Dir(privateTests), "tmp")
 		for _, d := range []string{home, tmp} {
 			if err := os.MkdirAll(d, 0o755); err != nil {
-				die("private run dirs: %v", err)
+				return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("private run dirs: %v", err))
 			}
 		}
 		os.Setenv("HOME", home)
@@ -144,7 +244,7 @@ func main() {
 		os.Setenv("TMPDIR", tmp)
 	}
 	if err := prepareFixtures(testsDir); err != nil {
-		die("prepare fixtures: %v", err)
+		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("prepare fixtures: %v", err))
 	}
 
 	var passed, failed, skipped, timedOut int
@@ -152,10 +252,32 @@ func main() {
 	var manifest *chunkManifest
 	if chunk != "" {
 		manifest, err = loadChunkManifest(chunksManifest)
-		dieIf(err)
-		dieIf(validateChunkManifest(manifest, fixtures))
+		if err != nil {
+			return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+		}
+		if err := validateChunkManifest(manifest, fixtures); err != nil {
+			return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+		}
+		idx, total, err := parseChunk(chunk)
+		if err != nil {
+			return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+		}
+		if total != manifest.ChunkCount {
+			return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("chunk %s does not match manifest chunk_count %d", chunk, manifest.ChunkCount))
+		}
+		report.Chunk = jsonChunk{Index: idx, Of: total}
+	} else {
+		report.Chunk = jsonChunk{Index: shard, Of: of}
 	}
-	selected := selectFixtures(fixtures, wordSet(tests), chunk, manifest)
+	partitioned := fixtures
+	if chunk == "" {
+		partitioned = shardFixtures(fixtures, of, shard)
+	}
+	selected := selectFixtures(partitioned, wordSet(tests), chunk, manifest)
+	logOut := stdout
+	if jsonOutput {
+		logOut = stderr
+	}
 	// BASH_TEST_SKIP: a skipped fixture is NOT a failure, but it must be counted
 	// and printed — an unreported skip is how a suite quietly stops covering
 	// something. (Until 2026-07-12 this knob was honored only by the shell loop;
@@ -167,7 +289,8 @@ func main() {
 		for _, f := range selected {
 			if skips[f.Name] {
 				skipped++
-				fmt.Printf("  SKIP  %s\n", f.Name)
+				report.Verdicts = append(report.Verdicts, jsonVerdict{Name: f.Name, Verdict: "skipped", DurationSeconds: 0})
+				fmt.Fprintf(logOut, "  SKIP  %s\n", f.Name)
 				continue
 			}
 			keep = append(keep, f)
@@ -175,22 +298,24 @@ func main() {
 		selected = keep
 	}
 	if len(selected) == 0 {
-		die("no fixtures selected")
+		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("no fixtures selected"))
 	}
 
-	fmt.Printf("Running bash 5.3 test suite against %s (%s timeout per test", bashPath, timeout)
+	fmt.Fprintf(logOut, "Running bash 5.3 test suite against %s (%s timeout per test", bashPath, timeout)
 	if chunk != "" {
-		fmt.Printf(", chunk %s", chunk)
+		fmt.Fprintf(logOut, ", chunk %s", chunk)
 	}
-	fmt.Println(")...")
+	fmt.Fprintln(logOut, ")...")
 
 	for _, f := range selected {
 		if _, err := os.Stat(filepath.Join(testsDir, f.Test)); err != nil {
 			skipped++
+			report.Verdicts = append(report.Verdicts, jsonVerdict{Name: f.Name, Verdict: "skipped", DurationSeconds: 0})
 			continue
 		}
 		if _, err := os.Stat(filepath.Join(testsDir, f.Right)); err != nil {
 			skipped++
+			report.Verdicts = append(report.Verdicts, jsonVerdict{Name: f.Name, Verdict: "skipped", DurationSeconds: 0})
 			continue
 		}
 		perTestTimeout := timeout
@@ -202,28 +327,100 @@ func main() {
 		elapsed := time.Since(start)
 		if err != nil {
 			failed++
-			fmt.Printf("  FAIL  %s\n", f.Name)
-			fmt.Printf("        %v\n", err)
-			fmt.Printf("DURATION\t%s\t%.3f\n", f.Name, elapsed.Seconds())
+			report.Verdicts = append(report.Verdicts, jsonVerdict{Name: f.Name, Verdict: "failed", DurationSeconds: elapsed.Seconds()})
+			fmt.Fprintf(logOut, "  FAIL  %s\n", f.Name)
+			fmt.Fprintf(logOut, "        %v\n", err)
+			fmt.Fprintf(logOut, "DURATION\t%s\t%.3f\n", f.Name, elapsed.Seconds())
 			continue
 		}
 		switch result {
 		case "PASS":
 			passed++
+			report.Verdicts = append(report.Verdicts, jsonVerdict{Name: f.Name, Verdict: "passed", DurationSeconds: elapsed.Seconds()})
 		case "TIME":
 			timedOut++
+			report.Verdicts = append(report.Verdicts, jsonVerdict{Name: f.Name, Verdict: "timed_out", DurationSeconds: elapsed.Seconds()})
 		default:
 			failed++
+			report.Verdicts = append(report.Verdicts, jsonVerdict{Name: f.Name, Verdict: "failed", DurationSeconds: elapsed.Seconds()})
 		}
-		fmt.Printf("  %-5s %s\n", result, f.Name)
-		fmt.Printf("DURATION\t%s\t%.3f\n", f.Name, elapsed.Seconds())
+		fmt.Fprintf(logOut, "  %-5s %s\n", result, f.Name)
+		fmt.Fprintf(logOut, "DURATION\t%s\t%.3f\n", f.Name, elapsed.Seconds())
 	}
 
-	fmt.Println()
-	fmt.Printf("Results: %d passed, %d failed, %d skipped, %d timed out\n", passed, failed, skipped, timedOut)
-	if failed != 0 || timedOut != 0 {
-		os.Exit(1)
+	fmt.Fprintln(logOut)
+	fmt.Fprintf(logOut, "Results: %d passed, %d failed, %d skipped, %d timed out\n", passed, failed, skipped, timedOut)
+	report.Summary = jsonSummary{Passed: passed, Failed: failed, Skipped: skipped, TimedOut: timedOut}
+	if jsonOutput {
+		emitJSON(stdout, &report)
 	}
+	if failed != 0 || timedOut != 0 {
+		return 1
+	}
+	return 0
+}
+
+func jsonFlagRequested(args []string) bool {
+	for _, arg := range args {
+		if arg == "--json" || arg == "-json" || strings.HasPrefix(arg, "--json=") || strings.HasPrefix(arg, "-json=") {
+			return true
+		}
+	}
+	return false
+}
+
+func newJSONReport(started time.Time) jsonReport {
+	runner, _ := os.Hostname()
+	if v := firstNonemptyEnv("BASH53_RUNNER", "RUNNER_NAME", "CI_RUNNER_ID", "AGENT_NAME"); v != "" {
+		runner = v
+	}
+	runID := firstNonemptyEnv("BASH53_RUN_ID", "GITHUB_RUN_ID", "CI_PIPELINE_ID", "BUILD_BUILDID")
+	if runID == "" {
+		runID = fmt.Sprintf("%s-%d", started.Format("20060102T150405.000000000Z"), os.Getpid())
+	}
+	commit := firstNonemptyEnv("GITHUB_SHA", "CI_COMMIT_SHA", "BUILD_SOURCEVERSION")
+	if commit == "" {
+		if out, err := exec.Command("git", "rev-parse", "HEAD").Output(); err == nil {
+			commit = strings.TrimSpace(string(out))
+		}
+	}
+	return jsonReport{
+		SchemaVersion: 1,
+		Suite:         "bash-5.3",
+		RunID:         runID,
+		Context: jsonContext{
+			Runner: runner, Commit: commit, StartedAt: started.Format(time.RFC3339Nano),
+			HostOS: runtime.GOOS, HostArch: runtime.GOARCH,
+		},
+		Infrastructure: jsonInfrastructure{Status: "ok", PreflightErrors: []string{}},
+		Verdicts:       []jsonVerdict{},
+	}
+}
+
+func firstNonemptyEnv(names ...string) string {
+	for _, name := range names {
+		if value := os.Getenv(name); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func infrastructureFailure(jsonOutput bool, stdout, stderr io.Writer, report *jsonReport, err error) int {
+	fmt.Fprintf(stderr, "bash53-suite: %v\n", err)
+	if jsonOutput {
+		report.Infrastructure.Status = "failed"
+		report.Infrastructure.PreflightErrors = []string{err.Error()}
+		report.Verdicts = []jsonVerdict{}
+		report.Summary = jsonSummary{}
+		emitJSON(stdout, report)
+	}
+	return 2
+}
+
+func emitJSON(stdout io.Writer, report *jsonReport) {
+	report.Context.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	_ = json.NewEncoder(stdout).Encode(report)
 }
 
 func discoverFixtures(testsDir string) ([]fixture, error) {
@@ -294,6 +491,22 @@ func selectFixtures(fixtures []fixture, tests map[string]bool, chunk string, man
 	var out []fixture
 	for _, f := range selected {
 		if wanted[f.Name] {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// shardFixtures partitions discoverFixtures' stable order without requiring a
+// manifest. Shards are zero-based and use a stride so every fixture appears in
+// exactly one shard for a given value of of.
+func shardFixtures(fixtures []fixture, of, shard int) []fixture {
+	if of == 1 && shard == 0 {
+		return fixtures
+	}
+	out := make([]fixture, 0, (len(fixtures)+of-1)/of)
+	for i, f := range fixtures {
+		if i%of == shard {
 			out = append(out, f)
 		}
 	}
