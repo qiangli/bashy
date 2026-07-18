@@ -48,10 +48,10 @@ func TestOfShardCorrectness(t *testing.T) {
 	all := fixtures("a", "b", "c", "d", "e", "f", "g")
 	want := [][]string{{"a", "d", "g"}, {"b", "e"}, {"c", "f"}}
 	seen := map[string]int{}
-	for shard := 1; shard <= 3; shard++ {
+	for shard := 0; shard < 3; shard++ {
 		got := fixtureNames(selectShard(all, 3, shard))
-		if !reflect.DeepEqual(got, want[shard-1]) {
-			t.Fatalf("shard %d = %v, want %v", shard, got, want[shard-1])
+		if !reflect.DeepEqual(got, want[shard]) {
+			t.Fatalf("shard %d = %v, want %v", shard, got, want[shard])
 		}
 		for _, name := range got {
 			seen[name]++

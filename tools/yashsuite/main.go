@@ -92,7 +92,7 @@ func main() {
 	flag.StringVar(&manifestPath, "chunks-manifest", "yash-chunks.json", "stable yash chunk manifest")
 	flag.StringVar(&runID, "run-id", "", "run identifier shared by all chunks")
 	flag.IntVar(&of, "of", 0, "number of ad-hoc modulo shards")
-	flag.IntVar(&shard, "shard", 0, "one-based ad-hoc shard index")
+	flag.IntVar(&shard, "shard", 0, "zero-based ad-hoc shard index")
 	flag.BoolVar(&jsonOutput, "json", false, "emit a JSON chunk record")
 	flag.BoolVar(&listOnly, "list", false, "list discovered fixture names")
 	flag.BoolVar(&chunkCountOnly, "chunk-count", false, "print manifest chunk_count")
@@ -137,10 +137,10 @@ func main() {
 		}
 		selected = selectManifest(fixtures, m, chunkIndex)
 	case of != 0 || shard != 0:
-		if of < 1 || shard < 1 || shard > of {
-			die(fmt.Errorf("--of and --shard require 1 <= shard <= of"))
+		if of < 1 || shard < 0 || shard >= of {
+			die(fmt.Errorf("--of and --shard require 0 <= shard < of"))
 		}
-		chunkIndex, chunkTotal = shard, of
+		chunkIndex, chunkTotal = shard+1, of
 		selected = selectShard(fixtures, of, shard)
 	}
 	if len(selected) == 0 {
@@ -301,7 +301,7 @@ func selectManifest(fixtures []fixture, m *manifest, id int) []fixture {
 func selectShard(fixtures []fixture, of, shard int) []fixture {
 	var selected []fixture
 	for i, fixture := range fixtures {
-		if i%of == shard-1 {
+		if i%of == shard {
 			selected = append(selected, fixture)
 		}
 	}
