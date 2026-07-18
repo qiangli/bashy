@@ -1175,3 +1175,93 @@ func TestRelocatePendingCommandFlag(t *testing.T) {
 		}
 	}
 }
+
+// --- strict POSIX mode is engaged by argv[0]=="sh" only ---------------------
+
+// withStrictPosixEnv isolates a newRunner() call from the ambient shell: it
+// swaps os.Args[0], resets the flag globals newRunner() consults, and clears
+// the env vars that would otherwise inject set-options of their own.
+func withStrictPosixEnv(t *testing.T, argv0 string, posixFlag bool) {
+	t.Helper()
+	oldArgs := os.Args
+	oldPosix := *posix
+	oldFlags := flag.CommandLine
+	t.Cleanup(func() {
+		os.Args = oldArgs
+		*posix = oldPosix
+		flag.CommandLine = oldFlags
+	})
+	flag.CommandLine = flag.NewFlagSet(argv0, flag.ExitOnError)
+	os.Args = []string{argv0}
+	*posix = posixFlag
+	t.Setenv("SHELLOPTS", "")
+	t.Setenv("BASHOPTS", "")
+	t.Setenv("POSIXLY_CORRECT", "")
+}
+
+// runStrictProbe runs a script whose only non-conformance is an assignment
+// error in a command-word prefix (`a=b true` where `a` is readonly). POSIX
+// makes that fatal for a non-interactive shell; bash 5.3 does not. It needs no
+// external command and no PATH, so it is a hermetic strict-mode probe.
+func runStrictProbe(t *testing.T) (exited bool, err error) {
+	t.Helper()
+	const script = "readonly a=a\na=b true\n:\n"
+	f, perr := syntax.NewParser().Parse(strings.NewReader(script), "")
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	r, nerr := newRunner()
+	if nerr != nil {
+		t.Fatal(nerr)
+	}
+	if oerr := interp.StdIO(nil, io.Discard, io.Discard)(r); oerr != nil {
+		t.Fatal(oerr)
+	}
+	err = r.Run(context.Background(), f)
+	return r.Exited(), err
+}
+
+func TestStrictPosixEngagedByArgv0Sh(t *testing.T) {
+	// Every spelling of "invoked as sh" bash honors: plain, login (leading
+	// '-'), and an absolute path.
+	for _, argv0 := range []string{"sh", "-sh", "/bin/sh"} {
+		t.Run(argv0, func(t *testing.T) {
+			withStrictPosixEnv(t, argv0, true)
+			exited, err := runStrictProbe(t)
+			if err == nil {
+				t.Fatalf("argv0=%q: assignment error on a readonly var was not fatal; strict POSIX mode did not engage", argv0)
+			}
+			var status interp.ExitStatus
+			if errors.As(err, &status) && status == 0 {
+				t.Fatalf("argv0=%q: runner exited 0, want nonzero", argv0)
+			}
+			if !exited {
+				t.Fatalf("argv0=%q: runner did not report Exited() after a fatal assignment error", argv0)
+			}
+		})
+	}
+}
+
+func TestStrictPosixNotEngagedByPosixFlag(t *testing.T) {
+	// `bash --posix` / `-o posix` / SHELLOPTS=posix / POSIXLY_CORRECT must stay
+	// byte-identical to bash 5.3, which survives the assignment error.
+	for _, argv0 := range []string{"bash", "rbash", "bashy"} {
+		t.Run(argv0, func(t *testing.T) {
+			withStrictPosixEnv(t, argv0, true)
+			if _, err := runStrictProbe(t); err != nil {
+				t.Fatalf("argv0=%q with posix mode: want completion exit 0, got %v (strict mode leaked past argv0==sh)", argv0, err)
+			}
+		})
+	}
+}
+
+func TestStrictPosixNotEngagedWithoutPosix(t *testing.T) {
+	for _, argv0 := range []string{"bash", "rbash"} {
+		t.Run(argv0, func(t *testing.T) {
+			withStrictPosixEnv(t, argv0, false)
+			if _, err := runStrictProbe(t); err != nil {
+				t.Fatalf("argv0=%q plain: want completion exit 0, got %v", argv0, err)
+			}
+		})
+	}
+}
