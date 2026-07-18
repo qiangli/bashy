@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "suite": "yash",
+  "chunk_count": 8,
+  "measurement": {
+    "measured_at": "",
+    "runner": "tools/yashsuite",
+    "command": "go run ./tools/yashsuite --tests-dir .yash-tests/tests --shell bin/bash --json",
+    "result": "not measured",
+    "duration_source": "equal one-second estimates; replace with real per-fixture measurements before timing-sensitive scheduling"
+  },
+  "chunks": [
+    {
+      "id": 1,
+      "duration_seconds": 9,
+      "fixtures": [
+        { "name": "alias-p", "duration_seconds": 1 },
+        { "name": "cd-p", "duration_seconds": 1 },
+        { "name": "error-p", "duration_seconds": 1 },
+        { "name": "fsplit-p", "duration_seconds": 1 },
+        { "name": "kill2-p", "duration_seconds": 1 },
+        { "name": "pipeline-p", "duration_seconds": 1 },
+        { "name": "set-p", "duration_seconds": 1 },
+        { "name": "times-p", "duration_seconds": 1 },
+        { "name": "while-p", "duration_seconds": 1 }
+      ]
+    },
+    {
+      "id": 2,
+      "duration_seconds": 8,
+      "fixtures": [
+        { "name": "andor-p", "duration_seconds": 1 },
+        { "name": "cmdsub-p", "duration_seconds": 1 },
+        { "name": "eval-p", "duration_seconds": 1 },
+        { "name": "function-p", "duration_seconds": 1 },
+        { "name": "kill3-p", "duration_seconds": 1 },
+        { "name": "ppid-p", "duration_seconds": 1 },
+        { "name": "shift-p", "duration_seconds": 1 },
+        { "name": "trap-p", "duration_seconds": 1 }
+      ]
+    },
+    {
+      "id": 3,
+      "duration_seconds": 8,
+      "fixtures": [
+        { "name": "arith-p", "duration_seconds": 1 },
+        { "name": "command-p", "duration_seconds": 1 },
+        { "name": "exec-p", "duration_seconds": 1 },
+        { "name": "getopts-p", "duration_seconds": 1 },
+        { "name": "kill4-p", "duration_seconds": 1 },
+        { "name": "printf-p", "duration_seconds": 1 },
+        { "name": "signal-p", "duration_seconds": 1 },
+        { "name": "type-p", "duration_seconds": 1 }
+      ]
+    },
+    {
+      "id": 4,
+      "duration_seconds": 8,
+      "fixtures": [
+        { "name": "async-p", "duration_seconds": 1 },
+        { "name": "comment-p", "duration_seconds": 1 },
+        { "name": "exit-p", "duration_seconds": 1 },
+        { "name": "grouping-p", "duration_seconds": 1 },
+        { "name": "lineno-p", "duration_seconds": 1 },
+        { "name": "pwd-p", "duration_seconds": 1 },
+        { "name": "simple-p", "duration_seconds": 1 },
+        { "name": "ulimit-p", "duration_seconds": 1 }
+      ]
+    },
+    {
+      "id": 5,
+      "duration_seconds": 8,
+      "fixtures": [
+        { "name": "bg-p", "duration_seconds": 1 },
+        { "name": "continue-p", "duration_seconds": 1 },
+        { "name": "export-p", "duration_seconds": 1 },
+        { "name": "if-p", "duration_seconds": 1 },
+        { "name": "nop-p", "duration_seconds": 1 },
+        { "name": "read-p", "duration_seconds": 1 },
+        { "name": "special-p", "duration_seconds": 1 },
+        { "name": "umask-p", "duration_seconds": 1 }
+      ]
+    },
+    {
+      "id": 6,
+      "duration_seconds": 8,
+      "fixtures": [
+        { "name": "break-p", "duration_seconds": 1 },
+        { "name": "declutil-p", "duration_seconds": 1 },
+        { "name": "fg-p", "duration_seconds": 1 },
+        { "name": "input-p", "duration_seconds": 1 },
+        { "name": "option-p", "duration_seconds": 1 },
+        { "name": "readonly-p", "duration_seconds": 1 },
+        { "name": "subshell-p", "duration_seconds": 1 },
+        { "name": "unset-p", "duration_seconds": 1 }
+      ]
+    },
+    {
+      "id": 7,
+      "duration_seconds": 8,
+      "fixtures": [
+        { "name": "builtins-p", "duration_seconds": 1 },
+        { "name": "dot-p", "duration_seconds": 1 },
+        { "name": "fnmatch-p", "duration_seconds": 1 },
+        { "name": "job-p", "duration_seconds": 1 },
+        { "name": "param-p", "duration_seconds": 1 },
+        { "name": "redir-p", "duration_seconds": 1 },
+        { "name": "test-p", "duration_seconds": 1 },
+        { "name": "variable-p", "duration_seconds": 1 }
+      ]
+    },
+    {
+      "id": 8,
+      "duration_seconds": 8,
+      "fixtures": [
+        { "name": "case-p", "duration_seconds": 1 },
+        { "name": "errexit-p", "duration_seconds": 1 },
+        { "name": "for-p", "duration_seconds": 1 },
+        { "name": "kill1-p", "duration_seconds": 1 },
+        { "name": "path-p", "duration_seconds": 1 },
+        { "name": "return-p", "duration_seconds": 1 },
+        { "name": "testtty-p", "duration_seconds": 1 },
+        { "name": "wait-p", "duration_seconds": 1 }
+      ]
+    }
+  ]
+}
