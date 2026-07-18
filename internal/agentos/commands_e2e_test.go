@@ -359,6 +359,78 @@ func TestSkillsE2E(t *testing.T) {
 	}
 }
 
+// TestSeatAuthorityInvariantsE2E pins the governance contract as it reaches an
+// agent: the EMBEDDED skill text, read back out of the built binary, not the
+// source tree. The invariant is that the steward appoints and qualifies
+// conductor seats and a conductor never self-selects its seat or its successor
+// — with worker-fleet sizing still exclusively the conductor's. Each clause is
+// asserted positively (the rule is stated) and negatively (the wording that
+// used to contradict it is gone), because a skill that merely dropped the old
+// text would read as governed while saying nothing.
+func TestSeatAuthorityInvariantsE2E(t *testing.T) {
+	bin := bashyBinary(t)
+
+	// Wording removed in the governance correction. Present in either skill it
+	// re-opens self-selection, so both bodies are checked against the same set.
+	forbidden := []string{
+		"Staffing — pick the conductor",
+		"Backup conductor + self-handoff",
+		"self-handoff",
+	}
+
+	for _, tc := range []struct {
+		skill string
+		// require: substrings the embedded body must carry, each keyed by the
+		// invariant it encodes so a failure names the rule, not a string.
+		require map[string]string
+	}{
+		{
+			skill: "conductor",
+			require: map[string]string{
+				"appointed, not self-selected":   "you are APPOINTED, you are not self-selected",
+				"steward appoints seats":         "The steward appoints and qualifies conductor seats",
+				"no self-named successor":        "never names its own successor",
+				"conductor still owns its fleet": "worker fleet",
+				"sub-hub adds no steward layer":  "no steward-facing ownership layer",
+				"standby notifies the steward":   "checkpoints and notifies the steward",
+				"scope routes via the steward":   "Scope moves only through the steward",
+				// Wrap-safe: the source line breaks after "cannot hand scope".
+				"no lateral scope transfer":       "laterally to another conductor",
+				"seats are not held concurrently": "must not hold a steward seat and a conductor seat at the same time",
+			},
+		},
+		{
+			skill: "steward",
+			require: map[string]string{
+				"steward appoints and qualifies":  "You appoint and qualify conductor seats",
+				"conductor never self-selects":    "a conductor never selects its own seat",
+				"conductor sizes its own fleet":   "Each conductor decides **how many workers**",
+				"foreman stays the conductor's":   "still that conductor's worker",
+				"standby is not a transfer":       "not a lateral transfer",
+				"steward records the boundary":    "Record the old and the new boundary before the receiving conductor",
+				"seats are not held concurrently": "never hold a steward seat and a conductor seat at the same",
+			},
+		},
+	} {
+		t.Run(tc.skill, func(t *testing.T) {
+			stdout, _, code := runBashyStd(bin, "skills", "show", tc.skill)
+			if code != 0 {
+				t.Fatalf("skills show %s exit %d:\n%s", tc.skill, code, stdout)
+			}
+			for rule, want := range tc.require {
+				if !strings.Contains(stdout, want) {
+					t.Errorf("embedded %s skill does not state %q (missing %q)", tc.skill, rule, want)
+				}
+			}
+			for _, bad := range forbidden {
+				if strings.Contains(stdout, bad) {
+					t.Errorf("embedded %s skill still carries contradictory wording %q", tc.skill, bad)
+				}
+			}
+		})
+	}
+}
+
 // TestSkillsAddVerifyE2E drives the P1 verified-admission loop end to end
 // against an isolated store ($BASHY_SKILLS_DIR): author a dual-bundle
 // skill, add it, see it env-gated in list, verify it, and confirm the

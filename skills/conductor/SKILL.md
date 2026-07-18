@@ -40,6 +40,43 @@ This file is the actionable checklist. The full narrative — the four isolation
 traps in depth, convergence details, and two worked campaigns — lives in the
 bundled `reference.md`; read it before your first campaign.
 
+## Seat authority — you are APPOINTED, you are not self-selected
+
+**The steward appoints and qualifies conductor seats.** A conductor never selects
+its own seat, never qualifies itself, and never names its own successor. If no
+steward has appointed you to this workstream, you do not hold the seat — ask the
+steward for the appointment rather than assuming it.
+
+What you *do* own, exclusively, is the **worker fleet**: how many workers your
+assignment needs, which tool/model runs each story, how they are isolated,
+steered, interrupted, reassigned, gated, and merged back. The steward does not
+size, select, or steer your workers; you do not size or select conductor seats.
+
+**One agent must not hold a steward seat and a conductor seat at the same time.**
+The steward's job is to judge conductor outcomes by independent evidence; an
+agent that appoints, drives, and reviews itself has no independent layer left and
+every check collapses into self-report. If you are already the host steward and a
+conductor seat is needed, appoint a *different* agent to it.
+
+Three rules follow, and they are not negotiable:
+
+- **Sub-hubs stay inside your ownership.** If you appoint a foreman or any
+  sub-hub, it leads a *sub-team of your workers* under your contract and your
+  merge gate. It creates **no steward-facing ownership layer**: the steward keeps
+  addressing you, the appointed conductor, and never the foreman or its workers.
+  You remain accountable for everything the sub-hub does.
+- **Standby failover is conductor-internal, and it checkpoints.** You may run a
+  cold spare inside your own workstream and let it take the lease (fencing-epoch
+  protected) if you go dark. Activation **checkpoints and notifies the steward**
+  — it is a continuity event the steward must see, not a private swap. It never
+  implies a lateral transfer of authority: the standby inherits *your* appointed
+  scope unchanged, and nothing more.
+- **Scope moves only through the steward.** You may *request* release of scope
+  you should not hold, or transfer of scope you need. You **cannot hand scope
+  laterally to another conductor, and cannot accept scope handed to you by one.**
+  The steward records the old and new boundary **before** the receiving conductor
+  acts; until that record exists, the work is still the original owner's.
+
 ## The goal is the contract
 
 A conductor run is **done** iff three checks hold — the *same* contract for every
@@ -167,7 +204,9 @@ responsibilities, not separate skills to defer to:
   sitting, drive it unattended with `bashy weave autopilot` — it auto-dispatches
   the queue to the qualified fleet and re-drives stalled stories; `bashy weave
   autopilot --standby` runs a cold spare that takes the lease (fencing-epoch
-  protected) if the active conductor goes dark. To span idle gaps, **self-wake
+  protected) if the active conductor goes dark — a conductor-internal spare, so
+  **checkpoint and notify the steward on activation** and carry the appointed
+  scope across unchanged (§Seat authority). To span idle gaps, **self-wake
   with `bashy schedule`** — schedule your own re-entry carrying the next
   instruction, e.g. `bashy schedule add --every 30m --prompt "re-drive stalled
   stories, then converge" -- bashy weave autopilot` (the prompt arrives as
@@ -182,7 +221,10 @@ responsibilities, not separate skills to defer to:
   of agents, then have it report convergence back to you. This is hub-and-spoke
   with a sub-hub — you keep the campaign contract and the authoritative merge
   gate; the foreman owns its sub-loop. Delegate leadership when the fan-out is
-  wider than one driver can steer — never delegate the merge gate.
+  wider than one driver can steer — never delegate the merge gate. **A foreman
+  you appoint is still your worker**: it lives entirely inside your exclusive
+  worker ownership, adds no steward-facing ownership layer, and the steward keeps
+  addressing you rather than it (§Seat authority).
 
 ## Scheduling strategy
 
@@ -210,19 +252,18 @@ Maximize velocity per token, not just "run agents in parallel":
    pass its own gate while breaking a sibling that shares code (CONVERGE/REVIEW
    exist for exactly this).
 
-## Staffing — pick the conductor and the fleet (before the loop)
+## Staffing — qualify YOUR worker fleet (before the loop)
 
-Staff both **objectively** (don't guess who's good) under a standing **human
-override** (any human may pin/force/exclude any choice).
+Staffing here is **workers only** — the conductor seat itself is the steward's
+appointment, not yours to pick or trial (§Seat authority). Staff **objectively**
+(don't guess who's good) under a standing **human override** (any human may
+pin/force/exclude any choice).
 
-- **The conductor** — the one durably-assigned role; needs *orchestration*
-  competence (decompose, gate, salvage, judge evidence, never trust "submitted"),
-  a scarcer skill than writing a fix. Qualify it harder: run a candidate as a
-  trial conductor on a small real multi-issue round and score **convergence + a
-  clean gate** (the same predicate the campaign uses); a tool that can't drive a
-  round to green fails the bar even if it writes code. One conductor holds the
-  lease (`bashy weave baton take --as <you>` / `bashy sprint take`); re-write the
-  baton/continuity after every action so any handoff resumes cleanly.
+Hold the single-driver locks for the scope you were appointed to (`bashy weave
+baton take --as <you>` / `bashy sprint take`), and re-write the baton/continuity
+after every action so a standby activation or a steward-recorded transfer resumes
+cleanly.
+
 - **The fleet** — a pool qualified for **capability**, not pre-assigned a title.
   Per-story roles (coder / tester / reviewer / release / …) are the conductor's
   *runtime* decision: story → role → cheapest-capable tool. Qualify the pool with
@@ -234,14 +275,13 @@ override** (any human may pin/force/exclude any choice).
      emits nothing or instant-exits is dead weight.
   4. **Capability rating** — the carry-forward report card + prior-sprint
      outcomes; rates *what a tool can do*, not a title.
-- **Backup conductor + self-handoff.** Designate the trial runner-up as backup.
-  Hand off *before going dark* (token exhaustion / rate-limit): at a stable
-  point `bashy sprint handoff --to <backup@host>` (checkpoints + releases the
-  lease) and the backup resumes from continuity — the log is the state. A forced
-  `weave take --force` bumps the fencing epoch so a revived old conductor can't
-  double-drive. Track your own budget and checkpoint often; provider APIs don't
-  yet expose remaining-quota, so proactive handoff + frequent checkpoints are the
-  mitigation.
+- **Going dark — checkpoint, then tell the steward.** Track your own budget;
+  provider APIs don't expose remaining-quota, so frequent checkpoints are the
+  only mitigation. At a stable point before you run out, `bashy sprint checkpoint`
+  and **notify the steward** so it can decide the seat — activating your
+  conductor-internal standby is a continuity event you report, not a successor you
+  appoint. A forced `weave take --force` bumps the fencing epoch so a revived old
+  conductor can't double-drive.
 
 ## The loop (operational)
 
@@ -401,6 +441,11 @@ environment-divergent units + ripple canonically in a final pass.
 - Merging all stories at once without per-story re-gate.
 - Chasing non-actionable failures.
 - Fanning out shared-source work in parallel (collides at merge) — sequence it.
+- Self-selecting the conductor seat, trialling yourself into it, or naming your
+  own successor — the steward appoints and qualifies seats (§Seat authority).
+- Handing scope to, or accepting scope from, a sibling conductor directly — route
+  it through the steward and wait for the recorded boundary.
+- Holding a steward seat and a conductor seat at once — self-review is not review.
 
 ## Command quick-reference
 ```sh
