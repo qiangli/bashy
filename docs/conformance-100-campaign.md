@@ -53,15 +53,17 @@ the investment when it makes the mesh better for the campaign.
 
 | role | who | charter |
 |---|---|---|
-| **Steward** | **claude** (me) | own the outcome; monitor all conductors; **prevent agent overload** — if a conductor is piling work on one agent (e.g. codex), instruct it to reassign to a less-loaded, equally-capable agent; keep the human in the loop |
-| **Conductor of (a)** | **codex** | drive the conformance campaign — decompose the failing set, isolate in weave, gate on our harnesses, converge to 100%; may staff workers, subject to steward load-balancing |
-| **(b) auto-fixer** | **claude, delegated to self** (fork) | the parent stays steward; a forked self builds the test-speedup/auto-fixer fabric that (a) rides |
-| **(c) ecosystem** | **ycode** (reactive) | when an ecosystem change would help (a), ycode drives it |
+| **Steward** | **claude** (me) | own the host-wide outcome; decide conductor count and workstream boundaries; monitor conductors, coordinate shared merges/policy, and keep the human in the loop; never manage a conductor's workers |
+| **Conductor of (a)** | **codex** | own the conformance workstream end-to-end — decompose the failing set, choose and size its worker pool, isolate in weave, steer/fail over workers, gate on our harnesses, merge, and converge to 100% |
+| **(b) auto-fixer** | **steward-owned worker** (claude self-fork) | bounded accelerator work outside conductor (a); it may build test-speedup fabric but cannot merge into (a)'s repos without an explicit handoff |
+| **(c) ecosystem** | **ecosystem conductor** (ycode, when activated) | owns a separately bounded ycode/outpost/cloudbox workstream; coordinates shared-repo merges with the steward and conductor (a) |
 
-Additional conductors may be spun up and may assign agents; **the steward watches
-total load and rebalances** so no single agent (codex especially) is saturated while
-equally-capable agents sit idle. Capability + freedom, not habit, decides assignment
-(`bashy agents --band`, `weave fleet`).
+The steward may appoint additional conductors when workstreams are naturally independent.
+Each conductor alone decides how many workers its assignment needs and which agents to use.
+The steward manages conductor boundaries and shared-host contention by addressing the
+conductor, never by steering or reassigning that conductor's workers. The steward may also
+own or delegate separate direct work when requested or when judgment makes that the clearer
+path; ownership must remain explicit and non-overlapping.
 
 ## Discipline (unchanged, load-bearing)
 - **Never shell out** from the userland; the NO-list verbs exec by argv, not a shell.

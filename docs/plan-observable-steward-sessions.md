@@ -8,26 +8,26 @@ private pipe instead of a room.*
 
 ## The insight
 
-A steward session (one agent orchestrating a fleet to a verified goal) and a meeting
+A steward session (one host-wide agent coordinating conductors and any direct work) and a meeting
 (`bashy meet`) are not analogous — they are the **same thing at different sizes**. The
 minimum meeting is **1 human + 1 agent**. That is the conversation a user has with a steward.
 Everything larger is the same primitive with more participants:
 
 ```
 root room:           human ── steward                     (the 1:1 — a meeting)
-  └─ the steward adds participants / opens sub-rooms:
-       sub-room:      steward ── codex   (OTLP fix)
-       sub-room:      steward ── ycode   (MCP P3-P5)
-       sub-room:      steward ── agy     (otel ui)
+  ├─ workstream:      steward ── conductor A              (POSIX)
+  │    └─ workers:    conductor A ── codex / ycode / agy
+  ├─ workstream:      steward ── conductor B              (OTLP)
+  └─ direct room:     steward ── steward-owned worker     (bounded direct task)
 ```
 
-`observe` / `tell` / `say` apply at **every node, uniformly**. A second human `observe`s the
-root room to watch the steward think; drills into a sub-room to watch codex; `tell`s to
-interject at either level. "Leave the steward running in the background" is just: *the human
-detaches from the room; the agents keep meeting in it.*
+`observe` applies at every authorized node. `tell` / `say` use the same protocol but obey
+ownership: the steward addresses a conductor, the conductor steers its workers, and the
+steward steers only steward-owned workers. A second human can observe the root and drill
+into an authorized workstream without silently acquiring control of its workers.
 
-**The room is symmetric — it is the place where everyone meets.** A human joins a room the
-same way an agent does: both are *participants* who contribute, observe, and steer as peers.
+**The room protocol is symmetric; authority is not.** A human joins a room through the same
+protocol as an agent, but contribution and steering remain capability- and ownership-gated.
 There is no "human operates a tool" and no "tool reports to human" — there is a shared space
 and who is in it. That symmetry is the whole point: the room is the commons where humans and
 agents on the mesh convene (many threads, one fabric). The human/agent distinction is a fact
@@ -75,9 +75,9 @@ already lost.
 
 The earlier draft proposed a **bridge** (B1–B3) to wire fleet-run events *into* a meeting as a
 side feature. That framing is wrong. The runs are not an external stream to bridge in — **the
-interaction IS the meeting from the top**, and the workers are participants inside it or in
-child rooms of it. There is nothing to bridge; there is a root room and everything happens in
-it or under it. Simpler, and true.
+interaction IS the meeting from the top**. Conductors are the steward's workstream
+participants; conductor-owned workers live in child rooms controlled by that conductor,
+while steward-owned workers remain in separate direct rooms. There is nothing to bridge.
 
 ## The anomaly to fix
 
@@ -155,7 +155,8 @@ transcript-delta / presence). This is the load-bearing piece; get it surface-ind
 everything else is a client. The human↔steward conversation becomes a room here (an
 open-ended *work*-mode room, distinct from `meet`'s bounded council). Run-lifecycle events
 (`launched codex` · `files changed 17` · `GATE passed=true`) and steward narration are
-contributions; sub-rooms per worker nest under it.
+contributions; workstream rooms nest under it, and each conductor owns any worker rooms
+beneath its workstream. Steward-owned worker rooms remain separate.
 
   Discipline preserved: the `GATE` contribution is the SUPERVISOR's `bashy gate --json`
   verdict, never the worker's echoed prose (`skills/conductor/SKILL.md` — a worker's log
@@ -189,8 +190,9 @@ stores.
 
 - The human↔steward conversation exists as a room (`bashy meet list` shows it); a second
   terminal `observe`s it live; two observers see the same stream.
-- The steward opens a child room per delegated worker; drilling in shows that worker's live
-  turns; `say` steers one mid-turn.
+- The steward opens or joins a workstream room per conductor; the conductor owns child
+  worker membership and steering inside that room. Separate steward-owned workers may have
+  their own rooms and can be steered by the steward.
 - The gate contribution is the supervisor's `--json` verdict, not the worker's prose.
 - Detach + reattach (`resume`) loses nothing; the agents kept working while detached.
 - A work-mode room needs no `converge`/minutes to be valid (open-ended is a first-class mode).
