@@ -27,6 +27,15 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 : "${VSC_TARBALL:?set VSC_TARBALL to the licensed VSC-PCTS2016 tarball path}"
 [ -f "$VSC_TARBALL" ] || { echo "error: VSC_TARBALL not found: $VSC_TARBALL" >&2; exit 2; }
 
+"$ROOT/scripts/vsc-profile.sh" validate \
+  --profile cert \
+  --workers "${VSC_WORKERS:-1}" \
+  --chunks "${VSC_CHUNKS:-1}" \
+  --repeat "${VSC_REPEATS:-2}" \
+  --cache "${VSC_CACHE:-off}" \
+  --retries "${VSC_RETRIES:-0}" \
+  --sut-command sh >/dev/null
+
 OCI=${OCI:-}
 if [ -z "$OCI" ]; then
   if command -v docker >/dev/null 2>&1; then OCI=docker
