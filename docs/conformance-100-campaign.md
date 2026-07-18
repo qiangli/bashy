@@ -58,6 +58,14 @@ the investment when it makes the mesh better for the campaign.
 | **(b) auto-fixer** | **steward-owned worker** (claude self-fork) | bounded accelerator work outside conductor (a); it may build test-speedup fabric but cannot merge into (a)'s repos without an explicit handoff |
 | **(c) ecosystem** | **ecosystem conductor** (ycode, when activated) | owns a separately bounded ycode/outpost/cloudbox workstream; coordinates shared-repo merges with the steward and conductor (a) |
 
+**Seat separation is mandatory: one agent must NOT simultaneously serve as the host steward
+and as the POSIX/conformance conductor of (a).** The steward's value here is that it judges
+(a)'s evidence independently; an agent that appoints itself, drives the fleet, and then
+reviews its own convergence has collapsed the only independent layer, and every check becomes
+self-report. The steward appoints and qualifies the conductor seat; the conductor never
+self-selects that seat or names its successor. This is the general role contract (see the
+`steward` and `conductor` skills), stated here because this campaign is where it binds.
+
 The steward may appoint additional conductors when workstreams are naturally independent.
 Each conductor alone decides how many workers its assignment needs and which agents to use.
 The steward manages conductor boundaries and shared-host contention by addressing the
