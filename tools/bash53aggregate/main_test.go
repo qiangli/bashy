@@ -45,11 +45,13 @@ func TestCrossContext(t *testing.T) {
 	}
 }
 
-func TestPerInvocationTimestampsAccepted(t *testing.T) {
+func TestLeafShapedContainerChunksAccepted(t *testing.T) {
+	a := rec(1, 2, "run", "a")
+	a.Context = json.RawMessage(`{"runner":"container-amd64-deadbeef","commit":"abc123","started_at":"2026-07-18T10:00:00Z","finished_at":"2026-07-18T10:01:00Z","host_os":"linux","host_arch":"amd64","bash_path":"/workspace/bin/bash"}`)
 	b := rec(2, 2, "run", "b")
-	b.Context = json.RawMessage(`{"runner":"bash53suite","commit":"abc123","started_at":"2026-07-18T11:00:00Z","finished_at":"2026-07-18T11:01:00Z","host_os":"linux","host_arch":"amd64","bash_path":"/workspace/bin/bash"}`)
-	if _, err := aggregate([]record{rec(1, 2, "run", "a"), b}, 2); err != nil {
-		t.Fatalf("timestamp-only context difference rejected: %v", err)
+	b.Context = json.RawMessage(`{"runner":"container-amd64-deadbeef","commit":"abc123","started_at":"2026-07-18T11:00:00Z","finished_at":"2026-07-18T11:01:00Z","host_os":"linux","host_arch":"amd64","bash_path":"/workspace/bin/bash"}`)
+	if _, err := aggregate([]record{a, b}, 2); err != nil {
+		t.Fatalf("leaf-shaped container chunks rejected: %v", err)
 	}
 }
 
