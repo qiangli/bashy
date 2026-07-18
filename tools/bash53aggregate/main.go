@@ -34,6 +34,14 @@ type summary struct {
 	TimedOut int `json:"timed_out"`
 }
 
+type executionIdentity struct {
+	Runner   string `json:"runner"`
+	Commit   string `json:"commit"`
+	HostOS   string `json:"host_os"`
+	HostArch string `json:"host_arch"`
+	BashPath string `json:"bash_path"`
+}
+
 type record struct {
 	SchemaVersion  int             `json:"schema_version"`
 	Suite          string          `json:"suite"`
@@ -128,7 +136,7 @@ func aggregate(records []record, expected int) (record, error) {
 		return record{}, fmt.Errorf("got %d chunk records, want %d", len(records), expected)
 	}
 
-	contextKey, err := canonicalJSON(first.Context)
+	contextKey, err := contextIdentity(first.Context)
 	if err != nil {
 		return record{}, fmt.Errorf("invalid context: %w", err)
 	}
@@ -147,8 +155,8 @@ func aggregate(records []record, expected int) (record, error) {
 		if r.Suite != first.Suite || r.RunID != first.RunID {
 			return record{}, fmt.Errorf("chunk %d crosses suite/run context", r.Chunk.Index)
 		}
-		key, err := canonicalJSON(r.Context)
-		if err != nil || !bytes.Equal(key, contextKey) {
+		key, err := contextIdentity(r.Context)
+		if err != nil || key != contextKey {
 			return record{}, fmt.Errorf("chunk %d crosses execution context", r.Chunk.Index)
 		}
 		if r.Chunk.Of != expected || r.Chunk.Index < 1 || r.Chunk.Index > expected {
@@ -196,17 +204,19 @@ func aggregate(records []record, expected int) (record, error) {
 	return out, nil
 }
 
-func canonicalJSON(raw json.RawMessage) ([]byte, error) {
+func contextIdentity(raw json.RawMessage) (executionIdentity, error) {
 	if len(raw) == 0 {
 		raw = json.RawMessage(`{}`)
 	}
-	var value any
+	var identity executionIdentity
 	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.UseNumber()
-	if err := dec.Decode(&value); err != nil {
-		return nil, err
+	if err := dec.Decode(&identity); err != nil {
+		return executionIdentity{}, err
 	}
-	return json.Marshal(value)
+	if err := ensureEOF(dec); err != nil {
+		return executionIdentity{}, err
+	}
+	return identity, nil
 }
 
 func compareReference(got, want record) error {
