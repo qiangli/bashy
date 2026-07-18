@@ -121,6 +121,86 @@ hits, no index:
 - **path priors** — source over vendored/generated (reuse the skip-dir list),
 - **recency** (optional) — prefer recently-touched files.
 
+## The prior/weight layer — differential search
+
+A flat scan treats every file as equally likely to hold the answer. It isn't. A
+**weight `w(file)`** — an *attention prior* over files — biases the content lane
+toward likely-relevant files. This stays inside the no-index rule because **the
+weights are metadata (which files, how much), never file content**: it is a
+ranked-search-engine's smarts without its storage/build cost. The pipeline
+becomes:
+
+```
+classify → weight(files) → priority-scan → weighted-rank → cluster
+```
+
+### The signals (composed into w(file), query-dependent)
+
+| Signal | Source | Cost | Status |
+|---|---|---|---|
+| **type/role** — source ≫ test ≫ config ≫ docs ≫ generated/vendored | extension + path patterns | ~free | partial (skip-dirs) |
+| **centrality** — hubs many files import | `graph hotspots` / in-degree | cheap | **exists** |
+| **recency** — recently modified | git status + mtime | cheap | trivial |
+| **working set** — files opened/edited this session | session access log | cheap | new |
+| **hit history** — files that matched prior searches this session | search feeds itself | ~free | new |
+
+The blend is **query-dependent** — the router picks the profile: a symbol search
+weights source; a config-key search weights yaml/config; a "how do we handle X"
+weights docs/kb. Same files, different priors per intent.
+
+### How the weight is used (this is the "differential")
+
+1. **Priority-ordered scan + early-exit** — feed files to the grep engine in
+   weight order; once K solid hits come from high-prior files, stop. Effort is
+   proportional to priority, not corpus size: a huge repo whose answer sits in
+   the 5 hot files the agent already touched returns in ms. *(Requires a
+   walk-order hook on the grep engine — see below.)*
+2. **Weighted rank** — `final = match_score(rarity×density) × w(file)`.
+3. **Cluster by category** — group results source/test/config/docs so the agent
+   gets structured, not flat, output.
+
+### Why this forces the pure-Go grep engine (not external ripgrep)
+
+External ripgrep is a black box: its own walk order, scans everything, ranks
+nothing, no early-exit hook. This layer *requires* controlling which files, in
+what order, with early-exit, folding `w(file)` into the rank. The **coreutils
+grep engine** exposes all of that because bashy owns the walker (today
+`grep.go` walks `os.ReadDir`-sorted-by-name — that name-sort is the seam we
+replace with a priority order). So "custom rg" = **grep engine + priority
+walker + weighted ranker + session-signal store** — the differentiator no
+off-the-shelf tool has.
+
+### The session-signal store
+
+A small per-session store: `path → {opened, edited, hitCount, lastSeen}` with
+**time decay** (stale signals fade). Shape mirrors the space-time advisor's
+host-ledger precedent — kilobytes, session-scoped, **never content**. Two feed
+questions:
+- **search-scoped vs agent-scoped working set** — only files the search
+  surfaced, or every file the agent opened/edited (needs the harness to emit
+  file-access events)? The latter is the stronger signal; it depends on
+  tool-call telemetry.
+
+### Decisions / tensions
+
+1. **Cold start** — session 0 has no working-set/hits; fall back to static
+   priors (type + recency + centrality). Signals accumulate *within* a task, so
+   search sharpens as work proceeds. Graceful degradation.
+2. **Prior orders, never excludes** — early-exit risks missing the lone hit in a
+   low-prior file. The weight only *orders* the scan and *boosts* the rank; a
+   low-prior file still surfaces if it is the only match. Keep an
+   `--exhaustive` mode (scan all + rank) beside the default top-K-by-priority.
+3. **Self-tuning, but decay** — hits feed the working set, so search learns the
+   task; time-decay prevents a wrong early hit from biasing the rest of the
+   session.
+
+### Phasing note
+
+Ship **static** priors first (type + centrality + recency — no session state,
+most of the value), then layer the **learned** signals (working-set +
+hit-feedback + decay) as P1.5. The learned part is the one that "feels magic,"
+but the static part earns its keep on day one with zero state.
+
 ## Uniform result shape
 
 ```go
@@ -166,7 +246,12 @@ type Result struct {
   who-calls/concept/name).
 - **P1:** the expand stage (stemmer + bounded fuzzy + synonym map, all capped)
   and the rank stage (rarity × density × path prior). Wire the `ast`/`graph`
-  lanes into the router.
+  lanes into the router. Add the **static** prior/weight signals (type +
+  centrality via `graph hotspots` + recency) and the grep walk-order hook →
+  priority-ordered scan with early-exit.
+- **P1.5:** the **learned** prior signals — the session-signal store
+  (working-set + hit-feedback + time decay). This is the "differential search"
+  that sharpens within a task.
 - **P2 (only if measured):** a lazy, opt-in trigram candidate cache for
   outlier-huge repos. Gate it like any index — never on by default.
 
