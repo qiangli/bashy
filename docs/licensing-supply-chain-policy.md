@@ -25,6 +25,28 @@ runtime into a cache and exec'd as subprocesses; **no license propagates to
 bashy** (the same posture that lets the harness fetch a GPL test suite at runtime
 without vendoring it). Prefer permissive tools anyway, and record the source.
 
+**Strong-copyleft edge case (AGPL): the SearXNG rung.** The `bashy search` web
+ladder's keyless last rung is a self-hosted **SearXNG** (AGPL-3.0), run via
+`bashy podman`. AGPL is the strictest copyleft — its §13 adds a *network* clause
+GPL lacks — so it is worth spelling out why it is still a clean download+exec:
+- bashy **links/vendors nothing** — its only contact is an HTTP call to the
+  instance's `/search?format=json`; a separate process across a socket is not a
+  derivative work, so no copyleft crosses the boundary.
+- bashy runs the **unmodified official image** bound to **localhost**, queried
+  only by bashy on the same host. AGPL §13's source-offer obligation fires only
+  when you **modify** the program **and** serve it to **remote users** — neither
+  holds, so §13 stays dormant.
+- bashy does not **convey** SearXNG: the user's own podman pulls the official
+  image at runtime (like `ollama pull`), so bashy never distributes AGPL code.
+
+The AGPL therefore stays on that separate program, not on bashy. The discipline
+that keeps it clean, and must hold: **pull the official image unmodified**
+(configure via a mounted `settings.yml` only — configuration ≠ modification),
+**bind localhost**, and **never vendor it, fork-and-ship it, or expose it to
+third parties.** The rung is **off by default** (enabled only by setting
+`BASHY_SEARXNG_URL`); the keyed backends (Brave free tier, etc.) are the
+permissive-clean default per the "prefer permissive anyway" rule above.
+
 ## 3. Absolutely required + no permissive substitute → build from source
 
 If a component is genuinely required and **no permissive substitute exists**, do
