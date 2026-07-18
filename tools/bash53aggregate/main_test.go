@@ -12,7 +12,7 @@ func rec(index, of int, runID string, names ...string) record {
 		vs = append(vs, verdict{Name: name, Verdict: "passed", DurationSeconds: 1})
 	}
 	return record{SchemaVersion: 1, Suite: "bash-5.3", Chunk: chunkRef{Index: index, Of: of}, RunID: runID,
-		Context: json.RawMessage(`{"lane":"container"}`), Infrastructure: infrastructure{Status: "ok"}, Verdicts: vs}
+		Context: json.RawMessage(`{"runner":"bash53suite","commit":"abc123","started_at":"2026-07-18T10:00:00Z","finished_at":"2026-07-18T10:01:00Z","host_os":"linux","host_arch":"amd64","bash_path":"/workspace/bin/bash"}`), Infrastructure: infrastructure{Status: "ok"}, Verdicts: vs}
 }
 
 func TestValidSet(t *testing.T) {
@@ -43,10 +43,22 @@ func TestCrossContext(t *testing.T) {
 	if _, err := aggregate([]record{rec(1, 2, "run", "a"), b}, 2); err == nil {
 		t.Fatal("cross-run set accepted")
 	}
-	b = rec(2, 2, "run", "b")
-	b.Context = json.RawMessage(`{"lane":"baremetal"}`)
-	if _, err := aggregate([]record{rec(1, 2, "run", "a"), b}, 2); err == nil {
-		t.Fatal("cross-context set accepted")
+}
+
+func TestPerInvocationTimestampsAccepted(t *testing.T) {
+	b := rec(2, 2, "run", "b")
+	b.Context = json.RawMessage(`{"runner":"bash53suite","commit":"abc123","started_at":"2026-07-18T11:00:00Z","finished_at":"2026-07-18T11:01:00Z","host_os":"linux","host_arch":"amd64","bash_path":"/workspace/bin/bash"}`)
+	if _, err := aggregate([]record{rec(1, 2, "run", "a"), b}, 2); err != nil {
+		t.Fatalf("timestamp-only context difference rejected: %v", err)
+	}
+}
+
+func TestStableIdentityDifferenceRejected(t *testing.T) {
+	b := rec(2, 2, "run", "b")
+	b.Context = json.RawMessage(`{"runner":"bash53suite","commit":"different","started_at":"2026-07-18T10:00:00Z","finished_at":"2026-07-18T10:01:00Z","host_os":"linux","host_arch":"amd64","bash_path":"/workspace/bin/bash"}`)
+	_, err := aggregate([]record{rec(1, 2, "run", "a"), b}, 2)
+	if err == nil || !strings.Contains(err.Error(), "crosses execution context") {
+		t.Fatalf("got %v, want cross-context error", err)
 	}
 }
 
