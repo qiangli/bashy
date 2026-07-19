@@ -153,6 +153,12 @@ func advisorHandler(a *advisor) func(interp.ExecHandlerFunc) interp.ExecHandlerF
 				}
 				return err
 			}
+			if isBenignExit(args, status) {
+				// A "negative" answer (grep no-match, test false, diff differ),
+				// not an error. It must not feed doomed-loop detection or the
+				// advisor would flag a perfectly fine `grep -c` loop as doomed.
+				return err
+			}
 			n := 1
 			if a.mem != nil {
 				n = a.mem.recordFail(key)

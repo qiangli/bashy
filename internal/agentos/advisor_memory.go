@@ -42,8 +42,19 @@ import (
 const (
 	advisorMemSchema = "bashy-advisor-mem-v1"
 	loopThreshold    = 3   // failures of the identical command before escalation
+	loopWindowSecs   = 300 // failures more than this far apart aren't one loop
 	maxHostRecords   = 256 // cap the persisted ledger (LRU by last success)
 )
+
+// failMark tracks a loop key's consecutive-failure count and WHEN the last
+// failure happened. Without the timestamp, a long-lived interactive shell would
+// mistake the same argv failing a handful of times over an hour — in genuinely
+// different contexts — for one tight retry loop, and emit a spurious
+// "change your approach" hint. A doomed loop is failures in quick succession.
+type failMark struct {
+	n    int
+	last int64 // unix seconds of the last failure
+}
 
 // hostRecord is one host's reachability memory.
 type hostRecord struct {
@@ -65,8 +76,8 @@ type memory struct {
 	path   string // "" disables persistence
 	nowFn  func() int64
 	hosts  map[string]hostRecord
-	fails  map[string]int  // session-only: loop key -> consecutive failures
-	hinted map[string]bool // session-only: proactive-hint keys already shown
+	fails  map[string]failMark // session-only: loop key -> recent-failure mark
+	hinted map[string]bool     // session-only: proactive-hint keys already shown
 }
 
 // newMemory builds the memory and loads any persisted ledger (best-effort).
@@ -75,7 +86,7 @@ func newMemory() *memory {
 		path:   defaultMemoryPath(),
 		nowFn:  func() int64 { return time.Now().Unix() },
 		hosts:  map[string]hostRecord{},
-		fails:  map[string]int{},
+		fails:  map[string]failMark{},
 		hinted: map[string]bool{},
 	}
 	m.load()
@@ -134,12 +145,21 @@ func readMemoryFile(path string) map[string]hostRecord {
 }
 
 // recordFail bumps the session failure counter for key and returns the new
-// count (the Nth consecutive identical failure).
+// count (the Nth consecutive identical failure). If the previous failure of the
+// same key is older than loopWindowSecs, the count restarts: failures that far
+// apart are separate uses of the command, not one retry loop.
 func (m *memory) recordFail(key string) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.fails[key]++
-	return m.fails[key]
+	now := m.nowFn()
+	fm := m.fails[key]
+	if fm.n > 0 && now-fm.last > loopWindowSecs {
+		fm.n = 0
+	}
+	fm.n++
+	fm.last = now
+	m.fails[key] = fm
+	return fm.n
 }
 
 // clearFail resets a key's failure counter after it succeeds.
@@ -243,6 +263,28 @@ func capHostRecords(hosts map[string]hostRecord, n int) {
 // post-expansion argv. Re-running it identically yields the same key.
 func loopKey(args []string) string {
 	return strings.Join(args, "\x00")
+}
+
+// benignExitStatus maps a command to the exit status it uses for an ordinary
+// NEGATIVE answer — no match / false / files differ / not found — as opposed to
+// a real error (usually a higher status). Such an exit is not a failure and
+// must never feed doomed-loop detection: a script that runs `grep -c` in a loop
+// and legitimately finds nothing is not an agent stuck retrying.
+var benignExitStatus = map[string]int{
+	"grep": 1, "egrep": 1, "fgrep": 1, "rg": 1, "zgrep": 1,
+	"test": 1, "[": 1,
+	"cmp": 1, "diff": 1,
+	"pgrep": 1, "pidof": 1,
+}
+
+// isBenignExit reports whether status is the command's ordinary negative-answer
+// exit (see benignExitStatus), which should not be treated as a failure.
+func isBenignExit(args []string, status int) bool {
+	if len(args) == 0 {
+		return false
+	}
+	s, ok := benignExitStatus[baseName(args[0])]
+	return ok && status == s
 }
 
 // applyLoop escalates a hint when the identical command has failed loopThreshold

@@ -17,7 +17,7 @@ func newTestMemory(t *testing.T) *memory {
 		path:   filepath.Join(t.TempDir(), "hosts.json"),
 		nowFn:  func() int64 { return 1000 },
 		hosts:  map[string]hostRecord{},
-		fails:  map[string]int{},
+		fails:  map[string]failMark{},
 		hinted: map[string]bool{},
 	}
 }
@@ -37,12 +37,62 @@ func TestMemoryRecordFailAndClear(t *testing.T) {
 	}
 }
 
+// A doomed loop is failures in quick succession. The same argv failing again
+// after a long gap — the agent did other things in between — must restart the
+// count, or a long-lived interactive shell accumulates coincidental repeats and
+// emits a spurious "change your approach" hint.
+func TestMemoryRecordFailTemporalReset(t *testing.T) {
+	now := int64(1000)
+	m := newTestMemory(t)
+	m.nowFn = func() int64 { return now }
+	k := loopKey([]string{"grepish", "pat"})
+
+	if n := m.recordFail(k); n != 1 {
+		t.Fatalf("fail@t0 = %d, want 1", n)
+	}
+	now += 10 // still inside the window: a tight loop
+	if n := m.recordFail(k); n != 2 {
+		t.Fatalf("fail@t+10 = %d, want 2", n)
+	}
+	now += loopWindowSecs + 1 // long gap: not the same loop
+	if n := m.recordFail(k); n != 1 {
+		t.Fatalf("fail after %ds gap = %d, want reset to 1", loopWindowSecs+1, n)
+	}
+	now += 10
+	if n := m.recordFail(k); n != 2 {
+		t.Fatalf("fail@t+10 = %d, want 2", n)
+	}
+}
+
+func TestIsBenignExit(t *testing.T) {
+	cases := []struct {
+		args   []string
+		status int
+		want   bool
+	}{
+		{[]string{"grep", "pat", "f"}, 1, true},   // no match
+		{[]string{"grep", "pat", "f"}, 2, false},  // real error (bad file)
+		{[]string{"grep", "pat", "f"}, 0, false},  // matched
+		{[]string{"/bin/test", "-f", "x"}, 1, true}, // false, via a path
+		{[]string{"diff", "a", "b"}, 1, true},     // differ
+		{[]string{"diff", "a", "b"}, 2, false},    // trouble
+		{[]string{"ls", "nope"}, 1, false},        // ls exit 1 IS an error
+		{[]string{"cat", "nope"}, 1, false},
+		{nil, 1, false},
+	}
+	for _, c := range cases {
+		if got := isBenignExit(c.args, c.status); got != c.want {
+			t.Errorf("isBenignExit(%v, %d) = %v, want %v", c.args, c.status, got, c.want)
+		}
+	}
+}
+
 func TestMemoryPersistRoundTrip(t *testing.T) {
 	m := newTestMemory(t)
 	m.recordSuccess("host.local", "fpA") // new host ⇒ persisted
 
 	// A fresh memory at the same path must see the recorded host.
-	m2 := &memory{path: m.path, nowFn: m.nowFn, hosts: map[string]hostRecord{}, fails: map[string]int{}}
+	m2 := &memory{path: m.path, nowFn: m.nowFn, hosts: map[string]hostRecord{}, fails: map[string]failMark{}}
 	m2.load()
 	rec, ok := m2.priorSuccess("host.local")
 	if !ok {
@@ -59,7 +109,7 @@ func TestMemoryPersistMergesConcurrentWriters(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "hosts.json")
 	mk := func() *memory {
-		return &memory{path: path, nowFn: func() int64 { return 1000 }, hosts: map[string]hostRecord{}, fails: map[string]int{}}
+		return &memory{path: path, nowFn: func() int64 { return 1000 }, hosts: map[string]hostRecord{}, fails: map[string]failMark{}}
 	}
 	a, b := mk(), mk()
 	a.recordSuccess("alpha.local", "fpA")

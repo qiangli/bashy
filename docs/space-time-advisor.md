@@ -50,10 +50,17 @@ The advisor remembers across commands and sessions, which turns a guess into a
 grounded statement:
 
 - **Doomed-loop detection (per session).** The *identical* command failing three
-  or more times in a row escalates the hint to `retryable=false` with "this has
-  failed repeatedly for the same reason — change the approach, not the
-  parameters." Catches an agent re-running the same thing expecting a different
-  result.
+  or more times **in quick succession** escalates the hint to `retryable=false`
+  with "this has failed repeatedly for the same reason — change the approach, not
+  the parameters." Catches an agent re-running the same thing expecting a
+  different result. Two guards keep it from firing on non-loops:
+  - **Temporal window.** Failures more than `loopWindowSecs` (5 min) apart
+    restart the count — a doomed loop is a tight retry burst, not the same argv
+    used again in a different context an hour later in a long-lived shell.
+  - **Benign-exit exemption.** A command's ordinary *negative* answer is not a
+    failure and never counts: `grep`/`egrep`/`fgrep`/`rg` no-match (exit 1),
+    `test`/`[` false, `cmp`/`diff` differ, `pgrep`/`pidof` not-found. So a script
+    looping `grep -c` over files that legitimately don't match is never flagged.
 - **Host-success ledger (persisted).** Successful connections to a host are
   recorded under a **network fingerprint** — a hash of the machine's current
   physical-network subnets (loopback, link-local, down, and virtual/container/VPN

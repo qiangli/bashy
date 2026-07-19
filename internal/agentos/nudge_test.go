@@ -15,7 +15,7 @@ import (
 func newTestNudger(t *testing.T, agent bool) (*nudger, *bytes.Buffer) {
 	t.Helper()
 	var buf bytes.Buffer
-	m := &memory{hosts: map[string]hostRecord{}, fails: map[string]int{}, hinted: map[string]bool{}}
+	m := &memory{hosts: map[string]hostRecord{}, fails: map[string]failMark{}, hinted: map[string]bool{}}
 	return &nudger{agent: agent, mem: m, w: &buf}, &buf
 }
 
