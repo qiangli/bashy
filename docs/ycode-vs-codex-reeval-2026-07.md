@@ -82,3 +82,23 @@ round-trip savings this eval didn't trigger.
 
 Companion: `harness-ab-deepseek.md` (three-harness A/B), `band-ladder.md`
 (L1–L4 ladder), `first-party-harness.md` (why ycode is in the fleet).
+
+## Addendum — X4 cascade (glm-5.2 → terra → sol) vs codex, clean timing
+
+Re-run after the coach-termination fix (ycode 35d6590 turn.end emit + coreutils
+ee45e12 turn-boundary teardown), so wall-time is real, not the old 540s ceiling.
+The cascade runs via `bashy coach --agent ycode-cascade-x4` (glm base; escalates
+to terra then sol only when the coach's reflex fails to break a loop).
+
+| tier | X4 quality | X4 wall (mean) | codex | escalation |
+|---|---|---|---|---|
+| **L4** trap (steward) | CAUGHT+FIXED 2/2 | **109s** | 2/2 · ~115s | none — glm solved it |
+| **L3** search | 5/5 correct 2/2 | **54s** | 2/2 · ~14.5s | none |
+
+Verdict: on the HARD steward task, X4 matched codex-sol on quality AND wall-time
+(~109 vs ~115s) with a cheap glm base — the terra→sol ladder never fired, so the
+premium tier was an unused safety net (the cost win realized). On the TRIVIAL L3
+task codex was ~4× faster: the cascade's fixed launch overhead (coach + glm
+startup, ~40s) dominates a task that's over in seconds. Cascades earn their keep
+where the base does real work, not on quick lookups. Escalation stayed dormant
+both tiers — glm-5.2 (L2) cleared L4 unaided, which is itself the finding.
