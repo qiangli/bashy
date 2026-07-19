@@ -22,19 +22,11 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 
+	"github.com/qiangli/coreutils/pkg/nudge"
 	"github.com/qiangli/coreutils/pkg/weavecli"
 )
 
-const nudgeSchemaVersion = "bashy-hint-v1"
-
-// nudgeRules maps a legacy builtin name to the suggestion shown when an agent
-// uses it. Only state-mutating builtins with a safer agentic counterpart belong
-// here — their behavior is never changed, only annotated.
-var nudgeRules = map[string]string{
-	"cd":    "to run a single command elsewhere, prefer `awd DIR -- CMD` — it won't leave the shell in a new directory (cd persists and strands the next command).",
-	"pushd": "for a one-off command in another directory, prefer `awd DIR -- CMD` over pushd/popd — no directory-stack state to unwind.",
-	"popd":  "for a one-off command in another directory, prefer `awd DIR -- CMD` over pushd/popd — no directory-stack state to unwind.",
-}
+const nudgeSchemaVersion = nudge.SchemaVersion
 
 // nudger emits proactive tool-hints, rate-limited via the shared session memory.
 type nudger struct {
@@ -57,12 +49,10 @@ func (n *nudger) onAudit(ev interp.AuditEvent) {
 		return
 	}
 	name := ev.Args[0]
-	var suggest string
-	if ev.IsBuiltin {
-		suggest = nudgeRules[name]
-	} else {
-		suggest = routingHint(name, ev.Args)
-	}
+	// Rules live in coreutils/pkg/nudge — the single source of truth shared with
+	// ycode and any other consumer of the in-process userland. bashy keeps its
+	// own session-memory rate-limiting + emit below.
+	suggest := nudge.Suggest(ev.Args, ev.IsBuiltin)
 	if suggest == "" {
 		return
 	}
@@ -70,48 +60,6 @@ func (n *nudger) onAudit(ev interp.AuditEvent) {
 		return // already nudged for this tool this session
 	}
 	n.emit(name, suggest)
-}
-
-// routingHint suggests a faster/structural path for legacy search tools, based
-// only on the argv (no behavior change). Empty when there's nothing to suggest.
-func routingHint(name string, args []string) string {
-	switch name {
-	case "grep":
-		if hasArg(args, "--agentic") || !hasRecursiveFlag(args) {
-			return ""
-		}
-		return "repo-wide grep also walks ignored noise (node_modules/.git/vendor). Add `--agentic` to skip it, or use `ast refs <symbol>` / `ast map` for structural, token-budgeted code search."
-	case "find":
-		if hasArg(args, "--agentic") {
-			return ""
-		}
-		return "find walks ignored directories too. Add `--agentic` to skip .gitignore/node_modules, or use `ast symbols` / `ast map` to map the codebase."
-	}
-	return ""
-}
-
-func hasArg(args []string, want string) bool {
-	for _, a := range args[1:] {
-		if a == want {
-			return true
-		}
-	}
-	return false
-}
-
-// hasRecursiveFlag reports whether grep was asked to recurse (-r/-R, long forms,
-// or a combined short cluster like -rn).
-func hasRecursiveFlag(args []string) bool {
-	for _, a := range args[1:] {
-		switch a {
-		case "-r", "-R", "--recursive", "--dereference-recursive":
-			return true
-		}
-		if len(a) > 1 && a[0] == '-' && a[1] != '-' && strings.ContainsAny(a, "rR") {
-			return true
-		}
-	}
-	return false
 }
 
 // nudgeLine is the agent-mode JSON shape (one line on stderr).

@@ -73,31 +73,9 @@ func TestNudgeHumanModeProse(t *testing.T) {
 	}
 }
 
-func TestRoutingHintGrepFind(t *testing.T) {
-	// grep -r → routing hint; grep without recursion or with --agentic → none.
-	if routingHint("grep", []string{"grep", "-r", "foo", "."}) == "" {
-		t.Error("recursive grep should get a routing hint")
-	}
-	if routingHint("grep", []string{"grep", "-rn", "foo", "."}) == "" {
-		t.Error("combined -rn should count as recursive")
-	}
-	if routingHint("grep", []string{"grep", "foo", "file"}) != "" {
-		t.Error("non-recursive grep should get no hint")
-	}
-	if routingHint("grep", []string{"grep", "-r", "--agentic", "foo", "."}) != "" {
-		t.Error("grep already using --agentic should get no hint")
-	}
-	// find → hint unless already --agentic.
-	if routingHint("find", []string{"find", ".", "-name", "x"}) == "" {
-		t.Error("find should get a routing hint")
-	}
-	if routingHint("find", []string{"find", ".", "--agentic"}) != "" {
-		t.Error("find already using --agentic should get no hint")
-	}
-	if routingHint("ls", []string{"ls", "-r"}) != "" {
-		t.Error("unrelated tools get no routing hint")
-	}
-}
+// The routing-rule cases (grep -r → hint, --agentic/--json suppress, find → ast
+// symbols) now live in coreutils/pkg/nudge's TestSuggestBuiltinAndRouting, the
+// single source of truth. This file keeps the bashy-side audit→emit integration.
 
 func TestRoutingHintEmittedViaAudit(t *testing.T) {
 	n, buf := newTestNudger(t, true)
