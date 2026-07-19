@@ -48,7 +48,7 @@ augmented-search hooking the search verbs specifically.
 | **advisor** (bashy) | command failed | explain the space-determined cause | shipped |
 | **autofix** (`pkg/autofix`) | read-only wrong-dialect/platform flag | rewrite to local equivalent + note | **P0 shipped** |
 | **autoretry** | read-only command fails on a transient error | retry w/ backoff, then report attempts | **P1 shipped** |
-| **augmented-search / recommender** | a search verb / target lookup returns empty / not-found | escalate the query (literal→fuzzy→graph) AND recommend the likely-intended target (content/semantic/co-occurrence/graph), report what was tried | P2 |
+| **augmented-search / recommender** | a search verb / target lookup returns empty / not-found | escalate the query (literal→fuzzy→graph) AND recommend the likely-intended target (content/semantic/co-occurrence/graph, incl. ssh host/user), report what was tried | **P2 P0 shipped** |
 
 ### autofix — P0 (shipped)
 
@@ -126,6 +126,43 @@ recommender *does* it and reports. Read-only by nature. Bounds: each strategy
 capped, fuzzy edit-distance small, top-K recommendations, results deduped and
 score-ranked across strategies; never auto-*run* against a recommended target,
 only surface it (recommend, don't silently substitute — the agent decides).
+
+**P0 shipped** — `coreutils/pkg/recommend`, wired at `localShell.Run` so it
+covers both the builtin fast-path and forked commands. On a not-found target it
+ranks existing files by lexical similarity + a curated known-equivalent family
+(CLAUDE.md ⇄ AGENTS.md ⇄ …) and appends "no X; did you mean Y?". Verified:
+`cat CLAUDE.md` in a dir with AGENTS.md returns the recommendation. Later slices:
+the semantic/graph/co-occurrence strategies + the empty-search escalation ladder.
+
+#### SSH connectivity — the moving-laptop case (design)
+
+A laptop that travels office↔home is where the LLM struggles most, because the
+*right* answer changes with the network and the LLM can't see the network — but
+bashy can. Two failures, one recommender:
+
+1. **Host address flips.** A host reachable at the office (LAN IP / `.local`) may
+   be a different address at home (some hosts travel too). `ssh dev` fails with
+   *no route to host* / *could not resolve* / *connection timed out*. bashy knows
+   the alternatives from ground truth: `~/.ssh/config` (`Host`/`HostName`
+   aliases), `~/.ssh/known_hosts`, an mDNS/LAN scan (outpost already does this),
+   and — the key asset — the **advisor's persisted host-success ledger keyed by a
+   network fingerprint** (it already records "which address for host H worked on
+   network N"). On failure it recommends the address that last worked *on the
+   current network*: "dev unreachable at 10.0.1.5; on this network it last
+   answered at dev.local (192.168.1.20) — try that".
+2. **Username differs.** The remote user is not always the local `$USER`. `ssh
+   host` (no user) fails on auth; bashy recommends the `User` from `~/.ssh/config`
+   for that host, or the user that last authenticated (ledger).
+
+Design: a `recommend` strategy `sshTarget(host)` that fuses `~/.ssh/config` +
+`known_hosts` + the network-fingerprinted ledger (RRF-ranked), gated by the same
+transient/auth classification autoretry uses. **Recommend, don't auto-connect** —
+surface "try `ssh user@dev.local`", the agent (or human) decides; an auto-ssh to
+a guessed host is an effect, not a read. The ledger write ("this address+user
+worked on this network") happens on a *successful* ssh, feeding future
+recommendations — the same learn-from-success loop as the advisor. This unifies
+autoretry (the blip), autofix (a wrong-form flag) and recommend (the wrong
+host/user) on the one case an LLM cannot reason about without the local machine.
 
 ## Why this is bashy's to own
 
