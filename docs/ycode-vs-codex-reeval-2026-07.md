@@ -102,3 +102,23 @@ task codex was ~4× faster: the cascade's fixed launch overhead (coach + glm
 startup, ~40s) dominates a task that's over in seconds. Cascades earn their keep
 where the base does real work, not on quick lookups. Escalation stayed dormant
 both tiers — glm-5.2 (L2) cleared L4 unaided, which is itself the finding.
+
+## Anthropic head-to-head — PREPPED, blocked on access (2026-07-19)
+
+The claude (opus4.8/fable5) vs ycode head-to-head is fully prepared but cannot
+run: ycode has no legitimate access to the Anthropic subscription models.
+- Subscription OAuth (`ycode login`) authenticates AS Claude Code (Anthropic's
+  Claude-CLI client ID) and 403s without the Claude-Code-only beta header +
+  system-prompt identity. Completing that = impersonating Claude Code to bypass
+  Anthropic's access control that ties the Max subscription to their first-party
+  client — declined (ToS circumvention).
+- The supported path (ANTHROPIC_API_KEY with credits) is unavailable: the
+  operator's Anthropic API recharge errors out; the $200/mo Max subscription is a
+  separate product with no API credits.
+
+What IS ready for the instant access appears: agents ycode-opus4.8 (Esme, L3),
+ycode-fable5 (Roan, L4), the glm-based claude cascades ycode-cascade-claude-x3/x4
+(Vesna/Vera), and the three ycode gap fixes (edit correctness, LLM compaction
+default, tool-loop detection — ycode 079c62e) applied from the open-claude-code
+study. Run `bashy agents whois ycode-opus4.8` for the contact; the only missing
+piece is a funded ANTHROPIC_API_KEY.
