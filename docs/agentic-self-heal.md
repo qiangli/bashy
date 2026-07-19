@@ -47,7 +47,7 @@ augmented-search hooking the search verbs specifically.
 | **nudge** (`pkg/nudge`) | legacy tool w/ better counterpart | ONE hint, no change | shipped |
 | **advisor** (bashy) | command failed | explain the space-determined cause | shipped |
 | **autofix** (`pkg/autofix`) | read-only wrong-dialect/platform flag | rewrite to local equivalent + note | **P0 shipped** |
-| **autoretry** | read-only command fails on a transient error | retry w/ backoff, then report attempts | P1 |
+| **autoretry** | read-only command fails on a transient error | retry w/ backoff, then report attempts | **P1 shipped** |
 | **augmented-search / recommender** | a search verb / target lookup returns empty / not-found | escalate the query (literal→fuzzy→graph) AND recommend the likely-intended target (content/semantic/co-occurrence/graph), report what was tried | P2 |
 
 ### autofix — P0 (shipped)
@@ -74,7 +74,7 @@ ycode's shell** so agent-emitted GNU flags work in-process on every platform
 *without any rewrite* — bashy's coreutils is itself the portable truth. autofix
 then only handles the residual (forked non-coreutils tools, genuine typos).
 
-### autoretry — P1 (design)
+### autoretry — P1 (shipped)
 
 For a **read-only** command that fails on a **transient** error (network blip,
 `EAGAIN`, a lock, a briefly-unavailable resource — a bounded, recognizable set,
