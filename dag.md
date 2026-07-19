@@ -973,6 +973,13 @@ GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 "$BASHY_EXE" go build -trimpath -
 GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 "$BASHY_EXE" go build -trimpath -o "$harness" ./tools/bash53suite
 oci="${BASH53_OCI:-$BASHY_EXE podman}"
 $oci info >/dev/null
+# Build the locale-baked, hexdump-carrying substrate so the container lane
+# reproduces the native gate (the stock gcc image is missing both, and its
+# default root user trips the fixtures that refuse to run as root — the lane
+# runs it non-root via --userns=keep-id). Layer-cached, so a no-change rebuild
+# is instant.
+image="${BASH53_IMAGE:-localhost/bash53-conformance:latest}"
+$oci build -t "$image" -f tools/bash53-container/Containerfile tools/bash53-container
 ```
 
 ### test-bash-container-run
@@ -996,7 +1003,21 @@ harness="bin/bash53suite-linux-${host_goarch}"
 repo="$("$BASHY_EXE" pwd)"
 tests_root="$(cd external/bash-5.3 && pwd -P)"
 oci="${BASH53_OCI:-$BASHY_EXE podman}"
+image="${BASH53_IMAGE:-localhost/bash53-conformance:latest}"
+# Run as a non-root uid so the fixtures that refuse to run as root (test,
+# new-exp, execscript) and the permission-sensitive ones (redir) behave as they
+# do natively. The harness copies the corpus to a private tree under the
+# container's writable /tmp (os.MkdirTemp) and reads the world-executable testee
+# off the /work mount, so a plain numeric --user needs no host-uid match and no
+# passwd entry. We deliberately do NOT use --userns=keep-id: its per-container
+# userns+devpts setup races when chunk containers are created at the same
+# instant on one host (`crun: mount devpts ... Invalid argument`), whereas plain
+# --user has no such race. (A very high single-host fan-out can still exhaust the
+# container VM's memory/pid budget and lose the heaviest chunks; the fleet lane
+# spreads chunks across separate hosts, so each runs only a few at once and stays
+# well under that ceiling.)
 $oci run --rm \
+  --user 1000:1000 \
   -v "$repo:/work" \
   -v "$tests_root:/bash53" \
   -w /work \
@@ -1005,7 +1026,7 @@ $oci run --rm \
   -e BASH53_TIMEOUT="${BASH53_TIMEOUT:-}" \
   -e BASH53_JOBS_TIMEOUT="${BASH53_JOBS_TIMEOUT:-}" \
   -e BASH53_RUNNER="$runner" \
-  docker.io/library/gcc:14-bookworm \
+  "$image" \
   "./$harness" -tests-dir /bash53/tests -bash "./$testee"
 ```
 
