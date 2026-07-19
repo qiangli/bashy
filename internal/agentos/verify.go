@@ -31,6 +31,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -310,7 +311,20 @@ func ensureContainerRuntime() (string, error) {
 
 func isExecutable(path string) bool {
 	fi, err := os.Stat(path)
-	return err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0
+	if err != nil || fi.IsDir() {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		// Windows has no unix exec bit — a file copied/extracted there is
+		// -rw-rw-rw-. Runnability is by extension, so a bashy-managed podman.exe
+		// in the cache must still resolve.
+		switch strings.ToLower(filepath.Ext(path)) {
+		case ".exe", ".bat", ".cmd", ".com":
+			return true
+		}
+		return false
+	}
+	return fi.Mode()&0o111 != 0
 }
 
 // --- compliance: official POSIX (Open Group VSC-PCTS) — STUB ---

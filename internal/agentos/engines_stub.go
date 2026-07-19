@@ -212,15 +212,48 @@ func engineReleaseRepo() string {
 // resolveEngineBinary finds a usable engine binary — the host $PATH first (Tier 3),
 // then bashy's binmgr cache (where managed downloads land) — while never resolving
 // back to this bashy binary (the bare-name shim would recurse).
+//
+// The cache holds a tool in one of two layouts: FLAT (`<cache>/<name>[.exe]`, a
+// single managed blob) or TREE (`<cache>/<name>/<version>/<name>[.exe]`, how
+// binmgr's tree-mode Ensure lands the official podman/ollama archives). Check
+// both, honor the platform's `.exe` suffix, and take the newest tree version —
+// otherwise a host that already has podman cached (e.g. from a prior
+// `bashy podman` run) is told "no podman found."
 func resolveEngineBinary(name string) string {
 	self, _ := os.Executable()
 	if p, err := exec.LookPath(name); err == nil && p != "" && !sameFile(p, self) {
 		return p
 	}
-	if dir := engineCacheDir(); dir != "" {
-		if cand := filepath.Join(dir, name); isExecutable(cand) {
+	dir := engineCacheDir()
+	if dir == "" {
+		return ""
+	}
+	exe := name + exeSuffix()
+	for _, cand := range []string{filepath.Join(dir, exe), filepath.Join(dir, name)} {
+		if isExecutable(cand) {
 			return cand
 		}
+	}
+	best, bestMod := "", int64(0)
+	for _, pat := range []string{filepath.Join(dir, name, "*", exe), filepath.Join(dir, name, "*", name)} {
+		matches, _ := filepath.Glob(pat)
+		for _, m := range matches {
+			fi, err := os.Stat(m)
+			if err != nil || !isExecutable(m) {
+				continue
+			}
+			if mt := fi.ModTime().UnixNano(); best == "" || mt > bestMod {
+				best, bestMod = m, mt
+			}
+		}
+	}
+	return best
+}
+
+// exeSuffix is the platform executable suffix (".exe" on Windows).
+func exeSuffix() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
 	}
 	return ""
 }
