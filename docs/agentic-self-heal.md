@@ -48,7 +48,7 @@ augmented-search hooking the search verbs specifically.
 | **advisor** (bashy) | command failed | explain the space-determined cause | shipped |
 | **autofix** (`pkg/autofix`) | read-only wrong-dialect/platform flag | rewrite to local equivalent + note | **P0 shipped** |
 | **autoretry** | read-only command fails on a transient error | retry w/ backoff, then report attempts | P1 |
-| **augmented-search** | a search verb returns empty | escalate literal→stem→fuzzy→graph, report what was tried | P2 |
+| **augmented-search / recommender** | a search verb / target lookup returns empty / not-found | escalate the query (literal→fuzzy→graph) AND recommend the likely-intended target (content/semantic/co-occurrence/graph), report what was tried | P2 |
 
 ### autofix — P0 (shipped)
 
@@ -86,25 +86,46 @@ advisor's error-classification (it already distinguishes transient vs terminal).
 Idempotency guard: read-only only, and a per-command retry budget surfaced in
 the note. Never linked into `cmd/bash`.
 
-### augmented-search — P2 (design, owner: bashy)
+### augmented-search / recommender — P2 (design, owner: bashy)
 
-When a search verb (`grep`, `ast search`, `kb search`, `graph query`) returns
-**empty**, don't hand the agent nothing — escalate along a fixed ladder and
-report the whole trail:
+When a search verb (`grep`, `ast search`, `kb search`, `graph query`) or a
+target lookup returns **empty / not-found**, don't hand the agent nothing —
+turn the hint/advisor into a **recommendation system**: surface the
+likely-intended result and report the trail. Two layers:
+
+**(a) Escalation ladder** (widen the *same* query):
 
 ```
 literal → case-insensitive → stemmed/tokenized → fuzzy (edit-distance)
         → structural (ast symbols/refs) → graph (neighbors/callers)
 ```
 
-Stop at the first rung that yields results; emit a note listing **every rung
-tried and its yield** (`literal:0 stem:0 fuzzy:2 → showing fuzzy`). The
-load-bearing part is the *trail*: the agent is told exactly what has already
-been exhausted so it does not re-run a literal grep the shell already ran and
-widened. Ties into `pkg/nudge`'s existing routing toward `ast`/`graph` — the
-hint says "try the structural verb", augmented-search *does* it and reports.
-Read-only by nature. Bounds: each rung capped, fuzzy edit-distance small,
-results deduped across rungs.
+**(b) Recommend a different target** (the query was fine, the *needle* was
+mis-named). The load-bearing example: `grep CLAUDE.md` here returns nothing —
+but `AGENTS.md` exists and *is a pointer to CLAUDE.md*. A recommender should
+answer "no `CLAUDE.md`; did you mean `AGENTS.md`? (12 matches there)". Draw on
+known recommendation algorithms, ranked and combined (RRF-style, as `yc recall`
+already fuses):
+
+- **Content-based similarity** — filename/string distance + token overlap
+  (`CLAUDE.md` ≈ `AGENTS.md` lexically; `readme` ≈ `README.md`).
+- **Semantic** — embedding nearest-neighbour (`CLAUDE.md` ≈ `AGENTS.md`
+  *conceptually* — both agent-instruction files), reusing the kg/embed index.
+- **Co-occurrence / collaborative** — "lookups for X that ended at Y",
+  learned from the kb read-journal / usage ledger ("agents who searched
+  CLAUDE.md opened AGENTS.md").
+- **Graph adjacency** — the code/knowledge graph already knows `AGENTS.md`
+  *links to* `CLAUDE.md`; a not-found target resolves to its graph neighbour.
+
+Stop at the first layer that yields, and emit a note listing **every strategy
+tried and its yield** (`literal:0 fuzzy:0 recommend→AGENTS.md:12`). The *trail*
+is load-bearing: the agent is told exactly what has been exhausted so it never
+re-runs a search the shell already ran and widened. Ties into `pkg/nudge`'s
+routing toward `ast`/`graph` — the hint says "try the structural verb", the
+recommender *does* it and reports. Read-only by nature. Bounds: each strategy
+capped, fuzzy edit-distance small, top-K recommendations, results deduped and
+score-ranked across strategies; never auto-*run* against a recommended target,
+only surface it (recommend, don't silently substitute — the agent decides).
 
 ## Why this is bashy's to own
 
