@@ -71,6 +71,11 @@ release:
   github:
     owner: qiangli
     name: bashy
+  # A `-dev` semver tag is the QA candidate — mark it a PRE-RELEASE so promote.yml
+  # (which refuses to byte-promote a non-prerelease) accepts it, and so users don't
+  # mistake the untested candidate for the promoted release. `auto` flags any tag
+  # carrying a semver prerelease component (-dev / -rc / -beta).
+  prerelease: auto
 
 changelog:
   use: github
