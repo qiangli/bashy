@@ -2,7 +2,11 @@ name: release
 on:
   push:
     tags:
-      - 'v*'
+      # Build + publish a PRE-RELEASE only for -dev tags. A bare vX.Y.Z tag is a
+      # PROMOTION of already-tested bytes (see .github/workflows/promote.yml) and
+      # must NOT rebuild from source — prod ships exactly what QA tested, byte for
+      # byte. GoReleaser marks a -dev semver tag as a prerelease automatically.
+      - 'v*-dev'
 
 permissions:
   contents: write
