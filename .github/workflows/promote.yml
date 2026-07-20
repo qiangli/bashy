@@ -1,0 +1,193 @@
+# promote — the PROD gate of the tag-driven pipeline (bashy).
+#
+# release.yml builds a PRE-RELEASE from a `vX.Y.Z-dev` tag (GoReleaser marks a
+# -dev semver tag as a prerelease automatically). Per-OS QA pollers then test those
+# exact bytes on the real target OS and, on pass, create `refs/qa/<version>/<os>`.
+# This workflow is the last step: once the CONFIGURED required-OS set is green, it
+# BYTE-PROMOTES the tested pre-release to the official `--latest` release — no
+# rebuild, so users download exactly what QA ran — and fires the fleet-notify
+# webhook to cloudbox.
+#
+# bashy ships TWO archive families + a checksum sidecar (archive names are
+# UNVERSIONED — see .goreleaser.yaml `name_template: "bashy-{{ .Os }}-{{ .Arch }}"`):
+#   bashy-<os>-<arch>.{tar.gz|zip}   (the AgentOS system shell)
+#   bash-<os>-<arch>.{tar.gz|zip}    (the pure Bash 5.3 drop-in)
+#   checksums.txt
+# so promotion copies all of them, byte-identical.
+#
+# It is triggered by the bare `vX.Y.Z` promotion tag (or MANUAL via
+# workflow_dispatch). release.yml deliberately does NOT trigger on the bare tag
+# this creates, so promotion never rebuilds.
+#
+# Secrets (optional — if unset, the webhook step warns and skips):
+#   CLOUDBOX_RELEASE_WEBHOOK_URL / CLOUDBOX_RELEASE_WEBHOOK_SECRET
+name: promote
+
+on:
+  # Primary trigger: push a BARE vX.Y.Z tag (the promotion baton). release.yml only
+  # fires on `v*-dev`, so this tag never rebuilds — it byte-promotes the tested
+  # pre-release. `!v*-*` excludes -dev / -rc / any hyphenated pre-release tag.
+  push:
+    tags:
+      - 'v*'
+      - '!v*-*'
+  # Manual fallback (e.g. re-run after a transient webhook failure, or promote a
+  # version whose tag already exists).
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Base version to promote, e.g. v0.13.7 (its v0.13.7-dev pre-release must exist)'
+        required: true
+      required_os:
+        description: 'Space-separated OS gate that must all be green in refs/qa/<version>/<os>'
+        required: false
+        default: 'windows'
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    name: byte-promote + notify fleet
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release + read/write refs (belt-and-suspenders over the workflow-level grant)
+    steps:
+      - name: normalize version
+        id: v
+        env:
+          # tag-push → the tag name; manual dispatch → the input.
+          IN: ${{ github.event.inputs.version || github.ref_name }}
+        run: |
+          v="${IN#v}"                     # strip an optional leading v
+          case "$v" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::version must look like v1.2.3 (got '${IN}')"; exit 1 ;;
+          esac
+          echo "ver=v${v}"     >> "$GITHUB_OUTPUT"
+          echo "dev=v${v}-dev" >> "$GITHUB_OUTPUT"
+
+      - name: gate on per-OS QA refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VER: ${{ steps.v.outputs.ver }}
+          REQUIRED: ${{ github.event.inputs.required_os || 'windows' }}
+        run: |
+          # Every required OS must have promoted this version (refs/qa/<ver>/<os>).
+          missing=""
+          for os in $REQUIRED; do
+            if gh api "repos/${REPO}/git/refs/qa/${VER}/${os}" >/dev/null 2>&1; then
+              echo "  qa-${os}: green"
+            else
+              echo "::error::qa gate NOT met — missing refs/qa/${VER}/${os}"
+              missing="${missing} ${os}"
+            fi
+          done
+          [ -z "$missing" ] || { echo "blocked on:${missing}"; exit 1; }
+          echo "all required OS gates green for ${VER}"
+
+      - name: verify pre-release exists + resolve source commit
+        id: src
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEV: ${{ steps.v.outputs.dev }}
+          VER: ${{ steps.v.outputs.ver }}
+        run: |
+          # The tested pre-release must exist and BE a pre-release.
+          ispre=$(gh api "repos/${REPO}/releases/tags/${DEV}" --jq '.prerelease' 2>/dev/null || echo missing)
+          [ "$ispre" = "true" ] || { echo "::error::${DEV} is not a published pre-release (got: ${ispre})"; exit 1; }
+          # Refuse to double-promote.
+          if gh api "repos/${REPO}/releases/tags/${VER}" >/dev/null 2>&1; then
+            echo "::error::${VER} is already released — nothing to promote"; exit 1; fi
+          # Point the official tag at the SAME source commit the -dev tag built from.
+          obj=$(gh api "repos/${REPO}/git/ref/tags/${DEV}" --jq '.object')
+          otype=$(echo "$obj" | jq -r '.type'); osha=$(echo "$obj" | jq -r '.sha')
+          if [ "$otype" = "tag" ]; then
+            commit=$(gh api "repos/${REPO}/git/tags/${osha}" --jq '.object.sha')
+          else
+            commit="$osha"
+          fi
+          echo "commit=${commit}" >> "$GITHUB_OUTPUT"
+          echo "promoting ${DEV} (source ${commit}) -> ${VER}"
+
+      - name: download the tested pre-release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEV: ${{ steps.v.outputs.dev }}
+        run: |
+          mkdir -p dist
+          gh release download "${DEV}" -R "${REPO}" -D dist
+          echo "downloaded the exact bytes QA tested:"
+          ls -la dist/
+
+      - name: create official release (byte-identical, no rebuild)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VER: ${{ steps.v.outputs.ver }}
+          DEV: ${{ steps.v.outputs.dev }}
+          COMMIT: ${{ steps.src.outputs.commit }}
+        run: |
+          printf '%s\n' \
+            "Promoted from ${DEV} after per-OS QA (${{ github.event.inputs.required_os || 'windows' }})." \
+            "Byte-identical to the tested pre-release — no rebuild." > /tmp/notes.md
+          # -R is required: this job has no checkout, so gh can't infer the repo from a
+          # local git remote (would fail "not a git repository"). No --target: in the
+          # tag-push flow the vX.Y.Z tag already exists, so gh attaches to it; passing a
+          # target that differs from the existing tag makes gh PATCH the tag ref, which
+          # returns 403 on the release POST.
+          # bashy ships two archive families (bashy-* + bash-*) + checksums.txt — all
+          # promoted byte-identical. Archive names are unversioned (no ${VER} in the
+          # glob), unlike outpost's versioned naming.
+          gh release create "${VER}" -R "${REPO}" \
+            --title "${VER}" \
+            --notes-file /tmp/notes.md \
+            --latest \
+            dist/bashy-* dist/bash-* dist/checksums.txt
+          echo "released ${VER} as --latest from the tested ${DEV} bytes"
+
+      - name: build webhook payload
+        id: payload
+        env:
+          REPO: ${{ github.repository }}
+          VER: ${{ steps.v.outputs.ver }}
+          COMMIT: ${{ steps.src.outputs.commit }}
+        run: |
+          # Enumerate the primary bashy-* archives (the product the fleet rolls out).
+          # Names are unversioned: bashy-<os>-<arch>.{tar.gz|zip}.
+          base="https://github.com/${REPO}/releases/download/${VER}"
+          artifacts="{}"
+          for f in dist/bashy-*; do
+            name=$(basename "$f")
+            case "$name" in *.sha256) continue ;; esac
+            platform=${name#bashy-}; platform=${platform%.tar.gz}; platform=${platform%.zip}
+            os=${platform%-*}; arch=${platform##*-}
+            sha=$(shasum -a 256 "$f" | awk '{print $1}')
+            artifacts=$(jq -n --argjson cur "$artifacts" --arg key "${os}_${arch}" \
+              --arg url "${base}/${name}" --arg sha "$sha" \
+              '$cur + {($key): {url: $url, sha256: $sha}}')
+          done
+          jq -n --arg tag "$VER" --arg commit "$COMMIT" --argjson artifacts "$artifacts" \
+            '{tag: $tag, commit: $commit, artifacts: $artifacts}' > payload.json
+          jq . payload.json
+          echo "path=payload.json" >> "$GITHUB_OUTPUT"
+
+      - name: notify fleet (cloudbox release webhook)
+        env:
+          URL: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_URL }}
+          SECRET: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_SECRET }}
+          PAYLOAD: ${{ steps.payload.outputs.path }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$SECRET" ]; then
+            echo "::warning::CLOUDBOX_RELEASE_WEBHOOK_URL / _SECRET not set; skipping webhook"
+            exit 0
+          fi
+          sig=$(openssl dgst -sha256 -hmac "$SECRET" "$PAYLOAD" | awk '{print $2}')
+          curl -fsS -X POST "$URL" \
+            -H "Content-Type: application/json" \
+            -H "X-Bashy-Release-Sig: sha256=${sig}" \
+            --data-binary "@${PAYLOAD}"
+          echo "fleet notified — canary→fleet rollout will pick up ${VER}"

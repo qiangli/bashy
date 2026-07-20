@@ -17,7 +17,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ .Version }}'
+      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Version "-dev" }}'
     goos:
       - linux
       - darwin
@@ -33,7 +33,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ .Version }}'
+      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Version "-dev" }}'
     goos:
       - linux
       - darwin
