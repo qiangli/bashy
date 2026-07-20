@@ -1339,3 +1339,43 @@ Effects: read
 set -e
 scripts/zsh-scoreboard.sh --list "${ZSH_OUT:-}"
 ```
+
+### qa
+Per-OS release smoke (the release gate): download the released
+`$BASHY_TEST_VERSION` asset for the host OS/arch, verify its sha256 against the
+published `checksums.txt`, extract it, and smoke the binary — hard-failing on any
+mismatch or missing piece. Pure bashy userland: the runner's own curl/sha256sum/tar
+plus awk for the checksums lookup (no sort -V, grep -o, or host /tmp — the work
+happens in a cwd-local, gitignored `bin/qa-*` dir). The released `bashy` is a bash
+drop-in: it reports its version via the GNU `--version` flag (which also carries
+the bashy tag, e.g. `5.3.0(1)-bashy-0.18.0`) and runs scripts via `-c`; there is no
+standalone `version`/`shell` subcommand, so the smokes exercise those real front
+doors instead. Set `BASHY_TEST_VERSION` (e.g. `v0.18.0`).
+Effects: write, net
+
+```bash
+set -e
+[ -n "$BASHY_TEST_VERSION" ] || { echo "qa: set BASHY_TEST_VERSION (e.g. v0.18.0)" >&2; exit 2; }
+base=${BASHY_TEST_VERSION#v}; base=${base%-dev}
+os=$("$BASHY" uname -s | tr A-Z a-z)
+arch=$("$BASHY" uname -m); case "$arch" in x86_64) arch=amd64;; aarch64|arm64) arch=arm64;; esac
+ext=tar.gz; [ "$os" = windows ] && ext=zip
+asset="bashy-${os}-${arch}.${ext}"
+base_url="https://github.com/qiangli/bashy/releases/download/$BASHY_TEST_VERSION"
+tmp="$PWD/bin/qa-$$"; trap 'rm -rf "$tmp"' EXIT; mkdir -p "$tmp"; cd "$tmp"
+"$BASHY" curl -fsSL -o "$asset" "$base_url/$asset"
+"$BASHY" curl -fsSL -o checksums.txt "$base_url/checksums.txt"
+exp=$(awk -v a="$asset" '$2==a{print $1}' checksums.txt)
+[ -n "$exp" ] || { echo "qa: $asset missing from checksums.txt" >&2; exit 1; }
+act=$("$BASHY" sha256sum "$asset" | awk '{print $1}')
+[ "$exp" = "$act" ] || { echo "qa: sha256 mismatch (expected $exp got $act)" >&2; exit 1; }
+[ "$ext" = zip ] && { echo "qa: zip extraction not yet supported in pure bashy" >&2; exit 1; }
+"$BASHY" tar -xzf "$asset"
+bin="$PWD/bashy"; [ -x "$bin" ] || { echo "qa: extracted binary not found" >&2; exit 1; }
+ver=$("$bin" --version 2>&1)
+case "$ver" in *"$base"*) ;; *) echo "qa: version '$ver' missing '$base'" >&2; exit 1;; esac
+[ "$("$bin" -c 'echo runtime-ok' 2>&1)" = "runtime-ok" ] || { echo "qa: runtime smoke failed" >&2; exit 1; }
+curlout=$("$bin" curl --version 2>&1) || { echo "qa: curl --version failed" >&2; exit 1; }
+case "$curlout" in *curl*) ;; *) echo "qa: no curl line from curl --version" >&2; exit 1;; esac
+echo "Results: PASS qa $BASHY_TEST_VERSION $asset (version=$base, runtime-ok, curl ok)"
+```
