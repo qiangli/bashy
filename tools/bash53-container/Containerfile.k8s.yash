@@ -1,0 +1,79 @@
+# Self-contained yash POSIX (-p) conformance image for k8s / DKS.
+#
+# The yash analogue of Containerfile.k8s (bash-5.3): k8s pods cannot mount your
+# laptop, so this BAKES everything a chunk needs — the linux/$ARCH bashy `bash`
+# testee, the yashsuite runner, the shell-only yash `-p` fixture tree (with
+# run-test.sh + its C/sh helpers), and the pinned yash-chunks.json. The corpus is
+# yash's GPL test suite, CLONED at build time into a gitignored cache and never
+# vendored (same posture as the bash-5.3 fixture symlink); it is baked into a
+# throwaway RUNTIME image, not committed. Staged into the build context by
+# scripts/build-conformance-image.sh (SUITE=yash).
+#
+# The testee is run as `sh` by run-test.sh (it symlinks the testee to `sh` in a
+# per-case work dir), so bashy enters strict POSIX mode — exactly how
+# scripts/yash-scoreboard.sh measures the serial number. Runs non-root (uid 1000)
+# to mirror the bash-5.3 lane.
+FROM docker.io/library/gcc:14-bookworm
+
+# run-test.sh forces LANG=C, but generate a UTF-8 locale too so any case that
+# re-exports one behaves. hexdump/bsdextrautils parity with the bash-5.3 image.
+RUN set -eux; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      locales bsdextrautils busybox; \
+    rm -rf /var/lib/apt/lists/*; \
+    printf '%s\n' 'C.UTF-8 UTF-8' 'en_US.UTF-8 UTF-8' > /etc/locale.gen; \
+    locale-gen
+
+# yashsuite runs the framework via `sh run-test.sh …`. The yash harness + its
+# .tst fixtures dereference $LINENO under `set -u`, which dash (the image's
+# /bin/sh) does not support — every fixture dies with a critical
+# "LINENO: parameter not set" (rc=2). scripts/yash-scoreboard.sh drives the same
+# harness under busybox ash for exactly this reason, so point the PATH-resolved
+# `sh` (what yashsuite's exec.Command("sh", …) picks up — NOT the #!/bin/sh
+# shebang) at busybox ash. This makes the chunked interpreter identical to the
+# serial scoreboard's: the apples-to-apples the chunked==serial claim needs.
+RUN ln -sf /bin/busybox /usr/local/bin/sh
+
+# sigdfl: reset the realtime signals to SIG_DFL, then exec its args. A CRI runtime
+# (containerd/k8s) sets SIGRTMIN..SIGRTMAX to SIG_IGN on the pod's PID 1; SIG_IGN
+# survives exec, so a shell fixture inherits it and a `trap`-printing case sees a
+# spurious ignored realtime signal — failing trap-p ONLY under k8s. This MUST run
+# ahead of the Go runner: the Go runtime snapshots startup-ignored signals and
+# re-ignores them in every child it execs, so the reset is unreachable from inside
+# Go. `podman run` does not inject the mask, so sigdfl is a harmless no-op there.
+RUN printf '%s\n' \
+      '#include <signal.h>' \
+      '#include <unistd.h>' \
+      'int main(int argc, char **argv){' \
+      '  for (int s = SIGRTMIN; s <= SIGRTMAX; s++) signal(s, SIG_DFL);' \
+      '  if (argc < 2) return 0;' \
+      '  execvp(argv[1], argv+1);' \
+      '  return 127;' \
+      '}' > /tmp/sigdfl.c \
+    && gcc -O2 -o /usr/local/bin/sigdfl /tmp/sigdfl.c \
+    && rm -f /tmp/sigdfl.c
+
+# baked conformance payload (staged by the build script)
+COPY bin/        /work/bin/
+COPY yash-chunks.json /work/yash-chunks.json
+COPY yashtests/  /yashtests/
+
+RUN useradd -u 1000 -m runner && chown -R 1000:1000 /work /yashtests
+WORKDIR /work
+USER 1000:1000
+
+# run-test.sh runs under `set -u` and dereferences $LANG (line ~77) BEFORE it
+# exports LANG=C, so the process env must carry LANG or every fixture dies with
+# a critical "LANG: parameter not set" (rc=2) — a harness error, not a test
+# failure. The scoreboard passes `-e LANG=C`; bake it so both the serial
+# podman-run and the k8s CMD inherit it.
+ENV LANG=C
+
+# default: run one chunk (CHUNK=I/N env), through sigdfl so the realtime-signal
+# mask a CRI runtime injects never reaches the runner. The k8s Job overrides
+# command/args per chunk (and prepends sigdfl the same way); this makes
+# `podman run -e CHUNK=3/8 <image>` work standalone too. CHUNK unset => full
+# corpus (the serial baseline).
+ENV YASH_ARCH=arm64
+CMD ["sh","-c","sigdfl ./bin/yashsuite-linux-${YASH_ARCH} --tests-dir /yashtests --chunks-manifest /work/yash-chunks.json --shell ./bin/bash-linux-${YASH_ARCH}/bash ${CHUNK:+--chunk ${CHUNK}}"]
