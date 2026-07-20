@@ -23,6 +23,26 @@ RUN set -eux; \
       > /etc/locale.gen; \
     locale-gen
 
+# sigdfl: reset the realtime signals to SIG_DFL, then exec its args. A CRI
+# runtime (containerd/k8s) sets SIGRTMIN..SIGRTMAX to SIG_IGN on the pod's PID 1;
+# SIG_IGN survives exec, so a bash fixture inherits it and `trap -p` prints a
+# spurious `trap -- '' SIGRTMIN`, failing trap/varenv/execscript ONLY under k8s.
+# This MUST run ahead of the Go harness: the Go runtime snapshots startup-ignored
+# signals and re-ignores them in every child it execs, so the reset is unreachable
+# from inside Go (see tools/bash53suite/proc_unix.go). podman run does not inject
+# the mask, so sigdfl is a harmless no-op there.
+RUN printf '%s\n' \
+      '#include <signal.h>' \
+      '#include <unistd.h>' \
+      'int main(int argc, char **argv){' \
+      '  for (int s = SIGRTMIN; s <= SIGRTMAX; s++) signal(s, SIG_DFL);' \
+      '  if (argc < 2) return 0;' \
+      '  execvp(argv[1], argv+1);' \
+      '  return 127;' \
+      '}' > /tmp/sigdfl.c \
+    && gcc -O2 -o /usr/local/bin/sigdfl /tmp/sigdfl.c \
+    && rm -f /tmp/sigdfl.c
+
 # baked conformance payload (staged by the build script)
 COPY bin/       /work/bin/
 COPY chunks.json /work/chunks.json
@@ -33,7 +53,9 @@ RUN useradd -u 1000 -m runner && chown -R 1000:1000 /work /bash53
 WORKDIR /work
 USER 1000:1000
 
-# default: run one chunk (CHUNK=I/N env). The Argo Workflow overrides command/args
-# per chunk; this makes `podman run -e CHUNK=3/8 <image>` work standalone too.
+# default: run one chunk (CHUNK=I/N env), through sigdfl so the realtime-signal
+# mask a CRI runtime injects never reaches the harness. The k8s Job / Argo
+# Workflow overrides command/args per chunk (and prepends sigdfl the same way);
+# this makes `podman run -e CHUNK=3/8 <image>` work standalone too.
 ENV BASH53_ARCH=amd64
-CMD ["sh","-c","./bin/bash53suite-linux-${BASH53_ARCH} -tests-dir /bash53/tests -chunk ${CHUNK:-1/8} -bash ./bin/bash-linux-${BASH53_ARCH}/bash"]
+CMD ["sh","-c","sigdfl ./bin/bash53suite-linux-${BASH53_ARCH} -tests-dir /bash53/tests -chunk ${CHUNK:-1/8} -bash ./bin/bash-linux-${BASH53_ARCH}/bash"]

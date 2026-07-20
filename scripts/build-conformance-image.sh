@@ -27,7 +27,14 @@ cp tools/bash53-container/Containerfile.k8s "$CTX/Containerfile"
 sed -i.bak "s/^ENV BASH53_ARCH=.*/ENV BASH53_ARCH=$ARCH/" "$CTX/Containerfile" && rm -f "$CTX/Containerfile.bak"
 
 log "building image $IMAGE (linux/$ARCH)…"
-$OCI build --platform "linux/$ARCH" -t "$IMAGE" -f "$CTX/Containerfile" "$CTX" 2>&1 | grep -iE 'STEP|COMMIT|Successfully|error' | tail -4
+# SQUASH=1 collapses ALL layers into one so the image carries no inter-layer
+# whiteout (.wh.*) markers. Nested container runtimes (k3s-agent inside podman
+# inside a VM) cannot create the device-node whiteouts overlayfs uses, so a
+# multi-layer image fails `ctr images import` with "convert whiteout … operation
+# not permitted". A single flat layer imports cleanly on any nesting depth.
+SQUASH_FLAG=""
+[ "${SQUASH:-0}" = "1" ] && SQUASH_FLAG="--squash-all"
+$OCI build $SQUASH_FLAG --platform "linux/$ARCH" -t "$IMAGE" -f "$CTX/Containerfile" "$CTX" 2>&1 | grep -iE 'STEP|COMMIT|Successfully|error' | tail -4
 
 log "done. self-check: run chunk 3 inside the image (no mounts)…"
 $OCI run --rm --platform "linux/$ARCH" -e CHUNK=3/8 -e "BASH53_ARCH=$ARCH" "$IMAGE" 2>&1 | grep -aiE 'Results:|FAIL|error' | tail -2
