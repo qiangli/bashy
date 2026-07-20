@@ -190,26 +190,66 @@ run_chunk(){ # $1=host $2=chunk -> writes $OUT/$host-$chunk.{result,log}
   printf '%s' "$r" > "$OUT/$h-$ch.log"
 }
 
-# per-host: run its chunks with bounded concurrency = weight (memory-bounded)
-run_host(){ local h="$1" ch running=0 maxc="${H_WEIGHT[$h]}"; IFS=',' read -ra list <<<"${ASSIGN[$h]}"
-  for ch in "${list[@]}"; do run_chunk "$h" "$ch" &
+# run an explicit chunk list on a host, bounded concurrency = weight
+run_host_chunks(){ local h="$1" chunks="$2" ch running=0 maxc="${H_WEIGHT[$h]:-1}"; IFS=',' read -ra list <<<"$chunks"
+  for ch in "${list[@]}"; do [ -n "$ch" ] || continue; run_chunk "$h" "$ch" &
     running=$((running+1)); [ "$running" -ge "$maxc" ] && { wait -n 2>/dev/null || wait; running=$((running-1)); }
   done; wait; }
 
+# A RUN succeeded iff it emitted a `Results:` line. No line = an INFRASTRUCTURE
+# failure (host dropped off the network, container/OOM/oci error, ssh timeout) —
+# NOT a test failure (which is a real result and is kept). Only run failures retry.
+valid_result(){ local ch="$1" f; for f in "$OUT"/*-"$ch".result; do [ -s "$f" ] && grep -qi 'Results:' "$f" && return 0; done; return 1; }
+declare -A FAILHOST LASTHOST
+# pick_host: an available host eligible for this chunk, preferring one OTHER than
+# the host that just failed it (so a bad/dropped host doesn't get the retry too).
+pick_host(){ local ch="$1" avoid="${FAILHOST[$ch]:-}" h fb=""
+  for h in "${AVAIL[@]}"; do case ",${H_EXCL[$h]}," in *",$ch,"*) continue;; esac
+    if [ "$h" = "$avoid" ]; then fb="${fb:-$h}"; else echo "$h"; return 0; fi; done
+  [ -n "$fb" ] && { echo "$fb"; return 0; }; return 1; }   # only the failed host is eligible
+
+: "${MAX_ROUNDS:=3}"
 log "fanning out…"; START=$(date +%s)
-for h in "${AVAIL[@]}"; do [ -n "${ASSIGN[$h]:-}" ] && run_host "$h" & done
-wait; END=$(date +%s)
+# round 1: the resource-weighted assignment
+for h in "${AVAIL[@]}"; do
+  [ -n "${ASSIGN[$h]:-}" ] || continue
+  IFS=',' read -ra _cs <<<"${ASSIGN[$h]}"; for _c in "${_cs[@]}"; do LASTHOST[$_c]="$h"; done
+  run_host_chunks "$h" "${ASSIGN[$h]}" &
+done
+wait
+# rounds 2..N: re-dispatch any chunk whose RUN failed onto an alternate host
+round=2
+while [ "$round" -le "$MAX_ROUNDS" ]; do
+  declare -A RA=(); pend=0
+  for ch in $CHUNK_ORDER; do
+    valid_result "$ch" && continue
+    FAILHOST[$ch]="${LASTHOST[$ch]:-}"
+    alt="$(pick_host "$ch")" || { log "chunk $ch: run failed and no other eligible host is up — leaving it"; continue; }
+    RA[$alt]="${RA[$alt]:+${RA[$alt]},}$ch"; LASTHOST[$ch]="$alt"; pend=$((pend+1))
+  done
+  [ "$pend" = 0 ] && break
+  log "retry round $((round-1)): $pend run-failure(s) re-dispatched onto an alternate host"
+  for h in "${AVAIL[@]}"; do [ -n "${RA[$h]:-}" ] && run_host_chunks "$h" "${RA[$h]}" & done
+  wait; unset RA; round=$((round+1))
+done
+END=$(date +%s)
 [ "$HTTPD" = 1 ] && pkill -f "http.server $HTTP_PORT" 2>/dev/null || true
 
-# --- aggregate -----------------------------------------------------------------
-P=0; F=0; N=0
-for rf in "$OUT"/*.result; do
-  [ -s "$rf" ] || { log "MISSING: $(basename "$rf" .result)"; continue; }
-  line="$(cat "$rf")"; p="$(echo "$line" | awk '{print $2}')"; f="$(echo "$line" | awk '{print $4}')"
+# --- aggregate (one valid result per chunk; a chunk with no run is flagged) -----
+P=0; F=0; N=0; runfail=0
+for ch in $CHUNK_ORDER; do
+  line=""; who=""
+  for f in "$OUT"/*-"$ch".result; do
+    [ -s "$f" ] && grep -qi 'Results:' "$f" && { line="$(cat "$f")"; who="$(basename "$f" .result)"; break; }
+  done
+  if [ -z "$line" ]; then log "chunk $ch: RUN FAILED on all attempts (infrastructure, not a test failure)"; runfail=$((runfail+1)); continue; fi
+  p="$(echo "$line" | awk '{print $2}')"; f="$(echo "$line" | awk '{print $4}')"
   P=$((P+${p:-0})); F=$((F+${f:-0})); N=$((N+1))
-  printf '  %-18s %s\n' "$(basename "$rf" .result):" "$line"
+  printf '  chunk %-2s [%-16s] %s\n' "$ch" "$who" "$line"
 done
 echo "--------------------------------------------------------"
-printf 'FLEET AGGREGATE: %d passed, %d failed  (%d chunks, %ds wall)\n' "$P" "$F" "$N" "$((END-START))"
-[ "$P" = "$EXPECT" ] && [ "$F" = 0 ] && { echo "PASS: fleet reproduces $EXPECT/0"; exit 0; }
+printf 'FLEET AGGREGATE: %d passed, %d failed  (%d/%s chunks ran, %ds wall)\n' "$P" "$F" "$N" "$CHUNKS" "$((END-START))"
+[ "$runfail" = 0 ] || echo "WARNING: $runfail chunk(s) never ran — infrastructure, retried $((MAX_ROUNDS-1))x"
+[ "$runfail" = 0 ] && [ "$P" = "$EXPECT" ] && [ "$F" = 0 ] && { echo "PASS: fleet reproduces $EXPECT/0"; exit 0; }
+[ "$runfail" != 0 ] && { echo "INCOMPLETE: infrastructure failures prevented a full run"; exit 3; }
 echo "MISMATCH: expected $EXPECT/0"; exit 1
