@@ -1,0 +1,35 @@
+# fleet-conformance.conf — describe YOUR container fleet here, then either pass
+#   scripts/fleet-conformance.sh --config path/to/this/file
+# or copy it to one of the auto-discovered locations:
+#   ./fleet-conformance.conf   |   $XDG_CONFIG_HOME/bashy/fleet-conformance.conf
+# (nothing about any host is baked into the script — this file is the fleet.)
+#
+# One host per line: space-separated key=val. Blank lines and #comments ignored.
+#
+#   name       a label for the host (required)
+#   transport  local | ssh | winssh                       (default: local)
+#                local  = this machine (uses ./bin/bashy)
+#                ssh    = unix remote (scp ships the testee)
+#                winssh = Windows remote (testee shipped over the LAN via HTTP,
+#                         run inline; needs curl.exe on the host)
+#   target     ssh destination for ssh/winssh (user@host or an ssh-config alias)
+#   workdir    the host's bashy checkout / work dir ($USERPROFILE, ~ etc. are
+#              expanded ON the host)
+#   arch       arm64 | amd64  (the container/testee arch for that host)
+#   bashy      path to bashy ON the host (ssh/winssh; default: `bashy` on PATH)
+#   weight     concurrency/allocation units; OMIT to auto-probe (min(cpus,
+#              mem/CHUNK_MEM_GB) of the host's podman VM)
+#   excl       chunks this host must NOT run, e.g. a WSL2 host that diverges on a
+#              few fixtures (comma list). The chunk COUNT is pinned in chunks.json
+#              and is never derived from the fleet.
+#   enabled    0 to keep the entry but skip it (host reserved for other work)
+#
+# The fleet is DYNAMIC: every run probes which hosts are actually up (office vs
+# home vs library) and runs only on those, redistributing chunks over survivors.
+# Use --only / --skip to override for a single run.
+
+name=local transport=local workdir=. arch=arm64
+
+# name=mac2   transport=ssh    target=user@mac2.local           workdir=~/src/bashy              arch=arm64
+# name=winbox transport=winssh target=winbox                    workdir=$USERPROFILE/bash53work  arch=amd64  bashy=$USERPROFILE/bashy.exe  excl=3,6,7
+# name=busy   transport=ssh    target=user@busy.local           workdir=~/src/bashy              arch=amd64  enabled=0

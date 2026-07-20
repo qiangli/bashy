@@ -53,3 +53,6 @@ tet3/
 vsxgen/
 *.exe
 /bashy
+
+# local fleet definition (personal hosts) — never commit
+/fleet-conformance.conf
