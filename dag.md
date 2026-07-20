@@ -462,49 +462,80 @@ if [ -n "$prep_target" ]; then
     prep_i=$((prep_i + 1))
   done
 fi
-i=1
-while [ "$i" -le "$chunks" ]; do
-  idx=$(( (i - 1) % host_count + 1 ))
-  eval "host=\${$idx}"
-  (
-    remote_dir="$repo"
-    case "$host" in
-      *=*) remote="${host%%=*}"; remote_dir="${host#*=}" ;;
-      *) remote="$host" ;;
-    esac
-    if [ "$remote" = local ]; then
-      if [ -n "$item_list_target" ]; then
-        items=$(tr '\n' ' ' <"$outdir/group-$i")
-        export "$item_env=$items"
-        set +e
-        "$BASHY_EXE" dag "$target" >"$outdir/chunk-$i.out" 2>&1
-        rc=$?
-        set -e
+# Optional resilience (FANOUT_RETRY>1, default 1 = original single pass): a chunk
+# whose RUN fails for INFRASTRUCTURE reasons — a host dropping off the network, an
+# ssh/transport error, an OOM/OCI kill before it produced output — is re-dispatched
+# onto a DIFFERENT host (round-robin offset by the attempt) up to FANOUT_RETRY
+# times, so infra failures cost wall time but NEVER change the result. A legitimate
+# non-zero TASK result (the target ran and produced output) is kept, not retried.
+# Set FANOUT_OK_GREP to a pattern a completed chunk must print (e.g. '^Results:')
+# for stricter evidence-based classification. Works for any TARGET — tests or tasks.
+fanout_retry="${FANOUT_RETRY:-1}"
+ok_grep="${FANOUT_OK_GREP:-}"
+chunk_incomplete() {
+  n="$1"
+  st="$(cat "$outdir/chunk-$n.status" 2>/dev/null || echo 255)"
+  if [ -n "$ok_grep" ]; then
+    grep -q "$ok_grep" "$outdir/chunk-$n.out" 2>/dev/null && return 1 || return 0
+  fi
+  [ "$st" = 255 ] && return 0                                              # ssh/transport failure
+  { [ "$st" != 0 ] && [ ! -s "$outdir/chunk-$n.out" ]; } && return 0       # died before any output
+  return 1
+}
+pending=""; i=1
+while [ "$i" -le "$chunks" ]; do pending="$pending $i"; i=$((i + 1)); done
+attempt=1
+while [ -n "${pending# }" ] && [ "$attempt" -le "$fanout_retry" ]; do
+  [ "$attempt" -gt 1 ] && echo "dag-fanout: retry $attempt — re-dispatching run-failures onto alternate hosts:$pending" >&2
+  for i in $pending; do
+    idx=$(( (i - 1 + attempt - 1) % host_count + 1 ))
+    eval "host=\${$idx}"
+    (
+      remote_dir="$repo"
+      case "$host" in
+        *=*) remote="${host%%=*}"; remote_dir="${host#*=}" ;;
+        *) remote="$host" ;;
+      esac
+      if [ "$remote" = local ]; then
+        if [ -n "$item_list_target" ]; then
+          items=$(tr '\n' ' ' <"$outdir/group-$i")
+          export "$item_env=$items"
+          set +e
+          "$BASHY_EXE" dag "$target" >"$outdir/chunk-$i.out" 2>&1
+          rc=$?
+          set -e
+        else
+          set +e
+          CHUNK="$i/$chunks" "$BASHY_EXE" dag "$target" >"$outdir/chunk-$i.out" 2>&1
+          rc=$?
+          set -e
+        fi
       else
-        set +e
-        CHUNK="$i/$chunks" "$BASHY_EXE" dag "$target" >"$outdir/chunk-$i.out" 2>&1
-        rc=$?
-        set -e
+        if [ -n "$item_list_target" ]; then
+          items=$(tr '\n' ' ' <"$outdir/group-$i")
+          set +e
+          ssh "$remote" "cd '$remote_dir' && if [ -x ./bashy ]; then b=./bashy; elif [ -x ./bin/bashy.exe ]; then b=./bin/bashy.exe; else b=./bin/bashy; fi; export BASH53_TESTDATA_REPO='${BASH53_TESTDATA_REPO:-}' $item_env='$items'; \"\$b\" dag '$target'" >"$outdir/chunk-$i.out" 2>&1
+          rc=$?
+          set -e
+        else
+          set +e
+          ssh "$remote" "cd '$remote_dir' && if [ -x ./bashy ]; then b=./bashy; elif [ -x ./bin/bashy.exe ]; then b=./bin/bashy.exe; else b=./bin/bashy; fi; BASH53_TESTDATA_REPO='${BASH53_TESTDATA_REPO:-}' CHUNK='$i/$chunks' \"\$b\" dag '$target'" >"$outdir/chunk-$i.out" 2>&1
+          rc=$?
+          set -e
+        fi
       fi
-    else
-      if [ -n "$item_list_target" ]; then
-        items=$(tr '\n' ' ' <"$outdir/group-$i")
-        set +e
-        ssh "$remote" "cd '$remote_dir' && if [ -x ./bashy ]; then b=./bashy; elif [ -x ./bin/bashy.exe ]; then b=./bin/bashy.exe; else b=./bin/bashy; fi; export BASH53_TESTDATA_REPO='${BASH53_TESTDATA_REPO:-}' $item_env='$items'; \"\$b\" dag '$target'" >"$outdir/chunk-$i.out" 2>&1
-        rc=$?
-        set -e
-      else
-        set +e
-        ssh "$remote" "cd '$remote_dir' && if [ -x ./bashy ]; then b=./bashy; elif [ -x ./bin/bashy.exe ]; then b=./bin/bashy.exe; else b=./bin/bashy; fi; BASH53_TESTDATA_REPO='${BASH53_TESTDATA_REPO:-}' CHUNK='$i/$chunks' \"\$b\" dag '$target'" >"$outdir/chunk-$i.out" 2>&1
-        rc=$?
-        set -e
-      fi
-    fi
-    echo "$rc" >"$outdir/chunk-$i.status"
-  ) &
-  i=$((i + 1))
+      echo "$rc" >"$outdir/chunk-$i.status"
+    ) &
+  done
+  wait || true
+  np=""; i=1
+  while [ "$i" -le "$chunks" ]; do
+    chunk_incomplete "$i" && np="$np $i"
+    i=$((i + 1))
+  done
+  pending="$np"
+  attempt=$((attempt + 1))
 done
-wait || true
 cat "$outdir"/chunk-*.out
 bad=0
 for status in "$outdir"/chunk-*.status; do
@@ -1051,6 +1082,8 @@ fi
 TARGET="${TARGET:-test-bash-container-run}" \
 PREP_TARGET="${PREP_TARGET:-test-bash-container-prepare}" \
 CHUNKS="$pinned_chunks" \
+FANOUT_OK_GREP="${FANOUT_OK_GREP:-^Results:}" \
+FANOUT_RETRY="${FANOUT_RETRY:-3}" \
 "$BASHY_EXE" dag dag-fanout
 ```
 
