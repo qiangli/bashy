@@ -197,6 +197,14 @@ func main() {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		dieIf(enc.Encode(record))
+	} else {
+		// Same one-line summary shape as tools/bash53suite. The chunked DKS
+		// lane keys off it: dag-to-k8s-job.sh treats "^Results:" as "the suite
+		// ran to completion" (pod success even when a fixture failed), and
+		// k8s-job-aggregate.sh sums these lines across chunks. A chunk that
+		// dies before printing it is an INFRA failure the Job reschedules.
+		fmt.Printf("Results: %d passed, %d failed, %d skipped, %d timed out\n",
+			record.Summary.Passed, record.Summary.Failed, record.Summary.Skipped, record.Summary.TimedOut)
 	}
 	if record.Summary.Failed != 0 || record.Summary.TimedOut != 0 {
 		os.Exit(1)
