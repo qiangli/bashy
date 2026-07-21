@@ -10,6 +10,17 @@
 # userland-dependent cases are also excluded from the shell-only denominator:
 # ppid-p.tst:5 and simple-p.tst:290/299.
 # Clean-room: clones yash at runtime, never vendors it (GPL).
+#
+# Denominator integrity (Sprint-7 test-p.tst incident): a suite preamble can set
+# skip=true (e.g. test-p.tst probes `command -V test` for "built-in") and every
+# case then logs "%%% SKIPPED: file:line: desc" — no [bracket] tag, unlike
+# OK/ERROR — while run-test.sh still exits 0. Extracting only OK/ERROR made a
+# fully-skipped or trs-less leg vanish from the tally, printing 100% over a
+# silently shrunken denominator. So: SKIPPED marks are extracted too, a leg with
+# rc!=0 or no trs emits a synthetic suite-level ERROR, and the summary checks
+# bashy-measured vs oracle-measured case counts per suite — the gate FAILS on
+# any delta. Acceptance basis: bashy case count == oracle case count, zero
+# bashy-specific failures.
 set -u
 cd "$(dirname "$0")/.."
 ROOT=$PWD
@@ -50,16 +61,30 @@ if ! $OCI run --rm -v "$ROOT/.yash-tests/tests:/yt:ro" -v "$ROOT/bin/.bashy-full
     for pair in "bashy=/sh" "bash=bash"; do
       lbl=${pair%%=*}; sh=${pair#*=}
       command -v "$sh" >/dev/null 2>&1 || [ -x "$sh" ] || continue
+      trs="${f%.tst}.trs"
+      rm -f "$trs"   # a stale trs from the other leg must not stand in for this one
       timeout -s KILL 8 busybox ash run-test.sh "$sh" "$f" >/dev/null 2>&1
-      trs="${f%.tst}.trs"; [ -f "$trs" ] || continue
+      rc=$?
+      if [ "$rc" -ne 0 ] || [ ! -f "$trs" ]; then
+        # run-test.sh exits 0 even when cases fail; nonzero means a critical
+        # error or the watchdog kill. A crashed or trs-less leg must not
+        # silently vanish from the tally — emit a synthetic suite-level ERROR
+        # (line 0) so the host-side denominator check sees the hole.
+        if [ -f "$trs" ]; then trsstate=present; else trsstate=missing; fi
+        printf "%s|0|%s|ERROR|suite-level: rc=%d trs=%s\n" "$f" "$lbl" "$rc" "$trsstate"
+      fi
+      [ -f "$trs" ] || continue
       # format: %%% OK[PASSED]: suite-p.tst:LINE: description
+      #         %%% SKIPPED: suite-p.tst:LINE: description   (no [bracket] tag)
       # ERROR[PASSED_UNEXPECTEDLY] means the shell passed an upstream TODO
       # case; for bashy conformance triage, classify it as OK rather than a
-      # behavioral failure.
+      # behavioral failure. SKIPPED is extracted so a skip-preamble leg still
+      # shows up in the denominator check instead of shrinking it silently.
       sed -nE \
         -e "s/^%%% OK\[[^]]*\]: ([^ ]*\.tst):([0-9]+): (.*)/\1|\2|$lbl|OK|\3/p" \
         -e "s/^%%% ERROR\[PASSED_UNEXPECTEDLY\]: ([^ ]*\.tst):([0-9]+): (.*)/\1|\2|$lbl|OK|\3/p" \
         -e "s/^%%% ERROR\[FAILED\]: ([^ ]*\.tst):([0-9]+): (.*)/\1|\2|$lbl|ERROR|\3/p" \
+        -e "s/^%%% SKIPPED: ([^ ]*\.tst):([0-9]+): (.*)/\1|\2|$lbl|SKIPPED|\3/p" \
         "$trs" | while IFS="|" read -r file line label verdict desc; do
           excluded_case "$file" "$line" && continue
           printf "%s|%s|%s|%s|%s\n" "$file" "$line" "$label" "$verdict" "$desc"
@@ -76,8 +101,15 @@ if [ ! -s "$RAW" ]; then
   exit 2
 fi
 
-# host-side: tally + bashy-specific failures (bash OK, bashy ERROR)
+# host-side: tally + bashy-specific failures (bash OK, bashy ERROR) +
+# denominator check (bashy-measured vs oracle-measured case counts per suite).
+# SKIPPED verdicts and synthetic suite-level ERRORs (line 0) are counted apart
+# from measured cases; any per-suite measured-count delta fails the gate.
 awk -F'|' '
+  { suites[$1]=1 }
+  $4=="SKIPPED" { skipcnt[$3]++; next }
+  $2=="0" { printf "SUITE-LEVEL ERROR: %s %s (%s)\n", $1, $3, $5 > "/dev/stderr" }
+  $2!="0" { meas[$3]++; msuite[$3"|"$1]++ }
   $3=="bashy"{by[$1"|"$2]=$4; desc[$1"|"$2]=$5}
   $3=="bash"{ba[$1"|"$2]=$4}
   END{
@@ -88,9 +120,26 @@ awk -F'|' '
     n=0;
     for(k in by){ if(by[k]=="ERROR" && ba[k]=="OK"){ split(k,a,"|"); print a[1], a[2], desc[k]; n++ } }
     printf "BASHY-SPECIFIC FAILURES (bash OK, bashy FAIL): %d\n", n > "/dev/stderr";
+    printf "denominator: bashy measured %d cases (+%d skipped), oracle measured %d (+%d skipped)\n", \
+      meas["bashy"]+0, skipcnt["bashy"]+0, meas["bash"]+0, skipcnt["bash"]+0 > "/dev/stderr";
+    bad=0;
+    for(s in suites){
+      d = msuite["bash|"s]+0 - (msuite["bashy|"s]+0);
+      if(d!=0){
+        printf "DENOMINATOR DELTA %s: bashy=%d oracle=%d (delta %+d)\n", \
+          s, msuite["bashy|"s]+0, msuite["bash|"s]+0, d > "/dev/stderr";
+        bad=1;
+      }
+    }
+    if(bad) print "yash-scoreboard: FAIL — bashy case count != oracle case count (cases went unmeasured)" > "/dev/stderr";
+    exit bad;
   }
-' "$RAW" | sort > "$OUT/failures.txt"
+' "$RAW" > "$OUT/failures.unsorted"
+GATE=$?
+sort "$OUT/failures.unsorted" > "$OUT/failures.txt"
+rm -f "$OUT/failures.unsorted"
 
 echo "--- failures by suite ---" >&2
 awk '{c[$1]++} END{for(s in c) print c[s], s}' "$OUT/failures.txt" | sort -rn >&2
 echo "full list: $OUT/failures.txt" >&2
+exit "$GATE"
