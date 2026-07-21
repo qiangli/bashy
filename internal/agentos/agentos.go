@@ -67,6 +67,7 @@ import (
 	"github.com/qiangli/coreutils/external/tessaro"
 	"github.com/qiangli/coreutils/external/zot"
 	"github.com/qiangli/coreutils/pkg/agentcmd"
+	"github.com/qiangli/coreutils/pkg/board"
 	"github.com/qiangli/coreutils/pkg/capability"
 	"github.com/qiangli/coreutils/pkg/chat"
 	"github.com/qiangli/coreutils/pkg/dag"
@@ -123,7 +124,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "search", "sota", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
+		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "search", "sota", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login",
@@ -398,6 +399,17 @@ func Dispatch() {
 		tcmd.SetArgs(os.Args[2:])
 		if err := tcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy todo:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "board":
+		// The read-only steward console: the machine-global union of todo + sprint +
+		// weave (with agents/fleet), rendered as a terminal kanban, --json envelope,
+		// or a self-contained --html dashboard. nil sources = the P1 machine-global set.
+		bcmd := board.NewCommand(nil)
+		bcmd.SetArgs(os.Args[2:])
+		if err := bcmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy board:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
