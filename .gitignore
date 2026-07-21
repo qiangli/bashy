@@ -56,3 +56,7 @@ vsxgen/
 
 # local fleet definition (personal hosts) — never commit
 /fleet-conformance.conf
+
+# compiled test-suite runner binaries (source lives in tools/)
+/yashsuite
+/bash53suite
