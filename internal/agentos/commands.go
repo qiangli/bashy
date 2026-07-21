@@ -352,6 +352,7 @@ var verbSynopsis = map[string]string{
 	"pair":       "two agents + a gate: one proposes, one BREAKS it (writes the failing test) — a proof, not an opinion",
 	"judge":      "panel verdict on work with NO gate to run (a plan, a design). For code, use `pair` — it acts",
 	"todo":       "task list, git-repo aware: this repo's committed docs/todo/ (or a --base-dir), else the host's ~/.bashy/todo/",
+	"board":      "read-only steward console: machine-global union of todo+sprint+weave (terminal, --json, or self-contained --html)",
 	"invoke":     "invoke ONE agent, ONCE, on one instruction (the primitive every orchestrator is built on)",
 	"delegate":   "hand a task to an agent — another one, or YOURSELF (same tool, run detached to stay responsive)",
 	"coach":      "run an agent under an LLM-free auto-coach that ESCs it out of doomed tool-loops and tells it to deliver",
