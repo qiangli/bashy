@@ -430,6 +430,22 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
+	case "conductor":
+		// Role namespace: bare `conductor` and `conductor skill` print the
+		// conductor operating skill; `conductor dashboard` mounts the board.
+		renderConductorSkill := func(w io.Writer) error {
+			sc := coreskills.NewSkillsCmd(skillsOptions()...)
+			sc.SetArgs([]string{"show", "conductor"})
+			sc.SetOut(w)
+			return sc.Execute()
+		}
+		ccmd := board.NewConductorCommand(renderConductorSkill, nil)
+		ccmd.SetArgs(os.Args[2:])
+		if err := ccmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy conductor:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "pair":
 		// gate's SEMANTIC twin, and the successor to `judge`.
 		//
