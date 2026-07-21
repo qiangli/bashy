@@ -413,6 +413,23 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
+	case "steward":
+		// Role namespace (front door for the steward role): bare `steward` and
+		// `steward skill` print the existing steward operating skill; `steward
+		// dashboard` mounts the same read-only machine-global console as `board`.
+		renderStewardSkill := func(w io.Writer) error {
+			sc := coreskills.NewSkillsCmd(skillsOptions()...)
+			sc.SetArgs([]string{"show", "steward"})
+			sc.SetOut(w)
+			return sc.Execute()
+		}
+		scmd := board.NewStewardCommand(renderStewardSkill, nil)
+		scmd.SetArgs(os.Args[2:])
+		if err := scmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy steward:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "pair":
 		// gate's SEMANTIC twin, and the successor to `judge`.
 		//
