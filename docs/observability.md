@@ -109,10 +109,22 @@ own finding (`docs/harness-ab-deepseek.md`), and then ycode did it too.
 **Pure standard OTEL env vars.** Nothing bespoke.
 
 ```sh
-OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318   # unset = TOTAL no-op
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:31415  # unset = TOTAL no-op
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf           # or "grpc"
 OTEL_SERVICE_NAME=bashy
 ```
+
+**31415, not 4318.** The embedded stack multiplexes OTLP ingest and the query
+proxy on one port — `bashy otel serve` prints `OTLP gRPC at
+http://127.0.0.1:31415` — so the collector's conventional 4318 is not listening
+and never was. This example said 4318 until 2026-07-22; anyone who followed it
+exported into a closed port and saw nothing, which is indistinguishable from
+"telemetry is off".
+
+**The scheme is required.** `OTEL_EXPORTER_OTLP_ENDPOINT=127.0.0.1:31415` is not
+a URL, so the OTel SDK discards it and silently falls back to its own default
+(`https://localhost:4318`) — you get `connection refused` naming a port you
+never configured. Write `http://`.
 
 **Unset endpoint is a complete no-op** — no exporter, no batcher, no goroutine, no cost. A
 shell that pays for telemetry it is not exporting is a shell nobody uses. The global
