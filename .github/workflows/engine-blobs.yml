@@ -50,6 +50,39 @@ jobs:
           TAG="${{ github.event.release.tag_name || github.event.inputs.tag }}"
           ./scripts/publish-engine-blobs.sh "$TAG"
 
+  # The otel stack orchestrator. A SEPARATE job, not another matrix entry,
+  # because it shares none of the constraints above: it is our own pure-Go code
+  # (coreutils/external/otel, CGO_ENABLED=0), so one runner cross-compiles every
+  # platform — including linux and windows, which the podman matrix does not
+  # cover and which would otherwise have no otel blob at all.
+  #
+  # Without this the lean binary had no way to obtain the stack: binmgr looked
+  # for an otel-<goos>-<goarch>.gz asset that nothing produced, so a fresh host
+  # fell back to "set $BASHY_OTEL_BIN" and telemetry stayed unavailable unless
+  # someone built it by hand.
+  #
+  # Same decoupling as the blobs job: runs after the release is published, and
+  # needs no podman source bootstrap.
+  otel:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Bootstrap siblings (coreutils)
+        shell: bash
+        run: ./scripts/bootstrap-siblings.sh
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Build + publish otel blob (all platforms)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.event.release.tag_name || github.event.inputs.tag }}"
+          ./scripts/publish-otel-blob.sh "$TAG"
+
 # Matrix extensions (add once darwin CI is validated):
 #   - linux/amd64,arm64: ubuntu-24.04 / ubuntu-24.04-arm — needs the podman cgo
 #     build deps (libgpgme-dev, libbtrfs-dev, libassuan-dev, pkg-config) installed
