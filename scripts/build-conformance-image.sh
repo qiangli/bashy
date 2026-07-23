@@ -28,6 +28,15 @@ to_vm_path() {
     *)           printf '%s' "$p" ;;
   esac
 }
+# The podman machine to build inside — prefer the running one, else the first.
+# `podman machine ssh` needs an explicit name unless a machine is the default;
+# bashy's machine ("bashy") is not marked default, so we always name it.
+vm_machine() {
+  local m
+  m="$($OCI machine list --format '{{.Name}} {{.Running}}' 2>/dev/null | awk '$2=="true"{print $1; exit}')"
+  [ -n "$m" ] || m="$($OCI machine list --format '{{.Name}}' 2>/dev/null | head -1)"
+  printf '%s' "$m"
+}
 # coreutils mktemp reads TMPDIR; on Windows it is often unset while $TEMP holds
 # the native temp dir — point mktemp at it so `mktemp -d` below succeeds.
 on_windows && [ -z "${TMPDIR:-}" ] && [ -n "${TEMP:-}" ] && export TMPDIR="$TEMP"
@@ -95,16 +104,17 @@ SQUASH_FLAG=""
 # reads the context off its /mnt/<drive> WSL mount — same host, same containerd
 # the node uses, so it stays a native build.
 if on_windows; then
+  VMM="$(vm_machine)"; [ -n "$VMM" ] || { echo "build-conformance-image: no podman machine found (run: $OCI machine init)" >&2; exit 2; }
   vmctx="$(to_vm_path "$CTX")"
-  $OCI machine ssh "cd '$vmctx' && podman build $SQUASH_FLAG --platform linux/$ARCH -t '$IMAGE' -f Containerfile ." 2>&1 | grep -iE 'STEP|COMMIT|Successfully|error' | tail -4
+  $OCI machine ssh "$VMM" "cd '$vmctx' && podman build $SQUASH_FLAG --platform linux/$ARCH -t '$IMAGE' -f Containerfile ." 2>&1 | grep -iE 'STEP|COMMIT|Successfully|error' | tail -4
 else
   $OCI build $SQUASH_FLAG --platform "linux/$ARCH" -t "$IMAGE" -f "$CTX/Containerfile" "$CTX" 2>&1 | grep -iE 'STEP|COMMIT|Successfully|error' | tail -4
 fi
 
 log "done. self-check: run one chunk inside the image (no mounts)…"
 if on_windows; then
-  $OCI machine ssh "podman run --rm $SELFCHECK_ENV '$IMAGE'" 2>&1 | grep -aiE 'Results:|FAIL|error' | tail -2
+  $OCI machine ssh "$VMM" "podman run --rm $SELFCHECK_ENV '$IMAGE'" 2>&1 | grep -iE 'Results:|FAIL|error' | tail -2
 else
-  $OCI run --rm --platform "linux/$ARCH" $SELFCHECK_ENV "$IMAGE" 2>&1 | grep -aiE 'Results:|FAIL|error' | tail -2
+  $OCI run --rm --platform "linux/$ARCH" $SELFCHECK_ENV "$IMAGE" 2>&1 | grep -iE 'Results:|FAIL|error' | tail -2
 fi
 echo "IMAGE=$IMAGE  ARCH=$ARCH  SUITE=$SUITE" >&2
