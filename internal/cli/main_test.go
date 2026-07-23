@@ -1265,3 +1265,77 @@ func TestStrictPosixNotEngagedWithoutPosix(t *testing.T) {
 		})
 	}
 }
+
+// --- Claude Code Bash-tool `-c -l` invocation guard -------------------------
+
+// TestClaudeCodeWrapperExecutes guards the FULL Claude Code Bash-tool
+// invocation end-to-end, not just the argv rewrite.
+//
+// Claude Code (CLAUDE_CODE_SHELL) runs every command as
+//
+//	bash -c -l '<wrapper>'
+//
+// where <wrapper> is a fixed preamble that wraps the real command:
+//
+//	shopt -u extglob 2>/dev/null || true \
+//	  && { \builtin unalias -- '<x>'; \builtin unset -f -- '<x>'; } >/dev/null 2>&1 || true \
+//	  && eval '<command>' < /dev/null \
+//	  && pwd -P >| <cwd-tracking-file>
+//
+// TestRelocatePendingCommandFlag proves `-c` binds to the wrapper string (not
+// to `-l`). That is necessary but NOT sufficient: it never runs the wrapper,
+// so it cannot catch a regression where the wrapper parses/binds fine but then
+// fails to execute — the wrapped command never runs, or its stdout is lost, or
+// the `>|` cwd redirect fails. Both failure modes have been observed live:
+//
+//	(1) `-c` bound to `-l`  -> `-l: command not found`, exit 127 (argv bug)
+//	(2) wrapper ran but the wrapped command's stdout was swallowed / a
+//	    redirect inside the wrapper failed (exec/IO bug)
+//
+// This test fails on mode (2); TestRelocatePendingCommandFlag fails on mode
+// (1). Together they pin the whole `-c -l` contract. Hermetic — no external
+// process, mirrors runStrictProbe's parse+newRunner+StdIO pattern.
+func TestClaudeCodeWrapperExecutes(t *testing.T) {
+	// Isolate from any flag state a sibling test in this package left behind
+	// (this package parses into process-global flag vars).
+	oldCommand, oldLogin, oldPosix, oldForceI := *command, *login, *posix, *forceI
+	*command, *login, *posix, *forceI = "", true, false, false // login=true mirrors `-l`
+	t.Cleanup(func() {
+		*command, *login, *posix, *forceI = oldCommand, oldLogin, oldPosix, oldForceI
+	})
+
+	const marker = "CLAUDE_CODE_WRAPPER_OK"
+	cwdFile := filepath.Join(t.TempDir(), "cwd")
+
+	// The exact shape Claude Code's Bash tool emits, with the wrapped command
+	// replaced by a marker echo and the cwd-tracking redirect pointed at a
+	// temp file. Keep this string faithful to the real preamble.
+	wrapper := "shopt -u extglob 2>/dev/null || true && " +
+		"{ \\builtin unalias -- 'x'; \\builtin unset -f -- 'x'; } >/dev/null 2>&1 || true && " +
+		"eval 'echo " + marker + "' < /dev/null && " +
+		"pwd -P >| " + cwdFile
+
+	f, err := syntax.NewParser().Parse(strings.NewReader(wrapper), "")
+	if err != nil {
+		t.Fatalf("Claude Code wrapper failed to PARSE: %v", err)
+	}
+
+	r, err := newRunner()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := interp.StdIO(nil, &out, &out)(r); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.Run(context.Background(), f); err != nil {
+		t.Fatalf("Claude Code wrapper did not run to a clean exit: %v\noutput:\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), marker) {
+		t.Fatalf("wrapped command stdout was lost: want %q in output, got:\n%s", marker, out.String())
+	}
+	if _, err := os.Stat(cwdFile); err != nil {
+		t.Fatalf("`pwd -P >| <file>` cwd redirect did not write %s: %v", cwdFile, err)
+	}
+}
