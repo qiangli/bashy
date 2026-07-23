@@ -15,6 +15,22 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"; cd "$REPO"
 SUITE="${SUITE:-bash53}"
 ARCH="${ARCH:-amd64}"                                  # cluster node arch
 OCI="${OCI:-$REPO/bin/bashy podman}"
+# $OS=Windows_NT is set only on Windows. On the Windows DKS node the podman
+# CLIENT panics tarring a large build context (docs/todo 9d2b4e7a0c15); we route
+# build+run through the podman machine, which reads the /mnt/<drive> WSL mount.
+on_windows() { [ "${OS:-}" = "Windows_NT" ]; }
+# C:/foo | C:\foo | /c/foo  ->  /mnt/c/foo  (WSL mount of a host path)
+to_vm_path() {
+  local p="${1//\\//}"
+  case "$p" in
+    [A-Za-z]:/*) printf '/mnt/%s%s' "$(printf '%s' "${p%%:*}" | tr 'A-Z' 'a-z')" "${p#*:}" ;;
+    /[A-Za-z]/*) printf '/mnt%s' "$p" ;;
+    *)           printf '%s' "$p" ;;
+  esac
+}
+# coreutils mktemp reads TMPDIR; on Windows it is often unset while $TEMP holds
+# the native temp dir — point mktemp at it so `mktemp -d` below succeeds.
+on_windows && [ -z "${TMPDIR:-}" ] && [ -n "${TEMP:-}" ] && export TMPDIR="$TEMP"
 CTX="$(mktemp -d)/ctx"; mkdir -p "$CTX/bin"
 trap 'rm -rf "$(dirname "$CTX")"' EXIT
 log(){ printf '>> %s\n' "$*" >&2; }
@@ -27,7 +43,8 @@ bash53)
   GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 go build -trimpath -o "$CTX/bin/bash-linux-$ARCH/bash" ./cmd/bash
   GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 go build -trimpath -o "$CTX/bin/bash53suite-linux-$ARCH" ./tools/bash53suite
   log "staging fixture tree (strip prebuilt helpers; keep support/*.c)…"
-  FX="$(readlink external/bash-5.3)"
+  # symlink on unix; a real dir on a Windows checkout (symlinks not preserved).
+  FX="$(readlink external/bash-5.3 2>/dev/null || echo external/bash-5.3)"
   cp -R "$FX/." "$CTX/bash53/"
   rm -f "$CTX/bash53/tests/recho" "$CTX/bash53/tests/zecho" "$CTX/bash53/tests/xcase" "$CTX/bash53/tests/printenv"
   cp chunks.json "$CTX/chunks.json"
@@ -72,8 +89,22 @@ log "building image $IMAGE (linux/$ARCH, SUITE=$SUITE)…"
 # not permitted". A single flat layer imports cleanly on any nesting depth.
 SQUASH_FLAG=""
 [ "${SQUASH:-0}" = "1" ] && SQUASH_FLAG="--squash-all"
-$OCI build $SQUASH_FLAG --platform "linux/$ARCH" -t "$IMAGE" -f "$CTX/Containerfile" "$CTX" 2>&1 | grep -iE 'STEP|COMMIT|Successfully|error' | tail -4
+
+# On WINDOWS the podman CLIENT panics tarring a large native build context
+# (docs/todo 9d2b4e7a0c15); build + self-check INSIDE the podman machine, which
+# reads the context off its /mnt/<drive> WSL mount — same host, same containerd
+# the node uses, so it stays a native build.
+if on_windows; then
+  vmctx="$(to_vm_path "$CTX")"
+  $OCI machine ssh "cd '$vmctx' && podman build $SQUASH_FLAG --platform linux/$ARCH -t '$IMAGE' -f Containerfile ." 2>&1 | grep -iE 'STEP|COMMIT|Successfully|error' | tail -4
+else
+  $OCI build $SQUASH_FLAG --platform "linux/$ARCH" -t "$IMAGE" -f "$CTX/Containerfile" "$CTX" 2>&1 | grep -iE 'STEP|COMMIT|Successfully|error' | tail -4
+fi
 
 log "done. self-check: run one chunk inside the image (no mounts)…"
-$OCI run --rm --platform "linux/$ARCH" $SELFCHECK_ENV "$IMAGE" 2>&1 | grep -aiE 'Results:|FAIL|error' | tail -2
+if on_windows; then
+  $OCI machine ssh "podman run --rm $SELFCHECK_ENV '$IMAGE'" 2>&1 | grep -aiE 'Results:|FAIL|error' | tail -2
+else
+  $OCI run --rm --platform "linux/$ARCH" $SELFCHECK_ENV "$IMAGE" 2>&1 | grep -aiE 'Results:|FAIL|error' | tail -2
+fi
 echo "IMAGE=$IMAGE  ARCH=$ARCH  SUITE=$SUITE" >&2
