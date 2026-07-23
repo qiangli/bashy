@@ -50,6 +50,13 @@ func dispatchEngine(arg string) {
 		}
 		fmt.Fprint(os.Stderr, engineNotFoundMessage(name))
 		os.Exit(127)
+	case "dks":
+		// Provisioning the rootful DKS VM needs the in-process podman
+		// machine libraries, which are only linked in the bashy_engines
+		// build. The lean build can't create a VM.
+		fmt.Fprintln(os.Stderr, "bashy dks: not available in this build — the DKS VM provisioner "+
+			"needs the engine build (`-tags bashy_engines`). On Linux, run k3s under rootful podman directly (no VM).")
+		os.Exit(1)
 	}
 }
 

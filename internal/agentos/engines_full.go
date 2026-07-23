@@ -47,5 +47,16 @@ func dispatchEngine(arg string) {
 			os.Exit(1)
 		}
 		os.Exit(0)
+	case "dks":
+		// Provision/manage the dedicated ROOTFUL podman machine that DKS
+		// (k3s) runs in — a uniform VM so outposts in the wild don't each
+		// hit a different podman-machine quirk (rootless → cgroup denial →
+		// pods silently never start). Reuses the engine's EnsureMachine.
+		cmd := podmanengine.NewDKSCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	}
 }
