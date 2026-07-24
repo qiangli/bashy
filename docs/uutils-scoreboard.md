@@ -70,14 +70,18 @@ passed exact public case `test_dd::test_seek_output_fifo` in `bashy-cert`: one
 pass, zero failures, 5,365 filtered, 0.03 seconds, and no timeout. The exact
 quarantine is retired.
 
-Contained attempt 7 identified `test_dd::test_sync_delayed_reader`. The former
-SUT rejects standard `conv=sync` during argument parsing, before opening
-`if=fifo`; the test then blocks forever opening its FIFO writer because no
-reader exists. At 89,450 transcript bytes the run remained unchanged for more
-than three minutes, with the test thread blocked in a write-only FIFO `openat`
-and the SUT child defunct. Only this exact observed case is quarantined pending
-`conv=sync` semantics, a bounded delayed-writer regression, and exact contained
-verification.
+Contained attempt 7 identified `test_dd::test_sync_delayed_reader`: the former
+SUT rejected standard `conv=sync` before opening `if=fifo`, leaving the test
+writer blocked in its FIFO open. Coreutils
+`08a2a44e8bedd4ad5a25ecfd63ce9af873123cbf` now pads each input record before
+output reblocking, using NUL normally and spaces with block/unblock conversion.
+It also fixes order-independent `bs` precedence found by auditing all six
+pinned public `dd` FIFO cases; each shape now has a bounded regression. Its
+Linux ARM64 SUT
+(`sha256:374d188ab7073af52b0e0efcbe962e2da13fae98001e9f524156d7c6d2b0e7b0`)
+passed exact public case `test_dd::test_sync_delayed_reader` in `bashy-cert`:
+one pass, zero failures, 5,365 filtered, 0.15 seconds, and no timeout. The exact
+quarantine is retired; no unobserved case was quarantined.
 
 Prepare the dependency-only image once with `make prepare-uutils-image`. This
 networked preparation step archives the selected uutils revision and runs only
