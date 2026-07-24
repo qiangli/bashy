@@ -11,7 +11,7 @@ The agent-first equivalent of this repo's `Makefile`, runnable with the
 ```bash
 ./bashy dag --list           # fresh checkout bootstrap: builds bin/bashy if needed
 ./bashy dag build            # build both binaries through bashy go
-./bashy dag install          # install bash/bashy into GOBIN, after which `bashy dag ...` works
+./bashy dag install          # install into $DHNT_BIN_DIR (default ~/.local/bin)
 make dag ARGS=build          # make-based bootstrap wrapper around ./bashy dag
 bashy dag test               # once installed/on PATH: bashy go test ./...
 bashy dag --json test        # machine-readable envelope for an agent
@@ -111,23 +111,19 @@ LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-ba
 ```
 
 ### install
-go install both binaries into GOBIN.
+Install the built pair into the shared dhnt user bin (`$DHNT_BIN_DIR`, default
+`~/.local/bin`). The installer refuses a binary without the required AgentOS
+command surface, preventing a lean/stale binary from replacing bashy.
+Requires: build
 Effects: write
 
 ```bash
-VERSION="${VERSION:-dev}"
 BASHY_EXE="${BASHY:-bashy}"
-BUILD_ID=""
-if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  BUILD_ID=$(git describe --tags --exact-match HEAD 2>/dev/null || git rev-parse --short=7 HEAD 2>/dev/null || true)
-  if [ -n "$BUILD_ID" ]; then
-    if ! git diff --quiet --ignore-submodules -- 2>/dev/null || ! git diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
-      BUILD_ID="${BUILD_ID}-dirty"
-    fi
-  fi
-fi
-LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}'"
-"$BASHY_EXE" go install -trimpath -ldflags "$LDFLAGS" ./cmd/bash ./cmd/bashy
+goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
+ext=""
+[ "$goos" = windows ] && ext=.exe
+"$BASHY_EXE" go run ./tools/installbashy \
+  -bash "bin/bash${ext}" -bashy "bin/bashy${ext}"
 ```
 
 ### test

@@ -88,22 +88,11 @@ build-fips:
 	GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(LDFLAGS)" -o $(BASHY) ./cmd/bash
 	GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath $(if $(BASHY_TAGS),-tags "$(BASHY_TAGS)",) -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy
 
-## install: go install both binaries into GOBIN, then verify the installed
-## bashy handles Claude Code's `bash -c -l 'cmd'` snapshot shape (regression
-## guard for 288d8a9 and the macOS re-sign footgun).
-install:
-	go install -trimpath -ldflags "$(LDFLAGS)" ./cmd/bash ./cmd/bashy
-	@bindir="$$(go env GOBIN)"; [ -n "$$bindir" ] || bindir="$$(go env GOPATH)/bin"; \
-	shell="$$bindir/bashy"; \
-	echo "probe: $$shell -c -l 'echo ok'  (Claude Code snapshot shape)"; \
-	out="$$("$$shell" -c -l 'echo ok' 2>&1)"; rc=$$?; \
-	if [ "$$rc" != 0 ] || [ "$${out#*ok}" = "$$out" ]; then \
-		echo "FATAL: installed bashy failed the -c -l probe (rc=$$rc): $$out" >&2; \
-		echo "  a shell that can't run 'bash -c -l cmd' breaks Claude Code on every call" >&2; \
-		echo "  (stale build, arg-ordering regression, or an in-place cp that broke the code signature)." >&2; \
-		exit 1; \
-	fi; \
-	echo "ok: $$shell passes the -c -l probe"
+## install: Build and atomically install both binaries into the shared dhnt user
+## bin ($$DHNT_BIN_DIR, default $$HOME/.local/bin). The installer refuses
+## binaries missing the core AgentOS command surface.
+install: build
+	go run ./tools/installbashy -bash $(BASHY) -bashy $(BIN)
 
 ## test: Run all Go tests
 test:

@@ -76,7 +76,7 @@ bashy git clone https://github.com/qiangli/bashy
 cd bashy
 ./scripts/bootstrap-siblings.sh
 ./bashy dag build          # -> bin/bash and bin/bashy
-./bashy dag install        # optional: install into GOBIN
+./bashy dag install        # optional: install into $DHNT_BIN_DIR (~/.local/bin)
 ```
 
 On a host build of bashy with the container engine enabled, the same checkout can
@@ -100,7 +100,7 @@ new `bin/bashy` exists, use the repo-local bootstrap launcher:
 
 ```sh
 ./bashy dag build
-./bashy dag install   # installs bash/bashy into GOBIN; then `bashy dag ...` works
+./bashy dag install   # installs bash/bashy into $DHNT_BIN_DIR; then `bashy dag ...` works
 make dag ARGS=build   # equivalent bootstrap path if you prefer make
 ```
 

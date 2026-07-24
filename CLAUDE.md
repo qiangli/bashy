@@ -190,7 +190,7 @@ machine fails there as well.
 make build              # -> bin/bash (pure drop-in, cmd/bash) + bin/bashy (AgentOS, cmd/bashy) — two independent binaries
 make build-bash         # only bin/bash — all the conformance harness needs (skips the embed-heavy bashy build)
 make build-host         # full unix host build (= BASHY_ENGINES=1 BASHY_OBS=1 + embed blobs)
-make install            # go install both binaries into GOBIN
+make install            # install to $DHNT_BIN_DIR (default ~/.local/bin)
 make test               # go test ./...
 make test-bash          # drive bin/bash against bash's own 5.3 test suite (serial)
 make test-bash-parallel # same suite fanned out across cores — the canonical 86/86 gate
@@ -233,7 +233,7 @@ agent-first dogfood of the Makefile:
 
 ```sh
 ./bashy dag build                   # fresh checkout bootstrap: builds bin/bashy if needed
-./bashy dag install                 # install bash/bashy into GOBIN; after this `bashy dag ...` works
+./bashy dag install                 # install into $DHNT_BIN_DIR (default ~/.local/bin)
 bashy dag suites.md -j8 -k          # whole conformance matrix in parallel (-k: don't halt on first failure)
 bashy dag suites.md test-bash yash  # a subset of suites
 bashy dag --list                    # what `make help` shows, as DAG targets (see dag.md)
