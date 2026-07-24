@@ -16,8 +16,8 @@ or cloud credentials. The container runs as a non-root UID with:
 - tmpfs-only build space and a host-enforced wall timeout (default: one hour);
 - a permanent quarantine for infinite-device and root-recursion landmines.
 
-The quarantine also covers two public uutils FIFO cases discovered in the
-contained run at commit `a7551d77574266075f085d7db9add85e15dec7d6`:
+Two public uutils FIFO cases discovered in the contained run at commit
+`a7551d77574266075f085d7db9add85e15dec7d6` are now resolved:
 
 - `test_cp::test_cp_fifo` runs
   `cp --preserve=mode -r fifo fifo2`. Recursive `cp` must recreate the FIFO;
@@ -27,8 +27,12 @@ contained run at commit `a7551d77574266075f085d7db9add85e15dec7d6`:
   The destination hierarchy must exist before `cp` blocks on `src/fifo`, or
   the producer's directory handshake times out and leaves the child blocked.
 
-These skips have no override. Remove them only after deadline-bounded unit
-regressions and a successful contained verification.
+Coreutils commit `40eb4b634b5530cbabe2075da43bb0194fd588de` adds
+deadline-bounded regressions. Its Linux ARM64 SUT
+(`sha256:7460116a9c73407ab06e2c830f14b9245b26c8d478c83c33d16c6bf277db638e`)
+passed each exact upstream case separately in the isolated `bashy-cert` VM:
+one passed, zero failed, no timeout. Their two skips are therefore retired.
+They must still never be run directly on a steward host.
 
 Prepare the dependency-only image once with `make prepare-uutils-image`. This
 networked preparation step archives the selected uutils revision and runs only

@@ -49,11 +49,12 @@ esac
 case "$joined" in
   *"UUTILS_UNSAFE_"*) fail "supported OCI command exposed unsafe override" ;;
 esac
-for quarantined in \
+for resolved in \
   test_cp::test_cp_fifo \
   test_cp::test_dir_perm_race_with_preserve_mode_and_ownership; do
-  grep -Fq -- "--skip $quarantined" "$ROOT/scripts/uutils-scoreboard-inner.sh" ||
-    fail "missing permanent quarantine: $quarantined"
+  if grep -Fq -- "--skip $resolved" "$ROOT/scripts/uutils-scoreboard-inner.sh"; then
+    fail "resolved case remains quarantined: $resolved"
+  fi
 done
 mounts=0
 rw_mounts=0

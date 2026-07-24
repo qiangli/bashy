@@ -222,10 +222,12 @@ Never run the full uutils suite natively. A 2026-07-24 run triggered unbounded
 reads from `/dev/zero`/`/dev/random` and recursive `--preserve-root` bypasses
 that walked root-equivalent paths. Later contained runs found recursive `cp`
 deadlocks on `test_cp_fifo` and the `--copy-contents` directory-permission race:
-never run either case directly. `scripts/uutils-scoreboard.sh` is now the only
-supported entry point: it always uses a disposable, non-root OCI container with
-hard memory, PID, and wall-time limits, no network, and no host-root/home mount.
-Its known-case quarantine has no override. A killed, truncated, or
+coreutils `40eb4b6` fixed both, and each exact public case passed separately
+inside the capped `bashy-cert` VM. They are no longer quarantined, but must
+still never run directly. `scripts/uutils-scoreboard.sh` is the only supported
+entry point: it always uses a disposable, non-root OCI container with hard
+memory, PID, and wall-time limits, no network, and no host-root/home mount. Its
+remaining known-case quarantine has no override. A killed, truncated, or
 denominator-inconsistent cargo transcript emits no scoreboard. Run only
 `make test-uutils-safety` for bounded harness validation. See
 `docs/uutils-scoreboard.md` and `../docs/conformance-test-landmines.md`.

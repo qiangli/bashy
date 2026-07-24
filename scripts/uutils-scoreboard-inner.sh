@@ -26,8 +26,6 @@ DANGEROUS_SKIPS=(
   --skip test_chgrp::test_preserve_root_symlink
   --skip test_chgrp::test_preserve_root_symlink_cwd_root
   --skip test_chmod::test_chmod_preserve_root_with_paths_that_resolve_to_root
-  --skip test_cp::test_cp_fifo
-  --skip test_cp::test_dir_perm_race_with_preserve_mode_and_ownership
 )
 
 LIST=/out/list.txt
