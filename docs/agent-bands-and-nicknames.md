@@ -3,6 +3,24 @@
 *Shipped 2026-07-13. Mechanism lives in `coreutils/pkg/fleet`; surfaced by
 `bashy agents`, `bashy models`, `bashy whois`, and `bashy meet`.*
 
+**2026-07-24 model update.** Anthropic released Claude Opus 5 with canonical
+Claude API ID and alias `claude-opus-5`. Bashy's registry now carries exact
+`opus5` / `claude-opus5` records, so the intentionally floating `opus`,
+`claude:opus`, and `claude-opus` names resolve to Opus 5. Exact Opus 4.8 records
+remain available: Anthropic still lists `claude-opus-4-8` as active. The new
+rung inherits a provisional L3 declared peg and Opus 4.8's cost/quality priors
+until a fleet ladder run measures it; structural registration is not a live
+verification. Anthropic documents dateless 4.6-and-later IDs as pinned
+snapshots, not evergreen aliases; Bashy's own family alias is therefore the
+only intentionally floating layer.
+
+Official sources:
+
+- [Claude Opus 5 announcement](https://www.anthropic.com/news/claude-opus-5)
+- [Anthropic models overview and canonical IDs](https://platform.claude.com/docs/en/about-claude/models/overview)
+- [Model IDs and versioning](https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions)
+- [Model lifecycle status](https://platform.claude.com/docs/en/about-claude/model-deprecations)
+
 Three things make a fleet of agents drivable by a human: you need to know **who is
 worth asking**, you need to be able to **say their name**, and the name you write into
 a record has to **still be true a year later**. This is how bashy does all three.
@@ -112,26 +130,26 @@ rather than colliding — one name never means two things, or `whois` would have
 A model is named for the **exact version it is**, and the family name is **derived**:
 
 ```yaml
-# models/opus4.8.yaml
-name: opus4.8
+# models/opus5.yaml
+name: opus5
 family: opus
-version: "4.8"
+version: "5"
 band: 3
-model: claude-opus-4-8      # the id that reaches the wire
+model: claude-opus-5        # the id that reaches the wire
 ```
 
 Nothing declares the alias `opus`. The catalog *computes* it as "the highest version in
-family `opus`". Ship `opus4.9.yaml` and `opus` re-points itself — no alias list to edit,
+family `opus`". Ship `opus5.yaml` and `opus` re-points itself — no alias list to edit,
 no chance of it going stale.
 
 ```
 $ bashy whois opus
-opus4.8  Claude Opus 4.8  (model, subscription backend)
-target:  claude-opus-4-8
+opus5  Claude Opus 5  (model, subscription backend)
+target:  claude-opus-5
 ```
 
 Agents get the same treatment: `claude-opus` is a derived alias that follows the family,
-so it keeps working across releases while the canonical `claude-opus4.8` names an exact
+so it keeps working across releases while the canonical `claude-opus5` names an exact
 pair.
 
 ### Why bother — the rot this prevents
@@ -150,7 +168,7 @@ makes the record honest.
 So the rules are structural, not conventional:
 
 - **A binding is canonicalized however you spell it.** `bashy agents add x --model opus`
-  *persists* `model: opus4.8`. The identity that lands in a record is version-explicit
+  *persists* `model: opus5`. The identity that lands in a record is version-explicit
   even when the human typed the floating alias.
 - **A derived name never shadows a declared one.** Name a model literally `opus` and the
   derivation yields to you.
@@ -162,8 +180,8 @@ Bands are a snapshot of a moving landscape; they are meant to be re-pegged as mo
 ship. A new model is one file:
 
 ```
-$ bashy models add opus4.9 --family opus --version 4.9 --band 3 \
-    --provider anthropic --kind subscription --upstream claude-opus-4-9
+$ bashy models add opus5 --family opus --version 5 --band 3 \
+    --provider anthropic --kind subscription --upstream claude-opus-5
 ```
 
 Ring precedence is embedded → shared → cloud → local, so a shipped default can be
