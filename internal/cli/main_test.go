@@ -58,6 +58,55 @@ func TestNewRunnerInheritsOLDPWD(t *testing.T) {
 	}
 }
 
+func TestPromptTransformBangPosixMode(t *testing.T) {
+	// GNU Bash 5.3 preserves a bare ! in ${v@P} by default, while POSIX
+	// mode expands it as a history number. The explicitly escaped \! prompt
+	// form expands in both modes.
+	tests := []struct {
+		name  string
+		posix bool
+		value string
+		want  string
+	}{
+		{name: "default bare bang", value: "!", want: "<!>\n"},
+		{name: "default escaped bang", value: `\!`, want: "<1>\n"},
+		{name: "posix bare bang", posix: true, value: "!", want: "<1>\n"},
+		{name: "posix escaped bang", posix: true, value: `\!`, want: "<1>\n"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var r *interp.Runner
+			r, err := interp.New(
+				interp.Env(expand.ListEnviron("v="+tc.value)),
+				interp.StdIO(nil, &stdout, io.Discard),
+				interp.WithPosixMode(tc.posix),
+				interp.PromptExpand(func(s string) string {
+					return expandPrompt(s, func(name string) string {
+						return r.Env.Get(name).String()
+					}, 0, 0, tc.posix)
+				}),
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			prog, err := syntax.NewParser(
+				syntax.Variant(syntax.LangBash),
+				syntax.PosixMode(tc.posix),
+			).Parse(strings.NewReader(`printf '<%s>\n' "${v@P}"`), "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Run(context.Background(), prog); err != nil {
+				t.Fatal(err)
+			}
+			if got := stdout.String(); got != tc.want {
+				t.Fatalf("output = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestShouldRunInteractiveForDashSWithArgs(t *testing.T) {
 	oldCommand, oldForceI, oldPlusI, oldReadStdin := *command, *forceI, *plusI, *readStdin
 	oldFlags := flag.CommandLine
