@@ -220,11 +220,13 @@ minutes, one fixture is seconds.
 
 Never run the full uutils suite natively. A 2026-07-24 run triggered unbounded
 reads from `/dev/zero`/`/dev/random` and recursive `--preserve-root` bypasses
-that walked root-equivalent paths. `scripts/uutils-scoreboard.sh` now refuses
-host execution and quarantines the known cases. Resume only in a disposable,
-non-root container/VM with hard memory, PID, and wall-time limits and no
-host-root/home mount. The cross-repository policy and exact cases are recorded
-in `../docs/conformance-test-landmines.md`.
+that walked root-equivalent paths. `scripts/uutils-scoreboard.sh` is now the
+only supported entry point: it always uses a disposable, non-root OCI container
+with hard memory, PID, and wall-time limits, no network, and no host-root/home
+mount. Its known-case quarantine has no override. A killed, truncated, or
+denominator-inconsistent cargo transcript emits no scoreboard. Run only
+`make test-uutils-safety` for bounded harness validation. See
+`docs/uutils-scoreboard.md` and `../docs/conformance-test-landmines.md`.
 
 Beyond the bash-5.3 fixture gate, the broader conformance matrix (engine
 unit tests, POSIX-mode parity, the XCU/Oils/Austin/multi-shell differentials,

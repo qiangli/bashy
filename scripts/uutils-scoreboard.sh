@@ -1,145 +1,126 @@
 #!/usr/bin/env bash
-# uutils test-suite scoreboard --- runs the MIT-licensed uutils/coreutils
-# test suite (tests/by-util/*.rs via cargo) against the pure-Go
-# coreutils MULTICALL binary built from ../coreutils. That binary serves
-# the same tool registry bashy mounts in-process, and the suite's
-# supported external-binary override (UUTESTS_BINARY_PATH --- designed for
-# e.g. WASI binaries) accepts it directly because the invocation shape
-# (`coreutils <util> args---`) is identical.
-#
-# INFO scoreboard (like yash/zsh) --- never a 0/1 gate: plenty of uutils
-# cases assert uutils-specific diagnostics or extensions beyond the GNU
-# manual, so 100% is not the target; the trend is the signal.
-#
-# Requires: cargo, and the local uutils clone (a gitignored reference
-# checkout) at ../coreutils/reference/uutils-coreutils.
-set -u
+# Run the foreign uutils suite only inside a disposable, resource-capped OCI
+# container. The host prepares an immutable source archive and a read-only SUT;
+# only the requested result directory is writable from the container.
+set -euo pipefail
+
 cd "$(dirname "$0")/.."
 ROOT=$PWD
-OUT=${1:-/tmp/uutils-scoreboard}
+# shellcheck source=scripts/uutils-oci-lib.sh
+. "$ROOT/scripts/uutils-oci-lib.sh"
+
+LIST=0
+if [ "${1:-}" = --list ]; then
+  LIST=1
+  shift
+fi
+OUT=${1:-${UUTILS_OUT:-/tmp/uutils-scoreboard}}
 UU=${UUTILS:-$ROOT/../coreutils/reference/uutils-coreutils}
 THREADS=${THREADS:-2}
-mkdir -p "$OUT"
+IMAGE=${UUTILS_OCI_IMAGE:-localhost/bashy-uutils-cert:local}
+MEMORY=${UUTILS_MEMORY:-3g}
+PIDS=${UUTILS_PIDS:-512}
+TIMEOUT=${UUTILS_TIMEOUT:-3600}
 
-# Never drive the foreign, adversarial suite directly on the steward host.
-# Its cases include infinite devices and recursive root-equivalent operands.
-# The RSS polling watchdog is not containment: several workers can allocate
-# gigabytes between polls, and a recursive chmod/chgrp can mutate host-owned
-# paths without consuming much memory.  The supported runner must be a
-# disposable container with hard cgroup memory/PID limits and no host-root
-# mount.  Keep the override awkward and explicit for harness development only.
-if [ "${UUTILS_UNSAFE_HOST:-0}" != 1 ]; then
-  cat >&2 <<'EOF'
-uutils-scoreboard: REFUSED on the host.
-The upstream suite contains OOM and recursive-root landmines. Run it only in a
-disposable container with hard memory/PID limits and no host-root mount.
-For isolated harness development only: UUTILS_UNSAFE_HOST=1 (still quarantines
-known cases unless UUTILS_UNSAFE_LANDMINES=1 is also set).
-EOF
-  exit 2
-fi
-
-# HOST-SAFETY QUARANTINE
-#
-# These upstream tests are intentionally adversarial.  They are safe against
-# uutils because uutils rejects the operands before reading/walking them, but
-# the pure-Go SUT does not yet have all of those guards:
-#
-#   split -n 3 /dev/zero
-#     enters splitChunks' in-memory whole-input path on an infinite device;
-#   sort /dev/random nonexistent_file
-#     reads the infinite first operand before validating the missing second;
-#   chmod/chgrp -R --preserve-root PATH-THAT-RESOLVES-TO-/
-#     bypasses the current string-equality root guard and walks the host root.
-#
-# A 2026-07-24 run spawned two >2 GiB split processes and a >1 GiB sort
-# process, and also walked / through chmod/chgrp.  Never remove a skip merely
-# because the suite completes once: first land the corresponding SUT guard and
-# prove it with a small, isolated regression test.  UUTILS_UNSAFE_LANDMINES=1
-# is deliberately loud and opt-in for a disposable, memory-capped container.
-DANGEROUS_SKIPS=()
-if [ "${UUTILS_UNSAFE_LANDMINES:-0}" != 1 ]; then
-  DANGEROUS_SKIPS=(
-    --skip test_split::test_dev_zero
-    --skip test_split::test_number_by_bytes_dev_zero
-    --skip test_sort::test_verifies_input_files
-    --skip test_chgrp::test_preserve_root
-    --skip test_chgrp::test_preserve_root_symlink
-    --skip test_chgrp::test_preserve_root_symlink_cwd_root
-    --skip test_chmod::test_chmod_preserve_root_with_paths_that_resolve_to_root
-  )
-fi
-
-[ -d "$UU/tests/by-util" ] || {
-  echo "uutils clone not found at $UU (reference/ is gitignored --- clone github.com/uutils/coreutils there)" >&2
+case "$THREADS:$PIDS:$TIMEOUT" in
+  *[!0-9:]*|:*|*::*|*:) echo "THREADS, UUTILS_PIDS, and UUTILS_TIMEOUT must be positive integers" >&2; exit 2 ;;
+esac
+[ "$THREADS" -gt 0 ] && [ "$PIDS" -gt 0 ] && [ "$TIMEOUT" -gt 0 ] || {
+  echo "THREADS, UUTILS_PIDS, and UUTILS_TIMEOUT must be positive integers" >&2
   exit 2
 }
-command -v cargo >/dev/null 2>&1 || { echo "need cargo (rust toolchain)" >&2; exit 2; }
 
-# SUT override: point at a prebuilt multicall binary (e.g. one scp'd to
-# a bench box) instead of building ../coreutils here.
+[ -d "$UU/tests/by-util" ] || {
+  echo "uutils clone not found at $UU" >&2
+  exit 2
+}
+git -C "$UU" rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+  echo "uutils input must be a git checkout so an immutable tracked-file archive can be made" >&2
+  exit 2
+}
+
 if [ -n "${SUT:-}" ]; then
   [ -x "$SUT" ] || { echo "SUT not executable: $SUT" >&2; exit 2; }
 else
-  echo "building ../coreutils multicall---" >&2
-  ( cd ../coreutils && go build -trimpath -o bin/coreutils ./cmd/coreutils ) || exit 2
+  echo "building ../coreutils multicall on the host (the foreign suite remains contained)---" >&2
+  ( cd ../coreutils && go build -trimpath -o bin/coreutils ./cmd/coreutils )
   SUT=$(cd ../coreutils && pwd)/bin/coreutils
 fi
+SUT=$(cd "$(dirname "$SUT")" && pwd)/$(basename "$SUT")
 
-echo "building uutils test harness (cargo; first build is slow)---" >&2
-( cd "$UU" && cargo test --features unix --test tests --no-run >/dev/null 2>&1 ) || {
-  echo "cargo test harness build failed" >&2
-  exit 2
-}
+resolve_uutils_oci
+mkdir -p "$OUT"
+OUT=$(cd "$OUT" && pwd)
+# Never let a failed new attempt masquerade behind a previous complete result.
+rm -f "$OUT/run.txt" "$OUT/failures.txt"
+uid=$(id -u)
+gid=$(id -g)
+[ "$uid" -ne 0 ] || uid=65534
+[ "$gid" -ne 0 ] || gid=65534
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/bashy-uutils.XXXXXX")
+ARCHIVE=$WORK/uutils.tar
+CIDFILE=$WORK/cid
+TIMED_OUT=$WORK/timed-out
+CLIENT_LOG=$OUT/container-client.txt
+SCORE_TMP=$WORK/scoreboard
+FAIL_TMP=$WORK/failures
+CONTAINER_OUT=$WORK/out
+CONTAINER_NAME="bashy-uutils-${uid}-$$"
 
-RAW="$OUT/run.txt"
-echo "running uutils suite against $SUT---" >&2
-( cd "$UU" && UUTESTS_BINARY_PATH="$SUT" cargo test --features unix --test tests -- \
-    --test-threads="$THREADS" "${DANGEROUS_SKIPS[@]}" ) >"$RAW" 2>&1 &
-SUITE_PID=$!
-
-# Memory watchdog: a conformance run must never take the host down (a
-# runaway tool once did, via an unguarded huge allocation --- see shuf's
-# host-OOM guard). If the suite's process group exceeds MEMCAP_MB of
-# resident memory, kill it and report, rather than swapping the host to
-# death.
-MEMCAP_MB=${MEMCAP_MB:-2048}
-KILLED=0
-while kill -0 "$SUITE_PID" 2>/dev/null; do
-  RSS_MB=$(ps -ax -o pgid=,rss= | awk -v pg="$(ps -o pgid= -p $SUITE_PID | tr -d ' ')" \
-    '$1 == pg { s += $2 } END { print int(s/1024) }')
-  if [ "${RSS_MB:-0}" -gt "$MEMCAP_MB" ]; then
-    echo "watchdog: suite exceeded ${MEMCAP_MB}MB RSS (${RSS_MB}MB) --- killing" >&2
-    kill -TERM -- -"$(ps -o pgid= -p $SUITE_PID | tr -d ' ')" 2>/dev/null
-    sleep 2
-    kill -KILL -- -"$(ps -o pgid= -p $SUITE_PID | tr -d ' ')" 2>/dev/null
-    KILLED=1
-    break
+cleanup() {
+  if [ -s "$CIDFILE" ]; then
+    "${UUTILS_OCI_CMD[@]}" rm -f "$(cat "$CIDFILE")" >/dev/null 2>&1 || true
   fi
-  sleep 2
-done
-wait "$SUITE_PID" 2>/dev/null
-[ "$KILLED" = 1 ] && echo "watchdog: run was killed; scoreboard below is PARTIAL" >&2
+  "${UUTILS_OCI_CMD[@]}" rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+  rm -rf "$WORK"
+}
+trap cleanup EXIT INT TERM HUP
 
-# Per-util scoreboard from the per-test verdict lines.
-awk '
-  /^test test_[a-z0-9_]+::/ {
-    split($2, a, "::"); mod = a[1]
-    verdict = $NF
-    if (verdict == "ok") pass[mod]++
-    else if (verdict == "FAILED") fail[mod]++
-    else if (verdict == "ignored" || $(NF-1) == "ignored,") ign[mod]++
-    total[mod]++
-  }
-  END {
-    tp = tf = ti = 0
-    for (m in total) { tp += pass[m]; tf += fail[m]; ti += ign[m] }
-    printf "=== uutils suite scoreboard (features=unix) ===\n"
-    printf "total: %d pass / %d fail / %d ignored  (%d%% of %d run)\n", tp, tf, ti, (tp+tf ? 100*tp/(tp+tf) : 0), tp+tf
-    printf "--- weakest utils (fail desc) ---\n"
-    for (m in total) if (fail[m] > 0) printf "%4d fail / %4d  %s\n", fail[m], pass[m]+fail[m], m | "sort -rn | head -20"
-  }
-' "$RAW"
-grep '^test test_' "$RAW" | grep 'FAILED$' | awk '{print $2}' | sort > "$OUT/failures.txt"
-echo "full run: $RAW ; failing cases: $OUT/failures.txt" >&2
-grep -E '^test result:' "$RAW" | tail -1
+# git archive excludes target/, .git/, credentials, and untracked host files.
+git -C "$UU" archive --format=tar -o "$ARCHIVE" HEAD
+
+mkdir "$CONTAINER_OUT"
+# Root-run stewards are deliberately mapped to nobody in the container.
+chmod 0777 "$CONTAINER_OUT"
+build_uutils_oci_args \
+  "$IMAGE" "$uid:$gid" "$MEMORY" "$PIDS" "$CIDFILE" "$CONTAINER_NAME" \
+  "$ARCHIVE" "$SUT" "$ROOT/scripts/uutils-scoreboard-inner.sh" "$CONTAINER_OUT" "$THREADS"
+
+echo "running uutils suite in disposable OCI container via ${UUTILS_OCI_CMD[*]}---" >&2
+set +e
+"${UUTILS_OCI_CMD[@]}" "${UUTILS_OCI_ARGS[@]}" >"$CLIENT_LOG" 2>&1 &
+client_pid=$!
+(
+  sleep "$TIMEOUT"
+  if kill -0 "$client_pid" 2>/dev/null; then
+    : >"$TIMED_OUT"
+    kill -TERM "$client_pid" 2>/dev/null || true
+    sleep 5
+    kill -KILL "$client_pid" 2>/dev/null || true
+  fi
+) &
+watchdog_pid=$!
+wait "$client_pid"
+container_rc=$?
+kill "$watchdog_pid" 2>/dev/null || true
+wait "$watchdog_pid" 2>/dev/null
+set -e
+
+if [ -e "$TIMED_OUT" ]; then
+  echo "uutils-scoreboard: container exceeded ${TIMEOUT}s; NO scoreboard emitted" >&2
+  exit 2
+fi
+
+RAW=$CONTAINER_OUT/run.txt
+if ! "$ROOT/scripts/uutils-scoreboard-parse.sh" \
+  "$RAW" "$FAIL_TMP" "$container_rc" >"$SCORE_TMP"; then
+  echo "uutils-scoreboard: incomplete/aborted run (container exit $container_rc); NO scoreboard emitted" >&2
+  exit 2
+fi
+
+mv "$FAIL_TMP" "$OUT/failures.txt"
+cp "$RAW" "$OUT/run.txt.tmp.$$"
+mv "$OUT/run.txt.tmp.$$" "$OUT/run.txt"
+cat "$SCORE_TMP"
+echo "full run: $OUT/run.txt ; failing cases: $OUT/failures.txt" >&2
+[ "$LIST" -eq 0 ] || cat "$OUT/failures.txt"

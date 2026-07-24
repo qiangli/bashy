@@ -100,7 +100,14 @@ from ../coreutils, the same tool registry bashy mounts in-process. INFO (many
 cases assert uutils-specific diagnostics/extensions, so 100% is not the
 target). Needs cargo + the gitignored clone at
 ../coreutils/reference/uutils-coreutils.
-Tools: go cargo
+
+This task is OCI-only: it snapshots tracked uutils inputs, mounts the SUT
+read-only, disables networking, drops privileges/capabilities, and applies hard
+memory, PID, and wall-time bounds. It emits a scoreboard only after validating
+the terminal cargo summary against a preflight-listed denominator. Prepare its
+dependency-only offline image with `make prepare-uutils-image`. See
+`docs/uutils-scoreboard.md`.
+Tools: go docker
 ```bash
 scripts/uutils-scoreboard.sh
 ```

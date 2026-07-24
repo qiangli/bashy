@@ -1288,13 +1288,37 @@ JOBS="${JOBS:-}" BASH_TESTS_DIR="${BASH_TESTS_DIR:-external/bash-5.3/tests}" BAS
 ```
 
 ### test-uutils
-uutils/coreutils suite vs the pure-Go multicall (INFO metric; needs cargo).
-Sources: scripts/uutils-scoreboard.sh
-Effects: write, net
+Contained uutils/coreutils suite vs the pure-Go multicall (INFO metric).
+Requires the offline dependency image from `prepare-uutils-image`.
+Sources: scripts/uutils-scoreboard.sh, scripts/uutils-scoreboard-inner.sh
+Effects: write
 
 ```bash
 set -e
 scripts/uutils-scoreboard.sh "${UUTILS_OUT:-}"
+```
+
+### prepare-uutils-image
+Prepare the dependency-only OCI image. This networked step runs
+`cargo fetch --locked` during image construction, but never builds or executes
+the foreign suite.
+Sources: scripts/uutils-prepare-image.sh, scripts/uutils.Containerfile
+Effects: write, net
+
+```bash
+set -e
+scripts/uutils-prepare-image.sh
+```
+
+### test-uutils-safety
+Bounded containment/parser regression tests using synthetic logs and a stub OCI
+runtime only. Never invokes cargo or uutils.
+Sources: scripts/test-uutils-scoreboard.sh, scripts/uutils-oci-lib.sh, scripts/uutils-scoreboard-parse.sh
+Effects: write
+
+```bash
+set -e
+scripts/test-uutils-scoreboard.sh
 ```
 
 ### test-zsh

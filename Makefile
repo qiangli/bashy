@@ -183,17 +183,27 @@ test-zsh-list: test-zsh
 	@cat $${ZSH_OUT:-/tmp/zsh-scoreboard}/failures.txt
 
 ## test-uutils: uutils test-suite scoreboard — runs the MIT-licensed
-## uutils/coreutils test suite (via cargo + its UUTESTS_BINARY_PATH override)
-## against the pure-Go coreutils multicall from ../coreutils (the same tool
-## registry bashy mounts in-process). INFO metric, not a gate — many cases
-## assert uutils-specific diagnostics. Needs cargo + the gitignored clone at
-## ../coreutils/reference/uutils-coreutils. Output dir via UUTILS_OUT.
+## uutils/coreutils test suite in a disposable, non-root OCI container with
+## network/read-only-rootfs/memory/PID/wall-time isolation. The tracked uutils
+## input and SUT are mounted read-only; known landmines remain quarantined.
+## Requires the dependency-only image from `make prepare-uutils-image`.
+## Output dir via UUTILS_OUT.
 test-uutils:
 	@scripts/uutils-scoreboard.sh $(UUTILS_OUT)
 
 ## test-uutils-list: print the current uutils-suite failure list (module::case).
 test-uutils-list: test-uutils
 	@cat $${UUTILS_OUT:-/tmp/uutils-scoreboard}/failures.txt
+
+## test-uutils-safety: bounded synthetic/stub-OCI tests for containment command
+## construction and complete-scoreboard parsing; never runs cargo/uutils.
+test-uutils-safety:
+	@scripts/test-uutils-scoreboard.sh
+
+## prepare-uutils-image: build the local dependency-only OCI image used by
+## test-uutils. Fetches Cargo dependencies; never builds or runs foreign tests.
+prepare-uutils-image:
+	@scripts/uutils-prepare-image.sh
 
 ## smoke-chat: drive `bashy chat` interactive under a real pty against an installed
 ## agent — asserts the governed-launcher contract (native launch · registry · steer
