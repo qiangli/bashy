@@ -16,6 +16,14 @@ or cloud credentials. The container runs as a non-root UID with:
 - tmpfs-only build space and a host-enforced wall timeout (default: one hour);
 - a permanent quarantine for infinite-device and root-recursion landmines.
 
+Contained attempt 5 identified one exact `dd` FIFO harness landmine:
+`test_dd::test_random_73k_test_lazy_fullblock`. The test starts
+`dd iflag=fullblock if=fifo`, then opens and writes the FIFO synchronously with
+no deadline. If the SUT rejects `iflag` before opening the FIFO, the SUT exits
+and the harness blocks forever in the writer open. Only this exact test is
+quarantined while `iflag=fullblock` is implemented and verified; other `dd`
+tests remain measured.
+
 Two public uutils FIFO cases discovered in the contained run at commit
 `a7551d77574266075f085d7db9add85e15dec7d6` are now resolved:
 

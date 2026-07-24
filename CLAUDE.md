@@ -227,13 +227,17 @@ inside the capped `bashy-cert` VM. They are no longer quarantined, but must
 still never run directly. A later process snapshot tentatively implicated
 `test_cat::test_fifo_symlink`, but a bounded regression proved coreutils already
 follows and opens the FIFO symlink, and the exact public case passed in
-`bashy-cert`; that temporary skip is also retired. `scripts/uutils-scoreboard.sh`
-is the only supported entry point: it always uses a disposable, non-root OCI
-container with hard memory, PID, and wall-time limits, no network, and no
-host-root/home mount. Its remaining known-case quarantine has no override. A
-killed, truncated, or denominator-inconsistent cargo transcript emits no
-scoreboard. Run only `make test-uutils-safety` for bounded harness validation.
-See `docs/uutils-scoreboard.md` and
+`bashy-cert`; that temporary skip is also retired. Attempt 5 then found
+`test_dd::test_random_73k_test_lazy_fullblock` blocks forever because the test
+opens its FIFO writer without a deadline after the current SUT rejects
+unsupported `iflag=fullblock`; that exact case remains quarantined pending a
+bounded implementation and contained verification.
+`scripts/uutils-scoreboard.sh` is the only supported entry point: it always
+uses a disposable, non-root OCI container with hard memory, PID, and wall-time
+limits, no network, and no host-root/home mount. Its remaining known-case
+quarantine has no override. A killed, truncated, or denominator-inconsistent
+cargo transcript emits no scoreboard. Run only `make test-uutils-safety` for
+bounded harness validation. See `docs/uutils-scoreboard.md` and
 `../docs/conformance-test-landmines.md`.
 
 Beyond the bash-5.3 fixture gate, the broader conformance matrix (engine

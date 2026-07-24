@@ -57,6 +57,9 @@ for resolved in \
     fail "resolved case remains quarantined: $resolved"
   fi
 done
+dd_fullblock_skip='--skip test_dd::test_random_73k_test_lazy_fullblock'
+[ "$(grep -Fxc -- "  $dd_fullblock_skip" "$ROOT/scripts/uutils-scoreboard-inner.sh")" -eq 1 ] ||
+  fail "dd fullblock FIFO landmine must have one exact quarantine entry"
 mounts=0
 rw_mounts=0
 for ((i=0; i+1<${#UUTILS_OCI_ARGS[@]}; i++)); do
