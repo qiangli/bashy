@@ -232,7 +232,10 @@ follows and opens the FIFO symlink, and the exact public case passed in
 opens its FIFO writer without a deadline after the current SUT rejects
 unsupported `iflag=fullblock`; coreutils `c12313d` implemented full-block
 reads with a bounded FIFO regression, and the exact public case passed in
-`bashy-cert`, so that temporary skip is retired.
+`bashy-cert`, so that temporary skip is retired. Attempt 6 then found
+`test_dd::test_seek_output_fifo` deadlocks because both the SUT output and test
+producer open the FIFO write-only; that exact case remains quarantined pending
+bounded nonseekable-output seek semantics and contained verification.
 `scripts/uutils-scoreboard.sh` is the only supported entry point: it always
 uses a disposable, non-root OCI container with hard memory, PID, and wall-time
 limits, no network, and no host-root/home mount. Its remaining known-case

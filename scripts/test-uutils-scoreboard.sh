@@ -58,6 +58,9 @@ for resolved in \
     fail "resolved case remains quarantined: $resolved"
   fi
 done
+dd_seek_fifo_skip='--skip test_dd::test_seek_output_fifo'
+[ "$(grep -Fxc -- "  $dd_seek_fifo_skip" "$ROOT/scripts/uutils-scoreboard-inner.sh")" -eq 1 ] ||
+  fail "dd output-FIFO seek landmine must have one exact quarantine entry"
 mounts=0
 rw_mounts=0
 for ((i=0; i+1<${#UUTILS_OCI_ARGS[@]}; i++)); do

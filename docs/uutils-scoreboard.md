@@ -16,6 +16,14 @@ or cloud credentials. The container runs as a non-root UID with:
 - tmpfs-only build space and a host-enforced wall timeout (default: one hour);
 - a permanent quarantine for infinite-device and root-recursion landmines.
 
+Contained attempt 6 identified one exact output-FIFO landmine:
+`test_dd::test_seek_output_fifo`. The SUT runs
+`dd count=0 seek=1 of=fifo status=noxfer`, while the test writes one 512-byte
+block to the same FIFO. Both sides currently open write-only, so neither
+provides a reader and both block forever. Only this exact case is quarantined
+while nonseekable-output seek semantics are implemented and verified; other
+`dd` tests remain measured.
+
 Two public uutils FIFO cases discovered in the contained run at commit
 `a7551d77574266075f085d7db9add85e15dec7d6` are now resolved:
 
