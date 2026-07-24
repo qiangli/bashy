@@ -16,14 +16,6 @@ or cloud credentials. The container runs as a non-root UID with:
 - tmpfs-only build space and a host-enforced wall timeout (default: one hour);
 - a permanent quarantine for infinite-device and root-recursion landmines.
 
-Contained attempt 6 identified one exact output-FIFO landmine:
-`test_dd::test_seek_output_fifo`. The SUT runs
-`dd count=0 seek=1 of=fifo status=noxfer`, while the test writes one 512-byte
-block to the same FIFO. Both sides currently open write-only, so neither
-provides a reader and both block forever. Only this exact case is quarantined
-while nonseekable-output seek semantics are implemented and verified; other
-`dd` tests remain measured.
-
 Two public uutils FIFO cases discovered in the contained run at commit
 `a7551d77574266075f085d7db9add85e15dec7d6` are now resolved:
 
@@ -65,6 +57,18 @@ ARM64 SUT
 (`sha256:e7b720a7d30937c6118cf96dca9587331cac1193fbce7e41b56da4619e33e041`)
 passed the exact public case in `bashy-cert`: one passed, zero failed, 5,365
 filtered, 3.88 seconds, no timeout. The temporary dd skip is retired.
+
+Contained attempt 6 identified `test_dd::test_seek_output_fifo`: the former SUT
+and test producer both opened the output FIFO write-only, so neither supplied a
+reader. Coreutils `55960c0940ea918ef060a9d0f21eda6ef88f3fff` now simulates
+the nonseekable output offset by reading and discarding `seek * obs` bytes,
+while preserving regular-file seek, truncate, and `conv=notrunc` behavior. Its
+bounded FIFO regressions cover both output `seek` and input `skip`. The Linux
+ARM64 SUT
+(`sha256:91d6aca79c176adf69e3e830ed3f4ba4b6175eebabd1bc3f9040fafaa2a39b80`)
+passed exact public case `test_dd::test_seek_output_fifo` in `bashy-cert`: one
+pass, zero failures, 5,365 filtered, 0.03 seconds, and no timeout. The exact
+quarantine is retired.
 
 Prepare the dependency-only image once with `make prepare-uutils-image`. This
 networked preparation step archives the selected uutils revision and runs only

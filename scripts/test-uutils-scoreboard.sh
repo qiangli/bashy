@@ -53,14 +53,12 @@ for resolved in \
   test_cp::test_cp_fifo \
   test_cp::test_dir_perm_race_with_preserve_mode_and_ownership \
   test_cat::test_fifo_symlink \
-  test_dd::test_random_73k_test_lazy_fullblock; do
+  test_dd::test_random_73k_test_lazy_fullblock \
+  test_dd::test_seek_output_fifo; do
   if grep -Fq -- "--skip $resolved" "$ROOT/scripts/uutils-scoreboard-inner.sh"; then
     fail "resolved case remains quarantined: $resolved"
   fi
 done
-dd_seek_fifo_skip='--skip test_dd::test_seek_output_fifo'
-[ "$(grep -Fxc -- "  $dd_seek_fifo_skip" "$ROOT/scripts/uutils-scoreboard-inner.sh")" -eq 1 ] ||
-  fail "dd output-FIFO seek landmine must have one exact quarantine entry"
 mounts=0
 rw_mounts=0
 for ((i=0; i+1<${#UUTILS_OCI_ARGS[@]}; i++)); do
