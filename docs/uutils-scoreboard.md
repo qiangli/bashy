@@ -70,6 +70,15 @@ passed exact public case `test_dd::test_seek_output_fifo` in `bashy-cert`: one
 pass, zero failures, 5,365 filtered, 0.03 seconds, and no timeout. The exact
 quarantine is retired.
 
+Contained attempt 7 identified `test_dd::test_sync_delayed_reader`. The former
+SUT rejects standard `conv=sync` during argument parsing, before opening
+`if=fifo`; the test then blocks forever opening its FIFO writer because no
+reader exists. At 89,450 transcript bytes the run remained unchanged for more
+than three minutes, with the test thread blocked in a write-only FIFO `openat`
+and the SUT child defunct. Only this exact observed case is quarantined pending
+`conv=sync` semantics, a bounded delayed-writer regression, and exact contained
+verification.
+
 Prepare the dependency-only image once with `make prepare-uutils-image`. This
 networked preparation step archives the selected uutils revision and runs only
 `cargo fetch --locked` during an OCI image build; it never builds or executes

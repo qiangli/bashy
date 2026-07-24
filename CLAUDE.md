@@ -237,6 +237,11 @@ reads with a bounded FIFO regression, and the exact public case passed in
 producer open the FIFO write-only. Coreutils `55960c0` now consumes the output
 offset through a readable FIFO endpoint, its bounded regressions pass, and the
 exact public case passed in `bashy-cert`, so that temporary skip is retired.
+Attempt 7 then found `test_dd::test_sync_delayed_reader` deadlocks because the
+SUT rejects `conv=sync` before opening `if=fifo`, leaving the test producer
+blocked in its write-only FIFO open. That exact case remains quarantined
+pending standard sync-padding semantics, a bounded regression, and contained
+verification.
 `scripts/uutils-scoreboard.sh` is the only supported entry point: it always
 uses a disposable, non-root OCI container with hard memory, PID, and wall-time
 limits, no network, and no host-root/home mount. Its permanent known-case

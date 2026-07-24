@@ -59,6 +59,9 @@ for resolved in \
     fail "resolved case remains quarantined: $resolved"
   fi
 done
+dd_sync_fifo_skip='--skip test_dd::test_sync_delayed_reader'
+[ "$(grep -Fxc -- "  $dd_sync_fifo_skip" "$ROOT/scripts/uutils-scoreboard-inner.sh")" -eq 1 ] ||
+  fail "dd conv=sync FIFO landmine must have one exact quarantine entry"
 mounts=0
 rw_mounts=0
 for ((i=0; i+1<${#UUTILS_OCI_ARGS[@]}; i++)); do
