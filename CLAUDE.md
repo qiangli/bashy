@@ -230,8 +230,9 @@ follows and opens the FIFO symlink, and the exact public case passed in
 `bashy-cert`; that temporary skip is also retired. Attempt 5 then found
 `test_dd::test_random_73k_test_lazy_fullblock` blocks forever because the test
 opens its FIFO writer without a deadline after the current SUT rejects
-unsupported `iflag=fullblock`; that exact case remains quarantined pending a
-bounded implementation and contained verification.
+unsupported `iflag=fullblock`; coreutils `c12313d` implemented full-block
+reads with a bounded FIFO regression, and the exact public case passed in
+`bashy-cert`, so that temporary skip is retired.
 `scripts/uutils-scoreboard.sh` is the only supported entry point: it always
 uses a disposable, non-root OCI container with hard memory, PID, and wall-time
 limits, no network, and no host-root/home mount. Its remaining known-case

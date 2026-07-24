@@ -16,14 +16,6 @@ or cloud credentials. The container runs as a non-root UID with:
 - tmpfs-only build space and a host-enforced wall timeout (default: one hour);
 - a permanent quarantine for infinite-device and root-recursion landmines.
 
-Contained attempt 5 identified one exact `dd` FIFO harness landmine:
-`test_dd::test_random_73k_test_lazy_fullblock`. The test starts
-`dd iflag=fullblock if=fifo`, then opens and writes the FIFO synchronously with
-no deadline. If the SUT rejects `iflag` before opening the FIFO, the SUT exits
-and the harness blocks forever in the writer open. Only this exact test is
-quarantined while `iflag=fullblock` is implemented and verified; other `dd`
-tests remain measured.
-
 Two public uutils FIFO cases discovered in the contained run at commit
 `a7551d77574266075f085d7db9add85e15dec7d6` are now resolved:
 
@@ -54,6 +46,17 @@ ARM64 SUT
 passed the exact public case in `bashy-cert`: one passed, zero failed, 5,365
 filtered, 0.03 seconds, no timeout. The process snapshot had not identified
 the stalled test; the temporary cat skip is retired.
+
+Contained attempt 5 then identified
+`test_dd::test_random_73k_test_lazy_fullblock`: the former SUT rejected
+`iflag=fullblock` before opening the FIFO, while the test opened its writer
+without a deadline. Coreutils `c12313da0da7407974176e70618a08ceb2f16397`
+now accumulates short reads to `ibs` or EOF and adds a bounded 73,728-byte FIFO
+regression with nonblocking writer deadlines and kill/wait cleanup. Its Linux
+ARM64 SUT
+(`sha256:e7b720a7d30937c6118cf96dca9587331cac1193fbce7e41b56da4619e33e041`)
+passed the exact public case in `bashy-cert`: one passed, zero failed, 5,365
+filtered, 3.88 seconds, no timeout. The temporary dd skip is retired.
 
 Prepare the dependency-only image once with `make prepare-uutils-image`. This
 networked preparation step archives the selected uutils revision and runs only
