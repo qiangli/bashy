@@ -16,6 +16,14 @@ or cloud credentials. The container runs as a non-root UID with:
 - tmpfs-only build space and a host-enforced wall timeout (default: one hour);
 - a permanent quarantine for infinite-device and root-recursion landmines.
 
+Contained attempt 4 also identified one exact FIFO harness landmine:
+`test_cat::test_fifo_symlink`. The test starts `cat sympipe`, opens the FIFO
+from a producer thread, then joins that thread without a deadline. If the SUT
+exits before opening the FIFO, the producer remains blocked and the harness
+waits forever with a defunct SUT child. Only this exact test is quarantined
+while the cat implementation is repaired and verified; other cat tests remain
+measured.
+
 Two public uutils FIFO cases discovered in the contained run at commit
 `a7551d77574266075f085d7db9add85e15dec7d6` are now resolved:
 

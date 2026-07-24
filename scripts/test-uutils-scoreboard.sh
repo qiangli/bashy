@@ -56,6 +56,9 @@ for resolved in \
     fail "resolved case remains quarantined: $resolved"
   fi
 done
+cat_fifo_skip='--skip test_cat::test_fifo_symlink'
+[ "$(grep -Fxc -- "  $cat_fifo_skip" "$ROOT/scripts/uutils-scoreboard-inner.sh")" -eq 1 ] ||
+  fail "cat FIFO-symlink landmine must have one exact quarantine entry"
 mounts=0
 rw_mounts=0
 for ((i=0; i+1<${#UUTILS_OCI_ARGS[@]}; i++)); do

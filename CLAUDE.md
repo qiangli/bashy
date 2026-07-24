@@ -224,7 +224,11 @@ that walked root-equivalent paths. Later contained runs found recursive `cp`
 deadlocks on `test_cp_fifo` and the `--copy-contents` directory-permission race:
 coreutils `40eb4b6` fixed both, and each exact public case passed separately
 inside the capped `bashy-cert` VM. They are no longer quarantined, but must
-still never run directly. `scripts/uutils-scoreboard.sh` is the only supported
+still never run directly. A later contained run found
+`test_cat::test_fifo_symlink` can wait forever when `cat` exits before opening
+the symlinked FIFO: its producer blocks in `open(2)` and the harness joins it
+without a deadline. That exact case remains quarantined pending a bounded fix
+and contained verification. `scripts/uutils-scoreboard.sh` is the only supported
 entry point: it always uses a disposable, non-root OCI container with hard
 memory, PID, and wall-time limits, no network, and no host-root/home mount. Its
 remaining known-case quarantine has no override. A killed, truncated, or
