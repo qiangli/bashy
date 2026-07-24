@@ -198,7 +198,7 @@ make test-bash-list     # list available fixtures with per-fixture PASS/FAIL/TIM
 make test-yash          # yash POSIX (-p) scoreboard — the headline conformance-frontier metric
 make test-yash-list     # print the current bashy-specific yash failure list
 make test-zsh           # zsh-own-suite Tier-0 scoreboard (tools/ztst runner; INFO metric, not a gate)
-make test-uutils        # uutils/coreutils suite vs the pure-Go multicall (INFO metric; needs cargo)
+make test-uutils        # REFUSES native host execution: use only the contained runner (OOM/root-walk landmines)
 make dist               # cross-compile static binaries for all 6 platforms
 make tidy               # go mod tidy + gofmt -s -w . + go vet ./...
 make help               # every target with its `## ` doc line
@@ -215,6 +215,16 @@ go test -run TestDoctor -v ./internal/agentos
 
 `TESTS=` is the fast inner loop for conformance work — the full serial suite is
 minutes, one fixture is seconds.
+
+### Conformance-suite host safety
+
+Never run the full uutils suite natively. A 2026-07-24 run triggered unbounded
+reads from `/dev/zero`/`/dev/random` and recursive `--preserve-root` bypasses
+that walked root-equivalent paths. `scripts/uutils-scoreboard.sh` now refuses
+host execution and quarantines the known cases. Resume only in a disposable,
+non-root container/VM with hard memory, PID, and wall-time limits and no
+host-root/home mount. The cross-repository policy and exact cases are recorded
+in `../docs/conformance-test-landmines.md`.
 
 Beyond the bash-5.3 fixture gate, the broader conformance matrix (engine
 unit tests, POSIX-mode parity, the XCU/Oils/Austin/multi-shell differentials,

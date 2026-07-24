@@ -18,8 +18,57 @@ cd "$(dirname "$0")/.."
 ROOT=$PWD
 OUT=${1:-/tmp/uutils-scoreboard}
 UU=${UUTILS:-$ROOT/../coreutils/reference/uutils-coreutils}
-THREADS=${THREADS:-8}
+THREADS=${THREADS:-2}
 mkdir -p "$OUT"
+
+# Never drive the foreign, adversarial suite directly on the steward host.
+# Its cases include infinite devices and recursive root-equivalent operands.
+# The RSS polling watchdog is not containment: several workers can allocate
+# gigabytes between polls, and a recursive chmod/chgrp can mutate host-owned
+# paths without consuming much memory.  The supported runner must be a
+# disposable container with hard cgroup memory/PID limits and no host-root
+# mount.  Keep the override awkward and explicit for harness development only.
+if [ "${UUTILS_UNSAFE_HOST:-0}" != 1 ]; then
+  cat >&2 <<'EOF'
+uutils-scoreboard: REFUSED on the host.
+The upstream suite contains OOM and recursive-root landmines. Run it only in a
+disposable container with hard memory/PID limits and no host-root mount.
+For isolated harness development only: UUTILS_UNSAFE_HOST=1 (still quarantines
+known cases unless UUTILS_UNSAFE_LANDMINES=1 is also set).
+EOF
+  exit 2
+fi
+
+# HOST-SAFETY QUARANTINE
+#
+# These upstream tests are intentionally adversarial.  They are safe against
+# uutils because uutils rejects the operands before reading/walking them, but
+# the pure-Go SUT does not yet have all of those guards:
+#
+#   split -n 3 /dev/zero
+#     enters splitChunks' in-memory whole-input path on an infinite device;
+#   sort /dev/random nonexistent_file
+#     reads the infinite first operand before validating the missing second;
+#   chmod/chgrp -R --preserve-root PATH-THAT-RESOLVES-TO-/
+#     bypasses the current string-equality root guard and walks the host root.
+#
+# A 2026-07-24 run spawned two >2 GiB split processes and a >1 GiB sort
+# process, and also walked / through chmod/chgrp.  Never remove a skip merely
+# because the suite completes once: first land the corresponding SUT guard and
+# prove it with a small, isolated regression test.  UUTILS_UNSAFE_LANDMINES=1
+# is deliberately loud and opt-in for a disposable, memory-capped container.
+DANGEROUS_SKIPS=()
+if [ "${UUTILS_UNSAFE_LANDMINES:-0}" != 1 ]; then
+  DANGEROUS_SKIPS=(
+    --skip test_split::test_dev_zero
+    --skip test_split::test_number_by_bytes_dev_zero
+    --skip test_sort::test_verifies_input_files
+    --skip test_chgrp::test_preserve_root
+    --skip test_chgrp::test_preserve_root_symlink
+    --skip test_chgrp::test_preserve_root_symlink_cwd_root
+    --skip test_chmod::test_chmod_preserve_root_with_paths_that_resolve_to_root
+  )
+fi
 
 [ -d "$UU/tests/by-util" ] || {
   echo "uutils clone not found at $UU (reference/ is gitignored --- clone github.com/uutils/coreutils there)" >&2
@@ -45,7 +94,8 @@ echo "building uutils test harness (cargo; first build is slow)---" >&2
 
 RAW="$OUT/run.txt"
 echo "running uutils suite against $SUT---" >&2
-( cd "$UU" && UUTESTS_BINARY_PATH="$SUT" cargo test --features unix --test tests -- --test-threads="$THREADS" ) >"$RAW" 2>&1 &
+( cd "$UU" && UUTESTS_BINARY_PATH="$SUT" cargo test --features unix --test tests -- \
+    --test-threads="$THREADS" "${DANGEROUS_SKIPS[@]}" ) >"$RAW" 2>&1 &
 SUITE_PID=$!
 
 # Memory watchdog: a conformance run must never take the host down (a
@@ -53,7 +103,7 @@ SUITE_PID=$!
 # host-OOM guard). If the suite's process group exceeds MEMCAP_MB of
 # resident memory, kill it and report, rather than swapping the host to
 # death.
-MEMCAP_MB=${MEMCAP_MB:-16384}
+MEMCAP_MB=${MEMCAP_MB:-2048}
 KILLED=0
 while kill -0 "$SUITE_PID" 2>/dev/null; do
   RSS_MB=$(ps -ax -o pgid=,rss= | awk -v pg="$(ps -o pgid= -p $SUITE_PID | tr -d ' ')" \
