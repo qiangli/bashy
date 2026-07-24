@@ -16,6 +16,20 @@ or cloud credentials. The container runs as a non-root UID with:
 - tmpfs-only build space and a host-enforced wall timeout (default: one hour);
 - a permanent quarantine for infinite-device and root-recursion landmines.
 
+The quarantine also covers two public uutils FIFO cases discovered in the
+contained run at commit `a7551d77574266075f085d7db9add85e15dec7d6`:
+
+- `test_cp::test_cp_fifo` runs
+  `cp --preserve=mode -r fifo fifo2`. Recursive `cp` must recreate the FIFO;
+  opening it for input blocks forever because the test has no producer.
+- `test_cp::test_dir_perm_race_with_preserve_mode_and_ownership` runs
+  `cp --preserve=<mode|ownership> -R --copy-contents --parents src dest`.
+  The destination hierarchy must exist before `cp` blocks on `src/fifo`, or
+  the producer's directory handshake times out and leaves the child blocked.
+
+These skips have no override. Remove them only after deadline-bounded unit
+regressions and a successful contained verification.
+
 Prepare the dependency-only image once with `make prepare-uutils-image`. This
 networked preparation step archives the selected uutils revision and runs only
 `cargo fetch --locked` during an OCI image build; it never builds or executes
