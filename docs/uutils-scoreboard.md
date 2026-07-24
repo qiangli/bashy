@@ -16,14 +16,6 @@ or cloud credentials. The container runs as a non-root UID with:
 - tmpfs-only build space and a host-enforced wall timeout (default: one hour);
 - a permanent quarantine for infinite-device and root-recursion landmines.
 
-Contained attempt 4 also identified one exact FIFO harness landmine:
-`test_cat::test_fifo_symlink`. The test starts `cat sympipe`, opens the FIFO
-from a producer thread, then joins that thread without a deadline. If the SUT
-exits before opening the FIFO, the producer remains blocked and the harness
-waits forever with a defunct SUT child. Only this exact test is quarantined
-while the cat implementation is repaired and verified; other cat tests remain
-measured.
-
 Two public uutils FIFO cases discovered in the contained run at commit
 `a7551d77574266075f085d7db9add85e15dec7d6` are now resolved:
 
@@ -41,6 +33,19 @@ deadline-bounded regressions. Its Linux ARM64 SUT
 passed each exact upstream case separately in the isolated `bashy-cert` VM:
 one passed, zero failed, no timeout. Their two skips are therefore retired.
 They must still never be run directly on a steward host.
+
+Contained attempt 4 later stalled with an idle harness and defunct SUT
+children. Process arguments suggested `test_cat::test_fifo_symlink`, whose
+producer can block indefinitely if no FIFO reader arrives, so the exact case
+was quarantined pending proof. The audit found that coreutils already uses
+`os.Open`, follows the symlink, and rendezvous correctly. Coreutils
+`0e421f3b60b21bd7cca4d325b2f3497c69ba78f2` adds a bounded 128 KiB
+subprocess regression with producer deadline and kill/wait cleanup. Its Linux
+ARM64 SUT
+(`sha256:e57d48e56ada1e5641c8fd76c6c798cb0735774739aa137af7fbe2e028301093`)
+passed the exact public case in `bashy-cert`: one passed, zero failed, 5,365
+filtered, 0.03 seconds, no timeout. The process snapshot had not identified
+the stalled test; the temporary cat skip is retired.
 
 Prepare the dependency-only image once with `make prepare-uutils-image`. This
 networked preparation step archives the selected uutils revision and runs only
