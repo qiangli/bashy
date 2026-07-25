@@ -100,7 +100,7 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
   - **Bare-name verb shims** (`Preamble()`): front-door verbs are exposed without
     the `bashy ` prefix via overridable shell functions (`weave(){ command bashy
     weave "$@"; }`, …). Shadowing policy: native verbs (weave/sprint/dag/run/
-    commands/doctor/schedule/secrets/skills/kb) + identical drop-in passthroughs
+    commands/doctor/schedule/secrets/ask/skills/kb) + identical drop-in passthroughs
     (gh/act/rclone/podman/ollama/loom/zot/seaweedfs/kopia/mirror)
     always shimmed; version-sensitive provisioners (go/cmake/clang) only in agent
     mode; `time` (keyword) and jobs/fg/bg/kill (builtins) never. Override with
@@ -433,6 +433,14 @@ itself, which is pure Go).
 - `observability.md` — the shipped OTel plane. bashy could RUN a collector (`bashy otel`) and fed it NOTHING — it was the one tier of the whole stack missing from the umbrella's `service.name` set. Two primitives, chosen from what six hours of debugging could not see: **Provenance** (a value next to WHERE IT CAME FROM — the only bug caught by a signal was caught by `from_provider=false`) and **BoundHit** (a limit records when it BINDS — especially when the run recovers). Plus a span per command at the ExecHandler chokepoint, including the EXIT CODE. Stack trimmed 286 MB → 109 MB (−61%) by going Victoria-only: jaeger (2,240 deps) → VictoriaTraces, perses (1,478) → vmui, collector (833) → three proxy map entries, prometheus (556) → VictoriaMetrics. Pure standard OTEL env vars; unset endpoint is a total no-op; `cmd/bash` links none of it.
 - `audit-log.md` — the shipped compliance audit trail: a tamper-evident, hash-chained, secret-redacted record of every dispatched command with agent attribution and Command-Atlas effects (`bashy-audit-v1`; NIST AU-3/AU-9). Opt-in via `BASHY_AUDIT`, off by default, never in `cmd/bash` / `--posix`. Read side is `bashy audit {status,tail,verify,export,path}`; core is `coreutils/pkg/policy/audit`, the ExecHandler middleware is `internal/agentos/audit.go`. Records; does not block (policy engine) or contain (OS sandbox) — the un-bypassable record of the agentic+interactive command path, composes with auditd/EDR. Deferred: OTel export, signed checkpoints, gitleaks-grade redactor.
 - `fips-140.md` — the shipped FIPS 140-3 build mode: `make build-fips` (`GOFIPS140=v1.0.0`) builds both binaries against the Go Cryptographic Module (CMVP #5247); pure-Go, no cgo/BoringCrypto. Use `GODEBUG=fips140=on` (the build-fips default — keeps `md5sum` working), NOT `fips140=only` (rejects MD5) for a general shell. State surfaced in `bashy doctor` and `bashy context --json` (`runtime.fips140`). A FIPS-built `bin/bash` still passes 86/86. Pairs with the audit log for the FedRAMP/CMMC procurement story.
+- `plan-bashy-ask-human-input.md` — **`bashy ask`**: get an ad-hoc value from the
+  HUMAN from inside an agent session, over a channel the agent does not own
+  (controlling terminal → GUI askpass → out-of-band rendezvous), returning a PATH
+  rather than the value. Exists because a command run by an agentic CLI does not
+  own its stdin or stdout — measured: Claude Code `setsid`s its children, so
+  `/dev/tty` is ENXIO and the obvious implementation cannot work. Replaces the
+  `/tmp/x` habit. Engines are `coreutils/pkg/{ctty,ask}`; bashy contributes the
+  four registration points. Design of record: `../docs/bashy-ask-human-input-design.md`.
 - `bash.md`, `agentic-extensions.md` — background references, not active plans.
 
 POSIX-conformance frontier (the active layer now that bash-5.3 is 86/86 — driven via `suites.md` + `dag.md`):

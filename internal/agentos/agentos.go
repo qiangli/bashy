@@ -67,6 +67,7 @@ import (
 	"github.com/qiangli/coreutils/external/tessaro"
 	"github.com/qiangli/coreutils/external/zot"
 	"github.com/qiangli/coreutils/pkg/agentcmd"
+	"github.com/qiangli/coreutils/pkg/ask"
 	"github.com/qiangli/coreutils/pkg/board"
 	"github.com/qiangli/coreutils/pkg/capability"
 	"github.com/qiangli/coreutils/pkg/chat"
@@ -87,8 +88,8 @@ import (
 	"github.com/qiangli/coreutils/pkg/sdlc"
 	"github.com/qiangli/coreutils/pkg/search"
 	"github.com/qiangli/coreutils/pkg/secrets"
-	"github.com/qiangli/coreutils/pkg/sota"
 	coreskills "github.com/qiangli/coreutils/pkg/skills"
+	"github.com/qiangli/coreutils/pkg/sota"
 	"github.com/qiangli/coreutils/pkg/supervise"
 	"github.com/qiangli/coreutils/pkg/telemetry"
 	"github.com/qiangli/coreutils/pkg/todo"
@@ -124,7 +125,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "search", "sota", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
+		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "search", "sota", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
@@ -627,6 +628,18 @@ func Dispatch() {
 		cmd := secrets.NewSecretsCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "ask":
+		// Ask the HUMAN for an ad-hoc value over a channel the calling program
+		// does not own (controlling terminal → GUI askpass → out-of-band
+		// rendezvous), and hand back a path rather than the value. Local-first:
+		// no network, no pairing — unlike `secrets`, which is the cloudbox vault.
+		cmd := ask.NewAskCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 		os.Exit(0)

@@ -370,6 +370,7 @@ var verbSynopsis = map[string]string{
 	"dag":        "agent-first markdown DAG task runner",
 	"schedule":   "modern cron: run a command on a cron/interval/at schedule",
 	"secrets":    "managed API-key/token vault for the shell",
+	"ask":        "ask the HUMAN operator for an ad-hoc value (a token, an OTP) — never the model; returns a path, not the value",
 	"skills":     "tier-2 workspace skills, env-gated: list applicable here, probe the coordinate, show one",
 	"kb":         "host-shared knowledge base: search before a task, add/retro after (all agents, all repos)",
 	"tools":      "the agentic CLI harnesses this host can drive (claude, codex, opencode, ...)",
