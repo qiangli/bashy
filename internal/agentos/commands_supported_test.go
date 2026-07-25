@@ -65,7 +65,7 @@ func TestDockerAliasIsHandled(t *testing.T) {
 		t.Errorf("engineAlias(docker) = %q, want podman", got)
 	}
 	// Non-aliases pass through unchanged.
-	for _, n := range []string{"podman", "ollama", "gh"} {
+	for _, n := range []string{"podman", "ollama", "dks", "gh"} {
 		if got := engineAlias(n); got != n {
 			t.Errorf("engineAlias(%q) = %q, want unchanged", n, got)
 		}

@@ -97,6 +97,10 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 	if r := byName["docker"]; r.AliasOf != "podman" || r.Tier != atlas.TierSandbox {
 		t.Errorf("docker = %+v, want alias_of podman, tier sandbox", r)
 	}
+	if r := byName["dks"]; r.Stage != atlas.StageDeploy ||
+		r.Group != atlas.GroupClusterCloud || r.Tier != atlas.TierCluster {
+		t.Errorf("dks = %+v, want deploy/cluster-cloud/cluster", r)
+	}
 	if r := byName["doctl"]; r.Tier != atlas.TierCloud || r.Subclass != atlas.SubclassManagedExternal {
 		t.Errorf("doctl = %+v, want registry-derived cloud/managed-external", r)
 	}

@@ -421,6 +421,7 @@ var verbSynopsis = map[string]string{
 	"curl":       "curl (platform curl; pinned+verified curl.se/windows on a bare Windows node)",
 	"kubectl":    "Kubernetes CLI for the DKS cluster (managed external, Apache-2.0)",
 	"helm":       "Helm chart installer for the DKS cluster (managed external, Apache-2.0)",
+	"dks":        "provision and manage the dedicated rootful DKS (k3s) machine",
 	"sphere":     "peer-direct pooled p2p inference/compute — the sphere tier (via outpost)",
 	"tessaro":    "Tessaro account: sign in/out, status, open the portal (via outpost)",
 	"login":      "sign in to Tessaro — pair this machine with the portal",
