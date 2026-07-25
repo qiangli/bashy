@@ -69,6 +69,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/agentcmd"
 	"github.com/qiangli/coreutils/pkg/ask"
 	"github.com/qiangli/coreutils/pkg/board"
+	"github.com/qiangli/coreutils/pkg/bus"
 	"github.com/qiangli/coreutils/pkg/capability"
 	"github.com/qiangli/coreutils/pkg/chat"
 	"github.com/qiangli/coreutils/pkg/dag"
@@ -81,7 +82,6 @@ import (
 	"github.com/qiangli/coreutils/pkg/lexicon"
 	"github.com/qiangli/coreutils/pkg/meet"
 	"github.com/qiangli/coreutils/pkg/mirror"
-	"github.com/qiangli/coreutils/pkg/notify"
 	"github.com/qiangli/coreutils/pkg/pair"
 	"github.com/qiangli/coreutils/pkg/policy/coord"
 	"github.com/qiangli/coreutils/pkg/principal"
@@ -126,7 +126,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "notify", "search", "sota", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
+		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "search", "sota", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
@@ -632,21 +632,21 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
-	case "notify":
-		// Publish a notification to the host room's timeline — the push half of
-		// the agent bus (kb is the durable pull half). Addressed by --topic /
-		// --to / --room, and every publish must name a principal: a notification
-		// nobody can attribute is not a notification.
-		cmd := notify.NewCommand()
+	case "bus":
+		// The agent notification bus — the PUSH half of how agents coordinate,
+		// where `bashy kb` is the durable PULL half. `bus publish` appends an
+		// addressed notification to the host room timeline; `bus watch` follows
+		// it, or drains what this subscriber has not seen.
+		cmd := bus.NewBusCmd()
 		cmd.SetArgs(os.Args[2:])
 		err := cmd.Execute()
-		// notify.Reported means the command already wrote the failure in the form
-		// the caller asked for — printing a second, plain-text copy would corrupt
-		// the JSON stream it just wrote to stderr.
-		if err != nil && !notify.Reported(err) {
-			fmt.Fprintln(os.Stderr, "bashy notify:", err)
+		// bus.Reported means the command already wrote the failure in the form the
+		// caller asked for — printing a second, plain-text copy would corrupt the
+		// JSON stream it just wrote to stderr.
+		if err != nil && !bus.Reported(err) {
+			fmt.Fprintln(os.Stderr, "bashy bus:", err)
 		}
-		os.Exit(notify.ExitCode(err))
+		os.Exit(bus.ExitCode(err))
 	case "ask":
 		// Ask the HUMAN for an ad-hoc value over a channel the calling program
 		// does not own (controlling terminal → GUI askpass → out-of-band
