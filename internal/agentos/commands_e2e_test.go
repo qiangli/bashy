@@ -107,7 +107,7 @@ func firstLineOf(s string) string {
 }
 
 func featureAvailable(bin, name string) (bool, string) {
-	o, _ := runBashy(bin, "commands", name, "--features", "--json")
+	o, _, _ := runBashyStd(bin, "commands", name, "--features", "--json")
 	var info map[string]any
 	if err := json.Unmarshal([]byte(o), &info); err != nil {
 		return false, "no feature report"
@@ -124,9 +124,9 @@ func TestE2EDoctor(t *testing.T) {
 	bin := bashyBinary(t)
 
 	// JSON envelope: schema + a non-empty check list including the tool-surface sweep.
-	out, code := runBashy(bin, "doctor", "--json")
+	out, stderr, code := runBashyStd(bin, "doctor", "--json")
 	if code != 0 {
-		t.Fatalf("`bashy doctor --json` exited %d:\n%s", code, out)
+		t.Fatalf("`bashy doctor --json` exited %d:\nstdout=%s\nstderr=%s", code, out, stderr)
 	}
 	var env struct {
 		Schema string `json:"schema_version"`
@@ -190,9 +190,9 @@ func TestE2EDoctor(t *testing.T) {
 func TestE2EAllListedCommandsDispatch(t *testing.T) {
 	bin := bashyBinary(t)
 
-	out, code := runBashy(bin, "commands", "--json")
+	out, stderr, code := runBashyStd(bin, "commands", "--json")
 	if code != 0 {
-		t.Fatalf("`bashy commands --json` exited %d:\n%s", code, out)
+		t.Fatalf("`bashy commands --json` exited %d:\nstdout=%s\nstderr=%s", code, out, stderr)
 	}
 	var cat struct {
 		Builtins  []string `json:"builtins"`
@@ -211,7 +211,7 @@ func TestE2EAllListedCommandsDispatch(t *testing.T) {
 		if !contains(cat.Builtins, b) {
 			continue
 		}
-		if o, _ := runBashy(bin, "-c", "type -t "+b); strings.TrimSpace(o) != "builtin" {
+		if o, _, _ := runBashyStd(bin, "-c", "type -t "+b); strings.TrimSpace(o) != "builtin" {
 			t.Errorf("builtin %q did not resolve as a builtin: %q", b, strings.TrimSpace(o))
 		}
 	}
@@ -291,11 +291,15 @@ func contains(s []string, v string) bool {
 	return false
 }
 
-// runBashyStd is runBashy with stdout and stderr separated — needed by the
-// skills show byte-compat contract (content on stdout, verdict on stderr).
+// runBashyStd is runBashy with stdout and stderr separated. Machine-readable
+// output must never be decoded from CombinedOutput: diagnostics belong to stderr.
 func runBashyStd(bin string, args ...string) (stdout, stderr string, code int) {
+	return runBashyStdEnv(bin, nil, args...)
+}
+
+func runBashyStdEnv(bin string, env []string, args ...string) (stdout, stderr string, code int) {
 	cmd := exec.Command(bin, args...)
-	cmd.Env = append(os.Environ(), "BASHY_AGENTIC=1")
+	cmd.Env = append(append(os.Environ(), "BASHY_AGENTIC=1"), env...)
 	cmd.Stdin = strings.NewReader("")
 	var out, errb strings.Builder
 	cmd.Stdout, cmd.Stderr = &out, &errb
@@ -304,6 +308,40 @@ func runBashyStd(bin string, args ...string) (stdout, stderr string, code int) {
 		code = ee.ExitCode()
 	}
 	return out.String(), errb.String(), code
+}
+
+// TestE2EMachineOutputKeepsTelemetryOnStderr pins the CLI stream contract:
+// structured stdout remains directly parseable while operational notices stay
+// visible to humans on stderr. Telemetry remains enabled in both modes.
+func TestE2EMachineOutputKeepsTelemetryOnStderr(t *testing.T) {
+	bin := bashyBinary(t)
+	env := []string{
+		"OTEL_TRACES_EXPORTER=file",
+		"BASHY_TELEMETRY_QUIET=",
+		"BASHY_OTEL_SPOOL=" + filepath.Join(t.TempDir(), "spans.jsonl"),
+	}
+
+	stdout, stderr, code := runBashyStdEnv(bin, env, "commands", "--json")
+	if code != 0 {
+		t.Fatalf("commands --json exited %d:\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	if !json.Valid([]byte(stdout)) {
+		t.Fatalf("commands --json stdout is not clean JSON: %q", stdout)
+	}
+	if strings.Contains(stdout, "telemetry on") {
+		t.Fatalf("telemetry notice leaked into JSON stdout: %q", stdout)
+	}
+	if !strings.Contains(stderr, "bashy: telemetry on") {
+		t.Fatalf("telemetry notice missing from JSON-mode stderr: %q", stderr)
+	}
+
+	stdout, stderr, code = runBashyStdEnv(bin, env, "commands")
+	if code != 0 || strings.TrimSpace(stdout) == "" {
+		t.Fatalf("human commands output failed (exit %d): %q", code, stdout)
+	}
+	if !strings.Contains(stderr, "bashy: telemetry on") {
+		t.Fatalf("human-mode telemetry notice missing from stderr: %q", stderr)
+	}
 }
 
 // TestSkillsE2E drives the env-gated skills catalog end to end: list shows
@@ -603,16 +641,11 @@ func TestSkillsStandaloneSurfacesE2E(t *testing.T) {
 	}
 
 	run := func(args ...string) (string, int) {
-		cmd := exec.Command(bin, args...)
-		cmd.Env = append(os.Environ(), "BASHY_AGENTIC=1",
-			"BASHY_SKILLS_DIR="+store, "BASHY_SKILLS_PATH="+shared)
-		cmd.Stdin = strings.NewReader("")
-		out, err := cmd.CombinedOutput()
-		code := 0
-		if ee, ok := err.(*exec.ExitError); ok {
-			code = ee.ExitCode()
-		}
-		return string(out), code
+		stdout, _, code := runBashyStdEnv(bin, []string{
+			"BASHY_SKILLS_DIR=" + store,
+			"BASHY_SKILLS_PATH=" + shared,
+		}, args...)
+		return stdout, code
 	}
 
 	// go-repo-health: embedded, gated on has=go (present here — the e2e
