@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/qiangli/coreutils/external/podman/winhelper"
 	"github.com/qiangli/coreutils/pkg/binmgr"
 )
 
@@ -45,6 +46,9 @@ func dispatchEngine(arg string) {
 		if bin != "" {
 			if name == "ollama" {
 				applyOllamaIsolationEnv() // keep the lean ollama isolated like the embedded one
+			}
+			if name == "podman" {
+				applyPodmanHelperEnv() // Windows: without this a machine start serves NO endpoint
 			}
 			os.Exit(execEnginePassthrough(bin, os.Args[2:]))
 		}
@@ -184,6 +188,34 @@ func applyOllamaIsolationEnv() {
 		if home, err := os.UserHomeDir(); err == nil {
 			os.Setenv("OLLAMA_MODELS", filepath.Join(home, ".agents", "bashy", "ollama", "models"))
 		}
+	}
+}
+
+// applyPodmanHelperEnv provisions podman's Windows helper binaries and
+// exports the env that lets podman find them, before we exec it. A no-op
+// on every other platform.
+//
+// This is NOT an optimization. On Windows podman does not serve its API
+// itself: `podman machine start` launches win-sshproxy.exe to forward the
+// VM's socket onto `\\.\pipe\podman-<machine>` and
+// %TEMP%\podman\<machine>-api.sock. It finds that helper only via
+// containers.conf's helper_binaries_dir or
+// $CONTAINERS_HELPER_BINARY_DIR — and when it finds neither the start
+// still reports SUCCESS while publishing no endpoint at all. The VM runs
+// and nothing can connect, which every client (including outpost's
+// podman detection, and therefore `--cluster-mode=vk-podman`) sees as
+// "podman is not installed".
+//
+// The linked engine build has always done this; the LEAN build — the one
+// GoReleaser actually ships for Windows — execs podman instead of linking
+// it, and so skipped it. Failure is logged and ignored: a host whose
+// containers.conf already names a helper dir works either way.
+func applyPodmanHelperEnv() {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	if err := winhelper.Apply(engineCacheDir()); err != nil {
+		fmt.Fprintf(os.Stderr, "bashy podman: could not provision Windows helper binaries: %v\n", err)
 	}
 }
 
