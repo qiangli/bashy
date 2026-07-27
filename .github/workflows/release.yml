@@ -26,6 +26,16 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      # package.json pins the same version. GoReleaser's required SPA hook runs
+      # the locked install/build and fails the release if this toolchain or its
+      # output is absent.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+          run_install: false
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:

@@ -25,10 +25,15 @@ if [ ! -x "$bin" ] || [ "${BASHY_BOOTSTRAP_REBUILD:-0}" = 1 ]; then
 	echo "bashy bootstrap: building $bin" >&2
 	(
 		cd "$here"
+		spa_tag=$(scripts/build-meet-spa.sh optional)
+		tag_args=
+		if [ -n "$spa_tag" ]; then
+			tag_args="-tags=$spa_tag"
+		fi
 		if [ -n "$bootstrap_bashy" ] && [ -x "$bootstrap_bashy" ]; then
-			"$bootstrap_bashy" go build -trimpath -ldflags "$ldflags" -o "$bin" ./cmd/bashy
+			"$bootstrap_bashy" go build -trimpath $tag_args -ldflags "$ldflags" -o "$bin" ./cmd/bashy
 		else
-			go build -trimpath -ldflags "$ldflags" -o "$bin" ./cmd/bashy
+			go build -trimpath $tag_args -ldflags "$ldflags" -o "$bin" ./cmd/bashy
 		fi
 	)
 fi
