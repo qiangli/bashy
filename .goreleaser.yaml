@@ -7,6 +7,9 @@ version: 2
 before:
   hooks:
     - go mod download
+    # Release builds are fail-closed: no JS toolchain or no real dist/index.html
+    # means GoReleaser stops before it can produce a success-shaped release.
+    - ./scripts/build-meet-spa.sh required
 
 builds:
   - id: bashy
@@ -16,6 +19,13 @@ builds:
       - CGO_ENABLED=0
     flags:
       - -trimpath
+      - -tags=meetspa
+    hooks:
+      post:
+        # Runs for every target. The script checks every artifact's recorded Go
+        # tags and serves the native Linux artifact before publication.
+        - cmd: ./scripts/verify-meet-spa-release.sh "{{ .Path }}" "{{ .Target }}"
+          output: true
     ldflags:
       - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Version "-dev" }}'
     goos:

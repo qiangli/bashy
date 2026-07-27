@@ -73,10 +73,17 @@ build-bash:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BASHY) ./cmd/bash
 
 ## build-bashy: Build the AgentOS shell (cmd/bashy -> bin/bashy), embedding the
-## podman engine blobs when present (large binary; not needed for test-bash).
+## meet SPA when node/pnpm are available and podman blobs when present.
 build-bashy:
-	@echo "building bashy$(if $(BASHY_TAGS), with embeds: $(BASHY_TAGS),) ..."
-	go build -trimpath $(if $(BASHY_TAGS),-tags "$(BASHY_TAGS)",) -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy
+	@mkdir -p $(BIN_DIR)
+	@spa_tag=$$(scripts/build-meet-spa.sh optional); \
+	tags="$(BASHY_TAGS)"; [ -z "$$spa_tag" ] || tags="$${tags:+$$tags }$$spa_tag"; \
+	echo "building bashy$${tags:+ with embeds: $$tags} ..."; \
+	if [ -n "$$tags" ]; then \
+		go build -trimpath -tags "$$tags" -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy; \
+	else \
+		go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy; \
+	fi
 
 ## build-fips: Build both binaries against the Go FIPS 140-3 validated crypto
 ## module (CMVP #5247). Run with GODEBUG=fips140=on for FedRAMP/CMMC/gov use.
@@ -86,7 +93,13 @@ build-fips:
 	@mkdir -p $(BIN_DIR)
 	@echo "building with the Go FIPS 140-3 module (GOFIPS140=$(GOFIPS140_VERSION)) ..."
 	GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(LDFLAGS)" -o $(BASHY) ./cmd/bash
-	GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath $(if $(BASHY_TAGS),-tags "$(BASHY_TAGS)",) -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy
+	@spa_tag=$$(scripts/build-meet-spa.sh optional); \
+	tags="$(BASHY_TAGS)"; [ -z "$$spa_tag" ] || tags="$${tags:+$$tags }$$spa_tag"; \
+	if [ -n "$$tags" ]; then \
+		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -tags "$$tags" -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy; \
+	else \
+		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy; \
+	fi
 
 ## install: Build and atomically install both binaries into the shared dhnt user
 ## bin ($$DHNT_BIN_DIR, default $$HOME/.local/bin). The installer refuses
@@ -103,14 +116,19 @@ test:
 ## cross-compile sanity check).
 dist:
 	@mkdir -p $(BIN_DIR)/dist
-	@for plat in $(PLATFORMS); do \
+	@spa_tag=$$(scripts/build-meet-spa.sh optional); \
+	bashy_tags="$(BASHY_TAGS)"; [ -z "$$spa_tag" ] || bashy_tags="$${bashy_tags:+$$bashy_tags }$$spa_tag"; \
+	for plat in $(PLATFORMS); do \
 		os=$${plat%/*}; arch=$${plat#*/}; \
 		ext=; [ "$$os" = windows ] && ext=.exe; \
 		for name in bash bashy; do \
 			out=$(BIN_DIR)/dist/$$name-$$os-$$arch$$ext; \
 			echo "building $$out..."; \
-			CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch \
-				go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/$$name || exit 1; \
+			if [ "$$name" = bashy ] && [ -n "$$bashy_tags" ]; then \
+				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -tags "$$bashy_tags" -ldflags "$(LDFLAGS)" -o $$out ./cmd/$$name || exit 1; \
+			else \
+				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/$$name || exit 1; \
+			fi; \
 		done; \
 	done
 
