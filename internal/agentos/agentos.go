@@ -70,6 +70,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/ask"
 	"github.com/qiangli/coreutils/pkg/board"
 	"github.com/qiangli/coreutils/pkg/bus"
+	"github.com/qiangli/coreutils/pkg/herald"
 	"github.com/qiangli/coreutils/pkg/capability"
 	"github.com/qiangli/coreutils/pkg/chat"
 	"github.com/qiangli/coreutils/pkg/dag"
@@ -126,7 +127,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "search", "sota", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
+		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
@@ -647,6 +648,20 @@ func Dispatch() {
 			fmt.Fprintln(os.Stderr, "bashy bus:", err)
 		}
 		os.Exit(bus.ExitCode(err))
+	case "herald", "a2a":
+		// Reach an agent that is NOT on this host, over A2A. Every other
+		// coordination verb resolves a participant to a binary HERE; herald is
+		// the path to a capability that cannot be installed here at all.
+		//
+		// `a2a` is a hidden alias: the protocol name is what an operator will
+		// reach for first, but it is not the verb's name — herald speaks more
+		// than one wire, and inetd is not called telnetd.
+		//
+		// The exit status is load-bearing and belongs to the GATE, not to the
+		// peer's self-reported task state: 0 only when the gate passed, 2 when
+		// the peer claimed completion and nothing verified it. That is what
+		// lets a remote agent compose with && like any other command.
+		os.Exit(herald.Run(context.Background(), os.Args[2:]))
 	case "ask":
 		// Ask the HUMAN for an ad-hoc value over a channel the calling program
 		// does not own (controlling terminal → GUI askpass → out-of-band

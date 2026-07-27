@@ -371,6 +371,7 @@ var verbSynopsis = map[string]string{
 	"schedule":   "modern cron: run a command on a cron/interval/at schedule",
 	"secrets":    "managed API-key/token vault for the shell",
 	"bus":        "agent notification bus: `bus publish` a change, `bus watch` for one (kb holds facts; the bus carries changes)",
+	"herald":     "reach an agent that is not on this host, over A2A: `herald add` a peer, `herald send` it a task, and gate the result",
 	"ask":        "ask the HUMAN operator for an ad-hoc value (a token, an OTP) — never the model; returns a path, not the value",
 	"skills":     "tier-2 workspace skills, env-gated: list applicable here, probe the coordinate, show one",
 	"kb":         "host-shared knowledge base: search before a task, add/retro after (all agents, all repos)",
