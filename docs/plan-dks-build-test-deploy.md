@@ -31,6 +31,13 @@ byte-promotion evidence contracts.
 - `scripts/dks-release-gate.sh` ties all named native records to one exact
   source commit, aggregates named conformance Jobs, and requires native Linux,
   macOS, and Windows evidence by default.
+- `scripts/dks-author-qa-refs.sh` is the trusted aggregation boundary: it
+  verifies the published prerelease source, runs the exact-source DKS gate, and
+  atomically authors all required per-OS QA refs. Promotion now requires Linux,
+  macOS, and Windows refs pointing at that exact candidate commit.
+- A live source-pinned native Bash 5.3 run completed 86/86 on Dragon. A
+  failed-first/succeeded-second run also exposed and fixed ambiguous retry-Pod
+  evidence selection; cleanup now handles Go's read-only toolchain cache.
 - The remaining production blocker is capacity, not a silent software
   fallback: DKS currently has macOS/arm64 vk-native nodes only. The default
   release gate rejects the current fleet until native Linux and Windows nodes

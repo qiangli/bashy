@@ -41,7 +41,7 @@ on:
       required_os:
         description: 'Space-separated OS gate that must all be green in refs/qa/<version>/<os>'
         required: false
-        default: 'windows'
+        default: 'linux darwin windows'
 
 permissions:
   contents: write
@@ -72,15 +72,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           VER: ${{ steps.v.outputs.ver }}
-          REQUIRED: ${{ github.event.inputs.required_os || 'windows' }}
+          DEV: ${{ steps.v.outputs.dev }}
+          REQUIRED: ${{ github.event.inputs.required_os || 'linux darwin windows' }}
         run: |
-          # Every required OS must have promoted this version (refs/qa/<ver>/<os>).
+          # Every required OS must attest the exact commit behind the candidate,
+          # not merely leave a same-named ref behind.
+          obj=$(gh api "repos/${REPO}/git/ref/tags/${DEV}" --jq '.object')
+          otype=$(echo "$obj" | jq -r '.type'); expected=$(echo "$obj" | jq -r '.sha')
+          if [ "$otype" = "tag" ]; then
+            expected=$(gh api "repos/${REPO}/git/tags/${expected}" --jq '.object.sha')
+          fi
           missing=""
           for os in $REQUIRED; do
-            if gh api "repos/${REPO}/git/refs/qa/${VER}/${os}" >/dev/null 2>&1; then
-              echo "  qa-${os}: green"
+            actual=$(gh api "repos/${REPO}/git/refs/qa/${VER}/${os}" --jq '.object.sha' 2>/dev/null || true)
+            if [ "$actual" = "$expected" ]; then
+              echo "  qa-${os}: green at ${actual}"
             else
-              echo "::error::qa gate NOT met — missing refs/qa/${VER}/${os}"
+              echo "::error::qa gate NOT met — refs/qa/${VER}/${os}=${actual:-missing}, want ${expected}"
               missing="${missing} ${os}"
             fi
           done
@@ -132,7 +140,7 @@ jobs:
           COMMIT: ${{ steps.src.outputs.commit }}
         run: |
           printf '%s\n' \
-            "Promoted from ${DEV} after per-OS QA (${{ github.event.inputs.required_os || 'windows' }})." \
+            "Promoted from ${DEV} after per-OS QA (${{ github.event.inputs.required_os || 'linux darwin windows' }})." \
             "Byte-identical to the tested pre-release — no rebuild." > /tmp/notes.md
           # -R is required: this job has no checkout, so gh can't infer the repo from a
           # local git remote (would fail "not a git repository"). No --target: in the

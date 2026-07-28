@@ -52,4 +52,33 @@ case "$gate" in
   *) printf 'unexpected release gate result: %s\n' "$gate" >&2; exit 1 ;;
 esac
 
+fake_gh="$tmp/gh"
+cat >"$fake_gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  *'/releases/tags/v1.2.3-dev'*) printf '%s\n' true ;;
+  *'/git/ref/tags/v1.2.3-dev'*) printf '%s\n' 'commit abc123' ;;
+  *) printf 'unexpected fake gh call: %s\n' "$*" >&2; exit 91 ;;
+esac
+EOF
+chmod +x "$fake_gh"
+fake_gate="$tmp/gate"
+cat >"$fake_gate" <<'EOF'
+#!/usr/bin/env bash
+set -e
+[ "$EXPECTED_SOURCE_REF" = abc123 ]
+[ "$REQUIRED_PLATFORMS" = "linux darwin windows" ]
+echo DKS_RELEASE_GATE:fake-pass
+EOF
+chmod +x "$fake_gate"
+
+refs=$(cd "$root" && VERSION=v1.2.3 EXPECTED_SOURCE_REF=abc123 \
+  NATIVE_JOBS=native CONFORMANCE_JOBS=conformance \
+  GH="$fake_gh" GATE="$fake_gate" DRY_RUN=1 \
+  scripts/dks-author-qa-refs.sh)
+case "$refs" in
+  *'DKS_QA_REFS_READY version=v1.2.3 source_ref=abc123 platforms=linux darwin windows'*) ;;
+  *) printf 'unexpected QA ref result: %s\n' "$refs" >&2; exit 1 ;;
+esac
+
 echo "dks release evidence retry selection: PASS"
