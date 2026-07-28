@@ -219,7 +219,8 @@ Ensure the optional GNU Bash 5.3 fixture data is present. This is external GPL
 test data, not bashy source and not a build/runtime dependency. bashy does not
 vendor it and does not hard-code a default download URL. Set
 `BASH53_TESTDATA_REPO` to a public GPL-compatible testdata repo when a runner
-needs to hydrate the suite; the target clones it into the gitignored
+needs to hydrate the suite; set `BASH53_TESTDATA_REF` to the immutable Bash 5.3
+tag or commit. The target clones it into the gitignored
 `external/bash-5.3` directory on first use and pulls with `--ff-only` when it is
 already a git checkout. Existing non-git fixture trees are accepted for local
 development, but missing fixtures fail loudly.
@@ -230,10 +231,15 @@ set -e
 BASHY_EXE="${BASHY:-bashy}"
 dir=external/bash-5.3
 repo="${BASH53_TESTDATA_REPO:-}"
+ref="${BASH53_TESTDATA_REF:-}"
 if [ -d "$dir/.git" ]; then
   "$BASHY_EXE" git -C "$dir" config core.autocrlf false
   "$BASHY_EXE" git -C "$dir" reset --hard HEAD
-  "$BASHY_EXE" git -C "$dir" -c core.autocrlf=false pull --ff-only
+  if [ -n "$ref" ]; then
+    "$BASHY_EXE" git -C "$dir" checkout "$ref"
+  else
+    "$BASHY_EXE" git -C "$dir" -c core.autocrlf=false pull --ff-only
+  fi
   "$BASHY_EXE" git -C "$dir" -c core.autocrlf=false checkout -f HEAD
 elif [ -d "$dir/tests" ]; then
   :
@@ -249,6 +255,9 @@ elif [ -n "$repo" ]; then
   "$BASHY_EXE" mkdir -p external
   "$BASHY_EXE" git -c core.autocrlf=false clone "$repo" "$dir"
   "$BASHY_EXE" git -C "$dir" config core.autocrlf false
+  if [ -n "$ref" ]; then
+    "$BASHY_EXE" git -C "$dir" checkout "$ref"
+  fi
   "$BASHY_EXE" git -C "$dir" -c core.autocrlf=false checkout -f HEAD
 else
   echo "test-bash-data: missing $dir/tests; set BASH53_TESTDATA_REPO to a git testdata repo" >&2

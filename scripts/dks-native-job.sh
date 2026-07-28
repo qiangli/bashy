@@ -15,6 +15,7 @@ TASK="${TASK:-smoke}"
 SOURCE_URL="${SOURCE_URL:-https://github.com/qiangli/bashy.git}"
 SOURCE_REF="${SOURCE_REF:-}"
 BASH53_TESTDATA_REPO="${BASH53_TESTDATA_REPO:-}"
+BASH53_TESTDATA_REF="${BASH53_TESTDATA_REF:-}"
 TTL="${TTL:-3600}"
 BACKOFF="${BACKOFF:-1}"
 
@@ -31,8 +32,8 @@ case "$TASK" in smoke) ;; build|unit|bash53)
   echo "dks-native-job: TASK must be smoke, build, unit, or bash53" >&2
   exit 2
 esac
-if [ "$TASK" = bash53 ] && [ -z "$BASH53_TESTDATA_REPO" ]; then
-  echo "dks-native-job: BASH53_TESTDATA_REPO is required for TASK=bash53" >&2
+if [ "$TASK" = bash53 ] && { [ -z "$BASH53_TESTDATA_REPO" ] || [ -z "$BASH53_TESTDATA_REF" ]; }; then
+  echo "dks-native-job: BASH53_TESTDATA_REPO and BASH53_TESTDATA_REF are required for TASK=bash53" >&2
   exit 2
 fi
 if [ "$TASK" = bash53 ] && [ "$TARGET_OS" = windows ]; then
@@ -112,6 +113,7 @@ spec:
                     ;;
                   bash53)
                     BASHY="\$self" BASH53_TESTDATA_REPO="${BASH53_TESTDATA_REPO}" \
+                      BASH53_TESTDATA_REF="${BASH53_TESTDATA_REF}" \
                       "\$self" dag dag.md test-bash-parallel
                     ;;
                 esac
