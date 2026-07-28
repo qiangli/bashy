@@ -1390,8 +1390,10 @@ KUBECTL="$BASHY kubectl" scripts/k8s-job-aggregate.sh
 ### dks-native-smoke-apply
 Submit one native-platform smoke to a real `vk-native` host. `TARGET_OS` is
 required (`linux`, `darwin`, or `windows`); optionally constrain
-`TARGET_ARCH`/`TARGET_HOST`. This proves the installed bashy binary executes on
-the host OS rather than in the host's Linux agent/container runtime.
+`TARGET_ARCH`/`TARGET_HOST`. `ARTIFACT_URL`, `ARTIFACT_SHA256`, and
+`ARTIFACT_PATH` identify the immutable published Bashy release input. This
+proves the verified candidate executes on the host OS rather than in the host's
+Linux agent/container runtime.
 Effects: net, write
 
 ```bash

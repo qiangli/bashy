@@ -9,6 +9,9 @@ NS="${NS:-default}"
 TARGET_OS="${TARGET_OS:?set TARGET_OS to linux, darwin, or windows}"
 TARGET_ARCH="${TARGET_ARCH:-}"
 TARGET_HOST="${TARGET_HOST:-}"
+ARTIFACT_URL="${ARTIFACT_URL:?set ARTIFACT_URL to a published bashy release archive}"
+ARTIFACT_SHA256="${ARTIFACT_SHA256:?set ARTIFACT_SHA256 to the archive checksum}"
+ARTIFACT_PATH="${ARTIFACT_PATH:-bashy}"
 TTL="${TTL:-3600}"
 BACKOFF="${BACKOFF:-1}"
 
@@ -44,6 +47,9 @@ spec:
         dhnt.io/lane: native-platform
       annotations:
         outpost.dhnt.io/termination-log-tail: "true"
+        outpost.dhnt.io/native-artifact-url: "${ARTIFACT_URL}"
+        outpost.dhnt.io/native-artifact-sha256: "${ARTIFACT_SHA256}"
+        outpost.dhnt.io/native-artifact-path: "${ARTIFACT_PATH}"
     spec:
       restartPolicy: Never
       nodeSelector:
