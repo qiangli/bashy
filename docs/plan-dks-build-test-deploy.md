@@ -1,9 +1,41 @@
 # DKS build, test, and deploy plan
 
-Status: proposed
+Status: implemented through the macOS/native and vk-podman foundation; the
+three-platform production gate is intentionally blocked on native Linux and
+Windows DKS capacity.
 Scope: replace bashy's host-specific SSH fanout and standing per-host QA pollers
 with DKS-scheduled work while preserving the existing conformance and
 byte-promotion evidence contracts.
+
+## Implementation status (2026-07-28)
+
+- Outpost `v0.14.15` added opt-in, bounded terminal evidence for vk-native and
+  vk-podman Jobs. `v0.14.18` fixed libpod raw-stream demultiplexing; live
+  aggregation passed on both Dragon and Novidesign podman nodes.
+- Outpost `v0.14.16` bounded overlay login during runtime startup, restoring
+  unattended k3s recovery after container recreation.
+- Outpost `v0.14.17` added checksum-required HTTPS release-archive
+  materialization for vk-native (`tar.gz` and ZIP), with a content-addressed
+  cache and safe member extraction. Exact Bashy `v0.19.1` execution passed on
+  both current macOS hosts.
+- Outpost `v0.14.19` moved workload waiting/exit recording into a detached
+  durable helper. Active native Jobs remain adopted across daemon replacement,
+  and a Job that exits while the provider is down recovers its exit code and
+  terminal evidence.
+- `scripts/dks-native-job.sh` now emits source-pinned `smoke`, `build`, `unit`,
+  GNU Bash 5.3, and Yash POSIX tasks. Live source-pinned unit and build tasks
+  passed on Dragon and Novidesign respectively.
+- `scripts/dag-to-k8s-job.sh` supports agent or vk-podman placement, including
+  an exact registered-host selector. `scripts/k8s-job-aggregate.sh` fails closed
+  when any terminal result is missing.
+- `scripts/dks-release-gate.sh` ties all named native records to one exact
+  source commit, aggregates named conformance Jobs, and requires native Linux,
+  macOS, and Windows evidence by default.
+- The remaining production blocker is capacity, not a silent software
+  fallback: DKS currently has macOS/arm64 vk-native nodes only. The default
+  release gate rejects the current fleet until native Linux and Windows nodes
+  register Ready. GitHub Actions still supplies build/smoke evidence for those
+  platforms, but it is not mislabeled as DKS-native evidence.
 
 ## Findings
 
@@ -52,11 +84,13 @@ byte-promotion evidence contracts.
 - `vk-podman` is a Linux-container venue on every host. It is suitable for
   normalized conformance and high-throughput chunk fanout, but it does not prove
   native macOS or Windows behavior.
-- `vk-native` executes `Command` and `Args` as a detached process on the host,
-  resolving the executable from the host `PATH`. It does not materialize a
-  container image or source workspace.
-- `vk-native` records terminal status and a host-side log file, but its provider
-  does not expose Kubernetes container logs or exec/attach.
+- `vk-native` executes `Command` and `Args` as a detached process on the host.
+  Ordinary commands resolve from host `PATH`; DKS Jobs instead declare a
+  verified release archive and member, which Outpost materializes without a
+  host installation.
+- Virtual providers still do not expose Kubernetes logs or exec/attach.
+  Opted-in DKS workloads publish a bounded 4 KiB terminal tail in Pod status;
+  missing terminal evidence fails closed.
 - The podman translator supports one container, literal environment values, and
   hostPath/emptyDir abstractions. ConfigMap/Secret `envFrom`, projected data
   volumes, init containers, and sidecars are outside the current surface.

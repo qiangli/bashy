@@ -253,7 +253,14 @@ elif [ -n "$repo" ]; then
     exit 2
   fi
   "$BASHY_EXE" mkdir -p external
-  "$BASHY_EXE" git -c core.autocrlf=false clone "$repo" "$dir"
+  if [ -n "$ref" ]; then
+    if ! "$BASHY_EXE" git -c core.autocrlf=false clone --depth 1 --branch "$ref" "$repo" "$dir"; then
+      "$BASHY_EXE" rm -rf "$dir"
+      "$BASHY_EXE" git -c core.autocrlf=false clone "$repo" "$dir"
+    fi
+  else
+    "$BASHY_EXE" git -c core.autocrlf=false clone "$repo" "$dir"
+  fi
   "$BASHY_EXE" git -C "$dir" config core.autocrlf false
   if [ -n "$ref" ]; then
     "$BASHY_EXE" git -C "$dir" checkout "$ref"
