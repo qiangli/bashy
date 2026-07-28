@@ -99,7 +99,7 @@ spec:
               task="${TASK}"
               if [ "\$task" != smoke ]; then
                 workspace=\$(mktemp -d)
-                trap '"\$self" rm -rf "\$workspace"' EXIT
+                trap '"\$self" chmod -R u+w "\$workspace" 2>/dev/null || true; "\$self" rm -rf "\$workspace" 2>/dev/null || true' EXIT
                 "\$self" git clone "${SOURCE_URL}" "\$workspace/bashy"
                 "\$self" git -C "\$workspace/bashy" checkout --detach "${SOURCE_REF}"
                 cd "\$workspace/bashy"
@@ -112,12 +112,12 @@ spec:
                     "\$self" go test -short ./...
                     ;;
                   bash53)
-                    BASHY="\$self" BASH53_TESTDATA_REPO="${BASH53_TESTDATA_REPO}" \
+                    BASHY="\$self" JOBS=1 BASH53_TESTDATA_REPO="${BASH53_TESTDATA_REPO}" \
                       BASH53_TESTDATA_REF="${BASH53_TESTDATA_REF}" \
                       "\$self" dag dag.md test-bash-parallel
                     ;;
                   yash)
-                    BASHY="\$self" "\$self" dag dag.md test-yash
+                    BASHY="\$self" "\$self" scripts/yash-scoreboard.sh
                     ;;
                 esac
               fi

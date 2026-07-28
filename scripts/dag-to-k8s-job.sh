@@ -36,6 +36,7 @@ IMAGE="${IMAGE:?set IMAGE to the side-loaded, squashed conformance image}"
 CHUNKS="${CHUNKS:-8}"                    # corpus property (chunks.json), NOT fleet size
 PARALLELISM="${PARALLELISM:-4}"          # how many pods run at once
 ARCH="${ARCH:-arm64}"
+TARGET_HOST="${TARGET_HOST:-}"
 BACKOFF="${BACKOFF:-8}"                  # retry budget for INFRA failures
 TTL="${TTL:-3600}"
 REQ_CPU="${REQ_CPU:-500m}"
@@ -54,10 +55,13 @@ vk-podman)
   # Images must be registry-addressable unless already cached on every selected
   # host; the old agent-node side-load path is intentionally not used here.
   [ "$IMAGE_PULL_POLICY" = "Never" ] && IMAGE_PULL_POLICY=IfNotPresent
+  host_selector=""
+  [ -n "$TARGET_HOST" ] && host_selector='
+        outpost.dhnt.io/host: '"${TARGET_HOST}"
   placement='
       nodeSelector:
         outpost.dhnt.io/backend: vk-podman
-        kubernetes.io/arch: '"${ARCH}"'
+        kubernetes.io/arch: '"${ARCH}${host_selector}"'
       tolerations:
         - key: virtual-kubelet.io/provider
           operator: Equal
