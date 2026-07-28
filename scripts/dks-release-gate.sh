@@ -12,12 +12,12 @@ REQUIRED_PLATFORMS="${REQUIRED_PLATFORMS:-linux darwin windows}"
 seen=" "
 native_count=0
 for job in $NATIVE_JOBS; do
-  NS="$NS" JOB="$job" KUBECTL="$KUBECTL" scripts/dks-native-result.sh
-  pod="$($KUBECTL get pods -n "$NS" -l "job-name=${job}" \
-    -o jsonpath='{.items[0].metadata.name}')"
-  message="$($KUBECTL get pod "$pod" -n "$NS" \
-    -o jsonpath='{.status.containerStatuses[0].state.terminated.message}')"
-  record="$(printf '%s\n' "$message" | grep '^DKS_RESULT:' | tail -1)"
+  native_result="$(NS="$NS" JOB="$job" KUBECTL="$KUBECTL" scripts/dks-native-result.sh)"
+  printf '%s\n' "$native_result"
+  # dks-native-result has already selected and validated the successful retry
+  # Pod. Never re-query an unordered .items[0] and accidentally attest a failed
+  # attempt from the same Job.
+  record="$(printf '%s\n' "$native_result" | grep -o 'DKS_RESULT:.*' | tail -1)"
   platform="$(printf '%s\n' "$record" | sed -nE 's/.*"os":"([^"]+)".*/\1/p')"
   source_ref="$(printf '%s\n' "$record" | sed -nE 's/.*"source_ref":"([^"]*)".*/\1/p')"
   [ "$source_ref" = "$EXPECTED_SOURCE_REF" ] || {

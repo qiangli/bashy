@@ -59,6 +59,10 @@ jobs:
             echo "cmd/bashy $os/$arch (lean)..."
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -o /dev/null ./cmd/bashy
           done
+      - name: DKS release evidence script tests
+        if: runner.os != 'Windows'
+        shell: bash
+        run: scripts/test-dks-release-evidence.sh
 
   # The bash-5.3 conformance gate. Runs the real fixture suite against the pure
   # cmd/bash drop-in and fails on any NEW regression vs test/bash53-known-failures.txt

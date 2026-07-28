@@ -7,7 +7,14 @@ NS="${NS:-default}"
 JOB="${JOB:-bashy-native}"
 
 pod="$($KUBECTL get pods -n "$NS" -l "job-name=${JOB}" \
-  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)"
+  -o jsonpath='{range .items[?(@.status.phase=="Succeeded")]}{.metadata.name}{"\n"}{end}' \
+  2>/dev/null | head -1)"
+if [ -z "$pod" ]; then
+  # Preserve useful diagnostics while the Job is active or after all attempts
+  # failed. Completed Jobs are always read from their successful attempt above.
+  pod="$($KUBECTL get pods -n "$NS" -l "job-name=${JOB}" \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)"
+fi
 [ -n "$pod" ] || { echo "dks-native-result: no pod for job=$JOB ns=$NS" >&2; exit 2; }
 
 phase="$($KUBECTL get pod "$pod" -n "$NS" -o jsonpath='{.status.phase}')"
