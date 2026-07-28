@@ -22,6 +22,11 @@ jobs:
       # Clone it next door at the SHA pinned in .sibling-pins.
       - name: Bootstrap sibling deps (../sh)
         shell: bash
+        env:
+          # DKS source tasks intentionally skip heavyweight optional sibling
+          # submodules. A release builds the complete module graph, including
+          # coreutils' pinned Ollama replacement, so it must opt in.
+          BASHY_BOOTSTRAP_SUBMODULES: "1"
         run: ./scripts/bootstrap-siblings.sh
       - uses: actions/setup-go@v6
         with:
