@@ -16,6 +16,8 @@ SOURCE_URL="${SOURCE_URL:-https://github.com/qiangli/bashy.git}"
 SOURCE_REF="${SOURCE_REF:-}"
 BASH53_TESTDATA_REPO="${BASH53_TESTDATA_REPO:-}"
 BASH53_TESTDATA_REF="${BASH53_TESTDATA_REF:-}"
+YASH_TESTDATA_REPO="${YASH_TESTDATA_REPO:-}"
+YASH_TESTDATA_REF="${YASH_TESTDATA_REF:-}"
 TTL="${TTL:-3600}"
 BACKOFF="${BACKOFF:-1}"
 
@@ -38,6 +40,10 @@ if [ "$TASK" = bash53 ] && { [ -z "$BASH53_TESTDATA_REPO" ] || [ -z "$BASH53_TES
 fi
 if [ "$TASK" = bash53 ] && [ "$TARGET_OS" = windows ]; then
   echo "dks-native-job: TASK=bash53 requires a Unix vk-native host" >&2
+  exit 2
+fi
+if [ "$TASK" = yash ] && { [ -z "$YASH_TESTDATA_REPO" ] || [ -z "$YASH_TESTDATA_REF" ]; }; then
+  echo "dks-native-job: YASH_TESTDATA_REPO and YASH_TESTDATA_REF are required for TASK=yash" >&2
   exit 2
 fi
 
@@ -117,6 +123,8 @@ spec:
                       "\$self" dag dag.md test-bash-parallel
                     ;;
                   yash)
+                    "\$self" git clone "${YASH_TESTDATA_REPO}" .yash-tests
+                    "\$self" git -C .yash-tests checkout --detach "${YASH_TESTDATA_REF}"
                     BASHY="\$self" "\$self" scripts/yash-scoreboard.sh
                     ;;
                 esac

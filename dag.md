@@ -1404,6 +1404,8 @@ required (`linux`, `darwin`, or `windows`); optionally constrain
 proves the verified candidate executes on the host OS rather than in the host's
 Linux agent/container runtime. `TASK=smoke|build|unit|bash53|yash`; source tasks also
 require immutable `SOURCE_REF`, and `bash53` requires `BASH53_TESTDATA_REPO`.
+The `yash` task likewise requires immutable `YASH_TESTDATA_REPO` and
+`YASH_TESTDATA_REF` inputs.
 Effects: net, write
 
 ```bash
