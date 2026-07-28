@@ -1402,7 +1402,7 @@ required (`linux`, `darwin`, or `windows`); optionally constrain
 `TARGET_ARCH`/`TARGET_HOST`. `ARTIFACT_URL`, `ARTIFACT_SHA256`, and
 `ARTIFACT_PATH` identify the immutable published Bashy release input. This
 proves the verified candidate executes on the host OS rather than in the host's
-Linux agent/container runtime. `TASK=smoke|build|unit|bash53`; source tasks also
+Linux agent/container runtime. `TASK=smoke|build|unit|bash53|yash`; source tasks also
 require immutable `SOURCE_REF`, and `bash53` requires `BASH53_TESTDATA_REPO`.
 Effects: net, write
 

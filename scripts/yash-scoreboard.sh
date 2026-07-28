@@ -58,7 +58,11 @@ build_image localhost/posix-shells-broad $'FROM docker.io/library/bash:5.3\nRUN 
 
 ARCH=$(uname -m); case "$ARCH" in aarch64|arm64) GOARCH=arm64;; *) GOARCH=amd64;; esac
 echo "building linux/$GOARCH bashy…" >&2
-GOOS=linux GOARCH=$GOARCH go build -o bin/.bashy-full ./cmd/bash || exit 2
+if [ -n "${BASHY:-}" ]; then
+  GOOS=linux GOARCH=$GOARCH "$BASHY" go build -o bin/.bashy-full ./cmd/bash || exit 2
+else
+  GOOS=linux GOARCH=$GOARCH go build -o bin/.bashy-full ./cmd/bash || exit 2
+fi
 
 RAW="$OUT/verdicts.raw"
 echo "running yash -p corpus (bashy + bash, per case)…" >&2

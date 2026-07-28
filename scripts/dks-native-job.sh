@@ -23,13 +23,13 @@ case "$TARGET_OS" in linux|darwin|windows) ;; *)
   echo "dks-native-job: TARGET_OS must be linux, darwin, or windows" >&2
   exit 2
 esac
-case "$TASK" in smoke) ;; build|unit|bash53)
+case "$TASK" in smoke) ;; build|unit|bash53|yash)
   [ -n "$SOURCE_REF" ] || {
     echo "dks-native-job: SOURCE_REF is required for TASK=$TASK" >&2
     exit 2
   }
   ;; *)
-  echo "dks-native-job: TASK must be smoke, build, unit, or bash53" >&2
+  echo "dks-native-job: TASK must be smoke, build, unit, bash53, or yash" >&2
   exit 2
 esac
 if [ "$TASK" = bash53 ] && { [ -z "$BASH53_TESTDATA_REPO" ] || [ -z "$BASH53_TESTDATA_REF" ]; }; then
@@ -115,6 +115,9 @@ spec:
                     BASHY="\$self" BASH53_TESTDATA_REPO="${BASH53_TESTDATA_REPO}" \
                       BASH53_TESTDATA_REF="${BASH53_TESTDATA_REF}" \
                       "\$self" dag dag.md test-bash-parallel
+                    ;;
+                  yash)
+                    BASHY="\$self" "\$self" dag dag.md test-yash
                     ;;
                 esac
               fi
