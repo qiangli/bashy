@@ -105,7 +105,14 @@ spec:
               task="${TASK}"
               if [ "\$task" != smoke ]; then
                 workspace=\$(mktemp -d)
-                trap '"\$self" chmod -R u+w "\$workspace" 2>/dev/null || true; "\$self" rm -rf "\$workspace" 2>/dev/null || true' EXIT
+                # Go module/toolchain caches are deliberately read-only. On Unix,
+                # cleanup is host lifecycle work, so use native tools rather than
+                # depending on the Bashy chmod/rm compatibility surface.
+                if [ "\$os" = darwin ] || [ "\$os" = linux ]; then
+                  trap '/bin/chmod -R u+w "\$workspace" 2>/dev/null || true; /bin/rm -rf "\$workspace" 2>/dev/null || true' EXIT
+                else
+                  trap '"\$self" chmod -R u+w "\$workspace" 2>/dev/null || true; "\$self" rm -rf "\$workspace" 2>/dev/null || true' EXIT
+                fi
                 "\$self" git clone "${SOURCE_URL}" "\$workspace/bashy"
                 "\$self" git -C "\$workspace/bashy" checkout --detach "${SOURCE_REF}"
                 cd "\$workspace/bashy"

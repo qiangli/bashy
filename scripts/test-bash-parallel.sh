@@ -154,7 +154,23 @@ done
 
 # Surface any non-PASS fixtures (FAIL/TIME) so the run is actionable.
 fails=$(grep -hE '^  (FAIL|TIME)  ' "$OUT"/g*.out 2>/dev/null | sort -u)
-[ -n "$fails" ] && { echo; echo "non-PASS fixtures:"; echo "$fails"; }
+if [ -n "$fails" ]; then
+  echo
+  echo "non-PASS fixtures:"
+  echo "$fails"
+  echo
+  echo "failure details:"
+  for f in "$OUT"/g*.out; do
+    grep -qE '^  (FAIL|TIME)  ' "$f" || continue
+    # bash53suite prints the actionable error immediately after FAIL/TIME.
+    # Keep the DKS termination evidence compact while preserving enough context
+    # to diagnose a native-only conformance failure.
+    awk '
+      /^  (FAIL|TIME)  / { print; detail=4; next }
+      detail > 0 { print; detail--; next }
+    ' "$f"
+  done
+fi
 
 echo
 echo "Results: $P passed, $F failed, $S skipped, $T timed out  (${JOBS} groups, $((end - start))s)"
