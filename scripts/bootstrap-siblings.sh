@@ -70,6 +70,10 @@ git_checkout() {
 
 git_submodule_update() {
     repo=$1
+    # The lean Bashy build/test graph does not use the heavyweight optional
+    # engine submodules carried by coreutils. DKS workspaces are disposable and
+    # must not hydrate gigabytes of unrelated sources before every task.
+    [ "${BASHY_BOOTSTRAP_SUBMODULES:-0}" = 1 ] || return 0
     if command -v git >/dev/null 2>&1; then
         git -C "$repo" submodule update --init --recursive --quiet 2>/dev/null || true
         return
