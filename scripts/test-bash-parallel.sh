@@ -102,7 +102,12 @@ pn=${#PAR_FIX[@]}
 [ "$JOBS" -gt "$pn" ] && JOBS=$pn
 [ "$JOBS" -ge 1 ] || JOBS=1
 
-OUT=$(mktemp -d 2>/dev/null || echo /tmp/tbp.$$); trap 'rm -rf "$OUT"' EXIT
+OUT=$(mktemp -d 2>/dev/null || echo /tmp/tbp.$$)
+# Each group gets HOME=$OUT/home.N, so `bashy go` puts GOPATH beneath OUT.
+# Go's module/toolchain cache is intentionally read-only; make it writable
+# before removal or a successful DKS run leaves thousands of files behind and
+# crowds the bounded terminal evidence with cleanup errors.
+trap '/bin/chmod -R u+w "$OUT" 2>/dev/null || true; /bin/rm -rf "$OUT"' EXIT
 echo "test-bash-parallel: $n fixtures ($pn across $JOBS parallel groups, ${#SER_FIX[@]} serial)"
 
 # Round-robin assign the parallel fixtures to per-group files (avoids bash-3.2
