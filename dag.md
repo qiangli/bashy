@@ -1387,22 +1387,23 @@ set -e
 KUBECTL="$BASHY kubectl" scripts/k8s-job-aggregate.sh
 ```
 
-### dks-native-smoke-apply
-Submit one native-platform smoke to a real `vk-native` host. `TARGET_OS` is
+### dks-native-apply
+Submit one native-platform task to a real `vk-native` host. `TARGET_OS` is
 required (`linux`, `darwin`, or `windows`); optionally constrain
 `TARGET_ARCH`/`TARGET_HOST`. `ARTIFACT_URL`, `ARTIFACT_SHA256`, and
 `ARTIFACT_PATH` identify the immutable published Bashy release input. This
 proves the verified candidate executes on the host OS rather than in the host's
-Linux agent/container runtime.
+Linux agent/container runtime. `TASK=smoke|build|unit|bash53`; source tasks also
+require immutable `SOURCE_REF`, and `bash53` requires `BASH53_TESTDATA_REPO`.
 Effects: net, write
 
 ```bash
 set -e
 : "${TARGET_OS:?set TARGET_OS to linux, darwin, or windows}"
-scripts/dks-native-smoke-job.sh | "$BASHY" kubectl apply -f -
+scripts/dks-native-job.sh | "$BASHY" kubectl apply -f -
 ```
 
-### dks-native-smoke-result
+### dks-native-result
 Validate one native-platform DKS Job from its bounded terminal RunRecord. A
 Succeeded Pod without the `DKS_RESULT` marker is INCOMPLETE, never a pass.
 Effects: net, read

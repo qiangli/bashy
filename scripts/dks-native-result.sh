@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Validate one dks-native-smoke-job result from terminal Pod status.
+# Validate one dks-native-job result from terminal Pod status.
 set -euo pipefail
 
 KUBECTL="${KUBECTL:-bashy kubectl}"
 NS="${NS:-default}"
-JOB="${JOB:-bashy-native-smoke}"
+JOB="${JOB:-bashy-native}"
 
 pod="$($KUBECTL get pods -n "$NS" -l "job-name=${JOB}" \
   -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)"
