@@ -1422,6 +1422,19 @@ set -e
 KUBECTL="$BASHY kubectl" scripts/dks-native-result.sh
 ```
 
+### dks-release-gate
+Fail-closed pre-tag release gate over explicit completed DKS Jobs.
+`EXPECTED_SOURCE_REF` is the exact Bashy commit; `NATIVE_JOBS` and
+`CONFORMANCE_JOBS` are space-separated Job names. By default the native
+evidence must cover Linux, macOS, and Windows; override
+`REQUIRED_PLATFORMS` only for a deliberately narrower non-release run.
+Effects: net, read
+
+```bash
+set -e
+KUBECTL="$BASHY kubectl" scripts/dks-release-gate.sh
+```
+
 ### qa
 Per-OS release smoke (the release gate): download the released
 `$BASHY_TEST_VERSION` asset for the host OS/arch, verify its sha256 against the
