@@ -36,6 +36,26 @@ if [ -z "$OCI" ]; then
 fi
 [ -n "$OCI" ] || { echo "need docker or bashy podman" >&2; exit 2; }
 
+# A clean Podman store must not turn the localhost tag into an accidental
+# registry pull. Build the same explicit oracle image used by
+# yash-posix-suite.sh when it is absent; a build failure is infrastructure
+# failure (exit 2), never a shrunken/green scoreboard.
+build_image() {
+  name=$1
+  dockerfile=$2
+  $OCI image exists "$name" 2>/dev/null && return 0
+  echo "yash-scoreboard: building missing oracle image $name …" >&2
+  bd=$(mktemp -d) || exit 2
+  printf '%b' "$dockerfile" > "$bd/Containerfile"
+  if ! $OCI build -q -t "$name" "$bd" >&2; then
+    rm -rf "$bd"
+    echo "yash-scoreboard: could not build oracle image $name" >&2
+    exit 2
+  fi
+  rm -rf "$bd"
+}
+build_image localhost/posix-shells-broad $'FROM docker.io/library/bash:5.3\nRUN apk add --no-cache dash yash zsh mksh loksh\n'
+
 ARCH=$(uname -m); case "$ARCH" in aarch64|arm64) GOARCH=arm64;; *) GOARCH=amd64;; esac
 echo "building linux/$GOARCH bashy…" >&2
 GOOS=linux GOARCH=$GOARCH go build -o bin/.bashy-full ./cmd/bash || exit 2

@@ -1360,6 +1360,56 @@ set -e
 scripts/zsh-scoreboard.sh --list "${ZSH_OUT:-}"
 ```
 
+### dks-conformance-apply
+Submit the self-contained GNU Bash or yash conformance image as an Indexed DKS
+Job. `VENUE=vk-podman` selects all eligible Podman virtual nodes and enables the
+bounded terminal-status evidence fallback; `VENUE=agent` retains the ordinary
+k3s lane for comparison. Set `IMAGE` to a registry-addressable digest/tag for
+vk-podman (or a side-loaded image for agent), plus the suite-specific
+`SUITE_CMD`. Chunk membership comes from the committed manifest, never current
+fleet size.
+Effects: net, write
+
+```bash
+set -e
+: "${IMAGE:?set IMAGE to the self-contained conformance image}"
+scripts/dag-to-k8s-job.sh | "$BASHY" kubectl apply -f -
+```
+
+### dks-conformance-result
+Aggregate one completed DKS conformance Job. Reads ordinary Kubernetes logs
+when available and falls back to the opted-in terminal log tail on virtual
+nodes. Missing chunks or missing `Results:` evidence fail closed.
+Effects: net, read
+
+```bash
+set -e
+KUBECTL="$BASHY kubectl" scripts/k8s-job-aggregate.sh
+```
+
+### dks-native-smoke-apply
+Submit one native-platform smoke to a real `vk-native` host. `TARGET_OS` is
+required (`linux`, `darwin`, or `windows`); optionally constrain
+`TARGET_ARCH`/`TARGET_HOST`. This proves the installed bashy binary executes on
+the host OS rather than in the host's Linux agent/container runtime.
+Effects: net, write
+
+```bash
+set -e
+: "${TARGET_OS:?set TARGET_OS to linux, darwin, or windows}"
+scripts/dks-native-smoke-job.sh | "$BASHY" kubectl apply -f -
+```
+
+### dks-native-smoke-result
+Validate one native-platform DKS Job from its bounded terminal RunRecord. A
+Succeeded Pod without the `DKS_RESULT` marker is INCOMPLETE, never a pass.
+Effects: net, read
+
+```bash
+set -e
+KUBECTL="$BASHY kubectl" scripts/dks-native-result.sh
+```
+
 ### qa
 Per-OS release smoke (the release gate): download the released
 `$BASHY_TEST_VERSION` asset for the host OS/arch, verify its sha256 against the

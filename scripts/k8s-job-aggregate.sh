@@ -24,7 +24,15 @@ while IFS= read -r pod; do
   [ -n "$pod" ] || continue
   line="$($KUBECTL logs "$pod" -n "$NS" 2>/dev/null | grep -E '^Results:' | tail -1 || true)"
   if [ -z "$line" ]; then
-    echo "WARN: no Results line from $pod (log fetch failed?) — NOT counted" >&2
+    # Virtual-node providers may not expose the kubelet log route. DKS Jobs opt
+    # into Outpost's bounded terminal log tail, which is persisted in Pod
+    # status and survives provider restart. Read the final Results line there.
+    message="$($KUBECTL get pod "$pod" -n "$NS" \
+      -o jsonpath='{.status.containerStatuses[0].state.terminated.message}' 2>/dev/null || true)"
+    line="$(printf '%s\n' "$message" | grep -E '^Results:' | tail -1 || true)"
+  fi
+  if [ -z "$line" ]; then
+    echo "WARN: no Results line from $pod logs or terminal status — NOT counted" >&2
     missing=$((missing + 1))
     continue
   fi

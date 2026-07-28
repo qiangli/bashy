@@ -41,6 +41,34 @@ TTL="${TTL:-3600}"
 REQ_CPU="${REQ_CPU:-500m}"
 REQ_MEM="${REQ_MEM:-512Mi}"
 LIM_MEM="${LIM_MEM:-2Gi}"
+VENUE="${VENUE:-agent}"                    # agent | vk-podman
+IMAGE_PULL_POLICY="${IMAGE_PULL_POLICY:-Never}"
+
+case "$VENUE" in
+agent)
+  placement=""
+  ;;
+vk-podman)
+  # vk-podman is a Linux-container substrate even when its Node advertises the
+  # registered host's darwin/windows OS. Select the backend, not kubernetes.io/os.
+  # Images must be registry-addressable unless already cached on every selected
+  # host; the old agent-node side-load path is intentionally not used here.
+  [ "$IMAGE_PULL_POLICY" = "Never" ] && IMAGE_PULL_POLICY=IfNotPresent
+  placement='
+      nodeSelector:
+        outpost.dhnt.io/backend: vk-podman
+        kubernetes.io/arch: '"${ARCH}"'
+      tolerations:
+        - key: virtual-kubelet.io/provider
+          operator: Equal
+          value: outpost
+          effect: NoSchedule'
+  ;;
+*)
+  echo "dag-to-k8s-job: VENUE must be agent or vk-podman (got $VENUE)" >&2
+  exit 2
+  ;;
+esac
 
 # The per-chunk command. The literal ${CHUNK} is expanded IN THE POD (from
 # JOB_COMPLETION_INDEX), so it is single-quoted here to survive both this script
@@ -66,12 +94,17 @@ spec:
   template:
     metadata:
       labels: { app: ${NAME} }
+      annotations:
+        # Outpost copies only this opted-in, bounded tail into terminal Pod
+        # status. The aggregator uses it when virtual nodes have no logs route.
+        outpost.dhnt.io/termination-log-tail: "true"
     spec:
       restartPolicy: Never
+${placement}
       containers:
         - name: chunk
           image: ${IMAGE}
-          imagePullPolicy: Never
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
           command: ["sh", "-c"]
           args:
             - |
