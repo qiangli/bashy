@@ -23,6 +23,7 @@ func fixturePipeline() Pipeline {
 		Tasks: []Task{{
 			ID:               "native-smoke",
 			Lane:             LaneNative,
+			Distribution:     DistributionSingle,
 			Needs:            []string{},
 			Argv:             []string{"bashy", "--version"},
 			WorkingDirectory: ".",
@@ -260,6 +261,12 @@ func TestDecodePipelineRejectsMissingRequiredTaskFields(t *testing.T) {
 			},
 		},
 		{
+			name: "absent distribution",
+			edit: func(s string) string {
+				return strings.Replace(s, `,"distribution":"single"`, "", 1)
+			},
+		},
+		{
 			name: "absent environment",
 			edit: func(s string) string {
 				return strings.Replace(s,
@@ -324,6 +331,133 @@ func TestPipelineRequiresDeclaredPlatformMatrix(t *testing.T) {
 	pipeline.Matrix[0].Platform.Backend = "vk-podman"
 	if err := pipeline.Validate(); err == nil || !strings.Contains(err.Error(), "requires backend vk-native") {
 		t.Fatalf("got %v, want native backend error", err)
+	}
+}
+
+func TestPipelineRequiresKnownDistribution(t *testing.T) {
+	tests := []struct {
+		name         string
+		distribution Distribution
+		want         string
+	}{
+		{"missing", "", "distribution"},
+		{"unknown", "elastic-magic", "unknown value"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pipeline := fixturePipeline()
+			pipeline.Tasks[0].Distribution = tt.distribution
+			if err := pipeline.Validate(); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("got %v, want error containing %q", err, tt.want)
+			}
+		})
+	}
+
+	for _, distribution := range []Distribution{
+		DistributionSingle,
+		DistributionReplicated,
+		DistributionTopologyCoupled,
+	} {
+		t.Run("accept-"+string(distribution), func(t *testing.T) {
+			pipeline := fixturePipeline()
+			pipeline.Tasks[0].Distribution = distribution
+			if err := pipeline.Validate(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestShardableTaskRequiresStableChunkIdentity(t *testing.T) {
+	manifest := strings.Repeat("e", 64)
+	valid := Chunk{Index: 2, Count: 4, ManifestSHA256: manifest}
+	tests := []struct {
+		name string
+		edit func(*Pipeline)
+		want string
+	}{
+		{"missing", func(*Pipeline) {}, "requires chunk identity"},
+		{"zero count", func(p *Pipeline) {
+			p.Matrix[0].Chunk = &Chunk{Index: 1, Count: 0, ManifestSHA256: manifest}
+		}, "count: must be positive"},
+		{"zero index", func(p *Pipeline) {
+			p.Matrix[0].Chunk = &Chunk{Index: 0, Count: 4, ManifestSHA256: manifest}
+		}, "index: must be between"},
+		{"index above count", func(p *Pipeline) {
+			p.Matrix[0].Chunk = &Chunk{Index: 5, Count: 4, ManifestSHA256: manifest}
+		}, "index: must be between"},
+		{"bad manifest digest", func(p *Pipeline) {
+			p.Matrix[0].Chunk = &Chunk{Index: 1, Count: 4, ManifestSHA256: "not-a-digest"}
+		}, "lowercase 64-hex"},
+		{"inconsistent rows", func(p *Pipeline) {
+			for i := range p.Matrix {
+				chunk := valid
+				p.Matrix[i].Chunk = &chunk
+			}
+			p.Matrix[1].Chunk = &Chunk{Index: 3, Count: 4, ManifestSHA256: manifest}
+		}, "inconsistent chunk identity"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pipeline := fixturePipeline()
+			pipeline.Tasks[0].Distribution = DistributionShardable
+			tt.edit(&pipeline)
+			if err := pipeline.Validate(); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("got %v, want error containing %q", err, tt.want)
+			}
+		})
+	}
+
+	pipeline := fixturePipeline()
+	pipeline.Tasks[0].Distribution = DistributionShardable
+	for i := range pipeline.Matrix {
+		chunk := valid
+		pipeline.Matrix[i].Chunk = &chunk
+	}
+	if err := pipeline.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNonShardableTaskRejectsChunkIdentity(t *testing.T) {
+	pipeline := fixturePipeline()
+	pipeline.Matrix[0].Chunk = &Chunk{
+		Index:          1,
+		Count:          1,
+		ManifestSHA256: strings.Repeat("e", 64),
+	}
+	if err := pipeline.Validate(); err == nil || !strings.Contains(err.Error(), "must not declare chunk") {
+		t.Fatalf("got %v, want non-shardable chunk rejection", err)
+	}
+}
+
+func TestShardCanonicalEncodingIsDeterministicAndNonMutating(t *testing.T) {
+	pipeline := fixturePipeline()
+	pipeline.Tasks[0].Distribution = DistributionShardable
+	chunk := Chunk{Index: 2, Count: 4, ManifestSHA256: strings.Repeat("e", 64)}
+	for i := range pipeline.Matrix {
+		copy := chunk
+		pipeline.Matrix[i].Chunk = &copy
+	}
+	originalFirstOS := pipeline.Matrix[0].Platform.OS
+
+	first, err := MarshalPipeline(pipeline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := MarshalPipeline(pipeline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(first) != string(second) {
+		t.Fatalf("canonical shard encoding changed:\nfirst: %s\nsecond: %s", first, second)
+	}
+	if pipeline.Matrix[0].Platform.OS != originalFirstOS {
+		t.Fatal("canonical encoding mutated the caller's matrix order")
+	}
+	wantChunk := `"chunk":{"index":2,"count":4,"manifestSha256":"` + strings.Repeat("e", 64) + `"}`
+	if !strings.Contains(string(first), wantChunk) {
+		t.Fatalf("canonical encoding lacks pinned chunk object: %s", first)
 	}
 }
 

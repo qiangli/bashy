@@ -98,6 +98,7 @@ func TestDhntAggregateRequireOSCannotBeSatisfiedByNonNativeLane(t *testing.T) {
 			{
 				ID:               "native",
 				Lane:             dhnt.LaneNative,
+				Distribution:     dhnt.DistributionSingle,
 				Needs:            []string{},
 				Argv:             []string{"test"},
 				WorkingDirectory: ".",
@@ -106,6 +107,7 @@ func TestDhntAggregateRequireOSCannotBeSatisfiedByNonNativeLane(t *testing.T) {
 			{
 				ID:               "container",
 				Lane:             dhnt.LaneContainer,
+				Distribution:     dhnt.DistributionSingle,
 				Needs:            []string{},
 				Argv:             []string{"test"},
 				WorkingDirectory: ".",
@@ -188,6 +190,7 @@ func TestDhntAggregateRequireOSMustCheckTaskLaneNotOnlyBackend(t *testing.T) {
 			{
 				ID:               "native",
 				Lane:             dhnt.LaneNative,
+				Distribution:     dhnt.DistributionSingle,
 				Needs:            []string{},
 				Argv:             []string{"test"},
 				WorkingDirectory: ".",
@@ -196,6 +199,7 @@ func TestDhntAggregateRequireOSMustCheckTaskLaneNotOnlyBackend(t *testing.T) {
 			{
 				ID:               "container",
 				Lane:             dhnt.LaneContainer,
+				Distribution:     dhnt.DistributionSingle,
 				Needs:            []string{},
 				Argv:             []string{"test"},
 				WorkingDirectory: ".",

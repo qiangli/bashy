@@ -31,6 +31,18 @@ const (
 	LaneCloud     Lane = "cloud"
 )
 
+// Distribution declares how a task may be expanded by an executor. It is a
+// planning contract only: declaring a mode does not imply that a particular
+// executor implements it.
+type Distribution string
+
+const (
+	DistributionSingle          Distribution = "single"
+	DistributionShardable       Distribution = "shardable"
+	DistributionReplicated      Distribution = "replicated"
+	DistributionTopologyCoupled Distribution = "topology-coupled"
+)
+
 type ResultClass string
 
 const (
@@ -66,10 +78,20 @@ type Platform struct {
 type Task struct {
 	ID               string        `json:"id"`
 	Lane             Lane          `json:"lane"`
+	Distribution     Distribution  `json:"distribution"`
 	Needs            []string      `json:"needs"`
 	Argv             []string      `json:"argv"`
 	WorkingDirectory string        `json:"workingDirectory"`
 	Environment      []Environment `json:"environment"`
+}
+
+// Chunk pins one stable, one-based shard identity. ManifestSHA256 identifies
+// the immutable manifest that defines membership; online fleet capacity may
+// change concurrency but never Index, Count, or membership.
+type Chunk struct {
+	Index          int    `json:"index"`
+	Count          int    `json:"count"`
+	ManifestSHA256 string `json:"manifestSha256"`
 }
 
 // MatrixEntry declares one required task/platform result and the exact
@@ -77,6 +99,7 @@ type Task struct {
 type MatrixEntry struct {
 	Task     string     `json:"task"`
 	Platform Platform   `json:"platform"`
+	Chunk    *Chunk     `json:"chunk,omitempty"`
 	Inputs   []Artifact `json:"inputs"`
 	Outputs  []Artifact `json:"outputs"`
 }
@@ -163,6 +186,7 @@ func (p Pipeline) Validate() error {
 		return errors.New("matrix: must declare at least one platform")
 	}
 	covered := make(map[string]bool, len(tasks))
+	chunks := make(map[string]Chunk, len(tasks))
 	matrixKeys := make(map[string]bool, len(p.Matrix))
 	for i, entry := range p.Matrix {
 		task, exists := tasks[entry.Task]
@@ -174,6 +198,23 @@ func (p Pipeline) Validate() error {
 		}
 		if task.Lane == LaneNative && entry.Platform.Backend != "vk-native" {
 			return fmt.Errorf("matrix[%d]: native task %q requires backend vk-native", i, entry.Task)
+		}
+		switch task.Distribution {
+		case DistributionShardable:
+			if entry.Chunk == nil {
+				return fmt.Errorf("matrix[%d]: shardable task %q requires chunk identity", i, entry.Task)
+			}
+			if err := validateChunk(*entry.Chunk); err != nil {
+				return fmt.Errorf("matrix[%d]: chunk: %w", i, err)
+			}
+			if prior, ok := chunks[entry.Task]; ok && prior != *entry.Chunk {
+				return fmt.Errorf("matrix[%d]: shardable task %q has inconsistent chunk identity", i, entry.Task)
+			}
+			chunks[entry.Task] = *entry.Chunk
+		default:
+			if entry.Chunk != nil {
+				return fmt.Errorf("matrix[%d]: non-shardable task %q must not declare chunk identity", i, entry.Task)
+			}
 		}
 		if err := validateArtifacts("inputs", entry.Inputs, true); err != nil {
 			return fmt.Errorf("matrix[%d]: %w", i, err)
@@ -640,6 +681,11 @@ func validateTask(task Task) error {
 	default:
 		return fmt.Errorf("lane: unknown value %q", task.Lane)
 	}
+	switch task.Distribution {
+	case DistributionSingle, DistributionShardable, DistributionReplicated, DistributionTopologyCoupled:
+	default:
+		return fmt.Errorf("distribution: unknown value %q", task.Distribution)
+	}
 	if len(task.Argv) == 0 || task.Argv[0] == "" {
 		return errors.New("argv: must contain a non-empty command")
 	}
@@ -694,6 +740,16 @@ func validateTask(task Task) error {
 		seen[item.Name] = true
 	}
 	return nil
+}
+
+func validateChunk(chunk Chunk) error {
+	if chunk.Count < 1 {
+		return errors.New("count: must be positive")
+	}
+	if chunk.Index < 1 || chunk.Index > chunk.Count {
+		return fmt.Errorf("index: must be between 1 and count (%d)", chunk.Count)
+	}
+	return validateDigest("manifestSha256", chunk.ManifestSHA256)
 }
 
 func validatePlatform(p Platform) error {

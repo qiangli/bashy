@@ -15,7 +15,7 @@ bin="$tmp/bashy"
 DHNT="$bin dhnt"
 
 cat >"$pipeline" <<EOF
-{"schema":"dhnt.pipeline/v1","pipeline":"bashy-release","source":{"repository":"https://github.com/qiangli/bashy.git","commit":"abc123","sha256":"$source_sha"},"tasks":[{"id":"bash53","lane":"native","needs":[],"argv":["bashy","-c","test"],"workingDirectory":".","environment":[]}],"matrix":[{"task":"bash53","platform":{"backend":"vk-native","os":"darwin","arch":"arm64"},"inputs":[{"name":"candidate","sha256":"$candidate_sha"}],"outputs":[{"name":"tested-candidate","sha256":"$candidate_sha"}]}]}
+{"schema":"dhnt.pipeline/v1","pipeline":"bashy-release","source":{"repository":"https://github.com/qiangli/bashy.git","commit":"abc123","sha256":"$source_sha"},"tasks":[{"id":"bash53","lane":"native","distribution":"single","needs":[],"argv":["bashy","-c","test"],"workingDirectory":".","environment":[]}],"matrix":[{"task":"bash53","platform":{"backend":"vk-native","os":"darwin","arch":"arm64"},"inputs":[{"name":"candidate","sha256":"$candidate_sha"}],"outputs":[{"name":"tested-candidate","sha256":"$candidate_sha"}]}]}
 EOF
 
 # The native producer must translate host uname spellings into the canonical

@@ -17,8 +17,9 @@ A pipeline has these required fields:
 - `schema`: exactly `dhnt.pipeline/v1`;
 - `pipeline`: stable pipeline identity;
 - `source`: immutable `repository`, `commit`, and source-tree `sha256`;
-- `tasks`: task identity, closed `lane`, dependencies, argv, repository-relative
-  working directory, and literal non-secret environment;
+- `tasks`: task identity, closed `lane`, required closed `distribution`,
+  dependencies, argv, repository-relative working directory, and literal
+  non-secret environment;
 - `matrix`: one or more exact task/platform requirements, each with the expected
   named input and output SHA-256 digests.
 
@@ -27,6 +28,22 @@ the closed v1 backend set `local`, `vk-native`, `vk-podman`, `k3s`, and `cloud`;
 OS is `linux`, `darwin`, or `windows`; architecture is `amd64` or `arm64`.
 Every task must occur in the matrix. A native task must use `vk-native`.
 Dependencies must exist and be acyclic.
+
+Distribution is exactly `single`, `shardable`, `replicated`, or
+`topology-coupled`. It declares execution shape, not executor capability:
+accepting a pipeline does not claim that a local, DKS, or cloud executor can
+honor every shape.
+
+A `shardable` task must carry an explicit `chunk` object on every matrix entry:
+one-based `index`, positive `count`, and the lowercase SHA-256 of the immutable
+manifest that defines membership. All platform rows for the same task must
+carry the same chunk identity. The shard is therefore part of the task's stable
+identity; a pipeline represents multiple shards as distinct task IDs. Fleet
+capacity may change how many shard tasks run concurrently, but it must never
+derive or renumber chunks. Non-shardable tasks reject `chunk`. `replicated` and
+`topology-coupled` are declarations only in v1; this contract does not imply
+replica management, gang scheduling, GPU topology discovery, or multi-host
+training.
 
 The matrix is an explicit list rather than an implicit cross product. This
 allows Linux, Darwin, and Windows release archives to carry different digests
@@ -59,7 +76,8 @@ The byte-stable reference encoding is
 
 All SHA-256 values are lowercase 64-hex. Unknown and duplicate JSON fields,
 multiple JSON values, unknown enum values, duplicate task/artifact/matrix
-identities, invalid timestamps, and malformed identifiers are rejected.
+identities, missing distributions, invalid chunk identities, invalid
+timestamps, and malformed identifiers are rejected.
 
 Canonical encoders sort semantically unordered tasks, dependencies,
 environment entries, matrix entries, artifacts, and aggregate run identities.
