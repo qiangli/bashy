@@ -78,6 +78,20 @@ func atlasCatalog(builtins, core, verbs, hidden []string) []atlasRecord {
 	return out
 }
 
+// bashyOwnedVerbAtlas classifies front-door verbs implemented here rather than
+// in coreutils, so they carry a real classification instead of falling into the
+// deliberately-empty unknown branch below.
+var bashyOwnedVerbAtlas = map[string]atlas.Entry{
+	// dhnt reads pipeline/run JSON and writes JSON to stdout. No network, no
+	// mutation — the local-first evidence contract, not a transport.
+	"dhnt": {
+		Stage: atlas.StageTest,
+		Group: atlas.GroupPlatform,
+		Tier:  atlas.TierUserland,
+		Caps:  []string{atlas.CapJSON, atlas.CapReadOnly},
+	},
+}
+
 // verbAtlasRecord resolves one front-door verb: the curated table first,
 // then the declarative registry (whose entries derive group/tier/caps from
 // Entry.Tier — new registry CLIs need no atlas edit).
@@ -92,6 +106,14 @@ func verbAtlasRecord(name string, hidden bool) atlasRecord {
 	}
 	if e, ok := registry.Lookup(name); ok {
 		applyEntry(&r, atlas.RegistryEntry(e.Tier))
+		return r
+	}
+	// Verbs bashy owns outright, which the shared coreutils atlas has no
+	// reason to know about. Consulted LAST so it can never shadow a curated
+	// entry: if coreutils later classifies one of these, that wins and this
+	// row becomes dead weight rather than a silent override.
+	if e, ok := bashyOwnedVerbAtlas[name]; ok {
+		applyEntry(&r, e)
 		return r
 	}
 	// Unknown to both tables. Keep it VISIBLE, but do not invent a
