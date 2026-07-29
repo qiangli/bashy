@@ -13,6 +13,14 @@ NATIVE_JOBS="${NATIVE_JOBS:?set NATIVE_JOBS to space-separated vk-native Job nam
 CONFORMANCE_JOBS="${CONFORMANCE_JOBS:?set CONFORMANCE_JOBS to space-separated conformance Job names}"
 REQUIRED_PLATFORMS="${REQUIRED_PLATFORMS:-linux darwin windows}"
 
+# Shell word-splitting swallows whitespace-only values, silently dropping the
+# independent release policy even though the variable appears non-empty.
+# Require at least one real platform token after stripping whitespace.
+if [ -z "$(printf '%s' "$REQUIRED_PLATFORMS" | tr -d '[:space:]')" ]; then
+  echo "dks-release-gate: REQUIRED_PLATFORMS is empty or contains only whitespace" >&2
+  exit 5
+fi
+
 tmp="$(mktemp -d)"
 trap '/bin/rm -rf "$tmp"' EXIT
 native_count=0

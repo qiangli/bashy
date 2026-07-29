@@ -188,6 +188,16 @@ func dhntEmitRun(args []string) int {
 		fmt.Fprintln(os.Stderr, "bashy dhnt emit-run: unexpected positional arguments")
 		return 2
 	}
+	exitCodeProvided := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "exit-code" {
+			exitCodeProvided = true
+		}
+	})
+	if !exitCodeProvided {
+		fmt.Fprintln(os.Stderr, "bashy dhnt emit-run: --exit-code is required")
+		return 2
+	}
 	run.Schema = dhnt.RunSchema
 	run.Inputs = inputs
 	run.Outputs = outputs

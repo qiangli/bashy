@@ -66,4 +66,24 @@ if [ "$tp" -eq 0 ] && [ "$tf" -eq 0 ] && [ "$tt" -eq 0 ]; then
   echo "ABSENT: no tests were executed — verdict is not trustworthy" >&2
   exit 3
 fi
+# The Bash 5.3 release contract requires zero skipped tests. Executing one
+# case does not turn the other skipped cases into evidence.
+if [ "$ts" -gt 0 ]; then
+  echo "SKIPPED: ${ts} test(s) were skipped — verdict is not trustworthy" >&2
+  exit 3
+fi
+# Inspect the Job to verify Indexed Job completeness. An aggregator that
+# counts only Succeeded pods will miss incomplete Jobs where
+# status.succeeded < spec.completions.
+job_info=$($KUBECTL get job "$JOB" -n "$NS" -o json 2>/dev/null || :)
+if [ -n "$job_info" ]; then
+  spec_completions=$(printf '%s\n' "$job_info" | sed -n 's/.*"completions": *\([0-9][0-9]*\).*/\1/p' || :)
+  status_succeeded=$(printf '%s\n' "$job_info" | sed -n 's/.*"succeeded": *\([0-9][0-9]*\).*/\1/p' || :)
+  spec_completions=${spec_completions:-0}
+  status_succeeded=${status_succeeded:-0}
+  if [ "$spec_completions" -gt 0 ] && [ "$status_succeeded" -lt "$spec_completions" ]; then
+    echo "INCOMPLETE: ${status_succeeded} succeeded < ${spec_completions} required completions — verdict is not trustworthy" >&2
+    exit 3
+  fi
+fi
 [ "$tf" -eq 0 ] && [ "$tt" -eq 0 ]
