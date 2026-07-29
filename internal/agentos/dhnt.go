@@ -250,7 +250,9 @@ func dhntAggregate(args []string) int {
 	}
 	seenOS := map[string]bool{}
 	for _, entry := range pipeline.Matrix {
-		seenOS[entry.Platform.OS] = true
+		if entry.Platform.Backend == "vk-native" {
+			seenOS[entry.Platform.OS] = true
+		}
 	}
 	for _, required := range requiredOS {
 		if !seenOS[required] {

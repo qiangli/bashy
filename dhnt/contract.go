@@ -405,12 +405,18 @@ func parseHex4(b []byte) rune {
 }
 
 func validateToken(dec *json.Decoder, t reflect.Type) error {
-	for t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
 	token, err := dec.Token()
 	if err != nil {
 		return fmt.Errorf("malformed JSON: %w", err)
+	}
+	if token == nil {
+		if t.Kind() != reflect.Ptr {
+			return errors.New("malformed JSON: unexpected null value")
+		}
+		return nil
+	}
+	for t.Kind() == reflect.Ptr {
+		t = t.Elem()
 	}
 	delim, isDelim := token.(json.Delim)
 	if !isDelim {
@@ -458,6 +464,39 @@ func validateObject(dec *json.Decoder, t reflect.Type) error {
 	}
 	if _, err := dec.Token(); err != nil {
 		return fmt.Errorf("malformed JSON: %w", err)
+	}
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if !f.IsExported() {
+			continue
+		}
+		tag := f.Tag.Get("json")
+		if tag == "-" {
+			continue
+		}
+		name := f.Name
+		omitempty := false
+		if tag != "" {
+			parts := strings.Split(tag, ",")
+			if parts[0] != "" {
+				name = parts[0]
+			}
+			for _, part := range parts[1:] {
+				if strings.TrimSpace(part) == "omitempty" {
+					omitempty = true
+					break
+				}
+			}
+		}
+		if omitempty {
+			continue
+		}
+		if f.Type.Kind() != reflect.Slice {
+			continue
+		}
+		if !seen[name] {
+			return fmt.Errorf("malformed JSON: missing required field %q", name)
+		}
 	}
 	return nil
 }

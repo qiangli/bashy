@@ -41,6 +41,11 @@ while IFS= read -r pod; do
   f=$(printf '%s' "$line" | sed -nE 's/.* ([0-9]+) failed.*/\1/p')
   s=$(printf '%s' "$line" | sed -nE 's/.* ([0-9]+) skipped.*/\1/p')
   t=$(printf '%s' "$line" | sed -nE 's/.* ([0-9]+) timed out.*/\1/p')
+  if [ -z "$p" ] || [ -z "$f" ] || [ -z "$s" ] || [ -z "$t" ]; then
+    echo "WARN: truncated or malformed Results line — NOT counted" >&2
+    missing=$((missing + 1))
+    continue
+  fi
   tp=$((tp + ${p:-0})); tf=$((tf + ${f:-0})); ts=$((ts + ${s:-0})); tt=$((tt + ${t:-0}))
   chunks=$((chunks + 1))
   printf '  %-28s %s\n' "$pod" "$line"
