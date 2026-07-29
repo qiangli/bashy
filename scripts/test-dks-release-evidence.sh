@@ -158,6 +158,8 @@ case "$args" in
   *'get job conformance'*'.status.succeeded'*)
     if [ "${FAKE_JOB_MISSING_SUCCEEDED:-0}" = 1 ]; then
       :
+    elif [ "${FAKE_JOB_NONNUMERIC_SUCCEEDED:-0}" = 1 ]; then
+      printf '%s' complete
     elif [ "${FAKE_JOB_ZERO_SUCCEEDED:-0}" = 1 ]; then
       printf '%s' 0
     elif [ "${FAKE_INCOMPLETE_JOB:-0}" = 1 ]; then
@@ -385,6 +387,15 @@ fi
 if (cd "$root" && FAKE_JOB_MISSING_SUCCEEDED=1 KUBECTL="$fake" NS=test JOB=conformance \
   scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
   echo "conformance aggregation accepted a Job with missing status.succeeded" >&2
+  exit 1
+fi
+
+# A malformed non-numeric status.succeeded is not evidence that Kubernetes
+# completed the required indexes. The shell numeric comparison must fail closed,
+# not degrade into a false branch followed by a passing aggregate.
+if (cd "$root" && FAKE_JOB_NONNUMERIC_SUCCEEDED=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted a Job with non-numeric status.succeeded" >&2
   exit 1
 fi
 
