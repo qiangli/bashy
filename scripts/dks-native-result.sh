@@ -13,9 +13,18 @@ job_uid="$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.metadata.uid}' 2>/dev
   exit 4
 }
 
-pod="$($KUBECTL get pods -n "$NS" -l "job-name=${JOB}" \
+succeeded_pods="$($KUBECTL get pods -n "$NS" -l "job-name=${JOB}" \
   -o jsonpath='{range .items[?(@.status.phase=="Succeeded")]}{.metadata.name}{"\n"}{end}' \
-  2>/dev/null | head -1)"
+  2>/dev/null)" || true
+succeeded_count="$(printf '%s\n' "$succeeded_pods" | grep -c . || true)"
+if [ "$succeeded_count" -gt 1 ]; then
+  echo "dks-native-result: ambiguous — ${succeeded_count} successful Pods for job=$JOB; exactly one required" >&2
+  exit 4
+fi
+pod=""
+if [ "$succeeded_count" -eq 1 ]; then
+  pod="$succeeded_pods"
+fi
 if [ -z "$pod" ]; then
   # Preserve useful diagnostics while the Job is active or after all attempts
   # failed. Completed Jobs are always read from their successful attempt above.

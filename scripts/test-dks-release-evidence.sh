@@ -225,7 +225,7 @@ fi
 if (cd "$root" && FAKE_MULTIPLE_OWNED_NATIVE_PODS=1 KUBECTL="$fake" DHNT="$DHNT" NS=test JOB=retry-job \
   scripts/dks-native-result.sh >/dev/null 2>&1); then
   echo "native result collection accepted multiple successful owned Pods for one Job" >&2
-  adversarial_fail=1
+  exit 1
 fi
 
 # An empty conformance run is absence of evidence, even when its syntactically
