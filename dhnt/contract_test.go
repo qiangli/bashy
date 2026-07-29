@@ -61,7 +61,7 @@ func fixtureRun() Run {
 		},
 		Inputs:     []Artifact{{Name: "candidate", SHA256: inputDigest}},
 		Executor:   Executor{Node: "dragon-vk-native", Backend: "vk-native", OS: "darwin", Arch: "arm64"},
-		Result:     Result{Class: ResultPass, ExitCode: 0},
+		Result:     Result{Class: ResultPass, ExitCode: intPtr(0)},
 		Outputs:    []Artifact{{Name: "tested-candidate", SHA256: inputDigest}},
 		StartedAt:  "2026-07-29T12:00:00Z",
 		FinishedAt: "2026-07-29T12:00:01.123456789Z",
@@ -113,7 +113,7 @@ func TestEveryResultClass(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(string(tt.class), func(t *testing.T) {
 			run := fixtureRun()
-			run.Result = Result{Class: tt.class, ExitCode: tt.exit}
+			run.Result = Result{Class: tt.class, ExitCode: intPtr(tt.exit)}
 			if err := run.Validate(); err != nil {
 				t.Fatal(err)
 			}
@@ -148,7 +148,7 @@ func TestStrictValidation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		data = []byte(strings.Replace(string(data), `"exitCode":0,`, "", 1))
+		data = []byte(strings.Replace(string(data), `,"exitCode":0`, "", 1))
 		if _, err := DecodeRun(data); err == nil {
 			t.Fatal("pass record with absent result.exitCode was accepted as exit code zero")
 		}
@@ -227,9 +227,9 @@ func TestStrictValidation(t *testing.T) {
 		{"unknown backend", func(r *Run) { r.Executor.Backend = "argo" }, "unknown value"},
 		{"zero trace", func(r *Run) { r.TraceID = strings.Repeat("0", 32) }, "not all zero"},
 		{"empty inputs", func(r *Run) { r.Inputs = nil }, "must not be empty"},
-		{"pass nonzero", func(r *Run) { r.Result.ExitCode = 1 }, "pass requires"},
+		{"pass nonzero", func(r *Run) { *r.Result.ExitCode = 1 }, "pass requires"},
 		{"test-fail zero", func(r *Run) {
-			r.Result = Result{Class: ResultTestFail, ExitCode: 0}
+			r.Result = Result{Class: ResultTestFail, ExitCode: intPtr(0)}
 		}, "test-fail requires"},
 	}
 	for _, tt := range tests {

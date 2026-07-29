@@ -175,7 +175,8 @@ func dhntEmitRun(args []string) int {
 	fs.StringVar(&run.Executor.OS, "os", "", "observed executor OS")
 	fs.StringVar(&run.Executor.Arch, "arch", "", "observed executor architecture")
 	fs.StringVar(&class, "class", "", "result class")
-	fs.IntVar(&run.Result.ExitCode, "exit-code", 0, "process exit code")
+	var exitCode int
+	fs.IntVar(&exitCode, "exit-code", 0, "process exit code")
 	fs.Var(&outputs, "output", "output NAME=SHA256 (repeatable)")
 	fs.StringVar(&run.StartedAt, "started-at", "", "UTC RFC3339 timestamp")
 	fs.StringVar(&run.FinishedAt, "finished-at", "", "UTC RFC3339 timestamp")
@@ -191,6 +192,7 @@ func dhntEmitRun(args []string) int {
 	run.Inputs = inputs
 	run.Outputs = outputs
 	run.Result.Class = dhnt.ResultClass(class)
+	run.Result.ExitCode = &exitCode
 	data, err := dhnt.MarshalRun(run)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy dhnt emit-run:", err)

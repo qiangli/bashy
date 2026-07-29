@@ -36,7 +36,7 @@ func TestAggregateRejectsEveryNonPassClass(t *testing.T) {
 	} {
 		t.Run(string(class), func(t *testing.T) {
 			runs := completeRuns()
-			runs[0].Result = Result{Class: class, ExitCode: 1}
+			runs[0].Result = Result{Class: class, ExitCode: intPtr(1)}
 			if _, err := Aggregate(fixturePipeline(), runs); err == nil ||
 				!strings.Contains(err.Error(), "non-pass") {
 				t.Fatalf("got %v, want non-pass rejection", err)
@@ -79,7 +79,7 @@ func TestAggregateAdversarialMatrix(t *testing.T) {
 			(*runs)[0].Outputs[0].SHA256 = strings.Repeat("c", 64)
 		}, "duplicate task/platform"},
 		{"non pass", func(_ *Pipeline, runs *[]Run) {
-			(*runs)[0].Result = Result{Class: ResultTestFail, ExitCode: 1}
+			(*runs)[0].Result = Result{Class: ResultTestFail, ExitCode: intPtr(1)}
 		}, "non-pass"},
 		{"malformed record", func(_ *Pipeline, runs *[]Run) {
 			(*runs)[0].TraceID = "bad"

@@ -98,7 +98,7 @@ type Executor struct {
 
 type Result struct {
 	Class    ResultClass `json:"class"`
-	ExitCode int         `json:"exitCode"`
+	ExitCode *int        `json:"exitCode"`
 }
 
 type Run struct {
@@ -233,10 +233,13 @@ func (r Run) Validate() error {
 	default:
 		return fmt.Errorf("result.class: unknown value %q", r.Result.Class)
 	}
-	if r.Result.Class == ResultPass && r.Result.ExitCode != 0 {
+	if r.Result.ExitCode == nil {
+		return errors.New("result.exitCode: must be present")
+	}
+	if r.Result.Class == ResultPass && *r.Result.ExitCode != 0 {
 		return errors.New("result.exitCode: pass requires exit code 0")
 	}
-	if r.Result.Class == ResultTestFail && r.Result.ExitCode == 0 {
+	if r.Result.Class == ResultTestFail && *r.Result.ExitCode == 0 {
 		return errors.New("result.exitCode: test-fail requires a non-zero exit code")
 	}
 	start, err := validateTimestamp("startedAt", r.StartedAt)
@@ -294,9 +297,14 @@ func MarshalRun(r Run) ([]byte, error) {
 	return marshalLine(r)
 }
 
+func intPtr(i int) *int { return &i }
+
 func decodeStrict(data []byte, dst any) error {
 	if !utf8.Valid(data) {
 		return errors.New("malformed JSON: invalid UTF-8")
+	}
+	if err := validateJSONSurrogates(data); err != nil {
+		return err
 	}
 	if err := validateJSONKeys(data, dst); err != nil {
 		return err
@@ -333,6 +341,67 @@ func validateJSONKeys(data []byte, dst any) error {
 		return fmt.Errorf("malformed JSON: %w", err)
 	}
 	return nil
+}
+
+func validateJSONSurrogates(data []byte) error {
+	for i := 0; i < len(data); i++ {
+		if data[i] != '\\' {
+			continue
+		}
+		if i+1 >= len(data) {
+			continue
+		}
+		switch data[i+1] {
+		case '\\', '"', '/', 'b', 'f', 'n', 'r', 't':
+			i++
+			continue
+		case 'u':
+		default:
+			continue
+		}
+		if i+5 >= len(data) {
+			continue
+		}
+		r := parseHex4(data[i+2:])
+		if r < 0xD800 || r > 0xDFFF {
+			continue
+		}
+		if r <= 0xDBFF {
+			if i+12 > len(data) || data[i+6] != '\\' || data[i+7] != 'u' {
+				return fmt.Errorf("malformed JSON: unpaired UTF-16 surrogate \\u%04X", r)
+			}
+			next := parseHex4(data[i+8:])
+			if next < 0xDC00 || next > 0xDFFF {
+				return fmt.Errorf("malformed JSON: unpaired UTF-16 surrogate \\u%04X", r)
+			}
+			i += 11
+			continue
+		}
+		if i >= 6 && data[i-6] == '\\' && data[i-5] == 'u' {
+			prev := parseHex4(data[i-4:])
+			if prev >= 0xD800 && prev <= 0xDBFF {
+				continue
+			}
+		}
+		return fmt.Errorf("malformed JSON: unpaired UTF-16 surrogate \\u%04X", r)
+	}
+	return nil
+}
+
+func parseHex4(b []byte) rune {
+	var r rune
+	for i := 0; i < 4; i++ {
+		r <<= 4
+		switch {
+		case b[i] >= '0' && b[i] <= '9':
+			r |= rune(b[i] - '0')
+		case b[i] >= 'a' && b[i] <= 'f':
+			r |= rune(b[i] - 'a' + 10)
+		case b[i] >= 'A' && b[i] <= 'F':
+			r |= rune(b[i] - 'A' + 10)
+		}
+	}
+	return r
 }
 
 func validateToken(dec *json.Decoder, t reflect.Type) error {
@@ -523,7 +592,10 @@ func validateTask(task Task) error {
 	if task.WorkingDirectory == "" {
 		return errors.New("workingDirectory: must not be empty")
 	}
-	wd := strings.ReplaceAll(task.WorkingDirectory, "\\", "/")
+	if strings.Contains(task.WorkingDirectory, `\`) {
+		return errors.New("workingDirectory: must be a clean repository-relative path")
+	}
+	wd := task.WorkingDirectory
 	if strings.HasPrefix(wd, "/") {
 		return errors.New("workingDirectory: must be a clean repository-relative path")
 	}
