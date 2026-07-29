@@ -381,7 +381,7 @@ var verbSynopsis = map[string]string{
 	"people":     "human principals — who the names in prose refer to",
 	"whois":      "resolve any name (person/agent/tool/model/host) and say how to reach it",
 	"run":        "run a command, emit a structured result envelope (+advisor hints)",
-	"dhnt":       "validate, emit, and aggregate portable dhnt pipeline/run evidence",
+	"dhnt":       "validate, lower, emit, and aggregate portable dhnt pipeline/run evidence",
 	"commands":   "list the supported command surface (builtins, coreutils, verbs)",
 	"context":    "print first-hop agent context: exact bashy path and capabilities",
 	"doctor":     "diagnose the bashy environment (PATH/sh, engine, agent mode, bin cache)",

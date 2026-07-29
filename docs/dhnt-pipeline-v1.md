@@ -93,6 +93,7 @@ validate-run [FILE|-]
 canonicalize-run [FILE|-]
 emit-run FLAGS
 aggregate --pipeline FILE RUN...
+lower-argo --binding FILE [PIPELINE|-]
 ```
 
 Aggregation accepts exactly one valid, passing run for each declared matrix
@@ -119,6 +120,57 @@ searching for `"classification":"pass"` cannot silently treat the new record
 as its weaker schema, and the new gate cannot accept an old record. Migration
 must provide an explicit, independently verified v1 pipeline plan and rerun the
 worker; there is no best-effort digest synthesis.
+
+## Strict DKS Argo lowering
+
+`lower-argo` compiles a portable pipeline into deterministic Argo Workflow
+YAML without submitting it. The required `dhnt.argo-binding/v1` sidecar keeps
+cluster-only facts out of the portable contract:
+
+```json
+{
+  "schema": "dhnt.argo-binding/v1",
+  "workspace": {
+    "claimName": "nanochat-workspace",
+    "mountPath": "/workspace"
+  },
+  "tasks": [{
+    "id": "unit-test",
+    "image": "registry.example/nanochat@sha256:<64 lowercase hex>",
+    "artifacts": [
+      {"name": "source", "path": "source"},
+      {"name": "unit", "path": "artifacts/unit"}
+    ],
+    "timeoutSeconds": 600,
+    "retryLimit": 1
+  }]
+}
+```
+
+The claim must already exist. Every pipeline task needs exactly one binding,
+an immutable digest-pinned image, and exact path coverage for every declared
+input and output artifact. Paths are relative to the mounted workspace.
+Timeout and retry are optional execution policy; when present they map to
+Argo `activeDeadlineSeconds` and `retryStrategy.limit`.
+
+The compiler accepts only `cluster` and `container` tasks targeting
+`k3s/linux`, with `single` distribution or an already-expanded `shardable`
+task carrying an immutable chunk identity. It emits hard selectors for Linux,
+the declared architecture, and `outpost.dhnt.io/backend=k3s`. It rejects the
+entire pipeline on native/cloud lanes, non-k3s platforms, replicated or
+topology-coupled work, multiple matrix rows per task, missing images, partial
+artifact bindings, unknown fields (including secret references), or reserved
+runtime environment names. It never silently filters unsupported tasks and
+never turns native or topology-coupled training into an OCI job.
+
+The generated container receives literal task environment plus
+`DHNT_INPUT_<NAME>_{PATH,SHA256}` and
+`DHNT_OUTPUT_<NAME>_{PATH,SHA256}` metadata. The PVC is the transport boundary:
+this compiler does not copy artifact bytes, inspect secret stores, verify
+checksums, or publish results atomically. A workload claiming
+`dhnt.run/v1` evidence must use a separately trusted runner that verifies input
+bytes before execution and atomically verifies/publishes outputs. Argo
+`Succeeded` and these injected digest values alone are not release evidence.
 
 The separate GNU Bash 5.3 conformance jobs remain aggregated by the existing
 authoritative harness. This v1 slice strengthens native three-platform evidence

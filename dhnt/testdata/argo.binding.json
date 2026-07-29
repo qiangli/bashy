@@ -1,0 +1,1 @@
+{"schema":"dhnt.argo-binding/v1","workspace":{"claimName":"argo-smoke-workspace","mountPath":"/workspace"},"tasks":[{"id":"test","image":"registry.example/project@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","artifacts":[{"name":"report","path":"artifacts/report.json"},{"name":"source","path":"source"}],"timeoutSeconds":300,"retryLimit":1}]}

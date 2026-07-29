@@ -30,6 +30,8 @@ func dispatchDhnt(args []string) int {
 		return dhntEmitRun(args[1:])
 	case "aggregate":
 		return dhntAggregate(args[1:])
+	case "lower-argo":
+		return dhntLowerArgo(args[1:])
 	case "help", "-h", "--help":
 		printDhntUsage(os.Stdout)
 		return 0
@@ -49,7 +51,57 @@ Commands:
   validate-run [FILE|-]            strictly validate dhnt.run/v1
   canonicalize-run [FILE|-]        validate and print deterministic JSON
   emit-run FLAGS                   emit deterministic dhnt.run/v1 JSON
-  aggregate --pipeline FILE RUN... fail-closed matrix aggregation`)
+  aggregate --pipeline FILE RUN... fail-closed matrix aggregation
+  lower-argo --binding FILE [PIPELINE|-]
+                                   compile a strict DKS Argo Workflow`)
+}
+
+func dhntLowerArgo(args []string) int {
+	fs := flag.NewFlagSet("bashy dhnt lower-argo", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	var bindingPath string
+	fs.StringVar(&bindingPath, "binding", "", "dhnt.argo-binding/v1 file")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if bindingPath == "" || fs.NArg() > 1 {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-argo: --binding and at most one pipeline file are required")
+		return 2
+	}
+	pipelinePath := "-"
+	if fs.NArg() == 1 {
+		pipelinePath = fs.Arg(0)
+	}
+	pipelineData, err := readDhntFile(pipelinePath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-argo:", err)
+		return 2
+	}
+	bindingData, err := readDhntFile(bindingPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-argo:", err)
+		return 2
+	}
+	pipeline, err := dhnt.DecodePipeline(pipelineData)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-argo: pipeline:", err)
+		return 1
+	}
+	binding, err := dhnt.DecodeArgoBinding(bindingData)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-argo: binding:", err)
+		return 1
+	}
+	output, err := dhnt.LowerArgo(pipeline, binding)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-argo:", err)
+		return 1
+	}
+	if _, err := os.Stdout.Write(output); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-argo:", err)
+		return 1
+	}
+	return 0
 }
 
 func dhntValidate(args []string, pipeline, canonical bool) int {
