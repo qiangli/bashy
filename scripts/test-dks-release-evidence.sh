@@ -81,7 +81,22 @@ case "$args" in
     fi
     ;;
   *'get pods'*'app=conformance'*)
-    printf '%s\n' conformance-pod
+    if [ "${FAKE_DUPLICATE_COMPLETION_INDEX:-0}" = 1 ]; then
+      printf '%s\n' conformance-index-0-a conformance-index-0-b
+    elif [ "${FAKE_FOREIGN_CONFORMANCE_POD:-0}" = 1 ]; then
+      printf '%s\n' foreign-conformance-pod
+    else
+      printf '%s\n' conformance-pod
+    fi
+    ;;
+  *'get pod conformance-index-0-'*'batch\.kubernetes\.io/job-completion-index'*)
+    printf '%s' 0
+    ;;
+  *'get pod foreign-conformance-pod'*'.metadata.ownerReferences'*'.uid'*)
+    printf '%s' foreign-job-uid
+    ;;
+  *'get job conformance'*'.metadata.uid'*)
+    printf '%s' conformance-job-uid
     ;;
   *'get job conformance'*)
     if [ "${FAKE_JOB_QUERY_FAIL:-0}" = 1 ]; then
@@ -106,11 +121,13 @@ case "$args" in
       # The Job claims both completions succeeded, but the pod query above
       # exposes evidence for only one of them.
       printf '%s\n' '{"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":2}}'
+    elif [ "${FAKE_DUPLICATE_COMPLETION_INDEX:-0}" = 1 ]; then
+      printf '%s\n' '{"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":2,"completedIndexes":"0,1"}}'
     else
       printf '%s\n' '{"spec":{"completions":1,"completionMode":"Indexed"},"status":{"succeeded":1}}'
     fi
     ;;
-  *'logs conformance-pod'*)
+  *'logs conformance-pod'*|*'logs conformance-index-0-'*|*'logs foreign-conformance-pod'*)
     if [ "${FAKE_MALFORMED_RESULTS:-0}" = 1 ]; then
       printf '%s\n' 'Results: 86 passed'
     elif [ "${FAKE_AMBIGUOUS_RESULTS:-0}" = 1 ]; then
@@ -196,6 +213,25 @@ fi
 if (cd "$root" && FAKE_UNOBSERVED_COMPLETION=1 KUBECTL="$fake" NS=test JOB=conformance \
   scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
   echo "conformance aggregation accepted one observed result for two required completions" >&2
+  adversarial_fail=1
+fi
+
+# Indexed Job completeness is per completion index, not per successful Pod.
+# Kubernetes can briefly retain two successful retries for the same index.
+# Two index-0 summaries cannot substitute for the absent index-1 evidence,
+# even when Job status says both indexes eventually completed.
+if (cd "$root" && FAKE_DUPLICATE_COMPLETION_INDEX=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted duplicate evidence for completion index 0 while index 1 was absent" >&2
+  adversarial_fail=1
+fi
+
+# The app label is settable by any Pod in the namespace and does not prove Job
+# ownership. A passing summary from a foreign Pod must not authorize this Job
+# when the Job's own evidence is absent.
+if (cd "$root" && FAKE_FOREIGN_CONFORMANCE_POD=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted evidence from a Pod not owned by the Job" >&2
   adversarial_fail=1
 fi
 

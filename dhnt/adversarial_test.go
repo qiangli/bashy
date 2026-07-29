@@ -22,6 +22,23 @@ func TestDecodePipelineRejectsAbsentEnvironmentValue(t *testing.T) {
 	}
 }
 
+func TestDecodeRunRejectsUnpairedLowSurrogateAfterEscapedLiteral(t *testing.T) {
+	data, err := MarshalRun(fixtureRun())
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = []byte(strings.Replace(
+		string(data),
+		`"repository":"https://`,
+		`"repository":"\\uD800\uDC00https://`,
+		1,
+	))
+
+	if _, err := DecodeRun(data); err == nil {
+		t.Fatal("strict decoder accepted an unpaired low surrogate after an escaped literal that only resembles a high surrogate")
+	}
+}
+
 func TestPipelineRejectsNULInProcessParameters(t *testing.T) {
 	tests := []struct {
 		name string
