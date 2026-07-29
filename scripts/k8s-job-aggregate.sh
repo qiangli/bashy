@@ -39,8 +39,8 @@ completion_mode=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.spec.completio
 }
 
 spec_completions=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.spec.completions}' 2>/dev/null) || true
-[ -n "$spec_completions" ] && [ "$spec_completions" -gt 0 ] || {
-  echo "INDEXED_CHECK_FAIL: missing or zero spec.completions in Job object for job=$JOB ns=$NS" >&2
+[[ "$spec_completions" =~ ^[1-9][0-9]*$ ]] || {
+  echo "INDEXED_CHECK_FAIL: spec.completions must be a positive base-10 integer (got \"$spec_completions\") for job=$JOB ns=$NS" >&2
   exit 3
 }
 
@@ -160,8 +160,8 @@ for ((i=0; i<spec_completions; i++)); do
 done
 
 status_succeeded=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.status.succeeded}' 2>/dev/null) || true
-[ -n "$status_succeeded" ] || {
-  echo "INDEXED_CHECK_FAIL: missing status.succeeded in Job object for job=$JOB ns=$NS" >&2
+[[ "$status_succeeded" =~ ^[0-9]+$ ]] || {
+  echo "INDEXED_CHECK_FAIL: status.succeeded must be a non-negative base-10 integer (got \"$status_succeeded\") for job=$JOB ns=$NS" >&2
   exit 3
 }
 if [ "$status_succeeded" -lt "$spec_completions" ]; then

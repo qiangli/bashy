@@ -149,6 +149,8 @@ case "$args" in
   *'get job conformance'*'.spec.completions'*)
     if [ "${FAKE_JOB_MISSING_COMPLETIONS:-0}" = 1 ]; then
       :
+    elif [ "${FAKE_JOB_NONNUMERIC_COMPLETIONS:-0}" = 1 ]; then
+      printf '%s' many
     elif [ "${FAKE_JOB_MISSING_SUCCEEDED:-0}" = 1 ] || [ "${FAKE_JOB_ZERO_SUCCEEDED:-0}" = 1 ] || [ "${FAKE_INCOMPLETE_JOB:-0}" = 1 ] || [ "${FAKE_UNOBSERVED_COMPLETION:-0}" = 1 ] || [ "${FAKE_DUPLICATE_COMPLETION_INDEX:-0}" = 1 ]; then
       printf '%s' 2
     else
@@ -379,6 +381,14 @@ fi
 if (cd "$root" && FAKE_JOB_MISSING_COMPLETIONS=1 KUBECTL="$fake" NS=test JOB=conformance \
   scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
   echo "conformance aggregation accepted a Job with missing spec.completions" >&2
+  exit 1
+fi
+
+# A malformed non-numeric spec.completions is not evidence of how many
+# pods should have run. The aggregator must reject it before any arithmetic.
+if (cd "$root" && FAKE_JOB_NONNUMERIC_COMPLETIONS=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted a Job with non-numeric spec.completions" >&2
   exit 1
 fi
 
