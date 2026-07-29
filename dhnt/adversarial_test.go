@@ -74,3 +74,69 @@ func TestPipelineRejectsNULInProcessParameters(t *testing.T) {
 		})
 	}
 }
+
+func TestPipelineRejectsNULInSourceIdentity(t *testing.T) {
+	tests := []struct {
+		name string
+		edit func(*Source)
+	}{
+		{
+			name: "repository",
+			edit: func(source *Source) {
+				source.Repository = "https://example.test/repo.git\x00suffix"
+			},
+		},
+		{
+			name: "commit",
+			edit: func(source *Source) {
+				source.Commit = "abc123\x00suffix"
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pipeline := fixturePipeline()
+			tt.edit(&pipeline.Source)
+			if err := pipeline.Validate(); err == nil {
+				t.Fatal("pipeline accepted a NUL byte in source identity")
+			}
+		})
+	}
+}
+
+func TestRunRejectsNULInSourceAndExecutorIdentity(t *testing.T) {
+	tests := []struct {
+		name string
+		edit func(*Run)
+	}{
+		{
+			name: "source repository",
+			edit: func(run *Run) {
+				run.Source.Repository = "https://example.test/repo.git\x00suffix"
+			},
+		},
+		{
+			name: "source commit",
+			edit: func(run *Run) {
+				run.Source.Commit = "abc123\x00suffix"
+			},
+		},
+		{
+			name: "executor node",
+			edit: func(run *Run) {
+				run.Executor.Node = "node\x00suffix"
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			run := fixtureRun()
+			tt.edit(&run)
+			if err := run.Validate(); err == nil {
+				t.Fatal("run accepted a NUL byte in source or executor identity")
+			}
+		})
+	}
+}
