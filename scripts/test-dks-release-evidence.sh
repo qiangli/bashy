@@ -51,7 +51,11 @@ set -euo pipefail
 args="$*"
 case "$args" in
   *'get pods'*'status.phase=="Succeeded"'*)
-    printf '%s\n' successful-retry
+    if [ "${FAKE_MULTIPLE_OWNED_NATIVE_PODS:-0}" = 1 ]; then
+      printf '%s\n' successful-retry successful-retry-2
+    else
+      printf '%s\n' successful-retry
+    fi
     ;;
   *'get pods'*'.items[0].metadata.name'*)
     # The unordered first item is deliberately the failed attempt.
@@ -212,6 +216,15 @@ fi
 if (cd "$root" && FAKE_MULTIPLE_NATIVE_RESULTS=1 KUBECTL="$fake" DHNT="$DHNT" NS=test JOB=retry-job \
   scripts/dks-native-result.sh >/dev/null 2>&1); then
   echo "native result collection accepted multiple DKS_RESULT records from one Pod" >&2
+  adversarial_fail=1
+fi
+
+# A single-completion native Job can transiently retain multiple successful
+# owned Pods. Selecting the first one turns ambiguous evidence into a pass; the
+# collector should require exactly one successful owned pod for the Job.
+if (cd "$root" && FAKE_MULTIPLE_OWNED_NATIVE_PODS=1 KUBECTL="$fake" DHNT="$DHNT" NS=test JOB=retry-job \
+  scripts/dks-native-result.sh >/dev/null 2>&1); then
+  echo "native result collection accepted multiple successful owned Pods for one Job" >&2
   adversarial_fail=1
 fi
 
