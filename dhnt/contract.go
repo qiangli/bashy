@@ -378,9 +378,15 @@ func validateJSONSurrogates(data []byte) error {
 			continue
 		}
 		if i >= 6 && data[i-6] == '\\' && data[i-5] == 'u' {
-			prev := parseHex4(data[i-4:])
-			if prev >= 0xD800 && prev <= 0xDBFF {
-				continue
+			slashCount := 0
+			for j := i - 7; j >= 0 && data[j] == '\\'; j-- {
+				slashCount++
+			}
+			if slashCount%2 == 0 {
+				prev := parseHex4(data[i-4:])
+				if prev >= 0xD800 && prev <= 0xDBFF {
+					continue
+				}
 			}
 		}
 		return fmt.Errorf("malformed JSON: unpaired UTF-16 surrogate \\u%04X", r)

@@ -89,11 +89,23 @@ case "$args" in
       printf '%s\n' conformance-pod
     fi
     ;;
+  *'get pod conformance-pod'*'.metadata.ownerReferences'*'.uid'*)
+    printf '%s' conformance-job-uid
+    ;;
+  *'get pod conformance-pod'*'batch\.kubernetes\.io/job-completion-index'*)
+    printf '%s' 0
+    ;;
+  *'get pod conformance-index-0-'*'.metadata.ownerReferences'*'.uid'*)
+    printf '%s' conformance-job-uid
+    ;;
   *'get pod conformance-index-0-'*'batch\.kubernetes\.io/job-completion-index'*)
     printf '%s' 0
     ;;
   *'get pod foreign-conformance-pod'*'.metadata.ownerReferences'*'.uid'*)
     printf '%s' foreign-job-uid
+    ;;
+  *'get pod foreign-conformance-pod'*'batch\.kubernetes\.io/job-completion-index'*)
+    printf '%s' 0
     ;;
   *'get job conformance'*'.metadata.uid'*)
     printf '%s' conformance-job-uid
@@ -106,25 +118,23 @@ case "$args" in
     if [ "${FAKE_JOB_EMPTY:-0}" = 1 ]; then
       printf '\n'
     elif [ "${FAKE_JOB_MALFORMED:-0}" = 1 ]; then
-      printf '%s\n' '{"spec":{"completions":1},"status":{"succeeded":1}}'
+      printf '%s\n' '{"metadata":{"uid":"conformance-job-uid"},"spec":{"completions":1},"status":{"succeeded":1}}'
     elif [ "${FAKE_JOB_NON_INDEXED:-0}" = 1 ]; then
-      printf '%s\n' '{"spec":{"completions":1,"completionMode":"NonIndexed"},"status":{"succeeded":1}}'
+      printf '%s\n' '{"metadata":{"uid":"conformance-job-uid"},"spec":{"completions":1,"completionMode":"NonIndexed"},"status":{"succeeded":1}}'
     elif [ "${FAKE_JOB_MISSING_COMPLETIONS:-0}" = 1 ]; then
-      printf '%s\n' '{"spec":{"completionMode":"Indexed"},"status":{"succeeded":1}}'
+      printf '%s\n' '{"metadata":{"uid":"conformance-job-uid"},"spec":{"completionMode":"Indexed"},"status":{"succeeded":1}}'
     elif [ "${FAKE_JOB_MISSING_SUCCEEDED:-0}" = 1 ]; then
-      printf '%s\n' '{"spec":{"completions":2,"completionMode":"Indexed"},"status":{}}'
+      printf '%s\n' '{"metadata":{"uid":"conformance-job-uid"},"spec":{"completions":2,"completionMode":"Indexed"},"status":{}}'
     elif [ "${FAKE_JOB_ZERO_SUCCEEDED:-0}" = 1 ]; then
-      printf '%s\n' '{"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":0}}'
+      printf '%s\n' '{"metadata":{"uid":"conformance-job-uid"},"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":0}}'
     elif [ "${FAKE_INCOMPLETE_JOB:-0}" = 1 ]; then
-      printf '%s\n' '{"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":1}}'
+      printf '%s\n' '{"metadata":{"uid":"conformance-job-uid"},"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":1}}'
     elif [ "${FAKE_UNOBSERVED_COMPLETION:-0}" = 1 ]; then
-      # The Job claims both completions succeeded, but the pod query above
-      # exposes evidence for only one of them.
-      printf '%s\n' '{"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":2}}'
+      printf '%s\n' '{"metadata":{"uid":"conformance-job-uid"},"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":2}}'
     elif [ "${FAKE_DUPLICATE_COMPLETION_INDEX:-0}" = 1 ]; then
-      printf '%s\n' '{"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":2,"completedIndexes":"0,1"}}'
+      printf '%s\n' '{"metadata":{"uid":"conformance-job-uid"},"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":2,"completedIndexes":"0,1"}}'
     else
-      printf '%s\n' '{"spec":{"completions":1,"completionMode":"Indexed"},"status":{"succeeded":1}}'
+      printf '%s\n' '{"metadata":{"uid":"conformance-job-uid"},"spec":{"completions":1,"completionMode":"Indexed"},"status":{"succeeded":1}}'
     fi
     ;;
   *'logs conformance-pod'*|*'logs conformance-index-0-'*|*'logs foreign-conformance-pod'*)

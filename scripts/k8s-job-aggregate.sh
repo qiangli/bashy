@@ -13,6 +13,40 @@ KUBECTL="${KUBECTL:-outpost kubectl}"
 NS="${NS:-default}"
 JOB="${JOB:-bash53-conformance}"
 
+job_info=$($KUBECTL get job "$JOB" -n "$NS" -o json 2>/dev/null) || {
+  echo "JOB_QUERY_FAIL: kubectl get job failed for job=$JOB ns=$NS" >&2
+  exit 3
+}
+[ -n "$job_info" ] || {
+  echo "JOB_QUERY_FAIL: kubectl get job returned empty response for job=$JOB ns=$NS" >&2
+  exit 3
+}
+
+job_uid=$(printf '%s\n' "$job_info" | sed -n 's/.*"uid": *"\([^"]*\)".*/\1/p') || true
+[ -n "$job_uid" ] || {
+  echo "JOB_UID_FAIL: missing metadata.uid in Job object for job=$JOB ns=$NS" >&2
+  exit 3
+}
+
+completion_mode=$(printf '%s\n' "$job_info" | sed -n 's/.*"completionMode": *"\([^"]*\)".*/\1/p') || true
+[ -n "$completion_mode" ] || {
+  echo "INDEXED_CHECK_FAIL: missing completionMode in Job object for job=$JOB ns=$NS" >&2
+  exit 3
+}
+[ "$completion_mode" = "Indexed" ] || {
+  echo "INDEXED_CHECK_FAIL: completionMode is \"$completion_mode\", not Indexed for job=$JOB ns=$NS" >&2
+  exit 3
+}
+
+spec_completions=$(printf '%s\n' "$job_info" | sed -n 's/.*"completions": *\([0-9][0-9]*\).*/\1/p') || true
+[ -n "$spec_completions" ] && [ "$spec_completions" -gt 0 ] || {
+  echo "INDEXED_CHECK_FAIL: missing or zero spec.completions in Job object for job=$JOB ns=$NS" >&2
+  exit 3
+}
+
+declare -a idx_seen
+for ((i=0; i<spec_completions; i++)); do idx_seen[i]=0; done
+
 pods="$($KUBECTL get pods -n "$NS" -l "app=${JOB}" \
   --field-selector=status.phase=Succeeded \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null)"
@@ -22,6 +56,34 @@ pods="$($KUBECTL get pods -n "$NS" -l "app=${JOB}" \
 tp=0 tf=0 ts=0 tt=0 chunks=0 missing=0
 while IFS= read -r pod; do
   [ -n "$pod" ] || continue
+
+  pod_uid=$($KUBECTL get pod "$pod" -n "$NS" \
+    -o jsonpath='{.metadata.ownerReferences[0].uid}' 2>/dev/null || true)
+  if [ "$pod_uid" != "$job_uid" ]; then
+    echo "WARN: $pod is not owned by Job $JOB — evidence rejected" >&2
+    missing=$((missing + 1))
+    continue
+  fi
+
+  pod_index=$($KUBECTL get pod "$pod" -n "$NS" \
+    -o jsonpath='{.metadata.labels.batch\.kubernetes\.io/job-completion-index}' 2>/dev/null || true)
+  if [ -z "$pod_index" ] || ! [[ "$pod_index" =~ ^[0-9]+$ ]]; then
+    echo "WARN: $pod has absent or malformed job-completion-index — evidence rejected" >&2
+    missing=$((missing + 1))
+    continue
+  fi
+  if [ "$pod_index" -ge "$spec_completions" ]; then
+    echo "WARN: $pod completion index $pod_index >= $spec_completions — out of range" >&2
+    missing=$((missing + 1))
+    continue
+  fi
+  if [ "${idx_seen[$pod_index]}" -ne 0 ]; then
+    echo "WARN: duplicate completion index $pod_index from $pod — evidence rejected" >&2
+    missing=$((missing + 1))
+    continue
+  fi
+  idx_seen[$pod_index]=1
+
   pod_log="$($KUBECTL logs "$pod" -n "$NS" 2>/dev/null || true)"
   results_count="$(printf '%s\n' "$pod_log" | grep -cE '^Results:' || true)"
   line=""
@@ -90,36 +152,12 @@ if [ "$ts" -gt 0 ]; then
   echo "SKIPPED: ${ts} test(s) were skipped — verdict is not trustworthy" >&2
   exit 3
 fi
-# Inspect the Job to verify Indexed Job completeness. An aggregator that
-# counts only Succeeded pods will miss incomplete Jobs where
-# status.succeeded < spec.completions. The campaign contract requires
-# fail-closed aggregation: query failure, empty/malformed response, missing
-# required fields, non-Indexed completionMode, and succeeded < completions
-# all reject the aggregate.
-job_info=$($KUBECTL get job "$JOB" -n "$NS" -o json 2>/dev/null) || {
-  echo "INDEXED_CHECK_FAIL: kubectl get job failed for job=$JOB ns=$NS" >&2
-  exit 3
-}
-[ -n "$job_info" ] || {
-  echo "INDEXED_CHECK_FAIL: kubectl get job returned empty response for job=$JOB ns=$NS" >&2
-  exit 3
-}
-
-completion_mode=$(printf '%s\n' "$job_info" | sed -n 's/.*"completionMode": *"\([^"]*\)".*/\1/p') || true
-[ -n "$completion_mode" ] || {
-  echo "INDEXED_CHECK_FAIL: missing completionMode in Job object for job=$JOB ns=$NS" >&2
-  exit 3
-}
-[ "$completion_mode" = "Indexed" ] || {
-  echo "INDEXED_CHECK_FAIL: completionMode is \"$completion_mode\", not Indexed for job=$JOB ns=$NS" >&2
-  exit 3
-}
-
-spec_completions=$(printf '%s\n' "$job_info" | sed -n 's/.*"completions": *\([0-9][0-9]*\).*/\1/p') || true
-[ -n "$spec_completions" ] && [ "$spec_completions" -gt 0 ] || {
-  echo "INDEXED_CHECK_FAIL: missing or zero spec.completions in Job object for job=$JOB ns=$NS" >&2
-  exit 3
-}
+for ((i=0; i<spec_completions; i++)); do
+  if [ "${idx_seen[$i]}" -eq 0 ]; then
+    echo "INCOMPLETE: no evidence for completion index $i — verdict is not trustworthy" >&2
+    exit 3
+  fi
+done
 
 status_succeeded=$(printf '%s\n' "$job_info" | sed -n 's/.*"succeeded": *\([0-9][0-9]*\).*/\1/p') || true
 [ -n "$status_succeeded" ] || {
@@ -130,10 +168,6 @@ if [ "$status_succeeded" -lt "$spec_completions" ]; then
   echo "INCOMPLETE: ${status_succeeded} succeeded < ${spec_completions} required completions — verdict is not trustworthy" >&2
   exit 3
 fi
-# Job status is not a substitute for collected evidence. Observed valid
-# result chunks must equal the required completions exactly, so a
-# discrepancy (including status.succeeded >= completions with fewer
-# observed chunks) is incomplete evidence — reject the aggregate.
 if [ "$chunks" -ne "$spec_completions" ]; then
   echo "INCOMPLETE: ${chunks} observed chunk(s) != ${spec_completions} required completions — evidence is incomplete" >&2
   exit 3
