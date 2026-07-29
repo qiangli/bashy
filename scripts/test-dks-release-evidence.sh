@@ -63,6 +63,16 @@ case "$args" in
   *'get pod successful-retry'*'.spec.nodeName'*)
     printf '%s' dragon-vk-native
     ;;
+  *'get pod successful-retry'*'.metadata.ownerReferences'*'.uid'*)
+    if [ "${FAKE_FOREIGN_NATIVE_POD:-0}" = 1 ]; then
+      printf '%s' foreign-job-uid
+    else
+      printf '%s' retry-job-uid
+    fi
+    ;;
+  *'get job retry-job'*'.metadata.uid'*)
+    printf '%s' retry-job-uid
+    ;;
   *'get node dragon-vk-native'*'outpost\.dhnt\.io/backend'*)
     # An unlabelled node answers with the empty string, not an error.
     [ "${FAKE_NO_LABELS:-0}" = 1 ] || printf '%s' vk-native
@@ -76,6 +86,10 @@ case "$args" in
   *'get pod successful-retry'*'.terminated.message'*)
     if [ "${FAKE_LEGACY:-0}" = 1 ]; then
       printf '%s\n' 'DKS_RESULT:{"schema":1,"classification":"pass","task":"bash53","os":"darwin","arch":"arm64","source_ref":"abc123"}'
+    elif [ "${FAKE_MULTIPLE_NATIVE_RESULTS:-0}" = 1 ]; then
+      printf '%s\n' \
+        'DKS_RESULT:{"schema":"dhnt.run/v1","pipeline":"bashy-release","task":"bash53","run":"failed-darwin-run","source":{"repository":"https://github.com/qiangli/bashy.git","commit":"abc123","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"inputs":[{"name":"candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"executor":{"node":"dragon-vk-native","backend":"vk-native","os":"darwin","arch":"arm64"},"result":{"class":"test-fail","exitCode":1},"outputs":[{"name":"tested-candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"startedAt":"2026-07-29T12:00:00Z","finishedAt":"2026-07-29T12:00:30Z","traceId":"1123456789abcdef0123456789abcdef"}' \
+        'DKS_RESULT:{"schema":"dhnt.run/v1","pipeline":"bashy-release","task":"bash53","run":"darwin-run","source":{"repository":"https://github.com/qiangli/bashy.git","commit":"abc123","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"inputs":[{"name":"candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"executor":{"node":"dragon-vk-native","backend":"vk-native","os":"darwin","arch":"arm64"},"result":{"class":"pass","exitCode":0},"outputs":[{"name":"tested-candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"startedAt":"2026-07-29T12:00:00Z","finishedAt":"2026-07-29T12:01:00Z","traceId":"0123456789abcdef0123456789abcdef"}'
     else
       printf '%s\n' 'DKS_RESULT:{"schema":"dhnt.run/v1","pipeline":"bashy-release","task":"bash53","run":"darwin-run","source":{"repository":"https://github.com/qiangli/bashy.git","commit":"abc123","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"inputs":[{"name":"candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"executor":{"node":"dragon-vk-native","backend":"vk-native","os":"darwin","arch":"arm64"},"result":{"class":"pass","exitCode":0},"outputs":[{"name":"tested-candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"startedAt":"2026-07-29T12:00:00Z","finishedAt":"2026-07-29T12:01:00Z","traceId":"0123456789abcdef0123456789abcdef"}'
     fi
@@ -182,6 +196,23 @@ if (cd "$root" && FAKE_NO_LABELS=1 KUBECTL="$fake" DHNT="$DHNT" NS=test JOB=retr
   scripts/dks-native-result.sh >/dev/null 2>&1); then
   echo "an unlabelled node was accepted without an executor cross-check" >&2
   exit 1
+fi
+
+# The job-name label is not proof that a Pod belongs to the Job. A foreign Pod
+# can carry that label and present a valid, passing record from the expected
+# node unless the collector compares the Pod owner UID with the live Job UID.
+if (cd "$root" && FAKE_FOREIGN_NATIVE_POD=1 KUBECTL="$fake" DHNT="$DHNT" NS=test JOB=retry-job \
+  scripts/dks-native-result.sh >/dev/null 2>&1); then
+  echo "native result collection accepted evidence from a Pod not owned by the Job" >&2
+  adversarial_fail=1
+fi
+
+# The producer contract emits one terminal record. Selecting the last of two
+# markers lets a later pass erase an earlier failure from the same Pod status.
+if (cd "$root" && FAKE_MULTIPLE_NATIVE_RESULTS=1 KUBECTL="$fake" DHNT="$DHNT" NS=test JOB=retry-job \
+  scripts/dks-native-result.sh >/dev/null 2>&1); then
+  echo "native result collection accepted multiple DKS_RESULT records from one Pod" >&2
+  adversarial_fail=1
 fi
 
 # An empty conformance run is absence of evidence, even when its syntactically
