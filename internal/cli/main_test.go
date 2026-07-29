@@ -809,14 +809,19 @@ func TestRunUnexpectedTokenAbort(t *testing.T) {
 			name:    "prior-line-statement-runs-first",
 			src:     "echo hi\ncase\nin esac\n",
 			wantOut: "hi\n",
-			// Earlier-line `echo hi` runs; the up-front abort is declined and
-			// the case error falls to the recovery path, which runs line 3's
-			// `in` as a command (status 127), matching the pre-existing path.
-			// (The "in: command not found" lands on the runner's own stderr,
-			// not the os.Stderr the parse-error diagnostics use.)
-			wantStatus: 127,
+			// Earlier-line `echo hi` runs, then the up-front abort is
+			// declined and the case error falls to the recovery path.
+			// Bash prints ONE diagnostic here -- "line 2: syntax error
+			// near unexpected token `newline'" -- and stops; we still
+			// report line 3 as well, and name `case' rather than the
+			// newline. The exit status does match: `in` is a reserved
+			// word, so recovery reports a syntax error (2) instead of
+			// running it as a command, as bash never would.
+			wantStatus: 2,
 			wantErr: "./s: line 2: syntax error near unexpected token `case'\n" +
-				"./s: line 2: `case'\n",
+				"./s: line 2: `case'\n" +
+				"./s: line 3: syntax error near unexpected token `in'\n" +
+				"./s: line 3: `in esac'\n",
 		},
 	}
 	for _, tc := range tests {

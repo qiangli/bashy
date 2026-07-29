@@ -2948,6 +2948,12 @@ func printBashParseError(w io.Writer, src []byte, prefix string, pe syntax.Parse
 		fmt.Fprintf(w, "%s: line %d: %s\n", prefix, line, text)
 		return
 	}
+	if lines, ok := incompleteParseErrorLines(src, pe); ok {
+		for _, text := range lines {
+			fmt.Fprintf(w, "%s: %s\n", prefix, text)
+		}
+		return
+	}
 	text := rewriteParserErrorText(string(src), pe)
 	if eofLine, construct, ok := compoundEOFParseError(src, text); ok {
 		fmt.Fprintf(w, "%s: line %d: syntax error: unexpected end of file from `%s' command on line 1\n", prefix, eofLine, construct)
@@ -2965,6 +2971,11 @@ func printBashParseError(w io.Writer, src []byte, prefix string, pe syntax.Parse
 	if strings.HasPrefix(text, "unexpected EOF") && line == 1 &&
 		bytes.Contains(src, []byte("$(")) && bytes.Contains(src, []byte("<<")) {
 		line = bytes.Count(src, []byte("\n")) + 1
+	}
+	// An unterminated `${`: bash blames the end of input, not the `$`.
+	if text == "unexpected EOF while looking for matching `}'" &&
+		strings.HasSuffix(strings.TrimRight(string(src), " \t\n"), "${") {
+		line = eofReportLine(src)
 	}
 	fmt.Fprintf(w, "%s: line %d: %s\n", prefix, line, text)
 	if strings.HasSuffix(text, ": bad substitution") {
@@ -3002,6 +3013,183 @@ func arithForParseErrorLines(src string, pe syntax.ParseError) []string {
 		}
 	}
 	return nil
+}
+
+// eofReportLine is the line bash blames for an end-of-input diagnostic:
+// one past the last source line. `echo $(` on one line reports line 2.
+func eofReportLine(src []byte) int {
+	line := bytes.Count(src, []byte("\n")) + 1
+	if strings.TrimSpace(nthLine(src, line)) != "" {
+		line++
+	}
+	return line
+}
+
+// incompleteParseErrorLines renders the parse errors where our parser ran
+// out of input (pe.Incomplete). Bash splits these three ways, and which one
+// it picks depends on what the unfinished construct was still waiting for:
+//
+//	waiting for a command body   line <eof>: syntax error: unexpected end of
+//	(then/do/{/( ... )           file from `<kw>' command on line <kw line>
+//	waiting for a statement      line <eof>: syntax error: unexpected end of file
+//	(after && or ||)
+//	waiting for a word           line <n>: syntax error near unexpected token
+//	(after < > >& << etc.)       `newline'   + the source-line echo
+//
+// The last shape names `newline' because at end of input bash's lexer hands
+// the parser a newline token. Only the word case echoes the source line.
+// Returns ok=false for anything not in this family, leaving the existing
+// rewrites untouched.
+func incompleteParseErrorLines(src []byte, pe syntax.ParseError) ([]string, bool) {
+	if !pe.Incomplete {
+		return nil, false
+	}
+	text := pe.Text
+
+	// A subshell left open at EOF. `echo $(` carries the same message but
+	// anchors pe.Pos at the `$`, so check that pe.Pos really is the `(`.
+	if text == "unexpected EOF while looking for matching `)'" {
+		off := offsetBeforePos(src, pe.Pos)
+		// An unterminated array assignment (`a=( 1 2`) anchors at its `(`
+		// too, but bash reports it plainly at the opening line rather than
+		// as an unclosed command. The `=` before the paren tells them apart.
+		if off > 0 && off < len(src) && src[off] == '(' && src[off-1] == '=' {
+			return nil, false
+		}
+		if off >= 0 && off < len(src) && src[off] == '(' {
+			return []string{fmt.Sprintf("line %d: syntax error: unexpected end of file from `(' command on line %d",
+				eofReportLine(src), pe.Pos.Line())}, true
+		}
+		// Any other unterminated construct: bash reports it at the EOF
+		// line rather than where the construct opened.
+		return []string{fmt.Sprintf("line %d: %s", eofReportLine(src), text)}, true
+	}
+
+	// Waiting for a command body: name the outermost construct still open.
+	if strings.HasSuffix(text, "must be followed by a statement list") {
+		if kw, line, ok := outermostUnclosedConstruct(src); ok {
+			return []string{fmt.Sprintf("line %d: syntax error: unexpected end of file from `%s' command on line %d",
+				eofReportLine(src), kw, line)}, true
+		}
+		return []string{fmt.Sprintf("line %d: syntax error: unexpected end of file", eofReportLine(src))}, true
+	}
+
+	// Waiting for a statement after `&&` / `||` / `|`. Bash normally lets
+	// this run to end of input, but a reserved word that cannot stand on
+	// its own (`time |`, `! |`) makes the operator itself the error.
+	if strings.HasSuffix(text, "must be followed by a statement") {
+		off := offsetBeforePos(src, pe.Pos)
+		if off > 0 && off <= len(src) {
+			switch strings.TrimSpace(string(src[:off])) {
+			case "time", "!":
+				line := int(pe.Pos.Line())
+				op := strings.TrimSuffix(strings.TrimPrefix(text, "`"), "` must be followed by a statement")
+				out := []string{fmt.Sprintf("line %d: syntax error near unexpected token `%s'", line, op)}
+				if srcLine := nthLine(src, line); srcLine != "" {
+					out = append(out, fmt.Sprintf("line %d: `%s'", line, srcLine))
+				}
+				return out, true
+			}
+		}
+		return []string{fmt.Sprintf("line %d: syntax error: unexpected end of file", eofReportLine(src))}, true
+	}
+
+	// Waiting for a word/name/literal.
+	wordExpected := strings.HasSuffix(text, "must be followed by a word") ||
+		strings.HasSuffix(text, "must be followed by a name") ||
+		strings.HasSuffix(text, "must be followed by a literal") ||
+		text == "coproc clause requires a command" ||
+		text == "`foo(` must be followed by `)`"
+	if wordExpected {
+		line := int(pe.Pos.Line())
+		out := []string{fmt.Sprintf("line %d: syntax error near unexpected token `newline'", line)}
+		if srcLine := nthLine(src, line); srcLine != "" {
+			out = append(out, fmt.Sprintf("line %d: `%s'", line, srcLine))
+		}
+		return out, true
+	}
+	return nil, false
+}
+
+// outermostUnclosedConstruct finds the first compound command left open at
+// end of input — the one bash names in "unexpected end of file from `X'".
+// For `for i in; do` that is `for`, not the `do` our parser stopped at, and
+// for `f() {` it is the `{`. A word-level scan is enough here: this only
+// runs once the input has already failed to parse, so the cost of a wrong
+// guess is error wording, not behaviour.
+func outermostUnclosedConstruct(src []byte) (keyword string, line int, ok bool) {
+	type opener struct {
+		kw   string
+		line int
+	}
+	closes := map[string]string{
+		"if": "fi", "while": "done", "until": "done", "for": "done",
+		"select": "done", "case": "esac", "{": "}", "(": ")",
+	}
+	var stack []opener
+	curLine := 1
+	i := 0
+	for i < len(src) {
+		c := src[i]
+		switch {
+		case c == '\n':
+			curLine++
+			i++
+			continue
+		case c == ' ' || c == '\t' || c == ';' || c == '&' || c == '|':
+			i++
+			continue
+		case c == '\'' || c == '"':
+			quote := c
+			i++
+			for i < len(src) && src[i] != quote {
+				if src[i] == '\n' {
+					curLine++
+				}
+				i++
+			}
+			i++
+			continue
+		case c == '\\':
+			i += 2
+			continue
+		case c == '(' || c == '{':
+			stack = append(stack, opener{string(c), curLine})
+			i++
+			continue
+		case c == ')' || c == '}':
+			want := "("
+			if c == '}' {
+				want = "{"
+			}
+			if n := len(stack); n > 0 && stack[n-1].kw == want {
+				stack = stack[:n-1]
+			}
+			i++
+			continue
+		}
+		start := i
+		for i < len(src) {
+			b := src[i]
+			if b == ' ' || b == '\t' || b == '\n' || b == ';' || b == '&' ||
+				b == '|' || b == '(' || b == ')' || b == '\'' || b == '"' {
+				break
+			}
+			i++
+		}
+		word := string(src[start:i])
+		if _, isOpener := closes[word]; isOpener {
+			stack = append(stack, opener{word, curLine})
+			continue
+		}
+		if n := len(stack); n > 0 && closes[stack[n-1].kw] == word {
+			stack = stack[:n-1]
+		}
+	}
+	if len(stack) == 0 {
+		return "", 0, false
+	}
+	return stack[0].kw, stack[0].line, true
 }
 
 func compoundEOFParseError(src []byte, text string) (eofLine int, construct string, ok bool) {
@@ -3156,6 +3344,28 @@ func rewriteParserErrorText(src string, pe syntax.ParseError) string {
 		}
 		return "bad substitution"
 	}
+	// An arithmetic `for` header closed with a single `)` instead of `))`
+	// (`for((;;)`). Our parser reports the unmatched `((`; bash names the
+	// offending tail, which runs from the last `;` in the header to the
+	// stray `)` -- both `for((;;)` and `for((i=0;i<3;)` report `;)'.
+	if strings.HasPrefix(pe.Text, "reached `)` without matching `((`") {
+		if i := strings.LastIndexByte(src, ';'); i >= 0 {
+			if j := strings.IndexByte(src[i:], ')'); j >= 0 {
+				return fmt.Sprintf("syntax error near `%s'", src[i:i+j+1])
+			}
+		}
+	}
+	// `X` can only immediately follow a statement -- bash reports the
+	// stray token generically (`echo a; ;`).
+	if strings.HasSuffix(pe.Text, "` can only immediately follow a statement") {
+		tok := strings.TrimSuffix(strings.TrimPrefix(pe.Text, "`"), "` can only immediately follow a statement")
+		return fmt.Sprintf("syntax error near unexpected token `%s'", tok)
+	}
+	// A `${` running off the end of the input: our parser calls the empty
+	// name invalid, bash reports the unmatched brace.
+	if pe.Text == "invalid parameter name" && strings.HasSuffix(strings.TrimRight(src, " \t\n"), "${") {
+		return "unexpected EOF while looking for matching `}'"
+	}
 	if pe.Text == "invalid parameter name" {
 		if subst := nestedBadSubstSource(src, pe.Pos); subst != "" && subst != "${" {
 			subst = strings.ReplaceAll(subst, "$'", "'")
@@ -3195,9 +3405,17 @@ func rewriteParserErrorText(src string, pe syntax.ParseError) string {
 			return "syntax error near unexpected token `done' while looking for matching `)'"
 		case strings.Contains(pe.Text, "`esac` can only"):
 			return "syntax error near unexpected token `esac' while looking for matching `)'"
-		case strings.Contains(pe.Text, "`;;` can only"):
+		case strings.Contains(pe.Text, "`;;` can only"),
+			strings.Contains(pe.Text, "`in` can only"):
 			return "syntax error near unexpected token `in' while looking for matching `)'"
 		}
+	}
+	// A reserved word used as a command (`in`, `do`, `fi`, ...). Our parser
+	// explains which construct owns it; bash just names the token. This has
+	// to stay below the command-substitution cases above, which report the
+	// same keywords with the "while looking for matching `)'" suffix.
+	if kw, ok := reservedWordOnlyError(pe.Text); ok {
+		return fmt.Sprintf("syntax error near unexpected token `%s'", kw)
 	}
 	switch {
 	case pe.Text == "statements must be separated by &, ; or a newline",
@@ -3470,7 +3688,7 @@ func unexpectedTokenName(src string, pe syntax.ParseError) (string, bool) {
 		// whenever the source merely contains a `$(`; leave those to it so this
 		// abort doesn't clash with established behavior.
 		switch kw {
-		case "done", "esac", ";;":
+		case "done", "esac", "in", ";;":
 			if strings.Contains(src, "$(") {
 				return "", false
 			}
@@ -3509,7 +3727,7 @@ func completeStmtBeforeLine(src []byte, errLine int) bool {
 // "%#q can only be used …" diagnostics for a misplaced loop/`if`/`case`
 // reserved word, returning the bare keyword (without the `%#q` backticks).
 func reservedWordOnlyError(text string) (string, bool) {
-	for _, kw := range []string{"do", "done", "then", "elif", "fi", "esac", ";;"} {
+	for _, kw := range []string{"do", "done", "then", "elif", "fi", "esac", "in", ";;"} {
 		if strings.HasPrefix(text, "`"+kw+"` can only be used ") {
 			return kw, true
 		}
@@ -3534,6 +3752,16 @@ func tokensToSkip(text string) int {
 	case strings.Contains(text, "` must be followed by `in`, `do`, `;`, or a newline"):
 		// `for foo` / `select foo` -- skip kw + name.
 		return 2
+	case strings.HasPrefix(text, "`if` must be followed by"),
+		strings.HasPrefix(text, "`while` must be followed by"),
+		strings.HasPrefix(text, "`until` must be followed by"),
+		strings.HasPrefix(text, "`then` must be followed by"),
+		strings.HasPrefix(text, "`do` must be followed by"),
+		strings.HasPrefix(text, "`{` must be followed by"):
+		// Our parser anchors at the keyword ("`if` must be followed by a
+		// statement list") but bash names the token it actually tripped
+		// on -- the `;` in `if; then; fi`. Skip the keyword to reach it.
+		return 1
 	}
 	return 0
 }
