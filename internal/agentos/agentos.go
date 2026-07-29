@@ -70,13 +70,13 @@ import (
 	"github.com/qiangli/coreutils/pkg/ask"
 	"github.com/qiangli/coreutils/pkg/board"
 	"github.com/qiangli/coreutils/pkg/bus"
-	"github.com/qiangli/coreutils/pkg/herald"
 	"github.com/qiangli/coreutils/pkg/capability"
 	"github.com/qiangli/coreutils/pkg/chat"
 	"github.com/qiangli/coreutils/pkg/dag"
 	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/gate"
 	"github.com/qiangli/coreutils/pkg/handoff"
+	"github.com/qiangli/coreutils/pkg/herald"
 	"github.com/qiangli/coreutils/pkg/jobs"
 	"github.com/qiangli/coreutils/pkg/judge"
 	"github.com/qiangli/coreutils/pkg/kb"
@@ -127,7 +127,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform",
+		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
@@ -733,6 +733,10 @@ func Dispatch() {
 		// by default (meta trails on stderr); --capture embeds the streams in one
 		// stdout record. Returns the command's own exit status.
 		os.Exit(dispatchRun(os.Args[2:]))
+	case "dhnt":
+		// Portable dhnt.pipeline/v1 and dhnt.run/v1 validation, canonical
+		// encoding, worker emission, and fail-closed evidence aggregation.
+		os.Exit(dispatchDhnt(os.Args[2:]))
 	case "doctor":
 		// Environment self-diagnostic: PATH/sh shadowing, a stale bashy on PATH,
 		// toolchain + container engine, agent mode, bin cache. Advisory.

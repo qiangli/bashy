@@ -13,7 +13,13 @@ ARTIFACT_SHA256="${ARTIFACT_SHA256:?set ARTIFACT_SHA256 to the archive checksum}
 ARTIFACT_PATH="${ARTIFACT_PATH:-bashy}"
 TASK="${TASK:-smoke}"
 SOURCE_URL="${SOURCE_URL:-https://github.com/qiangli/bashy.git}"
-SOURCE_REF="${SOURCE_REF:-}"
+SOURCE_REF="${SOURCE_REF:?set SOURCE_REF to the exact source commit}"
+SOURCE_SHA256="${SOURCE_SHA256:?set SOURCE_SHA256 to the source-tree sha256}"
+PIPELINE_ID="${PIPELINE_ID:?set PIPELINE_ID to the dhnt.pipeline/v1 identity}"
+EVIDENCE_TASK="${EVIDENCE_TASK:-$TASK}"
+RUN_ID="${RUN_ID:-$NAME}"
+TRACE_ID="${TRACE_ID:?set TRACE_ID to a 32-lowercase-hex trace ID}"
+EXECUTOR_NODE="${EXECUTOR_NODE:?set EXECUTOR_NODE to the scheduled vk-native node name}"
 BASH53_TESTDATA_REPO="${BASH53_TESTDATA_REPO:-}"
 BASH53_TESTDATA_REF="${BASH53_TESTDATA_REF:-}"
 YASH_TESTDATA_REPO="${YASH_TESTDATA_REPO:-}"
@@ -97,6 +103,47 @@ spec:
             - |
               set -e
               self="\$0"
+              workspace=""
+              failure_class=infra-fail
+              started_at=\$("\$self" date -u '+%Y-%m-%dT%H:%M:%SZ')
+              emit_result() {
+                status=\$?
+                trap - EXIT
+                class=pass
+                [ "\$status" -eq 0 ] || class="\$failure_class"
+                case "\$status" in 130|143) class=canceled ;; esac
+                finished_at=\$("\$self" date -u '+%Y-%m-%dT%H:%M:%SZ')
+                record=\$("\$self" dhnt emit-run \
+                  --pipeline "${PIPELINE_ID}" \
+                  --task "${EVIDENCE_TASK}" \
+                  --run "${RUN_ID}" \
+                  --source-repository "${SOURCE_URL}" \
+                  --source-commit "${SOURCE_REF}" \
+                  --source-sha256 "${SOURCE_SHA256}" \
+                  --input "candidate=${ARTIFACT_SHA256}" \
+                  --node "${EXECUTOR_NODE}" \
+                  --backend vk-native \
+                  --os "\$os" \
+                  --arch "\$arch" \
+                  --class "\$class" \
+                  --exit-code "\$status" \
+                  --output "tested-candidate=${ARTIFACT_SHA256}" \
+                  --started-at "\$started_at" \
+                  --finished-at "\$finished_at" \
+                  --trace-id "${TRACE_ID}") || status=70
+                [ -z "\${record:-}" ] || printf 'DKS_RESULT:%s\n' "\$record"
+                if [ -n "\$workspace" ]; then
+                  if [ "\$os" = darwin ] || [ "\$os" = linux ]; then
+                    /bin/chmod -R u+w "\$workspace" 2>/dev/null || true
+                    /bin/rm -rf "\$workspace" 2>/dev/null || true
+                  else
+                    "\$self" chmod -R u+w "\$workspace" 2>/dev/null || true
+                    "\$self" rm -rf "\$workspace" 2>/dev/null || true
+                  fi
+                fi
+                exit "\$status"
+              }
+              trap emit_result EXIT
               os=\$(uname -s | tr A-Z a-z)
               arch=\$(uname -m)
               # Kubernetes and the release gate use Go's canonical platform
@@ -119,24 +166,24 @@ spec:
                 echo "dks-native-job: observed arch \$arch does not match target ${TARGET_ARCH}" >&2
                 exit 1
               fi
-              version=\$("\$self" --version | head -1)
+              failure_class=test-fail
+              # Not '--version | head -1': a pipeline reports HEAD's status, so
+              # a bashy that died here would have been read as a passing smoke.
+              "\$self" --version >/dev/null
               [ "\$("\$self" -c 'echo runtime-ok')" = runtime-ok ]
               "\$self" curl --version >/dev/null
               task="${TASK}"
               if [ "\$task" != smoke ]; then
+                # Staging the tree is infrastructure, not the system under test:
+                # a clone that cannot reach the remote is an infra-fail, and
+                # classifying it test-fail would blame the candidate for it.
+                failure_class=infra-fail
                 workspace=\$(mktemp -d)
-                # Go module/toolchain caches are deliberately read-only. On Unix,
-                # cleanup is host lifecycle work, so use native tools rather than
-                # depending on the Bashy chmod/rm compatibility surface.
-                if [ "\$os" = darwin ] || [ "\$os" = linux ]; then
-                  trap '/bin/chmod -R u+w "\$workspace" 2>/dev/null || true; /bin/rm -rf "\$workspace" 2>/dev/null || true' EXIT
-                else
-                  trap '"\$self" chmod -R u+w "\$workspace" 2>/dev/null || true; "\$self" rm -rf "\$workspace" 2>/dev/null || true' EXIT
-                fi
                 "\$self" git clone "${SOURCE_URL}" "\$workspace/bashy"
                 "\$self" git -C "\$workspace/bashy" checkout --detach "${SOURCE_REF}"
                 cd "\$workspace/bashy"
                 BASHY="\$self" "\$self" scripts/bootstrap-siblings.sh
+                failure_class=test-fail
                 case "\$task" in
                   build)
                     BASHY="\$self" "\$self" dag dag.md build
@@ -156,6 +203,4 @@ spec:
                     ;;
                 esac
               fi
-              printf 'DKS_RESULT:{"schema":1,"classification":"pass","lane":"native-platform","task":"%s","os":"%s","arch":"%s","version":"%s","source_ref":"%s"}\n' \
-                "\$task" "\$os" "\$arch" "\$version" "${SOURCE_REF}"
 YAML

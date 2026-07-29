@@ -5,9 +5,15 @@ set -euo pipefail
 
 VERSION="${VERSION:?set VERSION to the base candidate version, for example v0.19.2}"
 EXPECTED_SOURCE_REF="${EXPECTED_SOURCE_REF:?set EXPECTED_SOURCE_REF to the exact Bashy commit}"
+EXPECTED_SOURCE_SHA256="${EXPECTED_SOURCE_SHA256:?set EXPECTED_SOURCE_SHA256 to the source-tree sha256}"
+PIPELINE_FILE="${PIPELINE_FILE:?set PIPELINE_FILE to the exact dhnt.pipeline/v1 plan}"
 NATIVE_JOBS="${NATIVE_JOBS:?set NATIVE_JOBS to the completed native Job names}"
 CONFORMANCE_JOBS="${CONFORMANCE_JOBS:?set CONFORMANCE_JOBS to the completed conformance Job names}"
 PLATFORMS="${PLATFORMS:-linux darwin windows}"
+case "$PLATFORMS" in
+  "linux darwin windows") ;;
+  *) echo "dks-author-qa-refs: PLATFORMS must be exactly 'linux darwin windows' (Bashy v0.19.3 policy)" >&2; exit 5 ;;
+esac
 REPO="${REPO:-qiangli/bashy}"
 REMOTE="${REMOTE:-origin}"
 GH="${GH:-gh}"
@@ -38,9 +44,11 @@ fi
 
 NS="${NS:-default}" KUBECTL="${KUBECTL:-bashy kubectl}" \
   EXPECTED_SOURCE_REF="$EXPECTED_SOURCE_REF" \
+  EXPECTED_SOURCE_SHA256="$EXPECTED_SOURCE_SHA256" \
+  PIPELINE_FILE="$PIPELINE_FILE" \
   NATIVE_JOBS="$NATIVE_JOBS" \
   CONFORMANCE_JOBS="$CONFORMANCE_JOBS" \
-  REQUIRED_PLATFORMS="$PLATFORMS" \
+  REQUIRED_PLATFORMS="linux darwin windows" \
   "$GATE"
 
 refs=()
@@ -53,6 +61,10 @@ if [ "${DRY_RUN:-0}" = 1 ]; then
   exit 0
 fi
 
+[ ${#refs[@]} -gt 0 ] || {
+  echo "dks-author-qa-refs: no refs constructed; cannot push" >&2
+  exit 6
+}
 "$GIT" push --atomic "$REMOTE" "${refs[@]}"
 printf 'DKS_QA_REFS_AUTHORED version=%s source_ref=%s platforms=%s\n' \
   "$VERSION" "$EXPECTED_SOURCE_REF" "$PLATFORMS"
