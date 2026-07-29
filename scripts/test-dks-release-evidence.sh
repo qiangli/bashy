@@ -540,5 +540,32 @@ if (cd "$root" && VERSION=v1.2.3 EXPECTED_SOURCE_REF=abc123 \
   exit 1
 fi
 
+if (cd "$root" && VERSION=v1.2.3 EXPECTED_SOURCE_REF=abc123 \
+  EXPECTED_SOURCE_SHA256="$source_sha" PIPELINE_FILE="$pipeline" \
+  NATIVE_JOBS=native CONFORMANCE_JOBS=conformance PLATFORMS="linux darwin" \
+  GH="$fake_gh" GATE="$fake_gate_pass" DRY_RUN=1 \
+  scripts/dks-author-qa-refs.sh >/dev/null 2>&1); then
+  echo "QA ref author accepted a subset platform policy" >&2
+  exit 1
+fi
+
+if (cd "$root" && VERSION=v1.2.3 EXPECTED_SOURCE_REF=abc123 \
+  EXPECTED_SOURCE_SHA256="$source_sha" PIPELINE_FILE="$pipeline" \
+  NATIVE_JOBS=native CONFORMANCE_JOBS=conformance PLATFORMS="linux linux darwin windows" \
+  GH="$fake_gh" GATE="$fake_gate_pass" DRY_RUN=1 \
+  scripts/dks-author-qa-refs.sh >/dev/null 2>&1); then
+  echo "QA ref author accepted a duplicate platform policy" >&2
+  exit 1
+fi
+
+if (cd "$root" && VERSION=v1.2.3 EXPECTED_SOURCE_REF=abc123 \
+  EXPECTED_SOURCE_SHA256="$source_sha" PIPELINE_FILE="$pipeline" \
+  NATIVE_JOBS=native CONFORMANCE_JOBS=conformance PLATFORMS="linux darwin windows freebsd" \
+  GH="$fake_gh" GATE="$fake_gate_pass" DRY_RUN=1 \
+  scripts/dks-author-qa-refs.sh >/dev/null 2>&1); then
+  echo "QA ref author accepted an unknown platform policy" >&2
+  exit 1
+fi
+
 [ "$adversarial_fail" -eq 0 ] || exit 1
 echo "dks release evidence retry selection: PASS"
