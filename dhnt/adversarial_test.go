@@ -140,3 +140,19 @@ func TestRunRejectsNULInSourceAndExecutorIdentity(t *testing.T) {
 		})
 	}
 }
+
+func TestRunRejectsNegativeExitCodeForNonPassResults(t *testing.T) {
+	for _, class := range []ResultClass{
+		ResultTestFail, ResultInfraFail, ResultIncomplete, ResultCanceled,
+	} {
+		t.Run(string(class), func(t *testing.T) {
+			run := fixtureRun()
+			exitCode := -1
+			run.Result = Result{Class: class, ExitCode: &exitCode}
+
+			if err := run.Validate(); err == nil {
+				t.Fatal("run accepted a negative exit code that cannot be an observed process exit status")
+			}
+		})
+	}
+}
