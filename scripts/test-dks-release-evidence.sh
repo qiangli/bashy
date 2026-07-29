@@ -84,10 +84,23 @@ case "$args" in
     printf '%s\n' conformance-pod
     ;;
   *'get job conformance'*)
-    # The incomplete fixture has one successful chunk out of two required
-    # Indexed Job completions. A trustworthy aggregator must inspect the Job,
-    # not infer completeness from the non-empty set of successful Pods.
-    if [ "${FAKE_INCOMPLETE_JOB:-0}" = 1 ]; then
+    if [ "${FAKE_JOB_QUERY_FAIL:-0}" = 1 ]; then
+      echo "error: kubectl: connection refused" >&2
+      exit 1
+    fi
+    if [ "${FAKE_JOB_EMPTY:-0}" = 1 ]; then
+      printf '\n'
+    elif [ "${FAKE_JOB_MALFORMED:-0}" = 1 ]; then
+      printf '%s\n' '{"spec":{"completions":1},"status":{"succeeded":1}}'
+    elif [ "${FAKE_JOB_NON_INDEXED:-0}" = 1 ]; then
+      printf '%s\n' '{"spec":{"completions":1,"completionMode":"NonIndexed"},"status":{"succeeded":1}}'
+    elif [ "${FAKE_JOB_MISSING_COMPLETIONS:-0}" = 1 ]; then
+      printf '%s\n' '{"spec":{"completionMode":"Indexed"},"status":{"succeeded":1}}'
+    elif [ "${FAKE_JOB_MISSING_SUCCEEDED:-0}" = 1 ]; then
+      printf '%s\n' '{"spec":{"completions":2,"completionMode":"Indexed"},"status":{}}'
+    elif [ "${FAKE_JOB_ZERO_SUCCEEDED:-0}" = 1 ]; then
+      printf '%s\n' '{"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":0}}'
+    elif [ "${FAKE_INCOMPLETE_JOB:-0}" = 1 ]; then
       printf '%s\n' '{"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":1}}'
     else
       printf '%s\n' '{"spec":{"completions":1,"completionMode":"Indexed"},"status":{"succeeded":1}}'
@@ -167,6 +180,62 @@ if (cd "$root" && FAKE_INCOMPLETE_JOB=1 KUBECTL="$fake" NS=test JOB=conformance 
   scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
   echo "conformance aggregation accepted an incomplete Indexed Job" >&2
   adversarial_fail=1
+fi
+
+# kubectl get job query failure must fail closed — an unreachable API is
+# not a signal that the Job is complete.
+if (cd "$root" && FAKE_JOB_QUERY_FAIL=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted an unreachable kubectl API" >&2
+  exit 1
+fi
+
+# An empty kubectl response is not valid Job JSON. The aggregator must not
+# treat missing data as an implicit successful completion.
+if (cd "$root" && FAKE_JOB_EMPTY=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted an empty kubectl response" >&2
+  exit 1
+fi
+
+# Missing completionMode in the Job object means we cannot verify that this
+# is an Indexed Job. Completeness is defined only for Indexed Jobs.
+if (cd "$root" && FAKE_JOB_MALFORMED=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted a Job with missing completionMode" >&2
+  exit 1
+fi
+
+# A non-Indexed completionMode means the Job did not use the completionMode
+# contract that the aggregator expects. Its pod count cannot be verified.
+if (cd "$root" && FAKE_JOB_NON_INDEXED=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted a non-Indexed Job" >&2
+  exit 1
+fi
+
+# Missing spec.completions means we do not know how many pods should have
+# run. Without a required-completions count, completeness is unknowable.
+if (cd "$root" && FAKE_JOB_MISSING_COMPLETIONS=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted a Job with missing spec.completions" >&2
+  exit 1
+fi
+
+# Missing status.succeeded means we do not know how many pods completed.
+# Without that count, completeness is unknowable.
+if (cd "$root" && FAKE_JOB_MISSING_SUCCEEDED=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted a Job with missing status.succeeded" >&2
+  exit 1
+fi
+
+# status.succeeded must be positive when completions > 0 — zero succeeded
+# with nonzero required completions means no pods produced evidence.
+if (cd "$root" && FAKE_JOB_ZERO_SUCCEEDED=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted a Job with zero succeeded pods" >&2
+  exit 1
 fi
 
 # Missing counters are malformed evidence, not implicit zeroes. In particular,

@@ -74,16 +74,42 @@ if [ "$ts" -gt 0 ]; then
 fi
 # Inspect the Job to verify Indexed Job completeness. An aggregator that
 # counts only Succeeded pods will miss incomplete Jobs where
-# status.succeeded < spec.completions.
-job_info=$($KUBECTL get job "$JOB" -n "$NS" -o json 2>/dev/null || :)
-if [ -n "$job_info" ]; then
-  spec_completions=$(printf '%s\n' "$job_info" | sed -n 's/.*"completions": *\([0-9][0-9]*\).*/\1/p' || :)
-  status_succeeded=$(printf '%s\n' "$job_info" | sed -n 's/.*"succeeded": *\([0-9][0-9]*\).*/\1/p' || :)
-  spec_completions=${spec_completions:-0}
-  status_succeeded=${status_succeeded:-0}
-  if [ "$spec_completions" -gt 0 ] && [ "$status_succeeded" -lt "$spec_completions" ]; then
-    echo "INCOMPLETE: ${status_succeeded} succeeded < ${spec_completions} required completions — verdict is not trustworthy" >&2
-    exit 3
-  fi
+# status.succeeded < spec.completions. The campaign contract requires
+# fail-closed aggregation: query failure, empty/malformed response, missing
+# required fields, non-Indexed completionMode, and succeeded < completions
+# all reject the aggregate.
+job_info=$($KUBECTL get job "$JOB" -n "$NS" -o json 2>/dev/null) || {
+  echo "INDEXED_CHECK_FAIL: kubectl get job failed for job=$JOB ns=$NS" >&2
+  exit 3
+}
+[ -n "$job_info" ] || {
+  echo "INDEXED_CHECK_FAIL: kubectl get job returned empty response for job=$JOB ns=$NS" >&2
+  exit 3
+}
+
+completion_mode=$(printf '%s\n' "$job_info" | sed -n 's/.*"completionMode": *"\([^"]*\)".*/\1/p') || true
+[ -n "$completion_mode" ] || {
+  echo "INDEXED_CHECK_FAIL: missing completionMode in Job object for job=$JOB ns=$NS" >&2
+  exit 3
+}
+[ "$completion_mode" = "Indexed" ] || {
+  echo "INDEXED_CHECK_FAIL: completionMode is \"$completion_mode\", not Indexed for job=$JOB ns=$NS" >&2
+  exit 3
+}
+
+spec_completions=$(printf '%s\n' "$job_info" | sed -n 's/.*"completions": *\([0-9][0-9]*\).*/\1/p') || true
+[ -n "$spec_completions" ] && [ "$spec_completions" -gt 0 ] || {
+  echo "INDEXED_CHECK_FAIL: missing or zero spec.completions in Job object for job=$JOB ns=$NS" >&2
+  exit 3
+}
+
+status_succeeded=$(printf '%s\n' "$job_info" | sed -n 's/.*"succeeded": *\([0-9][0-9]*\).*/\1/p') || true
+[ -n "$status_succeeded" ] || {
+  echo "INDEXED_CHECK_FAIL: missing status.succeeded in Job object for job=$JOB ns=$NS" >&2
+  exit 3
+}
+if [ "$status_succeeded" -lt "$spec_completions" ]; then
+  echo "INCOMPLETE: ${status_succeeded} succeeded < ${spec_completions} required completions — verdict is not trustworthy" >&2
+  exit 3
 fi
 [ "$tf" -eq 0 ] && [ "$tt" -eq 0 ]
