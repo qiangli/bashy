@@ -4,6 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 tmp=$(mktemp -d)
 trap '/bin/rm -rf "$tmp"' EXIT
+adversarial_fail=0
 fake="$tmp/kubectl"
 source_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 candidate_sha=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
@@ -82,6 +83,16 @@ case "$args" in
   *'get pods'*'app=conformance'*)
     printf '%s\n' conformance-pod
     ;;
+  *'get job conformance'*)
+    # The incomplete fixture has one successful chunk out of two required
+    # Indexed Job completions. A trustworthy aggregator must inspect the Job,
+    # not infer completeness from the non-empty set of successful Pods.
+    if [ "${FAKE_INCOMPLETE_JOB:-0}" = 1 ]; then
+      printf '%s\n' '{"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":1}}'
+    else
+      printf '%s\n' '{"spec":{"completions":1,"completionMode":"Indexed"},"status":{"succeeded":1}}'
+    fi
+    ;;
   *'logs conformance-pod'*)
     if [ "${FAKE_MALFORMED_RESULTS:-0}" = 1 ]; then
       printf '%s\n' 'Results: 86 passed'
@@ -91,6 +102,8 @@ case "$args" in
       printf '%s\n' 'Results: 0 passed, 0 failed, 0 skipped, 0 timed out'
     elif [ "${FAKE_ALL_SKIPPED:-0}" = 1 ]; then
       printf '%s\n' 'Results: 0 passed, 0 failed, 86 skipped, 0 timed out'
+    elif [ "${FAKE_PARTIAL_SKIPS:-0}" = 1 ]; then
+      printf '%s\n' 'Results: 1 passed, 0 failed, 85 skipped, 0 timed out'
     else
       printf '%s\n' 'Results: 86 passed, 0 failed, 0 skipped, 0 timed out'
     fi
@@ -139,6 +152,23 @@ if (cd "$root" && FAKE_ALL_SKIPPED=1 KUBECTL="$fake" NS=test JOB=conformance \
   exit 1
 fi
 
+# Executing one case does not turn the other 85 skipped cases into evidence.
+# The authoritative Bash 5.3 release contract measures the whole suite and
+# requires zero skips.
+if (cd "$root" && FAKE_PARTIAL_SKIPS=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted a partial run with skipped tests" >&2
+  adversarial_fail=1
+fi
+
+# One successful chunk is not complete evidence for a two-completion Indexed
+# Job. The other chunk may still be running or may have exhausted its retries.
+if (cd "$root" && FAKE_INCOMPLETE_JOB=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted an incomplete Indexed Job" >&2
+  adversarial_fail=1
+fi
+
 # Missing counters are malformed evidence, not implicit zeroes. In particular,
 # a truncated line that retains only a positive pass count must not authorize a
 # passing conformance verdict.
@@ -175,6 +205,17 @@ if (cd "$root" && KUBECTL="$fake" DHNT="$DHNT" NS=test \
   REQUIRED_PLATFORMS=windows scripts/dks-release-gate.sh >/dev/null 2>&1); then
   echo "release gate accepted a pipeline missing a policy-required platform" >&2
   exit 1
+fi
+
+# Whitespace is not a platform policy. Without at least one parsed required OS,
+# the independent release policy has disappeared even though the variable is
+# technically non-empty.
+if (cd "$root" && KUBECTL="$fake" DHNT="$DHNT" NS=test \
+  EXPECTED_SOURCE_REF=abc123 EXPECTED_SOURCE_SHA256="$source_sha" \
+  PIPELINE_FILE="$pipeline" NATIVE_JOBS=retry-job CONFORMANCE_JOBS=conformance \
+  REQUIRED_PLATFORMS=" " scripts/dks-release-gate.sh >/dev/null 2>&1); then
+  echo "release gate accepted an empty required-platform policy" >&2
+  adversarial_fail=1
 fi
 
 # A required evidence list containing only whitespace is still absent evidence.
@@ -222,4 +263,5 @@ case "$refs" in
   *) printf 'unexpected QA ref result: %s\n' "$refs" >&2; exit 1 ;;
 esac
 
+[ "$adversarial_fail" -eq 0 ] || exit 1
 echo "dks release evidence retry selection: PASS"

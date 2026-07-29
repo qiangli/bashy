@@ -9,6 +9,42 @@ import (
 	"github.com/qiangli/bashy/dhnt"
 )
 
+func TestDhntEmitRunRejectsAbsentExitCode(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	args := []string{
+		"--pipeline", "release",
+		"--task", "smoke",
+		"--run", "run-1",
+		"--source-repository", "https://example.test/repository.git",
+		"--source-commit", "abc123",
+		"--source-sha256", digest,
+		"--input", "candidate=" + digest,
+		"--node", "node-1",
+		"--backend", "vk-native",
+		"--os", "linux",
+		"--arch", "amd64",
+		"--class", "pass",
+		"--output", "tested-candidate=" + digest,
+		"--started-at", "2026-07-29T12:00:00Z",
+		"--finished-at", "2026-07-29T12:00:01Z",
+		"--trace-id", "0123456789abcdef0123456789abcdef",
+	}
+
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer devNull.Close()
+	oldStdout := os.Stdout
+	os.Stdout = devNull
+	code := dhntEmitRun(args)
+	os.Stdout = oldStdout
+
+	if code == 0 {
+		t.Fatal("emit-run treated an absent --exit-code as observed exit code zero")
+	}
+}
+
 func TestDhntAggregateRequireOSCannotBeSatisfiedByNonNativeLane(t *testing.T) {
 	digest := strings.Repeat("a", 64)
 	source := dhnt.Source{
