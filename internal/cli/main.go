@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -580,6 +581,10 @@ func newRunner() (*interp.Runner, error) {
 	interactive := shouldRunInteractive(term.IsTerminal(int(os.Stdin.Fd())))
 	opts := []interp.RunnerOption{
 		interp.Interactive(interactive),
+		// `bash -n` (and `bash -o noexec`) suppress execution even in an
+		// interactive shell, unlike a `set -n` issued later — which an
+		// interactive shell ignores. See interp.CommandLineNoExec.
+		interp.CommandLineNoExec(cmdlineNoExec()),
 		// bashy is a standalone shell (one Runner per process), so mirror the
 		// umask builtin onto the process umask — external commands (mkdir, …)
 		// then honour it, as a real shell does (POSIX umask-p conformance).
@@ -744,6 +749,14 @@ func importBashFuncs(r *interp.Runner) {
 		}
 		r.Funcs[funcName] = fn.Body
 	}
+}
+
+// cmdlineNoExec reports whether noexec was requested on the command line
+// (`-n`, which splitCombinedShortFlags rewrites to `-o noexec`, or an
+// explicit `-o noexec`) and not cancelled by a later `+o noexec`.
+func cmdlineNoExec() bool {
+	on := slices.Contains(optsOn, "noexec")
+	return on && !slices.Contains(setOff, "noexec")
 }
 
 // collectSetArgs converts the -o / -O flags collected on the command
@@ -933,16 +946,12 @@ func runAll() error {
 		if *forceI {
 			// `bash -i` with a non-tty stdin: forced-interactive
 			// line loop with prompt echo and history saving, but no
-			// readline. With `-n` (noexec) lines are only recorded.
+			// readline. A command-line `-n` still suppresses
+			// execution here, so lines are only recorded; a later
+			// `set -n` does not, since this shell is interactive.
 			loadStartupFiles(r, true)
-			noexec := false
-			for _, o := range optsOn {
-				if o == "noexec" {
-					noexec = true
-				}
-			}
 			return runWithLoginLogout(r, func() error {
-				return runForcedInteractive(r, noexec)
+				return runForcedInteractive(r, cmdlineNoExec())
 			})
 		}
 		loadStartupFiles(r, false)
