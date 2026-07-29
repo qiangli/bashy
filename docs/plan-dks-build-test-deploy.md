@@ -1,9 +1,9 @@
 # DKS build, test, and deploy plan
 
 Status: implemented through the three-platform native and vk-podman foundation.
-The Linux, macOS, and Windows native-platform slice passed live on 2026-07-29;
-the full production gate still requires fresh conformance Jobs before it may
-author QA refs.
+The Linux, macOS, and Windows native-platform gate plus fresh Bash 5.3
+conformance passed live on 2026-07-29; all three QA refs were authored and
+`v0.19.3` was byte-promoted from the tested prerelease.
 Scope: replace bashy's host-specific SSH fanout and standing per-host QA pollers
 with DKS-scheduled work while preserving the existing conformance and
 byte-promotion evidence contracts.
@@ -44,6 +44,13 @@ byte-promotion evidence contracts.
   windows/amd64. Fresh `v0.19.3-dev` smokes passed on Dragon, Lern, and Puppy,
   and the three-platform release-gate slice accepted their exact-source
   records.
+- The complete gate then passed with a fresh source-pinned GNU Bash 5.3 run on
+  Dragon: 86 passed, 0 failed, 0 skipped, 0 timed out. The trusted aggregator
+  authored `refs/qa/v0.19.3/{linux,darwin,windows}` at the exact candidate
+  commit, and the promotion workflow published `v0.19.3` byte-identically.
+  Fleet notification was skipped because the workflow's cloudbox webhook
+  secrets were not configured; release correctness is green, automatic rollout
+  is a separate deployment configuration gap.
 - The live Puppy run exposed one producer bug: Windows `uname -s` reports
   `Windows_NT`, while the gate's canonical platform is `windows`.
   `dks-native-job.sh` now normalizes OS/architecture spellings and verifies the
