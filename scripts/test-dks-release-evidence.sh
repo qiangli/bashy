@@ -128,6 +128,46 @@ case "$args" in
   *'get job conformance'*'.metadata.uid'*)
     printf '%s' conformance-job-uid
     ;;
+  *'get job conformance'*'.metadata.name'*)
+    if [ "${FAKE_JOB_QUERY_FAIL:-0}" = 1 ]; then
+      echo "error: kubectl: connection refused" >&2
+      exit 1
+    fi
+    if [ "${FAKE_JOB_EMPTY:-0}" != 1 ]; then
+      printf '%s' conformance
+    fi
+    ;;
+  *'get job conformance'*'.spec.completionMode'*)
+    if [ "${FAKE_JOB_MALFORMED:-0}" = 1 ] || [ "${FAKE_JOB_LABEL_SPOOFS_COMPLETION_MODE:-0}" = 1 ]; then
+      :
+    elif [ "${FAKE_JOB_NON_INDEXED:-0}" = 1 ]; then
+      printf '%s' NonIndexed
+    else
+      printf '%s' Indexed
+    fi
+    ;;
+  *'get job conformance'*'.spec.completions'*)
+    if [ "${FAKE_JOB_MISSING_COMPLETIONS:-0}" = 1 ]; then
+      :
+    elif [ "${FAKE_JOB_MISSING_SUCCEEDED:-0}" = 1 ] || [ "${FAKE_JOB_ZERO_SUCCEEDED:-0}" = 1 ] || [ "${FAKE_INCOMPLETE_JOB:-0}" = 1 ] || [ "${FAKE_UNOBSERVED_COMPLETION:-0}" = 1 ] || [ "${FAKE_DUPLICATE_COMPLETION_INDEX:-0}" = 1 ]; then
+      printf '%s' 2
+    else
+      printf '%s' 1
+    fi
+    ;;
+  *'get job conformance'*'.status.succeeded'*)
+    if [ "${FAKE_JOB_MISSING_SUCCEEDED:-0}" = 1 ]; then
+      :
+    elif [ "${FAKE_JOB_ZERO_SUCCEEDED:-0}" = 1 ]; then
+      printf '%s' 0
+    elif [ "${FAKE_INCOMPLETE_JOB:-0}" = 1 ]; then
+      printf '%s' 1
+    elif [ "${FAKE_UNOBSERVED_COMPLETION:-0}" = 1 ] || [ "${FAKE_DUPLICATE_COMPLETION_INDEX:-0}" = 1 ]; then
+      printf '%s' 2
+    else
+      printf '%s' 1
+    fi
+    ;;
   *'get job conformance'*)
     if [ "${FAKE_JOB_QUERY_FAIL:-0}" = 1 ]; then
       echo "error: kubectl: connection refused" >&2

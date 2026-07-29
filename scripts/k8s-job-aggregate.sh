@@ -13,22 +13,22 @@ KUBECTL="${KUBECTL:-outpost kubectl}"
 NS="${NS:-default}"
 JOB="${JOB:-bash53-conformance}"
 
-job_info=$($KUBECTL get job "$JOB" -n "$NS" -o json 2>/dev/null) || {
+_job_name=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.metadata.name}' 2>/dev/null) || {
   echo "JOB_QUERY_FAIL: kubectl get job failed for job=$JOB ns=$NS" >&2
   exit 3
 }
-[ -n "$job_info" ] || {
+[ -n "$_job_name" ] || {
   echo "JOB_QUERY_FAIL: kubectl get job returned empty response for job=$JOB ns=$NS" >&2
   exit 3
 }
 
-job_uid=$(printf '%s\n' "$job_info" | sed -n 's/.*"uid": *"\([^"]*\)".*/\1/p') || true
+job_uid=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.metadata.uid}' 2>/dev/null) || true
 [ -n "$job_uid" ] || {
   echo "JOB_UID_FAIL: missing metadata.uid in Job object for job=$JOB ns=$NS" >&2
   exit 3
 }
 
-completion_mode=$(printf '%s\n' "$job_info" | sed -n 's/.*"completionMode": *"\([^"]*\)".*/\1/p') || true
+completion_mode=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.spec.completionMode}' 2>/dev/null) || true
 [ -n "$completion_mode" ] || {
   echo "INDEXED_CHECK_FAIL: missing completionMode in Job object for job=$JOB ns=$NS" >&2
   exit 3
@@ -38,7 +38,7 @@ completion_mode=$(printf '%s\n' "$job_info" | sed -n 's/.*"completionMode": *"\(
   exit 3
 }
 
-spec_completions=$(printf '%s\n' "$job_info" | sed -n 's/.*"completions": *\([0-9][0-9]*\).*/\1/p') || true
+spec_completions=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.spec.completions}' 2>/dev/null) || true
 [ -n "$spec_completions" ] && [ "$spec_completions" -gt 0 ] || {
   echo "INDEXED_CHECK_FAIL: missing or zero spec.completions in Job object for job=$JOB ns=$NS" >&2
   exit 3
@@ -159,7 +159,7 @@ for ((i=0; i<spec_completions; i++)); do
   fi
 done
 
-status_succeeded=$(printf '%s\n' "$job_info" | sed -n 's/.*"succeeded": *\([0-9][0-9]*\).*/\1/p') || true
+status_succeeded=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.status.succeeded}' 2>/dev/null) || true
 [ -n "$status_succeeded" ] || {
   echo "INDEXED_CHECK_FAIL: missing status.succeeded in Job object for job=$JOB ns=$NS" >&2
   exit 3
