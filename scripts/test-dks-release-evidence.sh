@@ -85,6 +85,8 @@ case "$args" in
   *'logs conformance-pod'*)
     if [ "${FAKE_ZERO_TESTS:-0}" = 1 ]; then
       printf '%s\n' 'Results: 0 passed, 0 failed, 0 skipped, 0 timed out'
+    elif [ "${FAKE_ALL_SKIPPED:-0}" = 1 ]; then
+      printf '%s\n' 'Results: 0 passed, 0 failed, 86 skipped, 0 timed out'
     else
       printf '%s\n' 'Results: 86 passed, 0 failed, 0 skipped, 0 timed out'
     fi
@@ -122,6 +124,14 @@ fi
 if (cd "$root" && FAKE_ZERO_TESTS=1 KUBECTL="$fake" NS=test JOB=conformance \
   scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
   echo "conformance aggregation accepted a run that executed zero tests" >&2
+  exit 1
+fi
+
+# Skipped cases were discovered but not executed, so an all-skipped summary is
+# still absence of evidence rather than a passing conformance run.
+if (cd "$root" && FAKE_ALL_SKIPPED=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted a run in which every test was skipped" >&2
   exit 1
 fi
 

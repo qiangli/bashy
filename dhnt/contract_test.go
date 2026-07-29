@@ -143,6 +143,16 @@ func TestStrictValidation(t *testing.T) {
 			t.Fatalf("got %v, want duplicate field error", err)
 		}
 	})
+	t.Run("missing pass exit code", func(t *testing.T) {
+		data, err := MarshalRun(fixtureRun())
+		if err != nil {
+			t.Fatal(err)
+		}
+		data = []byte(strings.Replace(string(data), `"exitCode":0,`, "", 1))
+		if _, err := DecodeRun(data); err == nil {
+			t.Fatal("pass record with absent result.exitCode was accepted as exit code zero")
+		}
+	})
 	t.Run("invalid UTF-8", func(t *testing.T) {
 		data, err := MarshalRun(fixtureRun())
 		if err != nil {
@@ -152,6 +162,17 @@ func TestStrictValidation(t *testing.T) {
 			"\"repository\":\"https://\xff", 1))
 		if _, err := DecodeRun(data); err == nil {
 			t.Fatal("invalid UTF-8 was silently accepted and normalized")
+		}
+	})
+	t.Run("unpaired UTF-16 surrogate", func(t *testing.T) {
+		data, err := MarshalRun(fixtureRun())
+		if err != nil {
+			t.Fatal(err)
+		}
+		data = []byte(strings.Replace(string(data), `"repository":"https://`,
+			`"repository":"\ud800https://`, 1))
+		if _, err := DecodeRun(data); err == nil {
+			t.Fatal("unpaired UTF-16 surrogate was silently accepted and normalized")
 		}
 	})
 	t.Run("field names are case sensitive", func(t *testing.T) {
@@ -255,6 +276,7 @@ func TestPipelineRejectsWorkingDirectoryTraversal(t *testing.T) {
 		{"unc forward-slash", "//server/share"},
 		{"redundant slashes", "foo//bar"},
 		{"redundant backslash-slash mix", `foo\/bar`},
+		{"platform-dependent separator", `foo\bar`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
