@@ -36,16 +36,15 @@ while IFS= read -r pod; do
     missing=$((missing + 1))
     continue
   fi
-  # "Results: 14 passed, 0 failed, 0 skipped, 0 timed out"
-  p=$(printf '%s' "$line" | sed -nE 's/.* ([0-9]+) passed.*/\1/p')
-  f=$(printf '%s' "$line" | sed -nE 's/.* ([0-9]+) failed.*/\1/p')
-  s=$(printf '%s' "$line" | sed -nE 's/.* ([0-9]+) skipped.*/\1/p')
-  t=$(printf '%s' "$line" | sed -nE 's/.* ([0-9]+) timed out.*/\1/p')
-  if [ -z "$p" ] || [ -z "$f" ] || [ -z "$s" ] || [ -z "$t" ]; then
+  # "Results: N passed, M failed, O skipped, P timed out"
+  # Parse exactly one complete anchored Results summary; reject extra or ambiguous text.
+  parsed=$(printf '%s' "$line" | sed -nE 's/^Results: ([0-9]+) passed, ([0-9]+) failed, ([0-9]+) skipped, ([0-9]+) timed out$/\1 \2 \3 \4/p')
+  if [ -z "$parsed" ]; then
     echo "WARN: truncated or malformed Results line — NOT counted" >&2
     missing=$((missing + 1))
     continue
   fi
+  read p f s t <<< "$parsed"
   tp=$((tp + ${p:-0})); tf=$((tf + ${f:-0})); ts=$((ts + ${s:-0})); tt=$((tt + ${t:-0}))
   chunks=$((chunks + 1))
   printf '  %-28s %s\n' "$pod" "$line"

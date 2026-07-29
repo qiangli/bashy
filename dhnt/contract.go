@@ -491,9 +491,6 @@ func validateObject(dec *json.Decoder, t reflect.Type) error {
 		if omitempty {
 			continue
 		}
-		if f.Type.Kind() != reflect.Slice {
-			continue
-		}
 		if !seen[name] {
 			return fmt.Errorf("malformed JSON: missing required field %q", name)
 		}
@@ -628,8 +625,16 @@ func validateTask(task Task) error {
 	if len(task.Argv) == 0 || task.Argv[0] == "" {
 		return errors.New("argv: must contain a non-empty command")
 	}
+	for i, arg := range task.Argv {
+		if strings.ContainsRune(arg, 0) {
+			return fmt.Errorf("argv[%d]: must not contain NUL byte", i)
+		}
+	}
 	if task.WorkingDirectory == "" {
 		return errors.New("workingDirectory: must not be empty")
+	}
+	if strings.ContainsRune(task.WorkingDirectory, 0) {
+		return errors.New("workingDirectory: must not contain NUL byte")
 	}
 	if strings.Contains(task.WorkingDirectory, `\`) {
 		return errors.New("workingDirectory: must be a clean repository-relative path")
@@ -656,8 +661,14 @@ func validateTask(task Task) error {
 	}
 	seen := map[string]bool{}
 	for i, item := range task.Environment {
+		if strings.ContainsRune(item.Name, 0) {
+			return fmt.Errorf("environment[%d].name: must not contain NUL byte", i)
+		}
 		if !envNameRE.MatchString(item.Name) {
 			return fmt.Errorf("environment[%d].name: invalid name %q", i, item.Name)
+		}
+		if strings.ContainsRune(item.Value, 0) {
+			return fmt.Errorf("environment[%d].value: must not contain NUL byte", i)
 		}
 		if seen[item.Name] {
 			return fmt.Errorf("environment[%d].name: duplicate name %q", i, item.Name)
