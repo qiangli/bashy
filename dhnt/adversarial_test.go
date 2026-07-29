@@ -156,3 +156,13 @@ func TestRunRejectsNegativeExitCodeForNonPassResults(t *testing.T) {
 		})
 	}
 }
+
+func TestRunRejectsNegativeExitCodeForPassResult(t *testing.T) {
+	run := fixtureRun()
+	exitCode := -1
+	run.Result = Result{Class: ResultPass, ExitCode: &exitCode}
+
+	if err := run.Validate(); err == nil {
+		t.Fatal("run accepted a negative exit code for pass that cannot be an observed process exit status")
+	}
+}

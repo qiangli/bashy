@@ -107,7 +107,7 @@ func TestEveryResultClass(t *testing.T) {
 		{ResultPass, 0},
 		{ResultTestFail, 1},
 		{ResultInfraFail, 70},
-		{ResultIncomplete, 0},
+		{ResultIncomplete, 75},
 		{ResultCanceled, 130},
 	}
 	for _, tt := range tests {
@@ -230,7 +230,7 @@ func TestStrictValidation(t *testing.T) {
 		{"pass nonzero", func(r *Run) { *r.Result.ExitCode = 1 }, "pass requires"},
 		{"test-fail zero", func(r *Run) {
 			r.Result = Result{Class: ResultTestFail, ExitCode: intPtr(0)}
-		}, "test-fail requires"},
+		}, "non-zero exit code"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

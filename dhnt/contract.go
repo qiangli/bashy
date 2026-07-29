@@ -239,11 +239,14 @@ func (r Run) Validate() error {
 	if r.Result.ExitCode == nil {
 		return errors.New("result.exitCode: must be present")
 	}
+	if *r.Result.ExitCode < 0 {
+		return errors.New("result.exitCode: must be non-negative (cannot be an observed process exit status)")
+	}
 	if r.Result.Class == ResultPass && *r.Result.ExitCode != 0 {
 		return errors.New("result.exitCode: pass requires exit code 0")
 	}
-	if r.Result.Class == ResultTestFail && *r.Result.ExitCode == 0 {
-		return errors.New("result.exitCode: test-fail requires a non-zero exit code")
+	if r.Result.Class != ResultPass && *r.Result.ExitCode == 0 {
+		return errors.New("result.exitCode: requires a non-zero exit code")
 	}
 	start, err := validateTimestamp("startedAt", r.StartedAt)
 	if err != nil {
