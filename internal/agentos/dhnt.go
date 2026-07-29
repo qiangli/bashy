@@ -248,9 +248,13 @@ func dhntAggregate(args []string) int {
 			return 1
 		}
 	}
+	taskLane := make(map[string]dhnt.Lane, len(pipeline.Tasks))
+	for _, task := range pipeline.Tasks {
+		taskLane[task.ID] = task.Lane
+	}
 	seenOS := map[string]bool{}
 	for _, entry := range pipeline.Matrix {
-		if entry.Platform.Backend == "vk-native" {
+		if entry.Platform.Backend == "vk-native" && taskLane[entry.Task] == dhnt.LaneNative {
 			seenOS[entry.Platform.OS] = true
 		}
 	}
