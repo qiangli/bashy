@@ -519,5 +519,26 @@ case "$refs" in
   *) printf 'unexpected QA ref result: %s\n' "$refs" >&2; exit 1 ;;
 esac
 
+# The authoring wrapper is the last command before ref mutation. It must not
+# delegate an empty platform set to a configurable gate and then report success;
+# without DRY_RUN the same path reaches `git push --atomic origin` with no
+# explicit refs.
+fake_gate_pass="$tmp/gate-pass"
+cat >"$fake_gate_pass" <<'EOF'
+#!/usr/bin/env bash
+set -e
+echo DKS_RELEASE_GATE:fake-pass
+EOF
+chmod +x "$fake_gate_pass"
+
+if (cd "$root" && VERSION=v1.2.3 EXPECTED_SOURCE_REF=abc123 \
+  EXPECTED_SOURCE_SHA256="$source_sha" PIPELINE_FILE="$pipeline" \
+  NATIVE_JOBS=native CONFORMANCE_JOBS=conformance PLATFORMS=" " \
+  GH="$fake_gh" GATE="$fake_gate_pass" DRY_RUN=1 \
+  scripts/dks-author-qa-refs.sh >/dev/null 2>&1); then
+  echo "QA ref author accepted an empty platform ref set" >&2
+  exit 1
+fi
+
 [ "$adversarial_fail" -eq 0 ] || exit 1
 echo "dks release evidence retry selection: PASS"
