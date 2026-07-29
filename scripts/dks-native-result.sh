@@ -7,6 +7,12 @@ DHNT="${DHNT:-bashy dhnt}"
 NS="${NS:-default}"
 JOB="${JOB:-bashy-native}"
 
+job_uid="$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.metadata.uid}' 2>/dev/null)" || true
+[ -n "$job_uid" ] || {
+  echo "dks-native-result: failed to query live Job uid for job=$JOB ns=$NS" >&2
+  exit 4
+}
+
 pod="$($KUBECTL get pods -n "$NS" -l "job-name=${JOB}" \
   -o jsonpath='{range .items[?(@.status.phase=="Succeeded")]}{.metadata.name}{"\n"}{end}' \
   2>/dev/null | head -1)"
@@ -17,6 +23,16 @@ if [ -z "$pod" ]; then
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)"
 fi
 [ -n "$pod" ] || { echo "dks-native-result: no pod for job=$JOB ns=$NS" >&2; exit 2; }
+
+pod_uid="$($KUBECTL get pod "$pod" -n "$NS" -o jsonpath='{.metadata.ownerReferences[0].uid}' 2>/dev/null)" || true
+[ -n "$pod_uid" ] || {
+  echo "dks-native-result: failed to query ownerReferences uid for pod=$pod" >&2
+  exit 4
+}
+[ "$pod_uid" = "$job_uid" ] || {
+  echo "dks-native-result: pod=$pod uid=$pod_uid does not match job=$JOB uid=$job_uid — evidence rejected" >&2
+  exit 4
+}
 
 phase="$($KUBECTL get pod "$pod" -n "$NS" -o jsonpath='{.status.phase}')"
 node="$($KUBECTL get pod "$pod" -n "$NS" -o jsonpath='{.spec.nodeName}')"
@@ -35,7 +51,12 @@ for pair in "backend=$backend" "os=$os" "arch=$arch"; do
 done
 message="$($KUBECTL get pod "$pod" -n "$NS" \
   -o jsonpath='{.status.containerStatuses[0].state.terminated.message}')"
-record="$(printf '%s\n' "$message" | grep '^DKS_RESULT:' | tail -1 || true)"
+dks_count="$(printf '%s\n' "$message" | grep -c '^DKS_RESULT:' || true)"
+if [ "$dks_count" -gt 1 ]; then
+  echo "dks-native-result: ambiguous — pod=$pod has ${dks_count} DKS_RESULT markers; exactly one required" >&2
+  exit 4
+fi
+record="$(printf '%s\n' "$message" | grep '^DKS_RESULT:')"
 
 [ "$phase" = Succeeded ] || {
   echo "dks-native-result: pod=$pod node=$node phase=$phase" >&2
