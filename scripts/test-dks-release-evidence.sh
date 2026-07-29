@@ -85,6 +85,8 @@ case "$args" in
   *'logs conformance-pod'*)
     if [ "${FAKE_MALFORMED_RESULTS:-0}" = 1 ]; then
       printf '%s\n' 'Results: 86 passed'
+    elif [ "${FAKE_AMBIGUOUS_RESULTS:-0}" = 1 ]; then
+      printf '%s\n' 'Results: 0 passed, 1 failed, 0 skipped, 0 timed out; 86 passed, 0 failed, 0 skipped, 0 timed out'
     elif [ "${FAKE_ZERO_TESTS:-0}" = 1 ]; then
       printf '%s\n' 'Results: 0 passed, 0 failed, 0 skipped, 0 timed out'
     elif [ "${FAKE_ALL_SKIPPED:-0}" = 1 ]; then
@@ -143,6 +145,15 @@ fi
 if (cd "$root" && FAKE_MALFORMED_RESULTS=1 KUBECTL="$fake" NS=test JOB=conformance \
   scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
   echo "conformance aggregation accepted a truncated Results record" >&2
+  exit 1
+fi
+
+# Parse exactly one complete summary. Greedy per-counter extraction must not
+# let a later passing suffix erase an earlier failure on the same malformed
+# evidence line.
+if (cd "$root" && FAKE_AMBIGUOUS_RESULTS=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted an ambiguous Results record containing a failure" >&2
   exit 1
 fi
 
