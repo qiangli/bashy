@@ -446,11 +446,22 @@ func validateTask(task Task) error {
 	if task.WorkingDirectory == "" {
 		return errors.New("workingDirectory: must not be empty")
 	}
-	if strings.HasPrefix(task.WorkingDirectory, "/") ||
-		path.Clean(task.WorkingDirectory) != task.WorkingDirectory ||
-		task.WorkingDirectory == ".." ||
-		strings.HasPrefix(task.WorkingDirectory, "../") {
-		return errors.New("workingDirectory: must be a clean repository-relative slash path")
+	wd := strings.ReplaceAll(task.WorkingDirectory, "\\", "/")
+	if strings.HasPrefix(wd, "/") {
+		return errors.New("workingDirectory: must be a clean repository-relative path")
+	}
+	if len(wd) >= 2 && wd[1] == ':' {
+		c := wd[0]
+		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+			return errors.New("workingDirectory: must be a clean repository-relative path")
+		}
+	}
+	if strings.HasPrefix(wd, "//") {
+		return errors.New("workingDirectory: must be a clean repository-relative path")
+	}
+	cleaned := path.Clean(wd)
+	if cleaned != wd || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return errors.New("workingDirectory: must be a clean repository-relative path")
 	}
 	if err := validateUniqueStrings("needs", task.Needs); err != nil {
 		return err

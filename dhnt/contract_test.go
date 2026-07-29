@@ -185,12 +185,34 @@ func TestPipelineRequiresDeclaredPlatformMatrix(t *testing.T) {
 	}
 }
 
-func TestPipelineRejectsWindowsWorkingDirectoryTraversal(t *testing.T) {
-	pipeline := fixturePipeline()
-	pipeline.Tasks[0].WorkingDirectory = `..\outside`
-
-	if err := pipeline.Validate(); err == nil ||
-		!strings.Contains(err.Error(), "workingDirectory") {
-		t.Fatalf("got %v, want repository-relative workingDirectory error", err)
+func TestPipelineRejectsWorkingDirectoryTraversal(t *testing.T) {
+	tests := []struct {
+		name string
+		wd   string
+	}{
+		{"backslash traversal", `..\outside`},
+		{"forward-slash traversal", "../outside"},
+		{"dot component", "./outside"},
+		{"parent-dir only", ".."},
+		{"mid-path traversal", "foo/../bar"},
+		{"mid-path backslash traversal", `foo\..\bar`},
+		{"absolute unix", "/etc/passwd"},
+		{"windows drive backslash", `C:\windows`},
+		{"windows drive forward-slash", "C:/windows"},
+		{"windows drive lowercase", `d:\temp`},
+		{"unc backslash", `\\server\share`},
+		{"unc forward-slash", "//server/share"},
+		{"redundant slashes", "foo//bar"},
+		{"redundant backslash-slash mix", `foo\/bar`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pipeline := fixturePipeline()
+			pipeline.Tasks[0].WorkingDirectory = tt.wd
+			if err := pipeline.Validate(); err == nil ||
+				!strings.Contains(err.Error(), "workingDirectory") {
+				t.Fatalf("got %v, want workingDirectory error", err)
+			}
+		})
 	}
 }
