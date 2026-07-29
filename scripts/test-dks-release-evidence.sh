@@ -79,6 +79,12 @@ case "$args" in
       printf '%s\n' 'DKS_RESULT:{"schema":"dhnt.run/v1","pipeline":"bashy-release","task":"bash53","run":"darwin-run","source":{"repository":"https://github.com/qiangli/bashy.git","commit":"abc123","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"inputs":[{"name":"candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"executor":{"node":"dragon-vk-native","backend":"vk-native","os":"darwin","arch":"arm64"},"result":{"class":"pass","exitCode":0},"outputs":[{"name":"tested-candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"startedAt":"2026-07-29T12:00:00Z","finishedAt":"2026-07-29T12:01:00Z","traceId":"0123456789abcdef0123456789abcdef"}'
     fi
     ;;
+  *'get pods'*'app=conformance'*)
+    printf '%s\n' conformance-pod
+    ;;
+  *'logs conformance-pod'*)
+    printf '%s\n' 'Results: 86 passed, 0 failed, 0 skipped, 0 timed out'
+    ;;
   *)
     printf 'unexpected fake kubectl call: %s\n' "$args" >&2
     exit 90
@@ -112,7 +118,7 @@ gate=$(cd "$root" && KUBECTL="$fake" DHNT="$DHNT" NS=test \
   EXPECTED_SOURCE_SHA256="$source_sha" \
   PIPELINE_FILE="$pipeline" \
   NATIVE_JOBS=retry-job \
-  CONFORMANCE_JOBS=" " \
+  CONFORMANCE_JOBS=conformance \
   REQUIRED_PLATFORMS=darwin \
   scripts/dks-release-gate.sh)
 case "$gate" in
@@ -121,9 +127,20 @@ case "$gate" in
 esac
 if (cd "$root" && KUBECTL="$fake" DHNT="$DHNT" NS=test \
   EXPECTED_SOURCE_REF=abc123 EXPECTED_SOURCE_SHA256="$source_sha" \
-  PIPELINE_FILE="$pipeline" NATIVE_JOBS=retry-job CONFORMANCE_JOBS=" " \
+  PIPELINE_FILE="$pipeline" NATIVE_JOBS=retry-job CONFORMANCE_JOBS=conformance \
   REQUIRED_PLATFORMS=windows scripts/dks-release-gate.sh >/dev/null 2>&1); then
   echo "release gate accepted a pipeline missing a policy-required platform" >&2
+  exit 1
+fi
+
+# A required evidence list containing only whitespace is still absent evidence.
+# The release gate must not emit a passing authorization with zero conformance
+# jobs merely because shell parameter expansion considers " " non-empty.
+if (cd "$root" && KUBECTL="$fake" DHNT="$DHNT" NS=test \
+  EXPECTED_SOURCE_REF=abc123 EXPECTED_SOURCE_SHA256="$source_sha" \
+  PIPELINE_FILE="$pipeline" NATIVE_JOBS=retry-job CONFORMANCE_JOBS=" " \
+  REQUIRED_PLATFORMS=darwin scripts/dks-release-gate.sh >/dev/null 2>&1); then
+  echo "release gate accepted zero conformance jobs" >&2
   exit 1
 fi
 

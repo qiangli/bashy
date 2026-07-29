@@ -184,3 +184,13 @@ func TestPipelineRequiresDeclaredPlatformMatrix(t *testing.T) {
 		t.Fatalf("got %v, want native backend error", err)
 	}
 }
+
+func TestPipelineRejectsWindowsWorkingDirectoryTraversal(t *testing.T) {
+	pipeline := fixturePipeline()
+	pipeline.Tasks[0].WorkingDirectory = `..\outside`
+
+	if err := pipeline.Validate(); err == nil ||
+		!strings.Contains(err.Error(), "workingDirectory") {
+		t.Fatalf("got %v, want repository-relative workingDirectory error", err)
+	}
+}
