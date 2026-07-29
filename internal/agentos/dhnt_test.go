@@ -45,6 +45,44 @@ func TestDhntEmitRunRejectsAbsentExitCode(t *testing.T) {
 	}
 }
 
+func TestDhntEmitRunFailsWhenEvidenceCannotBeWritten(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	args := []string{
+		"--pipeline", "release",
+		"--task", "smoke",
+		"--run", "run-1",
+		"--source-repository", "https://example.test/repository.git",
+		"--source-commit", "abc123",
+		"--source-sha256", digest,
+		"--input", "candidate=" + digest,
+		"--node", "node-1",
+		"--backend", "vk-native",
+		"--os", "linux",
+		"--arch", "amd64",
+		"--class", "pass",
+		"--exit-code", "0",
+		"--output", "tested-candidate=" + digest,
+		"--started-at", "2026-07-29T12:00:00Z",
+		"--finished-at", "2026-07-29T12:00:01Z",
+		"--trace-id", "0123456789abcdef0123456789abcdef",
+	}
+
+	closed, err := os.CreateTemp(t.TempDir(), "closed-stdout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := closed.Close(); err != nil {
+		t.Fatal(err)
+	}
+	oldStdout := os.Stdout
+	os.Stdout = closed
+	t.Cleanup(func() { os.Stdout = oldStdout })
+
+	if code := dhntEmitRun(args); code == 0 {
+		t.Fatal("emit-run reported success after stdout rejected the evidence record")
+	}
+}
+
 func TestDhntAggregateRequireOSCannotBeSatisfiedByNonNativeLane(t *testing.T) {
 	digest := strings.Repeat("a", 64)
 	source := dhnt.Source{

@@ -102,6 +102,10 @@ case "$args" in
       printf '%s\n' '{"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":0}}'
     elif [ "${FAKE_INCOMPLETE_JOB:-0}" = 1 ]; then
       printf '%s\n' '{"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":1}}'
+    elif [ "${FAKE_UNOBSERVED_COMPLETION:-0}" = 1 ]; then
+      # The Job claims both completions succeeded, but the pod query above
+      # exposes evidence for only one of them.
+      printf '%s\n' '{"spec":{"completions":2,"completionMode":"Indexed"},"status":{"succeeded":2}}'
     else
       printf '%s\n' '{"spec":{"completions":1,"completionMode":"Indexed"},"status":{"succeeded":1}}'
     fi
@@ -111,6 +115,10 @@ case "$args" in
       printf '%s\n' 'Results: 86 passed'
     elif [ "${FAKE_AMBIGUOUS_RESULTS:-0}" = 1 ]; then
       printf '%s\n' 'Results: 0 passed, 1 failed, 0 skipped, 0 timed out; 86 passed, 0 failed, 0 skipped, 0 timed out'
+    elif [ "${FAKE_MULTIPLE_RESULTS:-0}" = 1 ]; then
+      printf '%s\n' \
+        'Results: 0 passed, 1 failed, 0 skipped, 0 timed out' \
+        'Results: 86 passed, 0 failed, 0 skipped, 0 timed out'
     elif [ "${FAKE_ZERO_TESTS:-0}" = 1 ]; then
       printf '%s\n' 'Results: 0 passed, 0 failed, 0 skipped, 0 timed out'
     elif [ "${FAKE_ALL_SKIPPED:-0}" = 1 ]; then
@@ -179,6 +187,15 @@ fi
 if (cd "$root" && FAKE_INCOMPLETE_JOB=1 KUBECTL="$fake" NS=test JOB=conformance \
   scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
   echo "conformance aggregation accepted an incomplete Indexed Job" >&2
+  adversarial_fail=1
+fi
+
+# Job status is not a substitute for collected evidence. If two completions are
+# required but only one successful pod contributes a Results record, the
+# aggregate is incomplete even when status.succeeded claims two.
+if (cd "$root" && FAKE_UNOBSERVED_COMPLETION=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted one observed result for two required completions" >&2
   adversarial_fail=1
 fi
 
@@ -254,6 +271,14 @@ if (cd "$root" && FAKE_AMBIGUOUS_RESULTS=1 KUBECTL="$fake" NS=test JOB=conforman
   scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
   echo "conformance aggregation accepted an ambiguous Results record containing a failure" >&2
   exit 1
+fi
+
+# A pod must contribute exactly one summary. Selecting the final line lets a
+# later passing record erase an earlier failure from the same pod log.
+if (cd "$root" && FAKE_MULTIPLE_RESULTS=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted multiple Results records from one pod" >&2
+  adversarial_fail=1
 fi
 
 gate=$(cd "$root" && KUBECTL="$fake" DHNT="$DHNT" NS=test \
