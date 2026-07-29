@@ -221,6 +221,9 @@ func (r Run) Validate() error {
 	if strings.TrimSpace(r.Executor.Node) == "" {
 		return errors.New("executor.node: must not be empty")
 	}
+	if strings.ContainsRune(r.Executor.Node, 0) {
+		return errors.New("executor.node: must not contain NUL byte")
+	}
 	if err := validatePlatform(Platform{
 		Backend: r.Executor.Backend,
 		OS:      r.Executor.OS,
@@ -613,8 +616,14 @@ func validateSource(s Source) error {
 	if strings.TrimSpace(s.Repository) == "" {
 		return errors.New("source.repository: must not be empty")
 	}
+	if strings.ContainsRune(s.Repository, 0) {
+		return errors.New("source.repository: must not contain NUL byte")
+	}
 	if strings.TrimSpace(s.Commit) == "" {
 		return errors.New("source.commit: must not be empty")
+	}
+	if strings.ContainsRune(s.Commit, 0) {
+		return errors.New("source.commit: must not contain NUL byte")
 	}
 	return validateDigest("source.sha256", s.SHA256)
 }
