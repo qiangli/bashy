@@ -9,10 +9,12 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -293,7 +295,10 @@ func MarshalRun(r Run) ([]byte, error) {
 }
 
 func decodeStrict(data []byte, dst any) error {
-	if err := rejectDuplicateJSONFields(data); err != nil {
+	if !utf8.Valid(data) {
+		return errors.New("malformed JSON: invalid UTF-8")
+	}
+	if err := validateJSONKeys(data, dst); err != nil {
 		return err
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
@@ -311,65 +316,137 @@ func decodeStrict(data []byte, dst any) error {
 	return nil
 }
 
-func rejectDuplicateJSONFields(data []byte) error {
-	dec := json.NewDecoder(bytes.NewReader(data))
-	var checkValue func() error
-	checkValue = func() error {
-		token, err := dec.Token()
-		if err != nil {
-			return fmt.Errorf("malformed JSON: %w", err)
-		}
-		delim, composite := token.(json.Delim)
-		if !composite {
-			return nil
-		}
-		switch delim {
-		case '{':
-			seen := map[string]bool{}
-			for dec.More() {
-				token, err := dec.Token()
-				if err != nil {
-					return fmt.Errorf("malformed JSON: %w", err)
-				}
-				key, ok := token.(string)
-				if !ok {
-					return errors.New("malformed JSON: object key is not a string")
-				}
-				if seen[key] {
-					return fmt.Errorf("malformed JSON: duplicate field %q", key)
-				}
-				seen[key] = true
-				if err := checkValue(); err != nil {
-					return err
-				}
-			}
-			if _, err := dec.Token(); err != nil {
-				return fmt.Errorf("malformed JSON: %w", err)
-			}
-		case '[':
-			for dec.More() {
-				if err := checkValue(); err != nil {
-					return err
-				}
-			}
-			if _, err := dec.Token(); err != nil {
-				return fmt.Errorf("malformed JSON: %w", err)
-			}
-		default:
-			return errors.New("malformed JSON: unexpected delimiter")
-		}
-		return nil
+func validateJSONKeys(data []byte, dst any) error {
+	t := reflect.TypeOf(dst)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
 	}
-	if err := checkValue(); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	if err := validateToken(dec, t); err != nil {
 		return err
 	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+	var extra any
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		if err == nil {
 			return errors.New("malformed JSON: multiple values")
 		}
 		return fmt.Errorf("malformed JSON: %w", err)
 	}
 	return nil
+}
+
+func validateToken(dec *json.Decoder, t reflect.Type) error {
+	for t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	token, err := dec.Token()
+	if err != nil {
+		return fmt.Errorf("malformed JSON: %w", err)
+	}
+	delim, isDelim := token.(json.Delim)
+	if !isDelim {
+		return nil
+	}
+	switch delim {
+	case '{':
+		if t.Kind() == reflect.Struct {
+			return validateObject(dec, t)
+		}
+		return skipDelim(dec, '{', '}')
+	case '[':
+		if t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
+			return validateArrayElements(dec, t.Elem())
+		}
+		return skipDelim(dec, '[', ']')
+	default:
+		return fmt.Errorf("malformed JSON: unexpected delimiter %c", delim)
+	}
+}
+
+func validateObject(dec *json.Decoder, t reflect.Type) error {
+	fields := jsonFieldTypes(t)
+	seen := map[string]bool{}
+	for dec.More() {
+		keyToken, err := dec.Token()
+		if err != nil {
+			return fmt.Errorf("malformed JSON: %w", err)
+		}
+		key, ok := keyToken.(string)
+		if !ok {
+			return errors.New("malformed JSON: object key is not a string")
+		}
+		ft, known := fields[key]
+		if !known {
+			return fmt.Errorf("malformed JSON: unknown field %q", key)
+		}
+		if seen[key] {
+			return fmt.Errorf("malformed JSON: duplicate field %q", key)
+		}
+		seen[key] = true
+		if err := validateToken(dec, ft); err != nil {
+			return err
+		}
+	}
+	if _, err := dec.Token(); err != nil {
+		return fmt.Errorf("malformed JSON: %w", err)
+	}
+	return nil
+}
+
+func validateArrayElements(dec *json.Decoder, elemType reflect.Type) error {
+	for dec.More() {
+		if err := validateToken(dec, elemType); err != nil {
+			return err
+		}
+	}
+	if _, err := dec.Token(); err != nil {
+		return fmt.Errorf("malformed JSON: %w", err)
+	}
+	return nil
+}
+
+func skipDelim(dec *json.Decoder, open, close json.Delim) error {
+	depth := 1
+	for depth > 0 {
+		token, err := dec.Token()
+		if err != nil {
+			return fmt.Errorf("malformed JSON: %w", err)
+		}
+		if delim, ok := token.(json.Delim); ok {
+			if delim == open {
+				depth++
+			} else if delim == close {
+				depth--
+			}
+		}
+	}
+	return nil
+}
+
+func jsonFieldTypes(t reflect.Type) map[string]reflect.Type {
+	m := make(map[string]reflect.Type)
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if !f.IsExported() {
+			continue
+		}
+		tag := f.Tag.Get("json")
+		if tag == "-" {
+			continue
+		}
+		name := f.Name
+		if tag != "" {
+			if idx := strings.IndexByte(tag, ','); idx != -1 {
+				if idx > 0 {
+					name = tag[:idx]
+				}
+			} else {
+				name = tag
+			}
+		}
+		m[name] = f.Type
+	}
+	return m
 }
 
 func marshalLine(v any) ([]byte, error) {

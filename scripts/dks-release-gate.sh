@@ -47,5 +47,9 @@ for job in $CONFORMANCE_JOBS; do
   NS="$NS" JOB="$job" KUBECTL="$KUBECTL" scripts/k8s-job-aggregate.sh
   conformance_count=$((conformance_count + 1))
 done
+if [ "$conformance_count" -eq 0 ]; then
+  echo "dks-release-gate: zero conformance jobs — absence of evidence" >&2
+  exit 6
+fi
 
 printf 'DKS_RELEASE_GATE:%s\n' "$aggregate"

@@ -55,4 +55,9 @@ if [ "$missing" -gt 0 ]; then
   echo "INCOMPLETE: ${missing} pod(s) produced no Results line — verdict is not trustworthy" >&2
   exit 3
 fi
+# An aggregate with zero executed tests is absence of evidence, not a pass.
+if [ "$tp" -eq 0 ] && [ "$tf" -eq 0 ] && [ "$ts" -eq 0 ] && [ "$tt" -eq 0 ]; then
+  echo "ABSENT: no tests were executed — verdict is not trustworthy" >&2
+  exit 3
+fi
 [ "$tf" -eq 0 ] && [ "$tt" -eq 0 ]
