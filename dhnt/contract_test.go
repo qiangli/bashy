@@ -244,6 +244,76 @@ func TestStrictValidation(t *testing.T) {
 	}
 }
 
+func TestDecodePipelineRejectsMissingRequiredTaskFields(t *testing.T) {
+	data, err := MarshalPipeline(fixturePipeline())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		edit func(string) string
+	}{
+		{
+			name: "absent needs",
+			edit: func(s string) string {
+				return strings.Replace(s, `"needs":[],`, "", 1)
+			},
+		},
+		{
+			name: "absent environment",
+			edit: func(s string) string {
+				return strings.Replace(s,
+					`,"environment":[{"name":"A","value":"first"},{"name":"Z","value":"last"}]`,
+					"", 1)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := DecodePipeline([]byte(tt.edit(string(data)))); err == nil {
+				t.Fatal("strict decoder accepted a missing required task field")
+			}
+		})
+	}
+}
+
+func TestDecodePipelineRejectsNullTaskFieldValues(t *testing.T) {
+	data, err := MarshalPipeline(fixturePipeline())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		edit func(string) string
+	}{
+		{
+			name: "null needs",
+			edit: func(s string) string {
+				return strings.Replace(s, `"needs":[]`, `"needs":null`, 1)
+			},
+		},
+		{
+			name: "null environment value",
+			edit: func(s string) string {
+				return strings.Replace(s, `"value":"first"`, `"value":null`, 1)
+			},
+		},
+		{
+			name: "null argv argument",
+			edit: func(s string) string {
+				return strings.Replace(s, `"argv":["bashy","--version"]`, `"argv":["bashy",null]`, 1)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := DecodePipeline([]byte(tt.edit(string(data)))); err == nil {
+				t.Fatal("strict decoder accepted null for a non-null task field")
+			}
+		})
+	}
+}
+
 func TestPipelineRequiresDeclaredPlatformMatrix(t *testing.T) {
 	pipeline := fixturePipeline()
 	pipeline.Matrix = nil

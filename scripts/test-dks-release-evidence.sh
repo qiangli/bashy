@@ -83,7 +83,9 @@ case "$args" in
     printf '%s\n' conformance-pod
     ;;
   *'logs conformance-pod'*)
-    if [ "${FAKE_ZERO_TESTS:-0}" = 1 ]; then
+    if [ "${FAKE_MALFORMED_RESULTS:-0}" = 1 ]; then
+      printf '%s\n' 'Results: 86 passed'
+    elif [ "${FAKE_ZERO_TESTS:-0}" = 1 ]; then
       printf '%s\n' 'Results: 0 passed, 0 failed, 0 skipped, 0 timed out'
     elif [ "${FAKE_ALL_SKIPPED:-0}" = 1 ]; then
       printf '%s\n' 'Results: 0 passed, 0 failed, 86 skipped, 0 timed out'
@@ -132,6 +134,15 @@ fi
 if (cd "$root" && FAKE_ALL_SKIPPED=1 KUBECTL="$fake" NS=test JOB=conformance \
   scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
   echo "conformance aggregation accepted a run in which every test was skipped" >&2
+  exit 1
+fi
+
+# Missing counters are malformed evidence, not implicit zeroes. In particular,
+# a truncated line that retains only a positive pass count must not authorize a
+# passing conformance verdict.
+if (cd "$root" && FAKE_MALFORMED_RESULTS=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted a truncated Results record" >&2
   exit 1
 fi
 
