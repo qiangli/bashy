@@ -137,6 +137,8 @@ case "$args" in
       printf '\n'
     elif [ "${FAKE_JOB_MALFORMED:-0}" = 1 ]; then
       printf '%s\n' '{"metadata":{"uid":"conformance-job-uid"},"spec":{"completions":1},"status":{"succeeded":1}}'
+    elif [ "${FAKE_JOB_LABEL_SPOOFS_COMPLETION_MODE:-0}" = 1 ]; then
+      printf '%s\n' '{"metadata":{"uid":"conformance-job-uid","labels":{"completionMode":"Indexed"}},"spec":{"completions":1},"status":{"succeeded":1}}'
     elif [ "${FAKE_JOB_NON_INDEXED:-0}" = 1 ]; then
       printf '%s\n' '{"metadata":{"uid":"conformance-job-uid"},"spec":{"completions":1,"completionMode":"NonIndexed"},"status":{"succeeded":1}}'
     elif [ "${FAKE_JOB_MISSING_COMPLETIONS:-0}" = 1 ]; then
@@ -310,6 +312,15 @@ fi
 if (cd "$root" && FAKE_JOB_MALFORMED=1 KUBECTL="$fake" NS=test JOB=conformance \
   scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
   echo "conformance aggregation accepted a Job with missing completionMode" >&2
+  exit 1
+fi
+
+# The aggregator must read the Job's spec.completionMode, not any JSON key with
+# that spelling. A settable label named completionMode can otherwise spoof the
+# Indexed contract while the Job itself has no completionMode field.
+if (cd "$root" && FAKE_JOB_LABEL_SPOOFS_COMPLETION_MODE=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted a Job whose Indexed completionMode came only from a label" >&2
   exit 1
 fi
 
