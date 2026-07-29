@@ -83,7 +83,11 @@ case "$args" in
     printf '%s\n' conformance-pod
     ;;
   *'logs conformance-pod'*)
-    printf '%s\n' 'Results: 86 passed, 0 failed, 0 skipped, 0 timed out'
+    if [ "${FAKE_ZERO_TESTS:-0}" = 1 ]; then
+      printf '%s\n' 'Results: 0 passed, 0 failed, 0 skipped, 0 timed out'
+    else
+      printf '%s\n' 'Results: 86 passed, 0 failed, 0 skipped, 0 timed out'
+    fi
     ;;
   *)
     printf 'unexpected fake kubectl call: %s\n' "$args" >&2
@@ -110,6 +114,14 @@ fi
 if (cd "$root" && FAKE_NO_LABELS=1 KUBECTL="$fake" DHNT="$DHNT" NS=test JOB=retry-job \
   scripts/dks-native-result.sh >/dev/null 2>&1); then
   echo "an unlabelled node was accepted without an executor cross-check" >&2
+  exit 1
+fi
+
+# An empty conformance run is absence of evidence, even when its syntactically
+# valid summary contains no failures.
+if (cd "$root" && FAKE_ZERO_TESTS=1 KUBECTL="$fake" NS=test JOB=conformance \
+  scripts/k8s-job-aggregate.sh >/dev/null 2>&1); then
+  echo "conformance aggregation accepted a run that executed zero tests" >&2
   exit 1
 fi
 

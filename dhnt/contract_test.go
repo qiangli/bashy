@@ -143,6 +143,57 @@ func TestStrictValidation(t *testing.T) {
 			t.Fatalf("got %v, want duplicate field error", err)
 		}
 	})
+	t.Run("invalid UTF-8", func(t *testing.T) {
+		data, err := MarshalRun(fixtureRun())
+		if err != nil {
+			t.Fatal(err)
+		}
+		data = []byte(strings.Replace(string(data), `"repository":"https://`,
+			"\"repository\":\"https://\xff", 1))
+		if _, err := DecodeRun(data); err == nil {
+			t.Fatal("invalid UTF-8 was silently accepted and normalized")
+		}
+	})
+	t.Run("field names are case sensitive", func(t *testing.T) {
+		tests := []struct {
+			name   string
+			data   func() ([]byte, error)
+			decode func([]byte) error
+		}{
+			{
+				name: "pipeline",
+				data: func() ([]byte, error) {
+					return MarshalPipeline(fixturePipeline())
+				},
+				decode: func(data []byte) error {
+					_, err := DecodePipeline(data)
+					return err
+				},
+			},
+			{
+				name: "run",
+				data: func() ([]byte, error) {
+					return MarshalRun(fixtureRun())
+				},
+				decode: func(data []byte) error {
+					_, err := DecodeRun(data)
+					return err
+				},
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				data, err := tt.data()
+				if err != nil {
+					t.Fatal(err)
+				}
+				data = []byte(strings.Replace(string(data), `"schema":`, `"Schema":`, 1))
+				if err := tt.decode(data); err == nil || !strings.Contains(err.Error(), "unknown field") {
+					t.Fatalf("got %v, want wrong-case field to be rejected as unknown", err)
+				}
+			})
+		}
+	})
 	tests := []struct {
 		name string
 		edit func(*Run)
