@@ -22,14 +22,32 @@ pods="$($KUBECTL get pods -n "$NS" -l "app=${JOB}" \
 tp=0 tf=0 ts=0 tt=0 chunks=0 missing=0
 while IFS= read -r pod; do
   [ -n "$pod" ] || continue
-  line="$($KUBECTL logs "$pod" -n "$NS" 2>/dev/null | grep -E '^Results:' | tail -1 || true)"
+  pod_log="$($KUBECTL logs "$pod" -n "$NS" 2>/dev/null || true)"
+  results_count="$(printf '%s\n' "$pod_log" | grep -cE '^Results:' || true)"
+  line=""
+  if [ "$results_count" -eq 1 ]; then
+    line="$(printf '%s\n' "$pod_log" | grep -E '^Results:')"
+  elif [ "$results_count" -gt 1 ]; then
+    echo "WARN: ${results_count} Results lines from $pod logs — ambiguous evidence; NOT counted" >&2
+    missing=$((missing + 1))
+    continue
+  fi
   if [ -z "$line" ]; then
     # Virtual-node providers may not expose the kubelet log route. DKS Jobs opt
     # into Outpost's bounded terminal log tail, which is persisted in Pod
     # status and survives provider restart. Read the final Results line there.
     message="$($KUBECTL get pod "$pod" -n "$NS" \
       -o jsonpath='{.status.containerStatuses[0].state.terminated.message}' 2>/dev/null || true)"
-    line="$(printf '%s\n' "$message" | grep -E '^Results:' | tail -1 || true)"
+    if [ -n "$message" ]; then
+      results_count="$(printf '%s\n' "$message" | grep -cE '^Results:' || true)"
+      if [ "$results_count" -eq 1 ]; then
+        line="$(printf '%s\n' "$message" | grep -E '^Results:')"
+      elif [ "$results_count" -gt 1 ]; then
+        echo "WARN: ${results_count} Results lines in terminal message — ambiguous evidence; NOT counted" >&2
+        missing=$((missing + 1))
+        continue
+      fi
+    fi
   fi
   if [ -z "$line" ]; then
     echo "WARN: no Results line from $pod logs or terminal status — NOT counted" >&2
@@ -110,6 +128,14 @@ status_succeeded=$(printf '%s\n' "$job_info" | sed -n 's/.*"succeeded": *\([0-9]
 }
 if [ "$status_succeeded" -lt "$spec_completions" ]; then
   echo "INCOMPLETE: ${status_succeeded} succeeded < ${spec_completions} required completions — verdict is not trustworthy" >&2
+  exit 3
+fi
+# Job status is not a substitute for collected evidence. Observed valid
+# result chunks must equal the required completions exactly, so a
+# discrepancy (including status.succeeded >= completions with fewer
+# observed chunks) is incomplete evidence — reject the aggregate.
+if [ "$chunks" -ne "$spec_completions" ]; then
+  echo "INCOMPLETE: ${chunks} observed chunk(s) != ${spec_completions} required completions — evidence is incomplete" >&2
   exit 3
 fi
 [ "$tf" -eq 0 ] && [ "$tt" -eq 0 ]

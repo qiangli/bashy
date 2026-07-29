@@ -90,7 +90,10 @@ func dhntValidate(args []string, pipeline, canonical bool) int {
 				fmt.Fprintln(os.Stderr, "bashy dhnt:", err)
 				return 1
 			}
-			_, _ = os.Stdout.Write(data)
+			if _, err := os.Stdout.Write(data); err != nil {
+				fmt.Fprintln(os.Stderr, "bashy dhnt:", err)
+				return 1
+			}
 		}
 		return 0
 	}
@@ -122,7 +125,10 @@ func dhntValidate(args []string, pipeline, canonical bool) int {
 			fmt.Fprintln(os.Stderr, "bashy dhnt:", err)
 			return 1
 		}
-		_, _ = os.Stdout.Write(data)
+		if _, err := os.Stdout.Write(data); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy dhnt:", err)
+			return 1
+		}
 	}
 	return 0
 }
@@ -208,7 +214,10 @@ func dhntEmitRun(args []string) int {
 		fmt.Fprintln(os.Stderr, "bashy dhnt emit-run:", err)
 		return 1
 	}
-	_, _ = os.Stdout.Write(data)
+	if _, err := os.Stdout.Write(data); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt emit-run:", err)
+		return 1
+	}
 	return 0
 }
 
@@ -296,7 +305,10 @@ func dhntAggregate(args []string) int {
 		fmt.Fprintln(os.Stderr, "bashy dhnt aggregate:", err)
 		return 1
 	}
-	_, _ = os.Stdout.Write(data)
+	if _, err := os.Stdout.Write(data); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt aggregate:", err)
+		return 1
+	}
 	return 0
 }
 
