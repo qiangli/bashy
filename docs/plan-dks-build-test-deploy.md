@@ -1,8 +1,9 @@
 # DKS build, test, and deploy plan
 
-Status: implemented through the macOS/native and vk-podman foundation; the
-three-platform production gate is intentionally blocked on native Linux and
-Windows DKS capacity.
+Status: implemented through the three-platform native and vk-podman foundation.
+The Linux, macOS, and Windows native-platform slice passed live on 2026-07-29;
+the full production gate still requires fresh conformance Jobs before it may
+author QA refs.
 Scope: replace bashy's host-specific SSH fanout and standing per-host QA pollers
 with DKS-scheduled work while preserving the existing conformance and
 byte-promotion evidence contracts.
@@ -38,11 +39,16 @@ byte-promotion evidence contracts.
 - A live source-pinned native Bash 5.3 run completed 86/86 on Dragon. A
   failed-first/succeeded-second run also exposed and fixed ambiguous retry-Pod
   evidence selection; cleanup now handles Go's read-only toolchain cache.
-- The remaining production blocker is capacity, not a silent software
-  fallback: DKS currently has macOS/arm64 vk-native nodes only. The default
-  release gate rejects the current fleet until native Linux and Windows nodes
-  register Ready. GitHub Actions still supplies build/smoke evidence for those
-  platforms, but it is not mislabeled as DKS-native evidence.
+- Native capacity is now live on all required platforms: Dragon and Novidesign
+  provide darwin/arm64, Lern provides linux/amd64, and Puppy provides
+  windows/amd64. Fresh `v0.19.3-dev` smokes passed on Dragon, Lern, and Puppy,
+  and the three-platform release-gate slice accepted their exact-source
+  records.
+- The live Puppy run exposed one producer bug: Windows `uname -s` reports
+  `Windows_NT`, while the gate's canonical platform is `windows`.
+  `dks-native-job.sh` now normalizes OS/architecture spellings and verifies the
+  observed platform still matches its scheduled target before emitting a
+  RunRecord.
 
 ## Findings
 
@@ -101,10 +107,11 @@ byte-promotion evidence contracts.
 - The podman translator supports one container, literal environment values, and
   hostPath/emptyDir abstractions. ConfigMap/Secret `envFrom`, projected data
   volumes, init containers, and sidecars are outside the current surface.
-- Ready DKS capacity currently consists of two darwin/arm64 native nodes
-  (`dragon`, `novidesign`) plus their podman nodes and Linux k3s agent nodes.
-  There is no Ready native Windows or native Linux worker. The `puppy` agent node
-  is Unknown and is not a `vk-native` node.
+- Ready DKS native capacity currently consists of two darwin/arm64 nodes
+  (`dragon`, `novidesign`), one linux/amd64 node (`lern`), and one
+  windows/amd64 node (`puppy`). Agent and virtual runtimes are independent:
+  Puppy concurrently runs its Linux/WSL k3s-agent node and its Windows
+  `vk-native` node.
 
 ## Execution model
 
@@ -193,11 +200,10 @@ Run the six-target `CGO_ENABLED=0` cross-build as an additional build-integrity
 job. Cross-build success does not replace at least one real execution on each of
 Linux, macOS, and Windows.
 
-Before this gate can be complete, register and keep Ready at least one native
-Linux host and one native Windows host in addition to the current macOS nodes.
-Architecture-complete native QA requires one compatible worker per released
-OS/arch; otherwise declare native execution per OS plus cross-build coverage for
-the unrepresented architectures.
+The minimum per-OS capacity is now present. Architecture-complete native QA
+still requires one compatible worker per released OS/arch; until then, declare
+native execution per OS plus cross-build coverage for the unrepresented
+architectures.
 
 ### 5. Put candidate release QA on DKS
 

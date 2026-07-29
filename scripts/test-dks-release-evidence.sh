@@ -6,6 +6,27 @@ tmp=$(mktemp -d)
 trap '/bin/rm -rf "$tmp"' EXIT
 fake="$tmp/kubectl"
 
+# The native producer must translate host uname spellings into the canonical
+# platform names consumed by the release gate. This caught a live Windows run
+# that succeeded but reported windows_nt, making the three-platform gate reject
+# valid evidence as "missing windows".
+manifest=$(cd "$root" && \
+  TARGET_OS=windows TARGET_ARCH=amd64 \
+  ARTIFACT_URL=https://example.test/bashy.zip \
+  ARTIFACT_SHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  ARTIFACT_PATH=bashy.exe \
+  scripts/dks-native-job.sh)
+for expected in \
+  'windows_nt|mingw*|msys*) os=windows' \
+  'x86_64|amd64) arch=amd64' \
+  'observed OS $os does not match target windows'
+do
+  case "$manifest" in
+    *"$expected"*) ;;
+    *) printf 'native job omits canonical platform check: %s\n' "$expected" >&2; exit 1 ;;
+  esac
+done
+
 cat >"$fake" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail

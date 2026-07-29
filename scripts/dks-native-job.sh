@@ -99,6 +99,26 @@ spec:
               self="\$0"
               os=\$(uname -s | tr A-Z a-z)
               arch=\$(uname -m)
+              # Kubernetes and the release gate use Go's canonical platform
+              # vocabulary. Native uname does not: Windows reports Windows_NT
+              # and amd64 hosts commonly report x86_64.
+              case "\$os" in
+                windows_nt|mingw*|msys*) os=windows ;;
+                darwin|linux) ;;
+                *) echo "dks-native-job: unsupported observed OS \$os" >&2; exit 1 ;;
+              esac
+              case "\$arch" in
+                x86_64|amd64) arch=amd64 ;;
+                aarch64|arm64) arch=arm64 ;;
+              esac
+              [ "\$os" = "${TARGET_OS}" ] || {
+                echo "dks-native-job: observed OS \$os does not match target ${TARGET_OS}" >&2
+                exit 1
+              }
+              if [ -n "${TARGET_ARCH}" ] && [ "\$arch" != "${TARGET_ARCH}" ]; then
+                echo "dks-native-job: observed arch \$arch does not match target ${TARGET_ARCH}" >&2
+                exit 1
+              fi
               version=\$("\$self" --version | head -1)
               [ "\$("\$self" -c 'echo runtime-ok')" = runtime-ok ]
               "\$self" curl --version >/dev/null
