@@ -605,14 +605,21 @@ type argoMetadata struct {
 	Annotations  map[string]string `yaml:"annotations"`
 }
 type argoSpec struct {
-	Entrypoint         string         `yaml:"entrypoint"`
-	ServiceAccountName string         `yaml:"serviceAccountName,omitempty"`
-	Templates          []argoTemplate `yaml:"templates"`
-	Volumes            []argoVolume   `yaml:"volumes"`
+	Entrypoint            string                     `yaml:"entrypoint"`
+	ServiceAccountName    string                     `yaml:"serviceAccountName,omitempty"`
+	ArtifactRepositoryRef *argoArtifactRepositoryRef `yaml:"artifactRepositoryRef,omitempty"`
+	Templates             []argoTemplate             `yaml:"templates"`
+	Volumes               []argoVolume               `yaml:"volumes"`
+}
+type argoArtifactRepositoryRef struct {
+	ConfigMap string `yaml:"configMap"`
+	Key       string `yaml:"key"`
 }
 type argoTemplate struct {
 	Name                  string                `yaml:"name"`
 	Metadata              *argoTemplateMetadata `yaml:"metadata,omitempty"`
+	Inputs                argoArtifactIO        `yaml:"inputs,omitempty"`
+	Outputs               argoArtifactIO        `yaml:"outputs,omitempty"`
 	DAG                   argoDAG               `yaml:"dag,omitempty"`
 	NodeSelector          map[string]string     `yaml:"nodeSelector,omitempty"`
 	ActiveDeadlineSeconds *int                  `yaml:"activeDeadlineSeconds,omitempty"`
@@ -628,9 +635,22 @@ type argoDAG struct {
 	Tasks []argoDAGTask `yaml:"tasks,omitempty"`
 }
 type argoDAGTask struct {
-	Name         string   `yaml:"name"`
-	Template     string   `yaml:"template"`
-	Dependencies []string `yaml:"dependencies"`
+	Name         string         `yaml:"name"`
+	Template     string         `yaml:"template"`
+	Dependencies []string       `yaml:"dependencies"`
+	Arguments    argoArtifactIO `yaml:"arguments,omitempty"`
+}
+type argoArtifactIO struct {
+	Artifacts []argoArtifact `yaml:"artifacts,omitempty"`
+}
+type argoArtifact struct {
+	Name string          `yaml:"name"`
+	Path string          `yaml:"path,omitempty"`
+	From string          `yaml:"from,omitempty"`
+	S3   *argoS3Artifact `yaml:"s3,omitempty"`
+}
+type argoS3Artifact struct {
+	Key string `yaml:"key"`
 }
 type argoStep struct {
 	Name     string `yaml:"name"`

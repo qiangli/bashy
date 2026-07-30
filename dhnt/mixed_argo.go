@@ -27,11 +27,28 @@ const (
 // tasks. It is paired with, but deliberately separate from, the runtime worker
 // resolver: portable plans never contain Kubernetes node or Outpost identity.
 type MixedArgoBinding struct {
-	Schema               string              `json:"schema"`
-	Execution            ArgoBinding         `json:"execution"`
-	ServiceAccountName   string              `json:"serviceAccountName"`
-	ResultValidatorImage string              `json:"resultValidatorImage"`
-	Native               []NativeTaskBinding `json:"native"`
+	Schema               string                   `json:"schema"`
+	Execution            ArgoBinding              `json:"execution"`
+	ServiceAccountName   string                   `json:"serviceAccountName"`
+	ResultValidatorImage string                   `json:"resultValidatorImage"`
+	ArtifactRepository   ArgoRepositoryRef        `json:"artifactRepository"`
+	InitialArtifacts     []InitialArtifactBinding `json:"initialArtifacts"`
+	Native               []NativeTaskBinding      `json:"native"`
+}
+
+// ArgoRepositoryRef selects one namespaced, Secret-backed Argo artifact
+// repository. It contains no credentials.
+type ArgoRepositoryRef struct {
+	ConfigMap string `json:"configMap"`
+	Key       string `json:"key"`
+}
+
+// InitialArtifactBinding locates a root pipeline input in the selected
+// repository. Produced artifacts are wired directly from their producer task.
+type InitialArtifactBinding struct {
+	Name   string `json:"name"`
+	SHA256 string `json:"sha256"`
+	Key    string `json:"key"`
 }
 
 type NativeTaskBinding struct {
@@ -107,6 +124,27 @@ func (binding MixedArgoBinding) Validate() error {
 	if !validPinnedImage(binding.ResultValidatorImage) {
 		return errors.New("resultValidatorImage: must be pinned by lowercase sha256 digest")
 	}
+	if !kubeNameRE.MatchString(binding.ArtifactRepository.ConfigMap) ||
+		!kubeNameRE.MatchString(binding.ArtifactRepository.Key) {
+		return errors.New("artifactRepository: configMap and key must be Kubernetes-safe names")
+	}
+	initial := map[string]bool{}
+	for i, artifact := range binding.InitialArtifacts {
+		identity := artifact.Name + "@" + artifact.SHA256
+		if initial[identity] {
+			return fmt.Errorf("initialArtifacts[%d]: duplicate identity %q", i, identity)
+		}
+		initial[identity] = true
+		if err := validateID("name", artifact.Name); err != nil {
+			return fmt.Errorf("initialArtifacts[%d]: %w", i, err)
+		}
+		if !sha256RE.MatchString(artifact.SHA256) {
+			return fmt.Errorf("initialArtifacts[%d].sha256: must be lowercase SHA-256", i)
+		}
+		if !cleanArtifactKey(artifact.Key) {
+			return fmt.Errorf("initialArtifacts[%d].key: must be a clean non-secret object key", i)
+		}
+	}
 	seen := map[string]bool{}
 	for i, native := range binding.Native {
 		if seen[native.Task] {
@@ -146,6 +184,12 @@ func (binding MixedArgoBinding) Validate() error {
 		}
 	}
 	return nil
+}
+
+func cleanArtifactKey(value string) bool {
+	return value != "" && !strings.HasPrefix(value, "/") && path.Clean(value) == value &&
+		!strings.ContainsAny(value, `\?#`) && !strings.ContainsRune(value, 0) &&
+		value != ".." && !strings.HasPrefix(value, "../")
 }
 
 func (resolver DKSWorkerResolverBinding) Validate() error {
@@ -303,11 +347,24 @@ func LowerMixedDKS(p Pipeline, plan DKSPlacementPlan, binding MixedArgoBinding, 
 		Spec: argoSpec{
 			Entrypoint:         "pipeline",
 			ServiceAccountName: binding.ServiceAccountName,
+			ArtifactRepositoryRef: &argoArtifactRepositoryRef{
+				ConfigMap: binding.ArtifactRepository.ConfigMap,
+				Key:       binding.ArtifactRepository.Key,
+			},
 			Volumes: []argoVolume{{
 				Name: "workspace", PersistentVolumeClaim: argoPVC{ClaimName: binding.Execution.Workspace.ClaimName},
 			}},
 		},
 	}
+	producers, err := mixedArtifactProducers(p)
+	if err != nil {
+		return nil, err
+	}
+	initialArtifacts := map[string]string{}
+	for _, artifact := range binding.InitialArtifacts {
+		initialArtifacts[artifact.Name+"@"+artifact.SHA256] = artifact.Key
+	}
+	usedInitialArtifacts := map[string]bool{}
 	dagTemplate := argoTemplate{Name: "pipeline"}
 	tasks := append([]Task(nil), p.Tasks...)
 	sort.Slice(tasks, func(i, j int) bool { return tasks[i].ID < tasks[j].ID })
@@ -340,9 +397,24 @@ func LowerMixedDKS(p Pipeline, plan DKSPlacementPlan, binding MixedArgoBinding, 
 			}
 			claimedPaths[runtimePath.value] = task.ID + " " + runtimePath.kind
 		}
-		dagTemplate.DAG.Tasks = append(dagTemplate.DAG.Tasks, argoDAGTask{
+		dagTask := argoDAGTask{
 			Name: task.ID, Template: task.ID, Dependencies: sortedStrings(task.Needs),
-		})
+		}
+		for _, input := range entry.Inputs {
+			identity := input.Name + "@" + input.SHA256
+			argument := argoArtifact{Name: input.Name}
+			if producer, ok := producers[identity]; ok {
+				argument.From = fmt.Sprintf("{{tasks.%s.outputs.artifacts.%s}}", producer, input.Name)
+			} else if key, ok := initialArtifacts[identity]; ok {
+				argument.S3 = &argoS3Artifact{Key: key}
+				usedInitialArtifacts[identity] = true
+			} else {
+				return nil, fmt.Errorf("task %q: root input %q has no authenticated repository binding",
+					task.ID, input.Name)
+			}
+			dagTask.Arguments.Artifacts = append(dagTask.Arguments.Artifacts, argument)
+		}
+		dagTemplate.DAG.Tasks = append(dagTemplate.DAG.Tasks, dagTask)
 		switch task.Lane {
 		case LaneCluster, LaneContainer:
 			template, err := lowerMixedClusterTask(task, entry, taskBinding, spec, assignments, resolutions, binding.Execution.Workspace)
@@ -363,6 +435,14 @@ func LowerMixedDKS(p Pipeline, plan DKSPlacementPlan, binding MixedArgoBinding, 
 			workflow.Spec.Templates = append(workflow.Spec.Templates, templates...)
 		default:
 			return nil, fmt.Errorf("task %q: lane %q is unsupported by mixed DKS", task.ID, task.Lane)
+		}
+	}
+	for identity := range initialArtifacts {
+		if _, produced := producers[identity]; produced {
+			return nil, fmt.Errorf("initial artifact %q is also produced by the pipeline", identity)
+		}
+		if !usedInitialArtifacts[identity] {
+			return nil, fmt.Errorf("initial artifact %q is not a root pipeline input", identity)
 		}
 	}
 	for task := range nativeBindings {
@@ -472,6 +552,21 @@ func mixedAssignments(p Pipeline, plan DKSPlacementPlan) (map[string]string, map
 	return assignments, used, nil
 }
 
+func mixedArtifactProducers(p Pipeline) (map[string]string, error) {
+	producers := map[string]string{}
+	for _, entry := range p.Matrix {
+		for _, artifact := range entry.Outputs {
+			identity := artifact.Name + "@" + artifact.SHA256
+			if prior, exists := producers[identity]; exists {
+				return nil, fmt.Errorf("artifact %q has multiple producers %q and %q",
+					identity, prior, entry.Task)
+			}
+			producers[identity] = entry.Task
+		}
+	}
+	return producers, nil
+}
+
 func lowerMixedClusterTask(task Task, entry MatrixEntry, binding ArgoTaskBinding, spec RunnerSpec,
 	assignments map[string]string, resolutions map[string]DKSWorkerResolution, workspace ArgoWorkspace,
 ) (argoTemplate, error) {
@@ -511,6 +606,16 @@ func lowerMixedClusterTask(task Task, entry MatrixEntry, binding ArgoTaskBinding
 			},
 			VolumeMounts: []argoVolumeMount{{Name: "workspace", MountPath: workspace.MountPath}},
 		},
+	}
+	for _, input := range spec.Inputs {
+		template.Inputs.Artifacts = append(template.Inputs.Artifacts, argoArtifact{
+			Name: input.Name, Path: path.Join(workspace.MountPath, input.Path),
+		})
+	}
+	for _, output := range spec.Outputs {
+		template.Outputs.Artifacts = append(template.Outputs.Artifacts, argoArtifact{
+			Name: output.Name, Path: path.Join(workspace.MountPath, output.Path),
+		})
 	}
 	requests, err := placementResourceRequests(task)
 	if err != nil {

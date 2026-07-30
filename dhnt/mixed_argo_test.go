@@ -43,6 +43,9 @@ func mixedArgoFixture(t *testing.T) (Pipeline, DKSPlacementPlan, MixedArgoBindin
 		},
 		ServiceAccountName:   "argo-workflow",
 		ResultValidatorImage: "registry.example/bashy@sha256:" + strings.Repeat("d", 64),
+		ArtifactRepository: ArgoRepositoryRef{
+			ConfigMap: "artifact-repositories", Key: "seaweedfs-v1",
+		},
 	}
 	matrix := map[string]MatrixEntry{}
 	for _, entry := range pipeline.Matrix {
@@ -80,6 +83,7 @@ func mixedArgoFixture(t *testing.T) (Pipeline, DKSPlacementPlan, MixedArgoBindin
 			binding.Native = append(binding.Native, native)
 		}
 	}
+	bindInitialArtifacts(&binding, pipeline)
 	resolver := DKSWorkerResolverBinding{
 		Schema: DKSWorkerResolverSchema,
 		Workers: []DKSWorkerResolution{
@@ -114,6 +118,11 @@ func TestLowerMixedDKSGeneratesDirectNativeAndReduceFanIn(t *testing.T) {
 	if workflow.Spec.ServiceAccountName != binding.ServiceAccountName || len(workflow.Spec.Templates) != 7 {
 		t.Fatalf("unexpected workflow: %+v", workflow.Spec)
 	}
+	if workflow.Spec.ArtifactRepositoryRef == nil ||
+		workflow.Spec.ArtifactRepositoryRef.ConfigMap != "artifact-repositories" ||
+		workflow.Spec.ArtifactRepositoryRef.Key != "seaweedfs-v1" {
+		t.Fatalf("artifact repository was not explicitly bound: %+v", workflow.Spec.ArtifactRepositoryRef)
+	}
 	templates := map[string]argoTemplate{}
 	for _, template := range workflow.Spec.Templates {
 		templates[template.Name] = template
@@ -126,6 +135,19 @@ func TestLowerMixedDKSGeneratesDirectNativeAndReduceFanIn(t *testing.T) {
 	if templates["chunk-1"].Container.Resources == nil ||
 		templates["chunk-1"].Container.Resources.Requests["cpu"] != "2" {
 		t.Fatalf("cluster capacity request was not lowered: %+v", templates["chunk-1"].Container.Resources)
+	}
+	if len(templates["chunk-1"].Inputs.Artifacts) == 0 ||
+		len(templates["chunk-1"].Outputs.Artifacts) == 0 {
+		t.Fatalf("cluster artifacts were not materialized/published: %+v", templates["chunk-1"])
+	}
+	var chunk1 argoDAGTask
+	for _, task := range templates["pipeline"].DAG.Tasks {
+		if task.Name == "chunk-1" {
+			chunk1 = task
+		}
+	}
+	if len(chunk1.Arguments.Artifacts) != 1 || chunk1.Arguments.Artifacts[0].S3 == nil {
+		t.Fatalf("root input was not bound to authenticated repository key: %+v", chunk1)
 	}
 	if templates["train-create"].Resource == nil ||
 		!strings.Contains(templates["train-create"].Resource.Manifest, "private-native-a") ||
@@ -147,6 +169,11 @@ func TestLowerMixedDKSGeneratesDirectNativeAndReduceFanIn(t *testing.T) {
 	}
 	if !reflect.DeepEqual(reduce.Dependencies, []string{"chunk-1", "chunk-2"}) {
 		t.Fatalf("reducer does not fan in every chunk: %+v", reduce)
+	}
+	if len(reduce.Arguments.Artifacts) != 2 ||
+		reduce.Arguments.Artifacts[0].From == "" ||
+		reduce.Arguments.Artifacts[1].From == "" {
+		t.Fatalf("reducer inputs are not bound from producing tasks: %+v", reduce.Arguments)
 	}
 }
 
@@ -196,6 +223,20 @@ func TestLowerMixedDKSFailsClosed(t *testing.T) {
 			},
 			want: "retries must be zero",
 		},
+		{
+			name: "missing root artifact",
+			edit: func(_ *Pipeline, _ *DKSPlacementPlan, binding *MixedArgoBinding, _ *DKSWorkerResolverBinding) {
+				binding.InitialArtifacts = nil
+			},
+			want: "no authenticated repository binding",
+		},
+		{
+			name: "secret-like query in object key",
+			edit: func(_ *Pipeline, _ *DKSPlacementPlan, binding *MixedArgoBinding, _ *DKSWorkerResolverBinding) {
+				binding.InitialArtifacts[0].Key += "?X-Amz-Signature=secret"
+			},
+			want: "clean non-secret object key",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -244,6 +285,9 @@ func TestLowerMixedDKSUmbrellaNanochatSmoke(t *testing.T) {
 		},
 		ServiceAccountName:   "argo-workflow",
 		ResultValidatorImage: "registry.example/bashy@sha256:" + strings.Repeat("d", 64),
+		ArtifactRepository: ArgoRepositoryRef{
+			ConfigMap: "artifact-repositories", Key: "seaweedfs-v1",
+		},
 	}
 	matrix := map[string]MatrixEntry{}
 	for _, entry := range pipeline.Matrix {
@@ -281,6 +325,7 @@ func TestLowerMixedDKSUmbrellaNanochatSmoke(t *testing.T) {
 			binding.Native = append(binding.Native, native)
 		}
 	}
+	bindInitialArtifacts(&binding, pipeline)
 	resolver := DKSWorkerResolverBinding{Schema: DKSWorkerResolverSchema, Workers: []DKSWorkerResolution{
 		{Worker: "cluster-arm", Node: "private-cluster-arm", Backend: "k3s", OS: "linux", Arch: "arm64"},
 		{Worker: "cluster-amd", Node: "private-cluster-amd", Backend: "k3s", OS: "linux", Arch: "amd64"},
@@ -295,5 +340,28 @@ func TestLowerMixedDKSUmbrellaNanochatSmoke(t *testing.T) {
 		!strings.Contains(string(output), "name: dataset-reduce") ||
 		!strings.Contains(string(output), "name: base-eval-reduce") {
 		t.Fatalf("nanochat workflow is incomplete:\n%s", output)
+	}
+}
+
+func bindInitialArtifacts(binding *MixedArgoBinding, pipeline Pipeline) {
+	produced := map[string]bool{}
+	for _, entry := range pipeline.Matrix {
+		for _, output := range entry.Outputs {
+			produced[output.Name+"@"+output.SHA256] = true
+		}
+	}
+	seen := map[string]bool{}
+	for _, entry := range pipeline.Matrix {
+		for _, input := range entry.Inputs {
+			identity := input.Name + "@" + input.SHA256
+			if produced[identity] || seen[identity] {
+				continue
+			}
+			seen[identity] = true
+			binding.InitialArtifacts = append(binding.InitialArtifacts, InitialArtifactBinding{
+				Name: input.Name, SHA256: input.SHA256,
+				Key: "nanochat/inputs/" + input.SHA256 + "/" + input.Name + ".tgz",
+			})
+		}
 	}
 }
