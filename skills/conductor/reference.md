@@ -296,6 +296,26 @@ bashy weave start --resume --issue N --max-runtime 45m --mem-limit 12g \
   -- <tool> <recipe> "<body>" &
 ```
 
+**One agent works one run at a time.** An agent is a single identity — one
+conversation store, one kb attribution, one bus cursor — so two live runs under
+it mix context, and a worker answering about one story from the other's history
+is wrong in the way that looks right. Starting an agent that is already working
+another run is refused; the story stays `todo` for it to pick up next.
+
+So when the backlog is longer than the qualified fleet (four stories, two agents
+that can do the work), say which you want:
+
+```sh
+# a real second agent for this story: own name, own store, own attribution
+bashy weave start --run N --clone -- <agent> ... &
+```
+
+`--clone` mints a per-issue ephemeral agent (`007-w3`). They are hidden from
+`bashy agents list` (`--all` shows them) and reclaimed when the run finishes.
+The alternative — leaving the story queued — is cheaper and is the RIGHT answer
+whenever the stories share source, because cloning separates *identity*, not
+*source*: two clones on one implementation still collide at merge (§9).
+
 Recipes (typical): `claude --dangerously-skip-permissions "<body>"` · `codex exec
 --skip-git-repo-check --sandbox workspace-write "<body>"` · `opencode run
 "<body>"` · `aider --yes-always --no-check-update --message "<body>"`. Calibrate
@@ -418,6 +438,12 @@ fleet gets for free.
   can silently regress a case; sequential gating + combined re-measure catches it.
 - Chasing non-actionable failures (environment/flaky/not-our-bug) — wastes runs
   and invites regressions.
+- Staffing one agent onto two live runs. It is refused now (§7), but the reflex
+  to work around a refusal is the thing to drop: an agent is one identity, and
+  shared context across concurrent stories is what makes a worker answer
+  confidently about the wrong one.
+- Reaching for `--clone` to dodge the shared-source rule — cloning separates
+  IDENTITY, not SOURCE. Two clones on one implementation still collide at merge.
 
 ---
 
@@ -432,6 +458,7 @@ bashy sprint add/take/checkpoint/link/comment/show <id>
 bashy weave add --priority --points --tool --verify --body
 bashy weave start --no-spawn --issue N      # allocate workspace (then set up §5 isolation)
 bashy weave start --resume  --issue N -- <tool> "<body>"   # launch a run
+bashy weave start --run N --clone -- <agent>  # same agent, second concurrent run (§7)
 bashy weave list / status N / log N -f / fleet / baton
 bashy weave wait --issue N --timeout 50m &  # event-driven monitor
 bashy weave kill N --yes / salvage N / pull N / prune --stale --yes

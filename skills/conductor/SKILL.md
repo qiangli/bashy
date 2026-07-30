@@ -165,6 +165,24 @@ PLAN → (RESEARCH) → FAN-OUT → STEER → CONVERGE → RETRO. Drive it by ha
      round** (or sign it in) rather than dispatching it into a stall. Launch each
      survivor with the explicit headless form — never `--tool` bare, which hangs
      at the trust prompt: `weave start --issue N -- bash -c '<headless> "$WEAVE_ISSUE_BODY"'`.
+   - **ONE AGENT WORKS ONE RUN. To staff the same agent twice, `--clone`.**
+     An agent is a single identity — one conversation store, one kb attribution,
+     one bus cursor — so two live runs under it mix context, and a worker that
+     answers about #412 using what it learned on #411 is wrong in the way that
+     looks right. `weave start` therefore REFUSES an agent already working
+     another run, and the story stays `todo` for it to pick up next.
+     That bites the moment the backlog is longer than the fleet, which is the
+     normal case: four stories, two qualified agents. Two ways through, and
+     picking is part of scheduling —
+     - `weave start --run N --clone -- <agent>` mints a per-issue ephemeral
+       agent (`007-w3`) with its own name, store and attribution. Real
+       parallelism, because it is a real second agent. They are hidden from
+       `bashy agents list` (`--all` shows them) and reclaimed when the run ends.
+     - or leave it queued and let the agent take them in turn — cheaper in
+       tokens, and correct when the stories share source anyway (§Scheduling 1).
+     Do NOT reach for `--clone` to dodge the parallel-safety rule: cloning
+     separates *identity*, not *source*. Two clones on one implementation still
+     collide at merge.
 4. **STEER** — watch and unblock, proactively: `bashy weave list`, `… log N`,
    and let the **gate broker** auto-clear interactive blocks (`weave wait --issue
    N --broker` classifies a live gate and routes trust→keystroke / OAuth→`browser
@@ -241,6 +259,11 @@ Maximize velocity per token, not just "run agents in parallel":
    one-shot tool; verification/judging → a separate reviewer. Pick the *cheapest
    qualified* tool that clears the story's difficulty; cascade up on
    stuck/regression.
+   **When the qualified set is smaller than the story set** — one agent is the
+   only one that can do this class of work, and three stories need it — you are
+   choosing between queueing them onto that agent and cloning it (`--clone`,
+   §FAN-OUT). Clone when the stories are disjoint and the wall-clock matters;
+   queue when they share source, since the clones would only collide at merge.
 3. **Hard single-feature task = sequential grind with resume.** Decompose into
    bite-size, commit each reduction, resume until done (e.g. 143→32→10→0). Agents
    often hit the watchdog mid-work with an *uncommitted* fix — recover it and
@@ -441,6 +464,11 @@ environment-divergent units + ripple canonically in a final pass.
 - Merging all stories at once without per-story re-gate.
 - Chasing non-actionable failures.
 - Fanning out shared-source work in parallel (collides at merge) — sequence it.
+- Reaching for `--clone` to get around that: cloning separates IDENTITY, not
+  SOURCE. Two clones on one implementation still collide at merge.
+- Staffing one agent onto two live runs. It is refused now, but the reflex to
+  work around a refusal is the thing to drop: shared context across concurrent
+  stories is what makes a worker confidently answer about the wrong one.
 - Self-selecting the conductor seat, trialling yourself into it, or naming your
   own successor — the steward appoints and qualifies seats (§Seat authority).
 - Handing scope to, or accepting scope from, a sibling conductor directly — route
