@@ -1210,11 +1210,15 @@ func runFleet(noun string, args []string) {
 	case "models":
 		cmd = fleet.NewModelsCmd()
 	case "agents":
-		// `agents verify --live` actually launches each agent. The launcher lives
-		// in pkg/chat, which reads the fleet registry — so the registry cannot
-		// import it, and the binary is the one place both are in scope. The
-		// registry declares the hole; here is where it gets filled.
-		cmd = fleet.NewAgentsCmd(fleet.WithLiveProbe(liveProbeAgent))
+		// `agents verify --live` actually launches each agent, and `agents clone`
+		// branches its conversation store. Both live in pkg/chat, which reads the
+		// fleet registry — so the registry cannot import it, and the binary is the
+		// one place both are in scope. The registry declares the holes; here is
+		// where they get filled.
+		cmd = fleet.NewAgentsCmd(
+			fleet.WithLiveProbe(liveProbeAgent),
+			fleet.WithContextCloner(chat.CloneAgentContext),
+		)
 	case "people":
 		cmd = principal.NewPeopleCmd()
 	case "whois":
