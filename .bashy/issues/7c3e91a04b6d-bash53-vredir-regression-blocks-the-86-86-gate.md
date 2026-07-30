@@ -1,8 +1,9 @@
 ---
 id: 7c3e91a04b6d
 kind: bug
-title: 'bash-5.3 gate is 85/86: vredir regressed, and it blocks any bashy release'
-status: triaged
+resolution: invalid
+title: 'NOT A BUG: vredir 85/86 was an ambient-fd artifact of the test host, not a regression'
+status: closed
 stage: code
 priority: p0
 labels:
@@ -13,8 +14,47 @@ reporter: steward
 created: 2026-07-30T02:35:00Z
 ---
 
-`make test-bash` (SERIAL, the authoritative form) is **85 passed / 1 failed** on
-`0f198f0`. The gate requires 86/86, so this blocks tagging any bashy release.
+**CLOSED — INVALID. There is no bashy regression. The gate is GREEN: 86/86.**
+
+I filed this on a false diagnosis and am correcting it. The full serial suite is
+**86 passed / 0 failed** on `0f198f0` on a clean host. The 85/86 I first measured
+came from the *test host's environment*, not from bashy.
+
+## What actually happened
+
+`vredir` requires fd 42 to be **closed**: after `readonly v=42`, `exec {v}>&1`
+must fail, leaving `v=42`, so `>&$v` then fails and bash reports
+`$v: Bad file descriptor` — which the fixture greps for.
+
+The remote host I ran the gate on had **fds 0–148 all open**, fd 42 among them,
+because outpost's SSH exec channel leaks the daemon's entire fd table into
+exec'd children. With fd 42 open, `>&$v` *succeeds*, no diagnostic is produced,
+and the fixture prints `bad foo 1`.
+
+| Host | fd 42 | Result |
+|---|---|---|
+| clean local shell | closed | **86/86** |
+| via outpost ssh exec | **open** | 85/86 — `vredir` fails |
+
+Deterministic on both, isolated and in the full suite. Not a flake.
+
+The real defect is the fd leak, filed separately against outpost. This is the
+same hazard class that `sh@70734afb` ("deflake the bad-fd-7 redirect test
+against an ambient inherited fd") already patched for fd 7 — but the durable fix
+is to stop leaking fds, not to deflake each fixture.
+
+## Harness consequence, worth keeping
+
+**A conformance gate must not be run through a channel that leaks fds.** Running
+it via `outpost ssh` silently invalidates every fd-sensitive fixture and reports
+a plausible-looking failure. Same principle as never trusting a killed or
+truncated run as a scoreboard: an environment artifact is not a result.
+
+---
+
+Original (incorrect) report follows for the record.
+
+
 
 ## The failure
 
