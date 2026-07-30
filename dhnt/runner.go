@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -32,8 +33,9 @@ type RunnerMetadata struct {
 }
 
 // ExecuteTask runs one strict v2 task inside an opened workspace boundary and
-// atomically writes its evidence record. Runner v1 deliberately supports file
-// artifacts only; tree publication fails during spec validation.
+// atomically writes its evidence record. File outputs are sealed with an
+// immutable hard link; tree outputs are copied into a private staging tree,
+// re-hashed, and atomically renamed into their content-addressed destination.
 func ExecuteTask(ctx context.Context, workspace string, spec RunnerSpec, argv []string, metadata RunnerMetadata) (Run, error) {
 	if err := spec.Validate(); err != nil {
 		return Run{}, fmt.Errorf("runner spec: %w", err)
@@ -117,7 +119,7 @@ func ExecuteTask(ctx context.Context, workspace string, spec RunnerSpec, argv []
 	}
 
 	for _, artifact := range spec.Inputs {
-		digest, err := hashRootFile(root, artifact.Path)
+		digest, err := hashRootArtifact(root, artifact)
 		if err != nil || digest != artifact.SHA256 {
 			return finish(ResultInfraFail, runnerInfraExit, nil)
 		}
@@ -168,7 +170,7 @@ func ExecuteTask(ctx context.Context, workspace string, spec RunnerSpec, argv []
 		return finish(ResultCanceled, 130, nil)
 	}
 	for _, artifact := range spec.Inputs {
-		digest, err := hashRootFile(root, artifact.Path)
+		digest, err := hashRootArtifact(root, artifact)
 		if err != nil || digest != artifact.SHA256 {
 			return finish(ResultInfraFail, runnerInfraExit, nil)
 		}
@@ -181,7 +183,7 @@ func ExecuteTask(ctx context.Context, workspace string, spec RunnerSpec, argv []
 	for i, artifact := range sortedRunnerArtifacts(spec.Outputs) {
 		source := outputStage[artifact.Name]
 		target := path.Join(stage, "sealed", fmt.Sprintf("%03d", i))
-		digest, err := snapshotRootFile(root, source, target)
+		digest, err := snapshotRootArtifact(root, artifact, source, target)
 		if err != nil || digest != artifact.SHA256 {
 			return finish(ResultIncomplete, runnerIncompleteExit, nil)
 		}
@@ -189,7 +191,7 @@ func ExecuteTask(ctx context.Context, workspace string, spec RunnerSpec, argv []
 	}
 	for _, artifact := range sortedRunnerArtifacts(spec.Outputs) {
 		if preexistingOutputs[artifact.Name] {
-			digest, err := hashRootFile(root, artifact.Path)
+			digest, err := hashRootArtifact(root, artifact)
 			if err != nil || digest != artifact.SHA256 {
 				return finish(ResultInfraFail, runnerInfraExit, nil)
 			}
@@ -201,7 +203,16 @@ func ExecuteTask(ctx context.Context, workspace string, spec RunnerSpec, argv []
 			_ = root.Remove(artifact.Path)
 			return finish(ResultInfraFail, runnerInfraExit, nil)
 		}
-		if err := root.Link(sealed[artifact.Name], artifact.Path); err != nil {
+		switch artifact.Kind {
+		case ArtifactFile:
+			if err := root.Link(sealed[artifact.Name], artifact.Path); err != nil {
+				return finish(ResultInfraFail, runnerInfraExit, nil)
+			}
+		case ArtifactTree:
+			if err := root.Rename(sealed[artifact.Name], artifact.Path); err != nil {
+				return finish(ResultInfraFail, runnerInfraExit, nil)
+			}
+		default:
 			return finish(ResultInfraFail, runnerInfraExit, nil)
 		}
 		if err := syncRootParent(root, artifact.Path); err != nil {
@@ -372,6 +383,170 @@ func hashRootFile(root *os.Root, name string) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
+func hashRootArtifact(root *os.Root, artifact RunnerArtifact) (string, error) {
+	switch {
+	case artifact.Kind == ArtifactFile && artifact.DigestAlgorithm == DigestSHA256FileV1:
+		return hashRootFile(root, artifact.Path)
+	case artifact.Kind == ArtifactTree && artifact.DigestAlgorithm == DigestSHA256TreeV1:
+		return hashRootTree(root, artifact.Path)
+	default:
+		return "", fmt.Errorf("unsupported artifact kind/digest combination %q/%q",
+			artifact.Kind, artifact.DigestAlgorithm)
+	}
+}
+
+func hashRootTree(root *os.Root, name string) (string, error) {
+	if err := ensureNoSymlinkPath(root, name, false); err != nil {
+		return "", err
+	}
+	info, err := root.Lstat(name)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("artifact is not a real directory")
+	}
+	var entries []treeEntry
+	err = fs.WalkDir(root.FS(), name, func(current string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if current == name {
+			return nil
+		}
+		relative := strings.TrimPrefix(current, name+"/")
+		if err := validateTreePath(relative); err != nil {
+			return err
+		}
+		entryInfo, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if entryInfo.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%q: tree artifacts reject symlinks", current)
+		}
+		if entryInfo.IsDir() {
+			return nil
+		}
+		if !entryInfo.Mode().IsRegular() {
+			return fmt.Errorf("%q: tree artifacts reject special files", current)
+		}
+		digest, err := hashRootFile(root, current)
+		if err != nil {
+			return err
+		}
+		decoded, err := hex.DecodeString(digest)
+		if err != nil {
+			return err
+		}
+		var sum [sha256.Size]byte
+		copy(sum[:], decoded)
+		entries = append(entries, treeEntry{path: relative, digest: sum})
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return canonicalTreeDigest(entries)
+}
+
+func snapshotRootArtifact(root *os.Root, artifact RunnerArtifact, source, target string) (string, error) {
+	switch artifact.Kind {
+	case ArtifactFile:
+		return snapshotRootFile(root, source, target)
+	case ArtifactTree:
+		return snapshotRootTree(root, source, target)
+	default:
+		return "", fmt.Errorf("unsupported artifact kind %q", artifact.Kind)
+	}
+}
+
+func snapshotRootTree(root *os.Root, source, target string) (digest string, retErr error) {
+	if err := ensureNoSymlinkPath(root, source, false); err != nil {
+		return "", err
+	}
+	info, err := root.Lstat(source)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("staged tree output is not a real directory")
+	}
+	if err := root.Mkdir(target, 0o700); err != nil {
+		return "", err
+	}
+	defer func() {
+		if retErr != nil {
+			_ = root.RemoveAll(target)
+		}
+	}()
+	err = fs.WalkDir(root.FS(), source, func(current string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if current == source {
+			return nil
+		}
+		relative := strings.TrimPrefix(current, source+"/")
+		if err := validateTreePath(relative); err != nil {
+			return err
+		}
+		destination := path.Join(target, relative)
+		entryInfo, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if entryInfo.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%q: tree artifacts reject symlinks", current)
+		}
+		if entryInfo.IsDir() {
+			if err := root.Mkdir(destination, 0o700); err != nil {
+				return err
+			}
+			return nil
+		}
+		if !entryInfo.Mode().IsRegular() {
+			return fmt.Errorf("%q: tree artifacts reject special files", current)
+		}
+		input, err := root.Open(current)
+		if err != nil {
+			return err
+		}
+		opened, err := input.Stat()
+		if err != nil {
+			_ = input.Close()
+			return err
+		}
+		if !opened.Mode().IsRegular() || !os.SameFile(entryInfo, opened) {
+			_ = input.Close()
+			return fmt.Errorf("%q: tree entry changed identity while being opened", current)
+		}
+		output, err := root.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o400)
+		if err != nil {
+			_ = input.Close()
+			return err
+		}
+		_, copyErr := io.Copy(output, input)
+		syncErr := output.Sync()
+		closeOutputErr := output.Close()
+		closeInputErr := input.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if syncErr != nil {
+			return syncErr
+		}
+		if closeOutputErr != nil {
+			return closeOutputErr
+		}
+		return closeInputErr
+	})
+	if err != nil {
+		return "", err
+	}
+	return hashRootTree(root, target)
+}
+
 func snapshotRootFile(root *os.Root, source, target string) (string, error) {
 	if err := ensureNoSymlinkPath(root, source, false); err != nil {
 		return "", err
@@ -472,7 +647,7 @@ func verifyExistingDestination(root *os.Root, artifact RunnerArtifact) (bool, er
 	if err != nil || !exists {
 		return false, err
 	}
-	digest, err := hashRootFile(root, artifact.Path)
+	digest, err := hashRootArtifact(root, artifact)
 	if err != nil {
 		return false, err
 	}

@@ -41,6 +41,23 @@ func TestRunnerHelperProcess(t *testing.T) {
 		if err := os.WriteFile(output, []byte(runnerOutputBytes), 0o600); err != nil {
 			os.Exit(91)
 		}
+	case "tree-success":
+		if err := os.MkdirAll(filepath.Join(output, "nested"), 0o700); err != nil {
+			os.Exit(91)
+		}
+		if err := os.WriteFile(filepath.Join(output, "root.txt"), []byte("root\n"), 0o600); err != nil {
+			os.Exit(91)
+		}
+		if err := os.WriteFile(filepath.Join(output, "nested", "leaf.txt"), []byte("leaf\n"), 0o600); err != nil {
+			os.Exit(91)
+		}
+	case "tree-symlink":
+		if err := os.MkdirAll(output, 0o700); err != nil {
+			os.Exit(91)
+		}
+		if err := os.Symlink(os.Getenv("DHNT_INPUT_SOURCE_PATH"), filepath.Join(output, "escape")); err != nil {
+			os.Exit(91)
+		}
 	case "success-count":
 		countPath := os.Getenv("HELPER_COUNT_PATH")
 		count := byte('0')
@@ -96,6 +113,13 @@ func TestRunnerHelperProcess(t *testing.T) {
 		}
 	case "mutate-input":
 		if err := os.WriteFile(os.Getenv("DHNT_INPUT_SOURCE_PATH"), []byte("mutated"), 0o600); err != nil {
+			os.Exit(95)
+		}
+		if err := os.WriteFile(output, []byte(runnerOutputBytes), 0o600); err != nil {
+			os.Exit(91)
+		}
+	case "mutate-tree-input":
+		if err := os.WriteFile(filepath.Join(os.Getenv("DHNT_INPUT_SOURCE_PATH"), "added"), []byte("mutated"), 0o600); err != nil {
 			os.Exit(95)
 		}
 		if err := os.WriteFile(output, []byte(runnerOutputBytes), 0o600); err != nil {
@@ -194,6 +218,94 @@ func TestExecuteTaskSuccessCommitLastAndExactArgv(t *testing.T) {
 	}
 	if !equalBytes(manifest, want) {
 		t.Fatal("published manifest differs from canonical commit bytes")
+	}
+}
+
+func TestExecuteTaskPublishesVerifiedTree(t *testing.T) {
+	workspace, spec, argv := runnerFixture(t, "tree-success")
+	expected := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(expected, "nested"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(expected, "root.txt"), []byte("root\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(expected, "nested", "leaf.txt"), []byte("leaf\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	digest, err := HashArtifact(expected, ArtifactTree, DigestSHA256TreeV1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec.Outputs[0].Kind = ArtifactTree
+	spec.Outputs[0].DigestAlgorithm = DigestSHA256TreeV1
+	spec.Outputs[0].SHA256 = digest
+	spec.Outputs[0].Path = "blobs/" + digest
+	run, err := ExecuteTask(context.Background(), workspace, spec, argv, runnerMetadata())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Result.Class != ResultPass || run.OutputCommit == nil {
+		t.Fatalf("unexpected run: %+v", run)
+	}
+	published := filepath.Join(workspace, filepath.FromSlash(spec.Outputs[0].Path))
+	if got, err := HashArtifact(published, ArtifactTree, DigestSHA256TreeV1); err != nil || got != digest {
+		t.Fatalf("published tree digest = %q, %v; want %q", got, err, digest)
+	}
+	assertRunnerEvidence(t, workspace, spec, ResultPass, true)
+}
+
+func TestExecuteTaskVerifiesTreeInputBeforeAndAfterCommand(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		mode  string
+		class ResultClass
+	}{
+		{name: "unchanged", mode: "success", class: ResultPass},
+		{name: "mutated", mode: "mutate-tree-input", class: ResultInfraFail},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			workspace, spec, argv := runnerFixture(t, test.mode)
+			tree := filepath.Join(workspace, "inputs", "tree")
+			if err := os.MkdirAll(filepath.Join(tree, "nested"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(tree, "nested", "input.txt"), []byte("input\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			digest, err := HashArtifact(tree, ArtifactTree, DigestSHA256TreeV1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			spec.Inputs[0].Kind = ArtifactTree
+			spec.Inputs[0].DigestAlgorithm = DigestSHA256TreeV1
+			spec.Inputs[0].SHA256 = digest
+			spec.Inputs[0].Path = "inputs/tree"
+			run, err := ExecuteTask(context.Background(), workspace, spec, argv, runnerMetadata())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if run.Result.Class != test.class {
+				t.Fatalf("result class = %q, want %q: %+v", run.Result.Class, test.class, run)
+			}
+			if (run.OutputCommit != nil) != (test.class == ResultPass) {
+				t.Fatalf("unexpected commit for %q: %+v", test.class, run.OutputCommit)
+			}
+		})
+	}
+}
+
+func TestExecuteTaskRejectsSymlinkInTreeOutput(t *testing.T) {
+	workspace, spec, argv := runnerFixture(t, "tree-symlink")
+	spec.Outputs[0].Kind = ArtifactTree
+	spec.Outputs[0].DigestAlgorithm = DigestSHA256TreeV1
+	spec.Outputs[0].Path = "blobs/" + spec.Outputs[0].SHA256
+	run, err := ExecuteTask(context.Background(), workspace, spec, argv, runnerMetadata())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Result.Class != ResultIncomplete || run.OutputCommit != nil {
+		t.Fatalf("symlink tree produced dishonest evidence: %+v", run)
 	}
 }
 
@@ -425,12 +537,11 @@ func TestRunnerSpecRejectsAliasesTreesSecretsAndMalformedMetadata(t *testing.T) 
 			t.Fatalf("got %v", err)
 		}
 	})
-	t.Run("tree fail closed", func(t *testing.T) {
+	t.Run("kind digest mismatch", func(t *testing.T) {
 		edited := spec
 		edited.Outputs = append([]RunnerArtifact(nil), spec.Outputs...)
 		edited.Outputs[0].Kind = ArtifactTree
-		edited.Outputs[0].DigestAlgorithm = DigestSHA256TreeV1
-		if err := edited.Validate(); err == nil || !strings.Contains(err.Error(), "only file") {
+		if err := edited.Validate(); err == nil || !strings.Contains(err.Error(), "unsupported artifact kind/digest") {
 			t.Fatalf("got %v", err)
 		}
 	})

@@ -99,12 +99,11 @@ func TestLowerArgoV2FailsClosed(t *testing.T) {
 			want: "path alias",
 		},
 		{
-			name: "tree remains fail closed",
+			name: "artifact kind digest mismatch",
 			edit: func(p *Pipeline, _ *ArgoBinding) {
 				p.Matrix[0].Outputs[0].Kind = ArtifactTree
-				p.Matrix[0].Outputs[0].DigestAlgorithm = DigestSHA256TreeV1
 			},
-			want: "only file",
+			want: "tree requires",
 		},
 		{
 			name: "output is not content addressed",

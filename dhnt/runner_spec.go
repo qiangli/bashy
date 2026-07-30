@@ -136,9 +136,12 @@ func (spec RunnerSpec) Validate() error {
 				return fmt.Errorf("%s[%d].name: duplicate %q", field, i, artifact.Name)
 			}
 			names[artifact.Name] = true
-			if artifact.Kind != ArtifactFile || artifact.DigestAlgorithm != DigestSHA256FileV1 {
-				return fmt.Errorf("%s[%d]: runner v1 supports only file/%s; tree publication remains fail-closed",
-					field, i, DigestSHA256FileV1)
+			switch {
+			case artifact.Kind == ArtifactFile && artifact.DigestAlgorithm == DigestSHA256FileV1:
+			case artifact.Kind == ArtifactTree && artifact.DigestAlgorithm == DigestSHA256TreeV1:
+			default:
+				return fmt.Errorf("%s[%d]: unsupported artifact kind/digest combination %q/%q",
+					field, i, artifact.Kind, artifact.DigestAlgorithm)
 			}
 			if !cleanRelativePath(artifact.Path) || reservedRunnerPath(artifact.Path) {
 				return fmt.Errorf("%s[%d].path: must be a clean non-reserved workspace-relative path", field, i)
