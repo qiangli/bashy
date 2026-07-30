@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	dag "github.com/qiangli/coreutils/pkg/dag"
@@ -81,27 +82,66 @@ func PlanDKSPlacement(p Pipeline, facts []dag.HostFacts, now time.Time, maxAge t
 		if task.Placement == nil {
 			continue
 		}
-		spec := placementTaskSpec(task)
+		entry := matrix[task.ID]
+		spec := placementTaskSpec(task, entry)
 		switch task.Distribution {
 		case DistributionShardable:
 			if plannedReducers[task.Reducer] {
 				continue
 			}
-			manifest := &dag.ChunkManifest{SchemaVersion: 1, Suite: task.Reducer}
+			fullManifest := &dag.ChunkManifest{SchemaVersion: 1, Suite: task.Reducer}
+			type shardGroup struct {
+				spec   dag.TaskSpec
+				chunks []dag.Chunk
+			}
+			groups := map[string]*shardGroup{}
+			var groupKeys []string
 			for _, sibling := range p.Tasks {
 				if sibling.Reducer != task.Reducer {
 					continue
 				}
 				chunk := matrix[sibling.ID].Chunk
-				manifest.ChunkCount = chunk.Count
-				manifest.Chunks = append(manifest.Chunks, dag.Chunk{
+				member := dag.Chunk{
 					ID: chunk.Index, Fixtures: []dag.Fixture{{Name: sibling.ID}},
-				})
+				}
+				fullManifest.ChunkCount = chunk.Count
+				fullManifest.Chunks = append(fullManifest.Chunks, member)
+				siblingSpec := placementTaskSpec(sibling, matrix[sibling.ID])
+				keyData, err := json.Marshal(siblingSpec)
+				if err != nil {
+					return DKSPlacementPlan{}, fmt.Errorf("task %q placement identity: %w", sibling.ID, err)
+				}
+				key := string(keyData)
+				group := groups[key]
+				if group == nil {
+					group = &shardGroup{spec: siblingSpec}
+					groups[key] = group
+					groupKeys = append(groupKeys, key)
+				}
+				group.chunks = append(group.chunks, member)
 			}
-			reduction, err := dag.PlanChunkReduce(spec, manifest, facts, now, maxAge)
-			if err != nil {
-				return DKSPlacementPlan{}, fmt.Errorf("task %q: %w", task.ID, err)
+			sort.Strings(groupKeys)
+			reduction := dag.ChunkReducePlan{
+				Task: task.ID, Reducer: task.Reducer,
+				MembershipSHA256: strings.TrimPrefix(fullManifest.MembershipHash(), "m"),
 			}
+			for _, key := range groupKeys {
+				group := groups[key]
+				manifest := &dag.ChunkManifest{
+					SchemaVersion: 1, Suite: task.Reducer,
+					ChunkCount: len(group.chunks), Chunks: group.chunks,
+				}
+				partial, err := dag.PlanChunkReduce(group.spec, manifest, facts, now, maxAge)
+				if err != nil {
+					return DKSPlacementPlan{}, fmt.Errorf("task %q: %w", group.spec.Task, err)
+				}
+				reduction.Chunks = append(reduction.Chunks, partial.Chunks...)
+				reduction.RequiredChunkIndex = append(reduction.RequiredChunkIndex, partial.RequiredChunkIndex...)
+			}
+			sort.Slice(reduction.Chunks, func(i, j int) bool {
+				return reduction.Chunks[i].Index < reduction.Chunks[j].Index
+			})
+			sort.Ints(reduction.RequiredChunkIndex)
 			plan.Reductions = append(plan.Reductions, DKSReductionPlan{
 				ChunkReducePlan: reduction,
 				ManifestSHA256:  matrix[task.ID].Chunk.ManifestSHA256,
@@ -150,12 +190,13 @@ func MarshalDKSPlacementPlan(plan DKSPlacementPlan) ([]byte, error) {
 	return append(data, '\n'), nil
 }
 
-func placementTaskSpec(task Task) dag.TaskSpec {
+func placementTaskSpec(task Task, entry MatrixEntry) dag.TaskSpec {
 	p := task.Placement
 	spec := dag.TaskSpec{
 		SchemaVersion: dag.TaskSpecSchemaVersion,
 		Task:          task.ID, Venue: string(task.Lane), Distribution: dag.Distribution(task.Distribution),
 		Reducer: task.Reducer,
+		Match:   map[string]string{"os": entry.Platform.OS, "arch": entry.Platform.Arch},
 	}
 	if p != nil {
 		spec.CPUPerTask = p.CPU

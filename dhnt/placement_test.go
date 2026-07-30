@@ -118,6 +118,23 @@ func TestPlanDKSPlacementRejectsAmbiguousMatrixAndDuplicateWorkers(t *testing.T)
 	}
 }
 
+func TestPlanDKSPlacementHonorsPerShardPlatform(t *testing.T) {
+	now := time.Now().UTC()
+	pipeline := placementPipeline()
+	pipeline.Matrix[1].Platform.Arch = "arm64"
+	pipeline.Tasks[3].Placement.CohortSize = 1
+	facts := placementFacts(now, false)
+	facts[0].Arch = "arm64"
+	plan, err := PlanDKSPlacement(pipeline, facts, now, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := plan.Reductions[0].Chunks
+	if len(got) != 2 || got[0].Worker != "worker-a" || got[1].Worker != "worker-b" {
+		t.Fatalf("per-shard os/arch constraints were not preserved: %+v", got)
+	}
+}
+
 func TestDecodeDKSHostFactsIsVersionedAndStrict(t *testing.T) {
 	now := time.Now().UTC()
 	inventory := DKSHostFactsInventory{Schema: DKSHostFactsSchema, Facts: placementFacts(now, false)}
