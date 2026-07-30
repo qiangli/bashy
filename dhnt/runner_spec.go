@@ -66,8 +66,8 @@ func MarshalRunnerSpec(spec RunnerSpec) ([]byte, error) {
 	if err := spec.Validate(); err != nil {
 		return nil, err
 	}
-	spec.Argv = append([]string(nil), spec.Argv...)
-	spec.Environment = append([]Environment(nil), spec.Environment...)
+	spec.Argv = append([]string{}, spec.Argv...)
+	spec.Environment = append([]Environment{}, spec.Environment...)
 	sort.Slice(spec.Environment, func(i, j int) bool { return spec.Environment[i].Name < spec.Environment[j].Name })
 	spec.Inputs = sortedRunnerArtifacts(spec.Inputs)
 	spec.Outputs = sortedRunnerArtifacts(spec.Outputs)
@@ -188,7 +188,7 @@ func (artifact RunnerArtifact) Artifact() Artifact {
 }
 
 func sortedRunnerArtifacts(in []RunnerArtifact) []RunnerArtifact {
-	out := append([]RunnerArtifact(nil), in...)
+	out := append([]RunnerArtifact{}, in...)
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }

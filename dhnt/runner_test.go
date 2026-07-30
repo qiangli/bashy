@@ -129,6 +129,44 @@ func TestRunnerHelperProcess(t *testing.T) {
 	os.Exit(0)
 }
 
+func TestRunnerEmptyEnvironmentHelper(t *testing.T) {
+	output := os.Getenv("DHNT_OUTPUT_RESULT_PATH")
+	if output == "" {
+		return
+	}
+	if err := os.WriteFile(output, []byte(runnerOutputBytes), 0o600); err != nil {
+		os.Exit(91)
+	}
+}
+
+func TestExecuteTaskStartsWithEmptyEnvironmentArray(t *testing.T) {
+	workspace, spec, _ := runnerFixture(t, "success")
+	spec.Environment = []Environment{}
+	spec.Argv = []string{os.Args[0], "-test.run=^TestRunnerEmptyEnvironmentHelper$"}
+	encoded, err := MarshalRunnerSpec(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"environment":[]`) {
+		t.Fatalf("required empty environment encoded as null: %s", encoded)
+	}
+	nullEnvironment := []byte(strings.Replace(string(encoded), `"environment":[]`, `"environment":null`, 1))
+	if _, err := DecodeRunnerSpec(nullEnvironment); err == nil || !strings.Contains(err.Error(), "unexpected null") {
+		t.Fatalf("strict decoder accepted null environment: %v", err)
+	}
+	decoded, err := DecodeRunnerSpec(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := ExecuteTask(context.Background(), workspace, decoded, decoded.Argv, runnerMetadata())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Result.Class != ResultPass || run.OutputCommit == nil {
+		t.Fatalf("empty-environment runner did not start and pass: %+v", run)
+	}
+}
+
 func TestExecuteTaskSuccessCommitLastAndExactArgv(t *testing.T) {
 	workspace, spec, argv := runnerFixture(t, "success")
 	spec.Environment = append(spec.Environment, Environment{

@@ -48,6 +48,9 @@ func TestLowerArgoV2UsesTrustedRunnerAndDownwardIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if spec.Environment == nil || !strings.Contains(string(specJSON), `"environment":[]`) {
+		t.Fatalf("empty required environment was not encoded as an array: %s", specJSON)
+	}
 	if !slices.Equal(spec.Argv, pipeline.Tasks[0].Argv) ||
 		spec.CommitManifestPath != binding.Tasks[0].CommitManifestPath {
 		t.Fatalf("runner spec lost contract: %+v", spec)
@@ -134,7 +137,7 @@ func argoV2Fixture() (Pipeline, ArgoBinding) {
 		Tasks: []Task{{
 			ID: "test", Lane: LaneCluster, Distribution: DistributionSingle,
 			Needs: []string{}, Argv: []string{"./test", "argument with spaces", ";not-shell"},
-			WorkingDirectory: ".", Environment: []Environment{{Name: "PROFILE", Value: "smoke"}},
+			WorkingDirectory: ".", Environment: []Environment{},
 		}},
 		Matrix: []MatrixEntry{{
 			Task: "test", Platform: Platform{Backend: "k3s", OS: "linux", Arch: "arm64"},
