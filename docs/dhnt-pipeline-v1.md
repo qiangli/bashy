@@ -300,8 +300,11 @@ filesystem. The child receives a minimal environment consisting of `PATH`, an
 isolated `HOME`/`TMPDIR`, declared non-secret literals, and artifact metadata.
 Output paths point only into staging.
 
-After the child and its process group stop, the runner snapshots regular-file
-outputs into sealed staging files while hashing them. Verified files are linked
+After the child and its process group stop, the runner re-verifies every input
+before inspecting outputs. A missing input, type replacement, or digest change
+is an infrastructure failure and cannot publish outputs or a commit. The runner
+then snapshots regular-file outputs into sealed staging files while hashing
+them. Verified files are linked
 to content-addressed final names with atomic no-overwrite semantics. An existing
 destination is accepted only when it was observed before this command and still
 contains identical bytes; the command always reruns, so this is not a cache hit
@@ -319,6 +322,10 @@ snapshotting removes the workload's path from publication, but Bashy does not
 claim that an unprivileged runner sharing one writable UID with actively
 malicious concurrent code is a security sandbox. Container isolation and a
 trusted workspace/PVC controller are part of this execution boundary.
+Post-command digest verification detects persistent input corruption; a
+malicious digest-pinned workload that changes and restores identical bytes
+before the check remains inside that explicitly trusted workload/quiescent
+workspace boundary.
 
 Launch and preflight failures are `infra-fail`; a successful command with
 missing, partial, symlink, or wrong-digest output is `incomplete`; explicit

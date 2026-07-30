@@ -167,6 +167,12 @@ func ExecuteTask(ctx context.Context, workspace string, spec RunnerSpec, argv []
 	if ctx.Err() != nil {
 		return finish(ResultCanceled, 130, nil)
 	}
+	for _, artifact := range spec.Inputs {
+		digest, err := hashRootFile(root, artifact.Path)
+		if err != nil || digest != artifact.SHA256 {
+			return finish(ResultInfraFail, runnerInfraExit, nil)
+		}
+	}
 
 	sealed := make(map[string]string, len(spec.Outputs))
 	if err := root.MkdirAll(path.Join(stage, "sealed"), 0o700); err != nil {

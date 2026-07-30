@@ -94,6 +94,35 @@ func TestRunnerHelperProcess(t *testing.T) {
 		if err := os.WriteFile(os.Getenv("HELPER_COMMIT_PATH"), []byte("forged"), 0o600); err != nil {
 			os.Exit(92)
 		}
+	case "mutate-input":
+		if err := os.WriteFile(os.Getenv("DHNT_INPUT_SOURCE_PATH"), []byte("mutated"), 0o600); err != nil {
+			os.Exit(95)
+		}
+		if err := os.WriteFile(output, []byte(runnerOutputBytes), 0o600); err != nil {
+			os.Exit(91)
+		}
+	case "delete-input":
+		if err := os.Remove(os.Getenv("DHNT_INPUT_SOURCE_PATH")); err != nil {
+			os.Exit(95)
+		}
+		if err := os.WriteFile(output, []byte(runnerOutputBytes), 0o600); err != nil {
+			os.Exit(91)
+		}
+	case "replace-input":
+		input := os.Getenv("DHNT_INPUT_SOURCE_PATH")
+		replacement := input + ".replacement"
+		if err := os.WriteFile(replacement, []byte(runnerInputBytes), 0o600); err != nil {
+			os.Exit(95)
+		}
+		if err := os.Remove(input); err != nil {
+			os.Exit(95)
+		}
+		if err := os.Symlink(replacement, input); err != nil {
+			os.Exit(95)
+		}
+		if err := os.WriteFile(output, []byte(runnerOutputBytes), 0o600); err != nil {
+			os.Exit(91)
+		}
 	default:
 		os.Exit(96)
 	}
@@ -236,6 +265,28 @@ func TestExecuteTaskWrongMissingPartialAndSymlinkOutputsAreIncomplete(t *testing
 			assertRunnerEvidence(t, workspace, spec, ResultIncomplete, false)
 			if _, err := os.Stat(filepath.Join(workspace, filepath.FromSlash(spec.CommitManifestPath))); !os.IsNotExist(err) {
 				t.Fatal("invalid output published a commit")
+			}
+		})
+	}
+}
+
+func TestExecuteTaskRejectsInputMutationAfterCommand(t *testing.T) {
+	for _, mode := range []string{"mutate-input", "delete-input", "replace-input"} {
+		t.Run(mode, func(t *testing.T) {
+			workspace, spec, argv := runnerFixture(t, mode)
+			run, err := ExecuteTask(context.Background(), workspace, spec, argv, runnerMetadata())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if run.Result.Class != ResultInfraFail || run.OutputCommit != nil {
+				t.Fatalf("input mutation produced dishonest evidence: %+v", run)
+			}
+			assertRunnerEvidence(t, workspace, spec, ResultInfraFail, false)
+			if _, err := os.Stat(filepath.Join(workspace, filepath.FromSlash(spec.CommitManifestPath))); !os.IsNotExist(err) {
+				t.Fatal("mutated input allowed an output commit")
+			}
+			if _, err := os.Stat(filepath.Join(workspace, filepath.FromSlash(spec.Outputs[0].Path))); !os.IsNotExist(err) {
+				t.Fatal("mutated input allowed output publication")
 			}
 		})
 	}
