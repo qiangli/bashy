@@ -19,6 +19,10 @@ func Aggregate(p Pipeline, runs []Run) (AggregateResult, error) {
 	if err := p.Validate(); err != nil {
 		return AggregateResult{}, fmt.Errorf("pipeline: %w", err)
 	}
+	expectedRunSchema := RunSchema
+	if p.Schema == PipelineSchemaV2 {
+		expectedRunSchema = RunSchemaV2
+	}
 	expected := make(map[string]MatrixEntry, len(p.Matrix))
 	for _, entry := range p.Matrix {
 		expected[matrixKey(entry.Task, entry.Platform)] = entry
@@ -29,6 +33,10 @@ func Aggregate(p Pipeline, runs []Run) (AggregateResult, error) {
 	for i, run := range runs {
 		if err := run.Validate(); err != nil {
 			return AggregateResult{}, fmt.Errorf("run[%d]: malformed: %w", i, err)
+		}
+		if run.Schema != expectedRunSchema {
+			return AggregateResult{}, fmt.Errorf("run[%d]: schema mismatch: pipeline %q requires %q evidence, got %q",
+				i, p.Schema, expectedRunSchema, run.Schema)
 		}
 		if run.Pipeline != p.Pipeline {
 			return AggregateResult{}, fmt.Errorf("run[%d]: pipeline mismatch: got %q, want %q", i, run.Pipeline, p.Pipeline)

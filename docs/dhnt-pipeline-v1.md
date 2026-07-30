@@ -1,4 +1,4 @@
-# Portable pipeline and run evidence v1
+# Portable pipeline and run evidence
 
 `dhnt.pipeline/v1` and `dhnt.run/v1` are Bashy's first stable, portable
 pipeline/evidence contracts. They are plain JSON and contain no Argo,
@@ -71,6 +71,85 @@ code. `finishedAt` cannot precede `startedAt`.
 
 The byte-stable reference encoding is
 [`dhnt/testdata/run.golden.json`](../dhnt/testdata/run.golden.json).
+
+## Typed artifacts and atomic output-set evidence in v2
+
+`dhnt.pipeline/v2` and `dhnt.run/v2` preserve the v1 task, matrix, executor,
+result, and source shapes while making artifact identity self-describing. Every
+v2 artifact adds required closed fields:
+
+```json
+{
+  "name": "dataset",
+  "kind": "tree",
+  "digestAlgorithm": "sha256-tree-v1",
+  "sha256": "<64 lowercase hex>"
+}
+```
+
+The only valid kind/algorithm pairs are:
+
+- `file` / `sha256-file-v1`: raw SHA-256 of the regular file bytes;
+- `tree` / `sha256-tree-v1`: the portable canonical tree digest below.
+
+V1 artifacts must omit both new fields, and v2 artifacts must include them.
+Aggregation rejects v1 run evidence for a v2 pipeline and vice versa. Existing
+v1 decoding, validation, and canonical bytes remain unchanged.
+
+### `sha256-tree-v1`
+
+Tree hashing recursively includes regular files only. Symlinks and special
+files are errors and are never followed. Each entry path must be valid UTF-8,
+Unicode NFC, clean, slash-relative, non-empty, and free of backslashes and
+traversal. Entries are sorted by their UTF-8 bytes. The digest ignores file and
+directory modes, mtime, uid, gid, hard-link identity, and empty directories.
+Consequently, an empty tree has one stable identity and trees that differ only
+in excluded metadata have the same identity.
+
+The root digest is SHA-256 over this exact binary encoding:
+
+```text
+"dhnt.sha256-tree/v1\0"
+uint64be(file count)
+repeat in bytewise path order:
+    uint64be(path byte length)
+    path UTF-8 bytes
+    raw 32-byte SHA-256(file bytes)
+```
+
+The domain prefix distinguishes a tree root from a raw file digest. Fixed-width
+counts and length-prefixed paths make entry and path boundaries unambiguous.
+The public Go entry point is `dhnt.HashArtifact(path, kind, algorithm)`.
+
+### Output commit manifest
+
+A `dhnt.run/v2` record additionally requires `outputCommit`:
+
+```json
+{
+  "schema": "dhnt.output-commit/v1",
+  "digestAlgorithm": "sha256-output-commit-v1",
+  "sha256": "<64 lowercase hex>"
+}
+```
+
+Its SHA-256 is computed over the exact newline-terminated canonical JSON
+returned by `MarshalOutputCommitManifest(outputs)`. That manifest has schema
+`dhnt.output-commit/v1` and the complete, name-sorted v2 `outputs` array.
+Validation recomputes the identity, so changing, removing, or adding any output
+invalidates the run.
+
+For a filesystem runner, individual verified outputs may be staged and renamed
+first, but consumers must treat them as uncommitted until the manifest itself
+is atomically published. The manifest is the single visibility/commit point
+for the set; this avoids falsely claiming that multiple filesystem renames form
+one transaction. A future runner binding must declare its final manifest path,
+reject path and symlink aliases, and publish the manifest last.
+
+The byte-stable v2 reference encodings are
+[`pipeline-v2.golden.json`](../dhnt/testdata/pipeline-v2.golden.json),
+[`run-v2.golden.json`](../dhnt/testdata/run-v2.golden.json), and
+[`output-commit-v1.golden.json`](../dhnt/testdata/output-commit-v1.golden.json).
 
 ## Strictness and deterministic encoding
 
@@ -171,6 +250,12 @@ checksums, or publish results atomically. A workload claiming
 `dhnt.run/v1` evidence must use a separately trusted runner that verifies input
 bytes before execution and atomically verifies/publishes outputs. Argo
 `Succeeded` and these injected digest values alone are not release evidence.
+
+The current `dhnt.argo-binding/v1` lowerer accepts only
+`dhnt.pipeline/v1`. It rejects v2 rather than dropping artifact kinds or output
+commit semantics. The next migration must introduce a trusted-runner-aware
+binding that declares the output commit-manifest path and interposes that runner
+without shell reinterpretation.
 
 The separate GNU Bash 5.3 conformance jobs remain aggregated by the existing
 authoritative harness. This v1 slice strengthens native three-platform evidence

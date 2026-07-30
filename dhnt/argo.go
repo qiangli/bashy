@@ -63,6 +63,9 @@ func LowerArgo(p Pipeline, binding ArgoBinding) ([]byte, error) {
 	if err := p.Validate(); err != nil {
 		return nil, fmt.Errorf("pipeline: %w", err)
 	}
+	if p.Schema != PipelineSchema {
+		return nil, fmt.Errorf("pipeline schema %q requires the future trusted-runner Argo binding; v1 lowering cannot preserve v2 artifact semantics", p.Schema)
+	}
 	if err := binding.Validate(); err != nil {
 		return nil, fmt.Errorf("binding: %w", err)
 	}

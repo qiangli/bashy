@@ -1,0 +1,1 @@
+{"schema":"dhnt.output-commit/v1","outputs":[{"name":"report","kind":"file","digestAlgorithm":"sha256-file-v1","sha256":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},{"name":"tested-candidate","kind":"file","digestAlgorithm":"sha256-file-v1","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}]}

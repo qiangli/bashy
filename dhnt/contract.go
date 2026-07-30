@@ -18,8 +18,10 @@ import (
 )
 
 const (
-	PipelineSchema = "dhnt.pipeline/v1"
-	RunSchema      = "dhnt.run/v1"
+	PipelineSchema   = "dhnt.pipeline/v1"
+	PipelineSchemaV2 = "dhnt.pipeline/v2"
+	RunSchema        = "dhnt.run/v1"
+	RunSchemaV2      = "dhnt.run/v2"
 )
 
 type Lane string
@@ -60,9 +62,25 @@ type Source struct {
 }
 
 type Artifact struct {
-	Name   string `json:"name"`
-	SHA256 string `json:"sha256"`
+	Name            string          `json:"name"`
+	Kind            ArtifactKind    `json:"kind,omitempty"`
+	DigestAlgorithm DigestAlgorithm `json:"digestAlgorithm,omitempty"`
+	SHA256          string          `json:"sha256"`
 }
+
+type ArtifactKind string
+
+const (
+	ArtifactFile ArtifactKind = "file"
+	ArtifactTree ArtifactKind = "tree"
+)
+
+type DigestAlgorithm string
+
+const (
+	DigestSHA256FileV1 DigestAlgorithm = "sha256-file-v1"
+	DigestSHA256TreeV1 DigestAlgorithm = "sha256-tree-v1"
+)
 
 type Environment struct {
 	Name  string `json:"name"`
@@ -125,18 +143,19 @@ type Result struct {
 }
 
 type Run struct {
-	Schema     string     `json:"schema"`
-	Pipeline   string     `json:"pipeline"`
-	Task       string     `json:"task"`
-	Run        string     `json:"run"`
-	Source     Source     `json:"source"`
-	Inputs     []Artifact `json:"inputs"`
-	Executor   Executor   `json:"executor"`
-	Result     Result     `json:"result"`
-	Outputs    []Artifact `json:"outputs"`
-	StartedAt  string     `json:"startedAt"`
-	FinishedAt string     `json:"finishedAt"`
-	TraceID    string     `json:"traceId"`
+	Schema       string        `json:"schema"`
+	Pipeline     string        `json:"pipeline"`
+	Task         string        `json:"task"`
+	Run          string        `json:"run"`
+	Source       Source        `json:"source"`
+	Inputs       []Artifact    `json:"inputs"`
+	Executor     Executor      `json:"executor"`
+	Result       Result        `json:"result"`
+	Outputs      []Artifact    `json:"outputs"`
+	OutputCommit *OutputCommit `json:"outputCommit,omitempty"`
+	StartedAt    string        `json:"startedAt"`
+	FinishedAt   string        `json:"finishedAt"`
+	TraceID      string        `json:"traceId"`
 }
 
 var (
@@ -147,8 +166,10 @@ var (
 )
 
 func (p Pipeline) Validate() error {
-	if p.Schema != PipelineSchema {
-		return fmt.Errorf("schema: got %q, want %q", p.Schema, PipelineSchema)
+	switch p.Schema {
+	case PipelineSchema, PipelineSchemaV2:
+	default:
+		return fmt.Errorf("schema: got %q, want %q or %q", p.Schema, PipelineSchema, PipelineSchemaV2)
 	}
 	if err := validateID("pipeline", p.Pipeline); err != nil {
 		return err
@@ -216,10 +237,10 @@ func (p Pipeline) Validate() error {
 				return fmt.Errorf("matrix[%d]: non-shardable task %q must not declare chunk identity", i, entry.Task)
 			}
 		}
-		if err := validateArtifacts("inputs", entry.Inputs, true); err != nil {
+		if err := validateArtifacts("inputs", entry.Inputs, true, p.Schema); err != nil {
 			return fmt.Errorf("matrix[%d]: %w", i, err)
 		}
-		if err := validateArtifacts("outputs", entry.Outputs, true); err != nil {
+		if err := validateArtifacts("outputs", entry.Outputs, true, p.Schema); err != nil {
 			return fmt.Errorf("matrix[%d]: %w", i, err)
 		}
 		key := matrixKey(entry.Task, entry.Platform)
@@ -238,8 +259,10 @@ func (p Pipeline) Validate() error {
 }
 
 func (r Run) Validate() error {
-	if r.Schema != RunSchema {
-		return fmt.Errorf("schema: got %q, want %q", r.Schema, RunSchema)
+	switch r.Schema {
+	case RunSchema, RunSchemaV2:
+	default:
+		return fmt.Errorf("schema: got %q, want %q or %q", r.Schema, RunSchema, RunSchemaV2)
 	}
 	if err := validateID("pipeline", r.Pipeline); err != nil {
 		return err
@@ -253,11 +276,20 @@ func (r Run) Validate() error {
 	if err := validateSource(r.Source); err != nil {
 		return err
 	}
-	if err := validateArtifacts("inputs", r.Inputs, true); err != nil {
+	if err := validateArtifacts("inputs", r.Inputs, true, r.Schema); err != nil {
 		return err
 	}
-	if err := validateArtifacts("outputs", r.Outputs, true); err != nil {
+	if err := validateArtifacts("outputs", r.Outputs, true, r.Schema); err != nil {
 		return err
+	}
+	if r.Schema == RunSchema {
+		if r.OutputCommit != nil {
+			return errors.New("outputCommit: must be absent from dhnt.run/v1")
+		}
+	} else {
+		if err := validateOutputCommit(r.OutputCommit, r.Outputs); err != nil {
+			return err
+		}
 	}
 	if strings.TrimSpace(r.Executor.Node) == "" {
 		return errors.New("executor.node: must not be empty")
@@ -771,7 +803,7 @@ func validatePlatform(p Platform) error {
 	return nil
 }
 
-func validateArtifacts(field string, artifacts []Artifact, required bool) error {
+func validateArtifacts(field string, artifacts []Artifact, required bool, schema string) error {
 	if required && len(artifacts) == 0 {
 		return fmt.Errorf("%s: must not be empty", field)
 	}
@@ -784,6 +816,27 @@ func validateArtifacts(field string, artifacts []Artifact, required bool) error 
 			return fmt.Errorf("%s[%d].name: duplicate name %q", field, i, artifact.Name)
 		}
 		seen[artifact.Name] = true
+		switch schema {
+		case PipelineSchema, RunSchema:
+			if artifact.Kind != "" || artifact.DigestAlgorithm != "" {
+				return fmt.Errorf("%s[%d]: kind and digestAlgorithm must be absent from v1", field, i)
+			}
+		case PipelineSchemaV2, RunSchemaV2:
+			switch artifact.Kind {
+			case ArtifactFile:
+				if artifact.DigestAlgorithm != DigestSHA256FileV1 {
+					return fmt.Errorf("%s[%d].digestAlgorithm: file requires %q", field, i, DigestSHA256FileV1)
+				}
+			case ArtifactTree:
+				if artifact.DigestAlgorithm != DigestSHA256TreeV1 {
+					return fmt.Errorf("%s[%d].digestAlgorithm: tree requires %q", field, i, DigestSHA256TreeV1)
+				}
+			default:
+				return fmt.Errorf("%s[%d].kind: unknown value %q", field, i, artifact.Kind)
+			}
+		default:
+			return fmt.Errorf("schema: artifact validation does not support %q", schema)
+		}
 		if err := validateDigest(fmt.Sprintf("%s[%d].sha256", field, i), artifact.SHA256); err != nil {
 			return err
 		}
