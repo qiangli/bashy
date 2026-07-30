@@ -76,7 +76,12 @@ func PlanDKSPlacement(p Pipeline, facts []dag.HostFacts, now time.Time, maxAge t
 		}
 		matrix[entry.Task] = entry
 	}
-	plan := DKSPlacementPlan{Schema: DKSPlacementPlanSchema, Pipeline: p.Pipeline}
+	plan := DKSPlacementPlan{
+		Schema:     DKSPlacementPlanSchema,
+		Pipeline:   p.Pipeline,
+		Cohorts:    []dag.CohortPlan{},
+		Reductions: []DKSReductionPlan{},
+	}
 	plannedReducers := map[string]bool{}
 	for _, task := range p.Tasks {
 		if task.Placement == nil {

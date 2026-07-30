@@ -104,6 +104,30 @@ func TestPlanDKSPlacementRejectsHeterogeneousGangAndIsDeterministic(t *testing.T
 	}
 }
 
+func TestPlanDKSPlacementMarshalsEmptyCollectionsForTopologyOnlyPlan(t *testing.T) {
+	now := time.Now().UTC()
+	pipeline := placementPipeline()
+	pipeline.Tasks = []Task{pipeline.Tasks[3]}
+	pipeline.Tasks[0].Needs = []string{}
+	pipeline.Matrix = []MatrixEntry{pipeline.Matrix[3]}
+	plan, err := PlanDKSPlacement(
+		pipeline, placementFacts(now, false), now, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := MarshalDKSPlacementPlan(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), `"reductions":null`) ||
+		!strings.Contains(string(encoded), `"reductions":[]`) {
+		t.Fatalf("topology-only placement emitted a null collection: %s", encoded)
+	}
+	if _, err := DecodeDKSPlacementPlan(encoded); err != nil {
+		t.Fatalf("planner output was rejected by its strict decoder: %v", err)
+	}
+}
+
 func TestPlanDKSPlacementRejectsAmbiguousMatrixAndDuplicateWorkers(t *testing.T) {
 	now := time.Now().UTC()
 	pipeline := placementPipeline()
