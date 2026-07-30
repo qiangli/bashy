@@ -182,6 +182,20 @@ func DecodeDKSHostFacts(data []byte) (DKSHostFactsInventory, error) {
 	return inventory, nil
 }
 
+func DecodeDKSPlacementPlan(data []byte) (DKSPlacementPlan, error) {
+	var plan DKSPlacementPlan
+	if err := decodeStrict(data, &plan); err != nil {
+		return plan, err
+	}
+	if plan.Schema != DKSPlacementPlanSchema {
+		return plan, fmt.Errorf("schema: got %q, want %q", plan.Schema, DKSPlacementPlanSchema)
+	}
+	if err := validateID("pipeline", plan.Pipeline); err != nil {
+		return plan, err
+	}
+	return plan, nil
+}
+
 func MarshalDKSPlacementPlan(plan DKSPlacementPlan) ([]byte, error) {
 	if plan.Schema != DKSPlacementPlanSchema {
 		return nil, fmt.Errorf("schema: got %q, want %q", plan.Schema, DKSPlacementPlanSchema)

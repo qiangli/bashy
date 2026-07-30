@@ -71,6 +71,7 @@ func TestDhntNativeResultWrapAndVerifyRoundTrip(t *testing.T) {
 		t.Fatalf("wrap exit = %d", code)
 	}
 	verifiedPath := filepath.Join(dir, "verified.json")
+	commitPath := filepath.Join(dir, "commit.json")
 	canonicalPath := filepath.Join(dir, "canonical-run.json")
 	code := withDhntStdoutFile(t, canonicalPath, func() int {
 		return dhntVerifyNativeResult([]string{
@@ -82,6 +83,7 @@ func TestDhntNativeResultWrapAndVerifyRoundTrip(t *testing.T) {
 			"--expect-os", run.Executor.OS,
 			"--expect-arch", run.Executor.Arch,
 			"--artifact-output", verifiedPath,
+			"--commit-output", commitPath,
 			messagePath,
 		})
 	})
@@ -93,6 +95,13 @@ func TestDhntNativeResultWrapAndVerifyRoundTrip(t *testing.T) {
 	}
 	if got, err := os.ReadFile(canonicalPath); err != nil || string(got) != string(runJSON) {
 		t.Fatalf("canonical run mismatch: %v", err)
+	}
+	wantCommit, err := dhnt.MarshalOutputCommitManifest(run.Outputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(commitPath); err != nil || string(got) != string(wantCommit) {
+		t.Fatalf("canonical commit mismatch: %v", err)
 	}
 }
 

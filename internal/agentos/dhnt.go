@@ -42,6 +42,8 @@ func dispatchDhnt(args []string) int {
 		return dhntAggregate(args[1:])
 	case "lower-argo":
 		return dhntLowerArgo(args[1:])
+	case "lower-mixed-argo":
+		return dhntLowerMixedArgo(args[1:])
 	case "plan-dks":
 		return dhntPlanDKS(args[1:])
 	case "run-task":
@@ -72,6 +74,8 @@ Commands:
   aggregate --pipeline FILE RUN... fail-closed matrix aggregation
   lower-argo --binding FILE [PIPELINE|-]
                                    compile a strict DKS Argo Workflow
+  lower-mixed-argo --binding FILE --placement FILE --resolver FILE [PIPELINE|-]
+                                   compile a mixed real/vk-native DKS Workflow
   plan-dks --inventory FILE [PIPELINE|-]
                                    plan capacity/topology/chunk placement
   run-task --workspace DIR --spec-base64 DATA -- ARGV...
@@ -161,7 +165,7 @@ func dhntWrapNativeResult(args []string) int {
 func dhntVerifyNativeResult(args []string) int {
 	fs := flag.NewFlagSet("bashy dhnt verify-native-result", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	var name, kind, digest, node, backend, goos, arch, output string
+	var name, kind, digest, node, backend, goos, arch, output, commitOutput string
 	fs.StringVar(&name, "expect-name", "", "required artifact name")
 	fs.StringVar(&kind, "expect-kind", "", "required artifact kind (file)")
 	fs.StringVar(&digest, "expect-sha256", "", "required artifact SHA-256")
@@ -170,6 +174,7 @@ func dhntVerifyNativeResult(args []string) int {
 	fs.StringVar(&goos, "expect-os", "", "live Node OS")
 	fs.StringVar(&arch, "expect-arch", "", "live Node architecture")
 	fs.StringVar(&output, "artifact-output", "", "exclusive destination for verified bytes")
+	fs.StringVar(&commitOutput, "commit-output", "", "optional exclusive destination for canonical output-commit manifest")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -215,6 +220,17 @@ func dhntVerifyNativeResult(args []string) int {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy dhnt verify-native-result:", err)
 		return 1
+	}
+	if commitOutput != "" {
+		commit, err := dhnt.MarshalOutputCommitManifest(run.Outputs)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "bashy dhnt verify-native-result:", err)
+			return 1
+		}
+		if err := publishExclusiveFile(commitOutput, commit); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy dhnt verify-native-result:", err)
+			return 1
+		}
 	}
 	if err := publishExclusiveFile(output, payload); err != nil {
 		fmt.Fprintln(os.Stderr, "bashy dhnt verify-native-result:", err)
@@ -347,6 +363,76 @@ func dhntLowerArgo(args []string) int {
 	}
 	if _, err := os.Stdout.Write(output); err != nil {
 		fmt.Fprintln(os.Stderr, "bashy dhnt lower-argo:", err)
+		return 1
+	}
+	return 0
+}
+
+func dhntLowerMixedArgo(args []string) int {
+	fs := flag.NewFlagSet("bashy dhnt lower-mixed-argo", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	var bindingPath, placementPath, resolverPath string
+	fs.StringVar(&bindingPath, "binding", "", "dhnt.mixed-argo-binding/v1 file")
+	fs.StringVar(&placementPath, "placement", "", "dhnt.dks-placement/v1 file")
+	fs.StringVar(&resolverPath, "resolver", "", "runtime-only dhnt.dks-worker-resolver/v1 file")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if bindingPath == "" || placementPath == "" || resolverPath == "" || fs.NArg() > 1 {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-mixed-argo: --binding, --placement, --resolver, and at most one pipeline file are required")
+		return 2
+	}
+	pipelinePath := "-"
+	if fs.NArg() == 1 {
+		pipelinePath = fs.Arg(0)
+	}
+	pipelineData, err := readDhntFile(pipelinePath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-mixed-argo:", err)
+		return 2
+	}
+	bindingData, err := readDhntFile(bindingPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-mixed-argo:", err)
+		return 2
+	}
+	placementData, err := readDhntFile(placementPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-mixed-argo:", err)
+		return 2
+	}
+	resolverData, err := readDhntFile(resolverPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-mixed-argo:", err)
+		return 2
+	}
+	pipeline, err := dhnt.DecodePipeline(pipelineData)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-mixed-argo: pipeline:", err)
+		return 1
+	}
+	placement, err := dhnt.DecodeDKSPlacementPlan(placementData)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-mixed-argo: placement:", err)
+		return 1
+	}
+	binding, err := dhnt.DecodeMixedArgoBinding(bindingData)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-mixed-argo: binding:", err)
+		return 1
+	}
+	resolver, err := dhnt.DecodeDKSWorkerResolver(resolverData)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-mixed-argo: resolver:", err)
+		return 1
+	}
+	output, err := dhnt.LowerMixedDKS(pipeline, placement, binding, resolver)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-mixed-argo:", err)
+		return 1
+	}
+	if _, err := os.Stdout.Write(output); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt lower-mixed-argo:", err)
 		return 1
 	}
 	return 0

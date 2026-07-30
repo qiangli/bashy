@@ -605,9 +605,10 @@ type argoMetadata struct {
 	Annotations  map[string]string `yaml:"annotations"`
 }
 type argoSpec struct {
-	Entrypoint string         `yaml:"entrypoint"`
-	Templates  []argoTemplate `yaml:"templates"`
-	Volumes    []argoVolume   `yaml:"volumes"`
+	Entrypoint         string         `yaml:"entrypoint"`
+	ServiceAccountName string         `yaml:"serviceAccountName,omitempty"`
+	Templates          []argoTemplate `yaml:"templates"`
+	Volumes            []argoVolume   `yaml:"volumes"`
 }
 type argoTemplate struct {
 	Name                  string                `yaml:"name"`
@@ -617,6 +618,8 @@ type argoTemplate struct {
 	ActiveDeadlineSeconds *int                  `yaml:"activeDeadlineSeconds,omitempty"`
 	RetryStrategy         *argoRetryStrategy    `yaml:"retryStrategy,omitempty"`
 	Container             *argoContainer        `yaml:"container,omitempty"`
+	Steps                 [][]argoStep          `yaml:"steps,omitempty"`
+	Resource              *argoResource         `yaml:"resource,omitempty"`
 }
 type argoTemplateMetadata struct {
 	Annotations map[string]string `yaml:"annotations"`
@@ -629,16 +632,31 @@ type argoDAGTask struct {
 	Template     string   `yaml:"template"`
 	Dependencies []string `yaml:"dependencies"`
 }
+type argoStep struct {
+	Name     string `yaml:"name"`
+	Template string `yaml:"template"`
+}
+type argoResource struct {
+	Action            string `yaml:"action"`
+	SetOwnerReference bool   `yaml:"setOwnerReference"`
+	SuccessCondition  string `yaml:"successCondition"`
+	FailureCondition  string `yaml:"failureCondition"`
+	Manifest          string `yaml:"manifest"`
+}
 type argoRetryStrategy struct {
 	Limit string `yaml:"limit"`
 }
 type argoContainer struct {
-	Image        string            `yaml:"image"`
-	Command      []string          `yaml:"command"`
-	Args         []string          `yaml:"args"`
-	WorkingDir   string            `yaml:"workingDir"`
-	Env          []argoEnv         `yaml:"env"`
-	VolumeMounts []argoVolumeMount `yaml:"volumeMounts"`
+	Image        string                    `yaml:"image"`
+	Command      []string                  `yaml:"command"`
+	Args         []string                  `yaml:"args"`
+	WorkingDir   string                    `yaml:"workingDir"`
+	Env          []argoEnv                 `yaml:"env"`
+	VolumeMounts []argoVolumeMount         `yaml:"volumeMounts"`
+	Resources    *argoResourceRequirements `yaml:"resources,omitempty"`
+}
+type argoResourceRequirements struct {
+	Requests map[string]string `yaml:"requests"`
 }
 type argoEnv struct {
 	Name      string         `yaml:"name"`
