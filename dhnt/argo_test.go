@@ -208,7 +208,7 @@ func TestLowerArgoRejectsUmbrellaNanochatFixtureWithoutFiltering(t *testing.T) {
 		t.Fatal(err)
 	}
 	binding := ArgoBinding{
-		Schema: ArgoBindingSchema,
+		Schema: ArgoBindingSchemaV2,
 		Workspace: ArgoWorkspace{
 			ClaimName: "nanochat-workspace",
 			MountPath: "/workspace",
@@ -219,16 +219,19 @@ func TestLowerArgoRejectsUmbrellaNanochatFixtureWithoutFiltering(t *testing.T) {
 		matrix[entry.Task] = entry
 	}
 	for _, task := range pipeline.Tasks {
+		timeout, retries := 300, 0
 		taskBinding := ArgoTaskBinding{
-			ID:    task.ID,
-			Image: "registry.example/nanochat@sha256:" + strings.Repeat("e", 64),
+			ID: task.ID, Image: "registry.example/nanochat@sha256:" + strings.Repeat("e", 64),
+			RunnerPath: "/usr/local/bin/bashy", EvidenceDirectory: "evidence/" + task.ID,
+			CommitManifestPath: "commits/" + task.ID + ".json", NonzeroClass: ResultInfraFail,
+			TimeoutSeconds: &timeout, RetryLimit: &retries,
 		}
 		names := map[string]bool{}
 		for _, artifact := range append(append([]Artifact{}, matrix[task.ID].Inputs...), matrix[task.ID].Outputs...) {
 			if !names[artifact.Name] {
 				taskBinding.Artifacts = append(taskBinding.Artifacts, ArgoArtifactBinding{
 					Name: artifact.Name,
-					Path: "artifacts/" + artifact.Name,
+					Path: "artifacts/" + artifact.SHA256,
 				})
 				names[artifact.Name] = true
 			}

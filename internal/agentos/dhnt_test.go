@@ -1,6 +1,8 @@
 package agentos
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +10,107 @@ import (
 
 	"github.com/qiangli/bashy/dhnt"
 )
+
+func TestDhntNativeResultWrapAndVerifyRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	payload := []byte("verified native result\n")
+	sum := sha256.Sum256(payload)
+	artifact := dhnt.Artifact{
+		Name: "result", Kind: dhnt.ArtifactFile,
+		DigestAlgorithm: dhnt.DigestSHA256FileV1,
+		SHA256:          hex.EncodeToString(sum[:]),
+	}
+	exitCode := 0
+	run := dhnt.Run{
+		Schema:   dhnt.RunSchemaV2,
+		Pipeline: "mixed-v2",
+		Task:     "native",
+		Run:      "native-run",
+		Source: dhnt.Source{
+			Repository: "https://example.test/repository.git",
+			Commit:     "abc123", SHA256: strings.Repeat("a", 64),
+		},
+		Inputs: []dhnt.Artifact{{
+			Name: "input", Kind: dhnt.ArtifactFile,
+			DigestAlgorithm: dhnt.DigestSHA256FileV1,
+			SHA256:          strings.Repeat("b", 64),
+		}},
+		Executor: dhnt.Executor{
+			Node: "dragon-vk-native", Backend: "vk-native",
+			OS: "darwin", Arch: "arm64",
+		},
+		Result:     dhnt.Result{Class: dhnt.ResultPass, ExitCode: &exitCode},
+		Outputs:    []dhnt.Artifact{artifact},
+		StartedAt:  "2026-07-30T00:00:00Z",
+		FinishedAt: "2026-07-30T00:00:01Z",
+		TraceID:    "0123456789abcdef0123456789abcdef",
+	}
+	commit, err := dhnt.NewOutputCommit(run.Outputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.OutputCommit = &commit
+	runJSON, err := dhnt.MarshalRun(run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runPath := filepath.Join(dir, "run.json")
+	artifactPath := filepath.Join(dir, "result.json")
+	if err := os.WriteFile(runPath, runJSON, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(artifactPath, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	messagePath := filepath.Join(dir, "message")
+	if code := withDhntStdoutFile(t, messagePath, func() int {
+		return dhntWrapNativeResult([]string{
+			"--run", runPath, "--artifact", artifactPath,
+		})
+	}); code != 0 {
+		t.Fatalf("wrap exit = %d", code)
+	}
+	verifiedPath := filepath.Join(dir, "verified.json")
+	canonicalPath := filepath.Join(dir, "canonical-run.json")
+	code := withDhntStdoutFile(t, canonicalPath, func() int {
+		return dhntVerifyNativeResult([]string{
+			"--expect-name", artifact.Name,
+			"--expect-kind", string(artifact.Kind),
+			"--expect-sha256", artifact.SHA256,
+			"--expect-node", run.Executor.Node,
+			"--expect-backend", run.Executor.Backend,
+			"--expect-os", run.Executor.OS,
+			"--expect-arch", run.Executor.Arch,
+			"--artifact-output", verifiedPath,
+			messagePath,
+		})
+	})
+	if code != 0 {
+		t.Fatalf("verify exit = %d", code)
+	}
+	if got, err := os.ReadFile(verifiedPath); err != nil || string(got) != string(payload) {
+		t.Fatalf("verified payload = %q, %v", got, err)
+	}
+	if got, err := os.ReadFile(canonicalPath); err != nil || string(got) != string(runJSON) {
+		t.Fatalf("canonical run mismatch: %v", err)
+	}
+}
+
+func withDhntStdoutFile(t *testing.T, path string, run func() int) int {
+	t.Helper()
+	output, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stdout
+	os.Stdout = output
+	code := run()
+	os.Stdout = old
+	if err := output.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return code
+}
 
 func TestDhntEmitRunRejectsAbsentExitCode(t *testing.T) {
 	digest := strings.Repeat("a", 64)

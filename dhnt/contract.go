@@ -11,6 +11,7 @@ import (
 	"path"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -93,14 +94,31 @@ type Platform struct {
 	Arch    string `json:"arch"`
 }
 
+// PlacementRequirement is the portable capacity/topology request carried by a
+// v2 task. Quantities are minimums; TopologyKey groups coupled workers by an
+// observed domain such as kubernetes.io/hostname.
+type PlacementRequirement struct {
+	CPU                    int               `json:"cpu,omitempty"`
+	MemoryBytes            uint64            `json:"memoryBytes,omitempty"`
+	AcceleratorKind        string            `json:"acceleratorKind,omitempty"`
+	AcceleratorFamily      string            `json:"acceleratorFamily,omitempty"`
+	AcceleratorCount       int               `json:"acceleratorCount,omitempty"`
+	AcceleratorMemoryBytes uint64            `json:"acceleratorMemoryBytes,omitempty"`
+	MinimumCapacity        map[string]uint64 `json:"minimumCapacity,omitempty"`
+	TopologyKey            string            `json:"topologyKey,omitempty"`
+	CohortSize             int               `json:"cohortSize,omitempty"`
+}
+
 type Task struct {
-	ID               string        `json:"id"`
-	Lane             Lane          `json:"lane"`
-	Distribution     Distribution  `json:"distribution"`
-	Needs            []string      `json:"needs"`
-	Argv             []string      `json:"argv"`
-	WorkingDirectory string        `json:"workingDirectory"`
-	Environment      []Environment `json:"environment"`
+	ID               string                `json:"id"`
+	Lane             Lane                  `json:"lane"`
+	Distribution     Distribution          `json:"distribution"`
+	Needs            []string              `json:"needs"`
+	Argv             []string              `json:"argv"`
+	WorkingDirectory string                `json:"workingDirectory"`
+	Environment      []Environment         `json:"environment"`
+	Placement        *PlacementRequirement `json:"placement,omitempty"`
+	Reducer          string                `json:"reducer,omitempty"`
 }
 
 // Chunk pins one stable, one-based shard identity. ManifestSHA256 identifies
@@ -189,6 +207,11 @@ func (p Pipeline) Validate() error {
 			if err := validateNonSecretEnvironment(task.Environment); err != nil {
 				return fmt.Errorf("tasks[%d]: %w", i, err)
 			}
+			if err := validatePlacementRequirement(task); err != nil {
+				return fmt.Errorf("tasks[%d]: %w", i, err)
+			}
+		} else if task.Placement != nil || task.Reducer != "" {
+			return fmt.Errorf("tasks[%d]: placement and reducer must be absent from v1", i)
 		}
 		if _, exists := tasks[task.ID]; exists {
 			return fmt.Errorf("tasks[%d]: duplicate task %q", i, task.ID)
@@ -258,6 +281,79 @@ func (p Pipeline) Validate() error {
 	for id := range tasks {
 		if !covered[id] {
 			return fmt.Errorf("matrix: task %q has no declared platform", id)
+		}
+	}
+	if p.Schema == PipelineSchemaV2 {
+		if err := validateReduceCoverage(tasks, chunks); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validatePlacementRequirement(task Task) error {
+	if task.Placement != nil {
+		p := task.Placement
+		if p.CPU < 0 || p.AcceleratorCount < 0 || p.CohortSize < 0 {
+			return errors.New("placement quantities must not be negative")
+		}
+		if p.AcceleratorKind == "" && (p.AcceleratorFamily != "" || p.AcceleratorCount != 0 || p.AcceleratorMemoryBytes != 0) {
+			return errors.New("placement acceleratorKind is required for accelerator capacity")
+		}
+		for key, minimum := range p.MinimumCapacity {
+			if strings.TrimSpace(key) == "" || minimum == 0 {
+				return fmt.Errorf("placement minimumCapacity %q must be positive", key)
+			}
+		}
+	}
+	if task.Distribution == DistributionTopologyCoupled {
+		if task.Placement == nil || task.Placement.TopologyKey == "" || task.Placement.CohortSize < 1 {
+			return errors.New("topology-coupled task requires placement.topologyKey and positive cohortSize")
+		}
+	}
+	if task.Distribution == DistributionShardable && task.Placement != nil && task.Reducer == "" {
+		return errors.New("shardable task requires reducer")
+	}
+	return nil
+}
+
+func validateReduceCoverage(tasks map[string]Task, chunks map[string]Chunk) error {
+	type group struct {
+		count    int
+		manifest string
+		indexes  map[int]string
+	}
+	groups := map[string]*group{}
+	for taskID, chunk := range chunks {
+		task := tasks[taskID]
+		if task.Reducer == "" {
+			continue // pre-placement v2 compatibility; new planned tasks opt in
+		}
+		reducer, ok := tasks[task.Reducer]
+		if !ok {
+			return fmt.Errorf("task %q names unknown reducer %q", taskID, task.Reducer)
+		}
+		if !slices.Contains(reducer.Needs, taskID) {
+			return fmt.Errorf("reducer %q does not depend on shard %q", reducer.ID, taskID)
+		}
+		g := groups[task.Reducer]
+		if g == nil {
+			g = &group{count: chunk.Count, manifest: chunk.ManifestSHA256, indexes: map[int]string{}}
+			groups[task.Reducer] = g
+		}
+		if g.count != chunk.Count || g.manifest != chunk.ManifestSHA256 {
+			return fmt.Errorf("reducer %q mixes incompatible chunk manifests", task.Reducer)
+		}
+		if prior := g.indexes[chunk.Index]; prior != "" {
+			return fmt.Errorf("reducer %q has duplicate chunk %d from %q and %q", task.Reducer, chunk.Index, prior, taskID)
+		}
+		g.indexes[chunk.Index] = taskID
+	}
+	for reducer, g := range groups {
+		for index := 1; index <= g.count; index++ {
+			if g.indexes[index] == "" {
+				return fmt.Errorf("reducer %q is missing chunk %d/%d", reducer, index, g.count)
+			}
 		}
 	}
 	return nil

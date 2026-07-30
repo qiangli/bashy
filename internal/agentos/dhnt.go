@@ -9,9 +9,11 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/qiangli/bashy/dhnt"
 )
@@ -32,10 +34,16 @@ func dispatchDhnt(args []string) int {
 		return dhntValidate(args[1:], false, true)
 	case "emit-run":
 		return dhntEmitRun(args[1:])
+	case "verify-native-result":
+		return dhntVerifyNativeResult(args[1:])
+	case "wrap-native-result":
+		return dhntWrapNativeResult(args[1:])
 	case "aggregate":
 		return dhntAggregate(args[1:])
 	case "lower-argo":
 		return dhntLowerArgo(args[1:])
+	case "plan-dks":
+		return dhntPlanDKS(args[1:])
 	case "run-task":
 		return dhntRunTask(args[1:])
 	case "help", "-h", "--help":
@@ -57,11 +65,200 @@ Commands:
   validate-run [FILE|-]            strictly validate dhnt.run/v1 or v2
   canonicalize-run [FILE|-]        validate and print deterministic JSON
   emit-run FLAGS                   emit deterministic dhnt.run/v1 JSON
+  verify-native-result FLAGS [FILE|-]
+                                   verify one bounded vk-native result artifact
+  wrap-native-result --run FILE --artifact FILE
+                                   emit one bounded canonical result marker
   aggregate --pipeline FILE RUN... fail-closed matrix aggregation
   lower-argo --binding FILE [PIPELINE|-]
                                    compile a strict DKS Argo Workflow
+  plan-dks --inventory FILE [PIPELINE|-]
+                                   plan capacity/topology/chunk placement
   run-task --workspace DIR --spec-base64 DATA -- ARGV...
                                    execute one trusted runner task`)
+}
+
+func dhntWrapNativeResult(args []string) int {
+	fs := flag.NewFlagSet("bashy dhnt wrap-native-result", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	var runPath, artifactPath string
+	fs.StringVar(&runPath, "run", "", "canonical passing dhnt.run/v2 file")
+	fs.StringVar(&artifactPath, "artifact", "", "small regular file bound by the run")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 || runPath == "" || artifactPath == "" {
+		fmt.Fprintln(os.Stderr, "bashy dhnt wrap-native-result: --run and --artifact are required")
+		return 2
+	}
+	runData, err := readDhntFile(runPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt wrap-native-result:", err)
+		return 2
+	}
+	run, err := dhnt.DecodeRun(runData)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt wrap-native-result:", err)
+		return 1
+	}
+	if run.Schema != dhnt.RunSchemaV2 || len(run.Outputs) != 1 {
+		fmt.Fprintln(os.Stderr, "bashy dhnt wrap-native-result: run must be dhnt.run/v2 with exactly one output")
+		return 1
+	}
+	linkInfo, err := os.Lstat(artifactPath)
+	if err != nil || linkInfo.Mode()&os.ModeSymlink != 0 {
+		fmt.Fprintln(os.Stderr, "bashy dhnt wrap-native-result: artifact must be a regular non-symlink file")
+		return 1
+	}
+	artifactFile, err := os.Open(artifactPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt wrap-native-result:", err)
+		return 1
+	}
+	defer artifactFile.Close()
+	info, err := artifactFile.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		fmt.Fprintln(os.Stderr, "bashy dhnt wrap-native-result: artifact must be a regular non-symlink file")
+		return 1
+	}
+	if info.Size() > dhnt.MaxNativeResultArtifactBytes {
+		fmt.Fprintf(os.Stderr, "bashy dhnt wrap-native-result: artifact exceeds %d bytes\n",
+			dhnt.MaxNativeResultArtifactBytes)
+		return 1
+	}
+	artifactData, err := io.ReadAll(io.LimitReader(
+		artifactFile, dhnt.MaxNativeResultArtifactBytes+1))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt wrap-native-result:", err)
+		return 1
+	}
+	if len(artifactData) > dhnt.MaxNativeResultArtifactBytes {
+		fmt.Fprintf(os.Stderr, "bashy dhnt wrap-native-result: artifact exceeds %d bytes\n",
+			dhnt.MaxNativeResultArtifactBytes)
+		return 1
+	}
+	result, err := dhnt.NewNativeResult(run, run.Outputs[0], artifactData)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt wrap-native-result:", err)
+		return 1
+	}
+	data, err := dhnt.MarshalNativeResult(result)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt wrap-native-result:", err)
+		return 1
+	}
+	if _, err := fmt.Fprint(os.Stdout, dhnt.NativeResultMarker); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt wrap-native-result:", err)
+		return 1
+	}
+	if _, err := os.Stdout.Write(data); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt wrap-native-result:", err)
+		return 1
+	}
+	return 0
+}
+
+func dhntVerifyNativeResult(args []string) int {
+	fs := flag.NewFlagSet("bashy dhnt verify-native-result", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	var name, kind, digest, node, backend, goos, arch, output string
+	fs.StringVar(&name, "expect-name", "", "required artifact name")
+	fs.StringVar(&kind, "expect-kind", "", "required artifact kind (file)")
+	fs.StringVar(&digest, "expect-sha256", "", "required artifact SHA-256")
+	fs.StringVar(&node, "expect-node", "", "live Pod executor node")
+	fs.StringVar(&backend, "expect-backend", "", "live Node backend")
+	fs.StringVar(&goos, "expect-os", "", "live Node OS")
+	fs.StringVar(&arch, "expect-arch", "", "live Node architecture")
+	fs.StringVar(&output, "artifact-output", "", "exclusive destination for verified bytes")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() > 1 || name == "" || kind == "" || digest == "" ||
+		node == "" || backend == "" || goos == "" || arch == "" || output == "" {
+		fmt.Fprintln(os.Stderr, "bashy dhnt verify-native-result: all --expect-* flags and --artifact-output are required")
+		return 2
+	}
+	input := "-"
+	if fs.NArg() == 1 {
+		input = fs.Arg(0)
+	}
+	var reader io.Reader = os.Stdin
+	var file *os.File
+	var err error
+	if input != "-" {
+		file, err = os.Open(input)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "bashy dhnt verify-native-result:", err)
+			return 2
+		}
+		defer file.Close()
+		reader = file
+	}
+	message, err := io.ReadAll(io.LimitReader(reader, dhnt.MaxNativeResultMessageBytes+1))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt verify-native-result:", err)
+		return 2
+	}
+	digestAlgorithm := dhnt.DigestSHA256FileV1
+	if kind != string(dhnt.ArtifactFile) {
+		digestAlgorithm = dhnt.DigestSHA256TreeV1
+	}
+	payload, run, err := dhnt.VerifyNativeResultMessage(message, dhnt.NativeResultExpectation{
+		Artifact: dhnt.Artifact{
+			Name: name, Kind: dhnt.ArtifactKind(kind),
+			DigestAlgorithm: digestAlgorithm, SHA256: digest,
+		},
+		Executor: dhnt.Executor{
+			Node: node, Backend: backend, OS: goos, Arch: arch,
+		},
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt verify-native-result:", err)
+		return 1
+	}
+	if err := publishExclusiveFile(output, payload); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt verify-native-result:", err)
+		return 1
+	}
+	canonical, err := dhnt.MarshalRun(run)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt verify-native-result:", err)
+		return 1
+	}
+	if _, err := os.Stdout.Write(canonical); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt verify-native-result:", err)
+		return 1
+	}
+	return 0
+}
+
+func publishExclusiveFile(target string, content []byte) error {
+	parent := filepath.Dir(target)
+	staged, err := os.CreateTemp(parent, "."+filepath.Base(target)+".")
+	if err != nil {
+		return err
+	}
+	stagedName := staged.Name()
+	defer os.Remove(stagedName)
+	if err := staged.Chmod(0o600); err != nil {
+		staged.Close()
+		return err
+	}
+	if _, err := staged.Write(content); err != nil {
+		staged.Close()
+		return err
+	}
+	if err := staged.Sync(); err != nil {
+		staged.Close()
+		return err
+	}
+	if err := staged.Close(); err != nil {
+		return err
+	}
+	if err := os.Link(stagedName, target); err != nil {
+		return fmt.Errorf("publish verified artifact without overwrite: %w", err)
+	}
+	return nil
 }
 
 func dhntRunTask(args []string) int {
@@ -150,6 +347,75 @@ func dhntLowerArgo(args []string) int {
 	}
 	if _, err := os.Stdout.Write(output); err != nil {
 		fmt.Fprintln(os.Stderr, "bashy dhnt lower-argo:", err)
+		return 1
+	}
+	return 0
+}
+
+func dhntPlanDKS(args []string) int {
+	fs := flag.NewFlagSet("bashy dhnt plan-dks", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	var inventoryPath, nowText string
+	var maxFactAge time.Duration
+	fs.StringVar(&inventoryPath, "inventory", "", "dhnt.host-facts/v1 file")
+	fs.DurationVar(&maxFactAge, "max-fact-age", 10*time.Minute, "maximum accepted age of observed facts")
+	fs.StringVar(&nowText, "now", "", "RFC3339 planning time (default current UTC time)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if inventoryPath == "" || fs.NArg() > 1 {
+		fmt.Fprintln(os.Stderr, "bashy dhnt plan-dks: --inventory and at most one pipeline file are required")
+		return 2
+	}
+	if maxFactAge <= 0 {
+		fmt.Fprintln(os.Stderr, "bashy dhnt plan-dks: --max-fact-age must be positive")
+		return 2
+	}
+	now := time.Now().UTC()
+	if nowText != "" {
+		parsed, err := time.Parse(time.RFC3339, nowText)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "bashy dhnt plan-dks: --now must be RFC3339:", err)
+			return 2
+		}
+		now = parsed.UTC()
+	}
+	pipelinePath := "-"
+	if fs.NArg() == 1 {
+		pipelinePath = fs.Arg(0)
+	}
+	pipelineData, err := readDhntFile(pipelinePath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt plan-dks:", err)
+		return 2
+	}
+	inventoryData, err := readDhntFile(inventoryPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt plan-dks:", err)
+		return 2
+	}
+	pipeline, err := dhnt.DecodePipeline(pipelineData)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt plan-dks: pipeline:", err)
+		return 1
+	}
+	inventory, err := dhnt.DecodeDKSHostFacts(inventoryData)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt plan-dks: inventory:", err)
+		return 1
+	}
+	plan, err := dhnt.PlanDKSPlacement(pipeline, inventory.Facts, now, maxFactAge)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt plan-dks:", err)
+		return 1
+	}
+	output, err := dhnt.MarshalDKSPlacementPlan(plan)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt plan-dks:", err)
+		return 1
+	}
+	if _, err := os.Stdout.Write(output); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt plan-dks:", err)
 		return 1
 	}
 	return 0
