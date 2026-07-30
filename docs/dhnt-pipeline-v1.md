@@ -265,12 +265,12 @@ and additionally requires, per task:
 - `runnerPath`: a clean absolute path to the trusted Bashy runner inside the
   digest-pinned task image;
 - total artifact name/path coverage;
-- workspace-relative `evidencePath` and `commitManifestPath`;
+- workspace-relative `evidenceDirectory` and `commitManifestPath`;
 - `nonzeroClass`, exactly `test-fail` or `infra-fail`;
 - explicit positive `timeoutSeconds` and explicit bounded `retryLimit` (zero is
   valid when retries are intentionally disabled).
 
-Artifact, evidence, and commit paths must neither alias nor be
+Artifact, evidence-directory, and commit paths must neither alias nor be
 ancestor/descendant-related. Evidence and commit paths must also be unique
 across tasks. The current runner supports only `file` /
 `sha256-file-v1`, and each output's final basename must equal its digest.
@@ -308,7 +308,10 @@ contains identical bytes; the command always reruns, so this is not a cache hit
 or provenance claim. A mismatched destination fails closed. A crash may leave
 unreferenced verified blobs, but the canonical commit manifest is linked last
 as the single success visibility point. Only after that publication can a
-passing `dhnt.run/v2` record be atomically written.
+passing `dhnt.run/v2` record can be atomically linked at
+`<evidenceDirectory>/<podUID>.json`. Evidence publication never overwrites:
+every retry attempt retains its own immutable record, and a preexisting
+attempt destination fails closed.
 
 Input verification assumes the opened workspace is quiescent against hostile
 same-root metadata races. `os.Root` prevents path escape, and staged output

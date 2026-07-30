@@ -36,7 +36,7 @@ type RunnerSpec struct {
 	Environment        []Environment    `json:"environment"`
 	Inputs             []RunnerArtifact `json:"inputs"`
 	Outputs            []RunnerArtifact `json:"outputs"`
-	EvidencePath       string           `json:"evidencePath"`
+	EvidenceDirectory  string           `json:"evidenceDirectory"`
 	CommitManifestPath string           `json:"commitManifestPath"`
 	NonzeroClass       ResultClass      `json:"nonzeroClass"`
 	Platform           Platform         `json:"platform"`
@@ -109,20 +109,20 @@ func (spec RunnerSpec) Validate() error {
 	default:
 		return fmt.Errorf("nonzeroClass: must be %q or %q", ResultTestFail, ResultInfraFail)
 	}
-	if !cleanRelativePath(spec.EvidencePath) {
-		return fmt.Errorf("evidencePath: must be a clean workspace-relative path")
+	if !cleanRelativePath(spec.EvidenceDirectory) {
+		return fmt.Errorf("evidenceDirectory: must be a clean workspace-relative path")
 	}
 	if !cleanRelativePath(spec.CommitManifestPath) {
 		return fmt.Errorf("commitManifestPath: must be a clean workspace-relative path")
 	}
-	if reservedRunnerPath(spec.EvidencePath) || reservedRunnerPath(spec.CommitManifestPath) {
+	if reservedRunnerPath(spec.EvidenceDirectory) || reservedRunnerPath(spec.CommitManifestPath) {
 		return fmt.Errorf("runner paths must not use reserved .dhnt-staging")
 	}
-	if spec.EvidencePath == spec.CommitManifestPath {
-		return fmt.Errorf("path alias: evidence and commit manifest both use %q", spec.EvidencePath)
+	if spec.EvidenceDirectory == spec.CommitManifestPath {
+		return fmt.Errorf("path alias: evidence directory and commit manifest both use %q", spec.EvidenceDirectory)
 	}
 	allPaths := map[string]string{
-		spec.EvidencePath:       "evidence",
+		spec.EvidenceDirectory:  "evidence directory",
 		spec.CommitManifestPath: "commit manifest",
 	}
 	validate := func(field string, artifacts []RunnerArtifact, output bool) error {

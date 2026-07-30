@@ -92,7 +92,7 @@ func TestLowerArgoV2FailsClosed(t *testing.T) {
 		},
 		{
 			name: "evidence aliases artifact ancestor",
-			edit: func(_ *Pipeline, b *ArgoBinding) { b.Tasks[0].EvidencePath = "blobs" },
+			edit: func(_ *Pipeline, b *ArgoBinding) { b.Tasks[0].EvidenceDirectory = "blobs" },
 			want: "path alias",
 		},
 		{
@@ -160,7 +160,7 @@ func argoV2Fixture() (Pipeline, ArgoBinding) {
 				{Name: "source", Path: "inputs/source"},
 				{Name: "report", Path: "blobs/" + outputDigest},
 			},
-			EvidencePath: "evidence/test.json", CommitManifestPath: "commits/test.json",
+			EvidenceDirectory: "evidence/test", CommitManifestPath: "commits/test.json",
 			NonzeroClass: ResultTestFail, TimeoutSeconds: &timeout, RetryLimit: &retries,
 		}},
 	}

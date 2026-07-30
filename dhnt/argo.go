@@ -34,7 +34,7 @@ type ArgoTaskBinding struct {
 	Image              string                `json:"image"`
 	RunnerPath         string                `json:"runnerPath,omitempty"`
 	Artifacts          []ArgoArtifactBinding `json:"artifacts"`
-	EvidencePath       string                `json:"evidencePath,omitempty"`
+	EvidenceDirectory  string                `json:"evidenceDirectory,omitempty"`
 	CommitManifestPath string                `json:"commitManifestPath,omitempty"`
 	NonzeroClass       ResultClass           `json:"nonzeroClass,omitempty"`
 	TimeoutSeconds     *int                  `json:"timeoutSeconds,omitempty"`
@@ -283,7 +283,7 @@ func lowerArgoV2(p Pipeline, binding ArgoBinding) ([]byte, error) {
 			path string
 			kind string
 		}{
-			{taskBinding.EvidencePath, "evidence"},
+			{taskBinding.EvidenceDirectory, "evidence directory"},
 			{taskBinding.CommitManifestPath, "commit manifest"},
 		} {
 			if prior, exists := claimedRuntimePaths[item.path]; exists {
@@ -413,7 +413,7 @@ func runnerSpecForTask(p Pipeline, task Task, entry MatrixEntry, binding ArgoTas
 		Environment:        append([]Environment(nil), task.Environment...),
 		Inputs:             inputs,
 		Outputs:            outputs,
-		EvidencePath:       binding.EvidencePath,
+		EvidenceDirectory:  binding.EvidenceDirectory,
 		CommitManifestPath: binding.CommitManifestPath,
 		NonzeroClass:       binding.NonzeroClass,
 		Platform:           entry.Platform,
@@ -453,8 +453,8 @@ func (binding ArgoBinding) Validate() error {
 			return fmt.Errorf("tasks[%d].retryLimit: must be between 0 and 10", i)
 		}
 		if binding.Schema == ArgoBindingSchema {
-			if task.RunnerPath != "" || task.EvidencePath != "" || task.CommitManifestPath != "" || task.NonzeroClass != "" {
-				return fmt.Errorf("tasks[%d]: runnerPath, evidencePath, commitManifestPath, and nonzeroClass must be absent from v1", i)
+			if task.RunnerPath != "" || task.EvidenceDirectory != "" || task.CommitManifestPath != "" || task.NonzeroClass != "" {
+				return fmt.Errorf("tasks[%d]: runnerPath, evidenceDirectory, commitManifestPath, and nonzeroClass must be absent from v1", i)
 			}
 		} else {
 			if task.TimeoutSeconds == nil {
@@ -466,8 +466,8 @@ func (binding ArgoBinding) Validate() error {
 			if !cleanAbsolutePath(task.RunnerPath) {
 				return fmt.Errorf("tasks[%d].runnerPath: must be a clean absolute path", i)
 			}
-			if !cleanRelativePath(task.EvidencePath) {
-				return fmt.Errorf("tasks[%d].evidencePath: must be a clean workspace-relative path", i)
+			if !cleanRelativePath(task.EvidenceDirectory) {
+				return fmt.Errorf("tasks[%d].evidenceDirectory: must be a clean workspace-relative path", i)
 			}
 			if !cleanRelativePath(task.CommitManifestPath) {
 				return fmt.Errorf("tasks[%d].commitManifestPath: must be a clean workspace-relative path", i)
@@ -498,10 +498,10 @@ func (binding ArgoBinding) Validate() error {
 			for artifactPath, name := range pathSeen {
 				allPaths[artifactPath] = "artifact " + name
 			}
-			if prior, exists := allPaths[task.EvidencePath]; exists {
-				return fmt.Errorf("tasks[%d].evidencePath: aliases %s", i, prior)
+			if prior, exists := allPaths[task.EvidenceDirectory]; exists {
+				return fmt.Errorf("tasks[%d].evidenceDirectory: aliases %s", i, prior)
 			}
-			allPaths[task.EvidencePath] = "evidence"
+			allPaths[task.EvidenceDirectory] = "evidence directory"
 			if prior, exists := allPaths[task.CommitManifestPath]; exists {
 				return fmt.Errorf("tasks[%d].commitManifestPath: aliases %s", i, prior)
 			}

@@ -53,6 +53,17 @@ func TestRunnerHelperProcess(t *testing.T) {
 		if err := os.WriteFile(output, []byte(runnerOutputBytes), 0o600); err != nil {
 			os.Exit(91)
 		}
+	case "fail-once":
+		countPath := os.Getenv("HELPER_COUNT_PATH")
+		if _, err := os.Stat(countPath); os.IsNotExist(err) {
+			if err := os.WriteFile(countPath, []byte("1"), 0o600); err != nil {
+				os.Exit(93)
+			}
+			os.Exit(7)
+		}
+		if err := os.WriteFile(output, []byte(runnerOutputBytes), 0o600); err != nil {
+			os.Exit(91)
+		}
 	case "wrong":
 		if err := os.WriteFile(output, []byte("wrong"), 0o600); err != nil {
 			os.Exit(91)
@@ -139,6 +150,56 @@ func TestExecuteTaskPreexistingIdenticalDestinationsStillReruns(t *testing.T) {
 	}
 	if string(count) != "2" {
 		t.Fatalf("preexisting commit was treated as a cache hit; command count %q", count)
+	}
+}
+
+func TestExecuteTaskRetriesPreserveEveryAttemptEvidence(t *testing.T) {
+	workspace, spec, argv := runnerFixture(t, "fail-once")
+	spec.NonzeroClass = ResultTestFail
+	spec.Environment = append(spec.Environment, Environment{
+		Name: "HELPER_COUNT_PATH", Value: filepath.Join(workspace, "attempt-count"),
+	})
+	firstMetadata := runnerMetadata()
+	first, err := ExecuteTask(context.Background(), workspace, spec, argv, firstMetadata)
+	if err != nil || first.Result.Class != ResultTestFail {
+		t.Fatalf("first attempt: %+v, %v", first, err)
+	}
+	secondMetadata := runnerMetadata()
+	secondMetadata.PodUID = "11234567-89ab-cdef-0123-456789abcdef"
+	second, err := ExecuteTask(context.Background(), workspace, spec, argv, secondMetadata)
+	if err != nil || second.Result.Class != ResultPass {
+		t.Fatalf("second attempt: %+v, %v", second, err)
+	}
+	firstEvidence := readRunnerEvidence(t, workspace, spec, firstMetadata)
+	secondEvidence := readRunnerEvidence(t, workspace, spec, secondMetadata)
+	if firstEvidence.Result.Class != ResultTestFail || firstEvidence.OutputCommit != nil {
+		t.Fatalf("first evidence was overwritten: %+v", firstEvidence)
+	}
+	if secondEvidence.Result.Class != ResultPass || secondEvidence.OutputCommit == nil {
+		t.Fatalf("second evidence missing: %+v", secondEvidence)
+	}
+}
+
+func TestExecuteTaskRejectsPreexistingAttemptEvidence(t *testing.T) {
+	workspace, spec, argv := runnerFixture(t, "success")
+	metadata := runnerMetadata()
+	directory := filepath.Join(workspace, filepath.FromSlash(spec.EvidenceDirectory))
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	destination := filepath.Join(directory, metadata.PodUID+".json")
+	if err := os.WriteFile(destination, []byte("forged"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ExecuteTask(context.Background(), workspace, spec, argv, metadata); err == nil ||
+		!strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("got %v", err)
+	}
+	if got, err := os.ReadFile(destination); err != nil || string(got) != "forged" {
+		t.Fatalf("forged destination was rewritten: %q, %v", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, filepath.FromSlash(spec.CommitManifestPath))); !os.IsNotExist(err) {
+		t.Fatal("preexisting evidence destination allowed a commit")
 	}
 }
 
@@ -270,7 +331,7 @@ func TestRunnerSpecRejectsAliasesTreesSecretsAndMalformedMetadata(t *testing.T) 
 	workspace, spec, argv := runnerFixture(t, "success")
 	t.Run("ancestor alias", func(t *testing.T) {
 		edited := spec
-		edited.EvidencePath = pathParent(spec.Outputs[0].Path)
+		edited.EvidenceDirectory = pathParent(spec.Outputs[0].Path)
 		if err := edited.Validate(); err == nil || !strings.Contains(err.Error(), "path alias") {
 			t.Fatalf("got %v", err)
 		}
@@ -365,7 +426,7 @@ func runnerFixture(t *testing.T, mode string) (string, RunnerSpec, []string) {
 			Name: "result", Kind: ArtifactFile, DigestAlgorithm: DigestSHA256FileV1,
 			SHA256: outputHex, Path: "blobs/" + outputHex,
 		}},
-		EvidencePath:       "evidence/test.json",
+		EvidenceDirectory:  "evidence/test",
 		CommitManifestPath: "commits/test.json",
 		NonzeroClass:       ResultInfraFail,
 		Platform:           Platform{Backend: "k3s", OS: "linux", Arch: "arm64"},
@@ -385,7 +446,15 @@ func runnerMetadata() RunnerMetadata {
 
 func assertRunnerEvidence(t *testing.T, workspace string, spec RunnerSpec, class ResultClass, committed bool) {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(spec.EvidencePath)))
+	run := readRunnerEvidence(t, workspace, spec, runnerMetadata())
+	if run.Result.Class != class || (run.OutputCommit != nil) != committed {
+		t.Fatalf("unexpected persisted evidence: %+v", run)
+	}
+}
+
+func readRunnerEvidence(t *testing.T, workspace string, spec RunnerSpec, metadata RunnerMetadata) Run {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(spec.EvidenceDirectory), metadata.PodUID+".json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,9 +462,7 @@ func assertRunnerEvidence(t *testing.T, workspace string, spec RunnerSpec, class
 	if err != nil {
 		t.Fatal(err)
 	}
-	if run.Result.Class != class || (run.OutputCommit != nil) != committed {
-		t.Fatalf("unexpected persisted evidence: %+v", run)
-	}
+	return run
 }
 
 func equalStrings(a, b []string) bool {

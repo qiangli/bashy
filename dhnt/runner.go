@@ -69,7 +69,7 @@ func ExecuteTask(ctx context.Context, workspace string, spec RunnerSpec, argv []
 		run.Result = Result{Class: class, ExitCode: intPtr(exitCode)}
 		run.OutputCommit = commit
 		run.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
-		if err := publishRunEvidence(root, spec.EvidencePath, run, ""); err != nil {
+		if err := publishRunEvidence(root, spec.EvidenceDirectory, metadata.PodUID, run); err != nil {
 			return Run{}, err
 		}
 		return run, nil
@@ -106,8 +106,14 @@ func ExecuteTask(ctx context.Context, workspace string, spec RunnerSpec, argv []
 	if err := ensureParent(root, spec.CommitManifestPath); err != nil {
 		return finish(ResultInfraFail, runnerInfraExit, nil)
 	}
-	if err := ensureParent(root, spec.EvidencePath); err != nil {
+	if err := ensureEvidenceDirectory(root, spec.EvidenceDirectory); err != nil {
 		return Run{}, err
+	}
+	evidencePath := path.Join(spec.EvidenceDirectory, metadata.PodUID+".json")
+	if exists, err := rootPathExists(root, evidencePath); err != nil {
+		return Run{}, err
+	} else if exists {
+		return Run{}, fmt.Errorf("evidence destination %q already exists", evidencePath)
 	}
 
 	for _, artifact := range spec.Inputs {
@@ -289,8 +295,8 @@ func validateRunnerWorkspacePaths(root *os.Root, spec RunnerSpec) error {
 			return fmt.Errorf("output %q: %w", artifact.Name, err)
 		}
 	}
-	if err := ensureNoSymlinkPath(root, spec.EvidencePath, true); err != nil {
-		return fmt.Errorf("evidence: %w", err)
+	if err := ensureNoSymlinkPath(root, spec.EvidenceDirectory, true); err != nil {
+		return fmt.Errorf("evidence directory: %w", err)
 	}
 	if err := ensureNoSymlinkPath(root, spec.CommitManifestPath, true); err != nil {
 		return fmt.Errorf("commit manifest: %w", err)
@@ -547,32 +553,53 @@ func syncRootParent(root *os.Root, name string) error {
 	return file.Sync()
 }
 
-func publishRunEvidence(root *os.Root, evidencePath string, run Run, stage string) error {
+func publishRunEvidence(root *os.Root, evidenceDirectory, podUID string, run Run) error {
 	data, err := MarshalRun(run)
 	if err != nil {
 		return err
 	}
-	if stage == "" {
-		if err := ensureParent(root, evidencePath); err != nil {
-			return err
-		}
-		random := make([]byte, 8)
-		if _, err := rand.Read(random); err != nil {
-			return err
-		}
-		stage = path.Join(path.Dir(evidencePath), "."+path.Base(evidencePath)+"."+hex.EncodeToString(random)+".tmp")
+	if err := ensureEvidenceDirectory(root, evidenceDirectory); err != nil {
+		return err
 	}
+	evidencePath := path.Join(evidenceDirectory, podUID+".json")
+	random := make([]byte, 8)
+	if _, err := rand.Read(random); err != nil {
+		return err
+	}
+	stage := path.Join(evidenceDirectory, "."+podUID+"."+hex.EncodeToString(random)+".tmp")
 	if err := writeSealedRootFile(root, stage, data); err != nil {
 		return err
 	}
 	defer root.Remove(stage)
-	if err := ensureNoSymlinkPath(root, evidencePath, true); err != nil {
+	if exists, err := rootPathExists(root, evidencePath); err != nil {
 		return err
+	} else if exists {
+		return fmt.Errorf("evidence destination %q already exists", evidencePath)
 	}
-	if err := root.Rename(stage, evidencePath); err != nil {
+	if err := root.Link(stage, evidencePath); err != nil {
 		return err
 	}
 	return syncRootParent(root, evidencePath)
+}
+
+func ensureEvidenceDirectory(root *os.Root, directory string) error {
+	if err := ensureNoSymlinkPath(root, directory, true); err != nil {
+		return err
+	}
+	if err := root.MkdirAll(directory, 0o755); err != nil {
+		return err
+	}
+	if err := ensureNoSymlinkPath(root, directory, false); err != nil {
+		return err
+	}
+	info, err := root.Lstat(directory)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("evidence directory %q is not a directory", directory)
+	}
+	return nil
 }
 
 func equalBytes(a, b []byte) bool {
