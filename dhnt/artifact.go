@@ -26,7 +26,9 @@ type treeEntry struct {
 }
 
 // HashArtifact hashes one local filesystem artifact according to the closed v2
-// artifact contract. It never follows symlinks.
+// artifact contract. It rejects symlinks observed during traversal, but it is
+// not a hostile concurrent-filesystem boundary; callers needing that guarantee
+// must provide an opened, quiescent workspace such as ExecuteTask's boundary.
 func HashArtifact(name string, kind ArtifactKind, algorithm DigestAlgorithm) (string, error) {
 	switch {
 	case kind == ArtifactFile && algorithm == DigestSHA256FileV1:

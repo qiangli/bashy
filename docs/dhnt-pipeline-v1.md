@@ -123,7 +123,7 @@ The public Go entry point is `dhnt.HashArtifact(path, kind, algorithm)`.
 
 ### Output commit manifest
 
-A `dhnt.run/v2` record additionally requires `outputCommit`:
+A passing `dhnt.run/v2` record additionally requires `outputCommit`:
 
 ```json
 {
@@ -138,6 +138,11 @@ returned by `MarshalOutputCommitManifest(outputs)`. That manifest has schema
 `dhnt.output-commit/v1` and the complete, name-sorted v2 `outputs` array.
 Validation recomputes the identity, so changing, removing, or adding any output
 invalidates the run.
+
+Every non-pass class forbids `outputCommit`. Its `outputs` remain the pipeline's
+declared expectations, not a claim that those bytes were observed or published.
+Thus a failed, incomplete, or canceled command cannot carry committed-output
+evidence even when it exits after writing partial files.
 
 For a filesystem runner, individual verified outputs may be staged and renamed
 first, but consumers must treat them as uncommitted until the manifest itself
@@ -251,12 +256,74 @@ checksums, or publish results atomically. A workload claiming
 bytes before execution and atomically verifies/publishes outputs. Argo
 `Succeeded` and these injected digest values alone are not release evidence.
 
-The current `dhnt.argo-binding/v1` lowerer accepts only
-`dhnt.pipeline/v1`. It rejects v2 rather than dropping artifact kinds or output
-commit semantics. The next migration must introduce a trusted-runner-aware
-binding that declares the output commit-manifest path and interposes that runner
-without shell reinterpretation.
+### Runner-aware Argo v2
+
+`dhnt.argo-binding/v2` is the trusted-runner binding for
+`dhnt.pipeline/v2`. It retains the pre-existing PVC and immutable image fields
+and additionally requires, per task:
+
+- `runnerPath`: a clean absolute path to the trusted Bashy runner inside the
+  digest-pinned task image;
+- total artifact name/path coverage;
+- workspace-relative `evidencePath` and `commitManifestPath`;
+- `nonzeroClass`, exactly `test-fail` or `infra-fail`;
+- explicit positive `timeoutSeconds` and explicit bounded `retryLimit` (zero is
+  valid when retries are intentionally disabled).
+
+Artifact, evidence, and commit paths must neither alias nor be
+ancestor/descendant-related. Evidence and commit paths must also be unique
+across tasks. The current runner supports only `file` /
+`sha256-file-v1`, and each output's final basename must equal its digest.
+`tree` execution fails closed: portable atomic no-replace publication of a
+directory tree is not claimed. Tree hashing remains available for planning and
+offline verification.
+
+The lowerer invokes:
+
+```text
+<runnerPath> dhnt run-task --workspace <mount> --spec-base64 <spec> -- <exact argv...>
+```
+
+There is no shell reinterpretation. The canonical non-secret
+`dhnt.runner-spec/v1` repeats the exact argv, source, task environment,
+platform, typed artifacts, paths, and classification policy; the runner rejects
+argv drift. Kubernetes injects `spec.nodeName` and `metadata.uid` through the
+Downward API. The runner rejects malformed values and authors observed
+executor identity from them. The trusted collector must still compare the Pod's
+selected node and live node labels before accepting evidence; injected metadata
+does not replace that external check.
+
+The runner opens the workspace with Go's descriptor-backed `os.Root`, rejects
+observed symlink and special-file components, checks path aliases, verifies all
+inputs, and creates a unique reserved `.dhnt-staging` directory on the same
+filesystem. The child receives a minimal environment consisting of `PATH`, an
+isolated `HOME`/`TMPDIR`, declared non-secret literals, and artifact metadata.
+Output paths point only into staging.
+
+After the child and its process group stop, the runner snapshots regular-file
+outputs into sealed staging files while hashing them. Verified files are linked
+to content-addressed final names with atomic no-overwrite semantics. An existing
+destination is accepted only when it was observed before this command and still
+contains identical bytes; the command always reruns, so this is not a cache hit
+or provenance claim. A mismatched destination fails closed. A crash may leave
+unreferenced verified blobs, but the canonical commit manifest is linked last
+as the single success visibility point. Only after that publication can a
+passing `dhnt.run/v2` record be atomically written.
+
+Input verification assumes the opened workspace is quiescent against hostile
+same-root metadata races. `os.Root` prevents path escape, and staged output
+snapshotting removes the workload's path from publication, but Bashy does not
+claim that an unprivileged runner sharing one writable UID with actively
+malicious concurrent code is a security sandbox. Container isolation and a
+trusted workspace/PVC controller are part of this execution boundary.
+
+Launch and preflight failures are `infra-fail`; a successful command with
+missing, partial, symlink, or wrong-digest output is `incomplete`; explicit
+signals and context interruption are `canceled`; ordinary nonzero command exits
+use the binding's closed policy. No non-pass record carries an output commit.
+S3/object transfer, cache provenance, and tree publication are outside runner
+v1 and remain separate future contracts.
 
 The separate GNU Bash 5.3 conformance jobs remain aggregated by the existing
-authoritative harness. This v1 slice strengthens native three-platform evidence
-without changing Bash 5.3 requirements, adding Argo, or mutating a cluster.
+authoritative harness. These additive contracts do not change that release
+gate's three-platform policy or treat Argo status as evidence.

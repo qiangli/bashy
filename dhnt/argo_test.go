@@ -1,12 +1,171 @@
 package dhnt
 
 import (
+	"encoding/base64"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 )
+
+func TestLowerArgoV2UsesTrustedRunnerAndDownwardIdentity(t *testing.T) {
+	pipeline, binding := argoV2Fixture()
+	output, err := LowerArgo(pipeline, binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow argoWorkflow
+	if err := yaml.Unmarshal(output, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	if len(workflow.Spec.Templates) != 2 {
+		t.Fatalf("unexpected templates: %+v", workflow.Spec.Templates)
+	}
+	container := workflow.Spec.Templates[1].Container
+	if container == nil || !slices.Equal(container.Command, []string{"/usr/local/bin/bashy"}) {
+		t.Fatalf("trusted runner is not the command: %+v", container)
+	}
+	separator := slices.Index(container.Args, "--")
+	if separator < 0 || !slices.Equal(container.Args[separator+1:], pipeline.Tasks[0].Argv) {
+		t.Fatalf("original argv was not preserved after --: %+v", container.Args)
+	}
+	if separator < 2 || container.Args[0] != "dhnt" || container.Args[1] != "run-task" {
+		t.Fatalf("runner wrapper missing: %+v", container.Args)
+	}
+	var encoded string
+	for i, arg := range container.Args {
+		if arg == "--spec-base64" && i+1 < len(container.Args) {
+			encoded = container.Args[i+1]
+		}
+	}
+	specJSON, err := base64.StdEncoding.Strict().DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, err := DecodeRunnerSpec(specJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(spec.Argv, pipeline.Tasks[0].Argv) ||
+		spec.CommitManifestPath != binding.Tasks[0].CommitManifestPath {
+		t.Fatalf("runner spec lost contract: %+v", spec)
+	}
+	env := map[string]string{}
+	for _, item := range container.Env {
+		if item.ValueFrom == nil || item.ValueFrom.FieldRef == nil {
+			t.Fatalf("v2 runner env accepted an untrusted literal: %+v", item)
+		}
+		env[item.Name] = item.ValueFrom.FieldRef.FieldPath
+	}
+	if env["DHNT_EXECUTOR_NODE"] != "spec.nodeName" || env["DHNT_POD_UID"] != "metadata.uid" {
+		t.Fatalf("Downward API identity missing: %+v", env)
+	}
+}
+
+func TestLowerArgoV2FailsClosed(t *testing.T) {
+	tests := []struct {
+		name string
+		edit func(*Pipeline, *ArgoBinding)
+		want string
+	}{
+		{
+			name: "missing runner",
+			edit: func(_ *Pipeline, b *ArgoBinding) { b.Tasks[0].RunnerPath = "" },
+			want: "runnerPath",
+		},
+		{
+			name: "missing timeout",
+			edit: func(_ *Pipeline, b *ArgoBinding) { b.Tasks[0].TimeoutSeconds = nil },
+			want: "timeoutSeconds",
+		},
+		{
+			name: "missing retry policy",
+			edit: func(_ *Pipeline, b *ArgoBinding) { b.Tasks[0].RetryLimit = nil },
+			want: "retryLimit",
+		},
+		{
+			name: "incomplete artifact coverage",
+			edit: func(_ *Pipeline, b *ArgoBinding) { b.Tasks[0].Artifacts = b.Tasks[0].Artifacts[:1] },
+			want: "binding lacks output",
+		},
+		{
+			name: "evidence aliases artifact ancestor",
+			edit: func(_ *Pipeline, b *ArgoBinding) { b.Tasks[0].EvidencePath = "blobs" },
+			want: "path alias",
+		},
+		{
+			name: "tree remains fail closed",
+			edit: func(p *Pipeline, _ *ArgoBinding) {
+				p.Matrix[0].Outputs[0].Kind = ArtifactTree
+				p.Matrix[0].Outputs[0].DigestAlgorithm = DigestSHA256TreeV1
+			},
+			want: "only file",
+		},
+		{
+			name: "output is not content addressed",
+			edit: func(_ *Pipeline, b *ArgoBinding) { b.Tasks[0].Artifacts[1].Path = "blobs/latest" },
+			want: "basename must equal",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pipeline, binding := argoV2Fixture()
+			tt.edit(&pipeline, &binding)
+			if _, err := LowerArgo(pipeline, binding); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("got %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func argoV2Fixture() (Pipeline, ArgoBinding) {
+	inputDigest := strings.Repeat("a", 64)
+	outputDigest := strings.Repeat("b", 64)
+	pipeline := Pipeline{
+		Schema:   PipelineSchemaV2,
+		Pipeline: "runner-smoke",
+		Source: Source{
+			Repository: "https://example.test/project.git",
+			Commit:     "abc123",
+			SHA256:     strings.Repeat("c", 64),
+		},
+		Tasks: []Task{{
+			ID: "test", Lane: LaneCluster, Distribution: DistributionSingle,
+			Needs: []string{}, Argv: []string{"./test", "argument with spaces", ";not-shell"},
+			WorkingDirectory: ".", Environment: []Environment{{Name: "PROFILE", Value: "smoke"}},
+		}},
+		Matrix: []MatrixEntry{{
+			Task: "test", Platform: Platform{Backend: "k3s", OS: "linux", Arch: "arm64"},
+			Inputs: []Artifact{{
+				Name: "source", Kind: ArtifactFile, DigestAlgorithm: DigestSHA256FileV1, SHA256: inputDigest,
+			}},
+			Outputs: []Artifact{{
+				Name: "report", Kind: ArtifactFile, DigestAlgorithm: DigestSHA256FileV1, SHA256: outputDigest,
+			}},
+		}},
+	}
+	timeout, retries := 300, 1
+	binding := ArgoBinding{
+		Schema: ArgoBindingSchemaV2,
+		Workspace: ArgoWorkspace{
+			ClaimName: "runner-workspace",
+			MountPath: "/workspace",
+		},
+		Tasks: []ArgoTaskBinding{{
+			ID: "test", Image: "registry.example/project@sha256:" + strings.Repeat("d", 64),
+			RunnerPath: "/usr/local/bin/bashy",
+			Artifacts: []ArgoArtifactBinding{
+				{Name: "source", Path: "inputs/source"},
+				{Name: "report", Path: "blobs/" + outputDigest},
+			},
+			EvidencePath: "evidence/test.json", CommitManifestPath: "commits/test.json",
+			NonzeroClass: ResultTestFail, TimeoutSeconds: &timeout, RetryLimit: &retries,
+		}},
+	}
+	return pipeline, binding
+}
 
 func TestLowerArgoCheckedInAllClusterFixture(t *testing.T) {
 	pipelineData, err := os.ReadFile("testdata/argo.pipeline.json")

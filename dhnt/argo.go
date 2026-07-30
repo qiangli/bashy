@@ -2,6 +2,7 @@ package dhnt
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"path"
@@ -13,7 +14,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const ArgoBindingSchema = "dhnt.argo-binding/v1"
+const (
+	ArgoBindingSchema   = "dhnt.argo-binding/v1"
+	ArgoBindingSchemaV2 = "dhnt.argo-binding/v2"
+)
 
 type ArgoWorkspace struct {
 	ClaimName string `json:"claimName"`
@@ -26,11 +30,15 @@ type ArgoArtifactBinding struct {
 }
 
 type ArgoTaskBinding struct {
-	ID             string                `json:"id"`
-	Image          string                `json:"image"`
-	Artifacts      []ArgoArtifactBinding `json:"artifacts"`
-	TimeoutSeconds *int                  `json:"timeoutSeconds,omitempty"`
-	RetryLimit     *int                  `json:"retryLimit,omitempty"`
+	ID                 string                `json:"id"`
+	Image              string                `json:"image"`
+	RunnerPath         string                `json:"runnerPath,omitempty"`
+	Artifacts          []ArgoArtifactBinding `json:"artifacts"`
+	EvidencePath       string                `json:"evidencePath,omitempty"`
+	CommitManifestPath string                `json:"commitManifestPath,omitempty"`
+	NonzeroClass       ResultClass           `json:"nonzeroClass,omitempty"`
+	TimeoutSeconds     *int                  `json:"timeoutSeconds,omitempty"`
+	RetryLimit         *int                  `json:"retryLimit,omitempty"`
 }
 
 // ArgoBinding supplies execution facts that deliberately do not belong in the
@@ -63,11 +71,17 @@ func LowerArgo(p Pipeline, binding ArgoBinding) ([]byte, error) {
 	if err := p.Validate(); err != nil {
 		return nil, fmt.Errorf("pipeline: %w", err)
 	}
-	if p.Schema != PipelineSchema {
-		return nil, fmt.Errorf("pipeline schema %q requires the future trusted-runner Argo binding; v1 lowering cannot preserve v2 artifact semantics", p.Schema)
-	}
 	if err := binding.Validate(); err != nil {
 		return nil, fmt.Errorf("binding: %w", err)
+	}
+	if p.Schema == PipelineSchemaV2 {
+		if binding.Schema != ArgoBindingSchemaV2 {
+			return nil, fmt.Errorf("pipeline schema %q requires binding schema %q", p.Schema, ArgoBindingSchemaV2)
+		}
+		return lowerArgoV2(p, binding)
+	}
+	if binding.Schema != ArgoBindingSchema {
+		return nil, fmt.Errorf("pipeline schema %q requires binding schema %q", p.Schema, ArgoBindingSchema)
 	}
 	if !kubeNameRE.MatchString(p.Pipeline) || len(p.Pipeline) > 52 {
 		return nil, fmt.Errorf("pipeline %q is not a Kubernetes-safe name (lowercase DNS name, at most 52 characters)", p.Pipeline)
@@ -185,9 +199,232 @@ func LowerArgo(p Pipeline, binding ArgoBinding) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
+func lowerArgoV2(p Pipeline, binding ArgoBinding) ([]byte, error) {
+	if !kubeNameRE.MatchString(p.Pipeline) || len(p.Pipeline) > 52 {
+		return nil, fmt.Errorf("pipeline %q is not a Kubernetes-safe name (lowercase DNS name, at most 52 characters)", p.Pipeline)
+	}
+	matrix := make(map[string]MatrixEntry, len(p.Tasks))
+	for _, entry := range p.Matrix {
+		if _, exists := matrix[entry.Task]; exists {
+			return nil, fmt.Errorf("task %q has multiple matrix rows; Argo lowering requires one already-expanded task per row", entry.Task)
+		}
+		matrix[entry.Task] = entry
+	}
+	bindings := make(map[string]ArgoTaskBinding, len(binding.Tasks))
+	for _, task := range binding.Tasks {
+		bindings[task.ID] = task
+	}
+	if len(bindings) != len(p.Tasks) {
+		return nil, fmt.Errorf("binding task coverage mismatch: got %d, want %d", len(bindings), len(p.Tasks))
+	}
+	workflow := argoWorkflow{
+		APIVersion: "argoproj.io/v1alpha1",
+		Kind:       "Workflow",
+		Metadata: argoMetadata{
+			GenerateName: p.Pipeline + "-",
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "bashy-dhnt",
+				"dhnt.io/pipeline":             p.Pipeline,
+			},
+			Annotations: map[string]string{
+				"dhnt.io/source-commit": p.Source.Commit,
+				"dhnt.io/source-sha256": p.Source.SHA256,
+				"dhnt.io/evidence":      RunSchemaV2,
+			},
+		},
+		Spec: argoSpec{
+			Entrypoint: "pipeline",
+			Volumes: []argoVolume{{
+				Name:                  "workspace",
+				PersistentVolumeClaim: argoPVC{ClaimName: binding.Workspace.ClaimName},
+			}},
+		},
+	}
+	claimedRuntimePaths := map[string]string{}
+	workflowPaths := map[string]string{}
+	workflowArtifacts := map[string]Artifact{}
+	tasks := append([]Task(nil), p.Tasks...)
+	sort.Slice(tasks, func(i, j int) bool { return tasks[i].ID < tasks[j].ID })
+	dag := argoTemplate{Name: "pipeline"}
+	for _, task := range tasks {
+		if !kubeNameRE.MatchString(task.ID) || len(task.ID) > 63 {
+			return nil, fmt.Errorf("task %q is not a Kubernetes-safe lowercase DNS name", task.ID)
+		}
+		if task.Lane != LaneCluster && task.Lane != LaneContainer {
+			return nil, fmt.Errorf("task %q: lane %q cannot run on DKS Argo without changing its declared semantics", task.ID, task.Lane)
+		}
+		if task.Distribution != DistributionSingle && task.Distribution != DistributionShardable {
+			return nil, fmt.Errorf("task %q: distribution %q is unsupported (no fake replication, DDP, or gang scheduling)", task.ID, task.Distribution)
+		}
+		entry := matrix[task.ID]
+		if entry.Platform.Backend != "k3s" || entry.Platform.OS != "linux" {
+			return nil, fmt.Errorf("task %q: DKS Argo requires platform backend k3s and OS linux, got %s/%s",
+				task.ID, entry.Platform.Backend, entry.Platform.OS)
+		}
+		taskBinding, ok := bindings[task.ID]
+		if !ok {
+			return nil, fmt.Errorf("task %q: missing binding", task.ID)
+		}
+		spec, err := runnerSpecForTask(p, task, entry, taskBinding)
+		if err != nil {
+			return nil, fmt.Errorf("task %q: %w", task.ID, err)
+		}
+		for _, artifact := range append(append([]RunnerArtifact(nil), spec.Inputs...), spec.Outputs...) {
+			if prior, exists := workflowPaths[artifact.Path]; !exists {
+				workflowPaths[artifact.Path] = "task " + task.ID + " artifact " + artifact.Name
+				workflowArtifacts[artifact.Path] = artifact.Artifact()
+			} else if !strings.Contains(prior, " artifact ") {
+				return nil, fmt.Errorf("task %q: artifact path %q aliases %s", task.ID, artifact.Path, prior)
+			} else if workflowArtifacts[artifact.Path] != artifact.Artifact() {
+				return nil, fmt.Errorf("task %q: artifact path %q has conflicting immutable identities", task.ID, artifact.Path)
+			}
+		}
+		for _, item := range []struct {
+			path string
+			kind string
+		}{
+			{taskBinding.EvidencePath, "evidence"},
+			{taskBinding.CommitManifestPath, "commit manifest"},
+		} {
+			if prior, exists := claimedRuntimePaths[item.path]; exists {
+				return nil, fmt.Errorf("task %q: %s path %q is already used by %s", task.ID, item.kind, item.path, prior)
+			}
+			if prior, exists := workflowPaths[item.path]; exists {
+				return nil, fmt.Errorf("task %q: %s path %q aliases %s", task.ID, item.kind, item.path, prior)
+			}
+			claimedRuntimePaths[item.path] = "task " + task.ID + " " + item.kind
+			workflowPaths[item.path] = "task " + task.ID + " " + item.kind
+		}
+		specJSON, err := MarshalRunnerSpec(spec)
+		if err != nil {
+			return nil, fmt.Errorf("task %q: runner spec: %w", task.ID, err)
+		}
+		dag.DAG.Tasks = append(dag.DAG.Tasks, argoDAGTask{
+			Name: task.ID, Template: task.ID, Dependencies: sortedStrings(task.Needs),
+		})
+		template := argoTemplate{
+			Name: task.ID,
+			Metadata: &argoTemplateMetadata{Annotations: map[string]string{
+				"dhnt.io/distribution":    string(task.Distribution),
+				"dhnt.io/runner-contract": RunnerSpecSchema,
+			}},
+			NodeSelector: map[string]string{
+				"kubernetes.io/arch":      entry.Platform.Arch,
+				"kubernetes.io/os":        "linux",
+				"outpost.dhnt.io/backend": "k3s",
+			},
+			Container: &argoContainer{
+				Image:   taskBinding.Image,
+				Command: []string{taskBinding.RunnerPath},
+				Args: append([]string{
+					"dhnt", "run-task",
+					"--workspace", binding.Workspace.MountPath,
+					"--spec-base64", base64.StdEncoding.EncodeToString(specJSON),
+					"--",
+				}, task.Argv...),
+				WorkingDir: path.Join(binding.Workspace.MountPath, task.WorkingDirectory),
+				Env: []argoEnv{
+					{Name: "DHNT_EXECUTOR_NODE", ValueFrom: &argoEnvSource{
+						FieldRef: &argoFieldRef{FieldPath: "spec.nodeName"},
+					}},
+					{Name: "DHNT_POD_UID", ValueFrom: &argoEnvSource{
+						FieldRef: &argoFieldRef{FieldPath: "metadata.uid"},
+					}},
+				},
+				VolumeMounts: []argoVolumeMount{{
+					Name: "workspace", MountPath: binding.Workspace.MountPath,
+				}},
+			},
+		}
+		if taskBinding.TimeoutSeconds != nil {
+			template.ActiveDeadlineSeconds = taskBinding.TimeoutSeconds
+		}
+		if taskBinding.RetryLimit != nil {
+			template.RetryStrategy = &argoRetryStrategy{Limit: strconv.Itoa(*taskBinding.RetryLimit)}
+		}
+		workflow.Spec.Templates = append(workflow.Spec.Templates, template)
+	}
+	if err := rejectPathAliases(workflowPaths); err != nil {
+		return nil, fmt.Errorf("workflow paths: %w", err)
+	}
+	workflow.Spec.Templates = append([]argoTemplate{dag}, workflow.Spec.Templates...)
+	var out bytes.Buffer
+	encoder := yaml.NewEncoder(&out)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(workflow); err != nil {
+		return nil, err
+	}
+	if err := encoder.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+func runnerSpecForTask(p Pipeline, task Task, entry MatrixEntry, binding ArgoTaskBinding) (RunnerSpec, error) {
+	paths := make(map[string]string, len(binding.Artifacts))
+	for _, artifact := range binding.Artifacts {
+		paths[artifact.Name] = artifact.Path
+	}
+	expected := map[string]bool{}
+	convert := func(direction string, artifacts []Artifact) ([]RunnerArtifact, error) {
+		result := make([]RunnerArtifact, 0, len(artifacts))
+		for _, artifact := range artifacts {
+			artifactPath, ok := paths[artifact.Name]
+			if !ok {
+				return nil, fmt.Errorf("binding lacks %s artifact %q", direction, artifact.Name)
+			}
+			if expected[artifact.Name] {
+				return nil, fmt.Errorf("artifact %q is declared as both input and output; immutable runner paths cannot be in-place", artifact.Name)
+			}
+			expected[artifact.Name] = true
+			result = append(result, RunnerArtifact{
+				Name:            artifact.Name,
+				Kind:            artifact.Kind,
+				DigestAlgorithm: artifact.DigestAlgorithm,
+				SHA256:          artifact.SHA256,
+				Path:            artifactPath,
+			})
+		}
+		return result, nil
+	}
+	inputs, err := convert("input", entry.Inputs)
+	if err != nil {
+		return RunnerSpec{}, err
+	}
+	outputs, err := convert("output", entry.Outputs)
+	if err != nil {
+		return RunnerSpec{}, err
+	}
+	for name := range paths {
+		if !expected[name] {
+			return RunnerSpec{}, fmt.Errorf("binding has undeclared artifact %q", name)
+		}
+	}
+	if len(paths) != len(expected) {
+		return RunnerSpec{}, fmt.Errorf("artifact binding coverage mismatch")
+	}
+	return RunnerSpec{
+		Schema:             RunnerSpecSchema,
+		Pipeline:           p.Pipeline,
+		Task:               task.ID,
+		Source:             p.Source,
+		Argv:               append([]string(nil), task.Argv...),
+		WorkingDirectory:   task.WorkingDirectory,
+		Environment:        append([]Environment(nil), task.Environment...),
+		Inputs:             inputs,
+		Outputs:            outputs,
+		EvidencePath:       binding.EvidencePath,
+		CommitManifestPath: binding.CommitManifestPath,
+		NonzeroClass:       binding.NonzeroClass,
+		Platform:           entry.Platform,
+	}, nil
+}
+
 func (binding ArgoBinding) Validate() error {
-	if binding.Schema != ArgoBindingSchema {
-		return fmt.Errorf("schema: got %q, want %q", binding.Schema, ArgoBindingSchema)
+	switch binding.Schema {
+	case ArgoBindingSchema, ArgoBindingSchemaV2:
+	default:
+		return fmt.Errorf("schema: got %q, want %q or %q", binding.Schema, ArgoBindingSchema, ArgoBindingSchemaV2)
 	}
 	if !kubeNameRE.MatchString(binding.Workspace.ClaimName) || len(binding.Workspace.ClaimName) > 253 {
 		return errors.New("workspace.claimName: must be a Kubernetes-safe DNS name")
@@ -215,6 +452,32 @@ func (binding ArgoBinding) Validate() error {
 		if task.RetryLimit != nil && (*task.RetryLimit < 0 || *task.RetryLimit > 10) {
 			return fmt.Errorf("tasks[%d].retryLimit: must be between 0 and 10", i)
 		}
+		if binding.Schema == ArgoBindingSchema {
+			if task.RunnerPath != "" || task.EvidencePath != "" || task.CommitManifestPath != "" || task.NonzeroClass != "" {
+				return fmt.Errorf("tasks[%d]: runnerPath, evidencePath, commitManifestPath, and nonzeroClass must be absent from v1", i)
+			}
+		} else {
+			if task.TimeoutSeconds == nil {
+				return fmt.Errorf("tasks[%d].timeoutSeconds: must be explicitly bounded in v2", i)
+			}
+			if task.RetryLimit == nil {
+				return fmt.Errorf("tasks[%d].retryLimit: must be explicitly declared in v2", i)
+			}
+			if !cleanAbsolutePath(task.RunnerPath) {
+				return fmt.Errorf("tasks[%d].runnerPath: must be a clean absolute path", i)
+			}
+			if !cleanRelativePath(task.EvidencePath) {
+				return fmt.Errorf("tasks[%d].evidencePath: must be a clean workspace-relative path", i)
+			}
+			if !cleanRelativePath(task.CommitManifestPath) {
+				return fmt.Errorf("tasks[%d].commitManifestPath: must be a clean workspace-relative path", i)
+			}
+			switch task.NonzeroClass {
+			case ResultTestFail, ResultInfraFail:
+			default:
+				return fmt.Errorf("tasks[%d].nonzeroClass: must be %q or %q", i, ResultTestFail, ResultInfraFail)
+			}
+		}
 		artifactSeen := map[string]bool{}
 		pathSeen := map[string]string{}
 		for j, artifact := range task.Artifacts {
@@ -229,6 +492,23 @@ func (binding ArgoBinding) Validate() error {
 				return fmt.Errorf("tasks[%d].artifacts[%d].path: shared by artifacts %q and %q", i, j, prior, artifact.Name)
 			}
 			pathSeen[artifact.Path] = artifact.Name
+		}
+		if binding.Schema == ArgoBindingSchemaV2 {
+			allPaths := make(map[string]string, len(pathSeen)+2)
+			for artifactPath, name := range pathSeen {
+				allPaths[artifactPath] = "artifact " + name
+			}
+			if prior, exists := allPaths[task.EvidencePath]; exists {
+				return fmt.Errorf("tasks[%d].evidencePath: aliases %s", i, prior)
+			}
+			allPaths[task.EvidencePath] = "evidence"
+			if prior, exists := allPaths[task.CommitManifestPath]; exists {
+				return fmt.Errorf("tasks[%d].commitManifestPath: aliases %s", i, prior)
+			}
+			allPaths[task.CommitManifestPath] = "commit manifest"
+			if err := rejectPathAliases(allPaths); err != nil {
+				return fmt.Errorf("tasks[%d]: %w", i, err)
+			}
 		}
 	}
 	return nil
@@ -361,8 +641,29 @@ type argoContainer struct {
 	VolumeMounts []argoVolumeMount `yaml:"volumeMounts"`
 }
 type argoEnv struct {
-	Name  string `yaml:"name"`
-	Value string `yaml:"value"`
+	Name      string         `yaml:"name"`
+	Value     string         `yaml:"value"`
+	ValueFrom *argoEnvSource `yaml:"valueFrom,omitempty"`
+}
+
+func (environment argoEnv) MarshalYAML() (any, error) {
+	if environment.ValueFrom != nil {
+		return struct {
+			Name      string         `yaml:"name"`
+			ValueFrom *argoEnvSource `yaml:"valueFrom"`
+		}{Name: environment.Name, ValueFrom: environment.ValueFrom}, nil
+	}
+	return struct {
+		Name  string `yaml:"name"`
+		Value string `yaml:"value"`
+	}{Name: environment.Name, Value: environment.Value}, nil
+}
+
+type argoEnvSource struct {
+	FieldRef *argoFieldRef `yaml:"fieldRef,omitempty"`
+}
+type argoFieldRef struct {
+	FieldPath string `yaml:"fieldPath"`
 }
 type argoVolumeMount struct {
 	Name      string `yaml:"name"`

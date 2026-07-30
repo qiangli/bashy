@@ -185,6 +185,11 @@ func (p Pipeline) Validate() error {
 		if err := validateTask(task); err != nil {
 			return fmt.Errorf("tasks[%d]: %w", i, err)
 		}
+		if p.Schema == PipelineSchemaV2 {
+			if err := validateNonSecretEnvironment(task.Environment); err != nil {
+				return fmt.Errorf("tasks[%d]: %w", i, err)
+			}
+		}
 		if _, exists := tasks[task.ID]; exists {
 			return fmt.Errorf("tasks[%d]: duplicate task %q", i, task.ID)
 		}
@@ -287,8 +292,12 @@ func (r Run) Validate() error {
 			return errors.New("outputCommit: must be absent from dhnt.run/v1")
 		}
 	} else {
-		if err := validateOutputCommit(r.OutputCommit, r.Outputs); err != nil {
-			return err
+		if r.Result.Class == ResultPass {
+			if err := validateOutputCommit(r.OutputCommit, r.Outputs); err != nil {
+				return err
+			}
+		} else if r.OutputCommit != nil {
+			return errors.New("outputCommit: non-pass dhnt.run/v2 must not claim a committed output set")
 		}
 	}
 	if strings.TrimSpace(r.Executor.Node) == "" {

@@ -174,7 +174,7 @@ func TestV1AndV2FieldsDoNotCrossSchemas(t *testing.T) {
 			pipeline.Matrix[i].Outputs = v2FileArtifacts(pipeline.Matrix[i].Outputs)
 		}
 		if _, err := LowerArgo(pipeline, binding); err == nil ||
-			!strings.Contains(err.Error(), "trusted-runner") {
+			!strings.Contains(err.Error(), ArgoBindingSchemaV2) {
 			t.Fatalf("got %v", err)
 		}
 	})
@@ -216,6 +216,19 @@ func TestOutputCommitBindsCompleteCanonicalSet(t *testing.T) {
 		edited.OutputCommit = nil
 		if err := edited.Validate(); err == nil {
 			t.Fatal("v2 pass evidence omitted its output commit")
+		}
+	})
+	t.Run("non-pass forbids commit", func(t *testing.T) {
+		for _, class := range []ResultClass{ResultTestFail, ResultInfraFail, ResultIncomplete, ResultCanceled} {
+			edited := run
+			edited.Result = Result{Class: class, ExitCode: intPtr(1)}
+			if err := edited.Validate(); err == nil || !strings.Contains(err.Error(), "must not claim") {
+				t.Fatalf("%s: got %v", class, err)
+			}
+			edited.OutputCommit = nil
+			if err := edited.Validate(); err != nil {
+				t.Fatalf("%s without commit: %v", class, err)
+			}
 		}
 	})
 }

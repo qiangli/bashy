@@ -1,13 +1,17 @@
 package agentos
 
 import (
+	"context"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/qiangli/bashy/dhnt"
 )
@@ -32,6 +36,8 @@ func dispatchDhnt(args []string) int {
 		return dhntAggregate(args[1:])
 	case "lower-argo":
 		return dhntLowerArgo(args[1:])
+	case "run-task":
+		return dhntRunTask(args[1:])
 	case "help", "-h", "--help":
 		printDhntUsage(os.Stdout)
 		return 0
@@ -46,21 +52,66 @@ func printDhntUsage(w io.Writer) {
 	fmt.Fprintln(w, `usage: bashy dhnt COMMAND
 
 Commands:
-  validate-pipeline [FILE|-]       strictly validate dhnt.pipeline/v1
+  validate-pipeline [FILE|-]       strictly validate dhnt.pipeline/v1 or v2
   canonicalize-pipeline [FILE|-]   validate and print deterministic JSON
-  validate-run [FILE|-]            strictly validate dhnt.run/v1
+  validate-run [FILE|-]            strictly validate dhnt.run/v1 or v2
   canonicalize-run [FILE|-]        validate and print deterministic JSON
   emit-run FLAGS                   emit deterministic dhnt.run/v1 JSON
   aggregate --pipeline FILE RUN... fail-closed matrix aggregation
   lower-argo --binding FILE [PIPELINE|-]
-                                   compile a strict DKS Argo Workflow`)
+                                   compile a strict DKS Argo Workflow
+  run-task --workspace DIR --spec-base64 DATA -- ARGV...
+                                   execute one trusted runner task`)
+}
+
+func dhntRunTask(args []string) int {
+	fs := flag.NewFlagSet("bashy dhnt run-task", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	var workspace, encodedSpec string
+	fs.StringVar(&workspace, "workspace", "", "opened workspace boundary")
+	fs.StringVar(&encodedSpec, "spec-base64", "", "canonical dhnt.runner-spec/v1")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	argv := fs.Args()
+	if workspace == "" || encodedSpec == "" || len(argv) == 0 {
+		fmt.Fprintln(os.Stderr, "bashy dhnt run-task: --workspace, --spec-base64, and argv after -- are required")
+		return 2
+	}
+	specJSON, err := base64.StdEncoding.Strict().DecodeString(encodedSpec)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt run-task: spec:", err)
+		return 2
+	}
+	spec, err := dhnt.DecodeRunnerSpec(specJSON)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt run-task: spec:", err)
+		return 2
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	run, err := dhnt.ExecuteTask(ctx, workspace, spec, argv, dhnt.RunnerMetadata{
+		Node:   os.Getenv("DHNT_EXECUTOR_NODE"),
+		PodUID: os.Getenv("DHNT_POD_UID"),
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy dhnt run-task:", err)
+		return 1
+	}
+	if run.Result.Class == dhnt.ResultPass {
+		return 0
+	}
+	if run.Result.ExitCode != nil && *run.Result.ExitCode > 0 && *run.Result.ExitCode <= 255 {
+		return *run.Result.ExitCode
+	}
+	return 1
 }
 
 func dhntLowerArgo(args []string) int {
 	fs := flag.NewFlagSet("bashy dhnt lower-argo", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	var bindingPath string
-	fs.StringVar(&bindingPath, "binding", "", "dhnt.argo-binding/v1 file")
+	fs.StringVar(&bindingPath, "binding", "", "dhnt.argo-binding/v1 or v2 file")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
