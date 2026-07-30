@@ -92,6 +92,12 @@ func TestPlanDKSPlacementRejectsHeterogeneousGangAndIsDeterministic(t *testing.T
 		!reflect.DeepEqual(first.Cohorts[0].Workers, []string{"worker-a", "worker-b"}) {
 		t.Fatalf("incomplete placement: %+v", first)
 	}
+	if !reflect.DeepEqual(
+		[]string{first.Reductions[0].Chunks[0].Worker, first.Reductions[0].Chunks[1].Worker},
+		[]string{"worker-a", "worker-b"},
+	) {
+		t.Fatalf("homogeneous chunks were not spread across eligible workers: %+v", first.Reductions[0].Chunks)
+	}
 	if first.Reductions[0].ManifestSHA256 != strings.Repeat("a", 64) ||
 		first.Reductions[0].MembershipSHA256 == first.Reductions[0].ManifestSHA256 {
 		t.Fatalf("pinned manifest and derived membership identities were conflated: %+v", first.Reductions[0])

@@ -107,7 +107,10 @@ func PlanDKSPlacement(p Pipeline, facts []dag.HostFacts, now time.Time, maxAge t
 				fullManifest.ChunkCount = chunk.Count
 				fullManifest.Chunks = append(fullManifest.Chunks, member)
 				siblingSpec := placementTaskSpec(sibling, matrix[sibling.ID])
-				keyData, err := json.Marshal(siblingSpec)
+				identitySpec := siblingSpec
+				identitySpec.Task = ""
+				identitySpec.Reducer = ""
+				keyData, err := json.Marshal(identitySpec)
 				if err != nil {
 					return DKSPlacementPlan{}, fmt.Errorf("task %q placement identity: %w", sibling.ID, err)
 				}
