@@ -351,9 +351,7 @@ func LowerMixedDKS(p Pipeline, plan DKSPlacementPlan, binding MixedArgoBinding, 
 				ConfigMap: binding.ArtifactRepository.ConfigMap,
 				Key:       binding.ArtifactRepository.Key,
 			},
-			Volumes: []argoVolume{{
-				Name: "workspace", PersistentVolumeClaim: argoPVC{ClaimName: binding.Execution.Workspace.ClaimName},
-			}},
+			Volumes: []argoVolume{argoWorkspaceVolume(binding.Execution.Workspace)},
 		},
 	}
 	producers, err := mixedArtifactProducers(p)

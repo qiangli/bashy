@@ -128,6 +128,29 @@ func TestPlanDKSPlacementMarshalsEmptyCollectionsForTopologyOnlyPlan(t *testing.
 	}
 }
 
+func TestPlanDKSPlacementRoundTripsEmbeddedReductionFields(t *testing.T) {
+	now := time.Now().UTC()
+	plan, err := PlanDKSPlacement(
+		placementPipeline(), placementFacts(now, false), now, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Reductions) == 0 {
+		t.Fatal("fixture did not produce a reduction")
+	}
+	encoded, err := MarshalDKSPlacementPlan(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeDKSPlacementPlan(encoded)
+	if err != nil {
+		t.Fatalf("strict decoder rejected flattened embedded reduction fields: %v", err)
+	}
+	if !reflect.DeepEqual(decoded, plan) {
+		t.Fatalf("placement round trip changed the plan:\nwant: %#v\ngot:  %#v", plan, decoded)
+	}
+}
+
 func TestPlanDKSPlacementRejectsAmbiguousMatrixAndDuplicateWorkers(t *testing.T) {
 	now := time.Now().UTC()
 	pipeline := placementPipeline()

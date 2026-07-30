@@ -655,32 +655,7 @@ func validateObject(dec *json.Decoder, t reflect.Type) error {
 	if _, err := dec.Token(); err != nil {
 		return fmt.Errorf("malformed JSON: %w", err)
 	}
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		if !f.IsExported() {
-			continue
-		}
-		tag := f.Tag.Get("json")
-		if tag == "-" {
-			continue
-		}
-		name := f.Name
-		omitempty := false
-		if tag != "" {
-			parts := strings.Split(tag, ",")
-			if parts[0] != "" {
-				name = parts[0]
-			}
-			for _, part := range parts[1:] {
-				if strings.TrimSpace(part) == "omitempty" {
-					omitempty = true
-					break
-				}
-			}
-		}
-		if omitempty {
-			continue
-		}
+	for _, name := range requiredJSONFields(t) {
 		if !seen[name] {
 			return fmt.Errorf("malformed JSON: missing required field %q", name)
 		}
@@ -729,6 +704,18 @@ func jsonFieldTypes(t reflect.Type) map[string]reflect.Type {
 		if tag == "-" {
 			continue
 		}
+		if f.Anonymous && tag == "" {
+			embedded := f.Type
+			if embedded.Kind() == reflect.Ptr {
+				embedded = embedded.Elem()
+			}
+			if embedded.Kind() == reflect.Struct {
+				for name, fieldType := range jsonFieldTypes(embedded) {
+					m[name] = fieldType
+				}
+				continue
+			}
+		}
 		name := f.Name
 		if tag != "" {
 			if idx := strings.IndexByte(tag, ','); idx != -1 {
@@ -742,6 +729,48 @@ func jsonFieldTypes(t reflect.Type) map[string]reflect.Type {
 		m[name] = f.Type
 	}
 	return m
+}
+
+func requiredJSONFields(t reflect.Type) []string {
+	var result []string
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if !f.IsExported() {
+			continue
+		}
+		tag := f.Tag.Get("json")
+		if tag == "-" {
+			continue
+		}
+		if f.Anonymous && tag == "" {
+			embedded := f.Type
+			if embedded.Kind() == reflect.Ptr {
+				embedded = embedded.Elem()
+			}
+			if embedded.Kind() == reflect.Struct {
+				result = append(result, requiredJSONFields(embedded)...)
+				continue
+			}
+		}
+		name := f.Name
+		omitempty := false
+		if tag != "" {
+			parts := strings.Split(tag, ",")
+			if parts[0] != "" {
+				name = parts[0]
+			}
+			for _, part := range parts[1:] {
+				if strings.TrimSpace(part) == "omitempty" {
+					omitempty = true
+					break
+				}
+			}
+		}
+		if !omitempty {
+			result = append(result, name)
+		}
+	}
+	return result
 }
 
 func marshalLine(v any) ([]byte, error) {

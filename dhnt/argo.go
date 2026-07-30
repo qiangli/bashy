@@ -20,7 +20,8 @@ const (
 )
 
 type ArgoWorkspace struct {
-	ClaimName string `json:"claimName"`
+	ClaimName string `json:"claimName,omitempty"`
+	EmptyDir  bool   `json:"emptyDir,omitempty"`
 	MountPath string `json:"mountPath"`
 }
 
@@ -118,10 +119,7 @@ func LowerArgo(p Pipeline, binding ArgoBinding) ([]byte, error) {
 		},
 		Spec: argoSpec{
 			Entrypoint: "pipeline",
-			Volumes: []argoVolume{{
-				Name:                  "workspace",
-				PersistentVolumeClaim: argoPVC{ClaimName: binding.Workspace.ClaimName},
-			}},
+			Volumes:    []argoVolume{argoWorkspaceVolume(binding.Workspace)},
 		},
 	}
 
@@ -234,10 +232,7 @@ func lowerArgoV2(p Pipeline, binding ArgoBinding) ([]byte, error) {
 		},
 		Spec: argoSpec{
 			Entrypoint: "pipeline",
-			Volumes: []argoVolume{{
-				Name:                  "workspace",
-				PersistentVolumeClaim: argoPVC{ClaimName: binding.Workspace.ClaimName},
-			}},
+			Volumes:    []argoVolume{argoWorkspaceVolume(binding.Workspace)},
 		},
 	}
 	claimedRuntimePaths := map[string]string{}
@@ -426,7 +421,11 @@ func (binding ArgoBinding) Validate() error {
 	default:
 		return fmt.Errorf("schema: got %q, want %q or %q", binding.Schema, ArgoBindingSchema, ArgoBindingSchemaV2)
 	}
-	if !kubeNameRE.MatchString(binding.Workspace.ClaimName) || len(binding.Workspace.ClaimName) > 253 {
+	if (binding.Workspace.ClaimName == "") == !binding.Workspace.EmptyDir {
+		return errors.New("workspace: exactly one of claimName or emptyDir=true is required")
+	}
+	if binding.Workspace.ClaimName != "" &&
+		(!kubeNameRE.MatchString(binding.Workspace.ClaimName) || len(binding.Workspace.ClaimName) > 253) {
 		return errors.New("workspace.claimName: must be a Kubernetes-safe DNS name")
 	}
 	if !cleanAbsolutePath(binding.Workspace.MountPath) {
@@ -710,7 +709,32 @@ type argoVolumeMount struct {
 type argoVolume struct {
 	Name                  string  `yaml:"name"`
 	PersistentVolumeClaim argoPVC `yaml:"persistentVolumeClaim"`
+	EmptyDir              *argoEmptyDir
 }
 type argoPVC struct {
 	ClaimName string `yaml:"claimName"`
+}
+type argoEmptyDir struct{}
+
+func argoWorkspaceVolume(workspace ArgoWorkspace) argoVolume {
+	volume := argoVolume{Name: "workspace"}
+	if workspace.EmptyDir {
+		volume.EmptyDir = &argoEmptyDir{}
+	} else {
+		volume.PersistentVolumeClaim = argoPVC{ClaimName: workspace.ClaimName}
+	}
+	return volume
+}
+
+func (volume argoVolume) MarshalYAML() (any, error) {
+	if volume.EmptyDir != nil {
+		return struct {
+			Name     string        `yaml:"name"`
+			EmptyDir *argoEmptyDir `yaml:"emptyDir"`
+		}{Name: volume.Name, EmptyDir: volume.EmptyDir}, nil
+	}
+	return struct {
+		Name                  string  `yaml:"name"`
+		PersistentVolumeClaim argoPVC `yaml:"persistentVolumeClaim"`
+	}{Name: volume.Name, PersistentVolumeClaim: volume.PersistentVolumeClaim}, nil
 }

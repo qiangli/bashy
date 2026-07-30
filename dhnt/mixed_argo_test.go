@@ -177,12 +177,36 @@ func TestLowerMixedDKSGeneratesDirectNativeAndReduceFanIn(t *testing.T) {
 	}
 }
 
+func TestLowerMixedDKSEmptyDirWorkspaceSupportsCrossNodeArtifactFanIn(t *testing.T) {
+	pipeline, plan, binding, resolver := mixedArgoFixture(t)
+	binding.Execution.Workspace = ArgoWorkspace{
+		EmptyDir:  true,
+		MountPath: "/workspace",
+	}
+	output, err := LowerMixedDKS(pipeline, plan, binding, resolver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(output)
+	if !strings.Contains(text, "emptyDir: {}") ||
+		strings.Contains(text, "persistentVolumeClaim:") {
+		t.Fatalf("ephemeral workspace was not lowered exactly:\n%s", output)
+	}
+}
+
 func TestLowerMixedDKSFailsClosed(t *testing.T) {
 	tests := []struct {
 		name string
 		edit func(*Pipeline, *DKSPlacementPlan, *MixedArgoBinding, *DKSWorkerResolverBinding)
 		want string
 	}{
+		{
+			name: "ambiguous workspace",
+			edit: func(_ *Pipeline, _ *DKSPlacementPlan, binding *MixedArgoBinding, _ *DKSWorkerResolverBinding) {
+				binding.Execution.Workspace.EmptyDir = true
+			},
+			want: "exactly one of claimName or emptyDir",
+		},
 		{
 			name: "multi-host gang",
 			edit: func(_ *Pipeline, plan *DKSPlacementPlan, _ *MixedArgoBinding, _ *DKSWorkerResolverBinding) {
