@@ -135,6 +135,29 @@ BASHY_EXE="${BASHY:-bashy}"
 "$BASHY_EXE" go test ./...
 ```
 
+### fmtcheck
+The formatting gate. **Reports; never rewrites** — and that is the whole
+design, not caution. gofmt changes doc-comment TEXT as well as whitespace:
+godoc's legacy typographic substitution turns a pair of ASCII single-quotes
+into a curly closing quote. That has already silently corrupted the comment on
+`sortTrapListings` in `tools/bash53suite/main.go`, which quotes the empty-string
+argument of a trap listing — leaving a signal-fidelity harness documenting shell
+syntax that does not exist. An auto-fixing gate lands that class of change
+unreviewed, wearing the disguise reviewers skim past.
+
+So the gate fails and a human decides. When a file legitimately cannot take
+gofmt's output, restructure it — move the literal into an indented doc-comment
+code block, where the characters survive verbatim. That file is the worked
+example.
+
+The body delegates to `scripts/fmtcheck.sh`, which is also what the CI ubuntu
+leg runs. One script, two callers. Tracked `.go` files only.
+Effects: read
+
+```bash
+scripts/fmtcheck.sh
+```
+
 ### test-podman
 Build a platform-appropriate bashy Podman engine binary and smoke-test the
 container path. This target is intentionally runnable on every platform:

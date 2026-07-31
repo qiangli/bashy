@@ -28,6 +28,20 @@ jobs:
       # bashy go) is pure-Go and cross-compiles everywhere. The heavy host layers
       # — engines (bashy podman/ollama, -tags bashy_engines, cgo+btrfs/MLX, unix)
       # and obs (bashy otel, -tags bashy_obs) — are opt-in and built separately.
+      # Formatting is platform-independent, so this runs on ONE leg — three
+      # would be waste, and the windows leg would additionally have to reason
+      # about line endings.
+      #
+      # It REPORTS and never rewrites, deliberately. gofmt changes doc-comment
+      # TEXT as well as whitespace (a pair of ASCII single-quotes becomes a
+      # curly closing quote), which has already silently corrupted the comment
+      # in tools/bash53suite/main.go that quotes a trap listing's empty-string
+      # argument. An auto-fixing gate would land that class of change
+      # unreviewed, disguised as formatting.
+      - name: gofmt check (reports; never rewrites)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./scripts/fmtcheck.sh
       - name: Build + vet + test (shell core + lean agentos)
         shell: bash
         timeout-minutes: 10
