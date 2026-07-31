@@ -1412,6 +1412,12 @@ func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 			mws = append(mws, advisorHandler(a))
 		}
 	}
+	// Learning sits just inside the advisor: it reads the same exit code, but
+	// where the advisor SPEAKS on failure this one LISTENS on success. Passive,
+	// stderr-silent, and it never alters an outcome.
+	if learnEnabled() {
+		mws = append(mws, learnHandler())
+	}
 	mws = append(mws, dryRunHandler(r), coreutilsshell.Handler())
 	return append(opts, interp.ExecHandlers(mws...))
 }
