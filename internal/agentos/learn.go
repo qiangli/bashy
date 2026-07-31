@@ -158,10 +158,11 @@ func suggestKnown(args []string) {
 		if have, used := x.Roles[role]; used && have == f.Value {
 			continue
 		}
-		// Provenance carries the command that taught it, which is exactly what
-		// the realm check needs to decide whether the fact travels.
-		from := strings.TrimPrefix(f.Source, "exec:")
-		if from == "" || !craft.Transfers(role, from, args[0]) {
+		// Provenance decides whether the fact travels. It is either the command
+		// that taught it or a declared source (an ssh config), and both resolve
+		// to a realm — a fact whose realm cannot be resolved is skipped rather
+		// than assumed into one.
+		if !craft.TransfersTo(f.Source, args[0]) {
 			continue
 		}
 		rendered, ok := craft.RenderRole(args[0], role, f.Value)
