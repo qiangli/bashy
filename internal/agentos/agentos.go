@@ -88,6 +88,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/pair"
 	"github.com/qiangli/coreutils/pkg/policy/coord"
 	"github.com/qiangli/coreutils/pkg/principal"
+	"github.com/qiangli/coreutils/pkg/role/meetroom"
 	"github.com/qiangli/coreutils/pkg/schedule"
 	"github.com/qiangli/coreutils/pkg/sdlc"
 	"github.com/qiangli/coreutils/pkg/search"
@@ -436,6 +437,14 @@ func Dispatch() {
 		// Role namespace (front door for the steward role): bare `steward` and
 		// `steward skill` print the existing steward operating skill; `steward
 		// dashboard` mounts the same read-only machine-global console as `board`.
+		// Wire the role-room seam. pkg/steward cannot import meetroom itself —
+		// it sits in the cross-OS build canary that meet's transitive shell
+		// interpreter cannot satisfy — so the host, which already links meet,
+		// supplies the transport. Same shape as lexicon.RecordDiscovery: one
+		// narrow path between two packages that must not import each other.
+		steward.OpenRoom = meetroom.Assume
+		steward.CloseRoom = meetroom.Release
+
 		renderStewardSkill := func(w io.Writer) error {
 			// THE SEAT FIRST, THEN THE MANUAL. An agent arriving on a host asks
 			// "is anybody already stewarding this machine" before it asks "how
@@ -456,6 +465,15 @@ func Dispatch() {
 			return sc.Execute()
 		}
 		scmd := board.NewStewardCommand(renderStewardSkill, nil)
+		// MOUNT THE SEAT LIFECYCLE. Without this the role's front door offered
+		// only its manual and a dashboard: `claim`, `takeover` and `release`
+		// — the verbs that actually move the seat — were unreachable from
+		// bashy, so every instruction naming them was pointing at a command
+		// that did not exist. A front door that describes a role it cannot let
+		// you assume is worse than none.
+		for _, sub := range steward.NewStewardCmd().Commands() {
+			scmd.AddCommand(sub)
+		}
 		scmd.SetArgs(os.Args[2:])
 		if err := scmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy steward:", err)
