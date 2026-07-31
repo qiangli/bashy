@@ -6,7 +6,9 @@ package agentos
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -70,5 +72,46 @@ func TestObservedExitOf(t *testing.T) {
 	// An unclassifiable error is NOT an observation.
 	if _, ok := observedExitOf(errors.New("interrupted")); ok {
 		t.Error("an unclassifiable error was treated as an observed exit")
+	}
+}
+
+// THE INVARIANT THAT MATTERS MORE THAN THE LADDER ITSELF: every consumer of
+// the skills store must resolve the SAME directory.
+//
+// Four call sites used to spell the ladder out separately — the catalog, the
+// craft graph, the learning hook, and the repo-hint marker. The moment one
+// grows a rung the others lack, the catalog and its own history point at
+// different places, and it splits SILENTLY: facts get recorded and then are
+// simply not there when read back.
+func TestBashySkillsDir_Ladder(t *testing.T) {
+	t.Setenv("BASHY_SKILLS_DIR", "")
+	t.Setenv("BASHY_HOME", "")
+
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		t.Skip("no home directory")
+	}
+	want := filepath.Join(home, ".config", "bashy", "skills")
+	if got := bashySkillsDir(); got != want {
+		t.Errorf("default = %q, want %q — changing it would strand every existing store", got, want)
+	}
+
+	// $BASHY_HOME was the missing rung: it moved the audit log and the foreman
+	// state but left facts writing to the real home, which is a store that
+	// looks isolated and is not.
+	t.Setenv("BASHY_HOME", filepath.Join("/tmp", "bashy-home"))
+	if got, want := bashySkillsDir(), filepath.Join("/tmp", "bashy-home", "skills"); got != want {
+		t.Errorf("BASHY_HOME = %q, want %q", got, want)
+	}
+
+	// The specific override stays most precise, matching audit and foreman.
+	t.Setenv("BASHY_SKILLS_DIR", filepath.Join("/tmp", "explicit"))
+	if got, want := bashySkillsDir(), filepath.Join("/tmp", "explicit"); got != want {
+		t.Errorf("BASHY_SKILLS_DIR = %q, want %q", got, want)
+	}
+
+	// And the whole point: the hook's writer and the graph's reader agree.
+	if craftStoreDir() != bashySkillsDir() {
+		t.Errorf("craftStoreDir()=%q diverged from bashySkillsDir()=%q", craftStoreDir(), bashySkillsDir())
 	}
 }

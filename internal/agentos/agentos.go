@@ -204,13 +204,9 @@ func maybeAdvertiseSkillHint() {
 			break
 		}
 	}
-	store := os.Getenv("BASHY_SKILLS_DIR")
+	store := bashySkillsDir()
 	if store == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return
-		}
-		store = filepath.Join(home, ".config", "bashy", "skills")
+		return
 	}
 	sum := fmt.Sprintf("%x", sha256.Sum256([]byte(root)))[:16]
 	mark := filepath.Join(store, "hints", sum)
@@ -1233,7 +1229,7 @@ func skillsOptions() []coreskills.Option {
 			opts = append(opts, coreskills.WithSource(coreskills.SharedDirSource(dir)))
 		}
 	}
-	if dir := os.Getenv("BASHY_SKILLS_DIR"); dir != "" {
+	if dir := bashySkillsDir(); dir != "" {
 		opts = append(opts, coreskills.WithConfigDir(dir))
 	}
 	return opts
@@ -1261,15 +1257,45 @@ func recordDiscovery(d lexicon.Discovery) error {
 	})
 }
 
-func craftStoreDir() string {
-	if dir := os.Getenv("BASHY_SKILLS_DIR"); dir != "" {
+// bashySkillsDir is the ONE resolver for the skills store, shared by the
+// catalog, the craft graph, the learning hook, and the repo-hint marker.
+//
+// It has to be one function. Four call sites each spelling out the same ladder
+// is not a style problem: the moment one of them grows a rung the others lack,
+// the catalog and its own history point at different directories — and that
+// splits silently. `craft facts` would read one store while the learn hook
+// wrote another, so facts would be recorded and then simply not be there. The
+// craftOptions comment already asserted the two "move together"; this is what
+// makes that true rather than a convention.
+//
+// The ladder follows the one audit and foreman already use:
+//
+//	$BASHY_SKILLS_DIR   the specific override, most precise, wins
+//	$BASHY_HOME/skills  the whole bashy home relocated (test isolation, a
+//	                    per-workspace home, a sandboxed run)
+//	~/.config/bashy/skills
+//
+// $BASHY_HOME was the missing rung. Setting it moved the audit log and the
+// foreman state but left facts writing to the real home, which makes a store
+// that looks isolated and is not — the worst version, because a test that
+// believes it is hermetic will pass on data it did not create.
+//
+// An empty return means no home could be determined. Callers must treat it as
+// "no store" rather than as a path.
+func bashySkillsDir() string {
+	if dir := strings.TrimSpace(os.Getenv("BASHY_SKILLS_DIR")); dir != "" {
 		return dir
 	}
-	if home, err := os.UserHomeDir(); err == nil {
+	if home := strings.TrimSpace(os.Getenv("BASHY_HOME")); home != "" {
+		return filepath.Join(home, "skills")
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		return filepath.Join(home, ".config", "bashy", "skills")
 	}
 	return ""
 }
+
+func craftStoreDir() string { return bashySkillsDir() }
 
 // atlasCommandNames is the standard command surface — the pure-Go userland plus
 // bashy's own verbs — which the lexicon subtracts when enumerating this host's
@@ -1294,7 +1320,7 @@ func craftOptions() []craft.Option {
 	// exactly what `skills list` shows. Two views of one store that disagree
 	// about what exists surfaces only as a skill mysteriously not being found.
 	opts := []craft.Option{craft.WithSkillOptions(skillsOptions()...)}
-	if dir := os.Getenv("BASHY_SKILLS_DIR"); dir != "" {
+	if dir := bashySkillsDir(); dir != "" {
 		opts = append(opts, craft.WithStoreDir(dir))
 	}
 	return opts
