@@ -406,6 +406,13 @@ func Dispatch() {
 		// is how it ends up somewhere permanent.
 		lexicon.Synopses = verbSynopsis
 		lexicon.KnownCommands = atlasCommandNames()
+		lexicon.RecordDiscovery = recordDiscovery
+		// NO subcommands are mounted here, deliberately. `define` takes an
+		// arbitrary token, so every subcommand name would permanently steal a
+		// word from the definable vocabulary — `bashy define study` must mean
+		// "what is the word study", not "run the study action". The hole would
+		// also be invisible until someone tried to define that exact word.
+		// Collection lives at `bashy lexicon study`, with the other admin verbs.
 		dcmd := lexicon.NewDefineCmd()
 		dcmd.SetArgs(os.Args[2:])
 		if err := dcmd.Execute(); err != nil {
@@ -1230,6 +1237,38 @@ func skillsOptions() []coreskills.Option {
 		opts = append(opts, coreskills.WithConfigDir(dir))
 	}
 	return opts
+}
+
+// recordDiscovery routes an identity-bearing collection finding into the
+// host-local fact store.
+//
+// The wiring lives HERE rather than inside pkg/lexicon on purpose: a glossary
+// that could write to a fact store would eventually be asked to read from one,
+// and identity would start flowing toward the shareable side. Keeping the two
+// packages unaware of each other means the only path between them is this
+// function, which is short enough to audit.
+//
+// A side effect worth knowing: every address recorded this way makes the fold
+// admission gate STRICTER, because HostScrubber seeds from the fact store — so
+// collecting identity is what teaches the system to refuse leaking it.
+func recordDiscovery(d lexicon.Discovery) error {
+	store := craft.OpenFacts(craftStoreDir())
+	return store.Record(craft.Fact{
+		Entity: craft.Entity{Kind: craft.EntityKind(d.EntityKind), Name: d.EntityName},
+		Key:    d.Key,
+		Value:  d.Value,
+		Source: "define study",
+	})
+}
+
+func craftStoreDir() string {
+	if dir := os.Getenv("BASHY_SKILLS_DIR"); dir != "" {
+		return dir
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".config", "bashy", "skills")
+	}
+	return ""
 }
 
 // atlasCommandNames is the standard command surface — the pure-Go userland plus
