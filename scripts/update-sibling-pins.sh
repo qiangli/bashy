@@ -40,7 +40,7 @@ while IFS= read -r line; do
         continue
     fi
 
-    actual=$(git -C "$dir" rev-parse HEAD)
+    actual=$(unset GIT_DIR GIT_WORK_TREE; git -C "$dir" rev-parse HEAD)
     printf '%s=%s\n' "$name" "$actual" >>"$tmp"
 
     if [ "$pinned" = "$actual" ]; then

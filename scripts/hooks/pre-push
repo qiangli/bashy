@@ -24,6 +24,19 @@ set -eu
 
 cd "$(git rev-parse --show-toplevel)"
 
+# Git EXPORTS GIT_DIR when it invokes a hook. In a submodule checkout that is an
+# absolute path to THIS repo's gitdir, so a bare `git -C ../sibling rev-parse
+# HEAD` resolves THIS repo's HEAD instead of the sibling's — every sibling
+# reports the same SHA and the gate compares the wrong thing. Depending on which
+# way the mismatch falls that is either a false alarm or, worse, a gate that
+# passes while checking nothing.
+#
+# It only shows up in a real umbrella clone: a repo with a plain .git DIRECTORY
+# gets no GIT_DIR and works by accident, which is exactly how this survived.
+sibling_head() {
+	(unset GIT_DIR GIT_WORK_TREE && git -C "$1" rev-parse HEAD 2>/dev/null)
+}
+
 ./scripts/fmtcheck.sh
 
 pins=.sibling-pins
@@ -42,7 +55,8 @@ while IFS= read -r line; do
     dir=../$name
     # A standalone clone has no siblings to compare against — nothing to police.
     [ -e "$dir/.git" ] || continue
-    actual=$(git -C "$dir" rev-parse HEAD 2>/dev/null) || continue
+    actual=$(sibling_head "$dir") || continue
+	[ -n "$actual" ] || continue
     [ "$pinned" = "$actual" ] && continue
 
     if [ -z "$drift" ]; then
