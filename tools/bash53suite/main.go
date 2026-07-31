@@ -968,8 +968,18 @@ func normalizeOutput(name string, raw []byte) []byte {
 // So this is normalized on BOTH sides, want and got alike, and it only REORDERS
 // lines within a contiguous trap listing. A trap line that should not be there,
 // or one that is missing, still diffs — which is what matters, since that is the
-// exact shape of the regression the baseline once carried (a spurious
-// `trap -- '' SIGINT` from a startup-inherited hard ignore).
+// exact shape of the regression the baseline once carried: a spurious
+// startup-inherited hard ignore, listed as
+//
+//	trap -- '' SIGINT
+//
+// That line is INDENTED deliberately, which makes it a doc-comment code block.
+// As running text it would not survive: gofmt applies godoc's legacy typographic
+// substitution, which turns a pair of ASCII single-quotes into a curly closing
+// quote — silently rewriting the empty-string argument and leaving the comment
+// documenting shell syntax that does not exist.
+//
+// (This paragraph avoids writing that pair literally for the same reason.)
 var sortTrapListings = wordSet("execscript")
 
 func normalizeHostSignalOrder(name string, in []byte) []byte {
