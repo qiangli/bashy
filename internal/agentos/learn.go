@@ -20,8 +20,10 @@ package agentos
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	"mvdan.cc/sh/v3/interp"
@@ -58,10 +60,11 @@ func learnHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 	return func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 		return func(ctx context.Context, args []string) error {
 			err := next(ctx, args)
+			args = commandArgv(args)
 			if len(args) == 0 {
 				return err
 			}
-			status, ok := exitStatusOf(err)
+			status, ok := observedExitOf(err)
 			if !ok {
 				return err // a non-exit error (an interrupt): nothing was observed
 			}
@@ -110,6 +113,70 @@ func learnHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 			return err
 		}
 	}
+}
+
+// commandArgv strips bashy's own front-door invocation so the argv names the
+// command a person actually typed.
+//
+// bashy shims its front-door verbs as shell functions:
+//
+//	kubectl() { command /path/to/bashy kubectl "$@"; }
+//	docker()  { command /path/to/bashy podman  "$@"; }
+//
+// So by the time the ExecHandler sees it, `kubectl --context prod get pods` has
+// become `/path/to/bashy kubectl --context prod get pods` — argv[0] is the
+// bashy binary, and no lookup on it can ever match. Every managed CLI was
+// invisible to this hook for exactly that reason, and invisibly so: they simply
+// never taught or offered anything.
+//
+// Note what the docker shim does — it does not just re-spell the command, it
+// REPLACES it. `docker` on a bashy shell IS `bashy podman`, so the name that
+// reaches here is podman and a spec keyed only on "docker" would never fire.
+func commandArgv(args []string) []string {
+	if len(args) < 2 {
+		return args
+	}
+	if args[0] != bashySelfPath() {
+		return args
+	}
+	// `bashy -c …` and friends are bashy operating on itself, not a front-door
+	// verb. A flag in the first slot is the tell.
+	if strings.HasPrefix(args[1], "-") {
+		return args
+	}
+	return args[1:]
+}
+
+// observedExitOf reports the exit status of a command that actually RAN.
+//
+// It is deliberately broader than exitStatusOf, which only recognises the
+// shell's own interp.ExitStatus. Commands bashy dispatches itself — the
+// managed CLIs like kubectl and docker, and the cobra front-door verbs — do not
+// return that type; they return an *exec.ExitError or a wrapped error carrying
+// the status.
+//
+// The narrow check made the whole learning layer silently skip exactly those
+// commands. Nothing reported it: they simply never taught anything and never
+// offered anything, which is indistinguishable from having no facts about them.
+// A spec for a command the hook cannot see is inert, and an inert spec reads as
+// coverage while providing none.
+//
+// A truly unclassifiable error still returns false. "The command ran and
+// failed" and "the command never ran" are different claims, and only the first
+// is evidence.
+func observedExitOf(err error) (int, bool) {
+	if err == nil {
+		return 0, true
+	}
+	var st interp.ExitStatus
+	if errors.As(err, &st) {
+		return int(st), true
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode(), true
+	}
+	return 0, false
 }
 
 // suggestKnown offers what this host already knows about the target, when a
