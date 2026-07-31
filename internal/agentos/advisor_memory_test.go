@@ -70,13 +70,13 @@ func TestIsBenignExit(t *testing.T) {
 		status int
 		want   bool
 	}{
-		{[]string{"grep", "pat", "f"}, 1, true},   // no match
-		{[]string{"grep", "pat", "f"}, 2, false},  // real error (bad file)
-		{[]string{"grep", "pat", "f"}, 0, false},  // matched
+		{[]string{"grep", "pat", "f"}, 1, true},     // no match
+		{[]string{"grep", "pat", "f"}, 2, false},    // real error (bad file)
+		{[]string{"grep", "pat", "f"}, 0, false},    // matched
 		{[]string{"/bin/test", "-f", "x"}, 1, true}, // false, via a path
-		{[]string{"diff", "a", "b"}, 1, true},     // differ
-		{[]string{"diff", "a", "b"}, 2, false},    // trouble
-		{[]string{"ls", "nope"}, 1, false},        // ls exit 1 IS an error
+		{[]string{"diff", "a", "b"}, 1, true},       // differ
+		{[]string{"diff", "a", "b"}, 2, false},      // trouble
+		{[]string{"ls", "nope"}, 1, false},          // ls exit 1 IS an error
 		{[]string{"cat", "nope"}, 1, false},
 		{nil, 1, false},
 	}
