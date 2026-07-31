@@ -1251,10 +1251,14 @@ func atlasCommandNames() []string {
 // store. $BASHY_SKILLS_DIR therefore moves both together, which is what keeps
 // a redirected store from silently splitting the catalog from its history.
 func craftOptions() []craft.Option {
+	// The SAME catalog options the skills CLI gets, so `craft find` indexes
+	// exactly what `skills list` shows. Two views of one store that disagree
+	// about what exists surfaces only as a skill mysteriously not being found.
+	opts := []craft.Option{craft.WithSkillOptions(skillsOptions()...)}
 	if dir := os.Getenv("BASHY_SKILLS_DIR"); dir != "" {
-		return []craft.Option{craft.WithStoreDir(dir)}
+		opts = append(opts, craft.WithStoreDir(dir))
 	}
-	return nil
+	return opts
 }
 
 // runFleet dispatches one of the fleet registry nouns. The catalog is
