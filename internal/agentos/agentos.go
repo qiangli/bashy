@@ -68,10 +68,12 @@ import (
 	"github.com/qiangli/coreutils/external/zot"
 	"github.com/qiangli/coreutils/pkg/agentcmd"
 	"github.com/qiangli/coreutils/pkg/ask"
+	"github.com/qiangli/coreutils/pkg/atlas"
 	"github.com/qiangli/coreutils/pkg/board"
 	"github.com/qiangli/coreutils/pkg/bus"
 	"github.com/qiangli/coreutils/pkg/capability"
 	"github.com/qiangli/coreutils/pkg/chat"
+	"github.com/qiangli/coreutils/pkg/craft"
 	"github.com/qiangli/coreutils/pkg/dag"
 	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/gate"
@@ -90,7 +92,6 @@ import (
 	"github.com/qiangli/coreutils/pkg/sdlc"
 	"github.com/qiangli/coreutils/pkg/search"
 	"github.com/qiangli/coreutils/pkg/secrets"
-	"github.com/qiangli/coreutils/pkg/craft"
 	coreskills "github.com/qiangli/coreutils/pkg/skills"
 	"github.com/qiangli/coreutils/pkg/sota"
 	"github.com/qiangli/coreutils/pkg/supervise"
@@ -128,7 +129,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt",
+		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
@@ -384,10 +385,31 @@ func Dispatch() {
 		// moment this starts storing vocabulary rather than projecting it, it has
 		// become the hand-written glossary that always goes stale.
 		lexicon.Synopses = verbSynopsis
+		lexicon.KnownCommands = atlasCommandNames()
 		lcmd := lexicon.NewLexiconCmd()
 		lcmd.SetArgs(os.Args[2:])
 		if err := lcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy lexicon:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "define":
+		// The one question an agent actually asks, at top level rather than
+		// buried under `lexicon` — burying it costs more than the namespace is
+		// worth, and an agentic tool reaches for the shortest name that works.
+		//
+		// Answers from the projected registries (verbs, agent bindings, skills)
+		// AND this host's system inventory (env var names, local commands, path
+		// segments), falling back to classifying a term by SHAPE when nothing
+		// declared it. A term that looks like a credential is classified but
+		// never echoed: repeating a key into a terminal or an agent transcript
+		// is how it ends up somewhere permanent.
+		lexicon.Synopses = verbSynopsis
+		lexicon.KnownCommands = atlasCommandNames()
+		dcmd := lexicon.NewDefineCmd()
+		dcmd.SetArgs(os.Args[2:])
+		if err := dcmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy define:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
@@ -1208,6 +1230,20 @@ func skillsOptions() []coreskills.Option {
 		opts = append(opts, coreskills.WithConfigDir(dir))
 	}
 	return opts
+}
+
+// atlasCommandNames is the standard command surface — the pure-Go userland plus
+// bashy's own verbs — which the lexicon subtracts when enumerating this host's
+// LOCAL commands.
+//
+// The atlas is the right source precisely because it is ratcheted: its coverage
+// tests fail the build when a registered tool has no entry, so this set cannot
+// silently fall behind the surface it is meant to describe. Anything on PATH and
+// not in here is, by construction, something this machine has and a stock one
+// does not — which is the definition of local jargon.
+func atlasCommandNames() []string {
+	names := atlas.ToolNames()
+	return append(names, atlas.VerbNames()...)
 }
 
 // craftOptions points the living skill graph at the SAME store the skills

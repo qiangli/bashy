@@ -347,6 +347,7 @@ var verbSynopsis = map[string]string{
 	"handoff":    "pause this session and hand the work to another agent, a scheduler, or tomorrow",
 	"resume":     "pick up a handed-off session — any tool, any machine",
 	"claim":      "who is working in this project — and hold it while you write",
+	"define":     "what is this word on THIS system? verb, agent, env var, command, path, address — or unknown",
 	"lexicon":    "what do this project's words mean HERE? (verbs + agent bindings, projected)",
 	"gate":       "does this project pass? (the one command that decides)",
 	"pair":       "two agents + a gate: one proposes, one BREAKS it (writes the failing test) — a proof, not an opinion",
