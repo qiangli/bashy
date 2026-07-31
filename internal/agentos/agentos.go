@@ -94,6 +94,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/secrets"
 	coreskills "github.com/qiangli/coreutils/pkg/skills"
 	"github.com/qiangli/coreutils/pkg/sota"
+	"github.com/qiangli/coreutils/pkg/steward"
 	"github.com/qiangli/coreutils/pkg/supervise"
 	"github.com/qiangli/coreutils/pkg/telemetry"
 	"github.com/qiangli/coreutils/pkg/todo"
@@ -436,6 +437,19 @@ func Dispatch() {
 		// `steward skill` print the existing steward operating skill; `steward
 		// dashboard` mounts the same read-only machine-global console as `board`.
 		renderStewardSkill := func(w io.Writer) error {
+			// THE SEAT FIRST, THEN THE MANUAL. An agent arriving on a host asks
+			// "is anybody already stewarding this machine" before it asks "how
+			// do I steward" — and the answer changes what it should do next.
+			// Printing only the skill answered the second question while
+			// burying the first, which was reachable only by knowing to type
+			// `steward status`.
+			//
+			// A failure to read the seat is reported, not swallowed: silence
+			// there would read as "no steward", which is the one wrong answer
+			// that gets someone to seize a seat somebody else is holding.
+			if err := steward.SeatSummary(w, ""); err != nil {
+				fmt.Fprintf(w, "seat: cannot read (%v)\n\n", err)
+			}
 			sc := coreskills.NewSkillsCmd(skillsOptions()...)
 			sc.SetArgs([]string{"show", "steward"})
 			sc.SetOut(w)
