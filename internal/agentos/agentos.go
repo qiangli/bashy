@@ -380,9 +380,7 @@ func Dispatch() {
 		// infer them: what the team actually SAYS, and the precedence rule. The
 		// moment this starts storing vocabulary rather than projecting it, it has
 		// become the hand-written glossary that always goes stale.
-		lexicon.Synopses = verbSynopsis
-		lexicon.KnownCommands = atlasCommandNames()
-		lcmd := lexicon.NewLexiconCmd()
+		lcmd := newLexiconCmd()
 		lcmd.SetArgs(os.Args[2:])
 		if err := lcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy lexicon:", err)
@@ -400,16 +398,7 @@ func Dispatch() {
 		// declared it. A term that looks like a credential is classified but
 		// never echoed: repeating a key into a terminal or an agent transcript
 		// is how it ends up somewhere permanent.
-		lexicon.Synopses = verbSynopsis
-		lexicon.KnownCommands = atlasCommandNames()
-		lexicon.RecordDiscovery = recordDiscovery
-		// NO subcommands are mounted here, deliberately. `define` takes an
-		// arbitrary token, so every subcommand name would permanently steal a
-		// word from the definable vocabulary — `bashy define study` must mean
-		// "what is the word study", not "run the study action". The hole would
-		// also be invisible until someone tried to define that exact word.
-		// Collection lives at `bashy lexicon study`, with the other admin verbs.
-		dcmd := lexicon.NewDefineCmd()
+		dcmd := newDefineCmd()
 		dcmd.SetArgs(os.Args[2:])
 		if err := dcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy define:", err)
@@ -1235,6 +1224,51 @@ func skillsOptions() []coreskills.Option {
 	return opts
 }
 
+// wireLexicon injects everything pkg/lexicon needs from this host, in ONE
+// place, for EVERY entry point into it.
+//
+// It is a function rather than three assignments at each dispatch site because
+// the three assignments drifted, and the drift was silent. `bashy define` set
+// all three; `bashy lexicon` set two — so `bashy lexicon study`, which is where
+// the study verb actually lives, found RecordDiscovery nil, reported "no fact
+// store wired, nothing recorded", and dropped every address it had just
+// collected. Nothing failed: the command exited 0 and printed a term count, so
+// the only evidence was one line of prose nobody reads on a success path.
+//
+// The lesson generalises past this bug. A package configured through exported
+// vars has as many chances to be misconfigured as it has callers, and a hook
+// left nil is indistinguishable from a hook deliberately unset. Collapsing the
+// callers to one makes the wiring a property of the package pair rather than a
+// thing each dispatch arm must remember.
+func wireLexicon() {
+	lexicon.Synopses = verbSynopsis
+	lexicon.KnownCommands = atlasCommandNames()
+	lexicon.RecordDiscovery = recordDiscovery
+}
+
+// newLexiconCmd builds `bashy lexicon` — the glossary + its admin verbs
+// (list/resolve/emit/scan/study), whose argument sets are CLOSED.
+func newLexiconCmd() *cobra.Command {
+	wireLexicon()
+	return lexicon.NewLexiconCmd()
+}
+
+// newDefineCmd builds `bashy define` — the one question an agent actually asks,
+// at top level rather than buried under `lexicon`, because an agentic tool
+// reaches for the shortest name that works.
+//
+// NO subcommand is ever mounted here. `define` takes an ARBITRARY token, so
+// every subcommand name would permanently remove a word from the definable
+// vocabulary: mount `study` and `bashy define study` stops meaning "what is the
+// word study" and starts printing a help screen. The hole is invisible until
+// somebody asks about that exact word. Actions belong on `lexicon`, whose
+// arguments are a closed set — and TestDefineCmdHasNoSubcommands fails the
+// build if one appears here.
+func newDefineCmd() *cobra.Command {
+	wireLexicon()
+	return lexicon.NewDefineCmd()
+}
+
 // recordDiscovery routes an identity-bearing collection finding into the
 // host-local fact store.
 //
@@ -1253,7 +1287,11 @@ func recordDiscovery(d lexicon.Discovery) error {
 		Entity: craft.Entity{Kind: craft.EntityKind(d.EntityKind), Name: d.EntityName},
 		Key:    d.Key,
 		Value:  d.Value,
-		Source: "define study",
+		// The verb that produced it, spelled the way an operator would type it.
+		// It was "define study", which is not a command and never was — a
+		// provenance field that names a nonexistent source is worse than an
+		// empty one, because it looks checkable.
+		Source: "lexicon study",
 	})
 }
 
