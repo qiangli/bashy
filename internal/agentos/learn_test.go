@@ -13,6 +13,8 @@ import (
 	"testing"
 
 	"mvdan.cc/sh/v3/interp"
+
+	"github.com/qiangli/coreutils/pkg/craft"
 )
 
 // THE BUG THIS PINS. bashy shims its front-door verbs as shell functions, so
@@ -113,5 +115,39 @@ func TestBashySkillsDir_Ladder(t *testing.T) {
 	// And the whole point: the hook's writer and the graph's reader agree.
 	if craftStoreDir() != bashySkillsDir() {
 		t.Errorf("craftStoreDir()=%q diverged from bashySkillsDir()=%q", craftStoreDir(), bashySkillsDir())
+	}
+}
+
+// THE PAIRING IS THE DESIGN, and the cases are not complements — which is why
+// it is a named function with a test rather than two inline conditions. A
+// payload failure records exactly like success (the session provably worked)
+// while staying silent; a transport failure is the mirror image.
+func TestRouteVerdict(t *testing.T) {
+	cases := []struct {
+		name          string
+		verdict       craft.Verdict
+		status        int
+		speak, record bool
+	}{
+		{"success", craft.VerdictSuccess, 0, false, true},
+		{"remote command failed, session fine", craft.VerdictPayload, 1, false, true},
+		{"could not connect", craft.VerdictTransport, 255, true, false},
+		{"convention undeclared", craft.VerdictUnknown, 1, true, false},
+	}
+	for _, c := range cases {
+		speak, record := routeVerdict(c.verdict, c.status)
+		if speak != c.speak || record != c.record {
+			t.Errorf("%s: speak=%v record=%v, want speak=%v record=%v",
+				c.name, speak, record, c.speak, c.record)
+		}
+	}
+	// A payload verdict must never reach the hint channel: a suggestion about a
+	// host that was never the problem is how people learn to ignore hints.
+	if speak, _ := routeVerdict(craft.VerdictPayload, 7); speak {
+		t.Error("a payload failure must not speak")
+	}
+	// And must never be discarded as evidence: it is the common case.
+	if _, record := routeVerdict(craft.VerdictPayload, 7); !record {
+		t.Error("a payload failure proves the connection arguments; record them")
 	}
 }

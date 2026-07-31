@@ -68,8 +68,22 @@ func learnHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 			if !ok {
 				return err // a non-exit error (an interrupt): nothing was observed
 			}
-			if status != 0 {
-				// A failure is the moment to SPEAK, not to write.
+			verdict := craft.Classify(args[0], status)
+
+			// A PAYLOAD failure is not a failure of anything this package knows
+			// about. The session was established; the thing it carried returned
+			// non-zero on its own merits. So it is treated exactly like success:
+			// the connection arguments are recorded as PROVEN, and nothing is
+			// said.
+			//
+			// Both halves of that matter. Recording widens the evidence base to
+			// the common case — most invocations run something that can fail —
+			// and staying quiet keeps the hint channel credible, since a
+			// suggestion about a host that was never the problem is precisely
+			// how people learn to ignore suggestions.
+			speak, record := routeVerdict(verdict, status)
+			if speak {
+				// A transport failure is the moment to SPEAK, not to write.
 				suggestKnown(args)
 
 				// FAILURE TEACHES NOTHING, and this is a deliberate reversal of
@@ -100,6 +114,10 @@ func learnHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 				return err
 			}
 
+			if !record {
+				return err
+			}
+
 			x, usable := craft.Extract(args)
 			if !usable {
 				return err
@@ -113,6 +131,27 @@ func learnHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 			return err
 		}
 	}
+}
+
+// routeVerdict turns a classified exit into the two decisions this hook makes.
+//
+// It is a named function rather than two inline conditions because the pairing
+// is the whole design and it is easy to get subtly wrong: the cases are not
+// complements. A payload failure neither speaks NOR stays silent about
+// recording — it records, exactly like success, because the session provably
+// worked. A transport failure is the mirror image. Written inline, a later edit
+// that "simplifies" one branch can silently decouple them.
+//
+//	verdict      speak   record
+//	success      no      YES     nothing went wrong
+//	payload      no      YES     the session worked; its payload did not
+//	transport    YES     no      the arguments are suspect
+//	unknown      YES     no      cannot interpret; hint, but never learn
+func routeVerdict(verdict craft.Verdict, status int) (speak, record bool) {
+	if status == 0 {
+		return false, true
+	}
+	return verdict != craft.VerdictPayload, verdict.Confirms()
 }
 
 // commandArgv strips bashy's own front-door invocation so the argv names the
