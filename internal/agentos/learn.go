@@ -20,6 +20,7 @@ package agentos
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
@@ -61,9 +62,15 @@ func learnHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 				return err
 			}
 			status, ok := exitStatusOf(err)
-			if !ok || status != 0 {
-				// FAILURE TEACHES NOTHING HERE, and this is a deliberate
-				// reversal of the obvious design.
+			if !ok {
+				return err // a non-exit error (an interrupt): nothing was observed
+			}
+			if status != 0 {
+				// A failure is the moment to SPEAK, not to write.
+				suggestKnown(args)
+
+				// FAILURE TEACHES NOTHING, and this is a deliberate reversal of
+				// the obvious design.
 				//
 				// "Invalidate on failure" sounds right until you ask WHY the
 				// command failed. `ssh -p 2222 -l xuser host` can fail because
@@ -103,4 +110,74 @@ func learnHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 			return err
 		}
 	}
+}
+
+// suggestKnown offers what this host already knows about the target, when a
+// command fails without using it.
+//
+// The moment is chosen, not incidental. A failure against a host bashy has
+// facts for is the highest-precision instant to speak: the failure is itself
+// evidence the caller got something wrong, so a suggestion is wanted rather
+// than interrupting. Proactive hinting at the prompt has a far worse precision
+// profile, because nothing has signalled that help is welcome.
+//
+// Four conditions must ALL hold, which is what keeps this quiet:
+//
+//   - the command declared a target entity this host knows facts about;
+//   - the fact was learned from a command in the SAME auth realm — an ssh login
+//     is not a psql role, and suggesting one for the other is a confident wrong
+//     answer;
+//   - THIS command can express the role as a flag (scp takes a login as
+//     user@host, not -l, so a login is simply not offered for scp);
+//   - the invocation did not already supply it.
+//
+// That last one matters most for trust. Telling someone to pass a flag they
+// just passed is the fastest way to teach them to ignore every future hint —
+// and once hints are ignored the system is worse than one that never spoke.
+func suggestKnown(args []string) {
+	if len(args) == 0 {
+		return
+	}
+	// Extract's bool result requires roles to be present; here the whole point
+	// is that they may be MISSING, which is usually why the command failed. The
+	// entity is populated regardless, so it is read directly.
+	x, _ := craft.Extract(args)
+	if !x.Entity.Valid() {
+		return
+	}
+
+	facts := craft.OpenFacts(craftStoreDir()).For(x.Entity)
+	if len(facts) == 0 {
+		return
+	}
+
+	var offers []string
+	for _, f := range facts {
+		role := craft.Role(f.Key)
+		// Already supplied, with this value: saying it again is noise.
+		if have, used := x.Roles[role]; used && have == f.Value {
+			continue
+		}
+		// Provenance carries the command that taught it, which is exactly what
+		// the realm check needs to decide whether the fact travels.
+		from := strings.TrimPrefix(f.Source, "exec:")
+		if from == "" || !craft.Transfers(role, from, args[0]) {
+			continue
+		}
+		rendered, ok := craft.RenderRole(args[0], role, f.Value)
+		if !ok {
+			continue
+		}
+		offers = append(offers, rendered)
+	}
+	if len(offers) == 0 {
+		return
+	}
+
+	// One line, and a SUGGESTION — never applied. The caller may have a reason
+	// to use a different account for file transfer than for a shell, and an
+	// agent that silently rewrote the command would be wrong in a way nothing
+	// reported.
+	fmt.Fprintf(os.Stderr, "bashy: %s is known here as: %s\n",
+		x.Entity.Name, strings.Join(offers, " "))
 }
