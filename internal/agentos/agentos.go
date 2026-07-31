@@ -90,6 +90,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/sdlc"
 	"github.com/qiangli/coreutils/pkg/search"
 	"github.com/qiangli/coreutils/pkg/secrets"
+	"github.com/qiangli/coreutils/pkg/craft"
 	coreskills "github.com/qiangli/coreutils/pkg/skills"
 	"github.com/qiangli/coreutils/pkg/sota"
 	"github.com/qiangli/coreutils/pkg/supervise"
@@ -127,7 +128,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt",
+		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
@@ -695,6 +696,19 @@ func Dispatch() {
 			os.Exit(coreskills.ExitCode(err))
 		}
 		os.Exit(0)
+	case "craft":
+		// The living skill graph (coreutils/pkg/craft): what running the
+		// catalog has TAUGHT this host, as opposed to what the catalog
+		// holds. `history` reads back the attestation ledger every
+		// `skills run` writes — per skill, or pooled per capability so
+		// interchangeable implementations share one track record.
+		cmd := craft.NewCraftCmd(craftOptions()...)
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy craft:", err)
+			os.Exit(craft.ExitCode(err))
+		}
+		os.Exit(0)
 	case "kb":
 		// The host-shared knowledge base (coreutils/pkg/kb): the collective
 		// memory of all agents on this host across all repos — OKF-style
@@ -1194,6 +1208,17 @@ func skillsOptions() []coreskills.Option {
 		opts = append(opts, coreskills.WithConfigDir(dir))
 	}
 	return opts
+}
+
+// craftOptions points the living skill graph at the SAME store the skills
+// catalog writes to — craft is a reader over that evidence, not a second
+// store. $BASHY_SKILLS_DIR therefore moves both together, which is what keeps
+// a redirected store from silently splitting the catalog from its history.
+func craftOptions() []craft.Option {
+	if dir := os.Getenv("BASHY_SKILLS_DIR"); dir != "" {
+		return []craft.Option{craft.WithStoreDir(dir)}
+	}
+	return nil
 }
 
 // runFleet dispatches one of the fleet registry nouns. The catalog is

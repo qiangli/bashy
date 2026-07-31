@@ -374,6 +374,7 @@ var verbSynopsis = map[string]string{
 	"herald":     "reach an agent that is not on this host, over A2A: `herald add` a peer, `herald send` it a task, and gate the result",
 	"ask":        "ask the HUMAN operator for an ad-hoc value (a token, an OTP) — never the model; returns a path, not the value",
 	"skills":     "tier-2 workspace skills, env-gated: list applicable here, probe the coordinate, show one",
+	"craft":      "the living skill graph: what running skills has taught this host, per skill or per capability",
 	"kb":         "host-shared knowledge base: search before a task, add/retro after (all agents, all repos)",
 	"tools":      "the agentic CLI harnesses this host can drive (claude, codex, opencode, ...)",
 	"models":     "the inference backends the fleet can bind to (subscription, api, local)",
