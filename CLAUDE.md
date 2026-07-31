@@ -425,6 +425,23 @@ itself, which is pure Go).
 - `plan-dynvar.md`, `plan-error-format-pass.md`, `plan-punted-builtins.md` — scoped sub-plans for specific clusters of fixture failures.
 - `json-output.md` — bashy's opt-in `set --json` / `declare --json` structured-output extensions.
 - `agent-bands-and-nicknames.md` — the shipped **band** (L1–L4 capability peg, normalized across providers — a vendor's own tier ladder is never mapped positionally) + **nickname** system on `bashy agents`/`models`. Bands live on the model and are inherited by the agent; `--min-band N` selects a roster (`bashy meet start --min-band 3` seats its own table and reports who it skipped). Canonical model names are version-explicit (`opus5`) and the family name (`opus`) is a *derived* alias that re-points itself on release — so a record never rots. Nicknames are assigned deterministically from the binding (same agent, same name, every host). Rules: speak the alias, record the address; a binding is canonicalized however it was spelled; a derived name never shadows a declared one. Read before any fleet-registry / agent-selection / routing work.
+- **`bashy craft` + `bashy define`** — the living skill graph and the
+  what-is-this-word resolver, both in `coreutils/pkg/{craft,lexicon}`. `craft` is
+  the layer OVER the skills catalog: `find` asks for a capability in plain words
+  (matching on what a skill GUARANTEES, so a query resolves a skill whose prose
+  never used those words), `compose` renders it on demand at a **band** (0 = a
+  runnable script needing no model, 4 = pure intent), and `learn`/`facts`/`fold`
+  accumulate what running things taught. `define` answers "what is this word on
+  THIS system" across verbs, agent bindings, skills, env vars, local commands,
+  path segments, interfaces and mounts — reporting a command's resolved path and
+  an alias's expansion, and classifying a credential WITHOUT echoing it.
+  bashy contributes `internal/agentos/learn.go`, the ExecHandler middleware that
+  records what each successful invocation taught. Two rules that bite: `define`
+  must never gain a subcommand (its argument is an arbitrary user token, so a
+  subcommand steals that word — `bashy define study` once made "what is the word
+  study" unaskable), and `lexicon emit` must never render a `Location` (paths
+  carry the operator's home dir, and emit writes into committed files). Both
+  ratcheted. Design of record: `../docs/skill-graph-design.md`.
 - `command-atlas.md` — the Command Atlas: the multi-axis agent-facing catalog of the whole command surface (classical group + execution tier + capability + idiom axes). Tables live in `coreutils/pkg/atlas` (coverage-test-ratcheted against `tool.Names()`); the bashy merge layer is `internal/agentos/atlas.go`; views via `bashy commands --view tier|group|capabilities`, `--tier/--group/--cap` filters, `--idioms`, `--atlas` (`bashy-atlas-v1`). Adding a verb/tool = add its atlas entry (the tests name what you forgot).
 - `space-time-advisor.md` — the shipped space-time advisor: non-intrusive error-time hints (cwd/network/compute/disk + doomed-loop + network-fingerprint host memory) that steer agentic tools off doomed retries. Self-contained feature doc (dimensions, env vars, `bashy-advice-v1` JSON schema, scope/non-goals).
 - `one-agent-control.md` — **the one control surface** every command that drives an agent CLI now steers through (`invoke` · `weave` · `meet` · `foreman`). `chat.Session` (Start/Say/WaitIdle/Turn) is the primitive — *Invoke is a question, Session is a conversation* — and it lives in `chat` because that is where `agentChildEnv` (secret scrub · single granted API key · shell-forcing · principal identity) lives. `agentpty` owns the wire (`TextFrame` = a sentence typed; `VerbatimFrame` = a keystroke), collapsing three divergent copies of one protocol. Why `meet --steerable` is a flag and not a default (a live turn under a THIRD-PARTY CLI has no boundary — it ends on silence, so it pays a quiet period out and a TUI startup in). **A tool that declares `events_arg:` escapes that**: it reports `turn.end` and bashy believes it, because that is a fact the agent asserted rather than a silence bashy interpreted — today only `ycode` does (see `first-party-harness.md`). Also: `foreman interrupt` (ESC as a real keystroke) — a queued message never reaches an agent stuck in a tool loop, because it reads its queue only between turns and that turn is never going to end. Read before any steering / `say` / `tell` / agent-launch work.
@@ -495,6 +512,10 @@ brand-neutral and driven by bashy's own tools:
   validate-through-use → pointers-not-copies localization). Hard rules:
   transferred ≠ validated (a second agent promotes), kb reads foreign stores
   but never writes them.
+- `skills/steward/` — the steward role: the host's authority record, the
+  handover contract, and the tick loop. (Was missing from this list while
+  shipping since 2026-07 — `skills/embed.go` and `bashy skills list` both carry
+  six skills, and those are the sources of truth.)
 - `skills/force-agent-shell/` — attested check that agentic CLIs route their
   shell commands through bashy (so the pure-Go userland, the advisor, and OTel
   apply to everything an agent runs). Run as a convergence gate before an
