@@ -9,7 +9,8 @@
 # Usage:  NS=user-abc JOB=bash53-conformance k8s-job-aggregate.sh
 set -euo pipefail
 
-KUBECTL="${KUBECTL:-outpost kubectl}"
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/dks-profile.sh"
+KUBECTL="${KUBECTL:-$(dks_resolve_kubectl "outpost kubectl")}"
 NS="${NS:-default}"
 JOB="${JOB:-bash53-conformance}"
 

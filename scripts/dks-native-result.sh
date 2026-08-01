@@ -2,7 +2,8 @@
 # Validate one dks-native-job result from terminal Pod status.
 set -euo pipefail
 
-KUBECTL="${KUBECTL:-bashy kubectl}"
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/dks-profile.sh"
+KUBECTL="${KUBECTL:-$(dks_resolve_kubectl "bashy kubectl")}"
 DHNT="${DHNT:-bashy dhnt}"
 NS="${NS:-default}"
 JOB="${JOB:-bashy-native}"
