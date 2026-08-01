@@ -3,8 +3,8 @@
 Status: **public conformance statement, partially shipped.** The licensed
 VSC-PCTS shell scenario has run and its public-safe status lives in
 `vsc-pcts-run-status.md`; certification submission and any Open Group mark remain
-separate. Utilities results are cleared for publication under the 2026-07-29
-consent extension and will land in the same file.
+separate. Utilities-sweep results are published in the same file under the
+2026-07-29 consent extension.
 
 ## What is being claimed
 

@@ -18,18 +18,17 @@ conditions.**
 
 - **Shell-scenario results (`shell_no12`, `sh_12`) are published below** under
   the 2026-07-16 grant.
-- **The coreutils/utilities sweep is now cleared for publication** under the
-  2026-07-29 extension. The tallies have not been moved into this file yet — that
-  is pending work, not a licensing constraint.
+- **Utilities-sweep results are published below** under the 2026-07-29
+  extension.
 - **Conformance-work purposes only.** These numbers belong in engineering
   records like this one; they are not launch or marketing copy.
 - **Independent of consent and unchanged:** no "certified" / "passes the Open
   Group suite" claim, no Open Group mark/badge, and the suite is never
   redistributed.
 
-Full private record (shell + the not-yet-transcribed utilities sweep):
-`dhnt/docs/vsc-pcts/run-status.md`;
-grant: `dhnt/docs/legal/pcts-publication-consent-granted.md`.
+The full run record — journals, harness internals, the resumable launcher
+contract — is held privately by the maintainer; what is publishable under the
+grant is reproduced here.
 
 ## Shell scenario results (published under the 2026-07-16 grant)
 
@@ -60,14 +59,73 @@ Nothing about the earlier withholding was a claim of secrecy or of a bad result 
 the campaign is going well. It was a licensing term we should have honored from
 the start.
 
+## Utilities sweep results (published under the 2026-07-29 extension)
+
+The utility parts of the `posix` scenario (`posix_cmd` / `upe` / `sdo` / `xopen`,
+100 tsets) through the same non-privileged harness, with a **per-tset 10-minute
+cap** — a single part-level timeout does not work, because one slow tset will eat
+the whole budget before the rest of the sweep runs.
+
+Two arms, one harness. The **bashy arm** prepends our coreutils multicall binary
+and its ~135 command symlinks to the suite's `PATH`, so PCTS scores bashy's
+pure-Go tools wherever a name exists and the platform's GNU tools fill the rest.
+The **GNU baseline arm** is the same sweep against the stock toolchain. So this
+measures *bashy's userland against GNU's userland under identical conditions* —
+not against a POSIX ideal, and not a certification result.
+
+| arm | PASS | FAIL | UNRESOLVED | UNSUPPORTED |
+|---|---|---|---|---|
+| bashy userland (2026-07-08) | **2551** | **912** | 354 | 1341 |
+| GNU baseline (2026-07-07) | 2947 | 516 | 392 | 1313 |
+
+**86.6% of the GNU arm's pass count.** The +396 fail delta is **concentrated**,
+not spread — six commands carry more than half of it:
+
+- **sed +69, grep +59** — one root system, not two: the BRE/ERE engine
+  (`pkg/bre`, in coreutils) plus sed's feature grammar. ~130 of the delta.
+- **find +51** — `-exec` / `-ok` are on the NO-list (they shell out) and PCTS
+  tests exactly those, plus primary edge semantics.
+- **ls +20, expr +18, xargs +18, pr +17, env +16** (`env COMMAND` is likewise
+  NO-list), **id +12, od +9, mkdir +8, rm +7**.
+- ~35 further tsets at **+1..+6** — long-tail semantic edges.
+- **At parity with GNU:** `getconf`, `getopts`, `true`, `false`, `time`, `who`,
+  and the cap-limited `diff` / `ed` / `stty` / `more` / `crontab`.
+- **Not comparable across arms** (excluded from any reading of the delta):
+  `at` / `batch` / `tail` (per-tset cap artifacts differ between arms), `kill`
+  (bashy's builtin answers via the shell, not the userland shim), `patch`
+  (fixture collateral).
+
+Also from the utility arm, bashy scored **as the `sh` utility** (the `sh` tset
+inside `posix_cmd`, journal `0134be`, 2026-07-07): **41 PASS / 7 FAIL** /
+192 UNSUPPORTED. The seven: GA26 (#5), `sh -s` (#46), PATH_MAX (#59), `-c`/`-s`
+stdin handling (#67, #68), syntax-error-in-subshell exit status (#244), and
+async-events default (#801). These have not been triaged into real-bug vs
+declared-limitation vs environment.
+
+Reading: the uutils-parity campaign closed the GNU **option surface**; PCTS
+measures POSIX **runtime semantics**, which is a different axis — and it is the
+userland's current conformance frontier. The two NO-list entries the delta
+charges (~67 fails between `env COMMAND` and `find -exec`) are now
+data-justified candidates for the command-wrapper exception rather than open
+style questions.
+
+⚠️ **Currency caveat — read these as the measurement that motivated the work,
+not as today's score.** 2026-07-08 is the most recent *scored* utilities
+baseline. The `pkg/bre` regex cluster has since closed (5 fixes + an ERE/BRE
+parity lock), and **it has not been re-scored against PCTS** — that needs a Linux
+SUT and the licensed harness. The sed/grep lines above are therefore stale in the
+favourable direction, and the honest statement is that we do not yet know by how
+much. A later serial remeasurement (2026-07-18) was run cert-shaped for feedback
+discipline but produced no publishable per-command tallies, so it does not
+supersede this table.
+
 ## What is (and isn't) constrained
 
 - **Shell-utility test results — publishable** (per the 2026-07-16 grant):
   shell-scenario pass/fail tallies, assertion identifiers, reference-shell
   comparisons, for conformance-work purposes.
 - **Utilities-sweep results — also publishable** (per the 2026-07-29 extension):
-  anything derived from the utility (non-shell) tsets, on the same terms. Not yet
-  transcribed into this file.
+  anything derived from the utility (non-shell) tsets, on the same terms.
 - **Not constrained — ours, and published as always:** every measurement made
   with our own or freely-licensed harnesses. The Bash 5.3 fixture suite
   (`make test-bash`), the yash POSIX scoreboard, the clean-room differential and

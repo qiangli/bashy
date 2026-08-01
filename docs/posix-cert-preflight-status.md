@@ -2,8 +2,8 @@
 
 Status: **historical GO pre-flight snapshot.** Agent-drivable pre-flight is
 complete; licensed shell-scenario work has run; certification submission remains
-separate. Utilities results are cleared for publication (2026-07-29 consent
-extension) but have not been transcribed into `vsc-pcts-run-status.md` yet.
+separate. Utilities results are published in `vsc-pcts-run-status.md` under the
+2026-07-29 consent extension.
 
 ## Go/no-go criteria (from vsc-pcts-readiness.md §Go/no-go)
 
@@ -15,7 +15,7 @@ extension) but have not been transcribed into `vsc-pcts-run-status.md` yet.
 | **`<<${a}` heredoc-delimiter decision** | ✅ **DECIDED — declared limitation** (see below) | bashy parse-errors an expansion in the heredoc delimiter word; bash treats it as a *literal* delimiter + EOF-warns. |
 | **Declared-limitations list final** | ✅ list is stable (interactive job control; `((` nested-subshell ambiguity) | per `vsc-pcts-readiness.md` §Known limitations |
 | **Apply for VSC-PCTS license** (Open Group) | ✅ **LICENSED + SUITE IN HAND**; the shell-scenario run is complete (results held privately — see `vsc-pcts-run-status.md`) | VSC-PCTS2016 OSS v1.4 agreement, signed 2026-06-28, countersigned by The Open Group 2026-07-03 (ticket **#279890**); suite downloaded by 2026-07-04. Agreement held privately (personal data — never committed). The 12-month clock started at the suite-access email (early July 2026 → expires ~July 2027), with a 10-day destroy obligation after. Binding terms — suite not redistributable; **publishing results CONSENT GRANTED 2026-07-16 (ticket #280298) for shell-utility tests, EXTENDED 2026-07-29 to the utility test sets; both for conformance-work purposes only; no "certified"/trademark claim regardless** — see `bashy-v1.0.0-readiness.md` §License terms + `dhnt/docs/legal/pcts-publication-consent-granted.md`. |
-| **Stand up TET + wire bashy as SUT (POSIX mode)** | ✅ **shell scenario run** — public-safe status in `vsc-pcts-run-status.md`; utilities arm cleared for publication, transcription pending | scope scenario to shell + builtins |
+| **Stand up TET + wire bashy as SUT (POSIX mode)** | ✅ **shell scenario + utilities sweep run** — both published in `vsc-pcts-run-status.md` | scope scenario to shell + builtins |
 
 ## What "0 deviations" means here (claim discipline)
 
@@ -39,4 +39,4 @@ Investigated 2026-06-25. bash does **not** expand `${a}` in a heredoc delimiter 
 
 ## GO recommendation — agent-drivable criteria are GREEN
 
-Both clean-room differentials are **at 0 deviations**, the `<<${a}` decision is **made**, and the declared-limitations list above is **final**. The agent-drivable pre-flight is complete. The licensed shell-scenario run has since moved from future work to public-safe status tracking in `vsc-pcts-run-status.md`. Remaining work is certification submission/claim discipline plus publishing the utilities-campaign results now that consent covers them; no "POSIX certified" claim is made.
+Both clean-room differentials are **at 0 deviations**, the `<<${a}` decision is **made**, and the declared-limitations list above is **final**. The agent-drivable pre-flight is complete. The licensed shell-scenario run has since moved from future work to public-safe status tracking in `vsc-pcts-run-status.md`. Remaining work is certification submission/claim discipline plus re-scoring the utilities arm after the `pkg/bre` fixes; no "POSIX certified" claim is made.
