@@ -89,16 +89,16 @@ maintainer's private storage. The terms that constrain engineering work:
   The Open Group (§1). This binds *even after a clean run* — a green PCTS score
   is not publishable on its own.
 
-  ✅ **CONSENT GRANTED 2026-07-16 (ticket #280298) — SCOPED.** Between 2026-07-04
-  and 2026-07-11 this repo published PCTS tallies + assertion identifiers without
-  consent; on noticing we removed them and asked The Open Group. They have now
-  granted permission to publish results **"for the purposes of conformance work,
-  limited to the relevant tests related to the shell utility, other existing
-  requirements unchanged."** So: **shell-scenario results MAY be published**
-  (`shell_no12`, `sh_12`). **The coreutils/utilities sweep results remain
-  withheld** — "the shell utility" does not clearly cover the utility programs;
-  a scope follow-up on the ticket is needed before publishing those. And the
-  standing bars are **unchanged**: never a "certified" / "POSIX certified" /
+  ✅ **CONSENT GRANTED 2026-07-16, EXTENDED 2026-07-29 (ticket #280298).** Between
+  2026-07-04 and 2026-07-11 this repo published PCTS tallies + assertion
+  identifiers without consent; on noticing we removed them and asked The Open
+  Group. They granted permission to publish results **"for the purposes of
+  conformance work, limited to the relevant tests related to the shell utility,
+  other existing requirements unchanged"**, and on 2026-07-29 confirmed that the
+  consent **extends to the utility test sets** on the same terms. So:
+  **shell-scenario results MAY be published** (`shell_no12`, `sh_12`), and so MAY
+  **the coreutils/utilities sweep** — both **for conformance-work purposes
+  only**. And the standing bars are **unchanged**: never a "certified" / "POSIX certified" /
   "passes the Open Group suite" claim, no Open Group mark/badge, and the suite is
   never redistributed. Our own measurements (bash-5.3 fixtures, yash, the
   differential + 10-shell panels, POSIX-mode parity) were always unaffected.
@@ -184,10 +184,11 @@ and watch token budget.
   Group certification is actually granted. 86/86 is *our measured fixtures*, not
   total POSIX fidelity.
 - ❌ Do **not** publish a VSC-PCTS score, pass rate, or any "passes the Open
-  Group suite" claim outside the 2026-07-16 scoped consent. Shell-scenario
-  results may be published only within that grant; utilities results remain
-  withheld pending scope follow-up. The differential/yash/fixture numbers above
-  are ours to publish.
+  Group suite" claim outside the consent (granted 2026-07-16 for the shell,
+  extended 2026-07-29 to the utility test sets). Both arms may be published only
+  **for conformance-work purposes** — engineering records, not launch copy — and
+  a "certified"/"passes" claim is never covered. The differential/yash/fixture
+  numbers above are ours to publish.
 - Agentic uplift: state it only with the benchmark evidence behind it (arm,
   task count, verifier, sample) — self-reports are not evidence.
 

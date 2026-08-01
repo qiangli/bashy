@@ -76,7 +76,8 @@ path; ownership must remain explicit and non-overlapping.
 ## Discipline (unchanged, load-bearing)
 - **Never shell out** from the userland; the NO-list verbs exec by argv, not a shell.
 - **PCTS results are published only within written consent.** Shell-utility
-  results are covered by the scoped 2026-07-16 grant; utilities-sweep results
-  remain withheld pending follow-up.
+  results are covered by the 2026-07-16 grant and utilities-sweep results by the
+  2026-07-29 extension — both for conformance-work purposes only, and neither is
+  a "certified"/"passes" claim.
 - **The gate is evidence, never a status label** — a fixer that exits 0 is not a pass;
   run the differential.

@@ -3,7 +3,7 @@
 **Current status**: 🎉 86 bash tests passing, 0 failing, 0 skipped (of 86 measured fixtures) — **100% bash-5.3 compliance**
 **POSIX frontier**: yash `-p` conformance suite **96%** (confirmed 2026-07-01 on novicortex; ≥ bash 5.3/5.2, tied with mksh for best of the 10-shell panel) — run `bashy dag dag.md yash`; details in `docs/cross-shell-conformance-baseline.md` + `docs/yash-conformance-gap.md`
 
-**VSC-PCTS UTILITIES campaign (the active cert front, 2026-07-17)** — utilities-suite results remain withheld pending scope consent. Public updates may cite our own code changes and freely licensed harnesses only; no VSC-PCTS utilities tallies, assertion identifiers, raw journals, or private run-record pointers belong in this public repo.
+**VSC-PCTS UTILITIES campaign (the active cert front, 2026-07-17)** — publication consent for utilities-suite results was granted 2026-07-29 (ticket #280298), for conformance-work purposes on the same terms as the shell arm. Tallies and assertion identifiers therefore belong in `vsc-pcts-run-status.md` (not yet transcribed), not in this progress list; raw journals and private run-record pointers still stay out of this public repo, and no "certified"/"passes" claim is ever covered.
   - **`pkg/bre` regex cluster CLOSED (sed+grep): 5 flips + 1 parity lock**, all in `../coreutils/pkg/bre`, each independently gate-verified: `RE_DUP_MAX` intervals (`65dce2e`) · bracket validation (`b3de4d3`) · anchor parity (`b5fbf7a`) · back-ref edges (`7bc67cd`) · collating/equivalence classes (`4dca9f6`) · ERE/BRE operator lock (`b852d57`).
   - **In flight**: `expr` (`cmds/expr`). **Next**: `ls/xargs/od/mkdir/rm` (non-NO-list). **PENDING USER DECISION**: `find -exec` is a NO-list reversal — do not implement without explicit go-ahead.
   - **Stewardship handed to `codex-gpt5.6-sol` 2026-07-17** — full runbook in `dhnt/docs/steward-handover-2026-07-17.md` (the steward loop, commit/pin/refresh workflow, room control surface, disciplines, watches). Claude is observer/assistant.
@@ -175,7 +175,8 @@
 ### P9: POSIX Compliance
 
 - [x] Obtain Open Group VSC-PCTS test suite license; licensed materials remain
-      outside git and utilities results remain withheld pending scope follow-up
+      outside git. Results publication consented for both arms (shell 2026-07-16,
+      utilities 2026-07-29), conformance-work purposes only
 - [ ] Create tests/posix/ with POSIX shell compliance tests
 - [ ] ShellSpec integration for portability testing
 - [ ] POSIX mode (set -o posix) behavioral differences

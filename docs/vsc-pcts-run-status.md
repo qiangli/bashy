@@ -4,25 +4,31 @@ The official POSIX conformance work runs against **VSC-PCTS2016**, The Open
 Group's POSIX Verification Suite for Shell & Utilities, under a time-limited
 OSS license (agreement v1.4.OSS).
 
-**Publishing consent: GRANTED 2026-07-16 (ticket #280298) — SCOPED.** §1 of the
-license forbids publicly disclosing Test Suite results without The Open Group's
-prior written consent. We published tallies + assertion identifiers here between
-2026-07-04 and 2026-07-11 without that consent; on noticing we removed them and
-requested consent. The Open Group has now granted permission to publish results
+**Publishing consent: GRANTED 2026-07-16, EXTENDED 2026-07-29 (ticket #280298).**
+§1 of the license forbids publicly disclosing Test Suite results without The Open
+Group's prior written consent. We published tallies + assertion identifiers here
+between 2026-07-04 and 2026-07-11 without that consent; on noticing we removed
+them and requested consent. The Open Group granted permission to publish results
 **"for the purposes of conformance work, limited to the relevant tests related
-to the shell utility, other existing requirements unchanged."**
+to the shell utility, other existing requirements unchanged"** — and, asked
+whether that reached the utility programs too, **confirmed on 2026-07-29 that the
+consent extends to publishing results of the utility test sets, again for
+conformance-work purposes only and under the same otherwise-unchanged
+conditions.**
 
 - **Shell-scenario results (`shell_no12`, `sh_12`) are published below** under
   the 2026-07-16 grant.
-- **The coreutils/utilities sweep results remain WITHHELD.** "The shell utility"
-  does not clearly cover the utility programs; a scope follow-up on the ticket is
-  pending before those are published (the utilities arm is the active campaign
-  front). No utilities tallies appear in this file.
+- **The coreutils/utilities sweep is now cleared for publication** under the
+  2026-07-29 extension. The tallies have not been moved into this file yet — that
+  is pending work, not a licensing constraint.
+- **Conformance-work purposes only.** These numbers belong in engineering
+  records like this one; they are not launch or marketing copy.
 - **Independent of consent and unchanged:** no "certified" / "passes the Open
   Group suite" claim, no Open Group mark/badge, and the suite is never
   redistributed.
 
-Full private record (shell + withheld utilities): `dhnt/docs/vsc-pcts/run-status.md`;
+Full private record (shell + the not-yet-transcribed utilities sweep):
+`dhnt/docs/vsc-pcts/run-status.md`;
 grant: `dhnt/docs/legal/pcts-publication-consent-granted.md`.
 
 ## Shell scenario results (published under the 2026-07-16 grant)
@@ -56,11 +62,12 @@ the start.
 
 ## What is (and isn't) constrained
 
-- **Shell-utility test results — now publishable** (per the 2026-07-16 grant):
+- **Shell-utility test results — publishable** (per the 2026-07-16 grant):
   shell-scenario pass/fail tallies, assertion identifiers, reference-shell
   comparisons, for conformance-work purposes.
-- **Utilities-sweep results — still withheld** pending the scope follow-up:
-  anything derived from the utility (non-shell) tsets.
+- **Utilities-sweep results — also publishable** (per the 2026-07-29 extension):
+  anything derived from the utility (non-shell) tsets, on the same terms. Not yet
+  transcribed into this file.
 - **Not constrained — ours, and published as always:** every measurement made
   with our own or freely-licensed harnesses. The Bash 5.3 fixture suite
   (`make test-bash`), the yash POSIX scoreboard, the clean-room differential and

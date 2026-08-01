@@ -2,8 +2,14 @@
 
 Status: **public-safe Workstream C checkpoint.** This file records what may be
 committed publicly about utility-campaign shardability. It intentionally omits
-licensed test source, raw journals, private host names, credentials, and withheld
-utilities results.
+licensed test source, raw journals, private host names, and credentials.
+
+> **Update 2026-07-29:** publication consent now covers utility-test *results*
+> (ticket #280298), so the "withheld" rows below are no longer a licensing
+> limit — they are simply not yet measured/audited publicly. Timing and tallies
+> may be published for conformance-work purposes once the private audit reduces
+> them to stable public identifiers; raw journals and licensed source stay out
+> regardless.
 
 ## Boundary
 
@@ -30,7 +36,7 @@ Current public-safe feasibility result:
 
 | Field | Value |
 |---|---|
-| Total utility campaign time | **unknown publicly** - withheld with the private utilities arm |
+| Total utility campaign time | **unknown publicly** - not yet audited into a public-safe form (no longer a consent limit as of 2026-07-29) |
 | Longest independently invocable utility unit | **unknown publicly** - requires private harness-unit audit |
 | Required chunk count for sub-30-minute feedback | **unknown publicly** - depends on the longest indivisible private unit and setup cost |
 | Sub-30-minute campaign achievable | **unknown publicly** - not asserted from public evidence |

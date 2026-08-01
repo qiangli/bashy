@@ -53,8 +53,9 @@ Std 1003.1 (POSIX.1-2017) XCU** spec. Three facts shape this work:
 ### Phase 3 — Official VSC-PCTS2016 (formal certification)
 - License/TET setup and the shell scenario have run; public-safe state is in
   `vsc-pcts-run-status.md`.
-- Certification submission, any certification mark, and the utilities arm are
-  separate. Utilities results remain withheld pending scope follow-up.
+- Certification submission and any certification mark stay separate. The
+  utilities arm is its own campaign, and its results are cleared for publication
+  under the 2026-07-29 consent extension (ticket #280298).
 
 ### Phase 4 — Fix loop (throughout)
 - Deviations → issues → fix in sh → gate on the bash-5.3 suite (no regression)
