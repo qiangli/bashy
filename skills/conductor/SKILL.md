@@ -10,6 +10,18 @@ description: >-
   a conformance push, a coverage drive — with a fast repro and a regression guard
   to protect. NOT for a one- or two-edit fix (do it inline) or a goal with no
   way to verify "done" (define a gate, or stabilize a flaky suite, first).
+metadata:
+  # Bindings — the skill's OWN commands, so composition renders a runnable phase
+  # loop rather than labels. PLAN, RESEARCH and RETRO stay unbound as
+  # `latitude judage`: decomposing a goal into disjoint stories, deciding whether
+  # research is warranted, and judging what the round taught are judgement, and a
+  # command claiming to do them would be a lie.
+  check-goalimeto: bashy gate
+  check-coniverogeda: bashy weave status
+  check-revieweda: bashy judge
+  step-fanouto: bashy weave fleet --auth && bashy weave start
+  step-soteero: bashy weave status
+  step-coniveroge: bashy weave pull
 ---
 
 # conductor — drive a fleet of agent CLIs to a verified goal
