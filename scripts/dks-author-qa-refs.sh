@@ -3,8 +3,10 @@
 # published candidate points at that source, then atomically author all OS refs.
 set -euo pipefail
 
-. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/dks-profile.sh"
-KUBECTL="${KUBECTL:-$(dks_resolve_kubectl "bashy kubectl")}"
+. "$(cd "$(dirname "$0")" && pwd)/dks-profile.sh"
+if [ -z "${KUBECTL:-}" ]; then
+  KUBECTL="$(dks_resolve_kubectl "bashy kubectl")"
+fi
 
 VERSION="${VERSION:?set VERSION to the base candidate version, for example v0.19.2}"
 EXPECTED_SOURCE_REF="${EXPECTED_SOURCE_REF:?set EXPECTED_SOURCE_REF to the exact Bashy commit}"

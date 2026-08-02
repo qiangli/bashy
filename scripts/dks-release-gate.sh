@@ -2,8 +2,10 @@
 # Fail-closed release gate over completed DKS native and conformance Jobs.
 set -euo pipefail
 
-. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/dks-profile.sh"
-KUBECTL="${KUBECTL:-$(dks_resolve_kubectl "bashy kubectl")}"
+. "$(cd "$(dirname "$0")" && pwd)/dks-profile.sh"
+if [ -z "${KUBECTL:-}" ]; then
+  KUBECTL="$(dks_resolve_kubectl "bashy kubectl")"
+fi
 DHNT="${DHNT:-bashy dhnt}"
 NS="${NS:-default}"
 EXPECTED_SOURCE_REF="${EXPECTED_SOURCE_REF:?set EXPECTED_SOURCE_REF to the exact Bashy commit}"

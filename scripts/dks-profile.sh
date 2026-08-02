@@ -19,12 +19,34 @@
 # Not sourced directly by users: each DKS script sources this file and calls
 # dks_resolve_kubectl with its own existing default, e.g.:
 #
+#   . "$(cd "$(dirname "$0")" && pwd)/dks-profile.sh"
+#   if [ -z "${KUBECTL:-}" ]; then
+#     KUBECTL="$(dks_resolve_kubectl "outpost kubectl")"
+#   fi
+#
+# Use the plain `$0` + `if [ -z ... ]; then KUBECTL=$(...); fi` form above,
+# not the two patterns it replaced:
+#
 #   . "$(dirname "${BASH_SOURCE[0]:-$0}")/dks-profile.sh"
-#   KUBECTL="${KUBECTL:-$(dks_resolve_kubectl "outpost kubectl")}"
+#   KUBECTL="${KUBECTL:-$(dks_resolve_kubectl "...")}"
+#
+# Both are valid POSIX/bash but panic Bashy's mvdan-based expander under
+# `set -u`. Bashy never populates BASH_SOURCE[0] for the top-level script, so
+# `${BASH_SOURCE[0]:-$0}` hits the nounset fallback path - and that fallback
+# path nil-derefs in Bashy today. The same root cause hits any
+# `${arr[i]:-$(cmd)}` array-index-with-command-substitution default,
+# including the `KUBECTL="${KUBECTL:-$(...)}"` shorthand.
+#
+# See scripts/test-dks-profile.sh's bashy-panic regression, which executes
+# every modified script through installed bashy (when available) and
+# requires no panic.
 #
 # An explicit $KUBECTL set by the caller's environment always wins over any
-# profile - dks_resolve_kubectl is only consulted through the `${KUBECTL:-…}`
-# fallback, exactly like the pre-profile default it replaces.
+# profile - dks_resolve_kubectl is only consulted when $KUBECTL is unset or
+# empty, exactly like the pre-profile default it replaced. These scripts are
+# always invoked directly (never sourced), so $0 and ${BASH_SOURCE[0]:-$0}
+# name the same path under real bash - $0 alone is both simpler and
+# Bashy-safe.
 set -euo pipefail
 
 dks_resolve_kubectl() {

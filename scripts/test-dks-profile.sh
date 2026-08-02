@@ -147,6 +147,67 @@ case "$gate_err" in
   *) note "FAIL: dks-release-gate.sh peer failure message unclear: $gate_err"; fail=1 ;;
 esac
 
+# --- Bashy panic regression -------------------------------------------------
+# The nested `KUBECTL="${KUBECTL:-$(dks_resolve_kubectl ...)}"` default and the
+# `${BASH_SOURCE[0]:-$0}` self-location idiom both panicked Bashy's
+# mvdan-based expander under `set -u` (a nil pointer dereference resolving an
+# array-index/command-substitution parameter-expansion default) even though
+# both are valid POSIX/bash. Every modified script now uses a plain
+# `if [ -z ... ]; then ...; fi` conditional and `$0` instead. Exercise each
+# modified script through installed bashy, when available, and require it not
+# to panic. Deterministic/offline: a stub PATH shadows outpost/bashy/gh so
+# nothing touches a real cluster or network, and no script is expected to
+# succeed here — only to fail cleanly instead of crashing.
+if command -v bashy >/dev/null 2>&1; then
+  bashy_bin="$(command -v bashy)"
+  panic_bin="$tmp/panicbin"
+  mkdir -p "$panic_bin"
+  for stub in outpost bashy gh git; do
+    cat >"$panic_bin/$stub" <<EOF
+#!/usr/bin/env bash
+echo "$stub: stub refuses \$*" >&2
+exit 9
+EOF
+    chmod +x "$panic_bin/$stub"
+  done
+
+  no_panic() {
+    local desc="$1" script="$2"
+    shift 2
+    local out rc
+    set +e
+    out="$(cd "$root" && env -i \
+      PATH="$panic_bin:/usr/bin:/bin" HOME="$fake_home" "$@" \
+      "$bashy_bin" "$script" 2>&1)"
+    rc=$?
+    set -e
+    case "$out" in
+      *'panic:'*|*'SIGSEGV'*|*'goroutine '*)
+        note "FAIL: $desc panicked under bashy (exit=$rc)"
+        note "$out"
+        fail=1
+        ;;
+    esac
+  }
+
+  no_panic "dks-release-gate.sh" scripts/dks-release-gate.sh \
+    NS=default JOB=probe-job \
+    EXPECTED_SOURCE_REF=deadbeef EXPECTED_SOURCE_SHA256=deadbeef \
+    PIPELINE_FILE="$tmp/pipeline.json" NATIVE_JOBS=probe-job CONFORMANCE_JOBS=probe-job
+
+  no_panic "dks-native-result.sh" scripts/dks-native-result.sh \
+    NS=default JOB=probe-job
+
+  no_panic "k8s-job-aggregate.sh" scripts/k8s-job-aggregate.sh \
+    NS=default JOB=probe-job
+
+  no_panic "dks-author-qa-refs.sh" scripts/dks-author-qa-refs.sh \
+    VERSION=v0.0.0 EXPECTED_SOURCE_REF=deadbeef EXPECTED_SOURCE_SHA256=deadbeef \
+    PIPELINE_FILE="$tmp/pipeline.json" NATIVE_JOBS=probe-job CONFORMANCE_JOBS=probe-job
+else
+  note "SKIP: bashy not installed - bashy-panic regression not run"
+fi
+
 if [ "$fail" -eq 0 ]; then
   echo "dks profile resolution: PASS"
 else
