@@ -40,3 +40,87 @@ Investigated 2026-06-25. bash does **not** expand `${a}` in a heredoc delimiter 
 ## GO recommendation — agent-drivable criteria are GREEN
 
 Both clean-room differentials are **at 0 deviations**, the `<<${a}` decision is **made**, and the declared-limitations list above is **final**. The agent-drivable pre-flight is complete. The licensed shell-scenario run has since moved from future work to public-safe status tracking in `vsc-pcts-run-status.md`. Remaining work is certification submission/claim discipline plus re-scoring the utilities arm after the `pkg/bre` fixes; no "POSIX certified" claim is made.
+
+## 2026-08-02 preflight re-run (workstream 1, single-host, serial)
+
+Scope: re-confirm the two agent-drivable pre-flight gates named in this
+doc and in `posix-cert-handoff-runbook.md` §Pre-flight gate, on this host,
+without chunking/distribution. No `../sh`/`../coreutils` sibling edits, no
+DKS/O3 work; this run does not stand in for distributed/chunked evidence
+(that equivalence claim is tracked separately in
+`workstream-a-equivalence.md`).
+
+Environment: macOS (Darwin 25.5.0, arm64, host `dragon`), `go1.26.5`,
+repo at `fc4b3c5` (branch `agent/weave-issue-34`). `PATH` has no `sh`
+wrapper-shim ahead of `/bin/sh` (the documented local-env gotcha does not
+apply here). `external/bash-5.3` resolves via the gitignored symlink to a
+local Bash 5.3 source checkout's `tests/` dir.
+
+### `make test-bash` — authoritative single-SUT serial gate
+
+```sh
+make test-bash
+```
+
+Started 2026-08-02T20:54:37Z, wall time **127.01s** (`real 127.01 / user
+10.70 / sys 11.29`, per `/usr/bin/time -p`).
+
+**Result: 86 passed, 0 failed, 0 skipped, 0 timed out — no regression**
+against the 86/86 anchor cited above and in `docs/TODO.md`. Slowest
+fixtures: `jobs` (62.3s), `trap` (17.1s), `func` (5.1s), `read` (4.8s) —
+consistent with prior runs; no new slow or flaky fixture observed.
+
+### `make test-yash` — POSIX (-p) scoreboard
+
+**Not run — documented prerequisite absent.** `scripts/yash-scoreboard.sh`
+requires a local `.yash-tests/tests` corpus, which is a **gitignored
+runtime clone** of the GPL yash source (`git clone
+https://github.com/magicant/yash.git .yash-tests` — see
+`scripts/yash-posix-suite.sh` and `docs/report-yash-dks-bpath.md`); it is
+never vendored into the repo and was not present in this workspace
+(consistent with `workstream-a-equivalence.md`'s "Current measurements"
+note that the same clone was absent there). Provisioning it here would
+require an out-of-band network `git clone`, which this task does not
+authorize (workstream 1 is scoped to what's already present, and network
+provisioning is exactly the kind of setup step `posix-cert-handoff-
+runbook.md` reserves for the licensed/CI run, not an ad-hoc preflight).
+Docker itself is available on this host (`docker info` succeeds), so the
+**only** blocker is the missing corpus, not the OCI runtime.
+
+The last confirmed yash `-p` scoreboard remains the headline in
+`docs/TODO.md`: **96%** (2026-07-01, novicortex; ≥ bash 5.3/5.2, tied with
+mksh for best of the 10-shell panel) — this preflight neither confirms nor
+invalidates that number; it is carried forward unchanged. Fresh
+measurement requires either clearing the corpus-provisioning blocker above
+or running on a host where `.yash-tests/` is already materialized.
+
+### Next smallest fidelity gaps (from `docs/yash-conformance-gap.md`, unchanged by this run)
+
+The two highest-leverage, disjoint yash `-p` worklists (~60% of the last
+measured gap, per `docs/yash-conformance-gap.md` §Suggested fleet plan):
+
+1. **error-p subshell assignment-error** (~36 cases) — likely one root
+   cause in the subshell command-prefix assignment path (`../sh`
+   `interp`/`expand`).
+2. **alias-p substitution positions** (~30 cases) — the alias-expansion
+   pass when the value hits reserved words / operators / compound
+   boundaries.
+
+Each would need triage per the standard bucket discipline (real bug fixed
+in `../sh`, gated on `make test-bash` staying 86/86; wording/format
+artifact; or out-of-scope utility assertion) — none attempted here per
+scope (no sibling edits in this task).
+
+### Environment blockers for future preflight runs
+
+- **`docs/bashy-three-workstreams.md`** (the umbrella doc this task was
+  asked to read) does not exist in this repo or its checked-out siblings
+  (`sh`, `coreutils`, `readline`) — only same-named docs under an
+  unrelated sibling checkout (`dhnt-31437fad/.../docs/bashy-three-
+  workstreams.md`) were found on the host, outside this workspace's git
+  history. This preflight proceeded on this repo's own `CLAUDE.md` +
+  `posix-cert-preflight-status.md` + `posix-cert-handoff-runbook.md`
+  instead. Flagging so the umbrella doc's actual location (or absence in
+  this checkout) gets resolved before the next workstream-1 pass.
+- **`.yash-tests/` corpus** — see above; needs a one-time network clone
+  before `make test-yash` can run on a given host.
