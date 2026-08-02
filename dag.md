@@ -1412,7 +1412,9 @@ Effects: net, write
 ```bash
 set -e
 : "${IMAGE:?set IMAGE to the self-contained conformance image}"
-scripts/dag-to-k8s-job.sh | "$BASHY" kubectl apply -f -
+. scripts/dks-profile.sh
+dks_kubectl_init "$BASHY kubectl"
+scripts/dag-to-k8s-job.sh | dks_kubectl apply -f -
 ```
 
 ### dks-conformance-result
@@ -1423,7 +1425,7 @@ Effects: net, read
 
 ```bash
 set -e
-KUBECTL="$BASHY kubectl" scripts/k8s-job-aggregate.sh
+scripts/k8s-job-aggregate.sh
 ```
 
 ### dks-native-apply
@@ -1441,7 +1443,9 @@ Effects: net, write
 ```bash
 set -e
 : "${TARGET_OS:?set TARGET_OS to linux, darwin, or windows}"
-scripts/dks-native-job.sh | "$BASHY" kubectl apply -f -
+. scripts/dks-profile.sh
+dks_kubectl_init "$BASHY kubectl"
+scripts/dks-native-job.sh | dks_kubectl apply -f -
 ```
 
 ### dks-native-result
@@ -1451,7 +1455,7 @@ Effects: net, read
 
 ```bash
 set -e
-KUBECTL="$BASHY kubectl" scripts/dks-native-result.sh
+scripts/dks-native-result.sh
 ```
 
 ### dks-release-gate
@@ -1464,7 +1468,7 @@ Effects: net, read
 
 ```bash
 set -e
-KUBECTL="$BASHY kubectl" scripts/dks-release-gate.sh
+scripts/dks-release-gate.sh
 ```
 
 ### qa
