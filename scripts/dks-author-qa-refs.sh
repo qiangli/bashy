@@ -3,6 +3,11 @@
 # published candidate points at that source, then atomically author all OS refs.
 set -euo pipefail
 
+. "$(cd "$(dirname "$0")" && pwd)/dks-profile.sh"
+if [ -z "${KUBECTL:-}" ]; then
+  KUBECTL="$(dks_resolve_kubectl "bashy kubectl")"
+fi
+
 VERSION="${VERSION:?set VERSION to the base candidate version, for example v0.19.2}"
 EXPECTED_SOURCE_REF="${EXPECTED_SOURCE_REF:?set EXPECTED_SOURCE_REF to the exact Bashy commit}"
 EXPECTED_SOURCE_SHA256="${EXPECTED_SOURCE_SHA256:?set EXPECTED_SOURCE_SHA256 to the source-tree sha256}"
@@ -42,7 +47,7 @@ fi
   exit 4
 }
 
-NS="${NS:-default}" KUBECTL="${KUBECTL:-bashy kubectl}" \
+NS="${NS:-default}" KUBECTL="$KUBECTL" \
   EXPECTED_SOURCE_REF="$EXPECTED_SOURCE_REF" \
   EXPECTED_SOURCE_SHA256="$EXPECTED_SOURCE_SHA256" \
   PIPELINE_FILE="$PIPELINE_FILE" \

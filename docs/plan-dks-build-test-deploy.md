@@ -133,6 +133,45 @@ container running on that host.
 The k3s agent nodes may run Linux-only control/aggregation work, but they do not
 count as proof of their registered host's operating system.
 
+### KUBECTL profile: cloudbox vs. peer-hosted control plane
+
+Every DKS script that actually invokes `kubectl` (`scripts/k8s-job-aggregate.sh`,
+`scripts/dks-native-result.sh`, `scripts/dks-release-gate.sh`,
+`scripts/dks-author-qa-refs.sh`) resolves its `$KUBECTL` command through
+`scripts/dks-profile.sh`, which sources one function, `dks_resolve_kubectl`.
+This is a config choice, not a code path: the scripts' own logic never
+changes, only which `kubectl` invocation they shell out to. (The pure DKS
+manifest emitters — `scripts/dag-to-k8s-job.sh`, `scripts/dag-to-argo.sh`,
+`scripts/dks-native-job.sh` — never invoke `kubectl` themselves; they print
+YAML to stdout for a caller to pipe into `kubectl apply -f -`, so the profile
+does not apply to them.)
+
+Two profiles, selected by `$DKS_PROFILE`:
+
+- **`cloudbox`** (the default — unchanged from today). `$KUBECTL` resolves to
+  each script's existing default (`outpost kubectl` or `bashy kubectl`), which
+  fetches a per-user kubeconfig from Cloudbox on demand. Leaving `$DKS_PROFILE`
+  unset reproduces today's behavior exactly.
+- **`peer`**. Targets a peer-hosted control plane's already-local kubeconfig
+  instead of fetching one from Cloudbox. Resolves `$DKS_PEER_KUBECONFIG`
+  (default `$HOME/.kube/outpost-control-plane/k3s.yaml`) and sets
+  `KUBECTL="kubectl --kubeconfig <path>"`. If that file is absent, the script
+  exits non-zero with a message naming the missing path — it never silently
+  falls back to `cloudbox`, since applying to the wrong cluster is the failure
+  mode this exists to prevent. Only the path is inspected; the kubeconfig
+  content is never read or printed.
+
+An explicit `$KUBECTL` set by the caller's environment always wins over either
+profile, exactly as it did before the profile existed.
+
+Certification runs (`scripts/vsc-profile.sh`) are unaffected: VSC-PCTS is a
+single-SUT, no-cluster policy and never touches `$KUBECTL` or `$DKS_PROFILE`.
+
+Tests: `scripts/test-dks-profile.sh` (offline, no cluster, no `kubectl`
+execution — verifies default/peer/explicit-override/missing-file resolution
+and asserts the default `cloudbox` path is byte-identical to pre-profile
+behavior).
+
 ## Work plan
 
 ### 1. Define one DKS job and evidence contract
