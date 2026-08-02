@@ -59,7 +59,85 @@ Nothing about the earlier withholding was a claim of secrecy or of a bad result 
 the campaign is going well. It was a licensing term we should have honored from
 the start.
 
-## Utilities sweep results (published under the 2026-07-29 extension)
+## 2026-08-01 — full re-measure, both arms, one x86_64 host
+
+The 2026-07-08 figures below were scored on arm64 and pre-date the `pkg/bre`
+regex work. This run re-scored **both halves of the product** (shell +
+utilities) and **both arms** (bashy userland vs the stock GNU toolchain) on a
+single disposable Linux host, so the comparison carries no architecture
+variable. SUT is tag `vsc-pcts-2026-08-01`. Full POSIX08 scenario, 121 test
+sets per arm, per-tset 10-minute cap.
+
+| arm | PASS | FAIL | UNRESOLVED | UNSUPPORTED | UNTESTED | wall |
+|---|---|---|---|---|---|---|
+| bashy userland | 5,166 | 2,073 | 591 | 1,528 | 846 | ~3h |
+| GNU baseline | 5,625 | 1,837 | 756 | 1,559 | 876 | ~2h |
+
+**The result is the delta, not the fail count: +313 attributable to bashy.**
+Both arms run identical tests, so most volume cancels — `m4` 92, `bc` 214
+across three sets, `chown` 76, `make` 60, `ctags`/`strip` 24 each fail
+*identically in both arms*, being utilities our multicall does not ship (both
+arms scored the same distro binary) or environment properties.
+
+Remaining bashy-attributable failures by test set:
+
+```
+find +40   sed +35   date +34   dd +20   cp +16   pr  +15   patch +13
+env  +12   ls  +11   awk   +7   rm  +6   cut +6   cat  +6   xargs  +5
+od    +5   mkfifo +5  then +4/+3/+2/+1 across ~45 further sets
+```
+
+`sh_05 +2` is the only shell set with a real delta — **the shell arm is
+essentially at parity with the reference.**
+
+**The regex work landed.** Against the arm64 figures:
+
+| tset | 2026-07-08 | 2026-08-01 | |
+|---|---|---|---|
+| grep | +59 | **+3** | essentially closed |
+| expr | +18 | **0** | closed |
+| id | +12 | +1 | closed |
+| mkdir | +8 | +1 | closed |
+| xargs | +18 | +5 | large improvement |
+| sed | +69 | **+35** | halved |
+| ls | +20 | +11 | halved |
+| find | +51 | +40 | modest |
+| **total** | **+396** | **+313** | |
+
+`sed` halving rather than closing indicates the remainder is sed's own feature
+grammar, not the shared BRE/ERE engine.
+
+Three caveats, stated because they change how the numbers should be read:
+
+- **`date +34` is new** — absent from the arm64 list entirely (GNU fails 2,
+  bashy 36). Either a regression or newly-exercised coverage: this host
+  provisions a `de_DE` locale and `date` is locale-dependent, so those tests
+  could not previously run. Untriaged.
+- **`at`, `diff`, `tail` are excluded** as not comparable — they hit the
+  10-minute cap under bashy but not under GNU, so their bashy fail counts are
+  *truncation, not success*.
+- **The arm64 comparison is directional only.** The architecture changed *and*
+  the denominator moved: provisioning a locale, read-only and no-symlink
+  filesystems, and real special files means tests that were formerly skipped
+  now run.
+
+### A conformance defect the suite found
+
+`$!` after backgrounding a **subshell group** returns an internal job label
+rather than a PID:
+
+```
+$ sh -c '(:)& echo $!'        →  g1      (bashy)   66044 (dash)   66046 (bash)
+$ sh -c 'sleep 0 & echo $!'   →  66042   (correct — a real process was exec'd)
+```
+
+A background job that never execs has no OS PID, so `$!` falls back to a
+`g<N>` sentinel; real shells fork for `( … ) &`. This is not academic — TET's
+own shell API uses `` tet_context=`(:)& echo $!` `` to mint a context id, so
+`test $tet_context -eq 0` errored ~191 times per arm. Verdicts and assertion
+diagnostics were unaffected.
+
+## Utilities sweep results (2026-07-08, arm64 — superseded by the run above)
 
 The utility parts of the `posix` scenario (`posix_cmd` / `upe` / `sdo` / `xopen`,
 100 tsets) through the same non-privileged harness, with a **per-tset 10-minute
@@ -109,13 +187,11 @@ charges (~67 fails between `env COMMAND` and `find -exec`) are now
 data-justified candidates for the command-wrapper exception rather than open
 style questions.
 
-⚠️ **Currency caveat — read these as the measurement that motivated the work,
-not as today's score.** 2026-07-08 is the most recent *scored* utilities
-baseline. The `pkg/bre` regex cluster has since closed (5 fixes + an ERE/BRE
-parity lock), and **it has not been re-scored against PCTS** — that needs a Linux
-SUT and the licensed harness. The sed/grep lines above are therefore stale in the
-favourable direction, and the honest statement is that we do not yet know by how
-much. A later serial remeasurement (2026-07-18) was run cert-shaped for feedback
+✅ **Superseded 2026-08-01.** These were the numbers that motivated the
+`pkg/bre` work; that work has now been re-scored on x86_64 (see the section at
+the top of this file) and the regex cluster is confirmed closed — grep +59 → +3,
+expr +18 → 0. Keep this section as the historical arm64 baseline; quote the
+2026-08-01 figures as current. A later serial remeasurement (2026-07-18) was run cert-shaped for feedback
 discipline but produced no publishable per-command tallies, so it does not
 supersede this table.
 
