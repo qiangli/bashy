@@ -127,9 +127,10 @@ TTL="${TTL:-3600}"
 # never a real execution mode — campaign-distribute.sh refuses to emit a
 # CAMPAIGN_VERDICT (the only promotable marker) while it is set.
 campaign_k8s_resolve_kubectl() {
+  . "$root/dks-profile.sh"
   if [ -n "${CAMPAIGN_K8S_FAKE_KUBECTL:-}" ]; then
     echo "campaign-distribute-k8s: FAKE kubectl injected — logic check only; this run is NOT distributed execution and its output is not a distributed result" >&2
-    printf '%s\n' "$CAMPAIGN_K8S_FAKE_KUBECTL"
+    DKS_KUBECTL_CMD=("$CAMPAIGN_K8S_FAKE_KUBECTL")
     return 0
   fi
   case "${DKS_PROFILE:-peer}" in
@@ -144,11 +145,13 @@ campaign_k8s_resolve_kubectl() {
   # the D3 profile unconditionally instead of the historical
   # `[ -z "$KUBECTL" ]` dance, so an inherited cloudbox KUBECTL can never
   # silently steal a peer run.
-  . "$root/dks-profile.sh"
-  dks_resolve_kubectl "kubectl"
+  # The campaign transport deliberately ignores an ambient legacy KUBECTL
+  # override: peer profile selection is authoritative here.
+  unset KUBECTL
+  dks_kubectl_init "kubectl"
 }
 
-KUBECTL="$(campaign_k8s_resolve_kubectl)"
+campaign_k8s_resolve_kubectl
 
 # --- FAIL-CLOSED PEER CLUSTER IDENTITY ---------------------------------------
 #
@@ -382,7 +385,7 @@ campaign_k8s_preflight() {
   identities=""
   for role in $WORKERS; do
     node="$(campaign_k8s_node_for "$role")"
-    got="$($KUBECTL get node "$node" -o jsonpath='{.metadata.name}' 2>/dev/null)" || {
+    got="$(dks_kubectl get node "$node" -o jsonpath='{.metadata.name}' 2>/dev/null)" || {
       echo "campaign-distribute-k8s: REFUSED — worker role '$role' pins node '$node' which does not exist in the peer cluster" >&2
       exit 13
     }
@@ -390,8 +393,8 @@ campaign_k8s_preflight() {
       echo "campaign-distribute-k8s: REFUSED — node lookup for '$node' returned '$got'" >&2
       exit 13
     }
-    host="$($KUBECTL get node "$node" -o jsonpath='{.metadata.labels.outpost\.dhnt\.io/host}' 2>/dev/null || true)"
-    backend="$($KUBECTL get node "$node" -o jsonpath='{.metadata.labels.outpost\.dhnt\.io/backend}' 2>/dev/null || true)"
+    host="$(dks_kubectl get node "$node" -o jsonpath='{.metadata.labels.outpost\.dhnt\.io/host}' 2>/dev/null || true)"
+    backend="$(dks_kubectl get node "$node" -o jsonpath='{.metadata.labels.outpost\.dhnt\.io/backend}' 2>/dev/null || true)"
     if [ -n "$host" ]; then
       identity="$host|$backend"
     else
@@ -514,25 +517,25 @@ campaign_k8s_dispatch_chunk() {
   # parent's EXIT-trap cleanup of the ledger is the second line of defense,
   # ttlSecondsAfterFinished the third.
   printf '%s\n' "$job" >>"$ledger"
-  trap '$KUBECTL delete job "$job" -n "$NS" --ignore-not-found --wait=false >/dev/null 2>&1 || true' EXIT
+  trap 'dks_kubectl delete job "$job" -n "$NS" --ignore-not-found --wait=false >/dev/null 2>&1 || true' EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
 
   campaign_k8s_manifest "$job" "$node" "$worker" "$chunk_id" "$cases" \
-    | $KUBECTL apply -f - >/dev/null
+    | dks_kubectl apply -f - >/dev/null
 
-  if ! $KUBECTL wait --for=condition=complete "--timeout=${CHUNK_TIMEOUT}s" "job/$job" -n "$NS" >/dev/null 2>&1; then
+  if ! dks_kubectl wait --for=condition=complete "--timeout=${CHUNK_TIMEOUT}s" "job/$job" -n "$NS" >/dev/null 2>&1; then
     echo "campaign-distribute-k8s: FAIL chunk=$chunk_id worker=$worker node=$node — Job $job did not complete within ${CHUNK_TIMEOUT}s (never scheduled, wedged, or failed); worker unreachable is not a pass" >&2
     exit 3
   fi
 
-  job_uid="$($KUBECTL get job "$job" -n "$NS" -o jsonpath='{.metadata.uid}')"
+  job_uid="$(dks_kubectl get job "$job" -n "$NS" -o jsonpath='{.metadata.uid}')"
   [ -n "$job_uid" ] || {
     echo "campaign-distribute-k8s: FAIL chunk=$chunk_id — Job $job has no uid; identity cannot be established" >&2
     exit 3
   }
 
-  pods="$($KUBECTL get pods -n "$NS" -l "job-name=$job" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')"
+  pods="$(dks_kubectl get pods -n "$NS" -l "job-name=$job" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')"
   pod_n="$(printf '%s' "$pods" | grep -c . || true)"
   if [ "$pod_n" -ne 1 ]; then
     echo "campaign-distribute-k8s: FAIL chunk=$chunk_id — expected exactly 1 pod for Job $job, found $pod_n; ambiguous evidence is not evidence" >&2
@@ -540,20 +543,20 @@ campaign_k8s_dispatch_chunk() {
   fi
   pod="$(printf '%s' "$pods" | head -n1)"
 
-  owner_uid="$($KUBECTL get pod "$pod" -n "$NS" -o jsonpath='{.metadata.ownerReferences[0].uid}')"
+  owner_uid="$(dks_kubectl get pod "$pod" -n "$NS" -o jsonpath='{.metadata.ownerReferences[0].uid}')"
   if [ "$owner_uid" != "$job_uid" ]; then
     echo "campaign-distribute-k8s: FAIL chunk=$chunk_id — pod $pod is not owned by Job $job (owner uid '$owner_uid' != job uid '$job_uid'); foreign evidence rejected" >&2
     exit 5
   fi
 
-  observed_node="$($KUBECTL get pod "$pod" -n "$NS" -o jsonpath='{.spec.nodeName}')"
+  observed_node="$(dks_kubectl get pod "$pod" -n "$NS" -o jsonpath='{.spec.nodeName}')"
   if [ "$observed_node" != "$node" ]; then
     echo "campaign-distribute-k8s: FAIL chunk=$chunk_id — pinned node '$node' but pod $pod ran on '$observed_node'; the pin did not hold, placement evidence rejected" >&2
     exit 5
   fi
 
   log_file="$evidence_dir/chunk-$chunk_id.log"
-  $KUBECTL logs "$pod" -n "$NS" >"$log_file" || {
+  dks_kubectl logs "$pod" -n "$NS" >"$log_file" || {
     echo "campaign-distribute-k8s: FAIL chunk=$chunk_id — could not collect logs from pod $pod; a lost log is missing evidence, not a pass" >&2
     exit 4
   }
@@ -595,7 +598,7 @@ campaign_k8s_dispatch_chunk() {
     "$sidecar_transport" "$sidecar_evidence" \
     >"$evidence_dir/chunk-$chunk_id.evidence.json"
 
-  $KUBECTL delete job "$job" -n "$NS" --ignore-not-found --wait=false >/dev/null
+  dks_kubectl delete job "$job" -n "$NS" --ignore-not-found --wait=false >/dev/null
   trap - EXIT
 }
 
@@ -605,7 +608,7 @@ campaign_k8s_cleanup() {
   [ -f "$ledger" ] || return 0
   while IFS= read -r job; do
     [ -n "$job" ] || continue
-    $KUBECTL delete job "$job" -n "$NS" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+    dks_kubectl delete job "$job" -n "$NS" --ignore-not-found --wait=false >/dev/null 2>&1 || true
   done <"$ledger"
 }
 
