@@ -207,6 +207,35 @@ campaign_out_dir() {
   fi
 }
 
+# --- per-chunk result validation ---------------------------------------------
+# Every result line must be exactly two fields: <test_id> <outcome>.
+# outcome is one of pass|fail|skip. Test IDs must be unique within the file,
+# and must be a subset of the cases this chunk/serial run was asked to execute.
+# Malformed, duplicate, or foreign records are rejected before any reduction.
+campaign_validate_result_file() {
+  result_file="$1" expected_cases="$2" ctx="$3"
+
+  bad_lines="$(awk 'NF != 2 || $2 !~ /^(pass|fail|skip)$/ { print NR }' "$result_file")"
+  if [ -n "$bad_lines" ]; then
+    echo "campaign-distribute: FAIL $ctx — result contains malformed line(s) $bad_lines; every line must be '<test_id> <outcome>' with outcome in {pass,fail,skip}" >&2
+    exit 5
+  fi
+
+  dupes="$(cut -f1 -d' ' "$result_file" | sort | uniq -d)"
+  if [ -n "$dupes" ]; then
+    echo "campaign-distribute: FAIL $ctx — duplicate test ID(s) in result:" >&2
+    printf '%s\n' "$dupes" >&2
+    exit 5
+  fi
+
+  unknown="$(comm -23 <(cut -f1 -d' ' "$result_file" | sort -u) <(sort -u "$expected_cases"))"
+  if [ -n "$unknown" ]; then
+    echo "campaign-distribute: FAIL $ctx — result contains unknown/extra test ID(s) not in the assigned set:" >&2
+    printf '%s\n' "$unknown" >&2
+    exit 5
+  fi
+}
+
 # --- distribute --------------------------------------------------------------
 campaign_distribute() {
   campaign_require_common
@@ -304,6 +333,12 @@ campaign_distribute() {
       fi
     fi
 
+    # Every result line must be well-formed, the outcome must be one of the
+    # three allowed values, and the file must contain no duplicate or foreign
+    # records. This is a structural gate; the set-equality check below is the
+    # completeness gate (no drops, no smuggled substitutions).
+    campaign_validate_result_file "$result_file" "$chunk_cases" "chunk=$chunk_id worker=$worker"
+
     # The reported case set for this chunk must equal exactly the assigned
     # set: no dropped case, no foreign/duplicate case smuggled in from
     # elsewhere. A total-count match across chunks is not sufficient — see
@@ -384,6 +419,8 @@ campaign_serial() {
     echo "campaign-distribute: FAIL serial run — empty result file" >&2
     exit 4
   }
+
+  campaign_validate_result_file "$result_file" "$all_cases" "serial run"
 
   got_cases="$(cut -f1 -d' ' "$result_file" | sort -u)"
   want_cases="$(cat "$all_cases")"

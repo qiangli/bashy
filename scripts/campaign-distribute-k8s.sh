@@ -13,9 +13,18 @@
 # kubeconfig profile is consumed exclusively through dks-profile.sh's
 # dks_resolve_kubectl inside campaign_k8s_resolve_kubectl() below — the
 # single integration shim. This transport is PEER-ONLY: DKS_PROFILE=peer is
-# forced, an explicit cloudbox profile is refused, and an ambient $KUBECTL is
-# deliberately NOT honored (the profile is authoritative; a test injects a
-# kubectl through CAMPAIGN_K8S_FAKE_KUBECTL, never through $KUBECTL).
+# forced, an explicit cloudbox profile is refused, an ambient $KUBECONFIG is
+# refused outright, and an ambient $KUBECTL is deliberately NOT honored (the
+# profile is authoritative; a test injects a kubectl through
+# CAMPAIGN_K8S_FAKE_KUBECTL, never through $KUBECTL).
+#
+# PEER CLUSTER IDENTITY IS FAIL-CLOSED. Reaching *a* cluster is not evidence
+# of reaching the RIGHT one, and "whatever context happened to be ambient"
+# is precisely the cloudbox dependency this transport must not have. So
+# before any Job is created, the operator must have pinned the peer control
+# plane by CA fingerprint in CAMPAIGN_PEER_CA_SHA256, and the kubeconfig
+# this transport would actually use must present exactly that CA. An absent
+# pin is a REFUSAL, not a default — see campaign_k8s_verify_cluster_identity.
 #
 # Worker identity and the dhnt#4 trap: `outpost.dhnt.io/host` labels a HOST,
 # not a node — a host running two virtual backends presents TWO nodes with
@@ -47,7 +56,26 @@
 #                  `$CHUNK_POD_CMD <cases_file> <worker_role>`; must print one
 #                  `<test_id> <outcome>` line per case (same contract as
 #                  RUN_CHUNK_CMD)
+#   CAMPAIGN_PEER_CA_SHA256
+#                  the operator's pin for the peer control plane: the SHA256,
+#                  in hex (an optional "sha256:" prefix and any ':' separators
+#                  are stripped; case-insensitive), of the DECODED
+#                  certificate-authority bytes of the cluster the peer
+#                  kubeconfig's current-context selects. Compute it once, on
+#                  the peer control plane, with:
+#
+#                    kubectl --kubeconfig "$DKS_PEER_KUBECONFIG" config view \
+#                      --raw --minify \
+#                      -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' \
+#                      | base64 -d | sha256sum | cut -d' ' -f1
+#
+#                  There is no default and no TOFU: absence refuses.
 # Optional:
+#   DKS_PEER_KUBECONFIG
+#                  peer kubeconfig path (dks-profile.sh's variable; default
+#                  $HOME/.kube/outpost-control-plane/k3s.yaml). The identity
+#                  check reads THIS file — the same one the resolved $KUBECTL
+#                  will use — so the pin binds the transport, not a bystander.
 #   NS             namespace (default: default)
 #   CHUNK_TIMEOUT  seconds to wait for one chunk Job (default: 1800)
 #   TTL            ttlSecondsAfterFinished backstop (default: 3600) — the
@@ -71,6 +99,18 @@ if [ "$mode_norm" != campaign ]; then
 fi
 
 root=$(cd "$(dirname "$0")" && pwd)
+
+# An ambient $KUBECONFIG is ambient cluster context, and this transport must
+# never inherit one: the peer profile is the only authority for which cluster
+# a campaign is distributed onto. Refusing beats silently overriding it,
+# because an operator who exported a cloudbox KUBECONFIG believes that is
+# where their commands are going — and a refusal is the only outcome that
+# tells them it is not.
+if [ -n "${KUBECONFIG:-}" ]; then
+  echo "campaign-distribute-k8s: REFUSED — an ambient \$KUBECONFIG is set ('$KUBECONFIG'). This transport is peer-only and the DKS peer profile is authoritative; an inherited (cloudbox or other) cluster context must never steer a campaign distribution." >&2
+  echo "campaign-distribute-k8s: unset KUBECONFIG, select the peer control plane with DKS_PEER_KUBECONFIG, and pin it with CAMPAIGN_PEER_CA_SHA256." >&2
+  exit 8
+fi
 
 NS="${NS:-default}"
 CHUNK_TIMEOUT="${CHUNK_TIMEOUT:-1800}"
@@ -110,6 +150,174 @@ campaign_k8s_resolve_kubectl() {
 
 KUBECTL="$(campaign_k8s_resolve_kubectl)"
 
+# --- FAIL-CLOSED PEER CLUSTER IDENTITY ---------------------------------------
+#
+# `preflight` proves the pinned NODES are two real, distinct workers. It says
+# nothing about WHICH CLUSTER those nodes live in — a kubeconfig pointing at
+# the wrong control plane answers every one of those checks happily, and the
+# run distributes a campaign onto a cluster nobody chose. The identity gate
+# below closes that: the operator pins the peer control plane's CA by SHA256,
+# and this transport refuses to create a single Job unless the kubeconfig it
+# would use presents exactly that CA.
+#
+# It is deliberately unconditional — it runs on the fake-kubectl seam too, so
+# the deterministic gate exercises the same code the real path does, and no
+# execution mode exists in which a campaign is distributed onto an unverified
+# cluster.
+#
+# Nothing read out of the kubeconfig is ever printed: not the CA bytes, not
+# the server URL, not a token or client key. The only values that reach a log
+# are the two digests, and a CA certificate fingerprint is a public value by
+# construction (that is the whole point of pinning one).
+
+# Decode base64 on stdin. GNU, BSD and bashy's coreutils spell the flag
+# differently; probe against /dev/null so the real stdin is untouched.
+campaign_k8s_b64_decode() {
+  if base64 --decode </dev/null >/dev/null 2>&1; then
+    base64 --decode
+  elif base64 -d </dev/null >/dev/null 2>&1; then
+    base64 -d
+  elif base64 -D </dev/null >/dev/null 2>&1; then
+    base64 -D
+  else
+    openssl base64 -d
+  fi
+}
+
+# SHA256 of stdin, as bare lowercase hex.
+campaign_k8s_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 | awk '{print $1}'
+  else
+    openssl dgst -sha256 | awk '{print $NF}'
+  fi
+}
+
+# Print "<data|file> <value>" for the certificate-authority of the cluster the
+# kubeconfig's current-context selects — i.e. the MINIFIED view of the file,
+# not "some cluster somewhere in it". A kubeconfig routinely carries several
+# clusters (peer AND cloudbox); fingerprinting the wrong one would be a pin
+# that passes while pointing somewhere else entirely.
+#
+# Exit codes name what is missing so the caller can refuse specifically:
+#   2 no current-context   3 no/ambiguous context   4 no/ambiguous cluster
+#   5 the selected cluster carries no certificate-authority at all
+campaign_k8s_kubeconfig_ca_ref() {
+  awk '
+    function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+    function unq(s) { if (s ~ /^".*"$/) s = substr(s, 2, length(s) - 2); return s }
+    /^[ \t]*#/ { next }
+    {
+      raw = $0
+      # A key at column 0 opens a new top-level section and resets the
+      # per-section list-item counter.
+      if (raw ~ /^[A-Za-z][A-Za-z0-9_.-]*[ \t]*:/) {
+        p = index(raw, ":")
+        section = trim(substr(raw, 1, p - 1))
+        if (section == "current-context") cc = unq(trim(substr(raw, p + 1)))
+        item = 0
+        next
+      }
+      if (section != "clusters" && section != "contexts") next
+      body = raw
+      if (body ~ /^[ \t]*-[ \t]*$/) { item++; next }
+      if (body ~ /^[ \t]*-[ \t]/) { item++; sub(/^[ \t]*-[ \t]+/, "", body) }
+      body = trim(body)
+      if (body !~ /^[A-Za-z][A-Za-z0-9_.\/-]*[ \t]*:/) next
+      p = index(body, ":")
+      k = trim(substr(body, 1, p - 1))
+      v = unq(trim(substr(body, p + 1)))
+      if (section == "clusters") {
+        if (k == "name") cname[item] = v
+        else if (k == "certificate-authority-data") cdata[item] = v
+        else if (k == "certificate-authority") cfile[item] = v
+      } else {
+        if (k == "name") xname[item] = v
+        else if (k == "cluster") xcluster[item] = v
+      }
+    }
+    END {
+      if (cc == "") exit 2
+      want = ""; n = 0
+      for (i in xname) if (xname[i] == cc) { want = xcluster[i]; n++ }
+      if (n != 1 || want == "") exit 3
+      sel = ""; n = 0
+      for (i in cname) if (cname[i] == want) { sel = i; n++ }
+      if (n != 1) exit 4
+      if (cdata[sel] != "") { printf "data %s\n", cdata[sel]; exit 0 }
+      if (cfile[sel] != "") { printf "file %s\n", cfile[sel]; exit 0 }
+      exit 5
+    }
+  ' "$1"
+}
+
+campaign_k8s_identity_refuse() {
+  echo "campaign-distribute-k8s: REFUSED — peer cluster identity: $1" >&2
+  echo "campaign-distribute-k8s: no Job was created. A campaign is never distributed onto an unverified cluster; pin the peer control plane in CAMPAIGN_PEER_CA_SHA256." >&2
+  exit 16
+}
+
+campaign_k8s_verify_cluster_identity() {
+  expected_raw="${CAMPAIGN_PEER_CA_SHA256:-}"
+  [ -n "$expected_raw" ] || campaign_k8s_identity_refuse \
+    "CAMPAIGN_PEER_CA_SHA256 is not set. There is no default peer cluster and no trust-on-first-use: an unpinned run would distribute onto whatever cluster happened to be reachable."
+
+  expected="$(printf '%s' "$expected_raw" \
+    | tr 'A-Z' 'a-z' | sed -e 's/^sha256://' -e 's/[: \t]//g' | tr -d '\n')"
+  case "$expected" in
+    *[!0-9a-f]*|'') campaign_k8s_identity_refuse "CAMPAIGN_PEER_CA_SHA256 is not a hex SHA256 digest" ;;
+  esac
+  [ "${#expected}" -eq 64 ] || campaign_k8s_identity_refuse \
+    "CAMPAIGN_PEER_CA_SHA256 has ${#expected} hex digits, want 64 (a SHA256)"
+
+  # The same file dks-profile.sh's peer profile resolves $KUBECTL against, so
+  # the pin binds the transport that will actually run rather than a bystander
+  # kubeconfig that merely happens to be lying around.
+  kubeconfig="${DKS_PEER_KUBECONFIG:-${HOME:-}/.kube/outpost-control-plane/k3s.yaml}"
+  [ -f "$kubeconfig" ] || campaign_k8s_identity_refuse \
+    "peer kubeconfig not found at $kubeconfig (set DKS_PEER_KUBECONFIG)"
+
+  set +e
+  ca_ref="$(campaign_k8s_kubeconfig_ca_ref "$kubeconfig")"
+  ca_rc=$?
+  set -e
+  case "$ca_rc" in
+    0) ;;
+    2) campaign_k8s_identity_refuse "the peer kubeconfig has no current-context, so there is no cluster to verify" ;;
+    3) campaign_k8s_identity_refuse "the peer kubeconfig's current-context does not resolve to exactly one context" ;;
+    4) campaign_k8s_identity_refuse "the current context's cluster does not resolve to exactly one cluster entry" ;;
+    5) campaign_k8s_identity_refuse "the current context's cluster carries no certificate-authority — an unverifiable (e.g. insecure-skip-tls-verify) cluster cannot be pinned" ;;
+    *) campaign_k8s_identity_refuse "the peer kubeconfig could not be read as a kubeconfig" ;;
+  esac
+
+  ca_kind="${ca_ref%% *}"
+  ca_val="${ca_ref#* }"
+  actual=''
+  case "$ca_kind" in
+    data)
+      actual="$(printf '%s' "$ca_val" | campaign_k8s_b64_decode 2>/dev/null | campaign_k8s_sha256 2>/dev/null || true)"
+      ;;
+    file)
+      [ -f "$ca_val" ] || campaign_k8s_identity_refuse \
+        "the current context's cluster names a certificate-authority file that does not exist"
+      actual="$(campaign_k8s_sha256 <"$ca_val" 2>/dev/null || true)"
+      ;;
+  esac
+  case "$actual" in
+    *[!0-9a-f]*|'') campaign_k8s_identity_refuse "the peer cluster's certificate-authority could not be fingerprinted" ;;
+  esac
+  [ "${#actual}" -eq 64 ] || campaign_k8s_identity_refuse \
+    "the peer cluster's certificate-authority could not be fingerprinted"
+
+  if [ "$actual" != "$expected" ]; then
+    campaign_k8s_identity_refuse \
+      "the kubeconfig this transport would use presents CA sha256 $actual, but the operator pinned $expected — this is not the peer control plane you pinned"
+  fi
+  echo "CAMPAIGN_K8S_PEER_IDENTITY_OK: peer cluster CA sha256 $actual matches the operator pin" >&2
+}
+
 # --- role -> node pin lookup -------------------------------------------------
 campaign_k8s_node_for() {
   role="$1"
@@ -140,6 +348,10 @@ campaign_k8s_preflight() {
   : "${WORKER_NODES:?set WORKER_NODES to space-separated role=node pins}"
   : "${CHUNK_IMAGE:?set CHUNK_IMAGE to the chunk-runner container image}"
   : "${CHUNK_POD_CMD:?set CHUNK_POD_CMD to the in-pod chunk runner}"
+
+  # Peer control-plane identity is verified before any node lookup or Job
+  # creation: reaching *a* cluster is not evidence of reaching the right one.
+  campaign_k8s_verify_cluster_identity
 
   nodes=""
   for role in $WORKERS; do
@@ -274,6 +486,11 @@ campaign_k8s_dispatch_chunk() {
   node="$(campaign_k8s_node_for "$worker")" || exit 10
   campaign_k8s_check_token "$node" "node name"
 
+  # Verify the peer control plane before creating this chunk's Job. This is
+  # deliberately unconditional: it runs on the fake-kubectl seam too, so the
+  # deterministic gate exercises the same code the real path does.
+  campaign_k8s_verify_cluster_identity
+
   cases=""
   while IFS= read -r tc; do
     [ -n "$tc" ] || continue
@@ -352,8 +569,10 @@ campaign_k8s_dispatch_chunk() {
   hdr_job="$(printf '%s' "$header" | sed -n 's/.*"job":"\([^"]*\)".*/\1/p')"
   hdr_chunk="$(printf '%s' "$header" | sed -n 's/.*"chunk":\([0-9][0-9]*\).*/\1/p')"
   hdr_node="$(printf '%s' "$header" | sed -n 's/.*"node":"\([^"]*\)".*/\1/p')"
-  if [ "$hdr_job" != "$job" ] || [ "$hdr_chunk" != "$chunk_id" ] || [ "$hdr_node" != "$observed_node" ]; then
-    echo "campaign-distribute-k8s: FAIL chunk=$chunk_id — evidence header (job=$hdr_job chunk=$hdr_chunk node=$hdr_node) does not match Job $job chunk $chunk_id node $observed_node" >&2
+  hdr_worker="$(printf '%s' "$header" | sed -n 's/.*"worker":"\([^"]*\)".*/\1/p')"
+  hdr_suite="$(printf '%s' "$header" | sed -n 's/.*"suite":"\([^"]*\)".*/\1/p')"
+  if [ "$hdr_job" != "$job" ] || [ "$hdr_chunk" != "$chunk_id" ] || [ "$hdr_node" != "$observed_node" ] || [ "$hdr_worker" != "$worker" ] || [ "$hdr_suite" != "$SUITE" ]; then
+    echo "campaign-distribute-k8s: FAIL chunk=$chunk_id — evidence header (job=$hdr_job chunk=$hdr_chunk node=$hdr_node worker=$hdr_worker suite=$hdr_suite) does not match Job $job chunk $chunk_id node $observed_node worker=$worker suite=$SUITE" >&2
     exit 5
   fi
 

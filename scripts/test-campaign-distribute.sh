@@ -73,11 +73,23 @@ while IFS= read -r id; do
     fi
   fi
   printf '%s %s\n' "$id" "$outcome"
+  if [ "$worker" != "serial-exclusive" ] && [ -n "${FAKE_DUPLICATE_CASE:-}" ] && [ "$id" = "$FAKE_DUPLICATE_CASE" ]; then
+    printf '%s %s\n' "$FAKE_DUPLICATE_CASE" pass
+  fi
 done <"$chunk_file"
 
 if [ "$worker" != "serial-exclusive" ] && [ -n "${FAKE_INJECT_FOREIGN_CASE:-}" ]; then
   printf '%s %s\n' "$FAKE_INJECT_FOREIGN_CASE" pass
 fi
+
+if [ "$worker" != "serial-exclusive" ] && [ -n "${FAKE_BAD_LINE:-}" ]; then
+  printf '%s\n' "$FAKE_BAD_LINE"
+fi
+
+if [ "$worker" != "serial-exclusive" ] && [ -n "${FAKE_INVALID_OUTCOME:-}" ]; then
+  printf '%s %s\n' "$FAKE_INVALID_OUTCOME" notanoutcome
+fi
+
 FAKE
 chmod +x "$fake_run_chunk"
 
@@ -357,6 +369,65 @@ out=$(cd "$root" && env "$FAKESEAM" CHUNKS=8 SEED=3 \
 case "$out" in *'"cases":6'*) ;; *) fail "over-chunked corpus lost or gained cases: $out" ;; esac
 
 # =============================================================================
+# 14b. Result contract — a malformed line (not exactly two fields) is rejected
+#      in the distributed path.
+# =============================================================================
+set +e
+out=$(cd "$root" && env "$FAKESEAM" FAKE_BAD_LINE='case-a pass extra' CHUNKS=3 SEED=1 \
+  WORKERS="worker-a worker-b worker-c" OUT_DIR="$tmp/badline" "$DISTRIBUTE" distribute 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || adversarial "a malformed result line was accepted in distribute"
+case "$out" in *'malformed line'*) ;; *) adversarial "malformed-line refusal did not name the cause: $out" ;; esac
+
+# =============================================================================
+# 14c. Result contract — an outcome outside {pass,fail,skip} is rejected.
+# =============================================================================
+set +e
+out=$(cd "$root" && env "$FAKESEAM" FAKE_INVALID_OUTCOME=case-b CHUNKS=3 SEED=1 \
+  WORKERS="worker-a worker-b worker-c" OUT_DIR="$tmp/badoutcome" "$DISTRIBUTE" distribute 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || adversarial "an invalid outcome was accepted in distribute"
+case "$out" in *'outcome in {pass,fail,skip}'*) ;; *) adversarial "invalid-outcome refusal did not name the cause: $out" ;; esac
+
+# =============================================================================
+# 14d. Result contract — a duplicate test ID in one chunk is rejected.
+# =============================================================================
+set +e
+out=$(cd "$root" && env "$FAKESEAM" FAKE_DUPLICATE_CASE=case-a CHUNKS=3 SEED=1 \
+  WORKERS="worker-a worker-b worker-c" OUT_DIR="$tmp/dupcase" "$DISTRIBUTE" distribute 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || adversarial "a duplicate test ID was accepted in distribute"
+case "$out" in *'duplicate test ID'*) ;; *) adversarial "duplicate-ID refusal did not name the cause: $out" ;; esac
+
+# =============================================================================
+# 14e. Serial path — the same result contract applies to the local serial run.
+# =============================================================================
+bad_serial_executor="$tmp/bad-serial-executor.sh"
+cat >"$bad_serial_executor" <<'BAD'
+#!/usr/bin/env bash
+set -euo pipefail
+while IFS= read -r id; do
+  [ -n "$id" ] || continue
+  if [ "$id" = "case-a" ]; then
+    printf '%s\n' "case-a pass extra"
+  else
+    printf '%s %s\n' "$id" "$(awk -v i="$id" '$1==i{print $2}' "$OUTCOME_MAP")"
+  fi
+done <"$1"
+BAD
+chmod +x "$bad_serial_executor"
+set +e
+out=$(cd "$root" && SUITE=free-utils-sweep CASES_FILE="$cases" RUN_CHUNK_CMD="$bad_serial_executor" \
+  OUT_DIR="$tmp/badserial" "$DISTRIBUTE" serial 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || adversarial "a malformed serial result was accepted"
+case "$out" in *'malformed line'*) ;; *) adversarial "serial malformed-line refusal did not name the cause: $out" ;; esac
+
+# =============================================================================
 # ==== the k8s transport, exercised through a fake kubectl ====================
 # =============================================================================
 #
@@ -470,6 +541,8 @@ case "$verb" in
     worker="$(envval WORKER_ROLE)"
     suite="$(envval CAMPAIGN_SUITE)"
     chunk_cases="$(envval CHUNK_CASES)"
+    if [ -n "${FAKE_HEADER_WORKER:-}" ]; then worker="$FAKE_HEADER_WORKER"; fi
+    if [ -n "${FAKE_HEADER_SUITE:-}" ]; then suite="$FAKE_HEADER_SUITE"; fi
     printf 'CAMPAIGN_CHUNK_EVIDENCE:{"job":"%s","chunk":%s,"worker":"%s","node":"%s","suite":"%s"}\n' \
       "$jobname" "$chunk" "$worker" "$node" "$suite"
     for c in $chunk_cases; do
@@ -503,6 +576,40 @@ export FAKE_CLUSTER="$cluster"
 export CHUNK_IMAGE=dhnt.io/campaign-runner
 export CHUNK_POD_CMD=run-chunk
 PINS_OK="WORKER_NODES=worker-a=peer-node-1 worker-b=peer-node-2"
+
+# Peer cluster identity pin: a deterministic fake kubeconfig with one cluster
+# carrying a fake CA. The identity gate reads this file before any Job is
+# created, so every k8s test below must match the pin.
+peer_ca="$tmp/peer-ca.pem"
+{
+  printf '%s\n' '-----BEGIN CERTIFICATE-----'
+  printf 'FAKE PEER CLUSTER CA %s\n' "$(date +%s)"
+  printf '%s\n' '-----END CERTIFICATE-----'
+} >"$peer_ca"
+peer_ca_b64=$(base64 <"$peer_ca" | tr -d '\n')
+peer_ca_sha=$(sha256sum <"$peer_ca" | awk '{print $1}')
+kubeconfig="$tmp/peer-kubeconfig.yaml"
+cat >"$kubeconfig" <<EOF
+apiVersion: v1
+kind: Config
+current-context: peer
+contexts:
+- context:
+    cluster: peer
+    user: peer
+  name: peer
+clusters:
+- cluster:
+    certificate-authority-data: ${peer_ca_b64}
+    server: https://peer-control-plane
+  name: peer
+users:
+- name: peer
+  user:
+    token: redacted
+EOF
+export DKS_PEER_KUBECONFIG="$kubeconfig"
+export CAMPAIGN_PEER_CA_SHA256="$peer_ca_sha"
 
 # =============================================================================
 # 15. k8s happy path: one Job per chunk, pinned by node name to the two
@@ -711,6 +818,154 @@ set -e
 [ "$rc" -eq 9 ] || fail "missing peer kubeconfig did not fail loudly through dks-profile (got $rc): $out"
 case "$out" in *'refusing to fall back to cloudbox'*) ;; *) fail "peer kubeconfig failure did not come from dks-profile: $out" ;; esac
 case "$out" in *ambient-kubectl*) fail "an ambient \$KUBECTL overrode the peer profile: $out" ;; *) ;; esac
+
+# =============================================================================
+# 24c. Evidence header binding — a log header naming the wrong worker is
+#      rejected; the result must be attributable to the worker that was
+#      dispatched.
+# =============================================================================
+st="$tmp/k8s-wrong-worker-state"
+set +e
+out=$(cd "$root" && env CAMPAIGN_TRANSPORT=k8s "CAMPAIGN_K8S_FAKE_KUBECTL=$fake_kubectl" \
+  "FAKE_K8S_STATE=$st" "$PINS_OK" FAKE_HEADER_WORKER=worker-z \
+  CHUNKS=2 SEED=1 WORKERS="worker-a worker-b" OUT_DIR="$tmp/k8s-wrong-worker" "$DISTRIBUTE" distribute 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || adversarial "a chunk header with the wrong worker was accepted"
+case "$out" in *'worker='*) ;; *) adversarial "wrong-worker header refusal did not name the cause: $out" ;; esac
+
+# =============================================================================
+# 24d. Evidence header binding — a log header naming the wrong suite is
+#      rejected; the sidecar must self-identify the campaign it belongs to.
+# =============================================================================
+st="$tmp/k8s-wrong-suite-state"
+set +e
+out=$(cd "$root" && env CAMPAIGN_TRANSPORT=k8s "CAMPAIGN_K8S_FAKE_KUBECTL=$fake_kubectl" \
+  "FAKE_K8S_STATE=$st" "$PINS_OK" FAKE_HEADER_SUITE=wrong-suite \
+  CHUNKS=2 SEED=1 WORKERS="worker-a worker-b" OUT_DIR="$tmp/k8s-wrong-suite" "$DISTRIBUTE" distribute 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || adversarial "a chunk header with the wrong suite was accepted"
+case "$out" in *'suite='*) ;; *) adversarial "wrong-suite header refusal did not name the cause: $out" ;; esac
+
+# =============================================================================
+# 25. Peer cluster identity — an absent pin refuses before any Job is created.
+# =============================================================================
+set +e
+out=$(cd "$root" && env CAMPAIGN_TRANSPORT=k8s "CAMPAIGN_K8S_FAKE_KUBECTL=$fake_kubectl" \
+  "FAKE_K8S_STATE=$tmp/no-pin-state" "$PINS_OK" CHUNKS=2 SEED=1 WORKERS="worker-a worker-b" \
+  env -u CAMPAIGN_PEER_CA_SHA256 OUT_DIR="$tmp/no-pin" "$DISTRIBUTE" distribute 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || adversarial "a run with no peer CA pin was accepted"
+case "$out" in *'CAMPAIGN_PEER_CA_SHA256 is not set'*) ;; *) adversarial "missing CA pin refusal did not name the cause: $out" ;; esac
+[ ! -d "$tmp/no-pin-state/manifests" ] || [ -z "$(ls "$tmp/no-pin-state/manifests" 2>/dev/null)" ] \
+  || adversarial "missing CA pin refusal happened only after Jobs were created"
+
+# =============================================================================
+# 26. Peer cluster identity — a mismatched pin refuses (wrong control plane).
+# =============================================================================
+set +e
+out=$(cd "$root" && env CAMPAIGN_TRANSPORT=k8s "CAMPAIGN_K8S_FAKE_KUBECTL=$fake_kubectl" \
+  "FAKE_K8S_STATE=$tmp/bad-pin-state" "$PINS_OK" CHUNKS=2 SEED=1 WORKERS="worker-a worker-b" \
+  CAMPAIGN_PEER_CA_SHA256=0000000000000000000000000000000000000000000000000000000000000000 \
+  OUT_DIR="$tmp/bad-pin" "$DISTRIBUTE" distribute 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || adversarial "a mismatched peer CA pin was accepted"
+case "$out" in *'this is not the peer control plane you pinned'*) ;; *) adversarial "CA mismatch refusal did not name the cause: $out" ;; esac
+[ ! -d "$tmp/bad-pin-state/manifests" ] || [ -z "$(ls "$tmp/bad-pin-state/manifests" 2>/dev/null)" ] \
+  || adversarial "CA mismatch refusal happened only after Jobs were created"
+
+# =============================================================================
+# 27. Peer cluster identity — a kubeconfig with no current-context is unusable.
+# =============================================================================
+noctx_kubeconfig="$tmp/noctx-kubeconfig.yaml"
+sed -e 's/^current-context: peer$/current-context: /' "$kubeconfig" >"$noctx_kubeconfig"
+set +e
+out=$(cd "$root" && env CAMPAIGN_TRANSPORT=k8s "CAMPAIGN_K8S_FAKE_KUBECTL=$fake_kubectl" \
+  "FAKE_K8S_STATE=$tmp/noctx-state" "$PINS_OK" CHUNKS=2 SEED=1 WORKERS="worker-a worker-b" \
+  "DKS_PEER_KUBECONFIG=$noctx_kubeconfig" OUT_DIR="$tmp/noctx" "$DISTRIBUTE" distribute 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || adversarial "a kubeconfig with no current-context was accepted"
+case "$out" in *'no current-context'*) ;; *) adversarial "no-current-context refusal did not name the cause: $out" ;; esac
+
+# =============================================================================
+# 28. Peer cluster identity — a cluster with no CA is unverifiable and refuses.
+# =============================================================================
+noca_kubeconfig="$tmp/noca-kubeconfig.yaml"
+awk '/^    certificate-authority-data: /{next} /^  name: peer$/{print; next} {print}' "$kubeconfig" >"$noca_kubeconfig"
+set +e
+out=$(cd "$root" && env CAMPAIGN_TRANSPORT=k8s "CAMPAIGN_K8S_FAKE_KUBECTL=$fake_kubectl" \
+  "FAKE_K8S_STATE=$tmp/noca-state" "$PINS_OK" CHUNKS=2 SEED=1 WORKERS="worker-a worker-b" \
+  "DKS_PEER_KUBECONFIG=$noca_kubeconfig" OUT_DIR="$tmp/noca" "$DISTRIBUTE" distribute 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || adversarial "a cluster with no certificate-authority was accepted"
+case "$out" in *'no certificate-authority'*) ;; *) adversarial "no-CA refusal did not name the cause: $out" ;; esac
+
+# =============================================================================
+# 29. Peer cluster identity — a multi-cluster kubeconfig must be verified by
+#     the CURRENT context's cluster, not by some other cluster in the file.
+# =============================================================================
+other_ca="$tmp/other-ca.pem"
+{
+  printf '%s\n' '-----BEGIN CERTIFICATE-----'
+  printf '%s\n' 'OTHER CLUSTER CA'
+  printf '%s\n' '-----END CERTIFICATE-----'
+} >"$other_ca"
+other_ca_b64=$(base64 <"$other_ca" | tr -d '\n')
+other_kubeconfig="$tmp/other-kubeconfig.yaml"
+cat >"$other_kubeconfig" <<EOF
+apiVersion: v1
+kind: Config
+current-context: peer
+contexts:
+- context:
+    cluster: peer
+    user: peer
+  name: peer
+- context:
+    cluster: cloudbox
+    user: cloudbox
+  name: cloudbox
+clusters:
+- cluster:
+    certificate-authority-data: ${peer_ca_b64}
+    server: https://peer-control-plane
+  name: peer
+- cluster:
+    certificate-authority-data: ${other_ca_b64}
+    server: https://cloudbox
+  name: cloudbox
+users:
+- name: peer
+  user:
+    token: redacted
+- name: cloudbox
+  user:
+    token: redacted
+EOF
+set +e
+out=$(cd "$root" && env CAMPAIGN_TRANSPORT=k8s "CAMPAIGN_K8S_FAKE_KUBECTL=$fake_kubectl" \
+  "FAKE_K8S_STATE=$tmp/right-cluster-state" "$PINS_OK" CHUNKS=2 SEED=1 WORKERS="worker-a worker-b" \
+  "DKS_PEER_KUBECONFIG=$other_kubeconfig" OUT_DIR="$tmp/right-cluster" "$DISTRIBUTE" distribute 2>&1)
+rc=$?
+set -e
+[ "$rc" -eq 0 ] || fail "a kubeconfig with the pinned cluster as current-context was wrongly refused: $out"
+
+# Now pin the OTHER cluster's CA while the current-context still selects peer.
+other_ca_sha=$(sha256sum <"$other_ca" | awk '{print $1}')
+set +e
+out=$(cd "$root" && env CAMPAIGN_TRANSPORT=k8s "CAMPAIGN_K8S_FAKE_KUBECTL=$fake_kubectl" \
+  "FAKE_K8S_STATE=$tmp/wrong-cluster-state" "$PINS_OK" CHUNKS=2 SEED=1 WORKERS="worker-a worker-b" \
+  "DKS_PEER_KUBECONFIG=$other_kubeconfig" CAMPAIGN_PEER_CA_SHA256="$other_ca_sha" \
+  OUT_DIR="$tmp/wrong-cluster" "$DISTRIBUTE" distribute 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || adversarial "pinning a bystander cluster CA while current-context selects peer was accepted"
+case "$out" in *'this is not the peer control plane you pinned'*) ;; *) adversarial "bystander-cluster pin refusal did not name the cause: $out" ;; esac
 
 [ "$adversarial_fail" -eq 0 ] || exit 1
 echo "campaign-distribute verdict equivalence + peer-DKS transport: PASS"
