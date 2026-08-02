@@ -72,55 +72,30 @@ consistent with prior runs; no new slow or flaky fixture observed.
 
 ### `make test-yash` — POSIX (-p) scoreboard
 
-**Not run — documented prerequisite absent.** `scripts/yash-scoreboard.sh`
-requires a local `.yash-tests/tests` corpus, which is a **gitignored
-runtime clone** of the GPL yash source (`git clone
-https://github.com/magicant/yash.git .yash-tests` — see
-`scripts/yash-posix-suite.sh` and `docs/report-yash-dks-bpath.md`); it is
-never vendored into the repo and was not present in this workspace
-(consistent with `workstream-a-equivalence.md`'s "Current measurements"
-note that the same clone was absent there). Provisioning it here would
-require an out-of-band network `git clone`, which this task does not
-authorize (workstream 1 is scoped to what's already present, and network
-provisioning is exactly the kind of setup step `posix-cert-handoff-
-runbook.md` reserves for the licensed/CI run, not an ad-hoc preflight).
-Docker itself is available on this host (`docker info` succeeds), so the
-**only** blocker is the missing corpus, not the OCI runtime.
+The steward checkout already had the gitignored GPL Yash corpus materialized,
+so the authoritative serial scoreboard was run there rather than treating an
+isolated weave clone's missing ignored directory as a product blocker:
 
-The last confirmed yash `-p` scoreboard remains the headline in
-`docs/TODO.md`: **96%** (2026-07-01, novicortex; ≥ bash 5.3/5.2, tied with
-mksh for best of the 10-shell panel) — this preflight neither confirms nor
-invalidates that number; it is carried forward unchanged. Fresh
-measurement requires either clearing the corpus-provisioning blocker above
-or running on a host where `.yash-tests/` is already materialized.
+```sh
+make test-yash
+```
 
-### Next smallest fidelity gaps (from `docs/yash-conformance-gap.md`, unchanged by this run)
+**Result: 1,832 passed, 0 failed — 100%, with zero Bashy-specific
+failures.** Bashy and the Bash oracle each measured 1,832 cases and skipped
+the same 33 cases. The previous 96% result and its proposed
+`error-p`/`alias-p` worklists are superseded by this measurement; they are not
+open implementation streams unless a later clean rerun reproduces them.
 
-The two highest-leverage, disjoint yash `-p` worklists (~60% of the last
-measured gap, per `docs/yash-conformance-gap.md` §Suggested fleet plan):
+The corpus remains a gitignored runtime prerequisite rather than vendored
+source. A fresh weave workspace must materialize or copy `.yash-tests/` before
+running this gate. The umbrella campaign context lives one repository above at
+`../docs/bashy-three-workstreams.md`; its absence inside an isolated bashy-only
+clone is expected and is not a blocker.
 
-1. **error-p subshell assignment-error** (~36 cases) — likely one root
-   cause in the subshell command-prefix assignment path (`../sh`
-   `interp`/`expand`).
-2. **alias-p substitution positions** (~30 cases) — the alias-expansion
-   pass when the value hits reserved words / operators / compound
-   boundaries.
+### Current preflight conclusion
 
-Each would need triage per the standard bucket discipline (real bug fixed
-in `../sh`, gated on `make test-bash` staying 86/86; wording/format
-artifact; or out-of-scope utility assertion) — none attempted here per
-scope (no sibling edits in this task).
-
-### Environment blockers for future preflight runs
-
-- **`docs/bashy-three-workstreams.md`** (the umbrella doc this task was
-  asked to read) does not exist in this repo or its checked-out siblings
-  (`sh`, `coreutils`, `readline`) — only same-named docs under an
-  unrelated sibling checkout (`dhnt-31437fad/.../docs/bashy-three-
-  workstreams.md`) were found on the host, outside this workspace's git
-  history. This preflight proceeded on this repo's own `CLAUDE.md` +
-  `posix-cert-preflight-status.md` + `posix-cert-handoff-runbook.md`
-  instead. Flagging so the umbrella doc's actual location (or absence in
-  this checkout) gets resolved before the next workstream-1 pass.
-- **`.yash-tests/` corpus** — see above; needs a one-time network clone
-  before `make test-yash` can run on a given host.
+Both agent-drivable serial gates are green on 2026-08-02: Bash 5.3 is 86/86
+and Yash POSIX mode is 1,832/1,832 with no Bashy-specific differential. The
+active certification frontier is therefore the licensed VSC-PCTS shell and
+utility run, beginning with the `$!` TET-context defect and the utility failure
+streams tracked by the umbrella campaign.
