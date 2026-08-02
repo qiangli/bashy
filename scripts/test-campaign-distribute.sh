@@ -130,6 +130,42 @@ set -e
 [ "$rc" -eq 77 ] || fail "campaign-distribute-k8s.sh did not refuse MODE=cert with exit 77 (got $rc): $out"
 
 # =============================================================================
+# 1b. The MODE gate is an ALLOWLIST, not a denylist: it must refuse anything
+#     that is not (normalized for case/whitespace) exactly "campaign" —
+#     including every exact-string-denylist bypass the gate found
+#     (MODE=CERT, MODE=certification, MODE=" cert"), plus an explicitly empty
+#     MODE and a garbage value. None of these may distribute or exit 0.
+#     A truly UNSET MODE (never assigned at all) is the normal execution
+#     mode and must keep working — that is not a bypass, it is every other
+#     test in this file.
+# =============================================================================
+for bad_mode in CERT certification ' cert' '' garbage-mode; do
+  set +e
+  out=$(cd "$root" && MODE="$bad_mode" CHUNKS=3 WORKERS="worker-a worker-b" \
+    "$DISTRIBUTE" distribute 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -eq 77 ] || fail "MODE='$bad_mode' did not refuse distribute with exit 77 (got $rc): $out"
+  case "$out" in *REFUSED*) ;; *) fail "MODE='$bad_mode' refusal did not say REFUSED: $out" ;; esac
+
+  set +e
+  out=$(cd "$root" && MODE="$bad_mode" WORKERS="worker-a worker-b" "$K8S" preflight 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -eq 77 ] || fail "campaign-distribute-k8s.sh did not refuse MODE='$bad_mode' with exit 77 (got $rc): $out"
+done
+
+# A genuinely unset MODE (not exported at all) must still be treated as the
+# normal campaign mode and must NOT hit the exit-77 refusal — only an
+# explicit non-campaign value is a bypass attempt.
+set +e
+out=$(cd "$root" && env -u MODE CHUNKS=3 SEED=1 WORKERS="worker-a worker-b worker-c" \
+  OUT_DIR="$tmp/unset-mode" "$FAKESEAM" "$DISTRIBUTE" distribute 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 77 ] || fail "a genuinely unset MODE was wrongly refused as if it were a bypass: $out"
+
+# =============================================================================
 # 2. No transport is not a transport: distribute with a fully valid config but
 #    neither CAMPAIGN_TRANSPORT=k8s nor the test seam must refuse — the local
 #    fake is NOT reachable as a default or named execution mode.
@@ -501,6 +537,16 @@ for c in 0 1; do
     || fail "evidence sidecar for chunk $c does not carry its Job identity"
   grep -q '"node":"peer-node-' "$tmp/k8s-happy/chunk-$c.evidence.json" \
     || fail "evidence sidecar for chunk $c does not carry its source node"
+  # The sidecar is often archived away from the run line that produced it, so
+  # it must self-identify a fake-kubectl origin by content alone — a
+  # real-transport sidecar would say "transport":"k8s-peer" and
+  # "evidence":"development-only" instead of these fake-path values.
+  grep -q '"transport":"k8s-fake-kubectl"' "$tmp/k8s-happy/chunk-$c.evidence.json" \
+    || fail "evidence sidecar for chunk $c does not self-identify its fake-kubectl transport"
+  grep -q '"evidence":"logic-check-only"' "$tmp/k8s-happy/chunk-$c.evidence.json" \
+    || fail "evidence sidecar for chunk $c does not self-identify its logic-check-only evidence class"
+  grep -q '"transport":"k8s-peer"\|"evidence":"development-only"' "$tmp/k8s-happy/chunk-$c.evidence.json" \
+    && fail "a fake-kubectl sidecar must never carry the real-transport values"
 done
 
 # every created Job must have been deleted (dispatch deletes; the parent's

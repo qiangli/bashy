@@ -2,9 +2,10 @@
 
 Status: implemented. W2 (sprint 42, Phase 2) delivered the
 reduction/equivalence harness; W2b delivered the real peer-DKS transport it
-was missing. Scope: `scripts/campaign-distribute.sh`,
-`scripts/campaign-distribute-k8s.sh` and `scripts/test-campaign-distribute.sh`
-— see "Non-overlap contract" below.
+was missing; W2c hardened the MODE gate into an allowlist and made the
+evidence sidecar self-describing (both found by the W2b gate). Scope:
+`scripts/campaign-distribute.sh`, `scripts/campaign-distribute-k8s.sh` and
+`scripts/test-campaign-distribute.sh` — see "Non-overlap contract" below.
 
 ## Why this exists
 
@@ -30,24 +31,38 @@ This is the hardest constraint here and it is non-negotiable:
 
 This is enforced structurally, not just documented: `scripts/campaign-distribute.sh`
 checks `MODE` as the very first thing it does, before parsing any other
-argument or touching any file:
+argument or touching any file. The check is an **allowlist, not a denylist**:
+it refuses to distribute unless `MODE`, after normalizing whitespace and
+case, is exactly `campaign`. An earlier version checked `[ "$MODE" = cert ]`
+— an exact-string denylist that `MODE=CERT`, `MODE=certification`, and
+`MODE=" cert"` all bypassed to distribute and exit 0. The allowlist form
+treats every unrecognized value (empty, misspelled, wrong case,
+whitespace-padded) as cert-like and refuses it — never as campaign-like and
+allowed:
 
 ```sh
-MODE="${MODE:-campaign}"
-if [ "$MODE" = cert ]; then
-  echo "campaign-distribute: REFUSED — MODE=cert may never distribute or chunk a run." >&2
+MODE="${MODE-campaign}"   # unset (no colon): absent MODE still defaults to
+                          # campaign; an explicitly empty MODE="" stays empty
+                          # and is refused below, not silently defaulted.
+mode_norm="$(printf '%s' "$MODE" | tr '[:upper:]' '[:lower:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+if [ "$mode_norm" != campaign ]; then
+  echo "campaign-distribute: REFUSED — MODE must be exactly 'campaign' ..." >&2
   exit 77
 fi
 ```
 
-`scripts/campaign-distribute-k8s.sh` carries the identical check as defense
-in depth, so even a caller that somehow reached the transport directly is
-refused. `scripts/test-campaign-distribute.sh` asserts this refusal for the
-`distribute` and `serial` subcommands, for the transport script itself, and
-with the fake seams and `CAMPAIGN_TRANSPORT=k8s` supplied, so the check
-cannot be bypassed by a "just this once" flag combination. Exit code 77 is
-reserved for this refusal specifically, so a caller (or a CI gate) can
-distinguish "correctly refused" from any other failure mode.
+`scripts/campaign-distribute-k8s.sh` carries the identical allowlist check as
+defense in depth, so even a caller that somehow reached the transport
+directly is refused. `scripts/test-campaign-distribute.sh` asserts this
+refusal for the `distribute` and `serial` subcommands, for the transport
+script itself, and with the fake seams and `CAMPAIGN_TRANSPORT=k8s` supplied,
+so the check cannot be bypassed by a "just this once" flag combination — and
+separately asserts each of the exact-string-denylist bypasses above, plus an
+explicitly empty `MODE` and a garbage value, all refuse with exit 77, while a
+genuinely unset `MODE` (never assigned at all — the normal, documented usage)
+still runs as the campaign mode. Exit code 77 is reserved for this refusal
+specifically, so a caller (or a CI gate) can distinguish "correctly refused"
+from any other failure mode.
 
 If a cert run is ever needed, it must go through the existing, unchunked
 harness (`make test-bash`, `bashy dag suites.md`'s non-chunked targets) —
@@ -138,8 +153,16 @@ mode (see "Transports and verdict markers" below). Per chunk, the transport:
    the pin (a pod that ran elsewhere means the pin did not hold, rejected),
    and the header against both. An evidence sidecar
    (`bashy.campaign.evidence/v1`: suite, chunk, worker, job, job uid, pod,
-   node, log path) is written per chunk — an unattributed result is not
-   evidence, and the reduction refuses a chunk that lacks one.
+   node, log path, **transport**, **evidence** class) is written per chunk —
+   an unattributed result is not evidence, and the reduction refuses a chunk
+   that lacks one. The `transport`/`evidence` fields make the sidecar
+   self-describing: it carries `"transport":"k8s-fake-kubectl"` and
+   `"evidence":"logic-check-only"` when `CAMPAIGN_K8S_FAKE_KUBECTL` produced
+   it, or `"transport":"k8s-peer"` and `"evidence":"development-only"` for a
+   real peer-cluster run — so a sidecar archived away from the run line that
+   produced it can still be told apart from a fake-transport artifact by
+   content alone, instead of relying on context that will not travel with
+   the file.
 5. **Deletes the Job** after collection. Cleanup is three-layered: each
    dispatch deletes its own Job on every exit path (including INT/TERM), the
    parent sweeps a `jobs.created` ledger from an EXIT trap (Jobs are recorded
@@ -198,6 +221,15 @@ And even the real thing is **development evidence only**: note that
 `"evidence"` never says anything stronger than `development-only` — there is
 no marker, mode, or flag combination under which this harness's output is a
 certification result.
+
+`serial` also emits a `CAMPAIGN_VERDICT` line while running locally — that is
+correct (it is the equivalence baseline, and it self-declares
+`"mode":"serial","transport":"local-serial"`), but it means the bare marker
+string `CAMPAIGN_VERDICT` is **not** sufficient on its own to identify a
+distributed peer-cluster result. **Consumers of these lines MUST key on the
+`"mode"`/`"transport"` fields inside the JSON payload, never on the bare
+marker string** — a consumer that greps for `CAMPAIGN_VERDICT` alone will
+match a local serial run too.
 
 ## Unproven-hardware boundary
 

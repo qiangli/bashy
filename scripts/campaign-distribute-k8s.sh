@@ -54,9 +54,18 @@
 #                  primary cleanup is the explicit delete, not the TTL
 set -euo pipefail
 
-MODE="${MODE:-campaign}"
-if [ "$MODE" = cert ]; then
-  echo "campaign-distribute-k8s: REFUSED — MODE=cert may never distribute or chunk a run." >&2
+# Unset (no colon) so a truly-absent MODE still defaults to the normal
+# execution mode, but an explicitly empty MODE="" is preserved as empty and
+# falls through to the allowlist check below, which refuses it.
+MODE="${MODE-campaign}"
+
+# Allowlist, not denylist — defense in depth, mirroring campaign-distribute.sh:
+# refuse unless MODE, after normalizing whitespace and case, is exactly
+# "campaign". An unrecognized value is treated as cert-like and refused,
+# never as campaign-like and allowed.
+mode_norm="$(printf '%s' "$MODE" | tr '[:upper:]' '[:lower:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+if [ "$mode_norm" != campaign ]; then
+  echo "campaign-distribute-k8s: REFUSED — MODE must be exactly 'campaign' (whitespace/case-insensitive); got MODE='$MODE'." >&2
   echo "campaign-distribute-k8s: certification runs on one unchunked, exclusive SUT." >&2
   exit 77
 fi
@@ -350,9 +359,21 @@ campaign_k8s_dispatch_chunk() {
 
   sed '1d' "$log_file" >"$out_file"
 
+  # An evidence sidecar is often archived away from the run line that
+  # produced it, so it must self-identify whether a fake kubectl produced it
+  # rather than relying on context that will not travel with the file.
+  if [ -n "${CAMPAIGN_K8S_FAKE_KUBECTL:-}" ]; then
+    sidecar_transport=k8s-fake-kubectl
+    sidecar_evidence=logic-check-only
+  else
+    sidecar_transport=k8s-peer
+    sidecar_evidence=development-only
+  fi
+
   printf '%s\n' "$observed_node" >"$evidence_dir/chunk-$chunk_id.node"
-  printf '{"schema":"bashy.campaign.evidence/v1","suite":"%s","chunk":%s,"worker":"%s","job":"%s","job_uid":"%s","pod":"%s","node":"%s","log":"%s"}\n' \
+  printf '{"schema":"bashy.campaign.evidence/v1","suite":"%s","chunk":%s,"worker":"%s","job":"%s","job_uid":"%s","pod":"%s","node":"%s","log":"%s","transport":"%s","evidence":"%s"}\n' \
     "$SUITE" "$chunk_id" "$worker" "$job" "$job_uid" "$pod" "$observed_node" "$log_file" \
+    "$sidecar_transport" "$sidecar_evidence" \
     >"$evidence_dir/chunk-$chunk_id.evidence.json"
 
   $KUBECTL delete job "$job" -n "$NS" --ignore-not-found --wait=false >/dev/null

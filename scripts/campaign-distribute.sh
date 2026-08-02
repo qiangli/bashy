@@ -54,11 +54,20 @@
 #   OUT_DIR    scratch dir for chunk results + manifest (default: mktemp -d)
 set -euo pipefail
 
-MODE="${MODE:-campaign}"
+# Unset (no colon) so a truly-absent MODE still defaults to the normal
+# execution mode, but an explicitly empty MODE="" is preserved as empty and
+# falls through to the allowlist check below, which refuses it.
+MODE="${MODE-campaign}"
 
-if [ "$MODE" = cert ]; then
-  echo "campaign-distribute: REFUSED — MODE=cert may never distribute or chunk a run." >&2
-  echo "campaign-distribute: certification runs on one unchunked, exclusive SUT." >&2
+# Allowlist, not denylist: refuse to distribute unless MODE, after
+# normalizing whitespace and case, is exactly "campaign". An unrecognized
+# value — empty, misspelled, wrong case, whitespace-padded — is treated as
+# cert-like and refused, never as campaign-like and allowed. This was an
+# exact-string denylist on "cert" that MODE=CERT, MODE=certification, and
+# MODE=" cert" all bypassed to distribute and exit 0.
+mode_norm="$(printf '%s' "$MODE" | tr '[:upper:]' '[:lower:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+if [ "$mode_norm" != campaign ]; then
+  echo "campaign-distribute: REFUSED — MODE must be exactly 'campaign' (whitespace/case-insensitive); got MODE='$MODE'. This script's entire purpose is distribution, and certification runs on one unchunked, exclusive SUT." >&2
   echo "campaign-distribute: see docs/distributed-campaign-verdict-equivalence.md; use the serial harness (e.g. make test-bash) for a certification result instead." >&2
   exit 77
 fi
