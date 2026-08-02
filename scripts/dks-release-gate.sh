@@ -3,9 +3,10 @@
 set -euo pipefail
 
 . "$(cd "$(dirname "$0")" && pwd)/dks-profile.sh"
-if [ -z "${KUBECTL:-}" ]; then
-  KUBECTL="$(dks_resolve_kubectl "bashy kubectl")"
-fi
+dks_kubectl_init "bashy kubectl" || exit $?
+# Hand the resolved argv down to the child DKS scripts argv-safe (a newline per
+# element), so a whitespace/glob kubeconfig path survives the process boundary.
+DKS_KUBECTL_ARGV="$(dks_kubectl_serialize)"
 DHNT="${DHNT:-bashy dhnt}"
 NS="${NS:-default}"
 EXPECTED_SOURCE_REF="${EXPECTED_SOURCE_REF:?set EXPECTED_SOURCE_REF to the exact Bashy commit}"
@@ -28,7 +29,7 @@ tmp="$(mktemp -d)"
 trap '/bin/rm -rf "$tmp"' EXIT
 native_count=0
 for job in $NATIVE_JOBS; do
-  native_result="$(NS="$NS" JOB="$job" KUBECTL="$KUBECTL" DHNT="$DHNT" scripts/dks-native-result.sh)"
+  native_result="$(NS="$NS" JOB="$job" DKS_KUBECTL_ARGV="$DKS_KUBECTL_ARGV" DHNT="$DHNT" scripts/dks-native-result.sh)"
   printf '%s\n' "$native_result"
   # dks-native-result has already selected and validated the successful retry
   # Pod. Never re-query an unordered .items[0] and accidentally attest a failed
@@ -55,7 +56,7 @@ aggregate="$($DHNT aggregate \
 
 conformance_count=0
 for job in $CONFORMANCE_JOBS; do
-  NS="$NS" JOB="$job" KUBECTL="$KUBECTL" scripts/k8s-job-aggregate.sh
+  NS="$NS" JOB="$job" DKS_KUBECTL_ARGV="$DKS_KUBECTL_ARGV" scripts/k8s-job-aggregate.sh
   conformance_count=$((conformance_count + 1))
 done
 if [ "$conformance_count" -eq 0 ]; then

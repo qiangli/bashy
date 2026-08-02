@@ -4,19 +4,18 @@
 # Each pod printed a harness "Results: N passed, M failed, …" line for its chunk.
 # The Job is a placement/retry vehicle; the authoritative verdict is the SUM over
 # chunks, exactly as the serial harness reports it for the whole corpus. Reads
-# logs through `outpost kubectl` (or plain kubectl via $KUBECTL).
+# logs through the kubectl argv resolved by dks-profile.sh (cloudbox default
+# `outpost kubectl`; overridable via $KUBECTL / a peer profile).
 #
 # Usage:  NS=user-abc JOB=bash53-conformance k8s-job-aggregate.sh
 set -euo pipefail
 
 . "$(cd "$(dirname "$0")" && pwd)/dks-profile.sh"
-if [ -z "${KUBECTL:-}" ]; then
-  KUBECTL="$(dks_resolve_kubectl "outpost kubectl")"
-fi
+dks_kubectl_init "outpost kubectl" || exit $?
 NS="${NS:-default}"
 JOB="${JOB:-bash53-conformance}"
 
-_job_name=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.metadata.name}' 2>/dev/null) || {
+_job_name=$(dks_kubectl get job "$JOB" -n "$NS" -o jsonpath='{.metadata.name}' 2>/dev/null) || {
   echo "JOB_QUERY_FAIL: kubectl get job failed for job=$JOB ns=$NS" >&2
   exit 3
 }
@@ -25,13 +24,13 @@ _job_name=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.metadata.name}' 2>/d
   exit 3
 }
 
-job_uid=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.metadata.uid}' 2>/dev/null) || true
+job_uid=$(dks_kubectl get job "$JOB" -n "$NS" -o jsonpath='{.metadata.uid}' 2>/dev/null) || true
 [ -n "$job_uid" ] || {
   echo "JOB_UID_FAIL: missing metadata.uid in Job object for job=$JOB ns=$NS" >&2
   exit 3
 }
 
-completion_mode=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.spec.completionMode}' 2>/dev/null) || true
+completion_mode=$(dks_kubectl get job "$JOB" -n "$NS" -o jsonpath='{.spec.completionMode}' 2>/dev/null) || true
 [ -n "$completion_mode" ] || {
   echo "INDEXED_CHECK_FAIL: missing completionMode in Job object for job=$JOB ns=$NS" >&2
   exit 3
@@ -41,7 +40,7 @@ completion_mode=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.spec.completio
   exit 3
 }
 
-spec_completions=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.spec.completions}' 2>/dev/null) || true
+spec_completions=$(dks_kubectl get job "$JOB" -n "$NS" -o jsonpath='{.spec.completions}' 2>/dev/null) || true
 [[ "$spec_completions" =~ ^[1-9][0-9]*$ ]] || {
   echo "INDEXED_CHECK_FAIL: spec.completions must be a positive base-10 integer (got \"$spec_completions\") for job=$JOB ns=$NS" >&2
   exit 3
@@ -50,7 +49,7 @@ spec_completions=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.spec.completi
 declare -a idx_seen
 for ((i=0; i<spec_completions; i++)); do idx_seen[i]=0; done
 
-pods="$($KUBECTL get pods -n "$NS" -l "app=${JOB}" \
+pods="$(dks_kubectl get pods -n "$NS" -l "app=${JOB}" \
   --field-selector=status.phase=Succeeded \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null)"
 
@@ -60,7 +59,7 @@ tp=0 tf=0 ts=0 tt=0 chunks=0 missing=0
 while IFS= read -r pod; do
   [ -n "$pod" ] || continue
 
-  pod_uid=$($KUBECTL get pod "$pod" -n "$NS" \
+  pod_uid=$(dks_kubectl get pod "$pod" -n "$NS" \
     -o jsonpath='{.metadata.ownerReferences[0].uid}' 2>/dev/null || true)
   if [ "$pod_uid" != "$job_uid" ]; then
     echo "WARN: $pod is not owned by Job $JOB — evidence rejected" >&2
@@ -68,7 +67,7 @@ while IFS= read -r pod; do
     continue
   fi
 
-  pod_index=$($KUBECTL get pod "$pod" -n "$NS" \
+  pod_index=$(dks_kubectl get pod "$pod" -n "$NS" \
     -o jsonpath='{.metadata.labels.batch\.kubernetes\.io/job-completion-index}' 2>/dev/null || true)
   if [ -z "$pod_index" ] || ! [[ "$pod_index" =~ ^[0-9]+$ ]]; then
     echo "WARN: $pod has absent or malformed job-completion-index — evidence rejected" >&2
@@ -87,7 +86,7 @@ while IFS= read -r pod; do
   fi
   idx_seen[$pod_index]=1
 
-  pod_log="$($KUBECTL logs "$pod" -n "$NS" 2>/dev/null || true)"
+  pod_log="$(dks_kubectl logs "$pod" -n "$NS" 2>/dev/null || true)"
   results_count="$(printf '%s\n' "$pod_log" | grep -cE '^Results:' || true)"
   line=""
   if [ "$results_count" -eq 1 ]; then
@@ -101,7 +100,7 @@ while IFS= read -r pod; do
     # Virtual-node providers may not expose the kubelet log route. DKS Jobs opt
     # into Outpost's bounded terminal log tail, which is persisted in Pod
     # status and survives provider restart. Read the final Results line there.
-    message="$($KUBECTL get pod "$pod" -n "$NS" \
+    message="$(dks_kubectl get pod "$pod" -n "$NS" \
       -o jsonpath='{.status.containerStatuses[0].state.terminated.message}' 2>/dev/null || true)"
     if [ -n "$message" ]; then
       results_count="$(printf '%s\n' "$message" | grep -cE '^Results:' || true)"
@@ -162,7 +161,7 @@ for ((i=0; i<spec_completions; i++)); do
   fi
 done
 
-status_succeeded=$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.status.succeeded}' 2>/dev/null) || true
+status_succeeded=$(dks_kubectl get job "$JOB" -n "$NS" -o jsonpath='{.status.succeeded}' 2>/dev/null) || true
 [[ "$status_succeeded" =~ ^[0-9]+$ ]] || {
   echo "INDEXED_CHECK_FAIL: status.succeeded must be a non-negative base-10 integer (got \"$status_succeeded\") for job=$JOB ns=$NS" >&2
   exit 3

@@ -137,40 +137,68 @@ count as proof of their registered host's operating system.
 
 Every DKS script that actually invokes `kubectl` (`scripts/k8s-job-aggregate.sh`,
 `scripts/dks-native-result.sh`, `scripts/dks-release-gate.sh`,
-`scripts/dks-author-qa-refs.sh`) resolves its `$KUBECTL` command through
-`scripts/dks-profile.sh`, which sources one function, `dks_resolve_kubectl`.
-This is a config choice, not a code path: the scripts' own logic never
-changes, only which `kubectl` invocation they shell out to. (The pure DKS
-manifest emitters — `scripts/dag-to-k8s-job.sh`, `scripts/dag-to-argo.sh`,
-`scripts/dks-native-job.sh` — never invoke `kubectl` themselves; they print
-YAML to stdout for a caller to pipe into `kubectl apply -f -`, so the profile
-does not apply to them.)
+`scripts/dks-author-qa-refs.sh`) resolves its kubectl invocation through
+`scripts/dks-profile.sh`, which sources a small resolver, `dks_kubectl_init`,
+that populates the argv array `DKS_KUBECTL_CMD`. Scripts then call kubectl via
+`dks_kubectl <args...>`, which execs the stored argv verbatim — the elements
+are quoted, never word-split or globbed, so a kubeconfig path containing a
+space, `*`, `?`, or `[abc]` is passed through literally (the path is carried as
+its own argv element). This is a config choice, not a code path: the scripts'
+own logic never changes, only which `kubectl` invocation they shell out to.
+(The pure DKS manifest emitters — `scripts/dag-to-k8s-job.sh`,
+`scripts/dag-to-argo.sh`, `scripts/dks-native-job.sh` — never invoke `kubectl`
+themselves; they print YAML to stdout for a caller to pipe into
+`kubectl apply -f -`, so the profile does not apply to them.)
 
-Two profiles, selected by `$DKS_PROFILE`:
+Resolution precedence, from highest:
 
-- **`cloudbox`** (the default — unchanged from today). `$KUBECTL` resolves to
-  each script's existing default (`outpost kubectl` or `bashy kubectl`), which
-  fetches a per-user kubeconfig from Cloudbox on demand. Leaving `$DKS_PROFILE`
-  unset reproduces today's behavior exactly.
-- **`peer`**. Targets a peer-hosted control plane's already-local kubeconfig
-  instead of fetching one from Cloudbox. Resolves `$DKS_PEER_KUBECONFIG`
-  (default `$HOME/.kube/outpost-control-plane/k3s.yaml`) and sets
-  `KUBECTL="kubectl --kubeconfig <path>"`. If that file is absent, the script
-  exits non-zero with a message naming the missing path — it never silently
-  falls back to `cloudbox`, since applying to the wrong cluster is the failure
-  mode this exists to prevent. Only the path is inspected; the kubeconfig
-  content is never read or printed.
+1. `$DKS_KUBECTL_ARGV` — a newline-serialized argv handed down from a parent
+   DKS script (`dks-release-gate` / `dks-author-qa-refs` pass it to their
+   children, which is how the resolved target survives the process boundary
+   argv-safe; an env string could not carry a path with whitespace/globs
+   unambiguously).
+2. `$KUBECTL` — the legacy string override, kept for backwards compatibility.
+   Split on spaces with globbing disabled (`set -f`) and exec'd as a proper
+   argv, so it is glob-safe. An explicit `$KUBECTL` still wins over any
+   `$DKS_PROFILE`, exactly as it did before the profile existed.
+3. `$DKS_PROFILE` — the profile selector:
+   - **`cloudbox`** (the default). Resolves to each script's existing default
+     (`outpost kubectl` or `bashy kubectl`), which fetches a per-user
+     kubeconfig from Cloudbox on demand. Leaving `$DKS_PROFILE` unset
+     reproduces today's behavior exactly. An explicitly-empty `DKS_PROFILE`
+     (e.g. a typo'd `DKS_PROFILE=$UNSET_VAR`) is NOT treated as unset: it
+     fails closed as an unknown profile rather than quietly routing to
+     cloudbox.
+   - **`peer`**. Targets a peer-hosted control plane's already-local kubeconfig
+     instead of fetching one from Cloudbox. Resolves `$DKS_PEER_KUBECONFIG`
+     (default `$HOME/.kube/outpost-control-plane/k3s.yaml`) and builds
+     `kubectl --kubeconfig <path>` with the path as its own argv element. If
+     that file is absent or unreadable, the script exits non-zero (rc 9) with
+     a message naming the missing path — it never silently falls back to
+     `cloudbox`, since applying to the wrong cluster is the failure mode this
+     exists to prevent. Only the path is inspected; the kubeconfig content is
+     never read or printed.
 
-An explicit `$KUBECTL` set by the caller's environment always wins over either
-profile, exactly as it did before the profile existed.
+**Secret safety.** Sessions may run under unredacted PTY capture, so anything
+printed lands in an on-disk log. A kubectl argv can carry `--token=`,
+`--password=`, a bearer token, or a URL with embedded credentials, so the
+resolver never echoes the resolved argv, the `$KUBECTL` string, or
+`$DKS_KUBECTL_ARGV` — not on the success path, not on any error path.
+Announcements name only the profile plus a non-secret descriptor (the
+kubeconfig path, or the executable basename).
 
 Certification runs (`scripts/vsc-profile.sh`) are unaffected: VSC-PCTS is a
 single-SUT, no-cluster policy and never touches `$KUBECTL` or `$DKS_PROFILE`.
 
 Tests: `scripts/test-dks-profile.sh` (offline, no cluster, no `kubectl`
-execution — verifies default/peer/explicit-override/missing-file resolution
-and asserts the default `cloudbox` path is byte-identical to pre-profile
-behavior).
+execution — verifies default/peer/explicit-override/inherited-argv/missing-file
+resolution, asserts the default `cloudbox` path is byte-identical to
+pre-profile behavior, and adds three regression classes: a credential-shaped
+override value never reaches any output stream on any consumer or failure
+path; kubeconfig paths containing a space or glob metacharacters (`*`, `?`,
+`[abc]`) resolve and are invoked as single argv elements rather than refused or
+expanded; and the modified scripts do not panic Bashy's expander under
+`set -u`).
 
 ## Work plan
 
