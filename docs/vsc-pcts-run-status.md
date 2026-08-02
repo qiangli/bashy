@@ -79,6 +79,14 @@ across three sets, `chown` 76, `make` 60, `ctags`/`strip` 24 each fail
 *identically in both arms*, being utilities our multicall does not ship (both
 arms scored the same distro binary) or environment properties.
 
+**Per-assertion baseline: 291 bashy-only failing test purposes** across 63 sets
+(bashy 1,602 failing TPs, GNU 1,381, of which 1,311 are shared and therefore not
+ours). The full list — every TP with the suite's own assertion text, classified
+into 12 parallel work streams — is
+[`vsc-pcts-baseline-2026-08-01.md`](vsc-pcts-baseline-2026-08-01.md), and it is
+the **regression baseline**: a later run reproduces those 291 or explains each
+difference.
+
 Remaining bashy-attributable failures by test set:
 
 ```
