@@ -14,7 +14,12 @@ import (
 // used to fall through to "docker: No such file or directory"). Shared by every
 // dispatchEngine build variant (lean/full/windows) and unit-tested directly.
 func engineAlias(name string) string {
-	if name == "docker" {
+	// `sandbox` is the tier-3 NAME, aliased so the tier vocabulary and the verb
+	// surface agree. It is the RAW local engine and refuses nothing — outpost's
+	// `sandbox` app is a filtered libpod endpoint that strips privileged/host-
+	// namespace/host-bind/added-cap requests, and this alias does not inherit
+	// those guarantees. Do not narrow one without narrowing the other.
+	if name == "docker" || name == "sandbox" {
 		return "podman"
 	}
 	return name

@@ -340,6 +340,7 @@ func containsString(items []string, want string) bool {
 // their own Synopsis; builtins are standard). Brand-neutral, one line each.
 var verbSynopsis = map[string]string{
 	"docker":     "alias for `bashy podman` (isolated in-process container engine)",
+	"sandbox":    "alias for `bashy podman` — the tier-3 venue; RAW engine, not outpost's filtered sandbox app",
 	"podman":     "embedded, isolated in-process container engine",
 	"ollama":     "managed local LLM runtime (isolated daemon, own port/models)",
 	"weave":      "per-repo multi-agent workspace orchestrator",
@@ -452,7 +453,7 @@ func commandsCatalog() (builtins, core, verbs []string) {
 	sort.Strings(builtins)
 	core = tool.Names() // Names() already sorts; be defensive
 	sort.Strings(core)
-	verbs = append([]string{"docker"}, alwaysShimVerbs...)
+	verbs = append([]string{"docker", "sandbox"}, alwaysShimVerbs...)
 	verbs = append(verbs, agentModeShimVerbs...)
 	verbs = append(verbs, registry.Names()...) // declarative managed-external CLIs
 	sort.Strings(verbs)
