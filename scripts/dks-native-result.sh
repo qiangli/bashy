@@ -3,20 +3,18 @@
 set -euo pipefail
 
 . "$(cd "$(dirname "$0")" && pwd)/dks-profile.sh"
-if [ -z "${KUBECTL:-}" ]; then
-  KUBECTL="$(dks_resolve_kubectl "bashy kubectl")"
-fi
+dks_kubectl_init "bashy kubectl" || exit $?
 DHNT="${DHNT:-bashy dhnt}"
 NS="${NS:-default}"
 JOB="${JOB:-bashy-native}"
 
-job_uid="$($KUBECTL get job "$JOB" -n "$NS" -o jsonpath='{.metadata.uid}' 2>/dev/null)" || true
+job_uid="$(dks_kubectl get job "$JOB" -n "$NS" -o jsonpath='{.metadata.uid}' 2>/dev/null)" || true
 [ -n "$job_uid" ] || {
   echo "dks-native-result: failed to query live Job uid for job=$JOB ns=$NS" >&2
   exit 4
 }
 
-succeeded_pods="$($KUBECTL get pods -n "$NS" -l "job-name=${JOB}" \
+succeeded_pods="$(dks_kubectl get pods -n "$NS" -l "job-name=${JOB}" \
   -o jsonpath='{range .items[?(@.status.phase=="Succeeded")]}{.metadata.name}{"\n"}{end}' \
   2>/dev/null)" || true
 succeeded_count="$(printf '%s\n' "$succeeded_pods" | grep -c . || true)"
@@ -31,12 +29,12 @@ fi
 if [ -z "$pod" ]; then
   # Preserve useful diagnostics while the Job is active or after all attempts
   # failed. Completed Jobs are always read from their successful attempt above.
-  pod="$($KUBECTL get pods -n "$NS" -l "job-name=${JOB}" \
+  pod="$(dks_kubectl get pods -n "$NS" -l "job-name=${JOB}" \
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)"
 fi
 [ -n "$pod" ] || { echo "dks-native-result: no pod for job=$JOB ns=$NS" >&2; exit 2; }
 
-pod_uid="$($KUBECTL get pod "$pod" -n "$NS" -o jsonpath='{.metadata.ownerReferences[0].uid}' 2>/dev/null)" || true
+pod_uid="$(dks_kubectl get pod "$pod" -n "$NS" -o jsonpath='{.metadata.ownerReferences[0].uid}' 2>/dev/null)" || true
 [ -n "$pod_uid" ] || {
   echo "dks-native-result: failed to query ownerReferences uid for pod=$pod" >&2
   exit 4
@@ -46,11 +44,11 @@ pod_uid="$($KUBECTL get pod "$pod" -n "$NS" -o jsonpath='{.metadata.ownerReferen
   exit 4
 }
 
-phase="$($KUBECTL get pod "$pod" -n "$NS" -o jsonpath='{.status.phase}')"
-node="$($KUBECTL get pod "$pod" -n "$NS" -o jsonpath='{.spec.nodeName}')"
-backend="$($KUBECTL get node "$node" -o jsonpath='{.metadata.labels.outpost\.dhnt\.io/backend}')"
-os="$($KUBECTL get node "$node" -o jsonpath='{.metadata.labels.kubernetes\.io/os}')"
-arch="$($KUBECTL get node "$node" -o jsonpath='{.metadata.labels.kubernetes\.io/arch}')"
+phase="$(dks_kubectl get pod "$pod" -n "$NS" -o jsonpath='{.status.phase}')"
+node="$(dks_kubectl get pod "$pod" -n "$NS" -o jsonpath='{.spec.nodeName}')"
+backend="$(dks_kubectl get node "$node" -o jsonpath='{.metadata.labels.outpost\.dhnt\.io/backend}')"
+os="$(dks_kubectl get node "$node" -o jsonpath='{.metadata.labels.kubernetes\.io/os}')"
+arch="$(dks_kubectl get node "$node" -o jsonpath='{.metadata.labels.kubernetes\.io/arch}')"
 # An absent label reads back as the empty string, and an empty --expect-* is a
 # no-op in `dhnt canonicalize-run`. Left unchecked, an unlabelled node would
 # silently DISABLE the executor cross-check and the record would attest itself.
@@ -61,7 +59,7 @@ for pair in "backend=$backend" "os=$os" "arch=$arch"; do
     exit 4
   }
 done
-message="$($KUBECTL get pod "$pod" -n "$NS" \
+message="$(dks_kubectl get pod "$pod" -n "$NS" \
   -o jsonpath='{.status.containerStatuses[0].state.terminated.message}')"
 dks_count="$(printf '%s\n' "$message" | grep -c '^DKS_RESULT:' || true)"
 if [ "$dks_count" -gt 1 ]; then

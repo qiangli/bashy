@@ -4,9 +4,9 @@
 set -euo pipefail
 
 . "$(cd "$(dirname "$0")" && pwd)/dks-profile.sh"
-if [ -z "${KUBECTL:-}" ]; then
-  KUBECTL="$(dks_resolve_kubectl "bashy kubectl")"
-fi
+dks_kubectl_init "bashy kubectl" || exit $?
+# Argv-safe hand-off to the release gate (and, through it, its children).
+DKS_KUBECTL_ARGV="$(dks_kubectl_serialize)"
 
 VERSION="${VERSION:?set VERSION to the base candidate version, for example v0.19.2}"
 EXPECTED_SOURCE_REF="${EXPECTED_SOURCE_REF:?set EXPECTED_SOURCE_REF to the exact Bashy commit}"
@@ -47,7 +47,7 @@ fi
   exit 4
 }
 
-NS="${NS:-default}" KUBECTL="$KUBECTL" \
+NS="${NS:-default}" DKS_KUBECTL_ARGV="$DKS_KUBECTL_ARGV" \
   EXPECTED_SOURCE_REF="$EXPECTED_SOURCE_REF" \
   EXPECTED_SOURCE_SHA256="$EXPECTED_SOURCE_SHA256" \
   PIPELINE_FILE="$PIPELINE_FILE" \
