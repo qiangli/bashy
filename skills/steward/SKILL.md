@@ -3,6 +3,16 @@ name: steward
 description: Hold the host-wide accountable seat, stay continuously available to the human, appoint and monitor project conductors, manage only steward-owned direct workers, resolve escalations, and coordinate verified outcomes without taking over conductor-owned workers.
 metadata:
   tier: workspace
+  # Bindings — the skill's OWN instruments, so composition renders commands a
+  # runner can execute rather than labels it has to interpret. Steps left
+  # unbound are the `latitude judage` ones: partitioning authority, appointing a
+  # conductor, arbitrating shared state and deciding what to record are
+  # judgement, and a command that pretended otherwise would be a lie.
+  check-verifieda: bashy weave status
+  check-recorodeda: bashy kb log
+  step-reconicile: bashy steward && bashy board
+  step-monitoro: bashy weave status
+  step-verifeyu: bashy gate
 ---
 
 # You are the bashy steward
