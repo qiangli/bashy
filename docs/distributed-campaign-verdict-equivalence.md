@@ -1,7 +1,10 @@
 # Distributed campaign / free-suite verdict equivalence
 
-Status: implemented (W2, sprint 42, Phase 2). Scope: `scripts/campaign-distribute.sh`
-and `scripts/test-campaign-distribute.sh` only — see "Non-overlap contract" below.
+Status: implemented. W2 (sprint 42, Phase 2) delivered the
+reduction/equivalence harness; W2b delivered the real peer-DKS transport it
+was missing. Scope: `scripts/campaign-distribute.sh`,
+`scripts/campaign-distribute-k8s.sh` and `scripts/test-campaign-distribute.sh`
+— see "Non-overlap contract" below.
 
 ## Why this exists
 
@@ -37,11 +40,14 @@ if [ "$MODE" = cert ]; then
 fi
 ```
 
-`scripts/test-campaign-distribute.sh` asserts this refusal for both the
-`distribute` and `serial` subcommands, with a fully valid config supplied, so
-the check cannot be bypassed by a "just this once" flag combination. Exit
-code 77 is reserved for this refusal specifically, so a caller (or a CI gate)
-can distinguish "correctly refused" from any other failure mode.
+`scripts/campaign-distribute-k8s.sh` carries the identical check as defense
+in depth, so even a caller that somehow reached the transport directly is
+refused. `scripts/test-campaign-distribute.sh` asserts this refusal for the
+`distribute` and `serial` subcommands, for the transport script itself, and
+with the fake seams and `CAMPAIGN_TRANSPORT=k8s` supplied, so the check
+cannot be bypassed by a "just this once" flag combination. Exit code 77 is
+reserved for this refusal specifically, so a caller (or a CI gate) can
+distinguish "correctly refused" from any other failure mode.
 
 If a cert run is ever needed, it must go through the existing, unchunked
 harness (`make test-bash`, `bashy dag suites.md`'s non-chunked targets) —
@@ -108,49 +114,124 @@ that manifest to a file; pointing a later run at the exact same file replays
 the exact same chunk assignment, which is what makes a disagreement
 reproducible rather than a one-off flake.
 
-## The peer-worker / DKS integration seam
+## The real transport: per-chunk Kubernetes Jobs on the peer cluster
 
-`campaign_dispatch_chunk()` in `scripts/campaign-distribute.sh` is the single,
-documented shim function for placing a chunk on a peer-joined worker. Today
-it runs the configured `RUN_CHUNK_CMD` in a local subprocess and only labels
-the invocation with the assigned worker's role name — there is no real
-network transport wired up here.
+`CAMPAIGN_TRANSPORT=k8s` is the **only real transport**, implemented in
+`scripts/campaign-distribute-k8s.sh`. With no transport selected,
+`distribute` refuses (exit 8) — there is no default, and the local-subprocess
+dispatch that W2 originally shipped is no longer reachable as an execution
+mode (see "Transports and verdict markers" below). Per chunk, the transport:
 
-bashy#27 owns the DKS/kubectl host-profile scripts (`scripts/dks-profile.sh`
-and friends) and is still in flight; this work does not reimplement profile
-selection or touch any file `#27` owns. Once `#27` lands its profile
-interface, integrating it is a one-function-body change:
-`campaign_dispatch_chunk()` swaps its local-subprocess body for a call through
-that interface. Nothing else in this script depends on the shape of that
-interface.
+1. **Creates one Kubernetes Job** on the peer cluster, `backoffLimit: 0`,
+   `restartPolicy: Never`, with a `ttlSecondsAfterFinished` backstop.
+2. **Pins by node name** (`spec.nodeName` — no scheduler, no label matching)
+   to the node the chunk's worker role maps to in `WORKER_NODES`
+   (`role=node` pairs; hosts are named by role, never hostname/user).
+3. **Awaits completion** with a hard timeout: a Job that never scheduled,
+   wedged, or failed is a failed chunk — never a pass.
+4. **Collects logs as attributed evidence**: the pod's first line must be a
+   `CAMPAIGN_CHUNK_EVIDENCE` header stamped *inside the pod* with the Job
+   name, chunk id, worker role, suite, and the node name the kubelet reported
+   (`spec.nodeName` via the downward API). Collection cross-checks the pod's
+   `ownerReferences` uid against the Job uid (a pod not owned by this chunk's
+   Job is foreign evidence, rejected), the observed `.spec.nodeName` against
+   the pin (a pod that ran elsewhere means the pin did not hold, rejected),
+   and the header against both. An evidence sidecar
+   (`bashy.campaign.evidence/v1`: suite, chunk, worker, job, job uid, pod,
+   node, log path) is written per chunk — an unattributed result is not
+   evidence, and the reduction refuses a chunk that lacks one.
+5. **Deletes the Job** after collection. Cleanup is three-layered: each
+   dispatch deletes its own Job on every exit path (including INT/TERM), the
+   parent sweeps a `jobs.created` ledger from an EXIT trap (Jobs are recorded
+   in the ledger *before* `kubectl apply`), and the TTL is the final
+   backstop. No workload is leaked into the cluster, including on failure and
+   interrupt.
+
+After all chunks, the reduction additionally asserts the **observed**
+(API-reported, not requested) placement covered at least two distinct nodes —
+two chunks landing on one worker is not distribution.
+
+### Worker distinctness and the dhnt#4 host-label trap
+
+`preflight` runs before any Job is created and refuses (non-zero, loudly) if
+the pinning is not real distribution: fewer than two distinct nodes, two
+roles pinning one node, or a pinned node that does not exist in the peer
+cluster. The trap found in the dhnt#4 gate is handled explicitly:
+`outpost.dhnt.io/host` labels a **host**, not a node — a host running two
+virtual backends presents two nodes with the identical host label. Preflight
+therefore resolves each pinned node's `(outpost.dhnt.io/host,
+outpost.dhnt.io/backend)` identity tuple and refuses when two distinct node
+names collapse to one worker identity; the same host with distinct backend
+discriminators is accepted as two workers.
+
+### The D3 cluster-selection shim
+
+Cluster selection is bashy#27/D3's job, consumed through **one** function —
+`campaign_k8s_resolve_kubectl()` in `scripts/campaign-distribute-k8s.sh` —
+which sources `scripts/dks-profile.sh` and calls `dks_resolve_kubectl`. If
+the profile interface changes, that one function body is the entire
+integration. The transport is peer-only: `DKS_PROFILE=peer` is forced, an
+explicit cloudbox profile is refused (exit 8 — no cloudbox dependency in the
+peer path), and an ambient `$KUBECTL` is deliberately **not** honored — the
+profile is authoritative over the environment, so an inherited cloudbox
+kubectl can never silently steal a peer run. A missing peer kubeconfig fails
+loudly through the profile (exit 9), never falls back.
+
+## Transports and verdict markers
+
+Only a real peer-transport run may emit the promotable `CAMPAIGN_VERDICT`
+marker. The fake paths exist **only** as unit-injection seams for the
+deterministic gate and are structurally non-promotable:
+
+| Path | Selected by | Verdict marker | Evidence class |
+|---|---|---|---|
+| k8s, real kubectl via D3 peer profile | `CAMPAIGN_TRANSPORT=k8s` | `CAMPAIGN_VERDICT` | `development-only` |
+| k8s, fake kubectl | `CAMPAIGN_K8S_FAKE_KUBECTL=<path>` | `CAMPAIGN_FAKE_TRANSPORT_VERDICT` | `logic-check-only` |
+| local subprocess (the W2 dispatch) | `CAMPAIGN_TEST_FAKE_TRANSPORT=1` | `CAMPAIGN_FAKE_TRANSPORT_VERDICT` | `logic-check-only` |
+| none | — | refused, exit 8 | — |
+
+`verify` mirrors the split: a fake-transport equivalence reports
+`CAMPAIGN_LOGIC_EQUIVALENT` (a claim about the reduction logic), never
+`CAMPAIGN_VERDICT_EQUIVALENT` (a claim that distributed execution matched
+serial). The gate asserts a fake run can produce neither promotable marker.
+And even the real thing is **development evidence only**: note that
+`"evidence"` never says anything stronger than `development-only` — there is
+no marker, mode, or flag combination under which this harness's output is a
+certification result.
 
 ## Unproven-hardware boundary
 
-**Cross-worker distribution is UNPROVEN on real hardware.** The dispatch shim
-above only demonstrates the harness's *logic* (manifest generation, evidence
-checking, reduction, equivalence verification) against a local fake executor,
-per the deterministic-test requirement below. No claim is made here that
-running `campaign_dispatch_chunk` against a real remote peer (via ssh, mesh,
-or a future DKS-backed transport) has been exercised on physical hosts. Hosts
-in any future real-worker configuration should be named by **role**
-("worker" backend/arch/… ), never by hostname, username, or other
+**Live cross-worker execution is UNPROVEN — no two-machine run has
+happened.** The k8s transport above is real code exercised end-to-end
+(preflight, Job manifest, placement/identity evidence, collection, cleanup)
+but only through the fake-kubectl injection seam that simulates a small peer
+cluster on disk. No claim is made that a chunk Job has run on physical
+peer-joined hardware; the first real run must be labelled as such and its
+results treated as development evidence only, like everything else here.
+Hosts in any real-worker configuration are named by **role**
+(`worker-a=peer-node-1 …`), never by hostname, username, or other
 environment-identifying detail — consistent with
 `docs/chunked-fleet-conformance-plan.md`'s privacy rule.
 
-There is also no cloudbox dependency anywhere in the peer-execution path: the
-default dispatch is a plain local subprocess, and the documented integration
-seam for a real transport is peer-to-peer (ssh/mesh) or the DKS profile from
-`#27` — never a third-party managed sandbox.
-
 ## Deterministic tests, no cluster, no network
 
-`scripts/test-campaign-distribute.sh` fakes the entire worker layer: every
-"peer worker" is a role name string, and every chunk dispatch runs a local
-fake executor script that reads a canonical `case_id -> outcome` map and
-supports fault-injection knobs (unreachable worker, empty result, dropped
-case, injected foreign case, outcome-swap). Nothing in the test touches a
-real network socket or a real cluster. It must pass under both shells this
-repo ships:
+`scripts/test-campaign-distribute.sh` stays cluster-free and network-free by
+construction, through two injection seams:
+
+- **`CAMPAIGN_TEST_FAKE_TRANSPORT=1`** exercises the reduction/equivalence
+  logic against a local fake executor that reads a canonical
+  `case_id -> outcome` map and supports fault-injection knobs (unreachable
+  worker, empty result, dropped case, injected foreign case, outcome-swap).
+- **`CAMPAIGN_K8S_FAKE_KUBECTL=<path>`** exercises the k8s transport
+  end-to-end against a fake kubectl that simulates a small peer cluster on
+  disk (node objects with outpost host/backend labels — including the dhnt#4
+  twin-node trap — applied Job manifests, a deletion log, and logs derived
+  from the recorded manifest), with its own fault knobs (wedged Job, empty
+  logs, mis-scheduled pod, foreign pod owner).
+
+Neither seam is reachable as a real execution mode, and the gate asserts both
+force the non-promotable marker. It must pass under both shells this repo
+ships:
 
 ```sh
 /bin/bash scripts/test-campaign-distribute.sh
@@ -164,16 +245,18 @@ found — no workaround was needed in the scripts.
 
 This work owns exactly:
 
-- `scripts/campaign-distribute.sh` (new)
-- `scripts/test-campaign-distribute.sh` (new)
-- `docs/distributed-campaign-verdict-equivalence.md` (this file, new)
+- `scripts/campaign-distribute.sh` (W2, extended here)
+- `scripts/campaign-distribute-k8s.sh` (new — the real peer-DKS transport)
+- `scripts/test-campaign-distribute.sh` (W2, extended here)
+- `docs/distributed-campaign-verdict-equivalence.md` (this file)
 
-It does not create, edit, or depend on the internals of anything bashy#27
+It does not create, edit, or depend on the internals of anything bashy#27/D3
 owns: `scripts/dks-profile.sh`, `scripts/test-dks-profile.sh`,
 `scripts/dks-author-qa-refs.sh`, `scripts/dks-native-result.sh`,
 `scripts/dks-release-gate.sh`, `scripts/k8s-job-aggregate.sh`, or
-`docs/plan-dks-build-test-deploy.md`. The only place this work is aware that
-interface exists is the single shim function documented above.
+`docs/plan-dks-build-test-deploy.md`. The only place this work consumes that
+interface is the single `campaign_k8s_resolve_kubectl()` shim documented
+above.
 
 ## Licensing
 

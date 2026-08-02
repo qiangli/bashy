@@ -29,6 +29,23 @@
 #                  must print exactly one `<test_id> <outcome>` line per case in
 #                  the chunk file to stdout, and exit 0 iff it actually ran.
 #                  outcome is one of: pass fail skip
+#                  (used by `serial` always, and by `distribute` only under the
+#                  test-injection seam below)
+#
+# Transport (distribute/verify):
+#   CAMPAIGN_TRANSPORT=k8s   the ONLY real transport: one Kubernetes Job per
+#                            chunk on the PEER cluster, pinned to distinct
+#                            worker nodes — see scripts/campaign-distribute-k8s.sh
+#                            for its env (WORKER_NODES, CHUNK_IMAGE,
+#                            CHUNK_POD_CMD, NS, CHUNK_TIMEOUT).
+#   CAMPAIGN_TEST_FAKE_TRANSPORT=1
+#                            unit-injection seam ONLY: runs RUN_CHUNK_CMD in a
+#                            local subprocess so the gate stays deterministic
+#                            and network-free. Loud, and structurally
+#                            non-promotable: the run emits
+#                            CAMPAIGN_FAKE_TRANSPORT_VERDICT, never
+#                            CAMPAIGN_VERDICT. Not a real execution mode.
+#   With neither set, `distribute` refuses: there is no default transport.
 #
 # Optional:
 #   SEED       manifest determinism seed (default: 0)
@@ -48,18 +65,94 @@ fi
 
 subcmd="${1:-distribute}"
 
+campaign_root=$(cd "$(dirname "$0")" && pwd)
+
+# --- transport selection ------------------------------------------------------
+#
+# The only real transport is k8s: per-chunk Kubernetes Jobs on the PEER
+# cluster via scripts/campaign-distribute-k8s.sh (which consumes bashy#27/D3's
+# dks-profile.sh through a single shim — cluster selection is never
+# reimplemented here). The local-subprocess dispatch that W2 (#28) shipped
+# survives ONLY as the CAMPAIGN_TEST_FAKE_TRANSPORT unit-injection seam: it is
+# not reachable without that explicit test knob, and a run using it (or a
+# fake kubectl injected via CAMPAIGN_K8S_FAKE_KUBECTL) can never emit the
+# promotable CAMPAIGN_VERDICT marker.
+campaign_transport() {
+  if [ -n "${CAMPAIGN_TEST_FAKE_TRANSPORT:-}" ]; then
+    printf 'injected-fake\n'
+    return 0
+  fi
+  case "${CAMPAIGN_TRANSPORT:-}" in
+    k8s) printf 'k8s\n' ;;
+    '') printf 'none\n' ;;
+    *) printf 'unknown\n' ;;
+  esac
+}
+
+# Human/JSON-facing transport description, and the fake/real split that picks
+# the verdict marker.
+campaign_transport_desc() {
+  case "$(campaign_transport)" in
+    injected-fake) printf 'injected-fake\n' ;;
+    k8s)
+      if [ -n "${CAMPAIGN_K8S_FAKE_KUBECTL:-}" ]; then
+        printf 'k8s-fake-kubectl\n'
+      else
+        printf 'k8s-peer\n'
+      fi
+      ;;
+    *) printf 'none\n' ;;
+  esac
+}
+
+campaign_transport_is_fake() {
+  case "$(campaign_transport_desc)" in
+    k8s-peer) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+# Marker for the distribute verdict line: only a real peer-transport run may
+# say CAMPAIGN_VERDICT — a fake-transport run is a logic check and must never
+# be reportable as a distributed result.
+campaign_verdict_marker() {
+  if campaign_transport_is_fake; then
+    printf 'CAMPAIGN_FAKE_TRANSPORT_VERDICT'
+  else
+    printf 'CAMPAIGN_VERDICT'
+  fi
+}
+
+campaign_evidence_class() {
+  if campaign_transport_is_fake; then
+    printf 'logic-check-only'
+  else
+    # Even the real thing: distributed results are development evidence only,
+    # never a certification result.
+    printf 'development-only'
+  fi
+}
+
 # --- peer dispatch shim -----------------------------------------------------
 #
-# Integration seam for bashy#27's DKS/kubectl host-profile interface (still in
-# flight — see docs/plan-dks-build-test-deploy.md, owned by that issue; do not
-# reimplement profile selection here). Until it merges, a "peer worker" is a
-# named role dispatched to in a local subprocess — there is no real remote
-# transport wired up, so cross-worker distribution is UNPROVEN on real
-# hardware (see the doc). Once #27 lands its profile script, point the body
-# below at it: swapping this one function is the entire integration.
+# One chunk -> one worker. k8s: create/await/collect/delete a per-chunk Job
+# pinned to the worker's node (campaign-distribute-k8s.sh owns the kubectl
+# side). injected-fake: the W2 local-subprocess path, test-injection only.
 campaign_dispatch_chunk() {
-  worker="$1" chunk_cases_file="$2" out_file="$3"
-  "$RUN_CHUNK_CMD" "$chunk_cases_file" "$worker" >"$out_file"
+  worker="$1" chunk_cases_file="$2" out_file="$3" chunk_id="$4" evidence_dir="$5"
+  case "$(campaign_transport)" in
+    k8s)
+      "$campaign_root/campaign-distribute-k8s.sh" dispatch-chunk \
+        "$worker" "$chunk_cases_file" "$out_file" "$chunk_id" "$evidence_dir"
+      ;;
+    injected-fake)
+      "$RUN_CHUNK_CMD" "$chunk_cases_file" "$worker" >"$out_file"
+      ;;
+    *)
+      echo "campaign-distribute: no transport selected — set CAMPAIGN_TRANSPORT=k8s (the only real transport). The local fake is a unit-test injection seam (CAMPAIGN_TEST_FAKE_TRANSPORT=1), never an execution mode." >&2
+      exit 8
+      ;;
+  esac
 }
 
 # --- deterministic chunk manifest -------------------------------------------
@@ -110,7 +203,6 @@ campaign_distribute() {
   campaign_require_common
   : "${CHUNKS:?set CHUNKS to the chunk count}"
   : "${WORKERS:?set WORKERS to space-separated peer-worker role names}"
-  : "${RUN_CHUNK_CMD:?set RUN_CHUNK_CMD to the per-chunk executor}"
   case "$CHUNKS" in
     ''|*[!0-9]*) echo "campaign-distribute: CHUNKS must be a positive integer" >&2; exit 2 ;;
   esac
@@ -121,7 +213,36 @@ campaign_distribute() {
   nworkers=${#workers_arr[@]}
   [ "$nworkers" -gt 0 ] || { echo "campaign-distribute: WORKERS is empty" >&2; exit 2; }
 
+  transport="$(campaign_transport)"
+  case "$transport" in
+    k8s) ;;
+    injected-fake)
+      : "${RUN_CHUNK_CMD:?CAMPAIGN_TEST_FAKE_TRANSPORT needs RUN_CHUNK_CMD}"
+      echo "campaign-distribute: ================================================================" >&2
+      echo "campaign-distribute: FAKE TRANSPORT INJECTED (CAMPAIGN_TEST_FAKE_TRANSPORT) — this is" >&2
+      echo "campaign-distribute: a reduction-logic check in a local subprocess. NOTHING here ran" >&2
+      echo "campaign-distribute: on a peer worker; the output is NOT a distributed result." >&2
+      echo "campaign-distribute: ================================================================" >&2
+      ;;
+    *)
+      echo "campaign-distribute: no transport selected — set CAMPAIGN_TRANSPORT=k8s (the only real transport). The local fake is a unit-test injection seam (CAMPAIGN_TEST_FAKE_TRANSPORT=1), never an execution mode." >&2
+      exit 8
+      ;;
+  esac
+
   out_dir="$(campaign_out_dir)"
+
+  if [ "$transport" = k8s ]; then
+    # Verify the role->node pinning is real distribution BEFORE creating any
+    # Job, and guarantee cleanup of every Job the run creates even if it is
+    # interrupted mid-flight (each dispatch also deletes its own Job; this
+    # ledger sweep is the second line of defense, the Job TTL the third).
+    "$campaign_root/campaign-distribute-k8s.sh" preflight
+    trap '"$campaign_root/campaign-distribute-k8s.sh" cleanup "$out_dir/jobs.created" || true' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+  fi
+
   manifest="${MANIFEST:-$out_dir/manifest.tsv}"
   if [ -n "${MANIFEST:-}" ] && [ -s "$MANIFEST" ]; then
     echo "campaign-distribute: replaying committed manifest $MANIFEST" >&2
@@ -144,17 +265,34 @@ campaign_distribute() {
     expected_n=$(grep -c . "$chunk_cases" || true)
 
     result_file="$out_dir/chunk-$chunk_id.result"
-    if ! campaign_dispatch_chunk "$worker" "$chunk_cases" "$result_file" 2>"$out_dir/chunk-$chunk_id.err"; then
+    if [ "$expected_n" -eq 0 ]; then
+      # Nothing assigned, nothing to dispatch — an empty-because-empty chunk
+      # is positively accounted for as such, not inferred from silence.
+      echo "campaign-distribute: chunk=$chunk_id has no assigned cases — skipping dispatch" >&2
+      : >"$result_file"
+      chunk_id=$((chunk_id + 1))
+      continue
+    fi
+
+    if ! campaign_dispatch_chunk "$worker" "$chunk_cases" "$result_file" "$chunk_id" "$out_dir" 2>"$out_dir/chunk-$chunk_id.err"; then
       echo "campaign-distribute: FAIL chunk=$chunk_id worker=$worker — dispatch failed (worker unreachable or executor error)" >&2
       cat "$out_dir/chunk-$chunk_id.err" >&2 || true
       exit 3
     fi
 
-    if [ "$expected_n" -gt 0 ]; then
-      [ -s "$result_file" ] || {
-        echo "campaign-distribute: FAIL chunk=$chunk_id worker=$worker — empty result file, expected $expected_n cases. Absence of evidence, not a pass." >&2
+    [ -s "$result_file" ] || {
+      echo "campaign-distribute: FAIL chunk=$chunk_id worker=$worker — empty result file, expected $expected_n cases. Absence of evidence, not a pass." >&2
+      exit 4
+    }
+
+    if [ "$transport" = k8s ]; then
+      # Placement + identity evidence for this chunk must exist: the observed
+      # node file and the evidence sidecar are written by dispatch only after
+      # the pod's Job-ownership, node-pin, and evidence-header checks pass.
+      if [ ! -s "$out_dir/chunk-$chunk_id.node" ] || [ ! -s "$out_dir/chunk-$chunk_id.evidence.json" ]; then
+        echo "campaign-distribute: FAIL chunk=$chunk_id worker=$worker — no placement/identity evidence collected; an unattributed result is not evidence" >&2
         exit 4
-      }
+      fi
     fi
 
     # The reported case set for this chunk must equal exactly the assigned
@@ -189,6 +327,17 @@ campaign_distribute() {
     exit 7
   fi
 
+  if [ "$transport" = k8s ]; then
+    # Distribution means distinct workers actually executed: the observed
+    # (API-reported) placement across all dispatched chunks must cover at
+    # least two distinct nodes. Two chunks on one worker is not distribution.
+    observed_nodes=$(cat "$out_dir"/chunk-*.node 2>/dev/null | sort -u | grep -c . || true)
+    if [ "$observed_nodes" -lt 2 ]; then
+      echo "campaign-distribute: FAIL — dispatched chunks executed on $observed_nodes distinct node(s); distribution requires at least 2. Two chunks landing on one worker is not distribution." >&2
+      exit 12
+    fi
+  fi
+
   covered_n=$(sort -u "$covered" | grep -c .)
   pass_n=$(awk '$2=="pass"' "$verdict" | grep -c . || true)
   fail_n=$(awk '$2=="fail"' "$verdict" | grep -c . || true)
@@ -197,11 +346,17 @@ campaign_distribute() {
   [ "$fail_n" -eq 0 ] || class=fail
 
   sort -o "$verdict" "$verdict"
-  printf 'CAMPAIGN_VERDICT:{"schema":"bashy.campaign/v1","suite":"%s","mode":"distribute","chunks":%s,"workers":%s,"cases":%s,"pass":%s,"fail":%s,"skip":%s,"class":"%s","manifest":"%s","verdict":"%s"}\n' \
-    "$SUITE" "$CHUNKS" "$nworkers" "$covered_n" "$pass_n" "$fail_n" "$skip_n" "$class" "$manifest" "$verdict"
+  printf '%s:{"schema":"bashy.campaign/v1","suite":"%s","mode":"distribute","transport":"%s","evidence":"%s","chunks":%s,"workers":%s,"cases":%s,"pass":%s,"fail":%s,"skip":%s,"class":"%s","manifest":"%s","verdict":"%s"}\n' \
+    "$(campaign_verdict_marker)" "$SUITE" "$(campaign_transport_desc)" "$(campaign_evidence_class)" \
+    "$CHUNKS" "$nworkers" "$covered_n" "$pass_n" "$fail_n" "$skip_n" "$class" "$manifest" "$verdict"
 }
 
 # --- serial (development baseline, NOT a certification run) ---------------
+#
+# Serial is local by definition — one exclusive chunk on this host, run
+# directly through RUN_CHUNK_CMD, never through the distribution transport.
+# It exists as the equivalence baseline for `verify`; the certification
+# baseline remains the existing unchunked harness (e.g. make test-bash).
 campaign_serial() {
   campaign_require_common
   : "${RUN_CHUNK_CMD:?set RUN_CHUNK_CMD to the per-chunk executor}"
@@ -211,7 +366,7 @@ campaign_serial() {
   sort -u "$CASES_FILE" >"$all_cases"
   result_file="$out_dir/serial.result"
 
-  if ! campaign_dispatch_chunk "serial-exclusive" "$all_cases" "$result_file" 2>"$out_dir/serial.err"; then
+  if ! "$RUN_CHUNK_CMD" "$all_cases" "serial-exclusive" >"$result_file" 2>"$out_dir/serial.err"; then
     echo "campaign-distribute: FAIL serial run — executor failed" >&2
     cat "$out_dir/serial.err" >&2 || true
     exit 3
@@ -235,7 +390,7 @@ campaign_serial() {
   skip_n=$(awk '$2=="skip"' "$result_file" | grep -c . || true)
   class=pass
   [ "$fail_n" -eq 0 ] || class=fail
-  printf 'CAMPAIGN_VERDICT:{"schema":"bashy.campaign/v1","suite":"%s","mode":"serial","chunks":1,"workers":1,"cases":%s,"pass":%s,"fail":%s,"skip":%s,"class":"%s","verdict":"%s"}\n' \
+  printf 'CAMPAIGN_VERDICT:{"schema":"bashy.campaign/v1","suite":"%s","mode":"serial","transport":"local-serial","evidence":"development-only","chunks":1,"workers":1,"cases":%s,"pass":%s,"fail":%s,"skip":%s,"class":"%s","verdict":"%s"}\n' \
     "$SUITE" "$(grep -c . "$all_cases")" "$pass_n" "$fail_n" "$skip_n" "$class" "$result_file"
 }
 
@@ -261,8 +416,15 @@ campaign_verify() {
   if diff "$serial_verdict" "$dist_verdict" >"$base_out/diff.txt"; then
     echo "$serial_line" >&2
     echo "$dist_line" >&2
-    printf 'CAMPAIGN_VERDICT_EQUIVALENT:{"schema":"bashy.campaign/v1","suite":"%s","cases":%s}\n' \
-      "$SUITE" "$(grep -c . "$serial_verdict")"
+    # A fake-transport equivalence is a LOGIC claim about the reduction, not
+    # evidence that distributed execution matched serial — mark it so.
+    if campaign_transport_is_fake; then
+      eq_marker=CAMPAIGN_LOGIC_EQUIVALENT
+    else
+      eq_marker=CAMPAIGN_VERDICT_EQUIVALENT
+    fi
+    printf '%s:{"schema":"bashy.campaign/v1","suite":"%s","transport":"%s","cases":%s}\n' \
+      "$eq_marker" "$SUITE" "$(campaign_transport_desc)" "$(grep -c . "$serial_verdict")"
     return 0
   fi
 
