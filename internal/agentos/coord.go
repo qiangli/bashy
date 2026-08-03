@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"mvdan.cc/sh/v3/interp"
@@ -100,17 +101,38 @@ func isWrite(args []string) bool {
 	return isGitWrite(args[1:])
 }
 
+// gitGlobalFlagsWithValue are git's global options whose VALUE is a separate
+// argument. Skipping only the flag leaves the value looking like a subcommand,
+// so `git -C /path commit` resolves the verb as "/path" and matches nothing —
+// which is how the -C form this function's comment claims to handle was in fact
+// missed entirely.
+var gitGlobalFlagsWithValue = map[string]bool{
+	"-C": true, "-c": true, "--git-dir": true, "--work-tree": true,
+	"--namespace": true, "--exec-path": true,
+}
+
 // isGitWrite decides whether git's own arguments mutate shared state.
 func isGitWrite(args []string) bool {
-	for i, a := range args {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if gitGlobalFlagsWithValue[a] {
+			i++ // consume the value too
+			continue
+		}
 		if strings.HasPrefix(a, "-") {
-			continue // a global flag: git -C <dir> commit
+			continue // a valueless global flag, or --opt=value
 		}
 		if a == "reset" {
 			// `git reset --hard` destroys work; a plain `git reset` only unstages.
 			// Guard the destructive form only -- a guard that fires on harmless
 			// commands is a guard that gets switched off.
-			return containsString(args[i:], "--hard")
+			//
+			// slices.Contains, NOT containsString: that helper is a
+			// sort.SearchStrings BINARY SEARCH and requires its input sorted.
+			// argv never is, so `git reset --hard` searched an unsorted slice
+			// and reported not-found — the one destructive form this branch
+			// exists to catch was the one it missed.
+			return slices.Contains(args[i:], "--hard")
 		}
 		return writeVerbs[a]
 	}

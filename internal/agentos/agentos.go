@@ -1546,6 +1546,14 @@ func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 	if learnEnabled() {
 		mws = append(mws, learnHandler())
 	}
+	// The weave isolation guard speaks BEFORE the command, where the advisor
+	// speaks after it. weave already detects that the live checkout moved while
+	// a run held its workspace — but only on the read path, so the person who
+	// caused it learns at the next `weave list`, by which point the run is
+	// unmergeable without --force. Advisory only: one line, exit untouched.
+	if weaveGuardEnabled() {
+		mws = append(mws, weaveGuardHandler)
+	}
 	mws = append(mws, dryRunHandler(r), coreutilsshell.Handler())
 	return append(opts, interp.ExecHandlers(mws...))
 }
