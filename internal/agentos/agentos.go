@@ -1490,6 +1490,10 @@ func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 	if posix {
 		return append(opts, interp.ExecHandlers(coreutilsshell.Handler()))
 	}
+	// R0-pre: file a presence card for the agent this shell runs under, so an
+	// agent launched outside `bashy chat` stops being invisible to the address
+	// book. Best-effort, silent, and never a claim — see shellsession.go.
+	registerShellSession()
 	initial := dryRunRequested()
 	if initial && weavecli.IsAgent() {
 		// Agent mode emits a clean JSON manifest on stdout; suppress the
