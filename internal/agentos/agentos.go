@@ -700,6 +700,10 @@ func Dispatch() {
 		// where `bashy kb` is the durable PULL half. `bus publish` appends an
 		// addressed notification to the host room timeline; `bus watch` follows
 		// it, or drains what this subscriber has not seen.
+		// The catalog seam for `bus subscriptions --reconcile`. pkg/bus must not
+		// import pkg/fleet — the bus is transport, the roster is policy — so the
+		// host supplies the names, exactly as it does for steward.OpenRoom.
+		bus.FleetNames = fleetAgentNames
 		cmd := bus.NewBusCmd()
 		cmd.SetArgs(os.Args[2:])
 		err := cmd.Execute()

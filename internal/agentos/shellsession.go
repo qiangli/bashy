@@ -48,6 +48,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/room"
 	coreskills "github.com/qiangli/coreutils/pkg/skills"
 )
@@ -123,4 +124,22 @@ func registerShellSession() {
 // card means "can send, cannot be pushed to".
 func IsShellPresenceCard(c room.Card) bool {
 	return strings.HasPrefix(c.ID, shellSessionPrefix)
+}
+
+// fleetAgentNames lists the address book — every agent the catalog knows.
+//
+// It is the input to `bus subscriptions --reconcile`: the fleet IS the set that
+// needs inboxes, because `bashy agents list` is what a human or an agent reads
+// when deciding who to message. A catalog that will not load yields no names
+// rather than an error; reconciliation is a repair, and a repair that fails
+// loudly on a read it did not need is worse than one that does nothing.
+func fleetAgentNames() []string {
+	agents, _ := fleet.New().Agents()
+	out := make([]string, 0, len(agents))
+	for _, a := range agents {
+		if n := strings.TrimSpace(a.Name); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
 }
