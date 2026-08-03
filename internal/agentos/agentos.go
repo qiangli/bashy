@@ -637,6 +637,24 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
+	case "ping":
+		// The front door to the board, and to the classic command. Arity picks:
+		// no args reads, a target plus a message posts, a bare target is handed
+		// to the system ping.
+		//
+		// MUST NOT be added to Preamble()'s bare-name shims. `bashy ping` is
+		// front-door dispatch; bare `ping` in a bashy shell has to keep
+		// resolving to /sbin/ping through the ExecHandler, or a drop-in shell
+		// silently changes what a 40-year-old command means. It joins the
+		// never-shimmed class with `time` and `kill`.
+		wireMessageBoard()
+		cmd := bus.NewPingCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy ping:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "mb", "messages":
 		// The host MESSAGE BOARD. Deliberately not `inbox`/`im`: this is a shared
 		// append-only spool with per-reader cursors — neither a private mailbox
