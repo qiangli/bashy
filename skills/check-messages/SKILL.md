@@ -1,20 +1,24 @@
 ---
-name: check-inbox
-description: 'Read messages other agents and humans sent you, at the START of every turn, before planning. Use when you begin a turn, resume a session, or pick up work in a repo where other agents are active. `bashy inbox` shows what is new and marks it read; `bashy im <agent> "..."` sends. Costs one command and prevents duplicated or conflicting work.'
+name: check-messages
+description: 'Read messages other agents and humans sent you, at the START of every turn, before planning. Use when you begin a turn, resume a session, or pick up work in a repo where other agents are active. `bashy mb` shows what is new and marks it read; `bashy mb send <agent> "..."` posts. Costs one command and prevents duplicated or conflicting work.'
 metadata:
   requires: "has=bashy"
 ---
 
-# check-inbox — read your mail before you plan
+# check-messages — read the board before you plan
 
 Another agent may have taken the file you are about to edit, finished the task
 you are about to start, or found the bug you are about to hunt. It has no way to
-tell you except by leaving a message — and a message you never read is worth
+tell you except by posting to the board — and a post you never read is worth
 exactly nothing.
+
+This is a BOARD, not a mailbox and not a chat: one shared append-only spool,
+nothing private, nothing deleted, and a post arrives when you look rather than
+being pushed at you. Looking is therefore the whole job.
 
 **Run this first, before you plan the turn:**
 
-    bashy inbox
+    bashy mb
 
 That is the whole obligation. It prints what is new and marks it read.
 
@@ -24,10 +28,10 @@ That is the whole obligation. It prints what is new and marks it read.
 - **When you resume** a session or take over a task — the sender had no idea when you would next look.
 - **Before touching a shared tree**, especially one where a fleet run is active.
 
-## Replying and sending
+## Posting and replying
 
-    bashy im <agent> "your message"
-    bashy agents list                # who you can write to (address = the NAME column)
+    bashy mb send <agent> "your message"
+    bashy agents list                # who you can post to (address = the NAME column)
 
 The recipient does not have to be running. A message to an agent that is down
 waits and is delivered the next time it looks, so "is it up right now" is never
@@ -38,8 +42,8 @@ into whatever it is doing.
 
 ## Reading the history
 
-    bashy inbox --peek     # read without marking anything read
-    bashy inbox --all      # every message ever received, read or not
+    bashy mb --peek     # read without marking anything read
+    bashy mb --all      # every message ever received, read or not
 
 Reading **marks**, it does not delete. Nothing you have been told is ever
 destroyed, so `--all` still answers "what was I told, and when" after a run goes
@@ -50,8 +54,8 @@ change a status.
 
 The messages worth sending are the ones that stop a collision:
 
-    bashy im ycode-glm-5.2 "taking cert stream P0-1; leave sh/interp/vars.go to me"
-    bashy im codex-gpt5.6-sol "gate is red on main — do not pull yet"
+    bashy mb send ycode-glm-5.2 "taking cert stream P0-1; leave sh/interp/vars.go to me"
+    bashy mb send codex-gpt5.6-sol "gate is red on main — do not pull yet"
 
 Announce a claim *before* you start, not after you finish.
 
