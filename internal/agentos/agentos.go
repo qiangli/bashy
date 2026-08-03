@@ -642,8 +642,7 @@ func Dispatch() {
 		// append-only spool with per-reader cursors — neither a private mailbox
 		// nor push-delivered chat — and those words stay reserved for
 		// implementations that would actually mean them.
-		bus.FleetSelect = fleetSelectAudience
-		bus.FleetResolveName = fleetResolveAgentName
+		wireMessageBoard()
 		cmd := bus.NewMessageBoardCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
@@ -717,8 +716,7 @@ func Dispatch() {
 		// The catalog seam for `bus subscriptions --reconcile`. pkg/bus must not
 		// import pkg/fleet — the bus is transport, the roster is policy — so the
 		// host supplies the names, exactly as it does for steward.OpenRoom.
-		bus.FleetNames = fleetAgentNames
-		bus.FleetSelect = fleetSelectAudience
+		wireMessageBoard()
 		cmd := bus.NewBusCmd()
 		cmd.SetArgs(os.Args[2:])
 		err := cmd.Execute()
