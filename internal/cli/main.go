@@ -605,6 +605,10 @@ func newRunner() (*interp.Runner, error) {
 		interp.StdIO(os.Stdin, os.Stdout, os.Stderr),
 		interp.Env(env),
 		interp.WithBashCompatErrors(true),
+		// The cold CLI owns its process, so `trap - SIGNAL` must restore the
+		// real OS default disposition. Warm/session runners are embedded and
+		// deliberately do not opt into this process-global behavior.
+		interp.WithSignalResetter(interp.OSSignalResetter{}),
 		interp.WithInheritedFds(startupInheritedFds()),
 		interp.PromptExpand(func(s string) string {
 			envGet := func(name string) string {
