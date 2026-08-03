@@ -70,8 +70,10 @@ reserved_values=$(yaml_host_values "$DKS_RESERVED_HOSTS") || exit $?
 # Scheduler-native placement for Indexed Jobs. Unlike the point-in-time native
 # selector, one Indexed Job creates many Pods concurrently, so Kubernetes owns
 # the decision: accurate requests, soft worker preference/control-plane reserve,
-# and hostname spread keep shards off Dragon without hard-pinning them all to
-# one snapshot winner.
+# and physical-host spread keep shards off Dragon without hard-pinning them all
+# to one snapshot winner. A host can expose several vk-* node objects; spreading
+# by kubernetes.io/hostname would treat those logical venues as independent
+# machines and could concentrate supposedly-distributed shards on one box.
 affinity_spread=$(cat <<YAML
 
       affinity:
@@ -98,7 +100,7 @@ affinity_spread=$(cat <<YAML
                     operator: DoesNotExist
       topologySpreadConstraints:
         - maxSkew: 1
-          topologyKey: kubernetes.io/hostname
+          topologyKey: outpost.dhnt.io/host
           whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:

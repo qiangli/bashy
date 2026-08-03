@@ -73,10 +73,13 @@ byte-promotion evidence contracts.
 - `scripts/dks-native-job.sh` defaults `EXECUTOR_NODE=auto`, gives each task a
   realistic resource request, and hard-pins the emitted Job to the selected
   node so its RunRecord cannot name an executor the scheduler did not use.
-- Concurrent Indexed Jobs use scheduler-native soft affinity plus hostname
-  topology spreading in `scripts/dag-to-k8s-job.sh`; they are deliberately not
-  all hard-pinned to one point-in-time winner. Both physical agent nodes and
-  vk-podman nodes retain their required selectors/tolerations.
+- Concurrent Indexed Jobs use scheduler-native soft affinity plus physical-host
+  (`outpost.dhnt.io/host`) topology spreading in
+  `scripts/dag-to-k8s-job.sh`; they are deliberately not all hard-pinned to one
+  point-in-time winner. This host-level key prevents several logical vk venues
+  on one machine from masquerading as independent failure/resource domains.
+  Both physical agent nodes and vk-podman nodes retain their required
+  selectors/tolerations, and generated Pods opt into bounded terminal evidence.
 - Fixture tests cover live-utilization ranking, requests-only fallback, partial
   metrics, capacity rejection, taints, deterministic ties, Dragon fallback,
   worker preference, shard spreading, secret non-leakage, peer-only targeting,

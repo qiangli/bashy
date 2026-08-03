@@ -543,7 +543,9 @@ contains "Indexed Jobs name Dragon in the reserve preference" "$yaml" \
   'values: ["dragon"]'
 contains "Indexed Jobs avoid control-plane nodes when workers exist" "$yaml" \
   'key: node-role.kubernetes.io/control-plane'
-contains "Indexed Jobs spread by physical hostname" "$yaml" \
+contains "Indexed Jobs spread by registered physical host" "$yaml" \
+  'topologyKey: outpost.dhnt.io/host'
+lacks "Indexed Jobs do not mistake logical node names for physical hosts" "$yaml" \
   'topologyKey: kubernetes.io/hostname'
 lacks "Indexed Jobs are not hard-pinned to a preferred host" "$yaml" \
   'outpost.dhnt.io/host: novicortex'
@@ -556,6 +558,10 @@ contains "vk-podman keeps its virtual-kubelet toleration" "$yaml" \
   'key: virtual-kubelet.io/provider'
 contains "vk-podman also receives topology spreading" "$yaml" \
   'topologySpreadConstraints:'
+contains "vk-podman spreads across physical outpost hosts" "$yaml" \
+  'topologyKey: outpost.dhnt.io/host'
+contains "vk-podman opts into bounded terminal evidence" "$yaml" \
+  'outpost.dhnt.io/termination-log-tail: "true"'
 
 yaml=$(emit_indexed DKS_PREFERRED_HOSTS='novicortex,not valid')
 check "an invalid preferred-host list fails closed" "$(last_rc)" 2
