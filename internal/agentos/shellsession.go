@@ -48,6 +48,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/qiangli/coreutils/pkg/bus"
 	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/room"
 	coreskills "github.com/qiangli/coreutils/pkg/skills"
@@ -142,4 +143,48 @@ func fleetAgentNames() []string {
 		}
 	}
 	return out
+}
+
+// fleetSelectAudience answers a `bashy mb send --band/--tool/--provider`
+// selector from the CATALOG — the same catalog `bashy agents list` prints.
+//
+// That identity is the point. A selector resolved from a copy kept elsewhere is
+// a second opinion about who is L4, and a second opinion can drift; answering
+// from the catalog means the address book and the audience can never disagree.
+//
+// Criteria are ANDed, matching the flag documentation. A cascade agent has no
+// plain model binding (Base is set and Model ignored), so a provider or band
+// filter cannot describe it and it is skipped rather than guessed at — the same
+// no-attribution-no-row rule the capability ledger uses.
+func fleetSelectAudience(aud bus.Audience) ([]string, error) {
+	cat := fleet.New()
+	agents, _ := cat.Agents()
+	var out []string
+	for _, a := range agents {
+		if aud.Tool != "" && !strings.EqualFold(a.Tool, aud.Tool) {
+			continue
+		}
+		if aud.Band != 0 || aud.Provider != "" || aud.Family != "" || aud.Version != "" {
+			m, ok := cat.Model(a.Model)
+			if !ok {
+				continue // cascade or unresolvable binding: not describable, not guessed
+			}
+			if aud.Band != 0 && m.Band != aud.Band {
+				continue
+			}
+			if aud.Provider != "" && !strings.EqualFold(m.Provider, aud.Provider) {
+				continue
+			}
+			if aud.Family != "" && !strings.EqualFold(m.Family, aud.Family) {
+				continue
+			}
+			if aud.Version != "" && !strings.EqualFold(m.Version, aud.Version) {
+				continue
+			}
+		}
+		if n := strings.TrimSpace(a.Name); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out, nil
 }

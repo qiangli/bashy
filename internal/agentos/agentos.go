@@ -642,6 +642,7 @@ func Dispatch() {
 		// append-only spool with per-reader cursors — neither a private mailbox
 		// nor push-delivered chat — and those words stay reserved for
 		// implementations that would actually mean them.
+		bus.FleetSelect = fleetSelectAudience
 		cmd := bus.NewMessageBoardCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
@@ -716,6 +717,7 @@ func Dispatch() {
 		// import pkg/fleet — the bus is transport, the roster is policy — so the
 		// host supplies the names, exactly as it does for steward.OpenRoom.
 		bus.FleetNames = fleetAgentNames
+		bus.FleetSelect = fleetSelectAudience
 		cmd := bus.NewBusCmd()
 		cmd.SetArgs(os.Args[2:])
 		err := cmd.Execute()
