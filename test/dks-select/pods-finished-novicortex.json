@@ -1,0 +1,40 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "metadata": {
+        "name": "bashy-native-bash53-abcde",
+        "namespace": "default",
+        "labels": { "dhnt.io/lane": "native-platform" }
+      },
+      "spec": {
+        "nodeName": "novicortex",
+        "containers": [
+          {
+            "name": "smoke",
+            "resources": { "requests": { "cpu": "7", "memory": "15Gi" } }
+          }
+        ]
+      },
+      "status": { "phase": "Succeeded" }
+    },
+    {
+      "metadata": {
+        "name": "bashy-native-unit-fghij",
+        "namespace": "default",
+        "labels": { "dhnt.io/lane": "native-platform" }
+      },
+      "spec": {
+        "nodeName": "novicortex",
+        "containers": [
+          {
+            "name": "smoke",
+            "resources": { "requests": { "cpu": "7", "memory": "15Gi" } }
+          }
+        ]
+      },
+      "status": { "phase": "Failed" }
+    }
+  ]
+}

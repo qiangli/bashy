@@ -1,7 +1,37 @@
 #!/usr/bin/env bash
 # Emit one native-platform DKS Job. vk-native materializes a checksum-verified
 # Bashy release archive and executes it directly on the registered host OS.
+#
+# PLACEMENT. EXECUTOR_NODE selects where the shard runs and what the RunRecord
+# records as its executor:
+#
+#   EXECUTOR_NODE=<name>   explicit, unchanged behavior: the name is recorded
+#                          verbatim, no cluster is consulted, and the emitted
+#                          nodeSelector is exactly what TARGET_OS/ARCH/HOST say.
+#   EXECUTOR_NODE=auto     (the default) resource-aware placement via
+#                          scripts/dks-select-node.sh: Ready, schedulable,
+#                          label-matching nodes with real headroom for THIS
+#                          task's requests, preferring idle capable workers and
+#                          penalizing Dragon/control-plane so the coordination
+#                          seat stays responsive. The chosen node is pinned into
+#                          the nodeSelector, so the recorded executor and the
+#                          actual placement cannot drift apart.
+#
+# `auto` is the default because the alternative default was "whatever the
+# scheduler picks", which in practice meant Dragon. Selection FAILS CLOSED: no
+# eligible node is a non-zero exit and no manifest, never a Job that quietly
+# lands somewhere unsuitable.
+#
+# RESOURCE REQUESTS. Each task now carries realistic resources.requests (see
+# task_defaults below), overridable with TASK_CPU/TASK_MEMORY, or removable
+# entirely with TASK_RESOURCES=none — which restores the exact pre-placement
+# manifest. Requests are what make sequential fan-out spread correctly: once a
+# shard's Pod exists, the NEXT selection sees its request as reserved capacity
+# even before the process starts consuming anything. See the CONCURRENCY section
+# of scripts/dks-select-node.sh for what this does and does not guarantee.
 set -euo pipefail
+
+_here=$(cd "$(dirname "$0")" && pwd)
 
 NAME="${NAME:-bashy-native}"
 NS="${NS:-default}"
@@ -19,7 +49,8 @@ PIPELINE_ID="${PIPELINE_ID:?set PIPELINE_ID to the dhnt.pipeline/v1 identity}"
 EVIDENCE_TASK="${EVIDENCE_TASK:-$TASK}"
 RUN_ID="${RUN_ID:-$NAME}"
 TRACE_ID="${TRACE_ID:?set TRACE_ID to a 32-lowercase-hex trace ID}"
-EXECUTOR_NODE="${EXECUTOR_NODE:?set EXECUTOR_NODE to the scheduled vk-native node name}"
+EXECUTOR_NODE="${EXECUTOR_NODE:-auto}"
+TASK_RESOURCES="${TASK_RESOURCES:-requests}"
 BASH53_TESTDATA_REPO="${BASH53_TESTDATA_REPO:-}"
 BASH53_TESTDATA_REF="${BASH53_TESTDATA_REF:-}"
 YASH_TESTDATA_REPO="${YASH_TESTDATA_REPO:-}"
@@ -53,11 +84,111 @@ if [ "$TASK" = yash ] && { [ -z "$YASH_TESTDATA_REPO" ] || [ -z "$YASH_TESTDATA_
   exit 2
 fi
 
+case "$TASK_RESOURCES" in
+  requests | none) ;;
+  *)
+    echo "dks-native-job: TASK_RESOURCES must be requests or none (got '$TASK_RESOURCES')" >&2
+    exit 2
+    ;;
+esac
+if [ "$EXECUTOR_NODE" = auto ] && [ "$TASK_RESOURCES" = none ]; then
+  echo "dks-native-job: TASK_RESOURCES=none is incompatible with EXECUTOR_NODE=auto; without a Pod request, later shards cannot observe the selected reservation" >&2
+  exit 2
+fi
+
+# Per-task requests. These are sized from what the task actually does, not from
+# a uniform guess: a smoke is three subprocess launches, while the Bash 5.3
+# suite runs 86 fixtures with a 4 GB per-fixture memory cap. A request that is
+# too small is worse than none at all — it tells the selector a node has room it
+# does not have.
+case "$TASK" in
+  smoke)
+    default_cpu=250m
+    default_mem=512Mi
+    ;;
+  build)
+    default_cpu=2
+    default_mem=4Gi
+    ;;
+  unit)
+    default_cpu=2
+    default_mem=4Gi
+    ;;
+  yash)
+    default_cpu=2
+    default_mem=4Gi
+    ;;
+  bash53)
+    default_cpu=4
+    default_mem=6Gi
+    ;;
+  *)
+    default_cpu=1
+    default_mem=2Gi
+    ;;
+esac
+TASK_CPU="${TASK_CPU:-$default_cpu}"
+TASK_MEMORY="${TASK_MEMORY:-$default_mem}"
+
 selector_extra=""
 [ -n "$TARGET_ARCH" ] && selector_extra="${selector_extra}
         kubernetes.io/arch: ${TARGET_ARCH}"
 [ -n "$TARGET_HOST" ] && selector_extra="${selector_extra}
         outpost.dhnt.io/host: ${TARGET_HOST}"
+
+# Resource-aware placement. Only on EXECUTOR_NODE=auto: an explicit node name is
+# an operator decision and is recorded verbatim, exactly as before.
+if [ "$EXECUTOR_NODE" = auto ]; then
+  select_diag=$(mktemp)
+  # No `VAR="${VAR:-$(cmd)}"` shorthand and no `|| exit $?` on an assignment:
+  # both idioms have bitten these scripts under Bashy's expander (see
+  # dks-profile.sh). Capture, then check, explicitly.
+  set +e
+  selected_node=$(
+    DKS_SELECT_OS="$TARGET_OS" \
+      DKS_SELECT_ARCH="$TARGET_ARCH" \
+      DKS_SELECT_HOST="$TARGET_HOST" \
+      DKS_SELECT_CPU="$TASK_CPU" \
+      DKS_SELECT_MEM="$TASK_MEMORY" \
+      DKS_SELECT_DIAG_FILE="$select_diag" \
+      "$_here/dks-select-node.sh"
+  )
+  select_rc=$?
+  set -e
+  if [ "$select_rc" -ne 0 ] || [ -z "$selected_node" ]; then
+    rm -f "$select_diag"
+    echo "dks-native-job: EXECUTOR_NODE=auto found no eligible node for task=$TASK os=$TARGET_OS arch=${TARGET_ARCH:-any} host=${TARGET_HOST:-any} cpu=$TASK_CPU memory=$TASK_MEMORY (selector exit $select_rc; reasons above). Refusing to emit an unplaceable Job." >&2
+    exit "$((select_rc == 0 ? 3 : select_rc))"
+  fi
+  # Pin the emitted Job to the node the evidence will name. Without this the
+  # RunRecord would claim an executor the scheduler never had to honor — a
+  # placement decision that reads as enforced and is not.
+  pin_label=$(sed -n 's/^pin_label=//p' "$select_diag")
+  pin_value=$(sed -n 's/^pin_value=//p' "$select_diag")
+  rm -f "$select_diag"
+  if [ -z "$pin_label" ] || [ -z "$pin_value" ]; then
+    echo "dks-native-job: selector chose node '$selected_node' but reported no label to pin it with" >&2
+    exit 3
+  fi
+  case "$selector_extra" in
+    *"${pin_label}: ${pin_value}"*) ;; # already pinned by TARGET_HOST
+    *)
+      selector_extra="${selector_extra}
+        ${pin_label}: ${pin_value}"
+      ;;
+  esac
+  EXECUTOR_NODE="$selected_node"
+  echo "dks-native-job: EXECUTOR_NODE=auto selected node=$EXECUTOR_NODE (pinned via ${pin_label}=${pin_value})" >&2
+fi
+
+resources_block=""
+if [ "$TASK_RESOURCES" = requests ]; then
+  resources_block="
+          resources:
+            requests:
+              cpu: \"${TASK_CPU}\"
+              memory: \"${TASK_MEMORY}\""
+fi
 
 cat <<YAML
 apiVersion: batch/v1
@@ -96,7 +227,7 @@ spec:
       containers:
         - name: smoke
           image: dhnt.io/native-process
-          imagePullPolicy: Never
+          imagePullPolicy: Never${resources_block}
           command: ["bashy"]
           args:
             - "-c"

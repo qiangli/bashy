@@ -1,0 +1,31 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "metadata": {
+        "name": "dragon",
+        "labels": {
+          "kubernetes.io/os": "darwin",
+          "kubernetes.io/arch": "arm64",
+          "kubernetes.io/hostname": "dragon",
+          "outpost.dhnt.io/backend": "vk-native",
+          "outpost.dhnt.io/host": "dragon"
+        }
+      },
+      "spec": {
+        "taints": [
+          {
+            "key": "virtual-kubelet.io/provider",
+            "value": "outpost",
+            "effect": "NoSchedule"
+          }
+        ]
+      },
+      "status": {
+        "allocatable": { "cpu": "10", "memory": "32Gi" },
+        "conditions": [{ "type": "Ready", "status": "True" }]
+      }
+    }
+  ]
+}

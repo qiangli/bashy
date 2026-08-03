@@ -1,0 +1,250 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "metadata": {
+        "name": "dragon",
+        "labels": {
+          "kubernetes.io/os": "darwin",
+          "kubernetes.io/arch": "arm64",
+          "kubernetes.io/hostname": "dragon",
+          "outpost.dhnt.io/backend": "vk-native",
+          "outpost.dhnt.io/host": "dragon"
+        }
+      },
+      "spec": {
+        "taints": [
+          {
+            "key": "virtual-kubelet.io/provider",
+            "value": "outpost",
+            "effect": "NoSchedule"
+          }
+        ]
+      },
+      "status": {
+        "allocatable": { "cpu": "10", "memory": "32Gi" },
+        "conditions": [
+          { "type": "MemoryPressure", "status": "False" },
+          { "type": "Ready", "status": "True" }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "name": "novicortex",
+        "labels": {
+          "kubernetes.io/os": "darwin",
+          "kubernetes.io/arch": "arm64",
+          "kubernetes.io/hostname": "novicortex",
+          "outpost.dhnt.io/backend": "vk-native",
+          "outpost.dhnt.io/host": "novicortex"
+        }
+      },
+      "spec": {
+        "taints": [
+          {
+            "key": "virtual-kubelet.io/provider",
+            "value": "outpost",
+            "effect": "NoSchedule"
+          }
+        ]
+      },
+      "status": {
+        "allocatable": { "cpu": "8", "memory": "16Gi" },
+        "conditions": [{ "type": "Ready", "status": "True" }]
+      }
+    },
+    {
+      "metadata": {
+        "name": "novidesign",
+        "labels": {
+          "kubernetes.io/os": "darwin",
+          "kubernetes.io/arch": "arm64",
+          "kubernetes.io/hostname": "novidesign",
+          "outpost.dhnt.io/backend": "vk-native",
+          "outpost.dhnt.io/host": "novidesign"
+        }
+      },
+      "spec": {
+        "taints": [
+          {
+            "key": "virtual-kubelet.io/provider",
+            "value": "outpost",
+            "effect": "NoSchedule"
+          }
+        ]
+      },
+      "status": {
+        "allocatable": { "cpu": "8", "memory": "16Gi" },
+        "conditions": [{ "type": "Ready", "status": "True" }]
+      }
+    },
+    {
+      "metadata": {
+        "name": "noviextra",
+        "labels": {
+          "kubernetes.io/os": "darwin",
+          "kubernetes.io/arch": "arm64",
+          "kubernetes.io/hostname": "noviextra",
+          "outpost.dhnt.io/backend": "vk-native",
+          "outpost.dhnt.io/host": "noviextra"
+        }
+      },
+      "spec": {},
+      "status": {
+        "allocatable": { "cpu": "16", "memory": "64Gi" },
+        "conditions": [{ "type": "Ready", "status": "True" }]
+      }
+    },
+    {
+      "metadata": {
+        "name": "novistale",
+        "labels": {
+          "kubernetes.io/os": "darwin",
+          "kubernetes.io/arch": "arm64",
+          "kubernetes.io/hostname": "novistale",
+          "outpost.dhnt.io/backend": "vk-native",
+          "outpost.dhnt.io/host": "novistale"
+        }
+      },
+      "spec": {},
+      "status": {
+        "allocatable": { "cpu": "32", "memory": "128Gi" },
+        "conditions": [{ "type": "Ready", "status": "Unknown" }]
+      }
+    },
+    {
+      "metadata": {
+        "name": "novicold",
+        "labels": {
+          "kubernetes.io/os": "darwin",
+          "kubernetes.io/arch": "arm64",
+          "kubernetes.io/hostname": "novicold",
+          "outpost.dhnt.io/backend": "vk-native",
+          "outpost.dhnt.io/host": "novicold"
+        }
+      },
+      "spec": { "unschedulable": true },
+      "status": {
+        "allocatable": { "cpu": "32", "memory": "128Gi" },
+        "conditions": [{ "type": "Ready", "status": "True" }]
+      }
+    },
+    {
+      "metadata": {
+        "name": "novilocked",
+        "labels": {
+          "kubernetes.io/os": "darwin",
+          "kubernetes.io/arch": "arm64",
+          "kubernetes.io/hostname": "novilocked",
+          "outpost.dhnt.io/backend": "vk-native",
+          "outpost.dhnt.io/host": "novilocked"
+        }
+      },
+      "spec": {
+        "taints": [
+          {
+            "key": "virtual-kubelet.io/provider",
+            "value": "outpost",
+            "effect": "NoSchedule"
+          },
+          {
+            "key": "dedicated",
+            "value": "vsc-pcts",
+            "effect": "NoSchedule"
+          }
+        ]
+      },
+      "status": {
+        "allocatable": { "cpu": "32", "memory": "128Gi" },
+        "conditions": [{ "type": "Ready", "status": "True" }]
+      }
+    },
+    {
+      "metadata": {
+        "name": "novitiny",
+        "labels": {
+          "kubernetes.io/os": "darwin",
+          "kubernetes.io/arch": "arm64",
+          "kubernetes.io/hostname": "novitiny",
+          "outpost.dhnt.io/backend": "vk-native",
+          "outpost.dhnt.io/host": "novitiny"
+        }
+      },
+      "spec": {},
+      "status": {
+        "allocatable": { "cpu": "900m", "memory": "512Mi" },
+        "conditions": [{ "type": "Ready", "status": "True" }]
+      }
+    },
+    {
+      "metadata": {
+        "name": "novix86",
+        "labels": {
+          "kubernetes.io/os": "darwin",
+          "kubernetes.io/arch": "amd64",
+          "kubernetes.io/hostname": "novix86",
+          "outpost.dhnt.io/backend": "vk-native",
+          "outpost.dhnt.io/host": "novix86"
+        }
+      },
+      "spec": {},
+      "status": {
+        "allocatable": { "cpu": "32", "memory": "128Gi" },
+        "conditions": [{ "type": "Ready", "status": "True" }]
+      }
+    },
+    {
+      "metadata": {
+        "name": "novipod",
+        "labels": {
+          "kubernetes.io/os": "darwin",
+          "kubernetes.io/arch": "arm64",
+          "kubernetes.io/hostname": "novipod",
+          "outpost.dhnt.io/backend": "vk-podman",
+          "outpost.dhnt.io/host": "novipod"
+        }
+      },
+      "spec": {},
+      "status": {
+        "allocatable": { "cpu": "32", "memory": "128Gi" },
+        "conditions": [{ "type": "Ready", "status": "True" }]
+      }
+    },
+    {
+      "metadata": {
+        "name": "lern",
+        "labels": {
+          "kubernetes.io/os": "linux",
+          "kubernetes.io/arch": "amd64",
+          "kubernetes.io/hostname": "lern",
+          "outpost.dhnt.io/backend": "vk-native",
+          "outpost.dhnt.io/host": "lern"
+        }
+      },
+      "spec": {},
+      "status": {
+        "allocatable": { "cpu": "8", "memory": "16Gi" },
+        "conditions": [{ "type": "Ready", "status": "True" }]
+      }
+    },
+    {
+      "metadata": {
+        "name": "puppy-windows",
+        "labels": {
+          "kubernetes.io/os": "windows",
+          "kubernetes.io/arch": "amd64",
+          "kubernetes.io/hostname": "puppy-windows",
+          "outpost.dhnt.io/backend": "vk-native",
+          "outpost.dhnt.io/host": "puppy"
+        }
+      },
+      "spec": {},
+      "status": {
+        "allocatable": { "cpu": "7900m", "memory": "16Gi" },
+        "conditions": [{ "type": "Ready", "status": "True" }]
+      }
+    }
+  ]
+}

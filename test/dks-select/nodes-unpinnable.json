@@ -1,0 +1,37 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "metadata": {
+        "name": "noviorphan",
+        "labels": {
+          "kubernetes.io/os": "darwin",
+          "kubernetes.io/arch": "arm64",
+          "outpost.dhnt.io/backend": "vk-native"
+        }
+      },
+      "spec": {},
+      "status": {
+        "allocatable": { "cpu": "32", "memory": "128Gi" },
+        "conditions": [{ "type": "Ready", "status": "True" }]
+      }
+    },
+    {
+      "metadata": {
+        "name": "novihostname",
+        "labels": {
+          "kubernetes.io/os": "darwin",
+          "kubernetes.io/arch": "arm64",
+          "kubernetes.io/hostname": "novihostname",
+          "outpost.dhnt.io/backend": "vk-native"
+        }
+      },
+      "spec": {},
+      "status": {
+        "allocatable": { "cpu": "8", "memory": "16Gi" },
+        "conditions": [{ "type": "Ready", "status": "True" }]
+      }
+    }
+  ]
+}

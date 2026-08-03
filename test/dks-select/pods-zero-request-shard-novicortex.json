@@ -1,0 +1,19 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "_comment": "One sibling shard on novicortex that reserves NOTHING. This exists to isolate the spread penalty: with a Pod that carries resource requests, a node loses headroom too, so 'it was not chosen' cannot distinguish the penalty from the reservation. Here the two preferred workers are byte-identical on capacity and usage, so the ONLY thing that can separate them is the sibling count.",
+  "items": [
+    {
+      "metadata": {
+        "name": "bashy-native-chunk-0",
+        "namespace": "default",
+        "labels": { "dhnt.io/lane": "native-platform" }
+      },
+      "spec": {
+        "nodeName": "novicortex",
+        "containers": [{ "name": "smoke" }]
+      },
+      "status": { "phase": "Running" }
+    }
+  ]
+}

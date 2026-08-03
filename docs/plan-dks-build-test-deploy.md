@@ -57,6 +57,31 @@ byte-promotion evidence contracts.
   observed platform still matches its scheduled target before emitting a
   RunRecord.
 
+## Resource-aware peer placement (2026-08-02)
+
+- `scripts/dks-select-node.sh` selects native test/build workers from the peer
+  DKS only. It filters Ready, schedulable, label-compatible nodes and requires
+  enough allocatable CPU and memory for the task's real Pod request.
+- Used capacity is conservative: for each resource it takes the greater of live
+  `metrics.k8s.io` usage and Kubernetes effective Pod requests (including
+  per-Pod init-container maxima and Pod overhead). Missing metrics are explicit
+  warnings; strict callers can fail closed with `DKS_SELECT_REQUIRE_METRICS=1`.
+- Novicortex and Novidesign are preferred by default. Dragon and Kubernetes
+  control-plane nodes receive a reserve penalty, but remain usable when they are
+  the only sufficient capacity. This preserves the steward/control-plane host
+  without turning temporary worker loss into a fleet-wide outage.
+- `scripts/dks-native-job.sh` defaults `EXECUTOR_NODE=auto`, gives each task a
+  realistic resource request, and hard-pins the emitted Job to the selected
+  node so its RunRecord cannot name an executor the scheduler did not use.
+- Concurrent Indexed Jobs use scheduler-native soft affinity plus hostname
+  topology spreading in `scripts/dag-to-k8s-job.sh`; they are deliberately not
+  all hard-pinned to one point-in-time winner. Both physical agent nodes and
+  vk-podman nodes retain their required selectors/tolerations.
+- Fixture tests cover live-utilization ranking, requests-only fallback, partial
+  metrics, capacity rejection, taints, deterministic ties, Dragon fallback,
+  worker preference, shard spreading, secret non-leakage, peer-only targeting,
+  generated Job placement, and malformed configuration.
+
 ## Findings
 
 ### Existing Bash 5.3 gate

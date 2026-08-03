@@ -44,10 +44,74 @@ REQ_MEM="${REQ_MEM:-512Mi}"
 LIM_MEM="${LIM_MEM:-2Gi}"
 VENUE="${VENUE:-agent}"                    # agent | vk-podman
 IMAGE_PULL_POLICY="${IMAGE_PULL_POLICY:-Never}"
+DKS_PREFERRED_HOSTS="${DKS_PREFERRED_HOSTS:-novicortex,novidesign}"
+DKS_RESERVED_HOSTS="${DKS_RESERVED_HOSTS:-dragon}"
+
+yaml_host_values() {
+  local list="$1" rest entry out=""
+  case "$list" in
+    '' | ,* | *, | *,,* | *[!A-Za-z0-9,_.-]*)
+      echo "dag-to-k8s-job: DKS preferred/reserved hosts must be non-empty comma-separated Kubernetes label values" >&2
+      return 2
+      ;;
+  esac
+  rest="$list,"
+  while [ -n "$rest" ]; do
+    entry="${rest%%,*}"
+    rest="${rest#*,}"
+    [ -z "$out" ] || out="$out, "
+    out="${out}\"${entry}\""
+  done
+  printf '%s' "$out"
+}
+preferred_values=$(yaml_host_values "$DKS_PREFERRED_HOSTS") || exit $?
+reserved_values=$(yaml_host_values "$DKS_RESERVED_HOSTS") || exit $?
+
+# Scheduler-native placement for Indexed Jobs. Unlike the point-in-time native
+# selector, one Indexed Job creates many Pods concurrently, so Kubernetes owns
+# the decision: accurate requests, soft worker preference/control-plane reserve,
+# and hostname spread keep shards off Dragon without hard-pinning them all to
+# one snapshot winner.
+affinity_spread=$(cat <<YAML
+
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 80
+              preference:
+                matchExpressions:
+                  - key: outpost.dhnt.io/host
+                    operator: In
+                    values: [${preferred_values}]
+            - weight: 60
+              preference:
+                matchExpressions:
+                  - key: outpost.dhnt.io/host
+                    operator: NotIn
+                    values: [${reserved_values}]
+            - weight: 30
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+                  - key: node-role.kubernetes.io/master
+                    operator: DoesNotExist
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: ${NAME}
+YAML
+)
 
 case "$VENUE" in
 agent)
-  placement=""
+  placement='
+      nodeSelector:
+        outpost.dhnt.io/runtime-ready: "true"
+        kubernetes.io/arch: '"${ARCH}${affinity_spread}"
   ;;
 vk-podman)
   # vk-podman is a Linux-container substrate even when its Node advertises the
@@ -66,7 +130,7 @@ vk-podman)
         - key: virtual-kubelet.io/provider
           operator: Equal
           value: outpost
-          effect: NoSchedule'
+          effect: NoSchedule'"${affinity_spread}"
   ;;
 *)
   echo "dag-to-k8s-job: VENUE must be agent or vk-podman (got $VENUE)" >&2

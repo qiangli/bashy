@@ -1,0 +1,41 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "metadata": {
+        "name": "novictl",
+        "labels": {
+          "kubernetes.io/os": "darwin",
+          "kubernetes.io/arch": "arm64",
+          "kubernetes.io/hostname": "novictl",
+          "node-role.kubernetes.io/control-plane": "",
+          "outpost.dhnt.io/backend": "vk-native",
+          "outpost.dhnt.io/host": "novictl"
+        }
+      },
+      "spec": {},
+      "status": {
+        "allocatable": { "cpu": "32", "memory": "128Gi" },
+        "conditions": [{ "type": "Ready", "status": "True" }]
+      }
+    },
+    {
+      "metadata": {
+        "name": "noviplain",
+        "labels": {
+          "kubernetes.io/os": "darwin",
+          "kubernetes.io/arch": "arm64",
+          "kubernetes.io/hostname": "noviplain",
+          "outpost.dhnt.io/backend": "vk-native",
+          "outpost.dhnt.io/host": "noviplain"
+        }
+      },
+      "spec": {},
+      "status": {
+        "allocatable": { "cpu": "8", "memory": "16Gi" },
+        "conditions": [{ "type": "Ready", "status": "True" }]
+      }
+    }
+  ]
+}
