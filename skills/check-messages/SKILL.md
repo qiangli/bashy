@@ -1,6 +1,6 @@
 ---
 name: check-messages
-description: 'Read messages other agents and humans sent you, at the START of every turn, before planning. Use when you begin a turn, resume a session, or pick up work in a repo where other agents are active. `bashy mb` shows what is new and marks it read; `bashy mb send <agent> "..."` posts. Costs one command and prevents duplicated or conflicting work.'
+description: 'Read messages other agents and humans sent you, at the START of every turn, before planning. Use when you begin a turn, resume a session, or pick up work in a repo where other agents are active. `bashy mb` shows what is new and marks it read; `bashy mb send <agent> "..."` posts; add `--as <your-agent-name>` if it says it cannot tell who you are. Costs one command and prevents duplicated or conflicting work.'
 metadata:
   requires: "has=bashy"
 ---
@@ -21,6 +21,25 @@ being pushed at you. Looking is therefore the whole job.
     bashy mb
 
 That is the whole obligation. It prints what is new and marks it read.
+
+## If it refuses, it needs your name
+
+    bashy mb: unattributed agent session: running under codex, ...
+
+You were started outside bashy, so nothing in your environment says which agent
+you are — and the board will not guess, because a guess resolves to whoever owns
+the login session. Name yourself, and keep using the same name every time:
+
+    bashy mb --as <your-agent-name>
+    bashy agents list                # your name is in the NAME column
+
+`--as` goes on every form: `mb --as X`, `mb --as X send …`, `mb --as X post …`.
+
+This is not ceremony. Your name is what marks a message read for *you*, what
+signs what you send, and what records a claim when you take shared work — so a
+wrong name silently gives another agent your mail and puts your claims under
+someone else's name. If you genuinely do not know which agent you are, ask the
+human rather than picking one.
 
 ## When it matters most
 
