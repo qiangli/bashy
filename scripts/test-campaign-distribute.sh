@@ -967,5 +967,143 @@ set -e
 [ "$rc" -ne 0 ] || adversarial "pinning a bystander cluster CA while current-context selects peer was accepted"
 case "$out" in *'this is not the peer control plane you pinned'*) ;; *) adversarial "bystander-cluster pin refusal did not name the cause: $out" ;; esac
 
+# =============================================================================
+# ==== utilization-aware AUTO placement =======================================
+# =============================================================================
+#
+# When WORKER_NODES is UNSET and CAMPAIGN_AUTO_PLACEMENT=1, preflight resolves
+# each WORKERS role to a distinct eligible node through scripts/dks-select-node.sh
+# instead of hard-pinning. The selector runs fully hermetically off the same
+# fixture JSON its own suite uses (test/dks-select/*.json): no cluster, no
+# kubectl, no network. The fake kubectl still serves the campaign transport's
+# node-identity / placement / evidence path, so this exercises selection ->
+# persistence -> dispatch end to end.
+fx="$root/test/dks-select"
+
+# The campaign transport validates each selected node through the fake kubectl
+# (existence + distinct host/backend worker identity), so the fake cluster must
+# carry the nodes the selector can choose, each a distinct worker.
+autocluster="$tmp/autocluster"
+mkdir -p "$autocluster"
+printf 'host=dragon\nbackend=vk-native\n'      >"$autocluster/dragon"
+printf 'host=novicortex\nbackend=vk-native\n'  >"$autocluster/novicortex"
+printf 'host=novidesign\nbackend=vk-native\n'  >"$autocluster/novidesign"
+printf 'host=noviextra\nbackend=vk-native\n'   >"$autocluster/noviextra"
+
+# The fixtures are darwin/arm64/vk-native; size each shard at 2 CPU / 4Gi so
+# novitiny (900m) is too small and a busy novicortex (7 of 8 cores) drops out.
+auto_env() {
+  printf '%s\n' \
+    CAMPAIGN_TRANSPORT=k8s \
+    "CAMPAIGN_K8S_FAKE_KUBECTL=$fake_kubectl" \
+    "FAKE_CLUSTER=$autocluster" \
+    CAMPAIGN_AUTO_PLACEMENT=1 \
+    CAMPAIGN_SHARD_OS=darwin \
+    CAMPAIGN_SHARD_ARCH=arm64 \
+    CAMPAIGN_SHARD_CPU=2 \
+    CAMPAIGN_SHARD_MEM=4Gi \
+    "DKS_SELECT_NODES_JSON=$fx/nodes.json" \
+    "DKS_SELECT_PODS_JSON=$fx/pods-empty.json"
+}
+
+# --- 30. Auto happy path: busy Dragon loses to idle preferred workers; two
+#         roles resolve to two DISTINCT preferred nodes; the persisted map is
+#         written; and the emitted Jobs carry resources.requests matching the
+#         selection request. ------------------------------------------------
+st="$tmp/auto-idle-state"
+out=$(cd "$root" && env $(auto_env) "DKS_SELECT_METRICS_JSON=$fx/metrics-idle.json" \
+  "FAKE_K8S_STATE=$st" CHUNKS=2 SEED=1 WORKERS="worker-a worker-b" \
+  OUT_DIR="$tmp/auto-idle" "$DISTRIBUTE" distribute) \
+  || fail "auto placement (idle) did not complete: $out"
+case "$out" in
+  *'CAMPAIGN_FAKE_TRANSPORT_VERDICT:'*'"cases":6'*'"pass":4'*'"fail":1'*'"skip":1'*) ;;
+  *) fail "auto idle verdict wrong: $out" ;;
+esac
+
+placement="$tmp/auto-idle/placement.env"
+[ -s "$placement" ] || fail "auto placement wrote no persisted role=node map"
+grep -qx 'worker-a=novidesign' "$placement" \
+  || fail "auto placement did not resolve worker-a to the top-scoring preferred node (novidesign): $(cat "$placement")"
+grep -qx 'worker-b=novicortex' "$placement" \
+  || fail "auto placement did not resolve worker-b to the second distinct preferred node (novicortex): $(cat "$placement")"
+
+auto_nodes=$(awk '/^      nodeName: /{print $2}' "$st/manifests/"*.yaml | sort -u)
+[ "$auto_nodes" = "novicortex
+novidesign" ] || fail "auto Jobs were not pinned to two distinct preferred nodes: $auto_nodes"
+case "$auto_nodes" in *dragon*) fail "busy Dragon was selected over idle preferred workers" ;; esac
+
+# The reservation Kubernetes will enforce must equal the selection request, so
+# the next shard sees this one as used capacity.
+for mf in "$st/manifests/"*.yaml; do
+  grep -q 'cpu: "2"' "$mf"    || fail "Job manifest $mf carries no cpu request matching the selection (2)"
+  grep -q 'memory: "4Gi"' "$mf" || fail "Job manifest $mf carries no memory request matching the selection (4Gi)"
+done
+
+# --- 31. A busy novicortex drops out and novidesign is selected in its place. -
+st="$tmp/auto-busy-state"
+out=$(cd "$root" && env $(auto_env) "DKS_SELECT_METRICS_JSON=$fx/metrics-busy-novicortex.json" \
+  "FAKE_K8S_STATE=$st" CHUNKS=2 SEED=1 WORKERS="worker-a worker-b" \
+  OUT_DIR="$tmp/auto-busy" "$DISTRIBUTE" distribute) \
+  || fail "auto placement (busy novicortex) did not complete: $out"
+placement="$tmp/auto-busy/placement.env"
+grep -q '=novidesign$' "$placement" \
+  || fail "with novicortex busy, novidesign should be selected: $(cat "$placement")"
+grep -q '=novicortex$' "$placement" \
+  && fail "a busy novicortex (7 of 8 cores) was selected despite insufficient headroom: $(cat "$placement")"
+
+# --- 32. Two roles NEVER collide on one node: the exclusion feedback makes the
+#         second selection distinct even from a single point-in-time preflight. -
+a=$(awk -F= '/^worker-a=/{print $2}' "$tmp/auto-idle/placement.env")
+b=$(awk -F= '/^worker-b=/{print $2}' "$tmp/auto-idle/placement.env")
+[ -n "$a" ] && [ -n "$b" ] && [ "$a" != "$b" ] \
+  || adversarial "two auto roles resolved to the same node ($a, $b) — exclusion feedback failed"
+
+# --- 33. Insufficient capacity fails CLOSED: an impossible request selects no
+#         node for any role and refuses before any Job is created. -----------
+st="$tmp/auto-toobig-state"
+set +e
+out=$(cd "$root" && env $(auto_env) "DKS_SELECT_METRICS_JSON=$fx/metrics-idle.json" \
+  CAMPAIGN_SHARD_CPU=999 "FAKE_K8S_STATE=$st" CHUNKS=2 SEED=1 WORKERS="worker-a worker-b" \
+  OUT_DIR="$tmp/auto-toobig" "$DISTRIBUTE" distribute 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || adversarial "auto placement with an impossible CPU request was accepted"
+case "$out" in *'no eligible node'*) ;; *) adversarial "insufficient-capacity refusal did not name the cause: $out" ;; esac
+[ ! -d "$st/manifests" ] || [ -z "$(ls "$st/manifests" 2>/dev/null)" ] \
+  || adversarial "insufficient-capacity refusal happened only after Jobs were created"
+
+# --- 34. Stale / unavailable metrics fail CLOSED when metrics are required:
+#         REQUIRE_METRICS with no metrics reading refuses, no Job created. ----
+st="$tmp/auto-nometrics-state"
+set +e
+out=$(cd "$root" && env $(auto_env) DKS_SELECT_REQUIRE_METRICS=1 \
+  "FAKE_K8S_STATE=$st" CHUNKS=2 SEED=1 WORKERS="worker-a worker-b" \
+  OUT_DIR="$tmp/auto-nometrics" "$DISTRIBUTE" distribute 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || adversarial "auto placement was accepted with required-but-absent metrics"
+case "$out" in *'no eligible node'*) ;; *) adversarial "required-metrics refusal did not name the cause: $out" ;; esac
+[ ! -d "$st/manifests" ] || [ -z "$(ls "$st/manifests" 2>/dev/null)" ] \
+  || adversarial "required-metrics refusal happened only after Jobs were created"
+
+# --- 35. Manual WORKER_NODES is an OVERRIDE: even with CAMPAIGN_AUTO_PLACEMENT=1
+#         set, an explicit pin wins, the selector is never consulted (no DKS
+#         fixtures given), and — with no shard sizing — the manifest is
+#         unchanged (carries no resources block). ---------------------------
+st="$tmp/auto-override-state"
+out=$(cd "$root" && env CAMPAIGN_TRANSPORT=k8s "CAMPAIGN_K8S_FAKE_KUBECTL=$fake_kubectl" \
+  CAMPAIGN_AUTO_PLACEMENT=1 "FAKE_K8S_STATE=$st" "$PINS_OK" \
+  CHUNKS=2 SEED=1 WORKERS="worker-a worker-b" \
+  OUT_DIR="$tmp/auto-override" "$DISTRIBUTE" distribute) \
+  || fail "manual WORKER_NODES override under CAMPAIGN_AUTO_PLACEMENT did not complete: $out"
+override_nodes=$(awk '/^      nodeName: /{print $2}' "$st/manifests/"*.yaml | sort -u)
+[ "$override_nodes" = "peer-node-1
+peer-node-2" ] || fail "an explicit WORKER_NODES pin was not honored under auto mode: $override_nodes"
+grep -q '=peer-node-1$' "$tmp/auto-override/placement.env" \
+  || fail "manual override placement map lost its explicit pin: $(cat "$tmp/auto-override/placement.env")"
+if grep -q 'resources:' "$st/manifests/"*.yaml; then
+  fail "a manual run with no shard sizing gained a resources block — manual mode is not byte-unchanged"
+fi
+
 [ "$adversarial_fail" -eq 0 ] || exit 1
-echo "campaign-distribute verdict equivalence + peer-DKS transport: PASS"
+echo "campaign-distribute verdict equivalence + peer-DKS transport + auto placement: PASS"

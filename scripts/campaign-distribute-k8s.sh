@@ -50,7 +50,9 @@
 #   WORKERS        space-separated peer-worker ROLE names (hosts are named by
 #                  role, never by hostname/user)
 #   WORKER_NODES   space-separated role=node pins, e.g.
-#                  "worker-a=peer-node-1 worker-b=peer-node-2"
+#                  "worker-a=peer-node-1 worker-b=peer-node-2". When set it is a
+#                  fully manual, backward-compatible OVERRIDE: every role is
+#                  hard-pinned and the resource-aware selector is never consulted.
 #   CHUNK_IMAGE    container image providing the chunk runner
 #   CHUNK_POD_CMD  command inside the image, invoked as
 #                  `$CHUNK_POD_CMD <cases_file> <worker_role>`; must print one
@@ -80,6 +82,31 @@
 #   CHUNK_TIMEOUT  seconds to wait for one chunk Job (default: 1800)
 #   TTL            ttlSecondsAfterFinished backstop (default: 3600) — the
 #                  primary cleanup is the explicit delete, not the TTL
+#
+# AUTO PLACEMENT (opt-in; peer campaign / free-suite shards). When WORKER_NODES
+# is UNSET and CAMPAIGN_AUTO_PLACEMENT is truthy, `preflight` resolves each
+# logical WORKERS role to a DISTINCT eligible node with scripts/dks-select-node.sh
+# (the resource-aware selector — max(live metrics, reserved requests), Dragon /
+# control-plane penalty, novicortex/novidesign preference). Each resolution feeds
+# the nodes already chosen through DKS_SELECT_EXCLUDE_NODES so one point-in-time
+# preflight cannot pick a node twice, and the resolved role=node map is persisted
+# to a run-local, non-secret file ($CAMPAIGN_K8S_PLACEMENT_FILE, set by
+# campaign-distribute.sh to $OUT_DIR/placement.env). dispatch-chunk READS that
+# file — it never re-runs the selector, so the placement is decided exactly once
+# and cannot drift or be recomputed concurrently. Auto placement is fail-closed:
+# if the selector finds no eligible node for any role (insufficient / stale /
+# unavailable capacity), preflight refuses before any Job is created.
+#   CAMPAIGN_AUTO_PLACEMENT   1|true|yes|on enables auto placement (default off).
+#   CAMPAIGN_SHARD_OS         kubernetes.io/os for auto selection (default linux).
+#   CAMPAIGN_SHARD_BACKEND    outpost.dhnt.io/backend (default vk-native).
+#   CAMPAIGN_SHARD_ARCH       kubernetes.io/arch (default: any).
+#   CAMPAIGN_SHARD_CPU        per-shard CPU request as a k8s quantity. Sizes the
+#                             selection AND becomes the Job's resources.requests.cpu
+#                             (default in auto mode: 1; unset in manual mode).
+#   CAMPAIGN_SHARD_MEM        per-shard memory request (default in auto mode: 1Gi;
+#                             unset in manual mode). The emitted Job carries these
+#                             exact requests so Kubernetes enforces the reservation
+#                             and it is visible to the NEXT selection as used.
 set -euo pipefail
 
 # Unset (no colon) so a truly-absent MODE still defaults to the normal
@@ -115,6 +142,38 @@ fi
 NS="${NS:-default}"
 CHUNK_TIMEOUT="${CHUNK_TIMEOUT:-1800}"
 TTL="${TTL:-3600}"
+
+# --- placement mode + per-shard resource requests ----------------------------
+#
+# Manual mode (WORKER_NODES set) is the fully backward-compatible override.
+# Auto mode is opt-in and only when WORKER_NODES is UNSET, so an explicit pin
+# always wins over the selector.
+campaign_k8s_auto_mode() {
+  [ -z "${WORKER_NODES:-}" ] || return 1
+  case "${CAMPAIGN_AUTO_PLACEMENT:-}" in
+    1 | true | yes | on | TRUE | YES | ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# The per-shard requests, computed ONCE so the value that sizes auto selection
+# is byte-for-byte the value stamped into the Job's resources.requests. In
+# manual mode they default to empty (no resources block -> the manifest is
+# unchanged from before), unless the operator sets them explicitly.
+if [ -n "${CAMPAIGN_SHARD_CPU:-}" ]; then
+  REQ_CPU="$CAMPAIGN_SHARD_CPU"
+elif campaign_k8s_auto_mode; then
+  REQ_CPU="${CAMPAIGN_AUTO_DEFAULT_CPU:-1}"
+else
+  REQ_CPU=""
+fi
+if [ -n "${CAMPAIGN_SHARD_MEM:-}" ]; then
+  REQ_MEM="$CAMPAIGN_SHARD_MEM"
+elif campaign_k8s_auto_mode; then
+  REQ_MEM="${CAMPAIGN_AUTO_DEFAULT_MEM:-1Gi}"
+else
+  REQ_MEM=""
+fi
 
 # --- THE D3 INTEGRATION SHIM -------------------------------------------------
 #
@@ -322,7 +381,30 @@ campaign_k8s_verify_cluster_identity() {
 }
 
 # --- role -> node pin lookup -------------------------------------------------
+#
+# The persisted placement map (written ONCE by preflight) is authoritative when
+# present, so an auto-resolved placement is never recomputed per chunk and a
+# manual run reads the same resolved pins. Absent the map, fall back to the
+# WORKER_NODES manual pins directly (a direct dispatch-chunk invocation with no
+# preflight, e.g. in isolation).
 campaign_k8s_node_for() {
+  role="$1"
+  if [ -n "${CAMPAIGN_K8S_PLACEMENT_FILE:-}" ] && [ -f "$CAMPAIGN_K8S_PLACEMENT_FILE" ]; then
+    node="$(awk -F= -v r="$role" '$1 == r { print $2; exit }' "$CAMPAIGN_K8S_PLACEMENT_FILE")"
+    if [ -n "$node" ]; then printf '%s\n' "$node"; return 0; fi
+  fi
+  for pair in ${WORKER_NODES:-}; do
+    case "$pair" in
+      "$role"=*) printf '%s\n' "${pair#*=}"; return 0 ;;
+    esac
+  done
+  echo "campaign-distribute-k8s: no node pin for worker role '$role' (placement map / WORKER_NODES)" >&2
+  return 1
+}
+
+# Manual-only lookup, used while BUILDING the placement map so it never reads a
+# half-written map file.
+campaign_k8s_worker_nodes_pin() {
   role="$1"
   for pair in ${WORKER_NODES:-}; do
     case "$pair" in
@@ -331,6 +413,39 @@ campaign_k8s_node_for() {
   done
   echo "campaign-distribute-k8s: no node pin for worker role '$role' in WORKER_NODES" >&2
   return 1
+}
+
+# --- auto placement: resolve each role to a distinct eligible node -----------
+#
+# Prints one `role=node` line per WORKERS role on stdout. Feeds prior choices
+# through DKS_SELECT_EXCLUDE_NODES so a single point-in-time preflight cannot
+# select the same node twice. Fails closed (non-zero) the moment the selector
+# finds no eligible node for a role — insufficient / stale / unavailable
+# capacity never degrades to an optimistic pin.
+campaign_k8s_resolve_auto() {
+  auto_os="${CAMPAIGN_SHARD_OS:-linux}"
+  auto_backend="${CAMPAIGN_SHARD_BACKEND:-vk-native}"
+  auto_arch="${CAMPAIGN_SHARD_ARCH:-}"
+  exclude=""
+  for role in $WORKERS; do
+    campaign_k8s_check_token "$role" "worker role"
+    node="$(
+      DKS_SELECT_OS="$auto_os" \
+        DKS_SELECT_BACKEND="$auto_backend" \
+        DKS_SELECT_ARCH="$auto_arch" \
+        DKS_SELECT_CPU="$REQ_CPU" \
+        DKS_SELECT_MEM="$REQ_MEM" \
+        DKS_SELECT_EXCLUDE_NODES="$exclude" \
+        "$root/dks-select-node.sh"
+    )" || {
+      echo "campaign-distribute-k8s: REFUSED — auto placement found no eligible node for worker role '$role' (backend=$auto_backend os=$auto_os arch=${auto_arch:-any} cpu=${REQ_CPU:-0} mem=${REQ_MEM:-0}; see dks-select-node reasons above). Insufficient/stale/unavailable capacity fails closed — no Job was created." >&2
+      return 15
+    }
+    campaign_k8s_check_token "$node" "auto-selected node name"
+    exclude="${exclude:+$exclude,}$node"
+    echo "campaign-distribute-k8s: auto-placed role=$role node=$node (excluding: ${exclude})" >&2
+    printf '%s=%s\n' "$role" "$node"
+  done
 }
 
 campaign_k8s_check_token() {
@@ -348,13 +463,52 @@ campaign_k8s_check_token() {
 # --- preflight: pinning must be real distribution ----------------------------
 campaign_k8s_preflight() {
   : "${WORKERS:?set WORKERS to space-separated peer-worker role names}"
-  : "${WORKER_NODES:?set WORKER_NODES to space-separated role=node pins}"
   : "${CHUNK_IMAGE:?set CHUNK_IMAGE to the chunk-runner container image}"
   : "${CHUNK_POD_CMD:?set CHUNK_POD_CMD to the in-pod chunk runner}"
 
-  # Peer control-plane identity is verified before any node lookup or Job
-  # creation: reaching *a* cluster is not evidence of reaching the right one.
+  auto=0
+  if campaign_k8s_auto_mode; then auto=1; fi
+  if [ "$auto" -eq 0 ]; then
+    : "${WORKER_NODES:?set WORKER_NODES to space-separated role=node pins (manual override), or enable CAMPAIGN_AUTO_PLACEMENT=1 for resource-aware auto placement}"
+  fi
+
+  # Auto placement must persist its ONE resolution to a run-local file that the
+  # separate dispatch-chunk process reads; without a shared path there is
+  # nothing to share, so auto mode refuses rather than silently re-resolving.
+  placement="${CAMPAIGN_K8S_PLACEMENT_FILE:-}"
+  if [ "$auto" -eq 1 ] && [ -z "$placement" ]; then
+    echo "campaign-distribute-k8s: REFUSED — auto placement needs CAMPAIGN_K8S_PLACEMENT_FILE, a run-local path where preflight persists the resolved role=node map for dispatch-chunk to read (campaign-distribute.sh sets it to \$OUT_DIR/placement.env)." >&2
+    exit 20
+  fi
+
+  # If the per-shard requests are set, they must be plain tokens: they are
+  # interpolated into the Job's resources.requests.
+  [ -z "$REQ_CPU" ] || campaign_k8s_check_token "$REQ_CPU" "shard cpu request"
+  [ -z "$REQ_MEM" ] || campaign_k8s_check_token "$REQ_MEM" "shard memory request"
+
+  # Peer control-plane identity is verified before any node lookup, selector
+  # run, or Job creation: reaching *a* cluster is not evidence of reaching the
+  # right one.
   campaign_k8s_verify_cluster_identity
+
+  # Resolve the role->node map ONCE and persist it (write-then-rename so a
+  # reader never sees a partial map). dispatch-chunk reads $placement and never
+  # re-resolves — the placement is decided here, exactly once.
+  if [ -n "$placement" ]; then
+    tmp_placement="$placement.tmp.$$"
+    if [ "$auto" -eq 1 ]; then
+      campaign_k8s_resolve_auto >"$tmp_placement" || { rc=$?; rm -f "$tmp_placement"; exit "$rc"; }
+    else
+      : >"$tmp_placement"
+      for role in $WORKERS; do
+        campaign_k8s_check_token "$role" "worker role"
+        node="$(campaign_k8s_worker_nodes_pin "$role")" || { rm -f "$tmp_placement"; exit 10; }
+        campaign_k8s_check_token "$node" "node name"
+        printf '%s=%s\n' "$role" "$node" >>"$tmp_placement"
+      done
+    fi
+    mv "$tmp_placement" "$placement"
+  fi
 
   nodes=""
   for role in $WORKERS; do
@@ -418,6 +572,21 @@ campaign_k8s_preflight() {
 # --- per-chunk Job manifest ---------------------------------------------------
 campaign_k8s_manifest() {
   job="$1" node="$2" worker="$3" chunk_id="$4" cases="$5"
+
+  # resources.requests: the reservation Kubernetes enforces, sized to exactly
+  # the per-shard requests the selector placed against, so the next selection
+  # sees this shard as used capacity. Emitted only when a request is set (in
+  # manual mode with no shard config it is absent — the manifest is unchanged).
+  req_block=""
+  if [ -n "$REQ_CPU" ] || [ -n "$REQ_MEM" ]; then
+    req_block="          resources:
+            requests:"
+    [ -z "$REQ_CPU" ] || req_block="$req_block
+              cpu: \"$REQ_CPU\""
+    [ -z "$REQ_MEM" ] || req_block="$req_block
+              memory: \"$REQ_MEM\""
+  fi
+
   cat <<YAML
 apiVersion: batch/v1
 kind: Job
@@ -448,6 +617,7 @@ spec:
       containers:
         - name: chunk
           image: ${CHUNK_IMAGE}
+${req_block}
           env:
             - name: JOB_NAME
               value: "${job}"

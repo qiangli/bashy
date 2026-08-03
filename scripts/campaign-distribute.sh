@@ -271,6 +271,12 @@ campaign_distribute() {
   out_dir="$(campaign_out_dir)"
 
   if [ "$transport" = k8s ]; then
+    # The run-local, non-secret file where preflight persists the resolved
+    # role=node map and dispatch-chunk reads it back — so an auto placement is
+    # decided exactly once, in preflight, and never recomputed per chunk. Both
+    # the preflight and dispatch-chunk children inherit it from here.
+    export CAMPAIGN_K8S_PLACEMENT_FILE="$out_dir/placement.env"
+
     # Verify the role->node pinning is real distribution BEFORE creating any
     # Job, and guarantee cleanup of every Job the run creates even if it is
     # interrupted mid-flight (each dispatch also deletes its own Job; this
