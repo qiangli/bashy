@@ -643,6 +643,7 @@ func Dispatch() {
 		// nor push-delivered chat — and those words stay reserved for
 		// implementations that would actually mean them.
 		bus.FleetSelect = fleetSelectAudience
+		bus.FleetResolveName = fleetResolveAgentName
 		cmd := bus.NewMessageBoardCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {

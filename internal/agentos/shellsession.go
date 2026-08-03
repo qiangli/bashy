@@ -188,3 +188,27 @@ func fleetSelectAudience(aud bus.Audience) ([]string, error) {
 	}
 	return out, nil
 }
+
+// fleetResolveAgentName maps any spelling of an agent to its canonical fleet
+// name — the one `bashy agents list` prints and `mb send` addresses.
+//
+// This is what lets a bare `bashy mb` work. A reader's environment does not
+// carry its fleet name: a bashy-launched agent has
+// BASHY_PRINCIPAL=dhnt:agent/<Nick>, and everything else falls back to $USER.
+// Posts are addressed to the fleet name, so without this the send and read
+// sides resolve different identities and a post lands where its recipient never
+// looks — which is precisely what happened before this existed.
+//
+// An unknown string comes back EMPTY rather than guessed at, so the caller can
+// fall through to using it verbatim: a human at a terminal is a legitimate board
+// participant under their login name, not an agent to be resolved.
+func fleetResolveAgentName(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if a, ok := fleet.New().Agent(s); ok {
+		return a.Name
+	}
+	return ""
+}
