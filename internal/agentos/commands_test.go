@@ -174,8 +174,14 @@ func TestGNUCoreutilsReportTracksGaps(t *testing.T) {
 	if !slices.Contains(report.Missing, "coreutils") {
 		t.Fatalf("expected missing GNU command coreutils in missing set: %#v", report.Missing)
 	}
-	if !slices.Contains(report.CoveredByBuiltins, "printf") || !slices.Contains(report.CoveredByBuiltins, "test") {
-		t.Fatalf("expected printf/test to be tracked as bash builtin coverage: %#v", report.CoveredByBuiltins)
+	// coreutils now ships standalone printf/test/[, so those are bashy-native
+	// (not merely covered by the bash builtin); kill has no coreutils
+	// implementation and stays builtin-only coverage.
+	if !slices.Contains(report.BashyNative, "printf") || !slices.Contains(report.BashyNative, "test") {
+		t.Fatalf("expected printf/test to be tracked as bashy-native GNU commands: %#v", report.BashyNative)
+	}
+	if !slices.Contains(report.CoveredByBuiltins, "kill") {
+		t.Fatalf("expected kill to be tracked as bash builtin coverage: %#v", report.CoveredByBuiltins)
 	}
 	if !gnuGapHas(report.Not100Conformant, "ls") {
 		t.Fatalf("expected implemented but uncertified GNU command in not_100_conformant: %#v", report.Not100Conformant)
