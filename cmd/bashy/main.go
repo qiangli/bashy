@@ -32,6 +32,12 @@ func init() {
 }
 
 func main() {
+	// Job-carrier helper mode (a re-exec of this binary standing in for one
+	// background job) must not initialize telemetry or any AgentOS surface:
+	// intercept it before everything. cli.Main also intercepts, but by then
+	// telemetry.Init below would already have run. Never returns in helper mode.
+	cli.MaybeRunJobCarrierHelper()
+
 	// The OTel plane. A no-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set — no exporter,
 	// no batcher, no goroutine, no cost — so an ordinary interactive shell pays nothing.
 	//

@@ -470,6 +470,11 @@ var (
 
 // Main is the shell entry point, shared by cmd/bash and cmd/bashy.
 func Main() {
+	// Job-carrier helper mode (a re-exec of this binary standing in for one
+	// background job) is pure process identity: intercept it before process
+	// groups, AgentOS dispatch, flag parsing and startup files. Never returns
+	// in helper mode.
+	MaybeRunJobCarrierHelper()
 	// Optionally put ourselves in a new process group (BASH_SETPGRP) so the
 	// bash 5.3 test harness can reap our whole process tree with
 	// `kill -- -<pid>` — no external setsid/perl wrapper needed. No-op when
@@ -639,6 +644,19 @@ func newRunner() (*interp.Runner, error) {
 	}
 	if *posix {
 		opts = append(opts, interp.Params("-o", "posix"))
+	}
+	// Give background jobs a kernel-visible identity: a real, signalable PID
+	// for `$!` instead of the synthetic g<N> handle (the POSIX certification
+	// suite stores `$!` in tet_context and does integer comparisons on it).
+	// Standalone CLI runner only — session/embedded/deterministic runners must
+	// not unexpectedly spawn processes. On platforms without an OS-backed
+	// carrier, bash mode keeps the synthetic handles, but POSIX/sh mode fails
+	// closed: WithJobCarrier is a strict contract, so each background job then
+	// fails with a diagnostic rather than silently restoring g<N>.
+	if c := newCLIJobCarrier(); c != nil {
+		opts = append(opts, interp.WithJobCarrier(c))
+	} else if *posix || invokedAsSh() || slices.Contains(optsOn, "posix") {
+		opts = append(opts, interp.WithJobCarrier(unsupportedJobCarrier{}))
 	}
 	// argv[0]=="sh" asks for a *POSIX sh*, not "bash in posix mode": the caller
 	// picked the historical name, so the stricter POSIX-mandated semantics apply
