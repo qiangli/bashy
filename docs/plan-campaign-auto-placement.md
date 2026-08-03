@@ -31,7 +31,7 @@ The single missing seam was `campaign-distribute-k8s.sh`'s role→node resolutio
   once and cannot drift or be recomputed concurrently.
 - **Requests are enforced.** Auto placement accepts configurable
   `CAMPAIGN_SHARD_OS` / `_BACKEND` / `_ARCH` and per-shard
-  `CAMPAIGN_SHARD_CPU` / `_MEM` (defaulting to `linux` / `vk-native` / any and,
+  `CAMPAIGN_SHARD_CPU` / `_MEM` (defaulting to `linux` / `vk-podman` / any and,
   in auto mode, `1` / `1Gi`). The value that **sizes selection** is the same
   value stamped into the Job's `resources.requests`, so Kubernetes enforces the
   reservation and the next selection sees this shard as used capacity.

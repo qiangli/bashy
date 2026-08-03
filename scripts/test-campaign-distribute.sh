@@ -980,17 +980,27 @@ case "$out" in *'this is not the peer control plane you pinned'*) ;; *) adversar
 # persistence -> dispatch end to end.
 fx="$root/test/dks-select"
 
+# The selector's shared fixture models vk-native nodes. This campaign runs an
+# image and therefore intentionally exercises the default vk-podman backend;
+# derive an otherwise-identical node snapshot with that backend label.
+auto_nodes_json="$tmp/nodes-vk-podman.json"
+sed -e 's/"vk-podman"/"vk-ignored"/g' \
+  -e 's/"vk-native"/"vk-podman"/g' \
+  "$fx/nodes.json" >"$auto_nodes_json"
+
 # The campaign transport validates each selected node through the fake kubectl
 # (existence + distinct host/backend worker identity), so the fake cluster must
 # carry the nodes the selector can choose, each a distinct worker.
 autocluster="$tmp/autocluster"
 mkdir -p "$autocluster"
-printf 'host=dragon\nbackend=vk-native\n'      >"$autocluster/dragon"
-printf 'host=novicortex\nbackend=vk-native\n'  >"$autocluster/novicortex"
-printf 'host=novidesign\nbackend=vk-native\n'  >"$autocluster/novidesign"
-printf 'host=noviextra\nbackend=vk-native\n'   >"$autocluster/noviextra"
+printf 'host=dragon\nbackend=vk-podman\n'      >"$autocluster/dragon"
+printf 'host=novicortex\nbackend=vk-podman\n'  >"$autocluster/novicortex"
+printf 'host=novidesign\nbackend=vk-podman\n'  >"$autocluster/novidesign"
+printf 'host=noviextra\nbackend=vk-podman\n'   >"$autocluster/noviextra"
 
-# The fixtures are darwin/arm64/vk-native; size each shard at 2 CPU / 4Gi so
+# The fixtures are darwin/arm64/vk-podman; omitting CAMPAIGN_SHARD_BACKEND here
+# is the regression proof that image-backed chunks default to the container
+# backend. Size each shard at 2 CPU / 4Gi so
 # novitiny (900m) is too small and a busy novicortex (7 of 8 cores) drops out.
 auto_env() {
   printf '%s\n' \
@@ -1002,7 +1012,7 @@ auto_env() {
     CAMPAIGN_SHARD_ARCH=arm64 \
     CAMPAIGN_SHARD_CPU=2 \
     CAMPAIGN_SHARD_MEM=4Gi \
-    "DKS_SELECT_NODES_JSON=$fx/nodes.json" \
+    "DKS_SELECT_NODES_JSON=$auto_nodes_json" \
     "DKS_SELECT_PODS_JSON=$fx/pods-empty.json"
 }
 

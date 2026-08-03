@@ -98,7 +98,7 @@
 # unavailable capacity), preflight refuses before any Job is created.
 #   CAMPAIGN_AUTO_PLACEMENT   1|true|yes|on enables auto placement (default off).
 #   CAMPAIGN_SHARD_OS         kubernetes.io/os for auto selection (default linux).
-#   CAMPAIGN_SHARD_BACKEND    outpost.dhnt.io/backend (default vk-native).
+#   CAMPAIGN_SHARD_BACKEND    outpost.dhnt.io/backend (default vk-podman).
 #   CAMPAIGN_SHARD_ARCH       kubernetes.io/arch (default: any).
 #   CAMPAIGN_SHARD_CPU        per-shard CPU request as a k8s quantity. Sizes the
 #                             selection AND becomes the Job's resources.requests.cpu
@@ -424,7 +424,7 @@ campaign_k8s_worker_nodes_pin() {
 # capacity never degrades to an optimistic pin.
 campaign_k8s_resolve_auto() {
   auto_os="${CAMPAIGN_SHARD_OS:-linux}"
-  auto_backend="${CAMPAIGN_SHARD_BACKEND:-vk-native}"
+  auto_backend="${CAMPAIGN_SHARD_BACKEND:-vk-podman}"
   auto_arch="${CAMPAIGN_SHARD_ARCH:-}"
   exclude=""
   for role in $WORKERS; do
