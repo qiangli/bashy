@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # posix-parity-pty.sh — Phase 2 POSIX-mode interactive conformance probe.
 #
-# Drives `bashy --posix -i` through a real pseudo-terminal and compares it with
+# Drives the lean `cmd/bash` certification SUT through a real pseudo-terminal
+# and compares it with
 # GNU bash 5.3 `bash --posix -i` running in docker. This covers POSIX-mode
 # behavior that only appears for interactive shells: prompt rendering, readline
 # input, alias expansion across entered lines, and visible interactive option
@@ -13,15 +14,32 @@
 # inherently host/terminal-specific checks INFO when adding them.
 #
 # Usage: scripts/posix-parity-pty.sh
-#        BASHY=./bin/bashy scripts/posix-parity-pty.sh
+#        BASH_PTY_SUT=/path/to/bash scripts/posix-parity-pty.sh
 #        BASH_REF=/path/to/bash scripts/posix-parity-pty.sh   # smoke fallback
 #
 # Exit: 0 iff every non-INFO probe matches.
 set -u
 
-BASHY=${BASHY:-./bin/bashy}
+# Do not inherit $BASHY here: `bashy dag` intentionally injects that variable
+# as its AgentOS executable, which must not become the certification SUT.
+BASHY=${BASH_PTY_SUT:-./bin/bash}
 export BASHY
 export BASH_REF=${BASH_REF:-}
+
+# Prefer an installed, genuine GNU Bash 5.3 reference when available. Reject
+# bashy's version stamp explicitly: the certification SUT must never silently
+# become its own oracle merely because it is installed as `bash` on PATH.
+if [ -z "$BASH_REF" ]; then
+  for candidate in /opt/homebrew/bin/bash /usr/local/bin/bash "$(command -v bash 2>/dev/null)"; do
+    [ -n "$candidate" ] && [ -x "$candidate" ] || continue
+    version=$("$candidate" --version 2>/dev/null | sed -n '1p')
+    case "$version" in
+      *bashy*) ;;
+      "GNU bash, version 5.3"*) BASH_REF=$candidate; break ;;
+    esac
+  done
+fi
+export BASH_REF
 
 # Container runtime for the bash 5.3 oracle (same convention as
 # scripts/posix-parity.sh): default docker, fall back to `bashy podman`.
@@ -29,8 +47,7 @@ export BASH_REF=${BASH_REF:-}
 OCI=${OCI:-}
 if [ -z "$OCI" ] && [ -z "$BASH_REF" ]; then
   if command -v docker >/dev/null 2>&1; then OCI=docker
-  elif [ -n "${BASHY:-}" ]; then OCI="$BASHY podman"
-  elif command -v bashy  >/dev/null 2>&1; then OCI="bashy podman"
+  elif command -v bashy >/dev/null 2>&1; then OCI="$(command -v bashy) podman"
   fi
 fi
 export OCI
@@ -45,11 +62,12 @@ import sys
 import termios
 import time
 
-BASHY = os.environ.get("BASHY", "./bin/bashy")
+BASHY = os.environ.get("BASHY", "./bin/bash")
 BASH_REF = os.environ.get("BASH_REF", "")
 # Container runtime command (e.g. "docker" or "bashy podman"), space-split.
 OCI = os.environ.get("OCI", "docker").split()
 PROMPT = "@@@PROMPT@@@ "
+PROMPT_TOKEN = PROMPT.strip()
 
 
 class Probe:
@@ -203,10 +221,12 @@ def normalize_output(text, sent_lines):
         line = raw.strip()
         if not line:
             continue
-        if line.startswith(PROMPT):
-            line = line[len(PROMPT):].strip()
-        if PROMPT in line:
-            line = line.replace(PROMPT, "").strip()
+        if line.startswith(PROMPT_TOKEN):
+            line = line[len(PROMPT_TOKEN):].strip()
+        if PROMPT_TOKEN in line:
+            line = line.replace(PROMPT_TOKEN, "").strip()
+        if not line:
+            continue
         if line in sent:
             continue
         if line.startswith("@@@P:") or line.startswith("@@@X:"):
@@ -224,7 +244,7 @@ def normalize_prompt(text):
     return text
 
 
-def read_available(master, sel, proc, deadline, stop=None, idle=None):
+def read_available(master, sel, proc, deadline, stop=None, stop_re=None, idle=None):
     # Read until `deadline`, or until `stop` bytes are seen, or — when `idle`
     # is set — until the stream has produced nothing for `idle` seconds after
     # having produced something (useful to settle on a prompt we can't predict).
@@ -253,6 +273,8 @@ def read_available(master, sel, proc, deadline, stop=None, idle=None):
             if b"\x1b[6n" in chunk:
                 os.write(master, b"\x1b[1;1R")
             if stop and stop in out:
+                return bytes(out)
+            if stop_re and stop_re.search(out):
                 return bytes(out)
     return bytes(out)
 
@@ -305,30 +327,33 @@ def run_probe(cmd, probe):
         return normalize_output(first_text, []), "err", "shell exited before prompt"
 
     if probe.prompt_ps1:
-        # Set PS1 in-session, then echo a marker. The rendered prompt is the
-        # text printed immediately before the marker command's echo.
-        marker = "@@@PE@@@"
-        script = f"PS1='{probe.prompt_ps1}'\necho {marker}\nexit\n"
+        # Bracket PS1 itself with markers, then collect the rendered prompt.
+        # Do not depend on readline echoing the following command: with the PTY
+        # slave's kernel ECHO disabled, GNU Bash and bashy legitimately differ
+        # in whether that command echo is visible.
+        prompt_begin = "@@@PB@@@"
+        prompt_end = "@@@PE@@@"
+        assigned_ps1 = prompt_begin + probe.prompt_ps1 + prompt_end
         try:
-            os.write(master, script.encode())
+            os.write(master, f"PS1='{assigned_ps1}'\n".encode())
         except OSError as exc:
             terminate(proc)
             return "", "err", f"write failed: {exc}"
-        raw = read_available(master, sel, proc, time.time() + 6.0, stop=marker.encode())
+        raw = read_available(
+            master, sel, proc, time.time() + 6.0, stop=None, idle=0.4
+        )
         terminate(proc)
         text = strip_terminal_noise(raw)
-        # The stream after `PS1=...` is: <renderedPrompt>echo @@@PE@@@\n@@@PE@@@.
-        # Grab the rendered prompt = text on the line that contains the echoed
-        # `echo @@@PE@@@` command, before that command.
-        prompt_out = ""
-        for line in text.split("\n"):
-            idx = line.find(f"echo {marker}")
-            if idx > 0:
-                prompt_out = line[:idx].strip()
-                break
-        if not prompt_out:
+        rendered = re.findall(
+            re.escape(prompt_begin) + r"(.*?)" + re.escape(prompt_end), text
+        )
+        if not rendered:
+            if os.environ.get("PTY_DEBUG"):
+                print(f"PTY_DEBUG {probe.num} prompt_raw={text!r}", file=sys.stderr)
             return "", "err", "missing rendered prompt"
-        return prompt_out, "ok", ""
+        # If readline echoes the assignment, the literal unexpanded PS1 is the
+        # first match and the rendered prompt is the last.
+        return rendered[-1].strip(), "ok", ""
 
     begin = f"printf '@@@P:{probe.num}@@@\\n'"
     end = f"printf '@@@X:{probe.num}:%s@@@\\n' \"$?\""
@@ -347,8 +372,16 @@ def run_probe(cmd, probe):
         terminate(proc)
         return "", "err", f"write failed: {exc}"
 
-    end_marker = f"@@@X:{probe.num}:".encode()
-    raw = first + read_available(master, sel, proc, time.time() + 10.0, end_marker)
+    # Match only the executed sentinel's complete output line. Matching the
+    # `@@@X:n:` prefix is racy because readline first echoes the printf command
+    # containing that same text; stopping there kills the shell before printf
+    # executes and falsely reports a missing sentinel.
+    end_re_bytes = re.compile(
+        rb"(?:^|\r?\n)@@@X:" + str(probe.num).encode() + rb":\d+@@@\r?\n"
+    )
+    raw = first + read_available(
+        master, sel, proc, time.time() + 10.0, stop_re=end_re_bytes
+    )
     terminate(proc)
     text = strip_terminal_noise(raw)
 
@@ -359,8 +392,8 @@ def run_probe(cmd, probe):
     rc = None
     for raw_line in text.split("\n"):
         line = raw_line.strip()
-        if line.startswith(PROMPT):
-            line = line[len(PROMPT):].strip()
+        if line.startswith(PROMPT_TOKEN):
+            line = line[len(PROMPT_TOKEN):].strip()
         if line == start:
             in_body = True
             body_lines = []
@@ -372,6 +405,8 @@ def run_probe(cmd, probe):
         if in_body:
             body_lines.append(raw_line)
     if rc is None:
+        if os.environ.get("PTY_DEBUG"):
+            print(f"PTY_DEBUG {probe.num} raw={text!r}", file=sys.stderr)
         return normalize_output(text, sent_lines), "err", "missing sentinel"
 
     body = "\n".join(body_lines)
@@ -404,7 +439,7 @@ def compare():
 
 def main():
     if not os.path.exists(BASHY):
-        print(f"error: {BASHY} does not exist; run `go build -o bin/bashy .` first", file=sys.stderr)
+        print(f"error: {BASHY} does not exist; run `make build-bash` first", file=sys.stderr)
         return 2
 
     match = diff = infon = 0
