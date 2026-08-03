@@ -181,6 +181,37 @@ got=$(run_select DKS_SELECT_REQUIRE_METRICS=1)
 check "REQUIRE_METRICS=1 with no metrics at all exits 6" "$(last_rc)" 6
 check "REQUIRE_METRICS total-absence failure prints no node name" "$got" ""
 
+# 3f. Virtual nodes have no kubelet/NodeMetrics object. Their work still burns
+# the registered host, so inherit utilization from the physical node carrying
+# the same outpost host label. This is the live peer-DKS shape.
+cat >"$tmp/nodes-virtual-host.json" <<'EOF'
+{"items":[
+ {"metadata":{"name":"worker-physical","labels":{"kubernetes.io/os":"linux","kubernetes.io/arch":"arm64","kubernetes.io/hostname":"worker-physical","outpost.dhnt.io/backend":"k3s","outpost.dhnt.io/host":"novidesign","outpost.dhnt.io/runtime":"agent"}},"spec":{},"status":{"allocatable":{"cpu":"8","memory":"16Gi"},"conditions":[{"type":"Ready","status":"True"}]}},
+ {"metadata":{"name":"worker-vk-native","labels":{"kubernetes.io/os":"darwin","kubernetes.io/arch":"arm64","kubernetes.io/hostname":"worker-vk-native","outpost.dhnt.io/backend":"vk-native","outpost.dhnt.io/host":"novidesign","outpost.dhnt.io/runtime":"virtual"}},"spec":{},"status":{"allocatable":{"cpu":"14","memory":"36Gi"},"conditions":[{"type":"Ready","status":"True"}]}}
+]}
+EOF
+cat >"$tmp/metrics-physical-busy.json" <<'EOF'
+{"items":[{"metadata":{"name":"worker-physical"},"usage":{"cpu":"13","memory":"4Gi"}}]}
+EOF
+got=$(run_select "DKS_SELECT_NODES_JSON=$tmp/nodes-virtual-host.json" \
+  "DKS_SELECT_METRICS_JSON=$tmp/metrics-physical-busy.json")
+check "host utilization can exclude an overloaded virtual node" "$(last_rc)" 3
+check "an overloaded virtual node emits no selection" "$got" ""
+err=$(cat "$tmp/err")
+contains "virtual-node capacity names its physical-host metrics source" "$err" \
+  "usage=host-metrics"
+
+cat >"$tmp/metrics-physical-idle.json" <<'EOF'
+{"items":[{"metadata":{"name":"worker-physical"},"usage":{"cpu":"1","memory":"2Gi"}}]}
+EOF
+got=$(run_select "DKS_SELECT_NODES_JSON=$tmp/nodes-virtual-host.json" \
+  "DKS_SELECT_METRICS_JSON=$tmp/metrics-physical-idle.json" \
+  DKS_SELECT_REQUIRE_METRICS=1)
+check "strict metrics accepts a virtual node backed by physical-host metrics" "$got" \
+  worker-vk-native
+err=$(cat "$tmp/err")
+contains "virtual selection reports host metrics" "$err" "usage=host-metrics"
+
 # ---------------------------------------------------------------------------
 # 4. Schedulability exclusions. Each of these nodes is the roomiest in the
 #    inventory (32 CPU / 128Gi) precisely so that "it did not win" can only mean

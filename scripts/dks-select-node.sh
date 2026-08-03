@@ -436,13 +436,35 @@ spread_count() {
   ' "$pods_json"
 }
 
-# live usage for a node: "cpuQty memQty", empty when the node has no reading
+# live usage for a node: "cpuQty memQty source", empty when neither the node
+# nor its physical host has a reading. Virtual nodes have no kubelet and thus
+# no NodeMetrics object of their own; for them, use the physical k3s/agent Node
+# carrying the same outpost host label. That is the utilization of the machine
+# where vk-native/vk-podman will actually execute.
 node_usage() {
   [ "$metrics_available" -eq 1 ] || return 0
-  NODE="$1" jq -r '
+  local name="$1" host="${2:-}" usage host_node
+  usage=$(NODE="$name" jq -r '
     .items[]
     | select(.metadata.name == env.NODE)
-    | [(.usage.cpu // ""), (.usage.memory // "")] | map(tostring) | join("\u001f")
+    | [(.usage.cpu // ""), (.usage.memory // ""), "metrics"] | map(tostring) | join("\u001f")
+  ' "$metrics_json" | head -n 1)
+  if [ -n "$usage" ]; then
+    printf '%s\n' "$usage"
+    return 0
+  fi
+  [ -n "$host" ] || return 0
+  host_node=$(HOST="$host" jq -r '
+    .items[]
+    | select((.metadata.labels["outpost.dhnt.io/host"] // "") == env.HOST)
+    | select((.metadata.labels["outpost.dhnt.io/runtime"] // "") != "virtual")
+    | .metadata.name
+  ' "$nodes_json" | head -n 1)
+  [ -n "$host_node" ] || return 0
+  NODE="$host_node" jq -r '
+    .items[]
+    | select(.metadata.name == env.NODE)
+    | [(.usage.cpu // ""), (.usage.memory // ""), "host-metrics"] | map(tostring) | join("\u001f")
   ' "$metrics_json" | head -n 1
 }
 
@@ -613,13 +635,15 @@ EOF
   usage_src=requests
   use_cpu=0
   use_mem=0
-  usage=$(node_usage "$name")
+  usage=$(node_usage "$name" "$nhost")
   if [ -n "$usage" ]; then
     ucq="${usage%%"$US"*}"
-    umq="${usage#*"$US"}"
+    usage_rest="${usage#*"$US"}"
+    umq="${usage_rest%%"$US"*}"
+    reported_usage_src="${usage_rest#*"$US"}"
     use_cpu=$(parse_cpu_milli "$ucq" "metrics cpu usage on node $name")
     use_mem=$(parse_mem_bytes "$umq" "metrics memory usage on node $name")
-    usage_src=metrics
+    usage_src="$reported_usage_src"
   elif [ "$metrics_available" -eq 1 ]; then
     if [ "$REQUIRE_METRICS" = 1 ]; then
       die 6 "node $name has no metrics.k8s.io reading and DKS_SELECT_REQUIRE_METRICS=1"
