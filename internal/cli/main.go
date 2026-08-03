@@ -590,10 +590,6 @@ func newRunner() (*interp.Runner, error) {
 		// interactive shell, unlike a `set -n` issued later — which an
 		// interactive shell ignores. See interp.CommandLineNoExec.
 		interp.CommandLineNoExec(cmdlineNoExec()),
-		// bashy is a standalone shell (one Runner per process), so mirror the
-		// umask builtin onto the process umask — external commands (mkdir, …)
-		// then honour it, as a real shell does (POSIX umask-p conformance).
-		interp.MirrorUmask(true),
 		interp.CommandString(*command != ""),
 		interp.StandardInput(*command == "" && (flag.NArg() == 0 || *readStdin)),
 		interp.WithLoginShell(isLoginShell()),

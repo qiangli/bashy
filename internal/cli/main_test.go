@@ -644,6 +644,53 @@ func TestRunQuotedEmptyHeredocEOFKeepsBody(t *testing.T) {
 	}
 }
 
+func TestInProcessCoreutilsTouchHonorsVirtualUmask(t *testing.T) {
+	dir := t.TempDir()
+	baseline := filepath.Join(dir, "baseline")
+	f, err := os.OpenFile(baseline, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o666)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	baseInfo, err := os.Stat(baseline)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	file, err := syntax.NewParser().Parse(strings.NewReader(
+		"touch default; umask 077; touch restricted; umask 006; touch tp5"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	runner, err := interp.New(
+		interp.Dir(dir),
+		interp.StdIO(nil, io.Discard, &stderr),
+		interp.ExecHandlers(coreutilsshell.Handler()),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runner.Run(context.Background(), file); err != nil {
+		t.Fatalf("run: %v, stderr=%q", err, stderr.String())
+	}
+	for name, want := range map[string]os.FileMode{
+		"default":    baseInfo.Mode().Perm(),
+		"restricted": 0o600,
+		"tp5":        0o660,
+	} {
+		info, err := os.Stat(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("stat %s: %v", name, err)
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Errorf("%s mode=%#o, want %#o", name, got, want)
+		}
+	}
+}
+
 func TestRunBadSubstDollarParamRecovery(t *testing.T) {
 	src := "set -e\ntrap 'echo $?' EXIT\necho ${$NO_SUCH_VAR}\n"
 	var stdout, stderr bytes.Buffer

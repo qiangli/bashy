@@ -52,7 +52,6 @@ func NewSessionRunner(io SessionIO) (*interp.Runner, error) {
 	var r *interp.Runner
 	opts := []interp.RunnerOption{
 		interp.Interactive(false),
-		interp.MirrorUmask(true),
 		interp.CommandString(true),
 		interp.StandardInput(false),
 		interp.StdIO(io.Stdin, io.Stdout, io.Stderr),
