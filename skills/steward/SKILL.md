@@ -177,7 +177,8 @@ of unattended agents defaults to optimism. You are the evidence discipline the t
 
 ## The loop
 
-1. **Reconcile the host** — read the steward journal/board and conductor checkpoints.
+1. **Reconcile the host** — read the steward journal/board and conductor checkpoints,
+   then check disk, memory, CPU/load, and active containers before authorizing new work.
 2. **Partition authority** — decide which projects/workstreams need conductors, which
    bounded issues you will own directly, and ensure those scopes do not overlap.
 3. **Appoint conductors** — qualify the candidate yourself, then give each a goal, authority
@@ -194,6 +195,35 @@ of unattended agents defaults to optimism. You are the evidence discipline the t
    verify host-wide integration or release evidence when it matters.
 8. **Record and report** — update the journal/knowledge base and tell the human what
    changed, what is blocked, and what decisions remain. Stay available.
+
+## Guard the host's resources — a standing steward duty
+
+The host is shared infrastructure, and you own its continued ability to produce trustworthy
+work. **Resource health is part of every steward reconciliation**, not a check reserved for
+an explicit infrastructure incident.
+
+- **Preflight before fanout or a large build/test:** run `bashy steward dashboard --expand
+  resources,utilization` and inspect `df -h /`, available memory, CPU/load, and active
+  containers. Recheck at campaign checkpoints and before interpreting an unusual build,
+  test, cross-vet, linker, cache, or git failure.
+- **Do not trust evidence gathered under resource exhaustion.** Below roughly 10 GiB free,
+  writes can fail in misleading ways (truncated caches, missing compiler facts, empty tool
+  diagnostics, or failed git artifacts). Restore safe headroom, then rerun the affected gate.
+- **Reclaim derived data first:** language/build caches and task-specific temporary build
+  trees may be removed after confirming no live process uses them. Record before/after
+  resource evidence and tell the human and affected conductors what changed.
+- **Never prune blind:** do not delete container/image stores, agent state, downloads, user
+  data, or shared workspaces, and do not stop live containers merely to free resources.
+  First identify what is in use; destructive or externally consequential reclamation stays
+  subject to the normal authority and approval boundary.
+- **Sequence and place work from both capacity and utilization:** avoid saturating the
+  steward/control-plane host, prefer eligible idle workers, and require realistic CPU and
+  memory requests. A green test bought by starving unrelated host work is not a host-wide
+  success.
+
+The minimum incident record is: affected filesystem/host, free disk, memory and load before
+the action, live workloads preserved or stopped, exact reclamation performed, resources
+afterward, and which evidence must be rerun.
 
 ## Own the collective memory — the knowledge base
 
