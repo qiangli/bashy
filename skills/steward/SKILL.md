@@ -202,8 +202,22 @@ of unattended agents defaults to optimism. You are the evidence discipline the t
    `steward authorize` + `takeover`, which fences them deliberately. Read
    `steward reconcile` next: it is the verb a successor runs first.
 
-1. **Reconcile the host** — read the steward journal/board and conductor checkpoints,
-   then check disk, memory, CPU/load, and active containers before authorizing new work.
+1. **Read the seat's mail, then reconcile the host.**
+
+       bashy steward inbox      # sent TO the seat — including your predecessors'
+       bashy mb                 # the public board, sent to everyone or to you
+
+   Mail first, because a message read after you plan has already cost you the
+   work it was trying to prevent. Somebody may have taken the thing you are
+   about to start, or found the fault you are about to hunt.
+
+   `steward inbox` is the SEAT's mail, not yours: everything sent while a
+   predecessor held it is here too. That is what addressing a role buys — a
+   handover does not lose the mail. `steward status` shows an unread count, so
+   you do not have to remember to ask.
+
+   Then reconcile: read the journal/board and conductor checkpoints, and check
+   disk, memory, CPU/load and active containers before authorizing new work.
 2. **Partition authority** — decide which projects/workstreams need conductors, which
    bounded issues you will own directly, and ensure those scopes do not overlap.
 3. **Appoint conductors** — qualify the candidate yourself, then give each a goal, authority
