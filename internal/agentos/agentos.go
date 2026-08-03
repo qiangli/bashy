@@ -637,6 +637,30 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
+	case "im", "tell":
+		// The send half. `bus publish --to X --topic t "msg"` was already the
+		// mechanism and was spelled for the TRANSPORT: three flags and a noun an
+		// agent must understand before it can say hello. Messaging a colleague
+		// should cost one word.
+		cmd := bus.NewIMCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy im:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "inbox", "messages", "msgs":
+		// The one word an agent has to know. `bus pending` already did this, but
+		// it is two words under a noun describing the TRANSPORT rather than the
+		// act — a message system whose read command has to be explained is one
+		// nobody reads. Same buffer, same resolve-on-read; better name.
+		cmd := bus.NewInboxCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy inbox:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "leaderboard":
 		// The fleet's own run evidence, ranked. A TOP-LEVEL verb rather than
 		// `capability leaderboard` because it answers a different question:
