@@ -177,6 +177,31 @@ of unattended agents defaults to optimism. You are the evidence discipline the t
 
 ## The loop
 
+0. **Claim the seat — before anything else.**
+
+       bashy steward status     # is it VACANT, LAPSED, or held by someone alive?
+       bashy steward claim      # take it; --help explains authorization
+
+   Assuming the role does not acquire the seat, and nothing else in this loop
+   will tell you that you skipped it. Every step below writes to a seat you do
+   not hold: the journal stays empty, the board shows no workstreams, and
+   `steward ping` — the single point of contact for this host — exits 1 with
+   "no steward to ping" for anyone trying to reach you.
+
+   This is not bookkeeping. The seat is what makes the record ATTRIBUTABLE and
+   what makes you REACHABLE, and both fail silently in the direction that looks
+   like everything is fine: you go on working, and the host looks unstewarded.
+
+   Observed 2026-08-03: a steward drove three p0 workstreams for hours against
+   a VACANT seat with a 0-entry journal. Nothing was wrong with the work; there
+   was simply no record it had been done by anyone, and pings addressed to the
+   host bounced.
+
+   If it is held by someone alive, you are not the steward — reach them on the
+   bus first. If it is LAPSED, `claim` takes it; a live incumbent needs
+   `steward authorize` + `takeover`, which fences them deliberately. Read
+   `steward reconcile` next: it is the verb a successor runs first.
+
 1. **Reconcile the host** — read the steward journal/board and conductor checkpoints,
    then check disk, memory, CPU/load, and active containers before authorizing new work.
 2. **Partition authority** — decide which projects/workstreams need conductors, which
@@ -296,15 +321,28 @@ recording an explicit transfer before the new owner acts.
 
 ## Your instruments
 
-`bashy steward` (host seat/journal) · `bashy sprint` (conductor continuity) · `bashy issue`
+`bashy steward` (host seat/journal — `status` · **`claim`** · `reconcile` · `workstream` ·
+`decide` · `record` · `verify` · `checkpoint` · `ping` · `release`; `authorize` +
+`takeover` to fence a live incumbent) · `bashy sprint` (conductor continuity) · `bashy issue`
 (the register) · `bashy weave` (conductor execution, or isolated steward-owned direct work:
 add/split/link/start/status/log/attach/say/gate/judge/pull/salvage/reverify/kill/abandon/prune) · `bashy gate`
 (does it pass) · `bashy judge` (is it good) · `bashy agents` / `bashy whois` (which agent
-can do this, and at what cost) · `bashy claim` (who holds this project) · `bashy handoff`
+can do this, and at what cost) · `bashy handoff`
 / `bashy resume` (pass work across tools and machines; `handoff --as <role>` hands off the
 **seat**, not just the task — see below) · `bashy kb` (the host's collective memory —
 **yours to own, vet, and promote**; prefer it over private local scratch that does not
 travel).
+
+**Three different verbs are spelled `claim`. Do not substitute one for another:**
+
+- **`bashy steward claim`** — takes THE SEAT: this host's accountable role. The
+  one step 0 above is about. Nothing else grants it.
+- `bashy claim` — records who holds a PROJECT. Scoped to a repo, not to the host,
+  and holding one is not being the steward.
+- `bashy resume --claim` — takes over an in-flight TASK when resuming someone's
+  work. A task, not a role.
+
+An agent that greps for "claim" finds the last two first. They are not it.
 
 ## Handing off — the task, or the seat
 
