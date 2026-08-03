@@ -80,9 +80,12 @@ func (p signalShellProcess) finish(t *testing.T) {
 	}
 }
 
-// TestVSCTrapSignalBoundary covers the five signal semantics isolated by the
-// VSC sh_12 cluster. Every case crosses a real process boundary; the read cases
+// TestVSCTrapSignalBoundary covers the signal semantics isolated by the VSC
+// sh_12 cluster. Every case crosses a real process boundary; the read cases
 // deliberately deliver TERM before supplying input, matching SigWait -r.
+// TP720 here pins the supported sideband consumer, not discovery: VSC SigWait
+// does not set BASHY_HARD_IGNORE, so direct native-parent entry remains a
+// packaging/launcher responsibility outside the Go runtime.
 func TestVSCTrapSignalBoundary(t *testing.T) {
 	t.Run("TP712 reset restores default", func(t *testing.T) {
 		p := signalShell(t, "trap 'echo caught' TERM; kill -s TERM $$; trap - TERM; echo ready; read x; echo BAD")
@@ -137,10 +140,10 @@ func TestVSCTrapSignalBoundary(t *testing.T) {
 		}
 	})
 
-	t.Run("TP720 startup ignore stays immutable", func(t *testing.T) {
-		// The native launcher sets SIG_IGN immediately before exec. The
-		// sideband preserves that provenance across Go runtime startup; the
-		// standalone runner then re-applies SIG_IGN before executing script.
+	t.Run("TP720 sideband keeps startup ignore immutable", func(t *testing.T) {
+		// /bin/sh sets SIG_IGN immediately before exec while the fixture
+		// explicitly supplies the sideband. The standalone runner consumes
+		// that provenance and re-applies SIG_IGN before executing script.
 		const script = "trap 'echo BAD' TERM; trap - TERM; echo ready; read x; echo got=$x"
 		cmd := exec.Command("/bin/sh", "-c", `trap '' TERM; exec "$BASH_BIN" -c "$BASH_SCRIPT"`)
 		cmd.Env = append(os.Environ(),
