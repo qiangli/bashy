@@ -41,6 +41,10 @@ func MaybeRunJobCarrierHelper() {
 	if len(os.Args) != 2 || os.Args[1] != carrierHelperArg {
 		return
 	}
+	// An ignored disposition survives exec. Restore defaults explicitly so a
+	// shell started by a parent that ignores TERM/INT does not create an
+	// immortal carrier that external kill cannot control.
+	resetJobCarrierSignals()
 	buf := make([]byte, 128)
 	for {
 		if _, err := os.Stdin.Read(buf); err != nil {

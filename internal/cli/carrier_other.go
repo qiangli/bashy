@@ -13,3 +13,5 @@ import "mvdan.cc/sh/v3/interp"
 // POSIX/sh mode closed via unsupportedJobCarrier — strict process semantics
 // are never silently faked.
 func platformJobCarrier() interp.JobCarrier { return nil }
+
+func resetJobCarrierSignals() {}

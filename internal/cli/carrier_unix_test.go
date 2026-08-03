@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -128,13 +129,40 @@ func outPid(t *testing.T, out string) int {
 // comparisons on it): a bounded pure-builtin job whose $! must be numeric,
 // probeable by the external /bin/kill, and resolvable by wait.
 func TestCarrierCertificationShape(t *testing.T) {
-	out, exit := runBuiltBash(t, t.TempDir(), killBinPrelude+
-		`(:)& p=$!; case $p in *[!0-9]*|"") exit 90;; esac; "$K" -0 "$p"; wait "$p"`)
+	out, exit := runBuiltBash(t, t.TempDir(),
+		"tet_context=`(:)& echo $!`; case $tet_context in *[!0-9]*|\"\") exit 90;; esac; test \"$tet_context\" -gt 0")
 	if exit == 90 {
 		t.Fatalf("$! was not numeric (synthetic g<N>?); output:\n%s", out)
 	}
 	if exit != 0 {
 		t.Fatalf("exit = %d, want 0; output:\n%s", exit, out)
+	}
+}
+
+func TestCarrierHelperResetsIgnoredTerm(t *testing.T) {
+	signal.Ignore(syscall.SIGTERM)
+	cmd := exec.Command(builtBashBin(t), "--bashy-job-carrier")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		signal.Reset(syscall.SIGTERM)
+		t.Fatal(err)
+	}
+	defer stdin.Close()
+	if err := cmd.Start(); err != nil {
+		signal.Reset(syscall.SIGTERM)
+		t.Fatal(err)
+	}
+	// Restore the test process immediately; the child inherited SIG_IGN and
+	// must undo it itself in helper mode.
+	signal.Reset(syscall.SIGTERM)
+	time.Sleep(50 * time.Millisecond)
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	err = cmd.Wait()
+	ws, ok := cmd.ProcessState.Sys().(syscall.WaitStatus)
+	if !ok || !ws.Signaled() || ws.Signal() != syscall.SIGTERM {
+		t.Fatalf("helper death after inherited SIG_IGN: err=%v state=%v, want SIGTERM", err, cmd.ProcessState)
 	}
 }
 

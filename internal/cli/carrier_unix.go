@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"sync"
 	"syscall"
 
@@ -21,6 +22,8 @@ import (
 // executable in helper mode per background job (see MaybeRunJobCarrierHelper),
 // giving every `cmd &` a real, signalable kernel PID for `$!`.
 func platformJobCarrier() interp.JobCarrier { return execJobCarrier{} }
+
+func resetJobCarrierSignals() { signal.Reset() }
 
 type execJobCarrier struct{}
 

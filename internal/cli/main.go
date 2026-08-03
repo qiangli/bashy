@@ -655,7 +655,7 @@ func newRunner() (*interp.Runner, error) {
 	// fails with a diagnostic rather than silently restoring g<N>.
 	if c := newCLIJobCarrier(); c != nil {
 		opts = append(opts, interp.WithJobCarrier(c))
-	} else if *posix || invokedAsSh() || slices.Contains(optsOn, "posix") {
+	} else if posixModeRequested() {
 		opts = append(opts, interp.WithJobCarrier(unsupportedJobCarrier{}))
 	}
 	// argv[0]=="sh" asks for a *POSIX sh*, not "bash in posix mode": the caller
@@ -691,6 +691,19 @@ func newRunner() (*interp.Runner, error) {
 	// user rc so they can be overridden.
 	registerDefaultFuncs(r, AgentOSPreamble())
 	return r, nil
+}
+
+func posixModeRequested() bool {
+	if *posix || invokedAsSh() || slices.Contains(optsOn, "posix") {
+		return true
+	}
+	for _, name := range strings.Split(os.Getenv("SHELLOPTS"), ":") {
+		if name == "posix" {
+			return true
+		}
+	}
+	_, present := os.LookupEnv("POSIXLY_CORRECT")
+	return present
 }
 
 // registerDefaultFuncs parses preamble shell source and registers each function
