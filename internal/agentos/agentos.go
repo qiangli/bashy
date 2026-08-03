@@ -637,6 +637,20 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
+	case "leaderboard":
+		// The fleet's own run evidence, ranked. A TOP-LEVEL verb rather than
+		// `capability leaderboard` because it answers a different question:
+		// the matrix is a routing input ("who should take this"), this is an
+		// account ("what has actually happened, and how sure are we"). Folding
+		// them together would invite reading a routing estimate as a
+		// measurement.
+		cmd := capability.NewLeaderboardCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy leaderboard:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "sdlc":
 		// Workflow control plane: intake/deployment/approval boundary that
 		// delegates implementation planning and sprint execution to agents.
