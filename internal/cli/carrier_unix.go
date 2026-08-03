@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"mvdan.cc/sh/v3/interp"
 )
@@ -23,7 +24,50 @@ import (
 // giving every `cmd &` a real, signalable kernel PID for `$!`.
 func platformJobCarrier() interp.JobCarrier { return execJobCarrier{} }
 
-func resetJobCarrierSignals() { signal.Reset() }
+func resetJobCarrierSignals() {
+	// The Go runtime installs handlers at startup for notify-only signals such
+	// as SIGUSR1 and silently consumes them when no Notify receiver exists.
+	// signal.Reset cannot restore those runtime-owned actions. Relay the common
+	// terminating signals through a reserved 128+signal exit code instead;
+	// execCarrierProc.Wait maps that code back to the signal the interpreter
+	// must observe. This also overrides SIG_IGN inherited across exec.
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch,
+		syscall.SIGHUP, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGILL,
+		syscall.SIGTRAP, syscall.SIGABRT, syscall.SIGBUS, syscall.SIGFPE,
+		syscall.SIGUSR1, syscall.SIGSEGV, syscall.SIGUSR2, syscall.SIGPIPE,
+		syscall.SIGALRM, syscall.SIGTERM, syscall.SIGTSTP, syscall.SIGTTIN,
+		syscall.SIGTTOU, syscall.SIGXCPU, syscall.SIGXFSZ,
+	)
+	go func() {
+		for sig := range ch {
+			num, ok := sig.(syscall.Signal)
+			if !ok {
+				os.Exit(255)
+			}
+			switch num {
+			case syscall.SIGTSTP, syscall.SIGTTIN, syscall.SIGTTOU:
+				// Preserve job-control stop/resume visibility. SIGSTOP cannot
+				// be caught; a later SIGCONT resumes this relay loop.
+				_ = syscall.Kill(os.Getpid(), syscall.SIGSTOP)
+			default:
+				os.Exit(128 + int(num))
+			}
+		}
+	}()
+}
+
+func signalJobCarrierReady() {
+	if os.Getenv(carrierReadyEnv) != "3" {
+		return
+	}
+	ready := os.NewFile(3, "bashy-job-carrier-ready")
+	if ready == nil {
+		return
+	}
+	_, _ = ready.Write([]byte{1})
+	_ = ready.Close()
+}
 
 type execJobCarrier struct{}
 
@@ -33,10 +77,10 @@ func (execJobCarrier) StartCarrier(ctx context.Context) (interp.CarrierProcess, 
 		return nil, fmt.Errorf("resolving executable: %v", err)
 	}
 	cmd := exec.Command(exe, carrierHelperArg)
-	// An empty environment: the helper is intercepted before flag parsing,
-	// startup files and telemetry, and an env var that steers a normal shell
-	// start (BASH_ENV, BASH_SETPGRP, OTEL_*) must not reach it anyway.
-	cmd.Env = []string{}
+	// Only the private readiness descriptor marker is inherited. The helper is
+	// intercepted before flag parsing, startup files and telemetry; user-facing
+	// environment such as BASH_ENV, BASH_SETPGRP and OTEL_* must not reach it.
+	cmd.Env = []string{carrierReadyEnv + "=3"}
 	// Its own process group: under job control (`set -m`) group-directed
 	// signals target the negated carrier PID, and a tty ^C aimed at the
 	// shell's foreground group must not strike carriers.
@@ -45,9 +89,28 @@ func (execJobCarrier) StartCarrier(ctx context.Context) (interp.CarrierProcess, 
 	if err != nil {
 		return nil, err
 	}
-	if err := cmd.Start(); err != nil {
+	readyR, readyW, err := os.Pipe()
+	if err != nil {
 		stdin.Close()
 		return nil, err
+	}
+	cmd.ExtraFiles = []*os.File{readyW}
+	if err := cmd.Start(); err != nil {
+		stdin.Close()
+		readyR.Close()
+		readyW.Close()
+		return nil, err
+	}
+	readyW.Close()
+	_ = readyR.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var ready [1]byte
+	_, readyErr := io.ReadFull(readyR, ready[:])
+	readyR.Close()
+	if readyErr != nil {
+		stdin.Close()
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return nil, fmt.Errorf("job carrier readiness: %v", readyErr)
 	}
 	return &execCarrierProc{cmd: cmd, stdin: stdin}, nil
 }
@@ -66,6 +129,9 @@ func (p *execCarrierProc) Wait() int {
 	_ = p.cmd.Wait() // a signal death surfaces as *exec.ExitError; ProcessState has the detail
 	if ws, ok := p.cmd.ProcessState.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
 		return int(ws.Signal())
+	}
+	if code := p.cmd.ProcessState.ExitCode(); code > 128 && code < 256 {
+		return code - 128
 	}
 	return 0
 }

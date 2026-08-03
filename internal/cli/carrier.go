@@ -21,6 +21,7 @@ import (
 // the runner instead starts one helper per background job and uses its real
 // PID as the job's identity; see internal/cli/carrier_unix.go.
 const carrierHelperArg = "--bashy-job-carrier"
+const carrierReadyEnv = "BASHY_JOB_CARRIER_READY_FD"
 
 // MaybeRunJobCarrierHelper turns the current process into a job-carrier
 // helper — a kernel-visible stand-in for one background job — when argv is
@@ -31,12 +32,11 @@ const carrierHelperArg = "--bashy-job-carrier"
 // user code. cli.Main calls it first; cmd/bashy additionally calls it before
 // telemetry.Init so a carrier never initializes the OTel plane.
 //
-// The helper deliberately installs no signal handlers of its own, keeping the
-// default dispositions it was exec'd with: an external `kill` terminates it
-// and the parent's Wait reads the terminating signal from the wait status,
-// which the runner then relays to the job. Its lifetime is bounded by the
-// parent-owned stdin pipe: it exits on EOF, so it cannot outlive a parent
-// shell that dies without reaping it.
+// The platform hook relays externally delivered terminating signals through
+// the carrier wait status, including notify-only signals the Go runtime would
+// otherwise consume. Its lifetime is bounded by the parent-owned stdin pipe:
+// it exits on EOF, so it cannot outlive a parent shell that dies without
+// reaping it.
 func MaybeRunJobCarrierHelper() {
 	if len(os.Args) != 2 || os.Args[1] != carrierHelperArg {
 		return
@@ -45,6 +45,7 @@ func MaybeRunJobCarrierHelper() {
 	// shell started by a parent that ignores TERM/INT does not create an
 	// immortal carrier that external kill cannot control.
 	resetJobCarrierSignals()
+	signalJobCarrierReady()
 	buf := make([]byte, 128)
 	for {
 		if _, err := os.Stdin.Read(buf); err != nil {

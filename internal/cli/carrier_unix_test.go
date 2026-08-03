@@ -141,28 +141,37 @@ func TestCarrierCertificationShape(t *testing.T) {
 
 func TestCarrierHelperResetsIgnoredTerm(t *testing.T) {
 	signal.Ignore(syscall.SIGTERM)
-	cmd := exec.Command(builtBashBin(t), "--bashy-job-carrier")
-	stdin, err := cmd.StdinPipe()
+	cp, err := (execJobCarrier{}).StartCarrier(context.Background())
 	if err != nil {
-		signal.Reset(syscall.SIGTERM)
-		t.Fatal(err)
-	}
-	defer stdin.Close()
-	if err := cmd.Start(); err != nil {
 		signal.Reset(syscall.SIGTERM)
 		t.Fatal(err)
 	}
 	// Restore the test process immediately; the child inherited SIG_IGN and
 	// must undo it itself in helper mode.
 	signal.Reset(syscall.SIGTERM)
-	time.Sleep(50 * time.Millisecond)
-	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+	if err := syscall.Kill(cp.Pid(), syscall.SIGTERM); err != nil {
 		t.Fatal(err)
 	}
-	err = cmd.Wait()
-	ws, ok := cmd.ProcessState.Sys().(syscall.WaitStatus)
-	if !ok || !ws.Signaled() || ws.Signal() != syscall.SIGTERM {
-		t.Fatalf("helper death after inherited SIG_IGN: err=%v state=%v, want SIGTERM", err, cmd.ProcessState)
+	got := cp.Wait()
+	if got != int(syscall.SIGTERM) {
+		t.Fatalf("helper relay after inherited SIG_IGN = %d, want SIGTERM", got)
+	}
+}
+
+// Go's runtime installs a notify-only handler for SIGUSR1 before main. A bare
+// signal.Reset does not replace that handler unless os/signal first enabled
+// the signal, so the carrier used to swallow USR1 and leave `wait $!` wedged.
+func TestCarrierHelperRestoresDefaultUSR1(t *testing.T) {
+	cp, err := (execJobCarrier{}).StartCarrier(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Kill(cp.Pid(), syscall.SIGUSR1); err != nil {
+		t.Fatal(err)
+	}
+	got := cp.Wait()
+	if got != int(syscall.SIGUSR1) {
+		t.Fatalf("helper relay = %d, want SIGUSR1", got)
 	}
 }
 
@@ -251,7 +260,7 @@ done
 
 // TestCarrierHelperLifecycle drives helper mode directly: it must produce no
 // output, survive while the parent holds its stdin pipe, exit 0 on EOF, and —
-// dispositions preserved — die of an external SIGTERM with a signal status.
+// relay an external SIGTERM as its signal number.
 func TestCarrierHelperLifecycle(t *testing.T) {
 	t.Run("EOF", func(t *testing.T) {
 		cmd := exec.Command(builtBashBin(t), "--bashy-job-carrier")
@@ -277,23 +286,16 @@ func TestCarrierHelperLifecycle(t *testing.T) {
 		}
 	})
 	t.Run("Signal", func(t *testing.T) {
-		cmd := exec.Command(builtBashBin(t), "--bashy-job-carrier")
-		stdin, err := cmd.StdinPipe()
+		cp, err := (execJobCarrier{}).StartCarrier(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer stdin.Close()
-		if err := cmd.Start(); err != nil {
+		if err := syscall.Kill(cp.Pid(), syscall.SIGTERM); err != nil {
 			t.Fatal(err)
 		}
-		time.Sleep(50 * time.Millisecond)
-		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-			t.Fatal(err)
-		}
-		err = cmd.Wait()
-		ws, ok := cmd.ProcessState.Sys().(syscall.WaitStatus)
-		if !ok || !ws.Signaled() || ws.Signal() != syscall.SIGTERM {
-			t.Fatalf("helper death: err=%v state=%v, want SIGTERM signal death", err, cmd.ProcessState)
+		got := cp.Wait()
+		if got != int(syscall.SIGTERM) {
+			t.Fatalf("helper relay = %d, want SIGTERM", got)
 		}
 	})
 }

@@ -15,3 +15,4 @@ import "mvdan.cc/sh/v3/interp"
 func platformJobCarrier() interp.JobCarrier { return nil }
 
 func resetJobCarrierSignals() {}
+func signalJobCarrierReady()  {}
