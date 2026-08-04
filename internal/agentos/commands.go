@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
@@ -332,8 +333,7 @@ func printCommandFeature(w io.Writer, info map[string]any) {
 }
 
 func containsString(items []string, want string) bool {
-	i := sort.SearchStrings(items, want)
-	return i < len(items) && items[i] == want
+	return slices.Contains(items, want)
 }
 
 // verbSynopsis describes the front-door verb shims (the coreutils tools carry

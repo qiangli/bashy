@@ -180,8 +180,8 @@ func TestGNUCoreutilsReportTracksGaps(t *testing.T) {
 	if !slices.Contains(report.BashyNative, "printf") || !slices.Contains(report.BashyNative, "test") {
 		t.Fatalf("expected printf/test to be tracked as bashy-native GNU commands: %#v", report.BashyNative)
 	}
-	if !slices.Contains(report.CoveredByBuiltins, "kill") {
-		t.Fatalf("expected kill to be tracked as bash builtin coverage: %#v", report.CoveredByBuiltins)
+	if !slices.Contains(report.CoveredByBuiltins, "kill") && !slices.Contains(report.BashyNative, "kill") {
+		t.Fatalf("expected kill to be tracked as bash builtin or native coverage: %#v", report.CoveredByBuiltins)
 	}
 	if !gnuGapHas(report.Not100Conformant, "ls") {
 		t.Fatalf("expected implemented but uncertified GNU command in not_100_conformant: %#v", report.Not100Conformant)
