@@ -163,7 +163,13 @@ func advisorHandler(a *advisor) func(interp.ExecHandlerFunc) interp.ExecHandlerF
 			if a.mem != nil {
 				n = a.mem.recordFail(key)
 			}
-			if h := applyLoop(a.advise(handlerDir(ctx), args, status), baseName(args[0]), n); h != nil {
+			h := applyLoop(a.advise(handlerDir(ctx), args, status), baseName(args[0]), n)
+			// Hand the diagnosis to whoever is collecting before deciding
+			// whether to SPEAK it. The two are different questions: a hint can
+			// be worth recording and not worth interrupting for, and this line
+			// is a nil check when nobody is collecting.
+			diagFrom(ctx).recordDiagnosis(h)
+			if h != nil {
 				a.emit(handlerStderr(ctx), args[0], status, h)
 			}
 			return err

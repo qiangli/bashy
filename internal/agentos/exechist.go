@@ -129,6 +129,11 @@ func execHistHandler(rec *recorder) func(interp.ExecHandlerFunc) interp.ExecHand
 				return next(ctx, args)
 			}
 
+			// The slot goes down; the advisor fills it on the way back up.
+			// See exechist_diag.go for why the diagnosis is handed over rather
+			// than recomputed.
+			ctx, diag := withDiagSlot(ctx)
+
 			start := time.Now()
 			err := next(ctx, args)
 			elapsed := time.Since(start)
@@ -145,7 +150,7 @@ func execHistHandler(rec *recorder) func(interp.ExecHandlerFunc) interp.ExecHand
 			// none.
 			status, observed := observedExitOf(err)
 
-			rec.writeEpisode(ctx, argv, status, observed, elapsed)
+			rec.writeEpisode(ctx, argv, status, observed, elapsed, diag)
 			rec.observeSpace(ctx, argv, status, observed)
 
 			return err
@@ -154,7 +159,7 @@ func execHistHandler(rec *recorder) func(interp.ExecHandlerFunc) interp.ExecHand
 }
 
 // writeEpisode appends to the TIME plane.
-func (r *recorder) writeEpisode(ctx context.Context, argv []string, status int, observed bool, d time.Duration) {
+func (r *recorder) writeEpisode(ctx context.Context, argv []string, status int, observed bool, d time.Duration, diag *diagSlot) {
 	cwd := safeHandlerDir(ctx)
 
 	body := execlog.Scrub(onceScrubber(), argv, cwd, execlog.TemplateOpts{
@@ -164,8 +169,9 @@ func (r *recorder) writeEpisode(ctx context.Context, argv []string, status int, 
 	})
 
 	rec := execlog.Record{
-		At:         time.Now().UTC(),
-		Episode:    onceEpisode(),
+		At: time.Now().UTC(),
+		// Episode is NOT set here — Append owns it, from the argument below, so
+		// the field and the filename cannot disagree.
 		PID:        oncePID(),
 		PPID:       oncePPID(),
 		Cmd:        baseName(argv[0]),
@@ -179,6 +185,18 @@ func (r *recorder) writeEpisode(ctx context.Context, argv []string, status int, 
 	// defaulting the second to 0 is how an abstain becomes a pass.
 	if observed {
 		rec.Exit = &status
+
+		// A "negative answer" is not a failure. grep finding nothing, test
+		// being false, diff differing — counting those as failures would
+		// promote a pitfall saying grep is unreliable here, and in a real
+		// corpus they are 40% of every exit-1 there is.
+		//
+		// Computed directly rather than taken from the advisor, so it holds
+		// even when the advisor is switched off.
+		rec.Benign = status != 0 && isBenignExit(argv, status)
+	}
+	if diag != nil {
+		rec.Dimension, rec.Retryable = diag.dimension, diag.retryable
 	}
 
 	// Best effort by design: a record that cannot be written is a missed

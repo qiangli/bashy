@@ -218,3 +218,74 @@ func TestSubpathOfIsCoarse(t *testing.T) {
 		}
 	}
 }
+
+// TestBenignExitIsNotAFailure — grep finding nothing is a negative ANSWER, not
+// an error. In a real corpus 40% of every exit-1 is exactly this, so counting
+// them would promote a pitfall claiming grep is unreliable on this machine.
+func TestExecHistBenignExitIsNotAFailure(t *testing.T) {
+	rec, logDir, _ := testRecorder(t)
+	h := execHistHandler(rec)
+	inner := func(context.Context, []string) error { return interp.ExitStatus(1) }
+
+	_ = h(inner)(context.Background(), []string{"grep", "needle", "haystack"})
+	_ = h(inner)(context.Background(), []string{"go", "test", "./..."})
+	_ = rec.log.Close()
+
+	recs, _, _ := execlog.Read(logDir, execlog.Query{})
+	if len(recs) != 2 {
+		t.Fatalf("want 2 records, got %d", len(recs))
+	}
+	byCmd := map[string]execlog.Record{}
+	for _, r := range recs {
+		byCmd[r.Cmd] = r
+	}
+	if !byCmd["grep"].Benign {
+		t.Error("grep exit 1 must be marked benign")
+	}
+	if byCmd["go"].Benign {
+		t.Error("go test exit 1 is a real failure, not benign")
+	}
+}
+
+// TestDiagnosisIsHandedOver — the advisor's dimension must reach the record.
+// Without it a pitfall says "this exits 1 here", which is noise; with it the
+// pitfall says WHY, which is actionable.
+func TestExecHistDiagnosisIsHandedOver(t *testing.T) {
+	ctx, slot := withDiagSlot(context.Background())
+	if diagFrom(ctx) != slot {
+		t.Fatal("slot must be retrievable from the context")
+	}
+	slot.recordDiagnosis(&hint{dimension: "network", retryable: false})
+	if slot.dimension != "network" || slot.retryable {
+		t.Errorf("diagnosis not carried: %+v", slot)
+	}
+	// A second, vaguer pass must not overwrite a specific one.
+	slot.recordDiagnosis(&hint{dimension: "state", retryable: true})
+	if slot.dimension != "network" {
+		t.Errorf("first diagnosis must win, got %q", slot.dimension)
+	}
+}
+
+// TestDiagnosisSlotAbsentIsSafe — when the recorder is off there is no slot,
+// and the advisor's hand-off must be a nil check rather than a panic.
+func TestExecHistDiagnosisSlotAbsentIsSafe(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("hand-off panicked with no slot: %v", r)
+		}
+	}()
+	diagFrom(context.Background()).recordDiagnosis(&hint{dimension: "disk"})
+}
+
+// TestClassifiedFoundNothingIsNotUnclassified — a nil hint means the advisor
+// looked and found nothing, which is a different claim from never looking.
+func TestExecHistClassifiedFoundNothing(t *testing.T) {
+	_, slot := withDiagSlot(context.Background())
+	slot.recordDiagnosis(nil)
+	if !slot.filled {
+		t.Error("a nil diagnosis must still mark the slot as classified")
+	}
+	if slot.dimension != "" {
+		t.Errorf("no dimension should be invented, got %q", slot.dimension)
+	}
+}
