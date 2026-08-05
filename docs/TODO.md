@@ -52,6 +52,17 @@
 
 ## Remaining Work — By Priority
 
+### Agent event subscriptions
+
+- [ ] Design and implement the event-driven `bashy await` conductor primitive
+      described in `docs/plan-bashy-await-events.md`: reuse `weave wait` and
+      ycode's NDJSON turn boundary, add native file/process/remote-unit event
+      sources, emit one stable NDJSON envelope, and provide bounded polling only
+      as a declared compatibility backstop. Completion includes proving that the
+      owning conductor can receive and act on the event. An idle live session
+      may be rewoken through its host, but printing after the session process has
+      terminated cannot resurrect it.
+
 ### P0: Parser Fixes (blocking entire test files)
 
 - [x] `+=` compound assignment in arithmetic ternary: `$((cond ? val : x+=2))`
