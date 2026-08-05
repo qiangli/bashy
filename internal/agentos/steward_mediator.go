@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -80,28 +81,78 @@ type stewardMediator struct {
 // doing the expensive thing it reports that there was nothing cheaper and the
 // supervisor falls back to the free mechanical notice.
 func resolveStewardMediator(name string, band, stewardBand int) (*stewardMediator, string) {
+	if strings.TrimSpace(name) != "" {
+		sel, err := selectStewardAgent(name, "", 0)
+		if err != nil {
+			return nil, fmt.Sprintf("no mediator: %v", err)
+		}
+		c := sel.Chosen
+		return &stewardMediator{Agent: c.Name, Nick: c.Nick, Binding: c.Binding, Band: c.Band, Billing: c.Billing}, ""
+	}
+
 	if band == 0 {
 		band = stewardMediatorBand
 	}
-	sel, err := selectStewardAgent(name, "", bandOrZero(name, band))
-	if err != nil {
-		return nil, fmt.Sprintf("no mediator: %v", err)
+	// CHEAPEST ADEQUATE, NOT STRONGEST ADEQUATE — and the difference is the
+	// whole feature.
+	//
+	// selectStewardAgent ranks for the SEAT, where "any operable agent at L2 or
+	// above" correctly means the best one available. Reusing it here inverted
+	// the mediator's purpose: --mediator-band 2 resolved to an L4 frontier
+	// agent, which then failed the "must be below the steward's band" check and
+	// disabled triage entirely. The first live run reported exactly that and it
+	// would never have shown up in a unit test, because in isolation the
+	// selector was doing precisely what it was written to do.
+	//
+	// So the mediator sorts ASCENDING by band: the weakest agent that clears the
+	// floor, then the cheapest at the margin. `band` is a floor on competence,
+	// not a target.
+	cands, why := stewardMediatorCandidates(band, stewardBand)
+	if len(cands) == 0 {
+		return nil, "no mediator: " + why
 	}
-	c := sel.Chosen
-	if stewardBand > 0 && c.Band >= stewardBand && !sel.Explicit {
-		return nil, fmt.Sprintf("no mediator: the cheapest routable agent (%s, L%d) is not below the steward's own band (L%d) — "+
-			"triage would cost what it saves", c.Name, c.Band, stewardBand)
-	}
+	c := cands[0]
 	return &stewardMediator{Agent: c.Name, Nick: c.Nick, Binding: c.Binding, Band: c.Band, Billing: c.Billing}, ""
 }
 
-// bandOrZero suppresses the band selector when an explicit agent was named —
-// selectStewardAgent refuses both at once, by design.
-func bandOrZero(name string, band int) int {
-	if strings.TrimSpace(name) != "" {
-		return 0
+// stewardMediatorCandidates returns the agents eligible to triage, cheapest
+// first: band >= floor, band < the steward's own, operable, and not budget-blocked.
+func stewardMediatorCandidates(floor, stewardBand int) ([]stewardCandidate, string) {
+	sel, err := selectStewardAgent("", "", floor)
+	if err != nil {
+		return nil, err.Error()
 	}
-	return band
+	all := append([]stewardCandidate{sel.Chosen}, sel.Runners...)
+
+	var out []stewardCandidate
+	for _, c := range all {
+		if stewardBand > 0 && c.Band >= stewardBand {
+			continue
+		}
+		out = append(out, c)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Sprintf("every routable agent at L%d+ is at or above the steward's own band (L%d) — "+
+			"triage would cost what it saves", floor, stewardBand)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return lessStewardMediator(out[i], out[j]) })
+	return out, ""
+}
+
+// lessStewardMediator is deliberately the INVERSE of the seat's band ordering.
+// Weakest-that-qualifies first, then the cheaper billing class, then the lower
+// marginal cost, then name for determinism.
+func lessStewardMediator(a, b stewardCandidate) bool {
+	if a.Band != b.Band {
+		return a.Band < b.Band
+	}
+	if ra, rb := billingRank(a.Billing), billingRank(b.Billing); ra != rb {
+		return ra < rb
+	}
+	if a.MarginalCostMicro != b.MarginalCostMicro {
+		return a.MarginalCostMicro < b.MarginalCostMicro
+	}
+	return a.Name < b.Name
 }
 
 // mediate turns new mail into a short digest, or returns "" to fall back.

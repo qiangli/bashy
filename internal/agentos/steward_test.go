@@ -114,8 +114,38 @@ func TestMediatorRefusesToMatchTheStewardsBand(t *testing.T) {
 	if m != nil {
 		t.Skip("this host has no fleet catalog to resolve against")
 	}
-	if !strings.Contains(why, "not below") && !strings.Contains(why, "no mediator") {
+	if !strings.Contains(why, "cost what it saves") && !strings.Contains(why, "no mediator") {
 		t.Errorf("the refusal did not explain itself: %q", why)
+	}
+}
+
+// REGRESSION (found by the first live run): the mediator must pick the CHEAPEST
+// agent that clears the floor, not the strongest.
+//
+// It originally reused the SEAT's ranking, which is strongest-first by design.
+// So `--mediator-band 2` resolved to an L4 frontier agent, which then failed the
+// "must be below the steward's band" check and disabled triage entirely — the
+// feature was off on every host, and no unit test saw it because in isolation
+// the seat selector was doing exactly what it was written to do.
+func TestMediatorOrderingIsCheapestFirstNotStrongest(t *testing.T) {
+	weak := stewardCandidate{Name: "weak", Band: 2, Billing: fleet.BillingFlat}
+	strong := stewardCandidate{Name: "strong", Band: 3, Billing: fleet.BillingFlat}
+	if !lessStewardMediator(weak, strong) {
+		t.Error("the mediator ordering preferred the STRONGER agent — that is the seat's rule, " +
+			"and using it here is what silently disabled triage")
+	}
+	// And it must be the exact inverse of the seat's ordering on band alone.
+	if !lessStewardCandidate(strong, weak) {
+		t.Error("the seat ordering no longer prefers the stronger agent; the two rules have drifted together")
+	}
+}
+
+// A NAMED --mediator-agent is honoured without the band comparison: naming one
+// is the operator overriding the economics, and selectStewardAgent refuses
+// --agent and --band together, which is what the original code tripped over.
+func TestMediatorAcceptsAnExplicitAgentName(t *testing.T) {
+	if _, why := resolveStewardMediator("definitely-not-a-real-agent", 2, 4); !strings.Contains(why, "no mediator") {
+		t.Errorf("an unknown named mediator should report why, got %q", why)
 	}
 }
 
@@ -167,13 +197,13 @@ func TestMediatorDigestCoverageIsCounted(t *testing.T) {
 // between a predecessor's unanswered seat mail and board chatter.
 func TestMailNoticeIsAPointerAndSeparatesTheChannels(t *testing.T) {
 	w := &stewardMailWatch{topic: "steward.host", subscriber: "someone"}
-	w.seenSeat, w.seenBoard = 10, 20
+	w.seenSeat, w.seenBoard = map[string]struct{}{}, map[string]struct{}{}
 
-	seat := []bus.Pending{{Seq: 11, Body: "SECRET SEAT BODY"}, {Seq: 12, Body: "another"}}
-	board := []bus.Pending{{Seq: 21, Body: "SECRET BOARD BODY"}}
-	newSeat, _ := newerThan(seat, w.seenSeat)
-	newBoard, _ := newerThan(board, w.seenBoard)
-	w.nSeat, w.nBoard = len(newSeat), len(newBoard)
+	seat := []bus.Pending{{Seq: 11, TS: "t1", Body: "SECRET SEAT BODY"}, {Seq: 12, TS: "t1", Body: "another"}}
+	board := []bus.Pending{{Seq: 21, TS: "t1", Body: "SECRET BOARD BODY"}}
+	w.newSeat = unannounced(seat, w.seenSeat)
+	w.newBoard = unannounced(board, w.seenBoard)
+	w.nSeat, w.nBoard = len(w.newSeat), len(w.newBoard)
 
 	notice := stewardNoticeFor(w)
 	if strings.Contains(notice, "SECRET") {
@@ -192,15 +222,59 @@ func TestMailNoticeIsAPointerAndSeparatesTheChannels(t *testing.T) {
 // those messages at all — the delivery is lost silently, which is the exact
 // shape of failure the seat inbox exists to prevent.
 func TestMailWatchCommitsOnlyAfterDelivery(t *testing.T) {
-	w := &stewardMailWatch{}
-	items := []bus.Pending{{Seq: 7}}
-	_, w.pendSeat = newerThan(items, w.seenSeat)
-	if w.seenSeat != 0 {
-		t.Fatal("polling advanced the cursor before the notice was delivered")
+	w := &stewardMailWatch{seenSeat: map[string]struct{}{}, seenBoard: map[string]struct{}{}}
+	items := []bus.Pending{{Seq: 7, TS: "t1"}}
+	w.newSeat = unannounced(items, w.seenSeat)
+	if len(w.newSeat) != 1 {
+		t.Fatalf("the item was not seen as new: %d", len(w.newSeat))
+	}
+	if len(unannounced(items, w.seenSeat)) != 1 {
+		t.Fatal("polling marked the item announced before the notice was delivered")
 	}
 	w.commit()
-	if w.seenSeat != 7 {
-		t.Errorf("commit did not advance the cursor: %d", w.seenSeat)
+	if len(unannounced(items, w.seenSeat)) != 0 {
+		t.Error("commit did not mark the delivered item announced")
+	}
+}
+
+// REGRESSION (found by a live run, and it made the whole mail plane silently
+// dead): A SEQUENCE NUMBER IS ONLY A CURSOR WITHIN ONE UNBROKEN TIMELINE.
+//
+// The watch originally primed to max(seq) and reported anything above it. On a
+// real host the seat's pending file held Aug-3 entries at seq 3300 while
+// messages sent minutes earlier carried LOWER seqs — the bus timeline had been
+// reset, so seqs restarted from the bottom. The cursor pinned itself above
+// everything the future could produce and the watch went permanently blind:
+// no error, no warning, a channel that simply never had mail in it.
+func TestMailWatchSurvivesASequenceReset(t *testing.T) {
+	// The inbox at prime time: one ancient message carrying a HIGH seq.
+	old := []bus.Pending{{Seq: 3300, TS: "2026-08-03T18:19:59Z", Body: "ancient"}}
+	seen := idSet(old)
+
+	// A message that arrives now, after the timeline reset — lower seq, later time.
+	fresh := append(append([]bus.Pending{}, old...),
+		bus.Pending{Seq: 12, TS: "2026-08-05T20:42:01Z", Body: "SMOKE"})
+
+	got := unannounced(fresh, seen)
+	if len(got) != 1 {
+		t.Fatalf("a post-reset message with a LOWER seq was not reported as new (%d found) — "+
+			"this is the bug that made the nudge silently dead on a real host", len(got))
+	}
+	if got[0].Body != "SMOKE" {
+		t.Errorf("wrong message reported: %q", got[0].Body)
+	}
+}
+
+// The identity must distinguish two records that share a seq but not a time,
+// and must not re-announce one that matches on both.
+func TestPendingIdentityUsesSeqAndTime(t *testing.T) {
+	a := bus.Pending{Seq: 3300, TS: "2026-08-03T18:19:59Z"}
+	b := bus.Pending{Seq: 3300, TS: "2026-08-05T20:42:01Z"}
+	if pendingID(a) == pendingID(b) {
+		t.Error("two records sharing a seq across a reset collapsed to one identity")
+	}
+	if len(unannounced([]bus.Pending{a}, idSet([]bus.Pending{a}))) != 0 {
+		t.Error("an already-announced record was reported again")
 	}
 }
 

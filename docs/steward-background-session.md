@@ -258,14 +258,84 @@ AssumeRoom,ReleaseRoom,HolderName,Assignment}` (the seat-room lifecycle the host
 owns but must not reimplement) and `chat.SessionOptions.AllowUnsafe` (the
 session equivalent of `chat --yolo`, for a session nobody sits at).
 
+## What the live run found (2026-08-05, dragon)
+
+Eight `start → mail → stop` cycles against real agents (codex-gpt-5.5,
+ycode-gpt5.6-terra). **Every one of the following was a defect the automated
+tests did not and could not catch**, which is the argument for running the thing
+rather than testing around it.
+
+1. **The wrap-up could never work.** The agent session ran on the same context
+   that carries the stop signal, so SIGTERM terminated the agent's process tree
+   *before* the wrap-up said "asking for a handoff note". Every stop fell
+   through to the mechanical fallback while reporting that it had tried — a
+   success path reached by the absence of the thing it was supposed to produce.
+   Fixed by splitting `stopCtx` from `sessCtx`; the wrap-up now also states
+   plainly when the agent was already gone.
+2. **A mail nudge could stall the heartbeat.** `WaitIdle` ran in the same select
+   as the heartbeat ticker, so a busy agent blocked the pulse for up to
+   `--nudge-wait` (10 min) and the seat would lapse while its holder was
+   healthy — inverting the supervisor's entire purpose. Fixed: the mail watch is
+   its own goroutine, and liveness is checked on a separate 5s ticker.
+3. **The mediator was off on every host.** It reused the seat's
+   *strongest-first* ranking, so `--mediator-band 2` resolved to an L4, failed
+   the "must be below the steward's band" check, and disabled triage. Fixed with
+   a dedicated cheapest-first ordering; live runs now select `ycode-glm-5.2`
+   (L2) under a `codex-gpt-5.5` (L4) steward.
+4. **A room could be opened and never closed.** `EnsureRoom` reused a
+   predecessor's saved contact, but meet lets only the *organizer* change a
+   roster — so `stop` reported `room ... could not be closed` and the host went
+   on advertising a live channel to a seat nobody held. Fixed by recording
+   `role.Contact.Holder` and opening a fresh room when it differs.
+5. **A silent watcher.** A delivered nudge logged nothing, so "delivered" and
+   "never fired" were indistinguishable. Three rounds of live guessing went into
+   that. The watch now announces when it arms (and what it primed against),
+   when mail is seen, when it is delivered, and when push is not reaching the
+   tool at all.
+
+Also confirmed, and worth knowing:
+
+- **A full disk killed an agent mid-session and produced no useful error.** The
+  host was at 446 MB free; the agent exited ~4s after launch and the Go build
+  failed inside the linker. This is exactly the case the steward skill's
+  resource-health rule exists for — *do not trust evidence gathered under
+  resource exhaustion*. 14 GB of derived Go build cache was reclaimed and the
+  same run then worked.
+- **`--yolo` is required for ycode's steerable launch.** Its template carries
+  `--danger-skip-permissions` and the launch guard correctly refuses it
+  otherwise. This is the flag doing its job, not a bug.
+- **Push does not reach a continuously-repainting TUI.** codex never goes quiet
+  for the 25s silence window, so no nudge is ever delivered to it. The mail is
+  not lost — it queues, and the agent reads it on its next `bashy steward
+  inbox` — but the supervisor now says so once rather than retrying in silence.
+  Only a tool that *reports* `turn.end` gets reliable push
+  (`docs/first-party-harness.md`).
+
+## Verified vs not
+
+**Verified live:** install; selection with its cost/quota explanation; the L3
+band warning; claim-vs-takeover routing; room open and close; the handoff survey
+in its fresh and stale branches; detached spawn and supervisor lifecycle; the
+launch guard and `--yolo`; mediator selection; **mail detected and delivered to
+a live agent** (`mail — 1 seat` → `delivered a mail notice`); `stop` and
+`stop --force`; the wrap-up's honesty about an absent agent; the mechanical
+fallback note; the stop-outcome file; stale-record clearing.
+
+**Not verified:** the **message-board** channel has never been observed
+non-zero. The cause is below this feature: on the test host the bus timeline had
+been reset, so new messages reuse sequence numbers that already exist in the
+persisted buffer (13 lines carrying 3 distinct seqs, 10 of them `3300`), and the
+buffer's seq-dedup then drops them. `bashy steward inbox` shows the message
+because it resolves live; the persisted view does not. That is a `pkg/bus`
+defect worth filing on its own — the steward watch is already independent of
+seq ordering and of the read flag, and must not grow a workaround for it.
+
+Seat-channel detection is therefore **intermittent on this host** for the same
+reason: proven once end to end, not reproducible while the seq collisions
+persist.
+
 ## Known gaps
 
-- **No live end-to-end run is recorded here.** The command surface, selection,
-  brief, wrap-up wording, mediator guard and platform builds are covered by
-  tests and by cross-builds for linux/windows; a full start → mail → stop cycle
-  against a real agent has not been performed and must be before this is
-  claimed as verified. Per `docs/absence-of-evidence.md`, this line stays until
-  someone runs it.
 - **Windows has no graceful stop.** There is no SIGTERM to ask with, so
   `stewardTermSignals()` is empty there and a stop is a kill — the wrap-up does
   not run. Returning `os.Kill` would be worse (uncatchable). A record-file
@@ -273,3 +343,6 @@ session equivalent of `chat --yolo`, for a session nobody sits at).
 - **`mediator` is not yet a bus address.** Making it a role alias resolving to
   the steward seat topic would let `bashy mb send --to mediator` reach the
   host's point of contact — one seat, two names — and is a small follow-up.
+- **The bus seq collision above.** Until it is fixed, push delivery on this host
+  is best-effort; pull (`steward inbox` / `mb`) is unaffected and is what the
+  bootstrap brief tells the agent to rely on.

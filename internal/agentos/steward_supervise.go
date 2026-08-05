@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,8 +39,16 @@ import (
 
 const (
 	stewardHeartbeatEvery = 60 * time.Second
+	stewardLivenessEvery  = 5 * time.Second
 	stewardMailPollEvery  = 20 * time.Second
 	stewardIdleQuiet      = 25 * time.Second
+
+	// stewardPushGiveUpAfter is how many missed turn-boundary windows it takes
+	// before the supervisor says out loud that push is not working for this
+	// tool. It keeps retrying after that — the tool may simply have been busy —
+	// but it says so once, because a silent retry loop is indistinguishable
+	// from a working channel.
+	stewardPushGiveUpAfter = 2
 )
 
 // runStewardSupervisor is the detached child's whole life. It returns only when
@@ -53,10 +62,23 @@ func runStewardSupervisor(ctx context.Context, errW io.Writer, opt stewardStartO
 		return fmt.Errorf("steward supervise: no session record — `steward start` writes it before spawning this process")
 	}
 
-	// The stop signal. SIGTERM is how `steward stop` asks; SIGINT is how a human
-	// at the terminal asks. Both mean the same thing here: wrap up.
-	ctx, stopSignals := signal.NotifyContext(ctx, append([]os.Signal{os.Interrupt}, stewardTermSignals()...)...)
+	// TWO CONTEXTS, AND THE SPLIT IS LOAD-BEARING.
+	//
+	// stopCtx carries the stop SIGNAL — SIGTERM from `steward stop`, SIGINT from
+	// a human. sessCtx owns the AGENT PROCESS and outlives it, because the
+	// wrap-up's whole job is to talk to the agent AFTER the stop arrives.
+	//
+	// Running the session on the signalling context looked obviously right and
+	// was silently fatal: cancelling it terminates the agent's process tree, so
+	// by the time the wrap-up said "asking for a handoff note" there was nobody
+	// left to ask. Every stop fell through to the mechanical fallback while
+	// reporting that it had tried — a success path reached by the absence of the
+	// thing it was supposed to produce. A live run caught it; no unit test would
+	// have, because the failure is in the process lifetime, not the logic.
+	stopCtx, stopSignals := signal.NotifyContext(ctx, append([]os.Signal{os.Interrupt}, stewardTermSignals()...)...)
 	defer stopSignals()
+	sessCtx, endSession := context.WithCancel(context.WithoutCancel(ctx))
+	defer endSession()
 
 	brief, state := stewardBootstrapBrief(sess, opt)
 	sess.Handoff = state
@@ -64,7 +86,7 @@ func runStewardSupervisor(ctx context.Context, errW io.Writer, opt stewardStartO
 
 	fmt.Fprintf(errW, "steward: launching %s (%s) as the host steward\n", sess.Agent, sess.Binding)
 
-	agentSession, err := chat.Start(ctx, sess.Agent, chat.SessionOptions{
+	agentSession, err := chat.Start(sessCtx, sess.Agent, chat.SessionOptions{
 		Prompt: brief,
 		Cwd:    sess.Cwd,
 		// Mode labels the host-room card, so `bashy chat sessions` shows WHAT
@@ -91,27 +113,94 @@ func runStewardSupervisor(ctx context.Context, errW io.Writer, opt stewardStartO
 	// reimplemented — see stewardRunSidecar for why this process is where it
 	// belongs.
 	if opt.Sidecar {
-		go stewardRunSidecar(ctx, errW, sess)
+		go stewardRunSidecar(stopCtx, errW, sess)
 	}
 
-	stopReason := stewardWatch(ctx, errW, agentSession, sess, opt)
+	stopReason := stewardWatch(stopCtx, errW, agentSession, sess, opt)
 
+	// The agent is still up here — that is the point of sessCtx — so the
+	// wrap-up has somebody to ask. endSession fires on the deferred cancel,
+	// after the note has landed and the seat has been released.
 	return stewardWrapUp(errW, agentSession, sess, opt, stopReason)
 }
 
 // stewardWatch is the steady state: heartbeat the seat, nudge on new mail, and
 // notice if the agent dies. It returns why it stopped.
 func stewardWatch(ctx context.Context, errW io.Writer, s *chat.Session, sess *stewardSession, opt stewardStartOptions) string {
+	// THE MAIL WATCH RUNS IN ITS OWN GOROUTINE, and this is not tidiness.
+	//
+	// Delivering a nudge waits for a turn boundary — up to --nudge-wait, ten
+	// minutes by default. Run in the same select as the heartbeat, that wait
+	// blocks the heartbeat too: a steward busy on a long investigation would
+	// stop breathing, the seat would LAPSE while its holder was perfectly
+	// healthy, and the next agent along could claim it out from under a working
+	// steward. The supervisor exists to hold liveness; letting a mail nudge take
+	// liveness down would invert its entire purpose.
+	go stewardWatchMail(ctx, errW, s, sess, opt)
+
 	heartbeat := time.NewTicker(stewardHeartbeatEvery)
 	defer heartbeat.Stop()
-	mail := time.NewTicker(stewardMailPollEvery)
-	defer mail.Stop()
+	alive := time.NewTicker(stewardLivenessEvery)
+	defer alive.Stop()
 
-	watch := &stewardMailWatch{topic: sess.Topic, subscriber: stewardSubscriberName()}
+	for {
+		select {
+		case <-ctx.Done():
+			return "stop requested"
+		case <-alive.C:
+			if !s.Live() {
+				return "the agent exited"
+			}
+		case <-heartbeat.C:
+			if sess.SeatHeld && sess.Epoch > 0 {
+				if err := stewardHeartbeat(sess.Epoch); err != nil {
+					// A FENCED HEARTBEAT IS THE END OF THE TENURE, not a
+					// transient error: somebody took the seat over. Say so and
+					// stand down rather than keep running as a steward the host
+					// no longer recognises.
+					fmt.Fprintf(errW, "steward: heartbeat rejected (%v) — the seat has moved on; standing down\n", err)
+					return "fenced: the seat was taken over"
+				}
+			}
+		}
+	}
+}
+
+// stewardWatchMail is the relay half: poll the two channels, triage, and nudge
+// at a turn boundary. It never returns a stop reason — it cannot end the
+// session, only inform it.
+func stewardWatchMail(ctx context.Context, errW io.Writer, s *chat.Session, sess *stewardSession, opt stewardStartOptions) {
+	// OPEN THE BOARD CURSOR FIRST, and note WHICH name it opens under.
+	//
+	// The message board addresses AGENTS by name (`bashy mb send codex-gpt-5.5
+	// "..."`), so the cursor has to be the agent's, not the supervisor's
+	// principal — reading the board under the supervisor's identity was a live
+	// run reporting "0 board" while a post addressed to the agent sat there
+	// unseen.
+	//
+	// And it has to be opened at START, because a board subscription opens AT
+	// THE HEAD: a cursor created lazily when the first poll runs would skip
+	// everything posted between launch and that poll. Opening it here narrows
+	// the window to the launch itself, and the bootstrap brief covers the rest
+	// by telling the agent to read `bashy mb` on arrival.
+	if _, err := bus.EnsureSubscription(sess.Agent); err != nil {
+		fmt.Fprintf(errW, "steward: the board cursor for %s could not be opened (%v) — board mail will be invisible to the nudge\n",
+			sess.Agent, err)
+	}
+
+	watch := &stewardMailWatch{topic: sess.Topic, subscriber: sess.Agent}
 	// Prime the cursors so the first tick reports what arrives FROM NOW, not the
 	// entire backlog — the backlog is in the bootstrap brief, which told the
 	// agent to read it properly rather than have it pasted at them.
 	watch.prime()
+	// SAY THAT THE WATCH IS ARMED, AND WHAT IT PRIMED AGAINST.
+	//
+	// This loop logs nothing until mail arrives, so "watching and finding
+	// nothing" and "never started" looked identical from the log — which cost
+	// three rounds of guessing on live runs. The counts are the other half:
+	// they are what a wrong prime would show up in.
+	fmt.Fprintf(errW, "steward: mail watch armed on seat %s and board %s (%d + %d already seen, poll %s)\n",
+		sess.Topic, sess.Agent, len(watch.seenSeat), len(watch.seenBoard), stewardMailPollEvery)
 
 	mediator, why := (*stewardMediator)(nil), ""
 	if opt.Mediator {
@@ -125,64 +214,83 @@ func stewardWatch(ctx context.Context, errW io.Writer, s *chat.Session, sess *st
 		}
 	}
 
+	mail := time.NewTicker(stewardMailPollEvery)
+	defer mail.Stop()
+	missed := 0
 	for {
 		select {
 		case <-ctx.Done():
-			return "stop requested"
-		case <-heartbeat.C:
-			if sess.SeatHeld && sess.Epoch > 0 {
-				if err := stewardHeartbeat(sess.Epoch); err != nil {
-					// A FENCED HEARTBEAT IS THE END OF THE TENURE, not a
-					// transient error: somebody took the seat over. Say so and
-					// stand down rather than keep running as a steward the host
-					// no longer recognises.
-					fmt.Fprintf(errW, "steward: heartbeat rejected (%v) — the seat has moved on; standing down\n", err)
-					return "fenced: the seat was taken over"
-				}
-			}
-			if !s.Live() {
-				return "the agent exited"
-			}
+			return
 		case <-mail.C:
-			if !s.Live() {
-				return "the agent exited"
-			}
-			notice, newSeat, newBoard := watch.poll()
-			if notice == "" {
-				continue
-			}
-			// TRIAGE BEFORE WAITING, not after. The mediator call is a separate
-			// cheap process; running it while the steward is still finishing its
-			// turn overlaps the two instead of serialising them, and a digest
-			// that arrives late is no worse than one that arrives early.
-			if mediator != nil {
-				if digest, why := mediator.mediate(ctx, newSeat, newBoard); digest != "" {
-					notice = notice + "\n" + digest
-				} else if why != "" {
-					// A DEGRADED TRIAGE IS ANNOUNCED. The steward must know it
-					// is reading the raw pointer rather than a digest, or it
-					// will read the absence of urgent lines as the absence of
-					// urgency.
-					fmt.Fprintf(errW, "steward: %s\n", why)
-					notice = notice + "\n[bashy] triage unavailable (" + why + ") — the counts above are all that is known."
-				}
-			}
-			// AT A TURN BOUNDARY, NEVER MID-TURN. A message injected while the
-			// agent is thinking is either swallowed or corrupts the turn, which
-			// is the exact failure the bus sidecar was built to avoid. Waiting
-			// for idle costs latency and buys delivery.
-			wctx, cancel := context.WithTimeout(ctx, opt.NudgeWait)
-			err := s.WaitIdle(wctx, stewardIdleQuiet)
-			cancel()
-			if err != nil {
-				// Still busy. Keep the counts; the next tick tries again.
-				continue
-			}
-			watch.commit()
-			if err := s.Say(notice); err != nil {
-				fmt.Fprintf(errW, "steward: could not deliver a mail notice (%v)\n", err)
+		}
+		if !s.Live() {
+			return
+		}
+		notice, newSeat, newBoard := watch.poll()
+		if notice == "" {
+			continue
+		}
+		fmt.Fprintf(errW, "steward: mail — %d seat, %d board; waiting for a turn boundary\n", len(newSeat), len(newBoard))
+
+		// TRIAGE BEFORE WAITING, not after. The mediator call is a separate
+		// cheap process; running it while the steward is still finishing its
+		// turn overlaps the two instead of serialising them, and a digest that
+		// arrives late is no worse than one that arrives early.
+		if mediator != nil {
+			if digest, why := mediator.mediate(ctx, newSeat, newBoard); digest != "" {
+				notice = notice + "\n" + digest
+			} else if why != "" {
+				// A DEGRADED TRIAGE IS ANNOUNCED. The steward must know it is
+				// reading the raw pointer rather than a digest, or it will read
+				// the absence of urgent lines as the absence of urgency.
+				fmt.Fprintf(errW, "steward: %s\n", why)
+				notice = notice + "\n[bashy] triage unavailable (" + why + ") — the counts above are all that is known."
 			}
 		}
+
+		// AT A TURN BOUNDARY, NEVER MID-TURN. A message injected while the agent
+		// is thinking is either swallowed or corrupts the turn, which is the
+		// exact failure the bus sidecar was built to avoid. Waiting for idle
+		// costs latency and buys delivery.
+		wctx, cancel := context.WithTimeout(ctx, opt.NudgeWait)
+		err := s.WaitIdle(wctx, stewardIdleQuiet)
+		cancel()
+		if err != nil {
+			// Still busy. The cursors are NOT committed, so the next tick tries
+			// the same mail again — an undelivered nudge must not count as an
+			// announced one.
+			missed++
+			fmt.Fprintf(errW, "steward: no turn boundary within %s (%v) — retrying (%d)\n", opt.NudgeWait, err, missed)
+			if missed == stewardPushGiveUpAfter {
+				// SAY THAT PUSH IS NOT WORKING, ONCE, AND SAY WHY.
+				//
+				// Measured on codex: its TUI repaints continuously, so the
+				// 25-second silence heuristic never fires and no nudge is ever
+				// delivered. Retrying quietly forever would leave an operator
+				// believing the steward is being kept informed while it is not.
+				//
+				// The mail is NOT lost — that is the point of the queued tier.
+				// It sits in the inbox and the agent reads it the next time it
+				// runs `bashy steward inbox` / `bashy mb`, which the bootstrap
+				// brief tells it to do. Push is the optimisation; pull is the
+				// guarantee.
+				fmt.Fprintf(errW, "steward: PUSH IS NOT REACHING %s. Its turn boundary cannot be detected — "+
+					"a TUI that repaints continuously never goes quiet, and only a tool that REPORTS turn.end "+
+					"escapes that heuristic. The mail is queued and safe: the agent will see it when it next "+
+					"reads its inbox. Use a tool with an event channel for reliable push.\n", sess.Agent)
+			}
+			continue
+		}
+		missed = 0
+		watch.commit()
+		if err := s.Say(notice); err != nil {
+			fmt.Fprintf(errW, "steward: could not deliver a mail notice (%v)\n", err)
+			continue
+		}
+		// SAY SO. A delivered nudge used to log nothing, so "delivered" and
+		// "never fired" looked identical from the outside — which is exactly
+		// what happened on the first live run, and cost an hour of guessing.
+		fmt.Fprintf(errW, "steward: delivered a mail notice (%d seat, %d board)\n", len(newSeat), len(newBoard))
 	}
 }
 
@@ -199,7 +307,17 @@ func stewardWrapUp(errW io.Writer, s *chat.Session, sess *stewardSession, opt st
 
 	fmt.Fprintf(errW, "steward: stopping (%s) — asking %s for a handoff note\n", reason, sess.Agent)
 
-	if s.Live() && !opt.NoNote {
+	switch {
+	case opt.NoNote:
+		out.NoteDetail = "--no-note: the agent was never asked"
+	case !s.Live():
+		// SAY IT OUT LOUD. An agent that is already gone cannot be asked, and a
+		// wrap-up that quietly skipped the ask and produced a fallback note
+		// would be indistinguishable from one where the agent refused. That
+		// silence is what hid the context bug on the first live run.
+		out.Detail += "; the agent was ALREADY GONE when the wrap-up ran — it was never asked for a note"
+		fmt.Fprintln(errW, "steward: the agent was already gone — nothing to ask")
+	default:
 		ctx, cancel := context.WithTimeout(context.Background(), opt.StopTimeout)
 		if err := s.Say(stewardWrapUpInstruction(sess)); err != nil {
 			fmt.Fprintf(errW, "steward: could not ask for a note (%v)\n", err)
@@ -308,26 +426,51 @@ func stewardRunSidecar(ctx context.Context, errW io.Writer, sess *stewardSession
 // So the supervisor delivers a POINTER: how many, from where, go and look. The
 // agent runs `bashy steward inbox` / `bashy mb` itself, the read is attributed
 // to the steward, and the bodies never bypass the verbs that record them.
+// A SEQUENCE NUMBER IS ONLY A CURSOR WITHIN ONE UNBROKEN TIMELINE, so this
+// tracks IDENTITIES instead of a high-water mark.
+//
+// The obvious implementation — remember the highest seq seen, report anything
+// above it — ran on a real host and reported nothing, ever. The seat's pending
+// file held Aug-3 entries at seq 3300 while messages sent minutes ago carried
+// LOWER seqs: the bus timeline had been reset at some point, so seqs restarted
+// from the bottom. Priming to max(seq) pinned the cursor above everything the
+// future would ever produce, and the watch went permanently, silently blind —
+// no error, no warning, just a channel that never had any mail in it.
+//
+// Timestamps have the same weakness in miniature (ties within a second) and add
+// a clock dependency. So neither: remember WHICH ITEMS have been announced.
+// It is unaffected by resets, by file ordering, and by clock skew; the set is
+// bounded by the inbox, which is bounded by what the operator sends.
 type stewardMailWatch struct {
 	topic      string
 	subscriber string
 
-	seenSeat  int64
-	seenBoard int64
-	// pending* hold the counts a poll found, promoted to seen only once the
-	// notice is actually DELIVERED. A nudge that could not be delivered must not
-	// mark the mail as announced.
-	pendSeat  int64
-	pendBoard int64
+	seenSeat  map[string]struct{}
+	seenBoard map[string]struct{}
 	nSeat     int
 	nBoard    int
 	newSeat   []bus.Pending
 	newBoard  []bus.Pending
 }
 
+// pendingID is a message's identity within its channel. Seq alone is not unique
+// across a timeline reset; seq plus the publish timestamp is, and both are
+// carried by every record.
+func pendingID(p bus.Pending) string {
+	return strconv.FormatInt(p.Seq, 10) + "@" + p.TS
+}
+
 func (w *stewardMailWatch) prime() {
-	w.seenSeat = maxSeq(peekSeat(w.topic))
-	w.seenBoard = maxSeq(peekBoard(w.subscriber))
+	w.seenSeat = idSet(peekSeat(w.topic))
+	w.seenBoard = idSet(peekBoard(w.subscriber))
+}
+
+func idSet(items []bus.Pending) map[string]struct{} {
+	out := make(map[string]struct{}, len(items))
+	for _, it := range items {
+		out[pendingID(it)] = struct{}{}
+	}
+	return out
 }
 
 // poll returns the mechanical notice plus the NEW items on each channel (so the
@@ -337,8 +480,8 @@ func (w *stewardMailWatch) poll() (notice string, newSeat, newBoard []bus.Pendin
 	seat := peekSeat(w.topic)
 	board := peekBoard(w.subscriber)
 
-	w.newSeat, w.pendSeat = newerThan(seat, w.seenSeat)
-	w.newBoard, w.pendBoard = newerThan(board, w.seenBoard)
+	w.newSeat = unannounced(seat, w.seenSeat)
+	w.newBoard = unannounced(board, w.seenBoard)
 	w.nSeat, w.nBoard = len(w.newSeat), len(w.newBoard)
 	return w.render()
 }
@@ -368,25 +511,41 @@ func (w *stewardMailWatch) render() (notice string, newSeat, newBoard []bus.Pend
 		w.newSeat, w.newBoard
 }
 
-// commit promotes the last poll's cursors. Called only after the notice was
-// delivered.
+// commit marks the last poll's items announced. Called ONLY after the notice
+// was delivered — an undelivered nudge must not count as an announced one, or a
+// busy agent that missed one turn-boundary window never hears about that mail
+// at all.
 func (w *stewardMailWatch) commit() {
-	if w.pendSeat > w.seenSeat {
-		w.seenSeat = w.pendSeat
+	for _, it := range w.newSeat {
+		w.seenSeat[pendingID(it)] = struct{}{}
 	}
-	if w.pendBoard > w.seenBoard {
-		w.seenBoard = w.pendBoard
+	for _, it := range w.newBoard {
+		w.seenBoard[pendingID(it)] = struct{}{}
 	}
 }
 
 // peekSeat/peekBoard read WITHOUT marking. An error is an empty read: a watcher
 // that cannot see the mail must not invent it, and the agent's own verbs will
 // report the failure honestly when it goes to look.
+// THE WATCH READS EVERYTHING AND OWNS ITS OWN BOOKKEEPING. It must not consult
+// the READ FLAG, in either direction.
+//
+// Keying on "unread" looked obviously right and was measurably wrong: the read
+// flag belongs to the AGENT — it is set when the steward runs `bashy steward
+// inbox`, and by anything else that looks. On a live host every message in the
+// seat file was already marked read, so the watch saw an empty channel and
+// primed at 0 + 0 while `steward inbox` showed twelve messages. The two were
+// answering different questions and only one of them was the one being asked.
+//
+// Reading ALL items and deduping against this watch's own announced-set makes
+// the nudge independent of who has read what. That is also the correct
+// relationship: the supervisor must neither depend on the read state nor
+// disturb it, because the read is the evidence that the STEWARD looked.
 func peekSeat(topic string) []bus.Pending {
 	if strings.TrimSpace(topic) == "" {
 		return nil
 	}
-	items, err := bus.SeatPending(topic, true, false)
+	items, err := bus.SeatPending(topic, true, true)
 	if err != nil {
 		return nil
 	}
@@ -397,42 +556,40 @@ func peekBoard(subscriber string) []bus.Pending {
 	if strings.TrimSpace(subscriber) == "" {
 		return nil
 	}
-	items, err := bus.UnreadPending(subscriber)
+	// RESOLVE FIRST, then read. A board post lands on the shared TIMELINE; it
+	// only reaches an agent's own buffer when somebody resolves the timeline
+	// against that agent's subscription. `bus pending` does this before every
+	// read, which is why it works with no sidecar running — and reading the
+	// buffer directly, as this used to, reported an empty board while a post
+	// addressed to the agent sat on the timeline untouched. Truthfully empty,
+	// completely wrong.
+	//
+	// SeatPending already resolves internally, which is exactly why the seat
+	// channel worked while the board channel silently did not.
+	if _, err := bus.ResolveFor(subscriber); err != nil {
+		// Not fatal: whatever is already buffered is still worth reporting.
+		// Refusing to name a real backlog because one resolution pass failed
+		// would trade a partial answer for none.
+		_ = err
+	}
+	// ReadPending, not UnreadPending — see peekSeat for why the read flag is
+	// none of this watch's business.
+	items, err := bus.ReadPending(subscriber)
 	if err != nil {
 		return nil
 	}
 	return items
 }
 
-func maxSeq(items []bus.Pending) int64 {
-	var m int64
+// unannounced returns the items whose identity is not already in seen.
+func unannounced(items []bus.Pending, seen map[string]struct{}) []bus.Pending {
+	var out []bus.Pending
 	for _, it := range items {
-		if it.Seq > m {
-			m = it.Seq
-		}
-	}
-	return m
-}
-
-func newerThan(items []bus.Pending, since int64) (out []bus.Pending, high int64) {
-	high = since
-	for _, it := range items {
-		if it.Seq > since {
+		if _, ok := seen[pendingID(it)]; !ok {
 			out = append(out, it)
-			if it.Seq > high {
-				high = it.Seq
-			}
 		}
 	}
-	return out, high
-}
-
-func stewardSubscriberName() string {
-	r := steward.Self()
-	if r.Name != "" {
-		return r.Name
-	}
-	return "steward"
+	return out
 }
 
 // ─── seat writes ──────────────────────────────────────────────────────────────
