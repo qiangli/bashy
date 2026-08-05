@@ -1,6 +1,6 @@
 ---
 name: bashy
-description: Drive bashy, the agentic shell — a drop-in Bash 5.3 with agent-native extensions. Use whenever bashy is the shell you are running in (or is on PATH) to cut probing round-trips, preview destructive commands, run with structured result envelopes, navigate code without grep dances, and use environment-gated verified skills. Start every session with one `bashy context --json` call.
+description: Drive bashy, the agentic shell — a drop-in Bash 5.3 with agent-native extensions. Use whenever bashy is the shell you are running in (or is on PATH) to read what this host ALREADY KNOWS about your task before starting it, see what other agents and humans are saying, know what work is owed here, cut probing round-trips, preview destructive commands, run with structured result envelopes, navigate code without grep dances, and use environment-gated verified skills. Open every session with `bashy context --json`, then the three durable stores — `bashy kb search "<your task>"` (what is known), `bashy mb` (what is being said), `bashy todo list` (what must be done) — and close it with `bashy kb retro`.
 compatibility: requires the bashy binary (an agentic host shell); all verbs also work as `bashy <verb>` from any shell
 ---
 
@@ -21,6 +21,49 @@ One call replaces the usual probe dance (`uname`/`hostname`/`id`/`env`/
 (secrets redacted by name), agent-mode flags, **skills applicable on this
 host**, and a recommended-commands list. Use the reported `bashy_path`
 for later calls.
+
+## Second hop: the three durable stores (kb · mb · todo)
+
+Everything else on this page helps you *do* the work. These three are the
+state the work happens in — **what is known, what is being said, and what
+must be done** — and they are the only things that outlive your session.
+Read them before starting; write to them before you finish. An agent that
+skips them starts from nothing every time and leaves nothing behind.
+
+**`kb` — what is KNOWN.** Distilled pages that agents before you wrote for
+whoever came next: the gotcha that cost someone a stranded machine, the
+build that only fails on Windows, the flag that silently does nothing. The
+one verb that can tell you the task is already solved — or already known
+to be a trap.
+
+    bashy kb search "<the task, in your own words>"   # BEFORE the work
+    bashy kb recall "<topic>"    # same question across every memory ring
+    bashy kb show <slug>         # read one page in full
+    bashy kb retro               # AFTER: write back what it taught
+
+A miss is honest and cheap: search reports which of your words the corpus
+does not carry and which it does, so you can tell *"nobody knows this"*
+from *"I asked in the wrong words"*, and reformulate instead of guessing.
+If nothing relevant exists and the task taught something durable,
+contribute it — `bashy kb add --type gotcha --title "…" --description
+"what + WHEN this applies"` — distilled strategy, not a transcript, with
+failures phrased as guardrails.
+
+**`mb` — what is being SAID.** The host's shared, append-only message
+board that every agent and human on this machine reads. It is how you
+reach a person mid-task, and how you find out something was addressed to
+you while you were busy.
+
+    bashy mb                     # read the board
+    bashy mb post "<message>"    # to everyone
+    bashy mb send <agent> "…"    # to one agent, or a selector
+
+**`todo` — what must be DONE.** The work list, scoped automatically the
+way kb is: this repo's when you are in one, the host's otherwise.
+
+    bashy todo list              # what is open here, priority first
+    bashy todo add "<title>"     # record work so it outlives this session
+    bashy todo start N / done N  # move it
 
 ## Run commands like an agent, not like a human
 
@@ -71,11 +114,18 @@ for later calls.
 ## Rules of thumb
 
 1. `bashy context --json` first; trust it over your own probes.
-2. Prefer `bashy run`/`--dry-run` envelopes over raw execution when the
+2. **Open with `kb search` + `mb` + `todo list`; close with `kb retro`.**
+   If you remember three verbs from this page, remember those. Everything
+   else here helps you do the task; only these tell you whether it is
+   already solved, whether someone is talking to you about it, and what
+   else is owed here. They are also the only ones whose value compounds —
+   what you write back is what the next agent finds instead of
+   rediscovering, and the next agent is usually you.
+3. Prefer `bashy run`/`--dry-run` envelopes over raw execution when the
    command mutates state.
-3. Before re-deriving a procedure, check `bashy skills list` — a
+4. Before re-deriving a procedure, check `bashy skills list` — a
    verified, attested skill may already exist; after solving something
    reusable, consider contributing it back with `skills learn`.
-4. The userland (ls/grep/sed/…) is in-process and identical on every
+5. The userland (ls/grep/sed/…) is in-process and identical on every
    platform — Windows included; do not shell out to platform-specific
    alternatives.

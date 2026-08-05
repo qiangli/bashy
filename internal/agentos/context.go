@@ -120,6 +120,31 @@ type contextCaps struct {
 	// them on the first hop instead of re-deriving by search.
 	CodeGraph      bool `json:"code_graph"`
 	KnowledgeGraph bool `json:"knowledge_graph"`
+	// The three DURABLE STORES an agent inherits and leaves behind: what is
+	// KNOWN (kb), what is being SAID (mb), and what must be DONE (todo).
+	//
+	// They are grouped because they are one idea. Everything else bashy offers
+	// helps an agent DO the work; these three are the state the work happens in,
+	// and they are the only things that outlive a session. An agent that never
+	// touches them begins every session from nothing and leaves nothing for the
+	// next one — which four days of telemetry showed is exactly what happened:
+	// 61,084 dispatched commands, and one attempt to read the store.
+	//
+	// KnowledgeBase (kb search/recall/add/retro) is the host-shared, cross-repo
+	// memory: distilled pages agents wrote for whoever came next, plus the
+	// cross-ring read surface over them. Advertised separately from
+	// knowledge_graph because they are different stores — the graph is per-repo
+	// and contribution-shaped, kb is per-host and claim-shaped.
+	//
+	// MessageBoard (mb / mb post / mb send) is the host's shared append-only
+	// board: how an agent reaches a human or a peer mid-task, and how it finds
+	// out something was said to it.
+	//
+	// Todo (todo list/add/start/done) is the work list, scoped automatically the
+	// way kb is — the repo's when in one, the host's otherwise.
+	KnowledgeBase bool `json:"knowledge_base"`
+	MessageBoard  bool `json:"message_board"`
+	Todo          bool `json:"todo"`
 	// CoachReflex: the LLM-free loop-detection reflex is auto-attached to every
 	// weave/invoke/delegate run (off with BASHY_NO_COACH). Advertised so an agent
 	// knows its delegated work is loop-protected without invoking anything — the
@@ -233,9 +258,39 @@ func fillContext(report contextReport, bashyPath string) contextReport {
 		InProcessUserland: true,
 		CodeGraph:         true,
 		KnowledgeGraph:    true,
+		KnowledgeBase:     true,
+		MessageBoard:      true,
+		Todo:              true,
 		CoachReflex:       chat.ReflexEnabled(),
 	}
 	report.RecommendedCommands = []contextCommand{
+		// kb leads this list deliberately, and the reason is measured rather
+		// than asserted. Four days of telemetry: 61,084 dispatched commands, 36
+		// kb pages holding knowledge whose trigger situations demonstrably
+		// arose (8 of 10 probed pages), and exactly ONE agent reaching for the
+		// store unprompted — with a verb that did not exist, so it exited 1 and
+		// never tried again. Successful agent uses: zero.
+		//
+		// The cause was not the store; it was this list. `context --json` is
+		// documented as the FIRST call an agent makes, it recommended eight
+		// commands, and not one of them mentioned kb. An agent that did exactly
+		// what bashy told it to do was never told the memory existed.
+		//
+		// So: first entry, both halves of the loop, and the read comes before
+		// the write because that is the order the work happens in.
+		// kb / mb / todo lead this list as a SET, and the grouping is the point:
+		// they are the three things that do not survive a session boundary —
+		// what is KNOWN, what is being SAID, and what must be DONE. Every other
+		// verb here helps do the work; these three are the state the work
+		// happens in, and an agent that never touches them starts every session
+		// from nothing and leaves nothing behind.
+		{Purpose: "WHAT IS ALREADY KNOWN about this task — run BEFORE starting; other agents on this host left it for you", Command: bashyPath + " kb search QUERY"},
+		{Purpose: "same question across EVERY memory ring (kb + capabilities), one envelope", Command: bashyPath + " kb recall QUERY"},
+		{Purpose: "write back what THIS task taught — run AFTER finishing; validate/correct what you consulted, never blind-append", Command: bashyPath + " kb retro"},
+		{Purpose: "WHAT IS BEING SAID on this host — the shared message board every agent and human reads; check for messages addressed to you", Command: bashyPath + " mb"},
+		{Purpose: "say something to everyone (or one agent: mb send AGENT ...) — how you reach a human or a peer mid-task", Command: bashyPath + " mb post MESSAGE"},
+		{Purpose: "WHAT MUST BE DONE here — the work list, repo-scoped automatically; read it before deciding what to do next", Command: bashyPath + " todo list"},
+		{Purpose: "record work so it outlives this session (todo start/done to move it)", Command: bashyPath + " todo add TITLE"},
 		{Purpose: "preview destructive script safely", Command: bashyPath + " --dry-run SCRIPT"},
 		{Purpose: "agent-readable dry-run manifest", Command: "BASHY_AGENTIC=1 " + bashyPath + " --dry-run SCRIPT"},
 		{Purpose: "script preflight", Command: bashyPath + " check --agent --script SCRIPT"},

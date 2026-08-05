@@ -88,7 +88,6 @@ import (
 	"github.com/qiangli/coreutils/pkg/pair"
 	"github.com/qiangli/coreutils/pkg/policy/coord"
 	"github.com/qiangli/coreutils/pkg/principal"
-	"github.com/qiangli/coreutils/pkg/recall"
 	"github.com/qiangli/coreutils/pkg/role/meetroom"
 	"github.com/qiangli/coreutils/pkg/schedule"
 	"github.com/qiangli/coreutils/pkg/sdlc"
@@ -809,23 +808,6 @@ func Dispatch() {
 			os.Exit(craft.ExitCode(err))
 		}
 		os.Exit(0)
-	case "recall":
-		// The THIRD-PARTY read surface (coreutils/pkg/recall): "what is known
-		// about X" across every memory ring, for tools that are not bashy.
-		//
-		// Distinct from its two neighbours on purpose: `craft` answers "how do I
-		// do X" and composes a procedure; `kb` administers ONE ring; `recall`
-		// only READS, across all of them, and never composes. Its exit code is
-		// the contract third parties lean on — an empty answer is 0, only an
-		// unreadable ring is 1 — so a caller can always tell "nothing known"
-		// from "something broke". It exits from inside RunE for that reason.
-		cmd := recall.NewRecallCmd()
-		cmd.SetArgs(os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy recall:", err)
-			os.Exit(2) // usage; a broken ring exits 1 from inside the command
-		}
-		os.Exit(0)
 	case "kb":
 		// The host-shared knowledge base (coreutils/pkg/kb): the collective
 		// memory of all agents on this host across all repos — OKF-style
@@ -833,6 +815,7 @@ func Dispatch() {
 		// `add` when nothing relevant exists, `retro` (update/supersede/
 		// validate) after the task completes.
 		cmd := kb.NewKBCmd()
+		cmd.AddCommand(newKBRecallCmd())
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy kb:", err)
