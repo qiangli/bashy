@@ -56,9 +56,10 @@ bashy graph learn    [--dry-run] [--json]     stream  -> kb candidate pages
 bashy graph evidence <exec://...> [--json]    kb page -> back to the raw records
 ```
 
-`learn`, not `promote`: `bashy kb promote` already means candidate→validated,
-and two commands called promote doing different rungs of one ladder is a footgun
-in a surface an agent drives.
+`learn`, not `promote`: the candidate→validated rung is `bashy kb validate`,
+whose own help calls that act "promote" — and two verbs both meaning promote,
+doing different rungs of one ladder, is a footgun in a surface an agent drives.
+(There is no `bashy kb promote`.)
 
 ## The claim, and the round trip
 
@@ -82,7 +83,7 @@ them into the page would put 30k lines a day into a wiki whose index has to stay
 small enough to read.
 
 **Promotion is a candidate generator, never an author.** kb already has the
-ladder and `kb promote` requires evidence to climb it. A recorder able to mint
+ladder and `kb validate` requires evidence to climb it. A recorder able to mint
 validated knowledge is the confabulation vector with a store attached. The pipe
 also backs off — and says so — the moment a human validates or supersedes a
 page: a person's judgement outranks a recount.
