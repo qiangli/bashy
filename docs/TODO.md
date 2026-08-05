@@ -63,6 +63,18 @@
       may be rewoken through its host, but printing after the session process has
       terminated cannot resurrect it.
 
+### Quota stewardship
+
+- [ ] Evolve the existing `pkg/llmbudget` gate into **Quota Steward**
+      (`bashy ration`), following `docs/plan-quota-steward.md`: before
+      `chat`/`invoke`/`meet`/`foreman`/`weave` assigns work, acquire a
+      task-scoped capacity lease sized from provider evidence and historical
+      OTel usage; reserve checkpoint/handoff capacity; reconcile actual usage
+      each turn; and shrink, reroute, queue, or refuse work before a provider's
+      subscription reset disables an agent mid-mutation. Unknown subscription
+      capacity must stay explicitly unknown—never guessed as zero or unlimited—and
+      no subscription-to-metered-API overrun is implicit.
+
 ### P0: Parser Fixes (blocking entire test files)
 
 - [x] `+=` compound assignment in arithmetic ternary: `$((cond ? val : x+=2))`
