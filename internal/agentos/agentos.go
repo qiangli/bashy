@@ -1570,6 +1570,20 @@ func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 	if aw := newAuditWriter(); aw != nil {
 		mws = append(mws, auditHandler(aw, auditActor(), auditHost()))
 	}
+	// The agentic history recorder sits just inside audit and just outside the
+	// advisor. Inside audit because audit's chained record must remain the
+	// outermost account of what happened; outside the advisor because the
+	// advisor SPEAKS on failure while this one only WRITES, and a store that
+	// missed whatever the advisor did to the outcome would be recording a
+	// different command from the one that ran.
+	//
+	// It records every dispatched command (the TIME plane) and folds what each
+	// one taught about hosts, endpoints and accounts into the entity graph (the
+	// SPACE plane). Off entirely for interactive humans, and never linked into
+	// cmd/bash — WireExec returns above before any of this in posix mode.
+	if execHistEnabled() {
+		mws = append(mws, execHistHandler(newRecorder()))
+	}
 	if advisorEnabled() || hintsEnabled() {
 		a := newAdvisor()
 		if hintsEnabled() {

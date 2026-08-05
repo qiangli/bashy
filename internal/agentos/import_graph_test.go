@@ -33,11 +33,33 @@ func TestBinaryImportGraphsIsolateGfy(t *testing.T) {
 		t.Error("cmd/bash must not import coreutils — its import graph is disjoint from AgentOS")
 	}
 
+	// The execution planes ride the same rule. They record every command an
+	// agent dispatches, so a `bash` that linked them would be a pure Bash 5.3
+	// drop-in that quietly writes a history file — which is both a surprise and
+	// a privacy surface the drop-in never promised.
+	for _, pkg := range []string{
+		"qiangli/coreutils/pkg/execlog",
+		"qiangli/coreutils/pkg/spacegraph",
+	} {
+		if strings.Contains(bash, pkg) {
+			t.Errorf("cmd/bash must not import %s — the drop-in records nothing", pkg)
+		}
+	}
+
 	bashy := deps("github.com/qiangli/bashy/cmd/bashy")
 	if !strings.Contains(bashy, "qiangli/gfy") {
 		t.Error("cmd/bashy should import gfy — the code-graph feature must be wired in")
 	}
 	if !strings.Contains(bashy, "qiangli/coreutils/cmds/graph") {
 		t.Error("cmd/bashy should import cmds/graph — the graph verbs must be registered")
+	}
+	for _, pkg := range []string{
+		"qiangli/coreutils/pkg/execlog",
+		"qiangli/coreutils/pkg/spacegraph",
+	} {
+		if !strings.Contains(bashy, pkg) {
+			t.Errorf("cmd/bashy should import %s — an unwired recorder reads as coverage "+
+				"while providing none", pkg)
+		}
 	}
 }
