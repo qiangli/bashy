@@ -475,6 +475,10 @@ func Dispatch() {
 		for _, sub := range steward.NewStewardCmd().Commands() {
 			scmd.AddCommand(sub)
 		}
+		// RUNNING the seat, as opposed to recording it. Everything above reads
+		// or writes the journal; nothing above puts an agent on the host. See
+		// internal/agentos/steward.go.
+		scmd.AddCommand(newStewardStartCmd(), newStewardStopCmd())
 		scmd.SetArgs(os.Args[2:])
 		if err := scmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy steward:", err)
