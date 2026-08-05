@@ -152,7 +152,7 @@ func TestMediatorAcceptsAnExplicitAgentName(t *testing.T) {
 // THE MEDIATOR MAY SUMMARISE. IT MAY NOT FILTER.
 //
 // This is the whole safety property of putting a cheap agent between the host's
-// mail and its steward: a digest that does not account for every message is a
+// messages and its steward: a digest that does not account for every message is a
 // filter nobody authorised, and it fails in the direction where the steward
 // concludes there was nothing to hear. The count check is what makes that a
 // property rather than a hope.
@@ -188,15 +188,15 @@ func TestMediatorDigestCoverageIsCounted(t *testing.T) {
 	}
 }
 
-// THE NUDGE IS A POINTER, NOT THE MAIL.
+// THE NUDGE IS A POINTER, NOT THE MESSAGES.
 //
 // Both stores mark on read. If the supervisor drained them and pasted the
 // bodies, the inbox would show every message read by a process that is not the
 // steward, while the steward's own record showed it never looked. The two
 // channels are also reported separately: "4 messages" loses the distinction
-// between a predecessor's unanswered seat mail and board chatter.
-func TestMailNoticeIsAPointerAndSeparatesTheChannels(t *testing.T) {
-	w := &stewardMailWatch{topic: "steward.host", subscriber: "someone"}
+// between a predecessor's unanswered seat messages and board chatter.
+func TestMessageNoticeIsAPointerAndSeparatesTheChannels(t *testing.T) {
+	w := &stewardMsgWatch{topic: "steward.host", subscriber: "someone"}
 	w.seenSeat, w.seenBoard = map[string]struct{}{}, map[string]struct{}{}
 
 	seat := []bus.Pending{{Seq: 11, TS: "t1", Body: "SECRET SEAT BODY"}, {Seq: 12, TS: "t1", Body: "another"}}
@@ -216,13 +216,13 @@ func TestMailNoticeIsAPointerAndSeparatesTheChannels(t *testing.T) {
 	}
 }
 
-// A NUDGE THAT COULD NOT BE DELIVERED MUST NOT MARK THE MAIL AS ANNOUNCED.
+// A NUDGE THAT COULD NOT BE DELIVERED MUST NOT MARK THE MESSAGES AS ANNOUNCED.
 //
 // Otherwise a busy agent that missed one turn-boundary window never hears about
 // those messages at all — the delivery is lost silently, which is the exact
 // shape of failure the seat inbox exists to prevent.
-func TestMailWatchCommitsOnlyAfterDelivery(t *testing.T) {
-	w := &stewardMailWatch{seenSeat: map[string]struct{}{}, seenBoard: map[string]struct{}{}}
+func TestMessageWatchCommitsOnlyAfterDelivery(t *testing.T) {
+	w := &stewardMsgWatch{seenSeat: map[string]struct{}{}, seenBoard: map[string]struct{}{}}
 	items := []bus.Pending{{Seq: 7, TS: "t1"}}
 	w.newSeat = unannounced(items, w.seenSeat)
 	if len(w.newSeat) != 1 {
@@ -237,7 +237,7 @@ func TestMailWatchCommitsOnlyAfterDelivery(t *testing.T) {
 	}
 }
 
-// REGRESSION (found by a live run, and it made the whole mail plane silently
+// REGRESSION (found by a live run, and it made the whole message plane silently
 // dead): A SEQUENCE NUMBER IS ONLY A CURSOR WITHIN ONE UNBROKEN TIMELINE.
 //
 // The watch originally primed to max(seq) and reported anything above it. On a
@@ -245,8 +245,8 @@ func TestMailWatchCommitsOnlyAfterDelivery(t *testing.T) {
 // messages sent minutes earlier carried LOWER seqs — the bus timeline had been
 // reset, so seqs restarted from the bottom. The cursor pinned itself above
 // everything the future could produce and the watch went permanently blind:
-// no error, no warning, a channel that simply never had mail in it.
-func TestMailWatchSurvivesASequenceReset(t *testing.T) {
+// no error, no warning, a channel that simply never had anything in it.
+func TestMessageWatchSurvivesASequenceReset(t *testing.T) {
 	// The inbox at prime time: one ancient message carrying a HIGH seq.
 	old := []bus.Pending{{Seq: 3300, TS: "2026-08-03T18:19:59Z", Body: "ancient"}}
 	seen := idSet(old)
@@ -287,7 +287,7 @@ func TestBootstrapBriefBranchesOnTheNoteState(t *testing.T) {
 	brief, _ := stewardBootstrapBrief(sess, stewardStartOptions{StaleAfter: time.Hour})
 
 	// Whatever this host's handoff store holds, the brief must always load the
-	// role, name the seat, and point at the two mail verbs rather than paste mail.
+	// role, name the seat, and point at the two message verbs rather than paste them.
 	for _, want := range []string{"bashy steward skill", "bashy steward inbox", "bashy mb", "COUNT, never the contents"} {
 		if !strings.Contains(brief, want) {
 			t.Errorf("the bootstrap brief is missing %q", want)
@@ -346,7 +346,7 @@ func TestFallbackNoteDoesNotImpersonateABriefing(t *testing.T) {
 
 // stewardNoticeFor renders the notice from an already-counted watch, so the
 // wording can be tested without a live bus.
-func stewardNoticeFor(w *stewardMailWatch) string {
+func stewardNoticeFor(w *stewardMsgWatch) string {
 	notice, _, _ := w.render()
 	return notice
 }

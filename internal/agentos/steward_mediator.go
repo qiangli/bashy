@@ -25,7 +25,7 @@ import (
 //
 //   - A SEAT costs a lease, an epoch ladder, a room, a journal, a heartbeat, a
 //     takeover path and a handover contract. The steward needed all of that
-//     because it is ACCOUNTABLE. A mailbox is not accountable; it is a queue.
+//     because it is ACCOUNTABLE. A message queue is not accountable; it is a queue.
 //   - Two accountable seats on one host reopens the ownership question the
 //     steward skill spends pages closing. If a mediator decides what reaches the
 //     steward, it holds an authority the steward cannot audit — the steward would
@@ -40,8 +40,8 @@ import (
 // summarisation task, it is well inside an L2's competence, and it is the part
 // worth buying cheaply.
 //
-// So the mediator is a bounded ONE-SHOT invocation, fired only when new mail
-// arrives, at a low band, with a hard contract:
+// So the mediator is a bounded ONE-SHOT invocation, fired only when new messages
+// arrive, at a low band, with a hard contract:
 //
 //	IT SUMMARISES AND RANKS. IT NEVER FILTERS.
 //
@@ -61,7 +61,7 @@ const stewardMediatorBand = 2
 
 // stewardMediatorTimeout bounds the triage call. A mediator that is slow is
 // worse than no mediator: the steward is idle and waiting for a notice about
-// mail it could already have read.
+// messages it could already have read.
 const stewardMediatorTimeout = 90 * time.Second
 
 // stewardMediator is the resolved cheap agent, or nil when triage is off.
@@ -155,7 +155,7 @@ func lessStewardMediator(a, b stewardCandidate) bool {
 	return a.Name < b.Name
 }
 
-// mediate turns new mail into a short digest, or returns "" to fall back.
+// mediate turns new messages into a short digest, or returns "" to fall back.
 //
 // seat and board are the NEW items only. The mediator sees senders, topics and
 // bodies; what it returns is one line each plus an urgency call.

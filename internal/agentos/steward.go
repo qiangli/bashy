@@ -99,7 +99,7 @@ It is the verb that turns the seat from a record into a post. In order:
               instruction to investigate and WRITE one before doing anything
               else — that mending step is the steward's job, not a nicety.
   5. SUPERVISE it: heartbeat the seat, host the bus sidecar, and nudge the agent
-              at a turn boundary when mail arrives.
+              at a turn boundary when a message arrives.
 
 ALREADY RUNNING? Starting the same agent again prints its status and changes
 nothing. Starting a DIFFERENT one is refused unless --force, which stops the
@@ -137,12 +137,12 @@ incumbent (asking it for a note first) before taking over.`,
 			"STALLS on the first approval prompt rather than failing — take the keyboard with `bashy chat attach` "+
 			"if that happens, or start with this flag and let the room be the oversight")
 	f.BoolVar(&opt.Sidecar, "sidecar", true, "host the bus sidecar in the supervisor (free; it is what makes an interrupt reach a running turn)")
-	f.BoolVar(&opt.Mediator, "mediator", true, "triage new mail with a cheap low-band agent before nudging the steward")
-	f.StringVar(&opt.MediatorAgent, "mediator-agent", "", "use this agent for mail triage")
-	f.IntVar(&opt.MediatorBand, "mediator-band", 0, fmt.Sprintf("pick the mail-triage agent at this band (default %d; must be below the steward's)", stewardMediatorBand))
+	f.BoolVar(&opt.Mediator, "mediator", true, "triage new messages with a cheap low-band agent before nudging the steward")
+	f.StringVar(&opt.MediatorAgent, "mediator-agent", "", "use this agent for message triage")
+	f.IntVar(&opt.MediatorBand, "mediator-band", 0, fmt.Sprintf("pick the message-triage agent at this band (default %d; must be below the steward's)", stewardMediatorBand))
 	f.DurationVar(&opt.StaleAfter, "stale-after", stewardHandoffStale, "treat a handoff note older than this as a lead rather than a briefing")
 	f.DurationVar(&opt.StopTimeout, "stop-timeout", 5*time.Minute, "how long the wrap-up waits for the agent to write its note")
-	f.DurationVar(&opt.NudgeWait, "nudge-wait", 10*time.Minute, "how long a mail notice waits for a turn boundary before trying again")
+	f.DurationVar(&opt.NudgeWait, "nudge-wait", 10*time.Minute, "how long a message notice waits for a turn boundary before trying again")
 	f.StringVar(&opt.Cwd, "cwd", "", "working directory for the steward agent (default: here)")
 	f.BoolVar(&opt.AsJSON, "json", false, "emit the bashy-steward-session-v1 envelope")
 	f.BoolVar(&supervise, "supervise", false, "internal: run as the supervisor process (spawned by start)")
@@ -657,10 +657,10 @@ func stewardBootstrapBrief(sess *stewardSession, opt stewardStartOptions) (strin
 	if sess.Room != "" {
 		fmt.Fprintf(&b, " and in room %s", sess.Room)
 	}
-	b.WriteString(".\nA supervisor process heartbeats the seat for you and will tell you, between turns, when mail\n")
+	b.WriteString(".\nA supervisor process heartbeats the seat for you and will tell you, between turns, when a message\n")
 	b.WriteString("arrives. It tells you the COUNT, never the contents — read them yourself so the read is\n")
 	b.WriteString("recorded against you:\n")
-	b.WriteString("    bashy steward inbox        # mail addressed to the SEAT (including your predecessors')\n")
+	b.WriteString("    bashy steward inbox        # messages addressed to the SEAT (including your predecessors')\n")
 	b.WriteString("    bashy mb                   # the host message board\n\n")
 
 	// ── the note ──
@@ -712,11 +712,11 @@ func stewardBootstrapBrief(sess *stewardSession, opt stewardStartOptions) (strin
 	}
 
 	b.WriteString("THEN RUN YOUR LOOP (the skill has the full version):\n")
-	b.WriteString("  reconcile → read mail → partition authority → appoint conductors → monitor → verify → record.\n")
+	b.WriteString("  reconcile → read messages → partition authority → appoint conductors → monitor → verify → record.\n")
 	b.WriteString("Record what you do as you go — `bashy steward record`, `bashy steward decide`. A claim with\n")
 	b.WriteString("nothing to point at projects as UNKNOWN, and a claim nobody checked projects as ASSERTED.\n")
 	b.WriteString("Only `bashy steward verify` makes something verified.\n\n")
-	b.WriteString("Stay responsive. You will be interrupted with mail between turns; answer it. When you are\n")
+	b.WriteString("Stay responsive. You will be interrupted with messages between turns; answer them. When you are\n")
 	b.WriteString("asked to stand down, you will be told explicitly — write the handoff note then.\n")
 
 	return b.String(), state

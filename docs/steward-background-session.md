@@ -1,7 +1,7 @@
 # Running the steward: `bashy steward start` / `stop`
 
 Design of record for the two verbs that turn the steward seat from a *record*
-into a *post*, and for the mail plane that makes a background steward reachable.
+into a *post*, and for the message plane that makes a background steward reachable.
 
 Companion docs: `docs/one-agent-control.md` (the control surface every
 agent-driving verb uses), `docs/chat-interactive-launcher.md` (the governed
@@ -133,7 +133,7 @@ The investigation block is the same list in both the stale and missing cases:
 The question ("what is actually in flight here?") is identical; only the reason
 for asking differs.
 
-## The mail plane
+## The message plane
 
 A background steward is only useful if things can reach it. Three layers, and
 the split between them is the design.
@@ -151,7 +151,7 @@ The supervisor hosts it (`--sidecar`, default on). It is the one process a
 stewarded host keeps up for as long as it is attended, and it is already the
 thing whose agent the sidecar would be interrupting. It costs no tokens.
 
-### 2. The nudge — a pointer, never the mail
+### 2. The nudge — a pointer, never the messages
 
 The supervisor polls the seat inbox and the message board and tells the agent
 **counts and where to look**, at a turn boundary.
@@ -164,10 +164,10 @@ would report a healthy read side and nobody could tell that nothing had actually
 been considered. So the agent runs `bashy steward inbox` / `bashy mb` itself and
 the read is attributed to it.
 
-The two channels are always reported **separately**. The seat inbox is mail
+The two channels are always reported **separately**. The seat inbox holds messages
 addressed to the *role* and includes what predecessors were sent and never
 answered; the board is the host's public channel. "You have 4 messages" loses
-the only distinction that decides whether a predecessor's unanswered mail is
+the only distinction that decides whether a predecessor's unanswered messages are
 being read.
 
 A nudge that could not be delivered does **not** advance the cursor — otherwise
@@ -180,13 +180,13 @@ is blocked on a merge token; the rest is CI noise". That is a summarisation task
 well inside an L2's competence, and buying it cheaply is worth doing.
 
 It is a bounded **one-shot invocation** at a low band (`--mediator-band`,
-default 2), fired only when new mail arrives, read-only, not a standing agent.
+default 2), fired only when new messages arrive, read-only, not a standing agent.
 
 Why not a second seat:
 
 - A seat costs a lease, an epoch ladder, a room, a journal, a heartbeat, a
   takeover path and a handover contract. The steward needs all of that because
-  it is **accountable**. A mailbox is not accountable; it is a queue.
+  it is **accountable**. A message queue is not accountable; it is a queue.
 - Two accountable seats on one host reopens the ownership question the steward
   skill spends pages closing. If a mediator decides what reaches the steward, it
   holds an authority the steward cannot audit — the steward would then judge the
@@ -243,7 +243,7 @@ no longer recognises.
 |---|---|
 | `internal/agentos/steward.go` | the `start` / `stop` commands, the seat acquisition routing, the bootstrap brief and the wrap-up instruction |
 | `internal/agentos/steward_select.go` | cost/quota-aware agent selection and the band floor |
-| `internal/agentos/steward_supervise.go` | the supervisor: heartbeat, sidecar, mail watch, wrap-up, fallback note |
+| `internal/agentos/steward_supervise.go` | the supervisor: heartbeat, sidecar, message watch, wrap-up, fallback note |
 | `internal/agentos/steward_mediator.go` | the cheap triage function and its coverage guard |
 | `internal/agentos/steward_session.go` | the live-process record, the stop outcome, the handoff survey |
 | `internal/agentos/steward_proc_{unix,other}.go` | detach / alive-probe / signal, per platform |
@@ -260,7 +260,7 @@ session equivalent of `chat --yolo`, for a session nobody sits at).
 
 ## What the live run found (2026-08-05, dragon)
 
-Eight `start → mail → stop` cycles against real agents (codex-gpt-5.5,
+Eight `start → message → stop` cycles against real agents (codex-gpt-5.5,
 ycode-gpt5.6-terra). **Every one of the following was a defect the automated
 tests did not and could not catch**, which is the argument for running the thing
 rather than testing around it.
@@ -272,10 +272,10 @@ rather than testing around it.
    success path reached by the absence of the thing it was supposed to produce.
    Fixed by splitting `stopCtx` from `sessCtx`; the wrap-up now also states
    plainly when the agent was already gone.
-2. **A mail nudge could stall the heartbeat.** `WaitIdle` ran in the same select
+2. **A message nudge could stall the heartbeat.** `WaitIdle` ran in the same select
    as the heartbeat ticker, so a busy agent blocked the pulse for up to
    `--nudge-wait` (10 min) and the seat would lapse while its holder was
-   healthy — inverting the supervisor's entire purpose. Fixed: the mail watch is
+   healthy — inverting the supervisor's entire purpose. Fixed: the message watch is
    its own goroutine, and liveness is checked on a separate 5s ticker.
 3. **The mediator was off on every host.** It reused the seat's
    *strongest-first* ranking, so `--mediator-band 2` resolved to an L4, failed
@@ -290,7 +290,7 @@ rather than testing around it.
 5. **A silent watcher.** A delivered nudge logged nothing, so "delivered" and
    "never fired" were indistinguishable. Three rounds of live guessing went into
    that. The watch now announces when it arms (and what it primed against),
-   when mail is seen, when it is delivered, and when push is not reaching the
+   when a message is seen, when it is delivered, and when push is not reaching the
    tool at all.
 
 Also confirmed, and worth knowing:
@@ -305,7 +305,7 @@ Also confirmed, and worth knowing:
   `--danger-skip-permissions` and the launch guard correctly refuses it
   otherwise. This is the flag doing its job, not a bug.
 - **Push does not reach a continuously-repainting TUI.** codex never goes quiet
-  for the 25s silence window, so no nudge is ever delivered to it. The mail is
+  for the 25s silence window, so no nudge is ever delivered to it. The message is
   not lost — it queues, and the agent reads it on its next `bashy steward
   inbox` — but the supervisor now says so once rather than retrying in silence.
   Only a tool that *reports* `turn.end` gets reliable push
@@ -316,8 +316,8 @@ Also confirmed, and worth knowing:
 **Verified live:** install; selection with its cost/quota explanation; the L3
 band warning; claim-vs-takeover routing; room open and close; the handoff survey
 in its fresh and stale branches; detached spawn and supervisor lifecycle; the
-launch guard and `--yolo`; mediator selection; **mail detected and delivered to
-a live agent** (`mail — 1 seat` → `delivered a mail notice`); `stop` and
+launch guard and `--yolo`; mediator selection; **messages detected and delivered to
+a live agent** (`messages — 1 seat` → `delivered a message notice`); `stop` and
 `stop --force`; the wrap-up's honesty about an absent agent; the mechanical
 fallback note; the stop-outcome file; stale-record clearing.
 
