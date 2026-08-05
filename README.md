@@ -22,6 +22,27 @@ interpreter work. `bashy` is the user-facing shell; `sh` is the library.
 > being verified. As in Bash itself (`jobs.c` vs `nojobs.c`), OS-level job
 > control is a Unix feature.
 
+### POSIX conformance campaign identity
+
+Bashy's licensed Open Group campaign uses **VSC-PCTS2016 version 3.1** with the
+**VSC 5.4.1** framework/documentation, configured in the suite's **POSIX08**
+profile (`VSC_POSIX_VERSION=200809`) with the XSI/X/Open profile disabled
+(`VSC_XOPEN_VERSION=0`). The formal certification target for that suite is the
+**1003.1-2016 Shell and Utilities Product Standard**.
+
+That wording is deliberate. IEEE Std 1003.1-2017 is a later publication in the
+same POSIX.1-2008 / Issue 7 lineage, but it is not the Product Standard name for
+which VSC-PCTS2016 is authorized. Do not describe this campaign as a
+“VSC-PCTS2017” or “1003.1-2017 certification” run.
+
+Running the suite provides conformance evidence; it does **not** by itself make
+Bashy POSIX certified. Certification and use of an Open Group mark require a
+separate submission and approval. Current runs are diagnostic campaigns used to
+find and fix failures before an uninterrupted formal run. See
+[`docs/conformance-statement.md`](docs/conformance-statement.md) for claim scope
+and [`docs/vsc-pcts-run-status.md`](docs/vsc-pcts-run-status.md) for the
+public-safe measured status.
+
 ## Why
 
 - **No dependencies.** One binary. No `bash`, no shared libraries, no package

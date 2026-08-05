@@ -20,6 +20,14 @@ scenario is evidence; certification is a separate Open Group submission and
 approval process. The discipline here matters: *we claim only conformance we can
 verify and are permitted to publish.*
 
+The formal identity of the licensed campaign is **VSC-PCTS2016 version 3.1**,
+VSC release **5.4.1**, configured for **POSIX08**
+(`VSC_POSIX_VERSION=200809`) without XSI (`VSC_XOPEN_VERSION=0`). That suite is
+authorized for the **1003.1-2016 Shell and Utilities Product Standard**. The
+implementation claim above references POSIX.1-2017, a later publication in the
+same POSIX.1-2008 / Issue 7 lineage; it must not be used to rename the suite or
+the certification campaign as “VSC-PCTS2017” or “1003.1-2017 certification.”
+
 ## Scope
 
 In scope — what bashy owns and asserts conformance for:
