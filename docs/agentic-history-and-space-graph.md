@@ -1,7 +1,14 @@
 # Agentic history and the space graph
 
-**Status: P0 shipped.** The recorder, both stores, and the three read verbs are
-in. Promotion to durable claims (P1) and recipes (P2) are not.
+**Status: P0 + P1 + the kb pipe shipped (2026-08-05).** The recorder, both
+planes, the five read verbs, promotion into kb, and the evidence drill-down are
+in. Recipes are not, and are deliberately last.
+
+> **Read `../../docs/knowledge-substrate-reconciliation.md` first.** It corrects
+> the framing this document originally shipped with. `execlog` and `spacegraph`
+> are NOT stores of record: **kb is the one truth**, `execlog` and the OTel
+> spool are **streams** that feed it, and `spacegraph` is a **view**. Nothing
+> here is an answer on its own — the answer is a kb page.
 
 ## What it is
 
@@ -13,10 +20,11 @@ process that sees everything an agent does kept no usable record of it.
 
 This is that record — and it is two planes, not one:
 
-| Plane | Question | Store | Shareable |
-|---|---|---|---|
-| **TIME** — the episode journal | *what ran, in what order, with what outcome* | `~/.bashy/exec/<day>/<episode>.jsonl` | no |
-| **SPACE** — the entity graph | *what this environment IS, and how it connects* | `~/.bashy/skills/edges.jsonl` (`0600`) | **never** |
+| Plane | Question | Where | Layer | Shareable |
+|---|---|---|---|---|
+| **TIME** — the episode journal | *what ran, in what order, with what outcome* | `~/.bashy/exec/<day>/<episode>.jsonl` | stream | no |
+| **SPACE** — the entity graph | *what this environment IS, and how it connects* | `~/.bashy/skills/edges.jsonl` (`0600`) | view | **never** |
+| **CLAIM** — what it all amounts to | *what is known, and on what evidence* | `~/.bashy/kb/pages/*.md` | **truth** | yes, once validated |
 
 The second is the point. `ssh -p 2222 user@remote.host` is not remembered as a
 string; it teaches that **this host reached that endpoint, as that account** —
@@ -39,11 +47,45 @@ account:user@remote.host     account   out=0  in=1
 ## Verbs
 
 ```
-bashy graph history [--episode E] [--cmd C] [--since D] [--failed] [--limit N] [--json]
-bashy graph history --forget (--episode E | --before DURATION)
-bashy graph space   [--kind host|endpoint|account|repo|path|net] [--json]
-bashy graph reached [--json]
+bashy graph history  [--episode E] [--cmd C] [--since D] [--failed] [--limit N] [--json]
+bashy graph history  --graph            what usually follows what, and what fixes what
+bashy graph history  --forget (--episode E | --before DURATION)
+bashy graph space    [--kind host|endpoint|account|repo|path|net] [--json]
+bashy graph reached  [--json]
+bashy graph learn    [--dry-run] [--json]     stream  -> kb candidate pages
+bashy graph evidence <exec://...> [--json]    kb page -> back to the raw records
 ```
+
+`learn`, not `promote`: `bashy kb promote` already means candidate→validated,
+and two commands called promote doing different rungs of one ladder is a footgun
+in a surface an agent drives.
+
+## The claim, and the round trip
+
+`graph learn` writes one **candidate** page per pitfall the evidence supports —
+3 distinct sessions across 2 distinct days, no more recent success, excluding
+benign and opaque outcomes:
+
+```yaml
+type: gotcha
+title: go test ./hub/...
+description: fails on darwin (compute) — 3 failures across 3 sessions on 3 days
+tags: [exec-observed, go, compute]
+scope: {os: darwin}
+status: candidate                       # never `validated` — see below
+evidence: exec://2026-08-01..2026-08-04#n=3
+```
+
+The page holds the **claim**; `evidence` is an **address into the stream**, not a
+copy of it. `graph evidence exec://...` walks it back to the records. Copying
+them into the page would put 30k lines a day into a wiki whose index has to stay
+small enough to read.
+
+**Promotion is a candidate generator, never an author.** kb already has the
+ladder and `kb promote` requires evidence to climb it. A recorder able to mint
+validated knowledge is the confabulation vector with a store attached. The pipe
+also backs off — and says so — the moment a human validates or supersedes a
+page: a person's judgement outranks a recount.
 
 They live under `graph` because this is the **execution subgraph of the same
 knowledge graph** the code and wiki layers already sit in — same id space, same
@@ -97,6 +139,21 @@ lost:   88 records stamped but never flushed (process died)
 `Seq` is stamped at **creation**, not at flush, which is what makes that `lost`
 line countable instead of invisible.
 
+**The fade.** A claim outlives its evidence, on purpose. The stream is pruned on
+a retention policy; the kb page is not. So resolving an address whose records
+have aged out is not a failure — it is the answer, and `graph evidence` says so
+and exits 0:
+
+```
+evidence pruned — the claim stands, its records do not
+  exec://2026-07-02..2026-07-04#n=9
+```
+
+What must never happen is a claim quietly losing its provenance. A page that
+cannot say *"the records behind me were deleted"* is asserting something it can
+no longer support — the absence-of-evidence failure with a citation stapled to
+it.
+
 ## Limits, stated rather than hidden
 
 - **Builtins are invisible.** They never reach the ExecHandler, so `cd` — the
@@ -138,9 +195,14 @@ anything.
 
 | Path | What |
 |---|---|
-| `coreutils/pkg/execlog/` | TIME plane: record, writer, canonicaliser, prune |
+| `coreutils/pkg/execlog/` | TIME plane: record, writer, canonicaliser, prune, `Promote`, `Transitions` |
+| `coreutils/pkg/execlog/evidence.go` | the address into the stream, and the fade |
+| `coreutils/pkg/execlog/tokb.go` | the pipe: stream → kb candidate page |
 | `coreutils/pkg/spacegraph/` | SPACE plane: edges, bi-temporal store, `Observe` |
-| `coreutils/cmds/graph/space_verbs.go` | the three read verbs |
+| `coreutils/cmds/graph/space_verbs.go` | the five read/write verbs |
 | `bashy/internal/agentos/exechist.go` | the middleware |
+| `bashy/internal/agentos/exechist_diag.go` | the advisor→recorder diagnosis hand-off |
 
-Design of record: `../../docs/execution-knowledge-graph-design.md`.
+Design of record: `../../docs/knowledge-substrate-reconciliation.md` (the layer
+model, and what is still open), then
+`../../docs/execution-knowledge-graph-design.md` (the original node/edge design).

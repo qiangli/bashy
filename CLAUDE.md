@@ -12,7 +12,8 @@ package under `cmd/`, so their import graphs are disjoint:
   and interactive sessions with the same flags and semantics as `bash` 5.3,
   resolving external commands through `PATH` exactly as bash does. Its import
   graph **never includes coreutils** or any AgentOS surface, so it stays lean
-  (~8 MB vs. bashy's ~40 MB). **The compliance harness drives `bin/bash`, so
+  (measured 2026-08-05 on darwin/arm64: **6.2 MB vs. bashy's 81 MB**; see
+  §Binary size for where the difference goes). **The compliance harness drives `bin/bash`, so
   the conformance work measures this pure drop-in.**
 - **`bashy`** (`cmd/bashy`) — the **AgentOS system shell**: the same shell core
   plus the coreutils `shell.Handler()` ExecHandler (pure-Go userland
@@ -21,6 +22,11 @@ package under `cmd/`, so their import graphs are disjoint:
   gfy-backed, model-free), and its knowledge-graph CONTRIBUTION subcommands
   (graph note/link/observe/forget write · graph recall/notes/pitfalls read —
   a durable, shared, per-repo "agentic wiki" agents enrich; append-only store at the repo root),
+  and its EXECUTION subcommands (graph history/space/reached read · graph learn
+  writes what was observed into kb as CANDIDATE pages · graph evidence resolves a
+  page's pointer back to the raw records — the agentic replacement for the
+  interactive-only `history` builtin; see `docs/agentic-history-and-space-graph.md`
+  and, for the layer model, `../docs/knowledge-substrate-reconciliation.md`),
   in-process across
   Linux/macOS/Windows) and the front-door subcommands (`bashy weave …`,
   `bashy podman …`). It is the self-contained bootstrapper for a whole
@@ -111,7 +117,27 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
     `coreutils/scripts/embed-*.sh`). With the blobs, `bashy podman` is fully
     self-contained (no host podman); without them it falls back to a PATH podman.
     `cmd/bash` never gets these tags. Embedding the engine makes `bin/bashy` large
-    (~259 MB with blobs); `bin/bash` stays ~5.7 MB.
+    (~259 MB with blobs); `bin/bash` stays ~6 MB.
+
+    **Binary size — measured 2026-08-05, darwin/arm64, `make install` (meetspa
+    embed only, no engine blobs): `bashy` 81 MB, `bash` 6.2 MB.** The older
+    "~121 MB unix / ~47 MB Windows" figure below has not been re-measured since;
+    treat it as stale until `make dist` confirms it. Where the 75 MB goes, by
+    segment: `__rodata` 28.9 MB (vs 0.1 MB in `bash`), `__text` 20.7 MB,
+    `__gopclntab` 16.9 MB, `__DATA_CONST` 12.1 MB.
+
+    **The single largest item is one dependency: ~21.9 MB of tree-sitter grammar
+    tables.** A probe importing `coreutils/pkg/treesitter` is 24.3 MB against a
+    2.4 MB hello-world baseline. **Dead-code elimination does not help**, and the
+    obvious fix is a no-op: a probe referencing only `grammars.GoLanguage` builds
+    to the same 24.3 MB as one referencing all nine, because `//go:embed
+    grammar_blobs/*.bin` pulls the whole directory into one `embed.FS` regardless
+    of which loaders are called. Trimming `pkg/treesitter/languages.go` would save
+    zero bytes. Upstream already ships both tiers as build tags —
+    `-tags grammar_set_core` (100 langs) is 17.9 MB, `-tags grammar_blobs_external`
+    (read from disk) is 4.0 MB. Adopting them is a tracked item in
+    `docs/TODO.md` §Tree-sitter grammar tiering. **Verify any size claim by
+    measuring the binary, not by counting references.**
   - **Core vs ext / build profiles:** the default `cmd/bashy` is the **lean
     worker** — shell + coreutils userland + git + dag + `bashy go`
     (self-provisioning Go toolchain via `coreutils/external/gotoolchain` on
@@ -447,6 +473,7 @@ itself, which is pure Go).
 - `one-agent-control.md` — **the one control surface** every command that drives an agent CLI now steers through (`invoke` · `weave` · `meet` · `foreman`). `chat.Session` (Start/Say/WaitIdle/Turn) is the primitive — *Invoke is a question, Session is a conversation* — and it lives in `chat` because that is where `agentChildEnv` (secret scrub · single granted API key · shell-forcing · principal identity) lives. `agentpty` owns the wire (`TextFrame` = a sentence typed; `VerbatimFrame` = a keystroke), collapsing three divergent copies of one protocol. Why `meet --steerable` is a flag and not a default (a live turn under a THIRD-PARTY CLI has no boundary — it ends on silence, so it pays a quiet period out and a TUI startup in). **A tool that declares `events_arg:` escapes that**: it reports `turn.end` and bashy believes it, because that is a fact the agent asserted rather than a silence bashy interpreted — today only `ycode` does (see `first-party-harness.md`). Also: `foreman interrupt` (ESC as a real keystroke) — a queued message never reaches an agent stuck in a tool loop, because it reads its queue only between turns and that turn is never going to end. Read before any steering / `say` / `tell` / agent-launch work.
 - `chat-interactive-launcher.md` — **`bashy chat` as the governed front door** for launching a third-party agent CLI *interactively*: the tool's NATIVE UX (agentpty's raw-mode local-TTY passthrough, not a bashy REPL) but with the fleet-selected model, full `agentChildEnv` governance, and a live-sessions registry (`~/.bashy/sessions/`) that makes the launched agent ADDRESSABLE — `chat sessions`/`steer`/`interrupt`/`attach`, later coach/meet. Selection: `--agent NICK` (specific) or `--band N`/`--tool T` (any operable one, reusing `SeatByBand`). `invoke` stays the one-shot (*Invoke is a question, Session is a conversation* — finally implemented). ycode is special-cased (already bashy-native → just launches it with the resolved `--model`). Companion to `one-agent-control.md`. Read before any interactive-launch / session-registry / chat-mode work.
 - `absence-of-evidence.md` — **the day's real product, and the codebase's characteristic failure.** SEVEN instances in one day of ONE shape: *a success state reached by the absence of evidence.* Declared fields nothing writes (`ConversationMessage.Usage`, `ExemptFromMasking`, `StreamOptions`, `SessionTotalCost`, 3 config fields), caps that bind and exit 0, a pricing fallback that bills an unknown model at Claude's rate. Every one produced a PLAUSIBLE ANSWER THAT WAS NOT TRUE, and four of them nearly got recorded as facts about a MODEL. Also: the four times my own instruments lied (`cmd | head && echo OK` chains off head's exit; `rm` on a receiver's open file; a bad `pgrep` pattern; an OTLP receiver silently dropping span events). Read before trusting any green check.
+- `agentic-history-and-space-graph.md` — **the shipped agentic replacement for the `history` builtin, and the entity graph learned from it.** Two planes from one observation at the ExecHandler seam: TIME (`pkg/execlog`, every dispatched command, ordered, prunable) and SPACE (`pkg/spacegraph`, hosts/endpoints/accounts and the relations between them, bi-temporal, `0600`, **no export path — every node is identity**). `graph learn` pipes what the corpus supports into kb as **candidate** pages carrying an ADDRESS into the stream, not a copy; `graph evidence` walks it back, and reports honestly when the records have been pruned (the claim outlives its evidence). Load-bearing rules: time is never in a key (put a clock in one and the store silently fills with n=1 singletons); FAILURE TEACHES NOTHING (a transport failure is unattributed — correction is by supersession on positive evidence); every read verb prints its coverage. **Read `../docs/knowledge-substrate-reconciliation.md` first** — it demotes these two from "stores" to a stream and a view, with kb as the one truth.
 - `observability.md` — the shipped OTel plane. bashy could RUN a collector (`bashy otel`) and fed it NOTHING — it was the one tier of the whole stack missing from the umbrella's `service.name` set. Two primitives, chosen from what six hours of debugging could not see: **Provenance** (a value next to WHERE IT CAME FROM — the only bug caught by a signal was caught by `from_provider=false`) and **BoundHit** (a limit records when it BINDS — especially when the run recovers). Plus a span per command at the ExecHandler chokepoint, including the EXIT CODE. Stack trimmed 286 MB → 109 MB (−61%) by going Victoria-only: jaeger (2,240 deps) → VictoriaTraces, perses (1,478) → vmui, collector (833) → three proxy map entries, prometheus (556) → VictoriaMetrics. Pure standard OTEL env vars; unset endpoint is a total no-op; `cmd/bash` links none of it.
 - `audit-log.md` — the shipped compliance audit trail: a tamper-evident, hash-chained, secret-redacted record of every dispatched command with agent attribution and Command-Atlas effects (`bashy-audit-v1`; NIST AU-3/AU-9). Opt-in via `BASHY_AUDIT`, off by default, never in `cmd/bash` / `--posix`. Read side is `bashy audit {status,tail,verify,export,path}`; core is `coreutils/pkg/policy/audit`, the ExecHandler middleware is `internal/agentos/audit.go`. Records; does not block (policy engine) or contain (OS sandbox) — the un-bypassable record of the agentic+interactive command path, composes with auditd/EDR. Deferred: OTel export, signed checkpoints, gitleaks-grade redactor.
 - `fips-140.md` — the shipped FIPS 140-3 build mode: `make build-fips` (`GOFIPS140=v1.0.0`) builds both binaries against the Go Cryptographic Module (CMVP #5247); pure-Go, no cgo/BoringCrypto. Use `GODEBUG=fips140=on` (the build-fips default — keeps `md5sum` working), NOT `fips140=only` (rejects MD5) for a general shell. State surfaced in `bashy doctor` and `bashy context --json` (`runtime.fips140`). A FIPS-built `bin/bash` still passes 86/86. Pairs with the audit log for the FedRAMP/CMMC procurement story.
