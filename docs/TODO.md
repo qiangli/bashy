@@ -52,6 +52,54 @@
 
 ## Remaining Work — By Priority
 
+### Tree-sitter grammar tiering (measured 2026-08-05; ~20 MB of a ~81 MB binary)
+
+- [ ] **Two-tier the embedded tree-sitter grammars: embed only what bashy's own
+      toolchains need, fetch the rest on demand.** `pkg/treesitter/languages.go`
+      maps exactly **9** languages (go · python · javascript · typescript · tsx ·
+      rust · java · c · ruby), yet the binary carries parse tables for ~206.
+
+      **Do not start by writing code — upstream already has both tiers as build
+      tags**, and the first task is to evaluate them rather than reinvent them.
+      Measured on darwin/arm64 with a probe importing `pkg/treesitter`:
+
+      | build | size | vs default |
+      |---|---:|---:|
+      | default (`//go:embed grammar_blobs/*.bin`, ~206 langs) | 24.3 MB | — |
+      | `-tags grammar_set_core` (100 langs, incl. all 9 bashy uses) | 17.9 MB | **−6.4 MB** |
+      | `-tags grammar_blobs_external` (0 embedded, read from disk) | 4.0 MB | **−20.3 MB** |
+
+      Baseline for scale: a hello-world importing nothing is 2.4 MB, so the
+      grammar payload is ~21.9 MB — by far the largest single item in the binary
+      (`__rodata` is 28.9 MB in `bashy` vs 0.1 MB in `bash`).
+
+      **The trap that makes this worth doing at all:** dead-code elimination does
+      NOT help here. A probe referencing only `grammars.GoLanguage` builds to the
+      same 24.3 MB as one referencing all nine, because `//go:embed
+      grammar_blobs/*.bin` pulls the whole directory into one `embed.FS`
+      regardless of which loader functions are called. Trimming the map in
+      `languages.go` would save nothing — verify any proposed change by
+      MEASURING the binary, not by counting references.
+
+      Design questions to settle before implementing:
+      - `grammar_set_core` is the cheap win but still 100 languages for the 9 we
+        map. A genuinely minimal set needs either an upstream tag/PR or a
+        generated embed list on our side.
+      - `grammar_blobs_external` is the bigger win and matches the "fetch on
+        demand" half, but it makes `ast`/`graph` depend on blobs being present.
+        That must NOT become a network dependency at first use —
+        `pkg/atlas/localfirst_test.go` exists precisely to stop loop verbs
+        acquiring a `net` effect. Likely shape: ship the ~9 needed blobs in the
+        release archive (still self-contained, still offline), and fetch the
+        long tail through the existing binmgr download-on-demand path only when
+        a repo in an unembedded language is encountered.
+      - Decide what happens when a grammar is absent and cannot be fetched:
+        `ast`/`graph` must degrade with a stated limit, never silently report a
+        repo as having no symbols.
+
+      Reproduce the measurements with a throwaway module importing
+      `github.com/qiangli/coreutils/pkg/treesitter` and building under each tag.
+
 ### Agent event subscriptions
 
 - [ ] Design and implement the event-driven `bashy await` conductor primitive
