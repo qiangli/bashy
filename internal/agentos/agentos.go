@@ -137,7 +137,7 @@ var (
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
 	}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "git-scm", "curl"}
-	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "chat", "verify", "supervise"}
+	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "chat", "verify"}
 )
 
 func Preamble() string {
