@@ -62,6 +62,31 @@ public CI because VSC-PCTS is licensed. After that isolation gate passes,
 `make test-bash` in the harness restores the Bashy Go applets and checks shell
 integration before the larger command-and-utility campaign.
 
+### Product sequence and Bash++ activation
+
+Bashy ships two binaries through a three-stage product sequence:
+**`bash` → Bash++ → `bashy`**. `bash` is the compatible standalone shell;
+Bash++ is its opt-in language extension and the bridge to `bashy`; `bashy` is
+the complete shell, pure-Go userland, and agentic environment.
+
+| Invocation | Bash++ default | Agentic default |
+|---|---:|---:|
+| `bash` with `.sh`, `.bash`, or no extension | off | unavailable |
+| `bash` with `.bpp` | on | unavailable |
+| `bashy`, regardless of extension | on | on |
+
+Use `--bashpp` (canonical) or `--bash++` to opt in and `--no-bashpp` to opt
+out. `BASHY_BASHPP=1|0` supplies the environment default; `set -o bashpp` and
+`set +o bashpp` change the mode for subsequently parsed input. Bashy's agentic
+surface is independently controlled by `--agentic` / `--no-agentic` and
+`BASHY_AGENTIC=1|0`.
+
+Precedence is **explicit CLI → environment → `.bpp` extension → binary
+default**. Because extended grammar must be selected before a file is parsed,
+an in-file `set -o bashpp` cannot enable new syntax retroactively in an
+already-parsed file. Use a flag, environment setting, `.bpp`, or
+`#!/usr/bin/env -S bash --bashpp` for initial selection.
+
 ## Why
 
 - **No dependencies.** One binary. No `bash`, no shared libraries, no package

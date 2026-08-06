@@ -75,13 +75,38 @@ argued. This is a permanent regression test, and it closes a loop: **the conform
 guards the language, and the language is what makes the conformance suite's own records
 structured.** The two halves of the uplift check each other.
 
-Consequently there is **no script pragma** and no opt-in friction — extensions are simply on
-in bashy's default mode. Two gates remain, both host-level rather than script-level:
+Activation follows the two-binary product boundary. The standalone `bash`
+binary defaults to strict Bash 5.3 behavior for `.sh`, `.bash`, and
+extensionless files; Bash++ is opt-in there. A `.bpp` file opts in by default.
+The complete `bashy` binary defaults both Bash++ and its agentic surface on for
+every filename, with independent opt-outs.
 
-1. **`--posix` / `set -o posix` turns everything off.** This is what a certification run uses.
-2. **The engine is shared.** `interp`/`expand`/`syntax` live in `../sh` and have other
-   consumers, so "always on" cannot mean "always on in the engine". Gate at **`LangVariant`**:
-   bashy sets `LangBashPP`; other consumers keep `LangBash`. A host-application choice.
+| Invocation | Initial Bash++ mode | Agentic surface |
+|---|---:|---:|
+| `bash script.sh`, `script.bash`, or extensionless | off; opt in | unavailable |
+| `bash script.bpp` | on; opt out | unavailable |
+| `bashy <any file>` | on; opt out | on; opt out |
+
+The controls are `--bashpp` / `--bash++`, `--no-bashpp`,
+`BASHY_BASHPP=1|0`, and the `bashpp` shell option (`set -o bashpp` / `set +o
+bashpp`). The agentic surface has parallel `--agentic` / `--no-agentic` and
+`BASHY_AGENTIC=1|0` controls. Initial-mode precedence is:
+
+```text
+explicit CLI > environment > .bpp extension > binary default
+```
+
+The language must be selected before initial parsing. An in-file `set -o
+bashpp` cannot retroactively enable extended grammar in a file that was parsed
+as one unit; use the CLI, environment, `.bpp`, or a shebang such as
+`#!/usr/bin/env -S bash --bashpp`. The shell option remains meaningful for
+interactive input and subsequently parsed or sourced input.
+
+Certification invokes the standalone `bash` binary in POSIX mode without
+Bash++, so the extension remains outside the declared certified configuration.
+The engine is shared: `interp`/`expand`/`syntax` gate the extension at
+`LangVariant`, and other consumers retain `LangBash` unless they explicitly
+select `LangBashPP`.
 
 ---
 
