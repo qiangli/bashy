@@ -583,7 +583,8 @@ func newRunner() (*interp.Runner, error) {
 	// bash defaults to expanding aliases in interactive shells. A
 	// forced-interactive invocation (`-i script`) is interactive even
 	// when stdin is not a tty.
-	interactive := shouldRunInteractive(term.IsTerminal(int(os.Stdin.Fd())))
+	stdinIsTTY := term.IsTerminal(int(os.Stdin.Fd()))
+	interactive := shouldRunInteractive(stdinIsTTY)
 	opts := []interp.RunnerOption{
 		interp.Interactive(interactive),
 		// `bash -n` (and `bash -o noexec`) suppress execution even in an
@@ -612,6 +613,21 @@ func newRunner() (*interp.Runner, error) {
 			}
 			return expandPrompt(s, envGet, 0, 0, *posix)
 		}),
+	}
+	// Bash enables job control (monitor mode) automatically for an
+	// interactive shell attached to a real controlling terminal
+	// (initialize_job_control in jobs.c) — no script ever needs to run
+	// `set -m` itself. Without this, a background job's process group is
+	// never separated from the shell's own: a job-control stop signal
+	// (SIGTTIN/SIGTTOU/SIGTSTP) delivered to that shared process group can
+	// suspend the shell along with the job it meant to stop, and nothing is
+	// left running to resume it. Gate strictly on a real tty, matching bash's
+	// own fallback ("cannot set terminal process group ... no job control in
+	// this shell") for a forced-interactive shell with no terminal to own.
+	// Applied before collectSetArgs so an explicit `-O +m`/`set +m` on the
+	// command line or in the script still overrides this default.
+	if interactive && stdinIsTTY {
+		opts = append(opts, interp.Params("-m"))
 	}
 	// Reuse interp.Params to apply set-options requested on the
 	// command line. `bashy -o posix -o errexit` arrives here as

@@ -3,10 +3,11 @@ module github.com/qiangli/bashy
 go 1.26.5
 
 require (
+	github.com/creack/pty/v2 v2.0.1
 	github.com/qiangli/coreutils v0.0.0
 	github.com/qiangli/coreutils/external/otel v0.0.0
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/sys v0.46.0
+	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.44.0
 	golang.org/x/text v0.38.0
 	mvdan.cc/sh/v3 v3.13.1
@@ -65,7 +66,6 @@ require (
 	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f // indirect
 	github.com/coreos/go-systemd/v22 v22.7.0 // indirect
 	github.com/crc-org/vfkit v0.6.3 // indirect
-	github.com/creack/pty/v2 v2.0.1 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/d4l3k/go-bfloat16 v0.0.0-20211005043715-690c3bdd05f1 // indirect
@@ -213,6 +213,7 @@ require (
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
+	github.com/tklauser/ps v0.0.5-0.20260804061010-39c4acb07b31 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.0 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
