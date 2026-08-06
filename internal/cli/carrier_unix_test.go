@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"mvdan.cc/sh/v3/interp"
 )
 
 // These tests drive the real bin/bash binary end to end: the OS-backed job
@@ -298,4 +300,64 @@ func TestCarrierHelperLifecycle(t *testing.T) {
 			t.Fatalf("helper relay = %d, want SIGTERM", got)
 		}
 	})
+}
+
+// TestCarrierWaitStateStop proves execCarrierProc satisfies
+// interp.StopAwareCarrierProcess and accurately reports stopped and terminal states.
+func TestCarrierWaitStateStop(t *testing.T) {
+	cp, err := (execJobCarrier{}).StartCarrier(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cp.Terminate()
+
+	sa, ok := cp.(interp.StopAwareCarrierProcess)
+	if !ok {
+		t.Fatal("execCarrierProc does not implement interp.StopAwareCarrierProcess")
+	}
+
+	if err := syscall.Kill(sa.Pid(), syscall.SIGSTOP); err != nil {
+		t.Fatal(err)
+	}
+
+	st := sa.WaitState()
+	if !st.Stopped {
+		t.Fatalf("WaitState() returned st=%+v, want Stopped=true", st)
+	}
+	if st.Signal != int(syscall.SIGSTOP) && st.Signal != int(syscall.SIGTSTP) {
+		t.Fatalf("WaitState() signal = %d, want SIGSTOP (%d) or SIGTSTP (%d)", st.Signal, syscall.SIGSTOP, syscall.SIGTSTP)
+	}
+
+	sa.Terminate()
+	termSt := sa.WaitState()
+	if termSt.Stopped {
+		t.Fatalf("WaitState() after Terminate stopped = %v, want false", termSt.Stopped)
+	}
+	waitPidsGone(t, []int{sa.Pid()})
+}
+
+// TestCarrierExternalStop verifies end-to-end handling of a stopped job carrier process.
+func TestCarrierExternalStop(t *testing.T) {
+	for _, sig := range []struct {
+		name string
+	}{
+		{"STOP"},
+		{"TSTP"},
+	} {
+		t.Run(sig.name, func(t *testing.T) {
+			wantSt := fmt.Sprintf("st=%d", 128+int(syscall.SIGSTOP))
+			out, exit := runBuiltBash(t, t.TempDir(), killBinPrelude+`
+{ while :; do :; done; } &
+p=$!
+echo "pid=$p"
+"$K" -`+sig.name+` "$p"
+wait "$p"
+echo "st=$?"
+`)
+			if exit != 0 || !strings.Contains(out, wantSt) {
+				t.Fatalf("exit=%d, want %s in output:\n%s", exit, wantSt, out)
+			}
+			waitPidsGone(t, []int{outPid(t, out)})
+		})
+	}
 }

@@ -123,17 +123,54 @@ type execCarrierProc struct {
 
 func (p *execCarrierProc) Pid() int { return p.cmd.Process.Pid }
 
+// WaitState reaps or observes child stop state via wait4/waitpid with WUNTRACED.
+func (p *execCarrierProc) WaitState() interp.CarrierWaitState {
+	pid := p.cmd.Process.Pid
+	var ws syscall.WaitStatus
+	for {
+		_, err := syscall.Wait4(pid, &ws, syscall.WUNTRACED, nil)
+		if err == syscall.EINTR {
+			continue
+		}
+		if err != nil {
+			if p.cmd.ProcessState != nil {
+				if ws, ok := p.cmd.ProcessState.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+					return interp.CarrierWaitState{Signal: int(ws.Signal()), Stopped: false}
+				}
+				if code := p.cmd.ProcessState.ExitCode(); code > 128 && code < 256 {
+					return interp.CarrierWaitState{Signal: code - 128, Stopped: false}
+				}
+			}
+			return interp.CarrierWaitState{Signal: 0, Stopped: false}
+		}
+		break
+	}
+
+	if sig, stopped := isWaitStatusStopped(ws); stopped {
+		return interp.CarrierWaitState{
+			Signal:  sig,
+			Stopped: true,
+		}
+	}
+
+	if ws.Signaled() {
+		return interp.CarrierWaitState{Signal: int(ws.Signal()), Stopped: false}
+	}
+	if code := ws.ExitStatus(); code > 128 && code < 256 {
+		return interp.CarrierWaitState{Signal: code - 128, Stopped: false}
+	}
+	return interp.CarrierWaitState{Signal: 0, Stopped: false}
+}
+
 // Wait reaps the helper and maps a signal death to its signal number, 0 for a
 // normal exit. The runner calls it exactly once.
 func (p *execCarrierProc) Wait() int {
-	_ = p.cmd.Wait() // a signal death surfaces as *exec.ExitError; ProcessState has the detail
-	if ws, ok := p.cmd.ProcessState.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
-		return int(ws.Signal())
+	for {
+		st := p.WaitState()
+		if !st.Stopped {
+			return st.Signal
+		}
 	}
-	if code := p.cmd.ProcessState.ExitCode(); code > 128 && code < 256 {
-		return code - 128
-	}
-	return 0
 }
 
 // Terminate makes the helper exit promptly: EOF on its stdin pipe is its exit
@@ -144,5 +181,20 @@ func (p *execCarrierProc) Terminate() {
 	p.term.Do(func() {
 		p.stdin.Close()
 		_ = p.cmd.Process.Kill()
+		_ = syscall.Kill(p.cmd.Process.Pid, syscall.SIGCONT)
 	})
+}
+
+func isWaitStatusStopped(ws syscall.WaitStatus) (int, bool) {
+	if ws.Stopped() {
+		return int(ws.StopSignal()), true
+	}
+	u := uint32(ws)
+	if u&0xff == 0x7f {
+		sig := int((u >> 8) & 0xff)
+		if sig > 0 && sig != 0x7f {
+			return sig, true
+		}
+	}
+	return 0, false
 }
