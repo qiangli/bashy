@@ -230,6 +230,15 @@ make tidy               # go mod tidy + gofmt -s -w . + go vet ./...
 make help               # every target with its `## ` doc line
 ```
 
+The public 86-fixture Bash 5.3 gate is necessary but not the complete shell
+regression gate. On the licensed native host, the sibling proprietary harness
+must also run `make test-bash-system ARM=<unique-name>`: all 493 VSC shell TPs
+drive `bin/bash` while `/vsc/cushim` is absent and external commands resolve to
+VSC/host providers. Require it for release candidates and changes affecting
+shell semantics. It is intentionally not a Bashy Make target or public-CI job:
+the VSC suite is licensed and the OSS Bashy repository must not depend on the
+proprietary harness checkout.
+
 **Dragon delivery gate.** A verified Bashy change is not complete when tests
 pass or a commit is pushed. After the umbrella pin is bumped, rebuild on Dragon,
 install the canonical binary with `make install` (default
@@ -239,7 +248,8 @@ handoff. Do not substitute a repo-local binary for this final check.
 
 **Release checklist.** Releases are milestone-based semver bundles, not tags on
 every commit. Before proposing a tag: the authoritative GNU Bash 5.3 gate has
-zero regressions; applicable POSIX/compliance and focused tests are green;
+zero regressions; the 493-TP VSC Bash-only/system-utility gate is green;
+applicable POSIX/compliance and focused tests are green;
 submodule commits and pins are pushed and clean; Dragon has passed the
 rebuild/install/smoke gate above (including `bashy models`/`bashy agents` when
 the fleet changes); and changelog/release notes are ready. The steward proposes

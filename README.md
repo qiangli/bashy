@@ -43,6 +43,25 @@ find and fix failures before an uninterrupted formal run. See
 and [`docs/vsc-pcts-run-status.md`](docs/vsc-pcts-run-status.md) for the
 public-safe measured status.
 
+### Shell regression gates
+
+Shell development has two complementary regression gates:
+
+1. `make test-bash-parallel` runs the public GNU Bash 5.3 compatibility corpus
+   locally. Its current denominator is 86 fixtures and the required result is
+   86/86.
+2. On the licensed native VSC host,
+   `make test-bash-system ARM=<unique-name>` in the sibling
+   `vsc-pcts-harness-kit` runs all 493 POSIX shell TPs against `bin/bash`, with
+   Bashy's pure-Go command applets excluded from `PATH`.
+
+The 493-TP arm is relatively inexpensive and is required for release candidates
+and changes to parsing, expansion, execution, jobs, signals, traps, builtins,
+redirections, or locale-sensitive shell behavior. It cannot run in ordinary
+public CI because VSC-PCTS is licensed. After that isolation gate passes,
+`make test-bash` in the harness restores the Bashy Go applets and checks shell
+integration before the larger command-and-utility campaign.
+
 ## Why
 
 - **No dependencies.** One binary. No `bash`, no shared libraries, no package
