@@ -1469,7 +1469,7 @@ func runFleet(noun string, args []string) {
 		// fleet registry — so the registry cannot import it, and the binary is the
 		// one place both are in scope. The registry declares the holes; here is
 		// where they get filled.
-		cmd = fleet.NewAgentsCmd(
+		cmd = newAgentsRosterCmd(
 			fleet.WithLiveProbe(liveProbeAgent),
 			fleet.WithContextCloner(chat.CloneAgentContext),
 		)

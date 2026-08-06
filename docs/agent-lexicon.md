@@ -74,7 +74,7 @@ vocabulary.**
 | half of the lexicon | where it already lives | shape |
 |---|---|---|
 | **verbs** (`handoff`, `weave`, `gate`, `meet`, `sprint`) | the **Command Atlas** (`coreutils/pkg/atlas`) | name + synopsis + SDLC stage + group + effects — curated, closed-vocabulary, ratcheted at init |
-| **agent bindings** (`codex`, `claude`, `opencode-glm4`) | the **fleet registry** (`bashy agents` — "named `tool:model` bindings, the enlistable unit") | live, host-specific, already a registry |
+| **agent bindings** (`codex`, `claude`, `opencode-glm4`) | the **fleet registry** (`bashy agents list` — "named `tool:model` bindings, the enlistable unit") | live, host-specific, already a registry |
 | **capabilities** (`conductor`, `knowledge-transfer`) | **`bashy skills`** | already `SKILL.md`, already exported to `.claude/skills` and `.agents/skills` |
 
 Three registries, generated and maintained. Zero projection into the channels an agent actually reads.

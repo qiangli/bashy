@@ -382,7 +382,7 @@ var verbSynopsis = map[string]string{
 	"kb":          "host-shared knowledge base: search before a task, add/retro after (all agents, all repos)",
 	"tools":       "the agentic CLI harnesses this host can drive (claude, codex, opencode, ...)",
 	"models":      "the inference backends the fleet can bind to (subscription, api, local)",
-	"agents":      "named tool:model bindings — the enlistable unit; one agent, many nicknames",
+	"agents":      "active weave assignments; `agents list` shows registered tool:model bindings",
 	"people":      "human principals — who the names in prose refer to",
 	"whois":       "resolve any name (person/agent/tool/model/host) and say how to reach it",
 	"run":         "run a command, emit a structured result envelope (+advisor hints)",

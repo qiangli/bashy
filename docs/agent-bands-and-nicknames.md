@@ -1,7 +1,7 @@
 # Agent bands and nicknames
 
 *Shipped 2026-07-13. Mechanism lives in `coreutils/pkg/fleet`; surfaced by
-`bashy agents`, `bashy models`, `bashy whois`, and `bashy meet`.*
+`bashy agents list`, `bashy models`, `bashy whois`, and `bashy meet`.*
 
 **2026-07-24 model update.** Anthropic released Claude Opus 5 with canonical
 Claude API ID and alias `claude-opus-5`. Bashy's registry now carries exact
