@@ -21,13 +21,22 @@ deliberately claim Go semantics.
 The official Tour source is distributed under the Go project's BSD-style
 license unless otherwise noted. Adapted fixtures must:
 
-- pin the exact `golang.org/x/website` revision;
+- pin the exact revision of every source repository used;
 - retain the required Go Authors copyright and license notice;
-- record the original Tour path/example identifier;
+- record the original repository, path, and Tour example identifier;
 - identify material changes made for Bash++;
 - include any required license text in the repository's third-party notices.
 
-Source: <https://go.dev/tour/> and
+The `github.com/golang/tour` repository is the Tour's public source repository
+and still contains supporting packages and historical Tour material. Its
+README notes that the current web pages moved to `golang.org/x/website`.
+Corpus provenance must therefore point to `github.com/golang/tour` when an
+example or supporting package comes from that repository, and to
+`golang.org/x/website` when it comes from the current website source; do not
+treat the repositories as interchangeable.
+
+Sources: <https://go.dev/tour/>, <https://github.com/golang/tour>,
+<https://github.com/golang/tour/blob/master/LICENSE>, and
 <https://pkg.go.dev/golang.org/x/website/tour>.
 
 ### Go by Example
