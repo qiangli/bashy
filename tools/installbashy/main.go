@@ -53,6 +53,18 @@ func main() {
 	if err := verifyBashySurface(bashySource, runCommand); err != nil {
 		fatal(fmt.Errorf("refusing to install incomplete bashy: %w", err))
 	}
+	// Unix builds are a native pre-Go signal launcher plus a sibling Go
+	// payload. Install the payload first so replacing the launcher can never
+	// expose a path whose companion is missing.
+	for _, pair := range [][2]string{{bashSource + ".real", bashTarget + ".real"}, {bashySource + ".real", bashyTarget + ".real"}} {
+		if _, err := os.Stat(pair[0]); err == nil {
+			if err := installExecutable(pair[0], pair[1]); err != nil {
+				fatal(fmt.Errorf("install payload %s: %w", filepath.Base(pair[1]), err))
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			fatal(err)
+		}
+	}
 	if err := installExecutable(bashSource, bashTarget); err != nil {
 		fatal(fmt.Errorf("install bash: %w", err))
 	}

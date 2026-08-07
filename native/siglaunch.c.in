@@ -1,0 +1,110 @@
+// Copyright (c) 2026 qiangli
+// See LICENSE for licensing information
+
+// siglaunch is the native, pre-Go entry point for the shipped Unix shells.
+// The Go runtime replaces most inherited SIG_IGN dispositions before main,
+// but a POSIX shell must remember them forever.  Snapshot them here and pass
+// the names through the interpreter's private process-boundary sideband.
+#define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
+
+#include <errno.h>
+#include <limits.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+struct signal_name { int number; const char *name; };
+
+static const struct signal_name signals[] = {
+    {SIGHUP, "HUP"}, {SIGINT, "INT"}, {SIGQUIT, "QUIT"},
+    {SIGILL, "ILL"}, {SIGABRT, "ABRT"}, {SIGFPE, "FPE"},
+    {SIGSEGV, "SEGV"}, {SIGPIPE, "PIPE"}, {SIGALRM, "ALRM"},
+    {SIGTERM, "TERM"},
+#ifdef SIGBUS
+    {SIGBUS, "BUS"},
+#endif
+#ifdef SIGUSR1
+    {SIGUSR1, "USR1"},
+#endif
+#ifdef SIGUSR2
+    {SIGUSR2, "USR2"},
+#endif
+#ifdef SIGTSTP
+    {SIGTSTP, "TSTP"},
+#endif
+#ifdef SIGTTIN
+    {SIGTTIN, "TTIN"},
+#endif
+#ifdef SIGTTOU
+    {SIGTTOU, "TTOU"},
+#endif
+#ifdef SIGCONT
+    {SIGCONT, "CONT"},
+#endif
+#ifdef SIGXCPU
+    {SIGXCPU, "XCPU"},
+#endif
+#ifdef SIGXFSZ
+    {SIGXFSZ, "XFSZ"},
+#endif
+};
+
+static int executable_path(const char *arg0, char *dst, size_t size) {
+    if (strchr(arg0, '/')) {
+        return realpath(arg0, dst) != NULL ? 0 : -1;
+    }
+    const char *path = getenv("PATH");
+    if (!path) path = "/bin:/usr/bin";
+    char *copy = strdup(path);
+    if (!copy) return -1;
+    for (char *save = NULL, *dir = strtok_r(copy, ":", &save);
+         dir; dir = strtok_r(NULL, ":", &save)) {
+        if (snprintf(dst, size, "%s/%s", *dir ? dir : ".", arg0) >= (int)size)
+            continue;
+        if (access(dst, X_OK) == 0) {
+            char resolved[PATH_MAX];
+            if (realpath(dst, resolved)) {
+                strncpy(dst, resolved, size - 1);
+                dst[size - 1] = '\0';
+            }
+            free(copy);
+            return 0;
+        }
+    }
+    free(copy);
+    errno = ENOENT;
+    return -1;
+}
+
+int main(int argc, char **argv) {
+    (void)argc;
+    char ignored[512] = "";
+    const char *prior = getenv("BASHY_HARD_IGNORE");
+    if (prior && *prior) snprintf(ignored, sizeof ignored, "%s", prior);
+    for (size_t i = 0; i < sizeof signals / sizeof signals[0]; i++) {
+        struct sigaction action;
+        if (sigaction(signals[i].number, NULL, &action) != 0 ||
+            action.sa_handler != SIG_IGN)
+            continue;
+        size_t used = strlen(ignored);
+        snprintf(ignored + used, sizeof ignored - used, "%s%s",
+                 used ? "," : "", signals[i].name);
+    }
+    if (*ignored && setenv("BASHY_HARD_IGNORE", ignored, 1) != 0) {
+        perror("bashy signal launcher: setenv");
+        return 126;
+    }
+
+    char launcher[PATH_MAX], payload[PATH_MAX];
+    if (executable_path(argv[0], launcher, sizeof launcher) != 0 ||
+        snprintf(payload, sizeof payload, "%s.real", launcher) >= (int)sizeof payload) {
+        perror("bashy signal launcher: resolve executable");
+        return 126;
+    }
+    execv(payload, argv);
+    fprintf(stderr, "bashy signal launcher: exec %s: %s\n", payload, strerror(errno));
+    return errno == ENOENT ? 127 : 126;
+}

@@ -70,7 +70,12 @@ build-host:
 ## the conformance harness needs; it skips the embed-heavy bin/bashy build.
 build-bash:
 	@mkdir -p $(BIN_DIR)
-	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BASHY) ./cmd/bash
+	@case "$$(go env GOOS)" in \
+		linux|darwin) \
+			go build -trimpath -ldflags "$(LDFLAGS)" -o $(BASHY).real ./cmd/bash; \
+			cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BASHY) native/siglaunch.c.in ;; \
+		*) go build -trimpath -ldflags "$(LDFLAGS)" -o $(BASHY) ./cmd/bash ;; \
+	esac
 
 ## build-bashy: Build the AgentOS shell (cmd/bashy -> bin/bashy), embedding the
 ## meet SPA when node/pnpm are available and podman blobs when present.
@@ -79,10 +84,14 @@ build-bashy:
 	@spa_tag=$$(scripts/build-meet-spa.sh optional); \
 	tags="$(BASHY_TAGS)"; [ -z "$$spa_tag" ] || tags="$${tags:+$$tags }$$spa_tag"; \
 	echo "building bashy$${tags:+ with embeds: $$tags} ..."; \
+	goos=$$(go env GOOS); out=$(BIN); [ "$$goos" != linux ] && [ "$$goos" != darwin ] || out=$(BIN).real; \
 	if [ -n "$$tags" ]; then \
-		go build -trimpath -tags "$$tags" -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy; \
+		go build -trimpath -tags "$$tags" -ldflags "$(LDFLAGS)" -o $$out ./cmd/bashy; \
 	else \
-		go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy; \
+		go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bashy; \
+	fi; \
+	if [ "$$goos" = linux ] || [ "$$goos" = darwin ]; then \
+		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BIN) native/siglaunch.c.in; \
 	fi
 
 ## build-fips: Build both binaries against the Go FIPS 140-3 validated crypto
@@ -92,13 +101,21 @@ build-bashy:
 build-fips:
 	@mkdir -p $(BIN_DIR)
 	@echo "building with the Go FIPS 140-3 module (GOFIPS140=$(GOFIPS140_VERSION)) ..."
-	GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(LDFLAGS)" -o $(BASHY) ./cmd/bash
+	@goos=$$(go env GOOS); out=$(BASHY); [ "$$goos" != linux ] && [ "$$goos" != darwin ] || out=$(BASHY).real; \
+	GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bash; \
+	if [ "$$goos" = linux ] || [ "$$goos" = darwin ]; then \
+		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BASHY) native/siglaunch.c.in; \
+	fi
 	@spa_tag=$$(scripts/build-meet-spa.sh optional); \
 	tags="$(BASHY_TAGS)"; [ -z "$$spa_tag" ] || tags="$${tags:+$$tags }$$spa_tag"; \
+	goos=$$(go env GOOS); out=$(BIN); [ "$$goos" != linux ] && [ "$$goos" != darwin ] || out=$(BIN).real; \
 	if [ -n "$$tags" ]; then \
-		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -tags "$$tags" -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy; \
+		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -tags "$$tags" -ldflags "$(LDFLAGS)" -o $$out ./cmd/bashy; \
 	else \
-		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/bashy; \
+		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bashy; \
+	fi; \
+	if [ "$$goos" = linux ] || [ "$$goos" = darwin ]; then \
+		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BIN) native/siglaunch.c.in; \
 	fi
 
 ## install: Build and atomically install both binaries into the shared dhnt user
