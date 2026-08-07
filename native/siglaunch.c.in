@@ -67,8 +67,13 @@ static int executable_path(const char *arg0, char *dst, size_t size) {
         if (access(dst, X_OK) == 0) {
             char resolved[PATH_MAX];
             if (realpath(dst, resolved)) {
-                strncpy(dst, resolved, size - 1);
-                dst[size - 1] = '\0';
+                size_t resolved_len = strlen(resolved);
+                if (resolved_len >= size) {
+                    free(copy);
+                    errno = ENAMETOOLONG;
+                    return -1;
+                }
+                memcpy(dst, resolved, resolved_len + 1);
             }
             free(copy);
             return 0;
