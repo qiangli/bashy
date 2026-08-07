@@ -125,6 +125,34 @@ stages hand each other **native values over channels instead of serializing thro
 exactly where the 0-fork Tier-1 userland thesis cashes out, and exactly what a pipeline/HPC
 workload needs.
 
+### Data-race coverage is an L2 release gate
+
+The first Bash++ feature that introduces shared-memory concurrency must ship with an
+explicit Go race-detector campaign. Functional success is insufficient: the TP714 work
+demonstrated that a signal test can pass repeatedly while concurrently reading and writing
+an ordinary `bytes.Buffer`, and only `go test -race` exposes the invalid test harness.
+
+The L2 gate therefore requires:
+
+- `go test -race` for every package containing the parser, lowering, interpreter, channel,
+  cancellation, signal, or structured-concurrency implementation;
+- race-safe test observers—mutex-protected buffers, channels, atomics, or immutable
+  snapshots; never concurrent polling of `bytes.Buffer`, maps, slices, or runner state;
+- repeated tests for spawn/await, channel close/send/receive, cancellation, timeout,
+  panic/error propagation, signal delivery, nested concurrency, and process-boundary
+  serialization;
+- adversarial schedules covering close-vs-send, cancel-vs-complete, parent-exit-vs-child,
+  concurrent stdout/stderr, multiple waiters, and bounded fan-out;
+- leak and termination checks so a race-free test cannot pass while leaving goroutines,
+  pipes, child processes, or blocked channel operations behind;
+- both interpreted Bash++ and transpiled/native Go forms where the feature has both paths,
+  plus the Bash-mode-off superset regression gate;
+- a stable CI target and saved evidence containing Go version, platform, repetition count,
+  packages covered, and any explicitly quarantined nondeterminism.
+
+No concurrency feature is considered implemented when its race gate is skipped, reports a
+race, uses a race-unsafe oracle, or only tests the happy-path schedule.
+
 ## Types before concurrency
 
 Parallelism already exists — `dag -j N`, chunks, the fleet, goroutine subshells. **Structured
