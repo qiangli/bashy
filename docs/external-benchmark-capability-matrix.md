@@ -198,7 +198,7 @@ mid-2026 model (nulls in Sierra's S3 records) — recorded absence.
 
 | id | source | model | value | metric | prov |
 |---|---|---|---|---|---|
-| P01 | orchb | Gemini-3.1-Pro 0.573 · GPT-5.5 0.558 · DeepSeek-V4-Pro 0.547 · Claude-Opus-4.8 0.544 (glm-**5.1** 0.563 — not mapped to 5.2) | composite, n=100, no CIs, one-shot academic | I | 
+| P01 | orchb | Gemini-3.1-Pro 0.573 · GPT-5.5 0.558 · DeepSeek-V4-Pro 0.547 · Claude-Opus-4.8 0.544 (glm-**5.1** 0.563 — not mapped to 5.2) | composite, n=100, no CIs, one-shot academic | I |
 | P02 | — | **no maintained public instrument exists** (MARBLE dormant; τ² proxies only) | — | — | — |
 
 OrchBench's spread (0.544–0.573) is narrower than any plausible error bar —
