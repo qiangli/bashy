@@ -32,18 +32,27 @@ Source: <https://go.dev/tour/> and
 
 ### Go by Example
 
-As of this assessment, `github.com/mmcgrana/gobyexample` has no detected
-redistributable repository license. Its source code and prose must **not** be
-copied, mechanically translated, vendored, or committed.
+The repository README licenses the work, copyright Mark McGranaghan, under the
+Creative Commons Attribution 3.0 Unported license (CC BY 3.0). Its examples may
+therefore be adapted into Bash++ fixtures when the attribution requirements
+are followed. Each adaptation must:
 
-It may be used as a topic index—for example, “values,” “closures,” or
-“channels.” Tests for those topics must be independently designed from the Go
-language specification and official documentation. If the project later adds
-a suitable license or grants written permission, provenance policy must be
-reviewed before adapting its material.
+- pin the exact `github.com/mmcgrana/gobyexample` commit;
+- record the original example title, repository path, and source URL;
+- attribute Mark McGranaghan and link or include the CC BY 3.0 license;
+- clearly identify the Bash++ fixture as an adaptation and summarize material
+  changes; and
+- add the attribution and license information to the repository's third-party
+  notices before adapted material is committed.
 
-Sources: <https://gobyexample.com/> and
-<https://pkg.go.dev/github.com/mmcgrana/gobyexample>.
+The Go Gopher artwork is separately credited to Renée French under CC BY 3.0.
+Do not copy it into the corpus unless that separate attribution is retained.
+Independently authored tests inspired only by a topic name should still record
+their topic source, but must not be mislabeled as adaptations.
+
+Sources: <https://github.com/mmcgrana/gobyexample#license>,
+<https://creativecommons.org/licenses/by/3.0/>, and
+<https://gobyexample.com/>.
 
 ## Corpus manifest
 
@@ -136,4 +145,3 @@ differential runner. Bashy owns product activation (`--bashpp`, `.bpp`, and
 binary defaults), integration coverage, and this policy. Any accepted `sh`
 change must be pushed first, followed by Bashy's sibling pin and the umbrella
 submodule pins.
-
