@@ -1,8 +1,9 @@
 # bashy v1.0.0 — release readiness
 
-Status: **draft, 2026-07-04.** The single source of truth for what "v1.0.0"
-means and the gate to tag it. Ties the three release workstreams together:
-**(1) POSIX cert · (2) benchmark-driven agentic uplift · (3) release prep.**
+Status: **revised draft, 2026-08-07.** The single source of truth for what
+"v1.0.0" means and the gate to tag it. The release order and version-number
+policy are defined in `release-roadmap-and-versioning.md`. v1.0 ties together:
+**(1) Bash/POSIX foundation · (2) stable Bash++ Go profile · (3) release prep.**
 Update the checkboxes as items land; do not tag until §Gate is fully green.
 
 > Naming: **bashy** = the pure-Go Bash 5.3 drop-in (`cmd/bash`) + AgentOS system
@@ -10,16 +11,16 @@ Update the checkboxes as items land; do not tag until §Gate is fully green.
 
 ## What v1.0.0 asserts (the promise)
 
-bashy v1.0.0 is a **drop-in Bash 5.3 you can trust as a foundation** — the
-tier-1 userland keystone — with an agentic superset that measurably helps
-agents, and **zero non-permissive code compiled in**. Three claims, each with
+bashy v1.0.0 is a **drop-in Bash 5.3 you can trust as a foundation**, with a
+declared POSIX profile, a stable Go-shaped Bash++ language profile, reproducible
+signed packages, and **zero non-permissive code compiled in**. Three claims, each with
 strict discipline (§Claim discipline):
 
 1. **Bash 5.3 compatible + POSIX conformant** — runs Bash 5.3 scripts/sessions
    with matching semantics; POSIX-mode passes the conformance frontier.
-2. **Agentic uplift** — agents complete shell-heavy tasks more reliably / with
-   fewer doomed retries inside `bashy` than in stock Bash 5.3 + coreutils.
-3. **Self-contained + permissive** — one pure-Go binary, cross-platform; every
+2. **Bash++ Go profile** — the enumerated Go 1.26-shaped constructs meet
+   superset, differential, race, lifecycle, and interpreted/native gates.
+3. **Packaged + permissive** — cross-platform signed/verified artifacts; every
    engine/tool is download+exec (never bundled non-permissive), self-provisioned.
 
 ## Current evidence (re-measure before tagging — snapshots go stale)
@@ -69,9 +70,11 @@ The bar for this campaign is **zero fails that certified bash 5.3 / GNU do not
 also share** — not literal 100% PASS. Chasing raw GNU parity is a moving target,
 and PCTS charges some behaviors that exceed POSIX.
 
-**Cert is NOT a v1.0.0 blocker.** v1.0.0 ships with cert *pending* and the
-honest differential claim; certification is a follow-on badge (§Claim
-discipline).
+**Engineering POSIX closure is a v1.0.0 blocker; an awarded certification is
+not.** The declared shell/utility scope must have repeatable matched-host
+evidence, no unexplained Bashy-only failures, and finalized limitations. The
+formal Open Group submission and award remain human/legal milestones and must
+be described as pending until actually granted (§Claim discipline).
 
 ### License terms (binding — read before touching the suite or publishing a number)
 
@@ -117,17 +120,19 @@ maintainer's private storage. The terms that constrain engineering work:
   theirs. Send bug reports knowing that.
 - Use is limited to **testing bashy for conformance to IEEE Std 1003.1-2016**.
 
-## Workstream 2 — benchmark-driven agentic uplift
+## Post-v1.0 workstream — benchmark-driven agentic uplift (v1.2 target)
 
-Goal: **demonstrate + improve** the agentic uplift (claim 2) before v1.0.0.
+Goal: **demonstrate + improve** the agentic uplift before promoting the agentic
+surface as stable in v1.2.0. It is useful pre-v1.0 evidence, but no longer a
+v1.0 release blocker or v1.0 launch claim.
 
 - Harness: `eval/agent-shell/run-container-task.sh` — container-enforced shell
   selection via `bashy podman`, host agents, independent verification. Two arms:
   `bashy-current` vs `gnu-bash53`. Fleet: agy · claude · codex (subscription,
   watch rate limits) + opencode · aider (API budget — approval-gated).
 - **Problem to fix:** tasks must *discriminate*. A round where both arms pass
-  100% (2026-07-03) proves nothing. v1.0.0 tasks must stress the features only
-  bashy has, and mine `coreutils-gap-log.md`.
+  100% (2026-07-03) proves nothing. Agentic-stability tasks must stress the
+  features only bashy has, and mine `coreutils-gap-log.md`.
 - **The loop (TDD-at-fleet-scale):** design discriminating tasks → run the
   fleet in both arms → every bashy-loss or gap becomes a fix + a regression
   test → re-run; the green suite is the next round's guard.
@@ -149,7 +154,10 @@ and watch token budget.
 - [ ] CHANGELOG / release notes for v1.0.0.
 - [ ] Version stamp: `-X …/internal/cli.bashVersion=5.3.0(1)-bashy-v1.0.0`.
 - [ ] `THIRD_PARTY_LICENSES` current; supply-chain policy re-checked.
-- [ ] Cross-compile all 6 platforms clean (`make dist`), lean sizes sane.
+- [ ] Build Unix/Linux packages and verify install/upgrade/uninstall/checksum.
+- [ ] Sign/notarize and package macOS artifacts; verify on clean supported hosts.
+- [ ] Sign/package Windows artifacts; verify on clean supported hosts.
+- [ ] Cross-compile all declared OS/architectures clean (`make dist`), lean sizes sane.
 - [ ] Release CI green on ubuntu/macos/**windows** (unit + e2e dispatch).
 - [ ] README + `bashy commands` surface accurate (tiers 1–6 verbs, account).
 
@@ -160,9 +168,10 @@ and watch token budget.
    again). Re-run, don't trust a quoted count.
 2. **yash POSIX suite ≥ 96%** (no regression from the headline).
 3. **Differential + 10-shell panel = 0 deviations** (re-measured).
-4. **Agentic uplift demonstrated** on the discriminating benchmark set (claim 2
-   is real, not aspirational) — or claim 2 is softened in the release wording.
-5. **All 6 platforms cross-build; CI green incl. Windows.**
+4. **Bash++ v1 profile green** — enumerated Go 1.26 constructs, superset gate,
+   interpreted/native equivalence where implemented, and race/leak gates.
+5. **Declared packages are installed and verified**; macOS and Windows signing
+   gates pass, not merely cross-build.
 6. **Claim discipline honored** in every external string (§Claim discipline).
 
 ## Declared limitations (carry into the conformance statement + release notes)
