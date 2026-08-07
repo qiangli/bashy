@@ -2,7 +2,9 @@
 
 Status: **design of record, 2026-07-12.** The language half of the uplift; the runner half
 is `plan-distributed-chunked-execution.md` (§Axis 4 there is the summary — this is the
-detail). Sequencing lives in the plan; the decisions and their reasoning live here.
+detail). Sequencing lives in the plan; the decisions and their reasoning live here. The
+Go-oracle example corpus and its provenance policy are defined in
+`bash-plus-plus-go-example-corpus.md`.
 
 ## Why a language extension at all
 
