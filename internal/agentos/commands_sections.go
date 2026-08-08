@@ -73,7 +73,8 @@ func classSections(all bool) commandSections {
 			switch {
 			case agentToolGroups[r.Group]:
 				// bashy agent tools that happen to run in-process (graph,
-				// code-intel, foreman, fetch/browser) — group with the verbs.
+				// code-intel, fetch/browser) — group with the verbs. (foreman
+				// was a member; it is now a suppressed internal — Bashy #40.)
 				s.Agent[r.Tier] = append(s.Agent[r.Tier], r.Name)
 			case gnu[r.Name]:
 				s.Coreutils = append(s.Coreutils, r.Name)
