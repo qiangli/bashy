@@ -81,6 +81,6 @@ latent surface.
   reduces navigation commands without a token blowup. Deferred here only to avoid
   colliding with the in-flight container campaign; the fix had to land first (an
   undiscoverable, token-bombing feature is not worth an agent run).
-- **Directed-edge variant (F-D in `docs/graph-agentic-features-roadmap.md`):** would
-  turn `graph-impact` from an undirected coupling neighborhood into true reverse-
-  dependencies, shrinking the result further and sharpening precision.
+- **Directed-edge code view (`docs/bashy-unified-agentic-graph-architecture-plan.md`
+  §4):** preserve extracted relation direction for reverse-dependency analysis,
+  while retaining undirected projections for coupling and community queries.
