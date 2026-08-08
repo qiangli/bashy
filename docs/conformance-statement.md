@@ -1,10 +1,10 @@
 # bashy — POSIX conformance statement
 
-Status: **public conformance statement, partially shipped.** The licensed
-VSC-PCTS shell scenario has run and its public-safe status lives in
-`vsc-pcts-run-status.md`; certification submission and any Open Group mark remain
-separate. Utilities-sweep results are published in the same file under the
-2026-07-29 consent extension.
+Status: **public conformance statement, partially shipped; shell milestone
+complete 2026-08-08.** The licensed VSC-PCTS shell scenario has run and its
+public-safe status lives in `vsc-pcts-run-status.md`; certification submission
+and any Open Group mark remain separate. Utilities-sweep results are published
+in the same file under the 2026-07-29 consent extension.
 
 ## What is being claimed
 
@@ -64,6 +64,7 @@ All measured on the `bash` drop-in binary, re-runnable via
 
 | Harness | What it proves | Result |
 |---|---|---|
+| VSC-PCTS2016 `POSIX.shell` | licensed, native, serial shell-isolation scenario | **493/493 certification PASS group; 0 blockers/manual resolutions/caps** — milestone evidence only, not certification |
 | `make test-bash` | Bash 5.3 fixture suite (default mode) | **86/86** |
 | `posix-parity.sh` | `bashy --posix` ≡ `bash 5.3 --posix` on mechanically-testable behaviors | **38 match / 0 diff / 1 info / 39 probed** |
 | `posix-diff.sh` | clean-room XCU corpus, 5-oracle same-env differential | **0 deviations** |

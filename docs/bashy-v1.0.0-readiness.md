@@ -1,6 +1,6 @@
 # bashy v1.0.0 — release readiness
 
-Status: **revised draft, 2026-08-07.** The single source of truth for what
+Status: **revised draft, 2026-08-08.** The single source of truth for what
 "v1.0.0" means and the gate to tag it. The release order and version-number
 policy are defined in `release-roadmap-and-versioning.md`. v1.0 ties together:
 **(1) Bash/POSIX foundation · (2) stable Bash++ Go profile · (3) release prep.**
@@ -56,7 +56,8 @@ strict discipline (§Claim discipline):
       blockers/manual resolutions/caps, with Bashy's Go applets excluded and
       external Coreutils commands proven to resolve to GNU Coreutils 9.11.
       Public-safe status is in `docs/vsc-pcts-run-status.md`; licensed journals
-      and the reproducible run kit remain private.
+      and the reproducible run kit remain private. Shell-closure sprint #45 is
+      ended; there are no remaining shell-failure work lanes.
 - [ ] **Utilities fail-delta campaign** ← the active workstream. Two known
       engineering fronts, both stateable without suite results because they are
       our own code: **(a)** regex/text-engine depth — `pkg/bre`, driving `sed`

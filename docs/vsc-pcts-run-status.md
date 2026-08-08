@@ -32,6 +32,10 @@ grant is reproduced here.
 
 ## 2026-08-08 — POSIX shell-isolation milestone
 
+**Lifecycle status:** shell-closure sprint #45 is complete. No shell
+certification failures remain assigned or in progress; the continuing
+certification work belongs to the broader Shell-and-Utilities campaign.
+
 The complete 493-TP `POSIX.shell` scenario ran natively and serially on the
 dedicated Ubuntu x86_64 test host. Bashy's Go applets were excluded so the arm
 measured the shell language, builtins, and shell-to-system-command behavior;

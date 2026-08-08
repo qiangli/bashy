@@ -102,8 +102,9 @@ clone is expected and is not a blocker.
 
 ### Current preflight conclusion
 
-Both agent-drivable serial gates are green on 2026-08-02: Bash 5.3 is 86/86
-and Yash POSIX mode is 1,832/1,832 with no Bashy-specific differential. The
-active certification frontier is therefore the licensed VSC-PCTS shell and
-utility run, beginning with the `$!` TET-context defect and the utility failure
-streams tracked by the umbrella campaign.
+Both agent-drivable serial gates were green on 2026-08-02: Bash 5.3 was 86/86
+and Yash POSIX mode was 1,832/1,832 with no Bashy-specific differential. At
+that snapshot the frontier began with the `$!` TET-context defect. That shell
+front is now closed by the 2026-08-08 493/493 shell milestone; the current
+frontier is the Bashy-applet integration gate, 116 utility sets, and complete
+117-set formal run tracked by the broader campaign.

@@ -41,6 +41,8 @@ Detailed gates remain in `bashy-v1.0.0-readiness.md` and the component plans.
      pass group with zero blockers, zero manual resolutions, and zero caps.
      The measured shell-isolation PATH used GNU Coreutils 9.11 and excluded
      Bashy's Go applets. Evidence tag: `vsc-pcts-posix-shell-2026-08-08`.
+     The dedicated shell-closure sprint (#45) is ended; reopen this lane only
+     for a demonstrated regression.
    - Lane B: system commands/utilities, with GNU Coreutils 9.11 as the matched
      diagnostic reference—not as a claim that GNU behavior defines POSIX.
    - Engineering exit: no unexplained Bashy-only failures in the declared
