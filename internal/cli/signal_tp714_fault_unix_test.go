@@ -1,7 +1,7 @@
 // Copyright (c) 2026 qiangli
 // See LICENSE for licensing information
 
-//go:build unix
+//go:build linux
 
 package cli
 
