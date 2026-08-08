@@ -97,11 +97,121 @@ official packages.
 
 ### v1.2.0 — stable agentic surface
 
-- Promote the documented AgentOS/agentic commands and schemas to supported API.
+Public promise: **the agentic foundation becomes supported API** — addressing,
+schema/versioning discipline, and the relation vocabulary's extension rule.
+Individual agentic features graduate on top of it one at a time, as feedback
+arrives, and not all of them by v1.2.0.
+
+- Promote the documented AgentOS/agentic commands and schemas to supported API
+  **as each one graduates**, not as a single batch.
 - Require capability routing, safety/effect policy, structured output/schema
   versioning, observability, and benchmark evidence.
-- Experimental agentic verbs may exist earlier, but v1.2.0 is their stability
-  commitment.
+- Experimental agentic verbs may exist earlier; v1.2.0 is the stability
+  commitment for the foundation they stand on.
+
+#### Stability tiers — how a feature ships before it is frozen
+
+The agentic surface releases in **stages**, so a feature can ship, collect real
+feedback, and change shape without spending a major. Every agentic verb and
+schema carries exactly one tier, reported by `bashy commands --atlas` and
+`bashy context --json`:
+
+| Tier | Promise | Change cost |
+|---|---|---|
+| `experimental` | May change or disappear without notice. Off by default; not in the support matrix | patch |
+| `preview` | Shape is believed settled and is being validated in real use. Breaking changes are announced in release notes and carry a migration note | minor |
+| `supported` | Bound by the version rules above | major to break |
+
+Rules: a feature enters at `experimental` and graduates only on the evidence
+named below — never on age. Graduating is a **minor**; demoting or removing a
+`supported` feature is a **major**; changing an `experimental` one is a
+**patch**. The tier is per feature, so `weave` may be `supported` while a new
+relation is `experimental`. **Nothing graduates to `supported` without a
+consumer** — an unused feature has produced no feedback, so its shape is
+untested regardless of how long it has existed.
+
+#### Foundation first, then an MVP — not a full-blast re-architecture
+
+The agentland re-architecture (umbrella
+`docs/bashy-unified-agentic-graph-architecture-plan.md`, revised 2026-08-08)
+is rank-3 work: **build the seam, prove it runs, stop.** It is scoped here in
+three steps, and only the first is a v1.2.0 gate.
+
+**Step 1 — foundation, and the only v1.2.0 gate**, because deferring it is what
+costs a major. Two properties must hold before any agentic schema reaches
+`supported`; neither requires the re-architecture to be finished:
+
+- **Addressing is indirected.** A single `Ref` type exists and PID is advisory,
+  so agent name / control socket / episode / seat are attributes rather than
+  keys. Twelve identity keys are in use today; unifying them *after* the surface
+  is promoted is an incompatible public change. Indirection now keeps the later
+  unification a minor.
+- **The relation vocabulary is open.** A well-known core exists, and **an
+  unknown relation round-trips through an unmodified reader.** A closed
+  vocabulary promoted to supported API cannot grow without a major.
+
+That is the whole gate. Everything below ships at `experimental`, collects
+feedback, and graduates on its own schedule across later 1.2.x/1.3 releases.
+
+**Step 2 — MVP: one path, proven, `experimental`, off by default.** The
+narrowest useful slice of runtime-authored edges: emit the attribution →
+generation → gate-verdict chain for **one** run type, from weave and the gate
+(not execlog, which records argv and exit but no stdout). Baseline to beat is
+effectively zero — 17 `graph` invocations in 6.7 days, and one unprompted
+knowledge-store access in 61,084 dispatched commands. Prove the chain exists on
+real runs, then stop. Broaden only when ranks 1 and 2 are not waiting, and
+**expect the relation set to change once something consumes it** — that is the
+point of shipping it at `experimental` rather than designing it further on
+paper.
+
+**Step 3 — iterate, each on its own evidence and its own tier.** Not milestone
+gates: collapsing the three context-injection paths into one budgeted assembler;
+the fake-edge lint in `dag check`; the admission rule (four measurable benefits
+must exceed the coordination tax before work is expressed as a graph); an
+oscillation detector (tool calls ÷ distinct, with a stop rule) in
+`weave`/`supervise`. Each enters at `experimental`; each graduates when it has a
+consumer and the evidence below, or is removed if it does not earn one.
+
+**Separately, and not a milestone gate at all:** three silent data-loss races
+are live now — `room.Join` read-check-write, `bus.MarkRead` rewriting a file the
+sidecar appends to, `mb.PostMessage` colliding on a sequence number that is also
+a filename. Those are bug fixes under the write rule (`O_APPEND` under
+`PIPE_BUF`, `rename(2)`, or `O_CREAT|O_EXCL`; otherwise take an `flock`). Fix
+them as patches whenever, on their own evidence — do not hold them for a minor.
+
+#### Evidence gates
+
+Per principle 5, scaled to the step:
+
+| Graduation | Evidence required |
+|---|---|
+| Addressing → `supported` (step 1, the v1.2.0 gate) | Attachment survives carrier replacement and works for a session with no meaningful local PID |
+| Relation vocabulary → `supported` (step 1, the v1.2.0 gate) | The well-known core is classified (knowledge vs task, reflexive or not) and an unknown relation round-trips through an unmodified reader |
+| Runtime-authored edges → `preview` (step 2, may be post-1.2) | Fraction of completed runs producing a full attribution → generation → gate-verdict chain, against the ~0 baseline |
+| Anything → `supported` | A named consumer that would break if it changed. No consumer, no graduation |
+| Write-rule fixes (patch, any time) | Concurrent-writer test per offender; `go test -race` clean |
+
+A conformance test that only shows the machinery matching itself satisfies none
+of these. State the negative result if it comes, and demote or remove rather
+than carrying an `experimental` feature indefinitely.
+
+#### Explicitly out of scope for v1.2.0
+
+Deferred with a blocking reason in the plan's appendix; none may be implied by
+the v1.2.0 promise: the mount/adapter layer and any `bashy://` reference scheme;
+a full Graph IR with typed ports and a node union; the pattern library and
+`graph pattern *`; ForeignRuntime/polyglot embedding; Bonsai as a derived query
+index; and all Bash++ graph-module integration — that last is workstream (b) and
+belongs to the v1.0 language profile, not here.
+
+#### Sequencing
+
+Agentic work is rank 3 of bashy's three workstreams, behind POSIX certification
+and Bash++. Nothing here may preempt the v1.0 or v1.1 gates. Step 1 is small by
+construction; steps 2 and 3 add no front-door verb, land inside existing
+packages, and touch no file in `sh/`. A rank-3 item that needs a large
+measurement campaign to justify itself is not ready to be worked — it is ready
+to be written down and deferred.
 
 ### v1.3.x — Tessaro integration track
 
@@ -123,6 +233,11 @@ next major release.
 | Upstream patch/toolchain update with no public semantic change | patch | Dependency/provenance refresh |
 | Add compatible GNU Bash/POSIX/Go/Coreutils profile or feature | minor | New supported functionality |
 | Expose additional Go-version constructs in Bash++ compatibly | minor | Language surface grows |
+| Change or drop an `experimental` agentic feature | patch | No stability was promised; this is what the tier is for |
+| Graduate a feature `experimental` → `preview` → `supported` | minor | New supported functionality, on evidence and a consumer |
+| Add a relation to the agent-graph well-known core (post-1.2) | minor | Additive; an unknown relation must already round-trip through an unmodified reader |
+| Break a `preview` feature | minor + migration note in release notes | Shape was believed settled but was still being validated |
+| Remove or re-classify a well-known relation, demote a `supported` feature, or change how agents are addressed | major | Stored edges and existing readers require migration |
 | Change default semantics, remove a profile, or break public CLI/language/schema | major | User migration required |
 | Documentation/evidence-only correction | normally no release, or patch if republishing corrected metadata | No new API |
 
@@ -154,6 +269,7 @@ posix:       VSC-PCTS2016 / POSIX08 / IEEE 1003.1 campaign profile
 go_build:    1.26.x
 bashpp_go:   go1.26-profile-v1
 coreutils:   GNU 9.11 reference; Bashy command-set revision/hash
+agent_graph: none (pre-1.2) | contrib-v1 + relation-registry revision/hash
 tessaro:     none | sphere-v1 | dks-v1
 platforms:   exact signed/package artifact matrix
 evidence:    run IDs, totals, checksums, limitations
