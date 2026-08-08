@@ -108,6 +108,19 @@ arrives, and not all of them by v1.2.0.
   versioning, observability, and benchmark evidence.
 - Experimental agentic verbs may exist earlier; v1.2.0 is the stability
   commitment for the foundation they stand on.
+- **Agent protocol interoperability — tracked for development no earlier than
+  v1.2.0.** Plan MCP in both directions (expose Bashy tools and consume
+  external servers), ACP in both directions (drive local harnesses and let
+  editors drive Bashy), and A2A in both directions (delegate to and serve
+  remote peers). These are adapters over the unified agentic graph's identity,
+  policy, evidence, rendezvous, and lifecycle model, not three new control
+  planes. This item is **not an additional v1.2.0 release gate or a promise
+  that every protocol surface graduates together**: each surface enters at
+  `experimental`, remains subordinate to Step 1 below, and graduates only on
+  protocol conformance, fail-closed security, measured runtime evidence, and
+  a named consumer. The protocol-specific plan of record is
+  `dhnt/docs/bashy-agent-protocols-1.2.0-plan.md` in the umbrella. It does
+  not reopen the deferred generic mount/adapter layer or `bashy://` scheme.
 
 #### Stability tiers — how a feature ships before it is frozen
 
