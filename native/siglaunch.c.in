@@ -104,10 +104,19 @@ int main(int argc, char **argv) {
     }
 
     char launcher[PATH_MAX], payload[PATH_MAX];
-    if (executable_path(argv[0], launcher, sizeof launcher) != 0 ||
-        snprintf(payload, sizeof payload, "%s.real", launcher) >= (int)sizeof payload) {
-        perror("bashy signal launcher: resolve executable");
-        return 126;
+    const char *payload_override = getenv("BASHY_SIGNAL_PAYLOAD");
+    if (payload_override && *payload_override) {
+        if (snprintf(payload, sizeof payload, "%s", payload_override) >= (int)sizeof payload) {
+            errno = ENAMETOOLONG;
+            perror("bashy signal launcher: resolve payload override");
+            return 126;
+        }
+    } else {
+        if (executable_path(argv[0], launcher, sizeof launcher) != 0 ||
+            snprintf(payload, sizeof payload, "%s.real", launcher) >= (int)sizeof payload) {
+            perror("bashy signal launcher: resolve executable");
+            return 126;
+        }
     }
     execv(payload, argv);
     fprintf(stderr, "bashy signal launcher: exec %s: %s\n", payload, strerror(errno));

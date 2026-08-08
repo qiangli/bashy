@@ -202,6 +202,27 @@ func TestJSONRunnerUsesBASH53Runner(t *testing.T) {
 	}
 }
 
+func TestFixtureEnvPinsLauncherPayloadPair(t *testing.T) {
+	dir := t.TempDir()
+	launcher := filepath.Join(dir, "bash")
+	writeTestFile(t, launcher, "launcher")
+	writeTestFile(t, launcher+".real", "payload")
+	if err := os.Chmod(launcher, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(launcher+".real", 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	want := "BASHY_SIGNAL_PAYLOAD=" + launcher + ".real"
+	for _, entry := range fixtureEnv(dir, dir, launcher, "alpha") {
+		if entry == want {
+			return
+		}
+	}
+	t.Fatalf("fixture environment does not contain %q", want)
+}
+
 func TestJSONChunkMetadataAndSelection(t *testing.T) {
 	testsDir, bashPath := makePassingSuite(t, []string{"alpha", "beta"})
 	manifestPath := filepath.Join(t.TempDir(), "chunks.json")

@@ -48,4 +48,22 @@ func TestLauncherPreservesInheritedSignalIgnore(t *testing.T) {
 			}
 		})
 	}
+
+	// Bash's upstream fixtures copy $THIS_SH without knowing that the shipped
+	// Unix executable is a launcher/payload pair. The harness sideband keeps a
+	// relocated launcher tied to the exact payload selected for the run.
+	relocated := filepath.Join(dir, "relocated-shell")
+	data, err := os.ReadFile(launcher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(relocated, data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(relocated, "-c", "printf relocated")
+	cmd.Env = append(os.Environ(), "BASHY_SIGNAL_PAYLOAD="+payload)
+	out, err := cmd.CombinedOutput()
+	if err != nil || string(out) != "relocated" {
+		t.Fatalf("relocated launcher: err=%v output=%q", err, out)
+	}
 }

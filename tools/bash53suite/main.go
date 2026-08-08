@@ -933,6 +933,14 @@ func fixtureEnv(root, testsDir, bashPath, name string) []string {
 		"BASH_TSTOUT="+outPath,
 		"BASH_SETPGRP=1",
 	)
+	// Unix Bashy builds are a native signal launcher plus a sibling .real Go
+	// payload. GNU's own fixtures deliberately copy THIS_SH to temporary names;
+	// the copied launcher cannot find a sibling payload there. Preserve the
+	// shipped launcher as the executable under test while giving every nested
+	// copy an absolute path back to this run's exact payload.
+	if payload := bashPath + ".real"; isExecutableFile(payload) {
+		out = append(out, "BASHY_SIGNAL_PAYLOAD="+payload)
+	}
 	if name == "read" {
 		tmp, err := os.MkdirTemp("", "bashy-read-*")
 		if err == nil {
@@ -940,6 +948,11 @@ func fixtureEnv(root, testsDir, bashPath, name string) []string {
 		}
 	}
 	return out
+}
+
+func isExecutableFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0
 }
 
 func normalizeOutput(name string, raw []byte) []byte {
