@@ -1,6 +1,6 @@
 # Bashy release roadmap and versioning policy
 
-Status: **plan of record, 2026-08-07**. This document defines release order,
+Status: **plan of record, 2026-08-08**. This document defines release order,
 public promises, upstream compatibility coordinates, and version-number rules.
 Detailed gates remain in `bashy-v1.0.0-readiness.md` and the component plans.
 
@@ -32,11 +32,15 @@ Detailed gates remain in `bashy-v1.0.0-readiness.md` and the component plans.
    - Track the exact upstream tarball and applied Bash 5.3 patch level. GNU
      announced Bash 5.3 in July 2025; the release and patch series are separate
      provenance inputs.
-2. **POSIX shell and utilities — active.**
+2. **POSIX shell and utilities — shell-isolation milestone achieved; utilities active.**
    - Correct standard family name: **IEEE Std 1003.1**, not 1002.1.
    - Current licensed campaign profile: VSC-PCTS2016/POSIX08, as already
      recorded by the harness and license documents.
-   - Lane A: shell language/builtins.
+   - Lane A: shell language/builtins. **Achieved 2026-08-08:** the complete
+     493-TP `POSIX.shell` scenario placed all 493 TPs in the certification
+     pass group with zero blockers, zero manual resolutions, and zero caps.
+     The measured shell-isolation PATH used GNU Coreutils 9.11 and excluded
+     Bashy's Go applets. Evidence tag: `vsc-pcts-posix-shell-2026-08-08`.
    - Lane B: system commands/utilities, with GNU Coreutils 9.11 as the matched
      diagnostic reference—not as a claim that GNU behavior defines POSIX.
    - Engineering exit: no unexplained Bashy-only failures in the declared
@@ -44,6 +48,9 @@ Detailed gates remain in `bashy-v1.0.0-readiness.md` and the component plans.
    - Formal Open Group submission/certification remains a separately named
      human/legal milestone; engineering completion must not be worded as a
      certification award.
+   - Next: restore the Bashy Go applets for the shell-integration gate, close
+     the 116 utility sets, then run the uninterrupted 117-set/9,337-TP formal
+     profile and generate the suite's official report.
 3. **Bash++ language foundation.**
    - Stable target for v1.0: Go 1.26-shaped constructs supported by the declared
      Bash++ grammar/profile, including the race and lifecycle gate in

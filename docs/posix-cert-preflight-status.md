@@ -1,9 +1,10 @@
 # POSIX cert (VSC-PCTS) pre-flight — GO status snapshot
 
-Status: **historical GO pre-flight snapshot.** Agent-drivable pre-flight is
-complete; licensed shell-scenario work has run; certification submission remains
-separate. Utilities results are published in `vsc-pcts-run-status.md` under the
-2026-07-29 consent extension.
+Status: **historical GO pre-flight snapshot, superseded by the 2026-08-08 shell
+milestone.** Agent-drivable pre-flight is complete; the licensed 493-TP shell
+isolation arm now has 493 certification PASS-group outcomes and zero blockers.
+The 116 utility sets and complete 117-set formal run remain. Results are
+published in `vsc-pcts-run-status.md` under the consent grants.
 
 ## Go/no-go criteria (from vsc-pcts-readiness.md §Go/no-go)
 
@@ -15,13 +16,16 @@ separate. Utilities results are published in `vsc-pcts-run-status.md` under the
 | **`<<${a}` heredoc-delimiter decision** | ✅ **DECIDED — declared limitation** (see below) | bashy parse-errors an expansion in the heredoc delimiter word; bash treats it as a *literal* delimiter + EOF-warns. |
 | **Declared-limitations list final** | ✅ list is stable (interactive job control; `((` nested-subshell ambiguity) | per `vsc-pcts-readiness.md` §Known limitations |
 | **Apply for VSC-PCTS license** (Open Group) | ✅ **LICENSED + SUITE IN HAND**; the shell-scenario run is complete (results held privately — see `vsc-pcts-run-status.md`) | VSC-PCTS2016 OSS v1.4 agreement, signed 2026-06-28, countersigned by The Open Group 2026-07-03 (ticket **#279890**); suite downloaded by 2026-07-04. Agreement held privately (personal data — never committed). The 12-month clock started at the suite-access email (early July 2026 → expires ~July 2027), with a 10-day destroy obligation after. Binding terms — suite not redistributable; **publishing results CONSENT GRANTED 2026-07-16 (ticket #280298) for shell-utility tests, EXTENDED 2026-07-29 to the utility test sets; both for conformance-work purposes only; no "certified"/trademark claim regardless** — see `bashy-v1.0.0-readiness.md` §License terms + `dhnt/docs/legal/pcts-publication-consent-granted.md`. |
-| **Stand up TET + wire bashy as SUT (POSIX mode)** | ✅ **shell scenario + utilities sweep run** — both published in `vsc-pcts-run-status.md` | scope scenario to shell + builtins |
+| **Stand up TET + wire bashy as SUT (POSIX mode)** | ✅ **493/493 shell certification pass group, zero blockers/caps** on 2026-08-08; historical utilities sweep also published | tag `vsc-pcts-posix-shell-2026-08-08`; full 117-set run still pending |
 
 ## What "0 deviations" means here (claim discipline)
 
 Both differential harnesses run bashy in the **same environment** as the reference shells and find **0 cases where bashy diverges from bash 5.3** on the clean-room corpora. This is the strongest agent-drivable signal short of the official suite. It is **not** "POSIX certified" — that is the TET/Open-Group run (human step). Honest framing for any external claim:
 
-> "Zero deviations from bash 5.3 on a 719-script clean-room differential, cross-checked against a 10-shell panel — the strict-POSIX shells (dash, ash, posh, yash) and the feature-rich shells (bash, zsh, ksh93, mksh, loksh) — and on the POSIX-mode parity sweep; the official VSC-PCTS run is the remaining (licensed, human) step."
+> "Zero deviations from bash 5.3 on a 719-script clean-room differential,
+> cross-checked against a 10-shell panel; the licensed 493-TP POSIX shell
+> isolation milestone has zero certification blockers. The complete Shell and
+> Utilities profile and formal Open Group submission remain pending."
 
 Anchor: `make test-bash` 86/86 (bash's own 5.3 fixture suite) + drop-in fidelity 1096/1105 (99%) and climbing.
 
@@ -39,7 +43,11 @@ Investigated 2026-06-25. bash does **not** expand `${a}` in a heredoc delimiter 
 
 ## GO recommendation — agent-drivable criteria are GREEN
 
-Both clean-room differentials are **at 0 deviations**, the `<<${a}` decision is **made**, and the declared-limitations list above is **final**. The agent-drivable pre-flight is complete. The licensed shell-scenario run has since moved from future work to public-safe status tracking in `vsc-pcts-run-status.md`. Remaining work is certification submission/claim discipline plus re-scoring the utilities arm after the `pkg/bre` fixes; no "POSIX certified" claim is made.
+Both clean-room differentials are **at 0 deviations**, the `<<${a}` decision is
+**made**, and the 493-TP shell-isolation arm is in the certification PASS group
+with zero blockers. Remaining work is the Bashy-applet shell integration gate,
+the 116 utility sets, the complete 117-set formal run, and submission/claim
+discipline; no "POSIX certified" claim is made.
 
 ## 2026-08-02 preflight re-run (workstream 1, single-host, serial)
 

@@ -99,7 +99,12 @@ bash-fidelity warrants relaxing the parser before the run.
       public-safe state lives in `vsc-pcts-run-status.md`; licensed materials
       remain outside the repository.
 - [x] **Stand up TET + wire bashy as the SUT** in POSIX mode (`sh` invocation);
-      shell-scenario status is recorded in `vsc-pcts-run-status.md`.
+      the 2026-08-08 shell-isolation milestone has 493/493 certification
+      PASS-group outcomes with zero blockers/caps. Status is recorded in
+      `vsc-pcts-run-status.md` and tagged
+      `vsc-pcts-posix-shell-2026-08-08`.
+- [ ] **Complete the assembled Shell and Utilities profile** — Bashy-applet
+      shell integration, 116 utility sets, then one serial 117-set/9,337-TP run.
 - [ ] **Certification submission / mark decision** remains separate from having
       run the licensed suite. No Open Group certification claim is made.
 - [ ] **Decide dual-mode JC P1+** based on measured interactive-JC coverage.

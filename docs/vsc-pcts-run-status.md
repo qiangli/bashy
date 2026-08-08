@@ -30,6 +30,36 @@ The full run record — journals, harness internals, the resumable launcher
 contract — is held privately by the maintainer; what is publishable under the
 grant is reproduced here.
 
+## 2026-08-08 — POSIX shell-isolation milestone
+
+The complete 493-TP `POSIX.shell` scenario ran natively and serially on the
+dedicated Ubuntu x86_64 test host. Bashy's Go applets were excluded so the arm
+measured the shell language, builtins, and shell-to-system-command behavior;
+the provider manifest proves that representative Coreutils commands resolved
+from GNU Coreutils 9.11 rather than Ubuntu 9.4 or Bashy's multicall binary.
+
+| metric | result |
+|---|---:|
+| configured shell TPs | 493 |
+| certification PASS group | **493** |
+| certification blockers | **0** |
+| manual resolution required | **0** |
+| FAIL / UNRESOLVED / UNREPORTED / INSPECT | **0 / 0 / 0 / 0** |
+| caps | **0** |
+| wall time | 855 s |
+
+Coordinates: Bashy `1e3a14be`, sh `beb0b465`, harness `10c2ab5d`, GNU
+Coreutils 9.11 at `/opt/gnu-coreutils-9.11`; arm
+`bashy-shell-gnu911-pass-20260808T024000Z`. The source/evidence marker is
+`vsc-pcts-posix-shell-2026-08-08`.
+
+This closes the **shell-isolation engineering milestone**, not the Product
+Standard or certification program. `UNSUPPORTED`, `NOT IN USE`, and `UNTESTED`
+are included in the certification PASS group only under the declared profile
+and retained rationale. Next are the Bashy-applet shell integration gate, the
+116 utility sets, one uninterrupted 117-set/9,337-TP assembled-profile run, the
+suite-generated report, and the human Open Group submission.
+
 ## Shell scenario results (published under the 2026-07-16 grant)
 
 The POSIX `posix` **shell** scenario, run through our non-privileged TET harness

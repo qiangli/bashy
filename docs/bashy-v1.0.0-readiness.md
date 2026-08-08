@@ -33,6 +33,7 @@ strict discipline (§Claim discipline):
 | Clean-room differential | **0 deviations / 719 scripts** vs bash 5.3 | `scripts/oils-diff.sh` |
 | 10-shell panel | **0 deviations** (strict-POSIX + feature-rich) | `scripts/multishell-diff.sh` |
 | POSIX-mode parity sweep | **0 deviations / 23 probed** | `scripts/posix-parity.sh` |
+| VSC-PCTS POSIX shell isolation | **493/493 certification pass group; 0 blockers/caps** | `vsc-pcts-posix-shell-2026-08-08`; private harness run `bashy-shell-gnu911-pass-20260808T024000Z` |
 | Agentic uplift | **not yet demonstrated** — last slice 12/12 both arms (non-discriminating) | `docs/agent-shell-eval/` |
 
 ## Workstream 1 — POSIX cert (VSC-PCTS)
@@ -50,10 +51,12 @@ strict discipline (§Claim discipline):
       (VSC-PCTS2016-3.1 + TET3.6-lite + VSXgen4.11). The suite-access email is
       what **started the 12-month clock** (§License terms) — see that section for
       the term/destroy dates.
-- [x] **TET run against the licensed suite; SUT = bashy in `--posix` mode.**
-      The shell-scenario campaign is complete. *(Results are not recorded in this
-      public repo — see `docs/vsc-pcts-run-status.md` for why. The durable run
-      record, harness runbook, and campaign plan are held privately.)*
+- [x] **POSIX shell-isolation milestone.** On 2026-08-08 the complete 493-TP
+      shell scenario produced 493 certification PASS-group outcomes, zero
+      blockers/manual resolutions/caps, with Bashy's Go applets excluded and
+      external Coreutils commands proven to resolve to GNU Coreutils 9.11.
+      Public-safe status is in `docs/vsc-pcts-run-status.md`; licensed journals
+      and the reproducible run kit remain private.
 - [ ] **Utilities fail-delta campaign** ← the active workstream. Two known
       engineering fronts, both stateable without suite results because they are
       our own code: **(a)** regex/text-engine depth — `pkg/bre`, driving `sed`
