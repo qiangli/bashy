@@ -45,9 +45,12 @@ Investigated 2026-06-25. bash does **not** expand `${a}` in a heredoc delimiter 
 
 Both clean-room differentials are **at 0 deviations**, the `<<${a}` decision is
 **made**, and the 493-TP shell-isolation arm is in the certification PASS group
-with zero blockers. Remaining work is the Bashy-applet shell integration gate,
-the 116 utility sets, the complete 117-set formal run, and submission/claim
-discipline; no "POSIX certified" claim is made.
+with zero blockers. The next milestone is the 116-set/8,844-TP Commands and
+Utilities campaign, with Bashy's Go utilities as the SUT and GNU Coreutils
+9.11 as the matched diagnostic control. Re-running the 493 shell TPs with the
+assembled providers is a regression gate inside that campaign, not a separate
+roadmap milestone. The complete 117-set formal run and submission/claim
+discipline follow; no "POSIX certified" claim is made.
 
 ## 2026-08-02 preflight re-run (workstream 1, single-host, serial)
 
@@ -106,5 +109,6 @@ Both agent-drivable serial gates were green on 2026-08-02: Bash 5.3 was 86/86
 and Yash POSIX mode was 1,832/1,832 with no Bashy-specific differential. At
 that snapshot the frontier began with the `$!` TET-context defect. That shell
 front is now closed by the 2026-08-08 493/493 shell milestone; the current
-frontier is the Bashy-applet integration gate, 116 utility sets, and complete
-117-set formal run tracked by the broader campaign.
+frontier is the 116-set/8,844-TP Commands and Utilities campaign. The assembled
+provider shell rerun is its regression gate; the complete 117-set formal run
+follows.

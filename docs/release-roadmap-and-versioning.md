@@ -32,7 +32,7 @@ Detailed gates remain in `bashy-v1.0.0-readiness.md` and the component plans.
    - Track the exact upstream tarball and applied Bash 5.3 patch level. GNU
      announced Bash 5.3 in July 2025; the release and patch series are separate
      provenance inputs.
-2. **POSIX shell and utilities — shell-isolation milestone achieved; utilities active.**
+2. **IEEE Std 1003.1 Shell and Utilities — shell milestone achieved; utilities are next.**
    - Correct standard family name: **IEEE Std 1003.1**, not 1002.1.
    - Current licensed campaign profile: VSC-PCTS2016/POSIX08, as already
      recorded by the harness and license documents.
@@ -43,16 +43,23 @@ Detailed gates remain in `bashy-v1.0.0-readiness.md` and the component plans.
      Bashy's Go applets. Evidence tag: `vsc-pcts-posix-shell-2026-08-08`.
      The dedicated shell-closure sprint (#45) is ended; reopen this lane only
      for a demonstrated regression.
-   - Lane B: system commands/utilities, with GNU Coreutils 9.11 as the matched
-     diagnostic reference—not as a claim that GNU behavior defines POSIX.
-   - Engineering exit: no unexplained Bashy-only failures in the declared
-     scope, repeatable matched-host evidence, and finalized limitations.
+   - Lane B, the **next milestone**: complete all 116 Commands and Utilities
+     sets (8,844 configured TPs). Bashy's Go utilities are the SUT; GNU
+     Coreutils 9.11 is the apples-to-apples diagnostic control, not a claim
+     that GNU behavior defines POSIX. Both arms start from the same immutable
+     image and provisioning revision and differ only in their declared SUT.
+   - Re-running the 493 shell TPs with the assembled Bashy utility providers is
+     a regression/integration gate inside Lane B. It is not a separate roadmap
+     milestone and does not precede starting utility-set work.
+   - Lane B exit: all 116 sets and 8,844 TPs measured, no unexplained
+     Bashy-only failures, `UNRESOLVED` results, or caps in the declared scope,
+     repeatable matched-host evidence, and finalized provider limitations.
+   - After Lane B: execute one uninterrupted 117-set/9,337-TP assembled formal
+     profile, generate the suite's official report (`vrpt`), finalize the
+     conformance statement, and prepare the human submission.
    - Formal Open Group submission/certification remains a separately named
      human/legal milestone; engineering completion must not be worded as a
      certification award.
-   - Next: restore the Bashy Go applets for the shell-integration gate, close
-     the 116 utility sets, then run the uninterrupted 117-set/9,337-TP formal
-     profile and generate the suite's official report.
 3. **Bash++ language foundation.**
    - Stable target for v1.0: Go 1.26-shaped constructs supported by the declared
      Bash++ grammar/profile, including the race and lifecycle gate in
@@ -77,9 +84,12 @@ official packages.
 - Cross-platform install, upgrade, uninstall, smoke, signature, and checksum
   tests. A cross-build alone does not satisfy this milestone.
 
-### v1.1.0 — in-process Go Coreutils
+### v1.1.0 — expanded GNU Coreutils compatibility
 
-- Promote the declared Bashy/Coreutils command set and option/behavior matrix.
+- The POSIX Go-utility profile is pre-v1.0 certification work, not a v1.1
+  introduction: Bashy's Go utilities already exist and are the Lane B SUT.
+- Expand the declared command and option/behavior matrix beyond the POSIX
+  profile toward GNU Coreutils compatibility.
 - Gate GNU Coreutils 9.11 differentials and uutils-derived tests by provenance
   and relevance; do not require foreign-suite 100% where it tests extensions.
 - Preserve external-command fallback and provider reporting where commands are
