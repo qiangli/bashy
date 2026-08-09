@@ -21,7 +21,7 @@ func TestCommandsCatalogSources(t *testing.T) {
 	}
 	// The coreutils userland — invisible to compgen, the reason this exists.
 	// (code-intel is exposed as flat first-class verbs since the yc flatten.)
-	for _, want := range []string{"cat", "ls", "grep", "tree", "ast"} {
+	for _, want := range []string{"cat", "ls", "grep", "tree", "ast", "why"} {
 		if !slices.Contains(core, want) {
 			t.Errorf("coreutils userland missing %q", want)
 		}

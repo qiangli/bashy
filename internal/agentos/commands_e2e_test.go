@@ -255,6 +255,42 @@ func TestE2EAllListedCommandsDispatch(t *testing.T) {
 	}
 }
 
+// TestE2EWhyRejectsUnpinnedVersionOffline proves both AgentOS entry paths
+// reach the embedded managed-external wrapper without consulting its cache or
+// GitHub. An invalid version is rejected before either operation.
+func TestE2EWhyRejectsUnpinnedVersionOffline(t *testing.T) {
+	bin := bashyBinary(t)
+	env := []string{
+		"BASHY_BIN_CACHE=" + t.TempDir(),
+		"WHY_VERSION=v0.0.0",
+	}
+	want := `why: unsupported version override "v0.0.0": only v0.3.3 is pinned and supported`
+
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "front door", args: []string{"why"}},
+		{name: "shell userland", args: []string{"-c", "why"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stdout, stderr, code := runBashyStdEnv(bin, env, tc.args...)
+			if code != 1 {
+				t.Fatalf("exit = %d, want 1; stdout=%q stderr=%q", code, stdout, stderr)
+			}
+			if stdout != "" {
+				t.Fatalf("stdout = %q, want empty", stdout)
+			}
+			if !strings.Contains(stderr, want) {
+				t.Fatalf("stderr missing offline version rejection %q: %q", want, stderr)
+			}
+			if strings.Contains(stderr, "resolve witr") || strings.Contains(stderr, "ensure witr") {
+				t.Fatalf("version rejection reached network/install path: %q", stderr)
+			}
+		})
+	}
+}
+
 func TestE2EClaimDispatches(t *testing.T) {
 	bin := bashyBinary(t)
 	env := []string{"BASHY_COORD_DIR=" + t.TempDir(), "BASHY_EPISODE=test-claim-dispatch"}
