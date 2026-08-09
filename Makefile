@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy install test test-bash test-bash-run test-bash-parallel test-bash-list test-bash-helpers dist tidy clean help
+.PHONY: dag build build-bash build-bashy install test test-build-fail-closed test-bash test-bash-run test-bash-parallel test-bash-list test-bash-helpers dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -70,7 +70,8 @@ build-host:
 ## the conformance harness needs; it skips the embed-heavy bin/bashy build.
 build-bash:
 	@mkdir -p $(BIN_DIR)
-	@case "$$(go env GOOS)" in \
+	@set -e; \
+	case "$$(go env GOOS)" in \
 		linux|darwin) \
 			go build -trimpath -ldflags "$(LDFLAGS)" -o $(BASHY).real ./cmd/bash; \
 			cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BASHY) native/siglaunch.c.in ;; \
@@ -81,7 +82,8 @@ build-bash:
 ## meet SPA when node/pnpm are available and podman blobs when present.
 build-bashy:
 	@mkdir -p $(BIN_DIR)
-	@spa_tag=$$(scripts/build-meet-spa.sh optional); \
+	@set -e; \
+	spa_tag=$$(scripts/build-meet-spa.sh optional); \
 	tags="$(BASHY_TAGS)"; [ -z "$$spa_tag" ] || tags="$${tags:+$$tags }$$spa_tag"; \
 	echo "building bashy$${tags:+ with embeds: $$tags} ..."; \
 	goos=$$(go env GOOS); out=$(BIN); [ "$$goos" != linux ] && [ "$$goos" != darwin ] || out=$(BIN).real; \
@@ -101,12 +103,14 @@ build-bashy:
 build-fips:
 	@mkdir -p $(BIN_DIR)
 	@echo "building with the Go FIPS 140-3 module (GOFIPS140=$(GOFIPS140_VERSION)) ..."
-	@goos=$$(go env GOOS); out=$(BASHY); [ "$$goos" != linux ] && [ "$$goos" != darwin ] || out=$(BASHY).real; \
+	@set -e; \
+	goos=$$(go env GOOS); out=$(BASHY); [ "$$goos" != linux ] && [ "$$goos" != darwin ] || out=$(BASHY).real; \
 	GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bash; \
 	if [ "$$goos" = linux ] || [ "$$goos" = darwin ]; then \
 		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BASHY) native/siglaunch.c.in; \
 	fi
-	@spa_tag=$$(scripts/build-meet-spa.sh optional); \
+	@set -e; \
+	spa_tag=$$(scripts/build-meet-spa.sh optional); \
 	tags="$(BASHY_TAGS)"; [ -z "$$spa_tag" ] || tags="$${tags:+$$tags }$$spa_tag"; \
 	goos=$$(go env GOOS); out=$(BIN); [ "$$goos" != linux ] && [ "$$goos" != darwin ] || out=$(BIN).real; \
 	if [ -n "$$tags" ]; then \
@@ -125,8 +129,13 @@ install: build
 	go run ./tools/installbashy -bash $(BASHY) -bashy $(BIN)
 
 ## test: Run all Go tests
-test:
+test: test-build-fail-closed
 	go test ./...
+
+## test-build-fail-closed: Prove a failed Go build cannot fall through to the
+## native launcher compiler or the installer and reuse stale binaries.
+test-build-fail-closed:
+	scripts/test-build-fail-closed.sh
 
 ## dist: Cross-compile static binaries for all release platforms into bin/dist/
 ## (both bash and bashy; goreleaser handles real releases, this is a local

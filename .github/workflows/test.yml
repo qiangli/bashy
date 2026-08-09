@@ -42,6 +42,10 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: ./scripts/fmtcheck.sh
+      - name: Make build failures stop before launcher and install
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./scripts/test-build-fail-closed.sh
       - name: Build + vet + test (shell core + lean agentos)
         shell: bash
         timeout-minutes: 10
