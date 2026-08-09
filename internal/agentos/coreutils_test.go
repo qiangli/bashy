@@ -38,6 +38,20 @@ func TestDispatchCoreutilsAwkPOSIXFloatFormatter(t *testing.T) {
 	}
 }
 
+func TestDispatchCoreutilsAwkPOSIXEREBackend(t *testing.T) {
+	var out, err bytes.Buffer
+	input := strings.Repeat("a", 1001) + "\n"
+	code := dispatchCoreutilsTool("awk", []string{
+		`/^a{1001}$/ { print "literal" }`,
+	}, tool.Stdio{In: strings.NewReader(input), Out: &out, Err: &err})
+	if code != 0 || err.Len() != 0 {
+		t.Fatalf("awk exit = %d, stderr = %q", code, err.String())
+	}
+	if got, want := out.String(), "literal\n"; got != want {
+		t.Fatalf("awk stdout = %q, want %q", got, want)
+	}
+}
+
 func TestDispatchCoreutilsToolUnknown(t *testing.T) {
 	var err bytes.Buffer
 	code := dispatchCoreutilsTool("__missing__", nil, tool.Stdio{Err: &err})

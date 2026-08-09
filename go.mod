@@ -10,6 +10,7 @@ require (
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.44.0
 	golang.org/x/text v0.38.0
+	gopkg.in/yaml.v3 v3.0.1
 	mvdan.cc/sh/v3 v3.13.1
 )
 
@@ -268,7 +269,6 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorgonia.org/vecf32 v0.9.0 // indirect
 	gorgonia.org/vecf64 v0.9.0 // indirect
 	lukechampine.com/blake3 v1.4.1 // indirect
@@ -291,8 +291,8 @@ replace mvdan.cc/sh/v3 => ../sh
 replace github.com/qiangli/coreutils => ../coreutils
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
-// immutable POSIX formatter fork pinned by coreutils.
-replace github.com/benhoyt/goawk => github.com/qiangli/goawk v1.31.1-0.20260809115012-d0ef5e22caa1
+// immutable POSIX formatter and ERE-backend fork pinned by coreutils.
+replace github.com/benhoyt/goawk => github.com/qiangli/goawk v1.31.1-0.20260809151528-a9a0eae7aca7
 
 replace github.com/qiangli/coreutils/external/otel => ../coreutils/external/otel
 
