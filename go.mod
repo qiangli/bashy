@@ -290,6 +290,10 @@ replace mvdan.cc/sh/v3 => ../sh
 // clone of github.com/qiangli/coreutils standalone.
 replace github.com/qiangli/coreutils => ../coreutils
 
+// Dependency replaces are not transitive: keep the embedded awk on the same
+// immutable POSIX formatter fork pinned by coreutils.
+replace github.com/benhoyt/goawk => github.com/qiangli/goawk v1.31.1-0.20260809115012-d0ef5e22caa1
+
 replace github.com/qiangli/coreutils/external/otel => ../coreutils/external/otel
 
 replace github.com/jaegertracing/jaeger => github.com/qiangli/jaeger v0.0.0-20260426223533-5aaa7eb1f040
