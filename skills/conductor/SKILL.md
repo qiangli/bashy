@@ -68,9 +68,11 @@ size, select, or steer your workers; you do not size or select conductor seats.
 The steward's job is to judge conductor outcomes by independent evidence; an
 agent that appoints, drives, and reviews itself has no independent layer left and
 every check collapses into self-report. If you are already the host steward and a
-conductor seat is needed, appoint a *different* agent to it.
+conductor seat is needed, appoint a *different* agent to it. The general form,
+worth holding onto: **your outcome is judged by a live seat one layer up that did
+not drive the work** — what must never collapse is the judging layer.
 
-Three rules follow, and they are not negotiable:
+Four rules follow, and they are not negotiable:
 
 - **Sub-hubs stay inside your ownership.** If you appoint a foreman or any
   sub-hub, it leads a *sub-team of your workers* under your contract and your
@@ -88,6 +90,23 @@ Three rules follow, and they are not negotiable:
   laterally to another conductor, and cannot accept scope handed to you by one.**
   The steward records the old and new boundary **before** the receiving conductor
   acts; until that record exists, the work is still the original owner's.
+- **Your harness's own subagents are your workers, and they may not wear a
+  title or touch the gate.** Using your agentic tool's internal fan-out is
+  legitimate — a read-only sweep inside one turn produces no independent claim,
+  you remain the sole author of everything you report, and routing it through
+  `weave` would be ceremony. But two things are out. **(a) Never let an internal
+  agent assume a role title.** A subagent "acting as conductor" holds no lease so
+  nothing fences it, opens no room or inbox so nobody can reach it, heartbeats
+  nothing so no successor can tell whether it is alive or gone, and it evaporates
+  when your turn ends — mid-flight, with no continuity record. Every property the
+  seat guarantees is absent while the word promising them is in use. If work needs
+  a conductor, it needs an *appointed, addressable* one. **(b) Never let an
+  internal agent run the merge gate or author a convergence claim.** You run the
+  gate yourself, on your own authority — otherwise "converged" rests on a report
+  instead of evidence, which is the same failure as grepping a worker's log for
+  `PASS`. Beyond those two: **you signed it.** Whatever helpers you used, the
+  commits, gate verdict, and checkpoint are yours, and your checkpoint should say
+  plainly that internal helpers were used and for what.
 
 ## The goal is the contract
 
@@ -251,10 +270,11 @@ responsibilities, not separate skills to defer to:
   of agents, then have it report convergence back to you. This is hub-and-spoke
   with a sub-hub — you keep the campaign contract and the authoritative merge
   gate; the foreman owns its sub-loop. Delegate leadership when the fan-out is
-  wider than one driver can steer — never delegate the merge gate. **A foreman
-  you appoint is still your worker**: it lives entirely inside your exclusive
-  worker ownership, adds no steward-facing ownership layer, and the steward keeps
-  addressing you rather than it (§Seat authority).
+  wider than one driver can steer — never delegate the merge gate, to a foreman
+  or to your harness's own subagents (§Seat authority). **A foreman you appoint is
+  still your worker**: it lives entirely inside your exclusive worker ownership,
+  adds no steward-facing ownership layer, and the steward keeps addressing you
+  rather than it (§Seat authority).
 
 ## Scheduling strategy
 
