@@ -38,6 +38,19 @@ func TestDispatchCoreutilsAwkPOSIXFloatFormatter(t *testing.T) {
 	}
 }
 
+func TestDispatchCoreutilsAwkPOSIXOctalAlternateForm(t *testing.T) {
+	var out, err bytes.Buffer
+	code := dispatchCoreutilsTool("awk", []string{
+		`BEGIN { printf "<%#.o><%#.00o><%#.*o><%.0o>\n", 0, 0, 0, 0, 0 }`,
+	}, tool.Stdio{Out: &out, Err: &err})
+	if code != 0 || err.Len() != 0 {
+		t.Fatalf("awk exit = %d, stderr = %q", code, err.String())
+	}
+	if got, want := out.String(), "<0><0><0><>\n"; got != want {
+		t.Fatalf("awk stdout = %q, want %q", got, want)
+	}
+}
+
 func TestDispatchCoreutilsAwkPOSIXEREBackend(t *testing.T) {
 	var out, err bytes.Buffer
 	input := strings.Repeat("a", 1001) + "\n"
