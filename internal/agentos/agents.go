@@ -3,9 +3,11 @@
 
 package agentos
 
-// The bare `agents` view deliberately reads weave's durable queue.  A process
-// list cannot say whether a worker is assigned work (and a worker need not have
-// a stable process at all); the queue is the execution source of truth.
+// The `agents` view is a reconciled projection of the three local execution
+// stores: weave queues (workers), the sprint board (conductor leases), and the
+// host room (process liveness). None of those stores alone is enough to say
+// that an agent is really working. In particular, a queue item can survive a
+// killed wrapper and a sprint lease can outlive its conductor.
 
 import (
 	"encoding/json"
@@ -14,13 +16,18 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/qiangli/coreutils/pkg/fleet"
+	"github.com/qiangli/coreutils/pkg/room"
 	"github.com/spf13/cobra"
 )
 
+// The envelope name is kept stable; the reconciled fields are additive so an
+// existing `agents --json` consumer can continue reading Assignments.
 const agentsRosterSchema = "bashy-agents-v1"
 
 type agentsQueue struct {
@@ -30,13 +37,31 @@ type agentsQueue struct {
 }
 
 type agentsQueueItem struct {
-	ID        int64     `json:"id"`
-	Title     string    `json:"title"`
-	State     string    `json:"state"`
-	Tool      string    `json:"tool"`
-	Owner     string    `json:"owner"`
-	Created   time.Time `json:"created"`
-	StartedAt time.Time `json:"started_at"`
+	ID          int64             `json:"id"`
+	Title       string            `json:"title"`
+	State       string            `json:"state"`
+	Tool        string            `json:"tool"`
+	Owner       string            `json:"owner"`
+	Points      int               `json:"points,omitempty"`
+	Created     time.Time         `json:"created"`
+	StartedAt   time.Time         `json:"started_at"`
+	WrapperPID  int               `json:"wrapper_pid,omitempty"`
+	Stale       bool              `json:"stale,omitempty"`
+	Blocked     bool              `json:"blocked,omitempty"`
+	LaunchPhase string            `json:"launch_phase,omitempty"`
+	LaunchSpec  *agentsLaunchSpec `json:"launch_spec,omitempty"`
+	Comments    []agentsComment   `json:"comments,omitempty"`
+}
+
+type agentsLaunchSpec struct {
+	Agent      string        `json:"agent,omitempty"`
+	Tool       string        `json:"tool,omitempty"`
+	MaxRuntime time.Duration `json:"max_runtime,omitempty"`
+}
+
+type agentsComment struct {
+	At   time.Time `json:"at"`
+	Kind string    `json:"kind,omitempty"`
 }
 
 type agentsQueueStory struct {
@@ -47,15 +72,54 @@ type agentsQueueStory struct {
 	} `json:"runs"`
 }
 
+type agentsSprintBoard struct {
+	Stories []agentsSprint `json:"stories"`
+}
+
+type agentsSprint struct {
+	ID      int64              `json:"id"`
+	Title   string             `json:"title"`
+	Column  string             `json:"column"`
+	Lease   *agentsSprintLease `json:"lease,omitempty"`
+	Runs    []agentsSprintRun  `json:"runs,omitempty"`
+	Boxes   []agentsSprintBox  `json:"boxes,omitempty"`
+	Updated time.Time          `json:"updated_at,omitempty"`
+}
+
+type agentsSprintLease struct {
+	Holder string    `json:"holder"`
+	At     time.Time `json:"at"`
+}
+
+type agentsSprintRun struct {
+	Repo string `json:"repo"`
+	ID   int64  `json:"id"`
+}
+
+type agentsSprintBox struct {
+	StartedAt time.Time  `json:"started_at"`
+	Cutoff    time.Time  `json:"cutoff"`
+	StoppedAt *time.Time `json:"stopped_at,omitempty"`
+}
+
+// agentAssignment is deliberately a union: conductors have a sprint but no
+// run, workers have a run and may have a sprint. Zero-valued fields are omitted
+// in JSON so old consumers can continue reading the assignment fields.
 type agentAssignment struct {
-	Agent  string `json:"agent"`
-	Owner  string `json:"owner,omitempty"`
-	Repo   string `json:"repo"`
-	Run    int64  `json:"run"`
-	Sprint int64  `json:"sprint,omitempty"`
-	State  string `json:"state"`
-	Age    string `json:"age,omitempty"`
-	Title  string `json:"title"`
+	Agent        string    `json:"agent"`
+	Role         string    `json:"role"`
+	Owner        string    `json:"owner,omitempty"`
+	Repo         string    `json:"repo"`
+	Run          int64     `json:"run"`
+	Sprint       int64     `json:"sprint,omitempty"`
+	Points       int       `json:"points,omitempty"`
+	Deadline     time.Time `json:"deadline,omitempty"`
+	LastProgress time.Time `json:"last_progress,omitempty"`
+	State        string    `json:"state"`
+	Health       string    `json:"health"`
+	HealthReason string    `json:"health_reason,omitempty"`
+	Age          string    `json:"age,omitempty"`
+	Title        string    `json:"title"`
 }
 
 type agentsRoster struct {
@@ -63,12 +127,48 @@ type agentsRoster struct {
 	Assignments   []agentAssignment `json:"assignments"`
 }
 
+// encoding/json does not omit a zero time.Time with `omitempty` because it is
+// a struct. Keep the internal projection convenient for comparisons while
+// making the public envelope honest about absent evidence.
+func (a agentAssignment) MarshalJSON() ([]byte, error) {
+	type wire struct {
+		Agent        string     `json:"agent"`
+		Role         string     `json:"role"`
+		Owner        string     `json:"owner,omitempty"`
+		Repo         string     `json:"repo"`
+		Run          int64      `json:"run"`
+		Sprint       int64      `json:"sprint,omitempty"`
+		Points       int        `json:"points,omitempty"`
+		Deadline     *time.Time `json:"deadline,omitempty"`
+		LastProgress *time.Time `json:"last_progress,omitempty"`
+		State        string     `json:"state"`
+		Health       string     `json:"health"`
+		HealthReason string     `json:"health_reason,omitempty"`
+		Age          string     `json:"age,omitempty"`
+		Title        string     `json:"title"`
+	}
+	var deadline, progress *time.Time
+	if !a.Deadline.IsZero() {
+		v := a.Deadline
+		deadline = &v
+	}
+	if !a.LastProgress.IsZero() {
+		v := a.LastProgress
+		progress = &v
+	}
+	return json.Marshal(wire{
+		Agent: a.Agent, Role: a.Role, Owner: a.Owner, Repo: a.Repo, Run: a.Run,
+		Sprint: a.Sprint, Points: a.Points, Deadline: deadline, LastProgress: progress,
+		State: a.State, Health: a.Health, HealthReason: a.HealthReason, Age: a.Age, Title: a.Title,
+	})
+}
+
 var agentsHomeDir = os.UserHomeDir
 
 func newAgentsRosterCmd(opts ...fleet.Option) *cobra.Command {
 	cmd := fleet.NewAgentsCmd(opts...)
-	cmd.Short = "Show active agent assignments (use `agents list` for the catalog)"
-	cmd.Long = "Show currently active agent assignments from weave's durable queue.\n\n" +
+	cmd.Short = "Show the reconciled live agent roster (use `agents list` for the catalog)"
+	cmd.Long = "Show conductors and workers reconciled from the sprint, room, and weave stores.\n\n" +
 		"Use `bashy agents list` to list all registered agent bindings."
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		for _, name := range []string{"all", "band", "min-band"} {
@@ -82,7 +182,7 @@ func newAgentsRosterCmd(opts ...fleet.Option) *cobra.Command {
 }
 
 func renderAgentRoster(w io.Writer, asJSON bool) error {
-	assignments, err := activeAgentAssignments()
+	assignments, err := reconciledAgentRoster()
 	if err != nil {
 		return err
 	}
@@ -90,9 +190,14 @@ func renderAgentRoster(w io.Writer, asJSON bool) error {
 		return json.NewEncoder(w).Encode(agentsRoster{SchemaVersion: agentsRosterSchema, Assignments: assignments})
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "AGENT\tOWNER\tREPO\tRUN\tSPRINT\tSTATE\tAGE\tWORK")
+	// Keep the original columns first. Consumers commonly use the human view
+	// in a terminal copy/paste workflow; reconciled fields follow additively.
+	fmt.Fprintln(tw, "AGENT\tOWNER\tREPO\tRUN\tSPRINT\tSTATE\tAGE\tWORK\tROLE\tPOINTS\tDEADLINE\tHEALTH\tLAST PROGRESS")
 	for _, a := range assignments {
-		sprint := "-"
+		run, sprint := "-", "-"
+		if a.Run != 0 {
+			run = fmt.Sprintf("#%d", a.Run)
+		}
 		if a.Sprint != 0 {
 			sprint = fmt.Sprintf("#%d", a.Sprint)
 		}
@@ -100,11 +205,23 @@ func renderAgentRoster(w io.Writer, asJSON bool) error {
 		if owner == "" {
 			owner = "-"
 		}
-		age := a.Age
-		if age == "" {
-			age = "-"
+		points := "-"
+		if a.Points != 0 {
+			points = strconv.Itoa(a.Points)
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t#%d\t%s\t%s\t%s\t%s\n", a.Agent, owner, a.Repo, a.Run, sprint, a.State, age, a.Title)
+		deadline := "-"
+		if !a.Deadline.IsZero() {
+			deadline = a.Deadline.Local().Format("15:04:05")
+		}
+		last := "-"
+		if !a.LastProgress.IsZero() {
+			last = assignmentAgeAt(a.LastProgress, time.Now()) + " ago"
+		}
+		title := a.Title
+		if title == "" {
+			title = "-"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", a.Agent, owner, dash(a.Repo), run, sprint, dash(a.State), dash(a.Age), title, a.Role, points, deadline, healthLabel(a), last)
 	}
 	if err := tw.Flush(); err != nil {
 		return err
@@ -113,14 +230,75 @@ func renderAgentRoster(w io.Writer, asJSON bool) error {
 	return err
 }
 
-func activeAgentAssignments() ([]agentAssignment, error) {
+func dash(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "-"
+	}
+	return s
+}
+
+func healthLabel(a agentAssignment) string {
+	if a.HealthReason == "" {
+		return a.Health
+	}
+	return a.Health + " (" + a.HealthReason + ")"
+}
+
+// reconciledAgentRoster reads all stores before rendering either output mode.
+// This is intentionally one function: JSON and human output cannot disagree
+// about who is assigned when they share the same snapshot.
+func reconciledAgentRoster() ([]agentAssignment, error) {
 	home, err := agentsHomeDir()
 	if err != nil {
 		return nil, err
 	}
+	weaveRoots, sprintRoot := agentStoreRoots(home)
+	roomMembers, err := room.Members()
+	if err != nil {
+		return nil, err
+	}
+	roomByRunPID := make(map[string][]room.Card)
+	for _, card := range roomMembers {
+		if id, pid, ok := roomRunIdentity(card.ID); ok {
+			roomByRunPID[roomRunPIDKey(id, pid)] = append(roomByRunPID[roomRunPIDKey(id, pid)], card)
+		}
+	}
+
+	sprints, err := loadAgentSprints(sprintRoot)
+	if err != nil {
+		return nil, err
+	}
+	byRun := make(map[string]agentsSprint)
 	var out []agentAssignment
-	seen := map[string]bool{}
-	for _, base := range []string{filepath.Join(home, ".bashy", "weave"), filepath.Join(home, ".agents", "weave"), filepath.Join(home, ".agents", "ycode", "weave")} {
+	now := time.Now()
+	for _, sprint := range sprints {
+		for _, run := range sprint.Runs {
+			byRun[runKey(run.Repo, run.ID)] = sprint
+		}
+		if !activeSprintColumn(sprint.Column) || sprint.Lease == nil || strings.TrimSpace(sprint.Lease.Holder) == "" {
+			continue
+		}
+		a := agentAssignment{
+			Agent: sprint.Lease.Holder, Role: "conductor", Owner: sprint.Lease.Holder,
+			Sprint: sprint.ID, State: sprint.Column, Title: sprint.Title,
+			Health: "healthy", LastProgress: sprint.Lease.At,
+		}
+		if a.State == "" {
+			a.State = "assigned"
+		}
+		if deadline := sprintDeadline(sprint, now); !deadline.IsZero() {
+			a.Deadline = deadline
+		}
+		if sprint.Lease.At.IsZero() {
+			a.Health, a.HealthReason = "unknown", "missing conductor heartbeat"
+		} else if now.Sub(sprint.Lease.At) > 30*time.Minute {
+			a.Health, a.HealthReason = "stale", "conductor lease heartbeat expired"
+		}
+		a.Age = assignmentAgeAt(sprint.Lease.At, now)
+		out = append(out, a)
+	}
+
+	for _, base := range weaveRoots {
 		entries, err := os.ReadDir(base)
 		if os.IsNotExist(err) {
 			continue
@@ -133,68 +311,249 @@ func activeAgentAssignments() ([]agentAssignment, error) {
 				continue
 			}
 			path := filepath.Join(base, entry.Name(), "queue.json")
-			data, err := os.ReadFile(path)
-			if os.IsNotExist(err) {
-				continue
-			}
-			if err != nil {
-				return nil, err
-			}
 			var q agentsQueue
-			if err := json.Unmarshal(data, &q); err != nil {
+			found, err := readAgentJSON(path, &q)
+			if err != nil {
 				return nil, fmt.Errorf("read weave queue %s: %w", path, err)
+			}
+			if !found {
+				continue
 			}
 			repo := filepath.Base(q.Root)
 			if repo == "." || repo == "" {
 				repo = entry.Name()
 			}
-			sprints := queueSprints(q, repo)
+			// Older per-repo queues carried only the sprint/run link. Keep that
+			// link visible when the global sprint board is absent; the board is
+			// still preferred because it supplies the conductor/deadline facts.
+			for _, story := range q.Stories {
+				for _, run := range story.Runs {
+					key := runKey(run.Repo, run.ID)
+					if _, ok := byRun[key]; !ok {
+						byRun[key] = agentsSprint{ID: story.ID}
+					}
+				}
+			}
 			for _, item := range q.Items {
-				if item.State != "working" {
+				if !agentItemActive(item) {
 					continue
 				}
-				key := fmt.Sprintf("%s/%d", q.Root, item.ID)
-				if seen[key] {
-					continue
+				sprint, hasSprint := byRun[runKey(repo, item.ID)]
+				a := agentAssignment{
+					Agent: agentItemName(item), Role: "worker", Owner: item.Owner,
+					Repo: repo, Run: item.ID, State: item.State, Title: item.Title,
+					Points: item.Points, LastProgress: itemLastProgress(item),
 				}
-				seen[key] = true
-				agent := item.Owner
-				if agent == "" {
-					agent = item.Tool
+				if hasSprint {
+					a.Sprint = sprint.ID
 				}
-				if agent == "" {
-					agent = "?"
+				// A worker's deadline is its own bounded launch runtime. The
+				// sprint box is a conductor review cutoff, not a worker cap.
+				if !item.StartedAt.IsZero() && item.LaunchSpec != nil && item.LaunchSpec.MaxRuntime > 0 {
+					a.Deadline = item.StartedAt.Add(item.LaunchSpec.MaxRuntime)
 				}
-				out = append(out, agentAssignment{Agent: agent, Owner: item.Owner, Repo: repo, Run: item.ID, Sprint: sprints[item.ID], State: item.State, Age: assignmentAge(item, time.Now()), Title: item.Title})
+				a.Age = assignmentAgeAt(a.LastProgress, now)
+				a.Health, a.HealthReason = workerHealth(item, roomByRunPID[roomRunPIDKey(item.ID, item.WrapperPID)])
+				out = append(out, a)
 			}
 		}
 	}
-	sort.Slice(out, func(i, j int) bool {
+
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Role != out[j].Role {
+			return out[i].Role == "conductor"
+		}
 		if out[i].Repo != out[j].Repo {
 			return out[i].Repo < out[j].Repo
 		}
-		return out[i].Run < out[j].Run
+		if out[i].Sprint != out[j].Sprint {
+			return out[i].Sprint < out[j].Sprint
+		}
+		if out[i].Run != out[j].Run {
+			return out[i].Run < out[j].Run
+		}
+		return out[i].Agent < out[j].Agent
 	})
 	return out, nil
 }
 
-func queueSprints(q agentsQueue, repo string) map[int64]int64 {
-	out := make(map[int64]int64)
-	for _, story := range q.Stories {
-		for _, run := range story.Runs {
-			if run.Repo == repo {
-				out[run.ID] = story.ID
-			}
-		}
+func activeSprintColumn(column string) bool {
+	switch strings.ToLower(strings.TrimSpace(column)) {
+	case "doing", "review":
+		return true
+	default:
+		return false
 	}
-	return out
 }
 
-func assignmentAge(item agentsQueueItem, now time.Time) string {
-	then := item.StartedAt
-	if then.IsZero() {
-		then = item.Created
+func agentStoreRoots(home string) ([]string, string) {
+	if configured := strings.TrimSpace(os.Getenv("BASHY_HOME")); configured != "" {
+		return []string{filepath.Join(configured, "weave")}, agentSprintRoot(configured, home)
 	}
+	return []string{
+		filepath.Join(home, ".bashy", "weave"),
+		filepath.Join(home, ".agents", "weave"),
+		filepath.Join(home, ".agents", "ycode", "weave"),
+	}, agentSprintRoot("", home)
+}
+
+func agentSprintRoot(configuredHome, home string) string {
+	if dir := strings.TrimSpace(os.Getenv("BASHY_SPRINT_DIR")); dir != "" {
+		return dir
+	}
+	if configuredHome != "" {
+		return filepath.Join(configuredHome, "sprint")
+	}
+	return filepath.Join(home, ".bashy", "sprint")
+}
+
+func loadAgentSprints(root string) ([]agentsSprint, error) {
+	var board agentsSprintBoard
+	found, err := readAgentJSON(filepath.Join(root, "queue.json"), &board)
+	if err != nil {
+		return nil, fmt.Errorf("read sprint board: %w", err)
+	}
+	if !found {
+		return nil, nil
+	}
+	return board.Stories, nil
+}
+
+func readAgentJSON(path string, dst any) (bool, error) {
+	for attempt := 0; attempt < 3; attempt++ {
+		b, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		if err != nil {
+			return true, err
+		}
+		if err := json.Unmarshal(b, dst); err == nil {
+			return true, nil
+		} else if attempt == 2 {
+			return true, err
+		}
+		time.Sleep(time.Millisecond)
+	}
+	return false, nil
+}
+
+func runKey(repo string, id int64) string {
+	return strings.ToLower(strings.TrimSpace(repo)) + "/" + strconv.FormatInt(id, 10)
+}
+
+func agentItemActive(item agentsQueueItem) bool {
+	switch item.State {
+	case "allocated", "working", "finalizing":
+		return true
+	case "todo":
+		return item.Owner != "" || item.Tool != "" || item.LaunchSpec != nil
+	default:
+		return false
+	}
+}
+
+func agentItemName(item agentsQueueItem) string {
+	if item.Owner != "" {
+		return item.Owner
+	}
+	if item.LaunchSpec != nil && item.LaunchSpec.Agent != "" {
+		return item.LaunchSpec.Agent
+	}
+	if item.Tool != "" {
+		return item.Tool
+	}
+	return "?"
+}
+
+func itemLastProgress(item agentsQueueItem) time.Time {
+	for i := len(item.Comments) - 1; i >= 0; i-- {
+		if relevantWorkerComment(item.Comments[i].Kind) && !item.Comments[i].At.IsZero() {
+			return item.Comments[i].At
+		}
+	}
+	if !item.StartedAt.IsZero() {
+		return item.StartedAt
+	}
+	return item.Created
+}
+
+func sprintDeadline(s agentsSprint, now time.Time) time.Time {
+	for i := len(s.Boxes) - 1; i >= 0; i-- {
+		box := s.Boxes[i]
+		if !box.StartedAt.IsZero() && box.StoppedAt == nil {
+			return box.Cutoff
+		}
+	}
+	return time.Time{}
+}
+
+func roomRunID(id string) (int64, bool) {
+	run, _, ok := roomRunIdentity(id)
+	return run, ok
+}
+
+func roomRunIdentity(id string) (int64, int, bool) {
+	parts := strings.Split(id, "-")
+	if len(parts) < 3 || parts[0] != "weave" {
+		return 0, 0, false
+	}
+	run, runErr := strconv.ParseInt(parts[1], 10, 64)
+	pid, pidErr := strconv.Atoi(parts[2])
+	return run, pid, runErr == nil && pidErr == nil && pid > 0
+}
+
+func roomRunPIDKey(run int64, pid int) string {
+	return strconv.FormatInt(run, 10) + "/" + strconv.Itoa(pid)
+}
+
+func relevantWorkerComment(kind string) bool {
+	switch kind {
+	case "blocker", "progress", "decision", "review":
+		return true
+	default:
+		return false
+	}
+}
+
+func workerBlocked(item agentsQueueItem) bool {
+	for i := len(item.Comments) - 1; i >= 0; i-- {
+		if !relevantWorkerComment(item.Comments[i].Kind) {
+			continue
+		}
+		return item.Comments[i].Kind == "blocker"
+	}
+	return false
+}
+
+func workerHealth(item agentsQueueItem, cards []room.Card) (string, string) {
+	if workerBlocked(item) {
+		return "blocked", "latest worker note is a blocker"
+	}
+	if item.WrapperPID > 0 && !room.PidAlive(item.WrapperPID) {
+		return "stale", fmt.Sprintf("worker wrapper pid %d is not alive", item.WrapperPID)
+	}
+	if item.WrapperPID <= 0 {
+		return "unknown", "no worker wrapper heartbeat recorded"
+	}
+	if len(cards) > 0 {
+		if item.WrapperPID > 0 {
+			for _, card := range cards {
+				if card.PID == item.WrapperPID {
+					return "healthy", "room member and wrapper are live"
+				}
+			}
+			return "inconsistent", "room member pid differs from queue wrapper"
+		}
+		return "healthy", "room member is live"
+	}
+	if item.WrapperPID > 0 {
+		return "inconsistent", "live wrapper has no room member"
+	}
+	return "unknown", "no worker heartbeat recorded"
+}
+
+func assignmentAgeAt(then, now time.Time) string {
 	if then.IsZero() || then.After(now) {
 		return ""
 	}
@@ -206,4 +565,11 @@ func assignmentAge(item agentsQueueItem, now time.Time) string {
 		return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
 	}
 	return fmt.Sprintf("%ds", int(d.Seconds()))
+}
+
+// Kept for callers/tests that used the old helper directly.
+func activeAgentAssignments() ([]agentAssignment, error) { return reconciledAgentRoster() }
+
+func assignmentAge(item agentsQueueItem, now time.Time) string {
+	return assignmentAgeAt(itemLastProgress(item), now)
 }
