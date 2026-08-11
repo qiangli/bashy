@@ -23,6 +23,15 @@ var bashVersion = "5.3.0(1)-bashy"
 // this empty.
 var buildID string
 
+// VersionProduct and VersionCompatibility control only the human-facing
+// --version banner. The pure cmd/bash binary keeps the GNU-compatible banner;
+// cmd/bashy overrides these labels so the AgentOS product does not claim to be
+// GNU Bash. BASH_VERSION remains the compatibility version in both binaries.
+var (
+	VersionProduct       = "GNU bash"
+	VersionCompatibility string
+)
+
 const (
 	bashVerMajor = "5"
 	bashVerMinor = "3"
@@ -52,6 +61,14 @@ func bashVersionLine() string {
 		return bashVersion + " (" + id + ")"
 	}
 	return bashVersion
+}
+
+func versionBanner() string {
+	prefix := VersionProduct
+	if VersionCompatibility != "" {
+		prefix += ", " + VersionCompatibility
+	}
+	return prefix + ", version " + bashVersionLine()
 }
 
 // bashVersionVars returns the environment variables that identify bashy

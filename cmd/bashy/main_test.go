@@ -12,6 +12,9 @@ import (
 )
 
 func TestDefaultBuildWiresCompleteAgentOS(t *testing.T) {
+	if cli.VersionProduct != "bashy" || cli.VersionCompatibility != "GNU Bash 5.3 compatible" {
+		t.Fatalf("bashy version branding = %q / %q", cli.VersionProduct, cli.VersionCompatibility)
+	}
 	tests := []struct {
 		name string
 		got  any

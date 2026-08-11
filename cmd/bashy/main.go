@@ -24,6 +24,8 @@ func init() {
 	cli.AgentOSWireExec = agentos.WireExec
 	cli.AgentOSPreamble = agentos.Preamble
 	cli.AgentOSUsage = agentos.Usage
+	cli.VersionProduct = "bashy"
+	cli.VersionCompatibility = "GNU Bash 5.3 compatible"
 	// Keep the fork's nohup/setsid builtins: the in-process matrix shell needs
 	// `nohup foo &` to outlive a closed SSH session, which an external nohup
 	// over a goroutine job can't provide. (The pure `bash` drop-in suppresses

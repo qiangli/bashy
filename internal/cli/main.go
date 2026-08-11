@@ -491,7 +491,7 @@ func Main() {
 	os.Args = relocatePendingCommandFlag(os.Args)
 	preflightInvocationErrors(os.Args)
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
-		fmt.Printf("GNU bash, version %s\n", bashVersionLine())
+		fmt.Println(versionBanner())
 		return
 	}
 	// bash accepts POSIX-style combined short flags (`-ce 'cmd'`,
