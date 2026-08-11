@@ -13,6 +13,25 @@ its agent lifecycles. This feature is targeted for the **Bashy v1.2.0 release,
 after v1.0.0 certification**: it must not displace the v1/POSIX certification
 campaign or be used to weaken an existing compatibility gate.
 
+## Agentic spacetime principle
+
+Design every time-related command, option, and timestamp as the **time
+dimension of agentic spacetime**, not merely as a traditional date parser,
+timer, or delayed shell invocation. An agentic action has both a spatial
+coordinate (host, workspace, target resource, and execution context) and a
+temporal coordinate (nominal time, timezone, deadline, duration, recurrence,
+and recovery policy). The interface must preserve both coordinates so an agent
+can answer: what should happen, where, when, for how long, relative to which
+clock, and what should happen if that moment is missed.
+
+Classic flags remain compatible, but their internal model and Bashy extension
+surface should compose cleanly with agent plans, durable wakeups, deadlines,
+leases, cancellation, and lifecycle transitions. Prefer typed, inspectable
+temporal intent over opaque sleeps or embedded command strings. This principle
+also complements Bashy's existing space-time advisor: space explains whether
+an execution context is viable, while time explains when an action becomes
+eligible, late, expired, retryable, or complete.
+
 ## Why this is one feature
 
 Bashy already has useful pieces, but not yet one trustworthy clock:
