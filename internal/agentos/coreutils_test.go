@@ -26,6 +26,7 @@ func TestDispatchCoreutilsToolFetchHelp(t *testing.T) {
 }
 
 func TestDispatchCoreutilsAwkPOSIXFloatFormatter(t *testing.T) {
+	t.Setenv("LC_ALL", "C")
 	var out, err bytes.Buffer
 	code := dispatchCoreutilsTool("awk", []string{
 		`BEGIN {
@@ -42,6 +43,7 @@ func TestDispatchCoreutilsAwkPOSIXFloatFormatter(t *testing.T) {
 }
 
 func TestDispatchCoreutilsAwkPOSIXOctalAlternateForm(t *testing.T) {
+	t.Setenv("LC_ALL", "C")
 	var out, err bytes.Buffer
 	code := dispatchCoreutilsTool("awk", []string{
 		`BEGIN { printf "<%#.o><%#.00o><%#.*o><%.0o>\n", 0, 0, 0, 0, 0 }`,
@@ -55,6 +57,7 @@ func TestDispatchCoreutilsAwkPOSIXOctalAlternateForm(t *testing.T) {
 }
 
 func TestDispatchCoreutilsAwkPOSIXEREBackend(t *testing.T) {
+	t.Setenv("LC_ALL", "C")
 	var out, err bytes.Buffer
 	input := strings.Repeat("a", 1001) + "\n"
 	code := dispatchCoreutilsTool("awk", []string{

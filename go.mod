@@ -292,7 +292,7 @@ replace github.com/qiangli/coreutils => ../coreutils
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
-replace github.com/benhoyt/goawk => github.com/qiangli/goawk v1.31.1-0.20260810235709-63c4971fd522
+replace github.com/benhoyt/goawk => github.com/qiangli/goawk v1.31.1-0.20260811024949-9948781e3cd4
 
 replace github.com/qiangli/coreutils/external/otel => ../coreutils/external/otel
 
