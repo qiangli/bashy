@@ -1,7 +1,7 @@
 ---
 id: 8624c8fab52e
 kind: task
-title: 'Post-v1.2: durable agentic time orchestration'
+title: 'Bashy v1.2.0: durable agentic time orchestration'
 seq: 6
 status: todo
 priority: p2
@@ -9,9 +9,9 @@ created: 2026-08-11T17:26:27Z
 ---
 
 Design and deliver one durable time model for Bashy's classic time commands and
-its agent lifecycles. This is a **post-v1.2 feature**: it must not displace the
-v1/POSIX certification campaign or be used to weaken an existing compatibility
-gate.
+its agent lifecycles. This feature is targeted for the **Bashy v1.2.0 release,
+after v1.0.0 certification**: it must not displace the v1/POSIX certification
+campaign or be used to weaken an existing compatibility gate.
 
 ## Why this is one feature
 
@@ -244,4 +244,4 @@ command compatibility.
 - A calendar UI, hosted SaaS dependency, or hidden host-cron integration.
 - Keeping a provider session alive merely because a future action exists.
 - Inferring lifecycle state by scraping CLI output or replaying private prompts.
-- Expanding pre-v1 certification scope to deliver this post-v1.2 feature.
+- Expanding pre-v1 certification scope to deliver this v1.2.0 feature.
