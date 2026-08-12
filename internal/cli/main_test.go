@@ -1297,7 +1297,92 @@ func withStrictPosixEnv(t *testing.T, argv0 string, posixFlag bool) {
 	*posix = posixFlag
 	t.Setenv("SHELLOPTS", "")
 	t.Setenv("BASHOPTS", "")
+	unsetTestEnv(t, "POSIXLY_CORRECT")
+	unsetTestEnv(t, "POSIX_PEDANTIC")
+}
+
+func unsetTestEnv(t *testing.T, name string) {
+	t.Helper()
+	value, present := os.LookupEnv(name)
+	if err := os.Unsetenv(name); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if present {
+			_ = os.Setenv(name, value)
+		} else {
+			_ = os.Unsetenv(name)
+		}
+	})
+}
+
+func TestEffectiveStartupPosix(t *testing.T) {
+	cases := []struct {
+		name     string
+		argv     []string
+		envName  string
+		envValue string
+		want     bool
+	}{
+		{name: "plain bash", argv: []string{"bash"}},
+		{name: "long option", argv: []string{"bash", "--posix"}, want: true},
+		{name: "set option", argv: []string{"bash", "-o", "posix"}, want: true},
+		{name: "on then off", argv: []string{"bash", "-o", "posix", "-bashy-plus-o", "posix"}},
+		{name: "off then on", argv: []string{"bash", "-bashy-plus-o", "posix", "-o", "posix"}, want: true},
+		{name: "shellopts", argv: []string{"bash", "-bashy-plus-o", "posix"}, envName: "SHELLOPTS", envValue: "braceexpand:posix", want: true},
+		{name: "correct empty", argv: []string{"bash", "-bashy-plus-o", "posix"}, envName: "POSIXLY_CORRECT", want: true},
+		{name: "correct value", argv: []string{"bash"}, envName: "POSIXLY_CORRECT", envValue: "no", want: true},
+		{name: "pedantic empty", argv: []string{"bash"}, envName: "POSIX_PEDANTIC", want: true},
+		{name: "pedantic value", argv: []string{"bash"}, envName: "POSIX_PEDANTIC", envValue: "no", want: true},
+		{name: "invoked sh", argv: []string{"/bin/sh", "-bashy-plus-o", "posix"}, want: true},
+		{name: "invoked bashy", argv: []string{"bashy"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			oldArgs, oldPosix := os.Args, *posix
+			t.Cleanup(func() { os.Args, *posix = oldArgs, oldPosix })
+			os.Args, *posix = tc.argv, false
+			unsetTestEnv(t, "POSIXLY_CORRECT")
+			unsetTestEnv(t, "POSIX_PEDANTIC")
+			t.Setenv("SHELLOPTS", "")
+			if tc.envName != "" {
+				t.Setenv(tc.envName, tc.envValue)
+			}
+			if got := effectiveStartupPosix(); got != tc.want {
+				t.Fatalf("effectiveStartupPosix()=%v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPosixPedanticCreatesCorrectVariable(t *testing.T) {
+	withStrictPosixEnv(t, "bash", false)
+	t.Setenv("POSIX_PEDANTIC", "")
+	r, err := newRunner()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Env.Get("POSIXLY_CORRECT").String(); got != "y" {
+		t.Fatalf("POSIXLY_CORRECT=%q, want y", got)
+	}
+	if got := r.LangVariant(); got != syntax.LangPOSIX {
+		t.Fatalf("LangVariant=%v, want POSIX", got)
+	}
+}
+
+func TestEmptyPosixlyCorrectIsPreservedAndEnablesMode(t *testing.T) {
+	withStrictPosixEnv(t, "bash", false)
 	t.Setenv("POSIXLY_CORRECT", "")
+	r, err := newRunner()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Env.Get("POSIXLY_CORRECT").String(); got != "" {
+		t.Fatalf("POSIXLY_CORRECT=%q, want inherited empty value", got)
+	}
+	if got := r.LangVariant(); got != syntax.LangPOSIX {
+		t.Fatalf("LangVariant=%v, want POSIX", got)
+	}
 }
 
 // runStrictProbe runs a script whose only non-conformance is an assignment

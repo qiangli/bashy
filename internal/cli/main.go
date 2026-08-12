@@ -302,6 +302,17 @@ func splitCombinedShortFlags(args []string) []string {
 			out = append(out, a)
 			continue
 		}
+		// Preserve value-taking options as a pair and keep scanning after the
+		// value. Treating the option name alone as complete made its value look
+		// like the script operand, so a later +o/-o was never normalized.
+		if a == "-o" || a == "-O" || a == "--rcfile" || a == "--init-file" {
+			out = append(out, a)
+			if i+1 < len(args) {
+				i++
+				out = append(out, args[i])
+			}
+			continue
+		}
 		if a == "+O" {
 			out = append(out, "-bashy-plus-O")
 			continue
@@ -503,11 +514,6 @@ func Main() {
 	// script (e.g. `-c - 'echo x'`, `-c -- 'echo x'`, a lone `-`).
 	os.Args = stripIgnoredOperandHyphen(os.Args)
 	flag.Parse()
-	// Invoked as `sh` → POSIX mode, like bash. Set the flag so every downstream
-	// consumer (runner -o posix, prompt expansion, AgentOS wiring) honors it.
-	if invokedAsSh() {
-		*posix = true
-	}
 	err := runAll()
 
 	// Flush telemetry on EVERY exit path. os.Exit skips defers; this is the only hook
@@ -553,6 +559,7 @@ func shouldRunInteractive(stdinTTY bool) bool {
 const defaultPathValue = "/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:."
 
 func newRunner() (*interp.Runner, error) {
+	startupPosix := effectiveStartupPosix()
 	// Increment SHLVL from parent environment.
 	shlvl := 0
 	if s := os.Getenv("SHLVL"); s != "" {
@@ -566,6 +573,15 @@ func newRunner() (*interp.Runner, error) {
 	// succeeds (oils builtin-cd differential, all 5 oracle shells agree).
 	envVars := make([]string, 0, len(os.Environ())+len(bashVersionVars()))
 	envVars = append(envVars, shellStartupEnv(os.Environ())...)
+	// Bash 5.3 accepts POSIX_PEDANTIC as the legacy spelling of
+	// POSIXLY_CORRECT. If only the legacy name was inherited it additionally
+	// creates POSIXLY_CORRECT=y; an inherited POSIXLY_CORRECT value, including
+	// the empty string, is preserved verbatim.
+	if _, correct := os.LookupEnv("POSIXLY_CORRECT"); !correct {
+		if _, pedantic := os.LookupEnv("POSIX_PEDANTIC"); pedantic {
+			envVars = append(envVars, "POSIXLY_CORRECT=y")
+		}
+	}
 	envVars = append(envVars, bashVersionVars()...)
 	envVars = append(envVars, fmt.Sprintf("SHLVL=%d", shlvl))
 
@@ -611,7 +627,7 @@ func newRunner() (*interp.Runner, error) {
 			envGet := func(name string) string {
 				return r.Env.Get(name).String()
 			}
-			return expandPrompt(s, envGet, 0, 0, *posix)
+			return expandPrompt(s, envGet, 0, 0, startupPosix)
 		}),
 	}
 	// Bash enables job control (monitor mode) automatically for an
@@ -658,7 +674,7 @@ func newRunner() (*interp.Runner, error) {
 			opts = append(opts, interp.Params(setArgs...))
 		}
 	}
-	if *posix {
+	if startupPosix {
 		opts = append(opts, interp.Params("-o", "posix"))
 	}
 	// Give background jobs a kernel-visible identity: a real, signalable PID
@@ -671,7 +687,7 @@ func newRunner() (*interp.Runner, error) {
 	// fails with a diagnostic rather than silently restoring g<N>.
 	if c := newCLIJobCarrier(); c != nil {
 		opts = append(opts, interp.WithJobCarrier(c))
-	} else if posixModeRequested() {
+	} else if startupPosix {
 		opts = append(opts, interp.WithJobCarrier(unsupportedJobCarrier{}))
 	}
 	// argv[0]=="sh" asks for a *POSIX sh*, not "bash in posix mode": the caller
@@ -687,7 +703,7 @@ func newRunner() (*interp.Runner, error) {
 	// For the AgentOS shell `bashy`, inject the coreutils pure-Go userland +
 	// the code-intel verbs as in-process commands. No-op for the pure `bash` drop-in
 	// (the default AgentOSWireExec).
-	opts = AgentOSWireExec(opts, *posix)
+	opts = AgentOSWireExec(opts, startupPosix)
 	// Strict drop-in: disable the fork's extra builtins (nohup/setsid) so the
 	// pure `bash` binary resolves them to the real external commands like bash
 	// 5.3. The AgentOS `bashy` shell clears SuppressedForkBuiltins to keep them.
@@ -709,17 +725,69 @@ func newRunner() (*interp.Runner, error) {
 	return r, nil
 }
 
-func posixModeRequested() bool {
-	if *posix || invokedAsSh() || slices.Contains(optsOn, "posix") {
+// effectiveStartupPosix is the single startup-mode decision shared by the
+// parser, interpreter, prompts, job carrier and AgentOS boundary. GNU Bash
+// applies the environment and argv[0] triggers after processing invocation
+// set-options, so those triggers force POSIX mode even after `+o posix`.
+func effectiveStartupPosix() bool {
+	if invokedAsSh() {
 		return true
 	}
-	for _, name := range strings.Split(os.Getenv("SHELLOPTS"), ":") {
-		if name == "posix" {
+	return startupPosixForEnv(os.Environ())
+}
+
+func startupPosixForEnv(env []string) bool {
+	for _, entry := range env {
+		name, value, _ := strings.Cut(entry, "=")
+		if name == "POSIXLY_CORRECT" || name == "POSIX_PEDANTIC" {
 			return true
 		}
+		if name != "SHELLOPTS" {
+			continue
+		}
+		for _, name := range strings.Split(value, ":") {
+			if name == "posix" {
+				return true
+			}
+		}
 	}
-	_, present := os.LookupEnv("POSIXLY_CORRECT")
-	return present
+	return commandLinePosixMode()
+}
+
+// commandLinePosixMode resolves the last POSIX command-line option after the
+// argv normalizer has expanded +o/-o forms. Keeping the order here matters:
+// `-o posix +o posix` finishes off, while the reverse finishes on.
+func commandLinePosixMode() bool {
+	state, seen := false, false
+	for i := 1; i < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "--":
+			i = len(os.Args)
+		case "--posix":
+			state, seen = true, true
+		case "-o", "-bashy-plus-o":
+			if i+1 >= len(os.Args) {
+				continue
+			}
+			on := os.Args[i] == "-o"
+			i++
+			if os.Args[i] == "posix" {
+				state, seen = on, true
+			}
+		case "-c":
+			// relocatePendingCommandFlag places -c immediately before its
+			// command operand, after every invocation option.
+			i = len(os.Args)
+		default:
+			if !strings.HasPrefix(os.Args[i], "-") {
+				i = len(os.Args)
+			}
+		}
+	}
+	if seen {
+		return state
+	}
+	return *posix
 }
 
 // registerDefaultFuncs parses preamble shell source and registers each function
@@ -811,6 +879,9 @@ func cmdlineNoExec() bool {
 func collectSetArgs() []string {
 	var out []string
 	for _, name := range optsOn {
+		if name == "posix" {
+			continue
+		}
 		out = append(out, "-o", name)
 	}
 	// Bash also enters restricted mode via the `--restricted` long option
@@ -823,6 +894,9 @@ func collectSetArgs() []string {
 		out = append(out, "-o", "verbose")
 	}
 	for _, name := range setOff {
+		if name == "posix" {
+			continue
+		}
 		out = append(out, "+o", name)
 	}
 	for _, name := range optsOff {
@@ -2129,7 +2203,7 @@ func bashConditionalParseError(src string) bool {
 }
 
 func bashAliasReservedWordParseError(src string) bool {
-	if *posix || optsEnabled("posix") {
+	if effectiveStartupPosix() || optsEnabled("posix") {
 		return false
 	}
 	if !strings.Contains(src, "alias al=") ||
@@ -2331,7 +2405,8 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 		return nil
 	}
 	lang := syntax.LangBash
-	if *posix {
+	startupPosix := effectiveStartupPosix()
+	if startupPosix {
 		lang = syntax.LangPOSIX
 	}
 	// Buffer the source so we can echo the offending line back to stderr
@@ -2346,7 +2421,7 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	// `source`. An upfront dump of the whole input here would double the
 	// echo and miss sourced-file lines, so leave it to the runner.
 	src = quoteParamReplBackquotes(src)
-	src = staticAliasExpand(src, *posix || optsEnabled("posix"))
+	src = staticAliasExpand(src, startupPosix)
 	// Bash 5.3's `<file>: line N: …` prefix shape, with `: -c`
 	// inserted when running via `-c`. argv0 (the first positional
 	// after the -c command) is the file-name in -c mode; otherwise

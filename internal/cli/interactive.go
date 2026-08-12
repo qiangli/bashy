@@ -59,7 +59,7 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 	// rules via PosixMode, not the stricter LangPOSIX grammar that would drop
 	// bash extensions (arrays, ${v:off:len}, ${v^^}). See run() in main.go.
 	lang := syntax.LangBash
-	posixMode := *posix
+	posixMode := effectiveStartupPosix()
 
 	var cmdNum int
 	getPrompt := func(ps string) string {
@@ -76,7 +76,7 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 			val = defaultPS
 		}
 		envGet := func(name string) string { return r.LiveVar(name).String() }
-		return expandPrompt(val, envGet, cmdNum, cmdNum, *posix)
+		return expandPrompt(val, envGet, cmdNum, cmdNum, posixMode)
 	}
 
 	histFile := r.Env.Get("HISTFILE").String()
@@ -86,7 +86,7 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 		// ~/.bashy_history name for the non-posix default but matches the
 		// required ~/.sh_history under --posix.
 		name := ".bashy_history"
-		if *posix {
+		if posixMode {
 			name = ".sh_history"
 		}
 		if home, _ := os.UserHomeDir(); home != "" {

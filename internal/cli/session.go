@@ -31,6 +31,7 @@ type SessionIO struct {
 // import and AgentOS preamble — but takes its stdio/env/dir explicitly instead
 // of reading process globals, so a single process can serve many callers.
 func NewSessionRunner(io SessionIO) (*interp.Runner, error) {
+	startupPosix := startupPosixForEnv(io.Env)
 	// SHLVL from the CALLER's environment (not the serve process).
 	shlvl := 0
 	for _, kv := range io.Env {
@@ -42,6 +43,9 @@ func NewSessionRunner(io SessionIO) (*interp.Runner, error) {
 
 	envVars := make([]string, 0, len(io.Env)+len(bashVersionVars())+1)
 	envVars = append(envVars, shellStartupEnv(io.Env)...)
+	if !hasEnvKey(io.Env, "POSIXLY_CORRECT") && hasEnvKey(io.Env, "POSIX_PEDANTIC") {
+		envVars = append(envVars, "POSIXLY_CORRECT=y")
+	}
 	envVars = append(envVars, bashVersionVars()...)
 	envVars = append(envVars, fmt.Sprintf("SHLVL=%d", shlvl))
 	if !hasEnvKey(io.Env, "PATH") {
@@ -58,17 +62,17 @@ func NewSessionRunner(io SessionIO) (*interp.Runner, error) {
 		interp.Env(env),
 		interp.WithBashCompatErrors(true),
 		interp.PromptExpand(func(s string) string {
-			return expandPrompt(s, func(name string) string { return r.Env.Get(name).String() }, 0, 0, *posix)
+			return expandPrompt(s, func(name string) string { return r.Env.Get(name).String() }, 0, 0, startupPosix)
 		}),
 	}
 	if io.Dir != "" {
 		opts = append(opts, interp.Dir(io.Dir))
 	}
-	if *posix {
+	if startupPosix {
 		opts = append(opts, interp.Params("-o", "posix"))
 	}
 	// Same in-process coreutils + code-intel userland the cold path gets.
-	opts = AgentOSWireExec(opts, *posix)
+	opts = AgentOSWireExec(opts, startupPosix)
 	if len(SuppressedForkBuiltins) > 0 {
 		opts = append(opts, interp.WithDisabledBuiltins(SuppressedForkBuiltins...))
 	}
@@ -91,7 +95,8 @@ func RunSessionCommand(ctx context.Context, io SessionIO) int {
 		fmt.Fprintln(io.Stderr, "bashy: session:", err)
 		return 1
 	}
-	prog, perr := syntax.NewParser().Parse(strings.NewReader(io.Command), "")
+	posixMode := startupPosixForEnv(io.Env)
+	prog, perr := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.PosixMode(posixMode)).Parse(strings.NewReader(io.Command), "")
 	if perr != nil {
 		fmt.Fprintln(io.Stderr, "bashy:", perr)
 		return 2
