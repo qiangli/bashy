@@ -22,9 +22,9 @@ import (
 
 var requiredAgentOSVerbs = []string{
 	"agents",
+	"chat",
 	"commands",
 	"dag",
-	"invoke",
 	"judge",
 	"kb",
 	"meet",
