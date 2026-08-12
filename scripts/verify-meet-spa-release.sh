@@ -12,10 +12,22 @@ fi
 binary=$1
 target=$2
 
-if ! go version -m "$binary" 2>&1 |
+# Developer builds on Linux and macOS put the Go program beside a tiny native
+# signal-forwarding launcher as BINARY.real. GoReleaser artifacts are direct Go
+# executables. Inspect and smoke whichever form actually contains the build
+# metadata, while still failing closed if neither carries meetspa.
+artifact=$binary
+
+if ! go version -m "$artifact" 2>&1 |
 	grep -E -- '-tags=([^[:space:]]*,)?meetspa(,|[[:space:]]|$)' >/dev/null; then
-	echo "meet SPA release gate: $target artifact lacks the meetspa build tag" >&2
-	exit 1
+	companion=${binary}.real
+	if [ -x "$companion" ] && go version -m "$companion" 2>&1 |
+		grep -E -- '-tags=([^[:space:]]*,)?meetspa(,|[[:space:]]|$)' >/dev/null; then
+		artifact=$companion
+	else
+		echo "meet SPA release gate: $target artifact lacks the meetspa build tag" >&2
+		exit 1
+	fi
 fi
 
 host_target=$(go env GOOS)_$(go env GOARCH)
@@ -32,12 +44,12 @@ state_dir=$(mktemp -d "${TMPDIR:-/tmp}/bashy-meet-spa.XXXXXX")
 port=${BASHY_MEET_SMOKE_PORT:-18641}
 
 cleanup() {
-	BASHY_MEET_DIR="$state_dir" "$binary" meet service stop --port "$port" >/dev/null 2>&1 || true
+	BASHY_MEET_DIR="$state_dir" "$artifact" meet service stop --port "$port" >/dev/null 2>&1 || true
 	rm -rf "$state_dir"
 }
 trap cleanup EXIT HUP INT TERM
 
-BASHY_MEET_DIR="$state_dir" "$binary" meet service start --port "$port" >/dev/null
+BASHY_MEET_DIR="$state_dir" "$artifact" meet service start --port "$port" >/dev/null
 
 body=$state_dir/index.html
 ready=false
