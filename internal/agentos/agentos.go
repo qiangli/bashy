@@ -131,7 +131,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt",
+		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
@@ -851,6 +851,13 @@ func Dispatch() {
 		// Portable dhnt.pipeline/v1 and dhnt.run/v1 validation, canonical
 		// encoding, worker emission, and fail-closed evidence aggregation.
 		os.Exit(dispatchDhnt(os.Args[2:]))
+	case "release":
+		// Distribution: turn a .goreleaser.yaml into named, checksummed
+		// artifacts. T0 is the local-first half in-process — `release
+		// --snapshot` builds, archives, checksums and emits a bashy-release-v1
+		// ledger with no network, no credentials and no tag. Stages this tier
+		// does not implement are refused BY NAME by the config loader.
+		os.Exit(dispatchRelease(os.Args[2:]))
 	case "doctor":
 		// Environment self-diagnostic: PATH/sh shadowing, a stale bashy on PATH,
 		// toolchain + container engine, agent mode, bin cache. Advisory.

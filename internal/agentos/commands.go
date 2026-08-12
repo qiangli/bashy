@@ -387,6 +387,7 @@ var verbSynopsis = map[string]string{
 	"whois":       "resolve any name (person/agent/tool/model/host) and say how to reach it",
 	"run":         "run a command, emit a structured result envelope (+advisor hints)",
 	"dhnt":        "validate, lower, emit, and aggregate portable dhnt pipeline/run evidence",
+	"release":     "build → archive → checksum this project's release artifacts from .goreleaser.yaml (`--snapshot`: no tag, no network)",
 	"commands":    "list the supported command surface (builtins, coreutils, verbs)",
 	"context":     "print first-hop agent context: exact bashy path and capabilities",
 	"doctor":      "diagnose the bashy environment (PATH/sh, engine, agent mode, bin cache)",

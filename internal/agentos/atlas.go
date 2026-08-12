@@ -91,6 +91,24 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Tier:  atlas.TierUserland,
 		Caps:  []string{atlas.CapJSON, atlas.CapReadOnly},
 	},
+	// release turns a .goreleaser.yaml into named, checksummed artifacts. It
+	// serves DEPLOY: no other verb owns what bytes leave this machine or under
+	// what name. Tier is workspace — it reads and writes one project tree and
+	// nothing outside it. Group is toolchains: the T0 stages are the build and
+	// packaging side of the surface, next to the go/cmake/clang provisioners it
+	// drives (the closed group vocabulary, which lives in coreutils, has no
+	// "build" member and this slice does not change it).
+	//
+	// Effects are exactly what the T0 slice does: read the tree, write dist/,
+	// exec the Go toolchain. NOT `net` — `release --snapshot` is local-first,
+	// and publishing (which would earn `net`) is not implemented here.
+	"release": {
+		Stage:   atlas.StageDeploy,
+		Group:   atlas.GroupToolchains,
+		Tier:    atlas.TierWorkspace,
+		Caps:    []string{atlas.CapJSON, atlas.CapSpawnsProcesses},
+		Effects: []string{atlas.EffExec, atlas.EffRead, atlas.EffWrite},
+	},
 }
 
 // verbAtlasRecord resolves one front-door verb: the curated table first,

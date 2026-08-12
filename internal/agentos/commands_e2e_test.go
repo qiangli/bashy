@@ -234,7 +234,7 @@ func TestE2EAllListedCommandsDispatch(t *testing.T) {
 	// (docker/podman/ollama — the regression class) are really invoked.
 	native := set("weave", "sprint", "claim", "chat", "agent", "sdlc", "web", "dag",
 		"schedule", "secrets", "ask", "bus", "skills", "run", "commands", "context", "doctor",
-		"self", "check", "verify", "git", "dhnt")
+		"self", "check", "verify", "git", "dhnt", "release")
 	engine := set("podman", "ollama", "docker")
 
 	for _, v := range cat.Verbs {
