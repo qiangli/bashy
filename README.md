@@ -196,6 +196,18 @@ echo 'echo hi' | bashy         # read a script from stdin
 | `--pretty-print` | pretty-print the parsed input |
 | `--version` | print version and exit |
 
+### Shell mode selection
+
+Invoked as `bash` or `bashy`, the shell starts in GNU Bash 5.3-compatible
+mode. Invoked with basename `sh`, it starts in POSIX `sh` mode. POSIX mode can
+also be requested with `--posix`, `-o posix`, `SHELLOPTS=posix`, or by the
+presence of `POSIXLY_CORRECT`/`POSIX_PEDANTIC` (including empty values).
+Command-line `-o/+o posix` is last-wins unless one of the environment or `sh`
+startup conditions forces POSIX mode, matching GNU Bash 5.3.
+
+The complete contract, including strict `sh` semantics and certification
+wiring, is documented in [Shell mode selection](docs/shell-mode-selection.md).
+
 Startup files: interactive shells read `~/.bashyrc` (or `--rcfile`); login
 shells read `/etc/profile` and `~/.bashy_profile`; `$BASH_ENV` is honoured for
 non-interactive shells.

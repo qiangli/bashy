@@ -5,6 +5,11 @@ The 76 behaviors GNU bash 5.3 changes in POSIX mode (`set -o posix` /
 `doc/bashref.texi` "Bash POSIX Mode". For each: verify `bashy --posix`
 matches `bash 5.3 --posix`. Status: [ ] = to verify, [x] = matches, [!] = deviates (file issue).
 
+The authoritative startup-mode and precedence contract is
+[Shell mode selection](shell-mode-selection.md). It covers invocation as
+`bash`/`bashy`/`sh`, `SHELLOPTS`, `POSIXLY_CORRECT`, and `POSIX_PEDANTIC`, and
+the distinction between explicit Bash POSIX mode and strict `sh` invocation.
+
 ## Scope & testability (2026-06-20) — what counts as a conformance item
 
 The 76 behaviors were extracted verbatim from bash's `bashref.texi` "Bash POSIX
