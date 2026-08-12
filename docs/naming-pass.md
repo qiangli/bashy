@@ -1,6 +1,6 @@
 # The naming pass — what got renamed, and what deliberately did not
 
-Status: **done 2026-07-12.** Companion to `command-atlas.md` (the catalog) and
+Status: **historical naming decision, revised 2026-08-12.** Companion to `command-atlas.md` (the catalog) and
 `plan-bashy-coherence-pass.md` (the wider pass).
 
 ## The rule
@@ -46,9 +46,21 @@ verifying bashy itself*. A project that **adopts** bashy would reach for `bashy 
 `conform` says what it does. The general pass/fail question — *does this project pass?* — is
 **`bashy gate`**.
 
-### Both old names still work
+### 2026-08-12 correction: `chat` became a real chat
 
-`chat` and `verify` remain as **hidden aliases** (`alias_of` in the atlas, the same machinery as
+The July decision described the implementation that existed then. It stopped
+being true when `chat` gained a governed interactive session and the
+`sessions`, `steer`, `attach`, `interrupt`, and `timeline` controls. At that
+point the command really did chat, but the catalog still hid it as if it were
+the old one-shot alias.
+
+`chat` is therefore canonical and visible again. `invoke` remains a hidden
+compatibility spelling for existing one-shot callers; both still reach the
+same governed launcher, and `--instruction` selects the one-shot path.
+
+### Old names still work
+
+`invoke` and `verify` remain as **hidden aliases** (`alias_of` in the atlas, the same machinery as
 `docker` → `podman`). Nothing breaks; existing scripts, muscle memory and skill docs keep working. They
 are hidden from `bashy commands` and visible with `--all`.
 

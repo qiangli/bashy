@@ -27,7 +27,7 @@ func TestCommandsCatalogSources(t *testing.T) {
 		}
 	}
 	// Front-door verbs + the docker->podman shim + the lister itself.
-	for _, want := range []string{"weave", "run", "commands", "docker", "self"} {
+	for _, want := range []string{"weave", "run", "commands", "docker", "self", "chat"} {
 		if !slices.Contains(verbs, want) {
 			t.Errorf("verbs missing %q", want)
 		}
@@ -54,10 +54,13 @@ func TestCommandsCatalogSources(t *testing.T) {
 
 func TestHiddenVerbsCatalog(t *testing.T) {
 	hidden := hiddenVerbsCatalog()
-	for _, want := range []string{"bootstrap", "upgrade"} {
+	for _, want := range []string{"bootstrap", "upgrade", "invoke"} {
 		if !slices.Contains(hidden, want) {
 			t.Errorf("hidden catalog missing %q", want)
 		}
+	}
+	if slices.Contains(hidden, "chat") {
+		t.Error("chat is a governed interactive session and must be visible")
 	}
 	if !slices.IsSorted(hidden) {
 		t.Errorf("hidden verbs not sorted: %v", hidden)

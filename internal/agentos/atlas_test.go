@@ -114,6 +114,12 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 	if r := byName["upgrade"]; !r.Hidden || r.AliasOf != "self" {
 		t.Errorf("upgrade = %+v, want hidden alias of self", r)
 	}
+	if r := byName["chat"]; r.Hidden || r.AliasOf != "" {
+		t.Errorf("chat = %+v, want visible canonical verb", r)
+	}
+	if r := byName["invoke"]; !r.Hidden || r.AliasOf != "chat" {
+		t.Errorf("invoke = %+v, want hidden alias of chat", r)
+	}
 	if r := byName["go"]; r.Subclass != atlas.SubclassProvisioner {
 		t.Errorf("go = %+v, want subclass provisioner", r)
 	}

@@ -131,13 +131,13 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "invoke", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release",
+		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
 	}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "git-scm", "curl"}
-	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "chat", "verify"}
+	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "invoke", "verify"}
 )
 
 func Preamble() string {
@@ -552,17 +552,16 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
-	case "invoke", "chat":
+	case "chat", "invoke":
 		// Invoke ONE agent, ONCE, on one instruction — the primitive that unifies
 		// the heterogeneous agent CLIs (resolve the tool, inject identity, force
 		// bashy as its shell). Every orchestrator is built on it: sdlc, foreman and
 		// meet all call it; only weave bypasses it (it drives a PTY).
 		//
-		// Renamed from `chat` 2026-07-12, because chat does not chat. Its own
-		// synopsis always said "invoke an agent with a single unattended
-		// instruction" — no conversation, no back-and-forth, no session. The name
-		// misled an agent into thinking it was a session, which is what `foreman`
-		// actually is. `chat` remains a hidden alias; nothing breaks.
+		// The original one-shot `chat` was renamed to `invoke` in 2026-07. Chat
+		// later grew a real governed interactive session plus sessions/steer/
+		// attach/interrupt/timeline, so `chat` is canonical again and `invoke`
+		// remains the hidden compatibility spelling for existing one-shot callers.
 		cmd := chat.NewChatCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
