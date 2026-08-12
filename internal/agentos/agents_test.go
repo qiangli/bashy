@@ -20,6 +20,9 @@ func TestAgentRosterEmptyIncludesCatalogFooter(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := out.String()
+	if !strings.Contains(got, "LIVE 0") {
+		t.Fatalf("empty roster did not report zero live assignments: %q", got)
+	}
 	if !strings.HasSuffix(got, "To list all registered agents: bashy agents list\n") {
 		t.Fatalf("missing exact footer: %q", got)
 	}
@@ -32,7 +35,7 @@ func TestAgentRosterFiltersToWorkingAssignments(t *testing.T) {
 	home := t.TempDir()
 	useAgentsHome(t, home)
 	writeAgentsQueue(t, home, "demo-a1", agentsQueue{Root: "/work/demo", Items: []agentsQueueItem{
-		{ID: 1, Title: "working task", State: "working", Tool: "codex", Owner: "codex-worker", StartedAt: time.Now().Add(-2 * time.Minute)},
+		{ID: 1, Title: "working task", State: "working", Tool: "codex", Owner: "codex-worker", WrapperPID: os.Getpid(), StartedAt: time.Now().Add(-2 * time.Minute)},
 		{ID: 2, Title: "paused task", State: "paused", Tool: "claude", Owner: "claude-worker"},
 		{ID: 3, Title: "done task", State: "done", Tool: "agy", Owner: "agy-worker"},
 	}, Stories: []agentsQueueStory{{ID: 9, Runs: []struct {
@@ -59,7 +62,7 @@ func TestAgentRosterFiltersToWorkingAssignments(t *testing.T) {
 func TestAgentRosterJSON(t *testing.T) {
 	home := t.TempDir()
 	useAgentsHome(t, home)
-	writeAgentsQueue(t, home, "demo-a1", agentsQueue{Root: "/work/demo", Items: []agentsQueueItem{{ID: 7, Title: "ship", State: "working", Tool: "codex"}}})
+	writeAgentsQueue(t, home, "demo-a1", agentsQueue{Root: "/work/demo", Items: []agentsQueueItem{{ID: 7, Title: "ship", State: "working", Tool: "codex", WrapperPID: os.Getpid()}}})
 	var out bytes.Buffer
 	if err := renderAgentRoster(&out, true); err != nil {
 		t.Fatal(err)
@@ -68,7 +71,7 @@ func TestAgentRosterJSON(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.SchemaVersion != agentsRosterSchema || len(got.Assignments) != 1 || got.Assignments[0].Run != 7 {
+	if got.SchemaVersion != agentsRosterSchema || got.Summary.Live != 1 || len(got.Assignments) != 1 || got.Assignments[0].Run != 7 {
 		t.Fatalf("unexpected JSON: %#v", got)
 	}
 	if strings.Contains(out.String(), "To list all registered") {
@@ -87,6 +90,28 @@ func TestAgentsListStillUsesRegisteredCatalog(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "[") {
 		t.Fatalf("agents list no longer emitted catalog JSON: %q", out.String())
+	}
+}
+
+func TestAgentsAllAppliesToAssignmentView(t *testing.T) {
+	home, sprintDir, roomDir := t.TempDir(), t.TempDir(), t.TempDir()
+	t.Setenv("BASHY_HOME", home)
+	t.Setenv("BASHY_SPRINT_DIR", sprintDir)
+	t.Setenv("BASHY_ROOM_DIR", roomDir)
+	useAgentsHome(t, home)
+	writeJSONFile(t, filepath.Join(sprintDir, "queue.json"), agentsSprintBoard{Stories: []agentsSprint{{
+		ID: 9, Title: "stale", Column: "doing",
+		Lease: &agentsSprintLease{Holder: "stale-conductor", At: time.Now().Add(-time.Hour)},
+	}}})
+	cmd := newAgentsRosterCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--all", "--json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "stale-conductor") {
+		t.Fatalf("agents --all did not expose stale assignment: %q", out.String())
 	}
 }
 
@@ -167,7 +192,7 @@ func TestAgentRosterDerivesStaleAndBlockerAndDoesNotCrossPID(t *testing.T) {
 	}
 	q := agentsQueue{Root: "/campaign/one", Items: []agentsQueueItem{
 		{ID: 7, Title: "stale", State: "working", Owner: "old", WrapperPID: 999999, Comments: []agentsComment{{Kind: "system"}, {Kind: "progress", At: time.Now().Add(-time.Minute)}}},
-		{ID: 7, Title: "blocked", State: "working", Owner: "new", Comments: []agentsComment{{Kind: "blocker", At: time.Now()}}},
+		{ID: 7, Title: "blocked", State: "working", Owner: "new", WrapperPID: os.Getpid(), Comments: []agentsComment{{Kind: "blocker", At: time.Now()}}},
 		{ID: 8, Title: "allocated", State: "allocated", Owner: "launching"},
 	}}
 	writeJSONFile(t, filepath.Join(queueDir, "queue.json"), q)
@@ -190,8 +215,50 @@ func TestAgentRosterDerivesStaleAndBlockerAndDoesNotCrossPID(t *testing.T) {
 	if byTitle["blocked"].Health != "blocked" {
 		t.Fatalf("blocker projection = %#v", byTitle["blocked"])
 	}
-	if byTitle["allocated"].Health == "healthy" {
-		t.Fatalf("zero-PID allocated item became healthy from another run's room card: %#v", byTitle["allocated"])
+	if byTitle["allocated"].Health != "orphaned" {
+		t.Fatalf("zero-PID allocated item = %#v, want orphaned", byTitle["allocated"])
+	}
+}
+
+func TestAgentRosterDefaultHidesStaleAndAllShowsIt(t *testing.T) {
+	home, sprintDir, roomDir := t.TempDir(), t.TempDir(), t.TempDir()
+	t.Setenv("BASHY_HOME", home)
+	t.Setenv("BASHY_SPRINT_DIR", sprintDir)
+	t.Setenv("BASHY_ROOM_DIR", roomDir)
+	useAgentsHome(t, home)
+	writeJSONFile(t, filepath.Join(sprintDir, "queue.json"), agentsSprintBoard{Stories: []agentsSprint{{
+		ID: 54, Title: "expired conductor", Column: "doing",
+		Lease: &agentsSprintLease{Holder: "old-conductor", At: time.Now().Add(-time.Hour)},
+	}}})
+	queueDir := filepath.Join(home, "weave", "demo-a1")
+	if err := os.MkdirAll(queueDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSONFile(t, filepath.Join(queueDir, "queue.json"), agentsQueue{Root: "/work/demo", Items: []agentsQueueItem{{
+		ID: 8, Title: "orphan allocation", State: "allocated", Owner: "lost-worker",
+	}}})
+
+	var live bytes.Buffer
+	if err := renderAgentRoster(&live, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(live.String(), "LIVE 0") || !strings.Contains(live.String(), "STALE 1") || !strings.Contains(live.String(), "ORPHANED 1") {
+		t.Fatalf("default summary = %q", live.String())
+	}
+	for _, hidden := range []string{"old-conductor", "lost-worker"} {
+		if strings.Contains(live.String(), hidden) {
+			t.Fatalf("default roster exposed stale assignment %q: %s", hidden, live.String())
+		}
+	}
+
+	var all bytes.Buffer
+	if err := renderAgentRosterView(&all, false, true); err != nil {
+		t.Fatal(err)
+	}
+	for _, visible := range []string{"old-conductor", "lost-worker"} {
+		if !strings.Contains(all.String(), visible) {
+			t.Fatalf("--all roster omitted %q: %s", visible, all.String())
+		}
 	}
 }
 
@@ -216,7 +283,7 @@ func TestAgentRosterExcludesInactiveSprintLeasesAndOmitsZeroTimes(t *testing.T) 
 	}
 
 	var out bytes.Buffer
-	if err := renderAgentRoster(&out, true); err != nil {
+	if err := renderAgentRosterView(&out, true, true); err != nil {
 		t.Fatal(err)
 	}
 	var raw struct {

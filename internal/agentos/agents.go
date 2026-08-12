@@ -123,8 +123,17 @@ type agentAssignment struct {
 }
 
 type agentsRoster struct {
-	SchemaVersion string            `json:"schema_version"`
-	Assignments   []agentAssignment `json:"assignments"`
+	SchemaVersion string             `json:"schema_version"`
+	Summary       agentRosterSummary `json:"summary"`
+	Assignments   []agentAssignment  `json:"assignments"`
+}
+
+type agentRosterSummary struct {
+	Live         int `json:"live"`
+	Blocked      int `json:"blocked"`
+	Inconsistent int `json:"inconsistent"`
+	Stale        int `json:"stale"`
+	Orphaned     int `json:"orphaned"`
 }
 
 // encoding/json does not omit a zero time.Time with `omitempty` because it is
@@ -168,32 +177,55 @@ var agentsHomeDir = os.UserHomeDir
 func newAgentsRosterCmd(opts ...fleet.Option) *cobra.Command {
 	cmd := fleet.NewAgentsCmd(opts...)
 	cmd.Short = "Show the reconciled live agent roster (use `agents list` for the catalog)"
-	cmd.Long = "Show conductors and workers reconciled from the sprint, room, and weave stores.\n\n" +
+	cmd.Long = "Show live conductors and workers reconciled from the sprint, room, and weave stores.\n\n" +
+		"Stale and orphaned records are counted but hidden by default; use --all to inspect them. " +
 		"Use `bashy agents list` to list all registered agent bindings."
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		for _, name := range []string{"all", "band", "min-band"} {
+		for _, name := range []string{"band", "min-band"} {
 			if f := cmd.Flags().Lookup(name); f != nil && f.Changed {
 				return fmt.Errorf("--%s applies to `bashy agents list`, not the active-assignment view", name)
 			}
 		}
-		return renderAgentRoster(cmd.OutOrStdout(), cmd.Flags().Lookup("json").Changed)
+		showAll, err := cmd.Flags().GetBool("all")
+		if err != nil {
+			return err
+		}
+		return renderAgentRosterView(cmd.OutOrStdout(), cmd.Flags().Lookup("json").Changed, showAll)
 	}
 	return cmd
 }
 
 func renderAgentRoster(w io.Writer, asJSON bool) error {
+	return renderAgentRosterView(w, asJSON, false)
+}
+
+func renderAgentRosterView(w io.Writer, asJSON, showAll bool) error {
 	assignments, err := reconciledAgentRoster()
 	if err != nil {
 		return err
 	}
+	summary := summarizeAgentRoster(assignments)
+	visible := assignments
+	if !showAll {
+		visible = visible[:0]
+		for _, assignment := range assignments {
+			if assignmentLive(assignment) {
+				visible = append(visible, assignment)
+			}
+		}
+	}
 	if asJSON {
-		return json.NewEncoder(w).Encode(agentsRoster{SchemaVersion: agentsRosterSchema, Assignments: assignments})
+		return json.NewEncoder(w).Encode(agentsRoster{SchemaVersion: agentsRosterSchema, Summary: summary, Assignments: visible})
+	}
+	fmt.Fprintf(w, "LIVE %d (blocked %d, inconsistent %d) | STALE %d | ORPHANED %d\n", summary.Live, summary.Blocked, summary.Inconsistent, summary.Stale, summary.Orphaned)
+	if !showAll && len(visible) == 0 && (summary.Stale > 0 || summary.Orphaned > 0) {
+		fmt.Fprintln(w, "No live assignments. Inspect stale records with: bashy agents --all")
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	// Keep the original columns first. Consumers commonly use the human view
 	// in a terminal copy/paste workflow; reconciled fields follow additively.
 	fmt.Fprintln(tw, "AGENT\tOWNER\tREPO\tRUN\tSPRINT\tSTATE\tAGE\tWORK\tROLE\tPOINTS\tDEADLINE\tHEALTH\tLAST PROGRESS")
-	for _, a := range assignments {
+	for _, a := range visible {
 		run, sprint := "-", "-"
 		if a.Run != 0 {
 			run = fmt.Sprintf("#%d", a.Run)
@@ -228,6 +260,35 @@ func renderAgentRoster(w io.Writer, asJSON bool) error {
 	}
 	_, err = fmt.Fprintln(w, "To list all registered agents: bashy agents list")
 	return err
+}
+
+func summarizeAgentRoster(assignments []agentAssignment) agentRosterSummary {
+	var summary agentRosterSummary
+	for _, assignment := range assignments {
+		if assignmentLive(assignment) {
+			summary.Live++
+		}
+		switch assignment.Health {
+		case "blocked":
+			summary.Blocked++
+		case "inconsistent":
+			summary.Inconsistent++
+		case "stale":
+			summary.Stale++
+		case "orphaned", "unknown":
+			summary.Orphaned++
+		}
+	}
+	return summary
+}
+
+func assignmentLive(assignment agentAssignment) bool {
+	switch assignment.Health {
+	case "healthy", "blocked", "inconsistent":
+		return true
+	default:
+		return false
+	}
 }
 
 func dash(s string) string {
@@ -290,7 +351,7 @@ func reconciledAgentRoster() ([]agentAssignment, error) {
 			a.Deadline = deadline
 		}
 		if sprint.Lease.At.IsZero() {
-			a.Health, a.HealthReason = "unknown", "missing conductor heartbeat"
+			a.Health, a.HealthReason = "orphaned", "missing conductor heartbeat"
 		} else if now.Sub(sprint.Lease.At) > 30*time.Minute {
 			a.Health, a.HealthReason = "stale", "conductor lease heartbeat expired"
 		}
@@ -527,14 +588,14 @@ func workerBlocked(item agentsQueueItem) bool {
 }
 
 func workerHealth(item agentsQueueItem, cards []room.Card) (string, string) {
-	if workerBlocked(item) {
-		return "blocked", "latest worker note is a blocker"
-	}
 	if item.WrapperPID > 0 && !room.PidAlive(item.WrapperPID) {
 		return "stale", fmt.Sprintf("worker wrapper pid %d is not alive", item.WrapperPID)
 	}
 	if item.WrapperPID <= 0 {
-		return "unknown", "no worker wrapper heartbeat recorded"
+		return "orphaned", "active queue item has no worker wrapper heartbeat"
+	}
+	if workerBlocked(item) {
+		return "blocked", "latest worker note is a blocker"
 	}
 	if len(cards) > 0 {
 		if item.WrapperPID > 0 {
