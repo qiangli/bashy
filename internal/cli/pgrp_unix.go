@@ -5,6 +5,8 @@ package cli
 import (
 	"os"
 	"syscall"
+
+	"golang.org/x/term"
 )
 
 // maybeNewProcessGroup puts this process into a new process group when the
@@ -19,6 +21,14 @@ import (
 // pid). Errors (e.g. already a group leader) are ignored.
 func maybeNewProcessGroup() {
 	if os.Getenv("BASH_SETPGRP") == "" {
+		return
+	}
+	// A shell attached to a terminal must remain in the terminal's foreground
+	// process group. The non-TTY bash fixture harness needs this opt-in for its
+	// watchdog, but the VSC runner already places the shell beneath a
+	// foreground PTY wrapper. Detaching from that group without also taking
+	// terminal ownership makes ioctls such as stty stop on SIGTTOU.
+	if term.IsTerminal(int(os.Stdin.Fd())) || term.IsTerminal(int(os.Stdout.Fd())) {
 		return
 	}
 	_ = syscall.Setpgid(0, 0)
