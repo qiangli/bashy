@@ -11,6 +11,7 @@ import (
 
 var selectMeetAgent = selectStewardAgent
 var ensureMeetPermanentRoleRoom = meet.EnsurePermanentRoleRoom
+var loadMeetRoom = meet.Room
 
 func validateMeetRoomSecretary(name string) error {
 	if _, ok := fleet.New().Agent(strings.TrimSpace(name)); !ok {
@@ -42,6 +43,13 @@ func startMeetPermanentRole(_ context.Context, req meet.PermanentRoleStartReques
 	if err != nil {
 		return err
 	}
+	st, _, err := loadMeetRoom(req.Room)
+	if err != nil {
+		return err
+	}
+	if err := excludeMeetRoleConflicts(sel, st.Secretary, st.Chair); err != nil {
+		return err
+	}
 	if strings.TrimSpace(req.Agent) == "" {
 		if err := randomizeStewardSelection(sel); err != nil {
 			return err
@@ -51,6 +59,31 @@ func startMeetPermanentRole(_ context.Context, req meet.PermanentRoleStartReques
 		Out: meet.OutStore,
 	})
 	return err
+}
+
+func excludeMeetRoleConflicts(sel *stewardSelection, names ...string) error {
+	if sel == nil {
+		return fmt.Errorf("meet: agent selection returned no candidates")
+	}
+	excluded := map[string]bool{}
+	for _, name := range names {
+		if name = strings.ToLower(strings.TrimSpace(name)); name != "" {
+			excluded[name] = true
+		}
+	}
+	candidates := append([]stewardCandidate{sel.Chosen}, sel.Runners...)
+	kept := candidates[:0]
+	for _, candidate := range candidates {
+		if candidate.Name != "" && !excluded[strings.ToLower(candidate.Name)] {
+			kept = append(kept, candidate)
+		}
+	}
+	if len(kept) == 0 {
+		return fmt.Errorf("meet: no eligible room steward remains after excluding the secretary and chair")
+	}
+	sel.Chosen = kept[0]
+	sel.Runners = append([]stewardCandidate(nil), kept[1:]...)
+	return nil
 }
 
 // activateMeetRoomSecretary resolves the notes-only role to a concrete agent in

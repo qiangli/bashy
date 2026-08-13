@@ -20,10 +20,14 @@ import (
 )
 
 func TestMeetLazyStewardStartsRoomRoleWithoutTakingHostAuthority(t *testing.T) {
-	oldSelect, oldEnsure := selectMeetAgent, ensureMeetPermanentRoleRoom
+	oldSelect, oldEnsure, oldRoom := selectMeetAgent, ensureMeetPermanentRoleRoom, loadMeetRoom
 	t.Cleanup(func() {
 		selectMeetAgent, ensureMeetPermanentRoleRoom = oldSelect, oldEnsure
+		loadMeetRoom = oldRoom
 	})
+	loadMeetRoom = func(string) (*meet.State, *meet.Synthesis, error) {
+		return &meet.State{}, nil, nil
+	}
 	var gotName string
 	selectMeetAgent = func(name, tool string, band int) (*stewardSelection, error) {
 		gotName = name
@@ -53,7 +57,13 @@ func TestMeetLazyStewardStartsRoomRoleWithoutTakingHostAuthority(t *testing.T) {
 		if name != "" || tool != "" || band != 4 {
 			t.Fatalf("band selector = %q %q %d", name, tool, band)
 		}
-		return &stewardSelection{Chosen: stewardCandidate{Name: "Elif"}}, nil
+		return &stewardSelection{
+			Chosen:  stewardCandidate{Name: "secretary-agent"},
+			Runners: []stewardCandidate{{Name: "Elif"}},
+		}, nil
+	}
+	loadMeetRoom = func(string) (*meet.State, *meet.Synthesis, error) {
+		return &meet.State{Secretary: "secretary-agent"}, nil, nil
 	}
 	oldRandom := stewardRandomIndex
 	stewardRandomIndex = func(int) (int, error) { return 0, nil }
@@ -65,6 +75,23 @@ func TestMeetLazyStewardStartsRoomRoleWithoutTakingHostAuthority(t *testing.T) {
 	}
 	if gotHolder != "Elif" {
 		t.Fatalf("default lazy holder = %q", gotHolder)
+	}
+}
+
+func TestMeetLazyStewardRejectsOnlySecretaryCandidate(t *testing.T) {
+	oldSelect, oldRoom := selectMeetAgent, loadMeetRoom
+	t.Cleanup(func() { selectMeetAgent, loadMeetRoom = oldSelect, oldRoom })
+	selectMeetAgent = func(string, string, int) (*stewardSelection, error) {
+		return &stewardSelection{Chosen: stewardCandidate{Name: "secretary-agent"}}, nil
+	}
+	loadMeetRoom = func(string) (*meet.State, *meet.Synthesis, error) {
+		return &meet.State{Secretary: "secretary-agent"}, nil, nil
+	}
+	err := startMeetPermanentRole(context.Background(), meet.PermanentRoleStartRequest{
+		Room: "steward", Role: "steward", Band: 4,
+	})
+	if err == nil || !strings.Contains(err.Error(), "excluding the secretary and chair") {
+		t.Fatalf("conflicting steward selection = %v", err)
 	}
 }
 
