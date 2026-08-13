@@ -363,6 +363,7 @@ var verbSynopsis = map[string]string{
 	"conform":     "bashy's OWN fidelity batteries: compat/conformance/compliance/benchmark",
 	"chat":        "talk to an agent in a governed live session, or send one unattended instruction",
 	"meet":        "multi-participant deliberation session with a notes-only secretary",
+	"relay":       "one plain communication surface for Meet channels and Chat direct messages",
 	"supervise":   "drive a fleet against a goal of gated tasks, judged by a supervisor (conductor-as-a-verb)",
 	"capability":  "living agent (tool:model) × capability matrix for routing",
 	"leaderboard": "rank this host's agents on the runs they actually completed",
