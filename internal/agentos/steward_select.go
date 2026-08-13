@@ -4,7 +4,9 @@
 package agentos
 
 import (
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"sort"
 	"strings"
 
@@ -12,6 +14,36 @@ import (
 	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/llmbudget"
 )
+
+var stewardRandomIndex = func(n int) (int, error) {
+	v, err := rand.Int(rand.Reader, big.NewInt(int64(n)))
+	if err != nil {
+		return 0, err
+	}
+	return int(v.Int64()), nil
+}
+
+// randomizeStewardSelection selects uniformly from the already validated,
+// operable, budget-eligible frontier. It is deliberately applied only to the
+// unattended room role: explicit/operator starts retain cost-aware ordering.
+func randomizeStewardSelection(sel *stewardSelection) error {
+	if sel == nil {
+		return fmt.Errorf("steward start: no eligible selection")
+	}
+	all := append([]stewardCandidate{sel.Chosen}, sel.Runners...)
+	if len(all) < 2 {
+		return nil
+	}
+	i, err := stewardRandomIndex(len(all))
+	if err != nil {
+		return fmt.Errorf("steward start: choose among eligible agents: %w", err)
+	}
+	sel.Chosen = all[i]
+	sel.Runners = append(append([]stewardCandidate{}, all[:i]...), all[i+1:]...)
+	sel.BandFloor = sel.Chosen.Band < stewardBandFloor
+	sel.Why = fmt.Sprintf("randomly selected from %d operable budget-eligible agents at L%d+", len(all), sel.Chosen.Band)
+	return nil
+}
 
 // WHO SHOULD STEWARD THIS HOST, WHEN NOBODY SAID.
 //

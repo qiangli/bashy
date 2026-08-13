@@ -63,6 +63,10 @@ type stewardStartOptions struct {
 
 	Cwd    string
 	AsJSON bool
+
+	// RandomSelection is used only by the lazy permanent-room starter. A human
+	// explicitly running `steward start` keeps the explainable cost/quota order.
+	RandomSelection bool
 }
 
 // newStewardStartCmd builds `bashy steward start`.
@@ -169,6 +173,11 @@ func startStewardSession(out, errW io.Writer, opt stewardStartOptions) error {
 			return err
 		}
 		if same {
+			// The Meet service may have restarted after the supervisor. Rebind the
+			// durable @steward alias to the live agent before reporting success.
+			if line := steward.EnsureRoom(live.Agent); line != "" {
+				fmt.Fprint(errW, line)
+			}
 			// The idempotent case: a supervisor tick, a second terminal, a
 			// script run twice. Report and change nothing.
 			return reportStewardSession(out, live, opt.AsJSON, "already running")
@@ -189,6 +198,11 @@ func startStewardSession(out, errW io.Writer, opt stewardStartOptions) error {
 	sel, err := selectStewardAgent(opt.AgentName, opt.Tool, opt.Band)
 	if err != nil {
 		return err
+	}
+	if opt.RandomSelection && strings.TrimSpace(opt.AgentName) == "" {
+		if err := randomizeStewardSelection(sel); err != nil {
+			return err
+		}
 	}
 	writeStewardSelection(errW, sel)
 
@@ -219,7 +233,7 @@ func startStewardSession(out, errW io.Writer, opt stewardStartOptions) error {
 
 	// ─── the room and the inbox ────────────────────────────────────────────
 	sess.Topic = steward.Assignment().Topic()
-	if line := steward.EnsureRoom(steward.HolderName()); line != "" {
+	if line := steward.EnsureRoom(sel.Chosen.Name); line != "" {
 		fmt.Fprint(errW, line)
 	}
 	if c, err := steward.SeatContact(); err == nil && c != nil {
@@ -237,16 +251,19 @@ func startStewardSession(out, errW io.Writer, opt stewardStartOptions) error {
 	// ─── spawn ─────────────────────────────────────────────────────────────
 	logPath, err := stewardLogPath()
 	if err != nil {
+		_ = steward.ReleaseRoom(sel.Chosen.Name)
 		return err
 	}
 	sess.LogPath = logPath
 	if err := saveStewardSession(sess); err != nil {
+		_ = steward.ReleaseRoom(sel.Chosen.Name)
 		return err
 	}
 
 	pid, err := spawnStewardSupervisor(opt, logPath)
 	if err != nil {
 		_ = clearStewardSession()
+		_ = steward.ReleaseRoom(sel.Chosen.Name)
 		return err
 	}
 	sess.SupervisorPID = pid
@@ -412,7 +429,7 @@ func stopStewardSession(errW io.Writer, sess *stewardSession, timeout time.Durat
 			Agent: sess.Agent, StoppedAt: time.Now().UTC(),
 			Detail: "the supervisor exited without recording an outcome; the wrap-up below was performed by `steward stop`",
 		}
-		if line := steward.ReleaseRoom(steward.HolderName()); line != "" {
+		if line := steward.ReleaseRoom(sess.Agent); line != "" {
 			o.RoomClosed = !strings.Contains(line, "could not be closed")
 			fmt.Fprint(errW, line)
 		}

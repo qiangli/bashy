@@ -593,6 +593,8 @@ func Dispatch() {
 	case "meet":
 		// Multi-participant deliberation session: agentic CLIs + a human take
 		// turns; a dedicated notes-only secretary keeps and files the minutes.
+		meet.StartPermanentRole = startMeetPermanentRole
+		meet.StartRoomSecretary = activateMeetRoomSecretary
 		cmd := meet.NewMeetCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {

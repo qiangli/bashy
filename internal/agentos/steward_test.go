@@ -4,6 +4,7 @@
 package agentos
 
 import (
+	"context"
 	"io"
 	"strings"
 	"testing"
@@ -14,8 +15,74 @@ import (
 	"github.com/qiangli/coreutils/pkg/board"
 	"github.com/qiangli/coreutils/pkg/bus"
 	"github.com/qiangli/coreutils/pkg/fleet"
+	"github.com/qiangli/coreutils/pkg/meet"
 	"github.com/qiangli/coreutils/pkg/steward"
 )
+
+func TestMeetLazyStewardStartsRoomRoleWithoutTakingHostAuthority(t *testing.T) {
+	old := runMeetStewardSession
+	t.Cleanup(func() { runMeetStewardSession = old })
+	var got stewardStartOptions
+	runMeetStewardSession = func(_, _ io.Writer, opt stewardStartOptions) error {
+		got = opt
+		return nil
+	}
+	if err := startMeetPermanentRole(context.Background(), meet.PermanentRoleStartRequest{
+		Room: "steward", Role: "steward", Agent: "Rufus", Band: 4,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got.AgentName != "Rufus" || got.Band != 0 || !got.NoSeat || got.RandomSelection {
+		t.Fatalf("configured lazy start = %+v", got)
+	}
+	if err := startMeetPermanentRole(context.Background(), meet.PermanentRoleStartRequest{
+		Room: "steward", Role: "steward", Band: 4,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !got.NoSeat || !got.RandomSelection || got.Band != 4 {
+		t.Fatalf("default lazy start = %+v", got)
+	}
+}
+
+func TestLazyStewardRandomizesOnlyAmongEligibleSelection(t *testing.T) {
+	old := stewardRandomIndex
+	stewardRandomIndex = func(n int) (int, error) { return n - 1, nil }
+	t.Cleanup(func() { stewardRandomIndex = old })
+	sel := &stewardSelection{
+		Chosen:  stewardCandidate{Name: "a", Band: 4},
+		Runners: []stewardCandidate{{Name: "b", Band: 4}, {Name: "c", Band: 4}},
+	}
+	if err := randomizeStewardSelection(sel); err != nil {
+		t.Fatal(err)
+	}
+	if sel.Chosen.Name != "c" || len(sel.Runners) != 2 || !strings.Contains(sel.Why, "3 operable") {
+		t.Fatalf("random selection = %+v", sel)
+	}
+}
+
+func TestRoomSecretaryIsNamedFleetSelectionAndNotAnotherRoomRole(t *testing.T) {
+	old := selectMeetSecretaryAgent
+	selectMeetSecretaryAgent = func(name, tool string, band int) (*stewardSelection, error) {
+		if name != "" || tool != "" || band != 2 {
+			t.Fatalf("selector args = %q %q %d", name, tool, band)
+		}
+		return &stewardSelection{
+			Chosen:  stewardCandidate{Name: "participant", Band: 4},
+			Runners: []stewardCandidate{{Name: "secretary-agent", Band: 3}},
+		}, nil
+	}
+	t.Cleanup(func() { selectMeetSecretaryAgent = old })
+	got, err := activateMeetRoomSecretary(context.Background(), meet.RoomSecretaryStartRequest{
+		Room: "room-1", Band: 2, Exclude: []string{"participant"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "secretary-agent" {
+		t.Fatalf("secretary = %q", got)
+	}
+}
 
 // THE COMPLETION VERB MUST NOT BE IN THE ROLE NAMESPACE.
 //

@@ -351,7 +351,7 @@ func stewardWrapUp(errW io.Writer, s *chat.Session, sess *stewardSession, opt st
 
 	// The room closes before the seat is released, so there is never a moment
 	// where the host advertises a channel to a seat nobody holds.
-	if line := steward.ReleaseRoom(steward.HolderName()); line != "" {
+	if line := steward.ReleaseRoom(sess.Agent); line != "" {
 		out.RoomClosed = !strings.Contains(line, "could not be closed")
 		fmt.Fprint(errW, line)
 	}
