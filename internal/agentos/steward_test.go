@@ -20,28 +20,51 @@ import (
 )
 
 func TestMeetLazyStewardStartsRoomRoleWithoutTakingHostAuthority(t *testing.T) {
-	old := runMeetStewardSession
-	t.Cleanup(func() { runMeetStewardSession = old })
-	var got stewardStartOptions
-	runMeetStewardSession = func(_, _ io.Writer, opt stewardStartOptions) error {
-		got = opt
-		return nil
+	oldSelect, oldEnsure := selectMeetAgent, ensureMeetPermanentRoleRoom
+	t.Cleanup(func() {
+		selectMeetAgent, ensureMeetPermanentRoleRoom = oldSelect, oldEnsure
+	})
+	var gotName string
+	selectMeetAgent = func(name, tool string, band int) (*stewardSelection, error) {
+		gotName = name
+		if tool != "" || band != 0 {
+			t.Fatalf("named selector = %q %q %d", name, tool, band)
+		}
+		return &stewardSelection{Chosen: stewardCandidate{Name: "Rufus"}}, nil
+	}
+	var gotRoom, gotRole, gotHolder string
+	ensureMeetPermanentRoleRoom = func(room, role, holder string, opts meet.CreateOptions) (*meet.State, error) {
+		gotRoom, gotRole, gotHolder = room, role, holder
+		if opts.Out != meet.OutStore {
+			t.Fatalf("room output = %q", opts.Out)
+		}
+		return &meet.State{}, nil
 	}
 	if err := startMeetPermanentRole(context.Background(), meet.PermanentRoleStartRequest{
 		Room: "steward", Role: "steward", Agent: "Rufus", Band: 4,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if got.AgentName != "Rufus" || got.Band != 0 || !got.NoSeat || got.RandomSelection {
-		t.Fatalf("configured lazy start = %+v", got)
+	if gotName != "Rufus" || gotRoom != "steward" || gotRole != "steward" || gotHolder != "Rufus" {
+		t.Fatalf("configured lazy assignment = name %q room %q role %q holder %q", gotName, gotRoom, gotRole, gotHolder)
 	}
+
+	selectMeetAgent = func(name, tool string, band int) (*stewardSelection, error) {
+		if name != "" || tool != "" || band != 4 {
+			t.Fatalf("band selector = %q %q %d", name, tool, band)
+		}
+		return &stewardSelection{Chosen: stewardCandidate{Name: "Elif"}}, nil
+	}
+	oldRandom := stewardRandomIndex
+	stewardRandomIndex = func(int) (int, error) { return 0, nil }
+	t.Cleanup(func() { stewardRandomIndex = oldRandom })
 	if err := startMeetPermanentRole(context.Background(), meet.PermanentRoleStartRequest{
 		Room: "steward", Role: "steward", Band: 4,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if !got.NoSeat || !got.RandomSelection || got.Band != 4 {
-		t.Fatalf("default lazy start = %+v", got)
+	if gotHolder != "Elif" {
+		t.Fatalf("default lazy holder = %q", gotHolder)
 	}
 }
 
@@ -62,8 +85,8 @@ func TestLazyStewardRandomizesOnlyAmongEligibleSelection(t *testing.T) {
 }
 
 func TestRoomSecretaryIsNamedFleetSelectionAndNotAnotherRoomRole(t *testing.T) {
-	old := selectMeetSecretaryAgent
-	selectMeetSecretaryAgent = func(name, tool string, band int) (*stewardSelection, error) {
+	old := selectMeetAgent
+	selectMeetAgent = func(name, tool string, band int) (*stewardSelection, error) {
 		if name != "" || tool != "" || band != 2 {
 			t.Fatalf("selector args = %q %q %d", name, tool, band)
 		}
@@ -72,7 +95,7 @@ func TestRoomSecretaryIsNamedFleetSelectionAndNotAnotherRoomRole(t *testing.T) {
 			Runners: []stewardCandidate{{Name: "secretary-agent", Band: 3}},
 		}, nil
 	}
-	t.Cleanup(func() { selectMeetSecretaryAgent = old })
+	t.Cleanup(func() { selectMeetAgent = old })
 	got, err := activateMeetRoomSecretary(context.Background(), meet.RoomSecretaryStartRequest{
 		Room: "room-1", Band: 2, Exclude: []string{"participant"},
 	})

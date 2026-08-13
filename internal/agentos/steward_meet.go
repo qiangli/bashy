@@ -3,15 +3,14 @@ package agentos
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/meet"
 )
 
-var runMeetStewardSession = startStewardSession
-var selectMeetSecretaryAgent = selectStewardAgent
+var selectMeetAgent = selectStewardAgent
+var ensureMeetPermanentRoleRoom = meet.EnsurePermanentRoleRoom
 
 func validateMeetRoomSecretary(name string) error {
 	if _, ok := fleet.New().Agent(strings.TrimSpace(name)); !ok {
@@ -20,12 +19,15 @@ func validateMeetRoomSecretary(name string) error {
 	return nil
 }
 
-// startMeetPermanentRole is the process-lifecycle half of Meet's lazy role
-// activation. The request itself is a human action in the permanent room, but
-// it is not an attended transfer of host authority, so this starts a room
-// steward with --no-seat. The agent can manage this room; it cannot write the
-// host steward journal until the human explicitly grants and transfers that
-// stronger seat through `bashy steward start`.
+// startMeetPermanentRole assigns the room-local steward role to one concrete
+// fleet agent. It deliberately does NOT start the detached host-steward
+// supervisor: Address invokes the selected agent for each turn, and a room
+// role carries neither the host seat nor authority to write its journal.
+//
+// The former implementation started `steward start --no-seat` and returned as
+// soon as its supervisor process was spawned. That was both stronger than the
+// room needed and racy: Meet immediately reloaded the room before the child
+// could publish a holder, producing "returned without assigning the role".
 func startMeetPermanentRole(_ context.Context, req meet.PermanentRoleStartRequest) error {
 	if !strings.EqualFold(req.Room, "steward") || !strings.EqualFold(req.Role, "steward") {
 		return fmt.Errorf("unsupported permanent role %s in room %s", req.Role, req.Room)
@@ -36,12 +38,19 @@ func startMeetPermanentRole(_ context.Context, req meet.PermanentRoleStartReques
 		// refuses an agent+band combination because it is otherwise ambiguous.
 		band = 0
 	}
-	return runMeetStewardSession(io.Discard, io.Discard, stewardStartOptions{
-		AgentName:       req.Agent,
-		Band:            band,
-		NoSeat:          true,
-		RandomSelection: strings.TrimSpace(req.Agent) == "",
+	sel, err := selectMeetAgent(req.Agent, "", band)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(req.Agent) == "" {
+		if err := randomizeStewardSelection(sel); err != nil {
+			return err
+		}
+	}
+	_, err = ensureMeetPermanentRoleRoom(req.Room, req.Role, sel.Chosen.Name, meet.CreateOptions{
+		Out: meet.OutStore,
 	})
+	return err
 }
 
 // activateMeetRoomSecretary resolves the notes-only role to a concrete agent in
@@ -57,7 +66,7 @@ func activateMeetRoomSecretary(_ context.Context, req meet.RoomSecretaryStartReq
 	if strings.TrimSpace(req.Agent) != "" {
 		selectorBand = 0
 	}
-	sel, err := selectMeetSecretaryAgent(req.Agent, "", selectorBand)
+	sel, err := selectMeetAgent(req.Agent, "", selectorBand)
 	if err != nil {
 		return "", err
 	}
