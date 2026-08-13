@@ -84,6 +84,12 @@ func TestRoomSecretaryIsNamedFleetSelectionAndNotAnotherRoomRole(t *testing.T) {
 	}
 }
 
+func TestRoomSecretaryRejectsNamesOutsideBashyFleet(t *testing.T) {
+	if err := validateMeetRoomSecretary("definitely-not-a-fleet-agent"); err == nil || !strings.Contains(err.Error(), "bashy agents list") {
+		t.Fatalf("unknown secretary validation = %v", err)
+	}
+}
+
 // THE COMPLETION VERB MUST NOT BE IN THE ROLE NAMESPACE.
 //
 // cobra adds it to whatever command is Execute()d, and `bashy steward` is a

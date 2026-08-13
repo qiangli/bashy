@@ -6,11 +6,19 @@ import (
 	"io"
 	"strings"
 
+	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/meet"
 )
 
 var runMeetStewardSession = startStewardSession
 var selectMeetSecretaryAgent = selectStewardAgent
+
+func validateMeetRoomSecretary(name string) error {
+	if _, ok := fleet.New().Agent(strings.TrimSpace(name)); !ok {
+		return fmt.Errorf("meet: secretary %q must name an agent from `bashy agents list`", name)
+	}
+	return nil
+}
 
 // startMeetPermanentRole is the process-lifecycle half of Meet's lazy role
 // activation. The request itself is a human action in the permanent room, but
