@@ -1,6 +1,14 @@
 package cli
 
-import "testing"
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"mvdan.cc/sh/v3/expand"
+	"mvdan.cc/sh/v3/interp"
+	"mvdan.cc/sh/v3/syntax"
+)
 
 func TestBashVersionLineAppendsBuildID(t *testing.T) {
 	oldVersion, oldBuildID := bashVersion, buildID
@@ -53,5 +61,63 @@ func TestVersionBannerDefaultsToGNUCompatibleBash(t *testing.T) {
 	VersionCompatibility = "GNU Bash 5.3 compatible"
 	if got, want := versionBanner(), "bashy, GNU Bash 5.3 compatible, version 5.3.0(1)-bashy-dev (abc1234)"; got != want {
 		t.Fatalf("bashy versionBanner() = %q, want %q", got, want)
+	}
+}
+
+func TestBashVersionVarsStayOutOfRecipeEnvironment(t *testing.T) {
+	tests := []struct {
+		name         string
+		inherited    []string
+		wantExported bool
+	}{
+		{name: "synthesized shell variables"},
+		{
+			name:         "inherited export attributes",
+			inherited:    []string{"BASH=parent", "BASH_VERSION=parent-version"},
+			wantExported: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			env := withBashVersionVars(expand.ListEnviron(test.inherited...), test.inherited)
+			var childBash, childVersion bool
+			capture := func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
+				return func(ctx context.Context, args []string) error {
+					hcEnv := interp.HandlerCtx(ctx).Env
+					bashVar := hcEnv.Get("BASH")
+					versionVar := hcEnv.Get("BASH_VERSION")
+					if !bashVar.IsSet() || bashVar.String() == "parent" {
+						t.Fatalf("BASH shell variable = %#v; want bashy's startup value", bashVar)
+					}
+					if !versionVar.IsSet() || versionVar.String() == "parent-version" {
+						t.Fatalf("BASH_VERSION shell variable = %#v; want bashy's startup value", versionVar)
+					}
+					hcEnv.Each(func(name string, vr expand.Variable) bool {
+						if vr.Exported {
+							childBash = childBash || name == "BASH"
+							childVersion = childVersion || name == "BASH_VERSION"
+						}
+						return true
+					})
+					return nil
+				}
+			}
+			runner, err := interp.New(interp.Env(env), interp.ExecHandlers(capture))
+			if err != nil {
+				t.Fatal(err)
+			}
+			file, err := syntax.NewParser().Parse(strings.NewReader("recipe-probe"), "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := runner.Run(context.Background(), file); err != nil {
+				t.Fatal(err)
+			}
+			if childBash != test.wantExported || childVersion != test.wantExported {
+				t.Fatalf("recipe environment exports BASH=%v BASH_VERSION=%v; want both %v",
+					childBash, childVersion, test.wantExported)
+			}
+		})
 	}
 }

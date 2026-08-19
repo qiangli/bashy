@@ -6,6 +6,8 @@ package cli
 import (
 	"os"
 	"strings"
+
+	"mvdan.cc/sh/v3/expand"
 )
 
 // bashVersion identifies bashy as a Bash 5.3 compatible shell. It is a var,
@@ -82,4 +84,55 @@ func bashVersionVars() []string {
 		"BASH=" + exe,
 		"BASH_VERSION=" + bashVersion,
 	}
+}
+
+// bashVersionEnviron overlays bashy's BASH and BASH_VERSION values without
+// changing their inherited export attributes. GNU Bash binds both as shell
+// variables during startup: they are visible to shell code but absent from a
+// child's environment unless the caller had already exported them.
+type bashVersionEnviron struct {
+	base expand.Environ
+	bash expand.Variable
+	ver  expand.Variable
+}
+
+func withBashVersionVars(base expand.Environ, inherited []string) expand.Environ {
+	values := bashVersionVars()
+	_, bash, _ := strings.Cut(values[0], "=")
+	_, ver, _ := strings.Cut(values[1], "=")
+	return bashVersionEnviron{
+		base: base,
+		bash: expand.Variable{
+			Set: true, Exported: hasEnvKey(inherited, "BASH"), Kind: expand.String, Str: bash,
+		},
+		ver: expand.Variable{
+			Set: true, Exported: hasEnvKey(inherited, "BASH_VERSION"), Kind: expand.String, Str: ver,
+		},
+	}
+}
+
+func (e bashVersionEnviron) Get(name string) expand.Variable {
+	switch name {
+	case "BASH":
+		return e.bash
+	case "BASH_VERSION":
+		return e.ver
+	default:
+		return e.base.Get(name)
+	}
+}
+
+func (e bashVersionEnviron) Each(fn func(string, expand.Variable) bool) {
+	keepGoing := true
+	e.base.Each(func(name string, vr expand.Variable) bool {
+		if name == "BASH" || name == "BASH_VERSION" {
+			return true
+		}
+		keepGoing = fn(name, vr)
+		return keepGoing
+	})
+	if !keepGoing || !fn("BASH", e.bash) {
+		return
+	}
+	fn("BASH_VERSION", e.ver)
 }

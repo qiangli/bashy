@@ -560,6 +560,7 @@ const defaultPathValue = "/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin
 
 func newRunner() (*interp.Runner, error) {
 	startupPosix := effectiveStartupPosix()
+	inheritedEnv := os.Environ()
 	// Increment SHLVL from parent environment.
 	shlvl := 0
 	if s := os.Getenv("SHLVL"); s != "" {
@@ -571,8 +572,8 @@ func newRunner() (*interp.Runner, error) {
 	// other POSIX shell) carries an inherited OLDPWD through so `cd -`
 	// works in a fresh shell; stripping it made `cd -` fail where bash
 	// succeeds (oils builtin-cd differential, all 5 oracle shells agree).
-	envVars := make([]string, 0, len(os.Environ())+len(bashVersionVars()))
-	envVars = append(envVars, shellStartupEnv(os.Environ())...)
+	envVars := make([]string, 0, len(inheritedEnv)+2)
+	envVars = append(envVars, shellStartupEnv(inheritedEnv)...)
 	// Bash 5.3 accepts POSIX_PEDANTIC as the legacy spelling of
 	// POSIXLY_CORRECT. If only the legacy name was inherited it additionally
 	// creates POSIXLY_CORRECT=y; an inherited POSIXLY_CORRECT value, including
@@ -582,7 +583,6 @@ func newRunner() (*interp.Runner, error) {
 			envVars = append(envVars, "POSIXLY_CORRECT=y")
 		}
 	}
-	envVars = append(envVars, bashVersionVars()...)
 	envVars = append(envVars, fmt.Sprintf("SHLVL=%d", shlvl))
 
 	// Bash startup runs set_if_not("PATH", DEFAULT_PATH_VALUE)
@@ -593,7 +593,7 @@ func newRunner() (*interp.Runner, error) {
 		envVars = append(envVars, "PATH="+defaultPathValue)
 	}
 
-	env := expand.ListEnviron(envVars...)
+	env := withBashVersionVars(expand.ListEnviron(envVars...), inheritedEnv)
 	var r *interp.Runner
 	var err error
 	// bash defaults to expanding aliases in interactive shells. A

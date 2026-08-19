@@ -41,17 +41,16 @@ func NewSessionRunner(io SessionIO) (*interp.Runner, error) {
 	}
 	shlvl++
 
-	envVars := make([]string, 0, len(io.Env)+len(bashVersionVars())+1)
+	envVars := make([]string, 0, len(io.Env)+2)
 	envVars = append(envVars, shellStartupEnv(io.Env)...)
 	if !hasEnvKey(io.Env, "POSIXLY_CORRECT") && hasEnvKey(io.Env, "POSIX_PEDANTIC") {
 		envVars = append(envVars, "POSIXLY_CORRECT=y")
 	}
-	envVars = append(envVars, bashVersionVars()...)
 	envVars = append(envVars, fmt.Sprintf("SHLVL=%d", shlvl))
 	if !hasEnvKey(io.Env, "PATH") {
 		envVars = append(envVars, "PATH="+defaultPathValue)
 	}
-	env := expand.ListEnviron(envVars...)
+	env := withBashVersionVars(expand.ListEnviron(envVars...), io.Env)
 
 	var r *interp.Runner
 	opts := []interp.RunnerOption{

@@ -58,6 +58,29 @@ func TestNewRunnerInheritsOLDPWD(t *testing.T) {
 	}
 }
 
+func TestNewRunnerKeepsBashVersionVarsUnexported(t *testing.T) {
+	for _, argv0 := range []string{"sh", "bash"} {
+		t.Run(argv0, func(t *testing.T) {
+			withStrictPosixEnv(t, argv0, false)
+			unsetTestEnv(t, "BASH")
+			unsetTestEnv(t, "BASH_VERSION")
+			r, err := newRunner()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"BASH", "BASH_VERSION"} {
+				vr := r.Env.Get(name)
+				if !vr.IsSet() || vr.String() == "" {
+					t.Fatalf("%s is not visible as a shell variable: %#v", name, vr)
+				}
+				if vr.Exported {
+					t.Fatalf("%s is exported on clean startup: %#v", name, vr)
+				}
+			}
+		})
+	}
+}
+
 func TestPromptTransformBangPosixMode(t *testing.T) {
 	// GNU Bash 5.3 preserves a bare ! in ${v@P} by default, while POSIX
 	// mode expands it as a history number. The explicitly escaped \! prompt
