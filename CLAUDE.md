@@ -95,6 +95,21 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
     bashy), `git.go`/`git_verbs.go`, `self.go`. Adding a verb means touching its
     file **and** its atlas entry — the coverage tests and the CI e2e dispatch
     gate both fail otherwise.
+
+    The dispatcher now carries ~90 verbs, so **do not read this list as the
+    surface** — `agentos.go`'s `switch` is the dispatch truth and
+    `bashy commands --atlas` is the catalog. Orchestration/agent-fleet verbs
+    landed as their own files the same way: `coord.go` (`bashy claim` — a WRITE
+    is refused while another agent holds the project; enforced in the SHELL
+    because no document is mandatory across agent CLIs), `messageboard.go`
+    (`bashy mb` over `coreutils/pkg/bus`; `wireMessageBoard` has a test
+    asserting every hook is non-nil, because an unwired seam looks finished),
+    `steward.go`/`steward_meet.go`/`steward_mediator.go` (`bashy steward
+    start|stop` — putting an agent ON the seat, not just describing it),
+    `kbrecall.go` (`bashy kb recall`, mounted here rather than in `pkg/kb` to
+    keep that package an import leaf), `exechist.go`, `release.go`,
+    `agents.go`, `shellsession.go` + `session/` (the live-session socket, with
+    peer-credential checks per OS).
   - `internal/agentos/advisor*.go` — the **space-time advisor**: a non-intrusive
     post-exec `ExecHandler` middleware that, only when a command fails, appends one
     advisory hint explaining a space-determined failure (wrong cwd, host gone
@@ -216,8 +231,9 @@ machine fails there as well.
 make build              # -> bin/bash (pure drop-in, cmd/bash) + bin/bashy (AgentOS, cmd/bashy) — two independent binaries
 make build-bash         # only bin/bash — all the conformance harness needs (skips the embed-heavy bashy build)
 make build-host         # full unix host build (= BASHY_ENGINES=1 BASHY_OBS=1 + embed blobs)
-make install            # install to $DHNT_BIN_DIR (default ~/.local/bin)
-make test               # go test ./...
+make install            # install to $DHNT_BIN_DIR (default ~/.local/bin) — installs the .real pair too
+make build-fips         # both binaries against the Go FIPS 140-3 module (GOFIPS140) — see docs/fips-140.md
+make test               # scripts/test-build-fail-closed.sh, then go test ./...
 make test-bash          # drive bin/bash against bash's own 5.3 test suite (serial)
 make test-bash-parallel # same suite fanned out across cores — the canonical 86/86 gate
 make test-bash-list     # list available fixtures with per-fixture PASS/FAIL/TIME/SKIP
@@ -225,10 +241,32 @@ make test-yash          # yash POSIX (-p) scoreboard — the headline conformanc
 make test-yash-list     # print the current bashy-specific yash failure list
 make test-zsh           # zsh-own-suite Tier-0 scoreboard (tools/ztst runner; INFO metric, not a gate)
 make test-uutils        # REFUSES native host execution: use only the contained runner (OOM/root-walk landmines)
-make dist               # cross-compile static binaries for all 6 platforms
+make test-uutils-safety # the only bounded uutils harness validation that may run natively
+make dist               # cross-compile static binaries for all 6 platforms (pure Go, no siglaunch — see below)
+make smoke-chat AGENT=… # governed-launcher contract smoke (INFO, SKIPs without an agent or pty)
+make hooks              # install scripts/hooks/pre-push (the .sibling-pins drift guard)
 make tidy               # go mod tidy + gofmt -s -w . + go vet ./...
 make help               # every target with its `## ` doc line
 ```
+
+### The unix binaries are a C launcher over the Go binary
+
+On linux/darwin, `make build` / `build-bash` / `build-bashy` / `build-fips` /
+`install` emit **two files per shell**: `bin/bash.real` (the Go program) and
+`bin/bash` (a small native C launcher compiled from `native/siglaunch.c.in` with
+`cc`, which execs it). Same for `bashy`/`bashy.real`. The launcher exists because
+the Go runtime resets most inherited `SIG_IGN` dispositions before `main`, and a
+POSIX shell must remember them forever — siglaunch snapshots them pre-Go and
+passes the names through the interpreter's sideband. Added 2026-08-07 for the
+POSIX-cert startup-signal behavior — its regression test is
+`internal/cli/signal_tp714_fault_unix_test.go` (plus `native/siglaunch_test.go`).
+
+Consequences: `go build -o bin/bash ./cmd/bash` **overwrites the launcher with the
+Go binary** and silently loses the snapshot — always go through the Makefile. The
+harness, `make install`, and the installer all know about the `.real` pair.
+Windows and every `make dist` cross-compile are plain pure-Go binaries with no
+launcher (`CGO_ENABLED=0`), so this is a host-build shape, not a shipped-artifact
+one.
 
 The public 86-fixture Bash 5.3 gate is necessary but not the complete shell
 regression gate. On the licensed native host, the sibling proprietary harness
@@ -326,6 +364,9 @@ Once `make install` has run, drop the `./` and use the PATH binary.
 target with `Requires:`/`Sources:`/`Effects:` metadata, run in topological
 order through the in-process shell. `suites.md` is the conformance matrix
 (only `test-bash` is a hard 0/1 gate; the differentials are INFO probes);
+`ci.dag.md` is the shared CI graph for dhnt Go projects — other repos pull it in
+by pinned reference (`include: gh:qiangli/bashy@vX.Y.Z/ci.dag.md`) and override
+only the vars that differ, so a change here is cross-repo.
 `dag.md` mirrors the Makefile's build/test/lint targets and adds the chunked /
 fleet / container conformance lanes (`test-bash-chunks`, `test-bash-chunks-fleet`,
 `test-bash-chunks-container`, `yash-chunks`) that the Makefile has no equivalent
@@ -551,9 +592,13 @@ brand-neutral and driven by bashy's own tools:
   transferred ≠ validated (a second agent promotes), kb reads foreign stores
   but never writes them.
 - `skills/steward/` — the steward role: the host's authority record, the
-  handover contract, and the tick loop. (Was missing from this list while
-  shipping since 2026-07 — `skills/embed.go` and `bashy skills list` both carry
-  six skills, and those are the sources of truth.)
+  handover contract, and the tick loop.
+- `skills/check-messages/` — read the fleet message board (`bashy mb`) at the
+  START of a turn, before planning, so a second agent doesn't redo or contradict
+  work already taken. Requires `has=bashy`.
+
+`skills/embed.go` and `bashy skills list` are the sources of truth for the set
+(seven today); this prose drifts, they don't.
 - `skills/force-agent-shell/` — attested check that agentic CLIs route their
   shell commands through bashy (so the pure-Go userland, the advisor, and OTel
   apply to everything an agent runs). Run as a convergence gate before an
@@ -572,8 +617,11 @@ Full policy: `docs/licensing-supply-chain-policy.md`. In brief:
 - **Compiled-in / embedded / linked / vendored → permissive only**: MIT, BSD,
   Apache 2.0. No GPL/LGPL/MPL/SSPL/BSL/proprietary — nothing whose license could
   propagate. Record each in `THIRD_PARTY_LICENSES`.
-- **Pure Go only** for the core: no CGo, no C deps (the `cc` in
-  `test-bash-helpers` builds Bash's own test helpers, not bashy).
+- **Pure Go only** for the core: no CGo, no C libraries. Two `cc` invocations
+  exist and neither is CGo: `test-bash-helpers` builds Bash's own test helpers,
+  and the unix build compiles `native/siglaunch.c.in` as a standalone launcher
+  process (see §The unix binaries are a C launcher over the Go binary). Both are
+  our own code; cross-compiled release artifacts are `CGO_ENABLED=0` pure Go.
 - **Runtime download + exec ≠ bundling**: tools bashy downloads and runs as
   separate processes (podman/ollama/gh/loom/act/…, and fetched test suites) are
   not bundled — separate programs on their own licenses, no propagation. Prefer
