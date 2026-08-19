@@ -552,6 +552,15 @@ POSIX-conformance frontier (the active layer now that bash-5.3 is 86/86 — driv
 - `bashy-v1.0.0-readiness.md` — the release-readiness ledger.
 - `agent-adoption/matrix.md` — which agentic CLIs are verified running on bashy as their shell (the `force-agent-shell` skill's evidence base).
 - `first-party-harness.md` — **why ycode is in the fleet, and what it actually buys.** All four "still owed" items shipped 2026-07-14. The differentiator is NOT that it wins a bake-off (it lost — slowest, most code): it is the **event channel**. `--events` emits `turn.start`/`tool.call`/`turn.end` as NDJSON on both the one-shot and TUI paths, so a turn's end is a FACT THE AGENT REPORTS rather than a silence bashy interprets (`WaitIdle`, 25s). `turn.end.text` equals `--print` stdout exactly. Not yet reached: server mode (the agent loop lives in the server process, which never sees the client's `--events`). Read before any harness-selection or `chat.Session` work.
+- `plan-agent-harness-positioning.md` — gap analysis and phased plan for positioning
+  bashy as a **harness kit**, not a privileged Go-coded harness: governed substrate,
+  conductor, authoring kit, and bidirectional peer. Records the plain-bash worked-loop
+  gate, the later Bash++ port, and why front-door verbs need the same P0 governance seam
+  as shell-resolved commands.
+- `plan-bashy-llm.md` — P0.5 design of record for the missing stateless model-call
+  primitive: one JSON request/response, model resolution through the fleet catalog,
+  Ollama + OpenAI-compatible T0 providers, no tool execution, and record/replay. Read
+  with the positioning plan before any native model-call or harness-authoring work.
 - `band-ladder.md` — **the L1–L4 ladder across every provider**, with the two open questions now ANSWERED by running both as conductors: `gemini3.1` demoted L3→L2 (9.4× repeat ratio, never converged — a coder, not a lead; confound recorded), `deepseek-v4-pro` CONFIRMED L3 (1.2×, decomposed and delegated unprompted). The loop metric — total tool calls ÷ distinct — is the cheapest conductor health check there is. Read before any band re-peg or conductor selection.
 - `fleet-live-verification.md` — `bashy agents verify --live`: why a STRUCTURAL check (both halves of a binding resolve in the catalog) is not evidence that an agent can speak, and how five dead bindings hid behind one that looked healthy. The origin of "a verifier that passes on the ABSENCE of a known failure is not a verifier."
 - `harness-ab-deepseek.md` — **the three-harness A/B** (ycode vs opencode vs aider, one model, one task, one gate). All three converge; the differences were in the HARNESS, and two were ours. Headline finding: **all three exit 0 when they fail** — a harness's exit code carries no information, so run the gate. Also why aider is retired from the API-key lane (it cannot discover the files a task needs — architecture, not quality) and why opencode is KEPT (the cross-check against a first-party bug). Read before any harness-selection or fleet-routing decision.
