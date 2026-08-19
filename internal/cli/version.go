@@ -94,12 +94,23 @@ type bashVersionEnviron struct {
 	base expand.Environ
 	bash expand.Variable
 	ver  expand.Variable
+	last expand.Variable
 }
 
 func withBashVersionVars(base expand.Environ, inherited []string) expand.Environ {
 	values := bashVersionVars()
 	_, bash, _ := strings.Cut(values[0], "=")
 	_, ver, _ := strings.Cut(values[1], "=")
+	// GNU Bash preserves an inherited `_`; when it is absent, startup binds
+	// it to the shell executable without exporting the synthesized value.
+	last := base.Get("_")
+	if !last.IsSet() {
+		exe, _ := os.Executable()
+		if exe == "" {
+			exe = os.Args[0]
+		}
+		last = expand.Variable{Set: true, Kind: expand.String, Str: exe}
+	}
 	return bashVersionEnviron{
 		base: base,
 		bash: expand.Variable{
@@ -108,6 +119,7 @@ func withBashVersionVars(base expand.Environ, inherited []string) expand.Environ
 		ver: expand.Variable{
 			Set: true, Exported: hasEnvKey(inherited, "BASH_VERSION"), Kind: expand.String, Str: ver,
 		},
+		last: last,
 	}
 }
 
@@ -117,6 +129,8 @@ func (e bashVersionEnviron) Get(name string) expand.Variable {
 		return e.bash
 	case "BASH_VERSION":
 		return e.ver
+	case "_":
+		return e.last
 	default:
 		return e.base.Get(name)
 	}
@@ -125,7 +139,7 @@ func (e bashVersionEnviron) Get(name string) expand.Variable {
 func (e bashVersionEnviron) Each(fn func(string, expand.Variable) bool) {
 	keepGoing := true
 	e.base.Each(func(name string, vr expand.Variable) bool {
-		if name == "BASH" || name == "BASH_VERSION" {
+		if name == "BASH" || name == "BASH_VERSION" || name == "_" {
 			return true
 		}
 		keepGoing = fn(name, vr)
@@ -134,5 +148,8 @@ func (e bashVersionEnviron) Each(fn func(string, expand.Variable) bool) {
 	if !keepGoing || !fn("BASH", e.bash) {
 		return
 	}
-	fn("BASH_VERSION", e.ver)
+	if !fn("BASH_VERSION", e.ver) {
+		return
+	}
+	fn("_", e.last)
 }

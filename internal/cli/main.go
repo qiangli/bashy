@@ -2475,6 +2475,7 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	}
 	ctx := context.Background()
 	r.Reset()
+	startupLastArg := r.LiveVar("_")
 	if *command != "" {
 		assign := "BASH_EXECUTION_STRING=" + singleQuote(*command)
 		p := syntax.NewParser()
@@ -2482,6 +2483,9 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 			_ = r.Run(ctx, prog)
 		}
 	}
+	// BASH_EXECUTION_STRING is internal startup bookkeeping, not a user
+	// simple command. Restore GNU Bash's initial `_` before user code runs.
+	r.SetLastArgument(startupLastArg.String(), startupLastArg.Exported)
 	if err := interp.WithBashSource(src)(r); err != nil {
 		return err
 	}

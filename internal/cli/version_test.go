@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -9,6 +10,31 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
 )
+
+func TestStartupUnderscore(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name         string
+		inherited    []string
+		want         string
+		wantExported bool
+	}{
+		{name: "synthesized", want: exe},
+		{name: "inherited", inherited: []string{"_=parent"}, want: "parent", wantExported: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			env := withBashVersionVars(expand.ListEnviron(test.inherited...), test.inherited)
+			got := env.Get("_")
+			if got.String() != test.want || got.Exported != test.wantExported {
+				t.Fatalf("_ = %#v; want value %q exported=%v", got, test.want, test.wantExported)
+			}
+		})
+	}
+}
 
 func TestBashVersionLineAppendsBuildID(t *testing.T) {
 	oldVersion, oldBuildID := bashVersion, buildID
