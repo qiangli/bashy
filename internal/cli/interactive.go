@@ -107,11 +107,14 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 
 	var eofPresses int
 	return interactive.Run(context.Background(), interactive.Options{
-		Runner:            r,
-		Lang:              lang,
-		PosixMode:         posixMode,
-		Stdin:             stdin,
-		Stdout:            stdout,
+		Runner:    r,
+		Lang:      lang,
+		PosixMode: posixMode,
+		Stdin:     stdin,
+		// Prompts and line-editing echo are terminal UI, which bash writes to
+		// stderr. Keep command stdout on the runner's independently configured
+		// stream so `sh -s >output` captures only command output.
+		Stdout:            stderr,
 		Stderr:            stderr,
 		PS1:               func() string { return getPrompt("PS1") },
 		PS2:               func() string { return getPrompt("PS2") },
