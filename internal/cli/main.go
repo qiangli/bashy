@@ -383,8 +383,15 @@ func splitCombinedShortFlags(args []string) []string {
 			out = append(out, a)
 			continue
 		}
+		valueFlag := byte(0)
+		if last := a[len(a)-1]; last == 'o' || last == 'O' {
+			valueFlag = last
+		}
 		allKnown := true
 		for j := 1; j < len(a); j++ {
+			if valueFlag != 0 && j == len(a)-1 {
+				continue
+			}
 			if _, ok := shortToOpt[a[j]]; !ok && a[j] != 'c' && a[j] != 'l' && a[j] != 'i' && a[j] != 's' && a[j] != 'D' {
 				allKnown = false
 				break
@@ -396,6 +403,9 @@ func splitCombinedShortFlags(args []string) []string {
 		}
 		var bools, vals []byte
 		for j := 1; j < len(a); j++ {
+			if valueFlag != 0 && j == len(a)-1 {
+				continue
+			}
 			if a[j] == 'c' {
 				vals = append(vals, a[j])
 			} else {
@@ -420,6 +430,13 @@ func splitCombinedShortFlags(args []string) []string {
 		}
 		for _, c := range vals {
 			out = append(out, "-"+string(c))
+		}
+		if valueFlag != 0 {
+			out = append(out, "-"+string(valueFlag))
+			if i+1 < len(args) {
+				i++
+				out = append(out, args[i])
+			}
 		}
 	}
 	return out

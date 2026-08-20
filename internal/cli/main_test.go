@@ -376,6 +376,11 @@ func TestSplitCombinedShortFlagsLoginCommand(t *testing.T) {
 			args: []string{"bashy", "-ehc", "echo ok"},
 			want: []string{"bashy", "-o", "errexit", "-o", "hashall", "-c", "echo ok"},
 		},
+		{
+			name: "combined trailing o consumes option name",
+			args: []string{"bashy", "-Cefuvxo", "allexport", "echo ok"},
+			want: []string{"bashy", "-o", "noclobber", "-o", "errexit", "-o", "noglob", "-o", "nounset", "-o", "verbose", "-o", "xtrace", "-o", "allexport", "echo ok"},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
