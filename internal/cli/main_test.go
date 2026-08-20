@@ -881,6 +881,13 @@ func TestRunUnexpectedTokenAbort(t *testing.T) {
 				"./s: line 1: `$(echo f)$(echo or) i in a b c; do echo $i; done'\n",
 		},
 		{
+			name:       "close-paren-after-command",
+			src:        "echo )(\necho should-not-run\n",
+			wantStatus: 2,
+			wantErr: "./s: line 1: syntax error near unexpected token `)'\n" +
+				"./s: line 1: `echo )('\n",
+		},
+		{
 			name:    "prior-line-statement-runs-first",
 			src:     "echo hi\ncase\nin esac\n",
 			wantOut: "hi\n",

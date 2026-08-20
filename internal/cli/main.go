@@ -2985,6 +2985,9 @@ func fatalRecoveredParseError(src []byte, pe syntax.ParseError) bool {
 	if pe.Text == "`)` can only be used to close a subshell" {
 		return true
 	}
+	if pe.Text == "a command can only contain words and redirects; encountered `)`" {
+		return true
+	}
 	// An unclosed `{` command group at EOF is a fatal bash parse error (the whole
 	// input fails), not one our statement recovery should continue past.
 	if _, _, ok := braceGroupEOF(src, pe); ok {
