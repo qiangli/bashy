@@ -7,7 +7,8 @@
 # run time), and the pinned chunks.json. Staged into the build context by
 # scripts/build-conformance-image.sh. Runs non-root (uid 1000) so the fixtures
 # that refuse to run as root behave (mirror of the lane's --user 1000).
-FROM docker.io/library/ubuntu:24.04
+ARG BASE_IMAGE=docker.io/library/ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
+FROM ${BASE_IMAGE}
 
 # locales the suite exercises (intl/glob-test/…) + compiler/helper tools; same
 # Ubuntu 24.04 substrate intended for the later POSIX profile images.

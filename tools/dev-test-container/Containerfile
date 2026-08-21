@@ -1,0 +1,11 @@
+# General Bashy build/unit-test lane. The POSIX certification adapter is in the
+# proprietary harness because it additionally needs licensed bytes and fixtures.
+ARG BASE_IMAGE=docker.io/library/ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
+FROM ${BASE_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates build-essential git golang-go make bash python3 && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work/bashy

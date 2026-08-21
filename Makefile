@@ -1,7 +1,8 @@
-.PHONY: dag build build-bash build-bashy install test test-build-fail-closed test-bash test-bash-run test-bash-parallel test-bash-container test-bash-list test-bash-fixtures test-bash-helpers dist tidy clean help
+.PHONY: dag build build-bash build-bashy install test test-build-fail-closed test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-list test-bash-fixtures test-bash-helpers dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
+GO ?= go
 BASH_TESTS_DIR := external/bash-5.3/tests
 # The bash test fixtures invoke the shell as `bash` / via $BASH, so the
 # compliance harness drives a copy named `bin/bash`.
@@ -129,8 +130,12 @@ install: build
 	go run ./tools/installbashy -bash $(BASHY) -bashy $(BIN)
 
 ## test: Run all Go tests
-test: test-build-fail-closed
+test: test-build-fail-closed test-isolated-lanes
 	go test ./...
+
+## test-isolated-lanes: Verify concurrent test-lane naming and ownership wiring.
+test-isolated-lanes:
+	scripts/test-isolated-lanes.sh
 
 ## test-build-fail-closed: Prove a failed Go build cannot fall through to the
 ## native launcher compiler or the installer and reuse stale binaries.
@@ -207,13 +212,14 @@ BASH_TEST_CAT_V := printf
 ## Runs every shell-agnostic *-p.tst against bashy AND real bash in one container,
 ## per testcase, and lists the BASHY-SPECIFIC failures (bash passes, bashy fails) —
 ## the genuine bugs to fix. Job-control/signal suites excluded (goroutine ceiling).
-## Output dir via YASH_OUT (default /tmp/yash-scoreboard); failures in <dir>/failures.txt.
+## Output dir via YASH_OUT (default lane-specific /tmp/yash-scoreboard-*).
 test-yash:
 	@scripts/yash-scoreboard.sh $(YASH_OUT)
 
 ## test-yash-list: print the current bashy-specific yash failure list (suite line desc).
 test-yash-list: test-yash
-	@cat $${YASH_OUT:-/tmp/yash-scoreboard}/failures.txt
+	@lane=$$(. scripts/test-lane-id.sh; bashy_test_lane "$(CURDIR)"); \
+	 cat "$${YASH_OUT:-$${TMPDIR:-/tmp}/yash-scoreboard-$$lane}/failures.txt"
 
 ## test-zsh: zsh-own-suite scoreboard (Tier 0 of the zsh ladder) — runs zsh 5.9's
 ## Test/*.ztst (non-interactive classes A B C D E W Z) against bashy AND real zsh
@@ -321,10 +327,13 @@ test-bash-parallel: build-bash test-bash-fixtures test-bash-helpers
 ## runner, and pinned fixtures; the run has an isolated tmpfs, no network, a
 ## read-only root, a non-root uid, and a PTY for fixtures that open /dev/tty.
 ## Set BASH53_OCI or BASH53_IMAGE to override the container command/image.
-test-bash-container: build-bashy test-bash-fixtures
-	@BASH53_OCI="$${BASH53_OCI:-$(BIN) podman}" \
-	 BASH53_IMAGE="$${BASH53_IMAGE:-localhost/bash53-conformance-hermetic:latest}" \
+test-bash-container:
+	@BASH53_OCI="$${BASH53_OCI:-bashy podman}" \
 	 scripts/test-bash-container.sh
+
+## test-self-container: Run build/unit tests in an agent-owned Ubuntu OCI lane.
+test-self-container:
+	@BASHY_TEST_OCI="$${BASHY_TEST_OCI:-bashy podman}" scripts/test-self-container.sh
 
 ## test-bash-list: List all available bash 5.3 tests
 test-bash-list: test-bash-fixtures $(BIN_DIR)/bash53suite
@@ -335,7 +344,7 @@ test-bash-list: test-bash-fixtures $(BIN_DIR)/bash53suite
 ## and linked at external/bash-5.3. A custom BASH_TESTS_DIR is never downloaded.
 test-bash-fixtures:
 	@if [ "$(BASH_TESTS_DIR)" = "external/bash-5.3/tests" ]; then \
-		go run ./tools/bash53fixtures -root "$(CURDIR)" >/dev/null; \
+		$(GO) run ./tools/bash53fixtures -root "$(CURDIR)" >/dev/null; \
 	elif [ ! -d "$(BASH_TESTS_DIR)" ]; then \
 		echo "test-bash-fixtures: custom BASH_TESTS_DIR is missing: $(BASH_TESTS_DIR)" >&2; \
 		exit 2; \

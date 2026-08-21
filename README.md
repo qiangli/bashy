@@ -62,6 +62,12 @@ public CI because VSC-PCTS is licensed. After that isolation gate passes,
 `make test-bash` in the harness restores the Bashy Go applets and checks shell
 integration before the larger command-and-utility campaign.
 
+For concurrent agent work, use the isolated test-lane contract in
+[`docs/isolated-test-lanes.md`](docs/isolated-test-lanes.md). It maps
+weave/worktree ownership to distinct OCI containers and results, supports
+multiple simultaneous instances of the same suite or POSIX profile, documents
+the swappable Ubuntu base, and gives status/cleanup commands.
+
 ### Product sequence and Bash++ activation
 
 Bashy ships two binaries through a three-stage product sequence:

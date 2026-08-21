@@ -562,6 +562,7 @@ POSIX-conformance frontier (the active layer now that bash-5.3 is 86/86 — driv
 - `yash-conformance-gap.md` — the yash-scoreboard failure analysis behind the headline number in `docs/TODO.md`.
 - `zsh-scoreboard.md` — the zsh Tier-0 own-suite baseline (`make test-zsh`, `tools/ztst` runner); INFO metric, not a gate.
 - `chunked-fleet-conformance-plan.md` — the chunked/fleet/container conformance lanes in `dag.md` (`test-bash-chunks*`, `yash-chunks*`): chunk count is a corpus property pinned in a committed manifest, and the authoritative run stays single-host + unchunked (`make test-bash-container` runs all 86 serially in one hermetic image) — campaign mode never speaks for it.
+- `isolated-test-lanes.md` — the multi-agent container/runbook: weave workspace → lane → independent OCI container/result namespace; public self/Bash53/Yash commands, private POSIX A/B/C/D lanes, repeated-profile concurrency, swappable base-image adapters, capacity, status, and cleanup.
 - `ci-failure-autorepair-plan.md` + `config/ci-failure-fixer.env` + `scripts/ci-failure-{router,fixer,gate}.sh` — the `.github/workflows/ci-failure-report.yml` lane that routes a CI failure to a **fixer** run (the band-selected agent that repairs one failing gate — a lighter role than the SDLC `conductor`, which is the escalation target for a fix that needs orchestration).
 - `bashy-v1.0.0-readiness.md` — the release-readiness ledger.
 - `agent-adoption/matrix.md` — which agentic CLIs are verified running on bashy as their shell (the `force-agent-shell` skill's evidence base).

@@ -24,7 +24,10 @@
 set -u
 cd "$(dirname "$0")/.."
 ROOT=$PWD
-OUT=${1:-/tmp/yash-scoreboard}
+# shellcheck source=scripts/test-lane-id.sh
+. "$ROOT/scripts/test-lane-id.sh"
+LANE=$(bashy_test_lane "$ROOT") || { echo 'yash-scoreboard: unsafe BASHY_TEST_LANE' >&2; exit 2; }
+OUT=${1:-${TMPDIR:-/tmp}/yash-scoreboard-$LANE}
 mkdir -p "$OUT"
 
 OCI=${OCI:-}
@@ -35,6 +38,16 @@ if [ -z "$OCI" ]; then
   fi
 fi
 [ -n "$OCI" ] || { echo "need docker or bashy podman" >&2; exit 2; }
+
+GO_CMD=${GO:-}
+if [ -z "$GO_CMD" ]; then
+  if command -v go >/dev/null 2>&1; then GO_CMD=go
+  elif command -v bashy >/dev/null 2>&1; then GO_CMD="$(command -v bashy) go"
+  elif [ -x "$HOME/.local/bin/bashy" ]; then GO_CMD="$HOME/.local/bin/bashy go"
+  else echo 'yash-scoreboard: need go or bashy go to build the testee' >&2; exit 2
+  fi
+fi
+read -r -a go_cmd <<<"$GO_CMD"
 
 # A clean Podman store must not turn the localhost tag into an accidental
 # registry pull. Build the same explicit oracle image used by
@@ -58,11 +71,7 @@ build_image localhost/posix-shells-broad $'FROM docker.io/library/bash:5.3\nRUN 
 
 ARCH=$(uname -m); case "$ARCH" in aarch64|arm64) GOARCH=arm64;; *) GOARCH=amd64;; esac
 echo "building linux/$GOARCH bashy…" >&2
-if [ -n "${BASHY:-}" ]; then
-  GOOS=linux GOARCH=$GOARCH "$BASHY" go build -o bin/.bashy-full ./cmd/bash || exit 2
-else
-  GOOS=linux GOARCH=$GOARCH go build -o bin/.bashy-full ./cmd/bash || exit 2
-fi
+GOOS=linux GOARCH=$GOARCH "${go_cmd[@]}" build -o bin/.bashy-full ./cmd/bash || exit 2
 
 RAW="$OUT/verdicts.raw"
 echo "running yash -p corpus (bashy + bash, per case)…" >&2
@@ -71,7 +80,9 @@ echo "running yash -p corpus (bashy + bash, per case)…" >&2
 # argv[0] base name is `sh` (invokedAsSh, internal/cli/main.go). Measuring the
 # POSIX scoreboard through a testee named `bashy` would silently exercise the
 # non-strict path. The result LABEL stays "bashy" so the tally schema is unchanged.
-if ! $OCI run --rm -v "$ROOT/.yash-tests/tests:/yt:ro" -v "$ROOT/bin/.bashy-full:/sh:ro" \
+if ! $OCI run --rm --name "bashy-yash-$LANE" --label "io.dhnt.test.lane=$LANE" \
+  --cpus "${BASHY_TEST_CPUS:-2}" --memory "${BASHY_TEST_MEMORY:-4g}" --pids-limit 4096 \
+  -v "$ROOT/.yash-tests/tests:/yt:ro" -v "$ROOT/bin/.bashy-full:/sh:ro" \
   localhost/posix-shells-broad busybox ash -c '
   export LANG=C; cp -r /yt /work 2>/dev/null; cd /work
   excluded_case() {
