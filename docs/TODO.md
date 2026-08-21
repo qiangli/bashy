@@ -504,6 +504,25 @@ covered by an earlier section above is NOT repeated here.
 - [ ] **#14 Metrics handler**: `WithMetricsHandler(func(Metric))` (S)
 - [ ] **#15 Policy file**: `~/.bashy/policy.toml` or `.bashy.toml` with options/deny/caps sections (M)
 
+### Post-v1.0: Cross-platform common-denominator mode
+
+- [ ] Add an explicit opt-in `--portable-run` flag/profile whose declared
+  Bash, Coreutils, and Bash++ Go-feature surface is byte-for-byte behaviorally
+  identical across Windows, macOS, and Linux on every supported architecture.
+  Publish the capability list in machine-readable form; reject an operation
+  outside the portable subset instead of silently falling through to
+  platform-specific behavior. For platform-specific operations, provide and
+  document Bashy-native portable alternatives—especially Bash++ Go constructs
+  whose implementation owns the cross-platform semantics—and have diagnostics
+  name the appropriate alternative where one exists. Portable scripts may
+  therefore combine the enumerated shell/Coreutils subset with these Go-backed
+  constructs instead of emulating every operating-system behavior. Gate the
+  same scripts and result envelopes on
+  the OS/architecture matrix, including filesystem, process, signal, locale,
+  path, newline, permission, and terminal boundaries. This is a post-initial-
+  release enhancement, not a v1.0 blocker and not a claim that platform-native
+  behavior can be made identical outside the declared subset.
+
 ### Recommended next batches (from gap-analysis Section "Recommended next batches")
 
 1. **Batch A**: Error-message format pass (G0) — ~60 tests for one session
