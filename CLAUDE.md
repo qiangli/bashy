@@ -235,7 +235,8 @@ make install            # install to $DHNT_BIN_DIR (default ~/.local/bin) — in
 make build-fips         # both binaries against the Go FIPS 140-3 module (GOFIPS140) — see docs/fips-140.md
 make test               # scripts/test-build-fail-closed.sh, then go test ./...
 make test-bash          # drive bin/bash against bash's own 5.3 test suite (serial)
-make test-bash-parallel # same suite fanned out across cores — the canonical 86/86 gate
+make test-bash-parallel # native host diagnostic, fanned out across cores
+make test-bash-container # authoritative hermetic 86/86 gate (self-contained Linux image)
 make test-bash-list     # list available fixtures with per-fixture PASS/FAIL/TIME/SKIP
 make test-yash          # yash POSIX (-p) scoreboard — the headline conformance-frontier metric
 make test-yash-list     # print the current bashy-specific yash failure list
@@ -465,6 +466,14 @@ this gate failed before — `coproc`, `jobs` and `trap` were skipped *because th
 hung*, so CI stayed green while three fixtures went unmeasured. Nothing is skipped
 today; all 86 run.
 
+The authoritative release result is `make test-bash-container`: it bakes the
+testee, this runner, and the pinned fixture corpus into one Linux image, then
+runs non-root with an isolated tmpfs, no network, a read-only root, and a PTY.
+That prevents host `/tmp`, locale, permission, and controlling-terminal state
+from masquerading as shell regressions. Native `make test-bash` remains the
+fast host-integration lane; it is useful diagnostics, but its result is not a
+release verdict when the host cannot provide the fixture environment.
+
 ### Bash 5.3 fixtures (gitignored symlink)
 
 `external/bash-5.3` is a **gitignored symlink** into a Bash 5.3 fixture tree.
@@ -552,7 +561,7 @@ POSIX-conformance frontier (the active layer now that bash-5.3 is 86/86 — driv
 - `posix-cert-handoff-runbook.md`, `posix-cert-preflight-status.md`, `fidelity-ceiling-assessment.md` — VSC-PCTS certification runbook + status + the hard-ceiling assessment.
 - `yash-conformance-gap.md` — the yash-scoreboard failure analysis behind the headline number in `docs/TODO.md`.
 - `zsh-scoreboard.md` — the zsh Tier-0 own-suite baseline (`make test-zsh`, `tools/ztst` runner); INFO metric, not a gate.
-- `chunked-fleet-conformance-plan.md` — the chunked/fleet/container conformance lanes in `dag.md` (`test-bash-chunks*`, `yash-chunks*`): chunk count is a corpus property pinned in a committed manifest, and the authoritative run stays single-host + unchunked (`test-bash` 86/86 serial is the release gate) — campaign mode never speaks for it.
+- `chunked-fleet-conformance-plan.md` — the chunked/fleet/container conformance lanes in `dag.md` (`test-bash-chunks*`, `yash-chunks*`): chunk count is a corpus property pinned in a committed manifest, and the authoritative run stays single-host + unchunked (`make test-bash-container` runs all 86 serially in one hermetic image) — campaign mode never speaks for it.
 - `ci-failure-autorepair-plan.md` + `config/ci-failure-fixer.env` + `scripts/ci-failure-{router,fixer,gate}.sh` — the `.github/workflows/ci-failure-report.yml` lane that routes a CI failure to a **fixer** run (the band-selected agent that repairs one failing gate — a lighter role than the SDLC `conductor`, which is the escalation target for a fix that needs orchestration).
 - `bashy-v1.0.0-readiness.md` — the release-readiness ledger.
 - `agent-adoption/matrix.md` — which agentic CLIs are verified running on bashy as their shell (the `force-agent-shell` skill's evidence base).

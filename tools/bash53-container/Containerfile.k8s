@@ -7,14 +7,14 @@
 # run time), and the pinned chunks.json. Staged into the build context by
 # scripts/build-conformance-image.sh. Runs non-root (uid 1000) so the fixtures
 # that refuse to run as root behave (mirror of the lane's --user 1000).
-FROM docker.io/library/gcc:14-bookworm
+FROM docker.io/library/ubuntu:24.04
 
-# locales the suite exercises (intl/glob-test/…) + hexdump (printf6.sub); same as
-# the base conformance image.
+# locales the suite exercises (intl/glob-test/…) + compiler/helper tools; same
+# Ubuntu 24.04 substrate intended for the later POSIX profile images.
 RUN set -eux; \
     apt-get update; \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      locales bsdextrautils; \
+      build-essential locales tzdata bsdextrautils ca-certificates; \
     rm -rf /var/lib/apt/lists/*; \
     printf '%s\n' \
       'C.UTF-8 UTF-8' 'en_US.UTF-8 UTF-8' 'en_US ISO-8859-1' \
@@ -49,7 +49,8 @@ COPY chunks.json /work/chunks.json
 COPY bash53/    /bash53/
 
 # uid 1000 must own the workdir it writes helper builds / private trees under
-RUN useradd -u 1000 -m runner && chown -R 1000:1000 /work /bash53
+RUN getent passwd 1000 >/dev/null || useradd -u 1000 -m runner; \
+    chown -R 1000:1000 /work /bash53
 WORKDIR /work
 USER 1000:1000
 

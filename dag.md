@@ -998,22 +998,19 @@ PLAN_FILE="${PLAN_FILE:-bin/bash53-chunks.plan.tsv}" \
 ```
 
 ### test-bash-container
-Run the GNU Bash 5.3 conformance gate in a Linux container through `bashy
-podman`. This is the cross-platform release lane for Windows hosts: bashy
-cross-builds the pure `cmd/bash` testee and the bashy-native harness for Linux,
-then runs the external GPL fixture data inside a Linux userspace with `gcc`
-available for Bash's small helper programs. Set `BASH53_TESTDATA_REPO` to
-hydrate the gitignored fixture tree; set `TESTS="..."` or a manifest-valid
-`CHUNK=I/N` for subset/distributed runs. This is the default lane for heterogeneous fleet
-throughput because every host contributes a Linux container rather than its
-native filesystem/process semantics.
-Requires: test-bash-container-prepare
+Run the authoritative, complete GNU Bash 5.3 conformance gate in one
+self-contained Linux image through `bashy podman`. The image bakes the testee,
+the one fixture runner, and the SHA-256-pinned fixture corpus. Runtime is
+non-root, networkless, read-only, tmpfs-isolated, and PTY-backed, so host `/tmp`,
+locale, permissions, and controlling-terminal state cannot alter the verdict.
+The prepare/run targets below remain the bind-mounted chunk-worker leaves for
+heterogeneous fleet throughput; they are not the release verdict.
 Effects: write
 
 ```bash
 set -e
 BASHY_EXE="${BASHY:-bashy}"
-"$BASHY_EXE" dag test-bash-container-run
+BASH53_OCI="$BASHY_EXE podman" make test-bash-container
 ```
 
 ### test-bash-container-prepare

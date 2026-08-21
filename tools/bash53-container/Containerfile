@@ -1,19 +1,20 @@
 # Bash 5.3 conformance container substrate.
 #
-# The stock docker.io/library/gcc:14-bookworm image ships only C / C.UTF-8, so
+# The stock Ubuntu 24.04 image ships only C / C.UTF-8, so
 # the locale-sensitive fixtures (`intl` needs de_DE.UTF-8, `glob-test` needs
 # zh_TW.big5) fail in-container while they pass natively on a dev box that has
 # the locales. Bake the locale set the bash-5.3 suite exercises so the
 # container lane reproduces the native gate. Everything here is a build-time
 # (root) step; the lane runs the container non-root via `--userns=keep-id`.
-FROM docker.io/library/gcc:14-bookworm
+FROM docker.io/library/ubuntu:24.04
 
 # `locales` covers the locale-sensitive fixtures; `bsdextrautils` supplies
-# `hexdump`, which `printf6.sub` shells out to and the stock gcc image lacks.
+# `hexdump`, which `printf6.sub` shells out to and the stock image lacks;
+# `build-essential` supplies the fixture helper compiler.
 RUN set -eux; \
     apt-get update; \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      locales bsdextrautils; \
+      build-essential locales tzdata bsdextrautils ca-certificates; \
     rm -rf /var/lib/apt/lists/*; \
     printf '%s\n' \
       'C.UTF-8 UTF-8' \

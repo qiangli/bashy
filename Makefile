@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy install test test-build-fail-closed test-bash test-bash-run test-bash-parallel test-bash-list test-bash-fixtures test-bash-helpers dist tidy clean help
+.PHONY: dag build build-bash build-bashy install test test-build-fail-closed test-bash test-bash-run test-bash-parallel test-bash-container test-bash-list test-bash-fixtures test-bash-helpers dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -315,6 +315,16 @@ test-bash-run-legacy:
 ## CPU count; on a big box use e.g. `make test-bash-parallel JOBS=20`.
 test-bash-parallel: build-bash test-bash-fixtures test-bash-helpers
 	@JOBS=$(JOBS) BASH_TESTS_DIR=$(BASH_TESTS_DIR) BASH_TEST_SKIP="$(BASH_TEST_SKIP)" /bin/bash scripts/test-bash-parallel.sh
+
+## test-bash-container: Run the authoritative 86-fixture Bash 5.3 gate in a
+## self-contained Linux image through bashy podman. The image bakes the testee,
+## runner, and pinned fixtures; the run has an isolated tmpfs, no network, a
+## read-only root, a non-root uid, and a PTY for fixtures that open /dev/tty.
+## Set BASH53_OCI or BASH53_IMAGE to override the container command/image.
+test-bash-container: build-bashy test-bash-fixtures
+	@BASH53_OCI="$${BASH53_OCI:-$(BIN) podman}" \
+	 BASH53_IMAGE="$${BASH53_IMAGE:-localhost/bash53-conformance-hermetic:latest}" \
+	 scripts/test-bash-container.sh
 
 ## test-bash-list: List all available bash 5.3 tests
 test-bash-list: test-bash-fixtures $(BIN_DIR)/bash53suite

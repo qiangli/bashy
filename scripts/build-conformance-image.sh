@@ -47,6 +47,10 @@ log(){ printf '>> %s\n' "$*" >&2; }
 case "$SUITE" in
 bash53)
   IMAGE="${IMAGE:-localhost/bash53-conformance-k8s:latest}"
+  # The build script is also a supported direct entry point. Hydrate the same
+  # SHA-256-pinned cache as the Makefile target instead of assuming a checkout
+  # already has the gitignored external/bash-5.3 link.
+  make --no-print-directory test-bash-fixtures
   mkdir -p "$CTX/bin/bash-linux-$ARCH" "$CTX/bash53"
   log "building linux/$ARCH testee + bash53 harness…"
   GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 go build -trimpath -o "$CTX/bin/bash-linux-$ARCH/bash" ./cmd/bash
@@ -111,10 +115,26 @@ else
   $OCI build $SQUASH_FLAG --platform "linux/$ARCH" -t "$IMAGE" -f "$CTX/Containerfile" "$CTX" 2>&1 | grep -iE 'STEP|COMMIT|Successfully|error' | tail -4
 fi
 
-log "done. self-check: run one chunk inside the image (no mounts)…"
-if on_windows; then
-  $OCI machine ssh "$VMM" "podman run --rm $SELFCHECK_ENV '$IMAGE'" 2>&1 | grep -iE 'Results:|FAIL|error' | tail -2
+if [ "${SELFCHECK:-chunk}" = inventory ] && [ "$SUITE" = bash53 ]; then
+  log "done. self-check: verify exactly 86 baked fixtures (no mounts)…"
+  if on_windows; then
+    inventory="$($OCI machine ssh "$VMM" "podman run --rm '$IMAGE' sigdfl ./bin/bash53suite-linux-$ARCH -tests-dir /bash53/tests -list")"
+  else
+    inventory="$($OCI run --rm --network none --platform "linux/$ARCH" "$IMAGE" \
+      sigdfl "./bin/bash53suite-linux-$ARCH" -tests-dir /bash53/tests -list)"
+  fi
+  fixture_count="$(printf '%s\n' "$inventory" | tr -d '\r' | awk 'NF { n++ } END { print n+0 }')"
+  [ "$fixture_count" = 86 ] || {
+    echo "build-conformance-image: baked fixture inventory is $fixture_count, want 86" >&2
+    exit 2
+  }
+  log "self-check PASS: 86 baked fixtures"
 else
-  $OCI run --rm --platform "linux/$ARCH" $SELFCHECK_ENV "$IMAGE" 2>&1 | grep -iE 'Results:|FAIL|error' | tail -2
+  log "done. self-check: run one chunk inside the image (no mounts)…"
+  if on_windows; then
+    $OCI machine ssh "$VMM" "podman run --rm --tty --network none $SELFCHECK_ENV '$IMAGE'" 2>&1 | grep -iE 'Results:|FAIL|error' | tail -2
+  else
+    $OCI run --rm --tty --network none --platform "linux/$ARCH" $SELFCHECK_ENV "$IMAGE" 2>&1 | grep -iE 'Results:|FAIL|error' | tail -2
+  fi
 fi
 echo "IMAGE=$IMAGE  ARCH=$ARCH  SUITE=$SUITE" >&2

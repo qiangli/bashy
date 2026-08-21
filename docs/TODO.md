@@ -52,6 +52,15 @@
 
 ## Remaining Work — By Priority
 
+### Development-only differential conformance selection
+
+- [ ] Build a conservative change-impact selector for future sprints: map
+      interpreter/features and utility providers to Bash fixtures and licensed
+      POSIX test-purpose identities, add cross-cutting canaries, and optionally
+      enrich the map from runtime coverage. This is only a fast local/dev gate.
+      It must never replace the complete declared denominator for merge,
+      release, Profile A/B/C/D closure, or certification evidence.
+
 ### Tree-sitter grammar tiering (measured 2026-08-05; ~20 MB of a ~81 MB binary)
 
 - [ ] **Two-tier the embedded tree-sitter grammars: embed only what bashy's own
