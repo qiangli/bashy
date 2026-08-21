@@ -23,7 +23,7 @@ func TestAgentRosterEmptyIncludesCatalogFooter(t *testing.T) {
 	if !strings.Contains(got, "LIVE 0") {
 		t.Fatalf("empty roster did not report zero live assignments: %q", got)
 	}
-	if !strings.HasSuffix(got, "To list all registered agents: bashy agents list\n") {
+	if !strings.HasSuffix(got, "Track: bashy watch -n 2 bashy agents | JSON: bashy agents --json | Catalog: bashy agents list\n") {
 		t.Fatalf("missing exact footer: %q", got)
 	}
 	if strings.Contains(got, "working task") {
@@ -76,6 +76,114 @@ func TestAgentRosterJSON(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "To list all registered") {
 		t.Fatal("JSON included plain footer")
+	}
+}
+
+func TestAgentRosterIncludesStandaloneRoomAssignments(t *testing.T) {
+	home, sprintDir, roomDir := t.TempDir(), t.TempDir(), t.TempDir()
+	t.Setenv("BASHY_HOME", home)
+	t.Setenv("BASHY_SPRINT_DIR", sprintDir)
+	t.Setenv("BASHY_ROOM_DIR", roomDir)
+	useAgentsHome(t, home)
+	joined := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	cards := []room.Card{
+		{
+			ID: "Beatrix-invoke", Principal: "conductor", Tool: "claude", Model: "opus4.8",
+			Binding: "claude:opus4.8", Nick: "Beatrix", Band: 4, Mode: "oneshot",
+			Role: "reviewer", Task: "review assignment visibility", PID: os.Getpid(), Cwd: "/work/bashy", Joined: joined.Format(time.RFC3339),
+		},
+		{
+			ID: "codex-gpt-5-5", Principal: "operator", Tool: "codex", Model: "gpt-5.5",
+			Binding: "codex:gpt-5.5", Mode: "interactive", PID: os.Getpid(), Cwd: "/work/coreutils",
+		},
+	}
+	for _, card := range cards {
+		if err := room.Join(card); err != nil {
+			t.Fatal(err)
+		}
+		card := card
+		t.Cleanup(func() { room.Leave(card.ID) })
+	}
+
+	assignments, err := reconciledAgentRoster()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assignments) != 2 {
+		t.Fatalf("assignments = %#v, want both named and ad-hoc room work", assignments)
+	}
+	byBinding := make(map[string]agentAssignment)
+	for _, assignment := range assignments {
+		byBinding[assignment.Binding] = assignment
+	}
+	named := byBinding["claude:opus4.8"]
+	if named.Agent != "Beatrix" || named.Mode != "oneshot" || named.InvocationRole != "reviewer" || named.Source != "room" || named.Title != "review assignment visibility" {
+		t.Fatalf("named invocation = %#v", named)
+	}
+	if named.Owner != "conductor" || named.PID != os.Getpid() || named.Repo != "bashy" || !named.LastProgress.Equal(joined) {
+		t.Fatalf("named invocation evidence = %#v", named)
+	}
+	adhoc := byBinding["codex:gpt-5.5"]
+	if adhoc.Agent != "codex:gpt-5.5" || adhoc.Mode != "interactive" || adhoc.Source != "room" || adhoc.Repo != "coreutils" {
+		t.Fatalf("ad-hoc invocation = %#v", adhoc)
+	}
+	if !strings.Contains(adhoc.Title, "unlabeled live interactive") {
+		t.Fatalf("ad-hoc work label = %q", adhoc.Title)
+	}
+
+	var out bytes.Buffer
+	if err := renderAgentRoster(&out, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Beatrix", "review assignment visibility", "oneshot", "reviewer", "claude:opus4.8", "room"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("human roster missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestAgentRosterDoesNotDuplicateWeaveRoomCard(t *testing.T) {
+	home, sprintDir, roomDir := t.TempDir(), t.TempDir(), t.TempDir()
+	t.Setenv("BASHY_HOME", home)
+	t.Setenv("BASHY_SPRINT_DIR", sprintDir)
+	t.Setenv("BASHY_ROOM_DIR", roomDir)
+	useAgentsHome(t, home)
+	writeJSONFile(t, filepath.Join(home, "weave", "demo-a1", "queue.json"), agentsQueue{Root: "/work/demo", Items: []agentsQueueItem{{
+		ID: 91, Title: "visible once", State: "working", Owner: "Beatrix", WrapperPID: os.Getpid(), StartedAt: time.Now(),
+	}}})
+	cardID := fmt.Sprintf("weave-91-%d", os.Getpid())
+	if err := room.Join(room.Card{
+		ID: cardID, Principal: "conductor", Tool: "claude", Model: "opus4.8", Binding: "claude:opus4.8",
+		Nick: "Beatrix", Mode: "weave", Task: "#91 visible once", PID: os.Getpid(), Cwd: "/work/demo",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { room.Leave(cardID) })
+
+	assignments, err := reconciledAgentRoster()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assignments) != 1 {
+		t.Fatalf("assignments = %#v, want one reconciled weave assignment", assignments)
+	}
+	got := assignments[0]
+	if got.Run != 91 || got.Source != "weave" || got.Mode != "weave" || got.Binding != "claude:opus4.8" || got.PID != os.Getpid() {
+		t.Fatalf("reconciled weave assignment = %#v", got)
+	}
+}
+
+func TestRoomRepoUsesRepositoryRootFromNestedCwd(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "visible-repo")
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(root, "internal", "agentos")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := roomRepo(nested); got != "visible-repo" {
+		t.Fatalf("roomRepo(%q) = %q, want repository root label", nested, got)
 	}
 }
 
@@ -325,6 +433,7 @@ func writeJSONFile(t *testing.T, path string, value any) {
 
 func useAgentsHome(t *testing.T, home string) {
 	t.Helper()
+	t.Setenv("BASHY_ROOM_DIR", filepath.Join(home, "room"))
 	old := agentsHomeDir
 	agentsHomeDir = func() (string, error) { return home, nil }
 	t.Cleanup(func() { agentsHomeDir = old })

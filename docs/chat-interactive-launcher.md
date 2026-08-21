@@ -97,7 +97,9 @@ driving the session just uses the tool.
 
 - **P0 (this change)** — the governed native-interactive launch by fleet selection
   (`chat.Interact` + `PickAgent` + the `agentpty` tee), the live-sessions registry,
-  and the `sessions`/`steer`/`interrupt`/`attach` control verbs. `invoke` unchanged.
+  and the `sessions`/`steer`/`interrupt`/`attach` control verbs. One-shot
+  `invoke` work publishes a work-keyed room card for its lifetime (without
+  claiming an interactive identity seat), so `bashy agents` can account for it.
 - **P1** — coach auto-attach opt-in (`chat --coach`): a human session can ask a
   banded coach to watch (the reflex coach + `BandGraduatedEscalator` already exist;
   this just points them at a registry id). Off by default — the human is the coach.
