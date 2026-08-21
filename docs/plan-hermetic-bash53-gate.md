@@ -14,7 +14,7 @@ Profiles A/B/C/D; profile images vary the shell/provider payload, not the OS.
 - [x] Expose the lane through both `make test-bash-container` and
   `bashy dag test-bash-container`.
 - [x] Build the image and obtain an 86/86, zero-skip result.
-- [ ] Run Go/unit/static gates, commit and push Bashy, bump and push the
+- [x] Run Go/unit/static gates, commit and push Bashy, bump and push the
   umbrella pin, then rebuild/install/smoke the installed Bashy binary.
 
 The native targets remain useful host-integration diagnostics. They are not a
