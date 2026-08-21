@@ -467,9 +467,13 @@ today; all 86 run.
 
 ### Bash 5.3 fixtures (gitignored symlink)
 
-`external/bash-5.3` is a **gitignored symlink** into a Bash 5.3 source tree —
-only its `tests/` dir is used. Set it up locally before running `make
-test-bash`:
+`external/bash-5.3` is a **gitignored symlink** into a Bash 5.3 fixture tree.
+`make test-bash`, `make test-bash-parallel`, `make test-bash-list`, and the
+helper target create it automatically when absent: the released Bash 5.3
+tarball is pinned by SHA-256, the required `tests/` and `support/` trees are
+extracted atomically under the user cache directory, and the checkout symlink
+points there. An existing local source-tree symlink remains valid. To provide
+one explicitly instead:
 
 ```sh
 mkdir -p external

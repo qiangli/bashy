@@ -25,6 +25,8 @@ package agentos
 import (
 	"archive/tar"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -63,6 +65,8 @@ type suiteSpec struct {
 // source; only its tests/ tree is used, fetched into a gitignored cache. bashy
 // never vendors it.
 const bash53TarballURL = "https://ftp.gnu.org/gnu/bash/bash-5.3.tar.gz"
+
+const bash53TarballSHA256 = "0d5cd86965f869a26cf64f4b71be7b96f90a3ba8b3d74e27e8e9d9d5550f31ba"
 
 func suiteRegistry() []suiteSpec {
 	return []suiteSpec{
@@ -159,7 +163,7 @@ func printVerifyList(w io.Writer) {
 // --- compat: GNU Bash 5.3 compatibility (86/86) ---
 
 func runVerifyCompat(root string, args []string) int {
-	if _, err := ensureBash53Fixtures(root); err != nil {
+	if _, err := EnsureBash53Fixtures(root); err != nil {
 		fmt.Fprintf(os.Stderr, "verify compat: %v\n", err)
 		return 1
 	}
@@ -168,10 +172,10 @@ func runVerifyCompat(root string, args []string) int {
 	return runHarness(root, "make", append([]string{"test-bash-parallel"}, args...)...)
 }
 
-// ensureBash53Fixtures makes external/bash-5.3/tests present, fetching the GPL
+// EnsureBash53Fixtures makes external/bash-5.3/tests present, fetching the GPL
 // Bash 5.3 source tarball at runtime into a gitignored user-cache and symlinking
 // it in — the embedded-URL pattern. Idempotent; a no-op when already present.
-func ensureBash53Fixtures(root string) (string, error) {
+func EnsureBash53Fixtures(root string) (string, error) {
 	link := filepath.Join(root, "external", "bash-5.3")
 	if fi, err := os.Stat(filepath.Join(link, "tests")); err == nil && fi.IsDir() {
 		return link, nil // symlink or dir already satisfies the harness
@@ -181,10 +185,28 @@ func ensureBash53Fixtures(root string) (string, error) {
 		return "", err
 	}
 	dst := filepath.Join(cacheBase, "bashy", "conformance", "bash-5.3")
-	if fi, err := os.Stat(filepath.Join(dst, "tests")); err != nil || !fi.IsDir() {
+	if !validBash53Cache(dst) {
 		fmt.Fprintf(os.Stderr, "verify compat: fetching GPL Bash 5.3 tests (gitignored cache, not vendored)\n  %s\n", bash53TarballURL)
-		if err := fetchBash53Tests(bash53TarballURL, dst); err != nil {
+		parent := filepath.Dir(dst)
+		if err := os.MkdirAll(parent, 0o755); err != nil {
+			return "", err
+		}
+		tmp, err := os.MkdirTemp(parent, "bash-5.3.fetch-")
+		if err != nil {
+			return "", err
+		}
+		defer os.RemoveAll(tmp)
+		if err := fetchBash53Tests(bash53TarballURL, tmp, bash53TarballSHA256); err != nil {
 			return "", fmt.Errorf("fetch bash-5.3 tests: %w", err)
+		}
+		if err := os.WriteFile(filepath.Join(tmp, ".bashy-source-sha256"), []byte(bash53TarballSHA256+"\n"), 0o644); err != nil {
+			return "", err
+		}
+		if err := os.RemoveAll(dst); err != nil {
+			return "", err
+		}
+		if err := os.Rename(tmp, dst); err != nil {
+			return "", fmt.Errorf("publish bash-5.3 cache: %w", err)
 		}
 	}
 	_ = os.MkdirAll(filepath.Dir(link), 0o755)
@@ -195,9 +217,18 @@ func ensureBash53Fixtures(root string) (string, error) {
 	return link, nil
 }
 
-// fetchBash53Tests streams the tarball and extracts only bash-5.3/tests/** into
-// dst/tests (never the whole GPL source — only what the harness needs).
-func fetchBash53Tests(url, dst string) error {
+func validBash53Cache(dst string) bool {
+	fi, err := os.Stat(filepath.Join(dst, "tests"))
+	if err != nil || !fi.IsDir() {
+		return false
+	}
+	b, err := os.ReadFile(filepath.Join(dst, ".bashy-source-sha256"))
+	return err == nil && strings.TrimSpace(string(b)) == bash53TarballSHA256
+}
+
+// fetchBash53Tests streams the tarball and extracts only bash-5.3/tests/** and
+// bash-5.3/support/** (never the whole GPL source — only what the harness needs).
+func fetchBash53Tests(url, dst, wantSHA256 string) error {
 	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
@@ -207,13 +238,14 @@ func fetchBash53Tests(url, dst string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("http %d", resp.StatusCode)
 	}
-	gz, err := gzip.NewReader(resp.Body)
+	h := sha256.New()
+	gz, err := gzip.NewReader(io.TeeReader(resp.Body, h))
 	if err != nil {
 		return err
 	}
 	defer gz.Close()
 	tr := tar.NewReader(gz)
-	const want = "bash-5.3/tests/"
+	wants := []string{"bash-5.3/tests/", "bash-5.3/support/"}
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
@@ -222,11 +254,17 @@ func fetchBash53Tests(url, dst string) error {
 		if err != nil {
 			return err
 		}
-		idx := strings.Index(h.Name, want)
-		if idx < 0 {
+		matched := false
+		for _, prefix := range wants {
+			if strings.HasPrefix(h.Name, prefix) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			continue
 		}
-		rel := h.Name[idx+len("bash-5.3/"):] // -> tests/...
+		rel := strings.TrimPrefix(h.Name, "bash-5.3/")
 		if strings.Contains(rel, "..") {
 			continue // path-traversal guard
 		}
@@ -250,6 +288,10 @@ func fetchBash53Tests(url, dst string) error {
 			}
 			f.Close()
 		}
+	}
+	gotSHA256 := hex.EncodeToString(h.Sum(nil))
+	if gotSHA256 != strings.ToLower(strings.TrimSpace(wantSHA256)) {
+		return fmt.Errorf("sha256 mismatch: got %s, want %s", gotSHA256, wantSHA256)
 	}
 	if fi, err := os.Stat(filepath.Join(dst, "tests")); err != nil || !fi.IsDir() {
 		return fmt.Errorf("tarball did not contain bash-5.3/tests/")

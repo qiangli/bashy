@@ -123,16 +123,7 @@ jobs:
       # symlink pointing at the SAME upstream snapshot.
       - name: Fetch pinned bash-5.3 release source (for the fixture tree)
         shell: bash
-        run: |
-          set -euxo pipefail
-          url=https://ftp.gnu.org/gnu/bash/bash-5.3.tar.gz
-          sha=0d5cd86965f869a26cf64f4b71be7b96f90a3ba8b3d74e27e8e9d9d5550f31ba
-          curl -fsSL --retry 3 -o /tmp/bash-5.3.tar.gz "$url"
-          echo "$sha  /tmp/bash-5.3.tar.gz" | sha256sum -c -
-          mkdir -p external
-          tar -xzf /tmp/bash-5.3.tar.gz -C /tmp
-          ln -sfn /tmp/bash-5.3 external/bash-5.3
-          test -d external/bash-5.3/tests
+        run: make test-bash-fixtures
       - name: Build the recho/zecho fixture helpers
         shell: bash
         run: make test-bash-helpers

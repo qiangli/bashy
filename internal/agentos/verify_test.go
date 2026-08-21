@@ -4,6 +4,13 @@
 package agentos
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -65,11 +72,57 @@ func TestEnsureBash53FixturesNoOpWhenPresent(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "external", "bash-5.3", "tests"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	link, err := ensureBash53Fixtures(root)
+	link, err := EnsureBash53Fixtures(root)
 	if err != nil {
 		t.Fatalf("should be a no-op when tests/ present: %v", err)
 	}
 	if link != filepath.Join(root, "external", "bash-5.3") {
 		t.Errorf("unexpected link path %q", link)
+	}
+}
+
+func TestFetchBash53TestsVerifiesArchiveAndExtractsRequiredTrees(t *testing.T) {
+	var archive bytes.Buffer
+	gz := gzip.NewWriter(&archive)
+	tw := tar.NewWriter(gz)
+	for name, body := range map[string]string{
+		"bash-5.3/tests/run-all":   "fixture",
+		"bash-5.3/support/recho.c": "helper",
+		"bash-5.3/COPYING":         "not extracted",
+	} {
+		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(body))}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(archive.Bytes())
+	want := hex.EncodeToString(sum[:])
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive.Bytes())
+	}))
+	defer srv.Close()
+
+	dst := t.TempDir()
+	if err := fetchBash53Tests(srv.URL, dst, want); err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{"tests/run-all", "support/recho.c"} {
+		if _, err := os.Stat(filepath.Join(dst, rel)); err != nil {
+			t.Fatalf("required fixture %s: %v", rel, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dst, "COPYING")); !os.IsNotExist(err) {
+		t.Fatalf("unexpected non-fixture extraction: %v", err)
+	}
+	if err := fetchBash53Tests(srv.URL, t.TempDir(), "00"); err == nil {
+		t.Fatal("checksum mismatch accepted")
 	}
 }

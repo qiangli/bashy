@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy install test test-build-fail-closed test-bash test-bash-run test-bash-parallel test-bash-list test-bash-helpers dist tidy clean help
+.PHONY: dag build build-bash build-bashy install test test-build-fail-closed test-bash test-bash-run test-bash-parallel test-bash-list test-bash-fixtures test-bash-helpers dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -259,13 +259,13 @@ smoke-chat:
 ## test-bash: Run bash 5.3 native test suite against bashy (with per-test timeout).
 ## Builds only the lean bin/bash drop-in (not the 259MB embed-heavy bin/bashy).
 ## Iterate fast on a subset with TESTS="name ...", e.g. make test-bash TESTS="comsub varenv".
-test-bash: build-bash test-bash-helpers
+test-bash: build-bash test-bash-fixtures test-bash-helpers
 	@$(MAKE) --no-print-directory test-bash-run
 
 ## test-bash-run: the fixture loop only (no build). Used by `test-bash` (which
 ## builds first) and by scripts/test-bash-parallel.sh (builds once, then fans
 ## the loop out over fixture groups). Honors TESTS="name ..." like test-bash.
-test-bash-run: $(BIN_DIR)/bash53suite
+test-bash-run: test-bash-fixtures $(BIN_DIR)/bash53suite
 	@BASH53_TIMEOUT=$(BASH_TEST_TIMEOUT)s \
 	 BASH53_JOBS_TIMEOUT=$(BASH_TEST_TIMEOUT_JOBS)s \
 	 BASH53_MEM_KB=$(BASH_TEST_MEM_KB) \
@@ -313,12 +313,23 @@ test-bash-run-legacy:
 ## test-bash-parallel: Run the bash 5.3 suite in parallel fixture groups (builds
 ## bin/bash once, then fans the loop out over JOBS groups). JOBS defaults to the
 ## CPU count; on a big box use e.g. `make test-bash-parallel JOBS=20`.
-test-bash-parallel: build-bash test-bash-helpers
+test-bash-parallel: build-bash test-bash-fixtures test-bash-helpers
 	@JOBS=$(JOBS) BASH_TESTS_DIR=$(BASH_TESTS_DIR) BASH_TEST_SKIP="$(BASH_TEST_SKIP)" /bin/bash scripts/test-bash-parallel.sh
 
 ## test-bash-list: List all available bash 5.3 tests
-test-bash-list: $(BIN_DIR)/bash53suite
+test-bash-list: test-bash-fixtures $(BIN_DIR)/bash53suite
 	@$(BIN_DIR)/bash53suite -tests-dir $(BASH_TESTS_DIR) -list
+
+## test-bash-fixtures: Ensure the pinned GNU Bash 5.3 fixtures are present.
+## The default tree is SHA-256 verified, cached under the user cache directory,
+## and linked at external/bash-5.3. A custom BASH_TESTS_DIR is never downloaded.
+test-bash-fixtures:
+	@if [ "$(BASH_TESTS_DIR)" = "external/bash-5.3/tests" ]; then \
+		go run ./tools/bash53fixtures -root "$(CURDIR)" >/dev/null; \
+	elif [ ! -d "$(BASH_TESTS_DIR)" ]; then \
+		echo "test-bash-fixtures: custom BASH_TESTS_DIR is missing: $(BASH_TESTS_DIR)" >&2; \
+		exit 2; \
+	fi
 
 ## test-bash-helpers: Build helper programs needed by bash tests
 # heredoc5.sub round-trips $(BUILD_DIR)/config.h (needs 4096 < size <
@@ -327,7 +338,7 @@ test-bash-list: $(BIN_DIR)/bash53suite
 # generate deterministic stubs of the right sizes. Some trimmed fixture
 # copies also omit y.tab.c and examples/loadables/Makefile, which the
 # heredoc and glob-bracket tests read as source/build artifacts.
-test-bash-helpers:
+test-bash-helpers: test-bash-fixtures
 	@cd $(BASH_TESTS_DIR) && \
 		[ -f recho ] || cc -o recho ../support/recho.c 2>/dev/null; \
 		[ -f zecho ] || cc -o zecho ../support/zecho.c 2>/dev/null; \

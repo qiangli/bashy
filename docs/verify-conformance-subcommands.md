@@ -41,8 +41,10 @@ find-replace — the names live in one registry.
   Fetching for local use is **not redistribution**, so no copyleft propagates to
   bashy; the *harness* stays permissive. This is already the repo's posture (the
   yash script `git clone`s; the bash-5.3 fixtures are a gitignored symlink).
-  - `verify compat` → `ensureBash53Fixtures` streams `ftp.gnu.org/gnu/bash/bash-5.3.tar.gz`
-    and extracts **only `bash-5.3/tests/`** into `<UserCacheDir>/bashy/conformance/`,
+  - `verify compat` and every `make test-bash*` entry point → `EnsureBash53Fixtures`
+    downloads the SHA-256-pinned `ftp.gnu.org/gnu/bash/bash-5.3.tar.gz`
+    and extracts only the required `bash-5.3/tests/` and `bash-5.3/support/`
+    trees atomically into `<UserCacheDir>/bashy/conformance/`,
     symlinked in. Idempotent; a no-op when present.
 - **`licenseUserSupplied`** — the official POSIX suite (**Open Group VSC-PCTS**) is
   **licensed, not OSS**; its agreement restricts who may download and forbids
