@@ -43,15 +43,15 @@ Detailed gates remain in `bashy-v1.0.0-readiness.md` and the component plans.
      Bashy's Go applets. Evidence tag: `vsc-pcts-posix-shell-2026-08-08`.
      The dedicated shell-closure sprint (#45) is ended; reopen this lane only
      for a demonstrated regression.
-   - Lane B, the **next milestone**: complete all 116 Commands and Utilities
-     sets (8,844 configured TPs). Bashy's Go utilities are the SUT; GNU
-     Coreutils 9.11 is the apples-to-apples diagnostic control, not a claim
-     that GNU behavior defines POSIX. Both arms start from the same immutable
-     image and provisioning revision and differ only in their declared SUT.
-   - Re-running the 493 shell TPs with the assembled Bashy utility providers is
-     a regression/integration gate inside Lane B. It is not a separate roadmap
-     milestone and does not precede starting utility-set work.
-   - Lane B exit: all 116 sets and 8,844 TPs measured, no unexplained
+   - **Profile B, the primary corrective arm:** complete all 116 Commands and
+     Utilities sets (8,844 configured TPs) with Bashy `sh` and the frozen
+     GNU/system provider manifest. Bashy's Go multicall is excluded so the
+     matched A/B delta isolates the shell.
+   - **Profiles C/D, the Go-utility track:** place the canonical Bashy Go
+     multicall first under GNU Bash or Bashy. These profiles measure the 76 Go
+     applets and the assembled provider gaps independently of Profile B. See
+     `posix-command-coverage.md` for the exact accounting.
+   - Profile B exit: all 116 sets and 8,844 TPs measured, no unexplained
      Bashy-only failures, `UNRESOLVED` results, or caps in the declared scope,
      repeatable matched-host evidence, and finalized provider limitations.
    - After Lane B: execute one uninterrupted 117-set/9,337-TP assembled formal
@@ -86,8 +86,8 @@ official packages.
 
 ### v1.1.0 — expanded GNU Coreutils compatibility
 
-- The POSIX Go-utility profile is pre-v1.0 certification work, not a v1.1
-  introduction: Bashy's Go utilities already exist and are the Lane B SUT.
+- The POSIX Go-utility C/D profiles are pre-v1.0 engineering work, not a v1.1
+  introduction. They are separate from the Profile B shell arm.
 - Expand the declared command and option/behavior matrix beyond the POSIX
   profile toward GNU Coreutils compatibility.
 - Gate GNU Coreutils 9.11 differentials and uutils-derived tests by provenance

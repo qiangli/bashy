@@ -103,11 +103,11 @@ bash-fidelity warrants relaxing the parser before the run.
       PASS-group outcomes with zero blockers/caps. Status is recorded in
       `vsc-pcts-run-status.md` and tagged
       `vsc-pcts-posix-shell-2026-08-08`.
-- [ ] **Complete the Commands and Utilities milestone** — measure all 116 sets
-      and 8,844 configured TPs with Bashy's Go utilities as SUT and GNU
-      Coreutils 9.11 as matched control. Preserve 493/493 shell behavior with
-      an assembled-provider regression gate, then run one serial
-      117-set/9,337-TP formal profile.
+- [ ] **Complete the Commands and Utilities profiles** — run the primary
+      Profile B arm with Bashy `sh` plus frozen GNU/system providers, excluding
+      Bashy's Go multicall. Run Profiles C/D separately for Go-utility coverage.
+      Use `posix-command-coverage.md` for the 116-name provider accounting and
+      preserve the complete 117-set/9,337-TP denominator.
 - [ ] **Certification submission / mark decision** remains separate from having
       run the licensed suite. No Open Group certification claim is made.
 - [ ] **Decide dual-mode JC P1+** based on measured interactive-JC coverage.

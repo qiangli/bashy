@@ -45,12 +45,12 @@ Investigated 2026-06-25. bash does **not** expand `${a}` in a heredoc delimiter 
 
 Both clean-room differentials are **at 0 deviations**, the `<<${a}` decision is
 **made**, and the 493-TP shell-isolation arm is in the certification PASS group
-with zero blockers. The next milestone is the 116-set/8,844-TP Commands and
-Utilities campaign, with Bashy's Go utilities as the SUT and GNU Coreutils
-9.11 as the matched diagnostic control. Re-running the 493 shell TPs with the
-assembled providers is a regression gate inside that campaign, not a separate
-roadmap milestone. The complete 117-set formal run and submission/claim
-discipline follow; no "POSIX certified" claim is made.
+with zero blockers. The active primary corrective arm is Profile B: Bashy `sh`
+with frozen GNU/system providers and no Bashy Go multicall. Profiles C/D
+separately exercise the Go-utility provider over the same 116-set/8,844-TP
+inventory. See `posix-command-coverage.md`; the complete 117-set formal run and
+submission/claim discipline remain separate, and no "POSIX certified" claim is
+made.
 
 ## 2026-08-02 preflight re-run (workstream 1, single-host, serial)
 

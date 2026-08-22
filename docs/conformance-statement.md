@@ -48,6 +48,12 @@ Out of scope — deliberately not part of bashy's conformance claim:
   pure-Go self-contained story — the **`coreutils` sibling**, which carries its
   own conformance track. "Shell *and* Utilities" conformance = bashy + coreutils.
 
+This scope boundary is also the reason **Profile B uses GNU/system utilities,
+not Bashy's Go coreutils**: Profile B isolates the Bashy shell. Profiles C and
+D exercise the Bashy Go utility provider. The provider strategy, including the
+26 command names not currently implemented as Go applets or shell builtins, is
+recorded in [`posix-command-coverage.md`](posix-command-coverage.md).
+
 ## Mode of assertion
 
 POSIX conformance is asserted **in POSIX mode**. GNU Bash is intentionally

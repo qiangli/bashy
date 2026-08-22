@@ -43,7 +43,10 @@ gocloud.dev, moby/moby/api, envoy, MCP registry).
 T0 SCOPE:
   embedded    pkg/config (full .goreleaser.yaml schema, so an existing config
               works unchanged), pkg/archive, pkg/context; build/archive/checksum
-              in-process over pax + sha256sum + bashy git.
+              in-process over Go archive primitives + sha256sum + bashy git.
+              `coreutils/pkg/pax` is currently only a manifest/safe-extraction
+              planning kernel and must not be described as a shipped pax
+              command or archive writer.
   binmgr'd    goreleaser itself for unembedded stages, plus cosign, syft, gpg,
               docker, upx. pkg/binmgr already fetches/sha256-verifies/caches/runs
               GitHub-released binaries (gitea, ollama, zot), and

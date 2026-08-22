@@ -60,12 +60,11 @@ Coreutils 9.11 at `/opt/gnu-coreutils-9.11`; arm
 This closes the **shell-isolation engineering milestone**, not the Product
 Standard or certification program. `UNSUPPORTED`, `NOT IN USE`, and `UNTESTED`
 are included in the certification PASS group only under the declared profile
-and retained rationale. The next milestone is all 116 Commands and Utilities
-sets (8,844 configured TPs), with Bashy's Go utilities as SUT and GNU
-Coreutils 9.11 as matched control. The assembled-provider shell rerun is a
-regression gate within that campaign. One uninterrupted 117-set/9,337-TP
-assembled-profile run, the suite-generated report, and the human Open Group
-submission follow.
+and retained rationale. Current corrective work uses Profile B—Bashy `sh` with
+the frozen GNU/system provider environment—and excludes Bashy's Go multicall.
+Profiles C/D separately exercise the Go-utility provider. The exact 116-name
+accounting is routed through `posix-command-coverage.md`; the complete formal
+denominator remains 117 sets and 9,337 TPs.
 
 ## Shell scenario results (published under the 2026-07-16 grant)
 
