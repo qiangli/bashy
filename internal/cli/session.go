@@ -50,7 +50,7 @@ func NewSessionRunner(io SessionIO) (*interp.Runner, error) {
 	if !hasEnvKey(io.Env, "PATH") {
 		envVars = append(envVars, "PATH="+defaultPathValue)
 	}
-	env := withBashVersionVars(expand.ListEnviron(envVars...), io.Env)
+	env := withBashVersionVars(withStartupShellVar(expand.ListEnviron(envVars...)), io.Env)
 
 	var r *interp.Runner
 	opts := []interp.RunnerOption{

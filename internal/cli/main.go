@@ -610,7 +610,7 @@ func newRunner() (*interp.Runner, error) {
 		envVars = append(envVars, "PATH="+defaultPathValue)
 	}
 
-	env := withBashVersionVars(expand.ListEnviron(envVars...), inheritedEnv)
+	env := withBashVersionVars(withStartupShellVar(expand.ListEnviron(envVars...)), inheritedEnv)
 	var r *interp.Runner
 	var err error
 	// bash defaults to expanding aliases in interactive shells. A
