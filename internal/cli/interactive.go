@@ -64,6 +64,9 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 	var cmdNum int
 	getPrompt := func(ps string) string {
 		defaultPS := `\u@\h:\w\$ `
+		if ps == "PS1" && invokedAsSh() {
+			defaultPS = `sh-\v\$ `
+		}
 		if ps == "PS2" {
 			defaultPS = "> "
 		}

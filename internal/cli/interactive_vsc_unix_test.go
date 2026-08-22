@@ -184,3 +184,51 @@ func TestVSCInteractiveSpawnHandshakeZeroSizePTY(t *testing.T) {
 		t.Fatalf("interactive shell exit: %v", err)
 	}
 }
+
+func TestInteractiveShUsesPosixStartupAndPrompt(t *testing.T) {
+	dir := t.TempDir()
+	sh := filepath.Join(dir, "sh")
+	if err := os.Symlink(builtBashBin(t), sh); err != nil {
+		t.Fatal(err)
+	}
+	bashrc := filepath.Join(dir, ".bashrc")
+	if err := os.WriteFile(bashrc, []byte("echo BASHRC_MARKER\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	envFile := filepath.Join(dir, "env")
+	if err := os.WriteFile(envFile, []byte("echo ENV_MARKER\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(sh)
+	cmd.Env = []string{
+		"ENV=" + envFile,
+		"HOME=" + dir,
+		"PATH=" + dir + ":/bin:/usr/bin",
+		"TERM=xterm",
+	}
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ptmx.Close()
+	capture := startPTYCapture(ptmx)
+	t.Cleanup(func() {
+		if cmd.ProcessState == nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		}
+	})
+
+	got := capture.waitFor(t, []byte("ENV_MARKER"), 3*time.Second)
+	got = capture.waitFor(t, []byte("sh-"), 3*time.Second)
+	if bytes.Contains(got, []byte("BASHRC_MARKER")) {
+		t.Fatalf("interactive sh sourced .bashrc: %q", got)
+	}
+	if _, err := io.WriteString(ptmx, "exit\r"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("interactive shell exit: %v", err)
+	}
+}

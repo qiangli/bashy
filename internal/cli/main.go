@@ -988,7 +988,13 @@ func loadStartupFiles(r *interp.Runner, interactive bool) {
 			}
 		}
 	} else if interactive {
-		if !*norc && home != "" {
+		if invokedAsSh() {
+			// An interactive shell invoked as sh follows historical/POSIX
+			// startup rules: source ENV, not bash's per-user rc files.
+			if envFile := os.Getenv("ENV"); envFile != "" {
+				sourceIfExists(r, envFile)
+			}
+		} else if !*norc && home != "" {
 			// Try ~/.bashyrc first, fall back to ~/.bashrc
 			rc := filepath.Join(home, ".bashyrc")
 			if _, err := os.Stat(rc); err != nil {
