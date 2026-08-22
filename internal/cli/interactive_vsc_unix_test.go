@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -231,4 +232,143 @@ func TestInteractiveShUsesPosixStartupAndPrompt(t *testing.T) {
 	if err := cmd.Wait(); err != nil {
 		t.Fatalf("interactive shell exit: %v", err)
 	}
+}
+
+func TestInteractivePosixStartupBoundaries(t *testing.T) {
+	dir := t.TempDir()
+	sh := filepath.Join(dir, "sh")
+	bash := filepath.Join(dir, "bash")
+	for _, name := range []string{sh, bash} {
+		if err := os.Symlink(builtBashBin(t), name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bashrc := filepath.Join(dir, ".bashrc")
+	if err := os.WriteFile(bashrc, []byte("echo BASHRC_MARKER\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	envFile := filepath.Join(dir, "env")
+	if err := os.WriteFile(envFile, []byte("echo ENV_MARKER\nPS1='CUSTOM_PS1> '\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bashEnv := filepath.Join(dir, "bash-env")
+	if err := os.WriteFile(bashEnv, []byte("echo BASH_ENV_MARKER\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("explicit PS1 from ENV", func(t *testing.T) {
+		cmd := exec.Command(sh)
+		cmd.Env = startupBoundaryEnv(dir, envFile, bashEnv)
+		ptmx, err := pty.Start(cmd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ptmx.Close()
+		capture := startPTYCapture(ptmx)
+		got := capture.waitFor(t, []byte("CUSTOM_PS1> "), 3*time.Second)
+		if bytes.Contains(got, []byte("BASHRC_MARKER")) {
+			t.Fatalf("interactive sh sourced .bashrc: %q", got)
+		}
+		if _, err := io.WriteString(ptmx, "exit\r"); err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Wait(); err != nil {
+			t.Fatalf("interactive shell exit: %v", err)
+		}
+	})
+
+	t.Run("explicit POSIX bash uses ENV", func(t *testing.T) {
+		cmd := exec.Command(bash, "--posix")
+		cmd.Env = startupBoundaryEnv(dir, envFile, bashEnv)
+		ptmx, err := pty.Start(cmd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ptmx.Close()
+		capture := startPTYCapture(ptmx)
+		got := capture.waitFor(t, []byte("CUSTOM_PS1> "), 3*time.Second)
+		if bytes.Contains(got, []byte("BASHRC_MARKER")) {
+			t.Fatalf("interactive --posix bash sourced .bashrc: %q", got)
+		}
+		if _, err := io.WriteString(ptmx, "exit\r"); err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Wait(); err != nil {
+			t.Fatalf("interactive shell exit: %v", err)
+		}
+	})
+
+	t.Run("noninteractive sh skips ENV and BASH_ENV", func(t *testing.T) {
+		cmd := exec.Command(sh)
+		cmd.Env = startupBoundaryEnv(dir, envFile, bashEnv)
+		cmd.Stdin = strings.NewReader("printf BODY")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("noninteractive sh: %v: %s", err, out)
+		}
+		if string(out) != "BODY" {
+			t.Fatalf("noninteractive sh startup output = %q, want BODY", out)
+		}
+	})
+
+	t.Run("login sh uses profile not bash profiles", func(t *testing.T) {
+		for name, marker := range map[string]string{
+			".profile":      "PROFILE_MARKER",
+			".bash_profile": "BASH_PROFILE_MARKER",
+			".bash_login":   "BASH_LOGIN_MARKER",
+		} {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte("echo "+marker+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		cmd := exec.Command(sh, "--login")
+		cmd.Env = startupBoundaryEnv(dir, envFile, bashEnv)
+		cmd.Stdin = strings.NewReader("printf BODY")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("login sh: %v: %s", err, out)
+		}
+		text := string(out)
+		if !strings.Contains(text, "PROFILE_MARKER") ||
+			strings.Contains(text, "BASH_PROFILE_MARKER") ||
+			strings.Contains(text, "BASH_LOGIN_MARKER") {
+			t.Fatalf("wrong login sh startup files: %q", text)
+		}
+	})
+
+	t.Run("interactive login sh adds ENV after profile", func(t *testing.T) {
+		cmd := exec.Command(sh, "--login")
+		cmd.Env = startupBoundaryEnv(dir, envFile, bashEnv)
+		ptmx, err := pty.Start(cmd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ptmx.Close()
+		capture := startPTYCapture(ptmx)
+		got := capture.waitFor(t, []byte("CUSTOM_PS1> "), 3*time.Second)
+		if !bytes.Contains(got, []byte("PROFILE_MARKER")) ||
+			bytes.Contains(got, []byte("BASH_PROFILE_MARKER")) ||
+			bytes.Contains(got, []byte("BASH_LOGIN_MARKER")) {
+			t.Fatalf("wrong interactive login sh startup files: %q", got)
+		}
+		if _, err := io.WriteString(ptmx, "exit\r"); err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Wait(); err != nil {
+			t.Fatalf("interactive login shell exit: %v", err)
+		}
+	})
+}
+
+func startupBoundaryEnv(home, envFile, bashEnv string) []string {
+	var env []string
+	for _, entry := range os.Environ() {
+		name := strings.SplitN(entry, "=", 2)[0]
+		switch name {
+		case "HOME", "ENV", "BASH_ENV", "PS1", "POSIXLY_CORRECT", "POSIX_PEDANTIC", "SHELLOPTS":
+			continue
+		}
+		env = append(env, entry)
+	}
+	return append(env, "HOME="+home, "ENV=$HOME/"+filepath.Base(envFile), "BASH_ENV="+bashEnv, "TERM=xterm")
 }

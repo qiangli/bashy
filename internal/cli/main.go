@@ -24,6 +24,7 @@ import (
 
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
+	"mvdan.cc/sh/v3/shell"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -971,9 +972,44 @@ func sourceIfExists(r *interp.Runner, path string) {
 	runPath(r, path)
 }
 
+func sourceStartupEnv(r *interp.Runner, name string) {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return
+	}
+	path, err := shell.Expand(raw, func(key string) string {
+		return r.LiveVar(key).String()
+	})
+	if err != nil {
+		return
+	}
+	if strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			path = filepath.Join(home, strings.TrimPrefix(path, "~/"))
+		}
+	}
+	sourceIfExists(r, path)
+}
+
 // loadStartupFiles sources the appropriate startup files.
 func loadStartupFiles(r *interp.Runner, interactive bool) {
 	home, _ := os.UserHomeDir()
+	if invokedAsSh() {
+		if isLoginShell() && !*noprofile {
+			sourceIfExists(r, "/etc/profile")
+			if home != "" {
+				sourceIfExists(r, filepath.Join(home, ".profile"))
+			}
+		}
+		if interactive {
+			sourceStartupEnv(r, "ENV")
+		}
+		return
+	}
+	if interactive && effectiveStartupPosix() {
+		sourceStartupEnv(r, "ENV")
+		return
+	}
 
 	if isLoginShell() {
 		if !*noprofile {
@@ -988,13 +1024,7 @@ func loadStartupFiles(r *interp.Runner, interactive bool) {
 			}
 		}
 	} else if interactive {
-		if invokedAsSh() {
-			// An interactive shell invoked as sh follows historical/POSIX
-			// startup rules: source ENV, not bash's per-user rc files.
-			if envFile := os.Getenv("ENV"); envFile != "" {
-				sourceIfExists(r, envFile)
-			}
-		} else if !*norc && home != "" {
+		if !*norc && home != "" {
 			// Try ~/.bashyrc first, fall back to ~/.bashrc
 			rc := filepath.Join(home, ".bashyrc")
 			if _, err := os.Stat(rc); err != nil {
