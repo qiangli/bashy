@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy install test test-build-fail-closed test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-list test-bash-fixtures test-bash-helpers dist tidy clean help
+.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-build-fail-closed test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-list test-bash-fixtures test-bash-helpers dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -66,6 +66,20 @@ build: build-bash build-bashy
 ## if present) and the observability stack (bashy otel). Not cross-platform.
 build-host:
 	$(MAKE) build BASHY_ENGINES=1 BASHY_OBS=1
+
+## build-bashy-oci: Build the reusable Ubuntu/glibc Bashy base image. Override
+## BASHY_OCI, BASHY_OCI_IMAGE, or BASHY_OCI_PLATFORM as needed.
+build-bashy-oci:
+	@tools/bashy-oci/build-smoke.sh build
+
+## smoke-bashy-oci: Smoke the already-built Bashy base with no network, a
+## read-only root, dropped capabilities, and temporary work directories.
+smoke-bashy-oci:
+	@tools/bashy-oci/build-smoke.sh smoke
+
+## test-bashy-oci-policy: Offline structural checks for the OCI base contract.
+test-bashy-oci-policy:
+	@tools/bashy-oci/test-policy.sh
 
 ## build-bash: Build only the pure drop-in (cmd/bash -> bin/bash). This is all
 ## the conformance harness needs; it skips the embed-heavy bin/bashy build.

@@ -166,6 +166,12 @@ cd bashy
 make build          # -> bin/bashy
 ```
 
+A reusable Linux OCI base is also available. It preserves the required native
+launcher plus `.real` payload and uses a minimal Ubuntu/glibc runtime; see
+[`docs/bashy-oci-base.md`](docs/bashy-oci-base.md) for build, smoke, and derived
+image policy. It is the foundation for a future Bash/POSIX + canonical Go
+coreutils + O3 + verified-toolchain base, not yet an Ubuntu/Alpine parity claim.
+
 For a fresh checkout that wants to dogfood the DAG runner before this checkout's
 new `bin/bashy` exists, use the repo-local bootstrap launcher:
 

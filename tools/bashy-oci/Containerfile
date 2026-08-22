@@ -1,0 +1,77 @@
+# syntax=docker/dockerfile:1
+# Build with the directory containing the bashy/coreutils/sh/readline sibling
+# checkouts as the context. tools/bashy-oci/build-smoke.sh stages exactly that
+# public four-repository context and is the supported entry point.
+ARG GO_IMAGE=docker.io/library/golang:1.26.5-bookworm
+ARG RUNTIME_IMAGE=docker.io/library/ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
+
+FROM --platform=$TARGETPLATFORM ${GO_IMAGE} AS builder
+ARG TARGETOS=linux
+ARG TARGETARCH
+ARG VERSION=dev
+ARG BUILD_ID=oci
+
+WORKDIR /src
+COPY bashy/ bashy/
+COPY coreutils/ coreutils/
+COPY sh/ sh/
+COPY readline/ readline/
+
+# Always use the repository build so Linux keeps the native signal launcher
+# next to its Go payload. CGO stays disabled for the Go compilation; the small
+# launcher is an ordinary glibc C executable, not cgo.
+RUN test "$TARGETOS" = linux && \
+    cd /src/bashy && \
+    CGO_ENABLED=0 GOOS=linux GOARCH="$TARGETARCH" \
+      make build-bashy VERSION="$VERSION" BUILD_ID="$BUILD_ID" && \
+    test -x bin/bashy && test -x bin/bashy.real
+
+FROM ${RUNTIME_IMAGE} AS runtime
+
+ARG VERSION=dev
+ARG APT_SNAPSHOT=20260821T190000Z
+LABEL org.opencontainers.image.title="Bashy OCI base" \
+      org.opencontainers.image.description="Bashy shell and Go userland on a minimal Ubuntu/glibc runtime" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://github.com/qiangli/bashy"
+
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    HOME=/home/bashy \
+    BASHY_BIN_CACHE=/var/cache/bashy/bin \
+    OTEL_TRACES_EXPORTER=none \
+    PATH=/opt/bashy/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# This is intentionally Ubuntu rather than scratch. Bashy's locale bridge and
+# native launcher need glibc, while useful shell operation needs CA, timezone,
+# locale, and terminal databases. POSIX provider packages/services belong in a
+# derived profile image, not in this reusable base.
+RUN set -eux; \
+    apt-get update --snapshot "${APT_SNAPSHOT}"; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      ca-certificates locales ncurses-base tzdata; \
+    rm -rf /var/lib/apt/lists/*; \
+    printf '%s\n' 'en_US.UTF-8 UTF-8' > /etc/locale.gen; \
+    locale-gen; \
+    groupadd --gid 10001 bashy; \
+    useradd --uid 10001 --gid 10001 --create-home --shell /bin/sh bashy; \
+    install -d -o 10001 -g 10001 /var/cache/bashy/bin /home/bashy/.cache
+
+COPY --from=builder --chown=0:0 /src/bashy/bin/bashy /bashy
+COPY --from=builder --chown=0:0 /src/bashy/bin/bashy.real /bashy.real
+
+# Keep Ubuntu's /bin/sh (dash) intact: derived-image package maintainer scripts
+# must not be forced through Bashy. `sh` on the image PATH is Bashy's POSIX-mode
+# alias, and Profile D may independently wire /vsc/sut/sh to /bashy.
+RUN set -eux; \
+    chmod 0755 /bashy /bashy.real; \
+    install -d /opt/bashy/bin; \
+    ln -s /bashy /usr/local/bin/bashy; \
+    ln -s /bashy /opt/bashy/bin/sh; \
+    test ! /bin/sh -ef /bashy; \
+    ldd /bashy >/dev/null; \
+    ldd /bashy.real >/dev/null
+
+USER 10001:10001
+WORKDIR /work
+ENTRYPOINT ["/bashy"]
