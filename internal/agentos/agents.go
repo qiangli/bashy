@@ -187,6 +187,9 @@ var agentsHomeDir = os.UserHomeDir
 
 func newAgentsRosterCmd(opts ...fleet.Option) *cobra.Command {
 	cmd := fleet.NewAgentsCmd(opts...)
+	if f := cmd.Flags().Lookup("all"); f != nil {
+		f.Usage = "include stale, orphaned, and idle presence records"
+	}
 	cmd.Short = "Show every live agent assignment (use `agents list` for the catalog)"
 	cmd.Long = "Show all live named and ad-hoc work reconciled from sprint leases, weave queues, and room membership, including one-shot invocations and interactive sessions.\n\n" +
 		"Stale and orphaned records are counted but hidden by default; use --all to inspect them. " +
@@ -203,7 +206,175 @@ func newAgentsRosterCmd(opts ...fleet.Option) *cobra.Command {
 		}
 		return renderAgentRosterView(cmd.OutOrStdout(), cmd.Flags().Lookup("json").Changed, showAll)
 	}
+	cmd.AddCommand(newAgentsTrackCmd())
 	return cmd
+}
+
+const externalAssignmentMode = "external"
+
+func newAgentsTrackCmd() *cobra.Command {
+	root := &cobra.Command{
+		Use:   "track",
+		Short: "Publish externally launched work into the live agent roster",
+		Long: "Publish work launched by an external orchestrator into `bashy agents`.\n\n" +
+			"Bashy-managed chat/weave launches publish automatically. Codex collaboration,\n" +
+			"MCP, and other out-of-process launchers must start, heartbeat, and stop an\n" +
+			"assignment explicitly so their work is visible and stale work expires.",
+	}
+	root.AddCommand(newAgentsTrackStartCmd(), newAgentsTrackHeartbeatCmd(), newAgentsTrackStopCmd())
+	return root
+}
+
+func externalAssignmentID(id string) (string, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", fmt.Errorf("agents track: assignment id is empty")
+	}
+	for _, r := range id {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
+			continue
+		}
+		return "", fmt.Errorf("agents track: assignment id %q contains %q; use letters, digits, dot, underscore, or dash", id, r)
+	}
+	return "external-" + id, nil
+}
+
+func trackedOwnerPID(pid int) (int, error) {
+	if pid == 0 {
+		pid = os.Getppid()
+	}
+	if pid <= 1 || !room.PidAlive(pid) {
+		return 0, fmt.Errorf("agents track: owner pid %d is not live", pid)
+	}
+	return pid, nil
+}
+
+func newAgentsTrackStartCmd() *cobra.Command {
+	var agent, binding, role, task, cwd string
+	var ownerPID int
+	var ttl time.Duration
+	c := &cobra.Command{
+		Use:   "start <assignment-id>",
+		Short: "Publish one externally managed assignment",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := externalAssignmentID(args[0])
+			if err != nil {
+				return err
+			}
+			agent = strings.TrimSpace(agent)
+			if agent == "" {
+				return fmt.Errorf("agents track: --agent is required")
+			}
+			if ttl <= 0 {
+				return fmt.Errorf("agents track: --ttl must be positive")
+			}
+			pid, err := trackedOwnerPID(ownerPID)
+			if err != nil {
+				return err
+			}
+			binding = strings.TrimSpace(binding)
+			if binding == "" {
+				binding = agent
+			}
+			tool, model := binding, ""
+			if before, after, ok := strings.Cut(binding, ":"); ok {
+				tool, model = before, after
+			}
+			if cwd == "" {
+				cwd, _ = os.Getwd()
+			}
+			card := room.Card{
+				ID: id, Principal: fmt.Sprintf("pid:%d", pid), Tool: tool, Model: model,
+				Binding: binding, Nick: agent, Mode: externalAssignmentMode, Role: strings.TrimSpace(role),
+				Task: strings.TrimSpace(task), PID: pid, Cwd: cwd,
+				LeaseUntil: time.Now().UTC().Add(ttl).Format(time.RFC3339),
+			}
+			if err := room.Join(card); err != nil {
+				return fmt.Errorf("agents track: publish %s: %w", args[0], err)
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "TRACKING %s agent=%s pid=%d ttl=%s\n", args[0], agent, pid, ttl)
+			return err
+		},
+	}
+	c.Flags().StringVar(&agent, "agent", "", "display name of the named or ad-hoc worker")
+	c.Flags().StringVar(&binding, "binding", "", "resolved tool:model binding when known")
+	c.Flags().StringVar(&role, "role", "worker", "assignment role, e.g. worker or reviewer")
+	c.Flags().StringVar(&task, "task", "", "safe one-line work label")
+	c.Flags().StringVar(&cwd, "cwd", "", "assignment workspace (defaults to current directory)")
+	c.Flags().IntVar(&ownerPID, "owner-pid", 0, "long-lived managing process pid (defaults to this command's parent)")
+	c.Flags().DurationVar(&ttl, "ttl", 30*time.Minute, "heartbeat lease duration")
+	return c
+}
+
+func trackedCard(id string, ownerPID int) (room.Card, int, error) {
+	cardID, err := externalAssignmentID(id)
+	if err != nil {
+		return room.Card{}, 0, err
+	}
+	pid, err := trackedOwnerPID(ownerPID)
+	if err != nil {
+		return room.Card{}, 0, err
+	}
+	card, ok, err := room.Find(cardID)
+	if err != nil {
+		return room.Card{}, 0, err
+	}
+	if !ok || card.ID != cardID || card.Mode != externalAssignmentMode {
+		return room.Card{}, 0, fmt.Errorf("agents track: external assignment %q is not active", id)
+	}
+	if card.PID != pid {
+		return room.Card{}, 0, fmt.Errorf("agents track: assignment %q is owned by pid %d, not %d", id, card.PID, pid)
+	}
+	return card, pid, nil
+}
+
+func newAgentsTrackHeartbeatCmd() *cobra.Command {
+	var ownerPID int
+	var ttl time.Duration
+	c := &cobra.Command{
+		Use:   "heartbeat <assignment-id>",
+		Short: "Renew an externally managed assignment lease",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if ttl <= 0 {
+				return fmt.Errorf("agents track: --ttl must be positive")
+			}
+			card, pid, err := trackedCard(args[0], ownerPID)
+			if err != nil {
+				return err
+			}
+			card.LeaseUntil = time.Now().UTC().Add(ttl).Format(time.RFC3339)
+			if err := room.Join(card); err != nil {
+				return fmt.Errorf("agents track: heartbeat %s: %w", args[0], err)
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "HEARTBEAT %s pid=%d ttl=%s\n", args[0], pid, ttl)
+			return err
+		},
+	}
+	c.Flags().IntVar(&ownerPID, "owner-pid", 0, "long-lived managing process pid (defaults to this command's parent)")
+	c.Flags().DurationVar(&ttl, "ttl", 30*time.Minute, "renewed lease duration")
+	return c
+}
+
+func newAgentsTrackStopCmd() *cobra.Command {
+	var ownerPID int
+	c := &cobra.Command{
+		Use:   "stop <assignment-id>",
+		Short: "Retire an externally managed assignment",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			card, pid, err := trackedCard(args[0], ownerPID)
+			if err != nil {
+				return err
+			}
+			room.LeavePID(card.ID, pid)
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "STOPPED %s pid=%d\n", args[0], pid)
+			return err
+		},
+	}
+	c.Flags().IntVar(&ownerPID, "owner-pid", 0, "long-lived managing process pid (defaults to this command's parent)")
+	return c
 }
 
 func renderAgentRoster(w io.Writer, asJSON bool) error {
@@ -459,18 +630,26 @@ func reconciledAgentRoster() ([]agentAssignment, error) {
 			continue
 		}
 		joined := parseRoomJoined(card.Joined)
+		lastProgress := parseRoomJoined(card.Updated)
+		if lastProgress.IsZero() {
+			lastProgress = joined
+		}
+		source := "room"
+		if card.Mode == externalAssignmentMode {
+			source = externalAssignmentMode
+		}
 		a := agentAssignment{
 			Agent:          roomAgentName(card),
 			Binding:        card.Binding,
 			Role:           "worker",
 			InvocationRole: card.Role,
 			Mode:           card.Mode,
-			Source:         "room",
+			Source:         source,
 			Owner:          card.Principal,
 			PID:            card.PID,
 			Repo:           roomRepo(card.Cwd),
 			State:          "working",
-			LastProgress:   joined,
+			LastProgress:   lastProgress,
 			Health:         "healthy",
 			HealthReason:   "live room member",
 			Age:            assignmentAgeAt(joined, now),
@@ -478,6 +657,21 @@ func reconciledAgentRoster() ([]agentAssignment, error) {
 		}
 		if a.Title == "" {
 			a.Title = "unlabeled live " + dash(card.Mode)
+		}
+		// A raw tool process is presence/capacity, not evidence of assigned
+		// work. Keep it inspectable with --all, but never count it as LIVE.
+		if card.Mode == shellSessionMode {
+			a.Health = "idle"
+			a.HealthReason = "raw shell presence has no published assignment"
+		}
+		if card.Mode == externalAssignmentMode {
+			until := parseRoomJoined(card.LeaseUntil)
+			if until.IsZero() || !until.After(now) {
+				a.Health = "stale"
+				a.HealthReason = "external assignment heartbeat expired"
+			} else {
+				a.HealthReason = "external assignment heartbeat current"
+			}
 		}
 		if strings.EqualFold(card.Mode, "weave") {
 			a.Health = "inconsistent"

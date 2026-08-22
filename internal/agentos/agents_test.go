@@ -120,7 +120,7 @@ func TestAgentRosterIncludesStandaloneRoomAssignments(t *testing.T) {
 	if named.Agent != "Beatrix" || named.Mode != "oneshot" || named.InvocationRole != "reviewer" || named.Source != "room" || named.Title != "review assignment visibility" {
 		t.Fatalf("named invocation = %#v", named)
 	}
-	if named.Owner != "conductor" || named.PID != os.Getpid() || named.Repo != "bashy" || !named.LastProgress.Equal(joined) {
+	if named.Owner != "conductor" || named.PID != os.Getpid() || named.Repo != "bashy" || named.LastProgress.Before(joined) {
 		t.Fatalf("named invocation evidence = %#v", named)
 	}
 	adhoc := byBinding["codex:gpt-5.5"]
@@ -139,6 +139,93 @@ func TestAgentRosterIncludesStandaloneRoomAssignments(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("human roster missing %q:\n%s", want, out.String())
 		}
+	}
+}
+
+func TestAgentRosterTreatsRawShellPresenceAsIdleNotAssignedWork(t *testing.T) {
+	home := t.TempDir()
+	useAgentsHome(t, home)
+	id := fmt.Sprintf("shell:codex:%d", os.Getpid())
+	if err := room.Join(room.Card{ID: id, Tool: "codex", Binding: "codex", Mode: shellSessionMode, PID: os.Getpid()}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { room.Leave(id) })
+
+	var live bytes.Buffer
+	if err := renderAgentRoster(&live, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(live.String(), "LIVE 0") || strings.Contains(live.String(), "unlabeled live shell") {
+		t.Fatalf("raw shell presence was reported as assigned work: %s", live.String())
+	}
+
+	var all bytes.Buffer
+	if err := renderAgentRosterView(&all, false, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(all.String(), "raw shell presence has no published assignment") {
+		t.Fatalf("--all did not retain auditable shell presence: %s", all.String())
+	}
+}
+
+func TestAgentsTrackPublishesHeartbeatsExpiresAndStopsExternalWork(t *testing.T) {
+	home := t.TempDir()
+	useAgentsHome(t, home)
+	run := func(args ...string) string {
+		t.Helper()
+		cmd := newAgentsRosterCmd()
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs(args)
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("agents %v: %v\n%s", args, err, out.String())
+		}
+		return out.String()
+	}
+
+	start := run("track", "start", "pair-stage", "--agent", "Parfit", "--binding", "codex:gpt-5.6-sol",
+		"--role", "worker", "--task", "repair durable DO launcher", "--owner-pid", fmt.Sprint(os.Getpid()), "--ttl", "1h")
+	if !strings.Contains(start, "TRACKING pair-stage") {
+		t.Fatalf("start output = %q", start)
+	}
+	assignments, err := reconciledAgentRoster()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assignments) != 1 || assignments[0].Agent != "Parfit" || assignments[0].Source != externalAssignmentMode || assignments[0].Health != "healthy" {
+		t.Fatalf("tracked assignment = %#v", assignments)
+	}
+	joined := assignments[0].Age
+
+	heartbeat := run("track", "heartbeat", "pair-stage", "--owner-pid", fmt.Sprint(os.Getpid()), "--ttl", "2h")
+	if !strings.Contains(heartbeat, "HEARTBEAT pair-stage") {
+		t.Fatalf("heartbeat output = %q", heartbeat)
+	}
+	assignments, err = reconciledAgentRoster()
+	if err != nil || len(assignments) != 1 || assignments[0].Age != joined {
+		t.Fatalf("heartbeat changed assignment identity/start: %#v err=%v", assignments, err)
+	}
+
+	card, ok, err := room.Find("external-pair-stage")
+	if err != nil || !ok {
+		t.Fatalf("find tracked card: ok=%v err=%v", ok, err)
+	}
+	card.LeaseUntil = time.Now().UTC().Add(-time.Minute).Format(time.RFC3339)
+	if err := room.Join(card); err != nil {
+		t.Fatal(err)
+	}
+	assignments, err = reconciledAgentRoster()
+	if err != nil || len(assignments) != 1 || assignments[0].Health != "stale" {
+		t.Fatalf("expired tracked assignment = %#v err=%v", assignments, err)
+	}
+
+	stop := run("track", "stop", "pair-stage", "--owner-pid", fmt.Sprint(os.Getpid()))
+	if !strings.Contains(stop, "STOPPED pair-stage") {
+		t.Fatalf("stop output = %q", stop)
+	}
+	if _, ok, _ := room.Find("external-pair-stage"); ok {
+		t.Fatal("stopped tracked assignment remains in room")
 	}
 }
 
