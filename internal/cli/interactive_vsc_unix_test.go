@@ -312,12 +312,16 @@ func TestInteractivePosixStartupBoundaries(t *testing.T) {
 	})
 
 	t.Run("login sh uses profile not bash profiles", func(t *testing.T) {
-		for name, marker := range map[string]string{
-			".profile":      "PROFILE_MARKER",
-			".bash_profile": "BASH_PROFILE_MARKER",
-			".bash_login":   "BASH_LOGIN_MARKER",
+		profileEnv := filepath.Join(dir, "env-after-profile-live")
+		if err := os.WriteFile(profileEnv, []byte("echo PROFILE_ENV_MARKER\nPS1='PROFILE_PS1> '\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for name, content := range map[string]string{
+			".profile":      "echo PROFILE_MARKER\nENV='${HOME}/env-after-profile-$(printf live)'\n",
+			".bash_profile": "echo BASH_PROFILE_MARKER\n",
+			".bash_login":   "echo BASH_LOGIN_MARKER\n",
 		} {
-			if err := os.WriteFile(filepath.Join(dir, name), []byte("echo "+marker+"\n"), 0o600); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -345,8 +349,9 @@ func TestInteractivePosixStartupBoundaries(t *testing.T) {
 		}
 		defer ptmx.Close()
 		capture := startPTYCapture(ptmx)
-		got := capture.waitFor(t, []byte("CUSTOM_PS1> "), 3*time.Second)
+		got := capture.waitFor(t, []byte("PROFILE_PS1> "), 3*time.Second)
 		if !bytes.Contains(got, []byte("PROFILE_MARKER")) ||
+			!bytes.Contains(got, []byte("PROFILE_ENV_MARKER")) ||
 			bytes.Contains(got, []byte("BASH_PROFILE_MARKER")) ||
 			bytes.Contains(got, []byte("BASH_LOGIN_MARKER")) {
 			t.Fatalf("wrong interactive login sh startup files: %q", got)

@@ -24,7 +24,6 @@ import (
 
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/shell"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -973,13 +972,11 @@ func sourceIfExists(r *interp.Runner, path string) {
 }
 
 func sourceStartupEnv(r *interp.Runner, name string) {
-	raw := os.Getenv(name)
+	raw := r.LiveVar(name).String()
 	if raw == "" {
 		return
 	}
-	path, err := shell.Expand(raw, func(key string) string {
-		return r.LiveVar(key).String()
-	})
+	path, err := r.ExpandDocument(context.Background(), raw)
 	if err != nil {
 		return
 	}
