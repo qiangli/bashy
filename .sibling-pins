@@ -17,5 +17,5 @@
 # a push while a pin disagrees with its sibling's HEAD; run
 # scripts/update-sibling-pins.sh to resync.
 sh=031d47e2b1dffe89d89d6e5486636b1c5e7d988b
-coreutils=aadd8477da83534a5d9d9fc9badc55d52113f350
+coreutils=4a5fcb70800294b7ed7f969fac3ce012bc64344e
 readline=f646edb2e2790695465c0df43aab29fa8570c20d
