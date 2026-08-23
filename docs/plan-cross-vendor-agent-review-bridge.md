@@ -236,7 +236,7 @@ All adapters exchange one versioned, vendor-neutral envelope:
 {
   "schema": "bashy-review-v1",
   "event_id": "01K...",
-  "review_id": "vsc-s74-17",
+  "review_id": "a campaign host",
   "revision": 3,
   "event": "review.requested",
   "from": "profile-c-conductor",
@@ -327,14 +327,14 @@ bashy review request \
   --gate './scripts/profile-c-behavior-test.sh'
 
 # Either agent or the operator can inspect the durable record.
-bashy review show vsc-s74-17
-bashy review timeline vsc-s74-17
+bashy review show a campaign host
+bashy review timeline a campaign host
 
 # A new author revision supersedes the prior head and wakes the reviewer.
-bashy review revise vsc-s74-17 --head <new-sha>
+bashy review revise a campaign host --head <new-sha>
 
 # Approval applies only to the exact current tuple and recorded gates.
-bashy review approve vsc-s74-17 --head <new-sha>
+bashy review approve a campaign host --head <new-sha>
 ```
 
 Do not add automatic merge in the first release. The owning conductor continues
