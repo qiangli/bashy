@@ -3,8 +3,8 @@
 This is Bashy's routing page for the current Commands & Utilities inventory.
 Do not maintain another hand-written command list here.
 
-- Canonical 116-row inventory with configured TP counts, Bashy Go applet
-  presence, shell builtins, the 26 assembled gaps, and 71 extras:
+- Historical 2026-08-22 harness snapshot with configured TP counts (superseded
+  for current ownership/counting by the generated coreutils inventory below):
   [`../../vsc-pcts-harness-kit/docs/POSIX-BASHY-COREUTILS-COVERAGE.md`](../../vsc-pcts-harness-kit/docs/POSIX-BASHY-COREUTILS-COVERAGE.md)
 - Generated coreutils-side 116-row inventory:
   [`../../coreutils/docs/posix-required-commands.md`](../../coreutils/docs/posix-required-commands.md)
@@ -18,13 +18,17 @@ The accounting is:
 
 | Layer | Required names supplied |
 | --- | ---: |
-| canonical Bashy Go applets | 76 |
-| shell builtins plus `sh` not already credited above | 14 |
-| external-provider gaps in assembled C/D | 26 |
+| registered Bashy Go applets | 86 |
+| shell-only entries/builtins | 14 |
+| pinned external providers registered by the multicall | 16 |
+| unresolved provider gaps in assembled C/D | 0 |
 | configured required names | 116 |
 
-Coreutils alone is absent for 40 names. The assembled Bashy environment is
-missing 26 internally because the shell supplies 14 of those 40.
+The implementation-presence counts overlap: seven Go applets also resolve as
+shell builtins, and `time` resolves as a shell keyword. Effective staged
+ownership must therefore be recorded separately: 78 Go-selected names, 22
+shell-selected names, and 16 provider-selected names. The assembled C/D
+environment has no name-level gap.
 
 Profile B is Bashy `sh` plus the **prepared** GNU/system provider environment;
 it excludes Bashy's Go multicall. Profiles C/D place Bashy Go coreutils first.
@@ -36,4 +40,3 @@ credit.
 
 There is one canonical Go applet inventory. POSIX-required is documentation
 metadata, not a lean/full or certification-specific build.
-
