@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -30,15 +31,40 @@ func resetJobCarrierSignals() {
 	// signal.Reset cannot restore those runtime-owned actions. Relay the common
 	// terminating signals through a reserved 128+signal exit code instead;
 	// execCarrierProc.Wait maps that code back to the signal the interpreter
-	// must observe. This also overrides SIG_IGN inherited across exec.
+	// must observe. Signals already ignored when the helper starts must remain
+	// ignored: exec preserves SIG_IGN, and a background compound command has
+	// the same inherited disposition as a directly executed command.
+	sigs := []struct {
+		name string
+		sig  os.Signal
+	}{
+		{"HUP", syscall.SIGHUP}, {"INT", syscall.SIGINT}, {"QUIT", syscall.SIGQUIT},
+		{"ILL", syscall.SIGILL}, {"TRAP", syscall.SIGTRAP}, {"ABRT", syscall.SIGABRT},
+		{"BUS", syscall.SIGBUS}, {"FPE", syscall.SIGFPE}, {"USR1", syscall.SIGUSR1},
+		{"SEGV", syscall.SIGSEGV}, {"USR2", syscall.SIGUSR2}, {"PIPE", syscall.SIGPIPE},
+		{"ALRM", syscall.SIGALRM}, {"TERM", syscall.SIGTERM}, {"TSTP", syscall.SIGTSTP},
+		{"TTIN", syscall.SIGTTIN}, {"TTOU", syscall.SIGTTOU}, {"XCPU", syscall.SIGXCPU},
+		{"XFSZ", syscall.SIGXFSZ},
+	}
+	ignored := make(map[string]bool)
+	for _, name := range strings.Split(os.Getenv(carrierIgnoredEnv), ",") {
+		ignored[name] = name != ""
+	}
+	targets := make([]os.Signal, 0, len(sigs))
+	for _, entry := range sigs {
+		if ignored[entry.name] {
+			signal.Ignore(entry.sig)
+			continue
+		}
+		if !signal.Ignored(entry.sig) {
+			targets = append(targets, entry.sig)
+		}
+	}
+	if len(targets) == 0 {
+		return
+	}
 	ch := make(chan os.Signal, 1)
-	signal.Notify(ch,
-		syscall.SIGHUP, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGILL,
-		syscall.SIGTRAP, syscall.SIGABRT, syscall.SIGBUS, syscall.SIGFPE,
-		syscall.SIGUSR1, syscall.SIGSEGV, syscall.SIGUSR2, syscall.SIGPIPE,
-		syscall.SIGALRM, syscall.SIGTERM, syscall.SIGTSTP, syscall.SIGTTIN,
-		syscall.SIGTTOU, syscall.SIGXCPU, syscall.SIGXFSZ,
-	)
+	signal.Notify(ch, targets...)
 	go func() {
 		for sig := range ch {
 			num, ok := sig.(syscall.Signal)
@@ -72,6 +98,14 @@ func signalJobCarrierReady() {
 type execJobCarrier struct{}
 
 func (execJobCarrier) StartCarrier(ctx context.Context) (interp.CarrierProcess, error) {
+	return startExecJobCarrier(ctx, nil)
+}
+
+func (execJobCarrier) StartCarrierWithIgnoredSignals(ctx context.Context, ignored []string) (interp.CarrierProcess, error) {
+	return startExecJobCarrier(ctx, ignored)
+}
+
+func startExecJobCarrier(ctx context.Context, ignored []string) (interp.CarrierProcess, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("resolving executable: %v", err)
@@ -81,6 +115,9 @@ func (execJobCarrier) StartCarrier(ctx context.Context) (interp.CarrierProcess, 
 	// intercepted before flag parsing, startup files and telemetry; user-facing
 	// environment such as BASH_ENV, BASH_SETPGRP and OTEL_* must not reach it.
 	cmd.Env = []string{carrierReadyEnv + "=3"}
+	if len(ignored) > 0 {
+		cmd.Env = append(cmd.Env, carrierIgnoredEnv+"="+strings.Join(ignored, ","))
+	}
 	// Its own process group: under job control (`set -m`) group-directed
 	// signals target the negated carrier PID, and a tty ^C aimed at the
 	// shell's foreground group must not strike carriers.

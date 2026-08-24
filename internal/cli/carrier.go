@@ -22,6 +22,7 @@ import (
 // PID as the job's identity; see internal/cli/carrier_unix.go.
 const carrierHelperArg = "--bashy-job-carrier"
 const carrierReadyEnv = "BASHY_JOB_CARRIER_READY_FD"
+const carrierIgnoredEnv = "BASHY_JOB_CARRIER_IGNORED"
 
 // MaybeRunJobCarrierHelper turns the current process into a job-carrier
 // helper — a kernel-visible stand-in for one background job — when argv is
@@ -41,9 +42,8 @@ func MaybeRunJobCarrierHelper() {
 	if len(os.Args) != 2 || os.Args[1] != carrierHelperArg {
 		return
 	}
-	// An ignored disposition survives exec. Restore defaults explicitly so a
-	// shell started by a parent that ignores TERM/INT does not create an
-	// immortal carrier that external kill cannot control.
+	// Restore relay handlers for default dispositions and reconstruct the
+	// ignored-disposition snapshot supplied by the background runner.
 	resetJobCarrierSignals()
 	signalJobCarrierReady()
 	buf := make([]byte, 128)

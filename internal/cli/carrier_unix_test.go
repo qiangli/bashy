@@ -141,23 +141,50 @@ func TestCarrierCertificationShape(t *testing.T) {
 	}
 }
 
-func TestCarrierHelperResetsIgnoredTerm(t *testing.T) {
+func TestCarrierHelperPreservesIgnoredTerm(t *testing.T) {
 	signal.Ignore(syscall.SIGTERM)
 	cp, err := (execJobCarrier{}).StartCarrier(context.Background())
 	if err != nil {
 		signal.Reset(syscall.SIGTERM)
 		t.Fatal(err)
 	}
-	// Restore the test process immediately; the child inherited SIG_IGN and
-	// must undo it itself in helper mode.
+	// Restore the test process immediately. The helper must retain the ignored
+	// disposition it inherited across exec.
 	signal.Reset(syscall.SIGTERM)
 	if err := syscall.Kill(cp.Pid(), syscall.SIGTERM); err != nil {
+		cp.Terminate()
+		_ = cp.Wait()
 		t.Fatal(err)
 	}
-	got := cp.Wait()
-	if got != int(syscall.SIGTERM) {
-		t.Fatalf("helper relay after inherited SIG_IGN = %d, want SIGTERM", got)
+	time.Sleep(50 * time.Millisecond)
+	if err := syscall.Kill(cp.Pid(), 0); err != nil {
+		cp.Terminate()
+		_ = cp.Wait()
+		t.Fatalf("helper did not preserve inherited SIG_IGN: %v", err)
 	}
+	cp.Terminate()
+	_ = cp.Wait()
+}
+
+// A background compound command is represented by its carrier PID. Signals
+// ignored by the shell must therefore remain ignored by that carrier, just as
+// they are for a directly executed command.
+func TestCarrierBackgroundCompoundPreservesIgnoredTerm(t *testing.T) {
+	out, exit := runBuiltBash(t, t.TempDir(), killBinPrelude+`
+trap '' TERM
+{ until [ -e go ]; do :; done; } &
+p=$!
+echo "pid=$p"
+"$K" -TERM "$p"
+sleep 0.05
+if "$K" -0 "$p" 2>/dev/null; then echo alive; else echo dead; fi
+: >go
+wait "$p"
+`)
+	if exit != 0 || !strings.Contains(out, "alive") || strings.Contains(out, "dead") {
+		t.Fatalf("exit=%d, ignored TERM did not preserve carrier liveness:\n%s", exit, out)
+	}
+	waitPidsGone(t, []int{outPid(t, out)})
 }
 
 // Go's runtime installs a notify-only handler for SIGUSR1 before main. A bare
