@@ -28,6 +28,8 @@ import (
 // run proves the whole chain — helper interception, real `$!` PIDs, external
 // signaling, and carrier reaping.
 
+var _ interp.ProcessGroupCarrierProcess = (*execCarrierProc)(nil)
+
 var (
 	bashBinOnce sync.Once
 	bashBinPath string
@@ -88,6 +90,34 @@ func runBuiltBash(t *testing.T, dir, script string) (string, int) {
 }
 
 var numericPidRe = regexp.MustCompile(`^[1-9][0-9]*$`)
+var carrierPipelineIdentityRe = regexp.MustCompile(`(?:LEFT|RIGHT) pid=([0-9]+) pgrp=([0-9]+)`)
+
+func TestCarrierOwnsMonitoredPipelineProcessGroup(t *testing.T) {
+	out, exit := runBuiltBash(t, t.TempDir(), `
+set -m
+/bin/sh -c 'p=$$; g=$(/bin/ps -o pgid= -p "$p" | tr -d " "); echo "LEFT pid=$p pgrp=$g" >&2; sleep 1' |
+  /bin/sh -c 'p=$$; g=$(/bin/ps -o pgid= -p "$p" | tr -d " "); echo "RIGHT pid=$p pgrp=$g" >&2; sleep 1' &
+j=$(jobs -p)
+wait
+echo "JOBS_P=$j"
+`)
+	if exit != 0 {
+		t.Fatalf("pipeline exit=%d; output:\n%s", exit, out)
+	}
+	job := regexp.MustCompile(`(?m)^JOBS_P=([0-9]+)$`).FindStringSubmatch(out)
+	if job == nil {
+		t.Fatalf("jobs -p identity missing:\n%s", out)
+	}
+	matches := carrierPipelineIdentityRe.FindAllStringSubmatch(out, -1)
+	if len(matches) != 2 {
+		t.Fatalf("pipeline child identities missing:\n%s", out)
+	}
+	for _, match := range matches {
+		if match[2] != job[1] {
+			t.Fatalf("child pid %s joined pgrp %s, want stable job group %s:\n%s", match[1], match[2], job[1], out)
+		}
+	}
+}
 
 func pidLive(pid int) bool {
 	err := syscall.Kill(pid, 0)

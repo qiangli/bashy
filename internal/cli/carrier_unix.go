@@ -160,6 +160,15 @@ type execCarrierProc struct {
 
 func (p *execCarrierProc) Pid() int { return p.cmd.Process.Pid }
 
+// ProcessGroupID advertises the stable group created by Setpgid at carrier
+// startup. The sh runner uses it only while monitor mode is active, placing
+// every external component of the represented job in the carrier's group.
+func (p *execCarrierProc) ProcessGroupID() int { return p.cmd.Process.Pid }
+
+func (p *execCarrierProc) ResumeProcessGroupLeader() error {
+	return syscall.Kill(p.cmd.Process.Pid, syscall.SIGCONT)
+}
+
 // WaitState reaps or observes child stop state via wait4/waitpid with WUNTRACED.
 func (p *execCarrierProc) WaitState() interp.CarrierWaitState {
 	pid := p.cmd.Process.Pid
