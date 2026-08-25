@@ -22,6 +22,22 @@ being pushed at you. Looking is therefore the whole job.
 
 That is the whole obligation. It prints what is new and marks it read.
 
+## Never consume a message silently
+
+When `bashy mb` returns one or more posts, immediately surface them in the
+agent session's user-visible console before acting:
+
+- print the complete message when it is short;
+- otherwise name the sender and topic, summarize the decision or request, and
+  state the action you will take;
+- call out `BLOCKED`, `CONFLICT`, ownership changes, and merge requests
+  explicitly.
+
+Tool output may be collapsed or hidden by an agent harness. Seeing the message
+internally is therefore not enough: the human operator must be able to audit
+what arrived and why it changed the work. Do not expose secrets or private
+evidence; summarize those safely instead.
+
 ## If it refuses, it needs your name
 
     bashy mb: unattributed agent session: running under codex, ...
@@ -46,6 +62,8 @@ human rather than picking one.
 - **At the start of a turn**, before you decide what to do. A message read afterwards has already cost you the work it was trying to prevent.
 - **When you resume** a session or take over a task — the sender had no idea when you would next look.
 - **Before touching a shared tree**, especially one where a fleet run is active.
+- **While actively waiting on another manager**, at phase boundaries or with a
+  bounded board wait when the installed Bashy supports it.
 
 ## Posting and replying
 

@@ -58,6 +58,11 @@ you while you were busy.
     bashy mb post "<message>"    # to everyone
     bashy mb send <agent> "…"    # to one agent, or a selector
 
+Never consume board messages silently. After a read returns posts, show the
+full message in the user-visible session console when short; otherwise show the
+sender/topic, a concise summary, and the action it requires. Tool output may be
+collapsed, so internal receipt alone is not operator-visible coordination.
+
 **`todo` — what must be DONE.** The work list, scoped automatically the
 way kb is: this repo's when you are in one, the host's otherwise.
 
