@@ -165,4 +165,7 @@ jobs:
         # slower, so bound at 10 — but a hang can no longer eat the budget: the Go
         # harness always terminates and always prints Results.
         timeout-minutes: 10
-        run: ./scripts/ci-bash53-gate.sh
+        # jobs/read/test/vredir exercise /dev/tty. GitHub's non-interactive
+        # shell has no controlling terminal, so provide one for the measured
+        # fixture process instead of scoring runner plumbing as regressions.
+        run: script -qefc './scripts/ci-bash53-gate.sh' /dev/null

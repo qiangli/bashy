@@ -19,10 +19,12 @@ import (
 func testRecorder(t *testing.T) (*recorder, string, string) {
 	t.Helper()
 	logDir, spaceDir := t.TempDir(), t.TempDir()
-	return &recorder{
+	rec := &recorder{
 		log:   execlog.Open(logDir),
 		space: spacegraph.Open(spaceDir),
-	}, logDir, spaceDir
+	}
+	t.Cleanup(func() { _ = rec.log.Close() })
+	return rec, logDir, spaceDir
 }
 
 // TestExitUnchanged is the invariant every tenant of this seam must hold: a

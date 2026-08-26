@@ -2,6 +2,7 @@ package agentos
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -12,7 +13,10 @@ import (
 // touches the operator's live session registry.
 func roomInTempHome(t *testing.T) {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+	t.Setenv("USERPROFILE", root)
+	t.Setenv("BASHY_ROOM_DIR", filepath.Join(root, ".bashy", "room"))
 	if room.Dir() == "" {
 		t.Skip("room store unavailable")
 	}

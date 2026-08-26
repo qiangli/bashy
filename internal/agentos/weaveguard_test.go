@@ -134,6 +134,7 @@ func fakeHomeWith(t *testing.T, stateRoot string) string {
 	if _, err := os.Stat(filepath.Join(dst)); err != nil {
 		t.Fatalf("fake home not usable: %v", err)
 	}
+	t.Setenv("USERPROFILE", home)
 	_ = weave.HoldersQuery{}
 	return home
 }
