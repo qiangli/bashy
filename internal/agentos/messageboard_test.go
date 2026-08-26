@@ -62,7 +62,7 @@ func TestWireMessageBoard_HarnessDetectionAnswersForThisProcess(t *testing.T) {
 // Meet deliberately cannot import bus, so these two callbacks are the only
 // path from the shipped command to its already-built message-board support.
 // A unit test in either package cannot detect this hop going missing.
-func TestWireMeet_ConnectsBothMessageBoardSeams(t *testing.T) {
+func TestWireMeet_ConnectsEveryMessageBoardSeam(t *testing.T) {
 	for _, h := range []struct {
 		name string
 		set  func()
@@ -70,6 +70,7 @@ func TestWireMeet_ConnectsBothMessageBoardSeams(t *testing.T) {
 	}{
 		{"Notify", func() { meet.Notify = nil }, func() bool { return meet.Notify != nil }},
 		{"FetchMB", func() { meet.FetchMB = nil }, func() bool { return meet.FetchMB != nil }},
+		{"PostMB", func() { meet.PostMB = nil }, func() bool { return meet.PostMB != nil }},
 	} {
 		t.Run(h.name, func(t *testing.T) {
 			h.set()

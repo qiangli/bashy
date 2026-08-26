@@ -271,6 +271,7 @@ func wireMeet() {
 	meet.ValidateRoomSecretary = validateMeetRoomSecretary
 	meet.Notify = notifyMeetInvitation
 	meet.FetchMB = fetchMeetMessageBoardPosts
+	meet.PostMB = postMeetMessageBoardPost
 }
 
 // Dispatch handles AgentOS front-door subcommands that are not shell scripts —

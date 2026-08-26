@@ -75,6 +75,30 @@ func notifyMeetInvitation(agent string, inv meet.Invitation) (bool, string, erro
 	return true, "posted to mb", nil
 }
 
+// postMeetMessageBoardPost is the WRITE half of the seam — a board's own
+// announcements (the pointer back when it seeds from a thread, a group invite,
+// the outcome when it closes), as distinct from notifyMeetInvitation, which
+// delivers a per-agent invitation.
+//
+// A nil audience is a broadcast. A non-nil one carries meet's OpenInvite, which
+// is projected onto bus.Audience field-for-field: the selector vocabulary is
+// mb's, and Any is simply the audience with no constraint set, so an open board
+// can never admit somebody `mb send` would not have reached.
+func postMeetMessageBoardPost(post meet.MBPost, inv *meet.OpenInvite) (int64, error) {
+	from := strings.TrimSpace(post.From)
+	if from == "" {
+		from = "meet"
+	}
+	p := bus.Post{From: from, Topic: post.Topic, Body: post.Body}
+	if inv != nil {
+		p.Audience = &bus.Audience{
+			Band: inv.Band, Tool: inv.Tool, Provider: inv.Provider,
+			Family: inv.Family, Version: inv.Version,
+		}
+	}
+	return bus.PostMessageSeq(p)
+}
+
 // fetchMeetMessageBoardPosts is the read half of the seam. Meet owns the
 // requested ordering contract, so translate bus posts by sequence rather than
 // leaking bus's storage order into the room seed.
