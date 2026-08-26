@@ -4,11 +4,11 @@
 **POSIX frontier**: yash `-p` conformance suite **96%** (confirmed 2026-07-01 on novicortex; ≥ bash 5.3/5.2, tied with mksh for best of the 10-shell panel) — run `bashy dag dag.md yash`; details in `docs/cross-shell-conformance-baseline.md` + `docs/yash-conformance-gap.md`
 
 **VSC-PCTS campaign (current scope)** — the shell-isolation milestone is complete: all 493 shell TPs are in the certification PASS group with zero blockers/manual resolutions/caps under the proven GNU Coreutils 9.11 provider PATH (`vsc-pcts-posix-shell-2026-08-08`). The primary corrective arm is **Profile B: Bashy `sh` plus frozen GNU/system providers**, excluding Bashy's Go multicall. Profiles C/D separately measure the Bashy Go utility provider across the complete 116-set/8,844-TP inventory. The one-page scope and inventory routing source is `docs/posix-command-coverage.md`. Publication consent for utilities-suite results was granted 2026-07-29 (ticket #280298), for conformance-work purposes on the same terms as the shell arm. Raw journals remain private, and no "certified"/"passes the Open Group suite" claim is made.
-  - **C/D gap checkpoint:** all 26 assembled missing names remain external
-    providers today. `mailx`, `pax`, and `locale` have reusable Go kernels but
-    no registered applets; `ed`, `patch`, and `make` are plan-only; the other
-    20 have no internal POSIX implementation. Do not remove a gap until the
-    command is registered and the staged provider manifest proves selection.
+  - **C/D name-coverage checkpoint:** the assembled 116-name surface is complete:
+    90 registered Go applets, 14 shell-only entries, and 12 pinned external
+    providers. `ed`, `patch`, `mail`/`mailx`, and `talk` are pure-Go applets with
+    no external-provider pins or fallback. Behavioral conformance remains gated
+    by focused tests and the staged Profile C/D evidence.
   - **`pkg/bre` regex cluster CLOSED (sed+grep): 5 flips + 1 parity lock**, all in `../coreutils/pkg/bre`, each independently gate-verified: `RE_DUP_MAX` intervals (`65dce2e`) · bracket validation (`b3de4d3`) · anchor parity (`b5fbf7a`) · back-ref edges (`7bc67cd`) · collating/equivalence classes (`4dca9f6`) · ERE/BRE operator lock (`b852d57`).
   - **In flight**: `expr` (`cmds/expr`). **Next**: `ls/xargs/od/mkdir/rm` (non-NO-list). **PENDING USER DECISION**: `find -exec` is a NO-list reversal — do not implement without explicit go-ahead.
   - **Stewardship handed to `codex-gpt5.6-sol` 2026-07-17** — full runbook in `dhnt/docs/steward-handover-2026-07-17.md` (the steward loop, commit/pin/refresh workflow, room control surface, disciplines, watches). Claude is observer/assistant.
