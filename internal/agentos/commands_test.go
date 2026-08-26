@@ -27,7 +27,7 @@ func TestCommandsCatalogSources(t *testing.T) {
 		}
 	}
 	// Front-door verbs + the docker->podman shim + the lister itself.
-	for _, want := range []string{"weave", "run", "commands", "docker", "self", "chat"} {
+	for _, want := range []string{"weave", "run", "commands", "docker", "self", "chat", "mb", "messages", "ping"} {
 		if !slices.Contains(verbs, want) {
 			t.Errorf("verbs missing %q", want)
 		}
@@ -49,6 +49,16 @@ func TestCommandsCatalogSources(t *testing.T) {
 		if !slices.IsSorted(g) {
 			t.Errorf("group not sorted: %v", g)
 		}
+	}
+}
+
+func TestDirectFrontDoorCatalogDoesNotShimSystemPing(t *testing.T) {
+	_, _, verbs := commandsCatalog()
+	if !slices.Contains(verbs, "ping") {
+		t.Fatal("bashy ping is callable but absent from the command catalog")
+	}
+	if strings.Contains(Preamble(), "\nping()") || strings.HasPrefix(Preamble(), "ping()") {
+		t.Fatal("cataloguing bashy ping must not shadow the platform's bare ping command")
 	}
 }
 
@@ -100,6 +110,7 @@ func TestVerbSynopsisCoversEveryVerb(t *testing.T) {
 	// Every shimmed verb (incl. docker + the agent-mode provisioners) must have
 	// a one-line synopsis, so `commands -v` never shows a bare verb.
 	all := append([]string{"docker"}, alwaysShimVerbs...)
+	all = append(all, directFrontDoorVerbs...)
 	all = append(all, agentModeShimVerbs...)
 	all = append(all, hiddenFrontDoorVerbs...)
 	for _, v := range all {

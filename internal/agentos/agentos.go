@@ -136,6 +136,10 @@ var (
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
 	}
+	// Direct-only front doors are callable as `bashy NAME` and belong in the
+	// command catalog, but must not become bare shell shims. In particular,
+	// bare `ping` must continue to resolve to the platform command.
+	directFrontDoorVerbs = []string{"mb", "messages", "ping"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "git-scm", "curl"}
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "invoke", "verify"}
 )

@@ -4,6 +4,7 @@
 package agentos
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/qiangli/coreutils/pkg/atlas"
@@ -119,6 +120,23 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 	}
 	if r := byName["invoke"]; !r.Hidden || r.AliasOf != "chat" {
 		t.Errorf("invoke = %+v, want hidden alias of chat", r)
+	}
+	if r := byName["messages"]; r.Hidden || r.AliasOf != "mb" {
+		t.Errorf("messages = %+v, want visible alias of mb", r)
+	} else if mb := byName["mb"]; !slices.Equal(r.Caps, mb.Caps) || !slices.Equal(r.Effects, mb.Effects) {
+		t.Errorf("messages metadata = caps %v effects %v, want mb parity caps %v effects %v",
+			r.Caps, r.Effects, mb.Caps, mb.Effects)
+	}
+	if r := byName["ping"]; !slices.Contains(r.Caps, atlas.CapSpawnsProcesses) ||
+		!slices.Contains(r.Effects, atlas.EffNet) || !slices.Contains(r.Effects, atlas.EffExec) ||
+		!slices.Contains(r.Effects, atlas.EffPersist) {
+		t.Errorf("ping = %+v, want hybrid board + system-ICMP metadata", r)
+	}
+	if r := byName["meet"]; !slices.Contains(r.Effects, atlas.EffRead) ||
+		!slices.Contains(r.Effects, atlas.EffWrite) || !slices.Contains(r.Effects, atlas.EffPersist) ||
+		!slices.Contains(r.Effects, atlas.EffNet) || !slices.Contains(r.Effects, atlas.EffExec) ||
+		!slices.Contains(r.Effects, atlas.EffSpend) {
+		t.Errorf("meet = %+v, want durable conversation + inference metadata", r)
 	}
 	if r := byName["go"]; r.Subclass != atlas.SubclassProvisioner {
 		t.Errorf("go = %+v, want subclass provisioner", r)

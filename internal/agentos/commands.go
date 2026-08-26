@@ -368,6 +368,8 @@ var verbSynopsis = map[string]string{
 	"capability":  "living agent (tool:model) × capability matrix for routing",
 	"leaderboard": "rank this host's agents on the runs they actually completed",
 	"mb":          "host message board: read what was posted to you, post to others",
+	"messages":    "alias for `bashy mb` (the host message board)",
+	"ping":        "read or send on the host message board, or run system ICMP ping when given only a host",
 	"inbox":       "read 1:1 notifications addressed to you from the existing bus",
 	"notify":      "send one subject-only notification to an agent or role",
 	"foreman":     "drive a persistent, steerable agent session (chat elevated)",
@@ -460,6 +462,7 @@ func commandsCatalog() (builtins, core, verbs []string) {
 	core = tool.Names() // Names() already sorts; be defensive
 	sort.Strings(core)
 	verbs = append([]string{"docker", "sandbox"}, alwaysShimVerbs...)
+	verbs = append(verbs, directFrontDoorVerbs...)
 	verbs = append(verbs, agentModeShimVerbs...)
 	verbs = append(verbs, registry.Names()...) // declarative managed-external CLIs
 	sort.Strings(verbs)
