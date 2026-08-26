@@ -1,8 +1,12 @@
 package agentos
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/qiangli/coreutils/pkg/bus"
 	"github.com/qiangli/coreutils/pkg/fleet"
+	"github.com/qiangli/coreutils/pkg/meet"
 )
 
 // wireMessageBoard connects `bashy mb` to the fleet catalog.
@@ -40,4 +44,59 @@ func wireMessageBoard() {
 	// extends it), so the board and the rest of bashy agree on what counts as
 	// an agent rather than keeping a second copy that can drift.
 	bus.DetectHarness = fleet.DetectTool
+}
+
+// notifyMeetInvitation is the write half of meet's message-board seam. The
+// durable board append happens first; live steering is an immediacy upgrade,
+// never a substitute for the copy the recipient can read later.
+func notifyMeetInvitation(agent string, inv meet.Invitation) (bool, string, error) {
+	body := "meeting invitation"
+	if topic := strings.TrimSpace(inv.Topic); topic != "" {
+		body += ": " + topic
+	}
+	body += "\n" + inv.Join
+
+	if err := bus.PostMessage(bus.Post{
+		From:  "meet",
+		To:    agent,
+		Topic: "meet",
+		Body:  body,
+	}); err != nil {
+		return false, "", err
+	}
+
+	delivery := bus.SteerLive(agent, "[meet] "+body+"\n(also on the board — `bashy mb`)")
+	if delivery.Steered {
+		return true, "delivered live and posted to mb", nil
+	}
+	if delivery.Reason != "" {
+		return true, "posted to mb; live delivery unavailable: " + delivery.Reason, nil
+	}
+	return true, "posted to mb", nil
+}
+
+// fetchMeetMessageBoardPosts is the read half of the seam. Meet owns the
+// requested ordering contract, so translate bus posts by sequence rather than
+// leaking bus's storage order into the room seed.
+func fetchMeetMessageBoardPosts(seqs []int64) ([]meet.MBPost, error) {
+	posts, err := bus.Posts()
+	if err != nil {
+		return nil, err
+	}
+	bySeq := make(map[int64]bus.Post, len(posts))
+	for _, post := range posts {
+		bySeq[post.Seq] = post
+	}
+
+	out := make([]meet.MBPost, 0, len(seqs))
+	for _, seq := range seqs {
+		post, ok := bySeq[seq]
+		if !ok {
+			return nil, fmt.Errorf("mb post #%d not found", seq)
+		}
+		out = append(out, meet.MBPost{
+			Seq: seq, From: post.From, Topic: post.Topic, Body: post.Body,
+		})
+	}
+	return out, nil
 }

@@ -2,10 +2,13 @@ package agentos
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/qiangli/coreutils/pkg/bus"
+	"github.com/qiangli/coreutils/pkg/meet"
 )
 
 // THE HOP THAT KEEPS GETTING MISSED.
@@ -53,6 +56,78 @@ func TestWireMessageBoard_HarnessDetectionAnswersForThisProcess(t *testing.T) {
 	tool, ok := bus.DetectHarness()
 	if ok && tool == "" {
 		t.Fatal("DetectHarness reported an agent with no tool name — an identity that resolves to nothing is the bug, not the fix")
+	}
+}
+
+// Meet deliberately cannot import bus, so these two callbacks are the only
+// path from the shipped command to its already-built message-board support.
+// A unit test in either package cannot detect this hop going missing.
+func TestWireMeet_ConnectsBothMessageBoardSeams(t *testing.T) {
+	for _, h := range []struct {
+		name string
+		set  func()
+		got  func() bool
+	}{
+		{"Notify", func() { meet.Notify = nil }, func() bool { return meet.Notify != nil }},
+		{"FetchMB", func() { meet.FetchMB = nil }, func() bool { return meet.FetchMB != nil }},
+	} {
+		t.Run(h.name, func(t *testing.T) {
+			h.set()
+			wireMeet()
+			if !h.got() {
+				t.Fatalf("meet.%s is nil after wireMeet — the seam exists but nothing connects it", h.name)
+			}
+		})
+	}
+}
+
+func TestMeetMessageBoardSeamPreservesDeliveryAndAuthors(t *testing.T) {
+	t.Setenv("BASHY_MB_DIR", t.TempDir())
+
+	for _, post := range []bus.Post{
+		{From: "alice", Topic: "first", Body: "alpha"},
+		{From: "bob", Topic: "second", Body: "beta"},
+	} {
+		if err := bus.PostMessage(post); err != nil {
+			t.Fatalf("seed mb: %v", err)
+		}
+	}
+
+	wireMeet()
+	got, err := meet.FetchMB([]int64{2, 1})
+	if err != nil {
+		t.Fatalf("FetchMB: %v", err)
+	}
+	if len(got) != 2 || got[0].From != "bob" || got[0].Body != "beta" || got[1].From != "alice" || got[1].Body != "alpha" {
+		t.Fatalf("FetchMB lost requested order, author, or text: %+v", got)
+	}
+
+	delivered, reason, err := meet.Notify("test-agent", meet.Invitation{
+		Topic: "seam proof", Join: "bashy meet read durable-id --as test-agent",
+	})
+	if err != nil {
+		t.Fatalf("Notify: %v", err)
+	}
+	if !delivered || !strings.Contains(reason, "posted to mb") {
+		t.Fatalf("Notify receipt = delivered %v, reason %q; want a truthful durable delivery", delivered, reason)
+	}
+	posts, err := bus.Posts()
+	if err != nil {
+		t.Fatalf("read notified post: %v", err)
+	}
+	last := posts[len(posts)-1]
+	if last.To != "test-agent" || last.From != "meet" || !strings.Contains(last.Body, "bashy meet read durable-id --as test-agent") {
+		t.Fatalf("notification post = %+v", last)
+	}
+
+	blocked := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocked, []byte("block board creation"), 0o600); err != nil {
+		t.Fatalf("create blocked board path: %v", err)
+	}
+	t.Setenv("BASHY_MB_DIR", blocked)
+	delivered, _, err = meet.Notify("test-agent", meet.Invitation{Join: "literal join command"})
+	if err == nil || delivered {
+		t.Fatalf("failed board append = delivered %v, err %v; invite must not claim notification", delivered, err)
 	}
 }
 

@@ -261,6 +261,18 @@ func newBusFrontDoorCmd(name string) (*cobra.Command, string, bool) {
 	}
 }
 
+// wireMeet connects every host-owned meet seam in one place. Keeping these
+// assignments together makes the wiring itself testable: package-level tests
+// in meet prove each callback's mechanism, while agentos tests prove the
+// shipped bashy front door actually installs them.
+func wireMeet() {
+	meet.StartPermanentRole = startMeetPermanentRole
+	meet.StartRoomSecretary = activateMeetRoomSecretary
+	meet.ValidateRoomSecretary = validateMeetRoomSecretary
+	meet.Notify = notifyMeetInvitation
+	meet.FetchMB = fetchMeetMessageBoardPosts
+}
+
 // Dispatch handles AgentOS front-door subcommands that are not shell scripts —
 // `bashy weave …` (the multi-agent workspace orchestrator), `bashy otel …`
 // (the all-in-one observability stack), `bashy secrets …`
@@ -607,9 +619,7 @@ func Dispatch() {
 	case "meet":
 		// Multi-participant deliberation session: agentic CLIs + a human take
 		// turns; a dedicated notes-only secretary keeps and files the minutes.
-		meet.StartPermanentRole = startMeetPermanentRole
-		meet.StartRoomSecretary = activateMeetRoomSecretary
-		meet.ValidateRoomSecretary = validateMeetRoomSecretary
+		wireMeet()
 		cmd := meet.NewMeetCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
@@ -618,9 +628,7 @@ func Dispatch() {
 		}
 		os.Exit(0)
 	case "relay":
-		meet.StartPermanentRole = startMeetPermanentRole
-		meet.StartRoomSecretary = activateMeetRoomSecretary
-		meet.ValidateRoomSecretary = validateMeetRoomSecretary
+		wireMeet()
 		cmd := meet.NewRelayCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
