@@ -4,6 +4,7 @@ go 1.26.5
 
 require (
 	github.com/creack/pty/v2 v2.0.1
+	github.com/ergochat/readline v0.1.3
 	github.com/qiangli/coreutils v0.0.0
 	github.com/qiangli/coreutils/external/otel v0.0.0
 	github.com/spf13/cobra v1.10.2
@@ -86,7 +87,6 @@ require (
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/emirpasic/gods/v2 v2.0.0-alpha // indirect
-	github.com/ergochat/readline v0.1.3 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fsouza/go-dockerclient v1.13.1 // indirect
@@ -292,7 +292,7 @@ replace github.com/qiangli/coreutils => ../coreutils
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
-replace github.com/benhoyt/goawk => github.com/qiangli/goawk v1.31.1-0.20260811024949-9948781e3cd4
+replace github.com/benhoyt/goawk => github.com/qiangli/goawk v0.0.0-20260826042810-88712e61a085
 
 replace github.com/qiangli/coreutils/external/otel => ../coreutils/external/otel
 
