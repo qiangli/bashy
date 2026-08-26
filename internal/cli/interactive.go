@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ergochat/readline"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interactive"
 	"mvdan.cc/sh/v3/interp"
@@ -127,6 +128,14 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 		HistorySearchFold: true,
 		InterruptPrompt:   "^C",
 		EOFPrompt:         "exit",
+		PlainTerminal:     invokedAsSh(),
+		ConfigureReadline: func(cfg *readline.Config) {
+			// GNU Bash invoked as POSIX sh does not place a terminal cursor
+			// position query in the interactive transcript. Expect-style
+			// automation treats readline's DSR probe and its padding bytes as
+			// shell output, so suppress only that optional probe in POSIX mode.
+			cfg.DisableCursorPositionQuery = posixMode
+		},
 		PreCommand: func(ctx context.Context, r *interp.Runner) {
 			if pc := r.Env.Get("PROMPT_COMMAND").String(); pc != "" {
 				pcp := syntax.NewParser(syntax.Variant(lang), syntax.PosixMode(posixMode))

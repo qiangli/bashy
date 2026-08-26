@@ -71,7 +71,7 @@ func TestVSCInteractiveAutoMonitorSurvivesGroupTTIN(t *testing.T) {
 		}
 	})
 
-	capture.waitFor(t, []byte("\x1b[0K"), 3*time.Second)
+	capture.waitFor(t, []byte("$ "), 3*time.Second)
 	const setPrompt = "export PS1='PS1 '"
 	const promptMarker = "\r\nPS1 "
 	send := func(line string) {

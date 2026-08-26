@@ -142,8 +142,8 @@ func TestInteractiveTerminalUIUsesStderrWhenStdoutRedirected(t *testing.T) {
 
 // TestVSCInteractiveSpawnHandshakeZeroSizePTY reproduces libexpect.exp's
 // SpawnSh handshake on the zero-sized PTY Expect creates by default. The
-// command echo and CRLF must remain contiguous so its prompt matcher can
-// advance to TP718's actual unprefixed-signal assertion.
+// command echo and CRLF must remain contiguous, and POSIX sh must not insert
+// readline's cursor-position probe into the observable transcript.
 func TestVSCInteractiveSpawnHandshakeZeroSizePTY(t *testing.T) {
 	dir := t.TempDir()
 	sh := filepath.Join(dir, "sh")
@@ -170,8 +170,13 @@ func TestVSCInteractiveSpawnHandshakeZeroSizePTY(t *testing.T) {
 		}
 	})
 
-	// The first prompt follows the bounded, unanswered DSR query.
-	capture.waitFor(t, []byte("\x1b[0K"), 3*time.Second)
+	got := capture.waitFor(t, []byte("$ "), 3*time.Second)
+	if bytes.Contains(got, []byte("\x1b[6n")) {
+		t.Fatalf("interactive POSIX sh emitted a cursor-position query: %q", got)
+	}
+	if bytes.ContainsAny(got, "\x1b\b") {
+		t.Fatalf("interactive POSIX sh emitted terminal-control bytes: %q", got)
+	}
 	const setPrompt = "export PS1='PS1 '"
 	if _, err := io.WriteString(ptmx, setPrompt+"\r"); err != nil {
 		t.Fatal(err)
