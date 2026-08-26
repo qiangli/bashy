@@ -131,7 +131,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "relay", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release",
+		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "relay", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "inbox", "notify", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
@@ -245,6 +245,20 @@ func shellQuote(s string) string {
 		return "''"
 	}
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+func newBusFrontDoorCmd(name string) (*cobra.Command, string, bool) {
+	wireMessageBoard()
+	switch name {
+	case "mb", "messages":
+		return bus.NewMessageBoardCmd(), "mb", true
+	case "inbox":
+		return bus.NewInboxCmd(), "inbox", true
+	case "notify":
+		return bus.NewNotifyCmd(), "notify", true
+	default:
+		return nil, "", false
+	}
 }
 
 // Dispatch handles AgentOS front-door subcommands that are not shell scripts —
@@ -671,16 +685,18 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
-	case "mb", "messages":
-		// The host MESSAGE BOARD. Deliberately not `inbox`/`im`: this is a shared
-		// append-only spool with per-reader cursors — neither a private mailbox
-		// nor push-delivered chat — and those words stay reserved for
-		// implementations that would actually mean them.
-		wireMessageBoard()
-		cmd := bus.NewMessageBoardCmd()
+	case "mb", "messages", "inbox", "notify":
+		// The host communication front doors all share pkg/bus's fleet seams:
+		// identity, role/name resolution, and fleet selection. Mounting the
+		// command without this wire-up makes the feature look present while
+		// answering addressing questions with empty defaults.
+		cmd, label, ok := newBusFrontDoorCmd(os.Args[1])
+		if !ok {
+			return
+		}
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy mb:", err)
+			fmt.Fprintf(os.Stderr, "bashy %s: %v\n", label, err)
 			os.Exit(1)
 		}
 		os.Exit(0)

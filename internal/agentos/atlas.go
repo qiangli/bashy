@@ -109,6 +109,20 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Caps:    []string{atlas.CapJSON, atlas.CapSpawnsProcesses},
 		Effects: []string{atlas.EffExec, atlas.EffRead, atlas.EffWrite},
 	},
+	"inbox": {
+		Stage:   atlas.StageCross,
+		Group:   atlas.GroupOrch,
+		Tier:    atlas.TierUserland,
+		Caps:    []string{atlas.CapJSON},
+		Effects: []string{atlas.EffRead, atlas.EffWrite},
+	},
+	"notify": {
+		Stage:   atlas.StageCross,
+		Group:   atlas.GroupOrch,
+		Tier:    atlas.TierUserland,
+		Caps:    []string{atlas.CapJSON},
+		Effects: []string{atlas.EffWrite},
+	},
 }
 
 // verbAtlasRecord resolves one front-door verb: the curated table first,

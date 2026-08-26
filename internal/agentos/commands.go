@@ -368,6 +368,8 @@ var verbSynopsis = map[string]string{
 	"capability":  "living agent (tool:model) × capability matrix for routing",
 	"leaderboard": "rank this host's agents on the runs they actually completed",
 	"mb":          "host message board: read what was posted to you, post to others",
+	"inbox":       "read 1:1 notifications addressed to you from the existing bus",
+	"notify":      "send one subject-only notification to an agent or role",
 	"foreman":     "drive a persistent, steerable agent session (chat elevated)",
 	"agent":       "agent identity and local agent helpers",
 	"sdlc":        "route intake issues through agentic implementation and deployment gates",

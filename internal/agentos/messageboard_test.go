@@ -1,6 +1,8 @@
 package agentos
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/qiangli/coreutils/pkg/bus"
@@ -51,5 +53,38 @@ func TestWireMessageBoard_HarnessDetectionAnswersForThisProcess(t *testing.T) {
 	tool, ok := bus.DetectHarness()
 	if ok && tool == "" {
 		t.Fatal("DetectHarness reported an agent with no tool name — an identity that resolves to nothing is the bug, not the fix")
+	}
+}
+
+func TestMessageBoardFrontDoorResolvesInboxAndNotify(t *testing.T) {
+	for _, verb := range []string{"inbox", "notify"} {
+		t.Run(verb, func(t *testing.T) {
+			bus.FleetNames = nil
+			bus.FleetSelect = nil
+			bus.FleetResolveName = nil
+			bus.DetectHarness = nil
+
+			cmd, label, ok := newBusFrontDoorCmd(verb)
+			if !ok || cmd == nil {
+				t.Fatalf("bashy %s is not mounted in the AgentOS bus front door", verb)
+			}
+			if label != verb {
+				t.Fatalf("bashy %s resolved with label %q", verb, label)
+			}
+			if bus.FleetNames == nil || bus.FleetSelect == nil || bus.FleetResolveName == nil || bus.DetectHarness == nil {
+				t.Fatalf("bashy %s resolved without wiring the fleet seams", verb)
+			}
+
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs([]string{"--help"})
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("bashy %s --help failed: %v", verb, err)
+			}
+			if !strings.Contains(out.String(), verb) {
+				t.Fatalf("bashy %s --help did not render the mounted command help: %q", verb, out.String())
+			}
+		})
 	}
 }
