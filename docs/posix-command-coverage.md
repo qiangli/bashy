@@ -18,17 +18,24 @@ The accounting is:
 
 | Layer | Required names supplied |
 | --- | ---: |
-| registered Bashy Go applets | 90 |
+| registered Bashy Go applets | 92 |
 | shell-only entries/builtins | 14 |
-| pinned external providers registered by the multicall | 12 |
+| pinned external providers registered by the multicall | 10 |
 | unresolved provider gaps in assembled C/D | 0 |
 | configured required names | 116 |
 
 The implementation-presence counts overlap: seven Go applets also resolve as
 shell builtins, and `time` resolves as a shell keyword. Effective staged
-ownership must therefore be recorded separately: 82 Go-selected names, 22
-shell-selected names, and 12 provider-selected names. The assembled C/D
+ownership must therefore be recorded separately: 84 Go-selected names, 22
+shell-selected names, and 10 provider-selected names. The assembled C/D
 environment has no name-level gap.
+
+Availability and ownership are not conformance evidence. The generated
+interface ledger records evidence state separately: as of the current
+inventory 0 verified, 4 implemented, 102 partial, and 10 missing — the ten
+`missing` rows are exactly the ten external providers, whose behavior is not
+Bashy's to attest. Registry ownership passing never means a name's full
+flag/option/operand conformance is proven.
 
 Profile B is Bashy `sh` plus the **prepared** GNU/system provider environment;
 it excludes Bashy's Go multicall. Profiles C/D place Bashy Go coreutils first.

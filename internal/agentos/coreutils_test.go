@@ -35,8 +35,8 @@ func TestDispatchPOSIXProvidersHelpNamesCurrentOwnership(t *testing.T) {
 		t.Fatalf("posix-providers --help exit = %d, stderr = %q", code, err.String())
 	}
 	for _, want := range []string{
-		"Active external providers (12): ar, bc, ctags, ex, localedef, lp, m4, make, man, nm, strip, vi",
-		"Go-only replacements, never external providers: ed, patch, mail, mailx, talk",
+		"Active external providers (10): ar, ctags, ex, localedef, lp, m4, man, nm, strip, vi",
+		"Go-only replacements, never external providers: bc, ed, make, patch, mail, mailx, talk.",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("posix-providers help missing %q:\n%s", want, out.String())

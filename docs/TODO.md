@@ -5,8 +5,9 @@
 
 **VSC-PCTS campaign (current scope)** — the shell-isolation milestone is complete: all 493 shell TPs are in the certification PASS group with zero blockers/manual resolutions/caps under the proven GNU Coreutils 9.11 provider PATH (`vsc-pcts-posix-shell-2026-08-08`). The primary corrective arm is **Profile B: Bashy `sh` plus frozen GNU/system providers**, excluding Bashy's Go multicall. Profiles C/D separately measure the Bashy Go utility provider across the complete 116-set/8,844-TP inventory. The one-page scope and inventory routing source is `docs/posix-command-coverage.md`. Publication consent for utilities-suite results was granted 2026-07-29 (ticket #280298), for conformance-work purposes on the same terms as the shell arm. Raw journals remain private, and no "certified"/"passes the Open Group suite" claim is made.
   - **C/D name-coverage checkpoint:** the assembled 116-name surface is complete:
-    90 registered Go applets, 14 shell-only entries, and 12 pinned external
-    providers. `ed`, `patch`, `mail`/`mailx`, and `talk` are pure-Go applets with
+    92 registered Go applets, 14 shell-only entries, and 10 pinned external
+    providers (effective selection 84 Go / 22 shell / 10 provider). `make`, `bc`,
+    `ed`, `patch`, `mail`/`mailx`, and `talk` are pure-Go applets with
     no external-provider pins or fallback. Behavioral conformance remains gated
     by focused tests and the staged Profile C/D evidence.
   - **`pkg/bre` regex cluster CLOSED (sed+grep): 5 flips + 1 parity lock**, all in `../coreutils/pkg/bre`, each independently gate-verified: `RE_DUP_MAX` intervals (`65dce2e`) · bracket validation (`b3de4d3`) · anchor parity (`b5fbf7a`) · back-ref edges (`7bc67cd`) · collating/equivalence classes (`4dca9f6`) · ERE/BRE operator lock (`b852d57`).
