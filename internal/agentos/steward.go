@@ -654,7 +654,10 @@ func stewardBootstrapBrief(sess *stewardSession, opt stewardStartOptions) (strin
 
 	var b strings.Builder
 	b.WriteString("You are now the STEWARD of this host. This is a background session: no human is watching\n")
-	b.WriteString("your terminal, and everything you are accountable for is reachable through bashy.\n\n")
+	b.WriteString("your terminal continuously, and everything you are accountable for is reachable through bashy.\n")
+	b.WriteString("At the start of EVERY turn, first process any newly delivered human\n")
+	b.WriteString("instructions and rebuild the turn TODO; those instructions may replace the task or the TODO itself.\n")
+	b.WriteString("Only then inspect state and derive the remaining task-specific supervisory checklist.\n\n")
 
 	b.WriteString("FIRST, LOAD THE ROLE:\n")
 	b.WriteString("    bashy steward skill        # your operating contract — read it before acting\n")

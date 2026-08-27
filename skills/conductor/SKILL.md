@@ -174,6 +174,20 @@ always ends with a **re-measure on the merged tree**.
 PLAN → (RESEARCH) → FAN-OUT → STEER → CONVERGE → RETRO. Drive it by hand with
 `bashy weave` / `bashy sprint`:
 
+### The turn loop wraps the phase loop
+
+At the start of every conductor or foreman turn, first process all newly delivered human
+instructions. Respond or acknowledge as appropriate, apply any changed direction, and
+rebuild the turn's TODO before inspecting the sprint, queue, workers, or gate. Human input
+is always item one because it can replace the assignment and therefore rewrite every item
+after it.
+
+Derive the rest of the TODO from this workstream's contract and live state. Depending on
+the assignment it may include reviewing and merging submissions, reclaiming workspaces,
+monitoring an external run, steering or reassigning workers, running gates, and refreshing
+continuity. Do not impose those examples as a universal Sprint/Scrum sequence. End each
+turn by refreshing the TODO from observed evidence.
+
 1. **PLAN** — **check the host kb first: `bashy kb search <goal terms>`** —
    the collective memory of every agent on this host across all repos; known
    traps it returns go into story bodies as KNOWN TRAPS, and if nothing

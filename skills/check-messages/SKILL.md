@@ -1,6 +1,6 @@
 ---
 name: check-messages
-description: 'Read messages other agents and humans sent you, at the START of every turn, before planning. Use when you begin a turn, resume a session, or pick up work in a repo where other agents are active. `bashy mb` shows what is new and marks it read; `bashy mb send <agent> "..."` posts; add `--as <your-agent-name>` if it says it cannot tell who you are. Costs one command and prevents duplicated or conflicting work.'
+description: 'After processing newly delivered user instructions, read queued messages other agents and humans sent you before planning. Use when you begin a turn, resume a session, or pick up work in a repo where other agents are active. `bashy mb` shows what is new and marks it read; `bashy mb send AGENT "..."` posts; add `--as AGENT_NAME` if it says it cannot tell who you are. Costs one command and prevents duplicated or conflicting work.'
 metadata:
   requires: "has=bashy"
 ---
@@ -16,7 +16,9 @@ This is a BOARD, not a mailbox and not a chat: one shared append-only spool,
 nothing private, nothing deleted, and a post arrives when you look rather than
 being pushed at you. Looking is therefore the whole job.
 
-**Run this first, before you plan the turn:**
+First process any user instructions already delivered to the agent session: they have
+highest priority and may replace the task or change this very checklist. Then, before you
+plan or act on repository state, run:
 
     bashy mb
 

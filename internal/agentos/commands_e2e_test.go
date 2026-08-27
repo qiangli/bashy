@@ -505,6 +505,38 @@ func TestSeatAuthorityInvariantsE2E(t *testing.T) {
 	}
 }
 
+// TestSupervisoryTurnOrderE2E pins the first decision an embedded supervising
+// skill asks an agent to make. User direction must be applied before any
+// task-specific plan or worker inspection; the remainder is intentionally
+// derived rather than a Sprint-specific fixed checklist.
+func TestSupervisoryTurnOrderE2E(t *testing.T) {
+	bin := bashyBinary(t)
+
+	for _, skill := range []string{"steward", "conductor"} {
+		t.Run(skill, func(t *testing.T) {
+			stdout, _, code := runBashyStd(bin, "skills", "show", skill)
+			if code != 0 {
+				t.Fatalf("skills show %s exit %d:\n%s", skill, code, stdout)
+			}
+			human := strings.Index(stdout, "Before consulting dashboards, queues, plans, or workers")
+			if human < 0 {
+				human = strings.Index(stdout, "At the start of every conductor or foreman turn")
+			}
+			planning := strings.Index(stdout, "derive the remaining TODO")
+			if planning < 0 {
+				planning = strings.Index(stdout, "Derive the rest of the TODO")
+			}
+			if human < 0 || planning < 0 || human >= planning {
+				t.Fatalf("embedded %s skill does not put new human instructions before the derived TODO", skill)
+			}
+			if !strings.Contains(stdout, "not a fixed Sprint or Scrum checklist") &&
+				!strings.Contains(stdout, "not impose those examples as a universal Sprint/Scrum sequence") {
+				t.Errorf("embedded %s skill does not keep the remaining TODO task-specific", skill)
+			}
+		})
+	}
+}
+
 // TestSkillsAddVerifyE2E drives the P1 verified-admission loop end to end
 // against an isolated store ($BASHY_SKILLS_DIR): author a dual-bundle
 // skill, add it, see it env-gated in list, verify it, and confirm the
