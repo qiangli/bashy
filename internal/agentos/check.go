@@ -277,7 +277,7 @@ func (a *checkAnalyzer) analyzePath(path, role, from string, depth int) {
 
 func (a *checkAnalyzer) parserOptions() []syntax.ParserOption {
 	if a.opts.mode == "posix" {
-		return []syntax.ParserOption{syntax.Variant(syntax.LangBash), syntax.PosixMode(true)}
+		return []syntax.ParserOption{syntax.Variant(syntax.LangPOSIX)}
 	}
 	return []syntax.ParserOption{syntax.Variant(syntax.LangBash)}
 }

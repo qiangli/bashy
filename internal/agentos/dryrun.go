@@ -23,8 +23,8 @@ import (
 )
 
 // dryRunFlag is registered here (in agentos, imported only by cmd/bashy), so the
-// pure `bash` drop-in never sees `--dry-run` — bashy-only, also inert under
-// --posix (see WireExec).
+// pure `bash` drop-in never sees `--dry-run` — bashy-only. In POSIX mode it
+// selects parse-only validation instead of installing execution handlers.
 // dryRunFlag is the bashy-only --dryrun (consistent with `set -o dryrun`),
 // registered here (in agentos, imported only by cmd/bashy) so the pure bash
 // drop-in never sees it; also inert under --posix (see WireExec).
@@ -38,6 +38,33 @@ func init() {
 
 // dryRunRequested reports whether --dryrun was passed at startup.
 func dryRunRequested() bool { return *dryRunFlag }
+
+// PosixDryRunNoExec makes `bashy --dry-run --posix SCRIPT` a safe validation
+// operation. AgentOS execution handlers are deliberately absent in POSIX mode;
+// without this hook the dry-run flag would be silently ignored and the script
+// would execute for real.
+func PosixDryRunNoExec(posix bool) bool {
+	if !posix {
+		return false
+	}
+	if dryRunRequested() {
+		return true
+	}
+	// Preserve the explicit startup safety request even if an embedding caller
+	// resets the process-global flag set after parsing it.
+	for _, arg := range os.Args[1:] {
+		switch arg {
+		case "--dry-run", "--dryrun":
+			return true
+		case "--", "-c":
+			return false
+		}
+		if !strings.HasPrefix(arg, "-") {
+			return false
+		}
+	}
+	return false
+}
 
 // reporter is shared by the exec + open handlers for one dry run.
 type dryRunReporter struct {

@@ -24,6 +24,8 @@ func init() {
 	cli.AgentOSWireExec = agentos.WireExec
 	cli.AgentOSPreamble = agentos.Preamble
 	cli.AgentOSUsage = agentos.Usage
+	cli.AgentOSCommandLineNoExec = agentos.PosixDryRunNoExec
+	cli.AgentOSStrictPosixParse = agentos.PosixDryRunNoExec
 	cli.VersionProduct = "bashy"
 	cli.VersionCompatibility = "GNU Bash 5.3 compatible"
 	// Keep the fork's nohup/setsid builtins: the in-process matrix shell needs

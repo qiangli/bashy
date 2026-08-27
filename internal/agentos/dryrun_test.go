@@ -45,6 +45,40 @@ func TestDryRunAliasRegistered(t *testing.T) {
 	}
 }
 
+func TestPosixDryRunSelectsNoExec(t *testing.T) {
+	old := *dryRunFlag
+	t.Cleanup(func() { *dryRunFlag = old })
+	*dryRunFlag = true
+	if !PosixDryRunNoExec(true) {
+		t.Fatal("--dry-run --posix must select parse-only execution")
+	}
+	if PosixDryRunNoExec(false) {
+		t.Fatal("ordinary dry-run must keep its reporting execution path")
+	}
+	*dryRunFlag = false
+	if PosixDryRunNoExec(true) {
+		t.Fatal("POSIX mode without --dry-run must execute normally")
+	}
+}
+
+func TestPosixDryRunRetainsStartupSafetyIntent(t *testing.T) {
+	oldFlag := *dryRunFlag
+	oldArgs := os.Args
+	t.Cleanup(func() {
+		*dryRunFlag = oldFlag
+		os.Args = oldArgs
+	})
+	*dryRunFlag = false
+	os.Args = []string{"bashy", "--dry-run", "--posix", "-c", "echo unsafe"}
+	if !PosixDryRunNoExec(true) {
+		t.Fatal("explicit startup --dry-run must remain no-exec in POSIX mode")
+	}
+	os.Args = []string{"bashy", "--posix", "-c", "echo normal"}
+	if PosixDryRunNoExec(true) {
+		t.Fatal("ordinary POSIX execution must not become no-exec")
+	}
+}
+
 func TestShQuote(t *testing.T) {
 	cases := map[string]string{
 		"hello":   "hello",

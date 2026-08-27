@@ -5,8 +5,9 @@ and builtins, but **print external commands instead of executing them** — "xtr
 without side effects." It is the agent-/CI-facing safety net: see exactly what a
 script *would* invoke and what it *would* destroy, before it does anything.
 
-It is absent from the pure `bash` drop-in, inert under `--posix`, and adds **zero
-regression** to bash 5.3 conformance (86/86) — see [Design](#design).
+It is absent from the pure `bash` drop-in. Combined with `--posix`, it becomes a
+parse-only validator and executes nothing. This adds **zero regression** to bash
+5.3 conformance (86/86) — see [Design](#design).
 
 ## Usage
 
@@ -15,6 +16,8 @@ bashy --dryrun script.sh              # dry-run the whole script
 bashy --dry-run script.sh             # alias; preferred in agent-facing docs
 bashy --dryrun -c '<commands>'
 bashy --dry-run -c '<commands>'
+bashy --dry-run --posix script.sh    # strict POSIX parse only; execute nothing
+bashy check --mode posix script.sh   # strict POSIX grammar + static inventory
 bashy help dryrun                     # focused help for this feature
 
 # Runtime toggle — dry-run only part of a script:
@@ -86,7 +89,8 @@ every file untouched.
   `interp.EnableDryRunOption` RunnerOption that **only bashy passes** (and not
   under `--posix`); everywhere else — `bash`, `gosh`, `--posix` — `set -o dryrun`
   is rejected exactly like Bash. The option is kept out of `set -o` listings and
-  `SHELLOPTS`. Bash 5.3 suite stays **86/86**.
+  `SHELLOPTS`. The startup flag plus `--posix` uses the ordinary no-exec parser
+  path, so it cannot silently execute. Bash 5.3 suite stays **86/86**.
 - **Two seams, no engine rewrite.** A print-and-skip `interp.ExecHandler`
   (external commands) plus an `interp.OpenHandler` (redirection opens). Both no-op
   when `HandlerContext.DryRun()` is false, so normal runs are unaffected.

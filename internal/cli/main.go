@@ -474,6 +474,16 @@ var (
 	// bash drop-in leaves it empty so its help stays close to GNU Bash.
 	AgentOSUsage = func() string { return "" }
 
+	// AgentOSCommandLineNoExec lets the bashy-only front end request the
+	// interpreter's parse-only path without exposing a non-Bash option through
+	// the pure bash binary. It is used to make --dry-run --posix fail safe:
+	// POSIX mode does not install AgentOS execution handlers, so the combination
+	// must validate input without executing it.
+	AgentOSCommandLineNoExec func(bool) bool = func(bool) bool { return false }
+	// AgentOSStrictPosixParse selects the portable POSIX grammar for an
+	// AgentOS validation request. Ordinary bash --posix keeps Bash grammar.
+	AgentOSStrictPosixParse func(bool) bool = func(bool) bool { return false }
+
 	// SuppressedForkBuiltins names the qiangli/sh fork's extra builtins that the
 	// pure `bash` drop-in disables so its command table matches bash 5.3 exactly.
 	// bash 5.3 has NONE of these as builtins (source-verified: no matching .def);
@@ -623,7 +633,7 @@ func newRunner() (*interp.Runner, error) {
 		// `bash -n` (and `bash -o noexec`) suppress execution even in an
 		// interactive shell, unlike a `set -n` issued later — which an
 		// interactive shell ignores. See interp.CommandLineNoExec.
-		interp.CommandLineNoExec(cmdlineNoExec()),
+		interp.CommandLineNoExec(cmdlineNoExec() || AgentOSCommandLineNoExec(startupPosix)),
 		interp.CommandString(*command != ""),
 		interp.StandardInput(*command == "" && (flag.NArg() == 0 || *readStdin)),
 		interp.WithLoginShell(isLoginShell()),
@@ -2450,6 +2460,59 @@ func bashyParseOpts(reqLang syntax.LangVariant, extra ...syntax.ParserOption) []
 	return append([]syntax.ParserOption{syntax.Variant(variant), syntax.PosixMode(posix)}, extra...)
 }
 
+// strictPosixPolicyError rejects shell-extension commands which remain valid
+// simple-command tokens in the POSIX grammar. LangPOSIX already rejects
+// extension syntax such as arrays, process substitution, and here-strings;
+// this layer catches Bash builtins whose spelling is otherwise
+// indistinguishable from an external command.
+func strictPosixPolicyError(file *syntax.File, name string) error {
+	if file == nil {
+		return nil
+	}
+	var found error
+	syntax.Walk(file, func(node syntax.Node) bool {
+		if found != nil {
+			return false
+		}
+		call, ok := node.(*syntax.CallExpr)
+		if !ok || len(call.Args) == 0 {
+			return true
+		}
+		word := func(index int) (string, bool) {
+			if index >= len(call.Args) || len(call.Args[index].Parts) != 1 {
+				return "", false
+			}
+			lit, ok := call.Args[index].Parts[0].(*syntax.Lit)
+			if !ok {
+				return "", false
+			}
+			return lit.Value, true
+		}
+		command, static := word(0)
+		if !static {
+			return true
+		}
+		extension := ""
+		switch command {
+		case "[[", "local", "source", "typeset", "declare", "let":
+			extension = command
+		case "set":
+			option, okOption := word(1)
+			value, okValue := word(2)
+			if okOption && okValue && option == "-o" && value == "pipefail" {
+				extension = "set -o pipefail"
+			}
+		}
+		if extension != "" {
+			pos := call.Args[0].Pos()
+			found = fmt.Errorf("%s:%d:%d: %s is not a POSIX shell construct", name, pos.Line(), pos.Col(), extension)
+			return false
+		}
+		return true
+	})
+	return found
+}
+
 func run(r *interp.Runner, reader io.Reader, name string) error {
 	if reader == nil {
 		return nil
@@ -2458,6 +2521,13 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	startupPosix := effectiveStartupPosix()
 	if startupPosix {
 		lang = syntax.LangPOSIX
+	}
+	strictPosixParse := AgentOSStrictPosixParse(startupPosix)
+	parseOpts := func(extra ...syntax.ParserOption) []syntax.ParserOption {
+		if strictPosixParse {
+			return append([]syntax.ParserOption{syntax.Variant(syntax.LangPOSIX)}, extra...)
+		}
+		return bashyParseOpts(lang, extra...)
 	}
 	// Buffer the source so we can echo the offending line back to stderr
 	// in bash's `<file>: line N: \`<line>'` format when parsing fails.
@@ -2489,7 +2559,12 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	// up front via the shared engine helper and abort with bash's exact
 	// wording. DbracketParseError returns ok=false for any non-`[[ ]]` parse
 	// error, so the recovery path below is unchanged for everything else.
-	if _, perr := syntax.NewParser(syntax.Variant(lang)).Parse(bytes.NewReader(src), name); perr != nil {
+	preflightFile, perr := syntax.NewParser(parseOpts()...).Parse(bytes.NewReader(src), name)
+	if perr != nil {
+		if strictPosixParse {
+			fmt.Fprintln(os.Stderr, perr)
+			return interp.ExitStatus(2)
+		}
 		if msg, ok := syntax.DbracketParseError(perr, src, errPrefix); ok {
 			fmt.Fprintln(os.Stderr, msg)
 			return interp.ExitStatus(2)
@@ -2502,6 +2577,12 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 		// unexpectedTokenAbort returns ok=false for everything else.
 		if msg, ok := unexpectedTokenAbort(perr, src, errPrefix); ok {
 			fmt.Fprintln(os.Stderr, msg)
+			return interp.ExitStatus(2)
+		}
+	}
+	if strictPosixParse {
+		if perr := strictPosixPolicyError(preflightFile, name); perr != nil {
+			fmt.Fprintln(os.Stderr, perr)
 			return interp.ExitStatus(2)
 		}
 	}
@@ -2555,8 +2636,12 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	// r.Run(prog) would. The -c case (`*command != ""`) skips
 	// recovery; bash also fails -c entirely on parse error.
 	parseOnce := func(chunk []byte, parseLang syntax.LangVariant) (*syntax.File, syntax.ParseError, bool) {
-		f, perr := syntax.NewParser(bashyParseOpts(parseLang, syntax.HeredocEOFWarning(hdocWarn),
-			syntax.HeredocComsubWarning(comsubWarn))...).
+		options := parseOpts(syntax.HeredocEOFWarning(hdocWarn), syntax.HeredocComsubWarning(comsubWarn))
+		if !strictPosixParse {
+			options = bashyParseOpts(parseLang, syntax.HeredocEOFWarning(hdocWarn),
+				syntax.HeredocComsubWarning(comsubWarn))
+		}
+		f, perr := syntax.NewParser(options...).
 			Parse(bytes.NewReader(chunk), name)
 		if perr == nil {
 			return f, syntax.ParseError{}, false

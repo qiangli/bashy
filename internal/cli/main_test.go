@@ -1560,3 +1560,27 @@ func TestClaudeCodeWrapperExecutes(t *testing.T) {
 		t.Fatalf("`pwd -P >| <file>` cwd redirect did not write %s: %v", cwdFile, err)
 	}
 }
+
+func TestStrictPosixPolicyRejectsBuiltinExtensions(t *testing.T) {
+	for _, src := range []string{
+		"[[ -n x ]]\n",
+		"local value=x\n",
+		"source ./library.sh\n",
+		"set -o pipefail\n",
+	} {
+		file, err := syntax.NewParser(syntax.Variant(syntax.LangPOSIX)).Parse(strings.NewReader(src), "policy.sh")
+		if err != nil {
+			t.Fatalf("test input should reach policy layer: %q: %v", src, err)
+		}
+		if err := strictPosixPolicyError(file, "policy.sh"); err == nil {
+			t.Fatalf("strict POSIX policy accepted %q", src)
+		}
+	}
+	file, err := syntax.NewParser(syntax.Variant(syntax.LangPOSIX)).Parse(strings.NewReader("printf '%s\\n' ok\n"), "portable.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := strictPosixPolicyError(file, "portable.sh"); err != nil {
+		t.Fatalf("strict POSIX policy rejected portable input: %v", err)
+	}
+}

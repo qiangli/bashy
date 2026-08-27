@@ -24,6 +24,8 @@ func TestDefaultBuildWiresCompleteAgentOS(t *testing.T) {
 		{"wire exec", cli.AgentOSWireExec, agentos.WireExec},
 		{"preamble", cli.AgentOSPreamble, agentos.Preamble},
 		{"usage", cli.AgentOSUsage, agentos.Usage},
+		{"POSIX dry-run noexec", cli.AgentOSCommandLineNoExec, agentos.PosixDryRunNoExec},
+		{"POSIX dry-run strict parser", cli.AgentOSStrictPosixParse, agentos.PosixDryRunNoExec},
 	}
 	for _, tt := range tests {
 		if reflect.ValueOf(tt.got).Pointer() != reflect.ValueOf(tt.want).Pointer() {

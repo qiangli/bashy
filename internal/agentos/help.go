@@ -144,7 +144,8 @@ Manifest entries:
 
 Notes:
   --dryrun and --dry-run are aliases.
-  The feature is bashy-only and inert under --posix.
+  With --posix, dry-run is parse-only: it validates and executes nothing.
+  Use "bashy check --mode posix SCRIPT" to reject non-POSIX shell grammar.
   Dry-run is linear-path accurate: skipped external commands return success.
 `)
 }

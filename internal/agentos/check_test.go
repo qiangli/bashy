@@ -130,6 +130,22 @@ func TestCheckSyntaxError(t *testing.T) {
 	}
 }
 
+func TestCheckPosixModeRejectsBashSyntax(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "bashism.sh")
+	if err := os.WriteFile(script, []byte("values=(one two)\n[[ -n ${values[0]} ]]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	posix := newCheckAnalyzer(checkOptions{mode: "posix", maxDepth: 8}).run([]string{script})
+	if posix.Summary.Errors == 0 {
+		t.Fatalf("POSIX mode accepted Bash-only syntax: %#v", posix)
+	}
+	bash := newCheckAnalyzer(checkOptions{mode: "bash53", maxDepth: 8}).run([]string{script})
+	if bash.Summary.Errors != 0 {
+		t.Fatalf("bash53 mode rejected valid Bash syntax: %#v", bash.Diagnostics)
+	}
+}
+
 func TestCheckAgentModeSetsJSONFriendlyMode(t *testing.T) {
 	dir := t.TempDir()
 	script := filepath.Join(dir, "s.sh")
