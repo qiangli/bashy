@@ -25,6 +25,25 @@ func TestDispatchCoreutilsToolFetchHelp(t *testing.T) {
 	}
 }
 
+func TestDispatchPOSIXProvidersHelpNamesCurrentOwnership(t *testing.T) {
+	var out, err bytes.Buffer
+	code := dispatchCoreutilsTool("posix-providers", []string{"--help"}, tool.Stdio{
+		Out: &out,
+		Err: &err,
+	})
+	if code != 0 {
+		t.Fatalf("posix-providers --help exit = %d, stderr = %q", code, err.String())
+	}
+	for _, want := range []string{
+		"Active external providers (12): ar, bc, ctags, ex, localedef, lp, m4, make, man, nm, strip, vi",
+		"Go-only replacements, never external providers: ed, patch, mail, mailx, talk",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("posix-providers help missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
 func TestDispatchCoreutilsAwkPOSIXFloatFormatter(t *testing.T) {
 	t.Setenv("LC_ALL", "C")
 	var out, err bytes.Buffer
