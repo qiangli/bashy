@@ -73,6 +73,24 @@ expected response, and a stable reachable reference such as
 ID. Do not paste logs/full analysis, and never send only a temporary path the
 recipient cannot access; include enough summary to route safely.
 
+Quick coordination bodies authored through MB post/send (including messaging
+`ping`), Bus publish, or
+every manual `meet tell` have a hard 1024 UTF-8-byte limit.
+Admission rejects an oversized body before append; it never truncates or
+auto-splits because that can break commands/links and parts can interleave or
+partially deliver. Prefer a stable shared reference. If none exists, manually
+emit <=1024-byte numbered parts with one correlation token:
+
+```text
+[ref:abc 1/3] request: …; priority: P0; owner: conductor
+[ref:abc 2/3] …
+[ref:abc 3/3 END] …
+```
+
+The receiver waits for `END` before acknowledging the whole message and reports
+missing parts. Generated meeting turns, transcripts, imported artifacts, inbox
+rendering, and historical records are not subject to this quick-message cap.
+
 Until the assignment deadline, repeat this one-batch wait and process its
 result before re-entering:
 

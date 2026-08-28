@@ -116,6 +116,19 @@ decision, priority, owner or expected response, and a stable reachable reference
 or full analysis, and never send only an inaccessible temporary path; summarize
 enough for safe routing.
 
+MB post/send (including messaging `ping`), Bus publish, and every manual `meet tell` reject a
+single authored body over 1024 UTF-8 bytes before append. They never truncate or
+auto-split because a split can break commands/links and interleave or partially
+deliver. Prefer the stable reference above. If none is shared, manually send
+numbered parts, each at most 1024 bytes, with one correlation token:
+
+    [ref:abc 1/3] request/priority/owner …
+    [ref:abc 2/3] …
+    [ref:abc 3/3 END] …
+
+The first part carries request, priority, and owner. The receiver waits for
+`END` before acknowledging the whole message and reports missing parts.
+
 An acknowledgement is an explicit reply receipt, not a cursor receipt. Say:
 "received by sentinel and routed; supervisor has not yet read this; owner/action/ETA".
 When the assignment expires, hand off processed count, outstanding items, last

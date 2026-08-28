@@ -274,6 +274,8 @@ func TestInboxHelpTeachesBoundedSentinelResponseAndIdentitySafety(t *testing.T) 
 		"agents show NAME",
 		"stable repo-relative",
 		"Separate concurrent topic",
+		"1024 UTF-8",
+		"never truncate or auto-split",
 		"acknowledge receipt with owner, action, and ETA",
 		"Never read as another identity",
 		"monitoring ENDED",

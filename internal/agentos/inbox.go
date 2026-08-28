@@ -80,6 +80,12 @@ watchers need separate registered names. Keep messages short: request/decision,
 priority, owner/expected response, and a stable repo-relative + commit/issue/
 room/artifact reference; never send only an inaccessible temporary path.
 
+MB post/send (including messaging ping), Bus publish, and every manual Meet tell
+accept at most 1024 UTF-8
+bytes per authored body and never truncate or auto-split. If no stable shared
+reference exists, manually number <=1024-byte parts with one correlation token;
+the receiver waits for END and reports missing parts.
+
 A sentinel that exits must say monitoring ENDED, why/deadline, last processed
 provenance, outstanding status, and who resumes coverage. It must never promise
 continued monitoring after its process or assignment ends.
