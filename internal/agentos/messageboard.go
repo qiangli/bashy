@@ -44,6 +44,10 @@ func wireMessageBoard() {
 	// extends it), so the board and the rest of bashy agree on what counts as
 	// an agent rather than keeping a second copy that can drift.
 	bus.DetectHarness = fleet.DetectTool
+	// One receive surface, one turn-boundary hook. The callback is a read-through
+	// view over MB/Meet/role stores; pkg/bus remains the owner of pending delivery
+	// and no additional spool is introduced.
+	bus.PrepareTurnInbox = unifiedTurnPreamble
 }
 
 // notifyMeetInvitation is the write half of meet's message-board seam. The

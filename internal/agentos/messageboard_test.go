@@ -33,6 +33,7 @@ func TestWireMessageBoard_ConnectsEveryFleetSeam(t *testing.T) {
 		// The identity seam. Unwired, `bashy mb` misattributes every post made
 		// from a third-party TUI to whoever owns the login session.
 		{"DetectHarness", func() { bus.DetectHarness = nil }, func() bool { return bus.DetectHarness != nil }},
+		{"PrepareTurnInbox", func() { bus.PrepareTurnInbox = nil }, func() bool { return bus.PrepareTurnInbox != nil }},
 	} {
 		t.Run(h.name, func(t *testing.T) {
 			h.set()

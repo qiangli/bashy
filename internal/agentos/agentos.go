@@ -185,6 +185,10 @@ func Preamble() string {
 func init() {
 	os.Setenv("BASHY_AGENT_MANIFEST",
 		`v1 shell=agentic first-hop="bashy context --json" skills="bashy skills list" guide="bashy skills show bashy|bashy bashy"`)
+	// Chat, weave, meet and foreman all enter coreutils/chat without passing the
+	// communication CLI dispatcher. Wire the receive hook at process startup so
+	// every Bashy-owned session gets the same turn-boundary inbox view.
+	wireMessageBoard()
 }
 
 // maybeAdvertiseSkillHint is L1 of the advertisement ladder: when an
@@ -258,7 +262,7 @@ func newBusFrontDoorCmd(name string) (*cobra.Command, string, bool) {
 	case "mb", "messages":
 		return bus.NewMessageBoardCmd(), "mb", true
 	case "inbox":
-		return bus.NewInboxCmd(), "inbox", true
+		return newUnifiedInboxCmd(), "inbox", true
 	case "notify":
 		return bus.NewNotifyCmd(), "notify", true
 	default:
