@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"hash/fnv"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -199,6 +202,63 @@ func TestInboxSourceFingerprintMovesForEverySource(t *testing.T) {
 	}
 }
 
+func TestInboxChangeNotifierSeesNestedMeetWrite(t *testing.T) {
+	mbDir, roomDir, meetDir := t.TempDir(), t.TempDir(), t.TempDir()
+	t.Setenv("BASHY_MB_DIR", mbDir)
+	t.Setenv("BASHY_ROOM_DIR", roomDir)
+	t.Setenv("BASHY_MEET_DIR", meetDir)
+	roomPath := filepath.Join(meetDir, "standing-room")
+	if err := os.Mkdir(roomPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	transcript := filepath.Join(roomPath, "transcript.jsonl")
+	if err := os.WriteFile(transcript, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	changes := newInboxChangeNotifier()
+	t.Cleanup(changes.close)
+	before, _ := changes.fingerprint("")
+	if err := os.WriteFile(transcript, []byte("new durable event\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	waitForInboxGeneration(t, changes, before)
+}
+
+func TestInboxChangeNotifierArmsStoreCreatedAfterStart(t *testing.T) {
+	parent := t.TempDir()
+	t.Setenv("BASHY_MB_DIR", filepath.Join(parent, "mb"))
+	t.Setenv("BASHY_ROOM_DIR", filepath.Join(parent, "room"))
+	t.Setenv("BASHY_MEET_DIR", filepath.Join(parent, "meet"))
+	changes := newInboxChangeNotifier()
+	t.Cleanup(changes.close)
+	before, _ := changes.fingerprint("")
+
+	roomPath := filepath.Join(parent, "meet", "new-room")
+	if err := os.MkdirAll(roomPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(roomPath, "transcript.jsonl"), []byte("first event\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	waitForInboxGeneration(t, changes, before)
+}
+
+func waitForInboxGeneration(t *testing.T, changes *inboxChangeNotifier, before uint64) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+		_ = changes.wait(ctx, 250*time.Millisecond)
+		cancel()
+		after, _ := changes.fingerprint("")
+		if after != before {
+			return
+		}
+	}
+	t.Fatal("filesystem change did not advance inbox notification generation")
+}
+
 func TestInboxWatchWaitIsCanceledPromptly(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -221,6 +281,56 @@ func BenchmarkInboxSourcesFingerprint(b *testing.B) {
 			b.Fatal("fingerprint unavailable")
 		}
 	}
+}
+
+func BenchmarkInboxIdleFingerprintLargeMeetStore(b *testing.B) {
+	mbDir, roomDir, meetDir := b.TempDir(), b.TempDir(), b.TempDir()
+	b.Setenv("BASHY_MB_DIR", mbDir)
+	b.Setenv("BASHY_ROOM_DIR", roomDir)
+	b.Setenv("BASHY_MEET_DIR", meetDir)
+	// Store-shaped fixture measured on the affected host: 92 Meet rooms / 559
+	// files plus roughly 110 room routing files. History bytes do not dominate
+	// the metadata walk; retained directory entries do.
+	for _, subdir := range []string{"pending", "subs"} {
+		path := filepath.Join(roomDir, subdir)
+		if err := os.Mkdir(path, 0o700); err != nil {
+			b.Fatal(err)
+		}
+		for i := 0; i < 55; i++ {
+			if err := os.WriteFile(filepath.Join(path, fmt.Sprintf("route-%03d", i)), nil, 0o600); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+	for i := 0; i < 92; i++ {
+		roomPath := filepath.Join(meetDir, fmt.Sprintf("room-%05d", i))
+		if err := os.Mkdir(roomPath, 0o700); err != nil {
+			b.Fatal(err)
+		}
+		for _, name := range []string{"state.json", "transcript.jsonl", "lease.json", "summary.json", "members.json", "notes.jsonl"} {
+			if err := os.WriteFile(filepath.Join(roomPath, name), nil, 0o600); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+
+	b.Run("legacy-recursive-stat", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			if _, ok := inboxSourcesFingerprint("alice"); !ok {
+				b.Fatal("fingerprint unavailable")
+			}
+		}
+	})
+	b.Run("notification-generation", func(b *testing.B) {
+		changes := newInboxChangeNotifier()
+		b.Cleanup(changes.close)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			if _, ok := changes.fingerprint("alice"); !ok {
+				b.Fatal("fingerprint unavailable")
+			}
+		}
+	})
 }
 
 func BenchmarkInboxFullSnapshot(b *testing.B) {

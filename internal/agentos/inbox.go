@@ -165,17 +165,21 @@ func resolveInboxReader(as string) (string, error) {
 }
 
 func runUnifiedInbox(ctx context.Context, out, errOut io.Writer, reader string, limit int, peek, jsonOut, watch bool, bound time.Duration) error {
-	return runUnifiedInboxWithPoll(ctx, out, errOut, reader, limit, peek, jsonOut, watch, bound, defaultInboxPollRuntime())
+	return runUnifiedInboxWithPoll(ctx, out, errOut, reader, limit, peek, jsonOut, watch, bound, defaultInboxPollRuntime(watch || bound > 0))
 }
 
 func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader string, limit int, peek, jsonOut, watch bool, bound time.Duration, poll inboxPollRuntime) error {
+	if poll.close != nil {
+		defer poll.close()
+	}
 	deadline := time.Time{}
 	if bound > 0 {
 		deadline = poll.now().Add(bound)
 	}
 	// Reading every source is expensive enough that doing it on a fixed short
-	// timer saturates a core on an idle host; the gate keeps the loop honest by
-	// checking cheap stat metadata first. See inbox_poll.go.
+	// timer saturates a core on an idle host; the gate follows native store
+	// notifications and periodically rescans as a correctness backstop. See
+	// inbox_poll.go.
 	gate := &inboxPollGate{reader: reader, fingerprint: poll.fingerprint, fullRescan: poll.fullRescan}
 	interval := poll.min
 	for {
@@ -230,7 +234,7 @@ func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader 
 			return err
 		}
 		// Back off while nothing is arriving. Delivery latency stays bounded
-		// by inboxPollMax; idle cost stays bounded by the stat sweep.
+		// by inboxPollMax; an idle timeout only reads an atomic generation.
 		interval *= 2
 		if interval > poll.max {
 			interval = poll.max
