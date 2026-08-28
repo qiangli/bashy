@@ -111,6 +111,10 @@ coordination, host/resource monitoring, direct-work supervision, verification, c
 continuity updates. They are examples, not a fixed Sprint or Scrum checklist. Re-read and
 refresh the TODO at the end of the turn so the next turn starts from current evidence.
 
+Then run `bashy inbox --as <your-agent-name>` and follow
+`bashy skills show check-messages`; it includes public MB, standing Meet boards,
+Bus input, and only role backlog this identity currently holds.
+
 - **Choose the ownership layer first.** Give a conductor a project/workstream plus acceptance
   criteria and an escalation channel, work directly, or delegate a bounded independent task
   to a steward-owned worker. A conductor chooses its own fleet.
@@ -221,17 +225,16 @@ of unattended agents defaults to optimism. You are the evidence discipline the t
 
 2. **Read the seat's mail, then reconcile the host.**
 
-       bashy steward inbox      # sent TO the seat — including your predecessors'
-       bashy mb                 # the public board, sent to everyone or to you
+       bashy inbox --as <your-agent-name>  # unified personal + authorized seat input
 
    Mail first, because a message read after you plan has already cost you the
    work it was trying to prevent. Somebody may have taken the thing you are
    about to start, or found the fault you are about to hunt.
 
-   `steward inbox` is the SEAT's mail, not yours: everything sent while a
-   predecessor held it is here too. That is what addressing a role buys — a
-   handover does not lose the mail. `steward status` shows an unread count, so
-   you do not have to remember to ask.
+   The unified view includes retained SEAT mail only for the current holder:
+   everything sent while a predecessor held it remains available after a real
+   handover, while unrelated readers cannot drain its cursor. `steward status`
+   still reports the seat count.
 
    Then reconcile: read the journal/board and conductor checkpoints, and check
    disk, memory, CPU/load and active containers before authorizing new work.

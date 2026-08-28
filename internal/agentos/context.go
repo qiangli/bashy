@@ -137,13 +137,14 @@ type contextCaps struct {
 	// and contribution-shaped, kb is per-host and claim-shaped.
 	//
 	// MessageBoard (mb / mb post / mb send) is the host's shared append-only
-	// board: how an agent reaches a human or a peer mid-task, and how it finds
-	// out something was said to it.
+	// board and public send/history surface. UnifiedInbox is the receive-side
+	// read-through view across MB, Meet, Bus, and authorized role mail.
 	//
 	// Todo (todo list/add/start/done) is the work list, scoped automatically the
 	// way kb is — the repo's when in one, the host's otherwise.
 	KnowledgeBase bool `json:"knowledge_base"`
 	MessageBoard  bool `json:"message_board"`
+	UnifiedInbox  bool `json:"unified_inbox"`
 	Todo          bool `json:"todo"`
 	// CoachReflex: the LLM-free loop-detection reflex is auto-attached to every
 	// weave/invoke/delegate run (off with BASHY_NO_COACH). Advertised so an agent
@@ -260,6 +261,7 @@ func fillContext(report contextReport, bashyPath string) contextReport {
 		KnowledgeGraph:    true,
 		KnowledgeBase:     true,
 		MessageBoard:      true,
+		UnifiedInbox:      true,
 		Todo:              true,
 		CoachReflex:       chat.ReflexEnabled(),
 	}
@@ -278,7 +280,7 @@ func fillContext(report contextReport, bashyPath string) contextReport {
 		//
 		// So: first entry, both halves of the loop, and the read comes before
 		// the write because that is the order the work happens in.
-		// kb / mb / todo lead this list as a SET, and the grouping is the point:
+		// kb / inbox / todo lead this list as a SET, and the grouping is the point:
 		// they are the three things that do not survive a session boundary —
 		// what is KNOWN, what is being SAID, and what must be DONE. Every other
 		// verb here helps do the work; these three are the state the work
@@ -287,7 +289,7 @@ func fillContext(report contextReport, bashyPath string) contextReport {
 		{Purpose: "WHAT IS ALREADY KNOWN about this task — run BEFORE starting; other agents on this host left it for you", Command: bashyPath + " kb search QUERY"},
 		{Purpose: "same question across EVERY memory ring (kb + capabilities), one envelope", Command: bashyPath + " kb recall QUERY"},
 		{Purpose: "write back what THIS task taught — run AFTER finishing; validate/correct what you consulted, never blind-append", Command: bashyPath + " kb retro"},
-		{Purpose: "WHAT IS BEING SAID on this host — the shared message board every agent and human reads; check for messages addressed to you", Command: bashyPath + " mb"},
+		{Purpose: "WHAT NEEDS YOUR ATTENTION across MB, Meet, Bus, and authorized role mail — read/respond before planning", Command: bashyPath + " inbox"},
 		{Purpose: "say something to everyone (or one agent: mb send AGENT ...) — how you reach a human or a peer mid-task", Command: bashyPath + " mb post MESSAGE"},
 		{Purpose: "WHAT MUST BE DONE here — the work list, repo-scoped automatically; read it before deciding what to do next", Command: bashyPath + " todo list"},
 		{Purpose: "record work so it outlives this session (todo start/done to move it)", Command: bashyPath + " todo add TITLE"},
@@ -299,6 +301,7 @@ func fillContext(report contextReport, bashyPath string) contextReport {
 		{Purpose: "what code is coupled to a symbol (skip the grep dance)", Command: bashyPath + " graph impact SYMBOL"},
 		{Purpose: "recall/leave shared repo knowledge for other agents", Command: bashyPath + " graph recall QUERY"},
 		{Purpose: "skills applicable on this host (read one: skills show NAME; run attested: skills run NAME)", Command: bashyPath + " skills list"},
+		{Purpose: "canonical read/respond/monitor protocol for agent communication", Command: bashyPath + " skills show check-messages"},
 	}
 	report.Notes = []string{
 		"Replaces first-hop probes: `system` = uname/hostname/id, `tools` = which/tool discovery, `environment` = env — an agent need not run env/uname/hostname/id/which itself.",

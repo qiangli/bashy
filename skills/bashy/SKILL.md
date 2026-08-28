@@ -1,6 +1,6 @@
 ---
 name: bashy
-description: Drive bashy, the agentic shell — a drop-in Bash 5.3 with agent-native extensions. Use whenever bashy is the shell you are running in (or is on PATH) to read what this host ALREADY KNOWS about your task before starting it, see what other agents and humans are saying, know what work is owed here, cut probing round-trips, preview destructive commands, run with structured result envelopes, navigate code without grep dances, and use environment-gated verified skills. Open every session with `bashy context --json`, then the three durable stores — `bashy kb search "<your task>"` (what is known), `bashy mb` (what is being said), `bashy todo list` (what must be done) — and close it with `bashy kb retro`.
+description: Drive bashy, the agentic shell — a drop-in Bash 5.3 with agent-native extensions. Use whenever bashy is the shell you are running in (or is on PATH) to read what this host ALREADY KNOWS about your task before starting it, see what other agents and humans are saying, know what work is owed here, cut probing round-trips, preview destructive commands, run with structured result envelopes, navigate code without grep dances, and use environment-gated verified skills. Open every session with `bashy context --json`, then `bashy kb search "<your task>"`, `bashy inbox`, and `bashy todo list`; close with `bashy kb retro`.
 compatibility: requires the bashy binary (an agentic host shell); all verbs also work as `bashy <verb>` from any shell
 ---
 
@@ -22,10 +22,10 @@ One call replaces the usual probe dance (`uname`/`hostname`/`id`/`env`/
 host**, and a recommended-commands list. Use the reported `bashy_path`
 for later calls.
 
-## Second hop: the three durable stores (kb · mb · todo)
+## Second hop: durable state (kb · inbox · todo)
 
 Everything else on this page helps you *do* the work. These three are the
-state the work happens in — **what is known, what is being said, and what
+state the work happens in — **what is known, what needs attention, and what
 must be done** — and they are the only things that outlive your session.
 Read them before starting; write to them before you finish. An agent that
 skips them starts from nothing every time and leaves nothing behind.
@@ -49,12 +49,12 @@ contribute it — `bashy kb add --type gotcha --title "…" --description
 "what + WHEN this applies"` — distilled strategy, not a transcript, with
 failures phrased as guardrails.
 
-**`mb` — what is being SAID.** The host's shared, append-only message
-board that every agent and human on this machine reads. It is how you
-reach a person mid-task, and how you find out something was addressed to
-you while you were busy.
+**`inbox` — what needs your ATTENTION.** One read-through view over MB,
+standing Meet boards, Bus notifications, and authorized role mail. MB remains
+the public send/history surface; inbox prevents transport-by-transport polling.
 
-    bashy mb                     # read the board
+    bashy inbox                  # read every inbound source
+    bashy skills show check-messages
     bashy mb post "<message>"    # to everyone
     bashy mb send <agent> "…"    # to one agent, or a selector
 
@@ -119,7 +119,7 @@ way kb is: this repo's when you are in one, the host's otherwise.
 ## Rules of thumb
 
 1. `bashy context --json` first; trust it over your own probes.
-2. **Open with `kb search` + `mb` + `todo list`; close with `kb retro`.**
+2. **Open with `kb search` + `inbox` + `todo list`; close with `kb retro`.**
    If you remember three verbs from this page, remember those. Everything
    else here helps you do the task; only these tell you whether it is
    already solved, whether someone is talking to you about it, and what

@@ -25,6 +25,7 @@ func (shortInboxWriter) Write(p []byte) (int, error) { return len(p) - 1, nil }
 
 func TestInboxAggregatesBoardAndBusWithoutConsumingOnPeek(t *testing.T) {
 	isolateUnifiedInbox(t)
+	t.Setenv("BASHY_PRINCIPAL", "dhnt:agent/alice")
 
 	if err := bus.PostMessage(bus.Post{From: "human", To: "alice", Topic: "harness", Body: "board message"}); err != nil {
 		t.Fatal(err)
@@ -254,5 +255,201 @@ func TestInboxRefusesWatchWithLimit(t *testing.T) {
 	cmd.SetArgs([]string{"--as", "alice", "--watch", "--limit", "1"})
 	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "cannot be combined") {
 		t.Fatalf("watch+limit error = %v", err)
+	}
+}
+
+func TestInboxHelpTeachesBoundedSentinelResponseAndIdentitySafety(t *testing.T) {
+	cmd := newUnifiedInboxCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	help := out.String()
+	for _, behavior := range []string{
+		"--as NAME --wait 60s",
+		"human or sidecar stream",
+		"distinct registered Bashy",
+		"agents show NAME",
+		"stable repo-relative",
+		"Separate concurrent topic",
+		"acknowledge receipt with owner, action, and ETA",
+		"Never read as another identity",
+		"monitoring ENDED",
+		"continued monitoring after",
+		"skills show check-messages",
+	} {
+		if !strings.Contains(help, behavior) {
+			t.Fatalf("inbox help does not teach %q:\n%s", behavior, help)
+		}
+	}
+}
+
+func TestSentinelReadAdvancesOnlySentinelCursor(t *testing.T) {
+	isolateUnifiedInbox(t)
+	if err := bus.PostMessage(bus.Post{From: "human", To: "sentinel-agent", Body: "route this request"}); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := runUnifiedInbox(context.Background(), &out, io.Discard, "sentinel-agent", 0, false, false, false, 0); err != nil {
+		t.Fatal(err)
+	}
+	if bus.SeenSeq("sentinel-agent") == 0 {
+		t.Fatal("sentinel did not advance its own cursor")
+	}
+	if got := bus.SeenSeq("supervisor-agent"); got != 0 {
+		t.Fatalf("sentinel advanced supervisor cursor to %d", got)
+	}
+	if directed, _, _, err := bus.Unseen("supervisor-agent", 0); err != nil {
+		t.Fatal(err)
+	} else if len(directed) != 0 {
+		t.Fatalf("sentinel-directed post became supervisor-private input: %+v", directed)
+	}
+}
+
+func TestInboxRejectsAuthenticatedAgentBorrowingAnotherCursor(t *testing.T) {
+	isolateUnifiedInbox(t)
+	t.Setenv("BASHY_PRINCIPAL", "dhnt:agent/supervisor-agent")
+	cmd := newUnifiedInboxCmd()
+	cmd.SetArgs([]string{"--as", "sentinel-agent", "--peek"})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "cannot read as") {
+		t.Fatalf("authenticated cross-identity read error = %v", err)
+	}
+	if bus.SeenSeq("sentinel-agent") != 0 || bus.SeenSeq("supervisor-agent") != 0 {
+		t.Fatal("rejected cross-identity read advanced a cursor")
+	}
+}
+
+func TestInboxRejectsUnregisteredExplicitIdentity(t *testing.T) {
+	isolateUnifiedInbox(t)
+	cmd := newUnifiedInboxCmd()
+	cmd.SetArgs([]string{"--as", "not-a-registered-agent-zz", "--peek"})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "not a registered Bashy agent") {
+		t.Fatalf("unregistered identity error = %v", err)
+	}
+}
+
+func TestInboxExternalRoleAliasCannotDrainRolePending(t *testing.T) {
+	isolateUnifiedInbox(t)
+	const topic = "steward.host-test"
+	prior := bus.HostRoles
+	bus.HostRoles = func() []bus.HostRole {
+		return []bus.HostRole{{Label: "steward", Topic: topic, Holder: "holder-agent"}}
+	}
+	t.Cleanup(func() { bus.HostRoles = prior })
+	if _, err := bus.EnsureRoleInbox(topic); err != nil {
+		t.Fatal(err)
+	}
+	if err := bus.Publish(bus.Notification{Principal: "human", To: topic, Body: "held-role-private"}); err != nil {
+		t.Fatal(err)
+	}
+	cmd := newUnifiedInboxCmd()
+	cmd.SetArgs([]string{"--as", "steward", "--peek"})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "not a registered Bashy agent") {
+		t.Fatalf("external role read error = %v", err)
+	}
+	snapshot, err := bus.SnapshotInbox(topic)
+	if err != nil || len(snapshot.Items) != 1 {
+		t.Fatalf("rejected role alias drained pending: items=%d err=%v", len(snapshot.Items), err)
+	}
+}
+
+func TestInboxCollapsesMeetSeedOnlyByStructuredMBOriginAndAcknowledgesBoth(t *testing.T) {
+	isolateUnifiedInbox(t)
+	reader := "codex-gpt5.6-sol"
+	wireMeet()
+	if err := bus.PostMessage(bus.Post{From: "human", To: reader, Topic: "mb", Body: "INBOX_E2E_DEDUP"}); err != nil {
+		t.Fatal(err)
+	}
+	st, err := meet.Create(meet.CreateOptions{Topic: "seeded", Board: true, Participants: []string{reader}, Human: "operator"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := meet.SeedBoardFromMB(st, []int64{1}); err != nil {
+		t.Fatal(err)
+	}
+	// Same prose without provenance is an independent message and must survive.
+	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: "human", Kind: "message", Text: "INBOX_E2E_DEDUP"}); err != nil {
+		t.Fatal(err)
+	}
+	batch, err := snapshotUnifiedInbox(reader, 0, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var original, independent, copied int
+	for _, event := range batch.events {
+		if event.Source == "mb" && event.Seq == 1 {
+			original++
+		}
+		if event.Source == "meet" && event.Body == "INBOX_E2E_DEDUP" && event.Origin == nil {
+			independent++
+		}
+		if event.Source == "meet" && event.Origin != nil && event.Origin.Source == "mb" && event.Origin.Seq == 1 {
+			copied++
+		}
+	}
+	if original != 1 || independent != 1 || copied != 0 {
+		t.Fatalf("provenance collapse = original %d independent %d copied %d; events=%+v", original, independent, copied, batch.events)
+	}
+	for _, ack := range batch.acks {
+		if err := ack(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if bus.SeenSeq(reader) == 0 || meet.SeenSeq(st.ID, reader) != 2 {
+		t.Fatalf("both source watermarks not acknowledged: mb=%d meet=%d", bus.SeenSeq(reader), meet.SeenSeq(st.ID, reader))
+	}
+}
+
+func TestInboxLegacyRolePendingIsVisibleOnlyToCurrentHolder(t *testing.T) {
+	isolateUnifiedInbox(t)
+	const roleTopic = "conductor.83"
+	prior := bus.HostRoles
+	bus.HostRoles = func() []bus.HostRole {
+		return []bus.HostRole{{Label: "conductor:83", Topic: roleTopic, Holder: "holder-agent"}}
+	}
+	t.Cleanup(func() { bus.HostRoles = prior })
+	if _, err := bus.EnsureRoleInbox(roleTopic); err != nil {
+		t.Fatal(err)
+	}
+	if err := bus.Publish(bus.Notification{Principal: "human", To: roleTopic, Body: "seat-only backlog"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bus.ResolveFor(roleTopic); err != nil {
+		t.Fatal(err)
+	}
+	batch, err := snapshotUnifiedInbox("unrelated-agent", 0, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range batch.events {
+		if strings.Contains(event.Body, "seat-only backlog") {
+			t.Fatalf("unrelated agent saw role backlog: %+v", event)
+		}
+	}
+	before, err := bus.SnapshotInbox(roleTopic)
+	if err != nil || len(before.Items) != 1 {
+		t.Fatalf("unrelated read advanced role backlog: items=%d err=%v", len(before.Items), err)
+	}
+	holder, err := snapshotUnifiedInbox("holder-agent", 0, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, event := range holder.events {
+		found = found || strings.Contains(event.Body, "seat-only backlog")
+	}
+	if !found {
+		t.Fatalf("current holder did not receive role backlog: %+v", holder.events)
+	}
+	for _, ack := range holder.acks {
+		if err := ack(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	after, err := bus.SnapshotInbox(roleTopic)
+	if err != nil || len(after.Items) != 0 {
+		t.Fatalf("holder did not advance role backlog: items=%d err=%v", len(after.Items), err)
 	}
 }

@@ -182,6 +182,10 @@ rebuild the turn's TODO before inspecting the sprint, queue, workers, or gate. H
 is always item one because it can replace the assignment and therefore rewrite every item
 after it.
 
+Then run `bashy inbox --as <your-agent-name>` and follow
+`bashy skills show check-messages` before inspecting the fleet. This includes
+the conductor role backlog only while this identity holds its live lease.
+
 Derive the rest of the TODO from this workstream's contract and live state. Depending on
 the assignment it may include reviewing and merging submissions, reclaiming workspaces,
 monitoring an external run, steering or reassigning workers, running gates, and refreshing

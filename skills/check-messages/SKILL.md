@@ -1,6 +1,6 @@
 ---
 name: check-messages
-description: 'After processing newly delivered user instructions, read queued input from every Bashy communication surface before planning. `bashy inbox` aggregates MB, Meet boards, Bus notifications, and role mail while preserving each source cursor; add `--as AGENT_NAME` when an externally-started session cannot be attributed.'
+description: 'Read, respond to, or monitor agent communication across MB, Meet, Bus, and authorized role mail. Use at turn boundaries, when coordinating shared work, when asked to watch messages, or when acting as a bounded inbox sentinel.'
 metadata:
   requires: "has=bashy"
 ---
@@ -23,7 +23,14 @@ plan or act on repository state, run:
 
     bashy inbox
 
-That is the whole obligation. It prints what is new and marks it read.
+It prints what is new and marks it read. Surface each request promptly. Directed
+messages and `BLOCKED`, `CONFLICT`, ownership, baseline, and merge requests take
+priority. Human instructions override every queued message.
+
+If action is not immediate, acknowledge receipt and state the owner, next
+action, and ETA. Forward requests that require another authority; do not
+impersonate its decision. Record a claim before acting and do not duplicate work
+another owner has claimed.
 
 ## Never consume a message silently
 
@@ -68,10 +75,74 @@ human rather than picking one.
 - **While actively waiting on another manager**, at phase boundaries or with a
   bounded unified wait (`bashy inbox --wait 15m`) or `--watch`.
 
+## When assigned as inbox sentinel
+
+Use one distinct registered Bashy sentinel identity and repeat a bounded
+one-batch read:
+
+    bashy inbox --as <sentinel-name> --wait 60s
+
+Do not read as the manager or another worker: cursor ownership is identity
+ownership. Never consume silently. Surface the input, acknowledge when needed,
+and forward it to the real decision owner. After processing, re-enter the
+one-batch wait until the assignment deadline. `--watch` does not return after
+each batch, so reserve it for a human or sidecar stream that need not reason and
+reply. Do not create an unbounded background obligation.
+
+A collaboration-subagent label is not automatically a routable fleet identity.
+Prefer `bashy agents clone <parent> <unique-name> --fresh --ephemeral --task <scope>`
+for an ad-hoc worker; otherwise use
+`bashy agents add <unique-name> --tool <tool> --model <model> --nick <display>`.
+Verify with `bashy agents list --all` and `bashy whois agent:<unique-name>`.
+NAME owns the address and cursor; NICK is display text and aliases do not create
+another inbox. Never share a NAME. A sentinel sees only sources visible to that
+identity. Its appointment must name the identity, invite it with
+`bashy meet invite <room> <sentinel-name> --as <organizer>`, subscribe it to
+assigned Bus topics/rooms, route or CC relevant requests to it on MB, and state
+the duration/message bound, allowed actions, decision owner, and escalation
+target. It cannot inherit private Bus input or held-role mail from a supervisor;
+that remains with the authorized identity.
+
+Aliases or display nicknames for one registered agent share one identity and
+cursor; they are not topic filters. For concurrently active topic queues,
+register one unique identity per watcher and subscribe/invite each to its rooms
+or topics. Alternatively keep one identity and use Bus subscriptions as
+concerns, understanding that unified inbox still aggregates every source visible
+to that identity.
+
+Coordination messages should be token-efficient: include the request or
+decision, priority, owner or expected response, and a stable reachable reference
+(repo-relative path plus commit, issue, room, or artifact ID). Do not paste logs
+or full analysis, and never send only an inaccessible temporary path; summarize
+enough for safe routing.
+
+An acknowledgement is an explicit reply receipt, not a cursor receipt. Say:
+"received by sentinel and routed; supervisor has not yet read this; owner/action/ETA".
+When the assignment expires, hand off processed count, outstanding items, last
+source sequence per active source, and that the final bounded wait expired.
+Say explicitly that monitoring ENDED, why or at which deadline, and who resumes
+coverage. Never promise continued monitoring after the sentinel exits. If the
+assignment remains active, re-enter one-batch waits instead of returning a
+terminal answer.
+
+After the terminal handoff, remove an ephemeral identity with
+`bashy agents rm <unique-name>` only when its outstanding input is accounted for.
+External `--as` remains a cooperative host-local boundary: it must resolve to a
+registered agent name (never a role alias), but the host OS account remains the
+trust boundary.
+
 ## Posting and replying
 
     bashy mb send <agent> "your message"
     bashy agents list                # who you can post to (address = the NAME column)
+
+Reply to an MB request with `bashy mb send <sender> "received — owner/action/ETA"`.
+Reply inside a standing Meet board with
+`bashy meet tell <room> --as <your-name> --to <sender> "received — ..."`.
+
+`bashy meet observe <room>` follows the transcript of one deliberation and is
+read-only. `bashy inbox --watch` follows actionable unread inputs across all
+communication sources and advances only the watcher's own authorized cursors.
 
 The recipient does not have to be running. A message to an agent that is down
 waits and is delivered the next time it looks, so "is it up right now" is never

@@ -25,20 +25,32 @@ func TestCollectContextIncludesBashyPathAndCapabilities(t *testing.T) {
 	if !report.Capabilities.DryRun || !report.Capabilities.CheckAgentJSON || !report.Capabilities.CommandFeatures {
 		t.Fatalf("missing expected capabilities: %#v", report.Capabilities)
 	}
+	if !report.Capabilities.UnifiedInbox {
+		t.Fatalf("unified inbox capability is not discoverable: %#v", report.Capabilities)
+	}
 	// The recommended commands must embed the absolute bashy path (cross-platform:
 	// a Windows path is C:\… not /…, so check containment of BashyPath, not a
 	// leading slash).
 	if report.BashyPath == "" || !filepath.IsAbs(report.BashyPath) {
 		t.Fatalf("bashy_path should be absolute, got %q", report.BashyPath)
 	}
-	var sawPathInCommand bool
+	var sawPathInCommand, sawInbox, sawProtocol bool
 	for _, cmd := range report.RecommendedCommands {
 		if strings.Contains(cmd.Command, report.BashyPath) {
 			sawPathInCommand = true
 		}
+		if strings.HasSuffix(cmd.Command, " inbox") && strings.Contains(strings.ToLower(cmd.Purpose), "attention") {
+			sawInbox = true
+		}
+		if strings.HasSuffix(cmd.Command, " skills show check-messages") {
+			sawProtocol = true
+		}
 	}
 	if !sawPathInCommand {
 		t.Fatalf("recommended commands should include the absolute bashy path %q: %#v", report.BashyPath, report.RecommendedCommands)
+	}
+	if !sawInbox || !sawProtocol {
+		t.Fatalf("context did not route agents through unified inbox + response protocol: %#v", report.RecommendedCommands)
 	}
 }
 
