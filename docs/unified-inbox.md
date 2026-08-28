@@ -16,6 +16,15 @@ rendered source watermark. `--peek` performs no acknowledgement. A failed
 render leaves every source unread. `--limit` also leaves a capped source unread
 rather than silently consuming records it omitted.
 
+POSIX `mail`/`mailx` and `talk` are deliberately separate today: their default
+local mailbox and local interactive transports must remain unchanged for
+conformance. After Bash++ support and the Yoke agentic feature layer land, add
+an explicit opt-in bridge under the existing agentic controls
+(`--agentic`/`BASHY_AGENTIC=1`). With that gate enabled, those applets may
+publish and receive through this view while retaining source provenance
+(`mailx` or `talk`); with it disabled or in POSIX mode, no bridge is active.
+Do not silently infer or enable this integration.
+
 `--wait DUR` waits for one batch. `--watch` follows all sources until
 interrupted; `--watch --wait DUR` gives it a total bound. `--json` emits
 `bashy-inbox-v1` NDJSON with source, source sequence, sender, recipient, topic,

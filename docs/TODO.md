@@ -58,6 +58,14 @@
 
 ## Remaining Work — By Priority
 
+### Post-Bash++ / Yoke agentic communication bridge
+
+- [ ] Under the explicit agentic feature gate only, bridge the pure-Go POSIX
+      `mail`/`mailx` and `talk` applets into `bashy inbox`, preserving their
+      source provenance and local native stores/transports. Default and POSIX
+      behavior must remain unchanged. Implement after Bash++ and the Yoke
+      agentic feature layer; see `docs/unified-inbox.md`.
+
 ### Development-only differential conformance selection
 
 - [ ] Build a conservative change-impact selector for future sprints: map
