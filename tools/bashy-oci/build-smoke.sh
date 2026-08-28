@@ -41,7 +41,7 @@ stage_tree() {
   git -C "$src" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
     fail "required sibling is not a git checkout: $src"
   mkdir -p "$dest"
-  # Only the four open-source build inputs enter the OCI context. In particular,
+  # Only the five open-source build inputs enter the OCI context. In particular,
   # no umbrella sibling outside this explicit list—or ignored personal/cache
   # content inside one of them—can be sent to the daemon. Include untracked,
   # non-ignored files so a worktree can test this recipe before committing it.
@@ -56,6 +56,7 @@ build_image() {
   stage_tree "$parent/coreutils" "$context/coreutils"
   stage_tree "$parent/sh" "$context/sh"
   stage_tree "$parent/readline" "$context/readline"
+  stage_tree "$parent/filebrowser" "$context/filebrowser"
 
   "$oci" build \
     --platform "$platform" \

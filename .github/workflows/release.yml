@@ -18,9 +18,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      # bashy resolves the sh engine via `replace mvdan.cc/sh/v3 => ../sh`.
-      # Clone it next door at the SHA pinned in .sibling-pins.
-      - name: Bootstrap sibling deps (../sh)
+      # Bashy resolves four direct dependencies as flat siblings. Clone each
+      # next door at its exact SHA from .sibling-pins.
+      - name: Bootstrap sibling deps (all pinned flat replaces)
         shell: bash
         env:
           # DKS source tasks intentionally skip heavyweight optional sibling

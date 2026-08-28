@@ -26,7 +26,7 @@ if [ -z "${CONTAINER_HOST:-}" ] && [ "$(uname -s)" = Darwin ]; then
   fi
 fi
 
-for path in bashy sh coreutils readline; do
+for path in bashy sh coreutils readline filebrowser; do
   [ -d "$dhnt/$path" ] || { echo "test-self-container: missing sibling $dhnt/$path" >&2; exit 2; }
 done
 "${oci[@]}" container exists "$container" && {
@@ -41,12 +41,14 @@ done
   -e GOTOOLCHAIN=auto -e "BASHY_TEST_TARGET=$target" \
   -v "$dhnt/bashy:/source/bashy:ro" -v "$dhnt/sh:/source/sh:ro" \
   -v "$dhnt/coreutils:/source/coreutils:ro" -v "$dhnt/readline:/source/readline:ro" \
+  -v "$dhnt/filebrowser:/source/filebrowser:ro" \
   "$image" bash -lc '
     cp -a /source/bashy/. /work/bashy/
-    mkdir -p /work/sh /work/coreutils /work/readline
+    mkdir -p /work/sh /work/coreutils /work/readline /work/filebrowser
     cp -a /source/sh/. /work/sh/
     cp -a /source/coreutils/. /work/coreutils/
     cp -a /source/readline/. /work/readline/
+    cp -a /source/filebrowser/. /work/filebrowser/
     cd /work/bashy
     make "$BASHY_TEST_TARGET"
   '

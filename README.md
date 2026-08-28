@@ -160,8 +160,8 @@ The traditional host-tool path also works:
 ```sh
 git clone https://github.com/qiangli/bashy
 cd bashy
-# bashy resolves the sh engine as a flat sibling. This clones it next door
-# (../sh) at the SHA pinned in .sibling-pins:
+# Bashy resolves four dependencies as flat siblings. This clones each next
+# door at the exact SHA pinned in .sibling-pins:
 ./scripts/bootstrap-siblings.sh
 make build          # -> bin/bashy
 ```

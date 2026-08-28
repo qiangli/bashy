@@ -349,4 +349,6 @@ replace go.podman.io/podman/v6 => ../coreutils/external/podman/src
 
 replace github.com/qiangli/coreutils/pkg/oci => ../coreutils/pkg/oci
 
+// The AgentOS file-management surface uses the maintained qiangli/filebrowser
+// fork. Keep it as an exact flat sibling in umbrella and standalone builds.
 replace github.com/filebrowser/filebrowser/v2 => ../filebrowser

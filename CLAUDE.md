@@ -182,20 +182,22 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
 
 ## Module wiring
 
-`go.mod` requires three flat-sibling deps, resolved by `replace`:
+`go.mod` requires four flat-sibling deps, resolved by `replace`:
 
 ```
 replace mvdan.cc/sh/v3               => ../sh
 replace github.com/qiangli/coreutils => ../coreutils
 replace github.com/ergochat/readline => ../readline
+replace github.com/filebrowser/filebrowser/v2 => ../filebrowser
 ```
 
 `../sh` is the interpreter engine; `../coreutils` is the AgentOS hub that
 supplies the pure-Go userland + code-intel verbs the `bashy` binary injects (only
 `agentos.go` imports it); `../readline` is the ergochat/readline fork the
 interactive loop uses (the module path keeps the upstream name — the flat-layout
-convention is about the sibling dir, not the module string). In a parent
-monorepo all three are submodules. In
+convention is about the sibling dir, not the module string); and `../filebrowser`
+is the maintained qiangli/filebrowser fork used by the AgentOS file-management
+surface. In a parent monorepo all four are submodules. In
 a standalone clone, run `./scripts/bootstrap-siblings.sh` — it clones each
 sibling next to this repo at the SHAs pinned in
 `.sibling-pins` (and leaves any submodule mounts alone). CI does the

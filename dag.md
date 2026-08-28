@@ -810,6 +810,7 @@ for host in "$@"; do
         sh) url=https://github.com/qiangli/sh.git ;;
         coreutils) url=https://github.com/qiangli/coreutils.git ;;
         readline) url=https://github.com/qiangli/readline.git ;;
+        filebrowser) url=https://github.com/qiangli/filebrowser.git ;;
         *) return 0 ;;
       esac
       seed_cmd=

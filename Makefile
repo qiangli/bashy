@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-build-fail-closed test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-list test-bash-fixtures test-bash-helpers dist tidy clean help
+.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-list test-bash-fixtures test-bash-helpers dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -144,8 +144,13 @@ install: build
 	go run ./tools/installbashy -bash $(BASHY) -bashy $(BIN)
 
 ## test: Run all Go tests
-test: test-build-fail-closed test-isolated-lanes
+test: test-build-fail-closed test-sibling-pins test-isolated-lanes
 	go test ./...
+
+## test-sibling-pins: Require exact pins and clone mappings for every direct
+## flat-sibling replacement in go.mod.
+test-sibling-pins:
+	scripts/test-sibling-pins.sh
 
 ## test-isolated-lanes: Verify concurrent test-lane naming and ownership wiring.
 test-isolated-lanes:

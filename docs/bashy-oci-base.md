@@ -1,6 +1,6 @@
 # Bashy OCI base
 
-The reusable Linux base builds Bashy from the four public sibling checkouts and
+The reusable Linux base builds Bashy from the five public sibling checkouts and
 runs it on a small Ubuntu/glibc runtime. It preserves the Unix launcher contract:
 `/bashy` is the native signal launcher and `/bashy.real` is its adjacent Go
 payload. The image starts as the unprivileged `bashy` user with `/bashy` as its
@@ -28,11 +28,11 @@ BASHY_OCI_PLATFORM=linux/arm64 \
 ```
 
 The build helper creates a temporary context containing only `bashy`,
-`coreutils`, `sh`, and `readline`. Those directories must be flat siblings, as
-required by `go.mod`. Use the helper from an umbrella checkout: sending the
-whole parent directory as a raw OCI context could disclose unrelated sibling
-content to the daemon. A direct `podman build` is appropriate only when its
-context has first been restricted to the same four public trees.
+`coreutils`, `sh`, `readline`, and `filebrowser`. Those directories must be flat
+siblings, as required by `go.mod`. Use the helper from an umbrella checkout:
+sending the whole parent directory as a raw OCI context could disclose unrelated
+sibling content to the daemon. A direct `podman build` is appropriate only when
+its context has first been restricted to the same five public trees.
 
 The Ubuntu runtime digest and apt snapshot are pinned. The versioned Go builder
 currently has no committed multi-architecture digest; for a release build,

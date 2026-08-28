@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ensure the sibling-path replace target in go.mod (../sh) exists on disk, by
+# Ensure every flat sibling-path replace target in go.mod exists on disk by
 # cloning the pinned commit from upstream if the sibling is missing.
 #
 # Why: bashy lives in two contexts.
@@ -104,6 +104,7 @@ repo_url() {
         sh) echo "https://github.com/qiangli/sh.git" ;;
         coreutils) echo "https://github.com/qiangli/coreutils.git" ;;
         readline) echo "https://github.com/qiangli/readline.git" ;;
+        filebrowser) echo "https://github.com/qiangli/filebrowser.git" ;;
         *) echo "bootstrap-siblings: no repo URL for '$1'" >&2; return 1 ;;
     esac
 }

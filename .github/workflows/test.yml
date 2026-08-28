@@ -16,9 +16,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      # bashy resolves the sh engine via `replace mvdan.cc/sh/v3 => ../sh`.
-      # Clone it next door at the SHA pinned in .sibling-pins.
-      - name: Bootstrap sibling deps (../sh)
+      # Bashy resolves four direct dependencies as flat siblings. Clone each
+      # next door at its exact SHA from .sibling-pins.
+      - name: Bootstrap sibling deps (all pinned flat replaces)
         shell: bash
         run: ./scripts/bootstrap-siblings.sh
       - uses: actions/setup-go@v6
@@ -100,7 +100,7 @@ jobs:
     # (86/86 -> 85/86) walked in unnoticed. An advisory gate is not a gate.
     steps:
       - uses: actions/checkout@v7
-      - name: Bootstrap sibling deps (../sh, ../coreutils, ../readline)
+      - name: Bootstrap sibling deps (all pinned flat replaces)
         shell: bash
         run: ./scripts/bootstrap-siblings.sh
       - uses: actions/setup-go@v6

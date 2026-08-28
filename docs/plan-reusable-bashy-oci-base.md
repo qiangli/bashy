@@ -26,9 +26,9 @@ each layer requires its own measured profile and offline smoke gate.
 
 ## Decisions
 
-1. Build from the flat `bashy`, `coreutils`, `sh`, and `readline` sibling
-   checkouts. The helper stages only those four open-source trees so an umbrella
-   build never sends unrelated or proprietary siblings to an OCI daemon.
+1. Build from the flat `bashy`, `coreutils`, `sh`, `readline`, and `filebrowser`
+   sibling checkouts. The helper stages only those five open-source trees so an
+   umbrella build never sends unrelated or proprietary siblings to an OCI daemon.
 2. Build through `make build-bashy`, never `go build`. Linux Bashy is a native
    pre-Go signal launcher plus an adjacent `bashy.real` Go payload; losing that
    pair loses inherited-signal semantics.

@@ -1,5 +1,6 @@
 # Pinned commit SHAs for the sibling-path replace targets in go.mod
-# (../sh, ../coreutils). scripts/bootstrap-siblings.sh reads this file and
+# (../sh, ../coreutils, ../readline, ../filebrowser).
+# scripts/bootstrap-siblings.sh reads this file and
 # clones each sibling at the listed SHA, so standalone clones of bashy (and
 # CI) build without external setup. coreutils itself replaces ../sh, which
 # resolves to the same flat sibling.
@@ -19,3 +20,4 @@
 sh=8daca0ddb0d2be52f8d6d7ab96537e9cdd69f7ac
 coreutils=366dd72990649c150e51353910fd1ce791c3c3a8
 readline=27daa737068eba5f3214863ad31f6dc0cfe4cdec
+filebrowser=0e370282a5389ffc88d923728bc97babce753c12
