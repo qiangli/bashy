@@ -1,7 +1,13 @@
 #!/bin/sh
-# GoReleaser post-build hook. It asks every actual bashy artifact for its build
-# tags, then starts the native Linux artifact and asks its HTTP server for the
-# real SPA. Any failure happens before GoReleaser reaches its publish phase.
+# GoReleaser post-build hook: start the native artifact and ask its HTTP server
+# for the REAL room, failing before GoReleaser reaches its publish phase.
+#
+# This used to also assert the meetspa build tag. The tag is gone — the room is
+# compiled in unconditionally from pkg/meet/artifact — so the only question left
+# is the one that always mattered: does the shipped binary actually serve the UI?
+# A tracked artifact directory can go stale (a source change with no SPA rebuild
+# ships yesterday's bundle), which is exactly the failure a runtime check sees
+# and a tag check never could.
 set -eu
 
 if [ "$#" -ne 2 ]; then
@@ -13,31 +19,20 @@ binary=$1
 target=$2
 
 # Developer builds on Linux and macOS put the Go program beside a tiny native
-# signal-forwarding launcher as BINARY.real. GoReleaser artifacts are direct Go
-# executables. Inspect and smoke whichever form actually contains the build
-# metadata, while still failing closed if neither carries meetspa.
+# signal-forwarding launcher as BINARY.real; GoReleaser artifacts are direct Go
+# executables. Smoke whichever form is actually runnable here.
 artifact=$binary
-
-if ! go version -m "$artifact" 2>&1 |
-	grep -E -- '-tags=([^[:space:]]*,)?meetspa(,|[[:space:]]|$)' >/dev/null; then
-	companion=${binary}.real
-	if [ -x "$companion" ] && go version -m "$companion" 2>&1 |
-		grep -E -- '-tags=([^[:space:]]*,)?meetspa(,|[[:space:]]|$)' >/dev/null; then
-		artifact=$companion
-	else
-		echo "meet SPA release gate: $target artifact lacks the meetspa build tag" >&2
-		exit 1
-	fi
+if [ ! -x "$artifact" ] && [ -x "$binary.real" ]; then
+	artifact=$binary.real
 fi
 
-host_target=$(go env GOOS)_$(go env GOARCH)
+# Only the native target can be executed on this machine.
 case "$target" in
-	"$host_target"*)
-		;;
-	*)
-		echo "meet SPA release gate: $target artifact records -tags=meetspa"
-		exit 0
-		;;
+*"$(go env GOOS)"*"$(go env GOARCH)"*) ;;
+*)
+	echo "meet SPA release gate: $target is not native here; skipping runtime smoke"
+	exit 0
+	;;
 esac
 
 state_dir=$(mktemp -d "${TMPDIR:-/tmp}/bashy-meet-spa.XXXXXX")

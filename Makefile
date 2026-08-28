@@ -98,8 +98,8 @@ build-bash:
 build-bashy:
 	@mkdir -p $(BIN_DIR)
 	@set -e; \
-	spa_tag=$$(scripts/build-meet-spa.sh optional); \
-	tags="$(BASHY_TAGS)"; [ -z "$$spa_tag" ] || tags="$${tags:+$$tags }$$spa_tag"; \
+	scripts/build-meet-spa.sh optional >/dev/null; \
+	tags="$(BASHY_TAGS)"; \
 	echo "building bashy$${tags:+ with embeds: $$tags} ..."; \
 	goos=$$(go env GOOS); out=$(BIN); [ "$$goos" != linux ] && [ "$$goos" != darwin ] || out=$(BIN).real; \
 	if [ -n "$$tags" ]; then \
@@ -125,8 +125,8 @@ build-fips:
 		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BASHY) native/siglaunch.c.in; \
 	fi
 	@set -e; \
-	spa_tag=$$(scripts/build-meet-spa.sh optional); \
-	tags="$(BASHY_TAGS)"; [ -z "$$spa_tag" ] || tags="$${tags:+$$tags }$$spa_tag"; \
+	scripts/build-meet-spa.sh optional >/dev/null; \
+	tags="$(BASHY_TAGS)"; \
 	goos=$$(go env GOOS); out=$(BIN); [ "$$goos" != linux ] && [ "$$goos" != darwin ] || out=$(BIN).real; \
 	if [ -n "$$tags" ]; then \
 		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -tags "$$tags" -ldflags "$(LDFLAGS)" -o $$out ./cmd/bashy; \
@@ -161,8 +161,8 @@ test-build-fail-closed:
 ## cross-compile sanity check).
 dist:
 	@mkdir -p $(BIN_DIR)/dist
-	@spa_tag=$$(scripts/build-meet-spa.sh optional); \
-	bashy_tags="$(BASHY_TAGS)"; [ -z "$$spa_tag" ] || bashy_tags="$${bashy_tags:+$$bashy_tags }$$spa_tag"; \
+	@scripts/build-meet-spa.sh optional >/dev/null; \
+	bashy_tags="$(BASHY_TAGS)"; \
 	for plat in $(PLATFORMS); do \
 		os=$${plat%/*}; arch=$${plat#*/}; \
 		ext=; [ "$$os" = windows ] && ext=.exe; \

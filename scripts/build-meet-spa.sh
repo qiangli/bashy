@@ -60,4 +60,12 @@ if [ ! -s "$web_dir/dist/index.html" ] ||
 	exit 1
 fi
 
-printf '%s\n' meetspa
+# Promote the freshly built bundle into the TRACKED artifact directory that
+# pkg/meet embeds. dist/ is the SPA's own scratch and stays ignored; artifact/
+# is "these bytes ship", and moving them is a deliberate step that shows up in a
+# diff rather than a side effect of whoever last ran vite.
+artifact_dir=$(cd "$web_dir/.." && pwd)/artifact
+rm -rf "$artifact_dir"
+mkdir -p "$artifact_dir"
+cp -R "$web_dir/dist/." "$artifact_dir/"
+echo "meet SPA: promoted $web_dir/dist -> $artifact_dir" >&2
