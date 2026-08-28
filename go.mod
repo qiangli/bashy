@@ -31,6 +31,7 @@ require (
 	github.com/agnivade/levenshtein v1.2.1 // indirect
 	github.com/apache/arrow/go/arrow v0.0.0-20211112161151-bc219186db40 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
+	github.com/aymanbagabas/go-pty v0.2.3 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/benhoyt/goawk v1.31.0 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
@@ -68,6 +69,7 @@ require (
 	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f // indirect
 	github.com/coreos/go-systemd/v22 v22.7.0 // indirect
 	github.com/crc-org/vfkit v0.6.3 // indirect
+	github.com/creack/pty v1.1.24 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/d4l3k/go-bfloat16 v0.0.0-20211005043715-690c3bdd05f1 // indirect
@@ -216,6 +218,7 @@ require (
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/tklauser/ps v0.0.5-0.20260804061010-39c4acb07b31 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
+	github.com/u-root/u-root v0.16.0 // indirect
 	github.com/ugorji/go/codec v1.3.0 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	github.com/vbatts/tar-split v0.12.2 // indirect

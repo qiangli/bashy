@@ -47,6 +47,8 @@ github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPd
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
 github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=
 github.com/atotto/clipboard v0.1.4/go.mod h1:ZY9tmq7sm5xIbd9bOK4onWV4S6X0u6GY7Vn0Yu86PYI=
+github.com/aymanbagabas/go-pty v0.2.3 h1:hsqcTIUV8I4iTSh3HQl61CR2wh0YPS6gHOYLhAfWu/E=
+github.com/aymanbagabas/go-pty v0.2.3/go.mod h1:GLkgQovzqN5A1xMB79yHWiG1rhcquZCjkwKQGKFPdPg=
 github.com/bahlo/generic-list-go v0.2.0 h1:5sz/EEAK+ls5wF+NeqDpk5+iNdMDXrh3z3nPnH1Wvgk=
 github.com/bahlo/generic-list-go v0.2.0/go.mod h1:2KvAjgMlE5NNynlg/5iLrrCCZ2+5xWbdbCW3pNTGyYg=
 github.com/blang/semver/v4 v4.0.0 h1:1PFHFE6yCCTv8C1TeyNNarDzntLi7wMI5i/pzqYIsAM=
@@ -558,6 +560,8 @@ github.com/tklauser/ps v0.0.5-0.20260804061010-39c4acb07b31 h1:6yfc+1Yln6ZdKHKMU
 github.com/tklauser/ps v0.0.5-0.20260804061010-39c4acb07b31/go.mod h1:8gGq/KLjBz8HXrIvJjLGWYAM9pZagGK0WpKkWxm1av0=
 github.com/twitchyliquid64/golang-asm v0.15.1 h1:SU5vSMR7hnwNxj24w34ZyCi/FmDZTkS4MhqMhdFk5YI=
 github.com/twitchyliquid64/golang-asm v0.15.1/go.mod h1:a1lVb/DtPvCB8fslRZhAngC2+aY1QWCk3Cedj/Gdt08=
+github.com/u-root/u-root v0.16.0 h1:wY40O83MBVks97+Is0WlFlOPSwKQMIrWP9R1IsrExg8=
+github.com/u-root/u-root v0.16.0/go.mod h1:yL/XdSSW27PdGLgUh4MNRBy54mKM+TBLzpwiB4nwj90=
 github.com/ugorji/go/codec v1.3.0 h1:Qd2W2sQawAfG8XSvzwhBeoGq71zXOC/Q1E9y/wUcsUA=
 github.com/ugorji/go/codec v1.3.0/go.mod h1:pRBVtBSKl77K30Bv8R2P+cLSGaTtex6fsA2Wjqmfxj4=
 github.com/ulikunitz/xz v0.5.15 h1:9DNdB5s+SgV3bQ2ApL10xRc35ck0DuIX/isZvIk+ubY=

@@ -101,6 +101,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/todo"
 	"github.com/qiangli/coreutils/pkg/weave"
 	"github.com/qiangli/coreutils/pkg/weavecli"
+	"github.com/qiangli/coreutils/pkg/webconsole"
 	"github.com/qiangli/coreutils/pkg/webinspect"
 	coreutilsshell "github.com/qiangli/coreutils/shell"
 	"github.com/qiangli/coreutils/tool"
@@ -131,7 +132,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "relay", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "inbox", "notify", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release",
+		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "relay", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "inbox", "notify", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "apps",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
@@ -638,6 +639,28 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy relay:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	case "apps":
+		// The app launcher: ONE local surface with a start page of tiles and every
+		// other bashy web surface deep-linked beneath it — the shape
+		// dhnt/docs/agent-interaction-surfaces-design.md settled on, where a
+		// verb's --web-ui is a MODIFIER that deep-links in here rather than
+		// standing up another server ("five unrelated tiles is not bashy on the
+		// web: one nav, one auth, one design system").
+		//
+		// The tile list is not hardcoded: a verb declares a browser UI by
+		// carrying an atlas.WebSurface, and `bashy commands --view web` renders
+		// the same data in the terminal.
+		//
+		// Named for the macOS register (Apps / Terminal / Files). outpost serves
+		// an unrelated GET /apps — same word, different namespace.
+		wireMeet() // the Relay app is pkg/meet mounted in-process
+		cmd := webconsole.NewAppsCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy apps:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)

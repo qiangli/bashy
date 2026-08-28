@@ -14,7 +14,9 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/qiangli/coreutils/external/registry"
 	"github.com/qiangli/coreutils/pkg/atlas"
@@ -35,8 +37,14 @@ type atlasRecord struct {
 	Caps     []string `json:"caps,omitempty"`
 	Effects  []string `json:"effects,omitempty"`
 	Synopsis string   `json:"synopsis,omitempty"`
-	Hidden   bool     `json:"hidden,omitempty"`
-	AliasOf  string   `json:"alias_of,omitempty"`
+
+	// Web is the browser surface this command declares, if any. It is what
+	// `bashy web-console` discovers instead of carrying a hardcoded tile list,
+	// and what `commands --view web` renders. omitempty keeps every record
+	// without one byte-identical to the v1 shape.
+	Web     *atlas.WebSurface `json:"web_ui,omitempty"`
+	Hidden  bool              `json:"hidden,omitempty"`
+	AliasOf string            `json:"alias_of,omitempty"`
 }
 
 // atlasCatalog builds the merged atlas records for the given live catalog
@@ -181,6 +189,7 @@ func applyEntry(r *atlasRecord, e atlas.Entry) {
 	r.Group, r.Tier, r.Subclass, r.Caps, r.AliasOf = e.Group, e.Tier, e.Subclass, e.Caps, e.AliasOf
 	r.Stage = e.Stage
 	r.Effects = e.Effects
+	r.Web = e.Web
 }
 
 // liveAtlas assembles the full merged catalog for the bashy front door,
@@ -200,7 +209,7 @@ func liveAtlas(includeHidden bool) []atlasRecord {
 // --- the views ---------------------------------------------------------------
 
 // atlasViews are the non-classic --view values.
-var atlasViews = []string{"tier", "group", "sdlc", "capabilities", "effects"}
+var atlasViews = []string{"tier", "group", "sdlc", "capabilities", "effects", "web"}
 
 // atlasGroupDisplayOrder is the presentation order for the group view:
 // classical userland first, then the extended groups.
@@ -337,6 +346,8 @@ func dispatchAtlas(req atlasRequest) int {
 		printAtlasCaps(os.Stdout, records)
 	case req.view == "effects":
 		printAtlasEffects(os.Stdout, records)
+	case req.view == "web":
+		printAtlasWeb(os.Stdout, records)
 	case req.view == "sdlc":
 		// The spine: plan → code → test → deploy (+ cross). Reading this view is
 		// how you SEE the shape of the surface — which is how the Code stage was
@@ -512,4 +523,48 @@ func sortedCopy(items []string) []string {
 	out := append([]string(nil), items...)
 	sort.Strings(out)
 	return out
+}
+
+// printAtlasWeb renders the browser surfaces: which commands serve a web UI,
+// where the console mounts them, and the command that starts the ones it does
+// not own.
+//
+// This is deliberately a VIEW rather than a verb. `bashy commands` already
+// merges the atlas and already has --view, and the atlas's own ratchet asks any
+// new verb which SDLC stage it serves that nothing else already does — "list the
+// web surfaces" has no answer to that. `bashy web-console` renders the same data
+// as tiles; one source, two renderers.
+func printAtlasWeb(w io.Writer, records []atlasRecord) {
+	rows := make([]atlasRecord, 0, 8)
+	for _, r := range records {
+		if r.Web != nil {
+			rows = append(rows, r)
+		}
+	}
+	if len(rows) == 0 {
+		fmt.Fprintln(w, "no command declares a web surface")
+		return
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
+
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "COMMAND\tSURFACE\tMODE\tPORT\tPATH\tSTART")
+	for _, r := range rows {
+		path := "/"
+		if r.Web.Mount != "" {
+			path = "/" + r.Web.Mount + "/"
+		}
+		port := ""
+		if r.Web.Port != 0 {
+			port = strconv.Itoa(r.Web.Port)
+		}
+		start := ""
+		if len(r.Web.Start) > 0 {
+			start = "bashy " + strings.Join(r.Web.Start, " ")
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			r.Name, r.Web.Label, r.Web.Mode, port, path, start)
+	}
+	_ = tw.Flush()
+	fmt.Fprintln(w, "\nOpen them together with:  bashy apps")
 }
