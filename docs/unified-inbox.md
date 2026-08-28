@@ -16,6 +16,13 @@ rendered source watermark. `--peek` performs no acknowledgement. A failed
 render leaves every source unread. `--limit` also leaves a capped source unread
 rather than silently consuming records it omitted.
 
+Acknowledgement is atomic within each source, not across all sources. After a
+complete batch renders, source watermarks advance sequentially. If a later
+source acknowledgement fails, already-rendered records from an unacknowledged
+source can appear again on the next read; the failure does not hide an
+unrendered record. Consumers must therefore tolerate duplicate delivery and use
+the reported source plus source sequence as provenance.
+
 POSIX `mail`/`mailx` and `talk` are deliberately separate today: their default
 local mailbox and local interactive transports must remain unchanged for
 conformance. After Bash++ support and the Yoke agentic feature layer land, add
@@ -24,6 +31,14 @@ an explicit opt-in bridge under the existing agentic controls
 publish and receive through this view while retaining source provenance
 (`mailx` or `talk`); with it disabled or in POSIX mode, no bridge is active.
 Do not silently infer or enable this integration.
+
+Weave/Cloudbox session directives and notes remain a separate control-plane
+stream. They are attached to a shared execution session rather than addressed
+agent mail and are not aggregated here. Likewise, `pkg/bus`'s lower-level
+notification inbox is one source; the user-facing `bashy inbox` in
+`internal/agentos` is the unified multi-source surface. Programmatic/generated
+events are not subject to the authored quick-message cap unless their caller
+explicitly validates them as human/agent-authored coordination.
 
 `--wait DUR` waits for one batch. `--watch` follows all sources until
 interrupted; `--watch --wait DUR` gives it a total bound. `--json` emits
