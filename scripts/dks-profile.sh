@@ -10,18 +10,15 @@
 # command string, so a kubeconfig path containing a space, `*`, `?`, or `[abc]`
 # is passed through literally.
 #
-#   . "$(cd "$(dirname "$0")" && pwd)/dks-profile.sh"
+#   . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/dks-profile.sh"
 #   dks_kubectl_init "outpost kubectl" || exit $?
 #   ...
 #   job_uid="$(dks_kubectl get job "$JOB" -n "$NS" -o jsonpath='{.metadata.uid}')"
 #
-# Use the plain `$0`-based self-location above, never `${BASH_SOURCE[0]:-$0}`:
-# Bashy never populates BASH_SOURCE[0] for the top-level script, so that idiom
-# hits an array-index/`:-` fallback that nil-derefs (SIGSEGV) in Bashy's
-# mvdan-based expander under `set -u`. These scripts are always invoked directly
-# (never sourced), so `$0` names the same path under real bash and is both
-# simpler and Bashy-safe. For the same reason resolution never uses the
-# `VAR="${VAR:-$(cmd)}"` array/command-substitution default shorthand.
+# BASH_SOURCE identifies this file when sourced while `$0` remains the caller;
+# the fallback also covers shells that do not provide Bash's array. Bashy now
+# populates the top-level element and evaluates the indexed default safely under
+# `set -u`, matching Bash.
 #
 # ---------------------------------------------------------------------------
 # Resolution precedence (dks_kubectl_init):

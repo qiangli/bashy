@@ -75,18 +75,18 @@ func TestDispatchCoreutilsAwkPOSIXOctalAlternateForm(t *testing.T) {
 	}
 }
 
-func TestDispatchCoreutilsAwkPOSIXEREBackend(t *testing.T) {
+func TestDispatchCoreutilsAwkRejectsIntervalOverREDupMax(t *testing.T) {
 	t.Setenv("LC_ALL", "C")
 	var out, err bytes.Buffer
 	input := strings.Repeat("a", 1001) + "\n"
 	code := dispatchCoreutilsTool("awk", []string{
 		`/^a{1001}$/ { print "literal" }`,
 	}, tool.Stdio{In: strings.NewReader(input), Out: &out, Err: &err})
-	if code != 0 || err.Len() != 0 {
-		t.Fatalf("awk exit = %d, stderr = %q", code, err.String())
+	if code != 2 || !strings.Contains(err.String(), "invalid interval {1001}") {
+		t.Fatalf("awk exit = %d, stderr = %q; want POSIX RE_DUP_MAX rejection", code, err.String())
 	}
-	if got, want := out.String(), "literal\n"; got != want {
-		t.Fatalf("awk stdout = %q, want %q", got, want)
+	if out.Len() != 0 {
+		t.Fatalf("awk stdout = %q, want empty on parse error", out.String())
 	}
 }
 

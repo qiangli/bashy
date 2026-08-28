@@ -347,14 +347,11 @@ fi
 n=$(grep -cxF "ARG<$glob_kc>" "$argv_log" || true)
 [ "$n" = 1 ] || { note "FAIL: glob path appeared $n times, expected exactly 1"; fail=1; }
 
-# --- Bashy panic regression -------------------------------------------------
+# --- Bashy indexed-default regression --------------------------------------
 # The nested `KUBECTL="${KUBECTL:-$(dks_resolve_kubectl ...)}"` default and the
-# `${BASH_SOURCE[0]:-$0}` self-location idiom both panicked Bashy's
-# mvdan-based expander under `set -u` (a nil pointer dereference resolving an
-# array-index/command-substitution parameter-expansion default) even though
-# both are valid POSIX/bash. Every modified script now uses a plain
-# `dks_kubectl_init` call and `$0` self-location. Exercise each modified script
-# through installed bashy, when available, and require it not to panic.
+# `${BASH_SOURCE[0]:-$0}` self-location idiom are valid Bash under `set -u`.
+# Exercise each modified script through installed bashy, when available, and
+# require the source-aware form to fail cleanly rather than panic.
 # Deterministic/offline: a stub PATH shadows outpost/bashy/gh so nothing touches
 # a real cluster or network, and no script is expected to succeed here - only to
 # fail cleanly instead of crashing.

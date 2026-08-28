@@ -1220,9 +1220,6 @@ func writeSessionHistory(path string, entries []string, timestamps bool, sizeVal
 }
 
 func defaultCommandArgv0(arg0 string) string {
-	if filepath.Base(arg0) == "bash" {
-		return "bash"
-	}
 	return arg0
 }
 

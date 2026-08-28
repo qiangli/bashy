@@ -135,12 +135,11 @@
 # Tests: scripts/test-dks-select-node.sh (fixture JSON only - no cluster, no
 # kubectl execution, no network). Design: docs/plan-dks-build-test-deploy.md.
 #
-# `$0`-based self-location, never `${BASH_SOURCE[0]:-$0}`: Bashy does not
-# populate BASH_SOURCE[0] for a top-level script and that idiom nil-derefs its
-# expander under `set -u` (see dks-profile.sh).
+# Use Bash's source-aware location with a portable `$0` fallback. This remains
+# safe under `set -u` when the array is absent or empty.
 set -euo pipefail
 
-_here=$(cd "$(dirname "$0")" && pwd)
+_here=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)
 . "$_here/dks-profile.sh"
 
 # Deterministic sorting/collation regardless of the operator's locale.

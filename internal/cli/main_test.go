@@ -333,7 +333,7 @@ func TestDefaultCommandArgv0(t *testing.T) {
 		arg0 string
 		want string
 	}{
-		{"/tmp/bin/bash", "bash"},
+		{"/tmp/bin/bash", "/tmp/bin/bash"},
 		{"specialname", "specialname"},
 		{"-specialname", "-specialname"},
 	}
