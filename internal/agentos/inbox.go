@@ -165,49 +165,75 @@ func resolveInboxReader(as string) (string, error) {
 }
 
 func runUnifiedInbox(ctx context.Context, out, errOut io.Writer, reader string, limit int, peek, jsonOut, watch bool, bound time.Duration) error {
+	return runUnifiedInboxWithPoll(ctx, out, errOut, reader, limit, peek, jsonOut, watch, bound, defaultInboxPollRuntime())
+}
+
+func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader string, limit int, peek, jsonOut, watch bool, bound time.Duration, poll inboxPollRuntime) error {
 	deadline := time.Time{}
 	if bound > 0 {
-		deadline = time.Now().Add(bound)
+		deadline = poll.now().Add(bound)
 	}
+	// Reading every source is expensive enough that doing it on a fixed short
+	// timer saturates a core on an idle host; the gate keeps the loop honest by
+	// checking cheap stat metadata first. See inbox_poll.go.
+	gate := &inboxPollGate{reader: reader, fingerprint: poll.fingerprint, fullRescan: poll.fullRescan}
+	interval := poll.min
 	for {
-		batch, err := snapshotUnifiedInbox(reader, limit, true)
-		if err != nil {
-			return err
+		now := poll.now()
+		read, changed, sum, sampled := gate.due(now)
+		if changed {
+			// Traffic just landed: stay responsive for whatever follows it.
+			interval = poll.min
 		}
-		if len(batch.events) > 0 {
-			if err := renderInboxBatch(out, errOut, batch, jsonOut); err != nil {
+		if read {
+			batch, err := poll.snapshot(reader, limit, true)
+			if err != nil {
 				return err
 			}
-			if !peek {
-				for _, ack := range batch.acks {
-					if err := ack(); err != nil {
-						return fmt.Errorf("inbox: acknowledge rendered source: %w", err)
+			gate.commit(sum, sampled, now)
+			if len(batch.events) > 0 {
+				if err := renderInboxBatch(out, errOut, batch, jsonOut); err != nil {
+					return err
+				}
+				if !peek {
+					for _, ack := range batch.acks {
+						if err := ack(); err != nil {
+							return fmt.Errorf("inbox: acknowledge rendered source: %w", err)
+						}
 					}
 				}
-			}
-			if !watch {
+				interval = poll.min
+				if !watch {
+					return nil
+				}
+			} else if !watch && bound == 0 {
+				fmt.Fprintf(errOut, "nothing new in any channel for %s\n", reader)
 				return nil
 			}
-		} else if !watch && bound == 0 {
-			fmt.Fprintf(errOut, "nothing new in any channel for %s\n", reader)
-			return nil
 		}
-		if !watch && !deadline.IsZero() && !time.Now().Before(deadline) {
+		now = poll.now()
+		if !watch && !deadline.IsZero() && !now.Before(deadline) {
 			fmt.Fprintln(errOut, "EMPTY (timeout)")
 			return nil
 		}
-		if watch && !deadline.IsZero() && !time.Now().Before(deadline) {
+		if watch && !deadline.IsZero() && !now.Before(deadline) {
 			return nil
 		}
-		timer := time.NewTimer(100 * time.Millisecond)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
+		pause := interval
+		if !deadline.IsZero() && now.Add(pause).After(deadline) {
+			pause = deadline.Sub(now)
+		}
+		if err := poll.wait(ctx, pause); err != nil {
 			if watch {
 				return nil
 			}
-			return ctx.Err()
-		case <-timer.C:
+			return err
+		}
+		// Back off while nothing is arriving. Delivery latency stays bounded
+		// by inboxPollMax; idle cost stays bounded by the stat sweep.
+		interval *= 2
+		if interval > poll.max {
+			interval = poll.max
 		}
 	}
 }
