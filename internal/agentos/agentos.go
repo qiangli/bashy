@@ -283,6 +283,21 @@ func wireMeet() {
 	meet.PostMB = postMeetMessageBoardPost
 }
 
+// wireWebConsole connects every seam the `bashy apps` console needs, because it
+// serves OTHER verbs' surfaces in its own process and therefore has to install
+// their host wiring itself.
+//
+// It exists as a named function so the set is testable. The console's own
+// wiring is exactly the kind that fails silently: with the board seams
+// unconnected, `bus.ResolveSendTarget` cannot canonicalize a name through the
+// fleet catalog and quietly falls through to reader/person — so a post sent
+// from the browser reports success while addressing a name the CLI would have
+// resolved differently. Nothing crashes and nothing logs.
+func wireWebConsole() {
+	wireMeet()         // the Relay app is pkg/meet mounted in-process
+	wireMessageBoard() // the Messages app is pkg/bus read and posted in-process
+}
+
 // Dispatch handles AgentOS front-door subcommands that are not shell scripts —
 // `bashy weave …` (the multi-agent workspace orchestrator), `bashy otel …`
 // (the all-in-one observability stack), `bashy secrets …`
@@ -660,7 +675,7 @@ func Dispatch() {
 		//
 		// Named for the macOS register (Apps / Terminal / Files). outpost serves
 		// an unrelated GET /apps — same word, different namespace.
-		wireMeet() // the Relay app is pkg/meet mounted in-process
+		wireWebConsole()
 		cmd := webconsole.NewAppsCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {

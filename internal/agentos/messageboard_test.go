@@ -165,3 +165,34 @@ func TestMessageBoardFrontDoorResolvesInboxAndNotify(t *testing.T) {
 		})
 	}
 }
+
+// The web console serves other verbs' surfaces IN ITS OWN PROCESS, so it owes
+// their host wiring too. `bashy apps` wired meet and not the board, which is
+// invisible at every level that usually catches things: it compiles, it serves,
+// and a post from the browser returns 200. What it loses is fleet resolution —
+// a name that the CLI canonicalizes through the catalog falls through to
+// reader/person instead, so the post lands addressed to something else while
+// reporting success. That is the board's own founding defect, reintroduced by a
+// second front door.
+func TestWireWebConsole_ConnectsBothTheRoomAndTheBoard(t *testing.T) {
+	bus.FleetResolveName = nil
+	bus.FleetSelect = nil
+	bus.DetectHarness = nil
+	meet.FetchMB = nil
+
+	wireWebConsole()
+
+	for _, c := range []struct {
+		name string
+		got  func() bool
+	}{
+		{"bus.FleetResolveName", func() bool { return bus.FleetResolveName != nil }},
+		{"bus.FleetSelect", func() bool { return bus.FleetSelect != nil }},
+		{"bus.DetectHarness", func() bool { return bus.DetectHarness != nil }},
+		{"meet.FetchMB", func() bool { return meet.FetchMB != nil }},
+	} {
+		if !c.got() {
+			t.Errorf("%s is nil after wireWebConsole — the console mounts the panel but not its host wiring", c.name)
+		}
+	}
+}
