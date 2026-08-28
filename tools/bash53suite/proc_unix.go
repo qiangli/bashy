@@ -8,7 +8,11 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/qiangli/coreutils/pkg/procguard"
 )
+
+type parentDeathWatch = procguard.Guard
 
 func configureProcess(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -31,6 +35,24 @@ func killProcessTree(pid int) {
 	}
 	_ = syscall.Kill(-pid, syscall.SIGKILL)
 	_ = syscall.Kill(pid, syscall.SIGKILL)
+}
+
+// armParentDeathWatch covers the harness's abrupt-exit path without a
+// child-before-watcher window: the requested fixture is forked by an already
+// established in-group guard. The portable contract is the inherited process
+// group. A descendant that deliberately calls setpgid/setsid needs OS-specific
+// containment (for example a future Linux cgroup backend); POSIX and Darwin
+// provide no portable cross-session job object.
+func armParentDeathWatch(cmd *exec.Cmd) (*parentDeathWatch, error) {
+	return procguard.Arm(cmd)
+}
+
+func parentDeathWatchStarted(watch *parentDeathWatch, startErr error) {
+	watch.Started(startErr)
+}
+
+func stopParentDeathWatch(watch *parentDeathWatch) {
+	watch.Disarm()
 }
 
 func childPIDs(pid int) []int {

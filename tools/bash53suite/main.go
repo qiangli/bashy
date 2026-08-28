@@ -856,9 +856,16 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 	cmd.Stderr = &raw
 	cmd.Env = fixtureEnv(root, testsDir, bashPath, f.Name)
 
-	if err := cmd.Start(); err != nil {
+	parentWatch, err := armParentDeathWatch(cmd)
+	if err != nil {
 		return "FAIL", err
 	}
+	startErr := cmd.Start()
+	parentDeathWatchStarted(parentWatch, startErr)
+	if startErr != nil {
+		return "FAIL", startErr
+	}
+	defer func() { stopParentDeathWatch(parentWatch) }()
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	timer := time.NewTimer(timeout)
@@ -875,22 +882,29 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 
 	var runErr error
 	timedOut := false
+	reaped := func(err error) {
+		runErr = err
+		stopParentDeathWatch(parentWatch)
+		parentWatch = nil
+	}
 	select {
-	case runErr = <-done:
+	case err := <-done:
+		reaped(err)
 	case <-timer.C:
 		timedOut = true
 		killProcessTree(cmd.Process.Pid)
 		select {
-		case runErr = <-done:
+		case err := <-done:
+			reaped(err)
 		case <-time.After(5 * time.Second):
 			_ = cmd.Process.Kill()
 			select {
-			case runErr = <-done:
+			case err := <-done:
+				reaped(err)
 			case <-time.After(2 * time.Second):
 			}
 		}
 	}
-	killProcessTree(cmd.Process.Pid)
 	if timedOut {
 		return "TIME", nil
 	}
