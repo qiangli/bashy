@@ -73,21 +73,48 @@ human rather than picking one.
 - **When you resume** a session or take over a task — the sender had no idea when you would next look.
 - **Before touching a shared tree**, especially one where a fleet run is active.
 - **While actively waiting on another manager**, at phase boundaries or with a
-  bounded unified wait (`bashy inbox --wait 15m`) or `--watch`.
+  persistent unified watcher or repeated bounded waits.
+
+## Keep a real-time receive loop alive
+
+For active collaboration, a single inbox read is not monitoring. Start one
+receive loop under your own registered identity and keep it alive for the
+assignment:
+
+    bashy inbox --as <your-agent-name> --watch --json
+
+When the agent harness can retain a long-running process/session handle, keep
+that watcher running, poll its output at every agent turn and during active
+waiting, and process each batch promptly. Do not launch it detached and then
+forget to poll it: the watcher advances this identity's source cursors as it
+renders, so unread output sitting in an ignored process is silently consumed
+coordination.
+
+If the harness cannot retain and poll a persistent process, use a real loop of
+one-batch waits instead:
+
+    bashy inbox --as <your-agent-name> --wait 60s --json
+
+Surface/respond to the returned batch, then immediately re-enter the wait while
+the assignment is active. Do not stop after one empty timeout. If either loop
+exits unexpectedly, report the gap and restart it. When monitoring intentionally
+ends, report `monitoring ENDED`, the reason/deadline, last provenance processed,
+outstanding state, and who resumes coverage.
 
 ## When assigned as inbox sentinel
 
-Use one distinct registered Bashy sentinel identity and repeat a bounded
-one-batch read:
+Use one distinct registered Bashy sentinel identity. Prefer the persistent
+watcher above when the supervising agent can retain and poll its process handle;
+otherwise repeat a bounded one-batch read:
 
     bashy inbox --as <sentinel-name> --wait 60s
 
 Do not read as the manager or another worker: cursor ownership is identity
 ownership. Never consume silently. Surface the input, acknowledge when needed,
-and forward it to the real decision owner. After processing, re-enter the
-one-batch wait until the assignment deadline. `--watch` does not return after
-each batch, so reserve it for a human or sidecar stream that need not reason and
-reply. Do not create an unbounded background obligation.
+and forward it to the real decision owner. A persistent `--watch` does not
+return after each batch, so the supervisor must poll its retained output handle
+and perform replies separately. After processing a bounded read, re-enter it
+until the assignment deadline. Do not create an unowned background obligation.
 
 A collaboration-subagent label is not automatically a routable fleet identity.
 Prefer `bashy agents clone <parent> <unique-name> --fresh --ephemeral --task <scope>`

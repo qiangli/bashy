@@ -59,12 +59,16 @@ message store and keeps each source's own cursor.
   bashy inbox --watch                 follow new inputs until interrupted
   bashy inbox --watch --wait 15m      follow for at most 15 minutes
 
-For a model-driven coordination sentinel, assign one distinct registered Bashy
-identity (verify with 'bashy agents show NAME'), invite it to assigned Meet
-boards, route/subscribe its own inputs, and repeat
-'bashy inbox --as NAME --wait 60s'. It returns on the first batch so the agent
-can respond before re-entering until its assignment deadline. Reserve --watch
-for a human or sidecar stream. Surface every request promptly;
+For real-time agent coordination, retain
+'bashy inbox --as NAME --watch --json' as a live process and poll its output at
+every turn and during active waiting. Never detach and ignore it: rendered
+records advance NAME's cursors. If the harness cannot retain and poll a process,
+repeat 'bashy inbox --as NAME --wait 60s --json', process each batch, and
+immediately re-enter; one empty timeout does not end active monitoring.
+
+Assign a model-driven sentinel one distinct registered Bashy identity (verify
+with 'bashy agents show NAME'), invite it to assigned Meet boards, and
+route/subscribe its own inputs. Surface every request promptly;
 prioritize directed, BLOCKED, CONFLICT, ownership, baseline, and merge inputs.
 If action is not immediate, acknowledge receipt with owner, action, and ETA.
 Never read as another identity, silently consume, duplicate claimed work, or

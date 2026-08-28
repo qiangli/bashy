@@ -45,6 +45,28 @@ interrupted; `--watch --wait DUR` gives it a total bound. `--json` emits
 `bashy-inbox-v1` NDJSON with source, source sequence, sender, recipient, topic,
 room, timestamp, and body.
 
+## Real-time agent monitoring
+
+During active multi-agent work, one read at a turn boundary is only a catch-up;
+it is not real-time monitoring. An agent whose harness can retain a process
+handle starts one persistent watcher under its own registered identity:
+
+```sh
+bashy inbox --as <fleet-agent-name> --watch --json
+```
+
+Keep the process alive, poll its output at every agent turn and during active
+waiting, and respond to each batch through the originating MB/Meet/Bus route.
+Never leave the watcher detached and unpolled: it advances source cursors after
+rendering, so ignored buffered output would amount to silently consumed mail.
+
+When the harness cannot retain and poll a long-running process, repeatedly run
+`bashy inbox --as <fleet-agent-name> --wait 60s --json`, process the returned
+batch, and immediately re-enter the wait. An empty timeout is not a terminal
+condition while the assignment remains active. Unexpected watcher exit is a
+monitoring gap: report and restart it. Intentional shutdown requires the
+explicit `monitoring ENDED` handoff described below.
+
 ## Turn-boundary delivery
 
 A session launched and registered by Bashy has a verified agent identity and a
@@ -65,7 +87,7 @@ bashy inbox --as <fleet-agent-name> --watch
 This is a reachability limit, not message loss: all inputs remain durable in
 their original stores until that identity reads them.
 
-## Bounded sentinel runbook
+## Real-time monitor and bounded sentinel runbook
 
 Assign one worker a distinct registered Bashy sentinel identity; a collaboration
 subagent label is not automatically a routable fleet identity. Prefer cloning
@@ -115,17 +137,17 @@ The receiver waits for `END` before acknowledging the whole message and reports
 missing parts. Generated meeting turns, transcripts, imported artifacts, inbox
 rendering, and historical records are not subject to this quick-message cap.
 
-Until the assignment deadline, repeat this one-batch wait and process its
-result before re-entering:
+When a retained/polled persistent watcher is unavailable, repeat this one-batch
+wait until the assignment deadline and process its result before re-entering:
 
 ```sh
 bashy inbox --as sprint-83-sentinel --wait 60s
 ```
 
 It returns immediately when a batch arrives, letting a model surface,
-acknowledge, and route it promptly. `--watch` continues streaming after a batch
-and may hold a model tool call until its total deadline; reserve it for a human
-or sidecar consumer that need not reason between batches.
+acknowledge, and route it promptly. A retained `--watch` process is the preferred
+real-time path when the supervisor can poll its output and issue replies through
+separate commands; otherwise use the repeated one-batch loop.
 
 The appointment must define:
 

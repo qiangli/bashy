@@ -268,8 +268,10 @@ func TestInboxHelpTeachesBoundedSentinelResponseAndIdentitySafety(t *testing.T) 
 	}
 	help := out.String()
 	for _, behavior := range []string{
+		"--as NAME --watch --json",
+		"poll its output at",
 		"--as NAME --wait 60s",
-		"human or sidecar stream",
+		"one empty timeout does not end",
 		"distinct registered Bashy",
 		"agents show NAME",
 		"stable repo-relative",

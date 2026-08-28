@@ -185,6 +185,8 @@ after it.
 Then run `bashy inbox --as <your-agent-name>` and follow
 `bashy skills show check-messages` before inspecting the fleet. This includes
 the conductor role backlog only while this identity holds its live lease.
+For an active collaborative assignment, keep the skill's persistent watcher or
+repeated bounded-wait loop running; one turn-start read is not real-time monitoring.
 
 Derive the rest of the TODO from this workstream's contract and live state. Depending on
 the assignment it may include reviewing and merging submissions, reclaiming workspaces,
