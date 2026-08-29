@@ -1395,6 +1395,12 @@ func skillsOptions() []coreskills.Option {
 		coreskills.WithSource(coreskills.EmbedSource(skills.FS, coreskills.RingEmbedded)),
 		coreskills.WithHostVersion("bashy", cli.BashyVersion()),
 	}
+	// The org catalog pulled by `bashy skills sync`. Mounted BEFORE
+	// BASHY_SKILLS_PATH so an explicitly-pointed directory still wins, and
+	// below the local store so what you added or learned here always wins.
+	// Without this the sync would report "N pulled" and the skills would never
+	// appear — a wiring gap that reads as an empty org catalog.
+	opts = append(opts, coreskills.WithSource(coreskills.SharedDirSource(coreskills.CloudRingDir())))
 	for _, dir := range filepath.SplitList(os.Getenv("BASHY_SKILLS_PATH")) {
 		if dir != "" {
 			opts = append(opts, coreskills.WithSource(coreskills.SharedDirSource(dir)))
