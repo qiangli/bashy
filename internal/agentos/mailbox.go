@@ -578,7 +578,7 @@ func newHumanSendCmd() *cobra.Command {
 		if e != nil {
 			return e
 		}
-		from, e := bus.BoardIdentity(as)
+		from, e := bus.ResolveAuthoredActor(as)
 		if e != nil {
 			return e
 		}

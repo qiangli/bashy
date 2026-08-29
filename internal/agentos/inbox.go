@@ -3,15 +3,19 @@ package agentos
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/qiangli/coreutils/pkg/bus"
 	"github.com/qiangli/coreutils/pkg/fleet"
+	"github.com/qiangli/coreutils/pkg/lockfile"
 	"github.com/qiangli/coreutils/pkg/meet"
 	"github.com/qiangli/coreutils/pkg/room"
 	"github.com/spf13/cobra"
@@ -19,10 +23,7 @@ import (
 
 const unifiedInboxSchema = "bashy-inbox-v1"
 
-const (
-	inboxWatcherPrefix = "inbox:"
-	inboxWatcherMode   = "inbox"
-)
+const inboxWatcherMode = "inbox"
 
 type unifiedInboxEvent struct {
 	Schema string              `json:"schema"`
@@ -108,6 +109,15 @@ watchers need separate registered names. Keep messages short: request/decision,
 priority, owner/expected response, and a stable repo-relative + commit/issue/
 room/artifact reference; never send only an inaccessible temporary path.
 
+The live watcher card is also NAME's cooperative authored-message claim. MB,
+Meet, ping, notify, Bus publish, and human-mailbox send refuse an explicit --as
+NAME from a different live agent session and notify NAME of the refused attempt.
+A governed tool session uses a hashed session claim; tools without stable session
+metadata fall back to the watcher parent's process lineage. BASHY_PRINCIPAL is
+attribution, not ownership proof. This is host-local collision prevention, not
+cryptographic identity.
+Inspect ownership with 'bashy whois agent:NAME' (TAKEN) and 'bashy agents'.
+
 MB post/send (including messaging ping), Bus publish, and every manual Meet tell
 accept at most 1024 UTF-8
 bytes per authored body and never truncate or auto-split. If no stable shared
@@ -142,7 +152,11 @@ pretends such a session was adopted.`,
 			if err != nil {
 				return err
 			}
-			if watch {
+			// A bare human watch belongs to the OS login and has no agent card.
+			// An explicit --as or authenticated agent watch must instead claim
+			// one registered, globally unique fleet identity.
+			principal := strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL"))
+			if watch && (strings.TrimSpace(as) != "" || strings.Contains(principal, "agent/")) {
 				leave, err := registerInboxWatcher(reader)
 				if err != nil {
 					return err
@@ -204,27 +218,58 @@ func resolveInboxReader(as string) (string, error) {
 func registerInboxWatcher(reader string) (func(), error) {
 	agent, ok := fleet.New().Agent(reader)
 	if !ok {
-		// A human may use bare `bashy inbox --watch` under an OS login. Only
-		// registered agent identities belong in the agent workload roster.
-		return func() {}, nil
+		return nil, fmt.Errorf("inbox: watcher identity %q is not a registered Bashy agent; register it with `bashy agents add` or choose one from `bashy agents list --all`", reader)
+	}
+
+	// The kernel lock is the watcher lease. It closes the read-before-write
+	// race between two fresh processes and also refuses two watcher loops in
+	// one process, since both would otherwise advance the same source cursors.
+	claimDir := filepath.Join(room.Dir(), "claims")
+	if err := os.MkdirAll(claimDir, 0o700); err != nil {
+		return nil, fmt.Errorf("inbox: prepare watcher claims: %w", err)
+	}
+	claimPath := filepath.Join(claimDir, fmt.Sprintf("inbox-%x.lock", sha256.Sum256([]byte(agent.Name))))
+	claim, err := lockfile.TryAcquire(claimPath, lockfile.Holder{Name: agent.Name, Intent: "watch inbox"})
+	if err != nil {
+		if errors.Is(err, lockfile.ErrHeld) {
+			return nil, fmt.Errorf("inbox: registered agent %q already has a live inbox watcher", agent.Name)
+		}
+		return nil, fmt.Errorf("inbox: claim watcher identity %q: %w", agent.Name, err)
 	}
 	cwd, _ := os.Getwd()
+	principal := strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL"))
+	ownerPID := os.Getppid()
+	if ownerPID <= 1 {
+		// PID 1 is a common ancestor, never a session proof. Leave OwnerPID empty
+		// so the shared guard falls back to this watcher's live PID and fails
+		// closed for sibling commands when no stronger tool-session claim exists.
+		ownerPID = 0
+	}
+	sessionClaim := bus.HashSessionClaim(currentAgentSession(agent.Name))
 	card := room.Card{
-		ID:        inboxWatcherPrefix + agent.Name,
-		Principal: strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL")),
-		Tool:      agent.Tool,
-		Model:     agent.Model,
-		Binding:   agent.MatrixKey(),
-		Nick:      agent.Name,
-		Mode:      inboxWatcherMode,
-		Task:      "watching Bashy inbox",
-		PID:       os.Getpid(),
-		Cwd:       cwd,
+		// The registered name is the global identity claim. A parallel
+		// "inbox:NAME" card would let one identity occupy two live sessions.
+		ID:           agent.Name,
+		Principal:    principal,
+		SessionClaim: sessionClaim,
+		Tool:         agent.Tool,
+		Model:        agent.Model,
+		Binding:      agent.MatrixKey(),
+		Nick:         agent.Name,
+		Mode:         inboxWatcherMode,
+		Task:         "watching Bashy inbox",
+		PID:          os.Getpid(),
+		OwnerPID:     ownerPID,
+		Cwd:          cwd,
 	}
 	if err := room.Join(card); err != nil {
+		_ = claim.Release()
 		return nil, fmt.Errorf("inbox: register watcher %q: %w", agent.Name, err)
 	}
-	return func() { room.Leave(card.ID) }, nil
+	return func() {
+		room.Leave(card.ID)
+		_ = claim.Release()
+	}, nil
 }
 
 func runUnifiedInbox(ctx context.Context, out, errOut io.Writer, reader string, limit int, peek, jsonOut, watch bool, bound time.Duration) error {

@@ -12,7 +12,7 @@ import (
 // wireMessageBoard connects `bashy mb` to the fleet catalog.
 //
 // pkg/bus is the transport and the roster is policy, so every question the
-// board asks about the fleet is a hook the host fills in. All four are wired
+// board asks about the fleet is a hook the host fills in. They are wired
 // HERE, in one function, for a reason that is the whole point of the file:
 //
 // A seam nobody connects is indistinguishable from a feature nobody built —
@@ -30,6 +30,7 @@ func wireMessageBoard() {
 	bus.FleetNames = fleetAgentNames
 	bus.FleetSelect = fleetSelectAudience
 	bus.FleetResolveName = fleetResolveAgentName
+	bus.CurrentSessionClaim = currentAgentSession
 
 	// WHO you are, not merely who you can address.
 	//
@@ -48,6 +49,22 @@ func wireMessageBoard() {
 	// view over MB/Meet/role stores; pkg/bus remains the owner of pending delivery
 	// and no additional spool is introduced.
 	bus.PrepareTurnInbox = unifiedTurnPreamble
+}
+
+// currentAgentSession returns the current tool session only when agentName is
+// a registered fleet identity. The transport hashes this value before storing
+// or comparing it; keeping registry policy here avoids making pkg/bus depend on
+// the fleet catalog.
+func currentAgentSession(agentName string) string {
+	agent, ok := fleet.New().Agent(agentName)
+	if !ok {
+		return ""
+	}
+	tool, ok := fleet.New().Tool(agent.Tool)
+	if !ok {
+		return ""
+	}
+	return tool.CurrentSession()
 }
 
 // notifyMeetInvitation is the write half of meet's message-board seam. The

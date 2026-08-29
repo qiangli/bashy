@@ -30,6 +30,7 @@ func TestWireMessageBoard_ConnectsEveryFleetSeam(t *testing.T) {
 		{"FleetNames", func() { bus.FleetNames = nil }, func() bool { return bus.FleetNames != nil }},
 		{"FleetSelect", func() { bus.FleetSelect = nil }, func() bool { return bus.FleetSelect != nil }},
 		{"FleetResolveName", func() { bus.FleetResolveName = nil }, func() bool { return bus.FleetResolveName != nil }},
+		{"CurrentSessionClaim", func() { bus.CurrentSessionClaim = nil }, func() bool { return bus.CurrentSessionClaim != nil }},
 		// The identity seam. Unwired, `bashy mb` misattributes every post made
 		// from a third-party TUI to whoever owns the login session.
 		{"DetectHarness", func() { bus.DetectHarness = nil }, func() bool { return bus.DetectHarness != nil }},
@@ -148,7 +149,7 @@ func TestMessageBoardFrontDoorResolvesInboxAndNotify(t *testing.T) {
 			if label != verb {
 				t.Fatalf("bashy %s resolved with label %q", verb, label)
 			}
-			if bus.FleetNames == nil || bus.FleetSelect == nil || bus.FleetResolveName == nil || bus.DetectHarness == nil {
+			if bus.FleetNames == nil || bus.FleetSelect == nil || bus.FleetResolveName == nil || bus.CurrentSessionClaim == nil || bus.DetectHarness == nil {
 				t.Fatalf("bashy %s resolved without wiring the fleet seams", verb)
 			}
 
@@ -177,6 +178,7 @@ func TestMessageBoardFrontDoorResolvesInboxAndNotify(t *testing.T) {
 func TestWireWebConsole_ConnectsBothTheRoomAndTheBoard(t *testing.T) {
 	bus.FleetResolveName = nil
 	bus.FleetSelect = nil
+	bus.CurrentSessionClaim = nil
 	bus.DetectHarness = nil
 	meet.FetchMB = nil
 
@@ -188,6 +190,7 @@ func TestWireWebConsole_ConnectsBothTheRoomAndTheBoard(t *testing.T) {
 	}{
 		{"bus.FleetResolveName", func() bool { return bus.FleetResolveName != nil }},
 		{"bus.FleetSelect", func() bool { return bus.FleetSelect != nil }},
+		{"bus.CurrentSessionClaim", func() bool { return bus.CurrentSessionClaim != nil }},
 		{"bus.DetectHarness", func() bool { return bus.DetectHarness != nil }},
 		{"meet.FetchMB", func() bool { return meet.FetchMB != nil }},
 	} {

@@ -180,8 +180,7 @@ func TestInboxSourceFingerprintMovesForEverySource(t *testing.T) {
 			return bus.Publish(bus.Notification{Principal: "scheduler", To: reader, Body: "bus"})
 		}},
 		{"meet board record", func() error {
-			_, err := meet.PostAs(st.ID, reader, reader, "meet")
-			return err
+			return meet.AppendEvent(st.ID, meet.Event{Speaker: reader, To: reader, Kind: "status", Text: "meet"})
 		}},
 		{"legacy role holder", func() error {
 			holder = reader

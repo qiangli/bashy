@@ -78,7 +78,7 @@ func TestInboxAggregatesMeetAndAcknowledgesEachRenderedSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := meet.PostAs(st.ID, reader, reader, "meet message"); err != nil {
+	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: reader, To: reader, Kind: "status", Text: "meet message"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := bus.PostMessage(bus.Post{From: "human", To: reader, Body: "board message"}); err != nil {
@@ -135,7 +135,7 @@ func TestUnifiedTurnPreambleDeliversBoardAndMeetOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := meet.PostAs(st.ID, reader, reader, "turn meet"); err != nil {
+	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: reader, To: reader, Kind: "status", Text: "turn meet"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := bus.PostMessage(bus.Post{From: "human", To: reader, Body: "turn board"}); err != nil {
@@ -166,7 +166,7 @@ func TestInboxRenderFailureLeavesEverySourceUnread(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := meet.PostAs(st.ID, reader, reader, "meet survives"); err != nil {
+	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: reader, To: reader, Kind: "status", Text: "meet survives"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := bus.PostMessage(bus.Post{From: "human", To: reader, Body: "mb survives"}); err != nil {
@@ -206,7 +206,7 @@ func TestInboxExcludesMeetBoardsReaderNeverJoined(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := meet.PostAs(st.ID, other, other, "not alice's channel"); err != nil {
+	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: other, To: other, Kind: "status", Text: "not alice's channel"}); err != nil {
 		t.Fatal(err)
 	}
 	// A stale cursor is not membership. This models a removed participant or a
@@ -214,7 +214,7 @@ func TestInboxExcludesMeetBoardsReaderNeverJoined(t *testing.T) {
 	if err := meet.MarkSeen(st.ID, "codex-gpt5.6-sol"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := meet.PostAs(st.ID, other, other, "future private traffic"); err != nil {
+	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: other, To: other, Kind: "status", Text: "future private traffic"}); err != nil {
 		t.Fatal(err)
 	}
 	batch, err := snapshotUnifiedInbox("codex-gpt5.6-sol", 0, true)
@@ -279,7 +279,7 @@ func TestInboxWatcherPublishesActiveRosterPresenceForItsLifetime(t *testing.T) {
 		t.Fatalf("watcher room members = %#v, want one", members)
 	}
 	card := members[0]
-	if card.ID != inboxWatcherPrefix+name || card.Nick != name || card.Mode != inboxWatcherMode || card.PID != os.Getpid() || card.Task != "watching Bashy inbox" {
+	if card.ID != name || card.Nick != name || card.Mode != inboxWatcherMode || card.PID != os.Getpid() || card.OwnerPID != os.Getppid() || card.Task != "watching Bashy inbox" {
 		t.Fatalf("watcher card = %#v", card)
 	}
 
@@ -308,7 +308,7 @@ func TestInboxWatcherPublishesActiveRosterPresenceForItsLifetime(t *testing.T) {
 	}
 }
 
-func TestInboxWatcherRefreshDoesNotDuplicatePresence(t *testing.T) {
+func TestInboxWatcherRefusesASecondLiveClaimOfTheSameIdentity(t *testing.T) {
 	isolateUnifiedInbox(t)
 	const name = "singleton-inbox-sentinel"
 	if err := fleet.New().SaveAgent(fleet.Agent{Name: name, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
@@ -320,20 +320,93 @@ func TestInboxWatcherRefreshDoesNotDuplicatePresence(t *testing.T) {
 	}
 	defer leave()
 
-	// The same process may refresh its own card without creating a second row.
-	// room.Join rejects a different live PID; that behavior is covered by room.
-	refresh, err := registerInboxWatcher(name)
-	if err != nil {
-		t.Fatalf("same-process watcher refresh failed: %v", err)
+	if _, err := registerInboxWatcher(name); err == nil || !strings.Contains(err.Error(), "already has a live inbox watcher") {
+		t.Fatalf("second watcher claim error = %v", err)
 	}
+}
+
+func TestInboxWatcherRequiresARegisteredFleetIdentity(t *testing.T) {
+	isolateUnifiedInbox(t)
+	if _, err := registerInboxWatcher("observed-but-unregistered"); err == nil || !strings.Contains(err.Error(), "not a registered Bashy agent") {
+		t.Fatalf("unregistered watcher error = %v", err)
+	}
+}
+
+func TestInboxWatchRejectsAnObservedButUnregisteredAgentSeat(t *testing.T) {
+	isolateUnifiedInbox(t)
+	const name = "observed-seat-only"
+	if err := bus.SaveSubscription(bus.Subscription{Subscriber: name, To: name}); err != nil {
+		t.Fatal(err)
+	}
+	cmd := newUnifiedInboxCmd()
+	cmd.SetArgs([]string{"--as", name, "--watch", "--wait", "1ms"})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "not a registered Bashy agent") {
+		t.Fatalf("observed-only watcher error = %v", err)
+	}
+}
+
+func TestInboxWatcherCannotOverwriteAnotherLiveUseOfTheAgentIdentity(t *testing.T) {
+	isolateUnifiedInbox(t)
+	const name = "claimed-agent"
+	if err := fleet.New().SaveAgent(fleet.Agent{Name: name, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := room.Join(room.Card{ID: name, Nick: name, Mode: "interactive", PID: os.Getppid()}); err != nil {
+		t.Fatal(err)
+	}
+	defer room.LeavePID(name, os.Getppid())
+	if _, err := registerInboxWatcher(name); err == nil || !strings.Contains(err.Error(), "already live") {
+		t.Fatalf("global identity collision error = %v", err)
+	}
+}
+
+func TestInboxWatcherRecordsSessionProofSeparatelyFromAttribution(t *testing.T) {
+	isolateUnifiedInbox(t)
+	const name = "governed-sentinel"
+	const sessionEnv = "BASHY_TEST_TOOL_SESSION"
+	if err := fleet.New().SaveTool(fleet.Tool{Name: "sentinel-tool", Kind: "cli", CLI: fleet.ToolCLI{Launch: fleet.ToolLaunch{SessionEnv: []string{sessionEnv}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := fleet.New().SaveAgent(fleet.Agent{Name: name, Tool: "sentinel-tool", Model: "gpt5.6-sol"}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BASHY_PRINCIPAL", "dhnt:agent/"+name)
+	t.Setenv(sessionEnv, "private-session-value")
+	leave, err := registerInboxWatcher(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer leave()
 	members, err := room.Members()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(members) != 1 {
-		t.Fatalf("watcher refresh produced %d presence cards: %#v", len(members), members)
+	wantClaim := bus.HashSessionClaim("private-session-value")
+	if len(members) != 1 || members[0].Principal != "dhnt:agent/"+name || members[0].SessionClaim != wantClaim || members[0].OwnerPID != os.Getppid() {
+		t.Fatalf("governed watcher claim = %#v", members)
 	}
-	refresh()
+	if strings.Contains(members[0].SessionClaim, "private-session-value") {
+		t.Fatalf("watcher persisted raw tool session: %#v", members[0])
+	}
+}
+
+func TestInboxWatcherCanonicalizesAliasToTheGlobalAgentClaim(t *testing.T) {
+	isolateUnifiedInbox(t)
+	if err := fleet.New().SaveAgent(fleet.Agent{Name: "canonical-sentinel", Aliases: []string{"topic-sentinel"}, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
+		t.Fatal(err)
+	}
+	leave, err := registerInboxWatcher("topic-sentinel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer leave()
+	members, err := room.Members()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(members) != 1 || members[0].ID != "canonical-sentinel" || members[0].Nick != "canonical-sentinel" {
+		t.Fatalf("canonical watcher claim = %#v", members)
+	}
 }
 
 func TestInboxHelpTeachesBoundedSentinelResponseAndIdentitySafety(t *testing.T) {
@@ -360,6 +433,9 @@ func TestInboxHelpTeachesBoundedSentinelResponseAndIdentitySafety(t *testing.T) 
 		"never truncate or auto-split",
 		"acknowledge receipt with owner, action, and ETA",
 		"Never read as another identity",
+		"cooperative authored-message claim",
+		"different live agent session",
+		"whois agent:NAME",
 		"monitoring ENDED",
 		"continued monitoring after",
 		"skills show check-messages",

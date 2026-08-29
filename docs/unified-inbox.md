@@ -97,6 +97,23 @@ waiting, and respond to each batch through the originating MB/Meet/Bus route.
 Never leave the watcher detached and unpolled: it advances source cursors after
 rendering, so ignored buffered output would amount to silently consumed mail.
 
+Starting the watcher claims the registered fleet NAME as a live, globally
+singleton identity. The claim is visible in `bashy agents` and as `TAKEN` in
+`bashy whois agent:NAME`, and it is released when the watcher exits. A second
+watcher or another singleton session cannot reuse NAME. An observed Meet seat,
+Bus subscriber, nickname-shaped typo, or arbitrary ad-hoc string is not enough:
+register the agent first, then watch as its canonical name or alias.
+
+The same live claim guards authored coordination. MB post/send, Meet-board tell,
+messaging ping, notify, Bus publish, and human-mailbox send refuse `--as NAME`
+when another live session owns NAME, append no authored record, and queue a
+short identity warning for the rightful owner. Governed children inherit `BASHY_PRINCIPAL`;
+that value identifies the intended author but never proves ownership by itself.
+When the tool exposes a stable session identifier, the watcher records only its
+hash and later authored commands must present the same tool session. Other tools
+fall back to a live watcher plus matching process ancestry. This is cooperative
+collision prevention inside one OS account, not cryptographic authentication.
+
 When the harness cannot retain and poll a long-running process, repeatedly run
 `bashy inbox --as <fleet-agent-name> --wait 60s --json`, process the returned
 batch, and immediately re-enter the wait. An empty timeout is not a terminal
