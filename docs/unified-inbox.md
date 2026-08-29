@@ -115,8 +115,10 @@ fall back to a live watcher plus matching process ancestry. This is cooperative
 collision prevention inside one OS account, not cryptographic authentication.
 
 When the harness cannot retain and poll a long-running process, repeatedly run
-`bashy inbox --as <fleet-agent-name> --wait 60s --json`, process the returned
-batch, and immediately re-enter the wait. An empty timeout is not a terminal
+`bashy inbox --as <fleet-agent-name> --watch --wait 60s --json`, process its
+streamed batches, and immediately re-enter the wait. `--watch` makes each bounded
+wait hold the identity claim; omitting it leaves authored sends fail-closed. An
+empty timeout is not a terminal
 condition while the assignment remains active. Unexpected watcher exit is a
 monitoring gap: report and restart it. Intentional shutdown requires the
 explicit `monitoring ENDED` handoff described below.
@@ -191,17 +193,17 @@ The receiver waits for `END` before acknowledging the whole message and reports
 missing parts. Generated meeting turns, transcripts, imported artifacts, inbox
 rendering, and historical records are not subject to this quick-message cap.
 
-When a retained/polled persistent watcher is unavailable, repeat this one-batch
-wait until the assignment deadline and process its result before re-entering:
+When a retained persistent watcher is unavailable, repeat this bounded watcher
+until the assignment deadline and process its streamed output before re-entering:
 
 ```sh
-bashy inbox --as sprint-83-sentinel --wait 60s
+bashy inbox --as sprint-83-sentinel --watch --wait 60s
 ```
 
-It returns immediately when a batch arrives, letting a model surface,
-acknowledge, and route it promptly. A retained `--watch` process is the preferred
-real-time path when the supervisor can poll its output and issue replies through
-separate commands; otherwise use the repeated one-batch loop.
+It holds the identity claim for the full bound while streaming arriving batches,
+letting a model surface, acknowledge, and route them promptly. An unbounded
+retained `--watch` process is preferred when the supervisor can poll its output
+and issue replies through separate commands; otherwise repeat bounded watches.
 
 The appointment must define:
 
@@ -235,7 +237,7 @@ the fact that the final bounded wait and assignment expired.
 A terminal sentinel handoff must say `monitoring ENDED`, the deadline or reason,
 last processed provenance/cursor, outstanding or unread status, and who resumes
 coverage. It must never exit while promising it "will continue monitoring". If
-the assignment is still active, it re-enters another one-batch wait instead of
+the assignment is still active, it re-enters another bounded watch instead of
 returning a terminal answer.
 
 Only after that terminal handoff and accounting for outstanding input, clean up
@@ -246,7 +248,7 @@ the host OS account remains the trust boundary.
 
 The identity is also the cursor boundary: never point the sentinel at another
 agent's name. It must not silently consume another worker's mail. Re-enter the
-bounded one-batch wait only while the assignment remains active.
+bounded watch only while the assignment remains active.
 
 ```sh
 # Reply to an MB sender.

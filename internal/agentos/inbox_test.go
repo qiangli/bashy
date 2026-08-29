@@ -360,6 +360,84 @@ func TestInboxWatcherCannotOverwriteAnotherLiveUseOfTheAgentIdentity(t *testing.
 	}
 }
 
+func TestDottedInteractiveClaimRefusesInboxWatcher(t *testing.T) {
+	isolateUnifiedInbox(t)
+	const name = "codex.gpt5.6.sol"
+	if err := fleet.New().SaveAgent(fleet.Agent{Name: name, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
+		t.Fatal(err)
+	}
+	claimID := room.AgentClaimID(name)
+	if claimID == name {
+		t.Fatalf("test requires a sanitized dotted claim id, got %q", claimID)
+	}
+	if err := room.Join(room.Card{ID: claimID, Nick: name, Mode: "interactive", PID: os.Getppid()}); err != nil {
+		t.Fatal(err)
+	}
+	defer room.LeavePID(claimID, os.Getppid())
+	if _, err := registerInboxWatcher(name); err == nil || !strings.Contains(err.Error(), "already live") {
+		t.Fatalf("watcher against dotted interactive claim error = %v", err)
+	}
+}
+
+func TestDottedInboxWatcherRefusesInteractiveClaim(t *testing.T) {
+	isolateUnifiedInbox(t)
+	const name = "codex.gpt5.6.sol"
+	if err := fleet.New().SaveAgent(fleet.Agent{Name: name, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
+		t.Fatal(err)
+	}
+	leave, err := registerInboxWatcher(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer leave()
+	claimID := room.AgentClaimID(name)
+	if err := room.Join(room.Card{ID: claimID, Nick: name, Mode: "interactive", PID: os.Getppid()}); err == nil || !strings.Contains(err.Error(), "already live") {
+		t.Fatalf("interactive against dotted watcher claim error = %v", err)
+	}
+}
+
+func TestBoundedWatchHoldsAndReleasesTheAgentClaim(t *testing.T) {
+	isolateUnifiedInbox(t)
+	const name = "bounded-watch-sentinel"
+	if err := fleet.New().SaveAgent(fleet.Agent{Name: name, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	cmd := newUnifiedInboxCmd()
+	cmd.SetContext(ctx)
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"--as", name, "--watch", "--wait", "300ms", "--json"})
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute() }()
+
+	claimID := room.AgentClaimID(name)
+	deadline := time.Now().Add(time.Second)
+	for {
+		card, live, err := room.Find(claimID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if live {
+			if card.Mode != inboxWatcherMode || card.Nick != name {
+				t.Fatalf("bounded watcher card = %#v", card)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("bounded --watch never published its identity claim")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if _, live, err := room.Find(claimID); err != nil || live {
+		t.Fatalf("bounded watcher claim after return: live=%v err=%v", live, err)
+	}
+}
+
 func TestInboxWatcherRecordsSessionProofSeparatelyFromAttribution(t *testing.T) {
 	isolateUnifiedInbox(t)
 	const name = "governed-sentinel"
@@ -423,7 +501,8 @@ func TestInboxHelpTeachesBoundedSentinelResponseAndIdentitySafety(t *testing.T) 
 		"poll its output at",
 		"appears as active in",
 		"second watcher cannot claim",
-		"--as NAME --wait 60s",
+		"--as NAME --watch --wait 60s",
+		"every bounded run hold NAME's",
 		"one empty timeout does not end",
 		"distinct registered Bashy",
 		"agents show NAME",

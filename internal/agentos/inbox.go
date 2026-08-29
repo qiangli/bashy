@@ -88,8 +88,9 @@ every turn and during active waiting. Never detach and ignore it: rendered
 records advance NAME's cursors. While it runs, the watcher appears as active in
 'bashy agents'; a second watcher cannot claim the same NAME. If the harness
 cannot retain and poll a process,
-repeat 'bashy inbox --as NAME --wait 60s --json', process each batch, and
-immediately re-enter; one empty timeout does not end active monitoring.
+repeat 'bashy inbox --as NAME --watch --wait 60s --json', process its streamed
+batches, and immediately re-enter. --watch makes every bounded run hold NAME's
+claim; one empty timeout does not end active monitoring.
 
 Assign a model-driven sentinel one distinct registered Bashy identity (verify
 with 'bashy agents show NAME'), invite it to assigned Meet boards, and
@@ -249,7 +250,7 @@ func registerInboxWatcher(reader string) (func(), error) {
 	card := room.Card{
 		// The registered name is the global identity claim. A parallel
 		// "inbox:NAME" card would let one identity occupy two live sessions.
-		ID:           agent.Name,
+		ID:           room.AgentClaimID(agent.Name),
 		Principal:    principal,
 		SessionClaim: sessionClaim,
 		Tool:         agent.Tool,

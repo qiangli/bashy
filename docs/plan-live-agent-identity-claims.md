@@ -11,7 +11,8 @@ cryptographic security boundary.
 
 1. A live registered identity has one canonical room claim. Inbox watchers,
    interactive sessions, and other singleton sessions use the fleet name as
-   that claim; a second claimant fails before doing work.
+   input to the shared room claim-ID function; a second claimant fails before
+   doing work even when the fleet name contains dots or other path punctuation.
 2. A bare human inbox watch remains valid and does not mint an agent identity.
    An agent watcher must already exist in the fleet catalog; aliases resolve to
    the canonical name.
