@@ -11,11 +11,18 @@ import (
 	"time"
 
 	"github.com/qiangli/coreutils/pkg/bus"
+	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/meet"
+	"github.com/qiangli/coreutils/pkg/room"
 	"github.com/spf13/cobra"
 )
 
 const unifiedInboxSchema = "bashy-inbox-v1"
+
+const (
+	inboxWatcherPrefix = "inbox:"
+	inboxWatcherMode   = "inbox"
+)
 
 type unifiedInboxEvent struct {
 	Schema string              `json:"schema"`
@@ -62,7 +69,9 @@ message store and keeps each source's own cursor.
 For real-time agent coordination, retain
 'bashy inbox --as NAME --watch --json' as a live process and poll its output at
 every turn and during active waiting. Never detach and ignore it: rendered
-records advance NAME's cursors. If the harness cannot retain and poll a process,
+records advance NAME's cursors. While it runs, the watcher appears as active in
+'bashy agents'; a second watcher cannot claim the same NAME. If the harness
+cannot retain and poll a process,
 repeat 'bashy inbox --as NAME --wait 60s --json', process each batch, and
 immediately re-enter; one empty timeout does not end active monitoring.
 
@@ -118,6 +127,13 @@ pretends such a session was adopted.`,
 			if err != nil {
 				return err
 			}
+			if watch {
+				leave, err := registerInboxWatcher(reader)
+				if err != nil {
+					return err
+				}
+				defer leave()
+			}
 			return runUnifiedInbox(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), reader, limit, peek, jsonOut, watch, wait)
 		},
 	}
@@ -162,6 +178,36 @@ func resolveInboxReader(as string) (string, error) {
 		return "", fmt.Errorf("inbox: --as %q is not a registered Bashy agent; verify with `bashy agents list --all` and `bashy whois agent:%s`", as, as)
 	}
 	return addr, nil
+}
+
+// registerInboxWatcher makes a persistent inbox reader visible through
+// `bashy agents` for exactly as long as its watch process is alive. The stable
+// card ID is also a claim: two processes may not consume one registered
+// identity's cursors concurrently.
+func registerInboxWatcher(reader string) (func(), error) {
+	agent, ok := fleet.New().Agent(reader)
+	if !ok {
+		// A human may use bare `bashy inbox --watch` under an OS login. Only
+		// registered agent identities belong in the agent workload roster.
+		return func() {}, nil
+	}
+	cwd, _ := os.Getwd()
+	card := room.Card{
+		ID:        inboxWatcherPrefix + agent.Name,
+		Principal: strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL")),
+		Tool:      agent.Tool,
+		Model:     agent.Model,
+		Binding:   agent.MatrixKey(),
+		Nick:      agent.Name,
+		Mode:      inboxWatcherMode,
+		Task:      "watching Bashy inbox",
+		PID:       os.Getpid(),
+		Cwd:       cwd,
+	}
+	if err := room.Join(card); err != nil {
+		return nil, fmt.Errorf("inbox: register watcher %q: %w", agent.Name, err)
+	}
+	return func() { room.Leave(card.ID) }, nil
 }
 
 func runUnifiedInbox(ctx context.Context, out, errOut io.Writer, reader string, limit int, peek, jsonOut, watch bool, bound time.Duration) error {

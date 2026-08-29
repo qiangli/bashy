@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/qiangli/coreutils/pkg/bus"
+	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/meet"
+	"github.com/qiangli/coreutils/pkg/room"
 )
 
 type failingInboxWriter struct{}
@@ -258,6 +260,82 @@ func TestInboxRefusesWatchWithLimit(t *testing.T) {
 	}
 }
 
+func TestInboxWatcherPublishesActiveRosterPresenceForItsLifetime(t *testing.T) {
+	isolateUnifiedInbox(t)
+	const name = "inbox-sentinel-test"
+	if err := fleet.New().SaveAgent(fleet.Agent{Name: name, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
+		t.Fatal(err)
+	}
+
+	leave, err := registerInboxWatcher(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	members, err := room.Members()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(members) != 1 {
+		t.Fatalf("watcher room members = %#v, want one", members)
+	}
+	card := members[0]
+	if card.ID != inboxWatcherPrefix+name || card.Nick != name || card.Mode != inboxWatcherMode || card.PID != os.Getpid() || card.Task != "watching Bashy inbox" {
+		t.Fatalf("watcher card = %#v", card)
+	}
+
+	assignments, err := reconciledAgentRoster()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var watcher *agentAssignment
+	for i := range assignments {
+		if assignments[i].Agent == name {
+			watcher = &assignments[i]
+			break
+		}
+	}
+	if watcher == nil || watcher.Mode != inboxWatcherMode || watcher.Health != "healthy" || watcher.Title != "watching Bashy inbox" {
+		t.Fatalf("watcher assignment = %#v; full roster = %#v", watcher, assignments)
+	}
+
+	leave()
+	members, err = room.Members()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(members) != 0 {
+		t.Fatalf("watcher remained after exit: %#v", members)
+	}
+}
+
+func TestInboxWatcherRefreshDoesNotDuplicatePresence(t *testing.T) {
+	isolateUnifiedInbox(t)
+	const name = "singleton-inbox-sentinel"
+	if err := fleet.New().SaveAgent(fleet.Agent{Name: name, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
+		t.Fatal(err)
+	}
+	leave, err := registerInboxWatcher(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer leave()
+
+	// The same process may refresh its own card without creating a second row.
+	// room.Join rejects a different live PID; that behavior is covered by room.
+	refresh, err := registerInboxWatcher(name)
+	if err != nil {
+		t.Fatalf("same-process watcher refresh failed: %v", err)
+	}
+	members, err := room.Members()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(members) != 1 {
+		t.Fatalf("watcher refresh produced %d presence cards: %#v", len(members), members)
+	}
+	refresh()
+}
+
 func TestInboxHelpTeachesBoundedSentinelResponseAndIdentitySafety(t *testing.T) {
 	cmd := newUnifiedInboxCmd()
 	var out bytes.Buffer
@@ -270,6 +348,8 @@ func TestInboxHelpTeachesBoundedSentinelResponseAndIdentitySafety(t *testing.T) 
 	for _, behavior := range []string{
 		"--as NAME --watch --json",
 		"poll its output at",
+		"appears as active in",
+		"second watcher cannot claim",
 		"--as NAME --wait 60s",
 		"one empty timeout does not end",
 		"distinct registered Bashy",
