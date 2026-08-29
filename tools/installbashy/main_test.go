@@ -84,3 +84,51 @@ func TestInstallExecutableReplacesExistingFile(t *testing.T) {
 		t.Fatalf("installed body = %q", got)
 	}
 }
+
+func TestDefaultManDirUsesInstallPrefix(t *testing.T) {
+	got := defaultManDir(filepath.Join(string(filepath.Separator), "opt", "bashy", "bin"))
+	want := filepath.Join(string(filepath.Separator), "opt", "bashy", "share", "man", "man1")
+	if got != want {
+		t.Fatalf("default man dir = %q, want %q", got, want)
+	}
+}
+
+func TestInstallManualPagesRequiresAndInstallsCompleteInventory(t *testing.T) {
+	sh := filepath.Join(t.TempDir(), "sh")
+	cu := filepath.Join(t.TempDir(), "coreutils")
+	if err := os.MkdirAll(sh, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cu, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range requiredManualPages {
+		dir := sh
+		if name == "mail.1" || name == "mailx.1" || name == "talk.1" {
+			dir = cu
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("manual "+name+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dst := filepath.Join(t.TempDir(), "share", "man", "man1")
+	if err := installManualPages([]string{sh, cu}, dst); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range requiredManualPages {
+		info, err := os.Stat(filepath.Join(dst, name))
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if info.Mode().Perm() != 0o644 {
+			t.Errorf("%s mode = %o, want 644", name, info.Mode().Perm())
+		}
+	}
+	if err := os.Remove(filepath.Join(sh, "alias.1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := installManualPages([]string{sh, cu}, filepath.Join(t.TempDir(), "missing")); err == nil || !strings.Contains(err.Error(), "alias.1") {
+		t.Fatalf("missing-page error = %v", err)
+	}
+}

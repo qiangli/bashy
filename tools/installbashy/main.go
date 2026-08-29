@@ -37,10 +37,13 @@ var requiredAgentOSVerbs = []string{
 type commandRunner func(exe string, args ...string) ([]byte, error)
 
 func main() {
-	var bashSource, bashySource, installDir string
+	var bashSource, bashySource, installDir, manDir, shManDir, coreutilsManDir string
 	flag.StringVar(&bashSource, "bash", filepath.Join("bin", executableName("bash")), "freshly built bash binary")
 	flag.StringVar(&bashySource, "bashy", filepath.Join("bin", executableName("bashy")), "freshly built bashy binary")
 	flag.StringVar(&installDir, "dir", defaultInstallDir(), "installation directory (default: $DHNT_BIN_DIR or ~/.local/bin)")
+	flag.StringVar(&manDir, "man-dir", strings.TrimSpace(os.Getenv("DHNT_MAN_DIR")), "manual section-1 directory (default: the installation prefix's share/man/man1)")
+	flag.StringVar(&shManDir, "sh-man-dir", filepath.Join("..", "sh", "docs", "man", "man1"), "shell manual-page source directory")
+	flag.StringVar(&coreutilsManDir, "coreutils-man-dir", filepath.Join("..", "coreutils", "docs", "man", "man1"), "coreutils manual-page source directory")
 	flag.Parse()
 
 	dir, err := filepath.Abs(installDir)
@@ -49,6 +52,13 @@ func main() {
 	}
 	bashyTarget := filepath.Join(dir, executableName("bashy"))
 	bashTarget := filepath.Join(dir, executableName("bash"))
+	if manDir == "" {
+		manDir = defaultManDir(dir)
+	}
+	manDir, err = filepath.Abs(manDir)
+	if err != nil {
+		fatal(err)
+	}
 
 	if err := verifyBashySurface(bashySource, runCommand); err != nil {
 		fatal(fmt.Errorf("refusing to install incomplete bashy: %w", err))
@@ -74,8 +84,11 @@ func main() {
 	if err := verifyBashySurface(bashyTarget, runCommand); err != nil {
 		fatal(fmt.Errorf("installed bashy failed verification: %w", err))
 	}
+	if err := installManualPages([]string{shManDir, coreutilsManDir}, manDir); err != nil {
+		fatal(fmt.Errorf("install manual pages: %w", err))
+	}
 
-	fmt.Printf("installed %s and %s (dhnt user bin)\n", bashTarget, bashyTarget)
+	fmt.Printf("installed %s and %s (dhnt user bin); POSIX manuals in %s\n", bashTarget, bashyTarget, manDir)
 }
 
 func executableName(name string) string {
@@ -98,6 +111,49 @@ func defaultInstallDir() string {
 		return filepath.Join(".", ".local", "bin")
 	}
 	return filepath.Join(home, ".local", "bin")
+}
+
+func defaultManDir(binDir string) string {
+	return filepath.Join(filepath.Dir(filepath.Clean(binDir)), "share", "man", "man1")
+}
+
+var requiredManualPages = []string{
+	"alias.1", "bg.1", "cd.1", "command.1", "fc.1", "fg.1", "getopts.1",
+	"jobs.1", "unalias.1", "bashy-builtins.1", "mail.1", "mailx.1", "talk.1",
+}
+
+// installManualPages copies the product-owned section-1 manuals into the
+// ordinary man hierarchy.  Pages stay in the repositories that implement the
+// documented commands; this installer is only the Bashy distribution seam.
+func installManualPages(sourceDirs []string, dstDir string) error {
+	byName := make(map[string]string)
+	for _, dir := range sourceDirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return fmt.Errorf("read manual source %s: %w", dir, err)
+		}
+		for _, entry := range entries {
+			name := entry.Name()
+			if entry.IsDir() || filepath.Ext(name) != ".1" {
+				continue
+			}
+			if prior := byName[name]; prior != "" {
+				return fmt.Errorf("manual %s is owned by both %s and %s", name, prior, dir)
+			}
+			byName[name] = filepath.Join(dir, name)
+		}
+	}
+	for _, name := range requiredManualPages {
+		if byName[name] == "" {
+			return fmt.Errorf("required manual page is absent: %s", name)
+		}
+	}
+	for name, src := range byName {
+		if err := installRegularFile(src, filepath.Join(dstDir, name), 0o644); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+	}
+	return nil
 }
 
 func runCommand(exe string, args ...string) ([]byte, error) {
@@ -151,6 +207,10 @@ func verifyBashySurface(exe string, run commandRunner) error {
 }
 
 func installExecutable(src, dst string) error {
+	return installRegularFile(src, dst, 0o755)
+}
+
+func installRegularFile(src, dst string, mode os.FileMode) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -183,7 +243,7 @@ func installExecutable(src, dst string) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Chmod(tmpName, 0o755); err != nil {
+	if err := os.Chmod(tmpName, mode); err != nil {
 		return err
 	}
 	if err := os.Rename(tmpName, dst); err == nil {
