@@ -77,7 +77,7 @@ func dispatchMeta(args []string) {
 	row("icon", m.Icon)
 	row("tip", m.Tip)
 	if len(m.Start) > 0 {
-		row("start", "bashy "+strings.Join(m.Start, " "))
+		row("start", strings.Join(m.Start, " "))
 	}
 	_ = tw.Flush()
 	os.Exit(0)
