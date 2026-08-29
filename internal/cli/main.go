@@ -649,6 +649,10 @@ func newRunner() (*interp.Runner, error) {
 		// real OS default disposition. Warm/session runners are embedded and
 		// deliberately do not opt into this process-global behavior.
 		interp.WithSignalResetter(interp.OSSignalResetter{}),
+		// Linux's Go runtime otherwise reports externally delivered fault
+		// signals as a traceback plus exit 2. A standalone shell must instead
+		// expose the native signal wait status when no trap or ignore owns it.
+		interp.WithStandaloneSignalDefaults(),
 		interp.WithInheritedFds(startupInheritedFds()),
 		interp.PromptExpand(func(s string) string {
 			envGet := func(name string) string {
