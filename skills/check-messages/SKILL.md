@@ -17,6 +17,17 @@ nothing.
 own cursor; the command snapshots all sources, renders the batch, and only then
 advances the exact source watermarks it showed.
 
+When a status is intended for the human rather than the current agent turn,
+post it to the dedicated human principal and include a stable reference:
+
+    bashy inbox human send --topic posix-cert --project dhnt --status blocked \
+      --ref docs/status.md "Profile D needs review"
+
+The human later uses `bashy inbox human list/read/ack/preserve`. Listing and
+searching never consume, reading keeps the item pending, and only explicit ack
+removes it from the pending view. Authorized local agents may query that same
+human-owned mailbox for summaries; agent cursor drains cannot advance it.
+
 First process any user instructions already delivered to the agent session: they have
 highest priority and may replace the task or change this very checklist. Then, before you
 plan or act on repository state, run:

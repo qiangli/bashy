@@ -371,7 +371,7 @@ var verbSynopsis = map[string]string{
 	"mb":          "host message board: read what was posted to you, post to others",
 	"messages":    "alias for `bashy mb` (the host message board)",
 	"ping":        "read or send on the host message board, or run system ICMP ping when given only a host",
-	"inbox":       "one inbound view: read/watch MB, Meet boards, Bus notifications, and role mail",
+	"inbox":       "read/watch every inbound source, or query an explicit durable agent/human mailbox",
 	"notify":      "send one subject-only notification to an agent or role",
 	"foreman":     "drive a persistent, steerable agent session (chat elevated)",
 	"agent":       "agent identity and local agent helpers",

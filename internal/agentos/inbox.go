@@ -66,6 +66,21 @@ message store and keeps each source's own cursor.
   bashy inbox --watch                 follow new inputs until interrupted
   bashy inbox --watch --wait 15m      follow for at most 15 minutes
 
+For a durable, searchable mailbox that never disappears into turn or console
+traffic, use the explicit mailbox operations. Listing and searching consume
+nothing; read keeps a record pending; only ack removes it from the pending view.
+
+  bashy inbox list --topic harness --search profile
+  bashy inbox read mb:42
+  bashy inbox ack mb:42
+  bashy inbox human list --topic posix-cert --project dhnt
+  bashy inbox human send --topic posix-cert --project dhnt --status blocked --ref docs/status.md "Profile D needs review"
+
+The human lane belongs to the current OS user and aggregates MB, Meet boards,
+Bus/ping notifications, and broadcasts with its own state. Agent reads cannot
+consume it; authorized local agents may query and organize that same state for
+the human. Keep status concise and put detail at a stable shared reference.
+
 For real-time agent coordination, retain
 'bashy inbox --as NAME --watch --json' as a live process and poll its output at
 every turn and during active waiting. Never detach and ignore it: rendered
@@ -144,6 +159,8 @@ pretends such a session was adopted.`,
 	f.BoolVar(&watch, "watch", false, "follow all inbound sources until interrupted")
 	f.IntVarP(&limit, "limit", "n", 0, "show at most this many records per source (0 = no cap; a capped source remains unread)")
 	f.BoolVar(&jsonOut, "json", false, "emit one "+unifiedInboxSchema+" object per line (NDJSON)")
+	cmd.AddCommand(newMailboxListCmd(false), newMailboxReadCmd(false), newMailboxAckCmd(false), newMailboxPreserveCmd(false), newMailboxOrganizeCmd(false), newHumanMailboxCmd())
+	cmd.CompletionOptions.DisableDefaultCmd = true
 	return cmd
 }
 

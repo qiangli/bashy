@@ -58,6 +58,20 @@ the public send/history surface; inbox prevents transport-by-transport polling.
     bashy mb post "<message>"    # to everyone
     bashy mb send <agent> "…"    # to one agent, or a selector
 
+For status that must remain discoverable outside terminal history, use the
+explicit principal mailbox. Lists and searches do not consume; only `ack` takes
+an item out of the pending view.
+
+    bashy inbox list --topic harness --search timeout
+    bashy inbox human list --topic posix-cert --project dhnt
+    bashy inbox human send --topic posix-cert --project dhnt --status blocked \
+      --ref docs/status.md "Profile D needs review"
+
+Agent and human mailboxes share the same filters and JSON schema. `read` keeps
+an item pending, `ack` is explicit, `preserve` reopens it, and `--all` includes
+acknowledged history. Keep status under 1024 UTF-8 bytes and link details by a
+stable shared path, commit, issue, room, or artifact reference.
+
 Never consume board messages silently. After a read returns posts, show the
 full message in the user-visible session console when short; otherwise show the
 sender/topic, a concise summary, and the action it requires. Tool output may be

@@ -9,7 +9,7 @@ communication. It is a read-through view over existing durable sources:
 - addressed Bus notifications; and
 - retained legacy role-pending buffers, drained for migration compatibility.
 
-It creates no message store. Every source keeps its own cursor. A read follows
+It copies no message body into another store. Every source keeps its own cursor. A read follows
 the same transaction shape for each source: snapshot unread records and their
 high-water mark, render the complete combined batch, then acknowledge only the
 rendered source watermark. `--peek` performs no acknowledgement. A failed
@@ -44,6 +44,43 @@ explicitly validates them as human/agent-authored coordination.
 interrupted; `--watch --wait DUR` gives it a total bound. `--json` emits
 `bashy-inbox-v1` NDJSON with source, source sequence, sender, recipient, topic,
 room, timestamp, and body.
+
+## Durable principal mailboxes
+
+The explicit mailbox surface adds Gmail-like organization without forking the
+transports:
+
+```text
+bashy inbox list --topic harness --search timeout
+bashy inbox read mb:42                 # opened, still pending
+bashy inbox ack mb:42                  # explicit removal from pending
+bashy inbox preserve mb:42             # reopen/retain
+bashy inbox organize mb:42 --project dhnt --status active
+bashy inbox human list --topic posix-cert --project dhnt
+bashy inbox human send --topic posix-cert --project dhnt \
+  --status blocked --ref docs/status.md "Profile D needs review"
+```
+
+One ingestion and query model serves agent and human principals. It scans the
+authoritative MB, Meet-board, and Bus timelines, retains source attribution and
+structured provenance, removes only proven MB-to-Meet copies, and orders unread
+before read before acknowledged history. `--source`, `--topic`, `--project`,
+`--status`, full-record `--search`, and `--sort unread|newest|oldest|source` work without
+changing state; `organize` applies project/status labels. `--json` emits
+`bashy-mailbox-v1` NDJSON for agent-side summaries and organization.
+
+The human mailbox is addressed to the current OS user. It includes messages
+explicitly addressed to that user and host or room broadcasts, but never a
+direct message to another agent. Its read/ack overlay is separate from every
+native source cursor and every agent mailbox, so a turn-boundary agent read
+cannot make human status disappear. An authorized local agent may query, read,
+preserve, or acknowledge the same human-owned state on the user's behalf. The
+state directory is mode 0700 and each principal file is mode 0600.
+
+`list` never consumes. `read` records that an item was opened while leaving it
+pending. Only `ack` removes it from the default pending view, and `--all` shows
+acknowledged history. `preserve` clears acknowledgement and retains the item.
+The original source log remains authoritative and immutable throughout.
 
 ## Real-time agent monitoring
 
