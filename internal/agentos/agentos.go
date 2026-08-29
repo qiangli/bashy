@@ -352,6 +352,11 @@ func Dispatch() {
 	// excluded from the default lean build and gated behind dispatchObs: present
 	// only under `-tags bashy_obs`; the default stub points the user at a host.
 	dispatchObs(os.Args[1])
+	// `bashy <verb> meta` — the self-description contract, answered from the
+	// atlas for any verb that declares a web surface. Narrowly scoped so it
+	// cannot steal the word from a verb that takes it as an operand; see
+	// dispatchMeta.
+	dispatchMeta(os.Args)
 	switch os.Args[1] {
 	case "help":
 		os.Exit(dispatchHelp(os.Args[2:]))
