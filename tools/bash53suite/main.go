@@ -905,6 +905,11 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 			}
 		}
 	}
+	// procguard reaps the requested shell, but a shell may exit after leaving
+	// background descendants in its inherited process group. Kill that group
+	// on normal completion as well as timeout so no fixture process survives
+	// the harness iteration.
+	killProcessTree(cmd.Process.Pid)
 	if timedOut {
 		return "TIME", nil
 	}

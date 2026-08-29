@@ -311,6 +311,12 @@ minutes, one fixture is seconds.
 
 ### Conformance-suite host safety
 
+`tools/bash53suite` arms a procguard before launching each fixture. Abrupt
+harness death kills the fixture process group, and normal completion or timeout
+also removes background descendants left in that group. The fixture runner
+fails closed on Windows until job-object containment exists; this is a harness
+safety limitation, not a limitation of the shipped Windows shell binaries.
+
 Never run the full uutils suite natively. A 2026-07-24 run triggered unbounded
 reads from `/dev/zero`/`/dev/random` and recursive `--preserve-root` bypasses
 that walked root-equivalent paths. Later contained runs found recursive `cp`

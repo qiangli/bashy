@@ -95,6 +95,41 @@ func TestGuardedFixtureNormalRun(t *testing.T) {
 	}
 }
 
+// TestFixtureNormalExitKillsRemainingProcessGroup pins the normal-completion
+// cleanup path. The procguard helper exits when the requested shell exits; a
+// background descendant can still remain in the inherited process group and
+// must be killed before runFixture returns.
+func TestFixtureNormalExitKillsRemainingProcessGroup(t *testing.T) {
+	sh, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("no sh on this host")
+	}
+	dir := t.TempDir()
+	script := "sleep 120 </dev/null >/dev/null 2>&1 &\necho $! > child.pid\n"
+	if err := os.WriteFile(filepath.Join(dir, "background.sh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "background.right"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	status, err := runFixture(dir, dir, sh, fixture{
+		Name:  "background",
+		Test:  "background.sh",
+		Right: "background.right",
+	}, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != "PASS" {
+		t.Fatalf("status = %s", status)
+	}
+	child := readFixturePID(t, filepath.Join(dir, "child.pid"), time.Second)
+	defer func() { _ = syscall.Kill(child, syscall.SIGKILL) }()
+	if !waitFixtureGone(child, 2*time.Second) {
+		t.Fatalf("background fixture process %d survived normal fixture completion", child)
+	}
+}
+
 func TestFixtureGuardExistsBeforeCommandStart(t *testing.T) {
 	if os.Getenv("BASH53_GUARD_EARLY_HELPER") == "1" {
 		dir := os.Getenv("BASH53_GUARD_EARLY_DIR")
