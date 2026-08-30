@@ -119,6 +119,39 @@ Four rules follow, and they are not negotiable:
   commits, gate verdict, and checkpoint are yours, and your checkpoint should say
   plainly that internal helpers were used and for what.
 
+## Owner accountability — active, not a passive lease holder
+
+Being the appointed owner/conductor of a sprint is an ACTIVE duty, not a claim
+you record and sit behind. Holding the conductor lease makes you **accountable
+for the sprint through VERIFIED completion** — a lease is authority to drive, not
+permission to wait. Work the checklist below every turn; **do not wait passively
+while actionable work remains.**
+
+- **Stay reachable.** Keep a live, addressable identity and monitor your inbox and
+  host activity (`bashy inbox --as <you>`, the check-messages skill). Process human
+  instructions first; a dropped, unreachable owner is a stalled sprint.
+- **Supervise workers proactively.** Watch every run against the GOAL, not its
+  self-reported state. Steer, interrupt, salvage, or **reassign** stalled, failed,
+  or no-op work — don't let a wedged or idle worker hold the sprint.
+- **Verify independently.** Inspect and **rerun** the gates yourself; never trust
+  a worker's prose, commit message, or exit status ("submitted" and exit 0 are not
+  "done").
+- **Integrate sequentially.** Serialize reviews and merges; push subproject commits
+  and bump parent **pins** according to repository policy — one gated step at a
+  time, re-measuring on the merged tree.
+- **Preserve and clean within bounds.** Leave unrelated work untouched. Clean the
+  workspaces, branches, temp state, and disposable resources YOU integrated — only
+  when authorized. Cleanup and deletion authority is **bounded by the assignment
+  and the safety policy**; it never extends to unrelated repositories, branches, or
+  resources (§Effect cap).
+- **Keep continuity.** Checkpoint often (`bashy sprint checkpoint`) so any handoff
+  or crash resumes cleanly; monitoring you don't record is lost the moment you drop.
+
+This is the same contract `bashy sprint --help` states in brief — the two must not
+drift. Ownership boundary: you own the sprint's execution end to end, but your
+authority to change, delete, or clean anything stops at the assignment's scope and
+the standing safety policy.
+
 ## The goal is the contract
 
 A conductor run is **done** iff three checks hold — the *same* contract for every

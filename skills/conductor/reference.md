@@ -98,6 +98,55 @@ campaign; the fleet executes the runs.
 
 ---
 
+## Owner accountability (the lease is a duty, not a seat)
+
+A sprint's owner/conductor lease is authority to DRIVE, and being appointed to it
+makes you accountable for the sprint through **verified completion** — you are an
+active driver, not a passive lease holder who records the claim and waits behind
+it. `bashy sprint --help` states this
+contract in brief and `SKILL.md` gives the turn-by-turn checklist; this is the
+depth behind each obligation, and why it exists.
+
+- **Reachable identity + inbox/host monitoring.** An owner nobody can reach is a
+  stalled sprint that still looks owned. Keep a live, addressable identity, watch
+  your inbox and host activity every turn (`bashy inbox --as <you>`), and process
+  human direction first — it can replace the whole assignment.
+- **Proactive supervision + reassignment.** Judge each worker against the GOAL,
+  never its self-reported state; a `submitted`/exited worker has usually done only
+  part. Steer, interrupt, salvage a watchdog kill, or reassign to a different tool
+  rather than waiting on a wedged or no-op run (§8). The point of the lease is that
+  someone is *actively* driving; a lease held by a passive owner is worse than no
+  lease, because it suppresses failover.
+- **Independent gate inspection + rerun.** You run the gate yourself and read the
+  verdict from bashy, never from the worker's log (`bashy gate … --json`). Prose,
+  commit messages, and exit codes are leads, not evidence — measured: harnesses
+  exit 0 on catastrophic failure. Rerun the gate; don't grep for `PASS`.
+- **Sequential integration, push, and pins.** Serialize reviews and merges onto a
+  review branch, re-gating each (§9). Push subproject commits and bump parent
+  pins/submodules **according to repository policy** — in this tree, a
+  dependency-pin/submodule bump needs explicit human OK, and pins move in the same
+  breath as the change that needs them.
+- **Preserve unrelated work.** Apply patches by named source path; leave unrelated
+  working-tree edits and unrelated branches untouched. Never `git add -A` in a
+  sandboxed workspace.
+- **Cleanup, bounded by authority.** Clean the workspaces, branches, temp state,
+  and disposable resources you integrated (`bashy weave prune --stale`, kill/salvage
+  finished runs) — but only when authorized, and only for resources in your
+  assignment. **Cleanup and deletion authority is bounded by the assignment and the
+  safety policy**; it does not reach unrelated repositories, branches, or resources.
+  When in doubt, leave it and note it in the checkpoint rather than delete it.
+- **Continuity.** Checkpoint often so a planned handoff or a crash resumes cleanly
+  (`bashy sprint checkpoint`, `bashy weave baton write`) — monitoring you don't
+  record is lost the moment you drop.
+
+The ownership boundary, stated plainly: you own the sprint's execution end to end
+and are accountable for its verified completion, but your authority to change,
+delete, or clean anything stops at the assignment's scope and the standing safety
+policy (§Effect cap in `SKILL.md`). Do not wait passively while actionable work
+remains.
+
+---
+
 ## 0. The shape of the work (why a fleet, why a conductor)
 
 A wall of failures is rarely a wall of independent bugs — it is usually a small
