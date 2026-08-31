@@ -25,6 +25,8 @@ const unifiedInboxSchema = "bashy-inbox-v1"
 
 const inboxWatcherMode = "inbox"
 
+var inboxMeetRooms = meet.Rooms
+
 type unifiedInboxEvent struct {
 	Schema string              `json:"schema"`
 	Source string              `json:"source"`
@@ -441,7 +443,7 @@ func snapshotUnifiedInbox(reader string, limit int, includeBus bool) (inboxBatch
 
 	// Every Meet board is a channel. Ordinary chaired meetings are deliberately
 	// excluded: their transcript is a record, not a participant inbox.
-	rooms, err := meet.Rooms()
+	rooms, err := inboxMeetRooms()
 	if err != nil {
 		return batch, fmt.Errorf("meet rooms: %w", err)
 	}

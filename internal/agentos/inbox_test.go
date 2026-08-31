@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -237,11 +236,11 @@ func TestUnifiedTurnPreambleSurfacesSourceFailureWithoutAcknowledging(t *testing
 	if err := bus.PostMessage(bus.Post{From: "human", To: reader, Body: "must survive source error"}); err != nil {
 		t.Fatal(err)
 	}
-	blocked := filepath.Join(t.TempDir(), "not-a-directory")
-	if err := os.WriteFile(blocked, []byte("blocked"), 0o600); err != nil {
-		t.Fatal(err)
+	oldMeetRooms := inboxMeetRooms
+	inboxMeetRooms = func() ([]meet.RoomSummary, error) {
+		return nil, errors.New("forced source failure")
 	}
-	t.Setenv("BASHY_MEET_DIR", blocked)
+	t.Cleanup(func() { inboxMeetRooms = oldMeetRooms })
 	prepared := unifiedTurnPreamble(reader)
 	if !strings.Contains(prepared.Text, "unified inbox warning") || !strings.Contains(prepared.Text, "No source cursor was advanced") {
 		t.Fatalf("source failure was converted to an empty inbox: %q", prepared.Text)

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -140,17 +141,21 @@ func TestMailboxFiltersUnreadFirstAndExplicitReadAckPreserve(t *testing.T) {
 		t.Fatalf("preserve did not reopen: %+v", items)
 	}
 
-	p, _ := mailboxStatePath(human)
-	fi, err := os.Stat(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fi.Mode().Perm() != 0o600 {
-		t.Fatalf("state mode=%o", fi.Mode().Perm())
-	}
-	di, _ := os.Stat(os.Getenv("BASHY_MAILBOX_DIR"))
-	if di.Mode().Perm() != 0o700 {
-		t.Fatalf("dir mode=%o", di.Mode().Perm())
+	// Windows does not implement Unix permission bits; Stat reports the
+	// writable state as 0666 even when WriteFile was given 0600.
+	if runtime.GOOS != "windows" {
+		p, _ := mailboxStatePath(human)
+		fi, err := os.Stat(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fi.Mode().Perm() != 0o600 {
+			t.Fatalf("state mode=%o", fi.Mode().Perm())
+		}
+		di, _ := os.Stat(os.Getenv("BASHY_MAILBOX_DIR"))
+		if di.Mode().Perm() != 0o700 {
+			t.Fatalf("dir mode=%o", di.Mode().Perm())
+		}
 	}
 }
 

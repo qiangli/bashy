@@ -36,7 +36,7 @@ func TestS88LoginStdinReaderPreservesChildTTY(t *testing.T) {
 		}
 	})
 	capture := startPTYCapture(ptmx)
-	if _, err := ptmx.Write([]byte("tty >/dev/null && echo S88_CHILD_TTY_OK\n\x04")); err != nil {
+	if _, err := ptmx.Write([]byte("tty >/dev/null && echo S88_CHILD_TTY_OK; exit\n")); err != nil {
 		t.Fatal(err)
 	}
 	got := capture.waitFor(t, []byte("S88_CHILD_TTY_OK"), 5*time.Second)
