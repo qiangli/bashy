@@ -244,11 +244,11 @@ func TestHumanSendEnforcesBoundAndRecordsOrganizingMetadata(t *testing.T) {
 	t.Setenv(sessionEnv, "alice-session")
 	t.Setenv("BASHY_PRINCIPAL", "dhnt:agent/alice")
 	wireMessageBoard()
-	leave, err := registerInboxWatcher("alice")
+	watcher, err := registerInboxWatcher("alice")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer leave()
+	defer watcher.leave()
 	c := newHumanSendCmd()
 	c.SetOut(&bytes.Buffer{})
 	c.SetErr(&bytes.Buffer{})
@@ -365,11 +365,11 @@ func TestHumanSendAcceptsNestedWrapperFromClaimedWatcherSession(t *testing.T) {
 		return
 	}
 	if os.Getenv("BASHY_TEST_NESTED_WATCHER") != "" {
-		leave, err := registerInboxWatcher(name)
+		watcher, err := registerInboxWatcher(name)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer leave()
+		defer watcher.leave()
 		fmt.Fprintln(os.Stdout, "WATCHER-READY")
 		_, _ = io.Copy(io.Discard, os.Stdin)
 		return

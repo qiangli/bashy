@@ -267,7 +267,7 @@ func TestInboxWatcherPublishesActiveRosterPresenceForItsLifetime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	leave, err := registerInboxWatcher(name)
+	claim, err := registerInboxWatcher(name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +298,7 @@ func TestInboxWatcherPublishesActiveRosterPresenceForItsLifetime(t *testing.T) {
 		t.Fatalf("watcher assignment = %#v; full roster = %#v", watcher, assignments)
 	}
 
-	leave()
+	claim.leave()
 	members, err = room.Members()
 	if err != nil {
 		t.Fatal(err)
@@ -314,11 +314,11 @@ func TestInboxWatcherRefusesASecondLiveClaimOfTheSameIdentity(t *testing.T) {
 	if err := fleet.New().SaveAgent(fleet.Agent{Name: name, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
 		t.Fatal(err)
 	}
-	leave, err := registerInboxWatcher(name)
+	watcher, err := registerInboxWatcher(name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer leave()
+	defer watcher.leave()
 
 	if _, err := registerInboxWatcher(name); err == nil || !strings.Contains(err.Error(), "already has a live inbox watcher") {
 		t.Fatalf("second watcher claim error = %v", err)
@@ -385,11 +385,11 @@ func TestDottedInboxWatcherRefusesInteractiveClaim(t *testing.T) {
 	if err := fleet.New().SaveAgent(fleet.Agent{Name: name, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
 		t.Fatal(err)
 	}
-	leave, err := registerInboxWatcher(name)
+	watcher, err := registerInboxWatcher(name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer leave()
+	defer watcher.leave()
 	claimID := room.AgentClaimID(name)
 	if err := room.Join(room.Card{ID: claimID, Nick: name, Mode: "interactive", PID: os.Getppid()}); err == nil || !strings.Contains(err.Error(), "already live") {
 		t.Fatalf("interactive against dotted watcher claim error = %v", err)
@@ -450,11 +450,11 @@ func TestInboxWatcherRecordsSessionProofSeparatelyFromAttribution(t *testing.T) 
 	}
 	t.Setenv("BASHY_PRINCIPAL", "dhnt:agent/"+name)
 	t.Setenv(sessionEnv, "private-session-value")
-	leave, err := registerInboxWatcher(name)
+	watcher, err := registerInboxWatcher(name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer leave()
+	defer watcher.leave()
 	members, err := room.Members()
 	if err != nil {
 		t.Fatal(err)
@@ -473,11 +473,11 @@ func TestInboxWatcherCanonicalizesAliasToTheGlobalAgentClaim(t *testing.T) {
 	if err := fleet.New().SaveAgent(fleet.Agent{Name: "canonical-sentinel", Aliases: []string{"topic-sentinel"}, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
 		t.Fatal(err)
 	}
-	leave, err := registerInboxWatcher("topic-sentinel")
+	watcher, err := registerInboxWatcher("topic-sentinel")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer leave()
+	defer watcher.leave()
 	members, err := room.Members()
 	if err != nil {
 		t.Fatal(err)

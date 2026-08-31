@@ -125,6 +125,12 @@ bytes per authored body and never truncate or auto-split. If no stable shared
 reference exists, manually number <=1024-byte parts with one correlation token;
 the receiver waits for END and reports missing parts.
 
+A watch registered to NAME stops itself once the agent session that started it
+is no longer its parent or ancestor. It stops BEFORE reading, so nothing is
+rendered or acknowledged, and releases NAME's card and claim so a live session
+can resume coverage. A recycled owner pid is not that session; where the process
+tree cannot be read the watch keeps running.
+
 A sentinel that exits must say monitoring ENDED, why/deadline, last processed
 provenance, outstanding status, and who resumes coverage. It must never promise
 continued monitoring after its process or assignment ends.
@@ -157,14 +163,26 @@ pretends such a session was adopted.`,
 			// An explicit --as or authenticated agent watch must instead claim
 			// one registered, globally unique fleet identity.
 			principal := strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL"))
+			var claim inboxWatcherClaim
 			if watch && (strings.TrimSpace(as) != "" || strings.Contains(principal, "agent/")) {
-				leave, err := registerInboxWatcher(reader)
+				registered, err := registerInboxWatcher(reader)
 				if err != nil {
 					return err
 				}
-				defer leave()
+				// The release runs on EVERY exit, the orphan exit included: a
+				// watcher that stops because its session died must hand the
+				// identity back, or the replacement it just told the fleet to
+				// start is refused by the corpse's own claim.
+				defer registered.leave()
+				claim = registered
 			}
-			return runUnifiedInbox(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), reader, limit, peek, jsonOut, watch, wait)
+			// After the claim, never before it: the follow runtime arms native
+			// filesystem watches, and a refused claim must not leave them (and
+			// their goroutine) behind on a path that never reaches the loop
+			// that closes them.
+			poll := defaultInboxPollRuntime(watch || wait > 0)
+			poll.ownerLive = claim.ownerLive
+			return runUnifiedInboxWithPoll(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), reader, limit, peek, jsonOut, watch, wait, poll)
 		},
 	}
 	f := cmd.Flags()
@@ -212,14 +230,26 @@ func resolveInboxReader(as string) (string, error) {
 	return addr, nil
 }
 
+// inboxWatcherClaim is one registered watcher's hold on a fleet identity: how
+// it is released, and the condition under which it is still legitimate. The two
+// belong together — a claim whose owning session is gone must be released, and
+// the loop that discovers that is the one holding it.
+type inboxWatcherClaim struct {
+	leave func()
+	// ownerLive returns an error once the registered owner is provably no
+	// longer this process's parent or ancestor. It is nil-safe to call
+	// repeatedly and fails open where the process tree cannot be read.
+	ownerLive func() error
+}
+
 // registerInboxWatcher makes a persistent inbox reader visible through
 // `bashy agents` for exactly as long as its watch process is alive. The stable
 // card ID is also a claim: two processes may not consume one registered
 // identity's cursors concurrently.
-func registerInboxWatcher(reader string) (func(), error) {
+func registerInboxWatcher(reader string) (inboxWatcherClaim, error) {
 	agent, ok := fleet.New().Agent(reader)
 	if !ok {
-		return nil, fmt.Errorf("inbox: watcher identity %q is not a registered Bashy agent; register it with `bashy agents add` or choose one from `bashy agents list --all`", reader)
+		return inboxWatcherClaim{}, fmt.Errorf("inbox: watcher identity %q is not a registered Bashy agent; register it with `bashy agents add` or choose one from `bashy agents list --all`", reader)
 	}
 
 	// The kernel lock is the watcher lease. It closes the read-before-write
@@ -227,15 +257,15 @@ func registerInboxWatcher(reader string) (func(), error) {
 	// one process, since both would otherwise advance the same source cursors.
 	claimDir := filepath.Join(room.Dir(), "claims")
 	if err := os.MkdirAll(claimDir, 0o700); err != nil {
-		return nil, fmt.Errorf("inbox: prepare watcher claims: %w", err)
+		return inboxWatcherClaim{}, fmt.Errorf("inbox: prepare watcher claims: %w", err)
 	}
 	claimPath := filepath.Join(claimDir, fmt.Sprintf("inbox-%x.lock", sha256.Sum256([]byte(agent.Name))))
 	claim, err := lockfile.TryAcquire(claimPath, lockfile.Holder{Name: agent.Name, Intent: "watch inbox"})
 	if err != nil {
 		if errors.Is(err, lockfile.ErrHeld) {
-			return nil, fmt.Errorf("inbox: registered agent %q already has a live inbox watcher", agent.Name)
+			return inboxWatcherClaim{}, fmt.Errorf("inbox: registered agent %q already has a live inbox watcher", agent.Name)
 		}
-		return nil, fmt.Errorf("inbox: claim watcher identity %q: %w", agent.Name, err)
+		return inboxWatcherClaim{}, fmt.Errorf("inbox: claim watcher identity %q: %w", agent.Name, err)
 	}
 	cwd, _ := os.Getwd()
 	principal := strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL"))
@@ -265,11 +295,25 @@ func registerInboxWatcher(reader string) (func(), error) {
 	}
 	if err := room.Join(card); err != nil {
 		_ = claim.Release()
-		return nil, fmt.Errorf("inbox: register watcher %q: %w", agent.Name, err)
+		return inboxWatcherClaim{}, fmt.Errorf("inbox: register watcher %q: %w", agent.Name, err)
 	}
-	return func() {
-		room.Leave(card.ID)
-		_ = claim.Release()
+	anchor := inboxWatcherAnchor(card)
+	return inboxWatcherClaim{
+		leave: func() {
+			// Both halves, always. The room card is what `bashy agents` and the
+			// authored-identity guard read; the kernel claim is what the next
+			// watcher process must take. Releasing one and keeping the other
+			// leaves the identity half-held, which reads as available in one
+			// surface and taken in the other.
+			room.Leave(card.ID)
+			_ = claim.Release()
+		},
+		ownerLive: func() error {
+			if inboxOwnerRelation(os.Getpid(), anchor) == inboxOwnerGone {
+				return &inboxOwnerGoneError{agent: agent.Name, owner: anchor}
+			}
+			return nil
+		},
 	}, nil
 }
 
@@ -292,6 +336,15 @@ func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader 
 	gate := &inboxPollGate{reader: reader, fingerprint: poll.fingerprint, fullRescan: poll.fullRescan}
 	interval := poll.min
 	for {
+		// BEFORE the read, not after it. Rendering is what advances a cursor,
+		// so a watcher whose owning session has exited must discover that
+		// while the backlog is still intact — a record drained into a dead
+		// session's stdout is gone from every other reader's view too.
+		if poll.ownerLive != nil {
+			if err := poll.ownerLive(); err != nil {
+				return err
+			}
+		}
 		now := poll.now()
 		read, changed, sum, sampled := gate.due(now)
 		if changed {

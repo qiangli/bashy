@@ -114,6 +114,36 @@ hash and later authored commands must present the same tool session. Other tools
 fall back to a live watcher plus matching process ancestry. This is cooperative
 collision prevention inside one OS account, not cryptographic authentication.
 
+### An orphaned watcher stops instead of draining
+
+A watcher only earns the right to consume NAME's cursors from the agent session
+that started it: what it drains is rendered into that session's stream and
+nowhere else. When that session exits, the watcher is reparented and — before
+this behavior — kept reading and acknowledging forever. Every record it consumed
+after that point was delivered to nobody, was gone from every other reader's
+view, and the dead session's card and kernel claim kept refusing the replacement
+watcher the fleet would have started.
+
+Process liveness cannot answer this question. Pids are reused, so "the owner pid
+is alive" silently becomes true again under an unrelated process. The check is
+therefore a RELATIONSHIP, not a probe: the registered `OwnerPID` must still be
+the watcher's parent or one of its ancestors. It is evaluated BEFORE each read,
+so a watcher that has lost its session stops with its whole backlog intact and
+no cursor advanced, then releases both halves of the identity — the room card
+and the kernel claim — so the next watcher can take NAME immediately. The exit
+carries the `monitoring ENDED` handoff: why it stopped, that nothing was
+consumed, and who must resume coverage.
+
+`bashy agents` applies the same rule when it reconciles the roster: an inbox
+watcher whose owning session is gone is classified non-live (`orphaned`)
+immediately, with no lease to expire. It stays inspectable with `--all`.
+
+The process tree is read natively on Darwin and Linux. Where it cannot be read,
+the check FAILS OPEN — an unproved relationship is reported as unknown and the
+watcher keeps running, because stopping every watcher on an unsupported target
+is a worse failure than the leak it prevents. A bare human `--watch` registers
+no agent card and is unaffected.
+
 When the harness cannot retain and poll a long-running process, repeatedly run
 `bashy inbox --as <fleet-agent-name> --watch --wait 60s --json`, process its
 streamed batches, and immediately re-enter the wait. `--watch` makes each bounded

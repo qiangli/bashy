@@ -677,6 +677,15 @@ func reconciledAgentRoster() ([]agentAssignment, error) {
 			a.Health = "inconsistent"
 			a.HealthReason = "live weave room member has no active queue assignment"
 		}
+		// An inbox watcher's own process staying alive proves nothing: it is
+		// the AGENT SESSION it reads for that makes the identity occupied.
+		// Once that session is gone the card must stop counting as live
+		// immediately — there is no lease to expire here, and a roster that
+		// keeps showing it sends the next assignment to nobody.
+		if strings.EqualFold(card.Mode, inboxWatcherMode) && inboxWatcherOrphaned(card) {
+			a.Health = "orphaned"
+			a.HealthReason = "inbox watcher outlived the agent session that owns its identity"
+		}
 		out = append(out, a)
 	}
 

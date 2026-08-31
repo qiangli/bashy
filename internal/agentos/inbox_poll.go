@@ -35,6 +35,11 @@ type inboxPollRuntime struct {
 	snapshot             func(string, int, bool) (inboxBatch, error)
 	fingerprint          func(string) (uint64, bool)
 	close                func()
+	// ownerLive is set only for a watch that registered a fleet identity. It is
+	// evaluated before every read, so an orphaned watcher stops instead of
+	// draining an identity nobody is reading. Nil means unguarded: a human
+	// watch and every bounded non-identity read behave exactly as before.
+	ownerLive func() error
 }
 
 func defaultInboxPollRuntime(follow bool) inboxPollRuntime {
