@@ -244,6 +244,16 @@ func TestE2EAllListedCommandsDispatch(t *testing.T) {
 			if s := unsupportedSignal(o); s != "" {
 				t.Errorf("verb %q is listed but unsupported (%q): %s", v, s, firstLineOf(o))
 			}
+			if v == "sprint" {
+				const ownershipSentence = "The sprint manager is always responsible for the sprint's delivery from beginning to end, even when work is delegated."
+				const ownershipContract = "Delegation transfers execution, not accountability: owner retains lease, integration sequencing, independent final verification, continuity, and cleanup responsibility."
+				if !strings.Contains(o, ownershipSentence) {
+					t.Errorf("sprint help missing ownership sentence: %q", ownershipSentence)
+				}
+				if !strings.Contains(o, ownershipContract) {
+					t.Errorf("sprint help missing delegation contract: %q", ownershipContract)
+				}
+			}
 		default:
 			// Download/passthrough verb (gh/act/rclone/loom/zot/seaweedfs/kopia/
 			// mirror/go/cmake/clang): confirm dispatch recognition without pulling
@@ -456,23 +466,25 @@ func TestSeatAuthorityInvariantsE2E(t *testing.T) {
 		skill string
 		// require: substrings the embedded body must carry, each keyed by the
 		// invariant it encodes so a failure names the rule, not a string.
-		require map[string]string
-	}{
-		{
-			skill: "conductor",
-			require: map[string]string{
-				"appointed, not self-selected":   "you are APPOINTED, you are not self-selected",
-				"steward appoints seats":         "The steward appoints and qualifies conductor seats",
-				"no self-named successor":        "never names its own successor",
-				"conductor still owns its fleet": "worker fleet",
-				"sub-hub adds no steward layer":  "no steward-facing ownership layer",
-				"standby notifies the steward":   "checkpoints and notifies the steward",
-				"scope routes via the steward":   "Scope moves only through the steward",
-				// Wrap-safe: the source line breaks after "cannot hand scope".
-				"no lateral scope transfer":       "laterally to another conductor",
-				"seats are not held concurrently": "must not hold a steward seat and a conductor seat at the same time",
+			require map[string]string
+		}{
+			{
+				skill: "conductor",
+				require: map[string]string{
+					"appointed, not self-selected":   "you are APPOINTED, you are not self-selected",
+					"steward appoints seats":         "The steward appoints and qualifies conductor seats",
+					"no self-named successor":        "never names its own successor",
+					"conductor still owns its fleet": "worker fleet",
+					"sub-hub adds no steward layer":  "no steward-facing ownership layer",
+					"standby notifies the steward":   "checkpoints and notifies the steward",
+					"scope routes via the steward":   "Scope moves only through the steward",
+					// Wrap-safe: the source line breaks after "cannot hand scope".
+					"no lateral scope transfer":       "laterally to another conductor",
+					"seats are not held concurrently": "must not hold a steward seat and a conductor seat at the same time",
+					"ownership sentence":               "The sprint manager is always responsible for the sprint's delivery from beginning to end, even when work is delegated.",
+					"delegation contract":              "Delegation transfers execution, not accountability: owner retains lease, integration sequencing, independent final verification, continuity, and cleanup responsibility.",
+				},
 			},
-		},
 		{
 			skill: "steward",
 			require: map[string]string{

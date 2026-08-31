@@ -52,6 +52,17 @@ This file is the actionable checklist. The full narrative — the four isolation
 traps in depth, convergence details, and two worked campaigns — lives in the
 bundled `reference.md`; read it before your first campaign.
 
+## Sprint manager ownership
+
+The sprint manager is always responsible for the sprint's delivery from beginning
+to end, even when work is delegated.
+
+The sprint manager always has authority to delegate bounded operational work when
+busy, including monitoring, review preparation, testing, cleanup, and sub-team
+leadership, with clear scope, authority, and reporting. Delegation transfers
+execution, not accountability: owner retains lease, integration sequencing,
+independent final verification, continuity, and cleanup responsibility.
+
 ## Seat authority — you are APPOINTED, you are not self-selected
 
 **The steward appoints and qualifies conductor seats.** A conductor never selects

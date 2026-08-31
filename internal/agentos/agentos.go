@@ -383,6 +383,18 @@ func Dispatch() {
 		// Plan/handoff layer (cross-repo), peer to `weave` (per-repo
 		// execution). Shares the AgentOS state root; user-global board.
 		cmd := weave.NewSprintCmd()
+		sprintOwnership := `The sprint manager is always responsible for the sprint's delivery from beginning to end, even when work is delegated.
+
+The sprint manager always has authority to delegate bounded operational work when busy,
+including monitoring, review preparation, testing, cleanup, and sub-team leadership,
+with clear scope, authority, and reporting. Delegation transfers execution, not
+accountability: owner retains lease, integration sequencing, independent
+final verification, continuity, and cleanup responsibility.`
+		if cmd.Long == "" {
+			cmd.Long = sprintOwnership
+		} else if !strings.Contains(cmd.Long, "The sprint manager is always responsible for the sprint's delivery") {
+			cmd.Long = cmd.Long + "\n\n" + sprintOwnership
+		}
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
