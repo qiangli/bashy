@@ -4,7 +4,6 @@
 package cli
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -211,6 +210,7 @@ const (
 // parser has a complete command. At EOF the shell prints `exit` and
 // saves the history file.
 func runForcedInteractiveExec(r *interp.Runner) error {
+	r.EnableInteractiveHistory()
 	ps1 := os.Getenv("PS1")
 	if ps1 == "" {
 		ps1 = "$ "
@@ -289,6 +289,7 @@ func runForcedInteractiveExec(r *interp.Runner) error {
 			}
 			return
 		}
+		r.RecordInteractiveHistory(strings.TrimSuffix(pending, "\n"))
 		pending = ""
 		lastErr = r.Run(context.Background(), file)
 		if r.Exited() {
@@ -296,13 +297,20 @@ func runForcedInteractiveExec(r *interp.Runner) error {
 		}
 	}
 
-	in := bufio.NewReader(os.Stdin)
+	// Do not put a buffered reader in front of the process stdin. Once an
+	// accepted command starts, it owns all following bytes until it returns;
+	// fc's editor, read, and cat must see them before this loop does.
+	var inputByte [1]byte
 	startLine()
 	for !exited {
-		c, err := in.ReadByte()
-		if err != nil {
-			break
+		n, err := os.Stdin.Read(inputByte[:])
+		if n == 0 {
+			if err != nil {
+				break
+			}
+			continue
 		}
+		c := inputByte[0]
 		switch c {
 		case '\n':
 			if isearch {
@@ -347,6 +355,9 @@ func runForcedInteractiveExec(r *interp.Runner) error {
 			} else {
 				buffer += string(c)
 			}
+		}
+		if err != nil {
+			break
 		}
 	}
 	if !exited {

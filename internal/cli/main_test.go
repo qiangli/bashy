@@ -7,6 +7,7 @@ import (
 	"flag"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -1188,6 +1189,66 @@ func TestForcedInteractiveReverseSearch(t *testing.T) {
 	}
 	if string(data) != content {
 		t.Errorf("history file clobbered at exit:\n got: %q\nwant: %q", string(data), content)
+	}
+}
+
+func TestForcedInteractiveFcEditorOwnsFollowingPipeInput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("requires ed and Unix pipe inheritance")
+	}
+	if _, err := exec.LookPath("ed"); err != nil {
+		t.Skipf("ed not found: %v", err)
+	}
+	t.Setenv("HISTFILE", "")
+
+	stdin, input, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stdin.Close()
+	go func() {
+		_, _ = input.WriteString("echo hello world\nfc -e ed\ns/world/goodbye/\nw\nq\n")
+		_ = input.Close()
+	}()
+
+	oldStdin, oldStderr := os.Stdin, os.Stderr
+	os.Stdin = stdin
+	promptRead, promptWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = promptWrite
+	drained := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, promptRead)
+		close(drained)
+	}()
+	t.Cleanup(func() {
+		os.Stdin = oldStdin
+		os.Stderr = oldStderr
+		_ = promptWrite.Close()
+		<-drained
+		_ = promptRead.Close()
+	})
+
+	var stdout, stderr bytes.Buffer
+	r, err := interp.New(
+		interp.StdIO(stdin, &stdout, &stderr),
+		interp.Env(expand.ListEnviron("HOME="+t.TempDir(), "HISTFILE=/dev/null", "PATH=/bin:/usr/bin")),
+		interp.Interactive(true),
+		interp.WithPosixMode(true),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runForcedInteractiveExec(r); err != nil {
+		t.Fatalf("forced interactive fc: %v; stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "hello goodbye\n") {
+		t.Fatalf("stdout = %q, want edited command output", got)
+	}
+	if got := stderr.String(); got != "echo hello goodbye\n" {
+		t.Fatalf("stderr = %q, want only fc's edited-command trace", got)
 	}
 }
 
