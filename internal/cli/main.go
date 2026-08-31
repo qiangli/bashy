@@ -541,7 +541,10 @@ func Main() {
 	// script (e.g. `-c - 'echo x'`, `-c -- 'echo x'`, a lone `-`).
 	os.Args = stripIgnoredOperandHyphen(os.Args)
 	flag.Parse()
-	err := runAll()
+	err := prepareStartupCredentials(commandLinePrivilegedMode())
+	if err == nil {
+		err = runAll()
+	}
 
 	// Flush telemetry on EVERY exit path. os.Exit skips defers; this is the only hook
 	// that runs. A no-op unless OTel is exporting.
@@ -587,7 +590,7 @@ const defaultPathValue = "/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin
 
 func newRunner() (*interp.Runner, error) {
 	startupPosix := effectiveStartupPosix()
-	inheritedEnv := os.Environ()
+	inheritedEnv := secureStartupEnv(os.Environ())
 	// Increment SHLVL from parent environment.
 	shlvl := 0
 	if s := os.Getenv("SHLVL"); s != "" {
@@ -683,7 +686,7 @@ func newRunner() (*interp.Runner, error) {
 	if setArgs := collectSetArgs(); len(setArgs) > 0 {
 		opts = append(opts, interp.Params(setArgs...))
 	}
-	if bashOpts := os.Getenv("BASHOPTS"); bashOpts != "" {
+	if bashOpts := os.Getenv("BASHOPTS"); !startupPrivilegedMode && bashOpts != "" {
 		var setArgs []string
 		for _, name := range strings.Split(bashOpts, ":") {
 			if name != "" {
@@ -694,7 +697,7 @@ func newRunner() (*interp.Runner, error) {
 			opts = append(opts, interp.Params(setArgs...))
 		}
 	}
-	if shellOpts := os.Getenv("SHELLOPTS"); shellOpts != "" {
+	if shellOpts := os.Getenv("SHELLOPTS"); !startupPrivilegedMode && shellOpts != "" {
 		var setArgs []string
 		for _, name := range strings.Split(shellOpts, ":") {
 			if name != "" {
@@ -749,7 +752,9 @@ func newRunner() (*interp.Runner, error) {
 	// the form `BASH_FUNC_<name>%%=() { body; }`. Parse each one and
 	// register it as a shell function so child invocations see the
 	// caller's exported functions.
-	importBashFuncs(r)
+	if !startupPrivilegedMode {
+		importBashFuncs(r)
+	}
 	// AgentOS default functions (e.g. `docker` -> `bashy podman`), defined before
 	// user rc so they can be overridden.
 	registerDefaultFuncs(r, AgentOSPreamble())
@@ -773,7 +778,7 @@ func startupPosixForEnv(env []string) bool {
 		if name == "POSIXLY_CORRECT" || name == "POSIX_PEDANTIC" {
 			return true
 		}
-		if name != "SHELLOPTS" {
+		if name != "SHELLOPTS" || startupPrivilegedMode {
 			continue
 		}
 		for _, name := range strings.Split(value, ":") {
@@ -1004,6 +1009,9 @@ func sourceStartupEnv(r *interp.Runner, name string) {
 
 // loadStartupFiles sources the appropriate startup files.
 func loadStartupFiles(r *interp.Runner, interactive bool) {
+	if startupPrivilegedMode {
+		return
+	}
 	home, _ := os.UserHomeDir()
 	if invokedAsSh() {
 		if isLoginShell() && !*noprofile {
@@ -1053,7 +1061,7 @@ func loadStartupFiles(r *interp.Runner, interactive bool) {
 
 func runWithLoginLogout(r *interp.Runner, fn func() error) error {
 	err := fn()
-	if isLoginShell() {
+	if isLoginShell() && !startupPrivilegedMode {
 		if home, _ := os.UserHomeDir(); home != "" {
 			sourceIfExists(r, filepath.Join(home, ".bash_logout"))
 		}
