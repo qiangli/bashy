@@ -32,6 +32,17 @@ leadership, with clear scope, authority, and reporting. Delegation transfers
 execution, not accountability: owner retains lease, integration sequencing,
 independent final verification, continuity, and cleanup responsibility.
 
+The recorded sprint owner name is the coordination identity. A successor uses that
+same name for mb/Meet/chat/ping, or changes the sprint owner before adopting a new
+name, and keeps `bashy inbox --as <owner> --watch --json` live for it.
+
+When another sprint manager owns intersecting work, contact that owner through the
+Bashy coordination surfaces and request merge/sequencing before acting. Never
+delete, remove, reset, overwrite, or destroy another owner's branch, git worktree,
+weave workspace, uncommitted changes, or temporary state. Cleanup is proactive but
+strictly limited to resources this sprint owns or has explicitly accepted after
+review/integration; a coordination response does not itself grant deletion authority.
+
 ---
 
 ## Preconditions (when a fleet TDD campaign pays off)

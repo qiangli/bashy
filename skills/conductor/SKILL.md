@@ -63,6 +63,18 @@ leadership, with clear scope, authority, and reporting. Delegation transfers
 execution, not accountability: owner retains lease, integration sequencing,
 independent final verification, continuity, and cleanup responsibility.
 
+The sprint's recorded owner name is its coordination identity. A takeover assumes
+that same name for mb/Meet/chat/ping, unless it first updates sprint ownership to a
+new preferred name. Keep `bashy inbox --as <owner> --watch --json` live for the exact
+recorded name throughout management.
+
+Before touching work owned by another sprint manager, coordinate with that owner
+through mb/Meet/chat/ping and request merge or sequencing. Never delete, remove,
+reset, overwrite, or destroy another owner's branch, git worktree, weave workspace,
+uncommitted changes, or disposable state. The manager proactively reclaims only
+resources its own sprint owns or has explicitly accepted into that sprint after
+review and integration; coordination alone never grants deletion authority.
+
 ## Seat authority — you are APPOINTED, you are not self-selected
 
 **The steward appoints and qualifies conductor seats.** A conductor never selects

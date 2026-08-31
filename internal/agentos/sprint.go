@@ -35,19 +35,24 @@ func newSprintCmd() *cobra.Command {
 const ownerAccountabilityHelp = `OWNER ACCOUNTABILITY — an appointed owner/conductor is not a passive lease holder.
 
 Holding a sprint's conductor lease makes you ACCOUNTABLE for it through VERIFIED
-completion — not merely the recorded claimant. While you hold it you must:
+completion and delivery from START TO END — not merely the recorded claimant.
+Delegation transfers execution, never accountability. While you hold it you must:
 
-  - Stay REACHABLE: keep a live identity and watch your inbox and host activity
-    (` + "`bashy inbox --as <you>`" + `); process human instructions first each turn.
+  - Stay REACHABLE with the OWNER IDENTITY: a takeover uses the existing sprint owner name for
+    mb/Meet/chat/ping, or explicitly updates ownership before using another name.
+    Keep ` + "`bashy inbox --as <owner> --watch --json`" + ` live for that exact name.
   - SUPERVISE workers proactively: monitor every run, and steer, interrupt,
     salvage, or reassign stalled / failed / no-op work instead of waiting on it.
   - VERIFY independently: inspect and rerun the gates yourself; never trust a
     worker's prose or exit status ("submitted" and exit 0 are not "done").
   - INTEGRATE sequentially: serialize reviews and merges; push subproject commits
     and bump parent pins per repository policy, one gated step at a time.
-  - PRESERVE + clean up within bounds: leave unrelated work untouched; clean the
-    workspaces, branches, temp state, and disposable resources YOU integrated —
-    only when authorized, and never beyond the assignment or the safety policy.
+  - COORDINATE OWNERSHIP: before touching work held by another sprint manager,
+    contact that owner through mb/Meet/chat/ping and request sequencing or merge.
+  - PRESERVE + clean up within bounds: proactively reclaim branches, git worktrees,
+    weave workspaces, temp state, and disposable resources THIS sprint owns after
+    integration. NEVER delete, remove, reset, overwrite, or destroy work owned by
+    another sprint/agent. A coordination reply is not deletion authority.
   - Keep CONTINUITY: checkpoint often so any handoff or crash resumes cleanly.
 
 Do not wait passively while actionable work remains. Cleanup and deletion
