@@ -373,6 +373,7 @@ var verbSynopsis = map[string]string{
 	"ping":        "read or send on the host message board, or run system ICMP ping when given only a host",
 	"inbox":       "read/watch every inbound source, or query an explicit durable agent/human mailbox",
 	"notify":      "send one subject-only notification to an agent or role",
+	"activity":    "activity-event contract: subscribe to system activity, see why an event reached you",
 	"foreman":     "drive a persistent, steerable agent session (chat elevated)",
 	"agent":       "agent identity and local agent helpers",
 	"sdlc":        "route intake issues through agentic implementation and deployment gates",

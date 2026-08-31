@@ -132,7 +132,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "relay", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "inbox", "notify", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "apps",
+		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "relay", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "inbox", "notify", "activity", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "apps",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
@@ -953,6 +953,12 @@ func Dispatch() {
 		// Environment self-diagnostic: PATH/sh shadowing, a stale bashy on PATH,
 		// toolchain + container engine, agent mode, bin cache. Advisory.
 		os.Exit(dispatchDoctor(os.Args[2:]))
+	case "activity":
+		// The shared activity-event contract: subscription and status controls,
+		// route explanation, and the recovery fallback. Recipients READ their
+		// activity in `bashy inbox` — this verb is the control surface, not a
+		// second inbox. See docs/activity-events.md.
+		os.Exit(dispatchActivity(os.Args[2:]))
 	case "audit":
 		// The compliance audit trail: tail recent records, verify the hash chain
 		// (tamper-evidence), or export an evidence bundle. Reads the log written

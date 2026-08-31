@@ -131,6 +131,17 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Caps:    []string{atlas.CapJSON},
 		Effects: []string{atlas.EffWrite},
 	},
+	// activity is the control surface over the shared activity-event contract.
+	// Effects are read+write and NOT `net`: the whole delivery path is the
+	// local bus and the local session control socket, which is what keeps the
+	// SDLC loop inside the local-first guarantee pkg/atlas ratchets.
+	"activity": {
+		Stage:   atlas.StageCross,
+		Group:   atlas.GroupOrch,
+		Tier:    atlas.TierUserland,
+		Caps:    []string{atlas.CapJSON},
+		Effects: []string{atlas.EffRead, atlas.EffWrite},
+	},
 }
 
 // verbAtlasRecord resolves one front-door verb: the curated table first,
