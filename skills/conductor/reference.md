@@ -21,6 +21,17 @@ scoreboard) are worked out in the Appendix.
 The generic orchestration playbook is `bashy weave guide`; this is its
 **test-driven**, conductor-led specialization.
 
+## Ownership and delegation contract
+
+The sprint manager is always responsible for the sprint's delivery from beginning
+to end, even when work is delegated.
+
+The sprint manager always has authority to delegate bounded operational work when
+busy, including monitoring, review preparation, testing, cleanup, and sub-team
+leadership, with clear scope, authority, and reporting. Delegation transfers
+execution, not accountability: owner retains lease, integration sequencing,
+independent final verification, continuity, and cleanup responsibility.
+
 ---
 
 ## Preconditions (when a fleet TDD campaign pays off)
