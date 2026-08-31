@@ -30,6 +30,11 @@ func TestStandaloneFaultSignalsUseNativeWaitStatus(t *testing.T) {
 		t.Run(sig.String(), func(t *testing.T) {
 			cmd := exec.Command(bashBin, "-c", "echo ready; read value")
 			cmd.Env = []string{"PATH=/bin:/usr/bin", "HOME=" + t.TempDir()}
+			stdin, err := cmd.StdinPipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer stdin.Close()
 			stdout, err := cmd.StdoutPipe()
 			if err != nil {
 				t.Fatal(err)
