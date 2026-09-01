@@ -57,6 +57,25 @@ The shell has the same exposure, and it is worse: a reserved word in command pos
 shadow a *variable*, it shadows a **program**. Reserve `struct` and every script that invokes
 a binary called `struct` changes meaning.
 
+> [!IMPORTANT]
+> **SUPERSEDED, 2026-08 — the two-word rule below was abolished.** The design of
+> record is `dhnt/docs/bashpp-posix-superset-syntax.md`, which requires **exact
+> Go spelling**: `go worker(arg)`, never `go routine { … }`. There are no `bpp`,
+> `call`, `go routine`, `send`, `recv` or `gather` substitutes.
+>
+> **This section is kept because its reasoning turned out to be right about the
+> danger and wrong about the remedy**, and the record of that is worth more than
+> a deletion. It correctly identified that a bare reserved word breaks any
+> script invoking a program of that name. What it could not know without
+> measuring is that **the parenthesised call already disambiguates**: bash's
+> only `word (` production is `name ()`, so `go worker(a, b)` is *already* a
+> syntax error while `go build ./...` parses fine. The collision this rule was
+> invented to avoid does not exist for the call form, so the cost it was paying
+> — a non-Go spelling — bought nothing.
+>
+> Measured over 188 candidate shapes against GNU bash 5.3.15; see
+> `bashpp-tests/tools/startsites/`.
+
 > **Rule: prefer two-word keywords and new operators over new single reserved words.**
 
 | Form | Verdict | Why |

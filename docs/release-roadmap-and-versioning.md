@@ -280,7 +280,7 @@ bashy:       1.0.0
 gnu_bash:    5.3 + patch-level/hash
 posix:       VSC-PCTS2016 / POSIX08 / IEEE 1003.1 campaign profile
 go_build:    1.26.x
-bashpp_go:   go1.26-profile-v1
+bashpp_go:   go1.27-profile-v1
 coreutils:   GNU 9.11 reference; Bashy command-set revision/hash
 agent_graph: none (pre-1.2) | contrib-v1 + relation-registry revision/hash
 tessaro:     none | sphere-v1 | dks-v1
