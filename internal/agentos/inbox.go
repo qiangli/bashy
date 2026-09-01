@@ -364,19 +364,28 @@ func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader 
 					return err
 				}
 				if !peek {
-					for _, ack := range batch.acks {
-						if err := ack(); err != nil {
-							return fmt.Errorf("inbox: acknowledge rendered source: %w", err)
-						}
+					if err := acknowledgeInboxBatch(batch); err != nil {
+						return err
 					}
 				}
 				interval = poll.min
 				if !watch {
 					return nil
 				}
-			} else if !watch && bound == 0 {
-				fmt.Fprintf(errOut, "nothing new in any channel for %s\n", reader)
-				return nil
+			} else {
+				// Some source records are deliberately not inbound — most notably
+				// this reader's own Meet posts. Their source cursor still has to
+				// pass them or every poll rediscovers the same outbound record, but
+				// they must not render, wake a wait, or end a bounded read.
+				if !peek && len(batch.acks) > 0 {
+					if err := acknowledgeInboxBatch(batch); err != nil {
+						return err
+					}
+				}
+				if !watch && bound == 0 {
+					fmt.Fprintf(errOut, "nothing new in any channel for %s\n", reader)
+					return nil
+				}
 			}
 		}
 		now = poll.now()
@@ -406,9 +415,20 @@ func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader 
 	}
 }
 
+func acknowledgeInboxBatch(batch inboxBatch) error {
+	for _, ack := range batch.acks {
+		if err := ack(); err != nil {
+			return fmt.Errorf("inbox: advance processed source cursor: %w", err)
+		}
+	}
+	return nil
+}
+
 // snapshotUnifiedInbox only READS. Its ack closures are called after the whole
 // rendered batch has reached stdout, so a broken pipe cannot silently consume a
-// message. Each closure carries the exact per-source high-water mark observed.
+// message. A snapshot containing only filtered outbound records has no output to
+// fail and applies its closure silently. Each closure carries the exact
+// per-source high-water mark observed.
 func snapshotUnifiedInbox(reader string, limit int, includeBus bool) (inboxBatch, error) {
 	var batch inboxBatch
 	appendLimited := func(source string, events []unifiedInboxEvent, ack func() error) {
@@ -451,6 +471,7 @@ func snapshotUnifiedInbox(reader string, limit int, includeBus bool) (inboxBatch
 		if !room.Board || !stringMember(room.Members, reader) {
 			continue
 		}
+		seen := meet.SeenSeq(room.ID, reader)
 		d, o, _, through, err := meet.UnreadRecords(room.ID, reader, 0)
 		if err != nil {
 			return batch, fmt.Errorf("meet room %s: %w", room.ID, err)
@@ -467,6 +488,14 @@ func snapshotUnifiedInbox(reader string, limit int, includeBus bool) (inboxBatch
 		}
 		id := room.ID
 		appendLimited("meet:"+id, out, func() error { return meet.MarkSeenThrough(id, reader, through) })
+		if len(out) == 0 && through > seen {
+			// UnreadRecords intentionally filters records authored by reader.
+			// Carry their watermark as a silent acknowledgement: otherwise a
+			// watch either busy-loops on its own post or has to render it merely
+			// to move forward. runUnifiedInbox applies this ack without treating
+			// it as an inbound batch.
+			batch.acks = append(batch.acks, func() error { return meet.MarkSeenThrough(id, reader, through) })
+		}
 	}
 
 	if includeBus {
