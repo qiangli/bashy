@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/qiangli/coreutils/pkg/fleet"
+	"github.com/qiangli/coreutils/pkg/role"
 	"github.com/qiangli/coreutils/pkg/room"
 	"github.com/spf13/cobra"
 )
@@ -531,7 +532,7 @@ func reconciledAgentRoster() ([]agentAssignment, error) {
 		a := agentAssignment{
 			Agent: sprint.Lease.Holder, Role: "conductor", Owner: sprint.Lease.Holder,
 			Sprint: sprint.ID, State: sprint.Column, Title: sprint.Title,
-			Health: "healthy", LastProgress: sprint.Lease.At, Source: "sprint",
+			LastProgress: sprint.Lease.At, Source: "sprint",
 		}
 		if a.State == "" {
 			a.State = "assigned"
@@ -539,11 +540,7 @@ func reconciledAgentRoster() ([]agentAssignment, error) {
 		if deadline := sprintDeadline(sprint, now); !deadline.IsZero() {
 			a.Deadline = deadline
 		}
-		if sprint.Lease.At.IsZero() {
-			a.Health, a.HealthReason = "orphaned", "missing conductor heartbeat"
-		} else if now.Sub(sprint.Lease.At) > 30*time.Minute {
-			a.Health, a.HealthReason = "stale", "conductor lease heartbeat expired"
-		}
+		a.Health, a.HealthReason = sprintConductorHealth(*sprint.Lease, now)
 		a.Age = assignmentAgeAt(sprint.Lease.At, now)
 		out = append(out, a)
 	}
@@ -917,6 +914,55 @@ func workerHealth(item agentsQueueItem, cards []room.Card) (string, string) {
 		return "inconsistent", "live wrapper has no room member"
 	}
 	return "unknown", "no worker heartbeat recorded"
+}
+
+// sprintConductorLeaseTTL is how long a conductor's heartbeat stays believable.
+//
+// It MIRRORS weave's own sprintLeaseTTL, which is unexported and lives in
+// another module, so this is a copy that cannot be compile-checked against its
+// source. Change one and change the other: a roster that ages leases on a
+// different clock than the board reports a conductor the board has already
+// released, which is the surface disagreement this roster exists to end.
+const sprintConductorLeaseTTL = 30 * time.Minute
+
+// sprintConductorHealth grades a sprint's conductor lease.
+//
+// A conductor is NOT a process. An LLM conductor invokes commands ephemerally,
+// so between turns there is nothing to look up: the lease heartbeat is the only
+// evidence the roster has, and this arithmetic is the whole of the liveness
+// judgment. That is why the rule is delegated to role.Seat rather than
+// rewritten here — the canonical model answers with THREE states, and the one
+// a bare subtraction cannot express is the one that strands a row.
+//
+// UNKNOWN maps to "orphaned" and not to "stale" on purpose. Both hide the row
+// from the default view, but the words are a claim about evidence: "stale" says
+// the conductor stopped heartbeating, which is a fact about them; "orphaned"
+// says the record cannot support any statement at all. Reporting an unproved
+// lease as stale would assert the holder is gone on no evidence, and a
+// successor reads that as an invitation to seize the seat.
+func sprintConductorHealth(lease agentsSprintLease, now time.Time) (health, reason string) {
+	seat := role.Seat{
+		Holder:      strings.TrimSpace(lease.Holder),
+		HeartbeatAt: lease.At,
+		TTL:         sprintConductorLeaseTTL,
+	}
+	switch seat.Live(now) {
+	case role.LivenessLive:
+		return "healthy", "conductor lease heartbeat is current"
+	case role.LivenessLapsed:
+		return "stale", "conductor lease heartbeat expired"
+	case role.LivenessVacant:
+		// Unreachable: the caller skips a lease with no holder. Graded rather
+		// than assumed, so a future caller cannot inherit a silent "healthy".
+		return "orphaned", "conductor lease records no holder"
+	default:
+		if lease.At.IsZero() {
+			return "orphaned", "missing conductor heartbeat"
+		}
+		// Beyond clock skew, and therefore never able to lapse: left as
+		// "healthy" this row would hold a conductor seat on the board forever.
+		return "orphaned", "conductor lease heartbeat is dated in the future and cannot be aged"
+	}
 }
 
 func assignmentAgeAt(then, now time.Time) string {

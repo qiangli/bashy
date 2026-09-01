@@ -540,3 +540,84 @@ func writeAgentsQueue(t *testing.T, home, name string, q agentsQueue) {
 		t.Fatal(err)
 	}
 }
+
+// A conductor lease is a HEARTBEAT, so the roster's only evidence that anyone
+// is conducting is a timestamp. That makes the arithmetic on that timestamp
+// load-bearing: a lease the roster cannot age is reported "healthy" forever,
+// and a sprint nobody is conducting keeps a live conductor row on the board.
+//
+// The canonical rule is role.Seat.Live, which answers with THREE states —
+// live, lapsed, and unknown. Unknown is the one a bare `now.Sub(at) > ttl`
+// subtraction cannot express, and it is not hypothetical: a heartbeat written
+// by a host whose clock ran ahead is a negative age, which is never greater
+// than the TTL and therefore reads as fresh on every future call.
+func TestAgentRosterSprintLeaseLivenessMatchesCanonicalSeatRule(t *testing.T) {
+	now := time.Now().UTC()
+	cases := []struct {
+		name   string
+		at     time.Time
+		health string
+	}{
+		{"fresh heartbeat is live", now.Add(-time.Minute), "healthy"},
+		{"heartbeat past the ttl has lapsed", now.Add(-31 * time.Minute), "stale"},
+		{"missing heartbeat proves nothing", time.Time{}, "orphaned"},
+		// The regression: beyond clock skew, a future heartbeat is unproved,
+		// not fresh. Reported healthy, this row never ages out of the roster.
+		{"heartbeat from the future is unproved", now.Add(time.Hour), "orphaned"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home, sprintDir, roomDir := t.TempDir(), t.TempDir(), t.TempDir()
+			t.Setenv("BASHY_HOME", home)
+			t.Setenv("BASHY_SPRINT_DIR", sprintDir)
+			t.Setenv("BASHY_ROOM_DIR", roomDir)
+			useAgentsHome(t, home)
+			writeJSONFile(t, filepath.Join(sprintDir, "queue.json"), agentsSprintBoard{Stories: []agentsSprint{{
+				ID: 99, Title: "conductor liveness", Column: "doing",
+				Lease: &agentsSprintLease{Holder: "codex", At: tc.at},
+			}}})
+			assignments, err := reconciledAgentRoster()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(assignments) != 1 {
+				t.Fatalf("roster = %#v, want exactly one conductor row", assignments)
+			}
+			if got := assignments[0].Health; got != tc.health {
+				t.Fatalf("lease at %v: health = %q, want %q (reason %q)",
+					tc.at, got, tc.health, assignments[0].HealthReason)
+			}
+		})
+	}
+}
+
+// The boundary and the skew tolerance need a controlled clock, which the
+// roster cannot give (it reads time.Now itself). Grade the lease directly so
+// the exact instants are asserted rather than approached.
+func TestSprintConductorHealthGradesTheLeaseInstant(t *testing.T) {
+	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name   string
+		at     time.Time
+		health string
+	}{
+		{"just inside the ttl", now.Add(-sprintConductorLeaseTTL + time.Second), "healthy"},
+		// role.Seat.Live lapses at >= TTL, so the boundary itself is stale.
+		{"exactly at the ttl", now.Add(-sprintConductorLeaseTTL), "stale"},
+		// A heartbeat a moment ahead is ordinary clock and filesystem drift
+		// between two machines, not a corrupt record.
+		{"within clock skew ahead", now.Add(time.Second), "healthy"},
+		{"materially ahead", now.Add(time.Minute), "orphaned"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			health, reason := sprintConductorHealth(agentsSprintLease{Holder: "codex", At: tc.at}, now)
+			if health != tc.health {
+				t.Fatalf("lease at %v: health = %q, want %q (reason %q)", tc.at, health, tc.health, reason)
+			}
+			if reason == "" {
+				t.Fatal("every grade must say why; a bare verdict is not reviewable")
+			}
+		})
+	}
+}
