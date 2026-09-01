@@ -2629,6 +2629,13 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	if err := interp.WithBashSource(src)(r); err != nil {
 		return err
 	}
+	// `bashy < script` (name == ""): fd 0 IS the script source, so a command
+	// that reads fd 0 consumes the script's unread tail — bash's stdin-script
+	// quirk, covered by the bash-5.3 input-test fixture. A named script or
+	// `-c` leaves stdin alone as ordinary data.
+	if err := interp.WithStdinScript(name == "")(r); err != nil {
+		return err
+	}
 	if err := interp.WithIncrementalFilename(name)(r); err != nil {
 		return err
 	}
