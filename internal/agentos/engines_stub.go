@@ -239,15 +239,6 @@ func engineSpec(name string) binmgr.ManagedSpec {
 	return spec
 }
 
-// engineReleaseRepo is the repo whose release carries bashy's permissive engine
-// blobs. Overridable via $BASHY_ENGINE_REPO for forks/mirrors.
-func engineReleaseRepo() string {
-	if r := strings.TrimSpace(os.Getenv("BASHY_ENGINE_REPO")); r != "" {
-		return r
-	}
-	return "qiangli/bashy"
-}
-
 // resolveEngineBinary finds a usable engine binary — the host $PATH first (Tier 3),
 // then bashy's binmgr cache (where managed downloads land) — while never resolving
 // back to this bashy binary (the bare-name shim would recurse).
@@ -295,19 +286,6 @@ func exeSuffix() string {
 		return ".exe"
 	}
 	return ""
-}
-
-// engineCacheDir is bashy's managed-binary cache — $BASHY_BIN_CACHE if set (as
-// binmgr honors it), else <UserCacheDir>/bashy/bin.
-func engineCacheDir() string {
-	if d := strings.TrimSpace(os.Getenv("BASHY_BIN_CACHE")); d != "" {
-		return d
-	}
-	cb, err := os.UserCacheDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(cb, "bashy", "bin")
 }
 
 func sameFile(a, b string) bool {

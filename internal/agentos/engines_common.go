@@ -5,6 +5,7 @@ package agentos
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -82,4 +83,35 @@ func ollamaCloudGate(args []string) (blocked bool, message string) {
 		return true, ollamaCloudBlockMessage(t)
 	}
 	return false, ""
+}
+
+// These two are NOT engine-specific: they name bashy's managed-binary cache and
+// the release repo those managed blobs come from. The OBSERVABILITY stack is a
+// managed download through the same binmgr, so obs_stub.go needs them with no
+// opinion about engines — and it lives behind !bashy_obs while their old home
+// (engines_stub.go) lives behind !bashy_engines. Those two tags are
+// INDEPENDENT, so `BASHY_ENGINES=1` without `BASHY_OBS` dropped the
+// definitions and kept a caller. Untagged is the only home that satisfies all
+// four combinations.
+
+// engineReleaseRepo is the repo whose release carries bashy's permissive engine
+// blobs. Overridable via $BASHY_ENGINE_REPO for forks/mirrors.
+func engineReleaseRepo() string {
+	if r := strings.TrimSpace(os.Getenv("BASHY_ENGINE_REPO")); r != "" {
+		return r
+	}
+	return "qiangli/bashy"
+}
+
+// engineCacheDir is bashy's managed-binary cache — $BASHY_BIN_CACHE if set (as
+// binmgr honors it), else <UserCacheDir>/bashy/bin.
+func engineCacheDir() string {
+	if d := strings.TrimSpace(os.Getenv("BASHY_BIN_CACHE")); d != "" {
+		return d
+	}
+	cb, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(cb, "bashy", "bin")
 }

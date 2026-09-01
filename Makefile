@@ -144,7 +144,7 @@ install: build
 	go run ./tools/installbashy -bash $(BASHY) -bashy $(BIN)
 
 ## test: Run all Go tests
-test: test-build-fail-closed test-sibling-pins test-isolated-lanes
+test: test-build-fail-closed test-sibling-pins test-isolated-lanes test-build-tag-matrix
 	go test ./...
 
 ## test-sibling-pins: Require exact pins and clone mappings for every direct
@@ -160,6 +160,12 @@ test-isolated-lanes:
 ## native launcher compiler or the installer and reuse stale binaries.
 test-build-fail-closed:
 	scripts/test-build-fail-closed.sh
+
+## test-build-tag-matrix: Type-check every combination of the two host build
+## layers. Only lean and build-host are ever compiled by hand, so a broken tag
+## pairing (engines without obs) can rot unnoticed for weeks.
+test-build-tag-matrix:
+	scripts/test-build-tag-matrix.sh
 
 ## dist: Cross-compile static binaries for all release platforms into bin/dist/
 ## (both bash and bashy; goreleaser handles real releases, this is a local
