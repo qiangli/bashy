@@ -289,6 +289,31 @@ func TestAgentsListStillUsesRegisteredCatalog(t *testing.T) {
 	}
 }
 
+func TestAgentsRootAndCatalogExplainAllAccordingToTheirViews(t *testing.T) {
+	cmd := newAgentsRosterCmd()
+	var rootHelp bytes.Buffer
+	cmd.SetOut(&rootHelp)
+	cmd.SetArgs([]string{"--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rootHelp.String(), "include stale, orphaned, and idle presence records") {
+		t.Fatalf("agents root gives the wrong --all meaning:\n%s", rootHelp.String())
+	}
+
+	cmd = newAgentsRosterCmd()
+	var listHelp bytes.Buffer
+	cmd.SetOut(&listHelp)
+	cmd.SetArgs([]string{"list", "--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(listHelp.String(), "include dangling and ephemeral agents") ||
+		strings.Contains(listHelp.String(), "include stale, orphaned, and idle presence records") {
+		t.Fatalf("agents list gives the wrong --all meaning:\n%s", listHelp.String())
+	}
+}
+
 func TestAgentsAllAppliesToAssignmentView(t *testing.T) {
 	home, sprintDir, roomDir := t.TempDir(), t.TempDir(), t.TempDir()
 	t.Setenv("BASHY_HOME", home)
