@@ -77,7 +77,7 @@ func TestInboxAggregatesMeetAndAcknowledgesEachRenderedSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: reader, To: reader, Kind: "status", Text: "meet message"}); err != nil {
+	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: "claude-opus5", To: reader, Kind: "status", Text: "meet message"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := bus.PostMessage(bus.Post{From: "human", To: reader, Body: "board message"}); err != nil {
@@ -127,6 +127,81 @@ func TestInboxWatchDeliversANewBoardPostWithoutHumanRelay(t *testing.T) {
 	}
 }
 
+func TestInboxSilentlyAdvancesPastOwnMeetPostThenDeliversPeerReply(t *testing.T) {
+	isolateUnifiedInbox(t)
+	reader, peer := "codex-gpt5.6-sol", "claude-opus5"
+	st, err := meet.Create(meet.CreateOptions{Topic: "sprint channel", Board: true, Participants: []string{reader, peer}, Human: "operator"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: reader, Kind: "message", Text: "A status"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	if err := runUnifiedInbox(context.Background(), &out, &errOut, reader, 0, false, false, false, 0); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "A status") || out.Len() != 0 {
+		t.Fatalf("reader received its own Meet post: %q", out.String())
+	}
+	if got := meet.SeenSeq(st.ID, reader); got != 1 {
+		t.Fatalf("self-only Meet watermark=%d, want 1", got)
+	}
+	if got := meet.SeenSeq(st.ID, peer); got != 0 {
+		t.Fatalf("reader advanced peer cursor to %d", got)
+	}
+
+	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: peer, To: reader, Kind: "message", Text: "B reply"}); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errOut.Reset()
+	if err := runUnifiedInbox(context.Background(), &out, &errOut, reader, 0, false, false, false, 0); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "B reply") || strings.Contains(out.String(), "A status") {
+		t.Fatalf("peer delivery stdout=%q, want only B reply", out.String())
+	}
+	if got := meet.SeenSeq(st.ID, reader); got != 2 {
+		t.Fatalf("peer Meet watermark=%d, want 2", got)
+	}
+}
+
+func TestInboxBoundedWaitDoesNotFinishOnOwnMeetPost(t *testing.T) {
+	isolateUnifiedInbox(t)
+	reader, peer := "codex-gpt5.6-sol", "claude-opus5"
+	st, err := meet.Create(meet.CreateOptions{Topic: "sprint channel", Board: true, Participants: []string{reader, peer}, Human: "operator"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	posted := make(chan error, 2)
+	go func() {
+		time.Sleep(30 * time.Millisecond)
+		posted <- meet.AppendEvent(st.ID, meet.Event{Speaker: reader, Kind: "message", Text: "A status"})
+		time.Sleep(120 * time.Millisecond)
+		posted <- meet.AppendEvent(st.ID, meet.Event{Speaker: peer, To: reader, Kind: "message", Text: "B reply"})
+	}()
+
+	var out, errOut bytes.Buffer
+	started := time.Now()
+	if err := runUnifiedInbox(context.Background(), &out, &errOut, reader, 0, false, false, false, time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-posted; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-posted; err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(started); elapsed < 100*time.Millisecond {
+		t.Fatalf("bounded wait finished on reader's own post after %s", elapsed)
+	}
+	if !strings.Contains(out.String(), "B reply") || strings.Contains(out.String(), "A status") {
+		t.Fatalf("bounded wait stdout=%q, want only B reply", out.String())
+	}
+}
+
 func TestUnifiedTurnPreambleDeliversBoardAndMeetOnce(t *testing.T) {
 	isolateUnifiedInbox(t)
 	reader := "codex-gpt5.6-sol"
@@ -134,7 +209,7 @@ func TestUnifiedTurnPreambleDeliversBoardAndMeetOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: reader, To: reader, Kind: "status", Text: "turn meet"}); err != nil {
+	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: "claude-opus5", To: reader, Kind: "status", Text: "turn meet"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := bus.PostMessage(bus.Post{From: "human", To: reader, Body: "turn board"}); err != nil {
@@ -165,7 +240,7 @@ func TestInboxRenderFailureLeavesEverySourceUnread(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: reader, To: reader, Kind: "status", Text: "meet survives"}); err != nil {
+	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: "claude-opus5", To: reader, Kind: "status", Text: "meet survives"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := bus.PostMessage(bus.Post{From: "human", To: reader, Body: "mb survives"}); err != nil {
