@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/qiangli/coreutils/pkg/room"
+	"github.com/qiangli/coreutils/pkg/weave"
 )
 
 func TestAgentRosterEmptyIncludesCatalogFooter(t *testing.T) {
@@ -601,9 +602,9 @@ func TestSprintConductorHealthGradesTheLeaseInstant(t *testing.T) {
 		at     time.Time
 		health string
 	}{
-		{"just inside the ttl", now.Add(-sprintConductorLeaseTTL + time.Second), "healthy"},
+		{"just inside the ttl", now.Add(-weave.SprintLeaseTTL + time.Second), "healthy"},
 		// role.Seat.Live lapses at >= TTL, so the boundary itself is stale.
-		{"exactly at the ttl", now.Add(-sprintConductorLeaseTTL), "stale"},
+		{"exactly at the ttl", now.Add(-weave.SprintLeaseTTL), "stale"},
 		// A heartbeat a moment ahead is ordinary clock and filesystem drift
 		// between two machines, not a corrupt record.
 		{"within clock skew ahead", now.Add(time.Second), "healthy"},

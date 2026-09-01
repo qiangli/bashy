@@ -24,6 +24,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/role"
 	"github.com/qiangli/coreutils/pkg/room"
+	"github.com/qiangli/coreutils/pkg/weave"
 	"github.com/spf13/cobra"
 )
 
@@ -916,15 +917,6 @@ func workerHealth(item agentsQueueItem, cards []room.Card) (string, string) {
 	return "unknown", "no worker heartbeat recorded"
 }
 
-// sprintConductorLeaseTTL is how long a conductor's heartbeat stays believable.
-//
-// It MIRRORS weave's own sprintLeaseTTL, which is unexported and lives in
-// another module, so this is a copy that cannot be compile-checked against its
-// source. Change one and change the other: a roster that ages leases on a
-// different clock than the board reports a conductor the board has already
-// released, which is the surface disagreement this roster exists to end.
-const sprintConductorLeaseTTL = 30 * time.Minute
-
 // sprintConductorHealth grades a sprint's conductor lease.
 //
 // A conductor is NOT a process. An LLM conductor invokes commands ephemerally,
@@ -932,7 +924,9 @@ const sprintConductorLeaseTTL = 30 * time.Minute
 // evidence the roster has, and this arithmetic is the whole of the liveness
 // judgment. That is why the rule is delegated to role.Seat rather than
 // rewritten here — the canonical model answers with THREE states, and the one
-// a bare subtraction cannot express is the one that strands a row.
+// a bare subtraction cannot express is the one that strands a row. The TTL
+// comes from weave for the same reason: a roster ageing leases on a different
+// clock than the board reports a conductor the board has already released.
 //
 // UNKNOWN maps to "orphaned" and not to "stale" on purpose. Both hide the row
 // from the default view, but the words are a claim about evidence: "stale" says
@@ -944,7 +938,7 @@ func sprintConductorHealth(lease agentsSprintLease, now time.Time) (health, reas
 	seat := role.Seat{
 		Holder:      strings.TrimSpace(lease.Holder),
 		HeartbeatAt: lease.At,
-		TTL:         sprintConductorLeaseTTL,
+		TTL:         weave.SprintLeaseTTL,
 	}
 	switch seat.Live(now) {
 	case role.LivenessLive:
