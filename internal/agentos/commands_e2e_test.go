@@ -245,14 +245,18 @@ func TestE2EAllListedCommandsDispatch(t *testing.T) {
 				t.Errorf("verb %q is listed but unsupported (%q): %s", v, s, firstLineOf(o))
 			}
 			if v == "sprint" {
+				// Assert against the CONSTANT the help is built from, never a
+				// copy of its prose. Two parallel workers each wrote an owner-
+				// accountability contract on 2026-08-30; the surviving wording
+				// is ownerAccountabilityHelp, and the sentences pinned here
+				// were the other one's. This gate then failed on all three
+				// OSes for two days over wording, while the guarantee it
+				// exists to protect was present the whole time. Comparing
+				// against the source of truth cannot drift that way.
 				normalized := strings.Join(strings.Fields(o), " ")
-				const ownershipSentence = "The sprint manager is always responsible for the sprint's delivery from beginning to end, even when work is delegated."
-				const ownershipContract = "Delegation transfers execution, not accountability: owner retains lease, integration sequencing, independent final verification, continuity, and cleanup responsibility."
-				if !strings.Contains(normalized, ownershipSentence) {
-					t.Errorf("sprint help missing ownership sentence: %q", ownershipSentence)
-				}
-				if !strings.Contains(normalized, ownershipContract) {
-					t.Errorf("sprint help missing delegation contract: %q", ownershipContract)
+				want := strings.Join(strings.Fields(ownerAccountabilityHelp), " ")
+				if !strings.Contains(normalized, want) {
+					t.Errorf("sprint help does not carry the owner-accountability contract\nwant it to contain: %q\ngot: %q", want, normalized)
 				}
 			}
 		default:
