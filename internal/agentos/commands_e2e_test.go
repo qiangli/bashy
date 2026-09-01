@@ -706,9 +706,9 @@ func TestSkillsAdaptE2E(t *testing.T) {
 }
 
 // TestSkillsStandaloneSurfacesE2E: the standalone-first surfaces — the
-// embedded reference dual-bundle skill is env-gated + runnable, a shared
-// catalog dir ($BASHY_SKILLS_PATH — a cloned skills repo) is a read-only
-// ring, and `bashy context` advertises applicable skills first-hop.
+// embedded general-purpose skills ship with the binary, a shared catalog dir
+// ($BASHY_SKILLS_PATH — a cloned skills repo) is a read-only ring, and `bashy
+// context` advertises applicable skills first-hop.
 func TestSkillsStandaloneSurfacesE2E(t *testing.T) {
 	bin := bashyBinary(t)
 	store, shared := t.TempDir(), t.TempDir()
@@ -730,8 +730,6 @@ func TestSkillsStandaloneSurfacesE2E(t *testing.T) {
 		return stdout, code
 	}
 
-	// go-repo-health: embedded, gated on has=go (present here — the e2e
-	// builds with go), dual bundle.
 	out, code := run("skills", "list", "--json", "--all")
 	if code != 0 {
 		t.Fatalf("list: %s", out)
@@ -743,9 +741,6 @@ func TestSkillsStandaloneSurfacesE2E(t *testing.T) {
 	found := map[string]map[string]any{}
 	for _, r := range rows {
 		found[r["name"].(string)] = r
-	}
-	if r := found["go-repo-health"]; r == nil || r["applicable"] != true || r["identity"] == nil {
-		t.Fatalf("go-repo-health row: %+v", found["go-repo-health"])
 	}
 	if r := found["team-tip"]; r == nil || r["ring"] != "shared" {
 		t.Fatalf("team-tip row: %+v", found["team-tip"])
@@ -772,10 +767,10 @@ func TestSkillsStandaloneSurfacesE2E(t *testing.T) {
 		names[s.Name] = true
 		verified[s.Name] = s.Verified
 	}
-	if !names["conductor"] || !names["go-repo-health"] || !names["team-tip"] || !names["bashy"] {
+	if !names["conductor"] || !names["team-tip"] || !names["bashy"] {
 		t.Fatalf("context skills: %+v", report.Skills)
 	}
-	if !verified["go-repo-health"] || verified["team-tip"] {
+	if verified["team-tip"] {
 		t.Fatalf("verified flags: %+v", report.Skills)
 	}
 }

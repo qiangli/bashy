@@ -627,8 +627,6 @@ brand-neutral and driven by bashy's own tools:
 - `skills/conductor/` — drive a fleet of agent CLIs to a verified goal over
   `bashy sprint` + `bashy weave` (decompose → isolate → gate → converge, loop
   until a verifier passes); TDD-at-fleet-scale is the canonical mode.
-- `skills/go-repo-health/` — the reference dual-bundle skill (`SKILL.md` +
-  `skill.dhnt`): attested build-ok ∧ tests-green gate for a Go repo.
 - `skills/knowledge-transfer/` — agent-to-agent knowledge transfer via
   `bashy kb`: the MENTOR loop (distill private memory / in-context recall
   into reconciled candidate pages; select durable+team-relevant+non-derivable;
@@ -644,7 +642,9 @@ brand-neutral and driven by bashy's own tools:
   work already taken. Requires `has=bashy`.
 
 `skills/embed.go` and `bashy skills list` are the sources of truth for the set
-(seven today); this prose drifts, they don't.
+(six today); this prose drifts, they don't. Ecosystem-specific and internal
+operational skills, including `go-repo-health`, live in the umbrella's
+`skills/` overlay and are not compiled into the public binary.
 - `skills/force-agent-shell/` — attested check that agentic CLIs route their
   shell commands through bashy (so the pure-Go userland, the advisor, and OTel
   apply to everything an agent runs). Run as a convergence gate before an
