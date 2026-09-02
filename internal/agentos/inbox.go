@@ -474,14 +474,21 @@ func snapshotUnifiedInbox(reader string, limit int, includeBus bool) (inboxBatch
 	}
 	appendLimited("mb", mbEvents, func() error { return bus.MarkSeen(reader, mbHigh) })
 
-	// Every Meet board is a channel. Ordinary chaired meetings are deliberately
-	// excluded: their transcript is a record, not a participant inbox.
+	// Every Meet room a reader is SEATED in is a channel. Deliverability keys on
+	// the seat, never on the room's type: holding a seat IS a subscription to
+	// it. Chaired rooms keep deciding who holds the FLOOR — they stop deciding
+	// whether mail exists. The earlier `room.Board` gate was correct while a
+	// chaired meeting's participants were spawned processes that died at the end
+	// of their turn, so a transcript really was a record rather than an inbox;
+	// long-lived seats retired that premise, and the exclusion then silenced the
+	// one channel a sprint advertises to its own conductor. See
+	// docs/agent-inbox-unified-delivery.md sections 1-2 and 7 (P0-a).
 	rooms, err := inboxMeetRooms()
 	if err != nil {
 		return batch, fmt.Errorf("meet rooms: %w", err)
 	}
 	for _, room := range rooms {
-		if !room.Board || !stringMember(room.Members, reader) {
+		if !stringMember(room.Members, reader) {
 			continue
 		}
 		seen := meet.SeenSeq(room.ID, reader)

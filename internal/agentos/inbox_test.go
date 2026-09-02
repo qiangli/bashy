@@ -305,6 +305,62 @@ func TestInboxExcludesMeetBoardsReaderNeverJoined(t *testing.T) {
 	}
 }
 
+// A sprint's conductor room is an ordinary chaired meeting, so this is the
+// exact case that made the room a sprint advertises the one channel its owner
+// could not receive: the seat existed, the transcript held the questions, and
+// the inbox reported nothing. Deliverability keys on the seat (P0-a).
+func TestInboxDeliversChairedRoomMailToSeatedParticipant(t *testing.T) {
+	isolateUnifiedInbox(t)
+	reader := "codex-gpt5.6-sol"
+	peer := "claude-opus5"
+	st, err := meet.Create(meet.CreateOptions{Topic: "conductor 99", Participants: []string{reader, peer}, NoSecretary: true, Human: "operator"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Board {
+		t.Fatal("fixture opened a board; this case is about a CHAIRED room")
+	}
+	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: "operator", Kind: "human", Text: "what is the plan?"}); err != nil {
+		t.Fatal(err)
+	}
+	batch, err := snapshotUnifiedInbox(reader, 0, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, event := range batch.events {
+		if event.Room == st.ID && strings.Contains(event.Body, "what is the plan?") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("chaired-room mail never reached a seated participant: %+v", batch.events)
+	}
+}
+
+// The seat is the whole gate, so removing the room-type condition must not
+// widen delivery to rooms the reader holds no seat in.
+func TestInboxExcludesChairedRoomsReaderHoldsNoSeatIn(t *testing.T) {
+	isolateUnifiedInbox(t)
+	other := "claude-opus5"
+	st, err := meet.Create(meet.CreateOptions{Topic: "someone else's meeting", Participants: []string{other}, NoSecretary: true, Human: "operator"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: other, Kind: "status", Text: "not the reader's meeting"}); err != nil {
+		t.Fatal(err)
+	}
+	batch, err := snapshotUnifiedInbox("codex-gpt5.6-sol", 0, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range batch.events {
+		if event.Room == st.ID || strings.Contains(event.Body, "not the reader's meeting") {
+			t.Fatalf("unseated chaired room leaked into inbox: %+v", event)
+		}
+	}
+}
+
 func TestUnifiedTurnPreambleSurfacesSourceFailureWithoutAcknowledging(t *testing.T) {
 	isolateUnifiedInbox(t)
 	reader := "codex-gpt5.6-sol"
