@@ -84,18 +84,23 @@ The original source log remains authoritative and immutable throughout.
 
 ## Real-time agent monitoring
 
-During active multi-agent work, one read at a turn boundary is only a catch-up;
-it is not real-time monitoring. An agent whose harness can retain a process
-handle starts one persistent watcher under its own registered identity:
+During active multi-agent work, a Bashy-managed chat session needs no separate
+terminal watcher. Its runtime snapshots unified input without consuming it and
+injects that block through the session's real control transport. Only successful
+transport delivery advances source cursors. This is the supported sprint-manager
+path because it creates an actual model turn.
+
+An external harness that can retain and actively poll a process may instead run:
 
 ```sh
 bashy inbox --as <fleet-agent-name> --watch --json
 ```
 
-Keep the process alive, poll its output at every agent turn and during active
+Keep that process alive, poll its output at every agent turn and during active
 waiting, and respond to each batch through the originating MB/Meet/Bus route.
 Never leave the watcher detached and unpolled: it advances source cursors after
-rendering, so ignored buffered output would amount to silently consumed mail.
+rendering, so ignored buffered output would amount to silently consumed mail. A
+watcher card is therefore not accepted as sprint-manager delivery capability.
 
 Starting the watcher claims the registered fleet NAME as a live, globally
 singleton identity. The claim is visible in `bashy agents` and as `TAKEN` in
@@ -156,14 +161,19 @@ explicit `monitoring ENDED` handoff described below.
 ## Turn-boundary delivery
 
 A session launched and registered by Bashy has a verified agent identity and a
-control socket. Its opening prompt and each subsequent `chat.Session.Say` turn
-receive at most one combined inbox block before the caller's instruction. The
-block is part of that model turn and therefore passes through the existing LLM
-budget gate; it is not a free hidden call.
+control transport. Its opening prompt and each subsequent `chat.Session.Say`
+turn receive at most one combined inbox block before the caller's instruction.
+In addition, the managed runtime watches for new unified input and delivers the
+prepared block as its own turn: PTY tools queue it through their control socket;
+ACP tools receive it only after the active protocol turn has completed and its
+owner has observed that boundary, then the relay observes its own unsolicited
+turn to free the protocol for later input. The block passes through the existing
+LLM budget gate; it is not a free hidden call.
 
-A third-party agent process started outside Bashy has neither an authenticated
-room card nor a control socket. Bashy cannot safely steer it, and does not guess
-from a PID or claim live adoption. Its reliable path is explicit pull:
+A third-party agent process started outside Bashy has neither a verified managed
+delivery capability nor a control transport Bashy owns. Bashy cannot safely
+steer it, and does not guess from a PID or claim live adoption. Its path is
+explicit pull, or a watcher its external orchestrator actively polls:
 
 ```sh
 bashy inbox --as <fleet-agent-name>

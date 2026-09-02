@@ -40,7 +40,9 @@ Delegation transfers execution, never accountability. While you hold it you must
 
   - Stay REACHABLE with the OWNER IDENTITY: a takeover uses the existing sprint owner name for
     mb/Meet/chat/ping, or explicitly updates ownership before using another name.
-    Keep ` + "`bashy inbox --as <owner> --watch --json`" + ` live for that exact name.
+    Run as a Bashy-managed agent session under that exact name. Its harness automatically
+    injects unified inbox input into real agent turns. A terminal ` + "`bashy inbox --watch`" + `
+    only prints updates; it cannot wake an external Claude/Codex/OpenCode/ycode/agy harness.
   - SUPERVISE workers proactively: monitor every run, and steer, interrupt,
     salvage, or reassign stalled / failed / no-op work instead of waiting on it.
   - VERIFY independently: inspect and rerun the gates yourself; never trust a

@@ -13,8 +13,8 @@
   unchecked. Story closure checks linked items; reopening unchecks them. A
   gate-required or storyless item also requires recorded evidence.
 - A takeover keeps the recorded owner name as its coordination identity unless
-  it explicitly changes ownership first, and keeps the exact-name inbox watcher
-  live while managing the sprint.
+  it explicitly changes ownership first, and runs as an exact-name Bashy-managed
+  session with automatic inbox delivery while managing the sprint.
 
 ## Delivery slices
 
@@ -24,7 +24,7 @@
   `sprint focus` command surface.
 - [x] Derived checklist/next-story rendering and JSON progress.
 - [x] Priority enforcement with an audited override and done-column refusal.
-- [x] Take/resume identity preservation and exact inbox-watcher instruction.
+- [x] Take/resume identity preservation and verified managed-inbox delivery.
 - [x] Project write lease already enforces commit/push/merge/rebase conflicts;
   add `bashy claim request` so a blocked agent asks the live owner to
   review/merge/sequence/release without stealing the lock.

@@ -84,12 +84,14 @@ Bus/ping notifications, and broadcasts with its own state. Agent reads cannot
 consume it; authorized local agents may query and organize that same state for
 the human. Keep status concise and put detail at a stable shared reference.
 
-For real-time agent coordination, retain
-'bashy inbox --as NAME --watch --json' as a live process and poll its output at
-every turn and during active waiting. Never detach and ignore it: rendered
-records advance NAME's cursors. While it runs, the watcher appears as active in
-'bashy agents'; a second watcher cannot claim the same NAME. If the harness
-cannot retain and poll a process,
+For a Bashy-managed chat session, unified input is automatically injected through
+the session's real control transport and acknowledged only after delivery. This
+is the required mode for a sprint manager: a terminal watcher does not wake a
+model. For an external orchestrator that can retain and actively poll a process,
+run 'bashy inbox --as NAME --watch --json' and poll its output at every turn.
+Never detach and ignore it: rendered records advance NAME's cursors. While it
+runs, the watcher appears as active in 'bashy agents'; second watcher cannot claim
+the same NAME. If the external harness cannot retain and poll a process,
 repeat 'bashy inbox --as NAME --watch --wait 60s --json', process its streamed
 batches, and immediately re-enter. --watch makes every bounded run hold NAME's
 claim; one empty timeout does not end active monitoring.

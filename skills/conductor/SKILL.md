@@ -65,8 +65,10 @@ independent final verification, continuity, and cleanup responsibility.
 
 The sprint's recorded owner name is its coordination identity. A takeover assumes
 that same name for mb/Meet/chat/ping, unless it first updates sprint ownership to a
-new preferred name. Keep `bashy inbox --as <owner> --watch --json` live for the exact
-recorded name throughout management.
+new preferred name. Run the conductor as a Bashy-managed session under that exact
+name; Bashy automatically injects unified inbox input through its real agent
+control transport. A detached `bashy inbox --watch` only prints output and does
+not make an external harness wake up.
 
 Before touching work owned by another sprint manager, coordinate with that owner
 through mb/Meet/chat/ping and request merge or sequencing. Never delete, remove,

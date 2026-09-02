@@ -34,7 +34,9 @@ independent final verification, continuity, and cleanup responsibility.
 
 The recorded sprint owner name is the coordination identity. A successor uses that
 same name for mb/Meet/chat/ping, or changes the sprint owner before adopting a new
-name, and keeps `bashy inbox --as <owner> --watch --json` live for it.
+name. The successor must run as a Bashy-managed session under that name, whose
+runtime automatically injects unified inbox input into agent turns. A terminal
+watcher by itself is not a model notification path.
 
 When another sprint manager owns intersecting work, contact that owner through the
 Bashy coordination surfaces and request merge/sequencing before acting. Never
