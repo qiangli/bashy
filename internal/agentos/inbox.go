@@ -18,6 +18,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/lockfile"
 	"github.com/qiangli/coreutils/pkg/meet"
 	"github.com/qiangli/coreutils/pkg/room"
+	"github.com/qiangli/coreutils/pkg/weave"
 	"github.com/spf13/cobra"
 )
 
@@ -333,6 +334,12 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 }
 
 func runUnifiedInbox(ctx context.Context, out, errOut io.Writer, reader string, limit int, peek, jsonOut, watch bool, bound time.Duration) error {
+	// READING YOUR MAIL IS THE HEARTBEAT. An agent that reads its inbox is
+	// demonstrably running and demonstrably attending to this channel, which is
+	// what a seat needs to be true — and it is something an agent already does
+	// at a turn boundary rather than a process it has to hold open. Best-effort
+	// and silent: bookkeeping the caller did not ask for may never fail a read.
+	weave.RefreshSprintOwnerActivity(reader)
 	return runUnifiedInboxWithPoll(ctx, out, errOut, reader, limit, peek, jsonOut, watch, bound, defaultInboxPollRuntime(watch || bound > 0))
 }
 

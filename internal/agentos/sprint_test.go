@@ -93,7 +93,9 @@ func TestExternalSprintTakeWatchClaimsThenStreamsInbox(t *testing.T) {
 	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("take --watch: %v\n%s", err, out.String())
 	}
-	for _, want := range []string{"is now conductor", "READY: attached inbox delivery", "attached inbox stream", "wake the external manager"} {
+	// The take names the ONE action the new conductor now owns, rather than
+	// reporting a readiness condition it would have to go and arrange.
+	for _, want := range []string{"is now conductor", "read your mail with", "attached inbox stream", "wake the external manager"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("take --watch output missing %q:\n%s", want, out.String())
 		}
@@ -143,43 +145,38 @@ func TestConductorSkillCarriesOwnerChecklist(t *testing.T) {
 	}
 }
 
-// THE ATTACH BANNER WAS TRUE AND INSUFFICIENT.
-//
-// "retain and read this process until handoff" does not tell an agent that an
-// explicit ack is owed, and an agent that does not ack loses the seat to the
-// fail-closed fuse with nothing visible until the process exits nonzero. That
-// happened twice in one session on this project's own conductor seat, so the
-// loop is now printed at the moment it becomes the agent's responsibility.
-func TestSprintWatchNextStepsNamesTheLoopAndItsConsequences(t *testing.T) {
+// The attach banner said "retain and read this process" and stopped there,
+// which left the agent to discover the rest by failing. It now names the loop,
+// with the sprint id and owner substituted so nothing has to be assembled.
+func TestSprintWatchNextStepsNameTheLoopAndTheCommands(t *testing.T) {
 	var buf bytes.Buffer
 	writeSprintWatchNextSteps(&buf, 99, "trestle")
 	got := buf.String()
 
-	// The exact commands, already substituted: an agent must not have to
-	// assemble one from a template while a lease is ticking.
 	for _, want := range []string{
 		"bashy sprint inbox-ack 99 --as trestle",
-		"bashy sprint take 99 --as trestle --watch",
+		"bashy inbox --as trestle",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("next steps omit the runnable command %q:\n%s", want, got)
 		}
 	}
-	// Each step carries its CONSEQUENCE. An instruction with no stated cost is
-	// one an agent deprioritises under load, which is how the contract already
-	// in `sprint --help` came to be unread.
-	for _, want := range []string{"EXITS NONZERO", "UNREACHABLE"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("next steps omit the consequence %q:\n%s", want, got)
+	// It must say that nothing is lost by getting this wrong, because that is
+	// true and because a warning implying otherwise is what makes an agent
+	// treat a routine step as an emergency.
+	if !strings.Contains(got, "never consumed") || !strings.Contains(got, "nothing is lost") {
+		t.Errorf("next steps do not say unacked mail is safe:\n%s", got)
+	}
+	// The one genuine correctness point: two readers draining the same cursors.
+	if !strings.Contains(got, "second") || !strings.Contains(got, "cursors") {
+		t.Errorf("next steps do not warn against a second concurrent reader:\n%s", got)
+	}
+	// No penalties, because there are none.
+	for _, gone := range []string{"EXITS NONZERO", "UNREACHABLE", "ages out"} {
+		if strings.Contains(got, gone) {
+			t.Errorf("next steps still threaten %q, which no longer happens:\n%s", gone, got)
 		}
 	}
-	// The stream IS the inbox. A second reader would race it for the same
-	// cursors, and "start a watch" is the obvious wrong inference from the
-	// instruction to keep reading.
-	if !strings.Contains(got, "second") || !strings.Contains(got, "race") {
-		t.Errorf("next steps do not warn against a second inbox reader:\n%s", got)
-	}
-	// Compact enough to be read rather than skimmed past.
 	if n := strings.Count(got, "\n"); n > 9 {
 		t.Errorf("next steps are %d lines; keep them short enough to act on:\n%s", n, got)
 	}

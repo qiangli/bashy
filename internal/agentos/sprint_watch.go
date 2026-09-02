@@ -166,10 +166,21 @@ func runSprintInboxWatch(ctx context.Context, out, errOut io.Writer, sprintID in
 				if err := json.NewEncoder(out).Encode(reminder); err != nil {
 					return err
 				}
-				if misses >= rt.maxMisses {
-					return fmt.Errorf("sprint watch: monitoring ENDED with error: %s did not acknowledge inbox input after %d reminders (%s); messages remain unread; rerun `bashy sprint take %d --as %s --watch`",
-						owner, misses, now.Sub(deliveredAt).Round(time.Second), sprintID, owner)
-				}
+				// IT KEEPS REMINDING; IT DOES NOT QUIT.
+				//
+				// The guard that prevents message loss is that a cursor never
+				// advances until the manager proves it read — and that holds
+				// whether or not this process is alive. Exiting protected
+				// nothing further: the mail was already safe. What it did do
+				// was destroy the seat's delivery path over an unacknowledged
+				// message, so a conductor that was merely busy came back to a
+				// dead watch and a board reporting UNREACHABLE. Measured twice
+				// in one session on this project's own sprint.
+				//
+				// So the reminder stays (the sender is waiting and that must be
+				// visible) and the fuse goes. Unread mail is already reported
+				// where it belongs — `sprint show` counts unanswered messages
+				// and names the oldest.
 				nextReminder = nextReminder.Add(rt.ackEvery)
 			}
 		}
