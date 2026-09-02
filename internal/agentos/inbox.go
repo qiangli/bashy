@@ -85,9 +85,10 @@ consume it; authorized local agents may query and organize that same state for
 the human. Keep status concise and put detail at a stable shared reference.
 
 For a Bashy-managed chat session, unified input is automatically injected through
-the session's real control transport and acknowledged only after delivery. This
-is the required mode for a sprint manager: a terminal watcher does not wake a
-model. For an external orchestrator that can retain and actively poll a process,
+the session's real control transport and acknowledged only after delivery. An
+external sprint manager instead uses 'bashy sprint take/start --watch': the sprint
+command stays attached to its agent-harness parent and streams the same events.
+For other external orchestration that can retain and actively poll a process,
 run 'bashy inbox --as NAME --watch --json' and poll its output at every turn.
 Never detach and ignore it: rendered records advance NAME's cursors. While it
 runs, the watcher appears as active in 'bashy agents'; second watcher cannot claim
@@ -251,6 +252,15 @@ type inboxWatcherClaim struct {
 // card ID is also a claim: two processes may not consume one registered
 // identity's cursors concurrently.
 func registerInboxWatcher(reader string) (inboxWatcherClaim, error) {
+	return registerInboxWatcherAs(reader, inboxWatcherMode, "watching Bashy inbox", nil)
+}
+
+func registerSprintInboxWatcher(reader string) (inboxWatcherClaim, error) {
+	return registerInboxWatcherAs(reader, "sprint-inbox", "managing sprint with attached inbox stream",
+		[]string{room.CapInboxStream})
+}
+
+func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatcherClaim, error) {
 	agent, ok := fleet.New().Agent(reader)
 	if !ok {
 		return inboxWatcherClaim{}, fmt.Errorf("inbox: watcher identity %q is not a registered Bashy agent; register it with `bashy agents add` or choose one from `bashy agents list --all`", reader)
@@ -291,8 +301,9 @@ func registerInboxWatcher(reader string) (inboxWatcherClaim, error) {
 		Model:        agent.Model,
 		Binding:      agent.MatrixKey(),
 		Nick:         agent.Name,
-		Mode:         inboxWatcherMode,
-		Task:         "watching Bashy inbox",
+		Mode:         mode,
+		Task:         task,
+		Caps:         caps,
 		PID:          os.Getpid(),
 		OwnerPID:     ownerPID,
 		Cwd:          cwd,

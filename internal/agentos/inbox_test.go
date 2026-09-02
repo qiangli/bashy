@@ -382,6 +382,26 @@ func TestInboxWatcherPublishesActiveRosterPresenceForItsLifetime(t *testing.T) {
 	}
 }
 
+func TestSprintInboxWatcherAdvertisesAttachedStream(t *testing.T) {
+	isolateUnifiedInbox(t)
+	const name = "external-sprint-stream"
+	if err := fleet.New().SaveAgent(fleet.Agent{Name: name, Tool: "agy", Model: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	claim, err := registerSprintInboxWatcher(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer claim.leave()
+	card, live, err := room.Find(room.AgentClaimID(name))
+	if err != nil || !live {
+		t.Fatalf("sprint watcher card: live=%v err=%v", live, err)
+	}
+	if card.Mode != "sprint-inbox" || !room.HasCapability(card, room.CapInboxStream) || room.HasCapability(card, room.CapInboxDelivery) {
+		t.Fatalf("sprint watcher advertised the wrong delivery contract: %#v", card)
+	}
+}
+
 func TestInboxWatcherRefusesASecondLiveClaimOfTheSameIdentity(t *testing.T) {
 	isolateUnifiedInbox(t)
 	const name = "singleton-inbox-sentinel"

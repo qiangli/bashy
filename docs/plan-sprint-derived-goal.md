@@ -13,8 +13,9 @@
   unchecked. Story closure checks linked items; reopening unchecks them. A
   gate-required or storyless item also requires recorded evidence.
 - A takeover keeps the recorded owner name as its coordination identity unless
-  it explicitly changes ownership first, and runs as an exact-name Bashy-managed
-  session with automatic inbox delivery while managing the sprint.
+  it explicitly changes ownership first. A managed session uses automatic inbox
+  delivery; an external harness retains an exact-name `sprint ... --watch`
+  foreground stream while managing the sprint.
 
 ## Delivery slices
 

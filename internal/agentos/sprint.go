@@ -1,6 +1,9 @@
 package agentos
 
 import (
+	"fmt"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/qiangli/coreutils/pkg/weave"
@@ -24,8 +27,55 @@ func newSprintCmd() *cobra.Command {
 	if !strings.Contains(cmd.Long, ownerAccountabilityHelp) {
 		cmd.Long = strings.TrimRight(cmd.Long, "\n") + "\n\n" + ownerAccountabilityHelp
 	}
+	for _, child := range cmd.Commands() {
+		if child.Name() == "start" || child.Name() == "take" {
+			attachSprintWatch(child, child.Name() == "take")
+		}
+	}
 	return cmd
 }
+
+// attachSprintWatch lets an EXTERNAL agent harness own the conductor seat
+// without pretending Bashy can inject a turn into a process it did not launch.
+// The sprint command itself stays alive as the harness's foreground tool call;
+// its parent relationship and canonical room claim are the delivery proof.
+func attachSprintWatch(cmd *cobra.Command, takeover bool) {
+	var watch bool
+	cmd.Flags().BoolVar(&watch, "watch", false,
+		"after claiming, stay attached and stream unified inbox NDJSON (required for an external agent harness)")
+	original := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if !watch {
+			return original(cmd, args)
+		}
+		id, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("sprint must be an integer: %q", args[0])
+		}
+		explicit, _ := cmd.Flags().GetString("as")
+		owner, err := weave.SprintClaimIdentity(id, explicit, takeover)
+		if err != nil {
+			return err
+		}
+		claim, err := registerSprintInboxWatcher(owner)
+		if err != nil {
+			return fmt.Errorf("sprint %s --watch: %w", cmd.Name(), err)
+		}
+		defer claim.leave()
+		if err := original(cmd, args); err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.ErrOrStderr(),
+			"sprint %s: attached inbox stream for %s (parent pid %d); retain and read this process until handoff\n",
+			cmd.Name(), owner, sprintWatchParentPID())
+		poll := defaultInboxPollRuntime(true)
+		poll.ownerLive = claim.ownerLive
+		return runUnifiedInboxWithPoll(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(),
+			owner, 0, false, true, true, 0, poll)
+	}
+}
+
+func sprintWatchParentPID() int { return os.Getppid() }
 
 // ownerAccountabilityHelp is the active-owner contract appended to
 // `bashy sprint --help`. It is exported through the help of the command an agent
@@ -40,9 +90,9 @@ Delegation transfers execution, never accountability. While you hold it you must
 
   - Stay REACHABLE with the OWNER IDENTITY: a takeover uses the existing sprint owner name for
     mb/Meet/chat/ping, or explicitly updates ownership before using another name.
-    Run as a Bashy-managed agent session under that exact name. Its harness automatically
-    injects unified inbox input into real agent turns. A terminal ` + "`bashy inbox --watch`" + `
-    only prints updates; it cannot wake an external Claude/Codex/OpenCode/ycode/agy harness.
+    A Bashy-managed session receives input through its control transport. An external
+    Claude/Codex/OpenCode/ycode/agy harness must claim with ` + "`sprint take/start --watch`" + `
+    and retain/read that foreground process; its parent relationship is the delivery proof.
   - SUPERVISE workers proactively: monitor every run, and steer, interrupt,
     salvage, or reassign stalled / failed / no-op work instead of waiting on it.
   - VERIFY independently: inspect and rerun the gates yourself; never trust a

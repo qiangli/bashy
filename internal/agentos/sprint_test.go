@@ -2,10 +2,15 @@ package agentos
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qiangli/bashy/skills"
+	"github.com/qiangli/coreutils/pkg/bus"
+	"github.com/qiangli/coreutils/pkg/fleet"
 )
 
 // TestSprintHelpCarriesOwnerAccountability asserts the essential help contract:
@@ -52,6 +57,45 @@ func TestSprintHelpCarriesOwnerAccountability(t *testing.T) {
 	for _, want := range essentials {
 		if !strings.Contains(help, want) {
 			t.Errorf("sprint --help missing owner-accountability element %q", want)
+		}
+	}
+}
+
+func TestExternalSprintTakeWatchClaimsThenStreamsInbox(t *testing.T) {
+	isolateUnifiedInbox(t)
+	t.Setenv("BASHY_SPRINT_DIR", t.TempDir())
+	const owner = "external-sprint-manager"
+	if err := fleet.New().SaveAgent(fleet.Agent{Name: owner, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("WEAVE_CONDUCTOR", owner)
+
+	add := newSprintCmd()
+	add.SetOut(&bytes.Buffer{})
+	add.SetErr(&bytes.Buffer{})
+	add.SetArgs([]string{"add", "external watch test"})
+	if err := add.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if err := bus.PostMessage(bus.Post{From: "human", To: owner, Body: "wake the external manager"}); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	cmd := newSprintCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetContext(ctx)
+	cmd.SetArgs([]string{"take", "1", "--as", owner, "--watch"})
+	err := cmd.Execute()
+	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("take --watch: %v\n%s", err, out.String())
+	}
+	for _, want := range []string{"is now conductor", "READY: attached inbox delivery", "attached inbox stream", "wake the external manager"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("take --watch output missing %q:\n%s", want, out.String())
 		}
 	}
 }

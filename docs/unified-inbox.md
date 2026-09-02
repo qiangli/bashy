@@ -87,8 +87,21 @@ The original source log remains authoritative and immutable throughout.
 During active multi-agent work, a Bashy-managed chat session needs no separate
 terminal watcher. Its runtime snapshots unified input without consuming it and
 injects that block through the session's real control transport. Only successful
-transport delivery advances source cursors. This is the supported sprint-manager
-path because it creates an actual model turn.
+transport delivery advances source cursors.
+
+An externally launched sprint manager uses the attached-stream path:
+
+```sh
+bashy sprint take <id> --as <fleet-agent-name> --watch
+# or: bashy sprint start <id> --as <fleet-agent-name> --watch
+```
+
+The command claims the seat, prints the claim result, and remains alive streaming
+unified-inbox NDJSON. Its room card records the watcher process and its agent-
+harness parent. The external harness must retain and read/poll that foreground
+tool process; when it exits, the delivery capability disappears and the sprint
+reports NOT READY. Bashy cannot force an external model loop to schedule itself,
+but it can make the live parent-owned stream an enforced seat invariant.
 
 An external harness that can retain and actively poll a process may instead run:
 
@@ -99,8 +112,9 @@ bashy inbox --as <fleet-agent-name> --watch --json
 Keep that process alive, poll its output at every agent turn and during active
 waiting, and respond to each batch through the originating MB/Meet/Bus route.
 Never leave the watcher detached and unpolled: it advances source cursors after
-rendering, so ignored buffered output would amount to silently consumed mail. A
-watcher card is therefore not accepted as sprint-manager delivery capability.
+rendering, so ignored buffered output would amount to silently consumed mail. An
+ordinary watcher card is not accepted as sprint-manager delivery capability;
+only the parent-owned `sprint ... --watch` mode advertises that contract.
 
 Starting the watcher claims the registered fleet NAME as a live, globally
 singleton identity. The claim is visible in `bashy agents` and as `TAKEN` in
