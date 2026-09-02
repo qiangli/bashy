@@ -21,6 +21,25 @@ const (
 	sprintWatchMaxMisses   = 3
 )
 
+// sprintWatchHeartbeat is how often the ATTACHED watch refreshes the lease it
+// is holding open. A third of the TTL, so two consecutive misses still leave
+// the seat live — the usual margin for a heartbeat that must not flap.
+//
+// WHY THE WATCH HEARTBEATS AT ALL. Before this, the only thing that refreshed a
+// sprint lease was `sprint inbox-ack` — so the seat stayed live only while
+// somebody kept sending the manager mail. A conductor working steadily and
+// receiving nothing went STALE in thirty minutes with its mandated watch still
+// attached: measured at 2h08m of live watch against 1h19m of "STALE (no
+// heartbeat — take it)", on a seat the same board simultaneously marked live.
+// Two liveness signals for one seat, disagreeing.
+//
+// It is not a timer pretending to be evidence. This process is the harness's
+// own foreground tool call, so it dies with the harness; and it fails CLOSED on
+// mail the manager does not acknowledge — three reminders and it exits. An
+// unresponsive manager therefore stops heartbeating and its lease ages out
+// normally, which is the property that makes refreshing from here honest.
+var sprintWatchHeartbeat = weave.SprintLeaseTTL / 3
+
 type sprintWatchReminder struct {
 	Schema      string `json:"schema"`
 	Type        string `json:"type"`
@@ -37,12 +56,17 @@ type sprintWatchRuntime struct {
 	maxMisses int
 	poll      inboxPollRuntime
 	ackSeq    func(int64, string) (int64, error)
+	// beatEvery and beat keep the attached seat's lease alive. beat is a var so
+	// a test can drive the schedule without a sprint store on disk.
+	beatEvery time.Duration
+	beat      func(int64, string) error
 }
 
 func defaultSprintWatchRuntime() sprintWatchRuntime {
 	return sprintWatchRuntime{
 		ackEvery: sprintWatchAckInterval, maxMisses: sprintWatchMaxMisses,
 		poll: defaultInboxPollRuntime(true), ackSeq: latestSprintWatchAck,
+		beatEvery: sprintWatchHeartbeat, beat: weave.RefreshSprintManagerLease,
 	}
 }
 
@@ -61,6 +85,7 @@ func runSprintInboxWatch(ctx context.Context, out, errOut io.Writer, sprintID in
 	var deliveredAt, nextReminder time.Time
 	var ackBaseline int64
 	misses := 0
+	var nextBeat time.Time
 
 	for {
 		if rt.poll.ownerLive != nil {
@@ -69,6 +94,20 @@ func runSprintInboxWatch(ctx context.Context, out, errOut io.Writer, sprintID in
 			}
 		}
 		now := rt.poll.now()
+		// The attached stream IS the heartbeat: while this process runs, the
+		// seat is held. A refusal here means the lease is no longer this
+		// owner's — somebody took the seat over — and the honest response is to
+		// stop, not to keep streaming mail addressed to a seat we have lost.
+		if rt.beat != nil && (nextBeat.IsZero() || !now.Before(nextBeat)) {
+			if err := rt.beat(sprintID, owner); err != nil {
+				return fmt.Errorf("sprint watch: %s no longer holds sprint #%d — detaching: %w", owner, sprintID, err)
+			}
+			beatEvery := rt.beatEvery
+			if beatEvery <= 0 {
+				beatEvery = sprintWatchHeartbeat
+			}
+			nextBeat = now.Add(beatEvery)
+		}
 		if pending == nil {
 			read, changed, sum, sampled := gate.due(now)
 			if changed {
