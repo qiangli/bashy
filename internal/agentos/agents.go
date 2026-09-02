@@ -91,6 +91,9 @@ type agentsSprint struct {
 type agentsSprintLease struct {
 	Holder string    `json:"holder"`
 	At     time.Time `json:"at"`
+	// AttachedPID mirrors weaveStoryLease.AttachedPID: the process holding the
+	// seat open in the foreground, or zero when no process claims to be.
+	AttachedPID int `json:"attached_pid,omitempty"`
 }
 
 type agentsSprintRun struct {
@@ -139,8 +142,13 @@ type agentRosterSummary struct {
 	Live         int `json:"live"`
 	Blocked      int `json:"blocked"`
 	Inconsistent int `json:"inconsistent"`
-	Stale        int `json:"stale"`
-	Orphaned     int `json:"orphaned"`
+	// Overrun counts LIVE rows whose sprint cycle cutoff has passed. It joins
+	// blocked/inconsistent as a flag ON a live row rather than a state instead
+	// of one — the work may well still be going, and the operator needs to see
+	// that it is going past the clock it set.
+	Overrun  int `json:"overrun"`
+	Stale    int `json:"stale"`
+	Orphaned int `json:"orphaned"`
 }
 
 // encoding/json does not omit a zero time.Time with `omitempty` because it is
@@ -401,7 +409,8 @@ func renderAgentRosterView(w io.Writer, asJSON, showAll bool) error {
 	if asJSON {
 		return json.NewEncoder(w).Encode(agentsRoster{SchemaVersion: agentsRosterSchema, Summary: summary, Assignments: visible})
 	}
-	fmt.Fprintf(w, "LIVE %d (blocked %d, inconsistent %d) | STALE %d | ORPHANED %d\n", summary.Live, summary.Blocked, summary.Inconsistent, summary.Stale, summary.Orphaned)
+	fmt.Fprintf(w, "LIVE %d (blocked %d, inconsistent %d, overrun %d) | STALE %d | ORPHANED %d\n",
+		summary.Live, summary.Blocked, summary.Inconsistent, summary.Overrun, summary.Stale, summary.Orphaned)
 	if !showAll && len(visible) == 0 && (summary.Stale > 0 || summary.Orphaned > 0) {
 		fmt.Fprintln(w, "No live assignments. Inspect stale records with: bashy agents --all")
 	}
@@ -463,6 +472,8 @@ func summarizeAgentRoster(assignments []agentAssignment) agentRosterSummary {
 			summary.Blocked++
 		case "inconsistent":
 			summary.Inconsistent++
+		case "overrun":
+			summary.Overrun++
 		case "stale":
 			summary.Stale++
 		case "orphaned", "unknown":
@@ -474,7 +485,7 @@ func summarizeAgentRoster(assignments []agentAssignment) agentRosterSummary {
 
 func assignmentLive(assignment agentAssignment) bool {
 	switch assignment.Health {
-	case "healthy", "blocked", "inconsistent":
+	case "healthy", "blocked", "inconsistent", "overrun":
 		return true
 	default:
 		return false
@@ -541,7 +552,7 @@ func reconciledAgentRoster() ([]agentAssignment, error) {
 		if deadline := sprintDeadline(sprint, now); !deadline.IsZero() {
 			a.Deadline = deadline
 		}
-		a.Health, a.HealthReason = sprintConductorHealth(*sprint.Lease, now)
+		a.Health, a.HealthReason = sprintConductorHealth(*sprint.Lease, a.Deadline, now)
 		a.Age = assignmentAgeAt(sprint.Lease.At, now)
 		out = append(out, a)
 	}
@@ -934,7 +945,23 @@ func workerHealth(item agentsQueueItem, cards []room.Card) (string, string) {
 // says the record cannot support any statement at all. Reporting an unproved
 // lease as stale would assert the holder is gone on no evidence, and a
 // successor reads that as an invitation to seize the seat.
-func sprintConductorHealth(lease agentsSprintLease, now time.Time) (health, reason string) {
+func sprintConductorHealth(lease agentsSprintLease, deadline, now time.Time) (health, reason string) {
+	// A NAMED PROCESS THAT IS GONE OUTRANKS THE ARITHMETIC ABOVE IT.
+	//
+	// The heartbeat says somebody was alive when it was written, and nothing
+	// more. An attached watch beats every TTL/3, so at the moment it dies its
+	// last beat is up to a third of the TTL old and STILL INSIDE the window —
+	// the seat then reads healthy for the remaining two thirds with no process
+	// anywhere, which is the ghost row this check exists to kill. When the
+	// lease names the process that wrote the beat, its absence is evidence,
+	// and evidence beats an inference drawn from a clock.
+	//
+	// "stale" rather than "orphaned" on purpose: the record supports a
+	// statement here, and the statement is that the holder stopped — the exact
+	// claim "stale" is reserved for. A successor may take the seat.
+	if lease.AttachedPID > 0 && !room.PidAlive(lease.AttachedPID) {
+		return "stale", fmt.Sprintf("attached sprint watch pid %d is not alive", lease.AttachedPID)
+	}
 	seat := role.Seat{
 		Holder:      strings.TrimSpace(lease.Holder),
 		HeartbeatAt: lease.At,
@@ -942,6 +969,27 @@ func sprintConductorHealth(lease agentsSprintLease, now time.Time) (health, reas
 	}
 	switch seat.Live(now) {
 	case role.LivenessLive:
+		// A CURRENT HEARTBEAT IS NOT A CLAIM THAT THE WORK IS ON SCHEDULE.
+		//
+		// The lease is refreshed by ATTENTION — the holder reading its mail —
+		// and attention is cheap. Anything that reads that mailbox on a timer
+		// renews a full TTL, so a lease alone can keep a seat "healthy"
+		// indefinitely with no work behind it. Measured on this host: a sprint
+		// whose two-hour cycle had ended FOURTEEN HOURS earlier and whose
+		// conductor had not checkpointed in eleven, held open by a short-lived
+		// process that read the mailbox every half hour.
+		//
+		// The sprint already states the bound its own conductor agreed to, and
+		// the roster was already PRINTING it in the DEADLINE column while
+		// grading the row without it. So consult it. Overrun is reported, not
+		// hidden: a conductor legitimately running long must stay on the board,
+		// and the operator needs the row precisely BECAUSE the clock says
+		// something is wrong with it. What changes is the word — "healthy" is
+		// the one claim the evidence does not support.
+		if !deadline.IsZero() && now.After(deadline) {
+			return "overrun", fmt.Sprintf("heartbeat current but the sprint cycle cutoff passed %s ago",
+				now.Sub(deadline).Round(time.Minute))
+		}
 		return "healthy", "conductor lease heartbeat is current"
 	case role.LivenessLapsed:
 		return "stale", "conductor lease heartbeat expired"

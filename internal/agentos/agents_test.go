@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -637,7 +639,7 @@ func TestSprintConductorHealthGradesTheLeaseInstant(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			health, reason := sprintConductorHealth(agentsSprintLease{Holder: "codex", At: tc.at}, now)
+			health, reason := sprintConductorHealth(agentsSprintLease{Holder: "codex", At: tc.at}, time.Time{}, now)
 			if health != tc.health {
 				t.Fatalf("lease at %v: health = %q, want %q (reason %q)", tc.at, health, tc.health, reason)
 			}
@@ -646,4 +648,138 @@ func TestSprintConductorHealthGradesTheLeaseInstant(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSprintConductorHealthCatchesTheDeadAttachedWatch is the regression for
+// the ghost row: `bashy agents` reported one healthy conductor while nothing
+// was running anywhere on the host.
+//
+// The lease heartbeat alone cannot catch this. An attached watch beats every
+// TTL/3, so at the instant it dies its last beat is only minutes old and the
+// arithmetic — correctly — says "current". Everything the roster knew was
+// consistent with a live conductor; the conductor was gone. What was missing
+// was not a better sum but a fact: WHICH process wrote that beat.
+func TestSprintConductorHealthCatchesTheDeadAttachedWatch(t *testing.T) {
+	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	// One second old. No timestamp rule will ever reject this.
+	fresh := now.Add(-time.Second)
+
+	// PID 0 is never a live process and is what every non-attached refresher
+	// leaves behind, so a dead pid must be spelled out rather than borrowed.
+	dead := deadPIDForTest(t)
+
+	t.Run("fresh beat from a dead watch is not evidence", func(t *testing.T) {
+		health, reason := sprintConductorHealth(
+			agentsSprintLease{Holder: "codex", At: fresh, AttachedPID: dead}, time.Time{}, now)
+		if health != "stale" {
+			t.Fatalf("health = %q, want %q (reason %q)", health, "stale", reason)
+		}
+		if !strings.Contains(reason, strconv.Itoa(dead)) {
+			t.Fatalf("reason = %q, want it to name the dead pid %d so the row is actionable", reason, dead)
+		}
+	})
+
+	t.Run("fresh beat from a live watch still passes", func(t *testing.T) {
+		health, _ := sprintConductorHealth(
+			agentsSprintLease{Holder: "codex", At: fresh, AttachedPID: os.Getpid()}, time.Time{}, now)
+		if health != "healthy" {
+			t.Fatalf("health = %q, want healthy: a watch that IS running holds its seat", health)
+		}
+	})
+
+	t.Run("no attached process leaves the heartbeat rule alone", func(t *testing.T) {
+		// The ephemeral conductor: no process claims the seat, so the beat is
+		// the only evidence there is and it must still be believed.
+		health, _ := sprintConductorHealth(agentsSprintLease{Holder: "codex", At: fresh}, time.Time{}, now)
+		if health != "healthy" {
+			t.Fatalf("health = %q, want healthy: an LLM conductor holds no process", health)
+		}
+	})
+
+	t.Run("a dead watch cannot resurrect an expired lease", func(t *testing.T) {
+		health, _ := sprintConductorHealth(
+			agentsSprintLease{Holder: "codex", At: now.Add(-2 * weave.SprintLeaseTTL), AttachedPID: dead}, time.Time{}, now)
+		if health != "stale" {
+			t.Fatalf("health = %q, want stale", health)
+		}
+	})
+}
+
+// deadPIDForTest returns a pid that has certainly exited: a child is started
+// and reaped, so the number was real and is now free. Picking a large integer
+// and hoping instead is how this kind of test flakes on a busy host.
+func deadPIDForTest(t *testing.T) int {
+	t.Helper()
+	cmd := exec.Command("sh", "-c", "exit 0")
+	if err := cmd.Start(); err != nil {
+		t.Skipf("cannot start a helper process to retire: %v", err)
+	}
+	pid := cmd.Process.Pid
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("helper process: %v", err)
+	}
+	if room.PidAlive(pid) {
+		t.Skipf("pid %d was recycled before the assertion could use it", pid)
+	}
+	return pid
+}
+
+// TestSprintConductorHealthReportsAnOverrunCycle is the regression for the
+// half of the ghost that no process check can catch.
+//
+// The lease is refreshed by ATTENTION — the holder reading its mail — so
+// anything that reads that mailbox on a timer renews a full TTL. Measured on
+// a real host: a sprint whose two-hour cycle had ended fourteen hours earlier
+// and whose conductor had not checkpointed in eleven, reported "healthy"
+// because a short-lived process read the mailbox every half hour. The roster
+// was already printing the cutoff in the DEADLINE column while grading the row
+// without it.
+func TestSprintConductorHealthReportsAnOverrunCycle(t *testing.T) {
+	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	fresh := agentsSprintLease{Holder: "codex", At: now.Add(-time.Minute)}
+
+	t.Run("past the cutoff is not healthy", func(t *testing.T) {
+		health, reason := sprintConductorHealth(fresh, now.Add(-14*time.Hour), now)
+		if health != "overrun" {
+			t.Fatalf("health = %q, want %q (reason %q)", health, "overrun", reason)
+		}
+		if !strings.Contains(reason, "14h0m0s") {
+			t.Fatalf("reason = %q, want it to say how far past the cutoff the row is", reason)
+		}
+	})
+
+	t.Run("an overrun row stays on the board", func(t *testing.T) {
+		// Hiding it would be the opposite failure: a conductor legitimately
+		// running long is exactly the row the operator needs to see.
+		if !assignmentLive(agentAssignment{Health: "overrun"}) {
+			t.Fatal("an overrun conductor was dropped from the default view")
+		}
+		summary := summarizeAgentRoster([]agentAssignment{{Health: "overrun"}})
+		if summary.Live != 1 || summary.Overrun != 1 {
+			t.Fatalf("summary = %+v, want it counted as one live, one overrun", summary)
+		}
+	})
+
+	t.Run("inside the cutoff is healthy", func(t *testing.T) {
+		if health, _ := sprintConductorHealth(fresh, now.Add(time.Hour), now); health != "healthy" {
+			t.Fatalf("health = %q, want healthy: the cycle has an hour left", health)
+		}
+	})
+
+	t.Run("no cutoff leaves the heartbeat rule alone", func(t *testing.T) {
+		// A sprint that was never put on the clock states no bound, and an
+		// absent bound may never be read as an expired one.
+		if health, _ := sprintConductorHealth(fresh, time.Time{}, now); health != "healthy" {
+			t.Fatalf("health = %q, want healthy: this sprint declared no cycle", health)
+		}
+	})
+
+	t.Run("a lapsed heartbeat outranks the cutoff", func(t *testing.T) {
+		// Overrun describes a LIVE row. With no heartbeat behind it there is
+		// nothing to describe as running long.
+		stale := agentsSprintLease{Holder: "codex", At: now.Add(-2 * weave.SprintLeaseTTL)}
+		if health, _ := sprintConductorHealth(stale, now.Add(-14*time.Hour), now); health != "stale" {
+			t.Fatalf("health = %q, want stale", health)
+		}
+	})
 }

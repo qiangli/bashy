@@ -156,3 +156,62 @@ func TestDefaultSprintWatchRuntimeBeatsWellInsideTheLeaseTTL(t *testing.T) {
 		t.Fatalf("beatEvery = %s leaves no margin for a missed beat in %s", rt.beatEvery, weave.SprintLeaseTTL)
 	}
 }
+
+// TestSprintWatchStandsTheSeatDownOnDetach is the other half of the ghost fix.
+//
+// The watch is documented as holding the seat for as long as it runs, but
+// ending it used to write nothing at all — the last beat simply stayed on the
+// lease, and `bashy agents` went on reporting a healthy conductor for the rest
+// of the TTL. Every exit is covered, not just the tidy one: a takeover, a
+// store error and a cancelled context all end the same evidence.
+func TestSprintWatchStandsTheSeatDownOnDetach(t *testing.T) {
+	cases := []struct {
+		name string
+		rt   func(*sprintWatchRuntime)
+	}{
+		{"context cancelled", func(rt *sprintWatchRuntime) {}},
+		{"seat taken over", func(rt *sprintWatchRuntime) {
+			rt.beat = func(int64, string) error { return errors.New("sprint #98 is not held by manager") }
+		}},
+		{"store read failed", func(rt *sprintWatchRuntime) {
+			rt.poll = sprintWatchTestPoll(func(string, int, bool) (inboxBatch, error) {
+				return inboxBatch{}, errors.New("queue.json is unreadable")
+			})
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var released atomic.Int64
+			rt := sprintWatchRuntime{
+				ackEvery: time.Second, maxMisses: 3,
+				poll:      sprintWatchTestPoll(func(string, int, bool) (inboxBatch, error) { return inboxBatch{}, nil }),
+				ackSeq:    func(int64, string) (int64, error) { return 0, nil },
+				beatEvery: time.Minute,
+				beat:      func(int64, string) error { return nil },
+				release: func(id int64, owner string) error {
+					if id != 98 || owner != "manager" {
+						t.Errorf("release(%d, %q), want the seat this watch was holding", id, owner)
+					}
+					released.Add(1)
+					return nil
+				},
+			}
+			tc.rt(&rt)
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			_ = runSprintInboxWatch(ctx, &bytes.Buffer{}, &bytes.Buffer{}, 98, "manager", rt)
+			if released.Load() != 1 {
+				t.Fatalf("released %d times, want exactly 1: a detached watch that leaves its beat "+
+					"standing keeps a dead conductor on the board for a full TTL", released.Load())
+			}
+		})
+	}
+}
+
+// The wiring test. A release hook that exists but is never installed is the
+// same bug with an extra layer, and it looks finished from the inside.
+func TestDefaultSprintWatchRuntimeReleasesTheSeat(t *testing.T) {
+	if rt := defaultSprintWatchRuntime(); rt.release == nil {
+		t.Fatal("the default watch never stands its seat down; detaching would be invisible to `bashy agents`")
+	}
+}

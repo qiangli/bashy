@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -56,18 +57,29 @@ type sprintWatchRuntime struct {
 	maxMisses int
 	poll      inboxPollRuntime
 	ackSeq    func(int64, string) (int64, error)
-	// beatEvery and beat keep the attached seat's lease alive. beat is a var so
-	// a test can drive the schedule without a sprint store on disk.
+	// beatEvery and beat keep the attached seat's lease alive; release stands
+	// it back down when this stream detaches. Both are vars so a test can
+	// drive the schedule without a sprint store on disk.
 	beatEvery time.Duration
 	beat      func(int64, string) error
+	release   func(int64, string) error
 }
 
 func defaultSprintWatchRuntime() sprintWatchRuntime {
 	return sprintWatchRuntime{
 		ackEvery: sprintWatchAckInterval, maxMisses: sprintWatchMaxMisses,
 		poll: defaultInboxPollRuntime(true), ackSeq: latestSprintWatchAck,
-		beatEvery: sprintWatchHeartbeat, beat: weave.RefreshSprintManagerLease,
+		beatEvery: sprintWatchHeartbeat, beat: holdSprintWatchLease,
+		release: weave.ReleaseSprintManagerLease,
 	}
+}
+
+// holdSprintWatchLease beats the lease AND stamps this process onto it. The
+// attached watch is the one refresher that is still running when its beat is
+// read back, so it is the one that can be checked — see
+// sprintConductorHealth.
+func holdSprintWatchLease(id int64, owner string) error {
+	return weave.HoldSprintManagerLease(id, owner, os.Getpid())
 }
 
 // runSprintInboxWatch differs deliberately from ordinary inbox --watch: writing
@@ -78,6 +90,17 @@ func runSprintInboxWatch(ctx context.Context, out, errOut io.Writer, sprintID in
 	owner string, rt sprintWatchRuntime) error {
 	if rt.poll.close != nil {
 		defer rt.poll.close()
+	}
+	// DETACHING IS AN EVENT AND HAS TO BE WRITTEN DOWN. This stream is what
+	// holds the seat; every way out of the loop below — ctrl-C, a cancelled
+	// context, a store error, the owner's harness exiting — ends the only
+	// thing standing behind the last beat. Left unwritten, that beat kept the
+	// board reporting a healthy conductor for the rest of the TTL. Silent
+	// because it is bookkeeping: a watch must not fail on its way out over the
+	// note it wrote about leaving, and the holder-check inside release already
+	// makes it a no-op when somebody else has taken the seat.
+	if rt.release != nil {
+		defer func() { _ = rt.release(sprintID, owner) }()
 	}
 	gate := &inboxPollGate{reader: owner, fingerprint: rt.poll.fingerprint, fullRescan: rt.poll.fullRescan}
 	interval := rt.poll.min
