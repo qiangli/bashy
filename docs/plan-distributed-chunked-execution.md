@@ -101,9 +101,9 @@ the product: ssh only reaches machines you can already reach.
 | **control-plane + artifact return** | worker fetches its own inputs (clone / pull image); **results** return as structured per-item records | **MVP** — exactly what a merged scoreboard needs |
 | full staging (inputs pushed, outputs collected, content-addressed) | required for real ML/ETL (datasets, checkpoints, weights) | seam: `Inputs:`/`Outputs:`; the blob store already ships as bashy externals |
 
-### Axis 4 — the language (bashy++)
+### Axis 4 — the language (Bash++)
 
-**`dag.md` is the *declarative* workflow surface; bashy++ is the *in-language* one.** Two
+**`dag.md` is the *declarative* workflow surface; Bash++ is the *in-language* one.** Two
 faces of one runner: a chunked ML/HPC pipeline must express fan-out, typed records, and
 stage-to-stage handoff *in the script*, not only in a task heading.
 
@@ -118,7 +118,7 @@ stage-to-stage handoff *in the script*, not only in a task heading.
 - **Subshells are already goroutines**, so concurrency costs almost nothing at the runtime
   layer.
 
-**bashy++ is a true superset of bash — and the claim is MEASURED, not asserted.**
+**Bash++ is a true superset of bash — and the claim is MEASURED, not asserted.**
 
 The design rule that makes supersetness achievable — and the lesson C++ teaches by *failing*
 it (C++ is not a strict superset of C, and the reason is new reserved words: any C program
@@ -137,7 +137,7 @@ with a variable named `class` stops compiling):
 
 **The gate is empirical, and the dogfood IS the guard:**
 
-> Run the **entire** conformance matrix with bashy++ **ON** and require a **byte-identical
+> Run the **entire** conformance matrix with Bash++ **ON** and require a **byte-identical
 > fail-set** to mode-off — not just the 86 bash fixtures, but the 719-script clean-room
 > differential, the 10-shell panel, oils, yash, modernish. If the fail-set is identical with
 > extensions live, the superset property is *measured*. Permanent regression test: the

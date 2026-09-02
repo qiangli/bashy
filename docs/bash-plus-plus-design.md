@@ -1,4 +1,4 @@
-# bashy++ — a measured superset of Bash
+# Bash++ — a measured superset of Bash
 
 Status: **design of record, 2026-07-12.** The language half of the uplift; the runner half
 is `plan-distributed-chunked-execution.md` (§Axis 4 there is the summary — this is the
@@ -21,7 +21,7 @@ back with `awk`. That is not a cosmetic problem: it is precisely why the conform
 aggregator silently merged results across incompatible hosts — `awk` cannot tell that it is
 doing it.
 
-**`dag.md` is the declarative workflow surface; bashy++ is the in-language one.** Two faces
+**`dag.md` is the declarative workflow surface; Bash++ is the in-language one.** Two faces
 of one runner.
 
 ---
@@ -48,7 +48,7 @@ same seam a zsh mode would need.
 
 ## The design rule: supersetness is measured, not asserted
 
-bashy++ is a **true superset** of Bash — every valid Bash script keeps its exact meaning.
+Bash++ is a **true superset** of Bash — every valid Bash script keeps its exact meaning.
 The C++/C analogy is instructive precisely because **C++ failed this test**: it is *not* a
 strict superset of C, and the reason is new reserved words. Any C program with a variable
 named `class`, `new`, or `template` stops compiling.
@@ -87,7 +87,7 @@ a binary called `struct` changes meaning.
 
 ### The gate, and it is the dogfood
 
-> Run the **entire** conformance matrix with bashy++ **ON** and require a **byte-identical
+> Run the **entire** conformance matrix with Bash++ **ON** and require a **byte-identical
 > fail-set** to mode-off — not just the 86 Bash 5.3 fixtures, but the 719-script clean-room
 > differential, the 10-shell panel, oils, yash, modernish.
 
@@ -207,7 +207,7 @@ linked-in package registry is not a separate program.
 
 - **Error model.** `content, err := readFile "config.json"` maps Go's `(val, err)` onto the
   shell's `$?`. Does `err` shadow `$?`, coexist, or set both? Bash scripts branch on `$?`;
-  bashy++ scripts would branch on `$err`. Both must remain true simultaneously.
+  Bash++ scripts would branch on `$err`. Both must remain true simultaneously.
 - **Where `Object` values may flow.** Arrays of objects? Objects in associative arrays?
   Exported to the environment (which is `[]string` at the syscall boundary — an object cannot
   survive `execve` except as JSON)?
@@ -229,7 +229,7 @@ against what they accepted, amended, and rejected.
 > **1. Evolution of the variable engine (from strings to `any`).** Refactor environment storage
 > to handle structured data natively — a `Value` union wrapping Bash strings alongside complex
 > Go types (`Kind reflect.Kind; Value any`). When a standard Bash command runs, coerce to the
-> string representation; when a bashy++ construct runs, retain the native Go type.
+> string representation; when a Bash++ construct runs, retain the native Go type.
 >
 > **2. Native concurrency (true goroutines vs OS forks).** Intercept `go` to launch green
 > threads (`case *ast.GoStatement: go interpreter.Execute(node.Body, env)`) rather than a heavy
@@ -248,7 +248,7 @@ against what they accepted, amended, and rejected.
 > **5. Implementation strategy.** Not a separate language — a **strict superset** as an
 > extended grammar profile in the existing parser. Keep the Bash-compliant lexer; recognize
 > extended tokens (`:=`, `<-`, `struct`) under a pragma. **Context-aware evaluation:** passing a
-> bashy++ value into an external binary auto-serializes the Go struct/map to JSON — structured
+> Bash++ value into an external binary auto-serializes the Go struct/map to JSON — structured
 > JSON text to the outside world, fast native memory object inside the shell loop.
 
 **What we accepted:** the whole thesis (native runtime exposure, the `Value` union, channels

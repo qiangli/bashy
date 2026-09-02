@@ -136,6 +136,34 @@ it runs it.
 
 Agency is the point. The other two pillars exist to make it trustworthy.
 
+### Pillars and substrates are different axes
+
+Bashy is also described as three **substrates** — **Classic → Bash++ → Yoke** (see
+`../CLAUDE.md` §Name). That triple and these pillars are not the same decomposition, and
+conflating them is the single most common mis-citation in the corpus.
+
+A **pillar** is what bashy must have to be trustworthy; none is removable. A
+**substrate** is a surface you address by name.
+
+| Pillar | Substrate |
+|---|---|
+| I. compatibility — a shell it can trust | **Classic** |
+| II. capability — a userland it can rely on | **Classic** |
+| — *(no pillar)* | **Bash++** |
+| III. agency — a lifecycle it can drive | **Yoke** |
+
+Two asymmetries, and both are load-bearing rather than bookkeeping:
+
+**Bash++ is not a pillar, precisely because it is opt-in.** It is off unless you pass
+`--bashpp`, so it cannot sit in a chain whose whole claim is that each level is worthless
+without the one below it. Nothing may ever require it at runtime.
+
+**The userland is not a substrate, because it is not separately addressable.** You do not
+target it; you target the shell and get it. It is *how* pillar I keeps its promise on
+three operating systems — a Bash 5.3 that is only compatible where GNU coreutils happens
+to be installed has not kept the promise at all. That is why pillars I and II both land
+in Classic.
+
 ## 5. Six venues — one machine is *complete*, not degraded
 
 Work runs in one of six venues, from a single native process out to a hosted cloud:

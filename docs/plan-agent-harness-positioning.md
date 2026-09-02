@@ -60,6 +60,15 @@ describes. The condition is §5.5: it names an architecture, not a shipped capab
 publishing it before the primitive exists would put bashy in the red column of its own
 honest-claim ledger.
 
+**The expansion names layer 3, not the product — the two nest.** Read the phrase
+grammatically: *Bashy's Agentic Shell Harness Yoke* has head noun **Yoke**, modified by
+*Agentic Shell Harness*, possessed by *Bashy*. It therefore names **a yoke belonging to
+Bashy**, which is exactly the third substrate (`../CLAUDE.md` §Name,
+`../../docs/bashy-yoke-framework.md`) — not the whole. So the acronym names the product and
+its expansion names the product's top layer; that nesting *is* the recursion, and it is
+why **Yoke** may be used unqualified as the layer-3 name without colliding with BASHY the
+product name.
+
 ## 1. What `dsh` actually is
 
 `dsh` is built on Cordis, a plugin framework where a running application is a tree of

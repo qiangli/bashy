@@ -70,10 +70,11 @@ the swappable Ubuntu base, and gives status/cleanup commands.
 
 ### Product sequence and Bash++ activation
 
-Bashy ships two binaries through a three-stage product sequence:
-**`bash` → Bash++ → `bashy`**. `bash` is the compatible standalone shell;
-Bash++ is its opt-in language extension and the bridge to `bashy`; `bashy` is
-the complete shell, pure-Go userland, and agentic environment.
+Bashy ships two binaries carrying three named substrates:
+**Classic → Bash++ → Yoke**. **Classic** is the compatible standalone shell
+(`bash`) together with the pure-Go userland; **Bash++** is the opt-in language
+extension and the bridge upward; **Yoke** is the agentic framework. The `bash`
+binary is Classic alone; `bashy` carries all three.
 
 | Invocation | Bash++ default | Agentic default |
 |---|---:|---:|

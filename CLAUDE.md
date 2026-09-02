@@ -180,6 +180,58 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
     essential that's pure-Go + cross-platform is **core** (compiled in); a heavy
     or cgo host service is **ext** (build-tag, or binmgr download-on-demand).
 
+## Name
+
+**Three substrates, three names.** Bashy is built in three cumulative layers, and
+each has exactly one short name. Use these words; the corpus previously carried
+four competing framings for the same triple.
+
+| # | Short name | What it covers | Carried by |
+|---|---|---|---|
+| 1 | **Classic** | GNU Bash 5.3 compatibility + POSIX 1003.1-2016 conformance, **plus the pure-Go coreutils userland** | `bin/bash` (shell) + the coreutils ExecHandler |
+| 2 | **Bash++** | the opt-in language extension: Go-shaped constructs, plus the Python/TypeScript ergonomics Go omits (**Bash#** is a tier *inside* it, never a third dialect) | the `sh` parser/interpreter dialect seam |
+| 3 | **Yoke** | the agentic framework — tools, policy, durable sessions, communication, coordination, workflow, observability | `bin/bashy` (`internal/agentos`, planned `coreutils/pkg/yoke`) |
+
+Spoken as a ladder: **Classic → Bash++ → Yoke.** The ordering is load-bearing —
+a higher layer may never weaken a lower one.
+
+**Naming rules:**
+
+1. **Classic** names *bashy's* layer 1. **GNU Bash** or **stock bash** names the
+   external reference implementation. Never bare "Bash" for either — that
+   ambiguity is why this vocabulary exists. Not "basic": this is the most
+   rigorous layer in the repo, not a cut-down one.
+2. **Bash++** in prose (capital B, `++`). Never `bashy++`. Machine tokens are
+   separate and already settled: `--bashpp` canonical, `--bash++` human alias,
+   `syntax.LangBashPP` / `"bashpp"`.
+3. **Yoke**, capitalized, no prefix — never "bash yoke". Layer 3 does not exist
+   in the `bash` binary at all (`cmd/bash` structurally cannot link
+   `internal/agentos`), and Yoke is a general agent framework shared with ycode,
+   not a bash feature.
+4. Do **not** prefix all three with "bash". The prefix is not parallel: layer 1
+   *is* Bash, layer 2 is a superset *of* Bash, layer 3 is *not Bash at all*.
+5. `cert` still names the *workstream*; `compat` and `conformance` still name the
+   two *promises* inside Classic. Those are a different axis and are not renamed.
+   Retired as layer-3 names: "agentic extension", "agentic superset", "O3"
+   (`O3` keeps its own meaning as the ollama/oci/otel tool bundle).
+
+**Pillars are not substrates.** `docs/philosophy.md` §4 decomposes the thesis into
+three *pillars* — compatibility → capability → agency — and that is a different
+axis from the three substrates above. A pillar is what bashy must have to be
+trustworthy (none is removable); a substrate is a surface you address by name. So
+**Bash++ is not a pillar precisely because it is opt-in** (`--bashpp`, off by
+default), and **the userland is not a substrate** because it is not separately
+addressable — it is *how Classic keeps its compatibility promise on three
+operating systems*. Pillars I and II both land in Classic; pillar III is Yoke.
+Don't cite "the three pillars" when you mean the three substrates.
+
+**The backronym nests; it does not collide.** BASHY expands to *Bashy's Agentic
+Shell Harness Yoke*, whose head noun is **Yoke**, modified by *Agentic Shell
+Harness*, possessed by *Bashy* — so the phrase names **a yoke belonging to
+Bashy**, which is layer 3. The acronym names the product; its expansion names the
+product's top layer. Recursive in the GNU lineage, which is the joke. Design of
+record for layer 3: `../docs/bashy-yoke-framework.md` (planning-only, deferred).
+
 ## Module wiring
 
 `go.mod` requires four flat-sibling deps, resolved by `replace`:
@@ -510,7 +562,8 @@ itself, which is pure Go).
   and that claim is *enforced*, not asserted: `pkg/atlas/localfirst_test.go` fails the
   build if a loop verb starts declaring the `net` effect. The air-gapped room is a TEST,
   not a market (if it works there it works on the plane, in the outage, and on hotel
-  wifi). Three pillars (compatibility → capability → agency), six venues (venue 1 is a
+  wifi). Three pillars (compatibility → capability → agency — a DIFFERENT axis from the
+  three substrates in §Name; pillars I+II both land in Classic), six venues (venue 1 is a
   complete product, not a fallback), and what the philosophy FORBIDS. Read before any
   feature that reaches for a hosted service.
 - `TODO.md` — phase checklist + current PASS/FAIL/SKIP headline. Always read first.
