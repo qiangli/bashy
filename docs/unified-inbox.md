@@ -99,9 +99,25 @@ bashy sprint take <id> --as <fleet-agent-name> --watch
 The command claims the seat, prints the claim result, and remains alive streaming
 unified-inbox NDJSON. Its room card records the watcher process and its agent-
 harness parent. The external harness must retain and read/poll that foreground
-tool process; when it exits, the delivery capability disappears and the sprint
+tool process. After it handles each delivered batch, it confirms consumption with:
+
+```sh
+bashy sprint inbox-ack <id> --as <fleet-agent-name>
+```
+
+Writing bytes into a pipe proves only that the harness received them; the OS
+cannot prove that a model interpreted them. Therefore the attached watcher does
+not advance source cursors on output. The explicit ack is the proof of handling,
+advances exactly that rendered batch, and refreshes the sprint-manager lease.
+While a batch remains unacknowledged, the watcher prints `you got message` after
+three minutes and repeats at six and nine minutes. The third reminder exits
+nonzero, leaves the batch unread, and requires the harness to rerun
+`sprint take ... --watch`. A new batch starts a new three-strike window.
+
+When the watcher exits, the delivery capability disappears and the sprint
 reports NOT READY. Bashy cannot force an external model loop to schedule itself,
-but it can make the live parent-owned stream an enforced seat invariant.
+but it can enforce a live parent-owned stream plus explicit consumption receipts
+as seat invariants.
 
 An external harness that can retain and actively poll a process may instead run:
 

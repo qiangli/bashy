@@ -37,7 +37,10 @@ same name for mb/Meet/chat/ping, or changes the sprint owner before adopting a n
 name. A Bashy-managed successor receives input through its control transport. An
 external harness instead retains `sprint take/start --watch` as a foreground tool
 process and reads its streamed events; the process's parent relationship is the
-proof that the external agent, rather than an abandoned terminal, owns it.
+proof that the external agent, rather than an abandoned terminal, owns it. It
+runs `sprint inbox-ack ID --as OWNER` after handling each batch. Until then the
+source cursors do not advance; three reminders at three-minute intervals end the
+watcher nonzero and leave the batch available for the replacement watcher.
 
 When another sprint manager owns intersecting work, contact that owner through the
 Bashy coordination surfaces and request merge/sequencing before acting. Never

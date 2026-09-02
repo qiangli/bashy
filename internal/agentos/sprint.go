@@ -32,6 +32,7 @@ func newSprintCmd() *cobra.Command {
 			attachSprintWatch(child, child.Name() == "take")
 		}
 	}
+	cmd.AddCommand(newSprintInboxAckCmd())
 	return cmd
 }
 
@@ -70,8 +71,9 @@ func attachSprintWatch(cmd *cobra.Command, takeover bool) {
 			cmd.Name(), owner, sprintWatchParentPID())
 		poll := defaultInboxPollRuntime(true)
 		poll.ownerLive = claim.ownerLive
-		return runUnifiedInboxWithPoll(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(),
-			owner, 0, false, true, true, 0, poll)
+		rt := defaultSprintWatchRuntime()
+		rt.poll = poll
+		return runSprintInboxWatch(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), id, owner, rt)
 	}
 }
 
@@ -92,7 +94,9 @@ Delegation transfers execution, never accountability. While you hold it you must
     mb/Meet/chat/ping, or explicitly updates ownership before using another name.
     A Bashy-managed session receives input through its control transport. An external
     Claude/Codex/OpenCode/ycode/agy harness must claim with ` + "`sprint take/start --watch`" + `
-    and retain/read that foreground process; its parent relationship is the delivery proof.
+    and retain/read that foreground process. After handling each delivered batch it must run
+    ` + "`sprint inbox-ack ID --as OWNER`" + `. Unacknowledged input is reminded every three
+    minutes; the third reminder exits nonzero with input still unread, requiring a rerun.
   - SUPERVISE workers proactively: monitor every run, and steer, interrupt,
     salvage, or reassign stalled / failed / no-op work instead of waiting on it.
   - VERIFY independently: inspect and rerun the gates yourself; never trust a

@@ -15,7 +15,8 @@
 - A takeover keeps the recorded owner name as its coordination identity unless
   it explicitly changes ownership first. A managed session uses automatic inbox
   delivery; an external harness retains an exact-name `sprint ... --watch`
-  foreground stream while managing the sprint.
+  foreground stream while managing the sprint and explicitly acknowledges each
+  handled batch with `sprint inbox-ack`.
 
 ## Delivery slices
 

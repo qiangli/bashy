@@ -69,7 +69,9 @@ new preferred name. A Bashy-managed conductor receives input through its control
 transport. An externally launched conductor claims with
 `bashy sprint take <id> --as <owner> --watch` (or `start ... --watch`) and its
 harness must retain and read that foreground process. The watcher-to-parent
-relationship is the external harness's live delivery proof.
+relationship proves live delivery. After handling every delivered batch, run
+`bashy sprint inbox-ack <id> --as <owner>`; three unacknowledged three-minute
+reminders terminate the watcher with the input still unread.
 
 Before touching work owned by another sprint manager, coordinate with that owner
 through mb/Meet/chat/ping and request merge or sequencing. Never delete, remove,
