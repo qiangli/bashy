@@ -667,7 +667,7 @@ func TestInboxHelpTeachesBoundedSentinelResponseAndIdentitySafety(t *testing.T) 
 		"whois agent:NAME",
 		"monitoring ENDED",
 		"continued monitoring after",
-		"skills show check-messages",
+		"skills show inbox",
 	} {
 		if !strings.Contains(help, behavior) {
 			t.Fatalf("inbox help does not teach %q:\n%s", behavior, help)

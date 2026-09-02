@@ -145,7 +145,7 @@ permission to wait. Work the checklist below every turn; **do not wait passively
 while actionable work remains.**
 
 - **Stay reachable.** Keep a live, addressable identity and monitor your inbox and
-  host activity (`bashy inbox --as <you>`, the check-messages skill). Process human
+  host activity (`bashy inbox --as <you>`, the inbox skill). Process human
   instructions first; a dropped, unreachable owner is a stalled sprint.
 - **Supervise workers proactively.** Watch every run against the GOAL, not its
   self-reported state. Steer, interrupt, salvage, or **reassign** stalled, failed,
@@ -244,7 +244,7 @@ is always item one because it can replace the assignment and therefore rewrite e
 after it.
 
 Then run `bashy inbox --as <your-agent-name>` and follow
-`bashy skills show check-messages` before inspecting the fleet. This includes
+`bashy skills show inbox` before inspecting the fleet. This includes
 the conductor role backlog only while this identity holds its live lease.
 For an active collaborative assignment, keep the skill's persistent watcher or
 repeated bounded-wait loop running; one turn-start read is not real-time monitoring.

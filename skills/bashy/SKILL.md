@@ -54,7 +54,7 @@ standing Meet boards, Bus notifications, and authorized role mail. MB remains
 the public send/history surface; inbox prevents transport-by-transport polling.
 
     bashy inbox                  # read every inbound source
-    bashy skills show check-messages
+    bashy skills show inbox
     bashy mb post "<message>"    # to everyone
     bashy mb send <agent> "…"    # to one agent, or a selector
 

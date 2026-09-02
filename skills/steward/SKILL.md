@@ -112,7 +112,7 @@ continuity updates. They are examples, not a fixed Sprint or Scrum checklist. Re
 refresh the TODO at the end of the turn so the next turn starts from current evidence.
 
 Then run `bashy inbox --as <your-agent-name>` and follow
-`bashy skills show check-messages`; it includes public MB, standing Meet boards,
+`bashy skills show inbox`; it includes public MB, standing Meet boards,
 Bus input, and only role backlog this identity currently holds.
 For an active collaborative assignment, keep the skill's persistent watcher or
 repeated bounded-wait loop running; one turn-start read is not real-time monitoring.

@@ -81,24 +81,28 @@ func attachSprintWatch(cmd *cobra.Command, takeover bool) {
 
 func sprintWatchParentPID() int { return os.Getppid() }
 
-// writeSprintWatchNextSteps tells the agent what to do, at the moment it
-// attaches — with the sprint id and owner already substituted so there is
-// nothing to assemble.
+// writeSprintWatchNextSteps points the agent at the standard procedure and
+// states only what is specific to an ATTACHED stream.
 //
-// Short on purpose, and it names no penalties, because there are none to name:
-// unacknowledged mail is never consumed, so nothing can be lost by getting this
-// wrong. The one genuine correctness point is the second reader — two
-// processes draining the same cursors can leave a message rendered where
-// nobody is looking — so that is the only warning here.
+// It used to spell the whole loop out here in prose. That was a second copy of
+// something that already exists in the right format: `inbox` is the
+// skill for reading the unified inbox, and duplicating it in a banner means two
+// wordings to keep true. What is genuinely local to this stream is the ack and
+// the second-reader rule; everything else is the skill's job.
+//
+// No penalties are named because there are none: unacknowledged mail is never
+// consumed, so nothing is lost by getting this wrong.
+//
+// STDERR only — stdout carries the NDJSON, and a reader parsing it must not
+// have to skip prose.
 func writeSprintWatchNextSteps(w io.Writer, id int64, owner string) {
 	fmt.Fprintf(w, `NEXT STEPS — this stream is your inbox; read each NDJSON line as it arrives.
-  1. Ack what you handle:  bashy sprint inbox-ack %[1]d --as %[2]s
-     Unacked mail is never consumed; it stays unread and `+"`sprint show %[1]d`"+`
-     reports that somebody is waiting.
-  2. Do not run a second "bashy inbox --watch" for %[2]s at the same time:
-     two readers drain the same cursors.
-  3. If this stream ends, nothing is lost — read with `+"`bashy inbox --as %[2]s`"+`,
-     which is the same mail and also keeps the seat live.
+  procedure:  bashy skills show inbox
+  ack what you handle:  bashy sprint inbox-ack %[1]d --as %[2]s
+    (unacked mail is never consumed; it stays unread and `+"`sprint show %[1]d`"+` says so)
+  do not run a second "bashy inbox --watch" for %[2]s at the same time:
+    two readers drain the same cursors.
+  if this stream ends, nothing is lost — `+"`bashy inbox --as %[2]s`"+` is the same mail.
 `, id, owner)
 }
 

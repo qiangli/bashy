@@ -301,7 +301,7 @@ func fillContext(report contextReport, bashyPath string) contextReport {
 		{Purpose: "what code is coupled to a symbol (skip the grep dance)", Command: bashyPath + " graph impact SYMBOL"},
 		{Purpose: "recall/leave shared repo knowledge for other agents", Command: bashyPath + " graph recall QUERY"},
 		{Purpose: "skills applicable on this host (read one: skills show NAME; run attested: skills run NAME)", Command: bashyPath + " skills list"},
-		{Purpose: "canonical read/respond/monitor protocol for agent communication", Command: bashyPath + " skills show check-messages"},
+		{Purpose: "canonical read/respond/monitor protocol for agent communication", Command: bashyPath + " skills show inbox"},
 	}
 	report.Notes = []string{
 		"Replaces first-hop probes: `system` = uname/hostname/id, `tools` = which/tool discovery, `environment` = env — an agent need not run env/uname/hostname/id/which itself.",

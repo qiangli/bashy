@@ -42,7 +42,7 @@ func TestCollectContextIncludesBashyPathAndCapabilities(t *testing.T) {
 		if strings.HasSuffix(cmd.Command, " inbox") && strings.Contains(strings.ToLower(cmd.Purpose), "attention") {
 			sawInbox = true
 		}
-		if strings.HasSuffix(cmd.Command, " skills show check-messages") {
+		if strings.HasSuffix(cmd.Command, " skills show inbox") {
 			sawProtocol = true
 		}
 	}

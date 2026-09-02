@@ -108,7 +108,7 @@ impersonate decision authority. A sentinel sees only sources routed to its own
 identity; invite/subscribe/address it explicitly. Its reply must say the
 sentinel routed the request and the supervisor has not read it. On expiry,
 handoff processed/outstanding counts and last source sequences. See
-'bashy skills show check-messages'.
+'bashy skills show inbox'.
 
 NAME owns the address and cursor; NICK/aliases do not create another inbox.
 Never share one registered NAME between agents. Separate concurrent topic

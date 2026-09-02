@@ -93,9 +93,16 @@ func TestExternalSprintTakeWatchClaimsThenStreamsInbox(t *testing.T) {
 	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("take --watch: %v\n%s", err, out.String())
 	}
-	// The take names the ONE action the new conductor now owns, rather than
-	// reporting a readiness condition it would have to go and arrange.
-	for _, want := range []string{"is now conductor", "read your mail with", "attached inbox stream", "wake the external manager"} {
+	// The take names the runnable command and the standard procedure, rather
+	// than reporting a readiness condition the agent would have to go and
+	// arrange. Assert the COMMAND and the SKILL, never the prose around them.
+	for _, want := range []string{
+		"is now conductor",
+		"bashy inbox --as " + owner,
+		"bashy skills show inbox",
+		"attached inbox stream",
+		"wake the external manager",
+	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("take --watch output missing %q:\n%s", want, out.String())
 		}
@@ -156,6 +163,8 @@ func TestSprintWatchNextStepsNameTheLoopAndTheCommands(t *testing.T) {
 	for _, want := range []string{
 		"bashy sprint inbox-ack 99 --as trestle",
 		"bashy inbox --as trestle",
+		// The procedure lives in the standard skill, not in a second copy here.
+		"bashy skills show inbox",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("next steps omit the runnable command %q:\n%s", want, got)

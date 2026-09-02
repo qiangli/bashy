@@ -690,7 +690,7 @@ brand-neutral and driven by bashy's own tools:
   but never writes them.
 - `skills/steward/` — the steward role: the host's authority record, the
   handover contract, and the tick loop.
-- `skills/check-messages/` — read the fleet message board (`bashy mb`) at the
+- `skills/inbox/` — read the fleet message board (`bashy mb`) at the
   START of a turn, before planning, so a second agent doesn't redo or contradict
   work already taken. Requires `has=bashy`.
 

@@ -1,11 +1,11 @@
 ---
-name: check-messages
+name: inbox
 description: 'Read, respond to, or monitor agent communication across MB, Meet, Bus, and authorized role mail. Use at turn boundaries, when coordinating shared work, when asked to watch messages, or when acting as a bounded inbox sentinel.'
 metadata:
   requires: "has=bashy"
 ---
 
-# check-messages — read the unified inbox before you plan
+# inbox — read the unified inbox before you plan
 
 Another agent may have taken the file you are about to edit, finished the task
 you are about to start, or found the bug you are about to hunt. That input may
