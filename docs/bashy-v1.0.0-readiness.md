@@ -18,7 +18,7 @@ strict discipline (§Claim discipline):
 
 1. **Bash 5.3 compatible + POSIX conformant** — runs Bash 5.3 scripts/sessions
    with matching semantics; POSIX-mode passes the conformance frontier.
-2. **Bash++ Go profile** — the enumerated Go 1.26-shaped constructs meet
+2. **Bash++ Go profile** — the enumerated Go 1.27-shaped constructs meet
    superset, differential, race, lifecycle, and interpreted/native gates.
 3. **Packaged + permissive** — cross-platform signed/verified artifacts; every
    engine/tool is download+exec (never bundled non-permissive), self-provisioned.
@@ -172,7 +172,7 @@ and watch token budget.
    again). Re-run, don't trust a quoted count.
 2. **yash POSIX suite ≥ 96%** (no regression from the headline).
 3. **Differential + 10-shell panel = 0 deviations** (re-measured).
-4. **Bash++ v1 profile green** — enumerated Go 1.26 constructs, superset gate,
+4. **Bash++ v1 profile green** — enumerated Go 1.27 constructs, superset gate,
    interpreted/native equivalence where implemented, and race/leak gates.
 5. **Declared packages are installed and verified**; macOS and Windows signing
    gates pass, not merely cross-build.

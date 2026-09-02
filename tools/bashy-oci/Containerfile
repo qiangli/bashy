@@ -2,7 +2,7 @@
 # Build with the directory containing the bashy/coreutils/sh/readline/filebrowser sibling
 # checkouts as the context. tools/bashy-oci/build-smoke.sh stages exactly that
 # public five-repository context and is the supported entry point.
-ARG GO_IMAGE=docker.io/library/golang:1.26.5-bookworm
+ARG GO_IMAGE=docker.io/library/golang:1.27.1-bookworm
 ARG RUNTIME_IMAGE=docker.io/library/ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 
 FROM --platform=$TARGETPLATFORM ${GO_IMAGE} AS builder

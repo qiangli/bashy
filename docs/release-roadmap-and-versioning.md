@@ -61,10 +61,10 @@ Detailed gates remain in `bashy-v1.0.0-readiness.md` and the component plans.
      human/legal milestone; engineering completion must not be worded as a
      certification award.
 3. **Bash++ language foundation.**
-   - Stable target for v1.0: Go 1.26-shaped constructs supported by the declared
+   - Stable target for v1.0: Go 1.27-shaped constructs supported by the declared
      Bash++ grammar/profile, including the race and lifecycle gate in
      `bash-plus-plus-design.md`.
-   - Go 1.26 is an upstream toolchain/language coordinate, not a promise to
+   - Go 1.27 is an upstream toolchain/language coordinate, not a promise to
      accept arbitrary Go source. Every supported construct must be enumerated.
    - Python, TypeScript, and Rust embedding starts experimental, opt-in, and
      capability/effect-gated. It becomes stable only after runtime discovery,
@@ -262,8 +262,8 @@ Consequences:
 - GNU Bash 6.x does **not automatically** force Bashy 2.0.0. Adding a Bash 6
   profile while retaining Bash 5.3 can be a minor; changing defaults
   incompatibly or dropping 5.3 requires a major.
-- Go 1.26.x compiler/security updates are normally Bashy patches. Adding Go
-  1.27 language constructs to Bash++ is normally a minor. A hypothetical Go 2
+- Go 1.27.x compiler/security updates are normally Bashy patches. Adding later
+  Go language constructs to Bash++ is normally a minor. A hypothetical Go 2
   only forces a Bashy major when Bashy’s stable language/API becomes
   incompatible.
 - A new POSIX edition is a named profile. Adding it is normally minor; making
@@ -279,7 +279,7 @@ Every release publishes a machine-readable manifest and human support matrix:
 bashy:       1.0.0
 gnu_bash:    5.3 + patch-level/hash
 posix:       VSC-PCTS2016 / POSIX08 / IEEE 1003.1 campaign profile
-go_build:    1.26.x
+go_build:    1.27.x
 bashpp_go:   go1.27-profile-v1
 coreutils:   GNU 9.11 reference; Bashy command-set revision/hash
 agent_graph: none (pre-1.2) | contrib-v1 + relation-registry revision/hash
@@ -307,5 +307,5 @@ the product tag remains simply `vX.Y.Z`.
 References: [GNU Bash project](https://www.gnu.org/software/bash/),
 [GNU Bash 5.3 announcement](https://lists.gnu.org/archive/html/bash-announce/2025-07/msg00000.html),
 [Go release policy](https://go.dev/doc/devel/release),
-[Go 1.26 release notes](https://go.dev/doc/go1.26), and
+[Go 1.27 release notes](https://go.dev/doc/go1.27), and
 [The Open Group Issue 8 online publication](https://pubs.opengroup.org/onlinepubs/9799919799/).

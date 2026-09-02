@@ -30,7 +30,7 @@ jobs:
         run: ./scripts/bootstrap-siblings.sh
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version: 1.27.1
       - uses: actions/setup-node@v6
         with:
           node-version: 22

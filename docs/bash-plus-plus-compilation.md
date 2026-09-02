@@ -103,7 +103,7 @@ automatable against the existing fixtures.
 ## Where it sits in the roadmap
 
 The release sequence and version policy live in
-`release-roadmap-and-versioning.md`. The stable Go 1.26-shaped Bash++ profile is
+`release-roadmap-and-versioning.md`. The stable Go 1.27-shaped Bash++ profile is
 part of the v1.0 foundation; foreign-runtime embedding is experimental unless
 and until its own cross-platform/effect gates are promoted.
 
