@@ -2,6 +2,7 @@ package agentos
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -69,6 +70,7 @@ func attachSprintWatch(cmd *cobra.Command, takeover bool) {
 		fmt.Fprintf(cmd.ErrOrStderr(),
 			"sprint %s: attached inbox stream for %s (parent pid %d); retain and read this process until handoff\n",
 			cmd.Name(), owner, sprintWatchParentPID())
+		writeSprintWatchNextSteps(cmd.ErrOrStderr(), id, owner)
 		poll := defaultInboxPollRuntime(true)
 		poll.ownerLive = claim.ownerLive
 		rt := defaultSprintWatchRuntime()
@@ -78,6 +80,39 @@ func attachSprintWatch(cmd *cobra.Command, takeover bool) {
 }
 
 func sprintWatchParentPID() int { return os.Getppid() }
+
+// writeSprintWatchNextSteps tells the agent what it must now DO, at the moment
+// it attaches.
+//
+// The accountability contract is already in `sprint --help`, and that is not
+// the same thing: help is read once, before the work, by an agent that does not
+// yet know which of it will matter. This prints at the one moment the loop
+// becomes the agent's responsibility, with the sprint id and owner name already
+// substituted so there is nothing to assemble.
+//
+// It exists because the omission was MEASURED, repeatedly, on this project's
+// own conductor seat: an agent attached, read the banner "retain and read this
+// process", did not know an explicit ack was owed, and lost the seat to the
+// fail-closed fuse — twice in one session. The banner was true and insufficient.
+// Nothing about the failure was visible until the process exited nonzero.
+//
+// Written to STDERR: stdout carries the NDJSON delivery stream, and a reader
+// parsing it must not have to skip prose.
+//
+// Compact on purpose. Three steps, each with its consequence, is what an agent
+// reliably acts on; a longer block is one an agent skims past, which is how the
+// contract in `--help` came to be unread in the first place.
+func writeSprintWatchNextSteps(w io.Writer, id int64, owner string) {
+	fmt.Fprintf(w, `NEXT STEPS — this stream IS your inbox; nothing else will wake you.
+  1. READ each NDJSON line printed below as it arrives. Do NOT start a second
+     "bashy inbox --watch" for %[2]s: two readers race for the same cursors.
+  2. After handling a batch, ACK it:  bashy sprint inbox-ack %[1]d --as %[2]s
+     Unacked input is reminded every 3m; the 3rd reminder EXITS NONZERO with
+     the mail still unread and the seat then ages out.
+  3. If this process ends for ANY reason the seat goes UNREACHABLE. Re-attach:
+     bashy sprint take %[1]d --as %[2]s --watch
+`, id, owner)
+}
 
 // ownerAccountabilityHelp is the active-owner contract appended to
 // `bashy sprint --help`. It is exported through the help of the command an agent

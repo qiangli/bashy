@@ -142,3 +142,61 @@ func TestConductorSkillCarriesOwnerChecklist(t *testing.T) {
 		}
 	}
 }
+
+// THE ATTACH BANNER WAS TRUE AND INSUFFICIENT.
+//
+// "retain and read this process until handoff" does not tell an agent that an
+// explicit ack is owed, and an agent that does not ack loses the seat to the
+// fail-closed fuse with nothing visible until the process exits nonzero. That
+// happened twice in one session on this project's own conductor seat, so the
+// loop is now printed at the moment it becomes the agent's responsibility.
+func TestSprintWatchNextStepsNamesTheLoopAndItsConsequences(t *testing.T) {
+	var buf bytes.Buffer
+	writeSprintWatchNextSteps(&buf, 99, "trestle")
+	got := buf.String()
+
+	// The exact commands, already substituted: an agent must not have to
+	// assemble one from a template while a lease is ticking.
+	for _, want := range []string{
+		"bashy sprint inbox-ack 99 --as trestle",
+		"bashy sprint take 99 --as trestle --watch",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("next steps omit the runnable command %q:\n%s", want, got)
+		}
+	}
+	// Each step carries its CONSEQUENCE. An instruction with no stated cost is
+	// one an agent deprioritises under load, which is how the contract already
+	// in `sprint --help` came to be unread.
+	for _, want := range []string{"EXITS NONZERO", "UNREACHABLE"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("next steps omit the consequence %q:\n%s", want, got)
+		}
+	}
+	// The stream IS the inbox. A second reader would race it for the same
+	// cursors, and "start a watch" is the obvious wrong inference from the
+	// instruction to keep reading.
+	if !strings.Contains(got, "second") || !strings.Contains(got, "race") {
+		t.Errorf("next steps do not warn against a second inbox reader:\n%s", got)
+	}
+	// Compact enough to be read rather than skimmed past.
+	if n := strings.Count(got, "\n"); n > 9 {
+		t.Errorf("next steps are %d lines; keep them short enough to act on:\n%s", n, got)
+	}
+}
+
+// The block must go to STDERR: stdout carries the NDJSON delivery stream, and a
+// reader parsing it must not have to skip prose.
+func TestSprintWatchNextStepsStayOffTheDeliveryStream(t *testing.T) {
+	cmd := newSprintCmd()
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	writeSprintWatchNextSteps(cmd.ErrOrStderr(), 99, "trestle")
+	if out.Len() != 0 {
+		t.Fatalf("next steps polluted the NDJSON stream: %q", out.String())
+	}
+	if !strings.Contains(errOut.String(), "NEXT STEPS") {
+		t.Fatalf("next steps did not reach stderr: %q", errOut.String())
+	}
+}
