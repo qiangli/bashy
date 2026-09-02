@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -64,15 +65,60 @@ func isolateUnifiedInbox(t *testing.T) {
 	t.Helper()
 	t.Setenv("BASHY_MB_DIR", t.TempDir())
 	t.Setenv("BASHY_ROOM_DIR", t.TempDir())
-	t.Setenv("BASHY_FLEET_DIR", t.TempDir())
+	fleetDir := t.TempDir()
+	t.Setenv("BASHY_FLEET_DIR", fleetDir)
 	t.Setenv("BASHY_MEET_DIR", t.TempDir())
+	// THE SPRINT STORE IS PART OF THE INBOX PATH, AND FORGETTING IT WAS NOT
+	// HARMLESS. runUnifiedInbox opens by recording that this reader checked
+	// its mail (weave.RefreshSprintOwnerActivity), which WRITES a sprint lease
+	// held by that name. Unisolated, the suite reached into the operator's own
+	// board and renewed a live conductor lease for another full TTL on every
+	// run -- so a seat nobody was sitting in kept reporting healthy, and the
+	// only thing propping it up was `go test`.
+	//
+	// BASHY_HOME as well as BASHY_SPRINT_DIR on purpose: the store resolves
+	// BASHY_SPRINT_DIR, then BASHY_HOME, then the real home directory. Setting
+	// only the specific variable isolates the store we happen to know about
+	// today and leaves the next one reachable; setting the root closes the
+	// path itself. Four named stores above were not enough exactly once, and
+	// once was enough.
+	home := t.TempDir()
+	t.Setenv("BASHY_HOME", home)
+	t.Setenv("BASHY_SPRINT_DIR", filepath.Join(home, "sprint"))
 	t.Setenv("BASHY_PRINCIPAL", "")
 	t.Setenv("USER", "tester")
+	registerTestInboxAgent(t, fleetDir, inboxTestReader)
+}
+
+// inboxTestReader is the name these tests read as. It is registered into the
+// test's own empty fleet ring rather than borrowed from the shipped baseline.
+//
+// The tests used to read as a REAL baseline agent, because meet.Create refuses
+// an unregistered participant and the baseline was the only thing that
+// resolved. That made a live fleet identity -- somebody's actual conductor --
+// the subject of every run, and the inbox path writes to whatever sprint lease
+// that name holds. Owning the name is the fix: the ring is already isolated,
+// so the test can simply put its own agent in it.
+const inboxTestReader = "inbox-test-reader"
+
+func registerTestInboxAgent(t *testing.T, dir, name string) {
+	t.Helper()
+	agents := filepath.Join(dir, "agents")
+	if err := os.MkdirAll(agents, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	yaml := "name: " + name + "\nkind: agent\ntool: claude\nmodel: opus5\n"
+	if err := os.WriteFile(filepath.Join(agents, name+".yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := fleet.New().Agent(name); !ok {
+		t.Fatalf("test agent %q did not register in the isolated fleet ring %s", name, dir)
+	}
 }
 
 func TestInboxAggregatesMeetAndAcknowledgesEachRenderedSource(t *testing.T) {
 	isolateUnifiedInbox(t)
-	reader := "codex-gpt5.6-sol"
+	reader := inboxTestReader
 	st, err := meet.Create(meet.CreateOptions{Topic: "sprint channel", Board: true, Participants: []string{reader}, Human: "operator"})
 	if err != nil {
 		t.Fatal(err)
@@ -129,7 +175,7 @@ func TestInboxWatchDeliversANewBoardPostWithoutHumanRelay(t *testing.T) {
 
 func TestInboxSilentlyAdvancesPastOwnMeetPostThenDeliversPeerReply(t *testing.T) {
 	isolateUnifiedInbox(t)
-	reader, peer := "codex-gpt5.6-sol", "claude-opus5"
+	reader, peer := inboxTestReader, "claude-opus5"
 	st, err := meet.Create(meet.CreateOptions{Topic: "sprint channel", Board: true, Participants: []string{reader, peer}, Human: "operator"})
 	if err != nil {
 		t.Fatal(err)
@@ -170,7 +216,7 @@ func TestInboxSilentlyAdvancesPastOwnMeetPostThenDeliversPeerReply(t *testing.T)
 
 func TestInboxBoundedWaitDoesNotFinishOnOwnMeetPost(t *testing.T) {
 	isolateUnifiedInbox(t)
-	reader, peer := "codex-gpt5.6-sol", "claude-opus5"
+	reader, peer := inboxTestReader, "claude-opus5"
 	st, err := meet.Create(meet.CreateOptions{Topic: "sprint channel", Board: true, Participants: []string{reader, peer}, Human: "operator"})
 	if err != nil {
 		t.Fatal(err)
@@ -204,7 +250,7 @@ func TestInboxBoundedWaitDoesNotFinishOnOwnMeetPost(t *testing.T) {
 
 func TestUnifiedTurnPreambleDeliversBoardAndMeetOnce(t *testing.T) {
 	isolateUnifiedInbox(t)
-	reader := "codex-gpt5.6-sol"
+	reader := inboxTestReader
 	st, err := meet.Create(meet.CreateOptions{Topic: "sprint channel", Board: true, Participants: []string{reader}, Human: "operator"})
 	if err != nil {
 		t.Fatal(err)
@@ -235,7 +281,7 @@ func TestUnifiedTurnPreambleDeliversBoardAndMeetOnce(t *testing.T) {
 
 func TestInboxRenderFailureLeavesEverySourceUnread(t *testing.T) {
 	isolateUnifiedInbox(t)
-	reader := "codex-gpt5.6-sol"
+	reader := inboxTestReader
 	st, err := meet.Create(meet.CreateOptions{Topic: "sprint channel", Board: true, Participants: []string{reader}, Human: "operator"})
 	if err != nil {
 		t.Fatal(err)
@@ -285,13 +331,13 @@ func TestInboxExcludesMeetBoardsReaderNeverJoined(t *testing.T) {
 	}
 	// A stale cursor is not membership. This models a removed participant or a
 	// one-time open reader: future traffic must stop reaching it.
-	if err := meet.MarkSeen(st.ID, "codex-gpt5.6-sol"); err != nil {
+	if err := meet.MarkSeen(st.ID, inboxTestReader); err != nil {
 		t.Fatal(err)
 	}
 	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: other, To: other, Kind: "status", Text: "future private traffic"}); err != nil {
 		t.Fatal(err)
 	}
-	batch, err := snapshotUnifiedInbox("codex-gpt5.6-sol", 0, true)
+	batch, err := snapshotUnifiedInbox(inboxTestReader, 0, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +346,7 @@ func TestInboxExcludesMeetBoardsReaderNeverJoined(t *testing.T) {
 			t.Fatalf("unrelated Meet board leaked into inbox: %+v", event)
 		}
 	}
-	if got := meet.SeenSeq(st.ID, "codex-gpt5.6-sol"); got != 1 {
+	if got := meet.SeenSeq(st.ID, inboxTestReader); got != 1 {
 		t.Fatalf("unrelated Meet board cursor advanced from stale watermark: %d", got)
 	}
 }
@@ -311,7 +357,7 @@ func TestInboxExcludesMeetBoardsReaderNeverJoined(t *testing.T) {
 // the inbox reported nothing. Deliverability keys on the seat (P0-a).
 func TestInboxDeliversChairedRoomMailToSeatedParticipant(t *testing.T) {
 	isolateUnifiedInbox(t)
-	reader := "codex-gpt5.6-sol"
+	reader := inboxTestReader
 	peer := "claude-opus5"
 	st, err := meet.Create(meet.CreateOptions{Topic: "conductor 99", Participants: []string{reader, peer}, NoSecretary: true, Human: "operator"})
 	if err != nil {
@@ -350,7 +396,7 @@ func TestInboxExcludesChairedRoomsReaderHoldsNoSeatIn(t *testing.T) {
 	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: other, Kind: "status", Text: "not the reader's meeting"}); err != nil {
 		t.Fatal(err)
 	}
-	batch, err := snapshotUnifiedInbox("codex-gpt5.6-sol", 0, true)
+	batch, err := snapshotUnifiedInbox(inboxTestReader, 0, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,7 +409,7 @@ func TestInboxExcludesChairedRoomsReaderHoldsNoSeatIn(t *testing.T) {
 
 func TestUnifiedTurnPreambleSurfacesSourceFailureWithoutAcknowledging(t *testing.T) {
 	isolateUnifiedInbox(t)
-	reader := "codex-gpt5.6-sol"
+	reader := inboxTestReader
 	if err := bus.PostMessage(bus.Post{From: "human", To: reader, Body: "must survive source error"}); err != nil {
 		t.Fatal(err)
 	}
@@ -746,7 +792,7 @@ func TestInboxExternalRoleAliasCannotDrainRolePending(t *testing.T) {
 
 func TestInboxCollapsesMeetSeedOnlyByStructuredMBOriginAndAcknowledgesBoth(t *testing.T) {
 	isolateUnifiedInbox(t)
-	reader := "codex-gpt5.6-sol"
+	reader := inboxTestReader
 	wireMeet()
 	if err := bus.PostMessage(bus.Post{From: "human", To: reader, Topic: "mb", Body: "INBOX_E2E_DEDUP"}); err != nil {
 		t.Fatal(err)
@@ -840,5 +886,52 @@ func TestInboxLegacyRolePendingIsVisibleOnlyToCurrentHolder(t *testing.T) {
 	after, err := bus.SnapshotInbox(roleTopic)
 	if err != nil || len(after.Items) != 0 {
 		t.Fatalf("holder did not advance role backlog: items=%d err=%v", len(after.Items), err)
+	}
+}
+
+// TestIsolatedInboxNeverTouchesTheRealSprintStore is a regression for a bug
+// that took an hour to find and that no unit assertion would ever have caught,
+// because the damage landed OUTSIDE the test.
+//
+// runUnifiedInbox opens by recording that the reader checked its mail, and
+// that WRITES a sprint lease held by that name. The isolation helper redirected
+// four stores and not the fifth, and one test read as a real fleet agent — so
+// every `go test ./internal/agentos/` renewed a live conductor lease on the
+// operator's own board. A seat nobody occupied kept reporting healthy for
+// half an hour at a time, and the thing propping it up was the test suite.
+//
+// The property is stated where it broke: run the isolated path, then look at
+// the REAL store and require that nothing moved. It cannot rot the way an
+// "every store is isolated" checklist would, because it asserts the outcome
+// rather than the mechanism.
+func TestIsolatedInboxNeverTouchesTheRealSprintStore(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("no home directory to protect: %v", err)
+	}
+	real := filepath.Join(home, ".bashy", "sprint", "queue.json")
+	before, err := os.Stat(real)
+	if err != nil {
+		// Nothing to clobber on this host; the assertion has no subject.
+		t.Skipf("no sprint store at %s", real)
+	}
+
+	isolateUnifiedInbox(t)
+	// Deliberately the shape that did the damage: a plain, non-peek read under
+	// a name that could be somebody's live conductor.
+	var out, errOut bytes.Buffer
+	if err := runUnifiedInbox(context.Background(), &out, &errOut, inboxTestReader, 0, false, false, false, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := os.Stat(real)
+	if err != nil {
+		t.Fatalf("the real sprint store went missing during an isolated test: %v", err)
+	}
+	if !after.ModTime().Equal(before.ModTime()) || after.Size() != before.Size() {
+		t.Fatalf("an isolated inbox test wrote the REAL sprint store %s\n"+
+			"  before: %s (%d bytes)\n   after: %s (%d bytes)\n"+
+			"isolateUnifiedInbox must redirect every store this path can reach",
+			real, before.ModTime(), before.Size(), after.ModTime(), after.Size())
 	}
 }

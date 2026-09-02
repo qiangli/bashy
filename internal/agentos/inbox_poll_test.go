@@ -153,7 +153,7 @@ func TestInboxPollGateFailsOpenOnFingerprintError(t *testing.T) {
 
 func TestInboxSourceFingerprintMovesForEverySource(t *testing.T) {
 	isolateUnifiedInbox(t)
-	reader := "codex-gpt5.6-sol"
+	reader := inboxTestReader
 	priorRoles := bus.HostRoles
 	holder := "someone-else"
 	bus.HostRoles = func() []bus.HostRole {
