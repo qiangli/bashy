@@ -59,7 +59,7 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 	// Always bash grammar (drop-in); --posix applies POSIX *behavioral* parse
 	// rules via PosixMode, not the stricter LangPOSIX grammar that would drop
 	// bash extensions (arrays, ${v:off:len}, ${v^^}). See run() in main.go.
-	lang := syntax.LangBash
+	lang := r.Dialect()
 	posixMode := effectiveStartupPosix()
 
 	var cmdNum int

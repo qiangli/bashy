@@ -9,7 +9,6 @@ import (
 
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/syntax"
 )
 
 // SessionIO carries the per-request stdio/env/dir for a command run inside a
@@ -32,6 +31,21 @@ type SessionIO struct {
 // of reading process globals, so a single process can serve many callers.
 func NewSessionRunner(io SessionIO) (*interp.Runner, error) {
 	startupPosix := startupPosixForEnv(io.Env)
+	lookup := func(name string) (string, bool) {
+		for _, entry := range io.Env {
+			if key, value, ok := strings.Cut(entry, "="); ok && key == name {
+				return value, true
+			}
+		}
+		return "", false
+	}
+	resolution, err := ResolveBashPP(BashPPSelector{
+		Binary: BashPPBinaryBashy, Args: []string{"bashy", "-c", io.Command},
+		LookupEnv: lookup, Posix: startupPosix,
+	})
+	if err != nil {
+		return nil, err
+	}
 	// SHLVL from the CALLER's environment (not the serve process).
 	shlvl := 0
 	for _, kv := range io.Env {
@@ -54,6 +68,7 @@ func NewSessionRunner(io SessionIO) (*interp.Runner, error) {
 
 	var r *interp.Runner
 	opts := []interp.RunnerOption{
+		interp.Lang(resolution.LangVariant()),
 		interp.Interactive(false),
 		interp.CommandString(true),
 		interp.StandardInput(false),
@@ -75,7 +90,6 @@ func NewSessionRunner(io SessionIO) (*interp.Runner, error) {
 	if len(SuppressedForkBuiltins) > 0 {
 		opts = append(opts, interp.WithDisabledBuiltins(SuppressedForkBuiltins...))
 	}
-	var err error
 	r, err = interp.New(opts...)
 	if err != nil {
 		return nil, err
@@ -94,17 +108,11 @@ func RunSessionCommand(ctx context.Context, io SessionIO) int {
 		fmt.Fprintln(io.Stderr, "bashy: session:", err)
 		return 1
 	}
-	posixMode := startupPosixForEnv(io.Env)
-	prog, perr := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.PosixMode(posixMode)).Parse(strings.NewReader(io.Command), "")
-	if perr != nil {
-		fmt.Fprintln(io.Stderr, "bashy:", perr)
-		return 2
-	}
 	if err := interp.WithBashSource([]byte(io.Command))(r); err != nil {
 		fmt.Fprintln(io.Stderr, "bashy:", err)
 		return 1
 	}
-	runErr := r.Run(ctx, prog)
+	runErr := runStatementStream(ctx, r, []byte(io.Command), r.LangVariant(), "bashy")
 	var es interp.ExitStatus
 	if errors.As(runErr, &es) {
 		return int(es)

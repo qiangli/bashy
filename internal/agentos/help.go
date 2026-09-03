@@ -13,6 +13,7 @@ import (
 func Usage() string {
 	return `
 Bashy AgentOS extensions:
+	--bashpp, --bash++	enable Bash++ (--no-bashpp disables it)
 	--dryrun, --dry-run	preview external commands and destructive file ops
 	BASHY_AGENTIC=1		emit agent-readable JSON-lines for supported features
 

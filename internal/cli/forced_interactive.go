@@ -221,8 +221,6 @@ func runForcedInteractiveExec(r *interp.Runner) error {
 	}
 
 	e := newRlEmu()
-	parser := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.KeepComments(true))
-
 	var (
 		buffer       string // current edit line (recalled entries may be multi-line)
 		hpos         int    // history offset buffer came from; len(hist) when fresh
@@ -282,7 +280,8 @@ func runForcedInteractiveExec(r *interp.Runner) error {
 			e.appendLast(buffer, pending)
 		}
 		pending += buffer + "\n"
-		file, err := parser.Parse(strings.NewReader(pending), "bashy")
+		parser := syntax.NewParser(bashyParseOpts(r.LangVariant(), syntax.KeepComments(true))...)
+		_, err := parser.Parse(strings.NewReader(pending), "bashy")
 		if err != nil {
 			if !syntax.IsIncomplete(err) {
 				pending = ""
@@ -290,8 +289,9 @@ func runForcedInteractiveExec(r *interp.Runner) error {
 			return
 		}
 		r.RecordInteractiveHistory(strings.TrimSuffix(pending, "\n"))
+		input := pending
 		pending = ""
-		lastErr = r.Run(context.Background(), file)
+		lastErr = runStatementStream(context.Background(), r, []byte(input), r.LangVariant(), "bashy")
 		if r.Exited() {
 			exited = true
 		}

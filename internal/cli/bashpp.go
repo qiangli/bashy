@@ -130,6 +130,14 @@ type BashPPResolution struct {
 	Posix   bool
 }
 
+// LangVariant returns the concrete construction-time interpreter dialect.
+func (r BashPPResolution) LangVariant() syntax.LangVariant {
+	if r.Enabled {
+		return syntax.LangBashPP
+	}
+	return syntax.LangBash
+}
+
 // ParserOptions composes the selected grammar with the POSIX semantic profile.
 // Keeping both decisions in one API prevents callers from selecting LangBashPP
 // while accidentally dropping syntax.PosixMode(true).
