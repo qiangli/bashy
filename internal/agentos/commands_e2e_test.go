@@ -825,6 +825,18 @@ func TestSkillsAdvertisementLadderE2E(t *testing.T) {
 		t.Fatalf("hint repeated:\n%s", stderr)
 	}
 
+	// The documented hint kill-switch also suppresses the L1 advertisement on
+	// its first invocation; it must not write agent-dependent stderr or consume
+	// the once-per-repo marker.
+	disabled := t.TempDir()
+	if err := exec.Command("git", "-C", disabled, "init", "-q").Run(); err != nil {
+		t.Skip("git unavailable")
+	}
+	_, stderr, _ = run(disabled, append(agentEnv, "BASHY_HINTS=off"), "skills", "list")
+	if strings.Contains(stderr, "bashy skills show bashy") || strings.Contains(stderr, "detected") {
+		t.Fatalf("BASHY_HINTS=off emitted L1 hint:\n%s", stderr)
+	}
+
 	// Configured repo → never hints.
 	configured := t.TempDir()
 	if err := exec.Command("git", "-C", configured, "init", "-q").Run(); err != nil {

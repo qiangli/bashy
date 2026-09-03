@@ -197,6 +197,12 @@ func init() {
 // at the bashy skill. Zero writes to the repo; the once-per-repo marker
 // lives in the skills store.
 func maybeAdvertiseSkillHint() {
+	// The advertisement is a proactive hint and must honor the same documented
+	// master switch as every other hint. This is also required for reproducible
+	// subprocess evidence, where stderr must not depend on the driving agent.
+	if !hintsEnabled() {
+		return
+	}
 	agent, ok := coreskills.DetectAgent()
 	if !ok {
 		return

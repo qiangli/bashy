@@ -16,3 +16,6 @@ Pinned exact pushed `sh` head `3f7633163bfec71e0125c53ca4619aa18e397ab3`.
 Both binaries rebuild successfully; the sibling-pin gate and focused Bash++
 CLI/dialect tests pass. The previously accepted hermetic Bash86 result remains
 86/86; this pin changes only opt-in Bash++ syntax/interpreter behavior.
+The rebuilt binary also makes `BASHY_HINTS=off` suppress the first-run skill
+advertisement, keeping Tour and GoBy evidence stderr independent of the agent
+driving the subprocess.
