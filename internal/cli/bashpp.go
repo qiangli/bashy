@@ -127,19 +127,21 @@ type BashPPSelector struct {
 type BashPPResolution struct {
 	Enabled bool
 	Source  BashPPSource
+	Posix   bool
 }
 
-// LangVariant composes the resolution with an already-selected base variant
-// (as produced by main.go's own POSIX handling, e.g. LangBash or LangPOSIX):
-// [syntax.LangBashPP] if Bash++ is enabled, the base variant unchanged
-// otherwise. Bash++ is a strict superset of LangBash and stays orthogonal to
-// PosixMode, mirroring how bashyParseOpts already composes LangPOSIX with
-// PosixMode rather than replacing one with the other.
-func (r BashPPResolution) LangVariant(base syntax.LangVariant) syntax.LangVariant {
-	if r.Enabled {
-		return syntax.LangBashPP
+// ParserOptions composes the selected grammar with the POSIX semantic profile.
+// Keeping both decisions in one API prevents callers from selecting LangBashPP
+// while accidentally dropping syntax.PosixMode(true).
+func (r BashPPResolution) ParserOptions(base syntax.LangVariant, extra ...syntax.ParserOption) []syntax.ParserOption {
+	posix := r.Posix || base == syntax.LangPOSIX
+	if base == syntax.LangPOSIX {
+		base = syntax.LangBash
 	}
-	return base
+	if r.Enabled {
+		base = syntax.LangBashPP
+	}
+	return append([]syntax.ParserOption{syntax.Variant(base), syntax.PosixMode(posix)}, extra...)
 }
 
 // BashPPCertificationError reports that a selector resolved Bash++ on while
@@ -173,7 +175,7 @@ func ResolveBashPP(sel BashPPSelector) (BashPPResolution, error) {
 	if sel.Binary == BashPPBinaryBash && sel.Posix && enabled {
 		return BashPPResolution{}, &BashPPCertificationError{Source: source}
 	}
-	return BashPPResolution{Enabled: enabled, Source: source}, nil
+	return BashPPResolution{Enabled: enabled, Source: source, Posix: sel.Posix}, nil
 }
 
 func resolveBashPPTiers(sel BashPPSelector) (bool, BashPPSource) {
@@ -207,6 +209,12 @@ func commandLineBashPP(args []string) (enabled, seen bool) {
 			enabled, seen = false, true
 		case "-c":
 			return enabled, seen
+		case "-o", "-O", "--rcfile", "--init-file", "-bashy-plus-o", "-bashy-plus-O":
+			// These invocation options consume the following token. It is not
+			// a script operand, so selectors after it must still be scanned.
+			if i+1 < len(args) {
+				i++
+			}
 		default:
 			if !strings.HasPrefix(args[i], "-") {
 				return enabled, seen

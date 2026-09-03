@@ -310,21 +310,56 @@ func TestBashPPSource_Explicit(t *testing.T) {
 	}
 }
 
-func TestBashPPResolution_LangVariant(t *testing.T) {
-	enabled := BashPPResolution{Enabled: true, Source: BashPPSourceCLI}
-	if got := enabled.LangVariant(syntax.LangBash); got != syntax.LangBashPP {
-		t.Errorf("enabled.LangVariant(LangBash) = %v, want LangBashPP", got)
-	}
-	if got := enabled.LangVariant(syntax.LangPOSIX); got != syntax.LangBashPP {
-		t.Errorf("enabled.LangVariant(LangPOSIX) = %v, want LangBashPP", got)
+func TestBashPPResolution_ParserOptions(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		resolution BashPPResolution
+		base       syntax.LangVariant
+	}{
+		{"bashpp", BashPPResolution{Enabled: true}, syntax.LangBash},
+		{"bashpp-posix", BashPPResolution{Enabled: true, Posix: true}, syntax.LangBash},
+		{"bashpp-posix-base", BashPPResolution{Enabled: true}, syntax.LangPOSIX},
+		{"bash", BashPPResolution{}, syntax.LangBash},
+		{"bash-posix", BashPPResolution{Posix: true}, syntax.LangBash},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := syntax.NewParser(tc.resolution.ParserOptions(tc.base)...)
+			if _, err := p.Parse(strings.NewReader("echo ${x@Q}"), ""); err != nil {
+				t.Fatalf("Bash grammar was not retained: %v", err)
+			}
+		})
 	}
 
-	disabled := BashPPResolution{Enabled: false, Source: BashPPSourceBinaryDefault}
-	if got := disabled.LangVariant(syntax.LangBash); got != syntax.LangBash {
-		t.Errorf("disabled.LangVariant(LangBash) = %v, want LangBash unchanged", got)
+	// POSIX mode must remain observable when Bash++ owns the grammar.
+	// In POSIX mode, single quotes in these double-quoted parameter
+	// expansions are literal text rather than quote syntax.
+	resolved := BashPPResolution{Enabled: true, Posix: true}
+	file, err := syntax.NewParser(resolved.ParserOptions(syntax.LangBash)...).
+		Parse(strings.NewReader(`echo "${a+'x'}"`), "")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := disabled.LangVariant(syntax.LangPOSIX); got != syntax.LangPOSIX {
-		t.Errorf("disabled.LangVariant(LangPOSIX) = %v, want LangPOSIX unchanged", got)
+	call := file.Stmts[0].Cmd.(*syntax.CallExpr)
+	dq := call.Args[1].Parts[0].(*syntax.DblQuoted)
+	pe := dq.Parts[0].(*syntax.ParamExp)
+	if got := pe.Exp.Word.Lit(); got != "'x'" {
+		t.Fatalf("Bash++ dropped POSIX parsing semantics: got %q, want %q", got, "'x'")
+	}
+}
+
+func TestCommandLineBashPPSkipsOptionValues(t *testing.T) {
+	for _, args := range [][]string{
+		{"bash", "--rcfile", "foo", "--bashpp"},
+		{"bash", "--init-file", "foo", "--bashpp"},
+		{"bash", "-o", "errexit", "--bashpp"},
+		{"bash", "-O", "extglob", "--bashpp"},
+		{"bash", "-o", "errexit", "--bashpp", "--no-bashpp"},
+	} {
+		enabled, seen := commandLineBashPP(args)
+		want := args[len(args)-1] != "--no-bashpp"
+		if !seen || enabled != want {
+			t.Errorf("commandLineBashPP(%q) = %v, %v; want %v, true", args, enabled, seen, want)
+		}
 	}
 }
 
