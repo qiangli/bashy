@@ -113,6 +113,7 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 	return interactive.Run(context.Background(), interactive.Options{
 		Runner:    r,
 		Lang:      lang,
+		LangFunc:  func(r *interp.Runner) syntax.LangVariant { return r.Dialect() },
 		PosixMode: posixMode,
 		Stdin:     stdin,
 		// Prompts and line-editing echo are terminal UI, which bash writes to
