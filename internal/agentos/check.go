@@ -24,6 +24,7 @@ type checkOptions struct {
 	mode           string
 	json           bool
 	agent          bool
+	bashpp         bool
 	strictSystem   bool
 	allowContainer bool
 	noSource       bool
@@ -109,6 +110,10 @@ type checkAnalyzer struct {
 }
 
 func dispatchCheck(args []string) int {
+	return dispatchCheckTo(args, os.Stdout, os.Stderr)
+}
+
+func dispatchCheckTo(args []string, stdout, stderr io.Writer) int {
 	opts := checkOptions{mode: "bashy", maxDepth: 8}
 	var scripts []string
 	for i := 0; i < len(args); i++ {
@@ -119,6 +124,8 @@ func dispatchCheck(args []string) int {
 		case a == "--agent" || a == "--agentic":
 			opts.agent = true
 			opts.json = true
+		case a == "--bashpp" || a == "--bash++":
+			opts.bashpp = true
 		case a == "--strict-system":
 			opts.strictSystem = true
 		case a == "--allow-container":
@@ -126,11 +133,11 @@ func dispatchCheck(args []string) int {
 		case a == "--no-source":
 			opts.noSource = true
 		case a == "-h" || a == "--help":
-			printCheckUsage(os.Stdout)
+			printCheckUsage(stdout)
 			return 0
 		case a == "--mode" || a == "--source-root" || a == "--cwd" || a == "--script" || a == "--max-depth":
 			if i+1 >= len(args) {
-				fmt.Fprintf(os.Stderr, "check: %s requires an argument\n", a)
+				fmt.Fprintf(stderr, "check: %s requires an argument\n", a)
 				return 2
 			}
 			i++
@@ -146,7 +153,7 @@ func dispatchCheck(args []string) int {
 			case "--max-depth":
 				var n int
 				if _, err := fmt.Sscanf(args[i], "%d", &n); err != nil || n < 0 {
-					fmt.Fprintf(os.Stderr, "check: invalid --max-depth %q\n", args[i])
+					fmt.Fprintf(stderr, "check: invalid --max-depth %q\n", args[i])
 					return 2
 				}
 				opts.maxDepth = n
@@ -163,37 +170,51 @@ func dispatchCheck(args []string) int {
 			var n int
 			v := strings.TrimPrefix(a, "--max-depth=")
 			if _, err := fmt.Sscanf(v, "%d", &n); err != nil || n < 0 {
-				fmt.Fprintf(os.Stderr, "check: invalid --max-depth %q\n", v)
+				fmt.Fprintf(stderr, "check: invalid --max-depth %q\n", v)
 				return 2
 			}
 			opts.maxDepth = n
 		case strings.HasPrefix(a, "-"):
-			fmt.Fprintf(os.Stderr, "check: unknown option %q\n", a)
+			fmt.Fprintf(stderr, "check: unknown option %q\n", a)
 			return 2
 		default:
 			scripts = append(scripts, a)
 		}
 	}
 	if len(scripts) == 0 {
-		fmt.Fprintln(os.Stderr, "check: at least one script is required")
+		fmt.Fprintln(stderr, "check: at least one script is required")
 		return 2
 	}
 	if opts.mode != "bashy" && opts.mode != "bash53" && opts.mode != "posix" {
-		fmt.Fprintf(os.Stderr, "check: unsupported --mode %q\n", opts.mode)
+		fmt.Fprintf(stderr, "check: unsupported --mode %q\n", opts.mode)
 		return 2
 	}
 	if opts.cwd != "" {
 		if err := os.Chdir(opts.cwd); err != nil {
-			fmt.Fprintf(os.Stderr, "check: --cwd: %v\n", err)
+			fmt.Fprintf(stderr, "check: --cwd: %v\n", err)
 			return 2
 		}
 	}
 	report := newCheckAnalyzer(opts).run(scripts)
 	if opts.json {
 		b, _ := json.MarshalIndent(report, "", "  ")
-		fmt.Println(string(b))
+		fmt.Fprintln(stdout, string(b))
+	} else if opts.bashpp {
+		hasNullError := false
+		for _, d := range report.Diagnostics {
+			if strings.HasPrefix(d.Code, "BASHPP-ENULL-") {
+				fmt.Fprintf(stderr, "%s: %s\n", d.Code, d.Message)
+				hasNullError = true
+			}
+		}
+		if hasNullError {
+			return 2
+		}
+		if report.Summary.Errors > 0 {
+			printCheckReport(stdout, report)
+		}
 	} else {
-		printCheckReport(os.Stdout, report)
+		printCheckReport(stdout, report)
 	}
 	if report.Summary.Errors > 0 {
 		return 1
@@ -202,8 +223,9 @@ func dispatchCheck(args []string) int {
 }
 
 func printCheckUsage(w io.Writer) {
-	fmt.Fprintln(w, "usage: bashy check [--mode bash53|posix|bashy] [--json|--agent] [--script PATH] [--cwd DIR] [--strict-system] SCRIPT...")
+	fmt.Fprintln(w, "usage: bashy check [--bashpp|--bash++] [--mode bash53|posix|bashy] [--json|--agent] [--script PATH] [--cwd DIR] [--strict-system] SCRIPT...")
 	fmt.Fprintln(w, "Statically check shell scripts for syntax, recursive script references, and command resolution.")
+	fmt.Fprintln(w, "With --bashpp, also check Bash# null safety; successful checks are silent and null errors exit 2.")
 	fmt.Fprintln(w, "Agent mode emits JSON suitable for preflight: command inventory, system/container/not-found resolution, and diagnostics.")
 }
 
@@ -227,6 +249,9 @@ func newCheckAnalyzer(opts checkOptions) *checkAnalyzer {
 	}
 	if opts.agent {
 		a.report.Mode = opts.mode + "+agent"
+	}
+	if opts.bashpp {
+		a.report.Mode += "+bashpp"
 	}
 	return a
 }
@@ -265,6 +290,14 @@ func (a *checkAnalyzer) analyzePath(path, role, from string, depth int) {
 		a.addDiag(checkDiagnostic{Code: "BASHY0600", Level: "warning", File: resolved, Message: err.Error()})
 		return
 	}
+	if a.opts.bashpp {
+		if handled, diagnostics := checkBashPPNullSafety(resolved, data); handled {
+			for _, diagnostic := range diagnostics {
+				a.addDiag(diagnostic)
+			}
+			return
+		}
+	}
 	parser := syntax.NewParser(a.parserOptions()...)
 	file, err := parser.Parse(strings.NewReader(string(data)), resolved)
 	if err != nil {
@@ -278,6 +311,9 @@ func (a *checkAnalyzer) analyzePath(path, role, from string, depth int) {
 func (a *checkAnalyzer) parserOptions() []syntax.ParserOption {
 	if a.opts.mode == "posix" {
 		return []syntax.ParserOption{syntax.Variant(syntax.LangPOSIX)}
+	}
+	if a.opts.bashpp {
+		return []syntax.ParserOption{syntax.Variant(syntax.LangBashPP)}
 	}
 	return []syntax.ParserOption{syntax.Variant(syntax.LangBash)}
 }
