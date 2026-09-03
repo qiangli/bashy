@@ -621,6 +621,11 @@ const defaultPathValue = "/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin
 func newRunner() (*interp.Runner, error) {
 	startupPosix := effectiveStartupPosix()
 	inheritedEnv := secureStartupEnv(os.Environ())
+	// BASHY_BASHPP is an invocation selector, not shell state. Consume it at
+	// this process boundary so a caller can enable the top-level shell without
+	// silently changing every nested bash process launched by the script.
+	inheritedEnv = consumeInvocationSelectors(inheritedEnv)
+	_ = os.Unsetenv("BASHY_BASHPP")
 	// Increment SHLVL from parent environment.
 	shlvl := 0
 	if s := os.Getenv("SHLVL"); s != "" {
@@ -694,6 +699,9 @@ func newRunner() (*interp.Runner, error) {
 			}
 			return expandPrompt(s, envGet, 0, 0, startupPosix)
 		}),
+	}
+	if startupBashPP.Source == BashPPSourceEnv {
+		opts = append(opts, interp.HideBashPPOption())
 	}
 	// Bash enables job control (monitor mode) automatically for an
 	// interactive shell attached to a real controlling terminal
@@ -790,6 +798,13 @@ func newRunner() (*interp.Runner, error) {
 	// user rc so they can be overridden.
 	registerDefaultFuncs(r, AgentOSPreamble())
 	return r, nil
+}
+
+func consumeInvocationSelectors(env []string) []string {
+	return slices.DeleteFunc(env, func(entry string) bool {
+		name, _, _ := strings.Cut(entry, "=")
+		return name == "BASHY_BASHPP"
+	})
 }
 
 // effectiveStartupPosix is the single startup-mode decision shared by the
@@ -2527,6 +2542,9 @@ func strictPosixPolicyError(file *syntax.File, name string) error {
 	}
 	var found error
 	syntax.Walk(file, func(node syntax.Node) bool {
+		if node == nil {
+			return true
+		}
 		if found != nil {
 			return false
 		}
@@ -2680,121 +2698,279 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 			}
 		}
 	}
+	// Only the Bash++ grammar needs live statement-boundary reselection. Keep
+	// Classic input on the compatibility path unless its parsed program contains
+	// a real set -o/+o bashpp transition. This decision is based on the AST, not
+	// source spelling, so comments and data cannot change execution machinery.
+	if needsLiveDialectStream(preflightFile, r.Dialect()) {
+		return runStatementStream(ctx, r, src, lang, errPrefix)
+	}
+	if needsClassicRecoveryStream(preflightFile, perr) {
+		return runStatementStreamMode(ctx, r, src, lang, errPrefix, false)
+	}
 	// The argv0=sh certification route has no Bash++ grammar to reselect and
 	// relies on whole-file execution for fatal special-builtin errors.
 	if invokedAsSh() && preflightFile != nil && perr == nil {
 		return r.Run(ctx, preflightFile)
 	}
-	// All user input is parsed as a statement stream. The parser is rebuilt
-	// whenever a statement changes the runner dialect (`set -o/+o bashpp`) or
-	// POSIX mode, so even the next command on the same semicolon-separated line
-	// is parsed under the newly selected grammar.
-	return runStatementStream(ctx, r, src, lang, errPrefix)
-	/* legacy recovery loop retained below temporarily for source compatibility */
-	/*
-		var runErr error
-		cursor := 0
-		for cursor < len(src) {
-			parseLang := r.LangVariant()
-			// Build the chunk the parser sees: src[cursor:] with as many
-			// leading newlines as needed so the parser's internal line
-			// counter aligns with the absolute line in src. The line
-			// containing byte index `cursor` is determined by counting
-			// newlines in src[:cursor]; we want the parser to start at
-			// that line, so prepend (lineAtCursor - 1) newlines.
-			lineAtCursor := bytes.Count(src[:cursor], []byte("\n")) + 1
-			var chunk []byte
-			if lineAtCursor > 1 {
-				chunk = make([]byte, lineAtCursor-1+len(src)-cursor)
-				for i := 0; i < lineAtCursor-1; i++ {
-					chunk[i] = '\n'
+	// Classic execution retains the exact Bash 5.3 compatibility machinery.
+	hdocWarn := func(startLine, eofLine int, stop string) {
+		fmt.Fprintf(os.Stderr,
+			"%s: line %d: warning: here-document at line %d delimited by end-of-file (wanted `%s')\n",
+			errPrefix, eofLine, startLine, stop)
+	}
+	comsubWarn := func(line, count int) {
+		plural := ""
+		if count > 1 {
+			plural = "s"
+		}
+		fmt.Fprintf(os.Stderr,
+			"%s: line %d: warning: command substitution: %d unterminated here-document%s\n",
+			errPrefix, line, count, plural)
+	}
+	parseOnce := func(chunk []byte, parseLang syntax.LangVariant) (*syntax.File, syntax.ParseError, bool) {
+		options := parseOpts(syntax.HeredocEOFWarning(hdocWarn), syntax.HeredocComsubWarning(comsubWarn))
+		if !strictPosixParse {
+			options = bashyParseOpts(parseLang, syntax.HeredocEOFWarning(hdocWarn),
+				syntax.HeredocComsubWarning(comsubWarn))
+		}
+		f, parseErr := syntax.NewParser(options...).Parse(bytes.NewReader(chunk), name)
+		if parseErr == nil {
+			return f, syntax.ParseError{}, false
+		}
+		if pe, ok := bashRecoverableParseError(parseErr); ok {
+			return f, pe, true
+		}
+		return f, syntax.ParseError{}, false
+	}
+	followStdin := name == "" && *command == "" && bytes.Contains(src, []byte("exec 0<"))
+	var runCurrentStdin func(*os.File) error
+	runStmtsFollowingStdin := func(stmts []*syntax.Stmt, current *os.File) error {
+		var lastErr error
+		for _, stmt := range stmts {
+			lastErr = r.Run(ctx, stmt)
+			if r.Exited() {
+				if err := r.Run(ctx, &syntax.File{}); err != nil && lastErr == nil {
+					lastErr = err
 				}
-				copy(chunk[lineAtCursor-1:], src[cursor:])
-			} else {
-				chunk = src[cursor:]
+				return lastErr
 			}
-			prog, pe, gotErr := parseOnce(chunk, parseLang)
-			retryStart := cursor
-			if prog != nil && len(prog.Stmts) > 0 {
-				if !gotErr {
-					if followStdin {
-						return runStmtsFollowingStdin(prog.Stmts, r.StdinFile())
-					}
-					if err := r.Run(ctx, prog); err != nil {
+			if next := r.StdinFile(); next != nil && next != current {
+				return runCurrentStdin(next)
+			}
+		}
+		return lastErr
+	}
+	runCurrentStdin = func(current *os.File) error {
+		nextSrc, err := io.ReadAll(current)
+		if err != nil {
+			return err
+		}
+		if err := interp.WithBashSource(nextSrc)(r); err != nil {
+			return err
+		}
+		prog, pe, gotErr := parseOnce(nextSrc, r.LangVariant())
+		if gotErr {
+			printBashParseError(os.Stderr, nextSrc, errPrefix, pe)
+			return interp.ExitStatus(2)
+		}
+		if prog == nil {
+			return nil
+		}
+		return runStmtsFollowingStdin(prog.Stmts, current)
+	}
+	if *command != "" {
+		prog, pe, gotErr := parseOnce(src, lang)
+		if gotErr {
+			if stripped, msg, handled := backtickComsubUnclosedQuote(src, pe, name); handled {
+				fmt.Fprintln(os.Stderr, msg)
+				if prog2, _, failed := parseOnce(stripped, lang); !failed && prog2 != nil {
+					return r.Run(ctx, prog2)
+				}
+				return nil
+			}
+			printBashParseError(os.Stderr, src, errPrefix, pe)
+			return interp.ExitStatus(2)
+		}
+		if prog == nil {
+			return nil
+		}
+		return r.Run(ctx, prog)
+	}
+	var runErr error
+	cursor := 0
+	for cursor < len(src) {
+		parseLang := r.LangVariant()
+		// Build the chunk the parser sees: src[cursor:] with as many
+		// leading newlines as needed so the parser's internal line
+		// counter aligns with the absolute line in src. The line
+		// containing byte index `cursor` is determined by counting
+		// newlines in src[:cursor]; we want the parser to start at
+		// that line, so prepend (lineAtCursor - 1) newlines.
+		lineAtCursor := bytes.Count(src[:cursor], []byte("\n")) + 1
+		var chunk []byte
+		if lineAtCursor > 1 {
+			chunk = make([]byte, lineAtCursor-1+len(src)-cursor)
+			for i := 0; i < lineAtCursor-1; i++ {
+				chunk[i] = '\n'
+			}
+			copy(chunk[lineAtCursor-1:], src[cursor:])
+		} else {
+			chunk = src[cursor:]
+		}
+		prog, pe, gotErr := parseOnce(chunk, parseLang)
+		retryStart := cursor
+		if prog != nil && len(prog.Stmts) > 0 {
+			if !gotErr {
+				if followStdin {
+					return runStmtsFollowingStdin(prog.Stmts, r.StdinFile())
+				}
+				if err := r.Run(ctx, prog); err != nil {
+					runErr = err
+				}
+			} else {
+				for _, stmt := range prog.Stmts {
+					prevCursor := cursor
+					if err := r.Run(ctx, stmt); err != nil {
 						runErr = err
 					}
-				} else {
-					for _, stmt := range prog.Stmts {
-						prevCursor := cursor
-						if err := r.Run(ctx, stmt); err != nil {
+					cursor = stmtEndCursor(src, stmt)
+					if consumed := r.ConsumedSourceOffset(); consumed > prevCursor {
+						cursor = consumed
+					}
+					if r.Exited() {
+						if err := r.Run(ctx, &syntax.File{}); err != nil && runErr == nil {
 							runErr = err
 						}
-						cursor = stmtEndCursor(src, stmt)
-						if consumed := r.ConsumedSourceOffset(); consumed > prevCursor {
-							cursor = consumed
-						}
-						if r.Exited() {
-							if err := r.Run(ctx, &syntax.File{}); err != nil && runErr == nil {
-								runErr = err
-							}
-							return runErr
-						}
-						if r.LangVariant() != parseLang {
-							break
-						}
+						return runErr
 					}
-					retryStart = cursor
 					if r.LangVariant() != parseLang {
-						continue
+						break
 					}
 				}
-			}
-			if !gotErr {
-				return runErr
-			}
-			// Advance past the offending line. The error line is absolute
-			// (because we prepended newlines), so find the next '\n' at
-			// or after the start of that line in src.
-			errLine := int(pe.Pos.Line())
-			if r.RunAliasExpandedSourceLine(ctx, errLine) {
-				if consumed := r.ConsumedSourceOffset(); consumed > cursor {
-					cursor = consumed
-				} else {
-					cursor = advancePastLine(src, errLine)
-				}
-				continue
-			}
-			newCursor := advancePastLine(src, errLine)
-			if retryLang := r.LangVariant(); retryLang != parseLang && newCursor > cursor {
-				if retryStart <= cursor || retryStart > newCursor {
-					retryStart = lineStart(src, errLine)
-				}
-				if prog, _, gotErr := parseOnce(paddedChunk(src, retryStart, newCursor), retryLang); !gotErr {
-					if prog != nil && len(prog.Stmts) > 0 {
-						if err := r.Run(ctx, prog); err != nil {
-							runErr = err
-						}
-					}
-					cursor = newCursor
+				retryStart = cursor
+				if r.LangVariant() != parseLang {
 					continue
 				}
 			}
-			printBashParseError(os.Stderr, src, errPrefix, pe)
-			if fatalRecoveredParseError(src, pe) {
-				return interp.ExitStatus(2)
-			}
-			if newCursor <= cursor {
-				// No forward progress — bail to avoid infinite loop.
-				return interp.ExitStatus(2)
-			}
-			cursor = newCursor
-			// Best-effort exit status; bash's exit after a recovered parse
-			// error is the exit of the last successfully-run command, but
-			// any parse error in -i / file mode at least sets $? = 2 for
-			// the immediate failed parse.
-			runErr = interp.ExitStatus(2)
 		}
-		return runErr */
+		if !gotErr {
+			return runErr
+		}
+		// Advance past the offending line. The error line is absolute
+		// (because we prepended newlines), so find the next '\n' at
+		// or after the start of that line in src.
+		errLine := int(pe.Pos.Line())
+		if r.RunAliasExpandedSourceLine(ctx, errLine) {
+			if consumed := r.ConsumedSourceOffset(); consumed > cursor {
+				cursor = consumed
+			} else {
+				cursor = advancePastLine(src, errLine)
+			}
+			continue
+		}
+		newCursor := advancePastLine(src, errLine)
+		if retryLang := r.LangVariant(); retryLang != parseLang && newCursor > cursor {
+			if retryStart <= cursor || retryStart > newCursor {
+				retryStart = lineStart(src, errLine)
+			}
+			if prog, _, gotErr := parseOnce(paddedChunk(src, retryStart, newCursor), retryLang); !gotErr {
+				if prog != nil && len(prog.Stmts) > 0 {
+					if err := r.Run(ctx, prog); err != nil {
+						runErr = err
+					}
+				}
+				cursor = newCursor
+				continue
+			}
+		}
+		printBashParseError(os.Stderr, src, errPrefix, pe)
+		if fatalRecoveredParseError(src, pe) {
+			return interp.ExitStatus(2)
+		}
+		if newCursor <= cursor {
+			// No forward progress — bail to avoid infinite loop.
+			return interp.ExitStatus(2)
+		}
+		cursor = newCursor
+		r.SetLastExitStatus(1)
+		// Best-effort exit status; bash's exit after a recovered parse
+		// error is the exit of the last successfully-run command, but
+		// any parse error in -i / file mode at least sets $? = 2 for
+		// the immediate failed parse.
+		runErr = interp.ExitStatus(2)
+	}
+	if err := r.Run(ctx, &syntax.File{}); err != nil && runErr == nil {
+		runErr = err
+	}
+	return runErr
+}
+
+func needsLiveDialectStream(file *syntax.File, _ syntax.LangVariant) bool {
+	if file == nil {
+		return false
+	}
+	for _, stmt := range file.Stmts {
+		call, ok := stmt.Cmd.(*syntax.CallExpr)
+		if !ok || len(call.Args) != 3 {
+			continue
+		}
+		word := func(index int) (string, bool) {
+			lit := call.Args[index].Lit()
+			return lit, lit != ""
+		}
+		name, nameOK := word(0)
+		flag, flagOK := word(1)
+		option, optionOK := word(2)
+		if nameOK && flagOK && optionOK && name == "set" &&
+			(flag == "-o" || flag == "+o") && option == "bashpp" {
+			return true
+		}
+	}
+	return false
+}
+
+func needsClassicRecoveryStream(file *syntax.File, parseErr error) bool {
+	if pe, ok := parseErr.(syntax.ParseError); ok &&
+		(pe.Text == "unexpected EOF while looking for matching `)'" || strings.HasPrefix(pe.Text, "unclosed here-document")) {
+		return true
+	}
+	if pe, ok := bashRecoverableParseError(parseErr); ok {
+		if pe.Text == "invalid parameter name" || pe.Text == "`$` cannot be followed by a word" ||
+			strings.HasPrefix(pe.Text, "`'") || strings.HasPrefix(pe.Text, "unclosed here-document") {
+			return true
+		}
+	}
+	if file != nil {
+		needed := false
+		syntax.Walk(file, func(node syntax.Node) bool {
+			if node == nil {
+				return false
+			}
+			if pe, ok := node.(*syntax.ParamExp); ok && pe.BadSubst != nil {
+				needed = true
+				return false
+			}
+			if sub, ok := node.(*syntax.CmdSubst); ok {
+				syntax.Walk(sub, func(child syntax.Node) bool {
+					if child == nil {
+						return false
+					}
+					if redir, ok := child.(*syntax.Redirect); ok && redir.Hdoc != nil {
+						needed = true
+						return false
+					}
+					return !needed
+				})
+				return false
+			}
+			return !needed
+		})
+		if needed {
+			return true
+		}
+	}
+	return false
 }
 
 func runStatementStream(
@@ -2803,6 +2979,17 @@ func runStatementStream(
 	src []byte,
 	lang syntax.LangVariant,
 	errPrefix string,
+) error {
+	return runStatementStreamMode(ctx, r, src, lang, errPrefix, true)
+}
+
+func runStatementStreamMode(
+	ctx context.Context,
+	r *interp.Runner,
+	src []byte,
+	lang syntax.LangVariant,
+	errPrefix string,
+	liveDialect bool,
 ) error {
 	type hdocWarning struct {
 		startLine int
@@ -2851,6 +3038,13 @@ func runStatementStream(
 		padding := bytes.Count(src[:cursor], []byte("\n"))
 		for stmt, err := range parser.StmtsSeq(bytes.NewReader(chunk)) {
 			if stmt != nil {
+				if !liveDialect && len(hdocWarnings) > 0 {
+					if line, ok := incompleteCommandSubstitutionLine(stmt); ok {
+						hdocWarnings = hdocWarnings[:0]
+						fmt.Fprintf(os.Stderr, "%s: command substitution: line %d: unexpected EOF while looking for matching `)'\n", errPrefix, line)
+						return interp.ExitStatus(2)
+					}
+				}
 				flushWarnings()
 				// The script's exit status is the LAST executed statement's,
 				// like bash — always overwrite, so a successful command resets a
@@ -2866,12 +3060,16 @@ func runStatementStream(
 					_ = r.Run(ctx, &syntax.File{})
 					return runErr
 				}
-				end := stmt.End().Offset()
-				if stmt.Semicolon.IsValid() {
-					end = stmt.Semicolon.Offset() + 1
+				if liveDialect {
+					end := stmt.End().Offset()
+					if stmt.Semicolon.IsValid() {
+						end = stmt.Semicolon.Offset() + 1
+					}
+					cursor = cursor + int(end) - padding
+					cursor = min(max(cursor, prevCursor+1), len(src))
+				} else {
+					cursor = stmtEndCursor(src, stmt)
 				}
-				cursor = cursor + int(end) - padding
-				cursor = min(max(cursor, prevCursor+1), len(src))
 				if consumed := r.ConsumedSourceOffset(); consumed > prevCursor {
 					cursor = consumed
 				}
@@ -2887,6 +3085,19 @@ func runStatementStream(
 				}
 			}
 			if err != nil {
+				if pe, ok := err.(syntax.ParseError); ok && len(hdocWarnings) > 0 &&
+					pe.Text == "unexpected EOF while looking for matching `)'" {
+					if pe.Pos.Line() <= 1 {
+						eofLine := hdocWarnings[len(hdocWarnings)-1].eofLine
+						flushWarnings()
+						fmt.Fprintf(os.Stderr, "%s: line %d: %s\n", errPrefix, eofLine+1, pe.Text)
+						return interp.ExitStatus(2)
+					}
+					hdocWarnings = hdocWarnings[:0]
+					fmt.Fprintf(os.Stderr, "%s: command substitution: line %d: %s\n", errPrefix, pe.Pos.Line()+1, pe.Text)
+					fmt.Fprintln(os.Stdout)
+					return interp.ExitStatus(2)
+				}
 				if pe, ok := bashRecoverableParseError(err); ok {
 					errLine := int(pe.Pos.Line())
 					if r.RunAliasExpandedSourceLine(ctx, errLine) {
@@ -2967,7 +3178,7 @@ func runStatementStream(
 		if err := r.Run(ctx, &syntax.File{}); err != nil && runErr == nil {
 			runErr = err
 		}
-		if retainedErr != nil {
+		if liveDialect && retainedErr != nil {
 			return retainedErr
 		}
 		return runErr
@@ -2975,10 +3186,25 @@ func runStatementStream(
 	if err := r.Run(ctx, &syntax.File{}); err != nil && runErr == nil {
 		runErr = err
 	}
-	if retainedErr != nil {
+	if liveDialect && retainedErr != nil {
 		return retainedErr
 	}
 	return runErr
+}
+
+func incompleteCommandSubstitutionLine(stmt *syntax.Stmt) (int, bool) {
+	line := 0
+	syntax.Walk(stmt, func(node syntax.Node) bool {
+		if node == nil {
+			return false
+		}
+		if sub, ok := node.(*syntax.CmdSubst); ok && !sub.Right.IsValid() {
+			line = int(sub.Left.Line()) + 1
+			return false
+		}
+		return line == 0
+	})
+	return line, line > 0
 }
 
 // advancePastLine returns the byte offset just after the end of line

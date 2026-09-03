@@ -66,6 +66,7 @@ $OCI run --rm --platform "linux/$ARCH" \
   -e BASH53_TIMEOUT="${BASH53_TIMEOUT:-60s}" \
   -e BASH53_JOBS_TIMEOUT="${BASH53_JOBS_TIMEOUT:-120s}" \
   -e BASH53_MEM_KB="${BASH53_MEM_KB:-4194304}" \
+  -e BASHY_BASHPP="${BASHY_BASHPP:-}" \
   "$IMAGE" \
   sigdfl "./bin/bash53suite-linux-$ARCH" \
     -tests-dir /bash53/tests \

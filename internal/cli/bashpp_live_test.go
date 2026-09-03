@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -55,5 +56,46 @@ func TestRunSessionCommandBashPPLive(t *testing.T) {
 	})
 	if status != 0 || out.String() != "session\n" {
 		t.Fatalf("status=%d stdout=%q stderr=%q", status, out.String(), stderr.String())
+	}
+}
+
+func TestBashPPInvocationSelectorIsTopLevelOnly(t *testing.T) {
+	env := []string{"PATH=/bin", "BASHY_BASHPP=1", "HOME=/tmp"}
+	got := consumeInvocationSelectors(slices.Clone(env))
+	want := []string{"PATH=/bin", "HOME=/tmp"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("consumed env = %q, want %q", got, want)
+	}
+	resolution, err := ResolveBashPP(BashPPSelector{
+		Binary: BashPPBinaryBash,
+		LookupEnv: func(name string) (string, bool) {
+			if name == "BASHY_BASHPP" {
+				return "1", true
+			}
+			return "", false
+		},
+	})
+	if err != nil || !resolution.Enabled {
+		t.Fatalf("top-level resolution = %+v, %v; want enabled", resolution, err)
+	}
+}
+
+func TestLiveDialectStreamSelectionUsesParsedCommands(t *testing.T) {
+	parse := func(t *testing.T, src string) *syntax.File {
+		t.Helper()
+		file, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(src), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return file
+	}
+	if needsLiveDialectStream(parse(t, "echo 'set -o bashpp'\n"), syntax.LangBash) {
+		t.Fatal("quoted data selected live streaming")
+	}
+	if !needsLiveDialectStream(parse(t, "set -o bashpp; echo live\n"), syntax.LangBash) {
+		t.Fatal("parsed live toggle did not select streaming")
+	}
+	if needsLiveDialectStream(parse(t, "echo compatible\n"), syntax.LangBashPP) {
+		t.Fatal("an active dialect without a transition selected streaming")
 	}
 }
