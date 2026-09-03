@@ -18,6 +18,7 @@ bashy --dryrun -c '<commands>'
 bashy --dry-run -c '<commands>'
 bashy --dry-run --posix script.sh    # strict POSIX parse only; execute nothing
 bashy check --mode posix script.sh   # strict POSIX grammar + static inventory
+bashy check --bashpp program.bpp     # quiet Bash# null-safety check (exit 2 on errors)
 bashy help dryrun                     # focused help for this feature
 
 # Runtime toggle — dry-run only part of a script:
@@ -28,6 +29,10 @@ set +o dryrun                          # back to real execution
 
 `set -o dryrun` / `set +o dryrun` flip dry-run mid-script. `--dryrun` and
 `--dry-run` are aliases; both enable the same bashy-only extension.
+
+`check --bashpp` is static-only. It adds no runtime mode or grammar and emits
+only stable `BASHPP-ENULL-*` diagnostics when a nil-capable value is used
+without a valid flow guard.
 
 ## What it shows
 

@@ -1,6 +1,7 @@
 package agentos
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -8,6 +9,114 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestCheckBashPPNullSafetyOracle(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+		rc     int
+		stderr string
+	}{
+		{
+			name: "flow-narrow",
+			source: `func deref(p *int) int {
+    if p == nil {
+        return 0
+    }
+    return *p
+}
+`,
+		},
+		{
+			name: "false-positive-guards",
+			source: `func positive(p *int) bool {
+    return p != nil && *p > 0
+}
+func first(xs []string) string {
+    if xs == nil || len(xs) == 0 {
+        return ""
+    }
+    return xs[0]
+}
+`,
+		},
+		{
+			name: "reassign-after-narrow",
+			source: `func deref(p *int, replacement *int) int {
+    if p == nil { return 0 }
+    p = replacement
+    return *p
+}
+`,
+			rc: 2, stderr: "BASHPP-ENULL-DEREF: p may be nil after reassignment\n",
+		},
+		{
+			name:   "unsafe-deref",
+			source: "func deref(p *int) int {\n    return *p\n}\n",
+			rc:     2, stderr: "BASHPP-ENULL-DEREF: p may be nil when dereferenced\n",
+		},
+		{
+			name:   "unsafe-index",
+			source: "func first(xs []string) string {\n    return xs[0]\n}\n",
+			rc:     2, stderr: "BASHPP-ENULL-INDEX: xs may be nil when indexed\n",
+		},
+		{
+			name:   "unsafe-call",
+			source: "func invoke(fn func() int) int {\n    return fn()\n}\n",
+			rc:     2, stderr: "BASHPP-ENULL-CALL: fn may be nil when called\n",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), test.name+".bpp")
+			if err := os.WriteFile(path, []byte(test.source), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			var stdout, stderr bytes.Buffer
+			if got := dispatchCheckTo([]string{"--bashpp", path}, &stdout, &stderr); got != test.rc {
+				t.Fatalf("exit = %d, want %d; stdout=%q stderr=%q", got, test.rc, stdout.String(), stderr.String())
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("stdout = %q, want empty", stdout.String())
+			}
+			if got := stderr.String(); got != test.stderr {
+				t.Fatalf("stderr = %q, want %q", got, test.stderr)
+			}
+
+			stdout.Reset()
+			stderr.Reset()
+			dispatchCheckTo([]string{path}, &stdout, &stderr)
+			if strings.Contains(stderr.String(), "BASHPP-ENULL-") || strings.Contains(stdout.String(), "BASHPP-ENULL-") {
+				t.Fatalf("Bash# diagnostic leaked with selector off: stdout=%q stderr=%q", stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+func TestCheckBashPPHelpAndReportMode(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if rc := dispatchCheckTo([]string{"--help"}, &stdout, &stderr); rc != 0 {
+		t.Fatalf("help exit = %d", rc)
+	}
+	if !strings.Contains(stdout.String(), "--bashpp") || !strings.Contains(stdout.String(), "null safety") {
+		t.Fatalf("help omits Bash# checker contract:\n%s", stdout.String())
+	}
+	if record := verbAtlasRecord("check", false); !strings.Contains(record.Synopsis, "--bashpp null safety") {
+		t.Fatalf("check atlas synopsis omits Bash# null safety: %#v", record)
+	}
+
+	path := filepath.Join(t.TempDir(), "unsafe.bpp")
+	if err := os.WriteFile(path, []byte("func deref(p *int) int { return *p }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report := newCheckAnalyzer(checkOptions{mode: "bashy", bashpp: true, maxDepth: 8}).run([]string{path})
+	if report.Mode != "bashy+bashpp" || report.Summary.Errors != 1 || len(report.Diagnostics) != 1 {
+		t.Fatalf("unexpected Bash++ report: mode=%q summary=%#v diagnostics=%#v", report.Mode, report.Summary, report.Diagnostics)
+	}
+	if report.Diagnostics[0].Code != "BASHPP-ENULL-DEREF" {
+		t.Fatalf("diagnostic = %#v", report.Diagnostics[0])
+	}
+}
 
 func TestCheckRecursiveInventory(t *testing.T) {
 	dir := t.TempDir()
