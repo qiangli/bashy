@@ -14,6 +14,7 @@ import (
 
 	"github.com/qiangli/coreutils/pkg/bus"
 	"github.com/qiangli/coreutils/pkg/meet"
+	"github.com/qiangli/coreutils/pkg/weave"
 )
 
 func TestInboxWatchIdleHasBoundedPollsAndOneFullRead(t *testing.T) {
@@ -340,6 +341,67 @@ func BenchmarkInboxFullSnapshot(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		if _, err := snapshotUnifiedInbox("alice", 0, true); err != nil {
 			b.Fatal(err)
+		}
+	}
+}
+
+// A LONG WATCH MUST KEEP THE SEAT LIVE, not refresh once and drift.
+//
+// Measured on sprint #111's own seat: a watch running 1h18m showed its lease
+// STALE for 43m — the age of the last BOUNDED command, not of the watch. So an
+// agent doing exactly what the tool prints ("`--watch` to stay attached") still
+// went stale. That instruction is what replaced the reverted transport gate —
+// "reading your inbox is what keeps the seat live" — so a watch that does not
+// refresh does not hold up the thing it replaced.
+func TestInboxWatchKeepsRefreshingTheSeat(t *testing.T) {
+	beatEvery := weave.SprintLeaseTTL / 3
+	now := time.Unix(100, 0)
+	var beats []time.Time
+	prev := refreshSprintOwnerActivity
+	refreshSprintOwnerActivity = func(string) { beats = append(beats, now) }
+	t.Cleanup(func() { refreshSprintOwnerActivity = prev })
+
+	// Step the clock a third of the beat each tick, so it takes several ticks
+	// to earn one beat: a beat per tick would hammer the sprint store, and a
+	// beat that never comes is the bug.
+	step := beatEvery / 3
+	ticks := 0
+	runtime := inboxPollRuntime{
+		min: step, max: step, fullRescan: time.Hour,
+		now: func() time.Time { return now },
+		wait: func(_ context.Context, d time.Duration) error {
+			ticks++
+			now = now.Add(step)
+			if ticks == 10 {
+				return context.Canceled
+			}
+			return nil
+		},
+		snapshot:    func(string, int, bool) (inboxBatch, error) { return inboxBatch{}, nil },
+		fingerprint: func(string) (uint64, bool) { return 1, true },
+	}
+
+	var out, errOut bytes.Buffer
+	if err := runUnifiedInboxWithPoll(context.Background(), &out, &errOut, "alice", 0, false, false, true, 0, runtime); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ten ticks of a third of a beat is a bit over three beats' worth of time.
+	// The exact count is not the property; "more than once" is.
+	if len(beats) < 2 {
+		t.Fatalf("a watch spanning %v refreshed the seat %d time(s); it must keep "+
+			"refreshing or the conductor goes stale while demonstrably attending",
+			time.Duration(10)*step, len(beats))
+	}
+	// And it must NOT beat on every tick: the poll interval can be a second and
+	// the sprint store is not something to rewrite at that rate.
+	if len(beats) >= ticks {
+		t.Fatalf("refreshed %d times in %d ticks — the rate limit is not holding",
+			len(beats), ticks)
+	}
+	for i := 1; i < len(beats); i++ {
+		if gap := beats[i].Sub(beats[i-1]); gap < beatEvery {
+			t.Fatalf("beats %d and %d are %v apart, want at least %v", i-1, i, gap, beatEvery)
 		}
 	}
 }

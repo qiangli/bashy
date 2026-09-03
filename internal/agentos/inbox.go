@@ -333,13 +333,19 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 	}, nil
 }
 
+// refreshSprintOwnerActivity is the one refresher, behind a var so a test can
+// observe the watch's heartbeat without a sprint store on disk. Same shape as
+// meet's apiRunner and operableFn: one package-level var, overridden and
+// restored by the test that needs it.
+var refreshSprintOwnerActivity = weave.RefreshSprintOwnerActivity
+
 func runUnifiedInbox(ctx context.Context, out, errOut io.Writer, reader string, limit int, peek, jsonOut, watch bool, bound time.Duration) error {
 	// READING YOUR MAIL IS THE HEARTBEAT. An agent that reads its inbox is
 	// demonstrably running and demonstrably attending to this channel, which is
 	// what a seat needs to be true — and it is something an agent already does
 	// at a turn boundary rather than a process it has to hold open. Best-effort
 	// and silent: bookkeeping the caller did not ask for may never fail a read.
-	weave.RefreshSprintOwnerActivity(reader)
+	refreshSprintOwnerActivity(reader)
 	return runUnifiedInboxWithPoll(ctx, out, errOut, reader, limit, peek, jsonOut, watch, bound, defaultInboxPollRuntime(watch || bound > 0))
 }
 
@@ -357,6 +363,25 @@ func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader 
 	// inbox_poll.go.
 	gate := &inboxPollGate{reader: reader, fingerprint: poll.fingerprint, fullRescan: poll.fullRescan}
 	interval := poll.min
+	// THE WATCH MUST KEEP REFRESHING, not refresh once and drift.
+	//
+	// The refresh above runs before this loop, which was enough for a bounded
+	// read and wrong for a watch: measured on this sprint's own seat, a watch
+	// running 1h18m showed a lease STALE for 43m — the time since the last
+	// bounded command, not since the watch started. So an agent following the
+	// instruction the tool itself prints ("`--watch` to stay attached") still
+	// went stale, and that instruction is what REPLACED the reverted transport
+	// gate: "reading your inbox is what keeps the seat live". A watch that does
+	// not refresh does not hold up the thing it replaced.
+	//
+	// Rate-limited to the same cadence the attached sprint watch uses — a third
+	// of the TTL, so two consecutive misses still leave the seat live — because
+	// the poll tick can be a second and the sprint store is not something to
+	// rewrite at that rate. This is the SAME refresher on a schedule, never a
+	// second one: two liveness signals for one seat, disagreeing, is the defect
+	// sprint 105 was opened to fix.
+	lastBeat := poll.now()
+	beatEvery := weave.SprintLeaseTTL / 3
 	for {
 		// BEFORE the read, not after it. Rendering is what advances a cursor,
 		// so a watcher whose owning session has exited must discover that
@@ -368,6 +393,12 @@ func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader 
 			}
 		}
 		now := poll.now()
+		if now.Sub(lastBeat) >= beatEvery {
+			// Best-effort and silent, exactly as at entry: bookkeeping the
+			// caller did not ask for may never fail a read.
+			refreshSprintOwnerActivity(reader)
+			lastBeat = now
+		}
 		read, changed, sum, sampled := gate.due(now)
 		if changed {
 			// Traffic just landed: stay responsive for whatever follows it.
