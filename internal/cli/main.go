@@ -2743,7 +2743,7 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 		}
 		return f, syntax.ParseError{}, false
 	}
-	followStdin := name == "" && *command == "" && bytes.Contains(src, []byte("exec 0<"))
+	followStdin := name == "" && *command == "" && needsStdinExecRedirect(preflightFile)
 	var runCurrentStdin func(*os.File) error
 	runStmtsFollowingStdin := func(stmts []*syntax.Stmt, current *os.File) error {
 		var lastErr error
@@ -2904,6 +2904,46 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 		runErr = err
 	}
 	return runErr
+}
+
+// needsStdinExecRedirect reports whether the parsed program contains an
+// `exec` builtin statement with an explicit fd 0 input redirection (e.g.
+// `exec 0< file`). Like needsLiveDialectStream, the decision is made on the
+// AST rather than source spelling, so comments, quoted strings, here-document
+// data, and redirects on other commands or other descriptors cannot select
+// the follow-stdin execution machinery — only a real `exec 0<` statement, at
+// any nesting depth, can.
+func needsStdinExecRedirect(file *syntax.File) bool {
+	if file == nil {
+		return false
+	}
+	found := false
+	syntax.Walk(file, func(node syntax.Node) bool {
+		if found || node == nil {
+			return false
+		}
+		stmt, ok := node.(*syntax.Stmt)
+		if !ok {
+			return true
+		}
+		call, ok := stmt.Cmd.(*syntax.CallExpr)
+		if !ok || len(call.Args) == 0 || call.Args[0].Lit() != "exec" {
+			return true
+		}
+		for _, redir := range stmt.Redirs {
+			if redir.N == nil || redir.N.Value != "0" {
+				continue
+			}
+			switch redir.Op {
+			case syntax.RdrIn, syntax.DplIn, syntax.RdrInOut,
+				syntax.Hdoc, syntax.DashHdoc, syntax.WordHdoc:
+				found = true
+				return false
+			}
+		}
+		return true
+	})
+	return found
 }
 
 func needsLiveDialectStream(file *syntax.File, _ syntax.LangVariant) bool {

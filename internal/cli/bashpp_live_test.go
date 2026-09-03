@@ -99,3 +99,35 @@ func TestLiveDialectStreamSelectionUsesParsedCommands(t *testing.T) {
 		t.Fatal("an active dialect without a transition selected streaming")
 	}
 }
+
+func TestNeedsStdinExecRedirectIsASTBased(t *testing.T) {
+	parse := func(t *testing.T, src string) *syntax.File {
+		t.Helper()
+		file, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(src), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return file
+	}
+	cases := []struct {
+		name string
+		src  string
+		want bool
+	}{
+		{"exec fd0 input redirect", "echo start\nexec 0< file\n", true},
+		{"nested exec fd0 redirect", "if true; then exec 0< file; fi\n", true},
+		{"exec fd0 dup input", "exec 0<&3\n", true},
+		{"comment mentioning exec 0<", "# exec 0< file\n", false},
+		{"quoted string mentioning exec 0<", "echo 'exec 0< file'\n", false},
+		{"here-document data mentioning exec 0<", "cat <<'EOF'\nexec 0< file\nEOF\n", false},
+		{"non-exec command with fd0 redirect", "cat 0< file\n", false},
+		{"exec redirecting another descriptor", "exec 1> file\n", false},
+		{"exec with implicit stdin redirect", "exec < file\n", false},
+	}
+	for _, tc := range cases {
+		if got := needsStdinExecRedirect(parse(t, tc.src)); got != tc.want {
+			t.Errorf("%s (%q): needsStdinExecRedirect = %v, want %v",
+				tc.name, tc.src, got, tc.want)
+		}
+	}
+}
