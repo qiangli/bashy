@@ -3,12 +3,54 @@
 package cli
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestCLIPosixBashPPSignalIsByteInert(t *testing.T) {
+	type result struct {
+		stdout string
+		stderr string
+		exit   int
+	}
+	run := func(args ...string) result {
+		t.Helper()
+		cmd := exec.Command(builtBashBin(t), args...)
+		cmd.Env = cleanPosixStartupEnv(os.Environ())
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		err := cmd.Run()
+		exit := 0
+		if err != nil {
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) {
+				t.Fatalf("run %q: %v", args, err)
+			}
+			exit = exitErr.ExitCode()
+		}
+		return result{stdout: stdout.String(), stderr: stderr.String(), exit: exit}
+	}
+
+	// These inputs deliberately exercise recovery paths where ordinary POSIX
+	// mode produces fewer diagnostics. The Sprint 114 oracle requires the
+	// combined selector to match the POSIX-off invocation byte for byte.
+	for _, script := range []string{
+		"func greet(name string, retries int == 3) string {\n    return name\n}\n",
+		"type Color enum { Red; Green }\nswitch color {\ncase Red:\n    return 1\n}\n",
+	} {
+		want := run("-c", script)
+		for _, selector := range []string{"--bashpp", "--bash++"} {
+			if got := run("--posix", selector, "-c", script); got != want {
+				t.Errorf("%s changed bash result for %q\ngot:  %+v\nwant: %+v", selector, script, got, want)
+			}
+		}
+	}
+}
 
 func TestCLIPosixStartupMatchesBash53(t *testing.T) {
 	bash := builtBashBin(t)

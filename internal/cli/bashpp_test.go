@@ -4,7 +4,6 @@
 package cli
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -42,9 +41,18 @@ func TestResolveBashPP_Precedence(t *testing.T) {
 			wantSource: BashPPSourceBinaryDefault,
 		},
 		{
-			name: "bash binary, .bpp extension: on",
+			name: "bash binary, .bpp extension stays off without a selector",
 			sel: BashPPSelector{
 				Binary:   BashPPBinaryBash,
+				Filename: "script.bpp",
+			},
+			wantEnable: false,
+			wantSource: BashPPSourceBinaryDefault,
+		},
+		{
+			name: "bashy binary records the .bpp extension tier",
+			sel: BashPPSelector{
+				Binary:   BashPPBinaryBashy,
 				Filename: "script.bpp",
 			},
 			wantEnable: true,
@@ -88,14 +96,14 @@ func TestResolveBashPP_Precedence(t *testing.T) {
 			wantSource: BashPPSourceEnv,
 		},
 		{
-			name: "env garbage value has no opinion, falls through to extension",
+			name: "env garbage value has no opinion, falls through to bash default",
 			sel: BashPPSelector{
 				Binary:    BashPPBinaryBash,
 				Filename:  "script.bpp",
 				LookupEnv: envLookup(map[string]string{"BASHY_BASHPP": "yes"}),
 			},
-			wantEnable: true,
-			wantSource: BashPPSourceExtension,
+			wantEnable: false,
+			wantSource: BashPPSourceBinaryDefault,
 		},
 		{
 			name: "env unset has no opinion, falls through to binary default",
@@ -237,57 +245,66 @@ func TestResolveBashPP_Precedence(t *testing.T) {
 	}
 }
 
-func TestResolveBashPP_CertificationRefusal(t *testing.T) {
+func TestResolveBashPP_POSIXInertnessProfile(t *testing.T) {
 	tests := []struct {
-		name string
-		sel  BashPPSelector
+		name       string
+		sel        BashPPSelector
+		wantPosix  bool
+		wantSource BashPPSource
 	}{
 		{
-			name: "bash --posix --bashpp is refused",
+			name: "bash --posix --bashpp selects the inert profile",
 			sel: BashPPSelector{
 				Binary: BashPPBinaryBash,
 				Args:   []string{"bash", "--posix", "--bashpp"},
 				Posix:  true,
 			},
+			wantSource: BashPPSourceCLI,
 		},
 		{
-			name: "bash --posix --bash++ is refused (alias)",
+			name: "bash --posix --bash++ selects the inert profile",
 			sel: BashPPSelector{
 				Binary: BashPPBinaryBash,
 				Args:   []string{"bash", "--posix", "--bash++"},
 				Posix:  true,
 			},
+			wantSource: BashPPSourceCLI,
 		},
 		{
-			name: "bash --posix with BASHY_BASHPP=1 is refused",
+			name: "bash --posix with BASHY_BASHPP=1 selects the inert profile",
 			sel: BashPPSelector{
 				Binary:    BashPPBinaryBash,
 				LookupEnv: envLookup(map[string]string{"BASHY_BASHPP": "1"}),
 				Posix:     true,
 			},
+			wantSource: BashPPSourceEnv,
 		},
 		{
-			name: "bash --posix with a .bpp script is refused",
+			name: "bash --posix with only a .bpp filename remains POSIX",
 			sel: BashPPSelector{
 				Binary:   BashPPBinaryBash,
 				Filename: "script.bpp",
 				Posix:    true,
 			},
+			wantPosix:  true,
+			wantSource: BashPPSourceBinaryDefault,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := ResolveBashPP(tc.sel)
-			if err == nil {
-				t.Fatalf("ResolveBashPP() = %+v, want a certification refusal error", got)
+			if err != nil {
+				t.Fatalf("ResolveBashPP() unexpected error: %v", err)
 			}
-			var certErr *BashPPCertificationError
-			if !errors.As(err, &certErr) {
-				t.Fatalf("error = %v (%T), want *BashPPCertificationError", err, err)
+			if got.Enabled {
+				t.Errorf("Enabled = true, want false for the bash POSIX inertness profile")
 			}
-			if got != (BashPPResolution{}) {
-				t.Errorf("resolution on refusal = %+v, want zero value", got)
+			if got.Posix != tc.wantPosix {
+				t.Errorf("Posix = %v, want %v", got.Posix, tc.wantPosix)
+			}
+			if got.Source != tc.wantSource {
+				t.Errorf("Source = %q, want %q", got.Source, tc.wantSource)
 			}
 		})
 	}
@@ -359,20 +376,6 @@ func TestCommandLineBashPPSkipsOptionValues(t *testing.T) {
 		want := args[len(args)-1] != "--no-bashpp"
 		if !seen || enabled != want {
 			t.Errorf("commandLineBashPP(%q) = %v, %v; want %v, true", args, enabled, seen, want)
-		}
-	}
-}
-
-func TestBashPPCertificationError_Message(t *testing.T) {
-	err := &BashPPCertificationError{Source: BashPPSourceCLI}
-	msg := err.Error()
-	if msg == "" {
-		t.Fatal("Error() returned empty string")
-	}
-	// The message must name the actionable escapes, not just the refusal.
-	for _, want := range []string{"--posix", "bash binary", "--no-bashpp"} {
-		if !strings.Contains(msg, want) {
-			t.Errorf("Error() = %q, want it to mention %q", msg, want)
 		}
 	}
 }

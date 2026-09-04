@@ -97,15 +97,16 @@ guards the language, and the language is what makes the conformance suite's own 
 structured.** The two halves of the uplift check each other.
 
 Activation follows the two-binary product boundary. The standalone `bash`
-binary defaults to strict Bash 5.3 behavior for `.sh`, `.bash`, and
-extensionless files; Bash++ is opt-in there. A `.bpp` file opts in by default.
+binary defaults to strict Bash 5.3 behavior for every filename; Bash++ is
+opt-in there. A `.bpp` file is a source label, not an implicit selector, on
+that compatibility front door.
 The complete `bashy` binary defaults both Bash++ and its agentic surface on for
 every filename, with independent opt-outs.
 
 | Invocation | Initial Bash++ mode | Agentic surface |
 |---|---:|---:|
 | `bash script.sh`, `script.bash`, or extensionless | off; opt in | unavailable |
-| `bash script.bpp` | on; opt out | unavailable |
+| `bash script.bpp` | off; opt in | unavailable |
 | `bashy <any file>` | on; opt out | on; opt out |
 
 The controls are `--bashpp` / `--bash++`, `--no-bashpp`,
@@ -114,17 +115,23 @@ bashpp`). The agentic surface has parallel `--agentic` / `--no-agentic` and
 `BASHY_AGENTIC=1|0` controls. Initial-mode precedence is:
 
 ```text
-explicit CLI > environment > .bpp extension > binary default
+explicit CLI > environment > .bpp extension (bashy only) > binary default
 ```
 
 The language must be selected before initial parsing. An in-file `set -o
 bashpp` cannot retroactively enable extended grammar in a file that was parsed
-as one unit; use the CLI, environment, `.bpp`, or a shebang such as
+as one unit; use the CLI, environment, or a shebang such as
 `#!/usr/bin/env -S bash --bashpp`. The shell option remains meaningful for
 interactive input and subsequently parsed or sourced input.
 
 Certification invokes the standalone `bash` binary in POSIX mode without
 Bash++, so the extension remains outside the declared certified configuration.
+For the Sprint 114 executable oracle, an affirmative Bash++ selector paired
+with startup POSIX mode on that front door selects an inert compatibility
+profile: both the extension and POSIX-mode parser/runtime differences are
+disabled, making it byte-identical to the selector-off, POSIX-off invocation.
+Ordinary `bash --posix` and `bash --posix --no-bashpp` retain POSIX mode;
+`bashy --posix --bashpp` remains the supported combined language profile.
 The engine is shared: `interp`/`expand`/`syntax` gate the extension at
 `LangVariant`, and other consumers retain `LangBash` unless they explicitly
 select `LangBashPP`.

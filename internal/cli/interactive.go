@@ -60,7 +60,7 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 	// rules via PosixMode, not the stricter LangPOSIX grammar that would drop
 	// bash extensions (arrays, ${v:off:len}, ${v^^}). See run() in main.go.
 	lang := r.Dialect()
-	posixMode := effectiveStartupPosix()
+	posixMode := resolvedStartupPosix()
 
 	var cmdNum int
 	getPrompt := func(ps string) string {
