@@ -3,8 +3,8 @@ package agentos
 import (
 	"bytes"
 	"context"
-	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -61,6 +61,77 @@ func TestSprintHelpCarriesOwnerAccountability(t *testing.T) {
 	}
 }
 
+// watchSafetyNet bounds a --watch test that has gone wrong. It is NOT the
+// budget the assertion runs against: watchUntil stops the command the moment
+// the expected output has been written, so a healthy run never approaches it.
+const watchSafetyNet = 30 * time.Second
+
+// watchUntil is the command's stdout/stderr AND its stop condition.
+//
+// These tests used to give the command a 250ms deadline and hope the claim,
+// the banner and the first delivery all landed inside it. That put a wall
+// clock in the assertion, and the claim is the slow half: on the Windows CI
+// runner `take` failed with "sprint take: context deadline exceeded" before it
+// ever reached the stream, while the same test passes in 0.5s on a Windows
+// host with cycles to spare. The 250ms was measuring the runner.
+//
+// The deadline could not even be recognized for what it was — the claim path
+// funnels its error through weave's exitCodeError, which carries a code and
+// drops the cause, so the tests' errors.Is(err, context.DeadlineExceeded)
+// escape hatch was unreachable and a slow claim always read as a hard failure.
+//
+// Stopping on the CONDITION removes both problems: cancel as soon as every
+// expected string has been written, then assert on what was written. The
+// command's error is reported only when something is missing, because after a
+// caller-initiated cancel its exit status says nothing about delivery.
+type watchUntil struct {
+	mu     sync.Mutex
+	buf    bytes.Buffer
+	want   []string
+	cancel context.CancelFunc
+}
+
+func newWatchUntil(cancel context.CancelFunc, want ...string) *watchUntil {
+	return &watchUntil{want: want, cancel: cancel}
+}
+
+// Write records the chunk and, once nothing is outstanding, cancels the
+// command. Cobra writes from the command's own goroutine, so the cancel is
+// ordered after the write that completed the set.
+func (w *watchUntil) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	n, err := w.buf.Write(p)
+	complete := len(w.missingLocked()) == 0
+	w.mu.Unlock()
+	if complete {
+		w.cancel()
+	}
+	return n, err
+}
+
+func (w *watchUntil) missingLocked() []string {
+	got := w.buf.String()
+	var missing []string
+	for _, want := range w.want {
+		if !strings.Contains(got, want) {
+			missing = append(missing, want)
+		}
+	}
+	return missing
+}
+
+func (w *watchUntil) missing() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.missingLocked()
+}
+
+func (w *watchUntil) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
 func TestExternalSprintTakeWatchClaimsThenStreamsInbox(t *testing.T) {
 	isolateUnifiedInbox(t)
 	t.Setenv("BASHY_SPRINT_DIR", t.TempDir())
@@ -81,31 +152,26 @@ func TestExternalSprintTakeWatchClaimsThenStreamsInbox(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), watchSafetyNet)
 	defer cancel()
 	cmd := newSprintCmd()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"take", "1", "--owner", owner, "--watch"})
-	err := cmd.Execute()
-	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("take --watch: %v\n%s", err, out.String())
-	}
 	// The take names the runnable command and the standard procedure, rather
 	// than reporting a readiness condition the agent would have to go and
 	// arrange. Assert the COMMAND and the SKILL, never the prose around them.
-	for _, want := range []string{
+	out := newWatchUntil(cancel,
 		"is now conductor",
-		"bashy inbox --as " + owner,
+		"bashy inbox --as "+owner,
 		"bashy skills show inbox",
 		"attached inbox stream",
 		"wake the external manager",
-	} {
-		if !strings.Contains(out.String(), want) {
-			t.Errorf("take --watch output missing %q:\n%s", want, out.String())
-		}
+	)
+	cmd.SetOut(out)
+	cmd.SetErr(out)
+	cmd.SetContext(ctx)
+	cmd.SetArgs([]string{"take", "1", "--owner", owner, "--watch"})
+	err := cmd.Execute()
+	if missing := out.missing(); len(missing) > 0 {
+		t.Fatalf("take --watch never wrote %q: %v\n%s", missing, err, out.String())
 	}
 }
 
@@ -128,22 +194,17 @@ func TestExternalSprintStartWatchClaimsActiveSprintThenStreamsInbox(t *testing.T
 		t.Fatal(err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), watchSafetyNet)
 	defer cancel()
 	cmd := newSprintCmd()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
+	out := newWatchUntil(cancel, "started", "attached inbox stream", "start-watch delivery")
+	cmd.SetOut(out)
+	cmd.SetErr(out)
 	cmd.SetContext(ctx)
 	cmd.SetArgs([]string{"start", "1", "--owner", owner, "--watch", "--for", "1h"})
 	err := cmd.Execute()
-	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("start --watch: %v\n%s", err, out.String())
-	}
-	for _, want := range []string{"started", "attached inbox stream", "start-watch delivery"} {
-		if !strings.Contains(out.String(), want) {
-			t.Errorf("start --watch output missing %q:\n%s", want, out.String())
-		}
+	if missing := out.missing(); len(missing) > 0 {
+		t.Fatalf("start --watch never wrote %q: %v\n%s", missing, err, out.String())
 	}
 }
 
