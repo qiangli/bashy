@@ -15,7 +15,7 @@ import (
 	"strings"
 )
 
-//go:embed all:conductor all:bashy all:knowledge-transfer all:force-agent-shell all:steward all:inbox
+//go:embed all:conductor all:bashy all:knowledge-transfer all:force-agent-shell all:steward all:inbox all:sprint
 var FS embed.FS
 
 // Names returns every embedded skill directory name (those with a SKILL.md),

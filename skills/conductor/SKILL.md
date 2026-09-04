@@ -67,11 +67,11 @@ The sprint's recorded owner name is its coordination identity. A takeover assume
 that same name for mb/Meet/chat/ping, unless it first updates sprint ownership to a
 new preferred name. A Bashy-managed conductor receives input through its control
 transport. An externally launched conductor claims with
-`bashy sprint take <id> --as <owner> --watch` (or `start ... --watch`) and its
+`bashy sprint take <id> --owner <owner> --watch` (or `start ... --owner <owner> --watch`) and its
 harness must retain and read that foreground process. The watcher-to-parent
 relationship proves live delivery. After handling every delivered batch, run
-`bashy sprint inbox-ack <id> --as <owner>`; three unacknowledged three-minute
-reminders terminate the watcher with the input still unread.
+`bashy sprint inbox-ack <id> --as <owner>`; unacknowledged input stays unread and
+the watcher keeps reminding every three minutes until it is acknowledged.
 
 Before touching work owned by another sprint manager, coordinate with that owner
 through mb/Meet/chat/ping and request merge or sequencing. Never delete, remove,
@@ -443,7 +443,7 @@ share a source file — they parallelize but **merge sequentially** (§9).
 ### 4. Sprint + stories
 ```sh
 bashy sprint add "<goal>" --acceptance "<target green AND guard green>" --column doing --epic <name>
-bashy sprint take <id> --as conductor ;  bashy sprint checkpoint <id> --continuity "<baseline+plan>"
+bashy sprint take <id> --owner conductor ;  bashy sprint checkpoint <id> --continuity "<baseline+plan>"
 bashy weave add "<story>" --priority p0 --points 8 --tool <tool> --verify "$(cat gate.sh)" --body "$(cat story.md)"
 bashy sprint link <id> --repo <repo> --task <issue>
 bashy weave baton take --as <you>        # single-driver lock; re-write it after every action

@@ -88,7 +88,7 @@ func TestExternalSprintTakeWatchClaimsThenStreamsInbox(t *testing.T) {
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetContext(ctx)
-	cmd.SetArgs([]string{"take", "1", "--as", owner, "--watch"})
+	cmd.SetArgs([]string{"take", "1", "--owner", owner, "--watch"})
 	err := cmd.Execute()
 	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("take --watch: %v\n%s", err, out.String())
@@ -105,6 +105,44 @@ func TestExternalSprintTakeWatchClaimsThenStreamsInbox(t *testing.T) {
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("take --watch output missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestExternalSprintStartWatchClaimsActiveSprintThenStreamsInbox(t *testing.T) {
+	isolateUnifiedInbox(t)
+	t.Setenv("BASHY_SPRINT_DIR", t.TempDir())
+	const owner = "external-start-manager"
+	if err := fleet.New().SaveAgent(fleet.Agent{Name: owner, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := bus.PostMessage(bus.Post{From: "human", To: owner, Body: "start-watch delivery"}); err != nil {
+		t.Fatal(err)
+	}
+
+	add := newSprintCmd()
+	add.SetOut(&bytes.Buffer{})
+	add.SetErr(&bytes.Buffer{})
+	add.SetArgs([]string{"add", "external start watch test"})
+	if err := add.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	cmd := newSprintCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetContext(ctx)
+	cmd.SetArgs([]string{"start", "1", "--owner", owner, "--watch", "--for", "1h"})
+	err := cmd.Execute()
+	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("start --watch: %v\n%s", err, out.String())
+	}
+	for _, want := range []string{"started", "attached inbox stream", "start-watch delivery"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("start --watch output missing %q:\n%s", want, out.String())
 		}
 	}
 }
@@ -148,6 +186,29 @@ func TestConductorSkillCarriesOwnerChecklist(t *testing.T) {
 	} {
 		if !strings.Contains(ref, want) {
 			t.Errorf("conductor reference.md missing owner-accountability element %q", want)
+		}
+	}
+}
+
+// The embedded skill is the portable agent-facing adapter used by both the
+// vendor-neutral .agents export and Claude's .claude export. Keep the owner
+// decision outside Bashy and keep the existing-sprint path ownership-neutral.
+func TestSprintSkillRequiresAnExplicitManagerAndReusesActiveOwnership(t *testing.T) {
+	body, ok := skills.Body("sprint")
+	if !ok {
+		t.Fatal("sprint SKILL.md not embedded")
+	}
+	for _, want := range []string{
+		"Never choose a default manager or guess",
+		"bashy agents list",
+		"ask the user to choose before mutating",
+		"sprint start ID --owner NAME --instruction TEXT",
+		"sprint instruct ID --instruction TEXT",
+		"Do not supply or change an owner",
+		"claim that work was dispatched unless Bashy confirms it.",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("sprint SKILL.md missing adapter contract %q", want)
 		}
 	}
 }

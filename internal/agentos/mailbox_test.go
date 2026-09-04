@@ -81,6 +81,74 @@ func TestHumanMailboxAggregatesEverySourceAndBroadcastWithoutAgentConsumption(t 
 	}
 }
 
+func TestMailboxMeetHistorySurvivesNativeCursorWithStableMarks(t *testing.T) {
+	isolateUnifiedInbox(t)
+	t.Setenv("BASHY_MAILBOX_DIR", t.TempDir())
+	reader := inboxTestReader
+	spec := mailboxSpec{Key: "agent:" + reader, Address: reader, Kind: "agent"}
+	st, err := meet.Create(meet.CreateOptions{Topic: "delivery", Board: true, Participants: []string{reader}, Human: "human"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []meet.Event{
+		{Speaker: "human", Kind: "message", Text: "shared history"},
+		{Speaker: "bob", To: reader, Kind: "message", Text: "direct for reader"},
+		{Speaker: reader, To: "bob", Kind: "message", Text: "reader outbound"},
+		{Speaker: "human", To: "bob", Kind: "message", Text: "direct for Bob"},
+	} {
+		if err = meet.AppendEvent(st.ID, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	items, state, err := snapshotMailbox(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantIDs := []string{"meet:" + st.ID + ":1", "meet:" + st.ID + ":2"}
+	if got := meetMailboxIDs(items); strings.Join(got, ",") != strings.Join(wantIDs, ",") {
+		t.Fatalf("initial Meet IDs=%v, want %v", got, wantIDs)
+	}
+	mark := mailboxMark{ReadAt: "2026-09-03T00:00:00Z", Project: "dhnt", Status: "active"}
+	state.Marks[wantIDs[1]] = mark
+	if err = saveMailboxState(spec, state); err != nil {
+		t.Fatal(err)
+	}
+	if err = meet.MarkSeenThrough(st.ID, spec.Address, 4); err != nil {
+		t.Fatal(err)
+	}
+
+	items, _, err = snapshotMailbox(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := meetMailboxIDs(items); strings.Join(got, ",") != strings.Join(wantIDs, ",") {
+		t.Fatalf("Meet IDs after native cursor advanced=%v, want %v", got, wantIDs)
+	}
+	var direct mailboxItem
+	for _, item := range items {
+		if item.ID == wantIDs[1] {
+			direct = item
+		}
+	}
+	if !direct.Read || direct.Project != mark.Project || direct.Status != mark.Status {
+		t.Fatalf("marked Meet item after native cursor advanced=%+v", direct)
+	}
+	if got := meet.SeenSeq(st.ID, spec.Address); got != 4 {
+		t.Fatalf("mailbox snapshot changed native Meet cursor to %d", got)
+	}
+}
+
+func meetMailboxIDs(items []mailboxItem) []string {
+	var ids []string
+	for _, item := range items {
+		if item.Source == "meet" {
+			ids = append(ids, item.ID)
+		}
+	}
+	return ids
+}
+
 func TestMailboxFiltersUnreadFirstAndExplicitReadAckPreserve(t *testing.T) {
 	human := isolateMailbox(t)
 	if err := bus.PostMessage(bus.Post{From: "agent", To: human.Address, Topic: "posix-cert", Body: "Profile D status ref docs/status.md"}); err != nil {

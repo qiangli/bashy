@@ -204,7 +204,11 @@ func snapshotMailbox(spec mailboxSpec) ([]mailboxItem, mailboxState, error) {
 		if !r.Board || !stringMember(r.Members, spec.Address) {
 			continue
 		}
-		d, o, _, _, e := meet.UnreadRecords(r.ID, "__bashy_mailbox_full_scan__", 0)
+		// Read full history as the mailbox principal. HistoryRecords applies the
+		// same recipient isolation as native Meet delivery without consulting its
+		// cursor, so another inbox consumer cannot make durable mailbox IDs and
+		// their local marks disappear.
+		d, o, _, e := meet.HistoryRecords(r.ID, spec.Address, 0)
 		if e != nil {
 			return nil, state, e
 		}

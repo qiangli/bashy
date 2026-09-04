@@ -402,7 +402,7 @@ Reason:
    ```
 3. Claim leases:
    ```sh
-   bin/bashy sprint take <id> --as codex-conductor
+   bin/bashy sprint take <id> --owner codex-conductor
    bin/bashy weave baton take --as codex-conductor
    ```
 4. File stories:

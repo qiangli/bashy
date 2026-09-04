@@ -35,12 +35,12 @@ independent final verification, continuity, and cleanup responsibility.
 The recorded sprint owner name is the coordination identity. A successor uses that
 same name for mb/Meet/chat/ping, or changes the sprint owner before adopting a new
 name. A Bashy-managed successor receives input through its control transport. An
-external harness instead retains `sprint take/start --watch` as a foreground tool
+external harness instead retains `sprint take/start --owner OWNER --watch` as a foreground tool
 process and reads its streamed events; the process's parent relationship is the
 proof that the external agent, rather than an abandoned terminal, owns it. It
 runs `sprint inbox-ack ID --as OWNER` after handling each batch. Until then the
-source cursors do not advance; three reminders at three-minute intervals end the
-watcher nonzero and leave the batch available for the replacement watcher.
+source cursors do not advance, and reminders continue every three minutes until
+the manager acknowledges the batch.
 
 When another sprint manager owns intersecting work, contact that owner through the
 Bashy coordination surfaces and request merge/sequencing before acting. Never
@@ -259,7 +259,7 @@ layer) and file one **`bashy weave` issue** per story.
 bashy sprint add "<campaign goal>" \
   --acceptance "<the one measured predicate: target suite green AND guard green>" \
   --column doing --epic <campaign-name>
-bashy sprint take 9 --as conductor                 # claim the single-driver lease
+bashy sprint take 9 --owner conductor              # claim the single-driver lease
 bashy sprint checkpoint 9 --continuity "<baseline + plan + blockers>"
 
 bashy weave add "<story title>" --priority p0 --points 8 --tool codex \

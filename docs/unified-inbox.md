@@ -92,8 +92,8 @@ transport delivery advances source cursors.
 An externally launched sprint manager uses the attached-stream path:
 
 ```sh
-bashy sprint take <id> --as <fleet-agent-name> --watch
-# or: bashy sprint start <id> --as <fleet-agent-name> --watch
+bashy sprint take <id> --owner <fleet-agent-name> --watch
+# or: bashy sprint start <id> --owner <fleet-agent-name> --watch
 ```
 
 The command claims the seat, prints the claim result, and remains alive streaming
@@ -109,10 +109,9 @@ Writing bytes into a pipe proves only that the harness received them; the OS
 cannot prove that a model interpreted them. Therefore the attached watcher does
 not advance source cursors on output. The explicit ack is the proof of handling,
 advances exactly that rendered batch, and refreshes the sprint-manager lease.
-While a batch remains unacknowledged, the watcher prints `you got message` after
-three minutes and repeats at six and nine minutes. The third reminder exits
-nonzero, leaves the batch unread, and requires the harness to rerun
-`sprint take ... --watch`. A new batch starts a new three-strike window.
+While a batch remains unacknowledged, the watcher prints `you got message` every
+three minutes and keeps the batch unread. Reminders continue until the harness
+acknowledges the batch; unread input never tears down its own delivery path.
 
 When the watcher exits, the delivery capability disappears and the sprint
 reports NOT READY. Bashy cannot force an external model loop to schedule itself,

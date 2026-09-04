@@ -38,9 +38,9 @@ func TestSprintWatchRemindsWithoutQuittingAndNeverConsumesUnackedInput(t *testin
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
 	defer cancel()
 	rt := sprintWatchRuntime{
-		ackEvery: 5 * time.Millisecond, maxMisses: 3,
-		poll:   sprintWatchTestPoll(func(string, int, bool) (inboxBatch, error) { return batch, nil }),
-		ackSeq: func(int64, string) (int64, error) { return 0, nil },
+		ackEvery: 5 * time.Millisecond,
+		poll:     sprintWatchTestPoll(func(string, int, bool) (inboxBatch, error) { return batch, nil }),
+		ackSeq:   func(int64, string) (int64, error) { return 0, nil },
 	}
 	var out bytes.Buffer
 	// Ends only because the context expires — never of its own accord.
@@ -65,7 +65,7 @@ func TestSprintWatchAcknowledgementCommitsExactBatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
 	rt := sprintWatchRuntime{
-		ackEvery: time.Second, maxMisses: 3,
+		ackEvery: time.Second,
 		poll: sprintWatchTestPoll(func(string, int, bool) (inboxBatch, error) {
 			if committed.Load() {
 				return inboxBatch{}, nil
@@ -100,9 +100,9 @@ func TestSprintWatchHeartbeatsItsLeaseWithoutAnyMail(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
 	defer cancel()
 	rt := sprintWatchRuntime{
-		ackEvery: time.Second, maxMisses: 3,
-		poll:   sprintWatchTestPoll(func(string, int, bool) (inboxBatch, error) { return inboxBatch{}, nil }),
-		ackSeq: func(int64, string) (int64, error) { return 0, nil },
+		ackEvery: time.Second,
+		poll:     sprintWatchTestPoll(func(string, int, bool) (inboxBatch, error) { return inboxBatch{}, nil }),
+		ackSeq:   func(int64, string) (int64, error) { return 0, nil },
 		// Zero interval: every pass is due, so the schedule is not what is
 		// under test here — that the watch beats at all, unprompted, is.
 		beatEvery: 0,
@@ -127,9 +127,9 @@ func TestSprintWatchHeartbeatsItsLeaseWithoutAnyMail(t *testing.T) {
 // have lost, and rather than fighting the new holder for the lease.
 func TestSprintWatchDetachesWhenTheSeatIsTakenOver(t *testing.T) {
 	rt := sprintWatchRuntime{
-		ackEvery: time.Second, maxMisses: 3,
-		poll:   sprintWatchTestPoll(func(string, int, bool) (inboxBatch, error) { return inboxBatch{}, nil }),
-		ackSeq: func(int64, string) (int64, error) { return 0, nil },
+		ackEvery: time.Second,
+		poll:     sprintWatchTestPoll(func(string, int, bool) (inboxBatch, error) { return inboxBatch{}, nil }),
+		ackSeq:   func(int64, string) (int64, error) { return 0, nil },
 		beat: func(int64, string) error {
 			return errors.New("sprint #98 is not held by manager")
 		},
@@ -183,7 +183,7 @@ func TestSprintWatchStandsTheSeatDownOnDetach(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var released atomic.Int64
 			rt := sprintWatchRuntime{
-				ackEvery: time.Second, maxMisses: 3,
+				ackEvery:  time.Second,
 				poll:      sprintWatchTestPoll(func(string, int, bool) (inboxBatch, error) { return inboxBatch{}, nil }),
 				ackSeq:    func(int64, string) (int64, error) { return 0, nil },
 				beatEvery: time.Minute,

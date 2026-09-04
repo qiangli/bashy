@@ -19,7 +19,6 @@ import (
 const (
 	sprintWatchSchema      = "bashy-sprint-watch-v1"
 	sprintWatchAckInterval = 3 * time.Minute
-	sprintWatchMaxMisses   = 3
 )
 
 // sprintWatchHeartbeat is how often the ATTACHED watch refreshes the lease it
@@ -35,10 +34,9 @@ const (
 // Two liveness signals for one seat, disagreeing.
 //
 // It is not a timer pretending to be evidence. This process is the harness's
-// own foreground tool call, so it dies with the harness; and it fails CLOSED on
-// mail the manager does not acknowledge — three reminders and it exits. An
-// unresponsive manager therefore stops heartbeating and its lease ages out
-// normally, which is the property that makes refreshing from here honest.
+// own foreground tool call, so it dies with the harness. Unacknowledged mail
+// remains durable and reminders continue until the harness acknowledges it;
+// unread input must never destroy the delivery path that can handle it.
 var sprintWatchHeartbeat = weave.SprintLeaseTTL / 3
 
 type sprintWatchReminder struct {
@@ -47,16 +45,14 @@ type sprintWatchReminder struct {
 	Sprint      int64  `json:"sprint"`
 	Owner       string `json:"owner"`
 	Attempt     int    `json:"attempt"`
-	MaxAttempts int    `json:"max_attempts"`
 	UnackedFor  string `json:"unacked_for"`
 	Instruction string `json:"instruction"`
 }
 
 type sprintWatchRuntime struct {
-	ackEvery  time.Duration
-	maxMisses int
-	poll      inboxPollRuntime
-	ackSeq    func(int64, string) (int64, error)
+	ackEvery time.Duration
+	poll     inboxPollRuntime
+	ackSeq   func(int64, string) (int64, error)
 	// beatEvery and beat keep the attached seat's lease alive; release stands
 	// it back down when this stream detaches. Both are vars so a test can
 	// drive the schedule without a sprint store on disk.
@@ -67,8 +63,8 @@ type sprintWatchRuntime struct {
 
 func defaultSprintWatchRuntime() sprintWatchRuntime {
 	return sprintWatchRuntime{
-		ackEvery: sprintWatchAckInterval, maxMisses: sprintWatchMaxMisses,
-		poll: defaultInboxPollRuntime(true), ackSeq: latestSprintWatchAck,
+		ackEvery: sprintWatchAckInterval,
+		poll:     defaultInboxPollRuntime(true), ackSeq: latestSprintWatchAck,
 		beatEvery: sprintWatchHeartbeat, beat: holdSprintWatchLease,
 		release: weave.ReleaseSprintManagerLease,
 	}
@@ -182,7 +178,7 @@ func runSprintInboxWatch(ctx context.Context, out, errOut io.Writer, sprintID in
 				misses++
 				reminder := sprintWatchReminder{
 					Schema: sprintWatchSchema, Type: "unacknowledged-inbox", Sprint: sprintID,
-					Owner: owner, Attempt: misses, MaxAttempts: rt.maxMisses,
+					Owner: owner, Attempt: misses,
 					UnackedFor:  now.Sub(deliveredAt).Round(time.Second).String(),
 					Instruction: fmt.Sprintf("you got message; after reading run `bashy sprint inbox-ack %d --as %s`", sprintID, owner),
 				}

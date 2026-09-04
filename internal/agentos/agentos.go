@@ -189,6 +189,7 @@ func init() {
 	// communication CLI dispatcher. Wire the receive hook at process startup so
 	// every Bashy-owned session gets the same turn-boundary inbox view.
 	wireMessageBoard()
+	wireSprintOwner()
 }
 
 // maybeAdvertiseSkillHint is L1 of the advertisement ladder: when an

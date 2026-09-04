@@ -44,7 +44,7 @@ func newSprintCmd() *cobra.Command {
 func attachSprintWatch(cmd *cobra.Command, takeover bool) {
 	var watch bool
 	cmd.Flags().BoolVar(&watch, "watch", false,
-		"after claiming, stay attached and stream unified inbox NDJSON (optional: `bashy inbox --as <owner>` reads the same mail)")
+		"after claiming, stay attached and stream unified inbox NDJSON (bashy inbox --as OWNER reads the same mail)")
 	original := cmd.RunE
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if !watch {
@@ -54,7 +54,7 @@ func attachSprintWatch(cmd *cobra.Command, takeover bool) {
 		if err != nil {
 			return fmt.Errorf("sprint must be an integer: %q", args[0])
 		}
-		explicit, _ := cmd.Flags().GetString("as")
+		explicit, _ := cmd.Flags().GetString("owner")
 		owner, err := weave.SprintClaimIdentity(id, explicit, takeover)
 		if err != nil {
 			return err
@@ -120,10 +120,10 @@ Delegation transfers execution, never accountability. While you hold it you must
   - Stay REACHABLE with the OWNER IDENTITY: a takeover uses the existing sprint owner name for
     mb/Meet/chat/ping, or explicitly updates ownership before using another name.
     A Bashy-managed session receives input through its control transport. An external
-    Claude/Codex/OpenCode/ycode/agy harness must claim with ` + "`sprint take/start --watch`" + `
+    Claude/Codex/OpenCode/ycode/agy harness must claim with ` + "`sprint take/start --owner NAME --watch`" + `
     and retain/read that foreground process. After handling each delivered batch it must run
-    ` + "`sprint inbox-ack ID --as OWNER`" + `. Unacknowledged input is reminded every three
-    minutes; the third reminder exits nonzero with input still unread, requiring a rerun.
+	    ` + "`sprint inbox-ack ID --as OWNER`" + `. Unacknowledged input stays unread and
+	    reminders continue every three minutes until the manager acknowledges it.
   - SUPERVISE workers proactively: monitor every run, and steer, interrupt,
     salvage, or reassign stalled / failed / no-op work instead of waiting on it.
   - VERIFY independently: inspect and rerun the gates yourself; never trust a
