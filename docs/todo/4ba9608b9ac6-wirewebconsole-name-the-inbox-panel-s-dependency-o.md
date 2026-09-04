@@ -3,10 +3,11 @@ id: 4ba9608b9ac6
 kind: task
 title: 'wireWebConsole: name the Inbox panel''s dependency on the fleet seams'
 seq: 205
-status: todo
+status: done
 priority: p1
 created: 2026-09-04T17:47:54.215309Z
 sprint: 122
+closed: 2026-09-04T17:50:35.558992Z
 ---
 
 wireMessageBoard() now serves TWO console apps. With FleetNames nil the Inbox
