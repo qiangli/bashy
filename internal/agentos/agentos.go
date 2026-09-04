@@ -301,8 +301,13 @@ func wireMeet() {
 // from the browser reports success while addressing a name the CLI would have
 // resolved differently. Nothing crashes and nothing logs.
 func wireWebConsole() {
-	wireMeet()         // the Relay app is pkg/meet mounted in-process
-	wireMessageBoard() // the Messages app is pkg/bus read and posted in-process
+	wireMeet() // the Relay app is pkg/meet mounted in-process
+	// pkg/bus read and posted in-process. This one call serves TWO apps —
+	// Messages and Inbox — and the Inbox panel depends on the same fleet seams:
+	// with FleetNames nil its roster silently loses every catalog agent and
+	// shows only names the timeline happens to mention, which looks like a
+	// quiet fleet rather than a missing hook.
+	wireMessageBoard()
 }
 
 // Dispatch handles AgentOS front-door subcommands that are not shell scripts —
