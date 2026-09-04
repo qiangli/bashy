@@ -244,13 +244,35 @@ func TestSprintOwnerLaunchIsExactOnceAndUnbounded(t *testing.T) {
 	args := strings.Join(sprintOwnerForemanArgs("sprint-3-manager", weave.SprintOwnerRequest{
 		Sprint: 3, Owner: "manager", Duration: 45 * time.Minute,
 	}), " ")
-	for _, want := range []string{"--no-max-runtime", "--opening-send-once"} {
+	for _, want := range []string{"--no-max-runtime", "--opening-send-once", "--yolo"} {
 		if !strings.Contains(args, want) {
 			t.Errorf("launch args missing %s: %s", want, args)
 		}
 	}
 	if strings.Contains(args, " --max-runtime ") || strings.Contains(args, "45m") {
 		t.Fatalf("sprint cutoff leaked into manager lifetime: %s", args)
+	}
+}
+
+func TestSprintOwnerLaunchAuthorizesEverySupportedManagedAgentTool(t *testing.T) {
+	for _, owner := range []string{
+		"claude-opus5",
+		"codex-gpt5.6-sol",
+		"agy-opus4.6",
+		"opencode-kimi-k3",
+		"ycode-gpt5.6-sol",
+	} {
+		t.Run(owner, func(t *testing.T) {
+			args := sprintOwnerForemanArgs("sprint-115-manager", weave.SprintOwnerRequest{
+				Sprint: 115, Owner: owner,
+			})
+			joined := strings.Join(args, " ")
+			for _, want := range []string{"--agent " + owner, "--yolo", "--opening-send-once", "--no-max-runtime"} {
+				if !strings.Contains(joined, want) {
+					t.Fatalf("managed owner launch missing %q: %s", want, joined)
+				}
+			}
+		})
 	}
 }
 

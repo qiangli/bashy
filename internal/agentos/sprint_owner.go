@@ -173,7 +173,7 @@ func launchSprintOwnerForeman(ctx context.Context, id string, req weave.SprintOw
 func sprintOwnerForemanArgs(id string, req weave.SprintOwnerRequest) []string {
 	return []string{"foreman", "start", "--detach", "--id", id,
 		"--goal", fmt.Sprintf("Manage sprint #%d", req.Sprint), "--agent", req.Owner,
-		"--no-max-runtime", "--opening-send-once"}
+		"--no-max-runtime", "--opening-send-once", "--yolo"}
 }
 
 func waitForSprintOwnerControl(ctx context.Context, id string, limit time.Duration) error {
