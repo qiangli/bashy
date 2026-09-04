@@ -619,7 +619,7 @@ func shouldRunInteractive(stdinTTY bool) bool {
 const defaultPathValue = "/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:."
 
 func newRunner() (*interp.Runner, error) {
-	startupPosix := effectiveStartupPosix()
+	startupPosix := resolvedStartupPosix()
 	inheritedEnv := secureStartupEnv(os.Environ())
 	// BASHY_BASHPP is an invocation selector, not shell state. Consume it at
 	// this process boundary so a caller can enable the top-level shell without
@@ -816,6 +816,16 @@ func effectiveStartupPosix() bool {
 		return true
 	}
 	return startupPosixForEnv(os.Environ())
+}
+
+// resolvedStartupPosix is the runtime profile after Bash++ selection. Before
+// runAll resolves the selector (notably in focused unit tests), it falls back
+// to the raw startup decision. A non-empty source proves resolution occurred.
+func resolvedStartupPosix() bool {
+	if startupBashPP.Source != "" {
+		return startupBashPP.Posix
+	}
+	return effectiveStartupPosix()
 }
 
 func startupPosixForEnv(env []string) bool {
@@ -1071,7 +1081,7 @@ func loadStartupFiles(r *interp.Runner, interactive bool) {
 		}
 		return
 	}
-	if interactive && effectiveStartupPosix() {
+	if interactive && resolvedStartupPosix() {
 		sourceStartupEnv(r, "ENV")
 		return
 	}
@@ -2334,7 +2344,7 @@ func bashConditionalParseError(src string) bool {
 }
 
 func bashAliasReservedWordParseError(src string) bool {
-	if effectiveStartupPosix() || optsEnabled("posix") {
+	if resolvedStartupPosix() || optsEnabled("posix") {
 		return false
 	}
 	if !strings.Contains(src, "alias al=") ||
@@ -2592,7 +2602,7 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 		return nil
 	}
 	lang := syntax.LangBash
-	startupPosix := effectiveStartupPosix()
+	startupPosix := resolvedStartupPosix()
 	if startupPosix {
 		lang = syntax.LangPOSIX
 	}

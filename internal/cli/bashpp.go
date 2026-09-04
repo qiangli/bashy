@@ -4,7 +4,6 @@
 package cli
 
 import (
-	"fmt"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -66,8 +65,8 @@ import (
 // BashPPBinary identifies which of the two compiled entry points
 // ([BashPPBinaryBash], cmd/bash's pure Bash 5.3 drop-in, or
 // [BashPPBinaryBashy], cmd/bashy's AgentOS shell) is resolving the dialect.
-// It is the "binary default" tier and also the certification-refusal gate:
-// only the bash binary is the certification profile.
+// It is the "binary default" tier and identifies the pure bash front door
+// whose Sprint 114 POSIX+Bash++ combination is an inert compatibility profile.
 type BashPPBinary string
 
 const (
@@ -75,9 +74,8 @@ const (
 	BashPPBinaryBashy BashPPBinary = "bashy"
 )
 
-// bashPPBinaryDefault is the last-resort tier: Bash++ off unless the file
-// looks like Bash++ or something asked for it, except on bashy, whose
-// product default is Bash++ on (independently overridable, same as its
+// bashPPBinaryDefault is the last-resort tier: Bash++ is off on the pure bash
+// front door and on by default in bashy (independently overridable, like its
 // agentic surface).
 func (b BashPPBinary) bashPPDefault() bool {
 	return b == BashPPBinaryBashy
@@ -115,7 +113,9 @@ type BashPPSelector struct {
 	// os.LookupEnv. May be nil, meaning no environment tier.
 	LookupEnv func(name string) (value string, ok bool)
 	// Filename is the script path about to be parsed ("" for -c/stdin/
-	// interactive input, which never carry a .bpp extension).
+	// interactive input). The .bpp convention is only a source label for the
+	// Bash++-default bashy binary; the bash drop-in requires an explicit
+	// CLI/environment selector.
 	Filename string
 	// Posix is the already-resolved startup POSIX mode (effectiveStartupPosix
 	// in main.go), not merely the --posix flag's literal presence.
@@ -152,36 +152,19 @@ func (r BashPPResolution) ParserOptions(base syntax.LangVariant, extra ...syntax
 	return append([]syntax.ParserOption{syntax.Variant(base), syntax.PosixMode(posix)}, extra...)
 }
 
-// BashPPCertificationError reports that a selector resolved Bash++ on while
-// also being the certification profile (the bash binary under --posix),
-// which must fail clearly rather than silently leak extended grammar into a
-// certification-labeled invocation.
-type BashPPCertificationError struct {
-	Source BashPPSource
-}
-
-func (e *BashPPCertificationError) Error() string {
-	return fmt.Sprintf(
-		"bashpp: --posix on the bash binary is the certification profile and must run with Bash++ off; "+
-			"Bash++ was selected via %s — drop --posix, use the bashy binary, or add --no-bashpp",
-		e.Source,
-	)
-}
-
 // ResolveBashPP resolves the initial Bash++ dialect for one selector,
 // applying the documented precedence (explicit CLI > environment > .bpp
-// extension > binary default) and then the certification refusal: the bash
-// binary under POSIX mode is the certification profile
-// ("docs/bashpp-posix-superset-syntax.md" — certification uses the
-// standalone bash binary with --posix and without a Bash++ selector), and an
-// invocation that resolves Bash++ on there is refused rather than silently
-// running with extended grammar under a certification-labeled flag. bashy
-// under --posix is unaffected: `bashy --posix --bashpp` is a supported
-// combined mode, since bashy is never the certification binary.
+// extension > binary default). For the pure bash front door, .bpp is only a
+// filename and an affirmative Bash++ selector paired with startup POSIX mode
+// selects the Sprint 114 inertness profile: both extensions and POSIX-mode
+// parser/runtime differences are disabled so its result is byte-identical to
+// the selector-off, POSIX-off invocation. Ordinary bash --posix and explicit
+// --no-bashpp retain the POSIX profile. bashy --posix --bashpp remains a
+// supported combined mode because bashy is not the Classic front door.
 func ResolveBashPP(sel BashPPSelector) (BashPPResolution, error) {
 	enabled, source := resolveBashPPTiers(sel)
 	if sel.Binary == BashPPBinaryBash && sel.Posix && enabled {
-		return BashPPResolution{}, &BashPPCertificationError{Source: source}
+		return BashPPResolution{Source: source}, nil
 	}
 	return BashPPResolution{Enabled: enabled, Source: source, Posix: sel.Posix}, nil
 }
@@ -193,7 +176,7 @@ func resolveBashPPTiers(sel BashPPSelector) (bool, BashPPSource) {
 	if enabled, seen := envBashPP(sel.LookupEnv); seen {
 		return enabled, BashPPSourceEnv
 	}
-	if strings.HasSuffix(sel.Filename, ".bpp") {
+	if sel.Binary == BashPPBinaryBashy && strings.HasSuffix(sel.Filename, ".bpp") {
 		return true, BashPPSourceExtension
 	}
 	return sel.Binary.bashPPDefault(), BashPPSourceBinaryDefault
