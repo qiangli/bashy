@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"testing"
+	"time"
 )
 
 var bash53FixtureNames = []string{
@@ -427,5 +429,41 @@ func TestNormalizeHostSignalOrder(t *testing.T) {
 	// Other fixtures are untouched.
 	if got := string(normalizeHostSignalOrder("trap", []byte(linux))); got != linux {
 		t.Fatalf("non-execscript fixture was rewritten: %q", got)
+	}
+}
+
+// TestFixtureStdinIsIdleNotEndOfFile pins the stdin a fixture inherits.
+//
+// Bash's own suite is run from a terminal, so a fixture's stdin has NO input
+// available and is NOT at end-of-file. os/exec's default — /dev/null — gets
+// the second half wrong, and read.tests scores the difference: read6.sub's
+// third `read -t 0` probe prints 0 against /dev/null and 1 against an idle
+// descriptor, and read.right records 1. Measured against real bash 5.3, which
+// prints 0 on /dev/null too, so the expectation belongs to the environment
+// rather than to the shell under test.
+//
+// The probe is a blocking `read`: against /dev/null it returns at once and the
+// fixture completes, against an idle descriptor it runs to the harness
+// deadline. TIME is therefore the assertion that the descriptor is open.
+func TestFixtureStdinIsIdleNotEndOfFile(t *testing.T) {
+	sh, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("no sh on this host")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "idle.sh"), []byte("read line\necho \"read returned $?\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "idle.right"), []byte("unreachable\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	status, err := runFixture(dir, dir, sh, fixture{
+		Name: "idle", Test: "idle.sh", Right: "idle.right",
+	}, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != "TIME" {
+		t.Fatalf("status = %s, want TIME — the fixture's stdin reported end-of-file, so `read -t 0` will report input available and read.tests will diverge from read.right", status)
 	}
 }

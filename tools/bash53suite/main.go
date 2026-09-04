@@ -844,6 +844,25 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 		stdin = in
 	} else {
 		args = append(args, "./"+filepath.ToSlash(f.Test))
+		// Bash's own suite is run from a terminal, so a fixture's inherited
+		// stdin has NO input available and is NOT at end-of-file. os/exec's
+		// default (/dev/null) gets the second half wrong: /dev/null is always
+		// readable, so `read -t 0` reports input available and read6.sub's
+		// third probe prints 0 where read.right records 1. Measured against
+		// real bash 5.3: with /dev/null it also prints 0, and with an open
+		// idle descriptor both it and bashy print 1 — the expectation belongs
+		// to the environment, not to the shell. An idle pipe reproduces the
+		// terminal's readiness without needing a pty.
+		r, w, err := os.Pipe()
+		if err != nil {
+			return "FAIL", err
+		}
+		defer r.Close()
+		// The write end stays open for the fixture's whole life so the read
+		// end never reports EOF; closing it here would restore /dev/null's
+		// always-readable behaviour.
+		defer w.Close()
+		stdin = r
 	}
 	cmd := exec.CommandContext(ctx, bashPath, args...)
 	configureProcess(cmd)
