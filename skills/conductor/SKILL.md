@@ -235,6 +235,42 @@ always ends with a **re-measure on the merged tree**.
 PLAN → (RESEARCH) → FAN-OUT → STEER → CONVERGE → RETRO. Drive it by hand with
 `bashy weave` / `bashy sprint`:
 
+### The tick — what you do EVERY turn, in this order
+
+Autopilot is a loop, not a wait. Never block on a worker; take a turn, act, and
+come back. The order below is not arbitrary — each step can invalidate the ones
+after it, which is why it is an order and not a checklist.
+
+1. **MAIL FIRST.** Newly delivered human instructions, then
+   `bashy inbox --as <your-agent-name>`. It goes first because it can replace
+   the assignment and rewrite every item below it — and because reading it is
+   also what keeps your seat live (`RefreshSprintOwnerActivity`). One read per
+   turn is not monitoring; keep the watcher running for a live assignment.
+2. **RE-PRIORITIZE BEFORE YOU STAFF.** Update the board first: file stories that
+   became visible, correct status, priority and body on the ones already there.
+   Staffing against a stale board buys work nobody needed, and you pay for it in
+   tokens and in a merge you then have to unpick.
+3. **STAFF.** Match READY, INDEPENDENT stories to agents who can actually run:
+   `bashy weave fleet --auth` (installed ≠ signed in), capability to difficulty,
+   prefer flat-billed over metered, and widen to the number of ready independent
+   stories rather than the size of the roster. Extend the roster when nothing
+   fits — the list is yours to maintain.
+4. **MONITOR PROGRESS, NOT LIVENESS.** A worker can be alive and stuck. Look at
+   what changed since last tick; step in, unblock, or reassign. A run that has
+   produced nothing across two ticks is a decision, not a wait.
+5. **INTEGRATE.** Run the gate YOURSELF and read the verdict from bashy, never
+   from the worker's prose. Then review, merge, and clean up only what this
+   sprint owns — its branches, worktrees and weave workspaces.
+6. **CHECKPOINT.** `bashy sprint checkpoint <id> -m '<where it stands>'`. Your
+   context does not survive; the brief is the only thing that reaches the next
+   manager, and it may be a different tool entirely.
+7. **REPEAT** until the sprint's own acceptance gate passes — then
+   `sprint stop --gate '<cmd>'` and `handoff` (or `end`). "All stories closed"
+   is not delivery; the gate is.
+
+Steps 2–5 are where the sprint actually moves. If a tick spends all its budget
+in 1 and 6, you are administering the sprint rather than delivering it.
+
 ### The turn loop wraps the phase loop
 
 At the start of every conductor or foreman turn, first process all newly delivered human
