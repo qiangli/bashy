@@ -17,6 +17,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/lockfile"
 	"github.com/qiangli/coreutils/pkg/meet"
+	"github.com/qiangli/coreutils/pkg/principal"
 	"github.com/qiangli/coreutils/pkg/room"
 	"github.com/qiangli/coreutils/pkg/weave"
 	"github.com/spf13/cobra"
@@ -276,28 +277,30 @@ func registerSprintInboxWatcher(reader string) (inboxWatcherClaim, error) {
 }
 
 func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatcherClaim, error) {
-	agent, ok := fleet.New().Agent(reader)
-	if !ok {
-		return inboxWatcherClaim{}, fmt.Errorf("inbox: watcher identity %q is not a registered Bashy agent; register it with `bashy agents add` or choose one from `bashy agents list --all`", reader)
+	id, err := resolveInboxWatcherIdentity(reader)
+	if err != nil {
+		return inboxWatcherClaim{}, err
 	}
 
 	// The kernel lock is the watcher lease. It closes the read-before-write
 	// race between two fresh processes and also refuses two watcher loops in
 	// one process, since both would otherwise advance the same source cursors.
+	// This guard is generic — a person must not run two concurrent watchers of
+	// their own cursors any more than an agent may — so it is keyed on the
+	// resolved claim id, which is namespaced per identity kind.
 	claimDir := filepath.Join(room.Dir(), "claims")
 	if err := os.MkdirAll(claimDir, 0o700); err != nil {
 		return inboxWatcherClaim{}, fmt.Errorf("inbox: prepare watcher claims: %w", err)
 	}
-	claimPath := filepath.Join(claimDir, fmt.Sprintf("inbox-%x.lock", sha256.Sum256([]byte(agent.Name))))
-	claim, err := lockfile.TryAcquire(claimPath, lockfile.Holder{Name: agent.Name, Intent: "watch inbox"})
+	claimPath := filepath.Join(claimDir, fmt.Sprintf("inbox-%x.lock", sha256.Sum256([]byte(id.claimID))))
+	claim, err := lockfile.TryAcquire(claimPath, lockfile.Holder{Name: id.name, Intent: "watch inbox"})
 	if err != nil {
 		if errors.Is(err, lockfile.ErrHeld) {
-			return inboxWatcherClaim{}, fmt.Errorf("inbox: registered agent %q already has a live inbox watcher", agent.Name)
+			return inboxWatcherClaim{}, fmt.Errorf("inbox: %s %q already has a live inbox watcher", id.kind, id.name)
 		}
-		return inboxWatcherClaim{}, fmt.Errorf("inbox: claim watcher identity %q: %w", agent.Name, err)
+		return inboxWatcherClaim{}, fmt.Errorf("inbox: claim watcher identity %q: %w", id.name, err)
 	}
 	cwd, _ := os.Getwd()
-	principal := strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL"))
 	ownerPID := os.Getppid()
 	if ownerPID <= 1 {
 		// PID 1 is a common ancestor, never a session proof. Leave OwnerPID empty
@@ -305,17 +308,20 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 		// closed for sibling commands when no stronger tool-session claim exists.
 		ownerPID = 0
 	}
-	sessionClaim := bus.HashSessionClaim(currentAgentSession(agent.Name))
 	card := room.Card{
 		// The registered name is the global identity claim. A parallel
 		// "inbox:NAME" card would let one identity occupy two live sessions.
-		ID:           room.AgentClaimID(agent.Name),
-		Principal:    principal,
-		SessionClaim: sessionClaim,
-		Tool:         agent.Tool,
-		Model:        agent.Model,
-		Binding:      agent.MatrixKey(),
-		Nick:         agent.Name,
+		ID:        id.claimID,
+		Principal: id.principal,
+		// SessionClaim is the AGENT-to-AGENT impersonation proof; it is empty for
+		// a person, whose OS login is the trust boundary (bus.ResolveAuthoredActor
+		// decides authored mail the same way). Tool/Model/Binding likewise stay
+		// empty for a person, who has no runnable agent binding to report.
+		SessionClaim: id.sessionClaim,
+		Tool:         id.tool,
+		Model:        id.model,
+		Binding:      id.binding,
+		Nick:         id.nick,
 		Mode:         mode,
 		Task:         task,
 		Caps:         caps,
@@ -325,7 +331,7 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 	}
 	if err := room.Join(card); err != nil {
 		_ = claim.Release()
-		return inboxWatcherClaim{}, fmt.Errorf("inbox: register watcher %q: %w", agent.Name, err)
+		return inboxWatcherClaim{}, fmt.Errorf("inbox: register watcher %q: %w", id.name, err)
 	}
 	anchor := inboxWatcherAnchor(card)
 	return inboxWatcherClaim{
@@ -340,11 +346,71 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 		},
 		ownerLive: func() error {
 			if inboxOwnerRelation(os.Getpid(), anchor) == inboxOwnerGone {
-				return &inboxOwnerGoneError{agent: agent.Name, owner: anchor}
+				return &inboxOwnerGoneError{agent: id.name, owner: anchor}
 			}
 			return nil
 		},
 	}, nil
+}
+
+// inboxWatcherIdentity is the resolved holder of one watcher lease. Two identity
+// kinds may hold it: a registered AGENT, whose card carries a tool-session proof
+// (SessionClaim) so one harness cannot claim another agent's name; and a
+// registered PERSON, who carries none. A person is not an agent identity to
+// impersonate — the guard SessionClaim defends is specifically AGENT-to-AGENT,
+// and for a person the OS login is the trust boundary, exactly as
+// bus.ResolveAuthoredActor already decides for authored mail. Everything else —
+// the per-identity lease and the owning-session anchor for orphan detection — is
+// generic and applies to both.
+type inboxWatcherIdentity struct {
+	kind         string // "registered agent" | "person", for the duplicate-watcher message
+	name         string // canonical name; the lease holder and card nick
+	claimID      string // room card id, namespaced so an agent and a person never share one
+	principal    string // BASHY_PRINCIPAL (agent) or dhnt:person/<handle>
+	sessionClaim string // empty for a person
+	tool         string // empty for a person
+	model        string // empty for a person
+	binding      string // empty for a person
+	nick         string
+}
+
+// inboxPersonClaimID namespaces a person's room card so it can never be mistaken
+// for an agent's singleton claim (room.AgentClaimID) — the authored-actor guard
+// looks agents up by that id, and a person must not answer to it.
+func inboxPersonClaimID(handle string) string {
+	return "person:" + room.AgentClaimID(handle)
+}
+
+// resolveInboxWatcherIdentity classifies a reader that resolveInboxReader has
+// already vouched for. It accepts a registered agent or a registered person and
+// refuses everything else: an arbitrary string, an observed-but-unregistered
+// cursor, or a role must not file a watcher card. The refusal names BOTH
+// registries so it never sends a human to a list they can never appear in.
+func resolveInboxWatcherIdentity(reader string) (inboxWatcherIdentity, error) {
+	cat := fleet.New()
+	if agent, ok := cat.Agent(reader); ok {
+		return inboxWatcherIdentity{
+			kind:         "registered agent",
+			name:         agent.Name,
+			claimID:      room.AgentClaimID(agent.Name),
+			principal:    strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL")),
+			sessionClaim: bus.HashSessionClaim(currentAgentSession(agent.Name)),
+			tool:         agent.Tool,
+			model:        agent.Model,
+			binding:      agent.MatrixKey(),
+			nick:         agent.Name,
+		}, nil
+	}
+	if person, ok := cat.Person(reader); ok {
+		return inboxWatcherIdentity{
+			kind:      "person",
+			name:      person.Handle,
+			claimID:   inboxPersonClaimID(person.Handle),
+			principal: principal.URN(principal.KindPerson, person.Handle, principal.LocalOwner),
+			nick:      person.Handle,
+		}, nil
+	}
+	return inboxWatcherIdentity{}, fmt.Errorf("inbox: watcher identity %q is not a registered Bashy agent or a known person; register an agent with `bashy agents add`, add a person with `bashy people add`, or choose one from `bashy agents list --all` / `bashy people list`", reader)
 }
 
 // refreshSprintOwnerActivity is the one refresher, behind a var so a test can

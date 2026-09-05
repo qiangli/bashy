@@ -664,6 +664,133 @@ func TestInboxWatcherRecordsSessionProofSeparatelyFromAttribution(t *testing.T) 
 	}
 }
 
+// registerTestInboxPerson writes a human principal into the test's isolated
+// fleet ring so the resolver vouches for the name exactly as a shipped
+// `bashy people add` entry would.
+func registerTestInboxPerson(t *testing.T, handle string) {
+	t.Helper()
+	if err := fleet.New().SavePerson(fleet.Person{Handle: handle}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := fleet.New().Person(handle); !ok {
+		t.Fatalf("test person %q did not register in the isolated fleet ring", handle)
+	}
+}
+
+func TestInboxWatcherAcceptsRegisteredPersonWithoutSessionProof(t *testing.T) {
+	isolateUnifiedInbox(t)
+	const handle = "human1"
+	registerTestInboxPerson(t, handle)
+
+	// A person needs a card for the attached rung to mean anything, but a
+	// person is not an agent identity to impersonate: the tool-session proof
+	// that stops one AGENT harness claiming another does not apply.
+	watcher, err := registerInboxWatcher(handle)
+	if err != nil {
+		t.Fatalf("registered person refused a watch: %v", err)
+	}
+	defer watcher.leave()
+
+	members, err := room.Members()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(members) != 1 {
+		t.Fatalf("person watcher card = %#v", members)
+	}
+	card := members[0]
+	if card.Nick != handle {
+		t.Fatalf("person watcher nick = %q, want %q", card.Nick, handle)
+	}
+	// SessionClaim is the AGENT-to-AGENT impersonation guard and must be empty
+	// for a person, who holds no tool session to prove.
+	if card.SessionClaim != "" {
+		t.Fatalf("person watcher carried a session proof: %#v", card)
+	}
+	// The tool-session card fields describe a runnable agent binding a person
+	// does not have; leaving them set would misreport the person as an agent.
+	if card.Tool != "" || card.Binding != "" {
+		t.Fatalf("person watcher carried an agent binding: %#v", card)
+	}
+	// OwnerPID is generic orphan-detection state and DOES apply: the watch is
+	// anchored to the session that started it exactly like an agent's.
+	if card.OwnerPID != os.Getppid() {
+		t.Fatalf("person watcher owner pid = %d, want %d", card.OwnerPID, os.Getppid())
+	}
+	if card.Principal != "dhnt:person/"+handle {
+		t.Fatalf("person watcher principal = %q, want dhnt:person/%s", card.Principal, handle)
+	}
+
+	watcher.leave()
+	after, err := room.Members()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != 0 {
+		t.Fatalf("person watcher card survived leave: %#v", after)
+	}
+}
+
+func TestInboxWatcherPersonStillRefusesASecondLiveClaim(t *testing.T) {
+	isolateUnifiedInbox(t)
+	const handle = "human1"
+	registerTestInboxPerson(t, handle)
+
+	watcher, err := registerInboxWatcher(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer watcher.leave()
+
+	// The duplicate-watcher guard is generic: two processes must not drain one
+	// identity's cursors concurrently, person or agent.
+	if _, err := registerInboxWatcher(handle); err == nil || !strings.Contains(err.Error(), "already has a live inbox watcher") {
+		t.Fatalf("second person watcher claim error = %v", err)
+	}
+}
+
+func TestInboxWatchLetsARegisteredPersonHoldTheirSeat(t *testing.T) {
+	isolateUnifiedInbox(t)
+	const handle = "human1"
+	registerTestInboxPerson(t, handle)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	cmd := newUnifiedInboxCmd()
+	cmd.SetContext(ctx)
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	// The exact repro from the story: a person naming themselves with --watch.
+	cmd.SetArgs([]string{"--as", handle, "--watch", "--wait", "300ms", "--json"})
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute() }()
+
+	claimID := inboxPersonClaimID(handle)
+	deadline := time.Now().Add(time.Second)
+	for {
+		card, live, err := room.Find(claimID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if live {
+			if card.Mode != inboxWatcherMode || card.Nick != handle || card.SessionClaim != "" {
+				t.Fatalf("person watch card = %#v", card)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("person --watch never published its identity claim")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("person --watch returned an error: %v", err)
+	}
+	if _, live, err := room.Find(claimID); err != nil || live {
+		t.Fatalf("person watcher claim after return: live=%v err=%v", live, err)
+	}
+}
+
 func TestInboxWatcherCanonicalizesAliasToTheGlobalAgentClaim(t *testing.T) {
 	isolateUnifiedInbox(t)
 	if err := fleet.New().SaveAgent(fleet.Agent{Name: "canonical-sentinel", Aliases: []string{"topic-sentinel"}, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
