@@ -3,11 +3,12 @@ id: 0edb34695070
 kind: task
 title: 'Human lane S3: human-to-manager chat returns a delivery verdict'
 seq: 211
-status: assigned
+status: done
 priority: p0
 created: 2026-09-05T15:47:51.819315Z
 assignee: codex-gpt5.6-terra
 sprint: 126
+closed: 2026-09-05T21:31:32.510156Z
 ---
 
 A human messages a sprint owner in the room or by private DM and learns immediately whether it landed. Gate: to a LIVE owner -> delivered, and the record is visible in that owner's inbox; to a STALE/UNREACHABLE owner -> NOT DELIVERED naming the reason (no live watcher / no inbox-ack since T), the message still written to the durable board, and NO silent queue. Reproduce against the current board, which carries UNREACHABLE on #86/#100/#101/#122 and 1 live agent vs 3 stale.
