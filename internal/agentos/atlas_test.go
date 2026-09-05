@@ -4,11 +4,39 @@
 package agentos
 
 import (
+	"bytes"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/qiangli/coreutils/pkg/atlas"
 )
+
+func TestWebViewListsTheActualAppsByPublicName(t *testing.T) {
+	var out bytes.Buffer
+	printAtlasWeb(&out, liveAtlas(false))
+	text := out.String()
+
+	// These are the six apps the launcher actually exposes. Terminal and Files
+	// are launcher-owned, so a view built only from atlas declarations silently
+	// omitted them.
+	for _, want := range []string{
+		"Files", "Inbox", "Meet", "Messages", "Sprint", "Terminal",
+	} {
+		if !strings.Contains(text, "\n"+want+" ") {
+			t.Errorf("web view is missing app %q:\n%s", want, text)
+		}
+	}
+
+	// Apps is the launcher, not one of its own apps. Board remains the valid
+	// implementation command, but Sprint is the public app name.
+	if strings.Contains(text, "\nApps ") {
+		t.Errorf("web view lists the launcher as its own app:\n%s", text)
+	}
+	if !strings.Contains(text, "\nSprint") || !strings.Contains(text, "board") {
+		t.Errorf("Sprint app does not identify its board command:\n%s", text)
+	}
+}
 
 // TestAtlasCoversEveryCommand is the bashy-side coverage ratchet: every name
 // the live catalog reports — builtins, tools, always/agent-mode verbs,

@@ -20,6 +20,7 @@ import (
 
 	"github.com/qiangli/coreutils/external/registry"
 	"github.com/qiangli/coreutils/pkg/atlas"
+	"github.com/qiangli/coreutils/pkg/webconsole"
 	"github.com/qiangli/coreutils/tool"
 )
 
@@ -546,35 +547,41 @@ func sortedCopy(items []string) []string {
 // web surfaces" has no answer to that. `bashy web-console` renders the same data
 // as tiles; one source, two renderers.
 func printAtlasWeb(w io.Writer, records []atlasRecord) {
-	rows := make([]atlasRecord, 0, 8)
-	for _, r := range records {
-		if r.Web != nil {
-			rows = append(rows, r)
-		}
-	}
-	if len(rows) == 0 {
-		fmt.Fprintln(w, "no command declares a web surface")
+	// Render the launcher's discovered panels, not only atlas declarations.
+	// Terminal and Files belong to the launcher itself and deliberately have no
+	// pretend `bashy terminal` / `bashy files` verbs. Conversely, Apps is the
+	// launcher rather than one of the apps it launches, so Discover omits it.
+	panels := webconsole.Discover()
+	if len(panels) == 0 {
+		fmt.Fprintln(w, "no web apps are available")
 		return
 	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
+
+	// A panel's public name is its label (Sprint), while the command that owns
+	// its implementation can legitimately have a different name (board). Keep
+	// both facts instead of presenting the implementation name as the app name.
+	commandByMount := make(map[string]string, len(records))
+	for _, r := range records {
+		if r.Web != nil && r.Web.Mode != atlas.WebSelf {
+			commandByMount[r.Web.Mount] = r.Name
+		}
+	}
+	sort.Slice(panels, func(i, j int) bool { return panels[i].Label < panels[j].Label })
 
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "COMMAND\tSURFACE\tMODE\tPORT\tPATH\tSTART")
-	for _, r := range rows {
-		path := "/"
-		if r.Web.Mount != "" {
-			path = "/" + r.Web.Mount + "/"
+	fmt.Fprintln(tw, "APP\tCOMMAND\tMODE\tPORT\tPATH\tSTART")
+	for _, p := range panels {
+		mount := strings.Trim(p.Path, "/")
+		command := commandByMount[mount]
+		if command == "" {
+			command = "-"
 		}
 		port := ""
-		if r.Web.Port != 0 {
-			port = strconv.Itoa(r.Web.Port)
-		}
-		start := ""
-		if len(r.Web.Start) > 0 {
-			start = "bashy " + strings.Join(r.Web.Start, " ")
+		if p.Port != 0 {
+			port = strconv.Itoa(p.Port)
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
-			r.Name, r.Web.Label, r.Web.Mode, port, path, start)
+			p.Label, command, p.Mode, port, p.Path, p.StartHint())
 	}
 	_ = tw.Flush()
 	fmt.Fprintln(w, "\nOpen them together with:  bashy apps")
