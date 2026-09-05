@@ -760,7 +760,12 @@ func TestInboxRejectsUnregisteredExplicitIdentity(t *testing.T) {
 	isolateUnifiedInbox(t)
 	cmd := newUnifiedInboxCmd()
 	cmd.SetArgs([]string{"--as", "not-a-registered-agent-zz", "--peek"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "not a registered Bashy agent") {
+	// The refusal must also name the PEOPLE registry. Saying only "not a
+	// registered Bashy agent" sent a human to a list they can never appear in,
+	// which is the defect the one-principal work exists to fix.
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "owns no mailbox here") ||
+		!strings.Contains(err.Error(), "bashy people list") {
 		t.Fatalf("unregistered identity error = %v", err)
 	}
 }
@@ -781,7 +786,9 @@ func TestInboxExternalRoleAliasCannotDrainRolePending(t *testing.T) {
 	}
 	cmd := newUnifiedInboxCmd()
 	cmd.SetArgs([]string{"--as", "steward", "--peek"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "not a registered Bashy agent") {
+	// A role is an address that survives handover and holds no cursor of its
+	// own, so it is the one kind that may never be an inbox reader.
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "owns no mailbox here") {
 		t.Fatalf("external role read error = %v", err)
 	}
 	snapshot, err := bus.SnapshotInbox(topic)
