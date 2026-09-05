@@ -52,20 +52,34 @@ git_clone() {
     url=$1
     target=$2
     if [ -n "$BASHY_EXE" ]; then
-        "$BASHY_EXE" git clone --quiet "$url" "$target" >/dev/null
+        "$BASHY_EXE" git clone --quiet --no-checkout "$url" "$target" >/dev/null
         return
     fi
-    git clone --quiet "$url" "$target"
+    git clone --quiet --no-checkout "$url" "$target"
 }
 
 git_checkout() {
     repo=$1
     sha=$2
-    if [ -n "$BASHY_EXE" ]; then
-        (cd "$repo" && "$BASHY_EXE" git checkout "$sha" >/dev/null)
-        return
-    fi
-    git -C "$repo" checkout --quiet "$sha"
+    attempt=1
+    while [ "$attempt" -le 5 ]; do
+        if [ -n "$BASHY_EXE" ]; then
+            if (cd "$repo" && "$BASHY_EXE" git checkout "$sha" >/dev/null 2>&1); then
+                return 0
+            fi
+            (cd "$repo" && "$BASHY_EXE" git fetch --quiet origin "$sha") || true
+        else
+            if git -C "$repo" checkout --quiet "$sha" 2>/dev/null; then
+                return 0
+            fi
+            git -C "$repo" fetch --quiet origin "$sha" || true
+        fi
+        echo "bootstrap-siblings: $repo @ ${sha:0:12} not complete upstream; retry $attempt/5" >&2
+        sleep "$attempt"
+        attempt=$((attempt + 1))
+    done
+    echo "bootstrap-siblings: cannot check out $repo @ $sha after 5 retries" >&2
+    return 1
 }
 
 git_submodule_update() {
