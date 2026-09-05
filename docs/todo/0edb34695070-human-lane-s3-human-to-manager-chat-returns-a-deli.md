@@ -3,9 +3,10 @@ id: 0edb34695070
 kind: task
 title: 'Human lane S3: human-to-manager chat returns a delivery verdict'
 seq: 211
-status: todo
+status: assigned
 priority: p0
 created: 2026-09-05T15:47:51.819315Z
+assignee: codex-gpt5.6-terra
 sprint: 126
 ---
 

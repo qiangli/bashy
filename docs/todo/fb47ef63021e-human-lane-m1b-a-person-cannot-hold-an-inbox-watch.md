@@ -3,9 +3,10 @@ id: fb47ef63021e
 kind: task
 title: 'Human lane M1b: a person cannot hold an inbox watch, so a human manager cannot keep their seat live'
 seq: 219
-status: todo
+status: assigned
 priority: p0
 created: 2026-09-05T19:08:17.451401Z
+assignee: claude-opus4.8
 sprint: 126
 ---
 
