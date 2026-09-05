@@ -91,17 +91,36 @@ Target use case, stated by the operator: **instruct and work with agents from
   `coopauth.SystemUser()`, cloud gives `Identity.Username`, the CLI gives `--as`
   or `$USER`. Same person, up to three sender names, so their inbox fragments and
   attribution is unreliable. Make them resolve to one. This is the sprint.
+- **M1b — one identity ACROSS the console's own panels.** `/meet/` is a console
+  panel, so on a phone the mb panel signs the human as `Identity.Username` while
+  `/meet/` signs them via `actorOf` as `Identity.User` (the EMAIL), honours a
+  body-stated sender, and never canonicalizes. The same person is two identities
+  on one page load. Reconcile `actorOf` onto `userOf`'s precedence and
+  `BoardIdentity` canonicalization, and stop honouring a body-stated sender.
 - **M2 — render the verdict that already comes back.** Show per-recipient
   `state` + `reason` in the console. Presentation only: do not implement a
   classifier, do not add a second verdict model.
+- **M3 — app UI defects that hide an agent's output.** In scope because a
+  response you cannot read is a context defect in the operator's only remote
+  surface, not a cosmetic one. **Use the gate that already exists**:
+  `go test ./pkg/webconsole -tags verifydom` drives a real Chrome over the
+  launcher, every panel and the `/meet/` tabs, asserting no page threw. It exists
+  because byte-level tests cannot see a cascade, a DOM, or a script that throws —
+  `coreutils/CLAUDE.md` records four UI defects shipping in one day through that
+  gap. Add cases to that suite; do not add a UI framework or a second harness.
 
 ### Deferred, and why each is safe to defer
 
-- **S2 meet join** — a directed `mb` post is the instruction channel; joining a
-  meeting is a different capability. `meet` also runs its own server on its own
-  port and is **not** on the `bashy apps serve` path, so it is not on the phone
-  route at all. The meet/console identity divergence (row 6 above) stays recorded
-  and is the right fix the day meet joins the console path.
+- **S2 meet join** — Meet and Chat are TABS in the console, and the Chat tab is
+  a durable `(agent, human)` DM (`coreutils/pkg/meet/relay_dm.go`), so
+  instructing an agent needs no group-room join. Joining a group room is a
+  separate capability, which is what puts it outside an MVP whose test is
+  "context defect, not capability".
+  **Correction:** an earlier version of this plan deferred S2 by claiming meet
+  is not on the `bashy apps serve` path. That was false — `/meet/` is a console
+  panel (`pkg/webconsole/handler.go:299-305`, mounted under `on["meet"]`, SPA in
+  `pkg/meet/web`, driven by the console's own DOM suite). Meet **is** on the
+  phone route, so the identity divergence below is NOT deferrable.
 - **S4 reachability inventory** — the delivery verdict answers the same question
   after the fact, which is sufficient for one operator.
 - **S5 inbox noise** — readability, not function. Revisit if a phone screen makes

@@ -60,3 +60,19 @@ meet joins the console path — it is simply not MVP.
 
 Gate, narrowed: the same human posts from the browser and from the CLI and both
 render under one name in `bashy inbox` and on the board, with one cursor.
+
+CORRECTION 2026-09-05 — the meet half is BACK IN SCOPE for this card. The earlier
+narrowing deferred it on the false claim that meet is not on the `bashy apps
+serve` path. `/meet/` is a CONSOLE PANEL (`pkg/webconsole/handler.go:299-305`,
+mounted under `on["meet"]`, SPA in `pkg/meet/web`, exercised by the console's own
+DOM suite, which reasons explicitly about the phone viewport).
+
+So on a phone, one page load signs the same human two ways: the mb panel via
+`userOf` (cloud `Identity.Username`, canonicalized through `bus.BoardIdentity`)
+and `/meet/` via `actorOf` (cloud `Identity.User` — the EMAIL, never
+canonicalized, and it honours a body-stated sender that the console explicitly
+refuses). That is the cross-surface context defect this sprint is for.
+
+Gate, restored: the same human posts on mb and tells in `/meet/` under ONE name,
+from the CLI and from the browser, with one inbox and one cursor — and `meet`'s
+`actorOf` stops honouring a body-stated sender.
