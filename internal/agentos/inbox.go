@@ -229,9 +229,23 @@ func resolveInboxReader(as string) (string, error) {
 	if strings.TrimSpace(as) == "" {
 		return bus.BoardIdentity("")
 	}
+	// A PERSON owns a mailbox too. Restricting the reader to an agent left the
+	// operator with no inbox at all: mail addressed to them was written and
+	// nothing could read it, while `bashy apps` showed the same rows to everyone
+	// as a third-person peek. `bus.TargetPerson` already existed and was simply
+	// refused here.
+	//
+	// The rule is by EXCLUSION, and only a role is excluded: it is an address
+	// that survives handover and has no cursor of its own to advance.
+	//
+	// Listing the allowed kinds instead was subtly wrong. A name that ALREADY
+	// holds a cursor resolves as bus.TargetReader — before the agent or person
+	// branches are reached — so the operator's own name, which had a cursor from
+	// every prior read, was refused while an alias of the same person passed.
+	// Someone who owns a cursor is by definition an inbox owner.
 	addr, kind, ok := bus.ResolveSendTarget(as)
-	if !ok || kind != bus.TargetAgent {
-		return "", fmt.Errorf("inbox: --as %q is not a registered Bashy agent; verify with `bashy agents list --all` and `bashy whois agent:%s`", as, as)
+	if !ok || kind == bus.TargetRole {
+		return "", fmt.Errorf("inbox: --as %q owns no mailbox here; choose an agent from `bashy agents list --all` or a person from `bashy people list` (`bashy whois %s` says what it resolves to)", as, as)
 	}
 	return addr, nil
 }

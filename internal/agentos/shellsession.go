@@ -207,8 +207,16 @@ func fleetResolveAgentName(s string) string {
 	if s == "" {
 		return ""
 	}
-	if a, ok := fleet.New().Agent(s); ok {
-		return a.Name
+	// Canonicalize any PRINCIPAL, not agents only.
+	//
+	// This is the board's one name-folding hook: bus.BoardIdentity routes every
+	// sender and every addressee through it. Resolving agents alone meant a
+	// human's name never folded, so the operator was whatever string each
+	// surface happened to hand over — `qiangli` from the CLI, the cloud handle
+	// from the browser — and their posts and their inbox split between the two.
+	// An agent got one canonical name; a person got none.
+	if canonical, _, ok := fleet.New().CanonicalPrincipal(s); ok {
+		return canonical
 	}
 	return ""
 }
