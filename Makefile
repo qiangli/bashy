@@ -191,7 +191,9 @@ dist:
 BASH_TEST_TIMEOUT := 60
 # jobs runs a long sequence of real backgrounded sleeps (job-control timing);
 # it needs more than the default per-test cap even with working `kill` reaping.
-BASH_TEST_TIMEOUT_JOBS := 120
+# Hosted runners can take just over two minutes, so leave scheduling headroom
+# while retaining a finite fixture-specific watchdog.
+BASH_TEST_TIMEOUT_JOBS := 180
 # Per-fixture memory cap (KB) enforced by scripts/memwatch.sh. macOS does NOT
 # honor `ulimit -v`, so an unbounded-allocation fixture (e.g. intl/unicode1.sub)
 # can balloon to 100+ GB before the wall-clock timeout fires. The watchdog
