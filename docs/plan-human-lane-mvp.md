@@ -62,6 +62,54 @@ Three constraints follow, and they are what keeps this MVP small:
   existing `bashy apps serve` browser path is a required regression consumer of
   the same identity and delivery contract, not a separate implementation.
 
+## What this is FOR — the definition of done
+
+Sprint 126 delivers a **solid web UI experience** for the operator to work with
+**every agent in `bashy agents list`**, in order to run **future sprints of any
+kind** through `bashy sprint` plus `mb`/`meet`/`chat`/`todo`/`inbox`/`weave` —
+starting with bashy's own POSIX certification and Bash++ sprints. The web UI is
+the primary surface; the CLI keeps working but is not the target.
+
+This is a definition of DONE, not new scope. It exists because "solid" with no
+measure is how a sprint gets reported complete with six closed cards and an
+unusable surface.
+
+**It raises the bar on M1 specifically.** "Every agent" is 21 agents. One
+operator, one browser, many agents, many sprints, many rooms — that IS the
+multitasking axis, and identity inconsistency is where it breaks first. Someone
+who is `Identity.Username` in mb and `Identity.User` in `/meet/` cannot hold 21
+conversations straight, because the surfaces disagree about who they are.
+
+**Already addressable — do not build it again.** The mb `To` field is
+free-form and resolved by `bus.Send`, which 400s an unresolvable addressee with
+near-misses, so every name in `agents list` is already reachable from the
+browser and **an agent picker would be creep, not a requirement**. The inbox
+panel already exposes the full roster of inbox holders. The board panel already
+carries sprints, runs, and the sprint's stories. `meet` and `chat` are already
+tabs at `/meet/`. The surfaces exist; this sprint makes them tell the truth.
+
+### The final gate
+
+**Sprint 126 is done when a real story of a cert or Bash++ sprint can be driven
+from the web UI, including from a phone.** In one browser session, as ONE
+identity:
+
+1. read the live state of #100 (POSIX cert) or #98/#115 (Bash++) on the board;
+2. instruct a named agent from `agents list` about one of that sprint's real
+   stories;
+3. **see the agent's response render on the page**;
+4. see the per-recipient delivery `state` and `reason`;
+5. do the same with a SECOND agent on a DIFFERENT sprint, with neither
+   conversation leaking into the other;
+6. confirm the same identity and the same records from the CLI.
+
+This is `fleet-evidence-invariant.md` applied here: no success state may be
+reached by the ABSENCE of evidence, so "the UI looks fine" is not the gate —
+driving a real sprint is. It is also the anti-creep test in both directions:
+anything not needed to pass it is out, and the sprint is **not** done merely
+because the cards are closed. Dogfooding is the point; this is the surface that
+will run cert and Bash++, so it is proven by running them.
+
 ## TRUE MVP — rescoped 2026-09-05
 
 **All the features already exist. What is missing is context and multitasking.**
