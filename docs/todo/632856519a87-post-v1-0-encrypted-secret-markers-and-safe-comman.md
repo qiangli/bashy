@@ -222,3 +222,47 @@ Research notes / primary sources checked 2026-08-11:
 Deliverable for the implementation sprint: a post-v1.0 feature that makes the SAFE path
 easier than raw plaintext, proves where plaintext can and cannot exist, and composes with
 the existing vault / ask / output-firewall work instead of competing with it.
+
+## Evidence: the third layer is the one that keeps failing (2026-09-05)
+
+The output/capture redaction layer above is not theoretical, and it is not
+adequately covered by this card's threat model. That model lists shell history,
+argv/`ps`, `/proc`, audit logs, PTY captures, transcripts and copied notes. It
+does NOT list the class that has now leaked FOUR times in this tree:
+
+  DIAGNOSTIC COMMANDS WHOSE OUTPUT FORMAT INCLUDES CONFIGURATION.
+
+`dhnt/docs/credential-exposure-incidents.md` records three (an app-spec dump, an
+env dump, and `git remote -v` echoing a forge token embedded in a remote URL).
+On 2026-09-05 incident 3 RECURRED verbatim — same command, same tree, same
+forge, a different agent in a different session — and the token landed in a
+persisted agent transcript.
+
+That recurrence is the argument for the feature. Incident 3's documented
+prevention is a SENTENCE in a private doc ("`git remote -v`, `git config --get
+remote.*.url` and `git remote show` are secret-bearing in this tree"). It was
+already written, and it did not prevent anything, because a rule that requires
+every agent to have read a particular private doc first will keep failing at the
+same rate. Only a mechanism in the output path closes it.
+
+### A blind spot this card must handle explicitly
+
+`dhnt/docs/secret-output-firewall.md` redacts by matching known secret VALUES,
+not names — deliberately, because names are unbounded. But the forge token is
+NOT in the vault: it lives in `.git/config`, put there by a convenience that
+predates `bashy secrets`. A value-matcher sourced only from the vault has
+nothing to match and passes the leak through.
+
+So this layer needs one of two things, and the choice belongs on this card:
+
+  (a) the known-value set is sourced from CONFIG LOCATIONS as well as the vault
+      — git remote URLs, `~/.netrc`, kubeconfig, `~/.docker/config.json`; or
+  (b) a narrow SHAPE rule for credentials-in-URLs (`scheme://user:token@host`),
+      accepted as the one place a name/shape rule is justified because the
+      credential is positionally identifiable.
+
+(a) keeps the "values, not names" invariant and costs a config scan; (b) breaks
+it in exactly one bounded spot. Do not ship both silently.
+
+Scope note: recording this does NOT open the feature. It stays post-v1.0 behind
+the Bash 5.3/POSIX release, per the first line of this card.
