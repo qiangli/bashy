@@ -3,11 +3,12 @@ id: fb47ef63021e
 kind: task
 title: 'Human lane M1b: a person cannot hold an inbox watch, so a human manager cannot keep their seat live'
 seq: 219
-status: assigned
+status: done
 priority: p0
 created: 2026-09-05T19:08:17.451401Z
 assignee: claude-opus4.8
 sprint: 126
+closed: 2026-09-05T21:31:32.444435Z
 ---
 
 FOUND 2026-09-05 validating the three sprint operating modes. Same M1 axis as the resolver work; the last surface still refusing a person.
