@@ -4,7 +4,7 @@ kind: task
 title: 'Human lane S6: delivery state is an audit column, never a repair loop'
 seq: 214
 status: todo
-priority: p1
+priority: p2
 created: 2026-09-05T15:47:51.886112Z
 sprint: 126
 ---

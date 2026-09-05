@@ -4,7 +4,7 @@ kind: task
 title: 'Human lane S2: bashy meet join <meeting> --as <human>'
 seq: 210
 status: todo
-priority: p0
+priority: p2
 created: 2026-09-05T15:47:51.797421Z
 sprint: 126
 ---

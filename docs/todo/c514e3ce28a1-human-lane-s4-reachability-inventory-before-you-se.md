@@ -4,7 +4,7 @@ kind: task
 title: 'Human lane S4: reachability inventory before you send'
 seq: 212
 status: todo
-priority: p1
+priority: p2
 created: 2026-09-05T15:47:51.84164Z
 sprint: 126
 ---

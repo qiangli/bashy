@@ -62,6 +62,61 @@ Three constraints follow, and they are what keeps this MVP small:
   existing `bashy apps serve` browser path is a required regression consumer of
   the same identity and delivery contract, not a separate implementation.
 
+## TRUE MVP — rescoped 2026-09-05
+
+**All the features already exist. What is missing is context and multitasking.**
+Sprint 126 is a correctness sprint, not a feature sprint, and the one test for any
+story is: *does it fix a context/identity/multitasking defect, or does it add a
+capability?* A capability is out no matter how small; a context defect is in even
+if it looks cosmetic.
+
+Target use case, stated by the operator: **instruct and work with agents from
+`bashy apps` in a browser, locally and from a phone.**
+
+### What already ships (probed, not assumed)
+
+| capability | where |
+|---|---|
+| Browser sends a DIRECTED message to a named agent | `handleMBSend`, `pkg/webconsole/panel_mb.go:225` — sender derived from the request, never the body; canonicalized through `bus.BoardIdentity`; unresolvable addressee 400s with near-misses |
+| Six-state delivery ladder, per recipient | `bus.SendResult.Deliveries []Delivery`; `Delivery.State` is "the PROVABLE delivery state — one of the six", with `Reason` |
+| The browser already RECEIVES that result | `handleMBSend` returns it in the response JSON |
+| Reading: every agent's inbox, your own with mark-read, the sprint board | `panel_inbox.go`, `panel_board.go` |
+| A human sender is never refused | `BoardIdentity` with a non-empty name always succeeds; `resolveBoardName` falls back to the raw string |
+
+**A post from a phone lands today.** There is no missing capability on this route.
+
+### The two MVP items
+
+- **M1 — one human name across three paths.** Loopback gives
+  `coopauth.SystemUser()`, cloud gives `Identity.Username`, the CLI gives `--as`
+  or `$USER`. Same person, up to three sender names, so their inbox fragments and
+  attribution is unreliable. Make them resolve to one. This is the sprint.
+- **M2 — render the verdict that already comes back.** Show per-recipient
+  `state` + `reason` in the console. Presentation only: do not implement a
+  classifier, do not add a second verdict model.
+
+### Deferred, and why each is safe to defer
+
+- **S2 meet join** — a directed `mb` post is the instruction channel; joining a
+  meeting is a different capability. `meet` also runs its own server on its own
+  port and is **not** on the `bashy apps serve` path, so it is not on the phone
+  route at all. The meet/console identity divergence (row 6 above) stays recorded
+  and is the right fix the day meet joins the console path.
+- **S4 reachability inventory** — the delivery verdict answers the same question
+  after the fact, which is sufficient for one operator.
+- **S5 inbox noise** — readability, not function. Revisit if a phone screen makes
+  the inbox genuinely unusable; that would make it a context defect and bring it
+  back in.
+- **S6 beyond M2** — cross-surface normalization. The ladder exists; M2 surfaces
+  it where the operator is looking.
+
+### Precondition to VERIFY, not build
+
+Remote reach for `bashy apps serve` is existing outpost/cloudbox tunnel
+machinery. Confirm the console is reachable through it before assuming the phone
+case works end to end. If it is not, that is a tunnel/pairing task and does
+**not** belong to this sprint.
+
 ## Master execution plan
 
 Execute priority-first, with no fleet fan-out required:

@@ -36,3 +36,19 @@ observe, which is the evidence invariant inverted just as surely as reporting it
 delivered would be. Gate amended: a send to a live owner reports `delivered`; to
 a stale/absent owner it reports `failed` or `unverified` WITH the reason, and the
 two are distinguishable in the output.
+
+TRUE-MVP NARROWING 2026-09-05 — this is M2, and it is PRESENTATION ONLY.
+
+The ladder is already built. `bus.SendResult` carries `Deliveries []Delivery`;
+`Delivery` carries `To`, `Steered`, `Reason` and `State`, where `State` is
+documented as "the PROVABLE delivery state — one of the six". `handleMBSend`
+(`pkg/webconsole/panel_mb.go:225`) already returns the whole result to the
+browser in its JSON.
+
+So do NOT implement a delivery classifier, and do NOT add a verdict model. Render
+what the response already contains: per-recipient `state` plus `reason`, in the
+console, so the operator sees what happened to the instruction they just sent.
+
+Everything else on this card — reproducing against live STALE/UNREACHABLE owners,
+the CLI-side verdict wording — stays true but is not MVP. Ship the render first;
+it is the smallest change that makes the phone loop observable.

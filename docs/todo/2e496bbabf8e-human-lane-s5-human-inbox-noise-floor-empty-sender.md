@@ -4,7 +4,7 @@ kind: task
 title: 'Human lane S5: human inbox noise floor - empty senders and duplicate broadcasts'
 seq: 213
 status: todo
-priority: p1
+priority: p2
 created: 2026-09-05T15:47:51.864296Z
 sprint: 126
 ---

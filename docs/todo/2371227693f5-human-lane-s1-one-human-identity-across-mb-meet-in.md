@@ -37,3 +37,26 @@ the fleet catalog. Fix is RECONCILIATION, not a new surface: meet's actorOf
 adopts userOf's precedence and BoardIdentity canonicalization, and stops
 honouring a body-stated sender. Gate extends to: the same human posts on mb and
 tells in meet under ONE name, from CLI and from the browser.
+
+TRUE-MVP NARROWING 2026-09-05 — this is M1, and it is the whole sprint's core.
+All the features already exist; what is missing is context and multitasking.
+
+Scope is now exactly: ONE human name across the three paths that already work —
+loopback (`coopauth.SystemUser()`), cloud (`Identity.Username`), and CLI
+(`--as` / `$USER`) — so a post from a phone and a post from the terminal are the
+SAME sender and land in ONE inbox.
+
+There is NO hard blocker to remove: `BoardIdentity(as)` with a non-empty name
+always succeeds because `resolveBoardName` falls back to the raw string, and
+`userOf` never returns empty. A phone post lands TODAY. The defect is that the
+same person is up to three different sender names, which fragments their inbox
+and makes attribution unreliable — a context defect, not a missing capability.
+
+DEFERRED out of this card: the meet reconciliation. `meet` runs its own server
+on its own port and is NOT on the `bashy apps serve` path, so it is not on the
+phone route. The divergence is still recorded (actorOf takes the cloud EMAIL,
+honours a body-stated sender, never canonicalizes) and remains the right fix when
+meet joins the console path — it is simply not MVP.
+
+Gate, narrowed: the same human posts from the browser and from the CLI and both
+render under one name in `bashy inbox` and on the board, with one cursor.
