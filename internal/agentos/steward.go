@@ -701,7 +701,7 @@ func stewardBootstrapBrief(sess *stewardSession, opt stewardStartOptions) (strin
 			b.WriteString("\n")
 		}
 		b.WriteString("VERIFY BEFORE YOU TRUST IT. The note says what a predecessor BELIEVED. Confirm the world\n")
-		b.WriteString("still matches (`bashy board`, `bashy weave status`, `git status`) before acting on it.\n\n")
+		b.WriteString("still matches (`bashy steward dashboard`, `bashy weave status`, `git status`) before acting on it.\n\n")
 
 	case rec != nil && state.Stale:
 		fmt.Fprintf(&b, "There is one, but it is STALE: %s\n", state.Reason)
@@ -750,7 +750,7 @@ func stewardInvestigationBlock() string {
 	return "" +
 		"    bashy steward reconcile    # what the journal can and cannot establish — run this FIRST\n" +
 		"    bashy steward log --degraded  # claims nobody ever checked\n" +
-		"    bashy board                # todo + sprints + weave runs across the host\n" +
+		"    bashy steward dashboard    # todo + sprints + weave runs across the host\n" +
 		"    bashy weave status         # workspaces still open, and whether they committed anything\n" +
 		"    bashy chat sessions        # agents live on this host right now\n" +
 		"    bashy resume --all         # every handoff record, with status\n" +

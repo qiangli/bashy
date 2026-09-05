@@ -557,9 +557,9 @@ func printAtlasWeb(w io.Writer, records []atlasRecord) {
 		return
 	}
 
-	// A panel's public name is its label (Sprint), while the command that owns
-	// its implementation can legitimately have a different name (board). Keep
-	// both facts instead of presenting the implementation name as the app name.
+	// A panel's public name is its label (Sprint), while COMMAND is the canonical
+	// Bashy verb that owns it (sprint). Keep both fields because labels are for
+	// people and commands are stable machine tokens.
 	commandByMount := make(map[string]string, len(records))
 	for _, r := range records {
 		if r.Web != nil && r.Web.Mode != atlas.WebSelf {

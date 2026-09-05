@@ -28,13 +28,28 @@ func TestWebViewListsTheActualAppsByPublicName(t *testing.T) {
 		}
 	}
 
-	// Apps is the launcher, not one of its own apps. Board remains the valid
-	// implementation command, but Sprint is the public app name.
+	// Apps is the launcher, not one of its own apps. Public app names and their
+	// owning commands must agree.
 	if strings.Contains(text, "\nApps ") {
 		t.Errorf("web view lists the launcher as its own app:\n%s", text)
 	}
-	if !strings.Contains(text, "\nSprint") || !strings.Contains(text, "board") {
-		t.Errorf("Sprint app does not identify its board command:\n%s", text)
+	if !strings.Contains(text, "\nSprint") || !strings.Contains(text, "sprint") {
+		t.Errorf("Sprint app does not identify its sprint command:\n%s", text)
+	}
+	for label, command := range map[string]string{"Meet": "meet", "Sprint": "sprint"} {
+		found := false
+		for _, line := range strings.Split(text, "\n") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 && fields[0] == label {
+				found = true
+				if fields[1] != command {
+					t.Errorf("%s COMMAND = %q, want %q:\n%s", label, fields[1], command, text)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("web view has no %s row:\n%s", label, text)
+		}
 	}
 }
 
@@ -98,6 +113,11 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 		case "builtin", "coreutils", "verb":
 		default:
 			t.Errorf("%s: unexpected class %q", r.Name, r.Class)
+		}
+	}
+	for _, retired := range []string{"board", "relay"} {
+		if _, ok := byName[retired]; ok {
+			t.Errorf("retired top-level command %q remains in the live catalog", retired)
 		}
 	}
 

@@ -1,4 +1,8 @@
-# `bashy board` — the steward + conductor fleet console
+# Steward + conductor fleet console
+
+**Current surface:** the standalone `bashy board` spelling is retired. The
+same read-only projection is available as `bashy steward dashboard` and
+`bashy conductor dashboard`; Sprint owns the `/sprint/` web panel.
 
 **Status:** design of record (2026-07-20). Generalizes the ad-hoc session
 dashboard (a python script → Artifact) into a first-class bashy verb. Local-first,
@@ -34,7 +38,7 @@ bashy conductor dashboard    # the conductor console — one sprint (P2)
   skill (== the `skill` subcommand), so nothing that calls them today breaks.
 - Both dashboards are thin, role-scoped entry points into ONE shared engine
   `pkg/board`; they differ only in scope (steward = global union; conductor =
-  one sprint). `bashy board` MAY also exist as the un-namespaced engine verb, but
+  one sprint). The former un-namespaced `bashy board` engine verb is retired;
   the role verbs are the intended front doors.
 
 ## Two views, one renderer
@@ -143,7 +147,7 @@ Row{ Source(todo|sprint|run), Repo, ID, State, Tool, Band, Model, Label, Points,
 new tests green (renderer golden text+json; band-resolver table incl. the
 ambiguity cases `gpt-5.5` vs `gpt-5.6-sol`; `todo --json` envelope; an `--html`
 self-contained smoke asserting no external hosts); `bashy commands` lists
-`bashy board`; the e2e dispatch gate passes. Match repo style; HTML CSP-safe.
+the role dashboards; the e2e dispatch gate passes. Match repo style; HTML CSP-safe.
 
 ## Phasing (so it lands incrementally)
 

@@ -69,12 +69,12 @@ func TestNonSurfaceMetaOperandIsNotIntercepted(t *testing.T) {
 }
 
 func TestHumanMetaStartHintUsesCompleteArgvOnce(t *testing.T) {
-	out, err := runMetaHelper(t, "relay", metaHumanEnv+"=1")
-	if err != nil || !strings.Contains(out, "start") || !strings.Contains(out, "bashy relay serve\n") {
-		t.Fatalf("relay human meta = %q, %v", out, err)
+	out, err := runMetaHelper(t, "meet", metaHumanEnv+"=1")
+	if err != nil || !strings.Contains(out, "start") || !strings.Contains(out, "bashy meet serve\n") {
+		t.Fatalf("meet human meta = %q, %v", out, err)
 	}
 	if strings.Contains(out, "bashy bashy") {
-		t.Fatalf("relay human meta duplicated launcher: %q", out)
+		t.Fatalf("meet human meta duplicated launcher: %q", out)
 	}
 }
 

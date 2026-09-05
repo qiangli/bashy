@@ -673,7 +673,7 @@ func stewardFallbackRecord(sess *stewardSession, reason string) (*handoff.Record
 				"actually doing. Treat this as a marker that a tenure ended untidily, not as continuity.",
 			sess.Agent, sess.Binding, reason),
 		NextAction: "Run `bashy steward reconcile` first — it reports what the journal can and cannot establish. " +
-			"Then `bashy steward log --degraded` for claims nobody checked, and `bashy board` for work in flight. " +
+			"Then `bashy steward log --degraded` for claims nobody checked, and `bashy steward dashboard` for work in flight. " +
 			"Do not assume the host was idle.",
 		Blockers: []string{"no briefing from the previous steward: this record was written mechanically at stop"},
 	}

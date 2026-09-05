@@ -132,7 +132,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "board", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "relay", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "inbox", "notify", "activity", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "apps",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "inbox", "notify", "activity", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "apps",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
@@ -492,17 +492,6 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
-	case "board":
-		// The read-only steward console: the machine-global union of todo + sprint +
-		// weave (with agents/fleet), rendered as a terminal kanban, --json envelope,
-		// or a self-contained --html dashboard. nil sources = the P1 machine-global set.
-		bcmd := board.NewCommand(nil)
-		bcmd.SetArgs(os.Args[2:])
-		if err := bcmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy board:", err)
-			os.Exit(1)
-		}
-		os.Exit(0)
 	case "steward":
 		// Role namespace (front door for the steward role): bare `steward` and
 		// `steward skill` print the existing steward operating skill; `steward
@@ -668,15 +657,6 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy meet:", err)
-			os.Exit(1)
-		}
-		os.Exit(0)
-	case "relay":
-		wireMeet()
-		cmd := meet.NewRelayCmd()
-		cmd.SetArgs(os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy relay:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
