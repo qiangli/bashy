@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -152,6 +153,71 @@ func TestE2EOutputStage0CanonicalizesBeforeStage1SpillAndDiagnostics(t *testing.
 	if !bytes.Contains(out, []byte("$HOME/from-coreutils")) || !bytes.Contains(errOut, []byte("$HOME/missing")) {
 		t.Fatalf("in-process outputs were not canonicalized: stdout=%q stderr=%q", out, errOut)
 	}
+}
+
+func TestE2EOutputStage01SuppressesOnlyExactTelemetryHintsByDefault(t *testing.T) {
+	bin := bashyBinary(t)
+	fixtureHome := filepath.Join(t.TempDir(), "alice")
+	home := t.TempDir()
+	const secret = "ghp_abcdefghijklmnopqrstuvwxyz0123456789"
+	script := `hint="bashy: telemetry on → $HOME/.agents/otel/spool/spans.jsonl?token=$GITHUB_TOKEN (service=bashy)"; similar="bashy: telemetry on → $HOME/.agents/otel/spool/other.jsonl?token=$GITHUB_TOKEN (service=bashy)"; printf '%s\n%s\nordinary duplicate\n%s\nordinary duplicate\n%s\n' "$hint" "$hint" "$hint" "$similar" >&2`
+	env := isolatedOutputEnv(home,
+		"HOME="+fixtureHome,
+		"GITHUB_TOKEN="+secret,
+		"BASHY_E2E_SELF="+bin,
+		"BASHY_E2E_DUPLICATE_SCRIPT="+script)
+	out, errOut, code := runOutputBinary(t, bin, env, "-c", `BASHY_OUTPUT_REDUCE=off "$BASHY_E2E_SELF" -c "$BASHY_E2E_DUPLICATE_SCRIPT"`)
+	if code != 0 || len(out) != 0 {
+		t.Fatalf("duplicate fixture failed: exit=%d stdout=%d stderr=%d", code, len(out), len(errOut))
+	}
+	if bytes.Contains(errOut, []byte(fixtureHome)) || bytes.Contains(errOut, []byte(secret)) {
+		t.Fatal("private HOME or synthetic secret escaped inline")
+	}
+	if got := bytes.Count(errOut, []byte("bashy: telemetry on → ")); got != 2 {
+		t.Fatalf("inline telemetry hints=%d, want first exact hint plus distinct hint: %q", got, errOut)
+	}
+	if bytes.Count(errOut, []byte("ordinary duplicate")) != 2 ||
+		!bytes.Contains(errOut, []byte("2 duplicate telemetry hints suppressed")) {
+		t.Fatalf("nontelemetry or annotation mismatch: %q", errOut)
+	}
+
+	recovered := recoverE2E(t, bin, home, errOut)
+	if bytes.Contains(recovered, []byte(fixtureHome)) || bytes.Contains(recovered, []byte(secret)) {
+		t.Fatal("private HOME or synthetic secret escaped recovery")
+	}
+	if bytes.Count(recovered, []byte("bashy: telemetry on → ")) != 4 ||
+		bytes.Count(recovered, []byte("ordinary duplicate")) != 2 ||
+		!bytes.Contains(recovered, []byte("$HOME/.agents/otel/spool/")) ||
+		!bytes.Contains(recovered, []byte("[redacted:github-token]")) {
+		t.Fatalf("recovery did not preserve canonicalized/redacted source: %q", recovered)
+	}
+	inlineTokens := e2eTokenCount(t, bin, home, errOut)
+	fullTokens := e2eTokenCount(t, bin, home, recovered)
+	if inlineTokens >= fullTokens {
+		t.Fatalf("real-BPE token reduction absent: inline=%d full=%d", inlineTokens, fullTokens)
+	}
+	t.Logf("Stage 0.1 cl100k_base tokens: inline=%d full=%d", inlineTokens, fullTokens)
+}
+
+func e2eTokenCount(t *testing.T, bin, home string, input []byte) int {
+	t.Helper()
+	cmd := exec.Command(bin, "tokens", "--encoding", "cl100k_base")
+	cmd.Env = isolatedOutputEnv(home)
+	cmd.Stdin = bytes.NewReader(input)
+	var out, errOut bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errOut
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("exact token counter failed: %v (%d diagnostic bytes)", err, errOut.Len())
+	}
+	fields := strings.Fields(out.String())
+	if len(fields) == 0 {
+		t.Fatalf("exact token counter returned no count: %q", out.String())
+	}
+	n, err := strconv.Atoi(fields[0])
+	if err != nil {
+		t.Fatalf("parse exact token count %q: %v", fields[0], err)
+	}
+	return n
 }
 
 func runOutputBinary(t *testing.T, bin string, env []string, args ...string) (stdout, stderr []byte, code int) {

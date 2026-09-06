@@ -303,30 +303,25 @@ func (r *shellOutputReducer) finish(status int) error {
 
 	if failed {
 		// Until a failure-line classifier exists, the only honest implementation
-		// of "failure is never compressed below its evidence" is to keep it all.
-		// It still passes through the same redaction gate as successful output.
-		if _, err := r.outDst.Write(r.prepare(out)); err != nil {
+		// of "failure is never compressed below its evidence" is to keep it all,
+		// except for the closed Stage 0.1 telemetry registry.
+		if err := r.emit(r.outDst, argv, out, false, true); err != nil {
 			return err
 		}
-		_, err := r.errDst.Write(r.prepare(errOut))
+		return r.emit(r.errDst, argv, errOut, false, true)
+	}
+	if err := r.emit(r.outDst, argv, out, verdict, !r.stage1); err != nil {
 		return err
 	}
-	if err := r.emit(r.outDst, argv, out, verdict); err != nil {
-		return err
-	}
-	return r.emit(r.errDst, argv, errOut, verdict)
+	return r.emit(r.errDst, argv, errOut, verdict, !r.stage1)
 }
 
-func (r *shellOutputReducer) emit(dst io.Writer, argv []string, full []byte, verdict bool) error {
+func (r *shellOutputReducer) emit(dst io.Writer, argv []string, full []byte, verdict, telemetryOnly bool) error {
 	if len(full) == 0 {
 		return nil
 	}
 	body := r.prepare(full)
-	if !r.stage1 {
-		_, err := dst.Write(body)
-		return err
-	}
-	if verdict {
+	if verdict && !telemetryOnly {
 		digest, err := r.store.Put(body)
 		if err != nil {
 			// Spill-before-emit means a failed spill may never produce a lossy
@@ -341,7 +336,7 @@ func (r *shellOutputReducer) emit(dst io.Writer, argv []string, full []byte, ver
 		return err
 	}
 
-	res, err := reduce.Reduce(r.store, body, reduce.Config{})
+	res, err := reduce.Reduce(r.store, body, reduce.Config{TelemetryHintsOnly: telemetryOnly})
 	if err != nil {
 		_, writeErr := dst.Write(body)
 		if writeErr != nil {
@@ -353,16 +348,13 @@ func (r *shellOutputReducer) emit(dst io.Writer, argv []string, full []byte, ver
 	return err
 }
 
-// prepare is the shared Stage 0 → Stage 1 boundary.  Stage 0 is deliberately
-// always active in bashy: canonicalize before redaction and before a reducer
-// can persist output.  Stage 1 remains explicit opt-in, so ordinary output
-// receives no other transformation.
+// prepare is the shared Stage 0 → Stage 0.1 → Stage 1 boundary. Canonicalize
+// before redaction and before a reducer can compare or persist output. Stage 1
+// remains explicit opt-in; the redaction safety gate and the closed telemetry
+// deduper remain active without enabling arbitrary head elision.
 func (r *shellOutputReducer) prepare(full []byte) []byte {
 	body := reduce.CanonicalizeHome(full, r.home)
-	if r.stage1 {
-		return r.redactor.Redact(body)
-	}
-	return body
+	return r.redactor.Redact(body)
 }
 
 func verdictMarker(argv []string, body []byte, digest, handle string) string {
