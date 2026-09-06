@@ -36,6 +36,10 @@ func isolateOutputReduction(t *testing.T) {
 	*dryRunFlag = false
 	t.Setenv("BASHY_HOME", t.TempDir())
 	t.Setenv("BASHY_AGENTIC", "1")
+	// These tests exercise output shaping, not the process-lifetime execution
+	// history writer. Leaving it enabled keeps its JSONL descriptor open until
+	// process exit, which prevents Windows from removing BASHY_HOME at cleanup.
+	t.Setenv("BASHY_EXECHIST", "off")
 	t.Setenv("BASHY_OUTPUT_REDUCE", "")
 	t.Setenv("VSC_PROFILE", "")
 }
