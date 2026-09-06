@@ -72,7 +72,6 @@ func NewSessionRunner(io SessionIO) (*interp.Runner, error) {
 		interp.Interactive(false),
 		interp.CommandString(true),
 		interp.StandardInput(false),
-		interp.StdIO(io.Stdin, io.Stdout, io.Stderr),
 		interp.Env(env),
 		interp.WithBashCompatErrors(true),
 		interp.PromptExpand(func(s string) string {
@@ -86,7 +85,7 @@ func NewSessionRunner(io SessionIO) (*interp.Runner, error) {
 		opts = append(opts, interp.Params("-o", "posix"))
 	}
 	// Same in-process coreutils + code-intel userland the cold path gets.
-	opts = AgentOSWireExec(opts, startupPosix)
+	opts = AgentOSWireExec(opts, startupPosix, io.Env, io.Stdin, io.Stdout, io.Stderr)
 	if len(SuppressedForkBuiltins) > 0 {
 		opts = append(opts, interp.WithDisabledBuiltins(SuppressedForkBuiltins...))
 	}

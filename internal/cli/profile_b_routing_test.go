@@ -29,9 +29,9 @@ type profileBExecProbe struct {
 	calls        [][]string
 }
 
-func (p *profileBExecProbe) wire(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
+func (p *profileBExecProbe) wire(opts []interp.RunnerOption, posix bool, _ []string, in io.Reader, out, errOut io.Writer) []interp.RunnerOption {
 	p.startupPosix = append(p.startupPosix, posix)
-	return append(opts, interp.ExecHandlers(func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
+	return append(opts, interp.StdIO(in, out, errOut), interp.ExecHandlers(func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 		return func(ctx context.Context, args []string) error {
 			p.calls = append(p.calls, append([]string(nil), args...))
 			return fmt.Errorf("Profile B command escaped shell routing: %w", interp.NewExitStatus(125))

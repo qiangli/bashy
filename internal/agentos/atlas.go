@@ -91,6 +91,14 @@ func atlasCatalog(builtins, core, verbs, hidden []string) []atlasRecord {
 // in coreutils, so they carry a real classification instead of falling into the
 // deliberately-empty unknown branch below.
 var bashyOwnedVerbAtlas = map[string]atlas.Entry{
+	"out": {
+		Stage: atlas.StageCross, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
+		Caps: []string{atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
+	},
+	"full": {
+		Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierUserland,
+		Caps: []string{atlas.CapSpawnsProcesses}, Effects: []string{atlas.EffExec},
+	},
 	// dhnt reads pipeline/run/binding JSON and writes JSON or Workflow YAML to
 	// stdout. No network, no mutation — the local-first contract/compiler, not
 	// a transport.

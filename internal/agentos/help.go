@@ -15,10 +15,14 @@ func Usage() string {
 Bashy AgentOS extensions:
 	--bashpp, --bash++	enable Bash++ (--no-bashpp disables it)
 	--dryrun, --dry-run	preview external commands and destructive file ops
+	--reduce		reduce oversized command output with a recovery handle
+	--no-elide, --full	keep complete command output
 	BASHY_AGENTIC=1		emit agent-readable JSON-lines for supported features
+	BASHY_OUTPUT_REDUCE=on	enable output reduction (also true, 1, yes)
 
 Bashy front-door help:
 	bashy help dryrun		show dry-run examples and JSON manifest fields
+	bashy help output		show Stage 1 output-reduction activation and recovery
 	bashy context --json		show exact bashy path and agent capabilities
 	bashy commands --agentic	show agent-oriented command discovery
 	bashy check --agent --script X	validate script syntax and command closure as JSON
@@ -43,12 +47,15 @@ func dispatchHelp(args []string) int {
 	case "dryrun", "dry-run", "--dryrun", "--dry-run":
 		printDryRunHelp(os.Stdout)
 		return 0
+	case "output", "reduce", "reduction":
+		printOutputReductionHelp(os.Stdout)
+		return 0
 	case "commands":
 		printCommandsHelp(os.Stdout)
 		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "bashy help: unknown topic %q\n", args[0])
-		fmt.Fprintln(os.Stderr, "known topics: dryrun, commands")
+		fmt.Fprintln(os.Stderr, "known topics: dryrun, output, commands")
 		return 2
 	}
 }
@@ -58,6 +65,7 @@ func printGeneralHelp(w io.Writer) {
 
 Topics:
   dryrun    preview commands and destructive file operations without effects
+  output    opt in to bounded, recoverable command output
   commands  discover bashy command surfaces
 
 Common agent entry points:
@@ -74,6 +82,27 @@ Common agent entry points:
   bashy self fetch
   bashy git status
   bashy fetch --json https://example.com
+`)
+}
+
+func printOutputReductionHelp(w io.Writer) {
+	fmt.Fprint(w, `usage:
+  bashy --reduce -c 'command'
+  BASHY_OUTPUT_REDUCE=on bashy -c 'command'
+  BASHY_OUTPUT_REDUCE=profile:<name> bashy -c 'command'
+  bashy out HANDLE
+  bashy full -- command [args...]
+
+Stage 1 activation:
+  Reduction is explicit opt-in only. BASHY_AGENTIC by itself does not enable it.
+  Accepted environment opt-ins are on, true, 1, yes, or the non-empty scoped
+  form profile:<name>. A reduced marker includes the exact "bashy out HANDLE"
+  recovery command; recovered bytes are complete and redacted before storage.
+
+Rollback precedence:
+  --no-elide, --full, BASHY_OUTPUT_REDUCE=off, and "bashy full -- ..." keep
+  complete output. The off value wins even when --reduce is also present.
+  POSIX certification runs declared with VSC_PROFILE=cert are always unreduced.
 `)
 }
 

@@ -38,6 +38,7 @@ func TestBinaryImportGraphsIsolateGfy(t *testing.T) {
 	// drop-in that quietly writes a history file — which is both a surprise and
 	// a privacy surface the drop-in never promised.
 	for _, pkg := range []string{
+		"qiangli/coreutils/pkg/reduce",
 		"qiangli/coreutils/pkg/execlog",
 		"qiangli/coreutils/pkg/spacegraph",
 	} {
@@ -54,6 +55,7 @@ func TestBinaryImportGraphsIsolateGfy(t *testing.T) {
 		t.Error("cmd/bashy should import cmds/graph — the graph verbs must be registered")
 	}
 	for _, pkg := range []string{
+		"qiangli/coreutils/pkg/reduce",
 		"qiangli/coreutils/pkg/execlog",
 		"qiangli/coreutils/pkg/spacegraph",
 	} {

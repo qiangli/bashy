@@ -140,7 +140,7 @@ var (
 	// Direct-only front doors are callable as `bashy NAME` and belong in the
 	// command catalog, but must not become bare shell shims. In particular,
 	// bare `ping` must continue to resolve to the platform command.
-	directFrontDoorVerbs = []string{"mb", "messages", "ping"}
+	directFrontDoorVerbs = []string{"mb", "messages", "ping", "out", "full"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "git-scm", "curl"}
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "invoke", "verify"}
 )
@@ -384,6 +384,10 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
+	case "out":
+		os.Exit(dispatchOut(os.Args[2:]))
+	case "full":
+		os.Exit(dispatchFull(os.Args[2:]))
 	case "weave":
 		cmd := weave.NewWeaveCmd()
 		cmd.SetArgs(os.Args[2:])
@@ -1598,7 +1602,7 @@ func runFleet(noun string, args []string) {
 // core via cli.AgentOSWireExec. Shell builtins (echo, pwd, test, …) are handled
 // by the interpreter before the ExecHandler runs, so they are never shadowed —
 // only external-command names (ls, cat, grep, ast, …) are intercepted.
-func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
+func WireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Reader, stdout, stderr io.Writer) []interp.RunnerOption {
 	// --dry-run (bashy-only, inert under --posix). The handlers are installed
 	// whenever NOT in posix mode (they no-op when dry-run is off) so the runtime
 	// `set -o dryrun` toggle works even without the flag. EnableDryRunOption
@@ -1611,21 +1615,39 @@ func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 	opts = append(opts, interp.WithBgPidCallback(func(pid int) {
 		_ = jobs.DefaultRegistry().Record(pid, "(detached)")
 	}))
+	initialDryRun := dryRunRequested()
+	configuredStdout := stdout
+	if !posix && initialDryRun && agentModeForEnv(env) {
+		// Agent dry-run emits its manifest outside the runner. Suppress script
+		// stdout first, then let the reducer wrap that chosen sink below.
+		configuredStdout = io.Discard
+	}
+	var output *shellOutputReducer
+	var err error
+	// Stage 0 owns the model-visible terminal streams for every bashy run. It
+	// canonicalizes HOME before any Stage 1 redaction/spill work, while leaving
+	// Stage 1's reduction policy explicit opt-in inside the reducer.
+	output, err = newShellOutputReducer(configuredStdout, stderr, env)
+	if err == nil {
+		configuredStdout, stderr = output.stdout(), output.stderr()
+	}
+	// Exactly one StdIO option owns the final composed sinks. This is above the
+	// POSIX return so `bashy --posix` remains reducible when explicitly enabled.
+	opts = append(opts, interp.StdIO(stdin, configuredStdout, stderr))
+	outputMW := func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc { return next }
+	if output != nil {
+		outputMW = output.middleware
+	}
 	if posix {
-		return append(opts, interp.ExecHandlers(coreutilsshell.Handler()))
+		return append(opts, interp.ExecHandlers(outputMW, coreutilsshell.Handler()))
 	}
 	// R0-pre: file a presence card for the agent this shell runs under, so an
 	// agent launched outside `bashy chat` stops being invisible to the address
 	// book. Best-effort, silent, and never a claim — see shellsession.go.
 	registerShellSession()
-	initial := dryRunRequested()
-	if initial && weavecli.IsAgent() {
-		// Agent mode emits a clean JSON manifest on stdout; suppress the
-		// script's own stdout so only the manifest comes through.
-		opts = append(opts, interp.StdIO(os.Stdin, io.Discard, os.Stderr))
-	}
+	initial := initialDryRun
 	opts = append(opts, interp.EnableDryRunOption(initial))
-	r := newReporter(os.Stdout)
+	r := newReporter(stdout)
 	// OpenHandler catches `>` truncations (records, never writes); the exec
 	// handler prints+skips external commands and reports rm destructions. Both
 	// no-op when HandlerContext.DryRun() is false.
@@ -1696,7 +1718,7 @@ func WireExec(opts []interp.RunnerOption, posix bool) []interp.RunnerOption {
 	if weaveGuardEnabled() {
 		mws = append(mws, weaveGuardHandler)
 	}
-	mws = append(mws, dryRunHandler(r), coreutilsshell.Handler())
+	mws = append(mws, outputMW, dryRunHandler(r), coreutilsshell.Handler())
 	return append(opts, interp.ExecHandlers(mws...))
 }
 

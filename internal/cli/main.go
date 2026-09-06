@@ -489,7 +489,9 @@ var (
 	AgentOSShutdown = func() {}
 	// posix is passed so AgentOS extensions (e.g. --dry-run) stay inert under
 	// --posix and absent from the pure bash drop-in.
-	AgentOSWireExec func([]interp.RunnerOption, bool) []interp.RunnerOption = func(o []interp.RunnerOption, _ bool) []interp.RunnerOption { return o }
+	AgentOSWireExec func([]interp.RunnerOption, bool, []string, io.Reader, io.Writer, io.Writer) []interp.RunnerOption = func(o []interp.RunnerOption, _ bool, _ []string, in io.Reader, out, err io.Writer) []interp.RunnerOption {
+		return append(o, interp.StdIO(in, out, err))
+	}
 
 	// AgentOSPreamble returns shell source defining default functions/aliases
 	// (e.g. `docker() { … bashy podman … }`) registered BEFORE user startup files
@@ -681,7 +683,6 @@ func newRunner() (*interp.Runner, error) {
 		// supplies it. The `-c` and script paths set their own $0 (the
 		// command name operand or the script path) via run()'s name arg.
 		stdinArgv0Option(),
-		interp.StdIO(os.Stdin, os.Stdout, os.Stderr),
 		interp.Env(env),
 		interp.WithBashCompatErrors(true),
 		// The cold CLI owns its process, so `trap - SIGNAL` must restore the
@@ -776,7 +777,7 @@ func newRunner() (*interp.Runner, error) {
 	// For the AgentOS shell `bashy`, inject the coreutils pure-Go userland +
 	// the code-intel verbs as in-process commands. No-op for the pure `bash` drop-in
 	// (the default AgentOSWireExec).
-	opts = AgentOSWireExec(opts, startupPosix)
+	opts = AgentOSWireExec(opts, startupPosix, os.Environ(), os.Stdin, os.Stdout, os.Stderr)
 	// Strict drop-in: disable the fork's extra builtins (nohup/setsid) so the
 	// pure `bash` binary resolves them to the real external commands like bash
 	// 5.3. The AgentOS `bashy` shell clears SuppressedForkBuiltins to keep them.
