@@ -6,7 +6,6 @@ seq: 216
 status: todo
 priority: p0
 created: 2026-09-05T17:08:25.915002Z
-sprint: 126
 ---
 
 IN SCOPE as a context defect, not a cosmetic one: a response the operator cannot read is unusable context in their only remote surface. NOT a redesign and NOT new UI — fix rendering defects on the pages that already exist, with agent responses in the /meet/ Meet and Chat tabs as the named example.

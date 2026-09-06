@@ -6,7 +6,6 @@ seq: 217
 status: todo
 priority: p2
 created: 2026-09-05T17:51:03.209399Z
-sprint: 126
 ---
 
 FOUND while mining this host OTel spool for sprint facts (2026-09-05). Not MVP for sprint 126 — filed, not fixed.

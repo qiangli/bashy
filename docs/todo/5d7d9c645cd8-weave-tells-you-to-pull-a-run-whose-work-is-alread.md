@@ -6,7 +6,6 @@ seq: 223
 status: todo
 priority: p1
 created: 2026-09-06T00:17:45.257281Z
-sprint: 126
 ---
 
 FOUND while acting on the first `sprint tick` worksheet, which reported three runs

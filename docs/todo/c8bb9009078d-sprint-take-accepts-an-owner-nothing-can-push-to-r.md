@@ -6,7 +6,6 @@ seq: 220
 status: todo
 priority: p2
 created: 2026-09-05T19:08:32.159129Z
-sprint: 126
 ---
 
 FOUND 2026-09-05 validating the sprint operating modes. This is a DOC-vs-CODE inconsistency to DECIDE, not obviously a code bug.
