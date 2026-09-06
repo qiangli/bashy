@@ -3,11 +3,12 @@ id: 4e97d71c7e00
 kind: task
 title: 'PREREQUISITE PROBE: prove what request-progress reporting already reaches the operator, and where it stops'
 seq: 224
-status: assigned
+status: done
 priority: p0
 created: 2026-09-06T00:38:00.281928Z
-assignee: claude-opus5-webconsole
+assignee: codex-gpt5.6-sol
 sprint: 126
+closed: 2026-09-06T03:44:54.748374Z
 ---
 
 BLOCKS #216 (M3). M3 says "the specific symptoms are operator OBSERVATIONS and are not
@@ -91,3 +92,14 @@ CONSTRAINT: pkg/meet JobRef doc states "There is deliberately no second progress
 channel: a job that reported itself somewhere else would be a second truth about what
 happened in the room." Any fix extends the EXISTING live channel. No new store, no
 new transport, no second channel.
+
+MVP RESULT 2026-09-05: PASS, with no production M3 defect reproduced. The
+command-synergy gate passes 22/22 with a freshly built Bashy binary. The real
+Meet browser suite passes 29/29, including human send, working indication,
+bounded cumulative progress, final response, failure visibility, and two-agent
+Chat isolation. Console verifydom passes independently. G1 (room counters) and
+G2 (job-status read) are confirmed but deferred feature expansions; the MVP
+uses the existing Chat live/transcript path. G4 is confirmed: delivery state is
+rendered separately from execution progress. Evidence and disposition are
+recorded in coreutils `docs/request-progress-reporting.md` at commits 092ee8a6
+and 3c2d2d02.
