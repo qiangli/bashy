@@ -201,7 +201,12 @@ func snapshotMailbox(spec mailboxSpec) ([]mailboxItem, mailboxState, error) {
 		return nil, state, err
 	}
 	for _, r := range rooms {
-		if !r.Board || !stringMember(r.Members, spec.Address) {
+		// A seat is the Meet subscription for both live delivery and durable
+		// history. Sprint conductor rooms are chaired (not boards), so filtering
+		// on r.Board made their records disappear once the live manager advanced
+		// its native cursor. Membership plus HistoryRecords' recipient filtering
+		// keeps unrelated rooms and messages directed to another seat private.
+		if !stringMember(r.Members, spec.Address) {
 			continue
 		}
 		// Read full history as the mailbox principal. HistoryRecords applies the

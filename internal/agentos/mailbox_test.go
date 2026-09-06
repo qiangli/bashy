@@ -139,6 +139,104 @@ func TestMailboxMeetHistorySurvivesNativeCursorWithStableMarks(t *testing.T) {
 	}
 }
 
+func TestAgentMailboxKeepsDirectedChairedRoomHistoryAfterManagerConsumption(t *testing.T) {
+	isolateUnifiedInbox(t)
+	t.Setenv("BASHY_MAILBOX_DIR", t.TempDir())
+	reader := inboxTestReader
+	peer := "mailbox-history-peer"
+	registerTestInboxAgent(t, os.Getenv("BASHY_FLEET_DIR"), peer)
+	spec := mailboxSpec{Key: "agent:" + reader, Address: reader, Kind: "agent"}
+
+	conductor, err := meet.Create(meet.CreateOptions{
+		Topic: "sprint 127 conductor", Participants: []string{reader, peer},
+		NoSecretary: true, Human: "operator",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conductor.Board {
+		t.Fatal("fixture opened a board; a sprint conductor room is chaired")
+	}
+	const body = "steer sprint 127: rerun the tool-managed handoff"
+	for _, event := range []meet.Event{
+		{Speaker: "operator", To: reader, Kind: "human", Text: body},
+		{Speaker: "operator", To: peer, Kind: "human", Text: "private for peer"},
+		{Speaker: reader, To: "operator", Kind: "status", Text: "manager reply"},
+	} {
+		if err = meet.AppendEvent(conductor.ID, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	unrelated, err := meet.Create(meet.CreateOptions{
+		Topic: "another sprint", Participants: []string{peer},
+		NoSecretary: true, Human: "operator",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = meet.AppendEvent(unrelated.ID, meet.Event{Speaker: "operator", Kind: "human", Text: "unrelated room"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Model the resident manager consuming its live unified inbox first.
+	batch, err := snapshotUnifiedInbox(reader, 0, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundLive := false
+	for _, event := range batch.events {
+		if event.Room == conductor.ID && event.Body == body {
+			foundLive = true
+		}
+	}
+	if !foundLive {
+		t.Fatalf("directed conductor message missing from live inbox: %+v", batch.events)
+	}
+	for _, ack := range batch.acks {
+		if err = ack(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := meet.SeenSeq(conductor.ID, reader); got != 3 {
+		t.Fatalf("manager consumption advanced conductor cursor to %d, want 3", got)
+	}
+
+	items, _, err := snapshotMailbox(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var foundHistory bool
+	for _, item := range items {
+		if item.Source != "meet" {
+			continue
+		}
+		if item.Room == unrelated.ID || item.Body == "unrelated room" || item.Body == "private for peer" || item.Body == "manager reply" {
+			t.Fatalf("mailbox history exposed an unrelated/private record: %+v", item)
+		}
+		if item.Room == conductor.ID && item.Body == body {
+			foundHistory = true
+		}
+	}
+	if !foundHistory {
+		t.Fatalf("consumed conductor message missing from durable mailbox: %+v", items)
+	}
+
+	// Exercise the operator-facing query used by the sprint E2E. The manager is
+	// a registered fleet identity and may only open its own mailbox.
+	t.Setenv("BASHY_PRINCIPAL", "dhnt:agent/"+reader)
+	list := newMailboxListCmd(false)
+	var out bytes.Buffer
+	list.SetOut(&out)
+	list.SetErr(&bytes.Buffer{})
+	list.SetArgs([]string{"--all", "--as", reader, "--source", "meet", "--search", body})
+	if err = list.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), body) {
+		t.Fatalf("filtered durable mailbox omitted exact conductor message:\n%s", out.String())
+	}
+}
+
 func meetMailboxIDs(items []mailboxItem) []string {
 	var ids []string
 	for _, item := range items {
