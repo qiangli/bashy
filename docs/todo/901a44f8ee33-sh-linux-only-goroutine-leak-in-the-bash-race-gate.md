@@ -3,10 +3,11 @@ id: 901a44f8ee33
 kind: task
 title: 'sh: linux-only goroutine leak in the Bash++ race gate''s focused run'
 seq: 218
-status: todo
+status: done
 priority: p1
 created: 2026-09-05T18:42:04.052785Z
 sprint: 115
+closed: 2026-09-06T14:49:55.001351Z
 ---
 
 FOUND 2026-09-05 by making the Bash++ race gate platform-aware. Real defect, NOT introduced by that change.
