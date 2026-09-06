@@ -172,15 +172,24 @@ func TestCarrierCertificationShape(t *testing.T) {
 }
 
 func TestCarrierHelperPreservesIgnoredTerm(t *testing.T) {
+	restoreTerm := func() {
+		// Reset leaves a kernel-level SIG_IGN in place when the signal was
+		// ignored. Notify+Stop installs and then removes the Go handler, which
+		// restores SIG_DFL for subsequently exec'd children and runners.
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGTERM)
+		signal.Stop(ch)
+	}
+	defer restoreTerm()
 	signal.Ignore(syscall.SIGTERM)
 	cp, err := (execJobCarrier{}).StartCarrier(context.Background())
 	if err != nil {
-		signal.Reset(syscall.SIGTERM)
+		restoreTerm()
 		t.Fatal(err)
 	}
 	// Restore the test process immediately. The helper must retain the ignored
 	// disposition it inherited across exec.
-	signal.Reset(syscall.SIGTERM)
+	restoreTerm()
 	if err := syscall.Kill(cp.Pid(), syscall.SIGTERM); err != nil {
 		cp.Terminate()
 		_ = cp.Wait()

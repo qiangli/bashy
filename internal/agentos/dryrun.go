@@ -76,7 +76,11 @@ type dryRunReporter struct {
 }
 
 func newReporter(out io.Writer) *dryRunReporter {
-	return &dryRunReporter{agent: weavecli.IsAgent(), out: out,
+	return newReporterMode(out, weavecli.IsAgent())
+}
+
+func newReporterMode(out io.Writer, agent bool) *dryRunReporter {
+	return &dryRunReporter{agent: agent, out: out,
 		seenCmd: map[string]bool{}, seenDest: map[string]bool{}}
 }
 

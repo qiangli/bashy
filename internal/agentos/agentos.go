@@ -1603,6 +1603,18 @@ func runFleet(noun string, args []string) {
 // by the interpreter before the ExecHandler runs, so they are never shadowed —
 // only external-command names (ls, cat, grep, ast, …) are intercepted.
 func WireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Reader, stdout, stderr io.Writer) []interp.RunnerOption {
+	return wireExec(opts, posix, env, stdin, stdout, stderr, dryRunRequested())
+}
+
+// WireSessionExec is WireExec with request-local initial dry-run state. It is
+// the embedding seam: unlike WireExec, it never reads parsed CLI flags.
+func WireSessionExec(initialDryRun bool) func([]interp.RunnerOption, bool, []string, io.Reader, io.Writer, io.Writer) []interp.RunnerOption {
+	return func(opts []interp.RunnerOption, posix bool, env []string, stdin io.Reader, stdout, stderr io.Writer) []interp.RunnerOption {
+		return wireExec(opts, posix, env, stdin, stdout, stderr, initialDryRun)
+	}
+}
+
+func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Reader, stdout, stderr io.Writer, initialDryRun bool) []interp.RunnerOption {
 	// --dry-run (bashy-only, inert under --posix). The handlers are installed
 	// whenever NOT in posix mode (they no-op when dry-run is off) so the runtime
 	// `set -o dryrun` toggle works even without the flag. EnableDryRunOption
@@ -1615,7 +1627,6 @@ func WireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	opts = append(opts, interp.WithBgPidCallback(func(pid int) {
 		_ = jobs.DefaultRegistry().Record(pid, "(detached)")
 	}))
-	initialDryRun := dryRunRequested()
 	configuredStdout := stdout
 	if !posix && initialDryRun && agentModeForEnv(env) {
 		// Agent dry-run emits its manifest outside the runner. Suppress script
@@ -1647,7 +1658,7 @@ func WireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	registerShellSession()
 	initial := initialDryRun
 	opts = append(opts, interp.EnableDryRunOption(initial))
-	r := newReporter(stdout)
+	r := newReporterMode(stdout, agentModeForEnv(env))
 	// OpenHandler catches `>` truncations (records, never writes); the exec
 	// handler prints+skips external commands and reports rm destructions. Both
 	// no-op when HandlerContext.DryRun() is false.

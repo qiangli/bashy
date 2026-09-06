@@ -3,7 +3,7 @@ id: 1d83569387a0
 kind: task
 title: Export embeddable Bashy runner API
 seq: 31
-status: doing
+status: done
 priority: p0
 created: 2026-09-02T20:26:06.168491Z
 sprint: 106

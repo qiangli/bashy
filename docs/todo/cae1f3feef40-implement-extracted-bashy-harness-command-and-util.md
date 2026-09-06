@@ -3,7 +3,7 @@ id: cae1f3feef40
 kind: task
 title: Implement extracted Bashy harness command and utility kit
 seq: 32
-status: todo
+status: done
 priority: p0
 created: 2026-09-02T20:52:35.612251Z
 sprint: 106
