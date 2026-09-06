@@ -3,9 +3,10 @@ id: 1ca6d63e1c43
 kind: task
 title: 'CI: bash-5.3 ratchet red — declare the stdin-script case now that interp requires it'
 seq: 12
-status: todo
+status: done
 priority: p0
 created: 2026-09-01T13:30:44.765054Z
 assignee: ci-repair
 sprint: 101
+closed: 2026-09-06T08:12:15.008742Z
 ---
