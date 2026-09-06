@@ -3,10 +3,11 @@ id: 5eacb678ffdb
 kind: task
 title: dag build omits the native signal launcher, so dag install ships the payload as bashy
 seq: 243
-status: todo
+status: done
 priority: p1
 created: 2026-09-06T11:24:04.827053Z
 sprint: 115
+closed: 2026-09-06T14:02:05.02208Z
 ---
 
 DEFECT: `bashy dag build` and `make build` disagree on linux/darwin, and the
