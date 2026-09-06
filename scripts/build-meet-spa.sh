@@ -20,6 +20,20 @@ if [ ! -f "$web_dir/package.json" ] || [ ! -f "$web_dir/pnpm-lock.yaml" ]; then
 	exit 1
 fi
 
+# BASHY BUILDS BASHY. The tiers below are ordered so a host with no system Node
+# still produces a COMPLETE binary, because the third tier provisions its own.
+#
+# The failure this exists to prevent: on a machine with no node/pnpm the optional
+# mode printed one line and produced a UI-LESS binary that is otherwise
+# indistinguishable from a good one — same name, same verbs, 1 MB smaller. A
+# remote host built exactly that and it was caught only by diffing sizes against
+# a local build. A silent downgrade of the product is worse than a failed build.
+#
+#   direct   a system pnpm on PATH
+#   corepack a system node's corepack (honours package.json packageManager)
+#   bashy    `bashy pnpm` — binmgr provisions a pinned Node tree and runs corepack
+#            out of it, so no system Node is required at all. This is the
+#            self-hosting tier: bashy provisioning the toolchain that builds bashy.
 pnpm_kind=
 if command -v node >/dev/null 2>&1; then
 	if command -v pnpm >/dev/null 2>&1; then
@@ -30,21 +44,42 @@ if command -v node >/dev/null 2>&1; then
 	fi
 fi
 
+# Third tier. Probed INSIDE $web_dir because corepack resolves the pnpm named by
+# that directory's package.json `packageManager` field — probing from elsewhere
+# resolves LATEST pnpm instead, which has a different Node floor and gives a
+# false verdict either way. (Measured: the same probe passed from the project dir
+# and failed from $HOME.)
+bashy_bin=${BASHY_BIN:-}
+if [ -z "$pnpm_kind" ]; then
+	if [ -z "$bashy_bin" ] && command -v bashy >/dev/null 2>&1; then
+		bashy_bin=$(command -v bashy)
+	fi
+	if [ -n "$bashy_bin" ] && [ -x "$bashy_bin" ]; then
+		if (cd "$web_dir" && "$bashy_bin" pnpm --version >/dev/null 2>&1); then
+			pnpm_kind=bashy
+			echo "meet SPA: using bashy-provisioned pnpm ($bashy_bin) — no system Node needed" >&2
+		else
+			echo "meet SPA: $bashy_bin pnpm is present but not usable here; run '$bashy_bin pnpm --version' in $web_dir to see why" >&2
+		fi
+	fi
+fi
+
 if [ -z "$pnpm_kind" ]; then
 	if [ "$mode" = required ]; then
-		echo "meet SPA: release build requires node and pnpm (or corepack), but they are unavailable" >&2
+		echo "meet SPA: release build requires node and pnpm (or corepack, or a working 'bashy pnpm'), but none is available" >&2
 		exit 1
 	fi
-	echo "meet SPA: node/pnpm unavailable; building the honest no-UI bashy binary" >&2
+	echo "meet SPA: node/pnpm unavailable AND no usable 'bashy pnpm'; building the no-UI bashy binary" >&2
+	echo "meet SPA: THE RESULT HAS NO WEB CONSOLE UI. Install node/pnpm, or put a working bashy on PATH (or set BASHY_BIN), then rebuild." >&2
 	exit 0
 fi
 
 run_pnpm() {
-	if [ "$pnpm_kind" = direct ]; then
-		pnpm "$@"
-	else
-		corepack pnpm "$@"
-	fi
+	case "$pnpm_kind" in
+	direct) pnpm "$@" ;;
+	bashy) "$bashy_bin" pnpm "$@" ;;
+	*) corepack pnpm "$@" ;;
+	esac
 }
 
 echo "meet SPA: installing locked dependencies and building $web_dir/dist" >&2
