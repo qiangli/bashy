@@ -1,7 +1,7 @@
 ---
 id: 6e38f62e9c1d
 kind: task
-title: 'ITERATION LOOP: run a transfer round, record it, fix one defect — repeat until the operator calls it done'
+title: 'P0: Tool-managed takeover iteration loop — test, record, fix, repeat'
 seq: 225
 status: todo
 priority: p0
@@ -12,6 +12,11 @@ sprint: 127
 THE STANDING STORY FOR SPRINT #127. It does not close on a checklist. It closes when
 the operator says the transfer process is good enough, or calls it quit. Until then it
 stays open and accumulates ROUNDS.
+
+SPRINT 127 SCOPE: each round may produce tests and fixes for confirmed defects in
+already-supported behavior. If the first correction reveals a genuinely new capability,
+record it as a deferred feature story and continue the next round; do not implement the
+feature in this sprint.
 
 WHY A STANDING STORY RATHER THAN N STORIES. Nobody knows how many rounds this takes,
 and filing a fixed list would either run out early (and read as done when it is not)

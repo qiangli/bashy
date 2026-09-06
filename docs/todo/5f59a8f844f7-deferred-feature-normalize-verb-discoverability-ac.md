@@ -1,15 +1,18 @@
 ---
 id: 5f59a8f844f7
 kind: task
-title: 'P1: verb asymmetry across sprint/weave/todo makes every command a guess'
+title: 'DEFERRED FEATURE: normalize verb discoverability across sprint, weave, and todo'
 seq: 229
-status: todo
-priority: p1
+status: blocked
+priority: p3
 created: 2026-09-06T01:03:37.197207Z
-sprint: 127
 ---
 
 MEASURED matrix across the three sibling nouns:
+
+DEFERRED BY OPERATOR FOR SPRINT 127: this primarily proposes aliases, named refusal
+behavior, or other command-surface capability. Preserve the evidence, but do not staff or
+implement it while the sprint is restricted to tests and confirmed bug fixes.
 
     noun     show  comment  status  list
     sprint    Y      Y        Y      N

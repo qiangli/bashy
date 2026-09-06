@@ -3,11 +3,12 @@ id: 5a6747e44263
 kind: task
 title: 'Bug: sprint instruct races managed-session control socket readiness'
 seq: 235
-status: assigned
+status: done
 priority: p0
 created: 2026-09-06T03:17:42.788144Z
 assignee: codex-gpt5.6-sol
 sprint: 127
+closed: 2026-09-06T03:42:59.963048Z
 ---
 
 Repeated 3/3 in bash script/e2e-sprint-modes.sh at M2b: immediately after sprint start --managed, sprint instruct fails connecting to the manager control socket with connection refused. The detached manager process still exists and later reports reachable, so startup returns before its control socket is ready. Fix the supported managed-session path without adding a new feature; add a deterministic regression test covering immediate instruct after start. Acceptance: M2b passes repeatedly, focused pkg/weave/pkg/foreman tests pass, and scripts/crossvet.sh passes.

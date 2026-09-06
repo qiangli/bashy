@@ -1,7 +1,7 @@
 ---
 id: 504e402195df
 kind: task
-title: 'P1: a cross-repo sprint has no gate cwd, so --gate silently means ''in the tracked repo'''
+title: 'P1: report the actual cwd when a cross-repo sprint gate fails'
 seq: 233
 status: todo
 priority: p1
@@ -10,6 +10,10 @@ sprint: 127
 ---
 
 FOUND while stopping sprint 127 — the gate refused three times before I understood why.
+
+SPRINT 127 SCOPE: fix the misleading failure by reporting the actual gate cwd and
+documenting the explicit `cd` workaround. `--gate-cwd`, named-repo resolution, or any
+other new gate capability is a deferred feature and is not part of this story.
 
 `sprint stop 127 --gate "go test ./pkg/weave/ && scripts/crossvet.sh"` fails with
 "stat /Users/qiangli/projects/poc/dhnt/bashy/pkg/weave: directory not found". The gate runs

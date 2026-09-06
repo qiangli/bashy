@@ -1,16 +1,19 @@
 ---
 id: d744ac1a4552
 kind: task
-title: 'P2: the story id the board prints is shorter than the commit hook accepts'
+title: 'P1: make displayed story IDs valid commit-provenance input'
 seq: 231
 status: todo
-priority: p2
+priority: p1
 created: 2026-09-06T01:03:37.24574Z
 sprint: 127
 ---
 
 MEASURED: `todo list` prints an 8-character id (e.g. 39748beb). The commit-msg hook
 requires the full 12 and refuses the commit:
+
+SPRINT 127 SCOPE: repair the contradiction between two existing surfaces and add a
+regression test. Do not add a new trailer format, provenance store, or command option.
 
   sprint commit-msg: commit provenance: Story-ID must be the full 12-character
   lowercase hex id, got "39748beb"

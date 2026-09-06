@@ -1,18 +1,21 @@
 ---
 id: 86a76bf6b433
 kind: task
-title: 'P2: audit the six name/identity resolvers in pkg/weave before the next one is miswired'
+title: 'DEFERRED INVESTIGATION: audit the six name and identity resolvers in pkg/weave'
 seq: 232
-status: todo
-priority: p2
+status: blocked
+priority: p3
 created: 2026-09-06T01:03:37.2693Z
-sprint: 127
 ---
 
 A SHAPE, not a known bug. ff01bbb3 fixed `checkpoint` filing the continuity brief under
 the literal "conductor" — the cause was TWO functions answering "who is writing this"
 (weaveConductorName vs weaveStoryConductorName) with the wrong one wired in. The bug is
 fixed; the shape that produced it is not.
+
+DEFERRED BY OPERATOR FOR SPRINT 127: this is preventative investigation, not a confirmed
+bug or a test for a specified behavior. Do not staff it in the tests-and-bug-fixes-only
+lane. Reopen it in a later sprint if the audit is explicitly authorized.
 
 MEASURED: pkg/weave has SIX name/identity resolvers —
   weaveAgentName, weaveCodingIdentity, weaveConductorIdentity, weaveConductorName,

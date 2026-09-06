@@ -1,16 +1,19 @@
 ---
 id: 3077c6c99f4e
 kind: task
-title: 'P0: sprint show costs ~9.6k tokens and nothing steers a manager to the cheap read'
+title: 'P1: steer recurring sprint reads from show to tick'
 seq: 228
 status: todo
-priority: p0
+priority: p1
 created: 2026-09-06T01:03:06.821367Z
 sprint: 127
 ---
 
 MEASURED: sprint show 126 = 38,371 B (~9,600 tokens), of which 25,881 B is the acceptance
 text. sprint tick = 936 B (~234 tokens). RATIO 40x. On sprint 127, still 7x.
+
+SPRINT 127 SCOPE: correct the existing workflow guidance and hinting only. A new
+`--brief` output mode or any additional projection is a deferred feature.
 
 `show` is the RIGHT read for a takeover — a successor needs the acceptance criteria in full.
 It is the WRONG read for the tenth time in a shift, and it grows without bound as the thread

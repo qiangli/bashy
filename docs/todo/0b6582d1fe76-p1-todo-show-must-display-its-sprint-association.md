@@ -1,17 +1,21 @@
 ---
 id: 0b6582d1fe76
 kind: task
-title: 'P2: todo show never displays the sprint field, so a writer cannot confirm their own write'
+title: 'P1: todo show must display its sprint association'
 seq: 230
-status: todo
-priority: p2
+status: done
+priority: p1
 created: 2026-09-06T01:03:37.221501Z
 sprint: 127
+closed: 2026-09-06T03:43:24.41396Z
 ---
 
 MEASURED: `todo add --sprint 127` associates correctly — the --json row carries
 sprint=127 and the sprint board sees the item. But `todo show <id>` text output contains
 ZERO mentions of sprint.
+
+SPRINT 127 SCOPE: this is a display bug in an existing field. Add the regression test
+and render the already-loaded value. Do not add sprint filtering or another list mode.
 
 COST: believed the association had failed, ran a redundant `todo edit --sprint`, and only
 established the truth by grepping the board. A write you cannot read back in the view you
