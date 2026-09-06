@@ -3,10 +3,11 @@ id: 39748bebea4e
 kind: task
 title: 'RETRO: the agent that used bashy sprint reviews it — friction found while sitting the seat'
 seq: 226
-status: todo
+status: done
 priority: p1
 created: 2026-09-06T00:58:22.708201Z
 sprint: 127
+closed: 2026-09-06T01:03:58.683029Z
 ---
 
 A RETRO BY THE AGENT THAT ACTUALLY USED IT, not a design review. Read the code
