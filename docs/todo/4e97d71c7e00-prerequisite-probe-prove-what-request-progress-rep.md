@@ -93,13 +93,14 @@ channel: a job that reported itself somewhere else would be a second truth about
 happened in the room." Any fix extends the EXISTING live channel. No new store, no
 new transport, no second channel.
 
-MVP RESULT 2026-09-05: PASS, with no production M3 defect reproduced. The
-command-synergy gate passes 22/22 with a freshly built Bashy binary. The real
+MVP RESULT 2026-09-05: PASS, with no production M3 defect reproduced. The real
 Meet browser suite passes 29/29, including human send, working indication,
 bounded cumulative progress, final response, failure visibility, and two-agent
-Chat isolation. Console verifydom passes independently. G1 (room counters) and
-G2 (job-status read) are confirmed but deferred feature expansions; the MVP
-uses the existing Chat live/transcript path. G4 is confirmed: delivery state is
-rendered separately from execution progress. Evidence and disposition are
-recorded in coreutils `docs/request-progress-reporting.md` at commits 092ee8a6
-and 3c2d2d02.
+Chat isolation. Console verifydom passes independently. The command-synergy
+gate's supported human-steers-agent-manager path passes; its person-as-manager
+assertions were subsequently declared obsolete and are tracked by Sprint 127
+story #237. G1 (room counters) and G2 (job-status read) are confirmed but
+deferred feature expansions; the MVP uses the existing Chat live/transcript
+path. G4 is confirmed: delivery state is rendered separately from execution
+progress. Evidence and disposition are recorded in coreutils
+`docs/request-progress-reporting.md` at commits 092ee8a6 and 3c2d2d02.
