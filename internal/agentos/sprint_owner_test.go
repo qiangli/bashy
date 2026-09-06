@@ -3,6 +3,7 @@ package agentos
 import (
 	"context"
 	"errors"
+	"net"
 	"os"
 	"strings"
 	"testing"
@@ -136,6 +137,47 @@ func TestStartSprintOwnerCleansUpAfterControlReadinessFailure(t *testing.T) {
 	}
 	if stopped != 1 {
 		t.Fatalf("cleanup stops = %d, want 1", stopped)
+	}
+}
+
+func TestWaitForSprintOwnerControlRequiresAListeningSocket(t *testing.T) {
+	if !foreman.ControlSupported() {
+		t.Skip("managed control sockets are not supported")
+	}
+	t.Setenv("BASHY_FOREMAN_DIR", t.TempDir())
+	id := sprintOwnerSessionID(15)
+	store := foreman.NewStore("", id)
+	if err := store.Ensure(); err != nil {
+		t.Fatal(err)
+	}
+	path := store.CtlSockPath()
+	if err := os.WriteFile(path, []byte("stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- waitForSprintOwnerControl(context.Background(), id, time.Second) }()
+	select {
+	case err := <-done:
+		t.Fatalf("pathname without listener reported ready: %v", err)
+	case <-time.After(75 * time.Millisecond):
+	}
+
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("listening control socket was not detected")
 	}
 }
 

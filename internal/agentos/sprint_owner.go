@@ -3,6 +3,7 @@ package agentos
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -180,7 +181,12 @@ func waitForSprintOwnerControl(ctx context.Context, id string, limit time.Durati
 	deadline := time.Now().Add(limit)
 	path := foreman.NewStore("", id).CtlSockPath()
 	for {
-		if _, err := os.Stat(path); err == nil {
+		// The pathname is not readiness: a stale socket can outlive its listener,
+		// and a freshly detached process can publish the path just before Accept
+		// is reachable. Prove that the control listener accepts connections before
+		// allowing the caller to deliver its send-once instruction.
+		if conn, err := net.DialTimeout("unix", path, 100*time.Millisecond); err == nil {
+			_ = conn.Close()
 			return nil
 		}
 		if time.Now().After(deadline) {
