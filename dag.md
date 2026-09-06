@@ -55,8 +55,17 @@ installed or checkout-local bashy owns the Go toolchain path. This is the
 weave; ~121 MB unix, ~47 MB Windows (it cross-compiles everywhere — podman/ollama
 are !windows-gated, the otel observability stack is off by default). For a host
 build with the observability stack, use `build-host`.
-Sources: cmd/, internal/, go.mod, go.sum
-Generates: bin/bash, bin/bashy
+On linux and darwin the shipped program is a **native pre-Go signal launcher**
+(`native/siglaunch.c.in`, compiled to `bin/<name>`) plus a sibling **Go payload**
+(`bin/<name>.real`) — `tools/installbashy` installs the payload first, then the
+launcher, so no PATH entry is ever left without its companion. Building the Go
+binary straight to `bin/<name>` on those platforms silently ships the payload AS
+the launcher: it runs, so nothing fails visibly, and the signal handling the
+launcher exists to provide is simply gone. Keep this in step with the Makefile's
+`build-bash`/`build-bashy`, which are the same two recipes.
+
+Sources: cmd/, internal/, go.mod, go.sum, native/siglaunch.c.in
+Generates: bin/bash, bin/bashy (+ bin/bash.real, bin/bashy.real on linux/darwin)
 Effects: write
 
 ```bash
@@ -65,6 +74,7 @@ mkdir -p bin
 VERSION="${VERSION:-dev}"
 BASHY_EXE="${BASHY:-bashy}"
 goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
+hostgoos="$("$BASHY_EXE" go env GOOS)"
 ext=""
 [ "$goos" = windows ] && ext=.exe
 BUILD_ID=""
@@ -77,8 +87,20 @@ if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   fi
 fi
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}'"
-"$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "bin/bash${ext}"  ./cmd/bash
-"$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "bin/bashy${ext}" ./cmd/bashy
+scripts/build-meet-spa.sh optional >/dev/null
+# The launcher is compiled by the HOST cc, so it can only be produced for the
+# host's own platform. A cross-build therefore emits the plain Go binaries: a
+# host-native launcher paired with a foreign payload would be a broken pair that
+# builds cleanly and fails only when run.
+if { [ "$goos" = linux ] || [ "$goos" = darwin ]; } && [ "$goos" = "$hostgoos" ]; then
+  "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o bin/bash.real  ./cmd/bash
+  "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o bin/bashy.real ./cmd/bashy
+  cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o bin/bash  native/siglaunch.c.in
+  cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o bin/bashy native/siglaunch.c.in
+else
+  "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "bin/bash${ext}"  ./cmd/bash
+  "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "bin/bashy${ext}" ./cmd/bashy
+fi
 ```
 
 ### build-host
