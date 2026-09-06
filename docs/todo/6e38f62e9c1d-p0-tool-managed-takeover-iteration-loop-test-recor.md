@@ -6,7 +6,7 @@ seq: 225
 status: todo
 priority: p0
 created: 2026-09-06T00:49:42.538476Z
-sprint: 127
+sprint: 130
 ---
 
 THE STANDING STORY FOR SPRINT #127. It does not close on a checklist. It closes when

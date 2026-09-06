@@ -6,7 +6,7 @@ seq: 231
 status: todo
 priority: p1
 created: 2026-09-06T01:03:37.24574Z
-sprint: 127
+sprint: 130
 ---
 
 MEASURED: `todo list` prints an 8-character id (e.g. 39748beb). The commit-msg hook

@@ -6,6 +6,7 @@ seq: 210
 status: todo
 priority: p2
 created: 2026-09-05T15:47:51.797421Z
+sprint: 130
 ---
 
 'bashy meet join' does not exist: invite is organizer-only, observe is read-only, tell presumes a seat. Add ONE verb that seats a human in a known meet. Gate: join a running meet you did not organize; receive the transcript so far; 'meet tell' lands in the transcript; 'meet show' lists you as a participant; the seat is released on exit and the room card reflects it. Reuse invite/observe/tell internals - no new store, no new transport.

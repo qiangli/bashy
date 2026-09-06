@@ -6,7 +6,7 @@ seq: 228
 status: todo
 priority: p1
 created: 2026-09-06T01:03:06.821367Z
-sprint: 127
+sprint: 130
 ---
 
 MEASURED: sprint show 126 = 38,371 B (~9,600 tokens), of which 25,881 B is the acceptance

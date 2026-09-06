@@ -6,6 +6,7 @@ seq: 214
 status: todo
 priority: p2
 created: 2026-09-05T15:47:51.886112Z
+sprint: 130
 ---
 
 Every human-authored message (mb post/send, meet tell, dm) carries sent -> delivered -> acked, visible to the sender and in inbox. Gate: an unacked message stays visibly unacked indefinitely; a test asserts NO code path re-sends, re-words, auto-escalates or re-routes it. Rationale on the record: delivery state is reported to the SENDER and to no automation - an auto-retry would make a dead owner look reachable, which is the precise condition this sprint exists to expose.
