@@ -132,7 +132,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "inbox", "notify", "activity", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "apps",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "inbox", "notify", "activity", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "apps", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
@@ -386,6 +386,8 @@ func Dispatch() {
 		os.Exit(0)
 	case "out":
 		os.Exit(dispatchOut(os.Args[2:]))
+	case "transpile":
+		os.Exit(dispatchTranspile(os.Args[2:]))
 	case "full":
 		os.Exit(dispatchFull(os.Args[2:]))
 	case "weave":
