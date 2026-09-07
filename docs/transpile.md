@@ -2,6 +2,16 @@
 
 `bashy transpile` transpiles Bash++ source scripts into Go code backed by `mvdan.cc/sh/v3/lower` compiler definitions and `shellrt` runtime primitives.
 
+## Compiler Build Toolchain
+
+The Bashy and shell-engine modules retain a Go 1.26.5 compatibility floor and
+select `toolchain go1.27.0` for default automatic builds. Build Bashy and the
+generated artifacts with the reviewed Go 1.27 toolchain for the complete source
+profile. An older explicit `GOTOOLCHAIN=local` build cannot check independent
+method type parameters and reports `LOWER-ETOOLCHAIN` before emitting output.
+Changing the toolchain environment when running an existing Bashy binary does
+not change its compiled-in Go checker.
+
 ## Workspace Directory Structure
 
 Organize the build environment into a dedicated workspace containing the dependency clone in `deps/sh` and the application source in `app`:

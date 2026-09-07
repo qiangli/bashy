@@ -2,6 +2,8 @@ module github.com/qiangli/bashy
 
 go 1.26.5
 
+toolchain go1.27.0
+
 require (
 	github.com/creack/pty/v2 v2.0.1
 	github.com/ergochat/readline v0.1.3
