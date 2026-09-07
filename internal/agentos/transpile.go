@@ -17,8 +17,11 @@ import (
 // To compile a transpiled Go output into a standalone binary:
 // 1. Transpile Bash++ script to Go source:
 //    bashy transpile --bashpp input.bpp -o output.go
-// 2. Initialize and tidy the Go module environment:
+// 2. Setup dependency clone (e.g. deps/sh pinned to commit aeecec06dde29255ed581ad61982246e9a52e617)
+//    and configure module replace directive (mvdan.cc/sh/v3 => ../deps/sh):
 //    go mod init standalone
+//    go mod edit -require=mvdan.cc/sh/v3@v3.0.0
+//    go mod edit -replace=mvdan.cc/sh/v3=../deps/sh
 //    go mod tidy
 // 3. Build a reproducible binary against the standard library / shell runtime:
 //    go build -mod=mod -o myapp output.go
@@ -27,6 +30,7 @@ import (
 // base (mvdan.cc/sh/v3/lower/shellrt) using standard Go library primitives.
 // Dynamic features requiring the shell execution engine are compiled to explicit
 // shellrt bridge calls rather than unanalyzed interp invocations.
+// See docs/transpile.md for complete build recipe and runtime details.
 
 const sourceMapSchemaVersion = "bashy-transpile-map-v1"
 

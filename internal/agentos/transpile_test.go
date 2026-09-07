@@ -352,6 +352,12 @@ func TestTranspileRegisteredCLIDispatch(t *testing.T) {
 	if rec.Synopsis == "" {
 		t.Error("transpile verb has no synopsis in atlas record")
 	}
+	if len(rec.Caps) != 1 || rec.Caps[0] != "json" {
+		t.Errorf("got transpile caps %v, want [json]", rec.Caps)
+	}
+	if len(rec.Effects) != 2 || rec.Effects[0] != "read" || rec.Effects[1] != "write" {
+		t.Errorf("got transpile effects %v, want [read write]", rec.Effects)
+	}
 
 	// Subprocess helper invoking actual Dispatch() with os.Args, testing input/output paths with spaces
 	dir := t.TempDir()
