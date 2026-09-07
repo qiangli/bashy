@@ -2,6 +2,7 @@ package agentos
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -76,39 +77,107 @@ func TestTranspileDispatchArgs(t *testing.T) {
 	}
 }
 
-func TestTranspileInputEqualsOutputRejection(t *testing.T) {
+func TestTranspilePathCollisionsAndAliases(t *testing.T) {
 	dir := t.TempDir()
-	file := filepath.Join(dir, "script.bpp")
-	if err := os.WriteFile(file, []byte("echo hi\n"), 0644); err != nil {
+	srcFile := filepath.Join(dir, "script.bpp")
+	if err := os.WriteFile(srcFile, []byte("echo hi\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
+	outFile := filepath.Join(dir, "out.go")
 
-	exitCode := dispatchTranspile([]string{"--bashpp", file, "-o", file})
+	// 1. input == output
+	t.Run("input_equals_output", func(t *testing.T) {
+		exit := dispatchTranspile([]string{"--bashpp", srcFile, "-o", srcFile})
+		if exit != 2 {
+			t.Errorf("got exit %d, want 2", exit)
+		}
+	})
 
-	w.Close()
-	os.Stderr = oldStderr
+	// 2. map == input
+	t.Run("map_equals_input", func(t *testing.T) {
+		exit := dispatchTranspile([]string{"--bashpp", srcFile, "-o", outFile, "--map", srcFile})
+		if exit != 2 {
+			t.Errorf("got exit %d, want 2", exit)
+		}
+	})
 
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	stderr := buf.String()
+	// 3. map == output
+	t.Run("map_equals_output", func(t *testing.T) {
+		exit := dispatchTranspile([]string{"--bashpp", srcFile, "-o", outFile, "--map", outFile})
+		if exit != 2 {
+			t.Errorf("got exit %d, want 2", exit)
+		}
+	})
 
-	if exitCode != 2 {
-		t.Errorf("got exit %d, want 2", exitCode)
+	// 4. symlink collision
+	symFile := filepath.Join(dir, "symlink.bpp")
+	if err := os.Symlink(srcFile, symFile); err == nil {
+		t.Run("symlink_collision", func(t *testing.T) {
+			exit := dispatchTranspile([]string{"--bashpp", srcFile, "-o", symFile})
+			if exit != 2 {
+				t.Errorf("got exit %d for symlink collision, want 2", exit)
+			}
+		})
 	}
-	if !strings.Contains(stderr, "cannot be the same file") {
-		t.Errorf("got stderr %q, want path collision error", stderr)
+
+	// 5. hardlink collision
+	hardFile := filepath.Join(dir, "hardlink.bpp")
+	if err := os.Link(srcFile, hardFile); err == nil {
+		t.Run("hardlink_collision", func(t *testing.T) {
+			exit := dispatchTranspile([]string{"--bashpp", srcFile, "-o", hardFile})
+			if exit != 2 {
+				t.Errorf("got exit %d for hardlink collision, want 2", exit)
+			}
+		})
+	}
+
+	// 6. Destination directory collisions
+	outDir := filepath.Join(dir, "out_dir")
+	if err := os.Mkdir(outDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("output_is_directory", func(t *testing.T) {
+		exit := dispatchTranspile([]string{"--bashpp", srcFile, "-o", outDir})
+		if exit != 2 {
+			t.Errorf("got exit %d when output is directory, want 2", exit)
+		}
+	})
+
+	t.Run("map_is_directory", func(t *testing.T) {
+		exit := dispatchTranspile([]string{"--bashpp", srcFile, "-o", outFile, "--map", outDir})
+		if exit != 2 {
+			t.Errorf("got exit %d when map is directory, want 2", exit)
+		}
+	})
+}
+
+func TestTranspileDashInputPath(t *testing.T) {
+	dir := t.TempDir()
+	dashFile := filepath.Join(dir, "-script.bpp")
+	outFile := filepath.Join(dir, "out.go")
+
+	if err := os.WriteFile(dashFile, []byte("echo hello\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	exitCode := dispatchTranspile([]string{"--bashpp", "-o", outFile, "--", dashFile})
+	if exitCode != 0 {
+		t.Fatalf("dispatchTranspile with dash input path failed with exit %d", exitCode)
+	}
+
+	if _, err := os.Stat(outFile); err != nil {
+		t.Fatalf("expected output file to exist: %v", err)
 	}
 }
 
-func TestTranspileSuccessAndExecution(t *testing.T) {
+func TestTranspileGoBuildAndStandaloneExecute(t *testing.T) {
 	dir := t.TempDir()
 	inputFile := filepath.Join(dir, "test.bpp")
 	outputFile := filepath.Join(dir, "main.go")
 	mapFile := filepath.Join(dir, "main.go.map")
+	binFile := filepath.Join(dir, "app")
 
 	shDir, err := filepath.Abs("../../../sh")
 	if err != nil {
@@ -152,31 +221,43 @@ printf '%d\n' "$res"
 	if err != nil {
 		t.Fatalf("could not read generated go output: %v", err)
 	}
-	if len(outSource) == 0 {
-		t.Fatal("generated output file is empty")
-	}
 
-	// Verify source map artifact
+	// Verify exact digest matching bytes in source map artifact
 	mapData, err := os.ReadFile(mapFile)
 	if err != nil {
 		t.Fatalf("could not read map artifact: %v", err)
 	}
 	var art struct {
-		Origin   string `json:"origin"`
-		GoDigest string `json:"go_digest"`
-		Mappings []any  `json:"mappings"`
+		SchemaVersion string     `json:"schema_version"`
+		Origin        string     `json:"origin"`
+		GoDigest      string     `json:"go_digest"`
+		Mappings      []mapEntry `json:"mappings"`
 	}
 	if err := json.Unmarshal(mapData, &art); err != nil {
 		t.Fatalf("invalid map artifact JSON: %v", err)
 	}
+
+	if art.SchemaVersion != sourceMapSchemaVersion {
+		t.Errorf("got schema_version %q, want %q", art.SchemaVersion, sourceMapSchemaVersion)
+	}
 	if art.Origin != inputFile {
 		t.Errorf("got map origin %q, want %q", art.Origin, inputFile)
 	}
-	if !strings.HasPrefix(art.GoDigest, "sha256:") {
-		t.Errorf("got map go_digest %q, want sha256: prefix", art.GoDigest)
+	expectedDigest := fmt.Sprintf("sha256:%x", sha256.Sum256(outSource))
+	if art.GoDigest != expectedDigest {
+		t.Errorf("got go_digest %q, want exact matching %q", art.GoDigest, expectedDigest)
 	}
 	if len(art.Mappings) == 0 {
-		t.Error("expected non-empty mappings array in map artifact")
+		t.Fatal("expected non-empty mappings array in map artifact")
+	}
+
+	// Assert explicit mapping fields
+	firstMap := art.Mappings[0]
+	if firstMap.GoLine <= 0 || firstMap.GoCol <= 0 {
+		t.Errorf("invalid go position in map entry: %+v", firstMap)
+	}
+	if firstMap.SourceLine <= 0 || firstMap.Node == "" {
+		t.Errorf("invalid source line or node in map entry: %+v", firstMap)
 	}
 
 	// Tidy go.mod in test directory
@@ -186,15 +267,111 @@ printf '%d\n' "$res"
 		t.Fatalf("go mod tidy failed: %v, output: %s", err, out)
 	}
 
-	// Test executing the generated Go program
-	cmd := exec.Command("go", "run", outputFile)
-	cmd.Dir = dir
-	runOut, err := cmd.CombinedOutput()
+	// Actual go build binary
+	buildCmd := exec.Command("go", "build", "-o", binFile, outputFile)
+	buildCmd.Dir = dir
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("go build failed: %v, output: %s", err, out)
+	}
+
+	// Remove source script (.bpp) AND generated Go source file (.go) to prove standalone artifact execution!
+	if err := os.Remove(inputFile); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(outputFile); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run binary with clean, shellfree PATH
+	execCmd := exec.Command(binFile)
+	execCmd.Dir = dir
+	execCmd.Env = []string{"PATH=/bin:/usr/bin"}
+	runOut, err := execCmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("go run failed: %v\nOutput:\n%s\nGenerated Code:\n%s", err, runOut, outSource)
+		t.Fatalf("standalone binary execution failed: %v\nOutput:\n%s", err, runOut)
 	}
 	if strings.TrimSpace(string(runOut)) != "52" {
 		t.Errorf("got program output %q, want 52", strings.TrimSpace(string(runOut)))
+	}
+}
+
+func TestTranspileRegisteredCLIDispatch(t *testing.T) {
+	// Verify command registration
+	_, _, verbs := commandsCatalog()
+	found := false
+	for _, v := range verbs {
+		if v == "transpile" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("transpile verb not found in commandsCatalog()")
+	}
+
+	rec := verbAtlasRecord("transpile", false)
+	if rec.Synopsis == "" {
+		t.Error("transpile verb has no synopsis in atlas record")
+	}
+
+	// Test registered CLI dispatch path
+	dir := t.TempDir()
+	inputFile := filepath.Join(dir, "cli_test.bpp")
+	outputFile := filepath.Join(dir, "cli_out.go")
+
+	if err := os.WriteFile(inputFile, []byte("var x int = 10\necho hi\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	exitCode := dispatchTranspile([]string{"--bashpp", inputFile, "-o", outputFile})
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+
+	if exitCode != 0 {
+		t.Errorf("dispatchTranspile failed via registered path: %d", exitCode)
+	}
+	if _, err := os.Stat(outputFile); err != nil {
+		t.Errorf("expected outputFile to exist after registered dispatch: %v", err)
+	}
+}
+
+func TestTranspileAtomicRollbackOnSecondRenameFailure(t *testing.T) {
+	dir := t.TempDir()
+	outFile := filepath.Join(dir, "out.go")
+	mapFile := filepath.Join(dir, "bad_map_dir") // directory path will cause rename to fail
+
+	existingOut := []byte("// Old output content\n")
+	if err := os.WriteFile(outFile, existingOut, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Mkdir(mapFile, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	outData := []byte("// New Go source\n")
+	mapData := []byte("{}")
+
+	exit := writeOutputsAtomic(outFile, outData, mapFile, mapData)
+	if exit != 2 {
+		t.Errorf("got exit %d when map rename fails, want 2", exit)
+	}
+
+	// Verify old output file was restored via rollback
+	restored, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("could not read restored output file: %v", err)
+	}
+	if !bytes.Equal(restored, existingOut) {
+		t.Errorf("rollback failed: got %q, want %q", restored, existingOut)
 	}
 }
 
@@ -239,10 +416,15 @@ func TestTranspileNegativeDiagnosticNoEmission(t *testing.T) {
 	dir := t.TempDir()
 	inputFile := filepath.Join(dir, "bad.bpp")
 	outputFile := filepath.Join(dir, "out.go")
+	mapFile := filepath.Join(dir, "out.go.map")
 
-	// Pre-create output file to verify it is preserved untouched on error
+	// Pre-create output and map file to verify both are preserved untouched on error
 	existingContent := []byte("// Existing content\n")
+	existingMap := []byte("// Existing map\n")
 	if err := os.WriteFile(outputFile, existingContent, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mapFile, existingMap, 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -280,5 +462,14 @@ func TestTranspileNegativeDiagnosticNoEmission(t *testing.T) {
 	}
 	if !bytes.Equal(currentContent, existingContent) {
 		t.Errorf("output file was modified on compile rejection: got %q, want %q", currentContent, existingContent)
+	}
+
+	// Verify existing map file was preserved
+	currentMap, err := os.ReadFile(mapFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(currentMap, existingMap) {
+		t.Errorf("map file was modified on compile rejection: got %q, want %q", currentMap, existingMap)
 	}
 }
