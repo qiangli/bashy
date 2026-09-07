@@ -529,6 +529,64 @@ func TestTranspileNegativeDiagnosticNoEmission(t *testing.T) {
 	if !bytes.Equal(currentMap, existingMap) {
 		t.Errorf("map file was modified on compile rejection: got %q, want %q", currentMap, existingMap)
 	}
+
+	// Verify input file content remains unchanged
+	currentInput, err := os.ReadFile(inputFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(currentInput) != badScript {
+		t.Errorf("input file was modified on compile rejection: got %q, want %q", currentInput, badScript)
+	}
+
+	// Test case without pre-existing output or map files
+	t.Run("no_preexisting_files", func(t *testing.T) {
+		dir2 := t.TempDir()
+		input2 := filepath.Join(dir2, "bad2.bpp")
+		out2 := filepath.Join(dir2, "out2.go")
+		map2 := filepath.Join(dir2, "out2.go.map")
+
+		if err := os.WriteFile(input2, []byte(badScript), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		oldStderr2 := os.Stderr
+		r2, w2, _ := os.Pipe()
+		os.Stderr = w2
+
+		exitCode2 := dispatchTranspile([]string{"--bashpp", input2, "-o", out2})
+
+		w2.Close()
+		os.Stderr = oldStderr2
+
+		var buf2 bytes.Buffer
+		io.Copy(&buf2, r2)
+		stderr2 := buf2.String()
+
+		if exitCode2 != 2 {
+			t.Errorf("got exit code %d, want 2", exitCode2)
+		}
+		if stderr2 == "" {
+			t.Error("expected non-empty stderr on rejection")
+		}
+
+		// Verify no Go or map files were emitted
+		if _, err := os.Stat(out2); !os.IsNotExist(err) {
+			t.Errorf("output file was emitted on compile rejection: %v", err)
+		}
+		if _, err := os.Stat(map2); !os.IsNotExist(err) {
+			t.Errorf("map file was emitted on compile rejection: %v", err)
+		}
+
+		// Verify input file is unchanged
+		inData, err := os.ReadFile(input2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(inData) != badScript {
+			t.Errorf("input file was modified: got %q, want %q", string(inData), badScript)
+		}
+	})
 }
 
 func TestFormatDiagnostic(t *testing.T) {

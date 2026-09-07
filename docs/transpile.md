@@ -2,44 +2,69 @@
 
 `bashy transpile` transpiles Bash++ source scripts into Go code backed by `mvdan.cc/sh/v3/lower` compiler definitions and `shellrt` runtime primitives.
 
+## Workspace Directory Structure
+
+Organize the build environment into a dedicated workspace containing the dependency clone in `deps/sh` and the application source in `app`:
+
+```text
+workspace/
+├── deps/
+│   └── sh/          # Cloned dependency repository pinned to published commit
+└── app/
+    ├── input.bpp    # Bash++ source script
+    ├── output.go    # Transpiled Go output
+    └── go.mod       # Standalone module configuration with replace directive
+```
+
 ## Standalone Build Recipe
 
-Because upstream `mvdan.cc/sh/v3` does not include the `lower` compiler package or `shellrt` runtime, running `go mod tidy` in an unconfigured module environment would fetch upstream `mvdan.cc/sh/v3` and fail to resolve dependencies.
+Because upstream `mvdan.cc/sh/v3` does not include the `lower` compiler package or `shellrt` runtime, running `go mod tidy` in an unconfigured module environment would attempt to fetch upstream `mvdan.cc/sh/v3` and fail.
 
 To build standalone Go binaries transpiled from Bash++:
 
-### 1. Clone & Pin the Dependency Repo
+### 1. Clone & Pin the Published Dependency Repo
 
-Clone the compiler/runtime repository to a local path (e.g. `../deps/sh` or `./deps/sh`) and pin to the published commit:
+Clone the compiler/runtime repository to `deps/sh` and checkout the published commit SHA (`7146b30e1c1c8c845f6565c9f5c5609f4de93172`):
 
 ```bash
-git clone https://github.com/qiangli/sh deps/sh
-git -C deps/sh checkout aeecec06dde29255ed581ad61982246e9a52e617
+mkdir -p workspace/deps
+git clone https://github.com/qiangli/sh workspace/deps/sh
+git -C workspace/deps/sh checkout 7146b30e1c1c8c845f6565c9f5c5609f4de93172
 ```
 
-### 2. Transpile the Source Script
+### 2. Create Application Directory & Transpile
 
-Transpile the Bash++ input file to Go output:
+Create the `app` directory, write the Bash++ source script, and invoke `bashy transpile`:
 
 ```bash
+mkdir -p workspace/app
+cd workspace/app
+
+cat << 'EOF' > input.bpp
+var x int = 42
+println("hello from transpiled standalone:", x)
+EOF
+
 bashy transpile --bashpp input.bpp -o output.go
 ```
 
 ### 3. Setup `go.mod` with Replace Directive
 
-Initialize the standalone module and set up the replace directive mapping `mvdan.cc/sh/v3` to the local clone relative path:
+Initialize the Go module in `workspace/app` and configure the `replace` directive pointing to the relative path `../deps/sh`:
 
 ```bash
-go mod init standalone
+cd workspace/app
+
+go mod init app
 go mod edit -require=mvdan.cc/sh/v3@v3.0.0
 go mod edit -replace=mvdan.cc/sh/v3=../deps/sh
 go mod tidy
 ```
 
-The resulting `go.mod` file should resemble:
+The resulting `go.mod` in `workspace/app` will be:
 
 ```go
-module standalone
+module app
 
 go 1.27
 
@@ -50,14 +75,31 @@ replace mvdan.cc/sh/v3 => ../deps/sh
 
 ### 4. Build Standalone Binary
 
-Compile the Go output into a standalone executable:
+Compile the transpiled Go code into a standalone binary:
 
 ```bash
+cd workspace/app
 go build -mod=mod -o myapp output.go
+```
+
+### 5. Remove Sources & Execute Binary
+
+Remove the input Bash++ script (`input.bpp`) and transpiled Go file (`output.go`) to prove standalone binary execution:
+
+```bash
+cd workspace/app
+rm input.bpp output.go
+PATH="" ./myapp
+```
+
+Output:
+```text
+hello from transpiled standalone: 42
 ```
 
 ## Runtime Dependencies & Semantics
 
-- **Standard Library Base & `shellrt`**: Emitted Go code imports `mvdan.cc/sh/v3/lower/shellrt` for shell runtime helpers. Standard primitives use pure Go stdlib constructs (`fmt`, `os`, `strconv`) where applicable.
-- **Standalone Execution**: Compiled binaries run independently without needing the original `.bpp` source file or host shell binaries (`/bin/sh`, `/bin/bash`). Binaries execute cleanly even with `PATH=""`.
-- **Parity & Scope**: No unsupported parity claims are made; dynamic subshell features or unmapped shell constructs rely on explicit `shellrt` bridge invocations rather than unanalyzed interpreter fallbacks.
+- **Standard Library Base & `shellrt`**: Emitted Go code imports `mvdan.cc/sh/v3/lower/shellrt` for shell runtime helpers. Standard typed constructs use pure Go stdlib primitives (`fmt`, `os`, `strconv`).
+- **Typed-Only Standalone Execution with Empty PATH**: Typed-only programs (using typed variables, arithmetic, functions, and standard `println`/`printf`) execute independently with `PATH=""` when source files and host shell binaries are absent.
+- **Dynamic External Commands**: Dynamic scripts invoking external shell commands (such as `ls`, `grep`, or `curl`) require their respective external binaries to be available on `PATH`.
+- **Parity & Scope**: No unsupported parity claims are made; dynamic subshell features or unmapped shell constructs rely on explicit `shellrt` bridge invocations.

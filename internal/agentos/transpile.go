@@ -17,9 +17,10 @@ import (
 // To compile a transpiled Go output into a standalone binary:
 // 1. Transpile Bash++ script to Go source:
 //    bashy transpile --bashpp input.bpp -o output.go
-// 2. Setup dependency clone (e.g. deps/sh pinned to commit aeecec06dde29255ed581ad61982246e9a52e617)
-//    and configure module replace directive (mvdan.cc/sh/v3 => ../deps/sh):
-//    go mod init standalone
+// 2. Setup dependency clone (deps/sh pinned to published commit 7146b30e1c1c8c845f6565c9f5c5609f4de93172)
+//    and configure module replace directive in app directory (mvdan.cc/sh/v3 => ../deps/sh):
+//    cd workspace/app
+//    go mod init app
 //    go mod edit -require=mvdan.cc/sh/v3@v3.0.0
 //    go mod edit -replace=mvdan.cc/sh/v3=../deps/sh
 //    go mod tidy
