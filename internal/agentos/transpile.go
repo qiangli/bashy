@@ -146,7 +146,7 @@ func dispatchTranspile(args []string) int {
 			}
 		} else if inFlags && strings.HasPrefix(arg, "--map=") {
 			mapFile = strings.TrimPrefix(arg, "--map=")
-		} else if !inFlags || !strings.HasPrefix(arg, "-") {
+		} else if !inFlags || arg == "-" || !strings.HasPrefix(arg, "-") {
 			if input == "" {
 				input = arg
 			} else {
@@ -181,11 +181,11 @@ func dispatchTranspile(args []string) int {
 	}
 
 	// Reject all path collisions
-	if isSameFileOrAlias(input, output) {
+	if input != "-" && isSameFileOrAlias(input, output) {
 		fmt.Fprintln(os.Stderr, "transpile: input and output path cannot be the same file")
 		return 2
 	}
-	if isSameFileOrAlias(input, mapFile) {
+	if input != "-" && isSameFileOrAlias(input, mapFile) {
 		fmt.Fprintln(os.Stderr, "transpile: input and map path cannot be the same file")
 		return 2
 	}
@@ -195,7 +195,7 @@ func dispatchTranspile(args []string) int {
 	}
 
 	// Validate destination directory vs file types
-	if st, err := os.Stat(input); err == nil && st.IsDir() {
+	if st, err := os.Stat(input); input != "-" && err == nil && st.IsDir() {
 		fmt.Fprintf(os.Stderr, "transpile: input path is a directory: %s\n", input)
 		return 2
 	}
@@ -208,12 +208,26 @@ func dispatchTranspile(args []string) int {
 		return 2
 	}
 
-	f, err := os.Open(input)
+	sourceDir, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
 		return 2
 	}
-	defer f.Close()
+	f := os.Stdin
+	if input != "-" {
+		sourcePath, err := filepath.Abs(input)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
+			return 2
+		}
+		sourceDir = filepath.Dir(sourcePath)
+		f, err = os.Open(input)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
+			return 2
+		}
+		defer f.Close()
+	}
 
 	parser := syntax.NewParser(syntax.KeepComments(true), syntax.Variant(syntax.LangBashPP))
 	file, err := parser.Parse(f, input)
@@ -224,6 +238,7 @@ func dispatchTranspile(args []string) int {
 
 	opts := lower.Options{
 		Origin: input,
+		Dir:    sourceDir,
 	}
 	res, err := lower.Compile(file, opts)
 	if err != nil {
