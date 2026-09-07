@@ -12,6 +12,22 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
+// Reproducible Standalone Build Instructions:
+//
+// To compile a transpiled Go output into a standalone binary:
+// 1. Transpile Bash++ script to Go source:
+//    bashy transpile --bashpp input.bpp -o output.go
+// 2. Initialize and tidy the Go module environment:
+//    go mod init standalone
+//    go mod tidy
+// 3. Build a reproducible binary against the standard library / shell runtime:
+//    go build -mod=mod -o myapp output.go
+//
+// Standalone binaries emitted by the lower compiler depend on the plain runtime
+// base (mvdan.cc/sh/v3/lower/shellrt) using standard Go library primitives.
+// Dynamic features requiring the shell execution engine are compiled to explicit
+// shellrt bridge calls rather than unanalyzed interp invocations.
+
 const sourceMapSchemaVersion = "bashy-transpile-map-v1"
 
 type mapEntry struct {
@@ -28,6 +44,16 @@ type sourceMapArtifact struct {
 	Origin        string     `json:"origin"`
 	GoDigest      string     `json:"go_digest"`
 	Mappings      []mapEntry `json:"mappings"`
+}
+
+// formatDiagnostic renders a lower.Diagnostic. Structured diagnostics with a Code starting
+// with "BASHPP-" are printed as exact Code + ": " + Msg without file position prefixes;
+// ordinary LOWER- diagnostics retain their positioned format.
+func formatDiagnostic(d lower.Diagnostic) string {
+	if strings.HasPrefix(d.Code, "BASHPP-") {
+		return fmt.Sprintf("%s: %s", d.Code, d.Msg)
+	}
+	return d.Error()
 }
 
 // normPath returns clean absolute path with symlinks resolved if possible.
@@ -194,7 +220,7 @@ func dispatchTranspile(args []string) int {
 	if err != nil {
 		if el, ok := err.(lower.ErrorList); ok {
 			for _, diag := range el {
-				fmt.Fprintln(os.Stderr, diag.Error())
+				fmt.Fprintln(os.Stderr, formatDiagnostic(diag))
 			}
 		} else {
 			fmt.Fprintln(os.Stderr, err)

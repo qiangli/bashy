@@ -11,6 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"mvdan.cc/sh/v3/lower"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 func TestTranspileDispatchArgs(t *testing.T) {
@@ -519,5 +522,31 @@ func TestTranspileNegativeDiagnosticNoEmission(t *testing.T) {
 	}
 	if !bytes.Equal(currentMap, existingMap) {
 		t.Errorf("map file was modified on compile rejection: got %q, want %q", currentMap, existingMap)
+	}
+}
+
+func TestFormatDiagnostic(t *testing.T) {
+	pos := syntax.NewPos(12, 1, 5)
+
+	// BASHPP- prefix diagnostic: exact Code + ": " + Msg without file position prefix
+	bashppDiag := lower.Diagnostic{
+		Code: "BASHPP-ETYPE",
+		Msg:  "type mismatch",
+		Pos:  pos,
+		Node: "BashPPDecl",
+	}
+	if got := formatDiagnostic(bashppDiag); got != "BASHPP-ETYPE: type mismatch" {
+		t.Errorf("got formatted BASHPP diagnostic %q, want %q", got, "BASHPP-ETYPE: type mismatch")
+	}
+
+	// LOWER- prefix diagnostic: retains file position prefix
+	lowerDiag := lower.Diagnostic{
+		Code: "LOWER-EUNSUPPORTED",
+		Msg:  "unsupported statement",
+		Pos:  pos,
+		Node: "Stmt",
+	}
+	if got := formatDiagnostic(lowerDiag); !strings.HasPrefix(got, "1:5: LOWER-EUNSUPPORTED: unsupported statement") {
+		t.Errorf("got formatted LOWER diagnostic %q, want positioned format starting with %q", got, "1:5: LOWER-EUNSUPPORTED: unsupported statement")
 	}
 }
