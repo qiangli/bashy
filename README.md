@@ -94,6 +94,11 @@ an in-file `set -o bashpp` cannot enable new syntax retroactively in an
 already-parsed file. Use a flag, environment setting, `.bpp`, or
 `#!/usr/bin/env -S bash --bashpp` for initial selection.
 
+The bare `agentic` modifier permits explicitly implemented LLM assistance in
+Bash++ functions, methods and script blocks. See the runnable
+[agentic action example](docs/agentic-action-example.md) for the same action as
+a typed callable, shell script, executable tool and native embedding.
+
 ## Why
 
 - **No dependencies.** One binary. No `bash`, no shared libraries, no package

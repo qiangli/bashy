@@ -557,6 +557,11 @@ itself, which is pure Go).
 
 `docs/` holds the planning + status corpus. Load-bearing entries:
 
+- `agentic-action-example.md` — Sprint 134's bare `agentic` action examples:
+  typed function/method, shell function, executable script and native tool
+  embedding through the existing handler context and governed chat invocation.
+  `tools/agentic-example` is an example binary, not a new standard bashy verb.
+
 - `philosophy.md` — **the thesis: LOCAL FIRST.** "bashy is all an agent needs" — the whole
   SDLC loop (issue → weave → gate → judge → dag) closes on ONE machine with NO network,
   and that claim is *enforced*, not asserted: `pkg/atlas/localfirst_test.go` fails the

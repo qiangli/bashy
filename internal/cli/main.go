@@ -2602,7 +2602,10 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	if reader == nil {
 		return nil
 	}
-	lang := syntax.LangBash
+	// Preflight and -c parsing must use the same selected grammar as file
+	// execution. Starting in Classic here sent valid Bash++ source through
+	// Classic recovery, and rejected it entirely on the direct -c path.
+	lang := r.LangVariant()
 	startupPosix := resolvedStartupPosix()
 	if startupPosix {
 		lang = syntax.LangPOSIX

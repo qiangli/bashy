@@ -1,0 +1,23 @@
+#!/usr/bin/env -S bashy --bashpp
+agentic func summarize(text string) (string, error) {
+    output, err := capture("bashy", "chat", "--plain", "--read-only", "--agent", "${SUMMARY_AGENT:?set SUMMARY_AGENT}", "-m", "Summarize the following text in one sentence. Return only the summary.
+
+$text")
+    return output, err
+}
+type Report string
+agentic func (r Report) Summarize() (string, error) {
+    text := string(r)
+    output, err := summarize(text)
+    return output, err
+}
+agentic {
+    var report Report = ""
+    report=$1
+    output, err := report.Summarize()
+    if [ -n "$err" ]; then
+        printf '%s\n' "$err" >&2
+        exit 1
+    fi
+    printf '%s' "$output"
+}

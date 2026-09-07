@@ -34,6 +34,24 @@ func TestBashPPLiveStatementReselection(t *testing.T) {
 	}
 }
 
+func TestBashPPCommandStringUsesSelectedDialect(t *testing.T) {
+	previous := *command
+	t.Cleanup(func() { *command = previous })
+	*command = `agentic function marked() { printf '%s' "$1"; }; agentic { marked "input value"; }`
+	var stdout, stderr bytes.Buffer
+	r, err := interp.New(interp.Lang(syntax.LangBashPP), interp.CommandString(true),
+		interp.StdIO(nil, &stdout, &stderr), interp.Env(expand.ListEnviron()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := run(r, strings.NewReader(*command), "agentic-fixture"); err != nil {
+		t.Fatalf("-c: %v (stderr %q)", err, stderr.String())
+	}
+	if stdout.String() != "input value" || stderr.Len() != 0 {
+		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
 func TestBashPPLiveDisableFallsBackToClassic(t *testing.T) {
 	var out, stderr bytes.Buffer
 	r, err := interp.New(interp.Lang(syntax.LangBashPP), interp.StdIO(nil, &out, &stderr), interp.Env(expand.ListEnviron()))

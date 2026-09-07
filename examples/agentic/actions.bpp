@@ -1,0 +1,6 @@
+# Shared definitions; sourcing a file does not grant agentic scope.
+agentic function summarize_shell() {
+    bashy chat --plain --read-only --agent "${SUMMARY_AGENT:?set SUMMARY_AGENT}" -m "Summarize the following text in one sentence. Return only the summary.
+
+$1"
+}

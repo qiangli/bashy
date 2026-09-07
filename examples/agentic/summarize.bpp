@@ -1,0 +1,10 @@
+#!/usr/bin/env -S bashy --bashpp
+# A standalone script and executable tool share the same source contract.
+source "${BASH_SOURCE[0]%/*}/actions.bpp"
+agentic {
+    if [ "$#" -gt 0 ]; then
+        summarize_shell "$1"
+    else
+        summarize_shell "$(cat)"
+    fi
+}
