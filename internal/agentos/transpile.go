@@ -289,17 +289,25 @@ func writeOutputsAtomic(outputPath string, outputData []byte, mapPath string, ma
 	}
 
 	var origOutData []byte
+	var origOutMode os.FileMode = 0644
 	outExisted := false
-	if data, err := os.ReadFile(outputPath); err == nil {
-		origOutData = data
-		outExisted = true
+	if st, err := os.Stat(outputPath); err == nil {
+		if data, err := os.ReadFile(outputPath); err == nil {
+			origOutData = data
+			origOutMode = st.Mode().Perm()
+			outExisted = true
+		}
 	}
 
 	var origMapData []byte
+	var origMapMode os.FileMode = 0644
 	mapExisted := false
-	if data, err := os.ReadFile(mapPath); err == nil {
-		origMapData = data
-		mapExisted = true
+	if st, err := os.Stat(mapPath); err == nil {
+		if data, err := os.ReadFile(mapPath); err == nil {
+			origMapData = data
+			origMapMode = st.Mode().Perm()
+			mapExisted = true
+		}
 	}
 
 	if err := os.Rename(tmpOutName, outputPath); err != nil {
@@ -309,12 +317,18 @@ func writeOutputsAtomic(outputPath string, outputData []byte, mapPath string, ma
 
 	if err := os.Rename(tmpMapName, mapPath); err != nil {
 		if outExisted {
-			_ = os.WriteFile(outputPath, origOutData, 0644)
+			if rerr := os.WriteFile(outputPath, origOutData, origOutMode); rerr != nil {
+				fmt.Fprintf(os.Stderr, "transpile: rollback failed restoring output file: %v\n", rerr)
+			}
 		} else {
-			_ = os.Remove(outputPath)
+			if rerr := os.Remove(outputPath); rerr != nil && !os.IsNotExist(rerr) {
+				fmt.Fprintf(os.Stderr, "transpile: rollback failed removing output file: %v\n", rerr)
+			}
 		}
 		if mapExisted {
-			_ = os.WriteFile(mapPath, origMapData, 0644)
+			if rerr := os.WriteFile(mapPath, origMapData, origMapMode); rerr != nil {
+				fmt.Fprintf(os.Stderr, "transpile: rollback failed restoring map file: %v\n", rerr)
+			}
 		}
 		fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
 		return 2

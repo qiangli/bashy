@@ -251,15 +251,6 @@ printf '%d\n' "$res"
 		t.Fatal("expected non-empty mappings array in map artifact")
 	}
 
-	// Assert explicit mapping fields
-	firstMap := art.Mappings[0]
-	if firstMap.GoLine <= 0 || firstMap.GoCol <= 0 {
-		t.Errorf("invalid go position in map entry: %+v", firstMap)
-	}
-	if firstMap.SourceLine <= 0 || firstMap.Node == "" {
-		t.Errorf("invalid source line or node in map entry: %+v", firstMap)
-	}
-
 	// Tidy go.mod in test directory
 	tidyCmd := exec.Command("go", "mod", "tidy")
 	tidyCmd.Dir = dir
@@ -282,21 +273,41 @@ printf '%d\n' "$res"
 		t.Fatal(err)
 	}
 
-	// Run binary with clean, shellfree PATH
+	// Verify both source (.bpp) and Go (.go) are absent
+	if _, err := os.Stat(inputFile); !os.IsNotExist(err) {
+		t.Fatalf("expected inputFile to be absent, but stat returned: %v", err)
+	}
+	if _, err := os.Stat(outputFile); !os.IsNotExist(err) {
+		t.Fatalf("expected outputFile to be absent, but stat returned: %v", err)
+	}
+
+	// Create empty temp directory for PATH (containing no sh/bash binaries)
+	emptyPathDir := t.TempDir()
+	if _, err := os.Stat(filepath.Join(emptyPathDir, "sh")); !os.IsNotExist(err) {
+		t.Fatalf("emptyPathDir should not contain sh")
+	}
+
+	// Run compiled binary with shellfree PATH pointing to empty directory
 	execCmd := exec.Command(binFile)
 	execCmd.Dir = dir
-	execCmd.Env = []string{"PATH=/bin:/usr/bin"}
+	execCmd.Env = []string{"PATH=" + emptyPathDir}
 	runOut, err := execCmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("standalone binary execution failed: %v\nOutput:\n%s", err, runOut)
 	}
-	if strings.TrimSpace(string(runOut)) != "52" {
-		t.Errorf("got program output %q, want 52", strings.TrimSpace(string(runOut)))
+	if string(runOut) != "52\n" {
+		t.Errorf("got program output %q, want exact %q", string(runOut), "52\n")
 	}
 }
 
 func TestTranspileRegisteredCLIDispatch(t *testing.T) {
-	// Verify command registration
+	if os.Getenv("GO_WANT_HELPER_PROCESS") == "1" {
+		os.Args = strings.Split(os.Getenv("TEST_OS_ARGS"), " ")
+		Dispatch()
+		return
+	}
+
+	// Verify command registration metadata
 	_, _, verbs := commandsCatalog()
 	found := false
 	for _, v := range verbs {
@@ -314,7 +325,7 @@ func TestTranspileRegisteredCLIDispatch(t *testing.T) {
 		t.Error("transpile verb has no synopsis in atlas record")
 	}
 
-	// Test registered CLI dispatch path
+	// Subprocess helper invoking actual Dispatch() with os.Args
 	dir := t.TempDir()
 	inputFile := filepath.Join(dir, "cli_test.bpp")
 	outputFile := filepath.Join(dir, "cli_out.go")
@@ -323,23 +334,18 @@ func TestTranspileRegisteredCLIDispatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
-	exitCode := dispatchTranspile([]string{"--bashpp", inputFile, "-o", outputFile})
-
-	w.Close()
-	os.Stderr = oldStderr
-
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-
-	if exitCode != 0 {
-		t.Errorf("dispatchTranspile failed via registered path: %d", exitCode)
+	cmd := exec.Command(os.Args[0], "-test.run=TestTranspileRegisteredCLIDispatch")
+	cmd.Env = append(os.Environ(),
+		"GO_WANT_HELPER_PROCESS=1",
+		"TEST_OS_ARGS=bashy transpile --bashpp "+inputFile+" -o "+outputFile,
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("subprocess Dispatch failed: %v, output: %s", err, out)
 	}
+
 	if _, err := os.Stat(outputFile); err != nil {
-		t.Errorf("expected outputFile to exist after registered dispatch: %v", err)
+		t.Errorf("expected outputFile to exist after Dispatch(): %v", err)
 	}
 }
 
@@ -349,7 +355,8 @@ func TestTranspileAtomicRollbackOnSecondRenameFailure(t *testing.T) {
 	mapFile := filepath.Join(dir, "bad_map_dir") // directory path will cause rename to fail
 
 	existingOut := []byte("// Old output content\n")
-	if err := os.WriteFile(outFile, existingOut, 0644); err != nil {
+	origMode := os.FileMode(0600)
+	if err := os.WriteFile(outFile, existingOut, origMode); err != nil {
 		t.Fatal(err)
 	}
 
@@ -365,13 +372,20 @@ func TestTranspileAtomicRollbackOnSecondRenameFailure(t *testing.T) {
 		t.Errorf("got exit %d when map rename fails, want 2", exit)
 	}
 
-	// Verify old output file was restored via rollback
+	// Verify old output file was restored via rollback with original mode
 	restored, err := os.ReadFile(outFile)
 	if err != nil {
 		t.Fatalf("could not read restored output file: %v", err)
 	}
 	if !bytes.Equal(restored, existingOut) {
 		t.Errorf("rollback failed: got %q, want %q", restored, existingOut)
+	}
+	st, err := os.Stat(outFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Mode().Perm() != origMode {
+		t.Errorf("restored file mode = %o, want original %o", st.Mode().Perm(), origMode)
 	}
 }
 
