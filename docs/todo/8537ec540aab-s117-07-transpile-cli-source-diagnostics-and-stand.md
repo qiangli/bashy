@@ -3,9 +3,10 @@ id: 8537ec540aab
 kind: task
 title: 'S117-07: transpile CLI source diagnostics and standalone artifacts'
 seq: 246
-status: blocked
+status: doing
 priority: p1
 created: 2026-09-07T17:54:06.128715Z
+assignee: agy-gemini3.1
 sprint: 117
 ---
 
