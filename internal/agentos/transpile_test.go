@@ -251,30 +251,24 @@ printf '%d\n' "$res"
 		t.Fatal("expected non-empty mappings array in map artifact")
 	}
 
-	// Reinstated source coordinate assertions guarding map meaning vs input script
-	firstMap := art.Mappings[0]
-	if firstMap.GoLine <= 0 || firstMap.GoCol <= 0 {
-		t.Errorf("invalid go position in map entry: %+v", firstMap)
-	}
-	if firstMap.Node == "" {
-		t.Errorf("invalid node in map entry: %+v", firstMap)
-	}
-	if firstMap.SourceLine != 2 {
-		t.Errorf("got first mapping SourceLine %d, want 2", firstMap.SourceLine)
-	}
-	if firstMap.SourceCol != 1 {
-		t.Errorf("got first mapping SourceCol %d, want 1", firstMap.SourceCol)
-	}
-
-	foundLine1 := false
+	// Assert map meaning by Node + exact source position without assuming entry ordering
+	var foundDecl1, foundFuncDecl2 bool
 	for _, m := range art.Mappings {
-		if m.SourceLine == 1 && m.SourceCol == 1 {
-			foundLine1 = true
-			break
+		if m.GoLine <= 0 || m.GoCol <= 0 {
+			t.Errorf("invalid go position in mapping entry: %+v", m)
+		}
+		if m.Node == "BashPPDecl" && m.SourceLine == 1 && m.SourceCol == 1 {
+			foundDecl1 = true
+		}
+		if m.Node == "BashPPFuncDecl" && m.SourceLine == 2 && m.SourceCol == 1 {
+			foundFuncDecl2 = true
 		}
 	}
-	if !foundLine1 {
-		t.Error("expected mapping for source line 1 col 1 (var x) in map artifact")
+	if !foundDecl1 {
+		t.Error("expected mapping for Node BashPPDecl at source position 1:1 in map artifact")
+	}
+	if !foundFuncDecl2 {
+		t.Error("expected mapping for Node BashPPFuncDecl at source position 2:1 in map artifact")
 	}
 
 	// Tidy go.mod in test directory
