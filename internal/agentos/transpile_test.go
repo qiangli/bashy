@@ -251,6 +251,32 @@ printf '%d\n' "$res"
 		t.Fatal("expected non-empty mappings array in map artifact")
 	}
 
+	// Reinstated source coordinate assertions guarding map meaning vs input script
+	firstMap := art.Mappings[0]
+	if firstMap.GoLine <= 0 || firstMap.GoCol <= 0 {
+		t.Errorf("invalid go position in map entry: %+v", firstMap)
+	}
+	if firstMap.Node == "" {
+		t.Errorf("invalid node in map entry: %+v", firstMap)
+	}
+	if firstMap.SourceLine != 2 {
+		t.Errorf("got first mapping SourceLine %d, want 2", firstMap.SourceLine)
+	}
+	if firstMap.SourceCol != 1 {
+		t.Errorf("got first mapping SourceCol %d, want 1", firstMap.SourceCol)
+	}
+
+	foundLine1 := false
+	for _, m := range art.Mappings {
+		if m.SourceLine == 1 && m.SourceCol == 1 {
+			foundLine1 = true
+			break
+		}
+	}
+	if !foundLine1 {
+		t.Error("expected mapping for source line 1 col 1 (var x) in map artifact")
+	}
+
 	// Tidy go.mod in test directory
 	tidyCmd := exec.Command("go", "mod", "tidy")
 	tidyCmd.Dir = dir
@@ -302,7 +328,12 @@ printf '%d\n' "$res"
 
 func TestTranspileRegisteredCLIDispatch(t *testing.T) {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") == "1" {
-		os.Args = strings.Split(os.Getenv("TEST_OS_ARGS"), " ")
+		var args []string
+		if err := json.Unmarshal([]byte(os.Getenv("TEST_OS_ARGS_JSON")), &args); err != nil {
+			fmt.Fprintf(os.Stderr, "helper JSON unmarshal error: %v\n", err)
+			os.Exit(2)
+		}
+		os.Args = args
 		Dispatch()
 		return
 	}
@@ -325,19 +356,25 @@ func TestTranspileRegisteredCLIDispatch(t *testing.T) {
 		t.Error("transpile verb has no synopsis in atlas record")
 	}
 
-	// Subprocess helper invoking actual Dispatch() with os.Args
+	// Subprocess helper invoking actual Dispatch() with os.Args, testing input/output paths with spaces
 	dir := t.TempDir()
-	inputFile := filepath.Join(dir, "cli_test.bpp")
-	outputFile := filepath.Join(dir, "cli_out.go")
+	inputFile := filepath.Join(dir, "cli test input.bpp")
+	outputFile := filepath.Join(dir, "cli test output.go")
 
 	if err := os.WriteFile(inputFile, []byte("var x int = 10\necho hi\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	argsList := []string{"bashy", "transpile", "--bashpp", inputFile, "-o", outputFile}
+	argsData, err := json.Marshal(argsList)
+	if err != nil {
 		t.Fatal(err)
 	}
 
 	cmd := exec.Command(os.Args[0], "-test.run=TestTranspileRegisteredCLIDispatch")
 	cmd.Env = append(os.Environ(),
 		"GO_WANT_HELPER_PROCESS=1",
-		"TEST_OS_ARGS=bashy transpile --bashpp "+inputFile+" -o "+outputFile,
+		"TEST_OS_ARGS_JSON="+string(argsData),
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -355,8 +392,11 @@ func TestTranspileAtomicRollbackOnSecondRenameFailure(t *testing.T) {
 	mapFile := filepath.Join(dir, "bad_map_dir") // directory path will cause rename to fail
 
 	existingOut := []byte("// Old output content\n")
-	origMode := os.FileMode(0600)
+	origMode := os.FileMode(0640) // mode distinct from temp file mode 0600
 	if err := os.WriteFile(outFile, existingOut, origMode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(outFile, origMode); err != nil {
 		t.Fatal(err)
 	}
 
@@ -372,7 +412,7 @@ func TestTranspileAtomicRollbackOnSecondRenameFailure(t *testing.T) {
 		t.Errorf("got exit %d when map rename fails, want 2", exit)
 	}
 
-	// Verify old output file was restored via rollback with original mode
+	// Verify old output file was restored via rollback with original mode 0640
 	restored, err := os.ReadFile(outFile)
 	if err != nil {
 		t.Fatalf("could not read restored output file: %v", err)

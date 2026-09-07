@@ -319,6 +319,8 @@ func writeOutputsAtomic(outputPath string, outputData []byte, mapPath string, ma
 		if outExisted {
 			if rerr := os.WriteFile(outputPath, origOutData, origOutMode); rerr != nil {
 				fmt.Fprintf(os.Stderr, "transpile: rollback failed restoring output file: %v\n", rerr)
+			} else if cerr := os.Chmod(outputPath, origOutMode); cerr != nil {
+				fmt.Fprintf(os.Stderr, "transpile: rollback failed setting permissions on output file: %v\n", cerr)
 			}
 		} else {
 			if rerr := os.Remove(outputPath); rerr != nil && !os.IsNotExist(rerr) {
@@ -328,6 +330,8 @@ func writeOutputsAtomic(outputPath string, outputData []byte, mapPath string, ma
 		if mapExisted {
 			if rerr := os.WriteFile(mapPath, origMapData, origMapMode); rerr != nil {
 				fmt.Fprintf(os.Stderr, "transpile: rollback failed restoring map file: %v\n", rerr)
+			} else if cerr := os.Chmod(mapPath, origMapMode); cerr != nil {
+				fmt.Fprintf(os.Stderr, "transpile: rollback failed setting permissions on map file: %v\n", cerr)
 			}
 		}
 		fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
