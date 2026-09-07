@@ -96,7 +96,7 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Caps: []string{atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
 	},
 	"transpile": {
-		Stage: atlas.StageCode, Group: atlas.GroupDevtools, Tier: atlas.TierUserland,
+		Stage: atlas.StageCode, Group: atlas.GroupToolchains, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
 	},
 	"full": {

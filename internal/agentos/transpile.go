@@ -1,19 +1,29 @@
 package agentos
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"mvdan.cc/sh/v3/lower"
 	"mvdan.cc/sh/v3/syntax"
 )
 
-// dispatchTranspile handles 'bashy transpile --bashpp INPUT -o OUTPUT.go'
+type sourceMapArtifact struct {
+	Origin   string          `json:"origin"`
+	GoDigest string          `json:"go_digest"`
+	Mappings []lower.Mapping `json:"mappings"`
+}
+
+// dispatchTranspile handles 'bashy transpile --bashpp INPUT -o OUTPUT.go [--map MAPFILE]'
 func dispatchTranspile(args []string) int {
 	var bashpp bool
 	var output string
 	var input string
+	var mapFile string
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -29,6 +39,16 @@ func dispatchTranspile(args []string) int {
 			}
 		} else if strings.HasPrefix(arg, "-o") && len(arg) > 2 {
 			output = arg[2:]
+		} else if arg == "--map" {
+			if i+1 < len(args) {
+				mapFile = args[i+1]
+				i++
+			} else {
+				fmt.Fprintln(os.Stderr, "transpile: missing argument for --map")
+				return 2
+			}
+		} else if strings.HasPrefix(arg, "--map=") {
+			mapFile = strings.TrimPrefix(arg, "--map=")
 		} else if !strings.HasPrefix(arg, "-") {
 			if input == "" {
 				input = arg
@@ -37,12 +57,6 @@ func dispatchTranspile(args []string) int {
 				return 2
 			}
 		} else {
-			// Preserve Classic/POSIX modes: if they pass --posix instead of --bashpp, we reject it
-			// because transpile currently requires BashPP. But we parse it to give a clear error.
-			if arg == "--posix" || arg == "--classic" {
-				fmt.Fprintf(os.Stderr, "transpile: %s is not supported for transpilation\n", arg)
-				return 2
-			}
 			fmt.Fprintf(os.Stderr, "transpile: unknown flag: %s\n", arg)
 			return 2
 		}
@@ -61,10 +75,17 @@ func dispatchTranspile(args []string) int {
 		return 2
 	}
 
+	absInput, errInput := filepath.Abs(input)
+	absOutput, errOutput := filepath.Abs(output)
+	if errInput == nil && errOutput == nil && absInput == absOutput {
+		fmt.Fprintln(os.Stderr, "transpile: input and output path cannot be the same file")
+		return 2
+	}
+
 	f, err := os.Open(input)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
-		return 1
+		return 2
 	}
 	defer f.Close()
 
@@ -72,7 +93,7 @@ func dispatchTranspile(args []string) int {
 	file, err := parser.Parse(f, input)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		return 1
+		return 2
 	}
 
 	opts := lower.Options{
@@ -87,13 +108,88 @@ func dispatchTranspile(args []string) int {
 		} else {
 			fmt.Fprintln(os.Stderr, err)
 		}
-		return 1 // nonzero exit/no output on rejection
+		return 2
 	}
 
-	// Write output only on success, stable emission independent output path
-	if err := os.WriteFile(output, res.Source, 0666); err != nil {
+	if mapFile == "" {
+		if strings.HasSuffix(output, ".go") {
+			mapFile = strings.TrimSuffix(output, ".go") + ".go.map"
+		} else {
+			mapFile = output + ".map"
+		}
+	}
+
+	goDigest := fmt.Sprintf("sha256:%x", sha256.Sum256(res.Source))
+	mapArt := sourceMapArtifact{
+		Origin:   res.Origin,
+		GoDigest: goDigest,
+		Mappings: res.Mappings,
+	}
+	mapData, err := json.MarshalIndent(mapArt, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "transpile: map marshal error: %v\n", err)
+		return 2
+	}
+
+	outDir := filepath.Dir(output)
+	if err := os.MkdirAll(outDir, 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
-		return 1
+		return 2
+	}
+
+	tmpOut, err := os.CreateTemp(outDir, ".transpile-out-*.tmp")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
+		return 2
+	}
+	tmpOutName := tmpOut.Name()
+	defer os.Remove(tmpOutName)
+
+	if _, err := tmpOut.Write(res.Source); err != nil {
+		tmpOut.Close()
+		fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
+		return 2
+	}
+	if err := tmpOut.Sync(); err != nil {
+		tmpOut.Close()
+		fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
+		return 2
+	}
+	tmpOut.Close()
+
+	mapDir := filepath.Dir(mapFile)
+	if err := os.MkdirAll(mapDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
+		return 2
+	}
+	tmpMap, err := os.CreateTemp(mapDir, ".transpile-map-*.tmp")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
+		return 2
+	}
+	tmpMapName := tmpMap.Name()
+	defer os.Remove(tmpMapName)
+
+	if _, err := tmpMap.Write(mapData); err != nil {
+		tmpMap.Close()
+		fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
+		return 2
+	}
+	if err := tmpMap.Sync(); err != nil {
+		tmpMap.Close()
+		fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
+		return 2
+	}
+	tmpMap.Close()
+
+	if err := os.Rename(tmpOutName, output); err != nil {
+		fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
+		return 2
+	}
+
+	if err := os.Rename(tmpMapName, mapFile); err != nil {
+		fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
+		return 2
 	}
 
 	return 0

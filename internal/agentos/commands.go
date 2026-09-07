@@ -379,6 +379,7 @@ var verbSynopsis = map[string]string{
 	"sdlc":        "route intake issues through agentic implementation and deployment gates",
 	"web":         "web inspection helpers for SDLC verification",
 	"dag":         "agent-first markdown DAG task runner",
+	"transpile":   "compile Bash++ source to ordinary Go with source maps",
 	"schedule":    "modern cron: run a command on a cron/interval/at schedule",
 	"secrets":     "managed API-key/token vault for the shell",
 	"bus":         "agent notification bus: `bus publish` a change, `bus watch` for one (kb holds facts; the bus carries changes)",
