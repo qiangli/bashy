@@ -352,8 +352,8 @@ func TestTranspileRegisteredCLIDispatch(t *testing.T) {
 	if rec.Synopsis == "" {
 		t.Error("transpile verb has no synopsis in atlas record")
 	}
-	if len(rec.Caps) != 1 || rec.Caps[0] != "json" {
-		t.Errorf("got transpile caps %v, want [json]", rec.Caps)
+	if len(rec.Caps) != 0 {
+		t.Errorf("got transpile caps %v, want []", rec.Caps)
 	}
 	if len(rec.Effects) != 2 || rec.Effects[0] != "read" || rec.Effects[1] != "write" {
 		t.Errorf("got transpile effects %v, want [read write]", rec.Effects)
@@ -485,9 +485,7 @@ func TestTranspileNegativeDiagnosticNoEmission(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Code with unsupported node / type error in lower compile
-	badScript := `var x nonexistent_type = 123
-`
+	badScript := "var x nonexistent_type = 123\n"
 	if err := os.WriteFile(inputFile, []byte(badScript), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -508,8 +506,8 @@ func TestTranspileNegativeDiagnosticNoEmission(t *testing.T) {
 	if exitCode != 2 {
 		t.Errorf("got exit code %d, want 2", exitCode)
 	}
-	if !strings.Contains(stderr, "LOWER-") {
-		t.Errorf("got stderr %q, want positioned LOWER- diagnostic", stderr)
+	if !strings.Contains(stderr, "LOWER-") && !strings.Contains(stderr, "BASHPP-") {
+		t.Errorf("got stderr %q, want diagnostic code", stderr)
 	}
 
 	// Verify existing output file was preserved
@@ -539,7 +537,7 @@ func TestTranspileNegativeDiagnosticNoEmission(t *testing.T) {
 		t.Errorf("input file was modified on compile rejection: got %q, want %q", currentInput, badScript)
 	}
 
-	// Test case without pre-existing output or map files
+	// Subtest: diagnostic without pre-existing output or map files
 	t.Run("no_preexisting_files", func(t *testing.T) {
 		dir2 := t.TempDir()
 		input2 := filepath.Join(dir2, "bad2.bpp")

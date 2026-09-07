@@ -24,7 +24,7 @@ To build standalone Go binaries transpiled from Bash++:
 
 ### 1. Clone & Pin the Published Dependency Repo
 
-Clone the compiler/runtime repository to `deps/sh` and checkout the published commit SHA (`7146b30e1c1c8c845f6565c9f5c5609f4de93172`):
+Clone the compiler/runtime repository to `workspace/deps/sh` and checkout the published commit SHA (`7146b30e1c1c8c845f6565c9f5c5609f4de93172`):
 
 ```bash
 mkdir -p workspace/deps
@@ -34,7 +34,7 @@ git -C workspace/deps/sh checkout 7146b30e1c1c8c845f6565c9f5c5609f4de93172
 
 ### 2. Create Application Directory & Transpile
 
-Create the `app` directory, write the Bash++ source script, and invoke `bashy transpile`:
+Create the `workspace/app` directory, write the Bash++ source script, change into `workspace/app`, and invoke `bashy transpile`:
 
 ```bash
 mkdir -p workspace/app
@@ -53,22 +53,18 @@ bashy transpile --bashpp input.bpp -o output.go
 Initialize the Go module in `workspace/app` and configure the `replace` directive pointing to the relative path `../deps/sh`:
 
 ```bash
-cd workspace/app
-
 go mod init app
 go mod edit -require=mvdan.cc/sh/v3@v3.0.0
 go mod edit -replace=mvdan.cc/sh/v3=../deps/sh
 go mod tidy
 ```
 
-The resulting `go.mod` in `workspace/app` will be:
+For pure standard-library emitted scripts, `go mod tidy` prunes unused `require` entries while keeping the module `replace` directive intact:
 
 ```go
 module app
 
 go 1.27
-
-require mvdan.cc/sh/v3 v3.0.0
 
 replace mvdan.cc/sh/v3 => ../deps/sh
 ```
@@ -78,7 +74,6 @@ replace mvdan.cc/sh/v3 => ../deps/sh
 Compile the transpiled Go code into a standalone binary:
 
 ```bash
-cd workspace/app
 go build -mod=mod -o myapp output.go
 ```
 
@@ -87,7 +82,6 @@ go build -mod=mod -o myapp output.go
 Remove the input Bash++ script (`input.bpp`) and transpiled Go file (`output.go`) to prove standalone binary execution:
 
 ```bash
-cd workspace/app
 rm input.bpp output.go
 PATH="" ./myapp
 ```
