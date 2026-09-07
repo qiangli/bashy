@@ -590,7 +590,19 @@ func TestTranspileNegativeDiagnosticNoEmission(t *testing.T) {
 func TestFormatDiagnostic(t *testing.T) {
 	pos := syntax.NewPos(12, 1, 5)
 
-	// BASHPP- prefix diagnostic: exact Code + ": " + Msg without file position prefix
+	// 1. Text field non-empty precedence: exact Text string returned
+	textDiag := lower.Diagnostic{
+		Code: "BASHPP-ETYPE",
+		Msg:  "type mismatch",
+		Pos:  pos,
+		Node: "BashPPDecl",
+		Text: "input.bpp: line 1: BASHPP-ETYPE: custom exact text rendering",
+	}
+	if got := formatDiagnostic(textDiag); got != textDiag.Text {
+		t.Errorf("got formatted Text diagnostic %q, want exact Text %q", got, textDiag.Text)
+	}
+
+	// 2. BASHPP- prefix diagnostic (Text empty): exact Code + ": " + Msg without file position prefix
 	bashppDiag := lower.Diagnostic{
 		Code: "BASHPP-ETYPE",
 		Msg:  "type mismatch",
@@ -601,7 +613,7 @@ func TestFormatDiagnostic(t *testing.T) {
 		t.Errorf("got formatted BASHPP diagnostic %q, want %q", got, "BASHPP-ETYPE: type mismatch")
 	}
 
-	// LOWER- prefix diagnostic: retains file position prefix
+	// 3. LOWER- prefix diagnostic (Text empty): retains file position prefix
 	lowerDiag := lower.Diagnostic{
 		Code: "LOWER-EUNSUPPORTED",
 		Msg:  "unsupported statement",
@@ -610,5 +622,81 @@ func TestFormatDiagnostic(t *testing.T) {
 	}
 	if got := formatDiagnostic(lowerDiag); !strings.HasPrefix(got, "1:5: LOWER-EUNSUPPORTED: unsupported statement") {
 		t.Errorf("got formatted LOWER diagnostic %q, want positioned format starting with %q", got, "1:5: LOWER-EUNSUPPORTED: unsupported statement")
+	}
+}
+
+func TestTranspileCLIDiagnosticsIntegration(t *testing.T) {
+	tests := []struct {
+		name        string
+		script      string
+		wantExit    int
+		wantStderr  string
+	}{
+		{
+			name:       "unsupported_type_rejection",
+			script:     "var x nonexistent_type = 123\n",
+			wantExit:   2,
+			wantStderr: "LOWER-",
+		},
+		{
+			name:       "syntax_error_rejection",
+			script:     "func (\n",
+			wantExit:   2,
+			wantStderr: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			inputFile := filepath.Join(dir, "input.bpp")
+			outputFile := filepath.Join(dir, "out.go")
+			mapFile := filepath.Join(dir, "out.go.map")
+
+			if err := os.WriteFile(inputFile, []byte(tt.script), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			oldStderr := os.Stderr
+			r, w, _ := os.Pipe()
+			os.Stderr = w
+
+			exitCode := dispatchTranspile([]string{"--bashpp", inputFile, "-o", outputFile})
+
+			w.Close()
+			os.Stderr = oldStderr
+
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+			stderr := buf.String()
+
+			if exitCode != tt.wantExit {
+				t.Errorf("got exit code %d, want %d", exitCode, tt.wantExit)
+			}
+			if tt.wantStderr != "" && !strings.Contains(stderr, tt.wantStderr) {
+				t.Errorf("got stderr %q, want it to contain %q", stderr, tt.wantStderr)
+			}
+			if stderr == "" {
+				t.Error("expected non-empty stderr diagnostic output")
+			}
+
+			// Verify no Go output file emitted
+			if _, err := os.Stat(outputFile); !os.IsNotExist(err) {
+				t.Errorf("output file was created on error: %v", err)
+			}
+			// Verify no source map file emitted
+			if _, err := os.Stat(mapFile); !os.IsNotExist(err) {
+				t.Errorf("map file was created on error: %v", err)
+			}
+
+			// Verify input file content remains unchanged
+			inData, err := os.ReadFile(inputFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(inData) != tt.script {
+				t.Errorf("input file content was modified: got %q, want %q", string(inData), tt.script)
+			}
+		})
 	}
 }

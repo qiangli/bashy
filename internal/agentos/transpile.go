@@ -51,10 +51,14 @@ type sourceMapArtifact struct {
 	Mappings      []mapEntry `json:"mappings"`
 }
 
-// formatDiagnostic renders a lower.Diagnostic. Structured diagnostics with a Code starting
-// with "BASHPP-" are printed as exact Code + ": " + Msg without file position prefixes;
-// ordinary LOWER- diagnostics retain their positioned format.
+// formatDiagnostic renders a lower.Diagnostic. Non-empty Text takes precedence.
+// Structured diagnostics with a Code starting with "BASHPP-" are printed as
+// exact Code + ": " + Msg without file position prefixes; ordinary LOWER-
+// diagnostics retain their positioned format.
 func formatDiagnostic(d lower.Diagnostic) string {
+	if d.Text != "" {
+		return d.Text
+	}
 	if strings.HasPrefix(d.Code, "BASHPP-") {
 		return fmt.Sprintf("%s: %s", d.Code, d.Msg)
 	}
