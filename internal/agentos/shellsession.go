@@ -44,6 +44,7 @@
 package agentos
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -52,6 +53,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/room"
 	coreskills "github.com/qiangli/coreutils/pkg/skills"
+	"github.com/qiangli/coreutils/pkg/weave"
 )
 
 // shellSessionPrefix namespaces presence cards away from the ids room.Join
@@ -157,6 +159,21 @@ func fleetAgentNames() []string {
 // filter cannot describe it and it is skipped rather than guessed at — the same
 // no-attribution-no-row rule the capability ledger uses.
 func fleetSelectAudience(aud bus.Audience) ([]string, error) {
+	// ROLE is answered from the SPRINT RECORDS, not the catalog, because it
+	// selects on what an agent is DOING rather than on its binding. This is
+	// the seam sprint #139 was blocked on: pkg/bus is transport and must not
+	// learn to read the sprint store, so the host joins the two.
+	//
+	// It is deliberately exclusive of the binding filters rather than combined
+	// with them. Nothing today wants "L4 conductors", and silently ANDing two
+	// selectors that answer different questions would make an empty result
+	// indistinguishable from a wrong one.
+	if role := strings.TrimSpace(aud.Role); role != "" {
+		if !strings.EqualFold(role, "conductor") {
+			return nil, fmt.Errorf("unknown role %q: the only role with a live roster is 'conductor' (the seated sprint managers)", role)
+		}
+		return weave.LiveSprintManagers()
+	}
 	cat := fleet.New()
 	agents, _ := cat.Agents()
 	var out []string
