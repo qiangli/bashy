@@ -15,6 +15,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/foreman"
 	"github.com/qiangli/coreutils/pkg/llmbudget"
 	"github.com/qiangli/coreutils/pkg/resources"
+	"github.com/qiangli/coreutils/pkg/weave"
 )
 
 func monitorFixture(at time.Time, cpu float64, stale bool) *sprintMonitorSnapshot {
@@ -28,7 +29,10 @@ func TestSprintMonitorWatchBoundsOutputAndIgnoresTimestampOnlyChanges(t *testing
 	calls := 0
 	rt := sprintMonitorRuntime{now: func() time.Time { return now }, collect: func(context.Context, sprintMonitorOptions) (*sprintMonitorSnapshot, error) {
 		calls++
-		return monitorFixture(now, 10, false), nil
+		snapshot := monitorFixture(now, 10, false)
+		quota := 42.0
+		snapshot.Models.Accounts = []llmbudget.AccountReport{{Provider: "fixture", Account: "shared", Status: "ok", Metrics: []llmbudget.Metric{{Name: "quota.used_percent", Value: &quota, Classification: "actual", ObservedAt: now, Source: "fixture"}}}}
+		return snapshot, nil
 	}, wait: func(context.Context, time.Duration) error {
 		now = now.Add(30 * time.Second)
 		if calls == 3 {
@@ -51,6 +55,9 @@ func TestSprintMonitorWatchBoundsOutputAndIgnoresTimestampOnlyChanges(t *testing
 		var e sprintMonitorEvent
 		if err := json.Unmarshal([]byte(line), &e); err != nil {
 			t.Fatal(err)
+		}
+		if len(e.Accounts) != 1 || e.Accounts[0].Metrics[0].ObservedAt.IsZero() {
+			t.Fatal("emitted known quota lost actual observation timestamp")
 		}
 		want := "snapshot"
 		if i == 1 {
@@ -299,5 +306,43 @@ func TestSprintMonitorQuotaWindowsRemainDistinct(t *testing.T) {
 			t.Fatal("shared quota windows collapsed")
 		}
 		seen[sample.key] = true
+	}
+}
+
+func TestSprintMonitorRemoteSnapshotPreservesInventoryWithoutLocalNotices(t *testing.T) {
+	sprintWatchIsolate(t)
+	now := time.Now().UTC()
+	s := monitorFixture(now, 95, false)
+	s.Inventory = &weave.SprintInventory{At: now, Complete: true, Sprints: []weave.SprintInventorySeat{{ID: 138, Owner: "remote-owner", Active: true}}}
+	raw, _ := json.Marshal(s)
+	remote, e := decodeRemoteSprintMonitor(raw, sprintMonitorOptions{Sprint: 138, Host: "fixture-remote"}, now)
+	if e != nil || remote.Origin != "fixture-remote" || remote.Inventory == nil {
+		t.Fatalf("remote attribution lost: %+v %v", remote, e)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	calls := 0
+	rt := sprintMonitorRuntime{now: func() time.Time { return now }, collect: func(context.Context, sprintMonitorOptions) (*sprintMonitorSnapshot, error) {
+		calls++
+		return remote, nil
+	}, wait: func(context.Context, time.Duration) error {
+		now = now.Add(20 * time.Second)
+		if calls == 2 {
+			cancel()
+		}
+		return nil
+	}}
+	var out bytes.Buffer
+	if e = runSprintMonitor(ctx, &out, sprintMonitorOptions{Sprint: 138, Host: "fixture-remote"}, true, true, false, 5*time.Second, rt); e != nil {
+		t.Fatal(e)
+	}
+	ledger, e := resources.ReadAlertState(context.Background(), resources.ResourcesStateDir())
+	if e != nil || len(ledger.Entries) != 0 {
+		t.Fatal("remote observation evaluated local owner alerts")
+	}
+	s.At = now.Add(time.Minute)
+	raw, _ = json.Marshal(s)
+	if _, e = decodeRemoteSprintMonitor(raw, sprintMonitorOptions{}, now); e == nil {
+		t.Fatal("future remote data accepted")
 	}
 }

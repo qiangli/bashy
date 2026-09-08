@@ -869,6 +869,7 @@ func Dispatch() {
 		// dependency graph. dag.ExitCodeOf recovers the stable weavecli exit
 		// code from the cobra error so agents get a meaningful status.
 		cmd := dag.NewDagCmd()
+		dag.AddCapacityCommands(cmd, sprintCapacityServices())
 		cmd.SetArgs(os.Args[2:])
 		os.Exit(dag.ExitCodeOf(cmd.Execute()))
 	case "skills":

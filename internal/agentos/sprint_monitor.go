@@ -32,6 +32,7 @@ type sprintMonitorOptions struct {
 }
 type sprintMonitorSnapshot struct {
 	SchemaVersion string                     `json:"schema_version"`
+	Origin        string                     `json:"origin,omitempty"`
 	At            time.Time                  `json:"at"`
 	Sprint        int64                      `json:"sprint,omitempty"`
 	Host          *resources.HostObservation `json:"host"`
@@ -297,7 +298,6 @@ func monitorAccountLevels(s *sprintMonitorSnapshot) []sprintMonitorAccount {
 		row := sprintMonitorAccount{Provider: a.Provider, Account: a.Account, Pool: a.Pool, Status: a.Status}
 		for _, m := range a.Metrics {
 			if strings.HasPrefix(m.Name, "quota.") || strings.HasPrefix(m.Name, "budget.") || strings.HasPrefix(m.Name, "billing.") {
-				m.ObservedAt = time.Time{} // shared report retains exact source timestamps
 				row.Metrics = append(row.Metrics, m)
 			}
 		}
@@ -336,7 +336,7 @@ func runSprintMonitor(ctx context.Context, w io.Writer, opt sprintMonitorOptions
 			}
 			return renderSprintMonitor(w, s)
 		}
-		if s.Inventory != nil {
+		if s.Inventory != nil && s.Origin == "" {
 			targets := map[int64]string{}
 			for _, seat := range s.Inventory.Sprints {
 				if seat.Active && seat.Owner != "" && (opt.Sprint == 0 || seat.ID == opt.Sprint) {
@@ -357,6 +357,13 @@ func runSprintMonitor(ctx context.Context, w io.Writer, opt sprintMonitorOptions
 		stable := e
 		stable.At = time.Time{}
 		stable.Summary.At = time.Time{}
+		stable.Accounts = append([]sprintMonitorAccount(nil), e.Accounts...)
+		for i := range stable.Accounts {
+			stable.Accounts[i].Metrics = append([]llmbudget.Metric(nil), e.Accounts[i].Metrics...)
+			for j := range stable.Accounts[i].Metrics {
+				stable.Accounts[i].Metrics[j].ObservedAt = time.Time{}
+			}
+		}
 		b, _ := json.Marshal(stable)
 		hash := sha256.Sum256(b)
 		fingerprint := hex.EncodeToString(hash[:])
