@@ -392,6 +392,7 @@ func Dispatch() {
 		os.Exit(dispatchFull(os.Args[2:]))
 	case "weave":
 		cmd := weave.NewWeaveCmd()
+		configureWeaveResourceAdmission(cmd)
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
@@ -868,6 +869,7 @@ func Dispatch() {
 		// dependency graph. dag.ExitCodeOf recovers the stable weavecli exit
 		// code from the cobra error so agents get a meaningful status.
 		cmd := dag.NewDagCmd()
+		dag.AddCapacityCommands(cmd, sprintCapacityServices())
 		cmd.SetArgs(os.Args[2:])
 		os.Exit(dag.ExitCodeOf(cmd.Execute()))
 	case "skills":
@@ -1570,7 +1572,7 @@ func runFleet(noun string, args []string) {
 	case "tools":
 		cmd = fleet.NewToolsCmd()
 	case "models":
-		cmd = fleet.NewModelsCmd()
+		cmd = newModelsResourcesCmd()
 	case "agents":
 		// `agents verify --live` actually launches each agent, and `agents clone`
 		// branches its conversation store. Both live in pkg/chat, which reads the

@@ -50,10 +50,12 @@ type sprintWatchReminder struct {
 }
 
 type sprintWatchRuntime struct {
-	ackEvery    time.Duration
-	poll        inboxPollRuntime
-	ackSeq      func(int64, string) (int64, error) // legacy test injection
-	ackPosition func(context.Context, int64, string) (room.TimelinePosition, error)
+	observe      func(context.Context, int64, string)
+	observeEvery time.Duration
+	ackEvery     time.Duration
+	poll         inboxPollRuntime
+	ackSeq       func(int64, string) (int64, error) // legacy test injection
+	ackPosition  func(context.Context, int64, string) (room.TimelinePosition, error)
 	// beatEvery and beat keep the attached seat's lease alive; release stands
 	// it back down when this stream detaches. Both are vars so a test can
 	// drive the schedule without a sprint store on disk.
@@ -64,6 +66,7 @@ type sprintWatchRuntime struct {
 
 func defaultSprintWatchRuntime() sprintWatchRuntime {
 	return sprintWatchRuntime{
+		observe: observeSprintResources, observeEvery: 5 * time.Second,
 		ackEvery: sprintWatchAckInterval,
 		poll:     defaultInboxPollRuntime(true), ackPosition: newSprintWatchAckReader().latest,
 		beatEvery: sprintWatchHeartbeat, beat: holdSprintWatchLease,
@@ -99,6 +102,8 @@ func runSprintInboxWatch(ctx context.Context, out, errOut io.Writer, sprintID in
 	if rt.release != nil {
 		defer func() { _ = rt.release(sprintID, owner) }()
 	}
+	stopObservation := startSprintObservation(ctx, sprintID, owner, rt.observeEvery, rt.observe)
+	defer stopObservation()
 	gate := &inboxPollGate{reader: owner, fingerprint: rt.poll.fingerprint, fullRescan: rt.poll.fullRescan}
 	interval := rt.poll.min
 	var pending *inboxBatch

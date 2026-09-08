@@ -25,7 +25,7 @@ import (
 // command's own help makes it durable — every agent that reads `sprint --help`
 // sees the accountability contract next to the mechanics it is the point of.
 func newSprintCmd() *cobra.Command {
-	cmd := weave.NewSprintCmd()
+	cmd := weave.NewSprintCmd(weave.WithSprintResources(sprintMonitorSummary))
 	cmd.Short = "Plan/handoff board AND the ACTIVE owner-accountability contract for a sprint"
 	if !strings.Contains(cmd.Long, ownerAccountabilityHelp) {
 		cmd.Long = strings.TrimRight(cmd.Long, "\n") + "\n\n" + ownerAccountabilityHelp
@@ -36,6 +36,7 @@ func newSprintCmd() *cobra.Command {
 		}
 	}
 	cmd.AddCommand(newSprintInboxAckCmd())
+	cmd.AddCommand(newSprintMonitorCmd())
 	return cmd
 }
 
