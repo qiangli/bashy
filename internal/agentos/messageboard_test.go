@@ -3,6 +3,7 @@ package agentos
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -267,16 +268,136 @@ func TestFleetSelectAnswersRoleFromTheSprintRecords(t *testing.T) {
 		}
 	})
 
-	t.Run("role is exclusive of binding filters", func(t *testing.T) {
-		got, err := bus.FleetSelect(bus.Audience{Role: "conductor", Band: 9, Tool: "nonexistent"})
-		if err != nil {
-			t.Fatal(err)
-		}
-		// This test environment has no fleet catalog, so ANDing Role with the
-		// binding filters would yield EMPTY here — the wrong-answer shape the
-		// comment in fleetSelectAudience promises can never happen.
-		if len(got) != 1 || got[0] != "zoe" {
-			t.Fatalf("FleetSelect(role+binding) = %v, want [zoe] — Role must answer from the sprint records alone", got)
-		}
+	for _, tc := range []struct {
+		field string
+		aud   bus.Audience
+	}{
+		{"band", bus.Audience{Role: "conductor", Band: 4}},
+		{"tool", bus.Audience{Role: "conductor", Tool: "ycode"}},
+		{"provider", bus.Audience{Role: "conductor", Provider: "p"}},
+		{"family", bus.Audience{Role: "conductor", Family: "f"}},
+		{"version", bus.Audience{Role: "conductor", Version: "v"}},
+	} {
+		t.Run("role rejects "+tc.field, func(t *testing.T) {
+			got, err := bus.FleetSelect(tc.aud)
+			if err == nil || !strings.Contains(err.Error(), "role") || !strings.Contains(err.Error(), tc.field) {
+				t.Fatalf("FleetSelect(role+%s) = %v, %v; want named refusal", tc.field, got, err)
+			}
+			if len(got) != 0 {
+				t.Fatalf("invalid selector returned recipients: %v", got)
+			}
+		})
+	}
+}
+
+// Drive an actual stage command through the host's sprint-roster resolver and
+// then read as a second live manager with no sprint topic subscription. Field-only
+// announcement tests cannot prove this combined path or its uncapped routing.
+func TestStageAnnouncementsReachUnsubscribedLivePeer(t *testing.T) {
+	isolateStageBoard(t)
+	fresh := time.Now().UTC()
+	seedSprintBoard(t, []map[string]any{
+		seededStory(1, "stage-author", fresh),
+		seededStory(2, "stage-peer", fresh),
+		seededStory(3, "stage-ghost", fresh.Add(-weave.SprintLeaseTTL-time.Minute)),
+		seededStory(4, "", fresh),
 	})
+	wireMessageBoard()
+	if _, err := bus.EnsureSubscription("stage-peer"); err != nil {
+		t.Fatal(err)
+	}
+	for _, concern := range bus.DeclaredConcerns("stage-peer") {
+		if concern == "sprint" || concern == "*" {
+			t.Fatalf("peer unexpectedly subscribed to %q", concern)
+		}
+	}
+	for i := range 5 {
+		column := "backlog"
+		if i%2 == 1 {
+			column = "doing"
+		}
+		runStageMove(t, column)
+	}
+	posts, err := bus.Posts()
+	if err != nil || len(posts) != 5 {
+		t.Fatalf("stage history = %v, %v; want five posts", posts, err)
+	}
+	for _, p := range posts {
+		if p.Topic != "sprint" || p.Audience == nil || p.Audience.Role != "conductor" {
+			t.Fatalf("stage announcement lost routing: %+v", p)
+		}
+	}
+	directed, other, older, err := bus.Unseen("stage-peer", 2)
+	if err != nil || len(directed)+len(other) != 5 || older != 0 {
+		t.Fatalf("peer read: directed=%d other=%d older=%d err=%v; want all five uncapped", len(directed), len(other), older, err)
+	}
+	for _, excluded := range []string{"stage-ghost", "unowned-reader"} {
+		directed, other, _, err := bus.Unseen(excluded, 2)
+		if err != nil || len(directed)+len(other) != 0 {
+			t.Fatalf("excluded reader %s received %d posts: %v", excluded, len(directed)+len(other), err)
+		}
+	}
+}
+
+func TestStageAnnouncementResolutionFailurePreservesTransition(t *testing.T) {
+	for _, failure := range []string{"unavailable", "roster read failed"} {
+		t.Run(failure, func(t *testing.T) {
+			isolateStageBoard(t)
+			seedSprintBoard(t, []map[string]any{seededStory(1, "stage-author", time.Now().UTC())})
+			previous := bus.FleetSelect
+			t.Cleanup(func() { bus.FleetSelect = previous })
+			bus.FleetSelect = nil
+			if failure != "unavailable" {
+				bus.FleetSelect = func(bus.Audience) ([]string, error) { return nil, errors.New(failure) }
+			}
+			stderr := runStageMove(t, "backlog")
+			if !strings.Contains(stderr, "state change was recorded") || !strings.Contains(stderr, failure) {
+				t.Fatalf("announcement failure not visible: %q", stderr)
+			}
+			posts, err := bus.Posts()
+			if err != nil || len(posts) != 0 {
+				t.Fatalf("failed announcement posts = %v, %v", posts, err)
+			}
+			data, err := os.ReadFile(filepath.Join(os.Getenv("BASHY_SPRINT_DIR"), "queue.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var board struct {
+				Stories []struct {
+					Column string `json:"column"`
+				} `json:"stories"`
+			}
+			if err := json.Unmarshal(data, &board); err != nil {
+				t.Fatal(err)
+			}
+			if len(board.Stories) != 1 || board.Stories[0].Column != "backlog" {
+				t.Fatalf("stage did not persist: %s", data)
+			}
+		})
+	}
+}
+
+func isolateStageBoard(t *testing.T) {
+	t.Helper()
+	for _, variable := range []string{"BASHY_HOME", "BASHY_MB_DIR", "BASHY_ROOM_DIR", "BASHY_FLEET_DIR", "BASHY_MEET_DIR"} {
+		t.Setenv(variable, t.TempDir())
+	}
+	for _, variable := range []string{"BASHY_AGENTS_DIR", "BASHY_PEOPLE_DIR", "BASHY_AGENTS_PATH", "BASHY_PEOPLE_PATH"} {
+		t.Setenv(variable, "")
+	}
+	t.Setenv("BASHY_PRINCIPAL", "stage-author")
+	t.Setenv("BASHY_SPRINT_ANNOUNCE", "1")
+}
+
+func runStageMove(t *testing.T, column string) string {
+	t.Helper()
+	cmd := weave.NewSprintCmd()
+	var out, stderr bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{"move", "1", column})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("stage move: %v, stderr=%s", err, &stderr)
+	}
+	return stderr.String()
 }
