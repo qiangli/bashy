@@ -49,6 +49,11 @@ func TestHostAdmissionPressureUnknownAndFilesystem(t *testing.T) {
 	s.Stale = false
 	s.Kind = "actual"
 	obs.Sections["cpu"] = s
+	unknown := demand
+	unknown.MemoryBytes = 0
+	if err := checkHostAdmission(p, obs, unknown, now); err == nil {
+		t.Fatal("unknown run memory admitted under hard floor")
+	}
 	obs.System.Memory.AvailableBytes = 105
 	if err := checkHostAdmission(p, obs, demand, now); err == nil {
 		t.Fatal("run demand omitted from memory floor")

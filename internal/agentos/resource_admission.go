@@ -91,6 +91,9 @@ func checkHostAdmission(p hostAdmissionPolicy, obs *resources.HostObservation, d
 		}
 	}
 	if p.MinAvailableMemoryBytes != nil {
+		if demand.MemoryBytes == 0 {
+			return errors.New("run memory demand unknown under configured hard memory floor")
+		}
 		if err := require("memory", p.AllowEstimatedMemory); err != nil {
 			return err
 		}
