@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qiangli/coreutils/pkg/llmbudget"
 	"github.com/qiangli/coreutils/pkg/room"
 	"github.com/qiangli/coreutils/pkg/weave"
 )
@@ -234,6 +235,7 @@ func TestDefaultSprintWatchRuntimeReleasesTheSeat(t *testing.T) {
 // rooted in this test's HOME rather than inheriting the operator's stores.
 func sprintWatchIsolate(t testing.TB) string {
 	t.Helper()
+	t.Cleanup(llmbudget.SetDefault(llmbudget.New(llmbudget.Config{StatePath: filepath.Join(t.TempDir(), "budget.json")})))
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
 		if strings.HasPrefix(key, "BASHY_") {

@@ -1570,7 +1570,7 @@ func runFleet(noun string, args []string) {
 	case "tools":
 		cmd = fleet.NewToolsCmd()
 	case "models":
-		cmd = fleet.NewModelsCmd()
+		cmd = newModelsResourcesCmd()
 	case "agents":
 		// `agents verify --live` actually launches each agent, and `agents clone`
 		// branches its conversation store. Both live in pkg/chat, which reads the
