@@ -392,6 +392,7 @@ func Dispatch() {
 		os.Exit(dispatchFull(os.Args[2:]))
 	case "weave":
 		cmd := weave.NewWeaveCmd()
+		configureWeaveResourceAdmission(cmd)
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
