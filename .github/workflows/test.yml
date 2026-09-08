@@ -169,3 +169,39 @@ jobs:
         # shell has no controlling terminal, so provide one for the measured
         # fixture process instead of scoring runner plumbing as regressions.
         run: script -qefc './scripts/ci-bash53-gate.sh' /dev/null
+
+  # The tracked meet SPA artifact (coreutils/pkg/meet/artifact) can silently go
+  # stale: a source change with no SPA rebuild ships yesterday's bundle. This
+  # native-Linux job builds a fresh SPA and REQUIRES it to match the committed
+  # artifact byte-for-byte, without repairing it. Node/pnpm are provisioned the
+  # same way the release job does (matching pkg/meet/web's pinned packageManager),
+  # so a missing toolchain fails the gate closed rather than skipping it.
+  meet-spa-fresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Bootstrap sibling deps (all pinned flat replaces)
+        shell: bash
+        run: ./scripts/bootstrap-siblings.sh
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      # pkg/meet/web's package.json pins the same pnpm; build-meet-spa.sh resolves
+      # it through corepack from that directory's packageManager field.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+          run_install: false
+      # Hermetic regression first (no build), then the live real-SPA freshness
+      # gate — the same order make test uses, before anything could promote the
+      # artifact.
+      - name: meet SPA freshness regression (fixtures)
+        shell: bash
+        run: make test-meet-spa-fresh-regression
+      - name: meet SPA freshness gate (real build, non-mutating)
+        shell: bash
+        timeout-minutes: 10
+        run: make test-meet-spa-fresh

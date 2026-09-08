@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers dist tidy clean help
+.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -144,8 +144,25 @@ install: build
 	go run ./tools/installbashy -bash $(BASHY) -bashy $(BIN)
 
 ## test: Run all Go tests
-test: test-build-fail-closed test-sibling-pins test-isolated-lanes test-build-tag-matrix
+# test-meet-spa-fresh(-regression) run FIRST, before any recipe that could
+# rebuild-and-promote the tracked meet SPA artifact and thereby mask a stale
+# bundle the freshness gate exists to catch.
+test: test-meet-spa-fresh-regression test-meet-spa-fresh test-build-fail-closed test-sibling-pins test-isolated-lanes test-build-tag-matrix
 	go test ./...
+
+## test-meet-spa-fresh: REQUIRED non-mutating gate — build a fresh meet SPA and
+## compare it against the tracked artifact WITHOUT promoting. Fails (and never
+## repairs) when the committed bundle is stale, or fails closed when no
+## node/pnpm toolchain is available. CI provisions Node/pnpm; see the
+## meet-spa-fresh job in .github/workflows/test.yml.
+test-meet-spa-fresh:
+	scripts/build-meet-spa.sh check
+
+## test-meet-spa-fresh-regression: Hermetic regression for the freshness gate —
+## proves fresh accepted, stale rejected and left unchanged, and missing
+## toolchain fails closed. No network, no real SPA build.
+test-meet-spa-fresh-regression:
+	scripts/test-meet-spa-fresh.sh
 
 ## test-sibling-pins: Require exact pins and clone mappings for every direct
 ## flat-sibling replacement in go.mod.
