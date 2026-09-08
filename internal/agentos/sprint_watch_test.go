@@ -3,12 +3,16 @@ package agentos
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/qiangli/coreutils/pkg/room"
 	"github.com/qiangli/coreutils/pkg/weave"
 )
 
@@ -30,6 +34,7 @@ func sprintWatchTestPoll(snapshot func(string, int, bool) (inboxBatch, error)) i
 // twice in one session. So it reminds for as long as the mail is unread, and
 // keeps running.
 func TestSprintWatchRemindsWithoutQuittingAndNeverConsumesUnackedInput(t *testing.T) {
+	sprintWatchIsolate(t)
 	var committed atomic.Bool
 	batch := inboxBatch{
 		events: []unifiedInboxEvent{{Schema: unifiedInboxSchema, Source: "mb", Seq: 7, Body: "please respond"}},
@@ -56,6 +61,7 @@ func TestSprintWatchRemindsWithoutQuittingAndNeverConsumesUnackedInput(t *testin
 }
 
 func TestSprintWatchAcknowledgementCommitsExactBatch(t *testing.T) {
+	sprintWatchIsolate(t)
 	var committed atomic.Bool
 	var ackReads atomic.Int32
 	batch := inboxBatch{
@@ -96,6 +102,7 @@ func TestSprintWatchAcknowledgementCommitsExactBatch(t *testing.T) {
 // live host: 2h08m of running watch, 1h19m of it reported as
 // "STALE (no heartbeat — take it)".
 func TestSprintWatchHeartbeatsItsLeaseWithoutAnyMail(t *testing.T) {
+	sprintWatchIsolate(t)
 	var beats atomic.Int32
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
 	defer cancel()
@@ -126,6 +133,7 @@ func TestSprintWatchHeartbeatsItsLeaseWithoutAnyMail(t *testing.T) {
 // it over. Detach and say so, rather than streaming mail addressed to a seat we
 // have lost, and rather than fighting the new holder for the lease.
 func TestSprintWatchDetachesWhenTheSeatIsTakenOver(t *testing.T) {
+	sprintWatchIsolate(t)
 	rt := sprintWatchRuntime{
 		ackEvery: time.Second,
 		poll:     sprintWatchTestPoll(func(string, int, bool) (inboxBatch, error) { return inboxBatch{}, nil }),
@@ -143,7 +151,9 @@ func TestSprintWatchDetachesWhenTheSeatIsTakenOver(t *testing.T) {
 // The default runtime wires the real refresh and a schedule well inside the
 // lease TTL. A heartbeat at or above the TTL cannot keep anything alive.
 func TestDefaultSprintWatchRuntimeBeatsWellInsideTheLeaseTTL(t *testing.T) {
+	sprintWatchIsolate(t)
 	rt := defaultSprintWatchRuntime()
+	defer rt.poll.close()
 	if rt.beat == nil {
 		t.Fatal("the default watch does not refresh its lease at all")
 	}
@@ -165,6 +175,7 @@ func TestDefaultSprintWatchRuntimeBeatsWellInsideTheLeaseTTL(t *testing.T) {
 // of the TTL. Every exit is covered, not just the tidy one: a takeover, a
 // store error and a cancelled context all end the same evidence.
 func TestSprintWatchStandsTheSeatDownOnDetach(t *testing.T) {
+	sprintWatchIsolate(t)
 	cases := []struct {
 		name string
 		rt   func(*sprintWatchRuntime)
@@ -211,7 +222,127 @@ func TestSprintWatchStandsTheSeatDownOnDetach(t *testing.T) {
 // The wiring test. A release hook that exists but is never installed is the
 // same bug with an extra layer, and it looks finished from the inside.
 func TestDefaultSprintWatchRuntimeReleasesTheSeat(t *testing.T) {
-	if rt := defaultSprintWatchRuntime(); rt.release == nil {
+	sprintWatchIsolate(t)
+	rt := defaultSprintWatchRuntime()
+	defer rt.poll.close()
+	if rt.release == nil {
 		t.Fatal("the default watch never stands its seat down; detaching would be invisible to `bashy agents`")
+	}
+}
+
+// Even runtime-wiring tests create native filesystem watches: keep every source
+// rooted in this test's HOME rather than inheriting the operator's stores.
+func sprintWatchIsolate(t testing.TB) string {
+	t.Helper()
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		if strings.HasPrefix(key, "BASHY_") {
+			t.Setenv(key, "")
+		}
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	for _, store := range []string{"ROOM", "MB", "MEET", "SPRINT", "FLEET"} {
+		path := filepath.Join(home, strings.ToLower(store))
+		if err := os.MkdirAll(path, 0700); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("BASHY_"+store+"_DIR", path)
+	}
+	return filepath.Join(room.Dir(), "timeline.jsonl")
+}
+func sprintWatchWriteEvents(t testing.TB, path string, events ...room.Event) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for _, event := range events {
+		if err := json.NewEncoder(f).Encode(event); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+func TestSprintWatchIncrementalAckExactFilters(t *testing.T) {
+	path := sprintWatchIsolate(t)
+	good := room.Event{Type: room.EventAck, Topic: sprintWatchTopic(138), Actor: "MANAGER", Target: room.AgentClaimID("manager")}
+	events := []room.Event{good, good, good, good, good}
+	events[0].Type = room.EventNote
+	events[1].Topic = sprintWatchTopic(139)
+	events[2].Actor = "other"
+	events[3].Target = room.AgentClaimID("other")
+	events[4].Target = strings.ToUpper(good.Target)
+	sprintWatchWriteEvents(t, path, events...)
+	r := newSprintWatchAckReader()
+	p, err := r.latest(context.Background(), 138, "manager")
+	if err != nil || p.Seq != 0 {
+		t.Fatalf("unrelated event accepted: %+v %v", p, err)
+	}
+	sprintWatchWriteEvents(t, path, good)
+	p, err = r.latest(context.Background(), 138, "manager")
+	if err != nil || p.Seq != 6 {
+		t.Fatalf("exact ack missing: %+v %v", p, err)
+	}
+	before := r.reader.Stats()
+	r.latest(context.Background(), 138, "manager")
+	if got := r.reader.Stats(); got != before {
+		t.Fatalf("unchanged ack read did work: %+v -> %+v", before, got)
+	}
+}
+func TestSprintWatchResetRequiresFreshExplicitAck(t *testing.T) {
+	path := sprintWatchIsolate(t)
+	good := room.Event{Type: room.EventAck, Topic: sprintWatchTopic(138), Actor: "manager", Target: room.AgentClaimID("manager")}
+	sprintWatchWriteEvents(t, path, good)
+	committed := 0
+	reads := 0
+	r := newSprintWatchAckReader()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	rt := sprintWatchRuntime{ackEvery: time.Hour, poll: sprintWatchTestPoll(func(string, int, bool) (inboxBatch, error) {
+		return inboxBatch{events: []unifiedInboxEvent{{Schema: unifiedInboxSchema, Body: "pending"}}, acks: []func() error{func() error { committed++; cancel(); return nil }}}, nil
+	})}
+	rt.ackPosition = func(ctx context.Context, id int64, owner string) (room.TimelinePosition, error) {
+		reads++
+		if reads == 2 {
+			sprintWatchWriteEvents(t, path+".new", good, good)
+			if err := os.Rename(path+".new", path); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if reads == 3 {
+			if committed != 0 {
+				t.Fatal("historical ack in replacement consumed pending batch")
+			}
+			sprintWatchWriteEvents(t, path, good)
+		}
+		return r.latest(ctx, id, owner)
+	}
+	if err := runSprintInboxWatch(ctx, &bytes.Buffer{}, &bytes.Buffer{}, 138, "manager", rt); err != nil {
+		t.Fatal(err)
+	}
+	if committed != 1 || reads != 3 {
+		t.Fatalf("committed=%d reads=%d; want one exact batch after fresh ack", committed, reads)
+	}
+}
+func TestSprintWatchBoundsUnrelatedWakeups(t *testing.T) {
+	sprintWatchIsolate(t)
+	reads := 0
+	rt := sprintWatchRuntime{ackEvery: time.Hour, poll: sprintWatchTestPoll(func(string, int, bool) (inboxBatch, error) {
+		return inboxBatch{events: []unifiedInboxEvent{{Body: "pending"}}}, nil
+	}), ackPosition: func(context.Context, int64, string) (room.TimelinePosition, error) {
+		reads++
+		return room.TimelinePosition{Generation: 1}, nil
+	}}
+	rt.poll.min = 10 * time.Millisecond
+	rt.poll.wait = func(context.Context, time.Duration) error { return nil }
+	ctx, cancel := context.WithTimeout(context.Background(), 55*time.Millisecond)
+	defer cancel()
+	if err := runSprintInboxWatch(ctx, &bytes.Buffer{}, &bytes.Buffer{}, 138, "manager", rt); err != nil {
+		t.Fatal(err)
+	}
+	if reads > 7 {
+		t.Fatalf("unrelated wakes caused %d ack polls in 55ms", reads)
 	}
 }
