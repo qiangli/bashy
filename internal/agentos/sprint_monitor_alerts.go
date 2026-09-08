@@ -185,6 +185,7 @@ func updateSprintAlertTargets(ctx context.Context, s *sprintMonitorSnapshot, tar
 				digest := sha256.Sum256([]byte(sample.key))
 				key := fmt.Sprintf("sprint:%d:%x", id, digest[:16])
 				var c sprintAlertCondition
+				changed := false
 				if raw, ok := ledger.Entries[key]; ok {
 					if err := json.Unmarshal(raw, &c); err != nil {
 						return fmt.Errorf("alert state corrupt: %w", err)
@@ -199,15 +200,17 @@ func updateSprintAlertTargets(ctx context.Context, s *sprintMonitorSnapshot, tar
 					}
 					if c.Current == nil {
 						appendSprintAlert(&c, "warning", "additional resource conditions exceed the detailed alert-state limit; inspect sprint monitor --json", s.At)
+						b, _ := json.Marshal(c)
+						ledger.Entries[key] = b
 					}
-					b, _ := json.Marshal(c)
-					ledger.Entries[key] = b
 					continue
 				}
 				if c.Version == 0 {
 					c = sprintAlertCondition{Version: 1, Key: key, Sprint: id, Owner: owner}
+					changed = true
 				}
 				if c.Owner != owner {
+					changed = true
 					priorPending := c.Pending
 					c.Owner = owner
 					// Pending old-owner events remain durable but get one successor
@@ -222,12 +225,14 @@ func updateSprintAlertTargets(ctx context.Context, s *sprintMonitorSnapshot, tar
 					}
 				}
 				if !sample.known {
+					changed = changed || !c.Recovery.IsZero() || (c.Current == nil && !c.Onset.IsZero())
 					c.Recovery = time.Time{}
 					if c.Current == nil {
 						c.Onset = time.Time{}
 					}
 				}
 				if sample.known && sample.at.After(c.ObservedAt) {
+					changed = true
 					c.ObservedAt = sample.at
 					if sample.value >= sample.high {
 						c.Recovery = time.Time{}
@@ -255,6 +260,12 @@ func updateSprintAlertTargets(ctx context.Context, s *sprintMonitorSnapshot, tar
 							c.Onset = time.Time{}
 						}
 					}
+				}
+				// All clients evaluate the same cached source sample. Keep its
+				// existing bytes unless this transaction advanced condition state;
+				// the store can then recognize the no-op without reserializing it.
+				if !changed {
+					continue
 				}
 				b, err := json.Marshal(c)
 				if err != nil {
