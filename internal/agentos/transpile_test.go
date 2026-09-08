@@ -628,10 +628,10 @@ func TestFormatDiagnostic(t *testing.T) {
 
 func TestTranspileCLIDiagnosticsIntegration(t *testing.T) {
 	tests := []struct {
-		name        string
-		script      string
-		wantExit    int
-		wantStderr  string
+		name       string
+		script     string
+		wantExit   int
+		wantStderr string
 	}{
 		{
 			name:       "unsupported_type_rejection",
