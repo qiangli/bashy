@@ -2,13 +2,16 @@ package agentos
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qiangli/coreutils/pkg/bus"
 	"github.com/qiangli/coreutils/pkg/meet"
+	"github.com/qiangli/coreutils/pkg/weave"
 )
 
 // THE HOP THAT KEEPS GETTING MISSED.
@@ -198,4 +201,82 @@ func TestWireWebConsole_ConnectsBothTheRoomAndTheBoard(t *testing.T) {
 			t.Errorf("%s is nil after wireWebConsole — the console mounts the panel but not its host wiring", c.name)
 		}
 	}
+}
+
+// seedSprintBoard writes the lease table this test selects against. The
+// records are queue.json's `stories` — the same store `bashy sprint` owns —
+// written directly so the test pins the READER side of the seam (what
+// LiveSprintManagers accepts) without coupling to any sprint CLI behavior.
+func seedSprintBoard(t *testing.T, stories []map[string]any) {
+	t.Helper()
+	dir := t.TempDir()
+	b, err := json.Marshal(map[string]any{"next_id": 1, "next_story_id": len(stories) + 1, "stories": stories})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "queue.json"), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BASHY_SPRINT_DIR", dir)
+}
+
+func seededStory(id int, holder string, at time.Time) map[string]any {
+	s := map[string]any{"id": id, "title": "t", "column": "doing", "created": at}
+	if holder != "" {
+		s["lease"] = map[string]any{"holder": holder, "at": at}
+	}
+	return s
+}
+
+// --role is the one selector bus cannot resolve alone: Role is a SPRINT fact,
+// not a binding fact, and pkg/bus is transport that must not read the sprint
+// store. fleetSelectAudience is the host half that joins them, and this test
+// is the proof the join happened — the wired selector (not the private
+// function) must address exactly the seated managers and refuse what it
+// cannot honestly answer.
+func TestFleetSelectAnswersRoleFromTheSprintRecords(t *testing.T) {
+	fresh := time.Now().UTC()
+	stale := fresh.Add(-weave.SprintLeaseTTL - time.Minute)
+	seedSprintBoard(t, []map[string]any{
+		seededStory(1, "zoe", fresh),
+		seededStory(2, "zoe", fresh),
+		seededStory(3, "ghost", stale),
+		seededStory(4, "", fresh),
+		{"id": 5, "title": "unowned", "column": "backlog", "created": fresh},
+	})
+
+	wireMessageBoard()
+
+	t.Run("conductor addresses only live holders", func(t *testing.T) {
+		got, err := bus.FleetSelect(bus.Audience{Role: "conductor"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0] != "zoe" {
+			t.Fatalf("FleetSelect(role conductor) = %v, want [zoe] — stale leases, blank holders, and duplicate seats must not become addressees", got)
+		}
+	})
+
+	t.Run("unknown role is refused by name", func(t *testing.T) {
+		_, err := bus.FleetSelect(bus.Audience{Role: "reviewer"})
+		if err == nil {
+			t.Fatal("an unknown role must not resolve to an empty audience and report success — that is a broadcast pretending to be an answer")
+		}
+		if !strings.Contains(err.Error(), "reviewer") {
+			t.Fatalf("refusal must name the selector it refused: %v", err)
+		}
+	})
+
+	t.Run("role is exclusive of binding filters", func(t *testing.T) {
+		got, err := bus.FleetSelect(bus.Audience{Role: "conductor", Band: 9, Tool: "nonexistent"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// This test environment has no fleet catalog, so ANDing Role with the
+		// binding filters would yield EMPTY here — the wrong-answer shape the
+		// comment in fleetSelectAudience promises can never happen.
+		if len(got) != 1 || got[0] != "zoe" {
+			t.Fatalf("FleetSelect(role+binding) = %v, want [zoe] — Role must answer from the sprint records alone", got)
+		}
+	})
 }
