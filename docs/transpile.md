@@ -34,12 +34,12 @@ To build standalone Go binaries transpiled from Bash++:
 
 ### 1. Clone & Pin the Published Dependency Repo
 
-Clone the compiler/runtime repository to `workspace/deps/sh` and checkout the published commit SHA (`749093a8f42748ab086a61e08002170ef0eefae8`):
+Clone the compiler/runtime repository to `workspace/deps/sh` and checkout the published commit SHA (`052fc18adc87a3935dec416e3fb18d54890c2e20`):
 
 ```bash
 mkdir -p workspace/deps
 git clone https://github.com/qiangli/sh workspace/deps/sh
-git -C workspace/deps/sh checkout 749093a8f42748ab086a61e08002170ef0eefae8
+git -C workspace/deps/sh checkout 052fc18adc87a3935dec416e3fb18d54890c2e20
 ```
 
 ### 2. Create Application Directory & Transpile
