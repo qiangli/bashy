@@ -3,37 +3,39 @@ package activity
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/qiangli/coreutils/pkg/room"
 )
 
-// TestTransportMustBeStubbedNotRedirected is a ratchet on the test harness
-// itself, and it exists because the obvious way to isolate these tests does not
-// work.
-//
-// BASHY_ACTIVITY_DIR and BASHY_HOME move THIS package's outbox into a temp
-// tree. They do NOT move the bus: room.Dir() reads BASHY_ROOM_DIR and
-// otherwise resolves ~/.bashy/room directly. So a harness that set only the
-// activity env vars and let Emit call the real bus.Publish would append to the
-// OPERATOR'S live room timeline and steer their live agent sessions, while
-// looking hermetic — a green suite built on data it did not create.
-//
-// That is why newHarness replaces EnsureInbox/PublishDurable/WakeLive outright.
-// If someone later simplifies the harness back to environment variables, this
-// test is the thing that says why they cannot.
+// TestTransportMustBeStubbedNotRedirected checks both isolation boundaries.
+// BASHY_HOME now relocates room state as well as the activity outbox, unless
+// BASHY_ROOM_DIR overrides it. The harness still stubs EnsureInbox,
+// PublishDurable and WakeLive: these unit tests must observe delivery without
+// running the real transport, even when its storage paths are isolated.
 func TestTransportMustBeStubbedNotRedirected(t *testing.T) {
+	h := newHarness(t)
 	home := t.TempDir()
 	t.Setenv("BASHY_HOME", home)
 	t.Setenv("BASHY_ACTIVITY_DIR", filepath.Join(home, "activity"))
+	t.Setenv("BASHY_ROOM_DIR", "")
 
-	if got := room.Dir(); strings.HasPrefix(got, home) {
-		t.Fatalf("room.Dir() now follows BASHY_HOME (%s); the harness comment is stale and can be simplified", got)
+	roomDir := filepath.Join(home, "room")
+	if got := room.Dir(); got != roomDir {
+		t.Fatalf("room.Dir() = %s, want %s", got, roomDir)
 	}
-	// Our own store, by contrast, IS redirected.
-	if got := StateDir(); !strings.HasPrefix(got, home) {
-		t.Fatalf("StateDir() = %s, want it under %s", got, home)
+	if got, want := StateDir(), filepath.Join(home, "activity"); got != want {
+		t.Fatalf("StateDir() = %s, want %s", got, want)
+	}
+	h.live["steward"] = true
+	if _, err := Emit(failEvent("isolated transport")); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.inboxes) != 1 || h.inboxes[0] != "steward" || h.publishedTo("steward") != 1 || h.wakeCount("steward") != 1 {
+		t.Fatalf("emit did not use every transport stub: inboxes=%v published=%v woken=%v", h.inboxes, h.published, h.woken)
+	}
+	if _, err := os.Stat(roomDir); !os.IsNotExist(err) {
+		t.Fatalf("stubbed emit touched the real room store: stat %s: %v", roomDir, err)
 	}
 }
 

@@ -2,13 +2,17 @@ package agentos
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qiangli/coreutils/pkg/bus"
 	"github.com/qiangli/coreutils/pkg/meet"
+	"github.com/qiangli/coreutils/pkg/weave"
 )
 
 // THE HOP THAT KEEPS GETTING MISSED.
@@ -197,5 +201,246 @@ func TestWireWebConsole_ConnectsBothTheRoomAndTheBoard(t *testing.T) {
 		if !c.got() {
 			t.Errorf("%s is nil after wireWebConsole — the console mounts the panel but not its host wiring", c.name)
 		}
+	}
+}
+
+// seedSprintBoard writes the lease table this test selects against. The
+// records are queue.json's `stories` — the same store `bashy sprint` owns —
+// written directly so the test pins the READER side of the seam (what
+// LiveSprintManagers accepts) without coupling to any sprint CLI behavior.
+func seedSprintBoard(t *testing.T, stories []map[string]any) {
+	t.Helper()
+	dir := t.TempDir()
+	b, err := json.Marshal(map[string]any{"next_id": 1, "next_story_id": len(stories) + 1, "stories": stories})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "queue.json"), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BASHY_SPRINT_DIR", dir)
+}
+
+func seededStory(id int, holder string, at time.Time) map[string]any {
+	s := map[string]any{"id": id, "title": "t", "column": "doing", "created": at}
+	if holder != "" {
+		s["lease"] = map[string]any{"holder": holder, "at": at}
+	}
+	return s
+}
+
+// --role is the one selector bus cannot resolve alone: Role is a SPRINT fact,
+// not a binding fact, and pkg/bus is transport that must not read the sprint
+// store. fleetSelectAudience is the host half that joins them, and this test
+// is the proof the join happened — the wired selector (not the private
+// function) must address exactly the seated managers and refuse what it
+// cannot honestly answer.
+func TestFleetSelectAnswersRoleFromTheSprintRecords(t *testing.T) {
+	fresh := time.Now().UTC()
+	stale := fresh.Add(-weave.SprintLeaseTTL - time.Minute)
+	seedSprintBoard(t, []map[string]any{
+		seededStory(1, "zoe", fresh),
+		seededStory(2, "zoe", fresh),
+		seededStory(3, "ghost", stale),
+		seededStory(4, "", fresh),
+		{"id": 5, "title": "unowned", "column": "backlog", "created": fresh},
+	})
+
+	wireMessageBoard()
+
+	t.Run("conductor addresses only live holders", func(t *testing.T) {
+		got, err := bus.FleetSelect(bus.Audience{Role: "conductor"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0] != "zoe" {
+			t.Fatalf("FleetSelect(role conductor) = %v, want [zoe] — stale leases, blank holders, and duplicate seats must not become addressees", got)
+		}
+	})
+
+	t.Run("unknown role is refused by name", func(t *testing.T) {
+		_, err := bus.FleetSelect(bus.Audience{Role: "reviewer"})
+		if err == nil {
+			t.Fatal("an unknown role must not resolve to an empty audience and report success — that is a broadcast pretending to be an answer")
+		}
+		if !strings.Contains(err.Error(), "reviewer") {
+			t.Fatalf("refusal must name the selector it refused: %v", err)
+		}
+	})
+
+	for _, tc := range []struct {
+		field string
+		aud   bus.Audience
+	}{
+		{"band", bus.Audience{Role: "conductor", Band: 4}},
+		{"tool", bus.Audience{Role: "conductor", Tool: "ycode"}},
+		{"provider", bus.Audience{Role: "conductor", Provider: "p"}},
+		{"family", bus.Audience{Role: "conductor", Family: "f"}},
+		{"version", bus.Audience{Role: "conductor", Version: "v"}},
+	} {
+		t.Run("role rejects "+tc.field, func(t *testing.T) {
+			got, err := bus.FleetSelect(tc.aud)
+			if err == nil || !strings.Contains(err.Error(), "role") || !strings.Contains(err.Error(), tc.field) {
+				t.Fatalf("FleetSelect(role+%s) = %v, %v; want named refusal", tc.field, got, err)
+			}
+			if len(got) != 0 {
+				t.Fatalf("invalid selector returned recipients: %v", got)
+			}
+		})
+	}
+}
+
+// Drive an actual stage command through the host's sprint-roster resolver and
+// then read as a second live manager with no sprint topic subscription. Field-only
+// announcement tests cannot prove this combined path or its uncapped routing.
+func TestStageAnnouncementsReachUnsubscribedLivePeer(t *testing.T) {
+	isolateStageBoard(t)
+	fresh := time.Now().UTC()
+	seedSprintBoard(t, []map[string]any{
+		seededStory(1, "stage-author", fresh),
+		seededStory(2, "stage-peer", fresh),
+		seededStory(3, "stage-ghost", fresh.Add(-weave.SprintLeaseTTL-time.Minute)),
+		seededStory(4, "", fresh),
+	})
+	wireMessageBoard()
+	if _, err := bus.EnsureSubscription("stage-peer"); err != nil {
+		t.Fatal(err)
+	}
+	for _, concern := range bus.DeclaredConcerns("stage-peer") {
+		if concern == "sprint" || concern == "*" {
+			t.Fatalf("peer unexpectedly subscribed to %q", concern)
+		}
+	}
+	for i := range 5 {
+		column := "backlog"
+		if i%2 == 1 {
+			column = "doing"
+		}
+		runStageMove(t, column)
+	}
+	posts, err := bus.Posts()
+	if err != nil || len(posts) != 5 {
+		t.Fatalf("stage history = %v, %v; want five posts", posts, err)
+	}
+	for _, p := range posts {
+		if p.Topic != "sprint" || p.Audience == nil || p.Audience.Role != "conductor" {
+			t.Fatalf("stage announcement lost routing: %+v", p)
+		}
+	}
+	directed, other, older, err := bus.Unseen("stage-peer", 2)
+	if err != nil || len(directed)+len(other) != 5 || older != 0 {
+		t.Fatalf("peer read: directed=%d other=%d older=%d err=%v; want all five uncapped", len(directed), len(other), older, err)
+	}
+	for _, excluded := range []string{"stage-ghost", "unowned-reader"} {
+		directed, other, _, err := bus.Unseen(excluded, 2)
+		if err != nil || len(directed)+len(other) != 0 {
+			t.Fatalf("excluded reader %s received %d posts: %v", excluded, len(directed)+len(other), err)
+		}
+	}
+}
+
+func TestStageAnnouncementResolutionFailurePreservesTransition(t *testing.T) {
+	for _, failure := range []string{"unavailable", "roster read failed"} {
+		t.Run(failure, func(t *testing.T) {
+			isolateStageBoard(t)
+			seedSprintBoard(t, []map[string]any{seededStory(1, "stage-author", time.Now().UTC())})
+			previous := bus.FleetSelect
+			t.Cleanup(func() { bus.FleetSelect = previous })
+			bus.FleetSelect = nil
+			if failure != "unavailable" {
+				bus.FleetSelect = func(bus.Audience) ([]string, error) { return nil, errors.New(failure) }
+			}
+			stderr := runStageMove(t, "backlog")
+			if !strings.Contains(stderr, "state change was recorded") || !strings.Contains(stderr, failure) {
+				t.Fatalf("announcement failure not visible: %q", stderr)
+			}
+			posts, err := bus.Posts()
+			if err != nil || len(posts) != 0 {
+				t.Fatalf("failed announcement posts = %v, %v", posts, err)
+			}
+			data, err := os.ReadFile(filepath.Join(os.Getenv("BASHY_SPRINT_DIR"), "queue.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var board struct {
+				Stories []struct {
+					Column string `json:"column"`
+				} `json:"stories"`
+			}
+			if err := json.Unmarshal(data, &board); err != nil {
+				t.Fatal(err)
+			}
+			if len(board.Stories) != 1 || board.Stories[0].Column != "backlog" {
+				t.Fatalf("stage did not persist: %s", data)
+			}
+		})
+	}
+}
+
+func isolateStageBoard(t *testing.T) {
+	t.Helper()
+	for _, variable := range []string{"BASHY_HOME", "BASHY_MB_DIR", "BASHY_ROOM_DIR", "BASHY_FLEET_DIR", "BASHY_MEET_DIR"} {
+		t.Setenv(variable, t.TempDir())
+	}
+	for _, variable := range []string{"BASHY_AGENTS_DIR", "BASHY_PEOPLE_DIR", "BASHY_AGENTS_PATH", "BASHY_PEOPLE_PATH"} {
+		t.Setenv(variable, "")
+	}
+	t.Setenv("BASHY_PRINCIPAL", "stage-author")
+	t.Setenv("BASHY_SPRINT_ANNOUNCE", "1")
+}
+
+func runStageMove(t *testing.T, column string) string {
+	t.Helper()
+	cmd := weave.NewSprintCmd()
+	var out, stderr bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{"move", "1", column})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("stage move: %v, stderr=%s", err, &stderr)
+	}
+	return stderr.String()
+}
+
+func TestFleetSelectRejectsWhitespaceRole(t *testing.T) {
+	isolateStageBoard(t)
+	wireMessageBoard()
+	names, err := bus.FleetSelect(bus.Audience{Role: " \t\n "})
+	if err == nil || !strings.Contains(err.Error(), "role") || len(names) != 0 {
+		t.Fatalf("whitespace role resolved to %v, %v; want a named refusal", names, err)
+	}
+}
+
+func TestFleetSelectRejectsMalformedCatalogBeforeSend(t *testing.T) {
+	for _, partial := range []bool{false, true} {
+		t.Run(map[bool]string{false: "zero", true: "partial"}[partial], func(t *testing.T) {
+			isolateStageBoard(t)
+			dir := filepath.Join(os.Getenv("BASHY_FLEET_DIR"), "agents")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if partial {
+				if err := os.WriteFile(filepath.Join(dir, "valid-peer.yaml"), []byte("name: valid-peer\nkind: agent\ntool: sprint-test\nmodel: example\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(dir, "broken.yaml"), []byte("name: ["), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			wireMessageBoard()
+			aud := bus.Audience{Tool: "sprint-test"}
+			names, err := bus.FleetSelect(aud)
+			if err == nil || !strings.Contains(err.Error(), "broken") || len(names) != 0 {
+				t.Fatalf("malformed catalog resolved to %v, %v; want no names and the catalog error", names, err)
+			}
+			_, err = bus.Send(bus.SendRequest{From: "tester", Audience: &aud, Body: "must refuse incomplete roster"})
+			if err == nil || !strings.Contains(err.Error(), "broken") {
+				t.Fatalf("Send error = %v", err)
+			}
+			posts, err := bus.Posts()
+			if err != nil || len(posts) != 0 {
+				t.Fatalf("failed send posts = %v, %v", posts, err)
+			}
+		})
 	}
 }
