@@ -7,6 +7,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"os/exec"
@@ -381,4 +382,45 @@ func startupBoundaryEnv(home, envFile, bashEnv string) []string {
 		env = append(env, entry)
 	}
 	return append(env, "HOME="+home, "ENV=$HOME/"+filepath.Base(envFile), "BASH_ENV="+bashEnv, "TERM=xterm")
+}
+
+// An explicitly empty prompt is a shell value, including continuation prompts.
+// Compare with GNU Bash invoked as sh: no fallback prompt appears between the
+// ready handshake and these independently authored multiline commands.
+func TestInteractiveShExplicitlyEmptyPrompts(t *testing.T) {
+	dir := t.TempDir()
+	shell := filepath.Join(dir, "sh")
+	if err := os.Symlink(builtBashBin(t), shell); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, shell)
+	cmd.Env = []string{"PATH=/bin:/usr/bin", "HOME=" + dir, "TERM=dumb", "PS1=READY> ", "PS2=CONT> ", "HISTFILE=/dev/null"}
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ptmx.Close()
+	defer func() { cancel(); _ = cmd.Wait() }()
+	capture := startPTYCapture(ptmx)
+	capture.waitFor(t, []byte("READY> "), 3*time.Second)
+	if _, err := io.WriteString(ptmx, "stty -echo\r"); err != nil {
+		t.Fatal(err)
+	}
+	capture.waitForCount(t, []byte("READY> "), 2, 3*time.Second)
+	offset := capture.len()
+	if _, err := io.WriteString(ptmx, "PS1= PS2=\rprintf 'left\rright\\n'\rprintf 'END\\n'\r"); err != nil {
+		t.Fatal(err)
+	}
+	got := capture.waitForFrom(t, offset, []byte("END\r\n"), 3*time.Second)
+	if !bytes.Equal(got, []byte("left\r\nright\r\nEND\r\n")) {
+		t.Fatalf("explicitly empty primary/continuation prompts added terminal output: %q", got)
+	}
+	if _, err := io.WriteString(ptmx, "exit 0\r"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
 }

@@ -75,8 +75,9 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 		// only the initial environment, so an in-session `PS1=...` (re)assignment
 		// would otherwise never reach the prompt. POSIX behavior #29 (parameter
 		// expansion on PS1/PS2 in posix mode) depends on this too.
-		val := r.LiveVar(ps).String()
-		if val == "" {
+		vr := r.LiveVar(ps)
+		val := vr.String()
+		if !vr.IsSet() {
 			val = defaultPS
 		}
 		envGet := func(name string) string { return r.LiveVar(name).String() }
