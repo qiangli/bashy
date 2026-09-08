@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -613,5 +614,88 @@ func TestInboxHelpTeachesHumanMailboxDiscoveryAndStableReferences(t *testing.T) 
 		if !strings.Contains(s, want) {
 			t.Errorf("help omitted %q:\n%s", want, s)
 		}
+	}
+}
+
+// A mailbox includes the full board history. Resolving its selector once per
+// post both amplifies roster I/O and can split one read across lease owners.
+func TestAgentMailboxAudienceResolutionIsBoundedAndFresh(t *testing.T) {
+	isolateMailbox(t)
+	oldSelect, oldRoles := bus.FleetSelect, bus.HostRoles
+	t.Cleanup(func() { bus.FleetSelect, bus.HostRoles = oldSelect, oldRoles })
+	bus.HostRoles = nil
+	selectors := []bus.Audience{{Role: "conductor"}, {Band: 4}}
+	calls := map[bus.Audience]int{}
+	names := map[bus.Audience][]string{}
+	var resolutionErr error
+	bus.FleetSelect = func(a bus.Audience) ([]string, error) {
+		calls[a]++
+		roster := names[a]
+		// A handoff after this resolution must affect the NEXT read, never a
+		// later post sharing the selector in this same mailbox snapshot.
+		names[a] = []string{"new"}
+		return roster, resolutionErr
+	}
+	for _, aud := range selectors {
+		names[aud] = []string{"old"}
+		for range 7 {
+			if err := bus.PostMessage(bus.Post{From: "tester", Audience: &aud, Body: "manager notice"}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	clear(calls)
+	check := func(reader string, want, read int) {
+		t.Helper()
+		items, _, err := snapshotMailbox(mailboxSpec{Key: "agent:" + reader, Address: reader, Kind: "agent"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != want {
+			t.Errorf("read %d as %s: got %d items, want %d", read, reader, len(items), want)
+		}
+		for _, aud := range selectors {
+			if calls[aud] != read {
+				t.Errorf("read %d: selector %+v resolved %d times, want %d", read, aud, calls[aud], read)
+			}
+		}
+	}
+	check("old", 14, 1)
+	check("old", 0, 2)
+	check("new", 14, 3)
+	for _, aud := range selectors {
+		names[aud] = nil
+	}
+	check("new", 0, 4)  // expiration is stable throughout this snapshot
+	check("new", 14, 5) // initially empty rosters refresh on the next read
+	resolutionErr = errors.New("roster unavailable")
+	check("new", 0, 6)
+	resolutionErr = nil
+	check("new", 14, 7)
+}
+
+func TestHumanMailboxDoesNotResolveAgentAudiences(t *testing.T) {
+	human := isolateMailbox(t)
+	oldSelect := bus.FleetSelect
+	t.Cleanup(func() { bus.FleetSelect = oldSelect })
+	bus.FleetSelect = func(bus.Audience) ([]string, error) {
+		t.Error("human mailbox resolved an agent audience")
+		return []string{human.Address}, nil
+	}
+	for _, p := range []bus.Post{
+		{From: "tester", Body: "broadcast"},
+		{From: "tester", To: human.Address, Body: "direct"},
+		{From: "tester", Audience: &bus.Audience{Role: "conductor"}, Body: "agent audience"},
+	} {
+		if err := bus.PostMessage(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	items, _, err := snapshotMailbox(human)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 || items[0].Body != "broadcast" || items[1].Body != "direct" {
+		t.Fatalf("human posts = %+v", items)
 	}
 }
