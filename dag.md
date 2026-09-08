@@ -149,10 +149,15 @@ ext=""
 ```
 
 ### test
-Run all Go tests.
-Effects: read
+Run the hermetic Meet SPA freshness regression and the required non-mutating
+current-artifact gate, then all Go tests. The freshness check builds ignored SPA
+output while verifying the tracked artifact, so this target writes ignored build
+outputs.
+Effects: write
 
 ```bash
+scripts/test-meet-spa-fresh.sh || exit 1
+scripts/build-meet-spa.sh check || exit 1
 BASHY_EXE="${BASHY:-bashy}"
 "$BASHY_EXE" go test ./...
 ```
