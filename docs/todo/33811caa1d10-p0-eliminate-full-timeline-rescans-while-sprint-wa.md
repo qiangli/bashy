@@ -3,7 +3,7 @@ id: 33811caa1d10
 kind: task
 title: 'P0: eliminate full-timeline rescans while sprint watcher awaits inbox acknowledgment'
 seq: 247
-status: todo
+status: done
 priority: p0
 created: 2026-09-07T20:59:33.961542Z
 sprint: 138
@@ -27,6 +27,22 @@ ACCEPTANCE AND DELIVERY
 4. Run focused Bashy inbox/sprint tests and affected coreutils room tests if changed. Build/install the fix through the repo workflow, record the installed revision, and verify runtime CPU on a safely restarted watcher. Existing processes retain the old executable after installation; coordinate replacement with the active manager and preserve ownership and unread mail. Do not close based only on source tests or a replaced file on disk.
 
 Scope: Bashy agentos watcher and, if needed, coreutils room reader; one linked story owns this incident end to end. No production log contents or personal paths should be embedded into implementation or synthetic fixtures.
+
+DELIVERED, 2026-09-08
+Coreutils PR #9 and Bashy PR #11 are merged. The incremental reader is
+876d9787; the installed Bashy image is 04aff62, including graceful SIGINT/SIGTERM
+cleanup. All Linux/macOS/Windows CI and the Bash 5.3 fixture gate passed.
+The clean 200,000-event / 48.8 MB, 60-second comparison reduced CPU from
+68.67 seconds to 4.75 seconds (93.1%) with zero unchanged-history reads or
+decodes. The small-history control did not improve; no universal speedup is
+claimed. Installed synthetic steady-state CPU measured 0.78% of one core;
+the coordinated active watcher replacement measured 3.28% over 60 seconds.
+Unread mail and owner-checked graceful lease release passed. Production
+three-minute reminder output measured 226 bytes / 67 exact offline BPE tokens
+under both o200k_base and cl100k_base. Polling has no inference call path;
+these text counts do not establish billed usage or savings. Independent owner
+verification checked nine evidence classes, source/log hashes, dependency
+pins, native CI and installed-image identity before recording delivery.
 
 FOLLOW-UP OBSERVATIONS, 2026-09-07
 PID 50310 later measured 96.3% CPU at 3h08m56s elapsed. User explicitly requested direct coordination with Sprint 117 manager; status/acknowledgment and safe replacement request sent as MB post 555 by cpu-incident-investigator and repeated in Sprint 117 Meet room 10.
