@@ -63,7 +63,7 @@ func TestSprintWatchP0Performance(t *testing.T) {
 	var baselineStats room.TimelineReadStats
 	rt.ackSeq = func(id int64, owner string) (int64, error) {
 		baselineStats.BytesRead += int64(len(data))
-		baselineStats.BytesDecoded += int64(len(data))
+		baselineStats.BytesDecoded += int64(len(data) - count) // Timeline splits away newline delimiters.
 		baselineStats.RecordsDecoded += int64(count)
 		return latestSprintWatchAckP0Baseline(id, owner)
 	}
