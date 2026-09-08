@@ -3,10 +3,11 @@ id: ed10b57350ad
 kind: task
 title: 'Add bashy sprint monitor: combined host resources and LLM vendor usage, budgets, alerts and mitigation'
 seq: 248
-status: todo
+status: done
 priority: p1
 created: 2026-09-07T21:10:58.740355Z
 sprint: 138
+closed: 2026-09-08T10:48:42.223904Z
 ---
 
 USER REQUEST / OUTCOME
@@ -57,3 +58,20 @@ The default and watch forms are observational: no implicit pause, merge, prune, 
 
 ADDITIONAL ACCEPTANCE
 CLI/help and structured-output tests cover combined one-shot/selected-sprint views, all-vendor default and provider filters, watch cancellation/deadline, non-TTY incremental output, zero-state and partial-source failures, and no mutations/inference calls during monitoring. A demonstration shows host pressure and low vendor quota side by side, traces attribution, recommends a safe mitigation and shows recovery. Multiple monitor clients reuse snapshots/provider polling rather than multiplying scan or API traffic; overhead and output-volume gates from this story apply. Keep bashy models usage/limits/budget useful independently as the by-vendor drill-down.
+
+DELIVERY EVIDENCE — 2026-09-08
+
+Implementation validated on coreutils c14c958b / Bashy ac08764. Owner full gate:
+7,229 core tests, zero failures, cross-platform vet, Bashy Go tests and all86
+shell fixtures passed. Required component race tests and all8 native CI jobs
+passed; Windows executes actual resource/budget/executable regressions. Installed
+CLI and60-second watcher proofs passed, preserving authority/unread/lease state.
+
+Fresh8-client/10-sprint/2-provider/56MB measurement:1.0174% of one core,61.484MiB
+extra RSS,14 shared host refreshes,2 requests/provider, bounded NDJSON and zero
+inference. The original proposed1% CPU target was missed; manager explicitly
+revised the release ceiling to1.5% after profiling and five retained red reports.
+Other limits remain unchanged. See ../sprint-138-delivery.md for operational
+limits and the umbrella master plan/evidence for final publication, exact image
+and lifecycle closure receipts. Final metadata revision is independently built,
+smoked and checked in CI before sprint closure; no historical result is relabeled.
