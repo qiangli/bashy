@@ -50,9 +50,10 @@ type sprintWatchReminder struct {
 }
 
 type sprintWatchRuntime struct {
-	ackEvery time.Duration
-	poll     inboxPollRuntime
-	ackSeq   func(int64, string) (int64, error)
+	ackEvery    time.Duration
+	poll        inboxPollRuntime
+	ackSeq      func(int64, string) (int64, error) // legacy test injection
+	ackPosition func(context.Context, int64, string) (room.TimelinePosition, error)
 	// beatEvery and beat keep the attached seat's lease alive; release stands
 	// it back down when this stream detaches. Both are vars so a test can
 	// drive the schedule without a sprint store on disk.
@@ -64,7 +65,7 @@ type sprintWatchRuntime struct {
 func defaultSprintWatchRuntime() sprintWatchRuntime {
 	return sprintWatchRuntime{
 		ackEvery: sprintWatchAckInterval,
-		poll:     defaultInboxPollRuntime(true), ackSeq: latestSprintWatchAck,
+		poll:     defaultInboxPollRuntime(true), ackPosition: newSprintWatchAckReader().latest,
 		beatEvery: sprintWatchHeartbeat, beat: holdSprintWatchLease,
 		release: weave.ReleaseSprintManagerLease,
 	}
@@ -81,7 +82,7 @@ func holdSprintWatchLease(id int64, owner string) error {
 // runSprintInboxWatch differs deliberately from ordinary inbox --watch: writing
 // a pipe is not proof an external model consumed it. The source cursors remain
 // untouched until the manager explicitly runs `sprint inbox-ack`; without that
-// proof the watcher reminds three times and then fails closed.
+// proof the watcher keeps reminding while leaving unread input durable.
 func runSprintInboxWatch(ctx context.Context, out, errOut io.Writer, sprintID int64,
 	owner string, rt sprintWatchRuntime) error {
 	if rt.poll.close != nil {
@@ -102,11 +103,21 @@ func runSprintInboxWatch(ctx context.Context, out, errOut io.Writer, sprintID in
 	interval := rt.poll.min
 	var pending *inboxBatch
 	var deliveredAt, nextReminder time.Time
-	var ackBaseline int64
+	var ackBaseline room.TimelinePosition
+	ackPosition := rt.ackPosition
+	if ackPosition == nil {
+		ackPosition = func(_ context.Context, id int64, owner string) (room.TimelinePosition, error) {
+			seq, err := rt.ackSeq(id, owner)
+			return room.TimelinePosition{Generation: 1, Seq: seq}, err
+		}
+	}
 	misses := 0
 	var nextBeat time.Time
 
 	for {
+		if ctx.Err() != nil {
+			return nil
+		}
 		if rt.poll.ownerLive != nil {
 			if err := rt.poll.ownerLive(); err != nil {
 				return err
@@ -147,8 +158,11 @@ func runSprintInboxWatch(ctx context.Context, out, errOut io.Writer, sprintID in
 						}
 					}
 				} else {
-					baseline, err := rt.ackSeq(sprintID, owner)
+					baseline, err := ackPosition(ctx, sprintID, owner)
 					if err != nil {
+						if ctx.Err() != nil {
+							return nil
+						}
 						return err
 					}
 					if err := renderInboxBatch(out, errOut, batch, true); err != nil {
@@ -162,11 +176,18 @@ func runSprintInboxWatch(ctx context.Context, out, errOut io.Writer, sprintID in
 				}
 			}
 		} else {
-			seq, err := rt.ackSeq(sprintID, owner)
+			position, err := ackPosition(ctx, sprintID, owner)
 			if err != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
 				return err
 			}
-			if seq > ackBaseline {
+			if position.Generation != ackBaseline.Generation {
+				// A replaced stream contains historical input. Rebase and require a
+				// subsequent explicit ack rather than consuming mail on replay.
+				ackBaseline = position
+			} else if position.Seq > ackBaseline.Seq {
 				if err := acknowledgeInboxBatch(*pending); err != nil {
 					return err
 				}
@@ -211,8 +232,18 @@ func runSprintInboxWatch(ctx context.Context, out, errOut io.Writer, sprintID in
 		if pause <= 0 {
 			pause = rt.poll.min
 		}
+		waitStarted := time.Now()
 		if err := rt.poll.wait(ctx, pause); err != nil {
 			return nil
+		}
+		// Native notifications can concern unrelated files (including lock
+		// diagnostics). Coalesce those wakes while a batch awaits its ack.
+		if pending != nil {
+			if remaining := pause - time.Since(waitStarted); remaining > 0 {
+				if err := waitInboxPoll(ctx, remaining); err != nil {
+					return nil
+				}
+			}
 		}
 		if pending == nil {
 			interval *= 2
@@ -225,19 +256,24 @@ func runSprintInboxWatch(ctx context.Context, out, errOut io.Writer, sprintID in
 
 func sprintWatchTopic(id int64) string { return fmt.Sprintf("sprint.%d.inbox-read", id) }
 
-func latestSprintWatchAck(id int64, owner string) (int64, error) {
-	events, err := room.Timeline(0)
-	if err != nil {
-		return 0, err
+// Each watch owns its reduction; switching identity discards any prior stream.
+type sprintWatchAckReader struct {
+	reader *room.TimelineReader
+	id     int64
+	owner  string
+}
+
+func newSprintWatchAckReader() *sprintWatchAckReader { return &sprintWatchAckReader{} }
+func (r *sprintWatchAckReader) latest(ctx context.Context, id int64, owner string) (room.TimelinePosition, error) {
+	if r.reader == nil || r.id != id || r.owner != owner {
+		r.id = id
+		r.owner = owner
+		r.reader = room.NewTimelineReader(func(event room.Event) bool {
+			return event.Type == room.EventAck && event.Topic == sprintWatchTopic(id) &&
+				strings.EqualFold(event.Actor, owner) && event.Target == room.AgentClaimID(owner)
+		})
 	}
-	var latest int64
-	for _, event := range events {
-		if event.Type == room.EventAck && event.Topic == sprintWatchTopic(id) &&
-			strings.EqualFold(event.Actor, owner) && event.Target == room.AgentClaimID(owner) && event.Seq > latest {
-			latest = event.Seq
-		}
-	}
-	return latest, nil
+	return r.reader.Latest(ctx)
 }
 
 func newSprintInboxAckCmd() *cobra.Command {
