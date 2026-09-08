@@ -33,17 +33,17 @@ const carrierIgnoredEnv = "BASHY_JOB_CARRIER_IGNORED"
 // user code. cli.Main calls it first; cmd/bashy additionally calls it before
 // telemetry.Init so a carrier never initializes the OTel plane.
 //
-// The platform hook relays externally delivered terminating signals through
-// the carrier wait status, including notify-only signals the Go runtime would
-// otherwise consume. Its lifetime is bounded by the parent-owned stdin pipe:
+// The platform hook relays catchable signals over the private readiness/event
+// descriptor, including notify-only signals the Go runtime would otherwise
+// consume. Kernel stops and uncatchable termination remain wait states. Its lifetime is bounded by the parent-owned stdin pipe:
 // it exits on EOF, so it cannot outlive a parent shell that dies without
 // reaping it.
 func MaybeRunJobCarrierHelper() {
 	if len(os.Args) != 2 || os.Args[1] != carrierHelperArg {
 		return
 	}
-	// Restore relay handlers for default dispositions and reconstruct the
-	// ignored-disposition snapshot supplied by the background runner.
+	// Install the helper relay before publishing readiness. Catchable signal
+	// events remain private to the owning runner, which applies live traps.
 	resetJobCarrierSignals()
 	signalJobCarrierReady()
 	buf := make([]byte, 128)

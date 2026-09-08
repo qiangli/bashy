@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -230,17 +231,43 @@ wait "$p"
 // signal.Reset does not replace that handler unless os/signal first enabled
 // the signal, so the carrier used to swallow USR1 and leave `wait $!` wedged.
 func TestCarrierHelperRestoresDefaultUSR1(t *testing.T) {
+	// Standalone runner construction leaves Go's ignore bookkeeping set
+	// while restoring the kernel default. Reproduce that exact boundary,
+	// which whole-package tests reach before this helper compatibility case.
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+		signal.Ignore(syscall.SIGUSR1)
+		(interp.OSSignalResetter{}).ResetDefault(int(syscall.SIGUSR1), "USR1")
+		t.Cleanup(func() {
+			ch := make(chan os.Signal, 1)
+			signal.Notify(ch, syscall.SIGUSR1)
+			signal.Stop(ch)
+		})
+	}
 	cp, err := (execJobCarrier{}).StartCarrier(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer cp.Terminate()
 	if err := syscall.Kill(cp.Pid(), syscall.SIGUSR1); err != nil {
 		t.Fatal(err)
 	}
-	got := cp.Wait()
-	if got != int(syscall.SIGUSR1) {
-		t.Fatalf("helper relay = %d, want SIGUSR1", got)
+	done := make(chan int, 1)
+	go func() { done <- cp.Wait() }()
+	select {
+	case got := <-done:
+		if got != int(syscall.SIGUSR1) {
+			t.Fatalf("helper relay = %d, want SIGUSR1", got)
+		}
+	case <-time.After(3 * time.Second):
+		cp.Terminate()
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			t.Fatal("legacy waiter did not finish after termination")
+		}
+		t.Fatal("kernel-default USR1 was discarded as a stale Go ignore")
 	}
+	waitPidsGone(t, []int{cp.Pid()})
 }
 
 // TestCarrierLivePidProbeAndCleanup makes the liveness probe deterministic: a
