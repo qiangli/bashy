@@ -201,12 +201,7 @@ func boundSprintMonitor(s *sprintMonitorSnapshot) {
 		h := *s.Host
 		s.Host = &h
 		if len(h.Processes) > 32 {
-			h.Processes = append([]resources.ProcessObservation(nil), h.Processes...)
-			sort.SliceStable(h.Processes, func(i, j int) bool {
-				a, b := h.Processes[i].CPU.Value, h.Processes[j].CPU.Value
-				return a != nil && (b == nil || *a > *b)
-			})
-			h.Processes = h.Processes[:32]
+			h.Processes = topSprintProcesses(h.Processes, 32)
 			s.Warnings = append(s.Warnings, "process details limited to 32; host totals include other processes")
 		}
 		if s.Sprint > 0 {
@@ -481,4 +476,37 @@ func renderSprintMonitor(out io.Writer, s *sprintMonitorSnapshot) error {
 	}
 	_, err := io.WriteString(out, text.String())
 	return err
+}
+
+// Keep only bounded indices while selecting. Sorting/copying the entire wide
+// observation array retained every process behind a 32-row slice and amplified
+// allocation in every monitoring client. Equal/unknown CPU preserves input order.
+func topSprintProcesses(rows []resources.ProcessObservation, limit int) []resources.ProcessObservation {
+	if limit <= 0 {
+		return nil
+	}
+	indices := make([]int, 0, limit)
+	for i := range rows {
+		pos := len(indices)
+		for j, k := range indices {
+			a, b := rows[i].CPU.Value, rows[k].CPU.Value
+			if a != nil && (b == nil || *a > *b) {
+				pos = j
+				break
+			}
+		}
+		if pos >= limit {
+			continue
+		}
+		if len(indices) < limit {
+			indices = append(indices, 0)
+		}
+		copy(indices[pos+1:], indices[pos:len(indices)-1])
+		indices[pos] = i
+	}
+	out := make([]resources.ProcessObservation, len(indices))
+	for i, k := range indices {
+		out[i] = rows[k]
+	}
+	return out
 }
