@@ -401,3 +401,46 @@ func runStageMove(t *testing.T, column string) string {
 	}
 	return stderr.String()
 }
+
+func TestFleetSelectRejectsWhitespaceRole(t *testing.T) {
+	isolateStageBoard(t)
+	wireMessageBoard()
+	names, err := bus.FleetSelect(bus.Audience{Role: " \t\n "})
+	if err == nil || !strings.Contains(err.Error(), "role") || len(names) != 0 {
+		t.Fatalf("whitespace role resolved to %v, %v; want a named refusal", names, err)
+	}
+}
+
+func TestFleetSelectRejectsMalformedCatalogBeforeSend(t *testing.T) {
+	for _, partial := range []bool{false, true} {
+		t.Run(map[bool]string{false: "zero", true: "partial"}[partial], func(t *testing.T) {
+			isolateStageBoard(t)
+			dir := filepath.Join(os.Getenv("BASHY_FLEET_DIR"), "agents")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if partial {
+				if err := os.WriteFile(filepath.Join(dir, "valid-peer.yaml"), []byte("name: valid-peer\nkind: agent\ntool: sprint-test\nmodel: example\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(dir, "broken.yaml"), []byte("name: ["), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			wireMessageBoard()
+			aud := bus.Audience{Tool: "sprint-test"}
+			names, err := bus.FleetSelect(aud)
+			if err == nil || !strings.Contains(err.Error(), "broken") || len(names) != 0 {
+				t.Fatalf("malformed catalog resolved to %v, %v; want no names and the catalog error", names, err)
+			}
+			_, err = bus.Send(bus.SendRequest{From: "tester", Audience: &aud, Body: "must refuse incomplete roster"})
+			if err == nil || !strings.Contains(err.Error(), "broken") {
+				t.Fatalf("Send error = %v", err)
+			}
+			posts, err := bus.Posts()
+			if err != nil || len(posts) != 0 {
+				t.Fatalf("failed send posts = %v, %v", posts, err)
+			}
+		})
+	}
+}

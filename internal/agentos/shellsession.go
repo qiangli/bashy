@@ -44,6 +44,7 @@
 package agentos
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -176,7 +177,10 @@ func fleetSelectAudience(aud bus.Audience) ([]string, error) {
 		return weave.LiveSprintManagers()
 	}
 	cat := fleet.New()
-	agents, _ := cat.Agents()
+	agents, errs := cat.Agents()
+	if err := errors.Join(errs...); err != nil {
+		return nil, fmt.Errorf("audience: resolve fleet catalog: %w", err)
+	}
 	var out []string
 	for _, a := range agents {
 		if aud.Tool != "" && !strings.EqualFold(a.Tool, aud.Tool) {
