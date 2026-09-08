@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/qiangli/coreutils/pkg/weave"
 	"github.com/spf13/cobra"
@@ -50,6 +52,14 @@ func attachSprintWatch(cmd *cobra.Command, takeover bool) {
 		if !watch {
 			return original(cmd, args)
 		}
+		// AgentOS dispatch runs before shell signal handling. Turn an attached
+		// watch's termination signals into cancellation so lease and membership
+		// defers run while unread inbox cursors remain untouched.
+		parent := cmd.Context()
+		ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		cmd.SetContext(ctx)
+		defer cmd.SetContext(parent)
 		id, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			return fmt.Errorf("sprint must be an integer: %q", args[0])
