@@ -18,6 +18,13 @@ import (
 )
 
 func TestTranspileDispatchArgs(t *testing.T) {
+	missingInput := filepath.Join(t.TempDir(), "does-not-exist.sh")
+	_, missingErr := os.ReadFile(missingInput)
+	if !os.IsNotExist(missingErr) {
+		t.Fatalf("missing input fixture: got %v, want a file-not-found error", missingErr)
+	}
+	// Keep the actual file error in the diagnostic on every OS; Windows does
+	// not use the Unix "no such file or directory" wording.
 	tests := []struct {
 		name       string
 		args       []string
@@ -50,9 +57,9 @@ func TestTranspileDispatchArgs(t *testing.T) {
 		},
 		{
 			name:       "file not found",
-			args:       []string{"--bashpp", "does-not-exist.sh", "-o", "out.go"},
+			args:       []string{"--bashpp", missingInput, "-o", "out.go"},
 			wantExit:   2,
-			wantStderr: "no such file or directory",
+			wantStderr: "transpile: " + missingErr.Error(),
 		},
 	}
 
@@ -182,6 +189,9 @@ func TestTranspileGoBuildAndStandaloneExecute(t *testing.T) {
 	outputFile := filepath.Join(dir, "main.go")
 	mapFile := filepath.Join(dir, "main.go.map")
 	binFile := filepath.Join(dir, "app")
+	if runtime.GOOS == "windows" {
+		binFile += ".exe"
+	}
 
 	shDir, err := filepath.Abs("../../../sh")
 	if err != nil {
@@ -403,6 +413,15 @@ func TestTranspileAtomicRollbackOnSecondRenameFailure(t *testing.T) {
 	if err := os.Chmod(outFile, origMode); err != nil {
 		t.Fatal(err)
 	}
+	if runtime.GOOS == "windows" {
+		// Windows cannot represent Unix permission bits. Still require rollback
+		// to preserve the permissions the original file actually had.
+		original, err := os.Stat(outFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		origMode = original.Mode().Perm()
+	}
 
 	if err := os.Mkdir(mapFile, 0755); err != nil {
 		t.Fatal(err)
@@ -416,7 +435,7 @@ func TestTranspileAtomicRollbackOnSecondRenameFailure(t *testing.T) {
 		t.Errorf("got exit %d when map rename fails, want 2", exit)
 	}
 
-	// Verify old output file was restored via rollback with original mode 0640
+	// Verify rollback restores the original contents and permissions.
 	restored, err := os.ReadFile(outFile)
 	if err != nil {
 		t.Fatalf("could not read restored output file: %v", err)
@@ -764,6 +783,9 @@ func TestTranspileModuleInputDirectory(t *testing.T) {
 				t.Fatalf("origin=%q, want exact argument %q; %v", mapping.Origin, input, err)
 			}
 			binary := filepath.Join(root, "program")
+			if runtime.GOOS == "windows" {
+				binary += ".exe"
+			}
 			cmd = exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-o", binary, output)
 			cmd.Dir = moduleDir
 			cmd.Env = append(os.Environ(), "GOWORK=off", "GO111MODULE=on", "GOTOOLCHAIN=local")
