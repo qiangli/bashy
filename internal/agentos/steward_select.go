@@ -188,7 +188,7 @@ func selectStewardAgent(name, tool string, band int) (*stewardSelection, error) 
 		// THE METER, NOT A GUESS. If the budget gate would refuse this model's
 		// next turn, it cannot steward — a seat that blocks on its first write
 		// is an unattended host wearing a steward's name.
-		if d := llmbudget.Check(m.Name, 0); !d.Allowed() {
+		if d := previewStewardBudget(m.Name, a.Name); !d.Allowed() {
 			sel.Skipped = append(sel.Skipped, stewardSkip{a.Name, "budget gate: " + d.Reason})
 			continue
 		}
