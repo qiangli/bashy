@@ -184,12 +184,13 @@ func snapshotMailbox(spec mailboxSpec) ([]mailboxItem, mailboxState, error) {
 	if err != nil {
 		return nil, state, err
 	}
+	if spec.Kind == "agent" {
+		// Resolve each audience once for this complete mailbox read; direct
+		// Post.ForReader calls would reload the roster for every historical post.
+		posts = bus.FilterPostsForReader(posts, spec.Address)
+	}
 	for _, p := range posts {
-		accept := mailboxAccept(spec, p.To, p.Broadcast())
-		if spec.Kind == "agent" && !accept {
-			accept = p.ForReader(spec.Address)
-		}
-		if !accept {
+		if spec.Kind != "agent" && !mailboxAccept(spec, p.To, p.Broadcast()) {
 			continue
 		}
 		id := fmt.Sprintf("mb:%d", p.Seq)
