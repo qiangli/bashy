@@ -6,7 +6,6 @@ seq: 252
 status: done
 priority: p0
 created: 2026-09-09T06:57:33.47468Z
-weave: 4
 assignee: sprint118-manager
 sprint: 118
 closed: 2026-09-09T08:49:29.700763Z
