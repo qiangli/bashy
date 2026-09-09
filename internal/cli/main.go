@@ -709,6 +709,7 @@ func newRunner() (*interp.Runner, error) {
 		// command name operand or the script path) via run()'s name arg.
 		stdinArgv0Option(),
 		interp.Env(env),
+		interp.GoSourceEnv(goSourceProcessEnvironment),
 		interp.WithBashCompatErrors(true),
 		// The cold CLI owns its process, so `trap - SIGNAL` must restore the
 		// real OS default disposition. Warm/session runners are embedded and

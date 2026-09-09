@@ -112,6 +112,7 @@ func NewSessionRunnerWithConfig(io SessionIO, config SessionConfig) (*interp.Run
 		interp.CommandString(true),
 		interp.StandardInput(false),
 		interp.Env(env),
+		interp.GoSourceEnv(io.Env),
 		interp.WithBashCompatErrors(true),
 		interp.PromptExpand(func(s string) string {
 			return expandPrompt(s, func(name string) string { return r.Env.Get(name).String() }, 0, 0, startupPosix)
