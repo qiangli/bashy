@@ -54,6 +54,16 @@ var (
 	shoptOff      multiFlag
 )
 
+// Sprint 118: the Go-source selection. startupGoSourceSel is what
+// --source/--check/--go-file spelled, captured before flag.Parse;
+// startupGoSourceErr carries a scan failure so it is reported on the normal
+// exit path; startupGoSource is the validated result. See gosource.go.
+var (
+	startupGoSourceSel GoSourceSelection
+	startupGoSourceErr error
+	startupGoSource    GoSourceResolution
+)
+
 // multiFlag collects repeated string values for a flag, e.g. -o opt.
 type multiFlag []string
 
@@ -129,7 +139,8 @@ func preflightInvocationErrors(args []string) {
 func stripBashPPInvocationFlags(args []string) []string {
 	out := make([]string, 0, len(args))
 	options := true
-	for i, arg := range args {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
 		if i == 0 {
 			out = append(out, arg)
 			continue
@@ -146,6 +157,14 @@ func stripBashPPInvocationFlags(args []string) []string {
 			continue
 		}
 		out = append(out, arg)
+		// A value-taking option's value is not the script operand: step over
+		// it so a selector spelled behind it is still seen. Sharing
+		// invocationFlagTakesValue with the other argv scanners is what keeps
+		// `--rcfile F --bashpp` and `--source go --bashpp` working.
+		if invocationFlagTakesValue(arg) && i+1 < len(args) {
+			i++
+			out = append(out, args[i])
+		}
 	}
 	return out
 }
@@ -254,8 +273,7 @@ func relocatePendingCommandFlag(args []string) []string {
 		// Value-taking options keep their value token, including a
 		// cluster whose trailing flag takes a value (`-eo pipefail`).
 		switch {
-		case a == "-o" || a == "-O" || a == "+o" || a == "+O" ||
-			a == "--rcfile" || a == "--init-file":
+		case a == "+o" || a == "+O" || invocationFlagTakesValue(a):
 			i += 2
 		case isCluster && (a[len(a)-1] == 'o' || a[len(a)-1] == 'O'):
 			i += 2
@@ -558,6 +576,13 @@ func Main() {
 	// non-option argument (`bash -c -l 'cmd'` is a login shell running cmd —
 	// the shape Claude Code uses). Reorder argv so Go's value-taking `-c`
 	// binds to the real command string.
+	// The Go-source selectors are invocation selectors too: consume them here
+	// so `flag` never sees them and they never become the script's $@. They go
+	// FIRST, before -c relocation and the Bash++ strip, so those two scanners
+	// never meet a `--source go` pair and mistake its value for the script
+	// operand. A scan failure is deferred to runAll so it exits through the
+	// usual path.
+	os.Args, startupGoSourceSel, startupGoSourceErr = stripGoSourceInvocationFlags(os.Args)
 	os.Args = stripBashPPInvocationFlags(relocatePendingCommandFlag(os.Args))
 	preflightInvocationErrors(os.Args)
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
@@ -1142,6 +1167,22 @@ func runAll() error {
 	})
 	if err != nil {
 		return err
+	}
+	// Go-source selection is validated before anything else looks at the
+	// input: a refused selection must never reach a shell code path, and an
+	// accepted one takes its own dispatch below.
+	if err := resolveStartupGoSource(); err != nil {
+		return goSourceFailure(err)
+	}
+	// `--source=go` owns the whole invocation: the shell parser is never
+	// constructed for this input, on the success path or on any error path.
+	// This dispatch stands AHEAD of --pretty-print, --dump-strings and the
+	// -c parse preflights, each of which parses its input as shell before it
+	// knows what language the input is. (Selecting one of those modes with Go
+	// input is already refused by ResolveGoSource above; this ordering means
+	// no future shell preflight can quietly get in front of Go input either.)
+	if startupGoSource.Enabled {
+		return runGoSourceInvocation()
 	}
 	if *pretty {
 		if flag.NArg() == 0 {

@@ -200,13 +200,16 @@ func commandLineBashPP(args []string) (enabled, seen bool) {
 			enabled, seen = false, true
 		case "-c":
 			return enabled, seen
-		case "-o", "-O", "--rcfile", "--init-file", "-bashy-plus-o", "-bashy-plus-O":
-			// These invocation options consume the following token. It is not
-			// a script operand, so selectors after it must still be scanned.
-			if i+1 < len(args) {
-				i++
-			}
 		default:
+			// A value-taking invocation option consumes the following token.
+			// It is not a script operand, so selectors after it must still be
+			// scanned: `--source go --bashpp x.go` selects Bash++.
+			if invocationFlagTakesValue(args[i]) {
+				if i+1 < len(args) {
+					i++
+				}
+				continue
+			}
 			if !strings.HasPrefix(args[i], "-") {
 				return enabled, seen
 			}

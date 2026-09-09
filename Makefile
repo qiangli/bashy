@@ -45,6 +45,9 @@ PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 win
 #   BASHY_OBS=1      observability stack (bashy otel): ~193 MB of OpenTelemetry
 #                    Collector + VictoriaMetrics/Logs + Jaeger + Perses + k8s/aws.
 # `make build-host` turns on both.
+# The Go source front end behind `--source=go` (mvdan.cc/sh/v3/gosource) is NOT
+# one of these: it is a required part of the bashy binary and is always linked.
+# See docs/plan-source-go-dispatch.md.
 EMBED_DIR := ../coreutils/external/podman/engine
 ENGINE_TAGS := $(if $(BASHY_ENGINES),bashy_engines \
 	$(if $(wildcard $(EMBED_DIR)/podman_embed/podman.gz),embed_podman) \

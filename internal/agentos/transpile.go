@@ -4,9 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/qiangli/bashy/internal/cli"
 
 	"mvdan.cc/sh/v3/lower"
 	"mvdan.cc/sh/v3/syntax"
@@ -42,6 +45,22 @@ type mapEntry struct {
 	SourceCol    uint   `json:"source_col"`
 	SourceOffset uint   `json:"source_offset"`
 	Node         string `json:"node"`
+	// SourceFile and SourceFileOffset resolve a mapping back to ONE original
+	// input file and an offset within that file's own bytes. They are set only
+	// for --source=go, where the program's position space spans several
+	// original files; shell input has a single source and omits them, so the
+	// artifact stays byte-compatible for existing consumers.
+	SourceFile       string `json:"source_file,omitempty"`
+	SourceFileOffset uint   `json:"source_file_offset,omitempty"`
+}
+
+// mapSource records one original input file and the exact bytes that were
+// read, so a harness can prove the tested bytes were the pinned bytes.
+type mapSource struct {
+	Name   string `json:"name"`
+	SHA256 string `json:"sha256"`
+	Base   uint   `json:"base"`
+	Size   uint   `json:"size"`
 }
 
 type sourceMapArtifact struct {
@@ -49,6 +68,12 @@ type sourceMapArtifact struct {
 	Origin        string     `json:"origin"`
 	GoDigest      string     `json:"go_digest"`
 	Mappings      []mapEntry `json:"mappings"`
+	// SourceKind is "go" for --source=go and omitted for shell input.
+	SourceKind string `json:"source_kind,omitempty"`
+	// FrontEnd is the Go front end's version, recorded as evidence of which
+	// ingestion produced these positions.
+	FrontEnd string      `json:"front_end,omitempty"`
+	Sources  []mapSource `json:"sources,omitempty"`
 }
 
 // formatDiagnostic renders a lower.Diagnostic. Non-empty Text takes precedence.
@@ -110,12 +135,20 @@ func isSameFileOrAlias(pathA, pathB string) bool {
 	return false
 }
 
-// dispatchTranspile handles 'bashy transpile --bashpp INPUT -o OUTPUT.go [--map MAPFILE]'
+// dispatchTranspile handles
+// 'bashy transpile --bashpp [--source=go] INPUT -o OUTPUT.go [--map MAPFILE]'.
+//
+// Sprint 118: --source=go takes the SAME selector as the shell entry point, so
+// a corpus recipe spells one language for both product modes. The Go bytes are
+// loaded by the sh front end through cli.LoadGoSource; malformed Go is
+// reported with Go diagnostics and never reparsed as shell.
 func dispatchTranspile(args []string) int {
 	var bashpp bool
 	var output string
 	var input string
 	var mapFile string
+	sourceKind := "sh"
+	var goFiles []string
 
 	inFlags := true
 	for i := 0; i < len(args); i++ {
@@ -126,6 +159,26 @@ func dispatchTranspile(args []string) int {
 		}
 		if inFlags && arg == "--bashpp" {
 			bashpp = true
+		} else if inFlags && arg == "--source" {
+			if i+1 < len(args) {
+				sourceKind = args[i+1]
+				i++
+			} else {
+				fmt.Fprintln(os.Stderr, "transpile: missing argument for --source")
+				return 2
+			}
+		} else if inFlags && strings.HasPrefix(arg, "--source=") {
+			sourceKind = strings.TrimPrefix(arg, "--source=")
+		} else if inFlags && arg == "--go-file" {
+			if i+1 < len(args) {
+				goFiles = append(goFiles, args[i+1])
+				i++
+			} else {
+				fmt.Fprintln(os.Stderr, "transpile: missing argument for --go-file")
+				return 2
+			}
+		} else if inFlags && strings.HasPrefix(arg, "--go-file=") {
+			goFiles = append(goFiles, strings.TrimPrefix(arg, "--go-file="))
 		} else if inFlags && arg == "-o" {
 			if i+1 < len(args) {
 				output = args[i+1]
@@ -159,7 +212,22 @@ func dispatchTranspile(args []string) int {
 		}
 	}
 
-	if input == "" {
+	switch sourceKind {
+	case "sh", "go":
+	default:
+		fmt.Fprintf(os.Stderr, "transpile: --source: unknown input language %q (expected \"sh\" or \"go\")\n", sourceKind)
+		return 2
+	}
+	goInput := sourceKind == "go"
+	if len(goFiles) > 0 && !goInput {
+		fmt.Fprintln(os.Stderr, "transpile: --go-file requires --source=go")
+		return 2
+	}
+	if len(goFiles) > 0 && input != "" {
+		fmt.Fprintln(os.Stderr, "transpile: --go-file cannot be combined with a file operand")
+		return 2
+	}
+	if input == "" && len(goFiles) == 0 {
 		fmt.Fprintln(os.Stderr, "transpile: missing INPUT")
 		return 2
 	}
@@ -180,22 +248,27 @@ func dispatchTranspile(args []string) int {
 		}
 	}
 
-	// Reject all path collisions
-	if input != "-" && isSameFileOrAlias(input, output) {
-		fmt.Fprintln(os.Stderr, "transpile: input and output path cannot be the same file")
-		return 2
+	// Reject all path collisions, including every explicit Go package file.
+	// A directory operand's members are only known after collection, so they
+	// are checked again below, before anything is written.
+	for _, name := range goFiles {
+		if code := checkTranspileInputCollision(name, output, mapFile); code != 0 {
+			return code
+		}
 	}
-	if input != "-" && isSameFileOrAlias(input, mapFile) {
-		fmt.Fprintln(os.Stderr, "transpile: input and map path cannot be the same file")
-		return 2
+	if input != "" && input != "-" {
+		if code := checkTranspileInputCollision(input, output, mapFile); code != 0 {
+			return code
+		}
 	}
 	if isSameFileOrAlias(output, mapFile) {
 		fmt.Fprintln(os.Stderr, "transpile: output and map path cannot be the same file")
 		return 2
 	}
 
-	// Validate destination directory vs file types
-	if st, err := os.Stat(input); input != "-" && err == nil && st.IsDir() {
+	// Validate destination directory vs file types. A directory operand is a
+	// package recipe under --source=go, so it is only rejected for shell input.
+	if st, err := os.Stat(input); !goInput && input != "" && input != "-" && err == nil && st.IsDir() {
 		fmt.Fprintf(os.Stderr, "transpile: input path is a directory: %s\n", input)
 		return 2
 	}
@@ -213,31 +286,67 @@ func dispatchTranspile(args []string) int {
 		fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
 		return 2
 	}
-	f := os.Stdin
-	if input != "-" {
-		sourcePath, err := filepath.Abs(input)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
-			return 2
-		}
-		sourceDir = filepath.Dir(sourcePath)
-		f, err = os.Open(input)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
-			return 2
-		}
-		defer f.Close()
-	}
 
-	parser := syntax.NewParser(syntax.KeepComments(true), syntax.Variant(syntax.LangBashPP))
-	file, err := parser.Parse(f, input)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 2
+	var file *syntax.File
+	var goProg *cli.GoSourceProgram
+	origin := input
+	if goInput {
+		in, err := collectTranspileGoSource(input, goFiles)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, transpileGoSourceDiagnostic(err))
+			return 2
+		}
+		// EVERY collected original is checked against the destinations before
+		// a single byte is written. A directory recipe expands to files this
+		// command never saw on the command line, so checking only the operand
+		// would let `transpile --source=go ./pkg -o ./pkg/main.go` overwrite
+		// an upstream program with its own generated output — and the whole
+		// point of unchanged-source ingestion is that the input survives it.
+		for _, f := range in.Files {
+			if f.Name == "-" || f.Name == "-c" {
+				continue
+			}
+			if code := checkTranspileInputCollision(f.Name, output, mapFile); code != 0 {
+				return code
+			}
+		}
+		file, goProg, err = loadTranspileGoSource(in)
+		if err != nil {
+			// sh's Go diagnostics carry their own file:line:col positions and
+			// are printed verbatim. Bashy's own refusals are re-labelled with
+			// this command's name. There is no shell reparse behind either.
+			fmt.Fprintln(os.Stderr, transpileGoSourceDiagnostic(err))
+			return 2
+		}
+		// Origin stays the first ORIGINAL file name, never a generated one,
+		// so every lowered position resolves against upstream source.
+		origin, sourceDir = in.Files[0].Name, in.Dir
+	} else {
+		f := os.Stdin
+		if input != "-" {
+			sourcePath, err := filepath.Abs(input)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
+				return 2
+			}
+			sourceDir = filepath.Dir(sourcePath)
+			f, err = os.Open(input)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "transpile: %v\n", err)
+				return 2
+			}
+			defer f.Close()
+		}
+		parser := syntax.NewParser(syntax.KeepComments(true), syntax.Variant(syntax.LangBashPP))
+		file, err = parser.Parse(f, input)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 2
+		}
 	}
 
 	opts := lower.Options{
-		Origin: input,
+		Origin: origin,
 		Dir:    sourceDir,
 	}
 	res, err := lower.Compile(file, opts)
@@ -254,14 +363,31 @@ func dispatchTranspile(args []string) int {
 
 	entries := make([]mapEntry, 0, len(res.Mappings))
 	for _, m := range res.Mappings {
-		entries = append(entries, mapEntry{
+		entry := mapEntry{
 			GoLine:       m.GoLine,
 			GoCol:        m.GoCol,
 			SourceLine:   m.Pos.Line(),
 			SourceCol:    m.Pos.Col(),
 			SourceOffset: m.Pos.Offset(),
 			Node:         m.Node,
-		})
+		}
+		// For Go input the program's position space spans every original
+		// file, so a mapping is only actionable once it names WHICH file and
+		// an offset into that file's own bytes. An unresolved position FAILS
+		// the run: omitting source_file would publish a map whose entries
+		// silently mean "some file", and a consumer cannot tell that apart
+		// from shell input, which omits the field legitimately.
+		if goProg != nil {
+			name, off, ok := goProg.SourceAt(m.Pos)
+			if !ok {
+				fmt.Fprintf(os.Stderr,
+					"transpile: %s: mapping at offset %d resolves to no original source file\n",
+					origin, m.Pos.Offset())
+				return 2
+			}
+			entry.SourceFile, entry.SourceFileOffset = name, off
+		}
+		entries = append(entries, entry)
 	}
 
 	goDigest := fmt.Sprintf("sha256:%x", sha256.Sum256(res.Source))
@@ -270,6 +396,15 @@ func dispatchTranspile(args []string) int {
 		Origin:        res.Origin,
 		GoDigest:      goDigest,
 		Mappings:      entries,
+	}
+	if goProg != nil {
+		mapArt.SourceKind = "go"
+		mapArt.FrontEnd = goProg.FrontEnd
+		for _, o := range goProg.Origins {
+			mapArt.Sources = append(mapArt.Sources, mapSource{
+				Name: o.Name, SHA256: o.SHA256, Base: o.Base, Size: o.Size,
+			})
+		}
 	}
 	mapData, err := json.MarshalIndent(mapArt, "", "  ")
 	if err != nil {
@@ -389,4 +524,76 @@ func writeOutputsAtomic(outputPath string, outputData []byte, mapPath string, ma
 	}
 
 	return 0
+}
+
+// checkTranspileInputCollision refuses to write an output or map file over an
+// input. isSameFileOrAlias resolves symlinks and compares inode identity, so a
+// symlink or a hard link to an original is refused as the original.
+func checkTranspileInputCollision(input, output, mapFile string) int {
+	if isSameFileOrAlias(input, output) {
+		fmt.Fprintln(os.Stderr, "transpile: input and output path cannot be the same file")
+		return 2
+	}
+	if isSameFileOrAlias(input, mapFile) {
+		fmt.Fprintln(os.Stderr, "transpile: input and map path cannot be the same file")
+		return 2
+	}
+	return 0
+}
+
+// collectTranspileGoSource reads the original Go bytes for a transpile run.
+// It only reads: the bytes handed to the front end are the upstream bytes.
+func collectTranspileGoSource(input string, goFiles []string) (cli.GoSourceInput, error) {
+	res := cli.GoSourceResolution{Enabled: true, Files: goFiles}
+	operand := input
+	var stdin io.Reader
+	if operand == "-" || operand == "" {
+		operand = ""
+		if len(goFiles) == 0 {
+			stdin = os.Stdin
+		}
+	}
+	return cli.CollectGoSources(res, operand, "", stdin)
+}
+
+// loadTranspileGoSource hands collected bytes to the sh front end.
+//
+// Entry calls are requested only for a package that HAS an entry point. A
+// build-only obligation is a real one: `go build` compiles `package p; var X
+// int` happily, so a corpus row whose phase is "build" must be able to
+// transpile a non-main package too. Asking for RunMain unconditionally made
+// the front end reject every such package with "Go execution requires package
+// main with func main()", which would have turned a supported obligation into
+// a skip.
+//
+// The main-ness of a package is a fact of the source, and Bashy does not parse
+// Go: the front end reports it. So the load is done once WITHOUT entry calls —
+// which is also exactly the artifact a non-main package needs — and repeated
+// with them only when that first load reports package main and a main
+// function. A main package therefore still emits a runnable artifact, and no
+// entry call is ever synthesised here.
+func loadTranspileGoSource(in cli.GoSourceInput) (*syntax.File, *cli.GoSourceProgram, error) {
+	prog, err := cli.LoadGoSource(in, cli.GoSourceOptions{RunMain: false, Dir: in.Dir})
+	if err != nil {
+		return nil, nil, err
+	}
+	if prog.Package != "main" || prog.Main == "" {
+		return prog.File, prog, nil
+	}
+	prog, err = cli.LoadGoSource(in, cli.GoSourceOptions{RunMain: true, Dir: in.Dir})
+	if err != nil {
+		return nil, nil, err
+	}
+	return prog.File, prog, nil
+}
+
+// transpileGoSourceDiagnostic renders a Go-source error under this command's
+// name. The front end's own positioned diagnostics pass through untouched so a
+// differential harness can compare them against the Go toolchain byte for byte.
+func transpileGoSourceDiagnostic(err error) string {
+	msg := err.Error()
+	if cli.IsGoSourceError(err) {
+		return "transpile: " + strings.TrimPrefix(msg, "bashy: ")
+	}
+	return msg
 }
