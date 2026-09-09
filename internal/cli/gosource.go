@@ -156,6 +156,8 @@ type GoSourceSelection struct {
 	// Files records every --go-file, in the order given. Bashy does not sort
 	// them; the front end owns file ordering.
 	Files []string
+	// DoubleDash records if -- was explicitly seen, separating arguments.
+	DoubleDash bool
 }
 
 // Requested reports whether any flag in this group was spelled at all.
@@ -233,6 +235,9 @@ func stripGoSourceInvocationFlags(args []string) ([]string, GoSourceSelection, e
 		}
 		if options && (arg == "-c" || arg == "--" || arg == "-" || !strings.HasPrefix(arg, "-")) {
 			options = false
+			if arg == "--" {
+				sel.DoubleDash = true
+			}
 		}
 		if !options {
 			out = append(out, arg)
@@ -349,7 +354,7 @@ func ResolveGoSource(sel GoSourceSelection, ctx GoSourceContext) (GoSourceResolu
 	if ctx.Binary != BashPPBinaryBashy {
 		return GoSourceResolution{}, goSourceErrorf("bashy: --source=go requires the bashy front door")
 	}
-	if len(sel.Files) > 0 && ctx.HasOperand {
+	if len(sel.Files) > 0 && ctx.HasOperand && !sel.DoubleDash {
 		return GoSourceResolution{}, goSourceErrorf(
 			"bashy: --go-file cannot be combined with a file operand")
 	}
@@ -577,7 +582,7 @@ func goSourceLoadFailure(err error) error {
 // nothing else.
 func runGoSourceInvocation() error {
 	operand := ""
-	if *command == "" && !*readStdin && flag.NArg() > 0 {
+	if *command == "" && !*readStdin && flag.NArg() > 0 && len(startupGoSource.Files) == 0 {
 		operand = flag.Arg(0)
 	}
 	var stdin io.Reader
