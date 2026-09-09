@@ -64,6 +64,8 @@ type GoSourceOptions struct {
 	// Dir is the directory the source came from, used to resolve module
 	// imports. It is never the source identity — that stays the file name.
 	Dir string
+	// GoVersion selects checker language semantics without selecting an SDK.
+	GoVersion string
 }
 
 // GoSourceProgram is the loaded program: a positioned Bash++ AST plus the
@@ -147,6 +149,8 @@ const (
 // line: what the user spelled, before it is checked against the resolved
 // dialect and POSIX profile.
 type GoSourceSelection struct {
+	GoVersion     string
+	GoVersionSeen bool
 	// Language is the last --source value seen, "" when the flag is absent.
 	Language string
 	// LanguageSeen distinguishes an absent --source from --source=sh.
@@ -162,7 +166,7 @@ type GoSourceSelection struct {
 
 // Requested reports whether any flag in this group was spelled at all.
 func (s GoSourceSelection) Requested() bool {
-	return s.LanguageSeen || s.Check || len(s.Files) > 0
+	return s.LanguageSeen || s.GoVersionSeen || s.Check || len(s.Files) > 0
 }
 
 // GoSourceContext is everything resolution needs beyond the raw selection.
@@ -185,6 +189,7 @@ type GoSourceContext struct {
 
 // GoSourceResolution is the validated selection.
 type GoSourceResolution struct {
+	GoVersion string
 	// Enabled reports that the input is Go source.
 	Enabled bool
 	// Check requests semantic validation with no execution.
@@ -244,6 +249,19 @@ func stripGoSourceInvocationFlags(args []string) ([]string, GoSourceSelection, e
 			continue
 		}
 		switch {
+		case arg == "--go-version":
+			value, ok := goSourceFlagValue(args, &i)
+			if !ok || value == "" {
+				return nil, sel, goSourceErrorf("bashy: --go-version: missing argument")
+			}
+			sel.GoVersion, sel.GoVersionSeen = value, true
+			continue
+		case strings.HasPrefix(arg, "--go-version="):
+			sel.GoVersion, sel.GoVersionSeen = strings.TrimPrefix(arg, "--go-version="), true
+			if sel.GoVersion == "" {
+				return nil, sel, goSourceErrorf("bashy: --go-version: missing argument")
+			}
+			continue
 		case arg == "--check":
 			sel.Check = true
 			continue
@@ -294,7 +312,7 @@ func stripGoSourceInvocationFlags(args []string) ([]string, GoSourceSelection, e
 func invocationFlagTakesValue(arg string) bool {
 	switch arg {
 	case "-o", "-O", "--rcfile", "--init-file", "-bashy-plus-o", "-bashy-plus-O",
-		"--source", "--go-file":
+		"--source", "--go-file", "--go-version":
 		return true
 	}
 	return false
@@ -333,6 +351,9 @@ func ResolveGoSource(sel GoSourceSelection, ctx GoSourceContext) (GoSourceResolu
 		}
 	}
 	if lang != GoSourceLangGo {
+		if sel.GoVersionSeen {
+			return GoSourceResolution{}, goSourceErrorf("bashy: --go-version requires --source=go")
+		}
 		if sel.Check {
 			return GoSourceResolution{}, goSourceErrorf("bashy: --check requires --source=go")
 		}
@@ -362,7 +383,7 @@ func ResolveGoSource(sel GoSourceSelection, ctx GoSourceContext) (GoSourceResolu
 		return GoSourceResolution{}, goSourceErrorf(
 			"bashy: %s cannot be combined with --source=go", ctx.ShellOnlyMode)
 	}
-	return GoSourceResolution{Enabled: true, Check: sel.Check, Files: sel.Files}, nil
+	return GoSourceResolution{Enabled: true, Check: sel.Check, Files: sel.Files, GoVersion: sel.GoVersion}, nil
 }
 
 // GoSourceInput is a collected set of original files plus the directory used
@@ -598,7 +619,7 @@ func runGoSourceInvocation() error {
 	// false so the loaded program carries no entry calls at all — the absence
 	// of the calls, not a later branch, is what makes "executes nothing" true.
 	noExec := startupGoSource.Check || cmdlineNoExec() || AgentOSCommandLineNoExec(resolvedStartupPosix())
-	prog, err := LoadGoSource(in, GoSourceOptions{RunMain: !noExec, Dir: in.Dir})
+	prog, err := LoadGoSource(in, GoSourceOptions{RunMain: !noExec, Dir: in.Dir, GoVersion: startupGoSource.GoVersion})
 	if err != nil {
 		return goSourceLoadFailure(err)
 	}

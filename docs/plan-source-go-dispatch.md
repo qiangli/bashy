@@ -113,6 +113,7 @@ they never become script operands or `flag` errors.
 | `--source=sh` / `--source sh` | Explicit default. Shell input. Accepted so a harness can always spell the language. |
 | `--source=go` / `--source go` | The operand (or stdin, or `-c`, or `--go-file`) is Go source. |
 | `--check` | Validate semantically and execute nothing. Requires `--source=go`. |
+| `--go-version=go1.12` / `--go-version go1.12` | Pass the requested language version unchanged to the Go source type checker. Requires `--source=go`; accepted by both `--check` and transpile. It does not select or download an SDK. |
 | `--go-file=PATH` / `--go-file PATH` | Repeatable. Names one original file of a multi-file package explicitly. |
 
 Scanning follows the rule `commandLineBashPP` already uses: stop at `--`, at
@@ -479,3 +480,9 @@ This is the fast host-integration lane, not the release verdict. The
 authoritative result is `make test-bash-container`, which needs a container
 runtime this workspace does not have; that gate is still owed and is the
 manager's to run.
+
+## Checker language version
+
+The `--go-version` value travels through `GoSourceOptions.GoVersion` into `gosource.Options.GoVersion` and `types.Config.GoVersion`. Original bytes, including upstream `// -lang=...` comments, remain unchanged. Omission preserves the existing checker default. Empty CLI values and invalid versions fail; future versions cannot silently fall back to the current language. This option specifies checker feature restrictions; it is not certification of historical runtime/compiler behavior.
+
+Flags after the input operand or `--` remain program arguments on the execution entry point. All invocation scanners share the separated-value flag classification. Ordinary shell input cannot opt into this checker option.

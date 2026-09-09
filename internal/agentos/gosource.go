@@ -61,8 +61,9 @@ func loadGoSource(files []cli.GoSourceFile, opts cli.GoSourceOptions) (*cli.GoSo
 	// and every local or helper-module import is rejected before lowering
 	// gets a chance to resolve it.
 	prog, err := gosource.Load(sources, gosource.Options{
-		RunMain:  opts.RunMain,
-		Importer: lower.NewModuleImporter(opts.Dir),
+		RunMain:   opts.RunMain,
+		Importer:  lower.NewModuleImporter(opts.Dir),
+		GoVersion: opts.GoVersion,
 	})
 	if err != nil {
 		return nil, err
