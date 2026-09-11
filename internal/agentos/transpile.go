@@ -149,6 +149,8 @@ func dispatchTranspile(args []string) int {
 	var mapFile string
 	sourceKind := "sh"
 	var goFiles []string
+	var goPackages []cli.GoSourcePackageSpec
+	var goImportBase, goImportPath string
 	var goVersion string
 	var goVersionSeen bool
 
@@ -194,6 +196,52 @@ func dispatchTranspile(args []string) int {
 			}
 		} else if inFlags && strings.HasPrefix(arg, "--go-file=") {
 			goFiles = append(goFiles, strings.TrimPrefix(arg, "--go-file="))
+		} else if inFlags && (arg == "--go-package" || strings.HasPrefix(arg, "--go-package=")) {
+			value, ok := strings.CutPrefix(arg, "--go-package=")
+			if !ok {
+				if i+1 >= len(args) {
+					fmt.Fprintln(os.Stderr, "transpile: missing argument for --go-package")
+					return 2
+				}
+				value = args[i+1]
+				i++
+			}
+			spec, err := cli.ParseGoSourcePackage(value)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, transpileGoSourceDiagnostic(err))
+				return 2
+			}
+			goPackages = append(goPackages, spec)
+		} else if inFlags && (arg == "--go-import-base" || strings.HasPrefix(arg, "--go-import-base=")) {
+			value, ok := strings.CutPrefix(arg, "--go-import-base=")
+			if !ok {
+				if i+1 >= len(args) {
+					fmt.Fprintln(os.Stderr, "transpile: missing argument for --go-import-base")
+					return 2
+				}
+				value = args[i+1]
+				i++
+			}
+			if value == "" {
+				fmt.Fprintln(os.Stderr, "transpile: missing argument for --go-import-base")
+				return 2
+			}
+			goImportBase = value
+		} else if inFlags && (arg == "--go-import-path" || strings.HasPrefix(arg, "--go-import-path=")) {
+			value, ok := strings.CutPrefix(arg, "--go-import-path=")
+			if !ok {
+				if i+1 >= len(args) {
+					fmt.Fprintln(os.Stderr, "transpile: missing argument for --go-import-path")
+					return 2
+				}
+				value = args[i+1]
+				i++
+			}
+			if value == "" {
+				fmt.Fprintln(os.Stderr, "transpile: missing argument for --go-import-path")
+				return 2
+			}
+			goImportPath = value
 		} else if inFlags && arg == "-o" {
 			if i+1 < len(args) {
 				output = args[i+1]
@@ -240,6 +288,10 @@ func dispatchTranspile(args []string) int {
 	}
 	if len(goFiles) > 0 && !goInput {
 		fmt.Fprintln(os.Stderr, "transpile: --go-file requires --source=go")
+		return 2
+	}
+	if (len(goPackages) > 0 || goImportBase != "" || goImportPath != "") && !goInput {
+		fmt.Fprintln(os.Stderr, "transpile: --go-package, --go-import-base and --go-import-path require --source=go")
 		return 2
 	}
 	if len(goFiles) > 0 && input != "" {
@@ -329,7 +381,14 @@ func dispatchTranspile(args []string) int {
 				return code
 			}
 		}
-		file, goProg, err = loadTranspileGoSource(in, goVersion)
+		packages, err := cli.ReadGoSourcePackages(goPackages)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, transpileGoSourceDiagnostic(err))
+			return 2
+		}
+		file, goProg, err = loadTranspileGoSource(in, cli.GoSourceOptions{
+			GoVersion: goVersion, Packages: packages, ImportBase: goImportBase, ImportPath: goImportPath,
+		})
 		if err != nil {
 			// sh's Go diagnostics carry their own file:line:col positions and
 			// are printed verbatim. Bashy's own refusals are re-labelled with
@@ -367,6 +426,11 @@ func dispatchTranspile(args []string) int {
 	opts := lower.Options{
 		Origin: origin,
 		Dir:    sourceDir,
+	}
+	if goProg != nil {
+		// Lower against the importer the front end checked with, so an
+		// explicit package map is one map for both halves.
+		opts.Importer = goProg.Importer
 	}
 	res, err := lower.Compile(file, opts)
 	if err != nil {
@@ -591,19 +655,18 @@ func collectTranspileGoSource(input string, goFiles []string) (cli.GoSourceInput
 // with them only when that first load reports package main and a main
 // function. A main package therefore still emits a runnable artifact, and no
 // entry call is ever synthesised here.
-func loadTranspileGoSource(in cli.GoSourceInput, versions ...string) (*syntax.File, *cli.GoSourceProgram, error) {
-	var goVersion string
-	if len(versions) > 0 {
-		goVersion = versions[0]
-	}
-	prog, err := cli.LoadGoSource(in, cli.GoSourceOptions{RunMain: false, Dir: in.Dir, GoVersion: goVersion})
+func loadTranspileGoSource(in cli.GoSourceInput, base cli.GoSourceOptions) (*syntax.File, *cli.GoSourceProgram, error) {
+	opts := base
+	opts.RunMain, opts.Dir = false, in.Dir
+	prog, err := cli.LoadGoSource(in, opts)
 	if err != nil {
 		return nil, nil, err
 	}
 	if prog.Package != "main" || prog.Main == "" {
 		return prog.File, prog, nil
 	}
-	prog, err = cli.LoadGoSource(in, cli.GoSourceOptions{RunMain: true, Dir: in.Dir, GoVersion: goVersion})
+	opts.RunMain = true
+	prog, err = cli.LoadGoSource(in, opts)
 	if err != nil {
 		return nil, nil, err
 	}

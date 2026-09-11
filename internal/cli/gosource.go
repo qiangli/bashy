@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"go/types"
 	"io"
 	"os"
 	"path/filepath"
@@ -112,6 +113,9 @@ type GoSourceProgram struct {
 	FrontEnd string
 	// Resolutions are every import the checker resolved, in resolution order.
 	Resolutions []GoSourceImportResolution
+	// Importer is the importer the front end checked the program with (the
+	// explicit package map in front of the module importer), for lowering.
+	Importer types.Importer
 }
 
 // SourceAt maps a position in the loaded program back to the original file and
@@ -220,8 +224,8 @@ func (s GoSourceSelection) Requested() bool {
 		len(s.Packages) > 0 || s.ImportBase != "" || s.ImportPath != ""
 }
 
-// parseGoSourcePackage splits one --go-package value into its path and files.
-func parseGoSourcePackage(value string) (GoSourcePackageSpec, error) {
+// ParseGoSourcePackage splits one --go-package value into its path and files.
+func ParseGoSourcePackage(value string) (GoSourcePackageSpec, error) {
 	path, files, ok := strings.Cut(value, "=")
 	if !ok || path == "" || files == "" {
 		return GoSourcePackageSpec{}, goSourceErrorf("bashy: --go-package: want <importpath>=<file>[,<file>...], got %q", value)
@@ -365,7 +369,7 @@ func stripGoSourceInvocationFlags(args []string) ([]string, GoSourceSelection, e
 					return nil, sel, goSourceErrorf("bashy: --go-package: missing argument")
 				}
 			}
-			spec, err := parseGoSourcePackage(value)
+			spec, err := ParseGoSourcePackage(value)
 			if err != nil {
 				return nil, sel, err
 			}
@@ -520,9 +524,9 @@ func ResolveGoSource(sel GoSourceSelection, ctx GoSourceContext) (GoSourceResolu
 		Packages: sel.Packages, ImportBase: sel.ImportBase, ImportPath: sel.ImportPath, List: sel.List}, nil
 }
 
-// readGoSourcePackages reads the exact bytes of every --go-package file. It
+// ReadGoSourcePackages reads the exact bytes of every --go-package file. It
 // reads; it never edits or reorders.
-func readGoSourcePackages(specs []GoSourcePackageSpec) ([]GoSourcePackage, error) {
+func ReadGoSourcePackages(specs []GoSourcePackageSpec) ([]GoSourcePackage, error) {
 	out := make([]GoSourcePackage, 0, len(specs))
 	for _, spec := range specs {
 		pkg := GoSourcePackage{Path: spec.Path}
@@ -785,7 +789,7 @@ func runGoSourceInvocation() error {
 	// false so the loaded program carries no entry calls at all — the absence
 	// of the calls, not a later branch, is what makes "executes nothing" true.
 	noExec := startupGoSource.Check || cmdlineNoExec() || AgentOSCommandLineNoExec(resolvedStartupPosix())
-	packages, err := readGoSourcePackages(startupGoSource.Packages)
+	packages, err := ReadGoSourcePackages(startupGoSource.Packages)
 	if err != nil {
 		return goSourceFailure(err)
 	}

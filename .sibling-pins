@@ -17,7 +17,7 @@
 # the pins are never consulted here. scripts/hooks/pre-push therefore refuses
 # a push while a pin disagrees with its sibling's HEAD; run
 # scripts/update-sibling-pins.sh to resync.
-sh=d91e7f8f9d827f29ed9ddb10f11659d0161671d8
+sh=828e5b336535586c49918da0c4ca962648ff5c27
 coreutils=d66937b11a0250171090403cc7ad632fb2e8ae5b
 readline=b958823bd7075ed8b9a3aedd351422356a95fe79
 filebrowser=cde1146904add2d78d9846c71597520d34b17f7d

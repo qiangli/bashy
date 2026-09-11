@@ -85,6 +85,7 @@ func loadGoSource(files []cli.GoSourceFile, opts cli.GoSourceOptions) (*cli.GoSo
 		Main:          prog.Main,
 		InitFunctions: prog.InitFunctions,
 		FrontEnd:      gosource.Version,
+		Importer:      prog.Importer,
 	}
 	for _, s := range prog.Sources {
 		out.Origins = append(out.Origins, cli.GoSourceOrigin{
