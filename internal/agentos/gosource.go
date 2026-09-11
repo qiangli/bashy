@@ -60,10 +60,21 @@ func loadGoSource(files []cli.GoSourceFile, opts cli.GoSourceOptions) (*cli.GoSo
 	// Without it the Go export importer resolves the standard library only,
 	// and every local or helper-module import is rejected before lowering
 	// gets a chance to resolve it.
+	packages := make([]gosource.PackageSpec, 0, len(opts.Packages))
+	for _, pkg := range opts.Packages {
+		spec := gosource.PackageSpec{Path: pkg.Path}
+		for _, f := range pkg.Files {
+			spec.Sources = append(spec.Sources, gosource.Source{Name: f.Name, Data: f.Data})
+		}
+		packages = append(packages, spec)
+	}
 	prog, err := gosource.Load(sources, gosource.Options{
-		RunMain:   opts.RunMain,
-		Importer:  lower.NewModuleImporter(opts.Dir),
-		GoVersion: opts.GoVersion,
+		RunMain:    opts.RunMain,
+		Importer:   lower.NewModuleImporter(opts.Dir),
+		GoVersion:  opts.GoVersion,
+		Packages:   packages,
+		ImportBase: opts.ImportBase,
+		ImportPath: opts.ImportPath,
 	})
 	if err != nil {
 		return nil, err
@@ -78,6 +89,11 @@ func loadGoSource(files []cli.GoSourceFile, opts cli.GoSourceOptions) (*cli.GoSo
 	for _, s := range prog.Sources {
 		out.Origins = append(out.Origins, cli.GoSourceOrigin{
 			Name: s.Name, SHA256: s.SHA256, Base: s.Base, Size: s.Size,
+		})
+	}
+	for _, r := range prog.Resolutions {
+		out.Resolutions = append(out.Resolutions, cli.GoSourceImportResolution{
+			From: r.From, Import: r.Import, Path: r.Path, Origin: r.Origin, Name: r.Name, Files: r.Files,
 		})
 	}
 	return out, nil

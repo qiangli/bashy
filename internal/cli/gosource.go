@@ -5,6 +5,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -66,6 +67,36 @@ type GoSourceOptions struct {
 	Dir string
 	// GoVersion selects checker language semantics without selecting an SDK.
 	GoVersion string
+	// Packages are explicit dependency packages (--go-package), in order.
+	// They are the policy-free half of Go's import model — an in-memory
+	// importcfg — consulted before the module importer for every import.
+	Packages []GoSourcePackage
+	// ImportBase is the compiler's -D (--go-import-base): a relative import
+	// "./x" means ImportBase/x. Empty refuses relative imports.
+	ImportBase string
+	// ImportPath is the compiler's -p for the program package
+	// (--go-import-path): the identity its resolutions are attributed to.
+	ImportPath string
+}
+
+// GoSourcePackage is one explicit dependency package: the import path it is
+// registered under and its exact files. The path is an identity, never a
+// directory.
+type GoSourcePackage struct {
+	Path  string
+	Files []GoSourceFile
+}
+
+// GoSourceResolution is one recorded import resolution, as the front end
+// reports it: deterministic for a given input, so it can be listed and
+// audited the way `go list` output can.
+type GoSourceImportResolution struct {
+	From   string   `json:"from"`
+	Import string   `json:"import"`
+	Path   string   `json:"path"`
+	Origin string   `json:"origin"`
+	Name   string   `json:"name"`
+	Files  []string `json:"files,omitempty"`
 }
 
 // GoSourceProgram is the loaded program: a positioned Bash++ AST plus the
@@ -79,6 +110,8 @@ type GoSourceProgram struct {
 	Origins       []GoSourceOrigin
 	// FrontEnd is the front end's version string, recorded in evidence.
 	FrontEnd string
+	// Resolutions are every import the checker resolved, in resolution order.
+	Resolutions []GoSourceImportResolution
 }
 
 // SourceAt maps a position in the loaded program back to the original file and
@@ -160,13 +193,47 @@ type GoSourceSelection struct {
 	// Files records every --go-file, in the order given. Bashy does not sort
 	// them; the front end owns file ordering.
 	Files []string
+	// Packages records every --go-package <path>=<file>[,<file>...], in the
+	// order given; order is the dependency order the front end checks in.
+	Packages []GoSourcePackageSpec
+	// ImportBase records --go-import-base.
+	ImportBase string
+	// ImportPath records --go-import-path, the program package's own path
+	// (the compiler's -p); empty attributes its resolutions to the package name.
+	ImportPath string
+	// List records --go-list: check, then print every import resolution.
+	List bool
 	// DoubleDash records if -- was explicitly seen, separating arguments.
 	DoubleDash bool
 }
 
+// GoSourcePackageSpec is one --go-package as spelled: an import path and the
+// file names that make up the package.
+type GoSourcePackageSpec struct {
+	Path  string
+	Files []string
+}
+
 // Requested reports whether any flag in this group was spelled at all.
 func (s GoSourceSelection) Requested() bool {
-	return s.LanguageSeen || s.GoVersionSeen || s.Check || len(s.Files) > 0
+	return s.LanguageSeen || s.GoVersionSeen || s.Check || s.List || len(s.Files) > 0 ||
+		len(s.Packages) > 0 || s.ImportBase != "" || s.ImportPath != ""
+}
+
+// parseGoSourcePackage splits one --go-package value into its path and files.
+func parseGoSourcePackage(value string) (GoSourcePackageSpec, error) {
+	path, files, ok := strings.Cut(value, "=")
+	if !ok || path == "" || files == "" {
+		return GoSourcePackageSpec{}, goSourceErrorf("bashy: --go-package: want <importpath>=<file>[,<file>...], got %q", value)
+	}
+	spec := GoSourcePackageSpec{Path: path}
+	for _, name := range strings.Split(files, ",") {
+		if name == "" {
+			return GoSourcePackageSpec{}, goSourceErrorf("bashy: --go-package: empty file name in %q", value)
+		}
+		spec.Files = append(spec.Files, name)
+	}
+	return spec, nil
 }
 
 // GoSourceContext is everything resolution needs beyond the raw selection.
@@ -196,6 +263,12 @@ type GoSourceResolution struct {
 	Check bool
 	// Files are the explicit --go-file inputs, empty for operand/stdin input.
 	Files []string
+	// Packages, ImportBase and List carry the explicit package map and the
+	// audit listing request; see GoSourceSelection.
+	Packages   []GoSourcePackageSpec
+	ImportBase string
+	ImportPath string
+	List       bool
 }
 
 // goSourceError is a refusal that the caller reports on stderr and turns into
@@ -285,6 +358,46 @@ func stripGoSourceInvocationFlags(args []string) ([]string, GoSourceSelection, e
 		case strings.HasPrefix(arg, "--go-file="):
 			sel.Files = append(sel.Files, strings.TrimPrefix(arg, "--go-file="))
 			continue
+		case arg == "--go-package", strings.HasPrefix(arg, "--go-package="):
+			value, ok := strings.CutPrefix(arg, "--go-package=")
+			if !ok {
+				if value, ok = goSourceFlagValue(args, &i); !ok {
+					return nil, sel, goSourceErrorf("bashy: --go-package: missing argument")
+				}
+			}
+			spec, err := parseGoSourcePackage(value)
+			if err != nil {
+				return nil, sel, err
+			}
+			sel.Packages = append(sel.Packages, spec)
+			continue
+		case arg == "--go-import-base", strings.HasPrefix(arg, "--go-import-base="):
+			value, ok := strings.CutPrefix(arg, "--go-import-base=")
+			if !ok {
+				if value, ok = goSourceFlagValue(args, &i); !ok {
+					return nil, sel, goSourceErrorf("bashy: --go-import-base: missing argument")
+				}
+			}
+			if value == "" {
+				return nil, sel, goSourceErrorf("bashy: --go-import-base: missing argument")
+			}
+			sel.ImportBase = value
+			continue
+		case arg == "--go-import-path", strings.HasPrefix(arg, "--go-import-path="):
+			value, ok := strings.CutPrefix(arg, "--go-import-path=")
+			if !ok {
+				if value, ok = goSourceFlagValue(args, &i); !ok {
+					return nil, sel, goSourceErrorf("bashy: --go-import-path: missing argument")
+				}
+			}
+			if value == "" {
+				return nil, sel, goSourceErrorf("bashy: --go-import-path: missing argument")
+			}
+			sel.ImportPath = value
+			continue
+		case arg == "--go-list":
+			sel.List = true
+			continue
 		}
 		out = append(out, arg)
 		// Another option's value is not an operand, so the scan must step
@@ -312,7 +425,7 @@ func stripGoSourceInvocationFlags(args []string) ([]string, GoSourceSelection, e
 func invocationFlagTakesValue(arg string) bool {
 	switch arg {
 	case "-o", "-O", "--rcfile", "--init-file", "-bashy-plus-o", "-bashy-plus-O",
-		"--source", "--go-file", "--go-version":
+		"--source", "--go-file", "--go-version", "--go-package", "--go-import-base", "--go-import-path":
 		return true
 	}
 	return false
@@ -360,6 +473,18 @@ func ResolveGoSource(sel GoSourceSelection, ctx GoSourceContext) (GoSourceResolu
 		if len(sel.Files) > 0 {
 			return GoSourceResolution{}, goSourceErrorf("bashy: --go-file requires --source=go")
 		}
+		if len(sel.Packages) > 0 {
+			return GoSourceResolution{}, goSourceErrorf("bashy: --go-package requires --source=go")
+		}
+		if sel.ImportBase != "" {
+			return GoSourceResolution{}, goSourceErrorf("bashy: --go-import-base requires --source=go")
+		}
+		if sel.ImportPath != "" {
+			return GoSourceResolution{}, goSourceErrorf("bashy: --go-import-path requires --source=go")
+		}
+		if sel.List {
+			return GoSourceResolution{}, goSourceErrorf("bashy: --go-list requires --source=go")
+		}
 		return GoSourceResolution{}, nil
 	}
 	// POSIX is checked before Bash++ so the conformance refusal is the one
@@ -383,7 +508,48 @@ func ResolveGoSource(sel GoSourceSelection, ctx GoSourceContext) (GoSourceResolu
 		return GoSourceResolution{}, goSourceErrorf(
 			"bashy: %s cannot be combined with --source=go", ctx.ShellOnlyMode)
 	}
-	return GoSourceResolution{Enabled: true, Check: sel.Check, Files: sel.Files, GoVersion: sel.GoVersion}, nil
+	// The explicit package map is a static-analysis input today: the runtime
+	// import bridge resolves through the on-disk policy only, so running a
+	// program against a map it cannot see would be a wrong answer, not a
+	// slow one. --go-list is itself a check.
+	if (len(sel.Packages) > 0 || sel.ImportBase != "" || sel.ImportPath != "") && !sel.Check && !sel.List {
+		return GoSourceResolution{}, goSourceErrorf(
+			"bashy: --go-package, --go-import-base and --go-import-path require --check or --go-list; interpreted execution of an explicit package set is not supported")
+	}
+	return GoSourceResolution{Enabled: true, Check: sel.Check || sel.List, Files: sel.Files, GoVersion: sel.GoVersion,
+		Packages: sel.Packages, ImportBase: sel.ImportBase, ImportPath: sel.ImportPath, List: sel.List}, nil
+}
+
+// readGoSourcePackages reads the exact bytes of every --go-package file. It
+// reads; it never edits or reorders.
+func readGoSourcePackages(specs []GoSourcePackageSpec) ([]GoSourcePackage, error) {
+	out := make([]GoSourcePackage, 0, len(specs))
+	for _, spec := range specs {
+		pkg := GoSourcePackage{Path: spec.Path}
+		for _, name := range spec.Files {
+			data, err := os.ReadFile(name)
+			if err != nil {
+				return nil, err
+			}
+			pkg.Files = append(pkg.Files, GoSourceFile{Name: name, Data: data})
+		}
+		out = append(out, pkg)
+	}
+	return out, nil
+}
+
+// writeGoSourceList prints the recorded import resolutions, one JSON object
+// per line, in resolution order. The output is a pure function of the inputs
+// — no timestamps, no host paths beyond the names the caller gave — so two
+// runs over the same files print identical bytes and can be diffed.
+func writeGoSourceList(w io.Writer, resolutions []GoSourceImportResolution) error {
+	enc := json.NewEncoder(w)
+	for _, r := range resolutions {
+		if err := enc.Encode(r); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GoSourceInput is a collected set of original files plus the directory used
@@ -619,9 +785,20 @@ func runGoSourceInvocation() error {
 	// false so the loaded program carries no entry calls at all — the absence
 	// of the calls, not a later branch, is what makes "executes nothing" true.
 	noExec := startupGoSource.Check || cmdlineNoExec() || AgentOSCommandLineNoExec(resolvedStartupPosix())
-	prog, err := LoadGoSource(in, GoSourceOptions{RunMain: !noExec, Dir: in.Dir, GoVersion: startupGoSource.GoVersion})
+	packages, err := readGoSourcePackages(startupGoSource.Packages)
+	if err != nil {
+		return goSourceFailure(err)
+	}
+	prog, err := LoadGoSource(in, GoSourceOptions{RunMain: !noExec, Dir: in.Dir, GoVersion: startupGoSource.GoVersion,
+		Packages: packages, ImportBase: startupGoSource.ImportBase, ImportPath: startupGoSource.ImportPath})
 	if err != nil {
 		return goSourceLoadFailure(err)
+	}
+	if startupGoSource.List {
+		if err := writeGoSourceList(os.Stdout, prog.Resolutions); err != nil {
+			return err
+		}
+		return nil
 	}
 	if noExec {
 		return nil

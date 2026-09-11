@@ -115,6 +115,10 @@ they never become script operands or `flag` errors.
 | `--check` | Validate semantically and execute nothing. Requires `--source=go`. |
 | `--go-version=go1.12` / `--go-version go1.12` | Pass the requested language version unchanged to the Go source type checker. Requires `--source=go`; accepted by both `--check` and transpile. It does not select or download an SDK. |
 | `--go-file=PATH` / `--go-file PATH` | Repeatable. Names one original file of a multi-file package explicitly. |
+| `--go-package=PATH=FILE[,FILE...]` / `--go-package PATH=FILE[,FILE...]` | Repeatable, **ordered**. An explicit dependency package: the import path it is registered under and its exact files. This is the compiler's `-importcfg` in memory — the policy-free half of Go's import model — consulted before the module importer for every import. The path is an identity, never a directory. Requires `--check` or `--go-list`. |
+| `--go-import-base=BASE` / `--go-import-base BASE` | The compiler's `-D`: a relative import `./x` in any file means `BASE/x`. Without it a relative import is refused, exactly as `go tool compile` refuses it without `-D`. Relative imports are **never** resolved against the filesystem. |
+| `--go-import-path=PATH` / `--go-import-path PATH` | The compiler's `-p` for the program package: the identity its resolutions are attributed to in `--go-list`. Empty attributes them to the package name. |
+| `--go-list` | Implies `--check`. After a successful check, print every import the checker resolved — explicit packages and the program alike — as one JSON object per line in resolution order: `from`, `import` (as written), `path` (after base joining), `origin` (`package-map` or `importer`), `name`, `files`. The output is a pure function of the inputs, so two runs over the same files print identical bytes; it is the auditable counterpart of `go list` for an explicit package set. See the umbrella's `docs/bashpp-import-resolution.md`. |
 
 Scanning follows the rule `commandLineBashPP` already uses: stop at `--`, at
 `-c`, or at the first operand that does not start with `-`. Last one wins for
