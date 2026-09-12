@@ -3,10 +3,11 @@ id: aaf2ffe84309
 kind: task
 title: 'S159.1 bashy: ship bashy inspect (index, paths, mode); fold doctor/context/audit behind hidden aliases'
 seq: 257
-status: todo
+status: done
 priority: p0
 created: 2026-09-12T19:15:05.106924Z
 sprint: 159
+closed: 2026-09-12T19:26:26.112834Z
 ---
 
 bashy half of S159.1 (umbrella story f1d46cf5c54f; design docs/bashy-inspect-design.md in the umbrella, PRIVATE).
