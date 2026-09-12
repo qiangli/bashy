@@ -114,6 +114,7 @@ they never become script operands or `flag` errors.
 | `--source=go` / `--source go` | The operand (or stdin, or `-c`, or `--go-file`) is Go source. |
 | `--check` | Validate semantically and execute nothing. Requires `--source=go`. |
 | `--go-version=go1.12` / `--go-version go1.12` | Pass the requested language version unchanged to the Go source type checker. Requires `--source=go`; accepted by both `--check` and transpile. It does not select or download an SDK. |
+| `--go-test-builtins` / `--go-test-builtins=true` | Enable the Go checker test environment's predeclared `assert` and `trace` functions. Requires `--source=go`; accepted by both `--check` and transpile. |
 | `--go-file=PATH` / `--go-file PATH` | Repeatable. Names one original file of a multi-file package explicitly. |
 | `--go-package=PATH=FILE[,FILE...]` / `--go-package PATH=FILE[,FILE...]` | Repeatable, **ordered**. An explicit dependency package: the import path it is registered under and its exact files. This is the compiler's `-importcfg` in memory — the policy-free half of Go's import model — consulted before the module importer for every import. The path is an identity, never a directory. Requires `--check` or `--go-list`. |
 | `--go-import-base=BASE` / `--go-import-base BASE` | The compiler's `-D`: a relative import `./x` in any file means `BASE/x`. Without it a relative import is refused, exactly as `go tool compile` refuses it without `-D`. Relative imports are **never** resolved against the filesystem. |
@@ -488,5 +489,7 @@ manager's to run.
 ## Checker language version
 
 The `--go-version` value travels through `GoSourceOptions.GoVersion` into `gosource.Options.GoVersion` and `types.Config.GoVersion`. Original bytes, including upstream `// -lang=...` comments, remain unchanged. Omission preserves the existing checker default. Empty CLI values and invalid versions fail; future versions cannot silently fall back to the current language. This option specifies checker feature restrictions; it is not certification of historical runtime/compiler behavior.
+
+Likewise, `--go-test-builtins` travels through `GoSourceOptions.TestBuiltins` into `gosource.Options.TestBuiltins`, enabling the checker-only `assert` and `trace` predeclared functions without changing the Go language version.
 
 Flags after the input operand or `--` remain program arguments on the execution entry point. All invocation scanners share the separated-value flag classification. Ordinary shell input cannot opt into this checker option.

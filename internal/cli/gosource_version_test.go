@@ -47,3 +47,40 @@ func TestRunGoSourceVersionReachesLoader(t *testing.T) {
 		t.Fatalf("load: called=%v err=%v", called, err)
 	}
 }
+
+func TestGoSourceTestBuiltinsSelection(t *testing.T) {
+	for _, flag := range []string{"--go-test-builtins", "--go-test-builtins=true"} {
+		args := []string{"bashy", flag, "--source=go", "--bashpp", "--check", "original.go"}
+		remaining, sel, err := stripGoSourceInvocationFlags(args)
+		if err != nil || !sel.TestBuiltins || !sel.TestBuiltinsSeen {
+			t.Fatalf("%s selection: %+v %v", flag, sel, err)
+		}
+		if !reflect.DeepEqual(remaining, []string{"bashy", "--bashpp", "original.go"}) {
+			t.Fatalf("%s remaining args: %v", flag, remaining)
+		}
+		res, err := ResolveGoSource(sel, GoSourceContext{Binary: BashPPBinaryBashy, BashPP: true})
+		if err != nil || !res.TestBuiltins || !res.Check {
+			t.Fatalf("%s resolution: %+v %v", flag, res, err)
+		}
+	}
+
+	if _, err := ResolveGoSource(GoSourceSelection{TestBuiltins: true, TestBuiltinsSeen: true}, GoSourceContext{Binary: BashPPBinaryBashy, BashPP: true}); err == nil || !strings.Contains(err.Error(), "requires --source=go") {
+		t.Fatalf("test checker environment leaked to shell source: %v", err)
+	}
+}
+
+func TestRunGoSourceTestBuiltinsReachesLoader(t *testing.T) {
+	path := writeGoFixture(t, "package p\nfunc f() { assert(true) }\n")
+	withGoSourceSelection(t, GoSourceResolution{Enabled: true, Check: true, Files: []string{path}, TestBuiltins: true})
+	called := false
+	withGoSourceHook(t, func(_ []GoSourceFile, opts GoSourceOptions) (*GoSourceProgram, error) {
+		called = true
+		if opts.RunMain || !opts.TestBuiltins {
+			t.Fatalf("wrong checker options: %+v", opts)
+		}
+		return &GoSourceProgram{Package: "p"}, nil
+	})
+	if err := runGoSourceInvocation(); err != nil || !called {
+		t.Fatalf("load: called=%v err=%v", called, err)
+	}
+}

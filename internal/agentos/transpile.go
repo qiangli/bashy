@@ -153,6 +153,8 @@ func dispatchTranspile(args []string) int {
 	var goImportBase, goImportPath string
 	var goVersion string
 	var goVersionSeen bool
+	var goTestBuiltins bool
+	var goTestBuiltinsSeen bool
 
 	inFlags := true
 	for i := 0; i < len(args); i++ {
@@ -173,6 +175,11 @@ func dispatchTranspile(args []string) int {
 			}
 		} else if inFlags && strings.HasPrefix(arg, "--source=") {
 			sourceKind = strings.TrimPrefix(arg, "--source=")
+		} else if inFlags && (arg == "--go-test-builtins" || arg == "--go-test-builtins=true") {
+			goTestBuiltins, goTestBuiltinsSeen = true, true
+		} else if inFlags && strings.HasPrefix(arg, "--go-test-builtins=") {
+			fmt.Fprintln(os.Stderr, "transpile: --go-test-builtins: expected true")
+			return 2
 		} else if inFlags && arg == "--go-version" {
 			if i+1 >= len(args) || args[i+1] == "" {
 				fmt.Fprintln(os.Stderr, "transpile: missing argument for --go-version")
@@ -282,6 +289,10 @@ func dispatchTranspile(args []string) int {
 		return 2
 	}
 	goInput := sourceKind == "go"
+	if goTestBuiltinsSeen && !goInput {
+		fmt.Fprintln(os.Stderr, "transpile: --go-test-builtins requires --source=go")
+		return 2
+	}
 	if goVersionSeen && !goInput {
 		fmt.Fprintln(os.Stderr, "transpile: --go-version requires --source=go")
 		return 2
@@ -387,7 +398,8 @@ func dispatchTranspile(args []string) int {
 			return 2
 		}
 		file, goProg, err = loadTranspileGoSource(in, cli.GoSourceOptions{
-			GoVersion: goVersion, Packages: packages, ImportBase: goImportBase, ImportPath: goImportPath,
+			GoVersion: goVersion, TestBuiltins: goTestBuiltins,
+			Packages: packages, ImportBase: goImportBase, ImportPath: goImportPath,
 		})
 		if err != nil {
 			// sh's Go diagnostics carry their own file:line:col positions and

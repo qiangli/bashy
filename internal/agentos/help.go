@@ -14,6 +14,8 @@ func Usage() string {
 	return `
 Bashy AgentOS extensions:
 	--bashpp, --bash++	enable Bash++ (--no-bashpp disables it)
+	--go-version VERSION	select Go checker language semantics (requires --source=go)
+	--go-test-builtins	enable Go checker test builtins assert/trace (requires --source=go)
 	--dryrun, --dry-run	preview external commands and destructive file ops
 	--reduce		reduce oversized command output with a recovery handle
 	--no-elide, --full	keep complete command output
