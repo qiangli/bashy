@@ -96,3 +96,41 @@ func TestTranspileGoSourceTestBuiltins(t *testing.T) {
 		t.Fatalf("flag without Go source accepted: exit=%d stderr=%q", exit, stderr)
 	}
 }
+
+// Sprint: #154; Story: S154.1; Story-ID: 29abb27c8659
+func TestTranspileGoSourceCheckEnvironment(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "original.go")
+	if err := os.WriteFile(source, []byte("package p\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	originalLoad := cli.GoSourceLoad
+	t.Cleanup(func() { cli.GoSourceLoad = originalLoad })
+	for _, tc := range []struct {
+		flag string
+		get  func(cli.GoSourceOptions) bool
+	}{
+		{"--go-checker-branch-errors", func(o cli.GoSourceOptions) bool { return o.CheckerBranchErrors }},
+		{"--go-checker-branch-errors=true", func(o cli.GoSourceOptions) bool { return o.CheckerBranchErrors }},
+		{"--go-check-after-syntax-errors", func(o cli.GoSourceOptions) bool { return o.CheckAfterSyntaxErrors }},
+		{"--go-check-after-syntax-errors=true", func(o cli.GoSourceOptions) bool { return o.CheckAfterSyntaxErrors }},
+	} {
+		called := false
+		cli.GoSourceLoad = func(_ []cli.GoSourceFile, opts cli.GoSourceOptions) (*cli.GoSourceProgram, error) {
+			called = true
+			if !tc.get(opts) {
+				t.Fatalf("%s option dropped: %+v", tc.flag, opts)
+			}
+			return nil, errors.New("stop after option capture")
+		}
+		output := filepath.Join(dir, strings.TrimPrefix(strings.SplitN(tc.flag, "=", 2)[0], "--")+".go")
+		exit, stderr := captureTranspileStderr(t, []string{"--bashpp", "--source=go", tc.flag, source, "-o", output})
+		if exit != 2 || !called || !strings.Contains(stderr, "stop after option capture") {
+			t.Fatalf("%s: exit=%d called=%v stderr=%q", tc.flag, exit, called, stderr)
+		}
+		exit, stderr = captureTranspileStderr(t, []string{"--bashpp", "--source=sh", tc.flag, source, "-o", filepath.Join(dir, "rejected.go")})
+		if exit != 2 || !strings.Contains(stderr, "requires --source=go") {
+			t.Fatalf("%s without Go source accepted: exit=%d stderr=%q", tc.flag, exit, stderr)
+		}
+	}
+}

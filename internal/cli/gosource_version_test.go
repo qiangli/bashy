@@ -84,3 +84,57 @@ func TestRunGoSourceTestBuiltinsReachesLoader(t *testing.T) {
 		t.Fatalf("load: called=%v err=%v", called, err)
 	}
 }
+
+// Sprint: #154; Story: S154.1; Story-ID: 29abb27c8659
+func TestGoSourceCheckEnvironmentSelection(t *testing.T) {
+	for _, tc := range []struct {
+		flag string
+		get  func(GoSourceSelection) (bool, bool)
+		res  func(GoSourceResolution) bool
+		sel  GoSourceSelection
+	}{
+		{"--go-checker-branch-errors", func(s GoSourceSelection) (bool, bool) { return s.CheckerBranchErrors, s.CheckerBranchErrorsSeen },
+			func(r GoSourceResolution) bool { return r.CheckerBranchErrors }, GoSourceSelection{CheckerBranchErrors: true, CheckerBranchErrorsSeen: true}},
+		{"--go-checker-branch-errors=true", func(s GoSourceSelection) (bool, bool) { return s.CheckerBranchErrors, s.CheckerBranchErrorsSeen },
+			func(r GoSourceResolution) bool { return r.CheckerBranchErrors }, GoSourceSelection{CheckerBranchErrors: true, CheckerBranchErrorsSeen: true}},
+		{"--go-check-after-syntax-errors", func(s GoSourceSelection) (bool, bool) { return s.CheckAfterSyntaxErrors, s.CheckAfterSyntaxErrorsSeen },
+			func(r GoSourceResolution) bool { return r.CheckAfterSyntaxErrors }, GoSourceSelection{CheckAfterSyntaxErrors: true, CheckAfterSyntaxErrorsSeen: true}},
+		{"--go-check-after-syntax-errors=true", func(s GoSourceSelection) (bool, bool) { return s.CheckAfterSyntaxErrors, s.CheckAfterSyntaxErrorsSeen },
+			func(r GoSourceResolution) bool { return r.CheckAfterSyntaxErrors }, GoSourceSelection{CheckAfterSyntaxErrors: true, CheckAfterSyntaxErrorsSeen: true}},
+	} {
+		args := []string{"bashy", tc.flag, "--source=go", "--bashpp", "--check", "original.go"}
+		remaining, sel, err := stripGoSourceInvocationFlags(args)
+		if on, seen := tc.get(sel); err != nil || !on || !seen {
+			t.Fatalf("%s selection: %+v %v", tc.flag, sel, err)
+		}
+		if !reflect.DeepEqual(remaining, []string{"bashy", "--bashpp", "original.go"}) {
+			t.Fatalf("%s remaining args: %v", tc.flag, remaining)
+		}
+		res, err := ResolveGoSource(sel, GoSourceContext{Binary: BashPPBinaryBashy, BashPP: true})
+		if err != nil || !tc.res(res) || !res.Check {
+			t.Fatalf("%s resolution: %+v %v", tc.flag, res, err)
+		}
+		if _, err := ResolveGoSource(tc.sel, GoSourceContext{Binary: BashPPBinaryBashy, BashPP: true}); err == nil || !strings.Contains(err.Error(), "requires --source=go") {
+			t.Fatalf("%s leaked to shell source: %v", tc.flag, err)
+		}
+	}
+	if _, _, err := stripGoSourceInvocationFlags([]string{"bashy", "--go-check-after-syntax-errors=false", "--source=go", "--check", "x.go"}); err == nil || !strings.Contains(err.Error(), "expected true") {
+		t.Fatalf("=false accepted: %v", err)
+	}
+}
+
+func TestRunGoSourceCheckEnvironmentReachesLoader(t *testing.T) {
+	path := writeGoFixture(t, "package p\nfunc f() {\nL:\n\tfor {\n\t}\n}\n")
+	withGoSourceSelection(t, GoSourceResolution{Enabled: true, Check: true, Files: []string{path}, CheckerBranchErrors: true, CheckAfterSyntaxErrors: true})
+	called := false
+	withGoSourceHook(t, func(_ []GoSourceFile, opts GoSourceOptions) (*GoSourceProgram, error) {
+		called = true
+		if opts.RunMain || !opts.CheckerBranchErrors || !opts.CheckAfterSyntaxErrors {
+			t.Fatalf("wrong checker options: %+v", opts)
+		}
+		return &GoSourceProgram{Package: "p"}, nil
+	})
+	if err := runGoSourceInvocation(); err != nil || !called {
+		t.Fatalf("load: called=%v err=%v", called, err)
+	}
+}

@@ -155,6 +155,8 @@ func dispatchTranspile(args []string) int {
 	var goVersionSeen bool
 	var goTestBuiltins bool
 	var goTestBuiltinsSeen bool
+	var goCheckerBranchErrors, goCheckerBranchErrorsSeen bool
+	var goCheckAfterSyntaxErrors, goCheckAfterSyntaxErrorsSeen bool
 
 	inFlags := true
 	for i := 0; i < len(args); i++ {
@@ -179,6 +181,16 @@ func dispatchTranspile(args []string) int {
 			goTestBuiltins, goTestBuiltinsSeen = true, true
 		} else if inFlags && strings.HasPrefix(arg, "--go-test-builtins=") {
 			fmt.Fprintln(os.Stderr, "transpile: --go-test-builtins: expected true")
+			return 2
+		} else if inFlags && (arg == "--go-checker-branch-errors" || arg == "--go-checker-branch-errors=true") {
+			goCheckerBranchErrors, goCheckerBranchErrorsSeen = true, true
+		} else if inFlags && strings.HasPrefix(arg, "--go-checker-branch-errors=") {
+			fmt.Fprintln(os.Stderr, "transpile: --go-checker-branch-errors: expected true")
+			return 2
+		} else if inFlags && (arg == "--go-check-after-syntax-errors" || arg == "--go-check-after-syntax-errors=true") {
+			goCheckAfterSyntaxErrors, goCheckAfterSyntaxErrorsSeen = true, true
+		} else if inFlags && strings.HasPrefix(arg, "--go-check-after-syntax-errors=") {
+			fmt.Fprintln(os.Stderr, "transpile: --go-check-after-syntax-errors: expected true")
 			return 2
 		} else if inFlags && arg == "--go-version" {
 			if i+1 >= len(args) || args[i+1] == "" {
@@ -293,6 +305,14 @@ func dispatchTranspile(args []string) int {
 		fmt.Fprintln(os.Stderr, "transpile: --go-test-builtins requires --source=go")
 		return 2
 	}
+	if goCheckerBranchErrorsSeen && !goInput {
+		fmt.Fprintln(os.Stderr, "transpile: --go-checker-branch-errors requires --source=go")
+		return 2
+	}
+	if goCheckAfterSyntaxErrorsSeen && !goInput {
+		fmt.Fprintln(os.Stderr, "transpile: --go-check-after-syntax-errors requires --source=go")
+		return 2
+	}
 	if goVersionSeen && !goInput {
 		fmt.Fprintln(os.Stderr, "transpile: --go-version requires --source=go")
 		return 2
@@ -399,6 +419,7 @@ func dispatchTranspile(args []string) int {
 		}
 		file, goProg, err = loadTranspileGoSource(in, cli.GoSourceOptions{
 			GoVersion: goVersion, TestBuiltins: goTestBuiltins,
+			CheckerBranchErrors: goCheckerBranchErrors, CheckAfterSyntaxErrors: goCheckAfterSyntaxErrors,
 			Packages: packages, ImportBase: goImportBase, ImportPath: goImportPath,
 		})
 		if err != nil {

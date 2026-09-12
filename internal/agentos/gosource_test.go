@@ -315,7 +315,8 @@ func TestGoSourceResolvesModuleImports(t *testing.T) {
 // compares: the front end's positioned diagnostic, naming the ORIGINAL file.
 func TestGoSourceDiagnosticsNameTheOriginalFile(t *testing.T) {
 	for _, tc := range []struct{ name, body, want string }{
-		{"syntax", "package main\n\nif true; then echo shell-ran; fi\n", "expected declaration"},
+		// gc's wording (the syntax verdict is gc's own parser since S154 D3).
+		{"syntax", "package main\n\nif true; then echo shell-ran; fi\n", "syntax error: non-declaration statement outside function body"},
 		{"type", "package main\n\nfunc main() { _ = undefinedName }\n", "undefined: undefinedName"},
 		{"import", "package main\n\nimport \"example.com/absent\"\n\nfunc main() { _ = absent.X }\n", "example.com/absent"},
 	} {

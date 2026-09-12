@@ -71,6 +71,14 @@ type GoSourceOptions struct {
 	// TestBuiltins enables the go/types test checker environment, including
 	// its predeclared assert and trace functions.
 	TestBuiltins bool
+	// CheckerBranchErrors leaves label/goto/break/continue errors to the type
+	// checker (the types2/go-types test environment, which parses without
+	// CheckBranches); default is gc's syntax-stage branch check.
+	CheckerBranchErrors bool
+	// CheckAfterSyntaxErrors type-checks the partial AST after a syntax
+	// rejection and reports both (the check_test runners' environment);
+	// default is gc's: a syntax rejection is the complete result.
+	CheckAfterSyntaxErrors bool
 	// Packages are explicit dependency packages (--go-package), in order.
 	// They are the policy-free half of Go's import model — an in-memory
 	// importcfg — consulted before the module importer for every import.
@@ -193,6 +201,12 @@ type GoSourceSelection struct {
 	GoVersionSeen    bool
 	TestBuiltins     bool
 	TestBuiltinsSeen bool
+	// CheckerBranchErrors / CheckAfterSyntaxErrors record
+	// --go-checker-branch-errors / --go-check-after-syntax-errors.
+	CheckerBranchErrors        bool
+	CheckerBranchErrorsSeen    bool
+	CheckAfterSyntaxErrors     bool
+	CheckAfterSyntaxErrorsSeen bool
 	// Language is the last --source value seen, "" when the flag is absent.
 	Language string
 	// LanguageSeen distinguishes an absent --source from --source=sh.
@@ -225,7 +239,7 @@ type GoSourcePackageSpec struct {
 
 // Requested reports whether any flag in this group was spelled at all.
 func (s GoSourceSelection) Requested() bool {
-	return s.LanguageSeen || s.GoVersionSeen || s.TestBuiltinsSeen || s.Check || s.List || len(s.Files) > 0 ||
+	return s.LanguageSeen || s.GoVersionSeen || s.TestBuiltinsSeen || s.CheckerBranchErrorsSeen || s.CheckAfterSyntaxErrorsSeen || s.Check || s.List || len(s.Files) > 0 ||
 		len(s.Packages) > 0 || s.ImportBase != "" || s.ImportPath != ""
 }
 
@@ -265,8 +279,10 @@ type GoSourceContext struct {
 
 // GoSourceResolution is the validated selection.
 type GoSourceResolution struct {
-	GoVersion    string
-	TestBuiltins bool
+	GoVersion              string
+	TestBuiltins           bool
+	CheckerBranchErrors    bool
+	CheckAfterSyntaxErrors bool
 	// Enabled reports that the input is Go source.
 	Enabled bool
 	// Check requests semantic validation with no execution.
@@ -337,6 +353,16 @@ func stripGoSourceInvocationFlags(args []string) ([]string, GoSourceSelection, e
 			continue
 		case strings.HasPrefix(arg, "--go-test-builtins="):
 			return nil, sel, goSourceErrorf("bashy: --go-test-builtins: expected true")
+		case arg == "--go-checker-branch-errors", arg == "--go-checker-branch-errors=true":
+			sel.CheckerBranchErrors, sel.CheckerBranchErrorsSeen = true, true
+			continue
+		case strings.HasPrefix(arg, "--go-checker-branch-errors="):
+			return nil, sel, goSourceErrorf("bashy: --go-checker-branch-errors: expected true")
+		case arg == "--go-check-after-syntax-errors", arg == "--go-check-after-syntax-errors=true":
+			sel.CheckAfterSyntaxErrors, sel.CheckAfterSyntaxErrorsSeen = true, true
+			continue
+		case strings.HasPrefix(arg, "--go-check-after-syntax-errors="):
+			return nil, sel, goSourceErrorf("bashy: --go-check-after-syntax-errors: expected true")
 		case arg == "--go-version":
 			value, ok := goSourceFlagValue(args, &i)
 			if !ok || value == "" {
@@ -482,6 +508,12 @@ func ResolveGoSource(sel GoSourceSelection, ctx GoSourceContext) (GoSourceResolu
 		if sel.TestBuiltinsSeen {
 			return GoSourceResolution{}, goSourceErrorf("bashy: --go-test-builtins requires --source=go")
 		}
+		if sel.CheckerBranchErrorsSeen {
+			return GoSourceResolution{}, goSourceErrorf("bashy: --go-checker-branch-errors requires --source=go")
+		}
+		if sel.CheckAfterSyntaxErrorsSeen {
+			return GoSourceResolution{}, goSourceErrorf("bashy: --go-check-after-syntax-errors requires --source=go")
+		}
 		if sel.GoVersionSeen {
 			return GoSourceResolution{}, goSourceErrorf("bashy: --go-version requires --source=go")
 		}
@@ -531,8 +563,8 @@ func ResolveGoSource(sel GoSourceSelection, ctx GoSourceContext) (GoSourceResolu
 	// interpreter runs, so the runtime never resolves a mapped path on disk
 	// (S151.1). --go-list is itself a check.
 	return GoSourceResolution{Enabled: true, Check: sel.Check || sel.List, Files: sel.Files, GoVersion: sel.GoVersion,
-		TestBuiltins: sel.TestBuiltins,
-		Packages:     sel.Packages, ImportBase: sel.ImportBase, ImportPath: sel.ImportPath, List: sel.List}, nil
+		TestBuiltins: sel.TestBuiltins, CheckerBranchErrors: sel.CheckerBranchErrors, CheckAfterSyntaxErrors: sel.CheckAfterSyntaxErrors,
+		Packages: sel.Packages, ImportBase: sel.ImportBase, ImportPath: sel.ImportPath, List: sel.List}, nil
 }
 
 // ReadGoSourcePackages reads the exact bytes of every --go-package file. It
@@ -805,8 +837,8 @@ func runGoSourceInvocation() error {
 		return goSourceFailure(err)
 	}
 	prog, err := LoadGoSource(in, GoSourceOptions{RunMain: !noExec, Dir: in.Dir, GoVersion: startupGoSource.GoVersion,
-		TestBuiltins: startupGoSource.TestBuiltins,
-		Packages:     packages, ImportBase: startupGoSource.ImportBase, ImportPath: startupGoSource.ImportPath})
+		TestBuiltins: startupGoSource.TestBuiltins, CheckerBranchErrors: startupGoSource.CheckerBranchErrors, CheckAfterSyntaxErrors: startupGoSource.CheckAfterSyntaxErrors,
+		Packages: packages, ImportBase: startupGoSource.ImportBase, ImportPath: startupGoSource.ImportPath})
 	if err != nil {
 		return goSourceLoadFailure(err)
 	}

@@ -69,13 +69,15 @@ func loadGoSource(files []cli.GoSourceFile, opts cli.GoSourceOptions) (*cli.GoSo
 		packages = append(packages, spec)
 	}
 	prog, err := gosource.Load(sources, gosource.Options{
-		RunMain:      opts.RunMain,
-		Importer:     lower.NewModuleImporter(opts.Dir),
-		GoVersion:    opts.GoVersion,
-		TestBuiltins: opts.TestBuiltins,
-		Packages:     packages,
-		ImportBase:   opts.ImportBase,
-		ImportPath:   opts.ImportPath,
+		RunMain:                opts.RunMain,
+		Importer:               lower.NewModuleImporter(opts.Dir),
+		GoVersion:              opts.GoVersion,
+		TestBuiltins:           opts.TestBuiltins,
+		CheckerBranchErrors:    opts.CheckerBranchErrors,
+		CheckAfterSyntaxErrors: opts.CheckAfterSyntaxErrors,
+		Packages:               packages,
+		ImportBase:             opts.ImportBase,
+		ImportPath:             opts.ImportPath,
 	})
 	if err != nil {
 		return nil, err

@@ -258,7 +258,7 @@ func gnuGapHas(items []gnuCoreutilsGap, name string) bool {
 
 func TestUsageMentionsAgenticDryRun(t *testing.T) {
 	out := Usage()
-	for _, want := range []string{"--dryrun", "--dry-run", "--go-version", "--go-test-builtins", "BASHY_AGENTIC=1", "bashy help dryrun", "bashy commands --gnu", "GNU coreutils parity", "bashy self fetch"} {
+	for _, want := range []string{"--dryrun", "--dry-run", "--go-version", "--go-test-builtins", "--go-checker-branch-errors", "--go-check-after-syntax-errors", "BASHY_AGENTIC=1", "bashy help dryrun", "bashy commands --gnu", "GNU coreutils parity", "bashy self fetch"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("usage missing %q:\n%s", want, out)
 		}
