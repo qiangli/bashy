@@ -1,6 +1,7 @@
 package agentos
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,5 +53,46 @@ func TestTranspileGoSourceVersion(t *testing.T) {
 	got, err := os.ReadFile(source)
 	if err != nil || string(got) != string(bytes) {
 		t.Fatalf("source changed: %v", err)
+	}
+}
+
+func TestGoSourceTestBuiltinsWiring(t *testing.T) {
+	files := []cli.GoSourceFile{{Name: "builtins.go", Data: []byte("package p\nfunc f() { assert(true) }\n")}}
+	_, err := loadGoSource(files, cli.GoSourceOptions{Dir: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "undefined: assert") {
+		t.Fatalf("test builtins enabled by default: %v", err)
+	}
+	if _, err := loadGoSource(files, cli.GoSourceOptions{Dir: t.TempDir(), TestBuiltins: true}); err != nil {
+		t.Fatalf("test builtins not enabled: %v", err)
+	}
+}
+
+func TestTranspileGoSourceTestBuiltins(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "original.go")
+	if err := os.WriteFile(source, []byte("package p\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	originalLoad := cli.GoSourceLoad
+	t.Cleanup(func() { cli.GoSourceLoad = originalLoad })
+	for _, flag := range []string{"--go-test-builtins", "--go-test-builtins=true"} {
+		called := false
+		cli.GoSourceLoad = func(_ []cli.GoSourceFile, opts cli.GoSourceOptions) (*cli.GoSourceProgram, error) {
+			called = true
+			if !opts.TestBuiltins {
+				t.Fatalf("%s option dropped: %+v", flag, opts)
+			}
+			return nil, errors.New("stop after option capture")
+		}
+		output := filepath.Join(dir, strings.TrimPrefix(flag, "--")+".go")
+		exit, stderr := captureTranspileStderr(t, []string{"--bashpp", "--source=go", flag, source, "-o", output})
+		if exit != 2 || !called || !strings.Contains(stderr, "stop after option capture") {
+			t.Fatalf("%s: exit=%d called=%v stderr=%q", flag, exit, called, stderr)
+		}
+	}
+	output := filepath.Join(dir, "rejected.go")
+	exit, stderr := captureTranspileStderr(t, []string{"--bashpp", "--source=sh", "--go-test-builtins", source, "-o", output})
+	if exit != 2 || !strings.Contains(stderr, "requires --source=go") {
+		t.Fatalf("flag without Go source accepted: exit=%d stderr=%q", exit, stderr)
 	}
 }
