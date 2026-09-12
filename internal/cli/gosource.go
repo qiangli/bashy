@@ -512,14 +512,10 @@ func ResolveGoSource(sel GoSourceSelection, ctx GoSourceContext) (GoSourceResolu
 		return GoSourceResolution{}, goSourceErrorf(
 			"bashy: %s cannot be combined with --source=go", ctx.ShellOnlyMode)
 	}
-	// The explicit package map is a static-analysis input today: the runtime
-	// import bridge resolves through the on-disk policy only, so running a
-	// program against a map it cannot see would be a wrong answer, not a
-	// slow one. --go-list is itself a check.
-	if (len(sel.Packages) > 0 || sel.ImportBase != "" || sel.ImportPath != "") && !sel.Check && !sel.List {
-		return GoSourceResolution{}, goSourceErrorf(
-			"bashy: --go-package, --go-import-base and --go-import-path require --check or --go-list; interpreted execution of an explicit package set is not supported")
-	}
+	// The explicit package map is linked at lowering time: gosource lowers
+	// every mapped package from its exact files into the one program the
+	// interpreter runs, so the runtime never resolves a mapped path on disk
+	// (S151.1). --go-list is itself a check.
 	return GoSourceResolution{Enabled: true, Check: sel.Check || sel.List, Files: sel.Files, GoVersion: sel.GoVersion,
 		Packages: sel.Packages, ImportBase: sel.ImportBase, ImportPath: sel.ImportPath, List: sel.List}, nil
 }

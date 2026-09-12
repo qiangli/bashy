@@ -47,8 +47,6 @@ func TestResolveGoSourcePackageRefusals(t *testing.T) {
 		{"package without go", GoSourceSelection{Packages: pkg}, "bashy: --go-package requires --source=go"},
 		{"base without go", GoSourceSelection{ImportBase: "test"}, "bashy: --go-import-base requires --source=go"},
 		{"list without go", GoSourceSelection{List: true}, "bashy: --go-list requires --source=go"},
-		{"package without check", GoSourceSelection{Language: "go", LanguageSeen: true, Packages: pkg},
-			"bashy: --go-package, --go-import-base and --go-import-path require --check or --go-list; interpreted execution of an explicit package set is not supported"},
 		{"path without go", GoSourceSelection{ImportPath: "test/b"}, "bashy: --go-import-path requires --source=go"},
 	}
 	for _, tc := range tests {
