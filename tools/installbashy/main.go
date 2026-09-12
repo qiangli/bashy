@@ -20,17 +20,21 @@ import (
 	"strings"
 )
 
+// requiredAgentOSVerbs are the VISIBLE verbs an installable bashy must list.
+// Nouns are singular (agent/model/skill/tool); their plurals are hidden
+// aliases, so they are absent from `commands --json` by design and are
+// probed for dispatch below instead.
 var requiredAgentOSVerbs = []string{
-	"agents",
+	"agent",
 	"chat",
 	"commands",
 	"dag",
 	"judge",
 	"kb",
 	"meet",
-	"models",
-	"skills",
-	"tools",
+	"model",
+	"skill",
+	"tool",
 	"weave",
 }
 
@@ -194,7 +198,11 @@ func verifyBashySurface(exe string, run commandRunner) error {
 		return fmt.Errorf("AgentOS command surface is missing: %s", strings.Join(missing, ", "))
 	}
 
-	for _, verb := range []string{"judge", "agents"} {
+	// `agents` is the hidden plural alias of `agent`: an atlas alias row is
+	// metadata, only a dispatch arm makes the spelling work, so the alias is
+	// probed too — an installed bashy on which `bashy agents` fell through to
+	// the shell would break every existing caller at once.
+	for _, verb := range []string{"judge", "agent", "agents"} {
 		out, err = run(exe, verb, "--help")
 		if err != nil {
 			return fmt.Errorf("%s dispatch probe failed: %v: %s", verb, err, strings.TrimSpace(string(out)))

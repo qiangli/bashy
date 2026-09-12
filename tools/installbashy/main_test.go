@@ -41,8 +41,13 @@ func TestVerifyBashySurfaceRequiresAgentOSVerbs(t *testing.T) {
 	if err := verifyBashySurface("/tmp/bashy", run); err != nil {
 		t.Fatal(err)
 	}
-	if len(calls) != 4 {
-		t.Fatalf("probe count = %d, want 4", len(calls))
+	// login-shell echo, commands --json, then the three dispatch probes
+	// (judge, agent, and the hidden plural alias agents).
+	if len(calls) != 5 {
+		t.Fatalf("probe count = %d, want 5", len(calls))
+	}
+	if last := calls[len(calls)-1]; !reflect.DeepEqual(last, []string{"agents", "--help"}) {
+		t.Fatalf("last probe = %v, want the hidden plural alias `agents --help`", last)
 	}
 
 	incomplete := func(_ string, args ...string) ([]byte, error) {
@@ -55,7 +60,7 @@ func TestVerifyBashySurfaceRequiresAgentOSVerbs(t *testing.T) {
 		return nil, nil
 	}
 	err := verifyBashySurface("/tmp/bashy", incomplete)
-	if err == nil || !strings.Contains(err.Error(), "judge") || !strings.Contains(err.Error(), "agents") {
+	if err == nil || !strings.Contains(err.Error(), "judge") || !strings.Contains(err.Error(), "agent") {
 		t.Fatalf("missing AgentOS verbs error = %v", err)
 	}
 }
