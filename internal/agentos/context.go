@@ -21,6 +21,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/chat"
 	"github.com/qiangli/coreutils/pkg/handoff"
 	coreskills "github.com/qiangli/coreutils/pkg/skills"
+	"github.com/qiangli/coreutils/pkg/weavecli"
 )
 
 func isTerminal(f *os.File) bool {
@@ -71,8 +72,21 @@ type contextReport struct {
 }
 
 type contextMode struct {
+	// Agentic is the master switch as SET (BASHY_AGENTIC / DHNT_AGENT truthy).
 	Agentic bool `json:"agentic"`
+	// AgentDriven is the DECISION the affordances act on: BASHY_AGENTIC or a
+	// detected harness marker. It is what `advisor`, `hints` and `exechist`
+	// default from, and it is true under a detected agent even when
+	// `agentic` is false — which is why both are reported.
+	AgentDriven bool `json:"agent_driven"`
+	// Advisor is the advisor's DECISION (advisorEnabled), not the raw
+	// BASHY_ADVISOR value. Until 2026-09-12 it reported the env var, so it
+	// read false under a detected harness while the advisor was on.
 	Advisor bool `json:"advisor"`
+	// DecidedBy names the signal behind AgentDriven: the env var, or the
+	// detected tool and the marker variables that identified it. The full
+	// per-gate table is `bashy inspect mode`.
+	DecidedBy string `json:"decided_by,omitempty"`
 	// Agent is the detected driving agent ("claude", "codex", …) from
 	// the env markers each agentic tool sets; empty when none detected.
 	Agent string `json:"agent,omitempty"`
@@ -222,8 +236,10 @@ func collectContext() contextReport {
 		ProjectRoot:    projectRoot,
 		WorkspaceMount: workspaceMount,
 		Mode: contextMode{
-			Agentic: envTruthy("BASHY_AGENTIC") || envTruthy("DHNT_AGENT"),
-			Advisor: envTruthy("BASHY_ADVISOR"),
+			Agentic:     envTruthy("BASHY_AGENTIC") || envTruthy("DHNT_AGENT"),
+			AgentDriven: weavecli.IsAgentDriven(),
+			Advisor:     advisorEnabled(),
+			DecidedBy:   agentDrivenSignal(),
 		},
 	}
 	if agent, ok := coreskills.DetectAgent(); ok {

@@ -1513,7 +1513,9 @@ func recordDiscovery(d lexicon.Discovery) error {
 // craftOptions comment already asserted the two "move together"; this is what
 // makes that true rather than a convention.
 //
-// The ladder follows the one audit and foreman already use:
+// The ladder itself now lives with the catalog — coreskills.DefaultStoreDir — so
+// the reader in coreutils (`graph space`) and the writer here cannot diverge
+// again; this is a name for it, not a second copy:
 //
 //	$BASHY_SKILLS_DIR   the specific override, most precise, wins
 //	$BASHY_HOME/skills  the whole bashy home relocated (test isolation, a
@@ -1527,18 +1529,7 @@ func recordDiscovery(d lexicon.Discovery) error {
 //
 // An empty return means no home could be determined. Callers must treat it as
 // "no store" rather than as a path.
-func bashySkillsDir() string {
-	if dir := strings.TrimSpace(os.Getenv("BASHY_SKILLS_DIR")); dir != "" {
-		return dir
-	}
-	if home := strings.TrimSpace(os.Getenv("BASHY_HOME")); home != "" {
-		return filepath.Join(home, "skills")
-	}
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		return filepath.Join(home, ".config", "bashy", "skills")
-	}
-	return ""
-}
+func bashySkillsDir() string { return coreskills.DefaultStoreDir() }
 
 func craftStoreDir() string { return bashySkillsDir() }
 

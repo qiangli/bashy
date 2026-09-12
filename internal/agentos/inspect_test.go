@@ -10,7 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/qiangli/coreutils/pkg/binmgr"
+	"github.com/qiangli/coreutils/pkg/execlog"
 	"github.com/qiangli/coreutils/pkg/fleet"
+	coreskills "github.com/qiangli/coreutils/pkg/skills"
+	"github.com/qiangli/coreutils/pkg/weavecli"
 )
 
 // TestInspectIndexNamesOnlyAtlasVerbs: the index is a navigation aid, and a
@@ -191,5 +195,60 @@ func TestInspectFoldedAspectsDispatch(t *testing.T) {
 	}
 	if code := dispatchInspect([]string{"nonsense"}); code != 2 {
 		t.Errorf("unknown aspect exited %d, want 2", code)
+	}
+}
+
+// TestContextModeReportsDecisions: `context.mode` must agree with the
+// deciders and name the signal, so it can never again print advisor:false
+// under a detected harness while the advisor is on.
+func TestContextModeReportsDecisions(t *testing.T) {
+	marker := ""
+	for _, env := range fleet.MarkerEnvs() {
+		if env != "AGENT" && env != "AI_AGENT" {
+			marker = env
+			break
+		}
+	}
+	if marker == "" {
+		t.Skip("no harness marker env registered")
+	}
+	clearAgentSignals(t)
+	t.Setenv(marker, "1")
+	mode := contextMode{
+		Agentic:     envTruthy("BASHY_AGENTIC"),
+		AgentDriven: weavecli.IsAgentDriven(),
+		Advisor:     advisorEnabled(),
+		DecidedBy:   agentDrivenSignal(),
+	}
+	if mode.Agentic {
+		t.Fatal("agentic should be false with BASHY_AGENTIC unset")
+	}
+	if !mode.AgentDriven || !mode.Advisor {
+		t.Fatalf("under marker %s: agent_driven=%v advisor=%v, want both true", marker, mode.AgentDriven, mode.Advisor)
+	}
+	if !strings.Contains(mode.DecidedBy, marker) {
+		t.Fatalf("decided_by=%q does not name the marker %s", mode.DecidedBy, marker)
+	}
+	t.Setenv("BASHY_ADVISOR", "off")
+	if advisorEnabled() {
+		t.Fatal("BASHY_ADVISOR=off must win")
+	}
+}
+
+// TestStorePathsResolveThroughOwners pins bashy's three path names to the
+// coreutils accessors that own them — the S2 collapse of the byte-identical
+// duplicates that let the space store diverge.
+func TestStorePathsResolveThroughOwners(t *testing.T) {
+	t.Setenv("BASHY_HOME", t.TempDir())
+	t.Setenv("BASHY_SKILLS_DIR", "")
+	t.Setenv("BASHY_EXECHIST", "")
+	if bashySkillsDir() != coreskills.DefaultStoreDir() {
+		t.Errorf("bashySkillsDir=%q != skills.DefaultStoreDir=%q", bashySkillsDir(), coreskills.DefaultStoreDir())
+	}
+	if execHistDir() != execlog.DefaultRoot() {
+		t.Errorf("execHistDir=%q != execlog.DefaultRoot=%q", execHistDir(), execlog.DefaultRoot())
+	}
+	if d, err := binmgr.CacheDir(); err == nil && engineCacheDir() != d {
+		t.Errorf("engineCacheDir=%q != binmgr.CacheDir=%q", engineCacheDir(), d)
 	}
 }

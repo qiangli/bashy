@@ -67,21 +67,11 @@ func execHistEnabled() bool {
 
 // execHistDir is the store root: BASHY_EXECHIST when it names a path, else a
 // per-user default under the bashy home. Mirrors auditPath's ladder.
-func execHistDir() string {
-	v := strings.TrimSpace(os.Getenv("BASHY_EXECHIST"))
-	switch strings.ToLower(v) {
-	case "", "1", "true", "on", "yes", "0", "false", "off", "no":
-	default:
-		return v
-	}
-	if home := strings.TrimSpace(os.Getenv("BASHY_HOME")); home != "" {
-		return filepath.Join(home, "exec")
-	}
-	if h, err := os.UserHomeDir(); err == nil && h != "" {
-		return filepath.Join(h, ".bashy", "exec")
-	}
-	return filepath.Join(os.TempDir(), "bashy-exec")
-}
+//
+// The ladder lives with the store (execlog.DefaultRoot) so the `graph`
+// readers in coreutils and this writer resolve the same directory by
+// construction.
+func execHistDir() string { return execlog.DefaultRoot() }
 
 // The per-process constants. Every one of these is resolved lazily and exactly
 // once, and that is not a micro-optimisation:

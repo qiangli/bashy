@@ -118,9 +118,14 @@ func collectDoctorChecks() []doctorCheck {
 		add("host go", "info", "no host go on PATH (use `bashy go`)")
 	}
 
-	if weavecli.IsAgent() {
+	switch {
+	case weavecli.IsAgent():
 		add("agent mode", "info", "ON (BASHY_AGENTIC truthy → JSON defaults)")
-	} else {
+	case weavecli.IsAgentDriven():
+		// A harness is driving without BASHY_AGENTIC: the affordances
+		// (advisor, hints, exechist) are on, the JSON defaults are not.
+		add("agent mode", "info", "agent-driven ("+agentDrivenSignal()+") → affordances on; set BASHY_AGENTIC=1 for JSON defaults")
+	default:
 		add("agent mode", "info", "off (set BASHY_AGENTIC=1 for JSON defaults)")
 	}
 

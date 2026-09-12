@@ -304,7 +304,7 @@ func collectInspectPaths() []inspectPathRow {
 		add(inspectPathRow{Name: noun, Purpose: "the " + noun + " noun store", Path: fleet.NounDir(fleetRoot, noun), Scope: "user", Env: "BASHY_" + strings.ToUpper(noun) + "_DIR", Owner: "fleet.NounDir", ReadBy: "bashy " + noun})
 	}
 	skills := bashySkillsDir()
-	add(inspectPathRow{Name: "skills", Purpose: "the local skills ring; also the craft store", Path: skills, Scope: "user", Env: "BASHY_SKILLS_DIR", Owner: "bashySkillsDir", ReadBy: "skills list; craft"})
+	add(inspectPathRow{Name: "skills", Purpose: "the local skills ring; also the craft store", Path: skills, Scope: "user", Env: "BASHY_SKILLS_DIR", Owner: "skills.DefaultStoreDir", ReadBy: "skills list; craft"})
 	add(inspectPathRow{Name: "facts", Purpose: "craft facts (host-local, never exported)", Path: craft.OpenFacts(craftStoreDir()).Path(), Scope: "user", Owner: "craft.OpenFacts().Path", ReadBy: "craft facts; the learn middleware"})
 	add(inspectPathRow{Name: "folds", Purpose: "craft folds (generalisable, shareable)", Path: craft.OpenFolds(craftStoreDir(), nil).Path(), Scope: "user", Owner: "craft.OpenFolds().Path", ReadBy: "craft folds"})
 	add(inspectPathRow{Name: "attest", Purpose: "skills run receipts", Path: inspectSubdir(craft.AttestDir, craftStoreDir()), Scope: "user", Owner: "craft.AttestDir", ReadBy: "craft history; skills"})
@@ -324,7 +324,7 @@ func collectInspectPaths() []inspectPathRow {
 	p, u = errPath(weave.SprintStoreDir())
 	add(inspectPathRow{Name: "sprint", Purpose: "the sprint board (queue, leases, continuity)", Path: p, Unknown: u, Scope: "user", Env: "BASHY_SPRINT_DIR", Owner: "weave.SprintStoreDir", ReadBy: "sprint"})
 	add(inspectPathRow{Name: "weave", Purpose: "weave runs and workspace registry", Path: weave.StateRoot(), Scope: "user", Owner: "weave.StateRoot", ReadBy: "weave"})
-	add(inspectPathRow{Name: "exec", Purpose: "exec history episodes (execlog)", Path: execHistDir(), Scope: "user", Env: "BASHY_EXECHIST", Owner: "execHistDir", ReadBy: "graph history; graph reached"})
+	add(inspectPathRow{Name: "exec", Purpose: "exec history episodes (execlog); the space graph is written beside the skills store", Path: execHistDir(), Scope: "user", Env: "BASHY_EXECHIST", Owner: "execlog.DefaultRoot", ReadBy: "graph history; graph reached"})
 	if st, err := shellOutputStoreForEnv(os.Environ()); err == nil {
 		add(inspectPathRow{Name: "out", Purpose: "complete command output behind elision markers", Path: st.Root(), Scope: "user", Env: "BASHY_HOME", Owner: "shellOutputStoreForEnv().Root", ReadBy: "bashy out HANDLE"})
 	} else {
@@ -410,12 +410,7 @@ func collectInspectMode() []inspectModeRow {
 
 	// agent-driven: the machine-at-the-wheel question, by either route.
 	driven := weavecli.IsAgentDriven()
-	drivenBy := "default (no BASHY_AGENTIC, no harness marker)"
-	if agentic {
-		drivenBy = inspectEnvSignal("BASHY_AGENTIC", "")
-	} else if tool, ok := fleet.DetectTool(); ok {
-		drivenBy = "fleet.DetectTool → " + tool + inspectMarkerHit()
-	}
+	drivenBy := agentDrivenSignal()
 	rows = append(rows, inspectModeRow{Gate: "agent-driven", On: driven, DecidedBy: drivenBy})
 
 	killed := agenticDisabled()
@@ -465,6 +460,20 @@ func collectInspectMode() []inspectModeRow {
 
 	rows = append(rows, inspectModeRow{Gate: "dryrun", On: dryRunRequested(), DecidedBy: inspectIfElse(dryRunRequested(), "--dryrun at startup", "default")})
 	return rows
+}
+
+// agentDrivenSignal names the signal behind weavecli.IsAgentDriven — the env
+// var, or the detected tool with the marker variables that identified it (the
+// registry-derived list, via fleet.MarkerEnvs). Shared by `inspect mode`,
+// `inspect context` and `inspect doctor` so the three cannot disagree.
+func agentDrivenSignal() string {
+	if weavecli.IsAgent() {
+		return inspectEnvSignal("BASHY_AGENTIC", "BASHY_AGENTIC")
+	}
+	if tool, ok := fleet.DetectTool(); ok {
+		return "fleet.DetectTool → " + tool + inspectMarkerHit()
+	}
+	return "default (no BASHY_AGENTIC, no harness marker)"
 }
 
 // inspectEnvSignal renders NAME=value, or the fallback when NAME is unset.

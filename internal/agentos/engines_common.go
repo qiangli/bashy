@@ -5,8 +5,9 @@ package agentos
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
+
+	"github.com/qiangli/coreutils/pkg/binmgr"
 )
 
 // engineAlias normalizes a front-door engine alias to its canonical engine name.
@@ -105,13 +106,13 @@ func engineReleaseRepo() string {
 
 // engineCacheDir is bashy's managed-binary cache — $BASHY_BIN_CACHE if set (as
 // binmgr honors it), else <UserCacheDir>/bashy/bin.
+//
+// binmgr owns the cache; this is a name for its resolver, not a second copy.
+// An empty return means no cache dir could be determined.
 func engineCacheDir() string {
-	if d := strings.TrimSpace(os.Getenv("BASHY_BIN_CACHE")); d != "" {
-		return d
-	}
-	cb, err := os.UserCacheDir()
+	d, err := binmgr.CacheDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(cb, "bashy", "bin")
+	return d
 }
