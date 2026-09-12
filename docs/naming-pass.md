@@ -73,6 +73,41 @@ are hidden from `bashy commands` and visible with `--all`.
 | `review` / `status` / `list` / `board` | across weave, sprint, sdlc, meet | Namespaced. **But their JSON schemas differ for the same word** — that is a real problem, and it is a *schema* problem, not a *naming* one. Tracked separately; renaming would not fix it. |
 | `supervise` | `bashy supervise` (public) · `sdlc supervise` (hidden internal babysitter) | The public one is being **deleted** — folded into `weave --in-place` (its only honest differentiator is "live tree, not a clone", which is a flag, not a package). The collision resolves itself. |
 
+## 2026-09-12: nouns are singular
+
+> **Nouns are singular.** A front-door verb or subcommand that names a *kind of thing* is
+> spelled in the singular (`agent`, `model`, `tool`, `skill`, `secret`, `app`, `person`).
+> Enumeration is the `list` subcommand, never an `-s` suffix. A plural spelling is accepted
+> as a **hidden alias** of the singular — kept for existing callers, listed only under
+> `commands --all` — never canonical, never taught.
+
+Why this clears the bar above. English number is not a shell concept, and the surface had
+no rule an agent could apply: `todo` and `sprint` were enumerable lists and singular,
+`capability` a matrix and singular, `secrets` a vault and plural, `inbox` a queue and
+singular. So every noun's number was a fact to memorise, and a misremembered one was a bare
+`command not found` with no suggestion path. Worse, `agent` and `agents` were **two
+unrelated verbs** — one letter apart, one an identity helper, the other the fleet
+registry — which is a top-level name that lies. Singular was already the spelling of 53 of
+the 61 native verbs, and the convention of the CLIs agents already know (`git remote`,
+`docker container`, `gh pr`). bash's own plurals (`jobs`, `dirs`, `times`) are all
+subcommand-less listers — plural means *print the set* — so a plural verb with
+`add`/`rm`/`set` under it did not even follow bash's grammar.
+
+What changed: `agent model tool person skill secret app` are the verbs; `agents models tools
+people skills secrets apps` dispatch byte-identically as hidden aliases, as do `messages`
+(→ `mb`) and `issue` (→ `todo`, which the work-tracking model already made one record at two
+scopes). `agent whoami` moved under the noun. Nothing that worked stopped working.
+
+Exceptions are enumerated, never implied (`coreutils/pkg/atlas/naming_test.go` ratchets
+them): any name on the POSIX / bash-builtin / GNU-coreutils surface is frozen by the
+standard (`jobs`, `dirs`, `times`, `getopts`, `strings`, `tabs`, `users`, `groups`,
+`command`, `who`, `whoami`, …), and `commands` stays plural because `command` **is** one of
+them and it is a subcommand-less lister of the `jobs` shape. Storage and wire identifiers —
+store directories, `BASHY_*_DIR`, REST paths, scopes, entity kinds, schema strings — are not
+command spellings and are untouched. The same rule applies one level down (`weave comment`
+vs `weave comments`, `craft fold` vs `craft folds`, `bus subscribe` vs `bus subscriptions`):
+those pairs converge on `<noun> list` as each package is next opened.
+
 ## Why this is worth writing down
 
 The temptation in a naming pass is to make the table *look* tidy. That instinct is how `fanout` shipped

@@ -81,15 +81,24 @@ bucket is split into honest functional groups.
 | `code-intel` | ast, graph |
 | `net` | browser, fetch, web, curl |
 | `orchestration` | weave, sprint, dag, foreman, sdlc, chat, meet, agent, schedule, act, act-runner, mirror |
-| `knowledge` | kb, skills |
+| `knowledge` | kb, skill (`skills` is its hidden plural alias) |
 | `engines` | podman, docker, ollama, sphere |
 | `forge` | git, git-scm, gh, loom |
 | `toolchains` | go, cmake, clang, node, npm, npx, pnpm, yarn, python, pip, uv, mise, cargo, rustc, rustup, rust, java, javac, mvn |
 | `storage` | rclone, zot, seaweedfs, kopia |
 | `cluster-cloud` | kubectl, helm + every declarative-registry CLI (doctl today; aws/azure/gcloud when registered) |
-| `platform` | commands, check, verify, self, run, secrets, bootstrap, upgrade; `context` and `audit` remain platform rows as hidden aliases of `inspect` |
+| `platform` | commands, check, verify, self, run, secret, app, bootstrap, upgrade; `context` and `audit` remain platform rows as hidden aliases of `inspect`; `secrets`/`apps` are hidden plural aliases |
 | `diagnostics` | **inspect** (bashy's self-inspection: `paths` · `mode` · `doctor` · `context` · `audit`), check, conform, gate, out, posix-gate, why; `doctor` remains a diagnostics row as a hidden alias of `inspect`. Rule: a new read-only self-view is a new `inspect` aspect, never a new verb |
 | `account` | tessaro, login |
+
+**Naming rule (2026-09-12): nouns are singular.** A verb that names a kind of thing is
+`agent`, `model`, `tool`, `person`, `skill`, `secret`, `app`; enumeration is `list`, never an
+`-s` suffix. The plurals (`agents models tools people skills secrets apps`), `messages`
+(→ `mb`) and `issue` (→ `todo`) dispatch identically as **hidden aliases** (`alias_of`,
+listed under `--all`). Exceptions are enumerated in `coreutils/pkg/atlas/naming_test.go`:
+POSIX/bash/GNU names are frozen (`jobs`, `dirs`, `times`, `strings`, `users`, …) and
+`commands` stays plural because `command` is a POSIX builtin and it is a subcommand-less
+lister. Rationale in `naming-pass.md` §2026-09-12.
 
 Notes: `foreman` is both an in-process tool and a front-door verb — one atlas
 entry (group `orchestration`). `echo`/`false`/`pwd`/`true` exist in the
@@ -143,7 +152,7 @@ stage (the userland, knowledge, identity, diagnostics). One stage per command.
 | `code` | build it | weave, chat, foreman, agent, the toolchains (go/cargo/npm/…) |
 | `test` | decide pass/fail | check, verify, act, act-runner |
 | `deploy` | ship it | sdlc, kubectl, helm, sphere, tier-4+ registry CLIs |
-| `cross` | serves every stage | the userland, dag, kb, skills, secrets, doctor, git, … |
+| `cross` | serves every stage | the userland, dag, kb, skill, secret, doctor, git, … |
 
 **This axis exists to ask one question of every new verb: *which stage do you
 serve that nothing else already does?*** It is not decoration. bashy's agentic
@@ -178,14 +187,14 @@ is omitted when unsure (absence is *unknown*, not *no*).
 
 | cap | meaning | seeded on (evidence) |
 |---|---|---|
-| `json` | has a structured-output mode (`--json` or native equivalent) | tools: browser, fetch, duration, tz, ntp, sntp, tokens, foreman, ast, graph; verbs: weave, sprint, dag, sdlc, schedule, skills, kb, chat, agent, web, run, commands, context, check (verified flags); kubectl (native `-o json`) |
+| `json` | has a structured-output mode (`--json` or native equivalent) | tools: browser, fetch, duration, tz, ntp, sntp, tokens, foreman, ast, graph; verbs: weave, sprint, dag, sdlc, schedule, skill, kb, chat, agent, web, run, commands, context, check (verified flags); kubectl (native `-o json`) |
 | `dry-run` | participates in the bashy dry-run manifest (`docs/dryrun.md`) | rm (destroy kind); redirection truncation is shell-level |
 | `destructive` | can irreversibly delete/overwrite user data | rm, dd, shred, truncate |
 | `read-only` | never mutates the filesystem (conservative) | cat, cmp, comm, df, diff, du, grep, head, hexdump, ls, od, readlink, realpath, stat, strings, tac, tail, tokens, tree, wc, which + `ast` (all subcommands are structural reads) |
 | `cached` | keeps a persistent on-disk cache | graph (`.agents/bashy/graph.json`); self (bin cache); every `self-provisioning` verb (binmgr cache) |
 | `budget` | token-budget-aware output | tokens, ast map (`--budget`) |
-| `needs-network` | requires network to function (beyond first provision) | fetch, browser, ntp, sntp; git, gh, rclone, ollama, sphere, kubectl, helm, secrets, tessaro, login, registry CLIs |
-| `needs-pairing` | requires a Tessaro-paired machine / cloudbox token | sphere, tessaro, login, secrets |
+| `needs-network` | requires network to function (beyond first provision) | fetch, browser, ntp, sntp; git, gh, rclone, ollama, sphere, kubectl, helm, secret, tessaro, login, registry CLIs |
+| `needs-pairing` | requires a Tessaro-paired machine / cloudbox token | sphere, tessaro, login, secret |
 | `self-provisioning` | download → verify → cache → exec on first use | all toolchain provisioners, git/git-scm/gh/curl, rclone, loom, zot, seaweedfs, kopia, act, act-runner, kubectl, helm, mise, uv, registry CLIs |
 | `spawns-processes` | executes external processes (documented command-wrapper exception or managed external) | xargs, timeout, time, watch, nice, nohup, chroot, runcon, stdbuf, at, batch; run, chat, meet; every managed external / provisioner |
 | `daemon` | starts or manages a long-running service | ollama, loom, zot, seaweedfs, kopia, act-runner, mirror, podman, docker, foreman |
@@ -218,7 +227,7 @@ projects the 11 onto the dhnt 6 for skill-cap compatibility.
 | `destroy` | can **irreversibly** lose data | rm, dd, shred, truncate, unlink |
 | `net` | opens a network connection (egress / exfiltration surface) | fetch, browser, git, curl, kubectl |
 | `exec` | spawns a process bashy no longer governs | xargs, find, awk, env, chroot, all agent-spawning verbs |
-| `cred` | reads or writes credentials / secrets | secrets, gh, git, `env`/`printenv` (emit the whole env) |
+| `cred` | reads or writes credentials / secrets | secret, gh, git, `env`/`printenv` (emit the whole env) |
 | `priv` | changes privilege, ownership, or a security label | chmod, chown, chgrp, chcon, runcon, chroot, mknod |
 | `remote` | executes on **another host** (crosses the machine boundary) | dag (mesh), sphere, mirror, rclone, kubectl, helm, doctl |
 | `persist` | leaves something that **outlives the session** | crontab, at, batch, nohup, schedule, every daemon, self/upgrade |

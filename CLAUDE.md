@@ -344,7 +344,7 @@ every commit. Before proposing a tag: the authoritative GNU Bash 5.3 gate has
 zero regressions; the 493-TP VSC Bash-only/system-utility gate is green;
 applicable POSIX/compliance and focused tests are green;
 submodule commits and pins are pushed and clean; Dragon has passed the
-rebuild/install/smoke gate above (including `bashy models`/`bashy agents` when
+rebuild/install/smoke gate above (including `bashy model`/`bashy agent` when
 the fleet changes); and changelog/release notes are ready. The steward proposes
 the tag/release after these gates; do not create one merely because a change
 landed.
@@ -581,7 +581,7 @@ itself, which is pure Go).
 - `plan-dynvar.md`, `plan-error-format-pass.md`, `plan-punted-builtins.md` — scoped sub-plans for specific clusters of fixture failures.
 - `json-output.md` — bashy's opt-in `set --json` / `declare --json` structured-output extensions.
 - `plan-bashy-release-t0.md` — **`bashy release`**: the distribution verb (what bytes leave this machine, under what name — the one thing no orchestration verb owns). T0 = the local-first half in-process over `coreutils/pkg/release`: `bashy release --snapshot` builds → archives → checksums a `.goreleaser.yaml` subset and emits a `bashy-release-v1` ledger, with no network, no credentials and no tag. The whole GoReleaser CLI is NOT imported (measured: +77.3 MB, 277 new modules, 6 new MPL-2.0 deps); the tail (sign/sbom/publish/packages) stays binmgr-managed externals and is refused **by name** when a config declares it, never silently skipped. Records why the atlas group is `toolchains`, and why a snapshot's version is stated (`--version`) rather than guessed from a tag.
-- `agent-bands-and-nicknames.md` — the shipped **band** (L1–L4 capability peg, normalized across providers — a vendor's own tier ladder is never mapped positionally) + **nickname** system on `bashy agents`/`models`. Bands live on the model and are inherited by the agent; `--min-band N` selects a roster (`bashy meet start --min-band 3` seats its own table and reports who it skipped). Canonical model names are version-explicit (`opus5`) and the family name (`opus`) is a *derived* alias that re-points itself on release — so a record never rots. Nicknames are assigned deterministically from the binding (same agent, same name, every host). Rules: speak the alias, record the address; a binding is canonicalized however it was spelled; a derived name never shadows a declared one. Read before any fleet-registry / agent-selection / routing work.
+- `agent-bands-and-nicknames.md` — the shipped **band** (L1–L4 capability peg, normalized across providers — a vendor's own tier ladder is never mapped positionally) + **nickname** system on `bashy agent`/`bashy model`. Bands live on the model and are inherited by the agent; `--min-band N` selects a roster (`bashy meet start --min-band 3` seats its own table and reports who it skipped). Canonical model names are version-explicit (`opus5`) and the family name (`opus`) is a *derived* alias that re-points itself on release — so a record never rots. Nicknames are assigned deterministically from the binding (same agent, same name, every host). Rules: speak the alias, record the address; a binding is canonicalized however it was spelled; a derived name never shadows a declared one. Read before any fleet-registry / agent-selection / routing work.
 - **`bashy craft` + `bashy define`** — the living skill graph and the
   what-is-this-word resolver, both in `coreutils/pkg/{craft,lexicon}`. `craft` is
   the layer OVER the skills catalog: `find` asks for a capability in plain words
@@ -617,7 +617,7 @@ itself, which is pure Go).
   Read before wiring any subsystem to notify anybody.
 - `unified-inbox.md` — **`bashy inbox` is the one receive-side view** over MB, Meet boards, Bus notifications, and stable role addresses. It adds no store, preserves per-source cursors, watches all sources, and injects one budgeted block only at verified Bashy-owned turn boundaries; externally-started sessions remain explicit pull-only.
 - `chat-interactive-launcher.md` — **`bashy chat` as the governed front door** for launching a third-party agent CLI *interactively*: the tool's NATIVE UX (agentpty's raw-mode local-TTY passthrough, not a bashy REPL) but with the fleet-selected model, full `agentChildEnv` governance, and a live-sessions registry (`~/.bashy/sessions/`) that makes the launched agent ADDRESSABLE — `chat sessions`/`steer`/`interrupt`/`attach`, later coach/meet. Selection: `--agent NICK` (specific) or `--band N`/`--tool T` (any operable one, reusing `SeatByBand`). `invoke` stays the one-shot (*Invoke is a question, Session is a conversation* — finally implemented). ycode is special-cased (already bashy-native → just launches it with the resolved `--model`). Companion to `one-agent-control.md`. Read before any interactive-launch / session-registry / chat-mode work.
-- `unified-agent-assignment-visibility.md` — **`bashy agents` is the canonical live-work view.** Every managed launch, including short one-shot invoke work, publishes room membership while live; the roster reconciles room, weave, and sprint state without duplicates and exposes named/ad-hoc attribution to humans and JSON consumers. Read before changing any agent launch or assignment surface.
+- `unified-agent-assignment-visibility.md` — **`bashy agent` is the canonical live-work view.** Every managed launch, including short one-shot invoke work, publishes room membership while live; the roster reconciles room, weave, and sprint state without duplicates and exposes named/ad-hoc attribution to humans and JSON consumers. Read before changing any agent launch or assignment surface.
 - `absence-of-evidence.md` — **the day's real product, and the codebase's characteristic failure.** SEVEN instances in one day of ONE shape: *a success state reached by the absence of evidence.* Declared fields nothing writes (`ConversationMessage.Usage`, `ExemptFromMasking`, `StreamOptions`, `SessionTotalCost`, 3 config fields), caps that bind and exit 0, a pricing fallback that bills an unknown model at Claude's rate. Every one produced a PLAUSIBLE ANSWER THAT WAS NOT TRUE, and four of them nearly got recorded as facts about a MODEL. Also: the four times my own instruments lied (`cmd | head && echo OK` chains off head's exit; `rm` on a receiver's open file; a bad `pgrep` pattern; an OTLP receiver silently dropping span events). Read before trusting any green check.
 - `agentic-history-and-space-graph.md` — **the shipped agentic replacement for the `history` builtin, and the entity graph learned from it.** Two planes from one observation at the ExecHandler seam: TIME (`pkg/execlog`, every dispatched command, ordered, prunable) and SPACE (`pkg/spacegraph`, hosts/endpoints/accounts and the relations between them, bi-temporal, `0600`, **no export path — every node is identity**). `graph learn` pipes what the corpus supports into kb as **candidate** pages carrying an ADDRESS into the stream, not a copy; `graph evidence` walks it back, and reports honestly when the records have been pruned (the claim outlives its evidence). Load-bearing rules: time is never in a key (put a clock in one and the store silently fills with n=1 singletons); FAILURE TEACHES NOTHING (a transport failure is unattributed — correction is by supersession on positive evidence); every read verb prints its coverage. **Read `../docs/knowledge-substrate-reconciliation.md` first** — it demotes these two from "stores" to a stream and a view, with kb as the one truth.
 - `observability.md` — the shipped OTel plane. bashy could RUN a collector (`bashy otel`) and fed it NOTHING — it was the one tier of the whole stack missing from the umbrella's `service.name` set. Two primitives, chosen from what six hours of debugging could not see: **Provenance** (a value next to WHERE IT CAME FROM — the only bug caught by a signal was caught by `from_provider=false`) and **BoundHit** (a limit records when it BINDS — especially when the run recovers). Plus a span per command at the ExecHandler chokepoint, including the EXIT CODE. Stack trimmed 286 MB → 109 MB (−61%) by going Victoria-only: jaeger (2,240 deps) → VictoriaTraces, perses (1,478) → vmui, collector (833) → three proxy map entries, prometheus (556) → VictoriaMetrics. Pure standard OTEL env vars; unset endpoint is a total no-op; `cmd/bash` links none of it.
@@ -657,7 +657,7 @@ POSIX-conformance frontier (the active layer now that bash-5.3 is 86/86 — driv
   Ollama + OpenAI-compatible T0 providers, no tool execution, and record/replay. Read
   with the positioning plan before any native model-call or harness-authoring work.
 - `band-ladder.md` — **the L1–L4 ladder across every provider**, with the two open questions now ANSWERED by running both as conductors: `gemini3.1` demoted L3→L2 (9.4× repeat ratio, never converged — a coder, not a lead; confound recorded), `deepseek-v4-pro` CONFIRMED L3 (1.2×, decomposed and delegated unprompted). The loop metric — total tool calls ÷ distinct — is the cheapest conductor health check there is. Read before any band re-peg or conductor selection.
-- `fleet-live-verification.md` — `bashy agents verify --live`: why a STRUCTURAL check (both halves of a binding resolve in the catalog) is not evidence that an agent can speak, and how five dead bindings hid behind one that looked healthy. The origin of "a verifier that passes on the ABSENCE of a known failure is not a verifier."
+- `fleet-live-verification.md` — `bashy agent verify --live`: why a STRUCTURAL check (both halves of a binding resolve in the catalog) is not evidence that an agent can speak, and how five dead bindings hid behind one that looked healthy. The origin of "a verifier that passes on the ABSENCE of a known failure is not a verifier."
 - `harness-ab-deepseek.md` — **the three-harness A/B** (ycode vs opencode vs aider, one model, one task, one gate). All three converge; the differences were in the HARNESS, and two were ours. Headline finding: **all three exit 0 when they fail** — a harness's exit code carries no information, so run the gate. Also why aider is retired from the API-key lane (it cannot discover the files a task needs — architecture, not quality) and why opencode is KEPT (the cross-check against a first-party bug). Read before any harness-selection or fleet-routing decision.
 
 Per-fixture cluster analyses + blocker ledgers (snapshots — diff line-counts and PASS/FAIL claims in them are dated, re-measure before trusting):
@@ -675,7 +675,7 @@ Weave-round verification + retro reports (historical, not load-bearing):
 `skills/` holds the tier-2 **workspace** agentic skills bashy ships (the
 userland is tier 1, clusters tier 3). They are **compiled into the `bashy`
 binary** via the `//go:embed` directive in `skills/embed.go` (surfaced by
-`bashy skills`), so adding a skill means dropping its directory here AND adding
+`bashy skill`), so adding a skill means dropping its directory here AND adding
 it to that directive. Each is a self-contained Anthropic skill
 (`SKILL.md` actionable checklist + optional `reference.md` deep companion),
 brand-neutral and driven by bashy's own tools:
@@ -699,14 +699,14 @@ brand-neutral and driven by bashy's own tools:
   START of a turn, before planning, so a second agent doesn't redo or contradict
   work already taken. Requires `has=bashy`.
 
-`skills/embed.go` and `bashy skills list` are the sources of truth for the set
+`skills/embed.go` and `bashy skill list` are the sources of truth for the set
 (six today); this prose drifts, they don't. Ecosystem-specific and internal
 operational skills, including `go-repo-health`, live in the umbrella's
 `skills/` overlay and are not compiled into the public binary.
 - `skills/force-agent-shell/` — attested check that agentic CLIs route their
   shell commands through bashy (so the pure-Go userland, the advisor, and OTel
   apply to everything an agent runs). Run as a convergence gate before an
-  unattended fleet run: `bashy skills run force-agent-shell` (exit 0 iff the
+  unattended fleet run: `bashy skill run force-agent-shell` (exit 0 iff the
   contract holds); wiring is `bashy install-agent <agent>` (`--check` to verify).
 
 ## Plans
