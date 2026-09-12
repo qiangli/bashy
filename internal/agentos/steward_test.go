@@ -135,7 +135,7 @@ func TestRoomSecretaryIsNamedFleetSelectionAndNotAnotherRoomRole(t *testing.T) {
 }
 
 func TestRoomSecretaryRejectsNamesOutsideBashyFleet(t *testing.T) {
-	if err := validateMeetRoomSecretary("definitely-not-a-fleet-agent"); err == nil || !strings.Contains(err.Error(), "bashy agents list") {
+	if err := validateMeetRoomSecretary("definitely-not-a-fleet-agent"); err == nil || !strings.Contains(err.Error(), "bashy agent list") {
 		t.Fatalf("unknown secretary validation = %v", err)
 	}
 }

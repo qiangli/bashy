@@ -388,7 +388,7 @@ bashy weave start --run N --clone -- <agent> ... &
 ```
 
 `--clone` mints a per-issue ephemeral agent (`007-w3`). They are hidden from
-`bashy agents list` (`--all` shows them) and reclaimed when the run finishes.
+`bashy agent list` (`--all` shows them) and reclaimed when the run finishes.
 The alternative — leaving the story queued — is cheaper and is the RIGHT answer
 whenever the stories share source, because cloning separates *identity*, not
 *source*: two clones on one implementation still collide at merge (§9).

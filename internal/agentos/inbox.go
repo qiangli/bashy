@@ -93,14 +93,14 @@ command stays attached to its agent-harness parent and streams the same events.
 For other external orchestration that can retain and actively poll a process,
 run 'bashy inbox --as NAME --watch --json' and poll its output at every turn.
 Never detach and ignore it: rendered records advance NAME's cursors. While it
-runs, the watcher appears as active in 'bashy agents'; second watcher cannot claim
+runs, the watcher appears as active in 'bashy agent'; second watcher cannot claim
 the same NAME. If the external harness cannot retain and poll a process,
 repeat 'bashy inbox --as NAME --watch --wait 60s --json', process its streamed
 batches, and immediately re-enter. --watch makes every bounded run hold NAME's
 claim; one empty timeout does not end active monitoring.
 
 Assign a model-driven sentinel one distinct registered Bashy identity (verify
-with 'bashy agents show NAME'), invite it to assigned Meet boards, and
+with 'bashy agent show NAME'), invite it to assigned Meet boards, and
 route/subscribe its own inputs. Surface every request promptly;
 prioritize directed, BLOCKED, CONFLICT, ownership, baseline, and merge inputs.
 If action is not immediate, acknowledge receipt with owner, action, and ETA.
@@ -109,7 +109,7 @@ impersonate decision authority. A sentinel sees only sources routed to its own
 identity; invite/subscribe/address it explicitly. Its reply must say the
 sentinel routed the request and the supervisor has not read it. On expiry,
 handoff processed/outstanding counts and last source sequences. See
-'bashy skills show inbox'.
+'bashy skill show inbox'.
 
 NAME owns the address and cursor; NICK/aliases do not create another inbox.
 Never share one registered NAME between agents. Separate concurrent topic
@@ -124,7 +124,7 @@ A governed tool session uses a hashed session claim; tools without stable sessio
 metadata fall back to the watcher parent's process lineage. BASHY_PRINCIPAL is
 attribution, not ownership proof. This is host-local collision prevention, not
 cryptographic identity.
-Inspect ownership with 'bashy whois agent:NAME' (TAKEN) and 'bashy agents'.
+Inspect ownership with 'bashy whois agent:NAME' (TAKEN) and 'bashy agent'.
 
 MB post/send (including messaging ping), Bus publish, and every manual Meet tell
 accept at most 1024 UTF-8
@@ -232,7 +232,7 @@ func resolveInboxReader(as string) (string, error) {
 	}
 	// A PERSON owns a mailbox too. Restricting the reader to an agent left the
 	// operator with no inbox at all: mail addressed to them was written and
-	// nothing could read it, while `bashy apps` showed the same rows to everyone
+	// nothing could read it, while `bashy app` showed the same rows to everyone
 	// as a third-person peek. `bus.TargetPerson` already existed and was simply
 	// refused here.
 	//
@@ -246,7 +246,7 @@ func resolveInboxReader(as string) (string, error) {
 	// Someone who owns a cursor is by definition an inbox owner.
 	addr, kind, ok := bus.ResolveSendTarget(as)
 	if !ok || kind == bus.TargetRole {
-		return "", fmt.Errorf("inbox: --as %q owns no mailbox here; choose an agent from `bashy agents list --all` or a person from `bashy people list` (`bashy whois %s` says what it resolves to)", as, as)
+		return "", fmt.Errorf("inbox: --as %q owns no mailbox here; choose an agent from `bashy agent list --all` or a person from `bashy person list` (`bashy whois %s` says what it resolves to)", as, as)
 	}
 	return addr, nil
 }
@@ -264,7 +264,7 @@ type inboxWatcherClaim struct {
 }
 
 // registerInboxWatcher makes a persistent inbox reader visible through
-// `bashy agents` for exactly as long as its watch process is alive. The stable
+// `bashy agent` for exactly as long as its watch process is alive. The stable
 // card ID is also a claim: two processes may not consume one registered
 // identity's cursors concurrently.
 func registerInboxWatcher(reader string) (inboxWatcherClaim, error) {
@@ -336,7 +336,7 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 	anchor := inboxWatcherAnchor(card)
 	return inboxWatcherClaim{
 		leave: func() {
-			// Both halves, always. The room card is what `bashy agents` and the
+			// Both halves, always. The room card is what `bashy agent` and the
 			// authored-identity guard read; the kernel claim is what the next
 			// watcher process must take. Releasing one and keeping the other
 			// leaves the identity half-held, which reads as available in one
@@ -410,7 +410,7 @@ func resolveInboxWatcherIdentity(reader string) (inboxWatcherIdentity, error) {
 			nick:      person.Handle,
 		}, nil
 	}
-	return inboxWatcherIdentity{}, fmt.Errorf("inbox: watcher identity %q is not a registered Bashy agent or a known person; register an agent with `bashy agents add`, add a person with `bashy people add`, or choose one from `bashy agents list --all` / `bashy people list`", reader)
+	return inboxWatcherIdentity{}, fmt.Errorf("inbox: watcher identity %q is not a registered Bashy agent or a known person; register an agent with `bashy agent add`, add a person with `bashy person add`, or choose one from `bashy agent list --all` / `bashy person list`", reader)
 }
 
 // refreshSprintOwnerActivity is the one refresher, behind a var so a test can

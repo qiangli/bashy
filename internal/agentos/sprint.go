@@ -108,7 +108,7 @@ func sprintWatchParentPID() int { return os.Getppid() }
 // have to skip prose.
 func writeSprintWatchNextSteps(w io.Writer, id int64, owner string) {
 	fmt.Fprintf(w, `NEXT STEPS — this stream is your inbox; read each NDJSON line as it arrives.
-  procedure:  bashy skills show inbox
+  procedure:  bashy skill show inbox
   ack what you handle:  bashy sprint inbox-ack %[1]d --as %[2]s
     (unacked mail is never consumed; it stays unread and `+"`sprint show %[1]d`"+` says so)
   do not run a second "bashy inbox --watch" for %[2]s at the same time:
@@ -121,7 +121,7 @@ func writeSprintWatchNextSteps(w io.Writer, id int64, owner string) {
 // `bashy sprint --help`. It is exported through the help of the command an agent
 // reads before driving a sprint, so the accountability requirement travels with
 // the tool rather than living only in a human's memory. The conductor skill
-// (`bashy skills show conductor`) carries the same checklist in depth.
+// (`bashy skill show conductor`) carries the same checklist in depth.
 const ownerAccountabilityHelp = `OWNER ACCOUNTABILITY — an appointed owner/conductor is not a passive lease holder.
 
 Holding a sprint's conductor lease makes you ACCOUNTABLE for it through VERIFIED

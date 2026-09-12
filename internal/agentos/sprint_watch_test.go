@@ -172,7 +172,7 @@ func TestDefaultSprintWatchRuntimeBeatsWellInsideTheLeaseTTL(t *testing.T) {
 //
 // The watch is documented as holding the seat for as long as it runs, but
 // ending it used to write nothing at all — the last beat simply stayed on the
-// lease, and `bashy agents` went on reporting a healthy conductor for the rest
+// lease, and `bashy agent` went on reporting a healthy conductor for the rest
 // of the TTL. Every exit is covered, not just the tidy one: a takeover, a
 // store error and a cancelled context all end the same evidence.
 func TestSprintWatchStandsTheSeatDownOnDetach(t *testing.T) {
@@ -227,7 +227,7 @@ func TestDefaultSprintWatchRuntimeReleasesTheSeat(t *testing.T) {
 	rt := defaultSprintWatchRuntime()
 	defer rt.poll.close()
 	if rt.release == nil {
-		t.Fatal("the default watch never stands its seat down; detaching would be invisible to `bashy agents`")
+		t.Fatal("the default watch never stands its seat down; detaching would be invisible to `bashy agent`")
 	}
 }
 

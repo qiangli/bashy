@@ -112,7 +112,7 @@ continuity updates. They are examples, not a fixed Sprint or Scrum checklist. Re
 refresh the TODO at the end of the turn so the next turn starts from current evidence.
 
 Then run `bashy inbox --as <your-agent-name>` and follow
-`bashy skills show inbox`; it includes public MB, standing Meet boards,
+`bashy skill show inbox`; it includes public MB, standing Meet boards,
 Bus input, and only role backlog this identity currently holds.
 For an active collaborative assignment, keep the skill's persistent watcher or
 repeated bounded-wait loop running; one turn-start read is not real-time monitoring.
@@ -362,7 +362,7 @@ recording an explicit transfer before the new owner acts.
 `takeover` to fence a live incumbent) · `bashy sprint` (conductor continuity) · `bashy issue`
 (the register) · `bashy weave` (conductor execution, or isolated steward-owned direct work:
 add/split/link/start/status/log/attach/say/gate/judge/pull/salvage/reverify/kill/abandon/prune) · `bashy gate`
-(does it pass) · `bashy judge` (is it good) · `bashy agents` / `bashy whois` (which agent
+(does it pass) · `bashy judge` (is it good) · `bashy agent` / `bashy whois` (which agent
 can do this, and at what cost) · `bashy handoff`
 / `bashy resume` (pass work across tools and machines; `handoff --as <role>` hands off the
 **seat**, not just the task — see below) · `bashy kb` (the host's collective memory —

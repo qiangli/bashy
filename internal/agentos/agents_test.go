@@ -26,7 +26,7 @@ func TestAgentRosterEmptyIncludesCatalogFooter(t *testing.T) {
 	if !strings.Contains(got, "LIVE 0") {
 		t.Fatalf("empty roster did not report zero live assignments: %q", got)
 	}
-	if !strings.HasSuffix(got, "Track: bashy watch -n 2 bashy agents | JSON: bashy agents --json | Catalog: bashy agents list\n") {
+	if !strings.HasSuffix(got, "Track: bashy watch -n 2 bashy agent | JSON: bashy agent --json | Catalog: bashy agent list\n") {
 		t.Fatalf("missing exact footer: %q", got)
 	}
 	if strings.Contains(got, "working task") {
@@ -651,7 +651,7 @@ func TestSprintConductorHealthGradesTheLeaseInstant(t *testing.T) {
 }
 
 // TestSprintConductorHealthCatchesTheDeadAttachedWatch is the regression for
-// the ghost row: `bashy agents` reported one healthy conductor while nothing
+// the ghost row: `bashy agent` reported one healthy conductor while nothing
 // was running anywhere on the host.
 //
 // The lease heartbeat alone cannot catch this. An attached watch beats every

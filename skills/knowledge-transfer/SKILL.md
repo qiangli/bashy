@@ -99,8 +99,8 @@ newest version of a corrected note; convert relative dates to absolute.
 ### 4. Route — the procedures-vs-facts fork
 
 - **Executable procedure with a checkable contract** (a gate that can attest
-  it ran correctly) → make it a *skill*: `bashy skills learn <dir>` (verified
-  admission), later `bashy skills promote` for upstream review.
+  it ran correctly) → make it a *skill*: `bashy skill learn <dir>` (verified
+  admission), later `bashy skill promote` for upstream review.
 - **Prose know-how, judgment steps, operational rules, orientation, gotchas**
   → a kb page: `bashy kb add --type runbook|gotcha|lesson|decision|fact`.
 - When both exist, cross-link: the kb page names the skill; the skill's

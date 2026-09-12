@@ -11,8 +11,8 @@ agent-facing `/sprint` adapter; do not build or invoke a second prompt parser.
 ## Resolve the manager
 
 - Never choose a default manager or guess an identity.
-- If the user gave an exact manager, verify it with `bashy agents list`.
-- If the manager is missing or ambiguous, inspect `bashy agents list`, present
+- If the user gave an exact manager, verify it with `bashy agent list`.
+- If the manager is missing or ambiguous, inspect `bashy agent list`, present
   the relevant canonical names, and ask the user to choose before mutating the
   sprint.
 

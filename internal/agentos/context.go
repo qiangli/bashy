@@ -66,7 +66,7 @@ type contextReport struct {
 	EnvironmentRedacted string            `json:"environment_redacted,omitempty"`
 	// Skills is the L1 progressive-disclosure surface of the env-gated skill
 	// catalog: only skills applicable at THIS host's coordinate, name +
-	// one-liner (bodies via `bashy skills show`). Verified = the skill
+	// one-liner (bodies via `bashy skill show`). Verified = the skill
 	// carries a machine-checkable contract (dhnt dual bundle).
 	Skills []coreskills.Advertised `json:"skills,omitempty"`
 }
@@ -541,7 +541,7 @@ func printContextPlain(r contextReport) {
 		fmt.Printf("tools: %s\n", strings.Join(sortedKeys(r.Tools), " "))
 	}
 	if len(r.Skills) > 0 {
-		fmt.Println("skills (applicable here; read: bashy skills show NAME):")
+		fmt.Println("skills (applicable here; read: bashy skill show NAME):")
 		for _, s := range r.Skills {
 			mark := ""
 			if s.Verified {

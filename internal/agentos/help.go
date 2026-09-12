@@ -137,7 +137,7 @@ GNU parity fields:
                            and not counted as coreutils gaps, e.g. kill/printf/test
   not_100_conformant      bashy native coreutils names without a recorded GNU
                            coreutils conformance certificate
-  non_gnu_extras          useful bashy tools outside GNU coreutils, e.g. grep/sed/tree/ast
+  non_gnu_extras          useful bashy tool outside GNU coreutils, e.g. grep/sed/tree/ast
 
 Notes:
   --gnu is intentionally conservative. A command listed as not_100_conformant

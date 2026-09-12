@@ -161,7 +161,7 @@ func TestExternalSprintTakeWatchClaimsThenStreamsInbox(t *testing.T) {
 	out := newWatchUntil(cancel,
 		"is now conductor",
 		"bashy inbox --as "+owner,
-		"bashy skills show inbox",
+		"bashy skill show inbox",
 		"attached inbox stream",
 		"wake the external manager",
 	)
@@ -209,10 +209,10 @@ func TestExternalSprintStartWatchClaimsActiveSprintThenStreamsInbox(t *testing.T
 }
 
 // TestConductorSkillCarriesOwnerChecklist keeps the same contract durable in the
-// conductor skill (embedded into the bashy binary), so `bashy skills show
+// conductor skill (embedded into the bashy binary), so `bashy skill show
 // conductor` presents the concise active-owner checklist and the reference
 // companion expands it. Reads through the coreutils skills loader used by
-// `bashy skills`, exercising the same path an agent would.
+// `bashy skill`, exercising the same path an agent would.
 func TestConductorSkillCarriesOwnerChecklist(t *testing.T) {
 	body, ok := skills.Body("conductor")
 	if !ok {
@@ -261,7 +261,7 @@ func TestSprintSkillRequiresAnExplicitManagerAndReusesActiveOwnership(t *testing
 	}
 	for _, want := range []string{
 		"Never choose a default manager or guess",
-		"bashy agents list",
+		"bashy agent list",
 		"ask the user to choose before mutating",
 		"sprint start ID --owner NAME --instruction TEXT",
 		"sprint instruct ID --instruction TEXT",
@@ -286,7 +286,7 @@ func TestSprintWatchNextStepsNameTheLoopAndTheCommands(t *testing.T) {
 		"bashy sprint inbox-ack 99 --as trestle",
 		"bashy inbox --as trestle",
 		// The procedure lives in the standard skill, not in a second copy here.
-		"bashy skills show inbox",
+		"bashy skill show inbox",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("next steps omit the runnable command %q:\n%s", want, got)

@@ -232,9 +232,12 @@ func TestE2EAllListedCommandsDispatch(t *testing.T) {
 
 	// Native front-door verbs (safe, side-effect-free `--help`) + engine verbs
 	// (docker/podman/ollama — the regression class) are really invoked.
-	native := set("weave", "sprint", "claim", "chat", "agent", "sdlc", "web", "dag",
-		"schedule", "secrets", "ask", "bus", "skills", "run", "commands", "inspect", "context", "doctor",
-		"self", "check", "verify", "git", "dhnt", "release")
+	native := set("weave", "sprint", "claim", "chat", "agent", "model", "tool", "person", "sdlc", "web", "dag",
+		"schedule", "secret", "ask", "bus", "skill", "app", "run", "commands", "inspect", "context", "doctor",
+		"self", "check", "verify", "git", "dhnt", "release",
+		// hidden number aliases: byte-identical to their singular, and the only
+		// thing that proves the `case` arm exists is invoking them.
+		"agents", "models", "tools", "people", "skills", "secrets", "apps", "messages", "issue", "todo")
 	engine := set("podman", "ollama", "docker")
 
 	for _, v := range cat.Verbs {
@@ -266,6 +269,36 @@ func TestE2EAllListedCommandsDispatch(t *testing.T) {
 			if ok, class := featureAvailable(bin, v); !ok {
 				t.Errorf("verb %q is listed but dispatch does not recognize it (class=%s)", v, class)
 			}
+		}
+	}
+
+	// Hidden verbs are reachable as `bashy <name>` even though the default
+	// catalog omits them, so they are gated the same way. An atlas alias row
+	// is metadata; only the dispatch switch makes the spelling work, and a
+	// forgotten arm would otherwise ship silently under --all.
+	out, stderr, code = runBashyStd(bin, "commands", "--json", "--all")
+	if code != 0 {
+		t.Fatalf("`bashy commands --json --all` exited %d:\nstdout=%s\nstderr=%s", code, out, stderr)
+	}
+	var all struct {
+		Hidden []string `json:"hidden_verbs"`
+	}
+	if err := json.Unmarshal([]byte(out), &all); err != nil {
+		t.Fatalf("decode commands --all json: %v\n%s", err, out)
+	}
+	if len(all.Hidden) == 0 {
+		t.Fatalf("`commands --json --all` lists no hidden_verbs; expected the alias spellings")
+	}
+	for _, v := range all.Hidden {
+		if !native[v] {
+			if ok, class := featureAvailable(bin, v); !ok {
+				t.Errorf("hidden verb %q is listed but dispatch does not recognize it (class=%s)", v, class)
+			}
+			continue
+		}
+		o, _ := runBashy(bin, v, "--help")
+		if s := unsupportedSignal(o); s != "" {
+			t.Errorf("hidden verb %q is listed but unsupported (%q): %s", v, s, firstLineOf(o))
 		}
 	}
 }
@@ -817,11 +850,11 @@ func TestSkillsAdvertisementLadderE2E(t *testing.T) {
 	}
 	agentEnv := []string{"CLAUDECODE=1"}
 	_, stderr, _ := run(naive, agentEnv, "skills", "list")
-	if !strings.Contains(stderr, "bashy skills show bashy") {
+	if !strings.Contains(stderr, "bashy skill show bashy") {
 		t.Fatalf("no L1 hint:\n%s", stderr)
 	}
 	_, stderr, _ = run(naive, agentEnv, "skills", "list")
-	if strings.Contains(stderr, "bashy skills show bashy") {
+	if strings.Contains(stderr, "bashy skill show bashy") {
 		t.Fatalf("hint repeated:\n%s", stderr)
 	}
 
@@ -833,7 +866,7 @@ func TestSkillsAdvertisementLadderE2E(t *testing.T) {
 		t.Skip("git unavailable")
 	}
 	_, stderr, _ = run(disabled, append(agentEnv, "BASHY_HINTS=off"), "skills", "list")
-	if strings.Contains(stderr, "bashy skills show bashy") || strings.Contains(stderr, "detected") {
+	if strings.Contains(stderr, "bashy skill show bashy") || strings.Contains(stderr, "detected") {
 		t.Fatalf("BASHY_HINTS=off emitted L1 hint:\n%s", stderr)
 	}
 
@@ -846,7 +879,7 @@ func TestSkillsAdvertisementLadderE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, stderr, _ = run(configured, agentEnv, "skills", "list")
-	if strings.Contains(stderr, "bashy skills show bashy") {
+	if strings.Contains(stderr, "bashy skill show bashy") {
 		t.Fatalf("hinted in a configured repo:\n%s", stderr)
 	}
 
@@ -856,7 +889,7 @@ func TestSkillsAdvertisementLadderE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, stderr, _ = run(quiet, nil, "skills", "list")
-	if strings.Contains(stderr, "bashy skills show bashy") {
+	if strings.Contains(stderr, "bashy skill show bashy") {
 		t.Fatalf("hinted without an agent:\n%s", stderr)
 	}
 

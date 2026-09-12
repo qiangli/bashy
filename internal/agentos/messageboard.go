@@ -41,7 +41,7 @@ func wireMessageBoard() {
 	// host 2026-08-03: six of eight posts on a live board read `from: qiangli`,
 	// spanning the operator and two different agents.
 	//
-	// fleet.DetectTool is the registry-driven marker table (`bashy tools add`
+	// fleet.DetectTool is the registry-driven marker table (`bashy tool add`
 	// extends it), so the board and the rest of bashy agree on what counts as
 	// an agent rather than keeping a second copy that can drift.
 	bus.DetectHarness = fleet.DetectTool

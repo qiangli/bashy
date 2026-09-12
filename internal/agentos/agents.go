@@ -21,6 +21,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/qiangli/coreutils/pkg/agentcmd"
 	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/role"
 	"github.com/qiangli/coreutils/pkg/room"
@@ -200,14 +201,15 @@ func newAgentsRosterCmd(opts ...fleet.Option) *cobra.Command {
 	if f := cmd.Flags().Lookup("all"); f != nil {
 		f.Usage = "include stale, orphaned, and idle presence records"
 	}
-	cmd.Short = "Show every live agent assignment (use `agents list` for the catalog)"
+	cmd.Short = "Show every live agent assignment (use `agent list` for the catalog)"
 	cmd.Long = "Show all live named and ad-hoc work reconciled from sprint leases, weave queues, and room membership, including one-shot invocations and interactive sessions.\n\n" +
 		"Stale and orphaned records are counted but hidden by default; use --all to inspect them. " +
-		"Use --json for the machine-readable workload view. Use `bashy agents list` to list all registered agent bindings."
+		"Use --json for the machine-readable workload view. Use `bashy agent list` to list all registered agent bindings, " +
+		"`bashy agent whoami` for the identity this process acts as."
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		for _, name := range []string{"band", "min-band"} {
 			if f := cmd.Flags().Lookup(name); f != nil && f.Changed {
-				return fmt.Errorf("--%s applies to `bashy agents list`, not the active-assignment view", name)
+				return fmt.Errorf("--%s applies to `bashy agent list`, not the active-assignment view", name)
 			}
 		}
 		showAll, err := cmd.Flags().GetBool("all")
@@ -217,6 +219,10 @@ func newAgentsRosterCmd(opts ...fleet.Option) *cobra.Command {
 		return renderAgentRosterView(cmd.OutOrStdout(), cmd.Flags().Lookup("json").Changed, showAll)
 	}
 	cmd.AddCommand(newAgentsTrackCmd())
+	// `agent whoami` used to be a top-level `agent` verb one letter away from
+	// `agents` — two unrelated commands an agent had to tell apart by number.
+	// The identity helper lives under the noun it is about.
+	cmd.AddCommand(agentcmd.NewWhoamiCmd())
 	return cmd
 }
 
@@ -226,7 +232,7 @@ func newAgentsTrackCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "track",
 		Short: "Publish externally launched work into the live agent roster",
-		Long: "Publish work launched by an external orchestrator into `bashy agents`.\n\n" +
+		Long: "Publish work launched by an external orchestrator into `bashy agent`.\n\n" +
 			"Bashy-managed chat/weave launches publish automatically. Codex collaboration,\n" +
 			"MCP, and other out-of-process launchers must start, heartbeat, and stop an\n" +
 			"assignment explicitly so their work is visible and stale work expires.",
@@ -412,7 +418,7 @@ func renderAgentRosterView(w io.Writer, asJSON, showAll bool) error {
 	fmt.Fprintf(w, "LIVE %d (blocked %d, inconsistent %d, overrun %d) | STALE %d | ORPHANED %d\n",
 		summary.Live, summary.Blocked, summary.Inconsistent, summary.Overrun, summary.Stale, summary.Orphaned)
 	if !showAll && len(visible) == 0 && (summary.Stale > 0 || summary.Orphaned > 0) {
-		fmt.Fprintln(w, "No live assignments. Inspect stale records with: bashy agents --all")
+		fmt.Fprintln(w, "No live assignments. Inspect stale records with: bashy agent --all")
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	// Keep the original columns first. Consumers commonly use the human view
@@ -457,7 +463,7 @@ func renderAgentRosterView(w io.Writer, asJSON, showAll bool) error {
 	if err := tw.Flush(); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(w, "Track: bashy watch -n 2 bashy agents | JSON: bashy agents --json | Catalog: bashy agents list")
+	_, err = fmt.Fprintln(w, "Track: bashy watch -n 2 bashy agent | JSON: bashy agent --json | Catalog: bashy agent list")
 	return err
 }
 
@@ -631,7 +637,7 @@ func reconciledAgentRoster() ([]agentAssignment, error) {
 	// Room membership is the common denominator across launch paths. Project
 	// every live card that was not already represented by a weave queue item so
 	// short-lived invocations, interactive sessions, meet/foreman workers, and
-	// ad-hoc tool:model launches are visible through the same `bashy agents`
+	// ad-hoc tool:model launches are visible through the same `bashy agent`
 	// surface. A live process with no durable sprint/run is still consuming an
 	// agent identity and provider capacity; hiding it defeats workload routing.
 	for _, card := range roomMembers {

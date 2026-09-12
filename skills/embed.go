@@ -1,7 +1,7 @@
 // Package skills embeds the tier-2 workspace skills shipped with the bashy
 // binary, so a skill resolves from any cwd WITHOUT the source tree present —
 // the skill content is compiled into `bashy`, not read from this repo. Surface
-// them with `bashy skills` (see internal/agentos).
+// them with `bashy skill` (see internal/agentos).
 //
 // Each skill is a directory holding a `SKILL.md` (the actionable checklist,
 // required) and an optional `reference.md` (deep companion). Add a new skill by

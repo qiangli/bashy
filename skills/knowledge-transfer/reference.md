@@ -137,7 +137,7 @@ A real end-to-end run of the MENTOR loop (identifying details generalized):
   existing pages for a topic, already-transferred `xfer:` counts, and the
   decision menu — the ground-truth scaffolding for this skill. Absence of
   the verbs changes nothing about the process.
-- **`bashy skills learn` / `promote`** is the sibling channel for
+- **`bashy skill learn` / `promote`** is the sibling channel for
   procedure-shaped knowledge with a checkable contract; `promote` renders a
   human-review bundle and never commits on its own.
 - **The kb trust ladder + doctor** (where available) close the loop:

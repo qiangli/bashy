@@ -668,7 +668,7 @@ func TestInboxWatcherRecordsSessionProofSeparatelyFromAttribution(t *testing.T) 
 
 // registerTestInboxPerson writes a human principal into the test's isolated
 // fleet ring so the resolver vouches for the name exactly as a shipped
-// `bashy people add` entry would.
+// `bashy person add` entry would.
 func registerTestInboxPerson(t *testing.T, handle string) {
 	t.Helper()
 	if err := fleet.New().SavePerson(fleet.Person{Handle: handle}); err != nil {
@@ -830,7 +830,7 @@ func TestInboxHelpTeachesBoundedSentinelResponseAndIdentitySafety(t *testing.T) 
 		"every bounded run hold NAME's",
 		"one empty timeout does not end",
 		"distinct registered Bashy",
-		"agents show NAME",
+		"agent show NAME",
 		"stable repo-relative",
 		"Separate concurrent topic",
 		"1024 UTF-8",
@@ -842,7 +842,7 @@ func TestInboxHelpTeachesBoundedSentinelResponseAndIdentitySafety(t *testing.T) 
 		"whois agent:NAME",
 		"monitoring ENDED",
 		"continued monitoring after",
-		"skills show inbox",
+		"skill show inbox",
 	} {
 		if !strings.Contains(help, behavior) {
 			t.Fatalf("inbox help does not teach %q:\n%s", behavior, help)
@@ -894,7 +894,7 @@ func TestInboxRejectsUnregisteredExplicitIdentity(t *testing.T) {
 	// which is the defect the one-principal work exists to fix.
 	err := cmd.Execute()
 	if err == nil || !strings.Contains(err.Error(), "owns no mailbox here") ||
-		!strings.Contains(err.Error(), "bashy people list") {
+		!strings.Contains(err.Error(), "bashy person list") {
 		t.Fatalf("unregistered identity error = %v", err)
 	}
 }

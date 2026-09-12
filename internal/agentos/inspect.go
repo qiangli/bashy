@@ -299,19 +299,21 @@ func collectInspectPaths() []inspectPathRow {
 
 	// ── config ring (definitions an operator authors) ──
 	fleetRoot := fleet.DefaultRoot()
-	add(inspectPathRow{Name: "fleet", Purpose: "tool/model/agent definitions, one YAML per entry", Path: fleetRoot, Scope: "user", Env: "BASHY_FLEET_DIR", Owner: "fleet.DefaultRoot", ReadBy: "tools/models/agents list"})
-	for _, noun := range []string{"tools", "models", "agents"} {
-		add(inspectPathRow{Name: noun, Purpose: "the " + noun + " noun store", Path: fleet.NounDir(fleetRoot, noun), Scope: "user", Env: "BASHY_" + strings.ToUpper(noun) + "_DIR", Owner: "fleet.NounDir", ReadBy: "bashy " + noun})
+	add(inspectPathRow{Name: "fleet", Purpose: "tool/model/agent definitions, one YAML per entry", Path: fleetRoot, Scope: "user", Env: "BASHY_FLEET_DIR", Owner: "fleet.DefaultRoot", ReadBy: "tool/model/agent list"})
+	// The STORE keeps its plural name (the directory and env var are storage
+	// identifiers); the VERB that reads it is the singular noun.
+	for _, n := range []struct{ store, verb string }{{"tools", "tool"}, {"models", "model"}, {"agents", "agent"}} {
+		add(inspectPathRow{Name: n.store, Purpose: "the " + n.verb + " noun store", Path: fleet.NounDir(fleetRoot, n.store), Scope: "user", Env: "BASHY_" + strings.ToUpper(n.store) + "_DIR", Owner: "fleet.NounDir", ReadBy: "bashy " + n.verb})
 	}
 	skills := bashySkillsDir()
-	add(inspectPathRow{Name: "skills", Purpose: "the local skills ring; also the craft store", Path: skills, Scope: "user", Env: "BASHY_SKILLS_DIR", Owner: "skills.DefaultStoreDir", ReadBy: "skills list; craft"})
+	add(inspectPathRow{Name: "skills", Purpose: "the local skills ring; also the craft store", Path: skills, Scope: "user", Env: "BASHY_SKILLS_DIR", Owner: "skills.DefaultStoreDir", ReadBy: "skill list; craft"})
 	add(inspectPathRow{Name: "facts", Purpose: "craft facts (host-local, never exported)", Path: craft.OpenFacts(craftStoreDir()).Path(), Scope: "user", Owner: "craft.OpenFacts().Path", ReadBy: "craft facts; the learn middleware"})
 	add(inspectPathRow{Name: "folds", Purpose: "craft folds (generalisable, shareable)", Path: craft.OpenFolds(craftStoreDir(), nil).Path(), Scope: "user", Owner: "craft.OpenFolds().Path", ReadBy: "craft folds"})
-	add(inspectPathRow{Name: "attest", Purpose: "skills run receipts", Path: inspectSubdir(craft.AttestDir, craftStoreDir()), Scope: "user", Owner: "craft.AttestDir", ReadBy: "craft history; skills"})
+	add(inspectPathRow{Name: "attest", Purpose: "skills run receipts", Path: inspectSubdir(craft.AttestDir, craftStoreDir()), Scope: "user", Owner: "craft.AttestDir", ReadBy: "craft history; skill"})
 	add(inspectPathRow{Name: "hints", Purpose: "once-per-repo skill-hint markers", Path: hintsDir(), Scope: "user", Owner: "hintsDir", ReadBy: "the advertisement ladder"})
 	add(inspectPathRow{Name: "activity", Purpose: "activity-event journal and interests", Path: activity.StateDir(), Scope: "user", Env: "BASHY_ACTIVITY_DIR", Owner: "activity.StateDir", ReadBy: "activity; inbox"})
 	add(inspectPathRow{Name: "schedule", Purpose: "the schedule store", Path: schedule.StatePathFor(inspectCwd(), os.Environ()), Scope: "user", Owner: "schedule.StatePathFor", ReadBy: "bashy schedule"})
-	add(inspectPathRow{Name: "secrets-token", Purpose: "the scoped cloudbox token for bashy secrets", Path: secrets.TokenFilePath(), Scope: "user", Env: "BASHY_SECRETS_TOKEN", Owner: "secrets.TokenFilePath", ReadBy: "bashy secrets", Secret: true})
+	add(inspectPathRow{Name: "secrets-token", Purpose: "the scoped cloudbox token for bashy secret", Path: secrets.TokenFilePath(), Scope: "user", Env: "BASHY_SECRETS_TOKEN", Owner: "secrets.TokenFilePath", ReadBy: "bashy secret", Secret: true})
 
 	// ── state (what bashy and its agents write while working) ──
 	add(inspectPathRow{Name: "kb", Purpose: "host knowledge base", Path: kb.DefaultDir(), Scope: "user", Env: "BASHY_KB_DIR", Owner: "kb.DefaultDir", ReadBy: "kb; recall"})

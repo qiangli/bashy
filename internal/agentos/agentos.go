@@ -66,7 +66,6 @@ import (
 	"github.com/qiangli/coreutils/external/sphere"
 	"github.com/qiangli/coreutils/external/tessaro"
 	"github.com/qiangli/coreutils/external/zot"
-	"github.com/qiangli/coreutils/pkg/agentcmd"
 	"github.com/qiangli/coreutils/pkg/ask"
 	"github.com/qiangli/coreutils/pkg/atlas"
 	"github.com/qiangli/coreutils/pkg/board"
@@ -132,7 +131,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "inbox", "notify", "activity", "run", "commands", "inspect", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "apps", "transpile",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "notify", "activity", "run", "commands", "inspect", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
@@ -140,11 +139,20 @@ var (
 	// Direct-only front doors are callable as `bashy NAME` and belong in the
 	// command catalog, but must not become bare shell shims. In particular,
 	// bare `ping` must continue to resolve to the platform command.
-	directFrontDoorVerbs = []string{"mb", "messages", "ping", "out", "full"}
+	directFrontDoorVerbs = []string{"mb", "ping", "out", "full"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
-	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "invoke", "verify", "doctor", "context", "audit"}
+	//
+	// NOUNS ARE SINGULAR (same day). The registry/catalog nouns are `agent`,
+	// `model`, `tool`, `person`, `skill`, `secret`, `app`; their plurals stay
+	// reachable as `bashy <plural>` and dispatch byte-identically, but they are
+	// not taught and not shimmed bare. `messages` (→ mb) and `issue` (→ todo)
+	// are the same shape. The rule and its exceptions are ratcheted in
+	// coreutils/pkg/atlas/naming_test.go; the bare-shim/hidden split is what
+	// TestCommandsCatalogSources pins.
+	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "invoke", "verify", "doctor", "context", "audit",
+		"agents", "models", "tools", "people", "skills", "secrets", "apps", "messages", "issue"}
 )
 
 func Preamble() string {
@@ -186,7 +194,7 @@ func Preamble() string {
 // drop-in never carries it). Static string: zero startup cost.
 func init() {
 	os.Setenv("BASHY_AGENT_MANIFEST",
-		`v1 shell=agentic first-hop="bashy inspect context --json" skills="bashy skills list" guide="bashy skills show bashy|bashy bashy"`)
+		`v1 shell=agentic first-hop="bashy inspect context --json" skills="bashy skill list" guide="bashy skill show bashy|bashy bashy"`)
 	// Chat, weave, meet and foreman all enter coreutils/chat without passing the
 	// communication CLI dispatcher. Wire the receive hook at process startup so
 	// every Bashy-owned session gets the same turn-boundary inbox view.
@@ -241,7 +249,7 @@ func maybeAdvertiseSkillHint() {
 		}
 	}
 	if !configured {
-		fmt.Fprintf(os.Stderr, "bashy: %s detected, and this repo has no agent config — bashy is an agentic shell with a built-in guide: `bashy skills show bashy` (install for your agent: `bashy skills export bashy --user`; this hint shows once per repo)\n", agent)
+		fmt.Fprintf(os.Stderr, "bashy: %s detected, and this repo has no agent config — bashy is an agentic shell with a built-in guide: `bashy skill show bashy` (install for your agent: `bashy skill export bashy --user`; this hint shows once per repo)\n", agent)
 	}
 	if err := os.MkdirAll(filepath.Dir(mark), 0o755); err == nil {
 		_ = os.WriteFile(mark, []byte(root+"\n"), 0o644)
@@ -292,7 +300,7 @@ func wireMeet() {
 	meet.PostMB = postMeetMessageBoardPost
 }
 
-// wireWebConsole connects every seam the `bashy apps` console needs, because it
+// wireWebConsole connects every seam the `bashy app` console needs, because it
 // serves OTHER verbs' surfaces in its own process and therefore has to install
 // their host wiring itself.
 //
@@ -314,7 +322,7 @@ func wireWebConsole() {
 
 // Dispatch handles AgentOS front-door subcommands that are not shell scripts —
 // `bashy weave …` (the multi-agent workspace orchestrator), `bashy otel …`
-// (the all-in-one observability stack), `bashy secrets …`
+// (the all-in-one observability stack), `bashy secret …`
 // (managed API keys/tokens for the shell), `bashy dag …` (the
 // agent-first markdown DAG task runner), and `bashy podman …` (a transparent
 // shell-out to an installed podman). It is wired into the shell
@@ -486,7 +494,7 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
-	case "todo":
+	case "todo", "issue":
 		// THE task tracker. Auto-detected scope: inside a git repo → THAT repo's
 		// docs/todo/ (committed, the structured replacement for an ad-hoc TODO.md);
 		// otherwise the personal host list (~/.bashy/todo/<owner>/). --base-dir shows
@@ -669,7 +677,7 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
-	case "apps":
+	case "app", "apps":
 		// The app launcher: ONE local surface with a start page of tiles and every
 		// other bashy web surface deep-linked beneath it — the shape
 		// dhnt/docs/agent-interaction-surfaces-design.md settled on, where a
@@ -687,7 +695,7 @@ func Dispatch() {
 		cmd := webconsole.NewAppsCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy apps:", err)
+			fmt.Fprintln(os.Stderr, "bashy app:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
@@ -713,13 +721,6 @@ func Dispatch() {
 	// weave with a shared seed, and the runner should delegate to weave."
 	// N agents deliberating over one shared context is `bashy meet`; N agents
 	// working in parallel is `bashy weave`. There was no third thing.
-	case "agent":
-		cmd := agentcmd.NewAgentCmd()
-		cmd.SetArgs(os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
-		}
-		os.Exit(0)
 	case "capability":
 		// The living agent (tool:model) × capability matrix behind
 		// capability-routed delegation — the routing table for `chat --capability`.
@@ -814,8 +815,9 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
-	case "secrets":
+	case "secret", "secrets":
 		cmd := secrets.NewSecretsCmd()
+		cmd.Use = os.Args[1]
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			os.Exit(1)
@@ -874,7 +876,7 @@ func Dispatch() {
 		dag.AddCapacityCommands(cmd, sprintCapacityServices())
 		cmd.SetArgs(os.Args[2:])
 		os.Exit(dag.ExitCodeOf(cmd.Execute()))
-	case "skills":
+	case "skill", "skills":
 		// The env-gated skills catalog (coreutils/pkg/skills): `list` shows
 		// only skills applicable at this host's space-time coordinate,
 		// `probe` prints the coordinate, `show` prints a skill (stdout
@@ -884,7 +886,7 @@ func Dispatch() {
 		cmd := coreskills.NewSkillsCmd(skillsOptions()...)
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy skills:", err)
+			fmt.Fprintln(os.Stderr, "bashy skill:", err)
 			os.Exit(coreskills.ExitCode(err))
 		}
 		os.Exit(0)
@@ -915,7 +917,7 @@ func Dispatch() {
 			os.Exit(1)
 		}
 		os.Exit(0)
-	case "tools", "models", "agents", "people", "whois":
+	case "tool", "tools", "model", "models", "agent", "agents", "person", "people", "whois":
 		// The fleet registry (coreutils/pkg/fleet) and the principal
 		// resolver over it (coreutils/pkg/principal). A `tool` is an
 		// agentic CLI harness, a `model` an inference backend, an `agent`
@@ -1333,7 +1335,7 @@ func Dispatch() {
 		cmd := coreskills.NewSkillsCmd(skillsOptions()...)
 		cmd.SetArgs([]string{"show", os.Args[1]})
 		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy skills:", err)
+			fmt.Fprintln(os.Stderr, "bashy skill:", err)
 			os.Exit(coreskills.ExitCode(err))
 		}
 		os.Exit(0)
@@ -1414,7 +1416,7 @@ func skillsOptions() []coreskills.Option {
 		coreskills.WithSource(coreskills.EmbedSource(skills.FS, coreskills.RingEmbedded)),
 		coreskills.WithHostVersion("bashy", cli.BashyVersion()),
 	}
-	// The org catalog pulled by `bashy skills sync`. Mounted BEFORE
+	// The org catalog pulled by `bashy skill sync`. Mounted BEFORE
 	// BASHY_SKILLS_PATH so an explicitly-pointed directory still wins, and
 	// below the local store so what you added or learned here always wins.
 	// Without this the sync would report "N pulled" and the skills would never
@@ -1570,12 +1572,17 @@ func craftOptions() []craft.Option {
 func runFleet(noun string, args []string) {
 	var cmd *cobra.Command
 	exit := fleet.ExitCode
+	// The typed spelling is what --help and errors echo back; the plural is
+	// a hidden alias of the singular (nouns are singular — see
+	// hiddenFrontDoorVerbs), so both reach one command.
+	typed := noun
+	noun = fleetNoun(noun)
 	switch noun {
-	case "tools":
+	case "tool":
 		cmd = fleet.NewToolsCmd()
-	case "models":
+	case "model":
 		cmd = newModelsResourcesCmd()
-	case "agents":
+	case "agent":
 		// `agents verify --live` actually launches each agent, and `agents clone`
 		// branches its conversation store. Both live in pkg/chat, which reads the
 		// fleet registry — so the registry cannot import it, and the binary is the
@@ -1585,7 +1592,7 @@ func runFleet(noun string, args []string) {
 			fleet.WithLiveProbe(liveProbeAgent),
 			fleet.WithContextCloner(chat.CloneAgentContext),
 		)
-	case "people":
+	case "person":
 		cmd = principal.NewPeopleCmd()
 	case "whois":
 		// whois adds exit 3 for an ambiguous name — neither "missing" nor a
@@ -1595,12 +1602,29 @@ func runFleet(noun string, args []string) {
 		fmt.Fprintln(os.Stderr, "bashy: unknown fleet noun:", noun)
 		os.Exit(2)
 	}
+	cmd.Use = typed
 	cmd.SetArgs(args)
 	if err := cmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "bashy %s: %v\n", noun, err)
+		fmt.Fprintf(os.Stderr, "bashy %s: %v\n", typed, err)
 		os.Exit(exit(err))
 	}
 	os.Exit(0)
+}
+
+// fleetNoun folds a fleet noun's hidden plural spelling onto its canonical
+// singular. whois has no number.
+func fleetNoun(n string) string {
+	switch n {
+	case "tools":
+		return "tool"
+	case "models":
+		return "model"
+	case "agents":
+		return "agent"
+	case "people":
+		return "person"
+	}
+	return n
 }
 
 // WireExec appends the coreutils ExecHandler so any registered tool resolves
@@ -1739,7 +1763,7 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	return append(opts, interp.ExecHandlers(mws...))
 }
 
-// liveProbeAgent is the launcher behind `bashy agents verify --live`.
+// liveProbeAgent is the launcher behind `bashy agent verify --live`.
 //
 // It is a thin adapter, and the thinness is the point: it hands the work to
 // chat.ProbeAgent, which drives the SAME Invoke path a real turn takes. A probe

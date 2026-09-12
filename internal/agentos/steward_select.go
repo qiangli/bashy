@@ -47,7 +47,7 @@ func randomizeStewardSelection(sel *stewardSelection) error {
 
 // WHO SHOULD STEWARD THIS HOST, WHEN NOBODY SAID.
 //
-// `bashy agents list --min-band 4` already answers "who is strong enough". It
+// `bashy agent list --min-band 4` already answers "who is strong enough". It
 // does not answer "which of them should I spend", and for a steward that second
 // question is the whole decision: a steward is not a task, it is a process that
 // stays up, so it consumes its model's quota for as long as the host is
@@ -144,7 +144,7 @@ func selectStewardAgent(name, tool string, band int) (*stewardSelection, error) 
 		}
 		a, t, m, err := cat.Binding(n)
 		if err != nil {
-			return nil, fmt.Errorf("steward start: %w (`bashy agents list` shows the fleet)", err)
+			return nil, fmt.Errorf("steward start: %w (`bashy agent list` shows the fleet)", err)
 		}
 		if ok, reason := capability.Operable(t.Name); !ok {
 			return nil, fmt.Errorf("steward start: %s is not routable on this host: %s", n, reason)
@@ -205,7 +205,7 @@ func selectStewardAgent(name, tool string, band int) (*stewardSelection, error) 
 			hint = " — skipped: " + strings.Join(parts, ", ")
 		}
 		return nil, fmt.Errorf("steward start: no operable agent at band L%d or above%s. "+
-			"`bashy agents list --min-band %d` shows the roster; --band lowers the bar "+
+			"`bashy agent list --min-band %d` shows the roster; --band lowers the bar "+
 			"(and --agent names one outright)", band, hint, band)
 	}
 
@@ -229,7 +229,7 @@ func describeStewardCandidate(cat *fleet.Catalog, a fleet.Agent, t fleet.Tool, m
 		c.Reliability = a.Ledger.Reliability
 	}
 	// A CASCADE agent serves the band its ladder REACHES, not its base model's
-	// peg — the same correction `bashy agents list` makes.
+	// peg — the same correction `bashy agent list` makes.
 	if a.BandSource == fleet.BandCascade && a.Band > 0 {
 		c.Band, c.BandSource = a.Band, a.BandSource
 	}

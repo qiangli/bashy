@@ -54,7 +54,7 @@ standing Meet boards, Bus notifications, and authorized role mail. MB remains
 the public send/history surface; inbox prevents transport-by-transport polling.
 
     bashy inbox                  # read every inbound source
-    bashy skills show inbox
+    bashy skill show inbox
     bashy mb post "<message>"    # to everyone
     bashy mb send <agent> "…"    # to one agent, or a selector
 
@@ -110,17 +110,17 @@ way kb is: this repo's when you are in one, the host's otherwise.
 
 ## Skills: verified procedures, gated to this host
 
-- `bashy skills list` — only skills applicable at THIS host's coordinate
-  (env-gated); `bashy skills show NAME` to read one.
-- `bashy skills run NAME` — execute a machine-checkable skill; the
+- `bashy skill list` — only skills applicable at THIS host's coordinate
+  (env-gated); `bashy skill show NAME` to read one.
+- `bashy skill run NAME` — execute a machine-checkable skill; the
   success contract is verified and every run leaves a re-checkable
   attestation. Exit 0 iff the contract held.
-- `bashy skills run NAME --adapt --repair-agent "<your headless CLI>"`
+- `bashy skill run NAME --adapt --repair-agent "<your headless CLI>"`
   — self-heal a failing skill; verified fixes are learned once per host
   and reused by every agent.
-- Contribute back: author a skill folder, then `bashy skills learn DIR`
+- Contribute back: author a skill folder, then `bashy skill learn DIR`
   (admission requires the contract to actually hold here) and
-  `bashy skills promote NAME` (human-reviewed bundle — never
+  `bashy skill promote NAME` (human-reviewed bundle — never
   auto-published).
 
 ## Fleet and workspace (when the task outgrows one session)
@@ -128,7 +128,7 @@ way kb is: this repo's when you are in one, the host's otherwise.
 - `bashy weave …` — isolated per-issue workspaces for parallel agent
   runs; `bashy sprint …` — plan/continuity; `bashy dag TASKS.md` —
   markdown-defined task DAGs. Read the `conductor` skill
-  (`bashy skills show conductor`) before orchestrating a fleet.
+  (`bashy skill show conductor`) before orchestrating a fleet.
 
 ## Rules of thumb
 
@@ -142,9 +142,9 @@ way kb is: this repo's when you are in one, the host's otherwise.
    rediscovering, and the next agent is usually you.
 3. Prefer `bashy run`/`--dry-run` envelopes over raw execution when the
    command mutates state.
-4. Before re-deriving a procedure, check `bashy skills list` — a
+4. Before re-deriving a procedure, check `bashy skill list` — a
    verified, attested skill may already exist; after solving something
-   reusable, consider contributing it back with `skills learn`.
+   reusable, consider contributing it back with `skill learn`.
 5. The userland (ls/grep/sed/…) is in-process and identical on every
    platform — Windows included; do not shell out to platform-specific
    alternatives.

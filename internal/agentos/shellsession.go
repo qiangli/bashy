@@ -3,7 +3,7 @@
 
 // R0-pre — register the agent session nobody else knows about.
 //
-// `bashy agents list` is the address book, and its entries are `tool:model`
+// `bashy agent list` is the address book, and its entries are `tool:model`
 // bindings. Using it as an address book ASSUMES the singleton rule: one
 // identity, one live occupant. That assumption is currently FALSE, and it was
 // measured rather than suspected.
@@ -133,7 +133,7 @@ func IsShellPresenceCard(c room.Card) bool {
 // fleetAgentNames lists the address book — every agent the catalog knows.
 //
 // It is the input to `bus subscriptions --reconcile`: the fleet IS the set that
-// needs inboxes, because `bashy agents list` is what a human or an agent reads
+// needs inboxes, because `bashy agent list` is what a human or an agent reads
 // when deciding who to message. A catalog that will not load yields no names
 // rather than an error; reconciliation is a repair, and a repair that fails
 // loudly on a read it did not need is worse than one that does nothing.
@@ -149,7 +149,7 @@ func fleetAgentNames() []string {
 }
 
 // fleetSelectAudience answers a `bashy mb send --band/--tool/--provider`
-// selector from the CATALOG — the same catalog `bashy agents list` prints.
+// selector from the CATALOG — the same catalog `bashy agent list` prints.
 //
 // That identity is the point. A selector resolved from a copy kept elsewhere is
 // a second opinion about who is L4, and a second opinion can drift; answering
@@ -212,7 +212,7 @@ func fleetSelectAudience(aud bus.Audience) ([]string, error) {
 }
 
 // fleetResolveAgentName maps any spelling of an agent to its canonical fleet
-// name — the one `bashy agents list` prints and `mb send` addresses.
+// name — the one `bashy agent list` prints and `mb send` addresses.
 //
 // This is what lets a bare `bashy mb` work. A reader's environment does not
 // carry its fleet name: a bashy-launched agent has

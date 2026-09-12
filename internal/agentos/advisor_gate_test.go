@@ -54,7 +54,7 @@ func TestAdvisorExplicitOverrides(t *testing.T) {
 }
 
 // clearAgentEnv scrubs every agent signal. The marker list is queried from the registry,
-// never hardcoded: it is data (`bashy tools add` extends it), and a stale literal would
+// never hardcoded: it is data (`bashy tool add` extends it), and a stale literal would
 // leave the very marker that matters set.
 func clearAgentEnv(t *testing.T) {
 	t.Helper()

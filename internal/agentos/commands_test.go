@@ -27,7 +27,8 @@ func TestCommandsCatalogSources(t *testing.T) {
 		}
 	}
 	// Front-door verbs + the docker->podman shim + the lister itself.
-	for _, want := range []string{"weave", "run", "commands", "docker", "self", "chat", "mb", "messages", "ping"} {
+	for _, want := range []string{"weave", "run", "commands", "docker", "self", "chat", "mb", "ping",
+		"agent", "model", "tool", "person", "skill", "secret", "app"} {
 		if !slices.Contains(verbs, want) {
 			t.Errorf("verbs missing %q", want)
 		}

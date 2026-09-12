@@ -596,5 +596,5 @@ func printAtlasWeb(w io.Writer, records []atlasRecord) {
 			p.Label, command, p.Mode, port, p.Path, p.StartHint())
 	}
 	_ = tw.Flush()
-	fmt.Fprintln(w, "\nOpen them together with:  bashy apps")
+	fmt.Fprintln(w, "\nOpen them together with:  bashy app")
 }

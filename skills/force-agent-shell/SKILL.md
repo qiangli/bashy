@@ -1,6 +1,6 @@
 ---
 name: force-agent-shell
-description: 'Verify agentic CLIs run their shell commands through bashy (not the system shell) so the pure-Go userland, the space-time advisor, and OTel apply to everything an agent runs. Use before an unattended fleet run (weave/conductor/meet), after wiring a new agent, or as a convergence gate. Run `bashy skills run force-agent-shell`; exit 0 iff the contract holds. Companion prose kb page force-agent-shell-bashy.'
+description: 'Verify agentic CLIs run their shell commands through bashy (not the system shell) so the pure-Go userland, the space-time advisor, and OTel apply to everything an agent runs. Use before an unattended fleet run (weave/conductor/meet), after wiring a new agent, or as a convergence gate. Run `bashy skill run force-agent-shell`; exit 0 iff the contract holds. Companion prose kb page force-agent-shell-bashy.'
 metadata:
   requires: "has=claude"
   check-wireda: "bashy install-agent claude --check"
@@ -17,7 +17,7 @@ dhnt-aware runtime (bashy) executes and *attests* it.
 
 ## Use
 
-    bashy skills run force-agent-shell
+    bashy skill run force-agent-shell
 
 - The contract is machine-verified — exit 0 iff the anchor agent (claude) is
   wired to bashy (`install-agent claude --check`) **and** launcher forcing is

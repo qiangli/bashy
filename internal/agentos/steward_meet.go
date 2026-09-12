@@ -15,7 +15,7 @@ var loadMeetRoom = meet.Room
 
 func validateMeetRoomSecretary(name string) error {
 	if _, ok := fleet.New().Agent(strings.TrimSpace(name)); !ok {
-		return fmt.Errorf("meet: secretary %q must name an agent from `bashy agents list`", name)
+		return fmt.Errorf("meet: secretary %q must name an agent from `bashy agent list`", name)
 	}
 	return nil
 }

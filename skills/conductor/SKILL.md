@@ -280,7 +280,7 @@ is always item one because it can replace the assignment and therefore rewrite e
 after it.
 
 Then run `bashy inbox --as <your-agent-name>` and follow
-`bashy skills show inbox` before inspecting the fleet. This includes
+`bashy skill show inbox` before inspecting the fleet. This includes
 the conductor role backlog only while this identity holds its live lease.
 For an active collaborative assignment, keep the skill's persistent watcher or
 repeated bounded-wait loop running; one turn-start read is not real-time monitoring.
@@ -325,7 +325,7 @@ turn by refreshing the TODO from observed evidence.
      - `weave start --run N --clone -- <agent>` mints a per-issue ephemeral
        agent (`007-w3`) with its own name, store and attribution. Real
        parallelism, because it is a real second agent. They are hidden from
-       `bashy agents list` (`--all` shows them) and reclaimed when the run ends.
+       `bashy agent list` (`--all` shows them) and reclaimed when the run ends.
      - or leave it queued and let the agent take them in turn — cheaper in
        tokens, and correct when the stories share source anyway (§Scheduling 1).
      Do NOT reach for `--clone` to dodge the parallel-safety rule: cloning

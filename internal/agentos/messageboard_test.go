@@ -51,7 +51,7 @@ func TestWireMessageBoard_ConnectsEveryFleetSeam(t *testing.T) {
 }
 
 // DetectHarness must be the catalog's own detector, not a private copy. The
-// marker table is registry DATA (`bashy tools add` extends it), so a second
+// marker table is registry DATA (`bashy tool add` extends it), so a second
 // implementation would drift the moment a harness is added — and the drift
 // would show up as an agent silently posting under the operator's name again.
 func TestWireMessageBoard_HarnessDetectionAnswersForThisProcess(t *testing.T) {
@@ -172,7 +172,7 @@ func TestMessageBoardFrontDoorResolvesInboxAndNotify(t *testing.T) {
 }
 
 // The web console serves other verbs' surfaces IN ITS OWN PROCESS, so it owes
-// their host wiring too. `bashy apps` wired meet and not the board, which is
+// their host wiring too. `bashy app` wired meet and not the board, which is
 // invisible at every level that usually catches things: it compiles, it serves,
 // and a post from the browser returns 200. What it loses is fleet resolution —
 // a name that the CLI canonicalizes through the catalog falls through to

@@ -45,6 +45,11 @@ func dispatchMeta(args []string) {
 	}
 
 	verb := args[1]
+	// A surface is declared once, under the canonical spelling; a hidden
+	// alias (`apps` → `app`) answers for it.
+	if e, ok := atlas.Lookup(verb); ok && e.AliasOf != "" {
+		verb = e.AliasOf
+	}
 	w, ok := atlas.WebSurfaces()[verb]
 	if !ok {
 		return // not ours to answer — let the verb have its argument back

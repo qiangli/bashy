@@ -169,11 +169,28 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 	if r := byName["invoke"]; !r.Hidden || r.AliasOf != "chat" {
 		t.Errorf("invoke = %+v, want hidden alias of chat", r)
 	}
-	if r := byName["messages"]; r.Hidden || r.AliasOf != "mb" {
-		t.Errorf("messages = %+v, want visible alias of mb", r)
+	if r := byName["messages"]; !r.Hidden || r.AliasOf != "mb" {
+		t.Errorf("messages = %+v, want hidden alias of mb", r)
 	} else if mb := byName["mb"]; !slices.Equal(r.Caps, mb.Caps) || !slices.Equal(r.Effects, mb.Effects) {
 		t.Errorf("messages metadata = caps %v effects %v, want mb parity caps %v effects %v",
 			r.Caps, r.Effects, mb.Caps, mb.Effects)
+	}
+	// Nouns are singular: the registry/catalog verbs are visible under the
+	// singular and their plurals are hidden aliases with identical metadata.
+	for plural, singular := range map[string]string{"agents": "agent", "models": "model", "tools": "tool",
+		"people": "person", "skills": "skill", "secrets": "secret", "apps": "app", "issue": "todo"} {
+		s, p := byName[singular], byName[plural]
+		if s.Hidden || s.AliasOf != "" {
+			t.Errorf("%s = %+v, want visible canonical verb", singular, s)
+		}
+		if !p.Hidden || p.AliasOf != singular {
+			t.Errorf("%s = %+v, want hidden alias of %s", plural, p, singular)
+		} else if !slices.Equal(p.Caps, s.Caps) || !slices.Equal(p.Effects, s.Effects) || p.Stage != s.Stage || p.Tier != s.Tier {
+			t.Errorf("%s metadata = %+v, want parity with %s %+v", plural, p, singular, s)
+		}
+		if p.Web != nil {
+			t.Errorf("%s declares a web surface; only the canonical %s may", plural, singular)
+		}
 	}
 	if r := byName["ping"]; !slices.Contains(r.Caps, atlas.CapSpawnsProcesses) ||
 		!slices.Contains(r.Effects, atlas.EffNet) || !slices.Contains(r.Effects, atlas.EffExec) ||
