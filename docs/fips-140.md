@@ -38,11 +38,11 @@ GODEBUG=fips140=only bashy …   # ALSO reject every non-approved algorithm
 The active state is surfaced where an operator and an agent both look:
 
 ```sh
-bashy doctor            # a "FIPS 140-3" check: ok when active, info when not
-bashy context --json    # runtime.fips140: true | false
+bashy inspect doctor            # a "FIPS 140-3" check: ok when active, info when not
+bashy inspect context --json    # runtime.fips140: true | false
 ```
 
-`bashy context --json` is the first call an agent makes, so a policy that
+`bashy inspect context --json` is the first call an agent makes, so a policy that
 requires FIPS can gate on `runtime.fips140` directly.
 
 ## What is and isn't covered

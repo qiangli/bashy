@@ -127,7 +127,7 @@ arrives, and not all of them by v1.2.0.
 The agentic surface releases in **stages**, so a feature can ship, collect real
 feedback, and change shape without spending a major. Every agentic verb and
 schema carries exactly one tier, reported by `bashy commands --atlas` and
-`bashy context --json`:
+`bashy inspect context --json`:
 
 | Tier | Promise | Change cost |
 |---|---|---|

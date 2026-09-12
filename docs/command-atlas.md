@@ -87,7 +87,8 @@ bucket is split into honest functional groups.
 | `toolchains` | go, cmake, clang, node, npm, npx, pnpm, yarn, python, pip, uv, mise, cargo, rustc, rustup, rust, java, javac, mvn |
 | `storage` | rclone, zot, seaweedfs, kopia |
 | `cluster-cloud` | kubectl, helm + every declarative-registry CLI (doctl today; aws/azure/gcloud when registered) |
-| `platform` | commands, context, doctor, check, verify, self, run, secrets, bootstrap, upgrade |
+| `platform` | commands, check, verify, self, run, secrets, bootstrap, upgrade; `context` and `audit` remain platform rows as hidden aliases of `inspect` |
+| `diagnostics` | **inspect** (bashy's self-inspection: `paths` · `mode` · `doctor` · `context` · `audit`), check, conform, gate, out, posix-gate, why; `doctor` remains a diagnostics row as a hidden alias of `inspect`. Rule: a new read-only self-view is a new `inspect` aspect, never a new verb |
 | `account` | tessaro, login |
 
 Notes: `foreman` is both an in-process tool and a front-door verb — one atlas
@@ -227,7 +228,7 @@ Load-bearing classification notes:
 
 - **`env`/`printenv` carry `cred`.** They emit the whole environment, secrets
   included — which is exactly why the context-redaction allowlist must cover
-  them, not just `bashy context --json`.
+  them, not just `bashy inspect context --json`.
 - **`exec` marks the governance boundary.** Once a command spawns an external
   process, the pure-Go userland, the advisor, and the audit hook do not reach
   across the `execve`. The agent-orchestration verbs (weave/chat/meet/…) and the

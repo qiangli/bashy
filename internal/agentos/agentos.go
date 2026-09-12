@@ -132,7 +132,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "inbox", "notify", "activity", "run", "commands", "context", "doctor", "otel", "audit", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "apps", "transpile",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secrets", "ask", "bus", "herald", "search", "sota", "skills", "craft", "kb", "lexicon", "define", "tools", "models", "agents", "people", "whois", "inbox", "notify", "activity", "run", "commands", "inspect", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "apps", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
@@ -142,7 +142,9 @@ var (
 	// bare `ping` must continue to resolve to the platform command.
 	directFrontDoorVerbs = []string{"mb", "messages", "ping", "out", "full"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "git-scm", "curl"}
-	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "invoke", "verify"}
+	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
+	// reachable as `bashy <name>` for existing callers, listed under --all.
+	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "invoke", "verify", "doctor", "context", "audit"}
 )
 
 func Preamble() string {
@@ -184,7 +186,7 @@ func Preamble() string {
 // drop-in never carries it). Static string: zero startup cost.
 func init() {
 	os.Setenv("BASHY_AGENT_MANIFEST",
-		`v1 shell=agentic first-hop="bashy context --json" skills="bashy skills list" guide="bashy skills show bashy|bashy bashy"`)
+		`v1 shell=agentic first-hop="bashy inspect context --json" skills="bashy skills list" guide="bashy skills show bashy|bashy bashy"`)
 	// Chat, weave, meet and foreman all enter coreutils/chat without passing the
 	// communication CLI dispatcher. Wire the receive hook at process startup so
 	// every Bashy-owned session gets the same turn-boundary inbox view.
@@ -222,12 +224,12 @@ func maybeAdvertiseSkillHint() {
 			break
 		}
 	}
-	store := bashySkillsDir()
-	if store == "" {
+	hints := hintsDir()
+	if hints == "" {
 		return
 	}
 	sum := fmt.Sprintf("%x", sha256.Sum256([]byte(root)))[:16]
-	mark := filepath.Join(store, "hints", sum)
+	mark := filepath.Join(hints, sum)
 	if _, err := os.Stat(mark); err == nil {
 		return // this repo was evaluated before (hinted, or already configured)
 	}
@@ -949,10 +951,17 @@ func Dispatch() {
 		// ledger with no network, no credentials and no tag. Stages this tier
 		// does not implement are refused BY NAME by the config loader.
 		os.Exit(dispatchRelease(os.Args[2:]))
+	case "inspect":
+		// Self-inspection — the subject is bashy itself: the resource map, the
+		// gate decisions with the signal behind each, and the index of which
+		// verb answers every other question. doctor/context/audit are aspects
+		// of it (see inspect.go); read-only, offline, model-free by contract.
+		os.Exit(dispatchInspect(os.Args[2:]))
 	case "doctor":
 		// Environment self-diagnostic: PATH/sh shadowing, a stale bashy on PATH,
 		// toolchain + container engine, agent mode, bin cache. Advisory.
-		os.Exit(dispatchDoctor(os.Args[2:]))
+		// Hidden alias of `inspect doctor` since 2026-09-12 (same body).
+		os.Exit(dispatchInspect(append([]string{"doctor"}, os.Args[2:]...)))
 	case "activity":
 		// The shared activity-event contract: subscription and status controls,
 		// route explanation, and the recovery fallback. Recipients READ their
@@ -963,7 +972,8 @@ func Dispatch() {
 		// The compliance audit trail: tail recent records, verify the hash chain
 		// (tamper-evidence), or export an evidence bundle. Reads the log written
 		// by the audit ExecHandler middleware (opt-in via BASHY_AUDIT).
-		os.Exit(dispatchAudit(os.Args[2:]))
+		// Hidden alias of `inspect audit` since 2026-09-12 (same body).
+		os.Exit(dispatchInspect(append([]string{"audit"}, os.Args[2:]...)))
 	case "install-agent":
 		// Wire a coding agent (claude/opencode/aider/gemini/copilot) to use
 		// bashy as its shell; --check verifies, --uninstall reverses. See
@@ -972,7 +982,8 @@ func Dispatch() {
 	case "context":
 		// First-hop agent context: one compact JSON record with the exact bashy
 		// path, mode flags, cwd, and recommended discovery/safety commands.
-		os.Exit(dispatchContext(os.Args[2:]))
+		// Hidden alias of `inspect context` since 2026-09-12 (same body).
+		os.Exit(dispatchInspect(append([]string{"context"}, os.Args[2:]...)))
 	case "check":
 		// Static script preflight: syntax, recursive command inventory, and
 		// bashy/system/container/not-found resolution.

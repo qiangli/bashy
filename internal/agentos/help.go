@@ -23,13 +23,13 @@ Bashy AgentOS extensions:
 Bashy front-door help:
 	bashy help dryrun		show dry-run examples and JSON manifest fields
 	bashy help output		show Stage 1 output-reduction activation and recovery
-	bashy context --json		show exact bashy path and agent capabilities
+	bashy inspect context --json		show exact bashy path and agent capabilities
 	bashy commands --agentic	show agent-oriented command discovery
 	bashy check --agent --script X	validate script syntax and command closure as JSON
 	bashy run --check --capture -- X	preflight a script, then run with one JSON envelope
 	bashy commands grep --features	show one-command capability/gap report
 	bashy commands --gnu		show GNU coreutils parity/gap inventory
-	bashy doctor			diagnose shell/runtime environment
+	bashy inspect doctor			diagnose shell/runtime environment
 	bashy install-agent <agent>	wire claude/opencode/aider/... to use bashy as their shell
 	bashy serve [socket]		warm session: reuse one process for repeated -c calls
 	bashy self fetch		fetch/cache a released bashy binary
@@ -70,7 +70,7 @@ Topics:
 
 Common agent entry points:
 	bashy --dry-run -c 'rm -rf build'
-  bashy context --json
+  bashy inspect context --json
   BASHY_AGENTIC=1 bashy --dry-run script.sh
   bashy commands --agentic
   bashy check --agent --script script.sh
@@ -78,7 +78,7 @@ Common agent entry points:
   bashy commands grep --features
   bashy commands --gnu
   bashy commands --json --gnu
-  bashy doctor
+  bashy inspect doctor
   bashy self fetch
   bashy git status
   bashy fetch --json https://example.com

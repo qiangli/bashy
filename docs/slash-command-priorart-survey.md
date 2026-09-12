@@ -83,7 +83,7 @@ are few.
   **`/status` `/debug-config`**.
 - Gap: bashy has real, documented footguns — a PATH shim shadowing `sh`, a
   missing `external/bash-5.3` fixture symlink, engine build-tag availability,
-  sibling-pin drift. `bashy doctor` checks these and prints a health table
+  sibling-pin drift. `bashy inspect doctor` checks these and prints a health table
   (+ `--json`), turning tribal knowledge in the docs into a command.
 - Value: **MEDIUM**; reuses knowledge already written down.
 

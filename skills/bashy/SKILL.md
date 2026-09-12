@@ -1,6 +1,6 @@
 ---
 name: bashy
-description: Drive bashy, the agentic shell — a drop-in Bash 5.3 with agent-native extensions. Use whenever bashy is the shell you are running in (or is on PATH) to read what this host ALREADY KNOWS about your task before starting it, see what other agents and humans are saying, know what work is owed here, cut probing round-trips, preview destructive commands, run with structured result envelopes, navigate code without grep dances, and use environment-gated verified skills. Open every session with `bashy context --json`, then `bashy kb search "<your task>"`, `bashy inbox`, and `bashy todo list`; close with `bashy kb retro`.
+description: Drive bashy, the agentic shell — a drop-in Bash 5.3 with agent-native extensions. Use whenever bashy is the shell you are running in (or is on PATH) to read what this host ALREADY KNOWS about your task before starting it, see what other agents and humans are saying, know what work is owed here, cut probing round-trips, preview destructive commands, run with structured result envelopes, navigate code without grep dances, and use environment-gated verified skills. Open every session with `bashy inspect context --json`, then `bashy kb search "<your task>"`, `bashy inbox`, and `bashy todo list`; close with `bashy kb retro`.
 compatibility: requires the bashy binary (an agentic host shell); all verbs also work as `bashy <verb>` from any shell
 ---
 
@@ -14,7 +14,7 @@ bash means.
 
 ## First hop (do this once per session)
 
-    bashy context --json
+    bashy inspect context --json
 
 One call replaces the usual probe dance (`uname`/`hostname`/`id`/`env`/
 `which ...`): system + identity, resolved tool paths, safe environment
@@ -132,7 +132,7 @@ way kb is: this repo's when you are in one, the host's otherwise.
 
 ## Rules of thumb
 
-1. `bashy context --json` first; trust it over your own probes.
+1. `bashy inspect context --json` first; trust it over your own probes.
 2. **Open with `kb search` + `inbox` + `todo list`; close with `kb retro`.**
    If you remember three verbs from this page, remember those. Everything
    else here helps you do the task; only these tell you whether it is

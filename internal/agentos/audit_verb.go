@@ -38,7 +38,7 @@ func dispatchAudit(args []string) int {
 	case "export":
 		return auditExport(path)
 	case "-h", "--help", "help":
-		fmt.Println("usage: bashy audit {status|tail [N]|verify|export|path}")
+		fmt.Println("usage: bashy inspect audit {status|tail [N]|verify|export|path}")
 		fmt.Println("  status   whether auditing is on, the log path, record count, chain state")
 		fmt.Println("  tail [N] the last N records (default 20), one JSON object per line")
 		fmt.Println("  verify   walk the hash chain and report the first break, if any")

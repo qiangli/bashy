@@ -180,7 +180,7 @@ func dispatchContext(args []string) int {
 		case "--plain":
 			asJSON = false
 		case "-h", "--help":
-			fmt.Println("usage: bashy context [--json|--plain]")
+			fmt.Println("usage: bashy inspect context [--json|--plain]")
 			fmt.Println("Print one first-hop environment/discovery record for agents.")
 			return 0
 		default:
@@ -298,6 +298,7 @@ func fillContext(report contextReport, bashyPath string) contextReport {
 		{Purpose: "script preflight", Command: bashyPath + " check --agent --script SCRIPT"},
 		{Purpose: "preflight plus captured run envelope", Command: bashyPath + " run --check --capture -- SCRIPT"},
 		{Purpose: "one command capability lookup", Command: bashyPath + " commands COMMAND --features"},
+		{Purpose: "WHERE bashy keeps every store (scope-resolved for this cwd) and WHICH gates are on and why — the self-inspection index names what answers everything else", Command: bashyPath + " inspect"},
 		{Purpose: "what code is coupled to a symbol (skip the grep dance)", Command: bashyPath + " graph impact SYMBOL"},
 		{Purpose: "recall/leave shared repo knowledge for other agents", Command: bashyPath + " graph recall QUERY"},
 		{Purpose: "skills applicable on this host (read one: skills show NAME; run attested: skills run NAME)", Command: bashyPath + " skills list"},

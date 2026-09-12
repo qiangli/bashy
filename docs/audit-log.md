@@ -76,11 +76,11 @@ rooted at a public genesis. Deleting, reordering, or editing a single byte of
 any record breaks every record after it.
 
 ```sh
-bashy audit status    # on/off, path, record count, chain state
-bashy audit tail [N]   # the last N records (JSON lines)
-bashy audit verify     # walk the chain, report the first break (exit 1 if broken)
-bashy audit export     # the full chain + a verification summary (evidence bundle)
-bashy audit path       # print the configured log path
+bashy inspect audit status    # on/off, path, record count, chain state
+bashy inspect audit tail [N]   # the last N records (JSON lines)
+bashy inspect audit verify     # walk the chain, report the first break (exit 1 if broken)
+bashy inspect audit export     # the full chain + a verification summary (evidence bundle)
+bashy inspect audit path       # print the configured log path
 ```
 
 `verify` is the load-bearing one: `chain intact: N records verified ✓`, or
@@ -107,4 +107,4 @@ next slice.
   classification and identity.
 - `bashy/internal/agentos/audit.go` — the ExecHandler middleware (outermost in
   `WireExec`) that enriches with atlas effects + actor and captures the outcome.
-- `bashy/internal/agentos/audit_verb.go` — the `bashy audit` read verb.
+- `bashy/internal/agentos/audit_verb.go` — the `bashy inspect audit` read verb.
