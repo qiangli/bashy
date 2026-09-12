@@ -3,10 +3,11 @@ id: 1d1b71914ed5
 kind: task
 title: 'S159.2 bashy: collapse path duplicates onto owners; context.mode and doctor report decisions with the signal'
 seq: 258
-status: todo
+status: done
 priority: p1
 created: 2026-09-12T19:37:40.925484Z
 sprint: 159
+closed: 2026-09-12T19:40:55.716647Z
 ---
 
 bashy half of S159.2 (umbrella story 080662f5cfe4; design docs/bashy-inspect-design.md section 8, PRIVATE).
