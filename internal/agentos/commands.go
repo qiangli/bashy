@@ -458,7 +458,7 @@ var verbSynopsis = map[string]string{
 	"agentic":     "run one action in agentic mode; return a skill proposal when caller input is required",
 	"dhnt":        "validate, lower, emit, and aggregate portable dhnt pipeline/run evidence",
 	"release":     "build → archive → checksum this project's release artifacts from .goreleaser.yaml (`--snapshot`: no tag, no network)",
-	"commands":    "list the supported command surface (builtins, coreutils, verbs)",
+	"commands":    "the 1.0.0 command surface: core first, then every command by origin, tier, POSIX, or bin-managed status",
 	"inspect":     "self-inspection: resource map, gate decisions, and the index of what answers what",
 	"context":     "hidden alias for bashy inspect context",
 	"doctor":      "hidden alias for bashy inspect doctor",
