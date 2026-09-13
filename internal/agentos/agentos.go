@@ -70,6 +70,7 @@ import (
 	"github.com/qiangli/coreutils/external/zot"
 	"github.com/qiangli/coreutils/pkg/ask"
 	"github.com/qiangli/coreutils/pkg/atlas"
+	"github.com/qiangli/coreutils/pkg/autofix"
 	"github.com/qiangli/coreutils/pkg/board"
 	"github.com/qiangli/coreutils/pkg/bus"
 	"github.com/qiangli/coreutils/pkg/capability"
@@ -133,7 +134,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "notify", "activity", "run", "commands", "inspect", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "notify", "activity", "run", "agentic", "commands", "inspect", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
@@ -501,6 +502,8 @@ func dispatch() {
 		dispatchExit(dispatchTranspile(os.Args[2:]))
 	case "full":
 		dispatchExit(dispatchFull(os.Args[2:]))
+	case "agentic":
+		dispatchExit(dispatchAgentic(os.Args[2:]))
 	case "weave":
 		cmd := weave.NewWeaveCmd()
 		configureWeaveResourceAdmission(cmd)
@@ -1859,7 +1862,7 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	if weaveGuardEnabled() {
 		mws = append(mws, weaveGuardHandler)
 	}
-	mws = append(mws, outputMW, dryRunHandler(r), coreutilsshell.Handler())
+	mws = append(mws, outputMW, autofix.Handler(), dryRunHandler(r), coreutilsshell.Handler())
 	return append(opts, interp.ExecHandlers(mws...))
 }
 
