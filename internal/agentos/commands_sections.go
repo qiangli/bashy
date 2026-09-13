@@ -22,9 +22,10 @@ import (
 //	core       — the 1.0.0 core, in seven rows (fleet · session · work ·
 //	             knowledge · comms · human · discovery). A PRESENTATION
 //	             grouping — the atlas `group` axis is untouched.
-//	more       — visible bashy-added commands that are not core
-//	userland   — bash builtins · GNU coreutils · classic Unix · bin-managed
-//	             externals, as counts (`--view origin` lists them)
+//	more       — visible yoke commands (bashy-added) that are not core
+//	classic    — everything that is not yoke: bash builtins · GNU coreutils ·
+//	             classic Unix · bin-managed externals, as counts (`--view
+//	             origin` lists them)
 //	hidden     — curated experimental commands (`--all` lists them)
 //
 // The partition below is keyed on the atlas ORIGIN axis — who defined the
@@ -151,7 +152,7 @@ func printClassSections(w io.Writer, verbose, all bool) {
 	hiddenN := len(curatedHiddenVerbs)
 	total := coreN + len(s.More) + userland + hiddenN + len(hiddenFrontDoorVerbs)
 
-	fmt.Fprintf(w, "bashy commands — the 1.0.0 surface: %d core + %d more; `--all` for everything (%d)\n",
+	fmt.Fprintf(w, "bashy commands — the 1.0.0 surface: %d core + %d more yoke commands; `--all` for everything (%d)\n",
 		coreN, len(s.More), total)
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "core — what an agent uses every turn (%d):\n", coreN)
@@ -172,23 +173,23 @@ func printClassSections(w io.Writer, verbose, all bool) {
 	}
 
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "more — visible, not core (%d):\n", len(s.More))
+	fmt.Fprintf(w, "more yoke commands — visible, not core (%d):\n", len(s.More))
 	printSubSection(w, "", s.More, verbose, syn)
 
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "userland — bash builtins (%d) · GNU coreutils (%d) · classic Unix (%d) · bin-managed externals (%d):\n",
+	fmt.Fprintf(w, "classic — everything that is not yoke: bash builtins (%d) · GNU coreutils (%d) · classic Unix (%d) · bin-managed externals (%d):\n",
 		len(s.Shell), len(s.Coreutils), len(s.Classic), len(s.External))
 	fmt.Fprintln(w, "  bashy commands --view origin   every name by who defined it (* = POSIX-required)")
 	fmt.Fprintln(w, "  bashy commands --view tier     by execution venue")
 
 	fmt.Fprintln(w)
 	if all {
-		fmt.Fprintf(w, "experimental — hidden by default: they work, they are not yet proven (%d):\n", len(s.Experimental))
+		fmt.Fprintf(w, "experimental yoke commands — hidden by default: they work, they are not yet proven (%d):\n", len(s.Experimental))
 		printSubSection(w, "", s.Experimental, verbose, syn)
 		fmt.Fprintf(w, "hidden aliases (%d):\n", len(s.Aliases))
 		printSubSection(w, "", s.Aliases, verbose, syn)
 	} else {
-		fmt.Fprintf(w, "%d experimental commands are hidden — they work, they are not yet proven: bashy commands --all\n", hiddenN)
+		fmt.Fprintf(w, "%d experimental yoke commands are hidden — they work, they are not yet proven: bashy commands --all\n", hiddenN)
 	}
 }
 

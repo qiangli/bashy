@@ -303,6 +303,11 @@ Growth rule: adding an idiom edits this doc **and** the table in
 ### 2.6 Origin lens — who defined it (Sprint 167)
 
 The class split says how a name *resolves*; the origin says who *defined* it.
+The bashy-added group has a name of its own — the **yoke commands** — so it can
+be referred to as easily as the other four (decision 2026-09-13, Sprint 167).
+`bashy commands` minus yoke is the **classic** surface. Every yoke command is
+agentic in the sense that matters — built for agentic tools — and many are
+deterministic rungs that need no model.
 The two disagree in useful ways: `printf` resolves as a bash builtin but is a
 GNU coreutils program; `awk` is in-process Go but nobody at GNU wrote it;
 `m4` is POSIX-required and exec'd from a pinned provider. One **exclusive**
@@ -314,7 +319,7 @@ origin per command, plus one cross-cutting tag:
 | `gnu` | GNU coreutils | GNU coreutils 9.x command reimplemented in Go (`atlas.GNUCoreutilsUpstream()`, 108 names, 3 unimplemented: chroot coreutils runcon) | 98 visible (105 in the tool table; 7 shadowed by builtins) |
 | `unix` | classic Unix | other classic Unix tool reimplemented in Go — awk sed grep jq tar tree ed vi-less … | 48 |
 | `external` | bin-managed external | binmgr CLI, toolchain provisioner, or pinned POSIX provider — exec'd, never linked (= `subclass` ∈ managed-external/provisioner, or a registry entry) | 45 |
-| `bashy` | added by bashy | bashy's own agentic / yoke surface | 53 visible + 22 experimental + 16 aliases |
+| `bashy` | **yoke** (added by bashy) | the **yoke commands** — bashy's own agentic / yoke surface, its third substrate (Classic · Bash++ · Yoke). `commands` minus yoke = the classic surface. Every yoke command is built for agentic tools; *agentic* does not mean *needs a model* — the ladder has deterministic rungs (`tz clip duration tokens ntp`) that are yoke all the same. Wire value stays `bashy` (provenance = who); "yoke" is how the group is referred to, like "the GNU coreutils" | 53 visible + 22 experimental + 16 aliases |
 
 `posix: true` = one of the 116 POSIX-required names (`atlas.PosixRequired()`,
 ratcheted against `coreutils/docs/posix-required-commands.tsv`, the file

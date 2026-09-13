@@ -157,7 +157,8 @@ var (
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "invoke", "verify", "doctor", "context", "audit",
 		"agents", "models", "tools", "people", "skills", "secrets", "apps", "messages", "issue"}
 
-	// curatedHiddenVerbs are bashy-added commands that WORK but are not yet
+	// curatedHiddenVerbs are yoke commands (bashy-added, verbs AND in-process
+	// tools) that WORK but are not yet
 	// proven — experimental — and so are kept out of the default listings
 	// (`bashy commands`, `--agentic`) until a gate says otherwise (Sprint 167,
 	// bashy 1.0.0). This is a MATURITY claim, not a removal, and it is a
