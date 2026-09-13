@@ -36,7 +36,7 @@ func dispatchEngine(arg string) {
 		if name == "ollama" {
 			if blocked, msg := ollamaCloudGate(os.Args[2:]); blocked {
 				fmt.Fprint(os.Stderr, msg)
-				os.Exit(2)
+				dispatchExit(2)
 			}
 		}
 		bin := resolveEngineBinary(name)
@@ -50,17 +50,17 @@ func dispatchEngine(arg string) {
 			if name == "podman" {
 				applyPodmanHelperEnv() // Windows: without this a machine start serves NO endpoint
 			}
-			os.Exit(execEnginePassthrough(bin, os.Args[2:]))
+			dispatchExit(execEnginePassthrough(bin, os.Args[2:]))
 		}
 		fmt.Fprint(os.Stderr, engineNotFoundMessage(name))
-		os.Exit(127)
+		dispatchExit(127)
 	case "dks":
 		// Provisioning the rootful DKS VM needs the in-process podman
 		// machine libraries, which are only linked in the bashy_engines
 		// build. The lean build can't create a VM.
 		fmt.Fprintln(os.Stderr, "bashy dks: not available in this build — the DKS VM provisioner "+
 			"needs the engine build (`-tags bashy_engines`). On Linux, run k3s under rootful podman directly (no VM).")
-		os.Exit(1)
+		dispatchExit(1)
 	}
 }
 

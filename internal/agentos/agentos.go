@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -329,7 +330,82 @@ func wireWebConsole() {
 // core via cli.AgentOSDispatch and runs before any bash flag parsing, since the
 // subcommands carry their own flags. It os.Exit()s when it handles the
 // invocation and returns otherwise.
+type frontDoorExit int
+
+var frontDoorObserving atomic.Bool
+
+// Dispatch runs front-door commands through the observing portion of the
+// ExecHandler chain. The terminal handler is still the existing dispatcher;
+// the private exit signal only delays process exit until observers have seen
+// the real status.
 func Dispatch() {
+	if len(os.Args) < 2 || !isFrontDoorInvocation(os.Args[1]) {
+		dispatch()
+		return
+	}
+
+	h := interp.ExecHandlerFunc(func(_ context.Context, _ []string) (err error) {
+		defer func() {
+			if v := recover(); v != nil {
+				if code, ok := v.(frontDoorExit); ok {
+					if code != 0 {
+						err = interp.ExitStatus(code)
+					}
+					return
+				}
+				panic(v)
+			}
+		}()
+		dispatch()
+		return nil
+	})
+	mws := observingExecMiddlewares()
+	for i := len(mws) - 1; i >= 0; i-- {
+		h = mws[i](h)
+	}
+	frontDoorObserving.Store(true)
+	err := h(context.Background(), os.Args[1:])
+	frontDoorObserving.Store(false)
+	status, _ := exitStatusOf(err)
+	cli.AgentOSShutdown()
+	os.Exit(status)
+}
+
+func dispatchExit(code int) {
+	if !frontDoorObserving.Load() {
+		os.Exit(code)
+	}
+	panic(frontDoorExit(code))
+}
+
+func isFrontDoorInvocation(name string) bool {
+	if name == "" || name[0] == '-' || name[0] == '+' || strings.ContainsRune(name, os.PathSeparator) || strings.ContainsRune(name, '/') {
+		return false
+	}
+	if isMissingCommandToken(name) {
+		return true
+	}
+	if _, ok := atlas.Lookup(name); ok {
+		return true
+	}
+	_, core, verbs := commandsCatalog()
+	for _, names := range [][]string{
+		core,
+		verbs,
+		hiddenVerbsCatalog(),
+		skills.Names(),
+		{"help", "serve", "steward", "conductor", "jobs", "fg", "bg", "kill"},
+	} {
+		for _, known := range names {
+			if name == known {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func dispatch() {
 	if len(os.Args) < 2 {
 		return
 	}
@@ -360,7 +436,7 @@ func Dispatch() {
 	// warm process (skips the per-call process/package init). A dead or absent
 	// session falls through to normal in-process execution — never stranded.
 	if exit, handled := session.Route(); handled {
-		os.Exit(exit)
+		dispatchExit(exit)
 	}
 	// The container/LLM engines (`bashy podman`, `bashy ollama`) embed cgo +
 	// platform-specific backends (podman's btrfs/devmapper drivers, ollama's
@@ -381,7 +457,7 @@ func Dispatch() {
 	dispatchMeta(os.Args)
 	switch os.Args[1] {
 	case "help":
-		os.Exit(dispatchHelp(os.Args[2:]))
+		dispatchExit(dispatchHelp(os.Args[2:]))
 	case "serve":
 		// Warm session: one already-initialized process serves many
 		// `bashy -c "…"` calls. Optional socket path arg overrides the default.
@@ -391,23 +467,23 @@ func Dispatch() {
 		}
 		if err := session.Serve(socket); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy serve:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "out":
-		os.Exit(dispatchOut(os.Args[2:]))
+		dispatchExit(dispatchOut(os.Args[2:]))
 	case "transpile":
-		os.Exit(dispatchTranspile(os.Args[2:]))
+		dispatchExit(dispatchTranspile(os.Args[2:]))
 	case "full":
-		os.Exit(dispatchFull(os.Args[2:]))
+		dispatchExit(dispatchFull(os.Args[2:]))
 	case "weave":
 		cmd := weave.NewWeaveCmd()
 		configureWeaveResourceAdmission(cmd)
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "sprint":
 		// Plan/handoff layer (cross-repo), peer to `weave` (per-repo
 		// execution). Shares the AgentOS state root; user-global board.
@@ -416,9 +492,9 @@ func Dispatch() {
 		cmd := newSprintCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "handoff", "resume":
 		// Portable session handoff. Every agentic tool has a /resume, and every one
 		// of them is a prison: it reads that tool's private transcript store, on
@@ -440,9 +516,9 @@ func Dispatch() {
 		hcmd.SetArgs(os.Args[2:])
 		if err := hcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy "+os.Args[1]+":", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "claim":
 		cmd := coord.NewClaimCmd(func() []string {
 			cwd, err := os.Getwd()
@@ -454,9 +530,9 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy claim:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "lexicon":
 		// The project's jargon, PROJECTED from the registries that already define it.
 		// A user says "handoff this to codex": neither word means what the dictionary
@@ -473,9 +549,9 @@ func Dispatch() {
 		lcmd.SetArgs(os.Args[2:])
 		if err := lcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy lexicon:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "define":
 		// The one question an agent actually asks, at top level rather than
 		// buried under `lexicon` — burying it costs more than the namespace is
@@ -491,9 +567,9 @@ func Dispatch() {
 		dcmd.SetArgs(os.Args[2:])
 		if err := dcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy define:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "todo", "issue":
 		// THE task tracker. Auto-detected scope: inside a git repo → THAT repo's
 		// docs/todo/ (committed, the structured replacement for an ad-hoc TODO.md);
@@ -506,9 +582,9 @@ func Dispatch() {
 		tcmd.SetArgs(os.Args[2:])
 		if err := tcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy todo:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "steward":
 		// Role namespace (front door for the steward role): bare `steward` and
 		// `steward skill` print the existing steward operating skill; `steward
@@ -557,9 +633,9 @@ func Dispatch() {
 		scmd.SetArgs(os.Args[2:])
 		if err := scmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy steward:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "conductor":
 		// Role namespace: bare `conductor` and `conductor skill` print the
 		// conductor operating skill; `conductor dashboard` mounts the board.
@@ -573,9 +649,9 @@ func Dispatch() {
 		ccmd.SetArgs(os.Args[2:])
 		if err := ccmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy conductor:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "pair":
 		// gate's SEMANTIC twin, and the successor to `judge`.
 		//
@@ -599,9 +675,9 @@ func Dispatch() {
 		pcmd.SetArgs(os.Args[2:])
 		if err := pcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy pair:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "judge":
 		// Kept as an alias so the steward skill, weave, and any script keep working. It
 		// maps to the one role that behaves the way judge did: prose, no keyboard, an
@@ -610,9 +686,9 @@ func Dispatch() {
 		jcmd.SetArgs(os.Args[2:])
 		if err := jcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy judge:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "gate":
 		// THE Test verb. Before it, the Test stage was EMPTY -- not because nobody
 		// tested, but because the gate (the command that decides pass/fail) was
@@ -625,9 +701,9 @@ func Dispatch() {
 		gcmd.SetArgs(os.Args[2:])
 		if err := gcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy gate:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "chat", "invoke":
 		// Invoke ONE agent, ONCE, on one instruction — the primitive that unifies
 		// the heterogeneous agent CLIs (resolve the tool, inject identity, force
@@ -641,9 +717,9 @@ func Dispatch() {
 		cmd := chat.NewChatCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "coach":
 		// Run ONE agent under the LLM-free auto-coach: watch its tool.call stream
 		// and, when it loops, ESC it out and tell it to deliver. A report channel,
@@ -651,9 +727,9 @@ func Dispatch() {
 		cmd := chat.NewCoachCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "delegate":
 		// The ergonomic front for handing a task to an agent — a DIFFERENT one, or
 		// YOURSELF (the same tool, run detached to stay responsive). The lightweight
@@ -663,9 +739,9 @@ func Dispatch() {
 		cmd := chat.NewDelegateCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "meet":
 		// Multi-participant deliberation session: agentic CLIs + a human take
 		// turns; a dedicated notes-only secretary keeps and files the minutes.
@@ -674,9 +750,9 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy meet:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "app", "apps":
 		// The app launcher: ONE local surface with a start page of tiles and every
 		// other bashy web surface deep-linked beneath it — the shape
@@ -696,9 +772,9 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy app:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "supervise":
 		// Conductor-as-a-verb: one supervisor agent drives a fleet of workers
 		// against a goal decomposed into GATED tasks, in the current working
@@ -710,9 +786,9 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy supervise:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	// `fanout` was removed 2026-07-12 by the Command Atlas SDLC ratchet, which
 	// asks every front-door verb: which stage do you serve that nothing else
 	// already does? fanout had no answer. It shipped with zero callers, zero
@@ -728,9 +804,9 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy capability:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "ping":
 		// The front door to the board, and to the classic command. Arity picks:
 		// no args reads, a target plus a message posts, a bare target is handed
@@ -746,9 +822,9 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy ping:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "mb", "messages", "inbox", "notify":
 		// The host communication front doors all share pkg/bus's fleet seams:
 		// identity, role/name resolution, and fleet selection. Mounting the
@@ -761,9 +837,9 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintf(os.Stderr, "bashy %s: %v\n", label, err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "leaderboard":
 		// The fleet's own run evidence, ranked. A TOP-LEVEL verb rather than
 		// `capability leaderboard` because it answers a different question:
@@ -775,25 +851,25 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy leaderboard:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "sdlc":
 		// Workflow control plane: intake/deployment/approval boundary that
 		// delegates implementation planning and sprint execution to agents.
 		cmd := sdlc.NewSDLCCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "web":
 		cmd := webinspect.NewWebCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "search":
 		// Web search (query → cited results) via a provider ladder — the
 		// find-things primitive `bashy sota` builds on. See
@@ -801,9 +877,9 @@ func Dispatch() {
 		cmd := search.NewSearchCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "sota":
 		// Research the current state of the art: ground a synthesis agent in real
 		// `bashy search` sources and cite only those (anti-hallucination by
@@ -812,17 +888,17 @@ func Dispatch() {
 		cmd := sota.NewSotaCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "secret", "secrets":
 		cmd := secrets.NewSecretsCmd()
 		cmd.Use = os.Args[1]
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "bus":
 		// The agent notification bus — the PUSH half of how agents coordinate,
 		// where `bashy kb` is the durable PULL half. `bus publish` appends an
@@ -841,7 +917,7 @@ func Dispatch() {
 		if err != nil && !bus.Reported(err) {
 			fmt.Fprintln(os.Stderr, "bashy bus:", err)
 		}
-		os.Exit(bus.ExitCode(err))
+		dispatchExit(bus.ExitCode(err))
 	case "herald", "a2a":
 		// Reach an agent that is NOT on this host, over A2A. Every other
 		// coordination verb resolves a participant to a binary HERE; herald is
@@ -855,7 +931,7 @@ func Dispatch() {
 		// peer's self-reported task state: 0 only when the gate passed, 2 when
 		// the peer claimed completion and nothing verified it. That is what
 		// lets a remote agent compose with && like any other command.
-		os.Exit(herald.Run(context.Background(), os.Args[2:]))
+		dispatchExit(herald.Run(context.Background(), os.Args[2:]))
 	case "ask":
 		// Ask the HUMAN for an ad-hoc value over a channel the calling program
 		// does not own (controlling terminal → GUI askpass → out-of-band
@@ -865,9 +941,9 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "dag":
 		// The agent-first DAG task runner: markdown-defined targets run as a
 		// dependency graph. dag.ExitCodeOf recovers the stable weavecli exit
@@ -875,7 +951,7 @@ func Dispatch() {
 		cmd := dag.NewDagCmd()
 		dag.AddCapacityCommands(cmd, sprintCapacityServices())
 		cmd.SetArgs(os.Args[2:])
-		os.Exit(dag.ExitCodeOf(cmd.Execute()))
+		dispatchExit(dag.ExitCodeOf(cmd.Execute()))
 	case "skill", "skills":
 		// The env-gated skills catalog (coreutils/pkg/skills): `list` shows
 		// only skills applicable at this host's space-time coordinate,
@@ -887,9 +963,9 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy skill:", err)
-			os.Exit(coreskills.ExitCode(err))
+			dispatchExit(coreskills.ExitCode(err))
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "craft":
 		// The living skill graph (coreutils/pkg/craft): what running the
 		// catalog has TAUGHT this host, as opposed to what the catalog
@@ -900,9 +976,9 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy craft:", err)
-			os.Exit(craft.ExitCode(err))
+			dispatchExit(craft.ExitCode(err))
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "kb":
 		// The host-shared knowledge base (coreutils/pkg/kb): the collective
 		// memory of all agents on this host across all repos — OKF-style
@@ -914,9 +990,9 @@ func Dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy kb:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "tool", "tools", "model", "models", "agent", "agents", "person", "people", "whois":
 		// The fleet registry (coreutils/pkg/fleet) and the principal
 		// resolver over it (coreutils/pkg/principal). A `tool` is an
@@ -933,63 +1009,63 @@ func Dispatch() {
 		cmd := schedule.NewScheduleCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "run":
 		// Wrap a command and emit a structured result envelope (bashy-run-v1)
 		// bundling exit/signal/duration/cwd + the advisor's hints. Streams live
 		// by default (meta trails on stderr); --capture embeds the streams in one
 		// stdout record. Returns the command's own exit status.
-		os.Exit(dispatchRun(os.Args[2:]))
+		dispatchExit(dispatchRun(os.Args[2:]))
 	case "dhnt":
 		// Portable dhnt.pipeline/v1 and dhnt.run/v1 validation, canonical
 		// encoding, worker emission, and fail-closed evidence aggregation.
-		os.Exit(dispatchDhnt(os.Args[2:]))
+		dispatchExit(dispatchDhnt(os.Args[2:]))
 	case "release":
 		// Distribution: turn a .goreleaser.yaml into named, checksummed
 		// artifacts. T0 is the local-first half in-process — `release
 		// --snapshot` builds, archives, checksums and emits a bashy-release-v1
 		// ledger with no network, no credentials and no tag. Stages this tier
 		// does not implement are refused BY NAME by the config loader.
-		os.Exit(dispatchRelease(os.Args[2:]))
+		dispatchExit(dispatchRelease(os.Args[2:]))
 	case "inspect":
 		// Self-inspection — the subject is bashy itself: the resource map, the
 		// gate decisions with the signal behind each, and the index of which
 		// verb answers every other question. doctor/context/audit are aspects
 		// of it (see inspect.go); read-only, offline, model-free by contract.
-		os.Exit(dispatchInspect(os.Args[2:]))
+		dispatchExit(dispatchInspect(os.Args[2:]))
 	case "doctor":
 		// Environment self-diagnostic: PATH/sh shadowing, a stale bashy on PATH,
 		// toolchain + container engine, agent mode, bin cache. Advisory.
 		// Hidden alias of `inspect doctor` since 2026-09-12 (same body).
-		os.Exit(dispatchInspect(append([]string{"doctor"}, os.Args[2:]...)))
+		dispatchExit(dispatchInspect(append([]string{"doctor"}, os.Args[2:]...)))
 	case "activity":
 		// The shared activity-event contract: subscription and status controls,
 		// route explanation, and the recovery fallback. Recipients READ their
 		// activity in `bashy inbox` — this verb is the control surface, not a
 		// second inbox. See docs/activity-events.md.
-		os.Exit(dispatchActivity(os.Args[2:]))
+		dispatchExit(dispatchActivity(os.Args[2:]))
 	case "audit":
 		// The compliance audit trail: tail recent records, verify the hash chain
 		// (tamper-evidence), or export an evidence bundle. Reads the log written
 		// by the audit ExecHandler middleware (opt-in via BASHY_AUDIT).
 		// Hidden alias of `inspect audit` since 2026-09-12 (same body).
-		os.Exit(dispatchInspect(append([]string{"audit"}, os.Args[2:]...)))
+		dispatchExit(dispatchInspect(append([]string{"audit"}, os.Args[2:]...)))
 	case "install-agent":
 		// Wire a coding agent (claude/opencode/aider/gemini/copilot) to use
 		// bashy as its shell; --check verifies, --uninstall reverses. See
 		// docs/agent-adoption/matrix.md for per-agent verification status.
-		os.Exit(dispatchInstallAgent(os.Args[2:]))
+		dispatchExit(dispatchInstallAgent(os.Args[2:]))
 	case "context":
 		// First-hop agent context: one compact JSON record with the exact bashy
 		// path, mode flags, cwd, and recommended discovery/safety commands.
 		// Hidden alias of `inspect context` since 2026-09-12 (same body).
-		os.Exit(dispatchInspect(append([]string{"context"}, os.Args[2:]...)))
+		dispatchExit(dispatchInspect(append([]string{"context"}, os.Args[2:]...)))
 	case "check":
 		// Static script preflight: syntax, recursive command inventory, and
 		// bashy/system/container/not-found resolution.
-		os.Exit(dispatchCheck(os.Args[2:]))
+		dispatchExit(dispatchCheck(os.Args[2:]))
 	case "conform", "verify":
 		// BASHY'S OWN fidelity batteries: compat (GNU Bash 5.3) / conformance (yash
 		// POSIX) / compliance (Open Group VSC-PCTS, stub) / benchmark. Runs from a
@@ -1004,9 +1080,9 @@ func Dispatch() {
 		cmd := verifyCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "self":
 		// Self-management: fetch/cache release binaries and explicitly install a
 		// selected candidate. This is the bashy-side migration of outpost's
@@ -1014,9 +1090,9 @@ func Dispatch() {
 		cmd := selfCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "bootstrap", "upgrade":
 		// Hidden transitional aliases. They keep old muscle memory/scripts
 		// functional while `bashy self ...` becomes the documented surface.
@@ -1024,9 +1100,9 @@ func Dispatch() {
 		cmd.Use = os.Args[1]
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "git", "git-scm":
 		// `bashy git` is the REAL, full git — git-for-windows MinGit on Windows,
 		// system git on unix — provisioned + checksum-verified. It gives one
@@ -1037,15 +1113,15 @@ func Dispatch() {
 		cmd := gitscm.NewGitSCMCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "commands":
 		// Discovery: list the whole supported command surface — shell builtins,
 		// the in-process coreutils userland, and the bare-name front-door verbs —
 		// which are otherwise invisible to compgen/type (the handler intercepts
 		// them before PATH). --json for a structured catalog.
-		os.Exit(dispatchCommands(os.Args[2:]))
+		dispatchExit(dispatchCommands(os.Args[2:]))
 	case "go":
 		// Self-provisioning Go toolchain (check → download from go.dev →
 		// sha256-verify → cache → exec). No embedding, no system Go: this is
@@ -1054,18 +1130,18 @@ func Dispatch() {
 		cmd := gotoolchain.NewGoCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "cmake":
 		// Self-provisioning CMake (binmgr download -> verify -> cache; no system
 		// CMake needed). Pure-Go fetch + cross-platform, same shape as bashy go.
 		cmd := cmake.NewCmakeCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "clang":
 		// Self-provisioning Clang toolchain: the standalone llvm-mingw on Windows
 		// (binmgr), the system clang on macOS/Linux. The compiler half of the
@@ -1073,9 +1149,9 @@ func Dispatch() {
 		cmd := clang.NewClangCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "node", "npm", "npx", "pnpm", "yarn":
 		// Self-provisioning Node.js ecosystem (binmgr download from nodejs.org →
 		// verify via SHASUMS256 → cache → exec; pnpm/yarn via the bundled corepack).
@@ -1095,9 +1171,9 @@ func Dispatch() {
 		}
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "python", "pip", "uv":
 		// Self-provisioning Python ecosystem via astral-sh/uv (one verified binary
 		// that provisions CPython): python -> `uv run python`, pip -> `uv pip`.
@@ -1113,9 +1189,9 @@ func Dispatch() {
 		}
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "mise":
 		// Polyglot runtime/version manager (jdx/mise) — managed external binary,
 		// checksum-verified by binmgr. The power-user layer over the native
@@ -1123,9 +1199,9 @@ func Dispatch() {
 		cmd := mise.NewMiseCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "cargo", "rustc", "rustup", "rust":
 		// Self-provisioning Rust via the official rustup-init (sha256 sidecar
 		// verified), into a bashy-owned CARGO_HOME/RUSTUP_HOME. No system Rust.
@@ -1142,18 +1218,18 @@ func Dispatch() {
 		}
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "curl":
 		// Platform curl (built into Windows 10+, universal on unix); a pinned,
 		// checksum-verified curl.se/windows build on a bare Windows node.
 		cmd := curlbin.NewCurlCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "loom":
 		// Git forge: run Gitea as a managed external binary (binmgr
 		// downloads/verifies/caches it; not compiled in). bashy is the "OS of
@@ -1161,36 +1237,36 @@ func Dispatch() {
 		cmd := loom.NewLoomCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "zot":
 		// OCI registry (images + Ollama models): run Zot as a managed
 		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
 		cmd := zot.NewZotCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "seaweedfs":
 		// Object/blob store (S3 gateway): run SeaweedFS as a managed
 		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
 		cmd := seaweedfs.NewSeaweedfsCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "kopia":
 		// Snapshot-backup repository server: run Kopia as a managed
 		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
 		cmd := kopia.NewKopiaCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "act":
 		// Run GitHub Actions locally via a binmgr-managed nektos/act (MIT, not
 		// compiled in) — test CI on a host node before pushing. Needs a container
@@ -1198,9 +1274,9 @@ func Dispatch() {
 		cmd := act.NewActCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "act-runner":
 		// Gitea act_runner (MIT, binmgr-managed) — the PERSISTENT mesh CI daemon
 		// that registers against loom/Gitea and dials OUT (NAT-friendly), distinct
@@ -1210,36 +1286,36 @@ func Dispatch() {
 		cmd := actrunner.NewCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "gh":
 		// The GitHub CLI (cli/cli, MIT) via binmgr — open PRs, trigger/watch the
 		// real github runs, `gh api`. With act+go+git it closes the CI/CD loop.
 		cmd := gh.NewGhCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "rclone":
 		// Transparent passthrough to a binmgr-managed rclone (MIT) — the transfer
 		// engine + a NAS-style file server (`rclone serve …`). Not compiled in.
 		cmd := rclone.NewRcloneCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "kubectl":
 		// Kubernetes CLI (Apache-2.0) via binmgr (dl.k8s.io) — targets the DKS
 		// cluster by default (external/kube: KUBECONFIG → outpost's DKS kubeconfig).
 		cmd := kubectl.NewKubectlCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "helm":
 		// Helm — the kubernetes package manager (Apache-2.0) via binmgr
 		// (get.helm.sh) — installs charts onto the DKS cluster (same default
@@ -1247,9 +1323,9 @@ func Dispatch() {
 		cmd := helm.NewHelmCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "sphere":
 		// Sphere tier (tier 4): peer-direct pooled p2p inference/compute. Thin
 		// front-door that execs the outpost mesh agent at runtime — NO build
@@ -1258,9 +1334,9 @@ func Dispatch() {
 		cmd := sphere.NewSphereCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "tessaro":
 		// Account / front-door: sign in/out, status, open the portal. Execs the
 		// outpost agent at runtime (same exec-never-link discipline as sphere);
@@ -1268,17 +1344,17 @@ func Dispatch() {
 		cmd := tessaro.NewTessaroCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "login":
 		// Shortcut for `bashy tessaro login` — pair this machine with Tessaro.
 		cmd := tessaro.NewLoginCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "mirror":
 		// Continuous one-way directory mirror (Syncthing's architecture, all
 		// permissive parts: rjeczalik/notify MIT recursive watch + rclone MIT
@@ -1287,9 +1363,9 @@ func Dispatch() {
 		cmd := mirror.NewMirrorCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "jobs", "fg", "bg", "kill":
 		// Real-PID job control over detached background jobs (`foo &`). The
 		// in-shell fg/bg/jobs builtins can't own the controlling terminal
@@ -1310,12 +1386,12 @@ func Dispatch() {
 		}
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	}
 	if tool.Lookup(os.Args[1]) != nil {
-		os.Exit(dispatchCoreutilsTool(os.Args[1], os.Args[2:], tool.Stdio{
+		dispatchExit(dispatchCoreutilsTool(os.Args[1], os.Args[2:], tool.Stdio{
 			In:  os.Stdin,
 			Out: os.Stdout,
 			Err: os.Stderr,
@@ -1327,18 +1403,18 @@ func Dispatch() {
 		cmd := e.NewCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	}
 	if isEmbeddedSkillName(os.Args[1]) {
 		cmd := coreskills.NewSkillsCmd(skillsOptions()...)
 		cmd.SetArgs([]string{"show", os.Args[1]})
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy skill:", err)
-			os.Exit(coreskills.ExitCode(err))
+			dispatchExit(coreskills.ExitCode(err))
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	}
 	// Unknown first token — not a front-door verb, engine/obs command, or a
 	// registered coreutils tool. When it is a BARE command NAME (not an option,
@@ -1350,7 +1426,7 @@ func Dispatch() {
 	// so the pure `bash` drop-in semantics are untouched.
 	if isMissingCommandToken(os.Args[1]) {
 		fmt.Fprintf(os.Stderr, "%s: %s: command not found\n", os.Args[0], os.Args[1])
-		os.Exit(127)
+		dispatchExit(127)
 	}
 }
 
@@ -1600,15 +1676,15 @@ func runFleet(noun string, args []string) {
 		cmd, exit = principal.NewWhoisCmd(), principal.ExitCode
 	default:
 		fmt.Fprintln(os.Stderr, "bashy: unknown fleet noun:", noun)
-		os.Exit(2)
+		dispatchExit(2)
 	}
 	cmd.Use = typed
 	cmd.SetArgs(args)
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "bashy %s: %v\n", typed, err)
-		os.Exit(exit(err))
+		dispatchExit(exit(err))
 	}
-	os.Exit(0)
+	dispatchExit(0)
 }
 
 // fleetNoun folds a fleet noun's hidden plural spelling onto its canonical
@@ -1642,6 +1718,21 @@ func WireSessionExec(initialDryRun bool) func([]interp.RunnerOption, bool, []str
 	return func(opts []interp.RunnerOption, posix bool, env []string, stdin io.Reader, stdout, stderr io.Writer) []interp.RunnerOption {
 		return wireExec(opts, posix, env, stdin, stdout, stderr, initialDryRun)
 	}
+}
+
+// observingExecMiddlewares is the common record-only prefix for shell and
+// front-door commands. Every middleware here observes and returns the exact
+// result it received; middleware that can advise, refuse, learn, or rewrite
+// output belongs only in wireExec below.
+func observingExecMiddlewares() []func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
+	mws := []func(interp.ExecHandlerFunc) interp.ExecHandlerFunc{telemetry.ExecMiddleware}
+	if aw := newAuditWriter(); aw != nil {
+		mws = append(mws, auditHandler(aw, auditActor(), auditHost()))
+	}
+	if execHistEnabled() {
+		mws = append(mws, execHistHandler(newRecorder()))
+	}
+	return mws
 }
 
 func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Reader, stdout, stderr io.Writer, initialDryRun bool) []interp.RunnerOption {
@@ -1708,20 +1799,7 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	// outermost so it records the final outcome after every other middleware has
 	// run; the advisor is next (it reads the exit to advise); dry-run and the
 	// coreutils userland handler are innermost.
-	var mws []func(interp.ExecHandlerFunc) interp.ExecHandlerFunc
-
-	// Telemetry is OUTERMOST — outside even audit — so its span covers the true
-	// wall-clock and the final exit of everything below it, middleware included.
-	//
-	// It is a no-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set: no span, no allocation,
-	// no wrapper. bashy could already RUN an observability stack (`bashy otel`) and fed
-	// it NOTHING — a collector with no data, and the one tier of the whole stack that
-	// was invisible while every other service (ycode, outpost, cloudbox, loom) reported.
-	mws = append(mws, telemetry.ExecMiddleware)
-
-	if aw := newAuditWriter(); aw != nil {
-		mws = append(mws, auditHandler(aw, auditActor(), auditHost()))
-	}
+	mws := observingExecMiddlewares()
 	// The agentic history recorder sits just inside audit and just outside the
 	// advisor. Inside audit because audit's chained record must remain the
 	// outermost account of what happened; outside the advisor because the
@@ -1733,9 +1811,6 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	// one taught about hosts, endpoints and accounts into the entity graph (the
 	// SPACE plane). Off entirely for interactive humans, and never linked into
 	// cmd/bash — WireExec returns above before any of this in posix mode.
-	if execHistEnabled() {
-		mws = append(mws, execHistHandler(newRecorder()))
-	}
 	if advisorEnabled() || hintsEnabled() {
 		a := newAdvisor()
 		if hintsEnabled() {

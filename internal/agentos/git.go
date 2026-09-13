@@ -3,7 +3,6 @@ package agentos
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -744,7 +743,7 @@ func gitRevParseCmd() *cobra.Command {
 				// "true"/"false" so scripts can read either signal.
 				if res.Dirty {
 					fmt.Fprintln(out, "true")
-					os.Exit(1)
+					dispatchExit(1)
 				}
 				fmt.Fprintln(out, "false")
 				return nil

@@ -29,9 +29,9 @@ func dispatchEngine(arg string) {
 		cmd := podmanengine.NewPodmanCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "ollama":
 		// Managed, ISOLATED ollama: own bashy-owned port (never 11434), models
 		// under ~/.agents/bashy/ollama — never the host's ~/.ollama. Reached by
@@ -39,14 +39,14 @@ func dispatchEngine(arg string) {
 		// is self-hosted, so ollama.com sign-in is opt-in only.
 		if blocked, msg := ollamaCloudGate(os.Args[2:]); blocked {
 			os.Stderr.WriteString(msg)
-			os.Exit(2)
+			dispatchExit(2)
 		}
 		cmd := ollama.NewManagedOllamaCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "dks":
 		// Provision/manage the dedicated ROOTFUL podman machine that DKS
 		// (k3s) runs in — a uniform VM so outposts in the wild don't each
@@ -55,8 +55,8 @@ func dispatchEngine(arg string) {
 		cmd := podmanengine.NewDKSCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	}
 }
