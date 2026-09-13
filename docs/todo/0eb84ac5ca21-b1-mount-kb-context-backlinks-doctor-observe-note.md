@@ -3,9 +3,11 @@ id: 0eb84ac5ca21
 kind: task
 title: B1 mount kb context|backlinks|doctor|observe|note add|validate --from-gate|transfer; atlas rows; taught surface forbids direct file edits; e2e on scratch stores; .sibling-pins bump
 seq: 266
-status: todo
+status: assigned
 priority: p1
 created: 2026-09-13T01:31:42.132004Z
+weave: 9
+assignee: qiangli
 sprint: 163
 ---
 

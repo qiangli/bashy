@@ -36,10 +36,26 @@ build that only fails on Windows, the flag that silently does nothing. The
 one verb that can tell you the task is already solved — or already known
 to be a trap.
 
-    bashy kb search "<the task, in your own words>"   # BEFORE the work
-    bashy kb recall "<topic>"    # same question across every memory ring
-    bashy kb show <slug>         # read one page in full
-    bashy kb retro               # AFTER: write back what it taught
+    bashy kb context --for "<task>" --rings repo,host --forms note,page --budget 700 --json
+    bashy kb search "<the task, in your own words>"   # retrieve from one ring
+    bashy kb show <slug>                              # read one record in full
+    bashy kb observe --ring agent --episode E --kind tool-result --ref REF
+    bashy kb validate <slug> --ring RING --from-gate EVENT_ID
+    bashy kb note add --candidate --ring agent --episode E --title "…" --body "…"
+    bashy kb retro                                    # reconcile after the work
+
+These are the five harness stages: `context` assembles, `search`/`show`
+retrieve, `observe` journals an event, `validate --from-gate` verifies, and
+`note add --candidate` persists. A write selects exactly one store with
+`--ring repo|host|agent`; context reads a named set with `--rings` and filters
+record shapes with `--forms note,page,relation,code` (`kb search` uses singular
+`--form`). `kb backlinks` resolves incoming links, `kb doctor` only flags
+problems and never fixes them, and `kb transfer --from memex` is the supported
+legacy import path.
+
+Agents must never edit a kb store's `pages/*.md` or `graph.jsonl` by hand.
+Use the `bashy kb` verbs: they enforce attribution, candidate status, duplicate
+checks, redaction, ring ownership, relation ids, and append-only history.
 
 A miss is honest and cheap: search reports which of your words the corpus
 does not carry and which it does, so you can tell *"nobody knows this"*
