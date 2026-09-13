@@ -596,7 +596,7 @@ func filterOrigin(records []atlasRecord, origin string) []atlasRecord {
 // "what is still not pure Go" is one command, not a grep.
 func printAtlasExternal(w io.Writer, records []atlasRecord) {
 	kinds := []struct{ key, title string }{
-		{"provider", "pinned providers — in-process names served by a locally built pinned upstream (the POSIX ones are the pure-Go debt)"},
+		{"provider", "pinned POSIX providers — built locally from pinned upstream source; the pure-Go debt"},
 		{"managed-external", "managed externals — wrapped tools with their own release train (binmgr)"},
 		{"provisioner", "toolchain provisioners — version-pinned language/build toolchains"},
 	}
@@ -614,16 +614,15 @@ func printAtlasExternal(w io.Writer, records []atlasRecord) {
 		if kind == "" {
 			kind = atlas.SubclassManagedExternal // registry-derived CLIs carry it; defensive
 		}
-		// A coreutils-class managed external is a pinned POSIX provider
-		// (ar, ctags, …, plus why); a verb-class one is a wrapped tool.
-		if r.Class == "coreutils" && kind == atlas.SubclassManagedExternal {
+		// The provider block is EXACTLY the POSIX-required names served by a
+		// pinned provider — the debt list, nothing else. `why` (the witr
+		// wrapper) and `posix-providers` (the provisioner in front of the ten)
+		// are managed externals like any other wrapped tool.
+		if r.Class == "coreutils" && r.Posix && kind == atlas.SubclassManagedExternal {
 			kind = "provider"
-		}
-		if r.Class == "coreutils" && kind == atlas.SubclassProvisioner {
-			kind = "provider" // posix-providers, the provisioner in front of them
-		}
-		if kind == "provider" && r.Posix {
 			posixDebt++
+		} else if r.Class == "coreutils" {
+			kind = atlas.SubclassManagedExternal
 		}
 		byKind[kind] = append(byKind[kind], name)
 	}

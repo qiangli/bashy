@@ -345,11 +345,11 @@ view is the catalog's answer, and a name on its `not listed` line other than
 `sh` is a gap.
 
 **The external view.** `bashy commands --view external` is "what is still not
-pure Go" as one command: the 45 bin-managed names by kind — pinned providers
-(`ar ctags ex localedef lp m4 man nm strip vi` + `posix-providers`, `why`; the
-10 POSIX-required ones are the **pure-Go debt**, and each one implemented in
-Go leaves the list), managed externals (git gh act kubectl … — wrapped tools
-with their own release train), and toolchain provisioners (go node python …).
+pure Go" as one command: the 45 bin-managed names by kind — pinned POSIX
+providers (exactly `ar ctags ex localedef lp m4 man nm strip vi` — the
+**pure-Go debt**; each one implemented in Go leaves the list), managed
+externals (git gh act kubectl …, plus `posix-providers` and `why` — wrapped
+tools with their own release train), and toolchain provisioners (go node python …).
 `--json` returns only those records with `filter: {origin: external}`. This
 view matters until the POSIX providers are all reimplemented; it is the
 progress meter for that work.
