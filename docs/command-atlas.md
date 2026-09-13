@@ -307,7 +307,10 @@ The bashy-added group has a name of its own — the **yoke commands** — so it 
 be referred to as easily as the other four (decision 2026-09-13, Sprint 167).
 `bashy commands` minus yoke is the **classic** surface. Every yoke command is
 agentic in the sense that matters — built for agentic tools — and many are
-deterministic rungs that need no model.
+deterministic rungs that need no model. **Admission rule (operator,
+2026-09-13):** bashy is designed for agentic tools, so a newly introduced
+command is yoke *because* it is meant for them; a command with no agentic
+intent does not earn a place in the binary — write it in Bash++ instead.
 The two disagree in useful ways: `printf` resolves as a bash builtin but is a
 GNU coreutils program; `awk` is in-process Go but nobody at GNU wrote it;
 `m4` is POSIX-required and exec'd from a pinned provider. One **exclusive**
