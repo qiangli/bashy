@@ -69,6 +69,9 @@ Each command has one record:
 | `origin` | **provenance lens (§2.6) — exclusive: `bash` \| `gnu` \| `unix` \| `external` \| `bashy`; mandatory** |
 | `posix` | `true` for the 116 POSIX-required names (cross-cuts `origin`) |
 | `core` | `true` for the bashy 1.0.0 core (35 commands, §2.6) |
+| `os` | **platform lens (§2.7)** — the OSes the command is supported on (`darwin` \| `linux` \| `windows`); curated from the Windows/other stubs, cited in `platform.go` |
+| `partial` | supported OSes where it runs with a documented gap (a flag/mode that errors "not supported on windows") |
+| `portable` | `true` = full support on all three — the command a script can use as-is everywhere |
 | `status` | `experimental` on a curated-hidden command that is unproven; `alias` on a curated-hidden name that is only a second spelling of a visible command (`podman`/`docker` → `oci`, `sphere` → `peer`); absent on a compatibility alias (§2.6) |
 | `hidden` | `true` for the compatibility aliases and the curated experimental set (shown only with `--all`) |
 | `alias_of` | `oci` for `sandbox`/`podman`/`docker`, `peer` for `sphere`, the singular for each plural; empty otherwise |
@@ -300,6 +303,32 @@ Seed set:
 Growth rule: adding an idiom edits this doc **and** the table in
 `pkg/atlas`; the test asserts every referenced command exists in the catalog.
 
+### 2.7 Platform lens — where it runs (Sprint 167)
+
+Every `cmds/` package compiles on every GOOS, so build tags prove nothing;
+the truth is in the `*_other.go` / `*_windows.go` stubs, and
+`coreutils/pkg/atlas/platform.go` curates from them, citing each stub. Three
+values, not two: **unsupported** (the whole command errors there — `chown`,
+`mkfifo`, `nice` on Windows; `ps`, `chcon` anywhere but Linux; the pinned
+POSIX providers and `ollama` on Windows), **partial** (runs, with a named
+gap — `more` interactive mode, `find -ctime`, `xargs -p`, `stty`, `sync` on
+Windows), and **portable** (full on all three: 265 of 306 today).
+
+**The default listing is this host's.** A listing that names `mkfifo` on
+Windows advertises a command that will fail, so `bashy commands`, `-v --json`
+`sections` and every `--view` are filtered to `runtime.GOOS`, with a footer
+naming what was dropped (`not on darwin (2), not listed: chcon ps`).
+`--os any` lifts the filter (`--all` implies it, since "everything" means
+everything); `--os windows` asks about another host; `--portable` keeps only
+the cross-platform set and composes with any view. `bashy commands NAME` is
+never filtered — on macOS `ps` answers `NOT supported on darwin (only:
+linux)`. The default `--json` (`bashy-commands-v1`) is filtered the same way
+but gains no key: its keys are the guarded contract.
+
+Windows entries are the ones to believe rather than check from a mac
+(`docs/windows-crossplatform-uniformity.md`): a change to `platform.go`
+wants a run on a real Windows host, not a green cross-compile.
+
 ### 2.6 Origin lens — who defined it (Sprint 167)
 
 The class split says how a name *resolves*; the origin says who *defined* it.
@@ -438,6 +467,9 @@ bashy commands --view effects       # per-security-effect command lists (§2.5)
 bashy commands --view origin        # who defined each name: bash · gnu · unix · external · bashy (* = POSIX, ~ = experimental)
 bashy commands --view posix         # the 116 POSIX-required utilities by who provides each one here; names the unlisted (sh); --json = the filtered records
 bashy commands --view external      # bin-managed: pinned providers (POSIX ones = the pure-Go debt) · managed externals · toolchain provisioners; --json = the filtered records
+bashy commands --view portable      # runs as-is on windows · macOS · linux, by origin; the rest listed with where they DO run / their documented gap
+bashy commands --os windows         # platform filter (default: THIS host; `any` lifts it; `--all` implies any) — composes with every view
+bashy commands --portable           # only full-support-everywhere commands — composes with every view (`--view posix --portable`)
 bashy commands --view classic       # explicit alias for the default output
 bashy commands --tier workspace     # filter to one tier (implies tier view)
 bashy commands --group code-intel   # filter to one group

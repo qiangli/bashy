@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -57,6 +59,15 @@ type atlasRecord struct {
 	Posix  bool   `json:"posix,omitempty"`
 	Core   bool   `json:"core,omitempty"`
 	Status string `json:"status,omitempty"`
+
+	// Platform support (Sprint 167): OS = where the command is supported,
+	// Partial = supported OSes with a documented gap, Portable = full on all
+	// three. Default listings are filtered to runtime.GOOS (a listing that
+	// names mkfifo on Windows advertises a command that will fail); --os any
+	// lifts the filter, --portable keeps only the cross-platform set.
+	OS       []string `json:"os,omitempty"`
+	Partial  []string `json:"partial,omitempty"`
+	Portable bool     `json:"portable,omitempty"`
 }
 
 // statusExperimental is the Status of a curated-hidden command that is
@@ -94,6 +105,7 @@ func atlasCatalog(builtins, core, verbs, hidden []string) []atlasRecord {
 			// coreutils programs, but the builtin shadows the tool: the shell
 			// is who answers, so the shell is the origin.
 			Origin: atlas.OriginBash, Posix: atlas.IsPosixRequired(n),
+			OS: atlas.OSes(), Portable: true,
 		})
 	}
 	for _, n := range core {
@@ -238,6 +250,9 @@ func verbAtlasRecord(name string, hidden bool) (r atlasRecord) {
 		if r.Origin == "" {
 			r.Origin = atlas.OriginBashy // bashy-owned by definition
 		}
+		if len(r.OS) == 0 {
+			r.OS, r.Portable = atlas.OSes(), true
+		}
 		return r
 	}
 	// Unknown to both tables. Keep it VISIBLE, but do not invent a
@@ -269,6 +284,7 @@ func fillFromAtlas(r *atlasRecord) {
 	// bashy) is bashy's own.
 	r.Group, r.Tier, r.Stage = atlas.GroupPlatform, atlas.TierUserland, atlas.StageCross
 	r.Origin, r.Posix = atlas.OriginBashy, atlas.IsPosixRequired(r.Name)
+	r.OS, r.Portable = atlas.OSes(), true
 }
 
 func applyEntry(r *atlasRecord, e atlas.Entry) {
@@ -277,6 +293,7 @@ func applyEntry(r *atlasRecord, e atlas.Entry) {
 	r.Effects = e.Effects
 	r.Web = e.Web
 	r.Origin, r.Posix = e.Origin, e.Posix
+	r.OS, r.Partial, r.Portable = e.OS, e.Partial, e.Portable()
 }
 
 // liveAtlas assembles the full merged catalog for the bashy front door,
@@ -296,7 +313,7 @@ func liveAtlas(includeHidden bool) []atlasRecord {
 // --- the views ---------------------------------------------------------------
 
 // atlasViews are the non-classic --view values.
-var atlasViews = []string{"tier", "group", "sdlc", "capabilities", "effects", "web", "origin", "posix", "external"}
+var atlasViews = []string{"tier", "group", "sdlc", "capabilities", "effects", "web", "origin", "posix", "external", "portable"}
 
 // atlasGroupDisplayOrder is the presentation order for the group view:
 // classical userland first, then the extended groups.
@@ -321,16 +338,18 @@ var tierSynopsis = map[string]string{
 }
 
 type atlasRequest struct {
-	view    string // "", "tier", "group", "sdlc", "capabilities", "effects", "web", "origin"
-	tier    string // filters (ANDed when several are given)
-	group   string
-	cap     string
-	effect  string
-	idioms  bool
-	full    bool // --atlas: full records
-	asJSON  bool
-	all     bool // include hidden compatibility aliases
-	verbose bool
+	view     string // "", "tier", "group", "sdlc", "capabilities", "effects", "web", "origin"
+	tier     string // filters (ANDed when several are given)
+	group    string
+	cap      string
+	effect   string
+	idioms   bool
+	full     bool // --atlas: full records
+	asJSON   bool
+	all      bool // include hidden compatibility aliases
+	verbose  bool
+	os       string // platform filter: a GOOS, or "any"; "" = this host (runtime.GOOS)
+	portable bool   // only commands with full support on every platform
 }
 
 type atlasJSON struct {
@@ -400,8 +419,26 @@ func dispatchAtlas(req atlasRequest) int {
 	if req.effect != "" {
 		filter["effect"] = req.effect
 	}
-	if len(filter) > 0 {
+	query := len(filter) > 0
+	if query {
 		records = filterAtlas(records, req.tier, req.group, req.cap, req.effect)
+	}
+	// Platform: default = this host. `--all` means everything, so it lifts the
+	// platform filter too unless --os was given explicitly.
+	osFilter := req.os
+	if osFilter == "" {
+		osFilter = runtime.GOOS
+		if req.all {
+			osFilter = "any"
+		}
+	}
+	if osFilter != "any" {
+		records = filterOS(records, osFilter)
+		filter["os"] = osFilter
+	}
+	if req.portable || req.view == "portable" {
+		records = filterPortable(records)
+		filter["portable"] = "true"
 	}
 	if req.view == "external" {
 		// Likewise a filter: only what bashy exec's rather than links.
@@ -443,7 +480,13 @@ func dispatchAtlas(req atlasRequest) int {
 		printAtlasPosix(os.Stdout, records)
 	case req.view == "external":
 		printAtlasExternal(os.Stdout, records)
-	case len(filter) > 0:
+	case req.view == "portable":
+		printAtlasPortable(os.Stdout, records, liveAtlas(req.all))
+	case query:
+		// tier/group/cap/effect are QUERIES and render as a flat list; the
+		// platform filters (os, portable) narrow the records but leave the
+		// requested view's shape alone, so `--view origin --portable` is still
+		// the origin view.
 		printAtlasFiltered(os.Stdout, records, filter)
 	case req.view == "group":
 		printAtlasByKey(os.Stdout, records, atlasGroupDisplayOrder, "", func(r atlasRecord) string { return r.Group })
@@ -589,6 +632,68 @@ func printAtlasOrigin(w io.Writer, records []atlasRecord) {
 	}
 }
 
+func filterOS(records []atlasRecord, goos string) []atlasRecord {
+	var out []atlasRecord
+	for _, r := range records {
+		if slices.Contains(r.OS, goos) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func filterPortable(records []atlasRecord) []atlasRecord {
+	var out []atlasRecord
+	for _, r := range records {
+		if r.Portable {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// printAtlasPortable is the cross-platform view: the commands a script can
+// use AS-IS on windows, macOS and linux (full support, no documented gap),
+// by origin — and, from the unfiltered catalog, the ones that are not, each
+// with its reason, so "why isn't X here" is answered on the same screen.
+func printAtlasPortable(w io.Writer, portable, all []atlasRecord) {
+	byOrigin := map[string][]string{}
+	for _, r := range portable {
+		byOrigin[r.Origin] = append(byOrigin[r.Origin], r.Name)
+	}
+	fmt.Fprintf(w, "portable — runs as-is on windows, macOS and linux (%d of %d):\n", len(portable), len(all))
+	for _, o := range atlas.Origins() {
+		names := byOrigin[o]
+		if len(names) == 0 {
+			continue
+		}
+		title := o + " — " + atlas.OriginLabel(o)
+		if o == atlas.OriginBashy {
+			title = atlas.OriginLabel(o)
+		}
+		fmt.Fprintf(w, "  %s (%d):\n", title, len(names))
+		wrapNames(w, names, "    ", 80)
+	}
+	var missing, partial []string
+	for _, r := range all {
+		switch {
+		case r.Portable:
+		case len(r.OS) < len(atlas.OSes()):
+			missing = append(missing, r.Name+" ("+strings.Join(r.OS, ",")+")")
+		default:
+			partial = append(partial, r.Name+" (partial on "+strings.Join(r.Partial, ",")+")")
+		}
+	}
+	if len(missing) > 0 {
+		fmt.Fprintf(w, "  not on every platform (%d) — where it IS supported:\n", len(missing))
+		wrapNames(w, missing, "    ", 80)
+	}
+	if len(partial) > 0 {
+		fmt.Fprintf(w, "  everywhere, with a documented gap (%d) — `bashy commands NAME` names it:\n", len(partial))
+		wrapNames(w, partial, "    ", 80)
+	}
+}
+
 func filterOrigin(records []atlasRecord, origin string) []atlasRecord {
 	var out []atlasRecord
 	for _, r := range records {
@@ -685,11 +790,17 @@ func printAtlasPosix(w io.Writer, records []atlasRecord) {
 		}
 	}
 	required := atlas.PosixRequired()
-	var missing []string
+	var missing, notHere []string
 	for _, n := range required {
-		if !seen[n] {
-			missing = append(missing, n)
+		if seen[n] {
+			continue
 		}
+		if e, ok := atlas.Lookup(n); ok && len(e.OS) > 0 {
+			// Catalogued, but filtered out by the platform filter.
+			notHere = append(notHere, n+" ("+strings.Join(e.OS, ",")+")")
+			continue
+		}
+		missing = append(missing, n)
 	}
 	fmt.Fprintf(w, "posix — the %d POSIX-required utilities, by who provides each one here (%d listed):\n",
 		len(required), len(records))
@@ -710,6 +821,9 @@ func printAtlasPosix(w io.Writer, records []atlasRecord) {
 	if names := byOrigin[atlas.OriginExternal]; len(names) > 0 {
 		wrapNames(w, names, "      ", 80)
 	}
+	if len(notHere) > 0 {
+		fmt.Fprintf(w, "  not on this platform (%d) — where it IS supported: %s (`--os any` lists all)\n", len(notHere), strings.Join(notHere, " "))
+	}
 	if len(missing) > 0 {
 		fmt.Fprintf(w, "  not listed (%d): %s\n", len(missing), strings.Join(missing, " "))
 		fmt.Fprintln(w, "    `sh` is the Preamble's `sh() { bashy --posix; }` shim, not a catalogued command;")
@@ -719,7 +833,7 @@ func printAtlasPosix(w io.Writer, records []atlasRecord) {
 
 func printAtlasFiltered(w io.Writer, records []atlasRecord, filter map[string]string) {
 	var parts []string
-	for _, k := range []string{"tier", "group", "cap", "effect"} {
+	for _, k := range []string{"tier", "group", "cap", "effect", "os", "portable"} {
 		if v := filter[k]; v != "" {
 			parts = append(parts, k+"="+v)
 		}
@@ -813,6 +927,18 @@ func atlasFeatureFields(out map[string]any, name string, class string, hidden bo
 	}
 	if use := taughtNameFor(name); use != "" {
 		out["use"] = use
+	}
+	if len(r.OS) > 0 {
+		out["os"] = r.OS
+	}
+	if len(r.Partial) > 0 {
+		out["partial"] = r.Partial
+	}
+	if r.Portable {
+		out["portable"] = true
+	}
+	if !slices.Contains(r.OS, runtime.GOOS) && len(r.OS) > 0 {
+		out["unsupported_here"] = runtime.GOOS
 	}
 }
 

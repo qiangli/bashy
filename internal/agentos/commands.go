@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -32,6 +33,8 @@ func dispatchCommands(args []string) int {
 	asJSON, verbose := weavecli.IsAgent(), false // JSON by default under $BASHY_AGENTIC
 	agentic, all, gnu, features := false, false, false, false
 	var view, tierFilter, groupFilter, capFilter, effectFilter string
+	var osFilter string // "" = this host; "any" = no platform filter
+	portable := false
 	idioms, atlasFull := false, false
 	var query string
 	// valued reads a "--flag value" / "--flag=value" option; ok=false means
@@ -87,7 +90,24 @@ func dispatchCommands(args []string) int {
 			effectFilter = v
 			continue
 		}
+		if v, ok, matched := valued(a, "--os", &i); matched {
+			if !ok {
+				return 2
+			}
+			if v != "any" && v != "all" && !containsString(atlas.OSes(), v) {
+				fmt.Fprintf(os.Stderr, "commands: unknown os %q (os: %s any)\n", v, strings.Join(atlas.OSes(), " "))
+				return 2
+			}
+			if v == "all" {
+				v = "any"
+			}
+			osFilter = v
+			continue
+		}
 		switch a {
+		case "--portable", "--xplat", "--cross-platform":
+			portable = true
+			continue
 		case "--json", "--json=true":
 			asJSON = true
 		case "--json=false", "--plain":
@@ -128,6 +148,8 @@ func dispatchCommands(args []string) int {
 			fmt.Println("  --group G      filter by functional group (fileutils/code-intel/…)")
 			fmt.Println("  --cap C        filter by agentic capability (json/read-only/…)")
 			fmt.Println("  --effect E     filter by security effect (destroy/cred/priv/remote/net/…)")
+			fmt.Println("  --os OS        platform filter: darwin | linux | windows | any (default: this host)")
+			fmt.Println("  --portable     only commands with full support on every platform (composes with any view)")
 			fmt.Println("  --idioms       curated composites: commands naturally used together")
 			fmt.Println("  --atlas        full per-command atlas records (machine surface)")
 			return 0
@@ -147,10 +169,11 @@ func dispatchCommands(args []string) int {
 	if view == "classic" {
 		view = "" // explicit alias for the default output
 	}
-	if view != "" || tierFilter != "" || groupFilter != "" || capFilter != "" || effectFilter != "" || idioms || atlasFull {
+	if view != "" || tierFilter != "" || groupFilter != "" || capFilter != "" || effectFilter != "" || idioms || atlasFull || portable {
 		return dispatchAtlas(atlasRequest{
 			view: view, tier: tierFilter, group: groupFilter, cap: capFilter, effect: effectFilter,
 			idioms: idioms, full: atlasFull, asJSON: asJSON, all: all, verbose: verbose,
+			os: osFilter, portable: portable,
 		})
 	}
 
@@ -162,12 +185,10 @@ func dispatchCommands(args []string) int {
 	builtins, core, verbs := commandsCatalog()
 	hidden := hiddenVerbsCatalog()
 	gnuReport := gnuCoreutilsReport(core, builtins)
-	if all {
-		verbs = append(verbs, hidden...)
-		sort.Strings(verbs)
-	}
 	if query != "" || features {
-		info := commandFeatureReport(query, builtins, core, verbs, hidden, gnuReport)
+		// Name lookup is never platform-filtered: `bashy commands ps` on macOS
+		// answers "only on linux" rather than "not found".
+		info := commandFeatureReport(query, builtins, core, append(append([]string(nil), verbs...), hidden...), hidden, gnuReport)
 		if asJSON {
 			b, _ := json.Marshal(info)
 			fmt.Println(string(b))
@@ -183,6 +204,20 @@ func dispatchCommands(args []string) int {
 		return 0
 	}
 
+	// The default surface is this host's (`--all`, like `--os any`, lifts the
+	// platform filter along with the hidden one).
+	hostOS := runtime.GOOS
+	if all || osFilter == "any" {
+		hostOS = "any"
+	} else if osFilter != "" {
+		hostOS = osFilter
+	}
+	core = supportedOn(hostOS, core)
+	verbs = supportedOn(hostOS, verbs)
+	if all {
+		verbs = append(verbs, hidden...)
+		sort.Strings(verbs)
+	}
 	if asJSON {
 		out := map[string]any{
 			"schema_version": commandsSchemaVersion,
@@ -225,7 +260,7 @@ func dispatchCommands(args []string) int {
 	// umbrella (shell / coreutils / classic — all in-process, no fork), the
 	// exec'd externals, and bashy's native agent features partitioned by venue.
 	// See commands_sections.go. -v adds one-line synopses.
-	printClassSections(os.Stdout, verbose, all)
+	printClassSections(os.Stdout, verbose, all, hostOS)
 	if gnu {
 		printGNUCoreutilsReport(os.Stdout, gnuReport)
 	}
@@ -372,6 +407,20 @@ func originLine(info map[string]any) string {
 	}
 	if use, ok := info["use"].(string); ok && use != "" && info["status"] != "alias" {
 		parts = append(parts, "use `bashy "+use+"`") // an alias line already names it
+	}
+	switch {
+	case info["unsupported_here"] != nil:
+		oses, _ := info["os"].([]string)
+		parts = append(parts, fmt.Sprintf("NOT supported on %s (only: %s)", info["unsupported_here"], strings.Join(oses, " ")))
+	case info["portable"] == true:
+		parts = append(parts, "portable (windows · macOS · linux)")
+	default:
+		if oses, ok := info["os"].([]string); ok && len(oses) > 0 && len(oses) < 3 {
+			parts = append(parts, "only on "+strings.Join(oses, " "))
+		}
+		if p, ok := info["partial"].([]string); ok && len(p) > 0 {
+			parts = append(parts, "partial on "+strings.Join(p, " "))
+		}
 	}
 	return strings.Join(parts, " · ")
 }
@@ -545,6 +594,38 @@ func commandsCatalog() (builtins, core, verbs []string) {
 	core = withoutCuratedHidden(core)
 	verbs = withoutCuratedHidden(verbs)
 	return builtins, core, verbs
+}
+
+// supportedOn drops the names the atlas says goos cannot run (mkfifo on
+// windows, ps on darwin). The DEFAULT listings are this host's — a listing
+// that names a command that will fail is advertising a failure — while
+// `bashy commands NAME` answers for every name and `--os any` lists all.
+func supportedOn(goos string, names []string) []string {
+	if goos == "any" {
+		return names
+	}
+	out := names[:0:0]
+	for _, n := range names {
+		if e, ok := atlas.Lookup(n); ok && !e.SupportedOn(goos) {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// unsupportedHere returns the catalogued names the atlas says this host
+// cannot run — the default listing's footer counts them.
+func unsupportedHere(goos string) []string {
+	var out []string
+	_, core, verbs := commandsCatalog()
+	for _, n := range append(core, verbs...) {
+		if e, ok := atlas.Lookup(n); ok && !e.SupportedOn(goos) {
+			out = append(out, n)
+		}
+	}
+	sort.Strings(out)
+	return slices.Compact(out)
 }
 
 func withoutCuratedHidden(names []string) []string {

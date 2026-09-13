@@ -6,6 +6,8 @@ package agentos
 import (
 	"fmt"
 	"io"
+	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/qiangli/coreutils/pkg/atlas"
@@ -97,11 +99,23 @@ type commandSections struct {
 // Core, Status, AliasOf), never a name list of its own — except coreRows,
 // which is the one list this file owns.
 func classSections(all bool) commandSections {
+	goos := runtime.GOOS
+	if all {
+		goos = "any"
+	}
+	return classSectionsOn(all, goos)
+}
+
+// classSectionsOn is classSections filtered to one platform ("any" = none).
+func classSectionsOn(all bool, goos string) commandSections {
 	s := commandSections{Agent: map[string][]string{}}
 	for _, row := range coreRows {
 		s.Core = append(s.Core, coreRow{row.Label, append([]string(nil), row.Commands...)})
 	}
 	for _, r := range liveAtlas(all) {
+		if goos != "any" && !slices.Contains(r.OS, goos) {
+			continue
+		}
 		switch {
 		case r.Status == statusExperimental:
 			s.Experimental = append(s.Experimental, r.Name)
@@ -136,8 +150,8 @@ func classSections(all bool) commandSections {
 // printClassSections renders the first screen. In verbose mode each core and
 // visible-extra command gets its one-line synopsis; otherwise names are
 // wrapped into compact columns. `all` appends the hidden sets.
-func printClassSections(w io.Writer, verbose, all bool) {
-	s := classSections(all)
+func printClassSections(w io.Writer, verbose, all bool, goos string) {
+	s := classSectionsOn(all, goos)
 	syn := func(n string) string {
 		if t := tool.Lookup(n); t != nil && t.Synopsis != "" {
 			return t.Synopsis
@@ -193,6 +207,14 @@ func printClassSections(w io.Writer, verbose, all bool) {
 	fmt.Fprintln(w, "  bashy commands --view posix      the 116 POSIX-required utilities: internal (pure Go) vs bin-managed")
 	fmt.Fprintln(w, "  bashy commands --view external   what is downloaded + exec'd, and the pure-Go debt")
 	fmt.Fprintln(w, "  bashy commands --view tier       by execution venue")
+
+	if goos != "any" {
+		if n := unsupportedHere(goos); len(n) > 0 {
+			fmt.Fprintf(w, "  not on %s (%d), not listed: %s — `bashy commands --os any` lists everything\n",
+				goos, len(n), strings.Join(n, " "))
+		}
+	}
+	fmt.Fprintln(w, "  bashy commands --view portable   what runs as-is on windows · macOS · linux (--portable filters any view)")
 
 	fmt.Fprintln(w)
 	if all {

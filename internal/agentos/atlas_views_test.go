@@ -39,7 +39,7 @@ func captureCommands(t *testing.T, args ...string) (string, int) {
 
 func TestAtlasViewTierJSON(t *testing.T) {
 	t.Setenv("BASHY_AGENTIC", "")
-	out, code := captureCommands(t, "--view", "tier", "--json")
+	out, code := captureCommands(t, "--view", "tier", "--os", "any", "--json")
 	if code != 0 {
 		t.Fatalf("exit = %d", code)
 	}
@@ -251,7 +251,7 @@ func TestFeaturesReportGainsAtlasKeys(t *testing.T) {
 // list (`sh`, a Preamble shim) instead of silently dropping it.
 func TestAtlasViewPosix(t *testing.T) {
 	t.Setenv("BASHY_AGENTIC", "")
-	out, code := captureCommands(t, "--view", "posix", "--json")
+	out, code := captureCommands(t, "--view", "posix", "--os", "any", "--json")
 	if code != 0 {
 		t.Fatalf("exit = %d", code)
 	}
@@ -280,7 +280,7 @@ func TestAtlasViewPosix(t *testing.T) {
 	if _, ok := names["sh"]; ok {
 		t.Errorf("sh is a shim, not a catalogued command")
 	}
-	text, code := captureCommands(t, "--view", "posix")
+	text, code := captureCommands(t, "--view", "posix", "--os", "any")
 	for _, want := range []string{"internal — in the bashy binary", "(105)", "bin-managed — exec'd", "(10)", "not listed (1): sh"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("posix text view missing %q:\n%s", want, text)
@@ -326,5 +326,102 @@ func TestAtlasViewExternal(t *testing.T) {
 	text, code := captureCommands(t, "--view", "external")
 	if code != 0 || !strings.Contains(text, "pure-Go debt: 10 POSIX-required") {
 		t.Errorf("text view must count the POSIX provider debt:\n%s", text)
+	}
+}
+
+// TestPlatformFilterDefaultsToHost: the default listing is this host's; a
+// name the atlas says this OS cannot run is absent from it, present under
+// --os any, and still answered by name.
+func TestPlatformFilterDefaultsToHost(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "")
+	out, code := captureCommands(t, "--os", "windows", "--view", "origin", "--json")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	var got atlasJSON
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Filter["os"] != "windows" {
+		t.Errorf("filter = %v", got.Filter)
+	}
+	names := map[string]bool{}
+	for _, r := range got.Commands {
+		names[r.Name] = true
+		if !slices.Contains(r.OS, "windows") {
+			t.Errorf("%s: os %v leaked through the windows filter", r.Name, r.OS)
+		}
+	}
+	for _, unix := range []string{"mkfifo", "chown", "ps", "m4", "ollama"} {
+		if names[unix] {
+			t.Errorf("%s listed for windows", unix)
+		}
+	}
+	for _, ok := range []string{"cat", "grep", "weave", "oci", "more"} { // more: partial, still supported
+		if !names[ok] {
+			t.Errorf("%s missing for windows", ok)
+		}
+	}
+	// --os any lifts the filter; --all implies it.
+	for _, args := range [][]string{{"--os", "any", "--view", "origin", "--json"}, {"--all", "--view", "origin", "--json"}} {
+		out, _ = captureCommands(t, args...)
+		got = atlasJSON{}
+		if err := json.Unmarshal([]byte(out), &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if got.Filter["os"] != "" {
+			t.Errorf("%v: os filter still set: %v", args, got.Filter)
+		}
+		found := false
+		for _, r := range got.Commands {
+			if r.Name == "ps" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%v: ps (linux-only) must be listed when the platform filter is lifted", args)
+		}
+	}
+	// Name lookup is never filtered: ps answers on every host.
+	out, code = captureCommands(t, "ps")
+	if code != 0 || !strings.Contains(out, "only: linux") && !strings.Contains(out, "only on linux") {
+		t.Errorf("ps by name: exit %d\n%s", code, out)
+	}
+	if _, code = captureCommands(t, "--os", "plan9"); code != 2 {
+		t.Errorf("unknown os must exit 2, got %d", code)
+	}
+}
+
+// TestPortableFilterComposes: --portable narrows any view to full-support
+// commands, and --view portable lists them by origin with the rest explained.
+func TestPortableFilterComposes(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "")
+	out, code := captureCommands(t, "--view", "posix", "--portable", "--json")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	var got atlasJSON
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Filter["portable"] != "true" || got.Filter["posix"] != "true" {
+		t.Errorf("filter = %v", got.Filter)
+	}
+	for _, r := range got.Commands {
+		if !r.Portable || !r.Posix {
+			t.Errorf("%s: portable=%v posix=%v in the portable posix view", r.Name, r.Portable, r.Posix)
+		}
+		if r.Name == "chown" || r.Name == "more" || r.Name == "m4" {
+			t.Errorf("%s is not portable", r.Name)
+		}
+	}
+	text, code := captureCommands(t, "--view", "portable")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	for _, want := range []string{"portable — runs as-is on windows, macOS and linux", "not on every platform", "everywhere, with a documented gap", "mkfifo (darwin,linux)", "more (partial on windows)"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("portable view missing %q:\n%s", want, text)
+		}
 	}
 }
