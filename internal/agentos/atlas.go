@@ -547,7 +547,14 @@ func printAtlasOrigin(w io.Writer, records []atlasRecord) {
 		if len(names) == 0 {
 			continue
 		}
-		fmt.Fprintf(w, "  %s — %s (%d):\n", o, atlas.OriginLabel(o), len(names))
+		// The block name is the origin value, then its label; for the yoke
+		// origin the label already carries the value ("yoke — added by bashy"),
+		// so print the label alone rather than "bashy — yoke — added by bashy".
+		title := o + " — " + atlas.OriginLabel(o)
+		if o == atlas.OriginBashy {
+			title = atlas.OriginLabel(o)
+		}
+		fmt.Fprintf(w, "  %s (%d):\n", title, len(names))
 		wrapNames(w, names, "    ", 80)
 	}
 	if n := len(byOrigin[""]); n > 0 {
