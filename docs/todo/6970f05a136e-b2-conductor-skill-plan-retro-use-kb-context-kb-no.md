@@ -3,12 +3,13 @@ id: 6970f05a136e
 kind: task
 title: B2 conductor skill PLAN/RETRO use kb context / kb note add --candidate / kb observe; Claude Code + Codex + bashy chat hook recipes under skills/
 seq: 267
-status: assigned
+status: done
 priority: p2
 created: 2026-09-13T01:31:42.15962Z
 weave: 10
 assignee: qiangli
 sprint: 163
+closed: 2026-09-13T04:34:06.458436Z
 ---
 
 Goal: the conductor skill and the third-party harness recipes use the stage verbs structurally.
