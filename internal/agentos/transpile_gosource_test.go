@@ -169,6 +169,96 @@ func TestTranspileGoLibraryRefusals(t *testing.T) {
 	}
 }
 
+// TestTranspileGoLibraryExternalTestOnly covers a package whose only inputs
+// are --go-xtest-file (the cmd/internal/testdir shape): with no ordinary unit
+// to name the tested package, the identity is derived from the declared xtest
+// name minus its _test suffix, as go/build does.
+func TestTranspileGoLibraryExternalTestOnly(t *testing.T) {
+	dir, out := t.TempDir(), t.TempDir()
+	x := filepath.Join(dir, "testdir_test.go")
+	writeFile(t, x, "package testdir_test\n\nfunc Answer() int { return 42 }\n")
+	args := []string{"--bashpp", "--source=go", "--go-import-path", "cmd/internal/testdir", "--go-library", out,
+		"--go-xtest-file", x}
+	exit, stdout, stderr := captureTranspileOutput(t, args)
+	if exit != 0 {
+		t.Fatalf("exit = %d, stderr %q", exit, stderr)
+	}
+	data, err := os.ReadFile(x)
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := gosource.Load([]gosource.Source{{Name: x, Data: data}},
+		gosource.Options{PreserveNativeInit: true, ImportPath: "cmd/internal/testdir", Importer: lower.NewModuleImporter(dir)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if program.Package != "testdir_test" {
+		t.Fatalf("front end loaded package %q", program.Package)
+	}
+	want, err := lower.Compile(program.File, lower.Options{Package: program.Package, Library: true, Importer: program.Importer, Dir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, generated := range want.Files {
+		name := filepath.Base(generated.Name)
+		output := filepath.Join(out, name)
+		if !strings.Contains(stdout, "library ") || !strings.Contains(stdout, " -> "+output) {
+			t.Errorf("stdout %q does not report %s", stdout, name)
+		}
+		got, err := os.ReadFile(output)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, generated.Source) {
+			t.Errorf("%s differs from lower library output", name)
+		}
+		if _, err := os.Stat(output + ".map"); err != nil {
+			t.Errorf("%s map: %v", name, err)
+		}
+	}
+}
+
+// TestTranspileGoLibraryExternalTestRefusals pins the identity seam around
+// the xtest unit: a derived identity never widens what the external package
+// may claim to be, and an in-package file in the xtest slot is never merged.
+func TestTranspileGoLibraryExternalTestRefusals(t *testing.T) {
+	dir, lib := t.TempDir(), t.TempDir()
+	ordinary := filepath.Join(dir, "p.go")
+	writeFile(t, ordinary, "package p\n")
+	mismatched := filepath.Join(dir, "mismatched_test.go")
+	writeFile(t, mismatched, "package q_test\n")
+	malformed := filepath.Join(dir, "malformed_test.go")
+	writeFile(t, malformed, "package testdir\n")
+	inPackage := filepath.Join(dir, "mixed_test.go")
+	writeFile(t, inPackage, "package p\n")
+	bare := filepath.Join(dir, "bare_test.go")
+	writeFile(t, bare, "package _test\n")
+	for _, tc := range []struct {
+		name, want string
+		args       []string
+	}{
+		// The ordinary unit names p; an xtest unit for q tests another package.
+		{"mismatched", "must form the external test package",
+			[]string{"--bashpp", "--source=go", "--go-library", lib, "--go-import-path", "p", "--go-file", ordinary, "--go-xtest-file", mismatched}},
+		// xtest-only with no _test suffix: there is no identity to derive.
+		{"malformed", `package "testdir" does not name a tested package`,
+			[]string{"--bashpp", "--source=go", "--go-library", lib, "--go-import-path", "cmd/internal/testdir", "--go-xtest-file", malformed}},
+		// An in-package test file in the xtest slot stays a separate load unit.
+		{"mixed", "must form the external test package",
+			[]string{"--bashpp", "--source=go", "--go-library", lib, "--go-import-path", "p", "--go-file", ordinary, "--go-xtest-file", inPackage}},
+		// A bare _test would derive an empty tested-package identity.
+		{"user identity", `package "_test" does not name a tested package`,
+			[]string{"--bashpp", "--source=go", "--go-library", lib, "--go-import-path", "p", "--go-xtest-file", bare}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			exit, stderr := captureTranspileStderr(t, tc.args)
+			if exit != 2 || !strings.Contains(stderr, tc.want) {
+				t.Errorf("exit %d stderr %q, want %q", exit, stderr, tc.want)
+			}
+		})
+	}
+}
+
 func TestTranspileSourceSelectorRefusals(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "script.bpp")

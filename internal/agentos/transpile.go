@@ -642,6 +642,17 @@ func dispatchTranspileLibrary(outDir string, goFiles, goTestFiles, goXTestFiles 
 		}
 		if unitIndex == 0 {
 			packageName = prog.Package
+		} else if packageName == "" {
+			// External-test-only package (e.g. cmd/internal/testdir): there is
+			// no ordinary unit to name the tested package, so derive it the way
+			// go/build does — the declared xtest name minus its _test suffix,
+			// which must leave a non-empty identity behind.
+			tested, ok := strings.CutSuffix(prog.Package, "_test")
+			if !ok || tested == "" {
+				fmt.Fprintf(os.Stderr, "transpile: --go-xtest-file package %q does not name a tested package (want <package>_test)\n", prog.Package)
+				return 2
+			}
+			packageName = tested
 		} else if prog.Package != packageName+"_test" {
 			fmt.Fprintln(os.Stderr, "transpile: --go-xtest-file must form the external test package")
 			return 2
