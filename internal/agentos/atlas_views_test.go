@@ -93,10 +93,14 @@ func TestAtlasFilterTier(t *testing.T) {
 		}
 		names = append(names, r.Name)
 	}
-	for _, want := range []string{"weave", "sprint", "dag", "sdlc", "loom"} {
+	for _, want := range []string{"weave", "sprint", "dag", "loom"} {
 		if !slices.Contains(names, want) {
 			t.Errorf("workspace tier missing %q (got %v)", want, names)
 		}
+	}
+	// sdlc is curated-hidden (experimental): absent by default, present with --all.
+	if slices.Contains(names, "sdlc") {
+		t.Errorf("experimental sdlc leaked into the default workspace view")
 	}
 }
 
@@ -114,7 +118,7 @@ func TestAtlasFilterCap(t *testing.T) {
 	for _, r := range got.Commands {
 		names = append(names, r.Name)
 	}
-	for _, want := range []string{"weave", "fetch", "tokens", "kb"} {
+	for _, want := range []string{"weave", "fetch", "ast", "kb"} {
 		if !slices.Contains(names, want) {
 			t.Errorf("cap=json missing %q", want)
 		}

@@ -27,10 +27,36 @@ func TestCommandsCatalogSources(t *testing.T) {
 		}
 	}
 	// Front-door verbs + the docker->podman shim + the lister itself.
-	for _, want := range []string{"weave", "run", "commands", "docker", "self", "chat", "mb", "ping",
+	for _, want := range []string{"weave", "commands", "sandbox", "peer", "chat", "mb", "ping",
 		"agent", "model", "tool", "person", "skill", "secret", "app"} {
 		if !slices.Contains(verbs, want) {
 			t.Errorf("verbs missing %q", want)
+		}
+	}
+	// The curated experimental set is out of the default catalog (verbs AND
+	// tools), back under --all, and never loses its shim or dispatch.
+	hidden := hiddenVerbsCatalog()
+	for _, c := range curatedHiddenVerbs {
+		if slices.Contains(verbs, c) || slices.Contains(core, c) {
+			t.Errorf("experimental %q should not appear in the default catalog", c)
+		}
+		if !slices.Contains(hidden, c) {
+			t.Errorf("experimental %q must be catalogued under --all", c)
+		}
+		if slices.Contains(hiddenFrontDoorVerbs, c) {
+			t.Errorf("%q is in both hidden lists; curated must keep its shim", c)
+		}
+	}
+	for _, shimmed := range []string{"run", "podman", "sphere", "self", "check"} {
+		if !slices.Contains(alwaysShimVerbs, shimmed) {
+			t.Errorf("hiding %q must not remove its bare shim", shimmed)
+		}
+	}
+	// A visible alias of a hidden target (peer → sphere, sandbox → podman) is a
+	// new shape: the alias is taught, the target is not.
+	for alias, target := range map[string]string{"peer": "sphere", "sandbox": "podman"} {
+		if !slices.Contains(verbs, alias) || slices.Contains(verbs, target) {
+			t.Errorf("%s should be visible and %s hidden", alias, target)
 		}
 	}
 	// Toolchain provisioners are listed because `bashy go`, `bashy clang`, etc.
@@ -164,7 +190,7 @@ func TestAgenticCommandsMentionsDryRun(t *testing.T) {
 	for _, want := range []string{
 		"bashy help dryrun",
 		"bashy fetch --json URL",
-		"bashy self fetch",
+		"bashy commands --view origin",
 		"BASHY_AGENTIC=1 bashy --dry-run",
 		"destroy",
 		"truncate",
@@ -258,7 +284,7 @@ func gnuGapHas(items []gnuCoreutilsGap, name string) bool {
 
 func TestUsageMentionsAgenticDryRun(t *testing.T) {
 	out := Usage()
-	for _, want := range []string{"--dryrun", "--dry-run", "--go-version", "--go-test-builtins", "--go-checker-branch-errors", "--go-check-after-syntax-errors", "BASHY_AGENTIC=1", "bashy help dryrun", "bashy commands --gnu", "GNU coreutils parity", "bashy self fetch"} {
+	for _, want := range []string{"--dryrun", "--dry-run", "--go-version", "--go-test-builtins", "--go-checker-branch-errors", "--go-check-after-syntax-errors", "BASHY_AGENTIC=1", "bashy help dryrun", "bashy commands --gnu", "GNU coreutils parity", "bashy commands --view origin"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("usage missing %q:\n%s", want, out)
 		}

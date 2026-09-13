@@ -8,15 +8,18 @@ grouping), `bashy commands --view/--atlas/--idioms` (the views).
 
 ## 1. Why an atlas
 
-Bashy's command surface (~250 unique names) reaches agents through one flat
-catalog. `bashy commands` groups it by **how each command runs**: a *builtins*
-umbrella (shell builtins · in-process GNU coreutils · in-process classic tools —
-all zero-fork), the exec'd downloaded *externals*, and bashy's native *agent*
-features by execution venue. The underlying class taxonomy
-(`builtin`/`coreutils`/`verb`, §4) is unchanged — the default grouping derives
-from it plus the GNU-coreutils set (coreutils vs classic) and Subclass/Tier. That
-is the *classical* lens — what a command **is** and how it runs. Agents planning
-work need more lenses:
+Bashy's command surface (~340 unique names) reaches agents through one flat
+catalog. **Since Sprint 167 (bashy 1.0.0) the default `bashy commands` is
+core-first**: the first screen is the 35 commands an agent uses every turn in
+seven rows (fleet · session · work · knowledge · comms · human · discovery),
+then the visible extras, then one line of counts for the userland (bash
+builtins · GNU coreutils · classic Unix · bin-managed externals) with the view
+that expands it, then the count of hidden **experimental** commands. 325 names
+in one wall was the problem; a first screen readable in one pass is the fix.
+The underlying class taxonomy (`builtin`/`coreutils`/`verb`, §4) is unchanged,
+and the partition now keys on the **origin** axis (§2.6) rather than on group
+heuristics. That is the *classical* lens — what a command **is** and how it
+runs. Agents planning work need more lenses:
 
 - **where it runs** — the execution tier (userland / workspace / sandbox /
   sphere / cluster / cloud / account, per `dhnt` execution-tiers vocabulary);
@@ -63,8 +66,12 @@ Each command has one record:
 | `resolver` | existing: `bash-builtin` \| `bashy-in-process` \| `bashy-front-door` \| `managed-container-or-system` |
 | `caps` | agentic capability flags (§2.3) |
 | `effects` | security/privacy/governance effects (§2.5) — **mandatory, ≥1 per command** |
-| `hidden` | `true` for `bootstrap`/`upgrade` (shown only with `--all`) |
-| `alias_of` | `podman` for `docker`; empty otherwise |
+| `origin` | **provenance lens (§2.6) — exclusive: `bash` \| `gnu` \| `unix` \| `external` \| `bashy`; mandatory** |
+| `posix` | `true` for the 116 POSIX-required names (cross-cuts `origin`) |
+| `core` | `true` for the bashy 1.0.0 core (35 commands, §2.6) |
+| `status` | `experimental` on a curated-hidden command (§2.6); absent on a hidden alias |
+| `hidden` | `true` for the compatibility aliases and the curated experimental set (shown only with `--all`) |
+| `alias_of` | `podman` for `docker`/`sandbox`, `sphere` for `peer`, the singular for each plural; empty otherwise |
 
 ### 2.1 Group vocabulary
 
@@ -293,6 +300,58 @@ Seed set:
 Growth rule: adding an idiom edits this doc **and** the table in
 `pkg/atlas`; the test asserts every referenced command exists in the catalog.
 
+### 2.6 Origin lens — who defined it (Sprint 167)
+
+The class split says how a name *resolves*; the origin says who *defined* it.
+The two disagree in useful ways: `printf` resolves as a bash builtin but is a
+GNU coreutils program; `awk` is in-process Go but nobody at GNU wrote it;
+`m4` is POSIX-required and exec'd from a pinned provider. One **exclusive**
+origin per command, plus one cross-cutting tag:
+
+| origin | label | meaning | count |
+|---|---|---|---|
+| `bash` | bash builtin | bash 5.3 builtin, contributed by the embedding shell (stamped in bashy: the atlas tables never see builtins) | 61 |
+| `gnu` | GNU coreutils | GNU coreutils 9.x command reimplemented in Go (`atlas.GNUCoreutilsUpstream()`, 108 names, 3 unimplemented: chroot coreutils runcon) | 98 visible (105 in the tool table; 7 shadowed by builtins) |
+| `unix` | classic Unix | other classic Unix tool reimplemented in Go — awk sed grep jq tar tree ed vi-less … | 48 |
+| `external` | bin-managed external | binmgr CLI, toolchain provisioner, or pinned POSIX provider — exec'd, never linked (= `subclass` ∈ managed-external/provisioner, or a registry entry) | 45 |
+| `bashy` | added by bashy | bashy's own agentic / yoke surface | 53 visible + 22 experimental + 16 aliases |
+
+`posix: true` = one of the 116 POSIX-required names (`atlas.PosixRequired()`,
+ratcheted against `coreutils/docs/posix-required-commands.tsv`, the file
+`posix-gate`'s spec is generated from). POSIX is deliberately **not** an origin:
+it cuts across bash (`cd`), GNU (`cat`), classic Unix (`awk`) and external
+(`m4`), so a flat enum would have to pick between "GNU" and "POSIX" for `cat`
+and every reader would ask which won. (`sh` is the 116th name; it is a
+Preamble shim, not a listed command, so the view shows 115.)
+
+Origin is stamped per entry in `coreutils/pkg/atlas/origin.go`
+(`classifyOrigins`, after the subclass passes and before the alias pass so an
+alias inherits it) and ratcheted in `origin_test.go`: every entry has one,
+origin follows subclass, tool-table counts are pinned, aliases inherit.
+
+**The 1.0.0 core and the experimental set.** The visible/hidden split is a
+*maturity* claim, not a removal. `core: true` marks the 35 commands the
+operator named as used and dogfooded — fleet (`agent model tool skill person
+whois capability`) · session (`chat delegate foreman coach handoff resume
+claim`) · work (`sprint todo dag weave gate`) · knowledge (`kb graph craft
+secret`) · comms (`inbox mb meet ping notify bus activity`) · human (`app ask
+browser fetch`) · discovery (`commands`). Seventeen more bashy-added commands
+stay visible by name (`inspect sandbox ollama peer dks login tessaro release
+transpile dhnt otel duration tz ntp sntp clip ast`, plus `agentic`). The
+remaining 22 — `supervise judge pair sdlc schedule herald · define lexicon
+search sota · check conform · run out full · podman docker · sphere · self web
+· tokens posix-gate` — are **curated-hidden**: `status: "experimental"`,
+`hidden: true`, out of the default listing and `--agentic`, back under
+`--all`, answered by `commands NAME`, and **dispatched byte-identically with
+their bare shims intact** (`curatedHiddenVerbs` in `agentos.go` is a separate
+list from `hiddenFrontDoorVerbs`, which also strips the shim). A command
+graduates by leaving that list with a gate in hand.
+
+Two taught names front hidden engines: `sandbox` (alias of hidden `podman`)
+and `peer` (alias of hidden `sphere`) — the first aliases where the alias is
+visible and the target is not. `bashy commands podman` says
+`use \`bashy sandbox\``.
+
 ## 3. Data home
 
 **`coreutils/pkg/atlas`** — stdlib-only, no deps — holds the whole catalog:
@@ -336,6 +395,7 @@ bashy commands --view tier          # grouped by execution tier, counts per tier
 bashy commands --view group         # the functional-group lens
 bashy commands --view capabilities  # per-cap command lists
 bashy commands --view effects       # per-security-effect command lists (§2.5)
+bashy commands --view origin        # who defined each name: bash · gnu · unix · external · bashy (* = POSIX, ~ = experimental)
 bashy commands --view classic       # explicit alias for the default output
 bashy commands --tier workspace     # filter to one tier (implies tier view)
 bashy commands --group code-intel   # filter to one group
@@ -348,10 +408,18 @@ bashy commands --atlas              # full per-command records (the machine surf
 - Flags accept `--flag value` and `--flag=value`.
 - Unknown tier/group/cap/effect → exit 2, with the closed vocabulary printed so
   an agent can self-correct in one round trip.
-- `--json` composes with every view; `--all` adds hidden verbs
-  (`"hidden":true`); agent mode (`$BASHY_AGENTIC`) defaults to JSON as today.
+- `--json` composes with every view; `--all` adds the hidden aliases
+  (`"hidden":true`) and the curated experimental commands
+  (`"hidden":true,"status":"experimental"`); agent mode (`$BASHY_AGENTIC`)
+  defaults to JSON as today. Every record carries `origin` (+ `posix`, `core`).
 - `bashy commands NAME --features` gains additive keys: `group`, `tier`,
-  `caps`, `subclass` (legacy keys unchanged).
+  `caps`, `subclass`, `origin`, `posix`, `core`, `status`, and `use` (the
+  taught name of a hidden engine) (legacy keys unchanged). The text form
+  prints one provenance line: `origin: GNU coreutils · POSIX-required`.
+- `-v --json` `sections` additively carries `core` (the seven rows), `more`,
+  and — with `--all` — `experimental` and `aliases`, beside the v1
+  `shell/coreutils/classic/external/diagnostics/agent` partition, which is now
+  keyed on `origin`.
 - MCP `list_tools` `ToolInfo` gains additive `group` + `caps` fields.
   Multicall `--list` output stays byte-identical (richer listing = roadmap).
 

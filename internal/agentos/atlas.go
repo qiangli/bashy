@@ -46,7 +46,21 @@ type atlasRecord struct {
 	Web     *atlas.WebSurface `json:"web_ui,omitempty"`
 	Hidden  bool              `json:"hidden,omitempty"`
 	AliasOf string            `json:"alias_of,omitempty"`
+
+	// Origin is the provenance axis (Sprint 167): bash | gnu | unix | external
+	// | bashy — WHO defined the command, as opposed to Class, which says how
+	// it resolves. Posix tags the 116 POSIX-required names across origins.
+	// Core marks the bashy 1.0.0 core; Status is "experimental" on a
+	// curated-hidden command, absent on a hidden alias, so a reader can tell
+	// "hidden because unproven" from "hidden because it is a second spelling".
+	Origin string `json:"origin,omitempty"`
+	Posix  bool   `json:"posix,omitempty"`
+	Core   bool   `json:"core,omitempty"`
+	Status string `json:"status,omitempty"`
 }
+
+// statusExperimental is the Status of a curated-hidden command.
+const statusExperimental = "experimental"
 
 // atlasCatalog builds the merged atlas records for the given live catalog
 // (the outputs of commandsCatalog + hiddenVerbsCatalog). Names are unique;
@@ -67,20 +81,26 @@ func atlasCatalog(builtins, core, verbs, hidden []string) []atlasRecord {
 			Name: n, Class: "builtin", Group: atlas.GroupShell,
 			Tier: atlas.TierUserland, Stage: atlas.StageCross,
 			Resolver: "bash-builtin",
+			// The shell owns its builtins; the atlas tables never see them, so
+			// the origin is stamped here. `[`, `printf`, `kill` … are also GNU
+			// coreutils programs, but the builtin shadows the tool: the shell
+			// is who answers, so the shell is the origin.
+			Origin: atlas.OriginBash, Posix: atlas.IsPosixRequired(n),
 		})
 	}
 	for _, n := range core {
-		r := atlasRecord{Name: n, Class: "coreutils", Resolver: "bashy-in-process"}
-		fillFromAtlas(&r)
-		if t := tool.Lookup(n); t != nil {
-			r.Synopsis = t.Synopsis
-		}
-		add(r)
+		add(toolAtlasRecord(n, false))
 	}
 	for _, n := range verbs {
 		add(verbAtlasRecord(n, false))
 	}
 	for _, n := range hidden {
+		// `--all` adds two kinds of hidden name: compatibility aliases (verbs)
+		// and curated experimental commands, which may be in-process tools.
+		if tool.Lookup(n) != nil {
+			add(toolAtlasRecord(n, true))
+			continue
+		}
 		add(verbAtlasRecord(n, true))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -157,14 +177,39 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 	},
 }
 
+// toolAtlasRecord resolves one in-process (coreutils-class) tool.
+func toolAtlasRecord(name string, hidden bool) atlasRecord {
+	r := atlasRecord{Name: name, Class: "coreutils", Resolver: "bashy-in-process", Hidden: hidden}
+	fillFromAtlas(&r)
+	if t := tool.Lookup(name); t != nil {
+		r.Synopsis = t.Synopsis
+	}
+	stampSurface(&r)
+	return r
+}
+
+// stampSurface sets the 1.0.0-surface fields a record carries on top of its
+// atlas classification: Core for the named core, Status for a curated
+// experimental command. Aliases (AliasOf set) get neither: an alias is a
+// spelling, and its target already says what it is.
+func stampSurface(r *atlasRecord) {
+	if r.AliasOf == "" && isCoreCommand(r.Name) {
+		r.Core = true
+	}
+	if isCuratedHidden(r.Name) {
+		r.Status = statusExperimental
+	}
+}
+
 // verbAtlasRecord resolves one front-door verb: the curated table first,
 // then the declarative registry (whose entries derive group/tier/caps from
 // Entry.Tier — new registry CLIs need no atlas edit).
-func verbAtlasRecord(name string, hidden bool) atlasRecord {
-	r := atlasRecord{
+func verbAtlasRecord(name string, hidden bool) (r atlasRecord) {
+	r = atlasRecord{
 		Name: name, Class: "verb", Resolver: "bashy-front-door",
 		Hidden: hidden, Synopsis: verbSynopsis[name],
 	}
+	defer stampSurface(&r) // named result: the stamp lands on what is returned
 	if e, ok := atlas.Lookup(name); ok {
 		applyEntry(&r, e)
 		return r
@@ -179,6 +224,9 @@ func verbAtlasRecord(name string, hidden bool) atlasRecord {
 	// row becomes dead weight rather than a silent override.
 	if e, ok := bashyOwnedVerbAtlas[name]; ok {
 		applyEntry(&r, e)
+		if r.Origin == "" {
+			r.Origin = atlas.OriginBashy // bashy-owned by definition
+		}
 		return r
 	}
 	// Unknown to both tables. Keep it VISIBLE, but do not invent a
@@ -206,7 +254,10 @@ func fillFromAtlas(r *atlasRecord) {
 	// Shell builtins are deliberately absent from the atlas — the embedding
 	// shell owns that set (see the atlas package doc) — so this fallback is
 	// legitimate here, unlike the verb path. A builtin serves every stage.
+	// A registered tool the shared atlas does not list (foreman, registered by
+	// bashy) is bashy's own.
 	r.Group, r.Tier, r.Stage = atlas.GroupPlatform, atlas.TierUserland, atlas.StageCross
+	r.Origin, r.Posix = atlas.OriginBashy, atlas.IsPosixRequired(r.Name)
 }
 
 func applyEntry(r *atlasRecord, e atlas.Entry) {
@@ -214,6 +265,7 @@ func applyEntry(r *atlasRecord, e atlas.Entry) {
 	r.Stage = e.Stage
 	r.Effects = e.Effects
 	r.Web = e.Web
+	r.Origin, r.Posix = e.Origin, e.Posix
 }
 
 // liveAtlas assembles the full merged catalog for the bashy front door,
@@ -233,7 +285,7 @@ func liveAtlas(includeHidden bool) []atlasRecord {
 // --- the views ---------------------------------------------------------------
 
 // atlasViews are the non-classic --view values.
-var atlasViews = []string{"tier", "group", "sdlc", "capabilities", "effects", "web"}
+var atlasViews = []string{"tier", "group", "sdlc", "capabilities", "effects", "web", "origin"}
 
 // atlasGroupDisplayOrder is the presentation order for the group view:
 // classical userland first, then the extended groups.
@@ -258,7 +310,7 @@ var tierSynopsis = map[string]string{
 }
 
 type atlasRequest struct {
-	view    string // "", "tier", "group", "sdlc", "capabilities", "effects"
+	view    string // "", "tier", "group", "sdlc", "capabilities", "effects", "web", "origin"
 	tier    string // filters (ANDed when several are given)
 	group   string
 	cap     string
@@ -278,6 +330,7 @@ type atlasJSON struct {
 	Groups          []string          `json:"groups,omitempty"`
 	Capabilities    []string          `json:"capabilities,omitempty"`
 	SecurityEffects []string          `json:"security_effects,omitempty"`
+	Origins         []string          `json:"origins,omitempty"`
 	Commands        []atlasRecord     `json:"commands,omitempty"`
 	Idioms          []atlas.Idiom     `json:"idioms,omitempty"`
 }
@@ -348,6 +401,7 @@ func dispatchAtlas(req atlasRequest) int {
 			Groups:          atlas.Groups(),
 			Capabilities:    atlas.Capabilities(),
 			SecurityEffects: atlas.Effects(),
+			Origins:         atlas.Origins(),
 			Commands:        records,
 		}
 		if len(filter) > 0 {
@@ -372,6 +426,8 @@ func dispatchAtlas(req atlasRequest) int {
 		printAtlasEffects(os.Stdout, records)
 	case req.view == "web":
 		printAtlasWeb(os.Stdout, records)
+	case req.view == "origin":
+		printAtlasOrigin(os.Stdout, records)
 	case req.view == "sdlc":
 		// The spine: plan → code → test → deploy (+ cross). Reading this view is
 		// how you SEE the shape of the surface — which is how the Code stage was
@@ -459,6 +515,46 @@ func printAtlasEffects(w io.Writer, records []atlasRecord) {
 	}
 }
 
+// printAtlasOrigin is the provenance view: one block per origin, in the
+// closed order (shell → GNU → classic Unix → exec'd externals → added by
+// bashy), each name marked `*` when it is one of the 116 POSIX-required
+// utilities and `~` when it is a curated experimental command. It answers the
+// question the class split cannot: not "how does this resolve" but "who
+// defined it" — the question a reader asks before trusting a name in a script
+// that must also run under stock bash.
+func printAtlasOrigin(w io.Writer, records []atlasRecord) {
+	byOrigin := map[string][]string{}
+	posix, experimental := 0, 0
+	for _, r := range records {
+		name := r.Name
+		if r.Posix {
+			name += "*"
+			posix++
+		}
+		if r.Status == statusExperimental {
+			name += "~"
+			experimental++
+		}
+		byOrigin[r.Origin] = append(byOrigin[r.Origin], name)
+	}
+	fmt.Fprintf(w, "origin — who defined each command (%d; * = POSIX-required, %d", len(records), posix)
+	if experimental > 0 {
+		fmt.Fprintf(w, "; ~ = experimental, %d", experimental)
+	}
+	fmt.Fprintln(w, "):")
+	for _, o := range atlas.Origins() {
+		names := byOrigin[o]
+		if len(names) == 0 {
+			continue
+		}
+		fmt.Fprintf(w, "  %s — %s (%d):\n", o, atlas.OriginLabel(o), len(names))
+		wrapNames(w, names, "    ", 80)
+	}
+	if n := len(byOrigin[""]); n > 0 {
+		fmt.Fprintf(w, "  (unclassified: %d — a bug; every record must carry an origin)\n", n)
+	}
+}
+
 func printAtlasFiltered(w io.Writer, records []atlasRecord, filter map[string]string) {
 	var parts []string
 	for _, k := range []string{"tier", "group", "cap", "effect"} {
@@ -519,10 +615,10 @@ func atlasFeatureFields(out map[string]any, name string, class string, hidden bo
 	var r atlasRecord
 	switch class {
 	case "builtin":
-		r = atlasRecord{Group: atlas.GroupShell, Tier: atlas.TierUserland}
+		r = atlasRecord{Group: atlas.GroupShell, Tier: atlas.TierUserland,
+			Origin: atlas.OriginBash, Posix: atlas.IsPosixRequired(name)}
 	case "coreutils":
-		r = atlasRecord{Name: name}
-		fillFromAtlas(&r)
+		r = toolAtlasRecord(name, hidden)
 	case "verb":
 		r = verbAtlasRecord(name, hidden)
 	default:
@@ -541,6 +637,33 @@ func atlasFeatureFields(out map[string]any, name string, class string, hidden bo
 	if r.AliasOf != "" {
 		out["alias_of"] = r.AliasOf
 	}
+	if r.Origin != "" {
+		out["origin"] = r.Origin
+	}
+	if r.Posix {
+		out["posix"] = true
+	}
+	if r.Core {
+		out["core"] = true
+	}
+	if r.Status != "" {
+		out["status"] = r.Status
+	}
+	if use := taughtNameFor(name); use != "" {
+		out["use"] = use
+	}
+}
+
+// taughtNameFor returns the visible spelling of a curated-hidden command that
+// hides behind a taught alias, or "" when there is none.
+func taughtNameFor(name string) string {
+	switch name {
+	case "podman", "docker":
+		return "sandbox"
+	case "sphere":
+		return "peer"
+	}
+	return ""
 }
 
 func sortedCopy(items []string) []string {

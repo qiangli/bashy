@@ -12,23 +12,26 @@ import (
 	"github.com/qiangli/coreutils/tool"
 )
 
-// The `bashy commands` default surface is organized by HOW a command runs —
-// bashy's operational reality — with classical provenance as the sub-grouping:
+// The `bashy commands` default surface (Sprint 167, bashy 1.0.0) is
+// core-first: the first screen is the 35 commands an agent uses every turn,
+// then the handful of visible extras, then one line per userland origin with
+// a pointer to the view that expands it, then the count of what is hidden.
+// 325 names in a wall was the problem; a first screen an agent can read in
+// one pass is the fix.
 //
-//	builtins   — in-process, no fork (the bashy core)
-//	             · shell      : bash builtins
-//	             · coreutils  : GNU coreutils, pure-Go in-process
-//	             · classic    : other classic Unix tools, also in-process (jq/awk/sed/…)
-//	external   — provisioned + exec'd as separate downloaded binaries
-//	agent/ext  — bashy's own agentic features, sectioned by execution venue
+//	core       — the 1.0.0 core, in seven rows (fleet · session · work ·
+//	             knowledge · comms · human · discovery). A PRESENTATION
+//	             grouping — the atlas `group` axis is untouched.
+//	more       — visible bashy-added commands that are not core
+//	userland   — bash builtins · GNU coreutils · classic Unix · bin-managed
+//	             externals, as counts (`--view origin` lists them)
+//	hidden     — curated experimental commands (`--all` lists them)
 //
-// From the shell's point of view a coreutils tool IS a builtin (zero fork —
-// the Tier-1 in-process thesis), which is why shell + coreutils + classic sit
-// under one "builtins" umbrella. The (coreutils | classic) split is the one
-// piece of metadata the atlas does not store directly; it is derived from
-// membership in the canonical GNU coreutils set (gnuCoreutilsCommands, the same
-// list behind `--gnu`). Everything else — the external/agent split (Subclass)
-// and the venue partition (Tier) — comes straight from the atlas records.
+// The partition below is keyed on the atlas ORIGIN axis — who defined the
+// command — not on group heuristics. The previous split filed every
+// in-process tool in a `net`/`code-intel` group as an agent feature, which
+// put the POSIX `mail`, `mailx`, `talk`, `lp` and `ctags` next to `weave`.
+// Origin is stamped per entry in coreutils/pkg/atlas and ratcheted there.
 
 // venueOrder is the locked six-venue stack (+ account front door) used to
 // order the agent/ext section (dhnt docs/execution-tiers.md).
@@ -37,62 +40,91 @@ var venueOrder = []string{
 	atlas.TierSphere, atlas.TierCluster, atlas.TierCloud, atlas.TierAccount,
 }
 
-// commandSections is the `bashy commands` surface grouped by execution class.
+// coreRow is one presentation row of the 1.0.0 core.
+type coreRow struct {
+	Label    string   `json:"label"`
+	Commands []string `json:"commands"`
+}
+
+// coreRows is the bashy 1.0.0 core: the operator's named list (agent model
+// tool skill chat · sprint todo kb · inbox mb meet ping · dag weave · app ask
+// browser) plus the commands those are built on. The order within a row is
+// deliberate (the noun first, then what acts on it); it is not sorted.
+var coreRows = []coreRow{
+	{"fleet", []string{"agent", "model", "tool", "skill", "person", "whois", "capability"}},
+	{"session", []string{"chat", "delegate", "foreman", "coach", "handoff", "resume", "claim"}},
+	{"work", []string{"sprint", "todo", "dag", "weave", "gate"}},
+	{"knowledge", []string{"kb", "graph", "craft", "secret"}},
+	{"comms", []string{"inbox", "mb", "meet", "ping", "notify", "bus", "activity"}},
+	{"human", []string{"app", "ask", "browser", "fetch"}},
+	{"discovery", []string{"commands"}},
+}
+
+var coreSet = func() map[string]bool {
+	m := map[string]bool{}
+	for _, row := range coreRows {
+		for _, n := range row.Commands {
+			m[n] = true
+		}
+	}
+	return m
+}()
+
+// isCoreCommand reports whether name is in the bashy 1.0.0 core.
+func isCoreCommand(name string) bool { return coreSet[name] }
+
+// commandSections is the `bashy commands` surface, partitioned. The
+// by-how-it-runs fields (shell / coreutils / classic / external / agent) are
+// the v1 shape and stay; core / more / experimental / aliases are the 1.0.0
+// first-screen layout on top of them.
 type commandSections struct {
-	Shell       []string            `json:"shell"`       // bash builtins
-	Coreutils   []string            `json:"coreutils"`   // GNU coreutils, in-process
-	Classic     []string            `json:"classic"`     // other classic tools, in-process
-	External    []string            `json:"external"`    // downloaded + exec'd
-	Diagnostics []string            `json:"diagnostics"` // check/diagnose/verify family
-	Agent       map[string][]string `json:"agent"`       // venue -> native agentic verbs
+	Core         []coreRow           `json:"core"`                   // the 1.0.0 core, in presentation rows
+	More         []string            `json:"more"`                   // visible bashy-added, not core
+	Experimental []string            `json:"experimental,omitempty"` // curated-hidden (only with --all)
+	Aliases      []string            `json:"aliases,omitempty"`      // hidden compatibility aliases (only with --all)
+	Shell        []string            `json:"shell"`                  // bash builtins
+	Coreutils    []string            `json:"coreutils"`              // GNU coreutils, in-process
+	Classic      []string            `json:"classic"`                // other classic Unix tools, in-process
+	External     []string            `json:"external"`               // downloaded + exec'd
+	Diagnostics  []string            `json:"diagnostics"`            // check/diagnose/verify family
+	Agent        map[string][]string `json:"agent"`                  // venue -> bashy-added commands
 }
 
-// agentToolGroups are the atlas groups whose in-process tools are bashy's own
-// agentic features (code intelligence, the graph, orchestration, knowledge,
-// net helpers) rather than classic userland commands — so they belong in the
-// agent/ext section even though they resolve as in-process `coreutils`-class
-// tools, not front-door verbs.
-var agentToolGroups = map[string]bool{
-	atlas.GroupCodeIntel: true,
-	atlas.GroupOrch:      true,
-	atlas.GroupKnowledge: true,
-	atlas.GroupNet:       true,
-}
-
-// classSections partitions the live catalog into the five presentation classes.
-// It reuses liveAtlas (Class/Subclass/Group/Tier per command, name-sorted) so
-// the grouping stays in lockstep with the atlas the --view/--json paths report.
+// classSections partitions the live catalog. It reuses liveAtlas so the
+// grouping stays in lockstep with the atlas the --view/--json paths report;
+// every decision reads a field of the record (Origin, Subclass, Group, Tier,
+// Core, Status, AliasOf), never a name list of its own — except coreRows,
+// which is the one list this file owns.
 func classSections(all bool) commandSections {
-	gnu := sliceSet(gnuCoreutilsCommands)
 	s := commandSections{Agent: map[string][]string{}}
+	for _, row := range coreRows {
+		s.Core = append(s.Core, coreRow{row.Label, append([]string(nil), row.Commands...)})
+	}
 	for _, r := range liveAtlas(all) {
-		switch r.Class {
-		case "builtin":
+		switch {
+		case r.Status == statusExperimental:
+			s.Experimental = append(s.Experimental, r.Name)
+			continue
+		case r.Hidden:
+			s.Aliases = append(s.Aliases, r.Name)
+			continue
+		}
+		switch r.Origin {
+		case atlas.OriginBash:
 			s.Shell = append(s.Shell, r.Name)
-		case "coreutils":
-			switch {
-			case agentToolGroups[r.Group]:
-				// bashy agent tools that happen to run in-process (graph,
-				// code-intel, fetch/browser) — group with the verbs. (foreman
-				// was a member; it is now a suppressed internal — Bashy #40.)
-				s.Agent[r.Tier] = append(s.Agent[r.Tier], r.Name)
-			case gnu[r.Name]:
-				s.Coreutils = append(s.Coreutils, r.Name)
-			default:
-				s.Classic = append(s.Classic, r.Name)
+		case atlas.OriginGNU:
+			s.Coreutils = append(s.Coreutils, r.Name)
+		case atlas.OriginUnix:
+			s.Classic = append(s.Classic, r.Name)
+		case atlas.OriginExternal:
+			s.External = append(s.External, r.Name)
+		default: // bashy — the agent/ext partition by venue, plus core/more on top
+			if !r.Core {
+				s.More = append(s.More, r.Name)
 			}
-		case "verb":
-			// Downloaded, exec'd binaries (managed externals + toolchain
-			// provisioners) are "not ours, we just run them"; everything else
-			// is a native bashy feature, placed by its venue.
-			switch {
-			case r.Group == atlas.GroupDiagnostics:
-				// The check/diagnose/verify family, surfaced as its own section
-				// rather than scattered across the venue partition.
+			if r.Class == "verb" && r.Group == atlas.GroupDiagnostics {
 				s.Diagnostics = append(s.Diagnostics, r.Name)
-			case r.Subclass == atlas.SubclassManagedExternal || r.Subclass == atlas.SubclassProvisioner:
-				s.External = append(s.External, r.Name)
-			default:
+			} else {
 				s.Agent[r.Tier] = append(s.Agent[r.Tier], r.Name)
 			}
 		}
@@ -100,9 +132,9 @@ func classSections(all bool) commandSections {
 	return s
 }
 
-// printClassSections renders the five-section surface. In verbose mode each
-// described command gets its one-line synopsis; otherwise names are wrapped
-// into compact columns.
+// printClassSections renders the first screen. In verbose mode each core and
+// visible-extra command gets its one-line synopsis; otherwise names are
+// wrapped into compact columns. `all` appends the hidden sets.
 func printClassSections(w io.Writer, verbose, all bool) {
 	s := classSections(all)
 	syn := func(n string) string {
@@ -111,27 +143,52 @@ func printClassSections(w io.Writer, verbose, all bool) {
 		}
 		return verbSynopsis[n]
 	}
+	coreN := 0
+	for _, row := range s.Core {
+		coreN += len(row.Commands)
+	}
+	userland := len(s.Shell) + len(s.Coreutils) + len(s.Classic) + len(s.External)
+	hiddenN := len(curatedHiddenVerbs)
+	total := coreN + len(s.More) + userland + hiddenN + len(hiddenFrontDoorVerbs)
 
-	builtinTotal := len(s.Shell) + len(s.Coreutils) + len(s.Classic)
-	fmt.Fprintf(w, "builtins — in-process, no fork (%d):\n", builtinTotal)
-	printSubSection(w, "shell", s.Shell, verbose, nil) // builtins carry no synopsis in the fork
-	printSubSection(w, "coreutils", s.Coreutils, verbose, syn)
-	printSubSection(w, "classic", s.Classic, verbose, syn)
-
+	fmt.Fprintf(w, "bashy commands — the 1.0.0 surface: %d core + %d more; `--all` for everything (%d)\n",
+		coreN, len(s.More), total)
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "external — provisioned + exec'd downloaded binaries (%d):\n", len(s.External))
-	printSubSection(w, "", s.External, verbose, syn)
-
-	if len(s.Diagnostics) > 0 {
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "diagnostics — check / diagnose / verify (%d):\n", len(s.Diagnostics))
-		printSubSection(w, "", s.Diagnostics, verbose, syn)
+	fmt.Fprintf(w, "core — what an agent uses every turn (%d):\n", coreN)
+	if verbose {
+		for _, row := range s.Core {
+			printSubSection(w, row.Label, row.Commands, true, syn)
+		}
+	} else {
+		width := 0
+		for _, row := range s.Core {
+			if len(row.Label) > width {
+				width = len(row.Label)
+			}
+		}
+		for _, row := range s.Core {
+			fmt.Fprintf(w, "  %-*s  %s\n", width, row.Label, strings.Join(row.Commands, " "))
+		}
 	}
 
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "bashy agent/ext — native features, by venue:")
-	for _, v := range venueOrder {
-		printSubSection(w, v, s.Agent[v], verbose, syn)
+	fmt.Fprintf(w, "more — visible, not core (%d):\n", len(s.More))
+	printSubSection(w, "", s.More, verbose, syn)
+
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "userland — bash builtins (%d) · GNU coreutils (%d) · classic Unix (%d) · bin-managed externals (%d):\n",
+		len(s.Shell), len(s.Coreutils), len(s.Classic), len(s.External))
+	fmt.Fprintln(w, "  bashy commands --view origin   every name by who defined it (* = POSIX-required)")
+	fmt.Fprintln(w, "  bashy commands --view tier     by execution venue")
+
+	fmt.Fprintln(w)
+	if all {
+		fmt.Fprintf(w, "experimental — hidden by default: they work, they are not yet proven (%d):\n", len(s.Experimental))
+		printSubSection(w, "", s.Experimental, verbose, syn)
+		fmt.Fprintf(w, "hidden aliases (%d):\n", len(s.Aliases))
+		printSubSection(w, "", s.Aliases, verbose, syn)
+	} else {
+		fmt.Fprintf(w, "%d experimental commands are hidden — they work, they are not yet proven: bashy commands --all\n", hiddenN)
 	}
 }
 

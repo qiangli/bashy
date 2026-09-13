@@ -46,6 +46,9 @@ func TestAllListedCommandsAreSupported(t *testing.T) {
 	}
 
 	for _, v := range append(append([]string{}, verbs...), hiddenVerbsCatalog()...) {
+		if tool.Lookup(v) != nil {
+			continue // a curated-hidden in-process tool (tokens, posix-gate) carries its own synopsis
+		}
 		if strings.TrimSpace(verbSynopsis[v]) == "" {
 			t.Errorf("front-door verb %q is listed by `bashy commands` but has no synopsis (usually means no dispatch handler)", v)
 		}
@@ -57,9 +60,17 @@ func TestAllListedCommandsAreSupported(t *testing.T) {
 // fall through to "docker: No such file or directory".
 func TestDockerAliasIsHandled(t *testing.T) {
 	t.Setenv("BASHY_AGENTIC", "1")
+	// docker is curated-hidden (experimental) behind the taught `sandbox`:
+	// still catalogued under --all, still dispatched.
 	_, _, verbs := commandsCatalog()
-	if !slices.Contains(verbs, "docker") {
-		t.Fatal("docker should be listed as a verb")
+	if slices.Contains(verbs, "docker") {
+		t.Fatal("docker is hidden behind sandbox and must not be in the default catalog")
+	}
+	if !slices.Contains(verbs, "sandbox") {
+		t.Fatal("sandbox is the taught tier-3 name and must be listed")
+	}
+	if !slices.Contains(hiddenVerbsCatalog(), "docker") {
+		t.Fatal("docker must still be catalogued under --all")
 	}
 	if got := engineAlias("docker"); got != "podman" {
 		t.Errorf("engineAlias(docker) = %q, want podman", got)

@@ -21,6 +21,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 
 	"github.com/qiangli/coreutils/external/registry"
+	"github.com/qiangli/coreutils/pkg/atlas"
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	"github.com/qiangli/coreutils/tool"
 )
@@ -232,37 +233,40 @@ func dispatchCommands(args []string) int {
 }
 
 func printAgenticCommands(w io.Writer) {
-	fmt.Fprint(w, `agentic bashy commands:
-  bashy help dryrun              explain dry-run safety mode and JSON manifest
-  bashy context --json           first-hop context: exact bashy path + capabilities
-  BASHY_AGENTIC=1 bashy --dry-run script.sh
-                                  preview external commands, rm, and truncation as JSON-lines
-  bashy --dry-run -c 'commands'  human-readable dry-run preview
-  bashy run --capture -- command structured command result envelope
-  bashy run --check -- script.sh
-                                  preflight a script, then run it with one JSON envelope
-  bashy doctor                   diagnose PATH, shell, engine, and agent environment
-  bashy check --agent --script script.sh
-                                  JSON syntax + recursive command inventory preflight
-  bashy self fetch               fetch/cache a released bashy binary
-  bashy git ...                   embedded pure-Go git client
-  bashy fetch --json URL          built-in URL/REST client with status envelope
-  bashy commands -v              full command surface with synopses
-  bashy commands grep --features  one-command resolver/capability/gap report
-  bashy commands --view tier     the Command Atlas by execution tier; --atlas for records
-  bashy commands --idioms        commands naturally used together (composites)
-  bashy dag --list               list markdown DAG targets
-  bashy graph impact SYMBOL      code-graph blast radius: what's coupled to a symbol
-  bashy graph hotspots           most-connected symbols (refactor / orientation targets)
+	fmt.Fprint(w, `agentic bashy commands — the 1.0.0 core first (bashy commands for the full first screen):
+  bashy agent list               the registered tool:model bindings; agent whoami = this process
+  bashy model list / tool list   the inference backends and the agentic CLIs this host can drive
+  bashy skill list               tier-2 workspace skills applicable here
+  bashy chat AGENT "..."         one governed instruction to an agent (delegate: hand off a task)
+  bashy sprint / todo            the cross-repo board and this repo's committed task list
   bashy kb context --for TASK --rings repo,host --forms note,page --budget 700 --json
                                   assemble bounded knowledge for a task
   bashy kb observe --ring agent --episode E --kind KIND --ref REF
                                   journal an observation without writing a page
-  bashy kb validate SLUG --ring RING --from-gate EVENT_ID
-                                  promote only from a gate that ran and passed
-  bashy kb note add --candidate --ring agent --episode E --title T --body TEXT
-                                  persist a runtime candidate through the kb verb
-  bashy podman ...               Podman-compatible isolated container engine
+  bashy inbox / mb / notify      what reached you; the host board; send one subject to an agent
+  bashy meet                     multi-participant deliberation with a notes-only secretary
+  bashy dag --list               list markdown DAG targets; bashy weave = per-repo workspace runs
+  bashy gate                     does this project pass? (the one command that decides)
+  bashy graph impact SYMBOL      code-graph blast radius: what's coupled to a symbol
+  bashy app / ask / browser      open the console; ask the HUMAN for a value; drive a browser
+  bashy fetch --json URL         built-in URL/REST client with status envelope
+
+discovery:
+  bashy commands                 the 1.0.0 surface: 35 core + visible extras; --all for everything
+  bashy commands --view origin   every name by who defined it (bash · GNU · Unix · external · bashy)
+  bashy commands NAME            one command: class, origin, capabilities, gaps (--features for JSON)
+  bashy commands --idioms        commands naturally used together (composites)
+  bashy inspect context --json   first-hop context: exact bashy path + capabilities
+  bashy inspect doctor           diagnose PATH, shell, engine, and agent environment
+
+safety:
+  bashy help dryrun              explain dry-run safety mode and JSON manifest
+  BASHY_AGENTIC=1 bashy --dry-run script.sh
+                                  preview external commands, rm, and truncation as JSON-lines
+  bashy --dry-run -c 'commands'  human-readable dry-run preview
+  bashy help output              bounded, recoverable command output (on under BASHY_AGENTIC)
+  bashy sandbox ...              the tier-3 venue: isolated in-process container engine
+  bashy git ...                  embedded pure-Go git client
 
 dry-run JSON entry kinds:
   command   external command availability and resolved path
@@ -299,6 +303,13 @@ func commandFeatureReport(name string, builtins, core, verbs, hidden []string, g
 			out["synopsis"] = s
 		}
 		atlasFeatureFields(out, name, "verb", false)
+	case containsString(hidden, name) && tool.Lookup(name) != nil:
+		// A curated-hidden in-process tool (tokens, posix-gate).
+		out["class"], out["resolver"], out["available"], out["hidden"] = "coreutils", "bashy-in-process", true, true
+		if t := tool.Lookup(name); t != nil && t.Synopsis != "" {
+			out["synopsis"] = t.Synopsis
+		}
+		atlasFeatureFields(out, name, "coreutils", true)
 	case containsString(hidden, name):
 		out["class"], out["resolver"], out["available"], out["hidden"] = "verb", "bashy-front-door", true, true
 		if s := verbSynopsis[name]; s != "" {
@@ -327,8 +338,41 @@ func commandFeatureReport(name string, builtins, core, verbs, hidden []string, g
 	return out
 }
 
+// originLine renders the provenance + visibility line of a one-command
+// report: where the command came from, whether POSIX requires it, whether it
+// is 1.0.0 core, and — for a hidden one — why it is hidden and what to type
+// instead.
+func originLine(info map[string]any) string {
+	var parts []string
+	if o, ok := info["origin"].(string); ok && o != "" {
+		parts = append(parts, "origin: "+atlas.OriginLabel(o))
+	}
+	if p, ok := info["posix"].(bool); ok && p {
+		parts = append(parts, "POSIX-required")
+	}
+	if c, ok := info["core"].(bool); ok && c {
+		parts = append(parts, "1.0.0 core")
+	}
+	if st, ok := info["status"].(string); ok && st != "" {
+		parts = append(parts, st+" (hidden; `bashy commands --all` lists it)")
+	} else if h, ok := info["hidden"].(bool); ok && h {
+		if a, ok := info["alias_of"].(string); ok && a != "" {
+			parts = append(parts, "hidden alias of `bashy "+a+"`")
+		} else {
+			parts = append(parts, "hidden")
+		}
+	}
+	if use, ok := info["use"].(string); ok && use != "" {
+		parts = append(parts, "use `bashy "+use+"`")
+	}
+	return strings.Join(parts, " · ")
+}
+
 func printCommandFeature(w io.Writer, info map[string]any) {
 	fmt.Fprintf(w, "%s: %s via %s\n", info["name"], info["class"], info["resolver"])
+	if line := originLine(info); line != "" {
+		fmt.Fprintf(w, "  %s\n", line)
+	}
 	if s, ok := info["synopsis"].(string); ok && s != "" {
 		fmt.Fprintf(w, "  %s\n", s)
 	}
@@ -458,6 +502,7 @@ var verbSynopsis = map[string]string{
 	"helm":        "Helm chart installer for the DKS cluster (managed external, Apache-2.0)",
 	"dks":         "provision and manage the dedicated rootful DKS (k3s) machine",
 	"sphere":      "peer-direct pooled p2p inference/compute — the sphere tier (via outpost)",
+	"peer":        "peer-direct pooled p2p inference/compute — the sphere tier (via outpost); the taught name of `bashy sphere`",
 	"tessaro":     "Tessaro account: sign in/out, status, open the portal (via outpost)",
 	"login":       "sign in to Tessaro — pair this machine with the portal",
 }
@@ -486,11 +531,30 @@ func commandsCatalog() (builtins, core, verbs []string) {
 	verbs = append(verbs, agentModeShimVerbs...)
 	verbs = append(verbs, registry.Names()...) // declarative managed-external CLIs
 	sort.Strings(verbs)
+	// The curated (experimental) names are callable and shimmed exactly as
+	// before; they are only kept out of what is TAUGHT. See curatedHiddenVerbs.
+	core = withoutCuratedHidden(core)
+	verbs = withoutCuratedHidden(verbs)
 	return builtins, core, verbs
 }
 
+func withoutCuratedHidden(names []string) []string {
+	out := names[:0:0]
+	for _, n := range names {
+		if !isCuratedHidden(n) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// hiddenVerbsCatalog is everything `--all` adds back: the compatibility
+// aliases (no shim) and the curated experimental commands (shim kept). Both
+// verbs and in-process tools; atlasCatalog tells them apart by the tool
+// registry.
 func hiddenVerbsCatalog() []string {
 	verbs := append([]string(nil), hiddenFrontDoorVerbs...)
+	verbs = append(verbs, curatedHiddenVerbs...)
 	sort.Strings(verbs)
 	return verbs
 }
@@ -560,8 +624,7 @@ type gnuCoreutilsInventory struct {
 }
 
 func gnuCoreutilsReport(core, builtins []string) gnuCoreutilsInventory {
-	upstream := append([]string(nil), gnuCoreutilsCommands...)
-	sort.Strings(upstream)
+	upstream := atlas.GNUCoreutilsUpstream() // sorted
 	coreSet := sliceSet(core)
 	builtinSet := sliceSet(builtins)
 	certified := sliceSet(gnuCoreutilsFullyConformant)

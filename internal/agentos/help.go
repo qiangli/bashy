@@ -28,15 +28,14 @@ Bashy front-door help:
 	bashy help dryrun		show dry-run examples and JSON manifest fields
 	bashy help output		show Stage 1 output-reduction activation and recovery
 	bashy inspect context --json		show exact bashy path and agent capabilities
+	bashy commands			the 1.0.0 surface: 35 core commands first, then the rest
 	bashy commands --agentic	show agent-oriented command discovery
-	bashy check --agent --script X	validate script syntax and command closure as JSON
-	bashy run --check --capture -- X	preflight a script, then run with one JSON envelope
-	bashy commands grep --features	show one-command capability/gap report
+	bashy commands --view origin	every name by who defined it (bash · GNU · Unix · external · bashy)
+	bashy commands NAME		one command: class, origin, capabilities, gaps
 	bashy commands --gnu		show GNU coreutils parity/gap inventory
 	bashy inspect doctor			diagnose shell/runtime environment
 	bashy install-agent <agent>	wire claude/opencode/aider/... to use bashy as their shell
 	bashy serve [socket]		warm session: reuse one process for repeated -c calls
-	bashy self fetch		fetch/cache a released bashy binary
 	bashy git --help		show embedded git subcommands
 	bashy fetch --help		show built-in download/REST client
 `
@@ -73,17 +72,15 @@ Topics:
   commands  discover bashy command surfaces
 
 Common agent entry points:
-	bashy --dry-run -c 'rm -rf build'
+  bashy --dry-run -c 'rm -rf build'
   bashy inspect context --json
   BASHY_AGENTIC=1 bashy --dry-run script.sh
+  bashy commands
   bashy commands --agentic
-  bashy check --agent --script script.sh
-  bashy run --check --capture -- script.sh
+  bashy commands --view origin
   bashy commands grep --features
   bashy commands --gnu
-  bashy commands --json --gnu
   bashy inspect doctor
-  bashy self fetch
   bashy git status
   bashy fetch --json https://example.com
 `)

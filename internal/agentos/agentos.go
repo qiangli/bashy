@@ -137,7 +137,7 @@ var (
 		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "notify", "activity", "run", "agentic", "commands", "inspect", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
-		"kubectl", "helm", "sphere", "tessaro", "login", "dks",
+		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
 	}
 	// Direct-only front doors are callable as `bashy NAME` and belong in the
 	// command catalog, but must not become bare shell shims. In particular,
@@ -156,7 +156,54 @@ var (
 	// TestCommandsCatalogSources pins.
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "invoke", "verify", "doctor", "context", "audit",
 		"agents", "models", "tools", "people", "skills", "secrets", "apps", "messages", "issue"}
+
+	// curatedHiddenVerbs are bashy-added commands that WORK but are not yet
+	// proven — experimental — and so are kept out of the default listings
+	// (`bashy commands`, `--agentic`) until a gate says otherwise (Sprint 167,
+	// bashy 1.0.0). This is a MATURITY claim, not a removal, and it is a
+	// different list from hiddenFrontDoorVerbs on purpose: that one also
+	// strips the bare shell shim, whereas a curated verb keeps its shim and
+	// dispatches byte-identically — only what is TAUGHT changes. The record
+	// carries `hidden:true, status:"experimental"` so a reader can tell an
+	// unproven command from an alias; `--all` and `commands NAME` still
+	// answer for every one of them.
+	//
+	// The 1.0.0 core (the 35 that stay visible) is the operator's list of
+	// what was used and dogfooded: fleet (agent model tool skill person whois
+	// capability) · session (chat delegate foreman coach handoff resume claim)
+	// · work (sprint todo dag weave gate) · knowledge (kb graph craft secret) ·
+	// comms (inbox mb meet ping notify bus activity) · human (app ask browser
+	// fetch) · discovery (commands) — plus 17 non-core kept visible by name.
+	// A command graduates by leaving this list with a gate in hand.
+	//
+	// `podman`/`docker` hide behind the taught tier-3 name `sandbox`; `sphere`
+	// hides behind the taught alias `peer` (coreutils atlas: aliasVerb).
+	curatedHiddenVerbs = []string{
+		// higher-tier orchestration, layered over weave/dag/chat
+		"supervise", "judge", "pair", "sdlc", "schedule", "herald",
+		// research / vocabulary
+		"define", "lexicon", "search", "sota",
+		// self-fidelity / cert (inspect stays visible)
+		"check", "conform",
+		// output reduction (still on under BASHY_AGENTIC; `bashy help output`)
+		"run", "out", "full",
+		// engines: sandbox is the taught name
+		"podman", "docker",
+		// sphere: peer is the taught name
+		"sphere",
+		// platform: self is still the install/upgrade path
+		"self", "web",
+		// in-process tools (coreutils-class), same rule: they run, they are
+		// not taught. tokens feeds kb budgeting; posix-gate is the cert kit.
+		"tokens", "posix-gate",
+	}
 )
+
+// isCuratedHidden reports whether name is an experimental (curated-hidden)
+// bashy-added command — a front-door verb or an in-process tool.
+func isCuratedHidden(name string) bool {
+	return containsString(curatedHiddenVerbs, name)
+}
 
 func Preamble() string {
 	var b strings.Builder
@@ -1351,7 +1398,7 @@ func dispatch() {
 			dispatchExit(1)
 		}
 		dispatchExit(0)
-	case "sphere":
+	case "sphere", "peer":
 		// Sphere tier (tier 4): peer-direct pooled p2p inference/compute. Thin
 		// front-door that execs the outpost mesh agent at runtime — NO build
 		// dependency on outpost (bashy stays the standalone keystone). Without
