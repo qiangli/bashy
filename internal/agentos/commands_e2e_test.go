@@ -914,10 +914,10 @@ func TestSkillsAdvertisementLadderE2E(t *testing.T) {
 	}
 }
 
-// scratchStores relocates every store the CRUD verbs can write — skills,
+// scratchStoreEnv relocates every store the CRUD verbs can write — skills,
 // fleet, and the whole bashy home — into t.TempDir(). A test that reaches
 // the operator's real store is a defect, so every case below sets all six.
-func scratchStores(t *testing.T) []string {
+func scratchStoreEnv(t *testing.T) []string {
 	t.Helper()
 	root := t.TempDir()
 	return []string{
@@ -936,7 +936,7 @@ func scratchStores(t *testing.T) []string {
 // and a files map carrying SKILL.md verbatim.
 func TestE2ESkillShowYAMLRecord(t *testing.T) {
 	bin := bashyBinary(t)
-	stdout, stderr, code := runBashyStdEnv(bin, scratchStores(t), "skill", "show", "conductor", "--yaml")
+	stdout, stderr, code := runBashyStdEnv(bin, scratchStoreEnv(t), "skill", "show", "conductor", "--yaml")
 	if code != 0 {
 		t.Fatalf("skill show --yaml (exit %d): %s", code, stderr)
 	}
@@ -962,7 +962,7 @@ func TestE2ESkillShowYAMLRecord(t *testing.T) {
 // `skill rm` takes it back out.
 func TestE2ESkillAddRmRoundTrip(t *testing.T) {
 	bin := bashyBinary(t)
-	env := scratchStores(t)
+	env := scratchStoreEnv(t)
 	const name = "e2e-scratch-skill"
 
 	stdout, stderr, code := runBashyStdEnv(bin, env, "skill", "add", name, "--description", "x")
@@ -988,7 +988,7 @@ func TestE2ESkillAddRmRoundTrip(t *testing.T) {
 // reads it back — the generic CRUD contract every fleet noun shares.
 func TestE2EToolSetPathRoundTrip(t *testing.T) {
 	bin := bashyBinary(t)
-	env := scratchStores(t)
+	env := scratchStoreEnv(t)
 
 	stdout, stderr, code := runBashyStdEnv(bin, env, "tool", "add", "t1", "--set", "kind=cli", "--set", "cli.launch.exec=echo {prompt}")
 	if code != 0 || !strings.Contains(stdout, "t1 (cli)") {
