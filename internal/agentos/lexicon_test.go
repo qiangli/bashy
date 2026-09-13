@@ -32,8 +32,14 @@ func TestLexiconEntryPointsWireTheFactStore(t *testing.T) {
 			lexicon.RecordDiscovery = nil
 			lexicon.Synopses = nil
 			lexicon.KnownCommands = nil
+			lexicon.SkillSource = nil
 
 			_ = tc.build()
+
+			if lexicon.SkillSource == nil {
+				t.Error("SkillSource is nil — `define <skill>` would say unknown here while " +
+					"`inspect actions` lists the same skill with a facet")
+			}
 
 			if lexicon.RecordDiscovery == nil {
 				t.Error("RecordDiscovery is nil — collection will report its findings and " +

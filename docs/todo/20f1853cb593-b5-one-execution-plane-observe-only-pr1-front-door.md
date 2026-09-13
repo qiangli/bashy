@@ -3,12 +3,15 @@ id: 20f1853cb593
 kind: task
 title: 'B5 one execution plane, observe-only (PR1): front-door Dispatch through the wireExec middleware chain'
 seq: 263
-status: assigned
+status: done
 priority: p2
 created: 2026-09-12T23:03:30.263014Z
 weave: 8
 assignee: qiangli
 sprint: 161
+closed: 2026-09-13T00:59:41.539046Z
+resolution: fixed
+closed_by: claude-h
 ---
 
 One execution plane, OBSERVE-ONLY (script-execution plan PR1). Route front-door Dispatch() verbs (internal/agentos/agentos.go:332) through the same wireExec middleware chain as shell-resolved commands — telemetry -> audit -> execlog -> advisor -> learn — so bashy skill run, bashy chat, bashy dag are RECORDED like any other action. No policy, no deny, no envelope change, no behavior change to any verb: the chain only observes on this path.

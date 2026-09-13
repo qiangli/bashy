@@ -1529,6 +1529,9 @@ func wireLexicon() {
 	lexicon.Synopses = verbSynopsis
 	lexicon.KnownCommands = atlasCommandNames()
 	lexicon.RecordDiscovery = recordDiscovery
+	// The skill catalog is bashy's ring, not lexicon's: hand define the rows
+	// so `bashy define <skill>` carries the action facet `inspect actions` shows.
+	lexicon.SkillSource = lexiconSkillRows
 }
 
 // newLexiconCmd builds `bashy lexicon` — the glossary + its admin verbs
