@@ -333,9 +333,10 @@ and every reader would ask which won. (`sh` is the 116th name; it is a
 Preamble shim, not a listed command, so the view shows 115.)
 
 **The posix view.** `bashy commands --view posix` is the certification lens:
-the 116 POSIX-required names grouped by *who provides each one in this bashy*
-(20 shell builtins · 51 GNU · 34 classic Unix · 10 pinned providers = 115
-listed) and an explicit `not listed` line for what the catalog cannot show
+the 116 POSIX-required names in two labeled groups — **internal** (in the
+bashy binary, pure Go, no fork: 20 shell builtins · 51 GNU · 34 classic Unix =
+105) and **bin-managed** (exec'd from a locally built pinned upstream: 10, the
+pure-Go debt) — 115 listed and an explicit `not listed` line for what the catalog cannot show
 (`sh`, the Preamble's `--posix` shim). It is a filter as well as a view —
 `--view posix --json` returns only those records with `filter: {posix: true}`
 — so an agent can ask "which of the 116 does this build provide, and how"

@@ -660,6 +660,7 @@ func filterPosix(records []atlasRecord) []atlasRecord {
 func printAtlasPosix(w io.Writer, records []atlasRecord) {
 	byOrigin := map[string][]string{}
 	seen := map[string]bool{}
+	internal, managed := 0, 0
 	for _, r := range records {
 		name := r.Name
 		if r.Status == statusExperimental {
@@ -667,6 +668,11 @@ func printAtlasPosix(w io.Writer, records []atlasRecord) {
 		}
 		byOrigin[r.Origin] = append(byOrigin[r.Origin], name)
 		seen[r.Name] = true
+		if r.Origin == atlas.OriginExternal {
+			managed++
+		} else {
+			internal++
+		}
 	}
 	required := atlas.PosixRequired()
 	var missing []string
@@ -677,13 +683,22 @@ func printAtlasPosix(w io.Writer, records []atlasRecord) {
 	}
 	fmt.Fprintf(w, "posix — the %d POSIX-required utilities, by who provides each one here (%d listed):\n",
 		len(required), len(records))
-	for _, o := range atlas.Origins() {
+	// Two top-level groups, labeled so the split is unmistakable to an agent
+	// and a human alike: what runs INSIDE the bashy binary (pure Go, zero
+	// fork) versus what is BIN-MANAGED (a locally built pinned upstream that
+	// bashy exec's). The second group is the pure-Go debt.
+	fmt.Fprintf(w, "  internal — in the bashy binary, pure Go, no fork (%d):\n", internal)
+	for _, o := range []string{atlas.OriginBash, atlas.OriginGNU, atlas.OriginUnix} {
 		names := byOrigin[o]
 		if len(names) == 0 {
 			continue
 		}
-		fmt.Fprintf(w, "  %s — %s (%d):\n", o, atlas.OriginLabel(o), len(names))
-		wrapNames(w, names, "    ", 80)
+		fmt.Fprintf(w, "    %s — %s (%d):\n", o, atlas.OriginLabel(o), len(names))
+		wrapNames(w, names, "      ", 80)
+	}
+	fmt.Fprintf(w, "  bin-managed — exec'd from a locally built pinned upstream; the pure-Go debt (%d):\n", managed)
+	if names := byOrigin[atlas.OriginExternal]; len(names) > 0 {
+		wrapNames(w, names, "      ", 80)
 	}
 	if len(missing) > 0 {
 		fmt.Fprintf(w, "  not listed (%d): %s\n", len(missing), strings.Join(missing, " "))

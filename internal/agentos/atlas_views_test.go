@@ -281,6 +281,11 @@ func TestAtlasViewPosix(t *testing.T) {
 		t.Errorf("sh is a shim, not a catalogued command")
 	}
 	text, code := captureCommands(t, "--view", "posix")
+	for _, want := range []string{"internal — in the bashy binary", "(105)", "bin-managed — exec'd", "(10)", "not listed (1): sh"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("posix text view missing %q:\n%s", want, text)
+		}
+	}
 	if code != 0 || !strings.Contains(text, "not listed (1): sh") {
 		t.Errorf("text view must name the unlisted sh shim:\n%s", text)
 	}
