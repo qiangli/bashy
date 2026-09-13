@@ -6,7 +6,7 @@ seq: 245
 status: todo
 priority: p1
 created: 2026-09-06T11:33:40.786344Z
-sprint: 166
+sprint: 130
 ---
 
 tools/installbashy refuses "a binary without the required AgentOS command
