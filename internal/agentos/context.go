@@ -69,6 +69,12 @@ type contextReport struct {
 	// one-liner (bodies via `bashy skill show`). Verified = the skill
 	// carries a machine-checkable contract (dhnt dual bundle).
 	Skills []coreskills.Advertised `json:"skills,omitempty"`
+	// Actions tallies what this bashy can run by family (the lexicon action
+	// facet: command · script · agent · skill), so an agent knows on the first
+	// hop whether there is anything to run besides commands before it asks
+	// `bashy inspect actions`. Never omitted: an empty family is a 0, and
+	// script is 0 today because nothing projects that family yet.
+	Actions inspectActionCounts `json:"actions"`
 }
 
 type contextMode struct {
@@ -247,6 +253,7 @@ func collectContext() contextReport {
 	}
 	report = fillContext(report, bashyPath)
 	report.Skills = coreskills.Applicable(skillsOptions()...)
+	report.Actions = collectInspectActionCounts()
 	report.Environment, report.EnvironmentRedacted = collectEnvironment()
 	if len(os.Args) > 0 {
 		report.Argv0 = os.Args[0]
@@ -550,6 +557,8 @@ func printContextPlain(r contextReport) {
 			fmt.Printf("  %s%s: %s\n", s.Name, mark, s.Description)
 		}
 	}
+	a := r.Actions
+	fmt.Printf("actions: command=%d script=%d agent=%d skill=%d (list: bashy inspect actions)\n", a.Command, a.Script, a.Agent, a.Skill)
 	fmt.Println("recommended:")
 	for _, c := range r.RecommendedCommands {
 		fmt.Printf("  %s: %s\n", c.Purpose, c.Command)

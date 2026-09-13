@@ -73,6 +73,7 @@ var inspectIndex = []inspectIndexRow{
 	{"which gates are on, and which signal decided each", "bashy inspect mode", "inspect"},
 	{"is this host healthy for bashy (PATH/sh, engines, bin cache)", "bashy inspect doctor", "inspect"},
 	{"the first-hop record an agent reads before anything else", "bashy inspect context --json", "inspect"},
+	{"what this bashy can run, one facet row per action (command/script/agent/skill)", "bashy inspect actions --kind skill", "inspect"},
 	{"what ran here, tamper-evident (status, tail, verify, export)", "bashy inspect audit status", "inspect"},
 	{"what commands exist and how each one resolves", "bashy commands X --features", "commands"},
 	{"the full command atlas (group, tier, stage, caps, effects)", "bashy commands --atlas", "commands"},
@@ -127,13 +128,13 @@ func dispatchInspect(args []string) int {
 			return dispatchContext(rest)
 		case "audit":
 			return dispatchAudit(rest)
-		case "paths", "mode":
+		case "paths", "mode", "actions":
 			return dispatchInspectAspect(aspect, rest)
 		case "help":
 			inspectUsage(os.Stdout)
 			return 0
 		default:
-			fmt.Fprintf(os.Stderr, "bashy inspect: unknown aspect %q (try: paths mode doctor context audit)\n", aspect)
+			fmt.Fprintf(os.Stderr, "bashy inspect: unknown aspect %q (try: paths mode actions doctor context audit)\n", aspect)
 			return 2
 		}
 	}
@@ -146,6 +147,7 @@ func inspectUsage(w io.Writer) {
 	fmt.Fprintln(w, "  (none)    index — every question, and the verb that answers it")
 	fmt.Fprintln(w, "  paths     the resource map: every store bashy owns, scope-resolved for this cwd")
 	fmt.Fprintln(w, "  mode      effective gate decisions, each with the signal that decided it")
+	fmt.Fprintln(w, "  actions   what this bashy can run: one facet row per action  [--kind command|script|agent|skill]")
 	fmt.Fprintln(w, "  doctor    diagnose the host environment            (was: bashy doctor)")
 	fmt.Fprintln(w, "  context   the first-hop agent record               (was: bashy context)")
 	fmt.Fprintln(w, "  audit     the tamper-evident command trail          (was: bashy audit)")
@@ -154,15 +156,30 @@ func inspectUsage(w io.Writer) {
 
 func dispatchInspectAspect(aspect string, args []string) int {
 	asJSON := weavecli.IsAgent()
-	for _, a := range args {
-		switch a {
-		case "--json", "--json=true":
+	kind := "" // --kind, actions only
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--json" || a == "--json=true":
 			asJSON = true
-		case "--json=false", "--plain":
+		case a == "--json=false" || a == "--plain":
 			asJSON = false
-		case "-h", "--help":
+		case a == "-h" || a == "--help":
 			inspectUsage(os.Stdout)
 			return 0
+		case aspect == "actions" && (a == "--kind" || strings.HasPrefix(a, "--kind=")):
+			if strings.HasPrefix(a, "--kind=") {
+				kind = strings.TrimPrefix(a, "--kind=")
+			} else if i+1 < len(args) {
+				i++
+				kind = args[i]
+			}
+			// The vocabulary is closed; an unknown kind exits 2 with the set
+			// printed so an agent can self-correct in one round trip.
+			if !validInspectActionKind(kind) {
+				fmt.Fprintf(os.Stderr, "bashy inspect actions: unknown kind %q (one of: %s)\n", kind, strings.Join(inspectActionKinds, " "))
+				return 2
+			}
 		default:
 			fmt.Fprintf(os.Stderr, "bashy inspect %s: unknown option %q\n", aspect, a)
 			return 2
@@ -222,6 +239,13 @@ func dispatchInspectAspect(aspect string, args []string) int {
 			}
 			fmt.Printf("  %-13s %-3s %s%s\n", r.Gate, onOff(r.On), r.DecidedBy, ev)
 		}
+		return 0
+	case "actions":
+		rows := collectInspectActions(kind)
+		if asJSON {
+			return inspectEmitJSON(aspect, rows)
+		}
+		printInspectActions(rows, kind)
 		return 0
 	}
 	return 2

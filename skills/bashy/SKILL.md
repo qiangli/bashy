@@ -97,6 +97,22 @@ way kb is: this repo's when you are in one, the host's otherwise.
   environment-determined failures (wrong cwd, missing tool, full disk)
   so you do not retry a doomed command.
 
+Before you run something you did not write, ask what running it amounts to.
+`bashy inspect actions [--json] [--kind command|script|agent|skill]` lists every
+action this bashy can run as one facet row — `kind name identity contract
+latitude authority effects_declared executor` — across four families: a
+**command** is exact and deterministic (the shell runs what was typed; effects
+come off its atlas record), an **agent** binding is judge/agentic by definition
+(executor `agentlaunch:<tool>`, so its cost and effects are open), a **skill**
+is bound by the strongest contract it carries (`dhnt` face with declared
+effects, `metadata-checks`, or `none`; one judge step makes the whole run
+agentic), and **script** is a family nothing fills yet (reported as `0`, never
+omitted). `bashy define NAME` prints the same facet for one name (`runs:` line;
+nested `action` object under `--json`), and `bashy inspect context --json`
+carries the counts as `actions: {command, script, agent, skill}`. Prefer an
+exact/deterministic row when one satisfies the task; reach for a judge/agentic
+one only when the task needs the latitude.
+
 ## Navigate code without the grep dance
 
 - `bashy graph impact SYMBOL` — what code is coupled to a symbol.

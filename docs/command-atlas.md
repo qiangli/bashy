@@ -362,6 +362,30 @@ bashy commands --atlas              # full per-command records (the machine surf
     "fused":"grep -c PAT F","note":"one process, one pipe fewer","tier":"userland"}]}
 ```
 
+### 4.1 The action facet — `bashy inspect actions`
+
+The atlas classifies a command; the **action facet** (`coreutils/pkg/lexicon/action.go`)
+answers a different question for everything runnable — *what happens if I run
+this, and how much freedom does running it take* — in one vocabulary across
+**four families**: **command** (an atlas entry: exact, deterministic, executor
+builtin/coreutils/verb, effects off the record), **script** (a family the facet
+names but nothing projects yet — `inspect actions --kind script` says so and
+`inspect context` reports it as `0`, never omits it), **agent** (a fleet
+binding: judge/agentic by definition, identity `tool:model`, executor
+`agentlaunch:<tool>`), and **skill** (a catalog skill: contract `dhnt` with the
+face's content address and declared effect-cap when `skill.dhnt` is valid, else
+`metadata-checks` from `check-*` bindings, else `none`; one judge step makes the
+run agentic). `bashy inspect actions [--json] [--kind command|script|agent|skill]`
+is an *aspect* of `inspect` (never a verb) that lists those facets — the
+**generic half only** (`kind name identity contract latitude authority
+effects_declared executor`; no path, host or Location, so two hosts' output
+diffs into what one can run and the other cannot), sorted by kind then identity,
+as a `bashy-inspect-v1` envelope. It is not a second projection: the rows are
+the facets of the same lexicon store `bashy define NAME` answers from (the
+`runs:` line, and the nested `action` object in `--json`), so the two cannot
+disagree. `bashy inspect context --json` carries the per-family counts as
+`actions: {command, script, agent, skill}`.
+
 ## 5. The dag lens — the atlas as an execution-assist substrate
 
 `pkg/atlas`'s Go API is shaped for `bashy dag` from day one; the features
