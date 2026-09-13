@@ -332,6 +332,17 @@ it cuts across bash (`cd`), GNU (`cat`), classic Unix (`awk`) and external
 and every reader would ask which won. (`sh` is the 116th name; it is a
 Preamble shim, not a listed command, so the view shows 115.)
 
+**The posix view.** `bashy commands --view posix` is the certification lens:
+the 116 POSIX-required names grouped by *who provides each one in this bashy*
+(20 shell builtins · 51 GNU · 34 classic Unix · 10 pinned providers = 115
+listed) and an explicit `not listed` line for what the catalog cannot show
+(`sh`, the Preamble's `--posix` shim). It is a filter as well as a view —
+`--view posix --json` returns only those records with `filter: {posix: true}`
+— so an agent can ask "which of the 116 does this build provide, and how"
+in one call. `bashy posix-gate spec` remains the *certified* projection; this
+view is the catalog's answer, and a name on its `not listed` line other than
+`sh` is a gap.
+
 Origin is stamped per entry in `coreutils/pkg/atlas/origin.go`
 (`classifyOrigins`, after the subclass passes and before the alias pass so an
 alias inherits it) and ratcheted in `origin_test.go`: every entry has one,
@@ -405,6 +416,7 @@ bashy commands --view group         # the functional-group lens
 bashy commands --view capabilities  # per-cap command lists
 bashy commands --view effects       # per-security-effect command lists (§2.5)
 bashy commands --view origin        # who defined each name: bash · gnu · unix · external · bashy (* = POSIX, ~ = experimental)
+bashy commands --view posix         # the 116 POSIX-required utilities by who provides each one here; names the unlisted (sh); --json = the filtered records
 bashy commands --view classic       # explicit alias for the default output
 bashy commands --tier workspace     # filter to one tier (implies tier view)
 bashy commands --group code-intel   # filter to one group

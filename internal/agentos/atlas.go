@@ -285,7 +285,7 @@ func liveAtlas(includeHidden bool) []atlasRecord {
 // --- the views ---------------------------------------------------------------
 
 // atlasViews are the non-classic --view values.
-var atlasViews = []string{"tier", "group", "sdlc", "capabilities", "effects", "web", "origin"}
+var atlasViews = []string{"tier", "group", "sdlc", "capabilities", "effects", "web", "origin", "posix"}
 
 // atlasGroupDisplayOrder is the presentation order for the group view:
 // classical userland first, then the extended groups.
@@ -392,6 +392,13 @@ func dispatchAtlas(req atlasRequest) int {
 	if len(filter) > 0 {
 		records = filterAtlas(records, req.tier, req.group, req.cap, req.effect)
 	}
+	if req.view == "posix" {
+		// The posix view IS a filter: only the POSIX-required names, in text
+		// and in JSON alike, so `--view posix --json` is the machine answer to
+		// "which of the 116 does this bashy provide, and how".
+		records = filterPosix(records)
+		filter["posix"] = "true"
+	}
 
 	if req.asJSON {
 		out := atlasJSON{
@@ -416,6 +423,8 @@ func dispatchAtlas(req atlasRequest) int {
 	}
 
 	switch {
+	case req.view == "posix":
+		printAtlasPosix(os.Stdout, records)
 	case len(filter) > 0:
 		printAtlasFiltered(os.Stdout, records, filter)
 	case req.view == "group":
@@ -559,6 +568,58 @@ func printAtlasOrigin(w io.Writer, records []atlasRecord) {
 	}
 	if n := len(byOrigin[""]); n > 0 {
 		fmt.Fprintf(w, "  (unclassified: %d — a bug; every record must carry an origin)\n", n)
+	}
+}
+
+func filterPosix(records []atlasRecord) []atlasRecord {
+	var out []atlasRecord
+	for _, r := range records {
+		if r.Posix {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// printAtlasPosix is the certification view: the 116 POSIX-required utility
+// names (docs/posix-required-commands.tsv, what `posix-gate` certifies),
+// grouped by WHO PROVIDES each one in this bashy — the shell, the GNU
+// reimplementation, the classic-Unix reimplementation, or a pinned external
+// provider — with any name the listing cannot show named explicitly rather
+// than silently missing. A name marked `~` is provided by a curated
+// experimental command.
+func printAtlasPosix(w io.Writer, records []atlasRecord) {
+	byOrigin := map[string][]string{}
+	seen := map[string]bool{}
+	for _, r := range records {
+		name := r.Name
+		if r.Status == statusExperimental {
+			name += "~"
+		}
+		byOrigin[r.Origin] = append(byOrigin[r.Origin], name)
+		seen[r.Name] = true
+	}
+	required := atlas.PosixRequired()
+	var missing []string
+	for _, n := range required {
+		if !seen[n] {
+			missing = append(missing, n)
+		}
+	}
+	fmt.Fprintf(w, "posix — the %d POSIX-required utilities, by who provides each one here (%d listed):\n",
+		len(required), len(records))
+	for _, o := range atlas.Origins() {
+		names := byOrigin[o]
+		if len(names) == 0 {
+			continue
+		}
+		fmt.Fprintf(w, "  %s — %s (%d):\n", o, atlas.OriginLabel(o), len(names))
+		wrapNames(w, names, "    ", 80)
+	}
+	if len(missing) > 0 {
+		fmt.Fprintf(w, "  not listed (%d): %s\n", len(missing), strings.Join(missing, " "))
+		fmt.Fprintln(w, "    `sh` is the Preamble's `sh() { bashy --posix; }` shim, not a catalogued command;")
+		fmt.Fprintln(w, "    anything else here is a gap — `bashy posix-gate spec` is the certified projection.")
 	}
 }
 

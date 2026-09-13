@@ -245,3 +245,43 @@ func TestFeaturesReportGainsAtlasKeys(t *testing.T) {
 		t.Errorf("legacy keys changed: %v", got)
 	}
 }
+
+// TestAtlasViewPosix: the certification view lists exactly the POSIX-required
+// names the catalog provides, grouped by provider, and names what it cannot
+// list (`sh`, a Preamble shim) instead of silently dropping it.
+func TestAtlasViewPosix(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "")
+	out, code := captureCommands(t, "--view", "posix", "--json")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	var got atlasJSON
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Filter["posix"] != "true" {
+		t.Errorf("filter = %v, want posix=true", got.Filter)
+	}
+	names := map[string]string{}
+	for _, r := range got.Commands {
+		if !r.Posix {
+			t.Errorf("%s: not POSIX-required but in the posix view", r.Name)
+		}
+		names[r.Name] = r.Origin
+	}
+	if len(names) != 115 { // 116 required; `sh` is the Preamble shim, not a record
+		t.Errorf("posix view lists %d names, want 115", len(names))
+	}
+	for name, origin := range map[string]string{"cd": "bash", "cat": "gnu", "awk": "unix", "m4": "external"} {
+		if names[name] != origin {
+			t.Errorf("%s: origin %q, want %q", name, names[name], origin)
+		}
+	}
+	if _, ok := names["sh"]; ok {
+		t.Errorf("sh is a shim, not a catalogued command")
+	}
+	text, code := captureCommands(t, "--view", "posix")
+	if code != 0 || !strings.Contains(text, "not listed (1): sh") {
+		t.Errorf("text view must name the unlisted sh shim:\n%s", text)
+	}
+}
