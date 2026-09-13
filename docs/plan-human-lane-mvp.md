@@ -19,7 +19,7 @@ This is dhnt-only work. The sprint tracks the two umbrella subprojects that own
 the existing surfaces:
 
 - `bashy/` owns the shipped front door, principal wiring, unified human inbox,
-  and `bashy apps serve` integration;
+  and `bashy app serve` integration;
 - `coreutils/` owns `pkg/meet`, `pkg/bus`, and `pkg/weave`, including the room,
   delivery-receipt, and sprint-reachability primitives.
 
@@ -37,7 +37,7 @@ prerequisite.
 | 3 | The board carries `[UNREACHABLE: 2]` on #86, #100, #101, #122 and `STALE` on #89, #101, #106, #115. `bashy agents` shows **1 live agent, 3 stale**. A message to those owners is written and never read | sprint / inbox |
 | 4 | `inbox human` shows duplicated `bus/fleet.unresolved` broadcasts, three of them with an **empty sender** (`bus:3097`, `3098`, `3104`) | inbox |
 | 5 | A human-authored message has no delivery state the sender can see | all |
-| 6 | `bashy apps serve` derives the human via `userOf` (cloud `Identity.Username`, then session cookie, then `SystemUser`) and canonicalizes through `bus.BoardIdentity`; `meet serve` derives it via `actorOf` (cloud `Identity.User` — the EMAIL), honours a body-stated sender, and never canonicalizes. One cloud human is therefore two names | identity / browser |
+| 6 | `bashy app serve` derives the human via `userOf` (cloud `Identity.Username`, then session cookie, then `SystemUser`) and canonicalizes through `bus.BoardIdentity`; `meet serve` derives it via `actorOf` (cloud `Identity.User` — the EMAIL), honours a body-stated sender, and never canonicalizes. One cloud human is therefore two names | identity / browser |
 
 ## The design rule
 
@@ -59,7 +59,7 @@ Three constraints follow, and they are what keeps this MVP small:
   the precise condition this sprint exists to expose.
 - **Nothing new to run.** No new store, no new transport, no new web surface.
   Every story is one verb or one column over state the host already keeps. The
-  existing `bashy apps serve` browser path is a required regression consumer of
+  existing `bashy app serve` browser path is a required regression consumer of
   the same identity and delivery contract, not a separate implementation.
 
 ## What this is FOR — the definition of done
@@ -119,7 +119,7 @@ capability?* A capability is out no matter how small; a context defect is in eve
 if it looks cosmetic.
 
 Target use case, stated by the operator: **instruct and work with agents from
-`bashy apps` in a browser, locally and from a phone.**
+`bashy app` in a browser, locally and from a phone.**
 
 ### What already ships (probed, not assumed)
 
@@ -165,7 +165,7 @@ Target use case, stated by the operator: **instruct and work with agents from
   separate capability, which is what puts it outside an MVP whose test is
   "context defect, not capability".
   **Correction:** an earlier version of this plan deferred S2 by claiming meet
-  is not on the `bashy apps serve` path. That was false — `/meet/` is a console
+  is not on the `bashy app serve` path. That was false — `/meet/` is a console
   panel (`pkg/webconsole/handler.go:299-305`, mounted under `on["meet"]`, SPA in
   `pkg/meet/web`, driven by the console's own DOM suite). Meet **is** on the
   phone route, so the identity divergence below is NOT deferrable.
@@ -179,7 +179,7 @@ Target use case, stated by the operator: **instruct and work with agents from
 
 ### Precondition to VERIFY, not build
 
-Remote reach for `bashy apps serve` is existing outpost/cloudbox tunnel
+Remote reach for `bashy app serve` is existing outpost/cloudbox tunnel
 machinery. Confirm the console is reachable through it before assuming the phone
 case works end to end. If it is not, that is a tunnel/pairing task and does
 **not** belong to this sprint.
@@ -208,7 +208,7 @@ Execute priority-first, with no fleet fan-out required:
    unverified` — not a private ladder; prove there is no retry, re-word,
    escalation, or reroute.
 6. **Final umbrella gate.** From one human identity, use both the CLI and
-   `bashy apps serve` to join a known room, room-chat and DM a live manager,
+   `bashy app serve` to join a known room, room-chat and DM a live manager,
    obtain a reasoned NOT DELIVERED result for an unreachable manager, post/read
    mb, and observe the same receipt advance to acked. Run focused package tests,
    then `go test -short ./...` in `coreutils` and `bashy`.
@@ -270,7 +270,7 @@ claiming it was delivered.
 4. Start with **S1**. Everything else keys on the identity it settles, and
    S1's own gate now includes the browser half (row 6 above): the same human
    posts on mb and tells in meet under ONE name, from the CLI and from
-   `bashy apps serve`.
+   `bashy app serve`.
 5. `bashy sprint checkpoint 126 -m '...'` after each step. The continuity record
    is what a successor reads; a sprint whose lease lapses with an empty brief
    costs the next manager the whole investigation again.
@@ -284,7 +284,7 @@ claiming it was delivered.
 
 - Any model drafting, answering, routing or triaging on the human's behalf.
 - Automatic retry, re-wording, or escalation of an undelivered message.
-- A new web surface: `bashy meet serve` and `bashy apps serve` already exist and
+- A new web surface: `bashy meet serve` and `bashy app serve` already exist and
   are the browser path. Sprint 126 must exercise them end to end; implementation
   there is limited to compatibility wiring needed to expose the shared contract.
 - Fixing the STALE/UNREACHABLE owners themselves. This sprint makes their state
