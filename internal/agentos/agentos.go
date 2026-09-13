@@ -135,7 +135,7 @@ import (
 var (
 	alwaysShimVerbs = []string{
 		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "notify", "activity", "run", "agentic", "commands", "inspect", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
-		"git", "gh", "act", "act-runner", "rclone", "podman", "ollama",
+		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
 	}
@@ -177,8 +177,9 @@ var (
 	// fetch) · discovery (commands) — plus 17 non-core kept visible by name.
 	// A command graduates by leaving this list with a gate in hand.
 	//
-	// `podman`/`docker` hide behind the taught tier-3 name `sandbox`; `sphere`
-	// hides behind the taught alias `peer` (coreutils atlas: aliasVerb).
+	// `podman`/`docker` (vendor spellings) hide behind `oci` (the standard
+	// name, canonical) and `sandbox` (the popular name); `sphere` hides behind
+	// the taught alias `peer` (coreutils atlas: aliasVerb).
 	//
 	// NEVER `agentic`: it is a RESERVED WORD of Bash++ (operator, 2026-09-13),
 	// not a yoke verb up for curation. TestCommandsCatalogSources pins it.
@@ -191,7 +192,8 @@ var (
 		"check", "conform",
 		// output reduction (still on under BASHY_AGENTIC; `bashy help output`)
 		"run", "out", "full",
-		// engines: sandbox is the taught name
+		// engines: oci is the standard name, sandbox the popular one; these
+		// two are the vendor spellings
 		"podman", "docker",
 		// sphere: peer is the taught name
 		"sphere",

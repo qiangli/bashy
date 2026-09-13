@@ -21,7 +21,9 @@ func engineAlias(name string) string {
 	// `sandbox` app is a filtered libpod endpoint that strips privileged/host-
 	// namespace/host-bind/added-cap requests, and this alias does not inherit
 	// those guarantees. Do not narrow one without narrowing the other.
-	if name == "docker" || name == "sandbox" {
+	// `oci` is the STANDARD (canonical) name, `sandbox` the popular one, and
+	// `docker`/`podman` the vendor spellings; all four run the podman engine.
+	if name == "oci" || name == "docker" || name == "sandbox" {
 		return "podman"
 	}
 	return name

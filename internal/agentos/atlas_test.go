@@ -143,15 +143,15 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 	if r := byName["weave"]; r.Tier != atlas.TierWorkspace {
 		t.Errorf("weave tier = %q, want workspace", r.Tier)
 	}
-	if r := byName["docker"]; r.AliasOf != "podman" || r.Tier != atlas.TierSandbox {
-		t.Errorf("docker = %+v, want alias_of podman, tier sandbox", r)
+	if r := byName["docker"]; r.AliasOf != "oci" || r.Tier != atlas.TierSandbox {
+		t.Errorf("docker = %+v, want alias_of oci, tier sandbox", r)
 	}
 	// `sandbox` is the tier-3 name, so the vocabulary and the verb surface agree.
 	// Pinned alongside docker because both are the same alias and a half-applied
 	// alias is the regression that once produced "docker: No such file or
 	// directory" for a verb `bashy commands` was advertising.
-	if r := byName["sandbox"]; r.AliasOf != "podman" || r.Tier != atlas.TierSandbox {
-		t.Errorf("sandbox = %+v, want alias_of podman, tier sandbox", r)
+	if r := byName["sandbox"]; r.AliasOf != "oci" || r.Tier != atlas.TierSandbox {
+		t.Errorf("sandbox = %+v, want alias_of oci, tier sandbox", r)
 	}
 	if r := byName["dks"]; r.Stage != atlas.StageDeploy ||
 		r.Group != atlas.GroupClusterCloud || r.Tier != atlas.TierCluster {

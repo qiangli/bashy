@@ -810,7 +810,7 @@ func atlasFeatureFields(out map[string]any, name string, class string, hidden bo
 func taughtNameFor(name string) string {
 	switch name {
 	case "podman", "docker":
-		return "sandbox"
+		return "oci"
 	case "sphere":
 		return "peer"
 	}

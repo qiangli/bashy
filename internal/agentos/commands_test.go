@@ -27,7 +27,7 @@ func TestCommandsCatalogSources(t *testing.T) {
 		}
 	}
 	// Front-door verbs + the docker->podman shim + the lister itself.
-	for _, want := range []string{"weave", "commands", "sandbox", "peer", "chat", "mb", "ping",
+	for _, want := range []string{"weave", "commands", "oci", "sandbox", "peer", "chat", "mb", "ping",
 		"agent", "model", "tool", "person", "skill", "secret", "app"} {
 		if !slices.Contains(verbs, want) {
 			t.Errorf("verbs missing %q", want)
@@ -56,12 +56,22 @@ func TestCommandsCatalogSources(t *testing.T) {
 			t.Errorf("hiding %q must not remove its bare shim", shimmed)
 		}
 	}
-	// A visible alias of a hidden target (peer → sphere, sandbox → podman) is a
-	// new shape: the alias is taught, the target is not.
-	for alias, target := range map[string]string{"peer": "sphere", "sandbox": "podman"} {
+	// A visible alias of a hidden target (peer → sphere) is a new shape: the
+	// alias is taught, the target is not. The container engine is the other
+	// way round: oci is the canonical VISIBLE name, sandbox its visible popular
+	// alias, and the vendor spellings podman/docker are hidden aliases of it.
+	for alias, target := range map[string]string{"peer": "sphere"} {
 		if !slices.Contains(verbs, alias) || slices.Contains(verbs, target) {
 			t.Errorf("%s should be visible and %s hidden", alias, target)
 		}
+	}
+	for _, vendor := range []string{"podman", "docker"} {
+		if slices.Contains(verbs, vendor) || !slices.Contains(hidden, vendor) {
+			t.Errorf("vendor spelling %s should be hidden", vendor)
+		}
+	}
+	if got := engineAlias("oci"); got != "podman" {
+		t.Errorf("engineAlias(oci) = %q, want podman (the engine underneath)", got)
 	}
 	// Toolchain provisioners are listed because `bashy go`, `bashy clang`, etc.
 	// are callable even when the Preamble leaves bare names to PATH.

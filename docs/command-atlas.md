@@ -71,7 +71,7 @@ Each command has one record:
 | `core` | `true` for the bashy 1.0.0 core (35 commands, §2.6) |
 | `status` | `experimental` on a curated-hidden command (§2.6); absent on a hidden alias |
 | `hidden` | `true` for the compatibility aliases and the curated experimental set (shown only with `--all`) |
-| `alias_of` | `podman` for `docker`/`sandbox`, `sphere` for `peer`, the singular for each plural; empty otherwise |
+| `alias_of` | `oci` for `sandbox`/`podman`/`docker`, `sphere` for `peer`, the singular for each plural; empty otherwise |
 
 ### 2.1 Group vocabulary
 
@@ -365,8 +365,8 @@ operator named as used and dogfooded — fleet (`agent model tool skill person
 whois capability`) · session (`chat delegate foreman coach handoff resume
 claim`) · work (`sprint todo dag weave gate`) · knowledge (`kb graph craft
 secret`) · comms (`inbox mb meet ping notify bus activity`) · human (`app ask
-browser fetch`) · discovery (`commands`). Seventeen more bashy-added commands
-stay visible by name (`inspect sandbox ollama peer dks login tessaro release
+browser fetch`) · discovery (`commands`). Eighteen more bashy-added commands
+stay visible by name (`inspect oci sandbox ollama peer dks login tessaro release
 transpile dhnt otel duration tz ntp sntp clip ast`, plus `agentic` — a
 **Bash++ reserved word**, never a hide candidate). The
 remaining 22 — `supervise judge pair sdlc schedule herald · define lexicon
@@ -378,10 +378,14 @@ their bare shims intact** (`curatedHiddenVerbs` in `agentos.go` is a separate
 list from `hiddenFrontDoorVerbs`, which also strips the shim). A command
 graduates by leaving that list with a gate in hand.
 
-Two taught names front hidden engines: `sandbox` (alias of hidden `podman`)
-and `peer` (alias of hidden `sphere`) — the first aliases where the alias is
-visible and the target is not. `bashy commands podman` says
-`use \`bashy sandbox\``.
+**The container engine has one canonical name and three spellings** (operator,
+2026-09-13): `oci` is the **standard** name — the O3 pillar (ollama · oci ·
+otel), the spec the engine implements — and the canonical atlas entry;
+`sandbox` is the **popular** name (the tier-3 venue word, a visible alias);
+`podman` and `docker` are **vendor** spellings (hidden aliases, kept for
+callers). All four dispatch to the embedded podman engine. `peer` (alias of
+hidden `sphere`) is the other taught-name-over-hidden-target case.
+`bashy commands podman` says `use \`bashy oci\``.
 
 ## 3. Data home
 

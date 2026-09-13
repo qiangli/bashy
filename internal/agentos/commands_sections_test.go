@@ -75,8 +75,10 @@ func TestClassSectionsTaxonomy(t *testing.T) {
 		}
 	}
 	// The taught names are listed; the engines behind them are experimental.
-	if !agentAt(atlas.TierSandbox, "sandbox") {
-		t.Errorf("agent/sandbox missing %q", "sandbox")
+	for _, name := range []string{"oci", "sandbox"} {
+		if !agentAt(atlas.TierSandbox, name) {
+			t.Errorf("agent/sandbox missing %q", name)
+		}
 	}
 	if !agentAt(atlas.TierSphere, "peer") {
 		t.Errorf("agent/sphere missing %q", "peer")
@@ -114,7 +116,7 @@ func TestClassSectionsTaxonomy(t *testing.T) {
 	if coreN != 35 {
 		t.Errorf("core has %d commands, want 35 (Sprint 167 decision of record)", coreN)
 	}
-	for _, name := range []string{"inspect", "sandbox", "ollama", "peer", "dks", "login", "tessaro",
+	for _, name := range []string{"inspect", "oci", "sandbox", "ollama", "peer", "dks", "login", "tessaro",
 		"release", "transpile", "dhnt", "otel", "duration", "tz", "ntp", "sntp", "clip", "ast"} {
 		if !has(s.More, name) {
 			t.Errorf("more (keep-visible) missing %q", name)
