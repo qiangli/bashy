@@ -464,6 +464,12 @@ func dispatchTranspile(args []string) int {
 		// Lower against the importer the front end checked with, so an
 		// explicit package map is one map for both halves.
 		opts.Importer = goProg.Importer
+		// A Go-only input lowers to itself (Sprint 152 D1): the generated
+		// file keeps the source's package clause. Without it every unit
+		// became `package main` with a synthesised main, so gc's optimizer
+		// notes on the generated module named a function the original
+		// never had (`can inline main`).
+		opts.Package = goProg.Package
 	}
 	res, err := lower.Compile(file, opts)
 	if err != nil {
