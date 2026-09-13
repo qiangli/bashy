@@ -285,3 +285,41 @@ func TestAtlasViewPosix(t *testing.T) {
 		t.Errorf("text view must name the unlisted sh shim:\n%s", text)
 	}
 }
+
+// TestAtlasViewExternal: the bin-managed view lists exactly the exec'd names
+// and counts the POSIX-required pinned providers as the pure-Go debt.
+func TestAtlasViewExternal(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "")
+	out, code := captureCommands(t, "--view", "external", "--json")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	var got atlasJSON
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Filter["origin"] != "external" {
+		t.Errorf("filter = %v, want origin=external", got.Filter)
+	}
+	names := map[string]bool{}
+	for _, r := range got.Commands {
+		if r.Origin != "external" {
+			t.Errorf("%s: origin %q in the external view", r.Name, r.Origin)
+		}
+		names[r.Name] = true
+	}
+	for _, want := range []string{"m4", "git", "kubectl", "go", "doctl", "posix-providers"} {
+		if !names[want] {
+			t.Errorf("external view missing %q", want)
+		}
+	}
+	for _, no := range []string{"awk", "cat", "weave", "cd"} {
+		if names[no] {
+			t.Errorf("external view must not list %q", no)
+		}
+	}
+	text, code := captureCommands(t, "--view", "external")
+	if code != 0 || !strings.Contains(text, "pure-Go debt: 10 POSIX-required") {
+		t.Errorf("text view must count the POSIX provider debt:\n%s", text)
+	}
+}

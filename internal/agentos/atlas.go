@@ -285,7 +285,7 @@ func liveAtlas(includeHidden bool) []atlasRecord {
 // --- the views ---------------------------------------------------------------
 
 // atlasViews are the non-classic --view values.
-var atlasViews = []string{"tier", "group", "sdlc", "capabilities", "effects", "web", "origin", "posix"}
+var atlasViews = []string{"tier", "group", "sdlc", "capabilities", "effects", "web", "origin", "posix", "external"}
 
 // atlasGroupDisplayOrder is the presentation order for the group view:
 // classical userland first, then the extended groups.
@@ -392,6 +392,11 @@ func dispatchAtlas(req atlasRequest) int {
 	if len(filter) > 0 {
 		records = filterAtlas(records, req.tier, req.group, req.cap, req.effect)
 	}
+	if req.view == "external" {
+		// Likewise a filter: only what bashy exec's rather than links.
+		records = filterOrigin(records, atlas.OriginExternal)
+		filter["origin"] = atlas.OriginExternal
+	}
 	if req.view == "posix" {
 		// The posix view IS a filter: only the POSIX-required names, in text
 		// and in JSON alike, so `--view posix --json` is the machine answer to
@@ -425,6 +430,8 @@ func dispatchAtlas(req atlasRequest) int {
 	switch {
 	case req.view == "posix":
 		printAtlasPosix(os.Stdout, records)
+	case req.view == "external":
+		printAtlasExternal(os.Stdout, records)
 	case len(filter) > 0:
 		printAtlasFiltered(os.Stdout, records, filter)
 	case req.view == "group":
@@ -569,6 +576,68 @@ func printAtlasOrigin(w io.Writer, records []atlasRecord) {
 	if n := len(byOrigin[""]); n > 0 {
 		fmt.Fprintf(w, "  (unclassified: %d — a bug; every record must carry an origin)\n", n)
 	}
+}
+
+func filterOrigin(records []atlasRecord, origin string) []atlasRecord {
+	var out []atlasRecord
+	for _, r := range records {
+		if r.Origin == origin {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// printAtlasExternal is the bin-managed view: everything bashy downloads and
+// exec's instead of linking, by kind — the pinned POSIX providers (the
+// pure-Go DEBT: each is a POSIX-required utility not yet implemented in Go),
+// the managed externals (wrapped tools with their own release train), and
+// the toolchain provisioners. `*` marks POSIX-required. The view exists so
+// "what is still not pure Go" is one command, not a grep.
+func printAtlasExternal(w io.Writer, records []atlasRecord) {
+	kinds := []struct{ key, title string }{
+		{"provider", "pinned providers — in-process names served by a locally built pinned upstream (the POSIX ones are the pure-Go debt)"},
+		{"managed-external", "managed externals — wrapped tools with their own release train (binmgr)"},
+		{"provisioner", "toolchain provisioners — version-pinned language/build toolchains"},
+	}
+	byKind := map[string][]string{}
+	posixDebt := 0
+	for _, r := range records {
+		name := r.Name
+		if r.Posix {
+			name += "*"
+		}
+		if r.Status == statusExperimental {
+			name += "~"
+		}
+		kind := r.Subclass
+		if kind == "" {
+			kind = atlas.SubclassManagedExternal // registry-derived CLIs carry it; defensive
+		}
+		// A coreutils-class managed external is a pinned POSIX provider
+		// (ar, ctags, …, plus why); a verb-class one is a wrapped tool.
+		if r.Class == "coreutils" && kind == atlas.SubclassManagedExternal {
+			kind = "provider"
+		}
+		if r.Class == "coreutils" && kind == atlas.SubclassProvisioner {
+			kind = "provider" // posix-providers, the provisioner in front of them
+		}
+		if kind == "provider" && r.Posix {
+			posixDebt++
+		}
+		byKind[kind] = append(byKind[kind], name)
+	}
+	fmt.Fprintf(w, "external — bin-managed: downloaded + exec'd, never linked (%d; * = POSIX-required):\n", len(records))
+	for _, k := range kinds {
+		names := byKind[k.key]
+		if len(names) == 0 {
+			continue
+		}
+		fmt.Fprintf(w, "  %s (%d):\n", k.title, len(names))
+		wrapNames(w, names, "    ", 80)
+	}
+	fmt.Fprintf(w, "  pure-Go debt: %d POSIX-required utilities still come from a pinned provider —\n", posixDebt)
+	fmt.Fprintln(w, "    `bashy posix-providers` provisions and inspects them; each one implemented in Go leaves this list.")
 }
 
 func filterPosix(records []atlasRecord) []atlasRecord {
