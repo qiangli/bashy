@@ -79,6 +79,7 @@ func loadGoSource(files []cli.GoSourceFile, opts cli.GoSourceOptions) (*cli.GoSo
 		Packages:               packages,
 		ImportBase:             opts.ImportBase,
 		ImportPath:             opts.ImportPath,
+		TestMain:               opts.TestMain,
 	})
 	if err != nil {
 		return nil, err

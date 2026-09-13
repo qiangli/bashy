@@ -92,6 +92,10 @@ type GoSourceOptions struct {
 	// ImportPath is the compiler's -p for the program package
 	// (--go-import-path): the identity its resolutions are attributed to.
 	ImportPath string
+	// TestMain asserts that the program is cmd/go's generated test main
+	// (--go-test-main): a FACT the caller passes, never inferred from a
+	// ".test" suffix; it requires ImportPath.
+	TestMain bool
 }
 
 // GoSourcePackage is one explicit dependency package: the import path it is
@@ -227,6 +231,9 @@ type GoSourceSelection struct {
 	// ImportPath records --go-import-path, the program package's own path
 	// (the compiler's -p); empty attributes its resolutions to the package name.
 	ImportPath string
+	// TestMain records --go-test-main: the program is cmd/go's generated
+	// test main. A fact, never inferred; requires ImportPath.
+	TestMain bool
 	// List records --go-list: check, then print every import resolution.
 	List bool
 	// DoubleDash records if -- was explicitly seen, separating arguments.
@@ -297,6 +304,7 @@ type GoSourceResolution struct {
 	Packages   []GoSourcePackageSpec
 	ImportBase string
 	ImportPath string
+	TestMain   bool
 	List       bool
 }
 
@@ -439,6 +447,9 @@ func stripGoSourceInvocationFlags(args []string) ([]string, GoSourceSelection, e
 			}
 			sel.ImportPath = value
 			continue
+		case arg == "--go-test-main":
+			sel.TestMain = true
+			continue
 		case arg == "--go-list":
 			sel.List = true
 			continue
@@ -535,6 +546,9 @@ func ResolveGoSource(sel GoSourceSelection, ctx GoSourceContext) (GoSourceResolu
 		if sel.ImportPath != "" {
 			return GoSourceResolution{}, goSourceErrorf("bashy: --go-import-path requires --source=go")
 		}
+		if sel.TestMain {
+			return GoSourceResolution{}, goSourceErrorf("bashy: --go-test-main requires --source=go")
+		}
 		if sel.List {
 			return GoSourceResolution{}, goSourceErrorf("bashy: --go-list requires --source=go")
 		}
@@ -565,9 +579,12 @@ func ResolveGoSource(sel GoSourceSelection, ctx GoSourceContext) (GoSourceResolu
 	// every mapped package from its exact files into the one program the
 	// interpreter runs, so the runtime never resolves a mapped path on disk
 	// (S151.1). --go-list is itself a check.
+	if sel.TestMain && sel.ImportPath == "" {
+		return GoSourceResolution{}, goSourceErrorf("bashy: --go-test-main asserts the identity of the program and requires --go-import-path")
+	}
 	return GoSourceResolution{Enabled: true, Check: sel.Check || sel.List, Files: sel.Files, GoVersion: sel.GoVersion,
 		TestBuiltins: sel.TestBuiltins, CheckerBranchErrors: sel.CheckerBranchErrors, CheckAfterSyntaxErrors: sel.CheckAfterSyntaxErrors,
-		Packages: sel.Packages, ImportBase: sel.ImportBase, ImportPath: sel.ImportPath, List: sel.List}, nil
+		Packages: sel.Packages, ImportBase: sel.ImportBase, ImportPath: sel.ImportPath, TestMain: sel.TestMain, List: sel.List}, nil
 }
 
 // ReadGoSourcePackages reads the exact bytes of every --go-package file. It
@@ -841,7 +858,7 @@ func runGoSourceInvocation() error {
 	}
 	prog, err := LoadGoSource(in, GoSourceOptions{RunMain: !noExec, Dir: in.Dir, GoVersion: startupGoSource.GoVersion,
 		TestBuiltins: startupGoSource.TestBuiltins, CheckerBranchErrors: startupGoSource.CheckerBranchErrors, CheckAfterSyntaxErrors: startupGoSource.CheckAfterSyntaxErrors,
-		Packages: packages, ImportBase: startupGoSource.ImportBase, ImportPath: startupGoSource.ImportPath})
+		Packages: packages, ImportBase: startupGoSource.ImportBase, ImportPath: startupGoSource.ImportPath, TestMain: startupGoSource.TestMain})
 	if err != nil {
 		return goSourceLoadFailure(err)
 	}
@@ -876,6 +893,14 @@ func runGoSourceInvocation() error {
 	// directory. See [GoSourceModuleDir].
 	if GoSourceModuleDir != nil && in.Dir != "" {
 		if err := GoSourceModuleDir(in.Dir)(r); err != nil {
+			return err
+		}
+	}
+	// The program's DECLARED identity (and the test-main fact) travel to the
+	// runtime resolver, where cmd/go's internal-visibility rule is decided
+	// on them (Sprint 165 D8); without an identity nothing changes.
+	if startupGoSource.ImportPath != "" {
+		if err := interp.GoSourceIdentity(startupGoSource.ImportPath, startupGoSource.TestMain)(r); err != nil {
 			return err
 		}
 	}

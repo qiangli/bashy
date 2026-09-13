@@ -48,6 +48,10 @@ func TestResolveGoSourcePackageRefusals(t *testing.T) {
 		{"base without go", GoSourceSelection{ImportBase: "test"}, "bashy: --go-import-base requires --source=go"},
 		{"list without go", GoSourceSelection{List: true}, "bashy: --go-list requires --source=go"},
 		{"path without go", GoSourceSelection{ImportPath: "test/b"}, "bashy: --go-import-path requires --source=go"},
+		{"test-main without go", GoSourceSelection{TestMain: true}, "bashy: --go-test-main requires --source=go"},
+		// Sprint 165 D8: the test-main FACT asserts the program's identity, so
+		// it is refused without one — never inferred from a ".test" suffix.
+		{"test-main without path", GoSourceSelection{Language: "go", LanguageSeen: true, TestMain: true}, "bashy: --go-test-main asserts the identity of the program and requires --go-import-path"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -60,6 +64,10 @@ func TestResolveGoSourcePackageRefusals(t *testing.T) {
 	res, err := ResolveGoSource(GoSourceSelection{Language: "go", LanguageSeen: true, List: true, Packages: pkg, ImportBase: "test"}, bashy)
 	if err != nil || !res.Check || !res.List || res.ImportBase != "test" || len(res.Packages) != 1 {
 		t.Fatalf("resolution = %+v, %v; --go-list must imply --check and carry the map", res, err)
+	}
+	res, err = ResolveGoSource(GoSourceSelection{Language: "go", LanguageSeen: true, ImportPath: "cmd/x.test", TestMain: true}, bashy)
+	if err != nil || res.ImportPath != "cmd/x.test" || !res.TestMain {
+		t.Fatalf("resolution = %+v, %v; --go-test-main with --go-import-path must carry both", res, err)
 	}
 }
 

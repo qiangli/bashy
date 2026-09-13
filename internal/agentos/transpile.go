@@ -154,6 +154,7 @@ func dispatchTranspile(args []string) int {
 	var goPackages []cli.GoSourcePackageSpec
 	var goLibrary string
 	var goImportBase, goImportPath string
+	var goTestMain bool
 	var goVersion string
 	var goVersionSeen bool
 	var goTestBuiltins bool
@@ -276,6 +277,9 @@ func dispatchTranspile(args []string) int {
 				return 2
 			}
 			goImportBase = value
+		} else if inFlags && arg == "--go-test-main" {
+			goTestMain = true
+			continue
 		} else if inFlags && (arg == "--go-import-path" || strings.HasPrefix(arg, "--go-import-path=")) {
 			value, ok := strings.CutPrefix(arg, "--go-import-path=")
 			if !ok {
@@ -355,8 +359,12 @@ func dispatchTranspile(args []string) int {
 		fmt.Fprintln(os.Stderr, "transpile: --go-test-file, --go-xtest-file and --go-library require --source=go")
 		return 2
 	}
-	if (len(goPackages) > 0 || goImportBase != "" || goImportPath != "") && !goInput {
-		fmt.Fprintln(os.Stderr, "transpile: --go-package, --go-import-base and --go-import-path require --source=go")
+	if (len(goPackages) > 0 || goImportBase != "" || goImportPath != "" || goTestMain) && !goInput {
+		fmt.Fprintln(os.Stderr, "transpile: --go-package, --go-import-base, --go-import-path and --go-test-main require --source=go")
+		return 2
+	}
+	if goTestMain && goImportPath == "" {
+		fmt.Fprintln(os.Stderr, "transpile: --go-test-main asserts the identity of the program and requires --go-import-path")
 		return 2
 	}
 	if goLibrary != "" && input != "" {
@@ -404,7 +412,7 @@ func dispatchTranspile(args []string) int {
 		return dispatchTranspileLibrary(goLibrary, goFiles, goTestFiles, goXTestFiles, cli.GoSourceOptions{
 			GoVersion: goVersion, TestBuiltins: goTestBuiltins,
 			CheckerBranchErrors: goCheckerBranchErrors, CheckAfterSyntaxErrors: goCheckAfterSyntaxErrors,
-			ImportBase: goImportBase, ImportPath: goImportPath, PreserveNativeInit: true,
+			ImportBase: goImportBase, ImportPath: goImportPath, TestMain: goTestMain, PreserveNativeInit: true,
 		})
 	}
 	if len(goTestFiles) > 0 || len(goXTestFiles) > 0 {
@@ -490,7 +498,7 @@ func dispatchTranspile(args []string) int {
 		file, goProg, err = loadTranspileGoSource(in, cli.GoSourceOptions{
 			GoVersion: goVersion, TestBuiltins: goTestBuiltins,
 			CheckerBranchErrors: goCheckerBranchErrors, CheckAfterSyntaxErrors: goCheckAfterSyntaxErrors,
-			Packages: packages, ImportBase: goImportBase, ImportPath: goImportPath,
+			Packages: packages, ImportBase: goImportBase, ImportPath: goImportPath, TestMain: goTestMain,
 		})
 		if err != nil {
 			// sh's Go diagnostics carry their own file:line:col positions and
