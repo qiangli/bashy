@@ -56,13 +56,12 @@ func TestCommandsCatalogSources(t *testing.T) {
 			t.Errorf("hiding %q must not remove its bare shim", shimmed)
 		}
 	}
-	// A visible alias of a hidden target (peer → sphere) is a new shape: the
-	// alias is taught, the target is not. The container engine is the other
-	// way round: oci is the canonical VISIBLE name, sandbox its visible popular
-	// alias, and the vendor spellings podman/docker are hidden aliases of it.
-	for alias, target := range map[string]string{"peer": "sphere"} {
-		if !slices.Contains(verbs, alias) || slices.Contains(verbs, target) {
-			t.Errorf("%s should be visible and %s hidden", alias, target)
+	// The canonical name is the taught one; the other spellings are aliases.
+	// peer (canonical, visible) ← sphere (tier word, hidden); oci (canonical,
+	// visible) ← sandbox (popular, visible) · podman/docker (vendor, hidden).
+	for hiddenAlias, canonical := range map[string]string{"sphere": "peer"} {
+		if !slices.Contains(verbs, canonical) || slices.Contains(verbs, hiddenAlias) || !slices.Contains(hidden, hiddenAlias) {
+			t.Errorf("%s should be visible and %s a hidden alias", canonical, hiddenAlias)
 		}
 	}
 	for _, vendor := range []string{"podman", "docker"} {

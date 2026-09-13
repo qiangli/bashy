@@ -178,8 +178,8 @@ var (
 	// A command graduates by leaving this list with a gate in hand.
 	//
 	// `podman`/`docker` (vendor spellings) hide behind `oci` (the standard
-	// name, canonical) and `sandbox` (the popular name); `sphere` hides behind
-	// the taught alias `peer` (coreutils atlas: aliasVerb).
+	// name, canonical) and `sandbox` (the popular name); `sphere` (the tier
+	// word) is the hidden alias of the canonical `peer`.
 	//
 	// NEVER `agentic`: it is a RESERVED WORD of Bash++ (operator, 2026-09-13),
 	// not a yoke verb up for curation. TestCommandsCatalogSources pins it.
@@ -195,7 +195,7 @@ var (
 		// engines: oci is the standard name, sandbox the popular one; these
 		// two are the vendor spellings
 		"podman", "docker",
-		// sphere: peer is the taught name
+		// sphere: the tier word, hidden alias of the canonical peer
 		"sphere",
 		// platform: self is still the install/upgrade path
 		"self", "web",
@@ -1404,7 +1404,7 @@ func dispatch() {
 			dispatchExit(1)
 		}
 		dispatchExit(0)
-	case "sphere", "peer":
+	case "peer", "sphere":
 		// Sphere tier (tier 4): peer-direct pooled p2p inference/compute. Thin
 		// front-door that execs the outpost mesh agent at runtime — NO build
 		// dependency on outpost (bashy stays the standalone keystone). Without

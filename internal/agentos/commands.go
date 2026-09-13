@@ -504,7 +504,7 @@ var verbSynopsis = map[string]string{
 	"kubectl":     "Kubernetes CLI for the DKS cluster (managed external, Apache-2.0)",
 	"helm":        "Helm chart installer for the DKS cluster (managed external, Apache-2.0)",
 	"dks":         "provision and manage the dedicated rootful DKS (k3s) machine",
-	"sphere":      "the sphere tier under its tier name; `bashy peer` is the taught spelling",
+	"sphere":      "tier-word spelling of `bashy peer` (the sphere tier's front door)",
 	"peer":        "the sphere tier: peer-direct pooled p2p inference/compute across your own machines (via outpost)",
 	"tessaro":     "Tessaro account: sign in/out, status, open the portal (via outpost)",
 	"login":       "sign in to Tessaro — pair this machine with the portal",

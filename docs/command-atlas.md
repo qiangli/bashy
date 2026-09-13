@@ -71,7 +71,7 @@ Each command has one record:
 | `core` | `true` for the bashy 1.0.0 core (35 commands, §2.6) |
 | `status` | `experimental` on a curated-hidden command (§2.6); absent on a hidden alias |
 | `hidden` | `true` for the compatibility aliases and the curated experimental set (shown only with `--all`) |
-| `alias_of` | `oci` for `sandbox`/`podman`/`docker`, `sphere` for `peer`, the singular for each plural; empty otherwise |
+| `alias_of` | `oci` for `sandbox`/`podman`/`docker`, `peer` for `sphere`, the singular for each plural; empty otherwise |
 
 ### 2.1 Group vocabulary
 
@@ -383,8 +383,9 @@ graduates by leaving that list with a gate in hand.
 otel), the spec the engine implements — and the canonical atlas entry;
 `sandbox` is the **popular** name (the tier-3 venue word, a visible alias);
 `podman` and `docker` are **vendor** spellings (hidden aliases, kept for
-callers). All four dispatch to the embedded podman engine. `peer` (alias of
-hidden `sphere`) is the other taught-name-over-hidden-target case.
+callers). All four dispatch to the embedded podman engine. The sphere tier
+follows the same rule: `peer` is the canonical (taught) name, `sphere` — the
+tier word — its hidden alias.
 `bashy commands podman` says `use \`bashy oci\``.
 
 ## 3. Data home
