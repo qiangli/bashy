@@ -490,13 +490,19 @@ traps). Repeat until the actionable failing set is empty; verify the
 environment-divergent cases and any cross-cluster ripple in the canonical
 environment in a final consolidation pass.
 
-At round end, write the durable residue into the **host kb** (`bashy kb`) —
-the collective memory of all agents on this host across all repos. Campaign
-notes die with the campaign; the kb is where the cross-campaign lessons live
-(the tool report card patterns above are exactly this genre). `bashy kb retro
-<terms>` structures the decision: add / update / supersede / validate / noop —
+At round end, persist durable residue as candidates in the conductor's agent
+ring with `bashy kb note add --candidate --ring agent --episode
+"<sprint-run>" --title "<lesson title>" --body "<distilled lesson>"`.
+Campaign notes die with the campaign; the kb is where cross-campaign lessons
+live (the tool report card patterns above are exactly this genre). After the
+conductor runs the merged-tree gate, record its verdict with `bashy kb observe
+--ring agent --episode "<sprint-run>" --kind gate --ref "<gate ref>" --ran
+--passed --command "<gate command>" --exit-code 0 --where "<merged tree>"
+--json`. Promotion is possible only through that returned event id:
+`bashy kb validate <slug> --ring agent --from-gate <event-id>`. Then `bashy kb
+retro <terms>` structures the remaining update / supersede / noop decision —
 distilled strategy with evidence, failures phrased as guardrails, never
-transcripts. Workers already saw the relevant pages (weave drops KB.md into
+transcripts. Workers already saw the relevant pages (weave drops `KB.md` into
 each workspace), so a validated kb page is knowledge the NEXT campaign's
 fleet gets for free.
 

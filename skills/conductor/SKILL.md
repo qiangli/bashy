@@ -291,14 +291,16 @@ monitoring an external run, steering or reassigning workers, running gates, and 
 continuity. Do not impose those examples as a universal Sprint/Scrum sequence. End each
 turn by refreshing the TODO from observed evidence.
 
-1. **PLAN** — **check the host kb first: `bashy kb search <goal terms>`** —
-   the collective memory of every agent on this host across all repos; known
-   traps it returns go into story bodies as KNOWN TRAPS, and if nothing
-   relevant exists note what you'd expect to find (you'll contribute it at
-   RETRO). Then decompose the goal into disjoint-scope stories, file them in
-   the queue (`bashy weave add … --priority p0`). Optional cheap-agent
-   estimates. (Workers get their own kb check for free: `weave start` drops
-   KB.md into each workspace.)
+1. **PLAN** — assemble the bounded repo + host context for each story before
+   decomposing or staffing it:
+   `bashy kb context --for "<story title>" --rings repo,host --budget 700`.
+   Put the returned traps into the story body as KNOWN TRAPS. An honest empty
+   context is not an error; note what you expected to find so RETRO can persist
+   it if the run teaches something durable. Then decompose the goal into
+   disjoint-scope stories and file them in the queue
+   (`bashy weave add … --priority p0`). Optional cheap-agent estimates.
+   (Workers receive the same assembled repo context when `weave start` drops
+   `KB.md` into each workspace.)
 2. **RESEARCH** *(only when complex)* — if the queue is large, research
    approaches / prior-art / risks first. Simple goals skip it.
 3. **FAN-OUT** *(routed by parallel-safety — see Scheduling)* — fan out to a
@@ -345,11 +347,16 @@ turn by refreshing the TODO from observed evidence.
    then `bashy weave pull`; re-run the goal verifier on the merged tree by hand
    before trusting it.
 6. **RETRO** — capture the tool report card (which CLI did well on what) + any
-   lessons; embed bisect findings into the next round's story bodies. **Close
-   the kb loop: `bashy kb retro <terms>`** — validate pages that proved out
-   (`bashy kb validate <slug> --evidence "<gate cmd/commit>"`), supersede
-   what proved wrong, add the campaign's durable lessons (distilled strategy
-   + failures-as-guardrails, never transcripts; NOOP when nothing durable).
+   lessons; embed bisect findings into the next round's story bodies. Persist
+   each durable lesson as a runtime candidate with
+   `bashy kb note add --candidate --ring agent --episode "<sprint-run>" --title "<lesson title>" --body "<distilled lesson>"`.
+   After the conductor has actually run the gate, journal its honest verdict:
+   `bashy kb observe --ring agent --episode "<sprint-run>" --kind gate --ref "<gate ref>" --ran --passed --command "<gate command>" --exit-code 0 --where "<merged tree>" --json`.
+   Capture the returned event id and promote a proved candidate only through
+   `bashy kb validate <slug> --ring agent --from-gate <event-id>`; a failed or
+   unrun gate never promotes. Supersede what proved wrong and use
+   `bashy kb retro <terms>` to reconcile the residue (distilled strategy +
+   failures-as-guardrails, never transcripts; NOOP when nothing durable).
    This is what makes the conductor — and every other agent on the host —
    improve across runs, not just within one.
 
