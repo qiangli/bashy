@@ -239,6 +239,11 @@ func verbAtlasRecord(name string, hidden bool) (r atlasRecord) {
 	}
 	if e, ok := registry.Lookup(name); ok {
 		applyEntry(&r, atlas.RegistryEntry(e.Tier))
+		// Registry CLIs are outside the atlas tables; their platform support
+		// is declared by name in the same table as every other external.
+		if d, ok := atlas.ExternalPlatforms(name); ok {
+			r.OS, r.Portable = d.OS, len(d.OS) == len(atlas.OSes())
+		}
 		return r
 	}
 	// Verbs bashy owns outright, which the shared coreutils atlas has no
