@@ -60,7 +60,7 @@ func TestVerifyBashySurfaceRequiresAgentOSVerbs(t *testing.T) {
 		return nil, nil
 	}
 	err := verifyBashySurface("/tmp/bashy", incomplete)
-	if err == nil || !strings.Contains(err.Error(), "judge") || !strings.Contains(err.Error(), "agent") {
+	if err == nil || !strings.Contains(err.Error(), "sprint") || !strings.Contains(err.Error(), "agent") {
 		t.Fatalf("missing AgentOS verbs error = %v", err)
 	}
 }

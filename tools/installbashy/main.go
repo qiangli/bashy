@@ -20,20 +20,21 @@ import (
 	"strings"
 )
 
-// requiredAgentOSVerbs are the VISIBLE verbs an installable bashy must list.
-// Nouns are singular (agent/model/skill/tool); their plurals are hidden
-// aliases, so they are absent from `commands --json` by design and are
-// probed for dispatch below instead.
+// requiredAgentOSVerbs are the VISIBLE verbs an installable bashy must list —
+// a slice of the 1.0.0 core. Nouns are singular (agent/model/skill/tool);
+// their plurals are hidden aliases, and the curated experimental verbs
+// (judge, …) are hidden by maturity, so both are absent from `commands --json`
+// by design and are probed for dispatch below instead.
 var requiredAgentOSVerbs = []string{
 	"agent",
 	"chat",
 	"commands",
 	"dag",
-	"judge",
 	"kb",
 	"meet",
 	"model",
 	"skill",
+	"sprint",
 	"tool",
 	"weave",
 }
@@ -201,7 +202,9 @@ func verifyBashySurface(exe string, run commandRunner) error {
 	// `agents` is the hidden plural alias of `agent`: an atlas alias row is
 	// metadata, only a dispatch arm makes the spelling work, so the alias is
 	// probed too — an installed bashy on which `bashy agents` fell through to
-	// the shell would break every existing caller at once.
+	// the shell would break every existing caller at once. `judge` is a
+	// curated-hidden (experimental) verb: hidden from the listing, and this
+	// probe is the proof that hidden never meant removed.
 	for _, verb := range []string{"judge", "agent", "agents"} {
 		out, err = run(exe, verb, "--help")
 		if err != nil {
