@@ -254,6 +254,14 @@ func printAgenticCommands(w io.Writer) {
   bashy dag --list               list markdown DAG targets
   bashy graph impact SYMBOL      code-graph blast radius: what's coupled to a symbol
   bashy graph hotspots           most-connected symbols (refactor / orientation targets)
+  bashy kb context --for TASK --rings repo,host --forms note,page --budget 700 --json
+                                  assemble bounded knowledge for a task
+  bashy kb observe --ring agent --episode E --kind KIND --ref REF
+                                  journal an observation without writing a page
+  bashy kb validate SLUG --ring RING --from-gate EVENT_ID
+                                  promote only from a gate that ran and passed
+  bashy kb note add --candidate --ring agent --episode E --title T --body TEXT
+                                  persist a runtime candidate through the kb verb
   bashy podman ...               Podman-compatible isolated container engine
 
 dry-run JSON entry kinds:
@@ -390,7 +398,7 @@ var verbSynopsis = map[string]string{
 	"skill":       "tier-2 workspace skills, env-gated: list applicable here, probe the coordinate, show one",
 	"skills":      "hidden alias for bashy skill",
 	"craft":       "the living skill graph: what running skills has taught this host, per skill or per capability",
-	"kb":          "host-shared knowledge base: search before a task, add/retro after (all agents, all repos)",
+	"kb":          "ring-aware knowledge stages: context/search, observe, validate, and candidate note add (JSON-capable)",
 	"tool":        "the agentic CLI harnesses this host can drive (claude, codex, opencode, ...)",
 	"model":       "the inference backends the fleet can bind to (subscription, api, local)",
 	"agent":       "active weave assignments; `agent list` shows registered tool:model bindings, `agent whoami` this process's identity",

@@ -58,3 +58,25 @@ func newKBRecallCmd() *cobra.Command {
 	}
 	return cmd
 }
+
+// newKBContextCmd mounts recall's budgeted assembly stage beside the
+// third-party recall surface. Code-form readers are intentionally not injected
+// in landing 1; landing 2 supplies cmds/graph's CodeRing through NewContextCmd's
+// Reader seam.
+func newKBContextCmd() *cobra.Command {
+	cmd := recall.NewContextCmd()
+
+	// Like recall, context spans rings and therefore must not inherit a flag
+	// that claims to select one kb store. Defining the closest hook also keeps
+	// kb's single-store scope header off this machine-readable surface.
+	cmd.PersistentPreRunE = func(c *cobra.Command, _ []string) error {
+		for _, f := range []string{"dir", "repo", "user", "base-dir"} {
+			if fl := c.Flags().Lookup(f); fl != nil && fl.Changed {
+				return fmt.Errorf(
+					"--%s selects ONE kb store; context assembles memory rings, so it cannot honour it — use --rings to select the read set", f)
+			}
+		}
+		return nil
+	}
+	return cmd
+}

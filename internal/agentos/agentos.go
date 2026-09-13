@@ -986,7 +986,7 @@ func dispatch() {
 		// `add` when nothing relevant exists, `retro` (update/supersede/
 		// validate) after the task completes.
 		cmd := kb.NewKBCmd()
-		cmd.AddCommand(newKBRecallCmd())
+		cmd.AddCommand(newKBRecallCmd(), newKBContextCmd())
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy kb:", err)

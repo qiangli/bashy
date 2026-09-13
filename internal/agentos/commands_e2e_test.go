@@ -401,11 +401,17 @@ func runBashyStdEnv(bin string, env []string, args ...string) (stdout, stderr st
 // visible to humans on stderr. Telemetry remains enabled in both modes.
 func TestE2EMachineOutputKeepsTelemetryOnStderr(t *testing.T) {
 	bin := bashyBinary(t)
-	env := []string{
+	scratch := scratchKBE2EEnv(t)
+	env := append([]string{}, scratch.vars...)
+	env = append(env,
 		"OTEL_TRACES_EXPORTER=file",
 		"BASHY_TELEMETRY_QUIET=",
-		"BASHY_OTEL_SPOOL=" + filepath.Join(t.TempDir(), "spans.jsonl"),
-	}
+		// Captured agent stderr is intentionally quiet by default. This test is
+		// about stream placement, so request the notice explicitly instead of
+		// letting the invoker's CI/agent markers decide the verdict.
+		"BASHY_TELEMETRY_NOTICE=1",
+		"BASHY_OTEL_SPOOL="+filepath.Join(t.TempDir(), "spans.jsonl"),
+	)
 
 	stdout, stderr, code := runBashyStdEnv(bin, env, "commands", "--json")
 	if code != 0 {

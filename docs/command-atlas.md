@@ -118,6 +118,16 @@ export [--yaml]`). Embedded entries are immutable; every write is copy-on-write
 into the local ring, so the verbs are the only supported way to edit the
 catalog — never the files under `~/.config/bashy/`.
 
+`kb` is likewise one atlas row with a subcommand-bearing surface (the atlas
+classifies executable command names, not Cobra paths). Its `knowledge` row
+carries `json` and fronts the five knowledge stages: `kb context --for TASK
+--rings repo,host --forms note,page --budget 700 --json` (assemble), `kb
+search`/`show` with singular `--ring` and `--form` (retrieve), `kb observe`
+(observe), `kb validate --from-gate` (verify), and `kb note add --candidate`
+(persist). `backlinks`, flag-only `doctor`, and `transfer --from memex` are on
+the same row. Agents use these verbs; they never edit a store's `pages/*.md` or
+`graph.jsonl` directly.
+
 The **default `bashy commands` surface** groups the userland further than
 these groups: `fileutils`/`textutils`/`shellutils` tools split into
 *coreutils* (name ∈ the canonical GNU coreutils set — the same list behind

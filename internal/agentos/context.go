@@ -150,9 +150,9 @@ type contextCaps struct {
 	// next one — which four days of telemetry showed is exactly what happened:
 	// 61,084 dispatched commands, and one attempt to read the store.
 	//
-	// KnowledgeBase (kb search/recall/add/retro) is the host-shared, cross-repo
-	// memory: distilled pages agents wrote for whoever came next, plus the
-	// cross-ring read surface over them. Advertised separately from
+	// KnowledgeBase is the ring-aware memory surface: context assembles,
+	// search/show retrieve, observe journals, validate verifies, and note add
+	// persists candidates. Advertised separately from
 	// knowledge_graph because they are different stores — the graph is per-repo
 	// and contribution-shaped, kb is per-host and claim-shaped.
 	//
@@ -310,7 +310,11 @@ func fillContext(report contextReport, bashyPath string) contextReport {
 		// happens in, and an agent that never touches them starts every session
 		// from nothing and leaves nothing behind.
 		{Purpose: "WHAT IS ALREADY KNOWN about this task — run BEFORE starting; other agents on this host left it for you", Command: bashyPath + " kb search QUERY"},
+		{Purpose: "ASSEMBLE one budgeted prompt context across selected rings and forms", Command: bashyPath + " kb context --for TASK --rings repo,host --forms note,page --budget 700 --json"},
 		{Purpose: "same question across EVERY memory ring (kb + capabilities), one envelope", Command: bashyPath + " kb recall QUERY"},
+		{Purpose: "OBSERVE a non-command result or gate verdict without creating a knowledge record", Command: bashyPath + " kb observe --ring agent --episode EPISODE --kind KIND --ref REF"},
+		{Purpose: "VERIFY a candidate only from an id-addressable gate event that ran and passed", Command: bashyPath + " kb validate SLUG --ring RING --from-gate EVENT_ID"},
+		{Purpose: "PERSIST a runtime note as a candidate in exactly one ring", Command: bashyPath + " kb note add --candidate --ring agent --episode EPISODE --title TITLE --body TEXT"},
 		{Purpose: "write back what THIS task taught — run AFTER finishing; validate/correct what you consulted, never blind-append", Command: bashyPath + " kb retro"},
 		{Purpose: "WHAT NEEDS YOUR ATTENTION across MB, Meet, Bus, and authorized role mail — read/respond before planning", Command: bashyPath + " inbox"},
 		{Purpose: "say something to everyone (or one agent: mb send AGENT ...) — how you reach a human or a peer mid-task", Command: bashyPath + " mb post MESSAGE"},
