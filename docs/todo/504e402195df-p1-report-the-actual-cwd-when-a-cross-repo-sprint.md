@@ -6,7 +6,7 @@ seq: 233
 status: todo
 priority: p1
 created: 2026-09-06T01:08:49.784406Z
-sprint: 130
+sprint: 166
 ---
 
 FOUND while stopping sprint 127 — the gate refused three times before I understood why.

@@ -6,7 +6,7 @@ seq: 244
 status: todo
 priority: p1
 created: 2026-09-06T11:33:26.160232Z
-sprint: 130
+sprint: 166
 ---
 
 There are TWO build systems and NOTHING tests that they agree. Verified: no

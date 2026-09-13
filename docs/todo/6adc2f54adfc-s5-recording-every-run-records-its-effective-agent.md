@@ -6,7 +6,7 @@ seq: 254
 status: todo
 priority: p1
 created: 2026-09-10T10:45:50.682897Z
-sprint: 146
+sprint: 166
 ---
 
 Load-bearing, not hygiene. Once the environment can activate agentic mode, the SOURCE alone no longer tells you whether a run was assisted - so the RUN has to say so.

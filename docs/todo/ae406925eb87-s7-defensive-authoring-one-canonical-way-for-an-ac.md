@@ -6,7 +6,7 @@ seq: 255
 status: todo
 priority: p2
 created: 2026-09-10T10:45:50.708233Z
-sprint: 146
+sprint: 166
 ---
 
 The author of an action decides whether it supports agentic mode and what happens when it does not. This story gives that decision one spelling so it is not hand-rolled differently in every script.
