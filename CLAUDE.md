@@ -621,6 +621,7 @@ itself, which is pure Go).
 - `absence-of-evidence.md` — **the day's real product, and the codebase's characteristic failure.** SEVEN instances in one day of ONE shape: *a success state reached by the absence of evidence.* Declared fields nothing writes (`ConversationMessage.Usage`, `ExemptFromMasking`, `StreamOptions`, `SessionTotalCost`, 3 config fields), caps that bind and exit 0, a pricing fallback that bills an unknown model at Claude's rate. Every one produced a PLAUSIBLE ANSWER THAT WAS NOT TRUE, and four of them nearly got recorded as facts about a MODEL. Also: the four times my own instruments lied (`cmd | head && echo OK` chains off head's exit; `rm` on a receiver's open file; a bad `pgrep` pattern; an OTLP receiver silently dropping span events). Read before trusting any green check.
 - `agentic-history-and-space-graph.md` — **the shipped agentic replacement for the `history` builtin, and the entity graph learned from it.** Two planes from one observation at the ExecHandler seam: TIME (`pkg/execlog`, every dispatched command, ordered, prunable) and SPACE (`pkg/spacegraph`, hosts/endpoints/accounts and the relations between them, bi-temporal, `0600`, **no export path — every node is identity**). `graph learn` pipes what the corpus supports into kb as **candidate** pages carrying an ADDRESS into the stream, not a copy; `graph evidence` walks it back, and reports honestly when the records have been pruned (the claim outlives its evidence). Load-bearing rules: time is never in a key (put a clock in one and the store silently fills with n=1 singletons); FAILURE TEACHES NOTHING (a transport failure is unattributed — correction is by supersession on positive evidence); every read verb prints its coverage. **Read `../docs/knowledge-substrate-reconciliation.md` first** — it demotes these two from "stores" to a stream and a view, with kb as the one truth.
 - `observability.md` — the shipped OTel plane. bashy could RUN a collector (`bashy otel`) and fed it NOTHING — it was the one tier of the whole stack missing from the umbrella's `service.name` set. Two primitives, chosen from what six hours of debugging could not see: **Provenance** (a value next to WHERE IT CAME FROM — the only bug caught by a signal was caught by `from_provider=false`) and **BoundHit** (a limit records when it BINDS — especially when the run recovers). Plus a span per command at the ExecHandler chokepoint, including the EXIT CODE. Stack trimmed 286 MB → 109 MB (−61%) by going Victoria-only: jaeger (2,240 deps) → VictoriaTraces, perses (1,478) → vmui, collector (833) → three proxy map entries, prometheus (556) → VictoriaMetrics. Pure standard OTEL env vars; unset endpoint is a total no-op; `cmd/bash` links none of it.
+- (umbrella) `docs/bashy-action-model.md` — the action contract: skill, agent, command and script are one `run(input) → output | error` shape; tool is the executor, model a resource; the `kind: skill` record rule and the generic `--set`/`schema` CRUD contract behind `bashy skill|tool|model|agent`.
 - `audit-log.md` — the shipped compliance audit trail: a tamper-evident, hash-chained, secret-redacted record of every dispatched command with agent attribution and Command-Atlas effects (`bashy-audit-v1`; NIST AU-3/AU-9). Opt-in via `BASHY_AUDIT`, off by default, never in `cmd/bash` / `--posix`. Read side is `bashy inspect audit {status,tail,verify,export,path}`; core is `coreutils/pkg/policy/audit`, the ExecHandler middleware is `internal/agentos/audit.go`. Records; does not block (policy engine) or contain (OS sandbox) — the un-bypassable record of the agentic+interactive command path, composes with auditd/EDR. Deferred: OTel export, signed checkpoints, gitleaks-grade redactor.
 - `fips-140.md` — the shipped FIPS 140-3 build mode: `make build-fips` (`GOFIPS140=v1.0.0`) builds both binaries against the Go Cryptographic Module (CMVP #5247); pure-Go, no cgo/BoringCrypto. Use `GODEBUG=fips140=on` (the build-fips default — keeps `md5sum` working), NOT `fips140=only` (rejects MD5) for a general shell. State surfaced in `bashy inspect doctor` and `bashy inspect context --json` (`runtime.fips140`). A FIPS-built `bin/bash` still passes 86/86. Pairs with the audit log for the FedRAMP/CMMC procurement story.
 - `plan-bashy-ask-human-input.md` — **`bashy ask`**: get an ad-hoc value from the
@@ -698,9 +699,22 @@ brand-neutral and driven by bashy's own tools:
 - `skills/inbox/` — read the fleet message board (`bashy mb`) at the
   START of a turn, before planning, so a second agent doesn't redo or contradict
   work already taken. Requires `has=bashy`.
+- `skills/sprint/` — the sprint seat: card, goals, stories, checkpoint,
+  handoff.
 
 `skills/embed.go` and `bashy skill list` are the sources of truth for the set
-(six today); this prose drifts, they don't. Ecosystem-specific and internal
+(seven today); this prose drifts, they don't.
+
+**Record vs canonical.** `SKILL.md` is the on-disk canonical form of every
+skill — the de facto standard third-party harnesses read — and `bashy skill
+show <name>` prints it byte-identical. `bashy skill show --yaml|--json`,
+`add <file.yaml>|-`, and `export --yaml` project the same folder to and from
+a `kind: skill` RECORD (a lossless bundle: frontmatter fields + files verbatim,
+identity derived from the `skill.dhnt` canonical line, never from the YAML).
+The record is for the catalog and the wire, never the authoring form. Edit a
+skill with `skill set`/`edit` (copy-on-write into the local ring; embedded
+skills are immutable), never by hand under `~/.config/bashy`. Design of
+record: the umbrella's `docs/bashy-action-model.md`. Ecosystem-specific and internal
 operational skills, including `go-repo-health`, live in the umbrella's
 `skills/` overlay and are not compiled into the public binary.
 - `skills/force-agent-shell/` — attested check that agentic CLIs route their
