@@ -5,7 +5,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	graphcmd "github.com/qiangli/coreutils/cmds/graph"
 	"github.com/qiangli/coreutils/pkg/recall"
+	"github.com/qiangli/coreutils/pkg/scope"
 )
 
 // newKBRecallCmd mounts the cross-ring read surface (coreutils/pkg/recall) as
@@ -60,11 +62,19 @@ func newKBRecallCmd() *cobra.Command {
 }
 
 // newKBContextCmd mounts recall's budgeted assembly stage beside the
-// third-party recall surface. Code-form readers are intentionally not injected
-// in landing 1; landing 2 supplies cmds/graph's CodeRing through NewContextCmd's
-// Reader seam.
+// third-party recall surface. The code form is a VIEW over the code graph,
+// never a stored ring, so its reader lives beside the engine in cmds/graph and
+// is injected here — at the dispatch layer, where bashy already links both —
+// rather than imported by pkg/recall (which would drag gfy + tree-sitter into
+// every recall consumer) or by pkg/kb (an import leaf). Outside a git repo
+// there is no code to read and no reader is injected; `--forms code` then
+// refuses exactly as it did before landing 2.
 func newKBContextCmd() *cobra.Command {
-	cmd := recall.NewContextCmd()
+	var extra []recall.Reader
+	if root, ok := scope.FindGitRoot(); ok {
+		extra = append(extra, graphcmd.NewCodeRing(root))
+	}
+	cmd := recall.NewContextCmd(extra...)
 
 	// Like recall, context spans rings and therefore must not inherit a flag
 	// that claims to select one kb store. Defining the closest hook also keeps
