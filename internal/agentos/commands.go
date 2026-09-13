@@ -393,8 +393,8 @@ func containsString(items []string, want string) bool {
 // verbSynopsis describes the front-door verb shims (the coreutils tools carry
 // their own Synopsis; builtins are standard). Brand-neutral, one line each.
 var verbSynopsis = map[string]string{
-	"docker":      "alias for `bashy podman` (isolated in-process container engine)",
-	"sandbox":     "alias for `bashy podman` — the tier-3 venue; RAW engine, not outpost's filtered sandbox app",
+	"docker":      "docker-compatible spelling of `bashy sandbox` (isolated in-process container engine)",
+	"sandbox":     "the tier-3 venue: embedded, isolated in-process container engine (RAW engine, not outpost's filtered sandbox app)",
 	"podman":      "embedded, isolated in-process container engine",
 	"ollama":      "managed local LLM runtime (isolated daemon, own port/models)",
 	"weave":       "per-repo multi-agent workspace orchestrator",
@@ -503,8 +503,8 @@ var verbSynopsis = map[string]string{
 	"kubectl":     "Kubernetes CLI for the DKS cluster (managed external, Apache-2.0)",
 	"helm":        "Helm chart installer for the DKS cluster (managed external, Apache-2.0)",
 	"dks":         "provision and manage the dedicated rootful DKS (k3s) machine",
-	"sphere":      "peer-direct pooled p2p inference/compute — the sphere tier (via outpost)",
-	"peer":        "peer-direct pooled p2p inference/compute — the sphere tier (via outpost); the taught name of `bashy sphere`",
+	"sphere":      "the sphere tier under its tier name; `bashy peer` is the taught spelling",
+	"peer":        "the sphere tier: peer-direct pooled p2p inference/compute across your own machines (via outpost)",
 	"tessaro":     "Tessaro account: sign in/out, status, open the portal (via outpost)",
 	"login":       "sign in to Tessaro — pair this machine with the portal",
 }
