@@ -253,7 +253,9 @@ func printAgenticCommands(w io.Writer) {
 
 discovery:
   bashy commands                 the 1.0.0 surface: 35 core + visible extras; --all for everything
-  bashy commands --view origin   every name by who defined it (bash · GNU · Unix · external · bashy)
+  bashy commands --view origin   every name by who defined it (bash · GNU · Unix · external · yoke)
+  bashy commands --view posix    the 116 POSIX-required utilities: internal (pure Go) vs bin-managed
+  bashy commands --view external what is downloaded + exec'd, and the pure-Go debt
   bashy commands NAME            one command: class, origin, capabilities, gaps (--features for JSON)
   bashy commands --idioms        commands naturally used together (composites)
   bashy inspect context --json   first-hop context: exact bashy path + capabilities
