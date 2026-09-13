@@ -393,11 +393,11 @@ func containsString(items []string, want string) bool {
 // verbSynopsis describes the front-door verb shims (the coreutils tools carry
 // their own Synopsis; builtins are standard). Brand-neutral, one line each.
 var verbSynopsis = map[string]string{
-	"oci":         "the tier-3 container engine, by its standard name (O3: ollama · oci · otel): embedded, isolated, in-process (RAW engine, not outpost's filtered sandbox app)",
+	"oci":         "the sandboxing pillar (O3: ollama · oci · otel): the tier-3 container engine by its standard name — embedded, isolated, in-process (RAW engine, not outpost's filtered sandbox app)",
 	"docker":      "vendor spelling of `bashy oci` (the embedded container engine)",
 	"sandbox":     "the tier-3 venue, by its popular name: same engine as `bashy oci`",
 	"podman":      "vendor spelling of `bashy oci` (the engine underneath)",
-	"ollama":      "managed local LLM runtime (isolated daemon, own port/models)",
+	"ollama":      "the LLM pillar (O3: ollama · oci · otel): managed local LLM runtime — isolated daemon, own port/models",
 	"weave":       "per-repo multi-agent workspace orchestrator",
 	"sprint":      "cross-repo plan/continuity board (peer to weave)",
 	"handoff":     "pause this session and hand the work to another agent, a scheduler, or tomorrow",
@@ -463,7 +463,7 @@ var verbSynopsis = map[string]string{
 	"inspect":     "self-inspection: resource map, gate decisions, and the index of what answers what",
 	"context":     "hidden alias for bashy inspect context",
 	"doctor":      "hidden alias for bashy inspect doctor",
-	"otel":        "query OTEL telemetry with bounded agent-readable summaries",
+	"otel":        "the telemetry pillar (O3: ollama · oci · otel): query OTel telemetry with bounded agent-readable summaries",
 	"audit":       "hidden alias for bashy inspect audit",
 	"check":       "statically check shell scripts for bashy/system command closure and --bashpp null safety",
 	"verify":      "run formal test batteries: compat/conformance/compliance/benchmark",
