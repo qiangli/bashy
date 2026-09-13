@@ -108,7 +108,15 @@ non-shell consumers (multicall, MCP). `ast` and `graph` (group `code-intel`)
 are each a **single command with subcommands** (`ast symbols/search/refs/map/
 query`; `graph build/stats/neighbors/impact/path/hotspots/query · note/link/
 observe/forget/recall/notes/pitfalls`) — one atlas entry each, dispatched
-in-process.
+in-process. Likewise the catalog nouns are one entry each with a shared CRUD
+shape: `tool`/`model`/`agent` (`list/show [--field PATH]/add [--set PATH=VALUE]/
+set [--set PATH=VALUE|--unset PATH]/rm/edit/schema [--json]/verify/sync` — `schema`
+lists the dotted paths `--set`, `--unset` and `--field` accept; an unknown path
+fails loudly and prints it) and `skill` (`list/probe/show [--yaml|--json]/add
+<dir>|<file.yaml>|-|<name> --description/rm/set/edit/verify/run/learn/promote/
+export [--yaml]`). Embedded entries are immutable; every write is copy-on-write
+into the local ring, so the verbs are the only supported way to edit the
+catalog — never the files under `~/.config/bashy/`.
 
 The **default `bashy commands` surface** groups the userland further than
 these groups: `fileutils`/`textutils`/`shellutils` tools split into

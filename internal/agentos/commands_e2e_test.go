@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // unsupportedSignals are substrings that mean a command did NOT dispatch to a real
@@ -909,5 +911,101 @@ func TestSkillsAdvertisementLadderE2E(t *testing.T) {
 	stdout, _, code = run(t.TempDir(), nil, "-c", `printf %s "$BASHY_AGENT_MANIFEST"`)
 	if code != 0 || !strings.Contains(stdout, "first-hop") {
 		t.Fatalf("manifest (exit %d): %q", code, stdout)
+	}
+}
+
+// scratchStores relocates every store the CRUD verbs can write — skills,
+// fleet, and the whole bashy home — into t.TempDir(). A test that reaches
+// the operator's real store is a defect, so every case below sets all six.
+func scratchStores(t *testing.T) []string {
+	t.Helper()
+	root := t.TempDir()
+	return []string{
+		"BASHY_HOME=" + filepath.Join(root, "home"),
+		"BASHY_FLEET_DIR=" + filepath.Join(root, "fleet"),
+		"BASHY_SKILLS_DIR=" + filepath.Join(root, "skills"),
+		"BASHY_TOOLS_DIR=" + filepath.Join(root, "tools"),
+		"BASHY_MODELS_DIR=" + filepath.Join(root, "models"),
+		"BASHY_AGENTS_DIR=" + filepath.Join(root, "agents"),
+		"BASHY_HINTS=off",
+	}
+}
+
+// TestE2ESkillShowYAMLRecord: `skill show <name> --yaml` prints the skill's
+// record — the lossless projection of its folder — as YAML with `kind: skill`
+// and a files map carrying SKILL.md verbatim.
+func TestE2ESkillShowYAMLRecord(t *testing.T) {
+	bin := bashyBinary(t)
+	stdout, stderr, code := runBashyStdEnv(bin, scratchStores(t), "skill", "show", "conductor", "--yaml")
+	if code != 0 {
+		t.Fatalf("skill show --yaml (exit %d): %s", code, stderr)
+	}
+	var rec struct {
+		Name  string            `yaml:"name"`
+		Kind  string            `yaml:"kind"`
+		Files map[string]string `yaml:"files"`
+	}
+	if err := yaml.Unmarshal([]byte(stdout), &rec); err != nil {
+		t.Fatalf("record is not YAML: %v\n%s", err, firstLineOf(stdout))
+	}
+	if rec.Kind != "skill" || rec.Name != "conductor" {
+		t.Fatalf("record kind/name = %q/%q, want skill/conductor", rec.Kind, rec.Name)
+	}
+	body, ok := rec.Files["SKILL.md"]
+	if !ok || !strings.Contains(body, "name: conductor") {
+		t.Fatalf("record files map lacks SKILL.md; keys = %v", rec.Files)
+	}
+}
+
+// TestE2ESkillAddRmRoundTrip: `skill add <name> --description` mints a
+// minimal skill into the scratch store, `skill list` admits it, and
+// `skill rm` takes it back out.
+func TestE2ESkillAddRmRoundTrip(t *testing.T) {
+	bin := bashyBinary(t)
+	env := scratchStores(t)
+	const name = "e2e-scratch-skill"
+
+	stdout, stderr, code := runBashyStdEnv(bin, env, "skill", "add", name, "--description", "x")
+	if code != 0 || !strings.Contains(stdout, "ring: local") {
+		t.Fatalf("skill add (exit %d): %s%s", code, stdout, stderr)
+	}
+	stdout, _, code = runBashyStdEnv(bin, env, "skill", "list")
+	if code != 0 || !contains(strings.Fields(stdout), name) {
+		t.Fatalf("skill list after add (exit %d):\n%s", code, stdout)
+	}
+	stdout, stderr, code = runBashyStdEnv(bin, env, "skill", "rm", name)
+	if code != 0 || !strings.Contains(stdout, "removed skill "+name) {
+		t.Fatalf("skill rm (exit %d): %s%s", code, stdout, stderr)
+	}
+	stdout, _, code = runBashyStdEnv(bin, env, "skill", "list")
+	if code != 0 || contains(strings.Fields(stdout), name) {
+		t.Fatalf("skill list after rm still carries %s (exit %d):\n%s", name, code, stdout)
+	}
+}
+
+// TestE2EToolSetPathRoundTrip: `tool add <name> --set path=value` mints a
+// tool from dotted paths, `tool set --set` edits one, and `tool show --field`
+// reads it back — the generic CRUD contract every fleet noun shares.
+func TestE2EToolSetPathRoundTrip(t *testing.T) {
+	bin := bashyBinary(t)
+	env := scratchStores(t)
+
+	stdout, stderr, code := runBashyStdEnv(bin, env, "tool", "add", "t1", "--set", "kind=cli", "--set", "cli.launch.exec=echo {prompt}")
+	if code != 0 || !strings.Contains(stdout, "t1 (cli)") {
+		t.Fatalf("tool add (exit %d): %s%s", code, stdout, stderr)
+	}
+	stdout, stderr, code = runBashyStdEnv(bin, env, "tool", "set", "t1", "--set", "display=T1")
+	if code != 0 {
+		t.Fatalf("tool set (exit %d): %s%s", code, stdout, stderr)
+	}
+	stdout, stderr, code = runBashyStdEnv(bin, env, "tool", "show", "t1", "--field", "display")
+	if code != 0 || strings.TrimSpace(stdout) != "T1" {
+		t.Fatalf("tool show --field display = %q (exit %d): %s", stdout, code, stderr)
+	}
+	// An unknown path fails loudly and prints the schema so the caller can
+	// self-correct in one round trip.
+	_, stderr, code = runBashyStdEnv(bin, env, "tool", "set", "t1", "--set", "no.such.path=1")
+	if code == 0 || !strings.Contains(stderr, "cli.launch.exec") {
+		t.Fatalf("tool set with an unknown path: exit %d, stderr lacks the schema:\n%s", code, stderr)
 	}
 }
