@@ -179,6 +179,9 @@ var (
 	//
 	// `podman`/`docker` hide behind the taught tier-3 name `sandbox`; `sphere`
 	// hides behind the taught alias `peer` (coreutils atlas: aliasVerb).
+	//
+	// NEVER `agentic`: it is a RESERVED WORD of Bash++ (operator, 2026-09-13),
+	// not a yoke verb up for curation. TestCommandsCatalogSources pins it.
 	curatedHiddenVerbs = []string{
 		// higher-tier orchestration, layered over weave/dag/chat
 		"supervise", "judge", "pair", "sdlc", "schedule", "herald",

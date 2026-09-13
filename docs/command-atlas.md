@@ -345,7 +345,8 @@ claim`) · work (`sprint todo dag weave gate`) · knowledge (`kb graph craft
 secret`) · comms (`inbox mb meet ping notify bus activity`) · human (`app ask
 browser fetch`) · discovery (`commands`). Seventeen more bashy-added commands
 stay visible by name (`inspect sandbox ollama peer dks login tessaro release
-transpile dhnt otel duration tz ntp sntp clip ast`, plus `agentic`). The
+transpile dhnt otel duration tz ntp sntp clip ast`, plus `agentic` — a
+**Bash++ reserved word**, never a hide candidate). The
 remaining 22 — `supervise judge pair sdlc schedule herald · define lexicon
 search sota · check conform · run out full · podman docker · sphere · self web
 · tokens posix-gate` — are **curated-hidden**: `status: "experimental"`,

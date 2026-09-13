@@ -47,6 +47,10 @@ func TestCommandsCatalogSources(t *testing.T) {
 			t.Errorf("%q is in both hidden lists; curated must keep its shim", c)
 		}
 	}
+	// `agentic` is a Bash++ reserved word — visible, shimmed, never curated.
+	if slices.Contains(curatedHiddenVerbs, "agentic") || !slices.Contains(verbs, "agentic") || !slices.Contains(alwaysShimVerbs, "agentic") {
+		t.Errorf("agentic is a Bash++ reserved word and must stay visible and shimmed")
+	}
 	for _, shimmed := range []string{"run", "podman", "sphere", "self", "check"} {
 		if !slices.Contains(alwaysShimVerbs, shimmed) {
 			t.Errorf("hiding %q must not remove its bare shim", shimmed)
