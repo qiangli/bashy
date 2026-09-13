@@ -14,6 +14,7 @@ import (
 	"github.com/qiangli/bashy/internal/cli"
 
 	"mvdan.cc/sh/v3/gosource"
+	"mvdan.cc/sh/v3/lower"
 )
 
 // Sprint 118, W1: `bashy transpile --bashpp --source=go`. The Go front end is
@@ -60,6 +61,112 @@ func captureTranspileStderr(t *testing.T, args []string) (int, string) {
 		t.Fatal(err)
 	}
 	return exit, buf.String()
+}
+
+func captureTranspileOutput(t *testing.T, args []string) (int, string, string) {
+	t.Helper()
+	oldOut, oldErr := os.Stdout, os.Stderr
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	errR, errW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout, os.Stderr = outW, errW
+	exit := dispatchTranspile(args)
+	outW.Close()
+	errW.Close()
+	os.Stdout, os.Stderr = oldOut, oldErr
+	var out, stderr bytes.Buffer
+	if _, err := io.Copy(&out, outR); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.Copy(&stderr, errR); err != nil {
+		t.Fatal(err)
+	}
+	return exit, out.String(), stderr.String()
+}
+
+func TestTranspileGoLibrary(t *testing.T) {
+	dir, out := filepath.Join("testdata", "sprint162", "library"), t.TempDir()
+	a := filepath.Join(dir, "a.go")
+	b := filepath.Join(dir, "b.go")
+	x := filepath.Join(dir, "external_test.go")
+	args := []string{"--bashpp", "--source=go", "--go-import-path", "example/library", "--go-library", out,
+		"--go-file", a, "--go-file", b, "--go-xtest-file", x}
+	exit, stdout, stderr := captureTranspileOutput(t, args)
+	if exit != 0 {
+		t.Fatalf("exit = %d, stderr %q", exit, stderr)
+	}
+	wantFor := make(map[string][]byte)
+	for _, names := range [][]string{{a, b}, {x}} {
+		var sources []gosource.Source
+		for _, name := range names {
+			data, err := os.ReadFile(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sources = append(sources, gosource.Source{Name: name, Data: data})
+		}
+		program, err := gosource.Load(sources, gosource.Options{PreserveNativeInit: true, ImportPath: "example/library", Importer: lower.NewModuleImporter(dir)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, err := lower.Compile(program.File, lower.Options{Package: program.Package, Library: true, Importer: program.Importer, Dir: dir})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, generated := range want.Files {
+			wantFor[filepath.Base(generated.Name)] = generated.Source
+		}
+	}
+	for _, name := range []string{"a.go", "b.go", "external_test.go"} {
+		if !strings.Contains(stdout, "library ") || !strings.Contains(stdout, " -> "+filepath.Join(out, name)) {
+			t.Errorf("stdout %q does not report %s", stdout, name)
+		}
+		got, err := os.ReadFile(filepath.Join(out, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, wantFor[name]) {
+			t.Errorf("%s differs from lower library output", name)
+		}
+		if _, err := os.Stat(filepath.Join(out, name+".map")); err != nil {
+			t.Errorf("%s map: %v", name, err)
+		}
+	}
+}
+
+func TestTranspileGoLibraryRefusals(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "a.go")
+	writeFile(t, src, "package p\n")
+	notDir := filepath.Join(dir, "file")
+	writeFile(t, notDir, "x")
+	for _, tc := range []struct {
+		name, want string
+		args       []string
+	}{
+		{"source", "requires --source=go", []string{"--bashpp", "--go-library", dir, "--go-file", src}},
+		{"flatten", "refuses --go-package", []string{"--bashpp", "--source=go", "--go-library", dir, "--go-import-path", "p", "--go-package", "q=" + src, "--go-file", src}},
+		{"not directory", "path is not a directory", []string{"--bashpp", "--source=go", "--go-library", notDir, "--go-import-path", "p", "--go-file", src}},
+		{"no go input", "requires Go input files", []string{"--bashpp", "--source=go", "--go-library", dir, "--go-import-path", "p", filepath.Join("testdata", "sprint162", "library", "negative-script.bpp")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			exit, stderr := captureTranspileStderr(t, tc.args)
+			if exit != 2 || !strings.Contains(stderr, tc.want) {
+				t.Errorf("exit %d stderr %q, want %q", exit, stderr, tc.want)
+			}
+		})
+	}
+	duplicate := filepath.Join(dir, "other", "a.go")
+	writeFile(t, duplicate, "package p\n")
+	exit, stderr := captureTranspileStderr(t, []string{"--bashpp", "--source=go", "--go-library", dir, "--go-import-path", "p", "--go-file", src, "--go-test-file", duplicate})
+	if exit != 2 || !strings.Contains(stderr, "duplicate or unresolved library output basename") {
+		t.Errorf("duplicate exit %d stderr %q", exit, stderr)
+	}
 }
 
 func TestTranspileSourceSelectorRefusals(t *testing.T) {

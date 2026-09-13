@@ -63,6 +63,9 @@ type GoSourceOptions struct {
 	// Loading never executes anything either way; false is what makes
 	// --check safe, since the resulting program carries no entry calls.
 	RunMain bool
+	// PreserveNativeInit keeps Go init declarations native. Library lowering
+	// uses it because its output is compiled by the Go toolchain as a package.
+	PreserveNativeInit bool
 	// Dir is the directory the source came from, used to resolve module
 	// imports. It is never the source identity — that stays the file name.
 	Dir string

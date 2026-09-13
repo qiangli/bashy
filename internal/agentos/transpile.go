@@ -149,7 +149,10 @@ func dispatchTranspile(args []string) int {
 	var mapFile string
 	sourceKind := "sh"
 	var goFiles []string
+	var goTestFiles []string
+	var goXTestFiles []string
 	var goPackages []cli.GoSourcePackageSpec
+	var goLibrary string
 	var goImportBase, goImportPath string
 	var goVersion string
 	var goVersionSeen bool
@@ -215,6 +218,33 @@ func dispatchTranspile(args []string) int {
 			}
 		} else if inFlags && strings.HasPrefix(arg, "--go-file=") {
 			goFiles = append(goFiles, strings.TrimPrefix(arg, "--go-file="))
+		} else if inFlags && arg == "--go-test-file" {
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "transpile: missing argument for --go-test-file")
+				return 2
+			}
+			goTestFiles = append(goTestFiles, args[i+1])
+			i++
+		} else if inFlags && strings.HasPrefix(arg, "--go-test-file=") {
+			goTestFiles = append(goTestFiles, strings.TrimPrefix(arg, "--go-test-file="))
+		} else if inFlags && arg == "--go-xtest-file" {
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "transpile: missing argument for --go-xtest-file")
+				return 2
+			}
+			goXTestFiles = append(goXTestFiles, args[i+1])
+			i++
+		} else if inFlags && strings.HasPrefix(arg, "--go-xtest-file=") {
+			goXTestFiles = append(goXTestFiles, strings.TrimPrefix(arg, "--go-xtest-file="))
+		} else if inFlags && arg == "--go-library" {
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "transpile: missing argument for --go-library")
+				return 2
+			}
+			goLibrary = args[i+1]
+			i++
+		} else if inFlags && strings.HasPrefix(arg, "--go-library=") {
+			goLibrary = strings.TrimPrefix(arg, "--go-library=")
 		} else if inFlags && (arg == "--go-package" || strings.HasPrefix(arg, "--go-package=")) {
 			value, ok := strings.CutPrefix(arg, "--go-package=")
 			if !ok {
@@ -321,15 +351,23 @@ func dispatchTranspile(args []string) int {
 		fmt.Fprintln(os.Stderr, "transpile: --go-file requires --source=go")
 		return 2
 	}
+	if (len(goTestFiles) > 0 || len(goXTestFiles) > 0 || goLibrary != "") && !goInput {
+		fmt.Fprintln(os.Stderr, "transpile: --go-test-file, --go-xtest-file and --go-library require --source=go")
+		return 2
+	}
 	if (len(goPackages) > 0 || goImportBase != "" || goImportPath != "") && !goInput {
 		fmt.Fprintln(os.Stderr, "transpile: --go-package, --go-import-base and --go-import-path require --source=go")
 		return 2
 	}
-	if len(goFiles) > 0 && input != "" {
+	if goLibrary != "" && input != "" {
+		fmt.Fprintln(os.Stderr, "transpile: --go-library requires Go input files")
+		return 2
+	}
+	if (len(goFiles) > 0 || len(goTestFiles) > 0 || len(goXTestFiles) > 0) && input != "" {
 		fmt.Fprintln(os.Stderr, "transpile: --go-file cannot be combined with a file operand")
 		return 2
 	}
-	if input == "" && len(goFiles) == 0 {
+	if input == "" && len(goFiles) == 0 && len(goTestFiles) == 0 && len(goXTestFiles) == 0 {
 		fmt.Fprintln(os.Stderr, "transpile: missing INPUT")
 		return 2
 	}
@@ -337,8 +375,40 @@ func dispatchTranspile(args []string) int {
 		fmt.Fprintln(os.Stderr, "transpile: --bashpp is required")
 		return 2
 	}
-	if output == "" {
+	if output == "" && goLibrary == "" {
 		fmt.Fprintln(os.Stderr, "transpile: missing -o OUTPUT.go")
+		return 2
+	}
+	if goLibrary != "" {
+		if output != "" {
+			fmt.Fprintln(os.Stderr, "transpile: --go-library cannot be combined with -o")
+			return 2
+		}
+		if len(goPackages) > 0 {
+			fmt.Fprintln(os.Stderr, "transpile: --go-library refuses --go-package")
+			return 2
+		}
+		if goImportPath == "" {
+			fmt.Fprintln(os.Stderr, "transpile: --go-library requires --go-import-path")
+			return 2
+		}
+		if len(goFiles)+len(goTestFiles)+len(goXTestFiles) == 0 {
+			fmt.Fprintln(os.Stderr, "transpile: --go-library requires Go input files")
+			return 2
+		}
+		st, err := os.Stat(goLibrary)
+		if err != nil || !st.IsDir() {
+			fmt.Fprintf(os.Stderr, "transpile: --go-library path is not a directory: %s\n", goLibrary)
+			return 2
+		}
+		return dispatchTranspileLibrary(goLibrary, goFiles, goTestFiles, goXTestFiles, cli.GoSourceOptions{
+			GoVersion: goVersion, TestBuiltins: goTestBuiltins,
+			CheckerBranchErrors: goCheckerBranchErrors, CheckAfterSyntaxErrors: goCheckAfterSyntaxErrors,
+			ImportBase: goImportBase, ImportPath: goImportPath, PreserveNativeInit: true,
+		})
+	}
+	if len(goTestFiles) > 0 || len(goXTestFiles) > 0 {
+		fmt.Fprintln(os.Stderr, "transpile: --go-test-file and --go-xtest-file require --go-library")
 		return 2
 	}
 
@@ -535,6 +605,118 @@ func dispatchTranspile(args []string) int {
 	}
 
 	return writeOutputsAtomic(output, res.Source, mapFile, mapData)
+}
+
+// dispatchTranspileLibrary emits a package as separate native Go files. The
+// ordinary and external test packages must stay separate load units: merging
+// them would flatten the external package and hide its import edge.
+func dispatchTranspileLibrary(outDir string, goFiles, goTestFiles, goXTestFiles []string, base cli.GoSourceOptions) int {
+	units := [][]string{append(append([]string{}, goFiles...), goTestFiles...), goXTestFiles}
+	programs := make([]*cli.GoSourceProgram, 0, len(units))
+	results := make([]*lower.Result, 0, len(units))
+	seen := make(map[string]bool)
+	packageName := ""
+	for unitIndex, names := range units {
+		if len(names) == 0 {
+			continue
+		}
+		in, err := collectTranspileGoSource("", names)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, transpileGoSourceDiagnostic(err))
+			return 2
+		}
+		opts := base
+		opts.Dir = in.Dir
+		prog, err := cli.LoadGoSource(in, opts)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, transpileGoSourceDiagnostic(err))
+			return 2
+		}
+		if unitIndex == 0 {
+			packageName = prog.Package
+		} else if prog.Package != packageName+"_test" {
+			fmt.Fprintln(os.Stderr, "transpile: --go-xtest-file must form the external test package")
+			return 2
+		}
+		res, err := lower.Compile(prog.File, lower.Options{
+			Origin: in.Files[0].Name, Dir: in.Dir, Package: prog.Package,
+			Importer: prog.Importer, Library: true,
+		})
+		if err != nil {
+			if el, ok := err.(lower.ErrorList); ok {
+				for _, diag := range el {
+					fmt.Fprintln(os.Stderr, formatDiagnostic(diag))
+				}
+			} else {
+				fmt.Fprintln(os.Stderr, err)
+			}
+			return 2
+		}
+		for _, generated := range res.Files {
+			baseName := filepath.Base(generated.Name)
+			if baseName == "." || baseName == string(filepath.Separator) || seen[baseName] {
+				fmt.Fprintf(os.Stderr, "transpile: duplicate or unresolved library output basename: %s\n", generated.Name)
+				return 2
+			}
+			seen[baseName] = true
+		}
+		programs = append(programs, prog)
+		results = append(results, res)
+	}
+
+	// All validation happens before the first atomic write. This includes map
+	// paths, so a duplicate input cannot leave a partially emitted overlay.
+	for _, res := range results {
+		for _, generated := range res.Files {
+			output := filepath.Join(outDir, filepath.Base(generated.Name))
+			if st, err := os.Stat(output); err == nil && st.IsDir() {
+				fmt.Fprintf(os.Stderr, "transpile: output path is a directory: %s\n", output)
+				return 2
+			}
+			mapPath := output + ".map"
+			if st, err := os.Stat(mapPath); err == nil && st.IsDir() {
+				fmt.Fprintf(os.Stderr, "transpile: map path is a directory: %s\n", mapPath)
+				return 2
+			}
+		}
+	}
+	for i, res := range results {
+		for _, generated := range res.Files {
+			mapData, err := transpileLibraryMap(generated, programs[i])
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				return 2
+			}
+			output := filepath.Join(outDir, filepath.Base(generated.Name))
+			if code := writeOutputsAtomic(output, generated.Source, output+".map", mapData); code != 0 {
+				return code
+			}
+			fmt.Printf("library %s -> %s\n", generated.Name, output)
+		}
+	}
+	return 0
+}
+
+func transpileLibraryMap(generated lower.FileResult, prog *cli.GoSourceProgram) ([]byte, error) {
+	entries := make([]mapEntry, 0, len(generated.Mappings))
+	for _, m := range generated.Mappings {
+		name, offset, ok := prog.SourceAt(m.Pos)
+		if !ok {
+			return nil, fmt.Errorf("transpile: %s: mapping at offset %d resolves to no original source file", generated.Name, m.Pos.Offset())
+		}
+		entries = append(entries, mapEntry{GoLine: m.GoLine, GoCol: m.GoCol, SourceLine: m.Pos.Line(), SourceCol: m.Pos.Col(), SourceOffset: m.Pos.Offset(), Node: m.Node, SourceFile: name, SourceFileOffset: offset})
+	}
+	art := sourceMapArtifact{SchemaVersion: sourceMapSchemaVersion, Origin: generated.Name,
+		GoDigest: fmt.Sprintf("sha256:%x", sha256.Sum256(generated.Source)), Mappings: entries,
+		SourceKind: "go", FrontEnd: prog.FrontEnd}
+	for _, o := range prog.Origins {
+		art.Sources = append(art.Sources, mapSource{Name: o.Name, SHA256: o.SHA256, Base: o.Base, Size: o.Size})
+	}
+	data, err := json.MarshalIndent(art, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("transpile: map marshal error: %v", err)
+	}
+	return data, nil
 }
 
 func writeOutputsAtomic(outputPath string, outputData []byte, mapPath string, mapData []byte) int {

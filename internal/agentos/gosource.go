@@ -70,6 +70,7 @@ func loadGoSource(files []cli.GoSourceFile, opts cli.GoSourceOptions) (*cli.GoSo
 	}
 	prog, err := gosource.Load(sources, gosource.Options{
 		RunMain:                opts.RunMain,
+		PreserveNativeInit:     opts.PreserveNativeInit,
 		Importer:               lower.NewModuleImporter(opts.Dir),
 		GoVersion:              opts.GoVersion,
 		TestBuiltins:           opts.TestBuiltins,
