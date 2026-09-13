@@ -3,12 +3,13 @@ id: 2ffc41d24307
 kind: task
 title: 'B4 harnessrunner refiners: (a) variable args to effect-pure builtins prove no governed effect; (b) kb front-door subverb refiner (read-only subverbs complete)'
 seq: 269
-status: assigned
+status: done
 priority: p1
 created: 2026-09-13T03:06:58.828246Z
 weave: 11
 assignee: qiangli
 sprint: 164
+closed: 2026-09-13T05:34:01.243089Z
 ---
 
 Sprint 163 Y1/Y2 residue. Today pkg/harnessrunner/compiler.go compileCall marks ANY call with a non-static argument 'dynamicCommand' (staticWord returns <dynamic> for every expansion) and, for atlas commands, marks every non-pure command 'effectRefinement' ('only a pure applet is effect-complete'). Consequences: (1) 'printf %s "$YCODE_IN_X"' is incomplete evidence, so ycode's bashy.run typed-input mechanism is denied under the real executor; (2) 'bashy kb context --for ... --json' — fully literal — is incomplete because the kb atlas row carries [read write], so the sprint 163 kb pipe is wired but never executes under the real boundary (ycode degrades to an honest abstained envelope). Both are refiners in this package; no atlas change, no ycode change.

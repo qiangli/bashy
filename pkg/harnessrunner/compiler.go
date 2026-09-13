@@ -206,17 +206,21 @@ func compileCall(argv []string, allStatic bool, intent *Intent) {
 	if len(argv) == 0 {
 		return
 	}
-	if !allStatic || argv[0] == "<dynamic>" {
+	name, factArgv, commandStatic := commandName(argv)
+	if !commandStatic {
 		markUnsupported(intent, "dynamicCommand", strings.Join(argv, " "), "command name or arguments cannot be proven")
 		return
 	}
-	name := argv[0]
 	if strings.ContainsAny(name, `/\\`) {
 		markUnsupported(intent, "executable", name, "path executables require a trusted digest-pinned resolver")
 		return
 	}
 	if effects, ok := builtinEffects[name]; ok {
-		fact := CommandFact{Name: name, Argv: append([]string(nil), argv...), Resolver: "shell-builtin", Tier: atlas.TierUserland, Stage: atlas.StageCross, Shape: string(atlas.ShapeResult), MaximumEffects: append([]string(nil), effects...)}
+		if !allStatic && !pureBuiltin(name) {
+			markUnsupported(intent, "dynamicCommand", strings.Join(argv, " "), "command name or arguments cannot be proven")
+			return
+		}
+		fact := CommandFact{Name: name, Argv: append([]string(nil), factArgv...), Resolver: "shell-builtin", Tier: atlas.TierUserland, Stage: atlas.StageCross, Shape: string(atlas.ShapeResult), MaximumEffects: append([]string(nil), effects...)}
 		fact.ContentDigest, _ = executableDigest()
 		if fact.ContentDigest == "" {
 			markUnsupported(intent, "executableDigest", name, "running Bashy binary could not be digested")
@@ -237,7 +241,7 @@ func compileCall(argv []string, allStatic bool, intent *Intent) {
 		return
 	}
 	fact := CommandFact{
-		Name: name, Argv: append([]string(nil), argv...), Resolver: "bashy-atlas",
+		Name: name, Argv: append([]string(nil), factArgv...), Resolver: "bashy-atlas",
 		Group: entry.Group, Tier: entry.Tier, Stage: entry.Stage,
 		Shape: string(entry.OutputShape()), Capabilities: append([]string(nil), entry.Caps...),
 		MaximumEffects: append([]string(nil), entry.Effects...),
@@ -247,17 +251,25 @@ func compileCall(argv []string, allStatic bool, intent *Intent) {
 		markUnsupported(intent, "executableDigest", name, "running Bashy binary could not be digested")
 	}
 	intent.Commands = append(intent.Commands, fact)
-	appendMaximumEffects(intent, fact)
 	toolNamesOnce.Do(func() {
 		toolNames = make(map[string]bool)
 		for _, toolName := range atlas.ToolNames() {
 			toolNames[toolName] = true
 		}
 	})
-	if !toolNames[name] {
+	_, hasCommandRefiner := commandRefiners[name]
+	if !toolNames[name] && !hasCommandRefiner {
 		markUnsupported(intent, "command", name, "front-door command requires a trusted digest-pinned executable resolver")
 		return
 	}
+	if refineAtlasCall(name, factArgv, allStatic, intent) {
+		return
+	}
+	if !allStatic {
+		markUnsupported(intent, "dynamicCommand", strings.Join(argv, " "), "command name or arguments cannot be proven")
+		return
+	}
+	appendMaximumEffects(intent, fact)
 	// Atlas supplies a conservative maximum, not argv semantics. Until a
 	// command-specific refiner proves operands and destinations, only a pure
 	// applet is effect-complete. Calling a broad maximum "complete" would let
@@ -267,6 +279,28 @@ func compileCall(argv []string, allStatic bool, intent *Intent) {
 			markUnsupported(intent, "effectRefinement", name, "command arguments require a command-specific target/destination refiner")
 			break
 		}
+	}
+}
+
+func commandName(argv []string) (string, []string, bool) {
+	if argv[0] == "<dynamic>" {
+		return "", argv, false
+	}
+	if len(argv) > 1 && isBashyFrontDoor(argv[0]) {
+		if argv[1] == "<dynamic>" {
+			return "", argv, false
+		}
+		return argv[1], argv, true
+	}
+	return argv[0], argv, true
+}
+
+func isBashyFrontDoor(name string) bool {
+	switch filepath.Base(name) {
+	case "bashy", "bashy.real":
+		return true
+	default:
+		return false
 	}
 }
 

@@ -1,13 +1,21 @@
 package harnessrunner
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/qiangli/coreutils/pkg/atlas"
+	"github.com/qiangli/coreutils/pkg/kb"
 )
 
 func compileRequest(t *testing.T, script string) Request {
 	t.Helper()
+	t.Setenv("BASHY_KB_DIR", filepath.Join(t.TempDir(), "host-kb"))
+	t.Setenv("BASHY_HOME", filepath.Join(t.TempDir(), "bashy-home"))
+	t.Setenv("BASHY_SKILLS_DIR", filepath.Join(t.TempDir(), "skills"))
+	t.Setenv("YCODE_DATA_DIR", filepath.Join(t.TempDir(), "ycode-data"))
 	return Request{
 		SchemaVersion: RequestSchemaVersion,
 		RequestID:     "req-1",
@@ -19,6 +27,22 @@ func compileRequest(t *testing.T, script string) Request {
 		Limits:    Limits{WallTimeMs: 5000, StdoutBytes: 1024, StderrBytes: 1024},
 		Placement: Placement{ID: "local", Generation: 1},
 	}
+}
+
+func compileRequestInCwd(t *testing.T, script, cwd string) Request {
+	t.Helper()
+	req := compileRequest(t, script)
+	req.Command.Cwd = cwd
+	return req
+}
+
+func makeRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return dir
 }
 
 func TestCompileIntentIsDeterministicAndBindsEnvironmentWithoutValue(t *testing.T) {
@@ -57,8 +81,44 @@ func TestCompileIntentIsDeterministicAndBindsEnvironmentWithoutValue(t *testing.
 	}
 }
 
+func TestPureBuiltinDynamicArgumentsAreComplete(t *testing.T) {
+	for _, script := range []string{`printf %s "$YCODE_IN_X"`, `echo "${VAR}"`} {
+		req := compileRequest(t, script)
+		intent, err := CompileIntent(req)
+		if err != nil {
+			t.Fatalf("%q: %v", script, err)
+		}
+		if !intent.Complete || len(intent.Unsupported) != 0 {
+			t.Fatalf("%q incomplete: %#v", script, intent)
+		}
+		if len(intent.Commands) != 1 {
+			t.Fatalf("%q command facts = %#v", script, intent.Commands)
+		}
+		if !contains(intent.Commands[0].Argv, "<dynamic>") {
+			t.Fatalf("%q dynamic arg not recorded in argv: %#v", script, intent.Commands[0])
+		}
+		if intent.ScriptDigest != digestBytes([]byte(script)) {
+			t.Fatalf("%q script digest = %q", script, intent.ScriptDigest)
+		}
+	}
+}
+
+func TestDynamicCommandAndDynamicRedirectionStillFailClosed(t *testing.T) {
+	tests := map[string]string{
+		`"$CMD" x`:     "dynamicCommand",
+		`echo hi > $F`: "dynamicRedirection",
+	}
+	for script, kind := range tests {
+		intent := mustCompileScript(t, script)
+		if intent.Complete {
+			t.Fatalf("%q unexpectedly complete: %#v", script, intent)
+		}
+		assertUnsupportedKind(t, intent, kind)
+	}
+}
+
 func TestCompileIntentFailsClosedForDynamicAndUnknownCommands(t *testing.T) {
-	for _, script := range []string{`"$COMMAND" arg`, "definitely-not-a-bashy-command arg", `/bin/echo unsafe`, `rm target`} {
+	for _, script := range []string{`"$COMMAND" arg`, `read "$X"`, `pwd "$X"`, "definitely-not-a-bashy-command arg", `/bin/echo unsafe`, `rm target`} {
 		req := compileRequest(t, script)
 		intent, err := CompileIntent(req)
 		if err != nil {
@@ -67,6 +127,75 @@ func TestCompileIntentFailsClosedForDynamicAndUnknownCommands(t *testing.T) {
 		if intent.Complete || len(intent.Unsupported) == 0 {
 			t.Fatalf("%q unexpectedly complete: %#v", script, intent)
 		}
+	}
+}
+
+func TestKBReadOnlySubverbsRefineToExactRead(t *testing.T) {
+	repo := makeRepo(t)
+	req := compileRequestInCwd(t, `bashy kb context --for x --rings repo,host --budget 700 --json`, repo)
+	intent, err := CompileIntent(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !intent.Complete || len(intent.Unsupported) != 0 {
+		t.Fatalf("kb context incomplete: %#v", intent)
+	}
+	assertSingleEffect(t, intent, atlas.EffRead, filepath.Join(repo, kb.RepoSub))
+}
+
+func TestKBReadOnlySubverbsAllowDynamicValues(t *testing.T) {
+	repo := makeRepo(t)
+	req := compileRequestInCwd(t, `bashy kb context --for "$TASK" --rings repo,host --budget 700 --json`, repo)
+	intent, err := CompileIntent(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !intent.Complete || len(intent.Unsupported) != 0 {
+		t.Fatalf("dynamic kb context incomplete: %#v", intent)
+	}
+	assertSingleEffect(t, intent, atlas.EffRead, filepath.Join(repo, kb.RepoSub))
+}
+
+func TestKBWriteSubverbsRefineStaticRingAndRejectDynamicRing(t *testing.T) {
+	repo := makeRepo(t)
+	req := compileRequestInCwd(t, `bashy kb note add --candidate --ring agent --title t --body b`, repo)
+	agentKB := filepath.Join(os.Getenv("YCODE_DATA_DIR"), "kb")
+	intent, err := CompileIntent(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !intent.Complete || len(intent.Unsupported) != 0 {
+		t.Fatalf("kb note incomplete: %#v", intent)
+	}
+	assertEffect(t, intent, atlas.EffRead, agentKB)
+	assertEffect(t, intent, atlas.EffWrite, agentKB)
+	if len(intent.Effects) != 2 {
+		t.Fatalf("write effects = %#v", intent.Effects)
+	}
+
+	req = compileRequestInCwd(t, `bashy kb note add --ring "$R" --title t --body b`, repo)
+	intent, err = CompileIntent(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if intent.Complete || len(intent.Unsupported) == 0 {
+		t.Fatalf("dynamic write ring unexpectedly complete: %#v", intent)
+	}
+	assertUnsupportedKind(t, intent, "dynamicCommand")
+}
+
+func TestKBUnknownSubverbAndGraphStayIncomplete(t *testing.T) {
+	repo := makeRepo(t)
+	for _, script := range []string{`bashy kb frobnicate`, `bashy graph impact x`} {
+		req := compileRequestInCwd(t, script, repo)
+		intent, err := CompileIntent(req)
+		if err != nil {
+			t.Fatalf("%q: %v", script, err)
+		}
+		if intent.Complete || len(intent.Unsupported) == 0 {
+			t.Fatalf("%q unexpectedly complete: %#v", script, intent)
+		}
+		assertUnsupportedKind(t, intent, "effectRefinement")
 	}
 }
 
@@ -104,4 +233,43 @@ func contains(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func mustCompileScript(t *testing.T, script string) Intent {
+	t.Helper()
+	req := compileRequest(t, script)
+	intent, err := CompileIntent(req)
+	if err != nil {
+		t.Fatalf("%q: %v", script, err)
+	}
+	return intent
+}
+
+func assertUnsupportedKind(t *testing.T, intent Intent, kind string) {
+	t.Helper()
+	for _, fact := range intent.Unsupported {
+		if fact.Kind == kind {
+			return
+		}
+	}
+	t.Fatalf("missing unsupported kind %q in %#v", kind, intent.Unsupported)
+}
+
+func assertSingleEffect(t *testing.T, intent Intent, kind, target string) {
+	t.Helper()
+	if len(intent.Effects) != 1 {
+		t.Fatalf("effects = %#v", intent.Effects)
+	}
+	assertEffect(t, intent, kind, target)
+}
+
+func assertEffect(t *testing.T, intent Intent, kind, target string) {
+	t.Helper()
+	target = canonicalTarget(target)
+	for _, effect := range intent.Effects {
+		if effect.Kind == kind && effect.Target == target && effect.Certainty == "exact" {
+			return
+		}
+	}
+	t.Fatalf("missing %s effect on %s in %#v", kind, target, intent.Effects)
 }
