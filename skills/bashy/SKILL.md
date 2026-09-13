@@ -123,6 +123,18 @@ way kb is: this repo's when you are in one, the host's otherwise.
   `bashy skill promote NAME` (human-reviewed bundle — never
   auto-published).
 
+## Edit the catalog through verbs, never by hand
+
+Never edit files under `~/.config/bashy/` (or any `BASHY_*_DIR`) directly:
+embedded entries are immutable and every write is copy-on-write into the
+local ring, which only the verbs do. `bashy <noun> schema` lists the dotted
+paths a `tool`/`model`/`agent` accepts; `bashy <noun> set NAME --set
+path=value` (`--unset path`) edits one, `bashy <noun> show NAME --field
+path` reads it back. Skills: `bashy skill add NAME --description "…"`
+mints one, `bashy skill set NAME` / `bashy skill rm NAME` edit and remove,
+`bashy skill show NAME --yaml` prints its record (`skill add FILE.yaml|-`
+re-imports it).
+
 ## Fleet and workspace (when the task outgrows one session)
 
 - `bashy weave …` — isolated per-issue workspaces for parallel agent

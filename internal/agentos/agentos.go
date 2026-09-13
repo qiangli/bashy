@@ -194,7 +194,7 @@ func Preamble() string {
 // drop-in never carries it). Static string: zero startup cost.
 func init() {
 	os.Setenv("BASHY_AGENT_MANIFEST",
-		`v1 shell=agentic first-hop="bashy inspect context --json" skills="bashy skill list" guide="bashy skill show bashy|bashy bashy"`)
+		`v1 shell=agentic first-hop="bashy inspect context --json" skills="bashy skill list" guide="bashy skill show bashy|bashy bashy" config="never hand-edit ~/.config/bashy or any BASHY_*_DIR; use bashy <tool|model|agent> schema|set --set path=value|show --field path, bashy skill add|set|rm|show --yaml"`)
 	// Chat, weave, meet and foreman all enter coreutils/chat without passing the
 	// communication CLI dispatcher. Wire the receive hook at process startup so
 	// every Bashy-owned session gets the same turn-boundary inbox view.
