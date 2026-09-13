@@ -131,7 +131,7 @@ func suiteSubcommand(s suiteSpec) *cobra.Command {
 			}
 			code := s.Run(root, args)
 			if code != 0 {
-				os.Exit(code)
+				dispatchExit(code)
 			}
 			return nil
 		},

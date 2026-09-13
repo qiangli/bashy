@@ -94,7 +94,7 @@ func auditHandler(w *audit.Writer, actor audit.Actor, host string) func(interp.E
 				Actor:      actor,
 				Argv:       argv,
 				Binary:     baseName(args[0]),
-				Cwd:        handlerDir(ctx),
+				Cwd:        safeHandlerDir(ctx),
 				Effects:    effectsFor(args[0]),
 				Host:       host,
 				Decision:   "allow", // allow-only until the policy engine ships

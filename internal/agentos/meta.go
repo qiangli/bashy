@@ -59,9 +59,9 @@ func dispatchMeta(args []string) {
 	if asJSON {
 		if err := webconsole.WriteMeta(os.Stdout, m); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy "+verb+" meta:", err)
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -85,5 +85,5 @@ func dispatchMeta(args []string) {
 		row("start", strings.Join(m.Start, " "))
 	}
 	_ = tw.Flush()
-	os.Exit(0)
+	dispatchExit(0)
 }

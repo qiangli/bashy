@@ -21,20 +21,20 @@ func dispatchEngine(arg string) {
 		cmd := podmanengine.NewPodmanCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	case "ollama":
 		fmt.Fprintln(os.Stderr, "bashy ollama: not supported in the Windows engine build")
-		os.Exit(1)
+		dispatchExit(1)
 	case "dks":
 		// Dedicated rootful DKS (k3s) machine — Windows uses the WSL/Hyper-V
 		// provider under the hood via the same podman machine API.
 		cmd := podmanengine.NewDKSCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			os.Exit(1)
+			dispatchExit(1)
 		}
-		os.Exit(0)
+		dispatchExit(0)
 	}
 }

@@ -54,9 +54,9 @@ func dispatchObs(arg string) {
 		if !otelquery.ErrorAlreadyPrinted(err) {
 			fmt.Fprintln(os.Stderr, "bashy otel:", err)
 		}
-		os.Exit(1)
+		dispatchExit(1)
 	}
-	os.Exit(0)
+	dispatchExit(0)
 }
 
 // resolveOtelBinary returns the provisioned single-binary otel stack, fetching
