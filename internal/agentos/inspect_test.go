@@ -252,3 +252,176 @@ func TestStorePathsResolveThroughOwners(t *testing.T) {
 		t.Errorf("engineCacheDir=%q != binmgr.CacheDir=%q", engineCacheDir(), d)
 	}
 }
+
+// scratchStores points every store the action rows read at t.TempDir(), so
+// the test neither reads nor writes the operator's fleet or skills ring.
+func scratchStores(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{
+		"BASHY_HOME", "BASHY_FLEET_DIR", "BASHY_SKILLS_DIR", "BASHY_TOOLS_DIR",
+		"BASHY_MODELS_DIR", "BASHY_AGENTS_DIR",
+	} {
+		t.Setenv(key, t.TempDir())
+	}
+	t.Setenv("BASHY_SKILLS_PATH", "")
+}
+
+func actionRow(t *testing.T, rows []inspectActionRow, kind, name string) inspectActionRow {
+	t.Helper()
+	for _, r := range rows {
+		if r.Kind == kind && r.Name == name {
+			return r
+		}
+	}
+	t.Fatalf("no %s row named %q in inspect actions", kind, name)
+	return inspectActionRow{}
+}
+
+// TestInspectActionsFacetRows: one row per action, in the facet's vocabulary,
+// for each of the three families something fills today — a verb, a binding
+// seeded into the scratch fleet store, and an embedded skill with a valid face.
+func TestInspectActionsFacetRows(t *testing.T) {
+	scratchStores(t)
+	if err := (fleet.New()).SaveAgent(fleet.Agent{Name: "b4-probe", Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
+		t.Fatal(err)
+	}
+	rows := collectInspectActions("")
+
+	// command: the atlas record projected — exact, deterministic, executed by the front door.
+	run := actionRow(t, rows, "command", "bashy run")
+	if run.Identity != "verb:run" || run.Contract != "none" || run.Latitude != "exact" || run.Authority != "deterministic" || run.Executor != "verb" {
+		t.Errorf("command row = %+v", run)
+	}
+	// agent: judge/agentic by definition; identity is the matrix key, executor the launcher.
+	probe := actionRow(t, rows, "agent", "b4-probe")
+	if probe.Identity != "codex:gpt5.6-sol" || probe.Latitude != "judge" || probe.Authority != "agentic" || probe.Executor != "agentlaunch:codex" {
+		t.Errorf("agent row = %+v", probe)
+	}
+	// skill: the embedded conductor carries a valid face, so the contract is dhnt
+	// and the identity is its content address; it has a judge step, so agentic.
+	cond := actionRow(t, rows, "skill", "conductor")
+	if cond.Contract != "dhnt" || !strings.HasPrefix(cond.Identity, "h") || cond.Latitude != "judge" || cond.Authority != "agentic" || cond.Executor != "dhnt" || len(cond.EffectsDeclared) == 0 {
+		t.Errorf("skill row = %+v", cond)
+	}
+
+	// --kind filters to exactly that family; the rows come back kind-sorted.
+	for _, kind := range inspectActionKinds {
+		for _, r := range collectInspectActions(kind) {
+			if r.Kind != kind {
+				t.Errorf("--kind %s returned a %s row (%s)", kind, r.Kind, r.Name)
+			}
+		}
+	}
+	for i := 1; i < len(rows); i++ {
+		a, b := rows[i-1], rows[i]
+		if a.Kind > b.Kind || (a.Kind == b.Kind && a.Identity > b.Identity) {
+			t.Fatalf("rows not sorted by kind then identity at %d: %s/%s before %s/%s", i, a.Kind, a.Identity, b.Kind, b.Identity)
+		}
+	}
+	if !validInspectActionKind("skill") || validInspectActionKind("dag-target") || validInspectActionKind("") {
+		t.Error("the --kind vocabulary must be exactly command script agent skill")
+	}
+	// Unsupported input fails loudly: an unknown kind, and --kind on an aspect
+	// that has no families, both exit 2 rather than silently listing everything.
+	if code := dispatchInspect([]string{"actions", "--kind", "bogus"}); code != 2 {
+		t.Errorf("inspect actions --kind bogus exited %d, want 2", code)
+	}
+	if code := dispatchInspect([]string{"paths", "--kind", "skill"}); code != 2 {
+		t.Errorf("inspect paths --kind exited %d, want 2", code)
+	}
+}
+
+// TestInspectActionsGenericOnly: a facet row is the shareable half — no path,
+// no host, no home directory ever reaches the JSON.
+func TestInspectActionsGenericOnly(t *testing.T) {
+	scratchStores(t)
+	b, err := json.Marshal(collectInspectActions(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, leak := range []string{os.Getenv("HOME"), os.Getenv("BASHY_SKILLS_DIR"), os.Getenv("BASHY_FLEET_DIR"), `"location":`, `"host":`, `"path":`} {
+		if leak != "" && strings.Contains(string(b), leak) {
+			t.Errorf("inspect actions --json carries %q", leak)
+		}
+	}
+}
+
+// TestContextCarriesActionCounts: the first-hop record states every family,
+// including the one nothing fills yet — a 0 is an answer, an absent key is not.
+func TestContextCarriesActionCounts(t *testing.T) {
+	scratchStores(t)
+	counts := collectInspectActionCounts()
+	if counts.Command == 0 || counts.Skill == 0 {
+		t.Fatalf("counts = %+v: the atlas verbs and the embedded skills always project", counts)
+	}
+	b, err := json.Marshal(contextReport{Actions: counts})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Actions map[string]int `json:"actions"`
+	}
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range inspectActionKinds {
+		if _, ok := got.Actions[k]; !ok {
+			t.Errorf("context.actions lacks %q (a zero must be stated, not omitted)", k)
+		}
+	}
+	if got.Actions["script"] != 0 {
+		t.Errorf("script = %d; nothing projects that family yet, so this test's premise changed", got.Actions["script"])
+	}
+	if n := len(collectInspectActions("skill")); n != counts.Skill {
+		t.Errorf("skill count %d != %d skill rows", counts.Skill, n)
+	}
+}
+
+// TestDefinePrintsActionFacet ratchets the MOUNT half of the facet on `bashy
+// define`: the command bashy wires prints the `runs:` line for a concept that
+// has one, and its --json carries the nested action object — never a top-level
+// or string-valued one.
+func TestDefinePrintsActionFacet(t *testing.T) {
+	scratchStores(t)
+	out := runDefine(t, "run")
+	if !strings.Contains(out, "runs: command contract=none latitude=exact authority=deterministic") {
+		t.Errorf("define run lacks the facet line:\n%s", out)
+	}
+	var d struct {
+		Concepts []struct {
+			ID     string          `json:"id"`
+			Action json.RawMessage `json:"action"`
+		} `json:"concepts"`
+		Action json.RawMessage `json:"action"`
+	}
+	if err := json.Unmarshal([]byte(runDefine(t, "run", "--json")), &d); err != nil {
+		t.Fatal(err)
+	}
+	if d.Action != nil {
+		t.Error("define --json carries a top-level action key")
+	}
+	var facet map[string]any
+	for _, c := range d.Concepts {
+		if c.ID == "verb:run" {
+			if err := json.Unmarshal(c.Action, &facet); err != nil {
+				t.Fatalf("verb:run action is not an object: %s", c.Action)
+			}
+		}
+	}
+	if facet["kind"] != "command" || facet["executor"] != "verb" {
+		t.Errorf("verb:run facet = %v", facet)
+	}
+}
+
+func runDefine(t *testing.T, args ...string) string {
+	t.Helper()
+	cmd := newDefineCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs(args)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("define %v: %v\n%s", args, err, out.String())
+	}
+	return out.String()
+}
