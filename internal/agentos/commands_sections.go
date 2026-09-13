@@ -179,8 +179,10 @@ func printClassSections(w io.Writer, verbose, all bool) {
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "classic — everything that is not yoke: bash builtins (%d) · GNU coreutils (%d) · classic Unix (%d) · bin-managed externals (%d):\n",
 		len(s.Shell), len(s.Coreutils), len(s.Classic), len(s.External))
-	fmt.Fprintln(w, "  bashy commands --view origin   every name by who defined it (* = POSIX-required)")
-	fmt.Fprintln(w, "  bashy commands --view tier     by execution venue")
+	fmt.Fprintln(w, "  bashy commands --view origin     every name by who defined it (* = POSIX-required)")
+	fmt.Fprintln(w, "  bashy commands --view posix      the 116 POSIX-required utilities: internal (pure Go) vs bin-managed")
+	fmt.Fprintln(w, "  bashy commands --view external   what is downloaded + exec'd, and the pure-Go debt")
+	fmt.Fprintln(w, "  bashy commands --view tier       by execution venue")
 
 	fmt.Fprintln(w)
 	if all {
