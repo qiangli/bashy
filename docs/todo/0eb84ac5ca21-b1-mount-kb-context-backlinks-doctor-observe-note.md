@@ -3,12 +3,13 @@ id: 0eb84ac5ca21
 kind: task
 title: B1 mount kb context|backlinks|doctor|observe|note add|validate --from-gate|transfer; atlas rows; taught surface forbids direct file edits; e2e on scratch stores; .sibling-pins bump
 seq: 266
-status: assigned
+status: done
 priority: p1
 created: 2026-09-13T01:31:42.132004Z
 weave: 9
 assignee: qiangli
 sprint: 163
+closed: 2026-09-13T04:23:13.11033Z
 ---
 
 Goal: bashy mounts and teaches the new kb surface; nothing ships wired to nothing. Design of record: dhnt docs/kb-rings-forms-stages.md §7; plan D1/D5.
