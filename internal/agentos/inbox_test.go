@@ -13,6 +13,7 @@ import (
 
 	"github.com/qiangli/coreutils/pkg/bus"
 	"github.com/qiangli/coreutils/pkg/fleet"
+	"github.com/qiangli/coreutils/pkg/fleet/fleettest"
 	"github.com/qiangli/coreutils/pkg/llmbudget"
 	"github.com/qiangli/coreutils/pkg/meet"
 	"github.com/qiangli/coreutils/pkg/room"
@@ -67,6 +68,10 @@ func isolateUnifiedInbox(t *testing.T) {
 	t.Cleanup(llmbudget.SetDefault(llmbudget.New(llmbudget.Config{StatePath: filepath.Join(t.TempDir(), "budget.json")})))
 	t.Setenv("BASHY_MB_DIR", t.TempDir())
 	t.Setenv("BASHY_ROOM_DIR", t.TempDir())
+	// The peer these tests talk to ("claude-opus5") used to ship in the
+	// embedded fleet baseline; that ring is tools-only now, so the test ring
+	// supplies the binding the same way an operator's overlay would.
+	fleettest.Ring(t)
 	fleetDir := t.TempDir()
 	t.Setenv("BASHY_FLEET_DIR", fleetDir)
 	t.Setenv("BASHY_MEET_DIR", t.TempDir())
