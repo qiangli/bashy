@@ -83,12 +83,13 @@ func TestClassSectionsTaxonomy(t *testing.T) {
 	if !agentAt(atlas.TierSphere, "peer") {
 		t.Errorf("agent/sphere missing %q", "peer")
 	}
-	for _, name := range []string{"podman", "docker", "sphere", "supervise", "run", "tokens", "posix-gate"} {
+	for _, name := range []string{"supervise", "run", "tokens", "posix-gate"} {
 		if !has(s.Experimental, name) {
 			t.Errorf("experimental missing %q", name)
 		}
 	}
-	for _, name := range []string{"skills", "invoke", "issue"} {
+	// Hidden SPELLINGS of visible commands are aliases, not experimental.
+	for _, name := range []string{"skills", "invoke", "issue", "podman", "docker", "sphere"} {
 		if !has(s.Aliases, name) {
 			t.Errorf("aliases missing %q", name)
 		}

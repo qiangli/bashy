@@ -106,7 +106,7 @@ func classSections(all bool) commandSections {
 		case r.Status == statusExperimental:
 			s.Experimental = append(s.Experimental, r.Name)
 			continue
-		case r.Hidden:
+		case r.Hidden: // compatibility aliases and hidden spellings (status alias)
 			s.Aliases = append(s.Aliases, r.Name)
 			continue
 		}
@@ -149,8 +149,18 @@ func printClassSections(w io.Writer, verbose, all bool) {
 		coreN += len(row.Commands)
 	}
 	userland := len(s.Shell) + len(s.Coreutils) + len(s.Classic) + len(s.External)
-	hiddenN := len(curatedHiddenVerbs)
-	total := coreN + len(s.More) + userland + hiddenN + len(hiddenFrontDoorVerbs)
+	// The hidden count is the EXPERIMENTAL count; hidden spellings of visible
+	// commands (podman, docker, sphere) are aliases, and are counted there.
+	hiddenN, aliasN := 0, 0
+	for _, r := range liveAtlas(true) {
+		switch {
+		case r.Status == statusExperimental:
+			hiddenN++
+		case r.Hidden:
+			aliasN++
+		}
+	}
+	total := coreN + len(s.More) + userland + hiddenN + aliasN
 
 	fmt.Fprintf(w, "bashy commands — the 1.0.0 surface: %d core + %d more yoke commands; `--all` for everything (%d)\n",
 		coreN, len(s.More), total)

@@ -59,8 +59,16 @@ type atlasRecord struct {
 	Status string `json:"status,omitempty"`
 }
 
-// statusExperimental is the Status of a curated-hidden command.
-const statusExperimental = "experimental"
+// statusExperimental is the Status of a curated-hidden command that is
+// hidden because it is unproven; statusAlias is the Status of a curated-hidden
+// name that is hidden only because it is a second SPELLING of a visible
+// canonical command (podman/docker → oci, sphere → peer). The label matches
+// the reason, so a reader is never told that a vendor spelling is "not yet
+// proven" when its engine is on the first screen.
+const (
+	statusExperimental = "experimental"
+	statusAlias        = "alias"
+)
 
 // atlasCatalog builds the merged atlas records for the given live catalog
 // (the outputs of commandsCatalog + hiddenVerbsCatalog). Names are unique;
@@ -198,6 +206,9 @@ func stampSurface(r *atlasRecord) {
 	}
 	if isCuratedHidden(r.Name) {
 		r.Status = statusExperimental
+		if r.AliasOf != "" && !isCuratedHidden(r.AliasOf) {
+			r.Status = statusAlias
+		}
 	}
 }
 

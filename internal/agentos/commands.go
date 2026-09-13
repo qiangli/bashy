@@ -355,7 +355,13 @@ func originLine(info map[string]any) string {
 	if c, ok := info["core"].(bool); ok && c {
 		parts = append(parts, "1.0.0 core")
 	}
-	if st, ok := info["status"].(string); ok && st != "" {
+	if st, ok := info["status"].(string); ok && st == "alias" {
+		if a, ok := info["alias_of"].(string); ok && a != "" {
+			parts = append(parts, "hidden spelling of `bashy "+a+"`")
+		} else {
+			parts = append(parts, "hidden spelling")
+		}
+	} else if st, ok := info["status"].(string); ok && st != "" {
 		parts = append(parts, st+" (hidden; `bashy commands --all` lists it)")
 	} else if h, ok := info["hidden"].(bool); ok && h {
 		if a, ok := info["alias_of"].(string); ok && a != "" {
@@ -364,8 +370,8 @@ func originLine(info map[string]any) string {
 			parts = append(parts, "hidden")
 		}
 	}
-	if use, ok := info["use"].(string); ok && use != "" {
-		parts = append(parts, "use `bashy "+use+"`")
+	if use, ok := info["use"].(string); ok && use != "" && info["status"] != "alias" {
+		parts = append(parts, "use `bashy "+use+"`") // an alias line already names it
 	}
 	return strings.Join(parts, " · ")
 }

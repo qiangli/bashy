@@ -69,7 +69,7 @@ Each command has one record:
 | `origin` | **provenance lens (§2.6) — exclusive: `bash` \| `gnu` \| `unix` \| `external` \| `bashy`; mandatory** |
 | `posix` | `true` for the 116 POSIX-required names (cross-cuts `origin`) |
 | `core` | `true` for the bashy 1.0.0 core (35 commands, §2.6) |
-| `status` | `experimental` on a curated-hidden command (§2.6); absent on a hidden alias |
+| `status` | `experimental` on a curated-hidden command that is unproven; `alias` on a curated-hidden name that is only a second spelling of a visible command (`podman`/`docker` → `oci`, `sphere` → `peer`); absent on a compatibility alias (§2.6) |
 | `hidden` | `true` for the compatibility aliases and the curated experimental set (shown only with `--all`) |
 | `alias_of` | `oci` for `sandbox`/`podman`/`docker`, `peer` for `sphere`, the singular for each plural; empty otherwise |
 
@@ -386,7 +386,11 @@ otel), the spec the engine implements — and the canonical atlas entry;
 callers). All four dispatch to the embedded podman engine. The sphere tier
 follows the same rule: `peer` is the canonical (taught) name, `sphere` — the
 tier word — its hidden alias.
-`bashy commands podman` says `use \`bashy oci\``.
+`bashy commands podman` says `hidden spelling of \`bashy oci\`` — its
+`status` is `alias`, not `experimental`, because it is hidden as a spelling,
+not as unproven (the engine is on the first screen). The default listing's
+"experimental" count therefore excludes the three spellings (19), which
+`--all` lists under hidden aliases instead.
 
 ## 3. Data home
 
