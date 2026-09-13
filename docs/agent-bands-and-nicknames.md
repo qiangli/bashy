@@ -1,7 +1,8 @@
 # Agent bands and nicknames
 
 *Shipped 2026-07-13. Mechanism lives in `coreutils/pkg/fleet`; surfaced by
-`bashy agents list`, `bashy models`, `bashy whois`, and `bashy meet`.*
+`bashy agent list`, `bashy model list`, `bashy whois`, and `bashy meet` (nouns are
+singular since 2026-09-12; the plural spellings still dispatch as hidden aliases).*
 
 **2026-07-24 model update.** Anthropic released Claude Opus 5 with canonical
 Claude API ID and alias `claude-opus-5`. Bashy's registry now carries exact
@@ -39,7 +40,7 @@ it binds and carries none of its own.
 | **L1** | basic | mechanical, single-file, unambiguous |
 
 ```
-$ bashy agents list
+$ bashy agent list          # dated snapshot (2026-07-24); rows and bands have moved since
 NAME                      NICK     BAND  TOOL      MODEL            RELIAB      RESOLVES  RING
 agy-gemini3.1             Anouk    L2~   agy       gemini3.1        medium      yes       embedded
 claude-fable5             Sable    L4~   claude    fable5           high        yes       embedded
@@ -50,8 +51,10 @@ opencode-deepseek-v4-pro  Ingrid   L3~   opencode  deepseek-v4-pro  medium      
 ycode-deepseek-v4-pro     Elif     L3~   ycode     deepseek-v4-pro  unmeasured  yes       embedded
 ```
 
-The `~` on every band means `band_source` is **not `measured`** — it is a declared
-guess or an operator's judgment. **Nothing in this fleet is `measured` yet**, and the
+The `~` on a band means `band_source` is **not `measured`** — it is a declared
+guess or an operator's judgment. As of 2026-09-12 four models carry
+`band_source: measured` (`deepseek-v4-pro`, `glm-5.2`, `glm-5.3`, `kimi-k3`) and
+print without the tilde; everything else is still `declared` or `operator`. The
 tilde is there so nobody quotes a guess as a measurement.
 
 **Bands are normalized across providers.** A vendor's own tier ladder is never mapped
@@ -69,8 +72,8 @@ This is what the band is *for*. Instead of knowing your fleet by heart and namin
 everyone:
 
 ```
-$ bashy agents list --min-band 3     # everyone worth seating at a design discussion
-$ bashy agents list --band 2         # exactly the mid-tier
+$ bashy agent list --min-band 3     # everyone worth seating at a design discussion
+$ bashy agent list --band 2         # exactly the mid-tier
 ```
 
 and, the payoff — a meeting that seats itself:
@@ -134,7 +137,7 @@ A model is named for the **exact version it is**, and the family name is **deriv
 name: opus5
 family: opus
 version: "5"
-band: 3
+band: 4                     # band_source: operator (re-pegged 2026-09; the YAML is the truth)
 model: claude-opus-5        # the id that reaches the wire
 ```
 

@@ -20,7 +20,9 @@ the over-spend the whole abstraction exists to make visible.
 ## The ladder
 
 Every rung below was **live-probed** (`bashy agents verify --live`) — it launches
-and answers. **21 of 21 agents pass.**
+and answers. **21 of 21 agents passed** — a dated snapshot (2026-07-14); the
+fleet has since grown to 39 agents in the operator overlay (umbrella `fleet/`),
+and the embedded ring no longer ships models or agents at all (Sprint 161).
 
 | band | Anthropic (claude) | OpenAI (codex) | Google (agy) | DeepSeek (ycode · opencode) | Moonshot (ycode · opencode) |
 |---|---|---|---|---|---|
@@ -108,7 +110,9 @@ opus4.8    L4~     <- the tilde is the point
 | `operator` | pegged from an operator's lived experience across real runs. Not a controlled experiment, but evidence from work that actually shipped. |
 | `measured` | earned by running the model up a difficulty ladder to the rung where it **failed**. |
 
-**Every band in this fleet is currently `~`.** None has been measured.
+**Every band in this fleet was `~` when this was written.** Since then four
+models earned `band_source: measured` (`deepseek-v4-pro`, `glm-5.2`, `glm-5.3`,
+`kimi-k3`); the rest are still unmeasured.
 
 That honesty is the whole point. This registry has already spent months trusting
 numbers nothing had ever checked — bands scored against bindings that were dead,
