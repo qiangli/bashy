@@ -6,8 +6,10 @@ seq: 271
 status: done
 priority: p1
 created: 2026-09-13T14:53:04.148371Z
+weave: 16
+assignee: claude-sonnet5
 sprint: 166
-closed: 2026-09-13T16:05:17.397206Z
+closed: 2026-09-13T16:31:11.959798Z
 ---
 
 SPRINT: #166. Validate that the SHIPPED output path does the right thing under bashy agentic - no new mechanism.
