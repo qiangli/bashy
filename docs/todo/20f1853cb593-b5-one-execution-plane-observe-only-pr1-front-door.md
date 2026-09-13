@@ -3,9 +3,11 @@ id: 20f1853cb593
 kind: task
 title: 'B5 one execution plane, observe-only (PR1): front-door Dispatch through the wireExec middleware chain'
 seq: 263
-status: todo
+status: assigned
 priority: p2
 created: 2026-09-12T23:03:30.263014Z
+weave: 8
+assignee: qiangli
 sprint: 161
 ---
 

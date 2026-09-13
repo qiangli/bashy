@@ -3,10 +3,15 @@ id: 2034ddd1f960
 kind: task
 title: B1 taught surface + e2e for CRUD verbs; forbid direct edits under ~/.config/bashy; bump .sibling-pins
 seq: 261
-status: todo
+status: done
 priority: p1
 created: 2026-09-12T23:03:30.212081Z
+weave: 6
+assignee: qiangli
 sprint: 161
+closed: 2026-09-13T00:49:12.158425Z
+resolution: fixed
+closed_by: claude-f
 ---
 
 Taught surface + e2e for the CRUD verbs (coreutils C2/C3/C4).

@@ -3,9 +3,11 @@ id: 269f1dcf69b8
 kind: task
 title: B4 bashy define + inspect actions aspect + inspect context counts surface the action facet
 seq: 262
-status: todo
+status: assigned
 priority: p1
 created: 2026-09-12T23:03:30.238493Z
+weave: 7
+assignee: qiangli
 sprint: 161
 ---
 
