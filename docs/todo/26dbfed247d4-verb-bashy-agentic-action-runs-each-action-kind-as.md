@@ -3,10 +3,11 @@ id: 26dbfed247d4
 kind: task
 title: 'Verb: bashy agentic ACTION runs each action kind as intended; externals are handed off'
 seq: 270
-status: todo
+status: done
 priority: p0
 created: 2026-09-13T14:36:13.493758Z
 sprint: 166
+closed: 2026-09-13T16:05:17.369661Z
 ---
 
 SPRINT: #166. The verb: bashy agentic [--no-fix] [--no-elide] [--json] ACTION [ARGS...] and its bare-name shim (agentic ls -l inside a bashy shell). ACTION is a command (bashy verb, coreutils applet, builtin, PATH program), a script (file or -), an agent/skill record (file.yaml or -), or a skill name.

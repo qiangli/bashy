@@ -3,10 +3,11 @@ id: b26c70c62e16
 kind: task
 title: 'Output: reduction, redaction and hints validated under bashy agentic'
 seq: 271
-status: todo
+status: done
 priority: p1
 created: 2026-09-13T14:53:04.148371Z
 sprint: 166
+closed: 2026-09-13T16:05:17.397206Z
 ---
 
 SPRINT: #166. Validate that the SHIPPED output path does the right thing under bashy agentic - no new mechanism.
