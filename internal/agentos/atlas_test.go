@@ -178,7 +178,7 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 	// Nouns are singular: the registry/catalog verbs are visible under the
 	// singular and their plurals are hidden aliases with identical metadata.
 	for plural, singular := range map[string]string{"agents": "agent", "models": "model", "tools": "tool",
-		"people": "person", "skills": "skill", "secrets": "secret", "apps": "app", "issue": "todo"} {
+		"people": "person", "skills": "skill", "secrets": "secret", "apps": "app", "issue": "todo", "resources": "resource"} {
 		s, p := byName[singular], byName[plural]
 		if s.Hidden || s.AliasOf != "" {
 			t.Errorf("%s = %+v, want visible canonical verb", singular, s)

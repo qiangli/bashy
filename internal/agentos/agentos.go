@@ -90,6 +90,7 @@ import (
 	"github.com/qiangli/coreutils/pkg/pair"
 	"github.com/qiangli/coreutils/pkg/policy/coord"
 	"github.com/qiangli/coreutils/pkg/principal"
+	"github.com/qiangli/coreutils/pkg/resources"
 	"github.com/qiangli/coreutils/pkg/role/meetroom"
 	"github.com/qiangli/coreutils/pkg/schedule"
 	"github.com/qiangli/coreutils/pkg/sdlc"
@@ -134,7 +135,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "notify", "activity", "run", "agentic", "commands", "inspect", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "notify", "activity", "run", "agentic", "commands", "inspect", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -155,7 +156,7 @@ var (
 	// coreutils/pkg/atlas/naming_test.go; the bare-shim/hidden split is what
 	// TestCommandsCatalogSources pins.
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "invoke", "verify", "doctor", "context", "audit",
-		"agents", "models", "tools", "people", "skills", "secrets", "apps", "messages", "issue"}
+		"agents", "models", "tools", "people", "skills", "secrets", "apps", "messages", "issue", "resources"}
 
 	// curatedHiddenVerbs are yoke commands (bashy-added, verbs AND in-process
 	// tools) that WORK but are not yet
@@ -576,6 +577,14 @@ func dispatch() {
 		cmd := newSprintCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
+			dispatchExit(1)
+		}
+		dispatchExit(0)
+	case "resource", "resources":
+		cmd := resources.NewCommand()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy resource:", err)
 			dispatchExit(1)
 		}
 		dispatchExit(0)

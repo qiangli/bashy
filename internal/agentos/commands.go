@@ -516,6 +516,8 @@ var verbSynopsis = map[string]string{
 	"release":     "build → archive → checksum this project's release artifacts from .goreleaser.yaml (`--snapshot`: no tag, no network)",
 	"commands":    "the 1.0.0 command surface: core first, then every command by origin, tier, POSIX, or bin-managed status",
 	"inspect":     "self-inspection: resource map, gate decisions, and the index of what answers what",
+	"resource":    "host totals and active weave disk, CPU, GPU, and memory usage",
+	"resources":   "hidden alias for bashy resource",
 	"context":     "hidden alias for bashy inspect context",
 	"doctor":      "hidden alias for bashy inspect doctor",
 	"otel":        "the telemetry pillar (O3: ollama · oci · otel): query OTel telemetry with bounded agent-readable summaries",

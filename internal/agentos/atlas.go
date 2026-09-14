@@ -131,6 +131,14 @@ func atlasCatalog(builtins, core, verbs, hidden []string) []atlasRecord {
 // in coreutils, so they carry a real classification instead of falling into the
 // deliberately-empty unknown branch below.
 var bashyOwnedVerbAtlas = map[string]atlas.Entry{
+	"resource": {
+		Stage: atlas.StageCross, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
+		Caps: []string{atlas.CapJSON, atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
+	},
+	"resources": {
+		Stage: atlas.StageCross, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
+		Caps: []string{atlas.CapJSON, atlas.CapReadOnly}, Effects: []string{atlas.EffRead}, AliasOf: "resource",
+	},
 	"out": {
 		Stage: atlas.StageCross, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
@@ -233,6 +241,15 @@ func verbAtlasRecord(name string, hidden bool) (r atlasRecord) {
 		Hidden: hidden, Synopsis: verbSynopsis[name],
 	}
 	defer stampSurface(&r) // named result: the stamp lands on what is returned
+	// `resources` is also the historical GNU-shaped in-shell applet. At the
+	// bashy front door it is now the hidden plural alias of `resource`, so the
+	// front-door classification must win over the applet's shared atlas row.
+	if name == "resources" {
+		applyEntry(&r, bashyOwnedVerbAtlas[name])
+		r.Origin = atlas.OriginBashy
+		r.OS, r.Portable = atlas.OSes(), true
+		return r
+	}
 	if e, ok := atlas.Lookup(name); ok {
 		applyEntry(&r, e)
 		return r
