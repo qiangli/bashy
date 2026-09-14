@@ -66,7 +66,8 @@ Each command has one record:
 | `resolver` | existing: `bash-builtin` \| `bashy-in-process` \| `bashy-front-door` \| `managed-container-or-system` |
 | `caps` | agentic capability flags (§2.3) |
 | `effects` | security/privacy/governance effects (§2.5) — **mandatory, ≥1 per command** |
-| `origin` | **provenance lens (§2.6) — exclusive: `bash` \| `gnu` \| `unix` \| `external` \| `bashy`; mandatory** |
+| `origin` | **provenance lens (§2.6) — exclusive: `bash` \| `gnu` \| `unix` \| `external` \| `bashy` \| `registered`; mandatory** |
+| `ring` | registered commands only (§2.9): `shared` \| `local` — which ring the record came from |
 | `posix` | `true` for the 116 POSIX-required names (cross-cuts `origin`) |
 | `core` | `true` for the bashy 1.0.0 core (35 commands, §2.6) |
 | `os` | **platform lens (§2.7)** — the OSes the command is supported on (`darwin` \| `linux` \| `windows`); curated from the Windows/other stubs, cited in `platform.go` |
@@ -126,7 +127,13 @@ fails loudly and prints it) and `skill` (`list/probe/show [--yaml|--json]/add
 <dir>|<file.yaml>|-|<name> --description/rm/set/edit/verify/run/learn/promote/
 export [--yaml]`). Embedded entries are immutable; every write is copy-on-write
 into the local ring, so the verbs are the only supported way to edit the
-catalog — never the files under `~/.config/bashy/`.
+catalog — never the files under `~/.config/bashy/`. **`commands` carries the
+same CRUD shape for the registered-command ring (§2.9):** `add NAME --set
+exec.0=… | script=… | download.…` (or `add FILE|-`), `set NAME --set PATH=VALUE
+[--unset PATH]`, `rm`, `edit`, `verify NAME`, `show NAME --yaml|--json|--field`,
+`list`, `schema`. A CRUD word counts **only when a NAME follows it** — bare
+`commands rm`/`set`/`verify` keep meaning "show that command's record" — and
+`command` (singular) is the hidden, no-shim front-door spelling.
 
 `kb` is likewise one atlas row with a subcommand-bearing surface (the atlas
 classifies executable command names, not Cobra paths). Its `knowledge` row
@@ -353,6 +360,8 @@ origin per command, plus one cross-cutting tag:
 | `external` | bin-managed external | binmgr CLI, toolchain provisioner, or pinned POSIX provider — exec'd, never linked (= `subclass` ∈ managed-external/provisioner, or a registry entry) | 45 |
 | `bashy` | **yoke** (added by bashy) | the **yoke commands** — bashy's own agentic / yoke surface, its third substrate (Classic · Bash++ · Yoke). `commands` minus yoke = the classic surface. Every yoke command is built for agentic tools; *agentic* does not mean *needs a model* — the ladder has deterministic rungs (`tz clip duration tokens ntp`) that are yoke all the same. Wire value stays `bashy` (provenance = who); "yoke" is how the group is referred to, like "the GNU coreutils" | 53 visible + 22 experimental + 16 aliases |
 
+| `registered` | registered — added with `bashy commands add` | **the operator's own ring** (§2.9): never a table entry; the record's data derives the entry (`atlas.RegisteredEntry`, the same precedent as the declarative-registry CLIs). Listed as its own block, and the one origin whose members are host-specific | whatever the host registered |
+
 `posix: true` = one of the 116 POSIX-required names (`atlas.PosixRequired()`,
 ratcheted against `coreutils/docs/posix-required-commands.tsv`, the file
 `posix-gate`'s spec is generated from). POSIX is deliberately **not** an origin:
@@ -447,6 +456,25 @@ citation as resolved · external (another store's kind) · unknown (not a kind)
 · dangling. There is deliberately no `mb show --links`: a citation inside a
 post is `define`'s job. Gate: the umbrella's `script/e2e-refs.sh`.
 
+### 2.9 Registered commands — the operator's ring (Sprint 179)
+
+`bashy commands add NAME …` registers a command of the operator's own — an
+`exec` argv template, a pinned `download` (sha256 in the record; no digest, no
+download), or an inline `script` body (`bashy [--no-bashpp] -c BODY NAME
+"$@"`; its effects are the author's to declare) — as a `kind: command` record
+under `~/.config/bashy/commands/` (`BASHY_COMMANDS_DIR`, writable local ring;
+`BASHY_COMMANDS_PATH` read-only shared dirs; no embedded ring, no cloud sync
+yet). From then on it is a command like every other: origin `registered`,
+subclass `registered`, resolver `bashy-registered`, every axis derived from the
+record (`coreutils/pkg/atlas/registered.go`), an innermost ExecHandler rung
+after the applet handler on **both** `wireExec` branches (POSIX and agentic
+alike; only `VSC_PROFILE=cert` excludes the ring), the front door, `define`,
+dry-run, `doctor`, and the native `agentic` rules (exit-6 yield). The
+collision filter refuses a name bashy ships (no `--force`; the refusal names
+the holder); a PATH program may be shadowed; a ring entry a newer bashy
+claims is reported `shadowed-by` and skipped. Design of record:
+`dhnt/docs/bashy-commands-registry.md`; gate `script/e2e-commands-registry.sh`.
+
 ## 3. Data home
 
 **`coreutils/pkg/atlas`** — stdlib-only, no deps — holds the whole catalog:
@@ -459,7 +487,9 @@ advisor, `mcp/` (list_tools), and the multicall binary must be able to
 import it; `bashy/internal/agentos` would wall it off. Bashy contributes only
 what it alone knows: the builtin name set (`interp.BuiltinNames()`), shim
 visibility (agent-mode provisioners appear only in agent mode), the `docker`
-alias, and registry-derived tiers (`registry.Entry.Tier`, int → name).
+alias, registry-derived tiers (`registry.Entry.Tier`, int → name), and the
+registered-command ring (`fleet.Command` → `atlas.RegisteredEntry`, read
+through `internal/agentos/registered.go`).
 
 Rejected alternatives: (a) tables inside `commands.go` — invisible to
 dag/MCP/multicall and drift-prone; (b) extending `tool.Tool` at registration
