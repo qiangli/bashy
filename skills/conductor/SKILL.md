@@ -136,6 +136,33 @@ Four rules follow, and they are not negotiable:
   commits, gate verdict, and checkpoint are yours, and your checkpoint should say
   plainly that internal helpers were used and for what.
 
+## Taking the seat — the entry ritual (BEFORE `sprint take`)
+
+`bashy sprint take` is not step one. Whether you are starting a fresh sprint or
+taking over one another conductor left, do these four things first, in order —
+the operator's standing rule (2026-09-14), written after one sprint drifted for
+days on an inherited plan and another shipped in 73 minutes on a re-verified one:
+
+1. **Inspect the code the stories touch.** Open the files, functions and packages
+   the stories and the spec name; check the import graph where a story says one
+   package will call another. A brief that is wrong about the code produces a
+   worker that re-implements what it could not import.
+2. **Read ALL the stories** — every linked story in every tracked repo
+   (`bashy sprint show <id> --links`, then `bashy todo show <id>` in each repo),
+   not the one `next:` points at. A title-only story is a spec you would have to
+   deduce; say so in the plan instead of deducing it in a lane.
+3. **Write the master execution plan if none exists, or UPDATE the existing one
+   against the code** (`docs/sprint-<n>-master-execution-plan.md`): what the
+   stories actually contain after step 1, the order and the waves, the decisions
+   only the operator can make, and the gate. Keep it MVP-sized — a plan longer
+   than the build it plans is a smell; a decision that only adds internal surface
+   is deferred by default and needs a named consumer.
+4. **State the sprint's primary goal in one sentence** at the top of the plan.
+   If you cannot, you are not ready to take the seat.
+
+Only then `sprint take`, and make that sentence the first checkpoint's brief. A
+takeover that skips this inherits the previous conductor's blind spots as facts.
+
 ## Owner accountability — active, not a passive lease holder
 
 Being the appointed owner/conductor of a sprint is an ACTIVE duty, not a claim
@@ -486,7 +513,8 @@ share a source file — they parallelize but **merge sequentially** (§9).
 ### 4. Sprint + stories
 ```sh
 bashy sprint add "<goal>" --acceptance "<target green AND guard green>" --column doing --epic <name>
-bashy sprint take <id> --owner conductor ;  bashy sprint checkpoint <id> --continuity "<baseline+plan>"
+# entry ritual first (§Taking the seat): code inspected, ALL stories read, plan written/updated, goal in one sentence
+bashy sprint take <id> --owner conductor ;  bashy sprint checkpoint <id> --continuity "<goal sentence + baseline + plan path>"
 bashy weave add "<story>" --priority p0 --points 8 --tool <tool> --verify "$(cat gate.sh)" --body "$(cat story.md)"
 bashy sprint link <id> --repo <repo> --task <issue>
 bashy weave baton take --as <you>        # single-driver lock; re-write it after every action
