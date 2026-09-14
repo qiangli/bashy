@@ -52,6 +52,24 @@ func TestBashPPCommandStringUsesSelectedDialect(t *testing.T) {
 	}
 }
 
+func TestBashPPCommandStringPythonFence(t *testing.T) {
+	previous := *command
+	t.Cleanup(func() { *command = previous })
+	*command = "~~~python as py\ndef add(a: int, b: int) -> int:\n    return a + b\n~~~\nanswer := py.add(20, 22)\necho $answer\n"
+	var stdout, stderr bytes.Buffer
+	r, err := interp.New(interp.Lang(syntax.LangBashPP), interp.CommandString(true),
+		interp.StdIO(nil, &stdout, &stderr), interp.Env(expand.ListEnviron()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := run(r, strings.NewReader(*command), "polyglot-fixture"); err != nil {
+		t.Fatalf("-c: %v (stderr %q)", err, stderr.String())
+	}
+	if stdout.String() != "42\n" || stderr.Len() != 0 {
+		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
 func TestBashPPLiveDisableFallsBackToClassic(t *testing.T) {
 	var out, stderr bytes.Buffer
 	r, err := interp.New(interp.Lang(syntax.LangBashPP), interp.StdIO(nil, &out, &stderr), interp.Env(expand.ListEnviron()))

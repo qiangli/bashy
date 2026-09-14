@@ -14,6 +14,7 @@ func Usage() string {
 	return `
 Bashy AgentOS extensions:
 	--bashpp, --bash++	enable Bash++ (--no-bashpp disables it)
+	~~~python ... ~~~	declare Python functions for direct or qualified Bash++ calls
 	--go-version VERSION	select Go checker language semantics (requires --source=go)
 	--go-test-builtins	enable Go checker test builtins assert/trace (requires --source=go)
 	--go-checker-branch-errors	leave label/goto/break errors to the Go type checker (requires --source=go)
