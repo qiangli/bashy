@@ -499,6 +499,15 @@ func dispatchTranspile(args []string) int {
 			GoVersion: goVersion, TestBuiltins: goTestBuiltins,
 			CheckerBranchErrors: goCheckerBranchErrors, CheckAfterSyntaxErrors: goCheckAfterSyntaxErrors,
 			Packages: packages, ImportBase: goImportBase, ImportPath: goImportPath, TestMain: goTestMain,
+			// The compiler's own directory route (-D, --go-import-base)
+			// compiles every package as its own unit and links the objects,
+			// so each phase lowers to a native unit (sh gosource:
+			// PreserveNativeInit): an explicit package map only serves the
+			// checker, and the generated file keeps the program's own names,
+			// imports and init for the compiler's -D/-importcfg and the
+			// linker to resolve, as they resolve the original. A module
+			// program (no -D) is still flattened into one file.
+			PreserveNativeInit: goImportBase != "",
 		})
 		if err != nil {
 			// sh's Go diagnostics carry their own file:line:col positions and
@@ -902,7 +911,9 @@ func loadTranspileGoSource(in cli.GoSourceInput, base cli.GoSourceOptions) (*syn
 	if err != nil {
 		return nil, nil, err
 	}
-	if prog.Package != "main" || prog.Main == "" {
+	// A native unit keeps the source's own main and init; only a flattened
+	// program needs the synthetic entry calls RunMain appends.
+	if prog.Package != "main" || prog.Main == "" || opts.PreserveNativeInit {
 		return prog.File, prog, nil
 	}
 	opts.RunMain = true
