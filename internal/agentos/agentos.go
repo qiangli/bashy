@@ -155,8 +155,15 @@ var (
 	// are the same shape. The rule and its exceptions are ratcheted in
 	// coreutils/pkg/atlas/naming_test.go; the bare-shim/hidden split is what
 	// TestCommandsCatalogSources pins.
+	//
+	// `command` (singular) is the hidden front-door alias of `commands` (Sprint
+	// 179): `bashy command add …` reaches the same dispatcher, and it is in
+	// THIS list precisely because it must never get a bare shim — inside the
+	// shell `command` is the POSIX builtin, which is why the lister stays
+	// plural (docs/bashy-command-noun-number-policy.md).
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "invoke", "verify", "doctor", "context", "audit",
-		"agents", "models", "tools", "people", "skills", "secrets", "apps", "messages", "issue", "resources"}
+		"agents", "models", "tools", "people", "skills", "secrets", "apps", "messages", "issue", "resources",
+		"command"}
 
 	// curatedHiddenVerbs are yoke commands (bashy-added, verbs AND in-process
 	// tools) that WORK but are not yet
@@ -469,6 +476,9 @@ func isFrontDoorInvocation(name string) bool {
 		return true
 	}
 	if _, ok := atlas.Lookup(name); ok {
+		return true
+	}
+	if _, ok := registeredLookup(name); ok {
 		return true
 	}
 	_, core, verbs := commandsCatalog()
@@ -1206,7 +1216,7 @@ func dispatch() {
 			dispatchExit(1)
 		}
 		dispatchExit(0)
-	case "commands":
+	case "commands", "command":
 		// Discovery: list the whole supported command surface — shell builtins,
 		// the in-process coreutils userland, and the bare-name front-door verbs —
 		// which are otherwise invisible to compgen/type (the handler intercepts
@@ -1497,6 +1507,12 @@ func dispatch() {
 		}
 		dispatchExit(0)
 	}
+	// The registered-command ring (`bashy commands add`): the operator's own
+	// front-door verbs, consulted after everything bashy ships and before the
+	// embedded skills / the 127 below.
+	if rec, ok := registeredLookup(os.Args[1]); ok {
+		dispatchExit(runRegisteredFrontDoor(rec, os.Args[2:]))
+	}
 	if isEmbeddedSkillName(os.Args[1]) {
 		cmd := coreskills.NewSkillsCmd(skillsOptions()...)
 		cmd.SetArgs([]string{"show", os.Args[1]})
@@ -1617,7 +1633,7 @@ func skillsOptions() []coreskills.Option {
 // thing each dispatch arm must remember.
 func wireLexicon() {
 	lexicon.Synopses = verbSynopsis
-	lexicon.KnownCommands = atlasCommandNames()
+	lexicon.KnownCommands = append(atlasCommandNames(), registeredNames()...)
 	lexicon.RecordDiscovery = recordDiscovery
 	// The skill catalog is bashy's ring, not lexicon's: hand define the rows
 	// so `bashy define <skill>` carries the action facet `inspect actions` shows.
@@ -1867,7 +1883,11 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 		outputMW = output.middleware
 	}
 	if posix {
-		return append(opts, interp.ExecHandlers(outputMW, coreutilsshell.Handler()))
+		// The registered-command rung takes its place in --posix too (operator,
+		// 2026-09-14: POSIX and agentic at the same time) — resolution is
+		// shared, the agentic chrome above is not. registeredHandler itself
+		// stands down under VSC_PROFILE=cert.
+		return append(opts, interp.ExecHandlers(outputMW, coreutilsshell.Handler(), registeredHandler()))
 	}
 	// R0-pre: file a presence card for the agent this shell runs under, so an
 	// agent launched outside `bashy chat` stops being invisible to the address
@@ -1930,7 +1950,11 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	if weaveGuardEnabled() {
 		mws = append(mws, weaveGuardHandler)
 	}
-	mws = append(mws, outputMW, autofix.Handler(), dryRunHandler(r), coreutilsshell.Handler())
+	// The registered-command ring (`bashy commands add`) is the innermost rung:
+	// after the applet handler so a record can never pre-empt an applet, and
+	// inside every middleware above so they all see argv[0] = the registered
+	// name. See registered.go.
+	mws = append(mws, outputMW, autofix.Handler(), dryRunHandler(r), coreutilsshell.Handler(), registeredHandler())
 	return append(opts, interp.ExecHandlers(mws...))
 }
 

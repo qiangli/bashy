@@ -259,11 +259,12 @@ func scratchStores(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{
 		"BASHY_HOME", "BASHY_FLEET_DIR", "BASHY_SKILLS_DIR", "BASHY_TOOLS_DIR",
-		"BASHY_MODELS_DIR", "BASHY_AGENTS_DIR",
+		"BASHY_MODELS_DIR", "BASHY_AGENTS_DIR", "BASHY_COMMANDS_DIR",
 	} {
 		t.Setenv(key, t.TempDir())
 	}
 	t.Setenv("BASHY_SKILLS_PATH", "")
+	t.Setenv("BASHY_COMMANDS_PATH", "")
 }
 
 func actionRow(t *testing.T, rows []inspectActionRow, kind, name string) inspectActionRow {

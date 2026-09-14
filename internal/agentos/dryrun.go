@@ -270,6 +270,9 @@ func resolveCmd(name string, env expand.Environ) (string, bool) {
 	if tool.Lookup(name) != nil {
 		return "coreutils:" + name, true
 	}
+	if _, ok := registeredLookup(name); ok {
+		return "registered:" + name, true
+	}
 	path := ""
 	if env != nil {
 		if v := env.Get("PATH"); v.IsSet() {

@@ -10,6 +10,7 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 
+	"github.com/qiangli/coreutils/external/registry"
 	"github.com/qiangli/coreutils/pkg/bscript"
 	"github.com/qiangli/coreutils/pkg/recall"
 	"github.com/qiangli/coreutils/pkg/weavecli"
@@ -58,11 +59,20 @@ func agenticCommand(args []string) (*exec.Cmd, bscript.Kind, bool) {
 	if isScriptPath(name) {
 		return exec.Command(bashySelfPath(), args...), bscript.Script, true
 	}
-	if tool.Lookup(name) != nil || interp.IsBuiltin(name) {
+	// A REGISTERED command (`bashy commands add`) takes the same path as a
+	// builtin or applet: one self-reexec through bashy's shell, where the
+	// innermost rung resolves it under the whole wireExec chain, and a
+	// non-zero result yields. This is what "treated like every other
+	// command" means for agentic; an UNREGISTERED name still falls to the
+	// external rung below with only BASHY_AGENTIC set.
+	if _, registered := registeredLookup(name); registered || tool.Lookup(name) != nil || interp.IsBuiltin(name) {
 		cmdArgs := append([]string{"-c", `command "$@"`, "bashy agentic"}, args...)
 		return exec.Command(bashySelfPath(), cmdArgs...), bscript.Command, true
 	}
-	if name != "agentic" && (slices.Contains(alwaysShimVerbs, name) || slices.Contains(directFrontDoorVerbs, name) || slices.Contains(hiddenFrontDoorVerbs, name)) {
+	// Front-door verbs, including the declarative bin-managed externals
+	// (doctl, …): until Sprint 179 those fell through to the raw external rung
+	// — the one shipped class outside the native rules.
+	if name != "agentic" && (slices.Contains(alwaysShimVerbs, name) || slices.Contains(directFrontDoorVerbs, name) || slices.Contains(hiddenFrontDoorVerbs, name) || slices.Contains(registry.Names(), name)) {
 		return exec.Command(bashySelfPath(), args...), bscript.Command, true
 	}
 	return exec.Command(name, args[1:]...), bscript.Command, false

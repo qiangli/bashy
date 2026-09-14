@@ -187,6 +187,17 @@ func addToolSurfaceChecks(checks *[]doctorCheck) {
 		st, detail := externalToolStatus(e.Name)
 		add(fmt.Sprintf("ext: %s (t%d)", e.Name, e.Tier), st, detail)
 	}
+	// registered commands (`bashy commands add`) — network-free: an exec
+	// program on PATH, a download already cached or on-demand, a script body;
+	// a ring entry this bashy now ships a command for is a warning, because it
+	// is skipped at dispatch until renamed.
+	for _, r := range registeredCommands() {
+		st, detail := registeredStatus(r)
+		add("registered: "+r.Name, st, detail)
+	}
+	for name, holder := range registeredShadowed() {
+		add("registered: "+name, "warn", "shadowed by "+holder+" — skipped at dispatch; rename it with `bashy commands set "+name+" --set name=…`")
+	}
 
 	// sphere tier (tier 4) — peer-direct pooled inference/compute via the outpost
 	// mesh agent (exec'd at runtime, not linked). info (not warn) when absent:

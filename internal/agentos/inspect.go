@@ -326,7 +326,7 @@ func collectInspectPaths() []inspectPathRow {
 	add(inspectPathRow{Name: "fleet", Purpose: "tool/model/agent definitions, one YAML per entry", Path: fleetRoot, Scope: "user", Env: "BASHY_FLEET_DIR", Owner: "fleet.DefaultRoot", ReadBy: "tool/model/agent list"})
 	// The STORE keeps its plural name (the directory and env var are storage
 	// identifiers); the VERB that reads it is the singular noun.
-	for _, n := range []struct{ store, verb string }{{"tools", "tool"}, {"models", "model"}, {"agents", "agent"}} {
+	for _, n := range []struct{ store, verb string }{{"tools", "tool"}, {"models", "model"}, {"agents", "agent"}, {"commands", "commands"}} {
 		add(inspectPathRow{Name: n.store, Purpose: "the " + n.verb + " noun store", Path: fleet.NounDir(fleetRoot, n.store), Scope: "user", Env: "BASHY_" + strings.ToUpper(n.store) + "_DIR", Owner: "fleet.NounDir", ReadBy: "bashy " + n.verb})
 	}
 	skills := bashySkillsDir()

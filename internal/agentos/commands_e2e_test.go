@@ -933,6 +933,8 @@ func scratchStoreEnv(t *testing.T) []string {
 		"BASHY_TOOLS_DIR=" + filepath.Join(root, "tools"),
 		"BASHY_MODELS_DIR=" + filepath.Join(root, "models"),
 		"BASHY_AGENTS_DIR=" + filepath.Join(root, "agents"),
+		"BASHY_COMMANDS_DIR=" + filepath.Join(root, "commands"),
+		"BASHY_COMMANDS_PATH=",
 		"BASHY_HINTS=off",
 	}
 }
