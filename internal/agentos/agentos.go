@@ -186,8 +186,11 @@ var (
 	curatedHiddenVerbs = []string{
 		// higher-tier orchestration, layered over weave/dag/chat
 		"supervise", "judge", "pair", "sdlc", "schedule", "herald",
-		// research / vocabulary
-		"define", "lexicon", "search", "sota",
+		// research / vocabulary. `define` GRADUATED 2026-09-14 (Sprint 168):
+		// it is the one resolver for `<kind>:<id>` refs, gated by
+		// script/e2e-refs.sh in the umbrella, and an agent that cannot find
+		// it cannot follow a citation.
+		"lexicon", "search", "sota",
 		// self-fidelity / cert (inspect stays visible)
 		"check", "conform",
 		// output reduction (still on under BASHY_AGENTIC; `bashy help output`)
@@ -1610,6 +1613,9 @@ func wireLexicon() {
 	// The skill catalog is bashy's ring, not lexicon's: hand define the rows
 	// so `bashy define <skill>` carries the action facet `inspect actions` shows.
 	lexicon.SkillSource = lexiconSkillRows
+	// The ref registry is the fifth hook, and the one the coverage test
+	// guards: `define <kind>:<id>` is answered by these, not by a projection.
+	wireRefResolvers()
 }
 
 // newLexiconCmd builds `bashy lexicon` — the glossary + its admin verbs
