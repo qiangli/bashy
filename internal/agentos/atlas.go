@@ -65,6 +65,7 @@ type atlasRecord struct {
 	// three. Default listings are filtered to runtime.GOOS (a listing that
 	// names mkfifo on Windows advertises a command that will fail); --os any
 	// lifts the filter, --portable keeps only the cross-platform set.
+	Ring     string   `json:"ring,omitempty"` // registered commands only: shared | local
 	OS       []string `json:"os,omitempty"`
 	Partial  []string `json:"partial,omitempty"`
 	Portable bool     `json:"portable,omitempty"`
@@ -260,6 +261,19 @@ func verbAtlasRecord(name string, hidden bool) (r atlasRecord) {
 		// is declared by name in the same table as every other external.
 		if d, ok := atlas.ExternalPlatforms(name); ok {
 			r.OS, r.Portable = d.OS, len(d.OS) == len(atlas.OSes())
+		}
+		return r
+	}
+	// The operator's ring (`bashy commands add`): the record's own data,
+	// derived the way a registry CLI's is. Consulted after everything bashy
+	// ships, mirroring dispatch.
+	if rec, ok := registeredLookup(name); ok {
+		applyEntry(&r, atlas.RegisteredEntry(rec.AtlasSpec()))
+		r.Resolver = "bashy-registered"
+		r.Synopsis = rec.Synopsis
+		r.Ring = rec.Ring.String()
+		if rec.Hidden {
+			r.Hidden = true
 		}
 		return r
 	}

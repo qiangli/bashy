@@ -23,13 +23,69 @@ import (
 
 	"github.com/qiangli/coreutils/external/registry"
 	"github.com/qiangli/coreutils/pkg/atlas"
+	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	"github.com/qiangli/coreutils/tool"
 )
 
 const commandsSchemaVersion = "bashy-commands-v1"
 
+// commandsCRUDWords are the `commands` sub-verbs that take a NAME. Each is
+// recognized only when a non-flag argument follows: bare `commands rm`
+// keeps its lifelong meaning — "show rm's record" — because `rm`, `set`,
+// `edit` and `verify` all name commands too. `list` and `schema` take no
+// name and collide with nothing.
+var (
+	commandsCRUDWords     = []string{"add", "show", "set", "rm", "edit", "verify"}
+	commandsNamelessWords = []string{"list", "schema"}
+)
+
+// commandsRegistryArgs reports whether args address the registered-command
+// ring rather than the lister, and rewrites `show NAME` (bare) to the
+// lister's own one-command report, which is what `commands NAME` already is.
+func commandsRegistryArgs(args []string) ([]string, bool) {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return args, false
+	}
+	if containsString(commandsNamelessWords, args[0]) {
+		return args, true
+	}
+	if !containsString(commandsCRUDWords, args[0]) || len(args) < 2 || strings.HasPrefix(args[1], "-") {
+		return args, false
+	}
+	if args[0] == "show" {
+		for _, a := range args[2:] {
+			if a == "--yaml" || a == "--json" || strings.HasPrefix(a, "--field") {
+				return args, true // the RECORD, not the atlas report
+			}
+		}
+		return args[1:], false // `commands show NAME` ≡ `commands NAME`
+	}
+	return args, true
+}
+
+// runCommandsRegistry mounts the fleet CRUD tree with bashy's holes filled:
+// the whole command surface as the collision filter, and the shell as the
+// script syntax probe. The index is dropped afterwards so a `NAME` typed
+// right after `add NAME` resolves.
+func runCommandsRegistry(args []string) int {
+	defer resetRegisteredIndex()
+	cmd := fleet.NewCommandsCmd(fleet.WithReservedNames(reservedCommandName), fleet.WithCommandProbe(scriptSyntaxProbe))
+	cmd.Use = "commands"
+	cmd.SetArgs(args)
+	if err := cmd.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "bashy commands: %v\n", err)
+		return fleet.ExitCode(err)
+	}
+	return 0
+}
+
 func dispatchCommands(args []string) int {
+	if rest, registry := commandsRegistryArgs(args); registry {
+		return runCommandsRegistry(rest)
+	} else {
+		args = rest
+	}
 	asJSON, verbose := weavecli.IsAgent(), false // JSON by default under $BASHY_AGENTIC
 	agentic, all, gnu, features := false, false, false, false
 	var view, tierFilter, groupFilter, capFilter, effectFilter string
@@ -152,6 +208,13 @@ func dispatchCommands(args []string) int {
 			fmt.Println("  --portable     only commands with full support on every platform (composes with any view)")
 			fmt.Println("  --idioms       curated composites: commands naturally used together")
 			fmt.Println("  --atlas        full per-command atlas records (machine surface)")
+			fmt.Println("Registered commands — your own, listed and dispatched like every shipped one:")
+			fmt.Println("  add NAME --set exec.0=PROG|script=BODY|download.url=…   register (schema lists every path)")
+			fmt.Println("  set NAME --set PATH=VALUE | rm NAME | edit NAME | verify [NAME]")
+			fmt.Println("  show NAME --yaml|--json|--field PATH   the record; bare `commands NAME` is the atlas report")
+			fmt.Println("  list | schema                          the ring; every settable path")
+			fmt.Println("  A CRUD word counts only when a NAME follows it: bare `commands rm` still shows rm's record.")
+			fmt.Println("  A name bashy already ships is refused; a PATH program may be shadowed. sync: not yet.")
 			return 0
 		default:
 			if strings.HasPrefix(a, "-") {
@@ -219,11 +282,18 @@ func dispatchCommands(args []string) int {
 		sort.Strings(verbs)
 	}
 	if asJSON {
+		registered := registeredNames()
+		if registered == nil {
+			registered = []string{}
+		}
 		out := map[string]any{
 			"schema_version": commandsSchemaVersion,
 			"builtins":       builtins,
 			"coreutils":      core,
 			"verbs":          verbs,
+			// Additive since Sprint 179: the operator's ring, also present in
+			// verbs (it dispatches at the front door). Always a list.
+			"registered": registered,
 		}
 		if all {
 			out["hidden_verbs"] = hidden
@@ -241,7 +311,7 @@ func dispatchCommands(args []string) int {
 				}
 			}
 			for _, n := range verbs {
-				if s := verbSynopsis[n]; s != "" {
+				if s := synopsisOf(n); s != "" {
 					syn[n] = s
 				}
 			}
@@ -336,10 +406,11 @@ func commandFeatureReport(name string, builtins, core, verbs, hidden []string, g
 		atlasFeatureFields(out, name, "coreutils", false)
 	case containsString(verbs, name):
 		out["class"], out["resolver"], out["available"] = "verb", "bashy-front-door", true
-		if s := verbSynopsis[name]; s != "" {
+		if s := synopsisOf(name); s != "" {
 			out["synopsis"] = s
 		}
 		atlasFeatureFields(out, name, "verb", false)
+		registeredFeatureFields(out, name)
 	case containsString(hidden, name) && tool.Lookup(name) != nil:
 		// A curated-hidden in-process tool (tokens, posix-gate).
 		out["class"], out["resolver"], out["available"], out["hidden"] = "coreutils", "bashy-in-process", true, true
@@ -349,10 +420,11 @@ func commandFeatureReport(name string, builtins, core, verbs, hidden []string, g
 		atlasFeatureFields(out, name, "coreutils", true)
 	case containsString(hidden, name):
 		out["class"], out["resolver"], out["available"], out["hidden"] = "verb", "bashy-front-door", true, true
-		if s := verbSynopsis[name]; s != "" {
+		if s := synopsisOf(name); s != "" {
 			out["synopsis"] = s
 		}
 		atlasFeatureFields(out, name, "verb", true)
+		registeredFeatureFields(out, name)
 	case containsString(gnu.Missing, name):
 		out["class"] = "gnu-coreutils-missing"
 		out["resolver"] = "managed-container-or-system"
@@ -590,7 +662,8 @@ func commandsCatalog() (builtins, core, verbs []string) {
 	verbs = append([]string{"docker", "sandbox"}, alwaysShimVerbs...)
 	verbs = append(verbs, directFrontDoorVerbs...)
 	verbs = append(verbs, agentModeShimVerbs...)
-	verbs = append(verbs, registry.Names()...) // declarative managed-external CLIs
+	verbs = append(verbs, registry.Names()...)  // declarative managed-external CLIs
+	verbs = append(verbs, registeredNames()...) // the operator's ring (`commands add`)
 	sort.Strings(verbs)
 	// The curated (experimental) names are callable and shimmed exactly as
 	// before; they are only kept out of what is TAUGHT. See curatedHiddenVerbs.
@@ -648,8 +721,25 @@ func withoutCuratedHidden(names []string) []string {
 func hiddenVerbsCatalog() []string {
 	verbs := append([]string(nil), hiddenFrontDoorVerbs...)
 	verbs = append(verbs, curatedHiddenVerbs...)
+	verbs = append(verbs, registeredHiddenNames()...)
 	sort.Strings(verbs)
 	return verbs
+}
+
+// synopsisOf is the one synopsis lookup every listing path uses: an
+// in-process tool's own, a verb's from the static table, else a registered
+// record's — the ring is data, so its prose cannot live in a Go map.
+func synopsisOf(name string) string {
+	if t := tool.Lookup(name); t != nil && t.Synopsis != "" {
+		return t.Synopsis
+	}
+	if s := verbSynopsis[name]; s != "" {
+		return s
+	}
+	if r, ok := registeredLookup(name); ok {
+		return r.Synopsis
+	}
+	return ""
 }
 
 // printCommandSynopses prints "name — synopsis" lines under a titled header,

@@ -15,6 +15,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 
 	"github.com/qiangli/coreutils/external/registry"
+	"github.com/qiangli/coreutils/pkg/assetring"
 	"github.com/qiangli/coreutils/pkg/atlas"
 	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/tool"
@@ -380,4 +381,21 @@ func registeredStatus(r fleet.Command) (status, detail string) {
 		return "ok", "script (" + r.Dialect + ")"
 	}
 	return "warn", "no runnable implementation"
+}
+
+// registeredFeatureFields adds the ring-only fields to a one-command report:
+// how the record runs, which ring it came from, and where it lives on disk.
+func registeredFeatureFields(out map[string]any, name string) {
+	rec, ok := registeredLookup(name)
+	if !ok {
+		return
+	}
+	out["resolver"] = "bashy-registered"
+	out["mode"] = rec.Mode()
+	out["ring"] = rec.Ring.String()
+	if rec.Ring == assetring.RingLocal {
+		if p, err := registeredCatalog().MaterializeCommand(rec.Name); err == nil {
+			out["path"] = p
+		}
+	}
 }

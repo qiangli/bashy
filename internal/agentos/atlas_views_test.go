@@ -193,11 +193,16 @@ func TestCommandsDefaultJSONUnchanged(t *testing.T) {
 	if got["schema_version"] != commandsSchemaVersion {
 		t.Errorf("schema_version = %v, want %q", got["schema_version"], commandsSchemaVersion)
 	}
-	want := map[string]bool{"schema_version": true, "builtins": true, "coreutils": true, "verbs": true}
+	// `registered` (Sprint 179) is the one ADDITIVE key: the operator's ring,
+	// always present as a list (empty here — TestMain isolates the ring).
+	want := map[string]bool{"schema_version": true, "builtins": true, "coreutils": true, "verbs": true, "registered": true}
 	for k := range got {
 		if !want[k] {
 			t.Errorf("unexpected key %q in default v1 output", k)
 		}
+	}
+	if reg, ok := got["registered"].([]any); !ok || len(reg) != 0 {
+		t.Errorf("registered = %v, want an empty list under an isolated ring", got["registered"])
 	}
 }
 

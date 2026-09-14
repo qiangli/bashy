@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/qiangli/coreutils/pkg/atlas"
-	"github.com/qiangli/coreutils/tool"
+	"sort"
 )
 
 // The `bashy commands` default surface (Sprint 167, bashy 1.0.0) is
@@ -89,6 +89,8 @@ type commandSections struct {
 	Coreutils    []string            `json:"coreutils"`              // GNU coreutils, in-process
 	Classic      []string            `json:"classic"`                // other classic Unix tools, in-process
 	External     []string            `json:"external"`               // downloaded + exec'd
+	Registered   []string            `json:"registered,omitempty"`   // the operator's ring (`commands add`)
+	Shadowed     map[string]string   `json:"shadowed,omitempty"`     // ring entries this bashy now ships a command for → holder
 	Diagnostics  []string            `json:"diagnostics"`            // check/diagnose/verify family
 	Agent        map[string][]string `json:"agent"`                  // venue -> bashy-added commands
 }
@@ -112,8 +114,19 @@ func classSectionsOn(all bool, goos string) commandSections {
 	for _, row := range coreRows {
 		s.Core = append(s.Core, coreRow{row.Label, append([]string(nil), row.Commands...)})
 	}
+	s.Shadowed = registeredShadowed()
 	for _, r := range liveAtlas(all) {
 		if goos != "any" && !slices.Contains(r.OS, goos) {
+			continue
+		}
+		// The operator's ring is its own block, decided BEFORE the hidden
+		// check: a hidden registered command is still a registered command,
+		// not a compatibility alias, and the default branch below would file
+		// an unknown origin under "more yoke".
+		if r.Origin == atlas.OriginRegistered {
+			if !r.Hidden || all {
+				s.Registered = append(s.Registered, r.Name)
+			}
 			continue
 		}
 		switch {
@@ -152,12 +165,7 @@ func classSectionsOn(all bool, goos string) commandSections {
 // wrapped into compact columns. `all` appends the hidden sets.
 func printClassSections(w io.Writer, verbose, all bool, goos string) {
 	s := classSectionsOn(all, goos)
-	syn := func(n string) string {
-		if t := tool.Lookup(n); t != nil && t.Synopsis != "" {
-			return t.Synopsis
-		}
-		return verbSynopsis[n]
-	}
+	syn := synopsisOf
 	coreN := 0
 	for _, row := range s.Core {
 		coreN += len(row.Commands)
@@ -174,7 +182,7 @@ func printClassSections(w io.Writer, verbose, all bool, goos string) {
 			aliasN++
 		}
 	}
-	total := coreN + len(s.More) + userland + hiddenN + aliasN
+	total := coreN + len(s.More) + userland + len(s.Registered) + hiddenN + aliasN
 
 	fmt.Fprintf(w, "bashy commands — the 1.0.0 surface: %d core + %d more yoke commands; `--all` for everything (%d)\n",
 		coreN, len(s.More), total)
@@ -215,6 +223,24 @@ func printClassSections(w io.Writer, verbose, all bool, goos string) {
 		}
 	}
 	fmt.Fprintln(w, "  bashy commands --view portable   what runs as-is on windows · macOS · linux (--portable filters any view)")
+
+	if len(s.Registered) > 0 || len(s.Shadowed) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "registered — yours, added with `bashy commands add`; dispatched like every command above (%d):\n", len(s.Registered))
+		printSubSection(w, "", s.Registered, verbose, syn)
+		if len(s.Shadowed) > 0 {
+			names := make([]string, 0, len(s.Shadowed))
+			for n := range s.Shadowed {
+				names = append(names, n)
+			}
+			sort.Strings(names)
+			fmt.Fprintf(w, "  shadowed by this bashy, skipped (%d):", len(names))
+			for _, n := range names {
+				fmt.Fprintf(w, " %s (%s)", n, s.Shadowed[n])
+			}
+			fmt.Fprintln(w, " — rename with `bashy commands set NAME --set name=…`")
+		}
+	}
 
 	fmt.Fprintln(w)
 	if all {
