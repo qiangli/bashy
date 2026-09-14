@@ -136,11 +136,11 @@ Four rules follow, and they are not negotiable:
   commits, gate verdict, and checkpoint are yours, and your checkpoint should say
   plainly that internal helpers were used and for what.
 
-## Taking the seat — the entry ritual (BEFORE `sprint take`)
+## Orientation — before you take the seat
 
 `bashy sprint take` is not step one. Whether you are starting a fresh sprint or
-taking over one another conductor left, do these four things first, in order —
-the operator's standing rule (2026-09-14), written after one sprint drifted for
+taking over one another conductor left, the sprint manager's orientation comes
+first — four things, in order, the operator's standing rule (2026-09-14), written after one sprint drifted for
 days on an inherited plan and another shipped in 73 minutes on a re-verified one:
 
 1. **Inspect the code the stories touch.** Open the files, functions and packages
@@ -513,7 +513,7 @@ share a source file — they parallelize but **merge sequentially** (§9).
 ### 4. Sprint + stories
 ```sh
 bashy sprint add "<goal>" --acceptance "<target green AND guard green>" --column doing --epic <name>
-# entry ritual first (§Taking the seat): code inspected, ALL stories read, plan written/updated, goal in one sentence
+# orientation first (§Orientation): code inspected, ALL stories read, plan written/updated, goal in one sentence
 bashy sprint take <id> --owner conductor ;  bashy sprint checkpoint <id> --continuity "<goal sentence + baseline + plan path>"
 bashy weave add "<story>" --priority p0 --points 8 --tool <tool> --verify "$(cat gate.sh)" --body "$(cat story.md)"
 bashy sprint link <id> --repo <repo> --task <issue>
