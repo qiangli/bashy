@@ -405,3 +405,47 @@ func TestInboxWatchKeepsRefreshingTheSeat(t *testing.T) {
 		}
 	}
 }
+
+// The managed-session relay in coreutils gates its unified snapshot on
+// bus.InboxFingerprint. Bashy must wire that to the same notifier `inbox
+// --watch` uses, or a meet/board write — which only the HOST hook reads —
+// would go undelivered until the relay's periodic full rescan.
+func TestWireMessageBoardGatesRelayOnHostNotifier(t *testing.T) {
+	mbDir, roomDir, meetDir := t.TempDir(), t.TempDir(), t.TempDir()
+	t.Setenv("BASHY_MB_DIR", mbDir)
+	t.Setenv("BASHY_ROOM_DIR", roomDir)
+	t.Setenv("BASHY_MEET_DIR", meetDir)
+	prev := bus.InboxFingerprint
+	t.Cleanup(func() { bus.InboxFingerprint = prev })
+	// A fresh notifier for this test's roots: the shared one is process-wide
+	// and may already be armed on another test's directories.
+	changes := newInboxChangeNotifier()
+	t.Cleanup(changes.close)
+	bus.InboxFingerprint = changes.fingerprint
+
+	gate := bus.NewInboxPollGate("relay-agent")
+	read, sum, ok := gate.Due(time.Now())
+	if !read {
+		t.Fatal("first tick reads")
+	}
+	gate.Commit(sum, ok, time.Now())
+	if read, _, _ := gate.Due(time.Now()); read {
+		t.Fatal("nothing moved: the relay gate must not snapshot")
+	}
+	before, _ := changes.fingerprint("")
+	if err := os.WriteFile(filepath.Join(mbDir, "posts.jsonl"), []byte("{\"body\":\"board post\"}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	waitForInboxGeneration(t, changes, before)
+	if read, _, _ := gate.Due(time.Now()); !read {
+		t.Fatal("a board write must open the relay gate through the host notifier")
+	}
+
+	wireMessageBoard()
+	if bus.InboxFingerprint == nil {
+		t.Fatal("wireMessageBoard must install the host inbox fingerprint")
+	}
+	if _, ok := bus.InboxFingerprint("relay-agent"); !ok {
+		t.Fatal("the shared notifier fingerprint must be available")
+	}
+}

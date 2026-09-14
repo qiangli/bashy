@@ -3,6 +3,7 @@ package agentos
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/qiangli/coreutils/pkg/bus"
 	"github.com/qiangli/coreutils/pkg/fleet"
@@ -49,6 +50,24 @@ func wireMessageBoard() {
 	// view over MB/Meet/role stores; pkg/bus remains the owner of pending delivery
 	// and no additional spool is introduced.
 	bus.PrepareTurnInbox = unifiedTurnPreamble
+	// Whoever adds an inbox source owns its change gate. The hook above makes
+	// every managed session's relay read the board and meet stores too, so the
+	// relay's poll gate must see THOSE move — coreutils' default fingerprint
+	// stats only the bus stores. The same fsnotify generation counter that
+	// keeps `inbox --watch` off the CPU (Sprint 138) does it; one notifier per
+	// process, armed lazily on first use so a session that never relays pays
+	// nothing (coreutils story #127).
+	bus.InboxFingerprint = sharedInboxFingerprint
+}
+
+var (
+	sharedInboxNotifierOnce sync.Once
+	sharedInboxNotifier     *inboxChangeNotifier
+)
+
+func sharedInboxFingerprint(agent string) (uint64, bool) {
+	sharedInboxNotifierOnce.Do(func() { sharedInboxNotifier = newInboxChangeNotifier() })
+	return sharedInboxNotifier.fingerprint(agent)
 }
 
 // currentAgentSession returns the current tool session only when agentName is
