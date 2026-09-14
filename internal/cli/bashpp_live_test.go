@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -63,6 +64,27 @@ func TestBashPPCommandStringPythonFence(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := run(r, strings.NewReader(*command), "polyglot-fixture"); err != nil {
+		t.Fatalf("-c: %v (stderr %q)", err, stderr.String())
+	}
+	if stdout.String() != "42\n" || stderr.Len() != 0 {
+		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestBashPPCommandStringTypeScriptFence(t *testing.T) {
+	if os.Getenv("BASHPP_TYPESCRIPT_MODULE") == "" {
+		t.Skip("set BASHPP_TYPESCRIPT_MODULE to an official TypeScript compiler module")
+	}
+	previous := *command
+	t.Cleanup(func() { *command = previous })
+	*command = "~~~typescript as ts\ninterface Value { n: number }\nexport function add(a: number, b: number): number { return a + b }\n~~~\nanswer := ts.add(20, 22)\necho $answer\n"
+	var stdout, stderr bytes.Buffer
+	r, err := interp.New(interp.Lang(syntax.LangBashPP), interp.CommandString(true),
+		interp.StdIO(nil, &stdout, &stderr), interp.Env(expand.ListEnviron()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := run(r, strings.NewReader(*command), "typescript-polyglot-fixture"); err != nil {
 		t.Fatalf("-c: %v (stderr %q)", err, stderr.String())
 	}
 	if stdout.String() != "42\n" || stderr.Len() != 0 {
