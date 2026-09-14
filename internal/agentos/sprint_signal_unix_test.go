@@ -47,7 +47,7 @@ func TestSprintWatchSignalsReleaseLeaseAndPreserveUnread(t *testing.T) {
 			add := newSprintCmd()
 			add.SetOut(&bytes.Buffer{})
 			add.SetErr(&bytes.Buffer{})
-			add.SetArgs([]string{"add", "signal cleanup proof", "--announce=false"})
+			add.SetArgs([]string{"add", "signal cleanup proof", "--primary-goal", "deliver the fixture", "--spec", "docs/test-plan.md", "--announce=false"})
 			if err := add.Execute(); err != nil {
 				t.Fatal(err)
 			}

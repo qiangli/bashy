@@ -144,7 +144,7 @@ func TestExternalSprintTakeWatchClaimsThenStreamsInbox(t *testing.T) {
 	add := newSprintCmd()
 	add.SetOut(&bytes.Buffer{})
 	add.SetErr(&bytes.Buffer{})
-	add.SetArgs([]string{"add", "external watch test"})
+	add.SetArgs([]string{"add", "external watch test", "--primary-goal", "deliver the fixture", "--spec", "docs/test-plan.md"})
 	if err := add.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestExternalSprintStartWatchClaimsActiveSprintThenStreamsInbox(t *testing.T
 	add := newSprintCmd()
 	add.SetOut(&bytes.Buffer{})
 	add.SetErr(&bytes.Buffer{})
-	add.SetArgs([]string{"add", "external start watch test"})
+	add.SetArgs([]string{"add", "external start watch test", "--primary-goal", "deliver the fixture", "--spec", "docs/test-plan.md"})
 	if err := add.Execute(); err != nil {
 		t.Fatal(err)
 	}

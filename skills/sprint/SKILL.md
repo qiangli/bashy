@@ -18,7 +18,15 @@ agent-facing `/sprint` adapter; do not build or invoke a second prompt parser.
 
 ## Start a new sprint
 
-Create or plan the sprint with the existing `bashy sprint` commands, then run:
+Before taking or starting the seat, inspect the affected code, read every linked
+story, and write or update the master execution plan. Record both orientation
+facts on the card; Bashy refuses `take` and `start` when either is absent:
+
+```text
+bashy sprint edit ID --primary-goal "ONE OUTCOME" --spec docs/sprint-ID-master-execution-plan.md
+```
+
+Then run:
 
 ```text
 bashy sprint start ID --owner NAME --instruction TEXT
@@ -38,6 +46,11 @@ bashy sprint instruct ID --instruction TEXT
 
 Do not supply or change an owner on this path. The command must reuse the
 current owner's managed session.
+
+Sprint stories use one fail-closed path: `sprint claim`, then `sprint submit`
+with delivery evidence, then the current manager runs `sprint accept` with the
+verification it independently checked. Generic `todo done` never closes a
+sprint story.
 
 Stop and report the command error if launch or instruction delivery fails. Do
 not claim that work was dispatched unless Bashy confirms it.
