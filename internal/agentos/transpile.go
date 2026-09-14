@@ -633,6 +633,7 @@ func dispatchTranspileLibrary(outDir string, goFiles, goTestFiles, goXTestFiles 
 	results := make([]*lower.Result, 0, len(units))
 	seen := make(map[string]bool)
 	packageName := ""
+	var testedFiles []cli.GoSourceFile
 	for unitIndex, names := range units {
 		if len(names) == 0 {
 			continue
@@ -644,6 +645,18 @@ func dispatchTranspileLibrary(outDir string, goFiles, goTestFiles, goXTestFiles 
 		}
 		opts := base
 		opts.Dir = in.Dir
+		if unitIndex == 0 {
+			testedFiles = in.Files
+		} else if len(testedFiles) > 0 && base.ImportPath != "" {
+			// cmd/go checks the external test package against ptest — the
+			// tested package WITH its in-package test files, which export
+			// helpers for exactly that use (go/types' util_test.go) — never
+			// against the plain package the module importer would load from
+			// the directory. The first unit is that variant; it is handed to
+			// the xtest unit as an explicit package under the tested identity,
+			// so every import of it (named or dot) resolves there first.
+			opts.Packages = append(append([]cli.GoSourcePackage(nil), opts.Packages...), cli.GoSourcePackage{Path: base.ImportPath, Files: testedFiles})
+		}
 		prog, err := cli.LoadGoSource(in, opts)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, transpileGoSourceDiagnostic(err))

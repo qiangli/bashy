@@ -486,3 +486,40 @@ func TestTranspileShellInputMapUnchanged(t *testing.T) {
 		}
 	}
 }
+
+// TestTranspileGoLibraryExternalTestSeesInPackageTestExports pins the Sprint
+// 171 package rows (go/types, types2, cmd/compile/internal/types): cmd/go
+// checks the external test package against ptest — the tested package WITH
+// its in-package test files — so a helper an in-package _test.go exports for
+// the external tests resolves there. The library transpile hands the first
+// unit (go + test files) to the xtest unit as an explicit package under the
+// tested identity; without it the external unit is checked against the
+// plain package and the helper is undefined.
+func TestTranspileGoLibraryExternalTestSeesInPackageTestExports(t *testing.T) {
+	dir, out := t.TempDir(), t.TempDir()
+	lib := filepath.Join(dir, "lib.go")
+	export := filepath.Join(dir, "export_test.go")
+	x := filepath.Join(dir, "x_test.go")
+	writeFile(t, lib, "package lib\n\ntype Sym struct{ N int }\n")
+	writeFile(t, export, "package lib\n\nfunc CmpN(a, b *Sym) int { return a.N - b.N }\n")
+	writeFile(t, x, "package lib_test\n\nimport (\n\t\"slices\"\n\n\t\"example.com/xtp/lib\"\n)\n\nfunc Sorted() bool {\n\tdata := []*lib.Sym{{3}, {1}}\n\tslices.SortFunc(data, lib.CmpN)\n\treturn data[0].N == 1\n}\n")
+	writeFile(t, filepath.Join(dir, "go.mod"), "module example.com/xtp/lib\n\ngo 1.23\n")
+	args := []string{"--bashpp", "--source=go", "--go-import-path", "example.com/xtp/lib", "--go-library", out,
+		"--go-file", lib, "--go-test-file", export, "--go-xtest-file", x}
+	exit, stdout, stderr := captureTranspileOutput(t, args)
+	if exit != 0 {
+		t.Fatalf("exit = %d, stderr %q", exit, stderr)
+	}
+	for _, name := range []string{"lib.go", "export_test.go", "x_test.go"} {
+		if !strings.Contains(stdout, " -> "+filepath.Join(out, name)) {
+			t.Errorf("stdout %q does not report %s", stdout, name)
+		}
+	}
+	got, err := os.ReadFile(filepath.Join(out, "x_test.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "lib.CmpN") || !strings.Contains(string(got), "package lib_test") {
+		t.Fatalf("external unit lost the helper or its identity:\n%s", got)
+	}
+}
