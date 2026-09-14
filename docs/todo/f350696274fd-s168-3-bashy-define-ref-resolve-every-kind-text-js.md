@@ -3,10 +3,11 @@ id: f350696274fd
 kind: task
 title: 'S168.3 bashy define <ref>: resolve every kind, text + --json; unknown ref exit 1 with vocabulary; define graduates from curatedHiddenVerbs on this gate'
 seq: 275
-status: todo
+status: done
 priority: p1
 created: 2026-09-13T22:56:21.736541Z
 sprint: 168
+closed: 2026-09-14T03:01:21.832837Z
 ---
 
 S168.3 (L-B in coreutils pkg/lexicon, then B1 here). Plan: dhnt docs/sprint-168-master-execution-plan.md, D4/D5, traps 4+6.
