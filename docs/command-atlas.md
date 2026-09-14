@@ -421,6 +421,32 @@ not as unproven (the engine is on the first screen). The default listing's
 "experimental" count therefore excludes the three spellings (19), which
 `--all` lists under hidden aliases instead.
 
+### 2.8 Refs — one address for everything bashy can name (Sprint 168)
+
+An agent has to learn **two things**:
+
+1. **Write `kind:id`.** In prose as `[[kind:id]]`, on the command line and in
+   JSON as `kind:id`: `kb:deploy-runbook`, `todo:a5f5cfc8`, `sprint:168`,
+   `run:coreutils-21`, `meet:<id>`, `mb:412`, `bus:77`, `agent:codex`,
+   `person:<handle>`, `host:<name>`, `tool:codex`, `model:opus5`,
+   `skill:conductor`, `episode:<id>`, `role:conductor:168`. Fifteen kinds,
+   closed and ratcheted (`coreutils/pkg/ref`); a prefix outside the list is a
+   word, not a ref — `codex:gpt5.6-sol` stays a `tool:model` binding.
+2. **Ask `bashy define kind:id`.** It answers with the record's title, status,
+   where it lives and the command that opens it (`--json` for the node).
+   Exit 1 only for a real ref that names nothing — and it says which of three
+   things happened: no such id, not a kind, or no resolver wired on this build.
+
+`urn:dhnt:kind:id` is the same ref spelled for text that leaves bashy (a URL,
+another tool's store, an OTel attribute); every parser accepts it, nothing
+emits it by default. Every listing prints the ref it lists (`todo list`,
+`kb list`, `sprint show`, `mb --history`, `weave list`, `whois`), so a row an
+agent reads is a citation it can write. Each store resolves its own kind;
+`todo show --links` / `sprint show --links` / `meet show --links` classify a
+citation as resolved · external (another store's kind) · unknown (not a kind)
+· dangling. There is deliberately no `mb show --links`: a citation inside a
+post is `define`'s job. Gate: the umbrella's `script/e2e-refs.sh`.
+
 ## 3. Data home
 
 **`coreutils/pkg/atlas`** — stdlib-only, no deps — holds the whole catalog:
