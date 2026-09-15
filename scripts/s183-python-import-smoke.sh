@@ -51,7 +51,10 @@ printf '%s\n' \
 	'import "strings"' \
 	'import python "nanochat.execution" as nano' \
 	'result := nano.execute_code("print(6 * 7)", timeout: 5)' \
-	'fmt.Println(result.success, strings.TrimSpace(result.stdout))' >"$tmp/nano.bpp"
+	'success := result.success' \
+	'raw := result.stdout' \
+	'stdout := strings.TrimSpace(raw)' \
+	'fmt.Println(success, stdout)' >"$tmp/nano.bpp"
 PYTHONPATH="$nano" BASHPP_PYTHON="$nano_python" "$bashy" --bashpp "$tmp/nano.bpp" >"$tmp/nano.out"
 [ "$(cat "$tmp/nano.out")" = "true 42" ] || fail "nanochat direct-import probe: $(cat "$tmp/nano.out")"
 
@@ -63,7 +66,8 @@ printf '%s\n' \
 	'import "fmt"' \
 	'import python "minisweagent.agents" as agents' \
 	'agentType := agents.get_agent_class("default")' \
-	'fmt.Println(agentType.__name__)' >"$tmp/mini.bpp"
+	'name := agentType.__name__' \
+	'fmt.Println(name)' >"$tmp/mini.bpp"
 (cd "$mini" && uv run --no-sync -- "$bashy" --bashpp "$tmp/mini.bpp") >"$tmp/mini.out"
 [ "$(cat "$tmp/mini.out")" = DefaultAgent ] || fail "mini-SWE-agent direct-import probe: $(cat "$tmp/mini.out")"
 
