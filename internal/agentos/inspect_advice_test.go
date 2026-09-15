@@ -21,6 +21,7 @@ func captureInspectAdvice(t *testing.T, args ...string) (string, int) {
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
 	}
+	defer r.Close()
 	os.Stdout = w
 	var sb bytes.Buffer
 	done := make(chan error, 1)
@@ -46,10 +47,9 @@ func adviceJSON(t *testing.T) (inspectAdviceReport, string, int) {
 		return inspectAdviceReport{}, out, code
 	}
 	var doc struct {
-		SchemaVersion string               `json:"schema_version"`
-		Aspect        string               `json:"aspect"`
-		Rows          inspectAdviceReport  `json:"rows"`
-		Raw           json.RawMessage      `json:"-"`
+		SchemaVersion string              `json:"schema_version"`
+		Aspect        string              `json:"aspect"`
+		Rows          inspectAdviceReport `json:"rows"`
 	}
 	if err := json.Unmarshal([]byte(out), &doc); err != nil {
 		t.Fatalf("not one JSON document: %v\n%s", err, out)
@@ -218,9 +218,9 @@ func TestInspectAdviceValidFile(t *testing.T) {
 func TestInspectAdviceInvalidFile(t *testing.T) {
 	clearAdviceSignals(t)
 	for name, path := range map[string]string{
-		"unparsable": writeAdviceFile(t, `{"schema": "bashy-advice-v1", "rules": [`),
+		"unparsable":                writeAdviceFile(t, `{"schema": "bashy-advice-v1", "rules": [`),
 		"never-advisable decorator": writeAdviceFile(t, `{"schema": "bashy-advice-v1", "rules": [{"name": "*", "decorator": "memo"}]}`),
-		"nonexistent":              filepath.Join(t.TempDir(), "gone.json"),
+		"nonexistent":               filepath.Join(t.TempDir(), "gone.json"),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("BASHY_ADVICE", path)
