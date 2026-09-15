@@ -81,13 +81,25 @@ name := py.main()
 - The fence is a declaration unit: only top-level `def`s; imports go inside
   the function body. Return values cross by value (str/int/float/bool/bytes/
   lists/maps); anything else is an opaque handle.
+- A `~~~ts` fence works the same way for TypeScript: the nearest
+  `package.json` + lockfile is the project (the manager — npm, pnpm, Bun — is
+  read from `packageManager`/the lock and never invoked), the checker is the
+  project-local `node_modules/typescript`, and the runtime is Node by default
+  or Bun under `Env: BASHPP_TYPESCRIPT_RUNTIME=bun` (`BASHPP_NODE`/`BASHPP_BUN`
+  name the executables). Ordinary ESM `import`s of the checkout's own source
+  and packages are allowed; a relative import may name its `.ts` file
+  explicitly, the spelling Node's native type stripping requires. Returned
+  promises are awaited. One body may declare a `~~~py` fence AND a `~~~ts`
+  fence and call both.
 - Nesting rule: the dag parser closes a body only on a line equal to the
   **opening** marker, so a `~~~py … ~~~` block nests inside a ` ```bashpp `
   recipe. A recipe that itself opens with `~~~` cannot contain one.
 
-Worked examples — two real Python repos driven by one `dag.md` each, with a
-fenced-Python `smoke` target — live in [`examples/dag/`](../examples/dag/)
-and are gated by `make smoke-dag-python`.
+Worked examples — two Python repos with a fenced-Python `smoke` target, two
+TypeScript repos with a fenced-TypeScript one, and one Python + TypeScript
+repo whose `smoke` calls both from a single body — live in
+[`examples/dag/`](../examples/dag/) and are gated by `make smoke-dag-python`
+and `make smoke-dag-typescript`.
 
 ## Cross-machine dispatch — `--mesh`
 
