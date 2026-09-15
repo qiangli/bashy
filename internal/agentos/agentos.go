@@ -1902,6 +1902,15 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	// agent launched outside `bashy chat` stops being invisible to the address
 	// book. Best-effort, silent, and never a claim — see shellsession.go.
 	registerShellSession()
+	// Bash++ native decorators (trace · guard · retry) and registration-time
+	// policy advice — decorators.go. Agentic branch only (the posix return
+	// above keeps both out of --posix, and cmd/bash never links this package);
+	// inert outside Bash++, where decorator syntax does not parse and the
+	// engine never consults advice, so the rules file is never even opened.
+	opts = append(opts,
+		interp.Decorators(nativeDecorators()),
+		interp.Advice(newAdviceCallback(env, stderr)),
+	)
 	initial := initialDryRun
 	opts = append(opts, interp.EnableDryRunOption(initial))
 	r := newReporterMode(stdout, agentModeForEnv(env))
