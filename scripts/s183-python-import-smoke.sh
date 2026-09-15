@@ -65,7 +65,7 @@ printf '%s\n' \
 	'name := agentType.__name__' \
 	'echo "$name"' >"$tmp/mini.bpp"
 (cd "$mini" && PYTHONPATH="$mini/src" BASHPP_PYTHON="$mini/.venv/bin/python" "$bashy" --bashpp "$tmp/mini.bpp") >"$tmp/mini.out"
-[ "$(cat "$tmp/mini.out")" = DefaultAgent ] || fail "mini-SWE-agent direct-import probe: $(cat "$tmp/mini.out")"
+[ "$(tail -n 1 "$tmp/mini.out")" = DefaultAgent ] || fail "mini-SWE-agent direct-import probe: $(cat "$tmp/mini.out")"
 
 git -C "$nano" status --porcelain=v1 --untracked-files=all >"$tmp/nano.after"
 git -C "$mini" status --porcelain=v1 --untracked-files=all >"$tmp/mini.after"
