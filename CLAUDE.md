@@ -439,9 +439,10 @@ case-insensitive filesystem (macOS) and breaks on Linux/CI.
 the file; there is no `-C`: `bashy awd DIR -- bashy dag …` is the one
 directory mechanism (`awd` is a front-door verb as well as a builtin). A
 ` ```bashpp ` body runs as Bash++ and may declare a `~~~py as py … ~~~`,
-`~~~ts as ts … ~~~`, `~~~rs as rs … ~~~`, `~~~c as c … ~~~` or
-`~~~cxx as cxx … ~~~` fence and call `py.main()` / `ts.launch()` /
-`rs.launch()` / `c.launch()` / `cxx.launch()`;
+`~~~ts as ts … ~~~`, `~~~rs as rs … ~~~`, `~~~c as c … ~~~`,
+`~~~cxx as cxx … ~~~`, or `~~~go as go … ~~~` fence and call
+`py.main()` / `ts.launch()` / `rs.launch()` / `c.launch()` /
+`cxx.launch()` / `go.launch()`;
 `examples/dag/{mini-swe-agent,nanochat}/dag.md` (Python, `make
 smoke-dag-python`), `examples/dag/{opencode,openclaw,hermes-agent}/dag.md`
 (TypeScript — Hermes has both fences in one body; `make smoke-dag-typescript`,

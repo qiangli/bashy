@@ -132,6 +132,14 @@ name := py.main()
   spawn-through to the PATH make); and the body sees PATH only — bashy's
   front-door shims (`bashy cmake`) are not applied inside it, so `cmake`
   must be on PATH.
+- `~~~go` exports top-level Go functions whose names are exported. The nearest
+  `go.mod` defines the project, so a fence may import checkout-owned packages;
+  `BASHPP_GO` overrides the Go executable, otherwise PATH `go` and then
+  `bashy go` are tried. Bool, integer/float kinds, string, and `[]byte` cross
+  the JSON call boundary, and a trailing `error` becomes the call error.
+  Preparation uses `go build -overlay`: generated worker files never enter the
+  checkout, while the compiled artifact is embedded for lowered execution.
+  Each call is a fresh process with the task's host authority, not a sandbox.
 - Nesting rule: the dag parser closes a body only on a line equal to the
   **opening** marker, so a `~~~py … ~~~` block nests inside a ` ```bashpp `
   recipe. A recipe that itself opens with `~~~` cannot contain one.
