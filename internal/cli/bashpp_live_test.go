@@ -59,7 +59,9 @@ func TestBashPPCommandStringPythonFence(t *testing.T) {
 	*command = "~~~python as py\ndef add(a: int, b: int) -> int:\n    return a + b\n~~~\nanswer := py.add(20, 22)\necho $answer\n"
 	var stdout, stderr bytes.Buffer
 	r, err := interp.New(interp.Lang(syntax.LangBashPP), interp.CommandString(true),
-		interp.StdIO(nil, &stdout, &stderr), interp.Env(expand.ListEnviron()))
+		// EnvironmentPlan selection intentionally uses the runner's recorded
+		// environment rather than the test process behind its back.
+		interp.StdIO(nil, &stdout, &stderr), interp.Env(expand.ListEnviron(os.Environ()...)))
 	if err != nil {
 		t.Fatal(err)
 	}
