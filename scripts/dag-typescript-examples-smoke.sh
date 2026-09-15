@@ -45,7 +45,12 @@ done
 # outside PATH is fine.
 bun=${BASHPP_BUN:-$(command -v bun 2>/dev/null || true)}
 [ -n "$bun" ] && [ -x "$bun" ] || fail "bun unavailable (set BASHPP_BUN or put bun on PATH)"
+bun_dir=$(CDPATH= cd -- "$(dirname "$bun")" && pwd -P)
+bun=$bun_dir/$(basename "$bun")
 export BASHPP_BUN="$bun"
+# The repos' own targets (`bun install`, `bun test`, `bun run …`) call `bun`
+# by name, so a Bun named only through BASHPP_BUN joins PATH for the run.
+command -v bun >/dev/null 2>&1 || { PATH=$bun_dir:$PATH; export PATH; }
 # pnpm: OpenClaw's package manager. corepack (bundled with Node 16-24, still
 # installable afterwards) can provide it without a global install.
 if ! command -v pnpm >/dev/null 2>&1; then
@@ -149,6 +154,6 @@ cmp -s "$tmp/hermes.before" "$tmp/hermes.after" || fail "Hermes Agent checkout c
 
 echo "bashy=$bashy"
 echo "opencode_commit=$(git -C "$opencode" rev-parse HEAD) bun=$("$bun" --version 2>&1)"
-echo "openclaw_commit=$(git -C "$openclaw" rev-parse HEAD) node=$(node --version 2>&1) pnpm=$(pnpm --version 2>&1)"
+echo "openclaw_commit=$(git -C "$openclaw" rev-parse HEAD) node=$(node --version 2>&1) pnpm=$(cd "$openclaw" && pnpm --version 2>&1)"
 echo "hermes_agent_commit=$(git -C "$hermes" rev-parse HEAD) python=$("$hermes/.venv/bin/python" --version 2>&1) node=$(node --version 2>&1)"
 echo "dag-typescript-examples-smoke: PASS"
