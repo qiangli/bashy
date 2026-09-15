@@ -1,15 +1,23 @@
 #!/bin/sh
 # Installed-product acceptance smoke for the examples/dag Python front doors
-# (Sprint 185). Not part of build or test: it needs two local third-party
-# checkouts and `uv`. It drives each example graph against its checkout with
-# `bashy awd DIR -- bashy dag -f FILE …` (bodies run in the invoking cwd, so
-# no file is copied into the checkout), asserts the JSON envelope and the
-# fenced-Python results, and verifies both checkouts have exactly the same
-# git status before and after.
+# (Sprint 185). Not part of build or test: it needs `uv`. It drives each
+# example graph against its checkout with `bashy awd DIR -- bashy dag -f
+# FILE …` (bodies run in the invoking cwd, so no file is copied into the
+# checkout), asserts the JSON envelope and the fenced-Python results, and
+# verifies both checkouts have byte-identical git status before and after.
 #
-#   BASHY_BIN=~/.local/bin/bashy \
-#   MINISWEAGENT_ROOT=/path/to/mini-swe-agent NANOCHAT_ROOT=/path/to/nanochat \
-#   scripts/dag-python-examples-smoke.sh
+#   BASHY_BIN=~/.local/bin/bashy scripts/dag-python-examples-smoke.sh
+#
+# The two checkouts are dependencies the gate provisions itself: each repo is
+# pinned (URL + commit, the coordinates this gate was measured against) and,
+# when its *_ROOT variable is not set, cloned shallow at that commit into
+# bashy's cache — <user cache dir>/bashy/examples/<name>, i.e.
+# ~/Library/Caches/bashy/examples on macOS, $XDG_CACHE_HOME/bashy/examples
+# (~/.cache/bashy/examples) on Linux — on first use and reused after (the
+# builds in it stay warm; a moved pin re-fetches). MINISWEAGENT_ROOT and
+# NANOCHAT_ROOT each name an existing checkout instead, at whatever commit it
+# is — never touched by the gate. BASHY_EXAMPLES_CACHE overrides the cache
+# directory.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd -P)
@@ -34,13 +42,41 @@ esac
 command -v uv >/dev/null 2>&1 || fail "uv unavailable"
 command -v python3 >/dev/null 2>&1 || fail "python3 unavailable"
 
-mini=${MINISWEAGENT_ROOT:?set MINISWEAGENT_ROOT to the mini-swe-agent checkout}
-nano=${NANOCHAT_ROOT:?set NANOCHAT_ROOT to the nanochat checkout}
-for checkout in "$mini" "$nano"; do
-	git -C "$checkout" rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "missing checkout: $checkout"
-done
-git -C "$mini" status --porcelain=v1 --untracked-files=all >"$tmp/mini.before"
-git -C "$nano" status --porcelain=v1 --untracked-files=all >"$tmp/nano.before"
+# The pinned checkouts (name, URL, commit) — the gate's dependencies.
+cache=${BASHY_EXAMPLES_CACHE:-}
+if [ -z "$cache" ]; then
+	case $(uname -s) in
+		Darwin) cache=$HOME/Library/Caches/bashy/examples ;;
+		*) cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/examples ;;
+	esac
+fi
+checkout() { # <root-or-empty> <name> <url> <commit>: prints the checkout to use
+	if [ -n "$1" ]; then
+		git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "missing checkout: $1"
+		printf '%s\n' "$1"
+		return 0
+	fi
+	dir=$cache/$2
+	if ! git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		echo "dag-python-examples-smoke: cloning $3 @ ${4%"${4#???????????}"} into $dir" >&2
+		rm -rf "$dir"
+		mkdir -p "$dir"
+		git -C "$dir" init -q
+		git -C "$dir" remote add origin "$3"
+	fi
+	if [ "$(git -C "$dir" rev-parse HEAD 2>/dev/null)" != "$4" ]; then
+		git -C "$dir" fetch -q --depth 1 origin "$4" || fail "$2: cannot fetch $4 from $3"
+		git -C "$dir" checkout -q --detach FETCH_HEAD || fail "$2: cannot check out $4"
+	fi
+	printf '%s\n' "$dir"
+}
+mini=$(checkout "${MINISWEAGENT_ROOT:-}" mini-swe-agent https://github.com/SWE-agent/mini-swe-agent.git 04d809ceab9df28f9adaed044884180159172930)
+nano=$(checkout "${NANOCHAT_ROOT:-}" nanochat https://github.com/karpathy/nanochat.git 92d63d4e8bb4df75c3b71618f31ddde2378b2bcd)
+[ -f "$mini/pyproject.toml" ] && [ -d "$mini/src/minisweagent" ] || fail "$mini is not the mini-SWE-agent source root"
+[ -f "$nano/pyproject.toml" ] && [ -f "$nano/uv.lock" ] && [ -d "$nano/nanochat" ] || fail "$nano is not the nanochat source root"
+status() { git -C "$1" status --porcelain=v1 --untracked-files=all; }
+status "$mini" >"$tmp/mini.before"
+status "$nano" >"$tmp/nano.before"
 
 export BASHY_HINTS=off
 export DAG_CACHE_DIR="$tmp/dag-cache" # never leave a run journal in the checkouts
@@ -102,8 +138,8 @@ smoke_line "$tmp/mini.json" smoke | grep -q "smoke: get_agent_class('default') -
 check_envelope nanochat "$tmp/nano.json" sync test smoke
 smoke_line "$tmp/nano.json" smoke | grep -q "smoke: execute_code -> 42" || fail "nanochat smoke did not report 42"
 
-git -C "$mini" status --porcelain=v1 --untracked-files=all >"$tmp/mini.after"
-git -C "$nano" status --porcelain=v1 --untracked-files=all >"$tmp/nano.after"
+status "$mini" >"$tmp/mini.after"
+status "$nano" >"$tmp/nano.after"
 cmp -s "$tmp/mini.before" "$tmp/mini.after" || fail "mini-SWE-agent checkout changed during the run"
 cmp -s "$tmp/nano.before" "$tmp/nano.after" || fail "nanochat checkout changed during the run"
 

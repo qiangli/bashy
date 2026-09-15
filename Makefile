@@ -317,25 +317,25 @@ smoke-python-imports:
 
 ## smoke-dag-python: Installed-product smoke for the examples/dag Python front
 ## doors (Sprint 185): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md`
-## against unchanged MINISWEAGENT_ROOT / NANOCHAT_ROOT checkouts, fenced-Python
-## smoke targets included. Not part of build/test.
+## against pinned cache clones unless MINISWEAGENT_ROOT / NANOCHAT_ROOT name
+## existing checkouts, fenced-Python smoke targets included. Not part of build/test.
 smoke-dag-python:
 	@scripts/dag-python-examples-smoke.sh
 
 ## smoke-dag-typescript: Installed-product smoke for the examples/dag TypeScript
 ## front doors (Sprint 186): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md`
-## against unchanged OPENCODE_ROOT / OPENCLAW_ROOT / HERMESAGENT_ROOT checkouts,
-## fenced-TypeScript (and, for Hermes, Python + TypeScript) smoke targets
-## included. Not part of build/test.
+## against pinned cache clones unless OPENCODE_ROOT / OPENCLAW_ROOT /
+## HERMESAGENT_ROOT name existing checkouts, fenced-TypeScript (and, for Hermes,
+## Python + TypeScript) smoke targets included. Not part of build/test.
 smoke-dag-typescript:
 	@scripts/dag-typescript-examples-smoke.sh
 
 ## smoke-dag-rust: Installed-product smoke for the examples/dag Rust front doors
 ## (Sprint 188): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md`
-## against unchanged CODEX_ROOT / UV_ROOT / BUN_ROOT checkouts, fenced-Rust smoke
-## AND launcher targets included (uv and Codex build their CLIs; RUST_TOOLCHAIN_BIN
-## fronts a toolchain when the PATH cargo is below a workspace's MSRV). Not part
-## of build/test.
+## against pinned cache clones unless CODEX_ROOT / UV_ROOT / BUN_ROOT name
+## existing checkouts, fenced-Rust smoke AND launcher targets included (uv and
+## Codex build their CLIs; RUST_TOOLCHAIN_BIN fronts a toolchain when the PATH
+## cargo is below a workspace's MSRV). Not part of build/test.
 smoke-dag-rust:
 	@scripts/dag-rust-examples-smoke.sh
 

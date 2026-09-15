@@ -3,18 +3,26 @@
 # doors (Sprint 186): OpenCode (Bun-managed, Bun runtime), OpenClaw
 # (pnpm-managed, Bun runtime for its NodeNext `.js`-for-`.ts` imports) and
 # Hermes Agent (uv + npm workspace; Python AND TypeScript fences in one body,
-# Node runtime). Not part of build or test: it needs three local third-party
-# checkouts plus `uv`, `node`, `npm`, `bun` and `pnpm` (or `corepack`). It
+# Node runtime). Not part of build or test: it needs `uv`, `node`, `npm`,
+# `bun` and `pnpm` (or `corepack`). It
 # drives each example graph against its checkout with
 # `bashy awd DIR -- bashy dag -f FILE …` (bodies run in the invoking cwd, so
 # no file is copied into the checkout), asserts the JSON envelope and the
-# fenced results, and verifies every checkout has exactly the same git
-# status before and after.
+# fenced results, and verifies every checkout has byte-identical git status
+# before and after.
 #
-#   BASHY_BIN=~/.local/bin/bashy \
-#   OPENCODE_ROOT=/path/to/opencode OPENCLAW_ROOT=/path/to/openclaw \
-#   HERMESAGENT_ROOT=/path/to/hermes-agent \
-#   scripts/dag-typescript-examples-smoke.sh
+#   BASHY_BIN=~/.local/bin/bashy scripts/dag-typescript-examples-smoke.sh
+#
+# The three checkouts are dependencies the gate provisions itself: each repo is
+# pinned (URL + commit, the coordinates this gate was measured against) and,
+# when its *_ROOT variable is not set, cloned shallow at that commit into
+# bashy's cache — <user cache dir>/bashy/examples/<name>, i.e.
+# ~/Library/Caches/bashy/examples on macOS, $XDG_CACHE_HOME/bashy/examples
+# (~/.cache/bashy/examples) on Linux — on first use and reused after (the
+# builds in it stay warm; a moved pin re-fetches). OPENCODE_ROOT,
+# OPENCLAW_ROOT and HERMESAGENT_ROOT each name an existing checkout instead,
+# at whatever commit it is — never touched by the gate. BASHY_EXAMPLES_CACHE
+# overrides the cache directory.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd -P)
@@ -62,15 +70,44 @@ if ! command -v pnpm >/dev/null 2>&1; then
 	export PATH
 fi
 
-opencode=${OPENCODE_ROOT:?set OPENCODE_ROOT to the OpenCode checkout}
-openclaw=${OPENCLAW_ROOT:?set OPENCLAW_ROOT to the OpenClaw checkout}
-hermes=${HERMESAGENT_ROOT:?set HERMESAGENT_ROOT to the Hermes Agent checkout}
-for checkout in "$opencode" "$openclaw" "$hermes"; do
-	git -C "$checkout" rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "missing checkout: $checkout"
-done
-git -C "$opencode" status --porcelain=v1 --untracked-files=all >"$tmp/opencode.before"
-git -C "$openclaw" status --porcelain=v1 --untracked-files=all >"$tmp/openclaw.before"
-git -C "$hermes" status --porcelain=v1 --untracked-files=all >"$tmp/hermes.before"
+# The pinned checkouts (name, URL, commit) — the gate's dependencies.
+cache=${BASHY_EXAMPLES_CACHE:-}
+if [ -z "$cache" ]; then
+	case $(uname -s) in
+		Darwin) cache=$HOME/Library/Caches/bashy/examples ;;
+		*) cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/examples ;;
+	esac
+fi
+checkout() { # <root-or-empty> <name> <url> <commit>: prints the checkout to use
+	if [ -n "$1" ]; then
+		git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "missing checkout: $1"
+		printf '%s\n' "$1"
+		return 0
+	fi
+	dir=$cache/$2
+	if ! git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		echo "dag-typescript-examples-smoke: cloning $3 @ ${4%"${4#???????????}"} into $dir" >&2
+		rm -rf "$dir"
+		mkdir -p "$dir"
+		git -C "$dir" init -q
+		git -C "$dir" remote add origin "$3"
+	fi
+	if [ "$(git -C "$dir" rev-parse HEAD 2>/dev/null)" != "$4" ]; then
+		git -C "$dir" fetch -q --depth 1 origin "$4" || fail "$2: cannot fetch $4 from $3"
+		git -C "$dir" checkout -q --detach FETCH_HEAD || fail "$2: cannot check out $4"
+	fi
+	printf '%s\n' "$dir"
+}
+opencode=$(checkout "${OPENCODE_ROOT:-}" opencode https://github.com/sst/opencode.git e03db9bc6908f75c9334d8aa997deeaac81c0298)
+openclaw=$(checkout "${OPENCLAW_ROOT:-}" openclaw https://github.com/openclaw/openclaw.git 067c75b8aa65607a41d0a5b7cd102d80eec33bd6)
+hermes=$(checkout "${HERMESAGENT_ROOT:-}" hermes-agent https://github.com/NousResearch/Hermes-Agent.git 5655920f9aeb6bb6d9b0d8b96b0f989c5f90c276)
+[ -f "$opencode/package.json" ] && [ -f "$opencode/bun.lock" ] && [ -d "$opencode/packages/opencode" ] || fail "$opencode is not the OpenCode source root"
+[ -f "$openclaw/package.json" ] && [ -f "$openclaw/pnpm-lock.yaml" ] && [ -f "$openclaw/pnpm-workspace.yaml" ] || fail "$openclaw is not the OpenClaw source root"
+[ -f "$hermes/pyproject.toml" ] && [ -f "$hermes/package-lock.json" ] && [ -d "$hermes/ui-tui" ] || fail "$hermes is not the Hermes Agent source root"
+status() { git -C "$1" status --porcelain=v1 --untracked-files=all; }
+status "$opencode" >"$tmp/opencode.before"
+status "$openclaw" >"$tmp/openclaw.before"
+status "$hermes" >"$tmp/hermes.before"
 
 export BASHY_HINTS=off
 export DAG_CACHE_DIR="$tmp/dag-cache" # never leave a run journal in the checkouts
@@ -145,9 +182,9 @@ check_envelope hermes-agent "$tmp/hermes.json" sync lint run install-tui build-i
 task_stdout "$tmp/hermes.json" smoke | grep -q 'smoke: hermes-agent [0-9][0-9.]*; compactNumber(1500000) -> 1.5M' || fail "hermes-agent smoke did not report both fences"
 task_stdout "$tmp/hermes.json" test | grep -q 'tests passed, 0 failed' || fail "hermes-agent test summary is not clean"
 
-git -C "$opencode" status --porcelain=v1 --untracked-files=all >"$tmp/opencode.after"
-git -C "$openclaw" status --porcelain=v1 --untracked-files=all >"$tmp/openclaw.after"
-git -C "$hermes" status --porcelain=v1 --untracked-files=all >"$tmp/hermes.after"
+status "$opencode" >"$tmp/opencode.after"
+status "$openclaw" >"$tmp/openclaw.after"
+status "$hermes" >"$tmp/hermes.after"
 cmp -s "$tmp/opencode.before" "$tmp/opencode.after" || fail "OpenCode checkout changed during the run"
 cmp -s "$tmp/openclaw.before" "$tmp/openclaw.after" || fail "OpenClaw checkout changed during the run"
 cmp -s "$tmp/hermes.before" "$tmp/hermes.after" || fail "Hermes Agent checkout changed during the run"

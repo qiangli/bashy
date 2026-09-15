@@ -8,11 +8,20 @@
 # against its checkout with `bashy awd DIR -- bashy dag -f FILE …` (bodies run
 # in the invoking cwd, so no file is copied into the checkout), asserts the
 # JSON envelope and the fenced results, and verifies every checkout has
-# exactly the same git status before and after.
+# byte-identical git status before and after.
 #
-#   BASHY_BIN=~/.local/bin/bashy \
-#   CODEX_ROOT=/path/to/codex UV_ROOT=/path/to/uv BUN_ROOT=/path/to/bun \
-#   scripts/dag-rust-examples-smoke.sh
+#   BASHY_BIN=~/.local/bin/bashy scripts/dag-rust-examples-smoke.sh
+#
+# The three checkouts are dependencies the gate provisions itself: each repo is
+# pinned (URL + commit, the coordinates this gate was measured against) and,
+# when its *_ROOT variable is not set, cloned shallow at that commit into
+# bashy's cache — <user cache dir>/bashy/examples/<name>, i.e.
+# ~/Library/Caches/bashy/examples on macOS, $XDG_CACHE_HOME/bashy/examples
+# (~/.cache/bashy/examples) on Linux — on first use and reused after (the
+# builds in it stay warm; a moved pin re-fetches). CODEX_ROOT, UV_ROOT and
+# BUN_ROOT each name an existing checkout instead, at whatever commit it is —
+# never touched by the gate. BASHY_EXAMPLES_CACHE overrides the cache
+# directory.
 #
 # The uv and Codex graphs BUILD their CLIs (`cargo build -p uv`,
 # `cargo build -p codex-cli` — minutes cold, seconds warm; `target/` stays
@@ -65,18 +74,44 @@ bun=$bun_dir/$(basename "$bun")
 export BASHPP_BUN="$bun"
 command -v bun >/dev/null 2>&1 || { PATH=$bun_dir:$PATH; export PATH; }
 
-codex=${CODEX_ROOT:?set CODEX_ROOT to the Codex checkout}
-uv=${UV_ROOT:?set UV_ROOT to the uv checkout}
-bunroot=${BUN_ROOT:?set BUN_ROOT to the Bun checkout}
-for checkout in "$codex" "$uv" "$bunroot"; do
-	git -C "$checkout" rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "missing checkout: $checkout"
-done
+# The pinned checkouts (name, URL, commit) — the gate's dependencies.
+cache=${BASHY_EXAMPLES_CACHE:-}
+if [ -z "$cache" ]; then
+	case $(uname -s) in
+		Darwin) cache=$HOME/Library/Caches/bashy/examples ;;
+		*) cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/examples ;;
+	esac
+fi
+checkout() { # <root-or-empty> <name> <url> <commit>: prints the checkout to use
+	if [ -n "$1" ]; then
+		git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "missing checkout: $1"
+		printf '%s\n' "$1"
+		return 0
+	fi
+	dir=$cache/$2
+	if ! git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		echo "dag-rust-examples-smoke: cloning $3 @ ${4%"${4#???????????}"} into $dir" >&2
+		rm -rf "$dir"
+		mkdir -p "$dir"
+		git -C "$dir" init -q
+		git -C "$dir" remote add origin "$3"
+	fi
+	if [ "$(git -C "$dir" rev-parse HEAD 2>/dev/null)" != "$4" ]; then
+		git -C "$dir" fetch -q --depth 1 origin "$4" || fail "$2: cannot fetch $4 from $3"
+		git -C "$dir" checkout -q --detach FETCH_HEAD || fail "$2: cannot check out $4"
+	fi
+	printf '%s\n' "$dir"
+}
+codex=$(checkout "${CODEX_ROOT:-}" codex https://github.com/openai/codex.git 7784318b5f7fa35728d41ffa13e2a5821ebb4d75)
+uv=$(checkout "${UV_ROOT:-}" uv https://github.com/astral-sh/uv.git 1f245a625114631502fa9abf60f50dffb832afdb)
+bunroot=$(checkout "${BUN_ROOT:-}" bun https://github.com/oven-sh/bun.git 7e56b402b06c1097ae315ca0246a445b5d82cd07)
 [ -f "$codex/codex-rs/Cargo.toml" ] || fail "$codex has no codex-rs/Cargo.toml"
 [ -f "$uv/Cargo.toml" ] && [ -f "$uv/rust-toolchain.toml" ] || fail "$uv is not the uv workspace root"
 [ -f "$bunroot/Cargo.toml" ] && [ -f "$bunroot/bun.lock" ] || fail "$bunroot is not the Bun source root"
-git -C "$codex" status --porcelain=v1 --untracked-files=all >"$tmp/codex.before"
-git -C "$uv" status --porcelain=v1 --untracked-files=all >"$tmp/uv.before"
-git -C "$bunroot" status --porcelain=v1 --untracked-files=all >"$tmp/bun.before"
+status() { git -C "$1" status --porcelain=v1 --untracked-files=all; }
+status "$codex" >"$tmp/codex.before"
+status "$uv" >"$tmp/uv.before"
+status "$bunroot" >"$tmp/bun.before"
 
 export BASHY_HINTS=off
 export DAG_CACHE_DIR="$tmp/dag-cache" # never leave a run journal in the checkouts
@@ -173,9 +208,9 @@ bun_channel=$(toml_value "$bunroot/rust-toolchain.toml" channel)
 task_stdout "$tmp/bun.json" smoke | grep -q "^smoke: bun [0-9][0-9.]* latest [0-9][0-9.]* toolchain $bun_channel members [1-9][0-9]* locked [1-9][0-9]*\$" || fail "bun smoke did not report the tree's coordinates"
 task_stdout "$tmp/bun.json" lint | grep -q 'Found 0 warnings and 0 errors' || fail "bun lint is not clean"
 
-git -C "$codex" status --porcelain=v1 --untracked-files=all >"$tmp/codex.after"
-git -C "$uv" status --porcelain=v1 --untracked-files=all >"$tmp/uv.after"
-git -C "$bunroot" status --porcelain=v1 --untracked-files=all >"$tmp/bun.after"
+status "$codex" >"$tmp/codex.after"
+status "$uv" >"$tmp/uv.after"
+status "$bunroot" >"$tmp/bun.after"
 cmp -s "$tmp/codex.before" "$tmp/codex.after" || fail "Codex checkout changed during the run"
 cmp -s "$tmp/uv.before" "$tmp/uv.after" || fail "uv checkout changed during the run"
 cmp -s "$tmp/bun.before" "$tmp/bun.after" || fail "Bun checkout changed during the run"
