@@ -331,11 +331,13 @@ smoke-dag-typescript:
 	@scripts/dag-typescript-examples-smoke.sh
 
 ## smoke-dag-rust: Installed-product smoke for the examples/dag Rust front doors
-## (Sprint 188): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md`
-## against pinned cache clones unless CODEX_ROOT / UV_ROOT / BUN_ROOT name
-## existing checkouts, fenced-Rust smoke AND launcher targets included (uv and
-## Codex build their CLIs; RUST_TOOLCHAIN_BIN fronts a toolchain when the PATH
-## cargo is below a workspace's MSRV). Not part of build/test.
+## (Sprint 194): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md`
+## against pinned cache clones unless CODEX_ROOT / UV_ROOT / BUN_ROOT / MISE_ROOT
+## name existing checkouts, fenced-Rust smoke AND launcher targets included (uv
+## and Codex build their CLIs; Mise's cache clone runs its own build/unit-test
+## front doors, while an explicit MISE_ROOT gets only a zero-env read-only smoke;
+## RUST_TOOLCHAIN_BIN fronts a toolchain when the PATH cargo is below a
+## workspace's MSRV). Not part of build/test.
 smoke-dag-rust:
 	@scripts/dag-rust-examples-smoke.sh
 

@@ -1,10 +1,11 @@
 #!/bin/sh
 # Installed-product acceptance smoke for the examples/dag Rust front doors
-# (Sprint 188): Codex (codex-rs Cargo workspace under the repo root), uv
+# (Sprint 194): Codex (codex-rs Cargo workspace under the repo root), uv
 # (Cargo workspace at the root, rust-toolchain.toml pinned) and Bun (a Bun
-# workspace AND a nightly-pinned Cargo workspace at one root). Not part of
-# build or test: it needs three local third-party checkouts plus `rustc`,
-# `cargo` (with `rustfmt`), `bun` and `git`. It drives each example graph
+# workspace AND a nightly-pinned Cargo workspace at one root), and Mise (a
+# Cargo workspace whose own `mise run` activates its mbx wrapper). Not part of
+# build or test: it needs four local third-party checkouts plus `rustc`,
+# `cargo` (with `rustfmt`), `bun`, `mise`, and `git`. It drives each example graph
 # against its checkout with `bashy awd DIR -- bashy dag -f FILE …` (bodies run
 # in the invoking cwd, so no file is copied into the checkout), asserts the
 # JSON envelope and the fenced results, and verifies every checkout has
@@ -12,14 +13,14 @@
 #
 #   BASHY_BIN=~/.local/bin/bashy scripts/dag-rust-examples-smoke.sh
 #
-# The three checkouts are dependencies the gate provisions itself: each repo is
+# The four checkouts are dependencies the gate provisions itself: each repo is
 # pinned (URL + commit, the coordinates this gate was measured against) and,
 # when its *_ROOT variable is not set, cloned shallow at that commit into
 # bashy's cache — <user cache dir>/bashy/examples/<name>, i.e.
 # ~/Library/Caches/bashy/examples on macOS, $XDG_CACHE_HOME/bashy/examples
 # (~/.cache/bashy/examples) on Linux — on first use and reused after (the
-# builds in it stay warm; a moved pin re-fetches). CODEX_ROOT, UV_ROOT and
-# BUN_ROOT each name an existing checkout instead, at whatever commit it is —
+# builds in it stay warm; a moved pin re-fetches). CODEX_ROOT, UV_ROOT,
+# BUN_ROOT and MISE_ROOT each name an existing checkout instead, at whatever commit it is —
 # never touched by the gate. BASHY_EXAMPLES_CACHE overrides the cache
 # directory.
 #
@@ -74,6 +75,15 @@ bun=$bun_dir/$(basename "$bun")
 export BASHPP_BUN="$bun"
 command -v bun >/dev/null 2>&1 || { PATH=$bun_dir:$PATH; export PATH; }
 
+# Mise's own build/test front doors are `mise run …`; MBX_DISABLE remains an
+# upstream-directed, surfaced fallback rather than a setting this gate supplies.
+# An explicit MISE_ROOT is operator-owned, so its zero-env fence smoke never
+# invokes Mise or writes build artifacts there.
+if [ -z "${MISE_ROOT:-}" ]; then
+	mise_bin=$(command -v mise 2>/dev/null || true)
+	[ -n "$mise_bin" ] && [ -x "$mise_bin" ] || fail "mise unavailable (needed for Mise's cache-owned build/test front doors)"
+fi
+
 # The pinned checkouts (name, URL, commit) — the gate's dependencies.
 cache=${BASHY_EXAMPLES_CACHE:-}
 if [ -z "$cache" ]; then
@@ -105,13 +115,16 @@ checkout() { # <root-or-empty> <name> <url> <commit>: prints the checkout to use
 codex=$(checkout "${CODEX_ROOT:-}" codex https://github.com/openai/codex.git 7784318b5f7fa35728d41ffa13e2a5821ebb4d75)
 uv=$(checkout "${UV_ROOT:-}" uv https://github.com/astral-sh/uv.git 1f245a625114631502fa9abf60f50dffb832afdb)
 bunroot=$(checkout "${BUN_ROOT:-}" bun https://github.com/oven-sh/bun.git 7e56b402b06c1097ae315ca0246a445b5d82cd07)
+mise_root=$(checkout "${MISE_ROOT:-}" mise https://github.com/jdx/mise.git 55d3b4fc789d76fbaa486cb523f92cc974ce67c7)
 [ -f "$codex/codex-rs/Cargo.toml" ] || fail "$codex has no codex-rs/Cargo.toml"
 [ -f "$uv/Cargo.toml" ] && [ -f "$uv/rust-toolchain.toml" ] || fail "$uv is not the uv workspace root"
 [ -f "$bunroot/Cargo.toml" ] && [ -f "$bunroot/bun.lock" ] || fail "$bunroot is not the Bun source root"
+[ -f "$mise_root/Cargo.toml" ] && [ -f "$mise_root/mise.toml" ] && [ -f "$mise_root/tasks.toml" ] || fail "$mise_root is not the Mise source root"
 status() { git -C "$1" status --porcelain=v1 --untracked-files=all; }
 status "$codex" >"$tmp/codex.before"
 status "$uv" >"$tmp/uv.before"
 status "$bunroot" >"$tmp/bun.before"
+status "$mise_root" >"$tmp/mise.before"
 
 export BASHY_HINTS=off
 export DAG_CACHE_DIR="$tmp/dag-cache" # never leave a run journal in the checkouts
@@ -164,7 +177,8 @@ toml_value() { # <file> <key>
 example_codex="$root/examples/dag/codex/dag.md"
 example_uv="$root/examples/dag/uv/dag.md"
 example_bun="$root/examples/dag/bun/dag.md"
-[ -f "$example_codex" ] && [ -f "$example_uv" ] && [ -f "$example_bun" ] || fail "examples/dag files missing under $root"
+example_mise="$root/examples/dag/mise/dag.md"
+[ -f "$example_codex" ] && [ -f "$example_uv" ] && [ -f "$example_bun" ] && [ -f "$example_mise" ] || fail "examples/dag files missing under $root"
 
 # Discovery from another directory: the graph lists, and --explain reports the
 # checkout (not the example's directory) as the effective working directory.
@@ -175,6 +189,9 @@ grep -q '^smoke' "$tmp/uv.list" && grep -q '^run' "$tmp/uv.list" || fail "uv --l
 # token (lossless: expand it back before comparing).
 explained=$(python3 -c 'import json,os,sys; d=json.load(open(sys.argv[1]))["result"]["dir"]; print(d.replace("$HOME", os.environ["HOME"], 1) if d.startswith("$HOME") else d)' "$tmp/codex.explain")
 [ "$(cd "$explained" && pwd -P)" = "$(cd "$codex" && pwd -P)" ] || fail "codex --explain dir = $explained, want the checkout"
+"$bashy" awd "$mise_root" -- "$bashy" dag -f "$example_mise" --explain --json smoke >"$tmp/mise.explain" || fail "mise --explain"
+explained=$(python3 -c 'import json,os,sys; d=json.load(open(sys.argv[1]))["result"]["dir"]; print(d.replace("$HOME", os.environ["HOME"], 1) if d.startswith("$HOME") else d)' "$tmp/mise.explain")
+[ "$(cd "$explained" && pwd -P)" = "$(cd "$mise_root" && pwd -P)" ] || fail "mise --explain dir = $explained, want the checkout"
 
 # uv (Cargo workspace at the root): fetch → format check, one crate's tests,
 # the fenced-Rust smoke (no build) and the fenced-Rust launcher over the
@@ -208,16 +225,36 @@ bun_channel=$(toml_value "$bunroot/rust-toolchain.toml" channel)
 task_stdout "$tmp/bun.json" smoke | grep -q "^smoke: bun [0-9][0-9.]* latest [0-9][0-9.]* toolchain $bun_channel members [1-9][0-9]* locked [1-9][0-9]*\$" || fail "bun smoke did not report the tree's coordinates"
 task_stdout "$tmp/bun.json" lint | grep -q 'Found 0 warnings and 0 errors' || fail "bun lint is not clean"
 
+# Mise: an explicit MISE_ROOT is operator-owned. Its fence runs under `env -i`
+# with only executable-discovery and temporary-home coordinates supplied, so it
+# reads the checkout but cannot inherit an active Mise/mbx environment. The
+# default cache checkout additionally proves the guide's own build/test front
+# doors and launcher, with mbx enabled (never MBX_DISABLE).
+env -i PATH="$PATH" HOME="$HOME" TMPDIR="$tmp" "$bashy" awd "$mise_root" -- "$bashy" dag -f "$example_mise" --json smoke >"$tmp/mise-smoke.json" 2>"$tmp/mise-smoke.json.err" || true
+check_envelope mise-smoke "$tmp/mise-smoke.json" smoke
+mise_version=$(toml_value "$mise_root/Cargo.toml" version)
+mise_msrv=$(toml_value "$mise_root/Cargo.toml" rust-version)
+mise_minimum=$(toml_value "$mise_root/mise.toml" min_version)
+task_stdout "$tmp/mise-smoke.json" smoke | grep -q "^smoke: mise $mise_version msrv $mise_msrv minimum $mise_minimum members [1-9][0-9]* locked [1-9][0-9]*$" || fail "mise smoke did not report the workspace coordinates"
+if [ -z "${MISE_ROOT:-}" ]; then
+	"$bashy" awd "$mise_root" -- "$bashy" dag -f "$example_mise" --json test run >"$tmp/mise.json" 2>"$tmp/mise.json.err" || true
+	check_envelope mise "$tmp/mise.json" build test run
+	task_stdout "$tmp/mise.json" run | grep -q "^run: mise $mise_version" || fail "mise run did not launch target/debug/mise at $mise_version"
+fi
+
 status "$codex" >"$tmp/codex.after"
 status "$uv" >"$tmp/uv.after"
 status "$bunroot" >"$tmp/bun.after"
+status "$mise_root" >"$tmp/mise.after"
 cmp -s "$tmp/codex.before" "$tmp/codex.after" || fail "Codex checkout changed during the run"
 cmp -s "$tmp/uv.before" "$tmp/uv.after" || fail "uv checkout changed during the run"
 cmp -s "$tmp/bun.before" "$tmp/bun.after" || fail "Bun checkout changed during the run"
+cmp -s "$tmp/mise.before" "$tmp/mise.after" || fail "Mise checkout changed during the run"
 
 echo "bashy=$bashy"
 echo "rustc=$(rustc --version 2>&1) cargo=$(cargo --version 2>&1)"
 echo "codex_commit=$(git -C "$codex" rev-parse HEAD) pinned=$codex_channel"
 echo "uv_commit=$(git -C "$uv" rev-parse HEAD) pinned=$uv_channel"
 echo "bun_commit=$(git -C "$bunroot" rev-parse HEAD) pinned=$bun_channel bun=$("$bun" --version 2>&1)"
+echo "mise_commit=$(git -C "$mise_root" rev-parse HEAD) version=$mise_version msrv=$mise_msrv minimum=$mise_minimum mbx=enabled"
 echo "dag-rust-examples-smoke: PASS"
