@@ -21,7 +21,7 @@ import (
 // the shell dispatches, with agent attribution and secrets stripped. It is the
 // evidence half of the security uplift — the artifact a security team needs to
 // answer "what did the agents run here, and prove it." It records; it never
-// blocks (that is the policy engine) and never reaches across an execve (that is
+// blocks unless a guard effect cap is present, and never reaches across an execve (that is
 // the OS sandbox). Opt-in, off by default, and — like every AgentOS feature —
 // never linked into the lean `cmd/bash` drop-in or active under --posix.
 //
@@ -77,8 +77,8 @@ func effectsFor(cmd string) []string {
 // auditHandler is the outermost ExecHandler middleware: it runs the command,
 // then appends one chained record capturing the resolved argv (secrets masked),
 // the atlas effects, the outcome, and the actor. It always returns the
-// command's real result unchanged — a command must never fail, or succeed,
-// because of auditing.
+// command's real result unchanged unless a guard cap denies execution. Caps
+// are enforced even with a nil audit writer; logging itself is best-effort.
 func auditHandler(w *audit.Writer, actor audit.Actor, host string) func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 	return func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 		return func(ctx context.Context, args []string) error {
@@ -86,17 +86,17 @@ func auditHandler(w *audit.Writer, actor audit.Actor, host string) func(interp.E
 				return next(ctx, args)
 			}
 			start := time.Now()
-			
+
 			effects := effectsFor(args[0])
 			decision := "allow"
 			var err error
-			
+
 			if cap, ok := advice.CapFrom(ctx); ok {
 				if len(cap.Exceeded(effects)) > 0 {
 					decision = "deny"
 				}
 			}
-			
+
 			if decision == "deny" {
 				err = interp.ExitStatus(1)
 			} else {

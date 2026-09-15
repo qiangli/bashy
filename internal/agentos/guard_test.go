@@ -10,7 +10,7 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
-	
+
 	"github.com/qiangli/coreutils/pkg/policy/advice"
 	"github.com/qiangli/coreutils/pkg/policy/audit"
 )
@@ -26,8 +26,7 @@ func runWithGuard(t *testing.T, script string, env map[string]string, capStr str
 
 	environ := os.Environ()
 	for k, v := range env {
-		os.Setenv(k, v)
-		defer os.Unsetenv(k)
+		t.Setenv(k, v)
 		environ = append(environ, k+"="+v)
 	}
 
@@ -38,7 +37,7 @@ func runWithGuard(t *testing.T, script string, env map[string]string, capStr str
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	opts := wireExec(nil, false, environ, nil, out, out, false)
 	for _, opt := range opts {
 		opt(runner)
@@ -52,7 +51,7 @@ func runWithGuard(t *testing.T, script string, env map[string]string, capStr str
 			t.Fatal(err)
 		}
 	}
-	
+
 	err = runner.Run(ctx, prog)
 	return err, out
 }
@@ -69,9 +68,19 @@ func TestGuardAllowedRun(t *testing.T) {
 }
 
 func TestGuardBodyNotRun(t *testing.T) {
-	// Let's use an external command that has effects in atlas, e.g. "curl".
-	// Atlas effects for curl include "net".
-	err, _ := runWithGuard(t, "curl http://example.com", nil, "read")
+	cap, err := advice.ParseCap("read")
+	if err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	handler := auditHandler(nil, audit.Actor{}, "test")(func(context.Context, []string) error {
+		called = true
+		return nil
+	})
+	err = handler(advice.WithCap(context.Background(), cap), []string{"curl", "https://example.invalid"})
+	if called {
+		t.Fatal("denied command executed")
+	}
 	if err == nil {
 		t.Fatal("expected denied run to fail, got success")
 	}
@@ -88,7 +97,7 @@ func TestGuardNestedCap(t *testing.T) {
 	ctx = advice.WithCap(ctx, c1)
 	c2, _ := advice.ParseCap("read")
 	ctx = advice.WithCap(ctx, c2)
-	
+
 	if final, ok := advice.CapFrom(ctx); !ok || len(final.Effects()) != 1 || final.Effects()[0] != "read" {
 		t.Fatalf("expected nested cap to intersect, got %v", final.Effects())
 	}
@@ -101,19 +110,19 @@ func TestAuditDenyRecordHashChain(t *testing.T) {
 		"BASHY_AUDIT": auditLog,
 		"BASHY_HOME":  tmp, // Fallback
 	}
-	
+
 	// Command requires net, cap is read
 	err, _ := runWithGuard(t, "curl http://example.com", env, "read")
 	if err == nil {
 		t.Fatal("expected deny error")
 	}
-	
+
 	f, err := os.Open(auditLog)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	
+
 	// Verify hash-chain verification
 	res := audit.Verify(f)
 	if !res.OK {
@@ -122,14 +131,14 @@ func TestAuditDenyRecordHashChain(t *testing.T) {
 	if res.Records != 1 {
 		t.Fatalf("expected 1 audit record, got %d", res.Records)
 	}
-	
+
 	f.Seek(0, 0)
 	var rec audit.Record
 	importJson := json.NewDecoder(f)
 	if err := importJson.Decode(&rec); err != nil {
 		t.Fatal(err)
 	}
-	
+
 	if rec.Decision != "deny" {
 		t.Fatalf("expected decision 'deny', got %q", rec.Decision)
 	}
