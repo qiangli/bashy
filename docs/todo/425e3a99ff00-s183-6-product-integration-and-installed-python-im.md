@@ -3,10 +3,10 @@ id: 425e3a99ff00
 kind: task
 title: S183.6 — product integration and installed Python import smoke
 seq: 284
-status: assigned
+status: todo
 priority: p1
 created: 2026-09-15T00:07:55.542386Z
-assignee: codex-gpt-5.5
+assignee: qiangli
 sprint: 183
 ---
 
