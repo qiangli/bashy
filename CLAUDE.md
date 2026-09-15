@@ -438,10 +438,14 @@ case-insensitive filesystem (macOS) and breaks on Linux/CI.
 **Bodies run in the invoking cwd (make parity, Sprint 185)** — `-f` only picks
 the file; there is no `-C`: `bashy awd DIR -- bashy dag …` is the one
 directory mechanism (`awd` is a front-door verb as well as a builtin). A
-` ```bashpp ` body runs as Bash++ and may declare a `~~~py as py … ~~~` fence
-and call `py.main()`; `examples/dag/{mini-swe-agent,nanochat}/dag.md` are the
-worked examples (two real Python repos, one `dag.md` each), gated by
-`make smoke-dag-python` — see `docs/dag.md` §Bash++ bodies.
+` ```bashpp ` body runs as Bash++ and may declare a `~~~py as py … ~~~` or
+`~~~ts as ts … ~~~` fence and call `py.main()` / `ts.launch()`;
+`examples/dag/{mini-swe-agent,nanochat}/dag.md` (Python, `make
+smoke-dag-python`) and `examples/dag/{opencode,openclaw,hermes-agent}/dag.md`
+(TypeScript — Hermes has both fences in one body; `make smoke-dag-typescript`,
+Sprint 186) are the worked examples, one real repo each — see `docs/dag.md`
+§Bash++ bodies. The TypeScript runtime is chosen per repo in the target's
+`Env:` (`BASHPP_TYPESCRIPT_RUNTIME=bun` where the repo's own imports need Bun).
 Inside DAG target bodies, use `"$BASHY" ...` for recursive bashy calls. Mirroring
 GNU Bash's `BASH`/`BASH_ARGV0` split, `bashy dag` injects `BASHY`/`BASHY_EXE`
 as the resolved executable path and `BASHY_ARGV0` as the raw argv0 string, so
