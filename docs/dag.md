@@ -140,6 +140,14 @@ name := py.main()
   Preparation uses `go build -overlay`: generated worker files never enter the
   checkout, while the compiled artifact is embedded for lowered execution.
   Each call is a fresh process with the task's host authority, not a sandbox.
+- `~~~bash` and `~~~sh` are embedded dialect islands, not foreign workers.
+  Top-level functions become direct or qualified variadic string callables;
+  arguments are positional parameters, stdout is the result, and non-zero
+  status is the call error. `bash` selects Bashy's Bash-5.3 dialect and `sh`
+  selects its POSIX dialect. Every call gets a fresh child interpreter and
+  environment, so state cannot leak. The gh example pastes `heading()` from
+  its checkout's `script/api-host-gateway/test.sh` verbatim and calls it from
+  the same Bash++ smoke body as the Go fence.
 - Nesting rule: the dag parser closes a body only on a line equal to the
   **opening** marker, so a `~~~py … ~~~` block nests inside a ` ```bashpp `
   recipe. A recipe that itself opens with `~~~` cannot contain one.
@@ -154,7 +162,8 @@ checkout's coordinates from a `~~~c` / `~~~cxx` fence (the project's own
 self-contained header included at compile time where it has one) and whose
 `run` launches the `configure`+`make` / `cmake --build` / `bootstrap` output
 from one, and three Go repos (gh, Hugo, Caddy) whose fence imports an
-unchanged checkout package and whose `run` launches the `go build` output — live in
+unchanged checkout package and whose `run` launches the `go build` output —
+live in
 [`examples/dag/`](../examples/dag/) and are gated by `make smoke-dag-python`,
 `make smoke-dag-typescript`, `make smoke-dag-rust`, `make smoke-dag-c`, and
 the self-provisioning `make smoke-dag-go`.

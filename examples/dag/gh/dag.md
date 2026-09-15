@@ -44,8 +44,16 @@ func Gh() string {
 	return buildpkg.Version
 }
 ~~~
+~~~sh as helper
+# Verbatim from script/api-host-gateway/test.sh.
+heading() {
+	printf '\n== %s\n' "$1"
+}
+~~~
 got := go.Gh()
 [ -n "$got" ] || { echo "smoke: go.Gh() returned empty" >&2; exit 1; }
+banner := helper.heading("gh $got")
+case "$banner" in *"== gh $got"*) ;; *) echo "smoke: checkout helper returned '$banner'" >&2; exit 1 ;; esac
 echo "smoke: gh $got"
 ```
 

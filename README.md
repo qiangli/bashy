@@ -190,7 +190,9 @@ make dag ARGS=build   # equivalent bootstrap path if you prefer make
 Real-repository DAG examples live under `examples/dag/`. The Go front doors
 for GitHub CLI, Hugo, and Caddy use `~~~go as go` to import the unchanged
 checkout, build its CLI, and launch that output; `make smoke-dag-go` provisions
-pinned checkouts into bashy's user cache and gates the installed product.
+pinned checkouts into bashy's user cache and gates the installed product. The
+gh smoke also runs a checkout-owned helper through an embedded `~~~sh` dialect
+island, with no host-shell dependency.
 
 ## Usage
 

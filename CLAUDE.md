@@ -443,6 +443,8 @@ directory mechanism (`awd` is a front-door verb as well as a builtin). A
 `~~~cxx as cxx … ~~~`, or `~~~go as go … ~~~` fence and call
 `py.main()` / `ts.launch()` / `rs.launch()` / `c.launch()` /
 `cxx.launch()` / `go.launch()`;
+`~~~bash` and `~~~sh` use fresh in-process Bash-5.3/POSIX child interpreters
+(positional string args, stdout result, non-zero status error; never host bash);
 `examples/dag/{mini-swe-agent,nanochat}/dag.md` (Python, `make
 smoke-dag-python`), `examples/dag/{opencode,openclaw,hermes-agent}/dag.md`
 (TypeScript — Hermes has both fences in one body; `make smoke-dag-typescript`,

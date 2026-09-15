@@ -3,9 +3,10 @@ id: 081a14ffb4c2
 kind: task
 title: S193.4 Shell-island dag example and installed gate
 seq: 296
-status: todo
+status: assigned
 priority: p0
 created: 2026-09-15T12:14:17.523692Z
+assignee: codex-gpt-5.5
 sprint: 193
 ---
 
