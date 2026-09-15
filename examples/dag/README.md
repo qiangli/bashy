@@ -1,8 +1,8 @@
 # `bashy dag` as a project's front door
 
-Five real repositories, each driven by ONE `dag.md` at its root instead of a
-`Makefile`, a `justfile`, an `npm run`/`pnpm`/`uv run` alias list, or a README
-full of incantations:
+Eight real repositories, each driven by ONE `dag.md` at its root instead of a
+`Makefile`, a `justfile`, a `cargo`/`npm run`/`pnpm`/`uv run` alias list, or a
+README full of incantations:
 
 | example | repo | stack | targets |
 |---|---|---|---|
@@ -11,10 +11,13 @@ full of incantations:
 | [`opencode/dag.md`](opencode/dag.md) | [anomalyco/opencode](https://github.com/anomalyco/opencode) | TypeScript (Bun workspace) | `install` · `typecheck` · `lint` · `test` · `test-config` · `run` · `smoke` |
 | [`openclaw/dag.md`](openclaw/dag.md) | [openclaw/openclaw](https://github.com/openclaw/openclaw) | TypeScript (pnpm workspace, Node) | `install` · `typecheck` · `format-check` · `lint` · `build` · `test` · `test-unit-fast` · `test-file` · `run` · `smoke` |
 | [`hermes-agent/dag.md`](hermes-agent/dag.md) | [NousResearch/Hermes-Agent](https://github.com/NousResearch/Hermes-Agent) | Python (uv) + TypeScript (npm workspace) | `sync` · `test` · `lint` · `run` · `install-tui` · `build-ink` · `typecheck-tui` · `test-tui` · `smoke` |
+| [`uv/dag.md`](uv/dag.md) | [astral-sh/uv](https://github.com/astral-sh/uv) | Rust (Cargo workspace, `rust-toolchain.toml`) | `fetch` · `fmt-check` · `clippy` · `build` · `test` · `smoke` · `run` |
+| [`codex/dag.md`](codex/dag.md) | [openai/codex](https://github.com/openai/codex) | Rust (`codex-rs/` Cargo workspace under the repo root, `justfile`) | `fetch` · `fmt-check` · `clippy` · `build` · `test` · `smoke` · `run` |
+| [`bun/dag.md`](bun/dag.md) | [oven-sh/bun](https://github.com/oven-sh/bun) | Bun workspace + Rust (nightly-pinned Cargo workspace) | `install` · `lint` · `typecheck` · `fmt-check-rust` · `rust-check` · `smoke` |
 
 Each target wraps the repo's OWN command (`uv sync`, `pytest`, `ruff`,
 `mkdocs`, `bun test`, `tsgo`, `oxlint`, `pnpm tsgo:core`, `vitest`, `npm run
-typecheck`, …) and declares what it depends on (`Requires:`), what it reads
+typecheck`, `cargo fmt --check`, `cargo build -p uv`, `cargo nextest run`, …) and declares what it depends on (`Requires:`), what it reads
 and produces (`Sources:`/`Generates:` — an unchanged `install` is skipped by
 content hash, not by mtime), and what it is allowed to do (`Effects:`).
 `bashy dag --list` is the help; `bashy dag test` does the right thing in
@@ -85,6 +88,54 @@ The Hermes example puts BOTH fences in one body: `py.version()` through the
 venv and `ts.compact()` through the npm workspace, one shell body, two
 languages, no glue.
 
+Rust — the same shape again, native this time. A `~~~rs` (or `~~~rust`)
+fence is a Rust declaration unit: its `pub fn` functions become callables,
+compiled by `rustc` into a small worker when the body is prepared (std-only,
+no crate dependencies, `BASHPP_RUSTC` overrides the compiler), run in the
+invoking directory, `Result<T, E>` errors and panics surfacing as call
+failures. Each Rust example carries TWO fence targets. `smoke` needs no
+build: `rs.uv()` / `rs.codex()` / `rs.bun()` read the checkout's own
+coordinates (crate version, MSRV, the `rust-toolchain.toml` channel, workspace
+members, locked packages) and the shell body cross-checks the answer against
+the same files with builtins alone. `run` is the launcher proper: after the
+repo's own `cargo build -p …`, `rs.launch()` executes the built binary with
+`std::process::Command` and hands its `--version` line back to the shell:
+
+````markdown
+### run
+Requires: build
+
+```bashpp
+~~~rs as rs
+use std::process::Command;
+
+pub fn launch() -> Result<String, String> {
+    let out = Command::new("target/debug/uv").arg("--version").output()
+        .map_err(|e| format!("target/debug/uv: {e}"))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+~~~
+got := rs.launch()
+case "$got" in "uv $version"*) ;; *) exit 1 ;; esac
+```
+````
+
+The fence compiles with whatever `rustc` PATH resolves to — it is std-only,
+so the workspace's own pin does not constrain it — while the repo's `cargo`
+targets need the toolchain the workspace pins (`rust-version` / `rust-
+toolchain.toml`): with rustup's proxies on PATH that happens by itself; a
+distro `cargo` below the MSRV refuses the build, which is the repo's rule,
+not bashy's. Codex keeps its workspace under `codex-rs/`, so its cargo
+targets `cd codex-rs && …` and its fence names `codex-rs/…` paths; Bun's
+Rust workspace only resolves after the native build has vendored
+`vendor/lolhtml`, so its `rust-check` is a documented target and the gate
+runs the Bun-side lanes plus the fence. The three checked-in Rust examples
+are the launch shape for a Cargo repo: `bashy dag run` = fetch → build →
+launch, one file, no wrapper script.
+
 ## Running them against a checkout
 
 The files are written to live at each repo's root (copy one there and run
@@ -113,3 +164,11 @@ byte-identical `git status` before and after:
   repo-wide lanes (`lint`, `test`, `test-unit-fast`) are documented targets,
   not gate targets: they report each checkout's own state, which is not
   bashy's to assert.
+- `make smoke-dag-rust` (`scripts/dag-rust-examples-smoke.sh`) —
+  `CODEX_ROOT`, `UV_ROOT`, `BUN_ROOT`; needs `rustc`, `cargo` with
+  `rustfmt`, and `bun`. It builds the uv and Codex CLIs (minutes cold,
+  seconds warm) so the `run` launchers are real; when the PATH `cargo` is
+  not a rustup proxy and sits below a workspace's MSRV, `RUST_TOOLCHAIN_BIN`
+  names a toolchain `bin/` to front PATH with. `clippy`, Codex `test`
+  (cargo-nextest), Bun `typecheck` and `rust-check` are documented targets,
+  not gate targets.

@@ -102,16 +102,25 @@ name := py.main()
   the same Bash++ call boundary as other fences. The compiled artifact is
   embedded when Bash++ is lowered, so the resulting native program does not
   need `rustc` at run time. Rust code is native code with the task's host
-  permissions; a fence is not a security sandbox.
+  permissions; a fence is not a security sandbox. In a dag body the worker
+  runs in the invoking cwd, so relative paths are the checkout's, and a
+  `std::process::Command` on the repo's own built binary (`Requires: build`)
+  is the launcher shape for a Cargo repo — `rs.launch()` in the examples.
+  The fence is std-only, so it compiles with whatever `rustc` PATH resolves
+  to; the repo's `cargo …` targets still need the toolchain the workspace
+  pins (rustup's proxies pick it up; a distro `cargo` below the MSRV refuses
+  the build, which is the repo's rule, not the fence's).
 - Nesting rule: the dag parser closes a body only on a line equal to the
   **opening** marker, so a `~~~py … ~~~` block nests inside a ` ```bashpp `
   recipe. A recipe that itself opens with `~~~` cannot contain one.
 
 Worked examples — two Python repos with a fenced-Python `smoke` target, two
-TypeScript repos with a fenced-TypeScript one, and one Python + TypeScript
-repo whose `smoke` calls both from a single body — live in
-[`examples/dag/`](../examples/dag/) and are gated by `make smoke-dag-python`
-and `make smoke-dag-typescript`.
+TypeScript repos with a fenced-TypeScript one, one Python + TypeScript repo
+whose `smoke` calls both from a single body, and three Rust repos (uv, Codex,
+Bun) whose `smoke` reads the workspace's coordinates from a `~~~rs` fence and
+whose `run` launches the freshly built CLI from one — live in
+[`examples/dag/`](../examples/dag/) and are gated by `make smoke-dag-python`,
+`make smoke-dag-typescript` and `make smoke-dag-rust`.
 
 ## Cross-machine dispatch — `--mesh`
 

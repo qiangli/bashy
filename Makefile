@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript dist tidy clean help
+.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -329,6 +329,15 @@ smoke-dag-python:
 ## included. Not part of build/test.
 smoke-dag-typescript:
 	@scripts/dag-typescript-examples-smoke.sh
+
+## smoke-dag-rust: Installed-product smoke for the examples/dag Rust front doors
+## (Sprint 188): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md`
+## against unchanged CODEX_ROOT / UV_ROOT / BUN_ROOT checkouts, fenced-Rust smoke
+## AND launcher targets included (uv and Codex build their CLIs; RUST_TOOLCHAIN_BIN
+## fronts a toolchain when the PATH cargo is below a workspace's MSRV). Not part
+## of build/test.
+smoke-dag-rust:
+	@scripts/dag-rust-examples-smoke.sh
 
 ## test-bash: Run bash 5.3 native test suite against bashy (with per-test timeout).
 ## Builds only the lean bin/bash drop-in (not the 259MB embed-heavy bin/bashy).
