@@ -241,6 +241,33 @@ func registeredArgv(ctx context.Context, rec fleet.Command, args []string) ([]st
 	return argv, nil
 }
 
+// registeredResolver is the ring's answer to the shell's OWN introspection —
+// `type`, `command -v`, `command -V` — wired through interp.CommandResolver
+// on both wireExec branches. Dispatch alone is not enough: a registered name
+// RAN while `command -v NAME` said not found, so a script that probes before
+// calling (the idiom every portable script uses) concluded the command was
+// absent. The resolver reports the name exactly where the exec rung sits —
+// after the shell's own names, before PATH — and stands down with
+// registeredLookup under VSC_PROFILE=cert.
+//
+// Path is deliberately empty for every mode, so `command -v NAME` prints the
+// bare NAME (the builtin/function shape): an exec record's argv[0] may carry
+// baked arguments (`git log --oneline`) that `$(command -v gl)` would lose,
+// and a download record's binary may not be provisioned yet. `type -t` says
+// `file` — of bash's closed vocabulary, the one a script switching on it
+// expects for something the shell hands off rather than runs itself.
+func registeredResolver(name string) (interp.ResolvedCommand, bool) {
+	rec, ok := registeredLookup(name)
+	if !ok {
+		return interp.ResolvedCommand{}, false
+	}
+	desc := fmt.Sprintf("%s is a bashy registered command (%s)", name, rec.Mode())
+	if name != rec.Name {
+		desc = fmt.Sprintf("%s is a bashy registered command (%s, alias of %s)", name, rec.Mode(), rec.Name)
+	}
+	return interp.ResolvedCommand{Desc: desc}, true
+}
+
 // registeredHandler is the innermost ExecHandler rung. It sits AFTER the
 // coreutils applet handler on both wireExec branches, so an applet always
 // wins and every middleware outside it has already seen the registered

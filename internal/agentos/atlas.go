@@ -357,7 +357,7 @@ func liveAtlas(includeHidden bool) []atlasRecord {
 // --- the views ---------------------------------------------------------------
 
 // atlasViews are the non-classic --view values.
-var atlasViews = []string{"tier", "group", "sdlc", "capabilities", "effects", "web", "origin", "posix", "external", "portable"}
+var atlasViews = []string{"tier", "group", "sdlc", "capabilities", "effects", "web", "origin", "posix", "external", "portable", "shipped", "registered"}
 
 // atlasGroupDisplayOrder is the presentation order for the group view:
 // classical userland first, then the extended groups.
@@ -489,6 +489,15 @@ func dispatchAtlas(req atlasRequest) int {
 		records = filterOrigin(records, atlas.OriginExternal)
 		filter["origin"] = atlas.OriginExternal
 	}
+	if req.view == "shipped" || req.view == "registered" {
+		// The provenance split every reader asks about first — which names
+		// are bashy's and which are mine — as two subset views in the shape
+		// of external/posix/portable. `shipped` is every origin but the ring
+		// (bucketed by origin, like the origin view minus one block);
+		// `registered` is the ring alone. JSON carries the same filter key.
+		records = filterShipped(records, req.view == "shipped")
+		filter["shipped"] = strconv.FormatBool(req.view == "shipped")
+	}
 	if req.view == "posix" {
 		// The posix view IS a filter: only the POSIX-required names, in text
 		// and in JSON alike, so `--view posix --json` is the machine answer to
@@ -524,6 +533,10 @@ func dispatchAtlas(req atlasRequest) int {
 		printAtlasPosix(os.Stdout, records)
 	case req.view == "external":
 		printAtlasExternal(os.Stdout, records)
+	case req.view == "shipped":
+		printAtlasShipped(os.Stdout, records, liveAtlas(req.all))
+	case req.view == "registered":
+		printAtlasRegistered(os.Stdout, records)
 	case req.view == "portable":
 		printAtlasPortable(os.Stdout, records, liveAtlas(req.all))
 	case query:
@@ -637,8 +650,19 @@ func printAtlasEffects(w io.Writer, records []atlasRecord) {
 // defined it" — the question a reader asks before trusting a name in a script
 // that must also run under stock bash.
 func printAtlasOrigin(w io.Writer, records []atlasRecord) {
-	byOrigin := map[string][]string{}
-	posix, experimental := 0, 0
+	byOrigin, posix, experimental := originBlocks(records)
+	fmt.Fprintf(w, "origin — who defined each command (%d; * = POSIX-required, %d", len(records), posix)
+	if experimental > 0 {
+		fmt.Fprintf(w, "; ~ = experimental, %d", experimental)
+	}
+	fmt.Fprintln(w, "):")
+	printOriginBlocks(w, byOrigin)
+}
+
+// originBlocks buckets records by origin with the origin view's markers
+// (`*` POSIX-required, `~` experimental) and returns the two counts.
+func originBlocks(records []atlasRecord) (byOrigin map[string][]string, posix, experimental int) {
+	byOrigin = map[string][]string{}
 	for _, r := range records {
 		name := r.Name
 		if r.Posix {
@@ -651,29 +675,84 @@ func printAtlasOrigin(w io.Writer, records []atlasRecord) {
 		}
 		byOrigin[r.Origin] = append(byOrigin[r.Origin], name)
 	}
-	fmt.Fprintf(w, "origin — who defined each command (%d; * = POSIX-required, %d", len(records), posix)
-	if experimental > 0 {
-		fmt.Fprintf(w, "; ~ = experimental, %d", experimental)
+	return byOrigin, posix, experimental
+}
+
+// originBlockTitle is the block heading for one origin: the origin value,
+// then its label — except where the label already opens with the value (the
+// yoke origin's "yoke — added by bashy", the ring's "registered — added with
+// bashy commands add"), which would otherwise print it twice.
+func originBlockTitle(o string) string {
+	label := atlas.OriginLabel(o)
+	if o == atlas.OriginBashy || strings.HasPrefix(label, o+" — ") {
+		return label
 	}
-	fmt.Fprintln(w, "):")
+	return o + " — " + label
+}
+
+// printOriginBlocks renders one block per origin in the closed order, then
+// names any record without an origin rather than dropping it.
+func printOriginBlocks(w io.Writer, byOrigin map[string][]string) {
 	for _, o := range atlas.Origins() {
 		names := byOrigin[o]
 		if len(names) == 0 {
 			continue
 		}
-		// The block name is the origin value, then its label; for the yoke
-		// origin the label already carries the value ("yoke — added by bashy"),
-		// so print the label alone rather than "bashy — yoke — added by bashy".
-		title := o + " — " + atlas.OriginLabel(o)
-		if o == atlas.OriginBashy {
-			title = atlas.OriginLabel(o)
-		}
-		fmt.Fprintf(w, "  %s (%d):\n", title, len(names))
+		fmt.Fprintf(w, "  %s (%d):\n", originBlockTitle(o), len(names))
 		wrapNames(w, names, "    ", 80)
 	}
 	if n := len(byOrigin[""]); n > 0 {
 		fmt.Fprintf(w, "  (unclassified: %d — a bug; every record must carry an origin)\n", n)
 	}
+}
+
+// filterShipped keeps the commands bashy ships (shipped=true: every origin
+// but the ring) or the operator's registered ring (shipped=false).
+func filterShipped(records []atlasRecord, shipped bool) []atlasRecord {
+	var out []atlasRecord
+	for _, r := range records {
+		if (r.Origin != atlas.OriginRegistered) == shipped {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// printAtlasShipped is the origin view minus the ring: every command bashy
+// itself delivers — bash builtins, the GNU and classic-Unix reimplementations,
+// the exec'd externals and the yoke commands — with the ring's size named on
+// the last line so the split is visible from either side.
+func printAtlasShipped(w io.Writer, shipped, all []atlasRecord) {
+	byOrigin, posix, experimental := originBlocks(shipped)
+	fmt.Fprintf(w, "shipped — every command bashy ships, by who defined it (%d; * = POSIX-required, %d", len(shipped), posix)
+	if experimental > 0 {
+		fmt.Fprintf(w, "; ~ = experimental, %d", experimental)
+	}
+	fmt.Fprintln(w, "):")
+	printOriginBlocks(w, byOrigin)
+	registered := len(filterShipped(all, false))
+	fmt.Fprintf(w, "  registered — yours, not shipped (%d): `bashy commands --view registered`\n", registered)
+}
+
+// printAtlasRegistered is the ring alone: the commands the operator added
+// with `bashy commands add` (`~` = hidden), as atlas records — the RECORD
+// behind each (mode, effects, ring, shadowing) is `bashy commands list`.
+func printAtlasRegistered(w io.Writer, records []atlasRecord) {
+	if len(records) == 0 {
+		fmt.Fprintln(w, "registered — yours (0): no registered commands — `bashy commands add NAME --set exec.0=/path/to/prog` (or --set script=…, --set download.url=…)")
+		return
+	}
+	var names []string
+	for _, r := range records {
+		name := r.Name
+		if r.Hidden {
+			name += "~"
+		}
+		names = append(names, name)
+	}
+	fmt.Fprintf(w, "registered — yours, added with `bashy commands add`; dispatched like every shipped command (%d; ~ = hidden):\n", len(records))
+	wrapNames(w, names, "    ", 80)
+	fmt.Fprintln(w, "  the record behind each (mode, effects, ring, shadowing): `bashy commands list`; the shipped side: `bashy commands --view shipped`")
 }
 
 func filterOS(records []atlasRecord, goos string) []atlasRecord {
@@ -711,11 +790,7 @@ func printAtlasPortable(w io.Writer, portable, all []atlasRecord) {
 		if len(names) == 0 {
 			continue
 		}
-		title := o + " — " + atlas.OriginLabel(o)
-		if o == atlas.OriginBashy {
-			title = atlas.OriginLabel(o)
-		}
-		fmt.Fprintf(w, "  %s (%d):\n", title, len(names))
+		fmt.Fprintf(w, "  %s (%d):\n", originBlockTitle(o), len(names))
 		wrapNames(w, names, "    ", 80)
 	}
 	var missing, partial []string

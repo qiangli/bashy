@@ -1889,6 +1889,9 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	if output != nil {
 		outputMW = output.middleware
 	}
+	// The ring answers `type` / `command -v` too, on both branches: what
+	// dispatch runs, introspection must see (registered.go, registeredResolver).
+	opts = append(opts, interp.CommandResolver(registeredResolver))
 	if posix {
 		// The registered-command rung takes its place in --posix too (operator,
 		// 2026-09-14: POSIX and agentic at the same time) — resolution is

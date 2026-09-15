@@ -392,6 +392,22 @@ tools with their own release train), and toolchain provisioners (go node python 
 view matters until the POSIX providers are all reimplemented; it is the
 progress meter for that work.
 
+**The shipped and registered views.** `bashy commands --view shipped` and
+`--view registered` are the two sides of the first split a reader asks about
+— *which commands are bashy's and which are mine*. `shipped` is the origin
+view minus the ring: every command bashy itself delivers, bucketed by origin
+(`bash · gnu · unix · external · yoke`), with the ring's size on the last
+line. `registered` is the ring alone — the commands you added with `bashy
+commands add` (`~` = hidden) — and points at `commands list` for the record
+behind each name (mode, effects, ring, shadowing). `--json` returns the
+filtered records with `filter: {shipped: "true" | "false"}`. Those two words
+are the vocabulary: **shipped** vs **registered**, never built-in vs custom
+("builtin" already names the bash builtin class, one of five shipped
+origins). A registered name is also what the shell's own introspection sees
+— `type NAME`, `command -v NAME`, `command -V NAME` report it where before it
+ran unseen — through the `sh` fork's `interp.CommandResolver` option, the
+embedder's rung in command lookup at the same position the exec rung holds.
+
 Origin is stamped per entry in `coreutils/pkg/atlas/origin.go`
 (`classifyOrigins`, after the subclass passes and before the alias pass so an
 alias inherits it) and ratcheted in `origin_test.go`: every entry has one,
@@ -524,6 +540,8 @@ bashy commands --view origin        # who defined each name: bash · gnu · unix
 bashy commands --view posix         # the 116 POSIX-required utilities by who provides each one here; names the unlisted (sh); --json = the filtered records
 bashy commands --view external      # bin-managed: pinned providers (POSIX ones = the pure-Go debt) · managed externals · toolchain provisioners; --json = the filtered records
 bashy commands --view portable      # runs as-is on windows · macOS · linux, by origin; the rest listed with where they DO run / their documented gap
+bashy commands --view shipped       # every command bashy ships, by origin (the origin view minus the ring); --json = the filtered records
+bashy commands --view registered    # the ring alone — yours, added with `bashy commands add` (~ = hidden); the record behind each: `commands list`
 bashy commands --os windows         # platform filter (default: THIS host; `any` lifts it; `--all` implies any) — composes with every view
 bashy commands --portable           # only full-support-everywhere commands — composes with every view (`--view posix --portable`)
 bashy commands --view classic       # explicit alias for the default output

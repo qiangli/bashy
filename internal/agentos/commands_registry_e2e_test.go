@@ -150,3 +150,128 @@ func TestE2ERegisteredDownload(t *testing.T) {
 		t.Error("a refused download left an executable in the cache")
 	}
 }
+
+// What dispatch runs, introspection must see: a registered name answers
+// `type`, `command -v` and `command -V` (in-shell, --posix included), where
+// before Sprint 195 it RAN while `command -v` said not found. The file
+// questions stay file questions (`type -P`, `hash`), and a certification run
+// sees nothing.
+func TestE2ERegisteredIntrospection(t *testing.T) {
+	bin := bashyBinary(t)
+	env := registryEnv(t)
+	if _, stderr, code := runBashyStdEnv(bin, env, "commands", "add", "hi0", "--set", "script=echo hi", "--set", "effects.0=pure", "--set", "aliases.0=hi0a"); code != 0 {
+		t.Fatalf("add (exit %d): %s", code, stderr)
+	}
+	cases := []struct {
+		args []string
+		want string
+		code int
+	}{
+		{[]string{"-c", "type hi0"}, "hi0 is a bashy registered command (script)\n", 0},
+		{[]string{"-c", "type -t hi0"}, "file\n", 0},
+		{[]string{"-c", "command -v hi0"}, "hi0\n", 0},
+		{[]string{"-c", "command -V hi0"}, "hi0 is a bashy registered command (script)\n", 0},
+		{[]string{"-c", "type hi0a"}, "hi0a is a bashy registered command (script, alias of hi0)\n", 0},
+		{[]string{"--posix", "-c", "command -v hi0 && type -t hi0"}, "hi0\nfile\n", 0},
+		// The idiom every portable script uses before calling a command.
+		{[]string{"-c", "command -v hi0 >/dev/null 2>&1 && hi0"}, "hi\n", 0},
+		// File questions: no path to print, PATH search stays PATH search.
+		{[]string{"-c", "type -p hi0; echo rc=$?"}, "rc=0\n", 0},
+		{[]string{"-c", "type -P hi0"}, "", 1},
+		{[]string{"-c", "command -v nosuch0"}, "", 1},
+	}
+	for _, tc := range cases {
+		stdout, stderr, code := runBashyStdEnv(bin, env, tc.args...)
+		if code != tc.code || stdout != tc.want {
+			t.Errorf("%v: exit %d (want %d) stdout=%q (want %q) stderr=%q", tc.args, code, tc.code, stdout, tc.want, stderr)
+		}
+	}
+	if stdout, _, code := runBashyStdEnv(bin, append(env, "VSC_PROFILE=cert"), "--posix", "-c", "command -v hi0"); code != 1 || stdout != "" {
+		t.Errorf("cert profile: exit %d stdout=%q, want 1 and nothing", code, stdout)
+	}
+	if _, _, code := runBashyStdEnv(bin, env, "commands", "rm", "hi0"); code != 0 {
+		t.Fatal("rm")
+	}
+	if _, _, code := runBashyStdEnv(bin, env, "-c", "command -v hi0"); code != 1 {
+		t.Errorf("after rm: exit %d, want 1", code)
+	}
+}
+
+// `--view shipped` and `--view registered` are the two sides of one split,
+// in text and JSON: shipped never carries a registered record, registered
+// carries nothing else, the footer counts agree, and the origin view's
+// registered block title is printed once.
+func TestE2ECommandsViewShippedRegistered(t *testing.T) {
+	bin := bashyBinary(t)
+	env := registryEnv(t)
+	type envelope struct {
+		View     string            `json:"view"`
+		Filter   map[string]string `json:"filter"`
+		Commands []struct {
+			Name   string `json:"name"`
+			Origin string `json:"origin"`
+		} `json:"commands"`
+	}
+	decode := func(t *testing.T, view string) envelope {
+		t.Helper()
+		stdout, stderr, code := runBashyStdEnv(bin, env, "commands", "--view", view, "--json")
+		if code != 0 {
+			t.Fatalf("--view %s --json: exit %d: %s", view, code, stderr)
+		}
+		var e envelope
+		if err := json.Unmarshal([]byte(stdout), &e); err != nil {
+			t.Fatalf("--view %s --json: %v", view, err)
+		}
+		return e
+	}
+	// Empty ring first.
+	if stdout, _, code := runBashyStdEnv(bin, env, "commands", "--view", "registered"); code != 0 || !strings.Contains(stdout, "registered — yours (0)") {
+		t.Errorf("empty --view registered: exit %d stdout=%q", code, stdout)
+	}
+	if e := decode(t, "registered"); len(e.Commands) != 0 || e.Filter["shipped"] != "false" {
+		t.Errorf("empty --view registered --json: %d commands, filter %v", len(e.Commands), e.Filter)
+	}
+	for _, n := range []string{"vw1", "vw2"} {
+		if _, stderr, code := runBashyStdEnv(bin, env, "commands", "add", n, "--set", "script=echo "+n, "--set", "effects.0=pure"); code != 0 {
+			t.Fatalf("add %s (exit %d): %s", n, code, stderr)
+		}
+	}
+	shipped, registered := decode(t, "shipped"), decode(t, "registered")
+	if shipped.Filter["shipped"] != "true" || registered.Filter["shipped"] != "false" {
+		t.Errorf("filters: shipped=%v registered=%v", shipped.Filter, registered.Filter)
+	}
+	for _, c := range shipped.Commands {
+		if c.Origin == "registered" {
+			t.Errorf("--view shipped carries registered %q", c.Name)
+		}
+	}
+	var names []string
+	for _, c := range registered.Commands {
+		if c.Origin != "registered" {
+			t.Errorf("--view registered carries shipped %q (%s)", c.Name, c.Origin)
+		}
+		names = append(names, c.Name)
+	}
+	if strings.Join(names, " ") != "vw1 vw2" {
+		t.Errorf("--view registered names = %v", names)
+	}
+	if len(shipped.Commands) == 0 {
+		t.Error("--view shipped is empty")
+	}
+	text, _, _ := runBashyStdEnv(bin, env, "commands", "--view", "shipped")
+	if !strings.Contains(text, "shipped — every command bashy ships") || !strings.Contains(text, "registered — yours, not shipped (2)") || strings.Contains(text, "vw1") {
+		t.Errorf("--view shipped text:\n%s", text)
+	}
+	text, _, _ = runBashyStdEnv(bin, env, "commands", "--view", "registered")
+	if !strings.Contains(text, "(2; ~ = hidden)") || !strings.Contains(text, "vw1 vw2") {
+		t.Errorf("--view registered text:\n%s", text)
+	}
+	text, _, _ = runBashyStdEnv(bin, env, "commands", "--view", "origin")
+	if strings.Contains(text, "registered — registered") || !strings.Contains(text, "  registered — added with bashy commands add (2):") {
+		t.Errorf("--view origin registered block title:\n%s", text)
+	}
+	help, _, _ := runBashyStdEnv(bin, env, "commands", "--help")
+	if !strings.Contains(help, "| shipped | registered") {
+		t.Errorf("--help does not list the views:\n%s", help)
+	}
+}
