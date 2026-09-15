@@ -152,6 +152,14 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapSpawnsProcesses}, Effects: []string{atlas.EffExec},
 	},
+	// awd runs ONE command in another directory and returns — the front-door
+	// form of the shell builtin, and the single "run it over there" mechanism
+	// (no verb grows its own -C/-D flag). Effects are the command's own; exec
+	// is what awd itself contributes. Not shimmed: it is already a builtin.
+	"awd": {
+		Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierUserland,
+		Caps: []string{atlas.CapSpawnsProcesses}, Effects: []string{atlas.EffExec},
+	},
 	// dhnt reads pipeline/run/binding JSON and writes JSON or Workflow YAML to
 	// stdout. No network, no mutation — the local-first contract/compiler, not
 	// a transport.

@@ -92,9 +92,11 @@ change is edited in `../sh`; this repo measures it via `make test-bash`.
     before execution), `verify.go`, `commands.go` + `atlas.go` (the Command
     Atlas lister), `doctor.go` (environment self-diagnostic), `nudge.go`,
     `installagent.go` (`bashy install-agent` — point an agent CLI's shell at
-    bashy), `git.go`/`git_verbs.go`, `self.go`. Adding a verb means touching its
-    file **and** its atlas entry — the coverage tests and the CI e2e dispatch
-    gate both fail otherwise.
+    bashy), `git.go`/`git_verbs.go`, `self.go`, `awd.go` (`bashy awd DIR --
+    CMD` — the front-door form of the `awd` builtin, the ONE "run it over
+    there" mechanism, so no verb grows a `-C`/`-D` flag). Adding a verb means
+    touching its file **and** its atlas entry — the coverage tests and the CI
+    e2e dispatch gate both fail otherwise.
 
     The dispatcher now carries ~90 verbs, so **do not read this list as the
     surface** — `agentos.go`'s `switch` is the dispatch truth and
@@ -433,6 +435,13 @@ fleet / container conformance lanes (`test-bash-chunks`, `test-bash-chunks-fleet
 `test-bash-chunks-container`, `yash-chunks`) that the Makefile has no equivalent
 for. **The file is `dag.md`, lowercase** — `DAG.md` only resolves on a
 case-insensitive filesystem (macOS) and breaks on Linux/CI.
+**Bodies run in the invoking cwd (make parity, Sprint 185)** — `-f` only picks
+the file; there is no `-C`: `bashy awd DIR -- bashy dag …` is the one
+directory mechanism (`awd` is a front-door verb as well as a builtin). A
+` ```bashpp ` body runs as Bash++ and may declare a `~~~py as py … ~~~` fence
+and call `py.main()`; `examples/dag/{mini-swe-agent,nanochat}/dag.md` are the
+worked examples (two real Python repos, one `dag.md` each), gated by
+`make smoke-dag-python` — see `docs/dag.md` §Bash++ bodies.
 Inside DAG target bodies, use `"$BASHY" ...` for recursive bashy calls. Mirroring
 GNU Bash's `BASH`/`BASH_ARGV0` split, `bashy dag` injects `BASHY`/`BASHY_EXE`
 as the resolved executable path and `BASHY_ARGV0` as the raw argv0 string, so

@@ -3,6 +3,7 @@ package agentos
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -74,5 +75,44 @@ func TestDagDispatchDoesNotDoubleReportDagErrors(t *testing.T) {
 	}
 	if strings.Contains(errOut.String(), "bashy dag:") {
 		t.Fatalf("a *dag.Error must not also be printed by the dispatcher:\n%s", errOut.String())
+	}
+}
+
+// A ```bashpp body may declare a `~~~py as py` fence and call py.main(); the
+// value comes back into the shell body. This is the shipped dispatch shape
+// (capacity mounted), in-process, against a temp task file. Bodies run in the
+// invoking cwd, so the test enters the file's directory first.
+func TestDagDispatchBashppPyFence(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not on PATH")
+	}
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("DAG_CACHE_DIR", filepath.Join(dir, ".cache"))
+	md := strings.Join([]string{
+		"## Tasks",
+		"",
+		"### smoke",
+		"",
+		"```bashpp",
+		"~~~py as py",
+		"def main() -> str:",
+		"    return 'launched-from-dispatch'",
+		"~~~",
+		"value := py.main()",
+		`echo "value=$value"`,
+		"```",
+		"",
+	}, "\n")
+	path := filepath.Join(dir, "dag.md")
+	if err := os.WriteFile(path, []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	if code := runDagDispatch([]string{"--file", path, "smoke"}, &out, &errOut); code != 0 {
+		t.Fatalf("dag smoke exit = %d\nstdout=%s\nstderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(out.String()+errOut.String(), "value=launched-from-dispatch") {
+		t.Fatalf("py.main() value did not reach the body\nstdout=%s\nstderr=%s", out.String(), errOut.String())
 	}
 }

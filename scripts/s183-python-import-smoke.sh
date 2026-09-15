@@ -25,8 +25,8 @@ case "$bashy" in
 	"$root"/*) fail "repo-local binary is not installed-product evidence: $bashy" ;;
 esac
 
-nano=${NANOCHAT_ROOT:-/Users/qiangli/projects/poc/nanochat}
-mini=${MINISWEAGENT_ROOT:-/Users/qiangli/projects/poc/mini-swe-agent}
+nano=${NANOCHAT_ROOT:?set NANOCHAT_ROOT to the nanochat checkout}
+mini=${MINISWEAGENT_ROOT:?set MINISWEAGENT_ROOT to the mini-swe-agent checkout}
 for checkout in "$nano" "$mini"; do
 	git -C "$checkout" rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "missing checkout: $checkout"
 done

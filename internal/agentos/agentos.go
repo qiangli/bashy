@@ -143,7 +143,9 @@ var (
 	// Direct-only front doors are callable as `bashy NAME` and belong in the
 	// command catalog, but must not become bare shell shims. In particular,
 	// bare `ping` must continue to resolve to the platform command.
-	directFrontDoorVerbs = []string{"mb", "ping", "out", "full"}
+	// `awd` is a shell builtin inside every script already; the front door only
+	// routes the bare invocation to it, so it must never become a shim either.
+	directFrontDoorVerbs = []string{"mb", "ping", "out", "full", "awd"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
@@ -569,6 +571,11 @@ func dispatch() {
 		dispatchExit(dispatchTranspile(os.Args[2:]))
 	case "full":
 		dispatchExit(dispatchFull(os.Args[2:]))
+	case "awd":
+		// Run one command in another directory and return (the `awd` builtin
+		// from the front door) — the one directory mechanism, so verbs never
+		// grow a -C/-D flag of their own.
+		dispatchExit(dispatchAwd(os.Args[2:]))
 	case "agentic":
 		dispatchExit(dispatchAgentic(os.Args[2:]))
 	case "weave":

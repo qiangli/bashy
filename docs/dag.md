@@ -24,6 +24,71 @@ bashy dag build                  # run "build" and its dependencies
 bashy dag pipeline.md ci         # run a target in a named file
 ```
 
+## Working directory
+
+Bodies run in the **invoking working directory**, exactly as `make` recipes
+do: `-f FILE` (or a positional file) only selects the task file, so a graph
+kept elsewhere — a checked-in example, a shared pipeline — drives the checkout
+you are standing in. `Sources:`/`Generates:`/`Inputs:`/`Artifacts:` and
+`Ensure:` resolve against that same directory; `include:` and `chunks.json`
+stay file-relative because they describe the file, not the run.
+
+There is deliberately **no `-C DIR` flag** — on `dag` or on any other verb.
+`awd DIR -- CMD` ("run one command over there, come back") is the one directory
+mechanism, and it is a front-door verb as well as a shell builtin:
+
+```bash
+bashy awd ~/src/nanochat -- bashy dag -f ~/pipelines/nanochat.dag.md test
+```
+
+The one exception is a positional **directory**: `bashy dag .bashy/deploy
+target` names both the file (that folder's `dag.md`) and the place to run it.
+`--explain` prints the effective directory.
+
+## Bash++ bodies and foreign fences
+
+A body tagged ` ```bashpp ` (alias ` ```bash++ `) runs as Bash++ instead of
+Classic Bash. Untagged and ` ```bash ` bodies are unchanged — Bash++ is opted
+into per target, so no existing task file is reinterpreted.
+
+A Bash++ body may declare a **source fence** in another language and call its
+functions directly. The launcher shape:
+
+````markdown
+### smoke
+Requires: sync
+Env: PYTHONPATH=src
+
+```bashpp
+~~~py as py
+def main() -> str:
+    from minisweagent.agents import get_agent_class
+    return get_agent_class("default").__name__
+~~~
+name := py.main()
+[ "$name" = DefaultAgent ]
+```
+````
+
+- `~~~py` and `~~~python` are the same language (as `~~~ts`/`~~~typescript`
+  are); `as py` is the alias the body calls through, and without an alias the
+  fence's public functions are promoted into the body's namespace (`main()`).
+- The fence's functions run in a persistent worker inside the project's own
+  Python environment — the nearest `.venv` (or `.python-version`, an active
+  `VIRTUAL_ENV`, then `python3` on PATH), discovered from the working
+  directory. `BASHPP_PYTHON` overrides the executable. Nothing is installed:
+  make the venv a `Requires:` dependency (a `sync` target).
+- The fence is a declaration unit: only top-level `def`s; imports go inside
+  the function body. Return values cross by value (str/int/float/bool/bytes/
+  lists/maps); anything else is an opaque handle.
+- Nesting rule: the dag parser closes a body only on a line equal to the
+  **opening** marker, so a `~~~py … ~~~` block nests inside a ` ```bashpp `
+  recipe. A recipe that itself opens with `~~~` cannot contain one.
+
+Worked examples — two real Python repos driven by one `dag.md` each, with a
+fenced-Python `smoke` target — live in [`examples/dag/`](../examples/dag/)
+and are gated by `make smoke-dag-python`.
+
 ## Cross-machine dispatch — `--mesh`
 
 A target carrying a `Host:` line is dispatched to **another machine** under

@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports dist tidy clean help
+.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -310,9 +310,17 @@ smoke-chat:
 	@scripts/chat-smoke.sh $(AGENT)
 
 ## smoke-python-imports: Explicit installed-product smoke for Sprint 183's
-## unchanged nanochat and mini-SWE-agent checkouts. Not part of build/test.
+## unchanged nanochat and mini-SWE-agent checkouts (NANOCHAT_ROOT and
+## MINISWEAGENT_ROOT name them). Not part of build/test.
 smoke-python-imports:
 	@scripts/s183-python-import-smoke.sh
+
+## smoke-dag-python: Installed-product smoke for the examples/dag Python front
+## doors (Sprint 185): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md`
+## against unchanged MINISWEAGENT_ROOT / NANOCHAT_ROOT checkouts, fenced-Python
+## smoke targets included. Not part of build/test.
+smoke-dag-python:
+	@scripts/dag-python-examples-smoke.sh
 
 ## test-bash: Run bash 5.3 native test suite against bashy (with per-test timeout).
 ## Builds only the lean bin/bash drop-in (not the 259MB embed-heavy bin/bashy).
