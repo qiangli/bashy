@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust dist tidy clean help
+.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -338,6 +338,17 @@ smoke-dag-typescript:
 ## of build/test.
 smoke-dag-rust:
 	@scripts/dag-rust-examples-smoke.sh
+
+## smoke-dag-c: Installed-product smoke for the examples/dag C and C++ front doors
+## (Sprint 190): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md`
+## against unchanged FFmpeg / curl / git (C) and tesseract / llama.cpp / CMake
+## (C++) checkouts — pinned and cloned by the gate into <user cache>/bashy/examples
+## unless FFMPEG_ROOT / CURL_ROOT / GIT_ROOT / TESSERACT_ROOT / LLAMACPP_ROOT /
+## CMAKE_ROOT name existing ones — fenced smoke AND launcher targets included
+## (every graph builds its binary; CMAKE_BIN fronts a cmake, else the PATH one,
+## else `bashy cmake`'s provisioned tree). Not part of `test`.
+smoke-dag-c:
+	@scripts/dag-c-examples-smoke.sh
 
 ## test-bash: Run bash 5.3 native test suite against bashy (with per-test timeout).
 ## Builds only the lean bin/bash drop-in (not the 259MB embed-heavy bin/bashy).

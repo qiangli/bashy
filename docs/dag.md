@@ -119,7 +119,19 @@ name := py.main()
   selection. Lowered programs embed the worker artifact and need no compiler
   at execution time. Each call is a fresh native process, so global state does
   not persist. Native fences run with the task's host authority, not in a
-  sandbox.
+  sandbox. The checkout root is an include root for the fence's QUOTED
+  includes only (`#include "include/curl/curlver.h"` reads the project's
+  own header at compile time; `<…>` stays the compiler's, so a project file
+  named `VERSION` does not shadow C++20's `<version>`). In a dag body the
+  worker runs in the invoking cwd, so relative paths are the checkout's, and
+  `popen` on the repo's own built binary (`Requires: build`) is the launcher
+  shape for a C/C++ repo — `c.launch()` / `cxx.launch()` in the examples; a
+  C++ launcher throws on failure and the exception is the call's error. Two
+  rules for the shell half of such a body: `make` is bashy's in-process POSIX
+  make, so a GNU `Makefile` is driven with `env make …` (the documented
+  spawn-through to the PATH make); and the body sees PATH only — bashy's
+  front-door shims (`bashy cmake`) are not applied inside it, so `cmake`
+  must be on PATH.
 - Nesting rule: the dag parser closes a body only on a line equal to the
   **opening** marker, so a `~~~py … ~~~` block nests inside a ` ```bashpp `
   recipe. A recipe that itself opens with `~~~` cannot contain one.
@@ -128,9 +140,14 @@ Worked examples — two Python repos with a fenced-Python `smoke` target, two
 TypeScript repos with a fenced-TypeScript one, one Python + TypeScript repo
 whose `smoke` calls both from a single body, and three Rust repos (uv, Codex,
 Bun) whose `smoke` reads the workspace's coordinates from a `~~~rs` fence and
-whose `run` launches the freshly built CLI from one — live in
+whose `run` launches the freshly built CLI from one, and six C/C++ repos
+(FFmpeg, curl, git; tesseract, llama.cpp, CMake) whose `smoke` reads the
+checkout's coordinates from a `~~~c` / `~~~cxx` fence (the project's own
+self-contained header included at compile time where it has one) and whose
+`run` launches the `configure`+`make` / `cmake --build` / `bootstrap` output
+from one — live in
 [`examples/dag/`](../examples/dag/) and are gated by `make smoke-dag-python`,
-`make smoke-dag-typescript` and `make smoke-dag-rust`.
+`make smoke-dag-typescript`, `make smoke-dag-rust` and `make smoke-dag-c`.
 
 ## Cross-machine dispatch — `--mesh`
 

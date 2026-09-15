@@ -1,8 +1,8 @@
 # `bashy dag` as a project's front door
 
-Eight real repositories, each driven by ONE `dag.md` at its root instead of a
-`Makefile`, a `justfile`, a `cargo`/`npm run`/`pnpm`/`uv run` alias list, or a
-README full of incantations:
+Fourteen real repositories, each driven by ONE `dag.md` at its root instead of
+a `Makefile`, a `justfile`, a `cargo`/`npm run`/`pnpm`/`uv run` alias list, a
+`cmake -B …` walkthrough, or a README full of incantations:
 
 | example | repo | stack | targets |
 |---|---|---|---|
@@ -14,10 +14,18 @@ README full of incantations:
 | [`uv/dag.md`](uv/dag.md) | [astral-sh/uv](https://github.com/astral-sh/uv) | Rust (Cargo workspace, `rust-toolchain.toml`) | `fetch` · `fmt-check` · `clippy` · `build` · `test` · `smoke` · `run` |
 | [`codex/dag.md`](codex/dag.md) | [openai/codex](https://github.com/openai/codex) | Rust (`codex-rs/` Cargo workspace under the repo root, `justfile`) | `fetch` · `fmt-check` · `clippy` · `build` · `test` · `smoke` · `run` |
 | [`bun/dag.md`](bun/dag.md) | [oven-sh/bun](https://github.com/oven-sh/bun) | Bun workspace + Rust (nightly-pinned Cargo workspace) | `install` · `lint` · `typecheck` · `fmt-check-rust` · `rust-check` · `smoke` |
+| [`ffmpeg/dag.md`](ffmpeg/dag.md) | [FFmpeg/FFmpeg](https://github.com/FFmpeg/FFmpeg) | C (`configure` + GNU make, in-tree) | `configure` · `build` · `test` · `smoke` · `run` |
+| [`curl/dag.md`](curl/dag.md) | [curl/curl](https://github.com/curl/curl) | C (CMake) | `configure` · `build` · `test` · `smoke` · `run` |
+| [`git/dag.md`](git/dag.md) | [git/git](https://github.com/git/git) | C (GNU make, in-tree) | `build` · `test` · `smoke` · `run` |
+| [`tesseract/dag.md`](tesseract/dag.md) | [tesseract-ocr/tesseract](https://github.com/tesseract-ocr/tesseract) | C++ (CMake + Leptonica) | `configure` · `build` · `smoke` · `run` |
+| [`llama.cpp/dag.md`](llama.cpp/dag.md) | [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp) | C/C++ (CMake) | `configure` · `build` · `test` · `smoke` · `run` |
+| [`cmake/dag.md`](cmake/dag.md) | [Kitware/CMake](https://github.com/Kitware/CMake) | C++ (`bootstrap` + GNU make, out-of-tree — no cmake needed) | `bootstrap` · `build` · `test` · `smoke` · `run` |
 
 Each target wraps the repo's OWN command (`uv sync`, `pytest`, `ruff`,
 `mkdocs`, `bun test`, `tsgo`, `oxlint`, `pnpm tsgo:core`, `vitest`, `npm run
-typecheck`, `cargo fmt --check`, `cargo build -p uv`, `cargo nextest run`, …) and declares what it depends on (`Requires:`), what it reads
+typecheck`, `cargo fmt --check`, `cargo build -p uv`, `cargo nextest run`,
+`./configure`, `make`, `cmake -B build`, `ctest`, `runtests.pl`, `bootstrap`,
+…) and declares what it depends on (`Requires:`), what it reads
 and produces (`Sources:`/`Generates:` — an unchanged `install` is skipped by
 content hash, not by mtime), and what it is allowed to do (`Effects:`).
 `bashy dag --list` is the help; `bashy dag test` does the right thing in
@@ -136,6 +144,70 @@ runs the Bun-side lanes plus the fence. The three checked-in Rust examples
 are the launch shape for a Cargo repo: `bashy dag run` = fetch → build →
 launch, one file, no wrapper script.
 
+C and C++ — native again, the compiler's this time. A `~~~c` fence (C17)
+or `~~~cxx` / `~~~cpp` fence (C++20) is a declaration unit: its
+non-`static` top-level functions become callables, compiled once by the
+`cc`/`c++` (`clang`/`clang++`) on PATH into a small worker (`BASHPP_CC` /
+`BASHPP_CXX` override), run as a fresh native process per call in the
+invoking directory. The checkout root is an include root for the fence's
+QUOTED includes — `#include "include/curl/curlver.h"`,
+`#include "ggml/include/ggml.h"` — so a self-contained project header is
+read at compile time, while the compiler's own `<…>` search is left alone
+(a project file named `VERSION` must not shadow C++20's `<version>`, and
+does not). No build flags are inferred and nothing is linked, so a fence
+that needs a generated header (FFmpeg's `libavutil/ffversion.h`) sits in a
+target that `Requires: build`. Each C/C++ example carries the same two
+fence targets as the Rust ones. `smoke` needs no build: `c.ffmpeg()` /
+`c.curl()` / `c.git()` and `cxx.tesseract()` / `cxx.llama()` /
+`cxx.cmake()` read the checkout's own coordinates (`RELEASE`, `curlver.h`'s
+macros, `GIT-VERSION-GEN`, `VERSION`, `LLAMA_VERSION_*`,
+`CMakeVersion.cmake`) and the shell body cross-checks the answer with
+builtins alone. `run` is the launcher proper: after the repo's own
+`configure`/`make`, `cmake --build`, or `bootstrap`, `launch()` runs the
+built binary through `popen` and hands its `--version` line back — a
+C++ launcher throws on failure and the exception is the call's error:
+
+````markdown
+### run
+Requires: build
+
+```bashpp
+~~~c as c
+#include <stdio.h>
+#include <string.h>
+
+const char* launch(void) {
+	static char line[512];
+	FILE* p = popen("build/src/curl --version", "r");
+	if (!p) return "popen: build/src/curl";
+	if (!fgets(line, sizeof line, p)) line[0] = 0;
+	if (pclose(p) != 0) return "build/src/curl --version: non-zero exit";
+	line[strcspn(line, "\n")] = 0;
+	return line;
+}
+~~~
+got := c.launch()
+case "$got" in "curl $version "*) ;; *) exit 1 ;; esac
+```
+````
+
+Two things a dag body sees differently from a terminal, both recorded in
+the examples that hit them. `make` inside a body is bashy's in-process
+POSIX make — a GNU `Makefile` (git, FFmpeg, CMake's generated one) needs
+`env make …`, the documented spawn-through that runs the `make` on PATH.
+And the body sees PATH only: bashy's front-door shims (`bashy cmake`, the
+self-provisioning CMake) are not applied inside it, so `cmake` must be on
+PATH — the gate fronts it with the provisioned tree's `bin/` when the host
+has none. Two repo-side traps the launchers caught: curl's CMake requires
+libpsl unless told otherwise (`CMAKE_OPTS=-DCURL_USE_LIBPSL=OFF`, curl's
+own switch), and tesseract adds Leptonica's include directory before its
+generated `build/include`, so on a host with a packaged tesseract installed
+the build compiles THAT package's `version.h` and the binary reports the
+wrong version — `CMAKE_INCLUDE_DIRECTORIES_BEFORE=ON` (in the example's
+default `CMAKE_OPTS`) puts the checkout's header first. The six checked-in
+C/C++ examples are the launch shape for a native repo: `bashy dag run` =
+configure → build → launch, one file, no wrapper script.
+
 ## Running them against a checkout
 
 The files are written to live at each repo's root (copy one there and run
@@ -152,7 +224,7 @@ only picks the file. That is why there is no `-C DIR` flag on `dag` (or on any
 other verb): `awd DIR -- CMD` is the one directory mechanism, and it works for
 every command.
 
-Two installed-product gates run the graphs this way against unchanged
+Four installed-product gates run the graphs this way against unchanged
 checkouts and assert the JSON envelope, the fence results and a
 byte-identical `git status` before and after:
 
@@ -172,3 +244,13 @@ byte-identical `git status` before and after:
   names a toolchain `bin/` to front PATH with. `clippy`, Codex `test`
   (cargo-nextest), Bun `typecheck` and `rust-check` are documented targets,
   not gate targets.
+- `make smoke-dag-c` (`scripts/dag-c-examples-smoke.sh`) — `FFMPEG_ROOT`,
+  `CURL_ROOT`, `GIT_ROOT`, `TESSERACT_ROOT`, `LLAMACPP_ROOT`, `CMAKE_ROOT`;
+  needs `cc`/`c++`, GNU `make`, `git`, `perl`, `pkg-config` with Leptonica,
+  and a `cmake` (`CMAKE_BIN` fronts one; with none on PATH the gate uses
+  `bashy cmake`'s provisioned tree). Every graph builds its binary (minutes
+  cold, seconds warm; all products gitignored) so the six `run` launchers
+  are real, and runs one light test per repo (curl `runtests.pl 1 2 3`, git
+  `t0000-basic.sh`, FFmpeg `fate-source`, llama.cpp `test-arg-parser`,
+  CMake `CMakeLib.testArgumentParser`). The full suites are documented
+  targets, not gate targets.

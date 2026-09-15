@@ -439,18 +439,27 @@ case-insensitive filesystem (macOS) and breaks on Linux/CI.
 the file; there is no `-C`: `bashy awd DIR -- bashy dag …` is the one
 directory mechanism (`awd` is a front-door verb as well as a builtin). A
 ` ```bashpp ` body runs as Bash++ and may declare a `~~~py as py … ~~~`,
-`~~~ts as ts … ~~~` or `~~~rs as rs … ~~~` fence and call `py.main()` /
-`ts.launch()` / `rs.launch()`;
+`~~~ts as ts … ~~~`, `~~~rs as rs … ~~~`, `~~~c as c … ~~~` or
+`~~~cxx as cxx … ~~~` fence and call `py.main()` / `ts.launch()` /
+`rs.launch()` / `c.launch()` / `cxx.launch()`;
 `examples/dag/{mini-swe-agent,nanochat}/dag.md` (Python, `make
 smoke-dag-python`), `examples/dag/{opencode,openclaw,hermes-agent}/dag.md`
 (TypeScript — Hermes has both fences in one body; `make smoke-dag-typescript`,
-Sprint 186) and `examples/dag/{uv,codex,bun}/dag.md` (Rust — `smoke` reads the
+Sprint 186), `examples/dag/{uv,codex,bun}/dag.md` (Rust — `smoke` reads the
 workspace from a fence, `run` launches the `cargo build` output from one;
-`make smoke-dag-rust`, Sprint 188) are the worked examples, one real repo
-each — see `docs/dag.md` §Bash++ bodies. A dag body must not lean on
-bashy's `sed`/`grep`/`cut`/`sort`/`tr` for a check: they refuse the macOS
-default `LANG=en_US.UTF-8` (coreutils' ctype/collate locale gate) — the
-examples cross-check with shell builtins only. The TypeScript runtime is chosen per repo in the target's
+`make smoke-dag-rust`, Sprint 188) and
+`examples/dag/{ffmpeg,curl,git,tesseract,llama.cpp,cmake}/dag.md` (C and
+C++ — `smoke` includes the checkout's own self-contained header at compile
+time, `run` launches the `configure`+`make` / `cmake --build` / `bootstrap`
+output through `popen`; `make smoke-dag-c`, Sprint 190) are the worked
+examples, one real repo each — see `docs/dag.md` §Bash++ bodies. A dag body
+must not lean on bashy's `sed`/`grep`/`cut`/`sort`/`tr` for a check: they
+refuse the macOS default `LANG=en_US.UTF-8` (coreutils' ctype/collate locale
+gate) — the examples cross-check with shell builtins only. Two more
+body-vs-terminal differences (Sprint 190): `make` in a body is bashy's
+in-process POSIX make, so a GNU `Makefile` is driven with `env make …`; and
+the body sees PATH only — the front-door shims (`bashy cmake`) are not
+applied inside it, so a body's `cmake` must be on PATH. The TypeScript runtime is chosen per repo in the target's
 `Env:` (`BASHPP_TYPESCRIPT_RUNTIME=bun` where the repo's own imports need Bun).
 Inside DAG target bodies, use `"$BASHY" ...` for recursive bashy calls. Mirroring
 GNU Bash's `BASH`/`BASH_ARGV0` split, `bashy dag` injects `BASHY`/`BASHY_EXE`
