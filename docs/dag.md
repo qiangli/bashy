@@ -71,7 +71,7 @@ name := py.main()
 ````
 
 - `~~~py` and `~~~python` are the same language (as `~~~ts`/`~~~typescript`
-  are); `as py` is the alias the body calls through, and without an alias the
+  and `~~~rs`/`~~~rust` are); `as py` is the alias the body calls through, and without an alias the
   fence's public functions are promoted into the body's namespace (`main()`).
 - The fence's functions run in a persistent worker inside the project's own
   Python environment — the nearest `.venv` (or `.python-version`, an active
@@ -91,6 +91,18 @@ name := py.main()
   explicitly, the spelling Node's native type stripping requires. Returned
   promises are awaited. One body may declare a `~~~py` fence AND a `~~~ts`
   fence and call both.
+- A `~~~rust` fence exports top-level `pub fn` declarations. Bash++ invokes a
+  native worker compiled by the nearest project-selected `rustc` (or
+  `BASHPP_RUSTC`); `Cargo.toml`, `Cargo.lock`, and `rust-toolchain*` participate
+  in environment identity, but Cargo is not run and dependencies are not
+  installed implicitly. Parameters may be booleans, Rust integer/float
+  primitives, `String`, `&str`, or `Vec<u8>`; results may use the owned forms,
+  primitives, `Vec<u8>`, `()`, or `Result<T, E>` where `E: Display`. Return a
+  `String`, not a borrowed `&str`. Function stdout/stderr and Rust errors cross
+  the same Bash++ call boundary as other fences. The compiled artifact is
+  embedded when Bash++ is lowered, so the resulting native program does not
+  need `rustc` at run time. Rust code is native code with the task's host
+  permissions; a fence is not a security sandbox.
 - Nesting rule: the dag parser closes a body only on a line equal to the
   **opening** marker, so a `~~~py … ~~~` block nests inside a ` ```bashpp `
   recipe. A recipe that itself opens with `~~~` cannot contain one.
