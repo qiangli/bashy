@@ -47,14 +47,11 @@ print(json.dumps({"fixture":"nanochat","python":os.path.realpath(sys.executable)
 	>"$tmp/nano.environment.json"
 
 printf '%s\n' \
-	'import "fmt"' \
-	'import "strings"' \
 	'import python "nanochat.execution" as nano' \
 	'result := nano.execute_code("print(6 * 7)", timeout: 5)' \
 	'success := result.success' \
-	'raw := result.stdout' \
-	'stdout := strings.TrimSpace(raw)' \
-	'fmt.Println(success, stdout)' >"$tmp/nano.bpp"
+	'stdout := result.stdout' \
+	'printf "%s %s" "$success" "$stdout"' >"$tmp/nano.bpp"
 PYTHONPATH="$nano" BASHPP_PYTHON="$nano_python" "$bashy" --bashpp "$tmp/nano.bpp" >"$tmp/nano.out"
 [ "$(cat "$tmp/nano.out")" = "true 42" ] || fail "nanochat direct-import probe: $(cat "$tmp/nano.out")"
 
@@ -63,11 +60,10 @@ command -v uv >/dev/null 2>&1 || fail "uv unavailable for mini-SWE-agent"
 print(json.dumps({"fixture":"mini-swe-agent","python":os.path.realpath(sys.executable),"python_version":platform.python_version(),"package_version":m.version("mini-swe-agent"),"module":os.path.realpath(minisweagent.__file__)}))') \
 	>"$tmp/mini.environment.json"
 printf '%s\n' \
-	'import "fmt"' \
 	'import python "minisweagent.agents" as agents' \
 	'agentType := agents.get_agent_class("default")' \
 	'name := agentType.__name__' \
-	'fmt.Println(name)' >"$tmp/mini.bpp"
+	'echo "$name"' >"$tmp/mini.bpp"
 (cd "$mini" && uv run --no-sync -- "$bashy" --bashpp "$tmp/mini.bpp") >"$tmp/mini.out"
 [ "$(cat "$tmp/mini.out")" = DefaultAgent ] || fail "mini-SWE-agent direct-import probe: $(cat "$tmp/mini.out")"
 
