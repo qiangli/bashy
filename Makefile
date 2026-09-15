@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go dist tidy clean help
+.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -145,6 +145,21 @@ build-fips:
 ## binaries missing the core AgentOS command surface.
 install: build
 	go run ./tools/installbashy -bash $(BASHY) -bashy $(BIN)
+
+## test-awd-installed-stress: Install to a disposable bin, then repeat the
+## front-door concurrent awd regression.  Race instrumentation is used on Go
+## targets that support it; other targets still run the installed stress loop.
+AWD_STRESS_RUNS ?= 25
+test-awd-installed-stress:
+	@set -eu; \
+	install_dir=$$(mktemp -d); \
+	trap 'rm -rf "$$install_dir"' EXIT HUP INT TERM; \
+	DHNT_BIN_DIR="$$install_dir" $(MAKE) --no-print-directory install; \
+	race=''; case "$$(go env GOOS)/$$(go env GOARCH)" in \
+	  linux/amd64|linux/arm64|linux/ppc64le|darwin/amd64|darwin/arm64|freebsd/amd64|windows/amd64) race='-race' ;; \
+	esac; \
+	BASHY_E2E_BIN="$$install_dir/bashy" go test $$race -tags e2e \
+	  -run '^TestAwdE2EConcurrentFrontDoorIsolation$$' -count=$(AWD_STRESS_RUNS) ./internal/agentos
 
 ## test: Run all Go tests
 # test-meet-spa-fresh(-regression) run FIRST, before any recipe that could
