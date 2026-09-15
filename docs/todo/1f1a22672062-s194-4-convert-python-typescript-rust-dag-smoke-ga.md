@@ -3,9 +3,11 @@ id: 1f1a22672062
 kind: task
 title: S194.4 convert Python TypeScript Rust dag smoke gates to pinned cache clones
 seq: 291
-status: todo
+status: assigned
 priority: p1
 created: 2026-09-15T12:05:21.497402Z
+weave: 22
+assignee: qiangli
 sprint: 194
 ---
 
