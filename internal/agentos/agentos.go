@@ -1845,9 +1845,8 @@ func WireSessionExec(initialDryRun bool) func([]interp.RunnerOption, bool, []str
 // output belongs only in wireExec below.
 func observingExecMiddlewares() []func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 	mws := []func(interp.ExecHandlerFunc) interp.ExecHandlerFunc{telemetry.ExecMiddleware}
-	if aw := newAuditWriter(); aw != nil {
-		mws = append(mws, auditHandler(aw, auditActor(), auditHost()))
-	}
+	aw := newAuditWriter()
+	mws = append(mws, auditHandler(aw, auditActor(), auditHost()))
 	if execHistEnabled() {
 		mws = append(mws, execHistHandler(newRecorder()))
 	}

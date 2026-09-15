@@ -13,6 +13,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 
 	"github.com/qiangli/coreutils/pkg/atlas"
+	"github.com/qiangli/coreutils/pkg/policy/advice"
 	"github.com/qiangli/coreutils/pkg/policy/audit"
 )
 
@@ -85,27 +86,44 @@ func auditHandler(w *audit.Writer, actor audit.Actor, host string) func(interp.E
 				return next(ctx, args)
 			}
 			start := time.Now()
-			err := next(ctx, args)
-			status, _ := exitStatusOf(err)
-
-			argv, masked := audit.Redact(args)
-			rec := audit.Record{
-				Time:       start.UTC().Format(time.RFC3339Nano),
-				Actor:      actor,
-				Argv:       argv,
-				Binary:     baseName(args[0]),
-				Cwd:        safeHandlerDir(ctx),
-				Effects:    effectsFor(args[0]),
-				Host:       host,
-				Decision:   "allow", // allow-only until the policy engine ships
-				Exit:       status,
-				DurationMs: time.Since(start).Milliseconds(),
-				Redactions: masked,
+			
+			effects := effectsFor(args[0])
+			decision := "allow"
+			var err error
+			
+			if cap, ok := advice.CapFrom(ctx); ok {
+				if len(cap.Exceeded(effects)) > 0 {
+					decision = "deny"
+				}
 			}
-			// Best-effort: a failed append must not break the command. It is
-			// still notable — the record simply does not land, and Verify will
-			// show a shorter chain, not a corrupt one.
-			_, _ = w.Append(rec)
+			
+			if decision == "deny" {
+				err = interp.ExitStatus(1)
+			} else {
+				err = next(ctx, args)
+			}
+
+			if w != nil {
+				status, _ := exitStatusOf(err)
+				argv, masked := audit.Redact(args)
+				rec := audit.Record{
+					Time:       start.UTC().Format(time.RFC3339Nano),
+					Actor:      actor,
+					Argv:       argv,
+					Binary:     baseName(args[0]),
+					Cwd:        safeHandlerDir(ctx),
+					Effects:    effects,
+					Host:       host,
+					Decision:   decision,
+					Exit:       status,
+					DurationMs: time.Since(start).Milliseconds(),
+					Redactions: masked,
+				}
+				// Best-effort: a failed append must not break the command. It is
+				// still notable — the record simply does not land, and Verify will
+				// show a shorter chain, not a corrupt one.
+				_, _ = w.Append(rec)
+			}
 			return err
 		}
 	}
