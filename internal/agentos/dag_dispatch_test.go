@@ -116,3 +116,32 @@ func TestDagDispatchBashppPyFence(t *testing.T) {
 		t.Fatalf("py.main() value did not reach the body\nstdout=%s\nstderr=%s", out.String(), errOut.String())
 	}
 }
+
+func TestDagDispatchBashppNativeFences(t *testing.T) {
+	if _, err := exec.LookPath("clang"); err != nil {
+		t.Skip("clang not on PATH")
+	}
+	if _, err := exec.LookPath("clang++"); err != nil {
+		t.Skip("clang++ not on PATH")
+	}
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("DAG_CACHE_DIR", filepath.Join(dir, ".cache"))
+	md := strings.Join([]string{
+		"## Tasks", "", "### smoke", "", "```bashpp",
+		"~~~c as cmod", "long long add(long long a, long long b) { return a+b; }", "~~~",
+		"~~~cxx as cpp", "#include <string>", `std::string greet(const std::string& name) { return "hello "+name; }`, "~~~",
+		"answer := cmod.add(20, 22)", "message := cpp.greet(world)", `echo "$answer:$message"`, "```", "",
+	}, "\n")
+	path := filepath.Join(dir, "dag.md")
+	if err := os.WriteFile(path, []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	if code := runDagDispatch([]string{"--file", path, "smoke"}, &out, &errOut); code != 0 {
+		t.Fatalf("dag native smoke exit = %d\nstdout=%s\nstderr=%s", code, out.String(), errOut.String())
+	}
+	if !strings.Contains(out.String()+errOut.String(), "42:hello world") {
+		t.Fatalf("native values did not reach the body\nstdout=%s\nstderr=%s", out.String(), errOut.String())
+	}
+}

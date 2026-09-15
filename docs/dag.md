@@ -110,6 +110,16 @@ name := py.main()
   to; the repo's `cargo …` targets still need the toolchain the workspace
   pins (rustup's proxies pick it up; a distro `cargo` below the MSRV refuses
   the build, which is the repo's rule, not the fence's).
+- `~~~c` and `~~~cpp` (alias `~~~cxx`) export non-`static`, top-level
+  functions and compile them once with Clang C17 or C++20. The bounded bridge
+  accepts scalar integers/floats/bools and C strings or `std::string`; C++
+  namespace members are not exported, while overloads, methods, templates,
+  variadics, aggregates, and arbitrary link
+  dependencies are rejected. `BASHPP_CC` and `BASHPP_CXX` override compiler
+  selection. Lowered programs embed the worker artifact and need no compiler
+  at execution time. Each call is a fresh native process, so global state does
+  not persist. Native fences run with the task's host authority, not in a
+  sandbox.
 - Nesting rule: the dag parser closes a body only on a line equal to the
   **opening** marker, so a `~~~py … ~~~` block nests inside a ` ```bashpp `
   recipe. A recipe that itself opens with `~~~` cannot contain one.
