@@ -3,9 +3,11 @@ id: 780944a84d33
 kind: task
 title: S194.5 add a pinned mise Rust-fence dag.md example
 seq: 292
-status: todo
+status: assigned
 priority: p1
 created: 2026-09-15T12:05:21.525244Z
+weave: 24
+assignee: qiangli
 sprint: 194
 ---
 
