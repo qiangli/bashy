@@ -153,9 +153,11 @@ whose `run` launches the freshly built CLI from one, and six C/C++ repos
 checkout's coordinates from a `~~~c` / `~~~cxx` fence (the project's own
 self-contained header included at compile time where it has one) and whose
 `run` launches the `configure`+`make` / `cmake --build` / `bootstrap` output
-from one — live in
+from one, and three Go repos (gh, Hugo, Caddy) whose fence imports an
+unchanged checkout package and whose `run` launches the `go build` output — live in
 [`examples/dag/`](../examples/dag/) and are gated by `make smoke-dag-python`,
-`make smoke-dag-typescript`, `make smoke-dag-rust` and `make smoke-dag-c`.
+`make smoke-dag-typescript`, `make smoke-dag-rust`, `make smoke-dag-c`, and
+the self-provisioning `make smoke-dag-go`.
 
 ## Cross-machine dispatch — `--mesh`
 

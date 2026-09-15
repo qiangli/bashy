@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c dist tidy clean help
+.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -349,6 +349,14 @@ smoke-dag-rust:
 ## else `bashy cmake`'s provisioned tree). Not part of `test`.
 smoke-dag-c:
 	@scripts/dag-c-examples-smoke.sh
+
+## smoke-dag-go: Installed-product smoke for gh, Hugo, and Caddy Go front doors
+## (Sprint 192). Pinned checkouts are cloned into <user cache>/bashy/examples
+## unless GH_ROOT / HUGO_ROOT / CADDY_ROOT name existing ones. Each graph runs
+## a focused test, imports the checkout from ~~~go, builds, launches, and leaves
+## git status unchanged. Not part of `test`.
+smoke-dag-go:
+	@scripts/dag-go-examples-smoke.sh
 
 ## test-bash: Run bash 5.3 native test suite against bashy (with per-test timeout).
 ## Builds only the lean bin/bash drop-in (not the 259MB embed-heavy bin/bashy).

@@ -3,9 +3,10 @@ id: e574bec85666
 kind: task
 title: S192.2 Go-repository dag front doors and self-provisioning gate
 seq: 295
-status: todo
+status: assigned
 priority: p0
 created: 2026-09-15T12:14:17.226921Z
+assignee: codex-gpt-5.5
 sprint: 192
 ---
 

@@ -452,8 +452,10 @@ workspace from a fence, `run` launches the `cargo build` output from one;
 `examples/dag/{ffmpeg,curl,git,tesseract,llama.cpp,cmake}/dag.md` (C and
 C++ — `smoke` includes the checkout's own self-contained header at compile
 time, `run` launches the `configure`+`make` / `cmake --build` / `bootstrap`
-output through `popen`; `make smoke-dag-c`, Sprint 190) are the worked
-examples, one real repo each — see `docs/dag.md` §Bash++ bodies. A dag body
+output through `popen`; `make smoke-dag-c`, Sprint 190), and
+`examples/dag/{gh,hugo,caddy}/dag.md` (Go — imports each checkout's package,
+then launches its `go build` output; `make smoke-dag-go`, Sprint 192) are the
+worked examples, one real repo each — see `docs/dag.md` §Bash++ bodies. A dag body
 must not lean on bashy's `sed`/`grep`/`cut`/`sort`/`tr` for a check: they
 refuse the macOS default `LANG=en_US.UTF-8` (coreutils' ctype/collate locale
 gate) — the examples cross-check with shell builtins only. Two more

@@ -187,6 +187,11 @@ new `bin/bashy` exists, use the repo-local bootstrap launcher:
 make dag ARGS=build   # equivalent bootstrap path if you prefer make
 ```
 
+Real-repository DAG examples live under `examples/dag/`. The Go front doors
+for GitHub CLI, Hugo, and Caddy use `~~~go as go` to import the unchanged
+checkout, build its CLI, and launch that output; `make smoke-dag-go` provisions
+pinned checkouts into bashy's user cache and gates the installed product.
+
 ## Usage
 
 ```sh
