@@ -50,7 +50,7 @@ printf '%s\n' \
 	'import "fmt"' \
 	'import "strings"' \
 	'import python "nanochat.execution" as nano' \
-	'result := nano.execute_code("print(6 * 7)", timeout: 5.0)' \
+	'result := nano.execute_code("print(6 * 7)", timeout: 5)' \
 	'fmt.Println(result.success, strings.TrimSpace(result.stdout))' >"$tmp/nano.bpp"
 PYTHONPATH="$nano" BASHPP_PYTHON="$nano_python" "$bashy" --bashpp "$tmp/nano.bpp" >"$tmp/nano.out"
 [ "$(cat "$tmp/nano.out")" = "true 42" ] || fail "nanochat direct-import probe: $(cat "$tmp/nano.out")"
