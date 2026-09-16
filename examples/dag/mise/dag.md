@@ -103,7 +103,8 @@ echo "smoke: $got"
 ### run
 Launch the debug CLI from a Rust fence after the upstream build task. The
 fence returns its `--version` line and the shell checks it against the
-checkout's declared version.
+checkout's declared version. Mise prints the version first, without a program
+name; debug builds append `-DEBUG` before the platform and build date.
 Requires: build
 Effects: read
 
@@ -123,9 +124,10 @@ version=
 while IFS= read -r line; do
 	case "$line" in 'version = "'*) version=${line#*\"}; version=${version%\"}; break ;; esac
 done <Cargo.toml
-case "$got" in
-	"mise $version"*) ;;
-	*) echo "run: rs.launch() -> '$got', want 'mise $version…'" >&2; exit 1 ;;
+[ -n "$version" ] || { echo "run: Cargo.toml has no version" >&2; exit 1; }
+case "${got%% *}" in
+	"$version"|"$version-DEBUG") ;;
+	*) echo "run: rs.launch() -> '$got', want version '$version' or '$version-DEBUG'" >&2; exit 1 ;;
 esac
-echo "run: $got"
+echo "run: mise $got"
 ```

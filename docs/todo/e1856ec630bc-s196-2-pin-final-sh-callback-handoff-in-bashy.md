@@ -11,3 +11,13 @@ sprint: 196
 ---
 
 Keep .sibling-pins sh at the final published Sprint 196 sh head, rerun warm zero-root example gates, and publish Bashy before umbrella integration.
+
+The pinned mise CLI emits `<version>[-DEBUG] <platform> (<date>)`, without
+its program name. Corrected the example's launcher assertion to compare the
+entire first token with the manifest version or that exact version plus
+`-DEBUG`; its reporting label remains `run: mise ...`. Wrong versions,
+extra suffixes, prefixed names and empty output still fail. Checked the
+actual built native CLI and release/debug positive and negative cases.
+The retained integration attempt passed mise build and all 4072 unit tests
+plus one additional test before failing the old launcher assertion; this
+partial result is not a passing cold gate. Parent-owned full gates remain.
