@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -102,10 +103,15 @@ func TestAwdE2EConcurrentFrontDoorIsolation(t *testing.T) {
 			src: strings.Join([]string{
 				"cd " + shellQuote(root),
 				"pushd " + shellQuote(parent) + " >/dev/null",
-				"func leftTask() { " + awd(left, "left") + "; }",
-				"func rightTask() { " + awd(right, "right") + "; }",
-				"go leftTask()",
-				"go rightTask()",
+				"done := make(chan bool)",
+				"func leftTask(done) { " + awd(left, "left") + "; done <- true; }",
+				"func rightTask(done) { " + awd(right, "right") + "; done <- true; }",
+				"go leftTask(done)",
+				"go rightTask(done)",
+				// EOF cancels unfinished tasks. Receive completion before
+				// checking parent state and the external report files.
+				"firstDone := <-done",
+				"secondDone := <-done",
 				parentState,
 			}, "\n"),
 		},
@@ -176,5 +182,45 @@ func TestAwdE2EDrivesDagPyFenceInAnotherDirectory(t *testing.T) {
 	out, stderr, code := runBashyStdEnv(bin, env, "awd", project, "--", bin, "dag", "-f", task, "smoke")
 	if code != 0 || !strings.Contains(out, "smoke=here:"+filepath.Base(project)) {
 		t.Fatalf("awd dag py-fence: code=%d out=%q stderr=%q", code, out, stderr)
+	}
+}
+
+// Keep task redirection on the installed product path: the product's dry-run
+// policy must not turn ordinary awd branch writes into forbidden custom opens.
+func TestAwdE2EConcurrentTaskRedirection(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("native cooperative task file opens are Unix-only")
+	}
+	bin := bashyBinary(t)
+	root := t.TempDir()
+	for _, name := range []string{"parent", "left", "right"} {
+		if err := os.Mkdir(filepath.Join(root, name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	parent := filepath.Join(root, "parent")
+	source := strings.Join([]string{
+		"cd " + shellQuote(root),
+		"pushd " + shellQuote(parent) + " >/dev/null",
+		`observe() { printf '%s|%s|%s|%s\n' "$1" "$PWD" "$OLDPWD" "${DIRSTACK[*]}" > state || return $?; sleep 0.02; }`,
+		"done := make(chan bool)",
+		"func leftTask(done) { awd " + shellQuote(filepath.Join(root, "left")) + " observe left || return $?; done <- true; }",
+		"func rightTask(done) { awd " + shellQuote(filepath.Join(root, "right")) + " observe right || return $?; done <- true; }",
+		"go leftTask(done)", "go rightTask(done)",
+		"firstDone := <-done", "secondDone := <-done",
+		`printf 'parent|%s|%s|%s\n' "$PWD" "$OLDPWD" "${DIRSTACK[*]}"`,
+	}, "\n")
+	out, stderr, code := runBashyStdEnv(bin, []string{"BASHY_HINTS=off"}, "--bashpp", "-c", source)
+	want := "parent|" + parent + "|" + root + "|" + parent + " " + root + "\n"
+	if code != 0 || out != want || stderr != "" {
+		t.Fatalf("code=%d out=%q want=%q stderr=%q", code, out, want, stderr)
+	}
+	for _, name := range []string{"left", "right"} {
+		dir := filepath.Join(root, name)
+		data, err := os.ReadFile(filepath.Join(dir, "state"))
+		want := name + "|" + dir + "|" + parent + "|" + dir + " " + root + "\n"
+		if err != nil || string(data) != want {
+			t.Fatalf("%s report=%q err=%v want=%q", name, data, err, want)
+		}
 	}
 }

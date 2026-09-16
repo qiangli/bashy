@@ -1914,10 +1914,11 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	initial := initialDryRun
 	opts = append(opts, interp.EnableDryRunOption(initial))
 	r := newReporterMode(stdout, agentModeForEnv(env))
-	// OpenHandler catches `>` truncations (records, never writes); the exec
-	// handler prints+skips external commands and reports rm destructions. Both
-	// no-op when HandlerContext.DryRun() is false.
-	opts = append(opts, interp.OpenHandler(dryRunOpenHandler(r)))
+	// The dry-run-only open override catches `>` truncations (records, never
+	// writes). When dryrun is off, leave native task/FIFO opens intact. The
+	// override remains installed for runtime `set -o dryrun` toggles; the exec
+	// handler separately prints+skips external commands and rm destructions.
+	opts = append(opts, interp.DryRunOpenHandler(dryRunOpenHandler(r)))
 
 	// The nudge subsystem (non-intrusive). Two halves sharing one session memory:
 	//   - advisor (reactive): OUTERMOST ExecHandler middleware; on a command's
