@@ -43,9 +43,13 @@ func TestGoSourceExecutableEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	moduleCache, err := exec.CommandContext(ctx, sdk, "env", "GOMODCACHE").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// The source importer needs an available build cache. Configure it equally
 	// for both executables; the variables under test remain absent or supplied.
-	baseEnv := []string{"HOME=" + dir, "GOCACHE=" + strings.TrimSpace(string(cache))}
+	baseEnv := []string{"HOME=" + dir, "GOCACHE=" + strings.TrimSpace(string(cache)), "GOMODCACHE=" + strings.TrimSpace(string(moduleCache)), "GOTOOLCHAIN=local"}
 	for name, env := range map[string][]string{
 		"absent":   {"LAST=last", "BAR=original-bar", "FIRST=first"},
 		"explicit": {"LAST=last", "BASH=caller-bash", "SHELL=caller-shell", "SHLVL=17", "UID=caller-uid", "EUID=caller-euid", "IFS=caller-ifs", "OPTIND=caller-optind", "BASH_VERSION=caller-version", "BASHY_AGENT_MANIFEST=caller-manifest", "FIRST=first"},

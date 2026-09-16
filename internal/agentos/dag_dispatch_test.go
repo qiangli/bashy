@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -83,6 +84,9 @@ func TestDagDispatchDoesNotDoubleReportDagErrors(t *testing.T) {
 // (capacity mounted), in-process, against a temp task file. Bodies run in the
 // invoking cwd, so the test enters the file's directory first.
 func TestDagDispatchBashppPyFence(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Bash++ foreign Python fences are not supported on Windows")
+	}
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 not on PATH")
 	}
@@ -118,6 +122,9 @@ func TestDagDispatchBashppPyFence(t *testing.T) {
 }
 
 func TestDagDispatchBashppNativeFences(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Bash++ C/C++ native fences require a Unix-like compiler environment")
+	}
 	if _, err := exec.LookPath("clang"); err != nil {
 		t.Skip("clang not on PATH")
 	}

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -318,7 +319,14 @@ func TestAtlasViewExternal(t *testing.T) {
 		}
 		names[r.Name] = true
 	}
-	for _, want := range []string{"m4", "git", "kubectl", "go", "doctl", "posix-providers"} {
+	wantExternal := []string{"git", "kubectl", "go", "doctl"}
+	wantDebt := "pure-Go debt: 10 POSIX-required"
+	if runtime.GOOS == "windows" {
+		wantDebt = "pure-Go debt: 0 POSIX-required"
+	} else {
+		wantExternal = append(wantExternal, "m4", "posix-providers")
+	}
+	for _, want := range wantExternal {
 		if !names[want] {
 			t.Errorf("external view missing %q", want)
 		}
@@ -329,7 +337,7 @@ func TestAtlasViewExternal(t *testing.T) {
 		}
 	}
 	text, code := captureCommands(t, "--view", "external")
-	if code != 0 || !strings.Contains(text, "pure-Go debt: 10 POSIX-required") {
+	if code != 0 || !strings.Contains(text, wantDebt) {
 		t.Errorf("text view must count the POSIX provider debt:\n%s", text)
 	}
 }
