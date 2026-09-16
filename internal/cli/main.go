@@ -1185,9 +1185,38 @@ func runAll() error {
 	if startupGoSource.Enabled {
 		return runGoSourceInvocation()
 	}
+	var invocationStdin io.Reader = os.Stdin
+	if startupBashPP.Enabled && !startupGoSourceSel.LanguageSeen &&
+		!shouldRunInteractive(term.IsTerminal(int(os.Stdin.Fd()))) {
+		// Directories retain the shell's ordinary error path; only explicit
+		// --source=go selects a package directory.
+		regularInput := filename == ""
+		if info, statErr := os.Stat(filename); statErr == nil {
+			regularInput = info.Mode().IsRegular()
+		}
+		if regularInput {
+			in, replay, selected, readErr := collectPackageGoSource(filename, *command, invocationStdin)
+			if readErr != nil {
+				return readErr
+			}
+			invocationStdin = replay
+			if selected {
+				res, err := ResolveGoSource(GoSourceSelection{Language: "go", LanguageSeen: true}, GoSourceContext{
+					Binary: binary, BashPP: startupBashPP.Enabled,
+					Posix:      commandLinePosixMode() || effectiveStartupPosix(),
+					HasOperand: filename != "", ShellOnlyMode: startupShellOnlyMode(),
+				})
+				if err != nil {
+					return goSourceFailure(err)
+				}
+				startupGoSource = res
+				return runGoSourceInput(in, filename)
+			}
+		}
+	}
 	if *pretty {
 		if flag.NArg() == 0 {
-			return prettyPrint(os.Stdin, "")
+			return prettyPrint(invocationStdin, "")
 		}
 		return prettyPrintPath(flag.Arg(0))
 	}
@@ -1197,7 +1226,7 @@ func runAll() error {
 			return dumpTranslatableStrings(strings.NewReader(*command), "-c", po)
 		}
 		if flag.NArg() == 0 || *readStdin {
-			return dumpTranslatableStrings(os.Stdin, "", po)
+			return dumpTranslatableStrings(invocationStdin, "", po)
 		}
 		return dumpTranslatableStringsPath(flag.Arg(0), po)
 	}
@@ -1264,7 +1293,7 @@ func runAll() error {
 		}
 		loadStartupFiles(r, false)
 		return runWithLoginLogout(r, func() error {
-			return run(r, os.Stdin, "")
+			return run(r, invocationStdin, "")
 		})
 	}
 	loadStartupFiles(r, false)

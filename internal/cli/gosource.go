@@ -9,6 +9,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"go/scanner"
+	"go/token"
 	"go/types"
 	"io"
 	"os"
@@ -25,9 +27,8 @@ import (
 // bytes are handed to the sh front end (mvdan.cc/sh/v3/gosource), which lexes,
 // parses and type-checks them with Go's own rules and returns a positioned
 // Bash++ AST. This file owns the selection, its refusals and the collection of
-// input files. It deliberately contains no Go lexer, parser or type checker —
-// reimplementing Go source parsing here is exactly what the sprint contract
-// forbids.
+// input files. The standard Go lexer recognizes only the leading package
+// marker; parsing and type checking remain entirely in the existing frontend.
 //
 // The load itself is reached through the [GoSourceLoad] hook, in the shape the
 // package already uses for AgentOSDispatch: the pure `bash` drop-in leaves it
@@ -826,6 +827,31 @@ func goSourceLoadFailure(err error) error {
 	return interp.ExitStatus(2)
 }
 
+// leadingGoPackage uses Go's lexer only to select the existing frontend.
+// Comments are skipped without altering the bytes passed to that frontend.
+func leadingGoPackage(src []byte) bool {
+	var scan scanner.Scanner
+	scan.Init(token.NewFileSet().AddFile("", -1, len(src)), src, nil, 0)
+	_, tok, _ := scan.Scan()
+	return tok == token.PACKAGE
+}
+
+// collectPackageGoSource reads one noninteractive invocation. Unselected stdin
+// is returned to the shell verbatim; file and command inputs remain untouched.
+func collectPackageGoSource(operand, command string, stdin io.Reader) (GoSourceInput, io.Reader, bool, error) {
+	in, err := CollectGoSources(GoSourceResolution{}, operand, command, stdin)
+	if err != nil {
+		return GoSourceInput{}, stdin, false, err
+	}
+	if len(in.Files) != 1 {
+		return GoSourceInput{}, stdin, false, nil
+	}
+	if operand == "" && command == "" {
+		stdin = strings.NewReader(string(in.Files[0].Data))
+	}
+	return in, stdin, leadingGoPackage(in.Files[0].Data), nil
+}
+
 // runGoSourceInvocation runs one `--source=go` invocation end to end.
 //
 // Shell startup files are deliberately not loaded, and neither are the login
@@ -847,6 +873,10 @@ func runGoSourceInvocation() error {
 	if err != nil {
 		return goSourceFailure(err)
 	}
+	return runGoSourceInput(in, operand)
+}
+
+func runGoSourceInput(in GoSourceInput, operand string) error {
 	// --check is semantic-only. `-n` / `-o noexec` means the same thing for
 	// this input, so a build-only corpus row may spell either. RunMain stays
 	// false so the loaded program carries no entry calls at all — the absence
