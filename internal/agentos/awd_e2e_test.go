@@ -104,8 +104,8 @@ func TestAwdE2EConcurrentFrontDoorIsolation(t *testing.T) {
 				"cd " + shellQuote(root),
 				"pushd " + shellQuote(parent) + " >/dev/null",
 				"done := make(chan bool)",
-				"func leftTask(done) { " + awd(left, "left") + "; done <- true; }",
-				"func rightTask(done) { " + awd(right, "right") + "; done <- true; }",
+				"func leftTask(done) { " + awd(left, "left") + " || return $?; done <- true; }",
+				"func rightTask(done) { " + awd(right, "right") + " || return $?; done <- true; }",
 				"go leftTask(done)",
 				"go rightTask(done)",
 				// EOF cancels unfinished tasks. Receive completion before
