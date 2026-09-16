@@ -150,7 +150,7 @@ except ValueError as e:
 tasks = {t["name"]: t for t in env.get("result", {}).get("tasks", [])}
 for t in tasks.values():
     if t["status"] not in ("done", "up-to-date", "skipped"):
-        sys.exit(f"dag-rust-examples-smoke: FAIL: {label}: target {t['name']} is {t['status']} (exit {t.get('exit_code')})\n{(t.get('stderr') or '')[-2000:]}")
+        sys.exit(f"dag-rust-examples-smoke: FAIL: {label}: target {t['name']} is {t['status']} (exit {t.get('exit_code')})\n{t.get('error') or ''}\n{(t.get('stderr') or '')[-2000:]}")
 if env.get("status") != "ok":
     sys.exit(f"dag-rust-examples-smoke: FAIL: {label}: envelope status {env.get('status')!r}")
 for name in expected:
@@ -158,7 +158,7 @@ for name in expected:
     if t is None:
         sys.exit(f"dag-rust-examples-smoke: FAIL: {label}: target {name} missing from envelope")
     if t["status"] not in ("done", "up-to-date"):
-        sys.exit(f"dag-rust-examples-smoke: FAIL: {label}: target {name} is {t['status']} (exit {t.get('exit_code')})\n{t.get('stderr','')[-2000:]}")
+        sys.exit(f"dag-rust-examples-smoke: FAIL: {label}: target {name} is {t['status']} (exit {t.get('exit_code')})\n{t.get('error') or ''}\n{(t.get('stderr') or '')[-2000:]}")
 print(f"{label}: " + " ".join(f"{n}={tasks[n]['status']}" for n in expected))
 PY
 }
