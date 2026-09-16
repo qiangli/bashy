@@ -4,18 +4,18 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"go/scanner"
-	"go/token"
 	"go/types"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"text/scanner"
 
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
@@ -827,29 +827,59 @@ func goSourceLoadFailure(err error) error {
 	return interp.ExitStatus(2)
 }
 
-// leadingGoPackage uses Go's lexer only to select the existing frontend.
-// Comments are skipped without altering the bytes passed to that frontend.
-func leadingGoPackage(src []byte) bool {
-	var scan scanner.Scanner
-	scan.Init(token.NewFileSet().AddFile("", -1, len(src)), src, nil, 0)
-	_, tok, _ := scan.Scan()
-	return tok == token.PACKAGE
+// packagePrefixReader limits scanner read-ahead to its current token. The
+// captured bytes are replayed unchanged when the input belongs to the shell.
+type packagePrefixReader struct {
+	reader io.Reader
+	prefix bytes.Buffer
+	err    error
 }
 
-// collectPackageGoSource reads one noninteractive invocation. Unselected stdin
-// is returned to the shell verbatim; file and command inputs remain untouched.
+func (r *packagePrefixReader) Read(p []byte) (int, error) {
+	if len(p) > 1 {
+		p = p[:1]
+	}
+	n, err := r.reader.Read(p)
+	r.prefix.Write(p[:n])
+	if err != nil && err != io.EOF {
+		r.err = err
+	}
+	return n, err
+}
+
+func scanGoPackagePrefix(reader io.Reader) (bool, io.Reader, error) {
+	prefix := &packagePrefixReader{reader: reader}
+	var scan scanner.Scanner
+	scan.Init(prefix)
+	scan.Mode = scanner.ScanIdents | scanner.ScanComments | scanner.SkipComments
+	scan.Error = func(*scanner.Scanner, string) {} // The selected frontend owns diagnostics.
+	selected := scan.Scan() == scanner.Ident && scan.TokenText() == "package"
+	return selected, io.MultiReader(bytes.NewReader(prefix.prefix.Bytes()), reader), prefix.err
+}
+
+// leadingGoPackage uses the standard scanner only to select the existing
+// frontend; it neither rewrites input nor implements Go grammar.
+func leadingGoPackage(src []byte) bool {
+	selected, _, _ := scanGoPackagePrefix(bytes.NewReader(src))
+	return selected
+}
+
+// collectPackageGoSource stops reading shell stdin as soon as its first token
+// identifies it. Only a selected Go compilation unit is collected in full.
 func collectPackageGoSource(operand, command string, stdin io.Reader) (GoSourceInput, io.Reader, bool, error) {
+	if operand == "" && command == "" && stdin != nil {
+		selected, replay, err := scanGoPackagePrefix(stdin)
+		if err != nil || !selected {
+			return GoSourceInput{}, replay, false, err
+		}
+		in, err := CollectGoSources(GoSourceResolution{}, "", "", replay)
+		return in, nil, true, err
+	}
 	in, err := CollectGoSources(GoSourceResolution{}, operand, command, stdin)
 	if err != nil {
 		return GoSourceInput{}, stdin, false, err
 	}
-	if len(in.Files) != 1 {
-		return GoSourceInput{}, stdin, false, nil
-	}
-	if operand == "" && command == "" {
-		stdin = strings.NewReader(string(in.Files[0].Data))
-	}
-	return in, stdin, leadingGoPackage(in.Files[0].Data), nil
+	return in, stdin, len(in.Files) == 1 && leadingGoPackage(in.Files[0].Data), nil
 }
 
 // runGoSourceInvocation runs one `--source=go` invocation end to end.

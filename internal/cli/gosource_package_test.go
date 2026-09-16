@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"mvdan.cc/sh/v3/gosource"
 )
@@ -52,8 +53,12 @@ func TestSprint198PackageInputCollection(t *testing.T) {
 			}
 		})
 	}
-	const shell = "echo '$literal'\n"
-	_, replay, selected, err := collectPackageGoSource("", "", strings.NewReader(shell))
+	const shell = "echo '$literal'\necho second\n"
+	reader := strings.NewReader(shell)
+	_, replay, selected, err := collectPackageGoSource("", "", reader)
+	if consumed := len(shell) - reader.Len(); consumed > len("echo ") {
+		t.Fatalf("selector read beyond first shell token: %d bytes", consumed)
+	}
 	data, readErr := io.ReadAll(replay)
 	if err != nil || readErr != nil || selected || string(data) != shell {
 		t.Fatalf("shell replay %q selected=%v errors=%v/%v", data, selected, err, readErr)
@@ -61,7 +66,7 @@ func TestSprint198PackageInputCollection(t *testing.T) {
 }
 
 func TestSprint198PackageBeforeShellPreflight(t *testing.T) {
-	for _, form := range []string{"command", "file", "stdin", "command-posix", "command-bash"} {
+	for _, form := range []string{"command", "file", "stdin", "stdin-args", "command-posix", "command-bash"} {
 		for _, source := range []string{
 			"//line original.go:10\n/* prefix */\npackage main\nfunc main(){x:=`$literal`;x=\"$unchanged\";_=x}\n",
 			"package ! malformed; echo shell-must-not-run\n",
@@ -90,7 +95,7 @@ func TestSprint198PackageBeforeShellPreflight(t *testing.T) {
 					*command = source
 				case "file":
 					os.Args = append(os.Args, writeGoFixture(t, source))
-				case "stdin":
+				case "stdin", "stdin-args":
 					f, err := os.CreateTemp(t.TempDir(), "stdin")
 					if err != nil {
 						t.Fatal(err)
@@ -100,6 +105,10 @@ func TestSprint198PackageBeforeShellPreflight(t *testing.T) {
 					}
 					_, _ = f.Seek(0, 0)
 					os.Stdin = f
+					if form == "stdin-args" {
+						*readStdin = true
+						os.Args = append(os.Args, "not-a-source-file", "another-argument")
+					}
 					t.Cleanup(func() { f.Close() })
 				}
 				if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
@@ -155,5 +164,39 @@ func TestSprint198PackageGoLexicalSemantics(t *testing.T) {
 	out := captureStderr(t, func() { runErr = runGoSourceInput(in, "") })
 	if runErr != nil || out != "$HOME $literal\n" {
 		t.Fatalf("Go literals/assignment: output=%q error=%v", out, runErr)
+	}
+}
+
+// Selection must not wait for EOF merely to recognize an ordinary shell word.
+// Execution itself keeps the existing run() buffering contract.
+func TestSprint198PackageStdinPrefixDoesNotWaitForEOF(t *testing.T) {
+	reader, writer := io.Pipe()
+	release := make(chan struct{})
+	t.Cleanup(func() { reader.Close(); writer.Close() })
+	go func() { _, _ = writer.Write([]byte("echo ready\n")); <-release; writer.Close() }()
+	type result struct {
+		replay   io.Reader
+		selected bool
+		err      error
+	}
+	done := make(chan result, 1)
+	go func() {
+		_, replay, selected, err := collectPackageGoSource("", "", reader)
+		done <- result{replay, selected, err}
+	}()
+	var got result
+	select {
+	case got = <-done:
+	case <-time.After(2 * time.Second):
+		close(release)
+		t.Fatal("shell prefix selection waited for EOF")
+	}
+	close(release)
+	if got.err != nil || got.selected {
+		t.Fatalf("selected=%v error=%v", got.selected, got.err)
+	}
+	data, err := io.ReadAll(got.replay)
+	if err != nil || string(data) != "echo ready\n" {
+		t.Fatalf("replay=%q error=%v", data, err)
 	}
 }
