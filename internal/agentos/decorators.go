@@ -20,18 +20,12 @@
 //     Next(). WithCap INTERSECTS with any outer cap (deny-only: a nested
 //     guard can never widen), and the shipped auditHandler — outermost in the
 //     ExecHandler chain, caps enforced even with a nil writer — refuses any
-//     command whose projected atlas effects exceed it, before the command
+//     command whose atlas effects exceed it, before the command
 //     runs, writing Decision "deny".
 //   - @retry(n:, backoff:) → SOURCE-ONLY (never advisable; the rules loader
 //     refuses it and the native double-checks), a bounded, cancellation-aware
 //     loop over Next() on autoretry.Backoff's default schedule. No new retry
 //     engine.
-//
-// The decorator bodies are deliberately self-contained — they read only
-// (ctx, *Call, args) and never Runner state — so the forthcoming shellrt
-// decorator-registry slot (compiled programs; sh-side, being added by the sh
-// compiler work) can register the same implementations through a thin adapter
-// instead of a second native set.
 package agentos
 
 import (
@@ -49,6 +43,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"mvdan.cc/sh/v3/interp"
+	"mvdan.cc/sh/v3/lower/shellrt"
 
 	"github.com/qiangli/coreutils/pkg/autoretry"
 	"github.com/qiangli/coreutils/pkg/policy/advice"
@@ -69,19 +64,71 @@ const retryAttemptLimit = 100
 // agentic (non-posix) shell. Registration is inert outside Bash++: decorator
 // syntax does not parse in plain Bash, and a script-defined function of the
 // same name shadows a native (resolution order is the engine's).
+// Install the compiled slot once at host startup, never during a call.
+func init() { shellrt.Decorators = compiledNativeDecorators() }
+
 func nativeDecorators() map[string]interp.DecoratorFunc {
 	return map[string]interp.DecoratorFunc{
-		"trace": traceDecorator,
-		"guard": guardDecorator,
-		"retry": retryDecorator,
+		"trace": adaptInterpreterDecorator(traceDecorator),
+		"guard": adaptInterpreterDecorator(guardDecorator),
+		"retry": adaptInterpreterDecorator(retryDecorator),
 	}
+}
+
+// nativeDecoratorCall shares the implementation while preserving each engine's
+// continuation. The adapters synchronize mutable fields at every Next boundary.
+type nativeDecoratorCall struct {
+	Name, Site, Caller, Advised string
+	Args, Results               []any
+	Status                      int
+	Agentic                     bool
+	Next                        func(context.Context)
+}
+type nativeDecoratorFunc func(context.Context, *nativeDecoratorCall, []interp.DecoratorArg) error
+
+func adaptInterpreterDecorator(fn nativeDecoratorFunc) interp.DecoratorFunc {
+	return func(ctx context.Context, c *interp.Call, args []interp.DecoratorArg) error {
+		call := &nativeDecoratorCall{Name: c.Name, Site: c.Site, Caller: c.Caller, Advised: c.Advised, Args: c.Args, Results: c.Results, Status: c.Status, Agentic: c.Agentic}
+		flush := func() { c.Args, c.Results, c.Status = call.Args, call.Results, call.Status }
+		call.Next = func(next context.Context) {
+			flush()
+			c.Next(next)
+			call.Args, call.Results, call.Status = c.Args, c.Results, c.Status
+		}
+		defer flush()
+		return fn(ctx, call, args)
+	}
+}
+
+// compiledNativeDecorators is the same native set for a compiled host. Such a
+// host must also wire its effect-aware command handler into the shell backend.
+func compiledNativeDecorators() map[string]shellrt.DecoratorFunc {
+	result := map[string]shellrt.DecoratorFunc{}
+	for name, fn := range map[string]nativeDecoratorFunc{"trace": traceDecorator, "guard": guardDecorator, "retry": retryDecorator} {
+		result[name] = func(ctx context.Context, c *shellrt.Call, args []shellrt.DecoratorArg) error {
+			call := &nativeDecoratorCall{Name: c.Name, Site: c.Site, Caller: c.Caller, Advised: c.Advised, Args: c.Args, Results: c.Results, Status: c.Status, Agentic: c.Agentic}
+			flush := func() { c.Args, c.Results, c.Status = call.Args, call.Results, call.Status }
+			call.Next = func(next context.Context) {
+				flush()
+				c.Next(next)
+				call.Args, call.Results, call.Status = c.Args, c.Results, c.Status
+			}
+			defer flush()
+			converted := make([]interp.DecoratorArg, len(args))
+			for i, arg := range args {
+				converted[i] = interp.DecoratorArg{Name: arg.Name, Value: arg.Value}
+			}
+			return fn(ctx, call, converted)
+		}
+	}
+	return result
 }
 
 // traceDecorator emits one `call <name>` span around the rest of the chain,
 // following ExecMiddleware's conventions: global provider, no attribute work
 // unless the span records, the status as the point. Arg VALUES never become
 // attributes — only the count.
-func traceDecorator(ctx context.Context, c *interp.Call, args []interp.DecoratorArg) error {
+func traceDecorator(ctx context.Context, c *nativeDecoratorCall, args []interp.DecoratorArg) error {
 	if len(args) != 0 {
 		return errors.New("trace takes no arguments")
 	}
@@ -128,10 +175,10 @@ func traceDecorator(ctx context.Context, c *interp.Call, args []interp.Decorator
 
 // guardDecorator narrows the effect cap for everything the rest of the chain
 // dispatches. It never skips Next — the deny is per COMMAND, made by the
-// shipped auditHandler when a command's projected atlas effects exceed the
+// shipped auditHandler when a command's atlas effects exceed the
 // cap riding this ctx; a body that dispatches nothing over the cap runs
 // unchanged.
-func guardDecorator(ctx context.Context, c *interp.Call, args []interp.DecoratorArg) error {
+func guardDecorator(ctx context.Context, c *nativeDecoratorCall, args []interp.DecoratorArg) error {
 	if len(args) != 1 || (args[0].Name != "" && args[0].Name != "effects") {
 		return fmt.Errorf("guard takes exactly one argument, effects: %q", "read,net")
 	}
@@ -148,7 +195,7 @@ func guardDecorator(ctx context.Context, c *interp.Call, args []interp.Decorator
 // source-given one) between attempts. Cancellation ends the loop immediately
 // and quietly: the last observed status stands, and a Ctrl-C is not a
 // decorator diagnostic.
-func retryDecorator(ctx context.Context, c *interp.Call, args []interp.DecoratorArg) error {
+func retryDecorator(ctx context.Context, c *nativeDecoratorCall, args []interp.DecoratorArg) error {
 	// Decision of record: retry is never advisable. The rules loader refuses
 	// it; this refusal covers any other AdviceFunc an embedder installs.
 	if c.Advised != "" {
@@ -186,6 +233,7 @@ func retryDecorator(ctx context.Context, c *interp.Call, args []interp.Decorator
 func retryPolicy(args []interp.DecoratorArg) (attempts int, fixed time.Duration, err error) {
 	attempts, fixed = autoretry.MaxAttempts, -1
 	positional := 0
+	seen := map[string]bool{}
 	for _, a := range args {
 		name := a.Name
 		if name == "" {
@@ -197,6 +245,10 @@ func retryPolicy(args []interp.DecoratorArg) (attempts int, fixed time.Duration,
 			}
 			positional++
 		}
+		if seen[name] {
+			return 0, 0, fmt.Errorf("retry argument %q was supplied more than once", name)
+		}
+		seen[name] = true
 		switch name {
 		case "n":
 			v, convErr := strconv.Atoi(strings.TrimSpace(a.Value))
@@ -224,7 +276,7 @@ func retryPolicy(args []interp.DecoratorArg) (attempts int, fixed time.Duration,
 //   - a plain-Bash or POSIX script never opens the rules file at all;
 //   - a cert run (VSC_PROFILE=cert) never does either, by FromEnv's own
 //     contract, whatever BASHY_ADVICE names;
-//   - a configured file that fails to load WARNS once and advises nothing —
+//   - a configured file that fails to load warns once and refuses all calls —
 //     a policy that silently does not apply is the absence-of-evidence
 //     failure this codebase keeps re-finding, so the off-state is spoken.
 //
@@ -237,15 +289,20 @@ func retryPolicy(args []interp.DecoratorArg) (attempts int, fixed time.Duration,
 func newAdviceCallback(env []string, stderr io.Writer) interp.AdviceFunc {
 	var once sync.Once
 	var rules *advice.Rules
+	var loadErr error
 	return func(name, file string, agentic bool) []interp.DecoratorSpec {
 		once.Do(func() {
 			loaded, err := advice.FromEnv(env)
 			if err != nil {
-				fmt.Fprintf(stderr, "bashy: advice: %v — no advice applied\n", err)
+				loadErr = err
+				fmt.Fprintf(stderr, "bashy: advice: %v — advised calls refused\n", err)
 				return
 			}
 			rules = loaded
 		})
+		if loadErr != nil {
+			return []interp.DecoratorSpec{{ID: "invalid-policy", Name: "__bashy_invalid_advice"}}
+		}
 		advised := rules.For(advice.Query{Name: name, File: file, Agentic: agentic})
 		if len(advised) == 0 {
 			return nil

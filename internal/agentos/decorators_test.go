@@ -29,6 +29,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"mvdan.cc/sh/v3/interp"
+	"mvdan.cc/sh/v3/lower/shellrt"
+	"mvdan.cc/sh/v3/lower/shellrt/shellexec"
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/qiangli/coreutils/pkg/policy/audit"
@@ -445,12 +447,12 @@ func TestAdviceCertNeverOpensFile(t *testing.T) {
 	}
 }
 
-func TestAdviceBrokenFileWarnsOnceAndAdvisesNothing(t *testing.T) {
+func TestAdviceBrokenFileWarnsOnceAndRefusesCalls(t *testing.T) {
 	garbage := writeAdviceRules(t, `{not json`)
 	warn := new(bytes.Buffer)
 	cb := newAdviceCallback([]string{"BASHY_ADVICE=" + garbage}, warn)
-	if got := cb("work", "job.sh", false); got != nil {
-		t.Fatalf("broken file advised %+v", got)
+	if got := cb("work", "job.sh", false); len(got) != 1 || got[0].Name != "__bashy_invalid_advice" {
+		t.Fatalf("broken file failed open: %+v", got)
 	}
 	if !strings.Contains(warn.String(), "advice") {
 		t.Fatalf("a configured policy failed silently: %q", warn.String())
@@ -539,7 +541,78 @@ func TestRetryRefusesAdvisedApplication(t *testing.T) {
 	// Defense in depth: the loader already refuses advised retry; the native
 	// itself refuses too, for any other AdviceFunc an embedder installs.
 	c := &interp.Call{Name: "f", Advised: "rogue-rule"}
-	if err := retryDecorator(context.Background(), c, nil); err == nil {
+	if err := adaptInterpreterDecorator(retryDecorator)(context.Background(), c, nil); err == nil {
 		t.Fatal("advised retry accepted")
+	}
+}
+
+func TestAdviceInvalidPolicyFailsClosed(t *testing.T) {
+	for _, policy := range []string{writeAdviceRules(t, `{broken`), filepath.Join(t.TempDir(), "missing.json")} {
+		err, out, diagnostic := runDecorated(t, context.Background(), syntax.LangBashPP, "func work() { echo escaped }\nwork()\n", map[string]string{"BASHY_ADVICE": policy, "VSC_PROFILE": ""})
+		if err == nil || out.Len() != 0 || !strings.Contains(diagnostic.String(), "advised calls refused") {
+			t.Fatalf("invalid policy escaped: err=%v out=%q stderr=%q", err, out, diagnostic)
+		}
+	}
+}
+
+func TestRetryRejectsDuplicateArguments(t *testing.T) {
+	for _, args := range [][]interp.DecoratorArg{
+		{{Name: "n", Value: "2"}, {Name: "n", Value: "3"}},
+		{{Value: "2"}, {Name: "n", Value: "3"}},
+		{{Name: "backoff", Value: "0s"}, {Name: "backoff", Value: "1s"}},
+	} {
+		if _, _, err := retryPolicy(args); err == nil {
+			t.Fatalf("accepted duplicate: %v", args)
+		}
+	}
+}
+
+func TestNativeCompiledDecorators(t *testing.T) {
+	sr := recordSpans(t)
+	logPath := filepath.Join(t.TempDir(), "audit.jsonl")
+	writer, err := audit.Open(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ran := 0
+	handler := auditHandler(writer, audit.Actor{}, "test")(func(context.Context, []string) error { ran++; return nil })
+	var out, diagnostic bytes.Buffer
+	p, err := shellrt.NewProgram(shellrt.WithStdio(nil, &out, &diagnostic), shellrt.WithShellFactory(shellexec.New(shellexec.RunnerOptions(interp.ExecHandler(handler)))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Session.Close()
+	call := &shellrt.Call{Name: "work"}
+	rungs := []shellrt.Decorator{
+		{Name: "trace"},
+		{Name: "guard", Args: func(*shellrt.Program) []shellrt.DecoratorArg {
+			return []shellrt.DecoratorArg{{Name: "effects", Value: "read"}}
+		}},
+		{Name: "retry", Args: func(*shellrt.Program) []shellrt.DecoratorArg {
+			return []shellrt.DecoratorArg{{Name: "n", Value: "2"}, {Name: "backoff", Value: "0s"}}
+		}},
+	}
+	attempts := 0
+	if !p.Decorate(call, rungs, func(region *shellrt.Program) error { attempts++; region.ShellRegion("touch forbidden"); return nil }) {
+		t.Fatalf("chain failed: %s", &diagnostic)
+	}
+	if attempts != 2 || ran != 0 || call.Status == 0 {
+		t.Fatalf("attempts=%d dispatched=%d status=%d stderr=%s", attempts, ran, call.Status, &diagnostic)
+	}
+	spans := callSpans(sr, "work")
+	if len(spans) != 1 {
+		t.Fatalf("trace spans=%d", len(spans))
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(data), `"decision":"deny"`) != 2 {
+		t.Fatalf("missing denial records: %s", data)
+	}
+	// The guard context must not leak into the caller's next shell region.
+	p.ShellRegion("touch allowed")
+	if ran != 1 {
+		t.Fatalf("caller remained guarded: dispatches=%d stderr=%s", ran, &diagnostic)
 	}
 }
