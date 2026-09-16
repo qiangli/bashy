@@ -1186,8 +1186,11 @@ func runAll() error {
 		return runGoSourceInvocation()
 	}
 	var invocationStdin io.Reader = os.Stdin
-	if startupBashPP.Enabled && !startupGoSourceSel.LanguageSeen &&
-		!shouldRunInteractive(term.IsTerminal(int(os.Stdin.Fd()))) {
+	// Ordinary POSIX startup suppresses the product's default extensions in
+	// run(). Only an explicit dialect request may select a Go unit here;
+	// ResolveGoSource then preserves its existing POSIX refusal.
+	if startupBashPP.Enabled && (!resolvedStartupPosix() || startupBashPP.Source.Explicit()) &&
+		!startupGoSourceSel.LanguageSeen && !shouldRunInteractive(term.IsTerminal(int(os.Stdin.Fd()))) {
 		// Directories retain the shell's ordinary error path; only explicit
 		// --source=go selects a package directory.
 		regularInput := filename == ""

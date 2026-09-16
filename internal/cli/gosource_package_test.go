@@ -200,3 +200,76 @@ func TestSprint198PackageStdinPrefixDoesNotWaitForEOF(t *testing.T) {
 		t.Fatalf("replay=%q error=%v", data, err)
 	}
 }
+
+func TestSprint198PackageOrdinaryPOSIXNoExec(t *testing.T) {
+	for _, mode := range []string{"flag", "option", "environment", "pedantic", "certification"} {
+		for _, form := range []string{"command", "stdin", "file"} {
+			t.Run(mode+"/"+form, func(t *testing.T) {
+				withStrictPosixEnv(t, "bashy", false)
+				oldOriginal, oldOpts, oldOff := originalArgs, optsOn, setOff
+				oldCommand, oldRead, oldForce := *command, *readStdin, *forceI
+				oldSel, oldRes, oldErr := startupGoSourceSel, startupGoSource, startupGoSourceErr
+				oldDialect, oldDefault, oldStdin := startupBashPP, AgentOSBashPPDefault, os.Stdin
+				t.Cleanup(func() {
+					originalArgs, optsOn, setOff = oldOriginal, oldOpts, oldOff
+					*command, *readStdin, *forceI = oldCommand, oldRead, oldForce
+					startupGoSourceSel, startupGoSource, startupGoSourceErr = oldSel, oldRes, oldErr
+					startupBashPP, AgentOSBashPPDefault, os.Stdin = oldDialect, oldDefault, oldStdin
+				})
+				t.Setenv("BASH_ENV", "")
+				unsetTestEnv(t, "BASHY_BASHPP")
+				AgentOSBashPPDefault = true
+				startupGoSourceSel, startupGoSource, startupGoSourceErr = GoSourceSelection{}, GoSourceResolution{}, nil
+				optsOn, setOff = []string{"noexec"}, nil
+				*command, *readStdin, *forceI = "", false, false
+				operand := ""
+				switch form {
+				case "command":
+					*command = "package main\n"
+				case "file":
+					operand = writeGoFixture(t, "package main\n")
+				case "stdin":
+					f, err := os.Open(writeGoFixture(t, "package main\n"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					os.Stdin = f
+					t.Cleanup(func() { f.Close() })
+				}
+				if operand != "" {
+					if err := flag.CommandLine.Parse([]string{operand}); err != nil {
+						t.Fatal(err)
+					}
+				}
+				os.Args = []string{"bashy"}
+				switch mode {
+				case "flag":
+					os.Args = append(os.Args, "--posix")
+				case "option":
+					os.Args = append(os.Args, "-o", "posix")
+				case "environment":
+					t.Setenv("POSIXLY_CORRECT", "1")
+				case "pedantic":
+					t.Setenv("POSIX_PEDANTIC", "1")
+				case "certification":
+					os.Args[0] = "sh"
+					AgentOSBashPPDefault = false
+				}
+				originalArgs = append([]string(nil), os.Args...)
+				if operand != "" {
+					os.Args = append(os.Args, operand)
+				}
+				called := false
+				withGoSourceHook(t, func([]GoSourceFile, GoSourceOptions) (*GoSourceProgram, error) {
+					called = true
+					return nil, errors.New("unexpected Go route")
+				})
+				var runErr error
+				diagnostic := captureStderr(t, func() { runErr = runAll() })
+				if called || runErr != nil || diagnostic != "" {
+					t.Fatalf("ordinary POSIX marker: frontend=%v error=%v diagnostic=%q", called, runErr, diagnostic)
+				}
+			})
+		}
+	}
+}
