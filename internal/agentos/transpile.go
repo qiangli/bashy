@@ -155,6 +155,7 @@ func dispatchTranspile(args []string) int {
 	var goLibrary string
 	var goImportBase, goImportPath string
 	var goTestMain bool
+	var goNativeUnit bool
 	var goVersion string
 	var goVersionSeen bool
 	var goTestBuiltins bool
@@ -237,6 +238,8 @@ func dispatchTranspile(args []string) int {
 			i++
 		} else if inFlags && strings.HasPrefix(arg, "--go-xtest-file=") {
 			goXTestFiles = append(goXTestFiles, strings.TrimPrefix(arg, "--go-xtest-file="))
+		} else if inFlags && arg == "--go-native-unit" {
+			goNativeUnit = true
 		} else if inFlags && arg == "--go-library" {
 			if i+1 >= len(args) {
 				fmt.Fprintln(os.Stderr, "transpile: missing argument for --go-library")
@@ -345,6 +348,14 @@ func dispatchTranspile(args []string) int {
 	}
 	if goCheckAfterSyntaxErrorsSeen && !goInput {
 		fmt.Fprintln(os.Stderr, "transpile: --go-check-after-syntax-errors requires --source=go")
+		return 2
+	}
+	if goNativeUnit && (!goInput || goImportPath == "") {
+		fmt.Fprintln(os.Stderr, "transpile: --go-native-unit requires --source=go and --go-import-path")
+		return 2
+	}
+	if goNativeUnit && (goLibrary != "" || goTestMain) {
+		fmt.Fprintln(os.Stderr, "transpile: --go-native-unit cannot be combined with --go-library or --go-test-main")
 		return 2
 	}
 	if goVersionSeen && !goInput {
@@ -499,15 +510,10 @@ func dispatchTranspile(args []string) int {
 			GoVersion: goVersion, TestBuiltins: goTestBuiltins,
 			CheckerBranchErrors: goCheckerBranchErrors, CheckAfterSyntaxErrors: goCheckAfterSyntaxErrors,
 			Packages: packages, ImportBase: goImportBase, ImportPath: goImportPath, TestMain: goTestMain,
-			// The compiler's own directory route (-D, --go-import-base)
-			// compiles every package as its own unit and links the objects,
-			// so each phase lowers to a native unit (sh gosource:
-			// PreserveNativeInit): an explicit package map only serves the
-			// checker, and the generated file keeps the program's own names,
-			// imports and init for the compiler's -D/-importcfg and the
-			// linker to resolve, as they resolve the original. A module
-			// program (no -D) is still flattened into one file.
-			PreserveNativeInit: goImportBase != "",
+			// Directory compiler phases and explicitly requested module units
+			// preserve package names, imports and native initialization. The
+			// package map supplies checker dependencies, not flattened code.
+			PreserveNativeInit: goNativeUnit || goImportBase != "",
 		})
 		if err != nil {
 			// sh's Go diagnostics carry their own file:line:col positions and
