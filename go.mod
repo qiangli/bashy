@@ -2,7 +2,7 @@ module github.com/qiangli/bashy
 
 go 1.26.5
 
-toolchain go1.27.0
+toolchain go1.27.1
 
 require (
 	github.com/creack/pty/v2 v2.0.1

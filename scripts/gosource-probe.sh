@@ -39,7 +39,7 @@ trap cleanup EXIT
 
 # The host toolchain IS the pinned one; never let a probe download another, and
 # never let a probe with its own HOME create a second module cache.
-export GOTOOLCHAIN=${GOTOOLCHAIN:-go1.27.0}
+export GOTOOLCHAIN=${GOTOOLCHAIN:-go1.27.1}
 # Documented master switch for proactive hints. Without it a probe's stderr
 # depends on which agent is driving the terminal, which is not a property of
 # the shell under test.

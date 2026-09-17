@@ -5,7 +5,7 @@
 ## Compiler Build Toolchain
 
 The Bashy and shell-engine modules retain a Go 1.26.5 compatibility floor and
-select `toolchain go1.27.0` for default automatic builds. Build Bashy and the
+select `toolchain go1.27.1` for default automatic builds (the reviewed coordinate since Sprint 206; go1.27.0 before). Build Bashy and the
 generated artifacts with the reviewed Go 1.27 toolchain for the complete source
 profile. An older explicit `GOTOOLCHAIN=local` build cannot check independent
 method type parameters and reports `LOWER-ETOOLCHAIN` before emitting output.
