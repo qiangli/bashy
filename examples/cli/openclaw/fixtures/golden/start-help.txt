@@ -1,0 +1,13 @@
+Open the terminal UI connected to the session runtime
+
+Usage:
+  openclaw start [target]
+
+Flags:
+      --session string   Session key to attach
+
+Global Flags:
+  -f, --file string   Configuration file (default "agent.yaml")
+  -h, --help          Show command help
+      --json          Emit machine-readable output
+

@@ -1,0 +1,35 @@
+#!/usr/bin/env -S bashy --bashpp
+set -e
+
+# Bounded common-lifecycle projection onto the pinned OpenClaw verbs.
+# init -> onboard, start -> tui, model -> models; every other token is
+# forwarded verbatim. plan and exit are declared unsupported (exit 4):
+# the pinned OpenClaw source has no such verbs.
+func upstreamVerb(verb string) string {
+    if verb == "init" { return "onboard" }
+    if verb == "start" { return "tui" }
+    if verb == "model" { return "models" }
+    return verb
+}
+
+var upstream string = ""
+upstream="${OPENCLAW_BIN:-openclaw}"
+
+var verb string = ""
+verb="${1:-}"
+
+mapped := upstreamVerb(verb)
+
+case "$verb" in
+plan|exit)
+    printf 'error: %s is unsupported by the bounded OpenClaw profile\n' "$verb" >&2
+    exit 4
+    ;;
+init|start|model)
+    shift
+    exec "$upstream" "$mapped" "$@"
+    ;;
+*)
+    exec "$upstream" "$@"
+    ;;
+esac
