@@ -1,0 +1,27 @@
+#!/usr/bin/env -S bashy --bashpp
+set -e
+
+# Thin native Bash++ adapter for the bounded Hermes Agent session-lifecycle CLI.
+#
+# It does NOT reimplement any Hermes behavior (no agent loop, providers, auth,
+# gateway, plugins or storage). It maps this profile's bounded convenience
+# aliases onto the installed upstream and forwards argv, stdin/stdout/stderr and
+# the exit status verbatim. The declarative contract lives in profile.yaml and
+# is compiled/rendered by ycode; substantive work runs only in the upstream.
+#
+# Upstream selection is an explicit executable override: set HERMES_BIN to an
+# absolute path to the installed `hermes`. With no override it resolves `hermes`
+# from PATH.
+
+var upstream string = ""
+upstream="${HERMES_BIN:-hermes}"
+
+# Bounded alias: `start` is projected onto Hermes' default `chat` command. The
+# rewrite applies only when `start` is the leading verb, matching how the
+# bounded surface is invoked; every other token is forwarded unchanged.
+if [ "${1:-}" = "start" ]; then
+    shift
+    set -- chat "$@"
+fi
+
+exec "$upstream" "$@"
