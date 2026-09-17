@@ -1,0 +1,36 @@
+Bounded projection of the mini-swe-agent `mini` CLI focused on the
+common session lifecycle: start or run a task and pick the model.
+ycode renders and validates this contract; the agent loop runs only
+when main.bpp forwards it to the installed upstream, so under ycode
+itself the run exits unsupported (4).
+
+
+Usage:
+  mini [OPTIONS] [command]
+
+Available Commands:
+  completion  Generate a shell completion script for the declared command tree
+  exit        A session exit verb is not present in the pinned mini source
+  init        A guided setup verb is not present in the pinned mini source
+  model       Model selection is the -m/--model flag; there is no model subcommand in the pinned mini source
+  plan        A planning mode is not present in the pinned mini source
+  resume      Session resume is not present in the pinned mini source
+  schema      Print the profile JSON Schema
+  start       Start or run an agent session for a task
+  validate    Validate and compile this CLI profile
+  version     Print version information
+
+Flags:
+      --agent-class string         Agent class to use
+  -c, --config string              Upstream config path/filename/key=value (recursively merged; forwarded to the installed mini)
+  -l, --cost-limit string          Cost limit; set 0 to disable
+      --environment-class string   Environment class to use
+      --exit-immediately           Exit immediately when the agent wants to finish instead of prompting
+  -f, --file string                Strict harness configuration file (default "mini.yaml")
+  -h, --help                       Show command help
+  -m, --model string               Model to use (e.g. anthropic/claude-sonnet-4.6)
+      --model-class string         Model class to use
+  -o, --output string              Output trajectory file
+  -t, --task string                Task/problem statement to solve
+  -y, --yolo                       Run without confirmation
+

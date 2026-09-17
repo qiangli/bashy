@@ -1,0 +1,13 @@
+{
+  "actions": [],
+  "api_calls": 3,
+  "bounded_version": "0.1.0",
+  "cost": 0.03,
+  "exit_status": "RepeatedFormatError",
+  "model_name": "replay/deterministic",
+  "scenario": "repeated-format-error",
+  "schema": "mini-swe-agent-bounded-result-v1",
+  "submission": "",
+  "trajectory_format": "mini-swe-agent-1.1",
+  "upstream_version": "2.4.6"
+}

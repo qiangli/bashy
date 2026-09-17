@@ -1,0 +1,40 @@
+#!/usr/bin/env -S bashy --bashpp
+set -e
+
+# Thin native Bash++ adapter for the bounded mini-swe-agent session-lifecycle
+# CLI. It does NOT reimplement any mini-swe-agent behavior (no agent loop, model
+# providers, environments or trajectory storage). It maps this profile's bounded
+# convenience verbs onto the installed upstream `mini` and forwards argv,
+# stdin/stdout/stderr and the exit status verbatim. The declarative contract
+# lives in profile.yaml and is compiled/rendered by ycode; the deterministic,
+# offline, self-contained port lives under harness/. Substantive online work
+# runs only in the installed upstream.
+#
+# Upstream selection is an explicit executable override: set MINI_BIN to an
+# absolute path to the installed `mini`. With no override it resolves `mini`
+# from PATH.
+
+var upstream string = ""
+upstream="${MINI_BIN:-mini}"
+
+var verb string = ""
+verb="${1:-}"
+
+# The pinned mini source is a single typer command with flags; init/model/plan/
+# resume/exit are declared unsupported (exit 4) because there is no such verb.
+# start/run are bounded convenience verbs for the default bare invocation: drop
+# the leading token and forward the remaining flags. Every other token — the
+# root flags (-m/-t/-c/...) and native ops — is forwarded verbatim.
+case "$verb" in
+init|model|plan|resume|exit)
+    printf 'error: %s is unsupported by the bounded mini-swe-agent profile\n' "$verb" >&2
+    exit 4
+    ;;
+start|run)
+    shift
+    exec "$upstream" "$@"
+    ;;
+*)
+    exec "$upstream" "$@"
+    ;;
+esac

@@ -1,0 +1,24 @@
+{
+  "name": "submit-success",
+  "description": "Two stateless shell actions, then an explicit submit that completes the task.",
+  "task": "create marker.txt containing ok, then submit",
+  "config": {
+    "system_template": "You are a helpful assistant that can interact with a computer.\n",
+    "instance_template": "Please solve this issue: {{task}}\n",
+    "cost_limit": 3.0,
+    "step_limit": 0,
+    "max_consecutive_format_errors": 3
+  },
+  "model": {
+    "model_name": "replay/deterministic",
+    "cost_per_call": 0.01,
+    "steps": [
+      {"reasoning": "Write the marker file.", "command": "printf ok > marker.txt"},
+      {"reasoning": "Verify the marker file exists.", "command": "cat marker.txt"},
+      {"reasoning": "Task done, submit the final output.", "command": "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\necho done"}
+    ]
+  },
+  "environment": {
+    "timeout": 30
+  }
+}

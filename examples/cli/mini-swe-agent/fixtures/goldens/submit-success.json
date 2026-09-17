@@ -1,0 +1,27 @@
+{
+  "actions": [
+    {
+      "command": "printf ok > marker.txt",
+      "returncode": 0
+    },
+    {
+      "command": "cat marker.txt",
+      "returncode": 0
+    },
+    {
+      "command": "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\necho done",
+      "returncode": 0,
+      "submitted": true
+    }
+  ],
+  "api_calls": 3,
+  "bounded_version": "0.1.0",
+  "cost": 0.03,
+  "exit_status": "Submitted",
+  "model_name": "replay/deterministic",
+  "scenario": "submit-success",
+  "schema": "mini-swe-agent-bounded-result-v1",
+  "submission": "done\n",
+  "trajectory_format": "mini-swe-agent-1.1",
+  "upstream_version": "2.4.6"
+}
