@@ -1,0 +1,22 @@
+{
+  "name": "step-limit",
+  "description": "The step limit stops the run after a fixed number of model calls even though the model would keep going.",
+  "task": "exceed the step budget",
+  "config": {
+    "cost_limit": 0,
+    "step_limit": 2,
+    "max_consecutive_format_errors": 0
+  },
+  "model": {
+    "model_name": "replay/deterministic",
+    "cost_per_call": 0.0,
+    "steps": [
+      {"reasoning": "First look.", "command": "echo a"},
+      {"reasoning": "Second look.", "command": "echo b"},
+      {"reasoning": "Third look (never reached).", "command": "echo c"}
+    ]
+  },
+  "environment": {
+    "timeout": 30
+  }
+}

@@ -21,6 +21,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .exceptions import FormatError
+
 
 class ReplayExhausted(RuntimeError):
     """Raised when the scripted steps run out before the loop terminated."""
@@ -47,8 +49,17 @@ class ReplayModel:
         step = self._steps[self._cursor]
         self._cursor += 1
         self.n_calls += 1
-        command = step["command"]
         reasoning = step.get("reasoning", "")
+        # A scripted step may deliberately produce no tool call, standing in for
+        # an upstream response the live model interface would reject as
+        # malformed. The billed assistant message plus a guidance message are
+        # carried on a FormatError, mirroring the upstream litellm model. The
+        # agent charges the assistant message's cost and counts the error.
+        if "format_error" in step:
+            assistant = self.format_message(role="assistant", content=reasoning, extra={"cost": self.cost_per_call})
+            guidance = self.format_message(role="user", content=str(step["format_error"]))
+            raise FormatError(assistant, guidance)
+        command = step["command"]
         return self.format_message(
             role="assistant",
             content=reasoning,

@@ -80,8 +80,9 @@ spec:
               installed upstream; the agent loop runs only there, so ycode
               exits unsupported (4) here.
             args: {min: 0, max: 0}
-            flags:
-              - {name: task, shorthand: t, type: string, default: "", usage: Task/problem statement to solve, scope: local}
+            # -t/--task is inherited from the root command; start does not
+            # redeclare it (ycode rejects a local flag that collides with an
+            # inherited one).
             dispatch: {operation: unsupported}
           - name: init
             short: A guided setup verb is not present in the pinned mini source
