@@ -97,7 +97,10 @@ already-parsed file. Use a flag, environment setting, `.bpp`, or
 The bare `agentic` modifier permits explicitly implemented LLM assistance in
 Bash++ functions, methods and script blocks. See the runnable
 [agentic action example](docs/agentic-action-example.md) for the same action as
-a typed callable, shell script, executable tool and native embedding.
+a typed callable, shell script, executable tool and native embedding. A function
+or a `dag` target can carry a [contract](docs/contracts.md) — `@require` /
+`@ensure` / `@guard`, `Require:` / `Ensure:` / `Effects:` — judged as shell
+checks at the process boundary.
 
 ## Why
 

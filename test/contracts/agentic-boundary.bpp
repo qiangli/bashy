@@ -1,0 +1,53 @@
+#!/usr/bin/env -S bashy --bashpp
+# Sprint 203 fixture — the agentic boundary under a contract.
+#
+# One agentic function carries all three clauses. The expected transcript
+# (agentic-boundary.expected) pins: require → body → ensure fire in that
+# order; a failed require never runs the body; @guard still denies a write
+# inside the body; a failed ensure exits 3 naming the clause; and a yield
+# (exit 6, input required) inside the block propagates with NO ensure run.
+# Every check is a shell command at the process boundary ($1..$n = the call's
+# arguments; STATUS/RESULT for @ensure) — nothing generative.
+
+# A check sees the call's ARGUMENTS ($1..$n) and the environment bashy was
+# started with — never the script's variables, exported or not. What a check
+# needs is passed to the call.
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+@guard(effects: "read")
+@require('test -n "$1"')
+@ensure('test "$1" != lie')
+agentic function summarize() {
+    echo "body: $1"
+    case "$1" in
+    write) touch "$work/leak" ;;    # exceeds the read cap → denied, status 1
+    yield) return 6 ;;              # input required — a yield, not a result
+    fail)  return 1 ;;
+    esac                            # "lie": exits 0, the postcondition disagrees
+}
+
+@require('test -d "$1"')
+@ensure('test -f "$1/$2"')
+function produce() {
+    : > "$1/$2"
+}
+
+@ensure('test "$RESULT" -gt 0')
+func twice(n int) int { return n * 2 }
+
+agentic {
+    summarize ok;      echo "ok      -> $?"
+    summarize "";      echo "empty   -> $?"
+    summarize lie;     echo "lie     -> $?"
+    summarize write;   echo "write   -> $?"
+    summarize fail;    echo "fail    -> $?"
+    summarize yield;   echo "yield   -> $?"
+}
+[ -e "$work/leak" ] && echo "LEAK: guard did not deny the write"
+
+produce "$work" made; echo "produce -> $? $(test -f "$work/made" && echo made)"
+produce /nonexistent made; echo "produce -> $?"
+x := twice(2);     echo "twice 2 -> $? x=$x"
+y := twice(0);     echo "twice 0 -> $? y=$y"
+echo done

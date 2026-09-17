@@ -1,7 +1,8 @@
 // Copyright (c) 2026 qiangli
 // See LICENSE for licensing information
 
-// decorators.go — the native Bash++ decorator set (trace · guard · retry) and
+// decorators.go — the native Bash++ decorator set (trace · guard · retry, plus
+// the contract clauses require · ensure in contracts.go) and
 // the registration-time policy-advice wiring, injected into the shell through
 // the existing wireExec seam (never --posix, never cmd/bash).
 //
@@ -33,6 +34,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -67,12 +69,27 @@ const retryAttemptLimit = 100
 // Install the compiled slot once at host startup, never during a call.
 func init() { shellrt.Decorators = compiledNativeDecorators() }
 
-func nativeDecorators() map[string]interp.DecoratorFunc {
-	return map[string]interp.DecoratorFunc{
-		"trace": adaptInterpreterDecorator(traceDecorator),
-		"guard": adaptInterpreterDecorator(guardDecorator),
-		"retry": adaptInterpreterDecorator(retryDecorator),
+func nativeDecorators(stderr io.Writer) map[string]interp.DecoratorFunc {
+	out := map[string]interp.DecoratorFunc{}
+	for name, fn := range nativeDecoratorSet(stderr) {
+		out[name] = adaptInterpreterDecorator(fn)
 	}
+	return out
+}
+
+// nativeDecoratorSet is the one list both hosts register from: the
+// cross-cutting three above and the two contract clauses (contracts.go),
+// which name a failed clause on stderr.
+func nativeDecoratorSet(stderr io.Writer) map[string]nativeDecoratorFunc {
+	set := map[string]nativeDecoratorFunc{
+		"trace": traceDecorator,
+		"guard": guardDecorator,
+		"retry": retryDecorator,
+	}
+	for name, fn := range contractDecorators(stderr) {
+		set[name] = fn
+	}
+	return set
 }
 
 // nativeDecoratorCall shares the implementation while preserving each engine's
@@ -104,7 +121,7 @@ func adaptInterpreterDecorator(fn nativeDecoratorFunc) interp.DecoratorFunc {
 // host must also wire its effect-aware command handler into the shell backend.
 func compiledNativeDecorators() map[string]shellrt.DecoratorFunc {
 	result := map[string]shellrt.DecoratorFunc{}
-	for name, fn := range map[string]nativeDecoratorFunc{"trace": traceDecorator, "guard": guardDecorator, "retry": retryDecorator} {
+	for name, fn := range nativeDecoratorSet(os.Stderr) {
 		result[name] = func(ctx context.Context, c *shellrt.Call, args []shellrt.DecoratorArg) error {
 			call := &nativeDecoratorCall{Name: c.Name, Site: c.Site, Caller: c.Caller, Advised: c.Advised, Args: c.Args, Results: c.Results, Status: c.Status, Agentic: c.Agentic}
 			flush := func() { c.Args, c.Results, c.Status = call.Args, call.Results, call.Status }

@@ -590,6 +590,14 @@ itself, which is pure Go).
 
 `docs/` holds the planning + status corpus. Load-bearing entries:
 
+- `contracts.md` — **Bash++ contracts (design by contract), Sprint 203:**
+  `Require:`/`Ensure:`/`Effects:` on a dag target, `@require`/`@ensure`/`@guard`
+  on a function; require → body → ensure, exit 3 naming the clause, a check is a
+  SHELL COMMAND at the process boundary (a function check sees `$1..$n` +
+  `STATUS`/`RESULT`, never the script's variables — single-quote it). An
+  agentic yield (exit 6) propagates with no `ensure` run; the fixture is
+  `test/contracts/` (`run.sh [bashy]` replays it on any binary). Natives live in
+  `internal/agentos/contracts.go`, source-only like `@retry`.
 - `agentic-action-example.md` — Sprint 134's bare `agentic` action examples:
   typed function/method, shell function, executable script and native tool
   embedding through the existing handler context and governed chat invocation.
