@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -40,12 +41,20 @@ func TestBashPPPOSIXSessionRuntime(t *testing.T) {
 				t.Fatalf("runtime POSIX=%v, want %v", got, tc.posix)
 			}
 			status := RunSessionCommandWithConfig(context.Background(), request, SessionConfig{})
-			wantStatus := 2
+			// eval reports reparsing errors with status 1, even when the
+			// enclosing command's startup parser would reject with status 2.
+			wantStatus := 1
 			if tc.on {
 				wantStatus = 0
 			}
 			if status != wantStatus || stdout.Len() != 0 || (stderr.Len() == 0) != tc.on {
 				t.Fatalf("status=%d stdout=%q stderr=%q, want status=%d", status, stdout.String(), stderr.String(), wantStatus)
+			}
+			if !tc.on && !strings.Contains(stderr.String(), "a command can only contain words and redirects") {
+				t.Fatalf("disabled grammar did not reject eval text while parsing: %q", stderr.String())
+			}
+			if strings.Contains(stderr.String(), "extensions disabled") {
+				t.Fatalf("disabled grammar reached Bash++ evaluation: %q", stderr.String())
 			}
 		})
 	}

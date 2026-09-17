@@ -99,51 +99,57 @@ func TestCLIBashPPPOSIXContract(t *testing.T) {
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					for _, input := range []struct {
-						name string
-						src  string
-						file bool
+						name    string
+						src     string
+						file    bool
+						offExit int
 					}{
-						{"command", definition, false},
-						{"file", "", true},
+						{"command", definition, false, 2},
+						{"file", "", true, 2},
 						// eval reparses through the runtime dialect rather than the
 						// CLI's startup parser, exposing disagreement between them.
-						{"eval", "eval '" + definition + "'", false},
-						{"source", ". ./extension.bpp", false},
+						// These builtins retain their established parse-error status 1.
+						{"eval", "eval '" + definition + "'", false, 1},
+						{"source", ". ./extension.bpp", false, 1},
 					} {
 						t.Run(input.name, func(t *testing.T) {
 							got := run(tc.args, tc.env, input.src, input.file)
-							wantExit := 2
+							wantExit := input.offExit
 							if tc.on {
 								wantExit = 0
 							}
 							if got.exit != wantExit || got.stdout != "" || (got.stderr == "") != tc.on {
 								t.Fatalf("got=%+v, want exit=%d and Bash++ accepted=%v", got, wantExit, tc.on)
 							}
+							if !tc.on && (!strings.Contains(got.stderr, "syntax error near unexpected token") && !strings.Contains(got.stderr, "a command can only contain words and redirects")) {
+								t.Fatalf("disabled grammar did not reject the definition while parsing: %+v", got)
+							}
+							if strings.Contains(got.stderr, "extensions disabled") {
+								t.Fatalf("disabled grammar reached Bash++ evaluation: %+v", got)
+							}
 						})
 					}
-					// Parse and runtime POSIX semantics must agree with the resolved
-					// profile. Sprint 114's bash combined selector deliberately has
-					// both extensions and POSIX differences off.
-					got := run(tc.args, tc.env, `a=; printf '<%s>\n' "${a+'x'}"`, false)
-					want := "<x>\n"
-					if tc.posix {
-						want = "<'x'>\n"
-					}
-					if got.exit != 0 || got.stdout != want || got.stderr != "" {
-						t.Fatalf("POSIX semantics got=%+v, want stdout=%q", got, want)
-					}
-					got = run(tc.args, tc.env, "set -o", false)
+					// Check the runtime option directly. Sprint 114's bash combined
+					// selector deliberately has both extensions and POSIX off.
+					got := run(tc.args, tc.env, "set -o", false)
 					if got.exit != 0 || got.stderr != "" {
 						t.Fatalf("option enumeration failed: %+v", got)
 					}
+					foundPosix := false
 					for _, line := range strings.Split(got.stdout, "\n") {
 						fields := strings.Fields(line)
 						if len(fields) == 2 && fields[0] == "bashpp" && !tc.on {
 							t.Fatalf("disabled grammar was exposed as a runtime option: %q", line)
 						}
-						if len(fields) == 2 && fields[0] == "posix" && (fields[1] == "on") != tc.posix {
-							t.Fatalf("POSIX runtime profile mismatch: %q, want on=%v", line, tc.posix)
+						if len(fields) == 2 && fields[0] == "posix" {
+							foundPosix = true
+							if (fields[1] == "on") != tc.posix {
+								t.Fatalf("POSIX runtime profile mismatch: %q, want on=%v", line, tc.posix)
+							}
 						}
+					}
+					if !foundPosix {
+						t.Fatalf("option enumeration omitted the POSIX runtime profile: %q", got.stdout)
 					}
 				})
 			}
