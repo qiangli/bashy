@@ -11,8 +11,8 @@ body: fail
 fail    -> 1
 body: yield
 yield   -> 6
-produce -> 0 made
-produce: precondition failed: test -d "$1"
+produce -> 0 made probe=unset
+produce: precondition failed: test -d "$work" && test -n "$1"
 produce -> 3
 twice 2 -> 0 x=4
 twice: postcondition failed: test "$RESULT" -gt 0

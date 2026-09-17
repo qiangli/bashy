@@ -100,6 +100,9 @@ type nativeDecoratorCall struct {
 	Status                      int
 	Agentic                     bool
 	Next                        func(context.Context)
+	// Run evaluates shell source in the call's frame (Call.Run on either
+	// engine): the current Args as $1..$n, vars bound, status returned.
+	Run func(context.Context, string, map[string]string) int
 }
 type nativeDecoratorFunc func(context.Context, *nativeDecoratorCall, []interp.DecoratorArg) error
 
@@ -111,6 +114,10 @@ func adaptInterpreterDecorator(fn nativeDecoratorFunc) interp.DecoratorFunc {
 			flush()
 			c.Next(next)
 			call.Args, call.Results, call.Status = c.Args, c.Results, c.Status
+		}
+		call.Run = func(ctx context.Context, src string, vars map[string]string) int {
+			flush()
+			return c.Run(ctx, src, vars)
 		}
 		defer flush()
 		return fn(ctx, call, args)
@@ -129,6 +136,10 @@ func compiledNativeDecorators() map[string]shellrt.DecoratorFunc {
 				flush()
 				c.Next(next)
 				call.Args, call.Results, call.Status = c.Args, c.Results, c.Status
+			}
+			call.Run = func(ctx context.Context, src string, vars map[string]string) int {
+				flush()
+				return c.Run(ctx, src, vars)
 			}
 			defer flush()
 			converted := make([]interp.DecoratorArg, len(args))

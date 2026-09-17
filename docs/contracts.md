@@ -41,19 +41,20 @@ another target; a `Require:` is one it cannot.
 ## What a check sees
 
 A check runs as a shell command through bashy's in-process shell and
-userland, **at the process boundary**:
+userland:
 
 - **dag target** — in the target's directory, with the target's environment,
   exactly as `Ensure:` always has. `Require:` accepts the same predicate
   forms (`file-exists <path>`, `file-absent <path>`, `http-ok <url>`,
   `cmd <shell…>`, or any bare shell command).
-- **function** — with the call's arguments bound as `$1..$n`, the working
-  directory and the environment bashy was started with. `@ensure`
+- **function** — **in the call's own frame**: the callee's variables (a
+  shell function's dynamic scope, a typed function's captured scope), its
+  working directory, and the call's arguments bound as `$1..$n`. `@ensure`
   additionally sees `STATUS` (the body's exit status) and, for a typed
-  function, `RESULT` (the first result value). A check does **not** see the
-  script's own variables, exported or not — what a check needs is passed to
-  the call. The effect cap on the call (`@guard`) applies to the check's
-  commands exactly as it applies to the body's.
+  function, `RESULT` (the first result value). A check's own assignments are
+  discarded, like a subshell's. The check's commands go through the shell's
+  own handler chain, so the effect cap on the call (`@guard`), registered
+  commands, dry-run and auditing apply to the check exactly as to the body.
 
 Write function checks in **single quotes**: a double-quoted decorator argument
 is expanded where the decorator line is evaluated, so `"$1"` would already be

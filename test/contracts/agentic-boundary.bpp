@@ -6,12 +6,12 @@
 # order; a failed require never runs the body; @guard still denies a write
 # inside the body; a failed ensure exits 3 naming the clause; and a yield
 # (exit 6, input required) inside the block propagates with NO ensure run.
-# Every check is a shell command at the process boundary ($1..$n = the call's
-# arguments; STATUS/RESULT for @ensure) — nothing generative.
+# Every check is a shell command run in the call's own frame ($1..$n = the
+# call's arguments, the script's variables visible, STATUS/RESULT for
+# @ensure) — nothing generative.
 
-# A check sees the call's ARGUMENTS ($1..$n) and the environment bashy was
-# started with — never the script's variables, exported or not. What a check
-# needs is passed to the call.
+# A check sees the script's variables (here $work) as the function does; a
+# check's own assignments never leak back.
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
@@ -27,10 +27,10 @@ agentic function summarize() {
     esac                            # "lie": exits 0, the postcondition disagrees
 }
 
-@require('test -d "$1"')
-@ensure('test -f "$1/$2"')
+@require('test -d "$work" && test -n "$1"')
+@ensure('probe=leaked; test -f "$work/$1"')
 function produce() {
-    : > "$1/$2"
+    : > "$work/$1"
 }
 
 @ensure('test "$RESULT" -gt 0')
@@ -46,8 +46,8 @@ agentic {
 }
 [ -e "$work/leak" ] && echo "LEAK: guard did not deny the write"
 
-produce "$work" made; echo "produce -> $? $(test -f "$work/made" && echo made)"
-produce /nonexistent made; echo "produce -> $?"
+produce made;      echo "produce -> $? $(test -f "$work/made" && echo made) probe=${probe-unset}"
+produce "";        echo "produce -> $?"
 x := twice(2);     echo "twice 2 -> $? x=$x"
 y := twice(0);     echo "twice 0 -> $? y=$y"
 echo done

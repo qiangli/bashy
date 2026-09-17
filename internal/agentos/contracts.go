@@ -3,10 +3,10 @@
 
 // contracts.go — the Bash++ contract decorators, @require and @ensure
 // (Sprint 203, design by contract at the process boundary). They ride the
-// same interp.Decorators slot as trace · guard · retry and add nothing to the
-// engine: a clause is one or more SHELL CHECKS (exit 0 = pass), the same
-// contract `bashy dag`'s Require:/Ensure: lines follow, never an expression
-// language and never anything generative.
+// same interp.Decorators slot as trace · guard · retry: a clause is one or
+// more SHELL CHECKS (exit 0 = pass), the same contract `bashy dag`'s
+// Require:/Ensure: lines follow, never an expression language and never
+// anything generative.
 //
 //   - @require("<check>", ...) runs each check BEFORE the body; the first
 //     failing check ends the call with status 3 (weavecli.ExitPrecondFail)
@@ -18,13 +18,13 @@
 //     weavecli.ExitInputRequired) propagates untouched — a harness must never
 //     see "postcondition failed" masking "input required".
 //
-// A check runs in a fresh in-process shell at the process boundary, with the
-// call's arguments bound as $1..$n, the process environment and cwd, and —
-// for @ensure — STATUS (the body's exit status) and RESULT (a typed
-// function's first result value, else empty). It does not see the caller's
-// shell variables: the engine exposes only Call, and the boundary is the
-// point. The effect cap riding the ctx (@guard, outer) is enforced on the
-// check's commands exactly as on the body's.
+// A check runs through Call.Run — in the decorated call's own frame: the
+// callee's variables, its working directory, the call's arguments as $1..$n,
+// and the shell's own exec-handler chain, so whatever governs the body (the
+// @guard cap, registered commands, dry-run, auditing) governs the check the
+// same way. @ensure additionally binds STATUS (the body's exit status) and
+// RESULT (a typed function's first result value, else empty). A check's own
+// assignments never leak back.
 //
 // Both are source-only (D6): an advised @require/@ensure is refused here, as
 // @retry is, until the tighten-only advice ratchet has its own gate.
@@ -35,15 +35,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
+	"strconv"
 	"strings"
 
-	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/qiangli/coreutils/pkg/weavecli"
-	coreutilsshell "github.com/qiangli/coreutils/shell"
 )
 
 // contractDecorators returns the two clauses bound to the shell's stderr,
@@ -112,50 +109,23 @@ func contractChecks(name string, c *nativeDecoratorCall, args []interp.Decorator
 	return checks, nil
 }
 
-// runContractChecks evaluates checks in order and returns the first that
-// fails, or "" when all pass.
+// runContractChecks evaluates checks in order in the call's frame and
+// returns the first that fails, or "" when all pass.
 func runContractChecks(ctx context.Context, c *nativeDecoratorCall, checks []string, post bool) string {
-	params := make([]string, len(c.Args))
-	for i, a := range c.Args {
-		params[i] = fmt.Sprint(a)
-	}
-	env := os.Environ()
+	var vars map[string]string
 	if post {
 		result := ""
 		if len(c.Results) > 0 {
 			result = fmt.Sprint(c.Results[0])
 		}
-		env = append(env, fmt.Sprintf("STATUS=%d", c.Status), "RESULT="+result)
+		vars = map[string]string{"STATUS": strconv.Itoa(c.Status), "RESULT": result}
 	}
-	dir, _ := os.Getwd()
 	for _, check := range checks {
-		if !contractCheckPasses(ctx, dir, env, params, check) {
+		if c.Run(ctx, check, vars) != 0 {
 			return check
 		}
 	}
 	return ""
-}
-
-// contractCheckPasses runs one check through the in-process shell + the
-// coreutils userland, with the ctx's effect cap enforced; exit 0 = pass. A
-// check that does not even parse fails — an unreadable contract is not a
-// satisfied one.
-func contractCheckPasses(ctx context.Context, dir string, env, params []string, check string) bool {
-	prog, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(check), "contract")
-	if err != nil {
-		return false
-	}
-	runner, err := interp.New(
-		interp.Dir(dir),
-		interp.Params(params...),
-		interp.Env(expand.ListEnviron(env...)),
-		interp.StdIO(nil, io.Discard, io.Discard),
-		interp.ExecHandlers(auditHandler(nil, auditActor(), auditHost()), coreutilsshell.Handler()),
-	)
-	if err != nil {
-		return false
-	}
-	return runner.Run(ctx, prog) == nil
 }
 
 // contractFail seals the call: status 3 and one line naming the function, the

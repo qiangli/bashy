@@ -4,6 +4,7 @@
 package agentos
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -12,6 +13,8 @@ import (
 	"testing"
 
 	"mvdan.cc/sh/v3/interp"
+	"mvdan.cc/sh/v3/lower/shellrt"
+	"mvdan.cc/sh/v3/lower/shellrt/shellexec"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -138,5 +141,73 @@ func TestContractDecoratorsAreSourceOnly(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "source-only") {
 			t.Errorf("%s advised: err = %v, want source-only refusal", name, err)
 		}
+	}
+}
+
+func TestContractChecksRunInTheCallFrame(t *testing.T) {
+	// The check sees the script's variables and the shell's working
+	// directory (a `cd` inside the body moves Runner.Dir, not the process),
+	// and its own assignments are discarded.
+	dir := t.TempDir()
+	script := `want=out.txt
+@require('test -n "$want" && test "$1" = "$WORK"')
+@ensure('probe=leaked; test -f "$want"')
+function build() { cd "$1" && : > "$want"; }
+build "$WORK"
+echo "status=$? probe=${probe-unset}"
+`
+	err, out, errOut := runDecorated(t, context.Background(), syntax.LangBashPP, script, map[string]string{"WORK": dir})
+	if err != nil {
+		t.Fatalf("want pass, got %v (stderr %q)", err, errOut.String())
+	}
+	if got := strings.TrimSpace(out.String()); got != "status=0 probe=unset" {
+		t.Errorf("stdout = %q", got)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "out.txt")); statErr != nil {
+		t.Fatalf("body did not write in the cd'd directory: %v", statErr)
+	}
+}
+
+func TestContractCompiledRequireEnsure(t *testing.T) {
+	// The compiled (shellrt) host: the same clauses through Call.Run over
+	// the program's session.
+	var out, diagnostic bytes.Buffer
+	p, err := shellrt.NewProgram(shellrt.WithStdio(nil, &out, &diagnostic), shellrt.WithShellFactory(shellexec.New()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Session.Close()
+	p.ShellRegion("outer=visible")
+	rungs := []shellrt.Decorator{
+		{Name: "require", Args: func(*shellrt.Program) []shellrt.DecoratorArg {
+			return []shellrt.DecoratorArg{{Value: `test "$1" = ok && test "$outer" = visible`}}
+		}},
+		{Name: "ensure", Args: func(*shellrt.Program) []shellrt.DecoratorArg {
+			return []shellrt.DecoratorArg{{Value: `test "$STATUS" = 0 && test "$RESULT" = 42`}}
+		}},
+	}
+	ran := 0
+	body := func(region *shellrt.Program) error {
+		ran++
+		region.ShellRegion("echo body")
+		region.SetStatus(0)
+		return nil
+	}
+	call := &shellrt.Call{Name: "work", Args: []any{"ok"}, Results: []any{42}}
+	if !p.Decorate(call, rungs, body) {
+		t.Fatalf("chain failed: %s", &diagnostic)
+	}
+	if call.Status != 0 || ran != 1 {
+		t.Fatalf("status=%d ran=%d stderr=%s", call.Status, ran, &diagnostic)
+	}
+	call = &shellrt.Call{Name: "work", Args: []any{"bad"}}
+	if !p.Decorate(call, rungs, body) {
+		t.Fatalf("chain failed: %s", &diagnostic)
+	}
+	// The compiled slot names the failed clause on the process stderr (it is
+	// installed at init); the status and the skipped body are what this
+	// test can see.
+	if call.Status != 3 || ran != 1 {
+		t.Fatalf("status=%d ran=%d stderr=%q", call.Status, ran, diagnostic.String())
 	}
 }
