@@ -1,0 +1,29 @@
+#!/usr/bin/env -S bashy --bashpp
+set -e
+
+~~~go as files
+import "path/filepath"
+
+func Relative(script string, name string) string {
+    absolute, err := filepath.Abs(script)
+    if err != nil { panic(err) }
+    return filepath.Clean(filepath.Join(filepath.Dir(absolute), name))
+}
+~~~
+
+func adapterFile(script string, name string) string {
+    resolved := files.Relative(script, name)
+    return resolved
+}
+
+var script string = ""
+script=$0
+profile := adapterFile(script, "profile.yaml")
+
+var binary string = ""
+binary="${YCODE_BIN:-}"
+if [ -z "$binary" ]; then
+    binary = adapterFile(script, "../../../../ycode/bin/ycode")
+fi
+
+exec "$binary" --file "$profile" "$@"
