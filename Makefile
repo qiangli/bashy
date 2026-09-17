@@ -445,10 +445,10 @@ test-bash-container:
 	 scripts/test-bash-container.sh
 
 ## test-bash-container-bashpp: Run the same hermetic 86-fixture gate with
-## Bash++ selected only for each top-level run-* harness process. The selector
-## is consumed there, so nested GNU fixture shells remain byte-exact Classic.
+## Bash++ selected explicitly for each top-level testee process. The dedicated
+## gate transport avoids using the shell's invocation selector as harness state.
 test-bash-container-bashpp:
-	@BASHY_BASHPP=1 BASH53_OCI="$${BASH53_OCI:-bashy podman}" \
+	@BASHY_BASHPP_GATE=1 BASH53_OCI="$${BASH53_OCI:-bashy podman}" \
 	 scripts/test-bash-container.sh
 
 ## test-self-container: Run build/unit tests in an agent-owned Ubuntu OCI lane.

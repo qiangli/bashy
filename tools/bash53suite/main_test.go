@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 )
@@ -201,6 +202,35 @@ func TestJSONRunnerUsesBASH53Runner(t *testing.T) {
 	report := decodeSingleReport(t, stdout.Bytes())
 	if got, want := report.Context.Runner, "container-amd64-deadbeef"; got != want {
 		t.Fatalf("context.runner = %q, want BASH53_RUNNER value %q", got, want)
+	}
+}
+
+func TestBashPPGatePassesExplicitSelectorToTopLevelTestee(t *testing.T) {
+	got := fixtureCommandArgs(fixture{Name: "alpha", Test: "alpha.sh"}, true)
+	want := []string{"--bashpp", "./alpha.sh"}
+	if !sameStringsInOrder(got, want) {
+		t.Fatalf("Bash++ fixture args = %q, want %q", got, want)
+	}
+}
+
+func TestClassicGateDoesNotPassBashPPSelector(t *testing.T) {
+	got := fixtureCommandArgs(fixture{Name: "alpha", Test: "alpha.sh"}, false)
+	want := []string{"./alpha.sh"}
+	if !sameStringsInOrder(got, want) {
+		t.Fatalf("Classic fixture args = %q, want %q", got, want)
+	}
+}
+
+func TestVerifyBashPPFailsClosedWhenTesteeRejectsSelector(t *testing.T) {
+	launcher := filepath.Join(t.TempDir(), "bash")
+	writeTestFile(t, launcher, "#!/bin/sh\necho 'bashpp rejected' >&2\nexit 2\n")
+	if err := os.Chmod(launcher, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyBashPP(launcher); err == nil {
+		t.Fatal("verifyBashPP accepted a testee that rejected --bashpp")
+	} else if got := err.Error(); !strings.Contains(got, "Bash++ gate requested") || !strings.Contains(got, "bashpp rejected") {
+		t.Fatalf("verifyBashPP error = %q, want selector and testee diagnostics", got)
 	}
 }
 

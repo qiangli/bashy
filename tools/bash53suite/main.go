@@ -77,7 +77,7 @@ type jsonSummary struct {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	var testsDir, bashPath, tests, skip, chunk, chunksManifest string
-	var listOnly, chunkCountOnly, shared, jsonOutput bool
+	var listOnly, chunkCountOnly, shared, jsonOutput, bashpp bool
 	var shard, of int
 	var timeout, jobsTimeout time.Duration
 	jsonOutput = jsonFlagRequested(args)
@@ -95,6 +95,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.IntVar(&of, "of", 1, "number of deterministic shards")
 	flags.IntVar(&shard, "shard", 0, "zero-based deterministic shard index")
 	flags.BoolVar(&jsonOutput, "json", jsonOutput, "emit one JSON result document")
+	flags.BoolVar(&bashpp, "bashpp", false, "require Bash++ and pass --bashpp to each top-level testee")
 	flags.BoolVar(&listOnly, "list", false, "list fixture names and exit")
 	flags.BoolVar(&chunkCountOnly, "chunk-count", false, "print pinned chunk_count from the chunk manifest and exit")
 	flags.BoolVar(&shared, "shared-tree", false, "run in the source fixture tree instead of a private copy (unsafe: leaks platform-built helpers across venues and races concurrent chunks)")
@@ -198,6 +199,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if _, err := os.Stat(bashPath); err != nil {
 		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("bash under test not found: %s: %v", bashPath, err))
+	}
+	if bashpp {
+		if err := verifyBashPP(bashPath); err != nil {
+			return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+		}
 	}
 
 	// Run against a private copy of the corpus, never the shared source tree.
@@ -323,7 +329,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			perTestTimeout = jobsTimeout
 		}
 		start := time.Now()
-		result, err := runFixture(root, testsDir, bashPath, f, perTestTimeout)
+		result, err := runFixture(root, testsDir, bashPath, f, perTestTimeout, bashpp)
 		elapsed := time.Since(start)
 		if err != nil {
 			failed++
@@ -830,7 +836,8 @@ func ensureStub(path string, lines int, name, reason string) error {
 	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
 
-func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duration) (string, error) {
+func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duration, bashppOpt ...bool) (string, error) {
+	bashpp := len(bashppOpt) > 0 && bashppOpt[0]
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	args := []string{}
@@ -843,7 +850,7 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 		defer in.Close()
 		stdin = in
 	} else {
-		args = append(args, "./"+filepath.ToSlash(f.Test))
+		args = fixtureCommandArgs(f, bashpp)
 		// Bash's own suite is run from a terminal, so a fixture's inherited
 		// stdin has NO input available and is NOT at end-of-file. os/exec's
 		// default (/dev/null) gets the second half wrong: /dev/null is always
@@ -948,6 +955,24 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 	}
 	writeDebugOutput(f.Name, want, got)
 	return "FAIL", fmt.Errorf("output differs from %s\n%s", f.Right, firstDiff(want, got))
+}
+
+func fixtureCommandArgs(f fixture, bashpp bool) []string {
+	args := make([]string, 0, 2)
+	if bashpp {
+		args = append(args, "--bashpp")
+	}
+	args = append(args, "./"+filepath.ToSlash(f.Test))
+	return args
+}
+
+func verifyBashPP(bashPath string) error {
+	cmd := exec.Command(bashPath, "--bashpp", "-c", "type Sprint119Gate int")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("Bash++ gate requested but --bashpp is not active in %s: %v\n%s", bashPath, err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 func fixtureEnv(root, testsDir, bashPath, name string) []string {
