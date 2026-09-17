@@ -1,0 +1,21 @@
+OpenClaw common session lifecycle
+
+Usage:
+  openclaw [command]
+
+Available Commands:
+  completion  Generate command completion
+  exit        A session exit verb is not present in the pinned OpenClaw source
+  init        Guided setup for auth, models, gateway, workspace and skills
+  model       Model discovery and configuration
+  plan        Planning mode is not present in the pinned OpenClaw source
+  resume      Resume a recent session in the terminal UI
+  start       Open the terminal UI connected to the session runtime
+  validate    Validate and compile the profile
+  version     Print version information
+
+Flags:
+  -f, --file string   Configuration file (default "agent.yaml")
+  -h, --help          Show command help
+      --json          Emit machine-readable output
+

@@ -1,0 +1,13 @@
+Resume a recent session in the terminal UI
+
+Usage:
+  openclaw resume [query]
+
+Flags:
+      --handoff string   Opaque session handoff payload
+
+Global Flags:
+  -f, --file string   Configuration file (default "agent.yaml")
+  -h, --help          Show command help
+      --json          Emit machine-readable output
+

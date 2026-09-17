@@ -1,0 +1,14 @@
+Model discovery and configuration
+
+Usage:
+  openclaw model [command]
+
+Available Commands:
+  list        List models configured by the compiled profile
+  status      Show live model auth and runtime state
+
+Global Flags:
+  -f, --file string   Configuration file (default "agent.yaml")
+  -h, --help          Show command help
+      --json          Emit machine-readable output
+

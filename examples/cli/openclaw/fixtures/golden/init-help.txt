@@ -1,0 +1,15 @@
+Guided setup for auth, models, gateway, workspace and skills
+
+Usage:
+  openclaw init
+
+Flags:
+      --agent-name string   Name for the first agent
+      --non-interactive     Run without prompts
+      --workspace string    Workspace proposal for guided setup
+
+Global Flags:
+  -f, --file string   Configuration file (default "agent.yaml")
+  -h, --help          Show command help
+      --json          Emit machine-readable output
+
