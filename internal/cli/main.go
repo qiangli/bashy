@@ -727,7 +727,12 @@ func newRunner() (*interp.Runner, error) {
 			return expandPrompt(s, envGet, 0, 0, startupPosix)
 		}),
 	}
-	if startupBashPP.Source == BashPPSourceEnv {
+	// The pure bash front door preserves Classic option enumeration when an
+	// invocation selector enables its extensions. The Bashy front door retains
+	// explicit mode discovery; an environment-selected compatibility process
+	// keeps the existing Classic listing contract on either binary.
+	if startupBashPP.Source == BashPPSourceEnv ||
+		(!AgentOSBashPPDefault && startupBashPP.Source == BashPPSourceCLI) {
 		opts = append(opts, interp.HideBashPPOption())
 	}
 	// Bash enables job control (monitor mode) automatically for an
