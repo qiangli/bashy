@@ -3,6 +3,14 @@
 # No checkout or fixture mount is visible to the runtime container.
 set -euo pipefail
 
+# This is a harness request, not a shell invocation selector. In particular,
+# an env-bash shebang may consume BASHY_BASHPP before this script starts.
+# Require an explicit request so a lost channel cannot become an OFF green.
+case "${BASH53_BASHPP:-}" in
+  0|1) ;;
+  *) echo 'test-bash-container: require BASH53_BASHPP=0 or 1 (use the Makefile targets)' >&2; exit 2 ;;
+esac
+
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 # shellcheck source=scripts/test-lane-id.sh
@@ -52,10 +60,6 @@ echo ">> running all 86 fixtures in the hermetic image" >&2
 # --tty supplies a controlling terminal for read/test/vredir. A fresh tmpfs
 # prevents fixed upstream names such as /tmp/bash from colliding with host or
 # prior-run state. The baked fixture tree and binaries remain immutable.
-gate_args=()
-if [ "${BASHY_BASHPP_GATE:-}" = 1 ]; then
-  gate_args+=(--bashpp)
-fi
 $OCI run --rm --platform "linux/$ARCH" \
   --name "$CONTAINER" --label "io.dhnt.test.lane=$LANE" \
   --cpus "${BASHY_TEST_CPUS:-2}" --memory "${BASHY_TEST_MEMORY:-6g}" --pids-limit 4096 \
@@ -70,10 +74,10 @@ $OCI run --rm --platform "linux/$ARCH" \
   -e BASH53_TIMEOUT="${BASH53_TIMEOUT:-60s}" \
   -e BASH53_JOBS_TIMEOUT="${BASH53_JOBS_TIMEOUT:-120s}" \
   -e BASH53_MEM_KB="${BASH53_MEM_KB:-4194304}" \
-  -e BASHY_BASHPP_GATE="${BASHY_BASHPP_GATE:-}" \
+  -e BASH53_BASHPP="$BASH53_BASHPP" \
   "$IMAGE" \
-    sigdfl "./bin/bash53suite-linux-$ARCH" \
+  sigdfl "./bin/bash53suite-linux-$ARCH" \
     -tests-dir /bash53/tests \
     -bash "./bin/bash-linux-$ARCH/bash" \
-    "${gate_args[@]}" \
+    -bashpp-mode "$BASH53_BASHPP" \
     -tests "${TESTS:-}"

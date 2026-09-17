@@ -165,7 +165,7 @@ test-awd-installed-stress:
 # test-meet-spa-fresh(-regression) run FIRST, before any recipe that could
 # rebuild-and-promote the tracked meet SPA artifact and thereby mask a stale
 # bundle the freshness gate exists to catch.
-test: test-meet-spa-fresh-regression test-meet-spa-fresh test-build-fail-closed test-sibling-pins test-isolated-lanes test-build-tag-matrix
+test: test-meet-spa-fresh-regression test-meet-spa-fresh test-build-fail-closed test-sibling-pins test-isolated-lanes test-build-tag-matrix test-bash-container-mode
 	go test ./...
 
 ## test-meet-spa-fresh: REQUIRED non-mutating gate — build a fresh meet SPA and
@@ -441,15 +441,21 @@ test-bash-parallel: build-bash test-bash-fixtures test-bash-helpers
 ## read-only root, a non-root uid, and a PTY for fixtures that open /dev/tty.
 ## Set BASH53_OCI or BASH53_IMAGE to override the container command/image.
 test-bash-container:
-	@BASH53_OCI="$${BASH53_OCI:-bashy podman}" \
+	@BASH53_BASHPP=0 BASH53_OCI="$${BASH53_OCI:-bashy podman}" \
 	 scripts/test-bash-container.sh
 
 ## test-bash-container-bashpp: Run the same hermetic 86-fixture gate with
 ## Bash++ selected explicitly for each top-level testee process. The dedicated
 ## gate transport avoids using the shell's invocation selector as harness state.
 test-bash-container-bashpp:
-	@BASHY_BASHPP_GATE=1 BASH53_OCI="$${BASH53_OCI:-bashy podman}" \
+	@BASH53_BASHPP=1 BASH53_OCI="$${BASH53_OCI:-bashy podman}" \
 	 scripts/test-bash-container.sh
+
+## test-bash-container-mode: Prove requested container modes survive a helper
+## shell that consumes BASHY_BASHPP (fake OCI/build commands; no container).
+.PHONY: test-bash-container-mode
+test-bash-container-mode:
+	/bin/sh scripts/test-bash-container-mode.sh
 
 ## test-self-container: Run build/unit tests in an agent-owned Ubuntu OCI lane.
 test-self-container:

@@ -205,35 +205,6 @@ func TestJSONRunnerUsesBASH53Runner(t *testing.T) {
 	}
 }
 
-func TestBashPPGatePassesExplicitSelectorToTopLevelTestee(t *testing.T) {
-	got := fixtureCommandArgs(fixture{Name: "alpha", Test: "alpha.sh"}, true)
-	want := []string{"--bashpp", "./alpha.sh"}
-	if !sameStringsInOrder(got, want) {
-		t.Fatalf("Bash++ fixture args = %q, want %q", got, want)
-	}
-}
-
-func TestClassicGateDoesNotPassBashPPSelector(t *testing.T) {
-	got := fixtureCommandArgs(fixture{Name: "alpha", Test: "alpha.sh"}, false)
-	want := []string{"./alpha.sh"}
-	if !sameStringsInOrder(got, want) {
-		t.Fatalf("Classic fixture args = %q, want %q", got, want)
-	}
-}
-
-func TestVerifyBashPPFailsClosedWhenTesteeRejectsSelector(t *testing.T) {
-	launcher := filepath.Join(t.TempDir(), "bash")
-	writeTestFile(t, launcher, "#!/bin/sh\necho 'bashpp rejected' >&2\nexit 2\n")
-	if err := os.Chmod(launcher, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := verifyBashPP(launcher); err == nil {
-		t.Fatal("verifyBashPP accepted a testee that rejected --bashpp")
-	} else if got := err.Error(); !strings.Contains(got, "Bash++ gate requested") || !strings.Contains(got, "bashpp rejected") {
-		t.Fatalf("verifyBashPP error = %q, want selector and testee diagnostics", got)
-	}
-}
-
 func TestFixtureEnvPinsLauncherPayloadPair(t *testing.T) {
 	dir := t.TempDir()
 	launcher := filepath.Join(dir, "bash")
@@ -253,6 +224,189 @@ func TestFixtureEnvPinsLauncherPayloadPair(t *testing.T) {
 		}
 	}
 	t.Fatalf("fixture environment does not contain %q", want)
+}
+
+func TestBashPPGatePassesExplicitSelectorToTopLevelTestee(t *testing.T) {
+	got := fixtureCommandArgs(fixture{Name: "alpha", Test: "alpha.sh"}, true)
+	want := []string{"--bashpp", "./alpha.sh"}
+	if !sameStringsInOrder(got, want) {
+		t.Fatalf("Bash++ fixture args = %q, want %q", got, want)
+	}
+}
+
+func TestClassicGatePassesExplicitDisableSelectorToTopLevelTestee(t *testing.T) {
+	got := fixtureCommandArgs(fixture{Name: "alpha", Test: "alpha.sh"}, false)
+	want := []string{"--no-bashpp", "./alpha.sh"}
+	if !sameStringsInOrder(got, want) {
+		t.Fatalf("Classic fixture args = %q, want %q", got, want)
+	}
+}
+
+func TestBashPPGateInputFixtureGetsExplicitSelector(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper uses a POSIX shell")
+	}
+	dir := t.TempDir()
+	launcher := filepath.Join(dir, "bash")
+	writeTestFile(t, launcher, "#!/bin/sh\n"+
+		"[ \"$1\" = \"$EXPECTED_BASH53_FLAG\" ] || exit 83\nshift\n"+
+		"[ $# = 0 ] || exit 84\n"+
+		"[ \"${BASHY_BASHPP+x}\" != x ] || exit 85\ncat\n")
+	if err := os.Chmod(launcher, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(dir, "input-line.sh"), "input-fixture\n")
+	writeTestFile(t, filepath.Join(dir, "input.right"), "input-fixture\n")
+	for _, tc := range []struct {
+		mode, flag string
+		enabled    bool
+	}{
+		{"0", "--no-bashpp", false}, {"1", "--bashpp", true},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			t.Setenv("BASH53_BASHPP", tc.mode)
+			t.Setenv("BASHY_BASHPP", "1")
+			t.Setenv("EXPECTED_BASH53_FLAG", tc.flag)
+			status, err := runFixture(dir, dir, launcher, fixture{Name: "input-test", Right: "input.right"}, time.Second, tc.enabled)
+			if err != nil || status != "PASS" {
+				t.Fatalf("stdin fixture mode %s: status=%s err=%v", tc.mode, status, err)
+			}
+		})
+	}
+}
+
+func TestVerifyBashPPFailsClosedWhenTesteeRejectsSelector(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper uses a POSIX shell")
+	}
+	dir := t.TempDir()
+	launcher := filepath.Join(dir, "bash")
+	writeTestFile(t, launcher, "#!/bin/sh\necho 'bashpp rejected' >&2\nexit 2\n")
+	if err := os.Chmod(launcher, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BASH53_BASHPP", "1")
+	if err := proveBashPPMode(dir, dir, launcher, "1"); err == nil {
+		t.Fatal("mode proof accepted a testee that rejected --bashpp")
+	} else if got := err.Error(); !strings.Contains(got, "Bash++ mode proof failed") || !strings.Contains(got, "bashpp rejected") {
+		t.Fatalf("mode proof error = %q, want selector and testee diagnostics", got)
+	}
+}
+
+func TestBashPPModeProofRejectsNoopTestee(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper uses a POSIX shell")
+	}
+	dir := t.TempDir()
+	launcher := filepath.Join(dir, "bash")
+	writeTestFile(t, launcher, "#!/bin/sh\nexit 0\n")
+	if err := os.Chmod(launcher, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"0", "1"} {
+		t.Setenv("BASH53_BASHPP", mode)
+		if err := proveBashPPMode(dir, dir, launcher, mode); err == nil {
+			t.Fatalf("mode %s accepted an exit-zero no-op testee", mode)
+		}
+	}
+}
+
+func TestFixtureEnvClearsInheritedSelectorsAtGateLaunch(t *testing.T) {
+	for _, mode := range []string{"0", "1"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Setenv("BASH53_BASHPP", mode)
+			t.Setenv("BASHY_BASHPP", "stale")
+			for _, name := range []string{"mode-proof", "alpha", "input-test"} {
+				var selectors []string
+				for _, entry := range fixtureEnv("", t.TempDir(), "/candidate/bash", name) {
+					if strings.HasPrefix(entry, "BASHY_BASHPP=") {
+						selectors = append(selectors, entry)
+					}
+				}
+				if len(selectors) != 0 {
+					t.Fatalf("fixture %s inherited selectors = %q, want none", name, selectors)
+				}
+			}
+		})
+	}
+}
+
+func TestBashPPModeLostSelectorRefusesBeforeFixtures(t *testing.T) {
+	for _, tc := range []struct{ mode, channel string }{
+		{"1", ""}, {"1", "0"}, {"0", "1"}, {"lost", "lost"},
+	} {
+		t.Run(tc.mode+"/"+tc.channel, func(t *testing.T) {
+			t.Setenv("BASH53_BASHPP", tc.channel)
+			var stdout, stderr bytes.Buffer
+			code := run([]string{"--json", "-bashpp-mode", tc.mode}, &stdout, &stderr)
+			if code != 2 || !strings.Contains(stderr.String(), "Bash++") && !strings.Contains(stderr.String(), "bashpp-mode") {
+				t.Fatalf("lost mode exit=%d stderr=%q", code, stderr.String())
+			}
+			report := decodeSingleReport(t, stdout.Bytes())
+			if report.Infrastructure.Status != "failed" || len(report.Verdicts) != 0 || report.Context.BashPPVerified {
+				t.Fatalf("lost selector emitted evidence: %+v", report)
+			}
+		})
+	}
+}
+
+func TestBashPPModeSemanticProofRejectsClassicForON(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Classic reference is a POSIX shell")
+	}
+	// The wrapper ignores Bashy's flags. ON must refuse despite the correctly
+	// forwarded argv; OFF must prove the ordinary shell still runs.
+	t.Setenv("BASH53_BASHPP", "1")
+	dir := t.TempDir()
+	classic := filepath.Join(dir, "classic")
+	writeTestFile(t, classic, "#!/bin/sh\nshift\nexec /bin/bash \"$@\"\n")
+	if err := os.Chmod(classic, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := proveBashPPMode(dir, dir, classic, "1"); err == nil {
+		t.Fatal("ON accepted a Classic shell that ignored its selector")
+	}
+	t.Setenv("BASH53_BASHPP", "0")
+	if err := proveBashPPMode(dir, dir, classic, "0"); err != nil {
+		t.Fatalf("OFF did not prove the Classic reference: %v", err)
+	}
+}
+
+func TestBashPPModeMissingAssertionRefuses(t *testing.T) {
+	t.Setenv("BASH53_BASHPP", "1")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--json"}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "missing harness mode assertion") {
+		t.Fatalf("missing assertion exit=%d stderr=%q", code, stderr.String())
+	}
+	report := decodeSingleReport(t, stdout.Bytes())
+	if report.Infrastructure.Status != "failed" || len(report.Verdicts) != 0 {
+		t.Fatalf("missing assertion emitted fixture evidence: %+v", report)
+	}
+}
+
+func TestBashPPModeProofKeepsFixtureDenominator(t *testing.T) {
+	testsDir, bashPath := makePassingSuite(t, []string{"alpha"})
+	// This child checks the actual argument/environment contract at both the
+	// preflight and fixture boundary, including removal of a stale selector.
+	writeTestFile(t, bashPath, "#!/bin/sh\n"+
+		"[ \"$1\" = --bashpp ] || exit 83\nshift\n"+
+		"[ \"${BASHY_BASHPP+x}\" != x ] || exit 84\n"+
+		"case \"$1\" in */mode-proof.sh) printf '%s\\n' bash53-shell-active bash53-bashpp-active ;; *) cat \"$1\" ;; esac\n")
+	t.Setenv("BASH53_BASHPP", "1")
+	t.Setenv("BASHY_BASHPP", "0")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--json", "--shared-tree", "--tests-dir", testsDir, "--bash", bashPath, "-bashpp-mode", "1"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("run exit=%d stderr=%q", code, stderr.String())
+	}
+	report := decodeSingleReport(t, stdout.Bytes())
+	if report.Context.BashPPMode != "on" || !report.Context.BashPPVerified {
+		t.Fatalf("no affirmative mode proof: %+v", report.Context)
+	}
+	if len(report.Verdicts) != 1 || report.Summary != (jsonSummary{Passed: 1}) {
+		t.Fatalf("preflight changed the fixture denominator: %+v", report)
+	}
 }
 
 func TestJSONChunkMetadataAndSelection(t *testing.T) {

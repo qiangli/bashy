@@ -48,13 +48,15 @@ type jsonChunk struct {
 }
 
 type jsonContext struct {
-	Runner     string `json:"runner"`
-	Commit     string `json:"commit"`
-	StartedAt  string `json:"started_at"`
-	FinishedAt string `json:"finished_at"`
-	HostOS     string `json:"host_os"`
-	HostArch   string `json:"host_arch"`
-	BashPath   string `json:"bash_path"`
+	Runner         string `json:"runner"`
+	Commit         string `json:"commit"`
+	StartedAt      string `json:"started_at"`
+	FinishedAt     string `json:"finished_at"`
+	HostOS         string `json:"host_os"`
+	HostArch       string `json:"host_arch"`
+	BashPath       string `json:"bash_path"`
+	BashPPMode     string `json:"bashpp_mode,omitempty"`
+	BashPPVerified bool   `json:"bashpp_verified,omitempty"`
 }
 
 type jsonInfrastructure struct {
@@ -76,8 +78,8 @@ type jsonSummary struct {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	var testsDir, bashPath, tests, skip, chunk, chunksManifest string
-	var listOnly, chunkCountOnly, shared, jsonOutput, bashpp bool
+	var testsDir, bashPath, tests, skip, chunk, chunksManifest, bashPPMode string
+	var listOnly, chunkCountOnly, shared, jsonOutput bool
 	var shard, of int
 	var timeout, jobsTimeout time.Duration
 	jsonOutput = jsonFlagRequested(args)
@@ -88,6 +90,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	flags.StringVar(&testsDir, "tests-dir", "external/bash-5.3/tests", "bash 5.3 tests directory")
 	flags.StringVar(&bashPath, "bash", "bin/bash", "bash-compatible binary under test")
+	flags.StringVar(&bashPPMode, "bashpp-mode", "", "require and prove BASH53_BASHPP=0 or 1 for the measured fixture shells")
 	flags.StringVar(&tests, "tests", "", "space-separated fixture names to run")
 	flags.StringVar(&skip, "skip", "", "space-separated fixture names to skip (BASH_TEST_SKIP)")
 	flags.StringVar(&chunk, "chunk", "", "run one distributed chunk, as 1/N")
@@ -95,7 +98,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.IntVar(&of, "of", 1, "number of deterministic shards")
 	flags.IntVar(&shard, "shard", 0, "zero-based deterministic shard index")
 	flags.BoolVar(&jsonOutput, "json", jsonOutput, "emit one JSON result document")
-	flags.BoolVar(&bashpp, "bashpp", false, "require Bash++ and pass --bashpp to each top-level testee")
 	flags.BoolVar(&listOnly, "list", false, "list fixture names and exit")
 	flags.BoolVar(&chunkCountOnly, "chunk-count", false, "print pinned chunk_count from the chunk manifest and exit")
 	flags.BoolVar(&shared, "shared-tree", false, "run in the source fixture tree instead of a private copy (unsafe: leaks platform-built helpers across venues and races concurrent chunks)")
@@ -109,6 +111,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return infrastructureFailure(true, stdout, stderr, &report, err)
 		}
 		return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+	}
+	if bashPPMode == "" && os.Getenv("BASH53_BASHPP") != "" {
+		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("BASH53_BASHPP requires -bashpp-mode: missing harness mode assertion"))
+	}
+	if bashPPMode != "" {
+		if bashPPMode != "0" && bashPPMode != "1" {
+			return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("invalid -bashpp-mode %q: want 0 or 1", bashPPMode))
+		}
+		if got := os.Getenv("BASH53_BASHPP"); got != bashPPMode {
+			return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("requested Bash++ mode %s but BASH53_BASHPP=%q: lost or changed harness selector", bashPPMode, got))
+		}
 	}
 	explicitShard := false
 	flags.Visit(func(f *flag.Flag) {
@@ -199,11 +212,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if _, err := os.Stat(bashPath); err != nil {
 		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("bash under test not found: %s: %v", bashPath, err))
-	}
-	if bashpp {
-		if err := verifyBashPP(bashPath); err != nil {
-			return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
-		}
 	}
 
 	// Run against a private copy of the corpus, never the shared source tree.
@@ -306,6 +314,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if len(selected) == 0 {
 		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("no fixtures selected"))
 	}
+	if bashPPMode != "" {
+		report.Context.BashPPMode = map[string]string{"0": "off", "1": "on"}[bashPPMode]
+		if err := proveBashPPMode(root, testsDir, bashPath, bashPPMode); err != nil {
+			return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+		}
+		report.Context.BashPPVerified = true
+		fmt.Fprintf(logOut, "Mode proof: Bash++ %s verified through the measured testee and fixture environment\n", report.Context.BashPPMode)
+	}
 
 	fmt.Fprintf(logOut, "Running bash 5.3 test suite against %s (%s timeout per test", bashPath, timeout)
 	if chunk != "" {
@@ -329,7 +345,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 			perTestTimeout = jobsTimeout
 		}
 		start := time.Now()
-		result, err := runFixture(root, testsDir, bashPath, f, perTestTimeout, bashpp)
+		var bashppOpt []bool
+		if bashPPMode != "" {
+			bashppOpt = []bool{bashPPMode == "1"}
+		}
+		result, err := runFixture(root, testsDir, bashPath, f, perTestTimeout, bashppOpt...)
 		elapsed := time.Since(start)
 		if err != nil {
 			failed++
@@ -837,10 +857,14 @@ func ensureStub(path string, lines int, name, reason string) error {
 }
 
 func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duration, bashppOpt ...bool) (string, error) {
-	bashpp := len(bashppOpt) > 0 && bashppOpt[0]
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	args := []string{}
+	if len(bashppOpt) > 0 {
+		args = fixtureCommandArgs(f, bashppOpt[0])
+	} else if f.Name != "input-test" {
+		args = append(args, "./"+filepath.ToSlash(f.Test))
+	}
 	var stdin *os.File
 	if f.Name == "input-test" {
 		in, err := os.Open(filepath.Join(testsDir, "input-line.sh"))
@@ -850,7 +874,6 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 		defer in.Close()
 		stdin = in
 	} else {
-		args = fixtureCommandArgs(f, bashpp)
 		// Bash's own suite is run from a terminal, so a fixture's inherited
 		// stdin has NO input available and is NOT at end-of-file. os/exec's
 		// default (/dev/null) gets the second half wrong: /dev/null is always
@@ -957,33 +980,23 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 	return "FAIL", fmt.Errorf("output differs from %s\n%s", f.Right, firstDiff(want, got))
 }
 
-func fixtureCommandArgs(f fixture, bashpp bool) []string {
-	args := make([]string, 0, 2)
-	if bashpp {
-		args = append(args, "--bashpp")
-	}
-	args = append(args, "./"+filepath.ToSlash(f.Test))
-	return args
-}
-
-func verifyBashPP(bashPath string) error {
-	cmd := exec.Command(bashPath, "--bashpp", "-c", "type Sprint119Gate int")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("Bash++ gate requested but --bashpp is not active in %s: %v\n%s", bashPath, err, strings.TrimSpace(string(output)))
-	}
-	return nil
-}
-
 func fixtureEnv(root, testsDir, bashPath, name string) []string {
 	env := os.Environ()
+	mode := os.Getenv("BASH53_BASHPP")
 	out := make([]string, 0, len(env)+10)
 	for _, kv := range env {
 		if strings.HasPrefix(kv, "OLDPWD=") {
 			continue
 		}
+		if (mode == "0" || mode == "1") && strings.HasPrefix(kv, "BASHY_BASHPP=") {
+			continue
+		}
 		out = append(out, kv)
 	}
+	// Gate launches select their mode explicitly in argv. Remove any inherited
+	// invocation selector so the requested OFF mode cannot be contaminated and
+	// nested GNU fixture shells remain Classic. Native diagnostic launches keep
+	// their existing environment contract when there is no gate request.
 	tmpBase := os.TempDir()
 	rawPath := filepath.Join(tmpBase, fmt.Sprintf("bashy-tstraw-%d", os.Getpid()))
 	outPath := filepath.Join(tmpBase, fmt.Sprintf("bashy-tstout-%d", os.Getpid()))
@@ -1011,6 +1024,74 @@ func fixtureEnv(root, testsDir, bashPath, name string) []string {
 		}
 	}
 	return out
+}
+
+func fixtureCommandArgs(f fixture, bashpp bool) []string {
+	args := make([]string, 0, 2)
+	if bashpp {
+		args = append(args, "--bashpp")
+	} else {
+		args = append(args, "--no-bashpp")
+	}
+	if f.Name != "input-test" {
+		path := filepath.ToSlash(f.Test)
+		if !filepath.IsAbs(f.Test) {
+			path = "./" + path
+		}
+		args = append(args, path)
+	}
+	return args
+}
+
+// proveBashPPMode uses file dispatch and exactly the argument/environment
+// constructors used by runFixture. Merely forwarding a mode flag is not
+// evidence that the testee used it.
+// This preflight creates no fixture verdict and never changes the corpus.
+func proveBashPPMode(root, testsDir, bashPath, mode string) error {
+	dir, err := os.MkdirTemp("", "bashy-bash53-mode-*")
+	if err != nil {
+		return fmt.Errorf("Bash++ mode proof: %w", err)
+	}
+	defer os.RemoveAll(dir)
+	probe := filepath.Join(dir, "mode-proof.sh")
+	const shellMarker = "bash53-shell-active\n"
+	const extensionMarker = "bash53-bashpp-active\n"
+	source := "printf '%s\\n' bash53-shell-active\nset -e\ntype Bash53GateProof int\nprintf '%s\\n' bash53-bashpp-active\n"
+	if err := os.WriteFile(probe, []byte(source), 0o600); err != nil {
+		return fmt.Errorf("Bash++ mode proof: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bashPath, fixtureCommandArgs(fixture{Name: "mode-proof", Test: probe}, mode == "1")...)
+	configureProcess(cmd)
+	cmd.Dir = testsDir
+	cmd.Env = fixtureEnv(root, testsDir, bashPath, "mode-proof")
+	cmd.Cancel = func() error { killProcessTree(cmd.Process.Pid); return nil }
+	cmd.WaitDelay = 2 * time.Second
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	watch, err := armParentDeathWatch(cmd)
+	if err != nil {
+		return fmt.Errorf("Bash++ mode proof: %w", err)
+	}
+	startErr := cmd.Start()
+	parentDeathWatchStarted(watch, startErr)
+	defer stopParentDeathWatch(watch)
+	if startErr != nil {
+		return fmt.Errorf("Bash++ mode proof: %w", startErr)
+	}
+	err = cmd.Wait()
+	killProcessTree(cmd.Process.Pid)
+	if ctx.Err() != nil {
+		return fmt.Errorf("Bash++ mode proof timed out: %w", ctx.Err())
+	}
+	if mode == "1" && err == nil && stdout.String() == shellMarker+extensionMarker && stderr.Len() == 0 {
+		return nil
+	}
+	if exitErr, ok := err.(*exec.ExitError); mode == "0" && ok && exitErr.ExitCode() == 1 && stdout.String() == shellMarker {
+		return nil
+	}
+	return fmt.Errorf("Bash++ mode proof failed for requested mode %s: status=%v stdout=%q stderr=%q", mode, err, stdout.String(), stderr.String())
 }
 
 func isExecutableFile(path string) bool {
