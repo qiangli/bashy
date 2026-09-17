@@ -52,6 +52,7 @@ scratch=$(mktemp -d "${TMPDIR:-/tmp}/bashy-cli-mini.XXXXXX")
 keep=1
 trap 'if [ "$keep" -eq 0 ]; then rm -rf "$scratch"; else printf "fixture evidence: %s\n" "$scratch" >&2; fi' EXIT
 trap 'exit 1' HUP INT TERM
+export MSWEA_WORKDIR="$scratch"
 
 passed=0
 pass() { passed=$((passed + 1)); printf 'PASS %s\n' "$1"; }
@@ -80,10 +81,12 @@ run_ycode completion elvish; want_status usage-bad-shell 2; pass usage-bad-shell
 # --- 2. ENTRYPOINT PARITY (shell == yaml == golden) ---------------------
 parity_case() {
     name=$1
+    shell_work=$(mktemp -d "$scratch/${name}-shell.XXXXXX")
+    yaml_work=$(mktemp -d "$scratch/${name}-yaml.XXXXXX")
     # The envelope is emitted on stdout even when the terminal outcome is a
     # non-submit (exit 1); `|| true` keeps set -e from aborting on that.
-    shell_out=$("$bashy_bin" --bashpp "$adapter" --scenario "$scenarios/$name.json" -y --emit-envelope 2>/dev/null || true)
-    yaml_out=$(/bin/sh "$yaml_entry" --scenario "$scenarios/$name.json" -y --emit-envelope 2>/dev/null || true)
+    shell_out=$(MSWEA_WORKDIR="$shell_work" "$bashy_bin" --bashpp "$adapter" --scenario "$scenarios/$name.json" -y --emit-envelope 2>/dev/null || true)
+    yaml_out=$(MSWEA_WORKDIR="$yaml_work" /bin/sh "$yaml_entry" --scenario "$scenarios/$name.json" -y --emit-envelope 2>/dev/null || true)
     gold=$(cat "$result_golden/$name.json")
     [ "$shell_out" = "$gold" ] || fail "parity-$name" "shell != golden"
     [ "$shell_out" = "$yaml_out" ] || fail "parity-$name" "shell != yaml"

@@ -89,10 +89,15 @@ def validate_budget(*, cost_limit: float, step_limit: int) -> tuple[float, int]:
         raise ConfigError(f"cost limit must be finite, got {cost_limit!r}")
     if cost < 0:
         raise ConfigError(f"cost limit must be >= 0 (0 disables), got {cost}")
+    if isinstance(step_limit, bool):
+        raise ConfigError(f"step limit is not an integer: {step_limit!r}")
     try:
-        steps = int(step_limit)
+        step_number = float(step_limit)
     except (TypeError, ValueError) as e:
         raise ConfigError(f"step limit is not an integer: {step_limit!r}") from e
+    if math.isnan(step_number) or math.isinf(step_number) or not step_number.is_integer():
+        raise ConfigError(f"step limit is not an integer: {step_limit!r}")
+    steps = int(step_number)
     if steps < 0:
         raise ConfigError(f"step limit must be >= 0 (0 disables), got {steps}")
     return cost, steps

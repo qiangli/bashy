@@ -25,6 +25,14 @@ fi
 export BASHY_BIN
 python_bin="${PYTHON_BIN:-python3}"
 
+# Honor help wherever it appears, including after flags such as
+# `-t TASK --help`; ycode owns rendering for those requests.
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help) exec "$YCODE_BIN" --file "$profile" --help ;;
+    esac
+done
+
 verb="${1:-}"
 case "$verb" in
     help | -h | --help | version | validate | completion | schema)

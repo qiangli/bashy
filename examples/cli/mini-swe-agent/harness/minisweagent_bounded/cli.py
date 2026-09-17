@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -211,13 +212,13 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write("error: empty task\n")
             return EXIT_FAILCLOSED
 
-    import shutil
-    import tempfile
-    scratch = tempfile.mkdtemp(prefix="mswea-cli-")
+    # Match the upstream CLI's working-directory behavior. Test fixtures can
+    # set MSWEA_WORKDIR to an isolated directory without deleting user output.
+    workdir = spec.get("environment", {}).get("cwd") or os.environ.get("MSWEA_WORKDIR") or os.getcwd()
     agent = None
     try:
         try:
-            agent = build_agent(spec, cwd=scratch, prompter=prompter)
+            agent = build_agent(spec, cwd=workdir, prompter=prompter)
             run = run_agent(agent, spec["task"])
         except NonInteractiveApproval as e:
             if agent is not None:
@@ -247,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
                     sys.stdout.write("\n")
         return _exit_code(envelope["exit_status"])
     finally:
-        shutil.rmtree(scratch, ignore_errors=True)
+        pass
 
 
 if __name__ == "__main__":
