@@ -11,33 +11,25 @@ import (
 
 // Sprint 98, Story #125 (B1): the resolved Bash++ dialect/selector model.
 //
-// This file is a self-contained preparation slice. It is not called from
-// main.go or anywhere else in this package — activation is held for the
-// parser/runtime integration story (B2/B3, #126) once bashpp_test.go's
-// callers are the only callers. Nothing here changes what any existing
-// invocation does.
+// Resolution is shared by the cold CLI and warm-session entry paths. Enabled
+// describes the effective grammar/runtime after the startup POSIX policy;
+// Source retains the winning selector tier even when that policy disables it.
 //
 // # Parser entry-path audit
 //
-// Every site in this package that currently builds a [syntax.Parser] or
-// otherwise pins a [syntax.LangVariant], and whether it is a candidate for
-// Bash++ dialect wiring once B1 is activated:
+// User-source entry paths and the internal parses which remain Classic:
 //
 //   - main.go, run() (lang := syntax.LangBash/LangPOSIX, ~line 2529) plus its
 //     parseOpts/bashyParseOpts closure (~2464) and the statement-recovery
 //     loop's parseOnce (~2654) and the direct -c parse (~2708). This is the
-//     primary script/-c/stdin execution path and the intended B2 integration
-//     point — the one place this story's resolver is built for but does not
-//     yet reach.
+//     primary script/-c/stdin execution path. It uses the runner's effective
+//     dialect and the resolved startup POSIX profile.
 //   - main.go, bashyParseOpts (~2464): translates a requested LangPOSIX into
-//     LangBash+PosixMode so `--posix` keeps bash grammar. A resolved Bash++
-//     selector composes with this (LangBashPP+PosixMode), it does not bypass
-//     it — see [BashPPResolution.LangVariant].
+//     LangBash+PosixMode so `--posix` keeps bash grammar. Startup POSIX
+//     suppresses Bash++ rather than combining LangBashPP with PosixMode.
 //   - interactive.go, runInteractive (~62, 105, 141): the readline-backed
-//     interactive REPL. Delegates per-line parsing to
-//     mvdan.cc/sh/v3/interactive with a fixed Lang for the whole session,
-//     matching the design doc's "selected before the file is parsed" rule
-//     for interactively typed input too.
+//     interactive REPL. Delegates per-line parsing to mvdan.cc/sh/v3/interactive
+//     with the startup dialect and live statement-boundary reselection.
 //   - forced_interactive.go, runForcedInteractiveExec (~224): the non-TTY
 //     `bash -i` emulation; same session-wide Lang shape as the interactive
 //     REPL. runnerExpand (~191) parses a synthetic `${...}` snippet for
@@ -102,7 +94,7 @@ func (s BashPPSource) Explicit() bool {
 // chain reads to decide the initial grammar for one parse. It takes an
 // argv-shaped slice and an env lookup func, rather than reading os.Args and
 // os.Environ directly, so resolution stays a pure, independently testable
-// function — main.go supplies the real values when B2 wires this in.
+// function.
 type BashPPSelector struct {
 	// Binary is which compiled entry point is asking. Required.
 	Binary BashPPBinary
@@ -122,8 +114,8 @@ type BashPPSelector struct {
 	Posix bool
 }
 
-// BashPPResolution is the resolved dialect selector: whether Bash++ is on,
-// and which precedence tier decided it.
+// BashPPResolution is the effective startup dialect and POSIX profile. Source
+// identifies the winning selector tier before applying the POSIX policy.
 type BashPPResolution struct {
 	Enabled bool
 	Source  BashPPSource
@@ -132,21 +124,24 @@ type BashPPResolution struct {
 
 // LangVariant returns the concrete construction-time interpreter dialect.
 func (r BashPPResolution) LangVariant() syntax.LangVariant {
-	if r.Enabled {
+	if r.Enabled && !r.Posix {
 		return syntax.LangBashPP
 	}
 	return syntax.LangBash
 }
 
-// ParserOptions composes the selected grammar with the POSIX semantic profile.
-// Keeping both decisions in one API prevents callers from selecting LangBashPP
-// while accidentally dropping syntax.PosixMode(true).
+// ParserOptions retains Bash grammar and applies the POSIX semantic profile.
+// POSIX input never selects Bash++ grammar, including an explicit LangPOSIX
+// base or a caller-constructed resolution with both booleans set.
 func (r BashPPResolution) ParserOptions(base syntax.LangVariant, extra ...syntax.ParserOption) []syntax.ParserOption {
 	posix := r.Posix || base == syntax.LangPOSIX
 	if base == syntax.LangPOSIX {
 		base = syntax.LangBash
 	}
-	if r.Enabled {
+	if posix && base == syntax.LangBashPP {
+		base = syntax.LangBash
+	}
+	if r.Enabled && !posix {
 		base = syntax.LangBashPP
 	}
 	return append([]syntax.ParserOption{syntax.Variant(base), syntax.PosixMode(posix)}, extra...)
@@ -159,14 +154,15 @@ func (r BashPPResolution) ParserOptions(base syntax.LangVariant, extra ...syntax
 // selects the Sprint 114 inertness profile: both extensions and POSIX-mode
 // parser/runtime differences are disabled so its result is byte-identical to
 // the selector-off, POSIX-off invocation. Ordinary bash --posix and explicit
-// --no-bashpp retain the POSIX profile. bashy --posix --bashpp remains a
-// supported combined mode because bashy is not the Classic front door.
+// --no-bashpp retain the POSIX profile. The bashy front door always retains
+// startup POSIX semantics while disabling Bash++ grammar/runtime, regardless
+// of which selector tier won. Source still reports that tier.
 func ResolveBashPP(sel BashPPSelector) (BashPPResolution, error) {
 	enabled, source := resolveBashPPTiers(sel)
 	if sel.Binary == BashPPBinaryBash && sel.Posix && enabled {
 		return BashPPResolution{Source: source}, nil
 	}
-	return BashPPResolution{Enabled: enabled, Source: source, Posix: sel.Posix}, nil
+	return BashPPResolution{Enabled: enabled && !sel.Posix, Source: source, Posix: sel.Posix}, nil
 }
 
 func resolveBashPPTiers(sel BashPPSelector) (bool, BashPPSource) {

@@ -189,22 +189,22 @@ func TestResolveBashPP_Precedence(t *testing.T) {
 			wantSource: BashPPSourceBinaryDefault,
 		},
 		{
-			name: "bashy under --posix with no signal stays on by binary default (not a certification profile)",
+			name: "bashy under --posix suppresses the binary default",
 			sel: BashPPSelector{
 				Binary: BashPPBinaryBashy,
 				Posix:  true,
 			},
-			wantEnable: true,
+			wantEnable: false,
 			wantSource: BashPPSourceBinaryDefault,
 		},
 		{
-			name: "bashy under --posix --bashpp is a supported combined mode",
+			name: "bashy under --posix --bashpp suppresses the explicit selector",
 			sel: BashPPSelector{
 				Binary: BashPPBinaryBashy,
 				Args:   []string{"bashy", "--posix", "--bashpp"},
 				Posix:  true,
 			},
-			wantEnable: true,
+			wantEnable: false,
 			wantSource: BashPPSourceCLI,
 		},
 		{
@@ -332,22 +332,28 @@ func TestBashPPResolution_ParserOptions(t *testing.T) {
 		name       string
 		resolution BashPPResolution
 		base       syntax.LangVariant
+		wantBashPP bool
 	}{
-		{"bashpp", BashPPResolution{Enabled: true}, syntax.LangBash},
-		{"bashpp-posix", BashPPResolution{Enabled: true, Posix: true}, syntax.LangBash},
-		{"bashpp-posix-base", BashPPResolution{Enabled: true}, syntax.LangPOSIX},
-		{"bash", BashPPResolution{}, syntax.LangBash},
-		{"bash-posix", BashPPResolution{Posix: true}, syntax.LangBash},
+		{"bashpp", BashPPResolution{Enabled: true}, syntax.LangBash, true},
+		{"bashpp-posix", BashPPResolution{Enabled: true, Posix: true}, syntax.LangBash, false},
+		{"bashpp-posix-base", BashPPResolution{Enabled: true}, syntax.LangPOSIX, false},
+		{"bashpp-base-posix", BashPPResolution{Posix: true}, syntax.LangBashPP, false},
+		{"bash", BashPPResolution{}, syntax.LangBash, false},
+		{"bash-posix", BashPPResolution{Posix: true}, syntax.LangBash, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := syntax.NewParser(tc.resolution.ParserOptions(tc.base)...)
 			if _, err := p.Parse(strings.NewReader("echo ${x@Q}"), ""); err != nil {
 				t.Fatalf("Bash grammar was not retained: %v", err)
 			}
+			_, err := p.Parse(strings.NewReader("agentic func f(n int) int { return n }"), "")
+			if got := err == nil; got != tc.wantBashPP {
+				t.Fatalf("Bash++ grammar accepted=%v, want %v (error %v)", got, tc.wantBashPP, err)
+			}
 		})
 	}
 
-	// POSIX mode must remain observable when Bash++ owns the grammar.
+	// POSIX mode must remain observable when it suppresses Bash++ grammar.
 	// In POSIX mode, single quotes in these double-quoted parameter
 	// expansions are literal text rather than quote syntax.
 	resolved := BashPPResolution{Enabled: true, Posix: true}
@@ -360,7 +366,73 @@ func TestBashPPResolution_ParserOptions(t *testing.T) {
 	dq := call.Args[1].Parts[0].(*syntax.DblQuoted)
 	pe := dq.Parts[0].(*syntax.ParamExp)
 	if got := pe.Exp.Word.Lit(); got != "'x'" {
-		t.Fatalf("Bash++ dropped POSIX parsing semantics: got %q, want %q", got, "'x'")
+		t.Fatalf("POSIX isolation dropped parsing semantics: got %q, want %q", got, "'x'")
+	}
+}
+
+func TestResolveBashPP_POSIXGrammarContract(t *testing.T) {
+	selectors := []struct {
+		name   string
+		args   []string
+		env    map[string]string
+		file   string
+		on     bool
+		source BashPPSource
+	}{
+		{"canonical", []string{"--bashpp"}, nil, "", true, BashPPSourceCLI},
+		{"alias", []string{"--bash++"}, nil, "", true, BashPPSourceCLI},
+		{"posix-before-selector", []string{"--posix", "--bashpp"}, nil, "", true, BashPPSourceCLI},
+		{"selector-before-posix", []string{"--bash++", "--posix"}, nil, "", true, BashPPSourceCLI},
+		{"last-selector-off", []string{"--bash++", "--no-bashpp"}, nil, "", false, BashPPSourceCLI},
+		{"last-selector-on", []string{"--no-bashpp", "--bash++"}, nil, "", true, BashPPSourceCLI},
+		{"environment-on", nil, map[string]string{"BASHY_BASHPP": "1"}, "", true, BashPPSourceEnv},
+		{"environment-off", nil, map[string]string{"BASHY_BASHPP": "0"}, "script.bpp", false, BashPPSourceEnv},
+		{"cli-on-beats-env-off", []string{"--bashpp"}, map[string]string{"BASHY_BASHPP": "0"}, "", true, BashPPSourceCLI},
+		{"cli-off-beats-env-on", []string{"--no-bashpp"}, map[string]string{"BASHY_BASHPP": "1"}, "", false, BashPPSourceCLI},
+		{"binary-default", nil, nil, "", false, BashPPSourceBinaryDefault},
+		{"inferred-extension", nil, nil, "script.bpp", false, BashPPSourceBinaryDefault},
+	}
+	for _, binary := range []BashPPBinary{BashPPBinaryBash, BashPPBinaryBashy} {
+		for _, startupPosix := range []bool{false, true} {
+			for _, tc := range selectors {
+				profile := "classic"
+				if startupPosix {
+					profile = "posix"
+				}
+				t.Run(string(binary)+"/"+profile+"/"+tc.name, func(t *testing.T) {
+					args := append([]string{string(binary)}, tc.args...)
+					res, err := ResolveBashPP(BashPPSelector{
+						Binary: binary, Args: args, LookupEnv: envLookup(tc.env), Filename: tc.file, Posix: startupPosix,
+					})
+					if err != nil {
+						t.Fatal(err)
+					}
+					on, source := tc.on, tc.source
+					if source == BashPPSourceBinaryDefault && binary == BashPPBinaryBashy {
+						on = true
+						if tc.file != "" {
+							source = BashPPSourceExtension
+						}
+					}
+					wantEnable := on && !startupPosix
+					wantPosix := startupPosix && (binary == BashPPBinaryBashy || !on)
+					if res.Enabled != wantEnable || res.Posix != wantPosix || res.Source != source {
+						t.Fatalf("resolution=%+v, want Enabled=%v Posix=%v Source=%s", res, wantEnable, wantPosix, source)
+					}
+					if res.Source.Explicit() != source.Explicit() {
+						t.Fatal("POSIX policy changed explicit-selector provenance")
+					}
+					if got := res.LangVariant() == syntax.LangBashPP; got != wantEnable {
+						t.Fatalf("runtime Bash++=%v, want %v", got, wantEnable)
+					}
+					_, err = syntax.NewParser(res.ParserOptions(syntax.LangBash)...).
+						Parse(strings.NewReader("agentic func f(n int) int { return n }"), "contract")
+					if got := err == nil; got != wantEnable {
+						t.Fatalf("parser Bash++=%v, want %v (error %v)", got, wantEnable, err)
+					}
+				})
+			}
+		}
 	}
 }
 

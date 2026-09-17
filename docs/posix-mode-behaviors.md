@@ -1,5 +1,19 @@
 # Bash POSIX-mode behaviors — bashy parity checklist (Phase 1)
 
+Startup POSIX selection disables Bash++ grammar and runtime dialect on both
+front doors. Bashy's default dialect, `.bpp` filenames, `--bashpp` / `--bash++`
+and `BASHY_BASHPP=1` cannot select a combined Bash++/POSIX grammar.
+`bashy --posix --bashpp` retains the POSIX profile. The standalone
+`bash --posix --bashpp` preserves Sprint 114's inert compatibility profile,
+where both Bash++ and POSIX differences are disabled. Ordinary `bash --posix`
+and a winning explicit Bash++-off selector keep POSIX semantics. Selector
+precedence and explicit-selector provenance remain unchanged.
+
+Focused controls are in `internal/cli/bashpp_test.go`,
+`bashpp_posix_contract_unix_test.go`, and `bashpp_posix_session_test.go`.
+They distinguish initial parse isolation from the runtime dialect used by
+`eval` and sourced files, with Bash++ activation controls outside POSIX mode.
+
 The 76 behaviors GNU bash 5.3 changes in POSIX mode (`set -o posix` /
 `--posix` / invoked as `sh`), extracted verbatim from bash's
 `doc/bashref.texi` "Bash POSIX Mode". For each: verify `bashy --posix`

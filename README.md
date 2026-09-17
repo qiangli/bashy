@@ -79,7 +79,7 @@ binary is Classic alone; `bashy` carries all three.
 | Invocation | Bash++ default | Agentic default |
 |---|---:|---:|
 | `bash` with `.sh`, `.bash`, or no extension | off | unavailable |
-| `bash` with `.bpp` | on | unavailable |
+| `bash` with `.bpp`, without an explicit selector | off | unavailable |
 | `bashy`, regardless of extension | on | on |
 
 Use `--bashpp` (canonical) or `--bash++` to opt in and `--no-bashpp` to opt
@@ -91,8 +91,18 @@ surface is independently controlled by `--agentic` / `--no-agentic` and
 Precedence is **explicit CLI → environment → `.bpp` extension → binary
 default**. Because extended grammar must be selected before a file is parsed,
 an in-file `set -o bashpp` cannot enable new syntax retroactively in an
-already-parsed file. Use a flag, environment setting, `.bpp`, or
+already-parsed file. Use a flag, environment setting, Bashy's `.bpp` convention, or
 `#!/usr/bin/env -S bash --bashpp` for initial selection.
+
+Startup POSIX mode suppresses Bash++ grammar on both front doors, including
+`--bashpp`, its `--bash++` alias, and `BASHY_BASHPP=1`. `bashy --posix`
+retains POSIX parsing and runtime semantics while disabling Bash++ defaults
+and explicit requests. The standalone `bash --posix --bashpp` combination
+retains the Sprint 114 compatibility profile: Bash++ and POSIX differences
+are both off, matching the selector-off, POSIX-off invocation. Ordinary
+`bash --posix`, including an explicit `--no-bashpp`, retains POSIX mode.
+The resolver still records the winning selector tier and whether it was
+explicit; that provenance does not mean extended grammar is enabled.
 
 The bare `agentic` modifier permits explicitly implemented LLM assistance in
 Bash++ functions, methods and script blocks. See the runnable

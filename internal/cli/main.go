@@ -766,7 +766,9 @@ func newRunner() (*interp.Runner, error) {
 	if shellOpts := os.Getenv("SHELLOPTS"); !startupPrivilegedMode && shellOpts != "" {
 		var setArgs []string
 		for _, name := range strings.Split(shellOpts, ":") {
-			if name != "" {
+			// POSIX is applied below from the resolved startup profile. A raw
+			// import here would reactivate it in bash's inert Bash++ profile.
+			if name != "" && name != "posix" {
 				setArgs = append(setArgs, "-o", name)
 			}
 		}
@@ -1162,10 +1164,11 @@ func runAll() error {
 		binary = BashPPBinaryBashy
 	}
 	var err error
-	startupBashPP, err = ResolveBashPP(BashPPSelector{
+	bashPPSelector := BashPPSelector{
 		Binary: binary, Args: originalArgs, LookupEnv: os.LookupEnv,
 		Filename: filename, Posix: effectiveStartupPosix(),
-	})
+	}
+	startupBashPP, err = ResolveBashPP(bashPPSelector)
 	if err != nil {
 		return err
 	}
@@ -1186,10 +1189,15 @@ func runAll() error {
 		return runGoSourceInvocation()
 	}
 	var invocationStdin io.Reader = os.Stdin
-	// Ordinary POSIX startup suppresses the product's default extensions in
-	// run(). Only an explicit dialect request may select a Go unit here;
-	// ResolveGoSource then preserves its existing POSIX refusal.
-	if startupBashPP.Enabled && (!resolvedStartupPosix() || startupBashPP.Source.Explicit()) &&
+	// POSIX disables the effective Bash++ grammar/runtime. Preserve recognition
+	// of an explicitly requested Go unit on the bashy front door so it receives
+	// ResolveGoSource's POSIX refusal before any shell parsing. The winning
+	// selector is only used for this refusal, never for enabling a dialect.
+	packageBashPP := startupBashPP.Enabled
+	if binary == BashPPBinaryBashy && startupBashPP.Posix && startupBashPP.Source.Explicit() {
+		packageBashPP, _ = resolveBashPPTiers(bashPPSelector)
+	}
+	if packageBashPP && (!resolvedStartupPosix() || startupBashPP.Source.Explicit()) &&
 		!startupGoSourceSel.LanguageSeen && !shouldRunInteractive(term.IsTerminal(int(os.Stdin.Fd()))) {
 		// Directories retain the shell's ordinary error path; only explicit
 		// --source=go selects a package directory.
