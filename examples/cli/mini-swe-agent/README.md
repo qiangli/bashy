@@ -1,52 +1,39 @@
-# mini-swe-agent — bounded CLI profile + offline harness
+# mini-swe-agent — bounded self-contained example (shell + YAML)
 
-A bounded, self-contained example of the [mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent)
-`mini` CLI expressed as a ycode YAML CLI profile, a thin Bash++ adapter, and a
-stdlib-only offline rewrite of the agent lifecycle. It is independently runnable
-from this directory. **No benchmark results are claimed.**
+A minimal, **self-contained** reconstruction of the [mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent)
+`mini` lifecycle, runnable from this directory through two equivalent
+entrypoints. It is **not a wrapper around an installed upstream `mini`** — the
+agent loop, the model interface, and the execution boundary are the local
+implementation under `harness/`. **No benchmark results are claimed.**
 
 ## Upstream source pin
 
 - Repository: `https://github.com/SWE-agent/mini-swe-agent`
-- Source commit pin: **`04d809ceab9df28f9adaed044884180159172930`**
-- Upstream package version at that pin: **`2.4.6`**
-  (`harness/minisweagent_bounded/__init__.py:UPSTREAM_VERSION`)
+- Source commit pin: **`04d809ceab9df28f9adaed044884180159172930`** (package version `2.4.6`)
 
-The read-only reference bundle used to author this port is **not shipped**; only
-the files below are part of the example.
+The read-only reference bundle used to author this port is **not shipped**.
 
-## Three surfaces
+## Two entrypoints, one local loop
 
-| Surface | File(s) | What it is | What it is NOT |
+Both entrypoints run the SAME loop (`harness/minisweagent_bounded/cli.py`):
+
+| Entrypoint | File | Parsing | Runs the loop? |
 |---|---|---|---|
-| CLI contract | `profile.yaml` | ycode strictly validates and renders the declared `mini` CLI (help/version/validate/completion + the bounded lifecycle verbs). | A running agent. ycode's frozen dispatch cannot launch a mini loop, so `start`/`run` exit unsupported (4) under ycode. |
-| Adapter | `main.bpp` | A thin Bash++ adapter that maps the bounded verbs onto an installed upstream `mini` and forwards argv/streams/exit status verbatim. | A reimplementation of any mini behavior. It runs the real upstream (online) — nothing bounded happens in the adapter. |
-| Offline harness | `harness/` | A stdlib-only, deterministic, **replay-only** rewrite of the agent step loop that runs end-to-end with real local shell actions and a scripted model, emitting a normalized result envelope. | Live inference. No network and no model provider is contacted. |
+| Shell | `main.bpp` | the local CLI (flags-first, argparse) | **yes, by default** |
+| YAML | `yaml-run.sh` + `profile.yaml` | **declaratively owned by ycode** (strict validation of the compiled contract) | yes, via the documented bridge |
 
-### Replay-only vs. live inference — stated plainly
+### The example-local bridge (documented limitation)
 
-The `harness/` lifecycle is **replay-only**: a scripted `ReplayModel` supplies a
-pre-recorded sequence of assistant steps, so the loop is fully deterministic and
-offline. Substantive **live** inference happens **only** in the installed
-upstream `mini`, reached through `main.bpp`. The fixtures never call a paid
-model.
-
-## CLI surface
-
-The pinned `mini` is a single [typer](https://typer.tiangolo.com/) command with
-flags — not a subcommand tree. This profile projects the common session
-lifecycle onto that flags-first surface:
-
-- Root flags: `-t/--task`, `-m/--model`, `-c/--config`, `-o/--output`,
-  `-l/--cost-limit`, `-y/--yolo`, `--exit-immediately`, `--model-class`,
-  `--agent-class`, `--environment-class`.
-- `start` (alias `run`): the bounded convenience verb for the default bare
-  invocation; the adapter drops the token and forwards the remaining flags.
-- `version`, `validate`, `schema`, `completion <shell>`, `help` — the shared
-  common CLI surface, dispatched by ycode.
-- `init`, `model`, `plan`, `resume`, `exit`: **declared unsupported (exit 4)**
-  because there is no such verb in the pinned source (mini configures on first
-  run; model selection is the `-m` flag; there is no plan/resume/exit verb).
+The frozen generic ycode compiler strictly **validates and renders**
+`profile.yaml` and owns the CLI parsing. Its frozen dispatch, however, **cannot
+launch a mini loop** — so the run itself dispatches `unsupported` (exit 4).
+`yaml-run.sh` uses ycode as the **strict parse gate**: it runs the invocation
+through ycode, propagates a real usage error (exit 2) verbatim, and on the exit-4
+"parsed-OK-but-not-runnable" signal it execs the same local `cli.py`. This is an
+example-local bridge only: **no shared Go/schema change and no second
+product-specific dispatch branch.** Matching the unsupported exit alone would not
+be parity; the shared fixtures prove both paths execute real actions, persist
+trajectories, and submit successfully.
 
 ## Run it
 
@@ -54,103 +41,145 @@ From this directory (`examples/cli/mini-swe-agent/`):
 
 ```sh
 YCODE_BIN=/path/to/ycode
+BASHY_BIN=/path/to/bashy      # or `bashy` on PATH
 
-# 1. CLI contract (strict validation + rendering, no agent runs):
+# Shell entrypoint (runs the local loop; here with an offline replay scenario):
+BASHY_BIN=$BASHY_BIN bashy --bashpp main.bpp \
+    --scenario fixtures/scenarios/submit-success.json -y --emit-envelope
+
+# YAML entrypoint (ycode validates/parses, then the same local loop runs):
+YCODE_BIN=$YCODE_BIN BASHY_BIN=$BASHY_BIN /bin/sh yaml-run.sh \
+    --scenario fixtures/scenarios/submit-success.json -y --emit-envelope
+
+# Declarative surface rendered by the frozen ycode binary:
 "$YCODE_BIN" --file profile.yaml validate
 "$YCODE_BIN" --file profile.yaml --help
 "$YCODE_BIN" --file profile.yaml completion bash
 
-# 2. Adapter → installed upstream `mini` (online; needs a real mini + credentials):
-MINI_BIN=/path/to/mini bashy --bashpp main.bpp start -t "fix the failing test"
-
-# 3. Offline lifecycle harness (deterministic, no network):
-cd harness
-python3 -m minisweagent_bounded.runner ../fixtures/scenarios/submit-success.json
-python3 -m unittest discover -s tests
+# A live run against a real OpenAI-compatible endpoint (needs a provider + key):
+BASHY_BIN=$BASHY_BIN bashy --bashpp main.bpp \
+    -t "fix the failing test" --model-class openai -m gpt-4o-mini \
+    --base-url "$OPENAI_BASE_URL" --api-key "$OPENAI_API_KEY"
 ```
 
-Set `MINI_BIN` to an absolute path to the installed `mini`; with no override the
-adapter resolves `mini` from `PATH`.
+### CLI surface (flags-first, mirroring upstream `mini`)
 
-## Offline fixtures
+`-t/--task`, `-c/--config` (repeatable), `-m/--model`, `-y/--yolo`,
+`-l/--cost-limit`, `-o/--output`, `--model-class`, `--agent-class`,
+`--environment-class`, `--exit-immediately`. Helper verbs
+(`version`/`validate`/`completion`/`schema`/`help`) render through ycode.
+Bounded example extensions (declared in `profile.yaml` so both entrypoints parse
+symmetrically): `--scenario`, `--replay`, `--emit-envelope`, `--step-limit`,
+`--mode`, `--base-url`, `--api-key`. Unsupported `--model-class` /
+`--agent-class` / `--environment-class` values **fail explicitly** (exit 2).
 
-`fixtures/run.sh` is the shared, deterministic, offline gate over all three
-surfaces (requires an absolute `YCODE_BIN`, a `BASHY_BIN` or `bashy` on `PATH`,
-and `python3`):
+## Behavior
+
+- **Interaction modes** — `confirm` (default), `yolo`, `human`; the `/c /y /u`
+  mode switches, `/h` help, and `/m` multiline comment; confirm-on-exit.
+- **Fail-closed** — confirm/human decisions and task prompting require a real
+  terminal; with no TTY the run refuses to proceed (exit 4). Piped newlines are
+  never treated as approval.
+- **Ctrl-C** — a real SIGINT is caught; interactively it prompts for a
+  comment/continue, non-interactively it stops with `UserInterruption`. The
+  child process group is always reaped (no orphan).
+- **Stateless actions** — every action runs as a fresh `bashy -c` process
+  (explicit argv, `shell=False`, **no host `/bin/sh` fallback**); a `cd` or env
+  change in one action never leaks into the next.
+- **Limits & truncation** — cost, step, and wall-time limits; long command
+  output is head/tail-elided.
+- **Trajectory** — the linear `mini-swe-agent-1.1` trajectory is persisted to
+  `-o/--output` on **both** successful and failed exits.
+- **Submission** — the explicit `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` marker
+  (first output line, return code 0) submits; a successful submission exits 0.
+
+### Models: replay + live (honest cost)
+
+- `ReplayModel` — deterministic offline replay of scripted assistant steps.
+- `LiveModel` — a minimal **stdlib** OpenAI-compatible chat/completions transport
+  (`urllib`, no SDK). The action is the last fenced bash block; a reply with none
+  raises a format error. Tested against a **loopback** fake provider
+  (`fixtures/fake_provider.py`) — no paid/network calls during verification.
+- **Cost accounting is honest**: cost is `cost_per_call × n_calls`. When a
+  provider's price is unknown the operator supplies `cost_per_call` (default 0)
+  or disables the budget with `--cost-limit 0`; the harness never invents a
+  price. NaN/infinite/negative budgets and malformed replay/config data are
+  rejected.
+
+### Normalized result contract
+
+`--emit-envelope` prints `mini-swe-agent-bounded-result-v1` on stdout —
+deterministic (no timestamps, paths, or host identity):
+
+```json
+{"schema":"mini-swe-agent-bounded-result-v1","scenario":"…","upstream_version":"2.4.6",
+ "bounded_version":"0.1.0","trajectory_format":"mini-swe-agent-1.1","mode":"yolo",
+ "exit_status":"Submitted","submission":"…","model_name":"…","api_calls":N,"cost":N,
+ "actions":[{"command":"…","returncode":0,"submitted":true}]}
+```
+
+## Requirements
+
+- **python3** (standard library only — no third-party packages).
+- A **Bashy** executable (`BASHY_BIN` or `bashy` on `PATH`) as the action executor.
+- The frozen **ycode** binary (`YCODE_BIN`) for the declarative surface and the
+  YAML entrypoint. The shell entrypoint's run path does not require ycode.
+
+## Fixtures
+
+`fixtures/run.sh` is the shared, deterministic, offline gate (26 cases):
 
 ```sh
 YCODE_BIN=/path/to/ycode BASHY_BIN="$(command -v bashy)" /bin/sh fixtures/run.sh
 ```
 
-- `fixtures/cli/` — golden stdout for the ycode-rendered help surface.
-- `fixtures/scenarios/` — 5 self-contained lifecycle scenarios (JSON).
-- `fixtures/goldens/` — the normalized result envelope for each scenario.
-
-The five scenarios exercise the full exit taxonomy with real actions and a real
-submission (the "parity" the harness demonstrates — not merely matching
-unsupported ops):
-
-| Scenario | Exit status | Demonstrates |
-|---|---|---|
-| `submit-success` | `Submitted` | stateless shell actions + explicit submit marker + submission payload |
-| `cost-limit` | `LimitsExceeded` | cost budget stops a non-submitting loop |
-| `step-limit` | `LimitsExceeded` | step budget stops a non-submitting loop |
-| `repeated-format-error` | `RepeatedFormatError` | N consecutive malformed responses terminate |
-| `format-error-recovers` | `Submitted` | a clean step resets the consecutive-error counter |
-
-The normalized envelope (`mini-swe-agent-bounded-result-v1`) is intentionally
-free of timestamps, absolute paths, and host identity, so a future benchmark
-harness can compare runs byte-for-byte.
+It covers: the ycode CLI contract; **shell/YAML/golden parity** across five
+lifecycle scenarios; **real-PTY** confirm and human interaction and a **real
+SIGINT** interruption (`fixtures/interactive_check.py`); the **live loopback**
+transport (`fixtures/live_check.py`); fail-closed and validation cases; and the
+python unit suite (`harness/tests/`). Scenarios live in `fixtures/scenarios/`,
+result goldens in `fixtures/goldens/`, help golden in `fixtures/cli/`.
 
 ## Source / adaptation manifest
 
-Every file under `harness/`, with its upstream origin at the source pin:
-
 | This file | Upstream origin | Relationship |
 |---|---|---|
-| `harness/minisweagent_bounded/exceptions.py` | `src/minisweagent/exceptions.py` | **Materially derived.** Trimmed to the subset the bounded loop uses (dropped `UserInterruption`). |
-| `harness/minisweagent_bounded/environment.py` | `src/minisweagent/environments/local.py` | **Materially derived.** Rewritten stdlib-only: pydantic `LocalEnvironmentConfig` replaced by plain `__init__` args; the `_run` process-group semantics and the `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` submit protocol are preserved. `get_template_vars` (platform/env injection) is omitted as out of scope. |
-| `harness/minisweagent_bounded/agent.py` | `src/minisweagent/agents/default.py` | **Materially derived.** The `DefaultAgent` step loop, the exit-status taxonomy, and the trajectory shape are preserved. jinja2 → a minimal `{{ var }}` substitution; pydantic `AgentConfig` → a `dataclass`; `recursive_merge` reimplemented. |
-| `harness/minisweagent_bounded/model.py` | *(none — original)* | **Original.** The offline `ReplayModel` stands in for the upstream network model providers (litellm), implementing the small model interface the agent depends on. |
-| `harness/minisweagent_bounded/runner.py` | *(none — original; cf. `src/minisweagent/run/mini.py`)* | **Original.** Offline scenario driver + normalized envelope. Replaces the typer/interactive/live-provider `mini` entrypoint. |
-| `harness/minisweagent_bounded/__init__.py` | cf. `src/minisweagent/__init__.py` | Mostly original package doc; carries the upstream version and trajectory-format constants. |
-| `harness/tests/test_harness.py` | *(none — original)* | **Original.** Deterministic offline regression tests. |
-| `harness/LICENSE` | `LICENSE` (upstream, MIT) | Verbatim upstream MIT license + copyright, with a note scoping the derived portions. |
+| `harness/minisweagent_bounded/exceptions.py` | `src/minisweagent/exceptions.py` | **Materially derived.** Full agent-flow hierarchy incl. `UserInterruption`; `NonInteractiveApproval` is original. |
+| `harness/minisweagent_bounded/environment.py` | `src/minisweagent/environments/local.py` | **Materially derived.** Stdlib-only; runs every action as `bashy -c` (explicit argv, no `/bin/sh`); process-group reap on timeout/interrupt; submit protocol preserved. |
+| `harness/minisweagent_bounded/agent.py` | `src/minisweagent/agents/default.py` + `agents/interactive.py` | **Materially derived.** Default step loop + the interactive subset (modes, `/c /y /u /h /m`, Ctrl-C, confirm-exit). jinja2→`{{var}}`; pydantic→dataclasses. |
+| `harness/minisweagent_bounded/model.py` | *(original; cf. litellm model)* | **Original.** `ReplayModel` + stdlib OpenAI-compatible `LiveModel`; last-fenced-block action extraction; output truncation. |
+| `harness/minisweagent_bounded/prompter.py` | *(original; replaces rich/prompt_toolkit)* | **Original.** Stdlib TTY-aware prompter + scripted test prompter. |
+| `harness/minisweagent_bounded/config.py` | *(original; replaces jinja/pydantic config merge)* | **Original.** JSON + `key=value` config merge; strict budget/replay validation. |
+| `harness/minisweagent_bounded/runner.py` | *(original)* | **Original.** Build/run/normalize core shared by both entrypoints and tests. |
+| `harness/minisweagent_bounded/cli.py` | *(original; cf. `run/mini.py`)* | **Original.** Flags-first entrypoint both paths exec. |
+| `harness/minisweagent_bounded/__init__.py` | cf. `src/minisweagent/__init__.py` | Package doc + version/trajectory-format constants. |
+| `harness/tests/test_harness.py` | *(original)* | **Original.** Deterministic offline unit tests. |
+| `harness/LICENSE` | `LICENSE` (upstream MIT) | Verbatim MIT + copyright, scoped to the derived portions. |
 
 ## License handling
 
-Upstream mini-swe-agent is **MIT**, © 2025 Kilian A. Lieret and Carlos E.
-Jimenez. The full MIT text and copyright are preserved verbatim in
-`harness/LICENSE`, and every materially derived file carries a header pointing
-back to its upstream origin and this manifest. Original files (`model.py`,
-`runner.py`, `test_harness.py`) say so explicitly. This is a permissive-only
-dependency; nothing is compiled into the bashy binaries.
+Upstream is **MIT**, © 2025 Kilian A. Lieret and Carlos E. Jimenez. The full MIT
+text and copyright are preserved verbatim in `harness/LICENSE`; every materially
+derived file carries a header pointing back to its origin; original files say so
+explicitly. Permissive-only; nothing is compiled into the bashy binaries.
 
 ## Excluded upstream subsystems & compatibility limits
 
-Deliberately **not** ported (out of scope for a bounded, offline, dependency-free
-example):
+Deliberately **not** ported (documented as unsupported):
 
-- **Model providers** — litellm and all hosted/local backends. Replaced by the
-  replay model; the harness performs no inference.
-- **Non-local environments** — docker / singularity / swerex. Only the local
-  shell environment is ported.
-- **The interactive UX** — the `InteractiveAgent`, confirm/human modes, the
-  `/c /y /u /h /m` controls, and Ctrl-C interruption live only in the upstream
-  `mini` reached through the adapter; they are not reimplemented offline.
+- **litellm / provider SDKs** — replaced by the stdlib `LiveModel` + `ReplayModel`.
+- **docker / singularity / swerex environments** — only the local Bashy
+  environment is ported; other `--environment-class` values fail explicitly.
 - **jinja2 templating** — replaced by minimal `{{ var }}` substitution;
-  conditionals/loops (e.g. the OS-conditional blocks in upstream `mini.yaml`)
-  are unsupported.
-- **pydantic config models, config discovery/merge, and trajectory storage
-  integrations.**
+  conditionals/loops (e.g. upstream `mini.yaml`'s OS-conditional blocks) are
+  unsupported.
+- **rich / prompt_toolkit** console decoration, **pydantic** config models, YAML
+  config-document discovery/merge, and trajectory storage integrations.
+- **Advanced Python classes / plugins / vendor behavior** — any unsupported
+  `--model-class` / `--agent-class` / `--environment-class` value fails
+  explicitly rather than silently degrading.
 
-Compatibility limits:
-
-- ycode strictly validates and renders the CLI contract, but its frozen dispatch
-  **cannot launch a mini loop**; `start`/`run` therefore exit unsupported (4)
-  under ycode. Running an actual session requires the adapter + an installed
-  upstream `mini`. This is a documented example-local bridge, not CLI parity.
-- The offline harness demonstrates the *lifecycle and exit outcomes* with real
-  actions and a real submission, under a **replay** model — it is not a
-  reproduction of upstream's live-inference behavior, and **no comparative
-  benchmark is claimed.**
+Compatibility limits: ycode's frozen dispatch cannot launch a mini loop, so the
+YAML entrypoint runs the loop through the documented example-local bridge above.
+The comparison is of **normalized events and exit outcomes**, not byte-identical
+UI decoration, and **no comparative benchmark is claimed** in this story.

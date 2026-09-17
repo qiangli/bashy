@@ -1,82 +1,98 @@
-"""Offline scenario driver — the deterministic entrypoint for the bounded harness.
+"""Shared harness core: build an agent from a spec, run it, normalize the result.
 
-This module is ORIGINAL to the bounded example (upstream's entrypoint is
-`minisweagent/run/mini.py`, a typer app that reaches a live model provider and
-an interactive UX — neither can run offline or deterministically). The runner
-loads a self-contained scenario document (task, prompt templates, resource
-limits, a scripted replay model, and environment settings), drives the real
-`DefaultAgent` step loop against a real `LocalEnvironment` and the `ReplayModel`,
-and emits a NORMALIZED result envelope on stdout.
+Original to this bounded example. This is the ONE loop both entrypoints use:
+`main.bpp` (the shell entrypoint) and the ycode-gated YAML bridge both invoke
+`cli.py`, which builds a normalized spec and calls `build_agent` + `run_agent`
+here. Unit tests and golden generation call `run_scenario` directly.
 
-The envelope is intentionally free of timestamps, absolute paths, and host
-identity so a future benchmark harness can compare runs byte-for-byte. It is
-`replay-only`: no network and no model provider is contacted. Substantive online
-inference happens only in the installed upstream `mini` (reached via
-../main.bpp), never here.
-
-Usage:
-    python -m minisweagent_bounded.runner SCENARIO.json
-    python -m minisweagent_bounded.runner --trajectory SCENARIO.json   # full traj
+A spec is a plain dict:
+    {
+      "name": str,                         # scenario label (optional)
+      "task": str,
+      "mode": "confirm"|"yolo"|"human",    # default "yolo" (deterministic/offline)
+      "config": {system_template, instance_template, step_limit, cost_limit,
+                 wall_time_limit_seconds, max_consecutive_format_errors,
+                 confirm_exit, whitelist_actions},
+      "model": {model_name, cost_per_call,
+                replay?: [steps...],       # offline replay
+                class?: "replay"|"openai", base_url?, api_key?},
+      "environment": {timeout, cwd}
+    }
+The normalized envelope is deterministic (no timestamps/paths/host identity).
 """
 
 from __future__ import annotations
 
-import argparse
-import json
-import sys
 import tempfile
-from pathlib import Path
 
 from . import BOUNDED_VERSION, TRAJECTORY_FORMAT, UPSTREAM_VERSION
-from .agent import AgentConfig, DefaultAgent
+from .agent import InteractiveAgent, InteractiveAgentConfig
+from .config import validate_budget, validate_replay_steps
 from .environment import LocalEnvironment
 from .exceptions import Submitted
-from .model import ReplayModel
+from .model import LiveModel, ReplayModel
+from .prompter import Prompter
 
 RESULT_SCHEMA = "mini-swe-agent-bounded-result-v1"
 
 
-def _build_config(spec: dict) -> AgentConfig:
+def build_model(model_spec: dict):
+    """Select and build the model. Replay by default; 'openai' for live transport."""
+    kind = model_spec.get("class", "replay")
+    name = model_spec.get("model_name", "replay/deterministic")
+    cost_per_call = model_spec.get("cost_per_call", 0.0)
+    if kind == "replay":
+        steps = model_spec.get("steps", model_spec.get("replay", []))
+        return ReplayModel(
+            model_name=name,
+            cost_per_call=cost_per_call,
+            steps=validate_replay_steps(steps),
+        )
+    if kind == "openai":
+        return LiveModel(
+            model_name=name,
+            base_url=model_spec.get("base_url"),
+            api_key=model_spec.get("api_key"),
+            cost_per_call=cost_per_call,
+        )
+    raise ValueError(f"unsupported model class: {kind!r} (supported: replay, openai)")
+
+
+def build_config(spec: dict) -> InteractiveAgentConfig:
     cfg = spec.get("config", {})
-    defaults = AgentConfig()
-    return AgentConfig(
+    defaults = InteractiveAgentConfig()
+    cost_limit, step_limit = validate_budget(
+        cost_limit=cfg.get("cost_limit", defaults.cost_limit),
+        step_limit=cfg.get("step_limit", defaults.step_limit),
+    )
+    return InteractiveAgentConfig(
         system_template=cfg.get("system_template", defaults.system_template),
         instance_template=cfg.get("instance_template", defaults.instance_template),
-        step_limit=int(cfg.get("step_limit", defaults.step_limit)),
-        cost_limit=float(cfg.get("cost_limit", defaults.cost_limit)),
+        step_limit=step_limit,
+        cost_limit=cost_limit,
         wall_time_limit_seconds=int(cfg.get("wall_time_limit_seconds", defaults.wall_time_limit_seconds)),
         max_consecutive_format_errors=int(
             cfg.get("max_consecutive_format_errors", defaults.max_consecutive_format_errors)
         ),
+        mode=spec.get("mode", "yolo"),
+        whitelist_actions=list(cfg.get("whitelist_actions", [])),
+        confirm_exit=bool(cfg.get("confirm_exit", defaults.confirm_exit)),
     )
 
 
-def run_scenario(spec: dict, *, cwd: str | None = None) -> dict:
-    """Run one scenario end-to-end and return {result, agent, events}.
-
-    When `cwd` is not given, each run executes in a private, throwaway working
-    directory so shell actions never touch the caller's tree and stay
-    reproducible.
-    """
-    if cwd is None:
-        with tempfile.TemporaryDirectory(prefix="mswea-bounded-") as scratch:
-            return run_scenario(spec, cwd=scratch)
-
-    model_spec = spec.get("model", {})
+def build_agent(spec: dict, *, cwd: str, prompter: Prompter | None = None):
     env_spec = spec.get("environment", {})
-
-    model = ReplayModel(
-        model_name=model_spec.get("model_name", "replay/deterministic"),
-        cost_per_call=float(model_spec.get("cost_per_call", 0.0)),
-        steps=model_spec.get("steps", []),
-    )
+    model = build_model(spec.get("model", {}))
     env = LocalEnvironment(cwd=cwd, timeout=int(env_spec.get("timeout", 30)))
-    agent = DefaultAgent(model=model, env=env, config=_build_config(spec))
+    config = build_config(spec)
+    agent = InteractiveAgent(model, env, config, prompter=prompter)
+    return agent
 
-    # Record every executed action's command and returncode, including the
-    # submit action (whose `execute` raises Submitted before returning).
+
+def run_agent(agent, task: str) -> dict:
+    """Run one agent, recording each executed action's command + returncode."""
     events: list[dict] = []
-    original_execute = env.execute
+    original_execute = agent.env.execute
 
     def recording_execute(action: dict, cwd: str = "", **kwargs):
         try:
@@ -87,21 +103,30 @@ def run_scenario(spec: dict, *, cwd: str | None = None) -> dict:
         events.append({"command": action.get("command", ""), "returncode": output["returncode"]})
         return output
 
-    env.execute = recording_execute  # type: ignore[method-assign]
-    result = agent.run(task=spec.get("task", ""))
+    agent.env.execute = recording_execute  # type: ignore[method-assign]
+    result = agent.run(task=task)
     return {"result": result, "agent": agent, "events": events}
 
 
+def run_scenario(spec: dict, *, cwd: str | None = None) -> dict:
+    """Build + run a scenario in a private throwaway cwd (unless cwd is given)."""
+    if cwd is None:
+        with tempfile.TemporaryDirectory(prefix="mswea-bounded-") as scratch:
+            return run_scenario(spec, cwd=scratch)
+    agent = build_agent(spec, cwd=cwd)
+    return run_agent(agent, spec.get("task", ""))
+
+
 def normalized_envelope(spec: dict, run: dict) -> dict:
-    """Project a completed run into the deterministic benchmark envelope."""
-    agent: DefaultAgent = run["agent"]
-    result: dict = run["result"]
+    agent = run["agent"]
+    result = run["result"]
     return {
         "schema": RESULT_SCHEMA,
         "scenario": spec.get("name", ""),
         "upstream_version": UPSTREAM_VERSION,
         "bounded_version": BOUNDED_VERSION,
         "trajectory_format": TRAJECTORY_FORMAT,
+        "mode": agent.config.mode,
         "exit_status": result.get("exit_status", ""),
         "submission": result.get("submission", ""),
         "model_name": agent.model.model_name,
@@ -109,29 +134,3 @@ def normalized_envelope(spec: dict, run: dict) -> dict:
         "cost": round(agent.cost, 6),
         "actions": run["events"],
     }
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="minisweagent_bounded.runner", description=__doc__)
-    parser.add_argument("scenario", type=Path, help="Path to a scenario JSON document.")
-    parser.add_argument(
-        "--trajectory",
-        action="store_true",
-        help="Emit the full linear trajectory instead of the normalized envelope.",
-    )
-    args = parser.parse_args(argv)
-
-    spec = json.loads(args.scenario.read_text())
-    run = run_scenario(spec)
-
-    if args.trajectory:
-        payload = run["agent"].serialize()
-    else:
-        payload = normalized_envelope(spec, run)
-    json.dump(payload, sys.stdout, indent=2, sort_keys=True)
-    sys.stdout.write("\n")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

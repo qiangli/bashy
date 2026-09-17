@@ -1,35 +1,33 @@
 #!/bin/sh
-# Offline, deterministic fixtures for the bounded mini-swe-agent example.
+# Shared, deterministic, offline fixture suite for the bounded mini-swe-agent
+# example. No paid/network model call anywhere (the live case uses a loopback
+# fake provider). Six surfaces:
 #
-# Three independent surfaces, no network and no model call anywhere:
+#   1. CLI CONTRACT (ycode) — the frozen ycode compiler strictly validates and
+#      renders profile.yaml; the run itself returns the exit-4 bridge signal and
+#      usage errors return 2.
+#   2. ENTRYPOINT PARITY — the shell entrypoint (main.bpp) and the YAML bridge
+#      (yaml-run.sh) run the SAME local loop and produce byte-identical
+#      normalized envelopes, equal to the committed goldens, across every
+#      scenario (real actions + successful submission + limit/format outcomes).
+#   3. INTERACTION + INTERRUPTION — real PTY input (confirm/human) and a real
+#      SIGINT drive the ACTUAL cli.py; the trajectory and exit code are checked
+#      and the child process group is reaped (no orphan).
+#   4. LIVE TRANSPORT — the LiveModel's real urllib transport against a loopback
+#      OpenAI-compatible provider.
+#   5. FAIL-CLOSED + VALIDATION — non-interactive confirm/human and missing task
+#      fail closed (never approved by piped newlines); bad budgets/classes/config
+#      fail explicitly.
+#   6. UNIT TESTS — the harness's own python regression suite.
 #
-#   1. CLI CONTRACT (ycode)   — the frozen ycode binary strictly validates
-#      profile.yaml and renders/dispatches the declared CLI: golden help, the
-#      supported ops (version/completion), the declared-unsupported ops (exit 4),
-#      and usage errors (exit 2). ycode's frozen dispatch cannot launch a mini
-#      loop, so start/run themselves exit unsupported (4) here — that is the
-#      documented example-local limit, not parity.
-#
-#   2. ADAPTER TRANSPORT (bashy) — main.bpp is driven against a FAKE upstream
-#      `mini`. These cases are transport evidence ONLY (argv projection, stream
-#      passthrough, exit-status propagation, unsupported-verb refusal); they
-#      prove nothing about a real mini-swe-agent installation.
-#
-#   3. LIFECYCLE HARNESS (python) — the self-contained, stdlib-only bounded
-#      harness replays each scenario end-to-end (real agent loop + real local
-#      shell actions + scripted replay model) and its NORMALIZED result envelope
-#      is held to the committed golden. This is the actual lifecycle/exit-outcome
-#      parity: submitted, cost/step limits, and repeated format errors, WITH the
-#      executed actions and the successful submission. Replay-only, never live.
-#
-# Requirements: an absolute YCODE_BIN (frozen ycode), an absolute BASHY_BIN (or
-# `bashy` on PATH), and python3.
+# Requires an absolute YCODE_BIN, a BASHY_BIN (or bashy on PATH), and python3.
 set -eu
 
 fixtures_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 example_dir=$(CDPATH= cd -- "$fixtures_dir/.." && pwd)
 profile="$example_dir/profile.yaml"
 adapter="$example_dir/main.bpp"
+yaml_entry="$example_dir/yaml-run.sh"
 harness_dir="$example_dir/harness"
 cli_golden="$fixtures_dir/cli"
 scenarios="$fixtures_dir/scenarios"
@@ -38,172 +36,120 @@ result_golden="$fixtures_dir/goldens"
 bashy_bin=${BASHY_BIN:-$(command -v bashy || true)}
 python_bin=${PYTHON_BIN:-$(command -v python3 || true)}
 : "${YCODE_BIN:?set YCODE_BIN to the absolute frozen ycode executable}"
-case "$YCODE_BIN" in
-    /*) ;;
-    *) printf '%s\n' 'YCODE_BIN must be an absolute path' >&2; exit 1 ;;
-esac
-case "$bashy_bin" in
-    /*) ;;
-    *) printf '%s\n' 'BASHY_BIN must be an absolute path (or bashy on PATH)' >&2; exit 1 ;;
-esac
-[ -x "$YCODE_BIN" ] || { printf 'not executable: %s\n' "$YCODE_BIN" >&2; exit 1; }
-[ -x "$bashy_bin" ] || { printf 'not executable: %s\n' "$bashy_bin" >&2; exit 1; }
-[ -n "$python_bin" ] || { printf '%s\n' 'python3 not found (set PYTHON_BIN)' >&2; exit 1; }
+case "$YCODE_BIN" in /*) ;; *) echo 'YCODE_BIN must be absolute' >&2; exit 1 ;; esac
+case "$bashy_bin" in /*) ;; *) echo 'BASHY_BIN must be absolute (or bashy on PATH)' >&2; exit 1 ;; esac
+[ -x "$YCODE_BIN" ] || { echo "not executable: $YCODE_BIN" >&2; exit 1; }
+[ -x "$bashy_bin" ] || { echo "not executable: $bashy_bin" >&2; exit 1; }
+[ -n "$python_bin" ] || { echo 'python3 not found (set PYTHON_BIN)' >&2; exit 1; }
+
+export BASHY_BIN="$bashy_bin"
+export YCODE_BIN
+export PYTHON_BIN="$python_bin"
+export BASHY_HINTS=off
+export LC_ALL=C
 
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/bashy-cli-mini.XXXXXX")
 keep=1
 trap 'if [ "$keep" -eq 0 ]; then rm -rf "$scratch"; else printf "fixture evidence: %s\n" "$scratch" >&2; fi' EXIT
 trap 'exit 1' HUP INT TERM
-export XDG_CONFIG_HOME="$scratch/config"
-export XDG_DATA_HOME="$scratch/data"
-export BASHY_HOME="$scratch/bashy"
-export BASHY_HINTS=off
-export LC_ALL=C
-cd "$scratch"
 
 passed=0
 pass() { passed=$((passed + 1)); printf 'PASS %s\n' "$1"; }
+fail() { printf 'FAIL %s: %s\n' "$1" "$2" >&2; exit 1; }
 
 status=0
-run_ycode() { status=0; "$YCODE_BIN" --file "$profile" "$@" >out 2>err </dev/null || status=$?; }
-
-want_status() {
-    if [ "$status" -ne "$2" ]; then
-        printf '%s: status %s, want %s\n' "$1" "$status" "$2" >&2; cat out err >&2; exit 1
-    fi
-}
-want_stderr_line() {
-    printf '%s\n' "$2" >expected.err
-    cmp -s expected.err err || { printf '%s: stderr differs from %s\n' "$1" "$2" >&2; cat err >&2; exit 1; }
-}
-golden_case() {
-    label=$1; file=$2; shift 2
-    run_ycode "$@"; want_status "$label" 0
-    cmp -s "$cli_golden/$file" out || {
-        printf '%s: stdout differs from cli/%s\n' "$label" "$file" >&2
-        diff "$cli_golden/$file" out >&2 || true; exit 1
-    }
-    pass "$label"
-}
-unsupported_case() {
-    label=$1; shift
-    run_ycode "$@"; want_status "$label" 4
-    want_stderr_line "$label" 'error: command is unsupported by this CLI contract'
-    pass "$label"
-}
-usage_case() {
-    label=$1; line=$2; shift 2
-    run_ycode "$@"; want_status "$label" 2
-    want_stderr_line "$label" "$line"
-    pass "$label"
-}
+run_ycode() { status=0; "$YCODE_BIN" --file "$profile" "$@" >"$scratch/out" 2>"$scratch/err" </dev/null || status=$?; }
+want_status() { [ "$status" -eq "$2" ] || { cat "$scratch/out" "$scratch/err" >&2; fail "$1" "status $status want $2"; }; }
 
 # --- 1. CLI CONTRACT (ycode) --------------------------------------------
 run_ycode validate; want_status validate 0
-printf '%s' "$(cat out)" | grep -q '^valid: mini' || { printf 'validate: unexpected output\n' >&2; cat out >&2; exit 1; }
+grep -q '^valid: mini' "$scratch/out" || fail validate "unexpected output"
 pass validate
 
-golden_case root-help root-help.txt --help
-golden_case start-help start-help.txt help start
+run_ycode --help; want_status root-help 0
+cmp -s "$cli_golden/root-help.txt" "$scratch/out" || { diff "$cli_golden/root-help.txt" "$scratch/out" >&2 || true; fail root-help "golden mismatch"; }
+pass root-help
 
-run_ycode version; want_status version 0
-[ -s out ] || { printf 'version: empty stdout\n' >&2; exit 1; }
-pass version
+run_ycode version; want_status version 0; [ -s "$scratch/out" ] || fail version empty; pass version
+run_ycode completion bash; want_status completion 0; [ -s "$scratch/out" ] || fail completion empty; pass completion
 
-run_ycode completion bash; want_status completion-bash 0
-[ -s out ] || { printf 'completion-bash: empty stdout\n' >&2; exit 1; }
-pass completion-bash
+run_ycode -t "do it"; want_status run-bridge-exit 4; pass run-bridge-exit4        # the bridge signal
+run_ycode --not-a-flag; want_status usage-bad-flag 2; pass usage-bad-flag
+run_ycode completion elvish; want_status usage-bad-shell 2; pass usage-bad-shell
 
-# ycode's frozen dispatch cannot launch a mini loop; the lifecycle verbs and the
-# not-in-source verbs are all declared unsupported and exit 4.
-unsupported_case unsupported-start start
-unsupported_case unsupported-run run
-unsupported_case unsupported-bare-task -t hello
-unsupported_case unsupported-init init
-unsupported_case unsupported-model model
-unsupported_case unsupported-plan plan
-unsupported_case unsupported-resume resume
-unsupported_case unsupported-exit exit
-
-usage_case usage-unknown-flag 'error: invalid command flags' --not-a-flag
-usage_case usage-unknown-command 'error: mini expects 0 argument(s)' bogus
-usage_case usage-resume-args 'error: mini resume expects 0 argument(s)' resume extra
-usage_case usage-completion-shell \
-    'error: mini completion argument must be one of bash, zsh, fish, powershell' \
-    completion elvish
-
-# --- 2. ADAPTER TRANSPORT (bashy, fake upstream) ------------------------
-fake="$scratch/fake-mini"
-cat >"$fake" <<'EOF'
-#!/bin/sh
-printf 'argv:'
-for a in "$@"; do printf ' %s' "$a"; done
-printf '\n'
-if [ ! -t 0 ]; then cat; fi
-exit "${FAKE_STATUS:-0}"
-EOF
-chmod +x "$fake"
-
-run_adapter() { status=0; MINI_BIN="$fake" "$bashy_bin" --bashpp "$adapter" "$@" >out 2>err </dev/null || status=$?; }
-adapter_argv_case() {
-    label=$1; want=$2; shift 2
-    run_adapter "$@"; want_status "$label" 0
-    printf '%s\n' "$want" >expected.out
-    cmp -s expected.out out || { printf '%s: argv projection differs\n' "$label" >&2; cat out err >&2; exit 1; }
-    pass "$label"
-}
-
-adapter_argv_case adapter-start 'argv: -t fix' start -t fix
-adapter_argv_case adapter-run 'argv: -m gpt' run -m gpt
-adapter_argv_case adapter-passthrough 'argv: -t hello' -t hello
-
-status=0
-printf 'ping\n' | MINI_BIN="$fake" "$bashy_bin" --bashpp "$adapter" run >out 2>err || status=$?
-want_status adapter-stdin-stream 0
-printf 'argv:\nping\n' >expected.out
-cmp -s expected.out out || { printf 'adapter-stdin-stream: stream transport differs\n' >&2; cat out err >&2; exit 1; }
-pass adapter-stdin-stream
-
-status=0
-FAKE_STATUS=7 MINI_BIN="$fake" "$bashy_bin" --bashpp "$adapter" --version >out 2>err </dev/null || status=$?
-want_status adapter-exit-status 7
-pass adapter-exit-status
-
-adapter_refuses() {
-    label=$1; verb=$2
-    run_adapter "$verb"; want_status "$label" 4
-    grep -q "error: $verb is unsupported by the bounded mini-swe-agent profile" err || {
-        printf '%s: missing unsupported message\n' "$label" >&2; cat err >&2; exit 1
-    }
-    [ -s out ] && { printf '%s: fake upstream was invoked\n' "$label" >&2; exit 1; }
-    pass "$label"
-}
-adapter_refuses adapter-unsupported-plan plan
-adapter_refuses adapter-unsupported-exit exit
-
-# --- 3. LIFECYCLE HARNESS (python replay) -------------------------------
-harness_case() {
+# --- 2. ENTRYPOINT PARITY (shell == yaml == golden) ---------------------
+parity_case() {
     name=$1
-    status=0
-    ( cd "$harness_dir" && "$python_bin" -m minisweagent_bounded.runner "$scenarios/$name.json" ) >out 2>err || status=$?
-    want_status "harness-$name" 0
-    cmp -s "$result_golden/$name.json" out || {
-        printf 'harness-%s: normalized envelope differs from goldens/%s.json\n' "$name" "$name" >&2
-        diff "$result_golden/$name.json" out >&2 || true; exit 1
-    }
-    pass "harness-$name"
+    # The envelope is emitted on stdout even when the terminal outcome is a
+    # non-submit (exit 1); `|| true` keeps set -e from aborting on that.
+    shell_out=$("$bashy_bin" --bashpp "$adapter" --scenario "$scenarios/$name.json" -y --emit-envelope 2>/dev/null || true)
+    yaml_out=$(/bin/sh "$yaml_entry" --scenario "$scenarios/$name.json" -y --emit-envelope 2>/dev/null || true)
+    gold=$(cat "$result_golden/$name.json")
+    [ "$shell_out" = "$gold" ] || fail "parity-$name" "shell != golden"
+    [ "$shell_out" = "$yaml_out" ] || fail "parity-$name" "shell != yaml"
+    pass "parity-$name"
 }
-harness_case submit-success
-harness_case cost-limit
-harness_case step-limit
-harness_case repeated-format-error
-harness_case format-error-recovers
+parity_case submit-success
+parity_case cost-limit
+parity_case step-limit
+parity_case repeated-format-error
+parity_case format-error-recovers
 
-# The bundled python unit tests are the harness's own regression gate.
+# --- 3. INTERACTION + INTERRUPTION (real pty / real signal) -------------
+for case in pty-confirm pty-human signal; do
+    "$python_bin" "$fixtures_dir/interactive_check.py" "$case" || fail "interactive-$case" "see output"
+    pass "interactive-$case"
+done
+
+# --- 4. LIVE TRANSPORT (loopback fake provider) -------------------------
+"$python_bin" "$fixtures_dir/live_check.py" || fail live-transport "see output"
+pass live-transport
+
+# --- 5. FAIL-CLOSED + VALIDATION ----------------------------------------
+cli() { status=0; "$bashy_bin" --bashpp "$adapter" "$@" >"$scratch/out" 2>"$scratch/err" || status=$?; }
+
+# confirm mode with piped newlines must NOT be treated as approval.
 status=0
-( cd "$harness_dir" && "$python_bin" -m unittest discover -s tests -q ) >out 2>err || status=$?
-want_status harness-unittest 0
-pass harness-unittest
+printf '\n\n\n' | "$bashy_bin" --bashpp "$adapter" --scenario "$scenarios/submit-success.json" --mode confirm >/dev/null 2>"$scratch/err" || status=$?
+[ "$status" -eq 4 ] || fail failclosed-confirm "status $status want 4"
+grep -q 'fail-closed' "$scratch/err" || fail failclosed-confirm "no fail-closed message"
+pass failclosed-confirm-piped
 
-printf 'PASS %s mini-swe-agent fixtures (adapter cases are fake-upstream transport evidence; harness is replay-only)\n' "$passed"
+cli -t x --mode human --model-class replay --replay "$scenarios/noop-steps.json" </dev/null
+want_status failclosed-human 4; pass failclosed-human
+
+cli --model-class replay --replay "$scenarios/noop-steps.json" -y </dev/null
+want_status failclosed-notask 4; pass failclosed-notask
+
+cli -t x -l nan -y --model-class replay --replay "$scenarios/noop-steps.json" </dev/null
+want_status budget-nan 3; pass budget-nan
+
+cli -t x -l -5 -y --model-class replay --replay "$scenarios/noop-steps.json" </dev/null
+want_status budget-negative 3; pass budget-negative
+
+cli -t x --model-class bogus -y </dev/null
+want_status unsupported-model-class 2; pass unsupported-model-class
+
+cli -t x --environment-class docker -y </dev/null
+want_status unsupported-env-class 2; pass unsupported-env-class
+
+printf '{not json' > "$scratch/bad.json"
+cli -t x -c "$scratch/bad.json" -y --model-class replay --replay "$scenarios/noop-steps.json" </dev/null
+want_status malformed-config 3; pass malformed-config
+
+# trajectory persisted on a NON-submit (failed) exit
+cli --scenario "$scenarios/cost-limit.json" -y -o "$scratch/traj.json" </dev/null
+want_status traj-on-failure 1
+"$python_bin" - "$scratch/traj.json" <<'PY' || fail traj-on-failure "no LimitsExceeded in trajectory"
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["info"]["exit_status"] == "LimitsExceeded", d["info"]["exit_status"]
+PY
+pass traj-on-failure
+
+# --- 6. UNIT TESTS ------------------------------------------------------
+( cd "$harness_dir" && "$python_bin" -m unittest discover -s tests -q ) >"$scratch/out" 2>&1 || { cat "$scratch/out" >&2; fail unit-tests "see output"; }
+pass unit-tests
+
+printf 'PASS %s mini-swe-agent fixtures (both entrypoints run the local loop; live uses a loopback provider; interaction/interruption use a real pty and a real signal)\n' "$passed"
 keep=0

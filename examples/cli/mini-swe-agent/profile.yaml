@@ -8,15 +8,17 @@ metadata:
     dhnt.io/purpose: canonical-self-hosting-harness
     # CLI variation lives ONLY under spec.interfaces.cli below. Every other
     # spec.* section is the shared canonical runtime baseline copied verbatim
-    # from examples/cli/ycode/profile.yaml; ycode compiles it so the bounded
-    # mini-swe-agent CLI surface validates and renders. Substantive agent-loop
-    # behavior is NOT run here — main.bpp forwards it to an installed upstream
-    # `mini`, and the self-contained offline harness lives under harness/.
+    # from examples/cli/ycode/profile.yaml; ycode compiles it so the flags-first
+    # mini CLI surface validates and renders. ycode's frozen dispatch cannot
+    # launch a mini loop, so the run itself dispatches `unsupported` (exit 4);
+    # that exit is the documented example-local BRIDGE POINT — a small wrapper
+    # uses ycode as the strict parse gate and then runs the LOCAL loop under
+    # harness/ (the same loop main.bpp runs directly). See README.md.
 
 spec:
   interfaces:
     cli:
-      identity: {name: mini, version: build, compatibility: "Bounded common session-lifecycle projection of the pinned mini-swe-agent `mini` CLI (start/run a task, pick the model). The pinned `mini` is a SINGLE typer command with flags (-m/--model, -t/--task, -y/--yolo, -l/--cost-limit, -c/--config, -o/--output, --*-class, --exit-immediately), not a subcommand tree; ycode compiles and renders this contract while substantive agent-loop behavior runs only by forwarding to the installed upstream via main.bpp, so the run/start lifecycle exits unsupported (4) under ycode itself. init/model/plan/resume/exit are NOT present as verbs in the pinned source and are declared unsupported (4). Providers/model backends (litellm), interactive confirmation UX, trajectory storage and all vendor-, hosted- and benchmark-specific behavior are out of scope."}
+      identity: {name: mini, version: build, compatibility: "Flags-first projection of the pinned mini-swe-agent `mini` CLI. The pinned `mini` is a SINGLE typer command with flags (-m/--model, -t/--task, -y/--yolo, -l/--cost-limit, -c/--config, -o/--output, --*-class, --exit-immediately), not a subcommand tree, so this contract declares those flags on the root command and adds only the helper verbs version/validate/completion/schema/help. ycode strictly validates and renders this contract; its frozen dispatch cannot launch a mini loop, so the run dispatches `unsupported` (exit 4) — the documented example-local bridge point. The substantive loop (the interactive/default agent, the stateless Bashy execution boundary, replay + a minimal OpenAI-compatible live transport) runs in the LOCAL harness/ package that both main.bpp and the YAML bridge invoke. litellm/provider SDKs, docker/swerex environments, rich/prompt_toolkit UX and trajectory storage integrations are out of scope."}
       bootstrap: {configFlags: [--file, -f], defaultFile: mini.yaml, env: MSWEA_MINI_CONFIG_PATH}
       presentation:
         formats: [text, json, table]
@@ -47,64 +49,45 @@ spec:
       root:
         name: mini
         usage: "mini [OPTIONS]"
-        short: mini-swe-agent common session lifecycle
+        short: bounded self-contained mini-swe-agent (flags-first)
         long: |
-          Bounded projection of the mini-swe-agent `mini` CLI focused on the
-          common session lifecycle: start or run a task and pick the model.
-          ycode renders and validates this contract; the agent loop runs only
-          when main.bpp forwards it to the installed upstream, so under ycode
-          itself the run exits unsupported (4).
+          Flags-first projection of the mini-swe-agent `mini` CLI: give a task
+          (-t), pick a model (-m), choose confirm/yolo/human interaction, and
+          bound the run with cost/step limits. ycode strictly validates and
+          renders this contract; because ycode's frozen dispatch cannot launch a
+          mini loop, the run itself dispatches unsupported (4) — the documented
+          bridge point. The actual loop runs in the local harness/ package that
+          both main.bpp and the YAML bridge invoke.
         args: {min: 0, max: 0}
         flags:
           - {name: file, shorthand: f, type: string, default: mini.yaml, usage: Strict harness configuration file, scope: inherited, env: MSWEA_MINI_CONFIG_PATH}
           - {name: model, shorthand: m, type: string, default: "", usage: "Model to use (e.g. anthropic/claude-sonnet-4.6)", scope: inherited}
           - {name: task, shorthand: t, type: string, default: "", usage: Task/problem statement to solve, scope: inherited}
-          - {name: config, shorthand: c, type: string, default: "", usage: "Upstream config path/filename/key=value (recursively merged; forwarded to the installed mini)", scope: inherited}
+          - {name: config, shorthand: c, type: string, default: "", usage: "JSON config file or dotted key=value (repeatable, recursively merged)", scope: inherited}
           - {name: output, shorthand: o, type: string, default: "", usage: Output trajectory file, scope: inherited}
           - {name: cost-limit, shorthand: l, type: string, default: "", usage: "Cost limit; set 0 to disable", scope: inherited}
           - {name: yolo, shorthand: y, type: bool, default: "false", usage: Run without confirmation, scope: inherited}
           - {name: exit-immediately, type: bool, default: "false", usage: Exit immediately when the agent wants to finish instead of prompting, scope: inherited}
-          - {name: model-class, type: string, default: "", usage: Model class to use, scope: inherited}
-          - {name: agent-class, type: string, default: "", usage: Agent class to use, scope: inherited}
-          - {name: environment-class, type: string, default: "", usage: Environment class to use, scope: inherited}
+          - {name: model-class, type: string, default: "", usage: "Model class (replay|openai; unsupported values fail explicitly)", scope: inherited}
+          - {name: agent-class, type: string, default: "", usage: "Agent class (interactive|default; unsupported values fail explicitly)", scope: inherited}
+          - {name: environment-class, type: string, default: "", usage: "Environment class (local|bashy; unsupported values fail explicitly)", scope: inherited}
+          # --- bounded-example extensions (not part of upstream mini's surface;
+          # declared here so ycode owns parsing for BOTH entrypoints symmetrically) ---
+          - {name: mode, type: string, default: "", usage: "Interaction mode override (confirm|yolo|human)", scope: inherited}
+          - {name: step-limit, type: string, default: "", usage: "Step budget; 0 disables (example extension)", scope: inherited}
+          - {name: scenario, type: string, default: "", usage: "Load a full offline spec JSON (example extension)", scope: inherited}
+          - {name: replay, type: string, default: "", usage: "Load scripted replay steps JSON (example extension)", scope: inherited}
+          - {name: base-url, type: string, default: "", usage: "OpenAI-compatible base URL (example extension)", scope: inherited}
+          - {name: api-key, type: string, default: "", usage: "OpenAI-compatible API key (example extension)", scope: inherited}
+          - {name: emit-envelope, type: bool, default: "false", usage: "Print the normalized result envelope to stdout (example extension)", scope: inherited}
+        # The run itself: ycode's frozen dispatch cannot launch a mini loop, so
+        # the flags-first invocation dispatches `unsupported` (exit 4). The YAML
+        # bridge treats that exit 4 as "parsed OK, now run the local loop"; a
+        # real usage error is exit 2 and is propagated. mini has NO run/start
+        # subcommand — it is flags-first — so none is declared. Only the helper
+        # verbs below are added.
         dispatch: {operation: unsupported}
         commands:
-          - name: start
-            aliases: [run]
-            usage: "start [OPTIONS]"
-            short: Start or run an agent session for a task
-            long: |
-              Bounded convenience verb for the pinned mini's default bare
-              invocation (`mini -t TASK`). `run` is an alias. main.bpp drops the
-              `start`/`run` token and forwards the remaining flags to the
-              installed upstream; the agent loop runs only there, so ycode
-              exits unsupported (4) here.
-            args: {min: 0, max: 0}
-            # -t/--task is inherited from the root command; start does not
-            # redeclare it (ycode rejects a local flag that collides with an
-            # inherited one).
-            dispatch: {operation: unsupported}
-          - name: init
-            short: A guided setup verb is not present in the pinned mini source
-            long: "The pinned mini configures on first run (configure_if_first_time); there is no `init` subcommand."
-            args: {min: 0, max: 0}
-            dispatch: {operation: unsupported}
-          - name: model
-            short: Model selection is the -m/--model flag; there is no model subcommand in the pinned mini source
-            args: {min: 0, max: 0}
-            dispatch: {operation: unsupported}
-          - name: plan
-            short: A planning mode is not present in the pinned mini source
-            args: {min: 0, max: 0}
-            dispatch: {operation: unsupported}
-          - name: resume
-            short: Session resume is not present in the pinned mini source
-            args: {min: 0, max: 0}
-            dispatch: {operation: unsupported}
-          - name: exit
-            short: A session exit verb is not present in the pinned mini source
-            args: {min: 0, max: 0}
-            dispatch: {operation: unsupported}
           - {name: version, short: Print version information, args: {min: 0, max: 0}, dispatch: {operation: version}}
           - {name: validate, short: Validate and compile this CLI profile, args: {min: 0, max: 0}, dispatch: {operation: validate}}
           - {name: schema, short: Print the profile JSON Schema, args: {min: 0, max: 0}, dispatch: {operation: schema}}

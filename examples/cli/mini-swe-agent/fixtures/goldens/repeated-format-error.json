@@ -4,6 +4,7 @@
   "bounded_version": "0.1.0",
   "cost": 0.03,
   "exit_status": "RepeatedFormatError",
+  "mode": "yolo",
   "model_name": "replay/deterministic",
   "scenario": "repeated-format-error",
   "schema": "mini-swe-agent-bounded-result-v1",

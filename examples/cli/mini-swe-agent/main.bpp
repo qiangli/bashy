@@ -1,40 +1,46 @@
 #!/usr/bin/env -S bashy --bashpp
-set -e
+set -eu
 
-# Thin native Bash++ adapter for the bounded mini-swe-agent session-lifecycle
-# CLI. It does NOT reimplement any mini-swe-agent behavior (no agent loop, model
-# providers, environments or trajectory storage). It maps this profile's bounded
-# convenience verbs onto the installed upstream `mini` and forwards argv,
-# stdin/stdout/stderr and the exit status verbatim. The declarative contract
-# lives in profile.yaml and is compiled/rendered by ycode; the deterministic,
-# offline, self-contained port lives under harness/. Substantive online work
-# runs only in the installed upstream.
+# Shell entrypoint for the bounded, self-contained mini-swe-agent example.
 #
-# Upstream selection is an explicit executable override: set MINI_BIN to an
-# absolute path to the installed `mini`. With no override it resolves `mini`
-# from PATH.
+# By DEFAULT this runs the LOCAL copied/adapted agent loop (harness/, the
+# minisweagent_bounded package) — it is NOT a wrapper around an installed
+# upstream `mini`. Every model-visible action is executed as an independent,
+# stateless Bashy process (see harness/.../environment.py). The flags-first CLI
+# surface mirrors upstream mini: -t/--task, -c/--config (repeatable), -m/--model,
+# -y/--yolo, -l/--cost-limit, -o/--output, --model-class, --agent-class,
+# --environment-class, --exit-immediately (plus bounded extras: --scenario,
+# --replay, --emit-envelope, --step-limit, --base-url, --api-key).
+#
+# The declarative verbs help/version/validate/completion/schema are rendered by
+# the frozen generic ycode compiler against profile.yaml (the YAML CLI contract)
+# when YCODE_BIN is set; -h/--help falls back to the local CLI's own help.
 
-var upstream string = ""
-upstream="${MINI_BIN:-mini}"
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+harness="$here/harness"
+profile="$here/profile.yaml"
 
-var verb string = ""
+# Resolve the Bashy that executes each action. Prefer an explicit override, then
+# the bashy already running this script, then PATH. No host-shell fallback.
+if [ -z "${BASHY_BIN:-}" ]; then
+    BASHY_BIN="$(command -v bashy || true)"
+fi
+export BASHY_BIN
+python_bin="${PYTHON_BIN:-python3}"
+
 verb="${1:-}"
-
-# The pinned mini source is a single typer command with flags; init/model/plan/
-# resume/exit are declared unsupported (exit 4) because there is no such verb.
-# start/run are bounded convenience verbs for the default bare invocation: drop
-# the leading token and forward the remaining flags. Every other token — the
-# root flags (-m/-t/-c/...) and native ops — is forwarded verbatim.
 case "$verb" in
-init|model|plan|resume|exit)
-    printf 'error: %s is unsupported by the bounded mini-swe-agent profile\n' "$verb" >&2
-    exit 4
-    ;;
-start|run)
-    shift
-    exec "$upstream" "$@"
-    ;;
-*)
-    exec "$upstream" "$@"
-    ;;
+    help|-h|--help)
+        if [ -n "${YCODE_BIN:-}" ] && [ -x "${YCODE_BIN:-}" ]; then
+            exec "$YCODE_BIN" --file "$profile" "$@"
+        fi
+        exec env PYTHONPATH="$harness" "$python_bin" -m minisweagent_bounded.cli --help
+        ;;
+    version|validate|completion|schema)
+        : "${YCODE_BIN:?the $verb verb renders through the frozen ycode compiler; set YCODE_BIN}"
+        exec "$YCODE_BIN" --file "$profile" "$@"
+        ;;
 esac
+
+# Default: run the local loop.
+exec env PYTHONPATH="$harness" "$python_bin" -m minisweagent_bounded.cli "$@"

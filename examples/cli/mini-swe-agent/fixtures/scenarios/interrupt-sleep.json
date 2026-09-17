@@ -1,0 +1,15 @@
+{
+  "name": "interrupt-sleep",
+  "description": "A long-running action interrupted by a real SIGINT; trajectory is saved with UserInterruption and the child process group is reaped.",
+  "task": "run a long action that will be interrupted",
+  "config": {"cost_limit": 0, "step_limit": 0, "max_consecutive_format_errors": 0},
+  "model": {
+    "model_name": "replay/deterministic",
+    "cost_per_call": 0.0,
+    "steps": [
+      {"reasoning": "Start a long action.", "command": "sleep 41.5"},
+      {"reasoning": "Submit (never reached).", "command": "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"}
+    ]
+  },
+  "environment": {"timeout": 120}
+}

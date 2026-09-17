@@ -14,6 +14,7 @@
   "bounded_version": "0.1.0",
   "cost": 0.04,
   "exit_status": "Submitted",
+  "mode": "yolo",
   "model_name": "replay/deterministic",
   "scenario": "format-error-recovers",
   "schema": "mini-swe-agent-bounded-result-v1",

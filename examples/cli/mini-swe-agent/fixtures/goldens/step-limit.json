@@ -13,6 +13,7 @@
   "bounded_version": "0.1.0",
   "cost": 0.0,
   "exit_status": "LimitsExceeded",
+  "mode": "yolo",
   "model_name": "replay/deterministic",
   "scenario": "step-limit",
   "schema": "mini-swe-agent-bounded-result-v1",
