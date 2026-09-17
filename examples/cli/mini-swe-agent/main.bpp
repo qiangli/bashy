@@ -1,0 +1,46 @@
+#!/usr/bin/env -S bashy --bashpp
+set -eu
+
+# Shell entrypoint for the bounded, self-contained mini-swe-agent example.
+#
+# By DEFAULT this runs the LOCAL copied/adapted agent loop (harness/, the
+# minisweagent_bounded package) — it is NOT a wrapper around an installed
+# upstream `mini`. Every model-visible action is executed as an independent,
+# stateless Bashy process (see harness/.../environment.py). The flags-first CLI
+# surface mirrors upstream mini: -t/--task, -c/--config (repeatable), -m/--model,
+# -y/--yolo, -l/--cost-limit, -o/--output, --model-class, --agent-class,
+# --environment-class, --exit-immediately (plus bounded extras: --scenario,
+# --replay, --emit-envelope, --step-limit, --base-url, --api-key).
+#
+# The declarative verbs help/version/validate/completion/schema are rendered by
+# the frozen generic ycode compiler against profile.yaml (the YAML CLI contract)
+# when YCODE_BIN is set; -h/--help falls back to the local CLI's own help.
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+harness="$here/harness"
+profile="$here/profile.yaml"
+
+# Resolve the Bashy that executes each action. Prefer an explicit override, then
+# the bashy already running this script, then PATH. No host-shell fallback.
+if [ -z "${BASHY_BIN:-}" ]; then
+    BASHY_BIN="$(command -v bashy || true)"
+fi
+export BASHY_BIN
+python_bin="${PYTHON_BIN:-python3}"
+
+verb="${1:-}"
+case "$verb" in
+    help|-h|--help)
+        if [ -n "${YCODE_BIN:-}" ] && [ -x "${YCODE_BIN:-}" ]; then
+            exec "$YCODE_BIN" --file "$profile" "$@"
+        fi
+        exec env PYTHONPATH="$harness" "$python_bin" -m minisweagent_bounded.cli --help
+        ;;
+    version|validate|completion|schema)
+        : "${YCODE_BIN:?the $verb verb renders through the frozen ycode compiler; set YCODE_BIN}"
+        exec "$YCODE_BIN" --file "$profile" "$@"
+        ;;
+esac
+
+# Default: run the local loop.
+exec env PYTHONPATH="$harness" "$python_bin" -m minisweagent_bounded.cli "$@"

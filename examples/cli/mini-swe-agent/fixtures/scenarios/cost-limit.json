@@ -1,0 +1,23 @@
+{
+  "name": "cost-limit",
+  "description": "The scripted model never submits; the run stops when accrued cost reaches the cost limit.",
+  "task": "loop without ever submitting",
+  "config": {
+    "cost_limit": 0.02,
+    "step_limit": 0,
+    "max_consecutive_format_errors": 0
+  },
+  "model": {
+    "model_name": "replay/deterministic",
+    "cost_per_call": 0.01,
+    "steps": [
+      {"reasoning": "Look around.", "command": "echo step-1"},
+      {"reasoning": "Look again.", "command": "echo step-2"},
+      {"reasoning": "Keep going.", "command": "echo step-3"},
+      {"reasoning": "And again.", "command": "echo step-4"}
+    ]
+  },
+  "environment": {
+    "timeout": 30
+  }
+}

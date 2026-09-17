@@ -1,0 +1,23 @@
+{
+  "actions": [
+    {
+      "command": "echo step-1",
+      "returncode": 0
+    },
+    {
+      "command": "echo step-2",
+      "returncode": 0
+    }
+  ],
+  "api_calls": 2,
+  "bounded_version": "0.1.0",
+  "cost": 0.02,
+  "exit_status": "LimitsExceeded",
+  "mode": "yolo",
+  "model_name": "replay/deterministic",
+  "scenario": "cost-limit",
+  "schema": "mini-swe-agent-bounded-result-v1",
+  "submission": "",
+  "trajectory_format": "mini-swe-agent-1.1",
+  "upstream_version": "2.4.6"
+}

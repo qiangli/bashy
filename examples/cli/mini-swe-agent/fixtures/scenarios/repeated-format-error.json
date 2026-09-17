@@ -1,0 +1,22 @@
+{
+  "name": "repeated-format-error",
+  "description": "The model produces no tool call three times in a row; the run stops with RepeatedFormatError.",
+  "task": "keep responding without a command",
+  "config": {
+    "cost_limit": 3.0,
+    "step_limit": 0,
+    "max_consecutive_format_errors": 3
+  },
+  "model": {
+    "model_name": "replay/deterministic",
+    "cost_per_call": 0.01,
+    "steps": [
+      {"reasoning": "I forgot the tool call.", "format_error": "Every response needs a bash tool call."},
+      {"reasoning": "Still no tool call.", "format_error": "Every response needs a bash tool call."},
+      {"reasoning": "Once more without a tool call.", "format_error": "Every response needs a bash tool call."}
+    ]
+  },
+  "environment": {
+    "timeout": 30
+  }
+}

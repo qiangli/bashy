@@ -1,0 +1,39 @@
+Flags-first projection of the mini-swe-agent `mini` CLI: give a task
+(-t), pick a model (-m), choose confirm/yolo/human interaction, and
+bound the run with cost/step limits. ycode strictly validates and
+renders this contract; because ycode's frozen dispatch cannot launch a
+mini loop, the run itself dispatches unsupported (4) — the documented
+bridge point. The actual loop runs in the local harness/ package that
+both main.bpp and the YAML bridge invoke.
+
+
+Usage:
+  mini [OPTIONS] [command]
+
+Available Commands:
+  completion  Generate a shell completion script for the declared command tree
+  schema      Print the profile JSON Schema
+  validate    Validate and compile this CLI profile
+  version     Print version information
+
+Flags:
+      --agent-class string         Agent class (interactive|default; unsupported values fail explicitly)
+      --api-key string             OpenAI-compatible API key (example extension)
+      --base-url string            OpenAI-compatible base URL (example extension)
+  -c, --config string              JSON config file or dotted key=value (repeatable, recursively merged)
+  -l, --cost-limit string          Cost limit; set 0 to disable
+      --emit-envelope              Print the normalized result envelope to stdout (example extension)
+      --environment-class string   Environment class (local|bashy; unsupported values fail explicitly)
+      --exit-immediately           Exit immediately when the agent wants to finish instead of prompting
+  -f, --file string                Strict harness configuration file (default "mini.yaml")
+  -h, --help                       Show command help
+      --mode string                Interaction mode override (confirm|yolo|human)
+  -m, --model string               Model to use (e.g. anthropic/claude-sonnet-4.6)
+      --model-class string         Model class (replay|openai; unsupported values fail explicitly)
+  -o, --output string              Output trajectory file
+      --replay string              Load scripted replay steps JSON (example extension)
+      --scenario string            Load a full offline spec JSON (example extension)
+      --step-limit string          Step budget; 0 disables (example extension)
+  -t, --task string                Task/problem statement to solve
+  -y, --yolo                       Run without confirmation
+
