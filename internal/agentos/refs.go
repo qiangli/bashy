@@ -25,7 +25,11 @@ import (
 // The registrations pass exactly what each store's own CLI passes with no
 // flags — the cwd's repo store for kb and todo, the default fleet catalog, the
 // default exec-history root — so `define todo:abc` and `todo show abc` agree
-// on which store they read.
+// on which store they read. A scoped ref (`kb:<repo>/<handle>`,
+// `todo:<repo>/<seq>`) resolves its scope segment through ONE lookup,
+// weave.ScopeLookup() — the cwd checkout first, then every weave queue root
+// by basename, ambiguity an error naming both — built once here and handed to
+// both stores, so kb and todo agree on which checkout a basename names.
 //
 // The contract this protects: a hook left nil is indistinguishable from a
 // store that is empty (the wireLexicon comment records the day that drift was
@@ -35,8 +39,9 @@ import (
 func wireRefResolvers() {
 	refResolversOnce.Do(func() {
 		g := lexicon.RefResolvers
-		kb.RegisterRefs(g, "")
-		todo.RegisterRefs(g, "", false, false, "")
+		scopes := weave.ScopeLookup()
+		kb.RegisterRefs(g, "", scopes)
+		todo.RegisterRefs(g, "", false, false, "", scopes)
 		weave.RegisterRefs(g)       // sprint, run
 		meet.RegisterRefs(g)        // meet
 		bus.RegisterRefs(g)         // mb, bus

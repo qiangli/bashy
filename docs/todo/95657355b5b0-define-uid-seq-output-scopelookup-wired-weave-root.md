@@ -3,7 +3,7 @@ id: 95657355b5b0
 kind: task
 title: 'define: uid/#seq output; scopeLookup wired (weave roots + user); atlas 2.8; e2e-refs kb+todo cases'
 seq: 302
-status: todo
+status: doing
 priority: p1
 created: 2026-09-16T18:56:59.556974Z
 sprint: 202

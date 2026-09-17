@@ -472,6 +472,28 @@ citation as resolved · external (another store's kind) · unknown (not a kind)
 · dangling. There is deliberately no `mb show --links`: a citation inside a
 post is `define`'s job. Gate: the umbrella's `script/e2e-refs.sh`.
 
+#### Entities and their three handles (Sprint 202)
+
+An **entity** is anything with a ref. Beyond its canonical id it may carry up
+to three **handles** that all name the same record; a store resolves all three,
+and `define` prints the other two as `uid:` and `seq:` lines.
+
+| handle | for | example | rule |
+|---|---|---|---|
+| **seq** | humans | `kb:22`, `todo:148` | unique within its scope; accepted as INPUT, **never emitted** as a ref — listings print `#seq` beside the ref |
+| **uuid** | agents | `kb:0192f3a4-7c1e` | THE identity, universal across hosts; a prefix of ≥ 8 hex is accepted, ≥ 12 hex is always a uid |
+| **slug** | web / prose | `kb:release-cycle` | the readable name; unique within its scope |
+
+The emitted ref stays `kb:<slug>` / `todo:<12-hex>`. The **scope** is the store
+the entity lives in, spelled as a leading segment — `kb:coreutils/release-cycle`,
+`todo:coreutils/148`, `user/` for the personal store — and elided when the
+reader shares the context; it is a virtual parent, never a kind. A repo scope is
+a checkout basename resolved through one lookup (the cwd checkout, then weave's
+known queue roots; two checkouts sharing a basename is an error naming both).
+`kb add` refuses a numeric or hex-shaped slug (it would shadow a seq or a uid);
+`kb doctor` reports a page missing `id`/`seq` and a duplicate seq, and never
+rewrites. Design of record: dhnt `docs/uniform-ref-addressing.md` D10–D13.
+
 ### 2.9 Registered commands — the operator's ring (Sprint 179)
 
 `bashy commands add NAME …` registers a command of the operator's own — an
