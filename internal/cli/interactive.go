@@ -56,10 +56,19 @@ func singleQuote(s string) string {
 }
 
 func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) error {
-	// Always bash grammar (drop-in); --posix applies POSIX *behavioral* parse
-	// rules via PosixMode, not the stricter LangPOSIX grammar that would drop
-	// bash extensions (arrays, ${v:off:len}, ${v^^}). See run() in main.go.
-	lang := r.Dialect()
+	// POSIX suppresses Bash++ grammar even when a live toggle has selected a
+	// latent Bash++ dialect. Translate the effective POSIX variant to Bash:
+	// the drop-in retains arrays and parameter extensions, with POSIX behavioral
+	// parse rules supplied separately by PosixMode. After set +o posix, the
+	// effective getter can expose the selected Bash++ dialect again.
+	langForRunner := func(r *interp.Runner) syntax.LangVariant {
+		lang := r.LangVariant()
+		if lang == syntax.LangPOSIX {
+			return syntax.LangBash
+		}
+		return lang
+	}
+	lang := langForRunner(r)
 	posixMode := resolvedStartupPosix()
 
 	var cmdNum int
@@ -114,7 +123,7 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 	return interactive.Run(context.Background(), interactive.Options{
 		Runner:    r,
 		Lang:      lang,
-		LangFunc:  func(r *interp.Runner) syntax.LangVariant { return r.Dialect() },
+		LangFunc:  langForRunner,
 		PosixMode: posixMode,
 		Stdin:     stdin,
 		// Prompts and line-editing echo are terminal UI, which bash writes to

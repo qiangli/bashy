@@ -112,3 +112,91 @@ func TestInteractiveBashPPLiveDialect(t *testing.T) {
 		})
 	}
 }
+
+func TestInteractiveBashPPPOSIXGrammarContract(t *testing.T) {
+	// Exercise both the normal readline front door and sh's cooked-terminal
+	// fallback. Both must consult the effective POSIX language, including a
+	// live toggle which changes the latent dialect inside the same input line.
+	for _, plainTerminal := range []bool{false, true} {
+		name := "readline"
+		if plainTerminal {
+			name = "plain-terminal"
+		}
+		t.Run(name, func(t *testing.T) {
+			binary := builtBashyBin(t)
+			pathDir := t.TempDir()
+			// Strict sh requires regular builtins to resolve in PATH. Provide
+			// type's lookup entry so this probe measures its parsed arguments,
+			// rather than the unrelated strict-POSIX PATH gate.
+			if err := os.WriteFile(filepath.Join(pathDir, "type"), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if plainTerminal {
+				link := filepath.Join(t.TempDir(), "sh")
+				if err := os.Symlink(binary, link); err != nil {
+					t.Fatal(err)
+				}
+				binary = link
+			}
+			cmd := exec.Command(binary, "--noprofile", "--norc", "--posix")
+			cmd.Env = []string{
+				"BASHY_BASHPP=1", "HOME=" + t.TempDir(), "PATH=" + pathDir + ":/bin:/usr/bin",
+				"PS1=POSIX> ", "TERM=xterm", "LC_ALL=C",
+			}
+			ptmx, err := pty.Start(cmd)
+			if err != nil {
+				t.Fatal(err)
+			}
+			capture := startPTYCapture(ptmx)
+			t.Cleanup(func() {
+				_ = ptmx.Close()
+				if cmd.ProcessState == nil {
+					_ = cmd.Process.Kill()
+					_ = cmd.Wait()
+				}
+			})
+			capture.waitFor(t, []byte("POSIX> "), 5*time.Second)
+			for i, line := range []string{
+				`a=(one two); printf 'ARRAY:%s\n' "${a[1]}"`,
+				`set -o bashpp; type Hidden int; printf 'POSIX_BOUNDARY\n'`,
+				`agentic func f(n int) int { return n }`,
+				`set +o posix; type Visible int; var x = 8; printf 'ACTIVATED:%s\n' "$x"`,
+				`set -o posix; type HiddenAgain int; printf 'POSIX_REENABLED\n'`,
+			} {
+				if _, err := io.WriteString(ptmx, line+"\r"); err != nil {
+					t.Fatal(err)
+				}
+				capture.waitForCount(t, []byte("POSIX> "), i+2, 5*time.Second)
+			}
+			capture.mu.Lock()
+			got := append([]byte(nil), capture.buf.Bytes()...)
+			capture.mu.Unlock()
+			for _, want := range []string{"ARRAY:two", "POSIX_BOUNDARY", "ACTIVATED:8", "POSIX_REENABLED"} {
+				if !bytes.Contains(got, []byte("\r\n"+want+"\r\n")) {
+					t.Fatalf("missing executed output %q in PTY transcript: %q", want, got)
+				}
+			}
+			for _, want := range []string{"type: Hidden: not found", "type: HiddenAgain: not found"} {
+				if !bytes.Contains(got, []byte(want)) {
+					t.Fatalf("POSIX selected extended type grammar; missing %q: %q", want, got)
+				}
+			}
+			if bytes.Contains(got, []byte("extensions disabled")) {
+				t.Fatalf("Bash++ reached runtime while POSIX grammar should reject it: %q", got)
+			}
+			if _, err := io.WriteString(ptmx, "exit 0\r"); err != nil {
+				t.Fatal(err)
+			}
+			done := make(chan error, 1)
+			go func() { done <- cmd.Wait() }()
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatalf("interactive shell exit: %v; PTY transcript: %q", err, got)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("interactive shell did not exit")
+			}
+		})
+	}
+}

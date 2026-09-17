@@ -69,6 +69,15 @@ resolver has already incorporated it. All other imported options are retained.
 This prevents an imported token from reactivating POSIX in the standalone
 inertness profile. Warm-session resolution always uses the Bashy front door.
 
+The interactive front door consults `Runner.LangVariant()` before each
+statement rather than its latent `Dialect()`. Effective POSIX is translated
+back to Classic Bash grammar to preserve the drop-in's arrays and parameter
+extensions. A live Bash++ toggle remains latent while POSIX is on; turning
+POSIX off exposes that selected dialect again for subsequently parsed input.
+Re-enabling POSIX suppresses the extended grammar again. This applies to both
+readline and the plain-terminal fallback without changing their startup
+`PosixMode` behavioral profile.
+
 An explicitly requested Go unit on Bashy still receives its existing POSIX
 refusal before shell parsing. Recognizing that unit uses the winning selector
 only for the refusal; it does not enable the grammar or runtime.
@@ -100,3 +109,6 @@ aliases, precedence, ordering and environment controls. The warm-session tests
 in `bashpp_posix_session_test.go` check runtime dialect and `eval` isolation.
 The existing Sprint 114 byte-inertness and Go-source refusal tests remain
 independent regression guards. Release gates run on the approved remote hosts.
+`TestInteractiveBashPPPOSIXGrammarContract` verifies effective live grammar,
+Classic Bash arrays, rejection under POSIX, and activation after disabling
+POSIX through both terminal paths.
