@@ -3,10 +3,13 @@ id: 95657355b5b0
 kind: task
 title: 'define: uid/#seq output; scopeLookup wired (weave roots + user); atlas 2.8; e2e-refs kb+todo cases'
 seq: 302
-status: doing
+status: done
 priority: p1
 created: 2026-09-16T18:56:59.556974Z
+assignee: transom
 sprint: 202
+closed: 2026-09-17T01:48:52.480092Z
+closed_by: transom
 ---
 
 Sprint #202 S2 (bashy). Depends on S1 (coreutils #148, new pin). Plan: docs/sprint-202-master-execution-plan.md in the umbrella.
