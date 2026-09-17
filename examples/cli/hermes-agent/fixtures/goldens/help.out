@@ -1,0 +1,30 @@
+Bounded projection of the Hermes Agent CLI focused on the common
+session lifecycle: start or continue a chat, pick the model, and
+resume a previous session. ycode renders and validates this contract;
+the chat/model/resume lifecycle runs only when main.bpp forwards it to
+the installed upstream, so under ycode itself it exits unsupported (4).
+
+
+Usage:
+  hermes [OPTIONS] [PROMPT] [command]
+
+Available Commands:
+  chat        Start or continue an interactive or one-shot chat session
+  completion  Generate a shell completion script for the declared command tree
+  help        Show help for a declared command
+  model       Select the default model and provider
+  schema      Print the profile JSON Schema
+  validate    Validate and compile this CLI profile
+  version     Print version information
+
+Flags:
+  -f, --file string        Strict harness configuration (default "agent.yaml")
+  -h, --help               Show command help
+  -m, --model string       Model override for this invocation (e.g. anthropic/claude-sonnet-4.6)
+      --provider string    Provider override for this invocation (e.g. openrouter, anthropic)
+      --reasoning string   Reasoning effort: none, minimal, low, medium, high, xhigh, max, ultra
+  -r, --resume string      Resume a previous session by id or title, or 'latest'
+      --tui                Launch the modern TUI instead of the classic REPL
+      --yolo               Bypass dangerous-command approval prompts
+
+

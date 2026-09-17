@@ -1,0 +1,16 @@
+Generate a shell completion script for the declared command tree
+
+Usage:
+  hermes completion <shell>
+
+Global Flags:
+  -f, --file string        Strict harness configuration (default "agent.yaml")
+  -h, --help               Show command help
+  -m, --model string       Model override for this invocation (e.g. anthropic/claude-sonnet-4.6)
+      --provider string    Provider override for this invocation (e.g. openrouter, anthropic)
+      --reasoning string   Reasoning effort: none, minimal, low, medium, high, xhigh, max, ultra
+  -r, --resume string      Resume a previous session by id or title, or 'latest'
+      --tui                Launch the modern TUI instead of the classic REPL
+      --yolo               Bypass dangerous-command approval prompts
+
+
