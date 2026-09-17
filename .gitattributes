@@ -1,2 +1,7 @@
 .sibling-pins text eol=lf
 *.sh text eol=lf
+# Bash++ sources and pinned transcripts are compared byte-for-byte by
+# internal/agentos/contracts_test.go; a CRLF checkout (Windows autocrlf)
+# makes every line differ while printing identically.
+*.bpp text eol=lf
+*.expected text eol=lf
