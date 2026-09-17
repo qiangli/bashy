@@ -1,0 +1,16 @@
+#!/usr/bin/env -S bashy --bashpp
+set -e
+
+~~~go as paths
+import "path/filepath"
+
+func Relative(script string) string {
+    absolute, err := filepath.Abs(script)
+    if err != nil { panic(err) }
+    return filepath.Clean(filepath.Join(filepath.Dir(absolute), "profile.yaml"))
+}
+~~~
+
+var upstream string = ""
+upstream="${OPENCODE_BIN:-opencode}"
+exec "$upstream" "$@"
