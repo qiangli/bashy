@@ -493,6 +493,12 @@ and the Windows leg is the one that catches things a local unix run cannot:
 - a **cross-build of the lean `cmd/bashy` for all 6 release platforms** with
   `CGO_ENABLED=0`.
 
+Push CI is unit and mock tests only (decided 2026-09-17). The GNU bash-5.3
+conformance suite (the former `bash53-gate` job) runs from
+`.github/workflows/conformance.yml` on `v*` tags and `workflow_dispatch`, and
+the licensed POSIX shell arm never runs in Actions at all — both are release
+gates (`kb:release-bashy`), not push gates.
+
 So before pushing, at minimum cross-build for Windows (`CGO_ENABLED=0
 GOOS=windows GOARCH=amd64 go build ./cmd/bashy`) plus `go test ./...`. Running
 the workflow under `bashy act` does **not** cover this — act is Linux-only.
