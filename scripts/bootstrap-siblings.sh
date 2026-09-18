@@ -116,6 +116,7 @@ install_hooks() {
 repo_url() {
     case "$1" in
         sh) echo "https://github.com/qiangli/sh.git" ;;
+        bashpp) echo "https://github.com/qiangli/bashpp.git" ;;
         coreutils) echo "https://github.com/qiangli/coreutils.git" ;;
         yoke) echo "https://github.com/qiangli/yoke.git" ;;
         readline) echo "https://github.com/qiangli/readline.git" ;;

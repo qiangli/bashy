@@ -7,6 +7,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/qiangli/bashpp/front"
+
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 )
@@ -78,8 +80,8 @@ func NewSessionRunnerWithConfig(io SessionIO, config SessionConfig) (*interp.Run
 		}
 		return "", false
 	}
-	resolution, err := ResolveBashPP(BashPPSelector{
-		Binary: BashPPBinaryBashy, Args: []string{"bashy", "-c", io.Command},
+	resolution, err := front.ResolveBashPP(front.BashPPSelector{
+		Binary: front.BashPPBinaryBashy, Args: []string{"bashy", "-c", io.Command},
 		LookupEnv: lookup, Posix: startupPosix,
 	})
 	if err != nil {

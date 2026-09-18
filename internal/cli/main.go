@@ -20,6 +20,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/qiangli/bashpp/front"
+
 	"golang.org/x/term"
 
 	"mvdan.cc/sh/v3/expand"
@@ -46,7 +48,7 @@ var (
 	noediting     = flag.Bool("noediting", false, "disable readline editing")
 	debugger      = flag.Bool("debugger", false, "enable debugger profile")
 	debug         = flag.Bool("debug", false, "enable debugger profile")
-	startupBashPP BashPPResolution
+	startupBashPP front.BashPPResolution
 	originalArgs  []string
 	optsOn        multiFlag
 	optsOff       multiFlag
@@ -59,9 +61,9 @@ var (
 // startupGoSourceErr carries a scan failure so it is reported on the normal
 // exit path; startupGoSource is the validated result. See gosource.go.
 var (
-	startupGoSourceSel GoSourceSelection
+	startupGoSourceSel front.GoSourceSelection
 	startupGoSourceErr error
-	startupGoSource    GoSourceResolution
+	startupGoSource    front.GoSourceResolution
 )
 
 // multiFlag collects repeated string values for a flag, e.g. -o opt.
@@ -159,9 +161,9 @@ func stripBashPPInvocationFlags(args []string) []string {
 		out = append(out, arg)
 		// A value-taking option's value is not the script operand: step over
 		// it so a selector spelled behind it is still seen. Sharing
-		// invocationFlagTakesValue with the other argv scanners is what keeps
+		// front.InvocationFlagTakesValue with the other argv scanners is what keeps
 		// `--rcfile F --bashpp` and `--source go --bashpp` working.
-		if invocationFlagTakesValue(arg) && i+1 < len(args) {
+		if front.InvocationFlagTakesValue(arg) && i+1 < len(args) {
 			i++
 			out = append(out, args[i])
 		}
@@ -273,7 +275,7 @@ func relocatePendingCommandFlag(args []string) []string {
 		// Value-taking options keep their value token, including a
 		// cluster whose trailing flag takes a value (`-eo pipefail`).
 		switch {
-		case a == "+o" || a == "+O" || invocationFlagTakesValue(a):
+		case a == "+o" || a == "+O" || front.InvocationFlagTakesValue(a):
 			i += 2
 		case isCluster && (a[len(a)-1] == 'o' || a[len(a)-1] == 'O'):
 			i += 2
@@ -582,7 +584,7 @@ func Main() {
 	// never meet a `--source go` pair and mistake its value for the script
 	// operand. A scan failure is deferred to runAll so it exits through the
 	// usual path.
-	os.Args, startupGoSourceSel, startupGoSourceErr = stripGoSourceInvocationFlags(os.Args)
+	os.Args, startupGoSourceSel, startupGoSourceErr = front.StripGoSourceInvocationFlags(os.Args)
 	os.Args = stripBashPPInvocationFlags(relocatePendingCommandFlag(os.Args))
 	preflightInvocationErrors(os.Args)
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
@@ -731,8 +733,8 @@ func newRunner() (*interp.Runner, error) {
 	// invocation selector enables its extensions. The Bashy front door retains
 	// explicit mode discovery; an environment-selected compatibility process
 	// keeps the existing Classic listing contract on either binary.
-	if startupBashPP.Source == BashPPSourceEnv ||
-		(!AgentOSBashPPDefault && startupBashPP.Source == BashPPSourceCLI) {
+	if startupBashPP.Source == front.BashPPSourceEnv ||
+		(!AgentOSBashPPDefault && startupBashPP.Source == front.BashPPSourceCLI) {
 		opts = append(opts, interp.HideBashPPOption())
 	}
 	// Bash enables job control (monitor mode) automatically for an
@@ -1164,16 +1166,16 @@ func runAll() error {
 	if *command == "" && !*readStdin && flag.NArg() > 0 {
 		filename = flag.Arg(0)
 	}
-	binary := BashPPBinaryBash
+	binary := front.BashPPBinaryBash
 	if AgentOSBashPPDefault {
-		binary = BashPPBinaryBashy
+		binary = front.BashPPBinaryBashy
 	}
 	var err error
-	bashPPSelector := BashPPSelector{
+	bashPPSelector := front.BashPPSelector{
 		Binary: binary, Args: originalArgs, LookupEnv: os.LookupEnv,
 		Filename: filename, Posix: effectiveStartupPosix(),
 	}
-	startupBashPP, err = ResolveBashPP(bashPPSelector)
+	startupBashPP, err = front.ResolveBashPP(bashPPSelector)
 	if err != nil {
 		return err
 	}
@@ -1188,7 +1190,7 @@ func runAll() error {
 	// This dispatch stands AHEAD of --pretty-print, --dump-strings and the
 	// -c parse preflights, each of which parses its input as shell before it
 	// knows what language the input is. (Selecting one of those modes with Go
-	// input is already refused by ResolveGoSource above; this ordering means
+	// input is already refused by front.ResolveGoSource above; this ordering means
 	// no future shell preflight can quietly get in front of Go input either.)
 	if startupGoSource.Enabled {
 		return runGoSourceInvocation()
@@ -1196,11 +1198,11 @@ func runAll() error {
 	var invocationStdin io.Reader = os.Stdin
 	// POSIX disables the effective Bash++ grammar/runtime. Preserve recognition
 	// of an explicitly requested Go unit on the bashy front door so it receives
-	// ResolveGoSource's POSIX refusal before any shell parsing. The winning
+	// front.ResolveGoSource's POSIX refusal before any shell parsing. The winning
 	// selector is only used for this refusal, never for enabling a dialect.
 	packageBashPP := startupBashPP.Enabled
-	if binary == BashPPBinaryBashy && startupBashPP.Posix && startupBashPP.Source.Explicit() {
-		packageBashPP, _ = resolveBashPPTiers(bashPPSelector)
+	if binary == front.BashPPBinaryBashy && startupBashPP.Posix && startupBashPP.Source.Explicit() {
+		packageBashPP, _ = front.ResolveBashPPTiers(bashPPSelector)
 	}
 	if packageBashPP && (!resolvedStartupPosix() || startupBashPP.Source.Explicit()) &&
 		!startupGoSourceSel.LanguageSeen && !shouldRunInteractive(term.IsTerminal(int(os.Stdin.Fd()))) {
@@ -1217,7 +1219,7 @@ func runAll() error {
 			}
 			invocationStdin = replay
 			if selected {
-				res, err := ResolveGoSource(GoSourceSelection{Language: "go", LanguageSeen: true}, GoSourceContext{
+				res, err := front.ResolveGoSource(front.GoSourceSelection{Language: "go", LanguageSeen: true}, front.GoSourceContext{
 					Binary: binary, BashPP: startupBashPP.Enabled,
 					Posix:      commandLinePosixMode() || effectiveStartupPosix(),
 					HasOperand: filename != "", ShellOnlyMode: startupShellOnlyMode(),

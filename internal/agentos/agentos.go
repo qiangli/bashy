@@ -25,6 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/qiangli/bashpp/transpile"
+
 	"github.com/spf13/cobra"
 	"mvdan.cc/sh/v3/interp"
 
@@ -568,7 +570,7 @@ func dispatch() {
 	case "out":
 		dispatchExit(dispatchOut(os.Args[2:]))
 	case "transpile":
-		dispatchExit(dispatchTranspile(os.Args[2:]))
+		dispatchExit(transpile.Main(os.Args[2:]))
 	case "full":
 		dispatchExit(dispatchFull(os.Args[2:]))
 	case "awd":

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/qiangli/bashpp/front"
+
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
@@ -126,8 +128,8 @@ func TestBashPPInvocationSelectorIsTopLevelOnly(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Fatalf("consumed env = %q, want %q", got, want)
 	}
-	resolution, err := ResolveBashPP(BashPPSelector{
-		Binary: BashPPBinaryBash,
+	resolution, err := front.ResolveBashPP(front.BashPPSelector{
+		Binary: front.BashPPBinaryBash,
 		LookupEnv: func(name string) (string, bool) {
 			if name == "BASHY_BASHPP" {
 				return "1", true

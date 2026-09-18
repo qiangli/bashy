@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qiangli/bashpp/front"
+
 	"mvdan.cc/sh/v3/gosource"
 )
 
@@ -86,7 +88,7 @@ func TestSprint198PackageBeforeShellPreflight(t *testing.T) {
 					_ = flag.CommandLine.Parse(nil)
 				})
 				AgentOSBashPPDefault = true
-				startupGoSourceSel, startupGoSource, startupGoSourceErr = GoSourceSelection{}, GoSourceResolution{}, nil
+				startupGoSourceSel, startupGoSource, startupGoSourceErr = front.GoSourceSelection{}, front.GoSourceResolution{}, nil
 				*command, *readStdin, *forceI = "", false, false
 				os.Args = []string{"bashy"}
 				originalArgs = []string{"bashy", "--bashpp"}
@@ -125,7 +127,7 @@ func TestSprint198PackageBeforeShellPreflight(t *testing.T) {
 					want = "bashy: --source=go requires the bashy front door"
 				}
 				called := false
-				withGoSourceHook(t, func(files []GoSourceFile, _ GoSourceOptions) (*GoSourceProgram, error) {
+				withGoSourceHook(t, func(files []front.GoSourceFile, _ front.GoSourceOptions) (*front.GoSourceProgram, error) {
 					called = true
 					if len(files) != 1 || string(files[0].Data) != source {
 						t.Fatalf("source changed: %+v", files)
@@ -145,16 +147,16 @@ func TestSprint198PackageBeforeShellPreflight(t *testing.T) {
 
 func TestSprint198PackageGoLexicalSemantics(t *testing.T) {
 	oldDialect := startupBashPP
-	startupBashPP = BashPPResolution{Enabled: true}
+	startupBashPP = front.BashPPResolution{Enabled: true}
 	t.Cleanup(func() { startupBashPP = oldDialect })
 	const source = "package main\nfunc main(){ x:=`$HOME`; x=x+\" $literal\"; println(x) }\n"
-	withGoSourceSelection(t, GoSourceResolution{Enabled: true})
-	withGoSourceHook(t, func(files []GoSourceFile, opts GoSourceOptions) (*GoSourceProgram, error) {
+	withGoSourceSelection(t, front.GoSourceResolution{Enabled: true})
+	withGoSourceHook(t, func(files []front.GoSourceFile, opts front.GoSourceOptions) (*front.GoSourceProgram, error) {
 		p, err := gosource.Load([]gosource.Source{{Name: files[0].Name, Data: files[0].Data}}, gosource.Options{RunMain: opts.RunMain})
 		if err != nil {
 			return nil, err
 		}
-		return &GoSourceProgram{File: p.File, Package: p.Package, Main: p.Main, InitFunctions: p.InitFunctions}, nil
+		return &front.GoSourceProgram{File: p.File, Package: p.Package, Main: p.Main, InitFunctions: p.InitFunctions}, nil
 	})
 	in, _, selected, err := collectPackageGoSource("", source, nil)
 	if err != nil || !selected {
@@ -219,7 +221,7 @@ func TestSprint198PackageOrdinaryPOSIXNoExec(t *testing.T) {
 				t.Setenv("BASH_ENV", "")
 				unsetTestEnv(t, "BASHY_BASHPP")
 				AgentOSBashPPDefault = true
-				startupGoSourceSel, startupGoSource, startupGoSourceErr = GoSourceSelection{}, GoSourceResolution{}, nil
+				startupGoSourceSel, startupGoSource, startupGoSourceErr = front.GoSourceSelection{}, front.GoSourceResolution{}, nil
 				optsOn, setOff = []string{"noexec"}, nil
 				*command, *readStdin, *forceI = "", false, false
 				operand := ""
@@ -260,7 +262,7 @@ func TestSprint198PackageOrdinaryPOSIXNoExec(t *testing.T) {
 					os.Args = append(os.Args, operand)
 				}
 				called := false
-				withGoSourceHook(t, func([]GoSourceFile, GoSourceOptions) (*GoSourceProgram, error) {
+				withGoSourceHook(t, func([]front.GoSourceFile, front.GoSourceOptions) (*front.GoSourceProgram, error) {
 					called = true
 					return nil, errors.New("unexpected Go route")
 				})
