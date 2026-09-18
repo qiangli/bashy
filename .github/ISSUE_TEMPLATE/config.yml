@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Bash# language (syntax, RFCs, the Go corpus)
+    url: https://github.com/qiangli/bashsharp/issues
+    about: Anything about the dialect itself rather than bashy the shell.
+  - name: Tour
+    url: https://github.com/qiangli/bashsharp-tour/issues
+    about: A tour program or transcript that does not match your binary.

@@ -1,0 +1,35 @@
+name: It broke here
+description: A script, command or install step that did not do what Bash 5.3 (or the tour) says it should.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What you ran, and what happened
+      description: The smallest script or command that shows it, and the output. If stock bash behaves differently, say what it printed.
+      placeholder: |
+        $ bashy -c 'set -o pipefail; false | true; echo $?'
+        expected 1, got 0
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `bashy inspect doctor`
+      description: Paste it as-is. It prints the binary, version, platform and which pieces are compiled in; it reports to nobody — this issue is the only place it goes.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS and how you installed
+      placeholder: Windows 11, the release zip / macOS 15, tarball / Ubuntu 24.04, built from source with `bashy dag build`
+    validations:
+      required: true
+  - type: checkboxes
+    id: tour
+    attributes:
+      label: Tour
+      options:
+        - label: I ran `./check.sh` from the tour repo and it passed (or I pasted its summary line above)
