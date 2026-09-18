@@ -236,16 +236,32 @@ record for layer 3: `../docs/bashy-yoke-framework.md` (planning-only, deferred).
 
 ## Module wiring
 
-`go.mod` requires four flat-sibling deps, resolved by `replace`:
+`go.mod` requires the flat-sibling deps, resolved by `replace`:
 
 ```
 replace mvdan.cc/sh/v3               => ../sh
+replace github.com/qiangli/bashpp    => ../bashpp
 replace github.com/qiangli/coreutils => ../coreutils
+replace github.com/qiangli/yoke      => ../yoke
 replace github.com/ergochat/readline => ../readline
 replace github.com/filebrowser/filebrowser/v2 => ../filebrowser
 ```
 
-`../sh` is the interpreter engine; `../coreutils` is the AgentOS hub that
+`../sh` is the interpreter engine; `../bashpp` is the **Bash++ language's
+front door** (Sprint 211: `sh` ← `bashpp` ← `bashy`) — `bashpp/front` is the
+dialect selector + the direct Go-source interface that `internal/cli` calls
+(`--bashpp`, `--source=go`, `--check`, `--go-list`), `bashpp/transpile` is
+what `bashy transpile` dispatches to and the import that wires the Go front
+end into `cmd/bashy` (the `bash` drop-in never imports it — the
+`TestGoSourceFrontEndIsNotLinkedIntoClassicBash` ratchet; it DOES reach
+`front`, as it has carried `--bashpp` since Sprint 97). The engine itself —
+the evaluator, `lower`, `gosource`, `polyglot`, the grammar — still lives in
+`sh` (`bashpp/docs/seam.md` says why), so a Bash++ *semantics* change is an
+`sh` change and a Bash++ *front* change is a `bashpp` change; the contract
+natives (`@require`/`@ensure`/`@guard`/`@trace`/`@retry`) and advice stay
+here in `internal/agentos` because they need yoke policy + OTel, which
+`bashpp` may not import. `cmd/bashpp` (in bashpp) is the language's own
+binary, what `bashpp-tests` corpus harness measures. `../coreutils` is the AgentOS hub that
 supplies the pure-Go userland + code-intel verbs the `bashy` binary injects (only
 `agentos.go` imports it); `../readline` is the ergochat/readline fork the
 interactive loop uses (the module path keeps the upstream name — the flat-layout
