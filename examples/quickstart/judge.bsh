@@ -1,0 +1,47 @@
+#!/usr/bin/env -S bashy --bashsharp
+# Bash# quickstart — a model's output is judged, never trusted.
+#
+# One `agentic` function under three deterministic contracts. Every check is
+# an ordinary shell command run in the call's own frame ($1..$n are the call's
+# arguments); nothing here calls a model, needs a key, or touches the network.
+#
+#   @guard    caps the body's effects (read-only here): a write inside is DENIED
+#   @require  precondition — a failed require never runs the body, exit 3
+#   @ensure   postcondition — the body ran, the result is judged, exit 3 on a lie
+#   return 6  a YIELD: "input required" — propagates to the caller (your
+#             harness) with no ensure run, so the agent can ask and retry
+#
+# Expected transcript: judge.expected  (six calls, six exit codes: 0 3 3 1 1 6)
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+@guard(effects: "read")
+@require('test -n "$1"')
+@ensure('test "$1" != lie')
+agentic function summarize() {
+    echo "body: $1"
+    case "$1" in
+    write) touch "$work/leak" ;;    # exceeds the read cap -> denied, status 1
+    yield) return 6 ;;              # input required -- a yield, not a result
+    fail)  return 1 ;;
+    esac                            # "lie": exits 0, the postcondition disagrees
+}
+
+agentic {
+    summarize ok;      echo "ok      -> $?"
+    summarize "";      echo "empty   -> $?"
+    summarize lie;     echo "lie     -> $?"
+    summarize write;   echo "write   -> $?"
+    summarize fail;    echo "fail    -> $?"
+    summarize yield;   echo "yield   -> $?"
+}
+[ -e "$work/leak" ] && echo "LEAK: guard did not deny the write"
+
+# The same contracts work on a typed Go function in the same file.
+@ensure('test "$RESULT" -gt 0')
+func twice(n int) int { return n * 2 }
+
+x := twice(2);     echo "twice 2 -> $? x=$x"
+y := twice(0);     echo "twice 0 -> $? y=$y"
+echo done

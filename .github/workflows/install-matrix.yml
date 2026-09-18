@@ -2,16 +2,14 @@ name: install-matrix
 
 # Sprint 212 S212.1: the launch bar of 2026-07-25, mechanized. On each OS
 # runner, install bashy the way a user does — download the release archive,
-# NO Go toolchain involved — and prove the contract-judged agentic demo
-# behaves: six invocations, six exit codes (0, 3, 3, 1, 1, 6), the pinned
-# transcript in test/contracts/agentic-boundary.expected. Windows is the
-# must-have segment.
+# NO Go toolchain involved — and run the Bash# quickstart through its own
+# gate, examples/quickstart/check.sh: the judge demo (six invocations, six
+# exit codes 0 3 3 1 1 6) plus decorators/kwargs/enums/readonly, each diffed
+# against its pinned transcript. Windows is the must-have segment.
 #
-# Until examples/quickstart/judge.bsh (S212.2) lands, the demo is the
-# Sprint 203 fixture test/contracts/agentic-boundary.bpp, which already
-# encodes those six exits; JUDGE below is the one line to move. The job can
-# only be green against a release that carries the contract natives
-# (Sprint 203, after v0.22.0) — run it with `tag` set to that release.
+# Green only against a release that carries the Sprint 203 contract natives
+# and the --bashsharp spelling (after v0.22.0) — run it with `tag` set to
+# that release.
 
 on:
   workflow_dispatch:
@@ -25,9 +23,6 @@ on:
 
 permissions:
   contents: read
-
-env:
-  JUDGE: test/contracts/agentic-boundary.bpp
 
 jobs:
   install:
@@ -81,29 +76,5 @@ jobs:
           echo "BASHY_BIN=$bin" >> "$GITHUB_ENV"
           "$bin" --version
 
-      - name: Judge demo — six invocations, six exit codes
-        run: |
-          set +e
-          out=$("$BASHY_BIN" --bashsharp "$JUDGE" 2>&1)
-          printf '%s\n' "$out"
-          # the transcript names each exit: "<case> -> <status>"
-          want='ok      -> 0
-          empty   -> 3
-          lie     -> 3
-          write   -> 1
-          fail    -> 1
-          yield   -> 6'
-          fail=0
-          while read -r line; do
-            [ -z "$line" ] && continue
-            line=$(printf '%s' "$line" | sed 's/^[[:space:]]*//')
-            if ! printf '%s\n' "$out" | grep -Fxq "$line"; then
-              echo "MISSING: $line" >&2; fail=1
-            fi
-          done <<< "$want"
-          if [ "$out" != "$(tr -d '\r' < test/contracts/agentic-boundary.expected)" ]; then
-            echo "transcript differs from test/contracts/agentic-boundary.expected:" >&2
-            diff -u <(tr -d '\r' < test/contracts/agentic-boundary.expected) <(printf '%s\n' "$out") >&2 || true
-            fail=1
-          fi
-          exit $fail
+      - name: Quickstart gate — judge (six exit codes) + decorators, kwargs, enums, readonly
+        run: ./examples/quickstart/check.sh "$BASHY_BIN"
