@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qiangli/bashpp/front"
+	"github.com/qiangli/bashsharp/front"
 
 	"mvdan.cc/sh/v3/gosource"
 )

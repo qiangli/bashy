@@ -835,7 +835,7 @@ for host in "$@"; do
       dir=\"../\$name\"
       case \"\$name\" in
         sh) url=https://github.com/qiangli/sh.git ;;
-        bashpp) url=https://github.com/qiangli/bashpp.git ;;
+        bashsharp) url=https://github.com/qiangli/bashsharp.git ;;
         coreutils) url=https://github.com/qiangli/coreutils.git ;;
         yoke) url=https://github.com/qiangli/yoke.git ;;
         readline) url=https://github.com/qiangli/readline.git ;;

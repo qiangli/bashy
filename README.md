@@ -149,9 +149,10 @@ bashy --version
 
 ### With Go
 
-```sh
-go install github.com/qiangli/bashy@latest
-```
+`go install github.com/qiangli/bashy@latest` is **not** supported: the module
+resolves its engine and siblings through flat `replace ../<sibling>`
+directives, which `go install` refuses. Use a release archive above, or build
+from source below.
 
 ### From source
 

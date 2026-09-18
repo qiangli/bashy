@@ -1,0 +1,109 @@
+name: install-matrix
+
+# Sprint 212 S212.1: the launch bar of 2026-07-25, mechanized. On each OS
+# runner, install bashy the way a user does — download the release archive,
+# NO Go toolchain involved — and prove the contract-judged agentic demo
+# behaves: six invocations, six exit codes (0, 3, 3, 1, 1, 6), the pinned
+# transcript in test/contracts/agentic-boundary.expected. Windows is the
+# must-have segment.
+#
+# Until examples/quickstart/judge.bsh (S212.2) lands, the demo is the
+# Sprint 203 fixture test/contracts/agentic-boundary.bpp, which already
+# encodes those six exits; JUDGE below is the one line to move. The job can
+# only be green against a release that carries the contract natives
+# (Sprint 203, after v0.22.0) — run it with `tag` set to that release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "release tag to install (default: latest non-prerelease)"
+        required: false
+        default: ""
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+env:
+  JUDGE: test/contracts/agentic-boundary.bpp
+
+jobs:
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: bashy-linux-amd64.tar.gz
+          - os: macos-latest
+            asset: bashy-darwin-arm64.tar.gz
+          - os: windows-latest
+            asset: bashy-windows-amd64.zip
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the release
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag='${{ github.event.inputs.tag }}'
+          if [ -z "$tag" ]; then
+            tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "installing $tag / ${{ matrix.asset }}"
+
+      - name: Download the release archive (no Go toolchain)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/bashy-install"
+          gh release download "${{ steps.rel.outputs.tag }}" --repo "$GITHUB_REPOSITORY" \
+            --pattern "${{ matrix.asset }}" --dir "$RUNNER_TEMP/bashy-install"
+          cd "$RUNNER_TEMP/bashy-install"
+          case "${{ matrix.asset }}" in
+            *.zip) unzip -q "${{ matrix.asset }}" ;;
+            *) tar -xzf "${{ matrix.asset }}" ;;
+          esac
+          ls -la
+
+      - name: bashy --version
+        run: |
+          bin="$RUNNER_TEMP/bashy-install/bashy"
+          [ -x "$bin" ] || bin="$RUNNER_TEMP/bashy-install/bashy.exe"
+          echo "BASHY_BIN=$bin" >> "$GITHUB_ENV"
+          "$bin" --version
+
+      - name: Judge demo — six invocations, six exit codes
+        run: |
+          set +e
+          out=$("$BASHY_BIN" --bashsharp "$JUDGE" 2>&1)
+          printf '%s\n' "$out"
+          # the transcript names each exit: "<case> -> <status>"
+          want='ok      -> 0
+          empty   -> 3
+          lie     -> 3
+          write   -> 1
+          fail    -> 1
+          yield   -> 6'
+          fail=0
+          while read -r line; do
+            [ -z "$line" ] && continue
+            line=$(printf '%s' "$line" | sed 's/^[[:space:]]*//')
+            if ! printf '%s\n' "$out" | grep -Fxq "$line"; then
+              echo "MISSING: $line" >&2; fail=1
+            fi
+          done <<< "$want"
+          if [ "$out" != "$(tr -d '\r' < test/contracts/agentic-boundary.expected)" ]; then
+            echo "transcript differs from test/contracts/agentic-boundary.expected:" >&2
+            diff -u <(tr -d '\r' < test/contracts/agentic-boundary.expected) <(printf '%s\n' "$out") >&2 || true
+            fail=1
+          fi
+          exit $fail

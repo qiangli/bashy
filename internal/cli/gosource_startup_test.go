@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qiangli/bashpp/front"
+	"github.com/qiangli/bashsharp/front"
 
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"

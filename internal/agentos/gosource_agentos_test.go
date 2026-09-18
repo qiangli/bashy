@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qiangli/bashpp/front"
+	"github.com/qiangli/bashsharp/front"
 )
 
 // TestGoSourceFrontEndIsLinkedByDefault is the whole point of removing the

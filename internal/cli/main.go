@@ -20,7 +20,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/qiangli/bashpp/front"
+	"github.com/qiangli/bashsharp/front"
 
 	"golang.org/x/term"
 
@@ -154,8 +154,7 @@ func stripBashPPInvocationFlags(args []string) []string {
 			out = append(out, arg)
 			continue
 		}
-		switch arg {
-		case "--bashpp", "--bash++", "--no-bashpp":
+		if front.IsSelectorFlag(arg) {
 			continue
 		}
 		out = append(out, arg)
@@ -650,10 +649,12 @@ const defaultPathValue = "/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin
 func newRunner() (*interp.Runner, error) {
 	startupPosix := resolvedStartupPosix()
 	inheritedEnv := secureStartupEnv(os.Environ())
-	// BASHY_BASHPP is an invocation selector, not shell state. Consume it at
-	// this process boundary so a caller can enable the top-level shell without
-	// silently changing every nested bash process launched by the script.
+	// BASHY_BASHSHARP (and its deprecated alias BASHY_BASHPP) is an invocation
+	// selector, not shell state. Consume it at this process boundary so a
+	// caller can enable the top-level shell without silently changing every
+	// nested bash process launched by the script.
 	inheritedEnv = consumeInvocationSelectors(inheritedEnv)
+	_ = os.Unsetenv("BASHY_BASHSHARP")
 	_ = os.Unsetenv("BASHY_BASHPP")
 	// Increment SHLVL from parent environment.
 	shlvl := 0
@@ -839,7 +840,7 @@ func newRunner() (*interp.Runner, error) {
 func consumeInvocationSelectors(env []string) []string {
 	return slices.DeleteFunc(env, func(entry string) bool {
 		name, _, _ := strings.Cut(entry, "=")
-		return name == "BASHY_BASHPP"
+		return name == "BASHY_BASHSHARP" || name == "BASHY_BASHPP"
 	})
 }
 
@@ -1178,6 +1179,14 @@ func runAll() error {
 	startupBashPP, err = front.ResolveBashPP(bashPPSelector)
 	if err != nil {
 		return err
+	}
+	// A Bash++-era spelling (--bashpp, BASHY_BASHPP, .bpp) still works for one
+	// minor release; tell a HUMAN so once, on a terminal stderr. Scripts,
+	// harnesses and fixtures that compare stderr byte for byte (the corpus
+	// harness still spells --bashpp) see exactly what they saw before.
+	if notice := startupBashPP.DeprecationNotice(); notice != "" && os.Getenv("BASHY_HINTS") != "off" &&
+		term.IsTerminal(int(os.Stderr.Fd())) {
+		fmt.Fprintln(os.Stderr, "bashy: "+notice)
 	}
 	// Go-source selection is validated before anything else looks at the
 	// input: a refused selection must never reach a shell code path, and an
@@ -3066,7 +3075,7 @@ func needsLiveDialectStream(file *syntax.File, _ syntax.LangVariant) bool {
 		flag, flagOK := word(1)
 		option, optionOK := word(2)
 		if nameOK && flagOK && optionOK && name == "set" &&
-			(flag == "-o" || flag == "+o") && option == "bashpp" {
+			(flag == "-o" || flag == "+o") && (option == "bashsharp" || option == "bashpp") {
 			return true
 		}
 	}

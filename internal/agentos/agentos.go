@@ -25,7 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/qiangli/bashpp/transpile"
+	"github.com/qiangli/bashsharp/transpile"
 
 	"github.com/spf13/cobra"
 	"mvdan.cc/sh/v3/interp"

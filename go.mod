@@ -7,7 +7,7 @@ toolchain go1.27.1
 require (
 	github.com/creack/pty/v2 v2.0.1
 	github.com/ergochat/readline v0.1.3
-	github.com/qiangli/bashpp v0.0.0
+	github.com/qiangli/bashsharp v0.0.0
 	github.com/qiangli/coreutils v0.0.0
 	github.com/qiangli/yoke v0.0.0
 	github.com/qiangli/yoke/external/otel v0.0.0
@@ -327,9 +327,10 @@ require (
 // github.com/qiangli/sh next to this repo as ./sh.
 replace mvdan.cc/sh/v3 => ../sh
 
-// Bash++ is its own language repo over the same engine (Sprint 211):
-// sh ← bashpp ← bashy. Flat sibling, like every other qiangli/<X> replace.
-replace github.com/qiangli/bashpp => ../bashpp
+// Bash# (formerly Bash++) is its own language repo over the same engine
+// (Sprint 211): sh ← bashsharp ← bashy. Flat sibling, like every other
+// qiangli/<X> replace.
+replace github.com/qiangli/bashsharp => ../bashsharp
 
 // coreutils is the CERTIFIED required set (the 116 POSIX names ∪ GNU
 // coreutils as pure-Go applets); yoke is everything agentic bashy adds on top

@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	"github.com/qiangli/bashpp/front"
+	"github.com/qiangli/bashsharp/front"
 )
 
 func TestRunGoSourceVersionReachesLoader(t *testing.T) {
