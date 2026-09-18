@@ -1,0 +1,8 @@
+bashy (github.com/qiangli/bashy)
+Copyright (c) 2026 Qiang Li
+
+bashy is built on github.com/qiangli/sh, a fork of mvdan.cc/sh by
+Daniel Martí (https://github.com/mvdan/sh), BSD-3-Clause. The parser,
+expansion and interpreter that run every script are his work, with the
+Bash 5.3 conformance and Bash# dialect patches carried in the fork.
+Interactive line editing uses a fork of github.com/ergochat/readline.

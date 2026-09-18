@@ -1,127 +1,79 @@
-# bashy — a pure-Go Bash 5.3 drop-in
+# bashy — a pure-Go Bash 5.3 that speaks Bash#
 
-`bashy` is a single static binary that runs Bash scripts and interactive
-sessions. It is written entirely in Go (no CGo, no system Bash required) and
-is a **drop-in replacement for `bash` 5.3** — same command-line flags, same
-script semantics, same `$BASH_VERSION` — that **passes GNU Bash's own 5.3 test
-suite** (every runnable fixture; see Status below).
+[![release](https://img.shields.io/github/v/release/qiangli/bashy?label=release)](https://github.com/qiangli/bashy/releases/latest)
+[![tour](https://github.com/qiangli/bashsharp-tour/actions/workflows/tour.yml/badge.svg)](https://github.com/qiangli/bashsharp-tour/actions/workflows/tour.yml)
 
-It is built on the [`qiangli/sh`](https://github.com/qiangli/sh) fork of
-[`mvdan.cc/sh`](https://github.com/mvdan/sh), which carries the Bash 5.3
-interpreter work. `bashy` is the user-facing shell; `sh` is the library.
+`bashy` is one static binary — no CGo, no system bash — that is a **drop-in
+Bash 5.3** on Linux, macOS and Windows: same flags, same script semantics,
+same `$BASH_VERSION`, and it passes GNU Bash's own 5.3 test suite (every
+runnable fixture, 86/86). With `--bashsharp` the same binary speaks
+**[Bash#](https://github.com/qiangli/bashsharp)**: the bash you already know,
+Go where you need types, any fenced language where you need a library, and
+`agentic` where you need a model — with contracts so a model's output is
+judged, never trusted.
 
-> **Status:** `bashy` passes **100% of GNU Bash's own 5.3 test suite** — every
-> measured fixture (86/86: 0 failing, 0 skipped) on Linux and macOS (see
-> [`docs/TODO.md`](docs/TODO.md)). That includes job control, coprocesses,
-> signal traps, and locale-aware (non-UTF-8) globbing — features the early
-> goroutine-based runner couldn't do, now implemented.
->
-> **Known limitations:** arithmetic uses the native int width, so 64-bit
-> values on 32-bit builds (`GOARCH=386`) truncate (a 64-bit-int migration is
-> tracked); and Windows builds and runs but its full test-suite run is still
-> being verified. As in Bash itself (`jobs.c` vs `nojobs.c`), OS-level job
-> control is a Unix feature.
+> **Alpha** (0.x). Bash 5.3 compatibility is stable; the Bash# dialect may
+> still change before 1.0 through RFCs. Every number this project states
+> names its corpus: [docs/claims.md](https://github.com/qiangli/bashsharp/blob/main/docs/claims.md).
 
-### POSIX conformance campaign identity
+## Ten minutes
 
-Bashy's licensed Open Group campaign uses **VSC-PCTS2016 version 3.1** with the
-**VSC 5.4.1** framework/documentation, configured in the suite's **POSIX08**
-profile (`VSC_POSIX_VERSION=200809`) with the XSI/X/Open profile disabled
-(`VSC_XOPEN_VERSION=0`). The formal certification target for that suite is the
-**1003.1-2016 Shell and Utilities Product Standard**.
+```sh
+# macOS (Apple Silicon)
+curl -fsSLO https://github.com/qiangli/bashy/releases/latest/download/bashy-darwin-arm64.tar.gz
+tar -xzf bashy-darwin-arm64.tar.gz && sudo install bashy /usr/local/bin/bashy
+bashy --version
+```
 
-That wording is deliberate. IEEE Std 1003.1-2017 is a later publication in the
-same POSIX.1-2008 / Issue 7 lineage, but it is not the Product Standard name for
-which VSC-PCTS2016 is authorized. Do not describe this campaign as a
-“VSC-PCTS2017” or “1003.1-2017 certification” run.
+Then take the tour — 27 small programs with pinned transcripts and one
+script that runs them all on your machine, also written as a procedure your
+coding agent can drive: **[qiangli/bashsharp-tour](https://github.com/qiangli/bashsharp-tour)**.
+The ten-minute version is in this repo: [`examples/quickstart/`](examples/quickstart/).
 
-Running the suite provides conformance evidence; it does **not** by itself make
-Bashy POSIX certified. Certification and use of an Open Group mark require a
-separate submission and approval. Current runs are diagnostic campaigns used to
-find and fix failures before an uninterrupted formal run. See
-[`docs/conformance-statement.md`](docs/conformance-statement.md) for claim scope
-and [`docs/vsc-pcts-run-status.md`](docs/vsc-pcts-run-status.md) for the
-public-safe measured status.
+```bash
+@guard(effects: "read")
+@require('test -n "$1"')
+@ensure('test "$1" != lie')
+agentic function summarize() { ... }
 
-### Shell regression gates
+agentic {
+    summarize ok        # exit 0
+    summarize ""        # exit 3 — precondition failed; the body never ran
+    summarize yield     # exit 6 — "I need input": a yield, not a made-up answer
+}
+```
 
-Shell development has two complementary regression gates:
+The interpreter never calls a model. `agentic` marks the one place a program
+may hand work to one, and the contracts around it are ordinary shell
+commands, run deterministically.
 
-1. `make test-bash-parallel` runs the public GNU Bash 5.3 compatibility corpus
-   locally. Its current denominator is 86 fixtures and the required result is
-   86/86.
-2. On the licensed native VSC host,
-   `make test-bash-system ARM=<unique-name>` in the sibling
-   `vsc-pcts-harness-kit` runs all 493 POSIX shell TPs against `bin/bash`, with
-   Bashy's pure-Go command applets excluded from `PATH`.
+## What you get
 
-The 493-TP arm is relatively inexpensive and is required for release candidates
-and changes to parsing, expansion, execution, jobs, signals, traps, builtins,
-redirections, or locale-sensitive shell behavior. It cannot run in ordinary
-public CI because VSC-PCTS is licensed. After that isolation gate passes,
-`make test-bash` in the harness restores the Bashy Go applets and checks shell
-integration before the larger command-and-utility campaign.
+- **A Bash 5.3 you can ship anywhere.** One binary per platform; job control,
+  coprocesses, signal traps, locale-aware globbing — verified against Bash's
+  own suite on Linux and macOS. Invoked as `sh`, or with `--posix`, it is a
+  POSIX shell: 493/493 on the licensed VSC shell arm, 99 %+ on yash's POSIX
+  suite (bash 5.3 itself scores 96 % there).
+- **The pure-Go userland with it.** `ls`, `sed`, `awk`, `grep`, `find`,
+  `sort`, `tar`, `jq`, `git`, `make`, … as applets, so the same script means
+  the same thing on Windows.
+- **Bash#** with the flag on: typed Go in shell text, fenced Python /
+  TypeScript / Rust / C / C++ / Go islands, decorators, keyword arguments,
+  enums, deep `readonly`, contracts and `agentic`. Off with `--no-bashsharp`
+  or `--posix`, where none of it exists.
+- **It rebuilds itself.** `bashy git clone`, `bashy scripts/bootstrap-siblings.sh`,
+  `bashy dag build` — on Windows with no git, no Go and no C compiler on the
+  host (see *From source*).
+- **A tool that knows its caller is an agent.** `bashy check` for static
+  checks, `bashy dag` for dependency-ordered tasks in Markdown, `bashy awd`
+  for "run this there", registered commands, and the `agentic` yield status
+  a harness can act on.
 
-For concurrent agent work, use the isolated test-lane contract in
-[`docs/isolated-test-lanes.md`](docs/isolated-test-lanes.md). It maps
-weave/worktree ownership to distinct OCI containers and results, supports
-multiple simultaneous instances of the same suite or POSIX profile, documents
-the swappable Ubuntu base, and gives status/cleanup commands.
-
-### Product sequence and Bash++ activation
-
-Bashy ships two binaries carrying three named substrates:
-**Classic → Bash++ → Yoke**. **Classic** is the compatible standalone shell
-(`bash`) together with the pure-Go userland; **Bash++** is the opt-in language
-extension and the bridge upward; **Yoke** is the agentic framework. The `bash`
-binary is Classic alone; `bashy` carries all three.
-
-| Invocation | Bash++ default | Agentic default |
-|---|---:|---:|
-| `bash` with `.sh`, `.bash`, or no extension | off | unavailable |
-| `bash` with `.bpp`, without an explicit selector | off | unavailable |
-| `bashy`, regardless of extension | on | on |
-
-Use `--bashpp` (canonical) or `--bash++` to opt in and `--no-bashpp` to opt
-out. `BASHY_BASHPP=1|0` supplies the environment default; `set -o bashpp` and
-`set +o bashpp` change the mode for subsequently parsed input. Bashy's agentic
-surface is independently controlled by `--agentic` / `--no-agentic` and
-`BASHY_AGENTIC=1|0`.
-
-Precedence is **explicit CLI → environment → `.bpp` extension → binary
-default**. Because extended grammar must be selected before a file is parsed,
-an in-file `set -o bashpp` cannot enable new syntax retroactively in an
-already-parsed file. Use a flag, environment setting, Bashy's `.bpp` convention, or
-`#!/usr/bin/env -S bash --bashpp` for initial selection.
-
-Startup POSIX mode suppresses Bash++ grammar on both front doors, including
-`--bashpp`, its `--bash++` alias, and `BASHY_BASHPP=1`. `bashy --posix`
-retains POSIX parsing and runtime semantics while disabling Bash++ defaults
-and explicit requests. The standalone `bash --posix --bashpp` combination
-retains the Sprint 114 compatibility profile: Bash++ and POSIX differences
-are both off, matching the selector-off, POSIX-off invocation. Ordinary
-`bash --posix`, including an explicit `--no-bashpp`, retains POSIX mode.
-The resolver still records the winning selector tier and whether it was
-explicit; that provenance does not mean extended grammar is enabled.
-
-The bare `agentic` modifier permits explicitly implemented LLM assistance in
-Bash++ functions, methods and script blocks. See the runnable
-[agentic action example](docs/agentic-action-example.md) for the same action as
-a typed callable, shell script, executable tool and native embedding. A function
-or a `dag` target can carry a [contract](docs/contracts.md) — `@require` /
-`@ensure` / `@guard`, `Require:` / `Ensure:` / `Effects:` — judged as shell
-checks at the process boundary.
-
-## Why
-
-- **No dependencies.** One binary. No `bash`, no shared libraries, no package
-  manager. Drop it on any host (including minimal containers and Windows) and
-  run your scripts.
-- **Cross-platform.** The same shell semantics on Linux and macOS (verified
-  against Bash's test suite); Windows builds and runs, with full verification
-  in progress.
-- **Embeddable lineage.** The engine underneath (`mvdan.cc/sh`) is a mature,
-  widely-used Go shell library, so behaviour is well-tested and hackable.
+Built on the [`qiangli/sh`](https://github.com/qiangli/sh) fork of
+[`mvdan.cc/sh`](https://github.com/mvdan/sh) by Daniel Martí — the engine is
+his; the Bash 5.3 conformance work and the Bash# dialect are carried in the
+fork. Campaign identity, regression gates and the product sequence:
+[docs/internal/campaign-and-gates.md](docs/internal/campaign-and-gates.md).
 
 ## Install
 
@@ -168,7 +120,7 @@ bashy git clone https://github.com/qiangli/bashy
 cd bashy
 bashy scripts/bootstrap-siblings.sh
 bashy dag build            # -> bin/bash and bin/bashy (bin/*.exe on Windows)
-bashy dag install          # optional: install into $DHNT_BIN_DIR (~/.local/bin)
+bashy dag install          # optional: install into ~/.local/bin ($DHNT_BIN_DIR to change)
 ```
 
 What the host must provide, per platform:
@@ -203,18 +155,14 @@ cd bashy
 make build                         # -> bin/bash and bin/bashy
 ```
 
-A reusable Linux OCI base is also available. It preserves the required native
-launcher plus `.real` payload and uses a minimal Ubuntu/glibc runtime; see
-[`docs/bashy-oci-base.md`](docs/bashy-oci-base.md) for build, smoke, and derived
-image policy. It is the foundation for a future Bash/POSIX + canonical Go
-coreutils + O3 + verified-toolchain base, not yet an Ubuntu/Alpine parity claim.
+A minimal Linux container base (Ubuntu/glibc, launcher + payload) is described
+in [`docs/bashy-oci-base.md`](docs/bashy-oci-base.md).
 
-Real-repository DAG examples live under `examples/dag/`. The Go front doors
-for GitHub CLI, Hugo, and Caddy use `~~~go as go` to import the unchanged
-checkout, build its CLI, and launch that output; `make smoke-dag-go` provisions
-pinned checkouts into bashy's user cache and gates the installed product. The
-gh smoke also runs a checkout-owned helper through an embedded `~~~sh` dialect
-island, with no host-shell dependency.
+Real-repository examples driven by `bashy dag` — one `dag.md` each for
+GitHub CLI, Hugo, Caddy, curl, git, FFmpeg, tesseract, llama.cpp, CMake, uv,
+Codex, Bun, OpenCode, OpenClaw, Hermes Agent and more, calling their Go,
+Python, TypeScript, Rust and C/C++ code as fenced islands — live under
+[`examples/dag/`](examples/dag/).
 
 ## Usage
 
@@ -280,10 +228,11 @@ Bash's own test suite.
 
 ## Development
 
-See [`CLAUDE.md`](CLAUDE.md) for the development workflow and
-[`docs/`](docs/) for the compliance roadmap and per-fixture analyses. The
-compliance suite is driven by `make test-bash` (requires a local
-`external/bash-5.3` symlink into a Bash source tree — see CLAUDE.md).
+See [`CLAUDE.md`](CLAUDE.md) for the development workflow and [`docs/`](docs/)
+for the compliance roadmap and per-fixture analyses. The Bash 5.3 suite is
+driven by `make test-bash` (serial; needs a controlling terminal; `make
+test-bash-fixtures` fetches the pinned fixture tree). The language, its
+roadmap and RFCs live in [qiangli/bashsharp](https://github.com/qiangli/bashsharp).
 
 ## License
 
