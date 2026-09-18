@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
@@ -40,10 +39,12 @@ import (
 //     observing/advising middleware sees argv[0] = the REGISTERED name, and a
 //     record can never pre-empt an applet.
 //   - The hot path never pays for an empty ring: the index loads lazily on
-//     the first builtin/applet miss, is fingerprinted by the ring dirs'
-//     mtimes, and re-checks at most once per registeredRecheck.
-
-const registeredRecheck = 2 * time.Second
+//     the first builtin/applet miss and is fingerprinted by the ring dirs'
+//     mtimes. Every lookup re-stats the ring dirs (one stat each; the ring
+//     is re-read only when an mtime moved) — no time window, no cache to
+//     reason about: `commands add x` followed by `x` in the same shell
+//     resolves, and `commands rm x` stops it. A lookup that resolves is
+//     about to start a process; a few stats are noise next to that.
 
 type registeredIndex struct {
 	byName   map[string]fleet.Command // canonical name AND every alias
@@ -51,7 +52,6 @@ type registeredIndex struct {
 	names    []string                 // visible canonical names, sorted
 	hidden   []string                 // hidden canonical names, sorted
 	fp       string
-	checked  time.Time
 }
 
 var (
@@ -81,7 +81,7 @@ func registeredFingerprint(cat *fleet.Catalog) string {
 }
 
 func loadRegistered(cat *fleet.Catalog, fp string) *registeredIndex {
-	idx := &registeredIndex{byName: map[string]fleet.Command{}, shadowed: cat.CommandShadows(), fp: fp, checked: time.Now()}
+	idx := &registeredIndex{byName: map[string]fleet.Command{}, shadowed: cat.CommandShadows(), fp: fp}
 	cmds, _ := cat.Commands()
 	for _, r := range cmds {
 		if _, taken := idx.shadowed[r.Name]; taken {
@@ -105,18 +105,17 @@ func loadRegistered(cat *fleet.Catalog, fp string) *registeredIndex {
 }
 
 // registeredIndexFor returns the cached index, reloading when the ring
-// changed. fresh=true forces the fingerprint check (the listing/CRUD paths
-// and every miss on the dispatch path); a hit never stats.
+// changed. fresh=true re-stats the ring dirs now (every lookup and every
+// listing/CRUD path do); fresh=false returns whatever is cached.
 func registeredIndexFor(fresh bool) *registeredIndex {
 	registeredMu.Lock()
 	defer registeredMu.Unlock()
-	if registeredIdx != nil && (!fresh || time.Since(registeredIdx.checked) < registeredRecheck) {
+	if registeredIdx != nil && !fresh {
 		return registeredIdx
 	}
 	cat := registeredCatalog()
 	fp := registeredFingerprint(cat)
 	if registeredIdx != nil && registeredIdx.fp == fp {
-		registeredIdx.checked = time.Now()
 		return registeredIdx
 	}
 	registeredIdx = loadRegistered(cat, fp)
@@ -130,16 +129,11 @@ func resetRegisteredIndex() {
 	registeredMu.Unlock()
 }
 
-// registeredLookup resolves a registered command by name or alias. A hit
-// costs a map read; a miss re-checks the ring at most once per
-// registeredRecheck, so `commands add x` followed by `x` in the same shell
-// resolves within that window.
+// registeredLookup resolves a registered command by name or alias, against
+// the ring as it is on disk right now (see registeredIndexFor).
 func registeredLookup(name string) (fleet.Command, bool) {
 	if name == "" || certProfile() {
 		return fleet.Command{}, false
-	}
-	if r, ok := registeredIndexFor(false).byName[name]; ok {
-		return r, true
 	}
 	r, ok := registeredIndexFor(true).byName[name]
 	return r, ok

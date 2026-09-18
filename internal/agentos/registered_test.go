@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
@@ -206,5 +207,28 @@ func TestRegisteredKnownToDryRunAndFrontDoor(t *testing.T) {
 	}
 	if !isFrontDoorInvocation("regy") {
 		t.Error("front door must recognise a registered name")
+	}
+}
+
+// A record written AFTER the index loaded resolves on the next lookup miss
+// and a removed one stops resolving on the next lookup — no time window;
+// the tour's 07-commands chapter: add, use, rm, in one shell.
+func TestRegisteredIndexSeesAddAndRemoveInTheSameShell(t *testing.T) {
+	dir := ringDir(t)
+	resetRegisteredIndex()
+	if _, ok := registeredLookup("shout"); ok {
+		t.Fatal("empty ring resolved shout")
+	}
+	time.Sleep(20 * time.Millisecond) // a distinct dir mtime on coarse filesystems
+	writeRecord(t, fleet.Command{Name: "shout", Script: "echo SHOUT", Effects: []string{"pure"}})
+	if _, ok := registeredLookup("shout"); !ok {
+		t.Fatal("a record added after the index loaded must resolve on the next miss")
+	}
+	if err := os.Remove(filepath.Join(dir, "shout.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if _, ok := registeredLookup("shout"); ok {
+		t.Fatal("a removed record must stop resolving on the next lookup")
 	}
 }
