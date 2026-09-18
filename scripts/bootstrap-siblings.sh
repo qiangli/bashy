@@ -51,11 +51,17 @@ git_head_short() {
 git_clone() {
     url=$1
     target=$2
+    # Clone from the parent directory into a RELATIVE name. A git launched as a
+    # plain Windows process (bashy's provisioned MinGit) reads an absolute
+    # /c/Users/... target as C:\c\Users\..., so the checkout lands on the wrong
+    # path; a relative target has no drive prefix to misread.
+    parent=$(dirname "$target")
+    name=$(basename "$target")
     if [ -n "$BASHY_EXE" ]; then
-        "$BASHY_EXE" git clone --quiet --no-checkout "$url" "$target" >/dev/null
+        (cd "$parent" && "$BASHY_EXE" git clone --quiet --no-checkout "$url" "$name" >/dev/null)
         return
     fi
-    git clone --quiet --no-checkout "$url" "$target"
+    (cd "$parent" && git clone --quiet --no-checkout "$url" "$name")
 }
 
 git_checkout() {
