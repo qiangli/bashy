@@ -48,6 +48,15 @@ git_head_short() {
     git -C "$repo" rev-parse --short HEAD
 }
 
+git_is_clean() {
+    repo=$1
+    if [ -n "$BASHY_EXE" ]; then
+        [ -z "$(cd "$repo" && "$BASHY_EXE" git status --porcelain --untracked-files=no 2>/dev/null)" ]
+        return
+    fi
+    [ -z "$(git -C "$repo" status --porcelain --untracked-files=no 2>/dev/null)" ]
+}
+
 git_clone() {
     url=$1
     target=$2
@@ -145,7 +154,26 @@ while IFS= read -r line; do
 
     target=$root/../$name
     if [ -e "$target/.git" ]; then
-        echo "bootstrap-siblings: $name -> $(git_head_short "$target") (already present, leaving alone)"
+        # An umbrella mount (a submodule of the parent checkout) is managed by
+        # the umbrella's pins: leave it alone. A sibling THIS script cloned
+        # follows .sibling-pins: when the pin moved, move the checkout — a
+        # stale sibling builds silently against the wrong engine.
+        head=$(git_head_short "$target")
+        if [ -f "$root/../.gitmodules" ] && grep -q "path = $name\$" "$root/../.gitmodules" 2>/dev/null; then
+            echo "bootstrap-siblings: $name -> $head (umbrella submodule, leaving alone)"
+            continue
+        fi
+        case "$sha" in
+            "$head"*)
+                echo "bootstrap-siblings: $name -> $head (already at the pin)"
+                continue ;;
+        esac
+        if ! git_is_clean "$target"; then
+            echo "bootstrap-siblings: $name -> $head has local changes; NOT moving it to the pinned ${sha:0:12} — commit or stash first" >&2
+            continue
+        fi
+        echo "bootstrap-siblings: $name -> $head; moving to the pinned ${sha:0:12}"
+        git_checkout "$target" "$sha"
         continue
     fi
     if [ -e "$target" ]; then
