@@ -570,6 +570,7 @@ func dispatch() {
 	case "out":
 		dispatchExit(dispatchOut(os.Args[2:]))
 	case "transpile":
+		ensureGoForTranspile(context.Background())
 		dispatchExit(transpile.Main(os.Args[2:]))
 	case "full":
 		dispatchExit(dispatchFull(os.Args[2:]))
