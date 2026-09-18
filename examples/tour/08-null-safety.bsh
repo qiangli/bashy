@@ -1,3 +1,0 @@
-func deref(p *int) int {
-    return *p
-}

@@ -1,9 +1,0 @@
-#!/usr/bin/env -S bashy --bashsharp
-# 00 — Bash# is a strict superset: a Bash 5.3 script means the same thing.
-# check.sh runs this file BOTH ways (flag on, flag off) and expects the same
-# transcript. Nothing below is Bash#; it is bash.
-
-greet() { printf 'hello, %s\n' "$1"; }
-for who in world agents; do greet "$who"; done
-arr=(a b c); echo "${#arr[@]} items: ${arr[*]}"
-[[ "$BASH_VERSION" == 5.3* ]] && echo "bash 5.3 semantics"

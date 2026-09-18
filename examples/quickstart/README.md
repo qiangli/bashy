@@ -41,6 +41,10 @@ function in the same file (`twice`).
 in this directory against its transcript on the `bashy` on your `PATH`
 (pass a path to test another binary).
 
+**The full tour** — six chapters, 27 programs, a version for coding agents
+(`SKILL.md`), and a gate that runs on every OS against the latest release —
+lives in its own repo: [qiangli/bashsharp-tour](https://github.com/qiangli/bashsharp-tour).
+
 ## The other files
 
 Each is copied from a fixture in the conformance suite and runs the same way:
