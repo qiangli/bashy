@@ -20,7 +20,7 @@
 # scripts/update-sibling-pins.sh to resync.
 sh=a3fd0fbe931d878c337bdda3288bba3d43b4b3b1
 bashsharp=4167be839388fe91ace8819fb7fc9944671c496f
-coreutils=5de4206b2246998ca021df5fa3589dc97edae02c
+coreutils=84ac20b87b9060f346f7367070745f0b50adc08e
 yoke=2854c03c8fd011d1a45e32a70d2bf5331555d66e
 readline=b958823bd7075ed8b9a3aedd351422356a95fe79
 filebrowser=cde1146904add2d78d9846c71597520d34b17f7d
