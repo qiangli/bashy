@@ -84,7 +84,11 @@ ARCH=$($OCI run --rm localhost/posix-shells-broad uname -m | tr -d '\r')
 case "$ARCH" in aarch64|arm64) GOARCH=arm64;; x86_64|amd64) GOARCH=amd64;; *) echo "bad arch $ARCH" >&2; exit 2;; esac
 BIN="$HERE/bin/.bashy-linux-yash-$$"
 echo "yash-suite: building linux/$GOARCH bashy…" >&2
-GOOS=linux GOARCH="$GOARCH" "$BASHY_EXE" go build -o "$BIN" ./cmd/bash || exit 2
+# CGO_ENABLED=0: on a native Linux host with a C compiler, Go would otherwise
+# link glibc and the testee is "not found" inside the musl (Alpine) panel —
+# every case errors and the panel reports ~9%. The release archives are
+# static for the same reason.
+CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" "$BASHY_EXE" go build -o "$BIN" ./cmd/bash || exit 2
 trap 'rm -f "$BIN"' EXIT
 
 [ -n "$OUTDIR" ] && { mkdir -p "$OUTDIR"; OUTMOUNT="-v $OUTDIR:/out"; } || OUTMOUNT=""
