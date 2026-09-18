@@ -6,7 +6,7 @@ package agentos
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/qiangli/coreutils/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/atlas"
 	"io"
 	"os"
 	"os/exec"

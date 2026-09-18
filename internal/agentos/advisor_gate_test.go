@@ -6,7 +6,7 @@ package agentos
 import (
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/fleet"
 )
 
 // The advisor exists to stop an agent from re-running a command that CANNOT succeed

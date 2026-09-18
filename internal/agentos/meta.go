@@ -9,8 +9,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/qiangli/coreutils/pkg/atlas"
-	"github.com/qiangli/coreutils/pkg/webconsole"
+	"github.com/qiangli/yoke/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/webconsole"
 )
 
 // dispatchMeta answers `bashy <verb> meta [--json]` for any verb that declares

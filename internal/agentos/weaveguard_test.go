@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/weave"
+	"github.com/qiangli/yoke/pkg/weave"
 )
 
 // THE BUG THIS TEST EXISTS FOR. `git` is a shell FUNCTION in every bashy

@@ -10,11 +10,11 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 
-	"github.com/qiangli/coreutils/external/registry"
-	"github.com/qiangli/coreutils/pkg/bscript"
-	"github.com/qiangli/coreutils/pkg/recall"
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	"github.com/qiangli/coreutils/tool"
+	"github.com/qiangli/yoke/external/registry"
+	"github.com/qiangli/yoke/pkg/bscript"
+	"github.com/qiangli/yoke/pkg/recall"
 )
 
 // dispatchAgentic runs exactly one action. Native tools and scripts re-enter

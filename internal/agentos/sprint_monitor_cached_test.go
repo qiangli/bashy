@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/llmbudget"
-	"github.com/qiangli/coreutils/pkg/resources"
+	"github.com/qiangli/yoke/pkg/llmbudget"
+	"github.com/qiangli/yoke/pkg/resources"
 )
 
 type cachedMonitorQuotaAdapter struct{}

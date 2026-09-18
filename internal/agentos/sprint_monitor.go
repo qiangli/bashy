@@ -16,9 +16,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/llmbudget"
-	"github.com/qiangli/coreutils/pkg/resources"
-	"github.com/qiangli/coreutils/pkg/weave"
+	"github.com/qiangli/yoke/pkg/llmbudget"
+	"github.com/qiangli/yoke/pkg/resources"
+	"github.com/qiangli/yoke/pkg/weave"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )

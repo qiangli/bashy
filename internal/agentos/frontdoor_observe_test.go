@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/execlog"
-	"github.com/qiangli/coreutils/pkg/policy/audit"
+	"github.com/qiangli/yoke/pkg/execlog"
+	"github.com/qiangli/yoke/pkg/policy/audit"
 )
 
 const frontDoorObserveHelper = "BASHY_TEST_FRONT_DOOR_OBSERVE"

@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/bus"
-	"github.com/qiangli/coreutils/pkg/chat"
+	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/chat"
 )
 
 // THE MEDIATOR IS A FUNCTION, NOT A SEAT.

@@ -1,6 +1,6 @@
 package harnessrunner
 
-import "github.com/qiangli/coreutils/pkg/atlas"
+import "github.com/qiangli/yoke/pkg/atlas"
 
 func pureBuiltin(name string) bool {
 	effects, ok := builtinEffects[name]

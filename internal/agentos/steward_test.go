@@ -12,11 +12,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/qiangli/coreutils/pkg/board"
-	"github.com/qiangli/coreutils/pkg/bus"
-	"github.com/qiangli/coreutils/pkg/fleet"
-	"github.com/qiangli/coreutils/pkg/meet"
-	"github.com/qiangli/coreutils/pkg/steward"
+	"github.com/qiangli/yoke/pkg/board"
+	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/meet"
+	"github.com/qiangli/yoke/pkg/steward"
 )
 
 func TestMeetLazyStewardStartsRoomRoleWithoutTakingHostAuthority(t *testing.T) {

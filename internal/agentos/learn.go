@@ -28,7 +28,7 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 
-	"github.com/qiangli/coreutils/pkg/craft"
+	"github.com/qiangli/yoke/pkg/craft"
 )
 
 // learnEnabled reports whether passive learning is on.

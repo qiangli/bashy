@@ -12,9 +12,9 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 
-	"github.com/qiangli/coreutils/pkg/atlas"
-	"github.com/qiangli/coreutils/pkg/policy/advice"
-	"github.com/qiangli/coreutils/pkg/policy/audit"
+	"github.com/qiangli/yoke/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/policy/advice"
+	"github.com/qiangli/yoke/pkg/policy/audit"
 )
 
 // The compliance audit: a tamper-evident, hash-chained record of every command

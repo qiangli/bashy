@@ -34,9 +34,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	outgit "github.com/qiangli/coreutils/git"
-	"github.com/qiangli/coreutils/pkg/release"
 	"github.com/qiangli/coreutils/pkg/weavecli"
+	outgit "github.com/qiangli/yoke/git"
+	"github.com/qiangli/yoke/pkg/release"
 )
 
 // releasePlanSchema tags the `release plan` envelope. The artifact ledger

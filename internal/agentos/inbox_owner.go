@@ -3,7 +3,7 @@ package agentos
 import (
 	"fmt"
 
-	"github.com/qiangli/coreutils/pkg/room"
+	"github.com/qiangli/yoke/pkg/room"
 )
 
 // A registered inbox watcher spends one fleet identity's cursors. Its right to

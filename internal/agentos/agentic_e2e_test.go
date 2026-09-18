@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/bscript"
 	"github.com/qiangli/coreutils/pkg/weavecli"
+	"github.com/qiangli/yoke/pkg/bscript"
 )
 
 func TestAgenticE2EHelpNativeYieldAndExternalStatus(t *testing.T) {

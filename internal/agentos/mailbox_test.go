@@ -14,10 +14,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/bus"
-	"github.com/qiangli/coreutils/pkg/fleet"
-	"github.com/qiangli/coreutils/pkg/meet"
-	"github.com/qiangli/coreutils/pkg/room"
+	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/meet"
+	"github.com/qiangli/yoke/pkg/room"
 )
 
 func isolateMailbox(t *testing.T) mailboxSpec {

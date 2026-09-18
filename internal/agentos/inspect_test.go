@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/binmgr"
-	"github.com/qiangli/coreutils/pkg/execlog"
-	"github.com/qiangli/coreutils/pkg/fleet"
-	coreskills "github.com/qiangli/coreutils/pkg/skills"
 	"github.com/qiangli/coreutils/pkg/weavecli"
+	"github.com/qiangli/yoke/pkg/binmgr"
+	"github.com/qiangli/yoke/pkg/execlog"
+	"github.com/qiangli/yoke/pkg/fleet"
+	coreskills "github.com/qiangli/yoke/pkg/skills"
 )
 
 // TestInspectIndexNamesOnlyAtlasVerbs: the index is a navigation aid, and a

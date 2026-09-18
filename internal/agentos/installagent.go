@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/chat"
+	"github.com/qiangli/yoke/pkg/chat"
 )
 
 // install-agent wires a coding agent to use bashy as its shell. Each agent

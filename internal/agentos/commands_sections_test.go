@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/atlas"
 )
 
 // TestClassSectionsTaxonomy pins the by-how-it-runs grouping the default

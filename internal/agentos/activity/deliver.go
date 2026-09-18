@@ -26,7 +26,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/bus"
+	"github.com/qiangli/yoke/pkg/bus"
 )
 
 // CoalesceWindow is how long a wake about one object suppresses the next wake

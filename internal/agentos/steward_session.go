@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/handoff"
-	"github.com/qiangli/coreutils/pkg/steward"
+	"github.com/qiangli/yoke/pkg/handoff"
+	"github.com/qiangli/yoke/pkg/steward"
 )
 
 // The RUNNING STEWARD is a separate fact from the SEAT, and this file is where

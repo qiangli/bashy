@@ -17,7 +17,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/release"
+	"github.com/qiangli/yoke/pkg/release"
 	"github.com/spf13/cobra"
 )
 

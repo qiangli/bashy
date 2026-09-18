@@ -121,7 +121,7 @@
         repo as having no symbols.
 
       Reproduce the measurements with a throwaway module importing
-      `github.com/qiangli/coreutils/pkg/treesitter` and building under each tag.
+      `github.com/qiangli/yoke/pkg/treesitter` and building under each tag.
 
 ### Agent event subscriptions
 

@@ -21,11 +21,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/agentcmd"
-	"github.com/qiangli/coreutils/pkg/fleet"
-	"github.com/qiangli/coreutils/pkg/role"
-	"github.com/qiangli/coreutils/pkg/room"
-	"github.com/qiangli/coreutils/pkg/weave"
+	"github.com/qiangli/yoke/pkg/agentcmd"
+	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/role"
+	"github.com/qiangli/yoke/pkg/room"
+	"github.com/qiangli/yoke/pkg/weave"
 	"github.com/spf13/cobra"
 )
 

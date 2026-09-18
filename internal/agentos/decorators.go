@@ -47,9 +47,9 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/lower/shellrt"
 
-	"github.com/qiangli/coreutils/pkg/autoretry"
-	"github.com/qiangli/coreutils/pkg/policy/advice"
-	"github.com/qiangli/coreutils/pkg/policy/audit"
+	"github.com/qiangli/yoke/pkg/autoretry"
+	"github.com/qiangli/yoke/pkg/policy/advice"
+	"github.com/qiangli/yoke/pkg/policy/audit"
 )
 
 // decoratorTracerName identifies this instrumentation library in every span

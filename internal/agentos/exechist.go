@@ -39,12 +39,12 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 
-	"github.com/qiangli/coreutils/pkg/craft"
-	"github.com/qiangli/coreutils/pkg/execlog"
-	"github.com/qiangli/coreutils/pkg/policy/coord"
-	"github.com/qiangli/coreutils/pkg/redact"
-	"github.com/qiangli/coreutils/pkg/spacegraph"
 	"github.com/qiangli/coreutils/pkg/weavecli"
+	"github.com/qiangli/yoke/pkg/craft"
+	"github.com/qiangli/yoke/pkg/execlog"
+	"github.com/qiangli/yoke/pkg/policy/coord"
+	"github.com/qiangli/yoke/pkg/redact"
+	"github.com/qiangli/yoke/pkg/spacegraph"
 )
 
 // execHistEnabled reports whether the recorder should run.

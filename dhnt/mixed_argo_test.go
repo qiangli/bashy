@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	dag "github.com/qiangli/coreutils/pkg/dag"
+	dag "github.com/qiangli/yoke/pkg/dag"
 	"gopkg.in/yaml.v3"
 )
 

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/qiangli/coreutils/pkg/fleet"
-	"github.com/qiangli/coreutils/pkg/meet"
+	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/meet"
 )
 
 var selectMeetAgent = selectStewardAgent

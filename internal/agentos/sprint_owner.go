@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/foreman"
 	"github.com/qiangli/coreutils/pkg/lockfile"
-	"github.com/qiangli/coreutils/pkg/room"
-	"github.com/qiangli/coreutils/pkg/weave"
+	"github.com/qiangli/yoke/pkg/foreman"
+	"github.com/qiangli/yoke/pkg/room"
+	"github.com/qiangli/yoke/pkg/weave"
 )
 
 const sprintOwnerReadyTimeout = 2 * time.Minute

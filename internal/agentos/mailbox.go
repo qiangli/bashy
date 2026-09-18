@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/bus"
 	"github.com/qiangli/coreutils/pkg/lockfile"
-	"github.com/qiangli/coreutils/pkg/meet"
-	"github.com/qiangli/coreutils/pkg/room"
+	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/meet"
+	"github.com/qiangli/yoke/pkg/room"
 	"github.com/spf13/cobra"
 )
 

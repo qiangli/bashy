@@ -10,9 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/qiangli/coreutils/pkg/capability"
-	"github.com/qiangli/coreutils/pkg/fleet"
-	"github.com/qiangli/coreutils/pkg/llmbudget"
+	"github.com/qiangli/yoke/pkg/capability"
+	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/llmbudget"
 )
 
 var stewardRandomIndex = func(n int) (int, error) {

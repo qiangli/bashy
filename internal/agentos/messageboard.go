@@ -5,9 +5,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/qiangli/coreutils/pkg/bus"
-	"github.com/qiangli/coreutils/pkg/fleet"
-	"github.com/qiangli/coreutils/pkg/meet"
+	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/meet"
 )
 
 // wireMessageBoard connects `bashy mb` to the fleet catalog.

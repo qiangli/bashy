@@ -26,7 +26,7 @@ set -eu
 mode=${1:-optional}
 # Overridable ONLY for the hermetic regression test; the default is the pinned
 # sibling and is what every real build uses.
-web_dir=${MEET_SPA_WEB_DIR:-../coreutils/pkg/meet/web}
+web_dir=${MEET_SPA_WEB_DIR:-../yoke/pkg/meet/web}
 
 # compare_trees FRESH_DIST TRACKED_ARTIFACT
 # Read-only. Return 0 when the tracked artifact is byte-for-byte and file-set
@@ -53,7 +53,7 @@ compare_trees() {
 	printf '%s\n' "$diff_out" | sed 's/^/meet SPA freshness:   /' >&2
 	echo "meet SPA freshness: rebuild and commit the bundle, then re-run:" >&2
 	echo "meet SPA freshness:   scripts/build-meet-spa.sh required   # rebuilds and promotes dist -> artifact" >&2
-	echo "meet SPA freshness:   git -C ../coreutils add pkg/meet/artifact && commit it" >&2
+	echo "meet SPA freshness:   git -C ../yoke add pkg/meet/artifact && commit it" >&2
 	return 1
 }
 

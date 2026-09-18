@@ -16,7 +16,7 @@
 set -eu
 
 HERE=$(cd "$(dirname "$0")/.." && pwd)
-CU="${COREUTILS_DIR:-$HERE/../coreutils}"
+CU="${YOKE_DIR:-$HERE/../yoke}"
 REPO="${BASHY_REPO:-qiangli/bashy}"
 TAG="${1:-}"
 GOOS=$(go env GOOS)

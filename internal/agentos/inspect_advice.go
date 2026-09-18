@@ -24,7 +24,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/qiangli/coreutils/pkg/policy/advice"
+	"github.com/qiangli/yoke/pkg/policy/advice"
 )
 
 // inspectAdviceArg is one decorator argument, rendered the way the decorator

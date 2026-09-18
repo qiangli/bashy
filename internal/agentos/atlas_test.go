@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/atlas"
 )
 
 func TestWebViewListsTheActualAppsByPublicName(t *testing.T) {

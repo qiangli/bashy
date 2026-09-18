@@ -8,8 +8,8 @@ package agentos
 import (
 	"os"
 
-	"github.com/qiangli/coreutils/external/otel/otelcli"
-	"github.com/qiangli/coreutils/pkg/otelquery"
+	"github.com/qiangli/yoke/external/otel/otelcli"
+	"github.com/qiangli/yoke/pkg/otelquery"
 )
 
 // dispatchObs (full build, -tags bashy_obs) wires the all-in-one observability

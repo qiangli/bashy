@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/fleet"
 )
 
 // The disambiguation rule: a CRUD word counts only when a NAME follows it;

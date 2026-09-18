@@ -14,11 +14,11 @@ import (
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 
-	"github.com/qiangli/coreutils/external/registry"
-	"github.com/qiangli/coreutils/pkg/assetring"
-	"github.com/qiangli/coreutils/pkg/atlas"
-	"github.com/qiangli/coreutils/pkg/fleet"
 	"github.com/qiangli/coreutils/tool"
+	"github.com/qiangli/yoke/external/registry"
+	"github.com/qiangli/yoke/pkg/assetring"
+	"github.com/qiangli/yoke/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/fleet"
 )
 
 // The registered-command ring (`bashy commands add`), as bashy consumes it.

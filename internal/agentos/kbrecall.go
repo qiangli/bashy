@@ -5,9 +5,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	graphcmd "github.com/qiangli/coreutils/cmds/graph"
-	"github.com/qiangli/coreutils/pkg/recall"
-	"github.com/qiangli/coreutils/pkg/scope"
+	graphcmd "github.com/qiangli/yoke/cmds/graph"
+	"github.com/qiangli/yoke/pkg/recall"
+	"github.com/qiangli/yoke/pkg/scope"
 )
 
 // newKBRecallCmd mounts the cross-ring read surface (coreutils/pkg/recall) as

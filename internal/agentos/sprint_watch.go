@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/bus"
-	"github.com/qiangli/coreutils/pkg/room"
-	"github.com/qiangli/coreutils/pkg/weave"
+	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/room"
+	"github.com/qiangli/yoke/pkg/weave"
 	"github.com/spf13/cobra"
 )
 

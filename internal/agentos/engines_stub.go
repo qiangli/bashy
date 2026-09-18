@@ -14,8 +14,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/qiangli/coreutils/external/podman/winhelper"
-	"github.com/qiangli/coreutils/pkg/binmgr"
+	"github.com/qiangli/yoke/external/podman/winhelper"
+	"github.com/qiangli/yoke/pkg/binmgr"
 )
 
 // dispatchEngine (lean build). The container/LLM engines are not LINKED into this

@@ -8,7 +8,7 @@
 # That script is per-runner and macOS-only because podman needs a native cgo
 # toolchain and its own source bootstrap, so its matrix is one runner per
 # platform. otel has none of those constraints: it is our own code
-# (coreutils/external/otel), pure Go, CGO_ENABLED=0 — verified building for
+# (yoke/external/otel), pure Go, CGO_ENABLED=0 — verified building for
 # darwin/{arm64,amd64}, linux/{amd64,arm64} and windows/amd64 from one host.
 #
 # So it cross-compiles the whole matrix in a single job. Folding it into the
@@ -26,13 +26,13 @@
 set -eu
 
 HERE=$(cd "$(dirname "$0")/.." && pwd)
-CU="${COREUTILS_DIR:-$HERE/../coreutils}"
+CU="${YOKE_DIR:-$HERE/../yoke}"
 REPO="${BASHY_REPO:-qiangli/bashy}"
 TAG="${1:-}"
 SRC="$CU/external/otel"
 
 if [ ! -d "$SRC" ]; then
-  echo "publish-otel-blob: no otel source at $SRC (set COREUTILS_DIR)" >&2
+  echo "publish-otel-blob: no otel source at $SRC (set YOKE_DIR)" >&2
   exit 1
 fi
 
@@ -61,7 +61,7 @@ done
 
 cat > "$STAGE/otel-blob-NOTICE.txt" <<'EOF'
 bashy otel blob — the embedded observability stack orchestrator
-(coreutils/external/otel), built from source in this project.
+(yoke/external/otel), built from source in this project.
 
 It is fetched at runtime and exec'd as a separate process; it is not linked
 into bashy. The storage/query components it supervises are NOT in this blob —

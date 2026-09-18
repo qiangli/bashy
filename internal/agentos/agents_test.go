@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/room"
-	"github.com/qiangli/coreutils/pkg/weave"
+	"github.com/qiangli/yoke/pkg/room"
+	"github.com/qiangli/yoke/pkg/weave"
 )
 
 func TestAgentRosterEmptyIncludesCatalogFooter(t *testing.T) {

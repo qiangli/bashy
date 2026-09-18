@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/bus"
-	"github.com/qiangli/coreutils/pkg/chat"
-	"github.com/qiangli/coreutils/pkg/handoff"
-	"github.com/qiangli/coreutils/pkg/steward"
+	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/chat"
+	"github.com/qiangli/yoke/pkg/handoff"
+	"github.com/qiangli/yoke/pkg/steward"
 )
 
 // The supervisor is the process that IS the background steward.

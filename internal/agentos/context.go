@@ -18,10 +18,10 @@ import (
 	"golang.org/x/term"
 
 	"github.com/qiangli/bashy/internal/cli"
-	"github.com/qiangli/coreutils/pkg/chat"
-	"github.com/qiangli/coreutils/pkg/handoff"
-	coreskills "github.com/qiangli/coreutils/pkg/skills"
 	"github.com/qiangli/coreutils/pkg/weavecli"
+	"github.com/qiangli/yoke/pkg/chat"
+	"github.com/qiangli/yoke/pkg/handoff"
+	coreskills "github.com/qiangli/yoke/pkg/skills"
 )
 
 func isTerminal(f *os.File) bool {

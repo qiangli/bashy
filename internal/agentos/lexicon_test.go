@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/lexicon"
+	"github.com/qiangli/yoke/pkg/lexicon"
 )
 
 // THE BUG THIS PINS. `bashy lexicon study` collects the host's addresses and

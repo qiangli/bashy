@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/kb"
+	"github.com/qiangli/yoke/pkg/kb"
 )
 
 func isolateKBCommandTest(t *testing.T) string {

@@ -8,7 +8,8 @@ require (
 	github.com/creack/pty/v2 v2.0.1
 	github.com/ergochat/readline v0.1.3
 	github.com/qiangli/coreutils v0.0.0
-	github.com/qiangli/coreutils/external/otel v0.0.0
+	github.com/qiangli/yoke v0.0.0
+	github.com/qiangli/yoke/external/otel v0.0.0
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
@@ -221,8 +222,8 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/proglottis/gpgme v0.1.6 // indirect
-	github.com/qiangli/coreutils/pkg/oci v0.0.0-00010101000000-000000000000 // indirect
 	github.com/qiangli/gfy v0.0.0-20260504062854-764095a2877d // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-00010101000000-000000000000 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.54.0 // indirect
 	github.com/redis/go-redis/v9 v9.20.1 // indirect
@@ -325,17 +326,21 @@ require (
 // github.com/qiangli/sh next to this repo as ./sh.
 replace mvdan.cc/sh/v3 => ../sh
 
-// The coreutils hub supplies the AgentOS pure-Go userland + `yc` verbs that
-// the `bashy` binary injects as in-process commands. Same flat-sibling rule
-// as ../sh: the coreutils submodule inside the dhnt umbrella, or a sibling
-// clone of github.com/qiangli/coreutils standalone.
+// coreutils is the CERTIFIED required set (the 116 POSIX names ∪ GNU
+// coreutils as pure-Go applets); yoke is everything agentic bashy adds on top
+// (the AgentOS hub, front-door verbs, managed externals, engines) — split
+// out of coreutils in Sprint 208 so yoke work never touches the certified
+// package. Same flat-sibling rule as ../sh: the submodules inside the dhnt
+// umbrella, or sibling clones of github.com/qiangli/{coreutils,yoke}.
 replace github.com/qiangli/coreutils => ../coreutils
+
+replace github.com/qiangli/yoke => ../yoke
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
 replace github.com/benhoyt/goawk => ../coreutils/third_party/goawk
 
-replace github.com/qiangli/coreutils/external/otel => ../coreutils/external/otel
+replace github.com/qiangli/yoke/external/otel => ../yoke/external/otel
 
 replace github.com/jaegertracing/jaeger => github.com/qiangli/jaeger v0.0.0-20260426223533-5aaa7eb1f040
 
@@ -343,14 +348,14 @@ replace github.com/perses/perses => github.com/qiangli/perses v0.0.0-20260426190
 
 replace github.com/ergochat/readline => ../readline
 
-replace github.com/ollama/ollama => ../coreutils/external/ollama/src
+replace github.com/ollama/ollama => ../yoke/external/ollama/src
 
-// Podman embed: bashy mounts coreutils' in-process podman engine, which consumes
+// Podman embed: bashy mounts yoke's in-process podman engine, which consumes
 // the qiangli/podman fork + the pkg/oci wrapper. Cross-module replaces don't
-// propagate from coreutils' go.mod, so bashy (the main module) restates them.
-replace go.podman.io/podman/v6 => ../coreutils/external/podman/src
+// propagate from yoke's go.mod, so bashy (the main module) restates them.
+replace go.podman.io/podman/v6 => ../yoke/external/podman/src
 
-replace github.com/qiangli/coreutils/pkg/oci => ../coreutils/pkg/oci
+replace github.com/qiangli/yoke/pkg/oci => ../yoke/pkg/oci
 
 // The AgentOS file-management surface uses the maintained qiangli/filebrowser
 // fork. Keep it as an exact flat sibling in umbrella and standalone builds.

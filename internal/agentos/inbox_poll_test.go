@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/bus"
-	"github.com/qiangli/coreutils/pkg/meet"
-	"github.com/qiangli/coreutils/pkg/weave"
+	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/meet"
+	"github.com/qiangli/yoke/pkg/weave"
 )
 
 func TestInboxWatchIdleHasBoundedPollsAndOneFullRead(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	coreatlas "github.com/qiangli/coreutils/pkg/atlas"
+	coreatlas "github.com/qiangli/yoke/pkg/atlas"
 )
 
 func TestContextManifestTeachesKnowledgeStages(t *testing.T) {

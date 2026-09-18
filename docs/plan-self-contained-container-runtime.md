@@ -109,7 +109,7 @@ The upstream code already has the pieces bashy needs:
 - `pkg/machine/gvproxy_windows.go`: Windows network helper integration.
 
 The bashy/coreutils integration should therefore adapt those upstream paths
-through `github.com/qiangli/coreutils/pkg/oci/machine` instead of copying a
+through `github.com/qiangli/yoke/pkg/oci/machine` instead of copying a
 second backend into bashy.
 
 Implemented first slice:

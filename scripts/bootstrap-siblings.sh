@@ -85,7 +85,7 @@ git_checkout() {
 git_submodule_update() {
     repo=$1
     # The lean Bashy build/test graph does not use the heavyweight optional
-    # engine submodules carried by coreutils. DKS workspaces are disposable and
+    # engine submodules carried by yoke. DKS workspaces are disposable and
     # must not hydrate gigabytes of unrelated sources before every task.
     [ "${BASHY_BOOTSTRAP_SUBMODULES:-0}" = 1 ] || return 0
     if command -v git >/dev/null 2>&1; then
@@ -117,6 +117,7 @@ repo_url() {
     case "$1" in
         sh) echo "https://github.com/qiangli/sh.git" ;;
         coreutils) echo "https://github.com/qiangli/coreutils.git" ;;
+        yoke) echo "https://github.com/qiangli/yoke.git" ;;
         readline) echo "https://github.com/qiangli/readline.git" ;;
         filebrowser) echo "https://github.com/qiangli/filebrowser.git" ;;
         *) echo "bootstrap-siblings: no repo URL for '$1'" >&2; return 1 ;;
@@ -149,7 +150,7 @@ while IFS= read -r line; do
     echo "bootstrap-siblings: cloning $url -> $target @ ${sha:0:12}"
     git_clone "$url" "$target"
     git_checkout "$target" "$sha"
-    # Siblings may have their own submodules (e.g. coreutils -> ollama/podman forks).
+    # Siblings may have their own submodules (e.g. yoke -> ollama/podman forks).
     # They are not needed for the default lean build; host-layer DAG targets can
     # materialize them later when a task actually needs those sources.
     git_submodule_update "$target"

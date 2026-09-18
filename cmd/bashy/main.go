@@ -13,7 +13,7 @@ package main
 import (
 	"context"
 
-	"github.com/qiangli/coreutils/pkg/telemetry"
+	"github.com/qiangli/yoke/pkg/telemetry"
 
 	"github.com/qiangli/bashy/internal/agentos"
 	"github.com/qiangli/bashy/internal/cli"

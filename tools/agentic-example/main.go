@@ -9,8 +9,8 @@ import (
 
 	"github.com/qiangli/bashy/internal/agentos"
 	"github.com/qiangli/bashy/internal/cli"
-	"github.com/qiangli/coreutils/pkg/chat"
 	"github.com/qiangli/coreutils/tool"
+	"github.com/qiangli/yoke/pkg/chat"
 	"mvdan.cc/sh/v3/interp"
 )
 

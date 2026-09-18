@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/bus"
-	"github.com/qiangli/coreutils/pkg/fleet"
-	"github.com/qiangli/coreutils/pkg/room"
+	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/room"
 )
 
 // stubInboxAncestry installs a deterministic process tree. Real pids are

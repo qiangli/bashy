@@ -19,10 +19,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/qiangli/coreutils/pkg/atlas"
-	"github.com/qiangli/coreutils/pkg/fleet"
-	"github.com/qiangli/coreutils/pkg/lexicon"
-	coreskills "github.com/qiangli/coreutils/pkg/skills"
+	"github.com/qiangli/yoke/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/lexicon"
+	coreskills "github.com/qiangli/yoke/pkg/skills"
 )
 
 // inspectActionKinds is the closed --kind vocabulary, in the order the four

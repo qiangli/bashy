@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/qiangli/bashy/skills"
-	"github.com/qiangli/coreutils/pkg/bus"
-	"github.com/qiangli/coreutils/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/fleet"
 )
 
 // TestSprintHelpCarriesOwnerAccountability asserts the essential help contract:

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/foreman"
-	"github.com/qiangli/coreutils/pkg/room"
-	"github.com/qiangli/coreutils/pkg/weave"
+	"github.com/qiangli/yoke/pkg/foreman"
+	"github.com/qiangli/yoke/pkg/room"
+	"github.com/qiangli/yoke/pkg/weave"
 )
 
 func isolateSprintOwnerHostSeams(t *testing.T) {

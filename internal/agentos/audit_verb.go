@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/qiangli/coreutils/pkg/policy/audit"
+	"github.com/qiangli/yoke/pkg/policy/audit"
 )
 
 // dispatchAudit implements `bashy audit {status,tail,verify,export,path}` — the

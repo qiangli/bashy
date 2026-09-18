@@ -1,12 +1,13 @@
 # Pinned commit SHAs for the sibling-path replace targets in go.mod
-# (../sh, ../coreutils, ../readline, ../filebrowser).
+# (../sh, ../coreutils, ../yoke, ../readline, ../filebrowser).
 # scripts/bootstrap-siblings.sh reads this file and
 # clones each sibling at the listed SHA, so standalone clones of bashy (and
-# CI) build without external setup. coreutils itself replaces ../sh, which
-# resolves to the same flat sibling.
+# CI) build without external setup. coreutils and yoke themselves replace
+# ../sh (and yoke replaces ../coreutils), which resolve to the same flat
+# siblings.
 #
 # Inside the dhnt umbrella the siblings already exist as submodules
-# (dhnt/sh, dhnt/coreutils) — the bootstrap script detects them and leaves
+# (dhnt/sh, dhnt/coreutils, dhnt/yoke) — the bootstrap script detects them and leaves
 # them alone, so there is still exactly one copy of each.
 #
 # Format: <name>=<sha>. When bumping a sibling in the umbrella's
@@ -18,6 +19,7 @@
 # a push while a pin disagrees with its sibling's HEAD; run
 # scripts/update-sibling-pins.sh to resync.
 sh=ffc16479d623ecf6466444c6017bd4671186ae68
-coreutils=20205973e13371fe6349bf499327433c561bbda4
+coreutils=5de4206b2246998ca021df5fa3589dc97edae02c
+yoke=2854c03c8fd011d1a45e32a70d2bf5331555d66e
 readline=b958823bd7075ed8b9a3aedd351422356a95fe79
 filebrowser=cde1146904add2d78d9846c71597520d34b17f7d

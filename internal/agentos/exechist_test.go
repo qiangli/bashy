@@ -12,8 +12,8 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 
-	"github.com/qiangli/coreutils/pkg/execlog"
-	"github.com/qiangli/coreutils/pkg/spacegraph"
+	"github.com/qiangli/yoke/pkg/execlog"
+	"github.com/qiangli/yoke/pkg/spacegraph"
 )
 
 func testRecorder(t *testing.T) (*recorder, string, string) {

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 
-	podmanengine "github.com/qiangli/coreutils/external/podman/engine"
+	podmanengine "github.com/qiangli/yoke/external/podman/engine"
 )
 
 // dispatchEngine wires the Windows-capable Podman machine frontend when bashy

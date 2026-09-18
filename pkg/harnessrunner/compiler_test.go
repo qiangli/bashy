@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/atlas"
-	"github.com/qiangli/coreutils/pkg/kb"
+	"github.com/qiangli/yoke/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/kb"
 )
 
 func compileRequest(t *testing.T, script string) Request {

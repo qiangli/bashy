@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/room"
+	"github.com/qiangli/yoke/pkg/room"
 )
 
 // TestTransportMustBeStubbedNotRedirected checks both isolation boundaries.

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/qiangli/coreutils/pkg/procguard"
+	"github.com/qiangli/yoke/pkg/procguard"
 )
 
 type parentDeathWatch = procguard.Guard

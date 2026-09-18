@@ -8,8 +8,8 @@ package agentos
 import (
 	"os"
 
-	"github.com/qiangli/coreutils/external/ollama"
-	podmanengine "github.com/qiangli/coreutils/external/podman/engine"
+	"github.com/qiangli/yoke/external/ollama"
+	podmanengine "github.com/qiangli/yoke/external/podman/engine"
 )
 
 // dispatchEngine (host build, -tags bashy_engines on a unix host) wires the

@@ -11,8 +11,8 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
 
-	"github.com/qiangli/coreutils/pkg/policy/advice"
-	"github.com/qiangli/coreutils/pkg/policy/audit"
+	"github.com/qiangli/yoke/pkg/policy/advice"
+	"github.com/qiangli/yoke/pkg/policy/audit"
 )
 
 // Helper to run bashy with given env, cap and a script.

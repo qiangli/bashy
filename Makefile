@@ -48,7 +48,7 @@ PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 win
 # The Go source front end behind `--source=go` (mvdan.cc/sh/v3/gosource) is NOT
 # one of these: it is a required part of the bashy binary and is always linked.
 # See docs/plan-source-go-dispatch.md.
-EMBED_DIR := ../coreutils/external/podman/engine
+EMBED_DIR := ../yoke/external/podman/engine
 ENGINE_TAGS := $(if $(BASHY_ENGINES),bashy_engines \
 	$(if $(wildcard $(EMBED_DIR)/podman_embed/podman.gz),embed_podman) \
 	$(if $(wildcard $(EMBED_DIR)/vfkit_embed/vfkit.gz),embed_vfkit) \

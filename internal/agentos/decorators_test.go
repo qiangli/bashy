@@ -33,7 +33,7 @@ import (
 	"mvdan.cc/sh/v3/lower/shellrt/shellexec"
 	"mvdan.cc/sh/v3/syntax"
 
-	"github.com/qiangli/coreutils/pkg/policy/audit"
+	"github.com/qiangli/yoke/pkg/policy/audit"
 )
 
 // runDecorated runs script through a runner wired exactly as wireExec wires

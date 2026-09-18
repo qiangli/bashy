@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/qiangli/coreutils/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/atlas"
 	"sort"
 )
 

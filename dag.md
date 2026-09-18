@@ -206,8 +206,8 @@ ext=""
 tags="bashy_engines"
 [ "$goos" = windows ] && tags="bashy_engines remote containers_image_openpgp"
 
-if [ -d ../coreutils/.git ]; then
-  git -C ../coreutils submodule update --init external/ollama/src external/podman/src || true
+if [ -d ../yoke/.git ]; then
+  git -C ../yoke submodule update --init external/ollama/src external/podman/src || true
 fi
 
 mkdir -p bin
@@ -836,6 +836,7 @@ for host in "$@"; do
       case \"\$name\" in
         sh) url=https://github.com/qiangli/sh.git ;;
         coreutils) url=https://github.com/qiangli/coreutils.git ;;
+        yoke) url=https://github.com/qiangli/yoke.git ;;
         readline) url=https://github.com/qiangli/readline.git ;;
         filebrowser) url=https://github.com/qiangli/filebrowser.git ;;
         *) return 0 ;;

@@ -50,7 +50,7 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 
-	"github.com/qiangli/coreutils/pkg/weave"
+	"github.com/qiangli/yoke/pkg/weave"
 )
 
 // weaveGuardEnabled gates the guard.

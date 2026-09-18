@@ -14,7 +14,7 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 
-	"github.com/qiangli/coreutils/pkg/craft"
+	"github.com/qiangli/yoke/pkg/craft"
 )
 
 // THE BUG THIS PINS. bashy shims its front-door verbs as shell functions, so

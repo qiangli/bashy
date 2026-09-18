@@ -18,9 +18,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/qiangli/coreutils/pkg/atlas"
-	"github.com/qiangli/coreutils/pkg/reduce"
-	"github.com/qiangli/coreutils/pkg/secrets"
+	"github.com/qiangli/yoke/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/reduce"
+	"github.com/qiangli/yoke/pkg/secrets"
 	"mvdan.cc/sh/v3/interp"
 )
 

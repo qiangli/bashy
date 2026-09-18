@@ -12,9 +12,9 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 
-	"github.com/qiangli/coreutils/pkg/handoff"
-	"github.com/qiangli/coreutils/pkg/policy/coord"
-	coreskills "github.com/qiangli/coreutils/pkg/skills"
+	"github.com/qiangli/yoke/pkg/handoff"
+	"github.com/qiangli/yoke/pkg/policy/coord"
+	coreskills "github.com/qiangli/yoke/pkg/skills"
 )
 
 // coordHandler refuses a WRITE when another agent already holds this project.

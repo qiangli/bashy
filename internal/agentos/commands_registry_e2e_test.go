@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/binmgr"
+	"github.com/qiangli/yoke/pkg/binmgr"
 )
 
 // registryEnv is scratchStoreEnv plus an isolated binmgr cache and no cert

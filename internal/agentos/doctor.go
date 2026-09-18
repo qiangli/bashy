@@ -20,11 +20,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/qiangli/coreutils/external/registry"
-	"github.com/qiangli/coreutils/external/sphere"
-	"github.com/qiangli/coreutils/pkg/binmgr"
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	"github.com/qiangli/coreutils/tool"
+	"github.com/qiangli/yoke/external/registry"
+	"github.com/qiangli/yoke/external/sphere"
+	"github.com/qiangli/yoke/pkg/binmgr"
 )
 
 const doctorSchemaVersion = "bashy-doctor-v1"

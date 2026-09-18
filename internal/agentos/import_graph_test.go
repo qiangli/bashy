@@ -29,8 +29,8 @@ func TestBinaryImportGraphsIsolateGfy(t *testing.T) {
 	if strings.Contains(bash, "qiangli/gfy") {
 		t.Error("cmd/bash must not import gfy — the lean drop-in stays engine-free")
 	}
-	if strings.Contains(bash, "qiangli/coreutils") {
-		t.Error("cmd/bash must not import coreutils — its import graph is disjoint from AgentOS")
+	if strings.Contains(bash, "qiangli/coreutils") || strings.Contains(bash, "qiangli/yoke") {
+		t.Error("cmd/bash must not import coreutils or yoke — its import graph is disjoint from AgentOS")
 	}
 
 	// The execution planes ride the same rule. They record every command an
@@ -38,9 +38,9 @@ func TestBinaryImportGraphsIsolateGfy(t *testing.T) {
 	// drop-in that quietly writes a history file — which is both a surprise and
 	// a privacy surface the drop-in never promised.
 	for _, pkg := range []string{
-		"qiangli/coreutils/pkg/reduce",
-		"qiangli/coreutils/pkg/execlog",
-		"qiangli/coreutils/pkg/spacegraph",
+		"qiangli/yoke/pkg/reduce",
+		"qiangli/yoke/pkg/execlog",
+		"qiangli/yoke/pkg/spacegraph",
 	} {
 		if strings.Contains(bash, pkg) {
 			t.Errorf("cmd/bash must not import %s — the drop-in records nothing", pkg)
@@ -51,13 +51,13 @@ func TestBinaryImportGraphsIsolateGfy(t *testing.T) {
 	if !strings.Contains(bashy, "qiangli/gfy") {
 		t.Error("cmd/bashy should import gfy — the code-graph feature must be wired in")
 	}
-	if !strings.Contains(bashy, "qiangli/coreutils/cmds/graph") {
+	if !strings.Contains(bashy, "qiangli/yoke/cmds/graph") {
 		t.Error("cmd/bashy should import cmds/graph — the graph verbs must be registered")
 	}
 	for _, pkg := range []string{
-		"qiangli/coreutils/pkg/reduce",
-		"qiangli/coreutils/pkg/execlog",
-		"qiangli/coreutils/pkg/spacegraph",
+		"qiangli/yoke/pkg/reduce",
+		"qiangli/yoke/pkg/execlog",
+		"qiangli/yoke/pkg/spacegraph",
 	} {
 		if !strings.Contains(bashy, pkg) {
 			t.Errorf("cmd/bashy should import %s — an unwired recorder reads as coverage "+

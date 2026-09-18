@@ -3,16 +3,16 @@ package agentos
 import (
 	"sync"
 
-	"github.com/qiangli/coreutils/pkg/bus"
-	"github.com/qiangli/coreutils/pkg/execlog"
-	"github.com/qiangli/coreutils/pkg/fleet"
-	"github.com/qiangli/coreutils/pkg/kb"
-	"github.com/qiangli/coreutils/pkg/lexicon"
-	"github.com/qiangli/coreutils/pkg/meet"
-	"github.com/qiangli/coreutils/pkg/principal"
-	"github.com/qiangli/coreutils/pkg/ref"
-	"github.com/qiangli/coreutils/pkg/todo"
-	"github.com/qiangli/coreutils/pkg/weave"
+	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/execlog"
+	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/kb"
+	"github.com/qiangli/yoke/pkg/lexicon"
+	"github.com/qiangli/yoke/pkg/meet"
+	"github.com/qiangli/yoke/pkg/principal"
+	"github.com/qiangli/yoke/pkg/ref"
+	"github.com/qiangli/yoke/pkg/todo"
+	"github.com/qiangli/yoke/pkg/weave"
 )
 
 // wireRefResolvers fills lexicon.RefResolvers — the registry `bashy define

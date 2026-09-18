@@ -85,7 +85,7 @@ jobs:
   # The GNU bash-5.3 conformance gate (the former bash53-gate job) moved to
   # conformance.yml on 2026-09-17: it runs on tags and by hand, not on push.
 
-  # The tracked meet SPA artifact (coreutils/pkg/meet/artifact) can silently go
+  # The tracked meet SPA artifact (yoke/pkg/meet/artifact) can silently go
   # stale: a source change with no SPA rebuild ships yesterday's bundle. This
   # native-Linux job builds a fresh SPA and REQUIRES it to match the committed
   # artifact byte-for-byte, without repairing it. Node/pnpm are provisioned the

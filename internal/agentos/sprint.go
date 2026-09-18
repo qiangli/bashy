@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/qiangli/coreutils/pkg/weave"
+	"github.com/qiangli/yoke/pkg/weave"
 	"github.com/spf13/cobra"
 )
 

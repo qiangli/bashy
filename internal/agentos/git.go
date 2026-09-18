@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	outgit "github.com/qiangli/coreutils/git"
+	outgit "github.com/qiangli/yoke/git"
 )
 
 // bashy git … — embedded git client. Pure-Go go-git backend so the

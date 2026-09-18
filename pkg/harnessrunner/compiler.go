@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/qiangli/coreutils/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/atlas"
 	"mvdan.cc/sh/v3/syntax"
 )
 

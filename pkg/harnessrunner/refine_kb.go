@@ -5,9 +5,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/qiangli/coreutils/pkg/atlas"
-	"github.com/qiangli/coreutils/pkg/kb"
-	"github.com/qiangli/coreutils/pkg/scope"
+	"github.com/qiangli/yoke/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/kb"
+	"github.com/qiangli/yoke/pkg/scope"
 )
 
 type commandRefiner func(argv []string, allStatic bool, intent *Intent) bool

@@ -13,8 +13,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/qiangli/coreutils/pkg/binmgr"
-	"github.com/qiangli/coreutils/pkg/otelquery"
+	"github.com/qiangli/yoke/pkg/binmgr"
+	"github.com/qiangli/yoke/pkg/otelquery"
 )
 
 // dispatchObs (default lean build) serves the otel query verbs in-process and

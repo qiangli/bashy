@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/resources"
-	"github.com/qiangli/coreutils/pkg/weave"
+	"github.com/qiangli/yoke/pkg/resources"
+	"github.com/qiangli/yoke/pkg/weave"
 )
 
 func TestHostAdmissionPressureUnknownAndFilesystem(t *testing.T) {

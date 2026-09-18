@@ -4,7 +4,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/resources"
+	"github.com/qiangli/yoke/pkg/resources"
 )
 
 func TestTopSprintProcessesPreservesStableFullSort(t *testing.T) {

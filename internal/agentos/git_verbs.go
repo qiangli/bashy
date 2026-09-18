@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	outgit "github.com/qiangli/coreutils/git"
+	outgit "github.com/qiangli/yoke/git"
 )
 
 // Parity verbs for `bashy git` beyond the original clone→push set:

@@ -2,7 +2,7 @@ package agentos
 
 import (
 	"context"
-	"github.com/qiangli/coreutils/pkg/llmbudget"
+	"github.com/qiangli/yoke/pkg/llmbudget"
 )
 
 // Candidate selection is an observation. The eventual chat/harness launch must

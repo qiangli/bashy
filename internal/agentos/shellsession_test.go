@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/room"
+	"github.com/qiangli/yoke/pkg/room"
 )
 
 // roomInTempHome points the room store at a disposable HOME so a test never

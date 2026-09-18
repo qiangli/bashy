@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/bus"
-	"github.com/qiangli/coreutils/pkg/foreman"
-	"github.com/qiangli/coreutils/pkg/llmbudget"
-	"github.com/qiangli/coreutils/pkg/resources"
-	"github.com/qiangli/coreutils/pkg/weave"
+	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/foreman"
+	"github.com/qiangli/yoke/pkg/llmbudget"
+	"github.com/qiangli/yoke/pkg/resources"
+	"github.com/qiangli/yoke/pkg/weave"
 )
 
 func monitorFixture(at time.Time, cpu float64, stale bool) *sprintMonitorSnapshot {

@@ -20,10 +20,10 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/qiangli/coreutils/external/registry"
-	"github.com/qiangli/coreutils/pkg/atlas"
-	"github.com/qiangli/coreutils/pkg/webconsole"
 	"github.com/qiangli/coreutils/tool"
+	"github.com/qiangli/yoke/external/registry"
+	"github.com/qiangli/yoke/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/webconsole"
 )
 
 const atlasSchemaVersion = "bashy-atlas-v1"

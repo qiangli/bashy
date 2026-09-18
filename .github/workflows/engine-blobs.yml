@@ -33,12 +33,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Bootstrap siblings (coreutils + podman source)
+      - name: Bootstrap siblings (yoke + podman source)
         shell: bash
         run: |
           ./scripts/bootstrap-siblings.sh
-          # embed-podman.sh builds podman from the coreutils podman submodule
-          git -C ../coreutils submodule update --init --depth 1 external/podman/src || true
+          # embed-podman.sh builds podman from the yoke podman submodule
+          git -C ../yoke submodule update --init --depth 1 external/podman/src || true
       - uses: actions/setup-go@v6
         with:
           go-version: 1.27.1
@@ -52,7 +52,7 @@ jobs:
 
   # The otel stack orchestrator. A SEPARATE job, not another matrix entry,
   # because it shares none of the constraints above: it is our own pure-Go code
-  # (coreutils/external/otel, CGO_ENABLED=0), so one runner cross-compiles every
+  # (yoke/external/otel, CGO_ENABLED=0), so one runner cross-compiles every
   # platform — including linux and windows, which the podman matrix does not
   # cover and which would otherwise have no otel blob at all.
   #
@@ -69,7 +69,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Bootstrap siblings (coreutils)
+      - name: Bootstrap siblings (yoke)
         shell: bash
         run: ./scripts/bootstrap-siblings.sh
       - uses: actions/setup-go@v6

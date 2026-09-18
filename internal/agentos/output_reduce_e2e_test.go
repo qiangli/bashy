@@ -17,7 +17,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/reduce"
+	"github.com/qiangli/yoke/pkg/reduce"
 )
 
 var (

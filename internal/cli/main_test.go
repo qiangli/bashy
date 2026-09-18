@@ -15,8 +15,8 @@ import (
 	"strings"
 	"testing"
 
-	_ "github.com/qiangli/coreutils/cmds/all"
 	coreutilsshell "github.com/qiangli/coreutils/shell"
+	_ "github.com/qiangli/yoke/cmds/all"
 
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"

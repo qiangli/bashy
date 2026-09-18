@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/atlas"
 )
 
 // The block title prints an origin's value once: "bash — bash builtin" keeps

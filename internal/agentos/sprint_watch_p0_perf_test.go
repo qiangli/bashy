@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qiangli/coreutils/pkg/room"
+	"github.com/qiangli/yoke/pkg/room"
 )
 
 // Opt-in actual watcher-loop experiment. Configuration is captured before the

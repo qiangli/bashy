@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/bscript"
+	"github.com/qiangli/yoke/pkg/bscript"
 )
 
 func TestAgenticCommandClassifiesNativeExternalAndScript(t *testing.T) {

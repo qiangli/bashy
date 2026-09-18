@@ -50,11 +50,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/qiangli/coreutils/pkg/bus"
-	"github.com/qiangli/coreutils/pkg/fleet"
-	"github.com/qiangli/coreutils/pkg/room"
-	coreskills "github.com/qiangli/coreutils/pkg/skills"
-	"github.com/qiangli/coreutils/pkg/weave"
+	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/room"
+	coreskills "github.com/qiangli/yoke/pkg/skills"
+	"github.com/qiangli/yoke/pkg/weave"
 )
 
 // shellSessionPrefix namespaces presence cards away from the ids room.Join

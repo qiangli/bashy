@@ -3,7 +3,7 @@ package agentos
 import (
 	"testing"
 
-	"github.com/qiangli/coreutils/pkg/ref"
+	"github.com/qiangli/yoke/pkg/ref"
 )
 
 // TestRefResolversCoverEveryKind is the coverage ratchet for `bashy define

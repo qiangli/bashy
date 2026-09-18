@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/qiangli/coreutils/pkg/binmgr"
+	"github.com/qiangli/yoke/pkg/binmgr"
 )
 
 // engineAlias normalizes a front-door engine alias to its canonical engine name.
