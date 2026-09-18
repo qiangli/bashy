@@ -156,34 +156,51 @@ from source below.
 
 ### From source
 
-If `bashy` is already installed on the outpost, the source build can dogfood
-bashy's own tool surface: no host `git`, `curl`, `wget`, or `make` required.
-`bashy git` gets the sources, `scripts/bootstrap-siblings.sh` uses `bashy git`
-for sibling checkouts, and `./bashy dag build` runs the build through `bashy go`
-(bashy's self-provisioning Go front end):
+bashy rebuilds itself using only an installed bashy. Every command below is
+run *through* `bashy`, so the same five lines work on Linux, macOS and
+Windows: `bashy git` fetches the sources, `bashy scripts/bootstrap-siblings.sh`
+checks out the sibling modules at the exact SHAs in `.sibling-pins`, and
+`bashy dag build` compiles both binaries through `bashy go`, which downloads
+and verifies its own pinned Go toolchain into bashy's cache the first time.
 
 ```sh
 bashy git clone https://github.com/qiangli/bashy
 cd bashy
-./scripts/bootstrap-siblings.sh
-./bashy dag build          # -> bin/bash and bin/bashy
-./bashy dag install        # optional: install into $DHNT_BIN_DIR (~/.local/bin)
+bashy scripts/bootstrap-siblings.sh
+bashy dag build            # -> bin/bash and bin/bashy (bin/*.exe on Windows)
+bashy dag install          # optional: install into $DHNT_BIN_DIR (~/.local/bin)
 ```
 
-On a host build of bashy with the container engine enabled, the same checkout can
-also be built inside a container with the host filesystem mounted through
-`bashy podman`; use that lane when the outpost should not depend on host build
-packages beyond the already-installed bashy.
+What the host must provide, per platform:
 
-The traditional host-tool path also works:
+| | git | Go | C compiler |
+| --- | --- | --- | --- |
+| Windows | **none** — `bashy git` downloads a pinned, checksum-verified MinGit | **none** — `bashy go` provisions it | not used |
+| macOS | the system `git` (Xcode Command Line Tools: `xcode-select --install`) | **none** — `bashy go` provisions it | optional |
+| Linux | the distribution's `git` | **none** — `bashy go` provisions it | optional |
+
+The C compiler is optional on Linux and macOS: with `cc` on `PATH` the build
+also compiles the native pre-Go signal launcher (`bin/bashy` + `bin/bashy.real`);
+without one it says so and ships the plain Go binaries — the same form the
+release archives ship. `bashy git` on Linux and macOS deliberately uses the
+platform git rather than downloading one.
+
+A checkout that has no installed bashy yet can bootstrap from the repo-local
+launcher instead (Linux/macOS; it needs a host `go`):
+
+```sh
+./bashy dag build
+./bashy dag install
+```
+
+The traditional host-tool path also works when `git`, `go` and `make` are
+already installed:
 
 ```sh
 git clone https://github.com/qiangli/bashy
 cd bashy
-# Bashy resolves four dependencies as flat siblings. This clones each next
-# door at the exact SHA pinned in .sibling-pins:
-./scripts/bootstrap-siblings.sh
-make build          # -> bin/bashy
+./scripts/bootstrap-siblings.sh    # clones each sibling next door at its pinned SHA
+make build                         # -> bin/bash and bin/bashy
 ```
 
 A reusable Linux OCI base is also available. It preserves the required native
@@ -191,15 +208,6 @@ launcher plus `.real` payload and uses a minimal Ubuntu/glibc runtime; see
 [`docs/bashy-oci-base.md`](docs/bashy-oci-base.md) for build, smoke, and derived
 image policy. It is the foundation for a future Bash/POSIX + canonical Go
 coreutils + O3 + verified-toolchain base, not yet an Ubuntu/Alpine parity claim.
-
-For a fresh checkout that wants to dogfood the DAG runner before this checkout's
-new `bin/bashy` exists, use the repo-local bootstrap launcher:
-
-```sh
-./bashy dag build
-./bashy dag install   # installs bash/bashy into $DHNT_BIN_DIR; then `bashy dag ...` works
-make dag ARGS=build   # equivalent bootstrap path if you prefer make
-```
 
 Real-repository DAG examples live under `examples/dag/`. The Go front doors
 for GitHub CLI, Hugo, and Caddy use `~~~go as go` to import the unchanged

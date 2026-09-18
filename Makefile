@@ -89,12 +89,11 @@ test-bashy-oci-policy:
 build-bash:
 	@mkdir -p $(BIN_DIR)
 	@set -e; \
-	case "$$(go env GOOS)" in \
-		linux|darwin) \
-			go build -trimpath -ldflags "$(LDFLAGS)" -o $(BASHY).real ./cmd/bash; \
-			cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BASHY) native/siglaunch.c.in ;; \
-		*) go build -trimpath -ldflags "$(LDFLAGS)" -o $(BASHY) ./cmd/bash ;; \
-	esac
+	goos=$$(go env GOOS); out=$(BASHY); launcher=$$(scripts/launcher-wanted.sh build-bash); [ "$$launcher" = 1 ] && out=$(BASHY).real || rm -f $(BASHY).real; \
+	go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bash; \
+	if [ "$$launcher" = 1 ]; then \
+		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BASHY) native/siglaunch.c.in; \
+	fi
 
 ## build-bashy: Build the AgentOS shell (cmd/bashy -> bin/bashy), embedding the
 ## meet SPA when node/pnpm are available and podman blobs when present.
@@ -104,13 +103,13 @@ build-bashy:
 	scripts/build-meet-spa.sh optional >/dev/null; \
 	tags="$(BASHY_TAGS)"; \
 	echo "building bashy$${tags:+ with embeds: $$tags} ..."; \
-	goos=$$(go env GOOS); out=$(BIN); [ "$$goos" != linux ] && [ "$$goos" != darwin ] || out=$(BIN).real; \
+	goos=$$(go env GOOS); out=$(BIN); launcher=$$(scripts/launcher-wanted.sh build-bashy); [ "$$launcher" = 1 ] && out=$(BIN).real || rm -f $(BIN).real; \
 	if [ -n "$$tags" ]; then \
 		go build -trimpath -tags "$$tags" -ldflags "$(LDFLAGS)" -o $$out ./cmd/bashy; \
 	else \
 		go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bashy; \
 	fi; \
-	if [ "$$goos" = linux ] || [ "$$goos" = darwin ]; then \
+	if [ "$$launcher" = 1 ]; then \
 		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BIN) native/siglaunch.c.in; \
 	fi
 
@@ -122,21 +121,21 @@ build-fips:
 	@mkdir -p $(BIN_DIR)
 	@echo "building with the Go FIPS 140-3 module (GOFIPS140=$(GOFIPS140_VERSION)) ..."
 	@set -e; \
-	goos=$$(go env GOOS); out=$(BASHY); [ "$$goos" != linux ] && [ "$$goos" != darwin ] || out=$(BASHY).real; \
+	goos=$$(go env GOOS); out=$(BASHY); launcher=$$(scripts/launcher-wanted.sh build-bash); [ "$$launcher" = 1 ] && out=$(BASHY).real || rm -f $(BASHY).real; \
 	GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bash; \
-	if [ "$$goos" = linux ] || [ "$$goos" = darwin ]; then \
+	if [ "$$launcher" = 1 ]; then \
 		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BASHY) native/siglaunch.c.in; \
 	fi
 	@set -e; \
 	scripts/build-meet-spa.sh optional >/dev/null; \
 	tags="$(BASHY_TAGS)"; \
-	goos=$$(go env GOOS); out=$(BIN); [ "$$goos" != linux ] && [ "$$goos" != darwin ] || out=$(BIN).real; \
+	goos=$$(go env GOOS); out=$(BIN); launcher=$$(scripts/launcher-wanted.sh build-bashy); [ "$$launcher" = 1 ] && out=$(BIN).real || rm -f $(BIN).real; \
 	if [ -n "$$tags" ]; then \
 		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -tags "$$tags" -ldflags "$(LDFLAGS)" -o $$out ./cmd/bashy; \
 	else \
 		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bashy; \
 	fi; \
-	if [ "$$goos" = linux ] || [ "$$goos" = darwin ]; then \
+	if [ "$$launcher" = 1 ]; then \
 		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BIN) native/siglaunch.c.in; \
 	fi
 

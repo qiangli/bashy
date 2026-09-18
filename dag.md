@@ -92,12 +92,17 @@ scripts/build-meet-spa.sh optional >/dev/null
 # host's own platform. A cross-build therefore emits the plain Go binaries: a
 # host-native launcher paired with a foreign payload would be a broken pair that
 # builds cleanly and fails only when run.
-if { [ "$goos" = linux ] || [ "$goos" = darwin ]; } && [ "$goos" = "$hostgoos" ]; then
+# Without a host C compiler the build still succeeds: it ships the plain Go
+# binaries — the same form the release archives ship — and says so, because
+# the launcher's job (preserving inherited SIGQUIT/SIGPIPE ignore dispositions)
+# is then simply absent rather than visibly failing.
+if [ "$goos" = "$hostgoos" ] && [ "$(BASHY="$BASHY_EXE" scripts/launcher-wanted.sh build)" = 1 ]; then
   "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o bin/bash.real  ./cmd/bash
   "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o bin/bashy.real ./cmd/bashy
   cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o bin/bash  native/siglaunch.c.in
   cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o bin/bashy native/siglaunch.c.in
 else
+  rm -f bin/bash.real bin/bashy.real
   "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "bin/bash${ext}"  ./cmd/bash
   "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "bin/bashy${ext}" ./cmd/bashy
 fi
