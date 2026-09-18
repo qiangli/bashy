@@ -20,12 +20,14 @@ BUILD_ID ?= $(shell if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/
 			printf '%s' "$$id"; \
 		fi; \
 	fi)
+SHELL_RUNTIME_COMMIT ?= $(shell sed -n 's/^sh=//p' .sibling-pins)
+SHELL_RUNTIME_COMMIT_TIME ?= $(shell git -C ../sh show -s --format=%cI $(SHELL_RUNTIME_COMMIT) 2>/dev/null)
 # -s -w strip the symbol table and DWARF debug info; with -trimpath (below)
 # this drops the binary ~30% (≈7.8M → ≈5.4M). A pure-Go bash can't reach C
 # bash's ~1.2M — the Go runtime/GC (~2.3M) plus the interpreter and the
 # x/text CJK charset tables (Big5/Shift-JIS, needed for locale-correct globs)
 # set a floor around 5M.
-LDFLAGS := -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$(VERSION)' -X 'github.com/qiangli/bashy/internal/cli.buildID=$(BUILD_ID)'
+LDFLAGS := -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$(VERSION)' -X 'github.com/qiangli/bashy/internal/cli.buildID=$(BUILD_ID)' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=$(SHELL_RUNTIME_COMMIT)' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=$(SHELL_RUNTIME_COMMIT_TIME)'
 
 # The Go FIPS 140-3 module version selected by the build-fips target (see
 # `go tool` / go.dev/doc/security/fips140). v1.0.0 holds CMVP certificate #5247.

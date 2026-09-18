@@ -26,7 +26,7 @@ builds:
         - cmd: ./scripts/verify-meet-spa-release.sh "{{ .Path }}" "{{ .Target }}"
           output: true
     ldflags:
-      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Version "-dev" }}'
+      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Version "-dev" }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit={{ .Env.SHELL_RUNTIME_COMMIT }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime={{ .Env.SHELL_RUNTIME_COMMIT_TIME }}'
     goos:
       - linux
       - darwin

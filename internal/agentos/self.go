@@ -179,6 +179,10 @@ func buildSelfBinary(ctx context.Context, target, version string) error {
 	}
 	ldflags := "-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-" + version +
 		" -X github.com/qiangli/bashy/internal/cli.buildID=" + selfBuildID(ctx)
+	if commit, commitTime := selfShellRuntimeStamp(ctx); commit != "" && commitTime != "" {
+		ldflags += " -X github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=" + commit +
+			" -X github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=" + commitTime
+	}
 	c := exec.CommandContext(ctx, exe, "go", "build", "-trimpath", "-ldflags", ldflags, "-o", target, "./cmd/bashy")
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
@@ -208,6 +212,28 @@ func selfBuildID(ctx context.Context) string {
 		id += "-dirty"
 	}
 	return id
+}
+
+func selfShellRuntimeStamp(ctx context.Context) (string, string) {
+	data, err := os.ReadFile(".sibling-pins")
+	if err != nil {
+		return "", ""
+	}
+	commit := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		if value, ok := strings.CutPrefix(line, "sh="); ok {
+			commit = strings.TrimSpace(value)
+			break
+		}
+	}
+	if commit == "" {
+		return "", ""
+	}
+	out, err := exec.CommandContext(ctx, "git", "-C", "../sh", "show", "-s", "--format=%cI", commit).Output()
+	if err != nil {
+		return "", ""
+	}
+	return commit, strings.TrimSpace(string(out))
 }
 
 func ensureBashyRelease(ctx context.Context, version string) (string, error) {

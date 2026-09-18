@@ -28,6 +28,15 @@ jobs:
           # coreutils' pinned Ollama replacement, so it must opt in.
           BASHY_BOOTSTRAP_SUBMODULES: "1"
         run: ./scripts/bootstrap-siblings.sh
+      - name: Export shell runtime pin
+        shell: bash
+        run: |
+          shell_runtime_commit=$(sed -n 's/^sh=//p' .sibling-pins)
+          shell_runtime_commit_time=$(git -C ../sh show -s --format=%cI "$shell_runtime_commit")
+          test -n "$shell_runtime_commit"
+          test -n "$shell_runtime_commit_time"
+          echo "SHELL_RUNTIME_COMMIT=$shell_runtime_commit" >> "$GITHUB_ENV"
+          echo "SHELL_RUNTIME_COMMIT_TIME=$shell_runtime_commit_time" >> "$GITHUB_ENV"
       - uses: actions/setup-go@v6
         with:
           go-version: 1.27.1

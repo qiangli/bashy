@@ -21,7 +21,9 @@ if [ ! -x "$bin" ] || [ "${BASHY_BOOTSTRAP_REBUILD:-0}" = 1 ]; then
 			fi
 		fi
 	fi
-	ldflags="-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${version} -X github.com/qiangli/bashy/internal/cli.buildID=${build_id}"
+	shell_runtime_commit=$(sed -n 's/^sh=//p' "$here/.sibling-pins")
+	shell_runtime_commit_time=$(git -C "$here/../sh" show -s --format=%cI "$shell_runtime_commit")
+	ldflags="-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${version} -X github.com/qiangli/bashy/internal/cli.buildID=${build_id} -X github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=${shell_runtime_commit} -X github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=${shell_runtime_commit_time}"
 	echo "bashy bootstrap: building $bin" >&2
 	(
 		cd "$here"
