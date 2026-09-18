@@ -1,0 +1,21 @@
+#!/usr/bin/env -S bashy --bashsharp
+# 05 — Deep readonly: bash's own `readonly` builtin, extended to freeze a
+# value all the way down — struct fields, slice indexes, map keys, aliases,
+# and through subshells. Reads stay ordinary.
+
+type Metadata struct { Name string }
+type Config struct { Meta Metadata; Ports []int; Labels map[string]string }
+cfg := Config{
+    Meta: Metadata{Name: "prod"},
+    Ports: []int{80, 443},
+    Labels: map[string]string{"tier": "edge"},
+}
+readonly cfg
+
+alias := cfg
+printf '%s:%d:%s\n' alias.Meta.Name alias.Ports[1] alias.Labels["tier"]
+
+(
+    cfg.Ports[0] = 8080         # refused: BASHPP-EREADONLY-MUTATION
+)
+printf 'still %d\n' cfg.Ports[0]

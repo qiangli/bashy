@@ -1,0 +1,20 @@
+#!/usr/bin/env -S bashy --bashsharp
+# 10 — And back out as Go. Every Bash# construct lowers to ordinary Go, so a
+# file can be handed to the Go compiler:
+#
+#     bashy transpile --bashsharp 10-transpile.bsh -o 10-transpile.go
+#     go run 10-transpile.go
+#
+# Lowering needs a Go toolchain of at least 1.27 on PATH; check.sh SKIPs this
+# section (and says why) when there is none. Running the file directly needs
+# nothing.
+
+func twice(n int) int { return n * 2 }
+func greet(name string, retries int = 3) {
+    printf '%s:%d\n' name retries
+}
+x := twice(21)
+echo "x=$x"
+greet("Ada")
+n := twice(2)
+greet(retries: n, name: "Bob")

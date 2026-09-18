@@ -1,0 +1,17 @@
+body: ok
+ok      -> 0
+summarize: precondition failed: test -n "$1"
+empty   -> 3
+body: lie
+summarize: postcondition failed: test "$1" != lie
+lie     -> 3
+body: write
+write   -> 1
+body: fail
+fail    -> 1
+body: yield
+yield   -> 6
+twice 2 -> 0 x=4
+twice: postcondition failed: test "$RESULT" -gt 0
+twice 0 -> 3 y=0
+done

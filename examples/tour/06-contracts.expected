@@ -1,0 +1,6 @@
+produce -> 0 made probe=unset
+produce: precondition failed: test -d "$work" && test -n "$1"
+produce -> 3
+twice 2 -> 0 x=4
+twice: postcondition failed: test "$RESULT" -gt 0
+twice 0 -> 3 y=0
