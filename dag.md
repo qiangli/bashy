@@ -87,7 +87,9 @@ if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   fi
 fi
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}'"
-scripts/build-meet-spa.sh optional >/dev/null
+# Helper scripts run THROUGH bashy: a Windows host has no /bin/sh to honour
+# their shebang, and PATH-restricted rebuilds have no other shell either.
+"$BASHY_EXE" scripts/build-meet-spa.sh optional >/dev/null
 # The launcher is compiled by the HOST cc, so it can only be produced for the
 # host's own platform. A cross-build therefore emits the plain Go binaries: a
 # host-native launcher paired with a foreign payload would be a broken pair that
@@ -96,7 +98,7 @@ scripts/build-meet-spa.sh optional >/dev/null
 # binaries — the same form the release archives ship — and says so, because
 # the launcher's job (preserving inherited SIGQUIT/SIGPIPE ignore dispositions)
 # is then simply absent rather than visibly failing.
-if [ "$goos" = "$hostgoos" ] && [ "$(BASHY="$BASHY_EXE" scripts/launcher-wanted.sh build)" = 1 ]; then
+if [ "$goos" = "$hostgoos" ] && [ "$(BASHY="$BASHY_EXE" "$BASHY_EXE" scripts/launcher-wanted.sh build)" = 1 ]; then
   "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o bin/bash.real  ./cmd/bash
   "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o bin/bashy.real ./cmd/bashy
   cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o bin/bash  native/siglaunch.c.in

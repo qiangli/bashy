@@ -125,7 +125,9 @@ func dispatchCheckTo(args []string, stdout, stderr io.Writer) int {
 		case a == "--agent" || a == "--agentic":
 			opts.agent = true
 			opts.json = true
-		case a == "--bashpp" || a == "--bash++":
+		case a == "--bashsharp" || a == "--bashpp" || a == "--bash++":
+			// --bashsharp is canonical; the Bash++ spellings are the
+			// deprecated aliases every other front door still accepts.
 			opts.bashpp = true
 		case a == "--strict-system":
 			opts.strictSystem = true
@@ -224,9 +226,9 @@ func dispatchCheckTo(args []string, stdout, stderr io.Writer) int {
 }
 
 func printCheckUsage(w io.Writer) {
-	fmt.Fprintln(w, "usage: bashy check [--bashpp|--bash++] [--mode bash53|posix|bashy] [--json|--agent] [--script PATH] [--cwd DIR] [--strict-system] SCRIPT...")
+	fmt.Fprintln(w, "usage: bashy check [--bashsharp] [--mode bash53|posix|bashy] [--json|--agent] [--script PATH] [--cwd DIR] [--strict-system] SCRIPT...")
 	fmt.Fprintln(w, "Statically check shell scripts for syntax, recursive script references, and command resolution.")
-	fmt.Fprintln(w, "With --bashpp, also check Bash# null safety; successful checks are silent and null errors exit 2.")
+	fmt.Fprintln(w, "With --bashsharp (alias --bashpp), also check Bash# null safety; successful checks are silent and null errors exit 2.")
 	fmt.Fprintln(w, "Agent mode emits JSON suitable for preflight: command inventory, system/container/not-found resolution, and diagnostics.")
 }
 

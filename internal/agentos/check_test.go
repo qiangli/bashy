@@ -73,7 +73,7 @@ func first(xs []string) string {
 				t.Fatal(err)
 			}
 			var stdout, stderr bytes.Buffer
-			if got := dispatchCheckTo([]string{"--bashpp", path}, &stdout, &stderr); got != test.rc {
+			if got := dispatchCheckTo([]string{"--bashsharp", path}, &stdout, &stderr); got != test.rc {
 				t.Fatalf("exit = %d, want %d; stdout=%q stderr=%q", got, test.rc, stdout.String(), stderr.String())
 			}
 			if stdout.Len() != 0 {
@@ -98,10 +98,10 @@ func TestCheckBashPPHelpAndReportMode(t *testing.T) {
 	if rc := dispatchCheckTo([]string{"--help"}, &stdout, &stderr); rc != 0 {
 		t.Fatalf("help exit = %d", rc)
 	}
-	if !strings.Contains(stdout.String(), "--bashpp") || !strings.Contains(stdout.String(), "null safety") {
+	if !strings.Contains(stdout.String(), "--bashsharp") || !strings.Contains(stdout.String(), "null safety") {
 		t.Fatalf("help omits Bash# checker contract:\n%s", stdout.String())
 	}
-	if record := verbAtlasRecord("check", false); !strings.Contains(record.Synopsis, "--bashpp null safety") {
+	if record := verbAtlasRecord("check", false); !strings.Contains(record.Synopsis, "--bashsharp null safety") {
 		t.Fatalf("check atlas synopsis omits Bash# null safety: %#v", record)
 	}
 
