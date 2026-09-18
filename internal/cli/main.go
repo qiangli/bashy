@@ -1074,7 +1074,7 @@ func isLoginShell() bool {
 
 // sourceIfExists sources a file if it exists, ignoring errors.
 func sourceIfExists(r *interp.Runner, path string) {
-	f, err := os.Open(path)
+	f, err := os.Open(interp.ShellPathToOS(r.Dir, path))
 	if err != nil {
 		return
 	}
@@ -4527,7 +4527,11 @@ func nthLine(src []byte, n int) string {
 func runPath(r *interp.Runner, path string) error {
 	shellName := os.Args[0]
 	orig := path
-	f, err := os.Open(path)
+	// The operand is in the shell's spelling — on Windows that is the MSYS
+	// drive form bashy itself hands out for $HOME, $TEMP and pwd (/c/Users/…),
+	// which the OS cannot open as given. Resolve it the way the engine
+	// resolves every other path; on Unix this is the identity.
+	f, err := os.Open(interp.ShellPathToOS(r.Dir, path))
 	if err != nil {
 		// Bash falls back to a $PATH search for a bare (no-slash) name.
 		if !strings.Contains(path, "/") {
