@@ -78,10 +78,12 @@ hostgoos="$("$BASHY_EXE" go env GOOS)"
 ext=""
 [ "$goos" = windows ] && ext=.exe
 BUILD_ID=""
-if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  BUILD_ID=$(git describe --tags --exact-match HEAD 2>/dev/null || git rev-parse --short=7 HEAD 2>/dev/null || true)
+# git through bashy too: on Windows it is the MinGit bashy provisioned, and a
+# PATH-restricted rebuild has no other git.
+if [ -e .git ] && "$BASHY_EXE" git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BUILD_ID=$("$BASHY_EXE" git describe --tags --exact-match HEAD 2>/dev/null || "$BASHY_EXE" git rev-parse --short=7 HEAD 2>/dev/null || true)
   if [ -n "$BUILD_ID" ]; then
-    if ! git diff --quiet --ignore-submodules -- 2>/dev/null || ! git diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+    if ! "$BASHY_EXE" git diff --quiet --ignore-submodules -- 2>/dev/null || ! "$BASHY_EXE" git diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
       BUILD_ID="${BUILD_ID}-dirty"
     fi
   fi
