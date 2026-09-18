@@ -1,0 +1,11 @@
+#!/usr/bin/env -S bashy --bashsharp
+# Keyword arguments and default parameters — both are bash syntax errors
+# today, so admitting them changes no existing script.
+# (From bashsharp-tests/tests/bashsharp/{kwargs,defaults}/.)
+
+func greet(name string, retries int = 3) {
+    printf '%s:%d\n' name retries
+}
+
+greet("Ada")                    # default applied
+greet(retries: 5, name: "Bob")  # keywords, any order
