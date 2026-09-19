@@ -117,9 +117,12 @@ func dispatchCheck(args []string) int {
 func dispatchCheckTo(args []string, stdout, stderr io.Writer) int {
 	opts := checkOptions{mode: "bashy", maxDepth: 8}
 	var scripts []string
+	prepare := false
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
+		case a == "--prepare":
+			prepare = true
 		case a == "--json":
 			opts.json = true
 		case a == "--agent" || a == "--agentic":
@@ -184,6 +187,9 @@ func dispatchCheckTo(args []string, stdout, stderr io.Writer) int {
 			scripts = append(scripts, a)
 		}
 	}
+	if prepare {
+		return checkPrepare(scripts, stdout, stderr)
+	}
 	if len(scripts) == 0 {
 		fmt.Fprintln(stderr, "check: at least one script is required")
 		return 2
@@ -227,6 +233,9 @@ func dispatchCheckTo(args []string, stdout, stderr io.Writer) int {
 
 func printCheckUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage: bashy check [--bashsharp] [--mode bash53|posix|bashy] [--json|--agent] [--script PATH] [--cwd DIR] [--strict-system] SCRIPT...")
+	fmt.Fprintln(w, "       bashy check --prepare [SCRIPT...]")
+	fmt.Fprintln(w, "--prepare provisions the toolchains the scripts' islands (~~~py/ts/rs/c/cxx/go, --source=go) will use — pinned, verified, cached — ahead of a run;")
+	fmt.Fprintln(w, "no script = every island toolchain. Optional: a run provisions on demand. Idempotent: a second run downloads nothing.")
 	fmt.Fprintln(w, "Statically check shell scripts for syntax, recursive script references, and command resolution.")
 	fmt.Fprintln(w, "With --bashsharp (alias --bashpp), also check Bash# null safety; successful checks are silent and null errors exit 2.")
 	fmt.Fprintln(w, "Agent mode emits JSON suitable for preflight: command inventory, system/container/not-found resolution, and diagnostics.")

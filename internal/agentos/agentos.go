@@ -409,6 +409,10 @@ var frontDoorObserving atomic.Bool
 // the private exit signal only delays process exit until observers have seen
 // the real status.
 func Dispatch() {
+	// A fence never resolves its tool from PATH (Sprint 213): the island
+	// tool resolver is installed before anything can plan an island — the
+	// interp runner, the Go front end behind `transpile`, `check --prepare`.
+	installIslandToolResolver()
 	if len(os.Args) < 2 || !isFrontDoorInvocation(os.Args[1]) {
 		dispatch()
 		return
@@ -570,7 +574,6 @@ func dispatch() {
 	case "out":
 		dispatchExit(dispatchOut(os.Args[2:]))
 	case "transpile":
-		ensureGoForTranspile(context.Background())
 		dispatchExit(transpile.Main(os.Args[2:]))
 	case "full":
 		dispatchExit(dispatchFull(os.Args[2:]))
