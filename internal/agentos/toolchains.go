@@ -31,13 +31,10 @@ var islandToolchains = map[string]func(ctx context.Context) (argv []string, why 
 	},
 	"cc": provisionedCC,
 	// rustc's -C linker= takes one program: a wrapper over zig cc.
-	"cc-linker": func(ctx context.Context) ([]string, string, error) {
-		wrapper, err := zigcc.Linker(ctx)
-		return single(wrapper, "selected provisioned zig cc as the linker", err)
-	},
-	"clang":   provisionedCC,
-	"c++":     provisionedCXX,
-	"clang++": provisionedCXX,
+	"cc-linker": provisionedLinker,
+	"clang":     provisionedCC,
+	"c++":       provisionedCXX,
+	"clang++":   provisionedCXX,
 	"python3": func(ctx context.Context) ([]string, string, error) {
 		return provisionedPython(ctx, "")
 	},

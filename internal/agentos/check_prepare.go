@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"runtime"
 	"sort"
 	"strings"
 
@@ -13,8 +12,8 @@ import (
 )
 
 // islandToolsFor maps a fence language to the tool names its island asks the
-// resolver for (toolchains.go). Rust links through the provisioned cc off
-// Windows, and TypeScript needs the compiler module as well as node.
+// resolver for (toolchains.go). Rust links through the provisioned cc, and
+// TypeScript needs the compiler module as well as node.
 func islandToolsFor(language string) []string {
 	switch language {
 	case "python":
@@ -22,9 +21,6 @@ func islandToolsFor(language string) []string {
 	case "typescript":
 		return []string{"node", "typescript"}
 	case "rust":
-		if runtime.GOOS == "windows" {
-			return []string{"rustc"}
-		}
 		return []string{"rustc", "cc-linker"}
 	case "c":
 		return []string{"cc"}

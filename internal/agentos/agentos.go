@@ -573,6 +573,9 @@ func dispatch() {
 		dispatchExit(0)
 	case "out":
 		dispatchExit(dispatchOut(os.Args[2:]))
+	case "zig-link":
+		// rustc's linker on Windows (ziglink.go): never a user-facing verb.
+		dispatchExit(dispatchZigLink(os.Args[2:]))
 	case "transpile":
 		dispatchExit(transpile.Main(os.Args[2:]))
 	case "full":
