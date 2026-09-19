@@ -61,6 +61,13 @@ commands, run deterministically.
   TypeScript / Rust / C / C++ / Go islands, decorators, keyword arguments,
   enums, deep `readonly`, contracts and `agentic`. Off with `--no-bashsharp`
   or `--posix`, where none of it exists.
+- **The islands bring their own toolchains.** A fence never resolves its
+  tool from your `PATH`: bashy provisions what it uses — Go 1.27.1, `zig cc`
+  for C/C++, a uv-managed CPython, Node + `typescript`, a rustup toolchain —
+  downloaded from the vendor once, checksum-verified against a pin in this
+  repo, cached — so the same program means the same thing on every machine.
+  `bashy check --prepare SCRIPT...` pays that download ahead of time;
+  `BASHPP_PYTHON`, `BASHPP_GO`, `BASHPP_CC`, … name a program explicitly.
 - **It rebuilds itself.** `bashy git clone`, `bashy scripts/bootstrap-siblings.sh`,
   `bashy dag build` — on Windows with no git, no Go and no C compiler on the
   host (see *From source*).
