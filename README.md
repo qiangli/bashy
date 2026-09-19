@@ -1,7 +1,7 @@
 # bashy — a pure-Go Bash 5.3 that speaks Bash#
 
 [![release](https://img.shields.io/github/v/release/qiangli/bashy?label=release)](https://github.com/qiangli/bashy/releases/latest)
-[![tour](https://github.com/bashsharp/bashsharp-tour/actions/workflows/tour.yml/badge.svg)](https://github.com/bashsharp/bashsharp-tour/actions/workflows/tour.yml)
+[![tour](https://github.com/bashsharp/tour/actions/workflows/tour.yml/badge.svg)](https://github.com/bashsharp/tour/actions/workflows/tour.yml)
 
 `bashy` is one static binary — no CGo, no system bash — that is a **drop-in
 Bash 5.3** on Linux, macOS and Windows: same flags, same script semantics,
@@ -27,7 +27,7 @@ bashy --version
 
 Then take the tour — 27 small programs with pinned transcripts and one
 script that runs them all on your machine, also written as a procedure your
-coding agent can drive: **[bashsharp/bashsharp-tour](https://github.com/bashsharp/bashsharp-tour)**.
+coding agent can drive: **[bashsharp/tour](https://github.com/bashsharp/tour)**.
 The ten-minute version is in this repo: [`examples/quickstart/`](examples/quickstart/).
 
 ```bash
