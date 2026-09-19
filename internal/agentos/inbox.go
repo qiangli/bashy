@@ -514,6 +514,12 @@ func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader 
 					}
 				}
 				if !watch && bound == 0 {
+					// The sync stamp (and any relay warning) is the one thing an
+					// empty inbox must still say: "nothing new" from a host that
+					// could not reach the relay is not the same as nothing new.
+					for _, warning := range batch.warns {
+						fmt.Fprintln(errOut, warning)
+					}
 					fmt.Fprintf(errOut, "nothing new in any channel for %s\n", reader)
 					return nil
 				}
