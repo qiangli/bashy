@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/qiangli/yoke/external/bun"
 	"github.com/qiangli/yoke/external/gotoolchain"
 	"github.com/qiangli/yoke/external/node"
 	"github.com/qiangli/yoke/external/python"
@@ -22,7 +23,7 @@ import (
 // attestation comparable across machines.
 //
 // Licenses: Go BSD-3 · Zig MIT · uv MIT/Apache-2.0 + CPython PSF-2.0 · Node
-// MIT + typescript Apache-2.0 · rustup MIT/Apache-2.0. A row's Ensure is cache-first, so the cost is
+// MIT + typescript Apache-2.0 · Bun MIT · rustup MIT/Apache-2.0. A row's Ensure is cache-first, so the cost is
 // paid once; `bashy check --prepare` pays it ahead of a run.
 var islandToolchains = map[string]func(ctx context.Context) (argv []string, why string, err error){
 	"go": func(ctx context.Context) ([]string, string, error) {
@@ -41,6 +42,12 @@ var islandToolchains = map[string]func(ctx context.Context) (argv []string, why 
 	"node": func(ctx context.Context) ([]string, string, error) {
 		bin, _, err := node.Ensure(ctx, "")
 		return single(bin, "selected provisioned node "+node.DefaultVersion, err)
+	},
+	// bun: the runtime a project selects with a bun lockfile or
+	// BASHPP_TYPESCRIPT_RUNTIME=bun (node stays the default).
+	"bun": func(ctx context.Context) ([]string, string, error) {
+		bin, err := bun.Ensure(ctx, "")
+		return single(bin, "selected provisioned "+bun.DefaultVersion, err)
 	},
 	// The TypeScript island's compiler MODULE (asked for by name when the
 	// project carries no typescript of its own): the pinned package dir.
@@ -97,7 +104,7 @@ func islandToolResolver(name string) ([]string, string, error) {
 }
 
 func islandToolchainNames() []string {
-	return []string{"go", "cc", "c++", "python3", "node", "typescript", "rustc"}
+	return []string{"go", "cc", "c++", "python3", "node", "bun", "typescript", "rustc"}
 }
 
 // installIslandToolResolver wires the table into the engine once per process.
