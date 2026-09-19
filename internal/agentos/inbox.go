@@ -560,8 +560,39 @@ func acknowledgeInboxBatch(batch inboxBatch) error {
 // message. A snapshot containing only filtered outbound records has no output to
 // fail and applies its closure silently. Each closure carries the exact
 // per-source high-water mark observed.
+// deliverSessionMail is the seam for the cross-host delivery pass; a test
+// replaces it. nil means "no delivery on this host".
+var deliverSessionMail = func(ctx context.Context, repoRoot, reader string) (weave.DeliveryReport, error) {
+	return weave.DeliverRemoteMail(ctx, repoRoot, reader)
+}
+
 func snapshotUnifiedInbox(reader string, limit int, includeBus bool) (inboxBatch, error) {
 	var batch inboxBatch
+
+	// LOCAL DELIVERY FIRST (Sprint 217, the email model). Mail from another
+	// host sits on the repo session's feed until this pass files it into the
+	// reader's own board under its uuid; everything below then reads it as
+	// ordinary directed mb mail. Delivery is not reading: it runs on --peek
+	// too, never advances a read cursor, and a redelivery is a no-op. An
+	// unpaired host, or one outside any checkout, skips it silently — the
+	// inbox works exactly as before. A relay ERROR is reported as a warning,
+	// never as an empty inbox: absence of evidence is not "no mail".
+	if deliverSessionMail != nil {
+		if cwd, err := os.Getwd(); err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			rep, derr := deliverSessionMail(ctx, cwd, reader)
+			cancel()
+			switch {
+			case derr != nil:
+				batch.warns = append(batch.warns, fmt.Sprintf("session: not synced — %v (local mail unaffected)", derr))
+			case rep.Skipped != "":
+				// nothing to say: not a team checkout
+			default:
+				batch.warns = append(batch.warns, fmt.Sprintf("session %s: synced as of %s · cursor %s · delivered %d",
+					shortSession(rep.Session), rep.AsOf.Format(time.RFC3339), shortSession(rep.Cursor), rep.Delivered))
+			}
+		}
+	}
 	appendLimited := func(source string, events []unifiedInboxEvent, ack func() error) {
 		shown := events
 		capped := limit > 0 && len(events) > limit
@@ -729,6 +760,17 @@ func renderInboxBatch(out, errOut io.Writer, batch inboxBatch, jsonOut bool) err
 		fmt.Fprintln(errOut, warning)
 	}
 	return nil
+}
+
+// shortSession abbreviates a uuid or cursor for the one-line sync stamp.
+func shortSession(id string) string {
+	if len(id) > 13 {
+		return id[:13]
+	}
+	if id == "" {
+		return "-"
+	}
+	return id
 }
 
 func stringMember(values []string, want string) bool {

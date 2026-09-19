@@ -17,6 +17,7 @@ import (
 	"github.com/qiangli/yoke/pkg/llmbudget"
 	"github.com/qiangli/yoke/pkg/meet"
 	"github.com/qiangli/yoke/pkg/room"
+	"github.com/qiangli/yoke/pkg/weave"
 )
 
 type failingInboxWriter struct{}
@@ -64,6 +65,13 @@ func TestInboxAggregatesBoardAndBusWithoutConsumingOnPeek(t *testing.T) {
 }
 
 func isolateUnifiedInbox(t *testing.T) {
+	// No relay in tests, ever: the real seam would derive a session from THIS
+	// checkout's origin and reach the operator's cloudbox.
+	prevDeliver := deliverSessionMail
+	deliverSessionMail = func(context.Context, string, string) (weave.DeliveryReport, error) {
+		return weave.DeliveryReport{Skipped: "test"}, nil
+	}
+	t.Cleanup(func() { deliverSessionMail = prevDeliver })
 	t.Helper()
 	t.Cleanup(llmbudget.SetDefault(llmbudget.New(llmbudget.Config{StatePath: filepath.Join(t.TempDir(), "budget.json")})))
 	t.Setenv("BASHY_MB_DIR", t.TempDir())
@@ -1074,5 +1082,52 @@ func TestIsolatedInboxNeverTouchesTheRealSprintStore(t *testing.T) {
 			"  before: %s (%d bytes)\n   after: %s (%d bytes)\n"+
 			"isolateUnifiedInbox must redirect every store this path can reach",
 			real, before.ModTime(), before.Size(), after.ModTime(), after.Size())
+	}
+}
+
+// Sprint 217: the delivery pass runs BEFORE the snapshot, its result is a
+// one-line sync stamp, and a relay error is a warning — never an empty inbox.
+func TestUnifiedInboxRunsDeliveryPassAndStampsSync(t *testing.T) {
+	isolateUnifiedInbox(t)
+	calls := 0
+	deliverSessionMail = func(_ context.Context, _ string, reader string) (weave.DeliveryReport, error) {
+		calls++
+		if reader != "tester" {
+			t.Fatalf("delivery pass for %q, want tester", reader)
+		}
+		return weave.DeliveryReport{Session: "0192f3a4-7c1e-7000-8000-000000000001", Delivered: 2, Cursor: "c9"}, nil
+	}
+	batch, err := snapshotUnifiedInbox("tester", 0, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("delivery pass ran %d times, want 1", calls)
+	}
+	var stamped bool
+	for _, w := range batch.warns {
+		if strings.Contains(w, "synced as of") && strings.Contains(w, "delivered 2") && strings.Contains(w, "cursor c9") {
+			stamped = true
+		}
+	}
+	if !stamped {
+		t.Fatalf("no sync stamp in warns: %v", batch.warns)
+	}
+
+	deliverSessionMail = func(context.Context, string, string) (weave.DeliveryReport, error) {
+		return weave.DeliveryReport{}, errors.New("relay 503")
+	}
+	batch, err = snapshotUnifiedInbox("tester", 0, false)
+	if err != nil {
+		t.Fatalf("a relay error must not fail the local inbox: %v", err)
+	}
+	var warned bool
+	for _, w := range batch.warns {
+		if strings.Contains(w, "not synced") && strings.Contains(w, "relay 503") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Fatalf("relay error not surfaced: %v", batch.warns)
 	}
 }

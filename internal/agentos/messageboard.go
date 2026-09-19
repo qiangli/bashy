@@ -1,13 +1,16 @@
 package agentos
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 
 	"github.com/qiangli/yoke/pkg/bus"
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/meet"
+	"github.com/qiangli/yoke/pkg/weave"
 )
 
 // wireMessageBoard connects `bashy mb` to the fleet catalog.
@@ -58,6 +61,22 @@ func wireMessageBoard() {
 	// process, armed lazily on first use so a session that never relays pays
 	// nothing (coreutils story #127).
 	bus.InboxFingerprint = sharedInboxFingerprint
+
+	// Cross-host mail (Sprint 217): a target the local ladder cannot place —
+	// or one spelled <name>@<host> — is asked of the repo's shared session
+	// roster, and the message rides that session as the relay. The repo the
+	// caller stands in is the session key; nothing is configured. bus keeps
+	// no cloudbox import: weave answers through these three seams, the same
+	// shape as FleetNames above.
+	bus.RemoteResolve = func(target string) (bus.RemoteRoute, error) {
+		cwd, _ := os.Getwd()
+		return weave.ResolveRemoteParticipant(context.Background(), cwd, target)
+	}
+	bus.RemoteSend = func(m bus.RemoteMessage) (bus.RemoteReceipt, error) {
+		cwd, _ := os.Getwd()
+		return weave.SendRemoteMessage(context.Background(), cwd, m)
+	}
+	bus.RemoteSender = weave.RemoteSenderSignature
 }
 
 var (

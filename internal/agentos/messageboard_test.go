@@ -39,6 +39,9 @@ func TestWireMessageBoard_ConnectsEveryFleetSeam(t *testing.T) {
 		// from a third-party TUI to whoever owns the login session.
 		{"DetectHarness", func() { bus.DetectHarness = nil }, func() bool { return bus.DetectHarness != nil }},
 		{"PrepareTurnInbox", func() { bus.PrepareTurnInbox = nil }, func() bool { return bus.PrepareTurnInbox != nil }},
+		{"RemoteResolve", func() { bus.RemoteResolve = nil }, func() bool { return bus.RemoteResolve != nil }},
+		{"RemoteSend", func() { bus.RemoteSend = nil }, func() bool { return bus.RemoteSend != nil }},
+		{"RemoteSender", func() { bus.RemoteSender = nil }, func() bool { return bus.RemoteSender != nil }},
 	} {
 		t.Run(h.name, func(t *testing.T) {
 			h.set()
