@@ -240,7 +240,7 @@ record for layer 3: `../docs/bashy-yoke-framework.md` (planning-only, deferred).
 
 ```
 replace mvdan.cc/sh/v3               => ../sh
-replace github.com/qiangli/bashsharp => ../bashsharp
+replace github.com/bashsharp/bashsharp => ../bashsharp
 replace github.com/qiangli/coreutils => ../coreutils
 replace github.com/qiangli/yoke      => ../yoke
 replace github.com/ergochat/readline => ../readline

@@ -180,8 +180,8 @@ func buildSelfBinary(ctx context.Context, target, version string) error {
 	ldflags := "-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-" + version +
 		" -X github.com/qiangli/bashy/internal/cli.buildID=" + selfBuildID(ctx)
 	if commit, commitTime := selfShellRuntimeStamp(ctx); commit != "" && commitTime != "" {
-		ldflags += " -X github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=" + commit +
-			" -X github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=" + commitTime
+		ldflags += " -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=" + commit +
+			" -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=" + commitTime
 	}
 	c := exec.CommandContext(ctx, exe, "go", "build", "-trimpath", "-ldflags", ldflags, "-o", target, "./cmd/bashy")
 	c.Stdout = os.Stdout

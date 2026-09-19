@@ -20,7 +20,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/qiangli/bashsharp/front"
+	"github.com/bashsharp/bashsharp/front"
 
 	"golang.org/x/term"
 

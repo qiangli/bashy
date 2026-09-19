@@ -1,20 +1,20 @@
 # bashy — a pure-Go Bash 5.3 that speaks Bash#
 
 [![release](https://img.shields.io/github/v/release/qiangli/bashy?label=release)](https://github.com/qiangli/bashy/releases/latest)
-[![tour](https://github.com/qiangli/bashsharp-tour/actions/workflows/tour.yml/badge.svg)](https://github.com/qiangli/bashsharp-tour/actions/workflows/tour.yml)
+[![tour](https://github.com/bashsharp/bashsharp-tour/actions/workflows/tour.yml/badge.svg)](https://github.com/bashsharp/bashsharp-tour/actions/workflows/tour.yml)
 
 `bashy` is one static binary — no CGo, no system bash — that is a **drop-in
 Bash 5.3** on Linux, macOS and Windows: same flags, same script semantics,
 same `$BASH_VERSION`, and it passes GNU Bash's own 5.3 test suite (every
 runnable fixture, 86/86). With `--bashsharp` the same binary speaks
-**[Bash#](https://github.com/qiangli/bashsharp)**: the bash you already know,
+**[Bash#](https://github.com/bashsharp/bashsharp)**: the bash you already know,
 Go where you need types, any fenced language where you need a library, and
 `agentic` where you need a model — with contracts so a model's output is
 judged, never trusted.
 
 > **Alpha** (0.x). Bash 5.3 compatibility is stable; the Bash# dialect may
 > still change before 1.0 through RFCs. Every number this project states
-> names its corpus: [docs/claims.md](https://github.com/qiangli/bashsharp/blob/main/docs/claims.md).
+> names its corpus: [docs/claims.md](https://github.com/bashsharp/bashsharp/blob/main/docs/claims.md).
 
 ## Ten minutes
 
@@ -27,7 +27,7 @@ bashy --version
 
 Then take the tour — 27 small programs with pinned transcripts and one
 script that runs them all on your machine, also written as a procedure your
-coding agent can drive: **[qiangli/bashsharp-tour](https://github.com/qiangli/bashsharp-tour)**.
+coding agent can drive: **[bashsharp/bashsharp-tour](https://github.com/bashsharp/bashsharp-tour)**.
 The ten-minute version is in this repo: [`examples/quickstart/`](examples/quickstart/).
 
 ```bash
@@ -239,7 +239,7 @@ See [`CLAUDE.md`](CLAUDE.md) for the development workflow and [`docs/`](docs/)
 for the compliance roadmap and per-fixture analyses. The Bash 5.3 suite is
 driven by `make test-bash` (serial; needs a controlling terminal; `make
 test-bash-fixtures` fetches the pinned fixture tree). The language, its
-roadmap and RFCs live in [qiangli/bashsharp](https://github.com/qiangli/bashsharp).
+roadmap and RFCs live in [bashsharp/bashsharp](https://github.com/bashsharp/bashsharp).
 
 ## License
 

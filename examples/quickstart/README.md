@@ -43,7 +43,7 @@ in this directory against its transcript on the `bashy` on your `PATH`
 
 **The full tour** — six chapters, 27 programs, a version for coding agents
 (`SKILL.md`), and a gate that runs on every OS against the latest release —
-lives in its own repo: [qiangli/bashsharp-tour](https://github.com/qiangli/bashsharp-tour).
+lives in its own repo: [bashsharp/bashsharp-tour](https://github.com/bashsharp/bashsharp-tour).
 
 ## The other files
 
