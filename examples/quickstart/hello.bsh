@@ -1,0 +1,17 @@
+#!/usr/bin/env -S bashy --bashsharp
+# (a) bashy + .bsh — the minimum executable FROM-scratch example.
+#
+# Run it directly: no Go toolchain, no model, no network, no key.
+#
+#   bashy --bashsharp hello.bsh          # interpreted
+#   bashy hello.bsh                      # same: .bsh implies --bashsharp
+#
+# Typed variables and a Go-style func — every .bsh file carries both the
+# familiar bash and the Bash# extensions; this one uses both layers.
+
+func greet(name string) string {
+    return "hello, " + name + "!"
+}
+
+name=${1:-world}
+printf '%s\n' greet(name)

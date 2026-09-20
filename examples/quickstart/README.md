@@ -45,6 +45,100 @@ in this directory against its transcript on the `bashy` on your `PATH`
 (`SKILL.md`), and a gate that runs on every OS against the latest release —
 lives in its own repo: [bashsharp/tour](https://github.com/bashsharp/tour).
 
+## Three delivery modes (Sprint 216, Story 540)
+
+Beyond the interpreter, Bash# scripts can be delivered in three ways from scratch:
+
+### (a) bashy + .bsh — interpreted, no toolchain
+
+`hello.bsh` is the minimum executable example. It needs nothing beyond the
+installed `bashy` binary:
+
+```sh
+bashy --bashsharp hello.bsh        # explicit flag
+bashy hello.bsh                    # .bsh implies --bashsharp
+```
+
+### (b) `transpile --standalone` — native Go binary, no bashy at runtime
+
+`hello_standalone.bsh` transpiles to a native binary that runs without bashy,
+a container engine, or any external provider. **Smaller supply-chain surface**:
+the standalone binary imports only `mvdan.cc/sh/v3/lower/shellrt` (the plain
+runtime base) and the Go standard library — it does NOT include bashy, podman,
+ollama, gh, loom, act, rclone, zot, seaweedfs, or searxng.
+
+> **Note:** "smaller supply-chain surface" describes dependency reduction.
+> The binary is NOT sandboxed — it runs as the user with standard OS permissions.
+
+```sh
+out=$(mktemp -d)
+bashy transpile --bashsharp hello_standalone.bsh --standalone -o "$out/main.go"
+cd "$out" && GOPROXY=direct GONOSUMDB='*' go mod tidy
+go build -o hello .               # pure Go, no interpreter dependency
+./hello                           # runs without bashy on PATH
+go version -m ./hello             # inspect SBOM: one shell-runtime dep
+```
+
+`check --prepare` is **not** needed here — the build requires Go and network
+access to resolve the shell-runtime module; `go mod tidy` handles both.
+
+### (c) Pre-prepared Python island — no runtime download
+
+`hello_island.bsh` embeds a Python function. Provision the toolchain once
+(on the target host, in a Dockerfile layer, or in CI before going air-gapped):
+
+```sh
+bashy check --prepare hello_island.bsh   # provisions python3; cache-first
+bashy --bashsharp hello_island.bsh       # runs offline after preparation
+```
+
+`check --prepare` is idempotent: a second call downloads nothing. The
+provisioned python3 is reused for every subsequent run on that host. No
+`pip install` is needed — the island uses only the Python standard library.
+
+### Proving all three FROM scratch
+
+`examples/quickstart/Containerfile` is one multi-stage file with three explicit
+targets that build and run three real `FROM scratch` images:
+
+| target | image contents | how it runs |
+|---|---|---|
+| `mode-a` | `bashy` (CGO_ENABLED=0) + its glibc loader closure + `hello.bsh` | interpreted, no toolchain |
+| `mode-b` | the `transpile --standalone` native binary, nothing else | no bashy at runtime |
+| `mode-c` | `bashy` + closure + the CPython tree prepared in a prior stage | no download at run |
+
+```sh
+make smoke-quickstart-container    # build + RUN all three scratch images
+```
+
+Each image is run with `--network=none --read-only`, so a run that reaches
+for a download fails — that is what makes (c)'s "prepared before the final
+stage" claim real. A run must exit 0 and print exactly `hello, world!`. The
+gate reports each image's compressed/uncompressed size and the standalone
+binary's `go version -m` SBOM line.
+
+**Why (a) and (c) carry four glibc files.** bashy's Linux build is not static
+even with `CGO_ENABLED=0`: coreutils' locale gate (`pkg/ctype`, `pkg/collate`)
+dlopens glibc through `ebitengine/purego` on linux/{amd64,arm64}, and purego's
+fakecgo emits `cgo_import_dynamic`, so the binary requests
+`/lib/ld-linux-*.so` plus libc/libdl/libpthread. A bare scratch image fails
+with "exec: missing dynamic library". `stage-closure.sh` copies exactly what
+`ldd` reports (~1.8 MB); (b) is the only truly static artifact. This is a
+property of the shipped lean binary (it will not run on musl/Alpine either),
+measured 2026-09-20, not of these images.
+
+**The authoritative proof is the Linux CI job**
+(`.github/workflows/quickstart-scratch.yml`), not a local run. On a developer
+box without a usable podman/docker engine the gate SKIPs (exit 0); a local pass
+is a convenience, not the release gate. The fast, container-free host check —
+
+```sh
+make smoke-quickstart              # (a)/(b)/(c) as host processes, not images
+```
+
+— is useful for iterating, but it does not prove a scratch image and does not
+speak for the gate.
+
 ## The other files
 
 Each is copied from a fixture in the conformance suite and runs the same way:

@@ -1,0 +1,23 @@
+#!/usr/bin/env -S bashy --bashsharp
+# (c) Pre-prepared Python island — run with NO runtime toolchain download.
+#
+# Before running on an air-gapped box or in a container image layer:
+#
+#   bashy check --prepare hello_island.bsh     # provisions python3 once
+#
+# After that, the script runs offline; check --prepare is cache-first so a
+# second call downloads nothing.  The worker build (the Python island compile)
+# still happens per-run but uses the already-present toolchain.
+#
+# The Python island does its work in pure Python with no pip install —
+# the only runtime dependency is the python3 binary that check --prepare
+# already placed in the toolchain cache.
+
+~~~py as py
+def greet(name: str) -> str:
+    return f"hello, {name}!"
+~~~
+
+name=${1:-world}
+msg := py.greet(name)
+echo "$msg"
