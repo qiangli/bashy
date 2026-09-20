@@ -209,6 +209,30 @@ default `CMAKE_OPTS`) puts the checkout's header first. The six checked-in
 C/C++ examples are the launch shape for a native repo: `bashy dag run` =
 configure → build → launch, one file, no wrapper script.
 
+## The `smoke` target under a contract (gh)
+
+[`gh/dag.md`](gh/dag.md)'s `smoke` is also the Sprint 216 (Story 541)
+acceptance fixture for agentic work in a dag body: the `~~~go` island call
+(`go.Gh()`, the checkout's own `internal/build`) sits inside ONE `agentic
+function` under `@require`/`@ensure`/`@guard`, and the body is the harness —
+it drives the function through every exit status the contract can produce
+and asserts each one, so the target's own exit is the verdict:
+
+| call | status | why |
+|---|---|---|
+| `gh_version ""` | 3 | `@require('test -n "$1"')` refused it; the body never ran |
+| `gh_version leak` | 126 | `@guard(effects: "read")` denied the `touch` before it ran |
+| `gh_version ask` | 6 | *input required* — no `GH_SMOKE_LABEL`; `@ensure` is not run |
+| `GH_SMOKE_LABEL=cli/cli gh_version ask` | 0 | the resume: the answer supplied explicitly; `@ensure` sees the result |
+
+Each call leaves one receipt in the existing skills/craft ledger
+(`docs/function-attestation.md`); `bashy craft history gh_version --all`
+reads them back as `FAIL`, `FAIL`, `yield`, `pass`. Offline, deterministic,
+no model call, no file left behind — `make smoke-dag-go` asserts the four
+lines, the four receipts and the read side. It works because a ` ```bashpp `
+body runs on the same agentic runner as `bashy --bashsharp` (see
+`docs/dag.md` §Bash++ bodies).
+
 ## Running them against a checkout
 
 The files are written to live at each repo's root (copy one there and run

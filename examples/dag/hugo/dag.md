@@ -14,7 +14,7 @@ overlay and the normal module/toolchain rules remain authoritative.
 
 ### test
 The repository's focused version-package tests.
-Effects: read, write, net
+Effects: read, write, net, exec
 
 ```bash
 go test -mod=readonly ./common/hugo
@@ -22,7 +22,7 @@ go test -mod=readonly ./common/hugo
 
 ### build
 Build Hugo at the repository's gitignored `dist/hugo` path.
-Effects: read, write, net
+Effects: read, write, net, exec
 Generates: dist/hugo
 Timeout: 30m
 

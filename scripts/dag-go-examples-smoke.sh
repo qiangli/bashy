@@ -65,6 +65,11 @@ status "$caddy" >"$tmp/caddy.before"
 export BASHY_HINTS=off
 export DAG_CACHE_DIR="$tmp/dag-cache"
 export GOFLAGS=-mod=readonly
+# Sprint 216 (Story 541): the gh smoke target's contracted agentic function
+# attests into the skills/craft ledger; a private store keeps the run
+# hermetic and lets the receipts be asserted below.
+export BASHY_SKILLS_DIR="$tmp/skills"
+unset BASHY_ATTEST
 
 check_envelope() { # <label> <json> <targets...>
 	label=$1 json=$2
@@ -101,6 +106,27 @@ run_graph() { # <label> <checkout> <example>
 }
 
 run_graph gh "$gh" "$root/examples/dag/gh/dag.md"
+# The contract path (Sprint 216, Story 541): the island call sits inside ONE
+# agentic function under @require/@ensure/@guard, and the body asserts every
+# exit status itself — 3 (require), 126 (guard denial), 6 (yield: input
+# required) and 0 (resumed with the answer supplied). Each line below is one
+# assertion the body passed; a missing line means the target lied about 0.
+for probe in "require -> 3" "guard -> 126" "yield -> 6" "resume -> 0"; do
+	task_stdout "$tmp/gh.json" smoke | grep -q "^smoke: gh_version $probe\$" || fail "gh smoke did not prove gh_version $probe"
+done
+# B18: the four calls left four receipts in the EXISTING ledger, in call
+# order, and the existing read side reports the yield as a handoff.
+[ -s "$BASHY_SKILLS_DIR/attest/gh_version.jsonl" ] || fail "gh smoke left no attestation ledger"
+python3 - "$BASHY_SKILLS_DIR/attest/gh_version.jsonl" <<'PY'
+import json, sys
+statuses = [json.loads(l)["status"] for l in open(sys.argv[1]) if l.strip()]
+if statuses != [3, 126, 6, 0]:
+    sys.exit(f"dag-go-examples-smoke: FAIL: gh_version receipts {statuses}, want [3, 126, 6, 0]")
+PY
+"$bashy" craft history gh_version --all >"$tmp/gh.history" 2>&1 || fail "craft history gh_version: $(cat "$tmp/gh.history")"
+grep -q '^gh_version  *4  *1  *2 ' "$tmp/gh.history" || fail "gh_version history summary is not RUNS=4 PASS=1 FAIL=2: $(cat "$tmp/gh.history")"
+grep -q ' yield  *gh_version' "$tmp/gh.history" || fail "the yield did not read back as a handoff: $(cat "$tmp/gh.history")"
+echo "gh: contract require=3 guard=126 yield=6 resume=0; ledger 4 receipts (1 pass, 2 fail, 1 yield)"
 run_graph hugo "$hugo" "$root/examples/dag/hugo/dag.md"
 run_graph caddy "$caddy" "$root/examples/dag/caddy/dag.md"
 
@@ -111,4 +137,4 @@ cmp -s "$tmp/gh.before" "$tmp/gh.after" || fail "gh checkout status changed"
 cmp -s "$tmp/hugo.before" "$tmp/hugo.after" || fail "Hugo checkout status changed"
 cmp -s "$tmp/caddy.before" "$tmp/caddy.after" || fail "Caddy checkout status changed"
 
-echo "dag-go-examples-smoke: OK — gh/Hugo/Caddy package fences, focused tests, builds, launches, and clean checkouts passed"
+echo "dag-go-examples-smoke: OK — gh/Hugo/Caddy package fences, focused tests, builds, launches, gh's contract + attestation, and clean checkouts passed"

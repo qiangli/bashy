@@ -372,7 +372,10 @@ smoke-dag-c:
 ## (Sprint 192). Pinned checkouts are cloned into <user cache>/bashy/examples
 ## unless GH_ROOT / HUGO_ROOT / CADDY_ROOT name existing ones. Each graph runs
 ## a focused test, imports the checkout from ~~~go, builds, launches, and leaves
-## git status unchanged. Not part of `test`.
+## git status unchanged. gh's smoke additionally proves the Sprint 216 (Story
+## 541) contract path: the island call under @require/@ensure/@guard in an
+## agentic function — exit 3/126/6, then 0 on resume — and its four receipts in
+## the skills/craft ledger. Not part of `test`.
 smoke-dag-go:
 	@scripts/dag-go-examples-smoke.sh
 

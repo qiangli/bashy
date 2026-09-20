@@ -168,6 +168,34 @@ live in
 `make smoke-dag-typescript`, `make smoke-dag-rust`, `make smoke-dag-c`, and
 the self-provisioning `make smoke-dag-go`.
 
+### A Bash++ body runs on the same agentic runner as `bashy --bashsharp`
+
+A ` ```bashpp ` body is executed by bashy's own interpreter registration
+(`internal/agentos/dag_bashpp.go`), which assembles the runner through the
+one `wireExec` seam every agentic runner in the binary uses — so the native
+decorators (`@trace` · `@guard` · `@retry` · `@require` · `@ensure`),
+registration-time policy advice, function attestation (the skills/craft
+ledger, `docs/function-attestation.md`) and the audit/advisor middleware
+apply inside a dag body exactly as in a script. The target's `Effects:` cap
+stays dag's **outermost** handler: an undeclared effect is refused with its
+diagnostic and exit 126 before any bashy middleware runs, and `@guard` inside
+a function narrows that same `advice.Cap` on the way down (so a guard denial
+in a dag body also reads 126, where the cold CLI's silent audit denial reads
+1). Classic (` ```bash ` / untagged) bodies keep yoke's own interpreter.
+
+Before Sprint 216 (Story 541) the dag runner was yoke's alone and had no
+decorator registry — `@guard` on an agentic function printed
+`BASHPP-EDECO-UNDEF`, the call failed with 1, and a body that never looked at
+the status let the target exit 0. `internal/agentos/dag_bashpp_test.go` pins
+the repair against the Sprint 203 contract fixture, and the gh example below
+is the end-to-end acceptance: its `smoke` wraps the `~~~go` island call in ONE
+agentic function under `@require`/`@ensure`/`@guard` and asserts every exit
+status the contract can produce — 3 (require), 126 (guard), 6 (yield: input
+required), then 0 once the answer is supplied explicitly in the environment
+(`GH_SMOKE_LABEL=…`, the harness's resume) — leaving four receipts that
+`bashy craft history gh_version --all` reads back (`FAIL`, `FAIL`, `yield`,
+`pass`). `make smoke-dag-go` asserts the lines, the ledger and the read side.
+
 ## Cross-machine dispatch — `--mesh`
 
 A target carrying a `Host:` line is dispatched to **another machine** under

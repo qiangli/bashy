@@ -14,7 +14,7 @@ not with a generated file in the checkout.
 
 ### test
 The repository's focused root-package tests.
-Effects: read, write, net
+Effects: read, write, net, exec
 
 ```bash
 go test -mod=readonly .
@@ -22,7 +22,7 @@ go test -mod=readonly .
 
 ### build
 Build the real command at Caddy's gitignored development output path.
-Effects: read, write, net
+Effects: read, write, net, exec
 Generates: cmd/caddy/caddy
 Timeout: 30m
 
