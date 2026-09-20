@@ -103,18 +103,29 @@ targets that build and run three real `FROM scratch` images:
 
 | target | image contents | how it runs |
 |---|---|---|
-| `mode-a` | static pure-Go `bashy` + `hello.bsh` | interpreted, no toolchain |
-| `mode-b` | the `transpile --standalone` native binary | no bashy at runtime |
-| `mode-c` | `bashy` + the CPython interpreter prepared in a prior stage | no download at run |
+| `mode-a` | `bashy` (CGO_ENABLED=0) + its glibc loader closure + `hello.bsh` | interpreted, no toolchain |
+| `mode-b` | the `transpile --standalone` native binary, nothing else | no bashy at runtime |
+| `mode-c` | `bashy` + closure + the CPython tree prepared in a prior stage | no download at run |
 
 ```sh
 make smoke-quickstart-container    # build + RUN all three scratch images
 ```
 
-Each image is run with `--network=none`, so a run that reaches for a download
-fails — that is what makes (c)'s "prepared before the final stage" claim real.
-The gate reports each image's compressed/uncompressed size and the standalone
+Each image is run with `--network=none --read-only`, so a run that reaches
+for a download fails — that is what makes (c)'s "prepared before the final
+stage" claim real. A run must exit 0 and print exactly `hello, world!`. The
+gate reports each image's compressed/uncompressed size and the standalone
 binary's `go version -m` SBOM line.
+
+**Why (a) and (c) carry four glibc files.** bashy's Linux build is not static
+even with `CGO_ENABLED=0`: coreutils' locale gate (`pkg/ctype`, `pkg/collate`)
+dlopens glibc through `ebitengine/purego` on linux/{amd64,arm64}, and purego's
+fakecgo emits `cgo_import_dynamic`, so the binary requests
+`/lib/ld-linux-*.so` plus libc/libdl/libpthread. A bare scratch image fails
+with "exec: missing dynamic library". `stage-closure.sh` copies exactly what
+`ldd` reports (~1.8 MB); (b) is the only truly static artifact. This is a
+property of the shipped lean binary (it will not run on musl/Alpine either),
+measured 2026-09-20, not of these images.
 
 **The authoritative proof is the Linux CI job**
 (`.github/workflows/quickstart-scratch.yml`), not a local run. On a developer
