@@ -196,7 +196,8 @@ func TestConfirmHighImpactAsksTheHuman(t *testing.T) {
 		if want := "marker\nrm 126\ndone " + work + " \nstatus 0\n"; out.String() != want {
 			t.Errorf("stdout = %q, want %q", out.String(), want)
 		}
-		if !strings.Contains(errOut.String(), "clean: declined ") || !strings.Contains(errOut.String(), ": rm -rf "+work+"/victim\n") {
+		declinedOp := renderArgv([]string{"rm", "-rf", work + "/victim"})
+		if !strings.Contains(errOut.String(), "clean: declined ") || !strings.Contains(errOut.String(), ": "+declinedOp+"\n") {
 			t.Errorf("stderr = %q", errOut.String())
 		}
 	})
