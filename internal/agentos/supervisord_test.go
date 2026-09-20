@@ -344,6 +344,9 @@ func realSupervisor(t *testing.T, script string, dagFile string) (*supervisor, *
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Windows refuses to remove a file that is still open: without this the
+	// TempDir cleanup fails the test after every assertion has passed.
+	t.Cleanup(func() { out.Close() })
 	t.Setenv("BASHY_SUPERVISORD_TEST_CHILD", script)
 	var log bytes.Buffer
 	s := &supervisor{
