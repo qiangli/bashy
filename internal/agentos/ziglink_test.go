@@ -42,6 +42,11 @@ func TestNormalizeWindowsGnuDefArgs(t *testing.T) {
 			want: []string{`C:/work/rustc123/list.def`, "symbols.o"},
 		},
 		{
+			name: "cmd boundary quotes entire argument",
+			in:   []string{`"-Wl,C:\work\rustc123\list.def"`, "symbols.o"},
+			want: []string{`C:/work/rustc123/list.def`, "symbols.o"},
+		},
+		{
 			name: "other def is preserved",
 			in:   []string{`-Wl,C:\work\public.def`, "symbols.o"},
 			want: []string{`-Wl,C:\work\public.def`, "symbols.o"},

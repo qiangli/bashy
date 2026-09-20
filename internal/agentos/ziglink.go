@@ -73,6 +73,7 @@ func dispatchZigLink(args []string) int {
 	cmd := exec.Command(zig, argv...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "bashy zig-link: raw argv=%q normalized argv=%q\n", args[1:], argv[1:])
 		for _, a := range argv[1:] {
 			if path, ok := rustcExportListPath(a); ok {
 				fmt.Fprintf(os.Stderr, "bashy zig-link: retained rustc export list as positional input %q\n", path)
@@ -96,13 +97,14 @@ func normalizeWindowsGnuDefArgs(args []string) []string {
 	out := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		a := args[i]
-		if strings.HasPrefix(a, "-Wl,") {
-			if path, ok := rustcExportListPath(a[len("-Wl,"):]); ok {
+		candidate := strings.Trim(strings.TrimSpace(a), `"`)
+		if strings.HasPrefix(candidate, "-Wl,") {
+			if path, ok := rustcExportListPath(candidate[len("-Wl,"):]); ok {
 				out = append(out, path)
 				continue
 			}
 		}
-		if a == "-Xlinker" && i+1 < len(args) {
+		if candidate == "-Xlinker" && i+1 < len(args) {
 			if path, ok := rustcExportListPath(args[i+1]); ok {
 				out = append(out, path)
 				i++
