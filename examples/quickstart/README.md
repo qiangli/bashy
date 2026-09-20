@@ -45,6 +45,68 @@ in this directory against its transcript on the `bashy` on your `PATH`
 (`SKILL.md`), and a gate that runs on every OS against the latest release —
 lives in its own repo: [bashsharp/tour](https://github.com/bashsharp/tour).
 
+## Three delivery modes (Sprint 216, Story 540)
+
+Beyond the interpreter, Bash# scripts can be delivered in three ways from scratch:
+
+### (a) bashy + .bsh — interpreted, no toolchain
+
+`hello.bsh` is the minimum executable example. It needs nothing beyond the
+installed `bashy` binary:
+
+```sh
+bashy --bashsharp hello.bsh        # explicit flag
+bashy hello.bsh                    # .bsh implies --bashsharp
+```
+
+### (b) `transpile --standalone` — native Go binary, no bashy at runtime
+
+`hello_standalone.bsh` transpiles to a native binary that runs without bashy,
+a container engine, or any external provider. **Smaller supply-chain surface**:
+the standalone binary imports only `mvdan.cc/sh/v3/lower/shellrt` (the plain
+runtime base) and the Go standard library — it does NOT include bashy, podman,
+ollama, gh, loom, act, rclone, zot, seaweedfs, or searxng.
+
+> **Note:** "smaller supply-chain surface" describes dependency reduction.
+> The binary is NOT sandboxed — it runs as the user with standard OS permissions.
+
+```sh
+out=$(mktemp -d)
+bashy transpile --bashsharp hello_standalone.bsh --standalone -o "$out/main.go"
+cd "$out" && GOPROXY=direct GONOSUMDB='*' go mod tidy
+go build -o hello .               # pure Go, no interpreter dependency
+./hello                           # runs without bashy on PATH
+go version -m ./hello             # inspect SBOM: one shell-runtime dep
+```
+
+`check --prepare` is **not** needed here — the build requires Go and network
+access to resolve the shell-runtime module; `go mod tidy` handles both.
+
+### (c) Pre-prepared Python island — no runtime download
+
+`hello_island.bsh` embeds a Python function. Provision the toolchain once
+(on the target host, in a Dockerfile layer, or in CI before going air-gapped):
+
+```sh
+bashy check --prepare hello_island.bsh   # provisions python3; cache-first
+bashy --bashsharp hello_island.bsh       # runs offline after preparation
+```
+
+`check --prepare` is idempotent: a second call downloads nothing. The
+provisioned python3 is reused for every subsequent run on that host. No
+`pip install` is needed — the island uses only the Python standard library.
+
+### Smoke gate
+
+```sh
+make smoke-quickstart              # all three modes, local
+SKIP_CONTAINER=1 make smoke-quickstart   # suppress optional container leg
+```
+
+The local smoke is deterministic and authoritative. The container leg records
+compressed/uncompressed binary sizes and a `go version -m` SBOM line when
+docker or podman is available, but its absence does not fail the gate.
+
 ## The other files
 
 Each is copied from a fixture in the conformance suite and runs the same way:

@@ -1,0 +1,31 @@
+#!/usr/bin/env -S bashy --bashsharp
+# (b) transpile --standalone: Bash# source compiled to a native Go binary with
+# NO bashy at runtime.
+#
+# Build recipe (one-time; bashy provisions Go if needed):
+#
+#   out=$(mktemp -d)
+#   bashy transpile --bashsharp hello_standalone.bsh --standalone -o "$out/main.go"
+#   cd "$out" && GOPROXY=direct GONOSUMDB='*' go mod tidy
+#   go build -o hello .                        # pure Go, no interp dependency
+#   ./hello                                    # runs without bashy on PATH
+#
+# The generated binary has no dynamic link to bashy; `go version -m ./hello`
+# shows the shell-runtime dependency and supply-chain surface.
+#
+# Smaller supply-chain surface: the standalone binary imports only
+# mvdan.cc/sh/v3/lower/shellrt (the plain runtime base) and the Go standard
+# library.  It does NOT embed bashy, a container engine, or any external
+# provider — making the attack surface smaller than running an interpreter
+# on every invocation.
+#
+# External providers this binary does NOT need at runtime:
+#   podman, ollama, gh, loom, act, rclone, zot, seaweedfs, kopia, searxng
+# (all ten Tier-2/3 providers; see docs/licensing-supply-chain-policy.md).
+
+func message() string {
+    return "hello, world!"
+}
+
+msg := message()
+echo "$msg"

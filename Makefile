@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go dist tidy clean help
+.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-quickstart dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -375,6 +375,15 @@ smoke-dag-c:
 ## git status unchanged. Not part of `test`.
 smoke-dag-go:
 	@scripts/dag-go-examples-smoke.sh
+
+## smoke-quickstart: Three-mode FROM-scratch example gate (Sprint 216, Story 540).
+## (a) bashy + .bsh interpreted, no toolchain; (b) transpile --standalone: Bash#
+## → Go binary, no bashy at runtime; (c) pre-prepared Python island via check
+## --prepare. Local smoke is deterministic. Container leg runs only when docker or
+## podman is available — SKIP_CONTAINER=1 suppresses it. Honest on hosts without
+## a container engine. Not part of `test`.
+smoke-quickstart:
+	@scripts/quickstart-smoke.sh
 
 ## test-bash: Run bash 5.3 native test suite against bashy (with per-test timeout).
 ## Builds only the lean bin/bash drop-in (not the 259MB embed-heavy bin/bashy).
