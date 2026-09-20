@@ -66,7 +66,6 @@ launcher exists to provide is simply gone. Keep this in step with the Makefile's
 
 Sources: cmd/, internal/, go.mod, go.sum, native/siglaunch.c.in
 Generates: bin/bash, bin/bashy (+ bin/bash.real, bin/bashy.real on linux/darwin)
-Effects: write
 
 ```bash
 set -e
@@ -120,7 +119,6 @@ podman`/`ollama`, `-tags bashy_engines`, cgo + btrfs/MLX) and the observability
 stack (`bashy otel`, `-tags bashy_obs`, ~193 MB). Not cross-platform — use only
 on a host node; the default `build` is the lean cross-platform worker.
 Generates: bin/bashy
-Effects: write
 
 ```bash
 set -e
@@ -150,7 +148,6 @@ Install the built pair into the shared dhnt user bin (`$DHNT_BIN_DIR`, default
 `~/.local/bin`). The installer refuses a binary without the required AgentOS
 command surface, preventing a lean/stale binary from replacing bashy.
 Requires: build
-Effects: write
 
 ```bash
 BASHY_EXE="${BASHY:-bashy}"
@@ -166,7 +163,6 @@ Run the hermetic Meet SPA freshness regression and the required non-mutating
 current-artifact gate, then all Go tests. The freshness check builds ignored SPA
 output while verifying the tracked artifact, so this target writes ignored build
 outputs.
-Effects: write
 
 ```bash
 scripts/test-meet-spa-fresh.sh || exit 1
@@ -207,7 +203,6 @@ reboot, or Hyper-V is selected but not enabled), the target reports a SKIP with
 the reason instead of failing unrelated DAG runs. Set
 `CONTAINERS_MACHINE_PROVIDER=hyperv` to exercise Hyper-V on Windows instead of
 the default WSL provider.
-Effects: write
 
 ```bash
 set -e
@@ -247,7 +242,6 @@ Cross-compile static binaries for all release platforms into bin/dist/ (both
 bash and bashy; a local cross-compile sanity check — goreleaser does real
 releases).
 Generates: bin/dist
-Effects: write
 
 ```bash
 set -e
@@ -288,7 +282,6 @@ tag or commit. The target clones it into the gitignored
 `external/bash-5.3` directory on first use and pulls with `--ff-only` when it is
 already a git checkout. Existing non-git fixture trees are accepted for local
 development, but missing fixtures fail loudly.
-Effects: write, net
 
 ```bash
 set -e
@@ -349,7 +342,6 @@ distributed shard. Use this lane when host OS behavior is part of the coverage;
 use `test-bash-container` / `test-bash-chunks-container` for heterogeneous fleet
 throughput.
 Requires: build, test-bash-data
-Effects: write
 
 ```bash
 set -e
@@ -373,7 +365,6 @@ Effects: write
 Run the native Bash 5.3 harness against an already prepared checkout. This is
 the chunk worker leaf used by `test-bash-chunks`; it deliberately has no build
 dependency so fanout does not rebuild the same checkout concurrently.
-Effects: write
 
 ```bash
 set -e
@@ -387,7 +378,6 @@ ext=""
 ### test-bash-list
 List the GNU Bash 5.3 fixtures known to the bashy-native harness.
 Requires: test-bash-data
-Effects: read
 
 ```bash
 BASHY_EXE="${BASHY:-bashy}"
@@ -399,7 +389,6 @@ Run one GNU Bash 5.3 distributed chunk. Set `CHUNK=I/N`, for example
 `CHUNK=2/8 bashy dag test-bash-chunk`. `N` must match the pinned
 `chunk_count` in `chunks.json`; fleet capacity never changes fixture membership.
 Requires: build, test-bash-data
-Effects: write
 
 ```bash
 set -e
@@ -431,7 +420,6 @@ must already have the source checkout, bashy binary, and any target-specific
 substrate ready. Set `PREP_TARGET=<dag-target>` to run a setup target once per
 participating host before chunk workers start; use this for builds, container
 engine checks, and test-data hydration that must not race per chunk.
-Effects: write
 
 ```bash
 set -e
@@ -643,7 +631,6 @@ is reached. Each round replans from the duration profile left by the previous
 round, records wall time, and saves the best assignment to `PLAN_FILE` for
 normal future runs. Set `SETTLE_ROUNDS=N` to stop after N rounds without a new
 best wall time.
-Effects: write
 
 ```bash
 set -e
@@ -718,7 +705,6 @@ single-process gate keeps its default 60s timeout. Set `HOSTS="local puppy"`
 only when the remote host can run the target noninteractively and the host OS
 variance is intentional.
 Requires: build, test-bash-data
-Effects: write
 
 ```bash
 set -e
@@ -741,7 +727,6 @@ each remote checkout exposes a usable bashy binary. Override remote paths with
 `NOVICORTEX_DIR=...`, `PUPPY_DIR=...`, or `LJ2IVY_DIR=...`; override the full
 fleet with `HOSTS=...`.
 Requires: test-bash-fleet-prepare
-Effects: read, net
 
 ```bash
 set -e
@@ -776,7 +761,6 @@ not silently test stale checkouts. Override remote paths with
 `NOVICORTEX_DIR=...`, `PUPPY_DIR=...`, or `LJ2IVY_DIR=...`; override the full
 fleet with `HOSTS=...`.
 Requires: build
-Effects: write, net
 
 ```bash
 set -e
@@ -1007,7 +991,6 @@ substrate. Override any path with `NOVICORTEX_DIR=...`, `PUPPY_DIR=...`, or
 `TARGET=test-bash` with `dag-fanout` directly when native baremetal behavior is
 the coverage goal.
 Requires: build, test-bash-data, test-bash-fleet-check
-Effects: write, net
 
 ```bash
 set -e
@@ -1027,7 +1010,6 @@ assignment is saved to `bin/bash53-chunks.plan.tsv` for manual review before
 updating committed `chunks.json`. Set `MAX_ROUNDS=5`, `SETTLE_ROUNDS=2`, and
 optionally `HOSTS=...`.
 Requires: build, test-bash-data
-Effects: write
 
 ```bash
 set -e
@@ -1064,7 +1046,6 @@ Prepare the GNU Bash 5.3 container-normalized lane once per host. This builds
 the host-architecture Linux testee and harness and validates the current
 bashy's container surface before fanout starts.
 Requires: test-bash-data
-Effects: write
 
 ```bash
 set -e
@@ -1094,7 +1075,6 @@ $oci build -t "$image" -f tools/bash53-container/Containerfile tools/bash53-cont
 ### test-bash-container-run
 Run the GNU Bash 5.3 container harness against an already prepared checkout.
 This is the chunk worker leaf used by `test-bash-chunks-container`.
-Effects: write
 
 ```bash
 set -e
@@ -1146,7 +1126,6 @@ container substrate, while the native `test-bash-chunks` target remains
 available for explicit baremetal OS coverage. Chunk membership and chunk count
 come from committed `chunks.json`.
 Requires: test-bash-data
-Effects: write
 
 ```bash
 set -e
@@ -1170,7 +1149,6 @@ Tune GNU Bash 5.3 container-normalized chunk assignments. This should be used
 for fleet throughput tuning; use `test-bash-chunks-tune` only for native
 baremetal timing.
 Requires: test-bash-data
-Effects: write
 
 ```bash
 set -e
@@ -1225,7 +1203,6 @@ scripts/yash-posix-suite.sh "${YASH_OUT:-}"
 Run the yash POSIX INFO suite through generic DAG fanout. Completion is the
 success criterion: yash failures are measured and reported by the suite, but
 they are not a 0/1 gate for this repo.
-Effects: write
 
 ```bash
 set -e
@@ -1242,7 +1219,6 @@ PLAN_FILE="${PLAN_FILE:-bin/yash-chunks.plan.tsv}" \
 
 ### yash-chunks-tune
 Tune yash POSIX INFO suite chunk assignments with bounded repeated fanout runs.
-Effects: write
 
 ```bash
 set -e
@@ -1259,7 +1235,6 @@ PLAN_FILE="${PLAN_FILE:-bin/yash-chunks.plan.tsv}" \
 
 ### tidy
 go mod tidy + gofmt -s -w . + go vet ./...
-Effects: write
 
 ```bash
 set -e
@@ -1283,7 +1258,6 @@ never includes coreutils; ~5.7 MB). All the conformance harness needs. Uses
 `"$BASHY" go build` so the toolchain path is bashy-owned.
 Sources: cmd/bash, internal/cli, go.mod, go.sum
 Generates: bin/bash
-Effects: write
 
 ```bash
 set -e
@@ -1302,7 +1276,6 @@ Build ONLY `bin/bashy` — the AgentOS shell from cmd/bashy. Set BASHY_TAGS to a
 embed tags (embed_podman/…). Lean worker by default.
 Sources: cmd/bashy, internal, go.mod, go.sum
 Generates: bin/bashy
-Effects: write
 
 ```bash
 set -e
@@ -1324,7 +1297,6 @@ Build both binaries against the Go FIPS 140-3 Cryptographic Module
 runtime (keeps md5sum working), not fips140=only.
 Sources: cmd, internal, go.mod, go.sum
 Generates: bin/bash, bin/bashy
-Effects: write
 
 ```bash
 set -e
@@ -1450,7 +1422,6 @@ k3s lane for comparison. Set `IMAGE` to a registry-addressable digest/tag for
 vk-podman (or a side-loaded image for agent), plus the suite-specific
 `SUITE_CMD`. Chunk membership comes from the committed manifest, never current
 fleet size.
-Effects: net, write
 
 ```bash
 set -e
@@ -1481,7 +1452,6 @@ Linux agent/container runtime. `TASK=smoke|build|unit|bash53|yash`; source tasks
 require immutable `SOURCE_REF`, and `bash53` requires `BASH53_TESTDATA_REPO`.
 The `yash` task likewise requires immutable `YASH_TESTDATA_REPO` and
 `YASH_TESTDATA_REF` inputs.
-Effects: net, write
 
 ```bash
 set -e
@@ -1525,7 +1495,6 @@ drop-in: it reports its version via the GNU `--version` flag (which also carries
 the bashy tag, e.g. `5.3.0(1)-bashy-0.18.0`) and runs scripts via `-c`; there is no
 standalone `version`/`shell` subcommand, so the smokes exercise those real front
 doors instead. Set `BASHY_TEST_VERSION` (e.g. `v0.18.0`).
-Effects: write, net
 
 ```bash
 set -e
