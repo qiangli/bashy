@@ -86,6 +86,15 @@ jobs:
           # a unix vet); running them is the Windows leg's job above.
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go vet ./tools/bash53suite
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go test -c -o /dev/null ./tools/bash53suite
+      # Cloudbox consumes a separate, explicit lean profile. The verifier
+      # rebuilds its stable artifact, audits ELF headers and the tagged Go
+      # dependency graph, then uses the runner's Docker daemon for a literal
+      # FROM scratch command smoke. Normal release builds remain unchanged.
+      - name: Static linux/amd64 Bashy scratch profile
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 10
+        run: make verify-bashy-scratch
       - name: DKS release evidence script tests
         if: runner.os != 'Windows'
         shell: bash
