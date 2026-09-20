@@ -160,6 +160,20 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapSpawnsProcesses}, Effects: []string{atlas.EffExec},
 	},
+	// supervisord keeps ONE dag root running in the foreground — the process
+	// half of DEPLOY that nothing else owns (sdlc routes, release packages,
+	// schedule fires; none of them stays up). Tier is workspace: it runs the
+	// project's own DAG.md and reaches nothing outside the tree. Effects are
+	// what it does itself: exec the root. It is a daemon-shaped command that
+	// never daemonizes. Partial on Windows: no process groups or signals, so
+	// the graceful phase is a CTRL_BREAK and the kill reaches the child only;
+	// orphan reaping is a Linux contract.
+	"supervisord": {
+		Stage: atlas.StageDeploy, Group: atlas.GroupOrch, Tier: atlas.TierWorkspace,
+		Caps:    []string{atlas.CapSpawnsProcesses, atlas.CapDaemon},
+		Effects: []string{atlas.EffExec},
+		OS:      atlas.OSes(), Partial: []string{atlas.OSWindows},
+	},
 	// dhnt reads pipeline/run/binding JSON and writes JSON or Workflow YAML to
 	// stdout. No network, no mutation — the local-first contract/compiler, not
 	// a transport.

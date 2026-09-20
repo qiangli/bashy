@@ -15,6 +15,11 @@ import (
 // Tests that need a populated ring, or want to assert on receipts, point
 // BASHY_COMMANDS_DIR / BASHY_SKILLS_DIR at their own temp dir.
 func TestMain(m *testing.M) {
+	// The supervisord integration tests re-exec this binary as a scripted
+	// stand-in for the dag root (supervisord_test.go).
+	if os.Getenv("BASHY_SUPERVISORD_TEST_CHILD") != "" {
+		os.Exit(supervisordTestChild())
+	}
 	dir, err := os.MkdirTemp("", "bashy-agentos-commands-")
 	if err != nil {
 		panic(err)
