@@ -57,7 +57,7 @@ func dispatchZigLink(args []string) int {
 	zig := args[0]
 	argv := []string{"cc"}
 	unwind := false
-	for _, a := range args[1:] {
+	for _, a := range normalizeWindowsGnuDefArgs(args[1:]) {
 		a = strings.TrimSpace(a)
 		if windowsGnuLinkDrop[a] {
 			// The panic unwinder's _Unwind_* symbols come from libgcc_eh on
@@ -80,4 +80,32 @@ func dispatchZigLink(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// normalizeWindowsGnuDefArgs removes rustc's temporary export-list argument.
+// Zig's MinGW linker rejects that GNU-driver spelling; like cargo-zigbuild, it
+// derives the DLL exports without the list. Everything else is kept byte-for-
+// byte so this adapter cannot silently reinterpret unrelated linker flags.
+func normalizeWindowsGnuDefArgs(args []string) []string {
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if strings.HasPrefix(a, "-Wl,") && isRustcExportList(a[len("-Wl,"):]) {
+			continue
+		}
+		if a == "-Xlinker" && i+1 < len(args) && isRustcExportList(args[i+1]) {
+			i++
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+func isRustcExportList(arg string) bool {
+	arg = strings.TrimSpace(arg)
+	if i := strings.LastIndexAny(arg, `/\\`); i >= 0 {
+		arg = arg[i+1:]
+	}
+	return strings.EqualFold(arg, "list.def")
 }
