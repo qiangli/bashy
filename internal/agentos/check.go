@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 
+	"mvdan.cc/sh/v3/lower"
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/qiangli/coreutils/tool"
@@ -302,19 +303,16 @@ func (a *checkAnalyzer) analyzePath(path, role, from string, depth int) {
 		a.addDiag(checkDiagnostic{Code: "BASHY0600", Level: "warning", File: resolved, Message: err.Error()})
 		return
 	}
-	if a.opts.bashpp {
-		if handled, diagnostics := checkBashPPNullSafety(resolved, data); handled {
-			for _, diagnostic := range diagnostics {
-				a.addDiag(diagnostic)
-			}
-			return
-		}
-	}
 	parser := syntax.NewParser(a.parserOptions()...)
 	file, err := parser.Parse(strings.NewReader(string(data)), resolved)
 	if err != nil {
 		a.addDiag(checkDiagnostic{Code: "BASHY0001", Level: "error", File: resolved, Message: err.Error()})
 		return
+	}
+	if a.opts.bashpp {
+		for _, diagnostic := range checkBashSharpDiagnostics(resolved, lower.CheckBashSharp(file)) {
+			a.addDiag(diagnostic)
+		}
 	}
 	a.collectFunctions(file)
 	a.walkFile(resolved, file, depth)

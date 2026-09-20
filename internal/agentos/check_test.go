@@ -56,6 +56,16 @@ func first(xs []string) string {
 			rc:     2, stderr: "BASHPP-ENULL-DEREF: p may be nil when dereferenced\n",
 		},
 		{
+			name: "mixed-real-file",
+			source: `#!/usr/bin/env -S bashy --bashsharp
+# A real script has shell statements around its typed declarations.
+echo before
+func deref(p *int) int { return *p }
+echo after
+`,
+			rc: 2, stderr: "BASHPP-ENULL-DEREF: p may be nil when dereferenced\n",
+		},
+		{
 			name:   "unsafe-index",
 			source: "func first(xs []string) string {\n    return xs[0]\n}\n",
 			rc:     2, stderr: "BASHPP-ENULL-INDEX: xs may be nil when indexed\n",
