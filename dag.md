@@ -192,7 +192,6 @@ example.
 
 The body delegates to `scripts/fmtcheck.sh`, which is also what the CI ubuntu
 leg runs. One script, two callers. Tracked `.go` files only.
-Effects: read
 
 ```bash
 scripts/fmtcheck.sh
