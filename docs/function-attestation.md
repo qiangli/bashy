@@ -98,10 +98,9 @@ seam was made in yoke — one commit, three files, all additive:
   `Failed`).
 - `pkg/craft/cmd.go`: `history` row carries `yielded`, `--all` renders `yield`.
 
-Pinned in `.sibling-pins` as **`yoke=efcd8817d4cde14b74258798b14cff530f84c84c`**
-(branch `agent/bashy-issue-41-attest-seam`, parent `c1ccbc9`, trailers
-`Sprint: #216 / Story: #545 / Story-ID: ed4495580ec2`). CI clones the pin from
-GitHub, so that commit must be pushed to yoke's origin before this lands —
-the worker does not push. bashy's `go.mod` also now lists
+Delivered on Yoke main by merge **`4e655fc75962dc2b6636b2b6d327ddec91c3aa0b`**
+(the additive seam is commits `5e1065a` and `dbdac88`) and pinned in
+`.sibling-pins`. CI therefore clones a public mainline commit rather than the
+worker's private candidate branch. bashy's `go.mod` also now lists
 `github.com/dhnt/dhnt` as a direct requirement (`attest.go` builds a
 `dhntskills.Attestation`); the version is unchanged.
