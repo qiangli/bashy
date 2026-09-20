@@ -109,13 +109,37 @@ home on Windows, so the native home prefix is never rewritten to `$HOME` there
 (on Unix `$HOME/bin` round-trips and nothing changes). Table test plus a replay
 of the recorded PATH line through the same canonicalizer.
 
-**What this does not settle.** The tour's `commands/register` case also failed
-on GitHub's Windows leg, where the checkout is on `D:\a\…` — *not* under the
-profile directory — with `bashy: command not found` from inside a script. That
-cannot be the display seam, and nothing in the interpreter's PATH lookup
-(`interp.lookPathDirMode`, case-insensitive env, `PATHEXT`) explains it from
-source reading on macOS. It needs a Windows run with the lookup instrumented.
-Keep the tour's `windows=todo:1ec1081071d7` marker until that run passes.
+### `commands/register` PATH lookup on Windows (Sprint 216, story 543)
+
+The tour's `commands/register` case also failed on GitHub's Windows leg, where
+the checkout is on `D:\a\…` — *not* under the profile directory — with
+`command not found` from inside a script. It is not the display seam, and the
+interpreter's own lookup (`interp.LookPathDir` → `lookPathDirMode` → `checkStat`
+→ `pathconv.JoinAbs`) converts every drive spelling correctly, which is why
+source reading on macOS could not explain it.
+
+The failing lookup was **bashy's own** `resolveCmd` (`internal/agentos/dryrun.go`),
+which the commands/dry-run/verify surface uses and which re-implemented the PATH
+scan. On Windows it got three details wrong at once:
+
+- it tested the POSIX `0o111` execute bit, which `os.Stat` never reports for a
+  Windows regular file, so **every** PATH hit looked non-executable;
+- it never appended `PATHEXT`, so `bashy` could not match `bashy.exe`;
+- it fed `os.Stat` an MSYS-form element (`/d/a/…`), which Windows reads as a
+  path on the *current* drive, not drive D.
+
+Fixed by delegating `resolveCmd`'s PATH branch to `interp.LookPathDir` — the
+same lookup the shell uses, which carries the pathconv conversion, `PATHEXT`,
+and the no-exec-bit Windows rule. Unix behaviour is unchanged.
+
+The `windows=todo:1ec1081071d7` marker is replaced by an instrumented,
+focused Windows gate — `TestResolveCmdWindowsPathSpellings`
+(`internal/agentos/register_pathlookup_windows_test.go`, Windows-only, run on
+every push by `test.yml`). It proves both `interp.LookPathDir` and `resolveCmd`
+resolve a program across native-backslash, native-forward-slash, and MSYS
+(`/c/…`) PATH spellings, logging each result so a residual failure localizes to
+a spelling instead of leaving a bare todo. The conversion is drive-agnostic, so
+the runner's C: temp dir exercises the exact code path the D:\ checkout hit.
 
 ## How to get the first number
 

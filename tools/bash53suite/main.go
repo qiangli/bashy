@@ -1115,7 +1115,18 @@ func proveBashPPMode(root, testsDir, bashPath, mode string) error {
 
 func isExecutableFile(path string) bool {
 	info, err := os.Stat(path)
-	return err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	// Windows has no POSIX execute bit — os.Stat reports 0666 for every
+	// writable regular file, so the Unix 0o111 test would reject a real
+	// payload. Existence of a regular sibling is the signal there. In a
+	// production Windows build there is no launcher and no `.real`, so the
+	// Stat above already fails and this branch is never reached.
+	if runtime.GOOS == "windows" {
+		return true
+	}
+	return info.Mode().Perm()&0o111 != 0
 }
 
 func normalizeOutput(name string, raw []byte) []byte {

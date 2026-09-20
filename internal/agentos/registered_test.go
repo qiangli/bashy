@@ -202,7 +202,7 @@ func TestAgenticClassifiesRegisteredAsNative(t *testing.T) {
 func TestRegisteredKnownToDryRunAndFrontDoor(t *testing.T) {
 	ringDir(t)
 	writeRecord(t, fleet.Command{Name: "regy", Script: "true", Effects: []string{"pure"}})
-	if got, ok := resolveCmd("regy", nil); !ok || got != "registered:regy" {
+	if got, ok := resolveCmd("", "regy", nil); !ok || got != "registered:regy" {
 		t.Errorf("resolveCmd = %q %v", got, ok)
 	}
 	if !isFrontDoorInvocation("regy") {

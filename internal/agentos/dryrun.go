@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -120,7 +121,7 @@ func (r *dryRunReporter) jsonLine(v any) {
 func (r *dryRunReporter) command(ctx context.Context, args []string) {
 	hc := interp.HandlerCtx(ctx)
 	name := args[0]
-	resolved, ok := resolveCmd(name, hc.Env)
+	resolved, ok := resolveCmd(hc.Dir, name, hc.Env)
 	imp := analyzeDestroy(name, args, hc.Dir)
 
 	if r.agent {
@@ -258,12 +259,27 @@ func analyzeDestroy(name string, args []string, dir string) *destroyEntry {
 }
 
 // resolveCmd reports how name resolves on this system: an in-process coreutils
-// tool, or a binary on the runner's PATH. ("", false) means it would not be
-// found — a missing dependency.
-func resolveCmd(name string, env expand.Environ) (string, bool) {
-	if strings.ContainsRune(name, '/') {
-		if fi, err := os.Stat(name); err == nil && !fi.IsDir() {
-			return name, true
+// tool, or a binary on the runner's PATH, resolved against cwd. ("", false)
+// means it would not be found — a missing dependency.
+//
+// PATH resolution delegates to interp.LookPathDir — the same lookup the shell
+// itself uses — rather than re-implementing it. That matters on Windows, where
+// a hand-rolled scan got three things wrong at once: it never appended PATHEXT
+// (so `bashy` could not match `bashy.exe`), it tested the POSIX 0o111 execute
+// bit that os.Stat never reports for a Windows regular file (so every PATH hit
+// looked non-executable), and it fed os.Stat an MSYS-form element (/d/a/…) that
+// Windows reads as a path on the current drive, not drive D — the shape behind
+// the tour's `commands/register` "command not found" on a D:\ checkout
+// (todo 1ec1081071d7). LookPathDir carries the pathconv conversion, PATHEXT,
+// and the no-exec-bit Windows rule; on Unix the behaviour is unchanged.
+func resolveCmd(cwd, name string, env expand.Environ) (string, bool) {
+	// A name that already carries a path separator is a direct file reference,
+	// never a coreutils applet or registered word. On Windows that includes a
+	// drive letter or backslash.
+	if strings.ContainsRune(name, '/') ||
+		(runtime.GOOS == "windows" && strings.ContainsAny(name, `:\`)) {
+		if p, err := interp.LookPathDir(cwd, env, name); err == nil {
+			return p, true
 		}
 		return "", false
 	}
@@ -273,19 +289,9 @@ func resolveCmd(name string, env expand.Environ) (string, bool) {
 	if _, ok := registeredLookup(name); ok {
 		return "registered:" + name, true
 	}
-	path := ""
 	if env != nil {
-		if v := env.Get("PATH"); v.IsSet() {
-			path = v.String()
-		}
-	}
-	for _, d := range filepath.SplitList(path) {
-		if d == "" {
-			continue
-		}
-		cand := filepath.Join(d, name)
-		if fi, err := os.Stat(cand); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
-			return cand, true
+		if p, err := interp.LookPathDir(cwd, env, name); err == nil {
+			return p, true
 		}
 	}
 	return "", false

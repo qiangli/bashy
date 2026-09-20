@@ -217,13 +217,37 @@ func TestFixtureEnvPinsLauncherPayloadPair(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := "BASHY_SIGNAL_PAYLOAD=" + launcher + ".real"
+	// Compare by file identity, not string equality: on Windows the value
+	// that reaches the environment can be an 8.3 short form
+	// (C:\Users\RUNNER~1\...) of the same file the test built under a long
+	// temp path, so a byte compare spuriously fails. os.SameFile resolves both
+	// to the same file; on Unix the identity check reduces to the exact string.
+	want := launcher + ".real"
+	const key = "BASHY_SIGNAL_PAYLOAD="
 	for _, entry := range fixtureEnv(dir, dir, launcher, "alpha") {
-		if entry == want {
+		if v, ok := strings.CutPrefix(entry, key); ok && samePathIdentity(v, want) {
 			return
 		}
 	}
-	t.Fatalf("fixture environment does not contain %q", want)
+	t.Fatalf("fixture environment does not pin launcher payload %q", want)
+}
+
+// samePathIdentity reports whether two paths name the same file. It tolerates
+// the Windows short/long (8.3) spellings of one path without weakening the
+// Unix comparison, which stays exact for identical strings.
+func samePathIdentity(a, b string) bool {
+	if a == b {
+		return true
+	}
+	fa, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	fb, err := os.Stat(b)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(fa, fb)
 }
 
 func TestBashPPGatePassesExplicitSelectorToTopLevelTestee(t *testing.T) {
@@ -658,18 +682,22 @@ func TestFixtureStdinIsIdleNotEndOfFile(t *testing.T) {
 // exist there. Both modes are exercised on every host.
 func TestFixturePathPerHost(t *testing.T) {
 	dir := t.TempDir()
-	unix := strings.Split(fixturePathMode(dir, "/opt/x/bin:/usr/bin", "", false), ":")
-	if want := []string{dir, "/usr/bin", "/bin", "/usr/local/bin"}; !sameStringsInOrder(unix, want) {
-		t.Fatalf("unix fixture PATH = %q, want %q", unix, want)
+	// Compare the whole PATH string, not a split-then-list compare: on Windows
+	// the tree dir is itself a drive path (C:\...) that contains the ':'
+	// separator, so splitting the simulated-Unix result on ':' here would
+	// depend on the host running the test and shred the first element.
+	if got, want := fixturePathMode(dir, "/opt/x/bin:/usr/bin", "", false),
+		strings.Join([]string{dir, "/usr/bin", "/bin", "/usr/local/bin"}, ":"); got != want {
+		t.Fatalf("unix fixture PATH = %q, want %q", got, want)
 	}
 	inherited := `C:\Program Files\Git\usr\bin;C:\Windows\System32`
-	win := strings.Split(fixturePathMode(dir, inherited, "", true), ";")
-	if want := []string{dir, `C:\Program Files\Git\usr\bin`, `C:\Windows\System32`}; !sameStringsInOrder(win, want) {
-		t.Fatalf("windows fixture PATH without BASH53_TOOLS_PATH = %q, want %q", win, want)
+	if got, want := fixturePathMode(dir, inherited, "", true),
+		strings.Join([]string{dir, `C:\Program Files\Git\usr\bin`, `C:\Windows\System32`}, ";"); got != want {
+		t.Fatalf("windows fixture PATH without BASH53_TOOLS_PATH = %q, want %q", got, want)
 	}
-	win = strings.Split(fixturePathMode(dir, inherited, `D:\tools\usr\bin; E:\more ;`, true), ";")
-	if want := []string{dir, `D:\tools\usr\bin`, `E:\more`}; !sameStringsInOrder(win, want) {
-		t.Fatalf("windows fixture PATH with BASH53_TOOLS_PATH = %q, want %q", win, want)
+	if got, want := fixturePathMode(dir, inherited, `D:\tools\usr\bin; E:\more ;`, true),
+		strings.Join([]string{dir, `D:\tools\usr\bin`, `E:\more`}, ";"); got != want {
+		t.Fatalf("windows fixture PATH with BASH53_TOOLS_PATH = %q, want %q", got, want)
 	}
 	if got := fixturePathMode(dir, "", "", true); got != dir {
 		t.Fatalf("windows fixture PATH with nothing to inherit = %q, want just the tree", got)

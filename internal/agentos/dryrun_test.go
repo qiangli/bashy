@@ -97,11 +97,11 @@ func TestShQuote(t *testing.T) {
 func TestResolveCmd(t *testing.T) {
 	env := expand.ListEnviron("PATH=/nonexistent-dir")
 	// A coreutils builtin resolves in-process (cmds/all is blank-imported).
-	if got, ok := resolveCmd("cat", env); !ok || got != "coreutils:cat" {
+	if got, ok := resolveCmd("", "cat", env); !ok || got != "coreutils:cat" {
 		t.Errorf("resolveCmd(cat) = %q,%v", got, ok)
 	}
 	// A command found nowhere is reported missing.
-	if _, ok := resolveCmd("totally-missing-tool-xyz", env); ok {
+	if _, ok := resolveCmd("", "totally-missing-tool-xyz", env); ok {
 		t.Error("missing tool reported available")
 	}
 }
