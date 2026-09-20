@@ -423,11 +423,13 @@ PATH=/bin:/usr/bin:$(dirname $(which go)) go test ./...
 
 ## Workflow
 
-**`bashy sprint` is the source of requests, plans and details** — read the
-sprint card (spec-ref, acceptance, continuity) for what to do; delivery commits
-carry `Sprint:` / `Story:` / `Story-ID:` trailers. `docs/TODO.md` is the
-conformance SCOREBOARD, not the work queue. After a change: `go test ./...` and
-`make test-bash`, then commit.
+Read `docs/TODO.md` to know what is open — it is the scoreboard and the todo
+list. But **every todo is tracked and accounted for as a STORY in a
+`bashy sprint`**: never pick a todo and work on it without a story (find it
+on the board or file one first), and read the sprint card (spec-ref,
+acceptance, continuity) for the request, plan and details. Delivery commits
+carry `Sprint:` / `Story:` / `Story-ID:` trailers. After a change:
+`go test ./...` and `make test-bash`, then commit.
 
 The goal is **PASS-count flips**: `make test-bash-list` prints per-fixture
 PASS/FAIL/TIME/SKIP, and the headline three-tuple at the top of `docs/TODO.md`
