@@ -1886,9 +1886,15 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	// Stage 0 owns the model-visible terminal streams for every bashy run. It
 	// canonicalizes HOME before any Stage 1 redaction/spill work, while leaving
 	// Stage 1's reduction policy explicit opt-in inside the reducer.
+	// A terminal sink is not model-visible and is passed through unwrapped so a
+	// foreground child inherits the tty (terminalSink); see story 05c51640.
 	output, err = newShellOutputReducer(configuredStdout, stderr, env)
 	if err == nil {
-		configuredStdout, stderr = output.stdout(), output.stderr()
+		var captured bool
+		configuredStdout, stderr, captured = output.wrapSinks(configuredStdout, stderr)
+		if !captured {
+			output = nil
+		}
 	}
 	// Exactly one StdIO option owns the final composed sinks. This is above the
 	// POSIX return so `bashy --posix` remains reducible when explicitly enabled.

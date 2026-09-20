@@ -21,6 +21,7 @@ import (
 	"github.com/qiangli/yoke/pkg/atlas"
 	"github.com/qiangli/yoke/pkg/reduce"
 	"github.com/qiangli/yoke/pkg/secrets"
+	"golang.org/x/term"
 	"mvdan.cc/sh/v3/interp"
 )
 
@@ -202,6 +203,38 @@ func newShellOutputReducer(out, errOut io.Writer, env []string) (*shellOutputRed
 
 func (r *shellOutputReducer) stdout() io.Writer { return shellCaptureWriter{r: r} }
 func (r *shellOutputReducer) stderr() io.Writer { return shellCaptureWriter{r: r, err: true} }
+
+// terminalSink reports whether w is the process's own terminal — an *os.File
+// on a tty (a pty on unix, the console handle on Windows).
+//
+// Stage 0 exists for MODEL-visible output: a harness reads bashy through a pipe.
+// A terminal sink is a human (or the bashy app's own xterm), and the bytes a
+// foreground child writes there must go to the terminal itself: wrapping the
+// sink in shellCaptureWriter turns it into a plain io.Writer, os/exec then hands
+// every external command an os.Pipe, and any TUI (codex, claude, vim, less,
+// ssh) starts without a terminal — "stdout is not a terminal" (story
+// 05c51640). So a tty sink is passed through unwrapped and the child inherits
+// the file; capture applies only to a sink that is not a terminal, or to any
+// sink when Stage 1 reduction was requested explicitly (outputReductionEnabled),
+// which is the operator asking for exactly that capture.
+func terminalSink(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	return ok && term.IsTerminal(int(f.Fd()))
+}
+
+// wrapSinks composes the reducer's writers over the configured sinks, leaving a
+// terminal sink untouched unless Stage 1 was requested. It reports whether any
+// sink is captured, so the caller can skip the middleware entirely when none is.
+func (r *shellOutputReducer) wrapSinks(out, errOut io.Writer) (io.Writer, io.Writer, bool) {
+	captured := false
+	if r.stage1 || !terminalSink(out) {
+		out, captured = r.stdout(), true
+	}
+	if r.stage1 || !terminalSink(errOut) {
+		errOut, captured = r.stderr(), true
+	}
+	return out, errOut, captured
+}
 
 func (r *shellOutputReducer) middleware(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 	return func(ctx context.Context, argv []string) error {
