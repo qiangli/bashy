@@ -4,7 +4,12 @@ name: quickstart-scratch
 # image's compressed/uncompressed size plus the standalone binary's
 # `go version -m` SBOM line. This is a Linux gate on purpose: the local smoke on
 # a developer's machine may SKIP (no engine) and is NOT authoritative — this job
-# is. Mark it a required check in branch protection.
+# is.
+#
+# REQUIRED CHECK: branch protection for `main` must list the status check
+# `quickstart-scratch / scratch-images` (this job) — a workflow file cannot
+# make itself required, that is a repository setting. Until it is listed, a
+# green run here is evidence, not a gate.
 on:
   push:
     branches: [main, master]
@@ -13,29 +18,34 @@ on:
 jobs:
   scratch-images:
     runs-on: ubuntu-latest
+    env:
+      # ubuntu runners ship BOTH docker and podman; pin the engine so the gate
+      # is deterministic (rootless podman on a runner has its own failure
+      # modes that would have nothing to do with the images under test).
+      BASHY_OCI: docker
     steps:
       - uses: actions/checkout@v7
       # Bashy resolves its direct dependencies as flat siblings; clone each at
       # its pinned SHA so the in-container `go build ./cmd/bashy` resolves.
+      # No host Go toolchain is needed: every build step runs inside the
+      # golang image named in examples/quickstart/Containerfile.
       - name: Bootstrap sibling deps (all pinned flat replaces)
         shell: bash
         run: ./scripts/bootstrap-siblings.sh
-      # GitHub's ubuntu runners ship Docker; the smoke uses it as the engine.
       # With an engine present, any build/run failure fails this gate (the
-      # smoke only SKIPs when NO engine is usable, which never happens here).
+      # smoke only SKIPs when NO engine is usable, which must never happen
+      # here — so assert the engine first, and assert afterwards that the
+      # smoke reached its final OK line rather than SKIPping).
       - name: Confirm a usable container engine is present (this gate must run)
         shell: bash
-        run: |
-          set -euxo pipefail
-          docker info >/dev/null
+        run: docker info >/dev/null
       - name: Build and run the three FROM-scratch images
         shell: bash
         timeout-minutes: 30
         run: |
           set -euxo pipefail
           scripts/quickstart-container-smoke.sh 2>&1 | tee /tmp/quickstart.log
-          # Fail closed: the smoke must have actually run (not SKIPped) here.
-          grep -q 'quickstart-container: OK' /tmp/quickstart.log
+          grep -q '^quickstart-container: OK' /tmp/quickstart.log
       - name: Publish sizes and SBOM to the job summary
         if: always()
         shell: bash
@@ -43,9 +53,11 @@ jobs:
           {
             echo '## Bash# three FROM-scratch delivery modes'
             echo
+            echo 'Measured on this run, inside the images (`docker image inspect` / `docker save | gzip -9` / `wc -c` / `go version -m`).'
+            echo
             echo '| kind | line |'
             echo '|---|---|'
-            grep -E 'quickstart-container: (SIZE|SBOM)' /tmp/quickstart.log \
-              | sed -E 's/quickstart-container: (SIZE|SBOM) /| \1 | /; s/$/ |/' \
-              || echo '| (none) | smoke produced no size/SBOM lines |'
+            grep -E '^quickstart-container: (SIZE|SBOM)' /tmp/quickstart.log 2>/dev/null \
+              | sed -E 's/^quickstart-container: (SIZE|SBOM) /| \1 | /; s/$/ |/' \
+              || echo '| (none) | smoke produced no size/SBOM lines — see the job log |'
           } >> "$GITHUB_STEP_SUMMARY"

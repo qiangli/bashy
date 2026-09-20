@@ -24,6 +24,7 @@
 # Usage:
 #   scripts/quickstart-container-smoke.sh
 #   BASHY_OCI=podman scripts/quickstart-container-smoke.sh   # force an engine
+#   QUICKSTART_KEEP=1 scripts/quickstart-container-smoke.sh  # keep the images for inspection
 set -eu
 
 repo=$(CDPATH= cd -P "$(dirname "$0")/.." && pwd)
@@ -66,6 +67,7 @@ stage_tree() {
 context=$(mktemp -d "${TMPDIR:-/tmp}/quickstart-scratch.XXXXXX")
 cleanup() {
   rm -rf "$context"
+  [ -n "${QUICKSTART_KEEP:-}" ] && return 0
   for t in mode-a mode-b mode-c standalone-builder; do
     "$oci" rmi -f "$tag_prefix-$t" >/dev/null 2>&1 || true
   done
@@ -88,12 +90,14 @@ build_target() {
     || fail "build $target"
 }
 
-# Run a scratch image with NO network; --tmpfs gives the island a writable /tmp.
+# Run a scratch image with NO network and a read-only root; --tmpfs gives the
+# island a writable /tmp. stdout is the result; stderr goes to a file so a
+# warning can never masquerade as (or hide) the greeting.
 run_image() {
   tag=$1
-  "$oci" run --rm --pull=never --network=none \
+  "$oci" run --rm --pull=never --network=none --read-only \
     --tmpfs /tmp:rw,nosuid,nodev,size=32m,mode=1777 \
-    "$tag" 2>&1
+    "$tag" 2>"$context/stderr"
 }
 
 report_size() {
@@ -103,11 +107,19 @@ report_size() {
   say "SIZE $label image uncompressed=${unc} bytes compressed(gzip -9)=${comp} bytes"
 }
 
+# The run must exit 0 AND print exactly the greeting: a non-zero exit is not
+# masked by a pipe, and extra output is a failure, not "close enough".
 expect_hello() {
   label=$1; tag=$2
-  got=$(run_image "$tag" | head -1)
-  [ "$got" = "hello, world!" ] || fail "$label ran but printed '$got' (want 'hello, world!')"
-  say "PASS $label — ran FROM scratch, --network=none, printed 'hello, world!'"
+  if ! got=$(run_image "$tag"); then
+    say "stderr:"; cat "$context/stderr" >&2
+    fail "$label exited non-zero (stdout: '$got')"
+  fi
+  if [ "$got" != "hello, world!" ]; then
+    say "stderr:"; cat "$context/stderr" >&2
+    fail "$label ran but printed '$got' (want 'hello, world!')"
+  fi
+  say "PASS $label — ran FROM scratch, --network=none, --read-only, printed 'hello, world!'"
 }
 
 # ── (a) bashy + .bsh ─────────────────────────────────────────────────────────
