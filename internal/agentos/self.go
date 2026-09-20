@@ -320,9 +320,46 @@ func installExecutable(src, dst string) error {
 		return err
 	}
 	if err := os.Rename(tmpName, dst); err != nil {
-		return err
+		// Windows refuses to replace a running image ("Access is denied") —
+		// and with no path given, dst IS the bashy that is running this
+		// command. A running image may still be RENAMED, so move it aside and
+		// put the new file in its place (the Windows self-update idiom).
+		if runtime.GOOS != "windows" {
+			return err
+		}
+		if err := replaceAside(tmpName, dst); err != nil {
+			return err
+		}
 	}
 	removeTmp = false
+	return nil
+}
+
+// replaceAside installs tmp at dst by renaming the existing dst to a
+// sibling `.old` name first. The `.old` left behind is the image that may
+// still be executing; it is removed on the next install (a stale one that
+// is no longer running deletes fine, one that is still running gets a
+// unique name instead). If the second rename fails the original is put
+// back, so dst never disappears.
+func replaceAside(tmp, dst string) error {
+	old := dst + ".old"
+	if err := os.Remove(old); err != nil && !errors.Is(err, os.ErrNotExist) {
+		// still running from a previous upgrade — park this one beside it
+		f, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".old-*")
+		if err != nil {
+			return err
+		}
+		old = f.Name()
+		_ = f.Close()
+		_ = os.Remove(old)
+	}
+	if err := os.Rename(dst, old); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		_ = os.Rename(old, dst)
+		return err
+	}
 	return nil
 }
 
