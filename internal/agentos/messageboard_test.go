@@ -42,6 +42,8 @@ func TestWireMessageBoard_ConnectsEveryFleetSeam(t *testing.T) {
 		{"RemoteResolve", func() { bus.RemoteResolve = nil }, func() bool { return bus.RemoteResolve != nil }},
 		{"RemoteSend", func() { bus.RemoteSend = nil }, func() bool { return bus.RemoteSend != nil }},
 		{"RemoteSender", func() { bus.RemoteSender = nil }, func() bool { return bus.RemoteSender != nil }},
+		{"meet.RelayShared", func() { meet.RelayShared = nil }, func() bool { return meet.RelayShared != nil }},
+		{"meet.SharedSessionID", func() { meet.SharedSessionID = nil }, func() bool { return meet.SharedSessionID != nil }},
 	} {
 		t.Run(h.name, func(t *testing.T) {
 			h.set()

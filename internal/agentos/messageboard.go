@@ -77,6 +77,22 @@ func wireMessageBoard() {
 		return weave.SendRemoteMessage(context.Background(), cwd, m)
 	}
 	bus.RemoteSender = weave.RemoteSenderSignature
+
+	// Shared meet rooms (Sprint 217, story 8): a `--shared` board's posts ride
+	// the same session; a host that drains the feed keeps a mirror of the
+	// room. meet never imports the relay — these two seams are it.
+	meet.RelayShared = func(st *meet.State, ev meet.Event) error {
+		cwd, _ := os.Getwd()
+		return weave.RelaySharedRoomPost(context.Background(), cwd, st, ev)
+	}
+	meet.SharedSessionID = func() (string, error) {
+		cwd, _ := os.Getwd()
+		sc, err := weave.EnsureRepoSession(context.Background(), cwd)
+		if err != nil {
+			return "", err
+		}
+		return sc.Pointer().TaskID, nil
+	}
 }
 
 var (
