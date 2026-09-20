@@ -211,7 +211,7 @@ func impactOf(effects []string) confirmImpact {
 // in-process tools), then the operator's registered ring. nil means
 // unclassified.
 func declaredEffects(arg0 string) []string {
-	name := baseName(arg0)
+	name := normalizeCommandName(baseName(arg0))
 	if e, ok := atlas.Lookup(name); ok {
 		return e.Effects
 	}
@@ -250,6 +250,17 @@ func renderEffects(effects []string) string {
 		return "unknown"
 	}
 	return strings.Join(effects, ",")
+}
+
+// normalizeCommandName strips platform-specific executable extensions (e.g.,
+// .exe on Windows) so Windows absolute paths like C:\Program Files\Git\usr\bin\cat.exe
+// map to the registered command "cat" in the atlas.
+func normalizeCommandName(name string) string {
+	lower := strings.ToLower(name)
+	if strings.HasSuffix(lower, ".exe") {
+		return strings.ToLower(name[:len(name)-4])
+	}
+	return name
 }
 
 // confirmHandler is the ExecHandler rung that decides each governed

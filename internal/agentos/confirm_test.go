@@ -100,6 +100,9 @@ func exists(t *testing.T, path string) bool {
 
 func runConfirm(t *testing.T, work, callArgs string, env map[string]string) (string, string) {
 	t.Helper()
+	// Quote the test-owned path without reparsing the already-spelled flags and
+	// arguments. This preserves backslashes and spaces on Windows.
+	callArgs = strings.ReplaceAll(callArgs, work, shellQuote(work))
 	script := strings.Replace(confirmScript, "clean %s", "clean "+callArgs, 1)
 	err, out, errOut := runDecorated(t, context.Background(), syntax.LangBashPP, script, env)
 	if err != nil {
@@ -524,5 +527,53 @@ func TestConfirmHandlerIgnoresCommandsOutsideAConfirmCall(t *testing.T) {
 	}
 	if err := h(context.Background(), nil); err != nil || calls != 2 {
 		t.Errorf("empty argv: err %v calls %d", err, calls)
+	}
+}
+
+func TestConfirmWindowsExeNormalization(t *testing.T) {
+	// Windows absolute paths like C:\Program Files\Git\usr\bin\cat.exe should
+	// map to the "cat" command in the atlas, not be treated as unknown.
+	for _, tc := range []struct {
+		path     string
+		wantName string
+	}{
+		{"cat", "cat"},
+		{"cat.exe", "cat"},
+		{"CAT.EXE", "cat"},
+		{"/usr/bin/cat", "cat"},
+		{"/usr/bin/cat.exe", "cat"},
+		{`C:\Program Files\Git\usr\bin\cat.exe`, "cat"},
+		{`C:\Windows\System32\cmd.exe`, "cmd"},
+		{"./my-script.exe", "my-script"},
+	} {
+		got := normalizeCommandName(baseName(tc.path))
+		if got != tc.wantName {
+			t.Errorf("normalizeCommandName(baseName(%q)) = %q, want %q", tc.path, got, tc.wantName)
+		}
+	}
+}
+
+func TestConfirmTokenPreservesArgvIdentity(t *testing.T) {
+	// Token must be derived from the ACTUAL argv, not the normalized command name,
+	// so a Windows path and a bare name produce different tokens.
+	tok1 := confirmToken([]string{"cat", "file.txt"})
+	tok2 := confirmToken([]string{`C:\usr\bin\cat.exe`, "file.txt"})
+	tok3 := confirmToken([]string{"cat.exe", "file.txt"})
+	if tok1 == tok2 {
+		t.Error("token should distinguish absolute Windows path from bare command name")
+	}
+	if tok1 == tok3 {
+		t.Error("token should distinguish cat.exe from cat")
+	}
+	// But declaredEffects should normalize and find the same effects.
+	e1 := declaredEffects("cat")
+	e2 := declaredEffects(`C:\usr\bin\cat.exe`)
+	e3 := declaredEffects("cat.exe")
+	if len(e1) == 0 || len(e2) == 0 || len(e3) == 0 {
+		t.Errorf("cat effects: %v %v %v (all should be classified)", e1, e2, e3)
+	}
+	// All three should have the same effect classification.
+	if strings.Join(e1, ",") != strings.Join(e2, ",") || strings.Join(e1, ",") != strings.Join(e3, ",") {
+		t.Errorf("effects differ: %v %v %v", e1, e2, e3)
 	}
 }
