@@ -1,0 +1,18 @@
+# test/yield/clean.bsh — the B19 fixture body (rfcs/0001-agentic-yield.md).
+#
+# One @confirm function whose body dispatches, in order, a read (cat), a
+# destroy (rm — high impact, confirmed or yielded), a write (mkdir —
+# auto-confirmed) and a pure builtin (echo). Every path is relative, so the
+# governed argv — and therefore its token — is the same on every machine:
+# confirm e9d85167 = sha256("rm\0-rf\0victim")[:8].
+#
+# The call is the script's last command: a yield surfaces to the invoking
+# harness as the PROCESS exit status 6.
+@confirm()
+function clean() {
+	cat marker
+	rm -rf victim
+	mkdir after
+	echo "cleaned"
+}
+clean "$@"

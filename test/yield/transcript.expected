@@ -1,0 +1,58 @@
+== 1 what-if: describe every governed operation, perform none ==
+marker
+what-if: clean: would run rm -rf victim (effects: destroy; confirm e9d85167)
+what-if: clean: would run mkdir after (effects: write)
+cleaned
+exit=0
+state: victim=present after=absent
+== 2 unattended run: the yield — exit 6, nothing destroyed ==
+marker
+clean: input required: confirm e9d85167: rm -rf victim (effects: destroy): no channel reaches a human (the harness owns input: BASHY_ASK_HANDLER); resume with clean --confirm=e9d85167:yes ... or --confirm=e9d85167:no ...
+clean: not run after yield: mkdir after
+cleaned
+exit=6
+state: victim=present after=absent
+== 3 the harness pauses and asks the human ==
+resume form: clean --confirm=e9d85167:yes|no
+human answered: yes
+== 4 replay with the human's answer ==
+marker
+cleaned
+exit=0
+state: victim=absent after=present
+== 5 an answer for another operation makes no progress ==
+marker
+clean: input required: confirm e9d85167: rm -rf victim (effects: destroy): no channel reaches a human (the harness owns input: BASHY_ASK_HANDLER); resume with clean --confirm=e9d85167:yes ... or --confirm=e9d85167:no ...
+clean: not run after yield: mkdir after
+cleaned
+exit=6
+state: victim=present after=absent
+== 6 the human said no: refused, body continues ==
+marker
+clean: declined e9d85167: rm -rf victim
+cleaned
+exit=0
+state: victim=present after=present
+== 7 a malformed answer list is a diagnostic, never a guess ==
+BASHPP-EDECO-NATIVE: @confirm: confirm: --confirm=nonsense: want TOKEN:yes or TOKEN:no per operation, comma-separated (--what-if lists the tokens)
+exit=1
+state: victim=present after=absent
+== 8 the same yield under BASHY_AGENTIC=1 is an envelope ==
+marker
+{
+  "schema_version": "loom-v2",
+  "command": "clean",
+  "status": "error",
+  "error": {
+    "code": "input_required",
+    "message": "input required: confirm e9d85167: rm -rf victim (effects: destroy): no channel reaches a human (BASHY_AGENTIC); resume with clean --confirm=e9d85167:yes ... or --confirm=e9d85167:no ..."
+  }
+}
+clean: not run after yield: mkdir after
+cleaned
+exit=6
+state: victim=present after=absent
+== 9 Bash OFF is identity: --what-if is an ordinary word ==
+cleaned --what-if
+exit=0
+state: victim=absent after=absent

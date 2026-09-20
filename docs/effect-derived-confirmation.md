@@ -98,8 +98,9 @@ an undecorated function sees `--what-if` as an ordinary word.
   failure (declined; unattended yield; envelope) and lifecycle (harness loop
   run → 6 → replay → 0; yield through `@ensure`) are all covered.
 - `test/yield/` — the executable harness fixture and recorded transcript
-  (B19): a real `bashy --bashsharp -c` receiving 6, the driver pausing,
-  reading the supplied answer, and replaying.
+  (B19): `run.sh [bashy]` drives a real `bashy --bashsharp` call that yields
+  6, pauses, reads the recorded human answer, and replays with
+  `--confirm=TOKEN:yes|no`, byte-diffing against `transcript.expected`.
 - `bashy help confirm` — the operator summary.
 
 ## Out of scope (deliberately)
