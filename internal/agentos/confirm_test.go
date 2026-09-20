@@ -182,7 +182,7 @@ func TestConfirmHighImpactAsksTheHuman(t *testing.T) {
 		stubAsk(t, false, nil)
 		work := confirmWork(t)
 		script := strings.Replace(confirmScript, `rm -rf "$1/victim"`, `rm -rf "$1/victim"; echo "rm $?"`, 1)
-		script = strings.Replace(script, "clean %s", "clean "+work, 1)
+		script = strings.Replace(script, "clean %s", "clean "+shellQuote(work), 1)
 		err, out, errOut := runDecorated(t, context.Background(), syntax.LangBashPP, script, nil)
 		if err != nil {
 			t.Fatalf("%v", err)
@@ -233,8 +233,9 @@ func TestConfirmUnattendedYields(t *testing.T) {
 	if m[1] != m[3] || m[1] != m[4] || m[1] != confirmToken([]string{"rm", "-rf", work + "/victim"}) {
 		t.Errorf("token %q does not name the operation (%q)", m[1], m[2])
 	}
-	if lines[1] != "clean: not run after yield: mkdir "+work+"/after" {
-		t.Errorf("not-run line = %q", lines[1])
+	wantNotRunLine := "clean: not run after yield: " + renderArgv([]string{"mkdir", work + "/after"})
+	if lines[1] != wantNotRunLine {
+		t.Errorf("not-run line = %q, want %q", lines[1], wantNotRunLine)
 	}
 }
 
@@ -270,8 +271,10 @@ func TestConfirmWhatIf(t *testing.T) {
 		t.Errorf("stdout = %q, want %q", out, want)
 	}
 	tok := confirmToken([]string{"rm", "-rf", work + "/victim"})
-	want := "what-if: clean: would run rm -rf " + work + "/victim (effects: destroy; confirm " + tok + ")\n" +
-		"what-if: clean: would run mkdir " + work + "/after (effects: write)\n"
+	rmOp := renderArgv([]string{"rm", "-rf", work + "/victim"})
+	mkdirOp := renderArgv([]string{"mkdir", work + "/after"})
+	want := "what-if: clean: would run " + rmOp + " (effects: destroy; confirm " + tok + ")\n" +
+		"what-if: clean: would run " + mkdirOp + " (effects: write)\n"
 	if errOut != want {
 		t.Errorf("stderr = %q\nwant     %q", errOut, want)
 	}
