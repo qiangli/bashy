@@ -71,7 +71,7 @@ func init() { shellrt.Decorators = compiledNativeDecorators() }
 
 func nativeDecorators(stderr io.Writer, sink *attestSink) map[string]interp.DecoratorFunc {
 	out := map[string]interp.DecoratorFunc{}
-	for name, fn := range nativeDecoratorSet(stderr, sink) {
+	for name, fn := range nativeDecoratorSet(stderr, sink.attesting) {
 		out[name] = adaptInterpreterDecorator(fn)
 	}
 	return out
@@ -80,9 +80,11 @@ func nativeDecorators(stderr io.Writer, sink *attestSink) map[string]interp.Deco
 // nativeDecoratorSet is the one list both hosts register from: the
 // cross-cutting three above, the two contract clauses (contracts.go), which
 // name a failed clause on stderr, and the pass-through `attest` rung advice
-// puts on agentic functions. Every one is wrapped by the sink (attest.go) so
-// the outermost native rung on a call appends that call's receipt, once.
-func nativeDecoratorSet(stderr io.Writer, sink *attestSink) map[string]nativeDecoratorFunc {
+// puts on agentic functions. Every one is wrapped through attesting (attest.go)
+// so the outermost native rung on a call appends that call's receipt, once.
+// attesting is a function rather than a resolved *attestSink so the compiled
+// host (below) can defer resolving its sink past this call.
+func nativeDecoratorSet(stderr io.Writer, attesting func(nativeDecoratorFunc) nativeDecoratorFunc) map[string]nativeDecoratorFunc {
 	set := map[string]nativeDecoratorFunc{
 		"trace":  traceDecorator,
 		"guard":  guardDecorator,
@@ -93,7 +95,7 @@ func nativeDecoratorSet(stderr io.Writer, sink *attestSink) map[string]nativeDec
 		set[name] = fn
 	}
 	for name, fn := range set {
-		set[name] = sink.attesting(fn)
+		set[name] = attesting(fn)
 	}
 	return set
 }
@@ -136,10 +138,18 @@ func adaptInterpreterDecorator(fn nativeDecoratorFunc) interp.DecoratorFunc {
 // compiledNativeDecorators is the same native set for a compiled host. Such a
 // host must also wire its effect-aware command handler into the shell backend.
 // The compiled host has no advice slot, so its agentic functions are attested
-// only when a source decorator puts them in a chain.
+// only when a source decorator puts them in a chain. Its attest sink resolves
+// lazily (compiledAttestSink, attest.go) on the first decorated call rather
+// than here at init time, since init() runs before anything — an embedder, a
+// test — can shape the process environment attestation reads.
 func compiledNativeDecorators() map[string]shellrt.DecoratorFunc {
 	result := map[string]shellrt.DecoratorFunc{}
-	for name, fn := range nativeDecoratorSet(os.Stderr, newAttestSink(os.Environ(), os.Stderr)) {
+	attesting := func(fn nativeDecoratorFunc) nativeDecoratorFunc {
+		return func(ctx context.Context, c *nativeDecoratorCall, args []interp.DecoratorArg) error {
+			return compiledAttestSink(os.Stderr).attesting(fn)(ctx, c, args)
+		}
+	}
+	for name, fn := range nativeDecoratorSet(os.Stderr, attesting) {
 		result[name] = func(ctx context.Context, c *shellrt.Call, args []shellrt.DecoratorArg) error {
 			call := &nativeDecoratorCall{Name: c.Name, Site: c.Site, Caller: c.Caller, Advised: c.Advised, Args: c.Args, Results: c.Results, Status: c.Status, Agentic: c.Agentic, key: c}
 			flush := func() { c.Args, c.Results, c.Status = call.Args, call.Results, call.Status }

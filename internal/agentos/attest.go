@@ -86,6 +86,24 @@ type attestSink struct {
 	spoken sync.Once // the first failed append is reported; the rest are not noise worth a line each
 }
 
+// compiledAttestSink resolves the compiled host's sink from the PROCESS
+// environment on the first decorated call, not at package init. The compiled
+// decorator registry (decorators.go's init()) is built once at host startup —
+// before an embedder or a test can set BASHY_SKILLS_DIR / BASHY_ATTEST — so
+// capturing os.Environ() there would freeze whatever was ambient when the
+// binary started. Deferring to first use still resolves at most once (the
+// coordinate's host probes are paid for once), it just waits until something
+// has had a chance to configure the environment first.
+var (
+	compiledAttestOnce sync.Once
+	compiledAttestVal  *attestSink
+)
+
+func compiledAttestSink(stderr io.Writer) *attestSink {
+	compiledAttestOnce.Do(func() { compiledAttestVal = newAttestSink(os.Environ(), stderr) })
+	return compiledAttestVal
+}
+
 // newAttestSink resolves the sink for one shell from its environment. A nil
 // sink means attestation is off, and every method on a nil sink is a no-op.
 func newAttestSink(env []string, stderr io.Writer) *attestSink {
