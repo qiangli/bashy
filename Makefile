@@ -1,7 +1,8 @@
-.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-quickstart smoke-quickstart-container dist tidy clean help
+.PHONY: dag build build-bash build-bashy build-bashy-scratch verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-quickstart smoke-quickstart-container dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
+BASHY_SCRATCH_ARTIFACT ?= $(BIN_DIR)/scratch/bashy-linux-amd64
 GO ?= go
 BASH_TESTS_DIR := external/bash-5.3/tests
 # The bash test fixtures invoke the shell as `bash` / via $BASH, so the
@@ -115,6 +116,21 @@ build-bashy:
 		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BIN) native/siglaunch.c.in; \
 	fi
 
+## build-bashy-scratch: Build the lean, static linux/amd64 Bashy profile used by
+## Cloudbox. The stable artifact path is bin/scratch/bashy-linux-amd64.
+build-bashy-scratch:
+	@mkdir -p $$(dirname "$(BASHY_SCRATCH_ARTIFACT)")
+	@echo "building static Cloudbox Bashy at $(BASHY_SCRATCH_ARTIFACT) ..."
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -trimpath \
+		-tags bashy_scratch -ldflags "$(LDFLAGS)" \
+		-o "$(BASHY_SCRATCH_ARTIFACT)" ./cmd/bashy
+
+## verify-bashy-scratch: Rebuild and fail closed unless the Cloudbox artifact is
+## static Linux amd64, purego-free, command-smoked, and scratch-runnable when an
+## OCI runtime is available.
+verify-bashy-scratch:
+	@BASHY_SCRATCH_ARTIFACT="$(BASHY_SCRATCH_ARTIFACT)" scripts/verify-bashy-scratch.sh
+
 ## build-fips: Build both binaries against the Go FIPS 140-3 validated crypto
 ## module (CMVP #5247). Run with GODEBUG=fips140=on for FedRAMP/CMMC/gov use.
 ## Do NOT use fips140=only for a general shell — it rejects MD5 (breaks md5sum).
@@ -166,7 +182,7 @@ test-awd-installed-stress:
 # test-meet-spa-fresh(-regression) run FIRST, before any recipe that could
 # rebuild-and-promote the tracked meet SPA artifact and thereby mask a stale
 # bundle the freshness gate exists to catch.
-test: test-meet-spa-fresh-regression test-meet-spa-fresh test-build-fail-closed test-sibling-pins test-isolated-lanes test-build-tag-matrix test-bash-container-mode
+test: test-meet-spa-fresh-regression test-meet-spa-fresh test-build-fail-closed test-sibling-pins test-isolated-lanes test-build-tag-matrix test-bash-container-mode verify-bashy-scratch
 	go test ./...
 
 ## test-meet-spa-fresh: REQUIRED non-mutating gate — build a fresh meet SPA and
