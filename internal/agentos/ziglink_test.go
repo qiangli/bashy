@@ -1,7 +1,10 @@
 package agentos
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -70,5 +73,47 @@ func TestNormalizeWindowsGnuDefArgs(t *testing.T) {
 				t.Fatalf("normalizeWindowsGnuDefArgs(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNormalizeWindowsGnuResponse(t *testing.T) {
+	// rustc 1.98.1 commit 48a229cea, link.rs lines 1834-1866
+	// (Apache-2.0 OR MIT) writes one POSIX-escaped UTF-8 argument per line.
+	in := "-Wl,C:\\\\work\\\\rustc123\\\\list.def\n-fno-use-linker-plugin\n-lgcc_eh\n-Wl,--nxcompat\n"
+	want := "C:\\\\work\\\\rustc123\\\\list.def\n-Wl,--nxcompat\n-lunwind\n"
+	got, changed := normalizeWindowsGnuResponse([]byte(in))
+	if !changed || string(got) != want {
+		t.Fatalf("normalize response = %q, %v; want %q, true", got, changed, want)
+	}
+
+	unchanged := []byte("-Wl,C:\\\\work\\\\public.def\n-luser32\n")
+	got, changed = normalizeWindowsGnuResponse(unchanged)
+	if changed || string(got) != string(unchanged) {
+		t.Fatalf("unrelated response changed: %q, %v", got, changed)
+	}
+}
+
+func TestNormalizeWindowsGnuResponseArgs(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "linker-arguments")
+	data := "-Wl,C:\\\\work\\\\rustc123\\\\list.def\n-luser32\n"
+	if err := os.WriteFile(source, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, cleanup, err := normalizeWindowsGnuResponseArgs([]string{"@" + source, "tail"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if len(got) != 2 || got[1] != "tail" || !strings.HasPrefix(got[0], "@") || got[0] == "@"+source {
+		t.Fatalf("response argv = %q", got)
+	}
+	rewritten, err := os.ReadFile(strings.TrimPrefix(got[0], "@"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "C:\\\\work\\\\rustc123\\\\list.def\n-luser32\n"
+	if string(rewritten) != want {
+		t.Fatalf("rewritten response = %q, want %q", rewritten, want)
 	}
 }

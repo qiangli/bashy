@@ -55,9 +55,15 @@ func dispatchZigLink(args []string) int {
 		return 2
 	}
 	zig := args[0]
+	linkArgs, cleanup, err := normalizeWindowsGnuResponseArgs(args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy zig-link:", err)
+		return 1
+	}
+	defer cleanup()
 	argv := []string{"cc"}
 	unwind := false
-	for _, a := range normalizeWindowsGnuDefArgs(args[1:]) {
+	for _, a := range normalizeWindowsGnuDefArgs(linkArgs) {
 		a = strings.TrimSpace(a)
 		if windowsGnuLinkDrop[a] {
 			// The panic unwinder's _Unwind_* symbols come from libgcc_eh on
@@ -87,6 +93,99 @@ func dispatchZigLink(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// normalizeWindowsGnuResponseArgs adapts rustc's overflow @file without
+// expanding or re-escaping its other arguments. Rust 1.98 writes one
+// POSIX-escaped argument per UTF-8 line for windows-gnu; removing only the
+// -Wl, wrapper leaves the same escaped path as a positional .def input.
+func normalizeWindowsGnuResponseArgs(args []string) ([]string, func(), error) {
+	out := append([]string(nil), args...)
+	var temps []string
+	cleanup := func() {
+		for _, name := range temps {
+			_ = os.Remove(name)
+		}
+	}
+	for i, arg := range out {
+		candidate := strings.Trim(strings.TrimSpace(arg), `"`)
+		if !strings.HasPrefix(candidate, "@") {
+			continue
+		}
+		source := strings.Trim(strings.TrimSpace(candidate[1:]), `"`)
+		data, err := os.ReadFile(source)
+		if err != nil {
+			cleanup()
+			return nil, func() {}, fmt.Errorf("read response file: %w", err)
+		}
+		normalized, changed := normalizeWindowsGnuResponse(data)
+		if !changed {
+			continue
+		}
+		file, err := os.CreateTemp(filepath.Dir(source), "bashy-linker-*.rsp")
+		if err != nil {
+			cleanup()
+			return nil, func() {}, fmt.Errorf("create response file: %w", err)
+		}
+		name := file.Name()
+		temps = append(temps, name)
+		if _, err := file.Write(normalized); err != nil {
+			_ = file.Close()
+			cleanup()
+			return nil, func() {}, fmt.Errorf("write response file: %w", err)
+		}
+		if err := file.Close(); err != nil {
+			cleanup()
+			return nil, func() {}, fmt.Errorf("close response file: %w", err)
+		}
+		out[i] = "@" + name
+	}
+	return out, cleanup, nil
+}
+
+func normalizeWindowsGnuResponse(data []byte) ([]byte, bool) {
+	lines := strings.Split(string(data), "\n")
+	out := make([]string, 0, len(lines))
+	changed := false
+	unwind := false
+	for i := 0; i < len(lines); i++ {
+		raw := lines[i]
+		body := strings.TrimSuffix(raw, "\r")
+		cr := raw[len(body):]
+		candidate := strings.Trim(strings.TrimSpace(body), `"`)
+		if windowsGnuLinkDrop[candidate] {
+			unwind = unwind || strings.Contains(candidate, "gcc_eh") || strings.Contains(candidate, "unwind")
+			changed = true
+			continue
+		}
+		if strings.HasPrefix(candidate, "-Wl,") {
+			path := candidate[len("-Wl,"):]
+			if _, ok := rustcExportListPath(path); ok {
+				out = append(out, path+cr)
+				changed = true
+				continue
+			}
+		}
+		if candidate == "-Xlinker" && i+1 < len(lines) {
+			next := lines[i+1]
+			nextBody := strings.TrimSuffix(next, "\r")
+			if _, ok := rustcExportListPath(nextBody); ok {
+				out = append(out, next)
+				i++
+				changed = true
+				continue
+			}
+		}
+		out = append(out, raw)
+	}
+	if unwind {
+		if len(out) > 0 && out[len(out)-1] == "" {
+			out = append(out[:len(out)-1], "-lunwind", "")
+		} else {
+			out = append(out, "-lunwind")
+		}
+	}
+	return []byte(strings.Join(out, "\n")), changed
 }
 
 // normalizeWindowsGnuDefArgs presents rustc's temporary export list as an
