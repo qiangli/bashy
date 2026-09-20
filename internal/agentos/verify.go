@@ -212,6 +212,15 @@ func EnsureBash53Fixtures(root string) (string, error) {
 	_ = os.MkdirAll(filepath.Dir(link), 0o755)
 	_ = os.Remove(link)
 	if err := os.Symlink(dst, link); err != nil {
+		if runtime.GOOS == "windows" {
+			// A symlink needs SeCreateSymbolicLinkPrivilege (or Developer
+			// Mode) on Windows, which an ordinary account and some CI runners
+			// lack. The verified cache is a complete fixture tree in its own
+			// right: hand it back and let the caller point the harness at it
+			// (`bash53suite -tests-dir <printed>/tests`).
+			fmt.Fprintf(os.Stderr, "verify compat: cannot link external/bash-5.3 (%v); using the cache directly\n", err)
+			return dst, nil
+		}
 		return "", fmt.Errorf("symlink external/bash-5.3: %w", err)
 	}
 	return link, nil

@@ -387,9 +387,16 @@ minutes, one fixture is seconds.
 
 `tools/bash53suite` arms a procguard before launching each fixture. Abrupt
 harness death kills the fixture process group, and normal completion or timeout
-also removes background descendants left in that group. The fixture runner
-fails closed on Windows until job-object containment exists; this is a harness
-safety limitation, not a limitation of the shipped Windows shell binaries.
+also removes background descendants left in that group. On Windows the same
+contract is provided by **Job Objects** (`proc_windows.go`, Sprint 216): the
+harness puts itself in a kill-on-close job so every fixture is born contained,
+and each fixture gets a nested job carrying the memory cap that is terminated
+on reap. The Windows tests prove it on every push; the suite itself is
+MEASURED there by `conformance.yml`'s `bash53-windows` job (tags /
+`workflow_dispatch`, `scripts/ci-bash53-windows.sh`), which publishes exact
+runnable/pass/fail/timeout/skip counts as an artifact. **No Windows count has
+been measured yet** — never quote 86/86 for Windows from anything but that
+artifact (see `docs/plan-bash53-windows-leg.md`).
 
 Never run the full uutils suite natively. A 2026-07-24 run triggered unbounded
 reads from `/dev/zero`/`/dev/random` and recursive `--preserve-root` bypasses

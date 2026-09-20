@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -196,9 +197,28 @@ func newShellOutputReducer(out, errOut io.Writer, env []string) (*shellOutputRed
 	}
 	return &shellOutputReducer{
 		store: store, redactor: shellOutputRedactor(env),
-		home: outputEnv(env, "HOME"), stage1: outputReductionEnabled(env),
+		home: displayHome(outputEnv(env, "HOME"), runtime.GOOS), stage1: outputReductionEnabled(env),
 		outDst: out, errDst: errOut,
 	}, nil
+}
+
+// displayHome is the directory Stage 0 canonicalizes to the `$HOME` token.
+//
+// On Windows it is empty, so no canonicalization happens there. The token is
+// only honest where it round-trips: on Unix `$HOME/bin` re-expands to the
+// path it replaced. On Windows the shell hands scripts HOME in the MSYS form
+// (/c/Users/x) while the process environment carries the native one
+// (C:\Users\x), so canonicalizing native output yields `$HOME\s213` — a
+// spelling that expands to `/c/Users/xs213`, i.e. to nothing. Measured
+// 2026-09-19 (todo 1ec1081071d7): `echo $PATH` printed
+// `C:\Windows\System32;C:\Windows;$HOME\s213`, and a PATH pasted back from
+// that display cannot find anything under the profile directory. Better no
+// reduction than a token that leaks a broken path into executable lookup.
+func displayHome(home, goos string) string {
+	if goos == "windows" {
+		return ""
+	}
+	return home
 }
 
 func (r *shellOutputReducer) stdout() io.Writer { return shellCaptureWriter{r: r} }
