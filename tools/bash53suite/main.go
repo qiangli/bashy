@@ -256,8 +256,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 		os.Setenv("HOME", home)
 		os.Setenv("HISTFILE", filepath.Join(home, ".bash_history"))
 		os.Setenv("TMPDIR", tmp)
+		if runtime.GOOS == "windows" {
+			// os.TempDir (and every native child) reads TMP/TEMP here, not
+			// TMPDIR; without these the private tree isolates nothing.
+			os.Setenv("TMP", tmp)
+			os.Setenv("TEMP", tmp)
+		}
 	}
-	if err := prepareFixtures(testsDir); err != nil {
+	if err := prepareFixtures(testsDir, stderr); err != nil {
 		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("prepare fixtures: %v", err))
 	}
 
@@ -328,6 +334,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(logOut, ", chunk %s", chunk)
 	}
 	fmt.Fprintln(logOut, ")...")
+	if runtime.GOOS == "windows" {
+		// No fixed userland on this OS: say which one the fixtures resolved
+		// their cat/sed/awk/diff from, or the count cannot be interpreted.
+		fmt.Fprintf(logOut, "Fixture PATH: %s\n", fixturePath(testsDir))
+	}
 
 	for _, f := range selected {
 		if _, err := os.Stat(filepath.Join(testsDir, f.Test)); err != nil {
@@ -754,7 +765,7 @@ var memCapKB = 4 * 1024 * 1024
 // It is a backstop, not a limit to tune: a fixture that trips it has a bug.
 func watchMemory(pid, capKB int, stop <-chan struct{}) {
 	if capKB <= 0 || runtime.GOOS == "windows" {
-		return // no portable process-group RSS on Windows; the timeout still applies
+		return // Windows caps the fixture's job object instead (proc_windows.go)
 	}
 	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
@@ -795,8 +806,12 @@ func groupRSSKB(pid int) int {
 	return total
 }
 
-func prepareFixtures(testsDir string) error {
+func prepareFixtures(testsDir string, warn io.Writer) error {
 	support := filepath.Join(testsDir, "..", "support")
+	extra, err := helperBinmodeSources(support)
+	if err != nil {
+		return err
+	}
 	for _, helper := range []string{"recho", "zecho", "xcase"} {
 		dst := filepath.Join(testsDir, exeName(helper))
 		src := filepath.Join(support, helper+".c")
@@ -808,14 +823,18 @@ func prepareFixtures(testsDir string) error {
 		// platform ran last. Never trust it. A missing compiler is a hard refusal,
 		// not a silent skip that surfaces later as `recho: command not found`
 		// masquerading as a conformance failure.
-		cc, err := exec.LookPath("cc")
+		cc, err := helperCompiler()
 		if err != nil {
-			return fmt.Errorf("tool.missing: no `cc` to build the bash test helper %q; "+
-				"the fixtures cannot run without it (this is an environment refusal, not a test failure)", helper)
+			return fmt.Errorf("tool.missing: no C compiler to build the bash test helper %q (%v); "+
+				"the fixtures cannot run without it (this is an environment refusal, not a test failure)", helper, err)
 		}
-		if out, err := exec.Command(cc, "-o", dst, src).CombinedOutput(); err != nil {
+		args := append([]string{"-o", dst, src}, extra...)
+		if out, err := exec.Command(cc, args...).CombinedOutput(); err != nil {
 			return fmt.Errorf("build %s: %v\n%s", helper, err, out)
 		}
+	}
+	if note := helperLineDisciplineNote(filepath.Join(testsDir, exeName("recho"))); note != "" {
+		fmt.Fprintln(warn, "bash53-suite: "+note)
 	}
 	parent := filepath.Dir(testsDir)
 	if err := ensureStub(filepath.Join(parent, "config.h"), 128, "config.h", "heredoc5.sub"); err != nil {
@@ -1004,7 +1023,7 @@ func fixtureEnv(root, testsDir, bashPath, name string) []string {
 		"THIS_SH="+bashPath,
 		"_="+bashPath,
 		"BUILD_DIR="+filepath.Dir(testsDir),
-		"PATH="+strings.Join([]string{testsDir, "/usr/bin", "/bin", "/usr/local/bin"}, string(os.PathListSeparator)),
+		"PATH="+fixturePath(testsDir),
 		"BASH_TSTRAW="+rawPath,
 		"BASH_TSTOUT="+outPath,
 		"BASH_SETPGRP=1",
@@ -1275,6 +1294,98 @@ func exeName(name string) string {
 		return name + ".exe"
 	}
 	return name
+}
+
+// fixturePath is the PATH a fixture shell sees: the fixture tree first (the
+// recho/zecho/xcase helpers), then a userland. Unix has that userland at fixed
+// places and the list is pinned for hermeticity. Windows has none, so the
+// userland is whatever BASH53_TOOLS_PATH names (a `;`-separated list — e.g.
+// Git for Windows' usr\bin, which carries the sed/awk/diff/cat the fixtures
+// call) or, when that is unset, the harness's own PATH. The testee is the
+// pure `bash` drop-in, which resolves external commands through PATH exactly
+// as bash does and carries no userland of its own, so the list is printed in
+// the run header: a measurement whose PATH is unknown is not a measurement.
+func fixturePath(testsDir string) string {
+	return fixturePathMode(testsDir, os.Getenv("PATH"), os.Getenv("BASH53_TOOLS_PATH"), runtime.GOOS == "windows")
+}
+
+func fixturePathMode(testsDir, inherited, tools string, windows bool) string {
+	if !windows {
+		return strings.Join([]string{testsDir, "/usr/bin", "/bin", "/usr/local/bin"}, ":")
+	}
+	elems := []string{testsDir}
+	list := tools
+	if strings.TrimSpace(list) == "" {
+		list = inherited
+	}
+	for e := range strings.SplitSeq(list, ";") {
+		if e = strings.TrimSpace(e); e != "" {
+			elems = append(elems, e)
+		}
+	}
+	return strings.Join(elems, ";")
+}
+
+// helperCompiler resolves the C compiler for the recho/zecho/xcase helpers:
+// $CC when set, else `cc`, else the names a host without the POSIX alias
+// carries (a GitHub Windows runner has mingw's `gcc` but no `cc`).
+func helperCompiler() (string, error) {
+	candidates := []string{"cc", "gcc", "clang"}
+	if cc := strings.TrimSpace(os.Getenv("CC")); cc != "" {
+		candidates = append([]string{cc}, candidates...)
+	}
+	for _, name := range candidates {
+		if path, err := exec.LookPath(name); err == nil {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("none of %s on PATH, and $CC is unset", strings.Join(candidates, "/"))
+}
+
+// helperBinmodeSources returns the extra translation units the helpers are
+// built with. On Windows a mingw-built C program opens stdout in TEXT mode
+// and writes CRLF for every "\n", so every recho line would differ from its
+// .right file by one byte that is the C runtime's, not the shell's. mingw-w64
+// honours a `_CRT_fmode` global at startup and applies it to the standard
+// streams, so one generated unit puts the helpers in binary mode without
+// touching the GPL corpus sources or the measured bytes. Elsewhere there is
+// nothing to add.
+func helperBinmodeSources(support string) ([]string, error) {
+	if runtime.GOOS != "windows" {
+		return nil, nil
+	}
+	if err := os.MkdirAll(support, 0o755); err != nil {
+		return nil, err
+	}
+	unit := filepath.Join(support, "bashy-binmode.c")
+	body := "/* generated by tools/bash53suite: binary-mode stdio for the mingw-built helpers */\n" +
+		"#include <fcntl.h>\n" +
+		"int _CRT_fmode = _O_BINARY;\n"
+	if err := os.WriteFile(unit, []byte(body), 0o644); err != nil {
+		return nil, err
+	}
+	return []string{unit}, nil
+}
+
+// helperLineDisciplineNote runs the freshly built recho once and reports a
+// carriage return in its output. It never changes a verdict: a helper that
+// still writes CRLF makes every recho-based fixture diverge, and the log must
+// say why rather than let the count pass as a statement about the shell.
+func helperLineDisciplineNote(recho string) string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+	if _, err := os.Stat(recho); err != nil {
+		return ""
+	}
+	out, err := exec.Command(recho, "a").Output()
+	if err != nil {
+		return fmt.Sprintf("helper line-discipline probe: %s a: %v", filepath.Base(recho), err)
+	}
+	if bytes.Contains(out, []byte{'\r'}) {
+		return "note: the C helpers write CRLF (binary-mode unit not honoured by this compiler); every recho/zecho-based fixture will diverge by that CR — the counts below measure the helpers' line discipline, not the shell"
+	}
+	return ""
 }
 
 func dieIf(err error) {

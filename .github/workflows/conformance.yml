@@ -101,3 +101,38 @@ jobs:
         # shell has no controlling terminal, so provide one for the measured
         # fixture process instead of scoring runner plumbing as regressions.
         run: script -qefc './scripts/ci-bash53-gate.sh' /dev/null
+
+  # The same runner, the same pinned corpus, on Windows — as a MEASUREMENT.
+  # Sprint 216 story 543: until then the harness failed closed on Windows (no
+  # job-object containment), so the suite had never been measured there. This
+  # job publishes whatever counts the runner observes (step summary + artifact:
+  # runnable / passed / failed / timed out / skipped) and is red only when the
+  # suite could not RUN — never for a fixture that failed. Do not quote 86/86
+  # for Windows from anything but this job's summary. Bounded: a fixture that
+  # waits on a tty forever costs one BASH53_TIMEOUT, not the budget.
+  bash53-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Bootstrap sibling deps (all pinned flat replaces)
+        shell: bash
+        run: ./scripts/bootstrap-siblings.sh
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.1
+      - name: Containment is proven before anything is measured
+        shell: bash
+        run: go test -v -timeout 5m -run 'TestFixture' ./tools/bash53suite
+      - name: bash-5.3 fixtures on Windows (measured counts; not a gate)
+        shell: bash
+        run: ./scripts/ci-bash53-windows.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bash53-windows
+          path: |
+            bash53-windows.log
+            bash53-windows-summary.md
+            bash53-windows-counts.json
+          if-no-files-found: ignore

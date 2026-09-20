@@ -651,3 +651,78 @@ func TestFixtureStdinIsIdleNotEndOfFile(t *testing.T) {
 		t.Fatalf("status = %s, want TIME — the fixture's stdin reported end-of-file, so `read -t 0` will report input available and read.tests will diverge from read.right", status)
 	}
 }
+
+// The fixture PATH is the tree first, then a userland. Unix pins one at fixed
+// places whatever the harness inherited; Windows takes BASH53_TOOLS_PATH when
+// set and the harness's own PATH otherwise, never a /usr/bin that does not
+// exist there. Both modes are exercised on every host.
+func TestFixturePathPerHost(t *testing.T) {
+	dir := t.TempDir()
+	unix := strings.Split(fixturePathMode(dir, "/opt/x/bin:/usr/bin", "", false), ":")
+	if want := []string{dir, "/usr/bin", "/bin", "/usr/local/bin"}; !sameStringsInOrder(unix, want) {
+		t.Fatalf("unix fixture PATH = %q, want %q", unix, want)
+	}
+	inherited := `C:\Program Files\Git\usr\bin;C:\Windows\System32`
+	win := strings.Split(fixturePathMode(dir, inherited, "", true), ";")
+	if want := []string{dir, `C:\Program Files\Git\usr\bin`, `C:\Windows\System32`}; !sameStringsInOrder(win, want) {
+		t.Fatalf("windows fixture PATH without BASH53_TOOLS_PATH = %q, want %q", win, want)
+	}
+	win = strings.Split(fixturePathMode(dir, inherited, `D:\tools\usr\bin; E:\more ;`, true), ";")
+	if want := []string{dir, `D:\tools\usr\bin`, `E:\more`}; !sameStringsInOrder(win, want) {
+		t.Fatalf("windows fixture PATH with BASH53_TOOLS_PATH = %q, want %q", win, want)
+	}
+	if got := fixturePathMode(dir, "", "", true); got != dir {
+		t.Fatalf("windows fixture PATH with nothing to inherit = %q, want just the tree", got)
+	}
+}
+
+// helperCompiler prefers $CC, then cc, then the names a cc-less host carries.
+func TestHelperCompilerPrefersCCEnv(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, exeName("mycc"))
+	writeTestFile(t, fake, "#!/bin/sh\nexit 0\n")
+	if err := os.Chmod(fake, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CC", fake)
+	got, err := helperCompiler()
+	if err != nil {
+		t.Fatalf("helperCompiler with CC set: %v", err)
+	}
+	if filepath.Clean(got) != filepath.Clean(fake) {
+		t.Fatalf("helperCompiler = %q, want $CC %q", got, fake)
+	}
+	t.Setenv("CC", "")
+	t.Setenv("PATH", t.TempDir())
+	if _, err := helperCompiler(); err == nil {
+		t.Fatal("helperCompiler found a compiler on a PATH holding none")
+	} else if !strings.Contains(err.Error(), "cc/gcc/clang") {
+		t.Fatalf("helperCompiler error = %q, want the candidate list", err)
+	}
+}
+
+// The binary-mode unit exists only for the Windows build of the helpers; on
+// every other host the compile line is unchanged.
+func TestHelperBinmodeSourcesOnlyOnWindows(t *testing.T) {
+	support := filepath.Join(t.TempDir(), "support")
+	extra, err := helperBinmodeSources(support)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" {
+		if len(extra) != 0 {
+			t.Fatalf("non-windows helper build got extra units %q", extra)
+		}
+		return
+	}
+	if len(extra) != 1 {
+		t.Fatalf("windows helper build got %d extra units, want 1", len(extra))
+	}
+	body, err := os.ReadFile(extra[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "_CRT_fmode = _O_BINARY") {
+		t.Fatalf("binmode unit does not set _CRT_fmode: %q", body)
+	}
+}
