@@ -234,13 +234,11 @@ func TestAttestOffIsSilent(t *testing.T) {
 }
 
 // A store that cannot be written is spoken once, not per call, and never
-// changes the call's own outcome.
+// changes the call's own outcome. The store is a regular file where a directory
+// is required, so attest fails cross-platform (chmod 0500 doesn't work on Windows).
 func TestAttestUnwritableStoreSpeaksOnce(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root writes anywhere")
-	}
 	store := filepath.Join(t.TempDir(), "ro")
-	if err := os.MkdirAll(store, 0o500); err != nil {
+	if err := os.WriteFile(store, []byte(""), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	script := "@require('true')\nfunction f() { echo \"f $1\"; }\nf a; f b\n"
