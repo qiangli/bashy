@@ -17,7 +17,8 @@ at a prompt to see whether the world is the way you meant it to be.
 |---|---|---|
 | require | `Require: <shell check>` (repeatable, one check per line) | `@require('<shell check>', ...)` (repeatable) |
 | ensure | `Ensure: <shell check>` (repeatable) | `@ensure('<shell check>', ...)` (repeatable) |
-| effects | `Effects: read,write,…` (declared, recorded) | `@guard(effects: "read,…")` (enforced) |
+| effects | `Effects: read,write,…` (enforced per dispatched command by Yoke's dag since B17, Sprint 216) | `@guard(effects: "read,…")` (enforced) |
+| confirm | — | `@confirm()` — effect-derived `--what-if` / `--confirm`, per operation; see `docs/effect-derived-confirmation.md` |
 
 Evaluation order on both surfaces: **require → body → ensure**, with the cap
 in force throughout. A failed `require` means the body **does not run** (and is
@@ -167,7 +168,7 @@ agentic {
 
 - `invariant` — Meyer's is a *class* invariant and Bash++ has no class model.
 - Advised (policy-applied) `@require`/`@ensure`.
-- Enforcing a dag `Effects:` cap (declared and recorded; the sandbox layer's
-  job).
+- Advised (policy-applied) `@confirm`; a `$ConfirmPreference` knob
+  (`docs/effect-derived-confirmation.md`).
 - A `~~~ensure` fence in `SKILL.md`, and a `dag --probe` that reports a
   postcondition that already holds before the body (it cannot discriminate).

@@ -642,6 +642,17 @@ itself, which is pure Go).
   the pass-through `attest` rung on every agentic registration. `BASHY_ATTEST=0`
   off; Bash OFF / `--posix` / `cmd/bash` structurally silent. The yoke seam
   (`AppendAttest`, `Status`, `StoreRevision`, `Stats.Yielded`) is pinned there.
+- `effect-derived-confirmation.md` — **`@confirm` (B16, Sprint 216):** PowerShell's
+  `SupportsShouldProcess` without the shell. A Bash# function declared `@confirm()`
+  gains a generated `--what-if` (describe every governed operation, run none) and a
+  per-operation confirmation of high-impact operations (declared `destroy`/`spend`/
+  `cred`/`priv`, or unclassified — fail closed), derived from the Command Atlas /
+  registered-command effects only, decided at the same ExecHandler rung as the `@guard`
+  cap. The human is reached through `bashy ask`; when no channel reaches one the call
+  YIELDS exit 6 with the resume form `--confirm=TOKEN:yes|no` (token = the operation's
+  argv), the contract `rfcs/0001-agentic-yield.md` (B19) pins: a harness pauses, asks,
+  and replays — never a fabricated yes/no. `test/yield/run.sh` is the recorded
+  harness fixture. Bash OFF is identity.
 - `agentic-action-example.md` — Sprint 134's bare `agentic` action examples:
   typed function/method, shell function, executable script and native tool
   embedding through the existing handler context and governed chat invocation.

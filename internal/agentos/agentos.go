@@ -1917,7 +1917,7 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	// agent launched outside `bashy chat` stops being invisible to the address
 	// book. Best-effort, silent, and never a claim — see shellsession.go.
 	registerShellSession()
-	// Bash++ native decorators (trace · guard · retry · require · ensure) and registration-time
+	// Bash++ native decorators (trace · guard · retry · confirm · require · ensure) and registration-time
 	// policy advice — decorators.go. Agentic branch only (the posix return
 	// above keeps both out of --posix, and cmd/bash never links this package);
 	// inert outside Bash++, where decorator syntax does not parse and the
@@ -1992,7 +1992,14 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	// after the applet handler so a record can never pre-empt an applet, and
 	// inside every middleware above so they all see argv[0] = the registered
 	// name. See registered.go.
-	mws = append(mws, outputMW, autofix.Handler(), dryRunHandler(r), coreutilsshell.Handler(), registeredHandler())
+	//
+	// The @confirm rung (confirm.go) sits just outside dry-run: it decides a
+	// governed operation per dispatched command — describe (--what-if), ask
+	// the human, honour a pre-supplied answer, or yield exit 6 — after
+	// autofix has settled the argv it describes, and outside the userland
+	// handler so in-process tools are governed too. Inert unless a @confirm
+	// call put its state on the context.
+	mws = append(mws, outputMW, autofix.Handler(), confirmHandler(), dryRunHandler(r), coreutilsshell.Handler(), registeredHandler())
 	return append(opts, interp.ExecHandlers(mws...))
 }
 

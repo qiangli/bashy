@@ -78,7 +78,8 @@ func nativeDecorators(stderr io.Writer, sink *attestSink) map[string]interp.Deco
 }
 
 // nativeDecoratorSet is the one list both hosts register from: the
-// cross-cutting three above, the two contract clauses (contracts.go), which
+// cross-cutting three above, effect-derived confirmation (confirm.go), the two
+// contract clauses (contracts.go), which
 // name a failed clause on stderr, and the pass-through `attest` rung advice
 // puts on agentic functions. Every one is wrapped through attesting (attest.go)
 // so the outermost native rung on a call appends that call's receipt, once.
@@ -86,10 +87,11 @@ func nativeDecorators(stderr io.Writer, sink *attestSink) map[string]interp.Deco
 // host (below) can defer resolving its sink past this call.
 func nativeDecoratorSet(stderr io.Writer, attesting func(nativeDecoratorFunc) nativeDecoratorFunc) map[string]nativeDecoratorFunc {
 	set := map[string]nativeDecoratorFunc{
-		"trace":  traceDecorator,
-		"guard":  guardDecorator,
-		"retry":  retryDecorator,
-		"attest": attestDecorator,
+		"trace":   traceDecorator,
+		"guard":   guardDecorator,
+		"retry":   retryDecorator,
+		"confirm": confirmDecorator, // confirm.go: effect-derived --what-if / --confirm
+		"attest":  attestDecorator,
 	}
 	for name, fn := range contractDecorators(stderr) {
 		set[name] = fn

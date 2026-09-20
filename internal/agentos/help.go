@@ -55,6 +55,9 @@ func dispatchHelp(args []string) int {
 	case "dryrun", "dry-run", "--dryrun", "--dry-run":
 		printDryRunHelp(os.Stdout)
 		return 0
+	case "confirm", "--confirm", "what-if", "--what-if", "whatif":
+		printConfirmHelp(os.Stdout)
+		return 0
 	case "output", "reduce", "reduction":
 		printOutputReductionHelp(os.Stdout)
 		return 0
@@ -63,7 +66,7 @@ func dispatchHelp(args []string) int {
 		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "bashy help: unknown topic %q\n", args[0])
-		fmt.Fprintln(os.Stderr, "known topics: dryrun, output, commands")
+		fmt.Fprintln(os.Stderr, "known topics: dryrun, confirm, output, commands")
 		return 2
 	}
 }
@@ -73,6 +76,7 @@ func printGeneralHelp(w io.Writer) {
 
 Topics:
   dryrun    preview commands and destructive file operations without effects
+  confirm   @confirm: effect-derived --what-if / --confirm on a Bash# function
   output    opt in to bounded, recoverable command output
   commands  discover bashy command surfaces
 
@@ -150,6 +154,49 @@ Notes:
   are treated as covered by the GNU Bash 5.3 compatibility and POSIX conformance
   suites. The goal is for each release to reduce missing and not_100_conformant
   coreutils counts.
+`)
+}
+
+func printConfirmHelp(w io.Writer) {
+	fmt.Fprint(w, `usage (Bash#, --bashsharp):
+  @confirm()
+  function NAME() { ...; }
+
+  NAME --what-if [ARG...]                      describe governed operations; run none
+  NAME [ARG...]                                confirm each high-impact operation
+  NAME --confirm=TOKEN:yes,TOKEN:no [ARG...]   resume with answers per operation
+
+Both flags are generated from the Command Atlas effects each dispatched
+command declares (bashy commands --view effects; registered commands carry
+their own record) — the function implements neither, and only the FIRST
+argument is inspected, so its own flags are never stolen. Pure and read
+commands are never governed.
+
+--what-if prints one line per governed operation on stderr —
+  what-if: NAME: would run ARGV (effects: E[,E...][; confirm TOKEN])
+— and runs none of them. High-impact operations carry their token.
+
+Without a flag, a high-impact operation (declared destroy, spend, cred or
+priv, or not classified at all) is put to the HUMAN through bashy ask over
+the terminal or an attended askpass. yes runs it; anything else refuses it
+with status 126 and the body continues. Other side effects (write, net,
+exec, remote, persist) run without a prompt, as PowerShell auto-confirms
+Medium impact.
+
+When nobody can be asked — BASHY_AGENTIC is set, a harness owns input
+(BASHY_ASK_HANDLER), or there is no terminal and no attended askpass — the
+call yields: exit 6, one line naming the operation, its token and the resume
+form. Nothing with a side effect runs after the yield point. The harness
+pauses, asks its human, and replays the call with the answer pre-supplied.
+Contract: rfcs/0001-agentic-yield.md. With BASHY_AGENTIC=1 the line is a
+JSON envelope (error.code "input_required").
+
+Example:
+  @confirm()
+  function clean() { rm -rf "$1"; echo "cleaned $1"; }
+  clean --what-if build              # what-if: clean: would run rm -rf build (effects: destroy,write; confirm 1f2e3d4c)
+  BASHY_AGENTIC=1 bashy -c 'clean build'   # exit 6, resume form on stderr
+  clean --confirm=1f2e3d4c:yes build       # runs
 `)
 }
 
