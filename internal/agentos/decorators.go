@@ -69,25 +69,31 @@ const retryAttemptLimit = 100
 // Install the compiled slot once at host startup, never during a call.
 func init() { shellrt.Decorators = compiledNativeDecorators() }
 
-func nativeDecorators(stderr io.Writer) map[string]interp.DecoratorFunc {
+func nativeDecorators(stderr io.Writer, sink *attestSink) map[string]interp.DecoratorFunc {
 	out := map[string]interp.DecoratorFunc{}
-	for name, fn := range nativeDecoratorSet(stderr) {
+	for name, fn := range nativeDecoratorSet(stderr, sink) {
 		out[name] = adaptInterpreterDecorator(fn)
 	}
 	return out
 }
 
 // nativeDecoratorSet is the one list both hosts register from: the
-// cross-cutting three above and the two contract clauses (contracts.go),
-// which name a failed clause on stderr.
-func nativeDecoratorSet(stderr io.Writer) map[string]nativeDecoratorFunc {
+// cross-cutting three above, the two contract clauses (contracts.go), which
+// name a failed clause on stderr, and the pass-through `attest` rung advice
+// puts on agentic functions. Every one is wrapped by the sink (attest.go) so
+// the outermost native rung on a call appends that call's receipt, once.
+func nativeDecoratorSet(stderr io.Writer, sink *attestSink) map[string]nativeDecoratorFunc {
 	set := map[string]nativeDecoratorFunc{
-		"trace": traceDecorator,
-		"guard": guardDecorator,
-		"retry": retryDecorator,
+		"trace":  traceDecorator,
+		"guard":  guardDecorator,
+		"retry":  retryDecorator,
+		"attest": attestDecorator,
 	}
 	for name, fn := range contractDecorators(stderr) {
 		set[name] = fn
+	}
+	for name, fn := range set {
+		set[name] = sink.attesting(fn)
 	}
 	return set
 }
@@ -103,12 +109,15 @@ type nativeDecoratorCall struct {
 	// Run evaluates shell source in the call's frame (Call.Run on either
 	// engine): the current Args as $1..$n, vars bound, status returned.
 	Run func(context.Context, string, map[string]string) int
+	// key is the engine's own Call, shared by every rung of one chain and by
+	// nothing else — what attest.go keys one call's frame on.
+	key any
 }
 type nativeDecoratorFunc func(context.Context, *nativeDecoratorCall, []interp.DecoratorArg) error
 
 func adaptInterpreterDecorator(fn nativeDecoratorFunc) interp.DecoratorFunc {
 	return func(ctx context.Context, c *interp.Call, args []interp.DecoratorArg) error {
-		call := &nativeDecoratorCall{Name: c.Name, Site: c.Site, Caller: c.Caller, Advised: c.Advised, Args: c.Args, Results: c.Results, Status: c.Status, Agentic: c.Agentic}
+		call := &nativeDecoratorCall{Name: c.Name, Site: c.Site, Caller: c.Caller, Advised: c.Advised, Args: c.Args, Results: c.Results, Status: c.Status, Agentic: c.Agentic, key: c}
 		flush := func() { c.Args, c.Results, c.Status = call.Args, call.Results, call.Status }
 		call.Next = func(next context.Context) {
 			flush()
@@ -126,11 +135,13 @@ func adaptInterpreterDecorator(fn nativeDecoratorFunc) interp.DecoratorFunc {
 
 // compiledNativeDecorators is the same native set for a compiled host. Such a
 // host must also wire its effect-aware command handler into the shell backend.
+// The compiled host has no advice slot, so its agentic functions are attested
+// only when a source decorator puts them in a chain.
 func compiledNativeDecorators() map[string]shellrt.DecoratorFunc {
 	result := map[string]shellrt.DecoratorFunc{}
-	for name, fn := range nativeDecoratorSet(os.Stderr) {
+	for name, fn := range nativeDecoratorSet(os.Stderr, newAttestSink(os.Environ(), os.Stderr)) {
 		result[name] = func(ctx context.Context, c *shellrt.Call, args []shellrt.DecoratorArg) error {
-			call := &nativeDecoratorCall{Name: c.Name, Site: c.Site, Caller: c.Caller, Advised: c.Advised, Args: c.Args, Results: c.Results, Status: c.Status, Agentic: c.Agentic}
+			call := &nativeDecoratorCall{Name: c.Name, Site: c.Site, Caller: c.Caller, Advised: c.Advised, Args: c.Args, Results: c.Results, Status: c.Status, Agentic: c.Agentic, key: c}
 			flush := func() { c.Args, c.Results, c.Status = call.Args, call.Results, call.Status }
 			call.Next = func(next context.Context) {
 				flush()
@@ -314,7 +325,13 @@ func retryPolicy(args []interp.DecoratorArg) (attempts int, fixed time.Duration,
 // reaches only functions user code registered. Idempotence and ordering are
 // the engine's: advised specs apply outermost, in the file order For()
 // returns, deduplicated by the stable rule ID on every re-registration.
-func newAdviceCallback(env []string, stderr io.Writer) interp.AdviceFunc {
+//
+// With attest on (attest.go), every AGENTIC registration additionally gets the
+// native `attest` rung, outermost, so an agentic{} function with no decorator
+// of its own still completes into the evidence ledger. It rides this seam
+// because it is the one place the engine tells the host about a registration
+// — and only while Bash++ is active, which is what keeps Bash OFF an identity.
+func newAdviceCallback(env []string, stderr io.Writer, attest bool) interp.AdviceFunc {
 	var once sync.Once
 	var rules *advice.Rules
 	var loadErr error
@@ -331,11 +348,14 @@ func newAdviceCallback(env []string, stderr io.Writer) interp.AdviceFunc {
 		if loadErr != nil {
 			return []interp.DecoratorSpec{{ID: "invalid-policy", Name: "__bashy_invalid_advice"}}
 		}
+		var specs []interp.DecoratorSpec
+		if attest && agentic {
+			specs = append(specs, interp.DecoratorSpec{ID: attestAdviceID, Name: "attest"})
+		}
 		advised := rules.For(advice.Query{Name: name, File: file, Agentic: agentic})
 		if len(advised) == 0 {
-			return nil
+			return specs
 		}
-		specs := make([]interp.DecoratorSpec, 0, len(advised))
 		for _, a := range advised {
 			spec := interp.DecoratorSpec{ID: a.RuleID, Name: a.Spec.Decorator}
 			for _, arg := range a.Spec.Args {

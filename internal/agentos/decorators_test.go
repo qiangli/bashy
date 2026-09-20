@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,10 +39,21 @@ import (
 
 // runDecorated runs script through a runner wired exactly as wireExec wires
 // the agentic shell, in the given language variant.
+//
+// The skills store is pointed at a private directory unless the test names
+// one: a completed decorated call attests into the store (attest.go), and a
+// test must never append to the developer's own ledger.
 func runDecorated(t *testing.T, ctx context.Context, lang syntax.LangVariant, script string, env map[string]string) (error, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 	out, errOut := new(bytes.Buffer), new(bytes.Buffer)
 	environ := os.Environ()
+	if _, ok := env["BASHY_SKILLS_DIR"]; !ok {
+		env = maps.Clone(env)
+		if env == nil {
+			env = map[string]string{}
+		}
+		env["BASHY_SKILLS_DIR"] = t.TempDir()
+	}
 	for k, v := range env {
 		t.Setenv(k, v)
 		environ = append(environ, k+"="+v)
@@ -318,7 +330,7 @@ const orderedRules = `{"schema":"bashy-advice-v1","rules":[
 func TestAdviceCallbackSpecsRawAndOrdered(t *testing.T) {
 	path := writeAdviceRules(t, orderedRules)
 	warn := new(bytes.Buffer)
-	cb := newAdviceCallback([]string{"BASHY_ADVICE=" + path}, warn)
+	cb := newAdviceCallback([]string{"BASHY_ADVICE=" + path}, warn, false)
 
 	specs := cb("worker", "job.sh", false)
 	if len(specs) != 2 {
@@ -433,7 +445,7 @@ func TestAdviceCertNeverOpensFile(t *testing.T) {
 	// no warning, no rules, and the file stays untouched.
 	garbage := writeAdviceRules(t, `{not json`)
 	warn := new(bytes.Buffer)
-	cb := newAdviceCallback([]string{"VSC_PROFILE=cert", "BASHY_ADVICE=" + garbage}, warn)
+	cb := newAdviceCallback([]string{"VSC_PROFILE=cert", "BASHY_ADVICE=" + garbage}, warn, false)
 	if got := cb("work", "job.sh", false); got != nil {
 		t.Fatalf("cert advised %+v", got)
 	}
@@ -441,7 +453,7 @@ func TestAdviceCertNeverOpensFile(t *testing.T) {
 		t.Fatalf("cert opened/parsed the rules file: %q", warn.String())
 	}
 	// A path that cannot be opened at all is equally invisible under cert.
-	cb = newAdviceCallback([]string{"VSC_PROFILE=cert", "BASHY_ADVICE=" + filepath.Join(t.TempDir(), "missing.json")}, warn)
+	cb = newAdviceCallback([]string{"VSC_PROFILE=cert", "BASHY_ADVICE=" + filepath.Join(t.TempDir(), "missing.json")}, warn, false)
 	if got := cb("work", "job.sh", false); got != nil || warn.Len() != 0 {
 		t.Fatalf("cert touched a missing rules file: %+v %q", got, warn.String())
 	}
@@ -450,7 +462,7 @@ func TestAdviceCertNeverOpensFile(t *testing.T) {
 func TestAdviceBrokenFileWarnsOnceAndRefusesCalls(t *testing.T) {
 	garbage := writeAdviceRules(t, `{not json`)
 	warn := new(bytes.Buffer)
-	cb := newAdviceCallback([]string{"BASHY_ADVICE=" + garbage}, warn)
+	cb := newAdviceCallback([]string{"BASHY_ADVICE=" + garbage}, warn, false)
 	if got := cb("work", "job.sh", false); len(got) != 1 || got[0].Name != "__bashy_invalid_advice" {
 		t.Fatalf("broken file failed open: %+v", got)
 	}

@@ -59,7 +59,7 @@ func requireDecorator(stderr io.Writer) nativeDecoratorFunc {
 		if err != nil {
 			return err
 		}
-		if failed := runContractChecks(ctx, c, checks, false); failed != "" {
+		if failed := runContractChecks(ctx, c, "require", checks, false); failed != "" {
 			contractFail(stderr, c, "precondition", failed)
 			return nil
 		}
@@ -80,7 +80,7 @@ func ensureDecorator(stderr io.Writer) nativeDecoratorFunc {
 			// is the verdict, and there is no result to judge.
 			return nil
 		}
-		if failed := runContractChecks(ctx, c, checks, true); failed != "" {
+		if failed := runContractChecks(ctx, c, "ensure", checks, true); failed != "" {
 			contractFail(stderr, c, "postcondition", failed)
 		}
 		return nil
@@ -110,8 +110,10 @@ func contractChecks(name string, c *nativeDecoratorCall, args []interp.Decorator
 }
 
 // runContractChecks evaluates checks in order in the call's frame and
-// returns the first that fails, or "" when all pass.
-func runContractChecks(ctx context.Context, c *nativeDecoratorCall, checks []string, post bool) string {
+// returns the first that fails, or "" when all pass. Each verdict is noted on
+// the call's attestation frame (attest.go) under "<clause>:<check>"; a check
+// after the first failure never runs and is never noted.
+func runContractChecks(ctx context.Context, c *nativeDecoratorCall, clause string, checks []string, post bool) string {
 	var vars map[string]string
 	if post {
 		result := ""
@@ -121,7 +123,9 @@ func runContractChecks(ctx context.Context, c *nativeDecoratorCall, checks []str
 		vars = map[string]string{"STATUS": strconv.Itoa(c.Status), "RESULT": result}
 	}
 	for _, check := range checks {
-		if c.Run(ctx, check, vars) != 0 {
+		held := c.Run(ctx, check, vars) == 0
+		attestRecord(ctx, c, clause, check, held)
+		if !held {
 			return check
 		}
 	}

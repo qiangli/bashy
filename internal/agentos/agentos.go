@@ -1922,9 +1922,13 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	// above keeps both out of --posix, and cmd/bash never links this package);
 	// inert outside Bash++, where decorator syntax does not parse and the
 	// engine never consults advice, so the rules file is never even opened.
+	// Function-call attestation (attest.go) rides both: the decorators append
+	// a completed call's receipt to the skills/craft ledger, and advice puts
+	// the `attest` rung on every agentic{} function so it is reached too.
+	sink := newAttestSink(env, stderr)
 	opts = append(opts,
-		interp.Decorators(nativeDecorators(stderr)),
-		interp.Advice(newAdviceCallback(env, stderr)),
+		interp.Decorators(nativeDecorators(stderr, sink)),
+		interp.Advice(newAdviceCallback(env, stderr, sink != nil)),
 	)
 	initial := initialDryRun
 	opts = append(opts, interp.EnableDryRunOption(initial))

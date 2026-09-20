@@ -632,6 +632,16 @@ itself, which is pure Go).
   agentic yield (exit 6) propagates with no `ensure` run; the fixture is
   `test/contracts/` (`run.sh [bashy]` replays it on any binary). Natives live in
   `internal/agentos/contracts.go`, source-only like `@retry`.
+- `function-attestation.md` — **Sprint 216 B18:** a decorated Bash# function
+  or `agentic function` completing appends ONE `skills.AttestRecord` to the
+  EXISTING yoke skills/craft ledger (`<store>/attest/<name>.jsonl`, read back by
+  `bashy craft history`) — clause verdicts as `<clause>:<check>`, exit status,
+  coordinate, `bashy@<version>` tier, store revision. A yield (exit 6) is a
+  HANDOFF (`status: 6`, `valid: false`, counted `yielded`, never `FAIL`). The
+  outermost native rung on a call appends, inner rungs contribute; advice puts
+  the pass-through `attest` rung on every agentic registration. `BASHY_ATTEST=0`
+  off; Bash OFF / `--posix` / `cmd/bash` structurally silent. The yoke seam
+  (`AppendAttest`, `Status`, `StoreRevision`, `Stats.Yielded`) is pinned there.
 - `agentic-action-example.md` — Sprint 134's bare `agentic` action examples:
   typed function/method, shell function, executable script and native tool
   embedding through the existing handler context and governed chat invocation.

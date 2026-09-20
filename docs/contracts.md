@@ -75,6 +75,48 @@ transcript is `agentic-boundary.expected`, and `test/contracts/run.sh
 advised postcondition is the tighten-only ratchet, and it needs its own gate
 first). `@retry` has the same rule.
 
+## What a completed call leaves behind (attestation)
+
+Since Sprint 216 (B18) a decorated Bash# function and an `agentic function`
+**attest** every completion into the **existing** yoke skills/craft evidence
+ledger — the same `skills.AttestRecord` a `bashy skill run` writes, into the
+same `<store>/attest/<name>.jsonl`, read back by the same `bashy craft
+history`. No store of its own, no second record type, no model call. See
+`docs/function-attestation.md` for the design of record.
+
+One call is one receipt, whatever it is decorated with. The receipt carries
+the clause verdicts as `Attest.Passed`/`Attest.Failed` ids of the form
+`<clause>:<check>` (`require:test -n "$1"`), the call's exit **status**, this
+host's environment **coordinate** (`context_key`), the executor **tier**
+(`bashy@<version>`) and the **store revision** (`craft.Revision`, taken before
+the append). `Valid` means *completed with status 0 and no check failed*. A
+**yield** (exit 6) is recorded with `status: 6` and `valid: false` and is
+counted by the reader as a *handoff* — in `RUNS`, in neither `PASS` nor
+`FAIL`, rendered `yield` — so a function that asked for input is never
+reported as one that failed, and never as one that completed.
+
+```sh
+$ BASHY_SKILLS_DIR=$S bashy --bashpp test/contracts/agentic-boundary.bpp
+$ BASHY_SKILLS_DIR=$S bashy craft history summarize --all
+SKILL                         RUNS  PASS  FAIL    RATE  COORDINATES
+summarize                        6     1     4   -0.50  1
+
+2026-09-20T09:11:33Z  pass   summarize   cc8403fe12e98  local
+2026-09-20T09:11:33Z  FAIL   summarize   cc8403fe12e98  local      # "": precondition
+…
+2026-09-20T09:11:33Z  yield  summarize   cc8403fe12e98  local
+```
+
+(The tier is `local` on an unstamped dev build and `bashy@<version>` on a
+release build — the `skills run` convention.)
+
+A plain, undecorated, non-agentic function is an identity (no receipt); Bash
+OFF never registers a decorator or consults advice, so a plain-Bash script
+leaves no ledger at all; `--posix` and `cmd/bash` never link the seam.
+`BASHY_ATTEST=0` switches it off; an empty skills store is also off. A store
+that cannot be written is spoken once on stderr and never changes the call's
+own outcome.
+
 ## Examples
 
 A dag target with a full contract:
