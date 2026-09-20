@@ -236,7 +236,7 @@ func TestE2EAllListedCommandsDispatch(t *testing.T) {
 	// (docker/podman/ollama — the regression class) are really invoked.
 	native := set("weave", "sprint", "claim", "chat", "agent", "model", "tool", "person", "sdlc", "web", "dag",
 		"schedule", "secret", "ask", "bus", "skill", "app", "run", "commands", "inspect", "context", "doctor",
-		"self", "check", "verify", "git", "dhnt", "release", "awd",
+		"self", "check", "verify", "git", "dhnt", "release", "awd", "supervisord",
 		// hidden number aliases: byte-identical to their singular, and the only
 		// thing that proves the `case` arm exists is invoking them.
 		"agents", "models", "tools", "people", "skills", "secrets", "apps", "messages", "issue", "todo")

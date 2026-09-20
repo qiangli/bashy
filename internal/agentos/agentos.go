@@ -147,7 +147,9 @@ var (
 	// bare `ping` must continue to resolve to the platform command.
 	// `awd` is a shell builtin inside every script already; the front door only
 	// routes the bare invocation to it, so it must never become a shim either.
-	directFrontDoorVerbs = []string{"mb", "ping", "out", "full", "awd"}
+	// `supervisord` shares its name with a widely installed program; bare
+	// `supervisord` stays the host's, `bashy supervisord` is ours.
+	directFrontDoorVerbs = []string{"mb", "ping", "out", "full", "awd", "supervisord"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
@@ -894,6 +896,12 @@ func dispatch() {
 			dispatchExit(1)
 		}
 		dispatchExit(0)
+	case "supervisord":
+		// The intentionally small foreground supervisor of ONE dag root:
+		// spawn → restart with bounded backoff → forward TERM/INT to the
+		// group → reap orphans as PID 1 (Sprint 218). Not a shim: a host's
+		// own supervisord (the Python one) must keep resolving bare.
+		dispatchExit(dispatchSupervisord(os.Args[2:]))
 	case "supervise":
 		// Conductor-as-a-verb: one supervisor agent drives a fleet of workers
 		// against a goal decomposed into GATED tasks, in the current working
