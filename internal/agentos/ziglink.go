@@ -82,18 +82,20 @@ func dispatchZigLink(args []string) int {
 	return 0
 }
 
-// normalizeWindowsGnuDefArgs removes rustc's temporary export-list argument.
-// Zig's MinGW linker rejects that GNU-driver spelling; like cargo-zigbuild, it
-// derives the DLL exports without the list. Everything else is kept byte-for-
-// byte so this adapter cannot silently reinterpret unrelated linker flags.
+// normalizeWindowsGnuDefArgs presents rustc's temporary export list as an
+// input file. Zig accepts .def inputs but rejects rustc's GNU -Wl spelling.
+// Everything else is kept byte-for-byte so this adapter cannot silently
+// reinterpret unrelated linker flags.
 func normalizeWindowsGnuDefArgs(args []string) []string {
 	out := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if strings.HasPrefix(a, "-Wl,") && isRustcExportList(a[len("-Wl,"):]) {
+			out = append(out, a[len("-Wl,"):])
 			continue
 		}
 		if a == "-Xlinker" && i+1 < len(args) && isRustcExportList(args[i+1]) {
+			out = append(out, args[i+1])
 			i++
 			continue
 		}

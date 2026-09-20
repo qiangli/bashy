@@ -10,11 +10,11 @@ import (
 //     (Apache-2.0 OR MIT): Windows GNU export lists are sent to the linker as
 //     list.def, through -Wl, for the observed no-comma path or -Xlinker when
 //     the argument cannot be combined.
-//   - cargo-zigbuild v0.23.3, commit cd38ab2, src/zig.rs (MIT): its
-//     Windows-GNU Zig adapter drops the temporary list.def argument.
 //
 // The normal case is copied from Sprint 216 tour run 35506896490; boundary and
 // failure cases pin the narrow adapter contract rather than accepting any .def.
+// Tour run 35508410228 proves why the file must be retained: dropping it lets
+// the link report success, but rustc then access-violates loading serde_derive.
 func TestNormalizeWindowsGnuDefArgs(t *testing.T) {
 	tests := []struct {
 		name string
@@ -24,17 +24,17 @@ func TestNormalizeWindowsGnuDefArgs(t *testing.T) {
 		{
 			name: "rustc windows path",
 			in:   []string{`-Wl,C:\Users\runneradmin\AppData\Local\bashpp\rust-target\debug\deps\rustcNPkazL\list.def`, "symbols.o"},
-			want: []string{"symbols.o"},
+			want: []string{`C:\Users\runneradmin\AppData\Local\bashpp\rust-target\debug\deps\rustcNPkazL\list.def`, "symbols.o"},
 		},
 		{
 			name: "xlinker pair",
 			in:   []string{"-Xlinker", `C:\work,comma\rustc123\list.def`, "symbols.o"},
-			want: []string{"symbols.o"},
+			want: []string{`C:\work,comma\rustc123\list.def`, "symbols.o"},
 		},
 		{
 			name: "case insensitive windows basename",
 			in:   []string{`-Wl,C:\work\LIST.DEF`, "symbols.o"},
-			want: []string{"symbols.o"},
+			want: []string{`C:\work\LIST.DEF`, "symbols.o"},
 		},
 		{
 			name: "other def is preserved",
