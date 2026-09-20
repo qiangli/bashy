@@ -73,6 +73,12 @@ func dispatchZigLink(args []string) int {
 	cmd := exec.Command(zig, argv...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
+		for _, a := range argv[1:] {
+			if path, ok := rustcExportListPath(a); ok {
+				fmt.Fprintf(os.Stderr, "bashy zig-link: retained rustc export list as positional input %q\n", path)
+				break
+			}
+		}
 		if ee, ok := err.(*exec.ExitError); ok {
 			return ee.ExitCode()
 		}
@@ -90,24 +96,32 @@ func normalizeWindowsGnuDefArgs(args []string) []string {
 	out := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		a := args[i]
-		if strings.HasPrefix(a, "-Wl,") && isRustcExportList(a[len("-Wl,"):]) {
-			out = append(out, a[len("-Wl,"):])
-			continue
+		if strings.HasPrefix(a, "-Wl,") {
+			if path, ok := rustcExportListPath(a[len("-Wl,"):]); ok {
+				out = append(out, path)
+				continue
+			}
 		}
-		if a == "-Xlinker" && i+1 < len(args) && isRustcExportList(args[i+1]) {
-			out = append(out, args[i+1])
-			i++
-			continue
+		if a == "-Xlinker" && i+1 < len(args) {
+			if path, ok := rustcExportListPath(args[i+1]); ok {
+				out = append(out, path)
+				i++
+				continue
+			}
 		}
 		out = append(out, a)
 	}
 	return out
 }
 
-func isRustcExportList(arg string) bool {
-	arg = strings.TrimSpace(arg)
-	if i := strings.LastIndexAny(arg, `/\\`); i >= 0 {
-		arg = arg[i+1:]
+func rustcExportListPath(arg string) (string, bool) {
+	path := strings.Trim(strings.TrimSpace(arg), `"`)
+	// The .cmd re-entry boundary can preserve Windows separators. Zig accepts
+	// native paths, but its cc input classifier is deterministic with slashes.
+	path = strings.ReplaceAll(path, `\`, "/")
+	base := path
+	if i := strings.LastIndexByte(base, '/'); i >= 0 {
+		base = base[i+1:]
 	}
-	return strings.EqualFold(arg, "list.def")
+	return path, strings.EqualFold(base, "list.def")
 }

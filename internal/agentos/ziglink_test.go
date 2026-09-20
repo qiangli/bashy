@@ -24,17 +24,22 @@ func TestNormalizeWindowsGnuDefArgs(t *testing.T) {
 		{
 			name: "rustc windows path",
 			in:   []string{`-Wl,C:\Users\runneradmin\AppData\Local\bashpp\rust-target\debug\deps\rustcNPkazL\list.def`, "symbols.o"},
-			want: []string{`C:\Users\runneradmin\AppData\Local\bashpp\rust-target\debug\deps\rustcNPkazL\list.def`, "symbols.o"},
+			want: []string{`C:/Users/runneradmin/AppData/Local/bashpp/rust-target/debug/deps/rustcNPkazL/list.def`, "symbols.o"},
 		},
 		{
 			name: "xlinker pair",
 			in:   []string{"-Xlinker", `C:\work,comma\rustc123\list.def`, "symbols.o"},
-			want: []string{`C:\work,comma\rustc123\list.def`, "symbols.o"},
+			want: []string{`C:/work,comma/rustc123/list.def`, "symbols.o"},
 		},
 		{
 			name: "case insensitive windows basename",
 			in:   []string{`-Wl,C:\work\LIST.DEF`, "symbols.o"},
-			want: []string{`C:\work\LIST.DEF`, "symbols.o"},
+			want: []string{`C:/work/LIST.DEF`, "symbols.o"},
+		},
+		{
+			name: "cmd boundary trailing quote",
+			in:   []string{`-Wl,C:\work\rustc123\list.def"`, "symbols.o"},
+			want: []string{`C:/work/rustc123/list.def`, "symbols.o"},
 		},
 		{
 			name: "other def is preserved",
