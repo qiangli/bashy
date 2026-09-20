@@ -3,6 +3,8 @@
 This is a pointer file for tools that look for `AGENTS.md` (Codex, OpenCode,
 etc.). All guidance lives in [`CLAUDE.md`](CLAUDE.md) — read that.
 
+**`bashy sprint` is the source of requests, plans and details for every agent** — read the sprint card (spec-ref, acceptance, continuity) for what to do, never this file. Delivery commits carry `Sprint:` / `Story:` / `Story-ID:` trailers.
+
 <!-- BEGIN bashy lexicon (generated — do not edit by hand) -->
 
 ## Project lexicon
