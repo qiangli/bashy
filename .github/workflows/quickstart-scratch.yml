@@ -1,0 +1,51 @@
+name: quickstart-scratch
+# Sprint 216, Story 540 — the AUTHORITATIVE proof for the three Bash# delivery
+# modes. It builds and RUNS three real `FROM scratch` images and publishes each
+# image's compressed/uncompressed size plus the standalone binary's
+# `go version -m` SBOM line. This is a Linux gate on purpose: the local smoke on
+# a developer's machine may SKIP (no engine) and is NOT authoritative — this job
+# is. Mark it a required check in branch protection.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  scratch-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Bashy resolves its direct dependencies as flat siblings; clone each at
+      # its pinned SHA so the in-container `go build ./cmd/bashy` resolves.
+      - name: Bootstrap sibling deps (all pinned flat replaces)
+        shell: bash
+        run: ./scripts/bootstrap-siblings.sh
+      # GitHub's ubuntu runners ship Docker; the smoke uses it as the engine.
+      # With an engine present, any build/run failure fails this gate (the
+      # smoke only SKIPs when NO engine is usable, which never happens here).
+      - name: Confirm a usable container engine is present (this gate must run)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          docker info >/dev/null
+      - name: Build and run the three FROM-scratch images
+        shell: bash
+        timeout-minutes: 30
+        run: |
+          set -euxo pipefail
+          scripts/quickstart-container-smoke.sh 2>&1 | tee /tmp/quickstart.log
+          # Fail closed: the smoke must have actually run (not SKIPped) here.
+          grep -q 'quickstart-container: OK' /tmp/quickstart.log
+      - name: Publish sizes and SBOM to the job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Bash# three FROM-scratch delivery modes'
+            echo
+            echo '| kind | line |'
+            echo '|---|---|'
+            grep -E 'quickstart-container: (SIZE|SBOM)' /tmp/quickstart.log \
+              | sed -E 's/quickstart-container: (SIZE|SBOM) /| \1 | /; s/$/ |/' \
+              || echo '| (none) | smoke produced no size/SBOM lines |'
+          } >> "$GITHUB_STEP_SUMMARY"

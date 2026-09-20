@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-quickstart dist tidy clean help
+.PHONY: dag build build-bash build-bashy build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-quickstart smoke-quickstart-container dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -376,14 +376,24 @@ smoke-dag-c:
 smoke-dag-go:
 	@scripts/dag-go-examples-smoke.sh
 
-## smoke-quickstart: Three-mode FROM-scratch example gate (Sprint 216, Story 540).
+## smoke-quickstart: Three-mode process-level example check (Sprint 216, Story 540).
 ## (a) bashy + .bsh interpreted, no toolchain; (b) transpile --standalone: Bash#
 ## → Go binary, no bashy at runtime; (c) pre-prepared Python island via check
-## --prepare. Local smoke is deterministic. Container leg runs only when docker or
-## podman is available — SKIP_CONTAINER=1 suppresses it. Honest on hosts without
-## a container engine. Not part of `test`.
+## --prepare. This is a fast host check, NOT the authoritative proof — the
+## FROM-scratch images are proved by smoke-quickstart-container / the Linux CI
+## job. Not part of `test`.
 smoke-quickstart:
 	@scripts/quickstart-smoke.sh
+
+## smoke-quickstart-container: AUTHORITATIVE three-mode FROM-scratch gate (Sprint
+## 216, Story 540). Builds and RUNS three real `FROM scratch` images from
+## examples/quickstart/Containerfile (each with --network=none) and reports each
+## image's compressed/uncompressed size + the standalone binary's `go version -m`
+## SBOM line. SKIPs (exit 0) when no podman/docker engine is usable; with an
+## engine present, any build/run failure fails. The required Linux CI job
+## (.github/workflows/quickstart-scratch.yml) is the release gate. Not part of `test`.
+smoke-quickstart-container:
+	@scripts/quickstart-container-smoke.sh
 
 ## test-bash: Run bash 5.3 native test suite against bashy (with per-test timeout).
 ## Builds only the lean bin/bash drop-in (not the 259MB embed-heavy bin/bashy).

@@ -1,23 +1,21 @@
 #!/bin/sh
-# Sprint 216, Story 540 — three-mode quickstart smoke gate.
+# Sprint 216, Story 540 — three-mode quickstart PROCESS-LEVEL check.
 #
-# Tests:
+# Tests, as host processes (NOT containers):
 #   (a) bashy + .bsh:               interpreted, no toolchain
 #   (b) transpile --standalone:     Bash# → Go → binary, no bashy at runtime
 #   (c) pre-prepared Python island: check --prepare then offline execution
 #
-# Local smoke is deterministic (exits 0 or non-0, same result every run).
-# Container leg is OPTIONAL and runs only when docker or podman is available;
-# hosts without a container engine still pass the full local gate.
+# This is a fast host check. It is NOT the authoritative FROM-scratch proof —
+# that is scripts/quickstart-container-smoke.sh, which builds and RUNS three
+# real `FROM scratch` images, and the required Linux CI job that drives it. This
+# script deliberately does not fake a container leg (an earlier version gzipped
+# the transpiled Go SOURCE and built inside a golang image, proving neither a
+# scratch image nor a run); it points at the real gate instead.
 #
 # Usage:
 #   scripts/quickstart-smoke.sh [BASHY_BIN]      # uses PATH bashy when omitted
 #   BASHY_BIN=bin/bashy scripts/quickstart-smoke.sh
-#   BASHY_BIN=bin/bashy SKIP_CONTAINER=1 scripts/quickstart-smoke.sh
-#
-# Container leg records:
-#   - compressed and uncompressed binary sizes for the standalone artifact
-#   - one go version -m SBOM line confirming the shell-runtime dependency
 #
 # Claim: standalone binaries have a SMALLER SUPPLY-CHAIN SURFACE than
 # interpreter-based invocations because they import only the plain shell
@@ -41,7 +39,6 @@ bashy=${BASHY_BIN:-}
 }
 
 flag=${BASHSHARP_FLAG:---bashsharp}
-skip_container=${SKIP_CONTAINER:-}
 rc=0
 
 pass() { echo "quickstart-smoke: PASS $*"; }
@@ -122,55 +119,18 @@ else
     echo "quickstart-smoke: INFO  (c) Python island — toolchain prepared via 'bashy check --prepare'"
 fi
 
-# ── Optional container leg ───────────────────────────────────────────────────
-
-engine=
-for e in docker podman; do
-    if command -v "$e" >/dev/null 2>&1; then
-        engine=$e
-        break
-    fi
-done
-
-if [ -z "$engine" ] || [ -n "$skip_container" ]; then
-    skip "container leg (no docker/podman found or SKIP_CONTAINER set) — local smoke is the authoritative gate"
-else
-    # Container leg: build the standalone binary inside a minimal Go image
-    # and record its sizes; the gate itself is still the local build above.
-    tmpdir_c=$(mktemp -d "${TMPDIR:-/tmp}/quickstart-container.XXXXXX")
-    trap 'rm -rf "$tmpdir_c"' EXIT HUP INT TERM
-
-    "$bashy" transpile "$flag" \
-        "$here/examples/quickstart/hello_standalone.bsh" \
-        --standalone -o "$tmpdir_c/main.go" 2>/dev/null
-
-    # Compressed size (gzip -9 approximates a container layer)
-    gzip -9 -c "$tmpdir_c/main.go" > "$tmpdir_c/main.go.gz"
-    compressed_src=$(wc -c < "$tmpdir_c/main.go.gz" | tr -d ' ')
-    uncompressed_src=$(wc -c < "$tmpdir_c/main.go" | tr -d ' ')
-    printf 'quickstart-smoke: CONT  container-src uncompressed=%s compressed=%s bytes\n' \
-        "$uncompressed_src" "$compressed_src"
-
-    # Run the build inside a throwaway container; capture the binary size
-    if "$engine" run --rm \
-            -v "$tmpdir_c:/work" \
-            -w /work \
-            golang:1.27-alpine \
-            sh -c 'GOPROXY=direct GONOSUMDB='"'"'*'"'"' go mod tidy && go build -ldflags "-s -w" -o hello .' \
-            >"$tmpdir_c/container.log" 2>&1; then
-        unc=$(wc -c < "$tmpdir_c/hello" | tr -d ' ')
-        gzip -9 -c "$tmpdir_c/hello" > "$tmpdir_c/hello.gz"
-        comp=$(wc -c < "$tmpdir_c/hello.gz" | tr -d ' ')
-        printf 'quickstart-smoke: CONT  binary uncompressed=%s compressed=%s bytes\n' "$unc" "$comp"
-        # SBOM from inside the container build
-        sbom=$(go version -m "$tmpdir_c/hello" 2>/dev/null \
-            | grep 'mvdan.cc/sh' | head -1 | tr -s '\t' ' ') || true
-        [ -n "$sbom" ] && printf 'quickstart-smoke: SBOM  %s\n' "$sbom"
-        pass "container leg ($engine)"
-    else
-        skip "container leg: build failed (engine=$engine); $(cat "$tmpdir_c/container.log" | tail -3)"
-    fi
-fi
+# ── The real FROM-scratch proof lives elsewhere ─────────────────────────────
+#
+# This script does NOT build container images. The authoritative proof — three
+# real `FROM scratch` images built AND run — is:
+#
+#   scripts/quickstart-container-smoke.sh   (make smoke-quickstart-container)
+#
+# and the required Linux CI job .github/workflows/quickstart-scratch.yml, which
+# is where the published compressed/uncompressed image sizes and the
+# `go version -m` SBOM line come from. A pass here is a fast host check, not the
+# release gate.
+echo "quickstart-smoke: INFO  FROM-scratch images are proved by 'make smoke-quickstart-container' (or the Linux CI job), not here"
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 

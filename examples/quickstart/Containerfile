@@ -1,0 +1,113 @@
+# syntax=docker/dockerfile:1
+#
+# Sprint 216, Story 540 — the three Bash# delivery modes, each as a real,
+# runnable `FROM scratch` image. One multi-stage file, three explicit targets:
+#
+#   mode-a  (a) bashy binary + .bsh source, interpreted
+#   mode-b  (b) transpile --standalone native binary, no bashy at runtime
+#   mode-c  (c) Python island with the interpreter prepared BEFORE the final
+#              stage, so the run performs no download
+#
+# Build with the PARENT directory of the bashy checkout as context — it must
+# contain the sibling checkouts (coreutils sh readline filebrowser bashsharp
+# yoke). scripts/quickstart-container-smoke.sh stages exactly that context and
+# is the supported entry point:
+#
+#   podman build --target mode-a -f bashy/examples/quickstart/Containerfile -t q-a CONTEXT
+#   podman build --target mode-b -f bashy/examples/quickstart/Containerfile -t q-b CONTEXT
+#   podman build --target mode-c -f bashy/examples/quickstart/Containerfile -t q-c CONTEXT
+#
+# KISS: no builder framework. The only tools are the Go image, bashy itself,
+# and cp/ldd for staging (c)'s glibc closure.
+ARG GO_IMAGE=docker.io/library/golang:1.27.1-bookworm
+
+# ---------------------------------------------------------------------------
+# builder — a STATIC, pure-Go bashy (CGO off, no C launcher) that runs on
+# scratch. This is deliberately not `make build`: the Makefile emits the glibc
+# siglaunch launcher pair, which cannot run FROM scratch. The cross-compiled
+# release shape (CGO_ENABLED=0, pure Go) is what we want here.
+# ---------------------------------------------------------------------------
+FROM ${GO_IMAGE} AS builder
+WORKDIR /src
+COPY bashy/ bashy/
+COPY coreutils/ coreutils/
+COPY sh/ sh/
+COPY readline/ readline/
+COPY filebrowser/ filebrowser/
+COPY bashsharp/ bashsharp/
+COPY yoke/ yoke/
+RUN cd bashy \
+ && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags "-s -w" -o /out/bashy ./cmd/bashy \
+ && OTEL_TRACES_EXPORTER=none BASHY_TELEMETRY_QUIET=1 /out/bashy --version >/dev/null
+
+# ===========================================================================
+# (a) bashy + .bsh — interpreted, no toolchain at runtime
+# ===========================================================================
+FROM scratch AS mode-a
+ENV OTEL_TRACES_EXPORTER=none BASHY_TELEMETRY_QUIET=1 HOME=/tmp
+COPY --from=builder /out/bashy /bashy
+COPY bashy/examples/quickstart/hello.bsh /hello.bsh
+ENTRYPOINT ["/bashy", "--bashsharp", "/hello.bsh"]
+
+# ===========================================================================
+# (b) transpile --standalone — native Go binary, NO bashy at runtime.
+# The transpile + `go build` happen here in the builder (network allowed);
+# the final scratch stage carries only the one static binary.
+# ===========================================================================
+FROM builder AS build-standalone
+RUN cd bashy \
+ && OTEL_TRACES_EXPORTER=none BASHY_TELEMETRY_QUIET=1 /out/bashy transpile --bashsharp \
+      examples/quickstart/hello_standalone.bsh --standalone -o /gen/main.go \
+ && cd /gen \
+ && GOPROXY=direct GONOSUMDB='*' go mod tidy \
+ && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags "-s -w" -o /out/hello . \
+ && /out/hello >/dev/null
+
+FROM scratch AS mode-b
+COPY --from=build-standalone /out/hello /hello
+ENTRYPOINT ["/hello"]
+
+# ===========================================================================
+# (c) Python island — interpreter fully prepared BEFORE the final stage.
+#
+# `bashy check --prepare` provisions the uv-managed CPython here in the builder
+# (network allowed). We then stage the whole interpreter tree at a fixed path
+# (/opt/python) plus its glibc/loader closure into /rootfs, and copy that into
+# a scratch image. At run time bashy is pointed at that interpreter directly
+# (CONDA_PREFIX + BASHPP_PYTHON), so it never consults uv, never resolves from
+# PATH, and downloads nothing.
+# ===========================================================================
+FROM builder AS build-island
+RUN set -eux; \
+    cd bashy; \
+    py=$(OTEL_TRACES_EXPORTER=none BASHY_TELEMETRY_QUIET=1 \
+         /out/bashy check --prepare examples/quickstart/hello_island.bsh \
+         | awk '$1=="python3"{print $2; exit}'); \
+    test -n "$py"; test -x "$py"; \
+    pyroot=$(cd "$(dirname "$py")/.." && pwd); \
+    mkdir -p /rootfs/opt/python; \
+    cp -a "$pyroot/." /rootfs/opt/python/; \
+    test -x /rootfs/opt/python/bin/python3; \
+    # Copy the shared-library closure of the interpreter and every stdlib
+    # extension module, so nothing is missing on scratch (glibc is backward
+    # compatible, so the builder's newer glibc satisfies pbs's baseline).
+    { ldd /rootfs/opt/python/bin/python3.* 2>/dev/null || true; \
+      find /rootfs/opt/python -name '*.so*' -exec ldd {} \; 2>/dev/null || true; } \
+      | awk '/=>/ {print $3} /ld-linux|ld64/ {print $1}' \
+      | sort -u \
+      | while read -r lib; do \
+          [ -n "$lib" ] && [ -f "$lib" ] || continue; \
+          mkdir -p "/rootfs$(dirname "$lib")"; \
+          cp -aL "$lib" "/rootfs$lib"; \
+        done; \
+    # Prove the staged interpreter runs with ONLY the staged rootfs on the
+    # loader path (an early, in-builder mirror of the scratch runtime).
+    LD_LIBRARY_PATH= /rootfs/opt/python/bin/python3 -c 'print("island-prep-ok")'
+
+FROM scratch AS mode-c
+ENV OTEL_TRACES_EXPORTER=none BASHY_TELEMETRY_QUIET=1 HOME=/tmp \
+    CONDA_PREFIX=/opt/python BASHPP_PYTHON=/opt/python/bin/python3
+COPY --from=builder /out/bashy /bashy
+COPY --from=build-island /rootfs/ /
+COPY bashy/examples/quickstart/hello_island.bsh /hello_island.bsh
+ENTRYPOINT ["/bashy", "--bashsharp", "/hello_island.bsh"]

@@ -96,16 +96,37 @@ bashy --bashsharp hello_island.bsh       # runs offline after preparation
 provisioned python3 is reused for every subsequent run on that host. No
 `pip install` is needed — the island uses only the Python standard library.
 
-### Smoke gate
+### Proving all three FROM scratch
+
+`examples/quickstart/Containerfile` is one multi-stage file with three explicit
+targets that build and run three real `FROM scratch` images:
+
+| target | image contents | how it runs |
+|---|---|---|
+| `mode-a` | static pure-Go `bashy` + `hello.bsh` | interpreted, no toolchain |
+| `mode-b` | the `transpile --standalone` native binary | no bashy at runtime |
+| `mode-c` | `bashy` + the CPython interpreter prepared in a prior stage | no download at run |
 
 ```sh
-make smoke-quickstart              # all three modes, local
-SKIP_CONTAINER=1 make smoke-quickstart   # suppress optional container leg
+make smoke-quickstart-container    # build + RUN all three scratch images
 ```
 
-The local smoke is deterministic and authoritative. The container leg records
-compressed/uncompressed binary sizes and a `go version -m` SBOM line when
-docker or podman is available, but its absence does not fail the gate.
+Each image is run with `--network=none`, so a run that reaches for a download
+fails — that is what makes (c)'s "prepared before the final stage" claim real.
+The gate reports each image's compressed/uncompressed size and the standalone
+binary's `go version -m` SBOM line.
+
+**The authoritative proof is the Linux CI job**
+(`.github/workflows/quickstart-scratch.yml`), not a local run. On a developer
+box without a usable podman/docker engine the gate SKIPs (exit 0); a local pass
+is a convenience, not the release gate. The fast, container-free host check —
+
+```sh
+make smoke-quickstart              # (a)/(b)/(c) as host processes, not images
+```
+
+— is useful for iterating, but it does not prove a scratch image and does not
+speak for the gate.
 
 ## The other files
 
