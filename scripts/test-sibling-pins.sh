@@ -34,9 +34,13 @@ while IFS= read -r line; do
     case "$sha" in *[!0-9a-f]*) fail "$name pin is not lowercase hexadecimal" ;; esac
     printf '%s\n' "$name" >>"$tmp/pins"
 
-    grep -Fq "$name) echo \"https://github.com/qiangli/$name.git\" ;;" "$bootstrap" ||
+    case "$name" in
+        bashsharp) repository=https://github.com/bashsharp/bashsharp.git ;;
+        *) repository=https://github.com/qiangli/$name.git ;;
+    esac
+    grep -Fq "$name) echo \"$repository\" ;;" "$bootstrap" ||
         fail "$name has no bootstrap repository mapping"
-    grep -Fq "$name) url=https://github.com/qiangli/$name.git ;;" "$dag" ||
+    grep -Fq "$name) url=$repository ;;" "$dag" ||
         fail "$name has no fleet-prepare repository mapping"
 done <"$pins"
 
