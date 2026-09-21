@@ -46,8 +46,8 @@ func TestDecoratorCatalogMatchesRegistryAndDocs(t *testing.T) {
 			minimum++
 		}
 	}
-	if minimum != 8 {
-		t.Fatalf("the minimum set is 8 decorators, catalog says %d — growing it is a decision, not a drift", minimum)
+	if minimum != 9 {
+		t.Fatalf("the minimum set is 9 decorators, catalog says %d — growing it is a decision, not a drift", minimum)
 	}
 }
 

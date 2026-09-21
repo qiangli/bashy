@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"mvdan.cc/sh/v3/interp"
+
+	"github.com/qiangli/yoke/pkg/policy/advice"
 )
 
 // Exit statuses the three decorators seal a call with: timeout(1)'s 124 and
@@ -218,3 +220,41 @@ func (s *authScratch_t) read() string {
 }
 
 func (s *authScratch_t) remove() { os.Remove(s.name) }
+
+// effectsDecorator is the author's side of the guard coin: @effects(E)
+// declares what a function does. Under a @guard cap that E exceeds, the call
+// is denied at the boundary (126) before the body runs. Otherwise the body
+// runs with E as its own cap — a command inside that exceeds E is denied as
+// under @guard — and with E vouching for commands the atlas does not know,
+// so a tool bashy has never heard of is classified by the author's word
+// instead of failing as unknown. The one argument is the effect list,
+// positional or effects:. Never advisable: it is a declaration.
+func effectsDecorator(stderr io.Writer) nativeDecoratorFunc {
+	return func(ctx context.Context, c *nativeDecoratorCall, args []interp.DecoratorArg) error {
+		if c.Advised != "" {
+			return errors.New("effects is a declaration and never applied by advice")
+		}
+		if len(args) != 1 || (args[0].Name != "" && args[0].Name != "effects") {
+			return fmt.Errorf("effects takes exactly one argument, effects: %q", "net,write")
+		}
+		cap, err := advice.ParseCap(args[0].Value)
+		if err != nil {
+			return fmt.Errorf("effects: %v", err)
+		}
+		declared := cap.Effects()
+		if outer, ok := advice.CapFrom(ctx); ok {
+			if over := outer.Exceeded(declared); len(over) > 0 {
+				c.Status = capDeniedStatus
+				fmt.Fprintf(stderr, "%s: declared effects %s exceed the guard (%s not allowed by %s)\n",
+					c.Name, strings.Join(declared, ","), strings.Join(over, ","), outer)
+				return nil
+			}
+		}
+		c.Next(advice.WithVouch(advice.WithCap(ctx, cap), declared))
+		return nil
+	}
+}
+
+// capDeniedStatus is the guard's denial status: 126, "found but not
+// executable", the same the shell yields for a command it refuses to run.
+const capDeniedStatus = 126

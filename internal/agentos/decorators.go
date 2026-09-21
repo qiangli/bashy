@@ -95,6 +95,7 @@ func nativeDecoratorSet(stderr io.Writer, attesting func(nativeDecoratorFunc) na
 		"timeout": timeoutDecorator(stderr), // decorators_std.go
 		"memo":    memoDecorator,
 		"auth":    authDecorator(stderr),
+		"effects": effectsDecorator(stderr),
 	}
 	for name, fn := range contractDecorators(stderr) {
 		set[name] = fn
@@ -233,8 +234,11 @@ func traceDecorator(ctx context.Context, c *nativeDecoratorCall, args []interp.D
 // cap riding this ctx; a body that dispatches nothing over the cap runs
 // unchanged.
 func guardDecorator(ctx context.Context, c *nativeDecoratorCall, args []interp.DecoratorArg) error {
+	// Positional (`@guard("read")`) or keyword (`@guard(effects: "read")`):
+	// one argument either way, and positional reads without the stutter
+	// beside `@effects("…")`.
 	if len(args) != 1 || (args[0].Name != "" && args[0].Name != "effects") {
-		return fmt.Errorf("guard takes exactly one argument, effects: %q", "read,net")
+		return fmt.Errorf("guard takes exactly one argument, the cap: %q", "read,net")
 	}
 	cap, err := advice.ParseCap(args[0].Value)
 	if err != nil {

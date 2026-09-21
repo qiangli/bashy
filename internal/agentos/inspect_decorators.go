@@ -27,12 +27,13 @@ type decoratorEntry struct {
 var decoratorCatalog = []decoratorEntry{
 	{"require", "'<check>', …", "precondition: every check (a shell command) must exit 0 or the body does not run", "dag Require:", "3", false, true},
 	{"ensure", "'<check>', …", "postcondition: judged after the body with $STATUS and $RESULT; failing invalidates the result", "dag Ensure:", "3", false, true},
-	{"guard", "effects: \"read,net\"", "the effect cap for everything the call dispatches; a command over the cap is denied by the audit handler when BASHY_AUDIT is on", "atlas effects, dag Effects: (advisory there)", "126", true, true},
+	{"guard", "\"read,net\" | effects: \"…\"", "the effect cap for everything the call dispatches; a command over the cap is denied before it runs; nested guards only narrow", "atlas effects, dag Effects: (advisory there)", "126", true, true},
 	{"trace", "—", "one OTel span `call <name>` around the call; argument count only, never values", "bashy otel", "—", true, true},
 	{"retry", "n: 3, backoff: \"1s\"", "re-runs the chain until it succeeds or n attempts are spent", "pkg/autoretry", "the last attempt's", false, true},
 	{"timeout", "\"10s\" | d: \"10s\"", "cancels the chain at the deadline; under @retry each attempt re-arms", "context deadline", "124", false, true},
 	{"memo", "[\"1h\" | ttl: \"1h\"]", "same name + args in one process returns the cached Results and Status without running the body; failures are not cached; printed output is not replayed", "process-wide map", "the cached", false, true},
 	{"auth", "via: \"<cmd>\", as: \"<principal>\"", "runs via once per process (default: bashy tessaro status); exit 0 = authenticated, first stdout line = principal, exported as BASHY_PRINCIPAL; as: must match", "bashy login / tessaro status", "77", true, true},
+	{"effects", "\"net,write\" | effects: \"…\"", "declares what the function does: denied at the call boundary when a @guard does not allow it; inside, its own cap, and the classification for commands the atlas does not know", "atlas vocabulary; @guard", "126", false, true},
 	{"confirm", "—", "effect-derived --what-if / --confirm per operation; high-impact atoms need an answer or the call yields", "atlas effects, bashy ask", "6", false, false},
 	{"attest", "—", "pass-through rung advice puts on agentic{} functions so the call is attested; not for authors", "craft ledger", "—", true, false},
 }

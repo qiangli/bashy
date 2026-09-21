@@ -188,3 +188,87 @@ secret
 		t.Errorf("stdout=%q stderr=%q", out.String(), errOut.String())
 	}
 }
+
+// @effects at the call boundary: a caller guarded to read cannot call a
+// function that declares write — denied before the body, naming both.
+func TestEffectsDecoratorBoundaryDenied(t *testing.T) {
+	leak := filepath.Join(t.TempDir(), "leak")
+	script := `@effects("write")
+function deploy() { touch "$LEAK"; }
+@guard("read")
+function caller() { deploy; echo "deploy -> $?"; }
+caller
+`
+	_, out, errOut := runDecorated(t, context.Background(), syntax.LangBashPP, script, map[string]string{"LEAK": leak})
+	if !strings.Contains(out.String(), "deploy -> 126") {
+		t.Fatalf("want the boundary denial 126; stdout=%q stderr=%q", out.String(), errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "deploy: declared effects write exceed the guard (write not allowed by read)") {
+		t.Errorf("stderr = %q", errOut.String())
+	}
+	if _, err := os.Stat(leak); err == nil {
+		t.Fatal("the body ran past the boundary denial")
+	}
+}
+
+// @effects vouches for a command the atlas does not know: an unknown tool
+// on PATH is denied under a bare @guard(exec) but runs inside an
+// @effects("exec") function called under the same guard.
+func TestEffectsDecoratorVouchesForUnknownTool(t *testing.T) {
+	dir := t.TempDir()
+	shim := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(shim, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(shim, "notinatlas"), []byte("#!/bin/sh\necho ran-unknown\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", shim+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	bare := `@guard(effects: "exec")
+function direct() { notinatlas; echo "direct -> $?"; }
+direct
+`
+	_, out, _ := runDecorated(t, context.Background(), syntax.LangBashPP, bare, nil)
+	if strings.Contains(out.String(), "ran-unknown") {
+		t.Fatalf("an atlas-unknown tool must be denied under a bare guard: %q", out.String())
+	}
+
+	vouched := `@effects("exec")
+function build() { notinatlas; }
+@guard(effects: "exec")
+function via() { build; echo "build -> $?"; }
+via
+`
+	_, out, errOut := runDecorated(t, context.Background(), syntax.LangBashPP, vouched, nil)
+	if !strings.Contains(out.String(), "ran-unknown") || !strings.Contains(out.String(), "build -> 0") {
+		t.Fatalf("the author's declaration must classify the unknown tool: stdout=%q stderr=%q", out.String(), errOut.String())
+	}
+}
+
+// Inside an @effects function the declaration is the cap: a command over it
+// is denied as under @guard.
+func TestEffectsDecoratorIsItsOwnCap(t *testing.T) {
+	leak := filepath.Join(t.TempDir(), "leak")
+	script := `@effects("read")
+function honest() { touch "$LEAK"; echo "touch -> $?"; }
+honest
+`
+	_, out, _ := runDecorated(t, context.Background(), syntax.LangBashPP, script, map[string]string{"LEAK": leak})
+	if strings.Contains(out.String(), "touch -> 0") {
+		t.Fatalf("a write inside an @effects(read) function must be denied: %q", out.String())
+	}
+	if _, err := os.Stat(leak); err == nil {
+		t.Fatal("the denied write happened")
+	}
+}
+
+func TestEffectsDecoratorRefusesBadDeclaration(t *testing.T) {
+	for _, deco := range []string{`@effects()`, `@effects("teleport")`, `@effects(cap: "read")`, `@effects("read", "write")`} {
+		script := deco + "\nfunction f() { :; }\nf\n"
+		err, _, errOut := runDecorated(t, context.Background(), syntax.LangBashPP, script, nil)
+		if err == nil || !strings.Contains(errOut.String(), "effects") {
+			t.Errorf("%s: want a refusal naming effects, got err=%v stderr=%q", deco, err, errOut.String())
+		}
+	}
+}

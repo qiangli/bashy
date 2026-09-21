@@ -74,6 +74,19 @@ func effectsFor(cmd string) []string {
 	return nil
 }
 
+// effectsForCtx is effectsFor with the author's word as the fallback: inside
+// an @effects function a command the atlas does not know carries the
+// declaration (advice.WithVouch) instead of "unknown".
+func effectsForCtx(ctx context.Context, cmd string) []string {
+	if e := effectsFor(cmd); e != nil {
+		return e
+	}
+	if v, ok := advice.VouchFrom(ctx); ok {
+		return v
+	}
+	return nil
+}
+
 // auditHandler is the outermost ExecHandler middleware: it runs the command,
 // then appends one chained record capturing the resolved argv (secrets masked),
 // the atlas effects, the outcome, and the actor. It always returns the
@@ -87,7 +100,7 @@ func auditHandler(w *audit.Writer, actor audit.Actor, host string) func(interp.E
 			}
 			start := time.Now()
 
-			effects := effectsFor(args[0])
+			effects := effectsForCtx(ctx, args[0])
 			decision := "allow"
 			var err error
 
