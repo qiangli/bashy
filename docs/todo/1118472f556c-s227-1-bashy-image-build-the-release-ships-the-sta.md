@@ -3,14 +3,17 @@ id: 1118472f556c
 kind: feature
 title: 'S227.1 bashy image build: the release ships the static bashy_scratch artifact (amd64+arm64); bashy fetches it and builds a FROM-scratch image through bashy podman — no source on the host'
 seq: 305
-status: doing
+status: done
 priority: p0
 labels:
     - linux
     - oci
     - dag
 created: 2026-09-20T21:23:20.094892Z
+assignee: corbel
 sprint: 227
+closed: 2026-09-21T07:34:27.612426Z
+closed_by: corbel
 ---
 
 DELIVERED (corbel, 2026-09-21). No source on the user's host: the release ships the static artifact; bashy fetches it and builds the image through its own podman. `bashy git` / `bashy go` remain the developer path (README "From source").

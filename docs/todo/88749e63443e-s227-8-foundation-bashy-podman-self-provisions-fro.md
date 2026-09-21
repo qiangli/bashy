@@ -3,14 +3,17 @@ id: 88749e63443e
 kind: feature
 title: 'S227.8 FOUNDATION — bashy podman self-provisions from pinned upstream releases (linux podman-static; darwin client+gvproxy+vfkit; windows client): no bashy-built blobs, download+exec'
 seq: 313
-status: doing
+status: done
 priority: p0
 labels:
     - airgap
     - self-contained
     - release
 created: 2026-09-21T05:25:09.831102Z
+assignee: corbel
 sprint: 227
+closed: 2026-09-21T07:34:27.474359Z
+closed_by: corbel
 ---
 
 The foundation of the sprint: `bashy podman` must work from the release download alone. It did not, on any OS — the lean engine dispatch looked for `podman-<goos>-<goarch>.gz` on the LATEST bashy release and no release since `v0.9.0` (darwin/arm64 only) carried one; `engine-blobs.yml` ran once (2026-07-04), had no linux runner, and its `release: published` trigger never fires (`release.yml` uses `GITHUB_TOKEN`).

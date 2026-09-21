@@ -3,14 +3,17 @@ id: 3f2dabf6ad3d
 kind: test
 title: 'S227.3 The airgap gate: supported-command matrix (docs/airgap-image.md) proven by smoke-airgap-container, run in CI on linux amd64/arm64 as a release gate'
 seq: 307
-status: doing
+status: done
 priority: p1
 labels:
     - airgap
     - docs
     - gate
 created: 2026-09-20T21:23:20.154291Z
+assignee: corbel
 sprint: 227
+closed: 2026-09-21T07:34:27.883074Z
+closed_by: corbel
 ---
 
 DELIVERED (corbel, 2026-09-21) — CI proof on the candidate tag pending (see evidence).
@@ -23,3 +26,5 @@ What landed:
 Measured on the Linux test host (image built from HEAD's scratch artifact, managed podman): 360 rows — 303 works, 6 present (man/time/xargs/full/run/transpile answer, but not --help), 50 not usable offline by design, 0 FAIL; second run in diff mode: "doc table matches the measured rows" PASS. Wall 15 s.
 
 Acceptance: SKIP without engine ✔ (by construction); FAIL on mismatch ✔ (measured before the probe fixes: 4 false rows failed the gate); doc regenerated from the script ✔; umbrella INDEX/README line — with the pin bump; workflow green on the candidate — pending the `-dev` tag.
+
+CI PROOF (2026-09-21): `airgap-image.yml` run 35573184968 — **linux/amd64 success, linux/arm64 success**, each 360 rows / 303 works / 6 present / 50 offline-by-design / 0 FAIL, "doc table matches the measured rows", through bashy's self-provisioned rootless podman on a PATH scrubbed of podman/docker (≈3 min per leg). Earlier runs on the way (recorded because each taught a host fact): 35569398441 + 35569726693 + 35570049721 + 35570248339 — Ubuntu 24.04 AppArmor `unprivileged_userns` profile denies the rootless reexec (fixed: sysctl in CI, hint in bashy, doc row); 35571524897 — a dag body's `make` is the in-process POSIX make (fixed: `env make`); 35571883949 — scrub PATH picked the distro Go (fixed: setup-go first); 35572167507 / 35572453776 / 35572809280 — arm64 table parity (fixed: node's `x64` token, normalize-before-cut, ASCII-only notes; awk `substr` is bytes on mawk, chars on gawk). Release runbook (kb:release-bashy-outpost) lists the workflow as a gate.
