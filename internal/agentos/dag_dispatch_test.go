@@ -98,7 +98,7 @@ func TestDagDispatchBashppPyFence(t *testing.T) {
 		"",
 		"### smoke",
 		"",
-		"```bashpp",
+		"```bsh",
 		"~~~py as py",
 		"def main() -> str:",
 		"    return 'launched-from-dispatch'",

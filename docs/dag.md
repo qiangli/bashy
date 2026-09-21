@@ -45,13 +45,16 @@ The one exception is a positional **directory**: `bashy dag .bashy/deploy
 target` names both the file (that folder's `dag.md`) and the place to run it.
 `--explain` prints the effective directory.
 
-## Bash++ bodies and foreign fences
+## Bash# bodies and foreign fences
 
-A body tagged ` ```bashpp ` (alias ` ```bash++ `) runs as Bash++ instead of
-Classic Bash. Untagged and ` ```bash ` bodies are unchanged — Bash++ is opted
-into per target, so no existing task file is reinterpreted.
+A body tagged ` ```bsh ` (or ` ```bashsharp `) runs as Bash# instead of
+Classic Bash. ` ```bashpp ` and ` ```bash++ ` are accepted aliases — they name
+the middle rung of the ladder bash → bash++ (the Go typed core) → bash#
+(fences, decorators, keyword params) — and mean the same thing. Untagged and
+` ```bash ` bodies are unchanged — Bash# is opted into per target, so no
+existing task file is reinterpreted.
 
-A Bash++ body may declare a **source fence** in another language and call its
+A Bash# body may declare a **source fence** in another language and call its
 functions directly. The launcher shape:
 
 ````markdown
@@ -59,7 +62,7 @@ functions directly. The launcher shape:
 Requires: sync
 Env: PYTHONPATH=src
 
-```bashpp
+```bsh
 ~~~py as py
 def main() -> str:
     from minisweagent.agents import get_agent_class
@@ -91,7 +94,7 @@ name := py.main()
   explicitly, the spelling Node's native type stripping requires. Returned
   promises are awaited. One body may declare a `~~~py` fence AND a `~~~ts`
   fence and call both.
-- A `~~~rust` fence exports top-level `pub fn` declarations. Bash++ invokes a
+- A `~~~rust` fence exports top-level `pub fn` declarations. Bash# invokes a
   native worker compiled by the nearest project-selected `rustc` (or
   `BASHPP_RUSTC`); `Cargo.toml`, `Cargo.lock`, and `rust-toolchain*` participate
   in environment identity, but Cargo is not run and dependencies are not
@@ -99,8 +102,8 @@ name := py.main()
   primitives, `String`, `&str`, or `Vec<u8>`; results may use the owned forms,
   primitives, `Vec<u8>`, `()`, or `Result<T, E>` where `E: Display`. Return a
   `String`, not a borrowed `&str`. Function stdout/stderr and Rust errors cross
-  the same Bash++ call boundary as other fences. The compiled artifact is
-  embedded when Bash++ is lowered, so the resulting native program does not
+  the same Bash# call boundary as other fences. The compiled artifact is
+  embedded when Bash# is lowered, so the resulting native program does not
   need `rustc` at run time. Rust code is native code with the task's host
   permissions; a fence is not a security sandbox. In a dag body the worker
   runs in the invoking cwd, so relative paths are the checkout's, and a
@@ -147,9 +150,9 @@ name := py.main()
   selects its POSIX dialect. Every call gets a fresh child interpreter and
   environment, so state cannot leak. The gh example pastes `heading()` from
   its checkout's `script/api-host-gateway/test.sh` verbatim and calls it from
-  the same Bash++ smoke body as the Go fence.
+  the same Bash# smoke body as the Go fence.
 - Nesting rule: the dag parser closes a body only on a line equal to the
-  **opening** marker, so a `~~~py … ~~~` block nests inside a ` ```bashpp `
+  **opening** marker, so a `~~~py … ~~~` block nests inside a ` ```bsh `
   recipe. A recipe that itself opens with `~~~` cannot contain one.
 
 Worked examples — two Python repos with a fenced-Python `smoke` target, two
@@ -168,9 +171,9 @@ live in
 `make smoke-dag-typescript`, `make smoke-dag-rust`, `make smoke-dag-c`, and
 the self-provisioning `make smoke-dag-go`.
 
-### A Bash++ body runs on the same agentic runner as `bashy --bashsharp`
+### A Bash# body runs on the same agentic runner as `bashy --bashsharp`
 
-A ` ```bashpp ` body is executed by bashy's own interpreter registration
+A ` ```bsh ` body is executed by bashy's own interpreter registration
 (`internal/agentos/dag_bashpp.go`), which assembles the runner through the
 one `wireExec` seam every agentic runner in the binary uses — so the native
 decorators (`@trace` · `@guard` · `@retry` · `@require` · `@ensure`),
@@ -201,7 +204,7 @@ required), then 0 once the answer is supplied explicitly in the environment
 
 ### Text fences (Sprint 234, B30)
 
-A Bash++ body may also declare a **text fence**: a declarative artifact whose
+A Bash# body may also declare a **text fence**: a declarative artifact whose
 alias exposes the *processor's* verbs instead of parsed functions —
 `~~~dockerfile as img` (`img.build()` → image id, `img.run(id, …)`),
 `~~~tf as iac` (`init`/`plan`/`apply`/`destroy`, OpenTofu), `~~~k8s`,

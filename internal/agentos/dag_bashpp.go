@@ -1,10 +1,10 @@
 // Copyright (c) 2026 qiangli
 // See LICENSE for licensing information
 
-// dag_bashpp.go — the ```bashpp dag body runs through the SAME runner wiring
+// dag_bashpp.go — the ```bsh dag body runs through the SAME runner wiring
 // as `bashy --bashsharp FILE` (Sprint 216, Story 541).
 //
-// yoke/pkg/dag ships its own Bash# interpreter for ```bashpp bodies, and it
+// yoke/pkg/dag ships its own Bash# interpreter for ```bsh bodies, and it
 // has to: yoke may not import this package, so the runner it builds carries
 // the coreutils userland and the target's effect cap and nothing else — no
 // decorator registry, no policy advice, no attestation sink. That is exactly
@@ -105,8 +105,12 @@ func dagExitCodeFromErr(err error) (int, error) {
 // Package init order guarantees yoke/pkg/dag has registered its interpreters
 // before this runs, so the override wins for every in-process dag run in the
 // bashy binary — `bashy dag`, and any verb that drives the engine directly.
+// It is registered under every spelling yoke accepts (bsh/bashsharp official,
+// bashpp/bash++ aliases): a tag missing here would not fail, it would fall
+// through to yoke's plain interpreter and run without the contracts.
 func init() {
 	bi := dagBashPPInterp{}
-	dag.RegisterInterpreter("bashpp", bi)
-	dag.RegisterInterpreter("bash++", bi)
+	for _, tag := range dag.BashSharpTags {
+		dag.RegisterInterpreter(tag, bi)
+	}
 }
