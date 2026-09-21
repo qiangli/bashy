@@ -98,7 +98,7 @@ the invoking directory — the repo root, so the paths below say `codex-rs/`
 source; here the workspace lives one level down, which the paths spell out).
 Effects: read
 
-```bashpp
+```bsh
 ~~~rs as rs
 use std::fs;
 
@@ -165,7 +165,7 @@ guarantees the binary exists first.
 Requires: build
 Effects: read
 
-```bashpp
+```bsh
 ~~~rs as rs
 use std::process::Command;
 

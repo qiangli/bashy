@@ -1,6 +1,6 @@
 Hermes' default command; bare `hermes` and `hermes chat` are
 equivalent. `start` is a bounded convenience alias mapped onto
-upstream `chat` by main.bpp. The agent loop runs only in the
+upstream `chat` by main.bsh. The agent loop runs only in the
 installed upstream, so ycode exits unsupported (4) here.
 
 

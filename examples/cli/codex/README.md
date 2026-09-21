@@ -8,5 +8,5 @@ remote-control behavior are explicit unsupported cases.
 Behavioral source pin: `ycode/priorart/codex` at
 `a8964cb1bad67bc26a826fb07d1bef99c6a3f008`.
 
-The YAML is interpreted by ycode. `main.bpp` forwards substantive behavior to
+The YAML is interpreted by ycode. `main.bsh` forwards substantive behavior to
 an installed upstream executable selected by `CODEX_BIN`.

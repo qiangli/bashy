@@ -3,7 +3,7 @@ set -eu
 
 fixtures_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 profile="$fixtures_dir/../ycode/profile.yaml"
-adapter="$fixtures_dir/../ycode/main.bpp"
+adapter="$fixtures_dir/../ycode/main.bsh"
 bashy_bin=${BASHY_BIN:-$(command -v bashy)}
 : "${YCODE_BIN:?set YCODE_BIN to the absolute candidate ycode executable}"
 case "$YCODE_BIN" in
@@ -41,7 +41,7 @@ compare() {
     direct_status=0
     "$YCODE_BIN" --file "$profile" "$@" >direct.out 2>direct.err || direct_status=$?
     adapter_status=0
-    "$bashy_bin" --bashpp "$adapter" "$@" >adapter.out 2>adapter.err || adapter_status=$?
+    "$bashy_bin" --bashsharp "$adapter" "$@" >adapter.out 2>adapter.err || adapter_status=$?
     if [ "$direct_status" -ne "$adapter_status" ]; then
         printf '%s: status direct=%s adapter=%s\n' "$label" "$direct_status" "$adapter_status" >&2
         cat direct.err adapter.err >&2

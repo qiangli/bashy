@@ -1,6 +1,6 @@
-# Bash++ Transpilation & Standalone Build Recipe
+# Bash# Transpilation & Standalone Build Recipe
 
-`bashy transpile` transpiles Bash++ source scripts into Go code backed by `mvdan.cc/sh/v3/lower` compiler definitions and `shellrt` runtime primitives.
+`bashy transpile` transpiles Bash# source scripts into Go code backed by `mvdan.cc/sh/v3/lower` compiler definitions and `shellrt` runtime primitives.
 
 ## Compiler Build Toolchain
 
@@ -21,7 +21,7 @@ workspace/
 ├── deps/
 │   └── sh/          # Cloned dependency repository pinned to published commit
 └── app/
-    ├── input.bpp    # Bash++ source script
+    ├── input.bsh    # Bash# source script
     ├── output.go    # Transpiled Go output
     └── go.mod       # Standalone module configuration with replace directive
 ```
@@ -30,7 +30,7 @@ workspace/
 
 Because upstream `mvdan.cc/sh/v3` does not include the `lower` compiler package or `shellrt` runtime, running `go mod tidy` in an unconfigured module environment would attempt to fetch upstream `mvdan.cc/sh/v3` and fail.
 
-To build standalone Go binaries transpiled from Bash++:
+To build standalone Go binaries transpiled from Bash#:
 
 ### 1. Clone & Pin the Published Dependency Repo
 
@@ -44,18 +44,18 @@ git -C workspace/deps/sh checkout bda9177642ce69c8f88ebe8e17c98c6b1b4901d8
 
 ### 2. Create Application Directory & Transpile
 
-Create the `workspace/app` directory, write the Bash++ source script, change into `workspace/app`, and invoke `bashy transpile`:
+Create the `workspace/app` directory, write the Bash# source script, change into `workspace/app`, and invoke `bashy transpile`:
 
 ```bash
 mkdir -p workspace/app
 cd workspace/app
 
-cat << 'EOF' > input.bpp
+cat << 'EOF' > input.bsh
 var x int = 42
 println("hello from transpiled standalone:", x)
 EOF
 
-bashy transpile --bashpp input.bpp -o output.go
+bashy transpile --bashsharp input.bsh -o output.go
 ```
 
 ### 3. Setup `go.mod` with Replace Directive
@@ -89,10 +89,10 @@ go build -mod=mod -o myapp output.go
 
 ### 5. Remove Sources & Execute Binary
 
-Remove the input Bash++ script (`input.bpp`) and transpiled Go file (`output.go`) to prove standalone binary execution:
+Remove the input Bash# script (`input.bsh`) and transpiled Go file (`output.go`) to prove standalone binary execution:
 
 ```bash
-rm input.bpp output.go
+rm input.bsh output.go
 PATH="" ./myapp
 ```
 

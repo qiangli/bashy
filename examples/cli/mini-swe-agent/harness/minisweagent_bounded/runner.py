@@ -1,7 +1,7 @@
 """Shared harness core: build an agent from a spec, run it, normalize the result.
 
 Original to this bounded example. This is the ONE loop both entrypoints use:
-`main.bpp` (the shell entrypoint) and the ycode-gated YAML bridge both invoke
+`main.bsh` (the shell entrypoint) and the ycode-gated YAML bridge both invoke
 `cli.py`, which builds a normalized spec and calls `build_agent` + `run_agent`
 here. Unit tests and golden generation call `run_scenario` directly.
 

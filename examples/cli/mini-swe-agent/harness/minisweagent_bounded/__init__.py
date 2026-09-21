@@ -5,7 +5,7 @@ flow: a system/instance prompt, a step loop that queries a model for a bash
 command, executes it as an independent stateless Bashy process, feeds the
 observation back, and stops on an explicit submit marker, a resource limit, a
 repeated format error, or a user interruption. It is the LOCAL implementation
-both entrypoints run — `main.bpp` (shell) and the ycode-gated YAML bridge — not
+both entrypoints run — `main.bsh` (shell) and the ycode-gated YAML bridge — not
 a wrapper around an installed upstream `mini`.
 
 Substantive behavior preserved from upstream (see README.md manifest):

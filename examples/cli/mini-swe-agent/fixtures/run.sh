@@ -6,7 +6,7 @@
 #   1. CLI CONTRACT (ycode) — the frozen ycode compiler strictly validates and
 #      renders profile.yaml; the run itself returns the exit-4 bridge signal and
 #      usage errors return 2.
-#   2. ENTRYPOINT PARITY — the shell entrypoint (main.bpp) and the YAML bridge
+#   2. ENTRYPOINT PARITY — the shell entrypoint (main.bsh) and the YAML bridge
 #      (yaml-run.sh) run the SAME local loop and produce byte-identical
 #      normalized envelopes, equal to the committed goldens, across every
 #      scenario (real actions + successful submission + limit/format outcomes).
@@ -26,7 +26,7 @@ set -eu
 fixtures_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 example_dir=$(CDPATH= cd -- "$fixtures_dir/.." && pwd)
 profile="$example_dir/profile.yaml"
-adapter="$example_dir/main.bpp"
+adapter="$example_dir/main.bsh"
 yaml_entry="$example_dir/yaml-run.sh"
 harness_dir="$example_dir/harness"
 cli_golden="$fixtures_dir/cli"
@@ -85,7 +85,7 @@ parity_case() {
     yaml_work=$(mktemp -d "$scratch/${name}-yaml.XXXXXX")
     # The envelope is emitted on stdout even when the terminal outcome is a
     # non-submit (exit 1); `|| true` keeps set -e from aborting on that.
-    shell_out=$(MSWEA_WORKDIR="$shell_work" "$bashy_bin" --bashpp "$adapter" --scenario "$scenarios/$name.json" -y --emit-envelope 2>/dev/null || true)
+    shell_out=$(MSWEA_WORKDIR="$shell_work" "$bashy_bin" --bashsharp "$adapter" --scenario "$scenarios/$name.json" -y --emit-envelope 2>/dev/null || true)
     yaml_out=$(MSWEA_WORKDIR="$yaml_work" /bin/sh "$yaml_entry" --scenario "$scenarios/$name.json" -y --emit-envelope 2>/dev/null || true)
     gold=$(cat "$result_golden/$name.json")
     [ "$shell_out" = "$gold" ] || fail "parity-$name" "shell != golden"
@@ -109,11 +109,11 @@ done
 pass live-transport
 
 # --- 5. FAIL-CLOSED + VALIDATION ----------------------------------------
-cli() { status=0; "$bashy_bin" --bashpp "$adapter" "$@" >"$scratch/out" 2>"$scratch/err" || status=$?; }
+cli() { status=0; "$bashy_bin" --bashsharp "$adapter" "$@" >"$scratch/out" 2>"$scratch/err" || status=$?; }
 
 # confirm mode with piped newlines must NOT be treated as approval.
 status=0
-printf '\n\n\n' | "$bashy_bin" --bashpp "$adapter" --scenario "$scenarios/submit-success.json" --mode confirm >/dev/null 2>"$scratch/err" || status=$?
+printf '\n\n\n' | "$bashy_bin" --bashsharp "$adapter" --scenario "$scenarios/submit-success.json" --mode confirm >/dev/null 2>"$scratch/err" || status=$?
 [ "$status" -eq 4 ] || fail failclosed-confirm "status $status want 4"
 grep -q 'fail-closed' "$scratch/err" || fail failclosed-confirm "no fail-closed message"
 pass failclosed-confirm-piped

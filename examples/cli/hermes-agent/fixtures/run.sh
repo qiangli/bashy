@@ -6,7 +6,7 @@
 #      surface is exercised through the FROZEN candidate (YCODE_BIN) against
 #      committed goldens: root/nested/alias help, version, declared dispatch,
 #      completion, and the usage(2) / unsupported(4) exit classes.
-#   2. The thin Bash++ adapter (main.bpp) is executed through the installed
+#   2. The thin Bash++ adapter (main.bsh) is executed through the installed
 #      Bashy (BASHY_BIN). A FAKE upstream selected via HERMES_BIN proves ONLY
 #      argv / stdin / stdout / stderr / exit-status transport and the bounded
 #      `start`->`chat` alias rewrite. It is NOT evidence of real Hermes
@@ -18,7 +18,7 @@ set -eu
 
 fixtures_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 profile="$fixtures_dir/../profile.yaml"
-adapter="$fixtures_dir/../main.bpp"
+adapter="$fixtures_dir/../main.bsh"
 goldens="$fixtures_dir/goldens"
 
 : "${YCODE_BIN:?set YCODE_BIN to the absolute candidate ycode executable}"
@@ -106,32 +106,32 @@ chmod +x "$fake"
 export HERMES_BIN="$fake"
 
 # argv passthrough (verbatim forwarding)
-printf '' | "$bashy_bin" --bashpp "$adapter" chat -q hi >/dev/null 2>&1 || true
+printf '' | "$bashy_bin" --bashsharp "$adapter" chat -q hi >/dev/null 2>&1 || true
 printf 'chat\n-q\nhi\n' >want_argv
 cmp -s want_argv "$argv_file" || { printf 'FAIL transport argv passthrough\n' >&2; diff want_argv "$argv_file" >&2; exit 1; }
 passed=$((passed + 1)); printf 'PASS transport argv passthrough (fake upstream)\n'
 
 # bounded alias rewrite start -> chat
-printf '' | "$bashy_bin" --bashpp "$adapter" start -q hi >/dev/null 2>&1 || true
+printf '' | "$bashy_bin" --bashsharp "$adapter" start -q hi >/dev/null 2>&1 || true
 printf 'chat\n-q\nhi\n' >want_alias
 cmp -s want_alias "$argv_file" || { printf 'FAIL transport alias start->chat\n' >&2; diff want_alias "$argv_file" >&2; exit 1; }
 passed=$((passed + 1)); printf 'PASS transport alias start->chat (fake upstream)\n'
 
 # stdin passthrough
-printf 'PING' | "$bashy_bin" --bashpp "$adapter" chat >/dev/null 2>&1 || true
+printf 'PING' | "$bashy_bin" --bashsharp "$adapter" chat >/dev/null 2>&1 || true
 printf 'PING' >want_stdin
 cmp -s want_stdin "$stdin_file" || { printf 'FAIL transport stdin passthrough\n' >&2; exit 1; }
 passed=$((passed + 1)); printf 'PASS transport stdin passthrough (fake upstream)\n'
 
 # stdout / stderr passthrough
-printf '' | "$bashy_bin" --bashpp "$adapter" chat >o.out 2>o.err || true
+printf '' | "$bashy_bin" --bashsharp "$adapter" chat >o.out 2>o.err || true
 grep -q '^OUT:chat$' o.out || { printf 'FAIL transport stdout passthrough\n' >&2; cat o.out >&2; exit 1; }
 grep -q '^ERR:chat$' o.err || { printf 'FAIL transport stderr passthrough\n' >&2; cat o.err >&2; exit 1; }
 passed=$((passed + 1)); printf 'PASS transport stdout/stderr passthrough (fake upstream)\n'
 
 # exit-status passthrough
 status=0
-FAKE_EXIT=7 "$bashy_bin" --bashpp "$adapter" chat </dev/null >/dev/null 2>&1 || status=$?
+FAKE_EXIT=7 "$bashy_bin" --bashsharp "$adapter" chat </dev/null >/dev/null 2>&1 || status=$?
 [ "$status" -eq 7 ] || { printf 'FAIL transport status passthrough: got %s want 7\n' "$status" >&2; exit 1; }
 passed=$((passed + 1)); printf 'PASS transport status passthrough (fake upstream)\n'
 

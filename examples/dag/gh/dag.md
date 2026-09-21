@@ -52,7 +52,7 @@ reads it back — 3 and 126 as `FAIL`, 6 as `yield`, 0 as `pass`.
 Offline and deterministic: no model, no network, no file left behind.
 Effects: read, write, net
 
-```bashpp
+```bsh
 ~~~go as go
 import buildpkg "github.com/cli/cli/v2/internal/build"
 
@@ -108,7 +108,7 @@ Launch the binary produced by `build` from the Go fence.
 Requires: build
 Effects: read, write, net
 
-```bashpp
+```bsh
 ~~~go as go
 import "os/exec"
 import "strings"

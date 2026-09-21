@@ -1,5 +1,5 @@
 Bounded convenience verb for the pinned mini's default bare
-invocation (`mini -t TASK`). `run` is an alias. main.bpp drops the
+invocation (`mini -t TASK`). `run` is an alias. main.bsh drops the
 `start`/`run` token and forwards the remaining flags to the
 installed upstream; the agent loop runs only there, so ycode
 exits unsupported (4) here.

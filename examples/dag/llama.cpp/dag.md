@@ -77,7 +77,7 @@ IS the program. It is compiled once by the `c++`/`clang++` on PATH
 invoking directory, so the relative paths are the checkout's.
 Effects: read
 
-```bashpp
+```bsh
 ~~~cxx as cxx
 #include <fstream>
 #include <string>
@@ -129,7 +129,7 @@ guarantees the binary exists first.
 Requires: build
 Effects: read
 
-```bashpp
+```bsh
 ~~~cxx as cxx
 #include <cstdio>
 #include <stdexcept>

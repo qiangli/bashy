@@ -91,7 +91,7 @@ Requires: install
 Env: BASHPP_TYPESCRIPT_RUNTIME=bun
 Effects: read
 
-```bashpp
+```bsh
 ~~~ts as ts
 import { fileInDirectory } from "./packages/opencode/src/config/paths"
 export function launch(): string {

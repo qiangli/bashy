@@ -66,7 +66,7 @@ fresh native process in the invoking directory, so the relative paths are
 the checkout's.
 Effects: read
 
-```bashpp
+```bsh
 ~~~cxx as cxx
 #include <filesystem>
 #include <fstream>
@@ -119,7 +119,7 @@ the `build` dependency guarantees the binary exists first.
 Requires: build
 Effects: read
 
-```bashpp
+```bsh
 ~~~cxx as cxx
 #include <cstdio>
 #include <stdexcept>

@@ -1,6 +1,6 @@
 #!/usr/bin/env -S bashy --bashsharp
 # Exhaustive enums: a `switch` over an enum must cover every member.
-# (From bashsharp-tests/tests/bashsharp/enums/exhaustive.bpp.)
+# (From bashsharp-tests/tests/bashsharp/enums/exhaustive.bsh.)
 
 type Color enum { Red; Green }
 func label(c Color) string {

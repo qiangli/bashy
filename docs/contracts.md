@@ -97,7 +97,7 @@ counted by the reader as a *handoff* — in `RUNS`, in neither `PASS` nor
 reported as one that failed, and never as one that completed.
 
 ```sh
-$ BASHY_SKILLS_DIR=$S bashy --bashpp test/contracts/agentic-boundary.bpp
+$ BASHY_SKILLS_DIR=$S bashy --bashsharp test/contracts/agentic-boundary.bpp
 $ BASHY_SKILLS_DIR=$S bashy craft history summarize --all
 SKILL                         RUNS  PASS  FAIL    RATE  COORDINATES
 summarize                        6     1     4   -0.50  1

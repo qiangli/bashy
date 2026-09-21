@@ -76,7 +76,7 @@ on PATH (`BASHPP_CC` overrides), C17, and runs as a fresh native process in
 the invoking directory, so relative paths are the checkout's.
 Effects: read
 
-```bashpp
+```bsh
 ~~~c as c
 #include <stdio.h>
 #include "include/curl/curlver.h"
@@ -118,7 +118,7 @@ binary exists first.
 Requires: build
 Effects: read
 
-```bashpp
+```bsh
 ~~~c as c
 #include <stdio.h>
 #include <string.h>

@@ -10,12 +10,12 @@ metadata:
     # spec.* section is the shared canonical runtime baseline copied verbatim
     # from examples/cli/ycode/profile.yaml; ycode compiles it so the bounded
     # Hermes CLI surface validates and renders. Substantive Hermes behavior is
-    # NOT run here — main.bpp forwards it to the installed upstream.
+    # NOT run here — main.bsh forwards it to the installed upstream.
 
 spec:
   interfaces:
     cli:
-      identity: {name: hermes, version: build, compatibility: "Bounded common session-lifecycle projection of the pinned Hermes Agent CLI (chat/start, model, session resume). ycode compiles and renders this contract; substantive chat/model/resume behavior is executed only by forwarding to the installed upstream via main.bpp, so those lifecycle operations exit unsupported (4) under ycode itself. Interactive-only controls (/init, /plan, /exit slash commands), auth/gateway/dashboard/plugins and all vendor-, hosted- and provider-specific behavior are out of scope and unsupported."}
+      identity: {name: hermes, version: build, compatibility: "Bounded common session-lifecycle projection of the pinned Hermes Agent CLI (chat/start, model, session resume). ycode compiles and renders this contract; substantive chat/model/resume behavior is executed only by forwarding to the installed upstream via main.bsh, so those lifecycle operations exit unsupported (4) under ycode itself. Interactive-only controls (/init, /plan, /exit slash commands), auth/gateway/dashboard/plugins and all vendor-, hosted- and provider-specific behavior are out of scope and unsupported."}
       bootstrap: {configFlags: [--file, -f], defaultFile: agent.yaml, env: HERMES_CONFIG}
       presentation:
         formats: [text, json, table]
@@ -57,7 +57,7 @@ spec:
           Bounded projection of the Hermes Agent CLI focused on the common
           session lifecycle: start or continue a chat, pick the model, and
           resume a previous session. ycode renders and validates this contract;
-          the chat/model/resume lifecycle runs only when main.bpp forwards it to
+          the chat/model/resume lifecycle runs only when main.bsh forwards it to
           the installed upstream, so under ycode itself it exits unsupported (4).
         args: {min: 0, max: -1}
         flags:
@@ -77,7 +77,7 @@ spec:
             long: |
               Hermes' default command; bare `hermes` and `hermes chat` are
               equivalent. `start` is a bounded convenience alias mapped onto
-              upstream `chat` by main.bpp. The agent loop runs only in the
+              upstream `chat` by main.bsh. The agent loop runs only in the
               installed upstream, so ycode exits unsupported (4) here.
             example: |
               hermes chat -q "Explain this repo"

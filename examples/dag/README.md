@@ -34,7 +34,7 @@ order; `-j` parallelises; `--json` gives an agent one envelope.
 
 ## The `smoke` target: a fence as the launcher
 
-Every file carries one target whose body is Bash++ (` ```bashpp `) and
+Every file carries one target whose body is Bash# (` ```bsh `) and
 declares its launcher IN the project's own language. Python:
 
 ````markdown
@@ -42,7 +42,7 @@ declares its launcher IN the project's own language. Python:
 Requires: sync
 Env: PYTHONPATH=src
 
-```bashpp
+```bsh
 ~~~py as py
 def main() -> str:
     from minisweagent.agents import get_agent_class
@@ -60,7 +60,7 @@ TypeScript — the same shape, importing the checkout's own source:
 Requires: install
 Env: BASHPP_TYPESCRIPT_RUNTIME=bun
 
-```bashpp
+```bsh
 ~~~ts as ts
 import { fileInDirectory } from "./packages/opencode/src/config/paths"
 export function launch(): string {
@@ -114,7 +114,7 @@ repo's own `cargo build -p …`, `rs.launch()` executes the built binary with
 ### run
 Requires: build
 
-```bashpp
+```bsh
 ~~~rs as rs
 use std::process::Command;
 
@@ -172,7 +172,7 @@ C++ launcher throws on failure and the exception is the call's error:
 ### run
 Requires: build
 
-```bashpp
+```bsh
 ~~~c as c
 #include <stdio.h>
 #include <string.h>
@@ -229,7 +229,7 @@ Each call leaves one receipt in the existing skills/craft ledger
 (`docs/function-attestation.md`); `bashy craft history gh_version --all`
 reads them back as `FAIL`, `FAIL`, `yield`, `pass`. Offline, deterministic,
 no model call, no file left behind — `make smoke-dag-go` asserts the four
-lines, the four receipts and the read side. It works because a ` ```bashpp `
+lines, the four receipts and the read side. It works because a ` ```bsh `
 body runs on the same agentic runner as `bashy --bashsharp` (see
 `docs/dag.md` §Bash++ bodies).
 

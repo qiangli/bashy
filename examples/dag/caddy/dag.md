@@ -34,7 +34,7 @@ go build -mod=readonly -o cmd/caddy/caddy ./cmd/caddy
 Call Caddy's own `Version` function and return its simple form.
 Effects: read, write, net
 
-```bashpp
+```bsh
 ~~~go as go
 import caddypkg "github.com/caddyserver/caddy/v2"
 
@@ -53,7 +53,7 @@ Launch the built Caddy command from the Go fence.
 Requires: build
 Effects: read, write, net
 
-```bashpp
+```bsh
 ~~~go as go
 import "os/exec"
 import "strings"
@@ -76,7 +76,7 @@ a named build context; the fence body is the whole image definition.
 Requires: test
 Effects: read, write, net, exec
 
-```bashpp
+```bsh
 ~~~dockerfile as img
 FROM docker.io/library/alpine:3.20
 COPY --from=src caddy /usr/bin/caddy

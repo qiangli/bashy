@@ -8,7 +8,7 @@ Two artifacts describe the same bounded surface:
 
 - `profile.yaml` — the declarative `spec.interfaces.cli` contract. It is compiled
   and rendered by ycode (the generic bootstrap); no product-specific Go is added.
-- `main.bpp` — a thin native Bash++ adapter that forwards substantive behavior to
+- `main.bsh` — a thin native Bash++ adapter that forwards substantive behavior to
   an **installed upstream** Hermes selected by `HERMES_BIN`.
 
 Behavioral source pin: `ycode/priorart/hermes-agent` at
@@ -36,7 +36,7 @@ This is a bounded subset, not a mirror of the (very large) `hermes` CLI.
 Source-backed session-lifecycle commands and flags are declared so help,
 parsing, aliases and dispatch are exercised, but the agent loop is **not** run by
 ycode — those operations dispatch `unsupported` and exit `4` under the candidate.
-`main.bpp` forwards them (and the bare-prompt form) to the installed upstream.
+`main.bsh` forwards them (and the bare-prompt form) to the installed upstream.
 
 | Surface | Upstream source |
 |---|---|
@@ -47,7 +47,7 @@ ycode — those operations dispatch `unsupported` and exit `4` under the candida
 
 `start` is a **bounded convenience alias** defined by this profile/adapter (it is
 mapped onto upstream `chat`); it is not a native upstream alias. The alias rewrite
-in `main.bpp` applies only when `start` is the leading verb.
+in `main.bsh` applies only when `start` is the leading verb.
 
 ### Unsupported / out of scope
 
@@ -73,8 +73,8 @@ adapter resolves `hermes` from `PATH`. Argv, stdin/stdout/stderr and the exit
 status are forwarded verbatim.
 
 ```sh
-HERMES_BIN=/abs/path/to/hermes bashy --bashpp examples/cli/hermes-agent/main.bpp chat -q "Explain this repo"
-HERMES_BIN=/abs/path/to/hermes bashy --bashpp examples/cli/hermes-agent/main.bpp start --oneshot -q "one and done"
+HERMES_BIN=/abs/path/to/hermes bashy --bashsharp examples/cli/hermes-agent/main.bsh chat -q "Explain this repo"
+HERMES_BIN=/abs/path/to/hermes bashy --bashsharp examples/cli/hermes-agent/main.bsh start --oneshot -q "one and done"
 ```
 
 Validate / inspect the declarative contract through ycode directly:
@@ -111,6 +111,6 @@ The transport checks prove **only** argv/stream/status wiring of the Bash++
 adapter; they are labeled `(fake upstream)` and are not evidence of real Hermes
 behavior. Goldens are generated with `LC_ALL=C` against the frozen candidate.
 
-`main.bpp` demonstrates **native Bash++** (typed variable declaration, control
+`main.bsh` demonstrates **native Bash++** (typed variable declaration, control
 flow, verbatim `exec` forwarding) with no fenced-Go helper, since none is used;
 the fenced-Go polyglot path is demonstrated by the sibling `ycode` profile.

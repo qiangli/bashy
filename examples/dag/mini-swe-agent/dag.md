@@ -92,7 +92,7 @@ Requires: sync
 Env: PYTHONPATH=src
 Effects: read
 
-```bashpp
+```bsh
 ~~~py as py
 def main() -> str:
     from minisweagent.agents import get_agent_class

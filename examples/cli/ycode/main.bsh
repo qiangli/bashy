@@ -1,4 +1,4 @@
-#!/usr/bin/env -S bashy --bashpp
+#!/usr/bin/env -S bashy --bashsharp
 set -e
 
 ~~~go as files

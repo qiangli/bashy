@@ -16,9 +16,9 @@ Edit the canonical document first, then refresh this snapshot.
 From the dhnt umbrella, after building the candidate ycode binary:
 
 ```sh
-YCODE_BIN="$PWD/ycode/bin/ycode" bashy --bashpp bashy/examples/cli/ycode/main.bpp --help
-YCODE_BIN="$PWD/ycode/bin/ycode" bashy --bashpp bashy/examples/cli/ycode/main.bpp validate
-YCODE_BIN="$PWD/ycode/bin/ycode" bashy --bashpp bashy/examples/cli/ycode/main.bpp config get spec.runtime.defaultAgentRef
+YCODE_BIN="$PWD/ycode/bin/ycode" bashy --bashsharp bashy/examples/cli/ycode/main.bsh --help
+YCODE_BIN="$PWD/ycode/bin/ycode" bashy --bashsharp bashy/examples/cli/ycode/main.bsh validate
+YCODE_BIN="$PWD/ycode/bin/ycode" bashy --bashsharp bashy/examples/cli/ycode/main.bsh config get spec.runtime.defaultAgentRef
 ```
 
 Set `YCODE_BIN` to an absolute executable path. Without it, the adapter resolves
@@ -28,8 +28,8 @@ selects another YAML document using ycode's normal last-value precedence.
 Arguments following `--` retain their normal meaning. Exit status, stdout and
 stderr come from the ycode process.
 
-`main.bpp` uses a typed Bash++ function and a fenced Go helper for path
-resolution, following the native patterns in `examples/agentic/typed.bpp` and
+`main.bsh` uses a typed Bash++ function and a fenced Go helper for path
+resolution, following the native patterns in `examples/agentic/typed.bsh` and
 `examples/dag/gh/dag.md`. The helper does not implement command parsing,
 providers, policy or an agent loop. The shell keeps the invoking working
 directory. Before running an actual prompt, configure the YAML runtime roots,

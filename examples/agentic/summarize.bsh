@@ -1,6 +1,6 @@
-#!/usr/bin/env -S bashy --bashpp
+#!/usr/bin/env -S bashy --bashsharp
 # A standalone script and executable tool share the same source contract.
-source "${BASH_SOURCE[0]%/*}/actions.bpp"
+source "${BASH_SOURCE[0]%/*}/actions.bsh"
 agentic {
     if [ "$#" -gt 0 ]; then
         summarize_shell "$1"

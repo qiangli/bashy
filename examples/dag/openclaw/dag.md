@@ -126,7 +126,7 @@ Requires: install
 Env: BASHPP_TYPESCRIPT_RUNTIME=bun
 Effects: read
 
-```bashpp
+```bsh
 ~~~ts as ts
 import { parseBooleanValue } from "./src/utils/boolean.js"
 import { chunkItems } from "./src/utils/chunk-items.js"

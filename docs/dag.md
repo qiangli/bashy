@@ -48,11 +48,8 @@ target` names both the file (that folder's `dag.md`) and the place to run it.
 ## Bash# bodies and foreign fences
 
 A body tagged ` ```bsh ` (or ` ```bashsharp `) runs as Bash# instead of
-Classic Bash. ` ```bashpp ` and ` ```bash++ ` are accepted aliases — they name
-the middle rung of the ladder bash → bash++ (the Go typed core) → bash#
-(fences, decorators, keyword params) — and mean the same thing. Untagged and
-` ```bash ` bodies are unchanged — Bash# is opted into per target, so no
-existing task file is reinterpreted.
+Classic Bash. Untagged and ` ```bash ` bodies are unchanged — Bash# is opted
+into per target, so no existing task file is reinterpreted.
 
 A Bash# body may declare a **source fence** in another language and call its
 functions directly. The launcher shape:

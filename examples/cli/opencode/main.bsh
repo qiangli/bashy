@@ -1,4 +1,4 @@
-#!/usr/bin/env -S bashy --bashpp
+#!/usr/bin/env -S bashy --bashsharp
 set -e
 
 ~~~go as paths
@@ -12,5 +12,5 @@ func Relative(script string) string {
 ~~~
 
 var upstream string = ""
-upstream="${CODEX_BIN:-codex}"
+upstream="${OPENCODE_BIN:-opencode}"
 exec "$upstream" "$@"

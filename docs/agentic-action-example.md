@@ -8,14 +8,14 @@ Select an agent already configured on your host, then run from the bashy checkou
 
 ```sh
 export SUMMARY_AGENT=your-configured-agent
-bashy --bashpp examples/agentic/typed.bpp 'The build passed. Deployment is pending.'
-printf '%s\n' 'The build passed. Deployment is pending.' | bashy --bashpp examples/agentic/summarize.bpp
-./examples/agentic/summarize.bpp 'The build passed. Deployment is pending.'
+bashy --bashsharp examples/agentic/typed.bsh 'The build passed. Deployment is pending.'
+printf '%s\n' 'The build passed. Deployment is pending.' | bashy --bashsharp examples/agentic/summarize.bsh
+./examples/agentic/summarize.bsh 'The build passed. Deployment is pending.'
 ```
 
-`actions.bpp` declares a shell function.
-`typed.bpp` declares a typed function and receiver method, preserving the typed
-output/error pair. `summarize.bpp` calls the shell function and preserves shell
+`actions.bsh` declares a shell function.
+`typed.bsh` declares a typed function and receiver method, preserving the typed
+output/error pair. `summarize.bsh` calls the shell function and preserves shell
 streams and status; the executable file is also a command/tool. Each entry script
 opts in through its own block. The flags `--plain --read-only` select plain output
 and the launcher's existing read-only policy. No agent or model is installed by
@@ -28,8 +28,8 @@ coreutils' existing tool registry. It registers `example-summary` only in the
 example binary, not as a new standard bashy verb:
 
 ```sh
-go run ./tools/agentic-example --bashpp -c 'agentic { example-summary "The build passed. Deployment is pending."; }'
-printf '%s\n' 'The build passed. Deployment is pending.' | go run ./tools/agentic-example --bashpp -c 'agentic { example-summary; }'
+go run ./tools/agentic-example --bashsharp -c 'agentic { example-summary "The build passed. Deployment is pending."; }'
+printf '%s\n' 'The build passed. Deployment is pending.' | go run ./tools/agentic-example --bashsharp -c 'agentic { example-summary; }'
 ```
 
 `tool.RunContext.Ctx` already retains `interp.HandlerContext.Agentic`. The adapter

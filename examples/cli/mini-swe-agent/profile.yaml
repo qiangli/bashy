@@ -13,12 +13,12 @@ metadata:
     # launch a mini loop, so the run itself dispatches `unsupported` (exit 4);
     # that exit is the documented example-local BRIDGE POINT — a small wrapper
     # uses ycode as the strict parse gate and then runs the LOCAL loop under
-    # harness/ (the same loop main.bpp runs directly). See README.md.
+    # harness/ (the same loop main.bsh runs directly). See README.md.
 
 spec:
   interfaces:
     cli:
-      identity: {name: mini, version: build, compatibility: "Flags-first projection of the pinned mini-swe-agent `mini` CLI. The pinned `mini` is a SINGLE typer command with flags (-m/--model, -t/--task, -y/--yolo, -l/--cost-limit, -c/--config, -o/--output, --*-class, --exit-immediately), not a subcommand tree, so this contract declares those flags on the root command and adds only the helper verbs version/validate/completion/schema/help. ycode strictly validates and renders this contract; its frozen dispatch cannot launch a mini loop, so the run dispatches `unsupported` (exit 4) — the documented example-local bridge point. The substantive loop (the interactive/default agent, the stateless Bashy execution boundary, replay + a minimal OpenAI-compatible live transport) runs in the LOCAL harness/ package that both main.bpp and the YAML bridge invoke. litellm/provider SDKs, docker/swerex environments, rich/prompt_toolkit UX and trajectory storage integrations are out of scope."}
+      identity: {name: mini, version: build, compatibility: "Flags-first projection of the pinned mini-swe-agent `mini` CLI. The pinned `mini` is a SINGLE typer command with flags (-m/--model, -t/--task, -y/--yolo, -l/--cost-limit, -c/--config, -o/--output, --*-class, --exit-immediately), not a subcommand tree, so this contract declares those flags on the root command and adds only the helper verbs version/validate/completion/schema/help. ycode strictly validates and renders this contract; its frozen dispatch cannot launch a mini loop, so the run dispatches `unsupported` (exit 4) — the documented example-local bridge point. The substantive loop (the interactive/default agent, the stateless Bashy execution boundary, replay + a minimal OpenAI-compatible live transport) runs in the LOCAL harness/ package that both main.bsh and the YAML bridge invoke. litellm/provider SDKs, docker/swerex environments, rich/prompt_toolkit UX and trajectory storage integrations are out of scope."}
       bootstrap: {configFlags: [--file, -f], defaultFile: mini.yaml, env: MSWEA_MINI_CONFIG_PATH}
       presentation:
         formats: [text, json, table]
@@ -57,7 +57,7 @@ spec:
           renders this contract; because ycode's frozen dispatch cannot launch a
           mini loop, the run itself dispatches unsupported (4) — the documented
           bridge point. The actual loop runs in the local harness/ package that
-          both main.bpp and the YAML bridge invoke.
+          both main.bsh and the YAML bridge invoke.
         args: {min: 0, max: 0}
         flags:
           - {name: file, shorthand: f, type: string, default: mini.yaml, usage: Strict harness configuration file, scope: inherited, env: MSWEA_MINI_CONFIG_PATH}

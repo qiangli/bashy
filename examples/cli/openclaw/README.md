@@ -33,7 +33,7 @@ pinned source itself ships bash and fish completion.
 - `profile.yaml` — strict `spec.interfaces.cli` document; the sections outside
   `spec.interfaces.cli` (and `metadata.name`) are the shared runtime graph
   used by every profile in `examples/cli/` and carry no OpenClaw variation.
-- `main.bpp` — thin native Bash++ adapter (typed `func`/`var`, no fenced Go —
+- `main.bsh` — thin native Bash++ adapter (typed `func`/`var`, no fenced Go —
   no helper needed one). It projects the bounded verbs onto the upstream
   spellings (`init`→`onboard`, `start`→`tui`, `model`→`models`), refuses
   `plan`/`exit` with exit 4 as declared, and otherwise execs the upstream
@@ -46,7 +46,7 @@ pinned source itself ships bash and fish completion.
 `start` in the compiled profile dispatches into the **declared, neutral ycode
 runtime graph and frontends** in this document (the shared `spec` sections
 every `examples/cli/` profile carries) — it never launches OpenClaw. The only
-path that reaches an upstream OpenClaw executable is the `main.bpp` Bash++
+path that reaches an upstream OpenClaw executable is the `main.bsh` Bash++
 adapter, which execs `OPENCLAW_BIN`. The offline fixtures exercise that
 adapter against a **fake** transport only, so the actual upstream OpenClaw
 TTY and session behavior is not certified by this example.
@@ -67,7 +67,7 @@ flag/command, argument arity, the completion shell enum, and the undeclared
 upstream flags `start --message`, `start --local`, `model list --all`,
 `model list --provider`), and stdin/TTY routing (`start` declares
 `mode: auto, stdin: false`, so non-TTY invocations are rejected and piped
-stdin is never consumed as a prompt). 8 cases drive `main.bpp` through the
+stdin is never consumed as a prompt). 8 cases drive `main.bsh` through the
 installed Bashy against a **fake** upstream: they are honest transport
 evidence only — argv projection, stdin/stdout passthrough and exit-status
 propagation — and prove nothing about a real OpenClaw installation. Version

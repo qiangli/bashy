@@ -2,7 +2,7 @@
 # Deep readonly: bash's own `readonly` builtin, extended to freeze a value
 # all the way down — struct fields, slice indexes, map keys, aliases, and
 # through subshells. Reads stay ordinary.
-# (From bashsharp-tests/tests/bashsharp/readonly/{deep-read,mutate-subshell}.bpp.)
+# (From bashsharp-tests/tests/bashsharp/readonly/{deep-read,mutate-subshell}.bsh.)
 
 type Metadata struct { Name string }
 type Config struct { Meta Metadata; Ports []int; Labels map[string]string }

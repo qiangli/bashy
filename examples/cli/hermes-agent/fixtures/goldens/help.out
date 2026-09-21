@@ -1,7 +1,7 @@
 Bounded projection of the Hermes Agent CLI focused on the common
 session lifecycle: start or continue a chat, pick the model, and
 resume a previous session. ycode renders and validates this contract;
-the chat/model/resume lifecycle runs only when main.bpp forwards it to
+the chat/model/resume lifecycle runs only when main.bsh forwards it to
 the installed upstream, so under ycode itself it exits unsupported (4).
 
 

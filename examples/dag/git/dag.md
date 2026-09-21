@@ -59,7 +59,7 @@ overrides), C17, and runs as a fresh native process in the invoking
 directory, so the relative paths are the checkout's.
 Effects: read
 
-```bashpp
+```bsh
 ~~~c as c
 #include <stdio.h>
 #include <string.h>
@@ -122,7 +122,7 @@ launcher, the `build` dependency guarantees the binary exists first.
 Requires: build
 Effects: read
 
-```bashpp
+```bsh
 ~~~c as c
 #include <stdio.h>
 #include <string.h>

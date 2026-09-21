@@ -129,7 +129,7 @@ default runtime — with its native type stripping). No wrapper script, no
 Requires: sync install-tui
 Effects: read
 
-```bashpp
+```bsh
 ~~~py as py
 def version() -> str:
     from importlib.metadata import version

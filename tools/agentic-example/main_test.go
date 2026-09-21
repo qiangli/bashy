@@ -114,12 +114,12 @@ func TestAgenticExampleProductEntries(t *testing.T) {
 		args  []string
 		input string
 	}{
-		{"native command", []string{"--bashpp", "-c", `agentic { example-summary "input with spaces"; }`}, ""},
-		{"native stdin", []string{"--bashpp"}, `agentic { example-summary "input with spaces"; }`},
-		{"typed method file", []string{"--bashpp", filepath.Join(examples, "typed.bpp"), "input with spaces"}, ""},
-		{"shell script file", []string{"--bashpp", filepath.Join(examples, "summarize.bpp"), "input with spaces"}, ""},
-		{"shell script stdin", []string{"--bashpp", filepath.Join(examples, "summarize.bpp")}, "input with spaces"},
-		{"external script tool", []string{"--bashpp", "-c", quote(filepath.Join(examples, "summarize.bpp")) + ` "input with spaces"`}, ""},
+		{"native command", []string{"--bashsharp", "-c", `agentic { example-summary "input with spaces"; }`}, ""},
+		{"native stdin", []string{"--bashsharp"}, `agentic { example-summary "input with spaces"; }`},
+		{"typed method file", []string{"--bashsharp", filepath.Join(examples, "typed.bsh"), "input with spaces"}, ""},
+		{"shell script file", []string{"--bashsharp", filepath.Join(examples, "summarize.bsh"), "input with spaces"}, ""},
+		{"shell script stdin", []string{"--bashsharp", filepath.Join(examples, "summarize.bsh")}, "input with spaces"},
+		{"external script tool", []string{"--bashsharp", "-c", quote(filepath.Join(examples, "summarize.bsh")) + ` "input with spaces"`}, ""},
 		{"classic explicit chat", []string{"--no-bashpp", "-c", `bashy chat --plain --read-only --agent codex -m "input with spaces"`}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -135,7 +135,7 @@ func TestAgenticExampleProductEntries(t *testing.T) {
 		})
 	}
 	t.Setenv("AGENTIC_FIXTURE_STATUS", "7")
-	cmd := exec.Command(exe, "-test.run=TestAgenticExampleCLIHelper", "--", "--bashpp", filepath.Join(examples, "typed.bpp"), "input with spaces")
+	cmd := exec.Command(exe, "-test.run=TestAgenticExampleCLIHelper", "--", "--bashsharp", filepath.Join(examples, "typed.bsh"), "input with spaces")
 	cmd.Dir = root
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
@@ -144,7 +144,7 @@ func TestAgenticExampleProductEntries(t *testing.T) {
 	}
 	for _, binding := range []string{"", "sprint134-unconfigured-agent"} {
 		t.Setenv("SUMMARY_AGENT", binding)
-		cmd := exec.Command(exe, "-test.run=TestAgenticExampleCLIHelper", "--", "--bashpp", filepath.Join(examples, "typed.bpp"), "input with spaces")
+		cmd := exec.Command(exe, "-test.run=TestAgenticExampleCLIHelper", "--", "--bashsharp", filepath.Join(examples, "typed.bsh"), "input with spaces")
 		cmd.Dir = root
 		var out, errOut bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &out, &errOut

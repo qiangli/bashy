@@ -1,4 +1,4 @@
-#!/usr/bin/env -S bashy --bashpp
+#!/usr/bin/env -S bashy --bashsharp
 set -eu
 
 # Shell entrypoint for the bounded, self-contained mini-swe-agent example.

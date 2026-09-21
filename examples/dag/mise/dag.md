@@ -51,7 +51,7 @@ std-only and reads the committed manifests and lockfile in the invoking
 checkout.
 Effects: read
 
-```bashpp
+```bsh
 ~~~rs as rs
 use std::fs;
 
@@ -108,7 +108,7 @@ name; debug builds append `-DEBUG` before the platform and build date.
 Requires: build
 Effects: read
 
-```bashpp
+```bsh
 ~~~rs as rs
 use std::process::Command;
 

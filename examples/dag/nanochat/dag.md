@@ -57,7 +57,7 @@ Requires: sync
 Env: PYTHONPATH=.
 Effects: read
 
-```bashpp
+```bsh
 ~~~py as py
 def main() -> str:
     from nanochat.execution import execute_code

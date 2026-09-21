@@ -34,7 +34,7 @@ go build -mod=readonly -o dist/hugo .
 Read `CurrentVersion` through Hugo's own Go package.
 Effects: read, write, net
 
-```bashpp
+```bsh
 ~~~go as go
 import hugopkg "github.com/gohugoio/hugo/common/hugo"
 
@@ -50,7 +50,7 @@ Launch the built Hugo command from the Go fence.
 Requires: build
 Effects: read, write, net
 
-```bashpp
+```bsh
 ~~~go as go
 import "os/exec"
 import "strings"

@@ -19,7 +19,7 @@ Both entrypoints run the SAME loop (`harness/minisweagent_bounded/cli.py`):
 
 | Entrypoint | File | Parsing | Runs the loop? |
 |---|---|---|---|
-| Shell | `main.bpp` | the local CLI (flags-first, argparse) | **yes, by default** |
+| Shell | `main.bsh` | the local CLI (flags-first, argparse) | **yes, by default** |
 | YAML | `yaml-run.sh` + `profile.yaml` | **declaratively owned by ycode** (strict validation of the compiled contract) | yes, via the documented bridge |
 
 ### The example-local bridge (documented limitation)
@@ -44,7 +44,7 @@ YCODE_BIN=/path/to/ycode
 BASHY_BIN=/path/to/bashy      # or `bashy` on PATH
 
 # Shell entrypoint (runs the local loop; here with an offline replay scenario):
-BASHY_BIN=$BASHY_BIN bashy --bashpp main.bpp \
+BASHY_BIN=$BASHY_BIN bashy --bashsharp main.bsh \
     --scenario fixtures/scenarios/submit-success.json -y --emit-envelope
 
 # YAML entrypoint (ycode validates/parses, then the same local loop runs):
@@ -57,7 +57,7 @@ YCODE_BIN=$YCODE_BIN BASHY_BIN=$BASHY_BIN /bin/sh yaml-run.sh \
 "$YCODE_BIN" --file profile.yaml completion bash
 
 # A live run against a real OpenAI-compatible endpoint (needs a provider + key):
-BASHY_BIN=$BASHY_BIN bashy --bashpp main.bpp \
+BASHY_BIN=$BASHY_BIN bashy --bashsharp main.bsh \
     -t "fix the failing test" --model-class openai -m gpt-4o-mini \
     --base-url "$OPENAI_BASE_URL" --api-key "$OPENAI_API_KEY"
 ```

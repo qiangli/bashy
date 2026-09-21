@@ -1,4 +1,4 @@
-#!/usr/bin/env -S bashy --bashpp
+#!/usr/bin/env -S bashy --bashsharp
 agentic func summarize(text string) (string, error) {
     output, err := capture("bashy", "chat", "--plain", "--read-only", "--agent", "${SUMMARY_AGENT:?set SUMMARY_AGENT}", "-m", "Summarize the following text in one sentence. Return only the summary.
 

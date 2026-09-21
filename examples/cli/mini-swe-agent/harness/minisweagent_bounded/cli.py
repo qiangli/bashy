@@ -1,7 +1,7 @@
 """Flags-first `mini` CLI — the single local loop both entrypoints run.
 
 Original to this bounded example (cf. upstream `minisweagent/run/mini.py`, a
-typer app reaching a live provider + interactive UX). `main.bpp` (the shell
+typer app reaching a live provider + interactive UX). `main.bsh` (the shell
 entrypoint) and the ycode-gated YAML bridge both exec this module, so the two
 paths run the SAME loop.
 

@@ -76,7 +76,7 @@ overrides), C++20, and runs as a fresh native process in the invoking
 directory, so the relative paths are the checkout's.
 Effects: read
 
-```bashpp
+```bsh
 ~~~cxx as cxx
 #include <fstream>
 #include <string>
@@ -133,7 +133,7 @@ exception surfaces as the call's error. The fence is the launcher, the
 Requires: build
 Effects: read
 
-```bashpp
+```bsh
 ~~~cxx as cxx
 #include <cstdio>
 #include <stdexcept>

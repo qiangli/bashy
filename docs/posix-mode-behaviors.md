@@ -1,10 +1,10 @@
 # Bash POSIX-mode behaviors — bashy parity checklist (Phase 1)
 
-Startup POSIX selection disables Bash++ grammar and runtime dialect on both
-front doors. Bashy's default dialect, `.bpp` filenames, `--bashpp` / `--bash++`
-and `BASHY_BASHPP=1` cannot select a combined Bash++/POSIX grammar.
-`bashy --posix --bashpp` retains the POSIX profile. The standalone
-`bash --posix --bashpp` preserves Sprint 114's inert compatibility profile,
+Startup POSIX selection disables Bash# grammar and runtime dialect on both
+front doors. Bashy's default dialect, `.bsh` filenames, `--bashsharp`
+and `BASHY_BASHSHARP=1` cannot select a combined Bash#/POSIX grammar.
+`bashy --posix --bashsharp` retains the POSIX profile. The standalone
+`bash --posix --bashsharp` preserves Sprint 114's inert compatibility profile,
 where both Bash++ and POSIX differences are disabled. Ordinary `bash --posix`
 and a winning explicit Bash++-off selector keep POSIX semantics. Selector
 precedence and explicit-selector provenance remain unchanged.

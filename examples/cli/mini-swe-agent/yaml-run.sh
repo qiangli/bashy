@@ -1,13 +1,13 @@
 #!/bin/sh
 # YAML entrypoint for the bounded mini-swe-agent example.
 #
-# This is the second runnable entrypoint (main.bpp is the shell one). Parsing is
+# This is the second runnable entrypoint (main.bsh is the shell one). Parsing is
 # DECLARATIVELY OWNED: the frozen generic ycode compiler validates and renders
 # profile.yaml and is the strict parse gate for every invocation. Because ycode's
 # frozen dispatch cannot launch a mini loop, a run that parses cleanly returns
 # exit 4 ("unsupported by this CLI contract"); this bridge treats that exit 4 as
 # "parsed OK — now run the LOCAL loop" and execs the same harness/ CLI that
-# main.bpp runs. A real usage error is exit 2 and is propagated verbatim.
+# main.bsh runs. A real usage error is exit 2 and is propagated verbatim.
 #
 # This is the documented example-local bridge: no shared Go/schema change, no
 # second product-specific dispatch branch — just ycode-as-parser + local loop.

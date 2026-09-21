@@ -1,4 +1,4 @@
-#!/usr/bin/env -S bashy --bashpp
+#!/usr/bin/env -S bashy --bashsharp
 set -e
 
 # Thin native Bash++ adapter for the bounded Hermes Agent session-lifecycle CLI.

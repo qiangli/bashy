@@ -3,7 +3,7 @@
 #
 # Candidate cases drive the real ycode binary against profile.yaml and hold
 # it to the declared goldens and exit classes (usage=2, unsupported=4).
-# Adapter cases drive main.bpp through the installed Bashy against a FAKE
+# Adapter cases drive main.bsh through the installed Bashy against a FAKE
 # upstream executable: they are transport evidence only (argv projection,
 # stream passthrough, exit-status propagation) and prove nothing about a
 # real OpenClaw installation. No model calls are made.
@@ -11,7 +11,7 @@ set -eu
 
 fixtures_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 profile="$fixtures_dir/../profile.yaml"
-adapter="$fixtures_dir/../main.bpp"
+adapter="$fixtures_dir/../main.bsh"
 golden="$fixtures_dir/golden"
 bashy_bin=${BASHY_BIN:-$(command -v bashy)}
 : "${YCODE_BIN:?set YCODE_BIN to the absolute candidate ycode executable}"
@@ -192,7 +192,7 @@ chmod +x "$fake"
 
 run_adapter() {
     status=0
-    OPENCLAW_BIN="$fake" "$bashy_bin" --bashpp "$adapter" "$@" >out 2>err </dev/null || status=$?
+    OPENCLAW_BIN="$fake" "$bashy_bin" --bashsharp "$adapter" "$@" >out 2>err </dev/null || status=$?
 }
 
 adapter_argv_case() {
@@ -216,14 +216,14 @@ adapter_argv_case adapter-map-model 'argv: models list' model list
 adapter_argv_case adapter-passthrough 'argv: resume q' resume q
 
 status=0
-printf 'ping\n' | OPENCLAW_BIN="$fake" "$bashy_bin" --bashpp "$adapter" resume >out 2>err || status=$?
+printf 'ping\n' | OPENCLAW_BIN="$fake" "$bashy_bin" --bashsharp "$adapter" resume >out 2>err || status=$?
 want_status adapter-stdin-stream 0
 printf 'argv: resume\nping\n' >expected.out
 cmp -s expected.out out || { printf 'adapter-stdin-stream: stream transport differs\n' >&2; cat out err >&2; exit 1; }
 pass adapter-stdin-stream
 
 status=0
-FAKE_STATUS=7 OPENCLAW_BIN="$fake" "$bashy_bin" --bashpp "$adapter" version >out 2>err </dev/null || status=$?
+FAKE_STATUS=7 OPENCLAW_BIN="$fake" "$bashy_bin" --bashsharp "$adapter" version >out 2>err </dev/null || status=$?
 want_status adapter-exit-status 7
 pass adapter-exit-status
 

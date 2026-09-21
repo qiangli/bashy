@@ -89,7 +89,7 @@ fence's environment fingerprint) and runs as a native worker in the
 invoking directory, so the relative paths are the checkout's.
 Effects: read
 
-```bashpp
+```bsh
 ~~~rs as rs
 use std::fs;
 
@@ -142,7 +142,7 @@ binary exists first.
 Requires: build
 Effects: read
 
-```bashpp
+```bsh
 ~~~rs as rs
 use std::process::Command;
 

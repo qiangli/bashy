@@ -76,7 +76,7 @@ C17, and runs as a fresh native process in the invoking directory, so the
 relative paths are the checkout's.
 Effects: read
 
-```bashpp
+```bsh
 ~~~c as c
 #include <dirent.h>
 #include <stdio.h>
@@ -151,7 +151,7 @@ dependency guarantees both the header and the binary exist first.
 Requires: build
 Effects: read
 
-```bashpp
+```bsh
 ~~~c as c
 #include <stdio.h>
 #include <string.h>

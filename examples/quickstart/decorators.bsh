@@ -2,7 +2,7 @@
 # Decorators: an ordinary function whose first parameter is `c *Call`.
 # `@tag(...)` lines stack above a declaration; the arguments are evaluated
 # PER INVOCATION in the declaring scope, with keyword and default arguments.
-# (From bashsharp-tests/tests/decorators/arguments.bpp.)
+# (From bashsharp-tests/tests/decorators/arguments.bsh.)
 
 func tag(c *Call, label string, level string = "info") {
     name := c.Name

@@ -18,7 +18,7 @@ bashy --dryrun -c '<commands>'
 bashy --dry-run -c '<commands>'
 bashy --dry-run --posix script.sh    # strict POSIX parse only; execute nothing
 bashy check --mode posix script.sh   # strict POSIX grammar + static inventory
-bashy check --bashpp program.bpp     # quiet Bash# null-safety check (exit 2 on errors)
+bashy check --bashsharp program.bsh  # quiet Bash# null-safety check (exit 2 on errors)
 bashy help dryrun                     # focused help for this feature
 
 # Runtime toggle — dry-run only part of a script:

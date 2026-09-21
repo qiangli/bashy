@@ -8,5 +8,5 @@ are explicit unsupported cases.
 Behavioral source pin: `ycode/priorart/opencode` at
 `e03db9bc6908f75c9334d8aa997deeaac81c0298`.
 
-The YAML is interpreted by ycode. `main.bpp` forwards substantive behavior to
+The YAML is interpreted by ycode. `main.bsh` forwards substantive behavior to
 an installed upstream executable selected by `OPENCODE_BIN`.

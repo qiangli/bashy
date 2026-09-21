@@ -92,7 +92,7 @@ channel the workspace itself pins — `Cargo.toml`, `Cargo.lock` and
 runs as a native worker in the invoking directory.
 Effects: read
 
-```bashpp
+```bsh
 ~~~rs as rs
 use std::fs;
 
