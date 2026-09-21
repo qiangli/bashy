@@ -18,6 +18,8 @@ Deliver: `build-image` with `BASHY_OCI_PLATFORM=windows/amd64` selects `tools/ba
 
 Engine (corrected at review, 2026-09-20): the lean `bashy podman` DOES build on Windows (`engines_stub.go` tag `!bashy_engines || (windows && …)`, with `applyPodmanHelperEnv` for the machine helpers) — but podman on Windows drives a WSL Linux machine and cannot build or run a Windows-native (nanoserver, process-isolated) image. That, not a build tag, is why this story's host engine is Docker in Windows-containers mode / containerd+hcsshim on the container host: the recorded exception to the sprint's engine rule.
 
+Host edition (operator Q, 2026-09-20): Windows Home cannot be the gate host — the Containers feature (and Hyper-V) exists only on Pro / Enterprise / Education / Server; on Home, Docker Desktop and podman run Linux containers only. Verify the edition (`Get-ComputerInfo WindowsProductName`) and that `Containers` is enabled before naming the host here; process isolation also needs the host build to match the nanoserver ltsc tag.
+
 Gate on a real Windows container host (process isolation; the existing Windows host from the v0.24.x QA lanes if it has the containers feature, else name the host that does) — cross-compile green is NOT evidence: the sibling Windows work found silent failures four times in one day. Run the S227.3 matrix rows there; rows that differ from linux get their own column.
 
 Acceptance: `docker run --rm --network=none -v ${PWD}:C:\work -w C:\work localhost/bashy:…-windows-amd64 --bashsharp .\script.bsh` runs a .bsh with builtin coreutils and one island; size table row; host + isolation mode + ltsc tag recorded in the evidence.
