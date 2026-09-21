@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy build-bashy-scratch verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-quickstart smoke-quickstart-container dist tidy clean help
+.PHONY: dag build build-bash build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-quickstart smoke-quickstart-container dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -116,14 +116,26 @@ build-bashy:
 		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BIN) native/siglaunch.c.in; \
 	fi
 
-## build-bashy-scratch: Build the lean, static linux/amd64 Bashy profile used by
-## Cloudbox. The stable artifact path is bin/scratch/bashy-linux-amd64.
+## build-bashy-scratch: Build the lean, static linux Bashy profile used by
+## Cloudbox and by the offline image (`bashy self image`). The stable amd64
+## artifact path is bin/scratch/bashy-linux-amd64; BASHY_SCRATCH_GOARCH=arm64
+## builds bin/scratch/bashy-linux-arm64 (override BASHY_SCRATCH_ARTIFACT to move it).
+BASHY_SCRATCH_GOARCH ?= amd64
+build-bashy-scratch: BASHY_SCRATCH_ARTIFACT := $(if $(filter amd64,$(BASHY_SCRATCH_GOARCH)),$(BASHY_SCRATCH_ARTIFACT),$(BIN_DIR)/scratch/bashy-linux-$(BASHY_SCRATCH_GOARCH))
 build-bashy-scratch:
 	@mkdir -p $$(dirname "$(BASHY_SCRATCH_ARTIFACT)")
-	@echo "building static Cloudbox Bashy at $(BASHY_SCRATCH_ARTIFACT) ..."
-	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -trimpath \
+	@echo "building static linux/$(BASHY_SCRATCH_GOARCH) Bashy at $(BASHY_SCRATCH_ARTIFACT) ..."
+	@CGO_ENABLED=0 GOOS=linux GOARCH=$(BASHY_SCRATCH_GOARCH) $(GO) build -trimpath \
 		-tags bashy_scratch -ldflags "$(LDFLAGS)" \
 		-o "$(BASHY_SCRATCH_ARTIFACT)" ./cmd/bashy
+
+## build-image: The offline bashy image from this checkout: build the static
+## scratch artifact for BASHY_IMAGE_ARCH (default: host arch) and wrap it FROM
+## scratch through `bashy self image` + bashy podman. Mirror of `dag build-image`.
+BASHY_IMAGE_ARCH ?= $(shell go env GOARCH)
+build-image:
+	@$(MAKE) --no-print-directory build-bashy-scratch BASHY_SCRATCH_GOARCH=$(BASHY_IMAGE_ARCH)
+	@BASHY_SCRATCH_BIN=$(BIN_DIR)/scratch/bashy-linux-$(BASHY_IMAGE_ARCH) $(BIN_DIR)/bashy self image --arch $(BASHY_IMAGE_ARCH) --version $(VERSION)
 
 ## verify-bashy-scratch: Rebuild and fail closed unless the Cloudbox artifact is
 ## static Linux amd64, purego-free, command-smoked, and scratch-runnable when an

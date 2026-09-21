@@ -3,7 +3,7 @@ id: 88749e63443e
 kind: feature
 title: 'S227.8 FOUNDATION — bashy podman self-provisions from pinned upstream releases (linux podman-static; darwin client+gvproxy+vfkit; windows client): no bashy-built blobs, download+exec'
 seq: 313
-status: todo
+status: doing
 priority: p0
 labels:
     - airgap

@@ -1041,6 +1041,29 @@ BASHY_EXE="${BASHY:-bashy}"
 BASH53_OCI="$BASHY_EXE podman" make test-bash-container
 ```
 
+### build-image
+The offline bashy image from this checkout (Sprint 227, "Bashy is all you
+need"): build the static `bashy_scratch` linux artifact for
+`BASHY_IMAGE_ARCH` (default: the host arch — what podman runs natively, also
+inside the macOS/Windows machine) and wrap it `FROM scratch` through
+`bashy self image`, which builds via `bashy podman` — the engine bashy
+provisions for itself. A user with only the release download runs
+`bashy self image` (it fetches the published artifact instead); this target is
+the repo/CI form that images the CANDIDATE. Then:
+
+    bashy podman run --rm --network=none -v "$PWD:/work" -w /work localhost/bashy:<ver>-linux-<arch> --bashsharp ./script.bsh
+
+Effects: write, net
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+arch="${BASHY_IMAGE_ARCH:-$("$BASHY_EXE" go env GOARCH)}"
+version="${BASHY_IMAGE_VERSION:-dev}"
+make --no-print-directory build-bashy-scratch BASHY_SCRATCH_GOARCH="$arch"
+BASHY_SCRATCH_BIN="bin/scratch/bashy-linux-$arch" "$BASHY_EXE" self image --arch "$arch" --version "$version"
+```
+
 ### test-bash-container-prepare
 Prepare the GNU Bash 5.3 container-normalized lane once per host. This builds
 the host-architecture Linux testee and harness and validates the current

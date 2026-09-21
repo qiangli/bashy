@@ -3,7 +3,7 @@ id: 1118472f556c
 kind: feature
 title: 'S227.1 bashy image build: the release ships the static bashy_scratch artifact (amd64+arm64); bashy fetches it and builds a FROM-scratch image through bashy podman — no source on the host'
 seq: 305
-status: todo
+status: doing
 priority: p0
 labels:
     - linux
@@ -13,22 +13,16 @@ created: 2026-09-20T21:23:20.094892Z
 sprint: 227
 ---
 
-DECIDED (operator, 2026-09-20): no source on the user's host. The release ships the static artifact; bashy fetches it and builds the image through its own podman. `bashy git` / `bashy go` are the developer path (README "From source"), not part of the image story.
+DELIVERED (corbel, 2026-09-21). No source on the user's host: the release ships the static artifact; bashy fetches it and builds the image through its own podman. `bashy git` / `bashy go` remain the developer path (README "From source").
 
-Today `make build-bashy-scratch` builds the static linux/amd64 `bashy_scratch` artifact and `scripts/verify-bashy-scratch.sh` proves it in a throwaway `FROM scratch` image. Nothing publishes it, nothing keeps an image.
+What landed:
+1. `build-bashy-scratch` takes `BASHY_SCRATCH_GOARCH=arm64` (amd64 path `bin/scratch/bashy-linux-amd64` unchanged — it has a consumer); `.goreleaser.yaml` build id `bashy-scratch` (tags `bashy_scratch`, linux amd64+arm64, raw binary assets `bashy-scratch-linux-{amd64,arm64}` in `checksums.txt`).
+2. `bashy self image [--arch] [--version] [--tag] [--engine]` (internal/agentos/self_image.go): fetches `bashy-scratch-linux-<arch>` for the running version (then its `-dev` prerelease) through binmgr's checksum→cache path, writes the Containerfile (`FROM scratch`, `COPY bashy /bashy`, `/tmp`, `HOME=/tmp/bashy`, `PATH=/`, telemetry off, `WORKDIR /work`, OCI labels, `ENTRYPOINT ["/bashy"]`), builds `localhost/bashy:<ver>-linux-<arch>` through `<this bashy> podman build --platform linux/<arch>`; `BASHY_SCRATCH_BIN` = a local artifact (the repo/CI form); `BASHY_OCI` = another engine. `self fetch/install` now never match the scratch asset.
+3. `dag build-image` (Makefile mirror `build-image`): `build-bashy-scratch` for `BASHY_IMAGE_ARCH` (default host arch) + `self image` on it — images the candidate.
+4. README "Containers — the offline image" with the two-line contract.
 
-Deliver:
-1. `build-bashy-scratch` for amd64 AND arm64 (GOARCH; keep the amd64 path stable — it has a consumer); `dist`/`release.yml` publish `bashy-scratch-linux-{amd64,arm64}` beside the other assets, listed in `checksums.txt`.
-2. `bashy image build [--arch amd64|arm64] [--tag T]` — a small builtin, one code path: fetch `bashy-scratch-linux-<arch>` for the running version from the release through binmgr (checksum-verified, cached in `BASHY_BIN_CACHE`; `BASHY_SCRATCH_BIN=<path>` uses a local artifact instead), write the Containerfile (`FROM scratch`, `COPY bashy /bashy`, `/tmp`, `/work`, `ENTRYPOINT ["/bashy"]`, env `OTEL_TRACES_EXPORTER=none BASHY_TELEMETRY_QUIET=1 HOME=/tmp`) into a temp context, exec `bashy podman build` — bashy's own engine (S227.8); `BASHY_OCI` stays the operator override. Tag `localhost/bashy:<version>-linux-<arch>`.
-3. `dag.md` target `build-image` (Makefile mirror) = the repo/CI form: `make build-bashy-scratch` then `bashy image build` with `BASHY_SCRATCH_BIN` pointed at it, so CI builds the candidate, not a published artifact.
+HOME is `/tmp/bashy`, not `/tmp`: Stage 0 output canonicalization rewrites the home prefix to `$HOME` on non-tty sinks (output_reduce.go, story 05c51640 — product behaviour, not this sprint's), and a container's stdout is never a tty; with HOME=/tmp every `/tmp/...` path a script printed came out as `$HOME/...` (measured). The matrix (S227.3) carries the row.
 
-The user contract (README "Containers" section + the verb's help):
+Measured on the Linux test host (Ubuntu 24.04 amd64, managed podman from S227.8, PATH without podman/docker): `self image` → `localhost/bashy:0.25.0-linux-amd64` in 6.7 s; `--version`, `-c 'printf ok'`, `--posix -c 'echo $((6*7))'`, and a mounted `.bsh` using wc/sort/head/grep/date/cut/ls/tr/uname all pass under `--network=none --read-only --cap-drop=ALL --tmpfs /tmp`; `curl` → "command not found" (nothing but bashy in the image); uncompressed 102.9 MB, compressed 46.5 MB (amd64). arm64 artifact built (`bin/scratch/bashy-linux-arm64`, static aarch64 ELF) — run proof for arm64 comes from S227.3's CI arm64 job. `verify-bashy-scratch` green; agentos tests + e2e dispatch gate green; Windows cross-build green.
 
-    bashy image build
-    bashy podman run --rm --network=none -v "$PWD:/work" -w /work localhost/bashy:<ver>-linux-<arch> --bashsharp ./script.bsh
-
-The image is bashy as it exists: bash 5.3 surface, `--posix`, `--bashsharp`, builtin coreutils, dag/weave/check/transpile. No externals inside (S227.2 deferred): an island that needs a toolchain fails under `--network=none` as any download does, and the matrix (S227.3) says so.
-
-License: the image contains bashy only — no base image, no third-party file — so it carries bashy's own license and nothing else (docs/licensing-supply-chain-policy.md). Nothing GPL enters at any rung.
-
-Acceptance: `bashy image build` on the dev box and on the Linux test host through `bashy podman` for both arches; `--version`, `-c 'printf ok'` and a mounted `.bsh` using builtin coreutils pass under `--network=none --read-only --cap-drop=ALL --tmpfs /tmp`; `verify-bashy-scratch.sh` still green; the two artifacts on the `-dev` release with checksums; compressed + uncompressed size per arch in the evidence record.
+Acceptance: image builds on the Linux test host through `bashy podman` ✔ (dev box has no machine — macOS proof is S227.0 on novidesign); offline contract ✔; verifier ✔; artifacts on the `-dev` release with checksums — pending the tag (next step); sizes recorded ✔.

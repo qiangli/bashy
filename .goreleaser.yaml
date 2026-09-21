@@ -34,6 +34,26 @@ builds:
     goarch:
       - amd64
       - arm64
+  # The offline image artifact (`bashy self image`): the static, purego-free
+  # bashy_scratch profile, linux only, shipped as a raw binary so the image
+  # build fetches one file. Same version stamp as bashy.
+  - id: bashy-scratch
+    main: ./cmd/bashy
+    binary: bashy-scratch-{{ .Os }}-{{ .Arch }}
+    no_unique_dist_dir: true
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    tags:
+      - bashy_scratch
+    ldflags:
+      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Version "-dev" }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit={{ .Env.SHELL_RUNTIME_COMMIT }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime={{ .Env.SHELL_RUNTIME_COMMIT_TIME }}'
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
   - id: bash
     main: ./cmd/bash
     binary: bash
@@ -52,6 +72,10 @@ builds:
       - arm64
 
 archives:
+  - id: bashy-scratch
+    ids: [bashy-scratch]
+    formats: [binary]
+    name_template: "bashy-scratch-{{ .Os }}-{{ .Arch }}"
   - id: bashy
     ids: [bashy]
     name_template: "bashy-{{ .Os }}-{{ .Arch }}"

@@ -33,7 +33,7 @@ It does not replace the running executable unless you explicitly install to a
 destination path.`,
 		SilenceUsage: true,
 	}
-	cmd.AddCommand(selfFetchCmd(), selfBuildCmd(), selfInstallCmd(), selfCheckCmd())
+	cmd.AddCommand(selfFetchCmd(), selfBuildCmd(), selfInstallCmd(), selfCheckCmd(), selfImageCmd())
 	return cmd
 }
 
@@ -266,8 +266,8 @@ func releaseBinaryName() string {
 
 func bashyArchiveMatch(name, goos, goarch string) bool {
 	n := strings.ToLower(name)
-	if !strings.HasPrefix(n, "bashy-") {
-		return false
+	if !strings.HasPrefix(n, "bashy-") || strings.HasPrefix(n, scratchAssetPrefix) {
+		return false // bashy-scratch-linux-<arch> is the image artifact (self image), not a shell release
 	}
 	if !strings.Contains(n, strings.ToLower(goos)) {
 		return false

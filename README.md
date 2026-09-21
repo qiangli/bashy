@@ -162,6 +162,28 @@ cd bashy
 make build                         # -> bin/bash and bin/bashy
 ```
 
+### Containers — the offline image
+
+Bashy is all you need. With nothing but the release download — no git, go,
+podman or docker on the host — build the image and run your script with no
+network:
+
+```sh
+bashy self image
+bashy podman run --rm --network=none -v "$PWD:/work" -w /work localhost/bashy:<ver>-linux-<arch> --bashsharp ./script.bsh
+```
+
+`bashy self image` fetches the release's static `bashy-scratch-linux-<arch>`
+artifact (checksum-verified) and builds a `FROM scratch` image around it
+through `bashy podman` — the engine bashy provisions for itself from the
+pinned upstream releases (a complete static podman on Linux; the machine
+client plus gvproxy/vfkit on macOS; the client on Windows, where the machine
+runs on WSL2 — every edition). The image is bashy as it is: Bash 5.3, `--posix`,
+Bash#, the builtin coreutils, dag/weave/check/transpile. What is and is not in
+it, per command, is the measured matrix in
+[`docs/airgap-image.md`](docs/airgap-image.md). From a checkout,
+`bashy dag build-image` images the candidate instead of a published artifact.
+
 A minimal Linux container base (Ubuntu/glibc, launcher + payload) is described
 in [`docs/bashy-oci-base.md`](docs/bashy-oci-base.md).
 
