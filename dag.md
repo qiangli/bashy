@@ -1079,6 +1079,21 @@ set -e
 BASHY="${BASHY:-bashy}" scripts/airgap-container-smoke.sh
 ```
 
+### smoke-self-contained-image
+"Bashy is all you need" (Sprint 227), as one gate: from the PUBLISHED release
+archive of `SELF_TAG` (e.g. `v0.25.0-dev`), on a PATH scrubbed of
+git/go/cc/podman/docker and an empty cache, run `bashy self image` and
+`bashy podman run --network=none` on a Bash# script, then print the
+provision inventory (what bashy fetched, with digests) — the doc's "What
+the host needs". Never SKIPs. Run it on each OS the doc claims.
+Effects: write, net
+
+```bash
+set -e
+[ -n "${SELF_TAG:-}" ] || { echo "SELF_TAG=vX.Y.Z[-dev] is required" >&2; exit 2; }
+scripts/self-contained-image-smoke.sh "$SELF_TAG"
+```
+
 ### test-bash-container-prepare
 Prepare the GNU Bash 5.3 container-normalized lane once per host. This builds
 the host-architecture Linux testee and harness and validates the current

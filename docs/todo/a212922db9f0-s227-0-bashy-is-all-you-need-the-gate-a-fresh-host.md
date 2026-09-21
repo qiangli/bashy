@@ -3,7 +3,7 @@ id: a212922db9f0
 kind: test
 title: 'S227.0 "Bashy is all you need" — the gate: a fresh host with ONLY the bashy release download runs bashy image build + bashy podman run on a .bsh offline (no git/go/cc/podman/docker on the host)'
 seq: 312
-status: todo
+status: doing
 priority: p0
 labels:
     - airgap
