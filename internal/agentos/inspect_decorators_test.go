@@ -13,12 +13,17 @@ import (
 	"testing"
 )
 
-// The registry, the inspect catalog and docs/decorators.md name the same
-// predefined set — nothing predefined goes uncatalogued, nothing catalogued
-// is fiction.
+// The registry (minus the internal attest, plus the engine's timed), the
+// inspect catalog and docs/decorators.md name the same supported set —
+// nothing supported goes uncatalogued, nothing catalogued is fiction.
 func TestDecoratorCatalogMatchesRegistryAndDocs(t *testing.T) {
 	registry := map[string]bool{}
 	for name := range nativeDecoratorSet(new(bytes.Buffer), func(fn nativeDecoratorFunc) nativeDecoratorFunc { return fn }) {
+		if !internalDecorators[name] {
+			registry[name] = true
+		}
+	}
+	for name := range engineDecorators {
 		registry[name] = true
 	}
 	catalog := map[string]bool{}
@@ -36,7 +41,6 @@ func TestDecoratorCatalogMatchesRegistryAndDocs(t *testing.T) {
 	for _, m := range regexp.MustCompile("(?m)^\\| `@([a-z]+)` \\|").FindAllStringSubmatch(string(doc), -1) {
 		documented[m[1]] = true
 	}
-	delete(documented, "timed") // the engine's, not bashy's registry
 	if !equalSets(registry, documented) {
 		t.Fatalf("registry %v != docs/decorators.md %v", keys(registry), keys(documented))
 	}
@@ -46,8 +50,8 @@ func TestDecoratorCatalogMatchesRegistryAndDocs(t *testing.T) {
 			minimum++
 		}
 	}
-	if minimum != 9 {
-		t.Fatalf("the minimum set is 9 decorators, catalog says %d — growing it is a decision, not a drift", minimum)
+	if minimum != 11 {
+		t.Fatalf("the supported set is 11 decorators, catalog says %d — growing it is a decision, not a drift", minimum)
 	}
 }
 

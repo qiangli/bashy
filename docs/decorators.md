@@ -1,9 +1,10 @@
 # Bash# predefined decorators — the catalog
 
-The decorators bashy predefines for Bash# (`.bsh`, or `bashy` in agentic
+The decorators bashy supports for Bash# (`.bsh`, or `bashy` in agentic
 mode). The list is deliberately the **minimum**: what `bashy dag` needs
 (`require`, `ensure`, `guard`) plus what a script author reaches for
-constantly (`trace`, `retry`, `timeout`, `memo`, `auth`, `effects`). Each is a thin
+constantly (`effects`, `trace`, `timed`, `retry`, `timeout`, `memo`, `auth`,
+`confirm`). Each is a thin
 connection to a rod bashy already has — the atlas, the OTel spool,
 `autoretry`, the context deadline, `bashy login` — never a policy of its
 own. `bashy inspect decorators` prints this table from the registry; a test
@@ -34,7 +35,7 @@ function deploy() { ... }
 Outermost first: `auth` wraps `timeout` wraps `retry` wraps `require` wraps
 the body. Arguments are the decorator's own, keyword (`n: 3`) or positional.
 
-## The minimum set
+## The supported set
 
 | decorator | arguments | what it does | connects to | exit | advisable |
 |---|---|---|---|---|---|
@@ -42,11 +43,13 @@ the body. Arguments are the decorator's own, keyword (`n: 3`) or positional.
 | `@ensure` | `'<check>', …` | postcondition: judged after the body with `$STATUS` and `$RESULT`; a failing check invalidates the result | dag `Ensure:` | 3 | no |
 | `@guard` | `"read,net"` or `effects: "…"` | the effect cap for everything the call dispatches: a command whose atlas effects exceed it is denied before it runs (126 in a dag body, non-zero in the shell); nested guards only narrow | atlas effect atoms; dag `Effects:` (advisory there) | 126 | yes |
 | `@trace` | — | one OTel span `call <name>` around the call; argument count only, never values | `bashy otel` spool | — | yes |
+| `@timed` | — | measures the call: one `@timed: <fn>: status=N duration=D` line on stderr; engine-supplied (`sh`), usable like any other | the `sh` engine | — | no |
 | `@retry` | `n: 3, backoff: "1s"` | re-runs the chain until it succeeds or `n` attempts are spent (default schedule: autoretry's) | `pkg/autoretry` | the last attempt's | never |
 | `@timeout` | `"10s"` or `d: "10s"` | cancels the chain at the deadline; under `@retry` each attempt re-arms | the context deadline | 124 | never |
 | `@memo` | `["1h"]` or `ttl: "1h"` | the same name + arguments within one process returns the cached `Results` and `Status` without running the body; a non-zero status is not cached; `ttl` expires an entry. Memo caches what the call **returns** — printed output is not replayed, so use it on typed (value-returning) functions | a process-wide map | the cached | never |
 | `@auth` | `via: "<cmd>"`, `as: "<principal>"` | runs `via` once per process (default `bashy tessaro status`, this host's pairing); exit 0 = authenticated and its first stdout line is the principal, exported to the body as `BASHY_PRINCIPAL`; `as:` names the principal required | `bashy login` / `bashy tessaro status` | 77 | yes |
 | `@effects` | `"net,write"` or `effects: "…"` | the author's side of the guard coin: declares what the function does. A `@guard` that does not allow the declaration denies the call at the boundary (126) before the body runs; inside, the declaration is the function's own cap **and** the classification for commands the atlas does not know — so a tool bashy has never heard of runs on the author's word instead of failing as `unknown` | atlas vocabulary; `@guard`; dag `Effects:` | 126 | never |
+| `@confirm` | — | human-in-the-loop **allow** per operation — not a guard: the high-impact atoms (`destroy`, `cred`, `priv`, `spend`, unknown) take their answer from `--confirm=TOKEN:yes` / `--what-if`, or the call yields; `docs/effect-derived-confirmation.md` | atlas effects, `bashy ask` | 6 | no |
 
 "Advisable" = an advice rule may apply it. `retry`, `memo`, `timeout` never:
 a policy that re-executes, replaces or cuts short a body behind the author's
@@ -105,21 +108,11 @@ guess:
 
 `bashy inspect decorators` and this page are pinned to each other by test.
 
-## Present, not in the minimum set
+## Internal
 
-| decorator | note |
-|---|---|
-| `@confirm` | effect-derived `--what-if` / `--confirm` per operation (exit 6 on an unanswered high-impact op); `docs/effect-derived-confirmation.md` |
-| `@attest` | the pass-through rung advice puts on `agentic{}` functions so the call is attested; not for authors |
-| `@timed` | the engine's own observation decorator (`sh`): one `@timed:` line with status and duration |
-
-## Making `@guard` say more
-
-`@guard` is what a caller may do; `@effects` is what a callee does — the two
-sides of one coin, both in the same eleven atoms. For a rule neither can
-express (deny by argument, by principal, by time of day), redefine `guard`
-in the script: `func guard(c *Call)` sees the call's name, arguments and
-principal and decides `Next()` itself.
+`attest` is registered too — the rung policy advice attaches to an `agentic{}`
+function so its completion is attested (`docs/function-attestation.md`). It is
+the mechanism's, not an author's: not in this list, not in `inspect`.
 
 ## Writing your own
 

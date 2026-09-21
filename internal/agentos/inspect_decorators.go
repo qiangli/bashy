@@ -8,12 +8,23 @@ import (
 	"sort"
 )
 
-// decoratorCatalog is the one description of the predefined decorator set —
+// decoratorCatalog is the one description of the supported decorator set —
 // what `bashy inspect decorators` prints and what docs/decorators.md must
-// match (a test pins the two to nativeDecoratorSet's keys). "Minimum" marks
-// the catalogued set: what dag needs or a script author reaches for
-// constantly. Everything predefined is redefinable: a script function of the
-// same name shadows the native.
+// match (a test pins the two to nativeDecoratorSet's keys plus the engine's
+// own timed, minus the internal attest). "Minimum" marks the supported set:
+// what dag needs or a script author reaches for constantly. Everything
+// predefined is redefinable: a script function of the same name shadows the
+// native.
+//
+// internalDecorators are registered for the mechanism, not for authors —
+// attest is the rung advice attaches to an agentic{} function — and stay out
+// of the catalog. engineDecorators are supplied by the sh engine, not this
+// registry, and are catalogued because an author may use them.
+var (
+	internalDecorators = map[string]bool{"attest": true}
+	engineDecorators   = map[string]bool{"timed": true}
+)
+
 type decoratorEntry struct {
 	Name      string `json:"name"`
 	Args      string `json:"args"`
@@ -34,8 +45,8 @@ var decoratorCatalog = []decoratorEntry{
 	{"memo", "[\"1h\" | ttl: \"1h\"]", "same name + args in one process returns the cached Results and Status without running the body; failures are not cached; printed output is not replayed", "process-wide map", "the cached", false, true},
 	{"auth", "via: \"<cmd>\", as: \"<principal>\"", "runs via once per process (default: bashy tessaro status); exit 0 = authenticated, first stdout line = principal, exported as BASHY_PRINCIPAL; as: must match", "bashy login / tessaro status", "77", true, true},
 	{"effects", "\"net,write\" | effects: \"…\"", "declares what the function does: denied at the call boundary when a @guard does not allow it; inside, its own cap, and the classification for commands the atlas does not know", "atlas vocabulary; @guard", "126", false, true},
-	{"confirm", "—", "effect-derived --what-if / --confirm per operation; high-impact atoms need an answer or the call yields", "atlas effects, bashy ask", "6", false, false},
-	{"attest", "—", "pass-through rung advice puts on agentic{} functions so the call is attested; not for authors", "craft ledger", "—", true, false},
+	{"confirm", "—", "human-in-the-loop allow per operation: high-impact atoms (destroy, cred, priv, spend, unknown) take their answer from --confirm=TOKEN:yes / --what-if or the call yields", "atlas effects, bashy ask", "6", false, true},
+	{"timed", "—", "measures the call: one `@timed: <fn>: status=N duration=D` line on stderr (engine-supplied)", "the sh engine", "—", false, true},
 }
 
 func collectInspectDecorators() []decoratorEntry {
@@ -50,11 +61,11 @@ func collectInspectDecorators() []decoratorEntry {
 }
 
 func printInspectDecorators(rows []decoratorEntry) {
-	fmt.Println("bashy inspect decorators — the predefined Bash# set (a script `func <name>(c *Call)` shadows any of them):")
+	fmt.Println("bashy inspect decorators — the supported Bash# set (a script `func <name>(c *Call)` shadows any of them):")
 	for _, d := range rows {
 		tag := ""
-		if !d.Minimum {
-			tag = "  (present, not in the minimum set)"
+		if engineDecorators[d.Name] {
+			tag = "  (engine-supplied)"
 		}
 		adv := "author-only"
 		if d.Advisable {
