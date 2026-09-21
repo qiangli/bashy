@@ -65,6 +65,12 @@ check_example hello hello.expected
 echo "quickstart-smoke: INFO  (a) bashy + .bsh — interpreted, no toolchain needed"
 
 # ── (b) transpile --standalone ──────────────────────────────────────────────
+# Only hello_standalone.bsh transpiles here, by design: pipeline.bsh opens
+# with `~~~dag as ci`, whose processor is the running bashy, and a transpiled
+# binary never depends on a bashy on the target (Sprint 237, D4) — lowering
+# refuses that fence by name; examples/quickstart/check.sh runs it
+# interpreted. A Bash# `func` runner fence does lower (sh/lower
+# text_fence_test parity).
 
 if ! command -v go >/dev/null 2>&1; then
     skip "(b) transpile --standalone: go not on PATH; install Go to run this leg"
