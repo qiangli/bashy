@@ -74,7 +74,7 @@ bound=; command -v timeout >/dev/null 2>&1 && bound="timeout 900"
 # run <args…>: the user contract, exactly — offline, read-only, no capabilities.
 run() { $bound $oci run --rm --network=none --read-only --cap-drop=ALL --tmpfs /tmp -v "$work:/work:ro" -w /work "$image" "$@"; }
 row() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >>"$out"; }   # section  name  status  note
-first() { printf '%s' "$1" | head -1 | tr '\t' ' ' | tr -cd '\040-\176' | cut -c1-70; }
+first() { printf '%s' "$1" | head -1 | tr '\t' ' ' | tr -cd '\040-\176' | cut -c1-200; }
 status=0
 
 # ── shell rows ───────────────────────────────────────────────────────────────
@@ -131,7 +131,7 @@ probe_one() {
   if [ "$mode" = front ]; then set -- /bashy "$n"; else set -- "$n"; fi
   o=$( { "$@" --version </dev/null; } 2>&1 ); rc=$?
   case "$o" in *"$n: command not found"*|*"unknown command \"$n\""*|*"unknown verb"*)
-    printf '%s\tabsent\t%s\t%s\n' "$n" "$rc" "$(printf '%s' "$o" | head -1 | tr -cd '\040-\176' | cut -c1-70)"; return ;; esac
+    printf '%s\tabsent\t%s\t%s\n' "$n" "$rc" "$(printf '%s' "$o" | head -1 | tr -cd '\040-\176' | cut -c1-200)"; return ;; esac
   if [ $rc -ne 0 ]; then
     o2=$( { "$@" --help </dev/null; } 2>&1 ); rc2=$?
     case "$o2" in *"$n: command not found"*|*"unknown command \"$n\""*|*"unknown verb"*)
@@ -141,8 +141,8 @@ probe_one() {
   fi
   # a bin-managed external answers offline with its provisioning error
   case "$o" in *"posix provider"*|*binmgr*|*"no system git"*|*"not pre-seeded"*)
-    printf '%s\texternal\t%s\t%s\n' "$n" "$rc" "$(printf '%s' "$o" | head -1 | tr '\t' ' ' | tr -cd '\040-\176' | cut -c1-70)"; return ;; esac
-  printf '%s\tpresent\t%s\t%s\n' "$n" "$rc" "$(printf '%s' "$o" | head -1 | tr '\t' ' ' | tr -cd '\040-\176' | cut -c1-70)"
+    printf '%s\texternal\t%s\t%s\n' "$n" "$rc" "$(printf '%s' "$o" | head -1 | tr '\t' ' ' | tr -cd '\040-\176' | cut -c1-200)"; return ;; esac
+  printf '%s\tpresent\t%s\t%s\n' "$n" "$rc" "$(printf '%s' "$o" | head -1 | tr '\t' ' ' | tr -cd '\040-\176' | cut -c1-200)"
 }
 mode=; [ "$1" = verbs.txt ] && mode=front
 for n in $(cat "$1"); do probe_one "$n" "$mode"; done
@@ -176,8 +176,10 @@ table=$work/table.md
   echo '|---|---|---|---|'
   # notes are informational: arch / version / commit tokens are normalized so
   # the same table is measured on amd64 and arm64, dev and release builds
-  sort -t "$T" -k1,1 -k2,2 "$out" | awk -F'\t' '{ gsub(/\|/, "\\|"); printf "| %s | `%s` | %s | %s |\n", $1, $2, $3, $4 }' |
-    sed -E 's/(amd64|arm64|x86_64|aarch64|x64)/<arch>/g; s/v?[0-9]+\.[0-9]+(\.[0-9]+)?(-[A-Za-z0-9.]+)?/<ver>/g; s/\([0-9a-f]{7,12}\)/(<sha>)/g; s/ dev( |$)/ <ver>\1/g; s/-dev([ )]|$)/-<ver>\1/g'
+  # normalize FIRST (tokens differ in length), then cut the note to 70 chars
+  sort -t "$T" -k1,1 -k2,2 "$out" |
+    sed -E 's/(amd64|arm64|x86_64|aarch64|x64)/<arch>/g; s/v?[0-9]+\.[0-9]+(\.[0-9]+)?(-[A-Za-z0-9.]+)?/<ver>/g; s/\([0-9a-f]{7,12}\)/(<sha>)/g; s/ dev( |$)/ <ver>\1/g; s/-dev([ )]|$)/-<ver>\1/g' |
+    awk -F'\t' '{ gsub(/\|/, "\\|"); printf "| %s | `%s` | %s | %s |\n", $1, $2, $3, substr($4, 1, 70) }'
 } >"$table"
 count() { grep -c "${T}$1${T}" "$out" || true; }
 say "rows=$(wc -l <"$out" | tr -d ' ') works=$(count works) present=$(count present) offline-by-design=$(( $(count 'not usable offline') + $(count absent) )) fail=$(count FAIL)"
