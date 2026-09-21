@@ -2007,7 +2007,7 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	// autofix has settled the argv it describes, and outside the userland
 	// handler so in-process tools are governed too. Inert unless a @confirm
 	// call put its state on the context.
-	mws = append(mws, outputMW, autofix.Handler(), confirmHandler(), dryRunHandler(r), coreutilsshell.Handler(), registeredHandler())
+	mws = append(mws, outputMW, autofix.Handler(), confirmHandler(), dryRunHandler(r), defineSessionHandler(), coreutilsshell.Handler(), registeredHandler())
 	return append(opts, interp.ExecHandlers(mws...))
 }
 
