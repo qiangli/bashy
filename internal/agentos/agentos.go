@@ -1023,6 +1023,9 @@ func dispatch() {
 		cmd.Use = os.Args[1]
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
+			// The command silences cobra's own reporting; without this line a
+			// 403 or a missing token exits 1 saying nothing.
+			fmt.Fprintf(os.Stderr, "%s: %v\n", os.Args[1], err)
 			dispatchExit(1)
 		}
 		dispatchExit(0)
