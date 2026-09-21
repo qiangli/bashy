@@ -1,0 +1,93 @@
+name: airgap-image
+# Sprint 227 — "Bashy is all you need": the offline image gate, a release gate
+# (kb:release-bashy). Builds the candidate's FROM-scratch image through
+# `bashy podman` — the engine bashy provisions for itself (rootless, from the
+# pinned upstream podman-static; a host podman on PATH would win, so PATH is
+# scrubbed of podman/docker here) — and proves every row of docs/airgap-image.md
+# under --network=none --read-only --cap-drop=ALL on linux amd64 AND arm64.
+# The doc's table must match the measurement or the job fails.
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'scripts/airgap-container-smoke.sh'
+      - 'docs/airgap-image.md'
+      - 'internal/agentos/self_image.go'
+      - 'internal/agentos/engines_podman.go'
+      - '.github/workflows/airgap-image.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  airgap:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest      # linux/amd64
+            arch: amd64
+          - runner: ubuntu-24.04-arm   # linux/arm64 (native, no emulation)
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Bootstrap sibling deps (all pinned flat replaces)
+        shell: bash
+        run: ./scripts/bootstrap-siblings.sh
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.1
+      - name: Build bashy
+        shell: bash
+        run: make build
+      - name: Scrub the host engines off PATH (bashy must provision its own podman)
+        shell: bash
+        run: |
+          set -euo pipefail
+          scrub=$RUNNER_TEMP/scrub-path
+          mkdir -p "$scrub"
+          for d in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin "$(dirname "$(command -v go)")"; do
+            for f in "$d"/*; do
+              b=$(basename "$f")
+              case "$b" in podman|docker|podman-remote|buildah|skopeo|nerdctl) continue ;; esac
+              [ -e "$scrub/$b" ] || ln -s "$f" "$scrub/$b"
+            done
+          done
+          echo "$scrub" > "$RUNNER_TEMP/scrub-path.txt"
+          ! PATH=$scrub command -v podman
+      - name: bashy podman provisions itself (cold cache, no engine on PATH)
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH=$(cat "$RUNNER_TEMP/scrub-path.txt")
+          export BASHY_BIN_CACHE=$RUNNER_TEMP/bashy-cache BASHY_TELEMETRY_QUIET=1
+          bin/bashy podman --version
+          bin/bashy podman info | grep -E 'conmon|ociRuntime|netavark' -A2 | head -20
+      - name: Build the image and run the airgap gate
+        shell: bash
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          export PATH=$(cat "$RUNNER_TEMP/scrub-path.txt")
+          export BASHY_BIN_CACHE=$RUNNER_TEMP/bashy-cache BASHY_TELEMETRY_QUIET=1
+          BASHY_IMAGE_ARCH=${{ matrix.arch }} scripts/airgap-container-smoke.sh 2>&1 | tee "$RUNNER_TEMP/airgap.log"
+          grep -q '^airgap: PASS' "$RUNNER_TEMP/airgap.log"
+      - name: Sizes to the job summary
+        if: always()
+        shell: bash
+        run: |
+          export PATH=$(cat "$RUNNER_TEMP/scrub-path.txt" 2>/dev/null || echo "$PATH")
+          export BASHY_BIN_CACHE=$RUNNER_TEMP/bashy-cache BASHY_TELEMETRY_QUIET=1
+          img=$(grep -o 'localhost/bashy:[^ ]*' "$RUNNER_TEMP/airgap.log" | head -1 || true)
+          {
+            echo "## airgap image — linux/${{ matrix.arch }}"
+            grep '^airgap: rows=' "$RUNNER_TEMP/airgap.log" || echo '(no row summary — see the log)'
+            if [ -n "$img" ]; then
+              echo "- image: \`$img\`"
+              echo "- uncompressed: $(bin/bashy podman image inspect "$img" --format '{{.Size}}' | awk '{printf "%.1f MB", $1/1048576}')"
+              echo "- compressed: $(bin/bashy podman save "$img" | gzip -9 | wc -c | awk '{printf "%.1f MB", $1/1048576}')"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

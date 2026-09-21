@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-quickstart smoke-quickstart-container dist tidy clean help
+.PHONY: dag build build-bash build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-quickstart smoke-quickstart-container smoke-airgap-container dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -425,6 +425,15 @@ smoke-quickstart:
 ## (.github/workflows/quickstart-scratch.yml) is the release gate. Not part of `test`.
 smoke-quickstart-container:
 	@scripts/quickstart-container-smoke.sh
+
+## smoke-airgap-container: The airgap gate (Sprint 227): build the offline bashy
+## image (build-image) and prove every row of docs/airgap-image.md under
+## --network=none --read-only --cap-drop=ALL, through bashy podman. SKIPs
+## (exit 0) without a usable engine; the doc's table must match what was
+## measured (AIRGAP_WRITE_DOC=1 regenerates it). The Linux CI job
+## (.github/workflows/airgap-image.yml, amd64 + arm64) is the release gate.
+smoke-airgap-container:
+	@scripts/airgap-container-smoke.sh
 
 ## test-bash: Run bash 5.3 native test suite against bashy (with per-test timeout).
 ## Builds only the lean bin/bash drop-in (not the 259MB embed-heavy bin/bashy).

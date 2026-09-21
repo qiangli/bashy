@@ -1064,6 +1064,21 @@ make --no-print-directory build-bashy-scratch BASHY_SCRATCH_GOARCH="$arch"
 BASHY_SCRATCH_BIN="bin/scratch/bashy-linux-$arch" "$BASHY_EXE" self image --arch "$arch" --version "$version"
 ```
 
+### smoke-airgap
+The airgap gate (Sprint 227): build the offline image (`build-image`) and
+prove every row of `docs/airgap-image.md` — shell modes, every builtin,
+every coreutil, every yoke verb — under `--network=none --read-only
+--cap-drop=ALL`, through `bashy podman`. SKIPs without a usable engine; with
+one, any failing row or a doc table that differs from the measurement fails.
+`AIRGAP_WRITE_DOC=1` regenerates the table. The Linux CI job
+(`airgap-image.yml`, amd64 + arm64) is the release gate.
+Effects: write, net
+
+```bash
+set -e
+BASHY="${BASHY:-bashy}" scripts/airgap-container-smoke.sh
+```
+
 ### test-bash-container-prepare
 Prepare the GNU Bash 5.3 container-normalized lane once per host. This builds
 the host-architecture Linux testee and harness and validates the current
