@@ -438,6 +438,7 @@ externals variant is a separate story.
 | verbs | `supervisord` | works | usage: bashy supervisord [flags] DAG.md TARGET |
 | verbs | `tessaro` | works | Tessaro is the front door to your dhnt mesh  pooled LLMs + durable age |
 | verbs | `todo` | works | todo tracks work as simple items (todo -> doing -> done, or blocked).  |
+| verbs | `tofu` | not usable offline | bin-managed external: would download - Error: tofu: binmgr: fetch rele |
 | verbs | `tokens` | works | tokens (qiangli/coreutils) <ver> |
 | verbs | `tool` | works | List agentic CLI tools. |
 | verbs | `tools` | works | List agentic CLI tools. |
@@ -449,5 +450,6 @@ externals variant is a separate story.
 | verbs | `web` | works | web inspection helpers |
 | verbs | `whois` | works | Resolve a name to a principal and say how to reach it. |
 | verbs | `yarn` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/ |
+| verbs | `zig` | present | runs in-process; --version/--help rc=1: Error: Get "https://ziglang.or |
 | verbs | `zot` | not usable offline | bin-managed external: would download - zot runs the Zot OCI registry   |
 <!-- airgap-table:end -->
