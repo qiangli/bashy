@@ -203,7 +203,7 @@ agentic { need q; }`
 // command runs — while a @guard inside the body keeps denying (126).
 func TestDagBashPPEffectsCapStillOutermost(t *testing.T) {
 	leak := filepath.Join(t.TempDir(), "leak")
-	code, env := runDagBody(t, "bashpp", "read", "touch "+leak+"; echo \"touch -> $?\"")
+	code, env := runDagBody(t, "bashpp", "read", "touch "+shellQuote(leak)+"; echo \"touch -> $?\"")
 	task := env.Result.Tasks[0]
 	if code != 0 || !strings.Contains(task.Stdout, "touch -> 0") {
 		t.Fatalf("an advisory Effects: cap must not fail the command: exit %d\nstdout=%s\nstderr=%s", code, task.Stdout, task.Stderr)

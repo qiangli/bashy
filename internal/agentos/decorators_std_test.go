@@ -5,8 +5,10 @@ package agentos
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -220,13 +222,27 @@ func TestEffectsDecoratorVouchesForUnknownTool(t *testing.T) {
 	if err := os.MkdirAll(shim, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(shim, "notinatlas"), []byte("#!/bin/sh\necho ran-unknown\n"), 0o755); err != nil {
+	// Use a real native executable: a shebang fixture cannot be launched on Windows.
+	self, err := os.Executable()
+	if err != nil {
 		t.Fatal(err)
 	}
+	binary, err := os.ReadFile(self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := "notinatlas"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	if err := os.WriteFile(filepath.Join(shim, name), binary, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BASHY_TEST_UNKNOWN_TOOL", "1")
 	t.Setenv("PATH", shim+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	bare := `@guard(effects: "exec")
-function direct() { notinatlas; echo "direct -> $?"; }
+function direct() { notinatlas -test.run=^TestEffectsUnknownToolProcess$; echo "direct -> $?"; }
 direct
 `
 	_, out, _ := runDecorated(t, context.Background(), syntax.LangBashPP, bare, nil)
@@ -235,7 +251,7 @@ direct
 	}
 
 	vouched := `@effects("exec")
-function build() { notinatlas; }
+function build() { notinatlas -test.run=^TestEffectsUnknownToolProcess$; }
 @guard(effects: "exec")
 function via() { build; echo "build -> $?"; }
 via
@@ -271,4 +287,13 @@ func TestEffectsDecoratorRefusesBadDeclaration(t *testing.T) {
 			t.Errorf("%s: want a refusal naming effects, got err=%v stderr=%q", deco, err, errOut.String())
 		}
 	}
+}
+
+// TestEffectsUnknownToolProcess is selected only by the native fixture child.
+func TestEffectsUnknownToolProcess(t *testing.T) {
+	if os.Getenv("BASHY_TEST_UNKNOWN_TOOL") != "1" {
+		return
+	}
+	fmt.Println("ran-unknown")
+	os.Exit(0)
 }
