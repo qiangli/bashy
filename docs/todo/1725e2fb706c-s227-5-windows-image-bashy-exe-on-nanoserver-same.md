@@ -16,6 +16,8 @@ bashy cross-compiles to windows/{amd64,arm64} with CGO_ENABLED=0 (no launcher pa
 
 Deliver: `build-image` with `BASHY_OCI_PLATFORM=windows/amd64` selects `tools/bashy-image/Containerfile.windows` — nanoserver base, `C:\bashy\bashy.exe`, `ENTRYPOINT ["C:\\bashy\\bashy.exe"]`, `BASHY_BIN_CACHE=C:\bashy\cache`, `PATH` = `C:\bashy;C:\Windows\System32`. Externals per S227.2 (MinGit is the git row here — `bashy git` downloads it on Windows, so it must be pre-seeded); the `$COMSPEC /c` pitfalls from the umbrella Windows punch-list apply inside the container too.
 
+Engine (corrected at review, 2026-09-20): the lean `bashy podman` DOES build on Windows (`engines_stub.go` tag `!bashy_engines || (windows && …)`, with `applyPodmanHelperEnv` for the machine helpers) — but podman on Windows drives a WSL Linux machine and cannot build or run a Windows-native (nanoserver, process-isolated) image. That, not a build tag, is why this story's host engine is Docker in Windows-containers mode / containerd+hcsshim on the container host: the recorded exception to the sprint's engine rule.
+
 Gate on a real Windows container host (process isolation; the existing Windows host from the v0.24.x QA lanes if it has the containers feature, else name the host that does) — cross-compile green is NOT evidence: the sibling Windows work found silent failures four times in one day. Run the S227.3 matrix rows there; rows that differ from linux get their own column.
 
 Acceptance: `docker run --rm --network=none -v ${PWD}:C:\work -w C:\work localhost/bashy:…-windows-amd64 --bashsharp .\script.bsh` runs a .bsh with builtin coreutils and one island; size table row; host + isolation mode + ltsc tag recorded in the evidence.
