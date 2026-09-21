@@ -13,17 +13,13 @@ created: 2026-09-20T21:26:22.004144Z
 sprint: 227
 ---
 
-The sprint's claim as one gate. Download bashy; two lines; your `.bsh` runs offline in a container — no git, go, cc, podman or docker on the host:
+IN DELIVERY (corbel, 2026-09-21). The sprint's claim as one gate — two lines from the release download:
 
-    bashy image build
+    bashy self image
     bashy podman run --rm --network=none -v "$PWD:/work" -w /work localhost/bashy:<ver>-linux-<arch> --bashsharp ./script.bsh
 
-Everything else is bashy provisioning itself into `BASHY_BIN_CACHE`: the podman engine (S227.8, from the pinned tag `engines-v1`: podman + gvproxy on linux, + vfkit on macOS) and the scratch artifact (S227.1, from the same release as the running bashy). On macOS and Windows the linux image runs inside bashy's own podman machine (vfkit / WSL2 — WSL2 exists on every Windows edition); there is no per-OS image or bundle (S227.5, S227.6 deferred).
+`scripts/self-contained-image-smoke.sh vX.Y.Z[-dev]` (dag `smoke-self-contained-image`, `SELF_TAG=`): downloads the tag's archive (the user's one download, verified against `checksums.txt`), builds a PATH that mirrors the system dirs minus git/go/cc/podman/docker (keeping `newuidmap`/`newgidmap` — the stated Linux host fact), empties `BASHY_BIN_CACHE`, runs the two lines on a Bash# script (`func` + typed args + a coreutils pipeline), and prints the provision inventory (every file bashy fetched, with sizes + digests) — the doc's "What the host needs". On macOS it inits/starts bashy's own podman machine first (`SELF_MACHINE_OPTS` sizes it) and records the time. Never SKIPs.
 
-Deliver `scripts/self-contained-image-smoke.sh` (dag `smoke-self-contained-image`): starts from a release archive on a host with `$PATH` = the bashy install dir + minimal system dirs (no git/go/cc/podman/docker), `BASHY_PODMAN_SYSTEM` unset, `BASHY_BIN_CACHE` = an empty dir; runs the two lines; prints the cache inventory (what bashy fetched, with digests) — that inventory IS docs/airgap-image.md §"What the host needs".
+Candidate: `v0.25.0-dev` (tag eea09efa). Runs: Linux test host as root and as a plain user; macOS on the dev box (the intended clean macOS host turned out to run a Homebrew podman machine that must not be disturbed — recorded); Windows deferred with reason (no managed Windows podman in this release; host podman path is what Windows gets today — docs/airgap-image.md).
 
-Prerequisites, stated not hidden, in that section: Linux rootless podman needs `newuidmap`/`subuid` (record per distro, or state rootful); the podman machine OS image is fetched by podman itself on `machine init` (macOS/Windows — bashy's engine fetching, under upstream terms, listed in the inventory, never redistributed by bashy); Windows: a host podman on `$PATH` in 227 (no managed Windows blob yet — recorded).
-
-Needs a `-dev` tag carrying S227.8 + S227.1 first: the gate runs from published bytes.
-
-Acceptance: passes on the Linux test host and a macOS host from published bytes with the scrubbed `$PATH`; Windows on the QA host with a host podman, or a recorded reason; inventory per OS pasted into the doc; nothing the host needed is left unnamed.
+Results: see the evidence record (umbrella docs/sprint-227/evidence.md §S227.0) — filled as the runs land.

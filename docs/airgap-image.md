@@ -52,15 +52,23 @@ archive on a host with `$PATH` scrubbed of git/go/cc/podman/docker and an empty
   podman needs `newuidmap`/`newgidmap` on `$PATH` and a `/etc/subuid` entry for
   the user (shadow-utils — present on every mainstream distro; as root none of
   this applies); the kernel's overlay/user-namespace support (any kernel ≥ 5.11);
-  and on Ubuntu 24.04+ (`kernel.apparmor_restrict_unprivileged_userns=1`) a
-  *cold* rootless `podman info` from bashy's unpackaged podman is denied its
-  reexec ("failed to reexec: Permission denied") — `build` and `run` work
-  regardless (measured: rootless build + `--network=none` run as a plain user),
-  and `info` works once a container has run; `sysctl
-  kernel.apparmor_restrict_unprivileged_userns=0` removes the quirk entirely.
+  and **Ubuntu 24.04+ with `kernel.apparmor_restrict_unprivileged_userns=1`**:
+  a rootless podman from an unpackaged path (ours) is moved into the
+  `unprivileged_userns` AppArmor profile when it creates its user namespace,
+  and that profile denies exec of `/proc/self/exe` — every rootless command
+  dies with "failed to reexec: Permission denied" (audit-log proven on a
+  GitHub `ubuntu-24.04` runner; the distro's `/usr/bin/podman` escapes through
+  its packaged profile). bashy prints the way out before exec: run as root, or
+  once `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`
+  (persist it in `/etc/sysctl.d/`). Some 24.04 kernels do not enforce it
+  (rootless build + run passed untouched on a 6.8 server kernel); the sysctl
+  makes it moot everywhere.
 - **macOS:** nothing but macOS. The first `bashy podman machine init` downloads
   the machine OS image (podman's own fetch, upstream terms) and creates the VM —
-  minutes and a few GB, once.
+  measured 28 s init + 12 s start on an Apple-silicon box, once. Mount paths must
+  be under what the machine shares (`/Users`, `/private`, `/var/folders`): `/tmp`
+  is a symlink to `/private/tmp` on the host and does not exist inside the VM —
+  `-v "$(pwd -P):/work"` if you work under `/tmp`.
 - **Windows:** WSL2 enabled (`wsl --install`, any edition). No managed Windows
   podman in this release: a host podman on `$PATH` is what Windows uses today.
 

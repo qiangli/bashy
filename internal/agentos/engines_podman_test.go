@@ -57,6 +57,15 @@ func TestManagedPodmanRootLinux(t *testing.T) {
 	}
 }
 
+func TestApparmorUsernsHint(t *testing.T) {
+	if apparmorUsernsHint(0, "1") != "" || apparmorUsernsHint(1000, "0") != "" || apparmorUsernsHint(1000, "") != "" {
+		t.Fatal("hint must only fire for a non-root user on a restricting host")
+	}
+	if h := apparmorUsernsHint(1000, "1"); !strings.Contains(h, "apparmor_restrict_unprivileged_userns=0") {
+		t.Fatalf("hint should name the sysctl: %q", h)
+	}
+}
+
 func TestPodmanConfOverrideLinuxPaths(t *testing.T) {
 	conf := podmanConfOverrideLinux("/c/podman/v6/podman-linux-amd64")
 	for _, want := range []string{

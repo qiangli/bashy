@@ -229,6 +229,9 @@ func applyManagedPodmanEnv(bin string) {
 		setenvDefault("CONTAINERS_STORAGE_CONF", filepath.Join(root, "etc", "containers", "storage.conf"))
 		os.Setenv("PATH", filepath.Join(root, "usr", "local", "bin")+string(os.PathListSeparator)+os.Getenv("PATH"))
 		ensureUserPolicyJSON(filepath.Join(root, "etc", "containers", "policy.json"))
+		if hint := apparmorUsernsHint(os.Geteuid(), readTrimmed("/proc/sys/kernel/apparmor_restrict_unprivileged_userns")); hint != "" {
+			fmt.Fprintln(os.Stderr, hint)
+		}
 	case "darwin":
 		conf, err := writeDarwinConfOverride()
 		if err != nil {
@@ -237,6 +240,31 @@ func applyManagedPodmanEnv(bin string) {
 		}
 		setenvDefault("CONTAINERS_CONF_OVERRIDE", conf)
 	}
+}
+
+// apparmorUsernsHint explains the one Linux host fact that makes a rootless
+// managed podman fail with the cryptic "failed to reexec: Permission denied":
+// Ubuntu 24.04+ (kernel.apparmor_restrict_unprivileged_userns=1) moves an
+// unconfined process that creates a user namespace into the `unprivileged_userns`
+// AppArmor profile, which denies exec of /proc/self/exe. The distro's own podman
+// escapes it through its packaged AppArmor profile; ours has none. Measured on a
+// GitHub ubuntu-24.04 runner (audit: apparmor="DENIED" operation="exec"
+// name="/proc/self/exe" profile="unprivileged_userns"). Root is unaffected.
+func apparmorUsernsHint(euid int, sysctl string) string {
+	if euid == 0 || sysctl != "1" {
+		return ""
+	}
+	return "bashy podman: this host restricts unprivileged user namespaces (kernel.apparmor_restrict_unprivileged_userns=1);\n" +
+		"  if podman answers \"failed to reexec: Permission denied\", either run it as root, or once:\n" +
+		"    sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0   # persist in /etc/sysctl.d/"
+}
+
+func readTrimmed(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
 }
 
 func setenvDefault(k, v string) {

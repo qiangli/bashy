@@ -18,6 +18,7 @@
 #   SELF_KEEP=1 … keeps the work dir; SELF_ARCHIVE=/path/to/bashy-<os>-<arch>.tar.gz uses local bytes
 #   SELF_PATH=/some/dir:/other overrides the scrubbed PATH (default: a mirror of
 #   the system dirs minus git/go/cc/podman/docker/…)
+#   SELF_MACHINE_OPTS="--cpus 2 --memory 2048 --disk-size 20" sizes the macOS machine
 #
 # Exit 0 = PASS (both lines ran, the script's output matched). Prints
 # `self-contained: PASS` / `FAIL`. Never SKIPs: a missing engine is the failure
@@ -86,7 +87,8 @@ if [ "$os" = darwin ]; then
   if ! $E "$bashy" podman machine list --format '{{.Name}}' 2>/dev/null | grep -q .; then
     t0=$(date +%s)
     say "podman machine init (first time: downloads the machine OS image — podman's own fetch)"
-    $E "$bashy" podman machine init 2>&1 | grep -vE '^\s*$' | tail -3 | sed 's/^/self-contained:   /' || fail "podman machine init"
+    # SELF_MACHINE_OPTS sizes the VM (e.g. "--cpus 2 --memory 2048 --disk-size 20")
+    $E "$bashy" podman machine init ${SELF_MACHINE_OPTS:-} 2>&1 | grep -vE '^\s*$' | tail -3 | sed 's/^/self-contained:   /' || fail "podman machine init"
     say "machine init took $(( $(date +%s) - t0 )) s"
   fi
   if ! $E "$bashy" podman info >/dev/null 2>&1; then
@@ -110,7 +112,9 @@ func greet(name string) string {
 printf '%s\n' greet("air-gap")
 printf 'x\ny\nz\n' | sort -r | head -1
 EOF
-got=$(cd "$work/proj" && $E "$bashy" podman run --rm --network=none -v "$PWD:/work" -w /work "$image" --bashsharp ./script.bsh 2>&1) || fail "line 2 failed: $got"
+# `pwd -P`: on macOS the machine mounts /Users, /private and /var/folders — a
+# /tmp/… path is a symlink to /private/tmp on the host and does not exist in the VM
+got=$(cd "$work/proj" && $E "$bashy" podman run --rm --network=none -v "$(pwd -P):/work" -w /work "$image" --bashsharp ./script.bsh 2>&1) || fail "line 2 failed: $got"
 [ "$got" = "hello, air-gap!
 z" ] || fail "unexpected output: $got"
 say "line 2: bashy podman run --network=none → $(printf '%s' "$got" | tr '\n' ' ')"

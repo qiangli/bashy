@@ -58,6 +58,15 @@ jobs:
           done
           echo "$scrub" > "$RUNNER_TEMP/scrub-path.txt"
           ! PATH=$scrub command -v podman
+      - name: The one Linux host fact (docs/airgap-image.md "What the host needs")
+        shell: bash
+        run: |
+          # Ubuntu 24.04+ moves an unconfined process that creates a user namespace
+          # into the `unprivileged_userns` AppArmor profile, which denies exec of
+          # /proc/self/exe — rootless podman from an unpackaged path dies with
+          # "failed to reexec: Permission denied" (audit-log proven on this runner).
+          # The distro podman escapes via its packaged profile; ours has none.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: bashy podman provisions itself (cold cache, no engine on PATH)
         shell: bash
         run: |
