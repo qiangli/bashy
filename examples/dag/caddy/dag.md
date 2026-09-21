@@ -67,3 +67,27 @@ got := go.Launch()
 [ -n "$got" ] || { echo "run: caddy version returned empty" >&2; exit 1; }
 echo "run: $got"
 ```
+
+### image
+Package the checkout's Linux build into an image declared by a fenced
+Dockerfile, then run `caddy version` from that image. The binary is built
+outside the checkout (the tree stays byte-identical) and reaches the build as
+a named build context; the fence body is the whole image definition.
+Requires: test
+Effects: read, write, net, exec
+
+```bashpp
+~~~dockerfile as img
+FROM docker.io/library/alpine:3.20
+COPY --from=src caddy /usr/bin/caddy
+ENTRYPOINT ["/usr/bin/caddy"]
+~~~
+out="${DAG_CACHE_DIR:-${TMPDIR:-/tmp}}/caddy-image"
+mkdir -p "$out"
+GOOS=linux GOARCH="$(go env GOARCH)" CGO_ENABLED=0 go build -o "$out/caddy" ./cmd/caddy || exit 1
+id := img.build("--build-context", "src=$out")
+[ -n "$id" ] || { echo "image: img.build() returned no image id" >&2; exit 1; }
+got := img.run("$id", "version")
+[ -n "$got" ] || { echo "image: caddy version from the image returned empty" >&2; exit 1; }
+echo "image: caddy $got"
+```

@@ -1,0 +1,4 @@
+lint: 43 lines
+ci.package: declared effects read,net exceed the guard (net not allowed by read)
+rehearsal: status=126 (a guard without net denies package)
+published 43-line script

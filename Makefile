@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-quickstart smoke-quickstart-container smoke-airgap-container dist tidy clean help
+.PHONY: dag build build-bash build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-text smoke-quickstart smoke-quickstart-container smoke-airgap-container dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -406,6 +406,17 @@ smoke-dag-c:
 ## the skills/craft ledger. Not part of `test`.
 smoke-dag-go:
 	@scripts/dag-go-examples-smoke.sh
+
+## smoke-dag-text: Installed-product smoke for the Sprint 234 text fences (B30):
+## the Caddy graph's `image` target (a ```bashpp body holding a ~~~dockerfile
+## fence, built with the checkout's Linux build as a named build context and
+## run from the image) and examples/quickstart/pipeline.bsh (a script carrying
+## its own CI/CD as a ~~~dag island, targets as methods, Effects: enforced by
+## @guard). Needs a running container engine; FAILS by name without one. The
+## Caddy checkout is cloned into <user cache>/bashy/examples unless CADDY_ROOT
+## names one. Not part of `test`.
+smoke-dag-text:
+	@scripts/dag-text-examples-smoke.sh
 
 ## smoke-quickstart: Three-mode process-level example check (Sprint 216, Story 540).
 ## (a) bashy + .bsh interpreted, no toolchain; (b) transpile --standalone: Bash#

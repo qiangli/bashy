@@ -365,7 +365,13 @@ time, `run` launches the `configure`+`make` / `cmake --build` / `bootstrap`
 output through `popen`; `make smoke-dag-c`, Sprint 190), and
 `examples/dag/{gh,hugo,caddy}/dag.md` (Go — imports each checkout's package,
 then launches its `go build` output; `make smoke-dag-go`, Sprint 192) are the
-worked examples, one real repo each — see `docs/dag.md` §Bash++ bodies. A dag body
+worked examples, one real repo each — see `docs/dag.md` §Bash++ bodies. A
+body may also hold a TEXT fence (Sprint 234, B30): `~~~dockerfile as img` /
+`~~~tf as iac` / `~~~k8s` / `~~~helm` / `~~~skill` / `~~~dag`, whose alias
+exposes the processor's declared verbs with their effect atoms (`@guard`
+denies an excess verb with 126), or `~~~<type> as <alias> !<runner>` for a
+runner that declares its own `methods`; `examples/dag/caddy/dag.md` `image`
+and `examples/quickstart/pipeline.bsh` under `make smoke-dag-text`. A dag body
 must not lean on bashy's `sed`/`grep`/`cut`/`sort`/`tr` for a check: they
 refuse the macOS default `LANG=en_US.UTF-8` (coreutils' ctype/collate locale
 gate) — the examples cross-check with shell builtins only. Two more

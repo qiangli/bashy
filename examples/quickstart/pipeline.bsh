@@ -1,0 +1,43 @@
+#!/usr/bin/env -S bashy --bashsharp
+# A script that carries its own CI/CD: the pipeline is a fenced dag — bashy's
+# own task language — and its targets are the alias's methods. The dag runs
+# in this script's directory; a target's `Effects:` line is the method's
+# declared effect, so a @guard that does not allow it denies the call before
+# the target runs (status 126), the same boundary @effects has.
+
+# The dag runs in this script's cwd; the script names itself to its targets.
+export PIPELINE=$(readlink -f "$0")
+
+~~~dag as ci
+---
+name: pipeline
+---
+## Tasks
+
+### lint
+Count the lines of this script.
+Effects: read
+```bash
+wc -l < "$PIPELINE" | tr -d ' '
+```
+
+### package
+Pretend to publish.
+Effects: read, net
+```bash
+echo "published $(wc -l < "$PIPELINE" | tr -d ' ')-line script"
+```
+~~~
+
+lines := ci.lint()
+echo "lint: $lines lines"
+
+@guard("read")
+func rehearse() {
+  x := ci.package()
+  echo "rehearsal: status=$? (a guard without net denies package)"
+}
+rehearse()
+
+out := ci.package()
+echo "$out"

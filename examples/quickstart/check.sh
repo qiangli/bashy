@@ -17,7 +17,7 @@ flag=${BASHSHARP_FLAG:---bashsharp}
 rc=0
 
 # Examples with no external toolchain dependency
-for ex in judge decorators kwargs enums readonly hello; do
+for ex in judge decorators kwargs enums readonly hello pipeline; do
     out=$("$bashy" "$flag" "$here/$ex.bsh" 2>&1) || true
     if [ "$out" = "$(cat "$here/$ex.expected")" ]; then
         echo "quickstart: PASS $ex"

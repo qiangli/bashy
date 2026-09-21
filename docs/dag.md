@@ -199,6 +199,27 @@ required), then 0 once the answer is supplied explicitly in the environment
 `bashy craft history gh_version --all` reads back (`FAIL`, `FAIL`, `yield`,
 `pass`). `make smoke-dag-go` asserts the lines, the ledger and the read side.
 
+### Text fences (Sprint 234, B30)
+
+A Bash++ body may also declare a **text fence**: a declarative artifact whose
+alias exposes the *processor's* verbs instead of parsed functions —
+`~~~dockerfile as img` (`img.build()` → image id, `img.run(id, …)`),
+`~~~tf as iac` (`init`/`plan`/`apply`/`destroy`, OpenTofu), `~~~k8s`,
+`~~~helm`, `~~~skill`, and `~~~dag` itself (a nested task file whose targets
+are the methods). Every verb DECLARES its effect atoms — `apply` is
+`net,write,spend` — and the body's `Effects:` line, or a `@guard` in the
+body, denies a verb that exceeds it before the processor runs (126). A
+`!runner` after the alias hands the body to a function or a registered
+command that answers `methods` itself; the format is never guessed. The
+processors are bashy's own verbs re-entered (`bashy podman`, `bashy tofu`),
+never PATH, so the target runs the same on every host. The worked example
+is `examples/dag/caddy/dag.md` `image`: the checkout's Linux build reaches
+the fenced Dockerfile as a named build context (`img.build("--build-context",
+"src=$out")`), and `caddy version` runs from the image; `make smoke-dag-text`
+proves it together with `examples/quickstart/pipeline.bsh`, a script carrying
+its own CI/CD as a `~~~dag` island. Decision record and the full row table:
+`bashsharp/docs/fenced-text-blocks-plan.md`.
+
 ## Cross-machine dispatch — `--mesh`
 
 A target carrying a `Host:` line is dispatched to **another machine** under

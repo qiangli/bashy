@@ -129,9 +129,9 @@ func dagMethods(listJSON string) (string, error) {
 // error, with stderr in it.
 func selfOutput(ctx context.Context, cfg polyglot.RuntimeConfig, exe string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, exe, args...)
-	cmd.Dir = cfg.Dir
-	if len(cfg.Environ) > 0 {
-		cmd.Env = append([]string(nil), cfg.Environ...)
+	cmd.Dir = cfg.CallerDir()
+	if env := cfg.CallerEnv(); len(env) > 0 {
+		cmd.Env = append([]string(nil), env...)
 	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
