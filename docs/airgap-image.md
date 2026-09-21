@@ -151,7 +151,7 @@ externals variant is a separate story.
 | builtins | `unalias` | works | bash builtin |
 | builtins | `unset` | works | bash builtin |
 | builtins | `wait` | works | bash builtin |
-| coreutils | `ar` | not usable offline | bin-managed external: would download — ar: posix provider cache root |
+| coreutils | `ar` | not usable offline | bin-managed external: would download - ar: posix provider cache root:  |
 | coreutils | `arch` | works | arch (qiangli/coreutils) <ver> |
 | coreutils | `ast` | works | Usage: ast <subcommand> [args] |
 | coreutils | `at` | works | at (qiangli/coreutils) <ver> |
@@ -179,7 +179,7 @@ externals variant is a separate story.
 | coreutils | `cp` | works | cp (qiangli/coreutils) <ver> |
 | coreutils | `crontab` | works | crontab (qiangli/coreutils) <ver> |
 | coreutils | `csplit` | works | csplit (qiangli/coreutils) <ver> |
-| coreutils | `ctags` | not usable offline | bin-managed external: would download — ctags: posix provider cache r |
+| coreutils | `ctags` | not usable offline | bin-managed external: would download - ctags: posix provider cache roo |
 | coreutils | `cut` | works | cut (qiangli/coreutils) <ver> |
 | coreutils | `cygpath` | works | cygpath (qiangli/coreutils) <ver> |
 | coreutils | `date` | works | date (qiangli/coreutils) <ver> |
@@ -193,7 +193,7 @@ externals variant is a separate story.
 | coreutils | `duration` | works | duration (qiangli/coreutils) <ver> |
 | coreutils | `ed` | works | ed (qiangli/coreutils) <ver> |
 | coreutils | `env` | works | env (qiangli/coreutils) <ver> |
-| coreutils | `ex` | not usable offline | bin-managed external: would download — ex: posix provider cache root |
+| coreutils | `ex` | not usable offline | bin-managed external: would download - ex: posix provider cache root:  |
 | coreutils | `expand` | works | expand (qiangli/coreutils) <ver> |
 | coreutils | `expr` | works | expr (qiangli/coreutils) <ver> |
 | coreutils | `factor` | works | factor (qiangli/coreutils) <ver> |
@@ -221,12 +221,12 @@ externals variant is a separate story.
 | coreutils | `link` | works | link (qiangli/coreutils) <ver> |
 | coreutils | `ln` | works | ln (qiangli/coreutils) <ver> |
 | coreutils | `locale` | works | locale (qiangli/coreutils) <ver> |
-| coreutils | `localedef` | not usable offline | bin-managed external: would download — localedef: posix provider cac |
+| coreutils | `localedef` | not usable offline | bin-managed external: would download - localedef: posix provider cache |
 | coreutils | `logger` | works | logger (qiangli/coreutils) <ver> |
 | coreutils | `logname` | works | logname (qiangli/coreutils) <ver> |
-| coreutils | `lp` | not usable offline | bin-managed external: would download — lp: posix provider cache root |
+| coreutils | `lp` | not usable offline | bin-managed external: would download - lp: posix provider cache root:  |
 | coreutils | `ls` | works | ls (qiangli/coreutils) <ver> |
-| coreutils | `m4` | not usable offline | bin-managed external: would download — m4: posix provider cache root |
+| coreutils | `m4` | not usable offline | bin-managed external: would download - m4: posix provider cache root:  |
 | coreutils | `mail` | works | mail (qiangli/coreutils) <ver> |
 | coreutils | `mailx` | works | mailx (qiangli/coreutils) <ver> |
 | coreutils | `make` | works | make (qiangli/coreutils) <ver> |
@@ -243,7 +243,7 @@ externals variant is a separate story.
 | coreutils | `newgrp` | works | bash builtin |
 | coreutils | `nice` | works | nice (qiangli/coreutils) <ver> |
 | coreutils | `nl` | works | nl (qiangli/coreutils) <ver> |
-| coreutils | `nm` | not usable offline | bin-managed external: would download — nm: posix provider cache root |
+| coreutils | `nm` | not usable offline | bin-managed external: would download - nm: posix provider cache root:  |
 | coreutils | `nohup` | works | bash builtin |
 | coreutils | `nproc` | works | nproc (qiangli/coreutils) <ver> |
 | coreutils | `ntp` | works | ntp (qiangli/coreutils) <ver> |
@@ -280,7 +280,7 @@ externals variant is a separate story.
 | coreutils | `stat` | works | stat (qiangli/coreutils) <ver> |
 | coreutils | `stdbuf` | works | stdbuf (qiangli/coreutils) <ver> |
 | coreutils | `strings` | works | strings (qiangli/coreutils) <ver> |
-| coreutils | `strip` | not usable offline | bin-managed external: would download — strip: posix provider cache r |
+| coreutils | `strip` | not usable offline | bin-managed external: would download - strip: posix provider cache roo |
 | coreutils | `stty` | works | stty (qiangli/coreutils) <ver> |
 | coreutils | `sum` | works | sum (qiangli/coreutils) <ver> |
 | coreutils | `sync` | works | sync (qiangli/coreutils) <ver> |
@@ -309,13 +309,13 @@ externals variant is a separate story.
 | coreutils | `uudecode` | works | uudecode (qiangli/coreutils) <ver> |
 | coreutils | `uuencode` | works | uuencode (qiangli/coreutils) <ver> |
 | coreutils | `vdir` | works | vdir (qiangli/coreutils) <ver> |
-| coreutils | `vi` | not usable offline | bin-managed external: would download — vi: posix provider cache root |
+| coreutils | `vi` | not usable offline | bin-managed external: would download - vi: posix provider cache root:  |
 | coreutils | `watch` | works | watch (qiangli/coreutils) <ver> |
 | coreutils | `wc` | works | wc (qiangli/coreutils) <ver> |
 | coreutils | `which` | works | which (qiangli/coreutils) <ver> |
 | coreutils | `who` | works | who (qiangli/coreutils) <ver> |
 | coreutils | `whoami` | works | whoami (qiangli/coreutils) <ver> |
-| coreutils | `why` | not usable offline | bin-managed external: would download — why: resolve witr: binmgr: fe |
+| coreutils | `why` | not usable offline | bin-managed external: would download - why: resolve witr: binmgr: fetc |
 | coreutils | `write` | works | write (qiangli/coreutils) <ver> |
 | coreutils | `wslpath` | works | wslpath (qiangli/coreutils) <ver> |
 | coreutils | `xargs` | present | runs in-process; --version/--help rc=2: xargs: unknown option "--help" |
@@ -329,8 +329,8 @@ externals variant is a separate story.
 | shell | `-c (arithmetic, printf)` | works | 42 |
 | shell | `echo $HOME (non-tty stdout)` | stated | prints $HOME: Stage 0 output canonicalization (output_reduce.go); a tt |
 | shell | `network (curl)` | absent | no network tools in the image; --network=none besides |
-| verbs | `act` | not usable offline | bin-managed external: would download — Error: act: resolve: binmgr:  |
-| verbs | `act-runner` | not usable offline | bin-managed external: would download — act-runner runs Gitea's act_r |
+| verbs | `act` | not usable offline | bin-managed external: would download - Error: act: resolve: binmgr: fe |
+| verbs | `act-runner` | not usable offline | bin-managed external: would download - act-runner runs Gitea's act_run |
 | verbs | `activity` | works | usage: bashy activity {status\|subscribe\|unsubscribe\|interests\|tail |
 | verbs | `agent` | works | Show all live named and ad-hoc work reconciled from sprint leases, wea |
 | verbs | `agentic` | works | usage: bashy agentic [--] ACTION [ARG...] |
@@ -362,15 +362,15 @@ externals variant is a separate story.
 | verbs | `dhnt` | works | usage: bashy dhnt COMMAND |
 | verbs | `dks` | not usable offline | engine / remote-by-design (by design): bashy dks: not available in thi |
 | verbs | `docker` | not usable offline | engine / remote-by-design (by design): bashy podman: fetching podman < |
-| verbs | `doctl` | not usable offline | bin-managed external: would download — Error: doctl: binmgr: fetch r |
+| verbs | `doctl` | not usable offline | bin-managed external: would download - Error: doctl: binmgr: fetch rel |
 | verbs | `doctor` | works | usage: doctor [--json] |
 | verbs | `foreman` | works | foreman <ver> |
 | verbs | `full` | present | runs in-process; --version/--help rc=2: bashy full: line 1: command: - |
 | verbs | `gate` | works | gate runs the project's gate  the command that decides pass/fail  and |
 | verbs | `gcloud` | not usable offline | engine / remote-by-design (by design): Error: gcloud: gcloud not found |
-| verbs | `gh` | not usable offline | bin-managed external: would download — Error: gh: resolve: binmgr: f |
-| verbs | `git` | not usable offline | bin-managed external: would download — Error: gitscm: no system git  |
-| verbs | `git-scm` | not usable offline | bin-managed external: would download — Error: gitscm: no system git  |
+| verbs | `gh` | not usable offline | bin-managed external: would download - Error: gh: resolve: binmgr: fet |
+| verbs | `git` | not usable offline | bin-managed external: would download - Error: gitscm: no system git on |
+| verbs | `git-scm` | not usable offline | bin-managed external: would download - Error: gitscm: no system git on |
 | verbs | `go` | not usable offline | engine / remote-by-design (by design): Error: gotoolchain: fetch relea |
 | verbs | `handoff` | works | handoff captures everything a successor needs and passes the work on. |
 | verbs | `helm` | not usable offline | engine / remote-by-design (by design): Error: helm: resolve latest ver |
@@ -381,16 +381,16 @@ externals variant is a separate story.
 | verbs | `issue` | works | todo tracks work as simple items (todo -> doing -> done, or blocked).  |
 | verbs | `judge` | works | judge reads a piece of work and renders an opinion on it. |
 | verbs | `kb` | works | kb is agent memory as a wiki of small markdown pages (YAML frontmatter |
-| verbs | `kopia` | not usable offline | bin-managed external: would download — kopia runs the Kopia reposito |
+| verbs | `kopia` | not usable offline | bin-managed external: would download - kopia runs the Kopia repository |
 | verbs | `kubectl` | not usable offline | engine / remote-by-design (by design): Error: kubectl: resolve stable  |
 | verbs | `lexicon` | works | lexicon is the project's jargon, projected from the registries that al |
 | verbs | `login` | not usable offline | engine / remote-by-design (by design): tessaro: this machine isn't con |
-| verbs | `loom` | not usable offline | bin-managed external: would download — loom runs Gitea  downloaded,  |
+| verbs | `loom` | not usable offline | bin-managed external: would download - loom runs Gitea  downloaded, sh |
 | verbs | `mb` | works | mb is the host's message board  one shared, append-only board every ag |
 | verbs | `meet` | works | Run a turn-taking planning meeting across agentic CLIs and a human. |
 | verbs | `messages` | works | mb is the host's message board  one shared, append-only board every ag |
 | verbs | `mirror` | works | mirror keeps a destination in sync with a source directory: an initial |
-| verbs | `mise` | not usable offline | bin-managed external: would download — Error: mise: resolve: binmgr: |
+| verbs | `mise` | not usable offline | bin-managed external: would download - Error: mise: resolve: binmgr: f |
 | verbs | `model` | works | List inference backends. |
 | verbs | `models` | works | List inference backends. |
 | verbs | `node` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/ |
@@ -411,12 +411,12 @@ externals variant is a separate story.
 | verbs | `podman` | not usable offline | engine / remote-by-design (by design): bashy podman: fetching podman < |
 | verbs | `posix-gate` | works | posix-gate <subcommand> |
 | verbs | `python` | not usable offline | engine / remote-by-design (by design): Error: python/uv: fetch sha256  |
-| verbs | `rclone` | not usable offline | bin-managed external: would download — Error: rclone: resolve: binmg |
+| verbs | `rclone` | not usable offline | bin-managed external: would download - Error: rclone: resolve: binmgr: |
 | verbs | `release` | works | bashy release turns a .goreleaser.yaml into named, checksummed artifac |
 | verbs | `resource` | works | Report host resource utilization |
 | verbs | `resources` | works | Report host resource utilization |
 | verbs | `resume` | works | resume reads a handoff record and continues the work. |
-| verbs | `rg` | not usable offline | bin-managed external: would download — Error: rg: binmgr: fetch rele |
+| verbs | `rg` | not usable offline | bin-managed external: would download - Error: rg: binmgr: fetch releas |
 | verbs | `run` | present | runs in-process; --version/--help rc=2: bashy run: unknown option "--h |
 | verbs | `rust` | not usable offline | engine / remote-by-design (by design): Error: rust: fetch sha256 sidec |
 | verbs | `rustc` | not usable offline | engine / remote-by-design (by design): Error: rust: fetch sha256 sidec |
@@ -425,7 +425,7 @@ externals variant is a separate story.
 | verbs | `schedule` | works | Modern cron: run commands on a cron/interval/at schedule, with an agen |
 | verbs | `sdlc` | works | bashy sdlc is a local-first SDLC coordinator. It accepts an issue/requ |
 | verbs | `search` | works | Search the web through a provider ladder (auto by available key, or -- |
-| verbs | `seaweedfs` | not usable offline | bin-managed external: would download — seaweedfs runs SeaweedFS  dow |
+| verbs | `seaweedfs` | not usable offline | bin-managed external: would download - seaweedfs runs SeaweedFS  downl |
 | verbs | `secret` | works | secrets fetches your API keys/tokens from cloudbox's encrypted vault |
 | verbs | `secrets` | works | secrets fetches your API keys/tokens from cloudbox's encrypted vault |
 | verbs | `self` | works | bashy self fetches and caches a released bashy binary using the same |
@@ -449,5 +449,5 @@ externals variant is a separate story.
 | verbs | `web` | works | web inspection helpers |
 | verbs | `whois` | works | Resolve a name to a principal and say how to reach it. |
 | verbs | `yarn` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/ |
-| verbs | `zot` | not usable offline | bin-managed external: would download — zot runs the Zot OCI registry |
+| verbs | `zot` | not usable offline | bin-managed external: would download - zot runs the Zot OCI registry   |
 <!-- airgap-table:end -->
