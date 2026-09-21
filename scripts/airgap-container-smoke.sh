@@ -177,7 +177,7 @@ table=$work/table.md
   # notes are informational: arch / version / commit tokens are normalized so
   # the same table is measured on amd64 and arm64, dev and release builds
   sort -t "$T" -k1,1 -k2,2 "$out" | awk -F'\t' '{ gsub(/\|/, "\\|"); printf "| %s | `%s` | %s | %s |\n", $1, $2, $3, $4 }' |
-    sed -E 's/(amd64|arm64|x86_64|aarch64)/<arch>/g; s/v?[0-9]+\.[0-9]+(\.[0-9]+)?(-[A-Za-z0-9.]+)?/<ver>/g; s/\([0-9a-f]{7,12}\)/(<sha>)/g; s/ dev( |$)/ <ver>\1/g; s/-dev([ )]|$)/-<ver>\1/g'
+    sed -E 's/(amd64|arm64|x86_64|aarch64|x64)/<arch>/g; s/v?[0-9]+\.[0-9]+(\.[0-9]+)?(-[A-Za-z0-9.]+)?/<ver>/g; s/\([0-9a-f]{7,12}\)/(<sha>)/g; s/ dev( |$)/ <ver>\1/g; s/-dev([ )]|$)/-<ver>\1/g'
 } >"$table"
 count() { grep -c "${T}$1${T}" "$out" || true; }
 say "rows=$(wc -l <"$out" | tr -d ' ') works=$(count works) present=$(count present) offline-by-design=$(( $(count 'not usable offline') + $(count absent) )) fail=$(count FAIL)"

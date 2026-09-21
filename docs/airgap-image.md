@@ -393,10 +393,10 @@ externals variant is a separate story.
 | verbs | `mise` | not usable offline | bin-managed external: would download — Error: mise: resolve: binmgr: fetch release jdx/mise@latest: Get "http |
 | verbs | `model` | works | List inference backends. |
 | verbs | `models` | works | List inference backends. |
-| verbs | `node` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/dist/<ver>/node-<ver>-x64.t |
+| verbs | `node` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/dist/<ver>/node-<ver>-<arch>.t |
 | verbs | `notify` | works | notify sends one subject-only notification through the existing bus. |
-| verbs | `npm` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/dist/<ver>/node-<ver>-x64.t |
-| verbs | `npx` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/dist/<ver>/node-<ver>-x64.t |
+| verbs | `npm` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/dist/<ver>/node-<ver>-<arch>.t |
+| verbs | `npx` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/dist/<ver>/node-<ver>-<arch>.t |
 | verbs | `oci` | not usable offline | engine / remote-by-design (by design): bashy podman: fetching podman <ver> for linux/<arch>  first run only |
 | verbs | `ollama` | not usable offline | engine / remote-by-design (by design): bashy ollama: no ollama found on PATH or in bashy's cache. |
 | verbs | `otel` | works | Query OTEL telemetry with bounded agent-readable summaries |
@@ -407,7 +407,7 @@ externals variant is a separate story.
 | verbs | `person` | works | Human principals  who the names in prose refer to |
 | verbs | `ping` | works | ping is the front door to this host's message board, and to the classi |
 | verbs | `pip` | not usable offline | engine / remote-by-design (by design): Error: python/uv: fetch sha256 sidecar: Get "https://github.com/astral |
-| verbs | `pnpm` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/dist/<ver>/node-<ver>-x64.t |
+| verbs | `pnpm` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/dist/<ver>/node-<ver>-<arch>.t |
 | verbs | `podman` | not usable offline | engine / remote-by-design (by design): bashy podman: fetching podman <ver> for linux/<arch>  first run only |
 | verbs | `posix-gate` | works | posix-gate <subcommand> |
 | verbs | `python` | not usable offline | engine / remote-by-design (by design): Error: python/uv: fetch sha256 sidecar: Get "https://github.com/astral |
@@ -448,6 +448,6 @@ externals variant is a separate story.
 | verbs | `weave` | works | weave is the per-repo EXECUTION engine: a local, filesystem-based |
 | verbs | `web` | works | web inspection helpers |
 | verbs | `whois` | works | Resolve a name to a principal and say how to reach it. |
-| verbs | `yarn` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/dist/<ver>/node-<ver>-x64.t |
+| verbs | `yarn` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/dist/<ver>/node-<ver>-<arch>.t |
 | verbs | `zot` | not usable offline | bin-managed external: would download — zot runs the Zot OCI registry  downloaded, sha256-verified, and cached |
 <!-- airgap-table:end -->
