@@ -60,3 +60,35 @@ func TestDagMethods(t *testing.T) {
 		t.Error("malformed list accepted")
 	}
 }
+
+func TestManifestRowsRegistered(t *testing.T) {
+	for name, verbs := range map[string][]string{
+		"cargo": {"build", "test", "check", "run"}, "pyproject": {"sync", "run", "test", "build"}, "uv": {"sync"},
+		"gomod": {"tidy", "build", "vet", "test", "run"}, "cmake": {"configure", "build", "test", "install"},
+		"makefile": {"build", "test", "clean", "target"}, "make": {"build"}, "package": {"install", "run", "test", "build"}, "npm": {"run"},
+	} {
+		row, ok := polyglot.LookupLanguage(name)
+		if !ok || !row.Text {
+			t.Fatalf("%s: no text row", name)
+		}
+		text := row.NewRuntime(polyglot.RuntimeConfig{}).(polyglot.Text)
+		for _, verb := range verbs {
+			found := false
+			for _, v := range text.Verbs {
+				found = found || v.Name == verb
+			}
+			if !found {
+				t.Errorf("%s: verb %s missing", name, verb)
+			}
+		}
+		if text.WorkDir != "{cwd}" {
+			t.Errorf("%s: manifest rows run in the caller's directory, got %q", name, text.WorkDir)
+		}
+	}
+	if row, _ := polyglot.LookupLanguage("gomod"); row.ModuleFor != "go" {
+		t.Errorf("gomod must provide the go module, ModuleFor=%q", row.ModuleFor)
+	}
+	if row, _ := polyglot.LookupLanguage("cargo"); len(row.NewRuntime(polyglot.RuntimeConfig{}).(polyglot.Text).Shadow) == 0 {
+		t.Error("cargo must shadow its sources")
+	}
+}
