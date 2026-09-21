@@ -92,6 +92,9 @@ func nativeDecoratorSet(stderr io.Writer, attesting func(nativeDecoratorFunc) na
 		"retry":   retryDecorator,
 		"confirm": confirmDecorator, // confirm.go: effect-derived --what-if / --confirm
 		"attest":  attestDecorator,
+		"timeout": timeoutDecorator(stderr), // decorators_std.go
+		"memo":    memoDecorator,
+		"auth":    authDecorator(stderr),
 	}
 	for name, fn := range contractDecorators(stderr) {
 		set[name] = fn
