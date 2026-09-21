@@ -371,7 +371,12 @@ body may also hold a TEXT fence (Sprint 234, B30): `~~~dockerfile as img` /
 exposes the processor's declared verbs with their effect atoms (`@guard`
 denies an excess verb with 126), or `~~~<type> as <alias> !<runner>` for a
 runner that declares its own `methods`; `examples/dag/caddy/dag.md` `image`
-and `examples/quickstart/pipeline.bsh` under `make smoke-dag-text`. A dag body
+and `examples/quickstart/pipeline.bsh` under `make smoke-dag-text`. The
+MANIFEST fences (Sprint 238) — `~~~cargo`, `~~~pyproject`, `~~~gomod`,
+`~~~cmake`, `~~~makefile`, `~~~package` — carry a project manifest inline and
+drive the toolchain bashy provisions in the directory `awd` chose, the tree
+byte-identical (`examples/manifests/`, `make smoke-dag-manifests`); a
+`~~~gomod` fence is the `~~~go` code fence's module. A dag body
 must not lean on bashy's `sed`/`grep`/`cut`/`sort`/`tr` for a check: they
 refuse the macOS default `LANG=en_US.UTF-8` (coreutils' ctype/collate locale
 gate) — the examples cross-check with shell builtins only. Two more

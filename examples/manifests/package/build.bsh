@@ -1,0 +1,8 @@
+~~~package as npm
+{ "name": "fenced", "version": "1.0.0", "private": true,
+  "scripts": { "build": "node $INIT_CWD/app.js", "test": "echo tests ok" } }
+~~~
+b := npm.build()
+echo "build status=$? -> $b"
+t := npm.test()
+echo "test status=$? -> $t"

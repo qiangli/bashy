@@ -1,0 +1,14 @@
+~~~makefile as mk
+all:
+	@echo "make says hi in $$(basename "$$PWD")"
+test:
+	@echo "tests pass"
+greet:
+	@echo "greet target"
+~~~
+a := mk.build()
+echo "build status=$? -> $a"
+t := mk.test()
+echo "test status=$? -> $t"
+g := mk.target("greet")
+echo "target status=$? -> $g"

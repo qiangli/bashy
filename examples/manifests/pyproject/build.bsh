@@ -1,0 +1,9 @@
+~~~pyproject as py
+[project]
+name = "fenced"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = ["rich"]
+~~~
+out := py.run("python", "app.py")
+echo "run status=$? -> $out"

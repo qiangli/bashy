@@ -128,6 +128,12 @@ verb that declares nothing (`validate`) never asks.
 | `tf` | `plan`, `output` | `net`, `read` / `read` |
 | `tf` | `apply` | `net`, `write`, `spend` |
 | `tf` | `destroy` | `net`, `destroy`, `spend` |
+| `cargo`, `gomod` | `build`, `check`/`vet`, `tidy` | `net`, `write` |
+| `cargo`, `gomod`, `pyproject` | `test`, `run` | `net`, `write`, `exec` |
+| `pyproject` | `sync`, `build` | `net`, `write` |
+| `cmake`, `makefile` | `configure`/`build`/`clean`/`target` | `write`, `exec` |
+| `package` | `install` | `net`, `write` |
+| `package` | `run`, `test` | `exec` |
 
 So `@guard("read,net,write")` lets `iac.plan()` through and denies
 `iac.apply()` (`spend not allowed by net,read,write`). The processors are

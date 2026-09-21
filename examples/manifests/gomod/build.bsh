@@ -1,0 +1,15 @@
+~~~gomod as mod
+module example.com/fenced
+
+go 1.27
+
+require github.com/fatih/color v1.18.0
+~~~
+~~~go as gofn
+import "strings"
+func Shout(s string) string { return strings.ToUpper(s) + "!" }
+~~~
+mod.tidy()
+built := mod.run(".")
+loud := gofn.Shout("$built")
+echo "$loud"

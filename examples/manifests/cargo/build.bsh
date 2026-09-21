@@ -1,0 +1,10 @@
+~~~cargo as rs
+[package]
+name = "fenced"
+version = "0.1.0"
+edition = "2021"
+~~~
+c := rs.check()
+echo "check status=$?"
+out := rs.run("from", "awd")
+echo "run status=$? -> $out"

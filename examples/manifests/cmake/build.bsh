@@ -1,0 +1,12 @@
+~~~cmake as cm
+cmake_minimum_required(VERSION 3.20)
+project(fenced C)
+add_executable(app ${BASHPP_CWD}/main.c)
+add_custom_target(test COMMAND app)
+~~~
+cm.configure()
+echo "configure status=$?"
+cm.build()
+echo "build status=$?"
+out := cm.test()
+echo "test status=$? -> $(printf '%s\n' "$out" | tail -1)"
