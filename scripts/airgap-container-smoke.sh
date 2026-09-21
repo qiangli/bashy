@@ -56,8 +56,11 @@ else
   arch=${BASHY_IMAGE_ARCH:-$("$bashy" go env GOARCH 2>/dev/null || uname -m)}
   case "$arch" in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; esac
   say "building the image for linux/$arch through the engine"
-  image=$(cd "$repo" && BASHY_IMAGE_ARCH=$arch BASHY_OCI="$oci" "$bashy" dag build-image 2>&1 | grep '^localhost/bashy:' | tail -1)
-  [ -n "$image" ] || fail "dag build-image printed no image tag"
+  buildlog=$(mktemp)
+  (cd "$repo" && BASHY_IMAGE_ARCH=$arch BASHY_OCI="$oci" "$bashy" dag build-image >"$buildlog" 2>&1) || true
+  image=$(grep '^localhost/bashy:' "$buildlog" | tail -1)
+  [ -n "$image" ] || { tail -40 "$buildlog" >&2; rm -f "$buildlog"; fail "dag build-image printed no image tag"; }
+  rm -f "$buildlog"
 fi
 say "image=$image"
 

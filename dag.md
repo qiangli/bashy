@@ -1053,14 +1053,15 @@ the repo/CI form that images the CANDIDATE. Then:
 
     bashy podman run --rm --network=none -v "$PWD:/work" -w /work localhost/bashy:<ver>-linux-<arch> --bashsharp ./script.bsh
 
-Effects: write, net
 
 ```bash
 set -e
 BASHY_EXE="${BASHY:-bashy}"
 arch="${BASHY_IMAGE_ARCH:-$("$BASHY_EXE" go env GOARCH)}"
 version="${BASHY_IMAGE_VERSION:-dev}"
-make --no-print-directory build-bashy-scratch BASHY_SCRATCH_GOARCH="$arch"
+# `env make`: inside a dag body `make` is bashy's in-process POSIX make, which
+# cannot drive this GNU Makefile (docs/dag.md §Bash++ bodies)
+env make --no-print-directory build-bashy-scratch BASHY_SCRATCH_GOARCH="$arch"
 BASHY_SCRATCH_BIN="bin/scratch/bashy-linux-$arch" "$BASHY_EXE" self image --arch "$arch" --version "$version"
 ```
 
@@ -1072,7 +1073,6 @@ every coreutil, every yoke verb — under `--network=none --read-only
 one, any failing row or a doc table that differs from the measurement fails.
 `AIRGAP_WRITE_DOC=1` regenerates the table. The Linux CI job
 (`airgap-image.yml`, amd64 + arm64) is the release gate.
-Effects: write, net
 
 ```bash
 set -e
@@ -1086,7 +1086,6 @@ git/go/cc/podman/docker and an empty cache, run `bashy self image` and
 `bashy podman run --network=none` on a Bash# script, then print the
 provision inventory (what bashy fetched, with digests) — the doc's "What
 the host needs". Never SKIPs. Run it on each OS the doc claims.
-Effects: write, net
 
 ```bash
 set -e
