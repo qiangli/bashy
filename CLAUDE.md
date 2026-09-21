@@ -430,10 +430,9 @@ PATH=/bin:/usr/bin:$(dirname $(which go)) go test ./...
 ## Workflow
 
 Read `docs/TODO.md` to know what is open — it is the scoreboard and the todo
-list. But **every todo is tracked and accounted for as a STORY in a
-`bashy sprint`**: never pick a todo and work on it without a story (find it
-on the board or file one first), and read the sprint card (spec-ref,
-acceptance, continuity) for the request, plan and details. Delivery commits
+list. A todo needs no sprint to exist; sprint work is tracked as stories on
+the card, and the sprint card (spec-ref, acceptance, continuity) carries the
+request, plan and details. Delivery commits
 carry `Sprint:` / `Story:` / `Story-ID:` trailers. After a change:
 `go test ./...` and `make test-bash`, then commit.
 
