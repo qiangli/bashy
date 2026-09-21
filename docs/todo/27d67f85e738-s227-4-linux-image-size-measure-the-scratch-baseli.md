@@ -3,14 +3,15 @@ id: 27d67f85e738
 kind: enhancement
 title: 'S227.4 Linux image size: measure the scratch baseline, then cut — drop meet SPA embed, treesitter grammar set, CJK charset tables; record per-variant compressed/uncompressed sizes'
 seq: 308
-status: todo
+status: blocked
 priority: p1
 labels:
     - linux
     - size
 created: 2026-09-20T21:23:20.183985Z
-sprint: 227
 ---
+
+**DEFERRED — unlinked from sprint 227 (operator, 2026-09-20: a simple image build of bashy's existing features, KISS).** The bashy_scratch profile is already the lean static build; S227.1 records the measured size per arch. Cuts are a follow-up once a number says they are worth it.
 
 Starting point is unmeasured for the `bashy_scratch` profile: the lean worker is ~121 MB on unix; the Makefile comment puts the floor for cmd/bash near 5 MB (Go runtime ~2.3 MB + interpreter + x/text CJK tables). Everything between is embeds and optional subsystems.
 

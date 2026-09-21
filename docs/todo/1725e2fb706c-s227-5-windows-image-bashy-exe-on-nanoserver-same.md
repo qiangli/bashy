@@ -3,14 +3,15 @@ id: 1725e2fb706c
 kind: feature
 title: 'S227.5 Windows image: bashy.exe on nanoserver, same build-image target, proven on a real Windows container host'
 seq: 309
-status: todo
+status: blocked
 priority: p1
 labels:
     - windows
     - oci
 created: 2026-09-20T21:23:20.212699Z
-sprint: 227
 ---
+
+**DEFERRED — unlinked from sprint 227 (operator, 2026-09-20).** A Windows-native image needs the Containers feature (Pro/Enterprise/Education/Server) and Docker in Windows-containers mode — not the self-contained story and not the common Windows box. Sprint 227 covers Windows with S227.9 instead: the linux image through the self-contained `bashy podman` machine on WSL2 (works on Home). This story stays filed for a later sprint that has a Server/Pro container host and a reason to ship a native image.
 
 bashy cross-compiles to windows/{amd64,arm64} with CGO_ENABLED=0 (no launcher pair — the launcher is unix-only), so the artifact exists; the image does not. Windows has no FROM scratch: the smallest base is `mcr.microsoft.com/windows/nanoserver:<ltsc>`.
 

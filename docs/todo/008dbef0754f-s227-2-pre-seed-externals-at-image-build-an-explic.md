@@ -3,15 +3,16 @@ id: 008dbef0754f
 kind: feature
 title: 'S227.2 Pre-seed externals at image build: an explicit manifest bakes bashy go / python island / node into BASHY_BIN_CACHE; runtime resolves from cache only, fails closed by name'
 seq: 306
-status: todo
+status: blocked
 priority: p0
 labels:
     - oci
     - binmgr
     - airgap
 created: 2026-09-20T21:23:20.124265Z
-sprint: 227
 ---
+
+**DEFERRED — unlinked from sprint 227 (operator, 2026-09-20: a simple image build of bashy's existing features, KISS).** A pre-seed manifest + BASHY_OFFLINE are new machinery. In 227 the image is bashy-only; externals get a matrix row ("not in the image — run `bashy check --prepare` against a mounted BASHY_BIN_CACHE"). This story is the follow-up when a seeded variant is wanted.
 
 Every external (`bashy go`, uv/python islands, node, cargo, clang, loom/zot/seaweedfs/kopia, MinGit) is a binmgr download-on-first-use into `$BASHY_BIN_CACHE` (`yoke/pkg/binmgr`). philosophy.md §3 says "pre-seed the cache and the air-gap is intact" but there is no verb that pre-seeds: each tool is fetched by whichever command first needs it (`bashy go version`, `bashy check --prepare <script>`).
 

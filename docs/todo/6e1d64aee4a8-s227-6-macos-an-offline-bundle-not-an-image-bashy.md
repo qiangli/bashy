@@ -3,14 +3,15 @@ id: 6e1d64aee4a8
 kind: feature
 title: 'S227.6 macOS: an offline bundle, not an image — bashy + launcher pair + seeded cache as one archive that runs a .bsh with networking disabled; record the decision'
 seq: 310
-status: todo
+status: blocked
 priority: p2
 labels:
     - macos
     - dist
 created: 2026-09-20T21:23:20.241579Z
-sprint: 227
 ---
+
+**DEFERRED — unlinked from sprint 227 (operator, 2026-09-20).** One rule for every OS: no per-OS bundles; the container form is the product. Sprint 227 covers macOS with S227.10 — the linux image through the self-contained `bashy podman` machine (vfkit). This story stays filed for a sprint that has a reason to ship a native darwin bundle (signing/notarization would come with it).
 
 There is no macOS container image: on macOS an OCI engine (bashy podman / podman machine) runs a Linux VM, so the S227.1 linux image already IS the macOS container answer. What "optimized for macOS" can mean is the native air-gapped form: a self-contained archive.
 
