@@ -39,7 +39,7 @@ the already-installed bashy.
 
 Targets carry `Requires:` (dependency edges), `Sources:`/`Generates:`
 (content-fingerprint up-to-date skip — `bashy dag build` no-ops when nothing
-changed; `--force`/`-B` re-runs) and `Effects:` (capability cap, recorded in
+changed; `--force`/`-B` re-runs) and `Effects:` (advisory effect cap, recorded in
 the attestation; `Ensure:` postconditions are enforced too). Targets run in
 topological order through the in-process shell — add `-j N` for parallel.
 

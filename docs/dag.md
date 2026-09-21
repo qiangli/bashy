@@ -177,11 +177,14 @@ decorators (`@trace` · `@guard` · `@retry` · `@require` · `@ensure`),
 registration-time policy advice, function attestation (the skills/craft
 ledger, `docs/function-attestation.md`) and the audit/advisor middleware
 apply inside a dag body exactly as in a script. The target's `Effects:` cap
-stays dag's **outermost** handler: an undeclared effect is refused with its
-diagnostic and exit 126 before any bashy middleware runs, and `@guard` inside
-a function narrows that same `advice.Cap` on the way down (so a guard denial
-in a dag body also reads 126, where the cold CLI's silent audit denial reads
-1). Classic (` ```bash ` / untagged) bodies keep yoke's own interpreter.
+stays dag's **outermost** handler and is advisory: an undeclared or
+unclassified command is reported once on stderr
+(`dag: effect cap: target T: "cmd" needs EFFECTS not in Effects: CAP`) and
+runs — the atlas that classifies commands is a table bashy curates, not a law
+it can complete, so it never refuses a build (Sprint 230). `@guard` inside a
+function sets its own `advice.Cap` for the rest of the chain; that one is the
+author's own narrowing and bashy's opt-in audit handler still denies on it.
+Classic (` ```bash ` / untagged) bodies keep yoke's own interpreter.
 
 Before Sprint 216 (Story 541) the dag runner was yoke's alone and had no
 decorator registry — `@guard` on an agentic function printed

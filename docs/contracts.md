@@ -17,7 +17,7 @@ at a prompt to see whether the world is the way you meant it to be.
 |---|---|---|
 | require | `Require: <shell check>` (repeatable, one check per line) | `@require('<shell check>', ...)` (repeatable) |
 | ensure | `Ensure: <shell check>` (repeatable) | `@ensure('<shell check>', ...)` (repeatable) |
-| effects | `Effects: read,write,…` (enforced per dispatched command by Yoke's dag since B17, Sprint 216) | `@guard(effects: "read,…")` (enforced) |
+| effects | `Effects: read,write,…` (advisory: a command outside the cap, or one the atlas does not know, is reported once on stderr and runs — the atlas is a table bashy curates, not a law; Sprint 230) | `@guard(effects: "read,…")` (enforced — the author's own narrowing) |
 | confirm | — | `@confirm()` — effect-derived `--what-if` / `--confirm`, per operation; see `docs/effect-derived-confirmation.md` |
 
 Evaluation order on both surfaces: **require → body → ensure**, with the cap
@@ -134,6 +134,12 @@ Effects: read,write
 go build -ldflags "-X main.version=$VERSION" -o dist/app .
 ~~~
 ```
+
+The cap is advisory: `go` is `exec,net,write` in the atlas, so this body runs
+and stderr says once
+`dag: effect cap: target "build": "go" needs exec,net not in Effects: read,write`
+— the line is the prompt to fix the declaration (or to notice a body doing
+more than its author meant), never a refused build.
 
 Run with `VERSION` unset and the body never runs:
 
