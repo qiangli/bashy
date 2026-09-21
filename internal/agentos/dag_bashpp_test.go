@@ -198,20 +198,21 @@ agentic { need q; }`
 }
 
 // B17 is not displaced by the re-wire: a target's declared Effects: cap is
-// still dag's outermost handler in a ```bashpp body — denial reports the
-// undeclared effect and exits 126, before any bashy middleware.
+// still dag's outermost handler in a ```bashpp body. Since Sprint 230 the cap
+// is advisory — the undeclared effect is reported once on stderr and the
+// command runs — while a @guard inside the body keeps denying (126).
 func TestDagBashPPEffectsCapStillOutermost(t *testing.T) {
 	leak := filepath.Join(t.TempDir(), "leak")
 	code, env := runDagBody(t, "bashpp", "read", "touch "+leak+"; echo \"touch -> $?\"")
 	task := env.Result.Tasks[0]
-	if code != 0 || !strings.Contains(task.Stdout, "touch -> 126") {
-		t.Fatalf("Effects: cap not enforced: exit %d\nstdout=%s\nstderr=%s", code, task.Stdout, task.Stderr)
+	if code != 0 || !strings.Contains(task.Stdout, "touch -> 0") {
+		t.Fatalf("an advisory Effects: cap must not fail the command: exit %d\nstdout=%s\nstderr=%s", code, task.Stdout, task.Stderr)
 	}
-	if !strings.Contains(task.Stderr, `effect cap denied "touch": undeclared effects write`) {
-		t.Fatalf("dag's denial diagnostic is missing:\n%s", task.Stderr)
+	if !strings.Contains(task.Stderr, `effect cap: target "smoke": "touch" needs write not in Effects: read`) {
+		t.Fatalf("dag's report is missing:\n%s", task.Stderr)
 	}
-	if _, err := os.Stat(leak); err == nil {
-		t.Fatal("the denied write happened")
+	if _, err := os.Stat(leak); err != nil {
+		t.Fatal("the reported write did not happen")
 	}
 }
 

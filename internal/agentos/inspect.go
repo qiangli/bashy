@@ -75,6 +75,7 @@ var inspectIndex = []inspectIndexRow{
 	{"the first-hop record an agent reads before anything else", "bashy inspect context --json", "inspect"},
 	{"what this bashy can run, one facet row per action (command/script/agent/skill)", "bashy inspect actions --kind skill", "inspect"},
 	{"which policy-applied decorator rules are active, and what decided that", "bashy inspect advice", "inspect"},
+	{"which decorators Bash# predefines, and what each one does", "bashy inspect decorators", "inspect"},
 	{"what ran here, tamper-evident (status, tail, verify, export)", "bashy inspect audit status", "inspect"},
 	{"what commands exist and how each one resolves", "bashy commands X --features", "commands"},
 	{"the full command atlas (group, tier, stage, caps, effects)", "bashy commands --atlas", "commands"},
@@ -129,13 +130,13 @@ func dispatchInspect(args []string) int {
 			return dispatchContext(rest)
 		case "audit":
 			return dispatchAudit(rest)
-		case "paths", "mode", "actions", "advice":
+		case "paths", "mode", "actions", "advice", "decorators":
 			return dispatchInspectAspect(aspect, rest)
 		case "help":
 			inspectUsage(os.Stdout)
 			return 0
 		default:
-			fmt.Fprintf(os.Stderr, "bashy inspect: unknown aspect %q (try: paths mode actions advice doctor context audit)\n", aspect)
+			fmt.Fprintf(os.Stderr, "bashy inspect: unknown aspect %q (try: paths mode actions advice decorators doctor context audit)\n", aspect)
 			return 2
 		}
 	}
@@ -150,6 +151,7 @@ func inspectUsage(w io.Writer) {
 	fmt.Fprintln(w, "  mode      effective gate decisions, each with the signal that decided it")
 	fmt.Fprintln(w, "  actions   what this bashy can run: one facet row per action  [--kind command|script|agent|skill]")
 	fmt.Fprintln(w, "  advice    the policy-applied decorator rules, and what decided them")
+	fmt.Fprintln(w, "  decorators the predefined Bash# decorator set: args, what each connects to, exit status")
 	fmt.Fprintln(w, "  doctor    diagnose the host environment            (was: bashy doctor)")
 	fmt.Fprintln(w, "  context   the first-hop agent record               (was: bashy context)")
 	fmt.Fprintln(w, "  audit     the tamper-evident command trail          (was: bashy audit)")
@@ -248,6 +250,13 @@ func dispatchInspectAspect(aspect string, args []string) int {
 			return inspectEmitJSON(aspect, rows)
 		}
 		printInspectActions(rows, kind)
+		return 0
+	case "decorators":
+		rows := collectInspectDecorators()
+		if asJSON {
+			return inspectEmitJSON(aspect, rows)
+		}
+		printInspectDecorators(rows)
 		return 0
 	case "advice":
 		rep, code := collectInspectAdvice()
