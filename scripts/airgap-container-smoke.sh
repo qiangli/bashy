@@ -41,7 +41,9 @@ bashy=${BASHY:-$repo/bin/bashy}
 
 # ── engine: no usable engine is a SKIP, not a failure ────────────────────────
 oci=${BASHY_OCI:-"$bashy podman"}
-if ! $oci info >/dev/null 2>&1; then
+# `version` (client + server), not `info`: a cold rootless `info` on Ubuntu 24.04
+# (apparmor_restrict_unprivileged_userns=1) fails its reexec although build/run work
+if ! $oci version >/dev/null 2>&1; then
   say "SKIP engine '$oci' is not usable here (no machine/daemon) — the Linux CI job is the gate"
   exit 0
 fi

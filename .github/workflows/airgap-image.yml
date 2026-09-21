@@ -65,7 +65,10 @@ jobs:
           export PATH=$(cat "$RUNNER_TEMP/scrub-path.txt")
           export BASHY_BIN_CACHE=$RUNNER_TEMP/bashy-cache BASHY_TELEMETRY_QUIET=1
           bin/bashy podman --version
-          bin/bashy podman info | grep -E 'conmon|ociRuntime|netavark' -A2 | head -20
+          # not `podman info`: on Ubuntu 24.04 (apparmor_restrict_unprivileged_userns=1)
+          # a COLD rootless `info` from an unpackaged binary is denied its reexec;
+          # build/run work (newuidmap path) and `info` works after the first run
+          bin/bashy podman version
       - name: Build the image and run the airgap gate
         shell: bash
         timeout-minutes: 30

@@ -48,10 +48,16 @@ Measured by `scripts/self-contained-image-smoke.sh` from the published release
 archive on a host with `$PATH` scrubbed of git/go/cc/podman/docker and an empty
 `$BASHY_BIN_CACHE`; the provision inventory it prints is this list.
 
-- **Linux:** nothing bashy does not fetch, with two host facts stated: rootless
-  podman needs `newuidmap`/`newgidmap` and a `/etc/subuid` entry for the user
-  (shadow-utils — present on every mainstream distro; as root none of this
-  applies), and the kernel's overlay/user-namespace support (any kernel ≥ 5.11).
+- **Linux:** nothing bashy does not fetch, with three host facts stated: rootless
+  podman needs `newuidmap`/`newgidmap` on `$PATH` and a `/etc/subuid` entry for
+  the user (shadow-utils — present on every mainstream distro; as root none of
+  this applies); the kernel's overlay/user-namespace support (any kernel ≥ 5.11);
+  and on Ubuntu 24.04+ (`kernel.apparmor_restrict_unprivileged_userns=1`) a
+  *cold* rootless `podman info` from bashy's unpackaged podman is denied its
+  reexec ("failed to reexec: Permission denied") — `build` and `run` work
+  regardless (measured: rootless build + `--network=none` run as a plain user),
+  and `info` works once a container has run; `sysctl
+  kernel.apparmor_restrict_unprivileged_userns=0` removes the quirk entirely.
 - **macOS:** nothing but macOS. The first `bashy podman machine init` downloads
   the machine OS image (podman's own fetch, upstream terms) and creates the VM —
   minutes and a few GB, once.
