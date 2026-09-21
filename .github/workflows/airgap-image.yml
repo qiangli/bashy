@@ -49,7 +49,8 @@ jobs:
           set -euo pipefail
           scrub=$RUNNER_TEMP/scrub-path
           mkdir -p "$scrub"
-          for d in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin "$(dirname "$(command -v go)")"; do
+          # setup-go's dir FIRST: /usr/bin carries the distro go, which is older than go.mod's floor
+          for d in "$(dirname "$(command -v go)")" /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin; do
             for f in "$d"/*; do
               b=$(basename "$f")
               case "$b" in podman|docker|podman-remote|buildah|skopeo|nerdctl) continue ;; esac
