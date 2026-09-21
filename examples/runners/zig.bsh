@@ -1,0 +1,35 @@
+#!/usr/bin/env -S bashy --bashsharp
+# A compiler for a language bashy has no fence for. The BUILDER is an inline
+# Bash# function: `build` compiles the fence with `bashy zig` (the toolchain
+# bashy already provisions for its C islands; "$BASH" is this very shell, so
+# no PATH is needed) into the fence's own directory — never the caller's
+# tree — and `run` launches the artifact. Effects are declared in the
+# `methods` answer, so a @guard caps them.
+
+func builder(verb string, file string, args ...string) string {
+  out="${file%/*}/app"
+  case "$verb" in
+    methods) printf '%s\n' '{"name":"build","effects":["write","exec"]}' '{"name":"run","effects":["exec"]}' ;;
+    build)   "$BASH" zig build-exe "$file" -femit-bin="$out" >/dev/null && echo "$out" ;;
+    run)     "$out" "${args[@]}" ;;
+  esac
+}
+
+~~~zig as z !builder
+const std = @import("std");
+pub fn main() void {
+    std.debug.print("hello from zig, built by a fenced builder\n", .{});
+}
+~~~
+
+bin := z.build()
+echo "built ${bin##*/}"
+z.run()
+
+
+@guard("read")
+func peek() {
+  x := z.run("nobody")
+  echo "guarded run status=$? x=[$x]"
+}
+peek()

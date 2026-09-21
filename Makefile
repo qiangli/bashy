@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-text smoke-dag-manifests smoke-quickstart smoke-quickstart-container smoke-airgap-container dist tidy clean help
+.PHONY: dag build build-bash build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -425,6 +425,13 @@ smoke-dag-text:
 ## what bashy provisions; none is needed on the host. Not part of `test`.
 smoke-dag-manifests:
 	@scripts/manifest-examples-smoke.sh
+
+## smoke-runners: Installed-product smoke for the rod (Sprint 238): a language or
+## toolchain bashy has never heard of added with a runner and nothing else —
+## examples/runners/{awk,zig,env}.bsh (registered runner, inline func builder,
+## inline shell runner) plus the refusal of an unregistered program. Not part of `test`.
+smoke-runners:
+	@scripts/runner-examples-smoke.sh
 
 ## smoke-quickstart: Three-mode process-level example check (Sprint 216, Story 540).
 ## (a) bashy + .bsh interpreted, no toolchain; (b) transpile --standalone: Bash#

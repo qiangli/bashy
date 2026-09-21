@@ -73,6 +73,7 @@ import (
 	"github.com/qiangli/yoke/external/seaweedfs"
 	"github.com/qiangli/yoke/external/sphere"
 	"github.com/qiangli/yoke/external/tessaro"
+	"github.com/qiangli/yoke/external/zigcc"
 	"github.com/qiangli/yoke/external/zot"
 	"github.com/qiangli/yoke/pkg/ask"
 	"github.com/qiangli/yoke/pkg/atlas"
@@ -150,7 +151,7 @@ var (
 	// `supervisord` shares its name with a widely installed program; bare
 	// `supervisord` stays the host's, `bashy supervisord` is ours.
 	directFrontDoorVerbs = []string{"mb", "ping", "out", "full", "awd", "supervisord"}
-	agentModeShimVerbs   = []string{"go", "cmake", "clang", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "git-scm", "curl"}
+	agentModeShimVerbs   = []string{"go", "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
 	//
@@ -1275,6 +1276,16 @@ func dispatch() {
 		// (binmgr), the system clang on macOS/Linux. The compiler half of the
 		// self-contained cross-platform build userland (cmake is the other half).
 		cmd := clang.NewClangCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			dispatchExit(1)
+		}
+		dispatchExit(0)
+	case "zig":
+		// Self-provisioning Zig toolchain — the pinned release the C islands'
+		// `cc` already compiles with, fronted as a language of its own so a
+		// `~~~zig` fence's runner can name it.
+		cmd := zigcc.NewZigCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)

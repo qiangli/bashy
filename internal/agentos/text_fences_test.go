@@ -44,9 +44,17 @@ func TestFenceToolsAnswerWithSelf(t *testing.T) {
 		if !ok {
 			t.Fatalf("no toolchain row for %s", tool)
 		}
+		if tool == "go" {
+			// Provisioned as one program by the island table; a self-verb
+			// must not replace it (the Go fence's SDK resolver needs a binary).
+			continue
+		}
 		argv, why, err := row(context.Background())
 		if err != nil || len(argv) != 2 || argv[1] != tool || !strings.Contains(why, "bashy "+tool) {
 			t.Errorf("%s: argv=%v why=%q err=%v", tool, argv, why, err)
 		}
+	}
+	if argv, _, err := islandToolchains["go"](context.Background()); err != nil || len(argv) != 1 {
+		t.Errorf("go row must stay the provisioned single binary: %v %v", argv, err)
 	}
 }

@@ -36,7 +36,7 @@ const commandsSchemaVersion = "bashy-commands-v1"
 // `edit` and `verify` all name commands too. `list` and `schema` take no
 // name and collide with nothing.
 var (
-	commandsCRUDWords     = []string{"add", "show", "set", "rm", "edit", "verify"}
+	commandsCRUDWords     = []string{"add", "register", "show", "set", "rm", "edit", "verify"}
 	commandsNamelessWords = []string{"list", "schema"}
 )
 
@@ -209,7 +209,7 @@ func dispatchCommands(args []string) int {
 			fmt.Println("  --idioms       curated composites: commands naturally used together")
 			fmt.Println("  --atlas        full per-command atlas records (machine surface)")
 			fmt.Println("Registered commands — your own, listed and dispatched like every shipped one:")
-			fmt.Println("  add NAME --set exec.0=PROG|script=BODY|download.url=…   register (schema lists every path)")
+			fmt.Println("  add|register NAME --set exec.0=PROG|script=BODY|download.url=…   register (schema lists every path)")
 			fmt.Println("  set NAME --set PATH=VALUE | rm NAME | edit NAME | verify [NAME]")
 			fmt.Println("  show NAME --yaml|--json|--field PATH   the record; bare `commands NAME` is the atlas report")
 			fmt.Println("  list | schema                          the ring; every settable path")
@@ -615,6 +615,7 @@ var verbSynopsis = map[string]string{
 	"go":          "self-provisioning Go toolchain (download → verify → cache → exec)",
 	"cmake":       "self-provisioning CMake build toolchain",
 	"clang":       "self-provisioning clang/LLVM toolchain",
+	"zig":         "self-provisioning Zig toolchain (the C islands' cc; `zig build-exe`, `zig run`)",
 	"node":        "self-provisioning Node.js runtime (download from nodejs.org → verify → cache → exec)",
 	"npm":         "Node.js package manager (from the provisioned Node tree)",
 	"npx":         "Node.js package runner (from the provisioned Node tree)",

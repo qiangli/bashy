@@ -48,8 +48,14 @@ func selfVerb(verb string) func(ctx context.Context) ([]string, string, error) {
 }
 
 func init() {
+	// A self-verb only fills a gap: a tool the island table already
+	// provisions as a single program (go, and the toolchains the code fences
+	// compile with) keeps its row — the Go fence's SDK resolver, for one,
+	// needs `go` to be one binary, not `bashy go`.
 	for _, tool := range fenceTools {
-		islandToolchains[tool] = selfVerb(tool)
+		if _, provisioned := islandToolchains[tool]; !provisioned {
+			islandToolchains[tool] = selfVerb(tool)
+		}
 	}
 }
 

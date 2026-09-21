@@ -10,6 +10,6 @@ import "strings"
 func Shout(s string) string { return strings.ToUpper(s) + "!" }
 ~~~
 mod.tidy()
-built := mod.run(".")
+built := mod.run("-tags", "gomodfence", ".")
 loud := gofn.Shout("$built")
 echo "$loud"

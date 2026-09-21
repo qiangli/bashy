@@ -1,0 +1,16 @@
+#!/usr/bin/env -S bashy --bashsharp
+# An interpreter for a language bashy has no fence for. The runner is
+# REGISTERED (examples/runners/awk-runner.sh, `bashy commands add awk-runner`);
+# this script declares nothing — it just names it. A program on PATH that is
+# not registered is refused: the fence means the same thing on every host.
+
+~~~awk as aw !awk-runner
+{ words += NF }
+END { print words " words" }
+~~~
+
+ok := aw.check()
+echo "$ok"
+me="$(dirname "$0")/awk.bsh"
+n := aw.run("$me")
+echo "this script has $n"

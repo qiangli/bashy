@@ -13,7 +13,10 @@ bashy awd examples/manifests/cargo -- bashy --bashsharp examples/manifests/cargo
 caches and outputs live under the fence root in the user cache, and the
 directory stays byte-identical (`git status` sees nothing). `gomod/build.bsh`
 carries both a `~~~gomod` manifest and a `~~~go` code fence: the manifest is
-the code fence's module, in a directory with no `go.mod`.
+the code fence's module, in a directory with no `go.mod` (`main.go` carries a
+`//go:build gomodfence` tag so the bashy module's own `go build ./...` skips
+it — `go mod tidy` still sees it — and the example passes the tag:
+`mod.run("-tags", "gomodfence", ".")`).
 
 `make smoke-dag-manifests` runs all six against the installed binary in a
 scratch copy of each directory and asserts the copy is unchanged. The
