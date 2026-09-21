@@ -415,6 +415,7 @@ func Dispatch() {
 	// tool resolver is installed before anything can plan an island — the
 	// interp runner, the Go front end behind `transpile`, `check --prepare`.
 	installIslandToolResolver()
+	installFenceSeams()
 	if len(os.Args) < 2 || !isFrontDoorInvocation(os.Args[1]) {
 		dispatch()
 		return

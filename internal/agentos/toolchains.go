@@ -104,7 +104,7 @@ func islandToolResolver(name string) ([]string, string, error) {
 }
 
 func islandToolchainNames() []string {
-	return []string{"go", "cc", "c++", "python3", "node", "bun", "typescript", "rustc"}
+	return append([]string{"go", "cc", "c++", "python3", "node", "bun", "typescript", "rustc"}, fenceTools...)
 }
 
 // installIslandToolResolver wires the table into the engine once per process.

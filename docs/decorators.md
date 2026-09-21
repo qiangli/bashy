@@ -108,6 +108,31 @@ guess:
 
 `bashy inspect decorators` and this page are pinned to each other by test.
 
+### Text fences declare the effects of their verbs
+
+A Bash# text fence (`~~~tf as iac`, `~~~dockerfile as img`; B30,
+`bashsharp/docs/fenced-text-blocks-plan.md`) is the third way: the fence's
+**row** declares what each verb does, and a `!runner` override declares it in
+its `methods` answer (`{"name":"apply","effects":["net","write","spend"]}`).
+A declared verb is checked at the call boundary exactly as `@effects` is —
+under a `@guard` the atoms exceed, the call is denied with 126 before the
+processor runs, and a `:=` site binds zero values and reads the status. A
+verb that declares nothing (`validate`) never asks.
+
+| row | verb | atoms |
+|---|---|---|
+| `dockerfile` | `build` | `net`, `write` |
+| `dockerfile` | `run` | `exec` |
+| `tf` | `validate` | — |
+| `tf` | `init` | `net`, `write` |
+| `tf` | `plan`, `output` | `net`, `read` / `read` |
+| `tf` | `apply` | `net`, `write`, `spend` |
+| `tf` | `destroy` | `net`, `destroy`, `spend` |
+
+So `@guard("read,net,write")` lets `iac.plan()` through and denies
+`iac.apply()` (`spend not allowed by net,read,write`). The processors are
+bashy's own verbs re-entered (`bashy podman`, `bashy tofu`), never PATH.
+
 ## Internal
 
 `attest` is registered too — the rung policy advice attaches to an `agentic{}`
