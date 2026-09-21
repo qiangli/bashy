@@ -649,7 +649,7 @@ const defaultPathValue = "/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin
 func newRunner() (*interp.Runner, error) {
 	startupPosix := resolvedStartupPosix()
 	inheritedEnv := secureStartupEnv(os.Environ())
-	// BASHY_BASHSHARP (and its deprecated alias BASHY_BASHPP) is an invocation
+	// BASHY_BASHSHARP (and its alias BASHY_BASHPP) is an invocation
 	// selector, not shell state. Consume it at this process boundary so a
 	// caller can enable the top-level shell without silently changing every
 	// nested bash process launched by the script.
@@ -1179,14 +1179,6 @@ func runAll() error {
 	startupBashPP, err = front.ResolveBashPP(bashPPSelector)
 	if err != nil {
 		return err
-	}
-	// A Bash++-era spelling (--bashpp, BASHY_BASHPP, .bpp) still works for one
-	// minor release; tell a HUMAN so once, on a terminal stderr. Scripts,
-	// harnesses and fixtures that compare stderr byte for byte (the corpus
-	// harness still spells --bashpp) see exactly what they saw before.
-	if notice := startupBashPP.DeprecationNotice(); notice != "" && os.Getenv("BASHY_HINTS") != "off" &&
-		term.IsTerminal(int(os.Stderr.Fd())) {
-		fmt.Fprintln(os.Stderr, "bashy: "+notice)
 	}
 	// Go-source selection is validated before anything else looks at the
 	// input: a refused selection must never reach a shell code path, and an
