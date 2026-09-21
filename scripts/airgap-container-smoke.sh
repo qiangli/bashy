@@ -178,7 +178,7 @@ table=$work/table.md
   # the same table is measured on amd64 and arm64, dev and release builds
   # normalize FIRST (tokens differ in length), then cut the note to 70 chars
   sort -t "$T" -k1,1 -k2,2 "$out" |
-    sed -E 's/(amd64|arm64|x86_64|aarch64|x64)/<arch>/g; s/v?[0-9]+\.[0-9]+(\.[0-9]+)?(-[A-Za-z0-9.]+)?/<ver>/g; s/\([0-9a-f]{7,12}\)/(<sha>)/g; s/ dev( |$)/ <ver>\1/g; s/-dev([ )]|$)/-<ver>\1/g' |
+    sh "$repo/scripts/airgap-normalize-notes.sh" |
     tr -cd '\011\012\040-\176' |
     awk -F'\t' '{ gsub(/\|/, "\\|"); printf "| %s | `%s` | %s | %s |\n", $1, $2, $3, substr($4, 1, 70) }'
 } >"$table"
