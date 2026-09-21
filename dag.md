@@ -119,6 +119,7 @@ podman`/`ollama`, `-tags bashy_engines`, cgo + btrfs/MLX) and the observability
 stack (`bashy otel`, `-tags bashy_obs`, ~193 MB). Not cross-platform — use only
 on a host node; the default `build` is the lean cross-platform worker.
 Generates: bin/bashy
+Effects: cred, exec, net, read, write
 
 ```bash
 set -e
@@ -148,6 +149,7 @@ Install the built pair into the shared dhnt user bin (`$DHNT_BIN_DIR`, default
 `~/.local/bin`). The installer refuses a binary without the required AgentOS
 command surface, preventing a lean/stale binary from replacing bashy.
 Requires: build
+Effects: exec, net, write
 
 ```bash
 BASHY_EXE="${BASHY:-bashy}"
@@ -203,6 +205,7 @@ reboot, or Hyper-V is selected but not enabled), the target reports a SKIP with
 the reason instead of failing unrelated DAG runs. Set
 `CONTAINERS_MACHINE_PROVIDER=hyperv` to exercise Hyper-V on Windows instead of
 the default WSL provider.
+Effects: cred, exec, net, read, write
 
 ```bash
 set -e
@@ -242,6 +245,7 @@ Cross-compile static binaries for all release platforms into bin/dist/ (both
 bash and bashy; a local cross-compile sanity check — goreleaser does real
 releases).
 Generates: bin/dist
+Effects: cred, exec, net, read, write
 
 ```bash
 set -e
@@ -282,6 +286,7 @@ tag or commit. The target clones it into the gitignored
 `external/bash-5.3` directory on first use and pulls with `--ff-only` when it is
 already a git checkout. Existing non-git fixture trees are accepted for local
 development, but missing fixtures fail loudly.
+Effects: cred, destroy, net, read, write
 
 ```bash
 set -e
@@ -342,6 +347,7 @@ distributed shard. Use this lane when host OS behavior is part of the coverage;
 use `test-bash-container` / `test-bash-chunks-container` for heterogeneous fleet
 throughput.
 Requires: build, test-bash-data
+Effects: exec, net, write
 
 ```bash
 set -e
@@ -365,6 +371,7 @@ Effects: write
 Run the native Bash 5.3 harness against an already prepared checkout. This is
 the chunk worker leaf used by `test-bash-chunks`; it deliberately has no build
 dependency so fanout does not rebuild the same checkout concurrently.
+Effects: exec, net, write
 
 ```bash
 set -e
@@ -378,6 +385,7 @@ ext=""
 ### test-bash-list
 List the GNU Bash 5.3 fixtures known to the bashy-native harness.
 Requires: test-bash-data
+Effects: exec, net, write
 
 ```bash
 BASHY_EXE="${BASHY:-bashy}"
@@ -389,6 +397,7 @@ Run one GNU Bash 5.3 distributed chunk. Set `CHUNK=I/N`, for example
 `CHUNK=2/8 bashy dag test-bash-chunk`. `N` must match the pinned
 `chunk_count` in `chunks.json`; fleet capacity never changes fixture membership.
 Requires: build, test-bash-data
+Effects: exec, net, write
 
 ```bash
 set -e
@@ -1098,6 +1107,7 @@ Prepare the GNU Bash 5.3 container-normalized lane once per host. This builds
 the host-architecture Linux testee and harness and validates the current
 bashy's container surface before fanout starts.
 Requires: test-bash-data
+Effects: destroy, exec, net, persist, write
 
 ```bash
 set -e
@@ -1127,6 +1137,7 @@ $oci build -t "$image" -f tools/bash53-container/Containerfile tools/bash53-cont
 ### test-bash-container-run
 Run the GNU Bash 5.3 container harness against an already prepared checkout.
 This is the chunk worker leaf used by `test-bash-chunks-container`.
+Effects: exec, net, persist, read
 
 ```bash
 set -e
@@ -1287,6 +1298,7 @@ PLAN_FILE="${PLAN_FILE:-bin/yash-chunks.plan.tsv}" \
 
 ### tidy
 go mod tidy + gofmt -s -w . + go vet ./...
+Effects: exec, net, write
 
 ```bash
 set -e
@@ -1310,6 +1322,7 @@ never includes coreutils; ~5.7 MB). All the conformance harness needs. Uses
 `"$BASHY" go build` so the toolchain path is bashy-owned.
 Sources: cmd/bash, internal/cli, go.mod, go.sum
 Generates: bin/bash
+Effects: cred, exec, net, read, write
 
 ```bash
 set -e
@@ -1328,6 +1341,7 @@ Build ONLY `bin/bashy` — the AgentOS shell from cmd/bashy. Set BASHY_TAGS to a
 embed tags (embed_podman/…). Lean worker by default.
 Sources: cmd/bashy, internal, go.mod, go.sum
 Generates: bin/bashy
+Effects: cred, exec, net, read, write
 
 ```bash
 set -e
@@ -1349,6 +1363,7 @@ Build both binaries against the Go FIPS 140-3 Cryptographic Module
 runtime (keeps md5sum working), not fips140=only.
 Sources: cmd, internal, go.mod, go.sum
 Generates: bin/bash, bin/bashy
+Effects: exec, net, write
 
 ```bash
 set -e
@@ -1547,6 +1562,7 @@ drop-in: it reports its version via the GNU `--version` flag (which also carries
 the bashy tag, e.g. `5.3.0(1)-bashy-0.18.0`) and runs scripts via `-c`; there is no
 standalone `version`/`shell` subcommand, so the smokes exercise those real front
 doors instead. Set `BASHY_TEST_VERSION` (e.g. `v0.18.0`).
+Effects: exec, net, read, write
 
 ```bash
 set -e
