@@ -1,0 +1,72 @@
+// Copyright (c) 2025 qiangli
+// See LICENSE for licensing information
+
+//go:build !bashy_engines || (windows && (!remote || !containers_image_openpgp))
+
+package agentos
+
+import (
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strings"
+	"testing"
+)
+
+var hex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+// Every pinned asset must carry a real sha256 and a tree entrypoint — the
+// fail-closed download path refuses anything else, and a typo here would only
+// surface on a fresh host.
+func TestPodmanPinsComplete(t *testing.T) {
+	for plat, a := range podmanAssets {
+		if !hex64.MatchString(a.sha256) {
+			t.Errorf("%s: sha256 %q is not 64 hex", plat, a.sha256)
+		}
+		if a.entrypoint == "" || !strings.HasPrefix(a.url, "https://github.com/") {
+			t.Errorf("%s: incomplete pin %+v", plat, a)
+		}
+		if strings.HasPrefix(plat, "windows/") != strings.HasSuffix(a.entrypoint, ".exe") {
+			t.Errorf("%s: entrypoint %q has the wrong suffix", plat, a.entrypoint)
+		}
+	}
+	for name, a := range darwinHelperAssets {
+		if !hex64.MatchString(a.sha256) || a.entrypoint != "" {
+			t.Errorf("darwin helper %s: bad pin %+v", name, a)
+		}
+	}
+	for _, plat := range []string{"linux/amd64", "linux/arm64", "darwin/arm64", "darwin/amd64", "windows/amd64", "windows/arm64"} {
+		if _, ok := podmanAssets[plat]; !ok {
+			t.Errorf("no podman pin for %s", plat)
+		}
+	}
+}
+
+func TestManagedPodmanRootLinux(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("linux layout")
+	}
+	a := podmanAssets["linux/"+runtime.GOARCH]
+	root := filepath.Join("/cache", "podman", a.version, strings.SplitN(a.entrypoint, "/", 2)[0])
+	bin := filepath.Join("/cache", "podman", a.version, filepath.FromSlash(a.entrypoint))
+	if got := managedPodmanRoot(bin); got != root {
+		t.Fatalf("managedPodmanRoot(%q) = %q, want %q", bin, got, root)
+	}
+	if managedPodmanRoot("/usr/bin/podman") != "" {
+		t.Fatal("a host podman must not be treated as managed")
+	}
+}
+
+func TestPodmanConfOverrideLinuxPaths(t *testing.T) {
+	conf := podmanConfOverrideLinux("/c/podman/v6/podman-linux-amd64")
+	for _, want := range []string{
+		`conmon_path = ["/c/podman/v6/podman-linux-amd64/usr/local/lib/podman/conmon"]`,
+		`crun = ["/c/podman/v6/podman-linux-amd64/usr/local/bin/crun"]`,
+		`network_backend = "netavark"`,
+		`cgroup_manager = "cgroupfs"`,
+	} {
+		if !strings.Contains(conf, want) {
+			t.Errorf("override missing %s\n%s", want, conf)
+		}
+	}
+}
