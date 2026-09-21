@@ -35,7 +35,7 @@ import (
 // its standalone behavior (PATH tools, no cap, functions and builtins only).
 
 // fenceTools are the text-row processors, each answered by bashy's own verb.
-var fenceTools = []string{"podman", "tofu", "kubectl", "helm"}
+var fenceTools = []string{"podman", "tofu", "kubectl", "helm", "skills"}
 
 func selfVerb(verb string) func(ctx context.Context) ([]string, string, error) {
 	return func(context.Context) ([]string, string, error) {
