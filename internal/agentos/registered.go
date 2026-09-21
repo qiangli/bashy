@@ -250,6 +250,14 @@ func registeredArgv(ctx context.Context, rec fleet.Command, args []string) ([]st
 // and a download record's binary may not be provisioned yet. `type -t` says
 // `file` — of bash's closed vocabulary, the one a script switching on it
 // expects for something the shell hands off rather than runs itself.
+//
+// Schema is the record's persisted `args:` (fleet.Command.Args) projected
+// field for field onto interp.CommandSchema (registeredSchema). The runner
+// binds and validates an invocation against it BEFORE the exec rung sees
+// the argv, so a script body is never entered on bad input; bashy only
+// copies — yoke owns the record and sh owns the ONE binder. A record
+// without `args:` hands over a nil Schema: the pre-schema pass-through, argv
+// untouched.
 func registeredResolver(name string) (interp.ResolvedCommand, bool) {
 	rec, ok := registeredLookup(name)
 	if !ok {
@@ -259,7 +267,45 @@ func registeredResolver(name string) (interp.ResolvedCommand, bool) {
 	if name != rec.Name {
 		desc = fmt.Sprintf("%s is a bashy registered command (%s, alias of %s)", name, rec.Mode(), rec.Name)
 	}
-	return interp.ResolvedCommand{Desc: desc}, true
+	return interp.ResolvedCommand{Desc: desc, Schema: registeredSchema(rec.Args)}, true
+}
+
+// registeredSchema is the plain copy from the persisted record type to the
+// interpreter's: the two are declared field for field (yoke
+// pkg/fleet/command_schema.go mirrors sh interp/api.go) precisely so this
+// adapter carries no rule of its own. nil in, nil out — an absent `args:`
+// must stay absent, not become an empty schema that accepts no arguments.
+func registeredSchema(args *fleet.CommandSchema) *interp.CommandSchema {
+	if args == nil {
+		return nil
+	}
+	schema := &interp.CommandSchema{}
+	if len(args.Positionals) > 0 {
+		schema.Positionals = make([]interp.CommandParameter, len(args.Positionals))
+		for i, p := range args.Positionals {
+			schema.Positionals[i] = interp.CommandParameter{
+				Name:     p.Name,
+				Type:     p.Type,
+				Required: p.Required,
+				Default:  p.Default,
+				Enum:     slices.Clone(p.Enum),
+			}
+		}
+	}
+	if len(args.Flags) > 0 {
+		schema.Flags = make([]interp.CommandFlag, len(args.Flags))
+		for i, f := range args.Flags {
+			schema.Flags[i] = interp.CommandFlag{
+				Name:      f.Name,
+				Shorthand: f.Shorthand,
+				Type:      f.Type,
+				Required:  f.Required,
+				Default:   f.Default,
+				Enum:      slices.Clone(f.Enum),
+			}
+		}
+	}
+	return schema
 }
 
 // registeredHandler is the innermost ExecHandler rung. It sits AFTER the

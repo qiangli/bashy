@@ -69,6 +69,106 @@ func TestE2ERegisteredScriptDispatch(t *testing.T) {
 	}
 }
 
+// A persisted SCRIPT schema (`commands add … --set args.…`) is honoured by
+// the built binary, in-shell and --posix alike: valid typed / enum /
+// defaulted arguments reach the body already bound, an invalid call is
+// refused with status 2 before the body is entered (the body's own marker
+// never appears), a legacy record keeps its argv byte for byte, and an
+// invalid schema is refused at add time. The `paint` fixture and the ported
+// PowerShell cases are the ones registered_schema_test.go cites (sh
+// interp/command_resolver_test.go @ ef726acd, yoke
+// pkg/fleet/command_schema_test.go @ 8163aa1; upstream PowerShell/PowerShell,
+// MIT) — here on a script record, through `bashy commands add`.
+func TestE2ERegisteredScriptSchema(t *testing.T) {
+	bin := bashyBinary(t)
+	env := registryEnv(t)
+	const body = `printf entered; for a; do printf '|%s' "$a"; done; echo`
+	add := func(name string, sets ...string) {
+		t.Helper()
+		args := []string{"commands", "add", name, "--set", "script=" + body, "--set", "effects.0=pure"}
+		for _, kv := range sets {
+			args = append(args, "--set", kv)
+		}
+		if _, stderr, code := runBashyStdEnv(bin, env, args...); code != 0 {
+			t.Fatalf("add %s (exit %d): %s", name, code, stderr)
+		}
+	}
+	add("paint",
+		"args.positionals.0.name=color", "args.positionals.0.required=true", "args.positionals.0.enum.0=red", "args.positionals.0.enum.1=blue",
+		"args.positionals.1.name=level", "args.positionals.1.type=int", "args.positionals.1.default=3",
+		"args.flags.0.name=mode", "args.flags.0.shorthand=m", "args.flags.0.default=fast", "args.flags.0.enum.0=fast", "args.flags.0.enum.1=slow",
+		"args.flags.1.name=count", "args.flags.1.shorthand=c", "args.flags.1.type=int", "args.flags.1.required=true",
+		"args.flags.2.name=verbose", "args.flags.2.shorthand=v", "args.flags.2.type=bool")
+	add("legacy0")
+	// The ported cases (provenance in registered_schema_test.go).
+	add("get-testvalidatesetps4", "args.positionals.0.name=Param1", "args.positionals.0.required=true",
+		"args.positionals.0.enum.0=Test1", "args.positionals.0.enum.1=TestString1", "args.positionals.0.enum.2=Test2")
+	add("get-fook", "args.positionals.0.name=p", "args.positionals.0.required=true",
+		"args.positionals.0.enum.0=A", "args.positionals.0.enum.1=B", "args.positionals.0.enum.2=C")
+	add("test-singleintparameter", "args.flags.0.name=Parameter1", "args.flags.0.type=int")
+	add("get-foo", "args.flags.0.name=b", "args.positionals.0.name=a", "args.positionals.0.required=true")
+	add("get-fooa", "args.positionals.0.name=n", "args.positionals.0.type=int", "args.positionals.0.default=007")
+	add("sw", "args.flags.0.name=Parameter1", "args.flags.0.type=bool")
+
+	cases := []struct {
+		src     string
+		wantOut string
+		wantErr []string
+	}{
+		{"paint --mode slow -c 007 blue", "entered|--mode=slow|--count=7|blue|3\n", nil},
+		{"paint --count=2 --verbose red", "entered|--mode=fast|--count=2|--verbose=true|red|3\n", nil},
+		{"paint red; echo rc=$?", "rc=2\n", []string{"missing required flag --count"}},
+		{"paint --count 1 green; echo rc=$?", "rc=2\n", []string{`color must be one of red, blue, got "green"`}},
+		{"paint --count nope red; echo rc=$?", "rc=2\n", []string{`--count expects int, got "nope"`}},
+		{"legacy0 --count nope -x --mode=slow -- green extra", "entered|--count|nope|-x|--mode=slow|--|green|extra\n", nil},
+		{"get-testvalidatesetps4 TestString1", "entered|TestString1\n", nil},
+		{"get-testvalidatesetps4 TestStringWrong; echo rc=$?", "rc=2\n", []string{`Param1 must be one of Test1, TestString1, Test2, got "TestStringWrong"`}},
+		{"get-fook 2; echo rc=$?", "rc=2\n", []string{`p must be one of A, B, C, got "2"`}},
+		{"test-singleintparameter --Parameter1 exampleInvalidParam; echo rc=$?", "rc=2\n", []string{"Parameter1", `"exampleInvalidParam"`}},
+		{"get-foo --b d c", "entered|--b=d|c\n", nil},
+		{"get-foo c --b d", "entered|--b=d|c\n", nil},
+		{"get-fooa", "entered|7\n", nil},
+		{"sw", "entered\n", nil},
+		{"sw --Parameter1", "entered|--Parameter1=true\n", nil},
+	}
+	for _, mode := range [][]string{{"-c"}, {"--posix", "-c"}} {
+		for _, tc := range cases {
+			args := append(append([]string(nil), mode...), tc.src)
+			stdout, stderr, _ := runBashyStdEnv(bin, env, args...)
+			if stdout != tc.wantOut {
+				t.Errorf("%v: stdout=%q want %q (stderr=%q)", args, stdout, tc.wantOut, stderr)
+			}
+			for _, want := range tc.wantErr {
+				if !strings.Contains(stderr, want) {
+					t.Errorf("%v: stderr=%q want substring %q", args, stderr, want)
+				}
+			}
+		}
+	}
+	if _, _, code := runBashyStdEnv(bin, env, "-c", "paint red"); code != 2 {
+		t.Errorf("refused call as the last command: exit %d, want 2", code)
+	}
+	// The schema is a persisted fact of the record.
+	if stdout, _, code := runBashyStdEnv(bin, env, "commands", "show", "paint", "--field", "args.flags.1.type"); code != 0 || strings.TrimSpace(stdout) != "int" {
+		t.Errorf("show --field args.flags.1.type: exit %d stdout=%q", code, stdout)
+	}
+	// An invalid schema is refused when written (yoke's write-time half),
+	// naming the set in declaration order; the ring does not gain the record.
+	_, stderr, code := runBashyStdEnv(bin, env, "commands", "add", "get-fook-bad", "--set", "script=true", "--set", "effects.0=pure",
+		"--set", "args.flags.0.name=p", "--set", "args.flags.0.default=2",
+		"--set", "args.flags.0.enum.0=A", "--set", "args.flags.0.enum.1=B", "--set", "args.flags.0.enum.2=C")
+	if code == 0 || !strings.Contains(stderr, `"2" is not one of A|B|C`) {
+		t.Errorf("add with an invalid schema: exit %d stderr=%q", code, stderr)
+	}
+	if _, _, code := runBashyStdEnv(bin, env, "-c", "command -v get-fook-bad"); code != 1 {
+		t.Errorf("a refused record must not be in the ring: exit %d, want 1", code)
+	}
+	// A certification run sees neither the record nor its schema.
+	if _, _, code := runBashyStdEnv(bin, append(env, "VSC_PROFILE=cert"), "--posix", "-c", "paint red"); code != 127 {
+		t.Errorf("cert profile: exit %d, want 127", code)
+	}
+}
+
 // A download record provisions on first use from the record's own digest,
 // hits the cache afterwards, and is refused — nothing cached — when the
 // digest is wrong or absent.
