@@ -281,7 +281,9 @@ after it, which is why it is an order and not a checklist.
    `bashy weave fleet --auth` (installed ≠ signed in), capability to difficulty,
    prefer flat-billed over metered, and widen to the number of ready independent
    stories rather than the size of the roster. Extend the roster when nothing
-   fits — the list is yours to maintain.
+   fits — the list is yours to maintain. Before assigning work to a shared host,
+   take its host-local advisory hold with `bashy claim NAME --intent TEXT`; release
+   it when done and never force another holder off without contacting them.
 4. **MONITOR PROGRESS, NOT LIVENESS.** A worker can be alive and stuck. Look at
    what changed since last tick; step in, unblock, or reassign. A run that has
    produced nothing across two ticks is a decision, not a wait.

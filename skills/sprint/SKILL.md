@@ -22,6 +22,10 @@ Before taking or starting the seat, inspect the affected code, read every linked
 story, and write or update the master execution plan. Record both orientation
 facts on the card; Bashy refuses `take` and `start` when either is absent:
 
+Before assigning work to a shared test host, droplet, device, or account, take
+its host-local advisory hold with `bashy claim NAME --intent TEXT`; release it
+when done and never force another holder off without contacting them.
+
 ```text
 bashy sprint edit ID --primary-goal "ONE OUTCOME" --spec docs/sprint-ID-master-execution-plan.md
 ```

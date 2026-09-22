@@ -143,6 +143,10 @@ Delegation transfers execution, never accountability. While you hold it you must
     and bump parent pins per repository policy, one gated step at a time.
   - COORDINATE OWNERSHIP: before touching work held by another sprint manager,
     contact that owner through mb/Meet/chat/ping and request sequencing or merge.
+  - CLAIM SHARED RESOURCES before use: hold a test host, droplet, device or account
+    with ` + "`bashy claim NAME --intent TEXT`" + ` and release it when done. The hold is
+    advisory and HOST-LOCAL; check ` + "`bashy claim list`" + `, and never force another
+    holder off without contacting them.
   - PRESERVE + clean up within bounds: proactively reclaim branches, git worktrees,
     weave workspaces, temp state, and disposable resources THIS sprint owns after
     integration. NEVER delete, remove, reset, overwrite, or destroy work owned by
