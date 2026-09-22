@@ -355,6 +355,15 @@ func TestFixtureEnvClearsInheritedSelectorsAtGateLaunch(t *testing.T) {
 	}
 }
 
+func TestFixtureEnvClearsInheritedPOSIXMode(t *testing.T) {
+	t.Setenv("POSIXLY_CORRECT", "1")
+	for _, entry := range fixtureEnv("", t.TempDir(), "/candidate/bash", "alias") {
+		if strings.HasPrefix(entry, "POSIXLY_CORRECT=") {
+			t.Fatalf("fixture inherited POSIX mode selector %q", entry)
+		}
+	}
+}
+
 func TestBashPPModeLostSelectorRefusesBeforeFixtures(t *testing.T) {
 	for _, tc := range []struct{ mode, channel string }{
 		{"1", ""}, {"1", "0"}, {"0", "1"}, {"lost", "lost"},

@@ -1046,7 +1046,10 @@ func fixtureEnv(root, testsDir, bashPath, name string) []string {
 	mode := os.Getenv("BASH53_BASHPP")
 	out := make([]string, 0, len(env)+10)
 	for _, kv := range env {
-		if strings.HasPrefix(kv, "OLDPWD=") {
+		// The corpus records ordinary Bash behavior. An ambient POSIX mode
+		// changes parsing and builtin semantics across otherwise unrelated
+		// fixtures, turning the host environment into false conformance failures.
+		if strings.HasPrefix(kv, "OLDPWD=") || strings.HasPrefix(kv, "POSIXLY_CORRECT=") {
 			continue
 		}
 		if (mode == "0" || mode == "1") && strings.HasPrefix(kv, "BASHY_BASHPP=") {
