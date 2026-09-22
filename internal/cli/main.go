@@ -2515,8 +2515,21 @@ var bashConditionalParseErrors = map[string][]string{
 	},
 }
 
+// openScriptOperand opens a script operand given in the shell's spelling:
+// on Windows that may be the POSIX form the shell hands out for $TMPDIR and
+// friends (/tmp/x, /c/Users/…), which os.Open cannot take as given
+// (invocation3.sub runs `$THIS_SH --pretty-print $TMPDIR/pretty-print-$$`).
+// Resolve it like runPath does; on Unix this is the identity.
+func openScriptOperand(path string) (*os.File, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		dir = "."
+	}
+	return os.Open(interp.ShellPathToOS(dir, path))
+}
+
 func prettyPrintPath(path string) error {
-	f, err := os.Open(path)
+	f, err := openScriptOperand(path)
 	if err != nil {
 		return err
 	}
@@ -2525,7 +2538,7 @@ func prettyPrintPath(path string) error {
 }
 
 func dumpTranslatableStringsPath(path string, po bool) error {
-	f, err := os.Open(path)
+	f, err := openScriptOperand(path)
 	if err != nil {
 		return err
 	}
