@@ -248,7 +248,10 @@ degrades exactly as a no-job-control Bash does.
 
 Two known gaps: arithmetic currently uses the native int width (64-bit on
 64-bit platforms), so very large values on 32-bit builds truncate — a tracked
-int64 migration; and the Windows test-suite run is still being verified.
+int64 migration; and Windows is measured, not at parity — the bash-5.3
+fixture suite scores 64/86 there against bashy's own userland (run
+35720151852, 2026-09-22; `scripts/ci-bash53-windows.sh`), with job control
+among the documented gaps above.
 Everything else — parameter expansion, arrays and associative arrays,
 namerefs, `[[ ]]`, arithmetic, here documents, brace/tilde/glob expansion
 (locale-aware, including non-UTF-8 charsets such as Big5/Shift-JIS), traps,
