@@ -286,6 +286,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 					return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("fixture userland: %v", err))
 				}
 				os.Setenv("BASHY_ROOT", rootDir)
+				// This root is private to one suite run. Locale applets are
+				// separate processes, so share the verified host listing here
+				// rather than repeating all category checks per locale -a.
+				os.Setenv("BASHY_HOST_LOCALE_CACHE", filepath.Join(rootDir, ".host-locales.json"))
 				// The fixtures take $THIS_SH apart as POSIX text; point
 				// them at the root's extensionless twin of the testee.
 				fixtureThisSH = fixtureThisSHPath
