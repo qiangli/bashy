@@ -28,7 +28,14 @@
 # when a caller wants to measure against something else; the run header
 # prints whatever was used. The corpus helpers (recho/zecho/xcase) are the
 # harness binary itself on Windows (tools/bash53suite/helpers.go): no C
-# compiler is consulted. BASH53_TIMEOUT bounds a hung fixture (default 60s
+# compiler is consulted for those. The one fixture that DOES need a C compiler
+# at run time — glob-bracket, which compiles+runs a fnmatch program and links a
+# strmatch loadable — gets a `cc` the harness provisions the way bashy
+# provisions every toolchain: the pinned, digest-verified `zig cc` the dag
+# island languages use, put on the fixture PATH with a bundled POSIX fnmatch
+# header (mingw ships none); see tools/bash53suite/cc_provision.go. The runner's
+# own mingw is deliberately NOT used — its C runtime corrupted the Sprint 245
+# baseline with CRLF. BASH53_TIMEOUT bounds a hung fixture (default 60s
 # here; a fixture that waits on a tty costs one timeout, not the budget).
 #
 # Outputs (all in the checkout root):

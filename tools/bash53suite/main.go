@@ -860,11 +860,30 @@ func groupRSSKB(pid int) int {
 
 func prepareFixtures(testsDir string, warn io.Writer) error {
 	support := filepath.Join(testsDir, "..", "support")
+	// shobjLibs is appended to the generated loadables Makefile's SHOBJ_LIBS.
+	// On Windows it carries the strmatch stub object so glob-bracket's
+	// strmatch.so links; elsewhere it stays empty.
+	shobjLibs := ""
 	if runtime.GOOS == "windows" {
 		// Sprint 245: the helpers are this binary (see helpers.go); no C
 		// toolchain, no text-mode CRLF from a foreign C runtime.
 		if err := installGoHelpers(testsDir); err != nil {
 			return err
+		}
+		// Sprint 246: give the fixtures a working `cc`. glob-bracket compiles
+		// and runs a fnmatch program and links a strmatch loadable; the runner
+		// has no C compiler bashy trusts (its mingw C runtime corrupted the
+		// Sprint 245 baseline with CRLF). Provision the same pinned `zig cc`
+		// the dag island languages use and put it on the fixture PATH — the way
+		// bashy provisions every toolchain. Best-effort: a provisioning failure
+		// (e.g. offline) leaves glob-bracket failing with its cc-not-found as
+		// before rather than breaking a run that never selected it.
+		if cc, err := provisionWindowsFixtureCC(filepath.Dir(testsDir)); err != nil {
+			fmt.Fprintf(warn, "bash53-suite: could not provision cc for the fixtures (%v); glob-bracket will fail with cc-not-found\n", err)
+		} else if cc != nil {
+			prependToolsPath(cc.Dir)
+			shobjLibs = filepath.ToSlash(cc.StubObject)
+			fmt.Fprintf(warn, "bash53-suite: provisioned zig cc (%s, target %s) on the fixture PATH for glob-bracket\n", filepath.Base(cc.Zig), cc.Target)
 		}
 	}
 	extra, err := helperBinmodeSources(support)
@@ -918,7 +937,7 @@ func prepareFixtures(testsDir string, warn io.Writer) error {
 		if runtime.GOOS == "darwin" {
 			ldflags = "-shared -undefined dynamic_lookup"
 		}
-		body := "CC = cc\nSHOBJ_STATUS = supported\nSHOBJ_CC = cc\nSHOBJ_CFLAGS = -fPIC\nSHOBJ_LD = cc\nSHOBJ_LDFLAGS = " + ldflags + "\nSHOBJ_XLDFLAGS =\nSHOBJ_LIBS =\n"
+		body := "CC = cc\nSHOBJ_STATUS = supported\nSHOBJ_CC = cc\nSHOBJ_CFLAGS = -fPIC\nSHOBJ_LD = cc\nSHOBJ_LDFLAGS = " + ldflags + "\nSHOBJ_XLDFLAGS =\nSHOBJ_LIBS = " + shobjLibs + "\n"
 		if err := os.WriteFile(mk, []byte(body), 0o644); err != nil {
 			return err
 		}
