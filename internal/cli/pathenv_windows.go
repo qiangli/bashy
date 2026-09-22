@@ -7,6 +7,8 @@ package cli
 
 import (
 	"strings"
+
+	"mvdan.cc/sh/v3/pathconv"
 )
 
 func shellStartupEnv(env []string) []string {
@@ -18,7 +20,9 @@ func shellStartupEnv(env []string) []string {
 			continue
 		}
 		if shellDirectoryEnv(name) {
-			value = windowsPathToShell(value)
+			// Through the engine's mounts (Sprint 245): with BASHY_ROOT set
+			// the run's TEMP is spelled /tmp and the root's dirs /usr, /etc.
+			value = pathconv.FromOS(value)
 		}
 		out = append(out, name+"="+value)
 	}

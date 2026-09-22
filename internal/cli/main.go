@@ -568,6 +568,10 @@ func Main() {
 	// `kill -- -<pid>` — no external setsid/perl wrapper needed. No-op when
 	// the env var is unset (i.e. always, outside the harness).
 	maybeNewProcessGroup()
+	// On Windows, become reachable by a sibling bashy's `kill` and take the
+	// bash default action for an unhandled signal (signal_server_windows.go).
+	// No-op elsewhere.
+	defer startProcessSignalServer()()
 	// AgentOS front-door subcommands (e.g. `bashy weave …`) are handled
 	// before any bash flag parsing, since they carry their own flags. No-op
 	// for the pure `bash` drop-in (the default AgentOSDispatch).
