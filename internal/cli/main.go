@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -1077,6 +1078,24 @@ func isLoginShell() bool {
 }
 
 // sourceIfExists sources a file if it exists, ignoring errors.
+// shellHomePath joins a startup file onto $HOME in the shell's spelling:
+// $HOME may be /tmp/x or /c/Users/x on Windows, where filepath.Join would
+// produce a backslash path the shell no longer recognizes as /tmp
+// (invocation.tests runs HOME=$TDIR bash --login).
+func trimExeSuffix(name string) string {
+	if runtime.GOOS == "windows" && strings.HasSuffix(strings.ToLower(name), ".exe") {
+		return name[:len(name)-4]
+	}
+	return name
+}
+
+func shellHomePath(home, name string) string {
+	if runtime.GOOS != "windows" {
+		return filepath.Join(home, name)
+	}
+	return strings.TrimRight(home, "/\\") + "/" + name
+}
+
 func sourceIfExists(r *interp.Runner, path string) {
 	f, err := os.Open(interp.ShellPathToOS(r.Dir, path))
 	if err != nil {
@@ -1132,7 +1151,7 @@ func loadStartupFiles(r *interp.Runner, interactive bool) {
 			sourceIfExists(r, "/etc/profile")
 			// Source first of: ~/.bash_profile, ~/.bash_login, ~/.profile
 			for _, name := range []string{".bash_profile", ".bash_login", ".profile"} {
-				path := filepath.Join(home, name)
+				path := shellHomePath(home, name)
 				if _, err := os.Stat(path); err == nil {
 					sourceIfExists(r, path)
 					break
@@ -1142,9 +1161,9 @@ func loadStartupFiles(r *interp.Runner, interactive bool) {
 	} else if interactive {
 		if !*norc && home != "" {
 			// Try ~/.bashyrc first, fall back to ~/.bashrc
-			rc := filepath.Join(home, ".bashyrc")
+			rc := shellHomePath(home, ".bashyrc")
 			if _, err := os.Stat(rc); err != nil {
-				rc = filepath.Join(home, ".bashrc")
+				rc = shellHomePath(home, ".bashrc")
 			}
 			sourceIfExists(r, rc)
 		}
@@ -1160,7 +1179,7 @@ func runWithLoginLogout(r *interp.Runner, fn func() error) error {
 	err := fn()
 	if isLoginShell() && !startupPrivilegedMode {
 		if home, _ := os.UserHomeDir(); home != "" {
-			sourceIfExists(r, filepath.Join(home, ".bash_logout"))
+			sourceIfExists(r, shellHomePath(home, ".bash_logout"))
 		}
 	}
 	return err
@@ -2741,7 +2760,9 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	// inserted when running via `-c`. argv0 (the first positional
 	// after the -c command) is the file-name in -c mode; otherwise
 	// it's the actual script path.
-	errPrefix := name
+	// Windows: `bash.exe: -c: line 1:` would defeat the fixtures' basename
+	// strip; MSYS bash never shows the suffix either.
+	errPrefix := trimExeSuffix(name)
 	if errPrefix == "" {
 		errPrefix = "bashy"
 	}
