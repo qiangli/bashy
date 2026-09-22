@@ -87,7 +87,7 @@ type jsonSummary struct {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	var testsDir, bashPath, tests, skip, chunk, chunksManifest, bashPPMode, userland string
-	var listOnly, chunkCountOnly, shared, jsonOutput bool
+	var listOnly, chunkCountOnly, shared, jsonOutput, filetimeProbe bool
 	var shard, of int
 	var timeout, jobsTimeout time.Duration
 	var userlandNote string
@@ -111,6 +111,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.BoolVar(&listOnly, "list", false, "list fixture names and exit")
 	flags.BoolVar(&chunkCountOnly, "chunk-count", false, "print pinned chunk_count from the chunk manifest and exit")
 	flags.BoolVar(&shared, "shared-tree", false, "run in the source fixture tree instead of a private copy (unsafe: leaks platform-built helpers across venues and races concurrent chunks)")
+	flags.BoolVar(&filetimeProbe, "filetime-probe", false, "Windows only: run the test.tests test -N timestamp probe in the prepared Bashy fixture context")
 	flags.DurationVar(&timeout, "timeout", 60*time.Second, "per-fixture timeout")
 	flags.DurationVar(&jobsTimeout, "jobs-timeout", 120*time.Second, "jobs fixture timeout")
 	if err := flags.Parse(args); err != nil {
@@ -300,6 +301,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if err := prepareFixtures(testsDir, stderr); err != nil {
 		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("prepare fixtures: %v", err))
+	}
+	if filetimeProbe {
+		if err := runFiletimeProbe(root, testsDir, bashPath, stdout, stderr); err != nil {
+			return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+		}
+		return 0
 	}
 
 	var passed, failed, skipped, timedOut int
