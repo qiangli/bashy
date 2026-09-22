@@ -1102,6 +1102,23 @@ func shellHomePath(home, name string) string {
 	return strings.TrimRight(home, "/\\") + "/" + name
 }
 
+// shellHome is the $HOME the shell itself sees — the one bash expands ~
+// from and finds its startup files under. It must not be os.UserHomeDir:
+// that reads %USERPROFILE% on Windows and ignores $HOME entirely, so
+// `HOME=$TDIR bash --login -c logout` (invocation.tests) looked for
+// .bash_logout under the runner's own profile directory and the fixture
+// never saw "this is bash_logout". Falls back to the host's home when the
+// shell has no HOME at all.
+func shellHome(r *interp.Runner) string {
+	if r != nil {
+		if home := r.LiveVar("HOME").String(); home != "" {
+			return home
+		}
+	}
+	home, _ := os.UserHomeDir()
+	return home
+}
+
 // shellFilePath is a path the shell spelled — $HISTFILE, a startup file
 // under $HOME — in the host's own form. On Windows /tmp/x and /c/Users/x
 // are the shell's spellings, and a plain os.Open or os.Stat of one takes
@@ -1144,8 +1161,8 @@ func sourceStartupEnv(r *interp.Runner, name string) {
 		return
 	}
 	if strings.HasPrefix(path, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			path = filepath.Join(home, strings.TrimPrefix(path, "~/"))
+		if home := shellHome(r); home != "" {
+			path = shellHomePath(home, strings.TrimPrefix(path, "~/"))
 		}
 	}
 	sourceIfExists(r, path)
@@ -1156,7 +1173,7 @@ func loadStartupFiles(r *interp.Runner, interactive bool) {
 	if startupPrivilegedMode {
 		return
 	}
-	home, _ := os.UserHomeDir()
+	home := shellHome(r)
 	if invokedAsSh() {
 		if isLoginShell() && !*noprofile {
 			sourceIfExists(r, "/etc/profile")
@@ -1206,7 +1223,7 @@ func loadStartupFiles(r *interp.Runner, interactive bool) {
 func runWithLoginLogout(r *interp.Runner, fn func() error) error {
 	err := fn()
 	if isLoginShell() && !startupPrivilegedMode {
-		if home, _ := os.UserHomeDir(); home != "" {
+		if home := shellHome(r); home != "" {
 			sourceIfExists(r, shellHomePath(home, ".bash_logout"))
 		}
 	}
