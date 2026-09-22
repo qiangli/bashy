@@ -41,6 +41,9 @@ func runLocaleProbe(stdout, _ io.Writer) error {
 	}
 
 	fmt.Fprintln(stdout, "locale-probe: prepared-root yoke service")
+	yokeBinary := filepath.Join(root, "usr", "bin", "yoke.exe")
+	probeLocale(stdout, yokeBinary, nil, "yoke printenv BASHY_HOST_LOCALE", "printenv", "BASHY_HOST_LOCALE")
+	probeLocale(stdout, yokeBinary, nil, "yoke printenv BASHY_HOST_LOCALE_NAMES", "printenv", "BASHY_HOST_LOCALE_NAMES")
 	probeLocale(stdout, yoke, nil, "yoke locale -a", "-a")
 	for _, name := range corpusLocaleNames {
 		env := localeProbeEnv(name)

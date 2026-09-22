@@ -41,6 +41,12 @@ esac
   CGO_ENABLED=0 go build -o bin/bash.exe ./cmd/bash
   go build -o bin/bash53suite.exe ./tools/bash53suite
   (cd ../yoke && CGO_ENABLED=0 go build -o "$OLDPWD/bin/yoke.exe" ./cmd/yoke)
+  if [ "$mode" = locale ]; then
+    host_locale_bin=$(command -v locale)
+    host_locale_native=$(cygpath -w "$host_locale_bin")
+    echo 'locale-probe: coreutils provider predicate diagnostics'
+    (cd ../coreutils && BASHY_LOCALE_DIAG=1 BASHY_HOST_LOCALE="$host_locale_native" BASHY_HOST_LOCALE_NAMES='en_US.UTF-8;zh_TW.big5;ja_JP.SJIS;fr_FR.ISO8859-1;de_DE.UTF-8;zh_HK.big5hkscs;ru_RU.CP1251' go test -v ./cmds/locale -run '^TestHostLocaleProviderRunnerProbe$')
+  fi
   tree=$(go run ./tools/bash53fixtures -root .)
   [ -d "$tree/tests" ] || { echo "probe: no fixture tree at $tree" >&2; exit 2; }
   echo "probe: userland=bin/yoke.exe"
