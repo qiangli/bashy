@@ -20,8 +20,9 @@ import (
 // ours to fix, not a foreign MSYS runtime's.
 //
 //	<treeRoot>/root/usr/bin/<name>.exe   one hard link per applet the binary lists
+//	<treeRoot>/root/usr/bin/<name>       its extensionless twin (Cygwin's view)
 //	<treeRoot>/root/usr/bin/bash.exe     the testee, copied once
-//	<treeRoot>/root/usr/bin/sh.exe       hard link to that copy
+//	<treeRoot>/root/usr/bin/{sh.exe,sh,bash}  hard links to that copy
 //	<treeRoot>/root/etc/passwd           a root line (redir.tests, coproc.tests)
 //
 // The multicall binary is copied into usr/bin first so every link is on the
@@ -60,6 +61,15 @@ func prepareUserland(treeRoot, userlandBin, bashPath string) (rootDir, binDir st
 		if err := linkOrCopy(multicall, dst); err != nil {
 			return "", "", 0, fmt.Errorf("applet %s: %v", name, err)
 		}
+		// The extensionless twin is what a fixture sees when it treats
+		// the root as a Unix tree — `cp /bin/sh .`, `ls /bin/echo` — the
+		// way Cygwin presents its .exe files. CreateProcess runs a PE
+		// image by full path whatever its name, so the twin also execs.
+		if exeName(name) != name {
+			if err := linkOrCopy(multicall, filepath.Join(binDir, name)); err != nil {
+				return "", "", 0, fmt.Errorf("applet %s (extensionless): %v", name, err)
+			}
+		}
 		names++
 	}
 	// The shell itself: fixtures exec /bin/sh (posix2.tests's `#! /bin/sh`,
@@ -69,8 +79,13 @@ func prepareUserland(treeRoot, userlandBin, bashPath string) (rootDir, binDir st
 	if err := copyFile(bashPath, bashCopy, 0o755); err != nil {
 		return "", "", 0, fmt.Errorf("copy testee into root: %v", err)
 	}
-	if err := linkOrCopy(bashCopy, filepath.Join(binDir, exeName("sh"))); err != nil {
-		return "", "", 0, fmt.Errorf("sh: %v", err)
+	for _, twin := range []string{exeName("sh"), "sh", "bash"} {
+		if twin == exeName("bash") {
+			continue
+		}
+		if err := linkOrCopy(bashCopy, filepath.Join(binDir, twin)); err != nil {
+			return "", "", 0, fmt.Errorf("%s: %v", twin, err)
+		}
 	}
 	passwd := "root:x:0:0:root:/root:/bin/sh\n" +
 		"nobody:x:65534:65534:nobody:/:/bin/sh\n"
