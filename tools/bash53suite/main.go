@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"mvdan.cc/sh/v3/interp"
 )
 
 var filterExpect = wordSet("attr exp exp-tests extglob extglob2 invert invocation more-exp new-exp nquote nquote1 nquote2 nquote3 nquote5 posix2 varenv")
@@ -30,7 +32,7 @@ type fixture struct {
 func main() {
 	// Invoked under a corpus helper's name (recho/zecho/xcase hard links in
 	// the private tests tree on Windows) the binary IS that helper.
-	if code, ok := runAsHelper(os.Args[0], os.Args[1:], os.Stdin, os.Stdout, os.Stderr); ok {
+	if code, ok := runAsHelper(os.Args[0], interp.DecodeWindowsArgs(os.Args[1:]), os.Stdin, os.Stdout, os.Stderr); ok {
 		os.Exit(code)
 	}
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))

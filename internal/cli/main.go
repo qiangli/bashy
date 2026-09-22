@@ -564,6 +564,10 @@ func Main() {
 	// groups, AgentOS dispatch, flag parsing and startup files. Never returns
 	// in helper mode.
 	MaybeRunJobCarrierHelper()
+	// Windows: a parent bashy spells argv bytes that are not UTF-8 as Cygwin
+	// lone surrogates on the UTF-16 command line; turn them back into the
+	// bytes the script passed (nquote4.tests). Identity elsewhere.
+	os.Args = interp.DecodeWindowsArgs(os.Args)
 	// Optionally put ourselves in a new process group (BASH_SETPGRP) so the
 	// bash 5.3 test harness can reap our whole process tree with
 	// `kill -- -<pid>` — no external setsid/perl wrapper needed. No-op when
