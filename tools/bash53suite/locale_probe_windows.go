@@ -30,13 +30,13 @@ func runLocaleProbe(stdout, _ io.Writer) error {
 	fmt.Fprintf(stdout, "locale-probe: host=%s\n", host)
 	fmt.Fprintf(stdout, "locale-probe: prepared-root=%s\n", yoke)
 	fmt.Fprintln(stdout, "locale-probe: direct host service")
-	probeLocale(stdout, host, nil, "locale", "-a")
+	probeLocale(stdout, host, nil, "host locale -a", "-a")
 	for _, name := range corpusLocaleNames {
 		env := localeProbeEnv(name)
-		probeLocale(stdout, host, env, "LC_ALL="+name, "locale")
-		probeLocale(stdout, host, env, "LC_ALL="+name, "locale", "charmap")
+		probeLocale(stdout, host, env, "host LC_ALL="+name+" locale")
+		probeLocale(stdout, host, env, "host LC_ALL="+name+" locale charmap", "charmap")
 		for _, category := range localeProbeCategories {
-			probeLocale(stdout, host, env, "LC_ALL="+name, "locale", "-k", category)
+			probeLocale(stdout, host, env, "host LC_ALL="+name+" locale -k "+category, "-k", category)
 		}
 	}
 
@@ -45,7 +45,7 @@ func runLocaleProbe(stdout, _ io.Writer) error {
 	for _, name := range corpusLocaleNames {
 		env := localeProbeEnv(name)
 		for _, category := range localeProbeCategories {
-			probeLocale(stdout, yoke, env, "yoke LC_ALL="+name+" locale -k "+category, "locale", "-k", category)
+			probeLocale(stdout, yoke, env, "yoke LC_ALL="+name+" locale -k "+category, "-k", category)
 		}
 	}
 	return nil
