@@ -292,6 +292,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 					os.Setenv("BASH53_TOOLS_PATH", binDir)
 				}
 				userlandNote = userlandHeader(rootDir, userland, names)
+				provider, err := configureHostLocaleProvider(runtime.GOOS, os.Getenv, os.Setenv, exec.LookPath)
+				if err != nil {
+					return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("fixture locale provider: %v", err))
+				}
+				if provider != "" {
+					userlandNote += fmt.Sprintf("; host locale provider %s", provider)
+				}
 			} else {
 				warnUserlandMissing(stderr, os.Getenv("BASH53_TOOLS_PATH"))
 			}

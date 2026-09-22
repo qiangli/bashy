@@ -49,6 +49,10 @@ One line (or a short paragraph) per load-bearing doc under `docs/`, moved verbat
   feature that reaches for a hosted service.
 - `TODO.md` — phase checklist + current PASS/FAIL/SKIP headline. Always read first.
 - `report-bash53-test-status.md` — per-fixture status snapshot from the bash 5.3 suite.
+- `sprint-253-windows-locale-service-blocker.md` — Story #711's fail-closed
+  Windows host-locale handoff and exact non-completion evidence: MSYS/Cygwin
+  service six corpus encodings but not Big5-HKSCS; Windows ICU has that
+  converter but not the required POSIX `LC_MESSAGES` category.
 - `handoff-bashy-2026-06.md` — most recent session-handoff notes (read when picking up cold).
 - `bash-gap-analysis.md` — ungated bash semantics gap analysis behind the failing fixtures.
 - `plan-bashy-drop-in.md` / `plan-cmd-bashy.md` / `plan-bash53-roadmap-agentic.md` — phase plans; each phase lands as a checkbox in `TODO.md`.
@@ -146,4 +150,3 @@ Per-fixture cluster analyses + blocker ledgers (snapshots — diff line-counts a
 Weave-round verification + retro reports (historical, not load-bearing):
 
 - `QA-REPORT-R10.md`, `JUDGE-REPORT-R6.md`, `JUDGE-REPORT-R7.md`, `SPRINT-R10-RETRO-DRAFT.md`.
-
