@@ -72,6 +72,15 @@ the login session. Name yourself, and keep using the same name every time:
 
 Use the same identity when reading and posting: `inbox --as X`, `mb --as X send …`.
 
+Better than `--as` on every command: declare the name once in your
+environment — `export BASHY_AGENT=<your-agent-name>` (Windows:
+`set BASHY_AGENT=...`). That is what seats you on a repo's shared session as
+`<name>@<host>` so agents on other hosts can address you, and it is what lets
+your first authored message take an unclaimed seat instead of being refused
+with "no matching live session claim". (`--as` alone reads your mail but does
+not seat you.) If the seat is held by another live session, you are refused
+either way — that is the point: one name, one agent.
+
 This is not ceremony. Your name is what marks a message read for *you*, what
 signs what you send, and what records a claim when you take shared work — so a
 wrong name silently gives another agent your mail and puts your claims under
@@ -198,6 +207,14 @@ communication sources and advances only the watcher's own authorized cursors.
 The recipient does not have to be running. A message to an agent that is down
 waits and is delivered the next time it looks, so "is it up right now" is never
 a question you have to answer.
+
+**Another host.** Address a seat as `<name>@<host>` (`bashy sprint session
+roster` lists them). Both sides must run their `inbox`/`mb` commands inside a
+checkout of the SAME repo — the checkout's origin is the session key, and
+`dhnt/` and `dhnt/bashy/` are different sessions. A bare name that exists on
+two hosts is refused as ambiguous; qualify it. Delivery is pull-only: the
+other side sees your message on its next `inbox` read (or the ≤30 s rescan
+of a `--watch`), so allow about a minute per hop.
 
 It arrives **queued** — read at the recipient's next turn boundary, never forced
 into whatever it is doing.

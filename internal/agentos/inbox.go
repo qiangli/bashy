@@ -121,8 +121,11 @@ The live watcher card is also NAME's cooperative authored-message claim. MB,
 Meet, ping, notify, Bus publish, and human-mailbox send refuse an explicit --as
 NAME from a different live agent session and notify NAME of the refused attempt.
 A governed tool session uses a hashed session claim; tools without stable session
-metadata fall back to the watcher parent's process lineage. BASHY_PRINCIPAL is
-attribution, not ownership proof. This is host-local collision prevention, not
+metadata fall back to the watcher parent's process lineage. A seat nobody holds
+is taken by the first authored message from a process that declares the name
+(BASHY_AGENT=NAME in its environment — the same declaration that seats NAME@host
+on a repo session); an undeclared caller is refused and told so. BASHY_PRINCIPAL
+is attribution, not ownership proof. This is host-local collision prevention, not
 cryptographic identity.
 Inspect ownership with 'bashy whois agent:NAME' (TAKEN) and 'bashy agent'.
 
