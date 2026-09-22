@@ -12,6 +12,12 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      probe_only:
+        description: 'Run only the Windows native FILETIME probe (do not rerun the M14 fixture baseline)'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   # The bash-5.3 conformance gate. Runs the real fixture suite against the pure
@@ -112,6 +118,7 @@ jobs:
   # waits on a tty forever costs one BASH53_TIMEOUT, not the budget.
   bash53-windows:
     runs-on: windows-latest
+    if: github.event_name != 'workflow_dispatch' || inputs.probe_only != true
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -136,3 +143,22 @@ jobs:
             bash53-windows-summary.md
             bash53-windows-counts.json
           if-no-files-found: ignore
+
+  # Sprint 253 S253.2: collect the platform fact needed by test -N without
+  # rerunning the accepted M14 fixture baseline. Dispatch this workflow with
+  # probe_only=true; the ordinary Windows measurement job is skipped above.
+  windows-filetime-probe:
+    if: github.event_name == 'workflow_dispatch' && inputs.probe_only == true
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Measure native NTFS FILETIMEs for test -N
+        shell: bash
+        run: ./scripts/ci-windows-filetime-probe.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-filetime-probe
+          path: windows-filetime-probe.log
+          if-no-files-found: error
