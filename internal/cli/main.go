@@ -1081,11 +1081,9 @@ func isLoginShell() bool {
 	return len(os.Args) > 0 && strings.HasPrefix(os.Args[0], "-")
 }
 
-// sourceIfExists sources a file if it exists, ignoring errors.
-// shellHomePath joins a startup file onto $HOME in the shell's spelling:
-// $HOME may be /tmp/x or /c/Users/x on Windows, where filepath.Join would
-// produce a backslash path the shell no longer recognizes as /tmp
-// (invocation.tests runs HOME=$TDIR bash --login).
+// trimExeSuffix drops a Windows .exe from the shell's own name: `bash.exe:
+// -c: line 1:` would defeat the fixtures' basename strip, and MSYS bash
+// never shows the suffix either.
 func trimExeSuffix(name string) string {
 	if runtime.GOOS == "windows" && strings.HasSuffix(strings.ToLower(name), ".exe") {
 		return name[:len(name)-4]
@@ -1093,6 +1091,10 @@ func trimExeSuffix(name string) string {
 	return name
 }
 
+// shellHomePath joins a startup file onto $HOME in the shell's spelling:
+// $HOME may be /tmp/x or /c/Users/x on Windows, where filepath.Join would
+// produce a backslash path the shell no longer recognizes as /tmp
+// (invocation.tests runs HOME=$TDIR bash --login).
 func shellHomePath(home, name string) string {
 	if runtime.GOOS != "windows" {
 		return filepath.Join(home, name)
@@ -1100,6 +1102,28 @@ func shellHomePath(home, name string) string {
 	return strings.TrimRight(home, "/\\") + "/" + name
 }
 
+// shellFilePath is a path the shell spelled — $HISTFILE, a startup file
+// under $HOME — in the host's own form. On Windows /tmp/x and /c/Users/x
+// are the shell's spellings, and a plain os.Open or os.Stat of one takes
+// it as the drive-relative \tmp\x, finding nothing: history.tests sets
+// HISTFILE under /tmp and then expects a C-r search to find what was
+// loaded from it. runPath and the pretty-print operand already go through
+// [interp.ShellPathToOS]; so do these.
+func shellFilePath(dir, path string) string {
+	if path == "" {
+		return path
+	}
+	return interp.ShellPathToOS(dir, path)
+}
+
+// startupFileExists reports whether a shell-spelled startup file is there,
+// resolved against the shell's cwd dir.
+func startupFileExists(dir, path string) bool {
+	_, err := os.Stat(shellFilePath(dir, path))
+	return err == nil
+}
+
+// sourceIfExists sources a file if it exists, ignoring errors.
 func sourceIfExists(r *interp.Runner, path string) {
 	f, err := os.Open(interp.ShellPathToOS(r.Dir, path))
 	if err != nil {
@@ -1137,7 +1161,7 @@ func loadStartupFiles(r *interp.Runner, interactive bool) {
 		if isLoginShell() && !*noprofile {
 			sourceIfExists(r, "/etc/profile")
 			if home != "" {
-				sourceIfExists(r, filepath.Join(home, ".profile"))
+				sourceIfExists(r, shellHomePath(home, ".profile"))
 			}
 		}
 		if interactive {
@@ -1156,7 +1180,7 @@ func loadStartupFiles(r *interp.Runner, interactive bool) {
 			// Source first of: ~/.bash_profile, ~/.bash_login, ~/.profile
 			for _, name := range []string{".bash_profile", ".bash_login", ".profile"} {
 				path := shellHomePath(home, name)
-				if _, err := os.Stat(path); err == nil {
+				if startupFileExists(r.Dir, path) {
 					sourceIfExists(r, path)
 					break
 				}
@@ -1166,7 +1190,7 @@ func loadStartupFiles(r *interp.Runner, interactive bool) {
 		if !*norc && home != "" {
 			// Try ~/.bashyrc first, fall back to ~/.bashrc
 			rc := shellHomePath(home, ".bashyrc")
-			if _, err := os.Stat(rc); err != nil {
+			if !startupFileExists(r.Dir, rc) {
 				rc = shellHomePath(home, ".bashrc")
 			}
 			sourceIfExists(r, rc)
@@ -1381,26 +1405,26 @@ func runForcedInteractive(r *interp.Runner, noexec bool) error {
 		entries = append(entries, line)
 	}
 	fmt.Fprintf(os.Stderr, "%sexit\n", ps1)
-	saveInteractiveHistory(entries)
+	saveInteractiveHistory(r.Dir, entries)
 	return nil
 }
 
 // saveInteractiveHistory writes the session history to $HISTFILE and
 // truncates it to $HISTFILESIZE entries, like an interactive bash exit.
-func saveInteractiveHistory(entries []string) {
+func saveInteractiveHistory(dir string, entries []string) {
 	_, timestamps := os.LookupEnv("HISTTIMEFORMAT")
 	sizeVal := "__unset__"
 	if v, ok := os.LookupEnv("HISTFILESIZE"); ok {
 		sizeVal = v
 	}
-	writeSessionHistory(os.Getenv("HISTFILE"), entries, timestamps, sizeVal)
+	writeSessionHistory(dir, os.Getenv("HISTFILE"), entries, timestamps, sizeVal)
 }
 
 // writeSessionHistory writes history entries to path, truncated to the
 // HISTFILESIZE value in sizeVal ("__unset__" disables truncation), with
 // `#<epoch>` timestamp lines when timestamps is set, matching an
 // interactive bash exit.
-func writeSessionHistory(path string, entries []string, timestamps bool, sizeVal string) {
+func writeSessionHistory(dir, path string, entries []string, timestamps bool, sizeVal string) {
 	if path == "" || len(entries) == 0 {
 		return
 	}
@@ -1418,7 +1442,7 @@ func writeSessionHistory(path string, entries []string, timestamps bool, sizeVal
 		sb.WriteString(e)
 		sb.WriteByte('\n')
 	}
-	_ = os.WriteFile(path, []byte(sb.String()), 0o600)
+	_ = os.WriteFile(shellFilePath(dir, path), []byte(sb.String()), 0o600)
 }
 
 func defaultCommandArgv0(arg0 string) string {

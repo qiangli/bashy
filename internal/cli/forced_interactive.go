@@ -30,14 +30,18 @@ type rlEmu struct {
 	base int // logical history number of hist[0] (bash history_base)
 	max  int // maximum entries; -1 means unstifled
 
+	// dir is the shell's cwd, which resolves $HISTFILE into the host's
+	// spelling; see shellFilePath.
+	dir string
+
 	ignoreSpace, ignoreDups bool
 	ignorePats              []string
 
 	added int // entries recorded this session (for the exit-time save)
 }
 
-func newRlEmu() *rlEmu {
-	e := &rlEmu{base: 1, max: -1}
+func newRlEmu(dir string) *rlEmu {
+	e := &rlEmu{base: 1, max: -1, dir: dir}
 	// Unset HISTSIZE defaults to 500; an empty or non-numeric value
 	// leaves the history unstifled, like bash's sv_histsize.
 	if v, ok := os.LookupEnv("HISTSIZE"); !ok {
@@ -68,7 +72,7 @@ func newRlEmu() *rlEmu {
 // startup: without `#<epoch>` timestamp markers every line is its own
 // entry (multi-line entries written by `history -w` come back split).
 func (e *rlEmu) loadFile(path string) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(shellFilePath(e.dir, path))
 	if err != nil {
 		return
 	}
@@ -220,7 +224,7 @@ func runForcedInteractiveExec(r *interp.Runner) error {
 		ps2 = "> "
 	}
 
-	e := newRlEmu()
+	e := newRlEmu(r.Dir)
 	var (
 		buffer       string // current edit line (recalled entries may be multi-line)
 		hpos         int    // history offset buffer came from; len(hist) when fresh
@@ -239,7 +243,7 @@ func runForcedInteractiveExec(r *interp.Runner) error {
 			return
 		}
 		n := min(e.added, len(e.hist))
-		writeSessionHistory(path, e.hist[len(e.hist)-n:],
+		writeSessionHistory(r.Dir, path, e.hist[len(e.hist)-n:],
 			runnerExpand(r, "HISTTIMEFORMAT+set") != "",
 			runnerExpand(r, "HISTFILESIZE-__unset__"))
 	}
