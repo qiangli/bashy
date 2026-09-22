@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -37,22 +36,32 @@ func runFiletimeProbe(root, testsDir, bashPath string, stdout, stderr io.Writer)
 		fmt.Fprintf(stdout, "filetime-probe: before native snapshot skipped: %v\n", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, bashPath, "-c", `t() { test "$@"; }; touch /tmp/test.newer ; sleep 1; echo "hello" > /tmp/test.newer; echo 't -N /tmp/test.newer'; t -N /tmp/test.newer`)
-	cmd.Dir = testsDir
-	cmd.Env = fixtureEnv(root, testsDir, bashPath, "test")
-	var output bytes.Buffer
-	cmd.Stdout = &output
-	cmd.Stderr = &output
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("test.tests:185-187 sequence failed: %v\n%s", err, output.String())
+	runPhase := func(phase, script string, allowFalse bool) error {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, bashPath, "-c", script)
+		cmd.Dir = testsDir
+		cmd.Env = fixtureEnv(root, testsDir, bashPath, "test")
+		output, err := cmd.CombinedOutput()
+		if len(output) != 0 {
+			fmt.Fprintf(stdout, "filetime-probe: %s output=%s", phase, output)
+		}
+		if err != nil && !(allowFalse && cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 1) {
+			return fmt.Errorf("test.tests %s failed: %w", phase, err)
+		}
+		if cmd.ProcessState != nil {
+			fmt.Fprintf(stdout, "filetime-probe: %s exit=%d\n", phase, cmd.ProcessState.ExitCode())
+		}
+		return runFiletimeSnapshot(snapshot, probePath, phase, stdout)
 	}
-	fmt.Fprintln(stdout, "filetime-probe: sequence=touch /tmp/test.newer ; sleep 1; echo \\\"hello\\\" > /tmp/test.newer; echo 't -N /tmp/test.newer'; t -N /tmp/test.newer")
-	if output.Len() != 0 {
-		fmt.Fprintf(stdout, "filetime-probe: sequence output=%s", output.String())
+	fmt.Fprintln(stdout, `filetime-probe: sequence=touch /tmp/test.newer ; sleep 1; echo "hello" > /tmp/test.newer; echo 't -N /tmp/test.newer'; t -N /tmp/test.newer`)
+	if err := runPhase("after-touch", `touch /tmp/test.newer`, false); err != nil {
+		return err
 	}
-	if err := runFiletimeSnapshot(snapshot, probePath, "after", stdout); err != nil {
+	if err := runPhase("after-write", `sleep 1; echo "hello" > /tmp/test.newer`, false); err != nil {
+		return err
+	}
+	if err := runPhase("after-test-N", `t() { test "$@"; }; echo 't -N /tmp/test.newer'; t -N /tmp/test.newer`, true); err != nil {
 		return err
 	}
 	return nil

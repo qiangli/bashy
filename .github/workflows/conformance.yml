@@ -29,6 +29,7 @@ jobs:
   # fixtures' .right files are version-specific to the fetched source.
   bash53-gate:
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || inputs.probe_only != true
     # ENFORCING as of 2026-07-12. This was `continue-on-error: true` ("advisory on
     # first landing... then delete this line"), and the line was never deleted. The
     # cost was not theoretical: the gate hung on every run (the old shell fixture
