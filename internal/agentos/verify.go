@@ -38,6 +38,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"mvdan.cc/sh/v3/winmode"
 )
 
 // suiteLicense classifies how a suite's tests may be obtained — the load-bearing
@@ -287,7 +289,8 @@ func fetchBash53Tests(url, dst, wantSHA256 string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(h.Mode)&0o777)
+			mode := os.FileMode(h.Mode) & 0o777
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
 			if err != nil {
 				return err
 			}
@@ -296,6 +299,16 @@ func fetchBash53Tests(url, dst, wantSHA256 string) error {
 				return err
 			}
 			f.Close()
+			// A tar header carries a POSIX mode; on a platform where the
+			// filesystem cannot hold one, record it where the shell and the
+			// userland read it back. The corpus ships its .sub scripts 755
+			// and executes them directly, so losing that bit makes every
+			// such fixture report "Permission denied".
+			if winmode.Supported {
+				if err := winmode.Set(target, mode); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	gotSHA256 := hex.EncodeToString(h.Sum(nil))

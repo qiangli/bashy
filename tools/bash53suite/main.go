@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"mvdan.cc/sh/v3/interp"
+	"mvdan.cc/sh/v3/winmode"
 )
 
 var filterExpect = wordSet("attr exp exp-tests extglob extglob2 invert invocation more-exp new-exp nquote nquote1 nquote2 nquote3 nquote5 posix2 varenv")
@@ -791,9 +792,18 @@ func copyTree(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		defer out.Close()
-		_, err = io.Copy(out, in)
-		return err
+		if _, err := io.Copy(out, in); err != nil {
+			out.Close()
+			return err
+		}
+		out.Close()
+		// Carry the source's mode across, including on a platform whose
+		// filesystem cannot hold one: the corpus's .sub scripts are 755 and
+		// several fixtures execute them directly.
+		if !winmode.Supported {
+			return nil // the filesystem already carries the mode
+		}
+		return winmode.Set(target, info.Mode().Perm())
 	})
 }
 
