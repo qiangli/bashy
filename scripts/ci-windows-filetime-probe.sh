@@ -19,6 +19,15 @@ log=windows-filetime-probe.log
   echo "probe: shell=bin/bash.exe via bash53suite under Git Bash"
   echo "probe: pwd=$(pwd)"
   echo "probe: RUNNER_TEMP=${RUNNER_TEMP:-unset}"
+  echo "locale-host: command=$(command -v locale || echo missing)"
+  if command -v locale >/dev/null; then
+    echo 'locale-host: requested corpus names from system locale -a'
+    locale -a | grep -iE '^(en_US|zh_TW|ja_JP|fr_FR|de_DE|zh_HK|ru_RU)' || true
+    for requested in en_US.UTF-8 zh_TW.big5 ja_JP.SJIS fr_FR.ISO8859-1 de_DE.UTF-8 zh_HK.big5hkscs ru_RU.CP1251; do
+      echo "locale-host: LC_ALL=$requested LC_MESSAGES"
+      LC_ALL="$requested" locale -k LC_MESSAGES 2>&1 || true
+    done
+  fi
   case "$(go env GOOS)" in windows) ;; *) echo 'probe: not a Windows build host' >&2; exit 2 ;; esac
   mkdir -p bin
   CGO_ENABLED=0 go build -o bin/bash.exe ./cmd/bash

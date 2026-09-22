@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       probe_only:
-        description: 'Run only the Windows native FILETIME probe (do not rerun the M14 fixture baseline)'
+        description: 'Run only Windows FILETIME and host-locale probes (do not rerun the M14 fixture baseline)'
         required: false
         default: false
         type: boolean
@@ -154,6 +154,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+      - name: Bootstrap sibling deps (all pinned flat replaces)
+        shell: bash
+        run: ./scripts/bootstrap-siblings.sh
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.1
       - name: Measure native NTFS FILETIMEs for test -N
         shell: bash
         run: ./scripts/ci-windows-filetime-probe.sh
