@@ -18,6 +18,14 @@ on:
         required: false
         default: false
         type: boolean
+      probe_mode:
+        description: 'Which targeted Windows platform probe to run when probe_only is true'
+        required: false
+        default: filetime
+        type: choice
+        options:
+          - filetime
+          - locale
 
 jobs:
   # The bash-5.3 conformance gate. Runs the real fixture suite against the pure
@@ -160,12 +168,14 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: 1.27.1
-      - name: Measure native NTFS FILETIMEs for test -N
+      - name: Measure targeted Windows platform behavior
         shell: bash
-        run: ./scripts/ci-windows-filetime-probe.sh
+        run: ./scripts/ci-windows-filetime-probe.sh '${{ inputs.probe_mode }}'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: windows-filetime-probe
-          path: windows-filetime-probe.log
+          name: windows-${{ inputs.probe_mode }}-probe
+          path: |
+            windows-filetime-probe.log
+            windows-locale-probe.log
           if-no-files-found: error

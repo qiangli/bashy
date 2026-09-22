@@ -41,7 +41,7 @@ func runLocaleProbe(stdout, _ io.Writer) error {
 	}
 
 	fmt.Fprintln(stdout, "locale-probe: prepared-root yoke service")
-	probeLocale(stdout, yoke, nil, "yoke locale -a")
+	probeLocale(stdout, yoke, nil, "yoke locale -a", "-a")
 	for _, name := range corpusLocaleNames {
 		env := localeProbeEnv(name)
 		for _, category := range localeProbeCategories {
