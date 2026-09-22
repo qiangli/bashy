@@ -15,13 +15,20 @@ that absolute path as `BASHY_HOST_LOCALE` and supplies all seven corpus names as
 caller can install a stronger POSIX provider in one step without a harness
 change. No locale archive or table is copied into Bashy or the fixture root.
 
-The coordinated coreutils#13 implementation (`6fc5b3ef`) consumes that
-contract. It accepts a candidate only when the host service:
+The coordinated coreutils#13 candidate (`6fc5b3ef`) consumes that contract. It
+accepts a candidate only when the host service:
 
 1. selects the requested locale without silently falling back;
 2. answers `locale -k` for `LC_CTYPE`, `LC_NUMERIC`, `LC_TIME`, `LC_COLLATE`,
    `LC_MONETARY`, and `LC_MESSAGES`; and
-3. returns a non-empty, matching charmap.
+3. returns a non-empty charmap.
+
+Bashy review found that the candidate does not yet compare that charmap with
+the requested codeset. The correction was returned to coreutils#13 and the
+sprint manager before integration: the comparison must be case- and
+punctuation-insensitive, allow only explicit aliases, and reject Big5 or ASCII
+for a Big5-HKSCS request. The candidate is therefore not integration-ready and
+this report does not treat its commit as completion evidence.
 
 Thus the bridge makes the six names proved by probe run 35776069474 available
 even though Git Bash omits their non-UTF-8 spellings from `locale -a`, while
@@ -57,7 +64,8 @@ authorizing locale data. Neither exists in the approved scope today.
 - `go test ./tools/bash53suite -run 'TestConfigureHostLocaleProvider|TestPrepareUserland'`
 - `GOOS=windows GOARCH=amd64 go test -c ./tools/bash53suite`
 - coreutils#13: focused fake-provider tests exercise selection fallback, every
-  category, charmap, and `TestAllLocales` without weakening that invariant.
+  category, non-empty charmap, and `TestAllLocales`; exact charmap matching is
+  the review correction still required before integration.
 
 Primary package references:
 
