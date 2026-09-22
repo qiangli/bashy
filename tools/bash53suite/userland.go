@@ -10,6 +10,25 @@ import (
 	"strings"
 )
 
+// fixtureThisSHPath is the spelling the fixtures get as $THIS_SH once the
+// virtual root exists. GNU's corpus treats THIS_SH as POSIX text and takes
+// its basename: type.tests does
+//
+//	SHBASE=${THIS_SH##*/}; hash -p /tmp/$SHBASE $SHBASE; type -p $SHBASE
+//
+// and type.right wants /tmp/bash. A Windows testee is bash.exe, so the
+// binary's own path makes SHBASE "bash.exe" and every line of that block
+// carries the suffix — the shell is displaying exactly the spelling it was
+// given, so no amount of display trimming in the engine can fix it. The
+// prepared root already carries an extensionless twin of the testee at
+// /usr/bin/bash, a real file hard-linked to the copy, the way Cygwin
+// presents its .exe images and the way GNU's own runner points THIS_SH at
+// ../bash on a Cygwin build. Handing the fixtures that path makes the
+// basename "bash", keeps `cp $THIS_SH …` (exec3.sub, posixexp.tests)
+// copying a file that exists, and still execs: CreateProcess runs a PE
+// image by full path whatever its name.
+const fixtureThisSHPath = "/usr/bin/bash"
+
 // prepareUserland lays out the POSIX-shaped root a Windows fixture run sees
 // (Sprint 245): the fixtures hard-code /bin/sh, /bin/echo, /usr/bin/printf,
 // /etc/passwd and friends, and the shell under test resolves those through
@@ -23,6 +42,10 @@ import (
 //	<treeRoot>/root/usr/bin/<name>       its extensionless twin (Cygwin's view)
 //	<treeRoot>/root/usr/bin/bash.exe     the testee, copied once
 //	<treeRoot>/root/usr/bin/{sh.exe,sh,bash}  hard links to that copy
+//
+// The extensionless /usr/bin/bash is also what the fixtures are handed as
+// $THIS_SH; see [fixtureThisSHPath].
+//
 //	<treeRoot>/root/etc/passwd           a root line (redir.tests, coproc.tests)
 //
 // The multicall binary is copied into usr/bin first so every link is on the
@@ -146,7 +169,7 @@ func isASCIILetter(c byte) bool {
 // be interpreted: which root, which binary, how many applets.
 func userlandHeader(rootDir, userlandBin string, names int) string {
 	var b bytes.Buffer
-	fmt.Fprintf(&b, "Fixture root: %s (BASHY_ROOT; userland %s, %d applets under usr/bin, sh = the testee)", rootDir, filepath.Base(userlandBin), names)
+	fmt.Fprintf(&b, "Fixture root: %s (BASHY_ROOT; userland %s, %d applets under usr/bin, sh = the testee, THIS_SH=%s)", rootDir, filepath.Base(userlandBin), names, fixtureThisSHPath)
 	return b.String()
 }
 

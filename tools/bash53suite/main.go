@@ -283,6 +283,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 					return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("fixture userland: %v", err))
 				}
 				os.Setenv("BASHY_ROOT", rootDir)
+				// The fixtures take $THIS_SH apart as POSIX text; point
+				// them at the root's extensionless twin of the testee.
+				fixtureThisSH = fixtureThisSHPath
 				if strings.TrimSpace(os.Getenv("BASH53_TOOLS_PATH")) == "" {
 					os.Setenv("BASH53_TOOLS_PATH", binDir)
 				}
@@ -1055,6 +1058,10 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 	return "FAIL", "", fmt.Errorf("output differs from %s\n%s", f.Right, firstDiff(want, got))
 }
 
+// fixtureThisSH overrides the $THIS_SH the fixtures are handed; it is set
+// once the Windows virtual root has been laid out. See fixtureThisSHPath.
+var fixtureThisSH string
+
 func fixtureEnv(root, testsDir, bashPath, name string) []string {
 	env := os.Environ()
 	mode := os.Getenv("BASH53_BASHPP")
@@ -1079,9 +1086,13 @@ func fixtureEnv(root, testsDir, bashPath, name string) []string {
 	rawPath := filepath.Join(tmpBase, fmt.Sprintf("bashy-tstraw-%d", os.Getpid()))
 	outPath := filepath.Join(tmpBase, fmt.Sprintf("bashy-tstout-%d", os.Getpid()))
 	windows := runtime.GOOS == "windows"
+	thisSH := posixSpelling(bashPath, windows)
+	if fixtureThisSH != "" {
+		thisSH = fixtureThisSH
+	}
 	out = append(out,
-		"THIS_SH="+posixSpelling(bashPath, windows),
-		"_="+posixSpelling(bashPath, windows),
+		"THIS_SH="+thisSH,
+		"_="+thisSH,
 		"BUILD_DIR="+posixSpelling(filepath.Dir(testsDir), windows),
 		"PATH="+fixturePath(testsDir),
 		"BASH_TSTRAW="+rawPath,
