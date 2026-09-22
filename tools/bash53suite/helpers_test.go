@@ -173,3 +173,20 @@ func TestPrepareUserlandLaysOutRoot(t *testing.T) {
 		t.Errorf("sh is not the testee: %q", sh)
 	}
 }
+
+// A timeout says how far the fixture got: a bare TIME sends the next reader
+// bisecting a corpus file on a remote runner.
+func TestTimeoutProgressNamesWhereItStopped(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "x.right"), []byte("one\ntwo\nthree\nfour\n"), 0o644)
+	f := fixture{Name: "x", Test: "x.tests", Right: "x.right"}
+	got := timeoutProgress(f, dir, []byte("one\ntwo\n"))
+	for _, want := range []string{"stopped after 2 output line(s) of 4 expected", `next expected: "two"`, `last: "one"`, `last: "two"`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("progress %q missing %q", got, want)
+		}
+	}
+	if got := timeoutProgress(f, dir, nil); !strings.Contains(got, "produced no output") {
+		t.Errorf("empty output progress = %q", got)
+	}
+}

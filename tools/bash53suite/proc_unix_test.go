@@ -24,7 +24,7 @@ func TestFixtureParentExitKillsProcessGroup(t *testing.T) {
 		if err != nil {
 			return
 		}
-		_, _ = runFixture(testsDir, testsDir, sh, fixture{
+		_, _, _ = runFixture(testsDir, testsDir, sh, fixture{
 			Name:  "parent-exit",
 			Test:  "parent-exit.sh",
 			Right: "parent-exit.right",
@@ -86,7 +86,7 @@ func TestGuardedFixtureNormalRun(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "normal.right"), []byte("guarded-normal\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	status, err := runFixture(dir, dir, sh, fixture{Name: "normal", Test: "normal.sh", Right: "normal.right"}, 5*time.Second)
+	status, _, err := runFixture(dir, dir, sh, fixture{Name: "normal", Test: "normal.sh", Right: "normal.right"}, 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestFixtureNormalExitKillsRemainingProcessGroup(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "background.right"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	status, err := runFixture(dir, dir, sh, fixture{
+	status, _, err := runFixture(dir, dir, sh, fixture{
 		Name:  "background",
 		Test:  "background.sh",
 		Right: "background.right",

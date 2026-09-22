@@ -394,7 +394,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if bashPPMode != "" {
 			bashppOpt = []bool{bashPPMode == "1"}
 		}
-		result, err := runFixture(root, testsDir, bashPath, f, perTestTimeout, bashppOpt...)
+		result, detail, err := runFixture(root, testsDir, bashPath, f, perTestTimeout, bashppOpt...)
 		elapsed := time.Since(start)
 		if err != nil {
 			failed++
@@ -416,6 +416,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 			report.Verdicts = append(report.Verdicts, jsonVerdict{Name: f.Name, Verdict: "failed", DurationSeconds: elapsed.Seconds()})
 		}
 		fmt.Fprintf(logOut, "  %-5s %s\n", result, f.Name)
+		if detail != "" {
+			fmt.Fprintf(logOut, "%s", detail)
+		}
 		fmt.Fprintf(logOut, "DURATION\t%s\t%.3f\n", f.Name, elapsed.Seconds())
 	}
 
@@ -919,7 +922,11 @@ func ensureStub(path string, lines int, name, reason string) error {
 	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
 
-func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duration, bashppOpt ...bool) (string, error) {
+// runFixture runs one fixture and reports its verdict. The middle result is
+// a human detail the log prints under the verdict — how far a timed-out
+// fixture got — and is empty for every other verdict; an error means the
+// harness itself could not run the fixture.
+func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duration, bashppOpt ...bool) (string, string, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	args := []string{}
@@ -932,7 +939,7 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 	if f.Name == "input-test" {
 		in, err := os.Open(filepath.Join(testsDir, "input-line.sh"))
 		if err != nil {
-			return "FAIL", err
+			return "FAIL", "", err
 		}
 		defer in.Close()
 		stdin = in
@@ -948,7 +955,7 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 		// terminal's readiness without needing a pty.
 		r, w, err := os.Pipe()
 		if err != nil {
-			return "FAIL", err
+			return "FAIL", "", err
 		}
 		defer r.Close()
 		// The write end stays open for the fixture's whole life so the read
@@ -970,12 +977,12 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 
 	parentWatch, err := armParentDeathWatch(cmd)
 	if err != nil {
-		return "FAIL", err
+		return "FAIL", "", err
 	}
 	startErr := cmd.Start()
 	parentDeathWatchStarted(parentWatch, startErr)
 	if startErr != nil {
-		return "FAIL", startErr
+		return "FAIL", "", startErr
 	}
 	defer func() { stopParentDeathWatch(parentWatch) }()
 	done := make(chan error, 1)
@@ -1023,7 +1030,12 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 	// the harness iteration.
 	killProcessTree(cmd.Process.Pid)
 	if timedOut {
-		return "TIME", nil
+		// A timeout with no evidence is a dead end: the fixture is a few
+		// hundred lines and the harness knows only that it stopped. Say how
+		// far it got — its last lines of output, and the .right line they
+		// correspond to — so the next reader can name the construct that
+		// blocked instead of bisecting a corpus file on a remote runner.
+		return "TIME", timeoutProgress(f, testsDir, normalizeOutput(f.Name, raw.Bytes())), nil
 	}
 	if runErr != nil {
 		// Bash's own harness gates on output, not process status. Keep going.
@@ -1032,15 +1044,15 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 	got := normalizeOutput(f.Name, raw.Bytes())
 	want, err := os.ReadFile(filepath.Join(testsDir, f.Right))
 	if err != nil {
-		return "FAIL", err
+		return "FAIL", "", err
 	}
 	got = normalizeHostSignalOrder(f.Name, got)
 	want = normalizeHostSignalOrder(f.Name, want)
 	if bytes.Equal(got, want) {
-		return "PASS", nil
+		return "PASS", "", nil
 	}
 	writeDebugOutput(f.Name, want, got)
-	return "FAIL", fmt.Errorf("output differs from %s\n%s", f.Right, firstDiff(want, got))
+	return "FAIL", "", fmt.Errorf("output differs from %s\n%s", f.Right, firstDiff(want, got))
 }
 
 func fixtureEnv(root, testsDir, bashPath, name string) []string {
@@ -1464,3 +1476,33 @@ func die(format string, args ...any) {
 }
 
 var _ io.Reader
+
+// timeoutProgress describes how far a fixture got before its deadline: the
+// number of output lines it produced, the last few of them, and the line of
+// the .right file they line up with. A bare "TIME" says only that something
+// blocked; this says where, which is what a reader on another OS needs.
+func timeoutProgress(f fixture, testsDir string, got []byte) string {
+	lines := bytes.Split(bytes.TrimRight(got, "\n"), []byte("\n"))
+	if len(lines) == 1 && len(lines[0]) == 0 {
+		return "        produced no output before the deadline\n"
+	}
+	var b strings.Builder
+	want, werr := os.ReadFile(filepath.Join(testsDir, f.Right))
+	fmt.Fprintf(&b, "        stopped after %d output line(s)", len(lines))
+	if werr == nil {
+		wantLines := bytes.Split(bytes.TrimRight(want, "\n"), []byte("\n"))
+		fmt.Fprintf(&b, " of %d expected", len(wantLines))
+		if len(lines) <= len(wantLines) {
+			fmt.Fprintf(&b, "; next expected: %q", trimDiffLine(wantLines[len(lines)-1]))
+		}
+	}
+	b.WriteString("\n")
+	tail := lines
+	if len(tail) > 5 {
+		tail = tail[len(tail)-5:]
+	}
+	for _, l := range tail {
+		fmt.Fprintf(&b, "        last: %q\n", trimDiffLine(l))
+	}
+	return b.String()
+}

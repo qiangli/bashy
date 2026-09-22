@@ -291,7 +291,7 @@ func TestBashPPGateInputFixtureGetsExplicitSelector(t *testing.T) {
 			t.Setenv("BASH53_BASHPP", tc.mode)
 			t.Setenv("BASHY_BASHPP", "1")
 			t.Setenv("EXPECTED_BASH53_FLAG", tc.flag)
-			status, err := runFixture(dir, dir, launcher, fixture{Name: "input-test", Right: "input.right"}, time.Second, tc.enabled)
+			status, _, err := runFixture(dir, dir, launcher, fixture{Name: "input-test", Right: "input.right"}, time.Second, tc.enabled)
 			if err != nil || status != "PASS" {
 				t.Fatalf("stdin fixture mode %s: status=%s err=%v", tc.mode, status, err)
 			}
@@ -674,7 +674,7 @@ func TestFixtureStdinIsIdleNotEndOfFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "idle.right"), []byte("unreachable\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	status, err := runFixture(dir, dir, sh, fixture{
+	status, _, err := runFixture(dir, dir, sh, fixture{
 		Name: "idle", Test: "idle.sh", Right: "idle.right",
 	}, 2*time.Second)
 	if err != nil {
