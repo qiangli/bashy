@@ -803,7 +803,9 @@ func copyTree(src, dst string) error {
 		if !winmode.Supported {
 			return nil // the filesystem already carries the mode
 		}
-		return winmode.Set(target, info.Mode().Perm())
+		// info comes from the directory walk, which reads the platform's
+		// own mode; the source's recorded mode is the one to carry.
+		return winmode.Set(target, winmode.Overlay(path, info.Mode()).Perm())
 	})
 }
 
