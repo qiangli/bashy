@@ -1,2 +1,3 @@
 {"op":"add","slug":"transpile-standalone-go-mod-tidy-required-before-go-build","id":"01a0be08-533f-76d9-828f-360137280795","tool":"agy-sonnet4.6-n","host":"dragon","episode":"weave-issue-40","at":"2026-09-20T08:56:51.779324Z"}
 {"op":"add","slug":"bashy-linux-build-is-not-static-under-cgo-enabled-0-purego-via-c","id":"01a0be2a-6ea6-7255-a451-576bf005b255","tool":"claude-fable5.1-q","host":"dragon","episode":"weave-issue-43","at":"2026-09-20T09:34:07.015328Z"}
+{"op":"add","slug":"windows-posix-locale-packages-do-not-service-big5-hkscs-end-to-e","id":"01a0cabb-137e-7dda-aa23-5a64be7ba67c","tool":"codex-gpt5.6-sol-k","host":"dragon","episode":"weave-issue-11","at":"2026-09-22T20:07:32.992003Z"}
