@@ -28,6 +28,11 @@ type fixture struct {
 }
 
 func main() {
+	// Invoked under a corpus helper's name (recho/zecho/xcase hard links in
+	// the private tests tree on Windows) the binary IS that helper.
+	if code, ok := runAsHelper(os.Args[0], os.Args[1:], os.Stdin, os.Stdout, os.Stderr); ok {
+		os.Exit(code)
+	}
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
@@ -78,10 +83,11 @@ type jsonSummary struct {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	var testsDir, bashPath, tests, skip, chunk, chunksManifest, bashPPMode string
+	var testsDir, bashPath, tests, skip, chunk, chunksManifest, bashPPMode, userland string
 	var listOnly, chunkCountOnly, shared, jsonOutput bool
 	var shard, of int
 	var timeout, jobsTimeout time.Duration
+	var userlandNote string
 	jsonOutput = jsonFlagRequested(args)
 	started := time.Now().UTC()
 	report := newJSONReport(started)
@@ -91,6 +97,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.StringVar(&testsDir, "tests-dir", "external/bash-5.3/tests", "bash 5.3 tests directory")
 	flags.StringVar(&bashPath, "bash", "bin/bash", "bash-compatible binary under test")
 	flags.StringVar(&bashPPMode, "bashpp-mode", "", "require and prove BASH53_BASHPP=0 or 1 for the measured fixture shells")
+	flags.StringVar(&userland, "userland", os.Getenv("BASH53_USERLAND"), "Windows: multicall userland binary (yoke/coreutils) laid out as /usr/bin under a BASHY_ROOT for the fixtures (BASH53_USERLAND)")
 	flags.StringVar(&tests, "tests", "", "space-separated fixture names to run")
 	flags.StringVar(&skip, "skip", "", "space-separated fixture names to skip (BASH_TEST_SKIP)")
 	flags.StringVar(&chunk, "chunk", "", "run one distributed chunk, as 1/N")
@@ -258,10 +265,32 @@ func run(args []string, stdout, stderr io.Writer) int {
 		os.Setenv("TMPDIR", tmp)
 		if runtime.GOOS == "windows" {
 			// os.TempDir (and every native child) reads TMP/TEMP here, not
-			// TMPDIR; without these the private tree isolates nothing.
+			// TMPDIR; without these the private tree isolates nothing. The
+			// fixtures themselves get TMPDIR=/tmp: the shell under test and
+			// its applets map /tmp onto exactly this TEMP, and the corpus
+			// treats $TMPDIR as POSIX text (heredoc/read/vredir build paths
+			// with it and `cd $TMPDIR; pwd` compares against it).
 			os.Setenv("TMP", tmp)
 			os.Setenv("TEMP", tmp)
+			os.Setenv("TMPDIR", "/tmp")
 		}
+		if runtime.GOOS == "windows" {
+			if userland != "" {
+				rootDir, binDir, names, err := prepareUserland(filepath.Dir(privateTests), userland, bashPath)
+				if err != nil {
+					return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("fixture userland: %v", err))
+				}
+				os.Setenv("BASHY_ROOT", rootDir)
+				if strings.TrimSpace(os.Getenv("BASH53_TOOLS_PATH")) == "" {
+					os.Setenv("BASH53_TOOLS_PATH", binDir)
+				}
+				userlandNote = userlandHeader(rootDir, userland, names)
+			} else {
+				warnUserlandMissing(stderr, os.Getenv("BASH53_TOOLS_PATH"))
+			}
+		}
+	} else if userland != "" {
+		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("-userland needs the private fixture tree; drop -shared-tree"))
 	}
 	if err := prepareFixtures(testsDir, stderr); err != nil {
 		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("prepare fixtures: %v", err))
@@ -338,6 +367,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		// No fixed userland on this OS: say which one the fixtures resolved
 		// their cat/sed/awk/diff from, or the count cannot be interpreted.
 		fmt.Fprintf(logOut, "Fixture PATH: %s\n", fixturePath(testsDir))
+		if userlandNote != "" {
+			fmt.Fprintln(logOut, userlandNote)
+		}
 	}
 
 	for _, f := range selected {
@@ -808,11 +840,21 @@ func groupRSSKB(pid int) int {
 
 func prepareFixtures(testsDir string, warn io.Writer) error {
 	support := filepath.Join(testsDir, "..", "support")
+	if runtime.GOOS == "windows" {
+		// Sprint 245: the helpers are this binary (see helpers.go); no C
+		// toolchain, no text-mode CRLF from a foreign C runtime.
+		if err := installGoHelpers(testsDir); err != nil {
+			return err
+		}
+	}
 	extra, err := helperBinmodeSources(support)
 	if err != nil {
 		return err
 	}
 	for _, helper := range []string{"recho", "zecho", "xcase"} {
+		if runtime.GOOS == "windows" {
+			break
+		}
 		dst := filepath.Join(testsDir, exeName(helper))
 		src := filepath.Join(support, helper+".c")
 		if _, err := os.Stat(src); err != nil {
@@ -1019,10 +1061,11 @@ func fixtureEnv(root, testsDir, bashPath, name string) []string {
 	tmpBase := os.TempDir()
 	rawPath := filepath.Join(tmpBase, fmt.Sprintf("bashy-tstraw-%d", os.Getpid()))
 	outPath := filepath.Join(tmpBase, fmt.Sprintf("bashy-tstout-%d", os.Getpid()))
+	windows := runtime.GOOS == "windows"
 	out = append(out,
-		"THIS_SH="+bashPath,
-		"_="+bashPath,
-		"BUILD_DIR="+filepath.Dir(testsDir),
+		"THIS_SH="+posixSpelling(bashPath, windows),
+		"_="+posixSpelling(bashPath, windows),
+		"BUILD_DIR="+posixSpelling(filepath.Dir(testsDir), windows),
 		"PATH="+fixturePath(testsDir),
 		"BASH_TSTRAW="+rawPath,
 		"BASH_TSTOUT="+outPath,
@@ -1039,6 +1082,11 @@ func fixtureEnv(root, testsDir, bashPath, name string) []string {
 	if name == "read" {
 		tmp, err := os.MkdirTemp("", "bashy-read-*")
 		if err == nil {
+			if windows {
+				// os.TempDir is the run's private TEMP, which the shell
+				// spells /tmp; keep the fixture's TMPDIR in that form.
+				tmp = "/tmp/" + filepath.Base(tmp)
+			}
 			out = append(out, "TMPDIR="+tmp)
 		}
 	}

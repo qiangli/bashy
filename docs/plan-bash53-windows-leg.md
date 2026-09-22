@@ -150,3 +150,28 @@ gh workflow run conformance.yml        # then download the bash53-windows artifa
 Then, and only then, add the measured line (`passed / runnable`, runner, date,
 testee version) to the Bash# claims table and to `CLAUDE.md` §Conformance-suite
 host safety.
+
+## Sprint 245 (2026-09-22): the leg measures against bashy's own userland
+
+The first two measurements (runs 35503573404 and 35659867244, both 23/86) ran
+against Git for Windows' MSYS `usr\bin`, and 26 of the 63 non-passing fixtures
+were the mingw-built `recho`/`zecho` writing CRLF — the C runtime's byte, not
+the shell's. The leg now:
+
+- builds the pure-Go **yoke** multicall binary (coreutils + yoke applets) from
+  the pinned sibling and lays it out as a POSIX root under the private run
+  tree (`-userland bin/yoke.exe`): `root/usr/bin/<applet>.exe` hard links,
+  `root/usr/bin/{bash,sh}.exe` = the testee, `root/etc/passwd`; exports
+  `BASHY_ROOT` for the shell's mounts (Sprint 245 story S245.1) and puts that
+  `usr/bin` on the fixture PATH. `BASH53_TOOLS_PATH` still overrides it.
+- serves `recho`/`zecho`/`xcase` from the harness binary itself by argv[0]
+  (`tools/bash53suite/helpers.go`), hard-linked into the tests tree; no C
+  compiler is consulted on Windows and stdout is binary.
+- hands the fixtures `THIS_SH`, `_`, `BUILD_DIR` in the shell's POSIX spelling
+  (`/d/a/.../bash.exe`) and `TMPDIR=/tmp` (TMP/TEMP stay native and are what
+  `/tmp` maps to), because the corpus post-processes them as POSIX text.
+
+The run header prints `Fixture PATH:` and `Fixture root:`; the counts JSON
+carries `userland`, `tools_path` and `fixture_root`. The plan and the
+per-fixture accounting live in the umbrella's
+`docs/sprint-245-bash53-windows-parity-plan.md`.
