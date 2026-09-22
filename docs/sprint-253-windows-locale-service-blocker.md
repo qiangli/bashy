@@ -30,9 +30,10 @@ punctuation-insensitive, allow only explicit aliases, and reject Big5 or ASCII
 for a Big5-HKSCS request. The candidate is therefore not integration-ready and
 this report does not treat its commit as completion evidence.
 
-Thus the bridge makes the six names proved by probe run 35776069474 available
-even though Git Bash omits their non-UTF-8 spellings from `locale -a`, while
-rejecting its false-success fallback for `zh_HK.big5hkscs`.
+The bridge is an incremental candidate for exposing the names that the host
+genuinely serves, including spellings omitted by Git Bash's `locale -a`. Probe
+run 35776069474 measured `LC_MESSAGES` for these names; the other categories
+and the full fixture impact still require the next Windows measurement.
 
 ## Exact blocker
 

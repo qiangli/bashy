@@ -40,6 +40,11 @@ func configureHostLocaleProvider(goos string, getenv func(string) string, setenv
 		return "", nil
 	}
 	if explicit := strings.TrimSpace(getenv(hostLocalePathEnv)); explicit != "" {
+		if strings.TrimSpace(getenv(hostLocaleNamesEnv)) == "" {
+			if err := setenv(hostLocaleNamesEnv, strings.Join(corpusLocaleNames, ";")); err != nil {
+				return "", err
+			}
+		}
 		return explicit, nil
 	}
 	path, err := lookPath("locale")

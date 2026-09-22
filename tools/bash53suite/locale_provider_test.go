@@ -49,6 +49,17 @@ func TestConfigureHostLocaleProvider(t *testing.T) {
 		}
 	})
 
+	t.Run("explicit package provider receives default corpus candidates", func(t *testing.T) {
+		env := map[string]string{hostLocalePathEnv: `C:\private\locale.exe`}
+		_, err := configureHostLocaleProvider("windows", func(k string) string { return env[k] }, func(k, v string) error {
+			env[k] = v
+			return nil
+		}, func(string) (string, error) { return "", errors.New("must not run") })
+		if err != nil || !reflect.DeepEqual(strings.Split(env[hostLocaleNamesEnv], ";"), corpusLocaleNames) {
+			t.Fatalf("candidates=%q, err=%v", env[hostLocaleNamesEnv], err)
+		}
+	})
+
 	t.Run("missing provider stays an honest absence", func(t *testing.T) {
 		env := map[string]string{}
 		provider, err := configureHostLocaleProvider("windows", func(k string) string { return env[k] }, func(k, v string) error {
