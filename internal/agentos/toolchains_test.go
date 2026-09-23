@@ -40,6 +40,19 @@ func TestInstallIslandToolResolverOffUnderCert(t *testing.T) {
 	}
 }
 
+func TestRustProvisionerHomesNormalizeWindowsCachePath(t *testing.T) {
+	cargo, rustup := rustProvisionerHomesMode(`/c/Users/runneradmin/AppData/Local/bashy/bin`, true)
+	if cargo != `C:\Users\runneradmin\AppData\Local\bashy\rust\cargo` {
+		t.Fatalf("cargo home = %q", cargo)
+	}
+	if rustup != `C:\Users\runneradmin\AppData\Local\bashy\rust\rustup` {
+		t.Fatalf("rustup home = %q", rustup)
+	}
+	if strings.Contains(cargo, "/c/") || strings.Contains(cargo, "/") {
+		t.Fatalf("cargo home retained an MSYS path spelling: %q", cargo)
+	}
+}
+
 // --prepare reads the fences a script opens and maps each to its rows.
 func TestFenceLanguagesAndTools(t *testing.T) {
 	dir := t.TempDir()

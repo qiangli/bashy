@@ -3,6 +3,9 @@ package agentos
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/qiangli/yoke/external/bun"
@@ -11,6 +14,8 @@ import (
 	"github.com/qiangli/yoke/external/python"
 	"github.com/qiangli/yoke/external/rust"
 	"github.com/qiangli/yoke/external/zigcc"
+	"github.com/qiangli/yoke/pkg/binmgr"
+	"mvdan.cc/sh/v3/pathconv"
 	"mvdan.cc/sh/v3/polyglot"
 )
 
@@ -116,5 +121,42 @@ func installIslandToolResolver() {
 	if certProfile() {
 		return
 	}
+	configureRustProvisionerEnvironment()
 	polyglot.ToolResolver = islandToolResolver
+}
+
+// configureRustProvisionerEnvironment gives Cargo the native spellings of
+// Bashy's owned registry and rustup roots. The shell intentionally exposes
+// HOME as an MSYS path on Windows; Cargo appends .cargo using native path
+// rules, producing a mixed /c/Users/...\\.cargo source path and panicking
+// while resolving dependencies. The provisioner owns these two roots, so set
+// them before island planning snapshots its child environment.
+func configureRustProvisionerEnvironment() {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	cache, err := binmgr.CacheDir()
+	if err != nil {
+		return
+	}
+	cargoHome, rustupHome := rustProvisionerHomesMode(cache, true)
+	_ = os.Setenv("CARGO_HOME", cargoHome)
+	_ = os.Setenv("RUSTUP_HOME", rustupHome)
+}
+
+// rustProvisionerHomesMode is split from the process mutation so the Windows
+// MSYS-to-native boundary is covered on every host. binmgr.CacheDir normally
+// comes from os.UserCacheDir, but BASHY_BIN_CACHE may itself be shell-spelled.
+func rustProvisionerHomesMode(cache string, windows bool) (cargoHome, rustupHome string) {
+	if !windows {
+		root := filepath.Join(filepath.Dir(cache), "rust")
+		return filepath.Join(root, "cargo"), filepath.Join(root, "rustup")
+	}
+	cache = pathconv.ToOSMode("", cache, true)
+	cache = strings.TrimRight(cache, `\\/`)
+	if i := strings.LastIndexAny(cache, `\\/`); i >= 0 {
+		cache = cache[:i]
+	}
+	root := cache + `\rust`
+	return root + `\cargo`, root + `\rustup`
 }
