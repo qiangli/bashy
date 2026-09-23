@@ -23,16 +23,20 @@ unchanged full BashSharp Tour is 38 pass/2 fail/0 skip/0 XFAIL.
 differing from pinned transcripts. Earlier candidate 5353ba3 passed 40/40 on
 the same host while that helper cache directory existed.
 
-Source mechanism: `internal/agentos/engines_podman.go` `provisionPodman`
-returns `cachedPodman` early, bypassing `provisionDarwinHelpers`;
-`applyManagedPodmanEnv` then calls `writeDarwinConfOverride`, which fails when
-the helper directory is absent. Repair managed macOS cache recovery narrowly,
-with a focused test for cached Podman and missing helpers. Preserve the original
-transcripts, deadlines, and Podman behavior.
+Source mechanism: `provisionPodman` returns `cachedPodman` early, bypassing
+`provisionDarwinHelpers`. The dispatch path can also return a flat cached
+Podman from `resolveEngineBinary` without calling `provisionPodman`. Then
+`applyManagedPodmanEnv` writes `containers.conf` into the absent helper
+directory. Once helper recovery was added to dispatch, its first retry exposed
+flat legacy `gvproxy` and `vfkit` cache files blocking binmgr's versioned
+directories under those names. The verified managed downloads now use distinct
+cache keys and leave legacy files intact.
 
-Verify both focused cases and the full unchanged Mac 40-case Tour against a
-rebuilt public-head candidate. Coordinate the Bashy head change with Linux
-and Windows final gates. Raw log:
-`/Users/noviadmin/s250-8aaa6171-evidence/final-product-8a68fab1/logs/bashsharp-tour.log`,
-SHA-256 `8fad09f0b7476cba8f16a59b753603f9dca1a5272614b9e7907d8957af7aa5c4`.
-Story #676 remains open.
+Verified on clean public Bashy `529e0ac` with sh `111e307` and Tour `82c2f98`:
+the focused `advanced/dockerfile` and `advanced/k8s` cases each returned 0
+and matched their pinned transcripts; the full unchanged macOS Tour passed
+**40/40**, zero failed, skipped, or known-failing. Full log SHA-256:
+`21e098bf0aefdc6295226feac4960a5de24d8d00bc980272a181300ab6c8af0d`.
+The private umbrella validation note records the candidate manifest and raw
+evidence path. No fixture or deadline changed. Story #676 remains open for
+the other host gates.
