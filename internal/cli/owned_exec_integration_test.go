@@ -23,7 +23,12 @@ func TestOwnedExecLargeArgAndEnv(t *testing.T) {
 	}
 	bash, yoke := filepath.Join(dir, "bash"+suffix), filepath.Join(dir, "yoke"+suffix)
 	for _, build := range []struct{ out, pkg, dir string }{{bash, "./cmd/bash", root}, {yoke, "./cmd/yoke", filepath.Join(root, "..", "yoke")}} {
-		cmd := exec.Command("go", "build", "-buildvcs=false", "-o", build.out, build.pkg)
+		args := []string{"build", "-buildvcs=false"}
+		if build.pkg == "./cmd/bash" {
+			args = append(args, "-tags=ownedexecprobe")
+		}
+		args = append(args, "-o", build.out, build.pkg)
+		cmd := exec.Command("go", args...)
 		cmd.Dir = build.dir
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("build %s: %v\n%s", build.pkg, err, out)
@@ -57,12 +62,12 @@ printf '%s\n' "$n"
 	// Both the ordinary redirected descriptor and the private frame must
 	// survive the same child launch. The large -c positional operand forces
 	// the frame on Windows as well as Unix.
-	fdScript := `v=$(printf '%*s' 200000 ''); export v; exec 9<<<'pipe-fd'; pad=$(printf '%*s' 200000 ''); exec bash -c 'IFS= read -r -u 9 line; printf "%s %s %s\n" "$line" "${#v}" "${BASHY_OWNED_EXEC_FRAME-unset}"' "$pad"`
+	fdScript := `v=$(printf '%*s' 200000 ''); export v; exec 9<<<'pipe-fd'; pad=$(printf '%*s' 200000 ''); exec bash -c ':' "$pad"`
 	cmd = exec.Command(bash, "-c", fdScript)
 	cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	out, err = cmd.CombinedOutput()
-	if err != nil || strings.TrimSpace(string(out)) != "pipe-fd 200000 unset" {
-		t.Fatalf("owned frame and inherited fd: error=%v, output=%q", err, out)
+	if err != nil || strings.TrimSpace(string(out)) != "fd-ok" {
+		t.Fatalf("owned frame and inherited fd: error=%v, bytes=%d, prefix=%q", err, len(out), out[:min(len(out), 400)])
 	}
 	if runtime.GOOS != "windows" {
 		pidScript := `v=$(printf '%*s' 200000 ''); export v; printf '%s\n' "$$"; exec bash -c 'printf "%s %s %s\n" "$$" "${#v}" "${BASHY_OWNED_EXEC_FRAME-unset}"'`
