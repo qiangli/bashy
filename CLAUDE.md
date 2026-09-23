@@ -278,11 +278,13 @@ MEASURED there by `conformance.yml`'s `bash53-windows` job (tags /
 runnable/pass/fail/timeout/skip counts as an artifact. Since Sprint 245 that
 leg runs against **bashy's own userland** (the pure-Go `yoke` multicall laid
 out as a POSIX root under `BASHY_ROOT`, with the corpus's recho/zecho/xcase
-helpers served by the harness binary itself), and the latest measurement is
-**64/86** (run 35720151852, 2026-09-22) — up from 23/86 on the Git-Bash
-userland. **Never quote 86/86 for Windows**, and never quote any Windows
-count from anything but that artifact (see `docs/plan-bash53-windows-leg.md`
-and the umbrella's `docs/sprint-245-delivery-evidence.md`).
+helpers served by the harness binary itself). The final Sprint 253 production
+artifact, run 35812307698, measured **86/86 on Windows and Linux**, with zero
+failures, timeouts, or skips. A later Sprint 257 candidate with general POSIX
+timezone handling passed **86/86** on two native Windows builds, native macOS,
+and two Ubuntu test droplets. Quote the exact candidate and source of each
+count (see `docs/plan-bash53-windows-leg.md` and the umbrella's
+`docs/sprint-253-delivery-evidence.md`).
 
 Never run the full uutils suite natively. A 2026-07-24 run triggered unbounded
 reads from `/dev/zero`/`/dev/random` and recursive `--preserve-root` bypasses

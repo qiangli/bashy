@@ -1,12 +1,12 @@
 # Plan: the Bash 5.3 fixture suite on Windows (Sprint 216, story 543)
 
-**Status (2026-09-20):** shipped in this repo; **no Windows measurement exists
-yet.** The count for Windows is whatever `.github/workflows/conformance.yml`'s
-`bash53-windows` job publishes on its first `workflow_dispatch` run — nothing
-below, in `CLAUDE.md`, or in the Bash# claims table may quote a Windows number
-before that artifact exists. 86/86 is a claim about the canonical hosts
-(native macOS serial, the Linux container gate) and stays that way until
-Windows is measured.
+**Status (2026-09-23):** shipped and measured. The final Sprint 253 production
+run [35812307698](https://github.com/qiangli/bashy/actions/runs/35812307698)
+reports 86/86 on Windows and Linux. The later Sprint 257 timezone candidate
+passed 86/86 on two native Windows builds, native macOS, and two Ubuntu test
+droplets. See the umbrella's `docs/sprint-253-delivery-evidence.md` for exact
+candidate and test conditions. The plan below records the original 2026-09-20
+implementation work.
 
 ## What was wrong
 

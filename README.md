@@ -248,10 +248,12 @@ degrades exactly as a no-job-control Bash does.
 
 Two known gaps: arithmetic currently uses the native int width (64-bit on
 64-bit platforms), so very large values on 32-bit builds truncate — a tracked
-int64 migration; and Windows is measured, not at parity — the bash-5.3
-fixture suite scores 64/86 there against bashy's own userland (run
-35720151852, 2026-09-22; `scripts/ci-bash53-windows.sh`), with job control
-among the documented gaps above.
+int64 migration; and some interactive job-control behavior remains incomplete.
+The final Sprint 253 production gate measured the Bash 5.3 fixtures at
+**86/86 on Windows and Linux** (run 35812307698), and the Sprint 257 timezone
+follow-up measured **86/86** on two native Windows builds, native macOS, and
+Ubuntu 24.04 test droplets. These are fixture results, not a claim of full
+Bash compatibility; see the umbrella's `docs/sprint-253-delivery-evidence.md`.
 Everything else — parameter expansion, arrays and associative arrays,
 namerefs, `[[ ]]`, arithmetic, here documents, brace/tilde/glob expansion
 (locale-aware, including non-UTF-8 charsets such as Big5/Shift-JIS), traps,
