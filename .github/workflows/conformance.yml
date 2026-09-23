@@ -27,6 +27,7 @@ on:
           - filetime
           - locale
           - pipe
+          - argmax
 
 jobs:
   # The bash-5.3 conformance gate. Runs the real fixture suite against the pure
@@ -173,7 +174,7 @@ jobs:
         with:
           go-version: 1.27.1
       - name: Measure targeted Windows platform behavior
-        if: inputs.probe_mode != 'pipe'
+        if: inputs.probe_mode != 'pipe' && inputs.probe_mode != 'argmax'
         shell: bash
         run: ./scripts/ci-windows-filetime-probe.sh '${{ inputs.probe_mode }}'
       - name: Check live and closed Windows named-pipe metadata
@@ -182,6 +183,15 @@ jobs:
         run: |
           set -o pipefail
           (cd ../coreutils && go test -v -run '^TestLstatNamedPipeTracksServerLifetime$' ./tool) 2>&1 | tee windows-pipe-probe.log
+      - name: Check Bashy argument budget and execscript only
+        if: inputs.probe_mode == 'argmax'
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd ../sh && go test -v -run '^TestWindowsExecBudgetStopsBeforeCreateProcess$' ./interp) 2>&1 | tee windows-argmax-probe.log
+          TESTS=execscript ./scripts/ci-bash53-windows.sh 2>&1 | tee -a windows-argmax-probe.log
+          grep -q '^  PASS  execscript' bash53-windows.log
+          ! grep -Eq '^  (FAIL|TIME|SKIP)  execscript' bash53-windows.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -190,4 +200,5 @@ jobs:
             windows-filetime-probe.log
             windows-locale-probe.log
             windows-pipe-probe.log
+            windows-argmax-probe.log
           if-no-files-found: error
