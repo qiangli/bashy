@@ -6,6 +6,8 @@
 package agentos
 
 import (
+	"context"
+	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -39,6 +41,49 @@ func TestPodmanPinsComplete(t *testing.T) {
 		if _, ok := podmanAssets[plat]; !ok {
 			t.Errorf("no podman pin for %s", plat)
 		}
+	}
+}
+
+func TestProvisionPodmanRepairsMissingDarwinHelpersOnCacheHit(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("darwin helper layout")
+	}
+
+	cache := t.TempDir()
+	t.Setenv("BASHY_BIN_CACHE", cache)
+	t.Setenv("CONTAINERS_CONF_OVERRIDE", "")
+	writeExecutable := func(p string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("stub"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	podmanAsset := podmanAssets["darwin/"+runtime.GOARCH]
+	podman := filepath.Join(cache, "podman", podmanAsset.version, filepath.FromSlash(podmanAsset.entrypoint))
+	writeExecutable(podman)
+	for name, asset := range darwinHelperAssets {
+		writeExecutable(filepath.Join(cache, name, asset.version, name))
+	}
+
+	if got := provisionPodman(context.Background()); got != podman {
+		t.Fatalf("provisionPodman() = %q, want cached %q", got, podman)
+	}
+	applyManagedPodmanEnv(podman)
+	for name := range darwinHelperAssets {
+		if !isExecutable(filepath.Join(cache, podmanHelperDirName, name)) {
+			t.Errorf("missing repaired %s helper", name)
+		}
+	}
+	conf := filepath.Join(cache, podmanHelperDirName, podmanConfOverrideName)
+	if got := os.Getenv("CONTAINERS_CONF_OVERRIDE"); got != conf {
+		t.Fatalf("CONTAINERS_CONF_OVERRIDE = %q, want %q", got, conf)
+	}
+	if _, err := os.Stat(conf); err != nil {
+		t.Fatalf("repaired helper config: %v", err)
 	}
 }
 

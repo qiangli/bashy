@@ -119,18 +119,19 @@ func cachedPodman() string {
 // macOS, the two machine helpers) into bashy's cache and returns the podman
 // entrypoint. "" means not available here (→ engineNotFoundMessage).
 func provisionPodman(ctx context.Context) string {
-	if p := cachedPodman(); p != "" {
-		return p
-	}
-	t, ok := podmanTool()
-	if !ok {
-		return ""
-	}
-	fmt.Fprintf(os.Stderr, "bashy podman: fetching podman %s for %s — first run only…\n", t.Version, binmgr.Platform())
-	path, err := binmgr.Ensure(ctx, t)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "bashy podman: %v\n", err)
-		return ""
+	p := cachedPodman()
+	if p == "" {
+		t, ok := podmanTool()
+		if !ok {
+			return ""
+		}
+		fmt.Fprintf(os.Stderr, "bashy podman: fetching podman %s for %s — first run only…\n", t.Version, binmgr.Platform())
+		var err error
+		p, err = binmgr.Ensure(ctx, t)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "bashy podman: %v\n", err)
+			return ""
+		}
 	}
 	if runtime.GOOS == "darwin" {
 		if err := provisionDarwinHelpers(ctx); err != nil {
@@ -138,7 +139,7 @@ func provisionPodman(ctx context.Context) string {
 			return ""
 		}
 	}
-	return path
+	return p
 }
 
 // darwinHelperDir is where gvproxy and vfkit live: a flat dir podman is pointed
