@@ -54,9 +54,16 @@ type runEnvelope struct {
 func dispatchRun(args []string) int {
 	capture := false
 	check := false
+	target := ""
 	i := 0
 	for ; i < len(args); i++ {
 		a := args[i]
+		if a == "--help" || a == "-h" {
+			fmt.Fprintln(os.Stdout, "usage: bashy run [--capture] [--check] [--target NAME] -- command [args...]")
+			fmt.Fprintln(os.Stdout, "       bashy run [--capture] [--target NAME] <bundle.bar|archive|dag.md|DAG-directory> [args...]")
+			fmt.Fprintln(os.Stdout, "A runnable archive has a root dag.md with a main target. Direct DAGs use --target or their configured default (main when present).")
+			return 0
+		}
 		if a == "--" {
 			i++
 			break
@@ -69,15 +76,42 @@ func dispatchRun(args []string) int {
 			capture = true
 		case "--check":
 			check = true
+		case "--target":
+			i++
+			if i >= len(args) || args[i] == "" {
+				fmt.Fprintln(os.Stderr, "bashy run: --target requires a DAG target name")
+				return 2
+			}
+			target = args[i]
 		default:
-			fmt.Fprintf(os.Stderr, "bashy run: unknown option %q\n", a)
-			return 2
+			if strings.HasPrefix(a, "--target=") {
+				target = strings.TrimPrefix(a, "--target=")
+				if target == "" {
+					fmt.Fprintln(os.Stderr, "bashy run: --target requires a DAG target name")
+					return 2
+				}
+			} else {
+				fmt.Fprintf(os.Stderr, "bashy run: unknown option %q\n", a)
+				return 2
+			}
 		}
 	}
 	argv := args[i:]
 	if len(argv) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: bashy run [--capture] [--check] [--] command [args...]")
+		fmt.Fprintln(os.Stderr, "usage: bashy run [--capture] [--check] [--target NAME] [--] command [args...] | bundle.bar | dag.md | DAG-directory")
 		return 2
+	}
+	if isBarBundle(argv[0]) || isDagEntry(argv[0]) {
+		if check {
+			fmt.Fprintln(os.Stderr, "bashy run: --check applies to command scripts, not DAGs")
+			return 2
+		}
+		tail, selected, err := extractRunTarget(argv[1:], target)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "bashy run: %v\n", err)
+			return 2
+		}
+		return dispatchDagEntry(argv[0], selected, tail, capture)
 	}
 
 	env, status := runCommand(argv, capture, check, os.Stdout, os.Stderr)
@@ -90,11 +124,46 @@ func dispatchRun(args []string) int {
 	return status
 }
 
+func extractRunTarget(args []string, target string) ([]string, string, error) {
+	remaining := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--target" {
+			if target != "" || i+1 >= len(args) || args[i+1] == "" {
+				return nil, "", fmt.Errorf("--target requires one DAG target name")
+			}
+			target = args[i+1]
+			i++
+			continue
+		}
+		if strings.HasPrefix(a, "--target=") {
+			if target != "" || strings.TrimPrefix(a, "--target=") == "" {
+				return nil, "", fmt.Errorf("--target requires one DAG target name")
+			}
+			target = strings.TrimPrefix(a, "--target=")
+			continue
+		}
+		remaining = append(remaining, a)
+	}
+	return remaining, target, nil
+}
+
 // runCommand executes argv and returns its result envelope + exit status. In
 // stream mode the command's stdout/stderr go to liveOut/liveErr; with capture
 // they are buffered into the envelope instead.
 func runCommand(argv []string, capture bool, check bool, liveOut, liveErr io.Writer) (runEnvelope, int) {
+	return runCommandAt(argv, capture, check, "", liveOut, liveErr)
+}
+
+func runCommandAt(argv []string, capture bool, check bool, dir string, liveOut, liveErr io.Writer) (runEnvelope, int) {
+	return runCommandAtEnv(argv, capture, check, dir, nil, liveOut, liveErr)
+}
+
+func runCommandAtEnv(argv []string, capture bool, check bool, dir string, extraEnv []string, liveOut, liveErr io.Writer) (runEnvelope, int) {
 	cwd, _ := os.Getwd()
+	if dir != "" {
+		cwd = dir
+	}
 	var report *checkReport
 	if check {
 		if script := scriptArgForCheck(argv); script != "" {
@@ -107,7 +176,13 @@ func runCommand(argv []string, capture bool, check bool, liveOut, liveErr io.Wri
 		}
 	}
 	c := exec.Command(argv[0], argv[1:]...)
+	c.Dir = dir
 	c.Env = runCommandEnv(os.Environ())
+	for _, kv := range extraEnv {
+		if key, value, ok := strings.Cut(kv, "="); ok {
+			c.Env = setEnv(c.Env, key, value)
+		}
+	}
 	var ob, eb bytes.Buffer
 	if capture {
 		c.Stdout, c.Stderr = &ob, &eb
