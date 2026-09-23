@@ -21,6 +21,7 @@ func TestGoSourceExecutableEnvironment(t *testing.T) {
 	sdk := filepath.Join(runtime.GOROOT(), "bin", "go")
 	bashy := filepath.Join(dir, "bashy")
 	bashyPayload := bashy
+	signalIgnore := ""
 	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
 		bashyPayload += ".real"
 	}
@@ -38,6 +39,15 @@ func TestGoSourceExecutableEnvironment(t *testing.T) {
 		cmd = exec.CommandContext(ctx, cc, "-x", "c", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-o", bashy, "../../native/siglaunch.c.in")
 		if output, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("signal launcher build: %v %s", err, output)
+		}
+		// A shell wrapper cannot carry arbitrary caller values for its own
+		// special variables: dash rejects OPTIND=caller-optind before exec.
+		// This native wrapper changes only the TERM disposition and execs the
+		// target with the original environment and argument order.
+		signalIgnore = filepath.Join(dir, "signal-ignore")
+		cmd = exec.CommandContext(ctx, cc, "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-o", signalIgnore, "testdata/gosource-environment/signal-ignore.c")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("signal ignore wrapper build: %v %s", err, output)
 		}
 	}
 	source, err := os.ReadFile("testdata/gosource-environment/environment-variables.go")
@@ -76,12 +86,12 @@ func TestGoSourceExecutableEnvironment(t *testing.T) {
 				runCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 				defer cancel()
 				var cmd *exec.Cmd
-				if bashyPayload != bashy {
+				if signalIgnore != "" {
 					// Force the launcher to add TERM to its private signal
 					// sideband. The native oracle inherits the identical SIG_IGN
 					// disposition without receiving that environment entry.
-					wrapperArgs := append([]string{"-c", `trap '' TERM; exec "$0" "$@"`, binary}, args...)
-					cmd = exec.CommandContext(runCtx, "/bin/sh", wrapperArgs...)
+					wrapperArgs := append([]string{binary}, args...)
+					cmd = exec.CommandContext(runCtx, signalIgnore, wrapperArgs...)
 				} else {
 					cmd = exec.CommandContext(runCtx, binary, args...)
 				}
