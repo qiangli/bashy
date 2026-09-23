@@ -10,4 +10,6 @@ package main
 
 import "github.com/qiangli/bashy/internal/cli"
 
+func init() { cli.BashDropinShMode = true }
+
 func main() { cli.Main() }
