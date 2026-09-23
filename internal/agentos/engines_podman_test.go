@@ -79,3 +79,11 @@ func TestPodmanConfOverrideLinuxPaths(t *testing.T) {
 		}
 	}
 }
+
+func TestPodmanLinuxPathAddsSystemSbinWithoutReordering(t *testing.T) {
+	got := strings.Split(podmanLinuxPath("/candidate/bin:/usr/bin:/bin:/usr/sbin"), ":")
+	want := []string{"/candidate/bin", "/usr/bin", "/bin", "/usr/sbin", "/usr/local/sbin", "/sbin"}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("podmanLinuxPath() = %q, want %q", got, want)
+	}
+}

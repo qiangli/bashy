@@ -211,6 +211,14 @@ func managedPodmanRoot(bin string) string {
 //
 // darwin: helper_binaries_dir → the dir holding gvproxy + vfkit.
 func applyManagedPodmanEnv(bin string) {
+	// Rootful netavark shells out to the host firewall tools (iptables/nft),
+	// which distributions commonly install in /usr/sbin. Minimal service and
+	// validation PATHs often contain only /usr/bin:/bin; keep their precedence,
+	// but make the standard system-administration directories visible to the
+	// podman child. This is required for host and managed podman alike.
+	if runtime.GOOS == "linux" {
+		os.Setenv("PATH", podmanLinuxPath(os.Getenv("PATH")))
+	}
 	if !strings.HasPrefix(bin, engineCacheDir()) {
 		return
 	}
@@ -241,6 +249,20 @@ func applyManagedPodmanEnv(bin string) {
 		}
 		setenvDefault("CONTAINERS_CONF_OVERRIDE", conf)
 	}
+}
+
+func podmanLinuxPath(current string) string {
+	parts := strings.Split(current, ":")
+	seen := make(map[string]bool, len(parts)+3)
+	for _, p := range parts {
+		seen[p] = true
+	}
+	for _, p := range []string{"/usr/local/sbin", "/usr/sbin", "/sbin"} {
+		if !seen[p] {
+			parts = append(parts, p)
+		}
+	}
+	return strings.Join(parts, ":")
 }
 
 // apparmorUsernsHint explains the one Linux host fact that makes a rootless
