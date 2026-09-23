@@ -110,6 +110,10 @@ func TestTranspileModuleInputDirectory(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				// The CLI consumes shell-spelled paths. On Windows, filepath.Rel
+				// uses backslashes, which a shell operand treats as literal
+				// filename characters rather than directory separators.
+				input = filepath.ToSlash(input)
 			} else if kind == "stdin" {
 				input = "-"
 				callerDir = moduleDir
