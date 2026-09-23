@@ -40,9 +40,13 @@ func init() {
 }
 
 func main() {
+	adoptingOwnedFrame := len(os.Args) == 2 && os.Args[1] == ownedexec.Sentinel
 	if err := ownedexec.Adopt(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(126)
+	}
+	if adoptingOwnedFrame {
+		cli.AdoptGoSourceProcessEnvironment()
 	}
 	// Job-carrier helper mode (a re-exec of this binary standing in for one
 	// background job) must not initialize telemetry or any AgentOS surface:

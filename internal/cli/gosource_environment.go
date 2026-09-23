@@ -8,3 +8,11 @@ import "os"
 // Shell startup still uses its normal enriched environment; only GoSource
 // dependency processes receive this separate immutable starting snapshot.
 var goSourceProcessEnvironment = os.Environ()
+
+// AdoptGoSourceProcessEnvironment records the restored environment of an
+// owned child frame. Ordinary starts deliberately retain the package's cold
+// caller snapshot: AgentOS initialization may install its own variables
+// before Main runs.
+func AdoptGoSourceProcessEnvironment() {
+	goSourceProcessEnvironment = os.Environ()
+}
