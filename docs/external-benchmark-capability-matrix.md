@@ -50,6 +50,7 @@ Ingestion rule (§2.2): a row only attaches on an exact, unambiguous match.
 | `kimi-k2.7-code` | `kimi-k2.7-code` (vendor page 2026-07-22) | `-highspeed` variant exists, not bound |
 | `kimi-k3` | `kimi-k3` (2026-07-16) | "kimi-k3-max" arena rows: effort variant, flagged |
 | `glm-5.2` | `glm-5.2` (2026-06-13) | "GLM-5" / "GLM-5.1" rows are earlier models — never mapped to 5.2 |
+| `muse-spark1.3` / `muse-spark1.2` | `muse-spark-1.3` / `muse-spark-1.2` (Meta Muse Code 1.3.0, added 2026-09-23) | the only public row found is Scale SWE-bench Pro public set, **Muse Spark 1.1** 61.5% (relayed, primary not re-read) — an earlier model, **NOT mapped** to 1.2/1.3. No external prior for either bound model; host evidence only (Sprint #262 bench) |
 | cascades (`ycode-cascade-*`) | none | composite bindings have **no external identity**; any prior is `derived` from constituents |
 
 ## 2. Sources (header blocks)
@@ -453,3 +454,4 @@ coverage:
 | date | trigger | algo | change |
 |---|---|---|---|
 | 2026-08-06 | initial publication (weave issue-42) | ebc-v1.0.0 | first matrix; 5-lane primary-source sweep; per-instrument cells, pooled composites deferred |
+| 2026-09-23 | Muse Code registered (Sprint #262) | ebc-v1.0.0 | identity rows for `muse-spark1.3`/`1.2`; Muse Spark 1.1 SWE-bench Pro row recorded as NOT mapped; no cells change |
