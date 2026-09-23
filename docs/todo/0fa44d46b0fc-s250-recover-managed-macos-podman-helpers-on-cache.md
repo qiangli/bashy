@@ -3,7 +3,7 @@ id: 0fa44d46b0fc
 kind: bug
 title: S250 recover managed macOS Podman helpers on cached binary
 seq: 325
-status: assigned
+status: done
 priority: p0
 labels:
     - macos
@@ -14,6 +14,8 @@ assignee: qiangli
 sprint: 250
 sprint_id: c912e608-edfe-59b8-bd36-a98f6dad1634
 sprint_title: Validate Go by Example, Go Tour and BashSharp Tour on three hosts
+closed: 2026-09-23T12:29:55.270694Z
+closed_by: codex-s250
 ---
 
 Mac final-product candidate Bashy 8a68fab1/sh 4888f8d7, Tour 82c2f98:
