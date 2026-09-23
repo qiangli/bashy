@@ -564,6 +564,10 @@ var (
 
 // Main is the shell entry point, shared by cmd/bash and cmd/bashy.
 func Main() {
+	// An owned child may have restored exported values from its inherited
+	// frame just before this entry point. Keep GoSource's startup snapshot in
+	// sync with the environment that the shell actually starts with.
+	goSourceProcessEnvironment = os.Environ()
 	// Job-carrier helper mode (a re-exec of this binary standing in for one
 	// background job) is pure process identity: intercept it before process
 	// groups, AgentOS dispatch, flag parsing and startup files. Never returns
@@ -711,6 +715,7 @@ func newRunner() (*interp.Runner, error) {
 	stdinIsTTY := term.IsTerminal(int(os.Stdin.Fd()))
 	interactive := shouldRunInteractive(stdinIsTTY)
 	opts := []interp.RunnerOption{
+		interp.OwnedExecutablePaths(ownedExecutablePaths()...),
 		interp.Lang(startupBashPP.LangVariant()),
 		interp.Interactive(interactive),
 		// `bash -n` (and `bash -o noexec`) suppress execution even in an

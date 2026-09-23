@@ -12,11 +12,14 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/qiangli/yoke/pkg/telemetry"
 
 	"github.com/qiangli/bashy/internal/agentos"
 	"github.com/qiangli/bashy/internal/cli"
+	"mvdan.cc/sh/v3/interp/ownedexec"
 )
 
 func init() {
@@ -37,6 +40,10 @@ func init() {
 }
 
 func main() {
+	if err := ownedexec.Adopt(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(126)
+	}
 	// Job-carrier helper mode (a re-exec of this binary standing in for one
 	// background job) must not initialize telemetry or any AgentOS surface:
 	// intercept it before everything. cli.Main also intercepts, but by then
