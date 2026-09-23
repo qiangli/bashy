@@ -6,6 +6,13 @@ Cold Bashy startup enriches the shell environment and agentos initialization
 installs BASHY_AGENT_MANIFEST. Ordinary Go input must observe the environment
 its caller supplied, rather than that shell state.
 
+The Unix signal launcher also runs before the Go payload and may add
+`BASHY_HARD_IGNORE` when the parent entered with ignored signals. It records
+whether the caller originally supplied that entry; the cold GoSource snapshot
+removes launcher-only provenance and restores the original entry (including an
+explicit empty value and its position). The shell still consumes the enriched
+sideband, so startup signal semantics are unchanged.
+
 The cli package captures `os.Environ()` during package initialization. Agentos
 imports cli, so the capture precedes agentos initialization and its manifest
 overwrite. Cold runners pass that ordered snapshot through
@@ -22,8 +29,11 @@ normal Bash subprocess environments retain their usual behavior.
 without optional tags, then compares raw stdout/stderr against native Go for
 the unchanged Go by Example environment program. It covers both absent and
 explicitly supplied BASH, SHELL, SHLVL, UID, EUID, IFS, OPTIND, BASH_VERSION and
-BASHY_AGENT_MANIFEST, including their order. Both binaries receive identical
-HOME/build-cache settings; the source importer requires a usable Go build cache.
+BASHY_AGENT_MANIFEST, including their order. On Unix it also drives both the
+native oracle and shipped launcher from a parent that ignores TERM, covering
+absent and explicit BASHY_HARD_IGNORE without changing the original example or
+normalizing its output. Both binaries receive identical HOME/build-cache
+settings; the source importer requires a usable Go build cache.
 No source or output normalization is used.
 
 Measured: actual executable differential PASS (13.1 s); warm GoSource session,

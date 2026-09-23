@@ -95,6 +95,27 @@ int main(int argc, char **argv) {
     (void)argc;
     char ignored[512] = "";
     const char *prior = getenv("BASHY_HARD_IGNORE");
+    char *prior_encoded = "0";
+    if (prior) {
+        size_t length = strlen(prior);
+        prior_encoded = malloc(length + 2);
+        if (!prior_encoded) {
+            perror("bashy signal launcher: preserve caller environment");
+            return 126;
+        }
+        prior_encoded[0] = '1';
+        memcpy(prior_encoded + 1, prior, length + 1);
+    }
+    // The Go payload starts after this launcher has enriched its environment.
+    // Carry enough provenance for non-shell front ends to reconstruct the
+    // caller's exact BASHY_HARD_IGNORE entry while the interpreter continues
+    // to consume the enriched signal sideband below.
+    if (setenv("BASHY_LAUNCHER_HARD_IGNORE_ORIGINAL", prior_encoded, 1) != 0) {
+        perror("bashy signal launcher: preserve caller environment");
+        if (prior) free(prior_encoded);
+        return 126;
+    }
+    if (prior) free(prior_encoded);
     if (prior && *prior) snprintf(ignored, sizeof ignored, "%s", prior);
     for (size_t i = 0; i < sizeof signals / sizeof signals[0]; i++) {
         struct sigaction action;

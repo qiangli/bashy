@@ -20,11 +20,25 @@ func TestGoSourceExecutableEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	sdk := filepath.Join(runtime.GOROOT(), "bin", "go")
 	bashy := filepath.Join(dir, "bashy")
+	bashyPayload := bashy
+	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
+		bashyPayload += ".real"
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, sdk, "build", "-p", "2", "-o", bashy, "github.com/qiangli/bashy/cmd/bashy")
+	cmd := exec.CommandContext(ctx, sdk, "build", "-p", "2", "-o", bashyPayload, "github.com/qiangli/bashy/cmd/bashy")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("default CLI build: %v %s", err, output)
+	}
+	if bashyPayload != bashy {
+		cc, err := exec.LookPath("cc")
+		if err != nil {
+			t.Skip("cc is required to exercise the shipped signal launcher")
+		}
+		cmd = exec.CommandContext(ctx, cc, "-x", "c", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-o", bashy, "../../native/siglaunch.c.in")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("signal launcher build: %v %s", err, output)
+		}
 	}
 	source, err := os.ReadFile("testdata/gosource-environment/environment-variables.go")
 	if err != nil {
@@ -51,8 +65,9 @@ func TestGoSourceExecutableEnvironment(t *testing.T) {
 	// for both executables; the variables under test remain absent or supplied.
 	baseEnv := []string{"HOME=" + dir, "GOCACHE=" + strings.TrimSpace(string(cache)), "GOMODCACHE=" + strings.TrimSpace(string(moduleCache)), "GOTOOLCHAIN=local"}
 	for name, env := range map[string][]string{
-		"absent":   {"LAST=last", "BAR=original-bar", "FIRST=first"},
-		"explicit": {"LAST=last", "BASH=caller-bash", "SHELL=caller-shell", "SHLVL=17", "UID=caller-uid", "EUID=caller-euid", "IFS=caller-ifs", "OPTIND=caller-optind", "BASH_VERSION=caller-version", "BASHY_AGENT_MANIFEST=caller-manifest", "FIRST=first"},
+		"absent":        {"LAST=last", "BAR=original-bar", "FIRST=first"},
+		"explicit":      {"LAST=last", "BASH=caller-bash", "SHELL=caller-shell", "SHLVL=17", "UID=caller-uid", "EUID=caller-euid", "IFS=caller-ifs", "OPTIND=caller-optind", "BASH_VERSION=caller-version", "BASHY_AGENT_MANIFEST=caller-manifest", "BASHY_HARD_IGNORE=USR1", "FIRST=first"},
+		"long explicit": {"LAST=last", "BASHY_HARD_IGNORE=" + strings.Repeat("USR1,", 120) + "USR1", "FIRST=first"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			env = append(append([]string{}, baseEnv...), env...)
@@ -60,7 +75,16 @@ func TestGoSourceExecutableEnvironment(t *testing.T) {
 				t.Helper()
 				runCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 				defer cancel()
-				cmd := exec.CommandContext(runCtx, binary, args...)
+				var cmd *exec.Cmd
+				if bashyPayload != bashy {
+					// Force the launcher to add TERM to its private signal
+					// sideband. The native oracle inherits the identical SIG_IGN
+					// disposition without receiving that environment entry.
+					wrapperArgs := append([]string{"-c", `trap '' TERM; exec "$0" "$@"`, binary}, args...)
+					cmd = exec.CommandContext(runCtx, "/bin/sh", wrapperArgs...)
+				} else {
+					cmd = exec.CommandContext(runCtx, binary, args...)
+				}
 				cmd.Dir = dir
 				cmd.Env = append([]string{}, env...)
 				var out, stderr bytes.Buffer
