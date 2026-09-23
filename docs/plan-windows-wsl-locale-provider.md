@@ -22,10 +22,12 @@ runs `scripts/provision-windows-wsl-locales.sh`; that script:
    host-service validator.
 
 The fixture runner receives the provider through `BASHY_HOST_LOCALE`, the
-Ubuntu selection through `BASHY_WSL_DISTRO`, and the complete corpus set through
-`BASHY_HOST_LOCALE_NAMES`. Coreutils remains the authority that filters
-advertised names using locale selection, every category, and the requested
-charmap; `TestAllLocales` remains unchanged.
+Ubuntu selection through `BASHY_WSL_DISTRO`, the native absolute `wsl.exe`
+path through `BASHY_WSL_EXE`, and the complete corpus set through
+`BASHY_HOST_LOCALE_NAMES`. The absolute path keeps the bridge working when the
+fixture root replaces `PATH` with its private userland. Coreutils remains the
+authority that filters advertised names using locale selection, every
+category, and the requested charmap; `TestAllLocales` remains unchanged.
 
 The install is idempotent: it reuses an existing Ubuntu registration, does not
 duplicate `/etc/locale.gen` entries, and safely regenerates the locale archive

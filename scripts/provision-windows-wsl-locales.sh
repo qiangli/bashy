@@ -15,6 +15,7 @@ windows) ;;
 esac
 command -v wsl.exe >/dev/null 2>&1 || fail "WSL is unavailable; install/enable WSL 2, then rerun"
 command -v cygpath >/dev/null 2>&1 || fail "cygpath is required (run this script from Git Bash)"
+wsl_windows=$(cygpath -aw "$(command -v wsl.exe)")
 
 list_distros() {
   wsl.exe -l -q 2>/dev/null | tr -d '\000\r' | sed 's/^[^[:alnum:]]*//'
@@ -51,6 +52,7 @@ wrapper_posix="$(pwd)/bin/windows-wsl-locale.exe"
 CGO_ENABLED=0 go build -o "$wrapper_posix" ./tools/windowswslocale
 wrapper_windows=$(cygpath -aw "$wrapper_posix")
 export BASHY_WSL_DISTRO=Ubuntu
+export BASHY_WSL_EXE="$wsl_windows"
 export BASHY_HOST_LOCALE="$wrapper_windows"
 export BASHY_HOST_LOCALE_NAMES='en_US.UTF-8;zh_TW.big5;ja_JP.SJIS;fr_FR.ISO8859-1;de_DE.UTF-8;zh_HK.big5hkscs;ru_RU.CP1251'
 
@@ -95,12 +97,14 @@ done
 env_file="$(pwd)/bin/windows-wsl-locales.env"
 {
   printf 'export BASHY_WSL_DISTRO=%q\n' "$BASHY_WSL_DISTRO"
+  printf 'export BASHY_WSL_EXE=%q\n' "$BASHY_WSL_EXE"
   printf 'export BASHY_HOST_LOCALE=%q\n' "$BASHY_HOST_LOCALE"
   printf 'export BASHY_HOST_LOCALE_NAMES=%q\n' "$BASHY_HOST_LOCALE_NAMES"
 } > "$env_file"
 if [ -n "${GITHUB_ENV:-}" ]; then
   {
     printf 'BASHY_WSL_DISTRO=%s\n' "$BASHY_WSL_DISTRO"
+    printf 'BASHY_WSL_EXE=%s\n' "$BASHY_WSL_EXE"
     printf 'BASHY_HOST_LOCALE=%s\n' "$BASHY_HOST_LOCALE"
     printf 'BASHY_HOST_LOCALE_NAMES=%s\n' "$BASHY_HOST_LOCALE_NAMES"
   } >> "$GITHUB_ENV"

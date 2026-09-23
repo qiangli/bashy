@@ -13,7 +13,11 @@ func main() {
 		os.Exit(2)
 	}
 	locale, localeSet := os.LookupEnv("LC_ALL")
-	cmd := exec.Command("wsl.exe", wslLocaleArgs(distro, locale, localeSet, os.Args[1:])...)
+	wsl := os.Getenv("BASHY_WSL_EXE")
+	if wsl == "" {
+		wsl = "wsl.exe"
+	}
+	cmd := exec.Command(wsl, wslLocaleArgs(distro, locale, localeSet, os.Args[1:])...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		if failed, ok := err.(*exec.ExitError); ok {
