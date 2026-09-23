@@ -243,6 +243,12 @@ func applyManagedPodmanEnv(bin string) {
 			fmt.Fprintln(os.Stderr, hint)
 		}
 	case "darwin":
+		// resolveEngineBinary can find a flat cached Podman directly, bypassing
+		// provisionPodman. Restore helpers here too before writing their config.
+		if err := provisionDarwinHelpers(context.Background()); err != nil {
+			fmt.Fprintf(os.Stderr, "bashy podman: %v\n", err)
+			return
+		}
 		conf, err := writeDarwinConfOverride()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "bashy podman: %v\n", err)

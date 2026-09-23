@@ -72,6 +72,10 @@ func TestProvisionPodmanRepairsMissingDarwinHelpersOnCacheHit(t *testing.T) {
 	if got := provisionPodman(context.Background()); got != podman {
 		t.Fatalf("provisionPodman() = %q, want cached %q", got, podman)
 	}
+	if err := os.RemoveAll(filepath.Join(cache, podmanHelperDirName)); err != nil {
+		t.Fatal(err)
+	}
+	// Dispatch resolves a flat cached binary without calling provisionPodman.
 	applyManagedPodmanEnv(podman)
 	for name := range darwinHelperAssets {
 		if !isExecutable(filepath.Join(cache, podmanHelperDirName, name)) {
