@@ -188,7 +188,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          (cd ../sh && go test -v -run '^TestWindowsExecBudgetStopsBeforeCreateProcess$' ./interp) 2>&1 | tee windows-argmax-probe.log
+          (cd ../sh && go test -v -run '^TestWindowsExecBudgetStopsBeforeCreateProcess$|^TestWindowsExecPathOwnerModeAndPlainScript$' ./interp) 2>&1 | tee windows-argmax-probe.log
           go test -v -run '^TestBashDropinShModeKeepsEchoWithEmptyPath$' ./internal/cli 2>&1 | tee -a windows-argmax-probe.log
           mkdir -p windows-argmax-debug
           BASH53_DEBUG_DIR="$(cygpath -aw "$PWD/windows-argmax-debug")" TESTS=execscript ./scripts/ci-bash53-windows.sh 2>&1 | tee -a windows-argmax-probe.log
