@@ -54,6 +54,16 @@ printf '%s\n' "$n"
 	if err != nil || len(out) != 200000 || strings.Trim(string(out), " ") != "" {
 		t.Fatalf("argv[0] dispatch: error=%v, output bytes=%d, prefix=%q", err, len(out), out[:min(len(out), 100)])
 	}
+	// Both the ordinary redirected descriptor and the private frame must
+	// survive the same child launch. The large -c positional operand forces
+	// the frame on Windows as well as Unix.
+	fdScript := `v=$(printf '%*s' 200000 ''); export v; exec 9<<<'pipe-fd'; pad=$(printf '%*s' 200000 ''); exec bash -c 'IFS= read -r -u 9 line; printf "%s %s %s\n" "$line" "${#v}" "${BASHY_OWNED_EXEC_FRAME-unset}"' "$pad"`
+	cmd = exec.Command(bash, "-c", fdScript)
+	cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err = cmd.CombinedOutput()
+	if err != nil || strings.TrimSpace(string(out)) != "pipe-fd 200000 unset" {
+		t.Fatalf("owned frame and inherited fd: error=%v, output=%q", err, out)
+	}
 	if runtime.GOOS != "windows" {
 		pidScript := `v=$(printf '%*s' 200000 ''); export v; printf '%s\n' "$$"; exec bash -c 'printf "%s %s %s\n" "$$" "${#v}" "${BASHY_OWNED_EXEC_FRAME-unset}"'`
 		cmd = exec.Command(bash, "-c", pidScript)
