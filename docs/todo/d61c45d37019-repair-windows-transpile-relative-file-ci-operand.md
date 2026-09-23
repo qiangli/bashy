@@ -3,15 +3,18 @@ id: d61c45d37019
 kind: bug
 title: Repair Windows transpile relative-file CI operand
 seq: 330
-status: doing
+status: done
 priority: p0
 labels:
     - windows
     - release
 created: 2026-09-23T20:10:53.31444Z
+assignee: codex-gpt5.6-sol
 sprint: 250
 sprint_id: c912e608-edfe-59b8-bd36-a98f6dad1634
 sprint_title: Validate Go by Example, Go Tour and BashSharp Tour on three hosts
+closed: 2026-09-23T20:54:54.613525Z
+closed_by: codex-s250
 ---
 
 Bashy test workflow run 35908988886 on candidate e48bd7d fails TestTranspileModuleInputDirectory/relative-file: transpile cannot open ..\module\main.bpp, shown with U+F05C encoded backslashes. The Go test uses filepath.Rel, which emits native backslashes on Windows; the transpile CLI path boundary currently treats relative backslashes as literal POSIX filename characters. Determine the intended native-vs-shell relative operand contract, then make the smallest sound product or test correction with controls for actual Windows dispatch and literal backslashes. Keep existing source/fixture semantics and limits. Gate: focused Windows runtime test, macOS/Linux tests, and Bashy three-OS test CI green before release tagging.
@@ -27,3 +30,12 @@ passed the unchanged absolute-file, relative-file, and stdin subtests in
 `82c6753134a710a12957f8c9653971cfcfb90697e24e918fe5ee77bb1ea23373`.
 The focused macOS test and Windows cross-compilation also passed. Three-OS
 candidate CI remains required before closing this card.
+
+Hosted Bashy `test` workflow 35915920628 at `62ad09585a3de52a0fcb790706a9856a1ff15bd4`
+passed `TestTranspileModuleInputDirectory` and all three absolute-file,
+relative-file, and stdin subtests on Windows. Its Ubuntu and macOS jobs also
+passed; the Windows job later failed only the separate GNU Bash helper argv0
+case tracked by Story #331. After that repair, workflow 35916946227 at
+`56bbb856b5578aa5204cc004c5d9bfedc4514197` passed all Ubuntu, macOS,
+Windows, and meet-spa-fresh jobs. The release notes/pin candidate gets its own
+exact-head CI gate under Story #744.
