@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -1561,6 +1562,39 @@ func TestStrictPosixNotEngagedByPosixFlag(t *testing.T) {
 				t.Fatalf("argv0=%q with posix mode: want completion exit 0, got %v (strict mode leaked past argv0==sh)", argv0, err)
 			}
 		})
+	}
+}
+
+func TestPosixReadonlyPrefixAssignmentStopsPhysicalLine(t *testing.T) {
+	const script = "readonly a=a\na=b true; printf 'same-line\\n'\nprintf 'next-line\\n'\n"
+	for _, posixMode := range []bool{false, true} {
+		for _, argv0 := range []string{"bash", "rbash", "bashy"} {
+			t.Run(fmt.Sprintf("%s/posix=%t", argv0, posixMode), func(t *testing.T) {
+				withStrictPosixEnv(t, argv0, posixMode)
+				file, err := syntax.NewParser().Parse(strings.NewReader(script), "")
+				if err != nil {
+					t.Fatal(err)
+				}
+				r, err := newRunner()
+				if err != nil {
+					t.Fatal(err)
+				}
+				var stdout bytes.Buffer
+				if err := interp.StdIO(nil, &stdout, io.Discard)(r); err != nil {
+					t.Fatal(err)
+				}
+				if err := r.Run(context.Background(), file); err != nil {
+					t.Fatalf("Run error = %v, want next physical line to complete", err)
+				}
+				want := "same-line\nnext-line\n"
+				if posixMode {
+					want = "next-line\n"
+				}
+				if got := stdout.String(); got != want {
+					t.Fatalf("stdout = %q, want %q", got, want)
+				}
+			})
+		}
 	}
 }
 
