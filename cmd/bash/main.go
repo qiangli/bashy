@@ -8,8 +8,20 @@
 // the sibling cmd/bashy and is built independently.
 package main
 
-import "github.com/qiangli/bashy/internal/cli"
+import (
+	"fmt"
+	"os"
+
+	"github.com/qiangli/bashy/internal/cli"
+	"mvdan.cc/sh/v3/interp/ownedexec"
+)
 
 func init() { cli.BashDropinShMode = true }
 
-func main() { cli.Main() }
+func main() {
+	if err := ownedexec.Adopt(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(126)
+	}
+	cli.Main()
+}
