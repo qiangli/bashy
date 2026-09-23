@@ -4624,7 +4624,11 @@ func runPath(r *interp.Runner, path string) error {
 		if !strings.Contains(path, "/") {
 			if resolved, lerr := interp.LookPathDir(r.Dir, r.Env, path); lerr == nil {
 				path = resolved
-				f, err = os.Open(path)
+				// LookPathDir returns the shell's spelling. A child Bashy process
+				// keeps a POSIX PATH (for example /bin:/usr/bin), so a bare
+				// script operand may resolve to /bin/ls on Windows. Open through
+				// the same mount conversion as the original operand.
+				f, err = os.Open(interp.ShellPathToOS(r.Dir, path))
 			}
 		}
 		if err != nil {
