@@ -169,7 +169,10 @@ func provisionDarwinHelpers(ctx context.Context) error {
 		if isExecutable(dest) {
 			continue
 		}
-		t := binmgr.Tool{Name: name, Version: a.version, Assets: map[string]binmgr.Asset{
+		// Legacy installs may have a flat <cache>/gvproxy or <cache>/vfkit
+		// executable. Give verified managed assets their own cache keys so
+		// binmgr can create versioned directories without moving those files.
+		t := binmgr.Tool{Name: "podman-" + name, Version: a.version, Assets: map[string]binmgr.Asset{
 			binmgr.Platform(): {URL: a.url, SHA256: a.sha256},
 		}}
 		src, err := binmgr.Ensure(ctx, t)

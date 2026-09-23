@@ -66,7 +66,8 @@ func TestProvisionPodmanRepairsMissingDarwinHelpersOnCacheHit(t *testing.T) {
 	podman := filepath.Join(cache, "podman", podmanAsset.version, filepath.FromSlash(podmanAsset.entrypoint))
 	writeExecutable(podman)
 	for name, asset := range darwinHelperAssets {
-		writeExecutable(filepath.Join(cache, name, asset.version, name))
+		writeExecutable(filepath.Join(cache, "podman-"+name, asset.version, "podman-"+name))
+		writeExecutable(filepath.Join(cache, name)) // legacy flat helper must survive
 	}
 
 	if got := provisionPodman(context.Background()); got != podman {
@@ -80,6 +81,9 @@ func TestProvisionPodmanRepairsMissingDarwinHelpersOnCacheHit(t *testing.T) {
 	for name := range darwinHelperAssets {
 		if !isExecutable(filepath.Join(cache, podmanHelperDirName, name)) {
 			t.Errorf("missing repaired %s helper", name)
+		}
+		if !isExecutable(filepath.Join(cache, name)) {
+			t.Errorf("legacy flat %s helper was changed", name)
 		}
 	}
 	conf := filepath.Join(cache, podmanHelperDirName, podmanConfOverrideName)
