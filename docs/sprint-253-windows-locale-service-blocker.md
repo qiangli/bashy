@@ -2,6 +2,14 @@
 
 Story: #711 (`f3f0e3ef7aae`)
 
+> Superseded for the production conformance lane: focused run 35799866752
+> proved that stock `windows-latest` can install Ubuntu under WSL without a
+> reboot and generate genuine glibc `zh_HK.big5hkscs`; run 35800181629 then
+> exposed a coreutils parser rejection. The narrow numeric-list repair is in
+> coreutils 3ac9c931; Windows yoke validation follows. The native-only
+> survey below remains the evidence for why WSL is a prerequisite rather than
+> a fabricated Windows locale table. See `plan-windows-wsl-locale-provider.md`.
+
 ## Result
 
 The Windows fixture root now has the fail-closed host-provider handoff, but the
