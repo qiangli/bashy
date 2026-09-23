@@ -35,11 +35,12 @@ var helperNames = []string{"recho", "zecho", "xcase"}
 // invoked under one of the helper names (a hard link or a copy), and reports
 // whether it did. It never triggers on the harness's own name.
 func runAsHelper(argv0 string, args []string, stdin io.Reader, stdout, stderr io.Writer) (int, bool) {
-	base := strings.TrimSuffix(filepath.Base(argv0), ".exe")
+	base := filepath.Base(argv0)
 	if runtime.GOOS == "windows" {
 		// argv[0] keeps whatever case the caller used (rEcHo.exe still runs).
 		base = strings.ToLower(base)
 	}
+	base = strings.TrimSuffix(base, ".exe")
 	switch base {
 	case "recho":
 		return helperRecho(args, stdout), true
