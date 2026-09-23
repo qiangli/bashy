@@ -189,7 +189,8 @@ jobs:
         run: |
           set -euo pipefail
           (cd ../sh && go test -v -run '^TestWindowsExecBudgetStopsBeforeCreateProcess$' ./interp) 2>&1 | tee windows-argmax-probe.log
-          TESTS=execscript ./scripts/ci-bash53-windows.sh 2>&1 | tee -a windows-argmax-probe.log
+          mkdir -p windows-argmax-debug
+          BASH53_DEBUG_DIR="$(cygpath -aw "$PWD/windows-argmax-debug")" TESTS=execscript ./scripts/ci-bash53-windows.sh 2>&1 | tee -a windows-argmax-probe.log
           grep -q '^  PASS  execscript' bash53-windows.log
           ! grep -Eq '^  (FAIL|TIME|SKIP)  execscript' bash53-windows.log
       - uses: actions/upload-artifact@v4
@@ -201,4 +202,6 @@ jobs:
             windows-locale-probe.log
             windows-pipe-probe.log
             windows-argmax-probe.log
+            windows-argmax-debug/execscript.got
+            windows-argmax-debug/execscript.want
           if-no-files-found: error

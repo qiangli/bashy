@@ -1524,6 +1524,33 @@ func TestStrictPosixEngagedByArgv0Sh(t *testing.T) {
 	}
 }
 
+func TestBashDropinShModeKeepsEchoWithEmptyPath(t *testing.T) {
+	withStrictPosixEnv(t, "sh", true)
+	old := BashDropinShMode
+	BashDropinShMode = true
+	t.Cleanup(func() { BashDropinShMode = old })
+	if _, err := runStrictProbe(t); err != nil {
+		t.Fatalf("pure Bash drop-in sh unexpectedly used strict POSIX: %v", err)
+	}
+	for _, source := range []string{"PATH=; echo this-is-sh", "unset PATH; echo this-is-sh"} {
+		file, err := syntax.NewParser().Parse(strings.NewReader(source), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := newRunner()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var output bytes.Buffer
+		if err := interp.StdIO(nil, &output, io.Discard)(r); err != nil {
+			t.Fatal(err)
+		}
+		if err := r.Run(context.Background(), file); err != nil || output.String() != "this-is-sh\n" {
+			t.Fatalf("%q: output=%q status=%v", source, output.String(), err)
+		}
+	}
+}
+
 func TestStrictPosixNotEngagedByPosixFlag(t *testing.T) {
 	// `bash --posix` / `-o posix` / SHELLOPTS=posix / POSIXLY_CORRECT must stay
 	// byte-identical to bash 5.3, which survives the assignment error.

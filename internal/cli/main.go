@@ -534,6 +534,11 @@ var (
 	// AgentOSBashPPDefault identifies the bashy entry point without coupling the
 	// shared CLI package to cmd/bashy. The pure bash binary leaves this false.
 	AgentOSBashPPDefault = false
+	// BashDropinShMode keeps the pure cmd/bash binary Bash-compatible when it
+	// is linked as sh. GNU Bash enters POSIX mode under that name but does not
+	// apply Bashy's stricter POSIX certification rules (such as PATH-gating
+	// echo). cmd/bashy leaves this false for its POSIX sh contract.
+	BashDropinShMode = false
 
 	// SuppressedForkBuiltins names the qiangli/sh fork's extra builtins that the
 	// pure `bash` drop-in disables so its command table matches bash 5.3 exactly.
@@ -809,14 +814,16 @@ func newRunner() (*interp.Runner, error) {
 	} else if startupPosix {
 		opts = append(opts, interp.WithJobCarrier(unsupportedJobCarrier{}))
 	}
-	// argv[0]=="sh" asks for a *POSIX sh*, not "bash in posix mode": the caller
-	// picked the historical name, so the stricter POSIX-mandated semantics apply
+	// AgentOS argv[0]=="sh" asks for a *POSIX sh*, not "bash in posix mode":
+	// the caller picked the historical name, so stricter POSIX semantics apply
 	// (assignment errors are fatal in any command word, function names may not
 	// shadow special builtins, regular builtins are PATH-gated, bare `return` in
 	// a trap action yields the pre-trap $?). Deliberately NOT engaged by
 	// `--posix`, `-o posix`, SHELLOPTS=posix or POSIXLY_CORRECT — non-strict
-	// posix mode stays byte-identical to bash 5.3.
-	if invokedAsSh() {
+	// posix mode stays byte-identical to bash 5.3. The pure cmd/bash drop-in
+	// follows GNU Bash's sh invocation instead, which retains regular builtins
+	// such as echo even when PATH is empty.
+	if invokedAsSh() && !BashDropinShMode {
 		opts = append(opts, interp.WithStrictPosix(true))
 	}
 	// For the AgentOS shell `bashy`, inject the coreutils pure-Go userland +
