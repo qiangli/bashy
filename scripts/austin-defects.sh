@@ -32,18 +32,54 @@
 # (no filesystem mutation, no signals, no OS-specific data), so there are
 # currently none — the hook is kept for parity with the template.
 #
-# Usage: scripts/austin-defects.sh   (needs bin/bashy built + a container runtime)
+# Usage: scripts/austin-defects.sh [--candidate-only | --oracle-bash /path/to/bash-5.3]
+# A local upstream GNU Bash 5.3 oracle avoids a container on native hosts.
+# Candidate-only mode records probe execution without scoring conformance.
 # Exit: 0 iff every non-INFO probe matches  (0-gate suite — plugs into
 #       scripts/posix-certdryrun.sh, which expects this contract).
 # NB: deliberately NO `set -u` — same long-standing sh nounset/array bug noted
 # in posix-parity.sh; this harness is interpreted by that shell.
 BASHY=${BASHY:-./bin/bashy}
+ORACLE_BASH=
+CANDIDATE_ONLY=0
+case "${1:-}" in
+  '') ;;
+  --candidate-only) CANDIDATE_ONLY=1 ;;
+  --oracle-bash)
+    [ "$#" -eq 2 ] && [ -x "$2" ] || {
+      echo "austin-defects: --oracle-bash needs an executable path" >&2; exit 2;
+    }
+    ORACLE_BASH=$2 ;;
+  *) echo "usage: $0 [--candidate-only | --oracle-bash /path/to/bash-5.3]" >&2; exit 2 ;;
+esac
+if [ "$CANDIDATE_ONLY" = 1 ] || [ -n "$ORACLE_BASH" ]; then
+  "$BASHY" check --prepare "$0" || {
+    echo "austin-defects: preload failed; no probes started" >&2; exit 2
+  }
+  "$BASHY" -c 'for tool in env sed tr grep head awk; do
+    command -v "$tool" >/dev/null || { printf "missing harness utility: %s\n" "$tool" >&2; exit 1; }
+  done' || {
+    echo "austin-defects: Bashy userland preload incomplete; no probes started" >&2; exit 2
+  }
+  echo "austin-defects: preload complete: harness utilities resolved in Bashy"
+fi
+if [ -n "$ORACLE_BASH" ]; then
+  version=$("$ORACLE_BASH" --version | head -1)
+  case "$version" in
+    'GNU bash, version 5.3.'*'-release '*) ;;
+    *) echo "austin-defects: local oracle must be upstream GNU Bash 5.3: $version" >&2; exit 2 ;;
+  esac
+  if [ "$ORACLE_BASH" -ef "$BASHY" ]; then
+    echo "austin-defects: oracle and candidate are the same executable" >&2; exit 2
+  fi
+  echo "austin-defects: local oracle: $version ($ORACLE_BASH)"
+fi
 
 # Container runtime that provides the bash 5.3 oracle. Defaults to `docker`,
 # auto-falls back to `bashy podman` (embedded rootless Podman on dev machines
 # without Docker). Override with OCI="..." for anything else.
 OCI=${OCI:-}
-if [ -z "$OCI" ]; then
+if [ -z "$OCI" ] && [ -z "$ORACLE_BASH" ] && [ "$CANDIDATE_ONLY" = 0 ]; then
   if command -v docker >/dev/null 2>&1; then OCI=docker
   elif [ -n "${BASHY:-}" ]; then OCI="$BASHY podman"
   elif command -v bashy  >/dev/null 2>&1; then OCI="bashy podman"
@@ -161,14 +197,35 @@ add sb-persist  'x=1; x=2 :; echo "[$x]"'
 add rb-trans    'x=1; x=2 true; echo "[$x]"'
 
 # --- run bashy locally: capture stdout + success/fail (discard diagnostics) ---
-declare -a BY_OUT BY_OK
+declare -a BY_OUT BY_OK BY_RC
 for i in "${!NUMS[@]}"; do
-  out=$("${CLEAN[@]}" "$BASHY" --posix -c "${SCRIPTS[$i]}" 2>/dev/null); rc=$?
+  if [ "$CANDIDATE_ONLY" = 1 ]; then
+    out=$("${CLEAN[@]}" "$BASHY" --posix -c "${SCRIPTS[$i]}" 2>&1); rc=$?
+  else
+    out=$("${CLEAN[@]}" "$BASHY" --posix -c "${SCRIPTS[$i]}" 2>/dev/null); rc=$?
+  fi
   BY_OUT[$i]=$(printf '%s' "$out" | norm | tr '\n' '~')
   BY_OK[$i]=$([ "$rc" -eq 0 ] && echo ok || echo err)
+  BY_RC[$i]=$rc
 done
 
-# --- run bash 5.3 in one container, stdout + exit marker per probe ---
+if [ "$CANDIDATE_ONLY" = 1 ]; then
+  for i in "${!NUMS[@]}"; do
+    printf 'EXECUTED #%s rc=%s stdout+stderr=[%s]\n' "${NUMS[$i]}" "${BY_RC[$i]}" "${BY_OUT[$i]}"
+  done
+  echo "=== ${#NUMS[@]} candidate probes executed / no oracle comparison ==="
+  exit 0
+fi
+
+# --- run the independent bash 5.3 reference ---
+declare -a BH_OUT_N BH_OK_N
+if [ -n "$ORACLE_BASH" ]; then
+  for i in "${!NUMS[@]}"; do
+    out=$("${CLEAN[@]}" "$ORACLE_BASH" --posix -c "${SCRIPTS[$i]}" 2>/dev/null); rc=$?
+    BH_OUT_N[$i]=$(printf '%s' "$out" | norm | tr '\n' '~')
+    BH_OK_N[$i]=$([ "$rc" -eq 0 ] && echo ok || echo err)
+  done
+else
 PROBES=$(for i in "${!NUMS[@]}"; do printf '%s\t%s\n' "$i" "${SCRIPTS[$i]}"; done)
 RAW=$(printf '%s\n' "$PROBES" | $OCI run --rm -i -e HOME=/tmp bash:5.3 bash -c '
   tab=$(printf "\t")
@@ -195,7 +252,6 @@ done < <(printf '%s\n' "$RAW")
 # Map container marker index (numeric position) back to probe ID for compare.
 # We keyed BH_OUT/BH_OK by the same loop index $i used to print PROBES, so a
 # parallel index walk lines them up regardless of the (string) probe IDs.
-declare -a BH_OUT_N BH_OK_N
 n=0
 for i in "${!NUMS[@]}"; do
   s=$(printf '%s' "${BH_OUT[$n]:-}" | norm)
@@ -203,6 +259,7 @@ for i in "${!NUMS[@]}"; do
   BH_OK_N[$i]=${BH_OK[$n]:-?}
   n=$((n+1))
 done
+fi
 
 # --- compare on (stdout, success/fail) ---
 match=0; diff=0; infon=0

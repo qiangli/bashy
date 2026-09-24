@@ -376,8 +376,13 @@ def run_probe(cmd, probe):
     # `@@@X:n:` prefix is racy because readline first echoes the printf command
     # containing that same text; stopping there kills the shell before printf
     # executes and falsely reports a missing sentinel.
+    # Readline may render several pending prompts before the completion
+    # marker when input was queued in one PTY write. Accept those prefixes;
+    # the marker itself still has to be a complete executed output line.
     end_re_bytes = re.compile(
-        rb"(?:^|\r?\n)@@@X:" + str(probe.num).encode() + rb":\d+@@@\r?\n"
+        rb"(?:^|\r?\n)(?:@@@PROMPT@@@[ ]*)*@@@X:"
+        + str(probe.num).encode()
+        + rb":\d+@@@\r?\n"
     )
     raw = first + read_available(
         master, sel, proc, time.time() + 10.0, stop_re=end_re_bytes
@@ -392,7 +397,7 @@ def run_probe(cmd, probe):
     rc = None
     for raw_line in text.split("\n"):
         line = raw_line.strip()
-        if line.startswith(PROMPT_TOKEN):
+        while line.startswith(PROMPT_TOKEN):
             line = line[len(PROMPT_TOKEN):].strip()
         if line == start:
             in_body = True

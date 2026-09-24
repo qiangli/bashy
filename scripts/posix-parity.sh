@@ -19,9 +19,11 @@
 # signal set differs Darwin vs Linux) are marked INFO and excluded from the
 # pass/fail count — only the POSIX-relevant aspect (format) is asserted.
 #
-# Usage: scripts/posix-parity.sh [--candidate-only]
+# Usage: scripts/posix-parity.sh [--candidate-only | --oracle-bash /path/to/bash-5.3]
 #   --candidate-only runs the probes locally through bashy --posix without an
 #   oracle. It reports execution and exit status, not conformance or parity.
+#   --oracle-bash uses an installed, independent GNU Bash 5.3 on the same host
+#   as the reference, without starting a container.
 # Exit: default mode exits 0 iff every non-INFO probe matches. Candidate-only
 # mode exits 0 after all probes run; individual probe exit codes are reported.
 # NB: deliberately NO `set -u`. The shell-under-test (bashy/sh) has a
@@ -30,16 +32,33 @@
 # accepts it. This harness is interpreted by that shell, so `set -u` aborts it.
 # Tracked as a separate sh conformance bug; does not affect the probes below.
 BASHY=${BASHY:-./bin/bashy}
+ORACLE_BASH=
 case "${1:-}" in
   '') CANDIDATE_ONLY=0 ;;
   --candidate-only) CANDIDATE_ONLY=1 ;;
-  *) echo "usage: $0 [--candidate-only]" >&2; exit 2 ;;
+  --oracle-bash)
+    [ "$#" -eq 2 ] && [ -x "$2" ] || {
+      echo "posix-parity: --oracle-bash needs an executable path" >&2; exit 2;
+    }
+    CANDIDATE_ONLY=0; ORACLE_BASH=$2 ;;
+  *) echo "usage: $0 [--candidate-only | --oracle-bash /path/to/bash-5.3]" >&2; exit 2 ;;
 esac
 ROOT=${BASHY_POSIX_REPO_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 cd "$ROOT" || exit 2
 [ -x "$BASHY" ] || { echo "posix-parity: candidate is not executable: $BASHY" >&2; exit 2; }
+if [ -n "$ORACLE_BASH" ]; then
+  version=$("$ORACLE_BASH" --version | head -1)
+  case "$version" in
+    'GNU bash, version 5.3.'*'-release '*) ;;
+    *) echo "posix-parity: local oracle must be upstream GNU Bash 5.3: $version" >&2; exit 2 ;;
+  esac
+  if [ "$ORACLE_BASH" -ef "$BASHY" ]; then
+    echo "posix-parity: oracle and candidate are the same executable" >&2; exit 2
+  fi
+  echo "posix-parity: local oracle: $version ($ORACLE_BASH)"
+fi
 
-if [ "$CANDIDATE_ONLY" = 1 ]; then
+if [ "$CANDIDATE_ONLY" = 1 ] || [ -n "$ORACLE_BASH" ]; then
   # `check --prepare` is Bashy's preload command. Scope it to this script so
   # shell-only suites do not download unrelated island toolchains.
   echo "posix-parity: preload: bashy check --prepare $0"
@@ -177,7 +196,7 @@ resolve_bashy_podman() {
 # Container runtime that provides the bash 5.3 oracle. Defaults to `docker`,
 # but auto-falls back to `bashy podman` (the embedded rootless Podman on dev
 # machines that have no Docker). Override with OCI="..." for anything else.
-if [ "$CANDIDATE_ONLY" = 0 ]; then
+if [ "$CANDIDATE_ONLY" = 0 ] && [ -z "$ORACLE_BASH" ]; then
   OCI=${OCI:-}
   if [ -z "$OCI" ]; then
     if command -v docker >/dev/null 2>&1 && oci_works docker; then
@@ -273,7 +292,15 @@ if [ "$CANDIDATE_ONLY" = 1 ]; then
   exit 0
 fi
 
-# --- run bash 5.3 in one docker container, stdout + exit marker per probe ---
+# --- run the independent bash 5.3 reference ---
+declare -a BH_OUT BH_OK
+if [ -n "$ORACLE_BASH" ]; then
+  for i in "${!NUMS[@]}"; do
+    out=$("${CLEAN[@]}" "$ORACLE_BASH" --posix -c "${SCRIPTS[$i]}" 2>/dev/null); rc=$?
+    BH_OUT[$i]=$(printf '%s' "$out" | norm | tr '\n' '~')
+    BH_OK[$i]=$([ "$rc" -eq 0 ] && echo ok || echo err)
+  done
+else
 PROBES=$(for i in "${!NUMS[@]}"; do printf '%s\t%s\n' "$i" "${SCRIPTS[$i]}"; done)
 if ! RAW=$(printf '%s\n' "$PROBES" | $OCI run --rm -i -e HOME=/tmp bash:5.3 bash -c '
   tab=$(printf "\t")
@@ -293,7 +320,6 @@ case "$RAW" in
     exit 2
     ;;
 esac
-declare -a BH_OUT BH_OK
 cur=""
 while IFS= read -r line; do
   case "$line" in
@@ -309,6 +335,7 @@ for i in "${!NUMS[@]}"; do
   s=$(printf '%s' "${BH_OUT[$i]:-}" | norm)
   BH_OUT[$i]=$(printf '%s' "$s" | tr '\n' '~')
 done
+fi
 
 # --- compare on (stdout, success/fail) ---
 match=0; diff=0; infon=0
