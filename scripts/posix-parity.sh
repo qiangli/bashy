@@ -19,14 +19,23 @@
 # signal set differs Darwin vs Linux) are marked INFO and excluded from the
 # pass/fail count — only the POSIX-relevant aspect (format) is asserted.
 #
-# Usage: scripts/posix-parity.sh   (needs bin/bashy built + docker or bashy podman)
-# Exit: 0 iff every non-INFO probe matches.
+# Usage: scripts/posix-parity.sh [--candidate-only]
+#   --candidate-only runs the probes locally through bashy --posix without an
+#   oracle. It reports execution and exit status, not conformance or parity.
+# Exit: default mode exits 0 iff every non-INFO probe matches. Candidate-only
+# mode exits 0 after all probes run; individual probe exit codes are reported.
 # NB: deliberately NO `set -u`. The shell-under-test (bashy/sh) has a
 # long-standing nounset bug — under `set -u`, assigning to a not-yet-set array
 # element (`arr[$i]=…`) falsely errors "unbound variable", whereas real bash 5.3
 # accepts it. This harness is interpreted by that shell, so `set -u` aborts it.
 # Tracked as a separate sh conformance bug; does not affect the probes below.
 BASHY=${BASHY:-./bin/bashy}
+[ -x "$BASHY" ] || { echo "posix-parity: candidate is not executable: $BASHY" >&2; exit 2; }
+case "${1:-}" in
+  '') CANDIDATE_ONLY=0 ;;
+  --candidate-only) CANDIDATE_ONLY=1 ;;
+  *) echo "usage: $0 [--candidate-only]" >&2; exit 2 ;;
+esac
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT" || exit 2
 
@@ -151,12 +160,14 @@ resolve_bashy_podman() {
 # Container runtime that provides the bash 5.3 oracle. Defaults to `docker`,
 # but auto-falls back to `bashy podman` (the embedded rootless Podman on dev
 # machines that have no Docker). Override with OCI="..." for anything else.
-OCI=${OCI:-}
-if [ -z "$OCI" ]; then
-  if command -v docker >/dev/null 2>&1 && oci_works docker; then
-    OCI=docker
-  else
-    OCI=$(resolve_bashy_podman) || { echo "error: no working container runtime (need docker or bashy podman)" >&2; exit 2; }
+if [ "$CANDIDATE_ONLY" = 0 ]; then
+  OCI=${OCI:-}
+  if [ -z "$OCI" ]; then
+    if command -v docker >/dev/null 2>&1 && oci_works docker; then
+      OCI=docker
+    else
+      OCI=$(resolve_bashy_podman) || { echo "error: no working container runtime (need docker or bashy podman)" >&2; exit 2; }
+    fi
   fi
 fi
 
@@ -225,12 +236,25 @@ add  61 'printf "%.6f\n" 0.5'
 add  62 'cd /; pwd'
 
 # --- run bashy locally: capture stdout + success/fail (discard diagnostics) ---
-declare -a BY_OUT BY_OK
+declare -a BY_OUT BY_OK BY_RC
 for i in "${!NUMS[@]}"; do
-  out=$("${CLEAN[@]}" "$BASHY" --posix -c "${SCRIPTS[$i]}" 2>/dev/null); rc=$?
+  if [ "$CANDIDATE_ONLY" = 1 ]; then
+    out=$("${CLEAN[@]}" "$BASHY" --posix -c "${SCRIPTS[$i]}" 2>&1); rc=$?
+  else
+    out=$("${CLEAN[@]}" "$BASHY" --posix -c "${SCRIPTS[$i]}" 2>/dev/null); rc=$?
+  fi
   BY_OUT[$i]=$(printf '%s' "$out" | norm | tr '\n' '~')
   BY_OK[$i]=$([ "$rc" -eq 0 ] && echo ok || echo err)
+  BY_RC[$i]=$rc
 done
+
+if [ "$CANDIDATE_ONLY" = 1 ]; then
+  for i in "${!NUMS[@]}"; do
+    printf 'EXECUTED #%s rc=%s stdout+stderr=[%s]\n' "${NUMS[$i]}" "${BY_RC[$i]}" "${BY_OUT[$i]}"
+  done
+  echo "=== ${#NUMS[@]} candidate probes executed / no oracle comparison ==="
+  exit 0
+fi
 
 # --- run bash 5.3 in one docker container, stdout + exit marker per probe ---
 PROBES=$(for i in "${!NUMS[@]}"; do printf '%s\t%s\n' "$i" "${SCRIPTS[$i]}"; done)
