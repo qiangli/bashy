@@ -1051,27 +1051,35 @@ BASH53_OCI="$BASHY_EXE podman" make test-bash-container
 ```
 
 ### test-posix-shell
-Run the licensed POSIX Profile B **shell-only** release gate. This is opt-in:
-the proprietary harness and supervisor-issued approval stay outside this
-repository. Configure `VSC_PCTS_HARNESS_DIR` to the local harness checkout,
-`VSC_DO_STATE_DIR` and `VSC_DO_STATE` to its DO2 coordination state,
-`VSC_SHELL_ARM` to a new arm name, and `VSC_PRIVATE_EVIDENCE_DIR` and
-`VSC_PUBLIC_EVIDENCE_DIR` to new evidence roots outside Git. Then run
-`bashy dag test-posix-shell`. Never point this target at the full utility
-campaign. The target passes its absolute, clean source root as
-`BASHY_SOURCE_DIR`; the private wrapper requires that root's HEAD to match
-the supervisor record before transfer. The supervisor-issued 10-field record
-is the private harness's gitignored `.vsc-phase-gate` file (mode 0600),
-separate from `$VSC_DO_STATE_DIR/state`. The wrapper validates that approval,
-exact source pins, transfer, build, SUT wiring, preflight, and phase gate;
-dispatches only one shell set under the original envelope; retrieves sealed
-evidence; and
-returns success only for 493 certification-pass-group TPs with zero blockers,
-caps, and runner failures. A missing harness, approval, receipt, or red result
-stops this DAG target and therefore the Bashy POSIX release gate. The local
-strict `bin/sh{,.real}` build checks the same tagged source and target recipe;
-the private harness rebuilds that target on DO2 and stages its Linux bytes as
-the SUT. The GNU-compatible `bin/bash` fixture gate remains separate.
+Run the licensed POSIX Profile B **shell-only** release gate, explicitly and
+only from a clean, pushed Bashy checkout at the supervisor-approved commit.
+The private harness and approval remain outside this repository. Its supervisor
+issues a 10-field `.vsc-phase-gate` file (gitignored, mode 0600) in the private
+harness checkout; this target never issues or edits approval. Configure a new
+unique arm and new private/public evidence roots outside Git, then run:
+
+    cd /absolute/path/to/bashy
+    export VSC_PCTS_HARNESS_DIR=/absolute/path/to/private/harness
+    export VSC_DO_STATE_DIR=/absolute/path/to/do2-state-root
+    export VSC_DO_STATE="$VSC_DO_STATE_DIR/state"
+    export VSC_SHELL_ARM=shell-only-unique-arm-name
+    export VSC_PRIVATE_EVIDENCE_DIR=/absolute/path/to/new-private-evidence
+    export VSC_PUBLIC_EVIDENCE_DIR=/absolute/path/to/new-public-evidence
+    bashy dag test-posix-shell
+
+The DAG passes its absolute source root as `BASHY_SOURCE_DIR`. The private
+wrapper checks its clean HEAD and sibling pins against the approval before
+transfer, builds `cmd/sh` on DO2, wires it as the pure SUT, runs preflight and
+phase gate, then dispatches **one shell set/493 TPs** under the original
+envelope with external GNU/system providers and no utility sets. It retrieves
+sealed evidence into the configured roots and must return success only for
+493 certification-pass-group TPs, zero blockers, caps, and runner failures.
+Record the arm, exact approved commits, public ledger/runner hashes, and
+retrieval verdict in the release evidence. Missing harness/approval, source
+drift, incomplete receipt, or any red TP exits nonzero and blocks the Bashy
+POSIX release gate. The local strict `bin/sh{,.real}` build checks the same
+source/target recipe; DO2 rebuilds its own Linux SUT bytes. The GNU-compatible
+`bin/bash` 86-fixture gate remains separate.
 Effects: cred, exec, net, read, write
 
 ```bash
