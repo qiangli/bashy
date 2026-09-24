@@ -17,8 +17,32 @@
 #        BASH_PTY_SUT=/path/to/bash scripts/posix-parity-pty.sh
 #        BASH_REF=/path/to/bash scripts/posix-parity-pty.sh   # smoke fallback
 #
-# Exit: 0 iff every non-INFO probe matches.
+# Exit: Unix comparison mode returns 0 iff every non-INFO probe matches.
+# Native Windows candidate-only mode returns 0 when all six ConPTY probes
+# complete; it makes no parity or conformance claim without an oracle.
 set -u
+
+# Python's pty/termios backend is Unix-only. On native Windows, run the same
+# six interactive scripts in a real ConPTY session. With no independent Bash
+# 5.3 executable there, this backend records execution without a parity score.
+case "${OS:-}" in
+  Windows_NT)
+    pty_sut=${BASH_PTY_SUT:-./bin/bashy.exe}
+    "$pty_sut" check --prepare "$0" || {
+      echo "posix-parity-pty: preload failed; no interactive probes started" >&2
+      exit 2
+    }
+    # Bashy's Windows userland can execute grep even when `command -v` does
+    # not enumerate its applet dispatcher. Probe the actual operation used by
+    # the interactive case instead of that introspection builtin.
+    "$pty_sut" -c "printf 'posix on\\n' | grep '^posix' >/dev/null" || {
+      echo "posix-parity-pty: Bashy grep unavailable; no interactive probes started" >&2
+      exit 2
+    }
+    exec "${BASH_PTY_WINDOWS_EXE:-./bin/posix-pty-windows.exe}" \
+      "$pty_sut"
+    ;;
+esac
 
 # Do not inherit $BASHY here: `bashy dag` intentionally injects that variable
 # as its AgentOS executable, which must not become the certification SUT.
