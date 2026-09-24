@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist tidy clean help
+.PHONY: dag build build-bash build-sh build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -8,6 +8,7 @@ BASH_TESTS_DIR := external/bash-5.3/tests
 # The bash test fixtures invoke the shell as `bash` / via $BASH, so the
 # compliance harness drives a copy named `bin/bash`.
 BASHY := $(BIN_DIR)/bash
+SH := $(BIN_DIR)/sh
 
 # Stamp a real version onto release builds. Override on the command line, e.g.
 #   make build VERSION=v0.1.0
@@ -96,6 +97,19 @@ build-bash:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bash; \
 	if [ "$$launcher" = 1 ]; then \
 		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BASHY) native/siglaunch.c.in; \
+	fi
+
+## build-sh: Build the pure strict POSIX sh for the opt-in shell conformance
+## gate. The regular build and release archives keep their GNU Bash binaries.
+build-sh:
+	@mkdir -p $(BIN_DIR)
+	@set -e; \
+	goos=$$(go env GOOS); out=$(SH); launcher=$$(scripts/launcher-wanted.sh build-sh); \
+	if [ "$$goos" = windows ]; then out=$(SH).exe; fi; \
+	[ "$$launcher" = 1 ] && out=$(SH).real || rm -f $(SH).real; \
+	go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/sh; \
+	if [ "$$launcher" = 1 ]; then \
+		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(SH) native/siglaunch.c.in; \
 	fi
 
 ## build-bashy: Build the AgentOS shell (cmd/bashy -> bin/bashy), embedding the

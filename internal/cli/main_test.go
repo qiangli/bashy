@@ -1507,7 +1507,11 @@ func runStrictProbe(t *testing.T) (exited bool, err error) {
 func TestStrictPosixEngagedByArgv0Sh(t *testing.T) {
 	// Every spelling of "invoked as sh" bash honors: plain, login (leading
 	// '-'), and an absolute path.
-	for _, argv0 := range []string{"sh", "-sh", "/bin/sh"} {
+	argv0s := []string{"sh", "-sh", "/bin/sh"}
+	if runtime.GOOS == "windows" {
+		argv0s = append(argv0s, "sh.exe", "-sh.exe", `C:\bin\sh.exe`)
+	}
+	for _, argv0 := range argv0s {
 		t.Run(argv0, func(t *testing.T) {
 			withStrictPosixEnv(t, argv0, true)
 			exited, err := runStrictProbe(t)

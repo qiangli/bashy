@@ -1076,7 +1076,7 @@ func invokedAsSh() bool {
 	if len(os.Args) == 0 {
 		return false
 	}
-	base := filepath.Base(strings.TrimPrefix(os.Args[0], "-"))
+	base := trimExeSuffix(filepath.Base(strings.TrimPrefix(os.Args[0], "-")))
 	return base == "sh"
 }
 

@@ -70,6 +70,22 @@ builds:
     goarch:
       - amd64
       - arm64
+  - id: sh
+    main: ./cmd/sh
+    binary: sh
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Version "-dev" }}'
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
 
 archives:
   - id: bashy-scratch
@@ -87,7 +103,9 @@ archives:
       - README.md
       - LICENSE
   - id: bash
-    ids: [bash]
+    # Ship the certified strict sh beside the GNU Bash-compatible binary in
+    # the existing archive family: six platforms and 15 release assets remain.
+    ids: [bash, sh]
     name_template: "bash-{{ .Os }}-{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:
