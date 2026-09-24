@@ -40,11 +40,12 @@ import (
 //     record can never pre-empt an applet.
 //   - The hot path never pays for an empty ring: the index loads lazily on
 //     the first builtin/applet miss and is fingerprinted by the ring dirs'
-//     mtimes. Every lookup re-stats the ring dirs (one stat each; the ring
-//     is re-read only when an mtime moved) — no time window, no cache to
+//     mtimes and entry names. Every lookup checks the ring dirs; records
+//     are re-read only when their fingerprint changes — no time window, no cache to
 //     reason about: `commands add x` followed by `x` in the same shell
 //     resolves, and `commands rm x` stops it. A lookup that resolves is
-//     about to start a process; a few stats are noise next to that.
+//     about to start a process; checking the small ring directory is noise
+//     next to that.
 
 type registeredIndex struct {
 	byName   map[string]fleet.Command // canonical name AND every alias
@@ -65,8 +66,8 @@ func registeredCatalog() *fleet.Catalog {
 	return fleet.New(fleet.WithReservedNames(reservedCommandName), fleet.WithCommandProbe(scriptSyntaxProbe))
 }
 
-// registeredFingerprint is the ring dirs' mtimes: a write into any of them
-// (add/set/rm rename a file into place) bumps the directory's mtime.
+// registeredFingerprint includes directory entries because a directory mtime
+// alone may not change promptly after add/rm on Windows.
 func registeredFingerprint(cat *fleet.Catalog) string {
 	var b strings.Builder
 	for _, d := range cat.CommandDirs() {
@@ -76,6 +77,14 @@ func registeredFingerprint(cat *fleet.Catalog) string {
 			continue
 		}
 		fmt.Fprintf(&b, "%s:%d;", d, fi.ModTime().UnixNano())
+		entries, err := os.ReadDir(d)
+		if err != nil {
+			fmt.Fprintf(&b, "error:%q;", err)
+			continue
+		}
+		for _, entry := range entries { // os.ReadDir sorts by name.
+			fmt.Fprintf(&b, "%q;", entry.Name())
+		}
 	}
 	return b.String()
 }

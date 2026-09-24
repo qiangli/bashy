@@ -232,3 +232,40 @@ func TestRegisteredIndexSeesAddAndRemoveInTheSameShell(t *testing.T) {
 		t.Fatal("a removed record must stop resolving on the next lookup")
 	}
 }
+
+// Some filesystems leave a directory's mtime unchanged across adjacent
+// writes. The index must still see a new or removed command on the next lookup.
+func TestRegisteredIndexSeesChangesWithUnchangedDirectoryMtime(t *testing.T) {
+	dir := ringDir(t)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mtime := fi.ModTime()
+	restoreMtime := func() {
+		t.Helper()
+		if err := os.Chtimes(dir, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, ok := registeredLookup("shout"); ok {
+		t.Fatal("empty ring resolved shout")
+	}
+	if err := registeredCatalog().SaveCommand(fleet.Command{Name: "shout", Script: "echo SHOUT", Effects: []string{"pure"}}); err != nil {
+		t.Fatal(err)
+	}
+	restoreMtime()
+	if _, ok := registeredLookup("shout"); !ok {
+		t.Fatal("new record must resolve despite unchanged directory mtime")
+	}
+	if err := os.Remove(filepath.Join(dir, "shout.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	restoreMtime()
+	if _, ok := registeredLookup("shout"); ok {
+		t.Fatal("removed record must stop resolving despite unchanged directory mtime")
+	}
+}
