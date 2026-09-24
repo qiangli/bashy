@@ -10,7 +10,6 @@ labels:
     - go-by-example
     - transpile
 created: 2026-09-23T12:43:19.161345Z
-weave: 20
 assignee: codex-s250
 sprint: 250
 sprint_id: c912e608-edfe-59b8-bd36-a98f6dad1634
