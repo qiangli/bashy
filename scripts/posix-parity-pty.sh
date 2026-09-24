@@ -442,6 +442,24 @@ def main():
         print(f"error: {BASHY} does not exist; run `make build-bash` first", file=sys.stderr)
         return 2
 
+    if not BASH_REF:
+        try:
+            oracle = subprocess.run(
+                [*OCI, "run", "--rm", "bash:5.3", "bash", "-c", "printf oracle-ready"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=float(os.environ.get("BASHY_POSIX_PTY_ORACLE_TIMEOUT", "120")),
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            print(f"error: POSIX oracle unavailable; no PTY comparisons run: {exc}", file=sys.stderr)
+            return 2
+        if oracle.returncode != 0 or b"oracle-ready" not in oracle.stdout:
+            detail = strip_terminal_noise(oracle.stderr).strip() or f"oracle exited {oracle.returncode}"
+            print(f"error: POSIX oracle unavailable; no PTY comparisons run: {detail}", file=sys.stderr)
+            return 2
+
     match = diff = infon = 0
     for probe, by_out, by_ok, by_note, bh_out, bh_ok, bh_note in compare():
         same = by_out == bh_out and by_ok == bh_ok and not by_note and not bh_note

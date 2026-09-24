@@ -177,6 +177,11 @@ RAW=$(printf '%s\n' "$PROBES" | $OCI run --rm -i -e HOME=/tmp bash:5.3 bash -c '
     bash --posix -c "$script" 2>/dev/null
     echo "@@@X:$idx:$?@@@"
   done')
+OCI_RC=$?
+if [ "$OCI_RC" -ne 0 ]; then
+  echo "austin-defects: POSIX oracle invocation failed (exit $OCI_RC); comparison is blocked" >&2
+  exit 2
+fi
 declare -a BH_OUT BH_OK
 cur=""
 while IFS= read -r line; do
