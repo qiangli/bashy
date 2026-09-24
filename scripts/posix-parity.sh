@@ -30,7 +30,6 @@
 # accepts it. This harness is interpreted by that shell, so `set -u` aborts it.
 # Tracked as a separate sh conformance bug; does not affect the probes below.
 BASHY=${BASHY:-./bin/bashy}
-[ -x "$BASHY" ] || { echo "posix-parity: candidate is not executable: $BASHY" >&2; exit 2; }
 case "${1:-}" in
   '') CANDIDATE_ONLY=0 ;;
   --candidate-only) CANDIDATE_ONLY=1 ;;
@@ -38,6 +37,7 @@ case "${1:-}" in
 esac
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT" || exit 2
+[ -x "$BASHY" ] || { echo "posix-parity: candidate is not executable: $BASHY" >&2; exit 2; }
 
 TMP_BASHY_PODMAN=
 cleanup() {
