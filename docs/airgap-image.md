@@ -417,7 +417,7 @@ externals variant is a separate story.
 | verbs | `resources` | works | Report host resource utilization |
 | verbs | `resume` | works | resume reads a handoff record and continues the work. |
 | verbs | `rg` | not usable offline | bin-managed external: would download - Error: rg: binmgr: fetch releas |
-| verbs | `run` | present | runs in-process; --version/--help rc=2: bashy run: unknown option "--h |
+| verbs | `run` | works | usage: bashy run [--capture] [--check] [--target NAME] -- command [arg |
 | verbs | `rust` | not usable offline | engine / remote-by-design (by design): Error: rust: fetch sha256 sidec |
 | verbs | `rustc` | not usable offline | engine / remote-by-design (by design): Error: rust: fetch sha256 sidec |
 | verbs | `rustup` | not usable offline | engine / remote-by-design (by design): Error: rust: fetch sha256 sidec |
