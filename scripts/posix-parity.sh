@@ -35,9 +35,26 @@ case "${1:-}" in
   --candidate-only) CANDIDATE_ONLY=1 ;;
   *) echo "usage: $0 [--candidate-only]" >&2; exit 2 ;;
 esac
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
+ROOT=${BASHY_POSIX_REPO_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 cd "$ROOT" || exit 2
 [ -x "$BASHY" ] || { echo "posix-parity: candidate is not executable: $BASHY" >&2; exit 2; }
+
+if [ "$CANDIDATE_ONLY" = 1 ]; then
+  # `check --prepare` is Bashy's preload command. Scope it to this script so
+  # shell-only suites do not download unrelated island toolchains.
+  echo "posix-parity: preload: bashy check --prepare $0"
+  "$BASHY" check --prepare "$0" || {
+    echo "posix-parity: preload failed; no POSIX probes were started" >&2
+    exit 2
+  }
+  "$BASHY" -c 'for tool in env sed tr grep head awk sleep dirname pwd rm; do
+    command -v "$tool" >/dev/null || { printf "missing harness utility: %s\n" "$tool" >&2; exit 1; }
+  done' || {
+    echo "posix-parity: Bashy userland preload incomplete; no POSIX probes were started" >&2
+    exit 2
+  }
+  echo "posix-parity: preload complete: harness utilities resolved in Bashy"
+fi
 
 TMP_BASHY_PODMAN=
 cleanup() {

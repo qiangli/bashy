@@ -13,4 +13,4 @@ sprint_id: e14729b9-4d75-5803-aca0-594e943ca2df
 sprint_title: Bashy GNU Bash 5.3, POSIX mode and full Go tests across platforms
 ---
 
-Provide a candidate-only mode for scripts/posix-parity.sh that runs every probe directly through Bashy --posix under the selected local Bashy shell, never starts an OCI runtime, records each exit code and combined output, and clearly avoids claiming parity or certification. Use it for Sprint 274 Windows and macOS survey receipts. Preserve default differential behavior for later Linux/oracle work; do not change Bashy product semantics.
+Provide native POSIX survey harnesses that run under Bashy GNU-compatible mode, never start OCI, and execute Bashy --posix as the subject. First run bashy check --prepare scoped to the parity and corpus scripts, then verify required harness utilities resolve inside Bashy; fail before any POSIX case if preload fails. Capture per-file corpus exits and outputs plus per-probe numeric exits and combined output without claiming parity or certification. Preserve default independent-oracle differential behavior and do not change Bashy product semantics.
