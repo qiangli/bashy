@@ -159,6 +159,13 @@ days on an inherited plan and another shipped in 73 minutes on a re-verified one
    is deferred by default and needs a named consumer.
 4. **State the sprint's primary goal in one sentence** at the top of the plan.
    If you cannot, you are not ready to take the seat.
+5. **Triage every item and start clean.** Classify each item the sprint must
+   close as a *defect* (fix it), a *design gap* (needs a decision before code)
+   or *out of scope* (an allowed exception or another owner). Put the design
+   decisions in the plan and raise them with the operator now, not after a
+   lane has spent its budget discovering them. Clear inherited state before
+   staffing: `bashy sprint prune <id>` (unlink runs whose checkouts are gone),
+   `bashy claim list` for stale holds.
 
 Only then `sprint take`, and make that sentence the first checkpoint's brief. A
 takeover that skips this inherits the previous conductor's blind spots as facts.
@@ -553,6 +560,13 @@ Clause 3 is **non-negotiable**: a gate of only "new units pass" misses guard
 regressions, and broad changes routinely close targets while nicking a passer.
 The conductor STILL re-runs the guard in the real repo post-merge.
 
+**Keep the per-story gate cheap.** When the guard or the target environment is
+expensive (a long suite, a remote host, a real-device run), the story gate is
+the build, the story's own targets and the focused unit tests only. The
+expensive guard runs ONCE per iteration on the frozen, merged candidate (§10),
+not once per story or per commit — running it per change turns verification
+into most of the sprint.
+
 ### 7. Launch
 Match tools to stories by the report card, hardest to strongest. Pre-seed each
 tool's trust/permission cache, set watchdogs, background each:
@@ -623,11 +637,23 @@ No push / no dependency-pin bump without explicit human OK.
    — bisect any guard regression against the pre-merge commit.
 
 ### 10. Iterate
-Re-run the goal against the **merged** branch to get the shrinking remainder;
-re-divide and re-sprint on the cleaner base (workspaces now clone the merged
-state → true-green baseline; embed each round's bisect findings into the next
-round's bodies). Repeat until the actionable set is empty; verify
-environment-divergent units + ripple canonically in a final pass.
+One iteration is one SDLC pass over the WHOLE sprint, not over one change or
+one story:
+
+1. **Code** every ready story, each verified by its cheap gate (§6).
+2. **Freeze** one integrated candidate (exact commits recorded).
+3. **Integrate once**: run the expensive verification in one batch — the
+   targets of this iteration plus the passing guard sample. Keep it
+   differential: never re-run a known failure whose code did not change.
+4. **Verify by ID**: credit only what passed in the target environment on
+   that candidate; a local green is progress, not credit.
+5. **Replan the reds**: fix next round, record an allowed exception with its
+   evidence, or move it to the sprint that owns its cause (group by root cause;
+   do not dump every leftover into one follow-up, and do not move a story back
+   and forth).
+6. **Repeat** on the merged base (workspaces now clone the merged state; embed
+   each round's findings into the next round's bodies) until the actionable set
+   is empty. Run the full suite once, at the end.
 
 ## Bounding & judge mode
 
@@ -645,7 +671,15 @@ environment-divergent units + ripple canonically in a final pass.
 - A gate demanding absolute green against a RED in-workspace base.
 - `git add -A` in a sandboxed workspace (commits a giant scratch cache).
 - One change spanning many subsystems broadly — closes targets, regresses the
-  guard. Keep fixes surgical; gate the guard every time.
+  guard. Keep fixes surgical; gate the cheap guard every time.
+- Interleaving code changes with long verification runs — freeze, then verify
+  once per iteration (§10). Re-running unchanged known failures is the same
+  waste.
+- Discovering a design gap mid-sprint that triage (§Orientation 5) would have
+  surfaced in the first hour.
+- Crediting a local green, or a worker's exit status, as delivery.
+- Guessing ETAs — quote the measured timings of the previous run, in the
+  operator's local time.
 - Assuming all fleet tools work — smoke-test; let strong tools absorb the rest.
 - Merging all stories at once without per-story re-gate.
 - Chasing non-actionable failures.
@@ -664,6 +698,10 @@ environment-divergent units + ripple canonically in a final pass.
 ## Command quick-reference
 ```sh
 bashy sprint add/take/checkpoint/link/handoff/show <id>
+bashy sprint comment <id> "<note>"            # thread note (evidence, decisions)
+bashy sprint prune <id> / unlink <id> --repo R --task N   # stale runs block `sprint end`
+bashy sprint yield <id> <story> ; bashy todo edit <story> --sprint <other>   # move a story
+bashy sprint goal rm <id> <goal> --reason "…"  # only for an outcome that MOVED, never one met
 bashy weave add --priority --points --tool --verify --body
 bashy weave start --no-spawn --issue N        # allocate, then set up §5 isolation
 bashy weave start --resume  --issue N -- <tool> "<body>"
