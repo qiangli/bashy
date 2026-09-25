@@ -96,6 +96,7 @@ func nativeDecoratorSet(stderr io.Writer, attesting func(nativeDecoratorFunc) na
 		"memo":    memoDecorator,
 		"auth":    authDecorator(stderr),
 		"effects": effectsDecorator(stderr),
+		"contain": containDecorator(stderr), // contain.go: OS-enforced network isolation of child programs
 	}
 	for name, fn := range contractDecorators(stderr) {
 		set[name] = fn

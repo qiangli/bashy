@@ -127,3 +127,65 @@ func TestFileRefinersStayFailClosed(t *testing.T) {
 		}
 	}
 }
+
+func effectKinds(intent Intent) map[string]string {
+	kinds := map[string]string{}
+	for _, e := range intent.Effects {
+		if e.Kind != atlas.EffPure {
+			kinds[e.Kind] = e.Scope
+		}
+	}
+	return kinds
+}
+
+func TestFunctionsCompileAtTheirCallSites(t *testing.T) {
+	dir := workspaceWithFiles(t)
+	intent := compileIn(t, dir, "show() { cat pkg/a.py; }\nshow")
+	if !intent.Complete {
+		t.Fatalf("provable function incomplete: %+v", intent.Unsupported)
+	}
+	if kinds := effectKinds(intent); kinds[atlas.EffRead] != atlas.TierWorkspace {
+		t.Fatalf("function body effects not merged: %+v", intent.Effects)
+	}
+	undecorated := compileIn(t, dir, "tests() { python3 -m pytest -q; }\ntests")
+	if undecorated.Complete {
+		t.Fatalf("an undecorated interpreter call must stay unsupported: %+v", undecorated.Effects)
+	}
+}
+
+func TestDecoratedEnvelopeBoundsInterpreters(t *testing.T) {
+	dir := workspaceWithFiles(t)
+	contained := compileIn(t, dir, `@effects("read,write,exec")
+@contain(net: "deny")
+function tests() { python3 -m pytest -q tests/; }
+tests`)
+	if !contained.Complete {
+		t.Fatalf("declared, contained envelope incomplete: %+v", contained.Unsupported)
+	}
+	kinds := effectKinds(contained)
+	if kinds[atlas.EffExec] != ScopeDeclared || kinds[atlas.EffWrite] != ScopeDeclared {
+		t.Fatalf("envelope not recorded as declared: %+v", contained.Effects)
+	}
+	if _, net := kinds[atlas.EffNet]; net {
+		t.Fatalf("contained envelope must not carry net: %+v", contained.Effects)
+	}
+	open := compileIn(t, dir, `@effects("read,write,exec")
+function tests() { python3 -m pytest -q; }
+tests`)
+	if _, net := effectKinds(open)[atlas.EffNet]; !net {
+		t.Fatalf("an uncontained declaration without net must keep a possible net effect: %+v", open.Effects)
+	}
+	exceeds := compileIn(t, dir, `@guard("read")
+@effects("read,write")
+function tests() { python3 -m pytest; }
+tests`)
+	if exceeds.Complete {
+		t.Fatalf("a declaration exceeding its guard must be unsupported")
+	}
+	precise := compileIn(t, dir, `@effects("read")
+function show() { cat pkg/a.py; }
+show`)
+	if !precise.Complete || effectKinds(precise)[atlas.EffRead] != atlas.TierWorkspace {
+		t.Fatalf("a provable decorated body must keep its precise effects: %+v", precise.Effects)
+	}
+}

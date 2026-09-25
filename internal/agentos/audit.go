@@ -100,7 +100,7 @@ func auditHandler(w *audit.Writer, actor audit.Actor, host string) func(interp.E
 			}
 			start := time.Now()
 
-			effects := effectsForCtx(ctx, args[0])
+			effects := containedEffects(ctx, args[0], effectsForCtx(ctx, args[0]))
 			decision := "allow"
 			var err error
 

@@ -153,29 +153,14 @@ func compileEnvironment(values []EnvironmentVariable, secretKey []byte) ([]Envir
 }
 
 func compileScript(script string, intent *Intent) error {
-	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(script), "<harness>")
+	// Bash# is bashy's default dialect for harness sessions (a strict superset
+	// of Bash), so the preflight parses what will actually run — decorators
+	// and function declarations included.
+	file, err := syntax.NewParser(syntax.Variant(syntax.LangBashPP)).Parse(strings.NewReader(script), "<harness>")
 	if err != nil {
 		return fmt.Errorf("parse command: %w", err)
 	}
-	syntax.Walk(file, func(node syntax.Node) bool {
-		switch n := node.(type) {
-		case *syntax.CallExpr:
-			if len(n.Args) == 0 {
-				return true
-			}
-			argv := make([]string, 0, len(n.Args))
-			allStatic := true
-			for _, word := range n.Args {
-				value, ok := staticWord(word)
-				argv = append(argv, value)
-				allStatic = allStatic && ok
-			}
-			compileCall(argv, allStatic, intent)
-		case *syntax.Redirect:
-			compileRedirect(n, intent)
-		}
-		return true
-	})
+	walkCompile(file, intent, collectFuncs(file))
 	return nil
 }
 

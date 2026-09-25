@@ -50,8 +50,10 @@ func TestDecoratorCatalogMatchesRegistryAndDocs(t *testing.T) {
 			minimum++
 		}
 	}
-	if minimum != 11 {
-		t.Fatalf("the supported set is 11 decorators, catalog says %d — growing it is a decision, not a drift", minimum)
+	// 12 since 2026-09-25: @contain (operator decision — Bash# gains what agents
+	// need to bound interpreters; Sprint 290 G0.11).
+	if minimum != 12 {
+		t.Fatalf("the supported set is 12 decorators, catalog says %d — growing it is a decision, not a drift", minimum)
 	}
 }
 

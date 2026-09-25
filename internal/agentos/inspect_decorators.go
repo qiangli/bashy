@@ -45,6 +45,7 @@ var decoratorCatalog = []decoratorEntry{
 	{"memo", "[\"1h\" | ttl: \"1h\"]", "same name + args in one process returns the cached Results and Status without running the body; failures are not cached; printed output is not replayed", "process-wide map", "the cached", false, true},
 	{"auth", "via: \"<cmd>\", as: \"<principal>\"", "runs via once per process (default: bashy tessaro status); exit 0 = authenticated, first stdout line = principal, exported as BASHY_PRINCIPAL; as: must match", "bashy login / tessaro status", "77", true, true},
 	{"effects", "\"net,write\" | effects: \"…\"", "declares what the function does: denied at the call boundary when a @guard does not allow it; inside, its own cap, and the classification for commands the atlas does not know", "atlas vocabulary; @guard", "126", false, true},
+	{"contain", "net: \"deny\"", "runs every external child the function starts with the network enforced off (Linux network namespace, macOS Seatbelt), so a cap without net admits an interpreter; in-process native tools are not children; unsupported OS fails closed", "bashy contain --net deny -- CMD", "125", false, true},
 	{"confirm", "—", "human-in-the-loop allow per operation: high-impact atoms (destroy, cred, priv, spend, unknown) take their answer from --confirm=TOKEN:yes / --what-if or the call yields", "atlas effects, bashy ask", "6", false, true},
 	{"timed", "—", "measures the call: one `@timed: <fn>: status=N duration=D` line on stderr (engine-supplied)", "the sh engine", "—", false, true},
 }

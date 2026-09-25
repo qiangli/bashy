@@ -611,6 +611,10 @@ func dispatch() {
 		dispatchExit(transpile.Main(transpilePathArgs(os.Args[2:])))
 	case "full":
 		dispatchExit(dispatchFull(os.Args[2:]))
+	case "contain":
+		// OS-enforced network isolation for one command (contain.go); the
+		// wrapper form of @contain(net: "deny").
+		dispatchExit(dispatchContain(os.Args[2:]))
 	case "awd":
 		// Run one command in another directory and return (the `awd` builtin
 		// from the front door) — the one directory mechanism, so verbs never
@@ -2049,7 +2053,9 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	// autofix has settled the argv it describes, and outside the userland
 	// handler so in-process tools are governed too. Inert unless a @confirm
 	// call put its state on the context.
-	mws = append(mws, outputMW, autofix.Handler(), confirmHandler(), dryRunHandler(r), defineSessionHandler(), coreutilsshell.Handler(), registeredHandler())
+	// contain (contain.go) is the very last rung: what reaches it is about to
+	// run as an external child, so inside @contain it is re-executed isolated.
+	mws = append(mws, outputMW, autofix.Handler(), confirmHandler(), dryRunHandler(r), defineSessionHandler(), coreutilsshell.Handler(), registeredHandler(), containHandler())
 	return append(opts, interp.ExecHandlers(mws...))
 }
 

@@ -49,6 +49,7 @@ the body. Arguments are the decorator's own, keyword (`n: 3`) or positional.
 | `@memo` | `["1h"]` or `ttl: "1h"` | the same name + arguments within one process returns the cached `Results` and `Status` without running the body; a non-zero status is not cached; `ttl` expires an entry. Memo caches what the call **returns** — printed output is not replayed, so use it on typed (value-returning) functions | a process-wide map | the cached | never |
 | `@auth` | `via: "<cmd>"`, `as: "<principal>"` | runs `via` once per process (default `bashy tessaro status`, this host's pairing); exit 0 = authenticated and its first stdout line is the principal, exported to the body as `BASHY_PRINCIPAL`; `as:` names the principal required | `bashy login` / `bashy tessaro status` | 77 | yes |
 | `@effects` | `"net,write"` or `effects: "…"` | the author's side of the guard coin: declares what the function does. A `@guard` that does not allow the declaration denies the call at the boundary (126) before the body runs; inside, the declaration is the function's own cap **and** the classification for commands the atlas does not know — so a tool bashy has never heard of runs on the author's word instead of failing as `unknown` | atlas vocabulary; `@guard`; dag `Effects:` | 126 | never |
+| `@contain` | `net: "deny"` | runs every EXTERNAL child the function starts with the network enforced off by the OS (Linux network namespace, macOS Seatbelt) — so a cap or declaration without `net` can admit an interpreter such as `python`/`pytest` whose atlas maximum includes `net`; in-process native tools are not children and keep their effects; filesystem isolation is not implied; an unsupported OS fails closed | `bashy contain --net deny -- CMD` (the wrapper); the harness preflight | 125 | never |
 | `@confirm` | — | human-in-the-loop **allow** per operation — not a guard: the high-impact atoms (`destroy`, `cred`, `priv`, `spend`, unknown) take their answer from `--confirm=TOKEN:yes` / `--what-if`, or the call yields; `docs/effect-derived-confirmation.md` | atlas effects, `bashy ask` | 6 | no |
 
 "Advisable" = an advice rule may apply it. `retry`, `memo`, `timeout` never:
@@ -65,6 +66,27 @@ function deploy() { ... }
 @guard("read")             # what may run under ci — the caller's cap
 function ci() { deploy; }  # denied at the boundary: write is not in read
 ```
+
+### Bounding code that cannot be proven: `@effects` + `@contain`
+
+An interpreter runs code its caller cannot see, so no refiner can prove its
+effects. The Bash# answer is a declared, enforced envelope:
+
+```bash
+@effects("read,write,exec")   # what the body does
+@contain(net: "deny")         # and the kernel keeps its children off the network
+function run_tests() { python -m pytest -q tests/; }
+run_tests
+```
+
+At run time the declaration is the function's cap and `@contain` re-executes
+each external child through `bashy contain --net deny --`, so a contained
+`python` has no network whatever it tries. The harness preflight
+(`pkg/harnessrunner`) reads the same declaration: a call to `run_tests`
+compiles to the declared envelope (scope `declared`); without `@contain` a
+declaration that omits `net` keeps a possible `net` effect, because nothing
+enforces it. `sandbox` names the podman engine — `contain` is the
+network-isolation word.
 
 ## The effect vocabulary (`@guard`, `@effects`, dag `Effects:`, `@confirm`)
 
