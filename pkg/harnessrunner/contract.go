@@ -147,6 +147,10 @@ type Intent struct {
 	Commands     []CommandFact     `json:"commands,omitempty"`
 	Effects      []Effect          `json:"effects,omitempty"`
 	Unsupported  []UnsupportedFact `json:"unsupported,omitempty"`
+
+	// cursor is the compile-time working directory after a static `cd`;
+	// it is never serialized or digested.
+	cursor string
 }
 
 type EnvironmentFact struct {

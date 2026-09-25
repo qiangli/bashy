@@ -215,6 +215,10 @@ func compileCall(argv []string, allStatic bool, intent *Intent) {
 		markUnsupported(intent, "executable", name, "path executables require a trusted digest-pinned resolver")
 		return
 	}
+	if name == "cd" {
+		refineCd(factArgv, allStatic, intent)
+		return
+	}
 	if effects, ok := builtinEffects[name]; ok {
 		if !allStatic && !pureBuiltin(name) {
 			markUnsupported(intent, "dynamicCommand", strings.Join(argv, " "), "command name or arguments cannot be proven")
@@ -323,18 +327,18 @@ func compileRedirect(redir *syntax.Redirect, intent *Intent) {
 	if target == "" || target == "-" || strings.HasPrefix(target, "&") {
 		return
 	}
-	if !filepath.IsAbs(target) {
-		target = filepath.Join(intent.Cwd, target)
-	}
-	target = canonicalTarget(target)
+	target = resolveOperand(intent, target)
+	// The scope is proven from the canonical target: a redirection outside
+	// the workspace root is userland, never labelled workspace.
+	scope := scopeFor(intent, target)
 	switch {
 	case strings.Contains(op, ">"):
-		intent.Effects = append(intent.Effects, Effect{Kind: atlas.EffWrite, Scope: atlas.TierWorkspace, Target: target, Source: "redirection:" + op, Certainty: "exact"})
+		intent.Effects = append(intent.Effects, Effect{Kind: atlas.EffWrite, Scope: scope, Target: target, Source: "redirection:" + op, Certainty: "exact"})
 		if !strings.Contains(op, ">>") {
-			intent.Effects = append(intent.Effects, Effect{Kind: atlas.EffDestroy, Scope: atlas.TierWorkspace, Target: target, Source: "redirection:" + op, Certainty: "possible"})
+			intent.Effects = append(intent.Effects, Effect{Kind: atlas.EffDestroy, Scope: scope, Target: target, Source: "redirection:" + op, Certainty: "possible"})
 		}
 	case strings.Contains(op, "<"):
-		intent.Effects = append(intent.Effects, Effect{Kind: atlas.EffRead, Scope: atlas.TierWorkspace, Target: target, Source: "redirection:" + op, Certainty: "exact"})
+		intent.Effects = append(intent.Effects, Effect{Kind: atlas.EffRead, Scope: scope, Target: target, Source: "redirection:" + op, Certainty: "exact"})
 	default:
 		markUnsupported(intent, "redirection", op, "redirection operator is not classified")
 	}
