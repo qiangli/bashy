@@ -23,3 +23,24 @@ func TestAgenticCommandClassifiesNativeExternalAndScript(t *testing.T) {
 		t.Fatalf("script: kind=%q yields=%v", kind, yields)
 	}
 }
+
+// When bashy runs embedded in another program, shims must not re-enter the
+// host's CLI: os.Executable() is the host there, so the self path resolves
+// to BASHY_SELF, then bashy on PATH, never the host binary.
+func TestBashySelfPathPrefersExplicitSelf(t *testing.T) {
+	t.Setenv("BASHY_SELF", "/opt/bashy/bin/bashy")
+	if got := bashySelfPath(); got != "/opt/bashy/bin/bashy" {
+		t.Fatalf("bashySelfPath() = %q, want BASHY_SELF", got)
+	}
+}
+
+func TestIsBashyExecutable(t *testing.T) {
+	for path, want := range map[string]bool{
+		"/usr/local/bin/bashy": true, "/x/bashy.real": true, "/b/bashy.exe": true,
+		"/usr/local/bin/ycode": false, "/x/agent-mini": false, "/x/bashyish": false,
+	} {
+		if got := isBashyExecutable(path); got != want {
+			t.Errorf("isBashyExecutable(%q) = %v, want %v", path, got, want)
+		}
+	}
+}

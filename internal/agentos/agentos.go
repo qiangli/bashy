@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -330,14 +331,40 @@ func maybeAdvertiseSkillHint() {
 	}
 }
 
+// bashySelfPath is the bashy executable that shims and re-entries run
+// (`git() { command <self> git "$@"; }`). It is the running binary only when
+// that binary IS bashy: when bashy is embedded as a library (ycode's harness
+// session, pkg/runner) os.Executable() is the host, and re-entering the host's
+// CLI would hand bashy verbs to a different program. Order: an explicit
+// BASHY_SELF from the embedder; the running executable when it is bashy (or a
+// Go test binary, which stands in for it in this package's tests); bashy on
+// PATH; else the bare name, so a missing bashy fails loudly instead of
+// silently re-entering the host.
 func bashySelfPath() string {
-	if exe, err := os.Executable(); err == nil && exe != "" {
+	if self := strings.TrimSpace(os.Getenv("BASHY_SELF")); self != "" {
+		return self
+	}
+	exe, err := os.Executable()
+	if err != nil || exe == "" {
+		if len(os.Args) > 0 && os.Args[0] != "" {
+			exe = os.Args[0]
+		}
+	}
+	if exe != "" && (isBashyExecutable(exe) || strings.HasSuffix(strings.TrimSuffix(filepath.Base(exe), ".exe"), ".test")) {
 		return exe
 	}
-	if len(os.Args) > 0 && os.Args[0] != "" {
-		return os.Args[0]
+	if path, err := exec.LookPath("bashy"); err == nil {
+		return path
 	}
 	return "bashy"
+}
+
+func isBashyExecutable(path string) bool {
+	switch strings.TrimSuffix(strings.ToLower(filepath.Base(path)), ".exe") {
+	case "bashy", "bashy.real":
+		return true
+	}
+	return false
 }
 
 func shellQuote(s string) string {
