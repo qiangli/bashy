@@ -134,6 +134,13 @@ func advisorHandler(a *advisor) func(interp.ExecHandlerFunc) interp.ExecHandlerF
 			if len(args) == 0 {
 				return err
 			}
+			// Name the command as it was invoked: `exec -a NAME FILE` runs
+			// FILE under NAME (Claude Code's grep shim runs its own binary,
+			// .../versions/2.1.283, as "ugrep"), and the file's name says
+			// nothing about what the command is or what its exit means.
+			if as := interp.HandlerCtx(ctx).ExecAs; as != "" {
+				args = append([]string{as}, args[1:]...)
+			}
 			status, ok := exitStatusOf(err)
 			if !ok {
 				return err // a non-exit error (e.g. interrupt): say nothing

@@ -271,7 +271,7 @@ func loopKey(args []string) string {
 // must never feed doomed-loop detection: a script that runs `grep -c` in a loop
 // and legitimately finds nothing is not an agent stuck retrying.
 var benignExitStatus = map[string]int{
-	"grep": 1, "egrep": 1, "fgrep": 1, "rg": 1, "zgrep": 1,
+	"grep": 1, "egrep": 1, "fgrep": 1, "rg": 1, "zgrep": 1, "ugrep": 1,
 	"test": 1, "[": 1,
 	"cmp": 1, "diff": 1,
 	"pgrep": 1, "pidof": 1,
