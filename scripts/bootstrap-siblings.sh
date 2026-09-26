@@ -192,4 +192,24 @@ while IFS= read -r line; do
     git_submodule_update "$target"
 done < "$pins"
 
+# The module graph still needs the go.mod of every module go.mod replaces into
+# a sibling's own submodule (yoke's ollama and podman forks: ycode, pinned
+# since the in-process engine, requires them), even though the lean build
+# compiles none of their packages. Hydrate just those paths, shallow and at
+# the sibling's pinned submodule commit; everything else stays behind
+# BASHY_BOOTSTRAP_SUBMODULES=1.
+module_graph_submodules() {
+    command -v git >/dev/null 2>&1 || return 0
+    sed -n 's|^replace [^ ]* => \.\./\([^/ ]*\)/\([^ ]*\)$|\1 \2|p' "$root/go.mod" |
+    while read -r sib sub; do
+        dir=$root/../$sib
+        [ -f "$dir/$sub/go.mod" ] && continue
+        [ -f "$dir/.gitmodules" ] && grep -q "path = $sub\$" "$dir/.gitmodules" || continue
+        echo "bootstrap-siblings: $sib/$sub (module graph) -> shallow submodule checkout"
+        git -C "$dir" submodule update --init --depth 1 --quiet -- "$sub" ||
+            echo "bootstrap-siblings: could not check out $sib/$sub; go needs its go.mod" >&2
+    done
+}
+module_graph_submodules
+
 install_hooks
