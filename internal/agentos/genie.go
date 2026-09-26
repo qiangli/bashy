@@ -32,7 +32,8 @@ const genieUsage = `usage: bashy genie "TASK"            solve TASK in the curre
        bashy genie pull                fetch a released bundle (not published yet)
 
 Environment: GENIE_BAR (bundle path), GENIE_SOURCE (source directory),
-GENIE_MODEL_ID (model override), YCODE_BIN (ycode binary); the bundle's
+GENIE_MODEL_ID (model override), YCODE_BIN (another ycode; default: the
+built-in bashy ycode); the bundle's
 dag.md documents the rest.
 `
 
@@ -228,19 +229,20 @@ func genieDoctor(args []string, stdout, stderr io.Writer) int {
 			report.ModelChoice = json.RawMessage(choice)
 		}
 	}
-	ycode := strings.TrimSpace(os.Getenv("YCODE_BIN"))
-	if ycode == "" {
-		ycode, _ = exec.LookPath("ycode")
+	// genie's engine is bashy's own `bashy ycode` unless YCODE_BIN names
+	// another ycode (the bundle's adapter makes the same choice).
+	engine := []string{bashySelfPath(), "ycode"}
+	report.Ycode = "bashy ycode (built in)"
+	if bin := strings.TrimSpace(os.Getenv("YCODE_BIN")); bin != "" {
+		engine = []string{bin}
+		report.Ycode = bin + " (YCODE_BIN)"
 	}
-	if ycode == "" {
-		report.YcodeError = "ycode not found (set YCODE_BIN or put ycode on PATH)"
+	if YcodeMain == nil && len(engine) == 2 {
+		report.YcodeError = "this bashy build does not link the ycode engine; set YCODE_BIN"
+	} else if out, err := exec.Command(engine[0], append(engine[1:], "version")...).Output(); err == nil {
+		report.YcodeVersion = strings.TrimSpace(lastLine(string(out)))
 	} else {
-		report.Ycode = ycode
-		if out, err := exec.Command(ycode, "version").Output(); err == nil {
-			report.YcodeVersion = strings.TrimSpace(lastLine(string(out)))
-		} else {
-			report.YcodeError = "ycode version: " + err.Error()
-		}
+		report.YcodeError = "ycode version: " + err.Error()
 	}
 	if asJSON {
 		enc := json.NewEncoder(stdout)
