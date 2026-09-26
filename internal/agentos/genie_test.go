@@ -3,6 +3,8 @@ package agentos
 // Sprint: #290; Story: #933; Story-ID: 6a0507862385
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,18 +26,50 @@ func TestGenieBundleResolution(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("BASHY_HOME", home)
 	t.Setenv("GENIE_BAR", "")
-	if _, err := genieBundle(); err == nil || !strings.Contains(err.Error(), "bashy genie build") {
-		t.Fatalf("missing bundle should point at build, got %v", err)
+	// The real builtin build runs this binary (`bashy dag`): in a test, the
+	// test binary. Stand in for it.
+	builds := 0
+	saved := buildBuiltinGenie
+	t.Cleanup(func() { buildBuiltinGenie = saved })
+	buildBuiltinGenie = func(home string, _ io.Writer) error {
+		builds++
+		digest, err := builtinGenieDigest()
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Join(home), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(home, "genie.bar"), []byte("built"), 0o644); err != nil {
+			return err
+		}
+		return writeGenieProvenance(home, genieProvenance{Source: "builtin", Digest: digest})
 	}
 	installed := filepath.Join(home, "genie", "genie.bar")
-	if err := os.MkdirAll(filepath.Dir(installed), 0o755); err != nil {
-		t.Fatal(err)
+	// No bundle: built from the builtin source on first use.
+	if got, err := genieBundle(); err != nil || got != installed || builds != 1 {
+		t.Fatalf("missing bundle: got %q, %v, builds %d", got, err, builds)
 	}
+	// A current builtin bundle is reused.
+	if got, err := genieBundle(); err != nil || got != installed || builds != 1 {
+		t.Fatalf("current builtin bundle: got %q, %v, builds %d", got, err, builds)
+	}
+	// A developer's build (recorded as a directory) is kept as is.
 	if err := os.WriteFile(installed, []byte("bar"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := genieBundle(); err != nil || got != installed {
-		t.Fatalf("installed bundle: got %q, %v", got, err)
+	if err := writeGenieProvenance(filepath.Dir(installed), genieProvenance{Source: "dir", Path: "/src/genie"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := genieBundle(); err != nil || got != installed || builds != 1 {
+		t.Fatalf("developer bundle: got %q, %v, builds %d", got, err, builds)
+	}
+	// doctor only looks: a missing bundle is reported, never built.
+	if err := os.Remove(installed); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolveGenieBundle(false); err == nil || builds != 1 {
+		t.Fatalf("a look-only resolve built or found a bundle: %v, builds %d", err, builds)
 	}
 	explicit := filepath.Join(t.TempDir(), "other.bar")
 	if err := os.WriteFile(explicit, []byte("bar"), 0o644); err != nil {
@@ -80,8 +114,12 @@ func TestGenieSourceDiscovery(t *testing.T) {
 func TestDispatchGenieUsageAndPull(t *testing.T) {
 	t.Setenv("BASHY_HOME", t.TempDir())
 	t.Setenv("GENIE_BAR", "")
-	// No arguments is the interactive session now; without a bundle it
-	// fails with the build hint instead of launching anything.
+	// No arguments is the interactive session; without a bundle genie builds
+	// the builtin one first. The real build runs this binary (the test
+	// binary here), so a stand-in fails it: nothing is launched.
+	saved := buildBuiltinGenie
+	t.Cleanup(func() { buildBuiltinGenie = saved })
+	buildBuiltinGenie = func(string, io.Writer) error { return errors.New("stub: no build in tests") }
 	if code := dispatchGenie(nil); code != 2 {
 		t.Fatalf("no arguments and no bundle: exit %d, want 2", code)
 	}

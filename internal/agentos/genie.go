@@ -182,7 +182,7 @@ func resolveGenieBundle(build bool) (string, error) {
 	// No bundle yet, or a builtin one older than this bashy: build genie
 	// from the source linked into this binary.
 	fmt.Fprintln(os.Stderr, "bashy genie: building the builtin genie bundle")
-	if err := installBuiltinGenie(home, os.Stderr); err != nil {
+	if err := buildBuiltinGenie(home, os.Stderr); err != nil {
 		return "", fmt.Errorf("building the builtin genie: %w", err)
 	}
 	return path, nil
@@ -222,7 +222,8 @@ func genieSource(from string) (string, error) {
 
 func isGenieSource(dir string) bool {
 	data, err := os.ReadFile(filepath.Join(dir, "dag.md"))
-	return err == nil && strings.Contains(string(data), "\n### solve\n") && strings.Contains(string(data), "genie")
+	text := strings.ReplaceAll(string(data), "\r\n", "\n") // a CRLF checkout (Windows)
+	return err == nil && strings.Contains(text, "\n### solve\n") && strings.Contains(text, "genie")
 }
 
 func genieBuild(args []string, stderr io.Writer) int {
@@ -248,7 +249,7 @@ func genieBuild(args []string, stderr io.Writer) int {
 		// No checkout around: the builtin source.
 		home, herr := genieHome()
 		if herr == nil {
-			herr = installBuiltinGenie(home, stderr)
+			herr = buildBuiltinGenie(home, stderr)
 		}
 		if herr != nil {
 			fmt.Fprintln(stderr, "bashy genie build:", herr)

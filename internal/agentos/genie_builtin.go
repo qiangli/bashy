@@ -118,6 +118,11 @@ func materializeBuiltinGenie(home, digest string) (string, error) {
 	return dir, nil
 }
 
+// buildBuiltinGenie builds the bundle from the builtin source. A variable so
+// tests can stand in for the real build, which runs this very binary (`bashy
+// dag`) — inside a test that is the test binary, which would run itself.
+var buildBuiltinGenie = installBuiltinGenie
+
 // installBuiltinGenie packages the embedded source and installs the bundle.
 func installBuiltinGenie(home string, stderr io.Writer) error {
 	digest, err := builtinGenieDigest()
