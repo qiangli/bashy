@@ -284,7 +284,7 @@ func sameFile(a, b string) bool {
 }
 
 func execEnginePassthrough(bin string, args []string) int {
-	cmd := exec.Command(bin, args...)
+	cmd := binmgr.Command(context.Background(), bin, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "bashy: %s: %v\n", bin, err)
