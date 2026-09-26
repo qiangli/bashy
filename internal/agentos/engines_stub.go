@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -280,7 +281,17 @@ func sameFile(a, b string) bool {
 func execEnginePassthrough(bin string, args []string) int {
 	cmd := exec.Command(bin, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "bashy: %s: %v\n", bin, err)
+		return 1
+	}
+	// bashy is only the front door: a termination signal meant for
+	// `bashy ollama serve` must reach the engine, or the engine is orphaned
+	// holding its port and model memory while bashy exits.
+	stop := forwardEngineSignals(cmd.Process)
+	err := cmd.Wait()
+	stop()
+	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
 			return ee.ExitCode()
 		}
@@ -288,6 +299,28 @@ func execEnginePassthrough(bin string, args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// forwardEngineSignals relays the interrupt and termination signals bashy
+// receives to the engine process until the returned stop is called.
+func forwardEngineSignals(p *os.Process) func() {
+	signals := make(chan os.Signal, 4)
+	signal.Notify(signals, append([]os.Signal{os.Interrupt}, stewardTermSignals()...)...)
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case s := <-signals:
+				_ = p.Signal(s)
+			case <-done:
+				return
+			}
+		}
+	}()
+	return func() {
+		signal.Stop(signals)
+		close(done)
+	}
 }
 
 func engineNotFoundMessage(arg string) string {
