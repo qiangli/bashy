@@ -6,11 +6,13 @@ package agentos
 import (
 	"context"
 	"fmt"
+	"github.com/qiangli/yoke/external/python"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -39,6 +41,7 @@ const scratchAssetPrefix = "bashy-scratch-linux-"
 
 func selfImageCmd() *cobra.Command {
 	var version, arch, tag, engine string
+	var with []string
 	cmd := &cobra.Command{
 		Use:   "image",
 		Short: "Build the offline FROM-scratch image of a released bashy through bashy podman",
@@ -50,16 +53,23 @@ through bashy's own podman. Run your script offline with:
   bashy podman run --rm --network=none -v "$PWD:/work" -w /work localhost/bashy:<version>-linux-<arch> --bashsharp ./script.bsh
 
 BASHY_SCRATCH_BIN=<path> builds from a local artifact instead of fetching one
-(what the repo's dag build-image target does); BASHY_OCI overrides the engine.`,
+(what the repo's dag build-image target does); BASHY_OCI overrides the engine.
+
+--with python,go preloads toolchains into their own layer by running bashy's
+own provisioning at build time (python: musl's loader, uv and CPython
+` + python.DefaultPython + `; go: the Go toolchain), so Bash# fences run offline and
+without a first-use download. The lean image (no --with) fetches them on
+demand instead.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return buildSelfImage(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), version, arch, tag, engine)
+			return buildSelfImage(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), version, arch, tag, engine, with)
 		},
 	}
 	cmd.Flags().StringVar(&version, "version", envOr("BASHY_SELF_VERSION", ""), "release tag of the artifact (default: the running version)")
 	cmd.Flags().StringVar(&arch, "arch", defaultImageArch(), "image architecture: amd64 or arm64")
 	cmd.Flags().StringVar(&tag, "tag", "", "image tag (default localhost/bashy:<version>-linux-<arch>)")
 	cmd.Flags().StringVar(&engine, "engine", envOr("BASHY_OCI", ""), "engine command (default: this bashy's podman)")
+	cmd.Flags().StringSliceVar(&with, "with", nil, "preload toolchains into the image: python, go")
 	return cmd
 }
 
@@ -74,9 +84,13 @@ func defaultImageArch() string {
 	}
 }
 
-func buildSelfImage(ctx context.Context, stdout, stderr io.Writer, version, arch, tag, engine string) error {
+func buildSelfImage(ctx context.Context, stdout, stderr io.Writer, version, arch, tag, engine string, with []string) error {
 	if arch != "amd64" && arch != "arm64" {
 		return fmt.Errorf("self image: --arch must be amd64 or arm64, got %q", arch)
+	}
+	preload, err := preloadSteps(with)
+	if err != nil {
+		return err
 	}
 	artifact, version, err := scratchArtifact(ctx, stderr, version, arch)
 	if err != nil {
@@ -84,6 +98,9 @@ func buildSelfImage(ctx context.Context, stdout, stderr io.Writer, version, arch
 	}
 	if tag == "" {
 		tag = "localhost/bashy:" + strings.TrimPrefix(version, "v") + "-linux-" + arch
+		if len(with) > 0 {
+			tag += "-with-" + strings.Join(normalizedWith(with), "-")
+		}
 	}
 	ctxDir, err := os.MkdirTemp("", "bashy-image-")
 	if err != nil {
@@ -96,7 +113,7 @@ func buildSelfImage(ctx context.Context, stdout, stderr io.Writer, version, arch
 	if err := os.MkdirAll(filepath.Join(ctxDir, "tmp", "bashy"), 0o1777); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(ctxDir, "Containerfile"), []byte(scratchContainerfile(version)), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ctxDir, "Containerfile"), []byte(scratchContainerfile(version)+preload), 0o644); err != nil {
 		return err
 	}
 	argv, err := engineArgv(engine)
@@ -214,4 +231,47 @@ func copyFileMode(src, dst string, mode os.FileMode) error {
 		return err
 	}
 	return out.Close()
+}
+
+// preloadToolchains maps a --with name to the build step that provisions it,
+// in exec form (the image has no /bin/sh). Each step is bashy's own
+// provisioning — the same code a fence triggers on first use — so the variant
+// holds exactly what the lean image would fetch. The toolchains live under
+// /opt/bashy, outside /tmp, so a --read-only --tmpfs /tmp run still sees them.
+var preloadToolchains = map[string]string{
+	"python": `RUN ["/bashy", "uv", "python", "install", "` + python.DefaultPython + `"]`,
+	"go":     `RUN ["/bashy", "go", "version"]`,
+}
+
+func normalizedWith(with []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, w := range with {
+		w = strings.ToLower(strings.TrimSpace(w))
+		if w != "" && !seen[w] {
+			seen[w] = true
+			out = append(out, w)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// preloadSteps is the Containerfile tail for --with: the cache locations the
+// provisioners honour, then one RUN per toolchain.
+func preloadSteps(with []string) (string, error) {
+	names := normalizedWith(with)
+	if len(names) == 0 {
+		return "", nil
+	}
+	var b strings.Builder
+	b.WriteString("ENV BASHY_BIN_CACHE=/opt/bashy/bin UV_PYTHON_INSTALL_DIR=/opt/bashy/python UV_PYTHON_PREFERENCE=only-managed\n")
+	for _, name := range names {
+		step, ok := preloadToolchains[name]
+		if !ok {
+			return "", fmt.Errorf("self image: --with %s is not supported (supported: python, go)", name)
+		}
+		b.WriteString(step + "\n")
+	}
+	return b.String(), nil
 }

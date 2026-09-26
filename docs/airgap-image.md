@@ -72,6 +72,28 @@ archive on a host with `$PATH` scrubbed of git/go/cc/podman/docker and an empty
 - **Windows:** WSL2 enabled (`wsl --install`, any edition). No managed Windows
   podman in this release: a host podman on `$PATH` is what Windows uses today.
 
+## Toolchains for fences: on demand or preloaded
+
+Bash# fences (`~~~py`, `embed python "./bench.py" as bm` …) and bashy's own
+rebuild need toolchains bashy provisions. Two ways to get them into the image:
+
+- **On demand (the lean image).** The first fence run fetches what it needs,
+  exactly as on any host. The image has no libc and no CA bundle, so bashy
+  carries its own TLS roots (exported as `SSL_CERT_FILE` for the toolchains it
+  runs), picks uv's static musl build, installs musl's loader (Alpine
+  v3.24 `musl-1.2.6-r2`, MIT, sha256-pinned) at
+  `/lib/ld-musl-<arch>.so.1`, and lets uv install a musl CPython. Needs network
+  on first use and a writable root; a read-only root gets an error naming the
+  variant below. Measured: first `embed python` run ~4 s; `bashy go build
+  ./cmd/bashy` inside the image rebuilds bashy in ~40 s.
+- **Preloaded (a variant).** `bashy self image --with python` (and/or `go`)
+  runs that same provisioning at build time into its own layer under
+  `/opt/bashy` — outside `/tmp`, so `--read-only --tmpfs /tmp` still sees it.
+  Fences then run offline with no first-use download. Measured on arm64: lean
+  104 MB, `--with python` 234 MB, `--with go` 356 MB; the `embed python`
+  script runs in 0.54 s under `--network=none --read-only`. Rust is not a
+  variant yet.
+
 ## The table
 
 `in the image` reads: **works** — the probe ran and exited 0; **present** — the
