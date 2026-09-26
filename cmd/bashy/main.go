@@ -20,6 +20,11 @@ import (
 	"github.com/qiangli/bashy/internal/agentos"
 	"github.com/qiangli/bashy/internal/cli"
 	"mvdan.cc/sh/v3/interp/ownedexec"
+
+	// Embedded CA roots, used only when the system has none: the offline
+	// image is FROM scratch (no /etc/ssl), and bashy provisions its own
+	// toolchains (uv/CPython, Go, …) over HTTPS from inside it.
+	_ "golang.org/x/crypto/x509roots/fallback"
 )
 
 func init() {

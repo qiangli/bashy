@@ -23,6 +23,8 @@ require (
 	mvdan.cc/sh/v3 v3.13.1
 )
 
+require golang.org/x/crypto/x509roots/fallback v0.0.0-20260921070245-7a4a4d6beae2
+
 require (
 	cyphar.com/go-pathrs v0.2.4 // indirect
 	dario.cat/mergo v1.0.2 // indirect
