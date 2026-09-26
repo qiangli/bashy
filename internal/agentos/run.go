@@ -177,6 +177,9 @@ func runCommandAtEnv(argv []string, capture bool, check bool, dir string, extraE
 	}
 	c := exec.Command(argv[0], argv[1:]...)
 	c.Dir = dir
+	// The command reads bashy's stdin, as it would under any shell: a piped
+	// message or an interactive terminal reaches it (a nil Stdin is /dev/null).
+	c.Stdin = os.Stdin
 	c.Env = runCommandEnv(os.Environ())
 	for _, kv := range extraEnv {
 		if key, value, ok := strings.Cut(kv, "="); ok {

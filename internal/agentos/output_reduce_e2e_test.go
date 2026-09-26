@@ -54,7 +54,7 @@ func isolatedOutputEnv(home string, entries ...string) []string {
 	drop := map[string]bool{
 		"BASHY_AGENTIC": true, "BASHY_HOME": true,
 		"BASHY_OUTPUT_REDUCE": true, "VSC_PROFILE": true,
-		"HOME": true,
+		"HOME": true, "BASHY_OUTPUT_PARENT": true,
 	}
 	env := make([]string, 0, len(os.Environ())+len(entries)+1)
 	for _, entry := range os.Environ() {
@@ -435,4 +435,32 @@ func TestE2EStandaloneBashNeverLinksOutputReduction(t *testing.T) {
 		t.Fatalf("standalone cmd/bash failed: exit=%d stdout=%d bytes stderr=%d bytes", code, len(out), len(errOut))
 	}
 	requireExactBytes(t, "standalone cmd/bash stdout", out, want)
+}
+
+// Stage 0 is a display transform for the model reading the OUTERMOST bashy.
+// A bashy whose output a program captures — `x=$("$BASHY" ...)` — must hand
+// back the real path, or every captured path breaks (genie's chat config was
+// read back as a literal "$HOME/..." path, 2026-09-26).
+func TestE2EOutputStage0NestedBashyOutputStaysExact(t *testing.T) {
+	bin := bashyBinary(t)
+	home := t.TempDir()
+	env := isolatedOutputEnv(t.TempDir(), "BASHY_AGENTIC=1", "HOME="+home, "INNER_BASHY="+bin)
+	script := `x=$("$INNER_BASHY" -c 'printf %s "$HOME/p"'); if [ "$x" = "$HOME/p" ]; then echo nested-exact; else echo "nested-rewritten"; fi; printf '%s\n' "$HOME/top"`
+	out, errOut, code := runOutputBinary(t, bin, env, "-c", script)
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errOut)
+	}
+	if string(out) != "nested-exact\n$HOME/top\n" {
+		t.Fatalf("stdout = %q, stderr = %q", out, errOut)
+	}
+
+	// A bashy whose parent (this test process) says it is a bashy leaves
+	// HOME alone; a stale pid (an agent CLI in between) does not.
+	out, _, code = runOutputBinary(t, bin, append(env, "BASHY_OUTPUT_PARENT="+strconv.Itoa(os.Getpid())), "-c", `printf '%s\n' "$HOME/top"`)
+	if code != 0 {
+		t.Fatalf("parent-marked run: exit=%d", code)
+	}
+	requireExactBytes(t, "parent-marked stdout", out, []byte(home+"/top\n"))
+	out, _, _ = runOutputBinary(t, bin, append(env, "BASHY_OUTPUT_PARENT=1"), "-c", `printf '%s\n' "$HOME/top"`)
+	requireExactBytes(t, "grandparent-marked stdout", out, []byte("$HOME/top\n"))
 }

@@ -31,6 +31,9 @@ func isolateOutputReduction(t *testing.T) {
 		noElideFlag, reduceFlag = oldNoElide, oldReduce
 		*dryRunFlag = oldDryRun
 	})
+	oldParent := outputParentIsBashy
+	t.Cleanup(func() { outputParentIsBashy = oldParent })
+	outputParentIsBashy = false // a test binary run from a bashy shell
 	noElideFlag = false
 	reduceFlag = optionalBool{}
 	*dryRunFlag = false

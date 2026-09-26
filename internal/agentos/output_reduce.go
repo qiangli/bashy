@@ -195,11 +195,34 @@ func newShellOutputReducer(out, errOut io.Writer, env []string) (*shellOutputRed
 	if err != nil {
 		return nil, err
 	}
+	home := displayHome(outputEnv(env, "HOME"), runtime.GOOS)
+	if outputParentIsBashy {
+		home = "" // data for the parent bashy's program, not for a model
+	}
 	return &shellOutputReducer{
 		store: store, redactor: shellOutputRedactor(env),
-		home: displayHome(outputEnv(env, "HOME"), runtime.GOOS), stage1: outputReductionEnabled(env),
+		home: home, stage1: outputReductionEnabled(env),
 		outDst: out, errDst: errOut,
 	}, nil
+}
+
+// outputParentEnv carries the pid of the bashy that started a process.
+// Stage 0 canonicalization is a display transform for a MODEL reading bashy's
+// output; a bashy whose direct parent is a bashy writes data for a program — a
+// `$("$BASHY" ...)` capture, a pipeline, a dag body's command — and rewriting
+// HOME there corrupts every captured path. The parent canonicalizes whatever
+// of it reaches a model. Matching the parent pid (not mere presence) keeps
+// Stage 0 on for the harness's shell in bashy → agent CLI → bashy: the
+// variable is inherited through the agent, but the agent is the parent.
+const outputParentEnv = "BASHY_OUTPUT_PARENT"
+
+// outputParentIsBashy is decided once, from the inherited value, before this
+// process exports its own pid to its children.
+var outputParentIsBashy bool
+
+func init() {
+	outputParentIsBashy = os.Getenv(outputParentEnv) == strconv.Itoa(os.Getppid())
+	os.Setenv(outputParentEnv, strconv.Itoa(os.Getpid()))
 }
 
 // displayHome is the directory Stage 0 canonicalizes to the `$HOME` token.
@@ -238,6 +261,15 @@ func (r *shellOutputReducer) stderr() io.Writer { return shellCaptureWriter{r: r
 // sink when Stage 1 reduction was requested explicitly (outputReductionEnabled),
 // which is the operator asking for exactly that capture.
 func terminalSink(w io.Writer) bool {
+	// A copying wrapper over the terminal (bashy dag's run-journal tee) still
+	// ends at the terminal: look through it.
+	for {
+		wrapped, ok := w.(interface{ Unwrap() io.Writer })
+		if !ok {
+			break
+		}
+		w = wrapped.Unwrap()
+	}
 	f, ok := w.(*os.File)
 	return ok && term.IsTerminal(int(f.Fd()))
 }

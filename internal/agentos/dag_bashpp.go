@@ -71,7 +71,7 @@ func (dagBashPPInterp) Run(ctx context.Context, t *dag.Task, tio dag.TaskIO) dag
 	}
 	// posix=false: a ```bashpp body is agentic by construction. No initial
 	// dry-run — `bashy dag -n` plans without running any body at all.
-	opts = wireExec(opts, false, tio.Env, nil, tio.Stdout, tio.Stderr, false)
+	opts = wireExec(opts, false, tio.Env, tio.Stdin, tio.Stdout, tio.Stderr, false)
 
 	runner, err := interp.New(opts...)
 	if err != nil {
