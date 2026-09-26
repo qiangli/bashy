@@ -120,6 +120,13 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 	}
 
 	var eofPresses int
+	ps1 := func() string { return getPrompt("PS1") }
+	var route func(context.Context, *interp.Runner, string) string
+	var greeting string
+	if agent := agentTerminalFromEnv(stderr); agent != nil {
+		ps1 = func() string { return agent.prompt(getPrompt("PS1")) }
+		route, greeting = agent.route, agent.greeting()
+	}
 	return interactive.Run(context.Background(), interactive.Options{
 		Runner:    r,
 		Lang:      lang,
@@ -131,7 +138,9 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 		// stream so `sh -s >output` captures only command output.
 		Stdout:            stderr,
 		Stderr:            stderr,
-		PS1:               func() string { return getPrompt("PS1") },
+		PS1:               ps1,
+		Route:             route,
+		Greeting:          greeting,
 		PS2:               func() string { return getPrompt("PS2") },
 		VimMode:           r.VimMode, // `set -o vi` switches to vi editing (re-read each prompt)
 		HistoryFile:       histFile,

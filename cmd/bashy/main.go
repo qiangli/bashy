@@ -17,6 +17,8 @@ import (
 
 	"github.com/qiangli/yoke/pkg/telemetry"
 
+	"github.com/qiangli/coreutils/tool"
+
 	"github.com/qiangli/bashy/internal/agentos"
 	"github.com/qiangli/bashy/internal/cli"
 	"github.com/qiangli/ycode/pkg/ycodecli"
@@ -33,6 +35,13 @@ func init() {
 	// internal/agentos — ycode imports bashy's pkg/harnessrunner, which imports
 	// agentos, so only package main can close the loop.
 	agentos.YcodeMain = ycodecli.Main
+	// The engine's terminal frontend is bashy's default agent TUI: the
+	// interactive shell with the agent attached (Sprint #301 T4).
+	ycodecli.TerminalUI = func(ctx context.Context, s ycodecli.TerminalSession) error {
+		return cli.RunAgentTerminal(ctx, s.Agent, s.Config, s.Session)
+	}
+	cli.AgentOSOwnedCommand = func(name string) bool { return tool.Lookup(name) != nil }
+	cli.AgentOSOwnedNames = tool.Names
 	cli.AgentOSDispatch = agentos.Dispatch
 	cli.AgentOSWireExec = agentos.WireExec
 	cli.AgentOSPreamble = agentos.Preamble
