@@ -234,7 +234,17 @@ func isCuratedHidden(name string) bool {
 	return containsString(curatedHiddenVerbs, name)
 }
 
-func Preamble() string {
+func Preamble() string { return PreambleFor(weavecli.IsAgent()) }
+
+// agentModeShimAliases are the other names a provisioner answers to in agent
+// mode: a model types python3/pip3, and a host with only bashy (Windows) has
+// neither.
+var agentModeShimAliases = map[string]string{"python3": "python", "pip3": "pip"}
+
+// PreambleFor is Preamble for a session whose agent mode is known — a
+// harness session is one (its request environment carries BASHY_AGENTIC=1)
+// even when the process that renders the preamble is not.
+func PreambleFor(agentMode bool) string {
 	var b strings.Builder
 	self := bashySelfPath()
 	fmt.Fprintf(&b, "docker() { command %s podman \"$@\"; }\n", shellQuote(self))
@@ -251,9 +261,12 @@ func Preamble() string {
 	//
 	// A machine at the wheel earns better HINTS. Only bashy orchestrating the run earns
 	// a different WORLD.
-	if weavecli.IsAgent() {
+	if agentMode {
 		for _, v := range agentModeShimVerbs {
 			fmt.Fprintf(&b, "%s() { command %s %s \"$@\"; }\n", v, shellQuote(self), v)
+		}
+		for _, alias := range []string{"python3", "pip3"} {
+			fmt.Fprintf(&b, "%s() { command %s %s \"$@\"; }\n", alias, shellQuote(self), agentModeShimAliases[alias])
 		}
 	}
 	// Declarative managed-external registry (tier-5/6 client CLIs: doctl, …) —

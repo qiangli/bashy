@@ -265,7 +265,12 @@ func (m *Manager) run(req Request, intent Intent, job *liveJob) {
 	termination := cli.RunSessionCommandResultWithConfig(ctx, cli.SessionIO{
 		Command: script, Dir: intent.Cwd, Env: env, Stdin: job.input,
 		Stdout: job.stdout, Stderr: job.stderr,
-	}, cli.SessionConfig{WireExec: agentos.WireSessionExec(false), Preamble: agentos.Preamble})
+	}, cli.SessionConfig{WireExec: agentos.WireSessionExec(false), Preamble: func() string {
+		// The session's own environment decides agent mode (the harness
+		// sends BASHY_AGENTIC=1), not this process's: its agent-mode shims
+		// (python/python3 -> bashy's provisioned toolchain) must be there.
+		return agentos.PreambleFor(sessionAgentic(env))
+	}})
 	_ = job.stdout.Close()
 	_ = job.stderr.Close()
 	stdoutBytes, stdoutOmitted := job.stdout.stats()
@@ -541,4 +546,14 @@ func quoteArgv(argv []string) string {
 		parts[i] = "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 	}
 	return strings.Join(parts, " ")
+}
+
+// sessionAgentic reports whether a session's environment turns agent mode on.
+func sessionAgentic(env []string) bool {
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "BASHY_AGENTIC="); ok {
+			return v == "1" || strings.EqualFold(v, "true")
+		}
+	}
+	return false
 }
