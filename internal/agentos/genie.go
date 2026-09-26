@@ -8,7 +8,9 @@ package agentos
 // run's own model server on a free port, the one-time model pull, the ycode
 // run — is the bundle's own `solve` recipe (dag.md), editable like any fish.
 //
-//	bashy genie TASK...        solve TASK in the current git repository
+//	bashy genie [-m MODEL] [MESSAGE...]   one turn, or interactive (chat)
+//	bashy genie web | resume | session ...
+//	bashy genie solve TASK...  bench-style: solve TASK in the current git repository
 //	bashy genie build [--from DIR]
 //	bashy genie doctor [--json]
 //	bashy genie pull           (no released bundle yet: says how to build)
@@ -26,32 +28,56 @@ import (
 	"strings"
 )
 
-const genieUsage = `usage: bashy genie "TASK"            solve TASK in the current git repository
-       bashy genie build [--from DIR]  package genie from its source (ycode/examples/genie)
-       bashy genie doctor [--json]     bundle, bashy, ycode, host facts and the model pick
-       bashy genie pull                fetch a released bundle (not published yet)
+const genieUsage = `usage: bashy genie [-m MODEL] "MESSAGE"   one turn in this directory; the answer on stdout
+       ... | bashy genie [-m MODEL]       the same, the message read from stdin
+       bashy genie [-m MODEL]             an interactive session (on a terminal)
+       bashy genie web [-m MODEL]         the browser chat page (prints the URL to open)
+       bashy genie resume                 continue the latest session interactively
+       bashy genie session [list|show|export|search|rename|fork] ...
+       bashy genie solve [-m MODEL] "TASK"  bench-style run: clean git tree, patch + run record
+       bashy genie build [--from DIR]     package genie from its source (ycode/examples/genie)
+       bashy genie doctor [--json]        bundle, bashy, ycode, host facts and the model pick
+       bashy genie pull                   fetch a released bundle (not published yet)
 
+The model is picked for this host unless -m (or GENIE_MODEL_ID) names one.
 Environment: GENIE_BAR (bundle path), GENIE_SOURCE (source directory),
 GENIE_MODEL_ID (model override), YCODE_BIN (another ycode; default: the
-built-in bashy ycode); the bundle's
-dag.md documents the rest.
+built-in bashy ycode); the bundle's dag.md documents the rest.
 `
 
 func dispatchGenie(args []string) int {
-	if len(args) == 0 {
-		fmt.Fprint(os.Stderr, genieUsage)
+	model, args, err := genieModelFlag(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy genie:", err)
 		return 2
 	}
-	switch args[0] {
-	case "-h", "--help", "help":
-		fmt.Fprint(os.Stdout, genieUsage)
-		return 0
-	case "build":
-		return genieBuild(args[1:], os.Stderr)
-	case "doctor":
-		return genieDoctor(args[1:], os.Stdout, os.Stderr)
-	case "pull":
-		fmt.Fprintln(os.Stderr, "bashy genie pull: no released genie bundle is published yet; build one from source with `bashy genie build` (GENIE_SOURCE or --from pointing at ycode/examples/genie)")
+	target, mode := "chat", ""
+	if len(args) > 0 {
+		switch args[0] {
+		case "-h", "--help", "help":
+			fmt.Fprint(os.Stdout, genieUsage)
+			return 0
+		case "build":
+			return genieBuild(args[1:], os.Stderr)
+		case "doctor":
+			return genieDoctor(args[1:], os.Stdout, os.Stderr)
+		case "pull":
+			fmt.Fprintln(os.Stderr, "bashy genie pull: no released genie bundle is published yet; build one from source with `bashy genie build` (GENIE_SOURCE or --from pointing at ycode/examples/genie)")
+			return 2
+		case "solve":
+			target, args = "solve", args[1:]
+		case "web", "resume", "session":
+			mode, args = args[0], args[1:]
+		}
+	}
+	if again, rest, err := genieModelFlag(args); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy genie:", err)
+		return 2
+	} else if again != "" {
+		model, args = again, rest // -m after the subcommand
+	}
+	if (mode == "web" || mode == "resume") && len(args) > 0 {
+		fmt.Fprintf(os.Stderr, "bashy genie %s takes no message\n", mode)
 		return 2
 	}
 	bundle, err := genieBundle()
@@ -59,7 +85,45 @@ func dispatchGenie(args []string) int {
 		fmt.Fprintln(os.Stderr, "bashy genie:", err)
 		return 2
 	}
-	return runSelf(append([]string{"run", "--target", "solve", bundle}, args...), os.Stdin, os.Stdout, os.Stderr)
+	if model != "" {
+		os.Setenv("GENIE_MODEL_ID", model)
+	}
+	if mode != "" {
+		os.Setenv("GENIE_MODE", mode)
+	}
+	return runSelf(append([]string{"run", "--target", target, bundle}, args...), os.Stdin, os.Stdout, os.Stderr)
+}
+
+// genieModelFlag takes -m/--model MODEL (or --model=MODEL) from before the
+// message; everything from the first other word on is the message.
+func genieModelFlag(args []string) (string, []string, error) {
+	model := ""
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--":
+			return model, append(rest, args[i+1:]...), nil
+		case arg == "-m" || arg == "--model":
+			if i+1 >= len(args) || args[i+1] == "" {
+				return "", nil, fmt.Errorf("%s needs a model name", arg)
+			}
+			model = args[i+1]
+			i++
+		case strings.HasPrefix(arg, "--model="):
+			model = strings.TrimPrefix(arg, "--model=")
+		default:
+			if len(rest) == 0 && strings.HasPrefix(arg, "-") && arg != "-h" && arg != "--help" {
+				return "", nil, fmt.Errorf("unknown flag %s (quote a message that starts with '-', or put -- before it)", arg)
+			}
+			rest = append(rest, arg)
+			if !strings.HasPrefix(arg, "-") {
+				// the subcommand or message has started: later words are its own
+				return model, append(rest, args[i+1:]...), nil
+			}
+		}
+	}
+	return model, rest, nil
 }
 
 // genieHome is where the installed bundle lives: $BASHY_HOME/genie, else
