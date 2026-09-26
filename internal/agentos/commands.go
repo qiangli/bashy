@@ -556,6 +556,7 @@ var verbSynopsis = map[string]string{
 	"out":         "recover complete command output by its digest-prefix handle",
 	"full":        "run one command with output reduction disabled",
 	"awd":         "run one command in another directory and return (the awd builtin, from the front door)",
+	"genie":       "solve a task in this repository with genie, the local-model SWE agent (own model server, no vendor): TASK, build, doctor",
 	"supervisord": "supervise ONE bashy dag root in the foreground: restart with bounded backoff, forward TERM/INT to its process group, reap orphans as PID 1",
 	"inbox":       "read/watch every inbound source, or query an explicit durable agent/human mailbox",
 	"notify":      "send one subject-only notification to an agent or role",
