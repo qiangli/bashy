@@ -1985,6 +1985,10 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	// The ring answers `type` / `command -v` too, on both branches: what
 	// dispatch runs, introspection must see (registered.go, registeredResolver).
 	opts = append(opts, interp.CommandResolver(registeredResolver))
+	// The pure-Go userland (coreutilsshell.Handler below) serves its applets
+	// by name: never hash them, or the second `jq` runs the host's /usr/bin/jq
+	// (or fails on a host with none) instead of bashy's own.
+	opts = append(opts, interp.ServedInProcess(func(name string) bool { return tool.Lookup(name) != nil }))
 	if posix {
 		// The registered-command rung takes its place in --posix too (operator,
 		// 2026-09-14: POSIX and agentic at the same time) — resolution is

@@ -150,21 +150,25 @@ func ollamaOfficialRepo() string {
 }
 
 // ollamaEntrypoint is the ollama executable's path within the official archive
-// for this platform (darwin/windows only; "" = not auto-provisionable here).
+// for this platform ("" = not auto-provisionable here). The linux archive keeps
+// the executable under bin/ and its runners under lib/ollama, which it finds
+// relative to itself.
 func ollamaEntrypoint() string {
 	switch runtime.GOOS {
 	case "darwin":
 		return "ollama"
 	case "windows":
 		return "ollama.exe"
+	case "linux":
+		return "bin/ollama"
 	default:
-		return "" // linux uses .tar.zst — provision via host/mesh instead
+		return ""
 	}
 }
 
 // ollamaAssetMatch selects the plain (non -rocm/-mlx/-jetpack) official ollama
-// asset bashy can extract for this platform: the universal darwin .tgz or the
-// per-arch windows .zip. linux (.tar.zst) matches nothing here.
+// asset bashy can extract for this platform: the universal darwin .tgz, the
+// per-arch windows .zip or the per-arch linux .tar.zst.
 func ollamaAssetMatch(name, goos, goarch string) bool {
 	n := strings.ToLower(name)
 	switch goos {
@@ -172,6 +176,8 @@ func ollamaAssetMatch(name, goos, goarch string) bool {
 		return n == "ollama-darwin.tgz"
 	case "windows":
 		return n == "ollama-windows-"+goarch+".zip"
+	case "linux":
+		return n == "ollama-linux-"+goarch+".tar.zst"
 	}
 	return false
 }
@@ -307,11 +313,6 @@ func engineNotFoundMessage(arg string) string {
 			"  Check network access to github.com releases (bashy fetches a pinned podman for " + binmgr.Platform() + "),\n" +
 			"  install podman yourself, or run containers on a paired host node over the mesh.\n"
 	default: // ollama
-		if runtime.GOOS == "linux" {
-			return "bashy ollama: no ollama found on PATH or in bashy's cache.\n" +
-				"  The official linux ollama ships as .tar.zst (not yet auto-extracted); install it\n" +
-				"  (https://ollama.com/download) or run it on a paired host node over the mesh.\n"
-		}
 		return "bashy ollama: could not fetch the official ollama runtime.\n" +
 			"  Check network access to github.com/ollama/ollama releases, install ollama\n" +
 			"  (https://ollama.com/download), or run it on a paired host node over the mesh.\n"

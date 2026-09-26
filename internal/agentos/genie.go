@@ -35,10 +35,15 @@ const genieUsage = `usage: bashy genie [-m MODEL] "MESSAGE"   one turn in this d
        bashy genie resume                 continue the latest session interactively
        bashy genie session [list|show|export|search|rename|fork] ...
        bashy genie solve [-m MODEL] "TASK"  bench-style run: clean git tree, patch + run record
+       bashy genie smoke [-m MODEL]       host smoke: a question and a fixture solve, one JSON line per step
        bashy genie build [--from DIR]     package genie from a checkout (ycode/examples/genie), else from the builtin source
        bashy genie doctor [--json]        bundle, bashy, ycode, host facts and the model pick
 
 The model is picked for this host unless -m (or GENIE_MODEL_ID) names one.
+-m may name an API model from the model registry (bashy model add NAME
+--set kind=api,base_url=URL,model=ID,api_key_ref=SECRET): genie then runs on
+that provider's OpenAI-compatible endpoint and starts no local model server —
+the way to run genie on a host too small for a local model.
 Environment: GENIE_BAR (bundle path), GENIE_SOURCE (source directory),
 GENIE_MODEL_ID (model override), YCODE_BIN (another ycode; default: the
 built-in bashy ycode); the bundle's dag.md documents the rest.
@@ -65,6 +70,8 @@ func dispatchGenie(args []string) int {
 			return 2
 		case "solve":
 			target, args = "solve", args[1:]
+		case "smoke":
+			target, args = "smoke", args[1:]
 		case "web", "resume", "session":
 			mode, args = args[0], args[1:]
 		}
@@ -85,7 +92,16 @@ func dispatchGenie(args []string) int {
 		return 2
 	}
 	if model != "" {
-		os.Setenv("GENIE_MODEL_ID", model)
+		external, ok, err := resolveGenieExternal(model)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "bashy genie:", err)
+			return 2
+		}
+		if ok {
+			external.apply()
+		} else {
+			os.Setenv("GENIE_MODEL_ID", model)
+		}
 	}
 	if mode != "" {
 		os.Setenv("GENIE_MODE", mode)
