@@ -1,6 +1,7 @@
 ---
 name: tesseract
 description: bashy dag front door for Tesseract OCR — CMake configure, the tesseract binary and the launched CLI, as one dependency graph
+type: dag
 default: smoke
 vars:
   JOBS ?= 8

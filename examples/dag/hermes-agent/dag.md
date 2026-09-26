@@ -1,6 +1,7 @@
 ---
 name: hermes-agent
 description: bashy dag front door for Hermes Agent — the Python core (uv, pytest, ruff) and the TypeScript TUI workspace (npm, tsc, vitest), as one dependency graph
+type: dag
 default: test
 vars:
   TEST_PATHS ?= tests

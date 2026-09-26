@@ -1,6 +1,7 @@
 ---
 name: caddy
 description: bashy dag front door for Caddy — focused test, build, fenced package smoke, and launched CLI
+type: dag
 default: smoke
 ---
 

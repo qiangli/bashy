@@ -1,6 +1,7 @@
 ---
 name: codex
 description: bashy dag front door for Codex — fetch, format check, clippy, build, nextest and the CLI binary of the codex-rs workspace, as one dependency graph
+type: dag
 default: fmt-check
 vars:
   TEST_CRATE ?= codex-arg0

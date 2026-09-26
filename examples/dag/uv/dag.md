@@ -1,6 +1,7 @@
 ---
 name: uv
 description: bashy dag front door for uv — fetch, format check, clippy, build, test and the CLI binary, as one dependency graph over the Cargo workspace
+type: dag
 default: fmt-check
 vars:
   TEST_CRATE ?= uv-pep440

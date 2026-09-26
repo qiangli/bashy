@@ -1,6 +1,7 @@
 ---
 name: curl
 description: bashy dag front door for curl — CMake configure, the curl binary, the test suite and the launched CLI, as one dependency graph
+type: dag
 default: smoke
 vars:
   JOBS ?= 8

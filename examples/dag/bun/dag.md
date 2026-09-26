@@ -1,6 +1,7 @@
 ---
 name: bun
 description: bashy dag front door for Bun's source tree — install, lint, typecheck, the Rust workspace's format check and cargo check, as one dependency graph
+type: dag
 default: lint
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: gh
 description: bashy dag front door for GitHub CLI — focused test, build, fenced package smoke, and launched CLI
+type: dag
 default: smoke
 ---
 

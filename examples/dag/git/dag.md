@@ -1,6 +1,7 @@
 ---
 name: git
 description: bashy dag front door for Git — build, one test script from t/, and the launched binary, as one dependency graph over the Makefile
+type: dag
 default: smoke
 vars:
   JOBS ?= 8

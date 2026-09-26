@@ -1,6 +1,7 @@
 ---
 name: opencode
 description: bashy dag front door for OpenCode — install, typecheck, lint, test, and the CLI entry point, as one dependency graph
+type: dag
 default: typecheck
 ---
 

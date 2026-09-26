@@ -1,6 +1,7 @@
 ---
 name: nanochat
 description: bashy dag front door for nanochat — sync, test, smoke, and the training/chat entry points, as one dependency graph
+type: dag
 default: test
 vars:
   PYTEST_ARGS ?= -q

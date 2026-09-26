@@ -1,6 +1,7 @@
 ---
 name: ffmpeg
 description: bashy dag front door for FFmpeg — configure, the ffmpeg binary, one FATE test and the launched CLI, as one dependency graph over the Makefile
+type: dag
 default: smoke
 vars:
   JOBS ?= 8

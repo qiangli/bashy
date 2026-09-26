@@ -1,6 +1,7 @@
 ---
 name: cmake
 description: bashy dag front door for CMake's own source — bootstrap, build, one CMakeLib test and the launched cmake, as one dependency graph
+type: dag
 default: smoke
 vars:
   JOBS ?= 8

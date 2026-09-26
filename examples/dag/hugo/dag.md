@@ -1,6 +1,7 @@
 ---
 name: hugo
 description: bashy dag front door for Hugo — focused test, build, fenced package smoke, and launched CLI
+type: dag
 default: smoke
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: mini-swe-agent
 description: bashy dag front door for mini-SWE-agent — sync, test, lint, docs, and the CLI entry point, as one dependency graph
+type: dag
 default: test
 vars:
   PYTEST_ARGS ?= -q -n auto

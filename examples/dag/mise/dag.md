@@ -1,6 +1,7 @@
 ---
 name: mise
 description: bashy dag front door for mise — the project's own build and unit-test tasks plus a Rust fence that reads the checkout's workspace coordinates
+type: dag
 default: build
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: bashy
 description: Build/test/lint targets for bashy, as a bashy dag pipeline (dogfood of the Makefile)
+type: dag
 ---
 
 # bashy — DAG task file

@@ -24,6 +24,47 @@ bashy dag build                  # run "build" and its dependencies
 bashy dag pipeline.md ci         # run a target in a named file
 ```
 
+## The header: one file, three readers
+
+A dag file stays a dag file — bashy's own format — but its YAML frontmatter
+is shaped so two other kinds of reader accept it too:
+
+- **Agent Skills** (Claude Code, Codex, and other agentic tools) route on
+  `name` (lowercase, digits, hyphens; ≤64) and `description` — say what the
+  file builds *and when to use it*.
+- **OKF** (Open Knowledge Format) readers require `type`; a dag file is
+  `type: dag`.
+
+The dag-only keys (`default`, `vars`, `include`) may stay top-level or nest
+under `metadata:`, the spelling strict skill validators accept. A top-level
+key wins over the same key under `metadata:`.
+
+```yaml
+---
+name: uv
+description: Build, lint and test uv. Use when asked to build or test it.
+type: dag
+metadata:
+  default: fmt-check
+  vars:
+    - TEST_CRATE ?= uv-pep440
+---
+```
+
+`bashy dag --check` warns (never fails) when the header is not strict YAML
+or lacks `name`/`description`/`type`. Files written with the older line
+syntax parse exactly as before.
+
+**Projecting a skill.** Other tools discover skills as `<dir>/SKILL.md`, not
+dag files, so `bashy dag --skill DIR` writes `DIR/<name>/SKILL.md`: a thin
+skill that lists the targets and says how to run them through `bashy dag`
+(never a copy of the bodies — dependency order, up-to-date skipping and
+effect caps live in the runner). It overwrites only its own output.
+
+```bash
+bashy dag --skill .claude/skills     # Claude Code picks it up from the repo
+```
+
 ## Working directory
 
 Bodies run in the **invoking working directory**, exactly as `make` recipes

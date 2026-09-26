@@ -1,6 +1,7 @@
 ---
 name: openclaw
 description: bashy dag front door for OpenClaw — install, typecheck, format check, tests, and the CLI entry point, as one dependency graph
+type: dag
 default: typecheck
 vars:
   TEST_FILE ?= src/utils/chunk-items.test.ts

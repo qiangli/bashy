@@ -1,6 +1,7 @@
 ---
-name: llama.cpp
+name: llama-cpp
 description: bashy dag front door for llama.cpp — CMake configure, the llama-cli binary, one ctest and the launched CLI, as one dependency graph
+type: dag
 default: smoke
 vars:
   JOBS ?= 8
