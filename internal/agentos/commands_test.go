@@ -28,7 +28,7 @@ func TestCommandsCatalogSources(t *testing.T) {
 	}
 	// Front-door verbs + the docker->podman shim + the lister itself.
 	for _, want := range []string{"weave", "commands", "oci", "sandbox", "peer", "chat", "mb", "ping",
-		"agent", "model", "tool", "person", "skill", "secret", "app", "resource"} {
+		"agent", "model", "tool", "person", "skill", "secret", "app", "resource", "llm"} {
 		if !slices.Contains(verbs, want) {
 			t.Errorf("verbs missing %q", want)
 		}
@@ -89,6 +89,19 @@ func TestCommandsCatalogSources(t *testing.T) {
 		if !slices.IsSorted(g) {
 			t.Errorf("group not sorted: %v", g)
 		}
+	}
+}
+
+func TestLLMIsDirectOnly(t *testing.T) {
+	_, _, verbs := commandsCatalog()
+	if !slices.Contains(verbs, "llm") {
+		t.Fatal("bashy llm is callable but absent from the command catalog")
+	}
+	if !slices.Contains(directFrontDoorVerbs, "llm") {
+		t.Fatal("llm must be a direct-only front door")
+	}
+	if slices.Contains(alwaysShimVerbs, "llm") || strings.Contains(Preamble(), "\nllm()") || strings.HasPrefix(Preamble(), "llm()") {
+		t.Fatal("bashy llm must not shadow the unrelated bare llm command")
 	}
 }
 

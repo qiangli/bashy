@@ -526,6 +526,7 @@ var verbSynopsis = map[string]string{
 	"podman":      "vendor spelling of `bashy oci` (the engine underneath)",
 	"ollama":      "the LLM pillar (O3: ollama · oci · otel): managed local LLM runtime — isolated daemon, own port/models",
 	"weave":       "per-repo multi-agent workspace orchestrator",
+	"llm":         "local OpenAI/Anthropic-compatible gateway over pre-spawned agent CLIs: ask for a band (L4, L4+, auto), a model or an agent; serve | pools | env",
 	"sprint":      "cross-repo plan/continuity board (peer to weave)",
 	"handoff":     "pause this session and hand the work to another agent, a scheduler, or tomorrow",
 	"resume":      "pick up a handed-off session — any tool, any machine",

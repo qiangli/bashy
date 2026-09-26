@@ -83,6 +83,7 @@ import (
 	"github.com/qiangli/yoke/pkg/bus"
 	"github.com/qiangli/yoke/pkg/capability"
 	"github.com/qiangli/yoke/pkg/chat"
+	"github.com/qiangli/yoke/pkg/cligw"
 	"github.com/qiangli/yoke/pkg/craft"
 	"github.com/qiangli/yoke/pkg/dag"
 	"github.com/qiangli/yoke/pkg/fleet"
@@ -152,7 +153,9 @@ var (
 	// routes the bare invocation to it, so it must never become a shim either.
 	// `supervisord` shares its name with a widely installed program; bare
 	// `supervisord` stays the host's, `bashy supervisord` is ours.
-	directFrontDoorVerbs = []string{"mb", "ping", "out", "full", "awd", "supervisord"}
+	// `llm` likewise belongs to a popular unrelated CLI; the local gateway is
+	// reached only as `bashy llm`.
+	directFrontDoorVerbs = []string{"mb", "ping", "out", "full", "awd", "supervisord", "llm"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
@@ -641,6 +644,14 @@ func dispatch() {
 		configureWeaveResourceAdmission(cmd)
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
+			dispatchExit(1)
+		}
+		dispatchExit(0)
+	case "llm":
+		cmd := cligw.NewCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy llm:", err)
 			dispatchExit(1)
 		}
 		dispatchExit(0)
