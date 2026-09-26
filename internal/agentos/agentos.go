@@ -105,6 +105,7 @@ import (
 	"github.com/qiangli/yoke/pkg/secrets"
 	coreskills "github.com/qiangli/yoke/pkg/skills"
 	"github.com/qiangli/yoke/pkg/sota"
+	"github.com/qiangli/yoke/pkg/stats"
 	"github.com/qiangli/yoke/pkg/steward"
 	"github.com/qiangli/yoke/pkg/supervise"
 	"github.com/qiangli/yoke/pkg/telemetry"
@@ -139,7 +140,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "genie", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "notify", "activity", "run", "agentic", "commands", "inspect", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "notify", "activity", "run", "agentic", "commands", "inspect", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -1001,6 +1002,17 @@ func dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintf(os.Stderr, "bashy %s: %v\n", label, err)
+			dispatchExit(1)
+		}
+		dispatchExit(0)
+	case "stats":
+		// Results JSONL → resolve rates with clustered CIs, paired
+		// differences, pass^k, cost per solve (yoke pkg/stats): the numbers
+		// behind every scoreboard row.
+		cmd := stats.NewCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy stats:", err)
 			dispatchExit(1)
 		}
 		dispatchExit(0)

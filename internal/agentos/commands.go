@@ -549,6 +549,7 @@ var verbSynopsis = map[string]string{
 	"supervise":   "drive a fleet against a goal of gated tasks, judged by a supervisor (conductor-as-a-verb)",
 	"capability":  "living agent (tool:model) × capability matrix for routing",
 	"leaderboard": "rank this host's agents on the runs they actually completed",
+	"stats":       "resolve rates with clustered 95% CIs, paired differences, pass^k and cost per solve over results JSONL",
 	"mb":          "host message board: read what was posted to you, post to others",
 	"messages":    "hidden alias for bashy mb",
 	"issue":       "hidden alias for bashy todo",
