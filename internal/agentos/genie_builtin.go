@@ -135,11 +135,15 @@ func installBuiltinGenie(home string, stderr io.Writer) error {
 }
 
 // builtinGenieCurrent reports whether an installed bundle may be used as is:
-// a developer's build (or one from before provenance was recorded) always;
-// a builtin build only while it matches this bashy's embedded source.
+// a developer's build (`build --from`, recorded as "dir") always; a builtin
+// build only while it matches this bashy's embedded source. A bundle with no
+// provenance predates the builtin source and is rebuilt from it.
 func builtinGenieCurrent(home string) bool {
 	p, ok := readGenieProvenance(home)
-	if !ok || p.Source != "builtin" {
+	if !ok {
+		return false
+	}
+	if p.Source != "builtin" {
 		return true
 	}
 	digest, err := builtinGenieDigest()

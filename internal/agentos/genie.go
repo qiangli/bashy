@@ -319,7 +319,7 @@ func genieDoctor(args []string, stdout, stderr io.Writer) int {
 		if home, err := genieHome(); err == nil && strings.TrimSpace(os.Getenv("GENIE_BAR")) == "" {
 			switch p, ok := readGenieProvenance(home); {
 			case !ok:
-				report.BundleSource = "unrecorded (built before provenance)"
+				report.BundleSource = "unrecorded (stale: the next run rebuilds it from the builtin source)"
 			case p.Source == "builtin":
 				report.BundleSource = "builtin " + p.Digest[:12]
 			default:

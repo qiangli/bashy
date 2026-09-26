@@ -34,8 +34,8 @@ func TestBuiltinGenieSource(t *testing.T) {
 		t.Fatalf("second materialize: %q %v", again, err)
 	}
 
-	if !builtinGenieCurrent(home) {
-		t.Fatal("no provenance: an existing bundle must be kept")
+	if builtinGenieCurrent(home) {
+		t.Fatal("no provenance: a bundle from before the builtin source is stale")
 	}
 	if err := writeGenieProvenance(home, genieProvenance{Source: "builtin", Digest: digest}); err != nil {
 		t.Fatal(err)
