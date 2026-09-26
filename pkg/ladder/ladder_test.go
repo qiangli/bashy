@@ -4,7 +4,7 @@ import "testing"
 
 type fakeCommands map[string]bool
 
-func (f fakeCommands) Known(name string) bool { return f[name] }
+func (f fakeCommands) Known(name string) bool          { return f[name] }
 func (f fakeCommands) GlobMatches(pattern string) bool { return pattern == "file?" }
 
 func (f fakeCommands) Names() []string {
@@ -57,6 +57,22 @@ func TestRepairRefusesTies(t *testing.T) {
 	cmds := fakeCommands{"cat": true, "cut": true}
 	if got := Resolve("cst file", cmds); got.Rung != Free {
 		t.Fatalf("tie repaired: %+v", got)
+	}
+}
+
+// On a full PATH a typo is often one edit from several names; the one with
+// the same letters (a transposition) wins, and a question is never repaired.
+func TestRepairOnACrowdedPath(t *testing.T) {
+	cmds := fakeCommands{"git": true, "gtr": true, "gt": true, "chat": true, "grep": true, "gerp": true}
+	if got := Resolve("gti --version", cmds); got.Rung != Repair || got.Line != "git --version" {
+		t.Fatalf("gti: %+v", got)
+	}
+	if got := Resolve("what does stats.py compute? one sentence", cmds); got.Rung != Free {
+		t.Fatalf("a question was repaired: %+v", got)
+	}
+	// Two transpositions at the same distance: no guess.
+	if got := Resolve("abc x", fakeCommands{"bac": true, "acb": true}); got.Rung != Free {
+		t.Fatalf("ambiguous anagram repaired: %+v", got)
 	}
 }
 

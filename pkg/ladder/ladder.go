@@ -68,6 +68,9 @@ func Resolve(line string, cmds Commands) Decision {
 	if word == "" || shellSyntax(word) || cmds.Known(word) && !question(text, cmds) {
 		return Decision{Rung: Literal, Line: line}
 	}
+	if question(text, cmds) {
+		return Decision{Rung: Free, Line: text}
+	}
 	if fixed, ok := repair(word, text, cmds.Names()); ok {
 		return Decision{Rung: Repair, Line: fixed + rest, Note: word + " → " + fixed}
 	}
@@ -141,34 +144,65 @@ func validName(s string) bool {
 
 // repair finds the one command name the first word misspells: one edit away
 // (an adjacent transposition counts as one) for words of three or more
-// characters, two for seven or more. A tie, a question, or a word that is
-// no command-like token leaves the line to the agent.
+// characters, two for seven or more. On a full PATH several names are often
+// that close ("gti": git, gtr, …); a tie is broken only by the one candidate
+// with the same letters (a transposition, the commonest typo). Any other tie,
+// a question, or a word that is no command-like token leaves the line to the
+// agent.
 func repair(word, text string, names []string) (string, bool) {
 	n := utf8.RuneCountInString(word)
-	if n < 3 || strings.HasSuffix(text, "?") || !commandLike(word) {
+	if n < 3 || !commandLike(word) {
 		return "", false
 	}
 	limit := 1
 	if n >= 7 {
 		limit = 2
 	}
-	best, count, bestDist := "", 0, limit+1
+	bestDist := limit + 1
+	var best []string
+	seen := map[string]bool{}
 	for _, name := range names {
-		if name == word || abs(utf8.RuneCountInString(name)-n) > limit {
+		if name == word || seen[name] || abs(utf8.RuneCountInString(name)-n) > limit {
 			continue
 		}
+		seen[name] = true
 		d := distance(word, name)
 		switch {
 		case d < bestDist:
-			best, count, bestDist = name, 1, d
-		case d == bestDist && name != best:
-			count++
+			best, bestDist = []string{name}, d
+		case d == bestDist:
+			best = append(best, name)
 		}
 	}
-	if count != 1 || bestDist > limit {
-		return "", false
+	if len(best) == 1 {
+		return best[0], true
 	}
-	return best, true
+	var anagrams []string
+	for _, name := range best {
+		if sameLetters(word, name) {
+			anagrams = append(anagrams, name)
+		}
+	}
+	if len(anagrams) == 1 {
+		return anagrams[0], true
+	}
+	return "", false
+}
+
+func sameLetters(a, b string) bool {
+	count := map[rune]int{}
+	for _, r := range a {
+		count[r]++
+	}
+	for _, r := range b {
+		count[r]--
+	}
+	for _, c := range count {
+		if c != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func commandLike(word string) bool {
