@@ -136,6 +136,7 @@ repo_url() {
         yoke) echo "https://github.com/qiangli/yoke.git" ;;
         readline) echo "https://github.com/qiangli/readline.git" ;;
         filebrowser) echo "https://github.com/qiangli/filebrowser.git" ;;
+        ycode) echo "https://github.com/qiangli/ycode.git" ;;
         *) echo "bootstrap-siblings: no repo URL for '$1'" >&2; return 1 ;;
     esac
 }
