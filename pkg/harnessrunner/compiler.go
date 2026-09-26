@@ -158,7 +158,12 @@ func compileScript(script string, intent *Intent) error {
 	// and function declarations included.
 	file, err := syntax.NewParser(syntax.Variant(syntax.LangBashPP)).Parse(strings.NewReader(script), "<harness>")
 	if err != nil {
-		return fmt.Errorf("parse command: %w", err)
+		// A command that does not parse is an unprovable intent, not a bad
+		// request: policy denies it and the reason (the parse error) reaches
+		// the caller — typically a model, which can correct it — instead of
+		// failing the whole turn.
+		markUnsupported(intent, "syntax", script, "the command does not parse: "+err.Error())
+		return nil
 	}
 	walkCompile(file, intent, collectFuncs(file))
 	return nil

@@ -35,9 +35,8 @@ const genieUsage = `usage: bashy genie [-m MODEL] "MESSAGE"   one turn in this d
        bashy genie resume                 continue the latest session interactively
        bashy genie session [list|show|export|search|rename|fork] ...
        bashy genie solve [-m MODEL] "TASK"  bench-style run: clean git tree, patch + run record
-       bashy genie build [--from DIR]     package genie from its source (ycode/examples/genie)
+       bashy genie build [--from DIR]     package genie from a checkout (ycode/examples/genie), else from the builtin source
        bashy genie doctor [--json]        bundle, bashy, ycode, host facts and the model pick
-       bashy genie pull                   fetch a released bundle (not published yet)
 
 The model is picked for this host unless -m (or GENIE_MODEL_ID) names one.
 Environment: GENIE_BAR (bundle path), GENIE_SOURCE (source directory),
@@ -62,7 +61,7 @@ func dispatchGenie(args []string) int {
 		case "doctor":
 			return genieDoctor(args[1:], os.Stdout, os.Stderr)
 		case "pull":
-			fmt.Fprintln(os.Stderr, "bashy genie pull: no released genie bundle is published yet; build one from source with `bashy genie build` (GENIE_SOURCE or --from pointing at ycode/examples/genie)")
+			fmt.Fprintln(os.Stderr, "bashy genie pull: genie is builtin — `bashy genie` builds its bundle from the source in this bashy on first use; there is nothing to fetch")
 			return 2
 		case "solve":
 			target, args = "solve", args[1:]
@@ -140,8 +139,13 @@ func genieHome() (string, error) {
 	return filepath.Join(home, "genie"), nil
 }
 
-// genieBundle resolves the bundle to run: $GENIE_BAR, else the installed one.
-func genieBundle() (string, error) {
+// genieBundle resolves the bundle to run: $GENIE_BAR, else the installed one,
+// built from the builtin source when missing or stale.
+func genieBundle() (string, error) { return resolveGenieBundle(true) }
+
+// resolveGenieBundle is genieBundle; with build false it only looks (doctor
+// never fixes).
+func resolveGenieBundle(build bool) (string, error) {
 	if path := strings.TrimSpace(os.Getenv("GENIE_BAR")); path != "" {
 		if _, err := os.Stat(path); err != nil {
 			return "", fmt.Errorf("GENIE_BAR: %w", err)
@@ -153,8 +157,17 @@ func genieBundle() (string, error) {
 		return "", err
 	}
 	path := filepath.Join(home, "genie.bar")
-	if _, err := os.Stat(path); err != nil {
-		return "", errors.New("no genie bundle installed; run `bashy genie build` (from a ycode checkout, or with GENIE_SOURCE / --from pointing at ycode/examples/genie)")
+	if _, err := os.Stat(path); err == nil && builtinGenieCurrent(home) {
+		return path, nil
+	}
+	if !build {
+		return "", errors.New("no current genie bundle: `bashy genie` builds it from the builtin source on first use (or `bashy genie build`)")
+	}
+	// No bundle yet, or a builtin one older than this bashy: build genie
+	// from the source linked into this binary.
+	fmt.Fprintln(os.Stderr, "bashy genie: building the builtin genie bundle")
+	if err := installBuiltinGenie(home, os.Stderr); err != nil {
+		return "", fmt.Errorf("building the builtin genie: %w", err)
 	}
 	return path, nil
 }
@@ -212,42 +225,66 @@ func genieBuild(args []string, stderr io.Writer) int {
 	}
 	source, err := genieSource(from)
 	if err != nil {
-		fmt.Fprintln(stderr, "bashy genie build:", err)
-		return 2
+		if from != "" || strings.TrimSpace(os.Getenv("GENIE_SOURCE")) != "" {
+			fmt.Fprintln(stderr, "bashy genie build:", err)
+			return 2
+		}
+		// No checkout around: the builtin source.
+		home, herr := genieHome()
+		if herr == nil {
+			herr = installBuiltinGenie(home, stderr)
+		}
+		if herr != nil {
+			fmt.Fprintln(stderr, "bashy genie build:", herr)
+			return 1
+		}
+		return 0
 	}
+	if err := packageGenie(source, genieProvenance{Source: "dir", Path: source}, stderr); err != nil {
+		fmt.Fprintln(stderr, "bashy genie build:", err)
+		return 1
+	}
+	return 0
+}
+
+// packageGenie runs the source's package target and installs the bundle it
+// makes, recording where it came from.
+func packageGenie(source string, provenance genieProvenance, stderr io.Writer) error {
 	cmd := exec.Command(bashySelfPath(), "dag", "-f", "dag.md", "package")
 	cmd.Dir = source
 	cmd.Stdout, cmd.Stderr = stderr, stderr
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintln(stderr, "bashy genie build: packaging failed:", err)
-		return 1
+		return fmt.Errorf("packaging failed: %w", err)
 	}
 	home, err := genieHome()
 	if err == nil {
 		err = os.MkdirAll(home, 0o755)
 	}
 	if err != nil {
-		fmt.Fprintln(stderr, "bashy genie build:", err)
-		return 1
+		return err
 	}
 	data, err := os.ReadFile(filepath.Join(source, "dist", "genie.bar"))
 	if err != nil {
-		fmt.Fprintln(stderr, "bashy genie build:", err)
-		return 1
+		return err
 	}
 	target := filepath.Join(home, "genie.bar")
 	tmp := target + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		fmt.Fprintln(stderr, "bashy genie build:", err)
-		return 1
+		return err
 	}
 	if err := os.Rename(tmp, target); err != nil {
-		fmt.Fprintln(stderr, "bashy genie build:", err)
-		return 1
+		return err
+	}
+	if err := writeGenieProvenance(home, provenance); err != nil {
+		return err
 	}
 	sum := sha256.Sum256(data)
-	fmt.Fprintf(stderr, "bashy genie: installed %s (sha256 %s) from %s\n", target, hex.EncodeToString(sum[:]), source)
-	return 0
+	from := source
+	if provenance.Source == "builtin" {
+		from = "the builtin source (" + provenance.Digest[:12] + ")"
+	}
+	fmt.Fprintf(stderr, "bashy genie: installed %s (sha256 %s) from %s\n", target, hex.EncodeToString(sum[:]), from)
+	return nil
 }
 
 type genieDoctorReport struct {
@@ -255,6 +292,7 @@ type genieDoctorReport struct {
 	Bundle        string          `json:"bundle,omitempty"`
 	BundleSHA256  string          `json:"bundle_sha256,omitempty"`
 	BundleError   string          `json:"bundle_error,omitempty"`
+	BundleSource  string          `json:"bundle_source,omitempty"`
 	Bashy         string          `json:"bashy"`
 	Ycode         string          `json:"ycode,omitempty"`
 	YcodeVersion  string          `json:"ycode_version,omitempty"`
@@ -270,13 +308,23 @@ func genieDoctor(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	report := genieDoctorReport{SchemaVersion: "bashy-genie-doctor-v1", Bashy: bashySelfPath()}
-	if bundle, err := genieBundle(); err != nil {
+	if bundle, err := resolveGenieBundle(false); err != nil {
 		report.BundleError = err.Error()
 	} else {
 		report.Bundle = bundle
 		if data, err := os.ReadFile(bundle); err == nil {
 			sum := sha256.Sum256(data)
 			report.BundleSHA256 = hex.EncodeToString(sum[:])
+		}
+		if home, err := genieHome(); err == nil && strings.TrimSpace(os.Getenv("GENIE_BAR")) == "" {
+			switch p, ok := readGenieProvenance(home); {
+			case !ok:
+				report.BundleSource = "unrecorded (built before provenance)"
+			case p.Source == "builtin":
+				report.BundleSource = "builtin " + p.Digest[:12]
+			default:
+				report.BundleSource = p.Path
+			}
 		}
 		// The pick is the bundle's own recipe; doctor shows its answer for
 		// this host (facts included) without starting a model server.
@@ -314,6 +362,9 @@ func genieDoctor(args []string, stdout, stderr io.Writer) int {
 		_ = enc.Encode(report)
 	} else {
 		fmt.Fprintf(stdout, "bundle:  %s%s\n", or(report.Bundle, report.BundleError), suffix(" sha256 ", report.BundleSHA256))
+		if report.BundleSource != "" {
+			fmt.Fprintf(stdout, "source:  %s\n", report.BundleSource)
+		}
 		fmt.Fprintf(stdout, "bashy:   %s\n", report.Bashy)
 		fmt.Fprintf(stdout, "ycode:   %s%s\n", or(report.Ycode, report.YcodeError), suffix(" ", report.YcodeVersion))
 		if report.ModelChoice != nil {

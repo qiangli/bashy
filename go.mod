@@ -25,6 +25,8 @@ require (
 
 require github.com/qiangli/ycode v0.0.0
 
+require github.com/qiangli/ycode/examples/genie v0.0.0
+
 require golang.org/x/crypto/x509roots/fallback v0.0.0-20260921070245-7a4a4d6beae2
 
 require (
@@ -388,3 +390,7 @@ replace github.com/filebrowser/filebrowser/v2 => ../filebrowser
 // ycode is the engine for agents declared in YAML; bashy mounts its CLI as
 // `bashy ycode` (cmd/bashy wires ycodecli.Main into agentos).
 replace github.com/qiangli/ycode => ../ycode
+
+// genie, bashy's builtin agent: its source is embedded (the genie module is
+// its own module inside the ycode checkout, so the ycode pin covers it).
+replace github.com/qiangli/ycode/examples/genie => ../ycode/examples/genie
