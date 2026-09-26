@@ -19,6 +19,7 @@ import (
 
 	"github.com/qiangli/bashy/internal/agentos"
 	"github.com/qiangli/bashy/internal/cli"
+	"github.com/qiangli/ycode/pkg/ycodecli"
 	"mvdan.cc/sh/v3/interp/ownedexec"
 
 	// Embedded CA roots, used only when the system has none: the offline
@@ -28,6 +29,10 @@ import (
 )
 
 func init() {
+	// `bashy ycode`: the YAML agent engine, wired here rather than imported by
+	// internal/agentos — ycode imports bashy's pkg/harnessrunner, which imports
+	// agentos, so only package main can close the loop.
+	agentos.YcodeMain = ycodecli.Main
 	cli.AgentOSDispatch = agentos.Dispatch
 	cli.AgentOSWireExec = agentos.WireExec
 	cli.AgentOSPreamble = agentos.Preamble
