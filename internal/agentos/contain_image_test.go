@@ -99,6 +99,15 @@ func TestContainRunArgs(t *testing.T) {
 	if strings.Contains(line, "CONTAIN_TEST_UNSET") {
 		t.Error("an unset env: name must not be passed")
 	}
+	// The caller's environment, not the process's, decides.
+	s.Environ = map[string]string{"CONTAIN_TEST_UNSET": "caller"}
+	line = strings.Join(containRunArgs(s, "n", "/b"), " ")
+	if !strings.Contains(line, "-e CONTAIN_TEST_UNSET=caller") || strings.Contains(line, "CONTAIN_TEST_PASS") {
+		t.Errorf("env: must come from the caller's environment:\n%s", line)
+	}
+	if (&containImageSpec{Environ: map[string]string{"BASHY_CONTAIN_CUSTOM": "w"}}).getenv("BASHY_CONTAIN_CUSTOM") != "w" {
+		t.Error("provider custom must see the caller's BASHY_CONTAIN_CUSTOM")
+	}
 }
 
 func TestContainScriptFunctions(t *testing.T) {
@@ -143,13 +152,11 @@ func TestContainInjectedBashy(t *testing.T) {
 	if err := os.WriteFile(notELF, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("BASHY_CONTAIN_BASHY", notELF)
-	if _, err := containInjectedBashy("amd64"); err == nil {
+	if _, err := containInjectedBashy(notELF, "amd64"); err == nil {
 		t.Error("a non-ELF injected bashy must be refused")
 	}
 	if runtime.GOOS != "linux" {
-		t.Setenv("BASHY_CONTAIN_BASHY", "")
-		if _, err := containInjectedBashy("amd64"); err == nil || !strings.Contains(err.Error(), "BASHY_CONTAIN_BASHY") {
+		if _, err := containInjectedBashy("", "amd64"); err == nil || !strings.Contains(err.Error(), "BASHY_CONTAIN_BASHY") {
 			t.Errorf("a non-linux host without BASHY_CONTAIN_BASHY: %v", err)
 		}
 	}

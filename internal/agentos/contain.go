@@ -95,12 +95,8 @@ func containDecorator(stderr io.Writer) nativeDecoratorFunc {
 			if net != "" {
 				return errors.New("contain: an image call has no network; a setup that needs one is a provider: custom")
 			}
-			img.Provider, img.Argv = provider, []string{"true"}
-			if err := img.validate(); err != nil {
-				c.Status = 2
-				fmt.Fprintf(stderr, "%s: contain: %v\n", c.Name, err)
-				return nil
-			}
+			// validated by runContainedImage, against the call's environment
+			img.Provider = provider
 			c.Status = runContainedCall(ctx, c, img, stderr)
 			return nil
 		}
@@ -135,12 +131,26 @@ func runContainedCall(ctx context.Context, c *nativeDecoratorCall, img *containI
 	}
 	dump.Close()
 	defer os.Remove(dump.Name())
-	if st := c.Run(ctx, `declare -f > "$__bashy_contain_fns"`, map[string]string{"__bashy_contain_fns": dump.Name()}); st != 0 {
+	// The call's functions and its exported environment, from its own frame.
+	envFile := dump.Name() + ".env"
+	defer os.Remove(envFile)
+	if st := c.Run(ctx, `declare -f > "$__bashy_contain_fns" && env -0 > "$__bashy_contain_env"`,
+		map[string]string{"__bashy_contain_fns": dump.Name(), "__bashy_contain_env": envFile}); st != 0 {
 		return containUnsupportedStatus
 	}
 	data, err := os.ReadFile(dump.Name())
 	if err != nil {
 		return containUnsupportedStatus
+	}
+	envData, err := os.ReadFile(envFile)
+	if err != nil {
+		return containUnsupportedStatus
+	}
+	img.Environ = map[string]string{}
+	for _, kv := range strings.Split(string(envData), "\x00") {
+		if k, v, ok := strings.Cut(kv, "="); ok && k != "" {
+			img.Environ[k] = v
+		}
 	}
 	// bashy is mounted at /.bashy/bashy: a bare `bashy` inside the call finds it.
 	script := "PATH=/.bashy:$PATH\n" + containScriptFunctions(string(data), c.Name) + "\n" + shellQuote(c.Name) + ` "$@"` + "\n"

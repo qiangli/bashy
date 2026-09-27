@@ -58,6 +58,22 @@ type containImageSpec struct {
 	RO       []string // HOST:CTR read-only mounts
 	Provider string   // "" | builtin | image | custom
 	Argv     []string // run by the injected bashy: bashy's own arguments
+	// Environ is the caller's exported environment (the decorated call's,
+	// not bashy's process environment); nil = the process environment.
+	Environ map[string]string
+}
+
+func (s *containImageSpec) lookup(name string) (string, bool) {
+	if s.Environ == nil {
+		return os.LookupEnv(name)
+	}
+	v, ok := s.Environ[name]
+	return v, ok
+}
+
+func (s *containImageSpec) getenv(name string) string {
+	v, _ := s.lookup(name)
+	return strings.TrimSpace(v)
 }
 
 func (s *containImageSpec) validate() error {
@@ -67,7 +83,7 @@ func (s *containImageSpec) validate() error {
 	switch s.Provider {
 	case "", containBuiltin, containImageP:
 	case containCustom:
-		if strings.TrimSpace(os.Getenv("BASHY_CONTAIN_CUSTOM")) == "" {
+		if s.getenv("BASHY_CONTAIN_CUSTOM") == "" {
 			return errors.New("provider custom needs BASHY_CONTAIN_CUSTOM (the wrapper command)")
 		}
 	default:
@@ -99,8 +115,7 @@ func (s *containImageSpec) validate() error {
 // containInjectedBashy is the static linux bashy mounted as the entrypoint:
 // BASHY_CONTAIN_BASHY, else this bashy when it is a static linux binary of
 // the image's architecture.
-func containInjectedBashy(arch string) (string, error) {
-	path := strings.TrimSpace(os.Getenv("BASHY_CONTAIN_BASHY"))
+func containInjectedBashy(path, arch string) (string, error) {
 	if path == "" {
 		if runtime.GOOS != "linux" {
 			return "", errors.New("the image needs a static linux bashy: set BASHY_CONTAIN_BASHY (e.g. `env make build-bashy-scratch` output)")
@@ -168,7 +183,7 @@ func containRunArgs(s *containImageSpec, name, bashyPath string) []string {
 		args = append(args, "-w", s.Workdir)
 	}
 	for _, n := range s.Env {
-		if v, ok := os.LookupEnv(n); ok {
+		if v, ok := s.lookup(n); ok {
 			args = append(args, "-e", n+"="+v)
 		}
 	}
@@ -191,7 +206,7 @@ func runContainedImage(s *containImageSpec, stderr io.Writer, run func(argv []st
 	if err != nil {
 		return fail(containUnsupportedStatus, "%v", err)
 	}
-	bashyPath, err := containInjectedBashy(arch)
+	bashyPath, err := containInjectedBashy(s.getenv("BASHY_CONTAIN_BASHY"), arch)
 	if err != nil {
 		return fail(containUnsupportedStatus, "%v", err)
 	}
@@ -206,7 +221,7 @@ func runContainedImage(s *containImageSpec, stderr io.Writer, run func(argv []st
 	name := "bashy-contain-" + randomHex(6)
 	argv := append([]string{bashySelfPath()}, containRunArgs(s, name, bashyPath)...)
 	if s.Provider == containCustom {
-		argv = append(strings.Fields(os.Getenv("BASHY_CONTAIN_CUSTOM")), argv...)
+		argv = append(strings.Fields(s.getenv("BASHY_CONTAIN_CUSTOM")), argv...)
 	}
 	start := time.Now()
 	status := run(argv)
