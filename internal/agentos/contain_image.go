@@ -4,14 +4,16 @@ package agentos
 //
 // @contain(image: ...) — a pinned third-party image as ONE contained call.
 //
-//	bashy contain --image NAME@sha256:<digest> [--workdir DIR] [--out HOSTDIR]
-//	              [--net deny|door] [--sticky KEY] [--env NAME]... [--ro HOST:CTR]...
-//	              -- COMMAND [ARGS...]
-//	bashy contain pin NAME[:TAG]      (pull once, print the digest reference)
+//	@contain(image: "NAME@sha256:<digest>", workdir: "/testbed", out: DIR,
+//	         net: "deny"|"door", sticky: KEY, env: "A,B", ro: "HOST:CTR,...")
+//	function f() { ...; }
 //
+// A decorator only: it adds no command. The container runs through bashy's
+// existing podman verb, in the call's own frame (its redirections apply).
 // Running somebody else's image is a privileged operation (supply chain,
 // exec), so it is containment, not a convenience: the image is named by
-// digest only (a tag is refused; `contain pin` resolves one, audited), its
+// digest only (a tag is refused; resolve one with `bashy podman pull` and
+// `bashy podman image inspect --format '{{.Digest}}'`), its
 // own entrypoint and shell are never trusted (bashy is mounted read-only and
 // IS the entrypoint), the call gets one container for its whole life (state
 // persists across the call's commands, gone after), nothing of the host is
@@ -67,24 +69,24 @@ type containImageSpec struct {
 	Out     string   // host directory mounted at /out ("" = none)
 	Net     string   // deny | door
 	Sticky  string   // net door: the one sticky binding the call may use
-	Env     []string // host variable NAMES passed through
+	Env     []string // variable NAMES passed through
 	RO      []string // HOST:CTR read-only mounts
 	Argv    []string
 }
 
 func (s *containImageSpec) validate() error {
 	if !containDigestRef.MatchString(s.Image) {
-		return fmt.Errorf("image %q is not pinned by digest (NAME@sha256:<64 hex>); pin a tag once with `bashy contain pin %s`", s.Image, s.Image)
+		return fmt.Errorf("image %q is not pinned by digest (NAME@sha256:<64 hex>); resolve a tag once with `bashy podman pull %s` and `bashy podman image inspect --format '{{.Digest}}' %s`", s.Image, s.Image, s.Image)
 	}
 	switch s.Net {
 	case "", "deny":
 		s.Net = "deny"
 		if s.Sticky != "" {
-			return errors.New("--sticky needs --net door")
+			return errors.New("sticky: needs net: \"door\"")
 		}
 	case "door":
 		if s.Sticky == "" {
-			return errors.New("net door needs --sticky KEY: the call may use one sticky binding, never the whole door")
+			return errors.New("net: \"door\" needs sticky: KEY — the call may use one sticky binding, never the whole door")
 		}
 		if strings.ContainsAny(s.Sticky, "/ \t\n") {
 			return fmt.Errorf("invalid sticky key %q", s.Sticky)
@@ -98,15 +100,15 @@ func (s *containImageSpec) validate() error {
 	for _, m := range s.RO {
 		host, ctr, ok := strings.Cut(m, ":")
 		if !ok || !filepath.IsAbs(host) || !strings.HasPrefix(ctr, "/") || strings.Contains(ctr, ":") {
-			return fmt.Errorf("--ro %q: want HOST:CTR, both absolute (always read-only)", m)
+			return fmt.Errorf("ro: %q: want HOST:CTR, both absolute (always read-only)", m)
 		}
 		if ctr == "/.bashy" || strings.HasPrefix(ctr, "/.bashy/") || ctr == containInOut {
-			return fmt.Errorf("--ro %q: %s is reserved", m, ctr)
+			return fmt.Errorf("ro: %q: %s is reserved", m, ctr)
 		}
 	}
 	for _, n := range s.Env {
 		if n == "" || strings.ContainsAny(n, "= \t\n") {
-			return fmt.Errorf("--env takes a variable NAME, got %q", n)
+			return fmt.Errorf("env: takes variable NAMES, got %q", n)
 		}
 	}
 	if len(s.Argv) == 0 {
@@ -207,54 +209,54 @@ func containRunArgs(s *containImageSpec, name, bashyPath, runDir string) []strin
 	return append(append(args, "--"), s.Argv...)
 }
 
-func runContainedImage(s *containImageSpec) int {
+// runContainedImage runs one contained image call: it validates the spec,
+// ensures the pinned image, prepares the injected bashy, the output directory
+// and (net door) the per-call door proxy in this process, then hands the
+// podman command line (`bashy podman run ...`, argv[0] is bashy) to run, and
+// cleans up after it.
+func runContainedImage(s *containImageSpec, stderr io.Writer, run func(argv []string) int) int {
+	fail := func(status int, format string, a ...any) int {
+		fmt.Fprintf(stderr, "contain: "+format+"\n", a...)
+		return status
+	}
 	if err := s.validate(); err != nil {
-		fmt.Fprintf(os.Stderr, "bashy contain: %v\n", err)
-		return 2
+		return fail(2, "%v", err)
 	}
 	arch, err := containEnsureImage(s.Image)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "bashy contain: %v\n", err)
-		return containUnsupportedStatus
+		return fail(containUnsupportedStatus, "%v", err)
 	}
 	bashyPath, err := containInjectedBashy(arch)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "bashy contain: %v\n", err)
-		return containUnsupportedStatus
+		return fail(containUnsupportedStatus, "%v", err)
 	}
 	if s.Out != "" {
 		if s.Out, err = filepath.Abs(s.Out); err == nil {
 			err = os.MkdirAll(s.Out, 0o755)
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "bashy contain: out: %v\n", err)
-			return containUnsupportedStatus
+			return fail(containUnsupportedStatus, "out: %v", err)
 		}
 	}
 	runDir := ""
 	if s.Net == "door" {
 		if runtime.GOOS != "linux" {
-			fmt.Fprintln(os.Stderr, "bashy contain: net door needs a linux host (a unix socket cannot cross the podman VM share)")
-			return containUnsupportedStatus
+			return fail(containUnsupportedStatus, "net door needs a linux host (a unix socket cannot cross the podman VM share)")
 		}
 		runDir, err = os.MkdirTemp("", "bashy-contain-")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "bashy contain: %v\n", err)
-			return containUnsupportedStatus
+			return fail(containUnsupportedStatus, "%v", err)
 		}
 		defer os.RemoveAll(runDir)
 		stop, err := serveDoorProxy(filepath.Join(runDir, containDoorSock), s.Sticky)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "bashy contain: net door: %v\n", err)
-			return containUnsupportedStatus
+			return fail(containUnsupportedStatus, "net door: %v", err)
 		}
 		defer stop()
 	}
 	name := "bashy-contain-" + randomHex(6)
-	cmd := exec.Command(bashySelfPath(), containRunArgs(s, name, bashyPath, runDir)...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	start := time.Now()
-	status := runForwardingSignals(cmd)
+	status := run(append([]string{bashySelfPath()}, containRunArgs(s, name, bashyPath, runDir)...))
 	// --rm removes it on a normal exit; this covers a killed podman client.
 	_ = exec.Command(bashySelfPath(), "podman", "rm", "-f", "-i", name).Run()
 	containRecord(s, status, start)
@@ -475,6 +477,8 @@ command:
 		defer ln.Close()
 		go relayToUnix(ln, sock)
 	}
+	// bashy is mounted at /.bashy/bashy: a bare `bashy` inside the call finds it.
+	_ = os.Setenv("PATH", "/.bashy:"+os.Getenv("PATH"))
 	argv := args[i:]
 	path := argv[0]
 	if isBashyExecutable(path) || path == "bashy" {
@@ -513,43 +517,4 @@ func closeWrite(c net.Conn) {
 	if cw, ok := c.(interface{ CloseWrite() error }); ok {
 		_ = cw.CloseWrite()
 	}
-}
-
-// ---- contain pin ------------------------------------------------------------
-
-// containPin pulls NAME[:TAG] once and prints NAME@sha256:<digest>, the only
-// form an image call accepts. The resolution is recorded in the ledger.
-func containPin(args []string) int {
-	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
-		fmt.Fprintln(os.Stderr, "usage: bashy contain pin NAME[:TAG]   (prints NAME@sha256:<digest>)")
-		return 2
-	}
-	ref := args[0]
-	if _, err := containPodman("pull", "-q", ref); err != nil {
-		fmt.Fprintf(os.Stderr, "bashy contain pin: %v\n", err)
-		return 1
-	}
-	digest, err := containPodman("image", "inspect", "--format", "{{.Digest}}", ref)
-	if err != nil || !strings.HasPrefix(digest, "sha256:") {
-		fmt.Fprintf(os.Stderr, "bashy contain pin: no digest for %s: %v\n", ref, err)
-		return 1
-	}
-	name := ref
-	if at := strings.Index(name, "@"); at >= 0 {
-		name = name[:at]
-	} else if slash, colon := strings.LastIndex(name, "/"), strings.LastIndex(name, ":"); colon > slash {
-		name = name[:colon]
-	}
-	pinned := name + "@" + digest
-	if line, err := json.Marshal(map[string]any{"time": time.Now().UTC().Format(time.RFC3339Nano), "pin": ref, "image": pinned}); err == nil {
-		path := containLedgerPath()
-		if os.MkdirAll(filepath.Dir(path), 0o700) == nil {
-			if f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
-				_, _ = f.Write(append(line, '\n'))
-				_ = f.Close()
-			}
-		}
-	}
-	fmt.Println(pinned)
-	return 0
 }

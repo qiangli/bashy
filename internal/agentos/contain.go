@@ -103,7 +103,7 @@ func containDecorator(stderr io.Writer) nativeDecoratorFunc {
 				fmt.Fprintf(stderr, "%s: contain: %v\n", c.Name, err)
 				return nil
 			}
-			c.Status = runContainedCall(ctx, c, img)
+			c.Status = runContainedCall(ctx, c, img, stderr)
 			return nil
 		}
 		if img.Workdir != "" || img.Out != "" || img.Sticky != "" || img.Env != nil || img.RO != nil {
@@ -130,7 +130,7 @@ func containDecorator(stderr io.Writer) nativeDecoratorFunc {
 // call's own @contain line stays behind (it is what put the call there), and
 // the arguments pass as "$@". Only what the declaration names crosses — no
 // variables but env:, no host files but ro: and out:.
-func runContainedCall(ctx context.Context, c *nativeDecoratorCall, img *containImageSpec) int {
+func runContainedCall(ctx context.Context, c *nativeDecoratorCall, img *containImageSpec, stderr io.Writer) int {
 	dump, err := os.CreateTemp("", "bashy-contain-fns-")
 	if err != nil {
 		return containUnsupportedStatus
@@ -145,20 +145,22 @@ func runContainedCall(ctx context.Context, c *nativeDecoratorCall, img *containI
 		return containUnsupportedStatus
 	}
 	script := containScriptFunctions(string(data), c.Name) + "\n" + shellQuote(c.Name) + ` "$@"` + "\n"
-	words := []string{shellQuote(bashySelfPath()), "contain", "--image", shellQuote(img.Image), "--net", shellQuote(img.Net)}
-	for flag, v := range map[string]string{"--workdir": img.Workdir, "--out": img.Out, "--sticky": img.Sticky} {
-		if v != "" {
-			words = append(words, flag, shellQuote(v))
+	const srcSlot = "\x00src\x00"
+	img.Argv = []string{"bashy", "-c", srcSlot, c.Name}
+	return runContainedImage(img, stderr, func(argv []string) int {
+		// Run in the call's frame, so the function's redirections and its
+		// arguments ("$@") apply; the script travels in a variable.
+		words := make([]string, 0, len(argv)+1)
+		for _, a := range argv {
+			if a == srcSlot {
+				words = append(words, `"$__bashy_contain_src"`)
+				continue
+			}
+			words = append(words, shellQuote(a))
 		}
-	}
-	for _, n := range img.Env {
-		words = append(words, "--env", shellQuote(n))
-	}
-	for _, m := range img.RO {
-		words = append(words, "--ro", shellQuote(m))
-	}
-	words = append(words, "--", "bashy", "-c", `"$__bashy_contain_src"`, shellQuote(c.Name), `"$@"`)
-	return c.Run(ctx, strings.Join(words, " "), map[string]string{"__bashy_contain_src": script})
+		words = append(words, `"$@"`)
+		return c.Run(ctx, strings.Join(words, " "), map[string]string{"__bashy_contain_src": script})
+	})
 }
 
 // containScriptFunctions keeps the script's own functions from `declare -f`
@@ -253,82 +255,43 @@ func containHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 func dispatchContain(args []string) int {
 	usage := func(w io.Writer) {
 		fmt.Fprintln(w, "usage: bashy contain --net deny [--provider builtin|native|image|custom] -- command [args...]")
-		fmt.Fprintln(w, "       bashy contain --image NAME@sha256:<digest> [--workdir DIR] [--out HOSTDIR] [--net deny|door]")
-		fmt.Fprintln(w, "                     [--sticky KEY] [--env NAME]... [--ro HOST:CTR]... -- command [args...]")
-		fmt.Fprintln(w, "       bashy contain pin NAME[:TAG]")
-		fmt.Fprintln(w, "  --net deny: run one command with enforced network isolation: native (Linux network")
-		fmt.Fprintln(w, "  namespace, macOS Seatbelt) where the OS has it, else bashy's own image with no network.")
+		fmt.Fprintln(w, "  run one command with enforced network isolation: native (Linux network namespace,")
+		fmt.Fprintln(w, "  macOS Seatbelt) where the OS has it, else bashy's own image with no network")
 		fmt.Fprintln(w, "  providers: builtin (default: native where the OS has it, else bashy's image), native,")
 		fmt.Fprintln(w, "  image (bashy's own image everywhere), custom (BASHY_CONTAIN_CUSTOM wrapper command).")
 		fmt.Fprintln(w, "  BASHY_CONTAIN_PROVIDER sets the host default; BASHY_CONTAIN_IMAGE overrides the image.")
-		fmt.Fprintln(w, "  --image: run the command as ONE contained call in a third-party image pinned by digest")
-		fmt.Fprintln(w, "  (`contain pin` resolves a tag once): bashy mounted read-only is the entrypoint, one")
-		fmt.Fprintln(w, "  container for the whole call, no host mounts but --ro (read-only) and --out (at /out),")
-		fmt.Fprintln(w, "  no network; --net door opens only the host's model door on 127.0.0.1:24556, restricted")
-		fmt.Fprintln(w, "  to the sticky binding --sticky KEY (the token never enters the container; linux hosts).")
-		fmt.Fprintln(w, "  BASHY_CONTAIN_BASHY names the static linux bashy to inject; BASHY_CONTAIN_DOOR an upstream door.")
 	}
-	if len(args) > 0 && args[0] == "pin" {
-		return containPin(args[1:])
-	}
+	// --init is internal: the entrypoint of the bashy injected into a
+	// @contain(image: ...) container. Not a user surface.
 	if len(args) > 0 && args[0] == "--init" {
 		return containInit(args[1:])
 	}
 	net, provider := "", ""
-	img := &containImageSpec{}
-	value := func(i *int, a, flag string) (string, bool) {
-		if a == flag && *i+1 < len(args) {
-			*i++
-			return args[*i], true
-		}
-		if v, ok := strings.CutPrefix(a, flag+"="); ok {
-			return v, true
-		}
-		return "", false
-	}
 	i := 0
 	for ; i < len(args); i++ {
 		a := args[i]
-		if a == "-h" || a == "--help" {
+		switch {
+		case a == "-h" || a == "--help":
 			usage(os.Stdout)
 			return 0
-		}
-		if a == "--" {
+		case a == "--net" && i+1 < len(args):
 			i++
-			break
-		}
-		if v, ok := value(&i, a, "--net"); ok {
-			net = v
-		} else if v, ok := value(&i, a, "--provider"); ok {
-			provider = v
-		} else if v, ok := value(&i, a, "--image"); ok {
-			img.Image = v
-		} else if v, ok := value(&i, a, "--workdir"); ok {
-			img.Workdir = v
-		} else if v, ok := value(&i, a, "--out"); ok {
-			img.Out = v
-		} else if v, ok := value(&i, a, "--sticky"); ok {
-			img.Sticky = v
-		} else if v, ok := value(&i, a, "--env"); ok {
-			img.Env = append(img.Env, v)
-		} else if v, ok := value(&i, a, "--ro"); ok {
-			img.RO = append(img.RO, v)
-		} else {
-			break
+			net = args[i]
+		case strings.HasPrefix(a, "--net="):
+			net = strings.TrimPrefix(a, "--net=")
+		case a == "--provider" && i+1 < len(args):
+			i++
+			provider = args[i]
+		case strings.HasPrefix(a, "--provider="):
+			provider = strings.TrimPrefix(a, "--provider=")
+		case a == "--":
+			i++
+			goto command
+		default:
+			goto command
 		}
 	}
-	if img.Image != "" {
-		if provider != "" {
-			fmt.Fprintln(os.Stderr, "bashy contain: --provider does not apply to --image (the image is the provider)")
-			return 2
-		}
-		img.Net, img.Argv = net, args[i:]
-		return runContainedImage(img)
-	}
-	if img.Workdir != "" || img.Out != "" || img.Sticky != "" || len(img.Env) > 0 || len(img.RO) > 0 {
-		fmt.Fprintln(os.Stderr, "bashy contain: --workdir/--out/--sticky/--env/--ro need --image")
-		return 2
-	}
+command:
 	if net != "deny" || i >= len(args) || provider != "" && !validContainProvider(provider) {
 		usage(os.Stderr)
 		return 2

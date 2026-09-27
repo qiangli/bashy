@@ -49,7 +49,7 @@ the body. Arguments are the decorator's own, keyword (`n: 3`) or positional.
 | `@memo` | `["1h"]` or `ttl: "1h"` | the same name + arguments within one process returns the cached `Results` and `Status` without running the body; a non-zero status is not cached; `ttl` expires an entry. Memo caches what the call **returns** — printed output is not replayed, so use it on typed (value-returning) functions | a process-wide map | the cached | never |
 | `@auth` | `via: "<cmd>"`, `as: "<principal>"` | runs `via` once per process (default `bashy tessaro status`, this host's pairing); exit 0 = authenticated and its first stdout line is the principal, exported to the body as `BASHY_PRINCIPAL`; `as:` names the principal required | `bashy login` / `bashy tessaro status` | 77 | yes |
 | `@effects` | `"net,write"` or `effects: "…"` | the author's side of the guard coin: declares what the function does. A `@guard` that does not allow the declaration denies the call at the boundary (126) before the body runs; inside, the declaration is the function's own cap **and** the classification for commands the atlas does not know — so a tool bashy has never heard of runs on the author's word instead of failing as `unknown` | atlas vocabulary; `@guard`; dag `Effects:` | 126 | never |
-| `@contain` | `net: "deny"` [, `provider:`] — or `image: "NAME@sha256:…"` [, `net: "deny"\|"door"`, `sticky:`, `workdir:`, `out:`, `env:`, `ro:`] | runs every EXTERNAL child the function starts with the network enforced off by the OS (Linux network namespace, macOS Seatbelt) — so a cap or declaration without `net` can admit an interpreter such as `python`/`pytest` whose atlas maximum includes `net`; in-process native tools are not children and keep their effects; filesystem isolation is not implied; an unsupported OS fails closed | `bashy contain --net deny -- CMD` / `bashy contain --image … -- CMD` (the wrappers); `bashy contain pin`; the harness preflight | 125 | never |
+| `@contain` | `net: "deny"` [, `provider:`] — or `image: "NAME@sha256:…"` [, `net: "deny"\|"door"`, `sticky:`, `workdir:`, `out:`, `env:`, `ro:`] | runs every EXTERNAL child the function starts with the network enforced off by the OS (Linux network namespace, macOS Seatbelt) — so a cap or declaration without `net` can admit an interpreter such as `python`/`pytest` whose atlas maximum includes `net`; in-process native tools are not children and keep their effects; filesystem isolation is not implied; an unsupported OS fails closed | `bashy contain --net deny -- CMD` (the wrapper, `net: "deny"` only); the harness preflight | 125 | never |
 | `@confirm` | — | human-in-the-loop **allow** per operation — not a guard: the high-impact atoms (`destroy`, `cred`, `priv`, `spend`, unknown) take their answer from `--confirm=TOKEN:yes` / `--what-if`, or the call yields; `docs/effect-derived-confirmation.md` | atlas effects, `bashy ask` | 6 | no |
 
 "Advisable" = an advice rule may apply it. `retry`, `memo`, `timeout` never:
@@ -99,9 +99,12 @@ download that executes — so it is a containment, not a convenience:
 function arm() { bashy genie --json "$1" > /out/prediction.json; }
 ```
 
-- **Pinned by digest only.** A tag is refused; `bashy contain pin NAME:TAG`
-  pulls once and prints the `NAME@sha256:…` reference (recorded in
-  `~/.bashy/contain/ledger.jsonl`).
+- **A decorator only — no command.** The container runs through bashy's
+  existing `podman` verb in the call's own frame, so the function's
+  redirections apply.
+- **Pinned by digest only.** A tag is refused; resolve one with
+  `bashy podman pull NAME:TAG` and
+  `bashy podman image inspect --format '{{.Digest}}' NAME:TAG`.
 - **bashy is the entrypoint.** A static linux bashy is mounted read-only at
   `/.bashy/bashy` (`BASHY_CONTAIN_BASHY`, e.g. the `build-bashy-scratch`
   artifact; a dynamically linked one is refused); the image's own entrypoint
@@ -120,7 +123,7 @@ function arm() { bashy genie --json "$1" > /out/prediction.json; }
   the token never enters the container. Linux hosts; `BASHY_CONTAIN_DOOR`
   names an upstream door (e.g. one tunnelled from another host, `/k/<token>`
   form). An inner `@contain(net: "deny")` is still enforced natively inside.
-- Every call is a ledger line (image, net, sticky, mounts, argv, exit,
+- Every call is a line in `~/.bashy/contain/ledger.jsonl` (image, net, sticky, mounts, argv, exit,
   duration) and, with `BASHY_AUDIT` on, an audit-chain record. Anything that
   cannot be enforced fails closed (125).
 

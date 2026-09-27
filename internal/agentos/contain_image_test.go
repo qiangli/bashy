@@ -36,9 +36,9 @@ func TestContainImageSpecValidate(t *testing.T) {
 		{"tag refused", ok(containImageSpec{Image: "docker.io/swebench/x:latest"}), "not pinned by digest"},
 		{"bare name refused", ok(containImageSpec{Image: "alpine"}), "not pinned by digest"},
 		{"short digest refused", ok(containImageSpec{Image: "alpine@sha256:abc"}), "not pinned by digest"},
-		{"door needs sticky", ok(containImageSpec{Net: "door"}), "needs --sticky"},
+		{"door needs sticky", ok(containImageSpec{Net: "door"}), "needs sticky:"},
 		{"door with sticky", ok(containImageSpec{Net: "door", Sticky: "arm-genie"}), ""},
-		{"sticky needs door", ok(containImageSpec{Sticky: "k"}), "needs --net door"},
+		{"sticky needs door", ok(containImageSpec{Sticky: "k"}), "needs net:"},
 		{"allow refused", ok(containImageSpec{Net: "allow"}), "deny or door"},
 		{"sticky path chars", ok(containImageSpec{Net: "door", Sticky: "a/b"}), "invalid sticky"},
 		{"relative workdir", ok(containImageSpec{Workdir: "testbed"}), "absolute"},
@@ -65,19 +65,27 @@ func TestContainImageSpecValidate(t *testing.T) {
 	}
 }
 
-func TestDispatchContainImageFlags(t *testing.T) {
+// The image call is a decorator only: `bashy contain` keeps exactly its
+// --net deny surface, and no image flag or pin subcommand exists.
+func TestContainCommandSurfaceUnchanged(t *testing.T) {
 	for _, args := range [][]string{
-		{"--workdir", "/testbed", "--net", "deny", "--", "true"}, // image-only flag without --image
-		{"--image", "alpine:latest", "--", "true"},               // a tag never reaches podman
-		{"--image", testDigestRef, "--provider", "native", "--", "true"},
-		{"--image", testDigestRef, "--net", "door", "--", "true"}, // door without a sticky key
+		{"--image", testDigestRef, "--", "true"},
+		{"--workdir", "/testbed", "--net", "deny", "--", "true"},
+		{"--net", "door", "--", "true"},
+		{"pin", "alpine:3"},
 	} {
 		if code := dispatchContain(args); code != 2 {
-			t.Errorf("dispatchContain(%q) = %d, want 2", args, code)
+			t.Errorf("dispatchContain(%q) = %d, want 2 (usage)", args, code)
 		}
 	}
-	if code := dispatchContain([]string{"pin"}); code != 2 {
-		t.Errorf("contain pin without an image = %d, want 2", code)
+}
+
+func TestContainImageRefusesBeforeRunning(t *testing.T) {
+	ran := false
+	var stderr strings.Builder
+	code := runContainedImage(&containImageSpec{Image: "alpine:3", Argv: []string{"true"}}, &stderr, func([]string) int { ran = true; return 0 })
+	if code != 2 || ran || !strings.Contains(stderr.String(), "not pinned by digest") {
+		t.Errorf("a tag: code %d ran %v stderr %q", code, ran, stderr.String())
 	}
 }
 
