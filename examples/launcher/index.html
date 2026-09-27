@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Example bashy launcher</title>
+</head>
+<body>
+  <h1>Example bashy launcher</h1>
+  <p id="error" role="alert"></p>
+  <ul id="apps"></ul>
+  <h2>Add a registered app</h2>
+  <form id="add-app">
+    <label>Name <input name="name" required></label>
+    <label>Port <input name="port" type="number" min="1" max="65535" required></label>
+    <label>Label <input name="label"></label>
+    <button>Add</button>
+  </form>
+  <script>
+    const apps = document.getElementById('apps');
+    const error = document.getElementById('error');
+    const form = document.getElementById('add-app');
+    async function request(path, options) {
+      const response = await fetch(new URL(path, document.baseURI), options);
+      if (!response.ok) throw new Error(await response.text());
+      return response;
+    }
+    function showError(reason) { error.textContent = reason.message; }
+    async function refresh() {
+      const data = await (await request('api/apps')).json();
+      apps.replaceChildren();
+      data.apps.sort((a, b) => a.name.localeCompare(b.name)).forEach(app => {
+        const row = document.createElement('li');
+        row.dataset.name = app.name;
+        const link = document.createElement('a');
+        link.href = new URL(app.path.replace(/^\//, ''), document.baseURI);
+        link.textContent = app.name + ' — ' + app.label + ' (' + app.status + ')';
+        row.append(link);
+        if (app.source === 'registered') {
+          const remove = document.createElement('button');
+          remove.textContent = 'Remove';
+          remove.addEventListener('click', async () => {
+            error.textContent = '';
+            try {
+              await request('api/apps/registered/' + encodeURIComponent(app.name), {method: 'DELETE'});
+              await refresh();
+            } catch (reason) { showError(reason); }
+          });
+          row.append(' ', remove);
+        }
+        apps.append(row);
+      });
+    }
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      error.textContent = '';
+      const fields = new FormData(form);
+      try {
+        await request('api/apps/registered', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({name: fields.get('name'), port: Number(fields.get('port')), label: fields.get('label')})
+        });
+        form.reset();
+        await refresh();
+      } catch (reason) { showError(reason); }
+    });
+    refresh().catch(showError);
+  </script>
+</body>
+</html>
