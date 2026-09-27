@@ -7,8 +7,10 @@ import (
 	"runtime"
 )
 
-func containSupported() error {
-	return fmt.Errorf("network isolation is not supported on %s yet", runtime.GOOS)
+// No native network isolation here (Windows): @contain runs its children in
+// bashy's own image instead (contain_container.go).
+func nativeContainSupported() error {
+	return fmt.Errorf("no native network isolation on %s", runtime.GOOS)
 }
 
-func runContained([]string) int { return containUnsupportedStatus }
+func runNativeContained([]string) int { return containUnsupportedStatus }

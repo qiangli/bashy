@@ -97,10 +97,7 @@ func buildSelfImage(ctx context.Context, stdout, stderr io.Writer, version, arch
 		return err
 	}
 	if tag == "" {
-		tag = "localhost/bashy:" + strings.TrimPrefix(version, "v") + "-linux-" + arch
-		if len(with) > 0 {
-			tag += "-with-" + strings.Join(normalizedWith(with), "-")
-		}
+		tag = selfImageTag(version, arch, with)
 	}
 	ctxDir, err := os.MkdirTemp("", "bashy-image-")
 	if err != nil {
@@ -241,6 +238,16 @@ func copyFileMode(src, dst string, mode os.FileMode) error {
 var preloadToolchains = map[string]string{
 	"python": `RUN ["/bashy", "uv", "python", "install", "` + python.DefaultPython + `"]`,
 	"go":     `RUN ["/bashy", "go", "version"]`,
+}
+
+// selfImageTag is the default tag of `bashy self image`:
+// localhost/bashy:<version>-linux-<arch>[-with-<toolchains>].
+func selfImageTag(version, arch string, with []string) string {
+	tag := "localhost/bashy:" + strings.TrimPrefix(version, "v") + "-linux-" + arch
+	if len(with) > 0 {
+		tag += "-with-" + strings.Join(normalizedWith(with), "-")
+	}
+	return tag
 }
 
 func normalizedWith(with []string) []string {

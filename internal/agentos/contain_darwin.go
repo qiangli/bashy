@@ -20,14 +20,14 @@ const seatbeltDenyNetwork = `(version 1)
 (allow network* (local unix-socket))
 (allow network* (remote unix-socket))`
 
-func containSupported() error {
+func nativeContainSupported() error {
 	if _, err := os.Stat(seatbeltExec); err != nil {
 		return fmt.Errorf("network isolation needs %s: %v", seatbeltExec, err)
 	}
 	return nil
 }
 
-func runContained(argv []string) int {
+func runNativeContained(argv []string) int {
 	cmd := exec.Command(seatbeltExec, append([]string{"-p", seatbeltDenyNetwork, "--"}, argv...)...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {

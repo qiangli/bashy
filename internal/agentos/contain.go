@@ -25,8 +25,10 @@ import (
 // maximum includes `net`: the containment bounds the effect. In-process
 // native tools (fetch, …) are not children and keep their `net` effect.
 //
-// Containment is network-only; filesystem isolation is a separate rod.
-// Unsupported platforms fail closed (exit 125): nothing runs uncontained.
+// Two backends (contain_container.go): native kernel primitives where they
+// exist, else bashy's own image run with no network and only the working
+// directory mounted. Whatever cannot be enforced fails closed (exit 125):
+// nothing runs uncontained.
 // ("sandbox" names the podman engine; this is deliberately a different word.)
 
 const containUnsupportedStatus = 125
@@ -111,7 +113,9 @@ func containHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 func dispatchContain(args []string) int {
 	usage := func(w io.Writer) {
 		fmt.Fprintln(w, "usage: bashy contain --net deny -- command [args...]")
-		fmt.Fprintln(w, "  run one command with OS-enforced network isolation (Linux network namespace, macOS Seatbelt)")
+		fmt.Fprintln(w, "  run one command with enforced network isolation: native (Linux network namespace,")
+		fmt.Fprintln(w, "  macOS Seatbelt) where the OS has it, else bashy's own image with no network")
+		fmt.Fprintln(w, "  (BASHY_CONTAIN_BACKEND=native|container chooses; BASHY_CONTAIN_IMAGE overrides the image)")
 	}
 	net := ""
 	i := 0

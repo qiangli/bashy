@@ -14,7 +14,7 @@ import (
 // unconfigured loopback, so it cannot reach any network. Rootless — no setuid
 // helper — and pure Go.
 
-func containSupported() error { return nil }
+func nativeContainSupported() error { return nil }
 
 func containCmd(argv []string) *exec.Cmd {
 	cmd := exec.Command(argv[0], argv[1:]...)
@@ -28,7 +28,7 @@ func containCmd(argv []string) *exec.Cmd {
 	return cmd
 }
 
-func runContained(argv []string) int {
+func runNativeContained(argv []string) int {
 	path, err := exec.LookPath(argv[0])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "bashy contain: %s: %v\n", argv[0], err)
