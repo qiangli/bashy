@@ -50,6 +50,7 @@ COPY readline/ readline/
 COPY filebrowser/ filebrowser/
 COPY bashsharp/ bashsharp/
 COPY yoke/ yoke/
+COPY ycode/ ycode/
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     cd bashy \

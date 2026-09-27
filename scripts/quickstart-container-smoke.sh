@@ -82,6 +82,7 @@ stage_tree "$parent/readline"    "$context/readline"
 stage_tree "$parent/filebrowser" "$context/filebrowser"
 stage_tree "$parent/bashsharp"   "$context/bashsharp"
 stage_tree "$parent/yoke"        "$context/yoke"
+stage_tree "$parent/ycode"       "$context/ycode"
 
 build_target() {
   target=$1; tag=$2
