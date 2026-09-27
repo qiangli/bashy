@@ -645,9 +645,6 @@ var verbSynopsis = map[string]string{
 	"peer":        "the sphere tier: peer-direct pooled p2p inference/compute across your own machines (via outpost)",
 	"tessaro":     "Tessaro account: sign in/out, status, open the portal (via outpost)",
 	"login":       "sign in to Tessaro — pair this machine with the portal",
-
-	// Cloud tier, agent-owned: rent with a deadline and a budget, give it back.
-	"ephemeral-host": "rent a short-lived cloud host with a mandatory deadline (--ttl) and budget (--cap); ledger-scoped, token from the vault: create | list | policy",
 }
 
 // merge the declarative registry's synopses into verbSynopsis so registry CLIs

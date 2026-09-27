@@ -86,7 +86,6 @@ import (
 	"github.com/qiangli/yoke/pkg/chat"
 	"github.com/qiangli/yoke/pkg/craft"
 	"github.com/qiangli/yoke/pkg/dag"
-	"github.com/qiangli/yoke/pkg/ephemeralhost"
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/gate"
 	"github.com/qiangli/yoke/pkg/handoff"
@@ -142,7 +141,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "notify", "activity", "run", "agentic", "commands", "inspect", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile", "ephemeral-host",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "notify", "activity", "run", "agentic", "commands", "inspect", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -661,16 +660,6 @@ func dispatch() {
 		configureWeaveResourceAdmission(cmd)
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "ephemeral-host":
-		// Rent a cloud host with a deadline and a budget; destroy only what the
-		// ledger holds. The provider token lives in the vault, never printed.
-		cmd := ephemeralhost.NewCmd()
-		cmd.SetArgs(os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy ephemeral-host:", err)
 			dispatchExit(1)
 		}
 		dispatchExit(0)
