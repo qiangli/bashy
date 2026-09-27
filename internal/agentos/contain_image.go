@@ -43,8 +43,9 @@ import (
 
 // Inside the container: bashy is mounted at /.bashy/bashy, results at /out.
 const (
-	containInBashy = "/.bashy/bashy"
-	containInOut   = "/out"
+	containInBashy  = "/.bashy/bashy"
+	containInScript = "/.bashy/call.bsh"
+	containInOut    = "/out"
 )
 
 var containDigestRef = regexp.MustCompile(`^[^@\s]+@sha256:[0-9a-f]{64}$`)
@@ -58,6 +59,7 @@ type containImageSpec struct {
 	RO       []string // HOST:CTR read-only mounts
 	Provider string   // "" | builtin | image | custom
 	Argv     []string // run by the injected bashy: bashy's own arguments
+	Script   string   // host file mounted read-only at /.bashy/call.bsh ("" = none)
 	// Environ is the caller's exported environment (the decorated call's,
 	// not bashy's process environment); nil = the process environment.
 	Environ map[string]string
@@ -167,27 +169,29 @@ func containEnsureImage(ref string) (string, error) {
 }
 
 // containRunArgs is the `podman run ...` command line for one contained
-// image call (without bashy's own path in front).
+// image call (without bashy's own path in front): bashy injected read-only as
+// the entrypoint, then only what the declaration names.
 func containRunArgs(s *containImageSpec, name, bashyPath string) []string {
-	args := []string{"podman", "run", "--rm", "-i", "--name", name, "--network=none",
-		"--entrypoint", containInBashy,
-		"-v", bashyPath + ":" + containInBashy + ":ro",
-		"-e", "BASHY_CONTAINED=image", "-e", "BASHY_HINTS=off", "-e", "BASHY_AGENTIC=1"}
+	opts := []string{"--name", name, "--entrypoint", containInBashy,
+		"-v", bashyPath + ":" + containInBashy + ":ro", "-e", "BASHY_CONTAINED=image"}
+	if s.Script != "" {
+		opts = append(opts, "-v", s.Script+":"+containInScript+":ro")
+	}
 	if s.Out != "" {
-		args = append(args, "-v", s.Out+":"+containInOut)
+		opts = append(opts, "-v", s.Out+":"+containInOut)
 	}
 	for _, m := range s.RO {
-		args = append(args, "-v", m+":ro")
+		opts = append(opts, "-v", m+":ro")
 	}
 	if s.Workdir != "" {
-		args = append(args, "-w", s.Workdir)
+		opts = append(opts, "-w", s.Workdir)
 	}
 	for _, n := range s.Env {
 		if v, ok := s.lookup(n); ok {
-			args = append(args, "-e", n+"="+v)
+			opts = append(opts, "-e", n+"="+v)
 		}
 	}
-	return append(append(args, s.Image), s.Argv...)
+	return podmanRun(opts, s.Image, s.Argv...)
 }
 
 // runContainedImage runs one contained image call: it validates the spec,

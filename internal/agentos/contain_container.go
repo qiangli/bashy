@@ -149,12 +149,20 @@ func containerCommand(argv []string) string {
 	return strings.Join(words, " ")
 }
 
-// containerRunArgs are the `bashy podman` arguments for one contained child.
+// podmanRun is the one `bashy podman run` command line every contained
+// container uses — the per-child image provider and the @contain(image: ...)
+// call alike: removed after the run, no network, bashy's quiet agentic
+// environment; opts are the form's own mounts and settings.
+func podmanRun(opts []string, image string, argv ...string) []string {
+	args := append([]string{"podman", "run", "--rm", "-i", "--network=none",
+		"-e", "BASHY_AGENTIC=1", "-e", "BASHY_HINTS=off"}, opts...)
+	return append(append(args, image), argv...)
+}
+
+// containerRunArgs are the `bashy podman` arguments for one contained child
+// in bashy's own image: the working directory at /work.
 func containerRunArgs(image, workdir, command string) []string {
-	return []string{"podman", "run", "--rm", "-i", "--network=none",
-		"-v", workdir + ":/work", "-w", "/work",
-		"-e", "BASHY_AGENTIC=1", "-e", "BASHY_HINTS=off",
-		image, "-c", command}
+	return podmanRun([]string{"-v", workdir + ":/work", "-w", "/work"}, image, "-c", command)
 }
 
 func runContainerContained(argv []string) int {

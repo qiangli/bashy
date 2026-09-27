@@ -152,23 +152,25 @@ func runContainedCall(ctx context.Context, c *nativeDecoratorCall, img *containI
 			img.Environ[k] = v
 		}
 	}
-	// bashy is mounted at /.bashy/bashy: a bare `bashy` inside the call finds it.
+	// The call's source travels as a read-only file (an argument is capped at
+	// 128 KiB on Linux); bashy is at /.bashy/bashy, so a bare `bashy` works.
 	script := "PATH=/.bashy:$PATH\n" + containScriptFunctions(string(data), c.Name) + "\n" + shellQuote(c.Name) + ` "$@"` + "\n"
-	const srcSlot = "\x00src\x00"
-	img.Argv = []string{"-c", srcSlot, c.Name}
+	src := dump.Name() + ".bsh"
+	defer os.Remove(src)
+	if err := os.WriteFile(src, []byte(script), 0o644); err != nil {
+		return containUnsupportedStatus
+	}
+	img.Script = src
+	img.Argv = []string{containInScript}
 	return runContainedImage(img, stderr, func(argv []string) int {
 		// Run in the call's frame, so the function's redirections and its
-		// arguments ("$@") apply; the script travels in a variable.
+		// arguments ("$@") apply.
 		words := make([]string, 0, len(argv)+1)
 		for _, a := range argv {
-			if a == srcSlot {
-				words = append(words, `"$__bashy_contain_src"`)
-				continue
-			}
 			words = append(words, shellQuote(a))
 		}
 		words = append(words, `"$@"`)
-		return c.Run(ctx, strings.Join(words, " "), map[string]string{"__bashy_contain_src": script})
+		return c.Run(ctx, strings.Join(words, " "), nil)
 	})
 }
 

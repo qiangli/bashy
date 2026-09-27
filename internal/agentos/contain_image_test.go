@@ -79,14 +79,16 @@ func TestContainImageRefusesBeforeRunning(t *testing.T) {
 
 func TestContainRunArgs(t *testing.T) {
 	t.Setenv("CONTAIN_TEST_PASS", "yes")
-	s := &containImageSpec{Image: testDigestRef, Workdir: "/testbed", Out: "/tmp/out",
+	s := &containImageSpec{Image: testDigestRef, Workdir: "/testbed", Out: "/tmp/out", Script: "/tmp/call.bsh",
 		Env: []string{"CONTAIN_TEST_PASS", "CONTAIN_TEST_UNSET"}, RO: []string{"/opt/tc:/opt/tc"}, Argv: []string{"-c", "echo hi"}}
 	line := strings.Join(containRunArgs(s, "bashy-contain-t", "/usr/local/bin/bashy"), " ")
 	for _, want := range []string{
-		"podman run --rm -i --name bashy-contain-t --network=none",
+		"podman run --rm -i --network=none",
+		"--name bashy-contain-t",
 		"--entrypoint /.bashy/bashy",
 		"-v /usr/local/bin/bashy:/.bashy/bashy:ro",
 		"-v /tmp/out:/out",
+		"-v /tmp/call.bsh:/.bashy/call.bsh:ro",
 		"-v /opt/tc:/opt/tc:ro",
 		"-w /testbed",
 		"-e CONTAIN_TEST_PASS=yes",
