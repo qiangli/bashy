@@ -21,11 +21,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/qiangli/yoke/pkg/broker/door"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const genieUsage = `usage: bashy genie [-m MODEL] "MESSAGE"   one turn in this directory; the answer on stdout
@@ -316,6 +319,19 @@ type genieDoctorReport struct {
 	YcodeError    string          `json:"ycode_error,omitempty"`
 	ModelChoice   json.RawMessage `json:"model_choice,omitempty"`
 	ModelError    string          `json:"model_error,omitempty"`
+	Door          string          `json:"door"`
+}
+
+// genieDoorStatus reports the host's model door (genie is its client): up
+// when /health answers at all (401 without a token still means up), else down.
+func genieDoorStatus() string {
+	url := door.BaseURL()
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(url + "/health")
+	if err != nil {
+		return "down at " + url + " (start it with `bashy llm up`)"
+	}
+	resp.Body.Close()
+	return "up at " + url
 }
 
 func genieDoctor(args []string, stdout, stderr io.Writer) int {
@@ -373,6 +389,7 @@ func genieDoctor(args []string, stdout, stderr io.Writer) int {
 	} else {
 		report.YcodeError = "ycode version: " + err.Error()
 	}
+	report.Door = genieDoorStatus()
 	if asJSON {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
@@ -384,6 +401,7 @@ func genieDoctor(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintf(stdout, "bashy:   %s\n", report.Bashy)
 		fmt.Fprintf(stdout, "ycode:   %s%s\n", or(report.Ycode, report.YcodeError), suffix(" ", report.YcodeVersion))
+		fmt.Fprintf(stdout, "door:    %s\n", report.Door)
 		if report.ModelChoice != nil {
 			var choice struct {
 				Model  string `json:"model"`
