@@ -365,7 +365,9 @@ func ensureContainerRuntime() (string, error) {
 	// A stopped podman VM makes every command fail; start it once.
 	if err := exec.Command(oci, "info").Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "verify: container runtime not responding — starting the podman machine…")
-		if serr := exec.Command(oci, "machine", "start").Run(); serr != nil {
+		start := exec.Command(oci, "machine", "start")
+		start.Dir = engineDaemonDir() // the VM's daemons must not pin the caller's cwd
+		if serr := start.Run(); serr != nil {
 			return "", fmt.Errorf("podman machine is not running and could not be started (try: %s machine start): %v", oci, serr)
 		}
 		fmt.Fprintf(os.Stderr, "verify: podman machine started — stop it with `%s machine stop` when done to free CPU\n", oci)
