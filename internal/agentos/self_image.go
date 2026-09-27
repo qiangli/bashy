@@ -152,8 +152,10 @@ func scratchContainerfile(version string) string {
 // to its -dev prerelease while a release is still on its candidate tag).
 func scratchArtifact(ctx context.Context, stderr io.Writer, version, arch string) (string, string, error) {
 	if local := strings.TrimSpace(os.Getenv("BASHY_SCRATCH_BIN")); local != "" {
-		if !isExecutable(local) {
-			return "", "", fmt.Errorf("self image: BASHY_SCRATCH_BIN=%s is not an executable file", local)
+		// A linux binary bound for the image, never run here: on Windows it
+		// has no execute bit to check, so it only has to be a file.
+		if info, err := os.Stat(local); err != nil || !info.Mode().IsRegular() {
+			return "", "", fmt.Errorf("self image: BASHY_SCRATCH_BIN=%s is not a file", local)
 		}
 		if version == "" {
 			version = firstNonEmpty(cli.BashyVersion(), "dev")
