@@ -44,6 +44,7 @@ func init() {
 	cli.AgentOSOwnedNames = tool.Names
 	cli.AgentOSDispatch = agentos.Dispatch
 	cli.AgentOSWireExec = agentos.WireExec
+	cli.AgentOSShellStartup = agentos.ShellStartup
 	cli.AgentOSPreamble = agentos.Preamble
 	cli.AgentOSUsage = agentos.Usage
 	cli.AgentOSCommandLineNoExec = agentos.PosixDryRunNoExec

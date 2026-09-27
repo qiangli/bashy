@@ -16,6 +16,8 @@ import (
 
 	"github.com/qiangli/yoke/external/podman/winhelper"
 	"github.com/qiangli/yoke/pkg/binmgr"
+	"github.com/qiangli/yoke/pkg/broker"
+	"github.com/qiangli/yoke/pkg/broker/door"
 )
 
 // dispatchEngine (lean build). The container/LLM engines are not LINKED into this
@@ -188,7 +190,13 @@ func ollamaAssetMatch(name, goos, goarch string) bool {
 // lean ollama never fights a host ollama.
 func applyOllamaIsolationEnv() {
 	if strings.TrimSpace(os.Getenv("OLLAMA_HOST")) == "" {
-		os.Setenv("OLLAMA_HOST", "127.0.0.1:11435")
+		// The raw engine (the door's child) gets its port from the door; a
+		// client verb goes through the door, token in the URL path.
+		if os.Getenv(broker.EngineModeEnv) != "" {
+			os.Setenv("OLLAMA_HOST", "127.0.0.1:11435")
+		} else if host, err := door.OllamaHost(); err == nil {
+			os.Setenv("OLLAMA_HOST", host)
+		}
 	}
 	if strings.TrimSpace(os.Getenv("OLLAMA_MODELS")) == "" {
 		if home, err := os.UserHomeDir(); err == nil {

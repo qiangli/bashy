@@ -507,6 +507,10 @@ var (
 	// A test that mocks the emitter proves the emitter was CALLED. It does not prove the
 	// data arrived. Only an exit hook does, in a program that exits like this one.
 	AgentOSShutdown = func() {}
+	// AgentOSShellStartup runs once before a shell runner captures its
+	// environment: the AgentOS shell mints its model-door session there
+	// (Sprint 302 Q5). A no-op for the pure bash drop-in.
+	AgentOSShellStartup = func() {}
 	// posix is passed so AgentOS extensions (e.g. --dry-run) stay inert under
 	// --posix and absent from the pure bash drop-in.
 	AgentOSWireExec func([]interp.RunnerOption, bool, []string, io.Reader, io.Writer, io.Writer) []interp.RunnerOption = func(o []interp.RunnerOption, _ bool, _ []string, in io.Reader, out, err io.Writer) []interp.RunnerOption {
@@ -661,6 +665,7 @@ func shouldRunInteractive(stdinTTY bool) bool {
 const defaultPathValue = "/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:."
 
 func newRunner() (*interp.Runner, error) {
+	AgentOSShellStartup()
 	startupPosix := resolvedStartupPosix()
 	inheritedEnv := secureStartupEnv(os.Environ())
 	// BASHY_BASHSHARP (and its alias BASHY_BASHPP) is an invocation

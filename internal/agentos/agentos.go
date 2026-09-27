@@ -83,7 +83,7 @@ import (
 	"github.com/qiangli/yoke/pkg/bus"
 	"github.com/qiangli/yoke/pkg/capability"
 	"github.com/qiangli/yoke/pkg/chat"
-	"github.com/qiangli/yoke/pkg/cligw"
+	"github.com/qiangli/yoke/pkg/broker"
 	"github.com/qiangli/yoke/pkg/craft"
 	"github.com/qiangli/yoke/pkg/dag"
 	"github.com/qiangli/yoke/pkg/fleet"
@@ -592,6 +592,9 @@ func dispatch() {
 	// Apple MLX) and only build on unix hosts — they are split into a
 	// platform-tagged dispatchEngine so the rest of AgentOS (shell, git, dag,
 	// weave, the binmgr-managed externals) cross-compiles to Windows.
+	if os.Args[1] == "ollama" && isDoorServe(os.Args[2:]) {
+		dispatchExit(runOllamaDoor(os.Args[3:]))
+	}
 	dispatchEngine(os.Args[1])
 	// The observability stack (`bashy otel`) compiles in the OpenTelemetry
 	// Collector + VictoriaMetrics/Logs + Jaeger + Perses + k8s/aws SDKs (~193 MB,
@@ -661,7 +664,7 @@ func dispatch() {
 		}
 		dispatchExit(0)
 	case "llm":
-		cmd := cligw.NewCmd()
+		cmd := broker.NewCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy llm:", err)
