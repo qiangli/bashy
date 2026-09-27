@@ -49,7 +49,7 @@ the body. Arguments are the decorator's own, keyword (`n: 3`) or positional.
 | `@memo` | `["1h"]` or `ttl: "1h"` | the same name + arguments within one process returns the cached `Results` and `Status` without running the body; a non-zero status is not cached; `ttl` expires an entry. Memo caches what the call **returns** — printed output is not replayed, so use it on typed (value-returning) functions | a process-wide map | the cached | never |
 | `@auth` | `via: "<cmd>"`, `as: "<principal>"` | runs `via` once per process (default `bashy tessaro status`, this host's pairing); exit 0 = authenticated and its first stdout line is the principal, exported to the body as `BASHY_PRINCIPAL`; `as:` names the principal required | `bashy login` / `bashy tessaro status` | 77 | yes |
 | `@effects` | `"net,write"` or `effects: "…"` | the author's side of the guard coin: declares what the function does. A `@guard` that does not allow the declaration denies the call at the boundary (126) before the body runs; inside, the declaration is the function's own cap **and** the classification for commands the atlas does not know — so a tool bashy has never heard of runs on the author's word instead of failing as `unknown` | atlas vocabulary; `@guard`; dag `Effects:` | 126 | never |
-| `@contain` | `net: "deny"` [, `provider:`] — or `image: "NAME@sha256:…"` [, `net: "deny"\|"door"`, `sticky:`, `workdir:`, `out:`, `env:`, `ro:`] | runs every EXTERNAL child the function starts with the network enforced off by the OS (Linux network namespace, macOS Seatbelt) — so a cap or declaration without `net` can admit an interpreter such as `python`/`pytest` whose atlas maximum includes `net`; in-process native tools are not children and keep their effects; filesystem isolation is not implied; an unsupported OS fails closed | `bashy contain --net deny -- CMD` (the wrapper, `net: "deny"` only); the harness preflight | 125 | never |
+| `@contain` | `net: "deny"` [, `provider:`] — or `image: "NAME@sha256:…"` [, `workdir:`, `out:`, `env:`, `ro:`, `provider: "custom"`] | runs every EXTERNAL child the function starts with the network enforced off by the OS (Linux network namespace, macOS Seatbelt) — so a cap or declaration without `net` can admit an interpreter such as `python`/`pytest` whose atlas maximum includes `net`; in-process native tools are not children and keep their effects; filesystem isolation is not implied; an unsupported OS fails closed | `bashy contain --net deny -- CMD` (the wrapper, `net: "deny"` only); the harness preflight | 125 | never |
 | `@confirm` | — | human-in-the-loop **allow** per operation — not a guard: the high-impact atoms (`destroy`, `cred`, `priv`, `spend`, unknown) take their answer from `--confirm=TOKEN:yes` / `--what-if`, or the call yields; `docs/effect-derived-confirmation.md` | atlas effects, `bashy ask` | 6 | no |
 
 "Advisable" = an advice rule may apply it. `retry`, `memo`, `timeout` never:
@@ -95,8 +95,8 @@ download that executes — so it is a containment, not a convenience:
 
 ```bash
 @contain(image: "docker.io/swebench/sweb.eval.x86_64.django_1776_django-11740@sha256:cd95…",
-         workdir: "/testbed", net: "door", sticky: "arm-genie", out: "/srv/run/out")
-function arm() { bashy genie --json "$1" > /out/prediction.json; }
+         workdir: "/testbed", out: "/srv/run/out")
+function check() { python -m pytest -q tests/ > /out/result.txt; }
 ```
 
 - **A decorator only — no command.** The container runs through bashy's
@@ -110,22 +110,18 @@ function arm() { bashy genie --json "$1" > /out/prediction.json; }
   artifact; a dynamically linked one is refused); the image's own entrypoint
   and shell are never trusted, and the image needs no bashy.
 - **One container per call.** The whole function runs inside — its script
-  functions travel as source (bashy's verb shims and the call's own `@contain`
-  line stay behind), arguments as `"$@"`; state lasts for the call and is
-  removed after it, killed calls included.
-- **Nothing crosses unless named.** No host mounts but `ro:` (read-only
-  `HOST:CTR` pairs) and `out:` (at `/out`); no variables but `env:` names.
-- **No network**, except `net: "door"`: the host's model door on
-  `127.0.0.1:24556` inside the container, restricted to the ONE sticky binding
-  `sticky:` (inference + model listing; the binding API, other bindings and
-  pulls are 403). The container reaches a relay to a per-call socket whose
-  far end — a filtering proxy in the host's bashy — holds the owner token, so
-  the token never enters the container. Linux hosts; `BASHY_CONTAIN_DOOR`
-  names an upstream door (e.g. one tunnelled from another host, `/k/<token>`
-  form). An inner `@contain(net: "deny")` is still enforced natively inside.
-- Every call is a line in `~/.bashy/contain/ledger.jsonl` (image, net, sticky, mounts, argv, exit,
-  duration) and, with `BASHY_AUDIT` on, an audit-chain record. Anything that
-  cannot be enforced fails closed (125).
+  functions travel as source, arguments as `"$@"`; the container is removed
+  after the call, killed calls included.
+- **Nothing crosses unless named, and no network.** No host mounts but `ro:`
+  (read-only `HOST:CTR` pairs) and `out:` (at `/out`); no variables but
+  `env:` names. An inner `@contain(net: "deny")` is still enforced inside.
+- **`provider: "custom"`** hands the prepared `podman run …` command line to
+  the `BASHY_CONTAIN_CUSTOM` wrapper (its words, then the command line), for a
+  setup this decorator does not provide — e.g. a benchmark's controlled path
+  to a model. The wrapper is the operator's (a registered command), not bashy's.
+- Every call is a line in `~/.bashy/contain/ledger.jsonl` and, with
+  `BASHY_AUDIT` on, an audit-chain record. Anything that cannot be enforced
+  fails closed (125).
 
 ## The effect vocabulary (`@guard`, `@effects`, dag `Effects:`, `@confirm`)
 

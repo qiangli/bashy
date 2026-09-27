@@ -59,7 +59,7 @@ func containDecorator(stderr io.Writer) nativeDecoratorFunc {
 		if c.Advised != "" {
 			return errors.New("contain is a declaration and never applied by advice")
 		}
-		const usage = `contain takes net: "deny" [, provider: builtin|native|image|custom], or image: "NAME@sha256:..." [, net: "deny"|"door", sticky:, workdir:, out:, env: "A,B", ro: "HOST:CTR,..."]`
+		const usage = `contain takes net: "deny" [, provider: builtin|native|image|custom], or image: "NAME@sha256:..." [, workdir:, out:, env: "A,B", ro: "HOST:CTR,...", provider: builtin|custom]`
 		net, provider := "", ""
 		img := &containImageSpec{}
 		list := func(v string) []string {
@@ -83,8 +83,6 @@ func containDecorator(stderr io.Writer) nativeDecoratorFunc {
 				img.Workdir = a.Value
 			case a.Name == "out" && img.Out == "":
 				img.Out = a.Value
-			case a.Name == "sticky" && img.Sticky == "":
-				img.Sticky = a.Value
 			case a.Name == "env" && img.Env == nil:
 				img.Env = list(a.Value)
 			case a.Name == "ro" && img.RO == nil:
@@ -94,10 +92,10 @@ func containDecorator(stderr io.Writer) nativeDecoratorFunc {
 			}
 		}
 		if img.Image != "" {
-			if provider != "" {
-				return errors.New("contain: provider does not apply to image: (the image is the provider)")
+			if net != "" {
+				return errors.New("contain: an image call has no network; a setup that needs one is a provider: custom")
 			}
-			img.Net, img.Argv = net, []string{"true"}
+			img.Provider, img.Argv = provider, []string{"true"}
 			if err := img.validate(); err != nil {
 				c.Status = 2
 				fmt.Fprintf(stderr, "%s: contain: %v\n", c.Name, err)
@@ -106,7 +104,7 @@ func containDecorator(stderr io.Writer) nativeDecoratorFunc {
 			c.Status = runContainedCall(ctx, c, img, stderr)
 			return nil
 		}
-		if img.Workdir != "" || img.Out != "" || img.Sticky != "" || img.Env != nil || img.RO != nil {
+		if img.Workdir != "" || img.Out != "" || img.Env != nil || img.RO != nil {
 			return errors.New(usage)
 		}
 		if net != "deny" {
@@ -144,9 +142,10 @@ func runContainedCall(ctx context.Context, c *nativeDecoratorCall, img *containI
 	if err != nil {
 		return containUnsupportedStatus
 	}
-	script := containScriptFunctions(string(data), c.Name) + "\n" + shellQuote(c.Name) + ` "$@"` + "\n"
+	// bashy is mounted at /.bashy/bashy: a bare `bashy` inside the call finds it.
+	script := "PATH=/.bashy:$PATH\n" + containScriptFunctions(string(data), c.Name) + "\n" + shellQuote(c.Name) + ` "$@"` + "\n"
 	const srcSlot = "\x00src\x00"
-	img.Argv = []string{"bashy", "-c", srcSlot, c.Name}
+	img.Argv = []string{"-c", srcSlot, c.Name}
 	return runContainedImage(img, stderr, func(argv []string) int {
 		// Run in the call's frame, so the function's redirections and its
 		// arguments ("$@") apply; the script travels in a variable.
@@ -260,11 +259,6 @@ func dispatchContain(args []string) int {
 		fmt.Fprintln(w, "  providers: builtin (default: native where the OS has it, else bashy's image), native,")
 		fmt.Fprintln(w, "  image (bashy's own image everywhere), custom (BASHY_CONTAIN_CUSTOM wrapper command).")
 		fmt.Fprintln(w, "  BASHY_CONTAIN_PROVIDER sets the host default; BASHY_CONTAIN_IMAGE overrides the image.")
-	}
-	// --init is internal: the entrypoint of the bashy injected into a
-	// @contain(image: ...) container. Not a user surface.
-	if len(args) > 0 && args[0] == "--init" {
-		return containInit(args[1:])
 	}
 	net, provider := "", ""
 	i := 0
