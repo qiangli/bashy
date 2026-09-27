@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -16,6 +17,12 @@ import (
 // that name: Claude Code's grep shim runs its own binary as "ugrep", whose
 // exit 1 is an ordinary no-match, not a failure that feeds loop detection.
 func TestAdvisorUsesExecAsName(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// The fixture is a #!/bin/sh file with no extension; exec'ing it on
+		// Windows hangs the whole agentos package (CI run 36337465550). The
+		// advice naming under test is OS-independent.
+		t.Skip("needs a directly executable shebang script")
+	}
 	dir := t.TempDir()
 	tool := filepath.Join(dir, "2.1.283")
 	if err := os.WriteFile(tool, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
