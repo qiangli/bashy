@@ -25,7 +25,7 @@ func TestBuiltinGenieSource(t *testing.T) {
 	if !isGenieSource(dir) {
 		t.Fatalf("%s is not a genie source tree", dir)
 	}
-	for _, rel := range []string{"agent.yaml", "cmd/genie/main.go", "lib/model-server.bsh", "prompts/system.md", "fixture/task.json", "go.mod", "models.json"} {
+	for _, rel := range []string{"agent.yaml", "cmd/genie/main.go", "lib/model-server.bsh", "prompts/system.md", "fixture/task.json", "fixture/repo/tests/__init__.py", "go.mod", "models.json"} {
 		if _, err := os.Stat(filepath.Join(dir, rel)); err != nil {
 			t.Errorf("missing %s: %v", rel, err)
 		}
