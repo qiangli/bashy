@@ -1,27 +1,39 @@
 package agentos
 
 import (
+	"os/exec"
 	"reflect"
 	"strings"
 	"testing"
 )
 
-func TestContainBackendChoice(t *testing.T) {
-	t.Setenv("BASHY_CONTAIN_BACKEND", "container")
-	if got := containBackend(); got != containContainer {
-		t.Fatalf("forced container: %q", got)
-	}
-	t.Setenv("BASHY_CONTAIN_BACKEND", "native")
-	if got := containBackend(); got != containNative {
-		t.Fatalf("forced native: %q", got)
-	}
-	t.Setenv("BASHY_CONTAIN_BACKEND", "")
-	want := containContainer
+func TestContainProviderResolution(t *testing.T) {
+	t.Setenv("BASHY_CONTAIN_PROVIDER", "")
+	builtin := containImageP
 	if nativeContainSupported() == nil {
-		want = containNative
+		builtin = containNative
 	}
-	if got := containBackend(); got != want {
-		t.Fatalf("default: %q, want %q", got, want)
+	for _, tc := range []struct{ requested, env, want string }{
+		{"", "", builtin},
+		{"builtin", "", builtin},
+		{"image", "", containImageP},
+		{"native", "", containNative},
+		{"custom", "", containCustom},
+		{"", "image", containImageP},       // host default
+		{"native", "image", containNative}, // the decorator wins
+	} {
+		t.Setenv("BASHY_CONTAIN_PROVIDER", tc.env)
+		if got := resolveContainProvider(tc.requested); got != tc.want {
+			t.Errorf("resolve(%q, env %q) = %q, want %q", tc.requested, tc.env, got, tc.want)
+		}
+	}
+	t.Setenv("BASHY_CONTAIN_PROVIDER", "")
+	t.Setenv("BASHY_CONTAIN_CUSTOM", "")
+	if containSupportedFor("custom") == nil {
+		t.Error("custom without BASHY_CONTAIN_CUSTOM must fail closed")
+	}
+	if validContainProvider("docker") {
+		t.Error("unknown provider accepted")
 	}
 }
 
@@ -69,5 +81,27 @@ func TestContainerCommandAndArgs(t *testing.T) {
 		if !found {
 			t.Errorf("run args lack %q: %q", want, args)
 		}
+	}
+}
+
+// provider custom runs the child under the user's wrapper and keeps its exit
+// status; an unknown provider is a usage error.
+func TestDispatchContainCustomProvider(t *testing.T) {
+	if _, err := exec.LookPath("env"); err != nil {
+		t.Skip("no env(1)")
+	}
+	t.Setenv("BASHY_CONTAIN_CUSTOM", "env")
+	if code := dispatchContain([]string{"--net", "deny", "--provider", "custom", "--", "true"}); code != 0 {
+		t.Fatalf("custom true: exit %d", code)
+	}
+	if code := dispatchContain([]string{"--net", "deny", "--provider=custom", "--", "false"}); code != 1 {
+		t.Fatalf("custom false: exit %d, want 1", code)
+	}
+	if code := dispatchContain([]string{"--net", "deny", "--provider", "docker", "--", "true"}); code != 2 {
+		t.Fatalf("unknown provider: exit %d, want 2", code)
+	}
+	t.Setenv("BASHY_CONTAIN_CUSTOM", "")
+	if code := dispatchContain([]string{"--net", "deny", "--provider", "custom", "--", "true"}); code != containUnsupportedStatus {
+		t.Fatalf("custom without a wrapper: exit %d, want %d", code, containUnsupportedStatus)
 	}
 }

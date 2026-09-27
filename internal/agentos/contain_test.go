@@ -11,7 +11,7 @@ import (
 )
 
 func TestContainedEffectsDropNetOnlyForExternalChildren(t *testing.T) {
-	ctx := withContainNet(context.Background())
+	ctx := withContainNet(context.Background(), "")
 	got := containedEffects(ctx, "python3", []string{atlas.EffExec, atlas.EffNet, atlas.EffWrite})
 	for _, e := range got {
 		if e == atlas.EffNet {
@@ -41,7 +41,7 @@ func TestDispatchContainRunsCommand(t *testing.T) {
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		t.Skip("network isolation backend is darwin/linux only")
 	}
-	if containSupported() != nil {
+	if nativeContainSupported() != nil {
 		t.Skip("no isolation backend on this host")
 	}
 	if _, err := exec.LookPath("true"); err != nil {

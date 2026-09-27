@@ -7,8 +7,9 @@ package agentos
 // toolchain. `container` runs the child in bashy's own image — all you need
 // is bashy — through bashy's podman with no network and only the working
 // directory mounted, so it also keeps the child away from everything else on
-// the host. Native is used where it exists, the container elsewhere
-// (Windows); BASHY_CONTAIN_BACKEND=container|native chooses explicitly.
+// the host. The provider picks: builtin (default: native where it exists, the
+// image elsewhere, e.g. Windows), native, image, or custom (the user's own
+// wrapper) — from @contain(provider: ...), else BASHY_CONTAIN_PROVIDER.
 // Either way a restriction that cannot be enforced fails closed (125).
 
 import (
@@ -22,38 +23,86 @@ import (
 	"github.com/qiangli/bashy/internal/cli"
 )
 
+// Providers. builtin (the default) is bashy's own choice: native where the
+// OS has it, else bashy's image. native and image force one of the two;
+// custom runs the child under the wrapper command in BASHY_CONTAIN_CUSTOM
+// (e.g. "bwrap --unshare-net --dev-bind / / --"), for a host or a user who
+// prefers their own.
 const (
-	containNative    = "native"
-	containContainer = "container"
+	containBuiltin = "builtin"
+	containNative  = "native"
+	containImageP  = "image"
+	containCustom  = "custom"
 )
 
-// containBackend picks the backend: BASHY_CONTAIN_BACKEND, else native where
-// the OS has it, else the container.
-func containBackend() string {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("BASHY_CONTAIN_BACKEND"))) {
-	case containNative:
-		return containNative
-	case containContainer:
-		return containContainer
+func validContainProvider(p string) bool {
+	switch p {
+	case containBuiltin, containNative, containImageP, containCustom:
+		return true
+	}
+	return false
+}
+
+// resolveContainProvider turns the requested provider (the decorator's, else
+// BASHY_CONTAIN_PROVIDER, else builtin) into the one that runs: native,
+// image or custom.
+func resolveContainProvider(requested string) string {
+	p := strings.ToLower(strings.TrimSpace(requested))
+	if p == "" {
+		p = strings.ToLower(strings.TrimSpace(os.Getenv("BASHY_CONTAIN_PROVIDER")))
+	}
+	switch p {
+	case containNative, containImageP, containCustom:
+		return p
 	}
 	if nativeContainSupported() == nil {
 		return containNative
 	}
-	return containContainer
+	return containImageP
 }
 
-func containSupported() error {
-	if containBackend() == containNative {
+// containSupportedFor fails early only where the answer is known without
+// running anything; the image provider reports its own failures (125).
+func containSupportedFor(provider string) error {
+	switch resolveContainProvider(provider) {
+	case containNative:
 		return nativeContainSupported()
+	case containCustom:
+		if strings.TrimSpace(os.Getenv("BASHY_CONTAIN_CUSTOM")) == "" {
+			return errors.New("provider custom needs BASHY_CONTAIN_CUSTOM (the wrapper command)")
+		}
 	}
-	return nil // the container backend reports its own failures (125)
+	return nil
 }
 
-func runContained(argv []string) int {
-	if containBackend() == containNative {
+func runContainedWith(provider string, argv []string) int {
+	switch resolveContainProvider(provider) {
+	case containNative:
 		return runNativeContained(argv)
+	case containCustom:
+		return runCustomContained(argv)
 	}
 	return runContainerContained(argv)
+}
+
+// runCustomContained runs argv under the user's wrapper: its words, then argv.
+func runCustomContained(argv []string) int {
+	wrapper := strings.Fields(os.Getenv("BASHY_CONTAIN_CUSTOM"))
+	if len(wrapper) == 0 {
+		fmt.Fprintln(os.Stderr, "bashy contain: provider custom needs BASHY_CONTAIN_CUSTOM")
+		return containUnsupportedStatus
+	}
+	cmd := exec.Command(wrapper[0], append(wrapper[1:], argv...)...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			return exit.ExitCode()
+		}
+		fmt.Fprintf(os.Stderr, "bashy contain: %v\n", err)
+		return containUnsupportedStatus
+	}
+	return 0
 }
 
 // containToolchains is the toolchain a contained child needs preloaded in the

@@ -35,14 +35,23 @@ const containUnsupportedStatus = 125
 
 type containKey struct{}
 
+// containScope is what a @contain(net: "deny"[, provider: P]) scope carries.
+type containScope struct{ provider string }
+
 // containNetFrom reports whether ctx is inside a @contain(net: "deny") scope.
 func containNetFrom(ctx context.Context) bool {
-	v, _ := ctx.Value(containKey{}).(bool)
-	return v
+	_, ok := ctx.Value(containKey{}).(containScope)
+	return ok
 }
 
-func withContainNet(ctx context.Context) context.Context {
-	return context.WithValue(ctx, containKey{}, true)
+// containProviderFrom is the scope's provider ("" = the host default).
+func containProviderFrom(ctx context.Context) string {
+	v, _ := ctx.Value(containKey{}).(containScope)
+	return v.provider
+}
+
+func withContainNet(ctx context.Context, provider string) context.Context {
+	return context.WithValue(ctx, containKey{}, containScope{provider: provider})
 }
 
 func containDecorator(stderr io.Writer) nativeDecoratorFunc {
@@ -50,15 +59,29 @@ func containDecorator(stderr io.Writer) nativeDecoratorFunc {
 		if c.Advised != "" {
 			return errors.New("contain is a declaration and never applied by advice")
 		}
-		if len(args) != 1 || (args[0].Name != "" && args[0].Name != "net") || args[0].Value != "deny" {
-			return fmt.Errorf("contain takes exactly one argument, net: %q", "deny")
+		net, provider := "", ""
+		for i, a := range args {
+			switch {
+			case (a.Name == "net" || a.Name == "" && i == 0) && net == "":
+				net = a.Value
+			case a.Name == "provider" && provider == "":
+				provider = a.Value
+			default:
+				return fmt.Errorf("contain takes net: %q and an optional provider: builtin|native|image|custom", "deny")
+			}
 		}
-		if err := containSupported(); err != nil {
+		if net != "deny" {
+			return fmt.Errorf("contain takes net: %q and an optional provider: builtin|native|image|custom", "deny")
+		}
+		if provider != "" && !validContainProvider(provider) {
+			return fmt.Errorf("contain: unknown provider %q (builtin, native, image, custom)", provider)
+		}
+		if err := containSupportedFor(provider); err != nil {
 			c.Status = containUnsupportedStatus
 			fmt.Fprintf(stderr, "%s: contain: %v\n", c.Name, err)
 			return nil
 		}
-		c.Next(withContainNet(ctx))
+		c.Next(withContainNet(ctx, provider))
 		return nil
 	}
 }
@@ -104,7 +127,11 @@ func containHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 			if len(args) == 0 || !containNetFrom(ctx) {
 				return next(ctx, args)
 			}
-			wrapped := append([]string{bashySelfPath(), "contain", "--net", "deny", "--"}, args...)
+			wrapped := []string{bashySelfPath(), "contain", "--net", "deny"}
+			if p := containProviderFrom(ctx); p != "" {
+				wrapped = append(wrapped, "--provider", p)
+			}
+			wrapped = append(append(wrapped, "--"), args...)
 			return next(ctx, wrapped)
 		}
 	}
@@ -112,12 +139,14 @@ func containHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 
 func dispatchContain(args []string) int {
 	usage := func(w io.Writer) {
-		fmt.Fprintln(w, "usage: bashy contain --net deny -- command [args...]")
+		fmt.Fprintln(w, "usage: bashy contain --net deny [--provider builtin|native|image|custom] -- command [args...]")
 		fmt.Fprintln(w, "  run one command with enforced network isolation: native (Linux network namespace,")
 		fmt.Fprintln(w, "  macOS Seatbelt) where the OS has it, else bashy's own image with no network")
-		fmt.Fprintln(w, "  (BASHY_CONTAIN_BACKEND=native|container chooses; BASHY_CONTAIN_IMAGE overrides the image)")
+		fmt.Fprintln(w, "  providers: builtin (default: native where the OS has it, else bashy's image), native,")
+		fmt.Fprintln(w, "  image (bashy's own image everywhere), custom (BASHY_CONTAIN_CUSTOM wrapper command).")
+		fmt.Fprintln(w, "  BASHY_CONTAIN_PROVIDER sets the host default; BASHY_CONTAIN_IMAGE overrides the image.")
 	}
-	net := ""
+	net, provider := "", ""
 	i := 0
 	for ; i < len(args); i++ {
 		a := args[i]
@@ -130,6 +159,11 @@ func dispatchContain(args []string) int {
 			net = args[i]
 		case strings.HasPrefix(a, "--net="):
 			net = strings.TrimPrefix(a, "--net=")
+		case a == "--provider" && i+1 < len(args):
+			i++
+			provider = args[i]
+		case strings.HasPrefix(a, "--provider="):
+			provider = strings.TrimPrefix(a, "--provider=")
 		case a == "--":
 			i++
 			goto command
@@ -138,13 +172,13 @@ func dispatchContain(args []string) int {
 		}
 	}
 command:
-	if net != "deny" || i >= len(args) {
+	if net != "deny" || i >= len(args) || provider != "" && !validContainProvider(provider) {
 		usage(os.Stderr)
 		return 2
 	}
-	if err := containSupported(); err != nil {
+	if err := containSupportedFor(provider); err != nil {
 		fmt.Fprintf(os.Stderr, "bashy contain: %v\n", err)
 		return containUnsupportedStatus
 	}
-	return runContained(args[i:])
+	return runContainedWith(provider, args[i:])
 }
