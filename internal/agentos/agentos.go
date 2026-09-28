@@ -241,6 +241,17 @@ func Preamble() string { return PreambleFor(weavecli.IsAgent()) }
 // neither.
 var agentModeShimAliases = map[string]string{"python3": "python", "pip3": "pip"}
 
+// activatedEnvNames are the agent-mode shims that yield to an ACTIVATED Python
+// environment. A virtualenv or conda env (VIRTUAL_ENV / CONDA_PREFIX) is the
+// project's own interpreter with the project's dependencies — a SWE-bench task
+// image activates `testbed` — so bare python/pip resolve through PATH there
+// and reach bashy's pinned toolchain only when no environment is active.
+// `bashy python` itself always means bashy's toolchain.
+var activatedEnvNames = map[string]bool{"python": true, "pip": true, "python3": true, "pip3": true}
+
+// activatedEnvShim renders one such shim: name, name, bashy, provisioner.
+const activatedEnvShim = "%s() { if [ -n \"${VIRTUAL_ENV:-}${CONDA_PREFIX:-}\" ]; then command %s \"$@\"; else command %s %s \"$@\"; fi; }\n"
+
 // PreambleFor is Preamble for a session whose agent mode is known — a
 // harness session is one (its request environment carries BASHY_AGENTIC=1)
 // even when the process that renders the preamble is not.
@@ -263,10 +274,14 @@ func PreambleFor(agentMode bool) string {
 	// a different WORLD.
 	if agentMode {
 		for _, v := range agentModeShimVerbs {
+			if activatedEnvNames[v] {
+				fmt.Fprintf(&b, activatedEnvShim, v, v, shellQuote(self), v)
+				continue
+			}
 			fmt.Fprintf(&b, "%s() { command %s %s \"$@\"; }\n", v, shellQuote(self), v)
 		}
 		for _, alias := range []string{"python3", "pip3"} {
-			fmt.Fprintf(&b, "%s() { command %s %s \"$@\"; }\n", alias, shellQuote(self), agentModeShimAliases[alias])
+			fmt.Fprintf(&b, activatedEnvShim, alias, alias, shellQuote(self), agentModeShimAliases[alias])
 		}
 	}
 	// Declarative managed-external registry (tier-5/6 client CLIs: doctl, …) —

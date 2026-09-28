@@ -14,7 +14,7 @@ func TestPreambleForAgentModeShims(t *testing.T) {
 			t.Errorf("agent preamble lacks %q", want)
 		}
 	}
-	if !strings.Contains(agent, "python3() { command") || !strings.Contains(agent, "' python \"$@\"; }") {
+	if !strings.Contains(agent, "python3() {") || !strings.Contains(agent, "' python \"$@\"; fi; }") {
 		t.Errorf("python3 must shim to `bashy python`:\n%s", agent)
 	}
 	human := PreambleFor(false)
