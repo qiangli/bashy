@@ -27,6 +27,9 @@ func TestMain(m *testing.M) {
 	os.Setenv("BASHY_COMMANDS_DIR", filepath.Join(dir, "commands"))
 	os.Setenv("BASHY_COMMANDS_PATH", "")
 	os.Setenv("BASHY_SKILLS_DIR", filepath.Join(dir, "skills"))
+	// The self path is this test binary: ensuring the podman machine would
+	// re-run the whole suite as `<test> podman info`.
+	ensurePodmanMachineHook = func(string) error { return nil }
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)

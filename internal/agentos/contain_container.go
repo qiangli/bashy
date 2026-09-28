@@ -199,14 +199,13 @@ func ensureContainImage(self, image string, with []string) error {
 		return nil
 	}
 	if runtime.GOOS != "linux" {
-		// podman runs in a VM here: start it if it is only stopped (a
-		// machine that does not exist yet is `bashy podman machine init`).
-		_ = exec.Command(self, "podman", "machine", "start").Run()
+		// podman runs in a VM here (a machine that does not exist yet is
+		// `bashy podman machine init`).
+		if err := ensurePodmanMachineHook(self); err != nil {
+			return err
+		}
 		if exec.Command(self, "podman", "image", "exists", image).Run() == nil {
 			return nil
-		}
-		if exec.Command(self, "podman", "info").Run() != nil {
-			return errors.New("bashy's podman is not running (create its VM once: bashy podman machine init && bashy podman machine start)")
 		}
 	}
 	if strings.TrimSpace(os.Getenv("BASHY_CONTAIN_IMAGE")) != "" {

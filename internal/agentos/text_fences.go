@@ -57,6 +57,20 @@ func init() {
 			islandToolchains[tool] = selfVerb(tool)
 		}
 	}
+	islandToolchains["podman"] = podmanFenceTool
+}
+
+// podmanFenceTool is `bashy podman` with its machine reachable: a
+// ~~~dockerfile or ~~~k8s fence needs the engine, not just its name.
+func podmanFenceTool(ctx context.Context) ([]string, string, error) {
+	argv, why, err := selfVerb("podman")(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := ensurePodmanMachineHook(argv[0]); err != nil {
+		return nil, "", err
+	}
+	return argv, why, nil
 }
 
 // fenceEffectGate denies a declared-effects foreign call that exceeds the
