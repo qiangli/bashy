@@ -17,7 +17,9 @@ import (
 )
 
 // Hard launch constraints are explicit operator policy. Advisory monitor
-// thresholds never acquire authority to pause, prune, or reject work.
+// thresholds never acquire authority to pause, prune, or reject work — with one
+// deliberate exception since 2026-09-28: the agent-mode host floors (limit.go)
+// refuse NEW external execs below a memory/disk floor, after repeated OOMs.
 type hostAdmissionPolicy struct {
 	Version                 int      `json:"version"`
 	MaxCPUPercent           *float64 `json:"max_cpu_percent,omitempty"`

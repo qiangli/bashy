@@ -155,7 +155,8 @@ var (
 	// `supervisord` stays the host's, `bashy supervisord` is ours.
 	// `llm` likewise belongs to a popular unrelated CLI; the local gateway is
 	// reached only as `bashy llm`.
-	directFrontDoorVerbs = []string{"mb", "ping", "out", "full", "awd", "supervisord", "llm"}
+	// `limit` is a wrapper verb like awd; bare `limit` is csh's builtin, never ours.
+	directFrontDoorVerbs = []string{"mb", "ping", "out", "full", "awd", "supervisord", "llm", "limit"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
@@ -663,6 +664,10 @@ func dispatch() {
 		// OS-enforced network isolation for one command (contain.go); the
 		// wrapper form of @contain(net: "deny").
 		dispatchExit(dispatchContain(os.Args[2:]))
+	case "limit":
+		// Resource limits for one command's process tree (limit.go); the
+		// wrapper form of @limit(memory:, pids:, disk:).
+		dispatchExit(dispatchLimit(os.Args[2:]))
 	case "awd":
 		// Run one command in another directory and return (the `awd` builtin
 		// from the front door) — the one directory mechanism, so verbs never
@@ -2124,9 +2129,16 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	// autofix has settled the argv it describes, and outside the userland
 	// handler so in-process tools are governed too. Inert unless a @confirm
 	// call put its state on the context.
-	// contain (contain.go) is the very last rung: what reaches it is about to
-	// run as an external child, so inside @contain it is re-executed isolated.
-	mws = append(mws, outputMW, autofix.Handler(), confirmHandler(), dryRunHandler(r), defineSessionHandler(), coreutilsshell.Handler(), registeredHandler(), containHandler())
+	// contain (contain.go) and limit (limit.go) are the last rungs: what
+	// reaches them is about to run as an external child, so inside @contain it
+	// is re-executed isolated and inside @limit under `bashy limit`, which
+	// wraps the contained command so its guard watches that whole tree. In
+	// agent mode the host floors (limit.go) judge the command first.
+	mws = append(mws, outputMW, autofix.Handler(), confirmHandler(), dryRunHandler(r), defineSessionHandler(), coreutilsshell.Handler(), registeredHandler())
+	if agentModeForEnv(env) {
+		mws = append(mws, hostFloorHandler())
+	}
+	mws = append(mws, containHandler(), limitHandler())
 	return append(opts, interp.ExecHandlers(mws...))
 }
 

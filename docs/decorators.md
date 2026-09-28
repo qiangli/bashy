@@ -50,6 +50,7 @@ the body. Arguments are the decorator's own, keyword (`n: 3`) or positional.
 | `@auth` | `via: "<cmd>"`, `as: "<principal>"` | runs `via` once per process (default `bashy tessaro status`, this host's pairing); exit 0 = authenticated and its first stdout line is the principal, exported to the body as `BASHY_PRINCIPAL`; `as:` names the principal required | `bashy login` / `bashy tessaro status` | 77 | yes |
 | `@effects` | `"net,write"` or `effects: "…"` | the author's side of the guard coin: declares what the function does. A `@guard` that does not allow the declaration denies the call at the boundary (126) before the body runs; inside, the declaration is the function's own cap **and** the classification for commands the atlas does not know — so a tool bashy has never heard of runs on the author's word instead of failing as `unknown` | atlas vocabulary; `@guard`; dag `Effects:` | 126 | never |
 | `@contain` | `net: "deny"` [, `provider:`] — or `image: "NAME@sha256:…"` [, `workdir:`, `out:`, `env:`, `ro:`, `provider: "custom"`] | runs every EXTERNAL child the function starts with the network enforced off by the OS (Linux network namespace, macOS Seatbelt) — so a cap or declaration without `net` can admit an interpreter such as `python`/`pytest` whose atlas maximum includes `net`; in-process native tools are not children and keep their effects; filesystem isolation is not implied; an unsupported OS fails closed | `bashy contain --net deny -- CMD` (the wrapper, `net: "deny"` only); the harness preflight | 125 | never |
+| `@limit` | `memory: "4Gi"`, `pids: 256`, `disk: "2Gi"` (at least one) | runs every EXTERNAL child the function starts under `bashy limit`, like a pod's `resources.limits`: the child's whole process tree is capped at `memory` (summed RSS) and `pids` (process count), and `disk` is the free space the working volume must keep while it runs; a breach kills the tree (TERM, then KILL ~2 s later) with one JSON record; nested scopes only tighten; composes with `@contain` (the limit watches the contained tree) | `bashy limit --memory Q --pids N --disk Q -- CMD` | 137 | never |
 | `@confirm` | — | human-in-the-loop **allow** per operation — not a guard: the high-impact atoms (`destroy`, `cred`, `priv`, `spend`, unknown) take their answer from `--confirm=TOKEN:yes` / `--what-if`, or the call yields; `docs/effect-derived-confirmation.md` | atlas effects, `bashy ask` | 6 | no |
 
 "Advisable" = an advice rule may apply it. `retry`, `memo`, `timeout` never:
@@ -122,6 +123,42 @@ function check() { python -m pytest -q tests/ > /out/result.txt; }
 - Every call is a line in `~/.bashy/contain/ledger.jsonl` and, with
   `BASHY_AUDIT` on, an audit-chain record. Anything that cannot be enforced
   fails closed (125).
+
+### Resource limits and host floors: `@limit`, `bashy limit`
+
+```bash
+@limit(memory: "4Gi", pids: 256, disk: "2Gi")
+function unit() { go test ./...; }          # each child tree is bounded
+
+bashy limit --memory 4Gi --pids 256 -- go test ./...   # the same, for one command
+```
+
+`bashy limit` starts the command in its own process group (on a terminal it
+stays in the caller's group and the guard signals the tree's pids one by one),
+samples the tree about every 500 ms, and on a breach prints one
+`bashy-limit-v1` JSON record (`kind: "limit_exceeded"`, the resource, the
+observed value, the limit, the pid) and exits **137**; otherwise it exits with
+the command's own status. Quantities are Kubernetes-style: `Ki/Mi/Gi/Ti`
+binary, `K/M/G/T` decimal, and docker's lowercase `k/m/g/t` as binary. It is a
+`-- CMD` wrapper, so it nests with `bashy contain`, `awd` and the rest; on
+Windows the kill reaches the root and every tree pid it saw (no Job Object yet).
+
+**Host floors.** Before it starts anything, `bashy limit` refuses — and in
+agent mode (`BASHY_AGENTIC=1`) every external exec is refused — while the host
+is already under water: available memory below `min(1Gi, 5% of RAM)` refuses
+any new external command; free disk on the working volume below
+`min(2Gi, 5% of the volume)` refuses a command whose atlas effects include
+`write` or that nobody has classified. A refusal is exit **75** (EX_TEMPFAIL)
+with one JSON record (`kind: "refused"`, the resource, the observed value, the
+floor). Builtins, in-process tools and a recovery set (`rm`, `du`, `df`, `ls`,
+`ps`, `kill`, `cat`, `git status`, `bashy resources`, …) are never refused, so
+an agent can always dig the host out. CPU saturation is never a reason to
+refuse. The host is sampled at most about once a second, so exec stays cheap.
+`BASHY_MIN_FREE_MEMORY` / `BASHY_MIN_FREE_DISK` (quantities) set the floors;
+`BASHY_LIMITS=off` disables them. This is a deliberate change of the older
+rule that resource monitors are advisory and never refuse work: repeated host
+OOMs (a test binary re-executing itself, ~500 MB a copy) made refusing new
+work below a floor the cheaper failure.
 
 ## The effect vocabulary (`@guard`, `@effects`, dag `Effects:`, `@confirm`)
 

@@ -160,6 +160,13 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapSpawnsProcesses}, Effects: []string{atlas.EffExec},
 	},
+	// limit runs ONE command under resource limits on its process tree — the
+	// wrapper form of @limit. Effects are the command's own; exec (and the
+	// kill of a tree that breaches) is what limit itself contributes.
+	"limit": {
+		Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierUserland,
+		Caps: []string{atlas.CapSpawnsProcesses}, Effects: []string{atlas.EffExec},
+	},
 	// supervisord keeps ONE dag root running in the foreground — the process
 	// half of DEPLOY that nothing else owns (sdlc routes, release packages,
 	// schedule fires; none of them stays up). Tier is workspace: it runs the

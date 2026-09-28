@@ -558,6 +558,7 @@ var verbSynopsis = map[string]string{
 	"out":         "recover complete command output by its digest-prefix handle",
 	"full":        "run one command with output reduction disabled",
 	"awd":         "run one command in another directory and return (the awd builtin, from the front door)",
+	"limit":       "run one command under k8s-style resource limits on its whole process tree: --memory, --pids, --disk (the @limit wrapper)",
 	"genie":       "solve a task in this repository with genie, the local-model SWE agent (own model server, no vendor): TASK, build, doctor",
 	"ycode":       "the engine for agents declared in YAML: run an agent.yaml (--file) or the builtin one; its session controls live here too",
 	"supervisord": "supervise ONE bashy dag root in the foreground: restart with bounded backoff, forward TERM/INT to its process group, reap orphans as PID 1",
