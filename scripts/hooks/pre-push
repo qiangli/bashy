@@ -39,6 +39,13 @@ sibling_head() {
 
 ./scripts/fmtcheck.sh
 
+# go.sum must cover every tag the build matrix uses: a hash needed only under
+# bashy_engines once went missing and failed `make test` minutes in. `go list
+# -deps` reports a missing hash in ~0.4 s without compiling.
+for tags in '' 'bashy_engines bashy_obs'; do
+	go list -deps -tags "$tags" ./cmd/bashy >/dev/null
+done
+
 pins=.sibling-pins
 [ -f "$pins" ] || exit 0
 

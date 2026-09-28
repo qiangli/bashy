@@ -848,6 +848,7 @@ for host in "$@"; do
         yoke) url=https://github.com/qiangli/yoke.git ;;
         readline) url=https://github.com/qiangli/readline.git ;;
         filebrowser) url=https://github.com/qiangli/filebrowser.git ;;
+        ycode) url=https://github.com/qiangli/ycode.git ;;
         *) return 0 ;;
       esac
       seed_cmd=

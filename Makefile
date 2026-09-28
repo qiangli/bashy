@@ -484,12 +484,18 @@ test-bash: build-bash test-bash-fixtures test-bash-helpers
 ## test-bash-run: the fixture loop only (no build). Used by `test-bash` (which
 ## builds first) and by scripts/test-bash-parallel.sh (builds once, then fans
 ## the loop out over fixture groups). Honors TESTS="name ..." like test-bash.
-test-bash-run: test-bash-fixtures $(BIN_DIR)/bash53suite
-	@BASH53_TIMEOUT=$(BASH_TEST_TIMEOUT)s \
+## Four fixtures (jobs, read, test, vredir) open /dev/tty, so a headless run
+## (agent, nohup, background job) goes through script(1) for a terminal, as CI
+## does (conformance.yml). Linux script takes -qefc; BSD/macOS takes the command.
+BASH53_RUN = BASH53_TIMEOUT=$(BASH_TEST_TIMEOUT)s \
 	 BASH53_JOBS_TIMEOUT=$(BASH_TEST_TIMEOUT_JOBS)s \
 	 BASH53_MEM_KB=$(BASH_TEST_MEM_KB) \
 	 $(BIN_DIR)/bash53suite -tests-dir $(BASH_TESTS_DIR) -bash $(BASHY) \
 	   -tests "$(TESTS)" -skip "$(BASH_TEST_SKIP)"
+test-bash-run: test-bash-fixtures $(BIN_DIR)/bash53suite
+	@if [ -t 0 ]; then $(BASH53_RUN); \
+	 elif script -qefc true /dev/null >/dev/null 2>&1; then script -qefc '$(BASH53_RUN)' /dev/null; \
+	 else script -q /dev/null sh -c '$(BASH53_RUN)'; fi
 
 ## bin/bash53suite: the ONE fixture runner. `bashy dag` drives the same binary,
 ## so `make test-bash` and a chunked/distributed dag run are the same program —
