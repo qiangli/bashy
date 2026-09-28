@@ -95,8 +95,12 @@ func (s *containImageSpec) validate() error {
 		return fmt.Errorf("workdir %q must be an absolute path inside the container", s.Workdir)
 	}
 	for _, m := range s.RO {
-		host, ctr, ok := strings.Cut(m, ":")
-		if !ok || !filepath.IsAbs(host) || !strings.HasPrefix(ctr, "/") || strings.Contains(ctr, ":") {
+		// Split at the last colon: the container side never has one, a
+		// Windows host side does (`C:\py:/opt/py`). A POSIX host path is
+		// absolute on every OS (the podman machine resolves it).
+		i := strings.LastIndex(m, ":")
+		host, ctr := m[:max(i, 0)], m[i+1:]
+		if i <= 0 || !(filepath.IsAbs(host) || strings.HasPrefix(host, "/")) || !strings.HasPrefix(ctr, "/") {
 			return fmt.Errorf("ro: %q: want HOST:CTR, both absolute (always read-only)", m)
 		}
 		if ctr == "/.bashy" || strings.HasPrefix(ctr, "/.bashy/") || ctr == containInOut {

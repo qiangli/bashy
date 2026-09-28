@@ -35,6 +35,8 @@ func TestContainImageSpecValidate(t *testing.T) {
 		{"native runs no image", ok(containImageSpec{Provider: "native"}), "does not run images"},
 		{"relative workdir", ok(containImageSpec{Workdir: "testbed"}), "absolute"},
 		{"ro ok", ok(containImageSpec{RO: []string{"/opt/py:/opt/py"}}), ""},
+		{"ro windows host", ok(containImageSpec{RO: []string{`C:\py:/opt/py`}}), map[bool]string{true: "", false: "HOST:CTR"}[runtime.GOOS == "windows"]},
+		{"ro no ctr", ok(containImageSpec{RO: []string{"/opt/py"}}), "HOST:CTR"},
 		{"ro relative host", ok(containImageSpec{RO: []string{"py:/opt/py"}}), "HOST:CTR"},
 		{"ro with mode", ok(containImageSpec{RO: []string{"/a:/b:rw"}}), "HOST:CTR"},
 		{"ro over bashy", ok(containImageSpec{RO: []string{"/tmp/x:/.bashy/bashy"}}), "reserved"},
