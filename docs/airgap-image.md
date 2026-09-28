@@ -378,7 +378,7 @@ externals variant is a separate story.
 | verbs | `context` | works | usage: bashy inspect context [--json\|--plain] |
 | verbs | `craft` | works | craft is the accumulated body of practical skill on this host. |
 | verbs | `curl` | not usable offline | engine / remote-by-design (by design): Error: curl: not found on PATH  |
-| verbs | `dag` | works | dag runs targets defined as headings in a markdown file (DAG.md) as a |
+| verbs | `dag` | works | dag runs targets defined as headings in a markdown file (dag.md) as a |
 | verbs | `define` | works | define answers "what is this word, here?" for any token. |
 | verbs | `delegate` | works | delegate hands a task to an agent and returns its result. |
 | verbs | `dhnt` | works | usage: bashy dhnt COMMAND |
@@ -390,6 +390,7 @@ externals variant is a separate story.
 | verbs | `full` | present | runs in-process; --version/--help rc=2: bashy full: line 1: command: - |
 | verbs | `gate` | works | gate runs the project's gate  the command that decides pass/fail  and |
 | verbs | `gcloud` | not usable offline | engine / remote-by-design (by design): Error: gcloud: gcloud not found |
+| verbs | `genie` | works | usage: bashy genie [-m MODEL] "MESSAGE"   one turn in this directory;  |
 | verbs | `gh` | not usable offline | bin-managed external: would download - Error: gh: resolve: binmgr: fet |
 | verbs | `git` | not usable offline | bin-managed external: would download - Error: gitscm: no system git on |
 | verbs | `git-scm` | not usable offline | bin-managed external: would download - Error: gitscm: no system git on |
@@ -406,6 +407,7 @@ externals variant is a separate story.
 | verbs | `kopia` | not usable offline | bin-managed external: would download - kopia runs the Kopia repository |
 | verbs | `kubectl` | not usable offline | engine / remote-by-design (by design): Error: kubectl: resolve stable  |
 | verbs | `lexicon` | works | lexicon is the project's jargon, projected from the registries that al |
+| verbs | `llm` | works | llm is the host's one door to its model capacity (port 24556, "AILLM"  |
 | verbs | `login` | not usable offline | engine / remote-by-design (by design): tessaro: this machine isn't con |
 | verbs | `loom` | not usable offline | bin-managed external: would download - loom runs Gitea  downloaded, sh |
 | verbs | `mb` | works | mb is the host's message board  one shared, append-only board every ag |
@@ -420,7 +422,7 @@ externals variant is a separate story.
 | verbs | `npm` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/ |
 | verbs | `npx` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/ |
 | verbs | `oci` | not usable offline | engine / remote-by-design (by design): bashy podman: fetching podman < |
-| verbs | `ollama` | not usable offline | engine / remote-by-design (by design): bashy ollama: no ollama found o |
+| verbs | `ollama` | not usable offline | engine / remote-by-design (by design): bashy ollama: could not fetch t |
 | verbs | `otel` | works | Query OTEL telemetry with bounded agent-readable summaries |
 | verbs | `out` | works | out reprints the full, un-reduced bytes that an elision marker spilled |
 | verbs | `pair` | works | Run work through two agents in different roles, optionally followed by |
@@ -456,6 +458,7 @@ externals variant is a separate story.
 | verbs | `sota` | works | sota grounds a synthesis agent in REAL web-search results (`bashy sear |
 | verbs | `sphere` | works | sphere is dhnt execution tier 4: multi-node, PEER-DIRECT pooled infere |
 | verbs | `sprint` | works | sprint is the conductor's PLAN/HANDOFF layer  the cross-repo kanban |
+| verbs | `stats` | works | stats is a unix filter over results JSONL: one record per attempt, fie |
 | verbs | `supervise` | works | Drive worker agents against a goal decomposed into tasks, IN the curre |
 | verbs | `supervisord` | works | usage: bashy supervisord [flags] DAG.md TARGET |
 | verbs | `tessaro` | works | Tessaro is the front door to your dhnt mesh  pooled LLMs + durable age |
