@@ -206,9 +206,29 @@ func onPath(name, path string) bool {
 			continue
 		}
 		for _, ext := range exts {
-			if info, err := os.Stat(filepath.Join(dir, name+ext)); err == nil && !info.IsDir() && executable(info) {
+			if info, err := os.Stat(filepath.Join(dir, name+ext)); err == nil && !info.IsDir() && executable(info) &&
+				(runtime.GOOS == "windows" || exactEntry(dir, name+ext)) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// exactEntry reports whether dir holds an entry spelled exactly name. On a
+// case-insensitive file system (macOS) stat finds /usr/bin/read for "Read",
+// so the first word of "Read TASK.md and do the task." ran as a command and
+// the agent never saw the prompt (Sprint 323, agent-bench on genie).
+func exactEntry(dir, name string) bool {
+	f, err := os.Open(dir)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	names, _ := f.Readdirnames(-1)
+	for _, n := range names {
+		if n == name {
+			return true
 		}
 	}
 	return false
