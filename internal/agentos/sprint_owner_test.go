@@ -2,6 +2,7 @@ package agentos
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"os"
@@ -293,6 +294,37 @@ func TestSprintOwnerLaunchIsExactOnceAndUnbounded(t *testing.T) {
 	}
 	if strings.Contains(args, " --max-runtime ") || strings.Contains(args, "45m") {
 		t.Fatalf("sprint cutoff leaked into manager lifetime: %s", args)
+	}
+}
+
+func TestLaunchSprintOwnerForemanPassesPrivateEnvWithoutPersistingIt(t *testing.T) {
+	oldRun := runSprintOwnerCommand
+	t.Cleanup(func() { runSprintOwnerCommand = oldRun })
+
+	const token = "sprint-lease-secret"
+	var gotArgs, gotEnv []string
+	runSprintOwnerCommand = func(_ context.Context, _ string, args []string, _ string, env []string) ([]byte, error) {
+		gotArgs = append([]string(nil), args...)
+		gotEnv = append([]string(nil), env...)
+		return nil, nil
+	}
+	if err := launchSprintOwnerForeman(context.Background(), "sprint-16-manager", weave.SprintOwnerRequest{
+		Sprint: 16, Owner: "manager", Env: map[string]string{"BASHY_SPRINT_LEASE_TOKEN": token},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(gotEnv, "\n"), "BASHY_SPRINT_LEASE_TOKEN="+token) {
+		t.Fatalf("launch environment missing lease token: %q", gotEnv)
+	}
+	if strings.Contains(strings.Join(gotArgs, "\n"), token) {
+		t.Fatalf("lease token leaked into launch arguments: %q", gotArgs)
+	}
+	persisted, err := json.Marshal(foreman.State{ID: "sprint-16-manager", Agent: "manager"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(persisted), token) {
+		t.Fatalf("lease token leaked into persisted state: %s", persisted)
 	}
 }
 

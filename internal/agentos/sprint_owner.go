@@ -28,6 +28,12 @@ var (
 		_, err := foreman.SendCommand("", id, foreman.Command{Verb: foreman.CommandStop})
 		return err
 	}
+	runSprintOwnerCommand = func(ctx context.Context, path string, args []string, dir string, env []string) ([]byte, error) {
+		cmd := exec.CommandContext(ctx, path, args...)
+		cmd.Dir = dir
+		cmd.Env = env
+		return cmd.CombinedOutput()
+	}
 	waitSprintOwnerControl      = waitForSprintOwnerControl
 	waitSprintOwnerTransport    = waitForSprintOwnerTransport
 	sprintOwnerControlSupported = foreman.ControlSupported
@@ -162,13 +168,32 @@ func sprintOwnerForemanCardLive(owner, id string) bool {
 
 func launchSprintOwnerForeman(ctx context.Context, id string, req weave.SprintOwnerRequest) error {
 	args := sprintOwnerForemanArgs(id, req)
-	cmd := exec.CommandContext(ctx, bashySelfPath(), args...)
-	cmd.Dir = req.Cwd
-	out, err := cmd.CombinedOutput()
+	// The detached manager inherits this environment. Keep it out of the
+	// Foreman arguments: Foreman's persisted state has no environment field,
+	// so the lease token remains only in the manager process environment and
+	// the lease-token file used to create this request.
+	out, err := runSprintOwnerCommand(ctx, bashySelfPath(), args, req.Cwd, sprintOwnerLaunchEnv(os.Environ(), req.Env))
 	if err != nil {
 		return fmt.Errorf("start managed session %s: %w: %s", id, err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+func sprintOwnerLaunchEnv(base []string, overrides map[string]string) []string {
+	if len(overrides) == 0 {
+		return base
+	}
+	env := make([]string, 0, len(base)+len(overrides))
+	for _, entry := range base {
+		name, _, _ := strings.Cut(entry, "=")
+		if _, replace := overrides[name]; !replace {
+			env = append(env, entry)
+		}
+	}
+	for name, value := range overrides {
+		env = append(env, name+"="+value)
+	}
+	return env
 }
 
 func sprintOwnerForemanArgs(id string, req weave.SprintOwnerRequest) []string {
