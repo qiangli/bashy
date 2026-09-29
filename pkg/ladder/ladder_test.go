@@ -86,3 +86,17 @@ func TestDistance(t *testing.T) {
 		}
 	}
 }
+
+// A word farther than the edit limit is never repaired, even when it is the
+// only candidate: "Reminder" is 3 edits from ismindex (limit 2 at 8 letters),
+// yet the agent-bench steer "Reminder from the release owner: …" ran as
+// `ismindex from the release owner …` in genie's terminal (Sprint 323).
+func TestRepairStaysWithinTheLimit(t *testing.T) {
+	line := "Reminder from the release owner: vendor/ is off-limits"
+	if got := Resolve(line, fakeCommands{"ismindex": true}); got.Rung != Free || got.Line != line {
+		t.Fatalf("repaired past the edit limit: %+v", got)
+	}
+	if got := Resolve("gxx status", fakeCommands{"git": true}); got.Rung != Free {
+		t.Fatalf("3-letter word 2 edits away repaired (limit 1): %+v", got)
+	}
+}

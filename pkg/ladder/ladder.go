@@ -168,6 +168,9 @@ func repair(word, text string, names []string) (string, bool) {
 		seen[name] = true
 		d := distance(word, name)
 		switch {
+		case d > limit:
+			// bestDist starts at limit+1, so without this a lone name just
+			// past the limit tied into best and was "repaired" to.
 		case d < bestDist:
 			best, bestDist = []string{name}, d
 		case d == bestDist:
