@@ -111,6 +111,7 @@ import (
 	"github.com/qiangli/yoke/pkg/supervise"
 	"github.com/qiangli/yoke/pkg/telemetry"
 	"github.com/qiangli/yoke/pkg/todo"
+	"github.com/qiangli/yoke/pkg/toolcmd"
 	"github.com/qiangli/yoke/pkg/weave"
 	"github.com/qiangli/yoke/pkg/webconsole"
 	"github.com/qiangli/yoke/pkg/webinspect"
@@ -1910,6 +1911,10 @@ func runFleet(noun string, args []string) {
 	switch noun {
 	case "tool":
 		cmd = fleet.NewToolsCmd()
+		// `tool cmd`: run a tool's declared vendor commands (slash commands,
+		// skills, subcommands) — Sprint #324, yoke/pkg/toolcmd. It needs
+		// pkg/chat, which the registry cannot import, so it is mounted here.
+		cmd.AddCommand(toolcmd.NewCmd())
 	case "model":
 		cmd = newModelsResourcesCmd()
 	case "agent":
