@@ -77,8 +77,8 @@ func runDagBody(t *testing.T, lang, effects, body string, extra ...string) (int,
 // The Sprint 203 fixture, byte-for-byte, as a ```bashpp dag body. Its pinned
 // transcript is the expectation, with exactly one dag-specific difference: a
 // guard-denied write is refused by dag's OUTERMOST effect-cap handler, which
-// reports the denial and exits 126 (the B17 contract), where the cold CLI's
-// audit handler denies silently with 1. Everything else — require → body →
+// reports the denial in its own words (the CLI's audit handler also exits 126
+// but names the missing effect as "denied by the effect cap"). Everything else — require → body →
 // ensure order, exit 3 naming the clause, the yield's untouched 6 with no
 // ensure run, the typed-function RESULT binding — must read identically.
 func TestDagBashPPBodyRunsContractFixture(t *testing.T) {
@@ -109,8 +109,8 @@ func TestDagBashPPBodyRunsContractFixture(t *testing.T) {
 		switch {
 		case strings.Contains(line, "precondition failed"), strings.Contains(line, "postcondition failed"):
 			wantErr = append(wantErr, line)
-		case line == "write   -> 1":
-			wantOut = append(wantOut, "write   -> 126")
+		case strings.Contains(line, ": denied by the effect cap "):
+			// the CLI's denial line; dag's own handler words it (counted below)
 		default:
 			wantOut = append(wantOut, line)
 		}

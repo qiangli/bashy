@@ -5,8 +5,11 @@ package agentos
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -105,13 +108,17 @@ func auditHandler(w *audit.Writer, actor audit.Actor, host string) func(interp.E
 			var err error
 
 			if cap, ok := advice.CapFrom(ctx); ok {
-				if len(cap.Exceeded(effects)) > 0 {
+				if over := cap.Exceeded(effects); len(over) > 0 {
 					decision = "deny"
+					reportCapDenial(ctx, args[0], effects, over, cap)
 				}
 			}
 
 			if decision == "deny" {
-				err = interp.ExitStatus(1)
+				// 126 like the @effects boundary denial (capDeniedStatus): the
+				// command was found but refused — distinct from the command's
+				// own failure, which a silent 1 was indistinguishable from.
+				err = interp.ExitStatus(capDeniedStatus)
 			} else {
 				err = next(ctx, args)
 			}
@@ -140,6 +147,52 @@ func auditHandler(w *audit.Writer, actor audit.Actor, host string) func(interp.E
 			return err
 		}
 	}
+}
+
+// reportCapDenial tells the caller WHY a command was refused under an effect
+// cap (@guard / @effects): which effects it needs that the cap lacks, where its
+// classification came from, and what would admit it. A denial is never silent
+// — an agent that sees only a bare non-zero status retries blind (Sprint 322
+// #1169: `python` under @effects("read,exec") exited 1 with empty output three
+// times).
+func reportCapDenial(ctx context.Context, cmd string, effects, over []string, cap advice.Cap) {
+	stderr := safeHandlerStderr(ctx)
+	if stderr == nil {
+		return
+	}
+	name := baseName(cmd)
+	if len(effects) == 0 {
+		fmt.Fprintf(stderr, "bashy: %s: denied by the effect cap %s: its effects are unknown (not in the Command Atlas); "+
+			"run it inside an @effects(\"...\") function that declares what it does\n", name, cap)
+		return
+	}
+	why := "declared by the enclosing @effects"
+	if e, ok := atlas.Lookup(name); ok {
+		why = "the Command Atlas classifies it " + strings.Join(e.Effects, ",")
+		if e.Group == atlas.GroupToolchains {
+			why += "; a toolchain runs arbitrary code that can write: build outputs, caches such as __pycache__, its own provisioning"
+		}
+		if len(e.Effects) != len(effects) {
+			why += "; net is dropped under @contain"
+		}
+	}
+	fix := "declare " + strings.Join(over, ",") + " in @effects/@guard to run it"
+	if slices.Contains(over, atlas.EffNet) && !containNetFrom(ctx) {
+		fix += ", or add @contain(net: \"deny\") to run it without network"
+	}
+	fmt.Fprintf(stderr, "bashy: %s: denied by the effect cap %s: needs %s (%s); %s\n",
+		name, cap, strings.Join(over, ","), why, fix)
+}
+
+// safeHandlerStderr is the command's stderr, or nil when ctx carries no
+// handler context (a handler driven directly, as unit tests do).
+func safeHandlerStderr(ctx context.Context) (w io.Writer) {
+	defer func() {
+		if recover() != nil {
+			w = nil
+		}
+	}()
+	return interp.HandlerCtx(ctx).Stderr
 }
 
 // newAuditWriter opens the configured audit log, or returns nil (disabled or

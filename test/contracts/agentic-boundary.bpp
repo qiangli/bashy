@@ -21,7 +21,7 @@ trap 'rm -rf "$work"' EXIT
 agentic function summarize() {
     echo "body: $1"
     case "$1" in
-    write) touch "$work/leak" ;;    # exceeds the read cap → denied, status 1
+    write) touch "$work/leak" ;;    # exceeds the read cap → denied, status 126
     yield) return 6 ;;              # input required — a yield, not a result
     fail)  return 1 ;;
     esac                            # "lie": exits 0, the postcondition disagrees

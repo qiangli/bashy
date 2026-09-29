@@ -297,3 +297,37 @@ func TestEffectsUnknownToolProcess(t *testing.T) {
 	fmt.Println("ran-unknown")
 	os.Exit(0)
 }
+
+// A command refused under an @effects cap is reported, never a silent exit 1
+// (Sprint 322 #1169): `python` is a toolchain the atlas classifies
+// net,exec,write, so a read,exec declaration refuses it — the denial names the
+// command, the missing effect, the cap, and where the classification came from,
+// with the distinct denial status 126.
+func TestEffectsDenialNamesMissingEffect(t *testing.T) {
+	t.Setenv("BASHY_SELF", filepath.Join(t.TempDir(), "no-such-bashy"))
+	cases := []struct {
+		name, decorators, need string
+		contained              bool
+	}{
+		{"contained", "@effects(\"read,exec\")\n@contain(net: \"deny\")\n", "needs write ", true},
+		{"bare", "@effects(\"read,exec\")\n", "needs net,write ", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			script := tc.decorators + "function check() {\n  python -c 'print(1)'\n}\ncheck\necho \"check -> $?\"\n"
+			_, out, errOut := runDecorated(t, context.Background(), syntax.LangBashPP, script, nil)
+			if !strings.Contains(out.String(), "check -> 126") {
+				t.Fatalf("want the denial status 126: stdout=%q stderr=%q", out.String(), errOut.String())
+			}
+			msg := errOut.String()
+			for _, want := range []string{"python: denied by the effect cap exec,read", tc.need, "Command Atlas", "declare "} {
+				if !strings.Contains(msg, want) {
+					t.Errorf("stderr missing %q: %q", want, msg)
+				}
+			}
+			if got := strings.Contains(msg, "net is dropped under @contain"); got != tc.contained {
+				t.Errorf("contain note = %v, want %v: %q", got, tc.contained, msg)
+			}
+		})
+	}
+}

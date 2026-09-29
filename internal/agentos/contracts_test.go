@@ -42,7 +42,7 @@ func TestContractsAgenticBoundaryFixture(t *testing.T) {
 	// exactly the contract messages (the fixture prints nothing else there).
 	var wantOut, wantErr []string
 	for _, ln := range strings.Split(strings.TrimSpace(string(want)), "\n") {
-		if strings.Contains(ln, " failed: ") {
+		if strings.Contains(ln, " failed: ") || strings.Contains(ln, ": denied by the effect cap ") {
 			wantErr = append(wantErr, ln)
 		} else {
 			wantOut = append(wantOut, ln)

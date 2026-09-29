@@ -77,7 +77,7 @@ func TestAttestFixtureLedger(t *testing.T) {
 		{0, true, []string{`require:test -n "$1"`, `ensure:test "$1" != lie`}, nil},       // ok
 		{3, false, nil, []string{`require:test -n "$1"`}},                                 // "": body never ran, ensure never judged
 		{3, false, []string{`require:test -n "$1"`}, []string{`ensure:test "$1" != lie`}}, // lie
-		{1, false, []string{`require:test -n "$1"`}, nil},                                 // write: guard denied inside the body
+		{126, false, []string{`require:test -n "$1"`}, nil},                               // write: guard denied inside the body
 		{1, false, []string{`require:test -n "$1"`}, nil},                                 // fail
 		{coreskills.AttestYield, false, []string{`require:test -n "$1"`}, nil},            // yield
 	}
