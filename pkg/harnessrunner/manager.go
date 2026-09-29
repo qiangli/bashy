@@ -262,15 +262,24 @@ func (m *Manager) run(req Request, intent Intent, job *liveJob) {
 		script = quoteArgv(req.Command.Argv)
 	}
 	ctx := job.ctx
-	termination := cli.RunSessionCommandResultWithConfig(ctx, cli.SessionIO{
-		Command: script, Dir: intent.Cwd, Env: env, Stdin: job.input,
-		Stdout: job.stdout, Stderr: job.stderr,
-	}, cli.SessionConfig{WireExec: agentos.WireSessionExec(false), Preamble: func() string {
-		// The session's own environment decides agent mode (the harness
-		// sends BASHY_AGENTIC=1), not this process's: its agent-mode shims
-		// (python/python3 -> bashy's provisioned toolchain) must be there.
-		return agentos.PreambleFor(sessionAgentic(env))
-	}})
+	finished := make(chan cli.SessionResult, 1)
+	go func() {
+		finished <- cli.RunSessionCommandResultWithConfig(ctx, cli.SessionIO{
+			Command: script, Dir: intent.Cwd, Env: env, Stdin: job.input,
+			Stdout: job.stdout, Stderr: job.stderr,
+		}, cli.SessionConfig{WireExec: agentos.WireSessionExec(false), Preamble: func() string {
+			// The session's own environment decides agent mode (the harness
+			// sends BASHY_AGENTIC=1), not this process's: its agent-mode shims
+			// (python/python3 -> bashy's provisioned toolchain) must be there.
+			return agentos.PreambleFor(sessionAgentic(env))
+		},
+			// A deadline or cancel must end the command's whole process
+			// tree: a grandchild left running (a server a test started)
+			// would otherwise hold the output pipe and the job forever.
+			ExecProcessGroups: true,
+		})
+	}()
+	termination := awaitSession(ctx, finished, job.stderr)
 	_ = job.stdout.Close()
 	_ = job.stderr.Close()
 	stdoutBytes, stdoutOmitted := job.stdout.stats()
@@ -295,6 +304,51 @@ func (m *Manager) run(req Request, intent Intent, job *liveJob) {
 	_ = m.persistRecord(job.record)
 	delete(m.jobs, job.record.JobID)
 	m.mu.Unlock()
+}
+
+// abandonGrace bounds how long a job whose wall time or cancel has fired may
+// keep its caller waiting. The shell delivers an interrupt, then a kill two
+// seconds later, to each external command's process group; a command still
+// not finished after that (an in-process loop that ignores cancellation, a
+// descendant that left the group and holds the output open) is abandoned so
+// the job settles as timed out or cancelled rather than hanging its caller.
+var abandonGrace = 5 * time.Second
+
+// abandonedExitCode is the status recorded for an abandoned command, the one
+// timeout(1) reports for a command it had to stop.
+const abandonedExitCode = 124
+
+// abandonedSessions counts abandoned commands that have not finished yet;
+// tests wait on it before removing the directories such a command still uses.
+var abandonedSessions sync.WaitGroup
+
+func awaitSession(ctx context.Context, finished <-chan cli.SessionResult, stderr io.Writer) cli.SessionResult {
+	select {
+	case result := <-finished:
+		return result
+	case <-ctx.Done():
+	}
+	timer := time.NewTimer(abandonGrace)
+	defer timer.Stop()
+	select {
+	case result := <-finished:
+		return result
+	case <-timer.C:
+		abandonedSessions.Add(1)
+		go func() {
+			defer abandonedSessions.Done()
+			<-finished
+		}()
+		fmt.Fprintf(stderr, "bashy: a command was still running %s after the %s and was abandoned; its output is not shown\n", abandonGrace, stopReason(ctx))
+		return cli.SessionResult{ExitCode: abandonedExitCode}
+	}
+}
+
+func stopReason(ctx context.Context) string {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return "wall time"
+	}
+	return "cancellation"
 }
 
 func (m *Manager) Poll(req Request) Result {

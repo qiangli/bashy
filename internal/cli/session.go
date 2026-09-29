@@ -37,6 +37,10 @@ type SessionConfig struct {
 	WireExec               SessionWireExec
 	Preamble               func() string
 	SuppressedForkBuiltins []string
+	// ExecProcessGroups starts each external command in its own process
+	// group so a cancelled request (a harness wall time) kills the command's
+	// whole tree, not only its direct child — see [interp.ExecProcessGroups].
+	ExecProcessGroups bool
 }
 
 func defaultSessionWireExec(opts []interp.RunnerOption, _ bool, _ []string, stdin io.Reader, stdout, stderr io.Writer) []interp.RunnerOption {
@@ -128,6 +132,9 @@ func NewSessionRunnerWithConfig(io SessionIO, config SessionConfig) (*interp.Run
 	}
 	// Same in-process coreutils + code-intel userland the cold path gets.
 	opts = wireExec(opts, startupPosix, io.Env, io.Stdin, io.Stdout, io.Stderr)
+	if config.ExecProcessGroups {
+		opts = append(opts, interp.ExecProcessGroups(true))
+	}
 	if len(config.SuppressedForkBuiltins) > 0 {
 		opts = append(opts, interp.WithDisabledBuiltins(config.SuppressedForkBuiltins...))
 	}
