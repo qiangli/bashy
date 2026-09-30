@@ -3,7 +3,7 @@ id: 5a917b8bc4d3
 kind: feature
 title: 'bashy peer channel = outpost''s in-process SSH (exec, SFTP, port-forward): wire it into bashy, no system ssh/sshd'
 seq: 365
-status: assigned
+status: done
 priority: p1
 labels:
     - remote
@@ -13,6 +13,8 @@ assignee: codex-gpt6-luna
 sprint: 342
 sprint_id: bdacb510-6448-5851-acf3-7a19f6ccccb2
 sprint_title: 'bashy dag remote: run any target on another host as if it were local (self-bootstrap, sync, run, fetch back)'
+closed: 2026-09-30T22:18:56.623911Z
+closed_by: codex-gpt6-sol
 ---
 
 Owner 2026-09-30: Bashy must use outpost's in-process SSH server and public client. Full acceptance stays: install-time key auth and pinned host key; remote installed Bashy itself serves LAN port 2223; local Bashy uses its embedded outpost client for exec, SFTP, direct-tcpip, and one forwarded port; prove all four dragon <-> novidesign.local. No system sshd after first host-OS bootstrap; preserve unrelated user work and system sshd.
