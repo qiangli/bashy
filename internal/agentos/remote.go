@@ -5,6 +5,10 @@ package agentos
 
 import (
 	"bytes"
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -13,10 +17,13 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/qiangli/bashy/internal/cli"
 	"github.com/qiangli/yoke/pkg/binmgr"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh"
 )
 
 // remoteInstallDir is owned by bashy. Bootstrap must not replace a user's
@@ -106,57 +113,373 @@ func runRemoteInstall(cmd *cobra.Command, host, fakeRoot string) error {
 		return fmt.Errorf("inspect remote installation: %w", err)
 	}
 
-	if remoteVer != "" && remoteVer == localVer {
-		fmt.Fprintf(stdout, "bashy %s already installed on %s\n", localVer, host)
-		return nil
+	alreadyInstalled := remoteVer != "" && remoteVer == localVer
+	if alreadyInstalled && !remotePeerServeAvailable(t, host) {
+		alreadyInstalled = false
 	}
-	if remoteVer != "" {
+	if alreadyInstalled {
+		fmt.Fprintf(stdout, "bashy %s already installed on %s\n", localVer, host)
+	} else if remoteVer != "" {
 		fmt.Fprintf(stderr, "upgrading %s: %s -> %s\n", host, remoteVer, localVer)
 	} else {
 		fmt.Fprintf(stdout, "installing bashy %s to %s (%s/%s)\n", localVer, host, goos, goarch)
 	}
 
-	if err := t.ensureRemoteDir(host); err != nil {
-		return fmt.Errorf("create remote dir: %w", err)
+	if !alreadyInstalled {
+		if err := t.ensureRemoteDir(host); err != nil {
+			return fmt.Errorf("create remote dir: %w", err)
+		}
+
+		// For Unix hosts with a launcher pair, install both files; otherwise single binary.
+		if localLauncher != "" && needsLauncher(goos) {
+			remoteReal := t.remotePath(host, "bashy.real")
+			remoteLauncher := t.remotePath(host, "bashy")
+			// install real first so launcher never points to missing payload
+			if err := t.copyFile(host, localBin, remoteReal+".tmp"); err != nil {
+				return err
+			}
+			if err := t.chmodAndMove(host, remoteReal+".tmp", remoteReal); err != nil {
+				return err
+			}
+			if err := t.copyFile(host, localLauncher, remoteLauncher+".tmp"); err != nil {
+				return err
+			}
+			if err := t.chmodAndMove(host, remoteLauncher+".tmp", remoteLauncher); err != nil {
+				return err
+			}
+		} else {
+			remoteBin := t.remotePath(host, binaryNameForGOOS(goos))
+			if err := t.copyFile(host, localBin, remoteBin+".tmp"); err != nil {
+				return err
+			}
+			if err := t.chmodAndMove(host, remoteBin+".tmp", remoteBin); err != nil {
+				return err
+			}
+		}
+
+		// Verify installed version.
+		newVer, err := t.remoteVersion(host, goos)
+		if err != nil {
+			return fmt.Errorf("verify remote install: %w", err)
+		}
+		if newVer != localVer {
+			return fmt.Errorf("remote version mismatch after install: got %q want %q", newVer, localVer)
+		}
+		fmt.Fprintf(stdout, "installed bashy %s on %s\n", localVer, host)
+	}
+	if err := provisionPeerIdentity(t, host); err != nil {
+		return fmt.Errorf("provision peer identity: %w", err)
+	}
+	if !t.isFake {
+		if err := startRemotePeerServer(t, host); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+const remotePeerDir = ".bashy/remote"
+
+func peerLocalDir(host string) string {
+	return filepath.Join(os.Getenv("HOME"), ".bashy", "remote", "peers", safePeerName(host))
+}
+
+func safePeerName(host string) string {
+	var b strings.Builder
+	for _, r := range host {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '.' || r == '-' || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
+}
+
+func provisionPeerIdentity(t *transport, host string) error {
+	dir := peerLocalDir(host)
+	if t.isFake {
+		root := t.fakeRoot
+		if strings.HasPrefix(host, "fake://") {
+			root = strings.TrimPrefix(host, "fake://")
+		}
+		dir = filepath.Join(root, ".bashy", "remote", "peers", safePeerName(host))
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	for _, ownedDir := range []string{dir, filepath.Dir(dir), filepath.Dir(filepath.Dir(dir))} {
+		if err := os.Chmod(ownedDir, 0o700); err != nil {
+			return err
+		}
+	}
+	localPriv := filepath.Join(dir, "id_ed25519")
+	localPub := filepath.Join(dir, "id_ed25519.pub")
+	_, pub, err := loadOrCreatePeerKey(localPriv, localPub)
+	if err != nil {
+		return err
 	}
 
-	// For Unix hosts with a launcher pair, install both files; otherwise single binary.
-	if localLauncher != "" && needsLauncher(goos) {
-		remoteReal := t.remotePath(host, "bashy.real")
-		remoteLauncher := t.remotePath(host, "bashy")
-		// install real first so launcher never points to missing payload
-		if err := t.copyFile(host, localBin, remoteReal+".tmp"); err != nil {
+	remoteBase := remotePeerDir
+	if t.isFake {
+		root := t.fakeRoot
+		if strings.HasPrefix(host, "fake://") {
+			root = strings.TrimPrefix(host, "fake://")
+		}
+		remoteBase = filepath.Join(root, remotePeerDir)
+		if err := os.MkdirAll(remoteBase, 0o700); err != nil {
 			return err
 		}
-		if err := t.chmodAndMove(host, remoteReal+".tmp", remoteReal); err != nil {
+	} else if _, err := t.sshRun(host, "mkdir -p \"$HOME/"+remotePeerDir+"\" && chmod 700 \"$HOME/"+remotePeerDir+"\""); err != nil {
+		return err
+	}
+
+	remoteAuthorized := filepath.Join(remoteBase, "authorized_keys")
+	remoteHostKey := filepath.Join(remoteBase, "host_ed25519")
+	if !t.isFake {
+		remoteAuthorized = "~/" + remotePeerDir + "/authorized_keys"
+		remoteHostKey = "~/" + remotePeerDir + "/host_ed25519"
+	}
+	pubKey, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		return err
+	}
+	if err := putRemoteIfMissing(t, host, remoteAuthorized, ssh.MarshalAuthorizedKey(pubKey), 0o600); err != nil {
+		return err
+	}
+	if err := secureRemoteFile(t, host, remoteAuthorized, 0o600); err != nil {
+		return err
+	}
+	knownHostPath := filepath.Join(dir, "host_key.pub")
+	known, err := os.ReadFile(knownHostPath)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if os.IsNotExist(err) {
+		tmpDir, err := os.MkdirTemp("", "bashy-peer-hostkey-*")
+		if err != nil {
 			return err
 		}
-		if err := t.copyFile(host, localLauncher, remoteLauncher+".tmp"); err != nil {
+		defer os.RemoveAll(tmpDir)
+		hostPriv, hostPub, err := loadOrCreatePeerKey(filepath.Join(tmpDir, "host_ed25519"), filepath.Join(tmpDir, "host_ed25519.pub"))
+		if err != nil {
 			return err
 		}
-		if err := t.chmodAndMove(host, remoteLauncher+".tmp", remoteLauncher); err != nil {
+		if err := putRemoteIfMissing(t, host, remoteHostKey, hostPriv, 0o600); err != nil {
+			return err
+		}
+		if err := secureRemoteFile(t, host, remoteHostKey, 0o600); err != nil {
+			return err
+		}
+		hostPubKey, err := ssh.NewPublicKey(hostPub)
+		if err != nil {
+			return err
+		}
+		known = ssh.MarshalAuthorizedKey(hostPubKey)
+		if err := writeNewFile(knownHostPath, known, 0o600); err != nil {
 			return err
 		}
 	} else {
-		remoteBin := t.remotePath(host, binaryNameForGOOS(goos))
-		if err := t.copyFile(host, localBin, remoteBin+".tmp"); err != nil {
-			return err
+		// A trust pin with no remote host key means the remote state was changed.
+		if t.isFake {
+			if _, statErr := os.Stat(remoteHostKey); statErr != nil {
+				return errors.New("pinned peer host key exists but remote key is missing")
+			}
+		} else {
+			if _, statErr := t.sshRun(host, "test -f \"$HOME/"+remotePeerDir+"/host_ed25519\""); statErr != nil {
+				return errors.New("pinned peer host key exists but remote key is missing")
+			}
 		}
-		if err := t.chmodAndMove(host, remoteBin+".tmp", remoteBin); err != nil {
-			return err
-		}
 	}
-
-	// Verify installed version.
-	newVer, err := t.remoteVersion(host, goos)
-	if err != nil {
-		return fmt.Errorf("verify remote install: %w", err)
+	if err := secureRemoteFile(t, host, remoteHostKey, 0o600); err != nil {
+		return err
 	}
-	if newVer != localVer {
-		return fmt.Errorf("remote version mismatch after install: got %q want %q", newVer, localVer)
+	if err := os.Chmod(knownHostPath, 0o600); err != nil {
+		return err
 	}
-	fmt.Fprintf(stdout, "installed bashy %s on %s\n", localVer, host)
+	_ = pub
 	return nil
+}
+
+func loadOrCreatePeerKey(privatePath, publicPath string) ([]byte, ed25519.PublicKey, error) {
+	priv, err := os.ReadFile(privatePath)
+	if err == nil {
+		key, parseErr := ssh.ParsePrivateKey(priv)
+		if parseErr != nil {
+			return nil, nil, parseErr
+		}
+		cryptoKey, ok := key.PublicKey().(ssh.CryptoPublicKey)
+		if !ok {
+			return nil, nil, errors.New("peer key is not a crypto public key")
+		}
+		pub, ok := cryptoKey.CryptoPublicKey().(ed25519.PublicKey)
+		if !ok {
+			return nil, nil, errors.New("peer key is not ed25519")
+		}
+		if _, statErr := os.Stat(publicPath); os.IsNotExist(statErr) {
+			if err := writeNewFile(publicPath, ssh.MarshalAuthorizedKey(key.PublicKey()), 0o600); err != nil {
+				return nil, nil, err
+			}
+		} else if statErr != nil {
+			return nil, nil, statErr
+		} else {
+			existing, readErr := os.ReadFile(publicPath)
+			if readErr != nil {
+				return nil, nil, readErr
+			}
+			pinned, _, _, _, parseErr := ssh.ParseAuthorizedKey(existing)
+			if parseErr != nil || !bytes.Equal(pinned.Marshal(), key.PublicKey().Marshal()) {
+				return nil, nil, errors.New("peer public key does not match persisted private key")
+			}
+		}
+		if err := os.Chmod(privatePath, 0o600); err != nil {
+			return nil, nil, err
+		}
+		if err := os.Chmod(publicPath, 0o600); err != nil {
+			return nil, nil, err
+		}
+		return priv, pub, nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, nil, err
+	}
+	pub, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, nil, err
+	}
+	block, err := ssh.MarshalPrivateKey(private, "bashy remote peer")
+	if err != nil {
+		return nil, nil, err
+	}
+	priv = pem.EncodeToMemory(block)
+	if err := writeNewFile(privatePath, priv, 0o600); err != nil {
+		return nil, nil, err
+	}
+	pubKey, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		return nil, nil, err
+	}
+	line := ssh.MarshalAuthorizedKey(pubKey)
+	if err := writeNewFile(publicPath, line, 0o600); err != nil {
+		return nil, nil, err
+	}
+	return priv, pub, nil
+}
+
+func writeNewFile(path string, data []byte, mode os.FileMode) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+func putRemoteIfMissing(t *transport, host, path string, data []byte, mode os.FileMode) error {
+	if t.isFake {
+		if _, err := os.Stat(path); err == nil {
+			return nil
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		tmp, err := os.CreateTemp(filepath.Dir(path), ".peer-key-*")
+		if err != nil {
+			return err
+		}
+		if _, err = tmp.Write(data); err != nil {
+			_ = tmp.Close()
+			return err
+		}
+		if err = tmp.Close(); err != nil {
+			return err
+		}
+		if err = os.Chmod(tmp.Name(), mode); err != nil {
+			return err
+		}
+		if err = os.Link(tmp.Name(), path); err != nil && !os.IsExist(err) {
+			return err
+		}
+		_ = os.Remove(tmp.Name())
+		return nil
+	}
+	// SCP to a unique temporary then atomically move only if absent.
+	local, err := os.CreateTemp("", "bashy-peer-key-*")
+	if err != nil {
+		return err
+	}
+	name := local.Name()
+	defer os.Remove(name)
+	if _, err = local.Write(data); err != nil {
+		_ = local.Close()
+		return err
+	}
+	if err = local.Close(); err != nil {
+		return err
+	}
+	tmp := path + ".bashy-tmp"
+	if err := t.scpCopy(host, name, tmp); err != nil {
+		return err
+	}
+	cmd := "chmod 600 \"$HOME/" + strings.TrimPrefix(tmp, "~/") + "\" && (test -e \"$HOME/" + strings.TrimPrefix(path, "~/") + "\" || mv \"$HOME/" + strings.TrimPrefix(tmp, "~/") + "\" \"$HOME/" + strings.TrimPrefix(path, "~/") + "\") && rm -f \"$HOME/" + strings.TrimPrefix(tmp, "~/") + "\""
+	_, err = t.sshRun(host, cmd)
+	return err
+}
+
+func secureRemoteFile(t *transport, host, path string, mode os.FileMode) error {
+	if t.isFake {
+		return os.Chmod(path, mode)
+	}
+	_, err := t.sshRun(host, fmt.Sprintf("chmod %o \"$HOME/%s\"", mode.Perm(), strings.TrimPrefix(path, "~/")))
+	return err
+}
+
+func startRemotePeerServer(t *transport, host string) error {
+	user, err := t.sshRun(host, "id -un")
+	if err != nil {
+		return fmt.Errorf("identify remote peer user: %w", err)
+	}
+	user = strings.TrimSpace(user)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ch, dialErr := DialInstalledPeerChannel(ctx, host, user)
+	cancel()
+	if dialErr == nil {
+		_ = ch.Close()
+		return nil
+	}
+	if !errors.Is(dialErr, syscall.ECONNREFUSED) {
+		return fmt.Errorf("verify existing Bashy peer listener on %s: %w", host, dialErr)
+	}
+	cmd := "nohup \"$HOME/" + remoteInstallDir + "/bashy\" remote peer-serve --authorized-keys \"$HOME/" + remotePeerDir + "/authorized_keys\" --host-key \"$HOME/" + remotePeerDir + "/host_ed25519\" </dev/null >/dev/null 2>&1 &"
+	if _, err := t.sshRun(host, cmd); err != nil {
+		return fmt.Errorf("start Bashy peer server: %w", err)
+	}
+	var last error
+	for i := 0; i < 50; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		ch, err := DialInstalledPeerChannel(ctx, host, user)
+		cancel()
+		if err == nil {
+			_ = ch.Close()
+			return nil
+		}
+		last = err
+		if !errors.Is(err, syscall.ECONNREFUSED) {
+			return fmt.Errorf("verify Bashy peer listener on %s: %w", host, err)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("Bashy peer listener on %s: %w", host, last)
+}
+
+func remotePeerServeAvailable(t *transport, host string) bool {
+	if t.isFake {
+		return true
+	}
+	_, err := t.sshRun(host, remoteShellPath(remoteInstallDir+"/bashy")+" remote peer-serve --help >/dev/null 2>&1")
+	return err == nil
 }
 
 func needsLauncher(goos string) bool {

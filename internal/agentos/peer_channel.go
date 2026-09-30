@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -179,6 +180,36 @@ func DialPeerChannel(ctx context.Context, cfg PeerChannelConfig) (*PeerChannel, 
 		return nil, fmt.Errorf("peer channel: authenticate %s: %w", cfg.Address, err)
 	}
 	return &PeerChannel{client: client}, nil
+}
+
+// DialInstalledPeerChannel loads Bashy's persisted install identity and pinned
+// host key for host. It fails closed when either file is absent or malformed.
+func DialInstalledPeerChannel(ctx context.Context, host, user string) (*PeerChannel, error) {
+	name := safePeerName(host)
+	dir := filepath.Join(os.Getenv("HOME"), ".bashy", "remote", "peers", name)
+	privatePath := filepath.Join(dir, "id_ed25519")
+	address := host
+	if at := strings.LastIndex(host, "@"); at >= 0 {
+		if user == "" {
+			user = host[:at]
+		}
+		address = host[at+1:]
+	}
+	if user == "" {
+		user = os.Getenv("USER")
+	}
+	if !strings.Contains(address, ":") {
+		address = net.JoinHostPort(address, "2223")
+	}
+	known, err := os.ReadFile(filepath.Join(dir, "host_key.pub"))
+	if err != nil {
+		return nil, fmt.Errorf("peer channel: pinned host key unavailable: %w", err)
+	}
+	pub, _, _, _, err := ssh.ParseAuthorizedKey(known)
+	if err != nil {
+		return nil, fmt.Errorf("peer channel: parse pinned host key: %w", err)
+	}
+	return DialPeerChannel(ctx, PeerChannelConfig{Address: address, User: user, PrivateKeyPath: privatePath, HostKeyCallback: ssh.FixedHostKey(pub)})
 }
 
 func (c *PeerChannel) Close() error {

@@ -128,6 +128,14 @@ func TestPeerChannelEmbeddedServerExecSFTPAndForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer channel.Close()
+	wrongHost, _ := testSSHKey(t)
+	if rejected, err := DialPeerChannel(context.Background(), PeerChannelConfig{
+		Address: server.Addr().String(), User: me.Username, PrivateKeyPath: clientKeyPath,
+		HostKeyCallback: ssh.FixedHostKey(wrongHost.PublicKey()),
+	}); err == nil {
+		_ = rejected.Close()
+		t.Fatal("peer dial accepted a changed host key")
+	}
 
 	result, err := channel.Exec(context.Background(), sshclient.ExecOptions{Command: "printf peer-exec"})
 	if err != nil || result.ExitCode != 0 || string(result.Stdout) != "peer-exec" {
