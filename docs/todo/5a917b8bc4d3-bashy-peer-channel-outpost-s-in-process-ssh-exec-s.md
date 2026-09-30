@@ -3,11 +3,13 @@ id: 5a917b8bc4d3
 kind: feature
 title: 'bashy peer channel = outpost''s in-process SSH (exec, SFTP, port-forward): wire it into bashy, no system ssh/sshd'
 seq: 365
-status: todo
+status: assigned
 priority: p1
 labels:
     - remote
 created: 2026-09-30T17:19:10.354723Z
+weave: 29
+assignee: codex-gpt6-luna
 sprint: 342
 sprint_id: bdacb510-6448-5851-acf3-7a19f6ccccb2
 sprint_title: 'bashy dag remote: run any target on another host as if it were local (self-bootstrap, sync, run, fetch back)'
