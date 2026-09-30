@@ -604,6 +604,7 @@ var verbSynopsis = map[string]string{
 	"audit":       "hidden alias for bashy inspect audit",
 	"check":       "statically check shell scripts for bashy/system command closure and --bashsharp null safety",
 	"verify":      "run formal test batteries: compat/conformance/compliance/benchmark",
+	"remote":      "push bashy to a remote host (idempotent, version-matched, ssh/scp bootstrap; no remote internet needed)",
 	"self":        "fetch/cache/install a released bashy binary",
 	"bootstrap":   "hidden alias for bashy self",
 	"upgrade":     "hidden alias for bashy self",
