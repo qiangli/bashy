@@ -28,6 +28,15 @@ jobs:
           # coreutils' pinned Ollama replacement, so it must opt in.
           BASHY_BOOTSTRAP_SUBMODULES: "1"
         run: ./scripts/bootstrap-siblings.sh
+      - name: Check seed bands for this release
+        id: seed-bands
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          summary=$(./scripts/check-seed-bands.sh "$TAG" --yoke ../yoke)
+          echo "summary=$summary" >> "$GITHUB_OUTPUT"
+          echo "$summary" >> "$GITHUB_STEP_SUMMARY"
       - name: Export shell runtime pin
         shell: bash
         run: |
@@ -57,3 +66,13 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Append seed summary to release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          SEED_SUMMARY: ${{ steps.seed-bands.outputs.summary }}
+        run: |
+          gh release view "$TAG" --json body --jq .body > "$RUNNER_TEMP/release-notes.md"
+          printf '\n%s\n' "$SEED_SUMMARY" >> "$RUNNER_TEMP/release-notes.md"
+          gh release edit "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"

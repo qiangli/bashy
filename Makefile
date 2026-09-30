@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-sh build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist tidy clean help
+.PHONY: dag build build-bash build-sh build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist check-seed-bands tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -249,6 +249,7 @@ test-build-tag-matrix:
 ## (both bash and bashy; goreleaser handles real releases, this is a local
 ## cross-compile sanity check).
 dist:
+	@if [ "$(VERSION)" != dev ]; then scripts/check-seed-bands.sh "$(VERSION)"; fi
 	@mkdir -p $(BIN_DIR)/dist
 	@scripts/build-meet-spa.sh optional >/dev/null; \
 	bashy_tags="$(BASHY_TAGS)"; \
@@ -265,6 +266,10 @@ dist:
 			fi; \
 		done; \
 	done
+
+## check-seed-bands: Apply the seed freshness rule to VERSION (for release builds).
+check-seed-bands:
+	@scripts/check-seed-bands.sh "$(VERSION)"
 
 BASH_TEST_TIMEOUT := 60
 # jobs runs a long sequence of real backgrounded sleeps (job-control timing);
