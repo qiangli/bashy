@@ -3,10 +3,13 @@ id: 401837b6352f
 kind: task
 title: Refresh POSIX preflight and yash evidence
 seq: 36
-status: todo
+status: done
 priority: p1
 created: 2026-09-03T00:23:52.704849Z
+assignee: claude-opus5.5
 sprint: 110
+closed: 2026-09-30T13:51:03.808289Z
+closed_by: claude-opus5.5
 ---
 
 Run posix-certdryrun, the yash POSIX scoreboard, and the public differential matrix against the same frozen candidate. Require non-empty verdict sets and record any runtime-sensitive signal, file-descriptor, process, or diagnostic delta.
