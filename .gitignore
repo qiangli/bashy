@@ -59,3 +59,6 @@ vsxgen/
 # compiled test-suite runner binaries (source lives in tools/)
 /yashsuite
 /bash53suite
+
+# local opencode CLI config (also in .git/info/exclude since July; tracked here so tooling agrees)
+/opencode.json
