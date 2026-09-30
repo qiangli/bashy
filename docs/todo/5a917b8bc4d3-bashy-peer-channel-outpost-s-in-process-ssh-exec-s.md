@@ -3,11 +3,12 @@ id: 5a917b8bc4d3
 kind: feature
 title: 'bashy peer channel = outpost''s in-process SSH (exec, SFTP, port-forward): wire it into bashy, no system ssh/sshd'
 seq: 365
-status: todo
+status: assigned
 priority: p1
 labels:
     - remote
 created: 2026-09-30T17:19:10.354723Z
+weave: 15
 assignee: codex-gpt5.6-terra
 sprint: 342
 sprint_id: bdacb510-6448-5851-acf3-7a19f6ccccb2
