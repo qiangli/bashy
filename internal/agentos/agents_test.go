@@ -310,7 +310,7 @@ func TestAgentsRootAndCatalogExplainAllAccordingToTheirViews(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(listHelp.String(), "include dangling and ephemeral agents") ||
+	if !strings.Contains(listHelp.String(), "--all shows every ring") ||
 		strings.Contains(listHelp.String(), "include stale, orphaned, and idle presence records") {
 		t.Fatalf("agents list gives the wrong --all meaning:\n%s", listHelp.String())
 	}
