@@ -16,6 +16,15 @@ git -C "$tmp/repo" commit --allow-empty -qm init
 )
 
 model=$tmp/yoke/pkg/fleet/baseline/models/model.yaml
+stamp=$tmp/yoke/pkg/fleet/baseline/seed-bands.txt
+write_stamp() {
+  cat > "$stamp" <<EOF
+# release seed stamp
+date: $1
+models: $2
+source: test fixture
+EOF
+}
 write_seed() {
   cat > "$model" <<EOF
 name: agent-a
@@ -33,12 +42,28 @@ expect_fail() {
 }
 
 write_seed 2025-01-02
+write_stamp 2025-01-02 1
 expect_ok v2.0.0 --yoke "$tmp/yoke"
 write_seed 2024-12-31
+write_stamp 2024-12-31 1
 expect_fail v2.0.0 --yoke "$tmp/yoke"
+write_seed 2025-01-02
+write_stamp 2025-01-02 2
+run v1.1.0 --yoke "$tmp/yoke" >"$tmp/out" 2>&1
+grep -q 'warning: stamp says 2 models but found 1 seeded model' "$tmp/out"
 expect_ok v1.1.0 --yoke "$tmp/yoke"
+write_stamp 2024-12-31 1
 expect_fail v1.1.0 --yoke "$tmp/yoke" --reseed
 rm -f "$model"
 expect_fail v2.0.0 --yoke "$tmp/yoke"
+grep -q 'no seeded models found' "$tmp/out"
+expect_fail v1.1.0 --yoke "$tmp/yoke"
+grep -q 'no seeded models found' "$tmp/out"
+if grep -q 'major release' "$tmp/out"; then echo 'minor failure mislabeled as major release' >&2; exit 1; fi
+write_seed 2025-01-02
+rm -f "$stamp"
+expect_fail v1.1.0 --yoke "$tmp/yoke"
+write_stamp invalid 1
+expect_fail v1.1.0 --yoke "$tmp/yoke"
 
 echo 'check-seed-bands tests passed'

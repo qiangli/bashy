@@ -17,6 +17,16 @@ done
 [ -n "$yoke_dir" ] || yoke_dir=../yoke
 models=$yoke_dir/pkg/fleet/baseline/models
 [ -d "$models" ] || { echo "seed models directory not found: $models" >&2; exit 1; }
+stamp=$yoke_dir/pkg/fleet/baseline/seed-bands.txt
+[ -f "$stamp" ] || { echo "seed bands stamp not found: $stamp" >&2; exit 1; }
+seed_date=$(awk -F: '/^[[:space:]]*date[[:space:]]*:/ { sub(/^[[:space:]]*/, "", $2); sub(/[[:space:]]*$/, "", $2); print $2; exit }' "$stamp")
+case $seed_date in [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;; *) echo "seed bands stamp has missing or invalid date" >&2; exit 1;; esac
+if ! awk -v d="$seed_date" 'BEGIN { split(d,a,"-"); y=a[1]+0; m=a[2]+0; day=a[3]+0; leap=(y%4==0 && (y%100!=0 || y%400==0)); max=(m==2 ? 28+leap : (m==4 || m==6 || m==9 || m==11 ? 30 : 31)); exit !(y>0 && m>=1 && m<=12 && day>=1 && day<=max) }'; then
+  echo "seed bands stamp has missing or invalid date" >&2
+  exit 1
+fi
+stamp_models=$(awk -F: '/^[[:space:]]*models[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' "$stamp")
+case $stamp_models in ''|*[!0-9]*) echo "seed bands stamp has invalid models count" >&2; exit 1;; esac
 
 major_release=0
 base_tag=${tag%%-*}
@@ -29,24 +39,15 @@ case $base_tag in v*.*.*) ;; *) echo "invalid release tag: $tag" >&2; exit 2;; e
 case $major:$minor:$patch in *[!0-9:]*|::*|:*:|*::|*.*) echo "invalid release tag: $tag" >&2; exit 2;; esac
 [ "$minor" = 0 ] && [ "$patch" = 0 ] && major_release=1
 
-dates_file=${TMPDIR:-/tmp}/check-seed-bands.$$.dates
-trap 'rm -f "$dates_file"' 0 HUP INT TERM
-: > "$dates_file"
-find "$models" -type f -name '*.yaml' -print | while IFS= read -r file; do
-  awk '
-    /^band_source:[[:space:]]*seeded([[:space:]]|$)/ { seeded=1 }
-    seeded && /seeded[[:space:]][0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ {
-      line=$0; sub(/^.*seeded[[:space:]]+/, "", line); sub(/[^0-9-].*$/, "", line); if (line > best) best=line
-    }
-    END { if (seeded) { if (best == "") { print "seeded model has no seeded YYYY-MM-DD date: " FILENAME > "/dev/stderr"; exit 1 }; print best } }
-  ' "$file" >> "$dates_file" || exit 1
-done
-count=$(wc -l < "$dates_file" | tr -d ' ')
-newest=$(sort "$dates_file" | tail -n 1)
+count=$(find "$models" -type f -name '*.yaml' -exec awk '/^band_source:[[:space:]]*seeded([[:space:]]|$)/ { found=1 } END { if (found) print FILENAME }' {} \; | wc -l | tr -d ' ')
 if [ "$count" -eq 0 ]; then
-  echo "major release needs regenerated seed bands (no seeded models)" >&2
+  echo "release seed check failed: no seeded models found" >&2
   exit 1
 fi
+if [ "$count" -ne "$stamp_models" ]; then
+  echo "warning: stamp says $stamp_models models but found $count seeded model(s)" >&2
+fi
+newest=$seed_date
 
 previous=
 previous_date=
@@ -66,7 +67,8 @@ if [ -n "$previous_date" ]; then
 fi
 if [ "$major_release" -eq 1 ] || [ "$reseed" = 1 ]; then
   if [ "$fresh" -ne 1 ]; then
-    echo "major release needs regenerated seed bands (newest seed $newest older than $previous of $previous_date) — run yoke-seedfit (docs/research/fleet-seed-bands-*.md) and re-pin yoke" >&2
+    if [ "$major_release" -eq 1 ]; then kind="major release"; else kind="release with --reseed"; fi
+    echo "$kind needs regenerated seed bands (stamp date $newest older than $previous of $previous_date) — run yoke-seedfit (docs/research/fleet-seed-bands-*.md) and re-pin yoke" >&2
     exit 1
   fi
   if [ "$major_release" -eq 1 ]; then echo "seed regenerated on major release (newest seed $newest)"
