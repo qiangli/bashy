@@ -1,7 +1,7 @@
 ---
 name: conductor
 description: >-
-  Conduct a fleet of agentic coding CLIs (claude, codex, opencode, ycode, agy) to
+  As the designated manager launched by bashy, conduct a fleet of agent CLIs to
   reach a VERIFIED goal — decompose → isolate → gate → converge, looping until a
   verifier passes — acting as the single conductor over `bashy sprint`
   (plan/continuity) and `bashy weave` (per-repo isolated execution). Use when a
@@ -26,8 +26,12 @@ metadata:
 
 # conductor — drive a fleet of agent CLIs to a verified goal
 
-You are the **conductor**. You never write the fix. You read the goal, set the
-contract, decompose, file stories, build the isolation + gates, launch and
+Only the **designated sprint manager launched by bashy** is the conductor.
+Other sessions are **supervisors**: read `bashy skill show supervisor` and use
+watch/tick/instruct/ping/abort only; do not take over because this skill is open.
+Assigned workers implement their bounded stories without manager authority.
+The remaining checklist applies to the designated manager. You never write the
+fix. You read the goal, set the contract, decompose, file stories, build the isolation + gates, launch and
 monitor the fleet, salvage killed runs, gate every merge, and iterate. The agents
 do all analysis and code; you own the *loop* and the *truth*.
 
@@ -52,26 +56,71 @@ This file is the actionable checklist. The full narrative — the four isolation
 traps in depth, convergence details, and two worked campaigns — lives in the
 bundled `reference.md`; read it before your first campaign.
 
+## Managed sprints and the band ladder
+
+Start the designated manager with:
+
+```sh
+bashy sprint start N --owner AGENT --instruction "deliver the sprint acceptance"
+```
+
+For an authorized takeover, use `bashy sprint take N --owner AGENT` through
+bashy's managed path. `take` alone or a matching owner name does not turn an
+interactive session into the manager. Bashy binds the lease to the agent identity
+and supplies `BASHY_SPRINT_LEASE_TOKEN` only to the launched manager. Never copy,
+print, or borrow that token. All sprint state changes — including assignment,
+story status, acceptance, checkpoint, edit, move and `end` — require that lease.
+The manager ends its own sprint; `end` runs scoring.
+
+`BASHY_SPRINT_ENFORCE=should` is the guidance rollout; `must` enforces the
+managed path. Sprints already running when enforcement flips are grandfathered.
+Do not lower enforcement to get around a refusal. An owner-authorized override
+uses `--override --reason "..."`; it is logged on the card and scorecard, never
+an invisible exception or permission to waive review dominance.
+
+**Set `BASHY_AGENT` to the actual assigned committing agent on every commit.**
+Keep bashy's injected worker identity; never attribute worker commits to the
+manager. Include the required `Sprint:`, `Story:` and `Story-ID:` trailers.
+Commit hooks check story assignment; pre-push checks and CI re-verify attribution.
+Missing `BASHY_AGENT` is a detected bypass and an automatic fail (0) of the
+sprint's **manage** score, with a penalty for the bypassing agent. Do not skip hooks.
+
+Use the ladder verbs for managed work (consult each verb's `--help` for arguments):
+
+| Verb | Purpose |
+|---|---|
+| `bashy sprint assign` | Match story difficulty to eligible agents and launch workers through weave; record assignments. |
+| `bashy sprint review` | Select an eligible reviewer; escalate if dominance cannot be met. |
+| `bashy sprint arena` / `bashy sprint heat` | Prepare pinned arenas and blind, isolated comparable attempts; mismatched fairness digests void a heat. |
+| `bashy sprint grade` | Run gates outside the booth; test tampering is a hard failure. |
+| `bashy sprint merge` | Manager-only merge of verified work, preserving author attribution. |
+| `bashy sprint accept N STORY --agent TOOL:MODEL --points 2 --rework 0` | Record accepted delivery with its actual agent, points and rework count. |
+| `bashy sprint fail N STORY --blame agent --evidence gate:REF` | Record failure with evidence; classify blame as `agent`, `environment` or `spec` before rating. |
+| `bashy leaderboard --duty code` | Inspect per-duty ratings, derived bands and gates (`code`, `manage`, `judge`, or `all`). |
+| `bashy leaderboard record` | Record evidence-backed seats, certificates, seeds or corrections; use `list` to inspect events. |
+
+Reviewer/merger conservative `code` must meet the author's point rating; judge
+conservative `manage` must meet the manager's rating. Escalate instead of waiving
+these checks. Only agent-class failures rate the implementer; environment and
+spec failures need their own remediation. Unclassified failures remain unrated.
+
+The manager's delivery value is **actual minus expected**, given the assigned
+team and stories, not raw shipped totals. Supervisor instructions are counted
+as outside steering and shown beside the score. False completion, red merges,
+dominance violations and detected managed-path bypasses automatically fail the
+sprint's manage score. Run gates yourself and read their verdicts.
+
 ## Sprint manager ownership
 
-The sprint manager is always responsible for the sprint's delivery from beginning
-to end, even when work is delegated.
+The manager remains accountable for delivery, integration, independent final
+verification, continuity and cleanup when delegating bounded operational work.
+Delegation does not transfer its lease. Bashy's managed session receives input
+through its control transport under the recorded owner identity. A supervisor
+uses `sprint instruct` to steer it; it does not assume that identity.
 
-The sprint manager always has authority to delegate bounded operational work when
-busy, including monitoring, review preparation, testing, cleanup, and sub-team
-leadership, with clear scope, authority, and reporting. Delegation transfers
-execution, not accountability: owner retains lease, integration sequencing,
-independent final verification, continuity, and cleanup responsibility.
-
-The sprint's recorded owner name is its coordination identity. A takeover assumes
-that same name for mb/Meet/chat/ping, unless it first updates sprint ownership to a
-new preferred name. A Bashy-managed conductor receives input through its control
-transport. An externally launched conductor claims with
-`bashy sprint take <id> --owner <owner> --watch` (or `start ... --owner <owner> --watch`) and its
-harness must retain and read that foreground process. The watcher-to-parent
-relationship proves live delivery. After handling every delivered batch, run
-`bashy sprint inbox-ack <id> --as <owner>`; unacknowledged input stays unread and
-the watcher keeps reminding every three minutes until it is acknowledged.
+The lower-level weave and patch mechanics below explain execution and recovery.
+They do not replace `sprint assign/review/grade/merge` or bypass lease checks in
+a managed sprint; use the ladder verbs for those transitions.
 
 Before touching work owned by another sprint manager, coordinate with that owner
 through mb/Meet/chat/ping and request merge or sequencing. Never delete, remove,
@@ -380,8 +429,8 @@ turn by refreshing the TODO from observed evidence.
    explicitly-iterative prompt (measure → fix next cluster → gate → commit →
    repeat) until the goal holds or each remainder is a documented blocker.
 5. **CONVERGE** — wait, then merge **verified** work back: `bashy weave wait`
-   then `bashy weave pull`; re-run the goal verifier on the merged tree by hand
-   before trusting it.
+   then `bashy sprint review`, `bashy sprint grade` and `bashy sprint merge`;
+   re-run the goal verifier on the merged tree by hand before trusting it.
 6. **RETRO** — capture the tool report card (which CLI did well on what) + any
    lessons; embed bisect findings into the next round's story bodies. Persist
    each durable lesson as a runtime candidate with
@@ -625,6 +674,9 @@ bashy weave wait --issue N --timeout 50m &
   timeouts flake into phantom regressions.
 
 ### 9. Converge — sequential gated merge on a review branch
+For a managed sprint, use `sprint review`, `sprint grade` and `sprint merge`;
+preserve attribution and re-gate the merged tree. The patch procedure below is
+for recovery within that managed workflow, never a replacement for its checks.
 No push / no dependency-pin bump without explicit human OK.
 1. Source-only patch from each run's private workspace (`git diff base..HEAD --
    <source-dirs>`; never scratch).
