@@ -133,6 +133,7 @@ repo_url() {
         sh) echo "https://github.com/qiangli/sh.git" ;;
         bashsharp) echo "https://github.com/bashsharp/bashsharp.git" ;;
         coreutils) echo "https://github.com/qiangli/coreutils.git" ;;
+        outpost) echo "https://github.com/qiangli/outpost.git" ;;
         yoke) echo "https://github.com/qiangli/yoke.git" ;;
         readline) echo "https://github.com/qiangli/readline.git" ;;
         filebrowser) echo "https://github.com/qiangli/filebrowser.git" ;;
