@@ -3,10 +3,13 @@ id: ae9b5ef7e7e8
 kind: task
 title: Freeze the Go 1.27.1 Linux Profile B candidate
 seq: 33
-status: todo
+status: done
 priority: p0
 created: 2026-09-03T00:23:52.704875Z
+assignee: claude-opus5.5
 sprint: 110
+closed: 2026-09-30T13:04:22.277479Z
+closed_by: claude-opus5.5
 ---
 
 Build the certification-shaped Linux artifact with Go 1.27.1; record its commit pins, toolchain, build inputs, checksum, and staged Profile B manifest so all later evidence names one exact SUT.
