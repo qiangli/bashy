@@ -253,6 +253,64 @@ func TestRemoteInstallRequiresHost(t *testing.T) {
 	}
 }
 
+func TestRemotePeerIdentityFakeIsPersistentAndPrivate(t *testing.T) {
+	root := t.TempDir()
+	tr := newTransport("fakehost", root)
+	if err := provisionPeerIdentity(tr, "fakehost"); err != nil {
+		t.Fatal(err)
+	}
+	local := filepath.Join(root, ".bashy", "remote", "peers", "fakehost")
+	remote := filepath.Join(root, remotePeerDir)
+	paths := []string{
+		filepath.Join(local, "id_ed25519"), filepath.Join(local, "id_ed25519.pub"), filepath.Join(local, "host_key.pub"),
+		filepath.Join(remote, "authorized_keys"), filepath.Join(remote, "host_ed25519"),
+	}
+	before := make([][]byte, len(paths))
+	for i, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		before[i] = data
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 || i == 4 {
+			if info.Mode().Perm() != 0o600 {
+				t.Errorf("private file %s mode %o", path, info.Mode().Perm())
+			}
+		}
+	}
+	for _, path := range []string{local, remote} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o700 {
+			t.Errorf("directory %s mode %o", path, info.Mode().Perm())
+		}
+	}
+	if err := os.WriteFile(filepath.Join(remote, "unrelated"), []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := provisionPeerIdentity(tr, "fakehost"); err != nil {
+		t.Fatal(err)
+	}
+	for i, path := range paths {
+		after, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(before[i], after) {
+			t.Errorf("rerun replaced %s", path)
+		}
+	}
+	if got, err := os.ReadFile(filepath.Join(remote, "unrelated")); err != nil || string(got) != "keep" {
+		t.Fatalf("unrelated remote file changed: %q %v", got, err)
+	}
+}
+
 func TestRemoteDetectOSFake(t *testing.T) {
 	tr := newTransport("fakehost", t.TempDir())
 	goos, goarch, err := tr.detectOSArch("fakehost")
