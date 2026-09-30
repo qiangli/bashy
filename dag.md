@@ -845,6 +845,7 @@ for host in "$@"; do
         sh) url=https://github.com/qiangli/sh.git ;;
         bashsharp) url=https://github.com/bashsharp/bashsharp.git ;;
         coreutils) url=https://github.com/qiangli/coreutils.git ;;
+        outpost) url=https://github.com/qiangli/outpost.git ;;
         yoke) url=https://github.com/qiangli/yoke.git ;;
         readline) url=https://github.com/qiangli/readline.git ;;
         filebrowser) url=https://github.com/qiangli/filebrowser.git ;;
