@@ -287,6 +287,23 @@ transport (default `ssh <host>`, override with `--remote` or the
 fetches its own code/data. Any `ssh`-compatible transport works, including an
 agent ssh-proxy stanza in `~/.ssh/config` (`ProxyCommand …`).
 
+For a repo-local target, `-H <host>` uses Bashy's installed peer channel and
+the target's declared `Sources:`/`Generates:` instead:
+
+```bash
+bashy dag -H novidesign.local test
+```
+
+The dependency closure's DAG file and declared source files are copied into a
+stable workspace below `~/.bashy/remote/workspaces/` on the peer. Each file is
+compared by SHA-256 before upload; unchanged files are logged as `unchanged`
+and only changed content is transferred. The installed remote `bashy dag`
+runs the same target there. Its stdout and stderr are tailed over SFTP while it
+runs, its exit code is returned, and declared `Generates:` are copied back into
+the local project. Peer identity and host-key trust come from `bashy remote
+install <host>`. This mode expects one target and currently accepts make-style
+`KEY=value` overrides.
+
 ## Windows hosts (mesh targets)
 
 A `--mesh` body runs in the **remote host's** shell, so the "identical on every

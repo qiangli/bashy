@@ -528,6 +528,17 @@ func dispatchExit(code int) {
 // minutes on. dag's own failures are *dag.Error values that emitErr has
 // already written as an envelope; those are not printed twice.
 func runDagDispatch(args []string, stdout, stderr io.Writer) int {
+	if host, rest, found, err := extractDagHost(args); err != nil {
+		fmt.Fprintf(stderr, "bashy dag: %v\n", err)
+		return 2
+	} else if found {
+		code, err := runRemoteDag(context.Background(), host, rest, stdout, stderr)
+		if err != nil {
+			fmt.Fprintf(stderr, "bashy dag: %v\n", err)
+			return 1
+		}
+		return code
+	}
 	cmd := dag.NewDagCmd()
 	dag.AddCapacityCommands(cmd, sprintCapacityServices())
 	cmd.SetOut(stdout)
