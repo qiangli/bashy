@@ -8,6 +8,7 @@ priority: p1
 labels:
     - remote
 created: 2026-09-30T17:19:12.148081Z
+assignee: codex-gpt6-luna
 sprint: 342
 sprint_id: bdacb510-6448-5851-acf3-7a19f6ccccb2
 sprint_title: 'bashy dag remote: run any target on another host as if it were local (self-bootstrap, sync, run, fetch back)'
