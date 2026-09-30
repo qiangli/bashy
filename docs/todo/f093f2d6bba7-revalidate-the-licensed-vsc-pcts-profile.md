@@ -6,7 +6,9 @@ seq: 35
 status: todo
 priority: p1
 created: 2026-09-03T00:23:52.71079Z
-sprint: 110
+sprint: 100
+sprint_id: b25f503b-9786-5052-8c12-472beb844ecb
+sprint_title: Sprint 100 — Profile D residual closure and final certification rerun
 ---
 
 Execute the licensed Profile B/VSC-PCTS procedure against the frozen candidate when the human-gated harness is available; compare results to the prior evidence, update the private handoff record, and keep submission/trademark claims separate from test completion.
@@ -20,3 +22,22 @@ Execute the licensed Profile B/VSC-PCTS procedure against the frozen candidate w
 - Human gate: licensed suite availability; if unavailable, stop and record it on the card.
 - Depends on: 1727b5446a3b, ae9b5ef7e7e8; start after 34046901d606 and 401837b6352f are green.
 - Addendum (certification-body guidance, 2026-09-30): scored evidence must come from the supplied official harness itself (no substitute runner without the certification body's review), and certification is per architecture. So this baseline is a Linux x86_64 run under the supplied harness only; an arm64 arm is a separate budgeted run, and no Windows or macOS-native scored run is in scope (Windows is a quality target pending the certification body's review).
+
+## Carried from Sprint #110 to Sprint #100 (steward decision 2026-09-30)
+
+Not run in #110 (on-time/KISS). Inputs ready for the baseline:
+- Frozen linux/amd64 candidate, **SUT digest 0844a95e** — bashy 2db80ed / sh
+  831b6b2d / coreutils c0c6cae7 / yoke 578a169, go1.27.1, CGO_ENABLED=0,
+  two cold builds byte-identical; manifests in umbrella
+  docs/sprint-110-evidence.md and dragon ~/.bashy/sprint/110/evidence/freeze.
+  Stage with `CGO_ENABLED=0` and diff /vsc/stage sha256s against it first.
+- Preflight gates on that candidate: see 34046901 / 401837b6 (Sprint #110).
+- GNU control: reuse the retained 2026-08-23 Profile A control per
+  RUNBOOK ("do not rerun profile A merely because Bashy changed"); no second host.
+- Duration: a full D arm on 2 vCPU was ~7h tests + ~45m setup in Sprint 85
+  r1 (~8.5h validation to retrieval) — give it its own time box.
+Blocked on two harness contract gaps (stories filed on #100 in
+vsc-pcts-harness-kit): adopting a dhnt-ephemeral host with a genuine
+provision record, and approval_ref on a pushed main/approval ref with exact
+gitlinks. The #110 runner s110-cert-amd64 and its .vsc-phase-gate were torn
+down at #110's end; the phase-gate record must be re-issued for the #100 host.
