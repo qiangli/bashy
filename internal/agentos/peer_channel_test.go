@@ -58,6 +58,19 @@ func TestPeerChannelConfigRequiresInstallIdentityAndTrust(t *testing.T) {
 	}
 }
 
+func TestDialPeerChannelRejectsNilContext(t *testing.T) {
+	_, err := DialPeerChannel(nil, PeerChannelConfig{})
+	if err == nil {
+		t.Fatal("nil context unexpectedly accepted")
+	}
+}
+
+func TestPeerChannelCloseNilClientIsSafe(t *testing.T) {
+	if err := (&PeerChannel{}).Close(); err != nil {
+		t.Fatalf("close nil client: %v", err)
+	}
+}
+
 func TestPeerChannelEmbeddedServerExecSFTPAndForward(t *testing.T) {
 	me, err := user.Current()
 	if err != nil || me.Username == "" {

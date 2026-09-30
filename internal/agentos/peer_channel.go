@@ -149,6 +149,9 @@ type PeerChannel struct{ client *sshclient.Client }
 // DialPeerChannel dials the remote's alternate outpost SSH port using the
 // install-time private key. It never invokes system ssh or sshd.
 func DialPeerChannel(ctx context.Context, cfg PeerChannelConfig) (*PeerChannel, error) {
+	if ctx == nil {
+		return nil, errors.New("peer channel: nil context")
+	}
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
@@ -179,7 +182,7 @@ func DialPeerChannel(ctx context.Context, cfg PeerChannelConfig) (*PeerChannel, 
 }
 
 func (c *PeerChannel) Close() error {
-	if c == nil {
+	if c == nil || c.client == nil {
 		return nil
 	}
 	return c.client.Close()
