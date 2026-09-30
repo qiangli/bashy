@@ -31,7 +31,27 @@ func remoteCmd() *cobra.Command {
 		Short: "Remote host operations",
 		Long:  `Manage bashy on remote hosts. The first step is remote install: push the self-contained bashy binary to a remote host via the host OS transport (ssh/scp on Unix), idempotently and version-matched, from the local release cache.`,
 	}
-	cmd.AddCommand(remoteInstallCmd())
+	cmd.AddCommand(remoteInstallCmd(), peerServeCmd())
+	return cmd
+}
+
+// peerServeCmd is the long-running endpoint started by remote install. Its
+// keys are provisioned once by the host-OS bootstrap transport.
+func peerServeCmd() *cobra.Command {
+	var authorized, hostKey string
+	cmd := &cobra.Command{Use: "peer-serve", Hidden: true, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		ctx := cmd.Context()
+		server, err := StartPeerSSHServer(ctx, PeerSSHServerConfig{AuthorizedKeysPath: authorized, HostKeyPath: hostKey})
+		if err != nil {
+			return err
+		}
+		defer server.Close()
+		return server.Wait()
+	}}
+	cmd.Flags().StringVar(&authorized, "authorized-keys", "", "Bashy peer authorized_keys")
+	cmd.Flags().StringVar(&hostKey, "host-key", "", "Bashy peer host private key")
+	_ = cmd.MarkFlagRequired("authorized-keys")
+	_ = cmd.MarkFlagRequired("host-key")
 	return cmd
 }
 
