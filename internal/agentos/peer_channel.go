@@ -14,15 +14,107 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/pkg/sftp"
 	"github.com/qiangli/outpost/pkg/sshclient"
+	"github.com/qiangli/outpost/pkg/sshserver"
 	"golang.org/x/crypto/ssh"
 )
 
 // peerChannelPort is intentionally not the system SSH port. Remote install
 // starts outpost sshd on this port, leaving a user's system sshd untouched.
 const peerChannelPort = 2223
+
+// PeerSSHServerConfig describes the user-space outpost SSH listener that a
+// remote bashy starts for peer connections. HostKeyPath is the install-time
+// host identity; AuthorizedKeysPath is the install-time client trust file.
+// Address defaults to the LAN-reachable alternate port when empty.
+type PeerSSHServerConfig struct {
+	Address            string
+	AuthorizedKeysPath string
+	HostKeyPath        string
+}
+
+// PeerSSHServer owns an embedded outpost SSH server and its listener.
+// Closing it only stops this user-space listener; it never touches system
+// sshd or any other listener owned by the user.
+type PeerSSHServer struct {
+	listener net.Listener
+	err      chan error
+	once     sync.Once
+}
+
+// StartPeerSSHServer starts outpost's SSH server on the configured alternate
+// port. The caller must provide install-time authorized keys and a persisted
+// host key; no key is generated or silently trusted at runtime.
+func StartPeerSSHServer(ctx context.Context, cfg PeerSSHServerConfig) (*PeerSSHServer, error) {
+	if ctx == nil {
+		return nil, errors.New("peer ssh server: nil context")
+	}
+	if strings.TrimSpace(cfg.Address) == "" {
+		cfg.Address = fmt.Sprintf(":%d", peerChannelPort)
+	}
+	if strings.TrimSpace(cfg.AuthorizedKeysPath) == "" {
+		return nil, errors.New("peer ssh server: authorized keys path is required")
+	}
+	if strings.TrimSpace(cfg.HostKeyPath) == "" {
+		return nil, errors.New("peer ssh server: host key path is required")
+	}
+	hostKey, err := readSSHSigner(cfg.HostKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("peer ssh server: read host key: %w", err)
+	}
+	listener, err := net.Listen("tcp", cfg.Address)
+	if err != nil {
+		return nil, fmt.Errorf("peer ssh server: listen %s: %w", cfg.Address, err)
+	}
+	server := &PeerSSHServer{listener: listener, err: make(chan error, 1)}
+	go func() {
+		server.err <- sshserver.Serve(ctx, listener, sshserver.Config{
+			AuthorizedKeysPath: cfg.AuthorizedKeysPath,
+			HostKey:            hostKey,
+		})
+	}()
+	return server, nil
+}
+
+func readSSHSigner(path string) (ssh.Signer, error) {
+	key, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	signer, err := ssh.ParsePrivateKey(key)
+	if err != nil {
+		return nil, err
+	}
+	return signer, nil
+}
+
+// Addr returns the actual listener address, including an OS-assigned port.
+func (s *PeerSSHServer) Addr() net.Addr {
+	if s == nil || s.listener == nil {
+		return nil
+	}
+	return s.listener.Addr()
+}
+
+// Wait waits for the embedded server to stop.
+func (s *PeerSSHServer) Wait() error {
+	if s == nil {
+		return nil
+	}
+	return <-s.err
+}
+
+// Close stops the embedded server and is safe to call more than once.
+func (s *PeerSSHServer) Close() error {
+	if s == nil || s.listener == nil {
+		return nil
+	}
+	s.once.Do(func() { _ = s.listener.Close() })
+	return nil
+}
 
 // PeerChannelConfig is the install-time identity needed to dial a remote
 // bashy's outpost listener. HostKeyCallback is supplied by the caller's
