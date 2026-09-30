@@ -1153,7 +1153,6 @@ func fixtureEnv(root, testsDir, bashPath, name string) []string {
 		"PATH="+fixturePath(testsDir),
 		"BASH_TSTRAW="+rawPath,
 		"BASH_TSTOUT="+outPath,
-		"BASH_SETPGRP=1",
 	)
 	// Unix Bashy builds are a native signal launcher plus a sibling .real Go
 	// payload. GNU's own fixtures deliberately copy THIS_SH to temporary names;
