@@ -5,9 +5,9 @@ go 1.26.5
 toolchain go1.27.1
 
 require (
+	github.com/bashsharp/bashsharp v0.0.0
 	github.com/creack/pty/v2 v2.0.1
 	github.com/ergochat/readline v0.1.3
-	github.com/bashsharp/bashsharp v0.0.0
 	github.com/qiangli/coreutils v0.0.0
 	github.com/qiangli/yoke v0.0.0
 	github.com/qiangli/yoke/external/otel v0.0.0
@@ -31,14 +31,17 @@ require golang.org/x/crypto/x509roots/fallback v0.0.0-20260921070245-7a4a4d6beae
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nats-io/nats.go v1.50.0 // indirect
 	github.com/nats-io/nkeys v0.4.15 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
+	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.68.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.19.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.20.0 // indirect
@@ -47,6 +50,10 @@ require (
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.43.0 // indirect
 	go.opentelemetry.io/otel/log v0.20.0 // indirect
 	go.opentelemetry.io/otel/sdk/log v0.20.0 // indirect
+	modernc.org/libc v1.72.3 // indirect
+	modernc.org/mathutil v1.7.1 // indirect
+	modernc.org/memory v1.11.0 // indirect
+	modernc.org/sqlite v1.50.1 // indirect
 )
 
 require (

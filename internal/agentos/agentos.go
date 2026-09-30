@@ -212,7 +212,7 @@ var (
 		// it is the one resolver for `<kind>:<id>` refs, gated by
 		// script/e2e-refs.sh in the umbrella, and an agent that cannot find
 		// it cannot follow a citation.
-		"lexicon", "search", "sota",
+		"lexicon", "sota",
 		// self-fidelity / cert (inspect stays visible)
 		"check", "conform",
 		// output reduction (still on under BASHY_AGENTIC; `bashy help output`)

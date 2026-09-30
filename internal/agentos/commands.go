@@ -540,7 +540,7 @@ var verbSynopsis = map[string]string{
 	"invoke":      "hidden compatibility alias for bashy chat",
 	"delegate":    "hand a task to an agent — another one, or YOURSELF (same tool, run detached to stay responsive)",
 	"coach":       "run an agent under an LLM-free auto-coach that ESCs it out of doomed tool-loops and tells it to deliver",
-	"search":      "web search (query → cited results) via a provider ladder (tavily/brave/serper) — the find-things primitive",
+	"search":      "find local files by indexed filename or scan content, and search the web with cited results",
 	"sota":        "research the current state of the art: ground a synthesis agent in real bashy-search sources (cite only those), or --hitchhike on the agent's own subscription web search",
 	"conform":     "bashy's OWN fidelity batteries: compat/conformance/compliance/benchmark",
 	"chat":        "talk to an agent in a governed live session, or send one unattended instruction",

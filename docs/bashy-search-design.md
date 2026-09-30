@@ -1,13 +1,43 @@
 # bashy search — design
 
-Status: design (P0b `pkg/search/local.go` shipped as a naive scan; this doc is
-the architecture it grows into). Brand-neutral: bashy + coreutils only.
+Status: design for content search; filename search can use an explicit index.
+The local implementation lives in `yoke/pkg/search`.
 
 `bashy search` is the missing **find-things primitive** — the local half of a
 two-layer stack whose web/research half is `bashy sota` (provider ladder →
 SearXNG; out of scope here). It unifies what bashy already has —
 `grep` · `find` · `ast` · `graph` · `kb` — behind one verb with a uniform
-result, and it does so **without building a persistent code index.**
+result, and it does so **without building a persistent code-content index.**
+
+### Filename indexing
+
+`bashy search --files QUERY` searches filenames beneath `--dir` (default: the
+current directory). It scans when that root has no index. Run
+`bashy search --files --index --dir ROOT` to build or refresh a persistent
+SQLite FTS5 trigram index; subsequent filename queries for that root read the
+index without walking the tree. `--index-status` reports the file count, skipped
+entries, disk size, and last refresh time. The index is stored under
+`$BASHY_HOME/search/files/` (or `~/.bashy/search/files/`).
+
+Refresh is explicit: the index is a snapshot and does not track file changes
+between builds. The same skip-directory list as the scan applies. Neither the
+index nor `--files` searches file contents, including PDF or Office document
+text. Use `--content` or a dedicated content extractor for that task.
+
+The filename index is inspired by [EverythingX](https://github.com/AlanKK/everythingx),
+which uses SQLite FTS5 trigram search. Bashy's index uses a pure-Go SQLite
+driver and stays separate from the content-search design below.
+
+On one 9,589-entry checkout (macOS arm64, warm filesystem cache), the index
+occupied 1.85 MiB, about 203 bytes per indexed file, and a full refresh took
+0.65 seconds. Median times over 10 warm one-shot invocations for a filename
+query capped at 40 results were 30.96 ms for `bashy search --files`, 13.84 ms
+for `rg --files -g '*test*' | head -40`, and 15.07 ms for
+`find . -type f -iname '*test*' | head -40`. The native Bashy process startup
+dominates its one-shot time; 100 repeated calls to the index API inside one Go
+process had a 1.25 ms median. The three commands differ in skip rules and path
+matching, so these are orientation measurements, not equivalent-result
+benchmarks or a claim that one-shot Bashy beats ripgrep.
 
 ## The one load-bearing principle: no transient code index
 
@@ -64,8 +94,8 @@ fan-out is noisier and pays every lane's cost on every query.)
         ▼               ▼       ▼            ▼              ▼
    literal/regex     symbol   who-calls   concept/idea    filename
         │               │       │            │              │
-     CONTENT          ast     graph /       kb            find
-     pipeline      (symbols)  ast refs   (knowledge)    (name scan)
+     CONTENT          ast     graph /       kb         SQLite index
+     pipeline      (symbols)  ast refs   (knowledge)    or name scan
         │
    expand → scan(rg) → rank
 ```
@@ -76,7 +106,7 @@ fan-out is noisier and pays every lane's cost on every query.)
   index).
 - **Who-calls / impact** → `graph` / `ast refs`.
 - **Concept / lesson** ("how do we handle retries") → `kb`.
-- **Filename** → `find` / name scan.
+- **Filename** → indexed lookup when built, otherwise a name scan.
 
 All lanes return the **same uniform result** so the caller sees one shape.
 
