@@ -5,6 +5,7 @@ package agentos
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,10 +14,16 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/qiangli/bashy/internal/cli"
 	"github.com/qiangli/yoke/pkg/binmgr"
+	"github.com/spf13/cobra"
 )
+
+// remoteInstallDir is owned by bashy. Bootstrap must not replace a user's
+// PATH binary or otherwise modify existing work on the remote host.
+const remoteInstallDir = ".bashy/remote/bin"
+
+var errRemoteNotInstalled = errors.New("bashy is not installed in the remote workspace")
 
 func remoteCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -74,7 +81,10 @@ func runRemoteInstall(cmd *cobra.Command, host, fakeRoot string) error {
 	if localVer == "" {
 		return fmt.Errorf("could not determine local version from %s", localBin)
 	}
-	remoteVer, _ := t.remoteVersion(host, goos) // empty if not installed
+	remoteVer, err := t.remoteVersion(host, goos)
+	if err != nil && !errors.Is(err, errRemoteNotInstalled) {
+		return fmt.Errorf("inspect remote installation: %w", err)
+	}
 
 	if remoteVer != "" && remoteVer == localVer {
 		fmt.Fprintf(stdout, "bashy %s already installed on %s\n", localVer, host)
@@ -332,15 +342,17 @@ func (t *transport) remotePath(host, name string) string {
 		if strings.HasPrefix(host, "fake://") {
 			root = strings.TrimPrefix(host, "fake://")
 		}
-		// support DHNT_BIN_DIR override inside fake? Use ~/.local/bin equivalent.
-		// Fake's home is the root itself; binary at <root>/.local/bin/<name> or <root>/<name> if root already ends with .local/bin
-		if strings.HasSuffix(root, ".local/bin") || strings.HasSuffix(root, ".local") {
+		if strings.HasSuffix(root, remoteInstallDir) {
 			return filepath.Join(root, name)
 		}
-		return filepath.Join(root, ".local", "bin", name)
+		return filepath.Join(root, remoteInstallDir, name)
 	}
-	return "~/.local/bin/" + name
+	// Keep this relative for scp's SFTP mode; unlike a remote shell it does not
+	// expand '~'. SSH commands use remoteShellPath below.
+	return remoteInstallDir + "/" + name
 }
+
+func remoteShellPath(path string) string { return "$HOME/" + path }
 
 func (t *transport) detectOSArch(host string) (string, string, error) {
 	if t.isFake {
@@ -413,13 +425,13 @@ func (t *transport) remoteVersion(host, goos string) (string, error) {
 			root = strings.TrimPrefix(host, "fake://")
 		}
 		candidates := []string{
-			filepath.Join(root, ".local", "bin", binaryNameForGOOS(goos)),
-			filepath.Join(root, ".local", "bin", "bashy.real"),
+			filepath.Join(root, remoteInstallDir, binaryNameForGOOS(goos)),
+			filepath.Join(root, remoteInstallDir, "bashy.real"),
 			filepath.Join(root, binaryNameForGOOS(goos)),
 			filepath.Join(root, "bashy"),
 			filepath.Join(root, "bashy.real"),
 		}
-		if strings.HasSuffix(root, ".local/bin") {
+		if strings.HasSuffix(root, remoteInstallDir) {
 			candidates = []string{filepath.Join(root, binaryNameForGOOS(goos)), filepath.Join(root, "bashy.real")}
 		}
 		for _, p := range candidates {
@@ -432,10 +444,11 @@ func (t *transport) remoteVersion(host, goos string) (string, error) {
 			}
 			return parseVersion(string(out)), nil
 		}
-		return "", fmt.Errorf("not installed")
+		return "", errRemoteNotInstalled
 	}
-	// Try common locations via ssh.
-	script := "bashy --version 2>&1; echo ___BASHY_VER_SEP___; ~/.local/bin/bashy --version 2>&1; echo ___BASHY_VER_SEP___; ~/.local/bin/bashy.real --version 2>&1"
+	// Probe only the directory owned by this bootstrap. In particular, do not
+	// treat an unrelated PATH bashy as ours.
+	script := remoteShellPath(remoteInstallDir+"/bashy") + " --version 2>&1 || true; echo ___BASHY_VER_SEP___; " + remoteShellPath(remoteInstallDir+"/bashy.real") + " --version 2>&1 || true"
 	out, err := t.sshRun(host, script)
 	if err != nil {
 		// ssh itself failed -> host unreachable
@@ -454,7 +467,7 @@ func (t *transport) remoteVersion(host, goos string) (string, error) {
 			return parseVersion(p), nil
 		}
 	}
-	return "", fmt.Errorf("not installed")
+	return "", errRemoteNotInstalled
 }
 
 func (t *transport) ensureRemoteDir(host string) error {
@@ -463,15 +476,13 @@ func (t *transport) ensureRemoteDir(host string) error {
 		if strings.HasPrefix(host, "fake://") {
 			root = strings.TrimPrefix(host, "fake://")
 		}
-		dir := filepath.Join(root, ".local", "bin")
-		if strings.HasSuffix(root, ".local/bin") {
+		dir := filepath.Join(root, remoteInstallDir)
+		if strings.HasSuffix(root, remoteInstallDir) {
 			dir = root
-		} else if strings.HasSuffix(root, ".local") {
-			dir = filepath.Join(root, "bin")
 		}
 		return os.MkdirAll(dir, 0o755)
 	}
-	_, err := t.sshRun(host, "mkdir -p ~/.local/bin")
+	_, err := t.sshRun(host, "mkdir -p "+remoteShellPath(remoteInstallDir))
 	return err
 }
 
@@ -532,7 +543,9 @@ func (t *transport) chmodAndMove(host, tmp, dst string) error {
 	}
 	// Use ssh to chmod and mv atomically.
 	// Quote paths for shell.
-	cmd := fmt.Sprintf("chmod +x %s && mv %s %s", shellQuote(tmp), shellQuote(tmp), shellQuote(dst))
+	// tmp and dst are generated by remotePath, never supplied by the host, so
+	// the $HOME form is both safe and necessary for shell expansion.
+	cmd := fmt.Sprintf("chmod +x %s && mv %s %s", remoteShellPath(tmp), remoteShellPath(tmp), remoteShellPath(dst))
 	_, err := t.sshRun(host, cmd)
 	return err
 }

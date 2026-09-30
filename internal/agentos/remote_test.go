@@ -5,7 +5,6 @@ package agentos
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,10 +29,10 @@ func TestParseVersion(t *testing.T) {
 
 func TestNormalizeGOOS(t *testing.T) {
 	cases := map[string]string{
-		"Darwin": "darwin",
-		"Linux":  "linux",
+		"Darwin":     "darwin",
+		"Linux":      "linux",
 		"MINGW64_NT": "windows",
-		"unknown": "",
+		"unknown":    "",
 	}
 	for in, want := range cases {
 		if got := normalizeGOOS(in); got != want {
@@ -44,10 +43,10 @@ func TestNormalizeGOOS(t *testing.T) {
 
 func TestNormalizeGOARCH(t *testing.T) {
 	cases := map[string]string{
-		"x86_64": "amd64",
-		"arm64": "arm64",
+		"x86_64":  "amd64",
+		"arm64":   "arm64",
 		"aarch64": "arm64",
-		"i386": "386",
+		"i386":    "386",
 	}
 	for in, want := range cases {
 		if got := normalizeGOARCH(in); got != want {
@@ -88,8 +87,8 @@ func TestRemoteInstallFake_FreshIdempotentAndUpgrade(t *testing.T) {
 		t.Fatalf("version mismatch after fresh install: local %q remote %q", localVer, remoteVer)
 	}
 	// Check both launcher and real exist on darwin (needsLauncher).
-	binPath := filepath.Join(tmp, ".local", "bin", "bashy")
-	realPath := filepath.Join(tmp, ".local", "bin", "bashy.real")
+	binPath := filepath.Join(tmp, remoteInstallDir, "bashy")
+	realPath := filepath.Join(tmp, remoteInstallDir, "bashy.real")
 	if _, err := os.Stat(binPath); err != nil {
 		t.Fatalf("bashy not at %s: %v", binPath, err)
 	}
@@ -185,7 +184,37 @@ func TestRemoteInstallFake_FreshIdempotentAndUpgrade(t *testing.T) {
 	if remoteNewVer != localVer {
 		t.Fatalf("upgrade failed: got %q want %q", remoteNewVer, localVer)
 	}
-	_ = fmt.Sprintf("ok")
+}
+
+func TestRemoteInstallFakePreservesUserPathBinary(t *testing.T) {
+	tmp := t.TempDir()
+	userBin := filepath.Join(tmp, ".local", "bin", "bashy")
+	if err := os.MkdirAll(filepath.Dir(userBin), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(userBin, []byte("do not replace user work"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(userBin)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := remoteCmd()
+	cmd.SetArgs([]string{"install", "--fake-root", tmp, "fakehost"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	after, err := os.ReadFile(userBin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatal("remote install replaced the user's PATH binary")
+	}
+	if _, err := os.Stat(filepath.Join(tmp, remoteInstallDir, "bashy")); err != nil {
+		t.Fatalf("owned remote binary not installed: %v", err)
+	}
 }
 
 func TestRemoteInstallFakeViaPathHost(t *testing.T) {
