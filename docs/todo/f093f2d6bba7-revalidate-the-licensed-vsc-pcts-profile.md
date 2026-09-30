@@ -6,9 +6,9 @@ seq: 35
 status: todo
 priority: p1
 created: 2026-09-03T00:23:52.71079Z
-sprint: 100
-sprint_id: b25f503b-9786-5052-8c12-472beb844ecb
-sprint_title: Sprint 100 — Profile D residual closure and final certification rerun
+sprint: 341
+sprint_id: 5f262cbb-e61a-5a5e-8361-c60190adf78f
+sprint_title: 'POSIX certification: base XCU claim, pure Go, Linux x86_64 - fresh baseline, failure list, final run'
 ---
 
 Execute the licensed Profile B/VSC-PCTS procedure against the frozen candidate when the human-gated harness is available; compare results to the prior evidence, update the private handoff record, and keep submission/trademark claims separate from test completion.
