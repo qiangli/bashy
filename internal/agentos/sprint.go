@@ -37,6 +37,7 @@ func newSprintCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newSprintInboxAckCmd())
 	cmd.AddCommand(newSprintMonitorCmd())
+	cmd.AddCommand(newSprintWaitCmd())
 	return cmd
 }
 
