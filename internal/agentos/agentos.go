@@ -542,6 +542,9 @@ func runDagDispatch(args []string, stdout, stderr io.Writer) int {
 }
 
 func isFrontDoorInvocation(name string) bool {
+	if name == "remote" {
+		return true
+	}
 	if name == "" || name[0] == '-' || name[0] == '+' || strings.ContainsRune(name, os.PathSeparator) || strings.ContainsRune(name, '/') {
 		return false
 	}
@@ -1344,6 +1347,13 @@ func dispatch() {
 		// client lives on as `outpost git`, for BOOTSTRAPPING a bare node that has
 		// outpost but no real git yet. `git-scm` is an explicit synonym.
 		cmd := gitscm.NewGitSCMCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			dispatchExit(1)
+		}
+		dispatchExit(0)
+	case "remote":
+		cmd := remoteCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
