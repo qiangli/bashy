@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -72,6 +73,9 @@ func TestPeerChannelCloseNilClientIsSafe(t *testing.T) {
 }
 
 func TestPeerChannelEmbeddedServerExecSFTPAndForward(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("peer server requires POSIX ownership checks for authorized keys; Windows ACL handling is not implemented")
+	}
 	me, err := user.Current()
 	if err != nil || me.Username == "" {
 		t.Skipf("current user unavailable: %v", err)

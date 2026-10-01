@@ -36,8 +36,8 @@ func TestDispatchPOSIXProvidersHelpNamesCurrentOwnership(t *testing.T) {
 		t.Fatalf("posix-providers --help exit = %d, stderr = %q", code, err.String())
 	}
 	for _, want := range []string{
-		"Active external providers (7): ar, ctags, ex, man, nm, strip, vi",
-		"Go-only replacements, never external providers: bc, ed, make, patch, mail, mailx, talk, lp, m4, localedef.",
+		"Active external providers (6): ar, ctags, ex, nm, strip, vi",
+		"Go-only replacements, never external providers: bc, ed, make, patch, mail, mailx, talk, lp, m4, localedef, man, gencat.",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("posix-providers help missing %q:\n%s", want, out.String())
@@ -45,7 +45,7 @@ func TestDispatchPOSIXProvidersHelpNamesCurrentOwnership(t *testing.T) {
 	}
 	// Check assembled ownership as well as help text: these names must
 	// remain registered without any external-provider definition.
-	for _, name := range []string{"localedef", "lp", "m4"} {
+	for _, name := range []string{"localedef", "lp", "m4", "man", "gencat"} {
 		if tool.Lookup(name) == nil {
 			t.Errorf("Go applet %s is absent from the assembled registry", name)
 		}

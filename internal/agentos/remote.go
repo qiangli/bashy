@@ -667,7 +667,7 @@ func isFakeHostPath(host string) bool {
 	if host == "" {
 		return false
 	}
-	if strings.HasPrefix(host, "/") || strings.HasPrefix(host, "./") || strings.HasPrefix(host, "../") {
+	if filepath.IsAbs(host) || strings.HasPrefix(host, "./") || strings.HasPrefix(host, "../") {
 		if fi, err := os.Stat(host); err == nil && fi.IsDir() {
 			return true
 		}

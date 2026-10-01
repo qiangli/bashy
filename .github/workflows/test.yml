@@ -51,6 +51,13 @@ jobs:
         timeout-minutes: 10
         run: |
           set -euxo pipefail
+          mkdir -p bin
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            go build -o bin/bashy.exe ./cmd/bashy
+          else
+            go build -o bin/bashy ./cmd/bashy
+          fi
+          export PATH="$PWD/bin:$PATH"
           if [ "$RUNNER_OS" = "Windows" ]; then
             go build ./cmd/bash ./cmd/sh ./cmd/bashy
             go vet  ./cmd/bash ./cmd/sh ./cmd/bashy ./internal/agentos

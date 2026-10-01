@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -276,7 +277,7 @@ func TestRemotePeerIdentityFakeIsPersistentAndPrivate(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if i == 0 || i == 4 {
+		if runtime.GOOS != "windows" && (i == 0 || i == 4) {
 			if info.Mode().Perm() != 0o600 {
 				t.Errorf("private file %s mode %o", path, info.Mode().Perm())
 			}
@@ -287,7 +288,7 @@ func TestRemotePeerIdentityFakeIsPersistentAndPrivate(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Mode().Perm() != 0o700 {
+		if runtime.GOOS != "windows" && info.Mode().Perm() != 0o700 {
 			t.Errorf("directory %s mode %o", path, info.Mode().Perm())
 		}
 	}
