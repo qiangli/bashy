@@ -88,7 +88,7 @@ func TestRemoteInstallFake_FreshIdempotentAndUpgrade(t *testing.T) {
 		t.Fatalf("version mismatch after fresh install: local %q remote %q", localVer, remoteVer)
 	}
 	// Check both launcher and real exist on darwin (needsLauncher).
-	binPath := filepath.Join(tmp, remoteInstallDir, "bashy")
+	binPath := filepath.Join(tmp, remoteInstallDir, binaryNameForGOOS(goos))
 	realPath := filepath.Join(tmp, remoteInstallDir, "bashy.real")
 	if _, err := os.Stat(binPath); err != nil {
 		t.Fatalf("bashy not at %s: %v", binPath, err)
@@ -213,7 +213,11 @@ func TestRemoteInstallFakePreservesUserPathBinary(t *testing.T) {
 	if !bytes.Equal(after, before) {
 		t.Fatal("remote install replaced the user's PATH binary")
 	}
-	if _, err := os.Stat(filepath.Join(tmp, remoteInstallDir, "bashy")); err != nil {
+	goos, _, err := newTransport("fakehost", tmp).detectOSArch("fakehost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(tmp, remoteInstallDir, binaryNameForGOOS(goos))); err != nil {
 		t.Fatalf("owned remote binary not installed: %v", err)
 	}
 }
