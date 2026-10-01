@@ -10,7 +10,7 @@
 #
 # Build with the PARENT directory of the bashy checkout as context — it must
 # contain the sibling checkouts (coreutils sh readline filebrowser bashsharp
-# yoke). scripts/quickstart-container-smoke.sh stages exactly that context and
+# yoke outpost). scripts/quickstart-container-smoke.sh stages exactly that context and
 # is the supported entry point:
 #
 #   podman build --target mode-a -f bashy/examples/quickstart/Containerfile -t q-a CONTEXT
@@ -51,6 +51,7 @@ COPY filebrowser/ filebrowser/
 COPY bashsharp/ bashsharp/
 COPY yoke/ yoke/
 COPY ycode/ ycode/
+COPY outpost/ outpost/
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     cd bashy \
