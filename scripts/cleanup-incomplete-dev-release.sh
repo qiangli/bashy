@@ -1,10 +1,14 @@
 #!/bin/bash
-# On a failed workflow, remove only a draft created during THIS run. Never
-# delete a published candidate or a draft from an earlier workflow attempt.
+# On a failed workflow, remove only a draft bearing THIS run's GoReleaser
+# marker. Neither time nor tag/commit alone proves ownership.
 set -euo pipefail
 : "${GH_TOKEN:?}" "${REPO:?}" "${TAG:?}" "${COMMIT:?}" "${RUN_ID:?}"
-state=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '{draft, created_at}' 2>/dev/null) || exit 0
+state=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '{draft, created_at, body}' 2>/dev/null) || exit 0
 [[ $(jq -r .draft <<<"$state") == true ]] || exit 0
+if ! jq -r .body <<<"$state" | grep -Fxq "<!-- bashy-release-run: $RUN_ID -->"; then
+ echo "preserving draft without this run's marker"
+ exit 0
+fi
 created=$(jq -r .created_at <<<"$state")
 started=$(gh api "repos/$REPO/actions/runs/$RUN_ID" --jq .created_at)
 [[ $created > $started || $created == "$started" ]] || { echo "preserving older draft $TAG"; exit 0; }

@@ -11,8 +11,26 @@ on:
 permissions:
   contents: write
 
+# One tag can have only one producer. Pending retries wait rather than
+# canceling a build that may already have created its draft.
+concurrency:
+  group: release-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Require unused release tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: ./scripts/verify-release-tag-vacant.sh
   darwin:
+    needs: preflight
     permissions:
       contents: read
       id-token: write
@@ -65,6 +83,7 @@ jobs:
           if-no-files-found: error
           retention-days: 3
   goreleaser:
+    needs: preflight
     outputs:
       seed_summary: ${{ steps.seed-bands.outputs.summary }}
     runs-on: ubuntu-latest
@@ -120,6 +139,7 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASHY_RELEASE_RUN_ID: ${{ github.run_id }}
   publish:
     permissions:
       contents: write
@@ -142,6 +162,7 @@ jobs:
           REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
           SEED_SUMMARY: ${{ needs.goreleaser.outputs.seed_summary }}
         run: ./scripts/publish-complete-dev-release.sh prepare
       - name: Sign complete artifact manifest
@@ -155,12 +176,13 @@ jobs:
           REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
           SEED_SUMMARY: ${{ needs.goreleaser.outputs.seed_summary }}
         run: ./scripts/publish-complete-dev-release.sh publish
   cleanup:
     name: remove incomplete draft from this run
-    if: ${{ always() && (needs.darwin.result != 'success' || needs.goreleaser.result != 'success' || needs.publish.result != 'success') }}
-    needs: [darwin, goreleaser, publish]
+    if: ${{ always() && needs.preflight.result == 'success' && (needs.darwin.result != 'success' || needs.goreleaser.result != 'success' || needs.publish.result != 'success') }}
+    needs: [preflight, darwin, goreleaser, publish]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

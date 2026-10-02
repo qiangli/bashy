@@ -128,6 +128,10 @@ release:
   github:
     owner: qiangli
     name: bashy
+  # The draft is owned by exactly one Actions run. Cleanup requires this marker
+  # before it may delete a failed draft, so another actor's release is safe.
+  header: |
+    <!-- bashy-release-run: {{ .Env.BASHY_RELEASE_RUN_ID }} -->
   # A `-dev` semver tag is the QA candidate — mark it a PRE-RELEASE so promote.yml
   # (which refuses to byte-promote a non-prerelease) accepts it, and so users don't
   # mistake the untested candidate for the promoted release. `auto` flags any tag

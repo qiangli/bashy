@@ -4,11 +4,15 @@
 set -euo pipefail
 [[ $# == 1 && ( $1 == prepare || $1 == publish ) ]] || { echo "usage: $0 prepare|publish" >&2; exit 2; }
 phase=$1
-: "${GH_TOKEN:?}" "${REPO:?}" "${TAG:?}" "${COMMIT:?}"
+: "${GH_TOKEN:?}" "${REPO:?}" "${TAG:?}" "${COMMIT:?}" "${RUN_ID:?}"
 [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+-dev$ ]] || { echo "invalid candidate tag" >&2; exit 2; }
-state=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '{draft, prerelease, target_commitish}')
+state=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '{draft, prerelease, target_commitish, body}')
 [[ $(jq -r .draft <<<"$state") == true ]] || { echo "candidate release is not a draft" >&2; exit 1; }
 [[ $(jq -r .prerelease <<<"$state") == true ]] || { echo "candidate release is not a prerelease" >&2; exit 1; }
+if ! jq -r .body <<<"$state" | grep -Fxq "<!-- bashy-release-run: $RUN_ID -->"; then
+ echo "candidate draft does not belong to this workflow run" >&2
+ exit 1
+fi
 ref=$(gh api "repos/$REPO/git/ref/tags/$TAG" --jq '.object')
 ref_type=$(jq -r .type <<<"$ref")
 ref_sha=$(jq -r .sha <<<"$ref")
