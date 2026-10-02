@@ -1,7 +1,7 @@
 ---
 id: 33099a9a1849
 kind: feature
-title: S369.3 Java as an optional registered runner fence (no built-in JDK)
+title: S370.1 Java as an optional registered runner fence (no built-in JDK)
 seq: 387
 status: todo
 priority: p2
@@ -9,9 +9,9 @@ labels:
     - toolchains
     - licensing
 created: 2026-10-01T17:31:45.833161Z
-sprint: 369
-sprint_id: ac323bec-85c1-53d1-9796-b27703113450
-sprint_title: Permissive-only grammar set and Java as a registered fence
+sprint: 370
+sprint_id: d64d3ab6-4bbb-5bca-8a47-3d7e5dbf9bc6
+sprint_title: Java as an optional registered runner fence (no built-in JDK)
 ---
 
 Goal

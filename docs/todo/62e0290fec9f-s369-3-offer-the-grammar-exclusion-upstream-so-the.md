@@ -1,7 +1,7 @@
 ---
 id: 62e0290fec9f
 kind: chore
-title: S369.4 Offer the grammar exclusion upstream so the fork can retire
+title: S369.3 Offer the grammar exclusion upstream so the fork can retire
 seq: 398
 status: todo
 priority: p3
