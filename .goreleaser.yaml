@@ -1,7 +1,6 @@
 # goreleaser config for bashy — Bash 5.3 drop-in.
-# The Linux one-file signal gate accepts pure-Go ET_EXEC builds. Darwin
-# cmd/bashy requires a native cgo constructor; this cross-build recipe fails
-# closed at its post-build gate until a native Darwin release lane is wired.
+# Linux one-file artifacts are pure Go. Native macOS jobs build the Darwin
+# artifacts with cgo, then add them to this draft before it is published.
 # NOTE: bashy depends on the qiangli/sh fork via `replace => ../sh`. CI runs
 # ./scripts/bootstrap-siblings.sh first to clone it next door at the pinned SHA.
 version: 2
@@ -33,7 +32,6 @@ builds:
       - -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Version "-dev" }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit={{ .Env.SHELL_RUNTIME_COMMIT }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime={{ .Env.SHELL_RUNTIME_COMMIT_TIME }}'
     goos:
       - linux
-      - darwin
       - windows
     goarch:
       - amd64
@@ -135,6 +133,7 @@ release:
   # mistake the untested candidate for the promoted release. `auto` flags any tag
   # carrying a semver prerelease component (-dev / -rc / -beta).
   prerelease: auto
+  draft: true
 
 changelog:
   use: github

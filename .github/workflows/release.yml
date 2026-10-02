@@ -12,7 +12,53 @@ permissions:
   contents: write
 
 jobs:
+  darwin:
+    name: native Bashy ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            arch: amd64
+          - runner: macos-15
+            arch: arm64
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Bootstrap pinned siblings
+        shell: bash
+        env:
+          BASHY_BOOTSTRAP_SUBMODULES: "1"
+        run: ./scripts/bootstrap-siblings.sh
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+          run_install: false
+      - name: Build, audit and probe native one-file Bashy
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          ./scripts/build-meet-spa.sh required
+          ./scripts/build-native-darwin-release.sh "$TAG" "$ARCH" "$RUNNER_TEMP/native"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bashy-darwin-${{ matrix.arch }}
+          path: ${{ runner.temp }}/native/bashy-darwin-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+          retention-days: 3
   goreleaser:
+    outputs:
+      seed_summary: ${{ steps.seed-bands.outputs.summary }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -66,13 +112,23 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Append seed summary to release notes
+  publish:
+    name: verify complete draft and publish candidate
+    needs: [darwin, goreleaser]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bashy-darwin-*
+          path: native
+          merge-multiple: true
+      - name: Attach native artifacts, verify all bytes, publish draft
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
-          SEED_SUMMARY: ${{ steps.seed-bands.outputs.summary }}
-        run: |
-          gh release view "$TAG" --json body --jq .body > "$RUNNER_TEMP/release-notes.md"
-          printf '\n%s\n' "$SEED_SUMMARY" >> "$RUNNER_TEMP/release-notes.md"
-          gh release edit "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+          COMMIT: ${{ github.sha }}
+          SEED_SUMMARY: ${{ needs.goreleaser.outputs.seed_summary }}
+        run: ./scripts/publish-complete-dev-release.sh
