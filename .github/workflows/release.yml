@@ -13,6 +13,10 @@ permissions:
 
 jobs:
   darwin:
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     name: native Bashy ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -50,6 +54,10 @@ jobs:
         run: |
           ./scripts/build-meet-spa.sh required
           ./scripts/build-native-darwin-release.sh "$TAG" "$ARCH" "$RUNNER_TEMP/native"
+      - name: Sign native Bashy archive provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ runner.temp }}/native/bashy-darwin-${{ matrix.arch }}.tar.gz
       - uses: actions/upload-artifact@v4
         with:
           name: bashy-darwin-${{ matrix.arch }}
@@ -113,6 +121,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   publish:
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     name: verify complete draft and publish candidate
     needs: [darwin, goreleaser]
     runs-on: ubuntu-latest
@@ -123,7 +135,7 @@ jobs:
           pattern: bashy-darwin-*
           path: native
           merge-multiple: true
-      - name: Attach native artifacts, verify all bytes, publish draft
+      - name: Verify native provenance and prepare complete signed manifest
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -131,4 +143,33 @@ jobs:
           TAG: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
           SEED_SUMMARY: ${{ needs.goreleaser.outputs.seed_summary }}
-        run: ./scripts/publish-complete-dev-release.sh
+        run: ./scripts/publish-complete-dev-release.sh prepare
+      - name: Sign complete artifact manifest
+        uses: actions/attest@v4
+        with:
+          subject-path: release-dist/checksums.txt
+      - name: Attach audited assets and publish candidate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+          SEED_SUMMARY: ${{ needs.goreleaser.outputs.seed_summary }}
+        run: ./scripts/publish-complete-dev-release.sh publish
+  cleanup:
+    name: remove incomplete draft from this run
+    if: ${{ always() && (needs.darwin.result != 'success' || needs.goreleaser.result != 'success' || needs.publish.result != 'success') }}
+    needs: [darwin, goreleaser, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Delete only this run's incomplete draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: ./scripts/cleanup-incomplete-dev-release.sh

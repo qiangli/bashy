@@ -52,7 +52,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the release + read/write refs (belt-and-suspenders over the workflow-level grant)
+      attestations: read
     steps:
+      - uses: actions/checkout@v7
       - name: normalize version
         id: v
         env:
@@ -130,6 +132,18 @@ jobs:
           gh release download "${DEV}" -R "${REPO}" -D dist
           echo "downloaded the exact bytes QA tested:"
           ls -la dist/
+
+      - name: verify signed candidate manifest and native Darwin provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.v.outputs.dev }}
+          COMMIT: ${{ steps.src.outputs.commit }}
+        run: |
+          ./scripts/verify-release-asset-set.sh dist
+          ./scripts/verify-release-provenance.sh dist/checksums.txt
+          ./scripts/verify-release-provenance.sh dist/bashy-darwin-amd64.tar.gz
+          ./scripts/verify-release-provenance.sh dist/bashy-darwin-arm64.tar.gz
 
       - name: create official release (byte-identical, no rebuild)
         env:
