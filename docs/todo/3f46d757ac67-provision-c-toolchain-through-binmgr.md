@@ -29,3 +29,9 @@ Implementation contract
 Acceptance
 - A supported host can run a C# console project through Bashy with no system .NET install, using one verified cached SDK.
 - The release SBOM remains scoped to Bashy's own distributed bytes; the .NET SDK appears in the separate runtime-download inventory with platform-specific license evidence and no unqualified permissive claim.
+
+Note for the PowerShell and C# fence sprint (Sprint 358, added 2026-10-02)
+- The Bash# `powershell` and `csharp` code fences planned in Sprint 358 do NOT depend on this story. They run on one pinned PowerShell 7.6 LTS archive, which already carries a .NET runtime and the Roslyn C# compiler; C# compiles there through `Add-Type`. This story serves only the optional NuGet tier (`#:package` lines in a C# fence).
+- License evidence already gathered, to be re-verified here against the pinned archives: the Windows x64 SDK zip of 10.0.401 has a `LICENSE.txt` stating the Microsoft .NET Library terms (not an OSI license), and contains closed components such as the WPF native libraries, `D3DCompiler_47_cor3.dll`, `vcruntime140_cor3.dll` and `Microsoft.DiaSymReader.Native`. A from-source build on Windows is not a way out: the upstream from-source build is Linux-only, a Windows build requires Visual Studio, and those components have no source.
+- Requested shape for Windows: an explicit opt-in that shows the license before the first download, or a user-supplied install selected through a `BASHPP_DOTNET` override. Linux and macOS archives are expected to be MIT; confirm from the archives.
+- Requested pins and child environment: SHA512 digests from the .NET release metadata committed per platform; `DOTNET_CLI_TELEMETRY_OPTOUT=1`, `DOTNET_NOLOGO=1`, and `DOTNET_CLI_HOME` plus `NUGET_PACKAGES` redirected under the Bashy cache.
