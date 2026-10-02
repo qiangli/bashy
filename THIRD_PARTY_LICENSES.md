@@ -57,9 +57,12 @@ on 2026-10-02.
    dependency closure** (transitively via `github.com/fatedier/frp`, the
    matrix-tunnel client). MPL-2.0 is file-level weak copyleft; §1 says no
    MPL compiled in. **Operator ruling 2026-10-02: bashy stays permissive-only;
-   §1 is not amended.** yamux must therefore leave the shipped closure —
-   replace the muxer or move the frp-based tunnel client out of the lean
-   `cmd/bashy` build. Until then the permissive-only release claim is blocked.
+   §1 is not amended.** The chain is `internal/agentos` → `outpost/pkg/sshserver`
+   → `outpost/internal/agent` → `frp/client` → yamux; bashy never opens a
+   tunnel. Because the module is linked UNMODIFIED, it is tolerated for now;
+   its removal is filed as **Sprint 368** (S368.1: cut the ssh-server → agent
+   import so frp and yamux leave bashy's closure; S368.2: clean-room
+   permissive yamux client for outpost's own tunnel). Not scheduled yet.
 2. **`github.com/odvcencio/gotreesitter` grammar blobs** — the runtime is MIT,
    but without build tags it embeds all 206 generated grammars (~21 MB) whose
    upstream licenses are not recorded anywhere (`grammars/languages.lock`
