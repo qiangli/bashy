@@ -164,3 +164,50 @@ func TestVSCTrapSignalBoundary(t *testing.T) {
 		p.finish(t)
 	})
 }
+
+// GA42 sends a signal after starting a noninteractive shell but before
+// providing the script on stdin. The launcher records inherited SIG_IGN in
+// BASHY_HARD_IGNORE; the CLI must consume it before blocking on stdin.
+func TestInheritedIgnoredSignalsWhileWaitingForStdin(t *testing.T) {
+	for _, name := range []string{"ABRT", "ALRM", "PIPE", "QUIT", "TERM", "USR1", "USR2"} {
+		t.Run(name, func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			cmd := exec.Command("/bin/sh", "-c", "trap '' "+name+`; exec "$BASH_BIN"`)
+			cmd.Env = append(os.Environ(),
+				"BASH_BIN="+builtBashBin(t),
+				"BASHY_HARD_IGNORE="+name,
+				"POSIXLY_CORRECT=1",
+			)
+			cmd.Stdout, cmd.Stderr = &out, &errOut
+			stdin, err := cmd.StdinPipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+			// Leave stdin open and empty until after delivery, as SigWait -r
+			// does. The shell remains blocked in the script read at this point.
+			time.Sleep(300 * time.Millisecond)
+			sig, ok := syscall.Signal(0), false
+			for _, entry := range carrierSignalNumbers {
+				if entry.name == name {
+					sig, ok = entry.sig, true
+					break
+				}
+			}
+			if !ok {
+				t.Fatalf("unknown signal %q", name)
+			}
+			if err := cmd.Process.Signal(sig); err != nil {
+				t.Fatal(err)
+			}
+			_, writeErr := io.WriteString(stdin, "printf survived\n")
+			_ = stdin.Close()
+			waitErr := cmd.Wait()
+			if writeErr != nil || waitErr != nil || out.String() != "survived" {
+				t.Fatalf("signal %s: write=%v wait=%v stdout=%q stderr=%q", name, writeErr, waitErr, out.String(), errOut.String())
+			}
+		})
+	}
+}

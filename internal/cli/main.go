@@ -2786,6 +2786,11 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	if reader == nil {
 		return nil
 	}
+	// A standalone shell can wait for stdin before receiving its first command.
+	// Restore signals ignored on entry before that wait: Reset consumes the
+	// launcher's signal provenance and reinstalls SIG_IGN. GA42 delivers the
+	// signal while stdin is still empty.
+	r.Reset()
 	// Preflight and -c parsing must use the same selected grammar as file
 	// execution. Starting in Classic here sent valid Bash++ source through
 	// Classic recovery, and rejected it entirely on the direct -c path.
@@ -2865,7 +2870,6 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	// the body. Wire that behaviour through the parser so the
 	// affected tests (comsub-eof, exportfunc, …) behave like bash.
 	ctx := context.Background()
-	r.Reset()
 	startupLastArg := r.LiveVar("_")
 	if *command != "" {
 		assign := "BASH_EXECUTION_STRING=" + singleQuote(*command)
