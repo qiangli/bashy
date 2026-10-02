@@ -265,6 +265,7 @@ dist:
 		ext=; [ "$$os" = windows ] && ext=.exe; \
 		for name in bash bashy; do \
 			out=$(BIN_DIR)/dist/$$name-$$os-$$arch$$ext; \
+			rm -f "$$out"; \
 			tmp=$$(mktemp "$$out.pending.XXXXXX"); \
 			ldflags="$(LDFLAGS)"; [ "$$name" = bashy ] && ldflags="$(BASHY_LDFLAGS)"; \
 			echo "building $$out..."; \

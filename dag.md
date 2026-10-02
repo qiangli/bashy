@@ -221,7 +221,7 @@ fi
 
 mkdir -p bin
 engine="bin/bashy-podman-test${ext}"
-"$BASHY_EXE" go build -trimpath -tags "$tags" -o "$engine" ./cmd/bashy
+BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh "$engine" "-w" "$tags"
 
 machine_list="bin/bashy-podman-machine-list.txt"
 info_log="bin/bashy-podman-info.txt"
