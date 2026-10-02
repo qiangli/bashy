@@ -1,3 +1,5 @@
+//go:build !bashy_core
+
 // Copyright (c) 2026 qiangli
 // See LICENSE for licensing information
 
