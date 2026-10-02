@@ -55,9 +55,11 @@ on 2026-10-02.
 
 1. **`github.com/hashicorp/yamux` — MPL-2.0 — IS in the lean `cmd/bashy`
    dependency closure** (transitively via `github.com/fatedier/frp`, the
-   matrix-tunnel client). MPL-2.0 is file-level weak copyleft and is used
-   unmodified, but §1 says no MPL compiled in. Needs a ruling: amend §1 to
-   admit unmodified MPL-2.0, or replace the muxer.
+   matrix-tunnel client). MPL-2.0 is file-level weak copyleft; §1 says no
+   MPL compiled in. **Operator ruling 2026-10-02: bashy stays permissive-only;
+   §1 is not amended.** yamux must therefore leave the shipped closure —
+   replace the muxer or move the frp-based tunnel client out of the lean
+   `cmd/bashy` build. Until then the permissive-only release claim is blocked.
 2. **`github.com/odvcencio/gotreesitter` grammar blobs** — the runtime is MIT,
    but without build tags it embeds all 206 generated grammars (~21 MB) whose
    upstream licenses are not recorded anywhere (`grammars/languages.lock`

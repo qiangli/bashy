@@ -10,7 +10,7 @@ One line (or a short paragraph) per load-bearing doc under `docs/`, moved verbat
 - `fence-toolchain-licenses.md` — **Bash# fence toolchains, inventory of record
   (2026-10-02):** per fence language the provisioner, pin, and the license of the
   actual downloaded archive including bundled non-permissive parts (Bun links LGPL
-  JavaScriptCore; Node bundles Artistic-2.0 npm; Zig bundles LGPL glibc / ZPL mingw
+  JavaScriptCore; Node bundles npm under Artistic-2.0, permissive but not in the policy's trio; Zig bundles LGPL glibc / ZPL mingw
   libc trees); `bash`/`sh` fences are bashy's own engine; the planned PowerShell/C#
   posture (Sprint 358). Seed of the Sprint 350 runtime-acquisition inventory.
 - `contracts.md` — **Bash++ contracts (design by contract), Sprint 203:**

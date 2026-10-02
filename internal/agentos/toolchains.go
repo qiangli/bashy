@@ -30,7 +30,7 @@ import (
 // Licenses (of the archive as read, not the badge — docs/fence-toolchain-licenses.md
 // is the record): Go BSD-3 · Zig MIT (bundles LGPL-2.1 glibc and ZPL-2.1 mingw-w64
 // libc trees as compile-time inputs) · uv MIT/Apache-2.0 + CPython PSF-2.0 (libedit,
-// no GNU readline) · Node MIT (bundles npm, Artistic-2.0) + typescript Apache-2.0 ·
+// no GNU readline) · Node MIT (bundles npm, Artistic-2.0: permissive, non-copyleft) + typescript Apache-2.0 ·
 // Bun: its own code MIT but the binary statically links LGPL-2 JavaScriptCore and
 // LGPL-2.1 tinycc, so not permissive as a program (download+exec only, never the
 // default) · rustup MIT/Apache-2.0. A row's Ensure is cache-first, so the cost is
