@@ -86,6 +86,7 @@ func main() {
 		return
 	}
 	if shellInvocation(os.Args[0]) {
+		installInheritedSignalIgnores()
 		cli.Main()
 		return
 	}
@@ -94,6 +95,7 @@ func main() {
 	// intercept it before everything. cli.Main also intercepts, but by then
 	// telemetry.Init below would already have run. Never returns in helper mode.
 	cli.MaybeRunJobCarrierHelper()
+	installInheritedSignalIgnores()
 
 	// The OTel plane. A no-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set — no exporter,
 	// no batcher, no goroutine, no cost — so an ordinary interactive shell pays nothing.
@@ -135,4 +137,27 @@ func shellInvocation(argv0 string) bool {
 func utilityInvocation(argv0 string) bool {
 	name := invocationName(argv0)
 	return name == "coreutils" || (name != "bashy" && !shellInvocation(argv0) && tool.Lookup(name) != nil)
+}
+
+// installInheritedSignalIgnores applies the pre-Go entry snapshot only to
+// shell routes. A parent can exec us with SIG_IGN dispositions that the Go
+// runtime replaces before main; the interpreter needs their original names
+// in BASHY_HARD_IGNORE to keep them immutable. CLI's Go-source environment
+// snapshot ran before this enrichment and still represents the caller's env.
+func installInheritedSignalIgnores() {
+	captured := preGoIgnoredSignals()
+	if captured == "" {
+		return
+	}
+	prior := os.Getenv("BASHY_HARD_IGNORE")
+	seen := make(map[string]bool)
+	var names []string
+	for _, name := range strings.Split(prior+","+captured, ",") {
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	_ = os.Setenv("BASHY_HARD_IGNORE", strings.Join(names, ","))
 }
