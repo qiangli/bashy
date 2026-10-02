@@ -18,14 +18,13 @@ COPY sh/ sh/
 COPY readline/ readline/
 COPY filebrowser/ filebrowser/
 
-# Always use the repository build so Linux keeps the native signal launcher
-# next to its Go payload. CGO stays disabled for the Go compilation; the small
-# launcher is an ordinary glibc C executable, not cgo.
+# Always use the repository build so the ELF signal-symbol gate runs before
+# the one-file Bashy payload is copied. CGO stays disabled for this image.
 RUN test "$TARGETOS" = linux && \
     cd /src/bashy && \
     CGO_ENABLED=0 GOOS=linux GOARCH="$TARGETARCH" \
       make build-bashy VERSION="$VERSION" BUILD_ID="$BUILD_ID" && \
-    test -x bin/bashy && test -x bin/bashy.real
+    test -x bin/bashy && test ! -e bin/bashy.real
 
 FROM ${RUNTIME_IMAGE} AS runtime
 
@@ -43,8 +42,8 @@ ENV LANG=C.UTF-8 \
     OTEL_TRACES_EXPORTER=none \
     PATH=/opt/bashy/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# This is intentionally Ubuntu rather than scratch. Bashy's locale bridge and
-# native launcher need glibc, while useful shell operation needs CA, timezone,
+# This is intentionally Ubuntu rather than scratch. Bashy's locale bridge
+# needs glibc, while useful shell operation needs CA, timezone,
 # locale, and terminal databases. POSIX provider packages/services belong in a
 # derived profile image, not in this reusable base.
 RUN set -eux; \
@@ -59,19 +58,17 @@ RUN set -eux; \
     install -d -o 10001 -g 10001 /var/cache/bashy/bin /home/bashy/.cache
 
 COPY --from=builder --chown=0:0 /src/bashy/bin/bashy /bashy
-COPY --from=builder --chown=0:0 /src/bashy/bin/bashy.real /bashy.real
 
 # Keep Ubuntu's /bin/sh (dash) intact: derived-image package maintainer scripts
 # must not be forced through Bashy. `sh` on the image PATH is Bashy's POSIX-mode
 # alias, and Profile D may independently wire /vsc/sut/sh to /bashy.
 RUN set -eux; \
-    chmod 0755 /bashy /bashy.real; \
+    chmod 0755 /bashy; \
     install -d /opt/bashy/bin; \
     ln -s /bashy /usr/local/bin/bashy; \
     ln -s /bashy /opt/bashy/bin/sh; \
     test ! /bin/sh -ef /bashy; \
-    ldd /bashy >/dev/null; \
-    ldd /bashy.real >/dev/null
+    ldd /bashy >/dev/null
 
 USER 10001:10001
 WORKDIR /work

@@ -24,12 +24,12 @@ BUILD_ID ?= $(shell if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/
 	fi)
 SHELL_RUNTIME_COMMIT ?= $(shell sed -n 's/^sh=//p' .sibling-pins)
 SHELL_RUNTIME_COMMIT_TIME ?= $(shell git -C ../sh show -s --format=%cI $(SHELL_RUNTIME_COMMIT) 2>/dev/null)
-# -s -w strip the symbol table and DWARF debug info; with -trimpath (below)
-# this drops the binary ~30% (≈7.8M → ≈5.4M). A pure-Go bash can't reach C
-# bash's ~1.2M — the Go runtime/GC (~2.3M) plus the interpreter and the
-# x/text CJK charset tables (Big5/Shift-JIS, needed for locale-correct globs)
-# set a floor around 5M.
-LDFLAGS := -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$(VERSION)' -X 'github.com/qiangli/bashy/internal/cli.buildID=$(BUILD_ID)' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=$(SHELL_RUNTIME_COMMIT)' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=$(SHELL_RUNTIME_COMMIT_TIME)'
+# Linux cmd/bashy must retain runtime.fwdSig in its ELF symbol table. The
+# Coreutils inherited-signal route reads it to preserve an execve caller's
+# signal dispositions. -w removes DWARF; -s also removes the required symbol.
+STAMP_LDFLAGS := -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$(VERSION)' -X 'github.com/qiangli/bashy/internal/cli.buildID=$(BUILD_ID)' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=$(SHELL_RUNTIME_COMMIT)' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=$(SHELL_RUNTIME_COMMIT_TIME)'
+LDFLAGS := -s -w $(STAMP_LDFLAGS)
+BASHY_LDFLAGS := -w $(STAMP_LDFLAGS)
 
 # The Go FIPS 140-3 module version selected by the build-fips target (see
 # `go tool` / go.dev/doc/security/fips140). v1.0.0 holds CMVP certificate #5247.
@@ -120,15 +120,16 @@ build-bashy:
 	scripts/build-meet-spa.sh optional >/dev/null; \
 	tags="$(BASHY_TAGS)"; \
 	echo "building bashy$${tags:+ with embeds: $$tags} ..."; \
-	goos=$$(go env GOOS); out=$(BIN); launcher=$$(scripts/launcher-wanted.sh build-bashy); [ "$$launcher" = 1 ] && out=$(BIN).real || rm -f $(BIN).real; \
+	out=$(BIN); \
+	tmp=$$(mktemp "$$out.pending.XXXXXX"); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
 	if [ -n "$$tags" ]; then \
-		go build -trimpath -tags "$$tags" -ldflags "$(LDFLAGS)" -o $$out ./cmd/bashy; \
+		go build -trimpath -tags "$$tags" -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
 	else \
-		go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bashy; \
+		go build -trimpath -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
 	fi; \
-	if [ "$$launcher" = 1 ]; then \
-		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BIN) native/siglaunch.c.in; \
-	fi
+	go run ./tools/elfaudit --bashy-signal "$$tmp"; \
+	mv -f "$$tmp" "$$out"; \
+	rm -f $(BIN).real
 
 ## build-bashy-scratch: Build the lean, static linux Bashy profile used by
 ## Cloudbox and by the offline image (`bashy self image`). The stable amd64
@@ -139,9 +140,13 @@ build-bashy-scratch: BASHY_SCRATCH_ARTIFACT := $(if $(filter amd64,$(BASHY_SCRAT
 build-bashy-scratch:
 	@mkdir -p $$(dirname "$(BASHY_SCRATCH_ARTIFACT)")
 	@echo "building static linux/$(BASHY_SCRATCH_GOARCH) Bashy at $(BASHY_SCRATCH_ARTIFACT) ..."
-	@CGO_ENABLED=0 GOOS=linux GOARCH=$(BASHY_SCRATCH_GOARCH) $(GO) build -trimpath \
-		-tags bashy_scratch -ldflags "$(LDFLAGS)" \
-		-o "$(BASHY_SCRATCH_ARTIFACT)" ./cmd/bashy
+	@set -e; out="$(BASHY_SCRATCH_ARTIFACT)"; \
+	tmp=$$(mktemp "$$out.pending.XXXXXX"); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
+	CGO_ENABLED=0 GOOS=linux GOARCH=$(BASHY_SCRATCH_GOARCH) $(GO) build -trimpath \
+		-tags bashy_scratch -ldflags "$(BASHY_LDFLAGS)" \
+		-o "$$tmp" ./cmd/bashy; \
+	go run ./tools/elfaudit --bashy-signal "$$tmp"; \
+	mv -f "$$tmp" "$$out"
 
 ## build-image: The offline bashy image from this checkout: build the static
 ## scratch artifact for BASHY_IMAGE_ARCH (default: host arch) and wrap it FROM
@@ -173,15 +178,16 @@ build-fips:
 	@set -e; \
 	scripts/build-meet-spa.sh optional >/dev/null; \
 	tags="$(BASHY_TAGS)"; \
-	goos=$$(go env GOOS); out=$(BIN); launcher=$$(scripts/launcher-wanted.sh build-bashy); [ "$$launcher" = 1 ] && out=$(BIN).real || rm -f $(BIN).real; \
+	out=$(BIN); \
+	tmp=$$(mktemp "$$out.pending.XXXXXX"); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
 	if [ -n "$$tags" ]; then \
-		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -tags "$$tags" -ldflags "$(LDFLAGS)" -o $$out ./cmd/bashy; \
+		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -tags "$$tags" -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
 	else \
-		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bashy; \
+		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
 	fi; \
-	if [ "$$launcher" = 1 ]; then \
-		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BIN) native/siglaunch.c.in; \
-	fi
+	go run ./tools/elfaudit --bashy-signal "$$tmp"; \
+	mv -f "$$tmp" "$$out"; \
+	rm -f $(BIN).real
 
 ## install: Build and atomically install both binaries into the shared dhnt user
 ## bin ($$DHNT_BIN_DIR, default $$HOME/.local/bin). The installer refuses
@@ -253,17 +259,22 @@ dist:
 	@mkdir -p $(BIN_DIR)/dist
 	@scripts/build-meet-spa.sh optional >/dev/null; \
 	bashy_tags="$(BASHY_TAGS)"; \
+	tmp=; trap '[ -z "$$tmp" ] || rm -f "$$tmp"' EXIT HUP INT TERM; \
 	for plat in $(PLATFORMS); do \
 		os=$${plat%/*}; arch=$${plat#*/}; \
 		ext=; [ "$$os" = windows ] && ext=.exe; \
 		for name in bash bashy; do \
 			out=$(BIN_DIR)/dist/$$name-$$os-$$arch$$ext; \
+			tmp=$$(mktemp "$$out.pending.XXXXXX"); \
+			ldflags="$(LDFLAGS)"; [ "$$name" = bashy ] && ldflags="$(BASHY_LDFLAGS)"; \
 			echo "building $$out..."; \
 			if [ "$$name" = bashy ] && [ -n "$$bashy_tags" ]; then \
-				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -tags "$$bashy_tags" -ldflags "$(LDFLAGS)" -o $$out ./cmd/$$name || exit 1; \
+				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -tags "$$bashy_tags" -ldflags "$$ldflags" -o "$$tmp" ./cmd/$$name || exit 1; \
 			else \
-				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/$$name || exit 1; \
+				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$$ldflags" -o "$$tmp" ./cmd/$$name || exit 1; \
 			fi; \
+			if [ "$$name" = bashy ]; then go run ./tools/elfaudit --bashy-signal "$$tmp" || exit 1; fi; \
+			mv -f "$$tmp" "$$out" || exit 1; tmp=; \
 		done; \
 	done
 

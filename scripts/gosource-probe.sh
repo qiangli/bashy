@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Sprint 118, W1 (Bashy half): end-to-end probes for `--source=go`, driven
-# through the DEFAULT-BUILT launcher (bin/bashy, i.e. the C launcher over
-# bin/bashy.real) rather than through `go run` or an in-process test hook.
+# through the DEFAULT-BUILT one-file bin/bashy rather than through `go run`
+# or an in-process test hook.
 #
 # The three modes are the ones /tmp/s118-integration/bashpp-tests/tools/corpus
 # specifies:

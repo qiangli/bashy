@@ -68,10 +68,14 @@ func main() {
 	if err := verifyBashySurface(bashySource, runCommand); err != nil {
 		fatal(fmt.Errorf("refusing to install incomplete bashy: %w", err))
 	}
-	// Unix builds are a native pre-Go signal launcher plus a sibling Go
-	// payload. Install the payload first so replacing the launcher can never
-	// expose a path whose companion is missing.
-	for _, pair := range [][2]string{{bashSource + ".real", bashTarget + ".real"}, {bashySource + ".real", bashyTarget + ".real"}} {
+	if _, err := os.Stat(bashySource + ".real"); err == nil {
+		fatal(fmt.Errorf("refusing two-file Bashy build: %s.real exists", bashySource))
+	} else if !errors.Is(err, os.ErrNotExist) {
+		fatal(err)
+	}
+	// The lean bash drop-in still has a native launcher and Go payload on Unix.
+	// Install that payload first so its launcher never lacks a companion.
+	for _, pair := range [][2]string{{bashSource + ".real", bashTarget + ".real"}} {
 		if _, err := os.Stat(pair[0]); err == nil {
 			if err := installExecutable(pair[0], pair[1]); err != nil {
 				fatal(fmt.Errorf("install payload %s: %w", filepath.Base(pair[1]), err))
@@ -88,6 +92,9 @@ func main() {
 	}
 	if err := verifyBashySurface(bashyTarget, runCommand); err != nil {
 		fatal(fmt.Errorf("installed bashy failed verification: %w", err))
+	}
+	if err := os.Remove(bashyTarget + ".real"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		fatal(fmt.Errorf("remove obsolete Bashy companion: %w", err))
 	}
 	if err := installManualPages([]string{shManDir, coreutilsManDir}, manDir); err != nil {
 		fatal(fmt.Errorf("install manual pages: %w", err))
