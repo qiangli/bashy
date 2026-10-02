@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/qiangli/bashy/internal/extensions"
 	"github.com/qiangli/coreutils/shell"
 	"github.com/qiangli/coreutils/tool"
 	"github.com/qiangli/yoke/pkg/fleet"
@@ -201,6 +202,17 @@ func Dispatch() {
 		return
 	}
 	if os.Args[1] == "commands" || os.Args[1] == "command" {
+		if len(os.Args) > 2 && (os.Args[2] == "language" || os.Args[2] == "toolchain") {
+			if certProfile() {
+				fmt.Fprintln(os.Stderr, "bashy commands: extension records are unavailable in cert profile")
+				os.Exit(2)
+			}
+			if err := extensions.Run(extensions.NewStore(extensions.BuiltinReserved), os.Args[2], os.Args[3:], os.Stdout); err != nil {
+				fmt.Fprintf(os.Stderr, "bashy commands: %v\n", err)
+				os.Exit(2)
+			}
+			os.Exit(0)
+		}
 		cmd := fleet.NewCommandsCmd(fleet.WithReservedNames(reservedName), fleet.WithCommandProbe(scriptSyntaxProbe))
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {

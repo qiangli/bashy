@@ -21,6 +21,7 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 
+	"github.com/qiangli/bashy/internal/extensions"
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	"github.com/qiangli/coreutils/tool"
 	"github.com/qiangli/yoke/external/registry"
@@ -81,6 +82,17 @@ func runCommandsRegistry(args []string) int {
 }
 
 func dispatchCommands(args []string) int {
+	if len(args) > 0 && (args[0] == "language" || args[0] == "toolchain") {
+		if certProfile() {
+			fmt.Fprintln(os.Stderr, "bashy commands: extension records are unavailable in cert profile")
+			return 2
+		}
+		if err := extensions.Run(extensions.NewStore(extensions.BuiltinReserved), args[0], args[1:], os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "bashy commands: %v\n", err)
+			return 2
+		}
+		return 0
+	}
 	if rest, registry := commandsRegistryArgs(args); registry {
 		return runCommandsRegistry(rest)
 	} else {
@@ -213,6 +225,7 @@ func dispatchCommands(args []string) int {
 			fmt.Println("  set NAME --set PATH=VALUE | rm NAME | edit NAME | verify [NAME]")
 			fmt.Println("  show NAME --yaml|--json|--field PATH   the record; bare `commands NAME` is the atlas report")
 			fmt.Println("  list | schema                          the ring; every settable path")
+			fmt.Println("  language|toolchain add|show|set|rm|verify NAME  versioned optional payload records")
 			fmt.Println("  A CRUD word counts only when a NAME follows it: bare `commands rm` still shows rm's record.")
 			fmt.Println("  A name bashy already ships is refused; a PATH program may be shadowed. sync: not yet.")
 			return 0
