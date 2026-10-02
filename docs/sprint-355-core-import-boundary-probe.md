@@ -2,7 +2,14 @@
 
 **Story:** #392 (`65684e7f4df6`). **Status:** implementation probe; the
 `bashy_core` build tag is not a release profile. The default `cmd/bashy`
-continues to ship its full front door.
+continues to ship its full front door. `tools/releaseeligibility` checks Go
+build metadata on every promoted Bashy artifact and rejects this diagnostic
+tag; direct `go build -tags bashy_core` remains available for measurements.
+The gate is separate from the ELF/Mach-O signal audit. A local
+`make build-bashy BASHY_TAGS=bashy_core` run passed the signal audit, failed
+release eligibility, and left neither a final nor pending artifact. The
+GoReleaser post-build hook likewise removed a copied tagged stage; an
+untagged `make build-bashy` passed both checks.
 
 Go initializes every imported package before `main`, so choosing a shell or
 applet route from `argv[0]` cannot defer AgentOS/ycode/Genie initialization

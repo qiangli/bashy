@@ -128,6 +128,7 @@ build-bashy:
 		go build -trimpath -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
 	fi; \
 	go run ./tools/elfaudit --bashy-signal "$$tmp"; \
+	go run ./tools/releaseeligibility "$$tmp"; \
 	mv -f "$$tmp" "$$out"; \
 	rm -f $(BIN).real
 
@@ -146,6 +147,7 @@ build-bashy-scratch:
 		-tags bashy_scratch -ldflags "$(BASHY_LDFLAGS)" \
 		-o "$$tmp" ./cmd/bashy; \
 	go run ./tools/elfaudit --bashy-signal "$$tmp"; \
+	go run ./tools/releaseeligibility "$$tmp"; \
 	mv -f "$$tmp" "$$out"
 
 ## build-image: The offline bashy image from this checkout: build the static
@@ -186,6 +188,7 @@ build-fips:
 		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
 	fi; \
 	go run ./tools/elfaudit --bashy-signal "$$tmp"; \
+	go run ./tools/releaseeligibility "$$tmp"; \
 	mv -f "$$tmp" "$$out"; \
 	rm -f $(BIN).real
 
@@ -274,7 +277,7 @@ dist:
 			else \
 				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$$ldflags" -o "$$tmp" ./cmd/$$name || exit 1; \
 			fi; \
-			if [ "$$name" = bashy ]; then go run ./tools/elfaudit --bashy-signal "$$tmp" || exit 1; fi; \
+			if [ "$$name" = bashy ]; then go run ./tools/elfaudit --bashy-signal "$$tmp" || exit 1; go run ./tools/releaseeligibility "$$tmp" || exit 1; fi; \
 			mv -f "$$tmp" "$$out" || exit 1; tmp=; \
 		done; \
 	done

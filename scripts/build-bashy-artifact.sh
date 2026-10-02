@@ -22,6 +22,7 @@ if [ -n "${BASHY_EXE:-}" ]; then
 		"$BASHY_EXE" go build -trimpath -ldflags "$ldflags" -o "$tmp" ./cmd/bashy
 	fi
 	(unset GOOS GOARCH CGO_ENABLED; "$BASHY_EXE" go run ./tools/elfaudit --bashy-signal "$tmp")
+	(unset GOOS GOARCH CGO_ENABLED; "$BASHY_EXE" go run ./tools/releaseeligibility "$tmp")
 else
 	if [ -n "$tags" ]; then
 		go build -trimpath -tags "$tags" -ldflags "$ldflags" -o "$tmp" ./cmd/bashy
@@ -29,6 +30,7 @@ else
 		go build -trimpath -ldflags "$ldflags" -o "$tmp" ./cmd/bashy
 	fi
 	(unset GOOS GOARCH CGO_ENABLED; go run ./tools/elfaudit --bashy-signal "$tmp")
+	(unset GOOS GOARCH CGO_ENABLED; go run ./tools/releaseeligibility "$tmp")
 fi
 
 mv -f "$tmp" "$out"
