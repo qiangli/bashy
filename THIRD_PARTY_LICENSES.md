@@ -63,12 +63,16 @@ on 2026-10-02.
    its removal is filed as **Sprint 368** (S368.1: cut the ssh-server → agent
    import so frp and yamux leave bashy's closure; S368.2: clean-room
    permissive yamux client for outpost's own tunnel). Not scheduled yet.
-2. **`github.com/odvcencio/gotreesitter` grammar blobs** — the runtime is MIT,
-   but without build tags it embeds all 206 generated grammars (~21 MB) whose
-   upstream licenses are not recorded anywhere (`grammars/languages.lock`
-   lists the source repos). bashy uses 9 languages. Fix path is
-   `grammar_set_core` / `grammar_blobs_external` plus a per-grammar license
-   list (`docs/TODO.md` already tracks the size half).
+2. **`github.com/odvcencio/gotreesitter` grammar blobs** — the runtime is MIT
+   and embeds all 206 grammar parse tables. Operator decision 2026-10-02: keep
+   them (the `ast` verbs serve code agents, not only fences) and attribute.
+   Every grammar's license is now read and recorded in
+   `../yoke/THIRD_PARTY_GRAMMARS.md` (201 permissive). **Five are
+   non-permissive and are still embedded today: `caddy`, `disassembly`,
+   `jq`, `ebnf` (GPL-3.0) and `nim` (MPL-2.0).** gotreesitter offers no
+   per-grammar exclusion that removes the bytes (`grammar_set_core` still
+   carries three of them), so dropping them needs a pinned fork with those
+   blobs and registrations deleted. Tracked as a Sprint 350 story.
 3. MPL-2.0 modules present in `go.mod` through the podman and filebrowser
    graphs but **not** in the lean closure: `cyphar.com/go-pathrs`,
    `hashicorp/errwrap`, `hashicorp/go-multierror`, `hashicorp/golang-lru/v2`.
@@ -77,8 +81,16 @@ on 2026-10-02.
    `seccomp/libseccomp-golang`) and `mattn/go-sqlite3` drop out of the
    `CGO_ENABLED=0` release build; the host (`make build-host`) variant must be
    inventoried separately.
-5. `../yoke/THIRD_PARTY_LICENSES.md` omits several linked modules
-   (gotreesitter, `modernc.org/sqlite` + `libc`, `dlclark/regexp2`,
-   `bytedance/sonic`, `twitchyliquid64/golang-asm`, `nlpodyssey/gopickle`,
-   `tiktoken-go/tokenizer`, `xuri/efp`; purego version drift) — all
-   permissive on inspection, but unrecorded.
+5. `../yoke/THIRD_PARTY_LICENSES.md` is by its own header a list of COPIED or
+   ADAPTED code, not of linked modules; the linked-module list is what the
+   Sprint 350 SBOM generates. gotreesitter now has a row there (it embeds
+   third-party data) and the purego version drift is fixed. Modules only
+   linked (`modernc.org/sqlite` + `libc`, `dlclark/regexp2`, `bytedance/sonic`,
+   `twitchyliquid64/golang-asm`, `nlpodyssey/gopickle`, `tiktoken-go/tokenizer`,
+   `xuri/efp`) were verified permissive in the module cache and belong to the
+   generated SBOM, not to a hand-kept list.
+6. **Java.** Operator decision 2026-10-02: no built-in Java support — no
+   Temurin provisioner, no `bashy java`/`javac`/`mvn` verbs (the stale
+   synopsis entries are removed). Every OpenJDK build is GPL-2.0 with
+   Classpath Exception, so Java enters only as an optional registered runner
+   fence over a JDK the user supplies (Sprint 350 story 387, rescoped).
