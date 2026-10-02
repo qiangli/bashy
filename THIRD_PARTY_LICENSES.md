@@ -89,10 +89,11 @@ on 2026-10-02.
    `twitchyliquid64/golang-asm`, `nlpodyssey/gopickle`, `tiktoken-go/tokenizer`,
    `xuri/efp`) were verified permissive in the module cache and belong to the
    generated SBOM, not to a hand-kept list.
-6. **Java.** Operator decision 2026-10-02: Java is kept but NOT built in, due
-   to licensing. Unlike Python, Rust and C/C++ it gets no polyglot row and no
-   bashy-provisioned toolchain: every OpenJDK build is GPL-2.0 WITH
-   Classpath-exception-2.0 and there is no permissive JDK. Java enters only as
-   an optional registered runner fence over a JDK the user supplies; the
-   stale `java`/`javac`/`mvn` synopsis entries are removed. Sprint 370
-   (deferred) delivers the recipe.
+6. **Java.** Operator decision 2026-10-02 (final): Java is a BUILT-IN fence
+   language like Python, Rust and C/C++, with a bashy-provisioned Temurin JDK.
+   Every OpenJDK build is GPL-2.0 WITH Classpath-exception-2.0 and no
+   permissive JDK exists, so it is admissible exactly as GNU make (GPL-3.0)
+   and OpenTofu (MPL-2.0) are: download + exec under §2, recorded with its
+   real license, never embedded or redistributed. The stale `java`/`javac`/
+   `mvn` synopsis entries stay removed until the provisioner exists; Sprint
+   370 (deferred) delivers the JDK provisioner and the `~~~java` fence.
