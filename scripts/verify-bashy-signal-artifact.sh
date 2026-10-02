@@ -1,5 +1,5 @@
 #!/bin/sh
-# Reject a Linux Bashy artifact whose ELF cannot preserve inherited signals.
+# Reject a Bashy artifact that cannot preserve inherited signals on its target.
 # Used by GoReleaser post-build hooks before the publish phase. Remove a bad
 # staging artifact so a failed release cannot leave it looking publishable.
 set -eu

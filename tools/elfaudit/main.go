@@ -4,6 +4,7 @@ package main
 import (
 	"debug/buildinfo"
 	"debug/elf"
+	"debug/macho"
 	"fmt"
 	"os"
 	"strings"
@@ -27,12 +28,11 @@ func main() {
 	}
 }
 
-// auditBashySignal is the post-build guard for every shipped Linux cmd/bashy
-// artifact. Coreutils' inherited-signal repair reads runtime.fwdSig from the
-// ELF symbol table and requires a fixed-address ET_EXEC image. Stripping or
-// PIE linking therefore changes observable signal semantics even when `go
-// build` succeeds. This check is cross-host: macOS release builders can audit
-// Linux ELF files without executing them.
+// auditBashySignal guards inherited-signal parity for shipped cmd/bashy
+// artifacts. Linux needs runtime.fwdSig in a fixed-address ELF symbol table;
+// Darwin needs the pre-Go C constructor. Pure-Go Darwin releases are rejected
+// before publication. This check is cross-host: macOS release builders can
+// audit Linux ELF files without executing them.
 func auditBashySignal(path string) error {
 	build, err := buildinfo.ReadFile(path)
 	if err != nil {
@@ -45,8 +45,30 @@ func auditBashySignal(path string) error {
 	for _, setting := range build.Settings {
 		settings[setting.Key] = setting.Value
 	}
-	if settings["GOOS"] != "linux" {
-		return nil // This signal route is Linux-specific.
+	switch settings["GOOS"] {
+	case "darwin":
+		if settings["CGO_ENABLED"] != "1" {
+			return fmt.Errorf("%s is pure-Go Darwin cmd/bashy; build natively with cgo to retain the pre-Go inherited-signal constructor", path)
+		}
+		f, err := macho.Open(path)
+		if err != nil {
+			return fmt.Errorf("open Darwin Bashy Mach-O %s: %w", path, err)
+		}
+		defer f.Close()
+		if f.Symtab == nil {
+			return fmt.Errorf("%s lacks a Mach-O symbol table for the inherited-signal constructor", path)
+		}
+		for _, symbol := range f.Symtab.Syms {
+			if symbol.Name == "_snapshot_inherited_ignores" {
+				fmt.Printf("elfaudit: PASS %s retains Darwin pre-Go inherited-signal constructor\n", path)
+				return nil
+			}
+		}
+		return fmt.Errorf("%s lacks the pre-Go inherited-signal constructor", path)
+	case "linux":
+		// Continue with the ELF check below.
+	default:
+		return nil
 	}
 
 	f, err := elf.Open(path)

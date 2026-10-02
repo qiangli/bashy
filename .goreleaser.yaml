@@ -1,5 +1,7 @@
-# goreleaser config for bashy — pure-Go Bash 5.3 drop-in.
-# Builds static (CGO_ENABLED=0) binaries for the 6 supported platforms.
+# goreleaser config for bashy — Bash 5.3 drop-in.
+# The Linux one-file signal gate accepts pure-Go ET_EXEC builds. Darwin
+# cmd/bashy requires a native cgo constructor; this cross-build recipe fails
+# closed at its post-build gate until a native Darwin release lane is wired.
 # NOTE: bashy depends on the qiangli/sh fork via `replace => ../sh`. CI runs
 # ./scripts/bootstrap-siblings.sh first to clone it next door at the pinned SHA.
 version: 2
