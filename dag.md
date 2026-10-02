@@ -63,7 +63,7 @@ ELF symbol gate preserves Coreutils' inherited-signal repair in every build.
 The separate pure-Go release shell-signal question remains open. Keep the build
 and post-build audit in step with Makefile `build-bashy`.
 
-Sources: cmd/, internal/, go.mod, go.sum, native/siglaunch.c.in, scripts/build-bashy-artifact.sh, tools/elfaudit
+Sources: cmd/, internal/, go.mod, go.sum, native/siglaunch.c.in, scripts/build-bashy-artifact.sh, tools/elfaudit, tools/releaseeligibility
 Generates: bin/bash, bin/bashy (+ bin/bash.real on linux/darwin)
 
 ```bash

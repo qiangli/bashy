@@ -1,5 +1,6 @@
 #!/bin/sh
-# Reject a Bashy artifact that cannot preserve inherited signals on its target.
+# Reject a Bashy artifact that cannot preserve inherited signals on its target
+# or uses a diagnostic build profile that is not eligible for release.
 # Used by GoReleaser post-build hooks before the publish phase. Remove a bad
 # staging artifact so a failed release cannot leave it looking publishable.
 set -eu
@@ -15,7 +16,7 @@ case "$artifact" in
 	/*) ;;
 	*) artifact=$PWD/$artifact ;;
 esac
-if (cd "$root" && go run ./tools/elfaudit --bashy-signal "$artifact"); then
+if (cd "$root" && go run ./tools/elfaudit --bashy-signal "$artifact" && go run ./tools/releaseeligibility "$artifact"); then
 	exit 0
 fi
 rm -f -- "$artifact"
