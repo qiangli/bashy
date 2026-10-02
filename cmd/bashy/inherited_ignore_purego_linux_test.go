@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"os/exec"
@@ -38,9 +39,19 @@ func TestPureGoSingleBinaryInheritedIgnoredSignals(t *testing.T) {
 		{"ABRT", syscall.SIGABRT},
 		{"ALRM", syscall.SIGALRM},
 		{"PIPE", syscall.SIGPIPE},
+		{"QUIT", syscall.SIGQUIT},
+		{"TERM", syscall.SIGTERM},
+		{"USR1", syscall.SIGUSR1},
+		{"USR2", syscall.SIGUSR2},
+		{"CONT", syscall.SIGCONT},
+		{"TSTP", syscall.SIGTSTP},
+		{"TTIN", syscall.SIGTTIN},
+		{"TTOU", syscall.SIGTTOU},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cmd := exec.Command("/bin/sh", "-c", "ulimit -c 0; trap '' "+tc.name+`; exec "$BASHY_SH"`)
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, "/bin/sh", "-c", "ulimit -c 0; trap '' "+tc.name+`; exec "$BASHY_SH"`)
 			cmd.Env = append(os.Environ(), "BASHY_SH="+sh, "PATH=/usr/bin:/bin")
 			stdin, err := cmd.StdinPipe()
 			if err != nil {
