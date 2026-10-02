@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -294,20 +295,44 @@ func TestSprintWaitReadsStructuredData(t *testing.T) {
 	if err := writeFile(dir+"/queue.json", b); err != nil {
 		t.Fatal(err)
 	}
+	// Windows may deny opening queue.json while the fixture replaces it.
+	// Serialize the fixture update with the real structured reader; this test
+	// covers stage detection, not concurrent replacement behavior.
+	var queueMu sync.Mutex
+	updates := make(chan error, 1)
 	// schedule update after short delay
 	go func() {
 		time.Sleep(20 * time.Millisecond)
 		updated := sprintWaitQueue{Stories: []*sprintWaitStory{{ID: 99, Column: "done", Thread: []weaveCommentView{}}}}
 		bb, _ := json.Marshal(updated)
-		_ = writeFile(dir+"/queue.json", bb)
+		queueMu.Lock()
+		err := writeFile(dir+"/queue.json", bb)
+		queueMu.Unlock()
+		updates <- err
 	}()
 	rt := defaultSprintWaitRuntime()
 	rt.pollEvery = 5 * time.Millisecond
+	rt.read = func(id int64) (*sprintWaitSnapshot, error) {
+		queueMu.Lock()
+		defer queueMu.Unlock()
+		snap, err := readSprintWaitSnapshot(id)
+		if err != nil {
+			return nil, err
+		}
+		// Ambient host disk and conductor state are separate wait events.
+		snap.DiskLow = false
+		snap.Idle = false
+		return snap, nil
+	}
 	var out bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if err := runSprintWait(ctx, &out, 99, 0, false, rt); err != nil {
-		t.Fatalf("structured read failed: %v", err)
+	waitErr := runSprintWait(ctx, &out, 99, 0, false, rt)
+	if err := <-updates; err != nil {
+		t.Fatalf("structured fixture update failed: %v", err)
+	}
+	if waitErr != nil {
+		t.Fatalf("structured read failed: %v", waitErr)
 	}
 	if !strings.Contains(out.String(), "stage") {
 		t.Fatalf("want stage from structured data, got %q", out.String())
