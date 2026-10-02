@@ -14,9 +14,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/qiangli/yoke/pkg/telemetry"
 
+	_ "github.com/qiangli/coreutils/cmds/all"
+	"github.com/qiangli/coreutils/multicall"
 	"github.com/qiangli/coreutils/tool"
 
 	"github.com/qiangli/bashy/internal/agentos"
@@ -31,6 +35,15 @@ import (
 )
 
 func init() {
+	// A link named sh or bash is a shell-only entry point. Keep the CLI's
+	// default (PATH-based) external-command resolver; AgentOS would intercept
+	// utility names before PATH and invalidate the certification shell route.
+	if shellInvocation(os.Args[0]) {
+		return
+	}
+	if utilityInvocation(os.Args[0]) {
+		return
+	}
 	// `bashy ycode`: the YAML agent engine, wired here rather than imported by
 	// internal/agentos — ycode imports bashy's pkg/harnessrunner, which imports
 	// agentos, so only package main can close the loop.
@@ -68,6 +81,14 @@ func main() {
 	if adoptingOwnedFrame {
 		cli.AdoptGoSourceProcessEnvironment()
 	}
+	if utilityInvocation(os.Args[0]) {
+		multicall.Main("coreutils")
+		return
+	}
+	if shellInvocation(os.Args[0]) {
+		cli.Main()
+		return
+	}
 	// Job-carrier helper mode (a re-exec of this binary standing in for one
 	// background job) must not initialize telemetry or any AgentOS surface:
 	// intercept it before everything. cli.Main also intercepts, but by then
@@ -92,4 +113,26 @@ func main() {
 	cli.AgentOSShutdown = func() { _ = shutdown(context.Background()) }
 
 	cli.Main()
+}
+
+func invocationName(argv0 string) string {
+	name := filepath.Base(argv0)
+	name = strings.TrimPrefix(name, "-")
+	if len(name) > 4 && strings.EqualFold(name[len(name)-4:], ".exe") {
+		name = name[:len(name)-4]
+	}
+	return name
+}
+
+func shellInvocation(argv0 string) bool {
+	switch invocationName(argv0) {
+	case "sh", "bash":
+		return true
+	}
+	return false
+}
+
+func utilityInvocation(argv0 string) bool {
+	name := invocationName(argv0)
+	return name == "coreutils" || (name != "bashy" && !shellInvocation(argv0) && tool.Lookup(name) != nil)
 }

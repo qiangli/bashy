@@ -4,9 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-This repo builds **two independent binaries** that share a common shell core
-(`internal/cli`) but are **separate compilations** — each has its own `main`
-package under `cmd/`, so their import graphs are disjoint:
+The downloadable **`bashy` executable contains both the Bash shell and Go
+coreutils**. A link to that same file named `sh` or `bash` starts the plain
+PATH-based shell; a link named for a supported utility starts that applet.
+`bashy` itself starts the AgentOS shell. Users need only the `bashy` download;
+links are entry points, not additional payloads.
+
+This repo also builds a separate, lean `bash` executable for compatibility
+work. It shares the shell core (`internal/cli`) with `bashy` but has a distinct
+`main` package and import graph:
 
 - **`bash`** (`cmd/bash`) — a pure-Go **Bash 5.3 drop-in**: runs Bash scripts
   and interactive sessions with the same flags and semantics as `bash` 5.3,
@@ -32,14 +38,14 @@ package under `cmd/`, so their import graphs are disjoint:
   `bashy podman …`). It is the self-contained bootstrapper for a whole
   unix-like userland (bash + coreutils + pkg + external tools).
 
-The AgentOS surface is injected, not branched at runtime: `internal/cli`
+The AgentOS surface is injected by the `bashy` entry point: `internal/cli`
 exposes two no-op hook vars (`AgentOSDispatch`, `AgentOSWireExec`); `cmd/bashy`
-sets them to `internal/agentos.{Dispatch,WireExec}` in its `init()`, while
-`cmd/bash` leaves the defaults. Because the coreutils import lives only in
-`internal/agentos` (imported only by `cmd/bashy`), the `bash` binary cannot
-pull it in. `make build` produces both `bin/bash` and `bin/bashy`. (Historical
-note: this used to be one binary split by argv[0] via `isAgentOSShell()`; it is
-now a structural cmd/ split.)
+sets them to `internal/agentos.{Dispatch,WireExec}` only when invoked as
+`bashy`; its `sh` and `bash` aliases leave the defaults. `cmd/bashy` also
+registers Go coreutils applets and dispatches their alias names directly.
+`cmd/bash` never imports coreutils or AgentOS. `make build` produces the
+optional `bin/bash` alongside `bin/bashy`; release archives build the single
+`bashy` payload directly from `cmd/bashy`.
 
 The interpreter engine lives in the
 [`qiangli/sh`](https://github.com/qiangli/sh) fork of `mvdan.cc/sh` (published
