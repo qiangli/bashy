@@ -56,17 +56,15 @@ installed or checkout-local bashy owns the Go toolchain path. This is the
 weave; ~121 MB unix, ~47 MB Windows (it cross-compiles everywhere — podman/ollama
 are !windows-gated, the otel observability stack is off by default). For a host
 build with the observability stack, use `build-host`.
-On linux and darwin the shipped program is a **native pre-Go signal launcher**
-(`native/siglaunch.c.in`, compiled to `bin/<name>`) plus a sibling **Go payload**
-(`bin/<name>.real`) — `tools/installbashy` installs the payload first, then the
-launcher, so no PATH entry is ever left without its companion. Building the Go
-binary straight to `bin/<name>` on those platforms silently ships the payload AS
-the launcher: it runs, so nothing fails visibly, and the signal handling the
-launcher exists to provide is simply gone. Keep this in step with the Makefile's
-`build-bash`/`build-bashy`, which are the same two recipes.
+On linux and darwin the lean `bash` drop-in retains its native pre-Go signal
+launcher and `.real` payload. `bashy` is one physical Go executable. Its cgo
+constructor records inherited ignored signals when cgo is enabled; the Linux
+ELF symbol gate preserves Coreutils' inherited-signal repair in every build.
+The separate pure-Go release shell-signal question remains open. Keep the build
+and post-build audit in step with Makefile `build-bashy`.
 
-Sources: cmd/, internal/, go.mod, go.sum, native/siglaunch.c.in
-Generates: bin/bash, bin/bashy (+ bin/bash.real, bin/bashy.real on linux/darwin)
+Sources: cmd/, internal/, go.mod, go.sum, native/siglaunch.c.in, scripts/build-bashy-artifact.sh, tools/elfaudit
+Generates: bin/bash, bin/bashy (+ bin/bash.real on linux/darwin)
 
 ```bash
 set -e
@@ -91,6 +89,7 @@ fi
 SHELL_RUNTIME_COMMIT=$(sed -n 's/^sh=//p' .sibling-pins)
 SHELL_RUNTIME_COMMIT_TIME=$("$BASHY_EXE" git -C ../sh show -s --format=%cI "$SHELL_RUNTIME_COMMIT")
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
+BASHY_LDFLAGS=${LDFLAGS#-s }
 # Helper scripts run THROUGH bashy: a Windows host has no /bin/sh to honour
 # their shebang, and PATH-restricted rebuilds have no other shell either.
 "$BASHY_EXE" scripts/build-meet-spa.sh optional >/dev/null
@@ -104,14 +103,12 @@ LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-ba
 # is then simply absent rather than visibly failing.
 if [ "$goos" = "$hostgoos" ] && [ "$(BASHY="$BASHY_EXE" "$BASHY_EXE" scripts/launcher-wanted.sh build)" = 1 ]; then
   "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o bin/bash.real  ./cmd/bash
-  "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o bin/bashy.real ./cmd/bashy
   cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o bin/bash  native/siglaunch.c.in
-  cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o bin/bashy native/siglaunch.c.in
 else
-  rm -f bin/bash.real bin/bashy.real
+  rm -f bin/bash.real
   "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "bin/bash${ext}"  ./cmd/bash
-  "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "bin/bashy${ext}" ./cmd/bashy
 fi
+BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh "bin/bashy${ext}" "$BASHY_LDFLAGS"
 ```
 
 ### build-host
@@ -142,7 +139,8 @@ fi
 SHELL_RUNTIME_COMMIT=$(sed -n 's/^sh=//p' .sibling-pins)
 SHELL_RUNTIME_COMMIT_TIME=$("$BASHY_EXE" git -C ../sh show -s --format=%cI "$SHELL_RUNTIME_COMMIT")
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
-"$BASHY_EXE" go build -trimpath -tags "bashy_engines bashy_obs" -ldflags "$LDFLAGS" -o "bin/bashy${ext}" ./cmd/bashy
+BASHY_LDFLAGS=${LDFLAGS#-s }
+BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh "bin/bashy${ext}" "$BASHY_LDFLAGS" "bashy_engines bashy_obs"
 ```
 
 ### install
@@ -223,7 +221,7 @@ fi
 
 mkdir -p bin
 engine="bin/bashy-podman-test${ext}"
-"$BASHY_EXE" go build -trimpath -tags "$tags" -o "$engine" ./cmd/bashy
+BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh "$engine" "-w" "$tags"
 
 machine_list="bin/bashy-podman-machine-list.txt"
 info_log="bin/bashy-podman-info.txt"
@@ -265,15 +263,18 @@ fi
 SHELL_RUNTIME_COMMIT=$(sed -n 's/^sh=//p' .sibling-pins)
 SHELL_RUNTIME_COMMIT_TIME=$("$BASHY_EXE" git -C ../sh show -s --format=%cI "$SHELL_RUNTIME_COMMIT")
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
+BASHY_LDFLAGS=${LDFLAGS#-s }
 for plat in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
   os=${plat%/*}; arch=${plat#*/}; ext=""
   [ "$os" = windows ] && ext=.exe
-  for name in bash bashy; do
-    out="bin/dist/${name}-${os}-${arch}${ext}"
-    echo "building $out..."
-    CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-      "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "$out" "./cmd/${name}"
-  done
+  bash_out="bin/dist/bash-${os}-${arch}${ext}"
+  bashy_out="bin/dist/bashy-${os}-${arch}${ext}"
+  echo "building $bash_out..."
+  CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+    "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "$bash_out" ./cmd/bash
+  echo "building $bashy_out..."
+  CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" BASHY_EXE="$BASHY_EXE" \
+    "$BASHY_EXE" scripts/build-bashy-artifact.sh "$bashy_out" "$BASHY_LDFLAGS"
 done
 ```
 
@@ -967,8 +968,8 @@ for host in "$@"; do
       fi
       shell_runtime_commit=\$(sed -n 's/^sh=//p' .sibling-pins)
       shell_runtime_commit_time=\$(git -C ../sh show -s --format=%cI \"\$shell_runtime_commit\")
-      LDFLAGS=\"-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-\$ref -X github.com/qiangli/bashy/internal/cli.buildID=\$build_id -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=\$shell_runtime_commit -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=\$shell_runtime_commit_time\"
-      go build -trimpath -ldflags \"\$LDFLAGS\" -o \"bin/bashy\$ext\" ./cmd/bashy
+      LDFLAGS=\"-w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-\$ref -X github.com/qiangli/bashy/internal/cli.buildID=\$build_id -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=\$shell_runtime_commit -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=\$shell_runtime_commit_time\"
+      ./scripts/build-bashy-artifact.sh \"bin/bashy\$ext\" \"\$LDFLAGS\"
       \"./bin/bashy\$ext\" dag build VERSION=\"\$ref\"
       fix_windows_ext
     elif command -v outpost >/dev/null 2>&1; then
@@ -1407,8 +1408,8 @@ if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   BUILD_ID=$(git rev-parse --short=7 HEAD 2>/dev/null || true)
 fi
 tags=""
-[ -n "${BASHY_TAGS:-}" ] && tags="-tags ${BASHY_TAGS}"
-"$BASHY_EXE" go build -trimpath $tags -ldflags "-s -w -X 'github.com/qiangli/bashy/internal/cli.buildID=$BUILD_ID'" -o bin/bashy ./cmd/bashy
+[ -n "${BASHY_TAGS:-}" ] && tags=${BASHY_TAGS}
+BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh bin/bashy "-w -X 'github.com/qiangli/bashy/internal/cli.buildID=$BUILD_ID'" "$tags"
 echo "built bin/bashy (AgentOS)"
 ```
 
@@ -1427,8 +1428,8 @@ BASHY_EXE="${BASHY:-bashy}"
 V="${GOFIPS140_VERSION:-v1.0.0}"
 echo "building with the Go FIPS 140-3 module (GOFIPS140=$V) ..."
 GOFIPS140="$V" "$BASHY_EXE" go build -trimpath -o bin/bash ./cmd/bash
-tags=""; [ -n "${BASHY_TAGS:-}" ] && tags="-tags ${BASHY_TAGS}"
-GOFIPS140="$V" "$BASHY_EXE" go build -trimpath $tags -o bin/bashy ./cmd/bashy
+tags=""; [ -n "${BASHY_TAGS:-}" ] && tags=${BASHY_TAGS}
+GOFIPS140="$V" BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh bin/bashy "-w" "$tags"
 echo "built bin/{bash,bashy} in FIPS mode"
 ```
 

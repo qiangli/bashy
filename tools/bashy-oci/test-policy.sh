@@ -20,7 +20,10 @@ has 'ARG APT_SNAPSHOT=20260821T190000Z' "$recipe"
 has 'apt-get update --snapshot "${APT_SNAPSHOT}"' "$recipe"
 has 'make build-bashy' "$recipe"
 has 'COPY --from=builder --chown=0:0 /src/bashy/bin/bashy /bashy' "$recipe"
-has 'COPY --from=builder --chown=0:0 /src/bashy/bin/bashy.real /bashy.real' "$recipe"
+has 'test -x bin/bashy && test ! -e bin/bashy.real' "$recipe"
+if grep -Fq 'COPY --from=builder --chown=0:0 /src/bashy/bin/bashy.real' "$recipe"; then
+	fail "runtime image still copies a second Bashy payload"
+fi
 has 'ENTRYPOINT ["/bashy"]' "$recipe"
 has 'OTEL_TRACES_EXPORTER=none' "$recipe"
 has 'ln -s /bashy /opt/bashy/bin/sh' "$recipe"

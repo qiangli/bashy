@@ -83,7 +83,7 @@ smoke_image() {
     grep -qx 'bashy-oci-smoke' || fail "Bashy command smoke failed"
   run_isolated --entrypoint /bin/sh "$image" -c '
     test -x /bashy
-    test -x /bashy.real
+    test ! -e /bashy.real
     test ! /bin/sh -ef /bashy
     test "$(readlink /opt/bashy/bin/sh)" = /bashy
     test "$OTEL_TRACES_EXPORTER" = none
@@ -92,7 +92,7 @@ smoke_image() {
       test "${POSIXLY_CORRECT+x}" = x
       printf "%s\n" posix-alias-ok
     '\''
-  ' | grep -qx 'posix-alias-ok' || fail "launcher pair or sh compatibility smoke failed"
+  ' | grep -qx 'posix-alias-ok' || fail "one-file Bashy or sh compatibility smoke failed"
   echo "build-smoke: PASS ($image, $platform)"
 }
 
