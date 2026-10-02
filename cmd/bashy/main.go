@@ -95,6 +95,7 @@ func main() {
 	// intercept it before everything. cli.Main also intercepts, but by then
 	// telemetry.Init below would already have run. Never returns in helper mode.
 	cli.MaybeRunJobCarrierHelper()
+	agentos.MarkOutputParent()
 	installInheritedSignalIgnores()
 
 	// The OTel plane. A no-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set — no exporter,

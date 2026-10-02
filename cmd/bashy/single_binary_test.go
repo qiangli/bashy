@@ -46,7 +46,7 @@ func TestOneBinaryShellAndUtilityRoutes(t *testing.T) {
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build bashy: %v\n%s", err, out)
 	}
-	for _, name := range []string{"sh", "bash", "cat", "coreutils"} {
+	for _, name := range []string{"sh", "bash", "cat", "env", "coreutils"} {
 		alias := filepath.Join(dir, name)
 		if err := os.Symlink(bin, alias); err != nil {
 			t.Fatal(err)
@@ -79,6 +79,42 @@ func TestOneBinaryShellAndUtilityRoutes(t *testing.T) {
 		return "", -1
 	}
 	baseEnv := append(os.Environ(), "BASHY_SESSION=", "BASHY_AGENTIC=0")
+	// A utility alias must not replace its inherited output-parent marker with
+	// its own PID. The cert shell compares two env snapshots from child applets.
+	noParent := make([]string, 0, len(baseEnv)+2)
+	for _, entry := range baseEnv {
+		if !strings.HasPrefix(entry, "BASHY_OUTPUT_PARENT=") {
+			noParent = append(noParent, entry)
+		}
+	}
+	if out, code := run("env", noParent, ""); code != 0 || strings.Contains(out, "BASHY_OUTPUT_PARENT=") {
+		t.Fatalf("env alias added output-parent marker: code=%d", code)
+	}
+	withParent := append(noParent, "BASHY_OUTPUT_PARENT=sentinel")
+	if out, code := run("env", withParent, ""); code != 0 || !strings.Contains(out, "BASHY_OUTPUT_PARENT=sentinel\n") {
+		t.Fatalf("env alias changed inherited output-parent marker: code=%d", code)
+	}
+	certPath := append(noParent, "PATH="+dir+":/usr/bin:/bin", "POSIXLY_CORRECT=1")
+	if out, code := run("sh", certPath, "", "-c", `set -o`); code != 0 {
+		t.Fatalf("POSIX shell alias set -o failed: code=%d output=%q", code, out)
+	} else {
+		posixOn := false
+		for _, line := range strings.Split(out, "\n") {
+			fields := strings.Fields(line)
+			if len(fields) == 2 && fields[0] == "posix" && fields[1] == "on" {
+				posixOn = true
+			}
+		}
+		if !posixOn {
+			t.Fatalf("POSIX shell alias did not enable POSIX mode: %q", out)
+		}
+	}
+	if out, code := run("sh", certPath, "", "-c", `env`); code != 0 || strings.Contains(out, "BASHY_OUTPUT_PARENT=") {
+		t.Fatalf("POSIX shell alias added output-parent marker: code=%d", code)
+	}
+	if out, code := run("sh", certPath, "", "-c", `a=$(env); b=$(env); [ "$a" = "$b" ]`); code != 0 {
+		t.Fatalf("POSIX shell child env snapshots differ: code=%d diagnostic bytes=%d", code, len(out))
+	}
 	if out, code := run("cat", baseEnv, "same file\n"); code != 0 || out != "same file\n" {
 		t.Fatalf("cat alias: code=%d output=%q", code, out)
 	}

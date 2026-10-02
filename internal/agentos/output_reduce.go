@@ -216,13 +216,20 @@ func newShellOutputReducer(out, errOut io.Writer, env []string) (*shellOutputRed
 // variable is inherited through the agent, but the agent is the parent.
 const outputParentEnv = "BASHY_OUTPUT_PARENT"
 
-// outputParentIsBashy is decided once, from the inherited value, before this
-// process exports its own pid to its children.
+// outputParentIsBashy is decided from the inherited value before the AgentOS
+// shell exports its own pid. Utility and plain shell aliases also import
+// agentos, but must leave their environment alone.
 var outputParentIsBashy bool
 
 func init() {
 	outputParentIsBashy = os.Getenv(outputParentEnv) == strconv.Itoa(os.Getppid())
-	os.Setenv(outputParentEnv, strconv.Itoa(os.Getpid()))
+}
+
+// MarkOutputParent identifies an AgentOS shell process to its child bashy
+// processes. Call it only after selecting the AgentOS route, never from package
+// init: the same executable serves plain shell and coreutils applet aliases.
+func MarkOutputParent() {
+	_ = os.Setenv(outputParentEnv, strconv.Itoa(os.Getpid()))
 }
 
 // displayHome is the directory Stage 0 canonicalizes to the `$HOME` token.
