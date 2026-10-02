@@ -48,6 +48,10 @@ One line (or a short paragraph) per load-bearing doc under `docs/`, moved verbat
   complete product, not a fallback), and what the philosophy FORBIDS. Read before any
   feature that reaches for a hosted service.
 - `TODO.md` — phase checklist + current PASS/FAIL/SKIP headline. Always read first.
+- `sprint-355-core-optional-design.md` — four-tier one-download Bashy design:
+  certifiable base, stable fence/CRUD core, first-party builtin records, and
+  optional payloads; pins, collision rules, POSIX impact decisions, and
+  migration from hardcoded polyglot/toolchain tables.
 - `report-bash53-test-status.md` — per-fixture status snapshot from the bash 5.3 suite.
 - `sprint-253-windows-locale-service-blocker.md` — Story #711's earlier
   fail-closed native-provider survey: MSYS/Cygwin service six corpus encodings
