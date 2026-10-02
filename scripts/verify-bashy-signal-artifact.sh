@@ -16,7 +16,12 @@ case "$artifact" in
 	/*) ;;
 	*) artifact=$PWD/$artifact ;;
 esac
-if (cd "$root" && go run ./tools/elfaudit --bashy-signal "$artifact" && go run ./tools/releaseeligibility "$artifact"); then
+if (
+	cd "$root"
+	unset GOOS GOARCH CGO_ENABLED
+	go run ./tools/elfaudit --bashy-signal "$artifact" &&
+		go run ./tools/releaseeligibility "$artifact"
+); then
 	exit 0
 fi
 rm -f -- "$artifact"
