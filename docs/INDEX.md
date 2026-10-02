@@ -3,6 +3,16 @@
 One line (or a short paragraph) per load-bearing doc under `docs/`, moved verbatim from `CLAUDE.md` §Doc index on 2026-09-20. `CLAUDE.md` only points here; when you add a doc, add its entry here.
 
 
+- `licensing-supply-chain-policy.md` — **the license rule of record:** compiled-in /
+  embedded / linked / vendored → BSD/MIT/Apache-2.0 only (`THIRD_PARTY_LICENSES.md` at
+  the repo root records them); download + exec is not bundling; build from permissive
+  source rather than ship a non-permissive prebuilt.
+- `fence-toolchain-licenses.md` — **Bash# fence toolchains, inventory of record
+  (2026-10-02):** per fence language the provisioner, pin, and the license of the
+  actual downloaded archive including bundled non-permissive parts (Bun links LGPL
+  JavaScriptCore; Node bundles Artistic-2.0 npm; Zig bundles LGPL glibc / ZPL mingw
+  libc trees); `bash`/`sh` fences are bashy's own engine; the planned PowerShell/C#
+  posture (Sprint 358). Seed of the Sprint 350 runtime-acquisition inventory.
 - `contracts.md` — **Bash++ contracts (design by contract), Sprint 203:**
   `Require:`/`Ensure:`/`Effects:` on a dag target, `@require`/`@ensure`/`@guard`
   on a function; require → body → ensure, exit 3 naming the clause, a check is a

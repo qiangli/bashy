@@ -27,8 +27,13 @@ import (
 // program on every host, which is what makes an island's fingerprint and its
 // attestation comparable across machines.
 //
-// Licenses: Go BSD-3 · Zig MIT · uv MIT/Apache-2.0 + CPython PSF-2.0 · Node
-// MIT + typescript Apache-2.0 · Bun MIT · rustup MIT/Apache-2.0. A row's Ensure is cache-first, so the cost is
+// Licenses (of the archive as read, not the badge — docs/fence-toolchain-licenses.md
+// is the record): Go BSD-3 · Zig MIT (bundles LGPL-2.1 glibc and ZPL-2.1 mingw-w64
+// libc trees as compile-time inputs) · uv MIT/Apache-2.0 + CPython PSF-2.0 (libedit,
+// no GNU readline) · Node MIT (bundles npm, Artistic-2.0) + typescript Apache-2.0 ·
+// Bun: its own code MIT but the binary statically links LGPL-2 JavaScriptCore and
+// LGPL-2.1 tinycc, so not permissive as a program (download+exec only, never the
+// default) · rustup MIT/Apache-2.0. A row's Ensure is cache-first, so the cost is
 // paid once; `bashy check --prepare` pays it ahead of a run.
 var islandToolchains = map[string]func(ctx context.Context) (argv []string, why string, err error){
 	"go": func(ctx context.Context) ([]string, string, error) {
