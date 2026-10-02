@@ -139,13 +139,18 @@ func utilityInvocation(argv0 string) bool {
 	return name == "coreutils" || (name != "bashy" && !shellInvocation(argv0) && tool.Lookup(name) != nil)
 }
 
-// installInheritedSignalIgnores applies the pre-Go entry snapshot only to
-// shell routes. A parent can exec us with SIG_IGN dispositions that the Go
-// runtime replaces before main; the interpreter needs their original names
-// in BASHY_HARD_IGNORE to keep them immutable. CLI's Go-source environment
-// snapshot ran before this enrichment and still represents the caller's env.
+// installInheritedSignalIgnores applies the entry snapshot only to shell
+// routes. A native parent can exec us with SIG_IGN dispositions that the Go
+// runtime replaces before main. Cgo builds capture them in a pre-Go
+// constructor; Linux pure-Go builds read the runtime's own ELF snapshot through
+// multicall. The interpreter needs their names in BASHY_HARD_IGNORE to keep
+// them immutable. CLI's Go-source environment snapshot ran before this
+// enrichment and still represents the caller's env.
 func installInheritedSignalIgnores() {
 	captured := preGoIgnoredSignals()
+	if captured == "" {
+		captured = strings.Join(multicall.InheritedIgnoredSignalNames(), ",")
+	}
 	if captured == "" {
 		return
 	}
