@@ -9,6 +9,9 @@ import (
 	"fmt"
 	"os"
 
+	// The Bash# Go-source loader is part of the language base. It registers
+	// front.GoSourceLoad without importing the optional AgentOS graph.
+	_ "github.com/bashsharp/bashsharp/transpile"
 	"github.com/qiangli/bashy/internal/cli"
 	"github.com/qiangli/bashy/internal/core"
 	_ "github.com/qiangli/coreutils/cmds/all"

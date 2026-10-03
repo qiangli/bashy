@@ -52,6 +52,31 @@ func TestCoreRouteOneFileAndCommandCRUD(t *testing.T) {
 			}
 		})
 	}
+	// The base profile retains Bash# Go-source execution. Its loader belongs
+	// to the language, even though optional AgentOS imports stay absent.
+	goSource := filepath.Join(dir, "minimal.go")
+	if err := os.WriteFile(goSource, []byte("package main\nfunc main() { println(\"go-source-ok\") }\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command(bin, "--source=go", "--bashsharp", goSource).CombinedOutput(); err != nil || string(out) != "go-source-ok\n" {
+		t.Fatalf("Bash# Go source: %v; output=%q", err, out)
+	}
+	goTool, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/s355core\n\ngo 1.27.1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	fence := filepath.Join(dir, "fence.bsh")
+	if err := os.WriteFile(fence, []byte("~~~go as go\nfunc Greet(name string) string { return \"hello \"+name }\n~~~\nvalue := go.Greet(world)\necho \"$value\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	fenceCmd := exec.Command(bin, "--bashsharp", fence)
+	fenceCmd.Env = append(os.Environ(), "BASHPP_GO="+goTool)
+	if out, err := fenceCmd.CombinedOutput(); err != nil || string(out) != "hello world\n" {
+		t.Fatalf("Bash# Go fence: %v; output=%q", err, out)
+	}
 	ring := filepath.Join(dir, "ring")
 	env := append(os.Environ(), "BASHY_COMMANDS_DIR="+ring)
 	run := func(want string, args ...string) {
