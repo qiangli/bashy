@@ -43,7 +43,7 @@ func TestRejectBaseWithoutCertificationSettings(t *testing.T) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build unguarded Bashy base: %v\n%s", err, out)
 	}
-	if err := audit(artifact); err == nil || !strings.Contains(err.Error(), "without Linux CGO certification") {
+	if err := audit(artifact); err == nil || !strings.Contains(err.Error(), "without Linux CGO and osusergo certification") {
 		t.Fatalf("base artifact audit = %v, want certification-settings rejection", err)
 	}
 }

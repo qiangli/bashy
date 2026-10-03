@@ -44,8 +44,8 @@ func audit(path string) error {
 	if tags["bashy_core"] {
 		return fmt.Errorf("%s uses diagnostic bashy_core tag; do not ship until optional command parity and route gates pass", path)
 	}
-	if tags["bashy_cert_base"] && (!tags["bashy_cert"] || settings["GOOS"] != "linux" || settings["CGO_ENABLED"] != "1") {
-		return fmt.Errorf("%s uses bashy_cert_base without Linux CGO certification tags and settings", path)
+	if tags["bashy_cert_base"] && (!tags["bashy_cert"] || !tags["osusergo"] || settings["GOOS"] != "linux" || settings["CGO_ENABLED"] != "1") {
+		return fmt.Errorf("%s uses bashy_cert_base without Linux CGO and osusergo certification tags and settings", path)
 	}
 	return nil
 }

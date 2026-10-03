@@ -7,8 +7,11 @@ and registered-command CRUD. It excludes the optional AgentOS, ycode, Genie,
 Filebrowser, and database import graph before Go package initialization.
 `bashy_core` remains a diagnostic-only tag and release eligibility rejects it.
 
-The Profile D harness must build with `bashy_cert,bashy_cert_base`, static
-Linux CGO, and `-w` (never `-s`). Its pre-TCC gate checks both tags, CGO,
+The Profile D harness must build with `bashy_cert,bashy_cert_base,osusergo`, static
+Linux CGO, and `-w` (never `-s`). The `osusergo` tag keeps account and group
+lookups on Go's `/etc/passwd` and `/etc/group` parser; static glibc's NSS
+module path crashed on a missing group in the one-file candidate. Its pre-TCC
+gate checks all three tags, CGO,
 ELF64 x86_64 ET_EXEC, no interpreter, and the retained `runtime.fwdSig`
 symbol. The Bashy release gate also rejects a base artifact lacking Linux
 CGO certification settings. The staged executable is one physical Bashy
