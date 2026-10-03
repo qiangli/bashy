@@ -1,4 +1,4 @@
-//go:build !bashy_core
+//go:build !bashy_core && !bashy_cert_base
 
 // Copyright (c) 2025 qiangli
 // See LICENSE for licensing information

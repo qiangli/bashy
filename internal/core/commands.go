@@ -1,7 +1,8 @@
 // Package core is the small one-file Bashy route used to prove the base/core
 // import boundary. It deliberately has no AgentOS, ycode, or Genie imports.
-// The bashy_core build tag is a non-shipping architecture probe until the
-// optional front door has migrated to separately versioned registrations.
+// The bashy_core build tag remains a non-shipping architecture probe; the
+// bashy_cert_base tag selects the same base/core runtime for a guarded
+// certification candidate.
 package core
 
 import (

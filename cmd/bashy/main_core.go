@@ -1,8 +1,9 @@
-//go:build bashy_core
+//go:build bashy_core || bashy_cert_base
 
-// The bashy_core profile is an architecture probe. It keeps one physical
-// executable with shell, Coreutils, and registered-command CRUD while optional
-// AgentOS/ycode/Genie packages are absent from its Go import graph.
+// bashy_core is an architecture probe; bashy_cert_base is the candidate
+// base/core product. Both keep one physical executable with shell, Bash#,
+// Coreutils, and command CRUD while optional AgentOS/ycode/Genie packages
+// are absent from the process import graph.
 package main
 
 import (

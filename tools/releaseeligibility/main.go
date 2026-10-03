@@ -31,15 +31,21 @@ func audit(path string) error {
 	if build.Path != "github.com/qiangli/bashy/cmd/bashy" {
 		return fmt.Errorf("%s contains %q, want cmd/bashy", path, build.Path)
 	}
+	tags := make(map[string]bool)
+	settings := make(map[string]string)
 	for _, setting := range build.Settings {
-		if setting.Key != "-tags" {
-			continue
-		}
-		for _, tag := range strings.FieldsFunc(setting.Value, func(r rune) bool { return r == ',' || unicode.IsSpace(r) }) {
-			if tag == "bashy_core" {
-				return fmt.Errorf("%s uses diagnostic bashy_core tag; do not ship until optional command parity and route gates pass", path)
+		settings[setting.Key] = setting.Value
+		if setting.Key == "-tags" {
+			for _, tag := range strings.FieldsFunc(setting.Value, func(r rune) bool { return r == ',' || unicode.IsSpace(r) }) {
+				tags[tag] = true
 			}
 		}
+	}
+	if tags["bashy_core"] {
+		return fmt.Errorf("%s uses diagnostic bashy_core tag; do not ship until optional command parity and route gates pass", path)
+	}
+	if tags["bashy_cert_base"] && (!tags["bashy_cert"] || settings["GOOS"] != "linux" || settings["CGO_ENABLED"] != "1") {
+		return fmt.Errorf("%s uses bashy_cert_base without Linux CGO certification tags and settings", path)
 	}
 	return nil
 }
