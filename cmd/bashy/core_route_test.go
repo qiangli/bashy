@@ -52,6 +52,26 @@ func TestCoreRouteOneFileAndCommandCRUD(t *testing.T) {
 			}
 		})
 	}
+	// POSIX at/batch/crontab share this scheduler. The native certification
+	// runner must be able to start it before any TCC process is launched.
+	scheduleEnv := append(os.Environ(), "BASHY_SCHEDULE_STATE="+filepath.Join(dir, "schedule.json"))
+	schedule := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command(bin, append([]string{"schedule"}, args...)...)
+		cmd.Env = scheduleEnv
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("schedule %v: %v; output=%q", args, err, out)
+		}
+		return string(out)
+	}
+	if got := schedule("start", "--interval", "1s", "--json"); !strings.Contains(got, `"running":true`) {
+		t.Fatalf("schedule start did not report running: %q", got)
+	}
+	t.Cleanup(func() { schedule("stop", "--json") })
+	if got := schedule("status", "--json"); !strings.Contains(got, `"running":true`) {
+		t.Fatalf("schedule status did not report running: %q", got)
+	}
 	// The base profile retains Bash# Go-source execution. Its loader belongs
 	// to the language, even though optional AgentOS imports stay absent.
 	goSource := filepath.Join(dir, "minimal.go")

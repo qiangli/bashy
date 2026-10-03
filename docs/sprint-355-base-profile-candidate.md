@@ -20,6 +20,11 @@ validation. In POSIX mode, that route also selects the strict POSIX grammar;
 the staging canary checks that a valid command has no side effects. This
 keeps the safety check available without importing optional AgentOS startup.
 
+The base also exposes Coreutils' `bashy schedule` daemon command. Profile D
+starts it before TCC so POSIX `at`, `batch`, and `crontab` jobs can run. The
+base dispatch uses the same schedule package as full Bashy and does not load
+AgentOS.
+
 This profile is a candidate for the declared POSIX base and Bash# runtime.
 It does not yet supply the optional AgentOS front door or a language/toolchain
 extension registry. Those are separately tracked in Sprint 355 and are not

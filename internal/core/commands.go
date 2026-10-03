@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/qiangli/coreutils/pkg/schedule"
 	"github.com/qiangli/coreutils/shell"
 	"github.com/qiangli/coreutils/tool"
 	"github.com/qiangli/yoke/pkg/fleet"
@@ -35,7 +36,7 @@ func reservedName(name string) (string, bool) {
 	if tool.Lookup(name) != nil {
 		return "coreutils applet", true
 	}
-	if name == "commands" || name == "command" || name == "help" {
+	if name == "commands" || name == "command" || name == "help" || name == "schedule" {
 		return "bashy core command", true
 	}
 	for _, word := range fleet.ReservedCommandWords() {
@@ -195,11 +196,20 @@ func WireExec(opts []interp.RunnerOption, _ bool, _ []string, in io.Reader, out,
 	return append(opts, interp.ExecHandlers(shell.Handler(), registeredHandler))
 }
 
-// Dispatch handles only the core's registered-command CRUD. Other arguments
-// remain shell arguments for cli.Main; optional front-door verbs are absent.
+// Dispatch handles core command CRUD and the scheduler required by POSIX
+// at/batch/crontab. Other arguments remain shell arguments for cli.Main;
+// optional front-door verbs are absent.
 func Dispatch() {
 	if len(os.Args) < 2 {
 		return
+	}
+	if os.Args[1] == "schedule" {
+		cmd := schedule.NewScheduleCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	}
 	if os.Args[1] == "commands" || os.Args[1] == "command" {
 		cmd := fleet.NewCommandsCmd(fleet.WithReservedNames(reservedName), fleet.WithCommandProbe(scriptSyntaxProbe))
