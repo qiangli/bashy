@@ -15,6 +15,11 @@ CGO certification settings. The staged executable is one physical Bashy
 file; shell and applet names are links to it. The existing required-command,
 provider, inode, and POSIX-mode checks still apply.
 
+The base entry point accepts `--dry-run` and `--dryrun` as parse-only
+validation. In POSIX mode, that route also selects the strict POSIX grammar;
+the staging canary checks that a valid command has no side effects. This
+keeps the safety check available without importing optional AgentOS startup.
+
 This profile is a candidate for the declared POSIX base and Bash# runtime.
 It does not yet supply the optional AgentOS front door or a language/toolchain
 extension registry. Those are separately tracked in Sprint 355 and are not

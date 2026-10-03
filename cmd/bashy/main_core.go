@@ -7,8 +7,10 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	// The Bash# Go-source loader is part of the language base. It registers
 	// front.GoSourceLoad without importing the optional AgentOS graph.
@@ -22,10 +24,39 @@ import (
 	"mvdan.cc/sh/v3/interp/ownedexec"
 )
 
+// The base profile has no AgentOS execution handlers. Its dry-run request
+// therefore validates source without executing it, including outside POSIX
+// mode. Keep the flag in this entry point so the plain bash binary never
+// acquires a Bashy-specific option.
+var baseDryRun = flag.Bool("dryrun", false, "bashy: parse source without executing it")
+
+func baseDryRunRequested() bool {
+	if *baseDryRun {
+		return true
+	}
+	// Preserve the startup safety request if an embedding caller resets the
+	// process-global flag set after it parses the command line.
+	for _, arg := range os.Args[1:] {
+		switch arg {
+		case "--dry-run", "--dryrun":
+			return true
+		case "--", "-c":
+			return false
+		}
+		if !strings.HasPrefix(arg, "-") {
+			return false
+		}
+	}
+	return false
+}
+
 func init() {
+	flag.BoolVar(baseDryRun, "dry-run", false, "bashy: alias for --dryrun")
 	if shellInvocation(os.Args[0]) || utilityInvocation(os.Args[0]) {
 		return
 	}
+	cli.AgentOSCommandLineNoExec = func(bool) bool { return baseDryRunRequested() }
+	cli.AgentOSStrictPosixParse = func(posix bool) bool { return posix && baseDryRunRequested() }
 	cli.AgentOSOwnedCommand = func(name string) bool { return tool.Lookup(name) != nil }
 	cli.AgentOSOwnedNames = tool.Names
 	cli.AgentOSDispatch = core.Dispatch
