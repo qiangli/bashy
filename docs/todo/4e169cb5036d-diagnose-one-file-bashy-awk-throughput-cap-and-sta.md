@@ -3,15 +3,18 @@ id: 4e169cb5036d
 kind: bug
 title: Diagnose one-file Bashy awk throughput cap and startup cost
 seq: 390
-status: todo
+status: done
 priority: p0
 labels:
     - posix-cert
     - performance
 created: 2026-10-02T23:21:34.232982Z
+assignee: codex-gpt6-sol
 sprint: 355
 sprint_id: 3a83ff48-7f8b-5be4-b0e6-e146762b2573
 sprint_title: Profile D residual blocker triage and targeted closure
+closed: 2026-10-04T07:13:47.959453Z
+closed_by: codex-gpt6-sol
 ---
 
 First one-file D diagnostic: shell set 493 TPs took 1299s versus frozen 966s; second awk set hit unchanged 600s cap versus frozen 353s, runner rc3 and no scored awk result. Measure exact one-file sh/awk cold-start versus prior lean sh and separate Coreutils on representative suite-free commands; identify cause before patch. Preserve one physical Bashy executable, POSIX semantics, inherited-signal symbol gates, and unchanged certification timeouts. Prove focused startup/awk improvement and regression behavior before any full D rerun.
@@ -37,3 +40,7 @@ The first core probe lacked the Bash# Go-source loader. A narrow diagnostic-only
 On host 605686484, after the owner sealed the shell-only TCC and released a suite-free `/tmp` window, we built `CGO_ENABLED=1 go build -trimpath -tags bashy_cert,bashy_core -ldflags '-linkmode external -extldflags -static'` from the same Bashy revision `3907df3` as the staged candidate. The diagnostic core ELF SHA-256 was `d052153c506f5b7dc5a5bec4aad68979fce3ba9314f339f8d5a6796b16ff8e0a`, 46 MiB, ET_EXEC with `runtime.fwdSig`; the staged full certification ELF SHA-256 was `4f5346ec3ad43a658c4e117efdd21c8c036dca962f7631ad769adb8e07b8af83`, 166 MiB, also static CGO. Core omitted version stamps from ldflags; these do not change the import graph. The shipping eligibility gate still rejects the core tag.
 
 With `POSIXLY_CORRECT=1`, `LANG=POSIX`, and `LC_ALL=C`, 120 warm interleaved launches of each route gave these medians (p95): full `sh -c :` **60.141 ms** (70.289), full `awk 'BEGIN{print 1}'` **58.884 ms** (71.098), static-CGO core sh **18.787 ms** (23.694), static-CGO core awk **18.727 ms** (22.645). Both sh→awk smoke checks printed `HI`. The core build is about 3.1 times faster for these launches under matched CGO/static settings. A full untagged pure-Go build from the same revision yielded sh **63.680 ms** (76.344) and awk **62.258 ms** (75.632), so turning CGO off alone did not reduce this observed startup tax; that pure-Go build cannot be a certification candidate because `bashy_cert` requires Linux CGO for the inherited-signal snapshot. These are host-specific launch measurements, not evidence that the licensed awk set now fits the unchanged 600-second cap. The remaining production task is to migrate optional behavior behind a base/core boundary with full route parity, then validate a new one-file certification candidate in a focused replay.
+
+## Sprint 355 acceptance evidence 2026-10-04
+
+The startup/throughput cause and matched build measurements are recorded at 82cc3c7 and 3907df3. The guarded base candidate then completed the full6 awk set and all 117 sets with zero caps under unchanged TCC limits. Historical raw journals and any pending formal certification decisions are unchanged.
