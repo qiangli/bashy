@@ -1261,6 +1261,31 @@ func runAll() error {
 	if err != nil {
 		return err
 	}
+	// An explicit Bash# selector keeps the historical interpreted Go-source
+	// path used by the corpus harness. Otherwise the file extension or the
+	// explicit source selector chooses a compiled whole-file program.
+	if binary == front.BashPPBinaryBashy && startupGoSourceErr == nil && filename != "" {
+		bashSharp, explicit := front.CommandLineBashPP(originalArgs)
+		if !(explicit && bashSharp) {
+			if startupGoSourceSel.LanguageSeen && startupGoSourceSel.Language == "go" ||
+				!startupGoSourceSel.LanguageSeen && strings.EqualFold(filepath.Ext(filename), ".go") {
+				status, runErr := interp.RunCompiledGoFile(filename, flag.Args()[1:], os.Stdin, os.Stdout, os.Stderr)
+				if runErr != nil {
+					return goSourceFailure(runErr)
+				}
+				if status != 0 {
+					return interp.ExitStatus(status)
+				}
+				return nil
+			}
+		}
+		if ext := strings.ToLower(filepath.Ext(filename)); unsupportedSourceExtension(ext) && !(explicit && bashSharp) && !startupGoSourceSel.LanguageSeen {
+			if ext == ".fs" || ext == ".fsx" {
+				return goSourceFailure(fmt.Errorf("%s:1:1: F# file execution is not yet supported; rewrite it as Go in a ~~~go fence in a .bsh script", filename))
+			}
+			return goSourceFailure(fmt.Errorf("%s:1:1: %s source is not yet supported as a file; use a ~~~%s fence in a .bsh script", filename, ext, fenceLanguage(ext)))
+		}
+	}
 	// Go-source selection is validated before anything else looks at the
 	// input: a refused selection must never reach a shell code path, and an
 	// accepted one takes its own dispatch below.
@@ -1408,6 +1433,28 @@ func runAll() error {
 	return runWithLoginLogout(r, func() error {
 		return runPath(r, path)
 	})
+}
+
+func unsupportedSourceExtension(ext string) bool {
+	switch ext {
+	case ".c", ".cc", ".cpp", ".cxx", ".js", ".mjs", ".ts", ".tsx", ".py", ".rs", ".fs", ".fsx":
+		return true
+	}
+	return false
+}
+
+func fenceLanguage(ext string) string {
+	switch ext {
+	case ".cc", ".cpp", ".cxx":
+		return "cxx"
+	case ".mjs":
+		return "ts"
+	case ".js":
+		return "ts"
+	case ".tsx":
+		return "ts"
+	}
+	return strings.TrimPrefix(ext, ".")
 }
 
 // runForcedInteractive emulates `bash -i` when stdin is not a terminal:

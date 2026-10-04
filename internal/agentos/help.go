@@ -13,6 +13,11 @@ import (
 func Usage() string {
 	return `
 Bashy AgentOS extensions:
+	FILE.bsh		interpret a Bash# script (also .sh, .bash, .bpp)
+	FILE.go		compile and run with the Go fence toolchain
+	--source=go FILE	compile and run Go source with any file extension
+	--bashsharp FILE	interpret any file as Bash# (--bashpp alias)
+	--bashpp --source=go FILE.go	interpret Go source for the corpus harness
 	--bashpp, --bash++	enable Bash++ (--no-bashpp disables it)
 	~~~python ... ~~~	declare Python functions for direct or qualified Bash++ calls
 	~~~typescript ... ~~~	declare official-compiler TypeScript functions for Bash++ calls
