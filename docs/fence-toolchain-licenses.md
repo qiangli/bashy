@@ -100,8 +100,83 @@ platform-specific payloads that the common notice does not separately rule on.
 This archive inventory records what was actually inspected without promoting
 the repository-level MIT/BSD notice into a conclusion about unlisted native
 libraries. The separately downloaded runtime is still download + exec under
-§2. S358.5 must record a live `Add-Type` run per required OS. S358.9 separately
-owns the FROM-scratch image's libstdc++, libgcc and ICU runtime ruling.
+§2. S358.5 must record a live `Add-Type` run per required OS. The
+FROM-scratch image's libstdc++, libgcc and ICU ruling is the next section.
+
+### FROM-scratch image runtime libraries (S358.9) — licence ruling
+
+Recorded 2026-10-04, before any fetch code. One ruling for this story and for
+Sprint 359's glibc image (S359.12), which needs the same C++ and GCC runtime.
+
+**What the image needs, as read from the binaries.** The bashy image has no
+libc. Every native part of .NET 10 and PowerShell (`pwsh`, `libcoreclr.so`,
+`libclrjit.so`, `libhostfxr.so`, `libhostpolicy.so`, `libpsl-native.so`)
+has `DT_NEEDED` entries for `libstdc++.so.6` and `libgcc_s.so.1` beside musl,
+and no `RUNPATH`. Together they import 1,632 undefined symbols, including
+the GNU libstdc++ ABI itself: `std::__cxx11::basic_string`,
+`basic_stringstream`, `std::thread`, `std::condition_variable` and
+`_Unwind_Resume@GCC_3.0`. LLVM's libc++ (Apache-2.0 WITH LLVM-exception)
+uses the `std::__1` ABI and cannot satisfy those imports. **There is no
+permissively licensed drop-in for this C++ runtime.** Building one from
+permissive source (policy §3) would mean rebuilding .NET against libc++,
+which is a fork of Microsoft's runtime and out of scope. OpenSSL is loaded
+with `dlopen` only when the runtime uses crypto or TLS. ICU is not
+provisioned. The image runs .NET in invariant globalization
+(`DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`).
+
+**Ruling.** libstdc++ and libgcc_s are GPL-3.0-or-later WITH
+GCC-exception-3.1 (the GCC Runtime Library Exception). Alpine labels the gcc
+aport `GPL-2.0-or-later AND LGPL-2.1-or-later`. That label covers the whole
+gcc source package, so the upstream terms above are the ones that apply to
+these two libraries. They **fit the runtime-download policy (§2)**, on these
+conditions, all of which hold in the code:
+
+1. bashy never links, embeds or vendors them. The bashy binary is static,
+   `CGO_ENABLED=0`, and has no `DT_NEEDED` at all. The libraries are loaded
+   only into the separately executed `pwsh`/`dotnet` process, which is a
+   Microsoft MIT program and not bashy.
+2. bashy never ships them. No release asset, no repository file and no image
+   bashy publishes contains them. bashy fetches them on the user's machine at
+   first use from Alpine's own pinned, sha256-verified packages. It installs
+   them as separate files in a private cache directory (never `/lib`), which
+   only the PowerShell child process sees through `LD_LIBRARY_PATH`.
+3. `bashy self image --with pwsh` builds the preloaded variant locally,
+   through the user's own engine. The bytes come from Alpine during that
+   build, the same download and exec on the user's side. **If the project
+   ever publishes a prebuilt `--with pwsh` image (or the S359.12 glibc
+   image), that is conveying GPL object code.** Publishing it then requires
+   the GPL-3.0 source offer for gcc (Alpine's `aports` plus the gcc 15.2.0
+   tarball), alongside the image and its SBOM. Treat that as an operator
+   decision, never a CI default.
+4. The Runtime Library Exception only affects programs compiled with GCC
+   against these libraries. It has no bearing on bashy, which does neither.
+   It is cited only because it is the licence the files carry.
+
+musl-obstack (GPL-2.0-or-later, no exception) is a dependency of Alpine's
+glibc-compatibility shim `gcompat`. bashy does **not** use `gcompat`: the
+arm64 route takes a source-built musl `libpsl-native` from Alpine instead.
+No GPL-without-exception file is fetched.
+
+**Pieces fetched only on a Linux host without glibc.** Every piece is
+sha256-pinned per architecture and verified before use. The Alpine pins are
+in `yoke/pkg/muslrt` (one provisioning path, shared with Python's loader and
+reusable by S359.12), and the PowerShell and .NET pins are in
+`yoke/external/pwsh`:
+
+| Piece | x64 (amd64) | arm64 | Source and version | Licence (as read) | Class |
+|---|---|---|---|---|---|
+| musl loader `ld-musl-<arch>.so.1` | yes | yes | Alpine v3.24 `musl-1.2.6-r2` (the Python row's pin, shared) | MIT | download + exec, permissive |
+| PowerShell, self-contained musl | `powershell-7.6.6-linux-musl-x64.tar.gz` | — | upstream release (row above) | MIT; common notice | download + exec |
+| PowerShell, framework-dependent | — | `powershell-7.6.6-linux-x64-musl-noopt-fxdependent.tar.gz`, sha256 `29a3d89b5d54f3aa67decaf64bd9cbf72cea469aa9e69330e5dc2c5ffdb37f38`. IL only, not ReadyToRun, so architecture-neutral. Its x64 apphost is not used | upstream release, `hashes.sha256` | `LICENSE.txt` MIT (sha256 `7c77a44a…f744`); `ThirdPartyNotices.txt` is the common notice (sha256 `27544345…88d1`) | download + exec |
+| .NET runtime 10.0.12 (`dotnet` muxer, hostfxr, Microsoft.NETCore.App) | inside the self-contained archive | `dotnet-runtime-10.0.12-linux-musl-arm64.tar.gz`, sha256 `8ff79d85ec4d4caa3b90bc6cfcce9bd28c3336cb245db3d6f9203c3fd77a2d4b` (also matches Microsoft's published sha512 `8f369a9f…8744`) | `builds.dotnet.microsoft.com`, 10.0.12 (2026-09-08), the version the x64 bundle carries | `LICENSE.txt` MIT (.NET Foundation, sha256 `cfc21f5e…7310`); `ThirdPartyNotices.txt` 1,451 lines, all permissive, no GPL/LGPL entry (sha256 `2dc8f8c5…cc7a`) | download + exec, permissive |
+| `libpsl-native.so` (PowerShell's native shim) | inside the self-contained archive | Alpine v3.24 community `libpsl-native-7.4.0-r2`. Microsoft publishes no musl-arm64 build. This is a musl source build of PowerShell-Native, with the same 33 exported functions as the copy in 7.6.6 (checked symbol by symbol) | Alpine | MIT (PowerShell-Native) | download + exec, permissive |
+| `libstdc++.so.6` (6.0.34) | yes | yes | Alpine v3.24 main `libstdc++-15.2.0-r5` | GPL-3.0-or-later WITH GCC-exception-3.1 (ruling above) | download + exec, **not permissive**, ruled acceptable |
+| `libgcc_s.so.1` | yes | yes | Alpine v3.24 main `libgcc-15.2.0-r5` | GPL-3.0-or-later WITH GCC-exception-3.1 (ruling above) | download + exec, **not permissive**, ruled acceptable |
+| `libssl.so.3`, `libcrypto.so.3` | yes | yes | Alpine v3.24 main `libssl3-3.5.9-r0`, `libcrypto3-3.5.9-r0`. Only the two libraries are installed; engines and the legacy provider are not | Apache-2.0 | download + exec, permissive |
+| ICU | no | no | not provisioned; invariant globalization | — | — |
+
+A glibc host or macOS/Windows host fetches none of these. Its rows are the
+archive table above.
 
 ## Not a fence, same inventory
 

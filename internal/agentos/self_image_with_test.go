@@ -32,7 +32,11 @@ func TestPreloadStepsForVariants(t *testing.T) {
 	if strings.Contains(got, "/tmp") {
 		t.Errorf("preloaded toolchains must not live under /tmp:\n%s", got)
 	}
-	if _, err := preloadSteps([]string{"rust"}); err == nil || !strings.Contains(err.Error(), "supported: python, go") {
+	pw, err := preloadSteps([]string{"pwsh"})
+	if err != nil || !strings.Contains(pw, `RUN ["/bashy", "pwsh", `) || !strings.Contains(pw, "BASHY_BIN_CACHE=/opt/bashy/bin") {
+		t.Fatalf("--with pwsh: %q, %v", pw, err)
+	}
+	if _, err := preloadSteps([]string{"rust"}); err == nil || !strings.Contains(err.Error(), "supported: go, pwsh, python") {
 		t.Fatalf("unknown toolchain: %v", err)
 	}
 	if n := normalizedWith([]string{"python", "go"}); strings.Join(n, "-") != "go-python" {
