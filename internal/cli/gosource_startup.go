@@ -179,24 +179,29 @@ func runGoSourceInvocation() error {
 	return runGoSourceInput(in, operand)
 }
 
+// commandFlagGiven reports whether -c was spelled, including `-c ""`, which
+// *command alone cannot distinguish from absence.
+var commandFlagGiven = func() bool {
+	given := false
+	flag.Visit(func(f *flag.Flag) { given = given || f.Name == "c" })
+	return given
+}
+
 // runContentCheck is --check with no --source: the input itself selects the
 // language, a Go compilation unit through the Go front end and anything else
 // through the Bash# shell check. Neither builds a runner or runs a body.
 func runContentCheck() error {
+	commandSet := commandFlagGiven()
 	operand := ""
-	if *command == "" && !*readStdin && flag.NArg() > 0 {
+	if !commandSet && !*readStdin && flag.NArg() > 0 {
 		operand = flag.Arg(0)
 	}
-	var stdin io.Reader
-	if operand == "" && *command == "" {
-		stdin = os.Stdin
-	}
-	if operand != "" && operand != "-" {
+	if !commandSet && operand != "" && operand != "-" {
 		if info, err := os.Stat(operand); err == nil && info.IsDir() {
 			return goSourceFailure(fmt.Errorf("--check: %s: is a directory; select Go packages with --source=go", operand))
 		}
 	}
-	in, err := front.CollectGoSources(front.GoSourceResolution{}, operand, *command, stdin)
+	in, err := front.CollectCheckInput(operand, *command, commandSet, os.Stdin)
 	if err != nil {
 		return goSourceFailure(err)
 	}

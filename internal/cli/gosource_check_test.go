@@ -15,6 +15,13 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
+func withCommandGiven(t *testing.T, given bool) {
+	t.Helper()
+	previous := commandFlagGiven
+	commandFlagGiven = func() bool { return given }
+	t.Cleanup(func() { commandFlagGiven = previous })
+}
+
 func runContentCheckOn(t *testing.T, body string) (int, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "p.bsh")
@@ -28,6 +35,7 @@ func runContentCheckOn(t *testing.T, body string) (int, string) {
 		t.Fatal(err)
 	}
 	withGoSourceSelection(t, front.GoSourceResolution{Check: true, ContentCheck: true})
+	withCommandGiven(t, false)
 	var err error
 	stderr := captureStderr(t, func() { err = runContentCheck() })
 	if err == nil {
@@ -80,5 +88,42 @@ func TestContentCheckShell(t *testing.T) {
 				t.Fatal("--check executed the program body")
 			}
 		})
+	}
+}
+
+func TestContentCheckDashAndEmptyCommand(t *testing.T) {
+	withGoSourceSelection(t, front.GoSourceResolution{Check: true, ContentCheck: true})
+	stdin := func(content string) {
+		f, err := os.CreateTemp(t.TempDir(), "stdin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.WriteString(content)
+		f.Seek(0, 0)
+		old := os.Stdin
+		os.Stdin = f
+		t.Cleanup(func() { os.Stdin = old; f.Close() })
+	}
+	oldCommand, oldStdin := *command, *readStdin
+	t.Cleanup(func() { *command, *readStdin = oldCommand, oldStdin; _ = flag.CommandLine.Parse(nil) })
+	*command, *readStdin = "", false
+
+	withCommandGiven(t, false)
+	stdin("func d(p *int) int { return *p }\n")
+	if err := flag.CommandLine.Parse([]string{"-"}); err != nil {
+		t.Fatal(err)
+	}
+	var err error
+	stderr := captureStderr(t, func() { err = runContentCheck() })
+	if exitStatusOf(t, err) != 2 || !strings.Contains(stderr, "BASHPP-ENULL-DEREF") {
+		t.Fatalf("dash stdin: err=%v stderr=%q", err, stderr)
+	}
+
+	// Explicit empty -c: stdin holds a bad program that must never be read.
+	*command = ""
+	withCommandGiven(t, true)
+	stderr = captureStderr(t, func() { err = runContentCheck() })
+	if err != nil || stderr != "" {
+		t.Fatalf("empty -c: err=%v stderr=%q", err, stderr)
 	}
 }
