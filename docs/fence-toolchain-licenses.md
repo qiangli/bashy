@@ -61,6 +61,12 @@ One separately downloaded PowerShell 7.6.6 runtime serves both fences;
 `csharp` is proposed to compile through `Add-Type` and the Roslyn 5.0 compiler
 in that runtime, subject to S358.5's real-host probe. Nothing from Microsoft is
 linked, embedded or vendored in bashy.
+On Linux, the managed child defaults to .NET invariant globalization so the
+runtime starts on minimal systems without ICU, including the FROM-scratch
+image. A host with ICU can explicitly set
+`DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=0` to use culture data. The clean
+Ubuntu WSL2 probe exposed the missing-ICU failure and passed after this
+setting; the separate Linux host gate remains open.
 
 ### Repository-level notice (not an archive ruling)
 
