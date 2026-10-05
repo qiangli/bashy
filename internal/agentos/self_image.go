@@ -6,6 +6,7 @@ package agentos
 import (
 	"context"
 	"fmt"
+	"github.com/qiangli/yoke/external/pwsh"
 	"github.com/qiangli/yoke/external/python"
 	"io"
 	"os"
@@ -55,10 +56,11 @@ through bashy's own podman. Run your script offline with:
 BASHY_SCRATCH_BIN=<path> builds from a local artifact instead of fetching one
 (what the repo's dag build-image target does); BASHY_OCI overrides the engine.
 
---with python,go preloads toolchains into their own layer by running bashy's
-own provisioning at build time (python: musl's loader, uv and CPython
-` + python.DefaultPython + `; go: the Go toolchain), so Bash# fences run offline and
-without a first-use download. The lean image (no --with) fetches them on
+--with python,go,pwsh preloads toolchains into their own layer by running
+bashy's own provisioning at build time (python: musl's loader, uv and CPython
+` + python.DefaultPython + `; go: the Go toolchain; pwsh: PowerShell ` + pwsh.DefaultVersion + ` for the
+powershell and csharp fences, with musl's loader and its runtime libraries), so
+Bash# fences run offline and without a first-use download. The lean image (no --with) fetches them on
 demand instead.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -69,7 +71,7 @@ demand instead.`,
 	cmd.Flags().StringVar(&arch, "arch", defaultImageArch(), "image architecture: amd64 or arm64")
 	cmd.Flags().StringVar(&tag, "tag", "", "image tag (default localhost/bashy:<version>-linux-<arch>)")
 	cmd.Flags().StringVar(&engine, "engine", envOr("BASHY_OCI", ""), "engine command (default: this bashy's podman)")
-	cmd.Flags().StringSliceVar(&with, "with", nil, "preload toolchains into the image: python, go")
+	cmd.Flags().StringSliceVar(&with, "with", nil, "preload toolchains into the image: go, pwsh, python")
 	return cmd
 }
 
@@ -110,6 +112,9 @@ func buildSelfImage(ctx context.Context, stdout, stderr io.Writer, version, arch
 	if err := os.MkdirAll(filepath.Join(ctxDir, "tmp", "bashy"), 0o1777); err != nil {
 		return err
 	}
+	if err := writeScratchEtc(filepath.Join(ctxDir, "etc")); err != nil {
+		return err
+	}
 	if err := os.WriteFile(filepath.Join(ctxDir, "Containerfile"), []byte(scratchContainerfile(version)+preload), 0o644); err != nil {
 		return err
 	}
@@ -131,7 +136,7 @@ func buildSelfImage(ctx context.Context, stdout, stderr io.Writer, version, arch
 }
 
 // scratchContainerfile is the whole image: one static binary, a writable /tmp,
-// /work for the user's mount. HOME is a dir OF its own under /tmp, not /tmp
+// a two-line account database in /etc, /work for the user's mount. HOME is a dir OF its own under /tmp, not /tmp
 // itself: Stage 0 output canonicalization rewrites the home prefix to `$HOME`
 // on non-tty sinks (output_reduce.go), and a container's stdout is never a tty
 // — with HOME=/tmp every /tmp path a script printed would come out as $HOME.
@@ -140,10 +145,31 @@ func scratchContainerfile(version string) string {
 	return "FROM scratch\n" +
 		"COPY bashy /bashy\n" +
 		"COPY tmp /tmp\n" +
+		"COPY etc /etc\n" +
 		"ENV HOME=/tmp/bashy PATH=/ OTEL_TRACES_EXPORTER=none BASHY_TELEMETRY_QUIET=1\n" +
 		"WORKDIR /work\n" +
 		"LABEL org.opencontainers.image.title=\"bashy\" org.opencontainers.image.version=\"" + version + "\" org.opencontainers.image.source=\"https://github.com/" + bashyReleaseRepo + "\"\n" +
 		"ENTRYPOINT [\"/bashy\"]\n"
+}
+
+// scratchPasswd and scratchGroup are the image's account database: root and
+// nobody, nothing else. Programs bashy runs as separate processes look their
+// own user up through libc, and a missing /etc/passwd is an error rather than
+// "no such user" there: PowerShell (musl getpwuid_r, ENOENT) refuses to start
+// without it. Root's home is HOME's.
+const (
+	scratchPasswd = "root:x:0:0:root:/tmp/bashy:/bashy\nnobody:x:65534:65534:nobody:/nonexistent:/bashy\n"
+	scratchGroup  = "root:x:0:\nnobody:x:65534:\n"
+)
+
+func writeScratchEtc(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "passwd"), []byte(scratchPasswd), 0o644); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "group"), []byte(scratchGroup), 0o644)
 }
 
 // scratchArtifact returns the static linux artifact to put in the image and
@@ -240,6 +266,10 @@ func copyFileMode(src, dst string, mode os.FileMode) error {
 var preloadToolchains = map[string]string{
 	"python": `RUN ["/bashy", "uv", "python", "install", "` + python.DefaultPython + `"]`,
 	"go":     `RUN ["/bashy", "go", "version"]`,
+	// pwsh: the PowerShell runtime both the powershell and csharp fences use,
+	// with musl's loader and the runtime libraries it needs (yoke
+	// external/pwsh/musl.go). Starting it once also proves it runs.
+	"pwsh": `RUN ["/bashy", "pwsh", "-NonInteractive", "-Command", "$PSVersionTable.PSVersion.ToString()"]`,
 }
 
 // selfImageTag is the default tag of `bashy self image`:
@@ -278,7 +308,7 @@ func preloadSteps(with []string) (string, error) {
 	for _, name := range names {
 		step, ok := preloadToolchains[name]
 		if !ok {
-			return "", fmt.Errorf("self image: --with %s is not supported (supported: python, go)", name)
+			return "", fmt.Errorf("self image: --with %s is not supported (supported: go, pwsh, python)", name)
 		}
 		b.WriteString(step + "\n")
 	}

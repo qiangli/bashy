@@ -94,6 +94,58 @@ rebuild need toolchains bashy provisions. Two ways to get them into the image:
   script runs in 0.54 s under `--network=none --read-only`. Rust is not a
   variant yet.
 
+### PowerShell and C# fences (`--with pwsh`)
+
+The `powershell` and `csharp` fences share one PowerShell 7.6.6 runtime. The
+image has no libc and no C++ runtime, so on first use bashy provisions all of
+this (yoke `external/pwsh/musl.go`; licences and the libstdc++/libgcc ruling
+are in `fence-toolchain-licenses.md`):
+
+- musl's loader at `/lib`, the same pin the Python path uses;
+- `libstdc++`, `libgcc_s`, `libssl` and `libcrypto` from pinned Alpine v3.24
+  packages, installed in a private directory under bashy's cache. Only the
+  PowerShell process sees that directory, through `LD_LIBRARY_PATH`;
+- **x64:** the upstream self-contained `linux-musl-x64` PowerShell archive;
+- **arm64:** upstream has no self-contained musl arm64 archive. bashy uses
+  the architecture-neutral framework-dependent archive on Microsoft's
+  `dotnet-runtime-10.0.12-linux-musl-arm64` tarball, plus Alpine's musl build
+  of `libpsl-native`.
+
+Globalization is **invariant** (`DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`;
+ICU is not provisioned). The current culture is the invariant culture, so
+culture-sensitive formatting (dates, `"{0:N}"`, sorting) follows invariant
+rules rather than a host locale. A caller that sets the variable itself keeps
+its own value. TLS works: .NET loads the provisioned OpenSSL and reads bashy's
+own CA bundle through `SSL_CERT_FILE`.
+
+The image carries a two-entry `/etc/passwd` and `/etc/group` (root, whose home
+is `$HOME`, and nobody). .NET resolves the current user through musl's
+`getpwuid_r`, and with no `/etc/passwd` at all PowerShell exits during
+initialization with "No such file or directory". A uid that has no entry (for
+example `--user 1000`) runs fine.
+
+On demand needs network and a writable root, exactly like Python. A read-only
+root or a non-root user gets an error naming `--with pwsh`. The preloaded
+variant needs neither and runs as any uid.
+
+Measured 2026-10-04 on Apple silicon (podman machine, applehv), with a local
+`make build-bashy-scratch` artifact of this candidate. That artifact is
+larger than the release figures above. amd64 ran under Rosetta emulation, so
+its times are emulated, not native:
+
+| | arm64 | amd64 (emulated) |
+|---|---|---|
+| lean image | 135 MB | 144 MB |
+| `--with pwsh` image | 304 MB (+169 MB) | 341 MB (+197 MB) |
+| `bashy self image --with pwsh`, whole build (pwsh fetched and started once) | 9.2 s | 9.8 s |
+| first PowerShell + C# script, lean image, on demand (downloads included) | 11.0 s | 7.2 s |
+| `pwsh -Command "ok"`, preloaded, `--network=none --read-only` (5 runs) | 0.64–0.68 s | 2.8–3.6 s |
+| PowerShell script with a C# `Add-Type`, preloaded, offline (5 runs) | 0.91–0.95 s | 3.3–3.6 s |
+| container start baseline (`bashy -c true`) | 0.17–0.26 s | — |
+
+All of these runs printed the same result lines: the PowerShell version,
+the C# method results, a pipeline and a SHA-256 through OpenSSL.
+
 ## The table
 
 `in the image` reads: **works** — the probe ran and exited 0; **present** — the

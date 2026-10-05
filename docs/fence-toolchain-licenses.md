@@ -152,8 +152,10 @@ arm64 route takes a source-built musl `libpsl-native` from Alpine instead.
 No GPL-without-exception file is fetched.
 
 **Pieces fetched only on a Linux host without glibc.** Every piece is
-sha256-pinned per architecture in `yoke/external/pwsh/musl.go` and verified
-before use:
+sha256-pinned per architecture and verified before use. The Alpine pins are
+in `yoke/pkg/muslrt` (one provisioning path, shared with Python's loader and
+reusable by S359.12), and the PowerShell and .NET pins are in
+`yoke/external/pwsh`:
 
 | Piece | x64 (amd64) | arm64 | Source and version | Licence (as read) | Class |
 |---|---|---|---|---|---|

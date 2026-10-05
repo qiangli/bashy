@@ -93,15 +93,19 @@ func provisionedPython(ctx context.Context, version string) ([]string, string, e
 }
 
 func provisionedPwsh(ctx context.Context) ([]string, string, error) {
-	argv, err := pwsh.FenceArgv(ctx, os.Getenv("BASHY_PWSH_VERSION"))
+	launch, err := pwsh.Resolve(ctx, os.Getenv("BASHY_PWSH_VERSION"))
 	if err != nil {
 		return nil, "", err
 	}
-	// ToolResolver's protocol carries argv but not environment. Set the two
-	// PowerShell process controls before the island snapshots its child env.
-	_ = os.Setenv("POWERSHELL_TELEMETRY_OPTOUT", "1")
-	_ = os.Setenv("POWERSHELL_UPDATECHECK", "Off")
-	return argv, "selected provisioned PowerShell " + pwsh.DefaultVersion + " (shared by powershell and csharp)", nil
+	// ToolResolver's protocol carries argv but not environment. Set the
+	// PowerShell process controls before the island snapshots its child env:
+	// telemetry and update checks off, and on a host without glibc (the bashy
+	// image) the private runtime library path and invariant globalization.
+	for _, kv := range launch.Overrides(os.Environ()) {
+		name, value, _ := strings.Cut(kv, "=")
+		_ = os.Setenv(name, value)
+	}
+	return launch.FenceArgv(), "selected provisioned PowerShell " + pwsh.DefaultVersion + " (shared by powershell and csharp)", nil
 }
 
 func single(bin, why string, err error) ([]string, string, error) {

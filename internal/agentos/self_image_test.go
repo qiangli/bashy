@@ -4,6 +4,8 @@
 package agentos
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -13,13 +15,26 @@ import (
 // HOME would rewrite every /tmp path a script prints).
 func TestScratchContainerfileShape(t *testing.T) {
 	cf := scratchContainerfile("v1.2.3")
-	for _, want := range []string{"FROM scratch\n", "COPY bashy /bashy\n", "HOME=/tmp/bashy", "OTEL_TRACES_EXPORTER=none", "BASHY_TELEMETRY_QUIET=1", "WORKDIR /work\n", `ENTRYPOINT ["/bashy"]`, `image.version="v1.2.3"`} {
+	for _, want := range []string{"FROM scratch\n", "COPY bashy /bashy\n", "COPY etc /etc\n", "HOME=/tmp/bashy", "OTEL_TRACES_EXPORTER=none", "BASHY_TELEMETRY_QUIET=1", "WORKDIR /work\n", `ENTRYPOINT ["/bashy"]`, `image.version="v1.2.3"`} {
 		if !strings.Contains(cf, want) {
 			t.Errorf("Containerfile missing %q:\n%s", want, cf)
 		}
 	}
 	if strings.Contains(cf, "RUN ") {
 		t.Errorf("FROM scratch has no shell to RUN anything:\n%s", cf)
+	}
+}
+
+// The account database holds root (home = HOME) and nobody, nothing else.
+func TestScratchEtcAccounts(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeScratchEtc(dir); err != nil {
+		t.Fatal(err)
+	}
+	passwd, _ := os.ReadFile(filepath.Join(dir, "passwd"))
+	group, _ := os.ReadFile(filepath.Join(dir, "group"))
+	if !strings.HasPrefix(string(passwd), "root:x:0:0:root:/tmp/bashy:") || strings.Count(string(passwd), "\n") != 2 || strings.Count(string(group), "\n") != 2 {
+		t.Fatalf("passwd %q group %q", passwd, group)
 	}
 }
 
