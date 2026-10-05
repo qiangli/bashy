@@ -11,6 +11,7 @@ import (
 	"github.com/qiangli/yoke/external/bun"
 	"github.com/qiangli/yoke/external/gotoolchain"
 	"github.com/qiangli/yoke/external/node"
+	"github.com/qiangli/yoke/external/pwsh"
 	"github.com/qiangli/yoke/external/python"
 	"github.com/qiangli/yoke/external/rust"
 	"github.com/qiangli/yoke/external/zigcc"
@@ -69,6 +70,7 @@ var islandToolchains = map[string]func(ctx context.Context) (argv []string, why 
 		bin, err := rust.EnsureRustc(ctx)
 		return single(bin, "selected provisioned rustc ("+rust.DefaultToolchain+")", err)
 	},
+	"pwsh": provisionedPwsh,
 }
 
 func provisionedCC(ctx context.Context) ([]string, string, error) {
@@ -88,6 +90,18 @@ func provisionedPython(ctx context.Context, version string) ([]string, string, e
 		label = python.DefaultPython
 	}
 	return single(bin, "selected provisioned CPython "+label+" (uv-managed)", err)
+}
+
+func provisionedPwsh(ctx context.Context) ([]string, string, error) {
+	argv, err := pwsh.FenceArgv(ctx, os.Getenv("BASHY_PWSH_VERSION"))
+	if err != nil {
+		return nil, "", err
+	}
+	// ToolResolver's protocol carries argv but not environment. Set the two
+	// PowerShell process controls before the island snapshots its child env.
+	_ = os.Setenv("POWERSHELL_TELEMETRY_OPTOUT", "1")
+	_ = os.Setenv("POWERSHELL_UPDATECHECK", "Off")
+	return argv, "selected provisioned PowerShell " + pwsh.DefaultVersion + " (shared by powershell and csharp)", nil
 }
 
 func single(bin, why string, err error) ([]string, string, error) {
@@ -114,7 +128,7 @@ func islandToolResolver(name string) ([]string, string, error) {
 }
 
 func islandToolchainNames() []string {
-	return append([]string{"go", "cc", "c++", "python3", "node", "bun", "typescript", "rustc"}, fenceTools...)
+	return append([]string{"go", "cc", "c++", "python3", "node", "bun", "typescript", "rustc", "pwsh"}, fenceTools...)
 }
 
 // installIslandToolResolver wires the table into the engine once per process.

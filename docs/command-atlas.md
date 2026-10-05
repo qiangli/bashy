@@ -95,7 +95,7 @@ bucket is split into honest functional groups.
 | `knowledge` | kb, skill (`skills` is its hidden plural alias) |
 | `engines` | podman, docker, ollama, sphere |
 | `forge` | git, git-scm, gh, loom |
-| `toolchains` | go, cmake, clang, node, npm, npx, pnpm, yarn, python, pip, uv, mise, cargo, rustc, rustup, rust, java, javac, mvn |
+| `toolchains` | go, cmake, clang, node, npm, npx, pnpm, yarn, python, pip, uv, mise, cargo, rustc, rustup, rust, pwsh, java, javac, mvn |
 | `storage` | rclone, zot, seaweedfs, kopia |
 | `cluster-cloud` | kubectl, helm + every declarative-registry CLI (doctl today; aws/azure/gcloud when registered) |
 | `platform` | commands, check, verify, self, run, secret, app, bootstrap, upgrade; `context` and `audit` remain platform rows as hidden aliases of `inspect`; `secrets`/`apps` are hidden plural aliases |

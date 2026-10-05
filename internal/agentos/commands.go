@@ -635,6 +635,7 @@ var verbSynopsis = map[string]string{
 	"rustc":       "Rust compiler (self-provisioning via rustup)",
 	"rustup":      "Rust toolchain manager (self-provisioning)",
 	"rust":        "Rust compiler (self-provisioning; alias of rustc)",
+	"pwsh":        "pinned PowerShell 7.6 LTS (shared with powershell and csharp fences; no profiles)",
 	"git-scm":     "real git (git-for-windows MinGit on Windows; system git on unix), verified",
 	"curl":        "curl (platform curl; pinned+verified curl.se/windows on a bare Windows node)",
 	"kubectl":     "Kubernetes CLI for the DKS cluster (managed external, Apache-2.0)",

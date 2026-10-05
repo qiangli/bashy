@@ -67,6 +67,7 @@ import (
 	"github.com/qiangli/yoke/external/loom"
 	"github.com/qiangli/yoke/external/mise"
 	"github.com/qiangli/yoke/external/node"
+	"github.com/qiangli/yoke/external/pwsh"
 	"github.com/qiangli/yoke/external/python"
 	"github.com/qiangli/yoke/external/rclone"
 	"github.com/qiangli/yoke/external/registry"
@@ -158,7 +159,7 @@ var (
 	// reached only as `bashy llm`.
 	// `limit` is a wrapper verb like awd; bare `limit` is csh's builtin, never ours.
 	directFrontDoorVerbs = []string{"mb", "ping", "out", "full", "awd", "supervisord", "llm", "limit"}
-	agentModeShimVerbs   = []string{"go", "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "git-scm", "curl"}
+	agentModeShimVerbs   = []string{"go", "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "pwsh", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
 	//
@@ -1469,6 +1470,15 @@ func dispatch() {
 		case "rust":
 			cmd = rust.NewRustCmd()
 		}
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			dispatchExit(1)
+		}
+		dispatchExit(0)
+	case "pwsh":
+		// Optional direct front door over the exact runtime cache used by the
+		// powershell and csharp fence workers.
+		cmd := pwsh.NewCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)

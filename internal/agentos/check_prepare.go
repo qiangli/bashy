@@ -28,6 +28,10 @@ func islandToolsFor(language string) []string {
 		return []string{"c++"}
 	case "go":
 		return []string{"go"}
+	case "powershell", "csharp":
+		// Both fences are workers in the same pinned PowerShell archive. Keeping
+		// one resolver name makes prepare and runtime converge on one cache copy.
+		return []string{"pwsh"}
 	}
 	return nil
 }
@@ -78,7 +82,7 @@ func checkPrepare(scripts []string, stdout, stderr io.Writer) int {
 	}
 	names := map[string]bool{}
 	if len(scripts) == 0 {
-		for _, lang := range []string{"go", "c", "cpp", "python", "typescript", "rust"} {
+		for _, lang := range []string{"go", "c", "cpp", "python", "typescript", "rust", "powershell", "csharp"} {
 			for _, n := range islandToolsFor(lang) {
 				names[n] = true
 			}

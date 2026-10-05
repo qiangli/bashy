@@ -1,6 +1,8 @@
 package agentos
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,5 +74,50 @@ func TestFenceLanguagesAndTools(t *testing.T) {
 	}
 	if langs, _ := fenceLanguages(filepath.Join(dir, "x.go")); strings.Join(langs, ",") != "go" {
 		t.Fatalf("a .go program is a Go island, got %q", langs)
+	}
+}
+
+func TestPowerShellAndCSharpShareManagedRuntime(t *testing.T) {
+	for _, language := range []string{"powershell", "csharp"} {
+		if got := strings.Join(islandToolsFor(language), ","); got != "pwsh" {
+			t.Errorf("%s tools = %q, want pwsh", language, got)
+		}
+	}
+	dir := t.TempDir()
+	script := filepath.Join(dir, "windows-user.bsh")
+	if err := os.WriteFile(script, []byte("~~~powershell as ps\nfunction Get-X {}\n~~~\n~~~csharp as cs\nclass X {}\n~~~\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	langs, err := fenceLanguages(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(langs, ","); got != "powershell,csharp" {
+		t.Fatalf("languages = %q, want powershell,csharp", got)
+	}
+}
+
+func TestCheckPrepareDeduplicatesSharedPwshRuntime(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "both.bsh")
+	if err := os.WriteFile(script, []byte("~~~powershell as ps\nfunction Get-X {}\n~~~\n~~~csharp as cs\nclass X {}\n~~~\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	original := islandToolchains["pwsh"]
+	t.Cleanup(func() { islandToolchains["pwsh"] = original })
+	calls := 0
+	islandToolchains["pwsh"] = func(context.Context) ([]string, string, error) {
+		calls++
+		return []string{"/managed/pwsh", "-NoProfile"}, "shared runtime", nil
+	}
+	var stdout, stderr bytes.Buffer
+	if rc := checkPrepare([]string{script}, &stdout, &stderr); rc != 0 {
+		t.Fatalf("checkPrepare rc=%d stderr=%q", rc, stderr.String())
+	}
+	if calls != 1 {
+		t.Fatalf("shared pwsh provisioned %d times, want once", calls)
+	}
+	if got := stdout.String(); !strings.Contains(got, "pwsh") || !strings.Contains(got, "shared runtime") {
+		t.Fatalf("prepare output = %q", got)
 	}
 }

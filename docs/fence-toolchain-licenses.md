@@ -55,31 +55,47 @@ The tool behind each is a CLI the fence drives with a verb table.
 | `cmake` | CMake 4.x (`yoke/external/cmake`) | BSD-3-Clause | download + exec |
 | `makefile` / `make` | in a dag body: bashy's pure-Go POSIX make. GNU make (Sprint 365 registered command) | GNU make **GPL-3.0** — downloaded or built from pinned source and executed, never bundled (`../../docs`: posix-provider-distribution-policy) | download/build + exec |
 
-## Planned: `powershell` and `csharp` (Sprint 358, planning only)
+## `powershell` and `csharp` (Sprint 358)
 
-Design: one pinned download, PowerShell 7.6.6 (assets for win-x64/arm64,
-linux-x64/arm64/musl-x64, osx-x64/arm64, with a published `hashes.sha256`),
-run as a persistent worker; C# compiles through `Add-Type` with the Roslyn 5.0
-compiler (MIT) inside the same archive. Nothing from Microsoft is linked,
-embedded or vendored. Posture, verified at the repository level:
+One separately downloaded PowerShell 7.6.6 runtime serves both fences;
+`csharp` is proposed to compile through `Add-Type` and the Roslyn 5.0 compiler
+in that runtime, subject to S358.5's real-host probe. Nothing from Microsoft is
+linked, embedded or vendored in bashy.
 
-- PowerShell repository license MIT; its `ThirdPartyNotices.txt` names only
-  MIT / BSD-2 packages (Markdig, Newtonsoft.Json, Microsoft.CodeAnalysis.CSharp
-  5.0.0, …).
-- Archive-level caveats the sprint already records: the Windows zip carries a
-  few closed Microsoft natives (`D3DCompiler_47_cor3.dll`,
-  `vcruntime140_cor3.dll`, WPF) listed in its own notices; the .NET **SDK**
-  Windows zip is under the non-OSI ".NET Library" terms and stays an explicit
-  opt-in for the NuGet tier only, never called permissive.
-- Still to verify in S358.1 / S358.5: `LICENSE.txt` and `ThirdPartyNotices.txt`
-  inside all seven pinned archives (only win-x64 has been read), and a live
-  `Add-Type` run per OS.
-- S358.9 (FROM-scratch image) needs libstdc++ and libgcc (GPL with the runtime
-  library exception) and ICU as separately downloaded files; that ruling is a
-  story deliverable.
+### Repository-level notice (not an archive ruling)
 
-Verdict: consistent with §2 — permissive upstream, download + exec, one
-non-OSI piece behind an opt-in.
+At tag `v7.6.6`, PowerShell/PowerShell's `LICENSE.txt` is MIT. Its
+`ThirdPartyNotices.txt` declares package rows under MIT or BSD-2-Clause,
+including `Microsoft.CodeAnalysis.Common 5.0.0` and
+`Microsoft.CodeAnalysis.CSharp 5.0.0` under MIT. The repository notice has
+SHA-256 `275443457d6f9eac61ef2367da89b1420b94f68c1cc94ed305d2591514ea88d1`.
+This is repository-level evidence only; it is not used as a ruling on every
+binary included in a platform archive.
+
+### Archive-level audit (2026-10-04)
+
+The audit downloaded all seven release archives, verified each against the
+release's `hashes.sha256`, and read the root `LICENSE.txt` and
+`ThirdPartyNotices.txt` from each archive. Every root license says MIT. All
+seven root notices have the same content as the repository notice after CRLF
+normalization (the Windows copies use CRLF). This sameness does not erase
+platform-specific payloads that the common notice does not separately rule on.
+
+| Platform | Release asset | SHA-256 | Root files read | Platform-specific finding |
+|---|---|---|---|---|
+| Windows x64 | `PowerShell-7.6.6-win-x64.zip` | `02fe458be20493fbdf43f61ea20610b811ee6c738ab1676c61b9cfcd1a33c860` | MIT license; common notice | Adds closed Microsoft native redistributables, including `D3DCompiler_47_cor3.dll` and `vcruntime140_cor3.dll`, plus WPF assemblies. The common notice is not a blanket license for these members. |
+| Windows arm64 | `PowerShell-7.6.6-win-arm64.zip` | `bbde9dda31d148415eccb5fbe1638e6400a144187b006e5b3fd8ec2f39d781be` | MIT license; common notice | Adds `vcruntime140_cor3.dll` and WPF assemblies (but not the x64 archive's `D3DCompiler_47_cor3.dll`). These platform members remain distinct from the common notice. |
+| Linux x64 (glibc) | `powershell-7.6.6-linux-x64.tar.gz` | `ddbc4a2d113bbd46d283cfedcbcd117a70caefd7673f41f2b4e0000badf103bc` | MIT license; common notice | No Windows-only native payloads. |
+| Linux arm64 (glibc) | `powershell-7.6.6-linux-arm64.tar.gz` | `924829e54c983648f6f1419a2dc7f9433c861b2fb5bd57736ff096c24f133729` | MIT license; common notice | No Windows-only native payloads. |
+| Linux x64 (musl) | `powershell-7.6.6-linux-musl-x64.tar.gz` | `9537c256a60c34f6bc2dd60c1c10b31a0c2ef26e96799d066be78325ab4947cc` | MIT license; common notice | No Windows-only native payloads. |
+| macOS x64 | `powershell-7.6.6-osx-x64.tar.gz` | `e325ed9f666894eb39a5ea52800b602da2fb4242bbe9747ceddb39cdc66de805` | MIT license; common notice | No Windows-only native payloads. |
+| macOS arm64 | `powershell-7.6.6-osx-arm64.tar.gz` | `6df833d094ebac1c1a74340d7b3437f4aaf5e03ce640484a1c4359f3ce8b3db1` | MIT license; common notice | No Windows-only native payloads. |
+
+This archive inventory records what was actually inspected without promoting
+the repository-level MIT/BSD notice into a conclusion about unlisted native
+libraries. The separately downloaded runtime is still download + exec under
+§2. S358.5 must record a live `Add-Type` run per required OS. S358.9 separately
+owns the FROM-scratch image's libstdc++, libgcc and ICU runtime ruling.
 
 ## Not a fence, same inventory
 
