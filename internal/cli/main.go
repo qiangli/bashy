@@ -1261,6 +1261,12 @@ func runAll() error {
 	if err != nil {
 		return err
 	}
+	// The sh entry point of the single bashy file is a strict POSIX sh, not
+	// the pure bash drop-in: an affirmative Bash++ selector must not trade its
+	// POSIX profile away for the drop-in's Sprint 114 inertness profile.
+	if invokedAsSh() && !BashDropinShMode && binary == front.BashPPBinaryBash && bashPPSelector.Posix {
+		startupBashPP.Enabled, startupBashPP.Posix = false, true
+	}
 	// An explicit Bash# selector keeps the historical interpreted Go-source
 	// path used by the corpus harness. Otherwise the file extension or the
 	// explicit source selector chooses a compiled whole-file program.
@@ -1268,7 +1274,7 @@ func runAll() error {
 		bashSharp, explicit := front.CommandLineBashPP(originalArgs)
 		if !(explicit && bashSharp) {
 			if startupGoSourceSel.LanguageSeen && startupGoSourceSel.Language == "go" ||
-				!startupGoSourceSel.LanguageSeen && strings.EqualFold(filepath.Ext(filename), ".go") {
+				!startupGoSourceSel.LanguageSeen && !resolvedStartupPosix() && strings.EqualFold(filepath.Ext(filename), ".go") {
 				status, runErr := interp.RunCompiledGoFile(filename, flag.Args()[1:], os.Stdin, os.Stdout, os.Stderr)
 				if runErr != nil {
 					return goSourceFailure(runErr)
