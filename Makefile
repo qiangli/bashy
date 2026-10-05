@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-sh build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist check-seed-bands tidy clean help
+.PHONY: dag build build-bash build-sh build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-powershell smoke-dag-csharp smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist check-seed-bands tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -440,6 +440,22 @@ smoke-dag-c:
 ## the skills/craft ledger. Not part of `test`.
 smoke-dag-go:
 	@scripts/dag-go-examples-smoke.sh
+
+## smoke-dag-powershell: Installed-product smoke for the examples/dag PowerShell front
+## door (Sprint 358): `bashy awd DIR -- bashy dag -f examples/dag/powershell/dag.md`
+## exercising Bash#-owned control flow (loops, conditionals, pipe command form, error
+## binding) calling the fenced PowerShell guest language via pinned PowerShell 7.6.6.
+## Not part of build/test.
+smoke-dag-powershell:
+	@scripts/dag-powershell-examples-smoke.sh
+
+## smoke-dag-csharp: Installed-product smoke for the examples/dag C# front door
+## (Sprint 358): `bashy awd DIR -- bashy dag -f examples/dag/csharp/dag.md`
+## exercising Bash#-owned control flow (loops, conditionals, string joins, exception
+## error binding) calling the fenced C# guest language compiled via Add-Type on the
+## pinned PowerShell 7.6.6 runtime. Not part of build/test.
+smoke-dag-csharp:
+	@scripts/dag-csharp-examples-smoke.sh
 
 ## smoke-dag-text: Installed-product smoke for the Sprint 234 text fences (B30):
 ## the Caddy graph's `image` target (a ```bashpp body holding a ~~~dockerfile
