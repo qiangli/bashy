@@ -1,6 +1,7 @@
 # Bashy release roadmap and versioning policy
 
-Status: **plan of record, 2026-08-08**. This document defines release order,
+Status: **plan of record, 2026-08-08; v1.0.0 scope amended 2026-10-04** (see
+§v1.0.0 — three pillars). This document defines release order,
 public promises, upstream compatibility coordinates, and version-number rules.
 Detailed gates remain in `bashy-v1.0.0-readiness.md` and the component plans.
 
@@ -66,36 +67,82 @@ Detailed gates remain in `bashy-v1.0.0-readiness.md` and the component plans.
      `bash-plus-plus-design.md`.
    - Go 1.27 is an upstream toolchain/language coordinate, not a promise to
      accept arbitrary Go source. Every supported construct must be enumerated.
-   - Python, TypeScript, and Rust embedding starts experimental, opt-in, and
-     capability/effect-gated. It becomes stable only after runtime discovery,
-     version negotiation, sandbox/effect policy, packaging, cancellation,
-     serialization, and cross-platform gates exist. Recommendation: do not make
-     all three stable embeddings blockers for v1.0.
+   - Embedded languages (fenced blocks) are part of v1.0.0 — amended
+     2026-10-04; the earlier recommendation not to gate v1.0 on them is
+     withdrawn. Each fence declares its stability tier, runs on a pinned
+     toolchain that is never resolved from `PATH`, and must pass interpreted
+     and compiled parity on Linux, macOS, and Windows.
 
-### v1.0.0 — official foundation release
+### v1.0.0 — official release: three pillars
 
-Public promise: stable Bash 5.3-compatible shell foundation, declared POSIX
-profile and limitations, stable Bash++ Go-construct profile, and reproducible
-official packages.
+Scope amended 2026-10-04. v1.0.0 ships three pillars on one binary, plus the
+services and packaging under them. Embedded languages and the agentic MVP were
+previously sequenced after v1.0; they are now part of it.
+
+1. **bash** — a GNU Bash 5.3-compatible shell and the declared IEEE Std 1003.1
+   Shell and Utilities profile with its limitations. Engineering closure of the
+   declared profile is a release gate; a certification award is a separate
+   human milestone and is never implied.
+2. **Bash#** — the opt-in language layer, inert under `--posix`:
+   - Go-shaped constructs mixed into script text (the declared Go profile),
+     with interpreted and compiled modes and `transpile`.
+   - Fenced blocks of other languages: Python, TypeScript, Rust, C/C++,
+     C#/PowerShell, Go, and bash/sh.
+   - The ergonomics tier: keyword and default arguments, exhaustive enums,
+     deep `readonly`, a null-safety check, decorators and contracts.
+3. **Yoke** — the agentic userland, shipped as an MVP that is a complete
+   foundation rather than a complete feature set. One of each thing an agent
+   needs:
+   - *Identity:* the model / tool / agent registry.
+   - *Models:* local models through Ollama, and one per-host endpoint that
+     speaks the OpenAI, Anthropic, and Ollama protocols; agent CLIs can be
+     served behind the same endpoint.
+   - *Tool protocol:* Bashy as an MCP server over its command atlas.
+   - *On-ramp:* `install-agent`, the command atlas, versioned `--json`
+     envelopes, `--dry-run`, and recoverable output reduction.
+   - *Reference agent:* genie, at `preview`.
+   - *Knowledge and skills:* `kb`, `graph`, `skill`, `craft`.
+   - *Work and communication:* `sprint`, `todo`, `dag`, `weave`, `gate`; `mb`,
+     `inbox`, `meet`, `ping`, `notify`, `bus`.
+   - *Safety floor:* declared effects on every command, the audit log, `ask`,
+     containment and limits, the sandbox, and pinned, verified downloads.
+
+**Managed services.** The home-host agent (outpost) manages Bashy's services
+and daemons; the commands stay in Bashy: the web console (`bashy app`), `loom`,
+an SSH server, and a minimal forward proxy (SOCKS and HTTP).
+
+**Every Yoke verb on the v1.0.0 list carries a declared stability tier** (see
+§Stability tiers) and a versioned schema. Shipping in v1.0.0 is not the same as
+`supported`: most of this surface is expected at `preview`, and nothing
+graduates to `supported` without a named consumer.
+
+**Official packages.**
 
 - Unix/Linux archives and packages, with checksums and provenance.
 - macOS universal/per-architecture artifacts, notarization/signing and package.
 - Windows artifacts, signing and package/installer.
 - Cross-platform install, upgrade, uninstall, smoke, signature, and checksum
   tests. A cross-build alone does not satisfy this milestone.
+- A software bill of materials, and a permissive-only dependency closure.
 
-### v1.1.0 — expanded GNU Coreutils compatibility
+### After v1.0 — utilities and language depth
 
-- The POSIX Go-utility C/D profiles are pre-v1.0 engineering work, not a v1.1
-  introduction. They are separate from the Profile B shell arm.
-- Expand the declared command and option/behavior matrix beyond the POSIX
-  profile toward GNU Coreutils compatibility.
+Amended 2026-10-04. This track no longer carries embedded languages (now
+v1.0.0) and its direction is POSIX completeness in Bashy's own code rather
+than chasing GNU extensions. A version number is assigned when it is planned.
+
+- Implement the remaining externally provided POSIX utilities in pure Go, from
+  the standard and manuals only.
 - Gate GNU Coreutils 9.11 differentials and uutils-derived tests by provenance
   and relevance; do not require foreign-suite 100% where it tests extensions.
-- Preserve external-command fallback and provider reporting where commands are
-  not promoted.
+- Bash# depth: per-language fence ergonomics beyond the v1.0.0 set, further
+  fence languages, workflow support, and the standard library.
 
 ### v1.2.0 — stable agentic surface
+
+Amended 2026-10-04: the agentic MVP itself ships in v1.0.0 (§v1.0.0, pillar 3)
+at declared tiers. This milestone is the later **stability commitment**, not
+the first appearance of the surface.
 
 Public promise: **the agentic foundation becomes supported API** — addressing,
 schema/versioning discipline, and the relation vocabulary's extension rule.
@@ -106,11 +153,12 @@ arrives, and not all of them by v1.2.0.
   **as each one graduates**, not as a single batch.
 - Require capability routing, safety/effect policy, structured output/schema
   versioning, observability, and benchmark evidence.
-- Experimental agentic verbs may exist earlier; v1.2.0 is the stability
-  commitment for the foundation they stand on.
-- **Agent protocol interoperability — tracked for development no earlier than
-  v1.2.0.** Plan MCP in both directions (expose Bashy tools and consume
-  external servers), ACP in both directions (drive local harnesses and let
+- Agentic verbs ship earlier, from v1.0.0, at `experimental` or `preview`;
+  v1.2.0 is the stability commitment for the foundation they stand on.
+- **Agent protocol interoperability.** The **MCP server** (expose Bashy's
+  commands as tools) is part of v1.0.0. The remaining surfaces are tracked for
+  development no earlier than v1.2.0: an MCP client (consume external
+  servers), ACP in both directions (drive local harnesses and let
   editors drive Bashy), and A2A in both directions (delegate to and serve
   remote peers). These are adapters over the unified agentic graph's identity,
   policy, evidence, rendezvous, and lifecycle model, not three new control
@@ -219,8 +267,10 @@ belongs to the v1.0 language profile, not here.
 
 #### Sequencing
 
-Agentic work is rank 3 of bashy's three workstreams, behind POSIX certification
-and Bash++. Nothing here may preempt the v1.0 or v1.1 gates. Step 1 is small by
+The agent-graph re-architecture described in this section is rank 3 of bashy's
+workstreams, behind POSIX certification and Bash#, and may not preempt the
+v1.0 gates. That ranking applies to the re-architecture only: the Yoke MVP
+list in §v1.0.0 is itself a v1.0 gate (amended 2026-10-04). Step 1 is small by
 construction; steps 2 and 3 add no front-door verb, land inside existing
 packages, and touch no file in `sh/`. A rank-3 item that needs a large
 measurement campaign to justify itself is not ready to be worked — it is ready
@@ -228,8 +278,9 @@ to be written down and deferred.
 
 ### v1.3.x — Tessaro integration track
 
-- **v1.3.0:** Sphere/P2P pairing and Ollama execution, with identity, trust,
-  discovery, transport, upgrade, and offline/degraded-mode gates.
+- **v1.3.0:** Sphere/P2P pairing and pooled model execution across hosts, with
+  identity, trust, discovery, transport, upgrade, and offline/degraded-mode
+  gates. (Single-host local models through Ollama are v1.0.0.)
 - **Recommended v1.4.0, or v1.3.1 only if no new public API:** cluster/DKS
   integration. DKS is a materially larger control-plane surface than Sphere;
   it should not inherit readiness merely because Sphere is green.
