@@ -69,6 +69,15 @@ var islandToolchains = map[string]func(ctx context.Context) (argv []string, why 
 		bin, err := rust.EnsureRustc(ctx)
 		return single(bin, "selected provisioned rustc ("+rust.DefaultToolchain+")", err)
 	},
+	// The PowerShell 7 runtime the powershell/csharp fences resolve. The pinned,
+	// digest-verified acquisition is Sprint 358 story S358.1 (7f9d84d1d0ce);
+	// until that provisioner lands, the row names the BASHPP_PWSH escape rather
+	// than silently reaching for a host pwsh.
+	"pwsh": provisionedPowerShell,
+}
+
+func provisionedPowerShell(ctx context.Context) ([]string, string, error) {
+	return nil, "", fmt.Errorf("bashy does not yet provision PowerShell (pinned acquisition is Sprint 358 story S358.1); set BASHPP_PWSH to a PowerShell 7 executable")
 }
 
 func provisionedCC(ctx context.Context) ([]string, string, error) {

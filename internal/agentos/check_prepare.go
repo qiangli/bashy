@@ -28,6 +28,8 @@ func islandToolsFor(language string) []string {
 		return []string{"c++"}
 	case "go":
 		return []string{"go"}
+	case "powershell":
+		return []string{"pwsh"}
 	}
 	return nil
 }
@@ -78,7 +80,7 @@ func checkPrepare(scripts []string, stdout, stderr io.Writer) int {
 	}
 	names := map[string]bool{}
 	if len(scripts) == 0 {
-		for _, lang := range []string{"go", "c", "cpp", "python", "typescript", "rust"} {
+		for _, lang := range []string{"go", "c", "cpp", "python", "typescript", "rust", "powershell"} {
 			for _, n := range islandToolsFor(lang) {
 				names[n] = true
 			}
