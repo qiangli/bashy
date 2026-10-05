@@ -361,9 +361,10 @@ the file; there is no `-C`: `bashy awd DIR -- bashy dag …` is the one
 directory mechanism (`awd` is a front-door verb as well as a builtin). A
 ` ```bashpp ` body runs as Bash++ and may declare a `~~~py as py … ~~~`,
 `~~~ts as ts … ~~~`, `~~~rs as rs … ~~~`, `~~~c as c … ~~~`,
-`~~~cxx as cxx … ~~~`, or `~~~go as go … ~~~` fence and call
+`~~~cxx as cxx … ~~~`, `~~~go as go … ~~~`, `~~~powershell as ps … ~~~`,
+or `~~~csharp as cs … ~~~` fence and call
 `py.main()` / `ts.launch()` / `rs.launch()` / `c.launch()` /
-`cxx.launch()` / `go.launch()`;
+`cxx.launch()` / `go.launch()` / `ps.Shout()` / `cs.Square()`;
 `~~~bash` and `~~~sh` use fresh in-process Bash-5.3/POSIX child interpreters
 (positional string args, stdout result, non-zero status error; never host bash);
 `examples/dag/{mini-swe-agent,nanochat}/dag.md` (Python, `make
