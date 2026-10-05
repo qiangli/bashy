@@ -1272,7 +1272,9 @@ func runAll() error {
 	// explicit source selector chooses a compiled whole-file program.
 	if binary == front.BashPPBinaryBashy && startupGoSourceErr == nil && filename != "" {
 		bashSharp, explicit := front.CommandLineBashPP(originalArgs)
-		if !(explicit && bashSharp) {
+		// --check never takes the compiled whole-file route: that route runs
+		// the program, and a check executes nothing.
+		if !(explicit && bashSharp) && !startupGoSourceSel.Check {
 			if startupGoSourceSel.LanguageSeen && startupGoSourceSel.Language == "go" ||
 				!startupGoSourceSel.LanguageSeen && !resolvedStartupPosix() && strings.EqualFold(filepath.Ext(filename), ".go") {
 				status, runErr := interp.RunCompiledGoFile(filename, flag.Args()[1:], os.Stdin, os.Stdout, os.Stderr)
@@ -1307,6 +1309,9 @@ func runAll() error {
 	// no future shell preflight can quietly get in front of Go input either.)
 	if startupGoSource.Enabled {
 		return runGoSourceInvocation()
+	}
+	if startupGoSource.ContentCheck {
+		return runContentCheck()
 	}
 	var invocationStdin io.Reader = os.Stdin
 	// POSIX disables the effective Bash++ grammar/runtime. Preserve recognition

@@ -179,6 +179,37 @@ func runGoSourceInvocation() error {
 	return runGoSourceInput(in, operand)
 }
 
+// runContentCheck is --check with no --source: the input itself selects the
+// language, a Go compilation unit through the Go front end and anything else
+// through the Bash# shell check. Neither builds a runner or runs a body.
+func runContentCheck() error {
+	operand := ""
+	if *command == "" && !*readStdin && flag.NArg() > 0 {
+		operand = flag.Arg(0)
+	}
+	var stdin io.Reader
+	if operand == "" && *command == "" {
+		stdin = os.Stdin
+	}
+	if operand != "" && operand != "-" {
+		if info, err := os.Stat(operand); err == nil && info.IsDir() {
+			return goSourceFailure(fmt.Errorf("--check: %s: is a directory; select Go packages with --source=go", operand))
+		}
+	}
+	in, err := front.CollectGoSources(front.GoSourceResolution{}, operand, *command, stdin)
+	if err != nil {
+		return goSourceFailure(err)
+	}
+	if in.IsGoUnit() {
+		startupGoSource = front.GoSourceResolution{Enabled: true, Check: true}
+		return runGoSourceInput(in, operand)
+	}
+	if err := front.CheckShellInput(in); err != nil {
+		return goSourceLoadFailure(err)
+	}
+	return nil
+}
+
 func runGoSourceInput(in front.GoSourceInput, operand string) error {
 	// --check is semantic-only. `-n` / `-o noexec` means the same thing for
 	// this input, so a build-only corpus row may spell either. RunMain stays
