@@ -146,8 +146,13 @@ so its times are emulated, not native:
 
 All of these runs printed the same result lines: the PowerShell version,
 the C# method results, a pipeline and a SHA-256 through OpenSSL.
-Run the required x64 and arm64 on-demand and preloaded offline image gates on
-the authorized test hosts before closing S358.9 or S358.10.
+The required x64 and arm64 on-demand and preloaded offline image gates ran
+the same combined PowerShell/C# Bash# fixture on the authorized test hosts;
+all four stdout captures match SHA-256
+`5e0a962c1b15a14dd48f33eb19e9144f08441c667a102bf479c638fd2df973c3`.
+The fixture and per-lane record are in the private umbrella
+`docs/sprint-358-evidence.md`. Final frozen-candidate certification remains
+S358.10.
 
 ## The table
 
