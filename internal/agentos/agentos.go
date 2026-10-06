@@ -158,7 +158,7 @@ var (
 	// `llm` likewise belongs to a popular unrelated CLI; the local gateway is
 	// reached only as `bashy llm`.
 	// `limit` is a wrapper verb like awd; bare `limit` is csh's builtin, never ours.
-	directFrontDoorVerbs = []string{"mb", "ping", "out", "full", "awd", "supervisord", "llm", "limit"}
+	directFrontDoorVerbs = []string{"mb", "ping", "out", "full", "awd", "supervisord", "llm", "limit", "proxy"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "pwsh", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
@@ -631,6 +631,13 @@ func dispatch() {
 	switch os.Args[1] {
 	case "help":
 		dispatchExit(dispatchHelp(os.Args[2:]))
+	case "proxy":
+		cmd := newProxyCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			dispatchExit(1)
+		}
+		dispatchExit(0)
 	case "serve":
 		// Warm session: one already-initialized process serves many
 		// `bashy -c "…"` calls. Optional socket path arg overrides the default.
