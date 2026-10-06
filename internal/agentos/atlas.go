@@ -132,6 +132,10 @@ func atlasCatalog(builtins, core, verbs, hidden []string) []atlasRecord {
 // in coreutils, so they carry a real classification instead of falling into the
 // deliberately-empty unknown branch below.
 var bashyOwnedVerbAtlas = map[string]atlas.Entry{
+	"proxy": {
+		Stage: atlas.StageCross, Group: atlas.GroupNet, Tier: atlas.TierUserland,
+		Caps: []string{atlas.CapDaemon}, Effects: []string{atlas.EffNet},
+	},
 	"resource": {
 		Stage: atlas.StageCross, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapJSON, atlas.CapReadOnly}, Effects: []string{atlas.EffRead},

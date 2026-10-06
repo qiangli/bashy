@@ -46,6 +46,7 @@ Bashy front-door help:
 	bashy inspect doctor			diagnose shell/runtime environment
 	bashy install-agent <agent>	wire claude/opencode/aider/... to use bashy as their shell
 	bashy serve [socket]		warm session: reuse one process for repeated -c calls
+	bashy proxy socks --listen ADDR	SOCKS5 CONNECT proxy (optional --username/--password)
 	bashy git --help		show embedded git subcommands
 	bashy fetch --help		show built-in download/REST client
 `

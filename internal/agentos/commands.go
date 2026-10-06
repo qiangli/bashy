@@ -520,6 +520,7 @@ func containsString(items []string, want string) bool {
 // verbSynopsis describes the front-door verb shims (the coreutils tools carry
 // their own Synopsis; builtins are standard). Brand-neutral, one line each.
 var verbSynopsis = map[string]string{
+	"proxy":       "standalone local network proxy: SOCKS5 CONNECT with remote DNS and optional username/password authentication",
 	"oci":         "the sandboxing pillar (O3: ollama · oci · otel): the tier-3 container engine by its standard name — embedded, isolated, in-process (RAW engine, not outpost's filtered sandbox app)",
 	"docker":      "vendor spelling of `bashy oci` (the embedded container engine)",
 	"sandbox":     "the tier-3 venue, by its popular name: same engine as `bashy oci`",
