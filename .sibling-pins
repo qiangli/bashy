@@ -1,5 +1,7 @@
 # Pinned commit SHAs for the sibling-path replace targets in go.mod
-# (../sh, ../bashsharp, ../coreutils, ../outpost, ../yoke, ../readline, ../filebrowser).
+# (../sh, ../bashsharp, ../coreutils, ../outpost, ../yoke, ../readline,
+# ../filebrowser, ../gotreesitter — the blob-free fork of
+# odvcencio/gotreesitter that both yoke and bashy replace into).
 # scripts/bootstrap-siblings.sh reads this file and
 # clones each sibling at the listed SHA, so standalone clones of bashy (and
 # CI) build without external setup. coreutils and yoke themselves replace
@@ -22,7 +24,8 @@ sh=0e1b001086de86b660154b3f165e6a4e85008f34
 bashsharp=b43b0fe98a1f0c3e1a77bb11a1a7bddfb1a32072
 coreutils=e117b356463c72a80fad439ab381b07fed2d08a7
 outpost=a4dc697bac235c61b3d436033de62f9d0cb18803
-yoke=dc7037f25ed0cb91198faf389f2392a4bf1a13df
+yoke=b64aba85e71bcfd56baf2a78add4461b0833e4ec
+gotreesitter=c8a5d22bb3f02f9985d1a83799f494f4e43d783d
 readline=38ad08e836761205d820a51da9b70100c5ec72e1
 filebrowser=0b059ae20b7948baa3c7d2db1309485486b47c3a
 ycode=caab797bd862d38c14f717d805d5227634c68e4e

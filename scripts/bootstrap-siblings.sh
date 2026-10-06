@@ -135,6 +135,7 @@ repo_url() {
         coreutils) echo "https://github.com/qiangli/coreutils.git" ;;
         outpost) echo "https://github.com/qiangli/outpost.git" ;;
         yoke) echo "https://github.com/qiangli/yoke.git" ;;
+        gotreesitter) echo "https://github.com/qiangli/gotreesitter.git" ;;
         readline) echo "https://github.com/qiangli/readline.git" ;;
         filebrowser) echo "https://github.com/qiangli/filebrowser.git" ;;
         ycode) echo "https://github.com/qiangli/ycode.git" ;;
