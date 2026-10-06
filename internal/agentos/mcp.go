@@ -12,12 +12,11 @@ import (
 	"syscall"
 
 	"github.com/qiangli/bashy/internal/cli"
-	yokemcp "github.com/qiangli/yoke/mcp"
 )
 
 // mcpUsage is the `bashy mcp` front-door usage, printed to stderr with
 // exit 2 when no subcommand (or --help) is given.
-const mcpUsage = `usage: bashy mcp serve [--transport stdio|http] [--allow EFFECTS]
+const mcpUsage = `usage: bashy mcp serve [--transport stdio|http] [--allow EFFECTS] [--max-output BYTES]
 
 Serve bashy commands to agents over the Model Context Protocol.
 
@@ -29,6 +28,11 @@ Serve bashy commands to agents over the Model Context Protocol.
 // over stdio, so any MCP client can launch `bashy mcp serve` as a stdio
 // server. A clean shutdown returns 0.
 func dispatchMCP(args []string) int {
+	args, maxOutput, err := mcpOutputArgs(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy mcp:", err)
+		return 2
+	}
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
 		fmt.Fprint(os.Stderr, mcpUsage)
 		return 2
@@ -96,7 +100,7 @@ func dispatchMCP(args []string) int {
 	if version == "" {
 		version = "dev"
 	}
-	if err := yokemcp.ServeStdio(ctx, "bashy", version); err != nil {
+	if err := serveMCPShells(ctx, "bashy", version, maxOutput); err != nil {
 		fmt.Fprintf(os.Stderr, "bashy mcp: %v\n", err)
 		return 1
 	}
