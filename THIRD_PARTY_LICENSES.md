@@ -59,10 +59,22 @@ on 2026-10-02.
    MPL compiled in. **Operator ruling 2026-10-02: bashy stays permissive-only;
    §1 is not amended.** The chain is `internal/agentos` → `outpost/pkg/sshserver`
    → `outpost/internal/agent` → `frp/client` → yamux; bashy never opens a
-   tunnel. Because the module is linked UNMODIFIED, it is tolerated for now;
-   its removal is filed as **Sprint 368** (S368.1: cut the ssh-server → agent
-   import so frp and yamux leave bashy's closure; S368.2: clean-room
-   permissive yamux client for outpost's own tunnel). Not scheduled yet.
+   tunnel. Because the module is linked UNMODIFIED, it is tolerated for now.
+   **Re-measured 2026-10-06** (full sweep of the 206 modules in the lean
+   closure: 82 MIT, 69 Apache-2.0, 51 BSD, 1 ISC, 1 MPL-2.0): yamux is the
+   ONLY non-permissive module. **No permissive Go drop-in exists** — every
+   Go implementation of the yamux wire protocol is MPL-2.0 (hashicorp/yamux,
+   libp2p/go-yamux, the 0magnet and bingoohuang copies); the permissive
+   implementations (libp2p/rust-yamux, tetcoin/remux: Apache-2.0 OR MIT;
+   yamux-js: MIT) are Rust or TypeScript; xtaci/smux is MIT but a different
+   wire format (cross-repo frp fork + cloudbox deploy). frp has no muxer seam
+   (`client/connector.go` calls yamux directly). Sprint 368 was closed on
+   2026-10-06 without the removal (operator decision); the work is now the
+   **post-v1.0 umbrella story #1584**: a clean-room MIT module exposing the
+   hashicorp/yamux API behind a `replace` directive, interop-tested against
+   stock yamux and an unmodified cloudbox, plus the ssh-server → agent import
+   cut. Until it lands this finding stays open and the unmodified module stays
+   tolerated; §1 is not widened.
 2. **`github.com/odvcencio/gotreesitter` grammar blobs** — the runtime is MIT
    and embeds all 206 grammar parse tables. Operator decision 2026-10-02: keep
    them (the `ast` verbs serve code agents, not only fences) and attribute.
