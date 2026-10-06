@@ -119,13 +119,15 @@ func dispatchMCP(args []string) int {
 		version = "dev"
 	}
 	if transport == "http" {
-		addr, err := startMCPHTTP(ctx, version, opts, listen)
+		srv, err := yokemcp.BuildServer("bashy", version, opts)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "bashy mcp:", err)
 			return 2
 		}
-		fmt.Fprintf(os.Stderr, "listening on http://%s/mcp\n", addr)
-		<-ctx.Done()
+		if err := runMCPHTTP(ctx, srv, opts, maxOutput, listen); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy mcp:", err)
+			return 2
+		}
 		return 0
 	}
 	srv, err := yokemcp.BuildServer("bashy", version, opts)
@@ -206,15 +208,19 @@ func runMCPStdio(ctx context.Context, srv *mcpsdk.Server, opts yokemcp.Options, 
 	return err
 }
 
-// ServeHTTP currently builds its own server. Validate an immutable snapshot
-// first so its legacy panicking constructor cannot observe a different ring.
-func startMCPHTTP(ctx context.Context, version string, opts yokemcp.Options, listen string) (string, error) {
-	if opts.Registered != nil {
-		snapshot := opts.Registered()
-		opts.Registered = func() []yokemcp.RegisteredCommand { return snapshot }
+// runMCPHTTP serves the SAME prebuilt server as stdio — shell sessions and
+// the registered-ring watcher attach to the server actually being served —
+// over loopback-only stateless Streamable HTTP, until ctx is cancelled.
+func runMCPHTTP(ctx context.Context, srv *mcpsdk.Server, opts yokemcp.Options, maxOutput int, listen string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	sessions := registerMCPShells(ctx, srv, maxOutput)
+	watcher := watchMCPRegistered(ctx, srv, opts, 2*time.Second)
+	defer func() { cancel(); <-sessions.done; <-watcher }()
+	addr, shutdown, err := yokemcp.ServeHTTPServerWithShutdown(ctx, srv, listen)
+	if err != nil {
+		return err
 	}
-	if _, err := yokemcp.BuildServer("bashy", version, opts); err != nil {
-		return "", err
-	}
-	return yokemcp.ServeHTTP(ctx, "bashy", version, opts, listen)
+	fmt.Fprintf(os.Stderr, "listening on http://%s/mcp\n", addr)
+	<-ctx.Done()
+	return shutdown()
 }

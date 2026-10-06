@@ -286,9 +286,20 @@ func TestMCPHTTP(t *testing.T) {
 	ringDir(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	addr, err := startMCPHTTP(ctx, "test", mcpTestOptions(t), "127.0.0.1:0")
+	opts := mcpTestOptions(t)
+	srv, err := yokemcp.BuildServer("test", "1", opts)
 	if err != nil {
 		t.Fatal(err)
+	}
+	sessions := registerMCPShells(ctx, srv, 65536)
+	defer func() { <-sessions.done }()
+	addr, shutdown, err := yokemcp.ServeHTTPServerWithShutdown(ctx, srv, "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer shutdown()
+	if _, _, err := yokemcp.ServeHTTPServerWithShutdown(ctx, srv, "0.0.0.0:0"); err == nil {
+		t.Fatal("non-loopback bind accepted")
 	}
 	cs, err := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "http-test", Version: "1"}, nil).Connect(ctx, &mcpsdk.StreamableClientTransport{Endpoint: "http://" + addr + "/mcp"}, nil)
 	if err != nil {
@@ -299,12 +310,13 @@ func TestMCPHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	found := false
+	found, shells := false, false
 	for _, item := range list.Tools {
 		found = found || item.Name == "bashy"
+		shells = shells || item.Name == "shell_exec"
 	}
-	if !found {
-		t.Fatal("HTTP tools/list missing bashy")
+	if !found || !shells {
+		t.Fatalf("HTTP tools/list missing bashy or shell_exec: found=%v shells=%v", found, shells)
 	}
 	out := mcpSessionDecode[yokemcp.RunToolOutput](t, mcpSessionCall(t, ctx, cs, "bashy", map[string]any{"script": "printf %s hi"}))
 	if out.Stdout != "hi" {
