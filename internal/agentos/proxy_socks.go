@@ -22,6 +22,7 @@ type socksDialer func(context.Context, string, string) (net.Conn, error)
 func newProxyCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "proxy", Short: "Run a local network proxy", Args: cobra.NoArgs}
 	cmd.AddCommand(newSOCKS5Cmd())
+	cmd.AddCommand(newHTTPProxyCmd())
 	return cmd
 }
 

@@ -3,6 +3,7 @@
 One line (or a short paragraph) per load-bearing doc under `docs/`, moved verbatim from `CLAUDE.md` §Doc index on 2026-09-20. `CLAUDE.md` only points here; when you add a doc, add its entry here.
 
 - `plan-bashy-proxy-socks5.md` — Sprint #343 Story #368 scope, CLI, remote DNS,
+- `docs/http-proxy.md` — bashy proxy http: HTTP/1.1 forward proxy + HTTPS CONNECT tunnelling (Sprint 343).
   protocol limits, cancellation, licensing, and interoperability tests.
 
 - `licensing-supply-chain-policy.md` — **the license rule of record:** compiled-in /
