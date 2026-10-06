@@ -546,6 +546,7 @@ var verbSynopsis = map[string]string{
 	"conform":     "bashy's OWN fidelity batteries: compat/conformance/compliance/benchmark",
 	"chat":        "talk to an agent in a governed live session, or send one unattended instruction",
 	"meet":        "multi-participant deliberation session with a notes-only secretary",
+	"mcp":         "serve bashy commands to agents over the Model Context Protocol (stdio)",
 	"app":         "open bashy's apps in a browser: Terminal, Files, Meet, every declared surface, and your own (app add NAME --port N)",
 	"apps":        "hidden alias for bashy app",
 	"supervise":   "drive a fleet against a goal of gated tasks, judged by a supervisor (conductor-as-a-verb)",

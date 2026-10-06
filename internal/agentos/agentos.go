@@ -143,7 +143,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "notify", "activity", "run", "agentic", "commands", "inspect", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "notify", "activity", "run", "agentic", "commands", "inspect", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -209,6 +209,9 @@ var (
 	curatedHiddenVerbs = []string{
 		// higher-tier orchestration, layered over weave/dag/chat
 		"supervise", "judge", "pair", "sdlc", "schedule", "herald",
+		// agent consumption surfaces: `mcp serve` runs the MCP server
+		// over stdio (experimental until the surface is proven)
+		"mcp",
 		// research / vocabulary. `define` GRADUATED 2026-09-14 (Sprint 168):
 		// it is the one resolver for `<kind>:<id>` refs, gated by
 		// script/e2e-refs.sh in the umbrella, and an agent that cannot find
@@ -650,6 +653,10 @@ func dispatch() {
 			dispatchExit(1)
 		}
 		dispatchExit(0)
+	case "mcp":
+		// Agent consumption surface: run the yoke MCP server over stdio
+		// so any MCP client can launch `bashy mcp serve` (see mcp.go).
+		dispatchExit(dispatchMCP(os.Args[2:]))
 	case "out":
 		dispatchExit(dispatchOut(os.Args[2:]))
 	case "zig-link":
