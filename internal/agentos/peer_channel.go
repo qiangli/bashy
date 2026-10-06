@@ -246,3 +246,12 @@ func (c *PeerChannel) LocalForward(ctx context.Context, listener net.Listener, h
 	}
 	return c.client.LocalForward(ctx, listener, host, port)
 }
+
+// RemoteForward exposes outpost's loopback-only remote TCP forward. Cancel ctx
+// to remove the remote listener and close its active connections.
+func (c *PeerChannel) RemoteForward(ctx context.Context, remoteAddr, localTarget string) (net.Addr, error) {
+	if c == nil || c.client == nil {
+		return nil, errors.New("peer channel: nil client")
+	}
+	return c.client.RemoteForward(ctx, remoteAddr, localTarget)
+}
