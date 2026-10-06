@@ -76,15 +76,10 @@ on 2026-10-02.
    cut. Until it lands this finding stays open and the unmodified module stays
    tolerated; §1 is not widened.
 2. **`github.com/odvcencio/gotreesitter` grammar blobs** — the runtime is MIT
-   and embeds all 206 grammar parse tables. Operator decision 2026-10-02: keep
-   them (the `ast` verbs serve code agents, not only fences) and attribute.
-   Every grammar's license is now read and recorded in
-   `../yoke/THIRD_PARTY_GRAMMARS.md` (201 permissive). **Five are
-   non-permissive and are still embedded today: `caddy`, `disassembly`,
-   `jq`, `ebnf` (GPL-3.0) and `nim` (MPL-2.0).** gotreesitter offers no
-   per-grammar exclusion that removes the bytes (`grammar_set_core` still
-   carries three of them), so dropping them needs a pinned fork with those
-   blobs and registrations deleted. Tracked as a Sprint 350 story.
+   and embeds 201 permissive grammar parse tables. Their per-grammar licenses
+   are recorded in [`yoke/THIRD_PARTY_GRAMMARS.md`](../yoke/THIRD_PARTY_GRAMMARS.md),
+   generated from the pinned blob-free fork. Its generator fails closed on
+   non-permissive or unknown licenses, and the `EXCLUDED` section is empty.
 3. MPL-2.0 modules present in `go.mod` through the podman and filebrowser
    graphs but **not** in the lean closure: `cyphar.com/go-pathrs`,
    `hashicorp/errwrap`, `hashicorp/go-multierror`, `hashicorp/golang-lru/v2`.
