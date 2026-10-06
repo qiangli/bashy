@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -33,7 +34,7 @@ Serve bashy commands to agents over the Model Context Protocol.
   serve --transport stdio   run the MCP server over stdio (default)
   serve --transport http    loopback HTTP at /mcp (default 127.0.0.1:0)
   --tools default           registered tools plus available core commands
-  --tools all               all canonical registry commands for this OS
+  --tools all               all canonical registry commands and visible verbs for this OS
   --allow EFFECTS           grant destroy,spend,cred,priv (comma-separated)
 `
 
@@ -170,6 +171,26 @@ func mcpOptions(allow, profile string) (yokemcp.Options, error) {
 			if opts.Tools[i] == "" {
 				return opts, fmt.Errorf("empty tool name in --tools")
 			}
+		}
+	}
+	if profile != "default" {
+		verbs := mcpVerbCommands()
+		var selected []yokemcp.RegisteredCommand
+		for _, verb := range verbs {
+			if profile == "all" || slices.Contains(opts.Tools, verb.Name) {
+				selected = append(selected, verb)
+				opts.Tools = slices.DeleteFunc(opts.Tools, func(name string) bool { return name == verb.Name })
+			}
+		}
+		opts.Registered = func() []yokemcp.RegisteredCommand {
+			ring := mcpRegisteredCommands()
+			out := append([]yokemcp.RegisteredCommand(nil), ring...)
+			for _, verb := range selected {
+				if !slices.ContainsFunc(ring, func(command yokemcp.RegisteredCommand) bool { return command.Name == verb.Name }) {
+					out = append(out, verb)
+				}
+			}
+			return out
 		}
 	}
 	return opts, nil
