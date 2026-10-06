@@ -5,6 +5,9 @@ One line (or a short paragraph) per load-bearing doc under `docs/`, moved verbat
 - `plan-bashy-proxy-socks5.md` — Sprint #343 Story #368 scope, CLI, remote DNS,
 - `docs/http-proxy.md` — bashy proxy http: HTTP/1.1 forward proxy + HTTPS CONNECT tunnelling (Sprint 343).
   protocol limits, cancellation, licensing, and interoperability tests.
+- `plan-proxy-environment.md` — Sprint #343 Story #371: standard proxy environment
+  handling for binmgr, native git, and Go module downloads, including ALL_PROXY,
+  SOCKS5/SOCKS5H, and NO_PROXY.
 
 - `licensing-supply-chain-policy.md` — **the license rule of record:** compiled-in /
   embedded / linked / vendored → BSD/MIT/Apache-2.0 only (`THIRD_PARTY_LICENSES.md` at

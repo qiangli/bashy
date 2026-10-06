@@ -5,4 +5,6 @@
 # PROJECT, and a project is a path set.
 go build ./...
 go test ./internal/... ./tools/...
-make test-bash
+# Force the host GNU Make for this GNU Makefile; Bashy's in-process POSIX make
+# intentionally does not implement its inference-rule syntax.
+env make test-bash

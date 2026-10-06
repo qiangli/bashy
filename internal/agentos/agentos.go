@@ -1378,6 +1378,9 @@ func dispatch() {
 		// sha256-verify → cache → exec). No embedding, no system Go: this is
 		// what lets a bare node `bashy go build/test`. Pure-Go + cross-platform,
 		// so it stays in the shared switch (not engine-gated).
+		// Refresh the ALL_PROXY fallback here too: an interactive shell may
+		// export it after package initialization, immediately before `bashy go`.
+		applyAllProxyFallback()
 		cmd := gotoolchain.NewGoCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
