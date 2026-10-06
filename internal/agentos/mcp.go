@@ -5,28 +5,40 @@ package agentos
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/qiangli/bashy/internal/cli"
+	"github.com/qiangli/coreutils/tool"
+	yokemcp "github.com/qiangli/yoke/mcp"
+	"github.com/qiangli/yoke/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/policy/audit"
 )
 
 // mcpUsage is the `bashy mcp` front-door usage, printed to stderr with
 // exit 2 when no subcommand (or --help) is given.
-const mcpUsage = `usage: bashy mcp serve [--transport stdio|http] [--allow EFFECTS] [--max-output BYTES]
+const mcpUsage = `usage: bashy mcp serve [--transport stdio|http] [--listen ADDR] [--allow EFFECTS]
+                       [--tools default|all|NAME,...] [--max-output BYTES]
 
 Serve bashy commands to agents over the Model Context Protocol.
 
   serve --transport stdio   run the MCP server over stdio (default)
-  serve --transport http    not yet supported
+  serve --transport http    loopback HTTP at /mcp (default 127.0.0.1:0)
+  --tools default           registered tools plus available core commands
+  --tools all               all canonical registry commands for this OS
+  --allow EFFECTS           grant destroy,spend,cred,priv (comma-separated)
 `
 
 // dispatchMCP is the `bashy mcp` front door: it runs the yoke MCP server
-// over stdio, so any MCP client can launch `bashy mcp serve` as a stdio
-// server. A clean shutdown returns 0.
+// over stdio or loopback HTTP. A clean shutdown returns 0.
 func dispatchMCP(args []string) int {
 	args, maxOutput, err := mcpOutputArgs(args)
 	if err != nil {
@@ -43,13 +55,14 @@ func dispatchMCP(args []string) int {
 	}
 	transport := "stdio"
 	allow := ""
+	profile, listen := "default", ""
 	rest := args[1:]
 	for i := 0; i < len(rest); i++ {
 		a := rest[i]
 		name, value, hasValue := strings.Cut(a, "=")
 		if !hasValue {
 			switch a {
-			case "--transport", "--allow":
+			case "--transport", "--allow", "--tools", "--listen":
 				name, value, hasValue = a, "", false
 				if i+1 < len(rest) {
 					i++
@@ -70,6 +83,16 @@ func dispatchMCP(args []string) int {
 				return 2
 			}
 			allow = value
+		case "--tools", "--listen":
+			if !hasValue || value == "" {
+				fmt.Fprint(os.Stderr, mcpUsage)
+				return 2
+			}
+			if name == "--tools" {
+				profile = value
+			} else {
+				listen = value
+			}
 		case "--help", "-h":
 			fmt.Fprint(os.Stderr, mcpUsage)
 			return 2
@@ -78,19 +101,14 @@ func dispatchMCP(args []string) int {
 			return 2
 		}
 	}
-	if transport == "http" {
-		fmt.Fprintln(os.Stderr, "bashy mcp: --transport http is not yet supported")
-		return 2
-	}
-	if transport != "stdio" {
+	if transport != "stdio" && transport != "http" {
 		fmt.Fprint(os.Stderr, mcpUsage)
 		return 2
 	}
-	// The yoke mcp package has no ParseAllow/NewServerWithOptions yet
-	// (checked against ../yoke/mcp), so --allow is accepted but not
-	// wired: warn and continue with the default server.
-	if allow != "" {
-		fmt.Fprintln(os.Stderr, "bashy mcp: --allow is not wired yet")
+	opts, err := mcpOptions(allow, profile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy mcp:", err)
+		return 2
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -100,9 +118,109 @@ func dispatchMCP(args []string) int {
 	if version == "" {
 		version = "dev"
 	}
-	if err := serveMCPShells(ctx, "bashy", version, maxOutput); err != nil {
-		fmt.Fprintf(os.Stderr, "bashy mcp: %v\n", err)
+	if transport == "http" {
+		srv, err := yokemcp.BuildServer("bashy", version, opts)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "bashy mcp:", err)
+			return 2
+		}
+		if err := runMCPHTTP(ctx, srv, opts, maxOutput, listen); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy mcp:", err)
+			return 2
+		}
+		return 0
+	}
+	srv, err := yokemcp.BuildServer("bashy", version, opts)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy mcp:", err)
+		return 2
+	}
+	if err := runMCPStdio(ctx, srv, opts, maxOutput); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy mcp:", err)
 		return 1
 	}
 	return 0
+}
+
+func mcpOptions(allow, profile string) (yokemcp.Options, error) {
+	grants, err := yokemcp.ParseAllow(allow)
+	if err != nil {
+		return yokemcp.Options{}, err
+	}
+	opts := yokemcp.Options{Policy: &yokemcp.Policy{Allow: grants, Audit: mcpAudit()},
+		Registered: mcpRegisteredCommands, RunScript: mcpRunScript}
+	switch profile {
+	case "default":
+		_, commands, verbs := commandsCatalog()
+		for _, name := range append(commands, verbs...) {
+			if !isCoreCommand(name) || tool.Lookup(name) == nil {
+				continue
+			}
+			if entry, ok := atlas.Lookup(name); ok && entry.AliasOf != "" {
+				continue
+			}
+			opts.Tools = append(opts.Tools, name)
+		}
+	case "all":
+		opts.AllTools = true
+	default:
+		opts.Tools = strings.Split(profile, ",")
+		for i, name := range opts.Tools {
+			opts.Tools[i] = strings.TrimSpace(name)
+			if opts.Tools[i] == "" {
+				return opts, fmt.Errorf("empty tool name in --tools")
+			}
+		}
+	}
+	return opts, nil
+}
+
+// Keep the transport's single call record in the same hash-chained audit as
+// shell dispatch. Action identifies the MCP tool; Binary identifies its command.
+func mcpAudit() func(yokemcp.Record) {
+	writer := newAuditWriter()
+	actor, host := auditActor(), auditHost()
+	return func(r yokemcp.Record) {
+		if writer == nil {
+			data, _ := json.Marshal(r)
+			_, _ = os.Stderr.Write(append(data, '\n'))
+			return
+		}
+		decision := "deny"
+		if r.Allowed {
+			decision = "allow"
+		}
+		_, _ = writer.Append(audit.Record{Time: r.Time, Actor: actor, Host: host,
+			Action: "mcp:" + r.Tool, Binary: r.Command, Argv: []string{r.Command},
+			Effects: r.Effects, Decision: decision, Exit: r.ExitCode, DurationMs: r.Duration.Milliseconds()})
+	}
+}
+
+func runMCPStdio(ctx context.Context, srv *mcpsdk.Server, opts yokemcp.Options, maxOutput int) error {
+	ctx, cancel := context.WithCancel(ctx)
+	sessions := registerMCPShells(ctx, srv, maxOutput)
+	watcher := watchMCPRegistered(ctx, srv, opts, 2*time.Second)
+	defer func() { cancel(); <-sessions.done; <-watcher }()
+	err := srv.Run(ctx, &mcpsdk.StdioTransport{})
+	if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) || (err != nil && strings.Contains(err.Error(), "server is closing")) {
+		return nil
+	}
+	return err
+}
+
+// runMCPHTTP serves the SAME prebuilt server as stdio — shell sessions and
+// the registered-ring watcher attach to the server actually being served —
+// over loopback-only stateless Streamable HTTP, until ctx is cancelled.
+func runMCPHTTP(ctx context.Context, srv *mcpsdk.Server, opts yokemcp.Options, maxOutput int, listen string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	sessions := registerMCPShells(ctx, srv, maxOutput)
+	watcher := watchMCPRegistered(ctx, srv, opts, 2*time.Second)
+	defer func() { cancel(); <-sessions.done; <-watcher }()
+	addr, shutdown, err := yokemcp.ServeHTTPServerWithShutdown(ctx, srv, listen)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "listening on http://%s/mcp\n", addr)
+	<-ctx.Done()
+	return shutdown()
 }

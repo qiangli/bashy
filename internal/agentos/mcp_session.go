@@ -15,7 +15,6 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/qiangli/bashy/internal/cli"
-	"github.com/qiangli/coreutils/tool"
 	yokemcp "github.com/qiangli/yoke/mcp"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
@@ -70,22 +69,10 @@ type mcpShells struct {
 	done      chan struct{}
 }
 
-var registerShellNames sync.Once
-
 func registerMCPShells(ctx context.Context, srv *mcpsdk.Server, maxOutput int) *mcpShells {
-	// Yoke currently requires synthetic MCP names to exist in the CLI registry.
-	// It has no commandEffects override and Atlas is immutable. Register explicit
-	// MCP-only sentinels so the policy's known-command check works, without making
-	// run_tool an alternate route into a session. The exec effect is advertised
-	// below, but yoke's audit cannot resolve it until it supports synthetic effects.
-	registerShellNames.Do(func() {
-		for _, name := range []string{"shell_open", "shell_exec", "shell_close"} {
-			tool.Register(&tool.Tool{Name: name, Synopsis: "MCP-only shell session tool", Run: func(rc *tool.RunContext, _ []string) int {
-				fmt.Fprintln(rc.Err, "use the dedicated MCP shell session tool")
-				return 2
-			}})
-		}
-	})
+	for _, name := range []string{"shell_open", "shell_exec", "shell_close"} {
+		yokemcp.DeclareSyntheticEffects(srv, name, []string{"exec"})
+	}
 	m := &mcpShells{ctx: ctx, sessions: make(map[string]*mcpShell), maxOutput: maxOutput, done: make(chan struct{})}
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "shell_open", Description: "Open an isolated persistent bashy shell."}, m.open)
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "shell_exec", Description: "Execute a script in a persistent shell. Effect: exec. Large streams return {path, bytes, preview}; files live until shell_close."}, m.exec)
