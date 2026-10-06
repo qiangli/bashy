@@ -199,15 +199,30 @@ func TestAgentsTrackPublishesHeartbeatsExpiresAndStopsExternalWork(t *testing.T)
 	if len(assignments) != 1 || assignments[0].Agent != "Parfit" || assignments[0].Source != externalAssignmentMode || assignments[0].Health != "healthy" {
 		t.Fatalf("tracked assignment = %#v", assignments)
 	}
-	joined := assignments[0].Age
+	// The assignment start is the persisted room Joined timestamp, which a
+	// heartbeat must never rewrite. The rendered Age is elapsed wall time and
+	// legitimately ticks forward between two reads (0s -> 1s; coarser on
+	// Windows), so comparing it is a flaky identity probe. Compare the stable
+	// underlying start value instead.
+	startCard, ok, err := room.Find("external-pair-stage")
+	if err != nil || !ok || startCard.Joined == "" {
+		t.Fatalf("find tracked card after start: ok=%v err=%v joined=%q", ok, err, startCard.Joined)
+	}
 
 	heartbeat := run("track", "heartbeat", "pair-stage", "--owner-pid", fmt.Sprint(os.Getpid()), "--ttl", "2h")
 	if !strings.Contains(heartbeat, "HEARTBEAT pair-stage") {
 		t.Fatalf("heartbeat output = %q", heartbeat)
 	}
 	assignments, err = reconciledAgentRoster()
-	if err != nil || len(assignments) != 1 || assignments[0].Age != joined {
-		t.Fatalf("heartbeat changed assignment identity/start: %#v err=%v", assignments, err)
+	if err != nil || len(assignments) != 1 || assignments[0].Agent != "Parfit" {
+		t.Fatalf("heartbeat changed assignment identity: %#v err=%v", assignments, err)
+	}
+	beatCard, ok, err := room.Find("external-pair-stage")
+	if err != nil || !ok {
+		t.Fatalf("find tracked card after heartbeat: ok=%v err=%v", ok, err)
+	}
+	if beatCard.Joined != startCard.Joined {
+		t.Fatalf("heartbeat rewrote assignment start: joined %q -> %q", startCard.Joined, beatCard.Joined)
 	}
 
 	card, ok, err := room.Find("external-pair-stage")
