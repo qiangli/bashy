@@ -8,7 +8,6 @@ priority: p1
 labels:
     - remote
 created: 2026-09-30T17:19:16.967483Z
-weave: 6
 assignee: claude-fable5.1
 sprint: 343
 sprint_id: ed2cbe05-a807-56d6-81dc-a9a04e7a11f5
