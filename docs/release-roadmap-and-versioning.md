@@ -270,7 +270,10 @@ belongs to the v1.0 language profile, not here.
 The agent-graph re-architecture described in this section is rank 3 of bashy's
 workstreams, behind POSIX certification and Bash#, and may not preempt the
 v1.0 gates. That ranking applies to the re-architecture only: the Yoke MVP
-list in §v1.0.0 is itself a v1.0 gate (amended 2026-10-04). Step 1 is small by
+list in §v1.0.0 is itself a v1.0 gate (amended 2026-10-04), and that MVP
+includes the MCP server (the §v1.0.0 tool protocol; see §Agent protocol
+interoperability). The rank-3 deferral here covers the re-architecture and
+the remaining protocol surfaces, not the MCP server. Step 1 is small by
 construction; steps 2 and 3 add no front-door verb, land inside existing
 packages, and touch no file in `sh/`. A rank-3 item that needs a large
 measurement campaign to justify itself is not ready to be worked — it is ready

@@ -54,8 +54,11 @@ func dispatchInstallAgent(args []string) int {
 	probe := fs.Bool("probe", false, "verify LIVE: run the agent once and confirm its shell is bashy (spends one LLM call)")
 	uninstall := fs.Bool("uninstall", false, "reverse a previous install")
 	yes := fs.Bool("yes", false, "perform invasive steps without prompting (codex: attempt chsh)")
+	mcpMode := fs.Bool("mcp", false, "register `bashy mcp serve` with the agent instead of wiring its shell")
+	dryRun := fs.Bool("dry-run", false, "with --mcp: print the MCP server entry instead of writing it")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `usage: bashy install-agent <agent> [--shell PATH] [--project] [--check] [--uninstall]
+       bashy install-agent <agent> --mcp [--project] [--dry-run] [--uninstall]
 
 Wire a coding agent to use bashy as its shell.
 
@@ -67,6 +70,11 @@ agents:
   copilot    Copilot CLI   PATH shim dir (~/.bashy/shims)
   agy        Antigravity   PATH shim dir (~/.bashy/shims)
   codex      Codex CLI     login shell via chsh (reads /etc/passwd; invasive)
+
+--mcp registers "bashy mcp serve" as an MCP server with the agent (claude: via
+the claude CLI "mcp add" command; codex: ~/.codex/config.toml mcp_servers;
+opencode: opencode.json "mcp"). --dry-run prints the entry instead of writing
+it; other agents have no MCP config writer.
 
 Note: bashy meet/chat/weave already force-inject the shell for spawned agents
 (SHELL + PATH shim + CLAUDE_CODE_SHELL) — this command makes the wiring durable
@@ -126,6 +134,14 @@ With no agent, prints the wiring status of every known agent.
 	ins, ok := installers[name]
 	if !ok {
 		fmt.Fprintf(os.Stderr, "install-agent: unknown agent %q (try: claude opencode aider gemini copilot codex agy)\n", name)
+		return 2
+	}
+
+	if *mcpMode {
+		return dispatchInstallAgentMCP(name, *project, *dryRun, *uninstall, *check, *probe)
+	}
+	if *dryRun {
+		fmt.Fprint(os.Stderr, "install-agent: --dry-run requires --mcp\n")
 		return 2
 	}
 
@@ -546,6 +562,286 @@ func mergeJSONFile(path string, mutate func(map[string]any)) error {
 		return err
 	}
 	return os.Rename(tmpName, path)
+}
+
+// --- MCP server entries ------------------------------------------------------
+
+// mcpServerName is the MCP server name registered with agents.
+const mcpServerName = "bashy"
+
+// mcpWriter registers `bashy mcp serve` with one agent. Agents without a
+// known MCP config surface have no writer: dispatch reports
+// "no MCP config writer for <agent>" instead of guessing a format.
+type mcpWriter struct {
+	// entry renders the exact entry install would write (or the exact
+	// command it would run) without touching anything.
+	entry func(project bool) string
+	// install writes the entry.
+	install func(project bool) (string, error)
+	// uninstall removes a previously installed entry.
+	uninstall func(project bool) (string, error)
+}
+
+func mcpWriters() map[string]mcpWriter {
+	return map[string]mcpWriter{
+		"claude":   claudeMCPWriter(),
+		"codex":    codexMCPWriter(),
+		"opencode": opencodeMCPWriter(),
+	}
+}
+
+func dispatchInstallAgentMCP(name string, project, dryRun, uninstall, check, probe bool) int {
+	if check || probe {
+		fmt.Fprint(os.Stderr, "install-agent: --mcp cannot be combined with --check or --probe\n")
+		return 2
+	}
+	if dryRun && uninstall {
+		fmt.Fprint(os.Stderr, "install-agent: --dry-run cannot be combined with --uninstall\n")
+		return 2
+	}
+	w, ok := mcpWriters()[name]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "install-agent: no MCP config writer for %q\n", name)
+		return 1
+	}
+	if dryRun {
+		fmt.Print(w.entry(project))
+		return 0
+	}
+	if uninstall {
+		msg, err := w.uninstall(project)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "install-agent: %s: %v\n", name, err)
+			return 1
+		}
+		fmt.Println(msg)
+		return 0
+	}
+	msg, err := w.install(project)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "install-agent: %s: %v\n", name, err)
+		return 1
+	}
+	fmt.Println(msg)
+	return 0
+}
+
+// claudeMCPWriter registers via the claude CLI's `mcp add` command:
+// `add [options] <name> <commandOrUrl> [args...]`, stdio by default,
+// `-s project` for the project scope (verified against claude mcp
+// add/remove --help; remove with no -s takes whichever scope holds it).
+func claudeMCPWriter() mcpWriter {
+	addArgv := func(project bool) []string {
+		args := []string{"mcp", "add"}
+		if project {
+			args = append(args, "-s", "project")
+		}
+		return append(args, mcpServerName, "--", "bashy", "mcp", "serve")
+	}
+	removeArgv := func(project bool) []string {
+		args := []string{"mcp", "remove"}
+		if project {
+			args = append(args, "-s", "project")
+		}
+		return append(args, mcpServerName)
+	}
+	runClaude := func(args []string) error {
+		if _, err := exec.LookPath("claude"); err != nil {
+			return fmt.Errorf("claude CLI not found on PATH")
+		}
+		if out, err := exec.Command("claude", args...).CombinedOutput(); err != nil {
+			return fmt.Errorf("claude %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+		return nil
+	}
+	return mcpWriter{
+		entry: func(project bool) string {
+			return "claude " + strings.Join(addArgv(project), " ") + "\n"
+		},
+		install: func(project bool) (string, error) {
+			if err := runClaude(addArgv(project)); err != nil {
+				return "", err
+			}
+			scope := "the claude CLI default scope"
+			if project {
+				scope = "the project scope"
+			}
+			return fmt.Sprintf("claude: registered MCP server %q via claude mcp add (%s)", mcpServerName, scope), nil
+		},
+		uninstall: func(project bool) (string, error) {
+			if err := runClaude(removeArgv(project)); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("claude: removed MCP server %q via claude mcp remove", mcpServerName), nil
+		},
+	}
+}
+
+// codexMCPServerEntry is the exact TOML codex itself writes for
+// `codex mcp add bashy -- bashy mcp serve` (verified against a scratch
+// CODEX_HOME): appended verbatim so the file stays in a shape codex reads.
+const codexMCPServerEntry = "[mcp_servers.bashy]\ncommand = \"bashy\"\nargs = [\"mcp\", \"serve\"]\n"
+
+func codexMCPConfigPath() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".codex", "config.toml")
+}
+
+// hasTOMLSection reports whether data contains a section header line exactly
+// equal to [section] (commented headers do not count). No TOML parser: the
+// file may hold arbitrary other tables that must pass through untouched.
+func hasTOMLSection(data []byte, section string) bool {
+	header := "[" + section + "]"
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if strings.TrimSpace(line) == header {
+			return true
+		}
+	}
+	return false
+}
+
+// writeFileAtomic writes path via temp + rename so an interrupted run never
+// truncates the agent's config file (same pattern as mergeJSONFile).
+func writeFileAtomic(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".install-agent-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return os.Rename(tmpName, path)
+}
+
+func codexMCPWriter() mcpWriter {
+	return mcpWriter{
+		entry: func(_ bool) string { return codexMCPServerEntry },
+		install: func(_ bool) (string, error) {
+			path := codexMCPConfigPath()
+			data, err := os.ReadFile(path)
+			if err != nil && !os.IsNotExist(err) {
+				return "", err
+			}
+			if hasTOMLSection(data, "mcp_servers.bashy") {
+				return fmt.Sprintf("codex: [mcp_servers.bashy] already present in %s", path), nil
+			}
+			var out string
+			if strings.TrimSpace(string(data)) == "" {
+				out = codexMCPServerEntry
+			} else {
+				out = strings.TrimRight(string(data), "\n") + "\n\n" + codexMCPServerEntry
+			}
+			if err := writeFileAtomic(path, []byte(out)); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("codex: wrote [mcp_servers.bashy] to %s", path), nil
+		},
+		uninstall: func(_ bool) (string, error) {
+			path := codexMCPConfigPath()
+			data, err := os.ReadFile(path)
+			if err != nil {
+				if os.IsNotExist(err) {
+					return fmt.Sprintf("codex: no [mcp_servers.bashy] entry in %s (nothing to remove)", path), nil
+				}
+				return "", err
+			}
+			if !hasTOMLSection(data, "mcp_servers.bashy") {
+				return fmt.Sprintf("codex: no [mcp_servers.bashy] entry in %s (nothing to remove)", path), nil
+			}
+			lines := strings.Split(string(data), "\n")
+			header := -1
+			for i, line := range lines {
+				if strings.TrimSpace(line) == "[mcp_servers.bashy]" {
+					header = i
+					break
+				}
+			}
+			start := header
+			if start > 0 && strings.TrimSpace(lines[start-1]) == "" {
+				start--
+			}
+			end := len(lines)
+			for i := header + 1; i < len(lines); i++ {
+				if t := strings.TrimSpace(lines[i]); strings.HasPrefix(t, "[") && strings.HasSuffix(t, "]") {
+					end = i
+					break
+				}
+			}
+			rest := append(append([]string{}, lines[:start]...), lines[end:]...)
+			out := strings.Join(rest, "\n")
+			if out != "" && !strings.HasSuffix(out, "\n") {
+				out += "\n"
+			}
+			for strings.Contains(out, "\n\n\n") {
+				out = strings.ReplaceAll(out, "\n\n\n", "\n\n")
+			}
+			if err := writeFileAtomic(path, []byte(out)); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("codex: removed [mcp_servers.bashy] from %s", path), nil
+		},
+	}
+}
+
+// opencodeMCPEntry renders the JSON fragment install merges under the "mcp"
+// key (shape verified against the opencode config schema's McpLocalConfig:
+// type/command required, command an argv array).
+func opencodeMCPEntry() string {
+	out, _ := json.MarshalIndent(map[string]any{
+		"mcp": map[string]any{
+			"bashy": map[string]any{
+				"type":    "local",
+				"command": []string{"bashy", "mcp", "serve"},
+			},
+		},
+	}, "", "  ")
+	return string(out) + "\n"
+}
+
+func opencodeMCPWriter() mcpWriter {
+	return mcpWriter{
+		entry: func(_ bool) string { return opencodeMCPEntry() },
+		install: func(project bool) (string, error) {
+			path := opencodeConfigPath(project)
+			err := mergeJSONFile(path, func(m map[string]any) {
+				servers, _ := m["mcp"].(map[string]any)
+				if servers == nil {
+					servers = map[string]any{}
+				}
+				servers["bashy"] = map[string]any{"type": "local", "command": []string{"bashy", "mcp", "serve"}}
+				m["mcp"] = servers
+			})
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("opencode: wrote mcp.bashy to %s", path), nil
+		},
+		uninstall: func(project bool) (string, error) {
+			path := opencodeConfigPath(project)
+			err := mergeJSONFile(path, func(m map[string]any) {
+				if servers, ok := m["mcp"].(map[string]any); ok {
+					delete(servers, "bashy")
+					if len(servers) == 0 {
+						delete(m, "mcp")
+					}
+				}
+			})
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("opencode: removed mcp.bashy from %s", path), nil
+		},
+	}
 }
 
 func printAgentStatus(installers map[string]agentInstaller, shell string) {
