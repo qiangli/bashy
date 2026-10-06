@@ -35,12 +35,17 @@ tools (per-flag schemas plus `stdin`/`dir`/`env`):
 
 - `--tools default` — the available core commands: canonical registry
   commands for this OS, aliases excluded.
-- `--tools all` — all canonical registry commands for this OS.
+- `--tools all` — all canonical registry commands and visible front-door verbs for this OS.
 - `--tools NAME,...` — exactly the named commands; unknown names are an
   error and the server does not start.
 
 Every profile additionally carries the registered commands and the `bashy`
 script tool below.
+
+With `--tools all`, visible front-door verbs are also direct tools; each runs
+as a bashy subprocess with the policy gate applied before dispatch. They can
+also be selected by name with `--tools`. Builtins stay script-only, and
+`run_tool` stays registry-only.
 
 ## The `bashy` script tool
 
