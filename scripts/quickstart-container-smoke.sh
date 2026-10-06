@@ -84,6 +84,7 @@ stage_tree "$parent/bashsharp"   "$context/bashsharp"
 stage_tree "$parent/yoke"        "$context/yoke"
 stage_tree "$parent/ycode"       "$context/ycode"
 stage_tree "$parent/outpost"     "$context/outpost"
+stage_tree "$parent/gotreesitter" "$context/gotreesitter"
 
 build_target() {
   target=$1; tag=$2

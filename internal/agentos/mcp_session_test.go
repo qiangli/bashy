@@ -12,6 +12,7 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	yokemcp "github.com/qiangli/yoke/mcp"
+	"mvdan.cc/sh/v3/interp"
 )
 
 func mcpSessionClient(t *testing.T, limit int) (context.Context, *mcpsdk.ClientSession, *mcpShells, context.CancelFunc) {
@@ -45,7 +46,8 @@ func mcpSessionCall(t *testing.T, ctx context.Context, cs *mcpsdk.ClientSession,
 func mcpSessionDecode[T any](t *testing.T, r *mcpsdk.CallToolResult) T {
 	t.Helper()
 	if r.IsError {
-		t.Fatalf("tool error: %+v", r.Content)
+		b, _ := json.Marshal(r.Content)
+		t.Fatalf("tool error: %s (structured: %+v)", b, r.StructuredContent)
 	}
 	b, err := json.Marshal(r.StructuredContent)
 	if err != nil {
@@ -73,16 +75,17 @@ func mcpSessionExec(t *testing.T, ctx context.Context, cs *mcpsdk.ClientSession,
 func TestMCPSessionPersistence(t *testing.T) {
 	ctx, cs, _, _ := mcpSessionClient(t, defaultMCPMaxOutput)
 	id := mcpSessionOpen(t, ctx, cs, shellOpenInput{Dir: t.TempDir(), Env: map[string]string{"M4_ENV": "initial"}})
-	if out := mcpSessionExec(t, ctx, cs, id, "cd /tmp"); out.ExitCode != 0 {
+	target := t.TempDir()
+	if out := mcpSessionExec(t, ctx, cs, id, "cd "+shellQuote(target)); out.ExitCode != 0 {
 		t.Fatalf("cd: %+v", out)
 	}
-	want, err := filepath.EvalSymlinks("/tmp")
+	want, err := filepath.EvalSymlinks(target)
 	if err != nil {
 		t.Fatal(err)
 	}
 	out := mcpSessionExec(t, ctx, cs, id, "pwd")
-	// Bash preserves the logical /tmp spelling on macOS; compare its realpath.
-	printed, pathErr := filepath.EvalSymlinks(strings.TrimSuffix(out.Stdout.(string), "\n"))
+	// Bash may preserve a logical path spelling; compare its realpath.
+	printed, pathErr := filepath.EvalSymlinks(interp.ShellPathToOS(target, strings.TrimSuffix(out.Stdout.(string), "\n")))
 	if pathErr != nil || printed != want {
 		t.Fatalf("pwd: %+v, want %q", out, want)
 	}

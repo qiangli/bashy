@@ -13,6 +13,7 @@ import (
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/policy/audit"
 	"io"
+	"mvdan.cc/sh/v3/interp"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -163,10 +164,10 @@ func TestMCPScriptTool(t *testing.T) {
 	if len(lines) != 2 || lines[0] != "input bytes" || out.Stderr != "problem" {
 		t.Fatalf("stdio: %+v", out)
 	}
-	actual, _ := filepath.EvalSymlinks(lines[1])
+	actual, _ := filepath.EvalSymlinks(interp.ShellPathToOS(dir, lines[1]))
 	want, _ := filepath.EvalSymlinks(dir)
 	if actual != want {
-		t.Fatalf("dir = %s, want %s", actual, want)
+		t.Fatalf("dir = %s, want %s; output: %+v", actual, want, out)
 	}
 	result := mcpSessionCall(t, ctx, cs, "bashy", map[string]any{"script": "exit 7"})
 	data, _ := json.Marshal(result.StructuredContent)
@@ -238,7 +239,7 @@ func TestMCPRegisteredTypedTool(t *testing.T) {
 		t.Fatalf("argv/stdio: %+v %+v", got, out)
 	}
 	want, _ := filepath.EvalSymlinks(dir)
-	actual, _ := filepath.EvalSymlinks(got.Dir)
+	actual, _ := filepath.EvalSymlinks(interp.ShellPathToOS(dir, got.Dir))
 	if actual != want {
 		t.Fatalf("cwd %q, want %q", actual, want)
 	}

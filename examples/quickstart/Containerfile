@@ -52,6 +52,7 @@ COPY bashsharp/ bashsharp/
 COPY yoke/ yoke/
 COPY ycode/ ycode/
 COPY outpost/ outpost/
+COPY gotreesitter/ gotreesitter/
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     cd bashy \
