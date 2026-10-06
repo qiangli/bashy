@@ -132,6 +132,7 @@ func TestPeerChannelEmbeddedServerExecSFTPAndForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer channel.Close()
+	t.Run("ReverseProxy", func(t *testing.T) { testPeerReverseProxy(t, channel) })
 	wrongHost, _ := testSSHKey(t)
 	if rejected, err := DialPeerChannel(context.Background(), PeerChannelConfig{
 		Address: server.Addr().String(), User: me.Username, PrivateKeyPath: clientKeyPath,

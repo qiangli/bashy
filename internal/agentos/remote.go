@@ -38,7 +38,7 @@ func remoteCmd() *cobra.Command {
 		Short: "Remote host operations",
 		Long:  `Manage bashy on remote hosts. The first step is remote install: push the self-contained bashy binary to a remote host via the host OS transport (ssh/scp on Unix), idempotently and version-matched, from the local release cache.`,
 	}
-	cmd.AddCommand(remoteInstallCmd(), peerServeCmd())
+	cmd.AddCommand(remoteInstallCmd(), peerServeCmd(), remoteExecCmd())
 	return cmd
 }
 
