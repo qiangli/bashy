@@ -3,7 +3,7 @@ id: 62e0290fec9f
 kind: chore
 title: S369.3 Offer the grammar exclusion upstream so the fork can retire
 seq: 398
-status: todo
+status: wontfix
 priority: p3
 labels:
     - licensing
@@ -11,7 +11,8 @@ created: 2026-10-02T22:40:18.333949Z
 assignee: claude-sonnet5.5
 sprint: 369
 sprint_id: ac323bec-85c1-53d1-9796-b27703113450
-sprint_title: Permissive-only grammar set and Java as a registered fence
+sprint_title: 'Permissive-only grammar set: drop the five non-permissive tree-sitter grammars'
+closed: 2026-10-06T12:37:34.114239Z
 ---
 
 Goal
