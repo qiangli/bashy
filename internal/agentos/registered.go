@@ -347,7 +347,7 @@ func registeredHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 			if rec.Cwd != "" {
 				cmd.Dir = rec.Cwd
 			}
-			cmd.Env = append(handlerEnv(hc.Env), rec.Env...)
+			cmd.Env = interp.NativeExecEnv(append(handlerEnv(hc.Env), rec.Env...), argv[0])
 			cmd.Stdin, cmd.Stdout, cmd.Stderr = hc.Stdin, hc.Stdout, hc.Stderr
 			if err := cmd.Run(); err != nil {
 				if ee, ok := err.(*exec.ExitError); ok {

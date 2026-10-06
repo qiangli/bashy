@@ -14,9 +14,11 @@ import (
 	"github.com/qiangli/yoke/pkg/policy/audit"
 	"io"
 	"mvdan.cc/sh/v3/interp"
+	"mvdan.cc/sh/v3/pathconv"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -202,6 +204,14 @@ func TestMCPRegisteredTypedTool(t *testing.T) {
 			Positionals: []fleet.CommandParameter{{Name: "message", Type: "string", Required: true}},
 			Flags:       []fleet.CommandFlag{{Name: "count", Shorthand: "n", Type: "int", Default: "2", Enum: []string{"2", "3"}}},
 		},
+	}
+	if runtime.GOOS == "windows" {
+		// Registered commands with Env bypass the interpreter's ordinary exec
+		// rung. Their native child must still receive usable Windows temp paths.
+		// The helper re-execs TestMain, whose MkdirTemp catches a broken path
+		// before it can produce the required argv/stdin response.
+		temp := pathconv.FromOS(t.TempDir())
+		rec.Env = append(rec.Env, "TEMP="+temp, "TMP="+temp)
 	}
 	writeRecord(t, rec)
 	ctx, cs, _ := mcpFrontClient(t, mcpTestOptions(t))
