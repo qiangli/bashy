@@ -194,7 +194,7 @@ require (
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.9.0 // indirect
-	github.com/go-git/go-git/v5 v5.19.1 // indirect
+	github.com/go-git/go-git/v5 v5.19.1
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
@@ -268,7 +268,7 @@ require (
 	github.com/moby/sys/user v0.4.0 // indirect
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
-	github.com/modelcontextprotocol/go-sdk v1.8.0 // indirect
+	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/nguyenthenguyen/docx v0.0.0-20230621112118-9c8e795a11db // indirect
@@ -446,6 +446,17 @@ replace github.com/qiangli/yoke/pkg/llmgw => ../yoke/pkg/llmgw
 // The AgentOS file-management surface uses the maintained qiangli/filebrowser
 // fork. Keep it as an exact flat sibling in umbrella and standalone builds.
 replace github.com/filebrowser/filebrowser/v2 => ../filebrowser
+
+// gotreesitter: pinned local fork of upstream v0.16.0 (../gotreesitter,
+// hosted as qiangli/gotreesitter, module path kept as upstream's) with the
+// five non-permissive grammars deleted at the byte level — caddy,
+// disassembly, ebnf, jq (GPL-3.0) and nim (MPL-2.0); the other 201 are
+// attributed in yoke/THIRD_PARTY_GRAMMARS.md. Upstream has no exclusion
+// mechanism that removes embedded bytes, and the path replace also redirects
+// the transitive qiangli/gfy -> odvcencio imports, which a module-path rename
+// could not reach. Restated here because yoke's replace is not transitive.
+// Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
+replace github.com/odvcencio/gotreesitter => ../gotreesitter
 
 // ycode is the engine for agents declared in YAML; bashy mounts its CLI as
 // `bashy ycode` (cmd/bashy wires ycodecli.Main into agentos).
