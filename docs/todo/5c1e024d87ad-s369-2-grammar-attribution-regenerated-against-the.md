@@ -3,15 +3,18 @@ id: 5c1e024d87ad
 kind: task
 title: S369.2 Grammar attribution regenerated against the fork; generator fails closed
 seq: 397
-status: todo
+status: done
 priority: p1
 labels:
     - licensing
     - yoke
 created: 2026-10-02T22:40:17.65082Z
+assignee: codex-gpt6-luna
 sprint: 369
 sprint_id: ac323bec-85c1-53d1-9796-b27703113450
 sprint_title: Permissive-only grammar set and Java as a registered fence
+closed: 2026-10-06T12:33:11.761259Z
+closed_by: muse-conductor
 ---
 
 Goal

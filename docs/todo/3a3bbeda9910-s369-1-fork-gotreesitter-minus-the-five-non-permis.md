@@ -3,18 +3,19 @@ id: 3a3bbeda9910
 kind: task
 title: S369.1 Fork gotreesitter minus the five non-permissive grammars; pin it in yoke and bashy
 seq: 396
-status: assigned
+status: done
 priority: p1
 labels:
     - licensing
     - yoke
     - bashy
 created: 2026-10-02T22:39:29.188252Z
-weave: 14
 assignee: ycode-glm-5.3
 sprint: 369
 sprint_id: ac323bec-85c1-53d1-9796-b27703113450
 sprint_title: Permissive-only grammar set and Java as a registered fence
+closed: 2026-10-06T12:17:41.443767Z
+closed_by: muse-conductor
 ---
 
 Goal

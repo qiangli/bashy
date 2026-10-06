@@ -3,12 +3,11 @@ id: 62e0290fec9f
 kind: chore
 title: S369.3 Offer the grammar exclusion upstream so the fork can retire
 seq: 398
-status: assigned
+status: todo
 priority: p3
 labels:
     - licensing
 created: 2026-10-02T22:40:18.333949Z
-weave: 16
 assignee: claude-sonnet5.5
 sprint: 369
 sprint_id: ac323bec-85c1-53d1-9796-b27703113450
