@@ -316,3 +316,13 @@ func TestUsageMentionsAgenticDryRun(t *testing.T) {
 		}
 	}
 }
+
+func TestOutpostFrontDoorIsDiscoverable(t *testing.T) {
+	_, _, verbs := commandsCatalog()
+	if !slices.Contains(verbs, "outpost") || !isFrontDoorInvocation("outpost") {
+		t.Fatal("outpost must be catalogued and dispatched as a front-door command")
+	}
+	if strings.Contains(Preamble(), "\noutpost()") {
+		t.Fatal("outpost front door must not shadow the service executable")
+	}
+}

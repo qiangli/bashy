@@ -185,6 +185,16 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Effects: []string{atlas.EffExec},
 		OS:      atlas.OSes(), Partial: []string{atlas.OSWindows},
 	},
+	// outpost passes its arguments to the paired outpost service executable
+	// beside this bashy (sibling first; see the resolver) — the client-side
+	// front door to the home-host agent that the sphere tier fronts. Effects
+	// are what the front door itself does: exec the sibling, whose service
+	// commands (upgrade, peers, service install) reach the network.
+	"outpost": {
+		Stage: atlas.StageDeploy, Group: atlas.GroupPlatform, Tier: atlas.TierSphere,
+		Caps:    []string{atlas.CapSpawnsProcesses},
+		Effects: []string{atlas.EffExec, atlas.EffNet},
+	},
 	// dhnt reads pipeline/run/binding JSON and writes JSON or Workflow YAML to
 	// stdout. No network, no mutation — the local-first contract/compiler, not
 	// a transport.

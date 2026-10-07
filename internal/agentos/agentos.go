@@ -65,6 +65,7 @@ import (
 	"github.com/qiangli/yoke/external/kopia"
 	"github.com/qiangli/yoke/external/kubectl"
 	"github.com/qiangli/yoke/external/loom"
+	"github.com/qiangli/yoke/external/meshagent"
 	"github.com/qiangli/yoke/external/mise"
 	"github.com/qiangli/yoke/external/node"
 	"github.com/qiangli/yoke/external/pwsh"
@@ -158,7 +159,7 @@ var (
 	// `llm` likewise belongs to a popular unrelated CLI; the local gateway is
 	// reached only as `bashy llm`.
 	// `limit` is a wrapper verb like awd; bare `limit` is csh's builtin, never ours.
-	directFrontDoorVerbs = []string{"mb", "ping", "out", "full", "awd", "supervisord", "llm", "limit", "proxy"}
+	directFrontDoorVerbs = []string{"mb", "ping", "out", "full", "awd", "supervisord", "llm", "limit", "proxy", "outpost"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "pwsh", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
@@ -306,6 +307,7 @@ func PreambleFor(agentMode bool) string {
 // Set in init (agentos links only into cmd/bashy; the lean cmd/bash
 // drop-in never carries it). Static string: zero startup cost.
 func init() {
+	meshagent.HostVersion = cli.BashyVersion
 	os.Setenv("BASHY_AGENT_MANIFEST",
 		`v1 shell=agentic first-hop="bashy inspect context --json" skills="bashy skill list" guide="bashy skill show bashy|bashy bashy" config="never hand-edit ~/.config/bashy or any BASHY_*_DIR; use bashy <tool|model|agent> schema|set --set path=value|show --field path, bashy skill add|set|rm|show --yaml"`)
 	// Chat, weave, meet and foreman all enter coreutils/chat without passing the
@@ -1596,6 +1598,16 @@ func dispatch() {
 		cmd := helm.NewHelmCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
+			dispatchExit(1)
+		}
+		dispatchExit(0)
+	case "outpost":
+		if err := meshagent.Exec(context.Background(), os.Args[2:]...); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			var exit *exec.ExitError
+			if errors.As(err, &exit) {
+				dispatchExit(exit.ExitCode())
+			}
 			dispatchExit(1)
 		}
 		dispatchExit(0)
