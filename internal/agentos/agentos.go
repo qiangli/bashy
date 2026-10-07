@@ -2146,6 +2146,16 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 			mws = append(mws, advisorHandler(a))
 		}
 	}
+	// The command-not-found hint (notfound.go) is the reactive counterpart to
+	// the advisor on the single largest class of agent shell failures: when a
+	// bare name exits 127 having provably failed to resolve, it appends one
+	// structured bashy-hint-v1 line (resolution tier · nearest provided name ·
+	// install door). It leaves the 127 and Bash's error text untouched, is
+	// silent for interactive humans (BASHY_AGENTIC gate), and never reaches the
+	// posix return above or cmd/bash.
+	if notFoundHintsEnabled(env) {
+		mws = append(mws, notFoundHintHandler(newNotFoundHinter()))
+	}
 	// Learning sits just inside the advisor: it reads the same exit code, but
 	// where the advisor SPEAKS on failure this one LISTENS on success. Passive,
 	// stderr-silent, and it never alters an outcome.
