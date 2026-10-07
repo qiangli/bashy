@@ -48,11 +48,10 @@ func init() {
 	// internal/agentos — ycode imports bashy's pkg/harnessrunner, which imports
 	// agentos, so only package main can close the loop.
 	agentos.YcodeMain = ycodecli.Main
-	// The engine's terminal frontend is bashy's default agent TUI: the
-	// interactive shell with the agent attached (Sprint #301 T4).
-	ycodecli.TerminalUI = func(ctx context.Context, s ycodecli.TerminalSession) error {
-		return cli.RunAgentTerminal(ctx, s.Agent, s.Config, s.Session)
-	}
+	// The engine's terminal frontend is ycode's native TUI; a literal line
+	// typed there (ladder rung 0/1) runs on bashy itself, byte-identically.
+	ycodecli.LiteralShell = cli.LiteralCommand
+	ycodecli.LiteralCommands = tool.Names
 	cli.AgentOSOwnedCommand = func(name string) bool { return tool.Lookup(name) != nil }
 	cli.AgentOSOwnedNames = tool.Names
 	cli.AgentOSDispatch = agentos.Dispatch
