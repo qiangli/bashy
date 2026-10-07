@@ -144,12 +144,12 @@ func dispatchYcode(args []string) int {
 		return 2
 	}
 	if !ycodeHasConfig(args) {
-		model, rest, err := genieModelFlag(args)
-		if err == nil && model != "" && (len(rest) == 0 || len(rest) == 1 && rest[0] == "web") {
-			return dispatchGenieWithHandoff(append(modelArgs(model), rest...), false)
-		}
-		if len(args) == 1 && args[0] == "web" {
-			return dispatchGenieWithHandoff([]string{"web"}, false)
+		if recipeArgs, selected, err := ycodeGenieRecipeArgs(args); selected {
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "bashy ycode:", err)
+				return 2
+			}
+			return dispatchGenieWithHandoff(recipeArgs, false)
 		}
 		config, err := builtinGenieConfig()
 		if err != nil {
@@ -162,6 +162,34 @@ func dispatchYcode(args []string) int {
 		}
 	}
 	return YcodeMain(args)
+}
+
+// ycodeGenieRecipeArgs recognizes the default human entry in both supported
+// model-flag orders. The recipe reenters ycode with -f, so it cannot recurse.
+func ycodeGenieRecipeArgs(args []string) ([]string, bool, error) {
+	if len(args) == 0 {
+		return nil, true, nil
+	}
+	if args[0] == "web" {
+		model, rest, err := genieModelFlag(args[1:])
+		if err != nil {
+			return nil, true, err
+		}
+		if len(rest) == 0 {
+			return append(modelArgs(model), "web"), true, nil
+		}
+		return nil, false, nil
+	}
+	if args[0] == "-m" || args[0] == "--model" || strings.HasPrefix(args[0], "--model=") {
+		model, rest, err := genieModelFlag(args)
+		if err != nil {
+			return nil, true, err
+		}
+		if len(rest) == 0 || len(rest) == 1 && rest[0] == "web" {
+			return append(modelArgs(model), rest...), true, nil
+		}
+	}
+	return nil, false, nil
 }
 
 func ycodeHasConfig(args []string) bool {

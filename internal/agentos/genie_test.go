@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -197,5 +198,61 @@ func TestYcodeBuiltinConfigAndCustomConfig(t *testing.T) {
 	}
 	if code := dispatchYcode([]string{"status"}); code != 0 || seenConfig != "" {
 		t.Fatalf("local config replaced: exit %d, config %q", code, seenConfig)
+	}
+}
+
+func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the child-process capture uses /bin/sh")
+	}
+	root := t.TempDir()
+	bar := filepath.Join(root, "genie.bar")
+	if err := os.WriteFile(bar, []byte("stub"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	self := filepath.Join(root, "bashy-self")
+	if err := os.WriteFile(self, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$CAPTURE_ARGS\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BASHY_SELF", self)
+	t.Setenv("GENIE_BAR", bar)
+	t.Setenv("GENIE_EXTERNAL_MODEL", "")
+	t.Setenv("YCODE_CONFIG", "")
+	t.Chdir(t.TempDir())
+	saved := YcodeMain
+	t.Cleanup(func() { YcodeMain = saved })
+	YcodeMain = func([]string) int { t.Fatal("human entry skipped the recipe"); return 1 }
+	for _, tc := range []struct {
+		name, mode, model string
+		args              []string
+	}{
+		{"bare", "chat", "", nil},
+		{"model", "chat", "s387-local-model", []string{"-m", "s387-local-model"}},
+		{"web", "web", "", []string{"web"}},
+		{"web-leading-model", "web", "s387-local-model", []string{"-m", "s387-local-model", "web"}},
+		{"web-trailing-model", "web", "s387-local-model", []string{"web", "-m", "s387-local-model"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			capture := filepath.Join(root, tc.name+".args")
+			t.Setenv("CAPTURE_ARGS", capture)
+			t.Setenv("GENIE_MODEL_ID", "")
+			if code := dispatchYcode(tc.args); code != 0 {
+				t.Fatalf("exit %d", code)
+			}
+			data, err := os.ReadFile(capture)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := strings.Split(strings.TrimSpace(string(data)), "\n")
+			if len(got) != 4 || got[0] != "run" || got[1] != "--target" || got[2] != "chat" || got[3] != bar {
+				t.Fatalf("recipe args: %q", got)
+			}
+			if tc.mode == "web" && os.Getenv("GENIE_MODE") != "web" {
+				t.Fatal("web mode not passed to recipe")
+			}
+			if tc.model != "" && os.Getenv("GENIE_MODEL_ID") != tc.model {
+				t.Fatalf("model not passed to recipe: %q", os.Getenv("GENIE_MODEL_ID"))
+			}
+		})
 	}
 }
