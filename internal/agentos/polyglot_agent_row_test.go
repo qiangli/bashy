@@ -295,3 +295,88 @@ func TestAgentFenceLoweringAndMissingEmbed(t *testing.T) {
 		t.Fatalf("missing definition: %v", err)
 	}
 }
+
+type yamlFenceFixture struct {
+	calls, closes int
+	failure       bool
+}
+
+func TestAgentFenceRejectsBindingDrift(t *testing.T) {
+	cat := agentFenceCatalog(t)
+	runtime := newAgentFenceRuntime(polyglot.RuntimeConfig{Dir: t.TempDir()}, cat, func(context.Context, chat.Options, chat.Runner) (chat.Result, error) {
+		t.Fatal("drift reached transport")
+		return chat.Result{}, nil
+	})
+	exports, err := runtime.Analyze(context.Background(), "searcher")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, _ := cat.Agent("searcher")
+	parent.Model = "changed"
+	if err := cat.SaveAgent(parent); err != nil {
+		t.Fatal(err)
+	}
+	mod := polyglot.Start(polyglot.Plan{ID: "drift", Source: "searcher", Exports: exports}, runtime)
+	defer mod.Close()
+	if _, err := mod.Call(context.Background(), "run", "request"); err == nil || !strings.Contains(err.Error(), "changed after preparation") {
+		t.Fatalf("drift err=%v", err)
+	}
+}
+
+func (f *yamlFenceFixture) Run(context.Context, string) (string, error) {
+	f.calls++
+	if f.failure {
+		return "partial", errors.New("fixture failure")
+	}
+	return "recorded answer", nil
+}
+func (f *yamlFenceFixture) Close() error { f.closes++; return nil }
+
+func TestAgentFenceYAMLInlineEmbedLifecycle(t *testing.T) {
+	oldPrepare := YAMLAgentPrepare
+	defer func() { YAMLAgentPrepare = oldPrepare }()
+	cat := agentFenceCatalog(t)
+	oldRow, _ := polyglot.LookupLanguage("agent")
+	defer polyglot.RegisterLanguage(oldRow)
+	oldGate := interp.ForeignEffectGate
+	interp.ForeignEffectGate = fenceEffectGate
+	defer func() { interp.ForeignEffectGate = oldGate }()
+	cwd, _ := os.Getwd()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agent.yaml")
+	const source = "apiVersion: ycode.dev/v1alpha1\nkind: Harness\nspec: {}\n"
+	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	rel, _ := filepath.Rel(cwd, path)
+	for _, embed := range []bool{false, true} {
+		for _, failure := range []bool{false, true} {
+			fixture := &yamlFenceFixture{failure: failure}
+			opened := 0
+			YAMLAgentPrepare = func(location string, raw []byte) (func() (YAMLAgentSession, error), error) {
+				if string(raw) != source {
+					t.Fatalf("definition changed: %q", raw)
+				}
+				if embed && location != path {
+					t.Fatalf("embed origin=%q want %q", location, path)
+				}
+				return func() (YAMLAgentSession, error) { opened++; return fixture, nil }, nil
+			}
+			row := agentFenceRow()
+			row.NewRuntime = func(cfg polyglot.RuntimeConfig) polyglot.LanguageRuntime { return newAgentFenceRuntime(cfg, cat, nil) }
+			polyglot.RegisterLanguage(row)
+			decl := "~~~agent as oracle\n" + source + "~~~\n"
+			if embed {
+				decl = "embed agent \"./" + rel + "\" as oracle\n"
+			}
+			body := "@ensure('test \"$RESULT\" = \"recorded answer\"')\nagentic func query() string { a, err := oracle.run(\"request\"); return a; }\nagentic { a := query(); echo \"$a\"; }\n"
+			_, out, diag := runDecorated(t, context.Background(), syntax.LangBashPP, decl+body, map[string]string{"BASHY_AUDIT": "0"})
+			if opened != 1 || fixture.calls != 1 || fixture.closes != 1 {
+				t.Fatalf("opened=%d fixture=%+v output=%q %q", opened, fixture, out, diag)
+			}
+			if !failure && !strings.Contains(out.String(), "recorded answer") {
+				t.Fatalf("output=%q %q", out, diag)
+			}
+		}
+	}
+}
