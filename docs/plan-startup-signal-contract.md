@@ -56,3 +56,18 @@ Go directly; with the correction all four pass. On Darwin/arm64,
 `go test ./tools/productgo -count=1 -v` passes (5.475s), including the runtime
 ignore/Notify/Stop/fault controls and managed executor without Go on PATH.
 These focused results do not supersede the outstanding Linux full-suite gate.
+
+Private SDK relocation requires product builds to use `-trimpath` (including
+Windows for a consistent build contract). Explicit false values in build args
+or GOFLAGS are rejected. This uses the existing Go-island fallback for an empty
+`runtime.GOROOT()` instead of retaining a build-host SDK path. Debug source
+paths are consequently trimmed as in the release build. The shared source
+cache remains read-only; the private SDK is removed when the builder returns.
+
+The downloaded-SDK regression now clears the child GOROOT environment and
+checks `runtime.GOROOT()` after private-copy cleanup, as well as the existing
+signal and source-integrity assertions. Against 09c3c85 it fails with the deleted
+private GOROOT; with this fix it passes. Focused Darwin/arm64 validation:
+`go test ./tools/productgo -run 'TestProductDownloadedToolchain|TestProductTrimpathContract' -count=1 -timeout=90s`
+passes (7.983s). The runtime signal predicate is unchanged; the manager's Linux
+gate remains separate evidence.

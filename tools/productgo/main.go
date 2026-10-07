@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -52,6 +53,13 @@ func run() error {
 	if args[0] != "build" {
 		return fmt.Errorf("unsupported product command %q", args[0])
 	}
+	// Product binaries must never retain a private, subsequently deleted SDK
+	// path in runtime.defaultGOROOT. Trimmed builds leave it empty, allowing
+	// runtime toolchain discovery to use its normal fallback.
+	if err := requireTrimpath(append(strings.Fields(os.Getenv("GOFLAGS")), args[1:]...)); err != nil {
+		return err
+	}
+	args = append([]string{args[0], "-trimpath"}, args[1:]...)
 	probe := goCommand("env", "-json", "GOROOT", "GOVERSION", "GOOS", "GOMODCACHE")
 	data, err := probe.Output()
 	if err != nil {
@@ -143,6 +151,21 @@ func run() error {
 			return fmt.Errorf("go exited %d", e.ExitCode())
 		}
 		return err
+	}
+	return nil
+}
+
+// Accept Go's boolean spellings, but never silently override an explicit opt-out.
+func requireTrimpath(flags []string) error {
+	for _, flag := range flags {
+		// GOFLAGS also accepts individually quoted flags.
+		flag = strings.Trim(flag, "\"'")
+		if value, ok := strings.CutPrefix(flag, "-trimpath="); ok {
+			enabled, err := strconv.ParseBool(value)
+			if err != nil || !enabled {
+				return fmt.Errorf("product builds require -trimpath; unsupported %q", flag)
+			}
+		}
 	}
 	return nil
 }

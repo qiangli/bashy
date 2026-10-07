@@ -36,8 +36,9 @@ func TestProductDownloadedToolchain(t *testing.T) {
 	}
 	source := filepath.Join(dir, "main.go")
 	if err := os.WriteFile(source, []byte(`package main
-import("fmt";"os";"os/signal";"syscall")
+import("fmt";"os";"os/signal";"syscall";"runtime")
 func main(){
+ if len(os.Args)>1 && os.Args[1]=="goroot" { fmt.Print(runtime.GOROOT()); return }
  ch:=make(chan os.Signal,1); signal.Notify(ch,syscall.SIGTERM)
  if err:=syscall.Kill(os.Getpid(),syscall.SIGTERM);err!=nil{panic(err)}
  <-ch; signal.Stop(ch)
@@ -81,6 +82,13 @@ func main(){
 		if strings.HasPrefix(entry.Name(), "bashy-runtime-overlay-") {
 			t.Fatal("private SDK leaked")
 		}
+	}
+	// The build driver has returned and removed its private SDK. Clear GOROOT
+	// so the parent's selected SDK cannot mask a stale compiled-in default.
+	probe := exec.Command(bin, "goroot")
+	probe.Env = append(os.Environ(), "GOROOT=")
+	if out, err := probe.CombinedOutput(); err != nil || len(out) != 0 {
+		t.Fatalf("post-cleanup runtime.GOROOT must be empty for fallback discovery: %v %q", err, out)
 	}
 }
 

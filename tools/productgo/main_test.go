@@ -150,3 +150,36 @@ func TestManagedGoWithoutHostGoOnPATH(t *testing.T) {
 		t.Fatalf("managed-only build: %v\n%s", err, out)
 	}
 }
+
+func TestProductTrimpathContract(t *testing.T) {
+	for _, value := range []string{"false", "0", "F", "invalid"} {
+		t.Run(value, func(t *testing.T) {
+			for _, inEnv := range []bool{false, true} {
+				args := []string{"build", "."}
+				env := append(os.Environ(), "GOFLAGS=")
+				if inEnv {
+					env = append(env, "GOFLAGS=-trimpath="+value)
+				} else {
+					args = []string{"build", "-trimpath=" + value, "."}
+				}
+				cmd := exec.Command("../../scripts/go-product.sh", args...)
+				cmd.Env = env
+				out, err := cmd.CombinedOutput()
+				// Invalid GOFLAGS can be rejected by the bootstrap Go command itself.
+				if err == nil || (!strings.Contains(string(out), "require -trimpath") && !(inEnv && value == "invalid" && strings.Contains(string(out), "invalid"))) {
+					t.Fatalf("env=%v: %v %s", inEnv, err, out)
+				}
+			}
+		})
+	}
+	for _, flag := range []string{`"-trimpath=false"`, "'-trimpath=0'"} {
+		if err := requireTrimpath([]string{flag}); err == nil {
+			t.Fatalf("accepted %s", flag)
+		}
+	}
+	for _, flag := range []string{"-trimpath", "-trimpath=true", "-trimpath=1", "-trimpath=T"} {
+		if err := requireTrimpath([]string{flag}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
