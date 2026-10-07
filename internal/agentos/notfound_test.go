@@ -19,7 +19,8 @@ import (
 
 func newTestNotFoundHinter() *notFoundHinter {
 	return &notFoundHinter{
-		provided: []string{"cat", "grep", "ls", "awd", "git", "printf"},
+		provided: []string{"cat", "grep", "ls", "awd", "git", "printf", "weave", "sandbox"},
+		handled:  map[string]bool{"weave": true, "sandbox": true, "git": true, "awd": true},
 		gnuCore:  map[string]bool{"gdate": true, "gstat": true},
 		seen:     map[string]bool{},
 	}
@@ -89,10 +90,14 @@ func TestNotFoundClassify(t *testing.T) {
 		t.Errorf("install = %q, want empty (no door)", nf.install)
 	}
 
-	// A GNU coreutils name carries the container install door.
+	// A GNU coreutils name carries the container install door, and its tier
+	// reflects that door (BASHY0302 "container") rather than a bare not_found.
 	nf = h.classify("gdate")
 	if nf.install != "gnu-coreutils-container" {
 		t.Errorf("install = %q, want gnu-coreutils-container", nf.install)
+	}
+	if nf.tier != "container" {
+		t.Errorf("tier = %q, want container (door tier, not not_found)", nf.tier)
 	}
 
 	// Something with no neighbour and no door.
@@ -119,7 +124,9 @@ func TestNotFoundEmitJSONShape(t *testing.T) {
 	if nl.Kind != "command-not-found" {
 		t.Errorf("kind = %q, want command-not-found", nl.Kind)
 	}
-	if nl.Tool != "gdate" || nl.Tier != "not_found" {
+	// gdate carries the container door, so its tier mirrors `bashy check`'s
+	// BASHY0302 ("container"), not a bare not_found.
+	if nl.Tool != "gdate" || nl.Tier != "container" {
 		t.Errorf("unexpected tool/tier: %+v", nl)
 	}
 	if nl.Install != "gnu-coreutils-container" {
@@ -320,6 +327,93 @@ func TestNotFoundHandlerSkipsRealCommandExiting127(t *testing.T) {
 	}
 	if strings.Contains(errOut.String(), "command-not-found") {
 		t.Errorf("a real command exiting 127 was wrongly annotated:\n%s", errOut.String())
+	}
+}
+
+// A front-door verb / self-shim resolves even though it is never on PATH: bashy
+// dispatches it. Resolution recognizing it is what keeps a real verb from being
+// mislabelled "not provided by bashy"; a typo of one is still unresolved.
+func TestNotFoundResolvesHandledFrontDoorVerb(t *testing.T) {
+	h := newTestNotFoundHinter()
+	for _, name := range []string{"weave", "sandbox"} {
+		if !h.resolves(context.Background(), name) {
+			t.Errorf("handled front-door verb %q must resolve", name)
+		}
+	}
+	// Empty name never resolves (and must never reach a PATH lookup).
+	if h.resolves(context.Background(), "") {
+		t.Error("empty name must not resolve")
+	}
+}
+
+// A bare front-door verb that reaches the exec handler and exits 127 (no shim
+// installed on this bare runner, never on PATH) must NOT be hinted as absent:
+// bashy provides it, so resolution suppresses the hint.
+func TestNotFoundHandlerSkipsHandledFrontDoorVerb(t *testing.T) {
+	h := newTestNotFoundHinter()
+	_, errOut := runNotFound(t, h, "sandbox ; echo status=$?\n")
+	if strings.Contains(errOut, "command-not-found") {
+		t.Errorf("a handled front-door verb was wrongly flagged not-found:\n%s", errOut)
+	}
+}
+
+// runWireWithNotFound wires the full non-posix agentic exec chain (wireExec,
+// which installs newNotFoundHinter when the gate is on) and runs script,
+// returning stdout+stderr. HOME/skills dirs are redirected so the chain's
+// best-effort session/audit writes never touch the developer's own state.
+func runWireWithNotFound(t *testing.T, script string, env map[string]string) (stdout, stderr string) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("BASHY_SKILLS_DIR", t.TempDir())
+	for k, v := range env {
+		t.Setenv(k, v)
+	}
+	var out, errOut bytes.Buffer
+	r, err := interp.New(interp.Env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, opt := range wireExec(nil, false, os.Environ(), nil, &out, &errOut, false) {
+		if err := opt(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	prog, perr := syntax.NewParser().Parse(strings.NewReader(script), "")
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	_ = r.Run(context.Background(), prog)
+	return out.String(), errOut.String()
+}
+
+// Through the real wireExec chain (not just the handler in isolation): with the
+// agentic gate on, a genuinely absent command still exits 127 and the hint is
+// appended on stderr.
+func TestNotFoundHintFiresThroughWireExec(t *testing.T) {
+	out, errOut := runWireWithNotFound(t, "no-such-command-zzz-77 ; echo status=$?\n",
+		map[string]string{"BASHY_AGENTIC": "1", "BASHY_HINTS": ""})
+	if !strings.Contains(out, "status=127") {
+		t.Fatalf("expected the absent command to exit 127, stdout=%q", out)
+	}
+	if !strings.Contains(errOut, "command-not-found") {
+		t.Errorf("the hint did not fire through wireExec:\n%s", errOut)
+	}
+}
+
+// The gate is honoured through wireExec too: without BASHY_AGENTIC the hinter
+// middleware is never installed, so an absent command exits 127 with no hint.
+func TestNotFoundHintOffThroughWireExec(t *testing.T) {
+	for _, env := range []map[string]string{
+		{"BASHY_AGENTIC": "", "BASHY_HINTS": ""},     // agentic gate off
+		{"BASHY_AGENTIC": "1", "BASHY_HINTS": "off"}, // shared silencer
+	} {
+		out, errOut := runWireWithNotFound(t, "no-such-command-zzz-78 ; echo status=$?\n", env)
+		if !strings.Contains(out, "status=127") {
+			t.Fatalf("expected the absent command to exit 127, stdout=%q (env=%v)", out, env)
+		}
+		if strings.Contains(errOut, "command-not-found") {
+			t.Errorf("the hint fired while gated off (env=%v):\n%s", env, errOut)
+		}
 	}
 }
 

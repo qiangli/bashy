@@ -66,7 +66,7 @@ func notFoundHintsEnabled() bool {
 // `bashy check`'s resolution tiers (BASHY0701 = not_found, BASHY0302 = the GNU
 // coreutils container door).
 type notFoundHint struct {
-	tier    string // resolution tier reached: always "not_found" at runtime
+	tier    string // resolution tier reached: "not_found", or "container" when a door exists
 	nearest string // nearest provided name (did-you-mean), "" if none close
 	install string // install-door token, "" if there is no door
 }
@@ -75,6 +75,7 @@ type notFoundHint struct {
 // the life of the session (shell process), like the other hint surfaces.
 type notFoundHinter struct {
 	provided []string        // builtin ∪ coreutil ∪ verb names (did-you-mean set)
+	handled  map[string]bool // front-door verb / self-shim names bashy dispatches off PATH
 	gnuCore  map[string]bool // names reachable via the managed GNU coreutils container
 	w        io.Writer       // default sink; the handler prefers the command's own stderr
 	mu       sync.Mutex
@@ -93,7 +94,18 @@ func newNotFoundHinter() *notFoundHinter {
 	for _, n := range gnuCoreutilsCommands {
 		gnu[n] = true
 	}
-	return &notFoundHinter{provided: provided, gnuCore: gnu, w: os.Stderr, seen: map[string]bool{}}
+	// Front-door verbs (and the `sh` self-shim) are dispatched by bashy itself,
+	// not resolved on PATH — the same rung `bashy check` reports as BASHY0202
+	// ("verb"). They must count as resolved, or a real verb that reaches the
+	// exec handler and exits 127 would be mislabelled "not provided by bashy".
+	// This mirrors the analyzer's verb set (check.go: verbs ∪ {"sh"}; "docker"
+	// is already in verbs).
+	handled := make(map[string]bool, len(verbs)+1)
+	for _, n := range verbs {
+		handled[n] = true
+	}
+	handled["sh"] = true
+	return &notFoundHinter{provided: provided, handled: handled, gnuCore: gnu, w: os.Stderr, seen: map[string]bool{}}
 }
 
 // resolves reports whether name resolves to something runnable in the SAME
@@ -107,6 +119,9 @@ func newNotFoundHinter() *notFoundHinter {
 func (h *notFoundHinter) resolves(ctx context.Context, name string) bool {
 	if name == "" {
 		return false
+	}
+	if h.handled[name] {
+		return true // a bashy front-door verb / self-shim: dispatched, never PATH-resolved
 	}
 	if tool.Lookup(name) != nil {
 		return true // pure-Go in-process coreutil applet (coreutilsshell.Handler)
@@ -126,6 +141,10 @@ func (h *notFoundHinter) classify(name string) notFoundHint {
 	base := baseName(name)
 	nf := notFoundHint{tier: "not_found", nearest: nearestProvided(base, h.provided)}
 	if h.gnuCore[base] {
+		// Reachable through the managed GNU coreutils container: the same
+		// BASHY0302 door `bashy check` reports as Kind "container". The tier
+		// reflects that door rather than a bare not_found.
+		nf.tier = "container"
 		nf.install = "gnu-coreutils-container"
 	}
 	return nf
@@ -204,7 +223,9 @@ func notFoundHintHandler(h *notFoundHinter) func(interp.ExecHandlerFunc) interp.
 			bare := false
 			if len(args) > 0 {
 				name = args[0]
-				bare = !strings.ContainsAny(name, `/\`)
+				// An empty operand is never a nameable command-not-found: skip
+				// it so the hint never fires with a blank tool name.
+				bare = name != "" && !strings.ContainsAny(name, `/\`)
 			}
 			// Resolve BEFORE running, in the shell's own context: a command
 			// that resolves now but removes itself (or rewrites PATH) and then
