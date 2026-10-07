@@ -25,7 +25,11 @@ import (
 //	                  app.play()  app.down()                         — podman kube, local
 //	~~~helm as chart  chart.template(rel, chart) chart.install(…) chart.upgrade(…) chart.uninstall(rel)
 //	~~~dag as ci      ci.<target>()  — the fenced file's own targets, from `bashy dag --list --json`
-//	~~~skill as s     s.run() s.run(target) s.verify() s.probe()
+//	~~~skill as s     s.run() s.verify() s.probe(), plus one method per
+//	                  tasks.md target (s.send(), …) when the caller's
+//	                  directory carries one — from `bashy skills run skill
+//	                  --list`, the exact targets/effects `--target` itself
+//	                  audits; an untasked skill keeps the three verbs
 //	~~~compose        reserved: refuses by name until the engine has a native path
 
 // K8s: a manifest applied through kubectl, or played locally by podman.
@@ -49,12 +53,23 @@ var helmRow = polyglot.Text{Type: "helm", FileName: "values.yaml", Tool: "helm",
 }}
 
 // Skill: the fence's SKILL.md is the one skill of a private local ring
-// rooted at the fence, named `skill`. `run` takes an optional dag target.
-var skillRow = polyglot.Text{Type: "skill", FileName: "skill/SKILL.md", Tool: "skills", WorkDir: "{cwd}", Verbs: []polyglot.Verb{
+// rooted at the fence, named `skill`; Shadow links a `tasks.md` the caller's
+// directory carries in beside it, the same bundled-tasks-face layout
+// `skills run --target` expects. Discover asks `bashy skills run skill
+// --list` for that file's targets (name + the exact effects `--target`
+// itself audits — the union over each target's Requires closure, or the
+// conservative read+write fallback when a dependency's own effects are
+// undeclared); an untasked skill answers nothing, so Analyze adds no
+// methods beyond the three declared verbs. DiscoveredVerb is the template
+// one of those methods runs: `bashy skills run skill --target <name>`.
+var skillRow = polyglot.Text{Type: "skill", FileName: "skill/SKILL.md", Tool: "skills", WorkDir: "{cwd}", Shadow: []string{"tasks.md"}, Verbs: []polyglot.Verb{
 	{Name: "run", Args: []string{"run", "skill"}, Env: []string{"BASHY_SKILLS_DIR={root}"}, Effects: []string{"exec"}},
 	{Name: "verify", Args: []string{"verify", "skill"}, Env: []string{"BASHY_SKILLS_DIR={root}"}, Effects: []string{"read"}},
 	{Name: "probe", Args: []string{"probe"}, Env: []string{"BASHY_SKILLS_DIR={root}"}, Effects: []string{"read"}},
-}}
+},
+	Discover:       &polyglot.Verb{Args: []string{"run", "skill", "--list", "--json"}, Env: []string{"BASHY_SKILLS_DIR={root}"}},
+	DiscoveredVerb: &polyglot.Verb{Args: []string{"run", "skill", "--target", "{target}"}, Env: []string{"BASHY_SKILLS_DIR={root}"}},
+}
 
 func init() {
 	k8s := polyglot.TextRow("k8s", []string{"kube"}, k8sRow)
