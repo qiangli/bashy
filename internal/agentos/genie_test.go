@@ -3,13 +3,18 @@ package agentos
 // Sprint: #290; Story: #933; Story-ID: 6a0507862385
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
+
+	coreacp "github.com/qiangli/yoke/pkg/acp"
 )
 
 func writeGenieSource(t *testing.T, dir string) {
@@ -20,6 +25,102 @@ func writeGenieSource(t *testing.T, dir string) {
 	dag := "# genie — Bashy workflow\n\n## Tasks\n\n### solve\nEffects: read\n\n```bsh\n:\n```\n"
 	if err := os.WriteFile(filepath.Join(dir, "dag.md"), []byte(dag), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func stubYcodeConfigSelection(t *testing.T) {
+	t.Helper()
+	saved := YcodeHasExplicitConfig
+	YcodeHasExplicitConfig = func(args []string) bool {
+		if os.Getenv("YCODE_CONFIG") != "" {
+			return true
+		}
+		if _, err := os.Stat("agent.yaml"); err == nil {
+			return true
+		}
+		return len(args) > 0 && (args[0] == "-f" || args[0] == "--file" || args[0] == "--config")
+	}
+	t.Cleanup(func() { YcodeHasExplicitConfig = saved })
+}
+
+// Exercise the shipped recipe's profile target and config generator together.
+// A cached source filename alone would pass a dispatch mock while granting
+// the agent the wrong workspace and model.
+func TestGenieRecipeGeneratesCallerWorkspaceAndModel(t *testing.T) {
+	if _, err := exec.LookPath("bashy"); err != nil {
+		t.Skip("bashy executable unavailable")
+	}
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("Go executable unavailable")
+	}
+	root := t.TempDir()
+	t.Setenv("BASHY_HOME", root)
+	source, err := builtinGenieConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Dir(source)
+	model := "s387-real-profile"
+	profile := exec.Command("bashy", "dag", "-f", "dag.md", "profile-model")
+	profile.Dir = dir
+	profile.Env = append(os.Environ(), "GENIE_PROFILE=s387test", "GENIE_MODEL_ID="+model, "GENIE_CONTEXT_TOKENS=32768")
+	if out, err := profile.CombinedOutput(); err != nil {
+		t.Fatalf("profile-model: %v\n%s", err, out)
+	}
+	workspace := filepath.Join(t.TempDir(), "caller")
+	if err := os.MkdirAll(workspace, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	generate := exec.Command("go", "run", "cmd/genie/main.go", "-config", filepath.Join(dir, "dist/profiles/s387test/agent.yaml"), "-workspace", workspace, "-instance-dir", filepath.Join(root, "instance"))
+	generate.Dir = dir
+	out, err := generate.CombinedOutput()
+	if err != nil {
+		t.Fatalf("instance config: %v\n%s", err, out)
+	}
+	config := strings.TrimSpace(string(out))
+	data, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"workspace: \"" + workspace + "\"",
+		"readableRoots: [\"" + workspace + "\",",
+		"writableRoots: [\"" + workspace + "\"]",
+		"id: \"" + model + "\"",
+	} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("generated config %q missing %q", config, want)
+		}
+	}
+	// ACP initialize only checks protocol transport. Create a real client
+	// session and verify its repository in the persisted session record.
+	ycodeRoot, err := filepath.Abs(filepath.Join("..", "..", "..", "ycode"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(ycodeRoot, "cmd/ycode/main.go")); err != nil {
+		t.Skip("ycode checkout unavailable")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	acpCommand := exec.Command("go", "run", "./cmd/ycode", "-f", config, "acp")
+	acpCommand.Dir = ycodeRoot
+	acpCommand.Env = os.Environ()
+	client, err := coreacp.NewClient(ctx, coreacp.BaseHandler{}, acpCommand)
+	if err != nil {
+		t.Fatalf("ACP initialize: %v", err)
+	}
+	defer client.Close()
+	sessionID, err := client.NewSession(ctx, workspace)
+	if err != nil {
+		t.Fatalf("ACP session/new: %v", err)
+	}
+	state, err := os.ReadFile(filepath.Join(root, "ycode", "harness", "acp-sessions.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(state), sessionID) || !strings.Contains(string(state), workspace) {
+		t.Fatalf("ACP session %q missing caller repository %q: %s", sessionID, workspace, state)
 	}
 }
 
@@ -159,6 +260,7 @@ func TestGenieModelFlag(t *testing.T) {
 }
 
 func TestYcodeBuiltinConfigAndCustomConfig(t *testing.T) {
+	stubYcodeConfigSelection(t)
 	t.Setenv("BASHY_HOME", t.TempDir())
 	t.Setenv("YCODE_CONFIG", "")
 	t.Chdir(t.TempDir())
@@ -201,7 +303,28 @@ func TestYcodeBuiltinConfigAndCustomConfig(t *testing.T) {
 	}
 }
 
+func TestYcodeDocsValuesDoNotSelectConfig(t *testing.T) {
+	stubYcodeConfigSelection(t)
+	t.Setenv("BASHY_HOME", t.TempDir())
+	t.Setenv("YCODE_CONFIG", "")
+	t.Chdir(t.TempDir())
+	saved := YcodeMain
+	t.Cleanup(func() { YcodeMain = saved })
+	var selected string
+	YcodeMain = func([]string) int { selected = os.Getenv("YCODE_CONFIG"); return 0 }
+	for _, args := range [][]string{{"docs", "--search", "-filter"}, {"docs", "--search", "--file=topic"}} {
+		t.Setenv("YCODE_CONFIG", "")
+		if code := dispatchYcode(args); code != 0 {
+			t.Fatalf("%q: exit %d", args, code)
+		}
+		if data, err := os.ReadFile(selected); err != nil || !strings.Contains(string(data), "name: genie") {
+			t.Fatalf("%q selected %q as a config: %v", args, selected, err)
+		}
+	}
+}
+
 func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
+	stubYcodeConfigSelection(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("the child-process capture uses /bin/sh")
 	}
@@ -211,7 +334,7 @@ func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
 		t.Fatal(err)
 	}
 	self := filepath.Join(root, "bashy-self")
-	if err := os.WriteFile(self, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$CAPTURE_ARGS\"\n"), 0o700); err != nil {
+	if err := os.WriteFile(self, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$CAPTURE_ARGS\"\nprintf '%s\\n' \"$GENIE_MODE\" > \"$CAPTURE_MODE\"\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("BASHY_SELF", self)
@@ -231,10 +354,24 @@ func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
 		{"web", "web", "", []string{"web"}},
 		{"web-leading-model", "web", "s387-local-model", []string{"-m", "s387-local-model", "web"}},
 		{"web-trailing-model", "web", "s387-local-model", []string{"web", "-m", "s387-local-model"}},
+		{"repl", "repl", "", []string{"repl"}},
+		{"resume", "resume", "", []string{"resume"}},
+		{"prompt", "prompt", "", []string{"prompt", "hello"}},
+		{"prompt-flag-text", "prompt", "", []string{"prompt", "--", "-filter"}},
+		{"text", "chat", "", []string{"--", "hello"}},
+		{"flag-text", "chat", "", []string{"--", "-filter"}},
+		{"acp", "acp", "s387-local-model", []string{"-m", "s387-local-model", "acp"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			capture := filepath.Join(root, tc.name+".args")
+			modeCapture := filepath.Join(root, tc.name+".mode")
 			t.Setenv("CAPTURE_ARGS", capture)
+			t.Setenv("CAPTURE_MODE", modeCapture)
+			ambient := "web"
+			if tc.name == "model" || tc.name == "prompt" || tc.name == "acp" || tc.mode == "web" {
+				ambient = "session"
+			}
+			t.Setenv("GENIE_MODE", ambient) // a hostile parent session
 			t.Setenv("GENIE_MODEL_ID", "")
 			if code := dispatchYcode(tc.args); code != 0 {
 				t.Fatalf("exit %d", code)
@@ -244,11 +381,12 @@ func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := strings.Split(strings.TrimSpace(string(data)), "\n")
-			if len(got) != 4 || got[0] != "run" || got[1] != "--target" || got[2] != "chat" || got[3] != bar {
+			if len(got) < 4 || got[0] != "run" || got[1] != "--target" || got[2] != "chat" || got[3] != bar {
 				t.Fatalf("recipe args: %q", got)
 			}
-			if tc.mode == "web" && os.Getenv("GENIE_MODE") != "web" {
-				t.Fatal("web mode not passed to recipe")
+			modeData, err := os.ReadFile(modeCapture)
+			if err != nil || strings.TrimSpace(string(modeData)) != tc.mode {
+				t.Fatalf("child mode = %q, err %v; want %q", modeData, err, tc.mode)
 			}
 			if tc.model != "" && os.Getenv("GENIE_MODEL_ID") != tc.model {
 				t.Fatalf("model not passed to recipe: %q", os.Getenv("GENIE_MODEL_ID"))

@@ -59,6 +59,13 @@ func dispatchGenie(args []string) int {
 }
 
 func dispatchGenieWithHandoff(args []string, handoff bool) int {
+	literalMessage := false
+	for _, arg := range args {
+		if arg == "--" {
+			literalMessage = true
+			break
+		}
+	}
 	model, args, err := genieModelFlag(args)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy genie:", err)
@@ -81,17 +88,23 @@ func dispatchGenieWithHandoff(args []string, handoff bool) int {
 			target, args = "solve", args[1:]
 		case "smoke":
 			target, args = "smoke", args[1:]
-		case "web", "resume", "session":
+		case "web", "resume", "session", "repl", "prompt", "acp":
 			mode, args = args[0], args[1:]
 		}
 	}
-	if again, rest, err := genieModelFlag(args); err != nil {
+	if literalMessage && len(args) > 0 && args[0] == "--" {
+		args = args[1:]
+	}
+	if literalMessage {
+		// The first parse already removed --; a second parse would mistake
+		// literal message text such as -filter for an option.
+	} else if again, rest, err := genieModelFlag(args); err != nil {
 		fmt.Fprintln(os.Stderr, "bashy genie:", err)
 		return 2
 	} else if again != "" {
 		model, args = again, rest // -m after the subcommand
 	}
-	if (mode == "web" || mode == "resume") && len(args) > 0 {
+	if (mode == "web" || mode == "acp" || mode == "repl") && len(args) > 0 {
 		fmt.Fprintf(os.Stderr, "bashy genie %s takes no message\n", mode)
 		return 2
 	}
@@ -120,9 +133,12 @@ func dispatchGenieWithHandoff(args []string, handoff bool) int {
 			os.Setenv("GENIE_MODEL_ID", model)
 		}
 	}
-	if mode != "" {
-		os.Setenv("GENIE_MODE", mode)
+	// Every invocation owns its mode. An ambient GENIE_MODE from another
+	// session must never turn an explicit terminal choice into web hosting.
+	if mode == "" {
+		mode = "chat"
 	}
+	os.Setenv("GENIE_MODE", mode)
 	return runSelf(append([]string{"run", "--target", target, bundle}, args...), os.Stdin, os.Stdout, os.Stderr)
 }
 
@@ -135,15 +151,19 @@ func modelArgs(model string) []string {
 
 // dispatchYcode selects the builtin genie for a bare invocation. An explicit
 // YAML path (flag, environment, or local agent.yaml) always keeps ycode's
-// authored configuration. Model selection and web hosting use genie's recipe,
-// which prepares the model endpoint and web token before reentering ycode
-// with an explicit generated config.
+// authored configuration. Every execution entry uses genie's recipe, which
+// prepares the caller workspace and model endpoint before reentering ycode
+// with a generated config.
 func dispatchYcode(args []string) int {
 	if YcodeMain == nil {
 		fmt.Fprintln(os.Stderr, "bashy ycode: not in this build")
 		return 2
 	}
-	if !ycodeHasConfig(args) {
+	if YcodeHasExplicitConfig == nil {
+		fmt.Fprintln(os.Stderr, "bashy ycode: config discovery is not wired in this build")
+		return 2
+	}
+	if !YcodeHasExplicitConfig(args) {
 		if recipeArgs, selected, err := ycodeGenieRecipeArgs(args); selected {
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "bashy ycode:", err)
@@ -164,11 +184,43 @@ func dispatchYcode(args []string) int {
 	return YcodeMain(args)
 }
 
-// ycodeGenieRecipeArgs recognizes the default human entry in both supported
-// model-flag orders. The recipe reenters ycode with -f, so it cannot recurse.
+// ycodeGenieRecipeArgs recognizes builtin execution entries and both model
+// flag orders around web. The recipe reenters with -f, so it cannot recurse.
 func ycodeGenieRecipeArgs(args []string) ([]string, bool, error) {
 	if len(args) == 0 {
 		return nil, true, nil
+	}
+	if args[0] == "--" {
+		return append([]string{"--"}, args[1:]...), true, nil
+	}
+	model, rest, err := genieModelFlag(args)
+	if err != nil {
+		return nil, true, err
+	}
+	if len(rest) == 0 {
+		return modelArgs(model), true, nil
+	}
+	if len(args) > len(rest) && args[len(args)-len(rest)-1] == "--" {
+		return append(append(modelArgs(model), "--"), rest...), true, nil
+	}
+	switch rest[0] {
+	case "web":
+		// The model flag may occur on either side of the web verb.
+		if model == "" {
+			model, rest, err = genieModelFlag(rest[1:])
+			if err != nil {
+				return nil, true, err
+			}
+			if len(rest) != 0 {
+				return nil, false, nil
+			}
+			return append(modelArgs(model), "web"), true, nil
+		}
+		if len(rest) == 1 {
+			return append(modelArgs(model), "web"), true, nil
+		}
+	case "repl", "resume", "prompt", "acp", "session":
+		return append(modelArgs(model), rest...), true, nil
 	}
 	if args[0] == "web" {
 		model, rest, err := genieModelFlag(args[1:])
@@ -180,36 +232,7 @@ func ycodeGenieRecipeArgs(args []string) ([]string, bool, error) {
 		}
 		return nil, false, nil
 	}
-	if args[0] == "-m" || args[0] == "--model" || strings.HasPrefix(args[0], "--model=") {
-		model, rest, err := genieModelFlag(args)
-		if err != nil {
-			return nil, true, err
-		}
-		if len(rest) == 0 || len(rest) == 1 && rest[0] == "web" {
-			return append(modelArgs(model), rest...), true, nil
-		}
-	}
 	return nil, false, nil
-}
-
-func ycodeHasConfig(args []string) bool {
-	if os.Getenv("YCODE_CONFIG") != "" {
-		return true
-	}
-	if _, err := os.Stat("agent.yaml"); err == nil || !os.IsNotExist(err) {
-		return true
-	}
-	for _, arg := range args {
-		if arg == "--" {
-			break
-		}
-		if arg == "-f" || arg == "--file" || arg == "--config" ||
-			strings.HasPrefix(arg, "-f=") || strings.HasPrefix(arg, "--file=") || strings.HasPrefix(arg, "--config=") ||
-			strings.HasPrefix(arg, "-f") && len(arg) > 2 {
-			return true
-		}
-	}
-	return false
 }
 
 func builtinGenieConfig() (string, error) {
