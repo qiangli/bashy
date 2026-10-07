@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -12,6 +13,11 @@ import (
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/llmbudget"
 	"github.com/qiangli/yoke/pkg/resources"
+)
+
+var (
+	capacityObserveHost = resources.ObserveHost
+	capacityLoadPolicy  = dag.LoadCapacityPolicy
 )
 
 func init() { observeSprintMonitorRemote = collectRemoteSprintMonitor }
@@ -22,7 +28,7 @@ func sprintCapacityServices() dag.CapacityServices {
 			return id.StartID, e
 		},
 		Probe: func(ctx context.Context, worker string) (dag.CapacityObservation, error) {
-			h, err := resources.ObserveHost(ctx, resources.HostObserveOptions{})
+			h, err := capacityObserveHost(ctx, resources.HostObserveOptions{})
 			if err != nil {
 				return dag.CapacityObservation{}, err
 			}
@@ -33,14 +39,10 @@ func sprintCapacityServices() dag.CapacityServices {
 			cpu, mem := h.Sections["cpu"], h.Sections["memory"]
 			known := cpu.Kind == "actual" && !cpu.Stale && mem.Kind == "actual" && !mem.Stale && !h.At.After(time.Now()) && time.Now().Before(h.ExpiresAt)
 			facts := dag.HostFacts{SchemaVersion: dag.HostFactsSchemaVersion, Worker: worker, OS: sys.OS, Arch: sys.Arch, CPU: sys.CPU.LogicalCores, MemBytes: sys.Memory.TotalBytes, Venues: []string{dag.VenueUserland}, ObservedAt: h.At, Capacities: map[string]uint64{}}
-			if st := h.Sections["disks"]; st.Kind == "actual" && !st.Stale && len(sys.Disks) > 0 {
-				free := uint64(math.MaxUint64)
-				for _, d := range sys.Disks {
-					if d.FreeBytes < free {
-						free = d.FreeBytes
-					}
+			if st := h.Sections["disks"]; st.Kind == "actual" && !st.Stale {
+				if free, ok := selectDestinationDiskFree(worker, sys.Disks); ok {
+					facts.Capacities["disk_bytes"] = free
 				}
-				facts.Capacities["disk_bytes"] = free
 			}
 			return dag.CapacityObservation{Facts: facts, HeadroomKnown: known, FreeCPU: math.Max(0, float64(sys.CPU.LogicalCores)*(1-sys.CPU.UsagePercent/100)), FreeMemory: sys.Memory.AvailableBytes}, nil
 		},
@@ -120,4 +122,59 @@ func decodeRemoteSprintMonitor(raw []byte, opt sprintMonitorOptions, now time.Ti
 	// Remote observation never evaluates or publishes against local sprint owners.
 	snapshot.Origin = opt.Host
 	return &snapshot, nil
+}
+
+// selectDestinationDiskFree reports the free bytes of the mount that actually
+// holds the worker's configured workspace. The worker is an opaque logical id
+// matched exactly against policy targets (dag semantics); a missing policy, an
+// unmatched worker, or any unresolvable destination yields unknown.
+func selectDestinationDiskFree(worker string, disks []resources.Disk) (uint64, bool) {
+	p, err := capacityLoadPolicy()
+	if err != nil || p == nil {
+		return 0, false
+	}
+	var minFree uint64
+	found := false
+	for _, t := range p.Targets {
+		if t.Worker != worker || worker == "" {
+			continue
+		}
+		if t.Workspace == "" || !filepath.IsAbs(t.Workspace) {
+			return 0, false
+		}
+		real, err := filepath.EvalSymlinks(t.Workspace)
+		if err != nil {
+			return 0, false
+		}
+		d, ok := coveringMount(disks, real)
+		if !ok {
+			return 0, false
+		}
+		if !found || d.FreeBytes < minFree {
+			minFree, found = d.FreeBytes, true
+		}
+	}
+	return minFree, found
+}
+
+func coveringMount(disks []resources.Disk, path string) (resources.Disk, bool) {
+	best, found := resources.Disk{}, false
+	for _, d := range disks {
+		if mountCovers(d.Mount, path) && (!found || len(d.Mount) > len(best.Mount)) {
+			best, found = d, true
+		}
+	}
+	return best, found
+}
+
+func mountCovers(mount, path string) bool {
+	if mount == "" || path == "" {
+		return false
+	}
+	sep := "/"
+	if strings.Contains(mount, `\`) || (len(mount) >= 2 && mount[1] == ':') {
+		sep, mount, path = `\`, strings.ToLower(mount), strings.ToLower(path)
+	}
+	mount = strings.TrimSuffix(mount, sep)
+	return path == mount || strings.HasPrefix(path, mount+sep)
 }
