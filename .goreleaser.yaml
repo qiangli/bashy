@@ -7,6 +7,7 @@ version: 2
 
 before:
   hooks:
+    - ./scripts/stage-outpost-release-license.sh
     - go mod download
     # Release builds are fail-closed: no JS toolchain or no real dist/index.html
     # means GoReleaser stops before it can produce a success-shaped release.
@@ -14,7 +15,7 @@ before:
 
 builds:
   - id: bashy
-    gobinary: ./scripts/go-product.sh
+    tool: ./scripts/go-product.sh
     main: ./cmd/bashy
     binary: bashy
     env:
@@ -30,7 +31,7 @@ builds:
         - cmd: ./scripts/verify-meet-spa-release.sh "{{ .Path }}" "{{ .Target }}"
           output: true
     ldflags:
-      - -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Version "-dev" }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit={{ .Env.SHELL_RUNTIME_COMMIT }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime={{ .Env.SHELL_RUNTIME_COMMIT_TIME }}'
+      - -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ .Tag }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit={{ .Env.SHELL_RUNTIME_COMMIT }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime={{ .Env.SHELL_RUNTIME_COMMIT_TIME }}'
     goos:
       - linux
       - windows
@@ -41,7 +42,7 @@ builds:
   # bashy_scratch profile, linux only, shipped as a raw binary so the image
   # build fetches one file. Same version stamp as bashy.
   - id: bashy-scratch
-    gobinary: ./scripts/go-product.sh
+    tool: ./scripts/go-product.sh
     main: ./cmd/bashy
     binary: bashy-scratch-{{ .Os }}-{{ .Arch }}
     no_unique_dist_dir: true
@@ -56,14 +57,14 @@ builds:
         - cmd: ./scripts/verify-bashy-signal-artifact.sh "{{ .Path }}"
           output: true
     ldflags:
-      - -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Version "-dev" }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit={{ .Env.SHELL_RUNTIME_COMMIT }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime={{ .Env.SHELL_RUNTIME_COMMIT_TIME }}'
+      - -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ .Tag }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit={{ .Env.SHELL_RUNTIME_COMMIT }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime={{ .Env.SHELL_RUNTIME_COMMIT_TIME }}'
     goos:
       - linux
     goarch:
       - amd64
       - arm64
   - id: bash
-    gobinary: ./scripts/go-product.sh
+    tool: ./scripts/go-product.sh
     main: ./cmd/bash
     binary: bash
     env:
@@ -71,16 +72,15 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Version "-dev" }}'
+      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ .Tag }}'
     goos:
       - linux
-      - darwin
       - windows
     goarch:
       - amd64
       - arm64
   - id: sh
-    gobinary: ./scripts/go-product.sh
+    tool: ./scripts/go-product.sh
     main: ./cmd/sh
     binary: sh
     env:
@@ -88,22 +88,38 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Version "-dev" }}'
+      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ .Tag }}'
     goos:
       - linux
-      - darwin
       - windows
     goarch:
       - amd64
       - arm64
 
+  - id: outpost
+    dir: ../outpost
+    main: ./cmd/outpost
+    binary: outpost
+    env:
+      - CGO_ENABLED=0
+    flags: [-trimpath]
+    tags: [fb_archives]
+    ldflags:
+      - -s -w -X 'github.com/qiangli/outpost/internal/agent.releaseTag={{ .Tag }}' -X 'github.com/qiangli/outpost/internal/agent.ldCommit={{ .Env.OUTPOST_COMMIT }}' -X 'github.com/qiangli/outpost/internal/agent.ldDirty=false'
+    goos: [linux, windows]
+    goarch: [amd64, arm64]
+
 archives:
+  - id: outpost
+    ids: [outpost]
+    formats: [binary]
+    name_template: 'outpost-v{{ trimsuffix .Version "-dev" }}-{{ .Os }}-{{ .Arch }}'
   - id: bashy-scratch
     ids: [bashy-scratch]
     formats: [binary]
     name_template: "bashy-scratch-{{ .Os }}-{{ .Arch }}"
   - id: bashy
-    ids: [bashy]
+    ids: [bashy, outpost, bash, sh]
     name_template: "bashy-{{ .Os }}-{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:
@@ -112,9 +128,10 @@ archives:
     files:
       - README.md
       - LICENSE
+      - src: .release-assets/LICENSE.outpost
+        dst: LICENSE.outpost
   - id: bash
-    # Ship the certified strict sh beside the GNU Bash-compatible binary in
-    # the existing archive family: six platforms and 15 release assets remain.
+    # Preserve the strict sh + GNU Bash-compatible archive family.
     ids: [bash, sh]
     name_template: "bash-{{ .Os }}-{{ .Arch }}"
     formats: [tar.gz]

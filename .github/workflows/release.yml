@@ -54,6 +54,8 @@ jobs:
         env:
           BASHY_BOOTSTRAP_SUBMODULES: "1"
         run: ./scripts/bootstrap-siblings.sh
+      - name: Check shared sibling graph
+        run: ./scripts/verify-shared-sibling-pins.sh
       - uses: actions/setup-go@v6
         with:
           go-version: 1.27.1
@@ -79,7 +81,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: bashy-darwin-${{ matrix.arch }}
-          path: ${{ runner.temp }}/native/bashy-darwin-${{ matrix.arch }}.tar.gz
+          path: ${{ runner.temp }}/native/*
           if-no-files-found: error
           retention-days: 3
   goreleaser:
@@ -101,6 +103,8 @@ jobs:
           # coreutils' pinned Ollama replacement, so it must opt in.
           BASHY_BOOTSTRAP_SUBMODULES: "1"
         run: ./scripts/bootstrap-siblings.sh
+      - name: Check shared sibling graph
+        run: ./scripts/verify-shared-sibling-pins.sh
       - name: Check seed bands for this release
         id: seed-bands
         shell: bash
@@ -117,6 +121,9 @@ jobs:
           shell_runtime_commit_time=$(git -C ../sh show -s --format=%cI "$shell_runtime_commit")
           test -n "$shell_runtime_commit"
           test -n "$shell_runtime_commit_time"
+          outpost_commit=$(sed -n 's/^outpost=//p' .sibling-pins)
+          test "$outpost_commit" = "$(git -C ../outpost rev-parse HEAD)"
+          echo "OUTPOST_COMMIT=$outpost_commit" >> "$GITHUB_ENV"
           echo "SHELL_RUNTIME_COMMIT=$shell_runtime_commit" >> "$GITHUB_ENV"
           echo "SHELL_RUNTIME_COMMIT_TIME=$shell_runtime_commit_time" >> "$GITHUB_ENV"
       - uses: actions/setup-go@v6
@@ -179,6 +186,15 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           SEED_SUMMARY: ${{ needs.goreleaser.outputs.seed_summary }}
         run: ./scripts/publish-complete-dev-release.sh publish
+      - name: register development product release
+        env:
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: "true"
+          DIST: published-dist
+          URL: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_URL }}
+          SECRET: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_SECRET }}
+        run: ./scripts/register-product-release.sh
   cleanup:
     name: remove incomplete draft from this run
     if: ${{ always() && needs.preflight.result == 'success' && (needs.darwin.result != 'success' || needs.goreleaser.result != 'success' || needs.publish.result != 'success') }}

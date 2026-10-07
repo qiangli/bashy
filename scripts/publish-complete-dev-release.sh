@@ -28,8 +28,12 @@ if [[ $phase == prepare ]]; then
  mkdir -p release-dist
  gh release download "$TAG" -R "$REPO" -D release-dist
  [[ ! -e release-dist/bashy-darwin-amd64.tar.gz && ! -e release-dist/bashy-darwin-arm64.tar.gz ]] || { echo "native archives already attached" >&2; exit 1; }
- cp native/bashy-darwin-*.tar.gz release-dist/
- (cd release-dist && sha256sum bash-* bashy-* > checksums.txt)
+ cp native/* release-dist/
+ for binary in release-dist/outpost-*; do
+  [[ $binary != *.sha256 ]] || continue
+  (cd release-dist && sha256sum "${binary##*/}") > "$binary.sha256"
+ done
+ (cd release-dist && sha256sum bash-* bashy-* outpost-* > checksums.txt)
  ./scripts/verify-release-asset-set.sh release-dist
  exit 0
 fi
@@ -37,7 +41,7 @@ fi
 for arch in amd64 arm64; do cmp "native/bashy-darwin-$arch.tar.gz" "release-dist/bashy-darwin-$arch.tar.gz"; done
 ./scripts/verify-release-provenance.sh release-dist/checksums.txt
 # Upload in a draft; a failed upload cannot expose an incomplete candidate.
-gh release upload "$TAG" -R "$REPO" native/bashy-darwin-*.tar.gz --clobber
+gh release upload "$TAG" -R "$REPO" native/* release-dist/outpost-*.sha256 --clobber
 gh release upload "$TAG" -R "$REPO" release-dist/checksums.txt --clobber
 mkdir -p published-dist
 gh release download "$TAG" -R "$REPO" -D published-dist

@@ -19,12 +19,22 @@ shell_commit=$(sed -n 's/^sh=//p' .sibling-pins)
 [[ -n $shell_commit ]] && git -C ../sh cat-file -e "$shell_commit^{commit}"
 shell_time=$(git -C ../sh show -s --format=%cI "$shell_commit")
 base=${tag#v}; base=${base%-dev}
-CGO_ENABLED=1 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -ldflags "-w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$base' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=$shell_commit' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=$shell_time'" -o "$stage/bashy" ./cmd/bashy
+CGO_ENABLED=1 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -ldflags "-w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$tag' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=$shell_commit' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=$shell_time'" -o "$stage/bashy" ./cmd/bashy
 ./scripts/verify-bashy-signal-artifact.sh "$stage/bashy"
 go run ./tools/bashysignalprobe "$stage/bashy"
 ./scripts/verify-meet-spa-release.sh "$stage/bashy" "darwin_$arch"
+outpost_commit=$(sed -n 's/^outpost=//p' .sibling-pins)
+[[ $outpost_commit =~ ^[0-9a-f]{40}$ ]] || { echo "missing outpost pin" >&2; exit 1; }
+[[ $(git -C ../outpost rev-parse HEAD) == "$outpost_commit" ]] || { echo "outpost pin drift" >&2; exit 1; }
+for shell in bash sh; do
+ CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -ldflags "-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$tag'" -o "$stage/$shell" "./cmd/$shell"
+done
+(cd ../outpost && CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" go build -trimpath -tags fb_archives -ldflags "-s -w -X github.com/qiangli/outpost/internal/agent.releaseTag=$tag -X github.com/qiangli/outpost/internal/agent.ldCommit=$outpost_commit -X github.com/qiangli/outpost/internal/agent.ldDirty=false" -o "$stage/outpost" ./cmd/outpost)
 cp README.md LICENSE "$stage/"
-COPYFILE_DISABLE=1 tar -czf "$stage/$name" -C "$stage" bashy README.md LICENSE
-[[ $(tar -tzf "$stage/$name" | LC_ALL=C sort | tr '\n' ' ') == 'LICENSE README.md bashy ' ]] || { echo "bad Darwin archive contents" >&2; exit 1; }
+cp ../outpost/LICENSE "$stage/LICENSE.outpost"
+COPYFILE_DISABLE=1 tar -czf "$stage/$name" -C "$stage" bashy outpost bash sh README.md LICENSE LICENSE.outpost
+[[ $(tar -tzf "$stage/$name" | LC_ALL=C sort | tr '\n' ' ') == 'LICENSE LICENSE.outpost README.md bash bashy outpost sh ' ]] || { echo "bad Darwin archive contents" >&2; exit 1; }
 mv "$stage/$name" "$outdir/$name"
+COPYFILE_DISABLE=1 tar -czf "$outdir/bash-darwin-$arch.tar.gz" -C "$stage" bash sh README.md LICENSE
+cp "$stage/outpost" "$outdir/outpost-v$base-darwin-$arch"
 shasum -a 256 "$outdir/$name"

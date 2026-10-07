@@ -62,3 +62,6 @@ vsxgen/
 
 # local opencode CLI config (also in .git/info/exclude since July; tracked here so tooling agrees)
 /opencode.json
+
+# GoReleaser stages the pinned outpost license inside its project root.
+/.release-assets/

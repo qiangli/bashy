@@ -119,9 +119,24 @@ jobs:
           else
             commit="$osha"
           fi
+          # A manually supplied stable tag must name the candidate's commit.
+          stable=$(gh api "repos/${REPO}/git/ref/tags/${VER}" --jq '.object' 2>/dev/null) || {
+            echo "::error::${VER} tag is missing"; exit 1;
+          }
+          stype=$(echo "$stable" | jq -r '.type'); ssha=$(echo "$stable" | jq -r '.sha')
+          if [ "$stype" = "tag" ]; then
+            ssha=$(gh api "repos/${REPO}/git/tags/${ssha}" --jq '.object.sha')
+          fi
+          [ "$ssha" = "$commit" ] || {
+            echo "::error::${VER} points to ${ssha}, candidate source is ${commit}"; exit 1;
+          }
           echo "commit=${commit}" >> "$GITHUB_OUTPUT"
           echo "promoting ${DEV} (source ${commit}) -> ${VER}"
 
+      - name: use the candidate's source pins and release tools
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.src.outputs.commit }}
       - name: download the tested pre-release assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -145,6 +160,15 @@ jobs:
           ./scripts/verify-release-provenance.sh dist/bashy-darwin-amd64.tar.gz
           ./scripts/verify-release-provenance.sh dist/bashy-darwin-arm64.tar.gz
 
+      - name: generate install channel manifests from verified archives
+        env:
+          TAG: ${{ steps.v.outputs.ver }}
+        run: python3 scripts/generate-install-channels.py "$TAG" dist channels
+      - uses: actions/upload-artifact@v4
+        with:
+          name: install-channels
+          path: channels/
+          if-no-files-found: error
       - name: create official release (byte-identical, no rebuild)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -168,48 +192,15 @@ jobs:
             --title "${VER}" \
             --notes-file /tmp/notes.md \
             --latest \
-            dist/bashy-* dist/bash-* dist/checksums.txt
+            dist/bashy-* dist/bash-* dist/outpost-* dist/checksums.txt
           echo "released ${VER} as --latest from the tested ${DEV} bytes"
 
-      - name: build webhook payload
-        id: payload
+      - name: register stable product release
         env:
           REPO: ${{ github.repository }}
-          VER: ${{ steps.v.outputs.ver }}
-          COMMIT: ${{ steps.src.outputs.commit }}
-        run: |
-          # Enumerate the primary bashy-* archives (the product the fleet rolls out).
-          # Names are unversioned: bashy-<os>-<arch>.{tar.gz|zip}.
-          base="https://github.com/${REPO}/releases/download/${VER}"
-          artifacts="{}"
-          for f in dist/bashy-*; do
-            name=$(basename "$f")
-            case "$name" in *.sha256) continue ;; esac
-            platform=${name#bashy-}; platform=${platform%.tar.gz}; platform=${platform%.zip}
-            os=${platform%-*}; arch=${platform##*-}
-            sha=$(shasum -a 256 "$f" | awk '{print $1}')
-            artifacts=$(jq -n --argjson cur "$artifacts" --arg key "${os}_${arch}" \
-              --arg url "${base}/${name}" --arg sha "$sha" \
-              '$cur + {($key): {url: $url, sha256: $sha}}')
-          done
-          jq -n --arg tag "$VER" --arg commit "$COMMIT" --argjson artifacts "$artifacts" \
-            '{tag: $tag, commit: $commit, artifacts: $artifacts}' > payload.json
-          jq . payload.json
-          echo "path=payload.json" >> "$GITHUB_OUTPUT"
-
-      - name: notify fleet (cloudbox release webhook)
-        env:
+          TAG: ${{ steps.v.outputs.ver }}
+          PRERELEASE: "false"
+          DIST: dist
           URL: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_URL }}
           SECRET: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_SECRET }}
-          PAYLOAD: ${{ steps.payload.outputs.path }}
-        run: |
-          if [ -z "$URL" ] || [ -z "$SECRET" ]; then
-            echo "::warning::CLOUDBOX_RELEASE_WEBHOOK_URL / _SECRET not set; skipping webhook"
-            exit 0
-          fi
-          sig=$(openssl dgst -sha256 -hmac "$SECRET" "$PAYLOAD" | awk '{print $2}')
-          curl -fsS -X POST "$URL" \
-            -H "Content-Type: application/json" \
-            -H "X-Bashy-Release-Sig: sha256=${sig}" \
-            --data-binary "@${PAYLOAD}"
-          echo "fleet notified — canary→fleet rollout will pick up ${VER}"
+        run: ./scripts/register-product-release.sh
