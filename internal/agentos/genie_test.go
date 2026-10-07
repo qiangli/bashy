@@ -156,3 +156,46 @@ func TestGenieModelFlag(t *testing.T) {
 		}
 	}
 }
+
+func TestYcodeBuiltinConfigAndCustomConfig(t *testing.T) {
+	t.Setenv("BASHY_HOME", t.TempDir())
+	t.Setenv("YCODE_CONFIG", "")
+	t.Chdir(t.TempDir())
+	saved := YcodeMain
+	t.Cleanup(func() { YcodeMain = saved })
+	var seenArgs []string
+	var seenConfig string
+	YcodeMain = func(args []string) int {
+		seenArgs = append([]string(nil), args...)
+		seenConfig = os.Getenv("YCODE_CONFIG")
+		return 0
+	}
+	if code := dispatchYcode([]string{"status"}); code != 0 {
+		t.Fatalf("builtin status exit %d", code)
+	}
+	data, err := os.ReadFile(seenConfig)
+	if err != nil || !strings.Contains(string(data), "name: genie") {
+		t.Fatalf("builtin config %q: %v", seenConfig, err)
+	}
+	if len(seenArgs) != 1 || seenArgs[0] != "status" {
+		t.Fatalf("args changed: %q", seenArgs)
+	}
+	custom := filepath.Join(t.TempDir(), "custom.yaml")
+	if err := os.WriteFile(custom, []byte("custom"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YCODE_CONFIG", custom)
+	if code := dispatchYcode([]string{"status"}); code != 0 || seenConfig != custom {
+		t.Fatalf("environment config replaced: exit %d, config %q", code, seenConfig)
+	}
+	t.Setenv("YCODE_CONFIG", "")
+	if code := dispatchYcode([]string{"-f", custom, "status"}); code != 0 || seenConfig != "" {
+		t.Fatalf("flag config replaced: exit %d, config %q", code, seenConfig)
+	}
+	if err := os.WriteFile("agent.yaml", []byte("local"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := dispatchYcode([]string{"status"}); code != 0 || seenConfig != "" {
+		t.Fatalf("local config replaced: exit %d, config %q", code, seenConfig)
+	}
+}
