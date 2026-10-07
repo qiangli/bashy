@@ -226,6 +226,16 @@ make tidy               # go mod tidy + gofmt -s -w . + go vet ./...
 make help               # every target with its `## ` doc line
 ```
 
+### Product runtime startup contract
+
+Build shipped binaries through `scripts/go-product.sh build` (used by Make,
+DAG artifact builds and release configuration). It applies a source-hash-pinned
+Go 1.27.1 overlay so ordinary inherited asynchronous signal ignores survive
+before main. It never modifies the installed GOROOT. Plain upstream `go build`
+does not supply this early-startup contract. The wrapper is build-only; use
+ordinary `go test` to run tests, whose product-building helpers use the wrapper.
+See `docs/plan-startup-signal-contract.md` for the precise scope and gates.
+
 ### The unix binaries are a C launcher over the Go binary
 
 On linux/darwin, `make build` / `build-bash` / `build-bashy` / `build-fips` /

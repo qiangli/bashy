@@ -41,7 +41,7 @@ func TestOneBinaryShellAndUtilityRoutes(t *testing.T) {
 	}
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "bashy")
-	build := exec.Command("go", "build", "-o", bin, "./cmd/bashy")
+	build := exec.Command("./scripts/go-product.sh", "build", "-o", bin, "./cmd/bashy")
 	build.Dir = filepath.Join("..", "..")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build bashy: %v\n%s", err, out)
