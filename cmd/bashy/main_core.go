@@ -19,7 +19,6 @@ import (
 	"github.com/qiangli/bashy/internal/core"
 	_ "github.com/qiangli/coreutils/cmds/all"
 	"github.com/qiangli/coreutils/multicall"
-	"github.com/qiangli/coreutils/tool"
 	_ "golang.org/x/crypto/x509roots/fallback"
 	"mvdan.cc/sh/v3/interp/ownedexec"
 )
