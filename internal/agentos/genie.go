@@ -59,6 +59,9 @@ func dispatchGenie(args []string) int {
 }
 
 func dispatchGenieWithHandoff(args []string, handoff bool) int {
+	if handoff {
+		os.Unsetenv("GENIE_YCODE_SESSION")
+	}
 	prefixLiteral := len(args) > 0 && args[0] == "--" ||
 		len(args) > 2 && (args[0] == "-m" || args[0] == "--model") && args[2] == "--" ||
 		len(args) > 1 && strings.HasPrefix(args[0], "--model=") && args[1] == "--"
@@ -167,11 +170,13 @@ func dispatchYcode(args []string) int {
 		return 2
 	}
 	if !YcodeHasExplicitConfig(args) {
-		if recipeArgs, selected, err := ycodeGenieRecipeArgs(args); selected {
+		entryArgs, sessionID := ycodeSessionPrefix(args)
+		if recipeArgs, selected, err := ycodeGenieRecipeArgs(entryArgs); selected {
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "bashy ycode:", err)
 				return 2
 			}
+			os.Setenv("GENIE_YCODE_SESSION", sessionID)
 			return dispatchGenieWithHandoff(recipeArgs, false)
 		}
 		config, err := builtinGenieConfig()
@@ -185,6 +190,16 @@ func dispatchYcode(args []string) int {
 		}
 	}
 	return YcodeMain(args)
+}
+
+func ycodeSessionPrefix(args []string) ([]string, string) {
+	if len(args) > 1 && args[0] == "--session" {
+		return args[2:], args[1]
+	}
+	if len(args) > 0 && strings.HasPrefix(args[0], "--session=") {
+		return args[1:], strings.TrimPrefix(args[0], "--session=")
+	}
+	return args, ""
 }
 
 // ycodeGenieRecipeArgs recognizes builtin execution entries and both model
@@ -211,6 +226,9 @@ func ycodeGenieRecipeArgs(args []string) ([]string, bool, error) {
 		return args, true, nil
 	}
 	if args[0] != "-m" && args[0] != "--model" && !strings.HasPrefix(args[0], "--model=") {
+		if !strings.HasPrefix(args[0], "-") && !isYcodeUtility(args[0]) {
+			return append([]string{"--"}, args...), true, nil
+		}
 		return nil, false, nil
 	}
 	model, rest, err := genieModelFlag(args)
@@ -232,6 +250,14 @@ func ycodeGenieRecipeArgs(args []string) ([]string, bool, error) {
 		return append(modelArgs(model), rest...), true, nil
 	}
 	return nil, false, nil
+}
+
+func isYcodeUtility(name string) bool {
+	switch name {
+	case "new", "status", "version", "doctor", "validate", "schema", "config", "model", "tools", "memory", "skill", "features", "docs", "shell", "serve", "completion", "help":
+		return true
+	}
+	return false
 }
 
 func builtinGenieConfig() (string, error) {
