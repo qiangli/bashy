@@ -142,6 +142,65 @@ func TestToolFenceStatusErrorsInvalidAndLowering(t *testing.T) {
 	}
 }
 
+func TestToolFenceRejectsCatalogDriftAfterAnalysis(t *testing.T) {
+	for _, change := range []struct {
+		name string
+		edit func(*fleet.Tool)
+	}{
+		{"effects", func(tool *fleet.Tool) { tool.Commands[0].Effects = []string{"read", "write"} }},
+		{"slash", func(tool *fleet.Tool) { tool.Commands[0].Slash = "write {args}" }},
+	} {
+		t.Run(change.name, func(t *testing.T) {
+			cat := toolFenceFixture(t)
+			calls := 0
+			runtime := newToolFenceRuntime(polyglot.RuntimeConfig{}, cat, func(context.Context, fleet.Tool, fleet.ToolCommand, string, toolcmd.Options) (toolcmd.Result, error) {
+				calls++
+				return toolcmd.Result{Outcome: toolcmd.OutcomeSuccess}, nil
+			})
+			exports, err := runtime.Analyze(context.Background(), "fixture")
+			if err != nil {
+				t.Fatal(err)
+			}
+			unadmitted := polyglot.Start(polyglot.Plan{ID: "unadmitted", Source: "fixture"}, runtime)
+			if _, err := unadmitted.Call(context.Background(), "review", "change"); err == nil || calls != 0 {
+				t.Fatalf("missing export dispatched: err=%v calls=%d", err, calls)
+			}
+			unadmitted.Close()
+			tool, _ := cat.Tool("fixture")
+			change.edit(&tool)
+			if err := cat.SaveTool(tool); err != nil {
+				t.Fatal(err)
+			}
+			mod := polyglot.Start(polyglot.Plan{ID: "drift", Source: "fixture", Exports: exports}, runtime)
+			defer mod.Close()
+			if _, err := mod.Call(context.Background(), "review", "change"); err == nil || !strings.Contains(err.Error(), "changed since analysis") || calls != 0 {
+				t.Fatalf("drift dispatched: err=%v calls=%d", err, calls)
+			}
+		})
+	}
+}
+
+func TestToolFenceRegisteredNestedDefinitionDefaultsAndAliases(t *testing.T) {
+	cat := toolFenceFixture(t)
+	definition := "kit: nested\ntype: cli\ncli:\n  launch:\n    exec: /bin/echo {prompt}\ncommands:\n  - name: review\n    slash: review {args}\n    mode: print\n    effects: [read]\n"
+	tool, err := fleet.ParseTool("", []byte(definition), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tool.CLI.Binary != "nested" {
+		t.Fatalf("missing binary default: %+v", tool.CLI)
+	}
+	if err := cat.SaveTool(tool); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := toolFenceBinding(cat, definition); err != nil {
+		t.Fatalf("registered definition rejected: %v", err)
+	}
+	if _, err := toolFenceBinding(cat, strings.Replace(definition, "review {args}", "write {args}", 1)); err == nil {
+		t.Fatal("changed nested command accepted")
+	}
+}
+
 func TestToolFenceRunnerMetersAndHonorsHardSpendCap(t *testing.T) {
 	cat := toolFenceFixture(t)
 	t.Setenv("BASHY_ROOM_DIR", t.TempDir())

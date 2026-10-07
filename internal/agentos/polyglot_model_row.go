@@ -154,9 +154,42 @@ func fleetFenceFieldsMatch(supplied map[string]any, kind string, registered any)
 		return err
 	}
 	for key, value := range supplied {
-		if !reflect.DeepEqual(value, actual[key]) {
+		registeredValue, exists := actual[key]
+		if !exists || !fleetFenceFieldMatches(value, registeredValue) {
 			return fmt.Errorf("%s fence: field %q differs from registered binding", kind, key)
 		}
 	}
 	return nil
+}
+
+// Compare only fields the document supplied. Fleet parsers fill defaults in
+// nested objects (for example cli.binary), so a whole-map comparison would
+// reject a registered tool's own valid YAML when that field is omitted.
+func fleetFenceFieldMatches(supplied, actual any) bool {
+	if fields, ok := supplied.(map[string]any); ok {
+		registered, ok := actual.(map[string]any)
+		if !ok {
+			return false
+		}
+		for key, value := range fields {
+			registeredValue, exists := registered[key]
+			if !exists || !fleetFenceFieldMatches(value, registeredValue) {
+				return false
+			}
+		}
+		return true
+	}
+	if items, ok := supplied.([]any); ok {
+		registered, ok := actual.([]any)
+		if !ok || len(items) != len(registered) {
+			return false
+		}
+		for i, item := range items {
+			if !fleetFenceFieldMatches(item, registered[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	return reflect.DeepEqual(supplied, actual)
 }

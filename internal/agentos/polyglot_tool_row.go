@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/toolcmd"
@@ -28,6 +30,8 @@ func toolFenceRow() polyglot.Language {
 type toolFenceRun func(context.Context, fleet.Tool, fleet.ToolCommand, string, toolcmd.Options) (toolcmd.Result, error)
 
 func newToolFenceRuntime(cfg polyglot.RuntimeConfig, catalog *fleet.Catalog, run toolFenceRun) polyglot.Embedded {
+	var mu sync.Mutex
+	analyzed := make(map[string]fleet.Tool)
 	return polyglot.Embedded{RuntimeName: "tool",
 		AnalyzeFunc: func(ctx context.Context, source string) ([]polyglot.Export, error) {
 			if err := ctx.Err(); err != nil {
@@ -55,6 +59,13 @@ func newToolFenceRuntime(cfg polyglot.RuntimeConfig, catalog *fleet.Catalog, run
 					Effects:   toolFenceEffects(command.Effects),
 					Signature: polyglot.Signature{Params: []string{"string"}, Results: []string{"string", "error"}}})
 			}
+			mu.Lock()
+			if prior, exists := analyzed[source]; exists && !reflect.DeepEqual(prior, tool) {
+				mu.Unlock()
+				return nil, fmt.Errorf("tool fence: %q changed since analysis", tool.Name)
+			}
+			analyzed[source] = tool
+			mu.Unlock()
 			return out, nil
 		},
 		CallFunc: func(ctx context.Context, plan polyglot.Plan, method string, args []any, kwargs map[string]any) (polyglot.CallResult, error) {
@@ -69,12 +80,28 @@ func newToolFenceRuntime(cfg polyglot.RuntimeConfig, catalog *fleet.Catalog, run
 			if err != nil {
 				return polyglot.CallResult{}, err
 			}
+			mu.Lock()
+			prior, analyzedSource := analyzed[plan.Source]
+			mu.Unlock()
+			if !analyzedSource || !reflect.DeepEqual(prior, tool) {
+				return polyglot.CallResult{}, fmt.Errorf("tool fence: %q changed since analysis", tool.Name)
+			}
 			command, ok := tool.Command(method)
 			if !ok {
 				return polyglot.CallResult{}, fmt.Errorf("tool fence: %s has no command %q", tool.Name, method)
 			}
 			if len(command.Effects) == 0 {
 				return polyglot.CallResult{}, fmt.Errorf("tool fence: %s:%s must declare effects", tool.Name, method)
+			}
+			admitted := false
+			for _, export := range plan.Exports {
+				if export.Name == method && export.Agentic && reflect.DeepEqual(export.Effects, toolFenceEffects(command.Effects)) {
+					admitted = true
+					break
+				}
+			}
+			if !admitted {
+				return polyglot.CallResult{}, fmt.Errorf("tool fence: %s:%s was not admitted by the analyzed export", tool.Name, method)
 			}
 			agent, err := toolFenceAgent(catalog, tool)
 			if err != nil {
