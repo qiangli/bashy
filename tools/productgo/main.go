@@ -52,18 +52,19 @@ func run() error {
 	if args[0] != "build" {
 		return fmt.Errorf("unsupported product command %q", args[0])
 	}
-	probe := goCommand("env", "-json", "GOROOT", "GOVERSION", "GOOS")
+	probe := goCommand("env", "-json", "GOROOT", "GOVERSION", "GOOS", "GOMODCACHE")
 	data, err := probe.Output()
 	if err != nil {
 		return err
 	}
-	var cfg struct{ GOROOT, GOVERSION, GOOS string }
+	var cfg struct{ GOROOT, GOVERSION, GOOS, GOMODCACHE string }
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return err
 	}
 	if cfg.GOVERSION != "go1.27.1" {
 		return fmt.Errorf("requires go1.27.1, found %s", cfg.GOVERSION)
 	}
+	buildRoot := ""
 	if cfg.GOOS == "linux" || cfg.GOOS == "darwin" {
 		source := filepath.Join(cfg.GOROOT, "src", "runtime", "signal_unix.go")
 		original, err := os.ReadFile(source)
@@ -82,6 +83,19 @@ func run() error {
 			return err
 		}
 		defer os.RemoveAll(dir)
+		buildRoot, err = overlayRoot(cfg.GOROOT, cfg.GOMODCACHE, dir)
+		if err != nil {
+			return err
+		}
+		source = filepath.Join(buildRoot, "src", "runtime", "signal_unix.go")
+		// Verify the bytes actually used by the relocated build too.
+		copied, err := os.ReadFile(source)
+		if err != nil {
+			return err
+		}
+		if _, err := patchRuntimeSource(copied); err != nil {
+			return err
+		}
 		replacement := filepath.Join(dir, "signal_unix.go")
 		if err := os.WriteFile(replacement, []byte(patched), 0600); err != nil {
 			return err
@@ -120,6 +134,9 @@ func run() error {
 		args = append([]string{args[0], "-overlay=" + path, "-ldflags=" + ldflags}, remaining...)
 	}
 	cmd := goCommand(args...)
+	if buildRoot != "" {
+		cmd = localGoCommand(buildRoot, args...)
+	}
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		if e, ok := err.(*exec.ExitError); ok {
@@ -128,6 +145,51 @@ func run() error {
 		return err
 	}
 	return nil
+}
+
+// Go rejects overlays anywhere beneath GOMODCACHE, including downloaded SDKs.
+// Copy those SDKs out, never hard-link or edit the shared installation. CopyFS
+// preserves executable bits and fails closed on unsupported entries/symlinks.
+func overlayRoot(root, cache, dir string) (string, error) {
+	root, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", err
+	}
+	// The cache need not exist for an installed SDK and a stdlib-only build.
+	if resolved, err := filepath.EvalSymlinks(cache); err == nil {
+		cache = resolved
+	}
+	inside := func(path string) bool {
+		rel, err := filepath.Rel(cache, path)
+		return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	}
+	if !inside(root) {
+		return root, nil
+	}
+	dir, err = filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", err
+	}
+	if inside(dir) {
+		return "", fmt.Errorf("private toolchain directory must be outside GOMODCACHE; set TMPDIR outside %s", cache)
+	}
+	private := filepath.Join(dir, "goroot")
+	if err := os.CopyFS(private, os.DirFS(root)); err != nil {
+		return "", fmt.Errorf("copy managed toolchain: %w", err)
+	}
+	return private, nil
+}
+
+func localGoCommand(root string, args ...string) *exec.Cmd {
+	name := "go"
+	if os.PathSeparator == '\\' {
+		name += ".exe"
+	}
+	cmd := exec.Command(filepath.Join(root, "bin", name), args...)
+	// The front door already selected and verified the SDK. Do not allow a
+	// second selection to switch back to the immutable cached installation.
+	cmd.Env = append(os.Environ(), "GOROOT="+root, "GOTOOLCHAIN=local")
+	return cmd
 }
 
 // Artifact/DAG builds can retain their explicitly selected managed toolchain.

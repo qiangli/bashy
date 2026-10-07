@@ -40,9 +40,17 @@ func main(){
 			bin := filepath.Join(dir, "probe"+active)
 			build := exec.Command("../../scripts/go-product.sh", "build", "-o", bin, source)
 			if active == "0" {
+				cache, err := goCommand("env", "GOMODCACHE").Output()
+				if err != nil {
+					t.Fatal(err)
+				}
+				root, err := overlayRoot(runtime.GOROOT(), strings.TrimSpace(string(cache)), dir)
+				if err != nil {
+					t.Fatal(err)
+				}
 				// Compile the same overlay without any activation flag, outside
 				// the product wrapper; the runtime must default to stock behavior.
-				original, err := os.ReadFile(filepath.Join(runtime.GOROOT(), "src/runtime/signal_unix.go"))
+				original, err := os.ReadFile(filepath.Join(root, "src/runtime/signal_unix.go"))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -54,12 +62,12 @@ func main(){
 				if err := os.WriteFile(replacement, []byte(patched), 0600); err != nil {
 					t.Fatal(err)
 				}
-				overlay, _ := json.Marshal(map[string]any{"Replace": map[string]string{filepath.Join(runtime.GOROOT(), "src/runtime/signal_unix.go"): replacement}})
+				overlay, _ := json.Marshal(map[string]any{"Replace": map[string]string{filepath.Join(root, "src/runtime/signal_unix.go"): replacement}})
 				path := filepath.Join(dir, "overlay.json")
 				if err := os.WriteFile(path, overlay, 0600); err != nil {
 					t.Fatal(err)
 				}
-				build = exec.Command("go", "build", "-overlay="+path, "-o", bin, source)
+				build = localGoCommand(root, "build", "-overlay="+path, "-o", bin, source)
 			}
 			if out, err := build.CombinedOutput(); err != nil {
 				t.Fatalf("build: %v\n%s", err, out)
