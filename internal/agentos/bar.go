@@ -119,12 +119,6 @@ func dispatchDagEntry(source, target string, args []string, capture bool) int {
 		return 2
 	}
 	argv := []string{self, "dag", "--quiet", "--file", dagFile}
-	// The DAG journal tees stdout through an io.Writer, turning the terminal
-	// child's stdout into a pipe. Interactive genie already has its own durable
-	// session log, so retain the real terminal descriptor for its TUI.
-	if target == "chat" && os.Getenv("GENIE_PRESERVE_TTY") == "1" && isTerminal(os.Stdin) && isTerminal(os.Stdout) {
-		argv = append(argv, "--no-journal")
-	}
 	if target != "" {
 		argv = append(argv, target)
 	}
