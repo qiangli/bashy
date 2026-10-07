@@ -35,7 +35,7 @@ bashy = a.source / ('bashy' + suffix)
 blocked = run([bashy, 'fetch', '--timeout', '5s', 'https://github.com'], check=False, overrides={'BASHY_OFFLINE': '0'})
 if blocked.returncode == 0:
     raise SystemExit('network isolation ineffective: candidate fetched external content')
-denial = re.compile(r'network is unreachable|operation not permitted|permission denied|connectex|i/o timeout|context deadline exceeded|no route to host|connection.*(?:timed out|refused)|lookup.*(?:denied|timeout)', re.I)
+denial = re.compile(r'network is unreachable|operation not permitted|permission denied|connectex|i/o timeout|context deadline exceeded|no route to host|connection.*(?:timed out|refused)|lookup.*(?:denied|timeout|no such host)', re.I)
 if not denial.search(blocked.stdout + blocked.stderr):
     raise SystemExit('external fetch failed without a recognizable network denial: ' + blocked.stderr)
 run([bashy, 'self', 'install', '--dir', a.destination])
