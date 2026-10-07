@@ -51,6 +51,7 @@ func init() {
 	// The engine's terminal frontend is ycode's native TUI; a literal line
 	// typed there (ladder rung 0/1) runs on bashy itself, byte-identically.
 	ycodecli.LiteralShell = cli.LiteralCommand
+	ycodecli.LiteralCommands = tool.Names
 	cli.AgentOSOwnedCommand = func(name string) bool { return tool.Lookup(name) != nil }
 	cli.AgentOSOwnedNames = tool.Names
 	cli.AgentOSDispatch = agentos.Dispatch
