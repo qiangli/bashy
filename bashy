@@ -4,7 +4,7 @@ set -eu
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 bin="$here/bin/bashy"
 
-bootstrap_bashy=${BASHY:-}
+bootstrap_bashy=${BASHY_EXE:-${BASHY:-}}
 if [ -z "$bootstrap_bashy" ] && command -v bashy >/dev/null 2>&1; then
 	bootstrap_bashy=$(command -v bashy)
 fi
@@ -33,9 +33,9 @@ if [ ! -x "$bin" ] || [ "${BASHY_BOOTSTRAP_REBUILD:-0}" = 1 ]; then
 			tag_args="-tags=$spa_tag"
 		fi
 		if [ -n "$bootstrap_bashy" ] && [ -x "$bootstrap_bashy" ]; then
-			"$bootstrap_bashy" go build -trimpath $tag_args -ldflags "$ldflags" -o "$bin" ./cmd/bashy
+			BASHY_EXE="$bootstrap_bashy" scripts/go-product.sh build -trimpath $tag_args -ldflags "$ldflags" -o "$bin" ./cmd/bashy
 		else
-			go build -trimpath $tag_args -ldflags "$ldflags" -o "$bin" ./cmd/bashy
+			BASHY_EXE= scripts/go-product.sh build -trimpath $tag_args -ldflags "$ldflags" -o "$bin" ./cmd/bashy
 		fi
 	)
 fi

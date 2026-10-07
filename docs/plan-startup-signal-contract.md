@@ -26,7 +26,7 @@ This covers ordinary asynchronous signal numbers, including ABRT, QUIT and
 TERM. It does **not** promise pre-main ignore for user-generated synchronous
 fault signal numbers such as SEGV/FPE, or runtime-reserved signals.
 
-Make host/FIPS/dist/scratch, artifact builds, native Darwin release and
+The root `./bashy` bootstrap, Make host/FIPS/dist/scratch, artifact builds, native Darwin release and
 GoReleaser use the product wrapper. Windows uses the unmodified runtime. A
 plain upstream `go build` is a developer build and does not provide this early
 startup contract. Nested signal regression builds use the same product wrapper.
@@ -46,3 +46,13 @@ the assertion. The test then attempts trap/reset and another delivery. Guards
 cover default TERM, Notify/Stop, the disabled overlay and a real nil-pointer
 fault. Required remote full tests and the release build matrix remain gates;
 a focused pass is not a full-suite pass.
+
+Bootstrap follow-up: both managed and plain-Go bootstrap paths use the product
+builder. Explicit BASHY_EXE takes precedence over BASHY and PATH discovery.
+The focused bootstrap regression executes the real entry script with a
+recording builder and checks all four selections, build flags and forwarded
+arguments. Against the previous entry script all four cases fail by invoking
+Go directly; with the correction all four pass. On Darwin/arm64,
+`go test ./tools/productgo -count=1 -v` passes (5.475s), including the runtime
+ignore/Notify/Stop/fault controls and managed executor without Go on PATH.
+These focused results do not supersede the outstanding Linux full-suite gate.
