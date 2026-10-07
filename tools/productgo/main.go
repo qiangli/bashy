@@ -39,7 +39,7 @@ func main() {
 
 func run() error {
 	if len(os.Args) < 5 {
-		return fmt.Errorf("usage: productgo GOOS GOARCH CGO_ENABLED build|test|run [args]")
+		return fmt.Errorf("usage: productgo GOOS GOARCH CGO_ENABLED build [args]")
 	}
 	for i, key := range []string{"GOOS", "GOARCH", "CGO_ENABLED"} {
 		if os.Args[i+1] == "" {
@@ -49,7 +49,7 @@ func run() error {
 		}
 	}
 	args := os.Args[4:]
-	if args[0] != "build" && args[0] != "test" && args[0] != "run" {
+	if args[0] != "build" {
 		return fmt.Errorf("unsupported product command %q", args[0])
 	}
 	probe := goCommand("env", "-json", "GOROOT", "GOVERSION", "GOOS")
@@ -70,14 +70,11 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		if fmt.Sprintf("%x", sha256.Sum256(original)) != sourceHash {
-			return fmt.Errorf("unrecognized runtime source: %s", source)
+		patched, err := patchRuntimeSource(original)
+		if err != nil {
+			return err
 		}
-		anchor := "\tt := &sigtable[sig]\n\tif t.flags&_SigSetStack != 0 {"
-		if strings.Count(string(original), anchor) != 1 {
-			return fmt.Errorf("runtime patch anchor not unique")
-		}
-		patched := strings.Replace(string(original), anchor, "\tt := &sigtable[sig]\n"+insertion+"\tif t.flags&_SigSetStack != 0 {", 1) + helpers
+
 		// Private per-invocation files avoid races with concurrent builds. Go's
 		// build cache still keys compiled runtime objects by their contents.
 		dir, err := os.MkdirTemp("", "bashy-runtime-overlay-")
@@ -94,7 +91,7 @@ func run() error {
 		if err := os.WriteFile(path, overlay, 0600); err != nil {
 			return err
 		}
-		ldflags := "-X runtime.bashyInheritedIgnore=1"
+		ldflags := ""
 		remaining := []string{}
 		for i := 1; i < len(args); i++ {
 			arg := args[i]
@@ -116,6 +113,10 @@ func run() error {
 		if strings.Contains(os.Getenv("GOFLAGS"), "-overlay") || strings.Contains(os.Getenv("GOFLAGS"), "-ldflags") {
 			return fmt.Errorf("GOFLAGS overlay/ldflags unsupported; pass flags explicitly")
 		}
+		if strings.Contains(ldflags, "runtime.bashyInheritedIgnore") {
+			return fmt.Errorf("caller cannot override the product startup contract")
+		}
+		ldflags += " -X runtime.bashyInheritedIgnore=1"
 		args = append([]string{args[0], "-overlay=" + path, "-ldflags=" + ldflags}, remaining...)
 	}
 	cmd := goCommand(args...)
@@ -135,4 +136,15 @@ func goCommand(args ...string) *exec.Cmd {
 		return exec.Command(front, append([]string{"go"}, args...)...)
 	}
 	return exec.Command("go", args...)
+}
+
+func patchRuntimeSource(original []byte) (string, error) {
+	if fmt.Sprintf("%x", sha256.Sum256(original)) != sourceHash {
+		return "", fmt.Errorf("unrecognized Go runtime source")
+	}
+	anchor := "\tt := &sigtable[sig]\n\tif t.flags&_SigSetStack != 0 {"
+	if strings.Count(string(original), anchor) != 1 {
+		return "", fmt.Errorf("runtime patch anchor not unique")
+	}
+	return strings.Replace(string(original), anchor, "\tt := &sigtable[sig]\n"+insertion+"\tif t.flags&_SigSetStack != 0 {", 1) + helpers, nil
 }

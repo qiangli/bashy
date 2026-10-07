@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,7 +38,29 @@ func main(){
 	for _, active := range []string{"1", "0"} {
 		t.Run("activation="+active, func(t *testing.T) {
 			bin := filepath.Join(dir, "probe"+active)
-			build := exec.Command("../../scripts/go-product.sh", "build", "-ldflags=-X runtime.bashyInheritedIgnore="+active, "-o", bin, source)
+			build := exec.Command("../../scripts/go-product.sh", "build", "-o", bin, source)
+			if active == "0" {
+				// Compile the same overlay without any activation flag, outside
+				// the product wrapper; the runtime must default to stock behavior.
+				original, err := os.ReadFile(filepath.Join(runtime.GOROOT(), "src/runtime/signal_unix.go"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				patched, err := patchRuntimeSource(original)
+				if err != nil {
+					t.Fatal(err)
+				}
+				replacement := filepath.Join(dir, "signal_unix.go")
+				if err := os.WriteFile(replacement, []byte(patched), 0600); err != nil {
+					t.Fatal(err)
+				}
+				overlay, _ := json.Marshal(map[string]any{"Replace": map[string]string{filepath.Join(runtime.GOROOT(), "src/runtime/signal_unix.go"): replacement}})
+				path := filepath.Join(dir, "overlay.json")
+				if err := os.WriteFile(path, overlay, 0600); err != nil {
+					t.Fatal(err)
+				}
+				build = exec.Command("go", "build", "-overlay="+path, "-o", bin, source)
+			}
 			if out, err := build.CombinedOutput(); err != nil {
 				t.Fatalf("build: %v\n%s", err, out)
 			}
@@ -67,5 +90,55 @@ func main(){
 				})
 			}
 		})
+	}
+}
+
+func TestProductBuildRejectsContractOverride(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("Unix runtime overlay")
+	}
+	for _, args := range [][]string{{"build", "-ldflags=-X runtime.bashyInheritedIgnore=0", "."}, {"run", ".", "--", "-ldflags=program-argument"}, {"test", "."}} {
+		out, err := exec.Command("../../scripts/go-product.sh", args...).CombinedOutput()
+		if err == nil || (!strings.Contains(string(out), "cannot override") && !strings.Contains(string(out), "only product builds")) {
+			t.Fatalf("args=%q err=%v out=%s", args, err, out)
+		}
+	}
+	if _, err := patchRuntimeSource([]byte("unknown source")); err == nil {
+		t.Fatal("accepted unknown runtime source")
+	}
+}
+
+func TestManagedGoWithoutHostGoOnPATH(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX managed front door")
+	}
+	dir := t.TempDir()
+	realGo, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The front door owns Go provisioning. PATH intentionally has no go (or cc).
+	for _, name := range []string{"env", "dirname"} {
+		path, err := exec.LookPath(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(path, filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	front := filepath.Join(dir, "managed-go")
+	script := "#!/bin/sh\n[ \"$1\" = go ] || exit 91\nshift\nexec '" + strings.ReplaceAll(realGo, "'", "'\\''") + "' \"$@\"\n"
+	if err := os.WriteFile(front, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(source, []byte("package main\nfunc main() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("../../scripts/go-product.sh", "build", "-o", filepath.Join(dir, "probe"), source)
+	cmd.Env = append(os.Environ(), "PATH="+dir, "BASHY_EXE="+front, "CGO_ENABLED=0")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("managed-only build: %v\n%s", err, out)
 	}
 }

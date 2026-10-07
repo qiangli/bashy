@@ -30,8 +30,13 @@ Make host/FIPS/dist/scratch, artifact builds, native Darwin release and
 GoReleaser use the product wrapper. Windows uses the unmodified runtime. A
 plain upstream `go build` is a developer build and does not provide this early
 startup contract. Nested signal regression builds use the same product wrapper.
-The build wrapper accepts explicit linker flags but refuses caller overlays
-or GOFLAGS linker overrides rather than silently replacing them.
+The wrapper supports `build` only; `run`/`test` are rejected rather than
+misinterpreting a target program's arguments. It accepts explicit linker flags
+but rejects changes to the runtime activation, caller overlays, and GOFLAGS
+linker overrides. It requires the selected toolchain to be Go 1.27.1 and fails
+on a newer selected toolchain instead of downloading or switching silently.
+Artifact/DAG callers supplying BASHY_EXE keep that managed Go executor for both
+the driver bootstrap and every Go subprocess, even without host Go on PATH.
 
 Validation plan: first reproduce on the unchanged runtime with the same Go
 version, then repeat isolated and under load on Linux. The test-only
