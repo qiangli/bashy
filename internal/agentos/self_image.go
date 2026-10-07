@@ -196,10 +196,11 @@ func scratchArtifact(ctx context.Context, stderr io.Writer, version, arch string
 		}
 		candidates = []string{v, v + "-dev"}
 	}
+	scratchName := "bashy-scratch-" + arch
 	var lastErr error
 	for _, v := range candidates {
 		tool, err := binmgr.ResolveGitHub(ctx, binmgr.GitHubSpec{
-			Name:    "bashy-scratch-" + arch,
+			Name:    scratchName,
 			Repo:    bashyReleaseRepo,
 			Version: v,
 			AssetMatch: func(name, _, _ string) bool {

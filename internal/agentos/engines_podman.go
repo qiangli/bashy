@@ -125,7 +125,9 @@ func provisionPodman(ctx context.Context) string {
 		if !ok {
 			return ""
 		}
-		fmt.Fprintf(os.Stderr, "bashy podman: fetching podman %s for %s — first run only…\n", t.Version, binmgr.Platform())
+		if !binmgr.Offline() {
+			fmt.Fprintf(os.Stderr, "bashy podman: fetching podman %s for %s — first run only…\n", t.Version, binmgr.Platform())
+		}
 		var err error
 		p, err = binmgr.Ensure(ctx, t)
 		if err != nil {

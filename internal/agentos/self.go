@@ -33,7 +33,7 @@ It does not replace the running executable unless you explicitly install to a
 destination path.`,
 		SilenceUsage: true,
 	}
-	cmd.AddCommand(selfFetchCmd(), selfBuildCmd(), selfInstallCmd(), selfCheckCmd(), selfImageCmd())
+	cmd.AddCommand(selfFetchCmd(), selfBuildCmd(), selfInstallCmd(), selfCheckCmd(), selfImageCmd(), selfSeedCmd())
 	return cmd
 }
 
@@ -83,56 +83,120 @@ func selfFetchCmd() *cobra.Command {
 }
 
 func selfInstallCmd() *cobra.Command {
-	var version string
-	var source bool
-	cmd := &cobra.Command{
-		Use:   "install [path]",
-		Short: "Install bashy to a target path",
-		Long: `Install bashy to PATH. By default this installs a cached release binary.
-Pass --source to build from the current source checkout first. With no path,
-install next to the currently running executable. The target is written via a
-same-directory temp file and rename.`,
-		Args: cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			target := ""
-			if len(args) == 1 {
-				target = args[0]
+	var version, dir, seed string
+	var source, service, userMode, systemMode bool
+	cmd := &cobra.Command{Use: "install [path]", Short: "Install the bashy product and optional outpost service", Long: `Install bashy, outpost, bash and sh together. By default, use the four files
+beside this executable (works offline). --version fetches a verified release.
+--dir selects the install directory; [path] selects the bashy executable path.
+--source preserves the developer-only single-binary build/install workflow.`, Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		if dir != "" && len(args) > 0 {
+			return errors.New("--dir and a target path are mutually exclusive")
+		}
+		if userMode && systemMode {
+			return errors.New("--user and --system are mutually exclusive")
+		}
+		if (userMode || systemMode) && !service {
+			return errors.New("--user and --system require --service")
+		}
+		if source && service {
+			return errors.New("--source builds only bashy; use the paired release to install a service")
+		}
+		if service && selfInstallEUID() == 0 {
+			return errors.New("refusing --service as root: a root install writes root-owned files the non-root service user cannot use.\n" +
+				"Install as the regular user, then register the service:\n" +
+				"  bashy self install --service --user\n" +
+				"  or: bashy self install && sudo ~/.local/bin/outpost service install --system --run-as <user>")
+		}
+		if seed != "" {
+			if err := binmgr.ImportSeed(cmd.Context(), seed); err != nil {
+				return err
 			}
-			target, err := resolveSelfInstallTarget(target)
+		}
+		target := ""
+		if len(args) == 1 {
+			target = args[0]
+		}
+		if dir != "" {
+			target = filepath.Join(dir, releaseBinaryName())
+		}
+		target, err := resolveSelfInstallTarget(target)
+		if err != nil {
+			return err
+		}
+		if source {
+			if !cmd.Flags().Changed("version") {
+				version = "dev"
+			}
+			tmp, err := os.MkdirTemp("", "bashy-self-build-*")
 			if err != nil {
 				return err
 			}
-			cached := ""
-			if source {
-				if !cmd.Flags().Changed("version") {
-					version = "dev"
-				}
-				tmpDir, err := os.MkdirTemp("", "bashy-self-build-*")
-				if err != nil {
-					return err
-				}
-				defer os.RemoveAll(tmpDir)
-				cached = filepath.Join(tmpDir, releaseBinaryName())
-				if err := buildSelfBinary(cmd.Context(), cached, version); err != nil {
-					return err
-				}
-			} else {
-				cached, err = ensureBashyRelease(cmd.Context(), version)
-				if err != nil {
-					return err
-				}
+			defer os.RemoveAll(tmp)
+			cached := filepath.Join(tmp, releaseBinaryName())
+			if err := buildSelfBinary(cmd.Context(), cached, version); err != nil {
+				return err
 			}
 			if err := installExecutable(cached, target); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "installed %s\n", target)
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&version, "version", envOr("BASHY_SELF_VERSION", "latest"), "Release tag to install (default latest)")
-	cmd.Flags().BoolVar(&source, "source", false, "Build from the current source checkout instead of installing a release")
+		} else {
+			if filepath.Base(target) != releaseBinaryName() {
+				return errors.New("paired install target must be named " + releaseBinaryName() + "; use --dir")
+			}
+			var members map[string]string
+			if !cmd.Flags().Changed("version") && os.Getenv("BASHY_SELF_VERSION") == "" {
+				exe, err := os.Executable()
+				if err != nil {
+					return err
+				}
+				members, err = adjacentProduct(exe)
+				if err != nil {
+					return err
+				}
+			}
+			if members == nil {
+				tool, err := resolveBashyRelease(cmd.Context(), version)
+				if err != nil {
+					return err
+				}
+				members, err = binmgr.EnsureMembers(cmd.Context(), tool, productMemberNames())
+				if err != nil {
+					return err
+				}
+			}
+			if err := installProduct(cmd.Context(), members, target, cmd.OutOrStdout(), cmd.ErrOrStderr()); err != nil {
+				return err
+			}
+		}
+		if service {
+			args := []string{"service", "install"}
+			if userMode {
+				args = append(args, "--user")
+			}
+			if systemMode {
+				args = append(args, "--system")
+			}
+			child := exec.CommandContext(cmd.Context(), filepath.Join(filepath.Dir(target), binmgr.BinaryName("outpost")), args...)
+			child.Stdin, child.Stdout, child.Stderr = cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr()
+			if err := child.Run(); err != nil {
+				return fmt.Errorf("register service: %w", err)
+			}
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "installed %s\n", target)
+		return nil
+	}}
+	cmd.Flags().StringVar(&version, "version", envOr("BASHY_SELF_VERSION", "latest"), "Release tag to fetch instead of using adjacent files")
+	cmd.Flags().StringVar(&dir, "dir", "", "Install all product executables into this directory")
+	cmd.Flags().StringVar(&seed, "seed", "", "Import a verified offline tool seed before installation")
+	cmd.Flags().BoolVar(&source, "source", false, "Build only bashy from the current source checkout")
+	cmd.Flags().BoolVar(&service, "service", false, "Register the installed outpost service")
+	cmd.Flags().BoolVar(&userMode, "user", false, "Register a per-user service")
+	cmd.Flags().BoolVar(&systemMode, "system", false, "Register a system service")
 	return cmd
 }
+
+// selfInstallEUID is a seam so the root refusal is testable unprivileged.
+var selfInstallEUID = os.Geteuid
 
 func selfBuildCmd() *cobra.Command {
 	var version string
@@ -241,7 +305,11 @@ func ensureBashyRelease(ctx context.Context, version string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return binmgr.Ensure(ctx, tool)
+	members, err := binmgr.EnsureMembers(ctx, tool, productMemberNames())
+	if err != nil {
+		return "", err
+	}
+	return members[releaseBinaryName()], nil
 }
 
 func resolveBashyRelease(ctx context.Context, version string) (binmgr.Tool, error) {
@@ -249,11 +317,12 @@ func resolveBashyRelease(ctx context.Context, version string) (binmgr.Tool, erro
 		version = "latest"
 	}
 	return binmgr.ResolveGitHub(ctx, binmgr.GitHubSpec{
-		Name:       "bashy",
-		Repo:       bashyReleaseRepo,
-		Version:    version,
-		Member:     releaseBinaryName(),
-		AssetMatch: bashyArchiveMatch,
+		Name:           "bashy",
+		RequireArchive: true,
+		Repo:           bashyReleaseRepo,
+		Version:        version,
+		Member:         releaseBinaryName(),
+		AssetMatch:     bashyArchiveMatch,
 	})
 }
 

@@ -6,6 +6,8 @@ package agentos
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/qiangli/yoke/pkg/binmgr"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -164,5 +166,107 @@ func TestSelfCommandIncludesBuildAndSourceInstall(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "--source") {
 		t.Fatalf("self install help missing --source:\n%s", out.String())
+	}
+}
+
+func TestInstallProductStagesBeforeChangingAnyMember(t *testing.T) {
+	source, target := t.TempDir(), t.TempDir()
+	members := map[string]string{}
+	for _, name := range productMemberNames() {
+		members[name] = filepath.Join(source, name)
+		if err := os.WriteFile(members[name], []byte("new-"+name), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(target, name), []byte("old-"+name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Last source is absent: no earlier installed member may have changed.
+	if err := os.Remove(members[binmgr.BinaryName("outpost")]); err != nil {
+		t.Fatal(err)
+	}
+	if err := installProductFiles(members, filepath.Join(target, releaseBinaryName())); err == nil {
+		t.Fatal("expected missing companion error")
+	}
+	for _, name := range productMemberNames() {
+		data, err := os.ReadFile(filepath.Join(target, name))
+		if err != nil || string(data) != "old-"+name {
+			t.Fatalf("%s changed before staging completed: %q %v", name, data, err)
+		}
+	}
+}
+func TestAdjacentProductAndVersionPair(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range productMemberNames() {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if members, err := adjacentProduct(filepath.Join(dir, releaseBinaryName())); err != nil || len(members) != 4 {
+		t.Fatalf("members=%v err=%v", members, err)
+	}
+	if !matchingProductBanner("bashy, version 5.3.0(1)-bashy-v1.2.3-dev", "v1.2.3") {
+		t.Fatal("matching product rejected")
+	}
+	if matchingProductBanner("bashy, version 5.3.0(1)-bashy-v1.2.4", "v1.2.3") {
+		t.Fatal("mismatched product accepted")
+	}
+	os.Remove(filepath.Join(dir, binmgr.BinaryName("sh")))
+	if _, err := adjacentProduct(filepath.Join(dir, releaseBinaryName())); err == nil {
+		t.Fatal("partial archive accepted")
+	}
+}
+
+func TestSelfSeedExportAndInstallSeed(t *testing.T) {
+	cache := t.TempDir()
+	t.Setenv("BASHY_BIN_CACHE", cache)
+	toolDir := filepath.Join(cache, "fixture-tool", "v1")
+	if err := os.MkdirAll(toolDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	binPath := filepath.Join(toolDir, binmgr.BinaryName("fixture-tool"))
+	if err := os.WriteFile(binPath, []byte("echo fixture"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	seedTar := filepath.Join(t.TempDir(), "seed.tar")
+	cmd := selfSeedCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"export", seedTar})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("self seed export failed: %v\n%s", err, out.String())
+	}
+	if _, err := os.Stat(seedTar); err != nil {
+		t.Fatalf("seed tar not created: %v", err)
+	}
+
+	cache2 := t.TempDir()
+	t.Setenv("BASHY_BIN_CACHE", cache2)
+	if err := binmgr.ImportSeed(cmd.Context(), seedTar); err != nil {
+		t.Fatalf("import seed failed: %v", err)
+	}
+	if imported := binmgr.CachedBinary("fixture-tool"); imported == "" {
+		t.Fatal("imported tool not found in cache")
+	}
+}
+
+func TestSelfInstallServiceRefusesRootBeforeWrites(t *testing.T) {
+	orig := selfInstallEUID
+	selfInstallEUID = func() int { return 0 }
+	t.Cleanup(func() { selfInstallEUID = orig })
+	dir := filepath.Join(t.TempDir(), "bin")
+	for _, flags := range [][]string{{"--service"}, {"--service", "--system"}} {
+		cmd := selfInstallCmd()
+		cmd.SetArgs(append([]string{"--dir", dir, "--seed", filepath.Join(t.TempDir(), "missing.seed")}, flags...))
+		cmd.SetOut(io.Discard)
+		cmd.SetErr(io.Discard)
+		err := cmd.Execute()
+		if err == nil || !strings.Contains(err.Error(), "refusing --service as root") {
+			t.Fatalf("%v: err = %v, want root refusal", flags, err)
+		}
+		if _, statErr := os.Stat(dir); !os.IsNotExist(statErr) {
+			t.Fatalf("%v: install dir created before refusal: %v", flags, statErr)
+		}
 	}
 }

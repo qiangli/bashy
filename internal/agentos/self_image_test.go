@@ -4,6 +4,9 @@
 package agentos
 
 import (
+	"context"
+	"github.com/qiangli/yoke/pkg/binmgr"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,5 +59,22 @@ func TestEngineArgvOverride(t *testing.T) {
 	argv, err = engineArgv("")
 	if err != nil || len(argv) != 2 || argv[1] != "podman" {
 		t.Fatalf("default engine = %v, %v (want <self> podman)", argv, err)
+	}
+}
+
+func TestScratchArtifactDoesNotRelabelCachedVersion(t *testing.T) {
+	t.Setenv("BASHY_OFFLINE", "1")
+	t.Setenv("BASHY_SCRATCH_BIN", "")
+	cache := t.TempDir()
+	t.Setenv("BASHY_BIN_CACHE", cache)
+	old := filepath.Join(cache, "bashy-scratch-amd64", "v1.0.0", binmgr.BinaryName("bashy-scratch-amd64"))
+	if err := os.MkdirAll(filepath.Dir(old), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(old, []byte("old release"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, version, err := scratchArtifact(context.Background(), io.Discard, "v2.0.0", "amd64"); err == nil {
+		t.Fatalf("old cached binary was accepted as %s", version)
 	}
 }

@@ -61,8 +61,17 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/bashy-install"
           gh release download "${{ steps.rel.outputs.tag }}" --repo "$GITHUB_REPOSITORY" \
-            --pattern "${{ matrix.asset }}" --dir "$RUNNER_TEMP/bashy-install"
+            --pattern "${{ matrix.asset }}" --pattern checksums.txt --dir "$RUNNER_TEMP/bashy-install"
           cd "$RUNNER_TEMP/bashy-install"
+          python - "${{ matrix.asset }}" <<'PY_CHECKSUM'
+          import hashlib, pathlib, sys
+          name = sys.argv[1]
+          entries = [line.split() for line in pathlib.Path('checksums.txt').read_text().splitlines()]
+          matches = [parts[0] for parts in entries if len(parts) == 2 and parts[1] == name]
+          digest = hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest()
+          if len(matches) != 1 or matches[0] != digest:
+              raise SystemExit('release archive checksum mismatch')
+          PY_CHECKSUM
           case "${{ matrix.asset }}" in
             *.zip) unzip -q "${{ matrix.asset }}" ;;
             *) tar -xzf "${{ matrix.asset }}" ;;
@@ -78,3 +87,56 @@ jobs:
 
       - name: Quickstart gate — judge (six exit codes) + decorators, kwargs, enums, readonly
         run: ./examples/quickstart/check.sh "$BASHY_BIN"
+
+      - name: Prove the candidate fetch command works before network isolation
+        run: |
+          BASHY_OFFLINE=0 "$BASHY_BIN" fetch --timeout 5s https://github.com > "$RUNNER_TEMP/bashy-fetch-online.txt"
+
+      - name: Install and verify the user service on the disposable runner
+        run: |
+          # The service manager does not inherit temporary XDG overrides.
+          # This gate is restricted to the disposable hosted CI runner.
+          unset XDG_CONFIG_HOME XDG_CACHE_HOME
+          outpost="$RUNNER_TEMP/bashy-service-bin/outpost"
+          case "$BASHY_BIN" in *.exe) outpost="$outpost.exe" ;; esac
+          trap 'if [ -f "$outpost" ]; then "$outpost" service uninstall --user; fi' EXIT
+          "$BASHY_BIN" self install --dir "$RUNNER_TEMP/bashy-service-bin" --service --user
+          "$outpost" service status --user
+          ready=0
+          for attempt in {1..30}; do
+            if "$outpost" status; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" = 1
+
+      - name: Offline installation with an isolated Linux network namespace
+        if: runner.os == 'Linux'
+        run: |
+          sudo unshare --net bash -c 'ip link set lo up; exec python3 "$1/scripts/offline-install-smoke.py" "$2" "$3" "$4" "$1"' -- "$GITHUB_WORKSPACE" "$RUNNER_TEMP/bashy-install" "$RUNNER_TEMP/bashy-offline-bin" "$RUNNER_TEMP/bashy-offline-home"
+
+      - name: Seeded managed OCI engine offline in a Linux network namespace
+        if: runner.os == 'Linux'
+        run: |
+          rc=0
+          sudo "$GITHUB_WORKSPACE/scripts/offline-seed-oci-smoke.sh" "$RUNNER_TEMP/bashy-offline-bin" "$RUNNER_TEMP/bashy-seed-oci" || rc=$?
+          # Retain raw podman output with the other offline logs, pass or fail.
+          sudo sh -c 'cp "$1"/oci-*.log "$2"/ && chmod a+r "$2"/oci-*.log' -- "$RUNNER_TEMP/bashy-seed-oci" "$RUNNER_TEMP/bashy-offline-home" || true
+          exit "$rc"
+
+      - name: Offline installation with process-scoped macOS network denial
+        if: runner.os == 'macOS'
+        run: |
+          sandbox-exec -p '(version 1)(allow default)(deny network*)(allow network* (local ip "localhost:*") (remote ip "localhost:*"))' python3 scripts/offline-install-smoke.py "$RUNNER_TEMP/bashy-install" "$RUNNER_TEMP/bashy-offline-bin" "$RUNNER_TEMP/bashy-offline-home" "$GITHUB_WORKSPACE"
+
+      - name: Offline installation with candidate-only Windows firewall rules
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/offline-install-windows.ps1 -Source "$env:RUNNER_TEMP/bashy-install" -Destination "$env:RUNNER_TEMP/bashy-offline-bin" -Work "$env:RUNNER_TEMP/bashy-offline-home" -Repo "$env:GITHUB_WORKSPACE"
+
+      - name: Retain offline results and raw daemon logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-install-${{ runner.os }}
+          path: ${{ runner.temp }}/bashy-offline-home/*.log
+          if-no-files-found: warn
