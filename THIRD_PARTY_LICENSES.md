@@ -104,3 +104,11 @@ on 2026-10-02.
    real license, never embedded or redistributed. The stale `java`/`javac`/
    `mvn` synopsis entries stay removed until the provisioner exists; Sprint
    370 (deferred) delivers the JDK provisioner and the `~~~java` fence.
+
+## Product Go runtime overlay
+
+Product Unix binaries compile a narrowly modified Go 1.27.1 runtime using a
+source overlay. Copyright The Go Authors, BSD-3-Clause; full notice in
+[`tools/productgo/GO-LICENSE`](tools/productgo/GO-LICENSE). The original source
+is supplied by the pinned Go toolchain and verified by SHA-256 before applying
+the overlay. See [startup contract](docs/plan-startup-signal-contract.md).

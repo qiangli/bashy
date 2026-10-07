@@ -53,9 +53,9 @@ jobs:
           set -euxo pipefail
           mkdir -p bin
           if [ "$RUNNER_OS" = "Windows" ]; then
-            go build -o bin/bashy.exe ./cmd/bashy
+            ./scripts/go-product.sh build -o bin/bashy.exe ./cmd/bashy
           else
-            go build -o bin/bashy ./cmd/bashy
+            ./scripts/go-product.sh build -o bin/bashy ./cmd/bashy
           fi
           export PATH="$PWD/bin:$PATH"
           if [ "$RUNNER_OS" = "Windows" ]; then
@@ -87,9 +87,9 @@ jobs:
           for osarch in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             os=${osarch%/*}; arch=${osarch#*/}
             echo "cmd/bashy $os/$arch (lean)..."
-            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -o /dev/null ./cmd/bashy
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" ./scripts/go-product.sh build -o /dev/null ./cmd/bashy
             echo "cmd/sh $os/$arch (strict POSIX)..."
-            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -o /dev/null ./cmd/sh
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" ./scripts/go-product.sh build -o /dev/null ./cmd/sh
           done
           # The fixture runner and its tests must at least COMPILE for Windows
           # on every leg (the job-object code is windows-only and invisible to

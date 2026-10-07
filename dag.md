@@ -49,7 +49,8 @@ topological order through the in-process shell — add `-j N` for parallel.
 ### build
 Build both independent binaries into bin/ (bash = pure drop-in from cmd/bash;
 bashy = AgentOS shell from cmd/bashy). Separate compilations — bash's import
-graph never includes coreutils. The recipe invokes `"$BASHY" go build`, so an
+graph never includes coreutils. Product compilation uses the pinned runtime
+overlay through `scripts/go-product.sh`, so an
 installed or checkout-local bashy owns the Go toolchain path. This is the
 **lean worker** bashy: shell + coreutils userland + git + dag + `bashy go`
 (self-provisioning Go toolchain) +
@@ -1376,7 +1377,7 @@ rm -rf bin
 ### build-bash
 Build ONLY `bin/bash` — the pure Bash 5.3 drop-in from cmd/bash (import graph
 never includes coreutils; ~5.7 MB). All the conformance harness needs. Uses
-`"$BASHY" go build` so the toolchain path is bashy-owned.
+`scripts/go-product.sh build` so the startup signal contract is enabled.
 Sources: cmd/bash, internal/cli, go.mod, go.sum
 Generates: bin/bash
 Effects: cred, exec, net, read, write

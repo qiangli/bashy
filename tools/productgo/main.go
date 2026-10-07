@@ -52,7 +52,7 @@ func run() error {
 	if args[0] != "build" && args[0] != "test" && args[0] != "run" {
 		return fmt.Errorf("unsupported product command %q", args[0])
 	}
-	probe := exec.Command("go", "env", "-json", "GOROOT", "GOVERSION", "GOOS")
+	probe := goCommand("env", "-json", "GOROOT", "GOVERSION", "GOOS")
 	data, err := probe.Output()
 	if err != nil {
 		return err
@@ -118,7 +118,7 @@ func run() error {
 		}
 		args = append([]string{args[0], "-overlay=" + path, "-ldflags=" + ldflags}, remaining...)
 	}
-	cmd := exec.Command("go", args...)
+	cmd := goCommand(args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		if e, ok := err.(*exec.ExitError); ok {
@@ -127,4 +127,12 @@ func run() error {
 		return err
 	}
 	return nil
+}
+
+// Artifact/DAG builds can retain their explicitly selected managed toolchain.
+func goCommand(args ...string) *exec.Cmd {
+	if front := os.Getenv("BASHY_EXE"); front != "" {
+		return exec.Command(front, append([]string{"go"}, args...)...)
+	}
+	return exec.Command("go", args...)
 }
