@@ -121,6 +121,19 @@ Bashy**, which is layer 3. The acronym names the product; its expansion names th
 product's top layer. Recursive in the GNU lineage, which is the joke. Design of
 record for layer 3: `../docs/bashy-yoke-framework.md` (planning-only, deferred).
 
+**Layer-3 agent surfaces.** `genie` is bashy's own agent and backend: session,
+memory, context, loop and tool-call behaviour are genie work (mechanism in the
+ycode engine bashy links, policy in genie's YAML). It is headless — no input
+box, scrolling, type-ahead or slash commands; invoked interactively it hands
+off to `bashy ycode`, the TUI and web chat UI for human users, which opens on
+genie. `bashy ycode` accepts a bare minimal slash set (`/init /plan /save
+/resume /model`, help, quit) for human convenience only; each is a shorthand
+for a declared `bashy ycode` command, which remains the surface for scripts,
+recipes and agents. bashy is the only binary users install; the ycode engine
+has no release channel of its own, and tool `ycode` is an alias of tool
+`genie` (`ycode:MODEL` equals `genie:MODEL`). Position of record:
+`../docs/bashy-agent-tui-design.md` §5.1.
+
 ## Module wiring
 
 `go.mod` requires the flat-sibling deps, resolved by `replace`:
