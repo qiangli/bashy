@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/qiangli/bashy/internal/httpproxy"
-	"github.com/qiangli/outpost/pkg/sshclient"
+	"github.com/qiangli/yoke/pkg/sshclient"
 )
 
 func testPeerReverseProxy(t *testing.T, channel *PeerChannel) {

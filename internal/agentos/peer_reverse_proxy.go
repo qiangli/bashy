@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/qiangli/outpost/pkg/sshclient"
+	"github.com/qiangli/yoke/pkg/sshclient"
 )
 
 // PeerReverseProxy owns a remote loopback listener backed by an operator proxy.

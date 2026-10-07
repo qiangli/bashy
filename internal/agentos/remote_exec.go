@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/qiangli/outpost/pkg/sshclient"
+	"github.com/qiangli/yoke/pkg/sshclient"
 	"github.com/spf13/cobra"
 )
 

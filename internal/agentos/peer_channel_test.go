@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qiangli/outpost/pkg/sshclient"
+	"github.com/qiangli/yoke/pkg/sshclient"
 	"golang.org/x/crypto/ssh"
 )
 

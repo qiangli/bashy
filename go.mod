@@ -9,7 +9,6 @@ require (
 	github.com/creack/pty/v2 v2.0.1
 	github.com/ergochat/readline v0.1.3
 	github.com/qiangli/coreutils v0.0.0
-	github.com/qiangli/outpost v0.0.0-20260930195924-7775d56d352b
 	github.com/qiangli/yoke v0.0.0
 	github.com/qiangli/yoke/external/otel v0.0.0
 	github.com/rjeczalik/notify v0.9.3
@@ -54,7 +53,6 @@ require (
 	github.com/fatedier/frp v0.68.1 // indirect
 	github.com/fatedier/golib v0.6.0 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
-	github.com/hashicorp/yamux v0.1.1 // indirect
 	github.com/klauspost/reedsolomon v1.12.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -427,10 +425,6 @@ replace github.com/bashsharp/bashsharp => ../bashsharp
 // package. Same flat-sibling rule as ../sh: the submodules inside the dhnt
 // umbrella, or sibling clones of github.com/qiangli/{coreutils,yoke}.
 replace github.com/qiangli/coreutils => ../coreutils
-
-// Outpost owns the SSH protocol implementation used by the peer channel.
-// Keep the same flat-sibling wiring as the other qiangli modules.
-replace github.com/qiangli/outpost => ../outpost
 
 replace github.com/qiangli/yoke => ../yoke
 

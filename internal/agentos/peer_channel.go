@@ -3,14 +3,14 @@
 
 package agentos
 
-// The peer channel deliberately contains no SSH protocol code. Outpost owns
-// both the server and client implementation; this is only Bashy's small,
-// key-authenticated adapter around its public client API.
+// The peer channel uses yoke's shared SSH transport and Bashy's existing
+// shell session runner. It does not link the outpost service implementation.
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -18,8 +18,9 @@ import (
 	"sync"
 
 	"github.com/pkg/sftp"
-	"github.com/qiangli/outpost/pkg/sshclient"
-	"github.com/qiangli/outpost/pkg/sshserver"
+	"github.com/qiangli/bashy/internal/cli"
+	"github.com/qiangli/yoke/pkg/sshclient"
+	"github.com/qiangli/yoke/pkg/sshserver"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -75,6 +76,9 @@ func StartPeerSSHServer(ctx context.Context, cfg PeerSSHServerConfig) (*PeerSSHS
 		server.err <- sshserver.Serve(ctx, listener, sshserver.Config{
 			AuthorizedKeysPath: cfg.AuthorizedKeysPath,
 			HostKey:            hostKey,
+			Execute: func(ctx context.Context, command string, in io.Reader, out, errOut io.Writer) uint32 {
+				return uint32(cli.RunSessionCommandWithConfig(ctx, cli.SessionIO{Command: command, Env: os.Environ(), Stdin: in, Stdout: out, Stderr: errOut}, cli.SessionConfig{WireExec: WireExec, Preamble: Preamble}))
+			},
 		})
 	}()
 	return server, nil
