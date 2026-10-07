@@ -126,10 +126,14 @@ memory, context, loop and tool-call behaviour are genie work (mechanism in the
 ycode engine bashy links, policy in genie's YAML). It is headless — no input
 box, scrolling, type-ahead or slash commands; invoked interactively it hands
 off to `bashy ycode`, the TUI and web chat UI for human users, which opens on
-genie. `bashy ycode` accepts a bare minimal slash set (`/init /plan /save
+genie. `bashy ycode` accepts a bare minimal slash set (`/config /init /clear /plan /save
 /resume /model`, help, quit) for human convenience only; each is a shorthand
 for a declared `bashy ycode` command, which remains the surface for scripts,
-recipes and agents. bashy is the only binary users install; the ycode engine
+recipes and agents. `/config` reports the effective configuration or selects a
+validated file without mixing session histories; `/init` uses repository
+`GENIE.md` while preserving other agents' instruction files. `/clear` starts a
+clean session retaining configuration and model, leaves the previous session
+resumable, and refuses during a live turn or approval. bashy is the only binary users install; the ycode engine
 has no release channel of its own, and tool `ycode` is an alias of tool
 `genie` (`ycode:MODEL` equals `genie:MODEL`). Position of record:
 `../docs/bashy-agent-tui-design.md` §5.1.
