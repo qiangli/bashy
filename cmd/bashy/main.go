@@ -48,6 +48,7 @@ func init() {
 	// internal/agentos — ycode imports bashy's pkg/harnessrunner, which imports
 	// agentos, so only package main can close the loop.
 	agentos.YcodeMain = ycodecli.Main
+	agentos.YcodeHasExplicitConfig = ycodecli.HasExplicitConfig
 	// The engine's terminal frontend is ycode's native TUI; a literal line
 	// typed there (ladder rung 0/1) runs on bashy itself, byte-identically.
 	ycodecli.LiteralShell = cli.LiteralCommand
