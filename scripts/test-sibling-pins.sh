@@ -50,9 +50,15 @@ LC_ALL=C sort "$tmp/pins" >"$tmp/pins.sorted"
 [ "$(uniq "$tmp/pins.sorted" | wc -l | tr -d ' ')" -eq "$(wc -l <"$tmp/pins.sorted" | tr -d ' ')" ] ||
     fail "duplicate sibling pin"
 
-cmp -s "$tmp/replaces" "$tmp/pins.sorted" || {
+# outpost is a BUILD-only pin consumed by S4 fleet builds; it intentionally has
+# no go.mod replace since the SSH packages moved to yoke (bashy's module
+# closure must not contain outpost). Exclude it from the replace/pin
+# equality — its SHA format and bootstrap/fleet mappings are still validated
+# in the loop above.
+grep -vx 'outpost' "$tmp/pins.sorted" >"$tmp/pins.linked"
+cmp -s "$tmp/replaces" "$tmp/pins.linked" || {
     echo "test-sibling-pins: direct flat replacements and pins differ:" >&2
-    diff -u "$tmp/replaces" "$tmp/pins.sorted" >&2 || true
+    diff -u "$tmp/replaces" "$tmp/pins.linked" >&2 || true
     exit 1
 }
 
