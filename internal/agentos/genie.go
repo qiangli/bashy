@@ -2,13 +2,14 @@ package agentos
 
 // Sprint: #290; Story: #933; Story-ID: 6a0507862385
 //
-// bashy genie — the front door to genie, the local-model SWE agent (ycode's
-// examples/genie). Rod-thin: this file only finds or builds the genie bundle
-// and hands the task to it. Everything else — the host-aware model pick, the
+// bashy genie — the job front door to genie, the local-model SWE agent (ycode's
+// examples/genie). Rod-thin: this file finds or builds the genie bundle
+// and hands jobs to it. Human terminal and web use enter through bashy ycode.
+// Everything else — the host-aware model pick, the
 // run's own model server on a free port, the one-time model pull, the ycode
 // run — is the bundle's own `solve` recipe (dag.md), editable like any fish.
 //
-//	bashy genie [-m MODEL] [MESSAGE...]   one turn, or interactive (chat)
+//	bashy genie [-m MODEL] [MESSAGE...]   one turn; bare terminal use hands off to ycode
 //	bashy genie web | resume | session ...
 //	bashy genie solve TASK...  bench-style: solve TASK in the current git repository
 //	bashy genie build [--from DIR]
@@ -21,7 +22,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/qiangli/yoke/pkg/broker/door"
 	"io"
 	"net/http"
 	"os"
@@ -29,12 +29,14 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/qiangli/yoke/pkg/broker/door"
 )
 
 const genieUsage = `usage: bashy genie [-m MODEL] "MESSAGE"   one turn in this directory; the answer on stdout
        ... | bashy genie [-m MODEL]       the same, the message read from stdin
-       bashy genie [-m MODEL]             an interactive session (on a terminal)
-       bashy genie web [-m MODEL]         the browser chat page (prints the URL to open)
+       bashy genie [-m MODEL]             hand off terminal use to bashy ycode
+       bashy genie web [-m MODEL]         hand off the browser chat page to bashy ycode web
        bashy genie resume                 continue the latest session interactively
        bashy genie session [list|show|export|search|rename|fork] ...
        bashy genie solve [-m MODEL] "TASK"  bench-style run: clean git tree, patch + run record
@@ -53,6 +55,17 @@ built-in bashy ycode); the bundle's dag.md documents the rest.
 `
 
 func dispatchGenie(args []string) int {
+	return dispatchGenieWithHandoff(args, true)
+}
+
+func dispatchGenieWithHandoff(args []string, handoff bool) int {
+	literalMessage := false
+	for _, arg := range args {
+		if arg == "--" {
+			literalMessage = true
+			break
+		}
+	}
 	model, args, err := genieModelFlag(args)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy genie:", err)
@@ -75,19 +88,33 @@ func dispatchGenie(args []string) int {
 			target, args = "solve", args[1:]
 		case "smoke":
 			target, args = "smoke", args[1:]
-		case "web", "resume", "session":
+		case "web", "resume", "session", "repl", "prompt", "acp":
 			mode, args = args[0], args[1:]
 		}
 	}
-	if again, rest, err := genieModelFlag(args); err != nil {
+	if literalMessage && len(args) > 0 && args[0] == "--" {
+		args = args[1:]
+	}
+	if literalMessage {
+		// The first parse already removed --; a second parse would mistake
+		// literal message text such as -filter for an option.
+	} else if again, rest, err := genieModelFlag(args); err != nil {
 		fmt.Fprintln(os.Stderr, "bashy genie:", err)
 		return 2
 	} else if again != "" {
 		model, args = again, rest // -m after the subcommand
 	}
-	if (mode == "web" || mode == "resume") && len(args) > 0 {
+	if (mode == "web" || mode == "acp" || mode == "repl") && len(args) > 0 {
 		fmt.Fprintf(os.Stderr, "bashy genie %s takes no message\n", mode)
 		return 2
+	}
+	if mode == "web" && handoff {
+		fmt.Fprintln(os.Stderr, "bashy genie web: use `bashy ycode web`")
+		return runSelf(append([]string{"ycode"}, append(modelArgs(model), "web")...), os.Stdin, os.Stdout, os.Stderr)
+	}
+	if handoff && target == "chat" && mode == "" && len(args) == 0 && isTerminal(os.Stdin) {
+		fmt.Fprintln(os.Stderr, "bashy genie: opening `bashy ycode`")
+		return runSelf(append([]string{"ycode"}, modelArgs(model)...), os.Stdin, os.Stdout, os.Stderr)
 	}
 	bundle, err := genieBundle()
 	if err != nil {
@@ -106,10 +133,125 @@ func dispatchGenie(args []string) int {
 			os.Setenv("GENIE_MODEL_ID", model)
 		}
 	}
-	if mode != "" {
-		os.Setenv("GENIE_MODE", mode)
+	// Every invocation owns its mode. An ambient GENIE_MODE from another
+	// session must never turn an explicit terminal choice into web hosting.
+	if mode == "" {
+		mode = "chat"
 	}
+	os.Setenv("GENIE_MODE", mode)
 	return runSelf(append([]string{"run", "--target", target, bundle}, args...), os.Stdin, os.Stdout, os.Stderr)
+}
+
+func modelArgs(model string) []string {
+	if model == "" {
+		return nil
+	}
+	return []string{"-m", model}
+}
+
+// dispatchYcode selects the builtin genie for a bare invocation. An explicit
+// YAML path (flag, environment, or local agent.yaml) always keeps ycode's
+// authored configuration. Every execution entry uses genie's recipe, which
+// prepares the caller workspace and model endpoint before reentering ycode
+// with a generated config.
+func dispatchYcode(args []string) int {
+	if YcodeMain == nil {
+		fmt.Fprintln(os.Stderr, "bashy ycode: not in this build")
+		return 2
+	}
+	if YcodeHasExplicitConfig == nil {
+		fmt.Fprintln(os.Stderr, "bashy ycode: config discovery is not wired in this build")
+		return 2
+	}
+	if !YcodeHasExplicitConfig(args) {
+		if recipeArgs, selected, err := ycodeGenieRecipeArgs(args); selected {
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "bashy ycode:", err)
+				return 2
+			}
+			return dispatchGenieWithHandoff(recipeArgs, false)
+		}
+		config, err := builtinGenieConfig()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "bashy ycode:", err)
+			return 2
+		}
+		if err := os.Setenv("YCODE_CONFIG", config); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy ycode:", err)
+			return 2
+		}
+	}
+	return YcodeMain(args)
+}
+
+// ycodeGenieRecipeArgs recognizes builtin execution entries and both model
+// flag orders around web. The recipe reenters with -f, so it cannot recurse.
+func ycodeGenieRecipeArgs(args []string) ([]string, bool, error) {
+	if len(args) == 0 {
+		return nil, true, nil
+	}
+	if args[0] == "--" {
+		return append([]string{"--"}, args[1:]...), true, nil
+	}
+	model, rest, err := genieModelFlag(args)
+	if err != nil {
+		return nil, true, err
+	}
+	if len(rest) == 0 {
+		return modelArgs(model), true, nil
+	}
+	if len(args) > len(rest) && args[len(args)-len(rest)-1] == "--" {
+		return append(append(modelArgs(model), "--"), rest...), true, nil
+	}
+	switch rest[0] {
+	case "web":
+		// The model flag may occur on either side of the web verb.
+		if model == "" {
+			model, rest, err = genieModelFlag(rest[1:])
+			if err != nil {
+				return nil, true, err
+			}
+			if len(rest) != 0 {
+				return nil, false, nil
+			}
+			return append(modelArgs(model), "web"), true, nil
+		}
+		if len(rest) == 1 {
+			return append(modelArgs(model), "web"), true, nil
+		}
+	case "repl", "resume", "prompt", "acp", "session":
+		return append(modelArgs(model), rest...), true, nil
+	}
+	if args[0] == "web" {
+		model, rest, err := genieModelFlag(args[1:])
+		if err != nil {
+			return nil, true, err
+		}
+		if len(rest) == 0 {
+			return append(modelArgs(model), "web"), true, nil
+		}
+		return nil, false, nil
+	}
+	return nil, false, nil
+}
+
+func builtinGenieConfig() (string, error) {
+	home, err := genieHome()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		return "", err
+	}
+	digest, err := builtinGenieDigest()
+	if err != nil {
+		return "", err
+	}
+	source, err := materializeBuiltinGenie(home, digest)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(source, "agent.yaml"), nil
 }
 
 // genieModelFlag takes -m/--model MODEL (or --model=MODEL) from before the

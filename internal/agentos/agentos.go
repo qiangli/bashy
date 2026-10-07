@@ -667,14 +667,7 @@ func dispatch() {
 	case "full":
 		dispatchExit(dispatchFull(os.Args[2:]))
 	case "ycode":
-		// The engine for agents declared in YAML (Sprint #301): ycode's CLI
-		// in-process, wired by cmd/bashy (YcodeMain) because ycode imports
-		// pkg/harnessrunner, which imports this package.
-		if YcodeMain == nil {
-			fmt.Fprintln(os.Stderr, "bashy ycode: not in this build")
-			dispatchExit(2)
-		}
-		dispatchExit(YcodeMain(os.Args[2:]))
+		dispatchExit(dispatchYcode(os.Args[2:]))
 	case "genie":
 		// The local-model SWE agent's front door (genie.go): find or build
 		// the genie bundle and run its solve recipe.
