@@ -3,7 +3,7 @@
 package cli
 
 import (
-	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -19,13 +19,12 @@ import (
 	"github.com/creack/pty/v2"
 )
 
-// TestAgentTUILadderOverPTY is the T4 acceptance (Sprint #301): `bashy ycode`
-// on a terminal hosts the agent in bashy's interactive shell, and every line
-// goes through the ladder — a literal command runs as typed, a typo is
-// repaired and echoed, free text becomes a turn (it reaches the model), a
-// session command moves the session, and a leading "/" is no command
-// language: it is a path like in any shell.
-func TestAgentTUILadderOverPTY(t *testing.T) {
+// TestAgentTUINativeOverPTY is the A7 acceptance (Sprint #387): `bashy ycode`
+// on a terminal hosts ycode's native TUI (not bashy's interactive shell), a
+// literal line runs on the bashy binary through ycodecli.LiteralShell (its
+// parent is the TUI process, not the in-process interpreter), and free text
+// becomes a turn that reaches the model.
+func TestAgentTUINativeOverPTY(t *testing.T) {
 	bin := builtBashyBin(t)
 	config, err := filepath.Abs("../../../ycode/examples/agent.yaml")
 	if err != nil {
@@ -36,8 +35,7 @@ func TestAgentTUILadderOverPTY(t *testing.T) {
 	}
 
 	// The model endpoint records what reaches it and answers every request
-	// with one fixed text (the Responses stream), so a turn shows up as a
-	// request carrying the typed text and an answer on the terminal.
+	// with one fixed text (the Responses stream).
 	var mu sync.Mutex
 	var requests []string
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -66,10 +64,10 @@ func TestAgentTUILadderOverPTY(t *testing.T) {
 	cmd.Dir = t.TempDir()
 	cmd.Env = []string{
 		"HOME=" + home, "BASHY_HOME=" + filepath.Join(home, ".bashy"),
-		"PATH=" + filepath.Dir(bin) + ":/bin:/usr/bin", "PS1=T> ", "TERM=xterm",
+		"PATH=" + filepath.Dir(bin) + ":/bin:/usr/bin", "TERM=xterm-256color",
 		"OPENAI_BASE_URL=" + model.URL, "OPENAI_API_KEY=stub", "BASHY_HINTS=off",
 	}
-	ptmx, err := pty.Start(cmd)
+	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: 40, Cols: 140})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,58 +80,35 @@ func TestAgentTUILadderOverPTY(t *testing.T) {
 		}
 	})
 	const wait = 20 * time.Second
-	prompt := []byte("T> ")
-	first := capture.waitFor(t, prompt, wait)
-	session := regexp.MustCompile(`\[ycode ([0-9a-f]{8})\] T> `).FindSubmatch(first)
-	if session == nil {
-		t.Fatalf("the prompt does not carry the agent and session: %q", first)
+	// The native TUI greets with its leave hint; bashy's shell would show a
+	// prompt carrying "[ycode SESSION]" instead.
+	first := capture.waitFor(t, []byte("Ctrl-D leaves"), wait)
+	if regexp.MustCompile(`\[ycode [0-9a-f]{8}\]`).Match(first) {
+		t.Fatalf("bashy's in-shell agent terminal answered, not the native TUI: %q", first)
 	}
-	if !bytes.Contains(first, []byte("ask in plain words")) {
-		t.Fatalf("no greeting: %q", first)
-	}
-	send := func(line string) []byte {
+	typeLine := func(line string) int {
 		t.Helper()
 		offset := capture.len()
 		if _, err := io.WriteString(ptmx, line+"\r"); err != nil {
 			t.Fatal(err)
 		}
-		// The echoed input line itself holds no prompt; the next one does.
-		return capture.waitForFrom(t, offset+len(line), prompt, wait)
+		return offset
 	}
 
-	// Rung 0: a literal command runs as typed.
-	if out := send("echo LIT-$((1+2))"); !bytes.Contains(out, []byte("LIT-3")) {
-		t.Fatalf("literal command did not run: %q", out)
-	}
-	// Rung 1: a misspelled command name is repaired, echoed, then run.
-	out := send("ehco REPAIRED")
-	if !bytes.Contains(out, []byte("echo REPAIRED  (ehco → echo)")) || !bytes.Contains(out, []byte("\r\nREPAIRED\r\n")) {
-		t.Fatalf("typo not repaired and echoed: %q", out)
-	}
-	// No slash commands: "/help" is a path, run by the shell, never a turn.
-	send("/help")
-	if reached("/help") {
-		t.Fatal(`"/help" reached the model`)
-	}
+	// Rung 0: a literal line runs as typed, on a bashy child of the TUI.
+	at := typeLine("echo literal-$((40+2)) ppid=$PPID")
+	want := fmt.Sprintf("literal-42 ppid=%d", cmd.Process.Pid)
+	capture.waitForFrom(t, at, []byte(want), wait)
+	// The TUI takes the terminal back (its status line repaints) before the
+	// next line is typed; typed earlier, it lands in the cooked tty.
+	capture.waitForFrom(t, capture.len(), []byte("session "), wait)
+
 	// Last rung: free text becomes an agent turn.
-	out = send("what does this repo do?")
+	at = typeLine("what does this repo do?")
+	capture.waitForFrom(t, at, []byte("STUB-ANSWER"), wait)
+	capture.waitForFrom(t, at, []byte("turn ended in"), wait)
 	if !reached("what does this repo do?") {
-		t.Fatalf("free text never reached the model; requests: %q; transcript: %q", requests, out)
-	}
-	if !bytes.Contains(out, []byte("STUB-ANSWER")) {
-		t.Fatalf("the turn's answer is not on the terminal: %q", out)
-	}
-	// A session command moves the terminal's session.
-	out = send("bashy ycode new")
-	fresh := regexp.MustCompile(`([0-9a-f]{8})-[0-9a-f]{4}-`).FindSubmatch(out)
-	if fresh == nil || bytes.Equal(fresh[1], session[1]) {
-		t.Fatalf("`bashy ycode new` printed no new session: %q", out)
-	}
-	if !bytes.Contains(out, []byte("[ycode "+string(fresh[1])+"] T> ")) {
-		t.Fatalf("the prompt did not move to the new session %s: %q", fresh[1], out)
-	}
-	if out := send("bashy ycode status"); !bytes.Contains(out, fresh[1]) {
-		t.Fatalf("status does not report the terminal's session: %q", out)
+		t.Fatalf("free text never reached the model; requests: %q", requests)
 	}
 
 	if os.Getenv("AGENT_TUI_TRANSCRIPT") != "" {
@@ -141,7 +116,7 @@ func TestAgentTUILadderOverPTY(t *testing.T) {
 		t.Logf("transcript:\n%s", capture.buf.String())
 		capture.mu.Unlock()
 	}
-	if _, err := io.WriteString(ptmx, "exit\r"); err != nil {
+	if _, err := io.WriteString(ptmx, "/quit\r"); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
@@ -152,9 +127,6 @@ func TestAgentTUILadderOverPTY(t *testing.T) {
 			t.Fatalf("bashy ycode exit: %v", err)
 		}
 	case <-time.After(wait):
-		t.Fatal("the agent terminal did not exit")
-	}
-	if left, _ := filepath.Glob(filepath.Join(home, ".bashy", "ycode", "terminals", "*")); len(left) != 0 {
-		t.Fatalf("session pointer left behind: %v", left)
+		t.Fatal("the native TUI did not exit on /quit")
 	}
 }

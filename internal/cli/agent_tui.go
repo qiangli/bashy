@@ -2,9 +2,6 @@ package cli
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,7 +15,11 @@ import (
 	"mvdan.cc/sh/v3/interp"
 )
 
-// The default agent TUI (Sprint #301 T4) is bashy's own interactive shell
+// `bashy ycode` on a terminal now hosts ycode's native TUI (Sprint #387 A7);
+// literal lines reach bashy through LiteralCommand. The in-shell agent
+// terminal below stays for a shell started with BASHY_AGENT_TUI set.
+//
+// The in-shell agent TUI (Sprint #301 T4) is bashy's own interactive shell
 // with an agent attached: one input line (the readline fork: history, vi/emacs
 // editing), the terminal's scrollback as the transcript, and a prompt that
 // carries the agent and its session. There is no slash parser; every line goes
@@ -46,53 +47,20 @@ var (
 	AgentOSOwnedNames   = func() []string { return nil }
 )
 
-// RunAgentTerminal hosts an agent's session on this terminal: it starts
-// bashy's interactive shell with the agent attached and returns when the user
-// leaves it. Wired as ycodecli.TerminalUI by cmd/bashy.
-func RunAgentTerminal(ctx context.Context, agent, config, session string) error {
-	pointer, err := newSessionPointer(session)
-	if err != nil {
-		return err
-	}
-	defer os.Remove(pointer)
+// LiteralCommand is the process that runs one literal line typed in ycode's
+// native TUI (rung 0, or the rung-1 repaired line the TUI echoed): the bashy
+// binary itself as `bashy -c LINE`, the line passed through byte-identically.
+// The caller (the TUI) wires stdin/stdout/stderr to the terminal. Wired as
+// ycodecli.LiteralShell by cmd/bashy.
+func LiteralCommand(line string) *exec.Cmd {
 	self, err := selfExecutable()
 	if err != nil {
-		return err
+		self = os.Args[0]
 	}
-	cmd := exec.CommandContext(ctx, self, "-i")
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	// The launching process already reported telemetry once; the shell and
-	// every turn or command it runs stay quiet about it.
-	cmd.Env = append(os.Environ(), agentTUIEnv+"="+agent, agentConfigEnv+"="+config, agentSessionEnv+"="+pointer, "BASHY_TELEMETRY_QUIET=1")
-	// Leaving the terminal is not a failure, whatever the last command's
-	// status was when the user left.
-	if err := cmd.Run(); err != nil {
-		if _, ok := errors.AsType[*exec.ExitError](err); !ok {
-			return err
-		}
-	}
-	return nil
-}
-
-// newSessionPointer writes the session pointer under $BASHY_HOME (else
-// ~/.bashy, else the temp dir) — never a per-OS config dir.
-func newSessionPointer(session string) (string, error) {
-	base := os.Getenv("BASHY_HOME")
-	if base == "" {
-		if home, err := os.UserHomeDir(); err == nil && home != "" {
-			base = filepath.Join(home, ".bashy")
-		} else {
-			base = filepath.Join(os.TempDir(), "bashy")
-		}
-	}
-	dir := filepath.Join(base, "ycode", "terminals")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", err
-	}
-	var nonce [6]byte
-	_, _ = rand.Read(nonce[:])
-	path := filepath.Join(dir, fmt.Sprintf("%d-%s.session", os.Getpid(), hex.EncodeToString(nonce[:])))
-	return path, os.WriteFile(path, []byte(session+"\n"), 0o600)
+	cmd := exec.Command(self, "-c", line)
+	// The launching process already reported telemetry once.
+	cmd.Env = append(os.Environ(), "BASHY_TELEMETRY_QUIET=1")
+	return cmd
 }
 
 // selfExecutable prefers the unix launcher over the Go program it execs
