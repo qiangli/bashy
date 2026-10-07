@@ -323,6 +323,23 @@ func TestYcodeDocsValuesDoNotSelectConfig(t *testing.T) {
 	}
 }
 
+func TestYcodeNonExecutionFlagsStayWithCLI(t *testing.T) {
+	stubYcodeConfigSelection(t)
+	t.Setenv("BASHY_HOME", t.TempDir())
+	t.Setenv("YCODE_CONFIG", "")
+	t.Chdir(t.TempDir())
+	saved := YcodeMain
+	t.Cleanup(func() { YcodeMain = saved })
+	var seen []string
+	YcodeMain = func(args []string) int { seen = append([]string(nil), args...); return 0 }
+	for _, args := range [][]string{{"--version"}, {"status", "--json"}, {"docs", "--search", "--file=topic"}} {
+		t.Setenv("YCODE_CONFIG", "")
+		if code := dispatchYcode(args); code != 0 || strings.Join(seen, "|") != strings.Join(args, "|") {
+			t.Fatalf("%q: exit %d, ycode args %q", args, code, seen)
+		}
+	}
+}
+
 func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
 	stubYcodeConfigSelection(t)
 	if runtime.GOOS == "windows" {
@@ -334,7 +351,7 @@ func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
 		t.Fatal(err)
 	}
 	self := filepath.Join(root, "bashy-self")
-	if err := os.WriteFile(self, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$CAPTURE_ARGS\"\nprintf '%s\\n' \"$GENIE_MODE\" > \"$CAPTURE_MODE\"\n"), 0o700); err != nil {
+	if err := os.WriteFile(self, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$CAPTURE_ARGS\"\nprintf '%s\\n' \"$GENIE_MODE\" > \"$CAPTURE_MODE\"\nprintf '%s\\n' \"$GENIE_YCODE_SESSION\" > \"$CAPTURE_SESSION\"\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("BASHY_SELF", self)
@@ -360,13 +377,21 @@ func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
 		{"prompt-flag-text", "prompt", "", []string{"prompt", "--", "-filter"}},
 		{"text", "chat", "", []string{"--", "hello"}},
 		{"flag-text", "chat", "", []string{"--", "-filter"}},
+		{"literal-web", "chat", "", []string{"--", "web"}},
+		{"model-literal-web", "chat", "s387-local-model", []string{"-m", "s387-local-model", "--", "web"}},
+		{"literal-build", "chat", "", []string{"--", "build"}},
+		{"positional", "chat", "", []string{"hello"}},
+		{"session-prompt", "prompt", "", []string{"--session", "s387-session", "prompt", "hello"}},
+		{"session-positional", "chat", "", []string{"--session=s387-session", "hello"}},
 		{"acp", "acp", "s387-local-model", []string{"-m", "s387-local-model", "acp"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			capture := filepath.Join(root, tc.name+".args")
 			modeCapture := filepath.Join(root, tc.name+".mode")
+			sessionCapture := filepath.Join(root, tc.name+".session")
 			t.Setenv("CAPTURE_ARGS", capture)
 			t.Setenv("CAPTURE_MODE", modeCapture)
+			t.Setenv("CAPTURE_SESSION", sessionCapture)
 			ambient := "web"
 			if tc.name == "model" || tc.name == "prompt" || tc.name == "acp" || tc.mode == "web" {
 				ambient = "session"
@@ -387,6 +412,14 @@ func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
 			modeData, err := os.ReadFile(modeCapture)
 			if err != nil || strings.TrimSpace(string(modeData)) != tc.mode {
 				t.Fatalf("child mode = %q, err %v; want %q", modeData, err, tc.mode)
+			}
+			sessionData, err := os.ReadFile(sessionCapture)
+			wantSession := ""
+			if strings.HasPrefix(tc.name, "session-") {
+				wantSession = "s387-session"
+			}
+			if err != nil || strings.TrimSpace(string(sessionData)) != wantSession {
+				t.Fatalf("child session = %q, err %v; want %q", sessionData, err, wantSession)
 			}
 			if tc.model != "" && os.Getenv("GENIE_MODEL_ID") != tc.model {
 				t.Fatalf("model not passed to recipe: %q", os.Getenv("GENIE_MODEL_ID"))
