@@ -94,7 +94,7 @@ build-bash:
 	@mkdir -p $(BIN_DIR)
 	@set -e; \
 	goos=$$(go env GOOS); out=$(BASHY); launcher=$$(scripts/launcher-wanted.sh build-bash); [ "$$launcher" = 1 ] && out=$(BASHY).real || rm -f $(BASHY).real; \
-	go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bash; \
+	scripts/go-product.sh build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bash; \
 	if [ "$$launcher" = 1 ]; then \
 		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BASHY) native/siglaunch.c.in; \
 	fi
@@ -107,7 +107,7 @@ build-sh:
 	goos=$$(go env GOOS); out=$(SH); launcher=$$(scripts/launcher-wanted.sh build-sh); \
 	if [ "$$goos" = windows ]; then out=$(SH).exe; fi; \
 	[ "$$launcher" = 1 ] && out=$(SH).real || rm -f $(SH).real; \
-	go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/sh; \
+	scripts/go-product.sh build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/sh; \
 	if [ "$$launcher" = 1 ]; then \
 		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(SH) native/siglaunch.c.in; \
 	fi
@@ -123,9 +123,9 @@ build-bashy:
 	out=$(BIN); \
 	tmp=$$(mktemp "$$out.pending.XXXXXX"); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
 	if [ -n "$$tags" ]; then \
-		go build -trimpath -tags "$$tags" -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
+		scripts/go-product.sh build -trimpath -tags "$$tags" -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
 	else \
-		go build -trimpath -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
+		scripts/go-product.sh build -trimpath -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
 	fi; \
 	go run ./tools/elfaudit --bashy-signal "$$tmp"; \
 	go run ./tools/releaseeligibility "$$tmp"; \
@@ -143,7 +143,7 @@ build-bashy-scratch:
 	@echo "building static linux/$(BASHY_SCRATCH_GOARCH) Bashy at $(BASHY_SCRATCH_ARTIFACT) ..."
 	@set -e; out="$(BASHY_SCRATCH_ARTIFACT)"; \
 	tmp=$$(mktemp "$$out.pending.XXXXXX"); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
-	CGO_ENABLED=0 GOOS=linux GOARCH=$(BASHY_SCRATCH_GOARCH) $(GO) build -trimpath \
+	CGO_ENABLED=0 GOOS=linux GOARCH=$(BASHY_SCRATCH_GOARCH) scripts/go-product.sh build -trimpath \
 		-tags bashy_scratch -ldflags "$(BASHY_LDFLAGS)" \
 		-o "$$tmp" ./cmd/bashy; \
 	go run ./tools/elfaudit --bashy-signal "$$tmp"; \
@@ -173,7 +173,7 @@ build-fips:
 	@echo "building with the Go FIPS 140-3 module (GOFIPS140=$(GOFIPS140_VERSION)) ..."
 	@set -e; \
 	goos=$$(go env GOOS); out=$(BASHY); launcher=$$(scripts/launcher-wanted.sh build-bash); [ "$$launcher" = 1 ] && out=$(BASHY).real || rm -f $(BASHY).real; \
-	GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bash; \
+	GOFIPS140=$(GOFIPS140_VERSION) scripts/go-product.sh build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bash; \
 	if [ "$$launcher" = 1 ]; then \
 		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BASHY) native/siglaunch.c.in; \
 	fi
@@ -183,9 +183,9 @@ build-fips:
 	out=$(BIN); \
 	tmp=$$(mktemp "$$out.pending.XXXXXX"); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
 	if [ -n "$$tags" ]; then \
-		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -tags "$$tags" -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
+		GOFIPS140=$(GOFIPS140_VERSION) scripts/go-product.sh build -trimpath -tags "$$tags" -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
 	else \
-		GOFIPS140=$(GOFIPS140_VERSION) go build -trimpath -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
+		GOFIPS140=$(GOFIPS140_VERSION) scripts/go-product.sh build -trimpath -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
 	fi; \
 	go run ./tools/elfaudit --bashy-signal "$$tmp"; \
 	go run ./tools/releaseeligibility "$$tmp"; \
@@ -273,9 +273,9 @@ dist:
 			ldflags="$(LDFLAGS)"; [ "$$name" = bashy ] && ldflags="$(BASHY_LDFLAGS)"; \
 			echo "building $$out..."; \
 			if [ "$$name" = bashy ] && [ -n "$$bashy_tags" ]; then \
-				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -tags "$$bashy_tags" -ldflags "$$ldflags" -o "$$tmp" ./cmd/$$name || exit 1; \
+				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch scripts/go-product.sh build -trimpath -tags "$$bashy_tags" -ldflags "$$ldflags" -o "$$tmp" ./cmd/$$name || exit 1; \
 			else \
-				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$$ldflags" -o "$$tmp" ./cmd/$$name || exit 1; \
+				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch scripts/go-product.sh build -trimpath -ldflags "$$ldflags" -o "$$tmp" ./cmd/$$name || exit 1; \
 			fi; \
 			if [ "$$name" = bashy ]; then go run ./tools/elfaudit --bashy-signal "$$tmp" || exit 1; go run ./tools/releaseeligibility "$$tmp" || exit 1; fi; \
 			mv -f "$$tmp" "$$out" || exit 1; tmp=; \

@@ -102,11 +102,11 @@ BASHY_LDFLAGS=${LDFLAGS#-s }
 # the launcher's job (preserving inherited SIGQUIT/SIGPIPE ignore dispositions)
 # is then simply absent rather than visibly failing.
 if [ "$goos" = "$hostgoos" ] && [ "$(BASHY="$BASHY_EXE" "$BASHY_EXE" scripts/launcher-wanted.sh build)" = 1 ]; then
-  "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o bin/bash.real  ./cmd/bash
+  scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o bin/bash.real  ./cmd/bash
   cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o bin/bash  native/siglaunch.c.in
 else
   rm -f bin/bash.real
-  "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "bin/bash${ext}"  ./cmd/bash
+  scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "bin/bash${ext}"  ./cmd/bash
 fi
 BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh "bin/bashy${ext}" "$BASHY_LDFLAGS"
 ```
@@ -271,7 +271,7 @@ for plat in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 wind
   bashy_out="bin/dist/bashy-${os}-${arch}${ext}"
   echo "building $bash_out..."
   CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-    "$BASHY_EXE" go build -trimpath -ldflags "$LDFLAGS" -o "$bash_out" ./cmd/bash
+    scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$bash_out" ./cmd/bash
   echo "building $bashy_out..."
   CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" BASHY_EXE="$BASHY_EXE" \
     "$BASHY_EXE" scripts/build-bashy-artifact.sh "$bashy_out" "$BASHY_LDFLAGS"
@@ -1178,7 +1178,7 @@ testee="${testee_dir}/bash"
 harness="bin/bash53suite-linux-${host_goarch}"
 [ -f "$testee_dir" ] && rm -f "$testee_dir"
 mkdir -p "$testee_dir"
-GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 "$BASHY_EXE" go build -trimpath -o "$testee" ./cmd/bash
+GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 scripts/go-product.sh build -trimpath -o "$testee" ./cmd/bash
 GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 "$BASHY_EXE" go build -trimpath -o "$harness" ./tools/bash53suite
 oci="${BASH53_OCI:-$BASHY_EXE podman}"
 $oci info >/dev/null
@@ -1389,7 +1389,7 @@ BUILD_ID=""
 if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   BUILD_ID=$(git rev-parse --short=7 HEAD 2>/dev/null || true)
 fi
-"$BASHY_EXE" go build -trimpath -ldflags "-s -w -X 'github.com/qiangli/bashy/internal/cli.buildID=$BUILD_ID'" -o bin/bash ./cmd/bash
+scripts/go-product.sh build -trimpath -ldflags "-s -w -X 'github.com/qiangli/bashy/internal/cli.buildID=$BUILD_ID'" -o bin/bash ./cmd/bash
 echo "built bin/bash (pure drop-in)"
 ```
 
@@ -1428,7 +1428,7 @@ mkdir -p bin
 BASHY_EXE="${BASHY:-bashy}"
 V="${GOFIPS140_VERSION:-v1.0.0}"
 echo "building with the Go FIPS 140-3 module (GOFIPS140=$V) ..."
-GOFIPS140="$V" "$BASHY_EXE" go build -trimpath -o bin/bash ./cmd/bash
+GOFIPS140="$V" scripts/go-product.sh build -trimpath -o bin/bash ./cmd/bash
 tags=""; [ -n "${BASHY_TAGS:-}" ] && tags=${BASHY_TAGS}
 GOFIPS140="$V" BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh bin/bashy "-w" "$tags"
 echo "built bin/{bash,bashy} in FIPS mode"

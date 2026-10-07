@@ -30,7 +30,7 @@ func TestInheritedIgnoreDuringStartup(t *testing.T) {
 		t.Run("cgo="+cgo, func(t *testing.T) {
 			dir := t.TempDir()
 			bin := filepath.Join(dir, "bashy")
-			build := exec.Command("go", "build", "-tags=startup_signal_probe", "-o", bin, "./cmd/bashy")
+			build := exec.Command("./scripts/go-product.sh", "build", "-tags=startup_signal_probe", "-o", bin, "./cmd/bashy")
 			build.Dir = filepath.Join("..", "..")
 			build.Env = append(os.Environ(), "CGO_ENABLED="+cgo)
 			if out, err := build.CombinedOutput(); err != nil {

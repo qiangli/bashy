@@ -14,6 +14,7 @@ before:
 
 builds:
   - id: bashy
+    gobinary: ./scripts/go-product.sh
     main: ./cmd/bashy
     binary: bashy
     env:
@@ -40,6 +41,7 @@ builds:
   # bashy_scratch profile, linux only, shipped as a raw binary so the image
   # build fetches one file. Same version stamp as bashy.
   - id: bashy-scratch
+    gobinary: ./scripts/go-product.sh
     main: ./cmd/bashy
     binary: bashy-scratch-{{ .Os }}-{{ .Arch }}
     no_unique_dist_dir: true
@@ -61,6 +63,7 @@ builds:
       - amd64
       - arm64
   - id: bash
+    gobinary: ./scripts/go-product.sh
     main: ./cmd/bash
     binary: bash
     env:
@@ -77,6 +80,7 @@ builds:
       - amd64
       - arm64
   - id: sh
+    gobinary: ./scripts/go-product.sh
     main: ./cmd/sh
     binary: sh
     env:

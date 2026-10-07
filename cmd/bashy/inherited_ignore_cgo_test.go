@@ -22,7 +22,7 @@ func TestSingleBinaryInheritedIgnoredSignals(t *testing.T) {
 	}
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "bashy")
-	build := exec.Command("go", "build", "-o", bin, "./cmd/bashy")
+	build := exec.Command("./scripts/go-product.sh", "build", "-o", bin, "./cmd/bashy")
 	build.Dir = filepath.Join("..", "..")
 	build.Env = append(os.Environ(), "CGO_ENABLED=1")
 	if out, err := build.CombinedOutput(); err != nil {

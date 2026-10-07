@@ -173,3 +173,5 @@ Per-fixture cluster analyses + blocker ledgers (snapshots — diff line-counts a
 Weave-round verification + retro reports (historical, not load-bearing):
 
 - `QA-REPORT-R10.md`, `JUDGE-REPORT-R6.md`, `JUDGE-REPORT-R7.md`, `SPRINT-R10-RETRO-DRAFT.md`.
+
+- [Product startup signal contract](plan-startup-signal-contract.md) — pinned runtime overlay, asynchronous ignore scope and deterministic gates.
