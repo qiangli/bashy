@@ -145,6 +145,11 @@ func dispatchGenieWithHandoff(args []string, handoff bool) int {
 		mode = "chat"
 	}
 	os.Setenv("GENIE_MODE", mode)
+	if target == "chat" && mode != "web" && mode != "acp" && mode != "session" && isTerminal(os.Stdin) && isTerminal(os.Stdout) {
+		os.Setenv("GENIE_PRESERVE_TTY", "1")
+	} else {
+		os.Unsetenv("GENIE_PRESERVE_TTY")
+	}
 	return runSelf(append([]string{"run", "--target", target, bundle}, args...), os.Stdin, os.Stdout, os.Stderr)
 }
 
