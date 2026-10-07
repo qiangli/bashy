@@ -6,7 +6,6 @@ seq: 408
 status: done
 priority: p0
 created: 2026-10-07T03:47:17.937694Z
-weave: 18
 assignee: codex-gpt5.6-sol
 sprint: 381
 sprint_id: 1a8fa6b8-96d8-5f96-bcfa-d01ecbb8005c
