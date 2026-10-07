@@ -9,17 +9,26 @@
 //
 // This reactive ExecHandler middleware adds ONE structured hint on exactly that
 // path: when a bare command name exits 127 AND is provably unresolved (not an
-// in-process coreutil, not on PATH), it emits a single bashy-hint-v1 JSON line
-// on stderr carrying the resolution tier, the nearest provided name
-// (did-you-mean), and the install door if one exists (a GNU coreutils name is
-// reachable through the managed container). It never alters the exit status or
-// the Bash error text, is inert unless BASHY_AGENTIC is set, is silenced by
-// BASHY_HINTS=off, and is rate-limited to once per name per session — exactly
-// like the proactive nudger and the reactive advisor it sits beside.
+// in-process coreutil, not a registered command, not on PATH), it emits a single
+// bashy-hint-v1 JSON line on stderr carrying the resolution tier, the nearest
+// provided name (did-you-mean), and the install door if one exists (a GNU
+// coreutils name is reachable through the managed container). It never alters
+// the exit status or the Bash error text, is inert unless BASHY_AGENTIC is set,
+// is silenced by BASHY_HINTS=off, and is rate-limited to once per name per
+// session — exactly like the proactive nudger and the reactive advisor it sits
+// beside.
 //
-// Resolution is verified by lookup, never by the exit code alone: a real
-// command that genuinely exits 127 is still on PATH or served in-process, so it
-// is never misclassified as not-found.
+// Resolution is verified by lookup, never by the exit code alone — and in the
+// SAME context the shell itself resolves: the default exec handler looks a bare
+// name up with interp.LookPathDir(hc.Dir, hc.Env, name), so a PATH assigned
+// inside the script or a relative PATH entry read after a `cd` resolves exactly
+// as the command does. os/exec.LookPath against the process environment cannot
+// see either, and would both (a) report a REAL command as not-found when it
+// lives only on the shell-local PATH and (b) suppress the hint for a genuine
+// shell-local miss that the host PATH happens to satisfy. The lookup is captured
+// BEFORE the command runs, so a command that exists now and then removes itself
+// (or rewrites PATH) and exits 127 keeps its genuine 127 rather than being
+// reported as not-found.
 package agentos
 
 import (
@@ -28,13 +37,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 
 	"mvdan.cc/sh/v3/interp"
 
 	"github.com/qiangli/coreutils/tool"
+	"github.com/qiangli/yoke/pkg/recommend"
 )
 
 // notFoundHintsEnabled reports whether the command-not-found hint should fire.
@@ -87,20 +96,29 @@ func newNotFoundHinter() *notFoundHinter {
 	return &notFoundHinter{provided: provided, gnuCore: gnu, w: os.Stderr, seen: map[string]bool{}}
 }
 
-// isNotFound reports whether name is provably unresolved: not served in-process
-// and not on PATH. This is the guard that keeps a real command which happens to
-// exit 127 from being reported as command-not-found.
-func (h *notFoundHinter) isNotFound(name string) bool {
+// resolves reports whether name resolves to something runnable in the SAME
+// context the shell's own exec chain uses: an in-process coreutil applet, a
+// registered command, or a PATH hit under the interpreter's current environment
+// and directory (interp.LookPathDir(hc.Dir, hc.Env, name) — the exact call the
+// default exec handler makes). Using the handler context rather than the process
+// environment is the whole correction: a PATH set inside the script and a
+// relative PATH entry after a `cd` resolve as the command does, and a genuine
+// shell-local miss is not masked by whatever the host PATH happens to carry.
+func (h *notFoundHinter) resolves(ctx context.Context, name string) bool {
 	if name == "" {
 		return false
 	}
 	if tool.Lookup(name) != nil {
-		return false // pure-Go in-process coreutil applet
+		return true // pure-Go in-process coreutil applet (coreutilsshell.Handler)
 	}
-	if _, err := exec.LookPath(name); err == nil {
-		return false // resolves on the host PATH
+	if _, ok := registeredLookup(name); ok {
+		return true // a `bashy commands add` registered command (registeredHandler)
 	}
-	return true
+	hc := interp.HandlerCtx(ctx)
+	if _, err := interp.LookPathDir(hc.Dir, hc.Env, name); err == nil {
+		return true // resolves on the shell's own PATH, from its own cwd
+	}
+	return false
 }
 
 // classify produces the hint payload for an unresolved command name.
@@ -179,23 +197,30 @@ func (h *notFoundHinter) emit(w io.Writer, name string) bool {
 func notFoundHintHandler(h *notFoundHinter) func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 	return func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 		return func(ctx context.Context, args []string) error {
+			// Only bare names are candidates: a path-ish operand's 127 is a
+			// different errno path (No such file / Is a directory), not a PATH
+			// miss, and Bash already said so precisely.
+			var name string
+			bare := false
+			if len(args) > 0 {
+				name = args[0]
+				bare = !strings.ContainsAny(name, `/\`)
+			}
+			// Resolve BEFORE running, in the shell's own context: a command
+			// that resolves now but removes itself (or rewrites PATH) and then
+			// exits 127 must keep its genuine 127, not be reported as not-found.
+			resolvedBefore := bare && h.resolves(ctx, name)
+
 			err := next(ctx, args)
-			if len(args) == 0 {
+			if !bare {
 				return err
 			}
 			status, ok := exitStatusOf(err)
 			if !ok || status != 127 {
 				return err // not a command-not-found status; say nothing
 			}
-			name := args[0]
-			// Only bare names: a path-ish operand's 127 is a different errno
-			// path (No such file / Is a directory), not a PATH miss, and Bash
-			// already said so precisely.
-			if strings.ContainsAny(name, `/\`) {
-				return err
-			}
-			if !h.isNotFound(name) {
-				return err
+			if resolvedBefore {
+				return err // a real command that resolved; its 127 is its own
 			}
 			h.emit(handlerStderr(ctx), name)
 			return err
@@ -203,84 +228,15 @@ func notFoundHintHandler(h *notFoundHinter) func(interp.ExecHandlerFunc) interp.
 	}
 }
 
-// nearestProvided returns the closest provided name to want within a small edit
-// distance, or "" when nothing is close enough to be a useful did-you-mean. Ties
-// resolve to the first candidate in the (sorted) provided set, so the result is
-// deterministic.
+// nearestProvided returns the closest provided name to want, or "" when nothing
+// is close enough to be a useful did-you-mean. It defers to the shared nudge
+// recommender (pkg/recommend) — the same lexical-similarity ranking the
+// not-found-target advisor uses — rather than carrying a second edit-distance
+// implementation.
 func nearestProvided(want string, provided []string) string {
-	if want == "" {
+	recs := recommend.Recommend(want, provided, 1)
+	if len(recs) == 0 {
 		return ""
 	}
-	// Scale the tolerance with the name length so short names are not matched to
-	// unrelated short names, while keeping a hard ceiling of 2 edits.
-	max := 2
-	if len(want) <= 3 {
-		max = 1
-	}
-	best := ""
-	bestDist := max + 1
-	for _, cand := range provided {
-		if cand == want {
-			continue // an exact match is not a "did you mean"
-		}
-		// A cheap length prefilter keeps the full DP off obviously-far names.
-		if abs(len(cand)-len(want)) > max {
-			continue
-		}
-		d := levenshtein(want, cand)
-		if d < bestDist {
-			bestDist, best = d, cand
-		}
-	}
-	if bestDist <= max {
-		return best
-	}
-	return ""
-}
-
-func abs(n int) int {
-	if n < 0 {
-		return -n
-	}
-	return n
-}
-
-// levenshtein is the classic edit distance (insert/delete/substitute, cost 1),
-// computed with a single rolling row.
-func levenshtein(a, b string) int {
-	ra, rb := []rune(a), []rune(b)
-	if len(ra) == 0 {
-		return len(rb)
-	}
-	if len(rb) == 0 {
-		return len(ra)
-	}
-	prev := make([]int, len(rb)+1)
-	for j := range prev {
-		prev[j] = j
-	}
-	for i := 1; i <= len(ra); i++ {
-		cur := make([]int, len(rb)+1)
-		cur[0] = i
-		for j := 1; j <= len(rb); j++ {
-			cost := 1
-			if ra[i-1] == rb[j-1] {
-				cost = 0
-			}
-			cur[j] = min3(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
-		}
-		prev = cur
-	}
-	return prev[len(rb)]
-}
-
-func min3(a, b, c int) int {
-	m := a
-	if b < m {
-		m = b
-	}
-	if c < m {
-		m = c
-	}
-	return m
+	return recs[0].Name
 }

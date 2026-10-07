@@ -74,25 +74,6 @@ func TestNearestProvidedDidYouMean(t *testing.T) {
 	}
 }
 
-func TestLevenshtein(t *testing.T) {
-	cases := []struct {
-		a, b string
-		want int
-	}{
-		{"", "", 0},
-		{"a", "", 1},
-		{"", "abc", 3},
-		{"kitten", "sitting", 3},
-		{"grep", "grep", 0},
-		{"grep", "gerp", 2},
-	}
-	for _, c := range cases {
-		if got := levenshtein(c.a, c.b); got != c.want {
-			t.Errorf("levenshtein(%q,%q) = %d, want %d", c.a, c.b, got, c.want)
-		}
-	}
-}
-
 func TestNotFoundClassify(t *testing.T) {
 	h := newTestNotFoundHinter()
 
@@ -160,33 +141,105 @@ func TestNotFoundEmitRateLimitedOncePerName(t *testing.T) {
 	}
 }
 
-func TestNotFoundIsNotFound(t *testing.T) {
-	h := newTestNotFoundHinter()
-	// A clearly-absent bare name is not found.
-	if !h.isNotFound("definitely-not-a-real-command-xyz-9z") {
-		t.Error("absent command should be reported not found")
-	}
-	// A real, on-PATH command is NOT reported not found: a real command that
-	// exits 127 must never be misclassified.
-	dir := t.TempDir()
-	realCmd := "realcmd127"
-	ext := ""
-	body := "#!/bin/sh\nexit 127\n"
-	if runtime.GOOS == "windows" {
-		ext = ".bat"
-		body = "@exit /b 127\r\n"
-	}
-	bin := filepath.Join(dir, realCmd+ext)
-	if err := os.WriteFile(bin, []byte(body), 0o755); err != nil {
+// runNotFound runs script through a runner wired with the not-found middleware
+// over the default (real-exec) handler, and returns stdout+stderr. The runner
+// inherits the process environment and cwd, so the script itself drives PATH and
+// cwd — which is the whole point: the handler must resolve against the shell's
+// live context, not the process one.
+func runNotFound(t *testing.T, h *notFoundHinter, script string) (stdout, stderr string) {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	r, err := interp.New(interp.StdIO(nil, &out, &errOut), interp.ExecHandlers(notFoundHintHandler(h)))
+	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	lookupName := realCmd
-	if runtime.GOOS == "windows" {
-		lookupName = realCmd + ext
+	prog, perr := syntax.NewParser().Parse(strings.NewReader(script), "")
+	if perr != nil {
+		t.Fatal(perr)
 	}
-	if h.isNotFound(lookupName) {
-		t.Errorf("%q is on PATH and must not be reported not found", lookupName)
+	_ = r.Run(context.Background(), prog)
+	return out.String(), errOut.String()
+}
+
+// writeExit127 drops an executable shebang script that exits 127 and returns its
+// directory; it is a REAL command whose 127 is its own, not a PATH miss.
+func writeExit127(t *testing.T, dir, name string) {
+	t.Helper()
+	bin := filepath.Join(dir, name)
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 127\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A real command reachable only on a PATH the SCRIPT assigns (never on the
+// process PATH) must not be reported as not-found when it exits 127. The old
+// os/exec.LookPath against the process environment could not see the shell-local
+// PATH and wrongly flagged it; resolution now uses the handler context.
+func TestNotFoundResolvesShellLocalPATH(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs a directly executable shebang script")
+	}
+	h := newTestNotFoundHinter()
+	dir := t.TempDir()
+	writeExit127(t, dir, "shelllocaltool")
+	// PATH is set INSIDE the script; the process PATH never contains dir.
+	script := "export PATH=" + dir + "\nshelllocaltool ; echo status=$?\n"
+	out, errOut := runNotFound(t, h, script)
+	if !strings.Contains(out, "status=127") {
+		t.Fatalf("expected the shell-local command to run and exit 127, stdout=%q", out)
+	}
+	if strings.Contains(errOut, "command-not-found") {
+		t.Errorf("a real command on the shell-local PATH was wrongly flagged:\n%s", errOut)
+	}
+}
+
+// A relative PATH entry read after a `cd` must resolve against the shell's cwd,
+// exactly as the command does. os/exec.LookPath would resolve it against the
+// process cwd and miss it, producing a false hint.
+func TestNotFoundResolvesRelativePATHAfterCd(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs a directly executable shebang script")
+	}
+	h := newTestNotFoundHinter()
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeExit127(t, sub, "reltool")
+	// cd into dir, put the RELATIVE entry "sub" on PATH, then run reltool.
+	script := "cd " + dir + "\nexport PATH=sub\nreltool ; echo status=$?\n"
+	out, errOut := runNotFound(t, h, script)
+	if !strings.Contains(out, "status=127") {
+		t.Fatalf("expected reltool to run and exit 127, stdout=%q", out)
+	}
+	if strings.Contains(errOut, "command-not-found") {
+		t.Errorf("a command on a relative shell-local PATH was wrongly flagged:\n%s", errOut)
+	}
+}
+
+// The mirror case: a genuine shell-local miss must still be hinted even when the
+// host PATH would satisfy the name. Here the script narrows PATH so the command
+// is unreachable; the old process-PATH lookup would have found it and silently
+// suppressed the hint.
+func TestNotFoundHintsShellLocalMissMaskedByHostPATH(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs a directly executable shebang script")
+	}
+	h := newTestNotFoundHinter()
+	dir := t.TempDir()
+	writeExit127(t, dir, "onhostonly")
+	// Put dir on the PROCESS PATH so os/exec.LookPath would resolve the name...
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// ...but a per-command assignment narrows PATH so the SHELL cannot: a real
+	// not-found that must be hinted.
+	script := "PATH=/no/such/dir onhostonly ; echo status=$?\n"
+	out, errOut := runNotFound(t, h, script)
+	if !strings.Contains(out, "status=127") {
+		t.Fatalf("expected a shell-local miss to exit 127, stdout=%q", out)
+	}
+	if !strings.Contains(errOut, "command-not-found") {
+		t.Errorf("a genuine shell-local miss was not hinted (host PATH masked it):\n%s", errOut)
 	}
 }
 
@@ -267,5 +320,33 @@ func TestNotFoundHandlerSkipsRealCommandExiting127(t *testing.T) {
 	}
 	if strings.Contains(errOut.String(), "command-not-found") {
 		t.Errorf("a real command exiting 127 was wrongly annotated:\n%s", errOut.String())
+	}
+}
+
+// The hint is wired only in the non-posix agentic path: a --posix shell (and so
+// the cmd/bash drop-in) must never emit it, even with the agentic env on.
+func TestNotFoundHintInertUnderPosix(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "1")
+	t.Setenv("BASHY_HINTS", "1")
+	var out, errOut bytes.Buffer
+	r, err := interp.New(interp.Env(nil), interp.Params("-o", "posix"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, opt := range wireExec(nil, true, os.Environ(), nil, &out, &errOut, false) {
+		if err := opt(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	prog, perr := syntax.NewParser().Parse(strings.NewReader("no-such-command-posix-zz ; echo status=$?\n"), "")
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	_ = r.Run(context.Background(), prog)
+	if !strings.Contains(out.String(), "status=127") {
+		t.Fatalf("expected the absent command to exit 127, stdout=%q", out.String())
+	}
+	if strings.Contains(errOut.String(), "command-not-found") {
+		t.Errorf("the command-not-found hint fired under --posix:\n%s", errOut.String())
 	}
 }
