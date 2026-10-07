@@ -323,6 +323,23 @@ func TestYcodeDocsValuesDoNotSelectConfig(t *testing.T) {
 	}
 }
 
+func TestYcodeNonExecutionFlagsStayWithCLI(t *testing.T) {
+	stubYcodeConfigSelection(t)
+	t.Setenv("BASHY_HOME", t.TempDir())
+	t.Setenv("YCODE_CONFIG", "")
+	t.Chdir(t.TempDir())
+	saved := YcodeMain
+	t.Cleanup(func() { YcodeMain = saved })
+	var seen []string
+	YcodeMain = func(args []string) int { seen = append([]string(nil), args...); return 0 }
+	for _, args := range [][]string{{"--version"}, {"status", "--json"}, {"docs", "--search", "--file=topic"}} {
+		t.Setenv("YCODE_CONFIG", "")
+		if code := dispatchYcode(args); code != 0 || strings.Join(seen, "|") != strings.Join(args, "|") {
+			t.Fatalf("%q: exit %d, ycode args %q", args, code, seen)
+		}
+	}
+}
+
 func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
 	stubYcodeConfigSelection(t)
 	if runtime.GOOS == "windows" {
@@ -360,6 +377,8 @@ func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
 		{"prompt-flag-text", "prompt", "", []string{"prompt", "--", "-filter"}},
 		{"text", "chat", "", []string{"--", "hello"}},
 		{"flag-text", "chat", "", []string{"--", "-filter"}},
+		{"literal-web", "chat", "", []string{"--", "web"}},
+		{"model-literal-web", "chat", "s387-local-model", []string{"-m", "s387-local-model", "--", "web"}},
 		{"acp", "acp", "s387-local-model", []string{"-m", "s387-local-model", "acp"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

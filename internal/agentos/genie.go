@@ -59,6 +59,9 @@ func dispatchGenie(args []string) int {
 }
 
 func dispatchGenieWithHandoff(args []string, handoff bool) int {
+	prefixLiteral := len(args) > 0 && args[0] == "--" ||
+		len(args) > 2 && (args[0] == "-m" || args[0] == "--model") && args[2] == "--" ||
+		len(args) > 1 && strings.HasPrefix(args[0], "--model=") && args[1] == "--"
 	literalMessage := false
 	for _, arg := range args {
 		if arg == "--" {
@@ -72,7 +75,7 @@ func dispatchGenieWithHandoff(args []string, handoff bool) int {
 		return 2
 	}
 	target, mode := "chat", ""
-	if len(args) > 0 {
+	if len(args) > 0 && !prefixLiteral {
 		switch args[0] {
 		case "-h", "--help", "help":
 			fmt.Fprint(os.Stdout, genieUsage)
@@ -193,6 +196,23 @@ func ycodeGenieRecipeArgs(args []string) ([]string, bool, error) {
 	if args[0] == "--" {
 		return append([]string{"--"}, args[1:]...), true, nil
 	}
+	if args[0] == "web" {
+		model, rest, err := genieModelFlag(args[1:])
+		if err != nil {
+			return nil, true, err
+		}
+		if len(rest) == 0 {
+			return append(modelArgs(model), "web"), true, nil
+		}
+		return nil, false, nil
+	}
+	switch args[0] {
+	case "repl", "resume", "prompt", "acp", "session":
+		return args, true, nil
+	}
+	if args[0] != "-m" && args[0] != "--model" && !strings.HasPrefix(args[0], "--model=") {
+		return nil, false, nil
+	}
 	model, rest, err := genieModelFlag(args)
 	if err != nil {
 		return nil, true, err
@@ -205,32 +225,11 @@ func ycodeGenieRecipeArgs(args []string) ([]string, bool, error) {
 	}
 	switch rest[0] {
 	case "web":
-		// The model flag may occur on either side of the web verb.
-		if model == "" {
-			model, rest, err = genieModelFlag(rest[1:])
-			if err != nil {
-				return nil, true, err
-			}
-			if len(rest) != 0 {
-				return nil, false, nil
-			}
-			return append(modelArgs(model), "web"), true, nil
-		}
 		if len(rest) == 1 {
 			return append(modelArgs(model), "web"), true, nil
 		}
 	case "repl", "resume", "prompt", "acp", "session":
 		return append(modelArgs(model), rest...), true, nil
-	}
-	if args[0] == "web" {
-		model, rest, err := genieModelFlag(args[1:])
-		if err != nil {
-			return nil, true, err
-		}
-		if len(rest) == 0 {
-			return append(modelArgs(model), "web"), true, nil
-		}
-		return nil, false, nil
 	}
 	return nil, false, nil
 }
