@@ -380,3 +380,48 @@ func TestAgentFenceYAMLInlineEmbedLifecycle(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentFenceTwoEmbedsKeepTheirOwnOrigins(t *testing.T) {
+	oldPrepare := YAMLAgentPrepare
+	defer func() { YAMLAgentPrepare = oldPrepare }()
+	oldRow, _ := polyglot.LookupLanguage("agent")
+	defer polyglot.RegisterLanguage(oldRow)
+	oldGate := interp.ForeignEffectGate
+	interp.ForeignEffectGate = fenceEffectGate
+	defer func() { interp.ForeignEffectGate = oldGate }()
+	cat := agentFenceCatalog(t)
+	row := agentFenceRow()
+	row.NewRuntime = func(cfg polyglot.RuntimeConfig) polyglot.LanguageRuntime { return newAgentFenceRuntime(cfg, cat, nil) }
+	polyglot.RegisterLanguage(row)
+	const source = "apiVersion: ycode.dev/v1alpha1\nkind: Harness\nspec: {}\n"
+	root := t.TempDir()
+	var paths []string
+	for _, name := range []string{"east", "west"} {
+		path := filepath.Join(root, name, "agent.yaml")
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, path)
+	}
+	seen := map[string]int{}
+	YAMLAgentPrepare = func(path string, raw []byte) (func() (YAMLAgentSession, error), error) {
+		if string(raw) != source {
+			t.Fatalf("source=%q", raw)
+		}
+		seen[path]++
+		return func() (YAMLAgentSession, error) { return &yamlFenceFixture{}, nil }, nil
+	}
+	cwd, _ := os.Getwd()
+	east, _ := filepath.Rel(cwd, paths[0])
+	west, _ := filepath.Rel(cwd, paths[1])
+	decl := "embed agent \"./" + east + "\" as east\nembed agent \"./" + west + "\" as west\n"
+	_, out, diag := runDecorated(t, context.Background(), syntax.LangBashPP,
+		decl+"agentic { a, ea := east.run(\"one\"); b, eb := west.run(\"two\"); echo \"$a $b\"; }\n",
+		map[string]string{"BASHY_AUDIT": "0"})
+	if seen[paths[0]] != 1 || seen[paths[1]] != 1 || !strings.Contains(out.String(), "recorded answer recorded answer") {
+		t.Fatalf("origins=%v stdout=%q stderr=%q", seen, out, diag)
+	}
+}

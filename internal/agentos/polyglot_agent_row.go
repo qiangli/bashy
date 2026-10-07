@@ -48,8 +48,8 @@ func newAgentFenceRuntime(cfg polyglot.RuntimeConfig, catalog *fleet.Catalog, in
 	var mu sync.Mutex
 	clones := map[string]string{}
 	sessions := map[string]YAMLAgentSession{}
-	prepared := map[string]func() (YAMLAgentSession, error){}
-	bindings := map[string]fleet.Agent{}
+	var prepared func() (YAMLAgentSession, error)
+	var binding fleet.Agent
 	cloneDefinitions := map[string]fleet.Agent{}
 	sourcePath := cfg.Source
 	if sourcePath == "" {
@@ -67,7 +67,7 @@ func newAgentFenceRuntime(cfg polyglot.RuntimeConfig, catalog *fleet.Catalog, in
 					if err != nil {
 						return nil, err
 					}
-					prepared[source] = open
+					prepared = open
 				} else {
 					return nil, errors.New("agent fence: YAML harness is not linked in this build")
 				}
@@ -76,7 +76,7 @@ func newAgentFenceRuntime(cfg polyglot.RuntimeConfig, catalog *fleet.Catalog, in
 				if err != nil {
 					return nil, err
 				}
-				bindings[source], _ = catalog.Agent(name)
+				binding, _ = catalog.Agent(name)
 			}
 			return []polyglot.Export{{Name: "run", Agentic: true, Effects: []string{"exec", "net", "spend"}, Signature: polyglot.Signature{Params: []string{"string"}, Results: []string{"string", "error"}}}}, nil
 		},
@@ -97,8 +97,8 @@ func newAgentFenceRuntime(cfg polyglot.RuntimeConfig, catalog *fleet.Catalog, in
 				session := sessions[plan.ID]
 				if session == nil {
 					var err error
-					if open := prepared[plan.Source]; open != nil {
-						session, err = open()
+					if prepared != nil {
+						session, err = prepared()
 					} else {
 						return polyglot.CallResult{}, errors.New("agent fence: YAML definition was not prepared")
 					}
@@ -117,7 +117,7 @@ func newAgentFenceRuntime(cfg polyglot.RuntimeConfig, catalog *fleet.Catalog, in
 					return polyglot.CallResult{}, err
 				}
 				current, _ := catalog.Agent(parent)
-				if expected, ok := bindings[plan.Source]; !ok || !reflect.DeepEqual(current, expected) {
+				if !reflect.DeepEqual(current, binding) {
 					return polyglot.CallResult{}, errors.New("agent fence: binding changed after preparation")
 				}
 				var id [12]byte
