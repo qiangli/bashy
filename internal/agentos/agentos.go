@@ -1601,9 +1601,8 @@ func dispatch() {
 		dispatchExit(0)
 	case "peer", "sphere":
 		// Sphere tier (tier 4): peer-direct pooled p2p inference/compute. Thin
-		// front-door that execs the outpost mesh agent at runtime — NO build
-		// dependency on outpost (bashy stays the standalone keystone). Without
-		// outpost there is no p2p sphere.
+		// front door to the paired outpost service executable. Service code
+		// stays behind this process boundary; bashy owns the userland shell.
 		cmd := sphere.NewSphereCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
