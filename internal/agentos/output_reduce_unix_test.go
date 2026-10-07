@@ -8,6 +8,7 @@ package agentos
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -18,6 +19,24 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
 )
+
+type terminalCopySink struct{ io.Writer }
+
+func (s terminalCopySink) Unwrap() io.Writer { return s.Writer }
+
+func TestJournalWrappedTerminalUnwrappedForChild(t *testing.T) {
+	ptmx, tty, err := pty.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ptmx.Close()
+	defer tty.Close()
+	r := &shellOutputReducer{}
+	out, errOut, captured := r.wrapSinks(terminalCopySink{tty}, terminalCopySink{tty})
+	if captured || out != tty || errOut != tty {
+		t.Fatalf("child sinks = %T, %T; captured=%v, want terminal file", out, errOut, captured)
+	}
+}
 
 func TestShellOutputReductionReturnsThroughPTY(t *testing.T) {
 	isolateOutputReduction(t)

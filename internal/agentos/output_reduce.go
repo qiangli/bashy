@@ -267,7 +267,7 @@ func (r *shellOutputReducer) stderr() io.Writer { return shellCaptureWriter{r: r
 // the file; capture applies only to a sink that is not a terminal, or to any
 // sink when Stage 1 reduction was requested explicitly (outputReductionEnabled),
 // which is the operator asking for exactly that capture.
-func terminalSink(w io.Writer) bool {
+func terminalFile(w io.Writer) *os.File {
 	// A copying wrapper over the terminal (bashy dag's run-journal tee) still
 	// ends at the terminal: look through it.
 	for {
@@ -278,7 +278,14 @@ func terminalSink(w io.Writer) bool {
 		w = wrapped.Unwrap()
 	}
 	f, ok := w.(*os.File)
-	return ok && term.IsTerminal(int(f.Fd()))
+	if ok && term.IsTerminal(int(f.Fd())) {
+		return f
+	}
+	return nil
+}
+
+func terminalSink(w io.Writer) bool {
+	return terminalFile(w) != nil
 }
 
 // wrapSinks composes the reducer's writers over the configured sinks, leaving a
@@ -288,9 +295,15 @@ func (r *shellOutputReducer) wrapSinks(out, errOut io.Writer) (io.Writer, io.Wri
 	captured := false
 	if r.stage1 || !terminalSink(out) {
 		out, captured = r.stdout(), true
+	} else {
+		// Give os/exec the terminal file itself. A journal tee remains a
+		// writer to the terminal, but would make child stdout a pipe.
+		out = terminalFile(out)
 	}
 	if r.stage1 || !terminalSink(errOut) {
 		errOut, captured = r.stderr(), true
+	} else {
+		errOut = terminalFile(errOut)
 	}
 	return out, errOut, captured
 }
