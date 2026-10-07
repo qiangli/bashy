@@ -848,6 +848,7 @@ for host in "$@"; do
         coreutils) url=https://github.com/qiangli/coreutils.git ;;
         outpost) url=https://github.com/qiangli/outpost.git ;;
         yoke) url=https://github.com/qiangli/yoke.git ;;
+        gotreesitter) url=https://github.com/qiangli/gotreesitter.git ;;
         readline) url=https://github.com/qiangli/readline.git ;;
         filebrowser) url=https://github.com/qiangli/filebrowser.git ;;
         ycode) url=https://github.com/qiangli/ycode.git ;;
