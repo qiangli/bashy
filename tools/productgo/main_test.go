@@ -154,6 +154,9 @@ func TestManagedGoWithoutHostGoOnPATH(t *testing.T) {
 func TestProductTrimpathContract(t *testing.T) {
 	for _, value := range []string{"false", "0", "F", "invalid"} {
 		t.Run(value, func(t *testing.T) {
+			if runtime.GOOS == "windows" {
+				t.Skip("POSIX product build wrapper")
+			}
 			for _, inEnv := range []bool{false, true} {
 				args := []string{"build", "."}
 				env := append(os.Environ(), "GOFLAGS=")
