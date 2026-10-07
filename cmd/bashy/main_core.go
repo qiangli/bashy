@@ -57,8 +57,6 @@ func init() {
 	}
 	cli.AgentOSCommandLineNoExec = func(bool) bool { return baseDryRunRequested() }
 	cli.AgentOSStrictPosixParse = func(posix bool) bool { return posix && baseDryRunRequested() }
-	cli.AgentOSOwnedCommand = func(name string) bool { return tool.Lookup(name) != nil }
-	cli.AgentOSOwnedNames = tool.Names
 	cli.AgentOSDispatch = core.Dispatch
 	cli.AgentOSWireExec = core.WireExec
 	cli.AgentOSBashPPDefault = true
