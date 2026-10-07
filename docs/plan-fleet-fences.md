@@ -1,136 +1,107 @@
-# Fleet fences and embed: implementation checkpoint
+# Fleet fences and embed: implementation and evidence
 
 Sprint #381, Story #1569, Story-ID e7aea0d9cfca.
 
-This is a partial implementation checkpoint, not S8 acceptance or release
-approval. The required target remains all four fleet kinds (model, tool,
-agent, skill), in inline and embedded forms, with existing definitions,
-governed execution, measured spend, and the full regression gates.
+The four fleet kinds — model, tool, agent and skill — support inline text
+fences and file-backed `embed`. Both forms use the same row and expose the
+same methods, effects and results. This records worker delivery, not S8
+acceptance, independent-review approval or completion of manager gates.
 
-## Delivered slice
+## Implemented behavior
 
-The engine methods protocol accepts an optional boolean `agentic`, beside
-`effects` / `effect`. The interpreter refuses a flagged call outside an
-explicit agentic region or marked function before invoking the host. Unmarked
-functions do not inherit permission. Flagged methods currently refuse lowering
-by name with an interpreted route.
+The methods protocol accepts an optional boolean `agentic` alongside
+`effects` / `effect`. The interpreter rejects flagged calls outside an
+explicit agentic region or marked function before invoking the host. An
+unmarked function does not inherit that permission. All four fleet rows are
+interpreted-only; lowering names the unsupported row and the interpreted route.
 
-Host runtimes can release module-owned resources through `Embedded.CloseFunc`.
-An explicitly declared `(string, error)` method preserves partial output and a
-typed error, including `.Error()`. Caller-context cancellation remains a runner
-failure and is not converted into a successful script exit.
+Model and tool rows resolve existing catalog definitions, including registered
+nested definitions and defaults. A model resolves one eligible registered
+agent binding; missing or ambiguous bindings fail explicitly. Tool methods
+come from the catalog's commands and declared effects. Their analyzed metadata
+is frozen and catalog drift is rejected. Model calls use governed `chat.Invoke`;
+tool calls use the existing governed tool-command runner. Agentic calls carry
+`exec,net,spend`, plus declared tool effects. Neither row supplies an unsafe
+launch, premium-budget override or a direct interpreter-to-model shortcut.
 
-The new agent row accepts a registered fleet binding name, or its existing
-fleet YAML binding-reference fields (`name`, matching `tool` / `model`, and
-`instruction.content`). It does not redefine the fleet format or change the
-parent binding. Other policy-bearing fields are refused instead of ignored.
-A clone is minted lazily after the interpreter's admission checks, reused for
-serial calls in that module, and removed on module teardown. The call uses
-`chat.Invoke`, the same one-shot harness as `chat --agent --instruction`, with
-no unsafe-launch, premium-budget, dry-run, or argv override.
+The agent row accepts a registered binding reference, supported existing fleet
+binding YAML, or a complete existing ycode/genie `kind: Harness` YAML document.
+Binding references validate matching tool/model and supported instruction
+fields; unsupported policy fields fail instead of being ignored. The binding
+path uses `chat.Invoke` and lazily creates a script-scoped fleet clone after
+admission, reuses it for serial calls, and removes it on teardown.
 
-```bash
-~~~agent as searcher
-registered-search-binding
-~~~
+Full YAML goes through the strict ycode compiler and existing one-shot harness.
+Imports, routing, permission policy, budgets and retry settings remain part of
+the compiled definition; malformed/unknown fields and multiple documents fail.
+Relative paths resolve beside the embedded definition or inline script. A full
+YAML run creates a fresh durable session of the compiled roster, preserving
+the authored agent reference rather than inventing a fleet parent. Script
+teardown cancels and settles its session; durable usage and event evidence
+remains. Provider attempts reserve budget and settle receipts through the spend
+gate. A budget gate cannot silently change the authored YAML route.
 
-@guard(effects: "exec,net,spend")
-@ensure('test -n "$RESULT"')
-agentic func search() string {
-    answer, err := searcher.run("Find the requested evidence")
-    if err != nil { panic(err); }
-    return answer
-}
-agentic { answer := search(); echo "$answer"; }
+`Embedded.CloseFunc` releases module resources. Declared `(string, error)`
+methods preserve partial output and typed errors, including `.Error()`.
+Caller-context cancellation remains a failure. The tour checks returned errors
+before passing answers to `@ensure`.
+
+Skills retain `run`, `verify` and `probe`. S7 owns task-target discovery and its
+final integration; this delivery does not edit that implementation or the
+`08-text-fences` chapter. The new matrix uses `verify` with a checked outcome.
+
+## Recorded tour and focused tests
+
+The sibling tour's `11-fleet` chapter now registers all eight kind/form
+combinations in its existing `cases.tsv` inventory, with `.expected` transcripts.
+Its `fleet` runner mode creates an isolated catalog and spend state, imports a
+deterministic local tool/model/agent using catalog verbs, and invokes the tested
+CLI through the real governed harness. The transport is a local Bashy script
+returning `recorded answer`; no model API or billable request is involved.
+Three additional transcripts exercise agentic denial, read-cap denial and an
+`@ensure` mismatch. Fixture assertions require transport evidence and positive
+metered tokens for executed calls, and no transport evidence for denied calls.
+The bounded native smoke passed 11/11 (eight success, three expected refusal),
+with zero skips; shell syntax and diff checks also passed. The CLI was built
+with `GOMAXPROCS=2 go build -p=2 ./cmd/bashy`, not a full test suite. Run the bounded chapter without island provisioning:
+
+```sh
+TOUR_FILTER=fleet/ sh bashsharp-tour/check.sh /absolute/path/to/bashy
 ```
 
-`embed agent "./binding.yaml" as searcher` uses exactly the same row. The
-file may contain the binding name or its supported existing YAML fields.
-This example needs a real registered binding; it is not the required recorded
-fixture tour chapter, and is not evidence of complete S8 acceptance.
+Worker evidence preceding the tour includes these focused selections:
 
-## Evidence from the isolated worker
+- `bashy/internal/agentos`: `TestAgentFence*`, `TestModelFence*`,
+  `TestToolFence*`, fence effect gates and row registration. Covers both forms,
+  invalid definitions, named lowering refusals, effect/agentic denials,
+  catalog drift, result/error preservation, clone reuse and cleanup, and
+  real harness spend reservation/settlement with fixture transports.
+- `bashy/cmd/bashy`: `TestYAMLAgentFenceCompilerRunner`, both complete YAML
+  formats in both forms with fixture providers, CLI enforcement and judged output.
+- `ycode/pkg/ycodecli`: `TestTextAgent*`, provider usage, hard-spend rejection,
+  source mutation and cancellation.
+- `sh`: focused agentic runner, typed-error, text-row, lowering and embedded
+  lifecycle checks. The full suite is not implied by these selections.
 
-Engine protocol commit: `f184bb2ae`.
-Engine lifecycle/error/lowering commit: `f17849216`.
+The model/tool review fix is `bashy c0b7915` with `yoke f8d87af`;
+full YAML delivery is `bashy 9737eee`, `ycode 3e8b22f`, `sh 7114c7e03`.
+These identify implementation evidence, not a claim of final manager review.
 
-Bounded commands run locally:
+## Known limits and outstanding gates
 
-```text
-sh:
-go test -tags full ./interp ./lower ./polyglot -run '^(TestBashPPAgentic|TestBashPPRunnerFence|TestBashPPForeignDeclaredStringError|TestBashPPPredeclaredErrorInterface|TestBashPPErrorInterfaceTypedNil|TestBashPPTextRow|TestBashPPForeignEffectGate|TestBashPPEmbedRunnerFence|TestLowerTextRowAndRunnerFence|TestLowerRunnerFenceRefusals|TestAgenticForeignLoweringRefusesByName|TestParseMethods|TestEmbeddedModuleClose)' -count=1 -timeout=120s
-ok mvdan.cc/sh/v3/interp
-ok mvdan.cc/sh/v3/lower
-ok mvdan.cc/sh/v3/polyglot
+Opaque CLI transports have estimated token/cost accounting, not invented
+provider-reported usage or a guaranteed hard spend bound. Hard limits refuse
+turns whose pre-call bound cannot be established. Full YAML provider receipts
+are settled when supplied; missing usage is marked estimated and uncertain
+interrupted requests retain reservations for reconciliation.
 
-bashy:
-go test ./internal/agentos -run '^(TestAgentFence|TestFenceEffectGate|TestDagMethods|TestTextRowsRegistered)' -count=1 -timeout=120s
-ok github.com/qiangli/bashy/internal/agentos
-```
+Binding-based chat reads the process environment; script-local exported
+environment projection is not claimed. The tour sets its catalog environment
+before starting the CLI. The offline tour proves real CLI wiring and outcome
+checks; it does not test an external provider or substitute for the complete
+backend matrix. The full-YAML fixtures remain in the implementation tests.
 
-The agent tests cover inline/embed execution parity, missing/invalid
-definitions, named lowering refusal, agentic denial, read-cap denial,
-permitted `exec,net,spend`, ensured output, clone reuse and deletion after
-success/failure/nonzero status/cancellation, and interpreter teardown on
-cancellation. The metering test substitutes only chat's external process
-transport: real catalog resolution, launch governance, reservation and
-settlement run. It reads the actual meter file and requires positive token and
-cost counters. A hard-spend policy then denies the opaque turn before transport.
-These are the existing harness's explicitly estimated accounting figures,
-not asserted provider-reported usage or a fabricated hard spend bound.
-
-Raw failure excerpts retained from development (all covered by the final
-passing selection):
-
-```text
-replacement directory ../gotreesitter does not exist
-TestBashPPRunnerFenceAgentic/command_denied:
-  "searcher.run": executable file not found in $PATH
-TestAgentFenceInlineEmbedGovernance/read_denied:
-  calls=1 out="recorded answer\n" diag="" err=<nil>
-TestAgentFenceHarnessMetersSpend:
-  tool "fixture" cannot select a model ... launch template has no {model}
-TestBashPPForeignDeclaredStringError:
-  BASHPP-EINTERFACE-VALUE: promoted interface method Error has no interface storage
-TestBashPPForeignDeclaredStringError:
-  type polyglot.error has no method Error
-TestAgentFenceInterpreterCancellationCleanup:
-  did not cancel a started call ... err=<nil>
-TestLowerTextRowAndRunnerFence:
-  generated source lacks ... Result: ""}
-```
-
-The missing private sibling was cloned locally. The command fixture was
-corrected to call `searcher.run()`. The guard test now installs the same fence
-seam as the CLI and uses the named effect-cap argument. The fixture launch
-now declares model selection. The error carrier and cancellation findings
-were fixed in the interpreter. Unmarked text-row literals retain their previous
-lowered spelling. No denial or cancellation assertions were removed.
-
-## Remaining acceptance and integration blockers
-
-- Model and tool rows are not implemented. The existing chat seam takes a
-  tool/model binding; a model-only row must integrate the existing routing
-  path without choosing an arbitrary tool. Fleet vendor `ToolCommand` records
-  currently have no effect field; resolve the existing authoritative effect
-  discovery/runner contract before exposing those methods.
-- Full ycode/genie `kind: Harness` YAML is not accepted by this slice. It needs
-  the strict ycode compiler and a governed launch/configuration seam preserving
-  its routing, authorization and policy. Do not parse it as a fleet binding
-  or treat the YAML as a prompt. Any missing direct-model/spec metering
-  prerequisite needs a linked owner story before its implementation.
-- Script-local exported environment changes are not explicitly projected into
-  this direct chat call; chat currently reads its process environment. Review
-  that seam with catalog scoping when completing inline spec integration.
-- S7 owns skill target methods. Its implementation and final skill/embed
-  integration must be consumed through the manager; the existing skill row
-  file has not been edited here.
-- The complete eight-combination tour, provider fixture matrix, and full
-  model/spec accounting proof remain open.
-- No complete `make test`, 86/86 Bash compatibility gate, Bash# harness gate,
-  installed-binary smoke, remote independent gate, push or story closure is
-  claimed. The manager owns those gates and integration.
-
-The next integration step is to review these commits, resolve the model/tool
-and strict-spec seams above, consume S7, then run the full acceptance matrix on
-the manager's claimed test host. Keep S8 open until those checks pass.
+Independent full-spec/backend review, final S7 integration, synchronized
+published sibling pins, complete `make test`, the 86/86 Bash compatibility
+gate, the Bash# harness, installed-binary smoke and remote acceptance remain
+manager-owned. No push, broad gate completion or story closure is claimed here.
