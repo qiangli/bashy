@@ -50,12 +50,18 @@ import (
 // The gate is deliberately BASHY_AGENTIC: the hint is a machine-readable line
 // for an agent, so it stays inert for interactive humans and without the env.
 // BASHY_HINTS=off is the shared silencer for every hint surface.
-func notFoundHintsEnabled() bool {
-	switch strings.ToLower(os.Getenv("BASHY_HINTS")) {
+//
+// The gate reads the EXECUTION environment wireExec was handed (last assignment
+// wins, as the shell resolves it), never the host process environment — the two
+// can differ when a caller wires a runner with an explicit env, and the hint
+// must honour the env the shell actually runs under. This mirrors
+// agentModeForEnv(env); os.Getenv here would gate on the wrong environment.
+func notFoundHintsEnabled(env []string) bool {
+	switch strings.ToLower(outputEnv(env, "BASHY_HINTS")) {
 	case "0", "false", "off", "no":
 		return false
 	}
-	switch strings.ToLower(os.Getenv("BASHY_AGENTIC")) {
+	switch strings.ToLower(outputEnv(env, "BASHY_AGENTIC")) {
 	case "", "0", "false", "off", "no":
 		return false
 	}

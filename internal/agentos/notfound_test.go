@@ -27,31 +27,52 @@ func newTestNotFoundHinter() *notFoundHinter {
 }
 
 func TestNotFoundHintsEnabledGate(t *testing.T) {
+	// The gate reads the supplied execution env, not the process env: drive it
+	// with explicit slices so the source under test is unambiguous.
 	// Inert without the env.
-	t.Setenv("BASHY_HINTS", "")
-	t.Setenv("BASHY_AGENTIC", "")
-	if notFoundHintsEnabled() {
+	if notFoundHintsEnabled([]string{"BASHY_HINTS=", "BASHY_AGENTIC="}) {
 		t.Error("must be inert when BASHY_AGENTIC is unset")
 	}
 	for _, v := range []string{"0", "off", "false", "no"} {
-		t.Setenv("BASHY_AGENTIC", v)
-		if notFoundHintsEnabled() {
+		if notFoundHintsEnabled([]string{"BASHY_AGENTIC=" + v}) {
 			t.Errorf("BASHY_AGENTIC=%q must stay inert", v)
 		}
 	}
 	for _, v := range []string{"1", "on", "true", "yes"} {
-		t.Setenv("BASHY_AGENTIC", v)
-		if !notFoundHintsEnabled() {
+		if !notFoundHintsEnabled([]string{"BASHY_AGENTIC=" + v}) {
 			t.Errorf("BASHY_AGENTIC=%q should enable the hint", v)
 		}
 	}
 	// BASHY_HINTS=off is the shared silencer even with BASHY_AGENTIC on.
-	t.Setenv("BASHY_AGENTIC", "1")
 	for _, v := range []string{"0", "off", "false", "no"} {
-		t.Setenv("BASHY_HINTS", v)
-		if notFoundHintsEnabled() {
+		if notFoundHintsEnabled([]string{"BASHY_AGENTIC=1", "BASHY_HINTS=" + v}) {
 			t.Errorf("BASHY_HINTS=%q must silence the hint", v)
 		}
+	}
+}
+
+// The gate must read the execution env wireExec was handed, never the host
+// process environment — the two can disagree. These three cases are exactly the
+// disagreements the t.Setenv+os.Environ wire tests cannot see, because there the
+// two environments are forced equal.
+func TestNotFoundHintsEnabledUsesSuppliedEnvNotHost(t *testing.T) {
+	// Host OFF, run env ON -> the hint fires: the supplied env wins.
+	t.Setenv("BASHY_AGENTIC", "")
+	t.Setenv("BASHY_HINTS", "")
+	if !notFoundHintsEnabled([]string{"BASHY_AGENTIC=1"}) {
+		t.Error("host BASHY_AGENTIC unset must not suppress a run env that enables it")
+	}
+	// Host ON, run env OFF -> no hint: the host must not force it on.
+	t.Setenv("BASHY_AGENTIC", "1")
+	t.Setenv("BASHY_HINTS", "")
+	if notFoundHintsEnabled([]string{"BASHY_AGENTIC="}) {
+		t.Error("host BASHY_AGENTIC set must not enable a run env that leaves it unset")
+	}
+	// Explicit BASHY_HINTS=off in the run env silences even when the host says on.
+	t.Setenv("BASHY_AGENTIC", "1")
+	t.Setenv("BASHY_HINTS", "1")
+	if notFoundHintsEnabled([]string{"BASHY_AGENTIC=1", "BASHY_HINTS=off"}) {
+		t.Error("explicit BASHY_HINTS=off in the run env must silence the hint")
 	}
 }
 
@@ -414,6 +435,42 @@ func TestNotFoundHintOffThroughWireExec(t *testing.T) {
 		if strings.Contains(errOut, "command-not-found") {
 			t.Errorf("the hint fired while gated off (env=%v):\n%s", env, errOut)
 		}
+	}
+}
+
+// wireExec must install (or omit) the hinter based on the env it is HANDED, not
+// the host process env. Here the process env disables the gate while the env
+// passed to wireExec enables it: the hint must still fire. This is the case the
+// t.Setenv+os.Environ wire tests above cannot reach, because there the two
+// environments are forced equal.
+func TestNotFoundHintWireExecHonoursSuppliedEnvOverHost(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("BASHY_SKILLS_DIR", t.TempDir())
+	// Host says OFF; the env handed to wireExec says ON.
+	t.Setenv("BASHY_AGENTIC", "")
+	t.Setenv("BASHY_HINTS", "")
+	env := []string{"BASHY_AGENTIC=1"}
+
+	var out, errOut bytes.Buffer
+	r, err := interp.New(interp.Env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, opt := range wireExec(nil, false, env, nil, &out, &errOut, false) {
+		if err := opt(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	prog, perr := syntax.NewParser().Parse(strings.NewReader("no-such-command-zzz-79 ; echo status=$?\n"), "")
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	_ = r.Run(context.Background(), prog)
+	if !strings.Contains(out.String(), "status=127") {
+		t.Fatalf("expected the absent command to exit 127, stdout=%q", out.String())
+	}
+	if !strings.Contains(errOut.String(), "command-not-found") {
+		t.Errorf("wireExec ignored the supplied env and gated on the host:\n%s", errOut.String())
 	}
 }
 
