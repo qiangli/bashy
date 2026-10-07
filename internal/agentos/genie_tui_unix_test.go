@@ -96,7 +96,7 @@ check:
 }
 
 func hasGenieTUIBanner(output string) bool {
-	return strings.Contains(output, "genie:") &&
-		strings.Contains(output, "Session commands:") &&
+	return strings.Contains(output, "genie · session ") &&
+		strings.Contains(output, "ask in plain words") &&
 		strings.Contains(output, "Ctrl-D leaves.")
 }
