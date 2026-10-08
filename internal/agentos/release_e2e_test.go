@@ -11,11 +11,14 @@
 package agentos
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/qiangli/yoke/pkg/binmgr"
 )
 
 const e2eReleaseConfig = `
@@ -107,23 +110,48 @@ func TestE2EReleaseSnapshot(t *testing.T) {
 	}
 }
 
-// A config declaring an unimplemented stage must fail the real binary loudly,
-// naming the stage — not produce a partial set of assets and exit 0.
-func TestE2EReleaseRefusesUnimplementedStage(t *testing.T) {
+// A config beyond the embedded subset runs the real binary through the
+// provisioned engine: announce is skipped under snapshot semantics, and the
+// engine's own artifacts.json (not our release-ledger.json) proves which
+// pipeline ran. The engine is pre-provisioned in-process into a temp cache
+// the child reuses; without provisioning (offline) this skips by name.
+func TestE2EReleaseDelegatesUnimplementedStage(t *testing.T) {
 	bin := bashyBinary(t)
 	dir := t.TempDir()
-	cfg := e2eReleaseConfig + "\nannounce:\n  slack:\n    enabled: true\n"
+	cfg := "project_name: demo\n" +
+		"builds:\n  - id: demo\n    main: ./cmd/demo\n    binary: demo\n" +
+		"archives:\n  - id: demo\n    formats: [tar.gz]\n" +
+		"checksum:\n  name_template: SHA256SUMS\n" +
+		"announce:\n  slack:\n    enabled: true\n"
 	if err := os.WriteFile(filepath.Join(dir, ".goreleaser.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	stdout, stderr, code := runBashyStd(bin, "release", "--snapshot", "--dir", dir, "--version", "0.1.0", "--skip-build")
-	if code == 0 {
-		t.Fatalf("a config with announce: must fail:\n%s", stdout)
+	if err := os.MkdirAll(filepath.Join(dir, "cmd", "demo"), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(stderr, "announce") {
-		t.Errorf("stderr must name the refused stage:\n%s", stderr)
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module demo\n\ngo 1.27\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "dist")); err == nil {
-		t.Error("a refused config must not have produced an output directory")
+	if err := os.WriteFile(filepath.Join(dir, "cmd", "demo", "main.go"),
+		[]byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cache := t.TempDir()
+	t.Setenv("BASHY_BIN_CACHE", cache)
+	if _, err := binmgr.EnsureGoreleaser(context.Background()); err != nil {
+		t.Skipf("delegation e2e needs the provisioned release engine: %v", err)
+	}
+	stdout, stderr, code := runBashyStdEnv(bin,
+		[]string{"BASHY_BIN_CACHE=" + cache},
+		"release", "--snapshot", "--dir", dir)
+	if code != 0 {
+		t.Fatalf("a delegable config must succeed:\nstdout=%s\nstderr=%s", stdout, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "dist", "artifacts.json")); err != nil {
+		t.Errorf("the engine's artifacts.json is missing — the embedded pipeline ran instead:\n%s", stdout)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "dist", "release-ledger.json")); err == nil {
+		t.Error("the embedded ledger is present — delegation did not hand off")
 	}
 }

@@ -170,14 +170,26 @@ case "$out" in
 esac
 ```
 
-### release
-Cut a release with GoReleaser. Fires from CI on a `vX.Y.Z-dev` tag; a bare tag
-is a byte-promotion of already-tested assets and must NOT rebuild.
+### release-snapshot
+Snapshot the project's release artifacts with `bashy release --snapshot`:
+nothing pre-installed (an extended config provisions the pinned release
+engine on first use). The shared entry point any including project runs.
 Effects: write, net
 
 ```bash
 BASHY_EXE="${BASHY:-bashy}"
-"$BASHY_EXE" goreleaser release --clean
+"$BASHY_EXE" release --snapshot
+```
+
+### release
+Cut a release: the snapshot artifacts, built the same way. Fires from CI on
+a `vX.Y.Z-dev` tag; a bare tag is a byte-promotion of already-tested assets
+and must NOT rebuild. Tagged publishing is not implemented — snapshots only.
+Effects: write, net
+
+```bash
+BASHY_EXE="${BASHY:-bashy}"
+"$BASHY_EXE" release --snapshot
 ```
 
 ### clean

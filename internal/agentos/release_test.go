@@ -7,6 +7,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -249,20 +250,77 @@ func TestReleaseSnapshotIsByteDeterministic(t *testing.T) {
 	}
 }
 
-// A config declaring a stage this tier does not implement must be refused BY
-// NAME, before anything is built — never a run that silently ships less.
-func TestReleaseRefusesUnimplementedStageByName(t *testing.T) {
+// A config beyond the embedded subset classifies as delegation-worthy: the
+// loader refuses it, and the refusal routes to the provisioned engine rather
+// than failing the run. This test stays offline — it exercises the routing,
+// never the download.
+func TestReleaseSnapshotDelegatesBeyondSubset(t *testing.T) {
+	for _, cfg := range []string{
+		releaseTestConfig + "\nsigns:\n  - cmd: cosign\n",
+		releaseTestConfig + "\nwobbles:\n  - nope\n",
+	} {
+		dir := newReleaseProject(t, cfg, demoPrebuilt)
+		_, _, err := loadReleaseConfig(&releaseOptions{dir: dir})
+		if err == nil {
+			t.Fatal("an extended config must not load into the embedded tier")
+		}
+		if !release.IsUnimplemented(err) {
+			t.Errorf("refusal must route to delegation, got: %v", err)
+		}
+	}
+	// A broken config is not delegation-worthy: syntax errors fail locally.
+	dir := newReleaseProject(t, "builds:\n  - id: [unclosed\n", demoPrebuilt)
+	_, _, err := loadReleaseConfig(&releaseOptions{dir: dir})
+	if err == nil || release.IsUnimplemented(err) {
+		t.Errorf("a syntax error must fail, got: %v", err)
+	}
+}
+
+// The embedded-tier flags shape the in-process pipeline only: combining them
+// with an extended config is a usage error, never a silently ignored flag.
+func TestReleaseDelegatedRefusesEmbeddedFlags(t *testing.T) {
+	dir := newReleaseProject(t, releaseTestConfig, demoPrebuilt)
+	for _, opts := range []releaseOptions{
+		{dir: dir, dist: "elsewhere"},
+		{dir: dir, skipBuild: true},
+		{dir: dir, version: "9.9.9"},
+	} {
+		err := runReleaseDelegated(context.Background(), io.Discard, io.Discard, &opts)
+		if !errors.Is(err, errReleaseUsage) {
+			t.Errorf("opts %+v: want a usage error, got %v", opts, err)
+		}
+	}
+}
+
+// `check` (and `plan`) validate the embedded tier: an extended config is
+// still refused BY NAME there, before anything is built.
+func TestReleaseCheckStillRefusesUnimplementedStage(t *testing.T) {
 	cfg := releaseTestConfig + "\nsigns:\n  - cmd: cosign\n"
 	dir := newReleaseProject(t, cfg, demoPrebuilt)
-	_, _, err := runReleaseCmd(t, "--snapshot", "--dir", dir, "--version", "0.1.0", "--skip-build")
+	_, _, err := runReleaseCmd(t, "check", "--dir", dir)
 	if err == nil {
-		t.Fatal("a config with signs: must be refused")
+		t.Fatal("a config with signs: must be refused by check")
 	}
 	if !errors.Is(err, release.ErrUnsupportedStage) || !strings.Contains(err.Error(), "signs") {
 		t.Errorf("error must name the stage: %v", err)
 	}
-	if _, statErr := os.Stat(filepath.Join(dir, "dist", "SHA256SUMS")); statErr == nil {
-		t.Error("a refused config must not have produced artifacts")
+}
+
+// The engine stays out of every user-facing surface: no command, no help
+// text, no registry synopsis names it. The `.goreleaser.yaml` config filename
+// is the schema users already write, so it is allowed through.
+func TestReleaseHelpNamesNoEngine(t *testing.T) {
+	root := releaseCmd()
+	texts := []string{root.Short, root.Long, synopsisOf("release")}
+	for _, c := range root.Commands() {
+		texts = append(texts, c.Short, c.Long)
+	}
+	for _, s := range texts {
+		scrubbed := strings.ReplaceAll(strings.ToLower(s), ".goreleaser.yaml", "")
+		scrubbed = strings.ReplaceAll(scrubbed, ".goreleaser.yml", "")
+		if strings.Contains(scrubbed, "goreleaser") {
+			t.Errorf("user-facing release text names the engine: %q", s)
+		}
 	}
 }
 
@@ -435,10 +493,12 @@ func TestReleaseIsCataloguedAndClassified(t *testing.T) {
 	if r.Stage != "deploy" || r.Tier != "workspace" {
 		t.Errorf("release = %+v, want deploy/workspace", r)
 	}
-	// Local-first: the T0 slice reaches no network, so it must not claim the
-	// net effect. A publish stage would earn it — and does not exist here.
-	if containsString(r.Effects, "net") {
-		t.Errorf("release declares the net effect but --snapshot is local-first: %+v", r.Effects)
+	// Local-first on a warm cache, one network fetch on a cold one: an
+	// extended config provisions the pinned release engine once, then it is
+	// cached like every managed external. Publishing would earn net on every
+	// run — and does not exist here.
+	if !containsString(r.Effects, "net") {
+		t.Errorf("release must declare net (cold-cache engine provisioning): %+v", r.Effects)
 	}
 	if !containsString(r.Effects, "write") || !containsString(r.Effects, "exec") {
 		t.Errorf("release must declare write+exec (it writes dist/ and runs the Go toolchain): %+v", r.Effects)

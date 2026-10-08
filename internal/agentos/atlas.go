@@ -211,20 +211,22 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 	// release turns a .goreleaser.yaml into named, checksummed artifacts. It
 	// serves DEPLOY: no other verb owns what bytes leave this machine or under
 	// what name. Tier is workspace — it reads and writes one project tree and
-	// nothing outside it. Group is toolchains: the T0 stages are the build and
-	// packaging side of the surface, next to the go/cmake/clang provisioners it
-	// drives (the closed group vocabulary, which lives in coreutils, has no
-	// "build" member and this slice does not change it).
+	// nothing outside it. Group is toolchains: the embedded stages are the
+	// build and packaging side of the surface, next to the go/cmake/clang
+	// provisioners it drives (the closed group vocabulary, which lives in
+	// coreutils, has no "build" member and this slice does not change it).
 	//
-	// Effects are exactly what the T0 slice does: read the tree, write dist/,
-	// exec the Go toolchain. NOT `net` — `release --snapshot` is local-first,
-	// and publishing (which would earn `net`) is not implemented here.
+	// Effects: read the tree, write dist/, exec the Go toolchain — plus `net`
+	// on a cold cache, when a config beyond the embedded stages provisions
+	// the release engine once (then it is cached like every managed external).
+	// Publishing (which would also earn `net` on every run) is not
+	// implemented here.
 	"release": {
 		Stage:   atlas.StageDeploy,
 		Group:   atlas.GroupToolchains,
 		Tier:    atlas.TierWorkspace,
 		Caps:    []string{atlas.CapJSON, atlas.CapSpawnsProcesses},
-		Effects: []string{atlas.EffExec, atlas.EffRead, atlas.EffWrite},
+		Effects: []string{atlas.EffExec, atlas.EffRead, atlas.EffWrite, atlas.EffNet},
 	},
 	"inbox": {
 		Stage:   atlas.StageCross,

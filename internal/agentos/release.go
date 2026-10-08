@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -36,6 +37,7 @@ import (
 
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	outgit "github.com/qiangli/yoke/git"
+	"github.com/qiangli/yoke/pkg/binmgr"
 	"github.com/qiangli/yoke/pkg/release"
 )
 
@@ -92,13 +94,12 @@ func releaseCmd() *cobra.Command {
 		Short: "Build, archive and checksum this project's release artifacts",
 		Long: `bashy release turns a .goreleaser.yaml into named, checksummed artifacts.
 
-T0 implements the local-first half in-process: build -> archive -> checksum,
+--snapshot runs the local-first pipeline: build -> archive -> checksum,
 emitting the archives, the checksum manifest, and a ` + release.LedgerSchema + ` artifact
-ledger. No network, no credentials, no tag required.
-
-Stages this tier does not implement (sign, sbom, publish, announce, packages)
-are refused BY NAME when the config declares them, so a run never ships fewer
-assets than the config asks for while still reporting success.
+ledger. No network, no credentials, no tag required. Configs reaching beyond
+the embedded stages run through the provisioned release engine instead —
+same config, same snapshot semantics, nothing extra to install. A run never
+ships fewer assets than the config asks for while still reporting success.
 
   bashy release --snapshot          build + archive + checksum (no tag needed)
   bashy release plan                what a run would produce, without building
@@ -196,11 +197,17 @@ func releaseCheckCmd() *cobra.Command {
 	return cmd
 }
 
-// runReleaseSnapshot is the T0 pipeline: resolve config + fields, build,
-// archive, checksum, then write the artifact ledger.
+// runReleaseSnapshot is the snapshot pipeline. Configs inside the embedded
+// subset (build, archive, checksum) run in-process; configs beyond it are
+// handed to the provisioned release engine with the same snapshot semantics.
+// `plan` and `check` keep validating the embedded tier only — they describe
+// what bashy itself implements, not what the engine would do.
 func runReleaseSnapshot(ctx context.Context, stdout, stderr io.Writer, opts *releaseOptions) error {
 	cfg, dir, err := loadReleaseConfig(opts)
 	if err != nil {
+		if release.IsUnimplemented(err) {
+			return runReleaseDelegated(ctx, stdout, stderr, opts)
+		}
 		return err
 	}
 	fields, err := resolveReleaseFields(dir, cfg, opts)
@@ -296,27 +303,52 @@ func runReleasePlan(stdout io.Writer, opts *releaseOptions) error {
 	return nil
 }
 
-// loadReleaseConfig resolves the project root and the config, applies the
-// goreleaser defaults, and honours a --dist override. It returns the ABSOLUTE
-// project root, which every path in the run is joined onto.
-func loadReleaseConfig(opts *releaseOptions) (*release.Config, string, error) {
-	dir := opts.dir
+// runReleaseDelegated runs a config beyond the embedded subset through the
+// provisioned release engine: same project root, same config file, snapshot
+// semantics (--snapshot implies no announce, no publish, no validation — the
+// run produces local artifacts only). The engine is ensured via binmgr
+// (pinned, verified) and exec'd, never linked. --dist, --version and
+// --skip-build shape the embedded pipeline only, so combining them with an
+// extended config is a usage error rather than a silently ignored flag. The
+// engine names itself in its own output; bashy adds nothing.
+func runReleaseDelegated(ctx context.Context, stdout, stderr io.Writer, opts *releaseOptions) error {
+	if opts.dist != "" || opts.skipBuild || strings.TrimSpace(opts.version) != "" {
+		return fmt.Errorf("%w: --dist, --version and --skip-build shape the embedded stages only — the extended config uses its own file", errReleaseUsage)
+	}
+	dir, path, err := resolveReleasePaths(opts)
+	if err != nil {
+		return err
+	}
+	bin, err := binmgr.EnsureGoreleaser(ctx)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, bin, "release", "--snapshot", "--clean", "--config", path)
+	cmd.Dir = dir
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	return cmd.Run()
+}
+
+// resolveReleasePaths resolves the ABSOLUTE project root and config path.
+// Every path in either pipeline is joined onto the returned root.
+func resolveReleasePaths(opts *releaseOptions) (dir, path string, err error) {
+	dir = opts.dir
 	if dir == "" {
 		wd, err := os.Getwd()
 		if err != nil {
-			return nil, "", err
+			return "", "", err
 		}
 		dir = wd
 	}
-	dir, err := filepath.Abs(dir)
-	if err != nil {
-		return nil, "", err
+	if dir, err = filepath.Abs(dir); err != nil {
+		return "", "", err
 	}
 	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
-		return nil, "", fmt.Errorf("release: project root %s is not a directory", dir)
+		return "", "", fmt.Errorf("release: project root %s is not a directory", dir)
 	}
 
-	path := opts.config
+	path = opts.config
 	switch {
 	case path == "":
 		for _, name := range releaseConfigNames {
@@ -327,11 +359,22 @@ func loadReleaseConfig(opts *releaseOptions) (*release.Config, string, error) {
 			}
 		}
 		if path == "" {
-			return nil, "", fmt.Errorf("release: no release config in %s (looked for %s) — pass --config PATH",
+			return "", "", fmt.Errorf("release: no release config in %s (looked for %s) — pass --config PATH",
 				dir, strings.Join(releaseConfigNames, ", "))
 		}
 	case !filepath.IsAbs(path):
 		path = filepath.Join(dir, path)
+	}
+	return dir, path, nil
+}
+
+// loadReleaseConfig resolves the project root and the config, applies the
+// goreleaser defaults, and honours a --dist override. It returns the ABSOLUTE
+// project root, which every path in the run is joined onto.
+func loadReleaseConfig(opts *releaseOptions) (*release.Config, string, error) {
+	dir, path, err := resolveReleasePaths(opts)
+	if err != nil {
+		return nil, "", err
 	}
 
 	cfg, err := release.LoadConfig(path)
