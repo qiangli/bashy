@@ -118,20 +118,13 @@ func TestAgentFenceInlineEmbedGovernance(t *testing.T) {
 		})
 	}
 	polyglot.RegisterLanguage(row)
-	dir := t.TempDir()
+	dir := newFenceEmbedFixtureDir(t)
 	def := filepath.Join(dir, "binding.yaml")
 	if err := os.WriteFile(def, []byte("searcher"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	// The parser resolves embed paths relative to its source file.
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	rel, err := filepath.Rel(cwd, def)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rel := fenceEmbedRelPath(t, def)
 	for _, declaration := range []string{"~~~agent as searcher\nsearcher\n~~~\n", "embed agent \"./" + rel + "\" as searcher\n"} {
 		for _, tc := range []struct {
 			name, body, want string
@@ -341,14 +334,13 @@ func TestAgentFenceYAMLInlineEmbedLifecycle(t *testing.T) {
 	oldGate := interp.ForeignEffectGate
 	interp.ForeignEffectGate = fenceEffectGate
 	defer func() { interp.ForeignEffectGate = oldGate }()
-	cwd, _ := os.Getwd()
-	dir := t.TempDir()
+	dir := newFenceEmbedFixtureDir(t)
 	path := filepath.Join(dir, "agent.yaml")
 	const source = "apiVersion: ycode.dev/v1alpha1\nkind: Harness\nspec: {}\n"
 	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
 		t.Fatal(err)
 	}
-	rel, _ := filepath.Rel(cwd, path)
+	rel := fenceEmbedRelPath(t, path)
 	for _, embed := range []bool{false, true} {
 		for _, failure := range []bool{false, true} {
 			fixture := &yamlFenceFixture{failure: failure}
@@ -394,7 +386,7 @@ func TestAgentFenceTwoEmbedsKeepTheirOwnOrigins(t *testing.T) {
 	row.NewRuntime = func(cfg polyglot.RuntimeConfig) polyglot.LanguageRuntime { return newAgentFenceRuntime(cfg, cat, nil) }
 	polyglot.RegisterLanguage(row)
 	const source = "apiVersion: ycode.dev/v1alpha1\nkind: Harness\nspec: {}\n"
-	root := t.TempDir()
+	root := newFenceEmbedFixtureDir(t)
 	var paths []string
 	for _, name := range []string{"east", "west"} {
 		path := filepath.Join(root, name, "agent.yaml")
@@ -414,9 +406,8 @@ func TestAgentFenceTwoEmbedsKeepTheirOwnOrigins(t *testing.T) {
 		seen[path]++
 		return func() (YAMLAgentSession, error) { return &yamlFenceFixture{}, nil }, nil
 	}
-	cwd, _ := os.Getwd()
-	east, _ := filepath.Rel(cwd, paths[0])
-	west, _ := filepath.Rel(cwd, paths[1])
+	east := fenceEmbedRelPath(t, paths[0])
+	west := fenceEmbedRelPath(t, paths[1])
 	decl := "embed agent \"./" + east + "\" as east\nembed agent \"./" + west + "\" as west\n"
 	_, out, diag := runDecorated(t, context.Background(), syntax.LangBashPP,
 		decl+"agentic { a, ea := east.run(\"one\"); b, eb := west.run(\"two\"); echo \"$a $b\"; }\n",

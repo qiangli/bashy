@@ -52,13 +52,12 @@ func TestToolFenceInlineEmbedMethodsAndGuards(t *testing.T) {
 		})
 	}
 	polyglot.RegisterLanguage(row)
-	dir := t.TempDir()
+	dir := newFenceEmbedFixtureDir(t)
 	definition := filepath.Join(dir, "tool.yaml")
 	if err := os.WriteFile(definition, []byte("name: fixture\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	cwd, _ := os.Getwd()
-	rel, _ := filepath.Rel(cwd, definition)
+	rel := fenceEmbedRelPath(t, definition)
 	for _, declaration := range []string{"~~~tool as kit\nname: fixture\n~~~\n", "embed tool \"./" + rel + "\" as kit\n"} {
 		for _, tc := range []struct {
 			body, want string
