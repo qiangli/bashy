@@ -30,6 +30,8 @@ builds:
         # tags and serves the native Linux artifact before publication.
         - cmd: ./scripts/verify-meet-spa-release.sh "{{ .Path }}" "{{ .Target }}"
           output: true
+        - cmd: ./scripts/generate-release-sbom.sh "{{ .Path }}" "{{ .Os }}" "{{ .Arch }}" dist/sbom
+          output: true
     ldflags:
       - -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ .Tag }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit={{ .Env.SHELL_RUNTIME_COMMIT }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime={{ .Env.SHELL_RUNTIME_COMMIT_TIME }}'
     goos:

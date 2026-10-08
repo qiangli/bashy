@@ -76,6 +76,9 @@ jobs:
           # testing. This covers .go compilation, selector precedence, caller
           # streams/arguments, and the compiled program's exit status.
           go test -v -timeout 5m -run '^TestSourceRoute$' ./cmd/bashy
+      - name: Verify permissive-only closure and SBOM gate
+        shell: bash
+        run: ./scripts/verify-permissive-closure.sh
       # E2E: build the real bashy binary on THIS OS and confirm every command
       # `bashy commands` advertises actually dispatches (no "No such command" /
       # "not in this build" / "No such file"). Runs on macOS AND Windows — the

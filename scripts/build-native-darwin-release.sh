@@ -23,6 +23,7 @@ CGO_ENABLED=1 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -
 ./scripts/verify-bashy-signal-artifact.sh "$stage/bashy"
 go run ./tools/bashysignalprobe "$stage/bashy"
 ./scripts/verify-meet-spa-release.sh "$stage/bashy" "darwin_$arch"
+./scripts/generate-release-sbom.sh "$stage/bashy" darwin "$arch" "${RUNNER_TEMP:-/tmp}/darwin-sbom"
 # ../outpost is the go.mod-pinned outpost module (scripts/resolve-pinned-siblings.sh).
 outpost_commit=${OUTPOST_COMMIT:-}
 [[ $outpost_commit =~ ^[0-9a-f]{40}$ ]] || { echo "missing OUTPOST_COMMIT (run scripts/resolve-pinned-siblings.sh)" >&2; exit 1; }

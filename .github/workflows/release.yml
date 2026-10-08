@@ -87,6 +87,12 @@ jobs:
           path: ${{ runner.temp }}/native/*
           if-no-files-found: error
           retention-days: 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bashy-darwin-${{ matrix.arch }}-sbom
+          path: ${{ runner.temp }}/darwin-sbom/*
+          if-no-files-found: ignore
+          retention-days: 7
   goreleaser:
     needs: preflight
     outputs:
@@ -134,6 +140,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BASHY_RELEASE_RUN_ID: ${{ github.run_id }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bashy-release-sboms
+          path: dist/sbom/*
+          if-no-files-found: ignore
+          retention-days: 7
   publish:
     permissions:
       contents: write

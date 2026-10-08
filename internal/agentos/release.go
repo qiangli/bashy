@@ -121,7 +121,7 @@ assets than the config asks for while still reporting success.
 		return fmt.Errorf("%w: %v", errReleaseUsage, err)
 	})
 
-	root.AddCommand(releaseSnapshotCmd(), releasePlanCmd(), releaseCheckCmd())
+	root.AddCommand(releaseSnapshotCmd(), releasePlanCmd(), releaseCheckCmd(), releaseSbomCmd())
 	return root
 }
 
