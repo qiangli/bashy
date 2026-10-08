@@ -39,12 +39,18 @@ func TestArtifactPreservesTempEnvironment(t *testing.T) {
 				}
 			}
 			write("artifact.sh", string(script))
+			write("driver.sh", `#!/bin/sh
+# Compare the shell's initial values, including its Windows path conversion.
+export EXPECTED_TMP="$TMP" EXPECTED_TEMP="$TEMP"
+export EXPECTED_GOTMPDIR="$GOTMPDIR" EXPECTED_LOWER_TMP="$tmp"
+. ./artifact.sh
+`)
 			write("scripts/go-product.sh", `#!/bin/sh
 set -eu
-[ "$TMP" = "$EXPECTED_TEMP" ]
+[ "$TMP" = "$EXPECTED_TMP" ]
 [ "$TEMP" = "$EXPECTED_TEMP" ]
-[ "$GOTMPDIR" = "$EXPECTED_TEMP" ]
-[ "$tmp" = "$EXPECTED_TEMP" ]
+[ "$GOTMPDIR" = "$EXPECTED_GOTMPDIR" ]
+[ "$tmp" = "$EXPECTED_LOWER_TMP" ]
 [ "$FAIL_BUILD" = no ] || exit 42
 while [ "$1" != -o ]; do shift; done
 printf artifact > "$2"
@@ -55,20 +61,20 @@ printf artifact > "$2"
 			if fail {
 				value = "yes"
 			}
-			cmd := exec.Command(shell, "artifact.sh", "bin/product", "", "test-tag")
+			cmd := exec.Command(shell, "driver.sh", "bin/product", "", "test-tag")
 			cmd.Dir = dir
 			var env []string
 			for _, entry := range os.Environ() {
 				key, _, _ := strings.Cut(entry, "=")
 				switch strings.ToUpper(key) {
-				case "TMP", "TEMP", "GOTMPDIR", "BASHY_EXE", "EXPECTED_TEMP", "FAIL_BUILD", "PATH":
+				case "TMP", "TEMP", "GOTMPDIR", "BASHY_EXE", "EXPECTED_TMP", "EXPECTED_TEMP", "EXPECTED_GOTMPDIR", "EXPECTED_LOWER_TMP", "FAIL_BUILD", "PATH":
 				default:
 					env = append(env, entry)
 				}
 			}
 			// On Windows, use just TMP: the original bug exports an assignment to
 			// lowercase tmp even though that name was never explicitly exported.
-			env = append(env, "TMP="+dir, "TEMP="+dir, "GOTMPDIR="+dir, "EXPECTED_TEMP="+dir,
+			env = append(env, "TMP="+dir, "TEMP="+dir, "GOTMPDIR="+dir,
 				"FAIL_BUILD="+value, "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 			if runtime.GOOS != "windows" {
 				env = append(env, "tmp="+dir)
