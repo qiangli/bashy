@@ -92,5 +92,18 @@ if [ -n "$fixed" ]; then
   rc=1
 fi
 
-[ "$rc" -eq 0 ] && echo "gate: OK — actual failure set matches the baseline ($(printf '%s' "$baseline" | grep -c .) known)."
+# These three fixtures once failed when a Linux service launched the shell
+# without LANG. The normal CI environment supplies a UTF-8 locale, so run
+# them again with the locale variables absent to keep that entry mode covered.
+if [ "$rc" -eq 0 ]; then
+  c_out=$(env -u LANG -u LC_ALL -u LC_CTYPE -u LANGUAGE make test-bash \
+    TESTS='exp-tests extglob new-exp' BASH_TEST_TIMEOUT="${CI_BASH_TEST_TIMEOUT:-60}" 2>&1)
+  c_rc=$?
+  printf '%s\n' "$c_out"
+  if [ "$c_rc" -ne 0 ] || ! printf '%s\n' "$c_out" | grep -q '^Results: 3 passed, 0 failed, 0 skipped, 0 timed out'; then
+    echo 'gate: unset-LANG fixture regression or incomplete run' >&2
+    rc=1
+  fi
+fi
+[ "$rc" -eq 0 ] && echo "gate: OK — actual failure set matches the baseline ($(printf '%s' "$baseline" | grep -c .) known), unset-LANG fixtures passed."
 exit $rc
