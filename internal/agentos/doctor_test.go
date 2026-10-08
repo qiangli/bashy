@@ -10,26 +10,6 @@ import (
 	"testing"
 )
 
-func TestParseSiblingPins(t *testing.T) {
-	pins := parseSiblingPins(`
-# comment
-sh=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-coreutils = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bad line
-=missing-name
-readline=
-`)
-	if pins["sh"] != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
-		t.Fatalf("sh pin missing: %#v", pins)
-	}
-	if pins["coreutils"] != "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
-		t.Fatalf("coreutils pin missing: %#v", pins)
-	}
-	if _, ok := pins["readline"]; ok {
-		t.Fatalf("empty sha should be ignored: %#v", pins)
-	}
-}
-
 func TestFindBashySourceRoot(t *testing.T) {
 	dir := t.TempDir()
 	root := filepath.Join(dir, "bashy")
@@ -49,34 +29,33 @@ func TestFindBashySourceRoot(t *testing.T) {
 	}
 }
 
-func TestSiblingLayoutChecksWarnOnMissingSiblings(t *testing.T) {
+func TestSiblingLayoutChecksReadGoModPins(t *testing.T) {
+	t.Setenv("GOWORK", "")
 	dir := t.TempDir()
+	write := func(rel, data string) {
+		p := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("bashy/go.mod", "module github.com/qiangli/bashy\n\ngo 1.24\n\nrequire mvdan.cc/sh/v3 v3.13.1\n")
+	write("sh/go.mod", "module mvdan.cc/sh/v3\n\ngo 1.24\n")
 	root := filepath.Join(dir, "bashy")
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, ".sibling-pins"), []byte("sh=abc\ncoreutils=def\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "sh"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "sh", "go.mod"), []byte("module mvdan.cc/sh/v3\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+
 	var checks []doctorCheck
 	addSiblingLayoutChecks(&checks, root)
-	var sawPins, sawMissing bool
-	for _, c := range checks {
-		if c.Name == "sibling pins" && c.Status == "ok" && strings.Contains(c.Detail, "coreutils") && strings.Contains(c.Detail, "sh") {
-			sawPins = true
-		}
-		if c.Name == "sibling repos" && c.Status == "warn" && strings.Contains(c.Detail, "coreutils") {
-			sawMissing = true
-		}
+	if len(checks) != 1 || checks[0].Status != "info" || !strings.Contains(checks[0].Detail, "no go.work") {
+		t.Fatalf("standalone: %#v", checks)
 	}
-	if !sawPins || !sawMissing {
-		t.Fatalf("unexpected sibling checks: %#v", checks)
+
+	write("go.work", "go 1.24\n\nuse (\n\t./bashy\n\t./sh\n)\n")
+	checks = nil
+	addSiblingLayoutChecks(&checks, root)
+	if len(checks) != 1 || checks[0].Status != "warn" || !strings.Contains(checks[0].Detail, "not comparable") || !strings.Contains(checks[0].Detail, "sh") {
+		t.Fatalf("placeholder pin in a workspace: %#v", checks)
 	}
 }
 

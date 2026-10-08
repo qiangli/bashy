@@ -12,12 +12,12 @@ import (
 	"crypto/fips140"
 	"encoding/json"
 	"fmt"
+	"github.com/qiangli/yoke/pkg/gomod"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 
 	"github.com/qiangli/coreutils/pkg/weavecli"
@@ -284,33 +284,39 @@ func addSiblingLayoutChecks(checks *[]doctorCheck, root string) {
 	add := func(name, status, detail string) {
 		*checks = append(*checks, doctorCheck{name, status, detail})
 	}
-	pinsPath := filepath.Join(root, ".sibling-pins")
-	data, err := os.ReadFile(pinsPath)
+	ws, err := gomod.Load(root)
 	if err != nil {
-		add("sibling pins", "warn", ".sibling-pins missing; standalone self-build cannot pin sibling repos")
+		add("sibling pins", "warn", "go.work: "+err.Error())
 		return
 	}
-	pins := parseSiblingPins(string(data))
-	if len(pins) == 0 {
-		add("sibling pins", "warn", ".sibling-pins has no active pins")
+	if ws == nil {
+		add("sibling pins", "info", "no go.work: siblings build at the go.mod versions")
 		return
 	}
-	names := make([]string, 0, len(pins))
-	missing := make([]string, 0)
-	for name := range pins {
-		names = append(names, name)
-		if _, err := os.Stat(filepath.Join(filepath.Dir(root), name, "go.mod")); err != nil {
-			missing = append(missing, name)
+	m := ws.Module(root)
+	if m == nil {
+		add("sibling pins", "warn", "bashy is not a module of "+ws.WorkFile)
+		return
+	}
+	var stale, unknown []string
+	drift := ws.Drift(m, nil)
+	for _, d := range drift {
+		switch d.State {
+		case gomod.Stale:
+			stale = append(stale, d.Name)
+		case gomod.Unknown:
+			unknown = append(unknown, d.Name)
 		}
 	}
-	sort.Strings(names)
-	sort.Strings(missing)
-	add("sibling pins", "ok", strings.Join(names, ", "))
-	if len(missing) == 0 {
-		add("sibling repos", "ok", "all pinned siblings exist next to bashy")
-		return
+	if len(stale) == 0 && len(unknown) == 0 {
+		add("sibling pins", "ok", fmt.Sprintf("%d sibling pin(s) match their HEAD", len(drift)))
 	}
-	add("sibling repos", "warn", "missing next to bashy: "+strings.Join(missing, ", "))
+	if len(stale) > 0 {
+		add("sibling pins", "warn", "stale (bashy mod sync): "+strings.Join(stale, ", "))
+	}
+	if len(unknown) > 0 {
+		add("sibling pins", "warn", "not comparable (bashy mod drift): "+strings.Join(unknown, ", "))
+	}
 }
 
 func findBashySourceRoot(start string) (string, bool) {
@@ -329,26 +335,6 @@ func findBashySourceRoot(start string) (string, bool) {
 		}
 		dir = next
 	}
-}
-
-func parseSiblingPins(src string) map[string]string {
-	pins := map[string]string{}
-	for _, line := range strings.Split(src, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		name, sha, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		name = strings.TrimSpace(name)
-		sha = strings.TrimSpace(sha)
-		if name != "" && sha != "" {
-			pins[name] = sha
-		}
-	}
-	return pins
 }
 
 func countDoctorWarnings(checks []doctorCheck) int {
