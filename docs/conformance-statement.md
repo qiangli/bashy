@@ -115,18 +115,16 @@ cert-dry-run is designed to shrink that gap to the long tail.
 
 ## Declared limitations
 
-Stated up front, to be measured (not assumed) once the licensed suite runs.
-None of these is a Shell-Command-Language conformance gap in batch/non-interactive
-mode — the mode the cert exercises.
+The fixture and historical conformance results above do not establish full
+interactive Bash/Readline parity. The current interactive boundary (2026-10-08,
+Sprint 379 Story 1511) is explicit below; detailed probe assertions and execution
+instructions are in [plan-interactive-depth.md](plan-interactive-depth.md).
 
-1. **Interactive terminal job control.** `fg`/`bg`/Ctrl-Z(`SIGTSTP`)/monitor-mode
-   notification timing are non-functional: the pure-Go engine runs subshells and
-   background commands as goroutines, not `fork()`ed processes, so there is no
-   real process group to re-attach to a controlling terminal. *Scriptable* job
-   control (`wait`, `wait %n`, `$!`, `kill %n`, `jobs`) is ~conformant (Gate C:
-   11/12). Plan of record to lift it if needed: the opt-in real-process path in
-   `sh/plan-dual-mode-job-control.md` — to be built **only if** VSC-PCTS data
-   shows interactive JC is load-bearing in batch mode.
+1. **Interactive terminal job control.** Unix process-group carriers and
+   terminal handoff are implemented and have focused tests in
+   `internal/cli/jobcontrol_autoMonitor_vsc_unix_test.go` and the carrier tests.
+   The former blanket “non-functional” description was stale. This does not
+   assert Unix signal/job-control parity under Windows ConPTY.
 2. **`((` arithmetic-vs-nested-subshell ambiguity.** `((cmd)||(cmd))` and deeply
    nested `( ( … ) )` need spaces; the streaming, no-backtrack parser cannot
    disambiguate `((` (a documented mvdan/sh limitation). Rare in conformance
@@ -142,6 +140,39 @@ mode — the mode the cert exercises.
 5. **Mixed stdout/stderr flush ordering.** Interleaving of the two streams in
    mixed-output cases can differ due to Go buffering; observable only when both
    streams are merged and ordering-sensitive.
+
+### Interactive Bash depth
+
+`TestInteractiveDepthPTY` and `tools/interactive-depth` share ten assertions:
+`compgen -W` prefix/no-match behavior; direct `complete -W/-p/-r` registry
+operations; `history -c/-s/-d/-w/-r/-a/-n/-p`; `fc -l/-n/-r`, `-s old=new`,
+`-e -`; and Ctrl-U line deletion. Each case runs in an isolated real PTY or
+ConPTY. These selected flag paths are not an exhaustive Bash differential.
+
+Declared limitations:
+
+- **Programmable completion:** no readline TAB callback is wired. `-F/-C`,
+  `COMP_*`, other action/option combinations and `compopt` during completion
+  are unproven. Registered specs are lost in command substitution:
+  `complete -W 'alpha beta' x; v=$(complete -p x)` yields empty `v`.
+- **`bind`:** interpreter dispatch is a no-op, including
+  `-p/-l/-x/-r/-q/-u/-m/-f`; a successful status does not indicate support.
+- **`READLINE_LINE`, `READLINE_POINT`, `READLINE_MARK`:** no `bind -x`
+  callback integration exposes or applies these values.
+- **History/fc depth:** the new lane does not establish range/negative history
+  deletion, timestamps, filtering, size limits, concurrent sessions, arbitrary
+  option/selector combinations or external-editor terminal handoff. Separate
+  Unix editor tests do not establish Windows editor parity. With history
+  disabled, a combined `fc -s` / `history -s` / `fc -e - -1` sequence
+  reports no command found instead of selecting the latest entry; the exact
+  reproducer is recorded in the probe plan.
+- **`checkjobs`:** the interactive exit loop does not consult the option to
+  warn/refuse exit with active jobs.
+- **`histappend`:** readline persistence is not controlled by this option;
+  append-versus-replace-on-exit and concurrent-session merging are not claimed.
+- **Windows:** the focused ConPTY lane is separate from `internal/cli`, which
+  remains excluded from Windows CI. It does not prove the entire package can
+  run headless, or Unix signal/job-control parity.
 
 ## Claim framing (use verbatim)
 

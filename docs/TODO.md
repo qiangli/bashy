@@ -1,6 +1,6 @@
 # Bashy: Bash 5.3 Drop-In Replacement — TODO Checklist
 
-**Current status**: 🎉 86 bash tests passing, 0 failing, 0 skipped (of 86 measured fixtures) — **100% bash-5.3 compliance**
+**Current status**: 🎉 86 bash tests passing, 0 failing, 0 skipped (of 86 measured fixtures) — **100% of those measured fixtures**, not proof of interactive completeness
 **POSIX frontier**: yash `-p` conformance suite **96%** (confirmed 2026-07-01 on novicortex; ≥ bash 5.3/5.2, tied with mksh for best of the 10-shell panel) — run `bashy dag dag.md yash`; details in `docs/cross-shell-conformance-baseline.md` + `docs/yash-conformance-gap.md`
 
 **VSC-PCTS campaign (current scope)** — the shell-isolation milestone is complete: all 493 shell TPs are in the certification PASS group with zero blockers/manual resolutions/caps under the proven GNU Coreutils 9.11 provider PATH (`vsc-pcts-posix-shell-2026-08-08`). The primary corrective arm is **Profile B: Bashy `sh` plus frozen GNU/system providers**, excluding Bashy's Go multicall. Profiles C/D separately measure the Bashy Go utility provider across the complete 116-set/8,844-TP inventory. The one-page scope and inventory routing source is `docs/posix-command-coverage.md`. Publication consent for utilities-suite results was granted 2026-07-29 (ticket #280298), for conformance-work purposes on the same terms as the shell arm. Raw journals remain private, and no "certified"/"passes the Open Group suite" claim is made.
@@ -13,7 +13,7 @@
   - **`pkg/bre` regex cluster CLOSED (sed+grep): 5 flips + 1 parity lock**, all in `../coreutils/pkg/bre`, each independently gate-verified: `RE_DUP_MAX` intervals (`65dce2e`) · bracket validation (`b3de4d3`) · anchor parity (`b5fbf7a`) · back-ref edges (`7bc67cd`) · collating/equivalence classes (`4dca9f6`) · ERE/BRE operator lock (`b852d57`).
   - **In flight**: `expr` (`cmds/expr`). **Next**: `ls/xargs/od/mkdir/rm` (non-NO-list). **PENDING USER DECISION**: `find -exec` is a NO-list reversal — do not implement without explicit go-ahead.
   - **Stewardship handed to `codex-gpt5.6-sol` 2026-07-17** — full runbook in `dhnt/docs/steward-handover-2026-07-17.md` (the steward loop, commit/pin/refresh workflow, room control surface, disciplines, watches). Claude is observer/assistant.
-**Last updated**: 2026-06-18 (array2 FLIPPED via the quoted-`@`-vs-IFS fix in sh/expand — `"${a[@]}"`/`"$@"` split to one word per element regardless of IFS; also dropped dollars 141→102 + exp-tests 61→52. glob-test 88→85 (bash-correct trailing-`\` literal + `?` leading-dot in sh/pattern, not yet a flip). Earlier: array/assoc/nameref/new-exp/coproc flipped; harness now measures the 8 formerly-silent skips — `<name>.tests` mapping mismatch — so the scoreboard finally covers every fixture instead of hiding 8):
+**Interactive coverage refreshed**: 2026-10-08 (Sprint 379, Story 1511; see below). Historical fixture update: 2026-06-18 (array2 FLIPPED via the quoted-`@`-vs-IFS fix in sh/expand — `"${a[@]}"`/`"$@"` split to one word per element regardless of IFS; also dropped dollars 141→102 + exp-tests 61→52. glob-test 88→85 (bash-correct trailing-`\` literal + `?` leading-dot in sh/pattern, not yet a flip). Earlier: array/assoc/nameref/new-exp/coproc flipped; harness now measures the 8 formerly-silent skips — `<name>.tests` mapping mismatch — so the scoreboard finally covers every fixture instead of hiding 8):
   - Wired into the harness (name→file mappings, like `dirstack`→`dstack`): array2→array-at-star, dollars→dollar-at-star, exp-tests→exp.tests(+expect-filter), glob-test→glob.tests, histexpand→histexp.tests, input-test→`< input-line.sh`.
   - `run-minimal` excluded (a `run-all`-style meta-runner, no stable `.right`). `execscript` skipped with a reason (host-dependent: bash binary path + system error wording + exec/`.`-on-directory exit codes; needs `test`-style normalization to measure).
   Reliable scoreboard = `make test-bash` under a clean PATH (`PATH=/bin:/usr/bin:$(dirname $(which go))`; a shell wrapper in PATH shadows `sh` and false-fails). weave sandboxes need the external/bash-5.3 fixture symlink prepped (it's a gitignored symlink) or workers can't measure and gates false-pass.
@@ -98,7 +98,7 @@
 
       **The trap that makes this worth doing at all:** dead-code elimination does
       NOT help here. A probe referencing only `grammars.GoLanguage` builds to the
-      same 24.3 MB as one referencing all nine, because `//go:embed
+      same 24.3 MB as one referencing all ten, because `//go:embed
       grammar_blobs/*.bin` pulls the whole directory into one `embed.FS`
       regardless of which loader functions are called. Trimming the map in
       `languages.go` would save nothing — verify any proposed change by
@@ -216,11 +216,33 @@
 - [x] `MAIL` / `MAILCHECK` / `MAILPATH` — settable/readable as plain variables; no periodic mail check loop (intentionally — modern shells skip this)
 - [ ] `READLINE_LINE` / `READLINE_POINT`
 
+### Interactive coverage and declared limitations (2026-10-08)
+
+The ten `TestInteractiveDepthPTY` cases and the shared
+`tools/interactive-depth` ConPTY runner establish only the assertions in
+[the probe plan and evidence](plan-interactive-depth.md). Existing unchecked
+historical backlog entries below are not evidence that all those features are
+absent; history/fc and Unix process-group job control have implementations.
+
+| Item | Tested scope / declared limitation |
+|---|---|
+| `complete` / `compgen` | PTY assertions: `compgen -W` prefix/no-match status; `complete -W/-p/-r` direct registry operations. Declared limits: completion specs disappear inside command substitution; no readline TAB callback; `-F/-C`, `COMP_*`, other action/option combinations and `compopt` during completion remain unproven. |
+| `bind` | Declared limitation: no-op dispatch; `-p/-l/-x/-r/-q/-u/-m/-f` do not integrate with readline. |
+| `history` | PTY assertions for `-c/-s/-d/-a/-r/-w/-n/-p`. Declared coverage limits: range/negative deletion, filtering, timestamps, sizes, concurrency and arbitrary flag combinations. |
+| `fc` | PTY assertions for `-l/-n/-r/-s` substitution and `-e -`. Declared coverage limits: external-editor handoff (especially Windows), failure paths and arbitrary selectors; the combined `fc -s` / `history -s` / `fc -e - -1` sequence fails to select the latest entry with history disabled (reproducer in the probe plan). |
+| `READLINE_LINE/POINT/MARK` | Declared limitation: no callback publishes/applies them. |
+| `checkjobs` | Declared limitation: setting is accepted but interactive exit does not consult it. |
+| `histappend` | Declared limitation: readline persistence does not implement shopt-controlled append/replace-on-exit or concurrent-session merging. |
+
+Windows probes require ConPTY and are run separately from the existing
+`internal/cli` CI exclusion. Passing the focused probes does not unskip the
+whole CLI package. The 86-fixture score is a separate batch compatibility result.
+
 ### P5: Interactive Features
 
 - [ ] History expansion: `!!`, `!$`, `!n`, `!-n`, `!string`, `^old^new`
-- [ ] `history` builtin: -c (clear), -d (delete), -a (append), -r (read), -w (write)
-- [ ] `fc` builtin: -l (list), -s (re-execute), -e (edit)
+- [x] `history` basic `-c/-d/-s/-a/-r/-w/-n/-p` behavior — focused PTY assertions; limits above
+- [x] `fc` basic `-l/-n/-r/-s` and `-e -` — focused PTY assertions; external-editor coverage remains separate
 - [ ] `bind` builtin: -p (list), -x (key to command)
 - [ ] Programmable completion: compgen/complete/compopt full implementation
 - [ ] Tab completion wired to readline
@@ -229,7 +251,12 @@
 - [ ] `PS4` custom xtrace prefix (replace hardcoded "+ ")
 - [ ] SIGWINCH → update COLUMNS/LINES
 
-### P6: Job Control (real process groups)
+### P6: Job Control (historical checklist)
+
+Unix process groups and terminal handoff are implemented; see
+`internal/cli/jobcontrol_autoMonitor_vsc_unix_test.go` and the carrier tests.
+The unchecked entries below are historical work items, not a current claim of
+missing implementation. This story does not re-prove the entire job-control matrix.
 
 - [ ] Process group management (Setpgid in exec.Cmd.SysProcAttr)
 - [ ] Terminal control (tcsetpgrp)
@@ -367,11 +394,11 @@ covered by an earlier section above is NOT repeated here.
 - [x] `case esac in esac)` — N/A: bash 5.3 rejects bare `esac)` per POSIX rule 4. `(esac)` and `foo|esac)` work in bashy.
 - [x] `${|cmd;}` valsub — `CmdSubst.ReplyVar` parsed at `syntax/parser.go:1250`, runtime captures body's `REPLY` as expansion value at `interp/runner.go:105-124`
 
-### G2: Stub builtins worth finishing (M each)
+### G2: Builtin depth (historical estimates; interactive status refreshed above)
 
 - [ ] `complete`/`compgen`/`compopt` — full spec engine (`-F/-W/-G/-C/-A/-X/-P/-S/-o`), wire to readline tab callback (L)
-- [ ] `history` — `-c/-d/-a/-r/-w/-n/-s/-p` on `~/.bashy_history` (M)
-- [ ] `fc` — `-l/-s/-e/-n/-r` re-execute and edit (M)
+- [x] `history` — basic `-c/-d/-a/-r/-w/-n/-s/-p` tested through a PTY with isolated files; see declared coverage limits above
+- [x] `fc` — basic `-l/-s/-n/-r` and `-e -` tested through a PTY; external editor handoff is a separate coverage limit
 - [ ] `bind` — `-p/-l/-x KEYSEQ:command/-r/-q/-u/-m keymap/-f file` (M)
 - [ ] `disown -h` — mark jobs to skip SIGHUP (S)
 - [ ] `help` — embed bash-style per-builtin help text (//go:embed) (S)
