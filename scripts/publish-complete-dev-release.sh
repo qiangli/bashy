@@ -6,7 +6,9 @@ set -euo pipefail
 phase=$1
 : "${GH_TOKEN:?}" "${REPO:?}" "${TAG:?}" "${COMMIT:?}" "${RUN_ID:?}"
 [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+-dev$ ]] || { echo "invalid candidate tag" >&2; exit 2; }
-state=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '{draft, prerelease, target_commitish, body}')
+# releases/tags/<tag> never returns drafts; find the candidate in the list.
+state=$(gh api "repos/$REPO/releases?per_page=100" --jq "map(select(.tag_name == \"$TAG\"))[0] // empty | {draft, prerelease, target_commitish, body}")
+[[ -n $state ]] || { echo "no release for $TAG" >&2; exit 1; }
 [[ $(jq -r .draft <<<"$state") == true ]] || { echo "candidate release is not a draft" >&2; exit 1; }
 [[ $(jq -r .prerelease <<<"$state") == true ]] || { echo "candidate release is not a prerelease" >&2; exit 1; }
 if ! jq -r .body <<<"$state" | grep -Fxq "<!-- bashy-release-run: $RUN_ID -->"; then

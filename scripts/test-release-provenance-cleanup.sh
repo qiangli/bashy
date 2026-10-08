@@ -15,7 +15,7 @@ if [[ $1 == attestation && $2 == verify ]]; then
 fi
 if [[ $1 == api ]]; then
  case "$2" in
-  */releases/tags/*) printf '{"draft":%s,"prerelease":true,"created_at":"%s","body":"%s"}\n' "$DRAFT" "$CREATED" "$MARKER";;
+  */releases\?per_page=*) printf '{"draft":%s,"prerelease":true,"created_at":"%s","body":"%s"}\n' "$DRAFT" "$CREATED" "$MARKER";;
   */actions/runs/*) printf '%s\n' "$STARTED";;
   */git/ref/tags/*) printf '{"type":"commit","sha":"%s"}\n' "$REF_SHA";;
   *) exit 1;;

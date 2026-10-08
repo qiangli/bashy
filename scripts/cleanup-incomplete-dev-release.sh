@@ -3,7 +3,9 @@
 # marker. Neither time nor tag/commit alone proves ownership.
 set -euo pipefail
 : "${GH_TOKEN:?}" "${REPO:?}" "${TAG:?}" "${COMMIT:?}" "${RUN_ID:?}"
-state=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '{draft, created_at, body}' 2>/dev/null) || exit 0
+# releases/tags/<tag> never returns drafts; find the candidate in the list.
+state=$(gh api "repos/$REPO/releases?per_page=100" --jq "map(select(.tag_name == \"$TAG\"))[0] // empty | {draft, created_at, body}" 2>/dev/null) || exit 0
+[[ -n $state ]] || exit 0
 [[ $(jq -r .draft <<<"$state") == true ]] || exit 0
 if ! jq -r .body <<<"$state" | grep -Fxq "<!-- bashy-release-run: $RUN_ID -->"; then
  echo "preserving draft without this run's marker"
