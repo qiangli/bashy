@@ -6,7 +6,9 @@ case "${1-}" in
  test|run) echo "go-product: only product builds are supported" >&2; exit 2 ;;
  *) if [ -n "${BASHY_EXE:-}" ]; then exec "$BASHY_EXE" go "$@"; fi; exec go "$@" ;;
 esac
-self=$(printf '%s' "$0" | tr '\\' /)   # Windows callers may pass scripts\go-product.sh
+# Windows callers may pass scripts\go-product.sh; use / without external tools.
+self=$0
+while :; do case $self in *\\*) self=${self%%\\*}/${self#*\\} ;; *) break ;; esac; done
 root=$(CDPATH= cd -- "$(dirname -- "$self")/.." && pwd)
 # Bootstrap the standard-library-only driver for the host, retaining the target
 # coordinates separately. The driver restores them for the actual Go command.
