@@ -9,7 +9,10 @@ esac
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 # Bootstrap the standard-library-only driver for the host, retaining the target
 # coordinates separately. The driver restores them for the actual Go command.
+# Capture the target before clearing it; no external env(1) (absent on Windows).
+target_os=${GOOS-} target_arch=${GOARCH-} target_cgo=${CGO_ENABLED-}
+export GOOS= GOARCH= CGO_ENABLED=0
 if [ -n "${BASHY_EXE:-}" ]; then
- exec env GOOS= GOARCH= CGO_ENABLED=0 "$BASHY_EXE" go run "$root/tools/productgo/main.go" "${GOOS-}" "${GOARCH-}" "${CGO_ENABLED-}" "$@"
+ exec "$BASHY_EXE" go run "$root/tools/productgo/main.go" "$target_os" "$target_arch" "$target_cgo" "$@"
 fi
-exec env GOOS= GOARCH= CGO_ENABLED=0 go run "$root/tools/productgo/main.go" "${GOOS-}" "${GOARCH-}" "${CGO_ENABLED-}" "$@"
+exec go run "$root/tools/productgo/main.go" "$target_os" "$target_arch" "$target_cgo" "$@"
