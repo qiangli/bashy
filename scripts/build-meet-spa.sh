@@ -76,6 +76,13 @@ case "$mode" in
 esac
 
 if [ ! -f "$web_dir/package.json" ] || [ ! -f "$web_dir/pnpm-lock.yaml" ]; then
+	# A standalone clone has no yoke source tree: the binary embeds the SPA
+	# artifact committed at the yoke version go.mod pins, which the
+	# meet-spa-fresh CI gate keeps fresh. Nothing to rebuild here.
+	if [ "$mode" = optional ]; then
+		echo "meet SPA: no $web_dir source tree; using the artifact committed at the pinned yoke" >&2
+		exit 0
+	fi
 	echo "meet SPA: missing $web_dir package.json or pnpm-lock.yaml" >&2
 	exit 1
 fi
