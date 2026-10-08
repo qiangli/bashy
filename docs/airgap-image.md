@@ -154,6 +154,24 @@ The fixture and per-lane record are in the private umbrella
 `docs/sprint-358-evidence.md`. Final frozen-candidate certification remains
 S358.10.
 
+### 1.0-claim evidence: lean image on linux/arm64 (2026-10-08, Sprint 379)
+
+Built from bashy main `39ba5d27` on novidesign.local (Apple Silicon) into the
+running podman machine `bashy` (applehv, linux/arm64): the static linux/arm64
+scratch artifact (tags `bashy_scratch`, `-w` + version stamps, 127,349,902
+bytes) wrapped by main's own `bashy self image --arch arm64` through main's
+podman provisioning. Result `localhost/bashy:dev-linux-arm64`: FROM scratch
+plus one binary, `/tmp`, and the two-line `/etc` — 127 MB uncompressed
+(`podman images`), 54,025,500 bytes compressed (`podman save | gzip`).
+Cold-start `run --version` takes 0.3 s and reports
+`5.3.0(1)-bashy-dev (39ba5d27)`. Every probe ran under `--network=none
+--read-only --cap-drop=ALL --tmpfs /tmp` and passed: `--version`, `-c`
+arithmetic, `--posix`, `--bashsharp` hello/kwargs/enums (each output matches
+its `.expected`), `echo $HOME` prints `$HOME` (Stage 0 canonicalization,
+stated), `curl` absent, `commands --all --json`, plus builtin/coreutils/verb
+spot checks (`type -t echo`, in-process `echo --version`, `ask --help`).
+Nothing failed, so the image needed no change.
+
 ## The table
 
 `in the image` reads: **works** — the probe ran and exited 0; **present** — the
