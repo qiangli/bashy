@@ -233,7 +233,7 @@ externals variant is a separate story.
 | builtins | `unalias` | works | bash builtin |
 | builtins | `unset` | works | bash builtin |
 | builtins | `wait` | works | bash builtin |
-| coreutils | `ar` | not usable offline | bin-managed external: would download - ar: posix provider cache root:  |
+| coreutils | `ar` | not usable offline | bin-managed external: would download - ar: ar <ver> is not provisioned |
 | coreutils | `arch` | works | arch (qiangli/coreutils) <ver> |
 | coreutils | `ast` | works | Usage: ast <subcommand> [args] |
 | coreutils | `at` | works | at (qiangli/coreutils) <ver> |
@@ -261,7 +261,7 @@ externals variant is a separate story.
 | coreutils | `cp` | works | cp (qiangli/coreutils) <ver> |
 | coreutils | `crontab` | works | crontab (qiangli/coreutils) <ver> |
 | coreutils | `csplit` | works | csplit (qiangli/coreutils) <ver> |
-| coreutils | `ctags` | not usable offline | bin-managed external: would download - ctags: posix provider cache roo |
+| coreutils | `ctags` | not usable offline | bin-managed external: would download - ctags: ctags <ver> is not provi |
 | coreutils | `cut` | works | cut (qiangli/coreutils) <ver> |
 | coreutils | `cygpath` | works | cygpath (qiangli/coreutils) <ver> |
 | coreutils | `date` | works | date (qiangli/coreutils) <ver> |
@@ -275,7 +275,7 @@ externals variant is a separate story.
 | coreutils | `duration` | works | duration (qiangli/coreutils) <ver> |
 | coreutils | `ed` | works | ed (qiangli/coreutils) <ver> |
 | coreutils | `env` | works | env (qiangli/coreutils) <ver> |
-| coreutils | `ex` | not usable offline | bin-managed external: would download - ex: posix provider cache root:  |
+| coreutils | `ex` | not usable offline | bin-managed external: would download - ex: ex <ver> is not provisioned |
 | coreutils | `expand` | works | expand (qiangli/coreutils) <ver> |
 | coreutils | `expr` | works | expr (qiangli/coreutils) <ver> |
 | coreutils | `factor` | works | factor (qiangli/coreutils) <ver> |
@@ -285,6 +285,7 @@ externals variant is a separate story.
 | coreutils | `fmt` | works | fmt (qiangli/coreutils) <ver> |
 | coreutils | `fold` | works | fold (qiangli/coreutils) <ver> |
 | coreutils | `foreman` | works | foreman <ver> |
+| coreutils | `gencat` | present | runs in-process; --version/--help rc=2: gencat: usage: gencat catfile  |
 | coreutils | `getconf` | works | getconf (qiangli/coreutils) <ver> |
 | coreutils | `graph` | works | Usage: graph <subcommand> [args] |
 | coreutils | `grep` | works | grep (qiangli/coreutils) <ver> |
@@ -303,16 +304,16 @@ externals variant is a separate story.
 | coreutils | `link` | works | link (qiangli/coreutils) <ver> |
 | coreutils | `ln` | works | ln (qiangli/coreutils) <ver> |
 | coreutils | `locale` | works | locale (qiangli/coreutils) <ver> |
-| coreutils | `localedef` | not usable offline | bin-managed external: would download - localedef: posix provider cache |
+| coreutils | `localedef` | works | Usage: localedef [-c] [-f charmap] [-i sourcefile] [-u codeset] name |
 | coreutils | `logger` | works | logger (qiangli/coreutils) <ver> |
 | coreutils | `logname` | works | logname (qiangli/coreutils) <ver> |
-| coreutils | `lp` | not usable offline | bin-managed external: would download - lp: posix provider cache root:  |
+| coreutils | `lp` | works | lp (qiangli/coreutils) <ver> |
 | coreutils | `ls` | works | ls (qiangli/coreutils) <ver> |
-| coreutils | `m4` | not usable offline | bin-managed external: would download - m4: posix provider cache root:  |
+| coreutils | `m4` | works | m4 (qiangli/coreutils) <ver> |
 | coreutils | `mail` | works | mail (qiangli/coreutils) <ver> |
 | coreutils | `mailx` | works | mailx (qiangli/coreutils) <ver> |
 | coreutils | `make` | works | make (qiangli/coreutils) <ver> |
-| coreutils | `man` | present | runs in-process; --version/--help rc=2: man: unknown option --help |
+| coreutils | `man` | present | runs in-process; --version/--help rc=2: man: unsupported option --help |
 | coreutils | `md5sum` | works | md5sum (qiangli/coreutils) <ver> |
 | coreutils | `mesg` | works | mesg (qiangli/coreutils) <ver> |
 | coreutils | `mkdir` | works | mkdir (qiangli/coreutils) <ver> |
@@ -325,7 +326,7 @@ externals variant is a separate story.
 | coreutils | `newgrp` | works | bash builtin |
 | coreutils | `nice` | works | nice (qiangli/coreutils) <ver> |
 | coreutils | `nl` | works | nl (qiangli/coreutils) <ver> |
-| coreutils | `nm` | not usable offline | bin-managed external: would download - nm: posix provider cache root:  |
+| coreutils | `nm` | not usable offline | bin-managed external: would download - nm: nm <ver> is not provisioned |
 | coreutils | `nohup` | works | bash builtin |
 | coreutils | `nproc` | works | nproc (qiangli/coreutils) <ver> |
 | coreutils | `ntp` | works | ntp (qiangli/coreutils) <ver> |
@@ -362,7 +363,7 @@ externals variant is a separate story.
 | coreutils | `stat` | works | stat (qiangli/coreutils) <ver> |
 | coreutils | `stdbuf` | works | stdbuf (qiangli/coreutils) <ver> |
 | coreutils | `strings` | works | strings (qiangli/coreutils) <ver> |
-| coreutils | `strip` | not usable offline | bin-managed external: would download - strip: posix provider cache roo |
+| coreutils | `strip` | not usable offline | bin-managed external: would download - strip: strip <ver> is not provi |
 | coreutils | `stty` | works | stty (qiangli/coreutils) <ver> |
 | coreutils | `sum` | works | sum (qiangli/coreutils) <ver> |
 | coreutils | `sync` | works | sync (qiangli/coreutils) <ver> |
@@ -391,7 +392,7 @@ externals variant is a separate story.
 | coreutils | `uudecode` | works | uudecode (qiangli/coreutils) <ver> |
 | coreutils | `uuencode` | works | uuencode (qiangli/coreutils) <ver> |
 | coreutils | `vdir` | works | vdir (qiangli/coreutils) <ver> |
-| coreutils | `vi` | not usable offline | bin-managed external: would download - vi: posix provider cache root:  |
+| coreutils | `vi` | not usable offline | bin-managed external: would download - vi: vi <ver> is not provisioned |
 | coreutils | `watch` | works | watch (qiangli/coreutils) <ver> |
 | coreutils | `wc` | works | wc (qiangli/coreutils) <ver> |
 | coreutils | `which` | works | which (qiangli/coreutils) <ver> |
@@ -467,10 +468,12 @@ externals variant is a separate story.
 | verbs | `kopia` | not usable offline | bin-managed external: would download - kopia runs the Kopia repository |
 | verbs | `kubectl` | not usable offline | engine / remote-by-design (by design): Error: kubectl: resolve stable  |
 | verbs | `lexicon` | works | lexicon is the project's jargon, projected from the registries that al |
+| verbs | `limit` | works | usage: bashy limit [--memory Q] [--pids N] [--disk Q] -- command [args |
 | verbs | `llm` | works | llm is the host's one door to its model capacity (port 24556, "AILLM"  |
 | verbs | `login` | not usable offline | engine / remote-by-design (by design): tessaro: this machine isn't con |
 | verbs | `loom` | not usable offline | bin-managed external: would download - loom runs Gitea  downloaded, sh |
 | verbs | `mb` | works | mb is the host's message board  one shared, append-only board every ag |
+| verbs | `mcp` | present | runs in-process; --version/--help rc=2: usage: bashy mcp serve [--tran |
 | verbs | `meet` | works | Run a turn-taking planning meeting across agentic CLIs and a human. |
 | verbs | `messages` | works | mb is the host's message board  one shared, append-only board every ag |
 | verbs | `mirror` | works | mirror keeps a destination in sync with a source directory: an initial |
@@ -485,6 +488,7 @@ externals variant is a separate story.
 | verbs | `ollama` | not usable offline | engine / remote-by-design (by design): bashy ollama: could not fetch t |
 | verbs | `otel` | works | Query OTEL telemetry with bounded agent-readable summaries |
 | verbs | `out` | works | out reprints the full, un-reduced bytes that an elision marker spilled |
+| verbs | `outpost` | present | runs in-process; --version/--help rc=1: meshagent: outpost mesh agent  |
 | verbs | `pair` | works | Run work through two agents in different roles, optionally followed by |
 | verbs | `peer` | works | sphere is dhnt execution tier 4: multi-node, PEER-DIRECT pooled infere |
 | verbs | `people` | works | Human principals  who the names in prose refer to |
@@ -494,6 +498,8 @@ externals variant is a separate story.
 | verbs | `pnpm` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/ |
 | verbs | `podman` | not usable offline | engine / remote-by-design (by design): bashy podman: fetching podman < |
 | verbs | `posix-gate` | works | posix-gate <subcommand> |
+| verbs | `proxy` | works | Run a local network proxy |
+| verbs | `pwsh` | present | runs in-process; --version/--help rc=1: Error: pwsh: musl loader: Get  |
 | verbs | `python` | not usable offline | engine / remote-by-design (by design): Error: python/uv: fetch sha256  |
 | verbs | `rclone` | not usable offline | bin-managed external: would download - Error: rclone: resolve: binmgr: |
 | verbs | `release` | works | bashy release turns a .goreleaser.yaml into named, checksummed artifac |
