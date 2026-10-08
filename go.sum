@@ -923,8 +923,8 @@ github.com/qiangli/podman/v6 v6.0.0-20260723062102-d454baa0afec h1:/QTru8tK6jBXW
 github.com/qiangli/podman/v6 v6.0.0-20260723062102-d454baa0afec/go.mod h1:21dWtcXkYmFHP+HOgjVQgRN+AW7heESQ8suaxeN3Ky8=
 github.com/qiangli/readline v0.1.4-0.20260919214158-38ad08e83676 h1:yjO0oA1tLqqmI1GkSJNIwKKnKDp0wOT8V8Kgj7ue1kE=
 github.com/qiangli/readline v0.1.4-0.20260919214158-38ad08e83676/go.mod h1:o3ux9QLHLm77bq7hDB21UTm6HlV2++IPDMfIfKDuOgY=
-github.com/qiangli/sh/v3 v3.0.0-20261008200626-c37be42dcd52 h1:U3PfwJk2zp9kG3hzEVzMn9FTu/N+tCH6oU64AhADzC0=
-github.com/qiangli/sh/v3 v3.0.0-20261008200626-c37be42dcd52/go.mod h1:B3gggi45SfDRerTyVE9jqTXW8MTOUFhB6g1p5/AuQ78=
+github.com/qiangli/sh/v3 v3.0.0-20261008205758-573ac5e7d979 h1:IOxkWO+tF3bD8y67uBVdPRVJs6BmGFlCoIwAIs5azWw=
+github.com/qiangli/sh/v3 v3.0.0-20261008205758-573ac5e7d979/go.mod h1:B3gggi45SfDRerTyVE9jqTXW8MTOUFhB6g1p5/AuQ78=
 github.com/qiangli/ycode v0.3.1-dev.0.20261008103721-fcd123d55aca h1:I6LCrxnrhzU+CCpjFfu0+pzKDv7W2hiJo5n+c6gtGgY=
 github.com/qiangli/ycode v0.3.1-dev.0.20261008103721-fcd123d55aca/go.mod h1:aX5H2empIv/BTDpj1RCNjVradRokwd8qsGKjp20zXio=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261008103721-fcd123d55aca h1:Lc1vs7Yoe83RxT4JNpJgXqu9D9WqdrbM+v6VHaEjAro=
