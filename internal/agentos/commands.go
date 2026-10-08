@@ -572,6 +572,7 @@ var verbSynopsis = map[string]string{
 	"web":         "web inspection helpers for SDLC verification",
 	"dag":         "agent-first markdown DAG task runner",
 	"transpile":   "compile Bash++ source to ordinary Go with source maps",
+	"explain":     "explain go: the table of Go constructs that differ in Bash#; resolve a refusal to its row and workaround",
 	"schedule":    "modern cron: run a command on a cron/interval/at schedule",
 	"secret":      "managed API-key/token vault for the shell",
 	"secrets":     "hidden alias for bashy secret",

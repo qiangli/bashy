@@ -152,6 +152,10 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Stage: atlas.StageCode, Group: atlas.GroupToolchains, Tier: atlas.TierUserland,
 		Effects: []string{atlas.EffRead, atlas.EffWrite},
 	},
+	"explain": {
+		Stage: atlas.StageCross, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
+		Caps: []string{atlas.CapJSON, atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
+	},
 	"full": {
 		Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapSpawnsProcesses}, Effects: []string{atlas.EffExec},
