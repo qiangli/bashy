@@ -65,9 +65,9 @@ contribute it — `bashy kb add --type gotcha --title "…" --description
 "what + WHEN this applies"` — distilled strategy, not a transcript, with
 failures phrased as guardrails.
 
-**`inbox` — what needs your ATTENTION.** One read-through view over MB,
-standing Meet boards, Bus notifications, and authorized role mail. MB remains
-the public send/history surface; inbox prevents transport-by-transport polling.
+**`inbox` — what needs your ATTENTION.** Messages to you: bashy inbox (peek by default; search with --from/--search; reply with bashy mb send).
+
+One read-through view over MB, standing Meet boards, Bus notifications, and authorized role mail. MB remains the public send/history surface; inbox prevents transport-by-transport polling.
 
     bashy inbox                  # read every inbound source
     bashy skill show inbox
