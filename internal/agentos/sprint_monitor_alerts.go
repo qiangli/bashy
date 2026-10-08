@@ -98,7 +98,16 @@ func observeSprintResources(ctx context.Context, id int64, owner string) {
 	}
 	_, _ = updateSprintAlerts(ctx, s, id, owner, true)
 }
-func activeSprintAlerts(ledger *resources.AlertLedger, id int64) []sprintResourceAlert {
+
+// sprintAlertObservationTTL bounds how long a condition may be served as a
+// live alert without a fresh observation. Live observers advance ObservedAt
+// every few seconds, so an hour of silence means no live session is watching
+// the condition — and the next live sample refires within seconds when the
+// pressure is still real. Without this bound a full-disk warning fired once
+// keeps displaying its peak reading weeks after the space was reclaimed.
+const sprintAlertObservationTTL = time.Hour
+
+func activeSprintAlerts(ledger *resources.AlertLedger, id int64, now time.Time) []sprintResourceAlert {
 	var alerts []sprintResourceAlert
 	if ledger == nil {
 		return alerts
@@ -108,7 +117,7 @@ func activeSprintAlerts(ledger *resources.AlertLedger, id int64) []sprintResourc
 		if json.Unmarshal(raw, &c) != nil || c.Version != 1 || (id > 0 && c.Sprint != id) {
 			continue
 		}
-		if c.Current != nil {
+		if c.Current != nil && (c.ObservedAt.IsZero() || now.Sub(c.ObservedAt) <= sprintAlertObservationTTL) {
 			alerts = append(alerts, *c.Current)
 		}
 	}
@@ -186,6 +195,7 @@ func updateSprintAlertTargets(ctx context.Context, s *sprintMonitorSnapshot, tar
 				key := fmt.Sprintf("sprint:%d:%x", id, digest[:16])
 				var c sprintAlertCondition
 				changed := false
+				noticed := false
 				if raw, ok := ledger.Entries[key]; ok {
 					if err := json.Unmarshal(raw, &c); err != nil {
 						return fmt.Errorf("alert state corrupt: %w", err)
@@ -218,9 +228,11 @@ func updateSprintAlertTargets(ctx context.Context, s *sprintMonitorSnapshot, tar
 					c.Pending = nil
 					if c.Current != nil {
 						appendSprintAlert(&c, c.Severity, "handoff: "+c.Current.Message, s.At)
+						noticed = true
 					} else if len(priorPending) > 0 {
 						last := priorPending[len(priorPending)-1]
 						appendSprintAlert(&c, last.Severity, "handoff: "+last.Message, s.At)
+						noticed = true
 						c.Current = nil
 					}
 				}
@@ -241,6 +253,9 @@ func updateSprintAlertTargets(ctx context.Context, s *sprintMonitorSnapshot, tar
 						}
 						if c.Current == nil && sample.at.Sub(c.Onset) >= 15*time.Second {
 							appendSprintAlert(&c, "warning", sample.message, sample.at)
+							noticed = true
+						} else if c.Current != nil && !noticed {
+							refreshSprintAlertReading(&c, sample)
 						}
 					} else if sample.value <= sample.low {
 						c.Onset = time.Time{}
@@ -258,6 +273,8 @@ func updateSprintAlertTargets(ctx context.Context, s *sprintMonitorSnapshot, tar
 						c.Recovery = time.Time{}
 						if c.Current == nil {
 							c.Onset = time.Time{}
+						} else if !noticed {
+							refreshSprintAlertReading(&c, sample)
 						}
 					}
 				}
@@ -292,7 +309,7 @@ func updateSprintAlertTargets(ctx context.Context, s *sprintMonitorSnapshot, tar
 					return err
 				})
 				if err != nil {
-					return activeSprintAlerts(ledger, selected), err
+					return activeSprintAlerts(ledger, selected, s.At), err
 				}
 				_, err = resources.UpdateAlertState(ctx, resources.ResourcesStateDir(), func(l *resources.AlertLedger) error {
 					var current sprintAlertCondition
@@ -313,13 +330,31 @@ func updateSprintAlertTargets(ctx context.Context, s *sprintMonitorSnapshot, tar
 					return e
 				})
 				if err != nil {
-					return activeSprintAlerts(ledger, selected), err
+					return activeSprintAlerts(ledger, selected, s.At), err
 				}
 			}
 		}
 	}
-	return activeSprintAlerts(ledger, selected), nil
+	return activeSprintAlerts(ledger, selected, s.At), nil
 }
+
+// refreshSprintAlertReading moves an active condition's displayed reading to
+// the latest sample without raising a new notice: the decision to alert was
+// already made at onset, so reclaimed space (or a further climb) must move
+// the shown value, not refire. Identity, generation and pending delivery are
+// untouched, so observers stay quiet while the reading tracks reality.
+func refreshSprintAlertReading(c *sprintAlertCondition, sample sprintAlertSample) {
+	if c.Current == nil {
+		return
+	}
+	message := sample.message
+	if len(message) > 512 {
+		message = message[:512]
+	}
+	c.Current.Message = message
+	c.Current.At = sample.at
+}
+
 func appendSprintAlert(c *sprintAlertCondition, severity, message string, at time.Time) {
 	c.Generation++
 	sum := sha256.Sum256([]byte(fmt.Sprintf("%s:%d:%s", c.Key, c.Generation, c.Owner)))

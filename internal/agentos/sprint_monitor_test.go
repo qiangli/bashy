@@ -141,6 +141,84 @@ func TestSprintMonitorAlertsSustainRecoverAndSurviveHandoff(t *testing.T) {
 		t.Fatal("recovery not durable for successor")
 	}
 }
+
+func diskMonitorFixture(at time.Time, usedPercent float64) *sprintMonitorSnapshot {
+	s := monitorFixture(at, 10, false)
+	total := uint64(100) << 30
+	used := uint64(usedPercent / 100 * float64(total))
+	s.Host.System.Disks = []resources.Disk{{
+		Mount: "/", FSType: "apfs", TotalBytes: total,
+		UsedBytes: used, FreeBytes: total - used, UsedPercent: usedPercent,
+	}}
+	s.Host.Sections["disks"] = resources.ObservationStatus{Kind: "actual", At: at}
+	return s
+}
+
+// A disk alert fired at the peak must track reclaimed space while the
+// condition stays active: the monitor kept reporting the full-disk reading
+// weeks after space was reclaimed because the active notice was frozen at
+// fire time.
+func TestSprintMonitorDiskAlertTracksReclaimedSpace(t *testing.T) {
+	sprintWatchIsolate(t)
+	at := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
+	update := func(seconds int, pct float64) []sprintResourceAlert {
+		t.Helper()
+		a, err := updateSprintAlerts(context.Background(), diskMonitorFixture(at.Add(time.Duration(seconds)*time.Second), pct), 138, "owner", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	if len(update(0, 100)) != 0 || len(update(10, 100)) != 0 {
+		t.Fatal("disk alert fired without sustained samples")
+	}
+	a := update(15, 100)
+	if len(a) != 1 || !strings.Contains(a[0].Message, "100.0%") {
+		t.Fatalf("disk onset=%+v", a)
+	}
+	id := a[0].ID
+	a = update(25, 87.8)
+	if len(a) != 1 || a[0].ID != id || !strings.Contains(a[0].Message, "87.8%") {
+		t.Fatalf("reclaimed disk still reports the peak: %+v", a)
+	}
+	a = update(30, 95.6)
+	if len(a) != 1 || a[0].ID != id || !strings.Contains(a[0].Message, "95.6%") {
+		t.Fatalf("climbing disk keeps the stale reading: %+v", a)
+	}
+	if len(update(60, 50)) != 1 || len(update(89, 50)) != 1 {
+		t.Fatal("recovery window shortened")
+	}
+	if len(update(90, 50)) != 0 {
+		t.Fatal("sustained recovery not recognized")
+	}
+}
+
+// Conditions no observer has refreshed must not be served as live alerts:
+// September full-disk warnings were still displayed in October, long after
+// the space was reclaimed and the sprints had ended.
+func TestSprintMonitorStaleAlertsAreNotServedAsLive(t *testing.T) {
+	sprintWatchIsolate(t)
+	at := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
+	fire := func(seconds int, pct float64) {
+		t.Helper()
+		if _, err := updateSprintAlerts(context.Background(), diskMonitorFixture(at.Add(time.Duration(seconds)*time.Second), pct), 138, "owner", false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fire(0, 100)
+	fire(10, 100)
+	fire(15, 100)
+	ledger, err := resources.ReadAlertState(context.Background(), resources.ResourcesStateDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(activeSprintAlerts(ledger, 138, at.Add(30*time.Minute))) != 1 {
+		t.Fatal("freshly observed alert hidden")
+	}
+	if len(activeSprintAlerts(ledger, 138, at.Add(2*time.Hour))) != 0 {
+		t.Fatal("unobserved condition still served as a live alert")
+	}
+}
 func TestSprintMonitorAlertPublicationReplaysWithoutConsumingInbox(t *testing.T) {
 	sprintWatchIsolate(t)
 	at := time.Now().UTC()

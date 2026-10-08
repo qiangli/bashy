@@ -190,7 +190,7 @@ func collectSprintMonitor(ctx context.Context, opt sprintMonitorOptions) (*sprin
 	}
 	ledger, err := resources.ReadAlertState(ctx, resources.ResourcesStateDir())
 	if err == nil {
-		out.Alerts = activeSprintAlerts(ledger, opt.Sprint)
+		out.Alerts = activeSprintAlerts(ledger, opt.Sprint, out.At)
 	} else if !os.IsNotExist(err) {
 		out.Warnings = append(out.Warnings, "alerts: "+err.Error())
 	}
