@@ -1,0 +1,440 @@
+{
+  "schema_version": "bashy-release-inventory-v1",
+  "release": "1.0.0",
+  "scope": "Part 4 release command surfaces, including documented alias spellings and their canonical front doors. Language syntax, modifiers, and explicitly deferred commands are not verbs in this inventory. supervise is retained as an unresolved 4a/4z conflict.",
+  "commands": [
+    {
+      "command": "sprint",
+      "section": "4a",
+      "stability": null,
+      "consumer": "embedded bashy skill",
+      "json_probe": [
+        "list",
+        "--json"
+      ],
+      "consumer_ref": "skills/bashy/SKILL.md"
+    },
+    {
+      "command": "todo",
+      "section": "4a",
+      "stability": null,
+      "consumer": "embedded bashy skill",
+      "json_probe": [
+        "list",
+        "--json"
+      ],
+      "consumer_ref": "skills/bashy/SKILL.md"
+    },
+    {
+      "command": "weave",
+      "section": "4a",
+      "stability": null,
+      "consumer": "embedded bashy skill",
+      "json_probe": [
+        "list",
+        "--json"
+      ],
+      "consumer_ref": "skills/bashy/SKILL.md"
+    },
+    {
+      "command": "dag",
+      "section": "4a",
+      "stability": null,
+      "consumer": "embedded bashy skill",
+      "json_probe": [
+        "--json",
+        "--list"
+      ],
+      "consumer_ref": "skills/bashy/SKILL.md"
+    },
+    {
+      "command": "foreman",
+      "section": "4a",
+      "stability": null,
+      "consumer": "embedded conductor skill",
+      "json_probe": [
+        "list",
+        "--json"
+      ],
+      "consumer_ref": "skills/conductor/SKILL.md",
+      "scope_gap": "Explicitly suppressed from the public atlas by Bashy #40 but listed in Part 4a; conductor must resolve scope"
+    },
+    {
+      "command": "supervise",
+      "section": "4a",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null,
+      "scope_gap": "Listed in 4a and deferred in 4z; conductor must resolve scope"
+    },
+    {
+      "command": "mb",
+      "section": "4b",
+      "stability": null,
+      "consumer": "embedded bashy skill",
+      "json_probe": [
+        "list",
+        "--json"
+      ],
+      "consumer_ref": "skills/bashy/SKILL.md"
+    },
+    {
+      "command": "meet",
+      "section": "4b",
+      "stability": null,
+      "consumer": "embedded force-agent-shell skill",
+      "json_probe": [
+        "service",
+        "status",
+        "--json"
+      ],
+      "consumer_ref": "skills/force-agent-shell/SKILL.md"
+    },
+    {
+      "command": "ping",
+      "section": "4b",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null
+    },
+    {
+      "command": "inbox",
+      "section": "4b",
+      "stability": null,
+      "consumer": "embedded bashy skill",
+      "json_probe": [
+        "--json"
+      ],
+      "consumer_ref": "skills/bashy/SKILL.md"
+    },
+    {
+      "command": "bus",
+      "section": "4b",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null
+    },
+    {
+      "command": "notify",
+      "section": "4b",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null
+    },
+    {
+      "command": "whois",
+      "section": "4b",
+      "stability": null,
+      "consumer": null,
+      "json_probe": [
+        "--json"
+      ]
+    },
+    {
+      "command": "app",
+      "section": "4c",
+      "stability": null,
+      "consumer": null,
+      "json_probe": [
+        "meta",
+        "--json"
+      ]
+    },
+    {
+      "command": "models",
+      "section": "4d",
+      "stability": null,
+      "consumer": null,
+      "json_probe": [
+        "list",
+        "--json"
+      ]
+    },
+    {
+      "command": "tools",
+      "section": "4d",
+      "stability": null,
+      "consumer": null,
+      "json_probe": [
+        "list",
+        "--json"
+      ]
+    },
+    {
+      "command": "agents",
+      "section": "4d",
+      "stability": null,
+      "consumer": null,
+      "json_probe": [
+        "list",
+        "--json"
+      ]
+    },
+    {
+      "command": "model",
+      "section": "4d",
+      "stability": null,
+      "consumer": null,
+      "json_probe": [
+        "list",
+        "--json"
+      ]
+    },
+    {
+      "command": "tool",
+      "section": "4d",
+      "stability": null,
+      "consumer": null,
+      "json_probe": [
+        "list",
+        "--json"
+      ]
+    },
+    {
+      "command": "agent",
+      "section": "4d",
+      "stability": null,
+      "consumer": "embedded conductor skill",
+      "json_probe": [
+        "list",
+        "--json"
+      ],
+      "consumer_ref": "skills/conductor/SKILL.md"
+    },
+    {
+      "command": "chat",
+      "section": "4d",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null
+    },
+    {
+      "command": "context",
+      "section": "4e",
+      "stability": null,
+      "consumer": null,
+      "json_probe": [
+        "--json"
+      ]
+    },
+    {
+      "command": "inspect",
+      "section": "4e",
+      "stability": null,
+      "consumer": "embedded bashy skill",
+      "json_probe": [
+        "context",
+        "--json"
+      ],
+      "consumer_ref": "skills/bashy/SKILL.md"
+    },
+    {
+      "command": "run",
+      "section": "4e",
+      "stability": null,
+      "consumer": "embedded bashy skill",
+      "json_probe": [
+        "--capture",
+        "--",
+        "true"
+      ],
+      "consumer_ref": "skills/bashy/SKILL.md"
+    },
+    {
+      "command": "commands",
+      "section": "4e",
+      "stability": null,
+      "consumer": "embedded bashy skill",
+      "json_probe": [
+        "--json"
+      ],
+      "consumer_ref": "skills/bashy/SKILL.md"
+    },
+    {
+      "command": "check",
+      "section": "4e",
+      "stability": null,
+      "consumer": "embedded bashy skill",
+      "json_probe": [
+        "--json",
+        "--script",
+        "true"
+      ],
+      "consumer_ref": "skills/bashy/SKILL.md"
+    },
+    {
+      "command": "verify",
+      "section": "4e",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null
+    },
+    {
+      "command": "conform",
+      "section": "4e",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null
+    },
+    {
+      "command": "llm",
+      "section": "4f\u20134g",
+      "stability": null,
+      "consumer": null,
+      "json_probe": [
+        "status",
+        "--json"
+      ]
+    },
+    {
+      "command": "ollama",
+      "section": "4f\u20134g",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null
+    },
+    {
+      "command": "mcp",
+      "section": "4h",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null
+    },
+    {
+      "command": "install-agent",
+      "section": "4h",
+      "stability": null,
+      "consumer": "embedded force-agent-shell skill",
+      "json_probe": null,
+      "consumer_ref": "skills/force-agent-shell/SKILL.md"
+    },
+    {
+      "command": "out",
+      "section": "4h",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null,
+      "scope_gap": "4.38 requires promotion from experimental; no promotion evidence recorded"
+    },
+    {
+      "command": "genie",
+      "section": "4i",
+      "stability": "preview",
+      "consumer": null,
+      "json_probe": null,
+      "stability_source": "docs/release-roadmap-and-versioning.md: reference agent"
+    },
+    {
+      "command": "ycode",
+      "section": "4i",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null
+    },
+    {
+      "command": "kb",
+      "section": "4j",
+      "stability": null,
+      "consumer": "embedded bashy skill",
+      "json_probe": [
+        "list",
+        "--json"
+      ],
+      "consumer_ref": "skills/bashy/SKILL.md"
+    },
+    {
+      "command": "graph",
+      "section": "4j",
+      "stability": null,
+      "consumer": "embedded bashy skill",
+      "json_probe": [
+        "notes",
+        "--json"
+      ],
+      "consumer_ref": "skills/bashy/SKILL.md"
+    },
+    {
+      "command": "skill",
+      "section": "4j",
+      "stability": null,
+      "consumer": "embedded bashy skill",
+      "json_probe": [
+        "probe",
+        "--json"
+      ],
+      "consumer_ref": "skills/bashy/SKILL.md"
+    },
+    {
+      "command": "craft",
+      "section": "4j",
+      "stability": null,
+      "consumer": null,
+      "json_probe": [
+        "history",
+        "--json"
+      ]
+    },
+    {
+      "command": "ask",
+      "section": "4k",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null
+    },
+    {
+      "command": "limit",
+      "section": "4k",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null
+    },
+    {
+      "command": "oci",
+      "section": "4k",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null
+    },
+    {
+      "command": "sandbox",
+      "section": "4k",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null
+    },
+    {
+      "command": "audit",
+      "section": "4k",
+      "stability": null,
+      "consumer": null,
+      "json_probe": [
+        "verify",
+        "--json"
+      ]
+    },
+    {
+      "command": "loom",
+      "section": "4s",
+      "stability": null,
+      "consumer": null,
+      "json_probe": [
+        "status",
+        "--json"
+      ]
+    },
+    {
+      "command": "sshd",
+      "section": "4s",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null
+    },
+    {
+      "command": "proxy",
+      "section": "4s",
+      "stability": null,
+      "consumer": null,
+      "json_probe": null
+    }
+  ]
+}

@@ -234,7 +234,7 @@ func TestE2EAllListedCommandsDispatch(t *testing.T) {
 
 	// Native front-door verbs (safe, side-effect-free `--help`) + engine verbs
 	// (docker/podman/ollama — the regression class) are really invoked.
-	native := set("weave", "sprint", "claim", "chat", "agent", "model", "tool", "person", "sdlc", "web", "dag",
+	native := set("install-agent", "weave", "sprint", "claim", "chat", "agent", "model", "tool", "person", "sdlc", "web", "dag",
 		"schedule", "secret", "ask", "bus", "skill", "app", "run", "commands", "inspect", "context", "doctor",
 		"self", "check", "verify", "git", "dhnt", "release", "awd", "supervisord", "limit", "mod",
 		// hidden number aliases: byte-identical to their singular, and the only

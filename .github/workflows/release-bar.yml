@@ -1,0 +1,82 @@
+name: v1 command release bar
+on:
+  workflow_dispatch:
+
+# This readiness gate intentionally fails while named release gaps are open.
+# No allowlist, continue-on-error, or known-failure baseline applies.
+jobs:
+  evidence:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Focused release gate regressions
+        run: python scripts/test-release-bar.py
+      - name: Build and collect candidate evidence
+        shell: bash
+        env:
+          CANDIDATE: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -eu
+          mkdir -p evidence
+          go build -o evidence/bashy.exe ./cmd/bashy
+          goos=$(go env GOOS)
+          python scripts/release-bar.py --bashy evidence/bashy.exe --candidate "$CANDIDATE" --json-out "evidence/report-$goos.json"
+          set +e
+          go test -json -timeout 8m -tags e2e -run '^TestE2EAllListedCommandsDispatch$' ./internal/agentos > "evidence/dispatch-$goos.jsonl" 2>&1
+          test_status=$?
+          python scripts/release-bar.py --record-dispatch "evidence/dispatch-$goos.jsonl" --candidate "$CANDIDATE" --os "$goos" --run-url "$RUN_URL" --json-out "evidence/pass-$goos.json"
+          record_status=$?
+          set -e
+          if [ "$test_status" -ne 0 ]; then cat "evidence/dispatch-$goos.jsonl"; exit "$test_status"; fi
+          exit "$record_status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-bar-${{ matrix.os }}
+          path: |
+            evidence/*.json
+            evidence/*.jsonl
+
+  check:
+    needs: evidence
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-bar-*
+          merge-multiple: true
+          path: evidence
+      - name: Require all five points for every listed command
+        env:
+          CANDIDATE: ${{ github.sha }}
+        run: |
+          python scripts/release-bar.py --candidate "$CANDIDATE" \
+            --merge-report evidence/report-darwin.json \
+            --merge-report evidence/report-linux.json \
+            --merge-report evidence/report-windows.json \
+            --dispatch-evidence evidence/pass-darwin.json \
+            --dispatch-evidence evidence/pass-linux.json \
+            --dispatch-evidence evidence/pass-windows.json \
+            --json-out evidence/release-bar.json \
+            --markdown-out evidence/release-bar.md --check
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-bar-combined
+          path: evidence/release-bar.*

@@ -111,6 +111,9 @@ previously sequenced after v1.0; they are now part of it.
 and daemons; the commands stay in Bashy: the web console (`bashy app`), `loom`,
 an SSH server, and a minimal forward proxy (SOCKS and HTTP).
 
+The [generated command evidence table](release-bar-v1.generated.md) and
+[strict five-point gate](release-bar.md) track the current gaps.
+
 **Every Yoke verb on the v1.0.0 list carries a declared stability tier** (see
 §Stability tiers) and a versioned schema. Shipping in v1.0.0 is not the same as
 `supported`: most of this surface is expected at `preview`, and nothing
