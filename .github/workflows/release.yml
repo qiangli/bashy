@@ -160,7 +160,8 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: bashy-darwin-*
-          path: native
+          # Not native/: that directory is tracked source (siglaunch).
+          path: release-native
           merge-multiple: true
       - name: Verify native provenance and prepare complete signed manifest
         shell: bash
