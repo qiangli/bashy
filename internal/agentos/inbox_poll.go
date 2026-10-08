@@ -76,13 +76,17 @@ func waitInboxPoll(ctx context.Context, d time.Duration) error {
 // rescan remains the correctness backstop for an unavailable watcher, an OS
 // queue overflow, or a platform-specific notification gap.
 //
-// A missing store is watched through its nearest existing parent. The event
-// which creates it increments the generation and lets armRoots install the
-// recursive watch; the full read triggered by that same event covers writes
-// which raced ahead of watch installation.
+// Initialize missing store directories and watch them directly. notify shares a
+// process-wide watch tree: a nonrecursive ancestor can absorb a later recursive
+// child without upgrading its native Windows watch, and stopping that child
+// can disturb other subscribers. Watching an unrelated ancestor for an absent
+// store therefore silenced otherwise successfully registered inbox watches.
+// Failed registrations leave the fingerprint unavailable so reads fail open and
+// subsequent polls retry registration.
 type inboxChangeNotifier struct {
 	epoch  atomic.Uint64
 	closed atomic.Bool
+	ready  atomic.Bool
 	wake   chan struct{}
 	events chan notify.EventInfo
 	stop   chan struct{}
@@ -109,7 +113,10 @@ func newInboxChangeNotifier() *inboxChangeNotifier {
 }
 
 func (n *inboxChangeNotifier) fingerprint(string) (uint64, bool) {
-	return n.epoch.Load(), true
+	if !n.ready.Load() {
+		n.armRoots()
+	}
+	return n.epoch.Load(), n.ready.Load()
 }
 
 func (n *inboxChangeNotifier) wait(ctx context.Context, d time.Duration) error {
@@ -148,42 +155,27 @@ func (n *inboxChangeNotifier) armRoots() {
 	if n.closed.Load() {
 		return
 	}
+	ready := true
 	for _, root := range n.roots {
 		if root == "" {
+			ready = false
 			continue
 		}
-		target := nearestExistingDir(root)
-		if target == "" {
-			continue
-		}
-		if sameFilePath(target, root) {
-			target = filepath.Join(target, "...")
-		}
+		target := filepath.Join(root, "...")
 		if _, ok := n.armed[target]; ok {
 			continue
 		}
-		if err := notify.Watch(target, n.events, notify.All); err == nil {
-			n.armed[target] = struct{}{}
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			ready = false
+			continue
 		}
+		if err := notify.Watch(target, n.events, notify.All); err != nil {
+			ready = false
+			continue
+		}
+		n.armed[target] = struct{}{}
 	}
-}
-
-func nearestExistingDir(path string) string {
-	for path != "" {
-		if info, err := os.Stat(path); err == nil && info.IsDir() {
-			return path
-		}
-		parent := filepath.Dir(path)
-		if parent == path {
-			return ""
-		}
-		path = parent
-	}
-	return ""
-}
-
-func sameFilePath(a, b string) bool {
-	return filepath.Clean(a) == filepath.Clean(b)
+	n.ready.Store(ready)
 }
 
 func (n *inboxChangeNotifier) close() {

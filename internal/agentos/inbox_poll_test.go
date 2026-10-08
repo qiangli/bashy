@@ -244,6 +244,73 @@ func TestInboxChangeNotifierArmsStoreCreatedAfterStart(t *testing.T) {
 	waitForInboxGeneration(t, changes, before)
 }
 
+func TestInboxChangeNotifierSeesWriteBelowAnotherNotifiersAncestor(t *testing.T) {
+	parent := t.TempDir()
+	existing := filepath.Join(parent, "existing")
+	if err := os.Mkdir(existing, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// A missing store used to install a watch on parent. notify shares its
+	// native watch tree across all inbox notifiers, including the relay.
+	for _, key := range []string{"BASHY_MB_DIR", "BASHY_ROOM_DIR", "BASHY_MEET_DIR"} {
+		t.Setenv(key, filepath.Join(parent, "missing"))
+	}
+	ancestor := newInboxChangeNotifier()
+	t.Cleanup(ancestor.close)
+	for _, key := range []string{"BASHY_MB_DIR", "BASHY_ROOM_DIR", "BASHY_MEET_DIR"} {
+		t.Setenv(key, existing)
+	}
+	changes := newInboxChangeNotifier()
+	t.Cleanup(changes.close)
+	before, _ := changes.fingerprint("")
+	if err := os.WriteFile(filepath.Join(existing, "posts.jsonl"), []byte("new durable event\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	waitForInboxGeneration(t, changes, before)
+}
+
+func TestInboxWaitBelowMissingStoreAncestor(t *testing.T) {
+	parent := t.TempDir()
+	// Keep the reproducer private while placing both wait tests below the
+	// missing store's ancestor, as happens with a relay and later inbox reads.
+	for _, key := range []string{"TMP", "TEMP", "TMPDIR"} {
+		t.Setenv(key, parent)
+	}
+	for _, key := range []string{"BASHY_MB_DIR", "BASHY_ROOM_DIR", "BASHY_MEET_DIR"} {
+		t.Setenv(key, filepath.Join(parent, "missing"))
+	}
+	ancestor := newInboxChangeNotifier()
+	t.Cleanup(ancestor.close)
+	t.Run("board", TestInboxWatchDeliversANewBoardPostWithoutHumanRelay)
+	t.Run("meet", TestInboxBoundedWaitDoesNotFinishOnOwnMeetPost)
+}
+
+func TestInboxChangeNotifierRetriesUnavailableStore(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "store")
+	if err := os.WriteFile(root, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"BASHY_MB_DIR", "BASHY_ROOM_DIR", "BASHY_MEET_DIR"} {
+		t.Setenv(key, root)
+	}
+	changes := newInboxChangeNotifier()
+	t.Cleanup(changes.close)
+	if _, ok := changes.fingerprint(""); ok {
+		t.Fatal("unavailable store suppressed full inbox reads")
+	}
+	if err := os.Remove(root); err != nil {
+		t.Fatal(err)
+	}
+	before, ok := changes.fingerprint("")
+	if !ok {
+		t.Fatal("watch registration did not recover when the store became available")
+	}
+	if err := os.WriteFile(filepath.Join(root, "posts.jsonl"), []byte("recovered\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	waitForInboxGeneration(t, changes, before)
+}
+
 func waitForInboxGeneration(t *testing.T, changes *inboxChangeNotifier, before uint64) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
