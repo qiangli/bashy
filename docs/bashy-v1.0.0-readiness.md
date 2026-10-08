@@ -124,10 +124,11 @@ maintainer's private storage. The terms that constrain engineering work:
   theirs. Send bug reports knowing that.
 - Use is limited to **testing bashy for conformance to IEEE Std 1003.1-2016**.
 
-## Post-v1.0 workstream — benchmark-driven agentic uplift (v1.2 target)
+## Post-v1.0 workstream — benchmark-driven Yoke uplift
 
 Goal: **demonstrate + improve** the agentic uplift before promoting the agentic
-surface as stable in v1.2.0. It is useful pre-v1.0 evidence, but no longer a
+surface as stable after v1.0.0 (the v1.2.0 milestone is retired; see the
+roadmap). It is useful pre-v1.0 evidence, but no longer a
 v1.0 release blocker or v1.0 launch claim.
 
 - Harness: `eval/agent-shell/run-container-task.sh` — container-enforced shell

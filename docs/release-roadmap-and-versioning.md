@@ -1,7 +1,8 @@
 # Bashy release roadmap and versioning policy
 
-Status: **plan of record, 2026-08-08; v1.0.0 scope amended 2026-10-04** (see
-§v1.0.0 — three pillars). This document defines release order,
+Status: **plan of record, 2026-08-08; v1.0.0 scope amended 2026-10-04; the
+v1.1 and v1.2 deferrals retired 2026-10-08** (see §v1.0.0 — three pillars and
+§After v1.0). This document defines release order,
 public promises, upstream compatibility coordinates, and version-number rules.
 Detailed gates remain in `bashy-v1.0.0-readiness.md` and the component plans.
 
@@ -76,8 +77,10 @@ Detailed gates remain in `bashy-v1.0.0-readiness.md` and the component plans.
 ### v1.0.0 — official release: three pillars
 
 Scope amended 2026-10-04. v1.0.0 ships three pillars on one binary, plus the
-services and packaging under them. Embedded languages and the agentic MVP were
-previously sequenced after v1.0; they are now part of it.
+services and packaging under them. Embedded languages, the Yoke MVP, the MCP
+server and the knowledge and skills surface were previously sequenced into
+v1.1 and v1.2; those deferrals are retired and all of it is part of v1.0.0.
+The v1.0.0 feature list is the Sprint 379 list, one story per line.
 
 1. **bash** — a GNU Bash 5.3-compatible shell and the declared IEEE Std 1003.1
    Shell and Utilities profile with its limitations. Engineering closure of the
@@ -132,7 +135,8 @@ graduates to `supported` without a named consumer.
 
 Amended 2026-10-04. This track no longer carries embedded languages (now
 v1.0.0) and its direction is POSIX completeness in Bashy's own code rather
-than chasing GNU extensions. A version number is assigned when it is planned.
+than chasing GNU extensions. No version number is assigned until it is
+planned; the earlier v1.1.0 slot is retired.
 
 - Implement the remaining externally provided POSIX utilities in pure Go, from
   the standard and manuals only.
@@ -141,41 +145,44 @@ than chasing GNU extensions. A version number is assigned when it is planned.
 - Bash# depth: per-language fence ergonomics beyond the v1.0.0 set, further
   fence languages, workflow support, and the standard library.
 
-### v1.2.0 — stable agentic surface
+### After v1.0 — Yoke stability and depth
 
-Amended 2026-10-04: the agentic MVP itself ships in v1.0.0 (§v1.0.0, pillar 3)
-at declared tiers. This milestone is the later **stability commitment**, not
-the first appearance of the surface.
+Amended 2026-10-08. The v1.2.0 milestone is retired: Yoke itself ships in
+v1.0.0 (§v1.0.0, pillar 3) at declared tiers, including the MCP server and
+`kb`, `graph`, `skill` and `craft`. What follows v1.0.0 is the later
+**stability commitment** and the depth work, with no version number assigned
+until each is planned.
 
-Public promise: **the agentic foundation becomes supported API** — addressing,
+Public promise: **the Yoke foundation becomes supported API** — addressing,
 schema/versioning discipline, and the relation vocabulary's extension rule.
-Individual agentic features graduate on top of it one at a time, as feedback
-arrives, and not all of them by v1.2.0.
+Individual Yoke features graduate on top of it one at a time, as feedback
+arrives, and not all of them at once.
 
-- Promote the documented AgentOS/agentic commands and schemas to supported API
+- Promote the documented Yoke commands and schemas to supported API
   **as each one graduates**, not as a single batch.
 - Require capability routing, safety/effect policy, structured output/schema
   versioning, observability, and benchmark evidence.
-- Agentic verbs ship earlier, from v1.0.0, at `experimental` or `preview`;
-  v1.2.0 is the stability commitment for the foundation they stand on.
+- Yoke verbs ship from v1.0.0 at `experimental` or `preview`; the stability
+  commitment is for the foundation they stand on.
 - **Agent protocol interoperability.** The **MCP server** (expose Bashy's
   commands as tools) is part of v1.0.0. The remaining surfaces are tracked for
-  development no earlier than v1.2.0: an MCP client (consume external
+  development with no version assigned: an MCP client (consume external
   servers), ACP in both directions (drive local harnesses and let
   editors drive Bashy), and A2A in both directions (delegate to and serve
   remote peers). These are adapters over the unified agentic graph's identity,
   policy, evidence, rendezvous, and lifecycle model, not three new control
-  planes. This item is **not an additional v1.2.0 release gate or a promise
+  planes. This item is **not an additional release gate or a promise
   that every protocol surface graduates together**: each surface enters at
   `experimental`, remains subordinate to Step 1 below, and graduates only on
   protocol conformance, fail-closed security, measured runtime evidence, and
   a named consumer. The protocol-specific plan of record is
-  `dhnt/docs/bashy-agent-protocols-1.2.0-plan.md` in the umbrella. It does
-  not reopen the deferred generic mount/adapter layer or `bashy://` scheme.
+  `dhnt/docs/bashy-agent-protocols-1.2.0-plan.md` in the umbrella (the file
+  name predates the retirement of the v1.2.0 label; the plan itself stands). It
+  does not reopen the deferred generic mount/adapter layer or `bashy://` scheme.
 
 #### Stability tiers — how a feature ships before it is frozen
 
-The agentic surface releases in **stages**, so a feature can ship, collect real
+The Yoke surface releases in **stages**, so a feature can ship, collect real
 feedback, and change shape without spending a major. Every agentic verb and
 schema carries exactly one tier, reported by `bashy commands --atlas` and
 `bashy inspect context --json`:
@@ -199,9 +206,9 @@ untested regardless of how long it has existed.
 The agentland re-architecture (umbrella
 `docs/bashy-unified-agentic-graph-architecture-plan.md`, revised 2026-08-08)
 is rank-3 work: **build the seam, prove it runs, stop.** It is scoped here in
-three steps, and only the first is a v1.2.0 gate.
+three steps, and only the first is a stability gate.
 
-**Step 1 — foundation, and the only v1.2.0 gate**, because deferring it is what
+**Step 1 — foundation, and the only stability gate**, because deferring it is what
 costs a major. Two properties must hold before any agentic schema reaches
 `supported`; neither requires the re-architecture to be finished:
 
@@ -215,7 +222,7 @@ costs a major. Two properties must hold before any agentic schema reaches
   vocabulary promoted to supported API cannot grow without a major.
 
 That is the whole gate. Everything below ships at `experimental`, collects
-feedback, and graduates on its own schedule across later 1.2.x/1.3 releases.
+feedback, and graduates on its own schedule across later releases.
 
 **Step 2 — MVP: one path, proven, `experimental`, off by default.** The
 narrowest useful slice of runtime-authored edges: emit the attribution →
@@ -249,9 +256,9 @@ Per principle 5, scaled to the step:
 
 | Graduation | Evidence required |
 |---|---|
-| Addressing → `supported` (step 1, the v1.2.0 gate) | Attachment survives carrier replacement and works for a session with no meaningful local PID |
-| Relation vocabulary → `supported` (step 1, the v1.2.0 gate) | The well-known core is classified (knowledge vs task, reflexive or not) and an unknown relation round-trips through an unmodified reader |
-| Runtime-authored edges → `preview` (step 2, may be post-1.2) | Fraction of completed runs producing a full attribution → generation → gate-verdict chain, against the ~0 baseline |
+| Addressing → `supported` (step 1, the stability gate) | Attachment survives carrier replacement and works for a session with no meaningful local PID |
+| Relation vocabulary → `supported` (step 1, the stability gate) | The well-known core is classified (knowledge vs task, reflexive or not) and an unknown relation round-trips through an unmodified reader |
+| Runtime-authored edges → `preview` (step 2, after the stability gate) | Fraction of completed runs producing a full attribution → generation → gate-verdict chain, against the ~0 baseline |
 | Anything → `supported` | A named consumer that would break if it changed. No consumer, no graduation |
 | Write-rule fixes (patch, any time) | Concurrent-writer test per offender; `go test -race` clean |
 
@@ -259,12 +266,13 @@ A conformance test that only shows the machinery matching itself satisfies none
 of these. State the negative result if it comes, and demote or remove rather
 than carrying an `experimental` feature indefinitely.
 
-#### Explicitly out of scope for v1.2.0
+#### Explicitly out of scope for the stability commitment
 
 Deferred with a blocking reason in the plan's appendix; none may be implied by
-the v1.2.0 promise: the mount/adapter layer and any `bashy://` reference scheme;
+the stability promise: the mount/adapter layer and any `bashy://` reference scheme;
 a full Graph IR with typed ports and a node union; the pattern library and
-`graph pattern *`; ForeignRuntime/polyglot embedding; Bonsai as a derived query
+`graph pattern *`; ForeignRuntime/polyglot embedding as a graph node type (the
+embedded-language fences themselves are v1.0.0); Bonsai as a derived query
 index; and all Bash++ graph-module integration — that last is workstream (b) and
 belongs to the v1.0 language profile, not here.
 
@@ -275,24 +283,26 @@ workstreams, behind POSIX certification and Bash#, and may not preempt the
 v1.0 gates. That ranking applies to the re-architecture only: the Yoke MVP
 list in §v1.0.0 is itself a v1.0 gate (amended 2026-10-04), and that MVP
 includes the MCP server (the §v1.0.0 tool protocol; see §Agent protocol
-interoperability). The rank-3 deferral here covers the re-architecture and
+interoperability) and `kb`, `graph`, `skill` and `craft`. The rank-3 deferral
+here covers the re-architecture and
 the remaining protocol surfaces, not the MCP server. Step 1 is small by
 construction; steps 2 and 3 add no front-door verb, land inside existing
 packages, and touch no file in `sh/`. A rank-3 item that needs a large
 measurement campaign to justify itself is not ready to be worked — it is ready
 to be written down and deferred.
 
-### v1.3.x — Tessaro integration track
+### After v1.0 — Tessaro integration track
 
-- **v1.3.0:** Sphere/P2P pairing and pooled model execution across hosts, with
+No version numbers are assigned; each item is planned on its own evidence.
+
+- **Sphere/P2P pairing and pooled model execution across hosts**, with
   identity, trust, discovery, transport, upgrade, and offline/degraded-mode
   gates. (Single-host local models through Ollama are v1.0.0.)
-- **Recommended v1.4.0, or v1.3.1 only if no new public API:** cluster/DKS
-  integration. DKS is a materially larger control-plane surface than Sphere;
-  it should not inherit readiness merely because Sphere is green.
+- **Cluster/DKS integration**, after Sphere, as its own minor (or a patch only
+  if it adds no public API). DKS is a materially larger control-plane surface
+  than Sphere; it should not inherit readiness merely because Sphere is green.
 
-Minor milestone numbers are planning coordinates, not permission to bypass
-SemVer. If a milestone requires incompatible public changes, it becomes the
+Milestone ordering is a planning coordinate, not permission to bypass SemVer. If a milestone requires incompatible public changes, it becomes the
 next major release.
 
 ## Product version rules
@@ -303,9 +313,9 @@ next major release.
 | Upstream patch/toolchain update with no public semantic change | patch | Dependency/provenance refresh |
 | Add compatible GNU Bash/POSIX/Go/Coreutils profile or feature | minor | New supported functionality |
 | Expose additional Go-version constructs in Bash++ compatibly | minor | Language surface grows |
-| Change or drop an `experimental` agentic feature | patch | No stability was promised; this is what the tier is for |
+| Change or drop an `experimental` Yoke feature | patch | No stability was promised; this is what the tier is for |
 | Graduate a feature `experimental` → `preview` → `supported` | minor | New supported functionality, on evidence and a consumer |
-| Add a relation to the agent-graph well-known core (post-1.2) | minor | Additive; an unknown relation must already round-trip through an unmodified reader |
+| Add a relation to the agent-graph well-known core (once it is `supported`) | minor | Additive; an unknown relation must already round-trip through an unmodified reader |
 | Break a `preview` feature | minor + migration note in release notes | Shape was believed settled but was still being validated |
 | Remove or re-classify a well-known relation, demote a `supported` feature, or change how agents are addressed | major | Stored edges and existing readers require migration |
 | Change default semantics, remove a profile, or break public CLI/language/schema | major | User migration required |
@@ -339,7 +349,7 @@ posix:       VSC-PCTS2016 / POSIX08 / IEEE 1003.1 campaign profile
 go_build:    1.27.x
 bashpp_go:   go1.27-profile-v1
 coreutils:   GNU 9.11 reference; Bashy command-set revision/hash
-agent_graph: none (pre-1.2) | contrib-v1 + relation-registry revision/hash
+agent_graph: none | contrib-v1 + relation-registry revision/hash
 tessaro:     none | sphere-v1 | dks-v1
 platforms:   exact signed/package artifact matrix
 evidence:    run IDs, totals, checksums, limitations
