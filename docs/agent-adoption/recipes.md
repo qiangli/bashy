@@ -51,7 +51,7 @@ matrix.md).
 Note the plain string — an object `{path, args}` form fails config
 validation (v1.17.10).
 
-## Aider (shape verified)
+## Aider (PTY `/run` verified)
 
 Aider takes its shell from `$SHELL` (spawned as `shell -i -c <cmd>` under a
 PTY via pexpect):
@@ -60,14 +60,16 @@ PTY via pexpect):
 SHELL=/path/to/bashy aider
 ```
 
-`bashy install-agent aider --check` probes the `-i -c` shape.
+`bashy install-agent aider --check` probes the `-i -c` shape. Aider 0.86.2's
+piped-stdin subprocess path ignores `$SHELL` and uses `/bin/sh`; use a PTY.
+See [the live proof and model-turn limits](sprint-379-proof.md).
 
 ## Gemini CLI / Copilot CLI / Antigravity `agy` (shim mechanism verified)
 
-All spawn a bare `bash -c` resolved via PATH on unix (gemini-family
-`run_shell_command`, `shell:false`, never reads `$SHELL`).
+The PATH recipe intercepts bare shell-name lookups on Unix. Live verification
+is version-dependent; see [current blockers](sprint-379-proof.md).
 `bashy install-agent gemini` (or `copilot`, or `agy`) writes
-`~/.bashy/shims/{bash,sh,zsh}` symlinks; launch with the shim dir prepended:
+`~/.bashy/shims/{bash,sh,zsh}` exec wrappers (preserving the bashy entry point); launch with the shim dir prepended:
 
 ```sh
 PATH="$HOME/.bashy/shims:$PATH" agy
@@ -83,7 +85,7 @@ codex reads the **`/etc/passwd` login shell** (`getpwuid_r` `pw_shell`), not
 lever is `chsh` to a bash/zsh-named bashy shim:
 
 ```sh
-bashy install-agent codex          # writes ~/.bashy/shims/bash -> bashy, prints the recipe
+bashy install-agent codex          # writes a bash-named exec wrapper, prints the recipe
 echo "$HOME/.bashy/shims/bash" | sudo tee -a /etc/shells   # once
 chsh -s "$HOME/.bashy/shims/bash"  # or: bashy install-agent codex --yes (after the /etc/shells line)
 ```
@@ -92,6 +94,11 @@ This changes the login shell for **all** sessions (Terminal, ssh) — it is the
 one invasive recipe. For text-only agent turns (e.g. `bashy meet`) codex's shell
 is moot, so this is only needed when codex will actually run shell commands.
 DYLD interposition is blocked (SIP + hardened runtime).
+
+Codex 0.157.1 also passed a real one-turn probe with `exec_command`'s `shell`
+parameter explicitly set to the installed wrapper and `login=false`. That
+proves the per-call route; default launches still use the account login shell.
+See [the transcript and independent execution record](sprint-379-proof.md).
 
 ## Codex CLI on Linux
 

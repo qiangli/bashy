@@ -1,5 +1,12 @@
 # Agent adoption matrix — B0 verification results
 
+**2026-10-08 update:** [Sprint 379 proof](sprint-379-proof.md) records current
+Codex explicit-shell and Aider PTY `/run` execution-log evidence, AGY quota,
+Gemini eligibility and Copilot authentication blockers. The table below is
+historical. Shell-name agent shims are now exec wrappers, not symlinks, because
+plain `bash`/`sh` aliases bypass AgentOS. Default Codex routing and a model-driven
+Aider turn remain unproven; no blocked row has been promoted to a live pass.
+
 Status of `bin/bash` (the pure Bash 5.3 drop-in) as the shell that coding
 agents spawn. Each row records the agent's shell-selection surface, the exact
 invocation shape it uses, and the verification level reached. Companion to

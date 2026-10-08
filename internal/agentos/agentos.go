@@ -221,8 +221,8 @@ var (
 		"lexicon", "sota",
 		// self-fidelity / cert (inspect stays visible)
 		"check", "conform",
-		// output reduction (still on under BASHY_AGENTIC; `bashy help output`)
-		"run", "out", "full",
+		// Output recovery (`out`) graduated in Sprint 379; reduction remains opt-in.
+		"run", "full",
 		// engines: oci is the standard name, sandbox the popular one; these
 		// two are the vendor spellings
 		"podman", "docker",

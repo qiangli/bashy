@@ -325,7 +325,10 @@ func aiderInstaller() agentInstaller {
 
     SHELL=%s aider
 
-or export SHELL in the profile of the account that runs aider.`, shell)
+or export SHELL in the profile of the account that runs aider.
+
+Aider 0.86.2 honors SHELL on its interactive PTY/pexpect path. Its piped-stdin
+subprocess path uses /bin/sh instead; run with a terminal/PTY to use this wiring.`, shell)
 	}
 	return agentInstaller{
 		name: "aider",
@@ -370,10 +373,8 @@ func shimInstaller(agent string) agentInstaller {
 				return "", err
 			}
 			for _, name := range shimNames {
-				link := filepath.Join(dir, name)
-				_ = os.Remove(link)
-				if err := os.Symlink(shell, link); err != nil {
-					return "", fmt.Errorf("shim %s: %w", link, err)
+				if err := chat.WriteShellShim(filepath.Join(dir, name), shell); err != nil {
+					return "", fmt.Errorf("shim %s: %w", name, err)
 				}
 			}
 			return fmt.Sprintf(`%s resolves bare "bash" via PATH (gemini-family run_shell_command). Shims written to %s; launch it as:
@@ -419,11 +420,8 @@ func codexInstaller(yes bool) agentInstaller {
 		if err := os.MkdirAll(shimDir(), 0o755); err != nil {
 			return "", err
 		}
-		if tgt, err := os.Readlink(shimBash); err != nil || tgt != shell {
-			_ = os.Remove(shimBash)
-			if err := os.Symlink(shell, shimBash); err != nil {
-				return "", fmt.Errorf("shim %s: %w", shimBash, err)
-			}
+		if err := chat.WriteShellShim(shimBash, shell); err != nil {
+			return "", fmt.Errorf("shim %s: %w", shimBash, err)
 		}
 		steps := fmt.Sprintf(`codex reads the /etc/passwd login shell (not $SHELL/PATH). Route it via a
 bash-named shim to bashy and set it as your login shell (invasive — changes the
