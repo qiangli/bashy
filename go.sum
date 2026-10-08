@@ -929,8 +929,8 @@ github.com/qiangli/ycode v0.3.1-dev.0.20261008103721-fcd123d55aca h1:I6LCrxnrhzU
 github.com/qiangli/ycode v0.3.1-dev.0.20261008103721-fcd123d55aca/go.mod h1:aX5H2empIv/BTDpj1RCNjVradRokwd8qsGKjp20zXio=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261008103721-fcd123d55aca h1:Lc1vs7Yoe83RxT4JNpJgXqu9D9WqdrbM+v6VHaEjAro=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261008103721-fcd123d55aca/go.mod h1:awa+nG7gsSb2nl5SKn5I0sRHBLUjWTW9QSF5JLfde0E=
-github.com/qiangli/yoke v0.0.0-20261008195915-036598d9884c h1:ysHkljLq4jq7q94YQPgx8nX/AeAWRbo/6PYQjtp66Co=
-github.com/qiangli/yoke v0.0.0-20261008195915-036598d9884c/go.mod h1:L0X3IhJ7Lk9XTP+BbUBQDibEFuG9IdInkI+aUD2A7PA=
+github.com/qiangli/yoke v0.0.0-20261008210640-b6efa19775ac h1:9nYYU8V/GH5TopT2FieflRUaQRP4oABDLj0qpvzZ1a4=
+github.com/qiangli/yoke v0.0.0-20261008210640-b6efa19775ac/go.mod h1:L0X3IhJ7Lk9XTP+BbUBQDibEFuG9IdInkI+aUD2A7PA=
 github.com/qiangli/yoke/external/otel v0.0.0-20261008195915-036598d9884c h1:2U2i2x1dach0aMPW3K0K7RRM+tkkEesQFkUFpy+itGU=
 github.com/qiangli/yoke/external/otel v0.0.0-20261008195915-036598d9884c/go.mod h1:jj7xLGalDsl6WhZbfqBiEcJItEd0qh1fEq8JDfVBYvo=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261008195915-036598d9884c h1:x25b7O43GX3/okyKeMhYS3mll3CPS5mZw6y0oONOJm0=

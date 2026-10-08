@@ -9,7 +9,7 @@ require (
 	github.com/creack/pty/v2 v2.0.1
 	github.com/ergochat/readline v0.1.3
 	github.com/qiangli/coreutils v0.0.0-20261008152708-7e3814c0e869
-	github.com/qiangli/yoke v0.0.0-20261008195915-036598d9884c
+	github.com/qiangli/yoke v0.0.0-20261008210640-b6efa19775ac
 	github.com/qiangli/yoke/external/otel v0.0.0-20261008195915-036598d9884c
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
