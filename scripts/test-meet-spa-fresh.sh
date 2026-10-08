@@ -133,7 +133,10 @@ build) mkdir -p dist; cp -R '$pinned_art/.' dist/ ;;
 esac
 EOF
 chmod +x "$tmp/bin/go" "$tmp/bin/node" "$tmp/bin/pnpm"
-if ! PATH="$tmp/bin:/bin:/usr/bin" BASHY_BIN= /bin/sh "$script" check >"$tmp/4.out" 2>&1; then
+# Run from a directory with no ../yoke sibling: the umbrella checkout has one,
+# so running in place would never exercise the standalone fallback.
+mkdir -p "$tmp/standalone/bashy"
+if ! (cd "$tmp/standalone/bashy" && PATH="$tmp/bin:/bin:/usr/bin" BASHY_BIN= /bin/sh "$script" check) >"$tmp/4.out" 2>&1; then
 	cat "$tmp/4.out" >&2
 	fail "standalone check did not resolve yoke from the go.mod pin"
 fi
