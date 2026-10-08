@@ -98,8 +98,8 @@ github.com/aymanbagabas/go-udiff v0.4.1 h1:OEIrQ8maEeDBXQDoGCbbTTXYJMYRCRO1fnodZ
 github.com/aymanbagabas/go-udiff v0.4.1/go.mod h1:0L9PGwj20lrtmEMeyw4WKJ/TMyDtvAoK9bf2u/mNo3w=
 github.com/bahlo/generic-list-go v0.2.0 h1:5sz/EEAK+ls5wF+NeqDpk5+iNdMDXrh3z3nPnH1Wvgk=
 github.com/bahlo/generic-list-go v0.2.0/go.mod h1:2KvAjgMlE5NNynlg/5iLrrCCZ2+5xWbdbCW3pNTGyYg=
-github.com/bashsharp/bashsharp v0.0.0-20261008175753-a4c7cfceebe8 h1:5J9ZTghgJd6l9583tNMKrVx4dlVLht3MHZrs+14Kbgg=
-github.com/bashsharp/bashsharp v0.0.0-20261008175753-a4c7cfceebe8/go.mod h1:py3/VFaDE2tmjXtg9FuDICZdl7jbhfi6nemDFp9jcjA=
+github.com/bashsharp/bashsharp v0.0.0-20261008183624-b516e93402ec h1:z0c5Y6r6YLB7kxdaeikBu52GKkIBbSsj3sxPzH8rZYE=
+github.com/bashsharp/bashsharp v0.0.0-20261008183624-b516e93402ec/go.mod h1:eLVQkEeEjlgK4fjKTf2M6MPd5G341CcWulMIksbNp+c=
 github.com/benbjohnson/clock v1.3.5 h1:VvXlSJBzZpA/zum6Sj74hxwYI2DIxRWuNIoXAzHZz5o=
 github.com/benbjohnson/clock v1.3.5/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
@@ -923,8 +923,8 @@ github.com/qiangli/podman/v6 v6.0.0-20260723062102-d454baa0afec h1:/QTru8tK6jBXW
 github.com/qiangli/podman/v6 v6.0.0-20260723062102-d454baa0afec/go.mod h1:21dWtcXkYmFHP+HOgjVQgRN+AW7heESQ8suaxeN3Ky8=
 github.com/qiangli/readline v0.1.4-0.20260919214158-38ad08e83676 h1:yjO0oA1tLqqmI1GkSJNIwKKnKDp0wOT8V8Kgj7ue1kE=
 github.com/qiangli/readline v0.1.4-0.20260919214158-38ad08e83676/go.mod h1:o3ux9QLHLm77bq7hDB21UTm6HlV2++IPDMfIfKDuOgY=
-github.com/qiangli/sh/v3 v3.0.0-20261008161309-2a6d42599019 h1:Cmw0gX3GMgGJVS9q6q5IN21MsYIybea8tIY24a30n3o=
-github.com/qiangli/sh/v3 v3.0.0-20261008161309-2a6d42599019/go.mod h1:B3gggi45SfDRerTyVE9jqTXW8MTOUFhB6g1p5/AuQ78=
+github.com/qiangli/sh/v3 v3.0.0-20261008183447-ffbc15640301 h1:wItMSjaRPfO7az1G9ZaecxWf1W8hzqHL4R+ixd5sykI=
+github.com/qiangli/sh/v3 v3.0.0-20261008183447-ffbc15640301/go.mod h1:B3gggi45SfDRerTyVE9jqTXW8MTOUFhB6g1p5/AuQ78=
 github.com/qiangli/ycode v0.3.1-dev.0.20261008103721-fcd123d55aca h1:I6LCrxnrhzU+CCpjFfu0+pzKDv7W2hiJo5n+c6gtGgY=
 github.com/qiangli/ycode v0.3.1-dev.0.20261008103721-fcd123d55aca/go.mod h1:aX5H2empIv/BTDpj1RCNjVradRokwd8qsGKjp20zXio=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261008103721-fcd123d55aca h1:Lc1vs7Yoe83RxT4JNpJgXqu9D9WqdrbM+v6VHaEjAro=

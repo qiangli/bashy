@@ -73,6 +73,13 @@ func TestSourceRoute(t *testing.T) {
 		{"fsharp script extension", []string{"x.fsx"}, "fsharp-script", 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// Foreign-language cases provision C/C++/Node/TS/Python/Rust/.NET
+			// toolchains on first use: too heavy for every per-push CI job.
+			// They run in the per-candidate evidence lanes (and on demand)
+			// with BASHY_TEST_FOREIGN_SOURCES=1; the Go route cases always run.
+			if foreignSourceCase(tc.args) && os.Getenv("BASHY_TEST_FOREIGN_SOURCES") != "1" {
+				t.Skip("set BASHY_TEST_FOREIGN_SOURCES=1 to provision foreign toolchains and run this case")
+			}
 			cmd := exec.Command(bin, tc.args...)
 			cmd.Dir = dir
 			cmd.Stdin = strings.NewReader("in\n")
@@ -93,4 +100,21 @@ func TestSourceRoute(t *testing.T) {
 			}
 		})
 	}
+}
+
+// foreignSourceCase reports whether a case runs a non-Go source file without
+// --source=go overriding it (that override case stays a cheap Go refusal).
+func foreignSourceCase(args []string) bool {
+	for _, a := range args {
+		if strings.HasPrefix(a, "--source=") {
+			return false
+		}
+	}
+	for _, a := range args {
+		switch filepath.Ext(a) {
+		case ".c", ".cc", ".cpp", ".cxx", ".js", ".mjs", ".ts", ".tsx", ".py", ".rs", ".fs", ".fsx":
+			return true
+		}
+	}
+	return false
 }
