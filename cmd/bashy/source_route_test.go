@@ -14,7 +14,15 @@ func TestSourceRoute(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
-	build := exec.Command("go", "build", "-tags", "bashy_core", "-o", bin, "./cmd/bashy")
+	foreignSources := os.Getenv("BASHY_TEST_FOREIGN_SOURCES") == "1"
+	buildArgs := []string{"build"}
+	if !foreignSources {
+		// Keep the Go-only gate fast; foreign sources need the full product's
+		// AgentOS tool resolver to provision their language toolchains.
+		buildArgs = append(buildArgs, "-tags", "bashy_core")
+	}
+	buildArgs = append(buildArgs, "-o", bin, "./cmd/bashy")
+	build := exec.Command("go", buildArgs...)
 	build.Dir = filepath.Join("..", "..")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v: %s", err, out)
@@ -77,7 +85,7 @@ func TestSourceRoute(t *testing.T) {
 			// toolchains on first use: too heavy for every per-push CI job.
 			// They run in the per-candidate evidence lanes (and on demand)
 			// with BASHY_TEST_FOREIGN_SOURCES=1; the Go route cases always run.
-			if foreignSourceCase(tc.args) && os.Getenv("BASHY_TEST_FOREIGN_SOURCES") != "1" {
+			if foreignSourceCase(tc.args) && !foreignSources {
 				t.Skip("set BASHY_TEST_FOREIGN_SOURCES=1 to provision foreign toolchains and run this case")
 			}
 			cmd := exec.Command(bin, tc.args...)
