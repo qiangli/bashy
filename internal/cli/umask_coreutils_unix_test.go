@@ -34,8 +34,10 @@ func builtCoreutilsBin(t *testing.T) string {
 			coreutilsBinErr = err
 			return
 		}
-		build := exec.Command("go", "build", "-o", coreutilsBinPath, "./cmd/coreutils")
-		build.Dir = filepath.Join(filepath.Dir(root), "coreutils")
+		// coreutils at the version bashy pins (the live tree in the dhnt
+		// go.work), built in bashy's module so its fork replaces apply.
+		build := exec.Command("go", "build", "-o", coreutilsBinPath, "github.com/qiangli/coreutils/cmd/coreutils")
+		build.Dir = root
 		out, err := build.CombinedOutput()
 		if err != nil {
 			coreutilsBinErr = fmt.Errorf("building cmd/coreutils: %v\n%s", err, out)

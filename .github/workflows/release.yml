@@ -73,7 +73,9 @@ jobs:
           TAG: ${{ github.ref_name }}
           ARCH: ${{ matrix.arch }}
         run: |
-          ./scripts/build-meet-spa.sh required
+          # The binary embeds the SPA artifact committed at the pinned yoke;
+          # fail closed if that artifact is stale or the toolchain is missing.
+          ./scripts/build-meet-spa.sh check
           ./scripts/build-native-darwin-release.sh "$TAG" "$ARCH" "$RUNNER_TEMP/native"
       - name: Sign native Bashy archive provenance
         uses: actions/attest@v4

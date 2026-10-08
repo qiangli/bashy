@@ -22,7 +22,7 @@ func TestOwnedExecLargeArgAndEnv(t *testing.T) {
 		suffix = ".exe"
 	}
 	bash, yoke := filepath.Join(dir, "bash"+suffix), filepath.Join(dir, "yoke"+suffix)
-	for _, build := range []struct{ out, pkg, dir string }{{bash, "./cmd/bash", root}, {yoke, "./cmd/yoke", filepath.Join(root, "..", "yoke")}} {
+	for _, build := range []struct{ out, pkg, dir string }{{bash, "./cmd/bash", root}, {yoke, "github.com/qiangli/yoke/cmd/yoke", root}} {
 		args := []string{"build", "-buildvcs=false"}
 		if build.pkg == "./cmd/bash" {
 			args = append(args, "-tags=ownedexecprobe")
