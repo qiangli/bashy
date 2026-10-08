@@ -358,3 +358,13 @@ func writeFile(path string, data []byte) error {
 	}
 	return os.Rename(tmp, path)
 }
+
+// The idle threshold follows the steward runbook (30 min), not 5 min.
+func TestSprintWaitIdleThresholdIsThirtyMinutes(t *testing.T) {
+	if sprintWaitIsIdle(6 * time.Minute) {
+		t.Fatal("a 6-minute-quiet foreman log must not read as an idle conductor")
+	}
+	if !sprintWaitIsIdle(31 * time.Minute) {
+		t.Fatal("a 31-minute-quiet foreman log must read as an idle conductor")
+	}
+}

@@ -19,9 +19,12 @@ import (
 )
 
 const (
-	sprintWaitSchema        = "bashy-sprint-wait-v1"
-	sprintWaitPollInterval  = 1 * time.Second
-	sprintWaitIdleThreshold = 5 * time.Minute
+	sprintWaitSchema       = "bashy-sprint-wait-v1"
+	sprintWaitPollInterval = 1 * time.Second
+	// 30 minutes without progress is the steward runbook's reassign
+	// threshold (kb:runbook-steward-supervising-conductors §3); 5 minutes
+	// fired on conductors legitimately waiting on long background jobs.
+	sprintWaitIdleThreshold = 30 * time.Minute
 	sprintWaitDiskFloor     = "" // derived via hostFloors; not a constant
 )
 
@@ -143,11 +146,15 @@ func sprintWaitConductorIdle(sprintID int64) (bool, string) {
 		return false, ""
 	}
 	age := time.Since(fi.ModTime())
-	if age > sprintWaitIdleThreshold {
+	if sprintWaitIsIdle(age) {
 		return true, fmt.Sprintf("foreman log %s mtime %s ago (%s)", logPath, age.Round(time.Second), fi.ModTime().Format(time.RFC3339))
 	}
 	return false, ""
 }
+
+// sprintWaitIsIdle reports whether a foreman log this old means the
+// conductor has gone idle.
+func sprintWaitIsIdle(age time.Duration) bool { return age > sprintWaitIdleThreshold }
 
 func sprintWaitDiskLow() (bool, string) {
 	// Use the same floor logic as hostFloors: min(2Gi, 5% total)
