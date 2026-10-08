@@ -9,8 +9,8 @@ require (
 	github.com/creack/pty/v2 v2.0.1
 	github.com/ergochat/readline v0.1.3
 	github.com/qiangli/coreutils v0.0.0-20261008152708-7e3814c0e869
-	github.com/qiangli/yoke v0.0.0-20261008161104-6103baf8716f
-	github.com/qiangli/yoke/external/otel v0.0.0-20261008161104-6103baf8716f
+	github.com/qiangli/yoke v0.0.0-20261008172022-e944ca981b4f
+	github.com/qiangli/yoke/external/otel v0.0.0-20261008172022-e944ca981b4f
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
@@ -152,7 +152,7 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261008111821-a3e9f037bb20 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261008170351-3da210f228ea // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
@@ -408,8 +408,8 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/proglottis/gpgme v0.1.6 // indirect
 	github.com/qiangli/gfy v0.0.0-20260920194528-5f76a171a47d // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261008161104-6103baf8716f // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261008161104-6103baf8716f // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261008172022-e944ca981b4f // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261008172022-e944ca981b4f // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/redis/go-redis/v9 v9.20.1 // indirect
