@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -83,9 +84,9 @@ func TestGenieRecipeGeneratesCallerWorkspaceAndModel(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"workspace: \"" + workspace + "\"",
-		"readableRoots: [\"" + workspace + "\",",
-		"writableRoots: [\"" + workspace + "\"]",
+		"workspace: " + strconv.Quote(workspace),
+		"readableRoots: [" + strconv.Quote(workspace) + ",",
+		"writableRoots: [" + strconv.Quote(workspace) + "]",
 		"id: \"" + model + "\"",
 	} {
 		if !strings.Contains(string(data), want) {

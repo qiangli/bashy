@@ -19,10 +19,27 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
+// toolFenceEchoBinary is a portable echo: this test binary re-executed in the
+// TestMain echo mode (there is no /bin/echo on Windows). Exec templates split
+// on whitespace, so the path must not contain any.
+func toolFenceEchoBinary(t *testing.T) string {
+	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.ContainsAny(exe, " \t") {
+		t.Fatalf("test binary path %q contains whitespace; exec templates split on it", exe)
+	}
+	t.Setenv(toolFenceEchoEnv, "1")
+	return exe
+}
+
 func toolFenceFixture(t *testing.T) *fleet.Catalog {
 	t.Helper()
 	cat := agentFenceCatalog(t)
-	tool := fleet.Tool{Name: "fixture", Kind: "cli", CLI: fleet.ToolCLI{Binary: "/bin/echo", Launch: fleet.ToolLaunch{Exec: "/bin/echo --model {model} {prompt}"}},
+	echo := toolFenceEchoBinary(t)
+	tool := fleet.Tool{Name: "fixture", Kind: "cli", CLI: fleet.ToolCLI{Binary: echo, Launch: fleet.ToolLaunch{Exec: echo + " --model {model} {prompt}"}},
 		Commands: []fleet.ToolCommand{{Name: "review", Slash: "review {args}", Mode: fleet.ToolCommandPrint, Effects: []string{"read"}}}}
 	if err := cat.SaveTool(tool); err != nil {
 		t.Fatal(err)

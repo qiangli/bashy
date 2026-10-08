@@ -1,8 +1,10 @@
 package agentos
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -14,11 +16,18 @@ import (
 // developer's real ~/.config/bashy directory unless redirected here first.
 // Tests that need a populated ring, or want to assert on receipts, point
 // BASHY_COMMANDS_DIR / BASHY_SKILLS_DIR at their own temp dir.
+// toolFenceEchoEnv switches the test binary into a portable echo (polyglot_tool_row_test.go).
+const toolFenceEchoEnv = "BASHY_TOOLFENCE_TEST_ECHO"
+
 func TestMain(m *testing.M) {
 	// The supervisord integration tests re-exec this binary as a scripted
 	// stand-in for the dag root (supervisord_test.go).
 	if os.Getenv("BASHY_SUPERVISORD_TEST_CHILD") != "" {
 		os.Exit(supervisordTestChild())
+	}
+	if os.Getenv(toolFenceEchoEnv) != "" {
+		fmt.Println(strings.Join(os.Args[1:], " "))
+		os.Exit(0)
 	}
 	dir, err := os.MkdirTemp("", "bashy-agentos-commands-")
 	if err != nil {
