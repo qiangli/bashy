@@ -45,12 +45,14 @@ for os_name, block in [('darwin', 'on_macos'), ('linux', 'on_linux')]:
         url, sha = artifact(os_name, arch)
         formula += [f'    {cpu} do', f'      url "{url}"', f'      sha256 "{sha}"', '    end']
     formula.append('  end')
-formula += ['  def install', '    bin.install "bashy", "outpost", "bash", "sh"', '  end',
+formula += ['  def install', '    bin.install "bashy", "outpost"',
+            '    # bash and sh stay off PATH so they never shadow Homebrew bash or /bin/sh.',
+            '    libexec.install "bash", "sh"', '  end',
             '  service do', '    run [opt_bin/"outpost", "supervisord"]', '    keep_alive true', '  end',
             '  test do', '    require "json"',
             '    shell = shell_output("#{bin}/bashy --version 2>&1")[/bashy-(v?[0-9]+\\.[0-9]+\\.[0-9]+(?:-dev)?)/, 1]',
             '    service = JSON.parse(shell_output("#{bin}/outpost version --json")).fetch("version")',
-            '    assert_not_nil shell',
+            '    refute_nil shell',
             '    assert_equal shell.delete_prefix("v").delete_suffix("-dev"), service.delete_prefix("v").delete_suffix("-dev")',
             '  end', 'end', '']
 (out / 'Formula/bashy.rb').write_text('\n'.join(formula))
