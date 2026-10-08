@@ -621,6 +621,7 @@ var verbSynopsis = map[string]string{
 	"seaweedfs":   "object/blob store with S3 gateway (managed external)",
 	"kopia":       "snapshot-backup repository server (managed external)",
 	"go":          "self-provisioning Go toolchain (download → verify → cache → exec)",
+	"mod":         "Bash# projects as Go modules: sibling pins are go.mod versions in a go.work (drift, sync, dir, tools, init)",
 	"cmake":       "self-provisioning CMake build toolchain",
 	"clang":       "self-provisioning clang/LLVM toolchain",
 	"zig":         "self-provisioning Zig toolchain (the C islands' cc; `zig build-exe`, `zig run`)",

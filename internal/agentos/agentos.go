@@ -90,6 +90,7 @@ import (
 	"github.com/qiangli/yoke/pkg/dag"
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/gate"
+	"github.com/qiangli/yoke/pkg/gomod"
 	"github.com/qiangli/yoke/pkg/handoff"
 	"github.com/qiangli/yoke/pkg/herald"
 	"github.com/qiangli/yoke/pkg/jobs"
@@ -159,7 +160,7 @@ var (
 	// `llm` likewise belongs to a popular unrelated CLI; the local gateway is
 	// reached only as `bashy llm`.
 	// `limit` is a wrapper verb like awd; bare `limit` is csh's builtin, never ours.
-	directFrontDoorVerbs = []string{"mb", "ping", "out", "full", "awd", "supervisord", "llm", "limit", "proxy", "outpost"}
+	directFrontDoorVerbs = []string{"mb", "ping", "out", "full", "awd", "supervisord", "llm", "limit", "proxy", "outpost", "mod"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "pwsh", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
@@ -1193,6 +1194,11 @@ func dispatch() {
 			dispatchExit(1)
 		}
 		dispatchExit(0)
+	case "mod":
+		// The Bash# module contract (yoke pkg/gomod): sibling pins are go.mod
+		// versions in a go.work workspace. drift/sync/dir/tools/init compose
+		// the go command; gomod.Run returns the weavecli exit code.
+		dispatchExit(gomod.Run(os.Args[2:], os.Stdout, os.Stderr))
 	case "dag":
 		// The agent-first DAG task runner: markdown-defined targets run as a
 		// dependency graph. dag.ExitCodeOf recovers the stable weavecli exit
