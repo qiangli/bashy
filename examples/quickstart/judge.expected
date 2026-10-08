@@ -6,7 +6,8 @@ body: lie
 summarize: postcondition failed: test "$1" != lie
 lie     -> 3
 body: write
-write   -> 1
+bashy: touch: denied by the effect cap read: needs write (the Command Atlas classifies it write); declare write in @effects/@guard to run it
+write   -> 126
 body: fail
 fail    -> 1
 body: yield

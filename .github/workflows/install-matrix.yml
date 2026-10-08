@@ -4,7 +4,7 @@ name: install-matrix
 # runner, install bashy the way a user does — download the release archive,
 # NO Go toolchain involved — and run the Bash# quickstart through its own
 # gate, examples/quickstart/check.sh: the judge demo (six invocations, six
-# exit codes 0 3 3 1 1 6) plus decorators/kwargs/enums/readonly, each diffed
+# exit codes 0 3 3 126 1 6) plus decorators/kwargs/enums/readonly, each diffed
 # against its pinned transcript. Windows is the must-have segment.
 #
 # Green only against a release that carries the Sprint 203 contract natives
