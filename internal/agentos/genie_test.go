@@ -101,9 +101,21 @@ func TestGenieRecipeGeneratesCallerWorkspaceAndModel(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(ycodeRoot, "cmd/ycode/main.go")); err != nil {
 		t.Skip("ycode checkout unavailable")
 	}
+	// A cold `go run ./cmd/ycode` compile can alone exceed the ACP handshake
+	// timeout on a CI runner. Build the binary first, with no deadline, and
+	// run only the built binary inside the timed context.
+	ycodeBin := filepath.Join(t.TempDir(), "ycode")
+	if runtime.GOOS == "windows" {
+		ycodeBin += ".exe"
+	}
+	build := exec.Command("go", "build", "-o", ycodeBin, "./cmd/ycode")
+	build.Dir = ycodeRoot
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build ycode: %v\n%s", err, out)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	acpCommand := exec.Command("go", "run", "./cmd/ycode", "-f", config, "acp")
+	acpCommand := exec.Command(ycodeBin, "-f", config, "acp")
 	acpCommand.Dir = ycodeRoot
 	acpCommand.Env = os.Environ()
 	client, err := coreacp.NewClient(ctx, coreacp.BaseHandler{}, acpCommand)
