@@ -2190,7 +2190,7 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	// is re-executed isolated and inside @limit under `bashy limit`, which
 	// wraps the contained command so its guard watches that whole tree. In
 	// agent mode the host floors (limit.go) judge the command first.
-	mws = append(mws, outputMW, autofix.Handler(), confirmHandler(), dryRunHandler(r), defineSessionHandler(), coreutilsshell.Handler(), registeredHandler())
+	mws = append(mws, outputMW, autofix.Handler(), confirmHandler(), dryRunHandler(r), defineSessionHandler(), gnuMakeHandler(), coreutilsshell.Handler(), registeredHandler())
 	if agentModeForEnv(env) {
 		mws = append(mws, hostFloorHandler())
 	}

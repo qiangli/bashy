@@ -422,7 +422,8 @@ must not lean on bashy's `sed`/`grep`/`cut`/`sort`/`tr` for a check: they
 refuse the macOS default `LANG=en_US.UTF-8` (coreutils' ctype/collate locale
 gate) — the examples cross-check with shell builtins only. Two more
 body-vs-terminal differences (Sprint 190): `make` in a body is bashy's
-in-process POSIX make, so a GNU `Makefile` is driven with `env make …`; and
+in-process POSIX make; a directory whose makefile is a `GNUmakefile` is handed
+to the host GNU make automatically, and any other GNU `Makefile` is driven with `env make …`; and
 the body sees PATH only — the front-door shims (`bashy cmake`) are not
 applied inside it, so a body's `cmake` must be on PATH. The TypeScript runtime is chosen per repo in the target's
 `Env:` (`BASHPP_TYPESCRIPT_RUNTIME=bun` where the repo's own imports need Bun).
