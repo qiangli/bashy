@@ -87,8 +87,8 @@ if [ -e .git ] && "$BASHY_EXE" git rev-parse --is-inside-work-tree >/dev/null 2>
     fi
   fi
 fi
-SHELL_RUNTIME_COMMIT=$(sed -n 's/^sh=//p' .sibling-pins)
-SHELL_RUNTIME_COMMIT_TIME=$("$BASHY_EXE" git -C ../sh show -s --format=%cI "$SHELL_RUNTIME_COMMIT")
+SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+SHELL_RUNTIME_COMMIT_TIME=
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
 BASHY_LDFLAGS=${LDFLAGS#-s }
 # Helper scripts run THROUGH bashy: a Windows host has no /bin/sh to honour
@@ -137,8 +137,8 @@ if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     fi
   fi
 fi
-SHELL_RUNTIME_COMMIT=$(sed -n 's/^sh=//p' .sibling-pins)
-SHELL_RUNTIME_COMMIT_TIME=$("$BASHY_EXE" git -C ../sh show -s --format=%cI "$SHELL_RUNTIME_COMMIT")
+SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+SHELL_RUNTIME_COMMIT_TIME=
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
 BASHY_LDFLAGS=${LDFLAGS#-s }
 BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh "bin/bashy${ext}" "$BASHY_LDFLAGS" "bashy_engines bashy_obs"
@@ -261,8 +261,8 @@ if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     fi
   fi
 fi
-SHELL_RUNTIME_COMMIT=$(sed -n 's/^sh=//p' .sibling-pins)
-SHELL_RUNTIME_COMMIT_TIME=$("$BASHY_EXE" git -C ../sh show -s --format=%cI "$SHELL_RUNTIME_COMMIT")
+SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+SHELL_RUNTIME_COMMIT_TIME=
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
 BASHY_LDFLAGS=${LDFLAGS#-s }
 for plat in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
@@ -968,8 +968,8 @@ for host in "$@"; do
           fi
         fi
       fi
-      shell_runtime_commit=\$(sed -n 's/^sh=//p' .sibling-pins)
-      shell_runtime_commit_time=\$(git -C ../sh show -s --format=%cI \"\$shell_runtime_commit\")
+      shell_runtime_commit=\$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+      shell_runtime_commit_time=
       LDFLAGS=\"-w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-\$ref -X github.com/qiangli/bashy/internal/cli.buildID=\$build_id -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=\$shell_runtime_commit -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=\$shell_runtime_commit_time\"
       ./scripts/build-bashy-artifact.sh \"bin/bashy\$ext\" \"\$LDFLAGS\"
       \"./bin/bashy\$ext\" dag build VERSION=\"\$ref\"

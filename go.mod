@@ -23,7 +23,7 @@ require (
 	mvdan.cc/sh/v3 v3.13.1
 )
 
-require github.com/qiangli/ycode v0.0.0
+require github.com/qiangli/ycode v0.3.1-dev.0.20261008103721-fcd123d55aca
 
 require github.com/qiangli/ycode/examples/genie v0.0.0
 
@@ -418,10 +418,4 @@ replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/
 // Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
 replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261006115113-c8a5d22bb3f0
 
-// ycode is the engine for agents declared in YAML; bashy mounts its CLI as
-// `bashy ycode` (cmd/bashy wires ycodecli.Main into agentos).
-replace github.com/qiangli/ycode => ../ycode
-
-// genie, bashy's builtin agent: its source is embedded (the genie module is
-// its own module inside the ycode checkout, so the ycode pin covers it).
-replace github.com/qiangli/ycode/examples/genie => ../ycode/examples/genie
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261008103721-fcd123d55aca

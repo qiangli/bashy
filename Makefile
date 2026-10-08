@@ -22,8 +22,8 @@ BUILD_ID ?= $(shell if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/
 			printf '%s' "$$id"; \
 		fi; \
 	fi)
-SHELL_RUNTIME_COMMIT ?= $(shell sed -n 's/^sh=//p' .sibling-pins)
-SHELL_RUNTIME_COMMIT_TIME ?= $(shell git -C ../sh show -s --format=%cI $(SHELL_RUNTIME_COMMIT) 2>/dev/null)
+SHELL_RUNTIME_COMMIT ?= $(shell sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+SHELL_RUNTIME_COMMIT_TIME ?=
 # Linux cmd/bashy must retain runtime.fwdSig in its ELF symbol table. The
 # Coreutils inherited-signal route reads it to preserve an execve caller's
 # signal dispositions. -w removes DWARF; -s also removes the required symbol.

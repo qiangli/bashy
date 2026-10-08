@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"golang.org/x/mod/modfile"
 	"io"
 	"os"
 	"os/exec"
@@ -243,9 +244,8 @@ func buildSelfBinary(ctx context.Context, target, version string) error {
 	}
 	ldflags := "-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-" + version +
 		" -X github.com/qiangli/bashy/internal/cli.buildID=" + selfBuildID(ctx)
-	if commit, commitTime := selfShellRuntimeStamp(ctx); commit != "" && commitTime != "" {
-		ldflags += " -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=" + commit +
-			" -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=" + commitTime
+	if version := selfShellRuntimeStamp(); version != "" {
+		ldflags += " -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=" + version
 	}
 	c := exec.CommandContext(ctx, exe, "go", "build", "-trimpath", "-ldflags", ldflags, "-o", target, "./cmd/bashy")
 	c.Stdout = os.Stdout
@@ -278,26 +278,24 @@ func selfBuildID(ctx context.Context) string {
 	return id
 }
 
-func selfShellRuntimeStamp(ctx context.Context) (string, string) {
-	data, err := os.ReadFile(".sibling-pins")
+// selfShellRuntimeStamp is the sh fork version bashy pins in go.mod
+// (replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 VERSION): the
+// transpiler writes it verbatim into a standalone program's go.mod.
+func selfShellRuntimeStamp() string {
+	data, err := os.ReadFile("go.mod")
 	if err != nil {
-		return "", ""
+		return ""
 	}
-	commit := ""
-	for _, line := range strings.Split(string(data), "\n") {
-		if value, ok := strings.CutPrefix(line, "sh="); ok {
-			commit = strings.TrimSpace(value)
-			break
+	f, err := modfile.ParseLax("go.mod", data, nil)
+	if err != nil {
+		return ""
+	}
+	for _, r := range f.Replace {
+		if r.Old.Path == "mvdan.cc/sh/v3" && r.New.Path == "github.com/qiangli/sh/v3" {
+			return r.New.Version
 		}
 	}
-	if commit == "" {
-		return "", ""
-	}
-	out, err := exec.CommandContext(ctx, "git", "-C", "../sh", "show", "-s", "--format=%cI", commit).Output()
-	if err != nil {
-		return "", ""
-	}
-	return commit, strings.TrimSpace(string(out))
+	return ""
 }
 
 func ensureBashyRelease(ctx context.Context, version string) (string, error) {
