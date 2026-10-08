@@ -17,6 +17,7 @@ package agentos
 //	bashy genie pull           (no released bundle yet: says how to build)
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -134,6 +135,10 @@ func dispatchGenieWithHandoff(args []string, handoff bool) int {
 			return 2
 		}
 		if ok {
+			if err := external.prepare(context.Background()); err != nil {
+				fmt.Fprintln(os.Stderr, "bashy genie:", err)
+				return 2
+			}
 			external.apply()
 		} else {
 			os.Setenv("GENIE_MODEL_ID", model)

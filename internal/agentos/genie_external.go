@@ -13,12 +13,16 @@ package agentos
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 
+	"github.com/qiangli/yoke/pkg/broker"
+	"github.com/qiangli/yoke/pkg/broker/door"
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/secrets"
 )
@@ -81,4 +85,33 @@ func (g genieExternal) apply() {
 	os.Setenv("GENIE_EXTERNAL_CONTEXT", strconv.FormatInt(g.Context, 10))
 	os.Setenv("OPENAI_BASE_URL", g.BaseURL)
 	os.Setenv("OPENAI_API_KEY", g.Key)
+}
+
+// genieEnsureDoor starts the host's model door; a seam so tests never start a
+// real one.
+var genieEnsureDoor = broker.EnsureUp
+
+// viaDoor reports whether the model is served by this host's model door
+// (the door-* registry entries). Nothing else starts the door for such a
+// model: genie's local-model recipe runs `llm up`, the external path does
+// not, and a request to a door that is not listening stalls the turn at
+// llm.requested with no output.
+func (g genieExternal) viaDoor() bool {
+	u, err := url.Parse(g.BaseURL)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	return (host == "127.0.0.1" || host == "localhost") && u.Port() == strconv.Itoa(door.Port())
+}
+
+// prepare makes the model reachable before genie's turn starts.
+func (g genieExternal) prepare(ctx context.Context) error {
+	if !g.viaDoor() {
+		return nil
+	}
+	if err := genieEnsureDoor(ctx); err != nil {
+		return fmt.Errorf("the model door did not start for %s: %w", g.Name, err)
+	}
+	return nil
 }
