@@ -68,6 +68,11 @@ jobs:
             go vet  ./cmd/bash ./cmd/sh ./cmd/bashy ./internal/...
             go test ./internal/cli ./internal/agentos
           fi
+          # Route selection is implemented at the executable boundary, so its
+          # tests must run on every OS rather than only during local package
+          # testing. This covers .go compilation, selector precedence, caller
+          # streams/arguments, and the compiled program's exit status.
+          go test -v -timeout 5m ./cmd/bashy
       # E2E: build the real bashy binary on THIS OS and confirm every command
       # `bashy commands` advertises actually dispatches (no "No such command" /
       # "not in this build" / "No such file"). Runs on macOS AND Windows — the
