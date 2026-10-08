@@ -49,13 +49,12 @@ func TestModelFenceInlineEmbedAndGuards(t *testing.T) {
 		})
 	}
 	polyglot.RegisterLanguage(row)
-	dir := t.TempDir()
+	dir := newFenceEmbedFixtureDir(t)
 	definition := filepath.Join(dir, "model.yaml")
 	if err := os.WriteFile(definition, []byte("name: fixture-model\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	cwd, _ := os.Getwd()
-	rel, _ := filepath.Rel(cwd, definition)
+	rel := fenceEmbedRelPath(t, definition)
 	for _, declaration := range []string{"~~~model as oracle\nname: fixture-model\n~~~\n", "embed model \"./" + rel + "\" as oracle\n"} {
 		for _, tc := range []struct {
 			body, want string
