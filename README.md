@@ -68,8 +68,7 @@ commands, run deterministically.
   repo, cached — so the same program means the same thing on every machine.
   `bashy check --prepare SCRIPT...` pays that download ahead of time;
   `BASHPP_PYTHON`, `BASHPP_GO`, `BASHPP_CC`, … name a program explicitly.
-- **It rebuilds itself.** `bashy git clone`, `bashy scripts/bootstrap-siblings.sh`,
-  `bashy dag build` — on Windows with no git, no Go and no C compiler on the
+- **It rebuilds itself.** `bashy git clone`, `bashy dag build` — on Windows with no git, no Go and no C compiler on the
   host (see *From source*).
 - **A tool that knows its caller is an agent.** `bashy check` for static
   checks, `bashy dag` for dependency-ordered tasks in Markdown, `bashy awd`
@@ -117,15 +116,14 @@ from source below.
 
 bashy rebuilds itself using only an installed bashy. Every command below is
 run *through* `bashy`, so the same five lines work on Linux, macOS and
-Windows: `bashy git` fetches the sources, `bashy scripts/bootstrap-siblings.sh`
-checks out the sibling modules at the exact SHAs in `.sibling-pins`, and
-`bashy dag build` compiles both binaries through `bashy go`, which downloads
+Windows: `bashy git` fetches the sources, and `bashy dag build` compiles both binaries through `bashy go`, which downloads
 and verifies its own pinned Go toolchain into bashy's cache the first time.
+The sibling modules are go.mod pins, so the go command downloads exactly the
+versions this commit names.
 
 ```sh
 bashy git clone https://github.com/qiangli/bashy
 cd bashy
-bashy scripts/bootstrap-siblings.sh
 bashy dag build            # -> bin/bash and bin/bashy (bin/*.exe on Windows)
 bashy dag install          # optional: install into ~/.local/bin ($DHNT_BIN_DIR to change)
 ```
@@ -158,7 +156,6 @@ already installed:
 ```sh
 git clone https://github.com/qiangli/bashy
 cd bashy
-./scripts/bootstrap-siblings.sh    # clones each sibling next door at its pinned SHA
 make build                         # -> bin/bash and bin/bashy
 ```
 

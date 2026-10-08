@@ -140,15 +140,22 @@ has no release channel of its own, and tool `ycode` is an alias of tool
 
 ## Module wiring
 
-`go.mod` requires the flat-sibling deps, resolved by `replace`:
+`go.mod` pins every sibling at a real version (Sprint 390; rules in the
+dhnt umbrella's `docs/bashy-go-module-contract.md`): requires at
+pseudo-versions for coreutils, yoke (and its nested otel/oci/llmgw modules),
+bashsharp, ycode/genie, gfy and outpost (a `tool` directive: the release
+builds `github.com/qiangli/outpost/cmd/outpost` at that version, never linked
+into bashy — `TestBashyBinaryDoesNotLinkOutpost`), and versioned replaces for
+the forks published under an upstream path:
 
 ```
-replace mvdan.cc/sh/v3               => ../sh
-replace github.com/bashsharp/bashsharp => ../bashsharp
-replace github.com/qiangli/coreutils => ../coreutils
-replace github.com/qiangli/yoke      => ../yoke
-replace github.com/ergochat/readline => ../readline
-replace github.com/filebrowser/filebrowser/v2 => ../filebrowser
+replace mvdan.cc/sh/v3                        => github.com/qiangli/sh/v3 <pseudo>
+replace github.com/ergochat/readline          => github.com/qiangli/readline <pseudo>
+replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/v2 <pseudo>
+replace github.com/odvcencio/gotreesitter     => github.com/qiangli/gotreesitter <pseudo>
+replace github.com/benhoyt/goawk              => github.com/qiangli/coreutils/third_party/goawk <pseudo>
+replace github.com/ollama/ollama              => github.com/qiangli/ollama <pseudo>
+replace go.podman.io/podman/v6                => github.com/qiangli/podman/v6 <pseudo>
 ```
 
 `../sh` is the interpreter engine; `../bashsharp` is the **Bash# language's
@@ -175,35 +182,22 @@ supplies the pure-Go userland + code-intel verbs the `bashy` binary injects (onl
 interactive loop uses (the module path keeps the upstream name — the flat-layout
 convention is about the sibling dir, not the module string); and `../filebrowser`
 is the maintained qiangli/filebrowser fork used by the AgentOS file-management
-surface. In a parent monorepo all four are submodules. In
-a standalone clone, run `./scripts/bootstrap-siblings.sh` — it clones each
-sibling next to this repo at the SHAs pinned in
-`.sibling-pins` (and leaves any submodule mounts alone). CI does the
-same before building. coreutils itself replaces `../sh`, which resolves to the
-same flat sibling. Keep the sibling SHAs coordinated; a parent monorepo's
-sync tooling auto-bumps `.sibling-pins`. (go.mod also carries further
-`../coreutils/...`-internal replaces for the embedded podman/ollama/otel
-engines — those ride the coreutils pin, not `.sibling-pins`.)
+surface. A standalone clone builds with stock go (it downloads the pins); inside the
+dhnt umbrella the root go.work builds the live sibling submodules instead.
+The shell runtime stamp (`transpile.ShellRuntimeCommit`) is the sh fork
+version on the go.mod replace line.
 
-**Bumping a sibling means bumping `.sibling-pins` in the same breath.**
-`.sibling-pins` is the only sibling source CI ever sees — it has no umbrella, so
-it clones each sibling at the pinned SHA. A local build **cannot** catch a stale
-pin: the umbrella mounts the live siblings as submodules, so the pins are never
-consulted here. The build passes locally against the new sibling while CI builds
-the old one and fails with a mystifying `no required module provides package` for
-code that plainly exists. (That is exactly how a stale coreutils pin broke every
-build for a dozen commits — the packages CI couldn't find had been added to
-coreutils *after* the pinned SHA.)
-
-Because push time is the only honest moment to notice, `scripts/hooks/pre-push`
-refuses a push while a pin disagrees with its sibling's HEAD. It is a no-op in a
-standalone clone (no siblings to compare), names the drifting sibling, and is
-bypassable with `git push --no-verify`. Install it with `make hooks` — or just
-run `./scripts/bootstrap-siblings.sh`, which now sets `core.hooksPath` for you.
-To resync after bumping a sibling: `./scripts/update-sibling-pins.sh`, then
-commit the pins with the change that needs them. Push the sibling to its own
-origin too — CI clones the pin from GitHub, so a SHA that exists only on your
-machine fails there as well.
+**A local umbrella build cannot catch code that needs a newer sibling than
+go.mod pins** — the go.work hides it, and CI (no workspace) fails with
+`no required module provides package` for code that plainly exists. So
+`scripts/hooks/pre-push` resolves the standalone graph
+(`GOWORK=off go list -deps`) at push time; install it with `make hooks`. To
+move pins: push the sibling first (a pin must name a pushed commit), then
+`bashy mod sync` (or `bashy dag sync` at the umbrella root), commit go.mod
+and go.sum with the change that needs them. `bashy mod drift` shows what
+trails. bashy and ycode require each other: that edge always trails and is
+bumped by hand (`go get github.com/qiangli/ycode@<sha>`) when bashy needs a
+newer ycode.
 
 ## Build / test / lint
 
@@ -225,7 +219,7 @@ make test-uutils        # REFUSES native host execution: use only the contained 
 make test-uutils-safety # the only bounded uutils harness validation that may run natively
 make dist               # cross-compile static binaries for all 6 platforms (pure Go, no siglaunch — see below)
 make smoke-chat AGENT=… # governed-launcher contract smoke (INFO, SKIPs without an agent or pty)
-make hooks              # install scripts/hooks/pre-push (the .sibling-pins drift guard)
+make hooks              # install scripts/hooks/pre-push (gofmt + standalone module graph)
 make tidy               # go mod tidy + gofmt -s -w . + go vet ./...
 make help               # every target with its `## ` doc line
 ```

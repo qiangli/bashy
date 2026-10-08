@@ -139,7 +139,7 @@ each suite target's body assumes it runs inside the bashy checkout. To dispatch
 over `bashy dag --mesh suites.md HOST=<bigbox>`, give each target a `Host: ${HOST}`
 line and prefix its body with the clone-and-build preamble from
 ../coreutils/examples/mesh-e2e-macos.md (the worker fetches bashy+sh from GitHub,
-runs scripts/bootstrap-siblings.sh, sets up the external/bash-5.3 fixtures, then
+sets up the external/bash-5.3 fixtures, then
 runs the suite). Kept out of the default bodies so local `-j` runs stay simple;
 wire it when the mesh path is set up.
 -->
