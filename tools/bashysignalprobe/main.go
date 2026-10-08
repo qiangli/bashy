@@ -1,3 +1,5 @@
+//go:build !windows
+
 // Command bashysignalprobe verifies a built Bashy artifact's inherited-ignore
 // behavior through its sh alias, including the pre-script signal window.
 package main
