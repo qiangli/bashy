@@ -140,7 +140,7 @@ probe_one() {
     [ -n "$o2" ] && o=$o2
   fi
   # a bin-managed external answers offline with its provisioning error
-  case "$o" in *"posix provider"*|*binmgr*|*"no system git"*|*"not pre-seeded"*)
+  case "$o" in *"posix provider"*|*"is not provisioned"*|*binmgr*|*"no system git"*|*"not pre-seeded"*)
     printf '%s\texternal\t%s\t%s\n' "$n" "$rc" "$(printf '%s' "$o" | head -1 | tr '\t' ' ' | tr -cd '\040-\176' | cut -c1-200)"; return ;; esac
   printf '%s\tpresent\t%s\t%s\n' "$n" "$rc" "$(printf '%s' "$o" | head -1 | tr '\t' ' ' | tr -cd '\040-\176' | cut -c1-200)"
 }
