@@ -146,6 +146,12 @@ jobs:
           path: dist/sbom/*
           if-no-files-found: ignore
           retention-days: 7
+      - name: List and verify Linux package contents
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes rpm
+          ./scripts/verify-linux-packages.sh dist
   publish:
     permissions:
       contents: write

@@ -144,6 +144,40 @@ archives:
       - README.md
       - LICENSE
 
+# The distro packages are another view of the same four Linux builds used by
+# the release archive. nFPM is part of the binmgr-managed GoReleaser toolchain;
+# no distro-specific rebuild is allowed here.
+nfpms:
+  - id: bashy-linux-packages
+    package_name: bashy
+    ids: [bashy, bash, sh, outpost]
+    vendor: dhnt
+    homepage: https://github.com/qiangli/bashy
+    maintainer: Qiang Li
+    description: Bashy userland, shell entry points, and outpost host agent
+    license: "BSD-3-Clause AND MIT"
+    # Never /usr/bin: bash and sh would collide with the distribution's own
+    # shells. All four members live together (sibling resolution) and only
+    # bashy and outpost are linked onto PATH; bash/sh stay opt-in.
+    bindir: /usr/lib/bashy/bin
+    formats:
+      - deb
+      - rpm
+      - apk
+    scripts:
+      postinstall: ./scripts/linux-package-postinstall.sh
+    contents:
+      - src: /usr/lib/bashy/bin/bashy
+        dst: /usr/bin/bashy
+        type: symlink
+      - src: /usr/lib/bashy/bin/outpost
+        dst: /usr/bin/outpost
+        type: symlink
+      - src: LICENSE
+        dst: /usr/share/licenses/bashy/LICENSE
+      - src: .release-assets/LICENSE.outpost
+        dst: /usr/share/licenses/bashy/LICENSE.outpost
+
 checksum:
   name_template: "checksums.txt"
 
