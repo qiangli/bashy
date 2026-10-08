@@ -59,19 +59,66 @@ quick
 }
 
 // Inside @retry every attempt gets its own deadline: the body starts n times.
+//
+// The deadline is fired from a controlled signal (see timeoutArm) once the body
+// has recorded its start for that attempt, so the re-arm is proven WITHOUT
+// racing a real 100ms deadline against the body's startup — a margin a coarse,
+// loaded Windows scheduler cannot keep, which made this test flaky. The body
+// never finishes on its own (sleep 30), so the only thing that ends an attempt
+// is the fired deadline; the outcome does not depend on how fast the body runs.
 func TestTimeoutDecoratorReArmsUnderRetry(t *testing.T) {
 	count := filepath.Join(t.TempDir(), "count")
+	started := func() int {
+		data, _ := os.ReadFile(count)
+		return strings.Count(string(data), "x")
+	}
+
+	const attempts = 2
+	armed := make(chan context.CancelCauseFunc, attempts)
+	prev := timeoutArm
+	timeoutArm = func(parent context.Context, _ time.Duration) (context.Context, context.CancelFunc) {
+		tctx, cancel := context.WithCancelCause(parent)
+		armed <- cancel
+		return tctx, func() { cancel(context.Canceled) }
+	}
+	t.Cleanup(func() { timeoutArm = prev })
+
+	// For each attempt, wait until the decorator has armed its deadline and the
+	// body has echoed, then fire the deadline — deterministically, not on a
+	// timer. A slow host only makes the poll loop iterate more; it cannot change
+	// the result.
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		for attempt := 1; attempt <= attempts; attempt++ {
+			var cancel context.CancelCauseFunc
+			select {
+			case cancel = <-armed:
+			case <-done:
+				return
+			}
+			for started() < attempt {
+				select {
+				case <-done:
+					return
+				case <-time.After(time.Millisecond):
+				}
+			}
+			cancel(context.DeadlineExceeded)
+		}
+	}()
+
 	script := `@retry(n: 2, backoff: "1ms")
 @timeout("100ms")
-function slow() { echo x >> "$COUNT"; sleep 3; }
+function slow() { echo x >> "$COUNT"; sleep 30; }
 slow
 `
 	err, _, errOut := runDecorated(t, context.Background(), syntax.LangBashPP, script, map[string]string{"COUNT": count})
 	if status, ok := exitStatusOf(err); !ok || status != exitTimeout {
 		t.Fatalf("want 124 after two timed-out attempts, got %v (stderr %q)", err, errOut.String())
 	}
-	if got := countLines(t, count); got != 2 {
-		t.Fatalf("body started %d times, want 2", got)
+	if got := started(); got != attempts {
+		t.Fatalf("body started %d times, want %d", got, attempts)
 	}
 }
 

@@ -41,15 +41,28 @@ func timeoutDecorator(stderr io.Writer) nativeDecoratorFunc {
 		if err != nil {
 			return err
 		}
-		tctx, cancel := context.WithTimeout(ctx, d)
+		tctx, cancel := timeoutArm(ctx, d)
 		defer cancel()
 		c.Next(tctx)
-		if errors.Is(tctx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+		if errors.Is(context.Cause(tctx), context.DeadlineExceeded) && ctx.Err() == nil {
 			c.Status = exitTimeout
 			fmt.Fprintf(stderr, "%s: timeout after %s\n", c.Name, d)
 		}
 		return nil
 	}
+}
+
+// timeoutArm creates the per-attempt deadline context @timeout runs Next under.
+// Production arms a real timer; a test overrides it to fire the deadline from a
+// signal it controls, so the re-arm-under-@retry invariant (the body starts
+// once per attempt, each attempt sealed with 124) is proven WITHOUT a real
+// wall-clock margin between a short deadline and the body's startup — a margin a
+// coarse, loaded Windows scheduler cannot keep, which made the re-arm test
+// flaky. The fired deadline is read through context.Cause, so a test
+// cancellation is indistinguishable from a real DeadlineExceeded. See the
+// memoNow doc comment for the sibling @memo fix.
+var timeoutArm = func(parent context.Context, d time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, d)
 }
 
 // memoDecorator memoizes a call per process: the same function with the same
