@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -126,15 +127,34 @@ flaky; flaky
 
 func TestMemoDecoratorTTLExpires(t *testing.T) {
 	memoStore = *new(memoStoreType)
+	// Drive expiry from a virtual clock the test controls: a cache HIT must not
+	// depend on two calls landing inside the TTL in real wall-clock time (a
+	// margin a loaded Windows runner cannot guarantee), and expiry must fire
+	// without a real sleep. See the memoNow doc comment.
+	virtual := time.Unix(0, 0)
+	prev := memoNow
+	memoNow = func() time.Time { return virtual }
+	t.Cleanup(func() { memoNow = prev })
+
 	count := filepath.Join(t.TempDir(), "count")
 	script := `@memo(ttl: "50ms")
 function tick() { echo x >> "$COUNT"; }
-tick; tick; sleep 0.2; tick
+tick
 `
-	err, _, errOut := runDecorated(t, context.Background(), syntax.LangBashPP, script, map[string]string{"COUNT": count})
-	if err != nil {
-		t.Fatalf("want pass, got %v (stderr %q)", err, errOut.String())
+	env := map[string]string{"COUNT": count}
+	run := func() {
+		t.Helper()
+		if err, _, errOut := runDecorated(t, context.Background(), syntax.LangBashPP, script, env); err != nil {
+			t.Fatalf("want pass, got %v (stderr %q)", err, errOut.String())
+		}
 	}
+
+	run() // miss: body runs, result cached at the virtual epoch
+	virtual = virtual.Add(10 * time.Millisecond)
+	run() // inside the 50ms TTL: a hit, the body does not run
+	virtual = virtual.Add(200 * time.Millisecond)
+	run() // past the TTL: expired, the body runs again
+
 	if got := countLines(t, count); got != 2 {
 		t.Fatalf("body ran %d times, want 2 (hit, then expired)", got)
 	}

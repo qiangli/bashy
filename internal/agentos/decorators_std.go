@@ -73,7 +73,7 @@ func memoDecorator(ctx context.Context, c *nativeDecoratorCall, args []interp.De
 	key := c.Name + "\x00" + fmt.Sprint(c.Args...)
 	if v, ok := memoStore.Load(key); ok {
 		e := v.(*memoEntry)
-		if ttl == 0 || time.Since(e.at) < ttl {
+		if ttl == 0 || memoNow().Sub(e.at) < ttl {
 			c.Results, c.Status = append([]any(nil), e.results...), e.status
 			return nil
 		}
@@ -81,10 +81,17 @@ func memoDecorator(ctx context.Context, c *nativeDecoratorCall, args []interp.De
 	}
 	c.Next(ctx)
 	if c.Status == 0 {
-		memoStore.Store(key, &memoEntry{results: append([]any(nil), c.Results...), status: 0, at: time.Now()})
+		memoStore.Store(key, &memoEntry{results: append([]any(nil), c.Results...), status: 0, at: memoNow()})
 	}
 	return nil
 }
+
+// memoNow is the clock @memo reads for TTL expiry. It is a package variable so
+// tests can drive expiry from a controlled virtual clock rather than depending
+// on how much wall-clock elapses between two calls — a real duration that a
+// loaded CI runner (notably Windows, with its coarser scheduler/timer
+// granularity) cannot keep inside a tight TTL, which made the TTL test flaky.
+var memoNow = time.Now
 
 type memoEntry struct {
 	results []any
