@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -58,6 +59,7 @@ func newUnifiedInboxCmd() *cobra.Command {
 	var wait time.Duration
 	var peek, jsonOut, watch bool
 	var limit int
+	var filter mailboxFilter
 	cmd := &cobra.Command{
 		Use:   "inbox",
 		Short: "read or watch every inbound Bashy communication channel",
@@ -65,11 +67,24 @@ func newUnifiedInboxCmd() *cobra.Command {
 boards, Bus pending buffers, and steward/conductor role addresses. It creates no
 message store and keeps each source's own cursor.
 
-  bashy inbox                         drain everything waiting for you
-  bashy inbox --peek                  inspect without advancing any cursor
-  bashy inbox --wait 15m              wait for one batch, then return
-  bashy inbox --watch                 follow new inputs until interrupted
+Reading never consumes. Printing a record - to a terminal, a pipe, or --json -
+leaves every source cursor and mailbox read/ack state exactly as it was. One
+chronological stream, newest last; each record shows its time, source and sender.
+
+  bashy inbox                         what is waiting for you, oldest first
+  bashy inbox --from alice            only messages whose sender matches
+  bashy inbox --search profile        only messages containing this text
+  bashy inbox --since 2h              only messages from the last two hours
+  bashy inbox --wait 15m              wait for one batch (still not consumed)
+  bashy inbox --watch                 follow new inputs; delivery acknowledges them
   bashy inbox --watch --wait 15m      follow for at most 15 minutes
+
+Only an explicit acknowledgment changes state: 'bashy inbox ack ID' for a
+mailbox record, or --watch (and a Bashy-managed session's turn delivery), which
+advances a source cursor after the record was actually delivered. --from,
+--search and --since select what is shown, so they cannot be combined with
+--watch (it would acknowledge records you never saw). --peek is accepted and
+is the default.
 
 For a durable, searchable mailbox that never disappears into turn or console
 traffic, use the explicit mailbox operations. Listing and searching consume
@@ -165,6 +180,12 @@ pretends such a session was adopted.`,
 			if watch && limit > 0 {
 				return fmt.Errorf("inbox: --watch cannot be combined with --limit (a capped source intentionally remains unread)")
 			}
+			if err := filter.validate(time.Now()); err != nil {
+				return err
+			}
+			if watch && filter.active() {
+				return fmt.Errorf("inbox: --watch cannot be combined with --from/--search/--since (delivery acknowledges records the filter would hide)")
+			}
 			reader, err := resolveInboxReader(as)
 			if err != nil {
 				return err
@@ -192,13 +213,21 @@ pretends such a session was adopted.`,
 			// that closes them.
 			poll := defaultInboxPollRuntime(watch || wait > 0)
 			poll.ownerLive = claim.ownerLive
-			return runUnifiedInboxWithPoll(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), reader, limit, peek, jsonOut, watch, wait, poll)
+			if filter.active() {
+				poll.snapshot = filteredInboxSnapshot(poll.snapshot, filter, limit)
+			}
+			// Only a watch consumes: it keeps following, so a peek-only batch
+			// would repeat forever. Every other read just prints.
+			return runUnifiedInboxWithPoll(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), reader, limit, peek || !watch, jsonOut, watch, wait, poll)
 		},
 	}
 	f := cmd.Flags()
 	f.StringVar(&as, "as", "", "read as this identity (required when an external agent session cannot be attributed)")
 	f.DurationVar(&wait, "wait", 0, "wait up to this duration for input (with --watch: total watch bound)")
-	f.BoolVar(&peek, "peek", false, "read without advancing any source cursor")
+	f.BoolVar(&peek, "peek", false, "read without advancing any source cursor (the default; only --watch consumes)")
+	f.StringVar(&filter.from, "from", "", "only messages whose sender contains this text")
+	f.StringVar(&filter.search, "search", "", "only messages containing this text (body/sender/recipient/topic/room/source)")
+	f.StringVar(&filter.sinceRaw, "since", "", "only messages at or after this time (duration like 2h or 3d, or RFC3339 / YYYY-MM-DD)")
 	f.BoolVar(&watch, "watch", false, "follow all inbound sources until interrupted")
 	f.IntVarP(&limit, "limit", "n", 0, "show at most this many records per source (0 = no cap; a capped source remains unread)")
 	f.BoolVar(&jsonOut, "json", false, "emit one "+unifiedInboxSchema+" object per line (NDJSON)")
@@ -597,8 +626,15 @@ func snapshotUnifiedInbox(reader string, limit int, includeBus bool) (inboxBatch
 			case rep.Skipped != "":
 				// nothing to say: not a team checkout
 			default:
-				batch.warns = append(batch.warns, fmt.Sprintf("session %s: synced as of %s · cursor %s · delivered %d",
-					shortSession(rep.Session), rep.AsOf.Format(time.RFC3339), shortSession(rep.Cursor), rep.Delivered))
+				// "delivered 0" sat under a screenful of mail and read as a
+				// contradiction: it counts records newly FILED this pass, not
+				// records waiting. Say it only when something was filed.
+				stamp := fmt.Sprintf("session %s: synced as of %s · cursor %s",
+					shortSession(rep.Session), rep.AsOf.Format(time.RFC3339), shortSession(rep.Cursor))
+				if rep.Delivered > 0 {
+					stamp += fmt.Sprintf(" · delivered %d", rep.Delivered)
+				}
+				batch.warns = append(batch.warns, stamp)
 			}
 		}
 	}
@@ -701,7 +737,98 @@ func snapshotUnifiedInbox(reader string, limit int, includeBus bool) (inboxBatch
 		}
 	}
 	batch.events = collapseProvenanceDuplicates(batch.events)
+	sortInboxEvents(batch.events)
 	return batch, nil
+}
+
+// parseInboxTime reads the timestamps the sources write (RFC3339, with or
+// without fractional seconds). ok is false for an empty or foreign format.
+func parseInboxTime(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
+}
+
+// parseInboxSince accepts a look-back duration (2h, 30m, 3d) or an absolute
+// RFC3339 / YYYY-MM-DD time.
+func parseInboxSince(raw string, now time.Time) (time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if strings.HasSuffix(raw, "d") {
+		var days int
+		if _, err := fmt.Sscanf(raw, "%dd", &days); err == nil && days >= 0 && fmt.Sprintf("%dd", days) == raw {
+			return now.Add(-time.Duration(days) * 24 * time.Hour), nil
+		}
+	}
+	if d, err := time.ParseDuration(raw); err == nil {
+		if d < 0 {
+			return time.Time{}, fmt.Errorf("inbox: --since %q must not be negative", raw)
+		}
+		return now.Add(-d), nil
+	}
+	if t, ok := parseInboxTime(raw); ok {
+		return t, nil
+	}
+	if t, err := time.ParseInLocation("2006-01-02", raw, now.Location()); err == nil {
+		return t, nil
+	}
+	return time.Time{}, fmt.Errorf("inbox: --since %q is not a duration (2h, 3d), RFC3339 time, or YYYY-MM-DD date", raw)
+}
+
+// sortInboxEvents makes the stream chronological, newest last, by PARSED time.
+// Sources format timestamps differently (fractional seconds, offsets), so a
+// string compare mis-orders them. Records with no parseable time sort first,
+// then ties break by source and sequence, so the order is deterministic.
+func sortInboxEvents(events []unifiedInboxEvent) {
+	sort.SliceStable(events, func(i, j int) bool {
+		ti, _ := parseInboxTime(events[i].At)
+		tj, _ := parseInboxTime(events[j].At)
+		if !ti.Equal(tj) {
+			return ti.Before(tj)
+		}
+		if events[i].Source != events[j].Source {
+			return events[i].Source < events[j].Source
+		}
+		return events[i].Seq < events[j].Seq
+	})
+}
+
+// inboxEventItem projects a record onto the mailbox item shape so the existing
+// mailboxFilter selects it; the role source is "role:LABEL" in the stream and
+// plain "role" to a filter.
+func inboxEventItem(e unifiedInboxEvent) mailboxItem {
+	source, _, _ := strings.Cut(e.Source, ":")
+	return mailboxItem{Schema: mailboxSchema, Source: source, Seq: e.Seq, At: e.At, From: e.From, To: e.To, Topic: e.Topic, Room: e.Room, Body: e.Body}
+}
+
+// filteredInboxSnapshot narrows a read-only snapshot. It drops the batch's
+// acknowledgements: a filtered view never moves a cursor past a record it hid.
+// The cap applies to the filtered stream and keeps the newest records.
+func filteredInboxSnapshot(next func(string, int, bool) (inboxBatch, error), f mailboxFilter, limit int) func(string, int, bool) (inboxBatch, error) {
+	f.all = true
+	return func(reader string, _ int, includeBus bool) (inboxBatch, error) {
+		batch, err := next(reader, 0, includeBus)
+		if err != nil {
+			return batch, err
+		}
+		kept := batch.events[:0:0]
+		for _, e := range batch.events {
+			if f.match(inboxEventItem(e)) {
+				kept = append(kept, e)
+			}
+		}
+		if limit > 0 && len(kept) > limit {
+			kept = kept[len(kept)-limit:]
+		}
+		batch.events = kept
+		batch.acks = nil
+		return batch, nil
+	}
 }
 
 // collapseProvenanceDuplicates removes only a Meet copy whose structured
@@ -751,7 +878,7 @@ func renderInboxBatch(out, errOut io.Writer, batch inboxBatch, jsonOut bool) err
 			if event.Room != "" {
 				where += "/" + event.Room
 			}
-			fmt.Fprintf(&rendered, "[%s:%d] %s → %s", where, event.Seq, emptyAs(event.From, "unknown"), emptyAs(event.To, "all"))
+			fmt.Fprintf(&rendered, "%s [%s:%d] %s → %s", emptyAs(event.At, "-"), where, event.Seq, emptyAs(event.From, "unknown"), emptyAs(event.To, "all"))
 			if event.Topic != "" {
 				fmt.Fprintf(&rendered, " (%s)", event.Topic)
 			}

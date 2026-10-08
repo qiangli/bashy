@@ -301,33 +301,69 @@ func snapshotMailbox(spec mailboxSpec) ([]mailboxItem, mailboxState, error) {
 
 type mailboxFilter struct {
 	source, topic, project, status, search, order string
+	from, sinceRaw                                string
+	since                                         time.Time
 	all                                           bool
 	limit                                         int
+}
+
+// validate resolves --since once per command so a typo fails before any read.
+func (f *mailboxFilter) validate(now time.Time) error {
+	f.since = time.Time{}
+	if strings.TrimSpace(f.sinceRaw) == "" {
+		return nil
+	}
+	t, err := parseInboxSince(f.sinceRaw, now)
+	if err != nil {
+		return err
+	}
+	f.since = t
+	return nil
+}
+
+// active reports whether any record-selecting filter is set; ordering and
+// limit are not selection.
+func (f mailboxFilter) active() bool {
+	return f.source != "" || f.topic != "" || f.project != "" || f.status != "" ||
+		f.search != "" || f.from != "" || !f.since.IsZero()
+}
+
+func (f mailboxFilter) match(i mailboxItem) bool {
+	if !f.all && i.Acknowledged {
+		return false
+	}
+	if f.source != "" && !strings.EqualFold(i.Source, f.source) {
+		return false
+	}
+	if f.topic != "" && !strings.EqualFold(i.Topic, f.topic) {
+		return false
+	}
+	if f.project != "" && !strings.EqualFold(i.Project, f.project) {
+		return false
+	}
+	if f.status != "" && !strings.EqualFold(i.Status, f.status) {
+		return false
+	}
+	if f.from != "" && !strings.Contains(strings.ToLower(i.From), strings.ToLower(f.from)) {
+		return false
+	}
+	if !f.since.IsZero() {
+		// A record whose time cannot be parsed has no proven age, so it cannot
+		// satisfy a time bound.
+		if at, ok := parseInboxTime(i.At); !ok || at.Before(f.since) {
+			return false
+		}
+	}
+	haystack := strings.Join([]string{i.Body, i.From, i.To, i.Topic, i.Project, i.Status, i.Room, i.Source}, " ")
+	return f.search == "" || strings.Contains(strings.ToLower(haystack), strings.ToLower(f.search))
 }
 
 func (f mailboxFilter) apply(in []mailboxItem) []mailboxItem {
 	out := make([]mailboxItem, 0, len(in))
 	for _, i := range in {
-		if !f.all && i.Acknowledged {
-			continue
+		if f.match(i) {
+			out = append(out, i)
 		}
-		if f.source != "" && !strings.EqualFold(i.Source, f.source) {
-			continue
-		}
-		if f.topic != "" && !strings.EqualFold(i.Topic, f.topic) {
-			continue
-		}
-		if f.project != "" && !strings.EqualFold(i.Project, f.project) {
-			continue
-		}
-		if f.status != "" && !strings.EqualFold(i.Status, f.status) {
-			continue
-		}
-		haystack := strings.Join([]string{i.Body, i.From, i.To, i.Topic, i.Project, i.Status, i.Room, i.Source}, " ")
-		if f.search != "" && !strings.Contains(strings.ToLower(haystack), strings.ToLower(f.search)) {
-			continue
-		}
-		out = append(out, i)
 	}
 	switch f.order {
 	case "", "unread":
@@ -356,6 +392,8 @@ func addMailboxFilterFlags(cmd *cobra.Command, f *mailboxFilter) {
 	p.StringVar(&f.project, "project", "", "filter by project")
 	p.StringVar(&f.status, "status", "", "filter by status")
 	p.StringVar(&f.search, "search", "", "search body/sender/recipient/topic/project/status/room/source")
+	p.StringVar(&f.from, "from", "", "only messages whose sender contains this text")
+	p.StringVar(&f.sinceRaw, "since", "", "only messages at or after this time (duration like 2h or 3d, or RFC3339 / YYYY-MM-DD)")
 	p.StringVar(&f.order, "sort", "unread", "order: unread, newest, oldest, or source")
 	p.BoolVar(&f.all, "all", false, "include acknowledged history")
 	p.IntVarP(&f.limit, "limit", "n", 0, "maximum records (0 = all)")
@@ -411,6 +449,9 @@ func newMailboxListCmd(human bool) *cobra.Command {
 		}
 		if f.limit < 0 {
 			return fmt.Errorf("inbox list: --limit must not be negative")
+		}
+		if e := f.validate(time.Now()); e != nil {
+			return e
 		}
 		s, e := mailboxSpecFor(human, as)
 		if e != nil {
