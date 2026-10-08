@@ -4,6 +4,7 @@
 package agentos
 
 import (
+	"context"
 	"crypto/sha256"
 	"debug/buildinfo"
 	"encoding/hex"
@@ -12,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	outgit "github.com/qiangli/yoke/git"
 )
 
 // LicenseClass classifies a module's license.
@@ -416,9 +418,11 @@ func GenerateSBOM(binaryPath string, opts SBOMOptions) (*SPDXDocument, error) {
 		commit = settings["vcs.revision"]
 	}
 	if commit == "" {
-		// Fallback to git
-		if out, err := exec.Command("git", "rev-parse", "HEAD").Output(); err == nil {
-			commit = strings.TrimSpace(string(out))
+		// Fallback to git through the one door (sprint 252 S252.6):
+		// bare rev-parse stays on the host binary; failure keeps the
+		// old silent-empty shape.
+		if out, err := outgit.RunChecked(context.Background(), "", []string{"rev-parse", "HEAD"}); err == nil {
+			commit = strings.TrimSpace(out)
 		}
 	}
 

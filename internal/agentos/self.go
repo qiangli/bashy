@@ -18,6 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	outgit "github.com/qiangli/yoke/git"
 	"github.com/qiangli/yoke/pkg/binmgr"
 )
 
@@ -257,22 +258,29 @@ func selfBuildID(ctx context.Context) string {
 	if _, err := os.Stat(".git"); err != nil {
 		return ""
 	}
-	if err := exec.CommandContext(ctx, "git", "rev-parse", "--is-inside-work-tree").Run(); err != nil {
+	// One door (sprint 252 S252.6): describe stays on the host binary
+	// through the door (unrouted); every step keeps the old tolerate-
+	// absence shape ("" on any failure, -dirty on any diff complaint).
+	gitOut := func(args ...string) (string, bool) {
+		out, err := outgit.RunChecked(ctx, "", args)
+		if err != nil {
+			return "", false
+		}
+		return strings.TrimSpace(out), true
+	}
+	if _, ok := gitOut("rev-parse", "--is-inside-work-tree"); !ok {
 		return ""
 	}
-	out, err := exec.CommandContext(ctx, "git", "describe", "--tags", "--exact-match", "HEAD").Output()
-	if err != nil {
-		out, err = exec.CommandContext(ctx, "git", "rev-parse", "--short=7", "HEAD").Output()
+	id, ok := gitOut("describe", "--tags", "--exact-match", "HEAD")
+	if !ok {
+		id, ok = gitOut("rev-parse", "--short=7", "HEAD")
 	}
-	if err != nil {
+	if !ok || id == "" {
 		return ""
 	}
-	id := strings.TrimSpace(string(out))
-	if id == "" {
-		return ""
-	}
-	if exec.CommandContext(ctx, "git", "diff", "--quiet", "--ignore-submodules", "--").Run() != nil ||
-		exec.CommandContext(ctx, "git", "diff", "--cached", "--quiet", "--ignore-submodules", "--").Run() != nil {
+	if _, err := outgit.RunChecked(ctx, "", []string{"diff", "--quiet", "--ignore-submodules", "--"}); err != nil {
+		id += "-dirty"
+	} else if _, err := outgit.RunChecked(ctx, "", []string{"diff", "--cached", "--quiet", "--ignore-submodules", "--"}); err != nil {
 		id += "-dirty"
 	}
 	return id

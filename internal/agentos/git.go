@@ -1,6 +1,7 @@
 package agentos
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -16,12 +17,15 @@ import (
 // edit → add → commit → push), the read/inspect verbs (status, diff,
 // log, branch, show, remote, fetch, merge-base, rev-list, ls-files,
 // blame, grep), and local writes (merge ff, tag, reset, rm, config).
-// Conflict-resolution machinery — rebase, stash, cherry-pick, apply,
-// submodules, worktrees, reflog, bisect — is intentionally out of
-// scope: a half-applied replay is worse than no support.
+// Conflict-resolution machinery — rebase, submodules, reflog,
+// bisect — is intentionally out of scope: a half-applied replay is
+// worse than no support. The engine additionally serves cherry,
+// revert, stash, worktree, clean and apply (sprint 252), dispatched
+// automatically for verbs without a dedicated subcommand.
 //
-// `bashy git ...` always resolves to this implementation regardless
-// of whether a system `git` is on PATH.
+// `bashy git ...` always resolves to the native implementation by
+// default; only --external permits the host binary as a fallback,
+// so the default path stays hermetic with or without system git.
 
 func init() {
 	// Hint messages inside the shared git package ("run \"<CLIName>
@@ -30,6 +34,7 @@ func init() {
 }
 
 func gitCmd() *cobra.Command {
+	var external bool
 	cmd := &cobra.Command{
 		Use:   "git",
 		Short: "Embedded git client (clone, pull, status, commit, push, …)",
@@ -47,13 +52,22 @@ remotes are served in-process too.
 pull and merge integrate fast-forwards only; local changes that don't
 conflict with the incoming commits survive, like real git. Diverged
 histories are an error — bashy git does not do conflict resolution.
-Also out of scope (use system git): rebase, stash, cherry-pick,
-apply, submodules, worktrees, reflog, bisect.
+Beyond the verbs below, the native engine also serves cherry, revert,
+stash, worktree, clean and apply (dispatched automatically); still
+out of scope (use --external where a host git exists): rebase,
+bisect, submodules, reflog and the other verbs named below.
+
+--external permits the host git binary as a fallback: verbs the
+native engine cannot serve run against system git with the verbatim
+arguments (stdout/stderr stream through; a missing binary fails
+loudly). Without the flag, unserved verbs fail with a workaround
+hint instead. Built-in verbs always run native.
 
 Authentication for HTTPS remotes uses --username/--password when
 supplied, otherwise falls back to $GITHUB_TOKEN or $GIT_TOKEN as the
 basic-auth password (with user "oauth2", which GitHub accepts).`,
 	}
+	cmd.PersistentFlags().BoolVar(&external, "external", false, "allow falling back to the host git binary for verbs the native engine cannot serve (native remains the default)")
 	cmd.AddCommand(
 		gitCloneCmd(),
 		gitInitCmd(),
@@ -88,9 +102,10 @@ basic-auth password (with user "oauth2", which GitHub accepts).`,
 	for _, sub := range cmd.Commands() {
 		sub.SilenceUsage = true
 	}
-	// Unmatched subcommands land here. bashy git NEVER falls back to
-	// a system git binary — verbs we recognize but don't implement get
-	// a clear explanation instead of cobra's generic "unknown command".
+	// Unmatched subcommands land here and dispatch through the native
+	// engine; only --external permits the host binary as a fallback.
+	// Verbs neither serves get a workaround hint instead of cobra's
+	// generic "unknown command".
 	cmd.Args = cobra.ArbitraryArgs
 	// Let flags meant for an unimplemented verb (e.g. `rebase -i`)
 	// reach the handler below instead of dying on flag parsing.
@@ -99,31 +114,62 @@ basic-auth password (with user "oauth2", which GitHub accepts).`,
 		if len(args) == 0 {
 			return cmd.Help()
 		}
+		var res *outgit.ExecResult
+		var err error
+		if external {
+			res, err = outgit.RunExternal(cmd.Context(), ".", args)
+		} else {
+			res, err = outgit.Exec(cmd.Context(), ".", args)
+		}
+		if err == nil {
+			return renderGitResult(cmd, res)
+		}
+		if !errors.Is(err, outgit.ErrUnsupported) {
+			return err
+		}
 		verb := args[0]
 		if hint, ok := unimplementedGitVerbs[verb]; ok {
-			return fmt.Errorf("git %s is not implemented by bashy's pure-Go git (and bashy never shells out to a system git binary).\n%s", verb, hint)
+			if external {
+				return fmt.Errorf("git %s is not served by the native engine, and no host git binary took it.\n%s", verb, hint)
+			}
+			return fmt.Errorf("git %s is not served by bashy's native git engine.\n%s\n(retry with --external where a host git binary exists)", verb, hint)
 		}
 		return fmt.Errorf("unknown git subcommand %q — see \"bashy git --help\" for the supported set", verb)
 	}
 	return cmd
 }
 
-// unimplementedGitVerbs maps git verbs bashy deliberately does not
-// ship to a workaround hint. bashy git exists precisely for machines
-// with NO system git, so each hint leads with what you can do using
-// bashy git itself; conflict-resolution verbs are the unavoidable
-// gap. Keep in sync with the scope notes in the gitCmd Long help and
-// the coreutils/git package comment.
+// renderGitResult streams an engine result to the command outputs. A
+// non-zero exit becomes an error (the CLI's usual error path, like every
+// other verb's typed error); stdout/stderr already streamed through.
+func renderGitResult(cmd *cobra.Command, res *outgit.ExecResult) error {
+	if res.Stdout != "" {
+		fmt.Fprint(cmd.OutOrStdout(), res.Stdout)
+	}
+	if res.Stderr != "" {
+		fmt.Fprint(cmd.ErrOrStderr(), res.Stderr)
+	}
+	if res.ExitCode != 0 {
+		return fmt.Errorf("git: exit status %d", res.ExitCode)
+	}
+	return nil
+}
+
+// unimplementedGitVerbs maps git verbs the native engine cannot serve
+// to a workaround hint. Verbs the engine HAS started serving (cherry,
+// revert, stash, worktree, clean, apply) are dispatched before this map
+// is consulted; their entries below cover only the flag combinations
+// the engine still rejects. Keep in sync with yoke/git/GAPS.md.
 var unimplementedGitVerbs = map[string]string{
 	"rebase":      "it needs conflict resolution. Bring your branch up to date with \"bashy git merge <base>\" (fast-forward), or recreate it: checkout the base, \"checkout -b\" a fresh branch, and re-apply your changes",
-	"cherry-pick": "it needs conflict resolution. Re-apply the change by hand (\"bashy git show <commit>\" prints the patch) and commit",
-	"revert":      "it needs conflict resolution. Invert the change by hand (\"bashy git show <commit>\" prints the patch) and commit",
-	"stash":       "commit your work to a temporary branch instead: \"bashy git checkout -b wip && bashy git add -A && bashy git commit -m wip\"",
-	"apply":       "patch application needs conflict handling. Make the edits directly and commit",
+	"cherry-pick": "linear conflict-free picks run natively; --continue/--abort/--skip and conflicts need a host git (--external) or a by-hand re-apply (\"bashy git show <commit>\" prints the patch)",
+	"revert":      "single-commit reverts run natively; merges and sequencer flags need a host git (--external) or a by-hand inversion (\"bashy git show <commit>\" prints the patch)",
+	"stash":       "push/pop/list run natively; drop/apply/show and --index/-u need a host git (--external), or commit to a temporary branch instead",
+	"apply":       "unified patches apply natively; binary patches and -R/--cached/--index need a host git (--external)",
 	"am":          "mailbox patch application is out of scope. Make the edits directly and commit",
-	"clean":       "\"bashy git ls-files -o\" lists untracked files; remove the ones you don't want with your shell",
+	"clean":       "clean -fd/-n runs natively; -x/-X/-e/-i need a host git (--external)",
 	"submodule":   "submodules are out of scope. Clone each submodule repo separately with \"bashy git clone\"",
-	"worktree":    "linked worktrees are out of scope. Make a second clone instead",
+	"worktree":    "add/remove/list run natively; exotic flags need a host git (--external)",
 	"reflog":      "go-git does not maintain a reflog. \"bashy git log\" shows reachable history",
 	"bisect":      "bisect is out of scope. \"bashy git checkout <commit>\" lets you test revisions manually",
 	"mergetool":   "interactive conflict resolution is out of scope",
