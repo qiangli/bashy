@@ -125,6 +125,20 @@ Tools: python3
 scripts/chat-smoke.sh
 ```
 
+### llm-local-e2e
+bashy local models end to end (Sprint 379 Y2) — pulls a tiny model into
+bashy's own Ollama engine, brings the model door up (`llm up`), and chats
+once through the OpenAI-compatible path and once through the
+Anthropic-compatible path, asserting a non-empty answer each time.
+INFO, and deliberately OUTSIDE `all`: it pulls ~1 GB and runs inference,
+so it belongs on a real host (macOS / Windows / Linux), never headless CI.
+Run it with `make smoke-llm-local` (or `bashy dag suites.md llm-local-e2e`);
+override the model with `E2E_MODEL=qwen3:8b`, skip the pull with `E2E_NO_PULL=1`.
+Tools: curl
+```bash
+scripts/e2e-llm-local.sh
+```
+
 ### all
 Aggregate goal — depends on every suite, so `bashy dag suites.md` (default) runs
 the full matrix. With `-jN` the independent suites fan out across N slots.

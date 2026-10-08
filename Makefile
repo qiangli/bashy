@@ -383,6 +383,14 @@ prepare-uutils-image:
 smoke-chat:
 	@scripts/chat-smoke.sh $(AGENT)
 
+## smoke-llm-local: bashy local-model e2e (Sprint 379 Y2) — pull a tiny model,
+## `llm up`, chat through the OpenAI + Anthropic paths, assert non-empty answers.
+## INFO, never a gate: pulls ~1 GB and runs inference, so it runs on a real host
+## (macOS / Windows / Linux), never headless CI. Override with E2E_MODEL=<name>,
+## skip the pull with E2E_NO_PULL=1.
+smoke-llm-local:
+	@scripts/e2e-llm-local.sh
+
 ## smoke-python-imports: Explicit installed-product smoke for Sprint 183's
 ## unchanged nanochat and mini-SWE-agent checkouts (NANOCHAT_ROOT and
 ## MINISWEAGENT_ROOT name them). Not part of build/test.
