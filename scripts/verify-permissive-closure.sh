@@ -45,10 +45,12 @@ echo "==> Dependency closure is clean: no yamux, no outpost, no non-permissive g
 echo "==> Verifying SBOM license classification and gate..."
 bin="${1:-}"
 if [[ -z "$bin" ]]; then
-  if [[ -x bin/bashy ]]; then
-    bin=bin/bashy
-  elif [[ -x bin/bashy.exe ]]; then
+  # .exe first: Git Bash on Windows reports `-x bin/bashy` true for
+  # bin/bashy.exe, but the Go program below opens the literal path.
+  if [[ -x bin/bashy.exe ]]; then
     bin=bin/bashy.exe
+  elif [[ -x bin/bashy ]]; then
+    bin=bin/bashy
   else
     tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/bashy-closure-check.XXXXXX")
     trap 'rm -rf "$tmpdir"' EXIT
