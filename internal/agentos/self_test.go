@@ -217,6 +217,52 @@ func TestAdjacentProductAndVersionPair(t *testing.T) {
 	}
 }
 
+func TestAdjacentProductLauncherPayloadRules(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range requiredProductMemberNames() {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bash := binmgr.BinaryName("bash")
+	sh := binmgr.BinaryName("sh")
+	if err := os.WriteFile(filepath.Join(dir, bash+".real"), []byte("bash payload"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, sh+".real"), []byte("sh payload"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	members, err := adjacentProduct(filepath.Join(dir, releaseBinaryName()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if members[bash+".real"] == "" || members[sh+".real"] == "" {
+		t.Fatalf("optional payloads missing from archive install members: %v", members)
+	}
+	names := productMemberNames(members)
+	for _, name := range []string{bash, sh} {
+		launcher, payload := -1, -1
+		for i, got := range names {
+			if got == name {
+				launcher = i
+			}
+			if got == name+".real" {
+				payload = i
+			}
+		}
+		if payload < 0 || launcher < 0 || payload >= launcher {
+			t.Fatalf("payload must be installed before launcher %s: %v", name, names)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, binmgr.BinaryName("bashy")+".real"), []byte("forbidden"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := adjacentProduct(filepath.Join(dir, releaseBinaryName())); err == nil || !strings.Contains(err.Error(), "one-file") {
+		t.Fatalf("bashy.real refusal = %v", err)
+	}
+}
+
 func TestSelfSeedExportAndInstallSeed(t *testing.T) {
 	cache := t.TempDir()
 	t.Setenv("BASHY_BIN_CACHE", cache)

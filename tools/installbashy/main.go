@@ -18,6 +18,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/qiangli/bashy/internal/installpair"
 )
 
 // requiredAgentOSVerbs are the VISIBLE verbs an installable bashy must list —
@@ -68,10 +70,11 @@ func main() {
 	if err := verifyBashySurface(bashySource, runCommand); err != nil {
 		fatal(fmt.Errorf("refusing to install incomplete bashy: %w", err))
 	}
-	if _, err := os.Stat(bashySource + ".real"); err == nil {
-		fatal(fmt.Errorf("refusing two-file Bashy build: %s.real exists", bashySource))
-	} else if !errors.Is(err, os.ErrNotExist) {
+	if err := installpair.RefuseCompanion(bashySource); err != nil {
 		fatal(err)
+	}
+	if err := installpair.VerifyOptional(bashSource, installpair.Runner(runCommand)); err != nil {
+		fatal(fmt.Errorf("refusing invalid bash launcher/payload pair: %w", err))
 	}
 	// The lean bash drop-in still has a native launcher and Go payload on Unix.
 	// Install that payload first so its launcher never lacks a companion.

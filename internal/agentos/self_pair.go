@@ -17,24 +17,55 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qiangli/bashy/internal/installpair"
 	"github.com/qiangli/yoke/pkg/binmgr"
 )
 
-func productMemberNames() []string {
+func requiredProductMemberNames() []string {
 	return []string{binmgr.BinaryName("bashy"), binmgr.BinaryName("bash"), binmgr.BinaryName("sh"), binmgr.BinaryName("outpost")}
 }
+
+func productMemberNames(memberSets ...map[string]string) []string {
+	var members map[string]string
+	if len(memberSets) != 0 {
+		members = memberSets[0]
+	}
+	bash := binmgr.BinaryName("bash")
+	sh := binmgr.BinaryName("sh")
+	names := []string{binmgr.BinaryName("bashy")}
+	for _, name := range []string{bash, sh} {
+		if members[name+".real"] != "" {
+			names = append(names, name+".real")
+		}
+		names = append(names, name)
+	}
+	return append(names, binmgr.BinaryName("outpost"))
+}
+
 func adjacentProduct(exe string) (map[string]string, error) {
 	if real, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = real
 	}
 	paths := map[string]string{}
-	for _, name := range productMemberNames() {
+	for _, name := range requiredProductMemberNames() {
 		path := filepath.Join(filepath.Dir(exe), name)
 		fi, err := os.Stat(path)
 		if err != nil || !fi.Mode().IsRegular() {
 			return nil, fmt.Errorf("adjacent release is incomplete: %s missing; extract the complete release archive or pass --version", name)
 		}
 		paths[name] = path
+	}
+	bashy := paths[binmgr.BinaryName("bashy")]
+	if err := installpair.RefuseCompanion(bashy); err != nil {
+		return nil, err
+	}
+	for _, name := range []string{binmgr.BinaryName("bash"), binmgr.BinaryName("sh")} {
+		path := paths[name] + ".real"
+		if _, err := os.Lstat(path); err == nil {
+			paths[name+".real"] = path
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
 	}
 	return paths, nil
 }
@@ -137,7 +168,17 @@ func probeProduct(ctx context.Context, members map[string]string) (string, error
 	if build.Version == "" {
 		return "", errors.New("paired install requires a stamped outpost release")
 	}
-	for _, name := range productMemberNames() {
+	if err := installpair.RefuseCompanion(members[binmgr.BinaryName("bashy")]); err != nil {
+		return "", err
+	}
+	for _, name := range []string{binmgr.BinaryName("bash"), binmgr.BinaryName("sh")} {
+		if err := installpair.VerifyOptional(members[name], func(exe string, args ...string) ([]byte, error) {
+			return exec.CommandContext(probeCtx, exe, args...).Output()
+		}); err != nil {
+			return "", fmt.Errorf("invalid %s launcher/payload pair: %w", name, err)
+		}
+	}
+	for _, name := range requiredProductMemberNames() {
 		if name == binmgr.BinaryName("outpost") {
 			continue
 		}
@@ -170,7 +211,7 @@ func installProductFiles(members map[string]string, target string) error {
 		existed       bool
 	}
 	items := []item{}
-	for _, name := range productMemberNames() {
+	for _, name := range productMemberNames(members) {
 		dst := filepath.Join(dir, name)
 		if name == releaseBinaryName() {
 			dst = target
@@ -214,7 +255,7 @@ func packProduct(path string, members map[string]string) (string, error) {
 	sum := sha256.New()
 	gz := gzip.NewWriter(io.MultiWriter(f, sum))
 	tw := tar.NewWriter(gz)
-	for _, name := range productMemberNames() {
+	for _, name := range productMemberNames(members) {
 		src, err := os.Open(members[name])
 		if err != nil {
 			tw.Close()
