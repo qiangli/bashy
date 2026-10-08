@@ -498,3 +498,85 @@ func TestGitBootstrapRemoteWorkflow(t *testing.T) {
 		t.Fatalf("fetched branch worktree mismatch body=%q err=%v", body, err)
 	}
 }
+
+func TestSplitGitExternal(t *testing.T) {
+	cases := []struct {
+		name     string
+		argv     []string
+		external bool
+		rest     []string
+		wantErr  string
+	}{
+		{"no flag defaults internal", []string{"status", "--short"}, false, []string{"status", "--short"}, ""},
+		{"bare flag selects external", []string{"--external", "log", "--oneline"}, true, []string{"log", "--oneline"}, ""},
+		{"flag after verb", []string{"log", "--external", "--oneline"}, true, []string{"log", "--oneline"}, ""},
+		{"explicit true", []string{"--external=true", "status"}, true, []string{"status"}, ""},
+		{"explicit false stays internal", []string{"--external=false", "status"}, false, []string{"status"}, ""},
+		{"last occurrence wins", []string{"--external", "--external=false", "status"}, false, []string{"status"}, ""},
+		{"other dashes untouched", []string{"-C", "/tmp", "status"}, false, []string{"-C", "/tmp", "status"}, ""},
+		{"bad value fails loudly", []string{"--external=maybe", "status"}, false, nil, "--external"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			external, rest, err := splitGitExternal(tc.argv)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("argv %q: expected error naming %q, got %v", tc.argv, tc.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("argv %q: unexpected error: %v", tc.argv, err)
+			}
+			if external != tc.external {
+				t.Fatalf("argv %q: external=%v, want %v", tc.argv, external, tc.external)
+			}
+			if len(rest) != len(tc.rest) {
+				t.Fatalf("argv %q: rest=%q, want %q", tc.argv, rest, tc.rest)
+			}
+			for i := range rest {
+				if rest[i] != tc.rest[i] {
+					t.Fatalf("argv %q: rest=%q, want %q", tc.argv, rest, tc.rest)
+				}
+			}
+		})
+	}
+}
+
+func TestGitStatusShortPassthrough(t *testing.T) {
+	// `status --short` must reach the engine's porcelain form, not die
+	// on flag parsing: the shell shims bare `git status --short` here.
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(prev) }()
+	run := func(args ...string) (string, error) {
+		root := gitCmd()
+		buf := &bytes.Buffer{}
+		root.SetOut(buf)
+		root.SetErr(buf)
+		root.SetArgs(args)
+		err := root.Execute()
+		return buf.String(), err
+	}
+	if _, err := run("init"); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, flag := range []string{"--short", "-s", "--porcelain"} {
+		out, err := run("status", flag)
+		if err != nil {
+			t.Fatalf("status %s: %v", flag, err)
+		}
+		if !strings.Contains(out, "?? new.txt") {
+			t.Fatalf("status %s: expected porcelain untracked line, got %q", flag, out)
+		}
+	}
+}

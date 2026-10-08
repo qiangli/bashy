@@ -1357,16 +1357,55 @@ func dispatch() {
 			dispatchExit(1)
 		}
 		dispatchExit(0)
-	case "git", "git-scm":
-		// `bashy git` is the REAL, full git — git-for-windows MinGit on Windows,
-		// system git on unix — provisioned + checksum-verified. It gives one
-		// consistent, complete git across platforms (the pure-Go coreutils client
-		// was a subset: no `version`, no full checkout flow). The pure-Go light
-		// client lives on as `outpost git`, for BOOTSTRAPPING a bare node that has
-		// outpost but no real git yet. `git-scm` is an explicit synonym.
+	case "git":
+		// One door (sprint 252): `bashy git` defaults to the pure-Go
+		// engine — sprint 252 closed the subset gaps (cherry, revert,
+		// stash, worktree, clean, apply, remote) that once justified
+		// shelling out. --external selects the REAL, full git —
+		// git-for-windows MinGit on Windows, system git on unix —
+		// provisioned + checksum-verified (the previous behavior of
+		// this entry). `git-scm` stays pinned to real git: it is the
+		// explicit escape hatch when the engine cannot serve.
+		external, rest, splitErr := splitGitExternal(os.Args[2:])
+		if splitErr != nil {
+			fmt.Fprintln(os.Stderr, splitErr)
+			dispatchExit(1)
+		}
+		var cmd *cobra.Command
+		if external {
+			cmd = gitscm.NewGitSCMCmd()
+		} else {
+			cmd = gitCmd()
+		}
+		cmd.SilenceErrors = true
+		cmd.SetArgs(rest)
+		if err := cmd.Execute(); err != nil {
+			var exit *exec.ExitError
+			if errors.As(err, &exit) {
+				dispatchExit(childExitStatus(err))
+			}
+			code := 1
+			var gexit *gitExitError
+			if errors.As(err, &gexit) {
+				code = gexit.code
+			}
+			fmt.Fprintln(os.Stderr, err)
+			dispatchExit(code)
+		}
+		dispatchExit(0)
+	case "git-scm":
+		// Explicit real-git spelling: always the provisioned binary,
+		// never the pure-Go engine. --external is accepted and ignored
+		// here (stripped, not forwarded) so scripts can pass it
+		// uniformly to both spellings.
+		_, rest, splitErr := splitGitExternal(os.Args[2:])
+		if splitErr != nil {
+			fmt.Fprintln(os.Stderr, splitErr)
+			dispatchExit(1)
+		}
 		cmd := gitscm.NewGitSCMCmd()
 		cmd.SilenceErrors = true
-		cmd.SetArgs(os.Args[2:])
+		cmd.SetArgs(rest)
 		if err := cmd.Execute(); err != nil {
 			var exit *exec.ExitError
 			if errors.As(err, &exit) {

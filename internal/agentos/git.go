@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -139,9 +140,44 @@ basic-auth password (with user "oauth2", which GitHub accepts).`,
 	return cmd
 }
 
+// splitGitExternal extracts the one-door selector from a `bashy git`
+// argv: `--external` (or --external=true/false in any position) is
+// consumed, everything else passes through verbatim. A malformed
+// --external= value fails loudly; it is never forwarded to real git,
+// where it would die as "unknown option".
+func splitGitExternal(args []string) (external bool, rest []string, err error) {
+	for _, a := range args {
+		if a == "--external" {
+			external = true
+			continue
+		}
+		if v, ok := strings.CutPrefix(a, "--external="); ok {
+			b, perr := strconv.ParseBool(v)
+			if perr != nil {
+				return false, nil, fmt.Errorf("invalid --external value %q: want true or false", v)
+			}
+			external = b
+			continue
+		}
+		rest = append(rest, a)
+	}
+	return external, rest, nil
+}
+
+// gitExitError carries a host-faithful exit code (128 fatal, 1
+// no-match/quiet-dirty, ...) from the native door to the front-door
+// dispatch, which maps it to the process status. The message is the
+// same text the plain error carried, so string assertions are unaffected.
+type gitExitError struct {
+	code int
+	msg  string
+}
+
+func (e *gitExitError) Error() string { return e.msg }
+
 // renderGitResult streams an engine result to the command outputs. A
-// non-zero exit becomes an error (the CLI's usual error path, like every
-// other verb's typed error); stdout/stderr already streamed through.
+// non-zero exit becomes a typed error (the CLI's usual error path, like
+// every other verb's typed error); stdout/stderr already streamed through.
 func renderGitResult(cmd *cobra.Command, res *outgit.ExecResult) error {
 	if res.Stdout != "" {
 		fmt.Fprint(cmd.OutOrStdout(), res.Stdout)
@@ -150,7 +186,7 @@ func renderGitResult(cmd *cobra.Command, res *outgit.ExecResult) error {
 		fmt.Fprint(cmd.ErrOrStderr(), res.Stderr)
 	}
 	if res.ExitCode != 0 {
-		return fmt.Errorf("git: exit status %d", res.ExitCode)
+		return &gitExitError{code: res.ExitCode, msg: fmt.Sprintf("git: exit status %d", res.ExitCode)}
 	}
 	return nil
 }
@@ -341,12 +377,23 @@ func gitCommitCmd() *cobra.Command {
 }
 
 func gitStatusCmd() *cobra.Command {
-	return &cobra.Command{
+	var short, porcelain bool
+	cmd := &cobra.Command{
 		Use:     "status [path]",
 		Short:   "Show working tree status",
 		Args:    cobra.MaximumNArgs(1),
 		Example: `  bashy git status`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if short || porcelain {
+				// Porcelain short form is served by the engine
+				// (nativeStatus --short); other status flags stay
+				// loud cobra errors, never silent approximations.
+				res, err := outgit.Exec(cmd.Context(), ".", []string{"status", "--short"})
+				if err != nil {
+					return err
+				}
+				return renderGitResult(cmd, res)
+			}
 			repo := "."
 			if len(args) > 0 {
 				repo = args[0]
@@ -390,6 +437,9 @@ func gitStatusCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVarP(&short, "short", "s", false, "Porcelain short format (engine-native)")
+	cmd.Flags().BoolVar(&porcelain, "porcelain", false, "Alias for --short")
+	return cmd
 }
 
 func gitLogCmd() *cobra.Command {
@@ -723,7 +773,9 @@ func gitShowCmd() *cobra.Command {
 			}
 			_, info, err := outgit.Show(outgit.ShowOptions{Commit: commit})
 			if err != nil {
-				return err
+				// Host git exits 128 on every show runtime failure
+				// (bad object, no repo); carry it through the door.
+				return &gitExitError{code: 128, msg: err.Error()}
 			}
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "commit %s\n", info.Hash)
