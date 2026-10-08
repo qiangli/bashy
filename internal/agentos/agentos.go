@@ -1363,8 +1363,14 @@ func dispatch() {
 		// client lives on as `outpost git`, for BOOTSTRAPPING a bare node that has
 		// outpost but no real git yet. `git-scm` is an explicit synonym.
 		cmd := gitscm.NewGitSCMCmd()
+		cmd.SilenceErrors = true
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
+			var exit *exec.ExitError
+			if errors.As(err, &exit) {
+				dispatchExit(childExitStatus(err))
+			}
+			fmt.Fprintln(os.Stderr, err)
 			dispatchExit(1)
 		}
 		dispatchExit(0)
