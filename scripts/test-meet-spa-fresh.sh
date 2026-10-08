@@ -1,7 +1,7 @@
 #!/bin/sh
 # Regression for the meet-SPA freshness gate (scripts/build-meet-spa.sh).
 #
-# Proves the three behaviours the stale-artifact bug demands, hermetically —
+# Proves the four behaviours the stale-artifact bug demands, hermetically —
 # no network, no real SPA build, and NEVER touching the tracked sibling
 # artifact:
 #   1. fresh accepted        — a dist identical to the artifact passes.
@@ -13,6 +13,8 @@
 #   3. missing toolchain fails closed — `check` with no node/pnpm/corepack/bashy
 #                               exits non-zero instead of green-lighting an
 #                               unverifiable bundle.
+#   4. standalone checkout — with no ../yoke, `check` resolves the yoke module
+#                               pinned by go.mod and compares its artifact.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd -P)
@@ -104,5 +106,38 @@ grep -q 'requires node and pnpm' "$tmp/3.out" || {
 	fail "toolchain-missing check did not fail on the toolchain (env not scrubbed?)"
 }
 echo "test-meet-spa-fresh: [4/4] check with no toolchain failed closed"
+
+# ---- 4. a standalone clone resolves the yoke module pin, not ../yoke ----
+# A tiny fake Go tool returns a fixture module directory. Fake node/pnpm build a
+# matching dist, so this verifies the resolver without network or a real SPA.
+pinned=$tmp/pinned-yoke
+pinned_web=$pinned/pkg/meet/web
+pinned_art=$pinned/pkg/meet/artifact
+mkdir -p "$pinned_web" "$pinned_art/assets" "$tmp/bin"
+printf '{"name":"meet-web","packageManager":"pnpm@11.17.0"}\n' >"$pinned_web/package.json"
+printf 'lockfileVersion: 9.0\n' >"$pinned_web/pnpm-lock.yaml"
+printf '<!doctype html><html><head></head><body>pinned</body></html>\n' >"$pinned_art/index.html"
+printf 'console.log("pinned");\n' >"$pinned_art/assets/app.js"
+cat >"$tmp/bin/go" <<EOF
+#!/bin/sh
+printf '{"Dir":"%s"}\\n' '$pinned'
+EOF
+cat >"$tmp/bin/node" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+cat >"$tmp/bin/pnpm" <<EOF
+#!/bin/sh
+case "\$1" in
+build) mkdir -p dist; cp -R '$pinned_art/.' dist/ ;;
+esac
+EOF
+chmod +x "$tmp/bin/go" "$tmp/bin/node" "$tmp/bin/pnpm"
+if ! PATH="$tmp/bin:/bin:/usr/bin" BASHY_BIN= /bin/sh "$script" check >"$tmp/4.out" 2>&1; then
+	cat "$tmp/4.out" >&2
+	fail "standalone check did not resolve yoke from the go.mod pin"
+fi
+grep -q 'using pinned yoke module' "$tmp/4.out" || fail "standalone check did not report its pinned-yoke fallback"
+echo "test-meet-spa-fresh: [5/5] standalone check resolves the pinned yoke module"
 
 echo "test-meet-spa-fresh: PASS"

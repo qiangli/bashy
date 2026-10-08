@@ -27,6 +27,13 @@ mode=${1:-optional}
 # Overridable ONLY for the hermetic regression test; the default is the pinned
 # sibling and is what every real build uses.
 web_dir=${MEET_SPA_WEB_DIR:-../yoke/pkg/meet/web}
+artifact_dir=
+scratch=
+
+cleanup() {
+	[ -z "$scratch" ] || rm -rf "$scratch"
+}
+trap cleanup EXIT HUP INT TERM
 
 # compare_trees FRESH_DIST TRACKED_ARTIFACT
 # Read-only. Return 0 when the tracked artifact is byte-for-byte and file-set
@@ -76,6 +83,33 @@ case "$mode" in
 esac
 
 if [ ! -f "$web_dir/package.json" ] || [ ! -f "$web_dir/pnpm-lock.yaml" ]; then
+	# The umbrella deliberately supplies ../yoke through go.work. A standalone
+	# clone deliberately does not: its yoke is the version pinned in go.mod.
+	# The check must still build that exact source tree, but the Go module cache
+	# is read-only, so build in a disposable copy and compare it to the pinned
+	# module's tracked artifact.
+	if [ -z "${MEET_SPA_WEB_DIR:-}" ] && [ "$mode" = check ]; then
+		if yoke_json=$(GOWORK=off go mod download -json github.com/qiangli/yoke 2>&1); then
+			yoke_dir=$(printf '%s\n' "$yoke_json" | awk -F '"' '/"Dir"/ { print $4; exit }')
+		else
+			echo "meet SPA: could not download the yoke module pinned in go.mod:" >&2
+			printf '%s\n' "$yoke_json" >&2
+			exit 1
+		fi
+		pinned_web_dir=$yoke_dir/pkg/meet/web
+		if [ -f "$pinned_web_dir/package.json" ] && [ -f "$pinned_web_dir/pnpm-lock.yaml" ]; then
+			scratch=$(mktemp -d "${TMPDIR:-/tmp}/bashy-meet-spa.XXXXXX")
+			cp -R "$pinned_web_dir" "$scratch/web"
+			# Go extracts modules read-only. The copied SPA needs to write dist/ and
+			# pnpm's temporary files, while the pinned cache must remain unchanged.
+			chmod -R u+w "$scratch/web"
+			web_dir=$scratch/web
+			artifact_dir=$yoke_dir/pkg/meet/artifact
+			echo "meet SPA: using pinned yoke module at $yoke_dir" >&2
+		fi
+	fi
+
+	if [ ! -f "$web_dir/package.json" ] || [ ! -f "$web_dir/pnpm-lock.yaml" ]; then
 	# A standalone clone has no yoke source tree: the binary embeds the SPA
 	# artifact committed at the yoke version go.mod pins, which the
 	# meet-spa-fresh CI gate keeps fresh. Nothing to rebuild here.
@@ -85,6 +119,7 @@ if [ ! -f "$web_dir/package.json" ] || [ ! -f "$web_dir/pnpm-lock.yaml" ]; then
 	fi
 	echo "meet SPA: missing $web_dir package.json or pnpm-lock.yaml" >&2
 	exit 1
+	fi
 fi
 
 # BASHY BUILDS BASHY. The tiers below are ordered so a host with no system Node
@@ -166,7 +201,9 @@ if [ ! -s "$web_dir/dist/index.html" ] ||
 	exit 1
 fi
 
-artifact_dir=$(cd "$web_dir/.." && pwd)/artifact
+if [ -z "$artifact_dir" ]; then
+	artifact_dir=$(cd "$web_dir/.." && pwd)/artifact
+fi
 
 if [ "$mode" = check ]; then
 	# NON-MUTATING gate: compare the fresh dist against the tracked artifact and
