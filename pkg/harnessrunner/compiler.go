@@ -324,7 +324,12 @@ func compileRedirect(redir *syntax.Redirect, intent *Intent) {
 	switch {
 	case strings.Contains(op, ">"):
 		intent.Effects = append(intent.Effects, Effect{Kind: atlas.EffWrite, Scope: scope, Target: target, Source: "redirection:" + op, Certainty: "exact"})
-		if !strings.Contains(op, ">>") {
+		// Truncating a workspace file is a workspace write, exactly like
+		// `sed -i` rewriting one: classifying it as destroy sent the most
+		// basic coding step (`echo x > f; cat f`) to a human approver, which
+		// a headless agent turns into a rejection. Outside the workspace the
+		// possible destroy stays, so policy still sees it.
+		if !strings.Contains(op, ">>") && scope != atlas.TierWorkspace {
 			intent.Effects = append(intent.Effects, Effect{Kind: atlas.EffDestroy, Scope: scope, Target: target, Source: "redirection:" + op, Certainty: "possible"})
 		}
 	case strings.Contains(op, "<"):

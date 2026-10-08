@@ -76,7 +76,9 @@ func TestCompileIntentIsDeterministicAndBindsEnvironmentWithoutValue(t *testing.
 	if !foundTarget {
 		t.Fatalf("redirection target missing from effects: %#v", first.Effects)
 	}
-	if !contains(kinds, "write") || !contains(kinds, "destroy") {
+	// A workspace truncation is a write; destroy is kept for targets
+	// outside the workspace (TestCompileIntentClassifiesSimpleCommandLists…).
+	if !contains(kinds, "write") || contains(kinds, "destroy") {
 		t.Fatalf("redirection effects = %v", kinds)
 	}
 }
@@ -114,6 +116,39 @@ func TestDynamicCommandAndDynamicRedirectionStillFailClosed(t *testing.T) {
 			t.Fatalf("%q unexpectedly complete: %#v", script, intent)
 		}
 		assertUnsupportedKind(t, intent, kind)
+	}
+}
+
+func TestCompileIntentClassifiesSimpleCommandListsAndWorkspaceRedirects(t *testing.T) {
+	dir := workspaceWithFiles(t)
+	intent := compileIn(t, dir, `pwd; echo steward-ok > f.txt; cat f.txt`)
+	if !intent.Complete || len(intent.Unsupported) != 0 {
+		t.Fatalf("compound workspace command incomplete: %#v", intent)
+	}
+	assertEffect(t, intent, atlas.EffWrite, filepath.Join(dir, "f.txt"))
+	assertEffect(t, intent, atlas.EffRead, filepath.Join(dir, "f.txt"))
+	// genie's workspace policy asks a human for any destroy effect, and a
+	// headless turn rejects an unanswered ask: a workspace truncation must
+	// be a plain write.
+	for _, e := range intent.Effects {
+		if e.Kind == atlas.EffDestroy || e.Scope != atlas.TierWorkspace {
+			t.Fatalf("workspace compound carries %+v; want only workspace read/write effects", e)
+		}
+	}
+
+	// Outside the workspace the write keeps its userland scope and its
+	// possible destroy, so policy still refuses or asks.
+	for _, script := range []string{`pwd; echo no > /etc/x; cat /etc/x`, `pwd; echo no > ../x; cat ../x`} {
+		intent = compileIn(t, dir, script)
+		destroyOutside := false
+		for _, e := range intent.Effects {
+			if e.Kind == atlas.EffDestroy && e.Scope == atlas.TierUserland {
+				destroyOutside = true
+			}
+		}
+		if !destroyOutside {
+			t.Fatalf("%q: outside-root redirect lost its userland destroy: %+v", script, intent.Effects)
+		}
 	}
 }
 
