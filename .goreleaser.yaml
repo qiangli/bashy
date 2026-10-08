@@ -1,8 +1,8 @@
 # goreleaser config for bashy — Bash 5.3 drop-in.
 # Linux one-file artifacts are pure Go. Native macOS jobs build the Darwin
 # artifacts with cgo, then add them to this draft before it is published.
-# NOTE: bashy depends on the qiangli/sh fork via `replace => ../sh`. CI runs
-# ./scripts/bootstrap-siblings.sh first to clone it next door at the pinned SHA.
+# Siblings are go.mod pins. The release job runs ./scripts/resolve-pinned-siblings.sh
+# first, which links ../outpost to the pinned outpost module for the outpost build.
 version: 2
 
 before:

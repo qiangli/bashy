@@ -15,17 +15,17 @@ name="bashy-darwin-$arch.tar.gz"
 [[ ! -e "$outdir/$name" ]] || { echo "refusing to overwrite $outdir/$name" >&2; exit 1; }
 stage=$(mktemp -d "${TMPDIR:-/tmp}/bashy-darwin-release.XXXXXX")
 trap 'rm -rf "$stage"' EXIT
-shell_commit=$(sed -n 's/^sh=//p' .sibling-pins)
-[[ -n $shell_commit ]] && git -C ../sh cat-file -e "$shell_commit^{commit}"
-shell_time=$(git -C ../sh show -s --format=%cI "$shell_commit")
+shell_commit=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+[[ -n $shell_commit ]] || { echo "missing sh fork replace in go.mod" >&2; exit 1; }
+shell_time=
 base=${tag#v}; base=${base%-dev}
 CGO_ENABLED=1 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -ldflags "-w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$tag' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=$shell_commit' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=$shell_time'" -o "$stage/bashy" ./cmd/bashy
 ./scripts/verify-bashy-signal-artifact.sh "$stage/bashy"
 go run ./tools/bashysignalprobe "$stage/bashy"
 ./scripts/verify-meet-spa-release.sh "$stage/bashy" "darwin_$arch"
-outpost_commit=$(sed -n 's/^outpost=//p' .sibling-pins)
-[[ $outpost_commit =~ ^[0-9a-f]{40}$ ]] || { echo "missing outpost pin" >&2; exit 1; }
-[[ $(git -C ../outpost rev-parse HEAD) == "$outpost_commit" ]] || { echo "outpost pin drift" >&2; exit 1; }
+# ../outpost is the go.mod-pinned outpost module (scripts/resolve-pinned-siblings.sh).
+outpost_commit=${OUTPOST_COMMIT:-}
+[[ $outpost_commit =~ ^[0-9a-f]{40}$ ]] || { echo "missing OUTPOST_COMMIT (run scripts/resolve-pinned-siblings.sh)" >&2; exit 1; }
 for shell in bash sh; do
  CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -ldflags "-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$tag'" -o "$stage/$shell" "./cmd/$shell"
 done

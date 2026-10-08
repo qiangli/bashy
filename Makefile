@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-sh build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-sibling-pins test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-powershell smoke-dag-csharp smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist check-seed-bands tidy clean help
+.PHONY: dag build build-bash build-sh build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-powershell smoke-dag-csharp smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist check-seed-bands tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -217,7 +217,7 @@ test-awd-installed-stress:
 # test-meet-spa-fresh(-regression) run FIRST, before any recipe that could
 # rebuild-and-promote the tracked meet SPA artifact and thereby mask a stale
 # bundle the freshness gate exists to catch.
-test: test-meet-spa-fresh-regression test-meet-spa-fresh test-build-fail-closed test-sibling-pins test-isolated-lanes test-build-tag-matrix test-bash-container-mode verify-bashy-scratch
+test: test-meet-spa-fresh-regression test-meet-spa-fresh test-build-fail-closed test-isolated-lanes test-build-tag-matrix test-bash-container-mode verify-bashy-scratch
 	go test ./...
 
 ## test-meet-spa-fresh: REQUIRED non-mutating gate — build a fresh meet SPA and
@@ -234,10 +234,6 @@ test-meet-spa-fresh:
 test-meet-spa-fresh-regression:
 	scripts/test-meet-spa-fresh.sh
 
-## test-sibling-pins: Require exact pins and clone mappings for every direct
-## flat-sibling replacement in go.mod.
-test-sibling-pins:
-	scripts/test-sibling-pins.sh
 
 ## test-isolated-lanes: Verify concurrent test-lane naming and ownership wiring.
 test-isolated-lanes:
@@ -657,7 +653,7 @@ test-bash-helpers: test-bash-fixtures
 		fi; \
 		true
 
-## hooks: Install the committed git hooks (pre-push .sibling-pins drift gate)
+## hooks: Install the committed git hooks (pre-push fmt + sibling pin drift gate)
 hooks:
 	git config core.hooksPath scripts/hooks
 	@echo "hooks: core.hooksPath -> scripts/hooks (bypass a hook with 'git push --no-verify')"

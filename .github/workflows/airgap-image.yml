@@ -34,9 +34,6 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
-      - name: Bootstrap sibling deps (all pinned flat replaces)
-        shell: bash
-        run: ./scripts/bootstrap-siblings.sh
       - uses: actions/setup-go@v6
         with:
           go-version: 1.27.1

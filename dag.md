@@ -839,64 +839,6 @@ for host in "$@"; do
       [ -f bin/bash ] && cp bin/bash \"bin/bash\$ext\"
       chmod +x \"bin/bashy\$ext\" \"bin/bash\$ext\" 2>/dev/null || true
     }
-    sync_sibling() {
-      name=\"\$1\"
-      sha=\"\$2\"
-      dir=\"../\$name\"
-      case \"\$name\" in
-        sh) url=https://github.com/qiangli/sh.git ;;
-        bashsharp) url=https://github.com/bashsharp/bashsharp.git ;;
-        coreutils) url=https://github.com/qiangli/coreutils.git ;;
-        outpost) url=https://github.com/qiangli/outpost.git ;;
-        yoke) url=https://github.com/qiangli/yoke.git ;;
-        gotreesitter) url=https://github.com/qiangli/gotreesitter.git ;;
-        readline) url=https://github.com/qiangli/readline.git ;;
-        filebrowser) url=https://github.com/qiangli/filebrowser.git ;;
-        ycode) url=https://github.com/qiangli/ycode.git ;;
-        *) return 0 ;;
-      esac
-      seed_cmd=
-      if [ -n \"\$seed\" ]; then
-        case \"\$seed\" in
-          ./*) seed_cmd=\"\$root/\${seed#./}\" ;;
-          *) seed_cmd=\"\$seed\" ;;
-        esac
-      fi
-      if [ -d \"\$dir/.git\" ]; then
-        if command -v git >/dev/null 2>&1; then
-          (cd \"\$dir\" && git fetch origin --quiet && git checkout \"\$sha\")
-        elif command -v outpost >/dev/null 2>&1; then
-          (cd \"\$dir\" && outpost git fetch origin && outpost git reset --hard \"\$sha\")
-        elif [ -n \"\$seed_cmd\" ]; then
-          (cd \"\$dir\" && \"\$seed_cmd\" git fetch origin --quiet && \"\$seed_cmd\" git checkout \"\$sha\")
-        else
-          echo \"fleet prepare: cannot update \$name without git, outpost git, or bashy git\" >&2
-          exit 127
-        fi
-      else
-        if command -v git >/dev/null 2>&1; then
-          git clone \"\$url\" \"\$dir\"
-          (cd \"\$dir\" && git checkout \"\$sha\")
-        elif command -v outpost >/dev/null 2>&1; then
-          outpost git clone \"\$url\" \"\$dir\"
-          (cd \"\$dir\" && outpost git reset --hard \"\$sha\")
-        elif [ -n \"\$seed_cmd\" ]; then
-          \"\$seed_cmd\" git clone \"\$url\" \"\$dir\"
-          (cd \"\$dir\" && \"\$seed_cmd\" git checkout \"\$sha\")
-        else
-          echo \"fleet prepare: cannot clone \$name without git, outpost git, or bashy git\" >&2
-          exit 127
-        fi
-      fi
-    }
-    sync_siblings() {
-      [ -f .sibling-pins ] || return 0
-      while IFS='=' read -r name sha; do
-        case \"\$name\" in ''|\#*) continue ;; esac
-        [ -n \"\$sha\" ] || continue
-        sync_sibling \"\$name\" \"\$sha\"
-      done <.sibling-pins
-    }
     seed=
     for candidate in ./bin/bashy\$ext ./bashy bashy; do
       case \"\$candidate\" in
@@ -950,7 +892,6 @@ for host in "$@"; do
       fi
     fi
     root=\"\$(pwd)\"
-    sync_siblings
     if [ -n \"\$seed\" ]; then
       if \"\$seed\" self build \"bin/bashy\$ext\" --version \"\$ref\" >/dev/null 2>&1; then
         \"./bin/bashy\$ext\" dag build VERSION=\"\$ref\"

@@ -53,12 +53,12 @@ if ! "$oci" info >/dev/null 2>&1; then
 fi
 say "engine=$oci"
 
-# ── stage a clean context: bashy + the open-source sibling checkouts ─────────
+# ── stage a clean context: bashy only (siblings are go.mod pins) ───────────
 stage_tree() {
   src=$1; dest=$2
-  [ -d "$src" ] || fail "required sibling checkout is missing: $src"
+  [ -d "$src" ] || fail "required checkout is missing: $src"
   git -C "$src" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
-    fail "required sibling is not a git checkout: $src"
+    fail "required checkout is not a git checkout: $src"
   mkdir -p "$dest"
   (cd "$src" && git ls-files --cached --others --exclude-standard -z |
     tar --null -T - -cf -) | (cd "$dest" && tar -xf -)
@@ -76,15 +76,6 @@ trap cleanup EXIT HUP INT TERM
 
 say "staging build context under $context"
 stage_tree "$repo"               "$context/bashy"
-stage_tree "$parent/coreutils"   "$context/coreutils"
-stage_tree "$parent/sh"          "$context/sh"
-stage_tree "$parent/readline"    "$context/readline"
-stage_tree "$parent/filebrowser" "$context/filebrowser"
-stage_tree "$parent/bashsharp"   "$context/bashsharp"
-stage_tree "$parent/yoke"        "$context/yoke"
-stage_tree "$parent/ycode"       "$context/ycode"
-stage_tree "$parent/outpost"     "$context/outpost"
-stage_tree "$parent/gotreesitter" "$context/gotreesitter"
 
 build_target() {
   target=$1; tag=$2

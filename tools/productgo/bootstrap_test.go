@@ -33,7 +33,7 @@ func TestRootBootstrapUsesProductBuilder(t *testing.T) {
 				}
 			}
 			write("bashy", string(bootstrap))
-			write(".sibling-pins", "sh=test-pin\n")
+			write("go.mod", "module github.com/qiangli/bashy\n\nreplace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 test-pin\n")
 			write("scripts/build-meet-spa.sh", "#!/bin/sh\nprintf test-spa\n")
 			write("path/git", "#!/bin/sh\nprintf test-time\n")
 			write("path/go", "#!/bin/sh\necho bypassed-product-builder >&2\nexit 92\n")
@@ -49,7 +49,7 @@ shift
 shift
 [ "$1" = -ldflags ]
 shift
-case "$1" in *ShellRuntimeCommit=test-pin*ShellRuntimeCommitTime=test-time*) ;; *) exit 94 ;; esac
+case "$1" in *ShellRuntimeCommit=test-pin*) ;; *) exit 94 ;; esac
 shift
 [ "$1" = -o ]
 output=$2

@@ -48,9 +48,6 @@ jobs:
     # (86/86 -> 85/86) walked in unnoticed. An advisory gate is not a gate.
     steps:
       - uses: actions/checkout@v7
-      - name: Bootstrap sibling deps (all pinned flat replaces)
-        shell: bash
-        run: ./scripts/bootstrap-siblings.sh
       - uses: actions/setup-go@v6
         with:
           go-version: 1.27.1
@@ -132,9 +129,6 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
-      - name: Bootstrap sibling deps (all pinned flat replaces)
-        shell: bash
-        run: ./scripts/bootstrap-siblings.sh
       - uses: actions/setup-go@v6
         with:
           go-version: 1.27.1
@@ -166,9 +160,6 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - name: Bootstrap sibling deps (all pinned flat replaces)
-        shell: bash
-        run: ./scripts/bootstrap-siblings.sh
       - uses: actions/setup-go@v6
         with:
           go-version: 1.27.1
@@ -181,7 +172,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          (cd ../coreutils && go test -v -run '^TestLstatNamedPipeTracksServerLifetime$' ./tool) 2>&1 | tee windows-pipe-probe.log
+          (cd "$(go list -m -f '{{.Dir}}' github.com/qiangli/coreutils)" && go test -v -run '^TestLstatNamedPipeTracksServerLifetime$' ./tool) 2>&1 | tee windows-pipe-probe.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:

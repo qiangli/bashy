@@ -3,7 +3,15 @@
 set -euo pipefail
 : "${REPO:?}" "${TAG:?}" "${PRERELEASE:?}" "${DIST:?}"
 [[ $PRERELEASE == true || $PRERELEASE == false ]] || exit 2
-pin=$(sed -n 's/^outpost=//p' .sibling-pins)
+# The outpost commit this tag ships: OUTPOST_COMMIT from the release job, or
+# the revision bashy's go.mod pins (tool github.com/qiangli/outpost/cmd/outpost),
+# expanded to the full commit.
+pin=${OUTPOST_COMMIT:-}
+if [[ -z $pin ]]; then
+ rev=$(sed -n 's|^[[:space:]]*github.com/qiangli/outpost v[^ ]*-\([0-9a-f]\{12\}\)\( // indirect\)\{0,1\}$|\1|p' go.mod)
+ auth=(); [[ -n ${GITHUB_TOKEN:-} ]] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+ pin=$(curl -fsSL "${auth[@]}" "https://api.github.com/repos/qiangli/outpost/commits/$rev" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("sha",""))')
+fi
 [[ $pin =~ ^[0-9a-f]{40}$ ]] || { echo 'invalid outpost source pin' >&2; exit 1; }
 base=${TAG%-dev}
 artifacts='{}'

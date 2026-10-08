@@ -8,10 +8,10 @@
 #   mode-c  (c) Python island with the interpreter prepared BEFORE the final
 #              stage, so the run performs no download
 #
-# Build with the PARENT directory of the bashy checkout as context — it must
-# contain the sibling checkouts (coreutils sh readline filebrowser bashsharp
-# yoke outpost). scripts/quickstart-container-smoke.sh stages exactly that context and
-# is the supported entry point:
+# Build with the PARENT directory of the bashy checkout as context; only
+# bashy/ is copied, and its siblings come from the go.mod pins (the builder
+# downloads them). scripts/quickstart-container-smoke.sh stages exactly that
+# context and is the supported entry point:
 #
 #   podman build --target mode-a -f bashy/examples/quickstart/Containerfile -t q-a CONTEXT
 #   podman build --target mode-b -f bashy/examples/quickstart/Containerfile -t q-b CONTEXT
@@ -44,15 +44,6 @@ FROM ${GO_IMAGE} AS builder
 ENV OTEL_TRACES_EXPORTER=none BASHY_TELEMETRY_QUIET=1
 WORKDIR /src
 COPY bashy/ bashy/
-COPY coreutils/ coreutils/
-COPY sh/ sh/
-COPY readline/ readline/
-COPY filebrowser/ filebrowser/
-COPY bashsharp/ bashsharp/
-COPY yoke/ yoke/
-COPY ycode/ ycode/
-COPY outpost/ outpost/
-COPY gotreesitter/ gotreesitter/
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     cd bashy \

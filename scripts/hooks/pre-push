@@ -1,92 +1,34 @@
 #!/bin/sh
-# pre-push — two gates: gofmt, then .sibling-pins drift.
+# pre-push — two gates: gofmt, then the standalone module graph.
 #
 # fmtcheck runs first and costs ~0.04s, so the cheap gate reports before the
-# pins walk starts. It is not inlined: scripts/fmtcheck.sh is the SAME script
+# module walk starts. It is not inlined: scripts/fmtcheck.sh is the SAME script
 # CI and `bashy dag fmtcheck` run, so the three can never check different
 # things. It REPORTS and never rewrites — gofmt changes doc-comment text as
 # well as whitespace, so the fix is a decision, not an automation. Read that
 # script's header before making it auto-fix.
 #
-# .sibling-pins is the only sibling source CI ever sees: a standalone clone has
-# no siblings, so scripts/bootstrap-siblings.sh clones each one at the pinned
-# SHA. Inside the umbrella the siblings are submodules and the pins are never
-# consulted — which means a LOCAL BUILD CANNOT CATCH A STALE PIN. It builds the
-# live sibling and passes; CI builds the pinned one and fails ~10 minutes later
-# with a mystifying "no required module provides package" for code that plainly
-# exists. That is how a stale coreutils pin broke every build for a dozen
-# commits. Push time is the only honest moment to notice.
+# Siblings are pinned in go.mod (requires at pseudo-versions, versioned fork
+# replaces). Inside the dhnt umbrella the go.work builds the live sibling
+# trees, so a LOCAL BUILD CANNOT CATCH code that needs a newer sibling than
+# go.mod pins; CI (no workspace) would fail ~10 minutes later. Resolving the
+# graph with GOWORK=off is the honest push-time check: it builds what CI
+# builds. `bashy mod drift` shows which pins trail their sibling HEADs and
+# `bashy mod sync` moves them.
 #
-# Install once per clone (`make hooks`, or bootstrap-siblings.sh does it for you):
+# Install once per clone (`make hooks`):
 #   git config core.hooksPath scripts/hooks
 # Bypass in an emergency with: git push --no-verify
 set -eu
 
 cd "$(git rev-parse --show-toplevel)"
 
-# Git EXPORTS GIT_DIR when it invokes a hook. In a submodule checkout that is an
-# absolute path to THIS repo's gitdir, so a bare `git -C ../sibling rev-parse
-# HEAD` resolves THIS repo's HEAD instead of the sibling's — every sibling
-# reports the same SHA and the gate compares the wrong thing. Depending on which
-# way the mismatch falls that is either a false alarm or, worse, a gate that
-# passes while checking nothing.
-#
-# It only shows up in a real umbrella clone: a repo with a plain .git DIRECTORY
-# gets no GIT_DIR and works by accident, which is exactly how this survived.
-sibling_head() {
-	(unset GIT_DIR GIT_WORK_TREE && git -C "$1" rev-parse HEAD 2>/dev/null)
-}
-
 ./scripts/fmtcheck.sh
 
 # go.sum must cover every tag the build matrix uses: a hash needed only under
 # bashy_engines once went missing and failed `make test` minutes in. `go list
-# -deps` reports a missing hash in ~0.4 s without compiling.
+# -deps` reports a missing hash in ~0.4 s without compiling. GOWORK=off makes
+# it resolve the pinned module graph CI builds, not the live workspace.
 for tags in '' 'bashy_engines bashy_obs'; do
-	go list -deps -tags "$tags" ./cmd/bashy >/dev/null
+	GOWORK=off go list -deps -tags "$tags" ./cmd/bashy >/dev/null
 done
-
-pins=.sibling-pins
-[ -f "$pins" ] || exit 0
-
-drift=''
-while IFS= read -r line; do
-    case "$line" in
-        '' | '#'*) continue ;;
-    esac
-    name=${line%%=*}
-    pinned=${line#*=}
-    pinned=$(printf %s "$pinned" | tr -d '[:space:]') # strip CR (CRLF) / stray whitespace
-    [ -n "$name" ] && [ -n "$pinned" ] && [ "$name" != "$pinned" ] || continue
-
-    dir=../$name
-    # A standalone clone has no siblings to compare against — nothing to police.
-    [ -e "$dir/.git" ] || continue
-    actual=$(sibling_head "$dir") || continue
-	[ -n "$actual" ] || continue
-    [ "$pinned" = "$actual" ] && continue
-
-    if [ -z "$drift" ]; then
-        echo "pre-push: .sibling-pins is stale — CI would build the wrong sibling." >&2
-        echo >&2
-        drift=yes
-    fi
-    printf '  %-10s pinned %s\n' "$name" "$(printf %s "$pinned" | cut -c1-12)" >&2
-    printf '  %-10s actual %s  (%s HEAD)\n' '' "$(printf %s "$actual" | cut -c1-12)" "$dir" >&2
-    echo >&2
-done < "$pins"
-
-[ -n "$drift" ] || exit 0
-
-cat >&2 <<'EOF'
-Fix (resync the pins to the sibling HEADs, then commit them with your change):
-
-  ./scripts/update-sibling-pins.sh
-  git commit -am 'chore: bump .sibling-pins'
-
-The sibling commit must also be pushed to its own origin — CI clones the pin
-from GitHub, so a SHA that exists only on this machine fails there too.
-
-Bypass (you are certain CI has the sibling it needs): git push --no-verify
-EOF
-exit 1

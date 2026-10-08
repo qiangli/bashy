@@ -62,10 +62,9 @@ echo "bash53-windows: building the pure drop-in, the fixture runner and the user
 CGO_ENABLED=0 go build -o bin/bash.exe ./cmd/bash || exit 2
 go build -o bin/bash53suite.exe ./tools/bash53suite || exit 2
 # yoke = coreutils (the certified required set) + the yoke applets (hexdump,
-# …), one multicall binary, built in its own module (the flat sibling that
-# bootstrap-siblings.sh pinned), so the userland measured is that pin.
-[ -d ../yoke ] || { echo "bash53-windows: ../yoke sibling missing (run scripts/bootstrap-siblings.sh)" >&2; exit 2; }
-(cd ../yoke && CGO_ENABLED=0 go build -o "$OLDPWD/bin/yoke.exe" ./cmd/yoke) || exit 2
+# …), one multicall binary, built at the yoke version bashy's go.mod pins, so
+# the userland measured is that pin.
+CGO_ENABLED=0 GOFLAGS=-mod=mod go build -o bin/yoke.exe github.com/qiangli/yoke/cmd/yoke || exit 2
 if [ -n "${BASHY_WSL_DISTRO:-}" ]; then
   echo "bash53-windows: verifying all seven corpus locales through yoke locale -a"
   available_locales=$(./bin/yoke.exe locale -a) || exit 2

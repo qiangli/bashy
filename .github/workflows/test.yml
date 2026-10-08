@@ -16,14 +16,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      # Bashy resolves four direct dependencies as flat siblings. Clone each
-      # next door at its exact SHA from .sibling-pins.
-      - name: Bootstrap sibling deps (all pinned flat replaces)
-        shell: bash
-        run: ./scripts/bootstrap-siblings.sh
-      - name: Check shared sibling graph
-        shell: bash
-        run: ./scripts/verify-shared-sibling-pins.sh
       - uses: actions/setup-go@v6
         with:
           go-version: 1.27.1
@@ -94,8 +86,8 @@ jobs:
             echo "cmd/sh $os/$arch (strict POSIX)..."
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" ./scripts/go-product.sh build -o /dev/null ./cmd/sh
           done
-          # Outpost builds under the SAME hydrated sibling graph as bashy.
-          (cd ../outpost && CGO_ENABLED=0 go build -tags fb_archives -o /dev/null ./cmd/outpost)
+          # Outpost builds at the version bashy pins (go.mod tool directive).
+          CGO_ENABLED=0 go build -tags fb_archives -o /dev/null github.com/qiangli/outpost/cmd/outpost
           # The fixture runner and its tests must at least COMPILE for Windows
           # on every leg (the job-object code is windows-only and invisible to
           # a unix vet); running them is the Windows leg's job above.
@@ -128,9 +120,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Bootstrap sibling deps (all pinned flat replaces)
-        shell: bash
-        run: ./scripts/bootstrap-siblings.sh
       - uses: actions/setup-go@v6
         with:
           go-version: 1.27.1

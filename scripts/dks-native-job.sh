@@ -313,7 +313,6 @@ spec:
                 "\$self" git clone "${SOURCE_URL}" "\$workspace/bashy"
                 "\$self" git -C "\$workspace/bashy" checkout --detach "${SOURCE_REF}"
                 cd "\$workspace/bashy"
-                BASHY="\$self" "\$self" scripts/bootstrap-siblings.sh
                 failure_class=test-fail
                 case "\$task" in
                   build)
