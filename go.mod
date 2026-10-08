@@ -23,7 +23,7 @@ require (
 	mvdan.cc/sh/v3 v3.13.1
 )
 
-require github.com/qiangli/ycode v0.3.1-dev.0.20261008103721-fcd123d55aca
+require github.com/qiangli/ycode v0.3.1-dev.0.20261008213158-d9151603b281
 
 require github.com/qiangli/ycode/examples/genie v0.0.0
 
