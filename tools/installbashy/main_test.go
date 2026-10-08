@@ -137,3 +137,86 @@ func TestInstallManualPagesRequiresAndInstallsCompleteInventory(t *testing.T) {
 		t.Fatalf("missing-page error = %v", err)
 	}
 }
+
+func TestResolveManualSourceDirsUsesPinnedModulesWithoutSiblings(t *testing.T) {
+	root := t.TempDir()
+	shModule := filepath.Join(root, "sh-module")
+	coreutilsModule := filepath.Join(root, "coreutils-module")
+	sh := filepath.Join(shModule, filepath.FromSlash(manualPageDir))
+	coreutils := filepath.Join(coreutilsModule, filepath.FromSlash(manualPageDir))
+	for _, dir := range []string{sh, coreutils} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range requiredManualPages {
+		dir := sh
+		if name == "mail.1" || name == "mailx.1" || name == "talk.1" {
+			dir = coreutils
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("manual "+name+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var downloaded []string
+	download := func(module string) (string, error) {
+		downloaded = append(downloaded, module)
+		switch module {
+		case "mvdan.cc/sh/v3":
+			return shModule, nil
+		case "github.com/qiangli/coreutils":
+			return coreutilsModule, nil
+		default:
+			t.Fatalf("unexpected module download %q", module)
+			return "", nil
+		}
+	}
+	sources, err := resolveManualSourceDirs(filepath.Join(root, "no-sh-sibling"), filepath.Join(root, "no-coreutils-sibling"), download)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{sh, coreutils}; !reflect.DeepEqual(sources, want) {
+		t.Fatalf("manual sources = %v, want %v", sources, want)
+	}
+	if want := []string{"mvdan.cc/sh/v3", "github.com/qiangli/coreutils"}; !reflect.DeepEqual(downloaded, want) {
+		t.Fatalf("downloaded modules = %v, want %v", downloaded, want)
+	}
+	dst := filepath.Join(root, "share", "man", "man1")
+	if err := installManualPages(sources, dst); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "alias.1")); err != nil {
+		t.Fatalf("installed sh manual: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "mail.1")); err != nil {
+		t.Fatalf("installed coreutils manual: %v", err)
+	}
+
+	if err := os.Remove(filepath.Join(sh, "alias.1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := installManualPages(sources, filepath.Join(root, "missing-pages")); err == nil || !strings.Contains(err.Error(), "alias.1") {
+		t.Fatalf("missing module manual error = %v", err)
+	}
+}
+
+func TestResolveManualSourceDirsKeepsUmbrellaSiblings(t *testing.T) {
+	sh := filepath.Join(t.TempDir(), "sh", filepath.FromSlash(manualPageDir))
+	coreutils := filepath.Join(t.TempDir(), "coreutils", filepath.FromSlash(manualPageDir))
+	for _, dir := range []string{sh, coreutils} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sources, err := resolveManualSourceDirs(sh, coreutils, func(module string) (string, error) {
+		t.Fatalf("downloaded %s despite an available sibling", module)
+		return "", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{sh, coreutils}; !reflect.DeepEqual(sources, want) {
+		t.Fatalf("manual sources = %v, want %v", sources, want)
+	}
+}

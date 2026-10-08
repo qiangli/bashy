@@ -99,7 +99,11 @@ func main() {
 	if err := os.Remove(bashyTarget + ".real"); err != nil && !errors.Is(err, os.ErrNotExist) {
 		fatal(fmt.Errorf("remove obsolete Bashy companion: %w", err))
 	}
-	if err := installManualPages([]string{shManDir, coreutilsManDir}, manDir); err != nil {
+	manualSourceDirs, err := resolveManualSourceDirs(shManDir, coreutilsManDir, downloadModuleDir)
+	if err != nil {
+		fatal(fmt.Errorf("resolve manual sources: %w", err))
+	}
+	if err := installManualPages(manualSourceDirs, manDir); err != nil {
 		fatal(fmt.Errorf("install manual pages: %w", err))
 	}
 
@@ -135,6 +139,57 @@ func defaultManDir(binDir string) string {
 var requiredManualPages = []string{
 	"alias.1", "bg.1", "cd.1", "command.1", "fc.1", "fg.1", "getopts.1",
 	"jobs.1", "unalias.1", "bashy-builtins.1", "mail.1", "mailx.1", "talk.1",
+}
+
+const manualPageDir = "docs/man/man1"
+
+type moduleDownloader func(module string) (string, error)
+
+// resolveManualSourceDirs retains the live sibling directories in the dhnt
+// umbrella. A standalone checkout has no siblings, so it instead obtains the
+// exact versions pinned by this checkout's go.mod from the module cache.
+func resolveManualSourceDirs(shDir, coreutilsDir string, download moduleDownloader) ([]string, error) {
+	shSource, err := resolveManualSourceDir(shDir, "mvdan.cc/sh/v3", download)
+	if err != nil {
+		return nil, err
+	}
+	coreutilsSource, err := resolveManualSourceDir(coreutilsDir, "github.com/qiangli/coreutils", download)
+	if err != nil {
+		return nil, err
+	}
+	return []string{shSource, coreutilsSource}, nil
+}
+
+func resolveManualSourceDir(siblingDir, module string, download moduleDownloader) (string, error) {
+	if _, err := os.Stat(siblingDir); err == nil {
+		return siblingDir, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("inspect sibling manual source %s: %w", siblingDir, err)
+	}
+	moduleDir, err := download(module)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(moduleDir, filepath.FromSlash(manualPageDir)), nil
+}
+
+func downloadModuleDir(module string) (string, error) {
+	cmd := exec.Command("go", "mod", "download", "-json", module)
+	cmd.Env = append(os.Environ(), "GOWORK=off")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("download %s: %w: %s", module, err, strings.TrimSpace(string(out)))
+	}
+	var result struct {
+		Dir string
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		return "", fmt.Errorf("decode go mod download %s: %w", module, err)
+	}
+	if result.Dir == "" {
+		return "", fmt.Errorf("go mod download %s returned no module directory", module)
+	}
+	return result.Dir, nil
 }
 
 // installManualPages copies the product-owned section-1 manuals into the
