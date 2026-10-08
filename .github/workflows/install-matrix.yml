@@ -85,14 +85,17 @@ jobs:
           echo "BASHY_BIN=$bin" >> "$GITHUB_ENV"
           "$bin" --version
 
+      # Later legs still run when the quickstart transcripts drift; the job stays red.
       - name: Quickstart gate — judge (six exit codes) + decorators, kwargs, enums, readonly
         run: ./examples/quickstart/check.sh "$BASHY_BIN"
 
       - name: Prove the candidate fetch command works before network isolation
+        if: ${{ !cancelled() }}
         run: |
           BASHY_OFFLINE=0 "$BASHY_BIN" fetch --timeout 5s https://github.com > "$RUNNER_TEMP/bashy-fetch-online.txt"
 
       - name: Install and verify the user service on the disposable runner
+        if: ${{ !cancelled() }}
         run: |
           # The service manager does not inherit temporary XDG overrides.
           # This gate is restricted to the disposable hosted CI runner.
@@ -110,12 +113,12 @@ jobs:
           test "$ready" = 1
 
       - name: Offline installation with an isolated Linux network namespace
-        if: runner.os == 'Linux'
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
         run: |
           sudo unshare --net bash -c 'ip link set lo up; exec python3 "$1/scripts/offline-install-smoke.py" "$2" "$3" "$4" "$1"' -- "$GITHUB_WORKSPACE" "$RUNNER_TEMP/bashy-install" "$RUNNER_TEMP/bashy-offline-bin" "$RUNNER_TEMP/bashy-offline-home"
 
       - name: Seeded managed OCI engine offline in a Linux network namespace
-        if: runner.os == 'Linux'
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
         run: |
           rc=0
           sudo "$GITHUB_WORKSPACE/scripts/offline-seed-oci-smoke.sh" "$RUNNER_TEMP/bashy-offline-bin" "$RUNNER_TEMP/bashy-seed-oci" || rc=$?
@@ -124,12 +127,12 @@ jobs:
           exit "$rc"
 
       - name: Offline installation with process-scoped macOS network denial
-        if: runner.os == 'macOS'
+        if: ${{ !cancelled() && runner.os == 'macOS' }}
         run: |
           sandbox-exec -p '(version 1)(allow default)(deny network*)(allow network* (local ip "localhost:*") (remote ip "localhost:*"))' python3 scripts/offline-install-smoke.py "$RUNNER_TEMP/bashy-install" "$RUNNER_TEMP/bashy-offline-bin" "$RUNNER_TEMP/bashy-offline-home" "$GITHUB_WORKSPACE"
 
       - name: Offline installation with candidate-only Windows firewall rules
-        if: runner.os == 'Windows'
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
         shell: pwsh
         run: ./scripts/offline-install-windows.ps1 -Source "$env:RUNNER_TEMP/bashy-install" -Destination "$env:RUNNER_TEMP/bashy-offline-bin" -Work "$env:RUNNER_TEMP/bashy-offline-home" -Repo "$env:GITHUB_WORKSPACE"
 
