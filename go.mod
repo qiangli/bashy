@@ -5,12 +5,12 @@ go 1.26.5
 toolchain go1.27.1
 
 require (
-	github.com/bashsharp/bashsharp v0.0.0
+	github.com/bashsharp/bashsharp v0.0.0-20261008102615-e2495567594a
 	github.com/creack/pty/v2 v2.0.1
 	github.com/ergochat/readline v0.1.3
-	github.com/qiangli/coreutils v0.0.0
-	github.com/qiangli/yoke v0.0.0
-	github.com/qiangli/yoke/external/otel v0.0.0
+	github.com/qiangli/coreutils v0.0.0-20261008102224-574a21fe8d42
+	github.com/qiangli/yoke v0.0.0-20261008103117-d4b23a332165
+	github.com/qiangli/yoke/external/otel v0.0.0-20261008103117-d4b23a332165
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
@@ -36,8 +36,6 @@ require (
 	charm.land/bubbles/v2 v2.2.1 // indirect
 	charm.land/bubbletea/v2 v2.0.9 // indirect
 	charm.land/lipgloss/v2 v2.0.6 // indirect
-	github.com/Azure/go-ntlmssp v0.1.0 // indirect
-	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/gopkg v0.1.4 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
@@ -48,12 +46,7 @@ require (
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
-	github.com/coreos/go-oidc/v3 v3.17.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/fatedier/frp v0.68.1 // indirect
-	github.com/fatedier/golib v0.6.0 // indirect
-	github.com/golang/snappy v1.0.0 // indirect
-	github.com/klauspost/reedsolomon v1.12.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
@@ -62,27 +55,14 @@ require (
 	github.com/nats-io/nkeys v0.4.15 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
-	github.com/pion/dtls/v3 v3.1.2 // indirect
-	github.com/pion/logging v0.2.4 // indirect
-	github.com/pion/stun/v3 v3.1.1 // indirect
-	github.com/pion/transport/v4 v4.0.1 // indirect
-	github.com/pires/go-proxyproto v0.7.0 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/samber/lo v1.53.0 // indirect
-	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 // indirect
-	github.com/templexxx/cpu v0.1.1 // indirect
-	github.com/templexxx/xorsimd v0.4.3 // indirect
-	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	github.com/xtaci/kcp-go/v5 v5.6.13 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.6.0 // indirect
-	go.opentelemetry.io/contrib/bridges/otelslog v0.19.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.69.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.68.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.20.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.20.0 // indirect
@@ -93,17 +73,10 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.20.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
-	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173 // indirect
-	gopkg.in/ini.v1 v1.67.0 // indirect
-	k8s.io/apimachinery v0.35.0 // indirect
-	k8s.io/klog/v2 v2.130.1 // indirect
-	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.50.1 // indirect
-	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 )
 
 require (
@@ -308,8 +281,8 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/proglottis/gpgme v0.1.6 // indirect
 	github.com/qiangli/gfy v0.0.0-20260504062854-764095a2877d // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-00010101000000-000000000000 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-00010101000000-000000000000 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261008103117-d4b23a332165 // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261008103117-d4b23a332165 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/redis/go-redis/v9 v9.20.1 // indirect
@@ -411,49 +384,28 @@ require (
 // unmerged Bash 5.3 interp patches). Resolve it as a flat sibling: inside the
 // dhnt umbrella ../sh is the sh submodule; in a standalone clone, clone
 // github.com/qiangli/sh next to this repo as ./sh.
-replace mvdan.cc/sh/v3 => ../sh
-
-// Bash# (formerly Bash++) is its own language repo over the same engine
-// (Sprint 211): sh ← bashsharp ← bashy. Flat sibling, like every other
-// qiangli/<X> replace.
-replace github.com/bashsharp/bashsharp => ../bashsharp
-
-// coreutils is the CERTIFIED required set (the 116 POSIX names ∪ GNU
-// coreutils as pure-Go applets); yoke is everything agentic bashy adds on top
-// (the AgentOS hub, front-door verbs, managed externals, engines) — split
-// out of coreutils in Sprint 208 so yoke work never touches the certified
-// package. Same flat-sibling rule as ../sh: the submodules inside the dhnt
-// umbrella, or sibling clones of github.com/qiangli/{coreutils,yoke}.
-replace github.com/qiangli/coreutils => ../coreutils
-
-replace github.com/qiangli/yoke => ../yoke
+replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261007045242-f6589660f589
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
-replace github.com/benhoyt/goawk => ../coreutils/third_party/goawk
-
-replace github.com/qiangli/yoke/external/otel => ../yoke/external/otel
+replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261008102224-574a21fe8d42
 
 replace github.com/jaegertracing/jaeger => github.com/qiangli/jaeger v0.0.0-20260426223533-5aaa7eb1f040
 
 replace github.com/perses/perses => github.com/qiangli/perses v0.0.0-20260426190059-de437951b5e6
 
-replace github.com/ergochat/readline => ../readline
+replace github.com/ergochat/readline => github.com/qiangli/readline v0.1.4-0.20260919214158-38ad08e83676
 
-replace github.com/ollama/ollama => ../yoke/external/ollama/src
+replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20260426003157-db9cd0a2004b
 
 // Podman embed: bashy mounts yoke's in-process podman engine, which consumes
 // the qiangli/podman fork + the pkg/oci wrapper. Cross-module replaces don't
 // propagate from yoke's go.mod, so bashy (the main module) restates them.
-replace go.podman.io/podman/v6 => ../yoke/external/podman/src
-
-replace github.com/qiangli/yoke/pkg/oci => ../yoke/pkg/oci
-
-replace github.com/qiangli/yoke/pkg/llmgw => ../yoke/pkg/llmgw
+replace go.podman.io/podman/v6 => github.com/qiangli/podman/v6 v6.0.0-20260723062102-d454baa0afec
 
 // The AgentOS file-management surface uses the maintained qiangli/filebrowser
 // fork. Keep it as an exact flat sibling in umbrella and standalone builds.
-replace github.com/filebrowser/filebrowser/v2 => ../filebrowser
+replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/v2 v2.0.0-20261002203458-0b059ae20b79
 
 // gotreesitter: pinned local fork of upstream v0.16.0 (../gotreesitter,
 // hosted as qiangli/gotreesitter, module path kept as upstream's) with the
@@ -464,7 +416,7 @@ replace github.com/filebrowser/filebrowser/v2 => ../filebrowser
 // the transitive qiangli/gfy -> odvcencio imports, which a module-path rename
 // could not reach. Restated here because yoke's replace is not transitive.
 // Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
-replace github.com/odvcencio/gotreesitter => ../gotreesitter
+replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261006115113-c8a5d22bb3f0
 
 // ycode is the engine for agents declared in YAML; bashy mounts its CLI as
 // `bashy ycode` (cmd/bashy wires ycodecli.Main into agentos).
