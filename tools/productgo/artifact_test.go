@@ -76,8 +76,8 @@ printf artifact > "$2"
 			cmd.Env = env
 			out, err := cmd.CombinedOutput()
 			if fail {
-				if err == nil {
-					t.Fatalf("expected build failure: %s", out)
+				if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 42 {
+					t.Fatalf("expected build exit 42, got %v: %s", err, out)
 				}
 			} else if err != nil {
 				t.Fatalf("artifact build: %v\n%s", err, out)
