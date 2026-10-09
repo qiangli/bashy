@@ -28,6 +28,8 @@ func islandToolsFor(language string) []string {
 		return []string{"c++"}
 	case "go":
 		return []string{"go"}
+	case "fsharp":
+		return []string{"dotnet"}
 	case "powershell", "csharp":
 		// Both fences are workers in the same pinned PowerShell archive. Keeping
 		// one resolver name makes prepare and runtime converge on one cache copy.
