@@ -247,3 +247,78 @@ And the finding that outlives all of it:
 
 Harness scores in the registry are still priors, with one exception: aider's `tool-use`
 is now measured (0.7 → 0.4). **Live-probed is still not the same as good.**
+
+## Genie preview workflow
+
+`genie` is bashy's own agent: `bashy genie "MSG"` runs one headless turn on the
+ycode engine that bashy links. It is a **preview tier**, and the workflow below is
+the one documented path that is expected to work on macOS, Linux and Windows.
+`scripts/genie-preview-workflow.sh` runs exactly these steps and exits non-zero
+when any of them breaks.
+
+**What "preview tier" means.** The surface works end to end today on the path
+below and is exercised on all three operating systems, but it is not a
+compatibility promise: flags, defaults and the builtin recipe may change between
+releases, only the one-turn headless path is covered (no TUI, no `genie web`, no
+long-running sessions), and a local model is proven for tool use only at the small
+size the script pulls. Nothing here weakens Classic: `bash` and the coreutils
+userland do not depend on genie.
+
+### 1. Install
+
+Download the single `bashy` executable for your OS and put it on `PATH`. There is
+nothing else to install: genie, the model door and the Ollama engine launcher are
+all inside it (the engine binary itself is fetched on first use). On Windows run
+scripts as `bashy.exe scripts/genie-preview-workflow.sh`; no other bash is needed.
+
+### 2. Pick a model
+
+Every genie turn goes through the host's model door (`bashy llm up`, port 24556,
+override with `BASHY_LLM_PORT`), so the model choice is one `-m` flag.
+
+- **Cloud.** Either a door model (`door-*`, which rides a CLI seat you are signed in
+  to) or a registry API model plus a provider key, for example
+  `bashy model add mine --set kind=api,base_url=URL,model=ID,api_key_ref=MY_API_KEY`
+  with `MY_API_KEY` in the environment or in `bashy secret`. The credential is
+  read from the environment or the vault at run time and is never printed.
+- **Local.** A small Ollama model that bashy pulls and serves itself:
+  `bashy llm up` then `bashy ollama pull qwen3:1.7b`. Allow about 1.5 GB of free
+  disk and memory; bashy refuses to start below its resource floors.
+
+### 3. Run the scripted one-turn task
+
+```sh
+scripts/genie-preview-workflow.sh                  # local leg, then cloud leg
+scripts/genie-preview-workflow.sh --legs local     # only the local model
+scripts/genie-preview-workflow.sh --isolate        # throwaway BASHY_HOME and door port
+```
+
+Each leg asks genie, in a fresh directory, to create `hello.txt` whose only
+content is a fixed token, run `cat hello.txt`, and show the output. The script then
+checks the **file on disk** and that the answer contains the token; an answer
+alone proves nothing. Every external step runs under a timeout
+(`GENIE_PREVIEW_PULL_TIMEOUT`, `GENIE_PREVIEW_TURN_TIMEOUT`,
+`GENIE_PREVIEW_UP_TIMEOUT`).
+
+| Exit | Meaning |
+|---|---|
+| 0 | every requested leg passed |
+| 1 | a leg failed, including a timeout |
+| 2 | usage or environment error (no bashy, bad flag) |
+| 3 | local passed but the cloud leg was skipped: no door model or credentialed API model on this host. **Not green for the preview bar.** |
+
+On exit the script stops the door only if it started it, removes only the models
+it added (the pulled tag and the `-bashy-<hash>` context variants genie derives
+from it), and deletes its scratch directories. `--isolate` is the safe choice on a
+shared host: it never touches an existing door, genie bundle or session.
+
+### Known gaps
+
+- `bashy llm down` cannot signal the door on Windows (`os.Process.Signal` with
+  `SIGTERM` is unsupported there). The script works around it by killing the pid
+  the isolated door logged; the proper fix lives in yoke's broker.
+- A `door-*` model needs a live sticky binding, which goes stale (HTTP 409) when
+  the CLI seat upgrades; the script therefore prefers a credentialed API model.
+- The ollama model store is host-global, not under `BASHY_HOME`, so `--isolate`
+  isolates the door and sessions but not pulled models; the script removes what
+  it added.
