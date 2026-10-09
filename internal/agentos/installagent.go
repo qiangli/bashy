@@ -484,8 +484,11 @@ Wrote the shim: %s -> %s`, shimBash, shimBash, shimBash, shell)
 		if !shellListed(shimBash) {
 			return steps + "\n\ninstall-agent: --yes: shim not in /etc/shells yet — run the sudo line above first, then re-run.", nil
 		}
-		if out, err := exec.Command("chsh", "-s", shimBash).CombinedOutput(); err != nil {
-			return "", fmt.Errorf("chsh -s %s: %v: %s", shimBash, err, strings.TrimSpace(string(out)))
+		// chsh prompts for the account password, so it gets the caller's terminal.
+		chsh := exec.Command("chsh", "-s", shimBash)
+		chsh.Stdin, chsh.Stdout, chsh.Stderr = os.Stdin, os.Stdout, os.Stderr
+		if err := chsh.Run(); err != nil {
+			return "", fmt.Errorf("chsh -s %s: %v", shimBash, err)
 		}
 		return fmt.Sprintf("codex: set login shell to %s (bashy) — new codex sessions will run `%s -lc`", shimBash, shimBash), nil
 	}
@@ -507,10 +510,14 @@ Wrote the shim: %s -> %s`, shimBash, shimBash, shimBash, shell)
 	}
 }
 
+// etcShellsPath is the system list of login shells chsh accepts; a variable so
+// tests can point it at a scratch file.
+var etcShellsPath = "/etc/shells"
+
 // shellListed reports whether path appears in /etc/shells (so chsh will accept
 // it for a non-root user).
 func shellListed(path string) bool {
-	data, err := os.ReadFile("/etc/shells")
+	data, err := os.ReadFile(etcShellsPath)
 	if err != nil {
 		return false
 	}
