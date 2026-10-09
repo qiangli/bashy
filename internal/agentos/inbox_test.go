@@ -82,6 +82,8 @@ func isolateUnifiedInbox(t *testing.T) {
 	fleettest.Ring(t)
 	fleetDir := t.TempDir()
 	t.Setenv("BASHY_FLEET_DIR", fleetDir)
+	t.Setenv("BASHY_INSTANCES_DIR", t.TempDir())
+	t.Setenv("BASHY_INSTANCE", "")
 	t.Setenv("BASHY_MEET_DIR", t.TempDir())
 	// THE SPRINT STORE IS PART OF THE INBOX PATH, AND FORGETTING IT WAS NOT
 	// HARMLESS. runUnifiedInbox opens by recording that this reader checked

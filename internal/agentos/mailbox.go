@@ -38,6 +38,8 @@ type mailboxItem struct {
 	Seq          int64               `json:"seq"`
 	At           string              `json:"at,omitempty"`
 	From         string              `json:"from,omitempty"`
+	FromParty    *bus.Party          `json:"from_party,omitempty"`
+	FromHandle   string              `json:"from_handle,omitempty"`
 	To           string              `json:"to,omitempty"`
 	Topic        string              `json:"topic,omitempty"`
 	Project      string              `json:"project,omitempty"`
@@ -195,7 +197,7 @@ func snapshotMailbox(spec mailboxSpec) ([]mailboxItem, mailboxState, error) {
 		}
 		id := fmt.Sprintf("mb:%d", p.Seq)
 		m := state.Marks[id]
-		out = append(out, mailboxItem{Schema: mailboxSchema, ID: id, Source: "mb", Seq: p.Seq, At: p.At, From: p.From, To: p.Audiences(), Topic: p.Topic, Project: m.Project, Status: m.Status, Body: p.Body, Read: m.ReadAt != "", Acknowledged: m.AckedAt != "", Preserved: m.Preserved})
+		out = append(out, mailboxItem{Schema: mailboxSchema, ID: id, Source: "mb", Seq: p.Seq, At: p.At, From: p.From, FromParty: p.FromParty, To: p.Audiences(), Topic: p.Topic, Project: m.Project, Status: m.Status, Body: p.Body, Read: m.ReadAt != "", Acknowledged: m.AckedAt != "", Preserved: m.Preserved})
 	}
 	rooms, err := meet.Rooms()
 	if err != nil {
@@ -252,7 +254,7 @@ func snapshotMailbox(spec mailboxSpec) ([]mailboxItem, mailboxState, error) {
 	}
 	if spec.Kind == "agent" && bus.HostRoles != nil {
 		for _, role := range bus.HostRoles() {
-			if !strings.EqualFold(strings.TrimSpace(role.Holder), spec.Address) {
+			if !(bus.Post{To: role.Topic}).Directed(spec.Address) {
 				continue
 			}
 			pending, e := bus.ReadPending(role.Topic)
@@ -265,6 +267,10 @@ func snapshotMailbox(spec mailboxSpec) ([]mailboxItem, mailboxState, error) {
 				out = append(out, mailboxItem{Schema: mailboxSchema, ID: id, Source: "role", Seq: p.Seq, At: p.TS, From: p.Principal, To: role.Label, Topic: p.Topic, Project: mark.Project, Status: mark.Status, Room: p.Room, Body: p.Body, Read: mark.ReadAt != "", Acknowledged: mark.AckedAt != "", Preserved: mark.Preserved})
 			}
 		}
+	}
+	for i := range out {
+		item := &out[i]
+		item.FromParty, item.FromHandle = inboxSenderIdentity(item.From, item.FromParty)
 	}
 	// A Meet copy with structured MB provenance is the same message, not a second task.
 	mb := map[int64]bool{}
@@ -344,7 +350,7 @@ func (f mailboxFilter) match(i mailboxItem) bool {
 	if f.status != "" && !strings.EqualFold(i.Status, f.status) {
 		return false
 	}
-	if f.from != "" && !strings.Contains(strings.ToLower(i.From), strings.ToLower(f.from)) {
+	if f.from != "" && !strings.Contains(strings.ToLower(inboxSenderText(i.From, i.FromParty, i.FromHandle)), strings.ToLower(f.from)) {
 		return false
 	}
 	if !f.since.IsZero() {
@@ -354,7 +360,7 @@ func (f mailboxFilter) match(i mailboxItem) bool {
 			return false
 		}
 	}
-	haystack := strings.Join([]string{i.Body, i.From, i.To, i.Topic, i.Project, i.Status, i.Room, i.Source}, " ")
+	haystack := strings.Join([]string{i.Body, inboxSenderText(i.From, i.FromParty, i.FromHandle), i.To, i.Topic, i.Project, i.Status, i.Room, i.Source}, " ")
 	return f.search == "" || strings.Contains(strings.ToLower(haystack), strings.ToLower(f.search))
 }
 
@@ -416,7 +422,7 @@ func renderMailbox(cmd *cobra.Command, items []mailboxItem, jsonOut bool) error 
 		if i.Acknowledged {
 			state = "acked"
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "[%s] [%s] %s/%d %s → %s", i.ID, state, i.Source, i.Seq, emptyAs(i.From, "unknown"), emptyAs(i.To, "all"))
+		fmt.Fprintf(cmd.OutOrStdout(), "[%s] [%s] %s/%d %s → %s", i.ID, state, i.Source, i.Seq, inboxSenderText(i.From, i.FromParty, i.FromHandle), emptyAs(i.To, "all"))
 		if i.Topic != "" {
 			fmt.Fprintf(cmd.OutOrStdout(), " (%s)", i.Topic)
 		}

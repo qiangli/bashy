@@ -31,16 +31,18 @@ const inboxWatcherMode = "inbox"
 var inboxMeetRooms = meet.Rooms
 
 type unifiedInboxEvent struct {
-	Schema string              `json:"schema"`
-	Source string              `json:"source"`
-	Seq    int64               `json:"seq"`
-	At     string              `json:"at,omitempty"`
-	From   string              `json:"from,omitempty"`
-	To     string              `json:"to,omitempty"`
-	Topic  string              `json:"topic,omitempty"`
-	Room   string              `json:"room,omitempty"`
-	Body   string              `json:"body"`
-	Origin *unifiedInboxOrigin `json:"origin,omitempty"`
+	Schema     string              `json:"schema"`
+	Source     string              `json:"source"`
+	Seq        int64               `json:"seq"`
+	At         string              `json:"at,omitempty"`
+	From       string              `json:"from,omitempty"`
+	FromParty  *bus.Party          `json:"from_party,omitempty"`
+	FromHandle string              `json:"from_handle,omitempty"`
+	To         string              `json:"to,omitempty"`
+	Topic      string              `json:"topic,omitempty"`
+	Room       string              `json:"room,omitempty"`
+	Body       string              `json:"body"`
+	Origin     *unifiedInboxOrigin `json:"origin,omitempty"`
 }
 
 type unifiedInboxOrigin struct {
@@ -241,6 +243,20 @@ pretends such a session was adopted.`,
 // name must resolve to a registered agent rather than minting an arbitrary
 // cursor by typo. Role backlog is reachable only through its current holder.
 func resolveInboxReader(as string) (string, error) {
+	if id, ok := principal.SelfInstanceUUID(); ok {
+		canonical, err := fleet.ParseInstanceUUID(id)
+		if err != nil {
+			return "", fmt.Errorf("inbox: invalid session instance: %w", err)
+		}
+		self := fleet.InstanceAddressPrefix + canonical
+		if strings.TrimSpace(as) != "" {
+			requested, explicit := bus.ExplicitInstanceID(as)
+			if !explicit || requested != canonical {
+				return "", fmt.Errorf("inbox: instance %q cannot read as %q; each instance owns its own mailbox. %s", self, as, inboxReaderHint)
+			}
+		}
+		return self, nil
+	}
 	principal := strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL"))
 	if strings.Contains(principal, "agent/") {
 		self, err := bus.BoardIdentity("")
@@ -671,7 +687,7 @@ func snapshotInbox(reader string, limit int, includeBus, deliver bool) (inboxBat
 		if p.Seq > mbHigh {
 			mbHigh = p.Seq
 		}
-		mbEvents = append(mbEvents, unifiedInboxEvent{Schema: unifiedInboxSchema, Source: "mb", Seq: p.Seq, At: p.At, From: p.From, To: bus.RoleLabelFor(p.To), Topic: p.Topic, Body: p.Body})
+		mbEvents = append(mbEvents, unifiedInboxEvent{Schema: unifiedInboxSchema, Source: "mb", Seq: p.Seq, At: p.At, From: p.From, FromParty: p.FromParty, To: bus.RoleLabelFor(p.To), Topic: p.Topic, Body: p.Body})
 	}
 	appendLimited("mb", mbEvents, func() error { return bus.MarkSeen(reader, mbHigh) })
 
@@ -732,7 +748,7 @@ func snapshotInbox(reader string, limit int, includeBus, deliver bool) (inboxBat
 	// created and this path can disappear after the retained backlog is empty.
 	if bus.HostRoles != nil {
 		for _, role := range bus.HostRoles() {
-			if !strings.EqualFold(strings.TrimSpace(role.Holder), strings.TrimSpace(reader)) {
+			if !(bus.Post{To: role.Topic}).Directed(reader) {
 				continue
 			}
 			snapshot, err := bus.SnapshotInbox(role.Topic)
@@ -742,6 +758,10 @@ func snapshotInbox(reader string, limit int, includeBus, deliver bool) (inboxBat
 			out := pendingEvents("role:"+role.Label, snapshot.Items)
 			appendLimited("role:"+role.Label, out, snapshot.Commit)
 		}
+	}
+	for i := range batch.events {
+		event := &batch.events[i]
+		event.FromParty, event.FromHandle = inboxSenderIdentity(event.From, event.FromParty)
 	}
 	batch.events = collapseProvenanceDuplicates(batch.events)
 	sortInboxEvents(batch.events)
@@ -810,7 +830,7 @@ func sortInboxEvents(events []unifiedInboxEvent) {
 // plain "role" to a filter.
 func inboxEventItem(e unifiedInboxEvent) mailboxItem {
 	source, _, _ := strings.Cut(e.Source, ":")
-	return mailboxItem{Schema: mailboxSchema, Source: source, Seq: e.Seq, At: e.At, From: e.From, To: e.To, Topic: e.Topic, Room: e.Room, Body: e.Body}
+	return mailboxItem{Schema: mailboxSchema, Source: source, Seq: e.Seq, At: e.At, From: e.From, FromParty: e.FromParty, FromHandle: e.FromHandle, To: e.To, Topic: e.Topic, Room: e.Room, Body: e.Body}
 }
 
 // filteredInboxSnapshot narrows a read-only snapshot. It drops the batch's
@@ -870,6 +890,53 @@ func pendingEvents(source string, items []bus.Pending) []unifiedInboxEvent {
 	return out
 }
 
+// Preserve send-time provenance. Older UUID-only records can recover their
+// frozen family from the instance store, but a reusable label is never looked
+// up as an identity. Handles are display metadata resolved only by UUID.
+func inboxSenderIdentity(from string, party *bus.Party) (*bus.Party, string) {
+	id, ok := bus.ExplicitInstanceID(from)
+	if party != nil {
+		id, ok = party.UUID, true
+	}
+	if !ok {
+		return party, ""
+	}
+	inst, err := bus.InstanceStoreFn().Get(id)
+	if err != nil {
+		return party, ""
+	}
+	if party == nil {
+		party = &bus.Party{UUID: inst.UUID, Label: inst.Label, FamilyID: inst.FamilyID,
+			Family: inst.Family, Policy: inst.Policy, Bindings: inst.Bindings}
+	}
+	return party, inst.Handle
+}
+
+// Both inbox views filter exactly the attribution that they display.
+func inboxSenderText(from string, party *bus.Party, handle string) string {
+	text := emptyAs(from, "unknown")
+	if party == nil {
+		return text
+	}
+	var details []string
+	if handle != "" {
+		details = append(details, "handle: "+handle)
+	} else if party.Label != "" && party.Label != from {
+		details = append(details, "label: "+party.Label)
+	}
+	details = append(details, "uuid: "+party.UUID)
+	if party.Family != "" {
+		details = append(details, "family: "+party.Family)
+	}
+	if len(party.Bindings) > 0 {
+		details = append(details, "bindings: "+strings.Join(party.Bindings, ", "))
+	}
+	if party.Selected != "" {
+		details = append(details, "selected: "+party.Selected)
+	}
+	return text + " (" + strings.Join(details, "; ") + ")"
+}
+
 func renderInboxBatch(out, errOut io.Writer, batch inboxBatch, jsonOut bool) error {
 	var rendered bytes.Buffer
 	if jsonOut {
@@ -885,7 +952,7 @@ func renderInboxBatch(out, errOut io.Writer, batch inboxBatch, jsonOut bool) err
 			if event.Room != "" {
 				where += "/" + event.Room
 			}
-			fmt.Fprintf(&rendered, "%s [%s:%d] %s → %s", emptyAs(event.At, "-"), where, event.Seq, emptyAs(event.From, "unknown"), emptyAs(event.To, "all"))
+			fmt.Fprintf(&rendered, "%s [%s:%d] %s → %s", emptyAs(event.At, "-"), where, event.Seq, inboxSenderText(event.From, event.FromParty, event.FromHandle), emptyAs(event.To, "all"))
 			if event.Topic != "" {
 				fmt.Fprintf(&rendered, " (%s)", event.Topic)
 			}
