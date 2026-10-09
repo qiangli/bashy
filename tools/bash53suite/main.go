@@ -19,6 +19,8 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/winmode"
+
+	"github.com/qiangli/bashy/internal/corpuslocales"
 )
 
 var filterExpect = wordSet("attr exp exp-tests extglob extglob2 invert invocation more-exp new-exp nquote nquote1 nquote2 nquote3 nquote5 posix2 varenv")
@@ -303,6 +305,23 @@ func run(args []string, stdout, stderr io.Writer) int {
 				}
 				if provider != "" {
 					userlandNote += fmt.Sprintf("; host locale provider %s", provider)
+				} else if strings.TrimSpace(os.Getenv("LOCPATH")) == "" {
+					// Provider-less Windows (operator D11: no WSL, no host
+					// locale service): serve the corpus set from the
+					// provisioned store — real glibc localedata compiled
+					// with localedef into LOCPATH — instead of leaving the
+					// locale-sensitive fixtures to their missing-locale
+					// diagnostics. An explicit LOCPATH still wins. A
+					// provisioning failure is not an infrastructure
+					// failure: degrade to the historic behavior (fixtures
+					// keep their truthful warnings) rather than refusing
+					// to measure.
+					if store, err := corpuslocales.EnsureCorpusLocales(); err != nil {
+						fmt.Fprintf(stderr, "bash53-suite: note: corpus locale store unavailable (%v); locale-sensitive fixtures keep their missing-locale diagnostics\n", err)
+					} else {
+						os.Setenv("LOCPATH", store)
+						userlandNote += fmt.Sprintf("; corpus locale store %s", store)
+					}
 				}
 			} else {
 				warnUserlandMissing(stderr, os.Getenv("BASH53_TOOLS_PATH"))

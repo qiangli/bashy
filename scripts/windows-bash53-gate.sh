@@ -10,6 +10,12 @@
 #   bin/bash.exe ........ the pure drop-in under test (./cmd/bash, no coreutils)
 #   bin/bash53suite.exe . the ONE fixture runner (tools/bash53suite)
 #   bin/yoke.exe ........ fixture userland (coreutils + applets, BASHY_ROOT)
+#   bin/bash53locales.exe  provisions the corpus locale store before the run
+#                         (tools/bash53locales: pinned glibc localedata,
+#                         compiled with localedef into LOCPATH) so the two
+#                         locale-sensitive fixtures measure instead of warn;
+#                         the harness repeats the same provisioning when no
+#                         host locale provider and no LOCPATH are set
 #   zig cc .............. provisioned at run time BY the runner itself for the
 #                         one fixture that needs a C compiler (glob-bracket);
 #                         never a host compiler (tools/bash53suite/cc_provision.go)
@@ -77,6 +83,12 @@ tree=$(go run ./tools/bash53fixtures -root .) || exit 2
 
 echo "gate: building the yoke userland at the pinned version"
 GOFLAGS=-mod=mod CGO_ENABLED=0 go build -o bin/yoke.exe github.com/qiangli/yoke/cmd/yoke || exit 2
+
+echo "gate: provisioning the corpus locale store (pinned glibc localedata, compiled with localedef)"
+go build -o bin/bash53locales.exe ./tools/bash53locales || exit 2
+store=$(./bin/bash53locales.exe) || exit 2
+export LOCPATH="$store"
+echo "gate: corpus locale store: $store"
 
 listed=0
 ./bin/bash53suite.exe -tests-dir "$tree/tests" -list >"$log.list" || exit 2
