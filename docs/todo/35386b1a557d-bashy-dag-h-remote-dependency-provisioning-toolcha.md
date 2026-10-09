@@ -8,9 +8,9 @@ priority: p2
 labels:
     - remote
 created: 2026-09-30T17:19:13.704223Z
-sprint: 345
-sprint_id: f8f1645d-6d4d-53ee-97b3-0b61f720c5bb
-sprint_title: Complete bashy dag -H remote execution and sandbox path
+sprint: 402
+sprint_id: 107fb1ff-6f9c-5bc1-8896-a26f792a6fd8
+sprint_title: 'bashy dag post-1.0: reusable task graphs and remote execution'
 ---
 
 Scope (5 pt): before running on the remote, resolve the target's toolchains/managed tools there through binmgr; when the remote cannot reach the network, push the needed artifacts from the local binmgr cache over the peer channel (or use the #343 tunnel). Acceptance: red/green; e2e go test on an offline remote with Go pushed from the local cache.
