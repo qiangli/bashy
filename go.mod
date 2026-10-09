@@ -15,7 +15,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/coreutils v0.0.0-20261009201221-a50cc1f27e6f
-	github.com/qiangli/ycode v0.3.1-dev.0.20261009170028-95f2568a2377
+	github.com/qiangli/ycode v0.3.1-dev.0.20261009202524-02ba64f64493
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261009174249-a65326a65461
 	github.com/qiangli/yoke/external/otel v0.0.0-20261009174249-a65326a65461
@@ -351,7 +351,7 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/qiangli/gfy v0.0.0-20261009070616-1a9d12418c8d // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261009142556-b0e815751928 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261009213805-3652ba80be69 // indirect
 	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261009174249-a65326a65461 // indirect
 	github.com/qiangli/yoke/pkg/oci v0.0.0-20261009174249-a65326a65461 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
@@ -537,6 +537,6 @@ replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/
 // Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
 replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261009064153-466dad1c3aef
 
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261009170028-95f2568a2377
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261009202524-02ba64f64493
 
 tool github.com/qiangli/outpost/cmd/outpost
