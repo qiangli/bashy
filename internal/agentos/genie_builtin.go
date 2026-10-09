@@ -5,9 +5,14 @@ package agentos
 // genie is bashy's builtin agent: its source (ycode/examples/genie) is linked
 // into this binary, so `bashy genie` on a host with only bashy builds its own
 // bundle on first use — no ycode checkout, no separate ycode, no released
-// bundle to fetch. A bundle built from a checkout (`bashy genie build --from`)
-// is a developer's choice and is kept; a bundle built from the builtin source
-// is rebuilt when this bashy carries a different source.
+// bundle to fetch. A bundle built from a checkout (`bashy genie build --from`,
+// or an auto-discovered checkout) is a developer's own workspace override: it
+// is kept only for a caller running from inside that same directory
+// (dirProvenanceScoped), never as a new host default for every other caller.
+// A bundle built from the builtin source is rebuilt when this bashy carries a
+// different source. Story b24f3f95: a worker's own `genie build` had been
+// silently adopted by every later invocation on the host, past a builtin
+// source change, because the old check kept any "dir" provenance forever.
 
 import (
 	"crypto/sha256"
@@ -19,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	geniesrc "github.com/qiangli/ycode/examples/genie"
 )
@@ -140,17 +146,63 @@ func installBuiltinGenie(home string, stderr io.Writer) error {
 }
 
 // builtinGenieCurrent reports whether an installed bundle may be used as is:
-// a developer's build (`build --from`, recorded as "dir") always; a builtin
+// a developer's build (`build --from`, recorded as "dir") only while this
+// invocation belongs to that same directory (dirProvenanceScoped); a builtin
 // build only while it matches this bashy's embedded source. A bundle with no
-// provenance predates the builtin source and is rebuilt from it.
+// provenance predates the builtin source and is rebuilt from it. A
+// dir-sourced bundle is a per-workspace override, never the host default: a
+// caller outside that directory falls back to (and rebuilds) the builtin
+// bundle instead of silently inheriting another workspace's build forever.
 func builtinGenieCurrent(home string) bool {
 	p, ok := readGenieProvenance(home)
 	if !ok {
 		return false
 	}
 	if p.Source != "builtin" {
-		return true
+		return dirProvenanceScoped(p.Path)
 	}
 	digest, err := builtinGenieDigest()
 	return err == nil && p.Digest == digest
+}
+
+// dirProvenanceScoped reports whether the current invocation belongs to the
+// directory a `genie build --from DIR` bundle was built from: the caller
+// names it again with GENIE_SOURCE, or is running from inside it (at or below
+// it). Any other caller treats the bundle as stale.
+func dirProvenanceScoped(path string) bool {
+	if source := strings.TrimSpace(os.Getenv("GENIE_SOURCE")); source != "" {
+		abs, err := filepath.Abs(source)
+		if err != nil {
+			abs = source
+		}
+		return resolvePath(abs) == resolvePath(path)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	return pathUnder(path, cwd)
+}
+
+// resolvePath evaluates symlinks (e.g. macOS's /tmp -> /private/tmp) so a
+// path survives round-tripping through os.Getwd; it falls back to the
+// cleaned input when the path does not exist or cannot be resolved.
+func resolvePath(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return filepath.Clean(path)
+}
+
+// pathUnder reports whether target is root itself or nested under it.
+func pathUnder(root, target string) bool {
+	root, target = resolvePath(root), resolvePath(target)
+	if root == target {
+		return true
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

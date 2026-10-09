@@ -52,7 +52,40 @@ func TestBuiltinGenieSource(t *testing.T) {
 	if err := writeGenieProvenance(home, genieProvenance{Source: "dir", Path: "/src/genie"}); err != nil {
 		t.Fatal(err)
 	}
+	if builtinGenieCurrent(home) {
+		t.Fatal("a directory-sourced bundle from elsewhere on the host is stale for this caller")
+	}
+}
+
+// A bundle built from a directory (`genie build --from DIR`, or an
+// auto-discovered checkout) is that directory's own override, not a new host
+// default for every other caller. A later run from elsewhere on the host must
+// fall back to (and rebuild) the builtin bundle rather than silently inherit
+// someone else's workspace build forever — the live bug: a weave worker's
+// `genie build` from its own workspace made ~/.bashy/genie track that
+// worker's checkout for every later invocation on the host, even past a
+// builtin source change.
+func TestBuiltinGenieDirSourceScopedToItsDirectory(t *testing.T) {
+	home := t.TempDir()
+	source := t.TempDir()
+	if err := writeGenieProvenance(home, genieProvenance{Source: "dir", Path: source}); err != nil {
+		t.Fatal(err)
+	}
+
+	elsewhere := t.TempDir()
+	t.Chdir(elsewhere)
+	if builtinGenieCurrent(home) {
+		t.Fatal("a directory-sourced bundle must not be the default for a caller outside that directory")
+	}
+
+	t.Chdir(source)
 	if !builtinGenieCurrent(home) {
-		t.Fatal("a developer's build is kept")
+		t.Fatal("a directory-sourced bundle is current for a caller running from inside its own directory")
+	}
+
+	t.Chdir(elsewhere)
+	t.Setenv("GENIE_SOURCE", source)
+	if !builtinGenieCurrent(home) {
+		t.Fatal("GENIE_SOURCE naming the same directory is also the caller's own override")
 	}
 }

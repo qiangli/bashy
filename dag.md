@@ -64,8 +64,13 @@ ELF symbol gate preserves Coreutils' inherited-signal repair in every build.
 The separate pure-Go release shell-signal question remains open. Keep the build
 and post-build audit in step with Makefile `build-bashy`.
 
-Sources: cmd/, internal/, go.mod, go.sum, native/siglaunch.c.in, scripts/build-bashy-artifact.sh, tools/elfaudit, tools/releaseeligibility
-Generates: bin/bash, bin/bashy (+ bin/bash.real on linux/darwin)
+No Sources:/Generates: here on purpose: the content-fingerprint cache only
+hashes files inside this document's own tree, so it cannot see a go.work
+sibling (`../ycode`, `../yoke`, `../sh`) changing underneath an unrelated
+`Sources:` list — `bashy dag install` (`Requires: build`) would then reinstall
+a stale `bin/bashy` after a sibling-only fix. Always run `go build`; its own
+cache keeps a true no-op invocation cheap. (Mirrors the Makefile's `build` /
+`install`, which are plain `.PHONY` targets for the same reason.)
 
 ```bash
 set -e

@@ -169,21 +169,36 @@ func TestGenieBundleResolution(t *testing.T) {
 	if got, err := genieBundle(); err != nil || got != installed || builds != 1 {
 		t.Fatalf("current builtin bundle: got %q, %v, builds %d", got, err, builds)
 	}
-	// A developer's build (recorded as a directory) is kept as is.
+	// A developer's build (recorded as a directory) from elsewhere on the
+	// host is not this caller's: it is stale, so genieBundle rebuilds from
+	// the builtin source instead of inheriting someone else's workspace.
 	if err := os.WriteFile(installed, []byte("bar"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := writeGenieProvenance(filepath.Dir(installed), genieProvenance{Source: "dir", Path: "/src/genie"}); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := genieBundle(); err != nil || got != installed || builds != 1 {
-		t.Fatalf("developer bundle: got %q, %v, builds %d", got, err, builds)
+	if got, err := genieBundle(); err != nil || got != installed || builds != 2 {
+		t.Fatalf("stranger's developer bundle: got %q, %v, builds %d", got, err, builds)
+	}
+	// But a developer's build is kept as is for a caller running from
+	// inside that very directory.
+	developer := t.TempDir()
+	if err := os.WriteFile(installed, []byte("bar"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeGenieProvenance(filepath.Dir(installed), genieProvenance{Source: "dir", Path: developer}); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(developer)
+	if got, err := genieBundle(); err != nil || got != installed || builds != 2 {
+		t.Fatalf("own developer bundle: got %q, %v, builds %d", got, err, builds)
 	}
 	// doctor only looks: a missing bundle is reported, never built.
 	if err := os.Remove(installed); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := resolveGenieBundle(false); err == nil || builds != 1 {
+	if _, err := resolveGenieBundle(false); err == nil || builds != 2 {
 		t.Fatalf("a look-only resolve built or found a bundle: %v, builds %d", err, builds)
 	}
 	explicit := filepath.Join(t.TempDir(), "other.bar")
@@ -197,6 +212,39 @@ func TestGenieBundleResolution(t *testing.T) {
 	t.Setenv("GENIE_BAR", filepath.Join(t.TempDir(), "missing.bar"))
 	if _, err := genieBundle(); err == nil {
 		t.Fatal("a missing GENIE_BAR must be an error, not a fallback")
+	}
+}
+
+// genie doctor must never report a stranger's dir-sourced bundle as the
+// current one: it only looks (resolveGenieBundle(false)), so a bundle this
+// caller cannot use must surface as a bundle error, not as a truthful-looking
+// "source: <someone else's directory>" line.
+func TestGenieDoctorNeverReportsAStrangerDirBundleAsCurrent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BASHY_HOME", home)
+	t.Setenv("GENIE_BAR", "")
+
+	installed := filepath.Join(home, "genie", "genie.bar")
+	if err := os.MkdirAll(filepath.Dir(installed), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(installed, []byte("bar"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stranger := t.TempDir()
+	if err := writeGenieProvenance(filepath.Dir(installed), genieProvenance{Source: "dir", Path: stranger}); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr strings.Builder
+	if code := genieDoctor(nil, &stdout, &stderr); code != 1 {
+		t.Fatalf("doctor exit = %d, want 1 (a stale bundle is an error): stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String(), "source:") {
+		t.Fatalf("doctor must not report a source line for a bundle it cannot use: %s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), stranger) {
+		t.Fatalf("doctor must not name a stranger's directory as if it were this caller's bundle: %s", stdout.String())
 	}
 }
 
