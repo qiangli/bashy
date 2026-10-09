@@ -13,7 +13,7 @@ package agentos
 // through the environment only, never a command line.
 //
 // Sprint: #379; Story: #37; Story-ID: 5b537ed16256 — the credential walks the
-// host's secrets.map binding (`zai` -> ZAI_API_KEY=@dragon-zai -> the vault),
+// host's secrets.map binding (`zai` -> ZAI_API_KEY=@host-zai -> the vault),
 // and a record with no context_length warns instead of silently starving.
 
 import (
@@ -99,7 +99,7 @@ func genieWarnContextFallback(model string) {
 //     the vault or its offline cache (secrets.ResolveAgentKey). This is the
 //     step that was missing: the catalog ref is STANDARD (`zai`, the same in
 //     every copy of the catalog) while the vault name is PER HOST
-//     (`dragon-zai`), and only the binding joins the two — so asking the vault
+//     (`host-zai`), and only the binding joins the two — so asking the vault
 //     for the bare ref found nothing on every host set up from the template;
 //  3. the vault by the bare ref, for a host that named its secret after the
 //     ref directly.

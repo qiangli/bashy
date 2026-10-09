@@ -15,7 +15,7 @@ import (
 )
 
 // The catalog names a credential by a STANDARD ref (`api_key_ref: zai`); the
-// host binds it under its own vault name (`ZAI_API_KEY=@dragon-zai`). genie
+// host binds it under its own vault name (`ZAI_API_KEY=@host-zai`). genie
 // asked the vault for the bare ref and found nothing on every such host. It
 // has to walk the binding. And a record with no context_length must say so,
 // once, instead of silently running a 1M-context model on 20480 tokens.
@@ -41,14 +41,14 @@ func TestGenieExternalResolvesKeyThroughHostBindingAndWarnsOnMissingContext(t *t
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		// The vault knows the HOST name only; there is no secret called "zai".
-		_, _ = w.Write([]byte(`{"secrets":[{"name":"dragon-zai","value":"vault-fixture"}]}`))
+		_, _ = w.Write([]byte(`{"secrets":[{"name":"host-zai","value":"vault-fixture"}]}`))
 	}))
 	defer server.Close()
 	t.Setenv("BASHY_CLOUDBOX_URL", server.URL)
 	if err := os.MkdirAll(filepath.Join(cfg, "bashy"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(cfg, "bashy", "secrets.map"), []byte("ZAI_API_KEY=@dragon-zai\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(cfg, "bashy", "secrets.map"), []byte("ZAI_API_KEY=@host-zai\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -63,7 +63,7 @@ func TestGenieExternalResolvesKeyThroughHostBindingAndWarnsOnMissingContext(t *t
 		t.Fatalf("resolve: ok=%v err=%v", ok, err)
 	}
 	if g.Key != "vault-fixture" {
-		t.Fatalf("key = %q; want the value bound as ZAI_API_KEY=@dragon-zai", g.Key)
+		t.Fatalf("key = %q; want the value bound as ZAI_API_KEY=@host-zai", g.Key)
 	}
 	if g.Context != genieContextFallback {
 		t.Fatalf("context = %d; want the %d fallback for a record with none", g.Context, genieContextFallback)
