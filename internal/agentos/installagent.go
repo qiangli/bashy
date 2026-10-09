@@ -387,7 +387,14 @@ subprocess path uses /bin/sh instead; run with a terminal/PTY to use this wiring
 
 // --- gemini / copilot: PATH shim dir ----------------------------------------
 
+// shimDir is where install-agent writes the bash/sh/zsh PATH shims. It honors
+// BASHY_SHIM_DIR so tests (and relocated installs) redirect the writes away
+// from the developer's real ~/.bashy/shims; the package test harness sets it
+// to a throwaway /tmp dir (main_test.go).
 func shimDir() string {
+	if d := strings.TrimSpace(os.Getenv("BASHY_SHIM_DIR")); d != "" {
+		return d
+	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".bashy", "shims")
 }
