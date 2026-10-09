@@ -41,6 +41,8 @@
 # Usage — from the checkout root on the Windows host, in cmd:
 #   bin\bashy.exe scripts/windows-bash53-gate.sh
 # Environment:
+#   BASH53_RELEASE_DIR .. optional published pair directory (bash.exe + bashy.exe);
+#                         builds test helpers only, never product executables
 #   TESTS ............... space-separated fixture subset (default: all 86)
 #   BASH53_TIMEOUT ...... per-fixture timeout, Go duration (default 60s)
 #   BASH53_JOBS_TIMEOUT . jobs-fixture timeout, Go duration (default 180s)
@@ -67,13 +69,25 @@ fi
 log=windows-bash53-gate.log
 export BASH53_TIMEOUT="${BASH53_TIMEOUT:-60s}"
 export BASH53_JOBS_TIMEOUT="${BASH53_JOBS_TIMEOUT:-180s}"
+testee_path=bin/bash.exe
 export BASH53_USERLAND=bin/yoke.exe
+if [ -n "${BASH53_RELEASE_DIR:-}" ]; then
+  testee_path="$BASH53_RELEASE_DIR/bash.exe"
+  export BASH53_USERLAND="$BASH53_RELEASE_DIR/bashy.exe"
+  for member in "$testee_path" "$BASH53_USERLAND"; do
+    [ -f "$member" ] || { echo "gate: missing release member: $member" >&2; exit 2; }
+  done
+fi
 
-echo "gate: building the pure drop-in, the fixture runner and the userland"
+echo "gate: preparing the testee and building the fixture runner"
 mkdir -p bin || exit 2
-CGO_ENABLED=0 go build -o bin/bash.exe ./cmd/bash || exit 2
+if [ -z "${BASH53_RELEASE_DIR:-}" ]; then
+  CGO_ENABLED=0 go build -o bin/bash.exe ./cmd/bash || exit 2
+else
+  echo "gate: published product pair: $BASH53_RELEASE_DIR (no product build)"
+fi
 go build -o bin/bash53suite.exe ./tools/bash53suite || exit 2
-testee_full=$(./bin/bash.exe --version)
+testee_full=$("$testee_path" --version)
 testee="${testee_full%%$'\n'*}"
 echo "gate: testee: $testee"
 
@@ -81,8 +95,10 @@ echo "gate: ensuring the pinned bash-5.3 fixture corpus"
 tree=$(go run ./tools/bash53fixtures -root .) || exit 2
 [ -d "$tree/tests" ] || { echo "gate: no tests/ under $tree" >&2; exit 2; }
 
-echo "gate: building the yoke userland at the pinned version"
-GOFLAGS=-mod=mod CGO_ENABLED=0 go build -o bin/yoke.exe github.com/qiangli/yoke/cmd/yoke || exit 2
+if [ -z "${BASH53_RELEASE_DIR:-}" ]; then
+  echo "gate: building the yoke userland at the pinned version"
+  GOFLAGS=-mod=mod CGO_ENABLED=0 go build -o bin/yoke.exe github.com/qiangli/yoke/cmd/yoke || exit 2
+fi
 
 echo "gate: provisioning the corpus locale store (pinned glibc localedata, compiled with localedef)"
 go build -o bin/bash53locales.exe ./tools/bash53locales || exit 2
@@ -97,10 +113,10 @@ rm -f "$log.list"
 echo "gate: $listed fixtures in the corpus; running (per-fixture timeout $BASH53_TIMEOUT, jobs $BASH53_JOBS_TIMEOUT)"
 
 if [ -n "${TESTS:-}" ]; then
-  ./bin/bash53suite.exe -tests-dir "$tree/tests" -bash bin/bash.exe \
+  ./bin/bash53suite.exe -tests-dir "$tree/tests" -bash "$testee_path" \
     -userland "$BASH53_USERLAND" -tests "$TESTS" >"$log" 2>&1
 else
-  ./bin/bash53suite.exe -tests-dir "$tree/tests" -bash bin/bash.exe \
+  ./bin/bash53suite.exe -tests-dir "$tree/tests" -bash "$testee_path" \
     -userland "$BASH53_USERLAND" >"$log" 2>&1
 fi
 rc=$?
@@ -169,7 +185,7 @@ printf '{"os":"windows","listed":%d,"runnable":%d,"passed":%d,"failed":%d,"timed
   echo "$results"
   echo '```'
   echo
-  echo "Testee: \`bin/bash.exe\`; userland: \`$BASH53_USERLAND\`; fixture tree: \`$tree\`; per-fixture timeout $BASH53_TIMEOUT (jobs $BASH53_JOBS_TIMEOUT); harness exit $rc."
+  echo "Testee: \`$testee_path\`; userland: \`$BASH53_USERLAND\`; fixture tree: \`$tree\`; per-fixture timeout $BASH53_TIMEOUT (jobs $BASH53_JOBS_TIMEOUT); harness exit $rc."
   echo
   echo "Non-passing fixtures:"
   echo
