@@ -24,7 +24,8 @@ func TestDagMdBuildTargetNeverSkipsOnStaleFingerprint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	section := buildTargetSection(t, string(data))
+	// A Windows checkout carries CRLF line ends; the heading regexp anchors on \n.
+	section := buildTargetSection(t, strings.ReplaceAll(string(data), "\r\n", "\n"))
 	for _, key := range []string{"Sources:", "Generates:"} {
 		if strings.Contains(section, "\n"+key) || strings.HasPrefix(section, key) {
 			t.Fatalf("dag.md's `build` target declares %s, which lets the content-fingerprint cache "+
