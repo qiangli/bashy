@@ -38,3 +38,10 @@ cli:
       agent --local runs the embedded agent (provider keys from the environment)
       instead of routing through the OpenClaw gateway; -m is the message.
 quirks: chat-gateway lineage; security-sensitive
+integration:
+  detect: ${OPENCLAW_STATE_DIR:-~/.openclaw}
+  skills:
+    user: [~/.agents/skills]
+    project: [.agents/skills]
+  mcp: {config: "${OPENCLAW_STATE_DIR:-~/.openclaw}/openclaw.json", format: json5, key: mcp.servers}
+  shell_env: SHELL

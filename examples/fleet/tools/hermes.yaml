@@ -18,6 +18,7 @@ cli:
   launch:
     exec: hermes --yolo --provider custom -m {model} -z {prompt}
     prompt_position: last
+    min_context: 64000
     key_env:
       - OPENAI_API_KEY
     env_markers:
@@ -25,7 +26,8 @@ cli:
     env:
       - HERMES_HOME={state_dir}
     setup: |
-      # hermes reads its custom endpoint from $HERMES_HOME/config.yaml.
+      # hermes reads its custom endpoint from $HERMES_HOME/config.yaml; it also
+      # reads the shared ~/.agents/skills (where `bashy skill export --user` writes).
       base={base_url}; model={model}
       cat > {state_dir}/config.yaml <<EOF
       model:
@@ -33,6 +35,8 @@ cli:
         base_url: $base
         api_key: $OPENAI_API_KEY
         default: $model
+      skills:
+        external_dirs: [$HOME/.agents/skills]
       EOF
       chmod 600 {state_dir}/config.yaml
     watchdog:
@@ -42,3 +46,10 @@ cli:
       -z is the documented one-prompt contract (final text only on stdout). The
       chat --oneshot -q form also exists. Native ACP via `hermes acp`.
 quirks: provider chosen with --provider or hermes model; -z prints only the final answer
+integration:
+  detect: ${HERMES_HOME:-~/.hermes}
+  skills:
+    user: ["${HERMES_HOME:-~/.hermes}/skills"]
+  instructions:
+    - {file: AGENTS.md, scope: project}
+  mcp: {config: "${HERMES_HOME:-~/.hermes}/config.yaml", format: yaml, key: mcp_servers}

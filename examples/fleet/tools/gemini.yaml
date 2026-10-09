@@ -21,3 +21,11 @@ cli:
       mem_limit: 8g
     notes: -p is one-shot; --output-format json|stream-json for structured output.
 quirks: Gemini protocol only
+integration:
+  detect: ~/.gemini
+  skills:
+    user: [~/.gemini/skills, ~/.agents/skills]
+    project: [.gemini/skills, .agents/skills]
+  instructions:
+    - {file: ~/.gemini/GEMINI.md}
+  mcp: {config: ~/.gemini/settings.json, format: json, key: mcpServers}

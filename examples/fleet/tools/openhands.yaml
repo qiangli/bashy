@@ -30,3 +30,11 @@ cli:
       --headless auto-approves actions and requires --task. The model and endpoint
       come from LLM_MODEL / LLM_BASE_URL, so a bashy binding cannot select them yet.
 quirks: model chosen by environment, not argv
+integration:
+  detect: ~/.openhands
+  skills:
+    user: [~/.agents/skills, ~/.openhands/skills]
+    project: [.agents/skills, .openhands/skills]
+  instructions:
+    - {file: AGENTS.md, scope: project}
+  mcp: {config: ~/.openhands/mcp.json, format: json, key: mcpServers}

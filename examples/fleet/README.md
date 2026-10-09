@@ -50,6 +50,14 @@ nothing about a specific CLI lives in bashy's code:
   to write the CLI's provider config into `{state_dir}` (bashy's private
   per-binding copy, so your own config of that CLI is never touched).
 - **`{model}`** may also sit inside an argument, e.g. `-m bashy/{model}`.
+- **`min_context`** is the smallest context window the CLI accepts. A binding
+  to a model declaring less is refused up front with both numbers.
+- **`integration:`** (top level) declares how the CLI takes skills and
+  instructions: a `detect` path, skill roots, instruction files, the MCP
+  location, and `shell_env`. `bashy skill export bashy --tool NAME`
+  installs the bashy skill into those roots and adds a bashy-managed
+  pointer block to the instruction files. `--user` does the same for every
+  tool it detects.
 
 ## Tool status (2026-10-09)
 

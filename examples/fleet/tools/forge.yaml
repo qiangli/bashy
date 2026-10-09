@@ -38,3 +38,13 @@ cli:
       -p runs one prompt and exits. -C DIR sets the working directory. Model and
       provider are configured outside the argv (forge provider / forge config).
 quirks: no model selection from argv; configure the provider before launch
+integration:
+  detect: ${FORGE_CONFIG:-~/.forge}
+  skills:
+    user: ["${FORGE_CONFIG:-~/.forge}/skills", ~/.agents/skills]
+    project: [.forge/skills]
+  instructions:
+    - {file: "${FORGE_CONFIG:-~/.forge}/AGENTS.md"}
+    - {file: AGENTS.md, scope: project}
+  mcp: {config: "${FORGE_CONFIG:-~/.forge}/.mcp.json", format: json, key: mcpServers}
+  shell_env: SHELL

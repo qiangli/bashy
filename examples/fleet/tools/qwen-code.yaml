@@ -29,3 +29,12 @@ cli:
       The positional prompt runs one-shot (-p is deprecated). --yolo accepts all
       actions; -o json|stream-json gives structured output.
 quirks: Gemini-CLI lineage
+integration:
+  detect: ${QWEN_HOME:-~/.qwen}
+  skills:
+    user: ["${QWEN_HOME:-~/.qwen}/skills", ~/.agents/skills]
+    project: [.qwen/skills, .agents/skills]
+  instructions:
+    - {file: "${QWEN_HOME:-~/.qwen}/QWEN.md"}
+    - {file: AGENTS.md, scope: project}
+  mcp: {config: "${QWEN_HOME:-~/.qwen}/settings.json", format: json, key: mcpServers}

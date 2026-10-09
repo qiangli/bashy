@@ -33,3 +33,13 @@ cli:
       mem_limit: 8g
     notes: run -t is one-shot; --no-session keeps no session file; --output-format json for structured output.
 quirks: needs GOOSE_PROVIDER and GOOSE_MODE=auto in the environment
+integration:
+  detect: ~/.config/goose
+  skills:
+    user: [~/.agents/skills]
+    project: [.agents/skills]
+  instructions:
+    - {file: ~/.config/goose/.goosehints}
+    - {file: AGENTS.md, scope: project}
+  mcp: {config: ~/.config/goose/config.yaml, format: yaml, key: extensions}
+  shell_env: GOOSE_SHELL

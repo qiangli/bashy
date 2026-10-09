@@ -32,3 +32,11 @@ cli:
       mem_limit: 8g
     notes: The positional prompt runs in act mode with auto-approve; --yolo widens it for unattended runs; --json emits NDJSON.
 quirks: provider set with -P or cline auth
+integration:
+  detect: ~/.cline
+  skills:
+    user: [~/.cline/skills, ~/.agents/skills]
+    project: [.cline/skills, .agents/skills]
+  instructions:
+    - {file: AGENTS.md, scope: project}
+  mcp: {config: ~/.cline/data/settings/cline_mcp_settings.json, format: json, key: mcpServers}

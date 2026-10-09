@@ -35,3 +35,12 @@ cli:
       mem_limit: 8g
     notes: crush run is non-interactive; -q hides the spinner; -c DIR sets the working directory.
 quirks: endpoints configured in crush.json, not the environment
+integration:
+  detect: ~/.config/crush
+  skills:
+    user: ["${CRUSH_SKILLS_DIR:-~/.config/crush/skills}", ~/.agents/skills]
+    project: [.crush/skills, .agents/skills]
+  instructions:
+    - {file: ~/.config/crush/CRUSH.md}
+    - {file: AGENTS.md, scope: project}
+  mcp: {config: ~/.config/crush/crush.json, format: json, key: mcp}
