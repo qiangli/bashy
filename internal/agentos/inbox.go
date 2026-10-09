@@ -629,6 +629,10 @@ func snapshotUnifiedInbox(reader string, limit int, includeBus bool) (inboxBatch
 // never waits on the network or files relay mail as a side effect.
 func snapshotInbox(reader string, limit int, includeBus, deliver bool) (inboxBatch, error) {
 	var batch inboxBatch
+	state, err := loadMailboxState(mailboxSpec{Key: "agent:" + reader, Address: reader, Kind: "agent"})
+	if err != nil {
+		return batch, err
+	}
 
 	// LOCAL DELIVERY FIRST (Sprint 217, the email model). Mail from another
 	// host sits on the repo session's feed until this pass files it into the
@@ -662,6 +666,26 @@ func snapshotInbox(reader string, limit int, includeBus, deliver bool) (inboxBat
 		}
 	}
 	appendLimited := func(source string, events []unifiedInboxEvent, ack func() error) {
+		// Explicit ack is per record, not a source high-water mark: advancing
+		// a cursor here would hide earlier unacknowledged mail. Filter before
+		// limiting so acknowledged records cannot occupy the visible window.
+		pending := events[:0]
+		for _, event := range events {
+			idSource := event.Source
+			if event.Source == "meet" {
+				idSource += ":" + event.Room
+			}
+			if state.Marks[fmt.Sprintf("%s:%d", idSource, event.Seq)].AckedAt != "" {
+				continue
+			}
+			// A seeded Meet copy shares the original MB acknowledgment.
+			if event.Origin != nil && strings.EqualFold(event.Origin.Source, "mb") &&
+				state.Marks[fmt.Sprintf("mb:%d", event.Origin.Seq)].AckedAt != "" {
+				continue
+			}
+			pending = append(pending, event)
+		}
+		events = pending
 		shown := events
 		capped := limit > 0 && len(events) > limit
 		if capped {

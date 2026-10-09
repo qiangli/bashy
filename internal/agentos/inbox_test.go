@@ -75,6 +75,7 @@ func isolateUnifiedInbox(t *testing.T) {
 	t.Helper()
 	t.Cleanup(llmbudget.SetDefault(llmbudget.New(llmbudget.Config{StatePath: filepath.Join(t.TempDir(), "budget.json")})))
 	t.Setenv("BASHY_MB_DIR", t.TempDir())
+	t.Setenv("BASHY_MAILBOX_DIR", t.TempDir())
 	t.Setenv("BASHY_ROOM_DIR", t.TempDir())
 	// The peer these tests talk to ("claude-opus5") used to ship in the
 	// embedded fleet baseline; that ring is tools-only now, so the test ring
