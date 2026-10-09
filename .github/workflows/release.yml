@@ -152,6 +152,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes rpm
           ./scripts/verify-linux-packages.sh dist
+      - name: Start the packaged bashy on Alpine
+        shell: bash
+        run: |
+          docker run --rm -v "$PWD/dist:/pkg:ro" alpine:3 sh -euc '
+            apk add --allow-untrusted /pkg/bashy_*_linux_amd64.apk
+            /usr/lib/bashy/bin/bashy --version
+            /usr/lib/bashy/bin/bashy -c "echo apk-ok"
+            /usr/lib/bashy/bin/outpost --version'
   publish:
     permissions:
       contents: write

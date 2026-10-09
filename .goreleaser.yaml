@@ -164,6 +164,12 @@ nfpms:
       - deb
       - rpm
       - apk
+    # The linux bashy links libc dynamically (purego's fakecgo), so on
+    # Alpine/musl it needs the glibc loader shim.
+    overrides:
+      apk:
+        dependencies:
+          - gcompat
     scripts:
       postinstall: ./scripts/linux-package-postinstall.sh
     contents:
