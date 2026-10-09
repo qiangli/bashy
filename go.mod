@@ -14,7 +14,7 @@ require (
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pkg/sftp v1.13.10
-	github.com/qiangli/coreutils v0.0.0-20261009071524-54a8fb26235e
+	github.com/qiangli/coreutils v0.0.0-20261009201221-a50cc1f27e6f
 	github.com/qiangli/ycode v0.3.1-dev.0.20261009170028-95f2568a2377
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261009174249-a65326a65461
