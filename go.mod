@@ -15,10 +15,10 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/coreutils v0.0.0-20261009071524-54a8fb26235e
-	github.com/qiangli/ycode v0.3.1-dev.0.20261009153120-7e918ef46e7a
+	github.com/qiangli/ycode v0.3.1-dev.0.20261009170028-95f2568a2377
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261009152353-a1c05d535fa8
-	github.com/qiangli/yoke/external/otel v0.0.0-20261009152353-a1c05d535fa8
+	github.com/qiangli/yoke v0.0.0-20261009165909-102eeee50058
+	github.com/qiangli/yoke/external/otel v0.0.0-20261009165909-102eeee50058
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
@@ -352,8 +352,8 @@ require (
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/qiangli/gfy v0.0.0-20261009070616-1a9d12418c8d // indirect
 	github.com/qiangli/outpost v0.14.38-0.20261009142556-b0e815751928 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261009152353-a1c05d535fa8 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261009152353-a1c05d535fa8 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261009165909-102eeee50058 // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261009165909-102eeee50058 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
@@ -503,7 +503,7 @@ require (
 // unmerged Bash 5.3 interp patches). Resolve it as a flat sibling: inside the
 // dhnt umbrella ../sh is the sh submodule; in a standalone clone, clone
 // github.com/qiangli/sh next to this repo as ./sh.
-replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261009143351-735360404962
+replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261009165436-494890783440
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
@@ -537,6 +537,6 @@ replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/
 // Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
 replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261009064153-466dad1c3aef
 
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261009153120-7e918ef46e7a
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261009170028-95f2568a2377
 
 tool github.com/qiangli/outpost/cmd/outpost
