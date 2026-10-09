@@ -4,6 +4,7 @@
 package agentos
 
 import (
+	"bytes"
 	"os"
 	"regexp"
 	"slices"
@@ -161,10 +162,12 @@ func TestClassSectionsTaxonomy(t *testing.T) {
 // registered commands. Use all platforms and agent-mode provisioners.
 func TestDocumentedExternalCount(t *testing.T) {
 	t.Setenv("BASHY_AGENTIC", "1")
-	doc, err := os.ReadFile("../../docs/command-atlas.md")
+	raw, err := os.ReadFile("../../docs/command-atlas.md")
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A Windows checkout carries CRLF line ends; the row regexp anchors on $.
+	doc := bytes.ReplaceAll(raw, []byte("\r\n"), []byte("\n"))
 	want := len(classSectionsOn(true, "any").External)
 	t.Logf("declarative managed-CLI registry: %d (%v)", len(registry.Names()), registry.Names())
 	var posix []string
