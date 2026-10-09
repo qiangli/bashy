@@ -8,8 +8,13 @@ package agentos
 // too small for any local model (a cheap cloud host) or when a stronger model
 // is wanted. The registry entry names the endpoint (base_url), the
 // provider-side id (model), the context (context_length) and the credential
-// (api_key_ref: a vault name, or already in the environment). The key reaches
-// the recipe through the environment only, never a command line.
+// (api_key_ref: a STANDARD ref the host binds to its own vault name in
+// secrets.map, or already in the environment). The key reaches the recipe
+// through the environment only, never a command line.
+//
+// Sprint: #379; Story: #37; Story-ID: 5b537ed16256 — the credential walks the
+// host's secrets.map binding (`zai` -> ZAI_API_KEY=@dragon-zai -> the vault),
+// and a record with no context_length warns instead of silently starving.
 
 import (
 	"bytes"
@@ -20,6 +25,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/qiangli/yoke/pkg/broker"
 	"github.com/qiangli/yoke/pkg/broker/door"
@@ -47,35 +53,79 @@ func resolveGenieExternal(name string) (genieExternal, bool, error) {
 	if m.APIKeyRef == "" {
 		return genieExternal{}, true, fmt.Errorf("model %s has no api_key_ref; name its credential: bashy model set %s --set api_key_ref=NAME", m.Name, m.Name)
 	}
-	key := ""
-	for _, env := range append([]string{m.APIKeyRef}, secrets.CredentialEnvNames(m.APIKeyRef)...) {
-		if v := strings.TrimSpace(os.Getenv(env)); v != "" {
-			key = v
-			break
-		}
-	}
-	if key == "" {
-		// The vault (cloudbox): the value is read into memory, not printed.
-		var out bytes.Buffer
-		cmd := exec.Command(bashySelfPath(), "secret", "get", m.APIKeyRef)
-		cmd.Stdout, cmd.Stderr = &out, os.Stderr
-		if err := cmd.Run(); err != nil {
-			return genieExternal{}, true, fmt.Errorf("model %s: credential %s is neither in the environment nor readable from the vault (bashy secret get %s): %v", m.Name, m.APIKeyRef, m.APIKeyRef, err)
-		}
-		key = strings.TrimSpace(out.String())
-	}
-	if key == "" {
-		return genieExternal{}, true, fmt.Errorf("model %s: credential %s is empty", m.Name, m.APIKeyRef)
+	key, err := genieExternalKey(m)
+	if err != nil {
+		return genieExternal{}, true, err
 	}
 	ctx := m.ContextLength
 	if ctx <= 0 {
-		ctx = 32768
+		ctx = genieContextFallback
+		genieWarnContextFallback(m.Name)
 	}
 	id := m.TargetFor("genie")
 	if id == "" {
 		id = m.Name
 	}
 	return genieExternal{Name: m.Name, ModelID: id, BaseURL: strings.TrimRight(m.BaseURL, "/"), Key: key, Context: ctx}, true, nil
+}
+
+// genieContextFallback is the context genie assumes for an API model whose
+// record declares none. It is small on purpose — a guess that is too LARGE
+// makes the provider reject the request — but small means STARVED: genie turns
+// it into a 20480-token budget after its output and compaction reserves, and a
+// 1M-context model (glm-5.3) lost its tool output within a few turns while
+// nothing said why. So the fallback is never silent: it warns once per model.
+const genieContextFallback = 32768
+
+var (
+	// genieWarnf is where the fallback warning goes; a seam so tests can read it.
+	genieWarnf = func(format string, args ...any) { fmt.Fprintf(os.Stderr, format, args...) }
+	// genieContextWarned holds the models already warned about, once per process.
+	genieContextWarned sync.Map
+)
+
+func genieWarnContextFallback(model string) {
+	if _, dup := genieContextWarned.LoadOrStore(model, struct{}{}); dup {
+		return
+	}
+	genieWarnf("genie: model %s declares no context_length; assuming %d tokens, which starves a large model — declare the vendor's context window: bashy model set %s --set context_length=N\n", model, genieContextFallback, model)
+}
+
+// genieExternalKey resolves the model's credential on THIS host, in order:
+//
+//  1. the environment — the ref itself, then its conventional names
+//     (ZAI_API_KEY, ZAI_TOKEN, …);
+//  2. the host's secrets.map binding for one of those names, rendered through
+//     the vault or its offline cache (secrets.ResolveAgentKey). This is the
+//     step that was missing: the catalog ref is STANDARD (`zai`, the same in
+//     every copy of the catalog) while the vault name is PER HOST
+//     (`dragon-zai`), and only the binding joins the two — so asking the vault
+//     for the bare ref found nothing on every host set up from the template;
+//  3. the vault by the bare ref, for a host that named its secret after the
+//     ref directly.
+//
+// The value is read into memory, never printed.
+func genieExternalKey(m fleet.Model) (string, error) {
+	if v := strings.TrimSpace(os.Getenv(m.APIKeyRef)); v != "" {
+		return v, nil
+	}
+	if kv, ok := secrets.ResolveAgentKey(os.Environ(), m.APIKeyRef); ok {
+		if _, v, found := strings.Cut(kv, "="); found && strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v), nil
+		}
+	}
+	var out bytes.Buffer
+	cmd := exec.Command(bashySelfPath(), "secret", "get", m.APIKeyRef)
+	cmd.Stdout, cmd.Stderr = &out, os.Stderr
+	if err := cmd.Run(); err != nil {
+		names := secrets.CredentialEnvNames(m.APIKeyRef)
+		return "", fmt.Errorf("model %s: credential %s is not in the environment, not bound in secrets.map, and not a vault secret by that name (bashy secret get %s): %v — bind it on this host: %s=@<vault secret name> in ~/.config/bashy/secrets.map", m.Name, m.APIKeyRef, m.APIKeyRef, err, names[0])
+	}
+	key := strings.TrimSpace(out.String())
+	if key == "" {
+		return "", fmt.Errorf("model %s: credential %s is empty", m.Name, m.APIKeyRef)
+	}
+	return key, nil
 }
 
 // apply exports the external model to genie's recipe.
