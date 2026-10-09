@@ -16,7 +16,9 @@ import (
 //	go build -ldflags "-X main.bashVersion=5.3.0(1)-bashy-v0.1.0"
 //
 // The "5.3.0(1)-" prefix is what the bash test suite's fixtures key on; keep
-// it when overriding so compliance checks still match.
+// it when overriding so compliance checks still match. BASH_VERSION carries
+// only "5.3.0(1)-bashy" (bashCompatVersion); the release suffix is shown by
+// --version.
 var bashVersion = "5.3.0(1)-bashy"
 
 // buildID is stamped by the Makefile from Git metadata. It is intentionally
@@ -82,8 +84,20 @@ func bashVersionVars() []string {
 	}
 	return []string{
 		"BASH=" + exe,
-		"BASH_VERSION=" + bashVersion,
+		"BASH_VERSION=" + bashCompatVersion(),
 	}
+}
+
+// bashCompatVersion is the BASH_VERSION value: the stamp without bashy's own
+// release suffix ("5.3.0(1)-bashy-v1.0.0" -> "5.3.0(1)-bashy"). GNU Bash's
+// value has no dot after the patch level, and scripts (and the Bash 5.3
+// history fixture) take ${BASH_VERSION%.*} expecting "5.3"; a dotted release
+// suffix broke that. The full stamp stays in --version and BashyVersion.
+func bashCompatVersion() string {
+	if i := strings.Index(bashVersion, "-bashy"); i >= 0 {
+		return bashVersion[:i] + "-bashy"
+	}
+	return bashVersion
 }
 
 // bashVersionEnviron overlays bashy's BASH and BASH_VERSION values without

@@ -147,3 +147,25 @@ func TestBashVersionVarsStayOutOfRecipeEnvironment(t *testing.T) {
 		})
 	}
 }
+
+// A release stamp carries dots ("-bashy-v1.0.0-rc.1-dev"); scripts and the
+// Bash 5.3 history fixture take ${BASH_VERSION%.*} and expect "5.3", so the
+// stamp must stay out of BASH_VERSION. --version still shows it.
+func TestBashVersionVarOmitsReleaseStamp(t *testing.T) {
+	oldVersion := bashVersion
+	defer func() { bashVersion = oldVersion }()
+
+	for _, stamp := range []string{"5.3.0(1)-bashy", "5.3.0(1)-bashy-dev", "5.3.0(1)-bashy-v1.0.0-rc.1-dev", "5.3.0(1)-bashy-v0.31.0"} {
+		bashVersion = stamp
+		_, got, _ := strings.Cut(bashVersionVars()[1], "=")
+		if got != "5.3.0(1)-bashy" {
+			t.Fatalf("stamp %q: BASH_VERSION = %q, want %q", stamp, got, "5.3.0(1)-bashy")
+		}
+		if trimmed := got[:strings.LastIndex(got, ".")]; trimmed != "5.3" {
+			t.Fatalf("stamp %q: ${BASH_VERSION%%.*} = %q, want 5.3", stamp, trimmed)
+		}
+		if !strings.Contains(bashVersionLine(), stamp) {
+			t.Fatalf("stamp %q missing from --version line %q", stamp, bashVersionLine())
+		}
+	}
+}
