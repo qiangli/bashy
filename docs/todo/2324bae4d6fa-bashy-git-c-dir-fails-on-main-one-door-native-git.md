@@ -3,11 +3,13 @@ id: 2324bae4d6fa
 kind: bug
 title: 'bashy git -C DIR fails on main: one-door native git refuses -C'
 seq: 418
-status: todo
+status: assigned
 priority: p0
 labels:
     - git
 created: 2026-10-09T04:16:45.826933Z
+weave: 1
+assignee: claude-sonnet5.5
 sprint: 404
 sprint_id: d0936923-9388-5532-b329-e23e58422343
 sprint_title: bashy git -C regression and canonical reinstall

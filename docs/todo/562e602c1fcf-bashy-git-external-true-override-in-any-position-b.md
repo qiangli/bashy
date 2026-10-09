@@ -3,14 +3,17 @@ id: 562e602c1fcf
 kind: enhancement
 title: bashy git --external=true override in any position; bashy commands needing full git use it
 seq: 419
-status: todo
+status: done
 priority: p1
 labels:
     - git
 created: 2026-10-09T05:19:58.879867Z
+assignee: claude-opus5.5
 sprint: 404
 sprint_id: d0936923-9388-5532-b329-e23e58422343
 sprint_title: bashy git -C regression and canonical reinstall
+closed: 2026-10-09T05:25:34.334127Z
+closed_by: claude-opus5.5
 ---
 
 Operator decision 2026-10-09: bashy git stays NATIVE by default (the Sprint 252 one-door, internal/agentos/git.go); --external=true (or --external) overrides to the full host git; other bashy commands that require full git support must use it.
