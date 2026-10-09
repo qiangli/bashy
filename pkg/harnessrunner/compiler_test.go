@@ -105,6 +105,30 @@ func TestPureBuiltinDynamicArgumentsAreComplete(t *testing.T) {
 	}
 }
 
+func TestTestBuiltinDynamicArgumentsYieldCompleteIntentWithReadEffects(t *testing.T) {
+	dir := workspaceWithFiles(t)
+	for _, script := range []string{
+		`[ -f "$x" ]`,
+		`test -f "$x"`,
+		`[ -f "$x" ]; cat pkg/a.py`,
+	} {
+		intent := compileIn(t, dir, script)
+		if !intent.Complete || len(intent.Unsupported) != 0 {
+			t.Fatalf("%q incomplete: %#v", script, intent)
+		}
+		hasRead := false
+		for _, e := range intent.Effects {
+			if e.Kind == atlas.EffRead {
+				hasRead = true
+				break
+			}
+		}
+		if !hasRead {
+			t.Fatalf("%q missing read effect: %#v", script, intent.Effects)
+		}
+	}
+}
+
 func TestDynamicCommandAndDynamicRedirectionStillFailClosed(t *testing.T) {
 	tests := map[string]string{
 		`"$CMD" x`:     "dynamicCommand",

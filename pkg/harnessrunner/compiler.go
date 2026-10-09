@@ -21,12 +21,15 @@ var environmentName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 var builtinEffects = map[string][]string{
 	":":      {atlas.EffPure},
+	"[":      {atlas.EffRead},
+	"[[":     {atlas.EffRead},
 	"echo":   {atlas.EffPure},
 	"exit":   {atlas.EffPure},
 	"false":  {atlas.EffPure},
 	"printf": {atlas.EffPure},
 	"pwd":    {atlas.EffRead},
 	"read":   {atlas.EffRead},
+	"test":   {atlas.EffRead},
 	"true":   {atlas.EffPure},
 }
 
@@ -210,7 +213,7 @@ func compileCall(argv []string, allStatic bool, intent *Intent) {
 		return
 	}
 	if effects, ok := builtinEffects[name]; ok {
-		if !allStatic && !pureBuiltin(name) {
+		if !allStatic && !pureOrReadOnlyBuiltin(name) {
 			markUnsupported(intent, "dynamicCommand", strings.Join(argv, " "), "command name or arguments cannot be proven")
 			return
 		}
