@@ -53,6 +53,8 @@ Changes after v0.32.0, toward 1.0.0.
 - Linux packages in the release pipeline, and a Winget handoff.
 - A local-model door end-to-end test: pull a model, `bashy llm up`, then chat
   through both the OpenAI-compatible and Anthropic-compatible paths.
+- `bashy sprint hooks install`: fail-closed commit provenance guard (Sprint / Story /
+  Story-ID trailers, Story-ID the full 12-hex id) plus a pre-push range check.
 - A directory whose makefile is a `GNUmakefile` is handed to the host GNU
   make.
 - `SECURITY.md` (how to report, supported versions, scope) and this
