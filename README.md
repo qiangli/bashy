@@ -28,6 +28,8 @@ runtime changes them. It is not a fully static, CGo-free release. See
 # macOS (Apple Silicon)
 curl -fsSLO https://github.com/qiangli/bashy/releases/latest/download/bashy-darwin-arm64.tar.gz
 tar -xzf bashy-darwin-arm64.tar.gz && sudo install bashy /usr/local/bin/bashy
+# no sudo? install for your user instead:
+#   mkdir -p ~/.local/bin && install bashy ~/.local/bin/bashy && export PATH="$HOME/.local/bin:$PATH"
 bashy --version
 ```
 
@@ -110,14 +112,19 @@ your `PATH`:
 # Linux/macOS example
 tar -xzf bashy-linux-amd64.tar.gz
 sudo install bashy /usr/local/bin/bashy
+# without sudo: mkdir -p ~/.local/bin && install bashy ~/.local/bin/bashy
+#   and put ~/.local/bin on PATH
 bashy --version
 ```
+
+A prerelease (a `-rc.N-dev` tag) is not `latest`: download it from its tag,
+`https://github.com/qiangli/bashy/releases/download/<tag>/<asset>`.
 
 ### With Go
 
 `go install github.com/qiangli/bashy@latest` is **not** supported: the module
-resolves its engine and siblings through flat `replace ../<sibling>`
-directives, which `go install` refuses. Use a release archive above, or build
+uses `replace` directives for its forks (the `mvdan.cc/sh/v3` engine and a
+few vendored upstreams), which `go install` refuses. Use a release archive above, or build
 from source below.
 
 ### From source
