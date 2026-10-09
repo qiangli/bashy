@@ -3,6 +3,7 @@ package agentos
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -1132,5 +1133,33 @@ func TestUnifiedInboxRunsDeliveryPassAndStampsSync(t *testing.T) {
 	}
 	if !warned {
 		t.Fatalf("relay error not surfaced: %v", batch.warns)
+	}
+}
+
+// TestInboxEmptyBoundedJSONEmitsVersionedEnvelope is the Part 4b slice of the
+// v1.0 release bar: the `inbox --json` probe must print one versioned JSON
+// document on stdout with exit 0. Zero NDJSON lines is not a document, so an
+// empty bounded read emits a single bashy-inbox-v1 envelope line carrying no
+// events. Non-empty bounded reads keep their NDJSON lines and watch streams
+// stay pure NDJSON (an envelope line would corrupt the stream).
+func TestInboxEmptyBoundedJSONEmitsVersionedEnvelope(t *testing.T) {
+	isolateUnifiedInbox(t)
+	for _, args := range [][]string{
+		{"--as", inboxTestReader, "--json"},
+		{"--as", inboxTestReader, "--peek", "--json"},
+		{"--as", inboxTestReader, "--wait", "10ms", "--json"},
+	} {
+		out, _, err := runInboxCmd(t, args...)
+		if err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		var envelope map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(out), &envelope); err != nil {
+			t.Fatalf("%v: stdout is not one JSON document: %q: %v", args, out, err)
+		}
+		var schema string
+		if err := json.Unmarshal(envelope["schema"], &schema); err != nil || schema != unifiedInboxSchema {
+			t.Fatalf("%v: envelope schema = %q, want %q: %q", args, schema, unifiedInboxSchema, out)
+		}
 	}
 }

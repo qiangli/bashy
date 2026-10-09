@@ -3,7 +3,7 @@
   "release": "1.0.0",
   "candidate": "story-1533-development-snapshot",
   "probe_os": "darwin",
-  "binary_sha256": "8c220e6316fa178a3d2eaf9751aa71614959be51efb2296672fb990fcd1b913a",
+  "binary_sha256": "9782c2c236885223c83197ff934fbe6b25dfbb6710b2da9b3f8d6dee8846d36a",
   "dispatch_test": "TestE2EAllListedCommandsDispatch",
   "commands": [
     {
@@ -14,12 +14,12 @@
       "execution_tier": "workspace",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
-      "json_schema": null,
+      "json_schema": "loom-v2",
       "json_probe": [
-        "list",
+        "board",
         "--json"
       ],
-      "json_probe_error": "exit 1",
+      "json_probe_error": null,
       "atlas_entry": true,
       "alias_of": null,
       "dispatch_coverage": {
@@ -35,7 +35,6 @@
       "scope_gap": null,
       "gaps": [
         "stability: no declared release tier",
-        "json_schema: no successful versioned JSON envelope probe",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -117,12 +116,12 @@
       "execution_tier": "workspace",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
-      "json_schema": null,
+      "json_schema": "dag-v1",
       "json_probe": [
         "--json",
         "--list"
       ],
-      "json_probe_error": "exit 2",
+      "json_probe_error": null,
       "atlas_entry": true,
       "alias_of": null,
       "dispatch_coverage": {
@@ -138,7 +137,6 @@
       "scope_gap": null,
       "gaps": [
         "stability: no declared release tier",
-        "json_schema: no successful versioned JSON envelope probe",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -158,7 +156,7 @@
         "--json"
       ],
       "json_probe_error": "JSON response has no top-level versioned schema",
-      "atlas_entry": false,
+      "atlas_entry": true,
       "alias_of": null,
       "dispatch_coverage": {
         "darwin": true,
@@ -174,7 +172,6 @@
       "gaps": [
         "stability: no declared release tier",
         "json_schema: no successful versioned JSON envelope probe",
-        "atlas: no complete entry in the live catalog",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence",
@@ -224,10 +221,9 @@
       "consumer_ref": "skills/bashy/SKILL.md",
       "json_schema": null,
       "json_probe": [
-        "list",
         "--json"
       ],
-      "json_probe_error": "exit 1",
+      "json_probe_error": "stdout is not a single JSON value",
       "atlas_entry": true,
       "alias_of": null,
       "dispatch_coverage": {
@@ -326,11 +322,11 @@
       "execution_tier": "userland",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
-      "json_schema": null,
+      "json_schema": "bashy-inbox-v1",
       "json_probe": [
         "--json"
       ],
-      "json_probe_error": "exit 1",
+      "json_probe_error": null,
       "atlas_entry": true,
       "alias_of": null,
       "dispatch_coverage": {
@@ -346,7 +342,6 @@
       "scope_gap": null,
       "gaps": [
         "stability: no declared release tier",
-        "json_schema: no successful versioned JSON envelope probe",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -424,13 +419,14 @@
       "stability": null,
       "stability_source": null,
       "execution_tier": "userland",
-      "consumer": null,
-      "consumer_ref": null,
-      "json_schema": null,
+      "consumer": "embedded inbox skill",
+      "consumer_ref": "skills/inbox/SKILL.md",
+      "json_schema": "bashy-whois-v1",
       "json_probe": [
+        "self",
         "--json"
       ],
-      "json_probe_error": "exit 2",
+      "json_probe_error": null,
       "atlas_entry": true,
       "alias_of": null,
       "dispatch_coverage": {
@@ -446,8 +442,6 @@
       "scope_gap": null,
       "gaps": [
         "stability: no declared release tier",
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -1617,5 +1611,5 @@
       ]
     }
   ],
-  "gap_count": 258
+  "gap_count": 252
 }

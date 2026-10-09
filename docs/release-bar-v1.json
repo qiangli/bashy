@@ -9,7 +9,7 @@
       "stability": null,
       "consumer": "embedded bashy skill",
       "json_probe": [
-        "list",
+        "board",
         "--json"
       ],
       "consumer_ref": "skills/bashy/SKILL.md"
@@ -73,7 +73,6 @@
       "stability": null,
       "consumer": "embedded bashy skill",
       "json_probe": [
-        "list",
         "--json"
       ],
       "consumer_ref": "skills/bashy/SKILL.md"
@@ -125,10 +124,12 @@
       "command": "whois",
       "section": "4b",
       "stability": null,
-      "consumer": null,
+      "consumer": "embedded inbox skill",
       "json_probe": [
+        "self",
         "--json"
-      ]
+      ],
+      "consumer_ref": "skills/inbox/SKILL.md"
     },
     {
       "command": "app",

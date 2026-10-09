@@ -226,3 +226,29 @@ func TestAtlasHidesHiddenAliasesByDefault(t *testing.T) {
 		t.Fatal("cargo provisioner missing from default atlas")
 	}
 }
+
+// TestForemanAtlasEntryIsComplete is the Part 4a slice of the v1.0 release
+// bar: foreman carries a named conductor consumer, so the bar requires a
+// complete atlas entry (group, tier, sdlc, effects, os — the same predicate
+// scripts/release-bar.py uses). The shared yoke atlas deliberately
+// suppresses foreman (Bashy #40), so bashy classifies it outright in
+// bashyOwnedVerbAtlas; the fallback platform/userland row without effects
+// is not a complete entry.
+func TestForemanAtlasEntryIsComplete(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "1")
+	var found *atlasRecord
+	for _, r := range liveAtlas(true) {
+		if r.Name == "foreman" {
+			r := r
+			found = &r
+		}
+	}
+	if found == nil {
+		t.Fatal("foreman missing from the live atlas catalog")
+	}
+	if found.Group == "" || found.Tier == "" || found.Stage == "" ||
+		len(found.Effects) == 0 || len(found.OS) == 0 {
+		t.Errorf("foreman has no complete atlas entry: group=%q tier=%q sdlc=%q effects=%v os=%v",
+			found.Group, found.Tier, found.Stage, found.Effects, found.OS)
+	}
+}

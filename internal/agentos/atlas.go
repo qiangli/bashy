@@ -130,8 +130,21 @@ func atlasCatalog(builtins, core, verbs, hidden []string) []atlasRecord {
 
 // bashyOwnedVerbAtlas classifies front-door verbs implemented here rather than
 // in coreutils, so they carry a real classification instead of falling into the
-// deliberately-empty unknown branch below.
+// deliberately-empty unknown branch below. It also classifies foreman, which
+// the shared atlas deliberately suppresses (Bashy #40) while Part 4a still
+// lists it with a conductor consumer: the tool-record fallback would leave it
+// without effects, which the v1.0 release bar counts as no atlas entry.
 var bashyOwnedVerbAtlas = map[string]atlas.Entry{
+	// foreman drives a persistent, steerable agent session (chat elevated).
+	// Same shape as its session siblings (chat/delegate/coach): it spawns
+	// external agent processes that reach the network on metered inference.
+	// CapDaemon is what its pre-suppression tool entry carried: a detached
+	// session keeps running after the invoking command exits.
+	"foreman": {
+		Stage: atlas.StageCode, Group: atlas.GroupOrch, Tier: atlas.TierUserland,
+		Caps:    []string{atlas.CapDaemon, atlas.CapJSON, atlas.CapSpawnsProcesses},
+		Effects: []string{atlas.EffExec, atlas.EffNet, atlas.EffSpend},
+	},
 	"proxy": {
 		Stage: atlas.StageCross, Group: atlas.GroupNet, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapDaemon}, Effects: []string{atlas.EffNet},
@@ -369,11 +382,19 @@ func fillFromAtlas(r *atlasRecord) {
 		applyEntry(r, e)
 		return
 	}
+	// A registered tool the shared atlas does not list (foreman, registered by
+	// bashy) is bashy's own: an explicit bashy-owned entry wins over the
+	// generic fallback so the record stays complete. Consulted only on a
+	// miss, so a future shared-atlas classification still wins.
+	if e, ok := bashyOwnedVerbAtlas[r.Name]; ok {
+		applyEntry(r, e)
+		r.Origin, r.Posix = atlas.OriginBashy, atlas.IsPosixRequired(r.Name)
+		r.OS, r.Portable = atlas.OSes(), true
+		return
+	}
 	// Shell builtins are deliberately absent from the atlas — the embedding
 	// shell owns that set (see the atlas package doc) — so this fallback is
 	// legitimate here, unlike the verb path. A builtin serves every stage.
-	// A registered tool the shared atlas does not list (foreman, registered by
-	// bashy) is bashy's own.
 	r.Group, r.Tier, r.Stage = atlas.GroupPlatform, atlas.TierUserland, atlas.StageCross
 	r.Origin, r.Posix = atlas.OriginBashy, atlas.IsPosixRequired(r.Name)
 	r.OS, r.Portable = atlas.OSes(), true

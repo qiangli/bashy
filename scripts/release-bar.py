@@ -78,17 +78,45 @@ def invoke(binary, args, cwd, env):
         return None, 'stdout is not a single JSON value'
 
 
+# Minimal DAG file the `dag --json --list` probe lists. A bare probe
+# directory has no DAG file, and listing there fails by design (like make
+# without a makefile) — the probe would measure the missing-file error, not
+# the success envelope. Seeding the smallest fixture keeps the probe on the
+# envelope shape; it mirrors the DAG.md fixture the dag dispatch tests write.
+PROBE_DAG_MD = "## Tasks\n\n### probe\nA release-bar probe target.\n\n```bash\necho probe-ok\n```\n"
+
+
+def seed_probe_fixtures(scratch):
+    Path(scratch, 'dag.md').write_text(PROBE_DAG_MD, encoding='utf-8')
+
+
+# Session-identity markers scrubbed from probe subprocesses. The prefix
+# families cover the bashy/weave/claude/codex harnesses; AGENT, AI_AGENT and
+# CLAUDECODE are exact names yoke fleet detection reads (CLAUDECODE carries
+# no underscore, so the CLAUDE_ prefix misses it). A leaked marker makes a
+# probe look like an agent session with no fleet identity, so board reads
+# that pass as anonymous in CI fail locally as "unattributed agent session".
+PROBE_ENV_PREFIXES = ('BASHY_', 'DHNT_', 'WEAVE_', 'CLAUDE_', 'CODEX_')
+PROBE_ENV_NAMES = ('AGENT', 'AI_AGENT', 'CLAUDECODE')
+
+
+def probe_env(scratch):
+    env = dict(os.environ)
+    # Isolate the catalog and all probe stores from the operator's session.
+    for key in list(env):
+        if key.startswith(PROBE_ENV_PREFIXES) or key in PROBE_ENV_NAMES:
+            env.pop(key)
+    env.update(HOME=scratch, USERPROFILE=scratch, XDG_CONFIG_HOME=scratch,
+               BASHY_TELEMETRY_QUIET='1', BASHY_AGENTIC='1')
+    return env
+
+
 def generate(binary, manifest, candidate, records):
     binary = str(Path(binary).resolve())
     rows = []
     with tempfile.TemporaryDirectory(prefix='bashy-release-bar-') as scratch:
-        env = dict(os.environ)
-        # Isolate the catalog and all probe stores from the operator's session.
-        for key in list(env):
-            if key.startswith(('BASHY_', 'DHNT_', 'WEAVE_', 'CLAUDE_', 'CODEX_')):
-                env.pop(key)
-        env.update(HOME=scratch, USERPROFILE=scratch, XDG_CONFIG_HOME=scratch,
-                   BASHY_TELEMETRY_QUIET='1', BASHY_AGENTIC='1')
+        seed_probe_fixtures(scratch)
+        env = probe_env(scratch)
         catalog, error = invoke(binary, ['commands', '--json', '--all'], scratch, env)
         if error or not isinstance(catalog, dict) or not catalog.get('verbs'):
             raise ValueError('commands catalog failed: ' + str(error))

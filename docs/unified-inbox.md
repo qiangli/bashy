@@ -43,7 +43,9 @@ explicitly validates them as human/agent-authored coordination.
 `--wait DUR` waits for one batch. `--watch` follows all sources until
 interrupted; `--watch --wait DUR` gives it a total bound. `--json` emits
 `bashy-inbox-v1` NDJSON with source, source sequence, sender, recipient, topic,
-room, timestamp, and body.
+room, timestamp, and body. A bounded (non-`--watch`) read with no mail emits
+one envelope line (`{"schema":"bashy-inbox-v1","events":[]}`) so the output
+stays one JSON document; `--watch` streams stay pure NDJSON.
 
 ## Durable principal mailboxes
 

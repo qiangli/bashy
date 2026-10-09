@@ -27,6 +27,17 @@ import (
 
 const unifiedInboxSchema = "bashy-inbox-v1"
 
+// writeInboxEmptyEnvelope gives a bounded --json read a versioned envelope
+// when no event arrived: zero NDJSON lines is not a JSON document, so a
+// machine caller could not tell "no mail" from a broken pipe. Only bounded
+// reads with nothing to render take this path — non-empty bounded reads keep
+// their NDJSON lines, and watch streams stay pure NDJSON (an envelope line
+// would corrupt the stream).
+func writeInboxEmptyEnvelope(out io.Writer) error {
+	_, err := fmt.Fprintf(out, "{\"schema\":%q,\"events\":[]}\n", unifiedInboxSchema)
+	return err
+}
+
 const inboxWatcherMode = "inbox"
 
 var inboxMeetRooms = meet.Rooms
@@ -233,7 +244,7 @@ pretends such a session was adopted.`,
 	f.StringVar(&filter.sinceRaw, "since", "", "only messages at or after this time (duration like 2h or 3d, or RFC3339 / YYYY-MM-DD)")
 	f.BoolVar(&watch, "watch", false, "follow all inbound sources until interrupted")
 	f.IntVarP(&limit, "limit", "n", 0, "show at most this many records per source (0 = no cap; a capped source remains unread)")
-	f.BoolVar(&jsonOut, "json", false, "emit one "+unifiedInboxSchema+" object per line (NDJSON)")
+	f.BoolVar(&jsonOut, "json", false, "emit one "+unifiedInboxSchema+" object per line (NDJSON); a bounded read with no mail emits one envelope line with no events")
 	cmd.AddCommand(newMailboxListCmd(false), newMailboxReadCmd(false), newMailboxAckCmd(false), newMailboxPreserveCmd(false), newMailboxOrganizeCmd(false), newHumanMailboxCmd())
 	cmd.CompletionOptions.DisableDefaultCmd = true
 	return cmd
@@ -566,6 +577,15 @@ func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader 
 					// The sync stamp (and any relay warning) is the one thing an
 					// empty inbox must still say: "nothing new" from a host that
 					// could not reach the relay is not the same as nothing new.
+					// With --json the machine side gets the same answer as one
+					// versioned envelope line on stdout (v1.0 release bar: the
+					// `inbox --json` probe needs one JSON document, and zero
+					// NDJSON lines is not one).
+					if jsonOut {
+						if err := writeInboxEmptyEnvelope(out); err != nil {
+							return err
+						}
+					}
 					for _, warning := range batch.warns {
 						fmt.Fprintln(errOut, warning)
 					}
@@ -576,6 +596,14 @@ func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader 
 		}
 		now = poll.now()
 		if !watch && !deadline.IsZero() && !now.Before(deadline) {
+			// Bounded --wait with --json that saw nothing: same empty
+			// envelope as the immediate empty read, so the probe and the
+			// skill's one-batch-wait loop both get one JSON document.
+			if jsonOut {
+				if err := writeInboxEmptyEnvelope(out); err != nil {
+					return err
+				}
+			}
 			fmt.Fprintln(errOut, "EMPTY (timeout)")
 			return nil
 		}

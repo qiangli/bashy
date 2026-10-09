@@ -6,7 +6,9 @@ import sys
 import tempfile
 import importlib.util
 from pathlib import Path
+import os
 import unittest
+import unittest.mock
 
 sys.dont_write_bytecode = True
 
@@ -99,6 +101,30 @@ class ReleaseBarTest(unittest.TestCase):
             self.assertEqual(1, result.returncode, result.stderr)
             self.assertIn('3 named gaps', result.stderr)
             self.assertEqual(3, json.loads(result.stdout)['gap_count'])
+
+    def test_probe_fixtures_seed_a_listable_dag(self):
+        with tempfile.TemporaryDirectory() as temp:
+            bar.seed_probe_fixtures(temp)
+            dag = Path(temp, 'dag.md').read_text()
+            self.assertIn('## Tasks', dag)
+            self.assertIn('```bash', dag)
+
+    def test_probe_env_scrubs_session_identity(self):
+        with tempfile.TemporaryDirectory() as temp:
+            overlay = {'AGENT': 'amp', 'AI_AGENT': 'claude-code_2-1-284_agent',
+                       'CLAUDECODE': '1', 'BASHY_INSTANCE': 'x',
+                       'CLAUDE_CODE_ENTRYPOINT': 'y',
+                       'WEAVE_ID': 'z', 'CODEX_HOME': 'w', 'DHNT_BASE_URL': 'v',
+                       'HOME': '/operator', 'UNRELATED': 'kept'}
+            with unittest.mock.patch.dict(os.environ, overlay, clear=False):
+                env = bar.probe_env(temp)
+            for key in ('AGENT', 'AI_AGENT', 'CLAUDECODE', 'BASHY_INSTANCE',
+                        'CLAUDE_CODE_ENTRYPOINT', 'WEAVE_ID', 'CODEX_HOME',
+                        'DHNT_BASE_URL'):
+                self.assertNotIn(key, env)
+            self.assertEqual(temp, env['HOME'])
+            self.assertEqual('kept', env['UNRELATED'])
+            self.assertEqual('1', env['BASHY_AGENTIC'])
 
     def test_inventory_has_unique_names_and_real_consumer_references(self):
         manifest = json.loads((bar.ROOT / 'docs/release-bar-v1.json').read_text())
