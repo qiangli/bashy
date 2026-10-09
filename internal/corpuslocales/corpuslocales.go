@@ -66,8 +66,8 @@ package corpuslocales
 //     range denotes. Other charmaps are used as shipped.
 //
 // Helpers (i18n_ctype, i18n, zh_CN) compile first so `copy` directives in the
-// corpus files resolve against the store; the seven corpus files themselves
-// are never textually altered except by rules 2, 4 and 5 above. LC_CTYPE
+// corpus files resolve against the store; the three gated corpus files
+// themselves are never textually altered except by rules 2, 4 and 5 above. LC_CTYPE
 // classes are therefore shared from one UTF-8-compiled i18n: correct for
 // locale(1) purposes (charmap + mb_cur report per locale) and invisible
 // everywhere else — coreutils has no compiled-class consumer. This
@@ -107,18 +107,16 @@ const corpusLocalesGlibcSHA256 = "1217fc41ac7fb1f310c8c32b9c6c009cc769398d4b367b
 // stale store is rebuilt rather than trusted.
 const corpusLocalesVersion = "glibc-2.44"
 
-const corpusLocalesProvisioner = "v1"
+const corpusLocalesProvisioner = "v2"
 
 // corpusLocaleSources are the tarball members fetched, relative to the
-// tarball root: the seven corpus locales plus the copy-chain helpers.
+// tarball root: the advertisement-gated corpus locales plus the copy-chain
+// helpers. en_US, de_DE, zh_HK and ru_RU are deliberately NOT compiled (see
+// the compiled-set note below).
 var corpusLocaleSources = []string{
 	"localedata/locales/fr_FR",
-	"localedata/locales/en_US",
-	"localedata/locales/de_DE",
 	"localedata/locales/zh_TW",
 	"localedata/locales/ja_JP",
-	"localedata/locales/zh_HK",
-	"localedata/locales/ru_RU",
 	"localedata/locales/zh_CN",
 	"localedata/locales/i18n",
 	"localedata/locales/i18n_ctype",
@@ -130,8 +128,6 @@ var corpusLocaleCharmaps = []string{
 	"localedata/charmaps/ISO-8859-1",
 	"localedata/charmaps/BIG5",
 	"localedata/charmaps/SHIFT_JIS",
-	"localedata/charmaps/BIG5-HKSCS",
-	"localedata/charmaps/CP1251",
 }
 
 // corpusLocaleSpec is one localedef invocation: compile Source with Charmap
@@ -144,16 +140,39 @@ type corpusLocaleSpec struct {
 }
 
 // corpusLocaleBuild is the full provisioned set in compile order.
+//
+// Compiled-set note: a compiled locale is STRICT about the categories it
+// does not carry — collate.OpenEnv errors on a compiled locale without
+// LC_COLLATE ("has no LC_COLLATE"), while an unknown locale name falls
+// back silently. The certified compiler cannot carry LC_COLLATE (rule 1),
+// so compiling a locale the fixtures place in LC_COLLATE/LC_ALL position
+// in front of a collation-consuming applet (sed, grep, sort, ...) turns a
+// working fallback into a hard error — measured: compiling en_US.UTF-8
+// breaks intl, whose intl.tests exports LC_ALL=en_US.UTF-8 globally.
+// The compiled set is therefore exactly the advertisement-gated names
+// whose fixture exposure is LC_CTYPE-only (plus the copy-chain helpers,
+// which no fixture names):
+//
+//   - zh_TW.big5: gated by glob2.sub:17 and unicode1.sub:121; glob-test
+//     exposure past the gate is LC_ALL=zh_TW.big5 with od (LC_ALL=C
+//     prefixed), recho (byte-level harness helper) and the engine only.
+//   - fr_FR.ISO8859-1: gated by unicode1.sub:101; LC_CTYPE-prefix only.
+//   - ja_JP.SJIS: gated by unicode1.sub:321; LC_CTYPE-prefix only.
+//
+// Deliberately NOT compiled: en_US.UTF-8 (no fixture gates on it —
+// unicode1.sub:602 TestCodePage runs unconditionally engine-side — and
+// dozens of fixtures export LC_ALL/LANG=en_US.UTF-8 in front of sed and
+// friends), de_DE.UTF-8 (already carried by the applet; same strictness
+// risk under LANG=de_DE), zh_HK.big5hkscs (its only corpus mention is a
+// commented-out LANG in read1.sub), ru_RU.CP1251 (unicode2.sub:34 uses it
+// LC_CTYPE-prefixed engine-side, which passes unadvertised). When the
+// certified toolchain learns LC_COLLATE, this set extends to all seven.
 var corpusLocaleBuild = []corpusLocaleSpec{
 	{StoreName: "i18n_ctype", Source: "i18n_ctype", Charmap: "UTF-8"},
 	{StoreName: "i18n", Source: "i18n", Charmap: "UTF-8"},
 	{StoreName: "zh_CN", Source: "zh_CN", Charmap: "UTF-8"},
-	{StoreName: "en_US.UTF-8", Source: "en_US", Charmap: "UTF-8"},
-	{StoreName: "de_DE.UTF-8", Source: "de_DE", Charmap: "UTF-8"},
-	{StoreName: "fr_FR.ISO8859-1", Source: "fr_FR", Charmap: "ISO-8859-1"},
-	{StoreName: "ru_RU.CP1251", Source: "ru_RU", Charmap: "CP1251"},
 	{StoreName: "zh_TW.big5", Source: "zh_TW", Charmap: "BIG5"},
-	{StoreName: "zh_HK.big5hkscs", Source: "zh_HK", Charmap: "BIG5-HKSCS"},
+	{StoreName: "fr_FR.ISO8859-1", Source: "fr_FR", Charmap: "ISO-8859-1"},
 	{StoreName: "ja_JP.SJIS", Source: "ja_JP", Charmap: "SHIFT_JIS"},
 }
 
@@ -161,13 +180,9 @@ var corpusLocaleBuild = []corpusLocaleSpec{
 // Helpers (i18n_ctype, i18n, zh_CN) are also advertised as a side effect;
 // the fixtures grep anchored names, so extras are harmless.
 var corpusAdvertisedNames = []string{
-	"en_US.UTF-8",
 	"zh_TW.big5",
-	"ja_JP.SJIS",
 	"fr_FR.ISO8859-1",
-	"de_DE.UTF-8",
-	"zh_HK.big5hkscs",
-	"ru_RU.CP1251",
+	"ja_JP.SJIS",
 }
 
 // EnsureCorpusLocales makes the compiled corpus locale store present,

@@ -226,8 +226,8 @@ func TestStageCharmapRangesTrueBytes(t *testing.T) {
 }
 
 func TestCorpusBuildTable(t *testing.T) {
-	if len(corpusLocaleBuild) != 10 {
-		t.Fatalf("build has %d specs, want 10 (3 helpers + 7 corpus)", len(corpusLocaleBuild))
+	if len(corpusLocaleBuild) != 6 {
+		t.Fatalf("build has %d specs, want 6 (3 helpers + 3 gated corpus)", len(corpusLocaleBuild))
 	}
 	seen := map[string]bool{}
 	helperIdx := map[string]int{}
@@ -246,10 +246,8 @@ func TestCorpusBuildTable(t *testing.T) {
 	if helperIdx["i18n_ctype"] != 0 || helperIdx["i18n"] != 1 || helperIdx["zh_CN"] != 2 {
 		t.Fatalf("helpers not first in build order: %v", helperIdx)
 	}
-	for _, name := range []string{"zh_TW.big5", "zh_HK.big5hkscs"} {
-		if helperIdx["zh_CN"] > helperIdx[name] {
-			t.Fatalf("zh_CN compiled after %q", name)
-		}
+	if helperIdx["zh_CN"] > helperIdx["zh_TW.big5"] {
+		t.Fatalf("zh_CN compiled after zh_TW.big5")
 	}
 	// Every advertised corpus name is built, with the charmap the corpus gates on.
 	charmaps := map[string]string{}
@@ -257,13 +255,9 @@ func TestCorpusBuildTable(t *testing.T) {
 		charmaps[spec.StoreName] = spec.Charmap
 	}
 	want := map[string]string{
-		"en_US.UTF-8":   "UTF-8",
-		"zh_TW.big5":    "BIG5",
-		"ja_JP.SJIS":    "SHIFT_JIS",
+		"zh_TW.big5":      "BIG5",
+		"ja_JP.SJIS":      "SHIFT_JIS",
 		"fr_FR.ISO8859-1": "ISO-8859-1",
-		"de_DE.UTF-8":   "UTF-8",
-		"zh_HK.big5hkscs": "BIG5-HKSCS",
-		"ru_RU.CP1251":  "CP1251",
 	}
 	for _, name := range corpusAdvertisedNames {
 		got, ok := charmaps[name]
@@ -272,6 +266,15 @@ func TestCorpusBuildTable(t *testing.T) {
 		}
 		if got != want[name] {
 			t.Fatalf("%s charmap = %s, want %s", name, got, want[name])
+		}
+	}
+	// Collation-strictness guard: locales the fixtures place in
+	// LC_COLLATE/LC_ALL position (or that no gate needs) must stay
+	// uncompiled, so their applets keep the silent C fallback. Measured:
+	// compiling en_US.UTF-8 breaks intl's sed.
+	for _, name := range []string{"en_US.UTF-8", "de_DE.UTF-8", "zh_HK.big5hkscs", "ru_RU.CP1251"} {
+		if _, ok := charmaps[name]; ok {
+			t.Fatalf("%q is built but must stay uncompiled (collation strictness)", name)
 		}
 	}
 }

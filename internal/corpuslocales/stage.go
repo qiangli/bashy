@@ -41,10 +41,10 @@ func stageLocaleSource(name string, data []byte) []byte {
 		}
 		lines = dropCopyOnlyStagedSection(lines, "LC_PAPER")
 		lines = dropCopyOnlyStagedSection(lines, "LC_MEASUREMENT")
-	case "en_US":
-		// Real LC_PAPER/LC_MEASUREMENT sections skip silently; keep them.
 	default:
 		// Rule 2: pure-copy extension sections can never resolve.
+		// (Real ones, were any staged file to carry them, are kept by
+		// dropCopyOnlyStagedSection and skip silently in the compiler.)
 		lines = dropCopyOnlyStagedSection(lines, "LC_PAPER")
 		lines = dropCopyOnlyStagedSection(lines, "LC_MEASUREMENT")
 	}
