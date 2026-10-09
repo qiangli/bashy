@@ -45,3 +45,10 @@ before SSH/SFTP as coverage gaps, even if installation copied the binaries.
 Run the Y7 local isolated workflow without a BASHY override, putting the
 release directory first on PATH. Snapshot real-home session state before and
 after; rc.2 does not include the forthcoming genie state-isolation repair.
+
+Do not launch other Windows lane processes while O4 temporarily changes User
+registry environment variables: a new SSH process can retain those values
+after restoration. Serialize O4 first, then explicitly reload the original
+User values for XDG_CONFIG_HOME, XDG_CACHE_HOME, BASHY_HOME and
+OUTPOST_ADMIN_ADDR into the next lane's Process environment. Record the
+effective paths and reject any remaining O4 scratch path before testing.
