@@ -3,7 +3,7 @@
 set -euo pipefail
 if [[ $# != 3 ]]; then echo "usage: $0 vX.Y.Z-dev amd64|arm64 OUTDIR" >&2; exit 2; fi
 tag=$1; arch=$2; outdir=$3
-[[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+-dev$ ]] || { echo "invalid release tag: $tag" >&2; exit 2; }
+[[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?-dev$ ]] || { echo "invalid release tag: $tag" >&2; exit 2; }
 [[ $arch == amd64 || $arch == arm64 ]] || { echo "invalid arch: $arch" >&2; exit 2; }
 [[ $(go env GOOS) == darwin && $(go env GOARCH) == "$arch" ]] || { echo "native darwin/$arch builder required" >&2; exit 1; }
 [[ $(go env CGO_ENABLED) == 1 ]] || { echo "native Darwin release requires cgo" >&2; exit 1; }

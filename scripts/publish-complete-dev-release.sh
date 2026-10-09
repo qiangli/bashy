@@ -5,7 +5,7 @@ set -euo pipefail
 [[ $# == 1 && ( $1 == prepare || $1 == publish ) ]] || { echo "usage: $0 prepare|publish" >&2; exit 2; }
 phase=$1
 : "${GH_TOKEN:?}" "${REPO:?}" "${TAG:?}" "${COMMIT:?}" "${RUN_ID:?}"
-[[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+-dev$ ]] || { echo "invalid candidate tag" >&2; exit 2; }
+[[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?-dev$ ]] || { echo "invalid candidate tag" >&2; exit 2; }
 # releases/tags/<tag> never returns drafts; find the candidate in the list.
 state=$(gh api "repos/$REPO/releases?per_page=100" --jq "map(select(.tag_name == \"$TAG\"))[0] // empty | {draft, prerelease, target_commitish, body}")
 [[ -n $state ]] || { echo "no release for $TAG" >&2; exit 1; }

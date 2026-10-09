@@ -2,7 +2,7 @@
 # GoReleaser must never append to an existing draft or published release.
 set -euo pipefail
 : "${GH_TOKEN:?}" "${REPO:?}" "${TAG:?}"
-[[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+-dev$ ]] || { echo "invalid candidate tag" >&2; exit 2; }
+[[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?-dev$ ]] || { echo "invalid candidate tag" >&2; exit 2; }
 code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
   --header 'Accept: application/vnd.github+json' \
   --header "Authorization: Bearer $GH_TOKEN" \
