@@ -12,7 +12,7 @@ if [[ -z $tag ]]; then
  done
 fi
 base=${tag%-dev}
-[[ $base =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "cannot determine release version" >&2; exit 1; }
+[[ $base =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] || { echo "cannot determine release version" >&2; exit 1; }
 expected=$(
  for os in darwin linux windows; do
   for arch in amd64 arm64; do
@@ -20,17 +20,22 @@ expected=$(
    printf '%s\n' "bash-$os-$arch.$ext" "bashy-$os-$arch.$ext" "outpost-$base-$os-$arch$suffix" "outpost-$base-$os-$arch$suffix.sha256"
   done
  done
+ # Linux packages are built once from the -dev tag and promoted byte-identical,
+ # so their version always carries the -dev suffix.
+ for arch in amd64 arm64; do
+  for fmt in apk deb rpm; do printf '%s\n' "bashy_${base#v}-dev_linux_$arch.$fmt"; done
+ done
  printf '%s\n' bashy-scratch-linux-amd64 bashy-scratch-linux-arm64 checksums.txt
 )
 expected=$(printf '%s\n' "$expected" | LC_ALL=C sort)
 actual=$(find "$dir" -maxdepth 1 -type f -exec basename {} \; | LC_ALL=C sort)
 if [[ $actual != "$expected" ]]; then
- echo "release asset set differs from required 27 files" >&2
+ echo "release asset set differs from required 33 files" >&2
  diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") >&2 || true
  exit 1
 fi
 (cd "$dir" && sha256sum -c checksums.txt --status)
-[[ $(wc -l < "$dir/checksums.txt" | tr -d ' ') == 26 ]] || { echo "checksum count must be 26" >&2; exit 1; }
+[[ $(wc -l < "$dir/checksums.txt" | tr -d ' ') == 32 ]] || { echo "checksum count must be 32" >&2; exit 1; }
 checksummed=$(sed -n 's/^[[:xdigit:]]\{64\}  //p' "$dir/checksums.txt" | LC_ALL=C sort)
 expected_checksums=$(printf '%s\n' "$expected" | sed '/^checksums.txt$/d')
 [[ $checksummed == "$expected_checksums" ]] || { echo "checksum entries differ from release assets" >&2; exit 1; }

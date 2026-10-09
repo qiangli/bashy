@@ -35,7 +35,7 @@ if [[ $phase == prepare ]]; then
   [[ $binary != *.sha256 ]] || continue
   (cd release-dist && sha256sum "${binary##*/}") > "$binary.sha256"
  done
- (cd release-dist && sha256sum bash-* bashy-* outpost-* > checksums.txt)
+ (cd release-dist && sha256sum bash-* bashy-* bashy_* outpost-* > checksums.txt)
  ./scripts/verify-release-asset-set.sh release-dist
  exit 0
 fi
