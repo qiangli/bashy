@@ -77,11 +77,11 @@ func TestSourceRoute(t *testing.T) {
 		{"python extension", []string{"x.py", "arg"}, "python arg", 0},
 		{"rust extension", []string{"x.rs"}, "rust", 0},
 		{"flag beats python extension", []string{"--source=go", "x.py"}, "expected 'package'", 1},
-		{"fsharp extension", []string{"x.fs"}, "fsharp", 0},
-		{"fsharp script extension", []string{"x.fsx"}, "fsharp-script", 0},
+		{"fsharp extension refused", []string{"x.fs"}, "x.fs:1:1: unsupported source extension .fs", 2},
+		{"fsharp script extension refused", []string{"x.fsx"}, "x.fsx:1:1: unsupported source extension .fsx", 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// Foreign-language cases provision C/C++/Node/TS/Python/Rust/.NET
+			// Foreign-language cases provision C/C++/Node/TS/Python/Rust
 			// toolchains on first use: too heavy for every per-push CI job.
 			// They run in the per-candidate evidence lanes (and on demand)
 			// with BASHY_TEST_FOREIGN_SOURCES=1; the Go route cases always run.
@@ -120,7 +120,7 @@ func foreignSourceCase(args []string) bool {
 	}
 	for _, a := range args {
 		switch filepath.Ext(a) {
-		case ".c", ".cc", ".cpp", ".cxx", ".js", ".mjs", ".ts", ".tsx", ".py", ".rs", ".fs", ".fsx":
+		case ".c", ".cc", ".cpp", ".cxx", ".js", ".mjs", ".ts", ".tsx", ".py", ".rs":
 			return true
 		}
 	}

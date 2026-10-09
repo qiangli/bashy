@@ -34,7 +34,7 @@ import (
 // no GNU readline) · Node MIT (bundles npm, Artistic-2.0: permissive, non-copyleft) + typescript Apache-2.0 ·
 // Bun: its own code MIT but the binary statically links LGPL-2 JavaScriptCore and
 // LGPL-2.1 tinycc, so not permissive as a program (download+exec only, never the
-// default) · rustup MIT/Apache-2.0 · .NET SDK MIT (dotnet.go). A row's Ensure is cache-first, so the cost is
+// default) · rustup MIT/Apache-2.0. A row's Ensure is cache-first, so the cost is
 // paid once; `bashy check --prepare` pays it ahead of a run.
 var islandToolchains = map[string]func(ctx context.Context) (argv []string, why string, err error){
 	"go": func(ctx context.Context) ([]string, string, error) {
@@ -71,8 +71,6 @@ var islandToolchains = map[string]func(ctx context.Context) (argv []string, why 
 		return single(bin, "selected provisioned rustc ("+rust.DefaultToolchain+")", err)
 	},
 	"pwsh": provisionedPwsh,
-	// dotnet: the SDK behind F# source files (`dotnet fsi`); see dotnet.go.
-	"dotnet": provisionedDotnet,
 }
 
 func provisionedCC(ctx context.Context) ([]string, string, error) {
@@ -134,7 +132,7 @@ func islandToolResolver(name string) ([]string, string, error) {
 }
 
 func islandToolchainNames() []string {
-	return append([]string{"go", "cc", "c++", "python3", "node", "bun", "typescript", "rustc", "pwsh", "dotnet"}, fenceTools...)
+	return append([]string{"go", "cc", "c++", "python3", "node", "bun", "typescript", "rustc", "pwsh"}, fenceTools...)
 }
 
 // installIslandToolResolver wires the table into the engine once per process.
