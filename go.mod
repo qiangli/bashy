@@ -6,7 +6,7 @@ toolchain go1.27.1
 
 require (
 	github.com/aymanbagabas/go-pty v0.2.3
-	github.com/bashsharp/bashsharp v0.0.0-20261009071830-bbf9eeee733a
+	github.com/bashsharp/bashsharp v0.0.0-20261009161804-00e6e0be94f9
 	github.com/creack/pty/v2 v2.0.1
 	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0
 	github.com/ergochat/readline v0.1.3
@@ -17,8 +17,8 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261009201221-a50cc1f27e6f
 	github.com/qiangli/ycode v0.3.1-dev.0.20261009202524-02ba64f64493
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261009174249-a65326a65461
-	github.com/qiangli/yoke/external/otel v0.0.0-20261009174249-a65326a65461
+	github.com/qiangli/yoke v0.0.0-20261009232517-9365756c4833
+	github.com/qiangli/yoke/external/otel v0.0.0-20261009232517-9365756c4833
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
@@ -351,9 +351,9 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/qiangli/gfy v0.0.0-20261009070616-1a9d12418c8d // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261009213805-3652ba80be69 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261009174249-a65326a65461 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261009174249-a65326a65461 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261009220445-10ceea6e5d42 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261009232517-9365756c4833 // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261009232517-9365756c4833 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
@@ -503,11 +503,11 @@ require (
 // unmerged Bash 5.3 interp patches). Resolve it as a flat sibling: inside the
 // dhnt umbrella ../sh is the sh submodule; in a standalone clone, clone
 // github.com/qiangli/sh next to this repo as ./sh.
-replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261009174503-43e2f537d1b4
+replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261009223315-5ed7e8b0b4ff
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
-replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261009071524-54a8fb26235e
+replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261009201221-a50cc1f27e6f
 
 replace github.com/jaegertracing/jaeger => github.com/qiangli/jaeger v0.0.0-20260426223533-5aaa7eb1f040
 
