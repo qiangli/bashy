@@ -447,10 +447,33 @@ func gitLogCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "log [path]",
 		Short: "Show commit history (most recent first)",
-		Args:  cobra.MaximumNArgs(1),
+		Args:  cobra.ArbitraryArgs,
 		Example: `  bashy git log
-  bashy git log -n 20`,
+  bashy git log -n 20
+  bashy git log -1 --format=%h`,
+		// Flags beyond -n (-1, --format, --oneline, …) belong to the engine's
+		// log; parse by hand so they reach it instead of dying in cobra.
+		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			for _, a := range args {
+				if a == "-h" || a == "--help" {
+					return cmd.Help()
+				}
+			}
+			if !legacyGitLogArgs(args) {
+				res, err := outgit.Exec(cmd.Context(), ".", append([]string{"log"}, args...))
+				if err != nil {
+					if errors.Is(err, outgit.ErrUnsupported) {
+						return fmt.Errorf("git log %s is not served by bashy's native git engine; retry with --external to run it on a host git", strings.Join(args, " "))
+					}
+					return err
+				}
+				return renderGitResult(cmd, res)
+			}
+			if err := cmd.Flags().Parse(args); err != nil {
+				return err
+			}
+			args = cmd.Flags().Args()
 			repo := "."
 			if len(args) > 0 {
 				repo = args[0]
@@ -865,4 +888,26 @@ func gitRevParseCmd() *cobra.Command {
 		return nil
 	}
 	return cmd
+}
+
+// legacyGitLogArgs reports whether args fit the dedicated log command's own
+// shape: -n/--number N plus at most one repository path.
+func legacyGitLogArgs(args []string) bool {
+	pos := 0
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-n" || a == "--number":
+			i++
+			if i >= len(args) {
+				return false
+			}
+		case strings.HasPrefix(a, "--number="):
+		case strings.HasPrefix(a, "-"):
+			return false
+		default:
+			pos++
+		}
+	}
+	return pos <= 1
 }

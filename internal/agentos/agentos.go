@@ -1387,6 +1387,22 @@ func dispatch() {
 		if external {
 			cmd = gitscm.NewGitSCMCmd()
 		} else {
+			// Global options before the verb (-C DIR, --no-pager, …) are
+			// applied as real git would; cobra never sees them.
+			dirs, stripped, gerr := splitGitGlobals(rest)
+			if gerr == nil {
+				gerr = applyGitDirs(dirs)
+			}
+			if gerr != nil {
+				fmt.Fprintln(os.Stderr, gerr)
+				code := 128
+				var gexit *gitExitError
+				if errors.As(gerr, &gexit) {
+					code = gexit.code
+				}
+				dispatchExit(code)
+			}
+			rest = stripped
 			cmd = gitCmd()
 		}
 		cmd.SilenceErrors = true
