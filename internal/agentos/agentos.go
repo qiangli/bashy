@@ -588,9 +588,6 @@ func dispatch() {
 	// L1 of the skills advertisement ladder: agent driving + agent-naive
 	// repo + not hinted here before → one stderr pointer. Zero repo writes.
 	maybeAdvertiseSkillHint()
-	// Unread-mail hint (Sprint 321): every ordinary command surfaces the same
-	// stderr-only hint when unread mail waits — read-only, arrival-scoped.
-	maybeHintUnreadMail(os.Args[1:])
 	// L2.5 (orchestrator channel): freshly created weave workspaces are
 	// bashy-owned space-time — stock each with the agent skill surface
 	// before any agent brand launches. $BASHY_WEAVE_SKILLS extends the
@@ -1314,12 +1311,6 @@ func dispatch() {
 		// bashy as its shell; --check verifies, --uninstall reverses. See
 		// docs/agent-adoption/matrix.md for per-agent verification status.
 		dispatchExit(dispatchInstallAgent(os.Args[2:]))
-	case "inbox-hook":
-		// Turn-boundary unread hint for external harnesses (Claude Code /
-		// Codex SessionStart + UserPromptSubmit hooks installed by
-		// `install-agent --hooks`): one model-visible JSON envelope on stdout
-		// when unread mail waits, else silent. Never consumes mail.
-		dispatchExit(dispatchInboxHook(os.Args[2:]))
 	case "context":
 		// First-hop agent context: one compact JSON record with the exact bashy
 		// path, mode flags, cwd, and recommended discovery/safety commands.

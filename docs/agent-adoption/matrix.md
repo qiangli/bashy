@@ -61,16 +61,6 @@ can be kept in step.
    recipe (`--yes` attempts `chsh`; never sudo-edits `/etc/shells`). `--check`
    probes the exact invocation shape (free); **`--probe`** runs the agent LIVE and
    asserts bashy handled its shell (one LLM call).
-3. **`bashy install-agent {claude,codex} --hooks [--as NAME] [--project]
-   [--dry-run] [--check] [--uninstall]`** — installs the native turn-boundary
-   inbox hook both harnesses support (claude 2.1.284: SessionStart +
-   UserPromptSubmit settings hooks, `hookSpecificOutput.additionalContext`;
-   codex 0.157.1: SessionStart + UserPromptSubmit inline `[[hooks.*]]` tables,
-   hooks stable-enabled so no `[features]` edit). The hook runs
-   `bashy inbox-hook` read-only: one unread hint when mail waits, silence
-   otherwise, never consuming mail. This is the inbox turn hook — not the MCP
-   skill export, not generic notify. Codex holds new hooks for trust review
-   (`/hooks`) before first run; approve there.
 
 ## Findings
 
