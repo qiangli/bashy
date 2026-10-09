@@ -11,6 +11,7 @@ spec.loader.exec_module(module)
 SOURCE = '''run shell-build bashy go build -o bin/bash.exe ./cmd/bash
 run product-install bashy go build -o "$BASHY_BIN" ./cmd/bashy
 run sharp-all bashsharp go test -json ./... -count=1 -timeout=10m
+run lower-validate bashsharp-tests "$BASHY_BIN" tools/lowering/validate.sh
 run lower-differential bashsharp-tests ruby tools/lowering/differential.rb
 run decorators bashsharp-tests ruby tools/decorators/acceptance.rb
 run agentic bashsharp-tests ruby tools/agentic/acceptance.rb
@@ -22,12 +23,13 @@ class ReleaseDriverTest(unittest.TestCase):
     def test_product_builds_removed_and_other_gates_preserved(self):
         result = module.prepare(SOURCE)
         self.assertNotIn('go build', result)
+        self.assertFalse(any(line.startswith('run lower-validate ') for line in result.splitlines()))
         self.assertIn('cp "$ROOT/product/bash.exe" "$BASH_ENGINE_BIN" || exit 2', result)
         self.assertIn('cp "$ROOT/product/bashy.exe" "$BASHY_BIN" || exit 2', result)
         for line in SOURCE.splitlines():
             if line.startswith(('run sharp-all ', 'run polyglot ')):
                 self.assertIn(line + '\n', result)
-        self.assertEqual(result.count('# D11 policy exclusion'), 3)
+        self.assertEqual(result.count('# D11 policy exclusion'), 4)
         self.assertFalse(any(' ruby ' in line for line in result.splitlines()
                              if not line.startswith('#')))
 

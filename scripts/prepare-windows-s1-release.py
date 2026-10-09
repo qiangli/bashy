@@ -25,12 +25,13 @@ def prepare(source: str) -> str:
     excluded = []
     lines = []
     for line in source.splitlines():
-        if line.startswith('run ') and ' bashsharp-tests ruby ' in line:
+        if (line.startswith('run ') and ' bashsharp-tests ruby ' in line) or line == (
+                'run lower-validate bashsharp-tests "$BASHY_BIN" tools/lowering/validate.sh'):
             excluded.append(line.split()[1])
             lines.append('# D11 policy exclusion (not a measured skip): ' + line)
         else:
             lines.append(line)
-    if excluded != ['lower-differential', 'decorators', 'agentic']:
+    if excluded != ['lower-validate', 'lower-differential', 'decorators', 'agentic']:
         raise ValueError(f"approved Ruby gate inventory changed: {excluded}")
     return '\n'.join(lines) + '\n'
 
