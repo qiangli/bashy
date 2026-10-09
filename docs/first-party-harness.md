@@ -271,6 +271,14 @@ nothing else to install: genie, the model door and the Ollama engine launcher ar
 all inside it (the engine binary itself is fetched on first use). On Windows run
 scripts as `bashy.exe scripts/genie-preview-workflow.sh`; no other bash is needed.
 
+The workflow script is not in the release archive. Without a checkout, fetch it
+from the same tag as your binary and run it with bashy:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/qiangli/bashy/<tag>/scripts/genie-preview-workflow.sh
+bashy genie-preview-workflow.sh --legs local --isolate
+```
+
 ### 2. Pick a model
 
 Every genie turn goes through the host's model door (`bashy llm up`, port 24556,

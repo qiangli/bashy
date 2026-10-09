@@ -27,9 +27,11 @@ runtime changes them. It is not a fully static, CGo-free release. See
 ```sh
 # macOS (Apple Silicon)
 curl -fsSLO https://github.com/qiangli/bashy/releases/latest/download/bashy-darwin-arm64.tar.gz
-tar -xzf bashy-darwin-arm64.tar.gz && sudo install bashy /usr/local/bin/bashy
-# no sudo? install for your user instead:
-#   mkdir -p ~/.local/bin && install bashy ~/.local/bin/bashy && export PATH="$HOME/.local/bin:$PATH"
+tar -xzf bashy-darwin-arm64.tar.gz
+# for your user (no sudo):
+mkdir -p ~/.local/bin && install bashy ~/.local/bin/bashy && export PATH="$HOME/.local/bin:$PATH"
+# or system-wide, if you are an administrator:
+#   sudo install bashy /usr/local/bin/bashy
 bashy --version
 ```
 
@@ -111,9 +113,8 @@ your `PATH`:
 ```sh
 # Linux/macOS example
 tar -xzf bashy-linux-amd64.tar.gz
-sudo install bashy /usr/local/bin/bashy
-# without sudo: mkdir -p ~/.local/bin && install bashy ~/.local/bin/bashy
-#   and put ~/.local/bin on PATH
+mkdir -p ~/.local/bin && install bashy ~/.local/bin/bashy   # put ~/.local/bin on PATH
+# or system-wide, if you are an administrator: sudo install bashy /usr/local/bin/bashy
 bashy --version
 ```
 
