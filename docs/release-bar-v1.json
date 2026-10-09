@@ -145,21 +145,23 @@
       "command": "models",
       "section": "4d",
       "stability": null,
-      "consumer": null,
+      "consumer": "genie external-model resolution",
       "json_probe": [
         "list",
         "--json"
-      ]
+      ],
+      "consumer_ref": "internal/agentos/genie_external.go"
     },
     {
       "command": "tools",
       "section": "4d",
       "stability": null,
-      "consumer": null,
+      "consumer": "weave launcher (tool contract)",
       "json_probe": [
         "list",
         "--json"
-      ]
+      ],
+      "consumer_ref": "github.com/qiangli/yoke/pkg/weave/weave_tools.go"
     },
     {
       "command": "agents",
@@ -176,21 +178,23 @@
       "command": "model",
       "section": "4d",
       "stability": null,
-      "consumer": null,
+      "consumer": "genie external-model resolution",
       "json_probe": [
         "list",
         "--json"
-      ]
+      ],
+      "consumer_ref": "internal/agentos/genie_external.go"
     },
     {
       "command": "tool",
       "section": "4d",
       "stability": null,
-      "consumer": null,
+      "consumer": "weave launcher (tool contract)",
       "json_probe": [
         "list",
         "--json"
-      ]
+      ],
+      "consumer_ref": "github.com/qiangli/yoke/pkg/weave/weave_tools.go"
     },
     {
       "command": "agent",
@@ -207,7 +211,7 @@
       "command": "chat",
       "section": "4d",
       "stability": null,
-      "consumer": null,
+      "consumer": "CI failure router script",
       "json_probe": [
         "--agent",
         "claude",
@@ -215,7 +219,8 @@
         "--json",
         "--instruction",
         "release-bar probe"
-      ]
+      ],
+      "consumer_ref": "scripts/ci-failure-router.sh"
     },
     {
       "command": "context",
@@ -276,6 +281,7 @@
       "section": "4e",
       "stability": null,
       "consumer": null,
+      "consumer_gap": "no reader in yoke or bashy outside docs/verify-conformance-subcommands.md; no workflow or script runs bashy verify",
       "json_probe": [
         "--list",
         "--json"
@@ -286,6 +292,7 @@
       "section": "4e",
       "stability": null,
       "consumer": null,
+      "consumer_gap": "no reader in yoke or bashy outside docs/verify-conformance-subcommands.md; no workflow or script runs bashy conform",
       "json_probe": [
         "--list",
         "--json"
@@ -295,11 +302,12 @@
       "command": "llm",
       "section": "4f\u20134g",
       "stability": null,
-      "consumer": null,
+      "consumer": "local-LLM e2e script",
       "json_probe": [
         "env",
         "--json"
-      ]
+      ],
+      "consumer_ref": "scripts/e2e-llm-local.sh"
     },
     {
       "command": "ollama",
@@ -342,8 +350,7 @@
         "--list",
         "--json"
       ],
-      "consumer_ref": "internal/agentos/inspect.go",
-      "scope_gap": "4.38 requires promotion from experimental; no promotion evidence recorded"
+      "consumer_ref": "internal/agentos/inspect.go"
     },
     {
       "command": "genie",
@@ -454,9 +461,14 @@
     {
       "command": "sshd",
       "section": "4s",
-      "stability": null,
+      "stability": "experimental",
+      "stability_source": "release-bar.policy",
       "consumer": null,
-      "json_probe": null
+      "consumer_gap": "the outpost-backed SSH service is not yet implemented in bashy",
+      "json_probe": null,
+      "json_gap": "the outpost-backed SSH service is not yet implemented in bashy",
+      "atlas_gap": "the outpost-backed SSH service is not yet implemented in bashy",
+      "dispatch_gap": "the outpost-backed SSH service is not yet implemented in bashy"
     },
     {
       "command": "proxy",

@@ -208,6 +208,21 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 	}
 }
 
+// Stability is a release promise rather than a visibility marker. Every verb
+// must carry its declared yoke or bashy-owned tier, and a curated-hidden verb
+// may never contradict the experimental marker that keeps it out of teaching.
+func TestAtlasVerbStability(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "1")
+	for _, r := range liveAtlas(true) {
+		if r.Class == "verb" && r.Stability == "" {
+			t.Errorf("%s: no declared release stability", r.Name)
+		}
+		if isCuratedHidden(r.Name) && r.Stability != atlas.StabilityExperimental {
+			t.Errorf("%s: curated-hidden stability = %q, want %q", r.Name, r.Stability, atlas.StabilityExperimental)
+		}
+	}
+}
+
 // Without includeHidden, hidden compatibility aliases must be absent. Toolchain
 // provisioners remain present because the atlas describes the callable bashy
 // front door, not only the bare-name Preamble shims.

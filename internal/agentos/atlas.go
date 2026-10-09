@@ -59,6 +59,10 @@ type atlasRecord struct {
 	Posix  bool   `json:"posix,omitempty"`
 	Core   bool   `json:"core,omitempty"`
 	Status string `json:"status,omitempty"`
+	// Stability is the declared release tier. Unlike Status (which marks
+	// curated-hidden commands), it comes from atlas.Entry.Stability and is
+	// never inferred from visibility or execution tier.
+	Stability string `json:"stability,omitempty"`
 
 	// Platform support (Sprint 167): OS = where the command is supported,
 	// Partial = supported OSes with a documented gap, Portable = full on all
@@ -142,36 +146,45 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 	// session keeps running after the invoking command exits.
 	"foreman": {
 		Stage: atlas.StageCode, Group: atlas.GroupOrch, Tier: atlas.TierUserland,
-		Caps:    []string{atlas.CapDaemon, atlas.CapJSON, atlas.CapSpawnsProcesses},
-		Effects: []string{atlas.EffExec, atlas.EffNet, atlas.EffSpend},
+		Caps:      []string{atlas.CapDaemon, atlas.CapJSON, atlas.CapSpawnsProcesses},
+		Effects:   []string{atlas.EffExec, atlas.EffNet, atlas.EffSpend},
+		Stability: atlas.StabilityExperimental,
 	},
 	"proxy": {
 		Stage: atlas.StageCross, Group: atlas.GroupNet, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapDaemon}, Effects: []string{atlas.EffNet},
+		Stability: atlas.StabilityExperimental,
 	},
 	"resource": {
 		Stage: atlas.StageCross, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapJSON, atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
+		Stability: atlas.StabilityExperimental,
 	},
 	"resources": {
 		Stage: atlas.StageCross, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapJSON, atlas.CapReadOnly}, Effects: []string{atlas.EffRead}, AliasOf: "resource",
+		Stability: atlas.StabilityExperimental,
 	},
 	"out": {
 		Stage: atlas.StageCross, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
+		// out has its graduation test, inspect-index reader, and bashy-out-v1 envelope.
+		Stability: atlas.StabilityPreview,
 	},
 	"transpile": {
 		Stage: atlas.StageCode, Group: atlas.GroupToolchains, Tier: atlas.TierUserland,
-		Effects: []string{atlas.EffRead, atlas.EffWrite},
+		Effects:   []string{atlas.EffRead, atlas.EffWrite},
+		Stability: atlas.StabilityExperimental,
 	},
 	"explain": {
 		Stage: atlas.StageCross, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapJSON, atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
+		Stability: atlas.StabilityExperimental,
 	},
 	"full": {
 		Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapSpawnsProcesses}, Effects: []string{atlas.EffExec},
+		Stability: atlas.StabilityExperimental,
 	},
 	// awd runs ONE command in another directory and returns — the front-door
 	// form of the shell builtin, and the single "run it over there" mechanism
@@ -180,6 +193,7 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 	"awd": {
 		Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapSpawnsProcesses}, Effects: []string{atlas.EffExec},
+		Stability: atlas.StabilityExperimental,
 	},
 	// limit runs ONE command under resource limits on its process tree — the
 	// wrapper form of @limit. Effects are the command's own; exec (and the
@@ -187,6 +201,7 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 	"limit": {
 		Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapSpawnsProcesses}, Effects: []string{atlas.EffExec},
+		Stability: atlas.StabilityExperimental,
 	},
 	// supervisord keeps ONE dag root running in the foreground — the process
 	// half of DEPLOY that nothing else owns (sdlc routes, release packages,
@@ -201,6 +216,7 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Caps:    []string{atlas.CapSpawnsProcesses, atlas.CapDaemon},
 		Effects: []string{atlas.EffExec},
 		OS:      atlas.OSes(), Partial: []string{atlas.OSWindows},
+		Stability: atlas.StabilityExperimental,
 	},
 	// outpost passes its arguments to the paired outpost service executable
 	// beside this bashy (sibling first; see the resolver) — the client-side
@@ -209,17 +225,19 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 	// commands (upgrade, peers, service install) reach the network.
 	"outpost": {
 		Stage: atlas.StageDeploy, Group: atlas.GroupPlatform, Tier: atlas.TierSphere,
-		Caps:    []string{atlas.CapSpawnsProcesses},
-		Effects: []string{atlas.EffExec, atlas.EffNet},
+		Caps:      []string{atlas.CapSpawnsProcesses},
+		Effects:   []string{atlas.EffExec, atlas.EffNet},
+		Stability: atlas.StabilityExperimental,
 	},
 	// dhnt reads pipeline/run/binding JSON and writes JSON or Workflow YAML to
 	// stdout. No network, no mutation — the local-first contract/compiler, not
 	// a transport.
 	"dhnt": {
-		Stage: atlas.StageTest,
-		Group: atlas.GroupPlatform,
-		Tier:  atlas.TierUserland,
-		Caps:  []string{atlas.CapJSON, atlas.CapReadOnly},
+		Stage:     atlas.StageTest,
+		Group:     atlas.GroupPlatform,
+		Tier:      atlas.TierUserland,
+		Caps:      []string{atlas.CapJSON, atlas.CapReadOnly},
+		Stability: atlas.StabilityExperimental,
 	},
 	// release turns a .goreleaser.yaml into named, checksummed artifacts. It
 	// serves DEPLOY: no other verb owns what bytes leave this machine or under
@@ -235,43 +253,48 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 	// Publishing (which would also earn `net` on every run) is not
 	// implemented here.
 	"release": {
-		Stage:   atlas.StageDeploy,
-		Group:   atlas.GroupToolchains,
-		Tier:    atlas.TierWorkspace,
-		Caps:    []string{atlas.CapJSON, atlas.CapSpawnsProcesses},
-		Effects: []string{atlas.EffExec, atlas.EffRead, atlas.EffWrite, atlas.EffNet},
+		Stage:     atlas.StageDeploy,
+		Group:     atlas.GroupToolchains,
+		Tier:      atlas.TierWorkspace,
+		Caps:      []string{atlas.CapJSON, atlas.CapSpawnsProcesses},
+		Effects:   []string{atlas.EffExec, atlas.EffRead, atlas.EffWrite, atlas.EffNet},
+		Stability: atlas.StabilityExperimental,
 	},
 	"inbox": {
-		Stage:   atlas.StageCross,
-		Group:   atlas.GroupOrch,
-		Tier:    atlas.TierUserland,
-		Caps:    []string{atlas.CapJSON},
-		Effects: []string{atlas.EffRead, atlas.EffWrite},
+		Stage:     atlas.StageCross,
+		Group:     atlas.GroupOrch,
+		Tier:      atlas.TierUserland,
+		Caps:      []string{atlas.CapJSON},
+		Effects:   []string{atlas.EffRead, atlas.EffWrite},
+		Stability: atlas.StabilityExperimental,
 	},
 	"instance": {
-		Stage:   atlas.StageCross,
-		Group:   atlas.GroupOrch,
-		Tier:    atlas.TierUserland,
-		Caps:    []string{atlas.CapJSON},
-		Effects: []string{atlas.EffRead, atlas.EffWrite},
+		Stage:     atlas.StageCross,
+		Group:     atlas.GroupOrch,
+		Tier:      atlas.TierUserland,
+		Caps:      []string{atlas.CapJSON},
+		Effects:   []string{atlas.EffRead, atlas.EffWrite},
+		Stability: atlas.StabilityExperimental,
 	},
 	"notify": {
-		Stage:   atlas.StageCross,
-		Group:   atlas.GroupOrch,
-		Tier:    atlas.TierUserland,
-		Caps:    []string{atlas.CapJSON},
-		Effects: []string{atlas.EffWrite},
+		Stage:     atlas.StageCross,
+		Group:     atlas.GroupOrch,
+		Tier:      atlas.TierUserland,
+		Caps:      []string{atlas.CapJSON},
+		Effects:   []string{atlas.EffWrite},
+		Stability: atlas.StabilityExperimental,
 	},
 	// activity is the control surface over the shared activity-event contract.
 	// Effects are read+write and NOT `net`: the whole delivery path is the
 	// local bus and the local session control socket, which is what keeps the
 	// SDLC loop inside the local-first guarantee pkg/atlas ratchets.
 	"activity": {
-		Stage:   atlas.StageCross,
-		Group:   atlas.GroupOrch,
-		Tier:    atlas.TierUserland,
-		Caps:    []string{atlas.CapJSON},
-		Effects: []string{atlas.EffRead, atlas.EffWrite},
+		Stage:     atlas.StageCross,
+		Group:     atlas.GroupOrch,
+		Tier:      atlas.TierUserland,
+		Caps:      []string{atlas.CapJSON},
+		Effects:   []string{atlas.EffRead, atlas.EffWrite},
+		Stability: atlas.StabilityExperimental,
 	},
 }
 
@@ -296,6 +319,12 @@ func stampSurface(r *atlasRecord) {
 	}
 	if isCuratedHidden(r.Name) {
 		r.Status = statusExperimental
+		// Coreutils-class hidden commands are not yoke verbs, so their atlas
+		// entry has no yoke declaration. Bashy's curation is their declaration:
+		// a command deliberately withheld from teaching is experimental.
+		if r.Stability == "" {
+			r.Stability = atlas.StabilityExperimental
+		}
 		if r.AliasOf != "" && !isCuratedHidden(r.AliasOf) {
 			r.Status = statusAlias
 		}
@@ -406,6 +435,7 @@ func applyEntry(r *atlasRecord, e atlas.Entry) {
 	r.Effects = e.Effects
 	r.Web = e.Web
 	r.Origin, r.Posix = e.Origin, e.Posix
+	r.Stability = e.Stability
 	r.OS, r.Partial, r.Portable = e.OS, e.Partial, e.Portable()
 }
 
@@ -1112,6 +1142,9 @@ func atlasFeatureFields(out map[string]any, name string, class string, hidden bo
 	}
 	if r.Status != "" {
 		out["status"] = r.Status
+	}
+	if r.Stability != "" {
+		out["stability"] = r.Stability
 	}
 	if use := taughtNameFor(name); use != "" {
 		out["use"] = use

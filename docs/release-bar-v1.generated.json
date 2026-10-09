@@ -3,17 +3,22 @@
   "release": "1.0.0",
   "candidate": "story-1533-development-snapshot",
   "probe_os": "darwin",
-  "binary_sha256": "f3c0850597488337e0f6f57bc1b5081c6f55aa920b0925b852ba265ac645e0cb",
+  "binary_sha256": "7289a4b4da552096abc698d404abfcc1e70c08f98459bed73165ec7041183996",
   "dispatch_test": "TestE2EAllListedCommandsDispatch",
   "commands": [
     {
       "command": "sprint",
       "section": "4a",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "workspace",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "loom-v2",
       "json_probe": [
         "board",
@@ -34,7 +39,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -43,11 +47,16 @@
     {
       "command": "todo",
       "section": "4a",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "workspace",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "loom-v2",
       "json_probe": [
         "list",
@@ -68,7 +77,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -77,11 +85,16 @@
     {
       "command": "weave",
       "section": "4a",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "workspace",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "loom-v2",
       "json_probe": [
         "list",
@@ -102,7 +115,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -111,11 +123,16 @@
     {
       "command": "dag",
       "section": "4a",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "workspace",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "dag-v1",
       "json_probe": [
         "--json",
@@ -136,7 +153,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -145,11 +161,16 @@
     {
       "command": "foreman",
       "section": "4a",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": "embedded conductor skill",
       "consumer_ref": "skills/conductor/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "foreman-v1",
       "json_probe": [
         "list",
@@ -170,7 +191,6 @@
       },
       "scope_gap": "Explicitly suppressed from the public atlas by Bashy #40 but listed in Part 4a; conductor must resolve scope",
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence",
@@ -181,10 +201,15 @@
       "command": "supervise",
       "section": "4a",
       "stability": "experimental",
-      "stability_source": "atlas.status",
+      "stability_source": "atlas.stability",
+      "atlas_status": "experimental",
       "execution_tier": "userland",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": null,
       "json_probe": null,
       "json_probe_error": "no safe JSON probe declared",
@@ -202,8 +227,8 @@
       },
       "scope_gap": "Listed in 4a and deferred in 4z; conductor must resolve scope",
       "gaps": [
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
+        "consumer: no shipped reader has been identified",
+        "json_schema: no safe JSON probe declared",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence",
@@ -213,11 +238,16 @@
     {
       "command": "mb",
       "section": "4b",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-mb-v1",
       "json_probe": [
         "--json"
@@ -237,7 +267,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -246,11 +275,16 @@
     {
       "command": "meet",
       "section": "4b",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": "embedded force-agent-shell skill",
       "consumer_ref": "skills/force-agent-shell/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-meet-service-v1",
       "json_probe": [
         "service",
@@ -272,7 +306,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -281,11 +314,16 @@
     {
       "command": "ping",
       "section": "4b",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": null,
       "json_probe": null,
       "json_probe_error": "no safe JSON probe declared",
@@ -303,9 +341,8 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
+        "consumer: no shipped reader has been identified",
+        "json_schema: no safe JSON probe declared",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -314,11 +351,16 @@
     {
       "command": "inbox",
       "section": "4b",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-inbox-v1",
       "json_probe": [
         "--json"
@@ -338,7 +380,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -347,11 +388,16 @@
     {
       "command": "bus",
       "section": "4b",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": null,
       "json_probe": null,
       "json_probe_error": "no safe JSON probe declared",
@@ -369,9 +415,8 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
+        "consumer: no shipped reader has been identified",
+        "json_schema: no safe JSON probe declared",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -380,11 +425,16 @@
     {
       "command": "notify",
       "section": "4b",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": null,
       "json_probe": null,
       "json_probe_error": "no safe JSON probe declared",
@@ -402,9 +452,8 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
+        "consumer: no shipped reader has been identified",
+        "json_schema: no safe JSON probe declared",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -413,11 +462,16 @@
     {
       "command": "whois",
       "section": "4b",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": "embedded inbox skill",
       "consumer_ref": "skills/inbox/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-whois-v1",
       "json_probe": [
         "self",
@@ -438,7 +492,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -447,11 +500,16 @@
     {
       "command": "app",
       "section": "4c",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "dhnt-app-meta-v1",
       "json_probe": [
         "meta",
@@ -472,8 +530,7 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
+        "consumer: no shipped reader has been identified",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -482,11 +539,16 @@
     {
       "command": "models",
       "section": "4d",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
-      "consumer": null,
-      "consumer_ref": null,
+      "consumer": "genie external-model resolution",
+      "consumer_ref": "internal/agentos/genie_external.go",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-fleet-list-v1",
       "json_probe": [
         "list",
@@ -507,8 +569,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -517,11 +577,16 @@
     {
       "command": "tools",
       "section": "4d",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
-      "consumer": null,
-      "consumer_ref": null,
+      "consumer": "weave launcher (tool contract)",
+      "consumer_ref": "github.com/qiangli/yoke/pkg/weave/weave_tools.go",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-fleet-list-v1",
       "json_probe": [
         "list",
@@ -542,8 +607,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -552,11 +615,16 @@
     {
       "command": "agents",
       "section": "4d",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": "CI failure router script",
       "consumer_ref": "scripts/ci-failure-router.sh",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-fleet-list-v1",
       "json_probe": [
         "list",
@@ -577,7 +645,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -586,11 +653,16 @@
     {
       "command": "model",
       "section": "4d",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
-      "consumer": null,
-      "consumer_ref": null,
+      "consumer": "genie external-model resolution",
+      "consumer_ref": "internal/agentos/genie_external.go",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-fleet-list-v1",
       "json_probe": [
         "list",
@@ -611,8 +683,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -621,11 +691,16 @@
     {
       "command": "tool",
       "section": "4d",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
-      "consumer": null,
-      "consumer_ref": null,
+      "consumer": "weave launcher (tool contract)",
+      "consumer_ref": "github.com/qiangli/yoke/pkg/weave/weave_tools.go",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-fleet-list-v1",
       "json_probe": [
         "list",
@@ -646,8 +721,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -656,11 +729,16 @@
     {
       "command": "agent",
       "section": "4d",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": "embedded conductor skill",
       "consumer_ref": "skills/conductor/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-fleet-list-v1",
       "json_probe": [
         "list",
@@ -681,7 +759,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -690,11 +767,16 @@
     {
       "command": "chat",
       "section": "4d",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
-      "consumer": null,
-      "consumer_ref": null,
+      "consumer": "CI failure router script",
+      "consumer_ref": "scripts/ci-failure-router.sh",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-chat-v1",
       "json_probe": [
         "--agent",
@@ -719,8 +801,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -729,11 +809,16 @@
     {
       "command": "context",
       "section": "4e",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-context-v1",
       "json_probe": [
         "--json"
@@ -753,8 +838,7 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
+        "consumer: no shipped reader has been identified",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -763,11 +847,16 @@
     {
       "command": "inspect",
       "section": "4e",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-context-v1",
       "json_probe": [
         "context",
@@ -788,7 +877,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -798,10 +886,15 @@
       "command": "run",
       "section": "4e",
       "stability": "experimental",
-      "stability_source": "atlas.status",
+      "stability_source": "atlas.stability",
+      "atlas_status": "experimental",
       "execution_tier": "userland",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-run-v1",
       "json_probe": [
         "--capture",
@@ -831,11 +924,16 @@
     {
       "command": "commands",
       "section": "4e",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-commands-v1",
       "json_probe": [
         "--json"
@@ -855,7 +953,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -865,10 +962,15 @@
       "command": "check",
       "section": "4e",
       "stability": "experimental",
-      "stability_source": "atlas.status",
+      "stability_source": "atlas.stability",
+      "atlas_status": "experimental",
       "execution_tier": "userland",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-check-v1",
       "json_probe": [
         "--json",
@@ -898,11 +1000,16 @@
     {
       "command": "verify",
       "section": "4e",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": "no reader in yoke or bashy outside docs/verify-conformance-subcommands.md; no workflow or script runs bashy verify",
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-conform-v1",
       "json_probe": [
         "--list",
@@ -923,8 +1030,7 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
+        "consumer: no reader in yoke or bashy outside docs/verify-conformance-subcommands.md; no workflow or script runs bashy verify",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -934,10 +1040,15 @@
       "command": "conform",
       "section": "4e",
       "stability": "experimental",
-      "stability_source": "atlas.status",
+      "stability_source": "atlas.stability",
+      "atlas_status": "experimental",
       "execution_tier": "userland",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": "no reader in yoke or bashy outside docs/verify-conformance-subcommands.md; no workflow or script runs bashy conform",
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-conform-v1",
       "json_probe": [
         "--list",
@@ -958,7 +1069,7 @@
       },
       "scope_gap": null,
       "gaps": [
-        "consumer: no named consumer recorded",
+        "consumer: no reader in yoke or bashy outside docs/verify-conformance-subcommands.md; no workflow or script runs bashy conform",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -967,17 +1078,22 @@
     {
       "command": "llm",
       "section": "4f\u20134g",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
-      "consumer": null,
-      "consumer_ref": null,
-      "json_schema": null,
+      "consumer": "local-LLM e2e script",
+      "consumer_ref": "scripts/e2e-llm-local.sh",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
+      "json_schema": "bashy-llm-env-v1",
       "json_probe": [
         "env",
         "--json"
       ],
-      "json_probe_error": "exit 1",
+      "json_probe_error": null,
       "atlas_entry": true,
       "alias_of": null,
       "dispatch_coverage": {
@@ -992,9 +1108,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -1003,11 +1116,16 @@
     {
       "command": "ollama",
       "section": "4f\u20134g",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "sphere",
       "consumer": "llm model door (engine argv)",
       "consumer_ref": "internal/agentos/door.go",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-ollama-status-v1",
       "json_probe": [
         "status",
@@ -1028,10 +1146,9 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
-        "dispatch_coverage: windows",
+        "dispatch_coverage: windows (not listed for this platform)",
         "dispatch_pass: no same-candidate windows evidence"
       ]
     },
@@ -1039,10 +1156,15 @@
       "command": "mcp",
       "section": "4h",
       "stability": "experimental",
-      "stability_source": "atlas.status",
+      "stability_source": "atlas.stability",
+      "atlas_status": "experimental",
       "execution_tier": "userland",
       "consumer": "install-agent --mcp registration",
       "consumer_ref": "internal/agentos/installagent.go",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-mcp-tools-v1",
       "json_probe": [
         "tools",
@@ -1071,11 +1193,16 @@
     {
       "command": "install-agent",
       "section": "4h",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": "embedded force-agent-shell skill",
       "consumer_ref": "skills/force-agent-shell/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-install-agent-v1",
       "json_probe": [
         "--json"
@@ -1095,7 +1222,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -1104,11 +1230,16 @@
     {
       "command": "out",
       "section": "4h",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": "inspect index (elision-marker recovery)",
       "consumer_ref": "internal/agentos/inspect.go",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-out-v1",
       "json_probe": [
         "--list",
@@ -1127,13 +1258,11 @@
         "linux": false,
         "windows": false
       },
-      "scope_gap": "4.38 requires promotion from experimental; no promotion evidence recorded",
+      "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
-        "dispatch_pass: no same-candidate windows evidence",
-        "scope: 4.38 requires promotion from experimental; no promotion evidence recorded"
+        "dispatch_pass: no same-candidate windows evidence"
       ]
     },
     {
@@ -1141,9 +1270,14 @@
       "section": "4i",
       "stability": "preview",
       "stability_source": "docs/release-roadmap-and-versioning.md: reference agent",
+      "atlas_status": null,
       "execution_tier": "workspace",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": null,
       "json_probe": null,
       "json_probe_error": "no safe JSON probe declared",
@@ -1161,8 +1295,8 @@
       },
       "scope_gap": null,
       "gaps": [
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
+        "consumer: no shipped reader has been identified",
+        "json_schema: no safe JSON probe declared",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -1171,11 +1305,16 @@
     {
       "command": "ycode",
       "section": "4i",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": null,
       "json_probe": null,
       "json_probe_error": "no safe JSON probe declared",
@@ -1193,9 +1332,8 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
+        "consumer: no shipped reader has been identified",
+        "json_schema: no safe JSON probe declared",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -1204,11 +1342,16 @@
     {
       "command": "kb",
       "section": "4j",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": null,
       "json_probe": [
         "list",
@@ -1229,8 +1372,7 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "json_schema: no successful versioned JSON envelope probe",
+        "json_schema: JSON response has no top-level versioned schema",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -1239,11 +1381,16 @@
     {
       "command": "graph",
       "section": "4j",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": null,
       "json_probe": [
         "notes",
@@ -1264,8 +1411,7 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "json_schema: no successful versioned JSON envelope probe",
+        "json_schema: exit 2",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -1274,11 +1420,16 @@
     {
       "command": "skill",
       "section": "4j",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": "embedded bashy skill",
       "consumer_ref": "skills/bashy/SKILL.md",
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-skill-probe-v1",
       "json_probe": [
         "probe",
@@ -1299,7 +1450,6 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -1308,11 +1458,16 @@
     {
       "command": "craft",
       "section": "4j",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": "bashy-craft-history-v1",
       "json_probe": [
         "history",
@@ -1333,8 +1488,7 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
+        "consumer: no shipped reader has been identified",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -1343,11 +1497,16 @@
     {
       "command": "ask",
       "section": "4k",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": null,
       "json_probe": null,
       "json_probe_error": "no safe JSON probe declared",
@@ -1365,9 +1524,8 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
+        "consumer: no shipped reader has been identified",
+        "json_schema: no safe JSON probe declared",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -1376,11 +1534,16 @@
     {
       "command": "limit",
       "section": "4k",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": null,
       "json_probe": null,
       "json_probe_error": "no safe JSON probe declared",
@@ -1398,9 +1561,8 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
+        "consumer: no shipped reader has been identified",
+        "json_schema: no safe JSON probe declared",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -1409,11 +1571,16 @@
     {
       "command": "oci",
       "section": "4k",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "sandbox",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": null,
       "json_probe": null,
       "json_probe_error": "no safe JSON probe declared",
@@ -1431,9 +1598,8 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
+        "consumer: no shipped reader has been identified",
+        "json_schema: no safe JSON probe declared",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -1442,11 +1608,16 @@
     {
       "command": "sandbox",
       "section": "4k",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "sandbox",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": null,
       "json_probe": null,
       "json_probe_error": "no safe JSON probe declared",
@@ -1464,9 +1635,8 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
+        "consumer: no shipped reader has been identified",
+        "json_schema: no safe JSON probe declared",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -1475,11 +1645,16 @@
     {
       "command": "audit",
       "section": "4k",
-      "stability": null,
-      "stability_source": null,
+      "stability": "preview",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": null,
       "json_probe": [
         "verify",
@@ -1500,9 +1675,8 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
+        "consumer: no shipped reader has been identified",
+        "json_schema: exit 1",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -1511,11 +1685,16 @@
     {
       "command": "loom",
       "section": "4s",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "workspace",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": null,
       "json_probe": [
         "status",
@@ -1536,9 +1715,8 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
+        "consumer: no shipped reader has been identified",
+        "json_schema: exit 1",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
@@ -1547,11 +1725,16 @@
     {
       "command": "sshd",
       "section": "4s",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "release-bar.policy",
+      "atlas_status": null,
       "execution_tier": null,
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": "the outpost-backed SSH service is not yet implemented in bashy",
+      "json_gap": "the outpost-backed SSH service is not yet implemented in bashy",
+      "atlas_gap": "the outpost-backed SSH service is not yet implemented in bashy",
+      "dispatch_gap": "the outpost-backed SSH service is not yet implemented in bashy",
       "json_schema": null,
       "json_probe": null,
       "json_probe_error": "no safe JSON probe declared",
@@ -1569,26 +1752,30 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
-        "atlas: no complete entry in the live catalog",
-        "dispatch_coverage: darwin",
+        "consumer: the outpost-backed SSH service is not yet implemented in bashy",
+        "json_schema: the outpost-backed SSH service is not yet implemented in bashy",
+        "atlas: the outpost-backed SSH service is not yet implemented in bashy",
+        "dispatch_coverage: darwin (the outpost-backed SSH service is not yet implemented in bashy)",
         "dispatch_pass: no same-candidate darwin evidence",
-        "dispatch_coverage: linux",
+        "dispatch_coverage: linux (the outpost-backed SSH service is not yet implemented in bashy)",
         "dispatch_pass: no same-candidate linux evidence",
-        "dispatch_coverage: windows",
+        "dispatch_coverage: windows (the outpost-backed SSH service is not yet implemented in bashy)",
         "dispatch_pass: no same-candidate windows evidence"
       ]
     },
     {
       "command": "proxy",
       "section": "4s",
-      "stability": null,
-      "stability_source": null,
+      "stability": "experimental",
+      "stability_source": "atlas.stability",
+      "atlas_status": null,
       "execution_tier": "userland",
       "consumer": null,
       "consumer_ref": null,
+      "consumer_gap": null,
+      "json_gap": null,
+      "atlas_gap": null,
+      "dispatch_gap": null,
       "json_schema": null,
       "json_probe": null,
       "json_probe_error": "no safe JSON probe declared",
@@ -1606,14 +1793,13 @@
       },
       "scope_gap": null,
       "gaps": [
-        "stability: no declared release tier",
-        "consumer: no named consumer recorded",
-        "json_schema: no successful versioned JSON envelope probe",
+        "consumer: no shipped reader has been identified",
+        "json_schema: no safe JSON probe declared",
         "dispatch_pass: no same-candidate darwin evidence",
         "dispatch_pass: no same-candidate linux evidence",
         "dispatch_pass: no same-candidate windows evidence"
       ]
     }
   ],
-  "gap_count": 232
+  "gap_count": 183
 }

@@ -53,13 +53,14 @@ without serving), `out --list --json` / `out --json HANDLE` (`bashy-out-v1`),
 `ollama status --json` (`bashy-ollama-status-v1`, read-only — never
 provisions or contacts the engine), and `chat --dry-run --json`
 (`bashy-chat-v1`, resolves the launch without running an agent). `llm env
---json` is declared but needs the yoke `pkg/broker` change before it can
-pass.
+--json` emits the `bashy-llm-env-v1` envelope.
 
 Consumers name shipped skills with a source reference; empty cells require a
 real consumer to be identified. Visible/core does not imply a stability tier.
-Only an existing atlas experimental declaration or an explicit release policy
-is reported. No promotion is inferred.
+The tier is declared as `atlas.stability` in yoke's `pkg/atlas`, or in bashy's
+`bashyOwnedVerbAtlas` for bashy-owned rows. A policy JSON `stability` override
+takes precedence per row and records its `stability_source`; no promotion is
+inferred.
 
 The inventory preserves plural aliases and canonical front doors. It includes
 readiness checks, the reference agent's human front door, and the audit verb.

@@ -46,15 +46,19 @@ def gaps_for(row):
     gaps = []
     if row.get('stability') not in ('experimental', 'preview', 'supported'):
         gaps.append('stability: no declared release tier')
+    if row.get('stability') != 'experimental' and row.get('atlas_status') == 'experimental':
+        gaps.append('stability: declared tier contradicts atlas experimental status')
     if not row.get('consumer'):
-        gaps.append('consumer: no named consumer recorded')
+        gaps.append('consumer: ' + (row.get('consumer_gap') or 'no shipped reader has been identified'))
     if not envelope_version({'schema_version': row.get('json_schema')}):
-        gaps.append('json_schema: no successful versioned JSON envelope probe')
+        gaps.append('json_schema: ' + (row.get('json_gap') or row.get('json_probe_error') or
+                                       'no safe versioned JSON probe is declared'))
     if not row.get('atlas_entry'):
-        gaps.append('atlas: no complete entry in the live catalog')
+        gaps.append('atlas: ' + (row.get('atlas_gap') or 'no complete entry in the live catalog'))
     for goos in OSES:
         if not row.get('dispatch_coverage', {}).get(goos):
-            gaps.append('dispatch_coverage: ' + goos)
+            gaps.append('dispatch_coverage: ' + goos + ' (' +
+                        (row.get('dispatch_gap') or 'not listed for this platform') + ')')
         if not row.get('dispatch_pass', {}).get(goos):
             gaps.append('dispatch_pass: no same-candidate ' + goos + ' evidence')
     if row.get('scope_gap'):
@@ -127,9 +131,10 @@ def generate(binary, manifest, candidate, records):
         for spec in manifest['commands']:
             name = spec['command']
             entry = entries.get(name, {})
-            stability = spec.get('stability')
+            stability = spec.get('stability') or entry.get('stability')
+            source = spec.get('stability_source') or ('atlas.stability' if entry.get('stability') else None)
             if not stability and entry.get('status') == 'experimental':
-                stability = 'experimental'
+                stability, source = 'experimental', 'atlas.status'
             probe = spec.get('json_probe')
             schema, probe_error = None, 'no safe JSON probe declared'
             if probe and entry:
@@ -139,9 +144,11 @@ def generate(binary, manifest, candidate, records):
                     probe_error = 'JSON response has no top-level versioned schema'
             coverage = {goos: dispatch_covered(name, catalog, entry, goos) for goos in OSES}
             row = dict(command=name, section=spec['section'], stability=stability,
-                       stability_source=spec.get('stability_source') or ('atlas.status' if stability else None),
+                       stability_source=source, atlas_status=entry.get('status'),
                        execution_tier=entry.get('tier'), consumer=spec.get('consumer'),
-                       consumer_ref=spec.get('consumer_ref'), json_schema=schema,
+                       consumer_ref=spec.get('consumer_ref'), consumer_gap=spec.get('consumer_gap'),
+                       json_gap=spec.get('json_gap'), atlas_gap=spec.get('atlas_gap'),
+                       dispatch_gap=spec.get('dispatch_gap'), json_schema=schema,
                        json_probe=probe, json_probe_error=probe_error,
                        atlas_entry=bool(entry and all(entry.get(k) for k in ('group', 'tier', 'sdlc', 'effects', 'os'))),
                        alias_of=entry.get('alias_of'), dispatch_coverage=coverage,

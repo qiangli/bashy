@@ -40,6 +40,17 @@ class ReleaseBarTest(unittest.TestCase):
         self.row['stability'] = 'workspace'
         self.assertTrue(bar.gaps_for(self.row))
 
+    def test_nonexperimental_tier_cannot_contradict_experimental_atlas_status(self):
+        self.row['atlas_status'] = 'experimental'
+        self.assertIn('stability: declared tier contradicts atlas experimental status', bar.gaps_for(self.row))
+
+    def test_named_gap_reason_is_reported_for_missing_consumer_and_envelope(self):
+        self.row.update(consumer=None, consumer_gap='no reader in the shipped tree',
+                        json_schema=None, json_gap='no safe probe for this command')
+        gaps = bar.gaps_for(self.row)
+        self.assertIn('consumer: no reader in the shipped tree', gaps)
+        self.assertIn('json_schema: no safe probe for this command', gaps)
+
     def test_unversioned_or_nested_schema_is_not_an_envelope(self):
         for payload in ([], {}, {'schema_version': ''}, {'result': {'schema_version': 'v1'}}):
             self.assertIsNone(bar.envelope_version(payload))
@@ -133,7 +144,14 @@ class ReleaseBarTest(unittest.TestCase):
         self.assertTrue(set('sprint todo weave dag foreman supervise mb meet ping inbox bus notify whois app models tools agents context run commands llm mcp install-agent out genie kb graph skill craft ask limit oci sandbox loom sshd proxy'.split()) <= set(names))
         for row in manifest['commands']:
             if row['consumer']:
-                self.assertIn('bashy ' + row['command'], (bar.ROOT / row['consumer_ref']).read_text())
+                ref = row['consumer_ref']
+                if ref.startswith('github.com/qiangli/yoke/'):
+                    self.assertEqual('github.com/qiangli/yoke/pkg/weave/weave_tools.go', ref)
+                    continue
+                command = {'models': 'model', 'tools': 'tool'}.get(row['command'], row['command'])
+                text = (bar.ROOT / ref).read_text()
+                self.assertTrue('bashy ' + command in text or '"$BASHY" ' + command in text,
+                                row['consumer_ref'])
 
 
 if __name__ == '__main__':
