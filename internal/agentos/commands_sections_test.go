@@ -4,9 +4,13 @@
 package agentos
 
 import (
+	"os"
+	"regexp"
 	"slices"
+	"strconv"
 	"testing"
 
+	"github.com/qiangli/yoke/external/registry"
 	"github.com/qiangli/yoke/pkg/atlas"
 )
 
@@ -150,5 +154,33 @@ func TestClassSectionsTaxonomy(t *testing.T) {
 		if c != 1 {
 			t.Errorf("%q appears in %d sections, want 1", n, c)
 		}
+	}
+}
+
+// Keep the public external count tied to the shipped catalog, not a host's
+// registered commands. Use all platforms and agent-mode provisioners.
+func TestDocumentedExternalCount(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "1")
+	doc, err := os.ReadFile("../../docs/command-atlas.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := len(classSectionsOn(true, "any").External)
+	t.Logf("declarative managed-CLI registry: %d (%v)", len(registry.Names()), registry.Names())
+	var posix []string
+	for _, row := range liveAtlas(true) {
+		if row.Origin == atlas.OriginExternal && row.Posix {
+			posix = append(posix, row.Name)
+		}
+	}
+	t.Logf("POSIX external providers: %d (%v)", len(posix), posix)
+	t.Logf("shipped external commands: %d (%v)", want, classSectionsOn(true, "any").External)
+	match := regexp.MustCompile("(?m)^\\| `external` .*\\| ([0-9]+) \\|$").FindSubmatch(doc)
+	if len(match) != 2 {
+		t.Fatal("missing external count in command-atlas.md")
+	}
+	got, err := strconv.Atoi(string(match[1]))
+	if err != nil || got != want {
+		t.Fatalf("documented external count = %d, registry = %d", got, want)
 	}
 }

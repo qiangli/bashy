@@ -1233,9 +1233,10 @@ container arch, clones yash's GPL test suite into a gitignored cache
 (`.yash-tests/`, never vendored), and runs the testee in POSIX mode across two
 oracle panels (alpine: bash 5.3/dash/ash/yash/mksh/loksh/zsh; debian adds
 posh/ksh93), reporting bashy's pass rate vs each. Needs a container engine
-(`bashy podman` on a unix host, or docker). As of 2026-06-29: **bashy 96%**
-(alpine 1763/1826, debian 1777/1838) — ahead of bash (95% / 94%) and tied with
-mksh for best. See `docs/cross-shell-conformance-baseline.md`.
+(`bashy podman` on a unix host, or docker). Current claims point to `yash-chunks.json` and
+`docs/public-claims-evidence.md`: fixture completion is not assertion conformance.
+Recheck per-panel assertion counts on the RC; older panel results remain in
+`docs/cross-shell-conformance-baseline.md` as historical evidence.
 Effects: write
 
 ```bash
@@ -1358,7 +1359,9 @@ echo "built bin/bashy (AgentOS)"
 
 ### build-fips
 Build both binaries against the Go FIPS 140-3 Cryptographic Module
-(GOFIPS140=v1.0.0). Pure-Go, no cgo/BoringCrypto. Use GODEBUG=fips140=on at
+(GOFIPS140=v1.0.0). Go cryptography without BoringCrypto; Darwin releases
+still link the inherited-signal C constructor via CGo (see
+`docs/public-claims-evidence.md`). Use GODEBUG=fips140=on at
 runtime (keeps md5sum working), not fips140=only.
 Sources: cmd, internal, go.mod, go.sum
 Generates: bin/bash, bin/bashy

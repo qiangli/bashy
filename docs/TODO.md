@@ -1,7 +1,7 @@
 # Bashy: Bash 5.3 Drop-In Replacement — TODO Checklist
 
 **Current status**: 🎉 86 bash tests passing, 0 failing, 0 skipped (of 86 measured fixtures) — **100% of those measured fixtures**, not proof of interactive completeness
-**POSIX frontier**: yash `-p` conformance suite **96%** (confirmed 2026-07-01 on novicortex; ≥ bash 5.3/5.2, tied with mksh for best of the 10-shell panel) — run `bashy dag dag.md yash`; details in `docs/cross-shell-conformance-baseline.md` + `docs/yash-conformance-gap.md`
+**POSIX frontier**: current yash claims point to [`yash-chunks.json`](../yash-chunks.json) and [measurement boundaries](public-claims-evidence.md). The committed fixture-completion record does not establish a current assertion pass percentage; recheck on RC with `bashy dag dag.md yash`.
 
 **VSC-PCTS campaign (current scope)** — the shell-isolation milestone is complete: all 493 shell TPs are in the certification PASS group with zero blockers/manual resolutions/caps under the proven GNU Coreutils 9.11 provider PATH (`vsc-pcts-posix-shell-2026-08-08`). The primary corrective arm is **Profile B: Bashy `sh` plus frozen GNU/system providers**, excluding Bashy's Go multicall. Profiles C/D separately measure the Bashy Go utility provider across the complete 116-set/8,844-TP inventory. The one-page scope and inventory routing source is `docs/posix-command-coverage.md`. Publication consent for utilities-suite results was granted 2026-07-29 (ticket #280298), for conformance-work purposes on the same terms as the shell arm. Raw journals remain private, and no "certified"/"passes the Open Group suite" claim is made.
   - **C/D name-coverage checkpoint:** the assembled 116-name surface is complete:
@@ -488,7 +488,10 @@ covered by an earlier section above is NOT repeated here.
 - [ ] `histappend`, `histreedit`, `histverify`, `cmdhist`, `lithist`, `mailwarn` — connect to history backend
 - [ ] `login_shell` — reflect `WithLoginShell` state in `shopt -p`
 
-### G8: Job control phase 1 (L)
+### G8: Job control phase 1 (historical, superseded)
+
+Unix job control has shipped; these old unchecked planning items are not current
+limitations. See [job-carrier.md](job-carrier.md).
 
 - [ ] `Setpgid: true` on `exec.Cmd.SysProcAttr` (Unix)
 - [ ] Track per-bgProc `pgid`
@@ -498,7 +501,10 @@ covered by an earlier section above is NOT repeated here.
 - [ ] `jobs -p` (PID only), `-l` (long format with PID), `-n` (changed-since-last), `-r` (running), `-s` (stopped), `-x cmd` (substitute jobspec)
 - [ ] `[1]+ Done <cmd>` status notification on prompt
 
-### G9: Job control phase 2 (XL)
+### G9: Job control phase 2 (historical, superseded)
+
+Unix terminal handoff has shipped; see the current conformance statement and
+`internal/cli/jobcontrol_autoMonitor_vsc_unix_test.go`.
 
 - [ ] TTY control (`tcsetpgrp` via golang.org/x/sys/unix)
 - [ ] SIGTSTP (Ctrl-Z) handler — stop foreground job, push to bg table

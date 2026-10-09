@@ -28,7 +28,7 @@ strict discipline (§Claim discipline):
 | Signal | Current | Source |
 |---|---|---|
 | Bash 5.3 fixture suite | **86/86** (100% of measured) | `make test-bash` (serial, the hard gate) |
-| yash POSIX `-p` suite | **96%** (best of 10-shell panel, tied mksh) | `bashy dag dag.md yash` |
+| yash POSIX `-p` suite | See [`yash-chunks.json`](../yash-chunks.json); fixture completion is not assertion conformance | `bashy dag dag.md yash` |
 | Drop-in fidelity | **99%** (1096/1105) | drop-in-fidelity campaign |
 | Clean-room differential | **0 deviations / 719 scripts** vs bash 5.3 | `scripts/oils-diff.sh` |
 | 10-shell panel | **0 deviations** (strict-POSIX + feature-rich) | `scripts/multishell-diff.sh` |
@@ -171,7 +171,8 @@ and watch token budget.
 1. **`make test-bash` = 86/86, serial, clean PATH** — the mandatory hard gate
    before ANY bashy tag (emphatic user rule; I've skipped it before — never
    again). Re-run, don't trust a quoted count.
-2. **yash POSIX suite ≥ 96%** (no regression from the headline).
+2. **yash POSIX suite remeasured on the RC** with corpus revision, per-panel
+   assertion counts and exclusions; see [measurement boundaries](public-claims-evidence.md).
 3. **Differential + 10-shell panel = 0 deviations** (re-measured).
 4. **Bash++ v1 profile green** — enumerated Go 1.27 constructs, superset gate,
    interpreted/native equivalence where implemented, and race/leak gates.
@@ -181,9 +182,10 @@ and watch token budget.
 
 ## Declared limitations (carry into the conformance statement + release notes)
 
-- **Interactive job control** — `fg`/`bg`/`jobs` can't own the controlling
-  terminal (subshells are goroutines); real-PID job control is the supported
-  path via `bashy jobs|fg|bg|kill` on the shared registry.
+- **Job-control platform boundary** — Unix process groups and terminal handoff
+  have shipped. Windows does not provide Unix process-group/TTY job control;
+  its basic job carrier provides process identity but no live signal proxy
+  (`os/exec` rejects `ExtraFiles`). See [job-carrier.md](job-carrier.md).
 - **`((` nested-subshell ambiguity** — a documented parser edge.
 - **`<<${a}` heredoc delimiter** — bashy parse-errors an expansion in the
   heredoc delimiter word (matches upstream mvdan/sh; loud + recovers); bash
@@ -193,7 +195,8 @@ and watch token budget.
 
 - ✅ "Zero deviations from Bash 5.3 across a 719-script clean-room differential,
   cross-checked against a 10-shell panel; 86/86 on Bash's own 5.3 fixture suite;
-  yash POSIX suite 96% (best of the panel)."
+  historical measurements, not a current RC verdict. Yash evidence and its
+  measurement units are recorded in `yash-chunks.json` and `public-claims-evidence.md`."
 - ❌ Do **not** say "100% POSIX compatible" or "POSIX certified" until Open
   Group certification is actually granted. 86/86 is *our measured fixtures*, not
   total POSIX fidelity.

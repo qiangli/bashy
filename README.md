@@ -1,11 +1,11 @@
-# bashy — a pure-Go Bash 5.3 that speaks Bash#
+# bashy — a Go Bash 5.3 that speaks Bash#
 
 [![release](https://img.shields.io/github/v/release/qiangli/bashy?label=release)](https://github.com/qiangli/bashy/releases/latest)
 [![tour](https://github.com/bashsharp/tour/actions/workflows/tour.yml/badge.svg)](https://github.com/bashsharp/tour/actions/workflows/tour.yml)
 
-`bashy` is one static binary — no CGo, no system bash — that is a **drop-in
+`bashy` is one executable per platform, with no system bash dependency — a **drop-in
 Bash 5.3** on Linux, macOS and Windows: same flags, same script semantics,
-same `$BASH_VERSION`, and it passes GNU Bash's own 5.3 test suite (every
+Bash-compatible `$BASH_VERSION`, and it passes GNU Bash's own 5.3 test suite (every
 runnable fixture, 86/86). With `--bashsharp` the same binary speaks
 **[Bash#](https://github.com/bashsharp/bashsharp)**: the bash you already know,
 Go where you need types, any fenced language where you need a library, and
@@ -15,6 +15,12 @@ judged, never trusted.
 > **Alpha** (0.x). Bash 5.3 compatibility is stable; the Bash# dialect may
 > still change before 1.0 through RFCs. Every number this project states
 > names its corpus: [docs/claims.md](https://github.com/bashsharp/bashsharp/blob/main/docs/claims.md).
+
+The shell and userland are Go. Linux and Windows release builds use
+`CGO_ENABLED=0`; the Darwin `bashy` release uses `CGO_ENABLED=1` to link the
+pre-Go C constructor that snapshots inherited ignored signals before the Go
+runtime changes them. It is not a fully static, CGo-free release. See
+[build evidence](docs/public-claims-evidence.md).
 
 ## Ten minutes
 
@@ -52,8 +58,10 @@ commands, run deterministically.
 - **A Bash 5.3 you can ship anywhere.** One binary per platform; job control,
   coprocesses, signal traps, locale-aware globbing — verified against Bash's
   own suite on Linux and macOS. Invoked as `sh`, or with `--posix`, it is a
-  POSIX shell: 493/493 on the licensed VSC shell arm, 99 %+ on yash's POSIX
-  suite (bash 5.3 itself scores 96 % there).
+  POSIX shell: 493/493 on the licensed VSC shell arm (milestone evidence).
+  For yash, see [yash-chunks.json](yash-chunks.json) and the
+  [measurement boundaries](docs/public-claims-evidence.md); fixture completion
+  is not an assertion pass percentage.
 - **The pure-Go userland with it.** `ls`, `sed`, `awk`, `grep`, `find`,
   `sort`, `tar`, `jq`, `git`, `make`, … as applets, so the same script means
   the same thing on Windows.
@@ -240,12 +248,15 @@ and process substitutions use real named pipes. Job control
 (`jobs`/`fg`/`bg`/`kill %n`/`suspend` with stopped-state tracking),
 coprocesses, and signal traps are implemented and pass Bash's test suite on
 Unix. Mirroring Bash's own design (`jobs.c` on Unix, `nojobs.c` elsewhere),
-the OS-level job-control machinery is Unix-only; on other platforms it
-degrades exactly as a no-job-control Bash does.
+Unix process groups and controlling-terminal handoff are implemented. Windows
+does not provide Unix process-group/TTY job control; its basic job carrier
+provides process identity but no live signal proxy (`os/exec` rejects
+`ExtraFiles`). See [job-carrier.md](docs/job-carrier.md).
 
-Two known gaps: arithmetic currently uses the native int width (64-bit on
-64-bit platforms), so very large values on 32-bit builds truncate — a tracked
-int64 migration; and some interactive job-control behavior remains incomplete.
+Arithmetic currently uses the native int width (64-bit on 64-bit platforms),
+so very large values on 32-bit builds truncate — a tracked int64 migration.
+Unix job control has shipped; the remaining interactive boundaries are listed
+in [the conformance statement](docs/conformance-statement.md#declared-limitations).
 The final Sprint 253 production gate measured the Bash 5.3 fixtures at
 **86/86 on Windows and Linux** (run 35812307698), and the Sprint 257 timezone
 follow-up measured **86/86** on two native Windows builds, native macOS, and
@@ -258,6 +269,10 @@ namerefs, `[[ ]]`, arithmetic, here documents, brace/tilde/glob expansion
 Bash's own test suite.
 
 ## Development
+
+Builds require `go 1.27` and select `toolchain go1.27.1`, as recorded in
+[`go.mod`](go.mod). Product versions come from the release tag; use
+`bashy --version` to identify the installed build.
 
 See [`CLAUDE.md`](CLAUDE.md) for the development workflow and [`docs/`](docs/)
 for the compliance roadmap and per-fixture analyses. The Bash 5.3 suite is

@@ -20,7 +20,7 @@ subcommand words**.
 | subcommand | precise term | the claim it earns | strength |
 |---|---|---|---|
 | `verify compat` | **compatibility** | behaves like GNU Bash 5.3 (reference impl) | matches an implementation |
-| `verify conformance` | **conformance** | passes 96% of the yash POSIX suite — *measured* | meets a standard, self-measured |
+| `verify conformance` | **conformance** | yash evidence: [`yash-chunks.json`](../yash-chunks.json), fixture completion only; assertion rate requires RC measurement | meets a standard, self-measured |
 | `verify compliance` | **certification** | *certified* POSIX (Open Group) | authority-granted, licensed |
 | `verify benchmark` | **benchmark** | faster / fewer tool-calls for agents | not a correctness claim |
 

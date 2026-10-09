@@ -1,5 +1,10 @@
 # Cross-shell conformance baselines (yash POSIX suite + the full-suite plan)
 
+> Historical measurements below are scoped to their recorded dates and corpora,
+> not the current release candidate. Current claims use [`yash-chunks.json`](../yash-chunks.json)
+> and [measurement boundaries](public-claims-evidence.md); no current assertion
+> pass percentage is established by the fixture-completion count.
+
 Status: **2026-07-01.** Baselines from running yash's POSIX (`-p`) suite against
 bashy + 10 reference shells (`scripts/yash-posix-suite.sh`). These are the
 **tracking baselines** for the future "100% on top of bash 5.3" / per-shell
@@ -123,18 +128,11 @@ moment a deep suite runs, the truth is **72%** (with a 435-case gap to bash).
 shallow-corpus ones.** Treat every "9x%/100%" as *"on a corpus that didn't go
 deep,"* the same way yash's suite revealed bashy is "really just 72%."
 
-What we may state, all verifiable, none inflated:
-- ✅ **"Passes bash 5.3's own fixture suite, 86/86."** (run `make test-bash` —
-  exact, reproducible, a real headline.)
-- ✅ **"Deep POSIX conformance is a work in progress: 72% on yash's 1840-case
-  torture suite, closing a known 435-case gap to bash 5.3."** (honest WIP.)
-- ❌ **Do NOT** pitch "93–100% compatible with dash/zsh/…", "100% POSIX", or any
-  bare "N% compatible" — those ride the shallow corpora and overstate. Even
-  *bash itself* is only 95% on yash's suite, so "100% anything" is corpus-relative.
-
-The deep number isn't a bad-news story — it's the **honest baseline + the
-roadmap**. The pitch is "a real bash 5.3 drop-in (86/86) that is rigorously and
-measurably closing the deep-conformance gap," not a hollow "100%."
+Current public wording must use [the evidence boundaries](public-claims-evidence.md),
+not the historical percentages in this section. Link `yash-chunks.json` and the
+dated reports; publish an assertion percentage only after remeasuring the RC
+with a named corpus, exclusions, per-panel denominator and candidate digest.
+The earlier recommendation to advertise the initial low percentage is retired.
 
 ## Forward plan: run the FULL upstream suites from source
 

@@ -65,12 +65,11 @@ tested" ≠ "conformant."
 Two areas are understood, bounded, and should be stated in the conformance
 statement (and measured, not assumed, once TET is running):
 
-1. **Interactive terminal job control** — `fg`/`bg`/Ctrl-Z/monitor-mode
-   notifications are non-functional (goroutine-not-fork model). *Scriptable* job
-   control (`wait`/`wait %n`/`$!`/`kill %n`/`jobs`) is ~conformant (Gate C:
-   11/12). Plan of record to lift it: opt-in real-process path
-   (`sh/plan-dual-mode-job-control.md`), to be built **only if** VSC-PCTS data
-   shows interactive JC is load-bearing in batch mode.
+1. **Platform boundary for job control** — Unix process groups, stopped-state
+   tracking and terminal handoff have shipped; see [job-carrier.md](job-carrier.md)
+   and `internal/cli/jobcontrol_autoMonitor_vsc_unix_test.go`. Windows does not
+   provide Unix process-group/TTY job control; its basic job carrier provides
+   process identity but no live signal proxy (`os/exec` rejects `ExtraFiles`).
 2. **`((` arithmetic-vs-nested-subshell ambiguity** — `((cmd)||(cmd))` /
    `( ( (…) ) )` need spaces; the streaming no-backtrack parser can't
    disambiguate (documented mvdan/sh limitation). Rare in conformance corpora.

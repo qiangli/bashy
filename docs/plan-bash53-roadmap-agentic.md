@@ -1,5 +1,11 @@
 # Bash 5.3 compliance roadmap — agentic-tool drop-in
 
+> Historical plan/assessment, superseded for current job-control claims. Unix
+> process groups, stopped-state tracking and controlling-terminal handoff have
+> shipped; see [job-carrier.md](job-carrier.md) and
+> [conformance-statement.md](conformance-statement.md#declared-limitations).
+> References below to missing Unix job control describe the earlier snapshot.
+
 Goal: make `bashy` a drop-in bash 5.3 replacement for agentic tooling.
 Strict-byte-match against the official bash 5.3 test suite (`make
 test-bash`) is the headline metric. Interactive-only features

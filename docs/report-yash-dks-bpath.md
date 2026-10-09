@@ -1,5 +1,10 @@
 # yash POSIX suite on DKS via the B-path — result report
 
+> Historical measurements below are scoped to their recorded dates and corpora,
+> not the current release candidate. Current claims use [`yash-chunks.json`](../yash-chunks.json)
+> and [measurement boundaries](public-claims-evidence.md); no current assertion
+> pass percentage is established by the fixture-completion count.
+
 **Issue #24 · run 2026-07-20 · conductor: agent-weave-issue-24**
 
 The bash-5.3 B-path (native k8s Indexed Job on DKS, 86/0) was mirrored for the
@@ -42,8 +47,7 @@ without a *critical* harness error. By run-test.sh's own design it returns 0 eve
 when individual POSIX cases fail ("Failure of test cases does not cause the script
 to return non-zero"). So this per-fixture number is a **harness-completion**
 signal — "bashy ran every shell-only `-p` fixture to completion with no critical
-break" — **not** the per-case conformance rate. The richer per-case rate (bashy
-≈ 96 %, at bash-parity on the true delta) is what `make test-yash`
+break" — **not** the per-case conformance rate. The separate per-case rate is what `make test-yash`
 (`scripts/yash-scoreboard.sh`) reports; see `docs/yash-conformance-gap.md`. The
 B-path claim proven here is the same one proven for bash-5.3: **the chunked
 placement vehicle reproduces the single-host result exactly** — 8 independent pods

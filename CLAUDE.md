@@ -547,8 +547,8 @@ ln -s /path/to/bash-5.3 external/bash-5.3
 ```
 
 `make test-bash-helpers` compiles the `recho`/`zecho` C helpers the suite
-needs (the only place `cc` is invoked — for test fixtures, not for bashy
-itself, which is pure Go).
+needs. This is separate from the Darwin release's CGo-linked pre-Go C
+constructor; see [build evidence](docs/public-claims-evidence.md).
 
 ### Doc index
 
@@ -621,11 +621,12 @@ Full policy: `docs/licensing-supply-chain-policy.md`. In brief:
 - **Compiled-in / embedded / linked / vendored → permissive only**: MIT, BSD,
   Apache 2.0. No GPL/LGPL/MPL/SSPL/BSL/proprietary — nothing whose license could
   propagate. Record each in `THIRD_PARTY_LICENSES`.
-- **Pure Go only** for the core: no CGo, no C libraries. Two `cc` invocations
-  exist and neither is CGo: `test-bash-helpers` builds Bash's own test helpers,
-  and the unix build compiles `native/siglaunch.c.in` as a standalone launcher
-  process (see §The unix binaries are a C launcher over the Go binary). Both are
-  our own code; cross-compiled release artifacts are `CGO_ENABLED=0` pure Go.
+- **Go core, platform-specific release linkage.** Linux/Windows releases use
+  `CGO_ENABLED=0`. Darwin `bashy` releases use `CGO_ENABLED=1` to link the pre-Go
+  C constructor that snapshots inherited ignored signals before the Go runtime
+  changes them (`cmd/bashy/inherited_ignore_cgo_unix.go`). This is separate
+  from the test helpers and optional local `siglaunch` launcher. See
+  [build evidence](docs/public-claims-evidence.md).
 - **Runtime download + exec ≠ bundling**: tools bashy downloads and runs as
   separate processes (podman/ollama/gh/loom/act/…, and fetched test suites) are
   not bundled — separate programs on their own licenses, no propagation. Prefer

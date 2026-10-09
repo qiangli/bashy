@@ -1,5 +1,11 @@
 # Bashy vs. GNU Bash 5.3 — Comprehensive Gap Analysis
 
+> Historical plan/assessment, superseded for current job-control claims. Unix
+> process groups, stopped-state tracking and controlling-terminal handoff have
+> shipped; see [job-carrier.md](job-carrier.md) and
+> [conformance-statement.md](conformance-statement.md#declared-limitations).
+> References below to missing Unix job control describe the earlier snapshot.
+
 Date: 2026-05-26
 Reference bash sources: `../sh/external/bash-5.3/`
 Bashy sources: `../sh/interp/`, `../sh/syntax/`, `../sh/expand/`, `../sh/cmd/bashy/`

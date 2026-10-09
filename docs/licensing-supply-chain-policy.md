@@ -10,8 +10,11 @@ lives in `CLAUDE.md` §Third-Party Libraries.
 ELv2, or proprietary — anything whose license could **propagate** to bashy. This
 covers Go module deps, embedded blobs (`*_embed`), and any vendored source.
 
-- **cgo-free core**: releases build `CGO_ENABLED=0`. cgo is only for opt-in,
-  non-core/host pieces where no pure-Go option exists.
+- The core is Go. Linux and Windows release builds use `CGO_ENABLED=0`;
+  the Darwin `bashy` release uses `CGO_ENABLED=1` to link the pre-Go C constructor
+  that snapshots inherited ignored signals before the Go runtime changes them.
+  See [public-claims-evidence.md](public-claims-evidence.md) and
+  `scripts/build-native-darwin-release.sh`.
 - Every compiled-in third party is recorded in `THIRD_PARTY_LICENSES` with its
   license (Apache-2.0 additionally requires stating changes).
 

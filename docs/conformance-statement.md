@@ -76,7 +76,7 @@ All measured on the `bash` drop-in binary, re-runnable via
 | `posix-diff.sh` | clean-room XCU corpus, 5-oracle same-env differential | **0 deviations** |
 | `oils-diff.sh` | Oils spec-test case code through the live differential | **0 deviations** |
 | `multishell-diff.sh` | 10-shell panel (dash/ash/posh/yash + bash/zsh/ksh93/mksh/loksh) | **0 deviations** |
-| `yash-posix-suite.sh` | yash's `-p` POSIX suite (strictest-shell suite; relative measure) | **bashy 96% (≥ bash) — 2026-06-29** (alpine 1763/1826 vs bash53 95%; debian 1777/1838 vs bash52 94%); ~61-case tail under triage |
+| `yash-posix-suite.sh` | yash's `-p` POSIX suite (strictest-shell suite; relative measure) | See [`yash-chunks.json`](../yash-chunks.json) and [measurement boundaries](public-claims-evidence.md); no current assertion percentage claimed |
 | `austin-defects.sh` | clean-room Austin-Group corner-case differential (37 probes) | **37 match / 0 diff** |
 | `dash-posix-suite.sh` | dash's shipped function-library load check (dash has no suite — oracle) | **bashy 6/8** (now matches bash; rejects ash brace-less bodies as of the syntax fix) |
 | `modernish-suite.sh` | modernish self-test (~389 tests) under each shell | **blocked by one `sh` parse bug** (`let --`) — see below |
@@ -91,16 +91,15 @@ once fixed the harness lights up automatically. Notably bashy is *closer* to
 clearing modernish's init than dash or yash (which fail its broader fatal-bug
 battery outright).
 
-**The yash row is the honest frontier.** The clean-room / Oils / multishell
-corpora are at 0 deviations, but they sample behavior; yash's own suite is the
-strictest POSIX shell's adversarial suite, where even bash/dash sit at ~94–95%.
-As of 2026-06-29 bashy is at **96%** — at parity-or-better with bash (95%/94%)
-and tied with mksh for best of the panel, ahead of dash/zsh 91% / ksh93 90%. The
-~61-case ERROR tail (down from 160) is the concrete remaining work — clustered
-and root-caused in **`yash-conformance-gap.md`** (a handful of root causes). This is the long tail the
-differential corpora did not reach, and exactly what the licensed VSC-PCTS run
-would surface; closing it is gated on the same 86/86 no-regression discipline as
-every other fix.
+**The yash row has two measurement units.** The committed
+[`yash-chunks.json`](../yash-chunks.json) records 50 shell-only fixtures completing
+on 2026-07-20, with no harness failures, skips or timeouts. It excludes the
+job-control/signal/TTY fixtures. The runner can complete even when individual
+assertions fail, so that record cannot establish an assertion pass percentage.
+Older panel measurements are preserved as historical evidence in
+[cross-shell-conformance-baseline.md](cross-shell-conformance-baseline.md).
+Recheck on RC with `bashy dag dag.md yash` and retain each panel's corpus revision,
+OK/ERROR counts, exclusions and testee commit before publishing a percentage.
 
 The clean-room corpora are authored from the spec, never copied from GPL suites;
 the GPL suites (yash, dash) are cloned at runtime into gitignored caches and run
@@ -123,8 +122,9 @@ instructions are in [plan-interactive-depth.md](plan-interactive-depth.md).
 1. **Interactive terminal job control.** Unix process-group carriers and
    terminal handoff are implemented and have focused tests in
    `internal/cli/jobcontrol_autoMonitor_vsc_unix_test.go` and the carrier tests.
-   The former blanket “non-functional” description was stale. This does not
-   assert Unix signal/job-control parity under Windows ConPTY.
+   Windows does not provide Unix process-group/TTY job control; its basic job
+   carrier provides process identity but no live signal proxy (`os/exec` rejects
+   `ExtraFiles`). See [job-carrier.md](job-carrier.md).
 2. **`((` arithmetic-vs-nested-subshell ambiguity.** `((cmd)||(cmd))` and deeply
    nested `( ( … ) )` need spaces; the streaming, no-backtrack parser cannot
    disambiguate `((` (a documented mvdan/sh limitation). Rare in conformance

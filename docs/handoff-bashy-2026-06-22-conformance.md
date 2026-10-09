@@ -1,5 +1,11 @@
 # Handoff — conformance next step (2026-06-22, updated 2026-06-23)
 
+> Historical plan/assessment, superseded for current job-control claims. Unix
+> process groups, stopped-state tracking and controlling-terminal handoff have
+> shipped; see [job-carrier.md](job-carrier.md) and
+> [conformance-statement.md](conformance-statement.md#declared-limitations).
+> References below to missing Unix job control describe the earlier snapshot.
+
 One-line: **bash-5.3 is done (86/86, 100%, default mode). Drop-in fidelity is
 now a COMMITTED, repeatable metric (`scripts/bash-fidelity.sh`, baseline
 941/1105 = 85%); the weave fleet is actively clearing its backlog. Pick up

@@ -1,5 +1,11 @@
 # Scoping: remaining POSIX-mode job-control (#23–27, #49) and fc (#54–57) behaviors
 
+> Historical plan/assessment, superseded for current job-control claims. Unix
+> process groups, stopped-state tracking and controlling-terminal handoff have
+> shipped; see [job-carrier.md](job-carrier.md) and
+> [conformance-statement.md](conformance-statement.md#declared-limitations).
+> References below to missing Unix job control describe the earlier snapshot.
+
 Scoped 2026-06-20 against the bash 5.3 oracle (`bashy podman run bash:5.3`) and
 the sh implementation (`interp/builtin.go` job code, `interp/history.go` fc).
 Classifies each remaining behavior as **TRACTABLE** (implement + probe now),

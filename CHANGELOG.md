@@ -31,6 +31,15 @@ frozen release candidate before the tag.
 
 ## [Unreleased]
 
+### Corrected
+
+- Public claims now distinguish shipped Unix job control from the Windows
+  process-group/TTY boundary, link yash evidence without an unsupported assertion
+  percentage, and count 49 visible external commands from the pinned catalog.
+- Build documentation requires Go 1.27 with toolchain go1.27.1 and qualifies
+  CGo-free release claims: Darwin `bashy` links a pre-Go C constructor to preserve
+  inherited ignored signals. See [claim evidence](docs/public-claims-evidence.md).
+
 Changes after v0.32.0, toward 1.0.0.
 
 ### Added

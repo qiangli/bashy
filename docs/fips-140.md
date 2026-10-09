@@ -3,9 +3,11 @@
 bashy can be built against the **Go Cryptographic Module v1.0.0**, which holds
 CMVP certificate **#5247** (validated to FIPS 140-3). This matters for FedRAMP,
 CMMC, and other US-government deployments that require validated cryptography —
-and it is nearly free here, because bashy is already pure Go with
-`CGO_ENABLED=0`: no BoringCrypto, no OpenSSL, no cgo, no forked toolchain. No
-other cgo-free agentic shell can offer it.
+the cryptographic implementation uses Go rather than BoringCrypto or OpenSSL.
+This does not make every release CGo-free: Darwin `bashy` releases link the
+pre-Go C constructor with `CGO_ENABLED=1` to preserve inherited ignored signals.
+Linux/Windows releases use `CGO_ENABLED=0`. See
+[build evidence](public-claims-evidence.md).
 
 ## Building it
 

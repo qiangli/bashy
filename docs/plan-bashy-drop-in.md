@@ -1,12 +1,18 @@
 # Plan: `cmd/bashy` Drop-In Replacement for Bash 5.3
 
+> Historical plan/assessment, superseded for current job-control claims. Unix
+> process groups, stopped-state tracking and controlling-terminal handoff have
+> shipped; see [job-carrier.md](job-carrier.md) and
+> [conformance-statement.md](conformance-statement.md#declared-limitations).
+> References below to missing Unix job control describe the earlier snapshot.
+
 ## Context
 
-Phases 1-8 built bashy into a solid Bash-compatible script runner (~60-70% of scripting features). However, it is not a drop-in replacement for interactive use. The three biggest blockers are: no readline/line editing, no command history, and no real job control. This plan covers the remaining work (Phases 9-19) to achieve full drop-in compatibility.
+Phases 1-8 built bashy into a solid Bash-compatible script runner (~60-70% of scripting features). At that planning baseline, it was not a drop-in replacement for interactive use: readline, history and real job control were missing. Unix job control has since shipped. This historical plan covered the remaining work (Phases 9-19) to achieve full drop-in compatibility.
 
 ## Constraints
 
-1. **Pure Go only** — No CGo, no C dependencies. All code and third-party libraries must be pure Go.
+1. **Go core** — the original no-CGo release rule is superseded: Darwin `bashy` releases link the pre-Go C constructor with `CGO_ENABLED=1` to preserve inherited ignored signals. Linux/Windows release builds use `CGO_ENABLED=0`; see [public-claims-evidence.md](public-claims-evidence.md).
 2. **Permissive licenses only** — All third-party dependencies must use MIT, BSD, Apache 2.0, or equivalent permissive licenses. No GPL/LGPL.
 3. **Backwards compatible** — All existing `go test ./...` must continue to pass.
 

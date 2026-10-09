@@ -357,7 +357,7 @@ origin per command, plus one cross-cutting tag:
 | `bash` | bash builtin | bash 5.3 builtin, contributed by the embedding shell (stamped in bashy: the atlas tables never see builtins) | 61 |
 | `gnu` | GNU coreutils | GNU coreutils 9.x command reimplemented in Go (`atlas.GNUCoreutilsUpstream()`, 108 names, 3 unimplemented: chroot coreutils runcon) | 98 visible (105 in the tool table; 7 shadowed by builtins) |
 | `unix` | classic Unix | other classic Unix tool reimplemented in Go — awk sed grep jq tar tree ed vi-less … | 48 |
-| `external` | bin-managed external | binmgr CLI, toolchain provisioner, or pinned POSIX provider — exec'd, never linked (= `subclass` ∈ managed-external/provisioner, or a registry entry) | 45 |
+| `external` | bin-managed external | binmgr CLI, toolchain provisioner, or pinned POSIX provider — exec'd, never linked (= `subclass` ∈ managed-external/provisioner, or a registry entry) | 49 |
 | `bashy` | **yoke** (added by bashy) | the **yoke commands** — bashy's own agentic / yoke surface, its third substrate (Classic · Bash++ · Yoke). `commands` minus yoke = the classic surface. Every yoke command is built for agentic tools; *agentic* does not mean *needs a model* — the ladder has deterministic rungs (`tz clip duration tokens ntp`) that are yoke all the same. Wire value stays `bashy` (provenance = who); "yoke" is how the group is referred to, like "the GNU coreutils" | 53 visible + 22 experimental + 16 aliases |
 
 | `registered` | registered — added with `bashy commands add` | **the operator's own ring** (§2.9): never a table entry; the record's data derives the entry (`atlas.RegisteredEntry`, the same precedent as the declarative-registry CLIs). Listed as its own block, and the one origin whose members are host-specific | whatever the host registered |
@@ -382,8 +382,13 @@ in one call. `bashy posix-gate spec` remains the *certified* projection; this
 view is the catalog's answer, and a name on its `not listed` line other than
 `sh` is a gap.
 
+The external count is the visible shipped catalog across all platforms with
+agent-mode provisioners enabled, excluding aliases, experimental entries and
+operator-registered commands. `TestDocumentedExternalCount` checks it against
+`classSectionsOn(true, "any")`; see [measurement boundaries](public-claims-evidence.md).
+
 **The external view.** `bashy commands --view external` is "what is still not
-pure Go" as one command: the 45 bin-managed names by kind — pinned POSIX
+pure Go" as one command: the 49 bin-managed names by kind — pinned POSIX
 providers (exactly `ar ctags ex localedef lp m4 man nm strip vi` — the
 **pure-Go debt**; each one implemented in Go leaves the list), managed
 externals (git gh act kubectl …, plus `posix-providers` and `why` — wrapped

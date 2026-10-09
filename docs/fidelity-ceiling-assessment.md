@@ -1,5 +1,11 @@
 # Drop-in fidelity — reaching 100% on shell-behavior cases
 
+> Historical plan/assessment, superseded for current job-control claims. Unix
+> process groups, stopped-state tracking and controlling-terminal handoff have
+> shipped; see [job-carrier.md](job-carrier.md) and
+> [conformance-statement.md](conformance-statement.md#declared-limitations).
+> References below to missing Unix job control describe the earlier snapshot.
+
 Status: **2026-06-25 — RESOLVED to 100% on shell-behavior cases.** Drove `scripts/bash-fidelity.sh` from 1059 to **1103/1103 = 100%** of shell-behavior cases (de-noised), with **make test-bash 86/86** held on every push. The final two non-matching cases were proven to be **runtime-substrate artifacts, not shell-behavior gaps**, and are transparently excluded (see fd-7 below).
 
 ## Where we are

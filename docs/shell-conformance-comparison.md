@@ -1,5 +1,10 @@
 # Shell conformance comparison — bashy vs gosh vs zsh
 
+> Historical measurements below are scoped to their recorded dates and corpora,
+> not the current release candidate. Current claims use [`yash-chunks.json`](../yash-chunks.json)
+> and [measurement boundaries](public-claims-evidence.md); no current assertion
+> pass percentage is established by the fixture-completion count.
+
 Measured 2026-06-28 on darwin/arm64 (bashy `4e31ce1`, sh fork `36c3fc07`).
 Reproduce with the commands in *Methodology* below.
 

@@ -1,5 +1,10 @@
 # Bashy release runbook
 
+Before publishing release notes, apply the [public-claim checks](public-claims-evidence.md).
+Use the actual candidate tag from `bashy --version`, Bash compatibility 5.3,
+and the Go 1.27 / toolchain go1.27.1 build coordinate; never substitute a
+historical report's version or percentage.
+
 The candidate release is built once from a `vX.Y.Z-dev` tag. Promotion reuses
 those tested bytes; it does not rebuild them. The repository knowledge record
 `kb:release-bashy` owns the full candidate, native-QA and promotion sequence.

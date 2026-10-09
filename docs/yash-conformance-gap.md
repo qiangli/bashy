@@ -1,5 +1,10 @@
 # yash POSIX-suite conformance gap — triage worklist
 
+> Historical measurements below are scoped to their recorded dates and corpora,
+> not the current release candidate. Current claims use [`yash-chunks.json`](../yash-chunks.json)
+> and [measurement boundaries](public-claims-evidence.md); no current assertion
+> pass percentage is established by the fixture-completion count.
+
 > **Update 2026-07-02 — the "gap" is largely a MEASUREMENT ARTIFACT; bashy is at bash-parity.**
 > Re-measured every `-p` cluster against a *genuine* bash oracle (macOS bash
 > 5.3.15 + Linux bash 5.2) using yash's own `run-test.sh` (drive with

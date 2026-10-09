@@ -195,8 +195,11 @@ A philosophy that forbids nothing is decoration. This one has teeth:
   is a directory, not a SaaS.
 - **No non-permissive dependency may be compiled in, linked, embedded, or vendored.**
   MIT/BSD/Apache only. Download-and-exec is not bundling; linking is.
-- **No CGo in the core.** Pure Go, or it does not cross-compile, and if it does not
-  cross-compile the agent on the other platform does not have it.
+- The core is Go. Linux and Windows release builds use `CGO_ENABLED=0`;
+  the Darwin `bashy` release uses `CGO_ENABLED=1` to link the pre-Go C constructor
+  that snapshots inherited ignored signals before the Go runtime changes them.
+  See [public-claims-evidence.md](public-claims-evidence.md) and
+  `scripts/build-native-darwin-release.sh`.
 - **Compatibility may never be traded for performance.** An optimization that breaks
   bash ships as an opt-in extension or it does not ship.
 - **Every command declares its effects.** A command an agent cannot reason about before

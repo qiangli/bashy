@@ -167,7 +167,8 @@ verify-bashy-scratch:
 ## build-fips: Build both binaries against the Go FIPS 140-3 validated crypto
 ## module (CMVP #5247). Run with GODEBUG=fips140=on for FedRAMP/CMMC/gov use.
 ## Do NOT use fips140=only for a general shell — it rejects MD5 (breaks md5sum).
-## Pure-Go, CGO_ENABLED=0: no BoringCrypto, no OpenSSL, no cgo.
+## Go cryptography: no BoringCrypto or OpenSSL. Darwin releases use CGo for
+## the pre-Go inherited-signal constructor; see docs/public-claims-evidence.md.
 build-fips:
 	@mkdir -p $(BIN_DIR)
 	@echo "building with the Go FIPS 140-3 module (GOFIPS140=$(GOFIPS140_VERSION)) ..."
