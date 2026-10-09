@@ -4,7 +4,8 @@ set -eu
 
 dist=${1:-dist}
 expected='usr/lib/bashy/bin/bashy usr/lib/bashy/bin/bash usr/lib/bashy/bin/sh usr/lib/bashy/bin/outpost usr/bin/bashy usr/bin/outpost'
-# Packages must never own the distribution's shells.
+# Packages must never own the distribution's shells. Match from the package
+# root only: the payload's own usr/lib/bashy/bin/bash must not trip bin/bash.
 forbidden='usr/bin/bash usr/bin/sh bin/bash bin/sh'
 
 check_contents() {
@@ -19,7 +20,7 @@ check_contents() {
     }
   done
   for path in $forbidden; do
-    if printf '%s\n' "$listing" | grep -Eq "(^|[[:space:]]|\./|/)${path}([[:space:]]|$)"; then
+    if printf '%s\n' "$listing" | grep -Eq "(^|[[:space:]])(\./|/)?${path}([[:space:]]|$)"; then
       echo "$package: must not install /$path" >&2
       exit 1
     fi
