@@ -28,15 +28,32 @@ import (
 // exit 2 when no subcommand (or --help) is given.
 const mcpUsage = `usage: bashy mcp serve [--transport stdio|http] [--listen ADDR] [--allow EFFECTS]
                        [--tools default|all|NAME,...] [--max-output BYTES]
+       bashy mcp tools [--tools default|all|NAME,...] [--json]
 
 Serve bashy commands to agents over the Model Context Protocol.
 
   serve --transport stdio   run the MCP server over stdio (default)
   serve --transport http    loopback HTTP at /mcp (default 127.0.0.1:0)
+  tools                     print the tools a profile would serve, without serving
+                            (--json: the bashy-mcp-tools-v1 envelope)
   --tools default           registered tools plus available core commands
   --tools all               all canonical registry commands and visible verbs for this OS
   --allow EFFECTS           grant destroy,spend,cred,priv (comma-separated)
 `
+
+// mcpToolsSchemaVersion is the envelope `bashy mcp tools --json` emits: the
+// resolved tool profile an MCP client would see from `bashy mcp serve`,
+// computed without starting a server.
+const mcpToolsSchemaVersion = "bashy-mcp-tools-v1"
+
+type mcpToolsEnvelope struct {
+	SchemaVersion string   `json:"schema_version"`
+	Profile       string   `json:"profile"`
+	Transports    []string `json:"transports"`
+	AllTools      bool     `json:"all_tools"`
+	Tools         []string `json:"tools"`
+	Registered    []string `json:"registered"`
+}
 
 // dispatchMCP is the `bashy mcp` front door: it runs the yoke MCP server
 // over stdio or loopback HTTP. A clean shutdown returns 0.
@@ -49,6 +66,9 @@ func dispatchMCP(args []string) int {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
 		fmt.Fprint(os.Stderr, mcpUsage)
 		return 2
+	}
+	if args[0] == "tools" {
+		return dispatchMCPTools(args[1:])
 	}
 	if args[0] != "serve" {
 		fmt.Fprint(os.Stderr, mcpUsage)
@@ -139,6 +159,65 @@ func dispatchMCP(args []string) int {
 	if err := runMCPStdio(ctx, srv, opts, maxOutput); err != nil {
 		fmt.Fprintln(os.Stderr, "bashy mcp:", err)
 		return 1
+	}
+	return 0
+}
+
+// dispatchMCPTools answers `bashy mcp tools [--tools PROFILE] [--json]`:
+// the same option resolution `serve` performs, reported instead of served.
+func dispatchMCPTools(args []string) int {
+	profile, asJSON := "default", false
+	for i := 0; i < len(args); i++ {
+		name, value, hasValue := strings.Cut(args[i], "=")
+		switch name {
+		case "--json":
+			asJSON = true
+		case "--tools":
+			if !hasValue && i+1 < len(args) {
+				i++
+				value, hasValue = args[i], true
+			}
+			if !hasValue || value == "" {
+				fmt.Fprint(os.Stderr, mcpUsage)
+				return 2
+			}
+			profile = value
+		default:
+			fmt.Fprint(os.Stderr, mcpUsage)
+			return 2
+		}
+	}
+	opts, err := mcpOptions("", profile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy mcp:", err)
+		return 2
+	}
+	env := mcpToolsEnvelope{SchemaVersion: mcpToolsSchemaVersion, Profile: profile, Transports: []string{"stdio", "http"},
+		AllTools: opts.AllTools, Tools: append([]string{}, opts.Tools...), Registered: []string{}}
+	slices.Sort(env.Tools)
+	if opts.Registered != nil {
+		for _, command := range opts.Registered() {
+			env.Registered = append(env.Registered, command.Name)
+		}
+		slices.Sort(env.Registered)
+	}
+	if asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(env); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy mcp:", err)
+			return 1
+		}
+		return 0
+	}
+	if env.AllTools {
+		fmt.Println("tools: all canonical registry commands and visible verbs for this OS")
+	}
+	for _, name := range env.Tools {
+		fmt.Println(name)
+	}
+	for _, name := range env.Registered {
+		fmt.Println(name + "\t(registered)")
 	}
 	return 0
 }

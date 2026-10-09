@@ -329,3 +329,10 @@ func engineNotFoundMessage(arg string) string {
 			"  (https://ollama.com/download), or run it on a paired host node over the mesh.\n"
 	}
 }
+
+// probeOllamaEngine (lean build): a host or cached ollama is used as-is;
+// otherwise the official release is provisionable on platforms whose asset
+// bashy can extract. Never provisions here.
+func probeOllamaEngine() ollamaEngineProbe {
+	return ollamaEngineProbe{Build: "lean", Binary: resolveEngineBinary("ollama"), Provisionable: ollamaEntrypoint() != ""}
+}

@@ -9,35 +9,35 @@ Candidate: `story-1533-development-snapshot`. A covered dispatch is not a record
 | todo | 4a | — | embedded bashy skill | loom-v2 (`todo list --json`) | yes | darwin, linux, windows | none |
 | weave | 4a | — | embedded bashy skill | loom-v2 (`weave list --json`) | yes | darwin, linux, windows | none |
 | dag | 4a | — | embedded bashy skill | dag-v1 (`dag --json --list`) | yes | darwin, linux, windows | none |
-| foreman | 4a | — | embedded conductor skill | missing (`foreman list --json`) | yes | darwin, linux, windows | none |
+| foreman | 4a | — | embedded conductor skill | foreman-v1 (`foreman list --json`) | yes | darwin, linux, windows | none |
 | supervise | 4a | experimental | — | missing | yes | darwin, linux, windows | none |
-| mb | 4b | — | embedded bashy skill | missing (`mb --json`) | yes | darwin, linux, windows | none |
-| meet | 4b | — | embedded force-agent-shell skill | missing (`meet service status --json`) | yes | darwin, linux, windows | none |
+| mb | 4b | — | embedded bashy skill | bashy-mb-v1 (`mb --json`) | yes | darwin, linux, windows | none |
+| meet | 4b | — | embedded force-agent-shell skill | bashy-meet-service-v1 (`meet service status --json`) | yes | darwin, linux, windows | none |
 | ping | 4b | — | — | missing | yes | darwin, linux, windows | none |
 | inbox | 4b | — | embedded bashy skill | bashy-inbox-v1 (`inbox --json`) | yes | darwin, linux, windows | none |
 | bus | 4b | — | — | missing | yes | darwin, linux, windows | none |
 | notify | 4b | — | — | missing | yes | darwin, linux, windows | none |
 | whois | 4b | — | embedded inbox skill | bashy-whois-v1 (`whois self --json`) | yes | darwin, linux, windows | none |
 | app | 4c | — | — | dhnt-app-meta-v1 (`app meta --json`) | yes | darwin, linux, windows | none |
-| models | 4d | — | — | missing (`models list --json`) | yes | darwin, linux, windows | none |
-| tools | 4d | — | — | missing (`tools list --json`) | yes | darwin, linux, windows | none |
-| agents | 4d | — | — | missing (`agents list --json`) | yes | darwin, linux, windows | none |
-| model | 4d | — | — | missing (`model list --json`) | yes | darwin, linux, windows | none |
-| tool | 4d | — | — | missing (`tool list --json`) | yes | darwin, linux, windows | none |
-| agent | 4d | — | embedded conductor skill | missing (`agent list --json`) | yes | darwin, linux, windows | none |
-| chat | 4d | — | — | missing | yes | darwin, linux, windows | none |
+| models | 4d | — | — | bashy-fleet-list-v1 (`models list --json`) | yes | darwin, linux, windows | none |
+| tools | 4d | — | — | bashy-fleet-list-v1 (`tools list --json`) | yes | darwin, linux, windows | none |
+| agents | 4d | — | CI failure router script | bashy-fleet-list-v1 (`agents list --json`) | yes | darwin, linux, windows | none |
+| model | 4d | — | — | bashy-fleet-list-v1 (`model list --json`) | yes | darwin, linux, windows | none |
+| tool | 4d | — | — | bashy-fleet-list-v1 (`tool list --json`) | yes | darwin, linux, windows | none |
+| agent | 4d | — | embedded conductor skill | bashy-fleet-list-v1 (`agent list --json`) | yes | darwin, linux, windows | none |
+| chat | 4d | — | — | bashy-chat-v1 (`chat --agent claude --dry-run --json --instruction release-bar probe`) | yes | darwin, linux, windows | none |
 | context | 4e | — | — | bashy-context-v1 (`context --json`) | yes | darwin, linux, windows | none |
 | inspect | 4e | — | embedded bashy skill | bashy-context-v1 (`inspect context --json`) | yes | darwin, linux, windows | none |
 | run | 4e | experimental | embedded bashy skill | bashy-run-v1 (`run --capture -- true`) | yes | darwin, linux, windows | none |
 | commands | 4e | — | embedded bashy skill | bashy-commands-v1 (`commands --json`) | yes | darwin, linux, windows | none |
 | check | 4e | experimental | embedded bashy skill | bashy-check-v1 (`check --json --script true`) | yes | darwin, linux, windows | none |
-| verify | 4e | — | — | missing | yes | darwin, linux, windows | none |
-| conform | 4e | experimental | — | missing | yes | darwin, linux, windows | none |
-| llm | 4f–4g | — | — | missing (`llm status --json`) | yes | darwin, linux, windows | none |
-| ollama | 4f–4g | — | — | missing | yes | darwin, linux | none |
-| mcp | 4h | experimental | — | missing | yes | darwin, linux, windows | none |
-| install-agent | 4h | — | embedded force-agent-shell skill | missing | yes | darwin, linux, windows | none |
-| out | 4h | — | — | missing | yes | darwin, linux, windows | none |
+| verify | 4e | — | — | bashy-conform-v1 (`verify --list --json`) | yes | darwin, linux, windows | none |
+| conform | 4e | experimental | — | bashy-conform-v1 (`conform --list --json`) | yes | darwin, linux, windows | none |
+| llm | 4f–4g | — | — | missing (`llm env --json`) | yes | darwin, linux, windows | none |
+| ollama | 4f–4g | — | llm model door (engine argv) | bashy-ollama-status-v1 (`ollama status --json`) | yes | darwin, linux | none |
+| mcp | 4h | experimental | install-agent --mcp registration | bashy-mcp-tools-v1 (`mcp tools --json`) | yes | darwin, linux, windows | none |
+| install-agent | 4h | — | embedded force-agent-shell skill | bashy-install-agent-v1 (`install-agent --json`) | yes | darwin, linux, windows | none |
+| out | 4h | — | inspect index (elision-marker recovery) | bashy-out-v1 (`out --list --json`) | yes | darwin, linux, windows | none |
 | genie | 4i | preview | — | missing | yes | darwin, linux, windows | none |
 | ycode | 4i | — | — | missing | yes | darwin, linux, windows | none |
 | kb | 4j | — | embedded bashy skill | missing (`kb list --json`) | yes | darwin, linux, windows | none |
@@ -61,35 +61,35 @@ Candidate: `story-1533-development-snapshot`. A covered dispatch is not a record
 | todo | Sprint 379 / Story 1533 | stability: no declared release tier; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | weave | Sprint 379 / Story 1533 | stability: no declared release tier; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | dag | Sprint 379 / Story 1533 | stability: no declared release tier; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
-| foreman | Sprint 379 / Story 1533 | stability: no declared release tier; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence; scope: Explicitly suppressed from the public atlas by Bashy #40 but listed in Part 4a; conductor must resolve scope |
+| foreman | Sprint 379 / Story 1533 | stability: no declared release tier; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence; scope: Explicitly suppressed from the public atlas by Bashy #40 but listed in Part 4a; conductor must resolve scope |
 | supervise | Sprint 379 / Story 1533 | consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence; scope: Listed in 4a and deferred in 4z; conductor must resolve scope |
-| mb | Sprint 379 / Story 1533 | stability: no declared release tier; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
-| meet | Sprint 379 / Story 1533 | stability: no declared release tier; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
+| mb | Sprint 379 / Story 1533 | stability: no declared release tier; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
+| meet | Sprint 379 / Story 1533 | stability: no declared release tier; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | ping | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | inbox | Sprint 379 / Story 1533 | stability: no declared release tier; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | bus | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | notify | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | whois | Sprint 379 / Story 1533 | stability: no declared release tier; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | app | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
-| models | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
-| tools | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
-| agents | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
-| model | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
-| tool | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
-| agent | Sprint 379 / Story 1533 | stability: no declared release tier; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
-| chat | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
+| models | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
+| tools | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
+| agents | Sprint 379 / Story 1533 | stability: no declared release tier; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
+| model | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
+| tool | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
+| agent | Sprint 379 / Story 1533 | stability: no declared release tier; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
+| chat | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | context | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | inspect | Sprint 379 / Story 1533 | stability: no declared release tier; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | run | Sprint 379 / Story 1533 | dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | commands | Sprint 379 / Story 1533 | stability: no declared release tier; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | check | Sprint 379 / Story 1533 | dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
-| verify | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
-| conform | Sprint 379 / Story 1533 | consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
+| verify | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
+| conform | Sprint 379 / Story 1533 | consumer: no named consumer recorded; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | llm | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
-| ollama | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_coverage: windows; dispatch_pass: no same-candidate windows evidence |
-| mcp | Sprint 379 / Story 1533 | consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
-| install-agent | Sprint 379 / Story 1533 | stability: no declared release tier; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
-| out | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence; scope: 4.38 requires promotion from experimental; no promotion evidence recorded |
+| ollama | Sprint 379 / Story 1533 | stability: no declared release tier; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_coverage: windows; dispatch_pass: no same-candidate windows evidence |
+| mcp | Sprint 379 / Story 1533 | dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
+| install-agent | Sprint 379 / Story 1533 | stability: no declared release tier; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
+| out | Sprint 379 / Story 1533 | stability: no declared release tier; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence; scope: 4.38 requires promotion from experimental; no promotion evidence recorded |
 | genie | Sprint 379 / Story 1533 | consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | ycode | Sprint 379 / Story 1533 | stability: no declared release tier; consumer: no named consumer recorded; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |
 | kb | Sprint 379 / Story 1533 | stability: no declared release tier; json_schema: no successful versioned JSON envelope probe; dispatch_pass: no same-candidate darwin evidence; dispatch_pass: no same-candidate linux evidence; dispatch_pass: no same-candidate windows evidence |

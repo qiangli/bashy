@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,6 +59,7 @@ func dispatchInstallAgent(args []string) int {
 	hooksMode := fs.Bool("hooks", false, "install turn-boundary inbox unread hooks (SessionStart + UserPromptSubmit) so the agent sees waiting mail within one turn")
 	asName := fs.String("as", "", "with --hooks: bake this registered bashy identity into the hook command (same as `bashy inbox --as`); without it the hook stays silent unless the session is attributable")
 	dryRun := fs.Bool("dry-run", false, "with --mcp or --hooks: print the entry instead of writing it")
+	asJSON := fs.Bool("json", false, "emit the bashy-install-agent-v1 envelope (status view, or --check for one agent)")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `usage: bashy install-agent <agent> [--shell PATH] [--project] [--check] [--uninstall]
        bashy install-agent <agent> --mcp [--project] [--dry-run] [--uninstall]
@@ -92,7 +94,8 @@ Note: bashy meet/chat/weave already force-inject the shell for spawned agents
 (SHELL + PATH shim + CLAUDE_CODE_SHELL) — this command makes the wiring durable
 for direct/interactive use. --probe runs the agent LIVE to confirm bashy is used.
 
-With no agent, prints the wiring status of every known agent.
+With no agent, prints the wiring status of every known agent; --json emits it
+(and a single agent's --check verdict) as the bashy-install-agent-v1 envelope.
 `)
 	}
 	// Accept the agent name anywhere among the flags (`install-agent claude
@@ -141,7 +144,10 @@ With no agent, prints the wiring status of every known agent.
 
 	installers := agentInstallers(*yes)
 	if name == "" {
-		printAgentStatus(installers, shell)
+		if *asJSON {
+			return writeAgentStatusJSON(os.Stdout, installers, shell)
+		}
+		printAgentStatus(os.Stdout, installers, shell)
 		return 0
 	}
 	ins, ok := installers[name]
@@ -182,7 +188,11 @@ With no agent, prints the wiring status of every known agent.
 		fmt.Printf("install-agent: %s: PROBE OK — agent ran its shell under bashy\n", name)
 		return 0
 	case *check:
-		if err := ins.check(shell, *project); err != nil {
+		err := ins.check(shell, *project)
+		if *asJSON {
+			return writeAgentCheckJSON(os.Stdout, name, shell, *project, err)
+		}
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "install-agent: %s: CHECK FAILED: %v\n", name, err)
 			return 1
 		}
@@ -1241,19 +1251,93 @@ func codexHookWriter() hookWriter {
 	}
 }
 
-func printAgentStatus(installers map[string]agentInstaller, shell string) {
-	fmt.Printf("shell: %s\n\n", shell)
-	for _, name := range []string{"claude", "opencode", "aider", "gemini", "copilot", "agy", "codex"} {
-		ins := installers[name]
-		onPath := ""
+// installAgentSchemaVersion is the envelope `bashy install-agent --json`
+// (the wiring status of every known agent) and `install-agent <agent>
+// --check --json` (one agent's verdict) emit.
+const installAgentSchemaVersion = "bashy-install-agent-v1"
+
+// installAgentOrder is the status view's row order: the E2E-verified
+// writers first, then the shim-based agents, then the invasive one.
+var installAgentOrder = []string{"claude", "opencode", "aider", "gemini", "copilot", "agy", "codex"}
+
+type installAgentRow struct {
+	Name      string `json:"name"`
+	Installed bool   `json:"installed"`
+	Wired     bool   `json:"wired"`
+	Error     string `json:"error,omitempty"`
+}
+
+type installAgentEnvelope struct {
+	SchemaVersion string            `json:"schema_version"`
+	Shell         string            `json:"shell"`
+	Project       bool              `json:"project,omitempty"`
+	Agent         string            `json:"agent,omitempty"`
+	Wired         *bool             `json:"wired,omitempty"`
+	Error         string            `json:"error,omitempty"`
+	Agents        []installAgentRow `json:"agents,omitempty"`
+}
+
+func agentStatusRows(installers map[string]agentInstaller, shell string) []installAgentRow {
+	rows := make([]installAgentRow, 0, len(installAgentOrder))
+	for _, name := range installAgentOrder {
+		row := installAgentRow{Name: name}
 		if _, err := exec.LookPath(name); err == nil {
+			row.Installed = true
+		}
+		if err := installers[name].check(shell, false); err == nil {
+			row.Wired = true
+		} else {
+			row.Error = err.Error()
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+func writeAgentStatusJSON(w io.Writer, installers map[string]agentInstaller, shell string) int {
+	env := installAgentEnvelope{SchemaVersion: installAgentSchemaVersion, Shell: shell, Agents: agentStatusRows(installers, shell)}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(env); err != nil {
+		fmt.Fprintln(os.Stderr, "install-agent:", err)
+		return 1
+	}
+	return 0
+}
+
+// writeAgentCheckJSON reports one agent's --check verdict inside the
+// envelope. The exit status still says wired (0) or not (1) so a gate can
+// use either the code or the field.
+func writeAgentCheckJSON(w io.Writer, name, shell string, project bool, checkErr error) int {
+	wired := checkErr == nil
+	env := installAgentEnvelope{SchemaVersion: installAgentSchemaVersion, Shell: shell, Project: project, Agent: name, Wired: &wired}
+	if checkErr != nil {
+		env.Error = checkErr.Error()
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(env); err != nil {
+		fmt.Fprintln(os.Stderr, "install-agent:", err)
+		return 1
+	}
+	if !wired {
+		return 1
+	}
+	return 0
+}
+
+func printAgentStatus(w io.Writer, installers map[string]agentInstaller, shell string) {
+	fmt.Fprintf(w, "shell: %s\n\n", shell)
+	for _, row := range agentStatusRows(installers, shell) {
+		onPath := ""
+		if row.Installed {
 			onPath = " (installed)"
 		}
 		status := "not wired"
-		if err := ins.check(shell, false); err == nil {
+		if row.Wired {
 			status = "wired + check OK"
 		}
-		fmt.Printf("  %-9s%-13s %s\n", name, onPath, status)
+		fmt.Fprintf(w, "  %-9s%-13s %s\n", row.Name, onPath, status)
 	}
-	fmt.Print("\nwire one: bashy install-agent <agent>   verify: bashy install-agent <agent> --check\n")
+	fmt.Fprint(w, "\nwire one: bashy install-agent <agent>   verify: bashy install-agent <agent> --check\n")
 }

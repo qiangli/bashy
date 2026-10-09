@@ -60,3 +60,9 @@ func dispatchEngine(arg string) {
 		dispatchExit(0)
 	}
 }
+
+// probeOllamaEngine (host engine build): ollama is linked into this binary.
+func probeOllamaEngine() ollamaEngineProbe {
+	self, _ := os.Executable()
+	return ollamaEngineProbe{Build: "embedded", Binary: self}
+}

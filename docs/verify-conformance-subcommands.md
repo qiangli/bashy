@@ -58,6 +58,7 @@ find-replace — the names live in one registry.
 
 ```
 bashy verify --list                 # the four suites + kind + status + license posture
+bashy verify --list --json          # the same registry as the bashy-conform-v1 envelope
 bashy verify compat        [args→make test-bash-parallel]     # 86/86 gate; auto-fetch fixtures
 bashy verify conformance   [args→scripts/yash-posix-suite.sh] # yash -p panel; auto-clones yash  (alias: yash)
 bashy verify compliance    [--suite PATH]                     # Open Group VSC-PCTS — STUB       (alias: posix)

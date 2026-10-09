@@ -40,6 +40,22 @@ covers that invocation, not every subcommand or payload field. Array-shaped
 legacy outputs cannot gain an envelope without a consumer migration; they
 remain named gaps. The additive `skill probe` version preserves existing keys.
 
+Front-door envelopes (Story 1533, part 4d–4h). Where a verb's body lives in
+yoke and still writes a bare JSON array, the bashy front door adds the
+envelope on the way out rather than changing the probe to an unrelated
+subcommand: `tool|model|agent list --json` (and the hidden plurals) emit
+`bashy-fleet-list-v1` with the registry's array under `items`, passing an
+object through untouched once the registry grows its own envelope. The
+other probed surfaces in that slice are bashy-owned: `conform --list --json`
+(`bashy-conform-v1`), `install-agent --json` (`bashy-install-agent-v1`),
+`mcp tools --json` (`bashy-mcp-tools-v1`, the profile `serve` would expose,
+without serving), `out --list --json` / `out --json HANDLE` (`bashy-out-v1`),
+`ollama status --json` (`bashy-ollama-status-v1`, read-only — never
+provisions or contacts the engine), and `chat --dry-run --json`
+(`bashy-chat-v1`, resolves the launch without running an agent). `llm env
+--json` is declared but needs the yoke `pkg/broker` change before it can
+pass.
+
 Consumers name shipped skills with a source reference; empty cells require a
 real consumer to be identified. Visible/core does not imply a stability tier.
 Only an existing atlas experimental declaration or an explicit release policy

@@ -4,7 +4,10 @@
 package agentos
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/qiangli/yoke/pkg/binmgr"
@@ -117,4 +120,87 @@ func engineCacheDir() string {
 		return ""
 	}
 	return d
+}
+
+// ollamaStatusSchemaVersion is the envelope `bashy ollama status --json`
+// emits: how this build reaches ollama (embedded, lean passthrough, or
+// unsupported), whether a binary is already available without provisioning,
+// and the isolation settings the managed engine would run under. It is a
+// read-only probe — no download, no daemon, no network — so it is the safe
+// JSON surface of a verb whose other subcommands all reach the engine.
+const ollamaStatusSchemaVersion = "bashy-ollama-status-v1"
+
+// ollamaEngineProbe is what each build variant knows about its ollama
+// without touching it (engines_stub.go, engines_full.go, engines_windows.go).
+type ollamaEngineProbe struct {
+	Build         string // embedded | lean | unsupported
+	Binary        string // resolved executable, "" when none is available yet
+	Provisionable bool   // the lean build can fetch the official release here
+}
+
+type ollamaStatusEnvelope struct {
+	SchemaVersion string `json:"schema_version"`
+	Engine        string `json:"engine"`
+	Build         string `json:"build"`
+	Binary        string `json:"binary,omitempty"`
+	Available     bool   `json:"available"`
+	Provisionable bool   `json:"provisionable"`
+	ModelsDir     string `json:"models_dir,omitempty"`
+	Host          string `json:"host,omitempty"`
+	CloudAllowed  bool   `json:"cloud_allowed"`
+	Door          string `json:"door"`
+}
+
+func ollamaStatus() ollamaStatusEnvelope {
+	probe := probeOllamaEngine()
+	env := ollamaStatusEnvelope{SchemaVersion: ollamaStatusSchemaVersion, Engine: "ollama", Build: probe.Build,
+		Binary: probe.Binary, Available: probe.Binary != "", Provisionable: probe.Provisionable,
+		Host: strings.TrimSpace(os.Getenv("OLLAMA_HOST")), CloudAllowed: ollamaCloudAllowed(), Door: "bashy llm"}
+	if env.ModelsDir = strings.TrimSpace(os.Getenv("OLLAMA_MODELS")); env.ModelsDir == "" {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			env.ModelsDir = filepath.Join(home, ".agents", "bashy", "ollama", "models")
+		}
+	}
+	return env
+}
+
+// runOllamaStatus answers `bashy ollama status [--json]`.
+func runOllamaStatus(args []string) int {
+	asJSON := false
+	for _, a := range args {
+		switch a {
+		case "--json":
+			asJSON = true
+		case "--help", "-h":
+			fmt.Println("usage: bashy ollama status [--json]   # read-only: how this build reaches ollama (bashy-ollama-status-v1)")
+			return 0
+		default:
+			fmt.Fprintf(os.Stderr, "bashy ollama status: unexpected argument %q (usage: bashy ollama status [--json])\n", a)
+			return 2
+		}
+	}
+	env := ollamaStatus()
+	if asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(env); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy ollama status:", err)
+			return 1
+		}
+		return 0
+	}
+	available := "no"
+	if env.Available {
+		available = "yes"
+	}
+	fmt.Printf("ollama: build=%s available=%s binary=%s models=%s host=%s door=%s\n",
+		env.Build, available, dashIfEmpty(env.Binary), env.ModelsDir, dashIfEmpty(env.Host), env.Door)
+	return 0
+}
+
+func dashIfEmpty(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }

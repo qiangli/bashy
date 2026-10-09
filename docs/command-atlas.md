@@ -97,7 +97,7 @@ bucket is split into honest functional groups.
 | `forge` | git, git-scm, gh, loom |
 | `toolchains` | go, cmake, clang, node, npm, npx, pnpm, yarn, python, pip, uv, mise, cargo, rustc, rustup, rust, pwsh, java, javac, mvn |
 | `storage` | rclone, zot, seaweedfs, kopia |
-| `cluster-cloud` | kubectl, helm + every declarative-registry CLI (doctl today; aws/azure/gcloud when registered) |
+| `cluster-cloud` | kubectl, helm + every declarative-registry CLI (doctl and gcloud today; `aws` and `azure` are planned registry entries, not shipped commands — they do not appear in `bashy commands`) |
 | `platform` | commands, check, verify, self, run, secret, app, bootstrap, upgrade; `context` and `audit` remain platform rows as hidden aliases of `inspect`; `secrets`/`apps` are hidden plural aliases |
 | `diagnostics` | **inspect** (bashy's self-inspection: `paths` · `mode` · `doctor` · `context` · `audit`), check, conform, gate, out, posix-gate, why; `doctor` remains a diagnostics row as a hidden alias of `inspect`. Rule: a new read-only self-view is a new `inspect` aspect, never a new verb |
 | `account` | tessaro, login |
@@ -169,7 +169,7 @@ cluster (your own DKS).
 | `sandbox` | podman, docker, act, act-runner |
 | `sphere` | sphere, ollama |
 | `cluster` | kubectl, helm |
-| `cloud` | registry CLIs with `Entry.Tier == 6` (doctl, future aws/azure/gcloud) — derived from the registry, never hand-listed here |
+| `cloud` | registry CLIs with `Entry.Tier == 6` (doctl and gcloud today; aws/azure are planned, not shipped) — derived from the registry, never hand-listed here |
 | `account` | tessaro, login |
 
 The tier means "the tier this command operates/fronts", not "where the binary
@@ -688,8 +688,10 @@ Proposals, explicitly not commitments; each stays honest about what exists.
   bundle-catalog verb is flagged needs-owner (catalog is a DKS-side concern).
 - **cloud** — the declarative registry **is** the extension mechanism: new
   providers are data (`registry.Entry`), and the atlas derives tier/group
-  automatically. Roadmap = aws/azure/gcloud entries, plus optional `Caps`
-  on `registry.Entry` if provider CLIs diverge.
+  automatically. doctl and gcloud are registered today; aws and azure are
+  **planned** entries (no `bashy aws` / `bashy azure` exists until the
+  registry row lands), plus optional `Caps` on `registry.Entry` if provider
+  CLIs diverge.
 
 ## 7. Measurement campaigns — proving the atlas pays for itself
 

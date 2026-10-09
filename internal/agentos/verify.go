@@ -27,6 +27,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -95,8 +96,41 @@ func suiteRegistry() []suiteSpec {
 	}
 }
 
+// conformSchemaVersion is the envelope `bashy conform --list --json` (and
+// its hidden alias `verify`) emits: the suite registry with each suite's
+// precision claim, licensing posture and setup status.
+const conformSchemaVersion = "bashy-conform-v1"
+
+type conformSuiteRow struct {
+	Name     string   `json:"name"`
+	Aliases  []string `json:"aliases,omitempty"`
+	Kind     string   `json:"kind"`
+	Summary  string   `json:"summary"`
+	License  string   `json:"license"`
+	Ready    bool     `json:"ready"`
+	FetchURL string   `json:"fetch_url,omitempty"`
+}
+
+type conformEnvelope struct {
+	SchemaVersion string            `json:"schema_version"`
+	Verb          string            `json:"verb"`
+	Suites        []conformSuiteRow `json:"suites"`
+}
+
+func (l suiteLicense) String() string {
+	switch l {
+	case licensePublicFetch:
+		return "public-fetch"
+	case licenseUserSupplied:
+		return "user-supplied"
+	case licenseHarnessOnly:
+		return "harness-only"
+	}
+	return "unknown"
+}
+
 func verifyCmd() *cobra.Command {
-	var list bool
+	var list, asJSON bool
 	cmd := &cobra.Command{
 		Use:   "conform [suite] [flags]",
 		Short: "run bashy's formal test batteries (compat/conformance/compliance/benchmark)",
@@ -107,6 +141,9 @@ func verifyCmd() *cobra.Command {
 			"user-supplied (licensed); bashy never vendors them.",
 		RunE: func(c *cobra.Command, args []string) error {
 			if list || len(args) == 0 {
+				if asJSON {
+					return writeVerifyListJSON(c.OutOrStdout())
+				}
 				printVerifyList(c.OutOrStdout())
 				return nil
 			}
@@ -114,6 +151,7 @@ func verifyCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&list, "list", false, "list the suites and their setup status")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "with --list: emit the bashy-conform-v1 envelope")
 	for _, s := range suiteRegistry() {
 		cmd.AddCommand(suiteSubcommand(s))
 	}
@@ -139,6 +177,17 @@ func suiteSubcommand(s suiteSpec) *cobra.Command {
 		},
 	}
 	return sub
+}
+
+func writeVerifyListJSON(w io.Writer) error {
+	env := conformEnvelope{SchemaVersion: conformSchemaVersion, Verb: "conform"}
+	for _, s := range suiteRegistry() {
+		env.Suites = append(env.Suites, conformSuiteRow{Name: s.Name, Aliases: s.Aliases, Kind: s.Kind, Summary: s.Summary,
+			License: s.License.String(), Ready: s.Ready, FetchURL: s.FetchURL})
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(env)
 }
 
 func printVerifyList(w io.Writer) {

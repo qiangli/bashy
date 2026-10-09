@@ -165,11 +165,12 @@
       "command": "agents",
       "section": "4d",
       "stability": null,
-      "consumer": null,
+      "consumer": "CI failure router script",
       "json_probe": [
         "list",
         "--json"
-      ]
+      ],
+      "consumer_ref": "scripts/ci-failure-router.sh"
     },
     {
       "command": "model",
@@ -207,7 +208,14 @@
       "section": "4d",
       "stability": null,
       "consumer": null,
-      "json_probe": null
+      "json_probe": [
+        "--agent",
+        "claude",
+        "--dry-run",
+        "--json",
+        "--instruction",
+        "release-bar probe"
+      ]
     },
     {
       "command": "context",
@@ -268,14 +276,20 @@
       "section": "4e",
       "stability": null,
       "consumer": null,
-      "json_probe": null
+      "json_probe": [
+        "--list",
+        "--json"
+      ]
     },
     {
       "command": "conform",
       "section": "4e",
       "stability": null,
       "consumer": null,
-      "json_probe": null
+      "json_probe": [
+        "--list",
+        "--json"
+      ]
     },
     {
       "command": "llm",
@@ -283,7 +297,7 @@
       "stability": null,
       "consumer": null,
       "json_probe": [
-        "status",
+        "env",
         "--json"
       ]
     },
@@ -291,30 +305,44 @@
       "command": "ollama",
       "section": "4f\u20134g",
       "stability": null,
-      "consumer": null,
-      "json_probe": null
+      "consumer": "llm model door (engine argv)",
+      "json_probe": [
+        "status",
+        "--json"
+      ],
+      "consumer_ref": "internal/agentos/door.go"
     },
     {
       "command": "mcp",
       "section": "4h",
       "stability": null,
-      "consumer": null,
-      "json_probe": null
+      "consumer": "install-agent --mcp registration",
+      "json_probe": [
+        "tools",
+        "--json"
+      ],
+      "consumer_ref": "internal/agentos/installagent.go"
     },
     {
       "command": "install-agent",
       "section": "4h",
       "stability": null,
       "consumer": "embedded force-agent-shell skill",
-      "json_probe": null,
+      "json_probe": [
+        "--json"
+      ],
       "consumer_ref": "skills/force-agent-shell/SKILL.md"
     },
     {
       "command": "out",
       "section": "4h",
       "stability": null,
-      "consumer": null,
-      "json_probe": null,
+      "consumer": "inspect index (elision-marker recovery)",
+      "json_probe": [
+        "--list",
+        "--json"
+      ],
+      "consumer_ref": "internal/agentos/inspect.go",
       "scope_gap": "4.38 requires promotion from experimental; no promotion evidence recorded"
     },
     {

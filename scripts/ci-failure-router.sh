@@ -98,7 +98,9 @@ preflight() {
 	# check (a wrong pick, not an error). Assert the PATH bashy actually emits a
 	# real kind before we trust its selection. (Cost: one local `agents list`.)
 	local kinds
-	kinds="$(bashy agents list --json 2>/dev/null | jq -r '[.[] | select(.kind == "subscription" or .kind == "api")] | length' 2>/dev/null)"
+	# `agents list --json` is the bashy-fleet-list-v1 envelope ({items: [...]});
+	# older binaries emit the bare array, so unwrap either shape.
+	kinds="$(bashy agents list --json 2>/dev/null | jq -r '(if type == "object" then .items else . end) | [.[] | select(.kind == "subscription" or .kind == "api")] | length' 2>/dev/null)"
 	if [[ -z "$kinds" || "$kinds" == "0" ]]; then
 		die "the 'bashy' on PATH does not report agent 'kind' (subscription/api), so fixer selection would silently degrade to the L4 fallback. This is usually a STALE install: run 'make install' in bashy/ so the PATH binary matches the built one. (bashy: $(command -v bashy 2>/dev/null))"
 	fi
@@ -253,6 +255,7 @@ select_band_fixer() {
 		((env.DHNT_CI_FIXER_TOOLS // "") | split(",") | map(select(length > 0))) as $tf
 		| ((env.DHNT_CI_FIXER_AGENTS // "") | split(",") | map(select(length > 0))) as $nf
 		| ((env.DHNT_CI_FIXER_ALLOW_METERED // "0") | tonumber) as $metered
+		| (if type == "object" then .items else . end)
 		| [ .[]
 			| select(.resolves == true)
 			| select(($tf | length) == 0 or (.tool as $t | $tf | index($t)))
@@ -264,7 +267,8 @@ select_band_fixer() {
 
 	if [[ -z "$candidates" ]]; then
 		candidates="$(bashy agents list --min-band "$band" --json 2>/dev/null | jq -r '
-			[ .[] | select(.resolves == true) ] | sort_by(.binding) | .[]
+			(if type == "object" then .items else . end)
+			| [ .[] | select(.resolves == true) ] | sort_by(.binding) | .[]
 			| [.name, .binding, (.kind // "?"), (.reliability // "?")] | @tsv' 2>/dev/null)"
 	fi
 	if [[ -z "$candidates" ]]; then

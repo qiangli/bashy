@@ -38,3 +38,8 @@ func dispatchEngine(arg string) {
 		dispatchExit(0)
 	}
 }
+
+// probeOllamaEngine (Windows engine build): ollama stays a unix host feature.
+func probeOllamaEngine() ollamaEngineProbe {
+	return ollamaEngineProbe{Build: "unsupported"}
+}

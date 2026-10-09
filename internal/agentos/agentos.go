@@ -628,6 +628,12 @@ func dispatch() {
 	if os.Args[1] == "ollama" && isDoorServe(os.Args[2:]) {
 		dispatchExit(runOllamaDoor(os.Args[3:]))
 	}
+	// `bashy ollama status [--json]` is bashy's own read-only probe of the
+	// managed engine (bashy-ollama-status-v1): it never provisions, launches
+	// or contacts ollama, so it is safe where the passthrough is not.
+	if os.Args[1] == "ollama" && len(os.Args) > 2 && os.Args[2] == "status" {
+		dispatchExit(runOllamaStatus(os.Args[3:]))
+	}
 	dispatchEngine(os.Args[1])
 	// The observability stack (`bashy otel`) compiles in the OpenTelemetry
 	// Collector + VictoriaMetrics/Logs + Jaeger + Perses + k8s/aws SDKs (~193 MB,
@@ -2039,8 +2045,10 @@ func runFleet(noun string, args []string) {
 		// skills, subcommands) — Sprint #324, yoke/pkg/toolcmd. It needs
 		// pkg/chat, which the registry cannot import, so it is mounted here.
 		cmd.AddCommand(toolcmd.NewCmd())
+		wrapFleetListEnvelope(cmd, noun, true)
 	case "model":
 		cmd = newModelsResourcesCmd()
+		wrapFleetListEnvelope(cmd, noun, true)
 	case "agent":
 		// `agents verify --live` actually launches each agent, and `agents clone`
 		// branches its conversation store. Both live in pkg/chat, which reads the
@@ -2051,6 +2059,9 @@ func runFleet(noun string, args []string) {
 			fleet.WithLiveProbe(liveProbeAgent),
 			fleet.WithContextCloner(chat.CloneAgentContext),
 		)
+		// The bare `agent --json` is the live roster (bashy-agents-v1); only
+		// the catalog verb gets the fleet-list envelope.
+		wrapFleetListEnvelope(cmd, noun, false)
 	case "person":
 		cmd = principal.NewPeopleCmd()
 	case "whois":

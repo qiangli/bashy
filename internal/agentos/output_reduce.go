@@ -6,6 +6,7 @@ package agentos
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/qiangli/yoke/pkg/atlas"
 	"github.com/qiangli/yoke/pkg/reduce"
@@ -524,12 +526,111 @@ func shortestOutputHandle(store *reduce.Store, digest string) string {
 	return hexsum[:n]
 }
 
+// outSchemaVersion is the envelope `bashy out --json HANDLE` (one recovered
+// artifact with its digest, size and content) and `bashy out --list [--json]`
+// (the artifacts the spill store holds) emit. Plain `bashy out HANDLE` stays
+// raw bytes so it composes with a pipe.
+const outSchemaVersion = "bashy-out-v1"
+
+type outArtifact struct {
+	Digest   string `json:"digest"`
+	Handle   string `json:"handle,omitempty"`
+	Bytes    int64  `json:"bytes"`
+	Lines    int    `json:"lines,omitempty"`
+	Modified string `json:"modified,omitempty"`
+	Content  string `json:"content,omitempty"`
+}
+
+type outEnvelope struct {
+	SchemaVersion string         `json:"schema_version"`
+	Root          string         `json:"root"`
+	Handle        string         `json:"handle,omitempty"`
+	Digest        string         `json:"digest,omitempty"`
+	Bytes         int64          `json:"bytes,omitempty"`
+	Lines         int            `json:"lines,omitempty"`
+	Content       string         `json:"content,omitempty"`
+	Artifacts     *[]outArtifact `json:"artifacts,omitempty"`
+}
+
 func dispatchOut(args []string) int {
+	var list, asJSON bool
+	rest := make([]string, 0, len(args))
+	for _, a := range args {
+		switch a {
+		case "--list":
+			list = true
+		case "--json":
+			asJSON = true
+		default:
+			rest = append(rest, a)
+		}
+	}
+	if list || asJSON {
+		return dispatchOutEnvelope(os.Stdout, rest, list, asJSON)
+	}
 	cmd := reduce.NewOutCmd(shellOutputStore)
 	cmd.SetArgs(args)
 	cmd.SetOut(os.Stdout)
 	cmd.SetErr(os.Stderr)
 	if err := cmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy out:", err)
+		return 1
+	}
+	return 0
+}
+
+// dispatchOutEnvelope serves the structured forms of `bashy out`.
+func dispatchOutEnvelope(w io.Writer, args []string, list, asJSON bool) int {
+	store, err := shellOutputStore()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy out:", err)
+		return 1
+	}
+	env := outEnvelope{SchemaVersion: outSchemaVersion, Root: store.Root()}
+	switch {
+	case list && len(args) != 0:
+		fmt.Fprintln(os.Stderr, "bashy out: --list takes no handle")
+		return 2
+	case list:
+		artifacts := []outArtifact{}
+		env.Artifacts = &artifacts
+		entries, err := os.ReadDir(store.Root())
+		if err != nil && !os.IsNotExist(err) {
+			fmt.Fprintln(os.Stderr, "bashy out:", err)
+			return 1
+		}
+		for _, entry := range entries {
+			name := entry.Name()
+			if len(name) != 64 || entry.IsDir() {
+				continue
+			}
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			artifacts = append(artifacts, outArtifact{Digest: "sha256:" + name, Handle: shortestOutputHandle(store, name),
+				Bytes: info.Size(), Modified: info.ModTime().UTC().Format(time.RFC3339)})
+		}
+		if !asJSON {
+			for _, a := range artifacts {
+				fmt.Fprintf(w, "%s\t%d\t%s\t%s\n", a.Handle, a.Bytes, a.Modified, a.Digest)
+			}
+			return 0
+		}
+	case len(args) != 1:
+		fmt.Fprintln(os.Stderr, "bashy out: --json takes exactly one handle")
+		return 2
+	default:
+		content, digest, err := store.Get(args[0])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "bashy out:", err)
+			return 1
+		}
+		env.Handle, env.Digest, env.Bytes, env.Lines, env.Content = args[0], digest, int64(len(content)), outputLineCount(content), string(content)
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(env); err != nil {
 		fmt.Fprintln(os.Stderr, "bashy out:", err)
 		return 1
 	}
