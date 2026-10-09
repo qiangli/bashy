@@ -55,10 +55,13 @@ func dispatchInstallAgent(args []string) int {
 	uninstall := fs.Bool("uninstall", false, "reverse a previous install")
 	yes := fs.Bool("yes", false, "perform invasive steps without prompting (codex: attempt chsh)")
 	mcpMode := fs.Bool("mcp", false, "register `bashy mcp serve` with the agent instead of wiring its shell")
-	dryRun := fs.Bool("dry-run", false, "with --mcp: print the MCP server entry instead of writing it")
+	hooksMode := fs.Bool("hooks", false, "install turn-boundary inbox unread hooks (SessionStart + UserPromptSubmit) so the agent sees waiting mail within one turn")
+	asName := fs.String("as", "", "with --hooks: bake this registered bashy identity into the hook command (same as `bashy inbox --as`); without it the hook stays silent unless the session is attributable")
+	dryRun := fs.Bool("dry-run", false, "with --mcp or --hooks: print the entry instead of writing it")
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `usage: bashy install-agent <agent> [--shell PATH] [--project] [--check] [--uninstall]
        bashy install-agent <agent> --mcp [--project] [--dry-run] [--uninstall]
+       bashy install-agent <agent> --hooks [--as NAME] [--project] [--dry-run] [--check] [--uninstall]
 
 Wire a coding agent to use bashy as its shell.
 
@@ -70,6 +73,15 @@ agents:
   copilot    Copilot CLI   PATH shim dir (~/.bashy/shims)
   agy        Antigravity   PATH shim dir (~/.bashy/shims)
   codex      Codex CLI     login shell via chsh (reads /etc/passwd; invasive)
+
+--hooks installs the native turn-boundary inbox hook both harnesses support
+(claude: SessionStart + UserPromptSubmit settings hooks; codex: SessionStart +
+UserPromptSubmit inline hooks in config.toml). The hook runs bashy inbox-hook
+read-only: one model-visible unread hint when mail waits, silence otherwise,
+and it never consumes mail. This is not the MCP skill export and not generic
+notify: it is the inbox turn hook. Codex lists new hooks for trust review
+(/hooks) before they first run; approve them there (or run that session with
+--dangerously-bypass-hook-trust).
 
 --mcp registers "bashy mcp serve" as an MCP server with the agent (claude: via
 the claude CLI "mcp add" command; codex: ~/.codex/config.toml mcp_servers;
@@ -86,12 +98,13 @@ With no agent, prints the wiring status of every known agent.
 	// Accept the agent name anywhere among the flags (`install-agent claude
 	// --check` and `install-agent --check claude` both work): Go's flag
 	// package stops at the first positional, so pull the name out before
-	// parsing. --shell is the only value-taking flag; keep its value with it.
+	// parsing. --shell and --as are the value-taking flags; keep their values
+	// with them so `--as NAME` is never mistaken for the agent name.
 	var name string
 	rest := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		a := args[i]
-		if a == "--shell" || a == "-shell" {
+		if a == "--shell" || a == "-shell" || a == "--as" || a == "-as" {
 			rest = append(rest, a)
 			if i+1 < len(args) {
 				i++
@@ -137,11 +150,26 @@ With no agent, prints the wiring status of every known agent.
 		return 2
 	}
 
+	if *mcpMode && *hooksMode {
+		fmt.Fprint(os.Stderr, "install-agent: --mcp cannot be combined with --hooks\n")
+		return 2
+	}
 	if *mcpMode {
 		return dispatchInstallAgentMCP(name, *project, *dryRun, *uninstall, *check, *probe)
 	}
+	if *hooksMode {
+		if *probe {
+			fmt.Fprint(os.Stderr, "install-agent: --hooks cannot be combined with --probe (verify delivery by invoking the installed hook command with a hook payload; see the Sprint 321 recipe)\n")
+			return 2
+		}
+		if name == "" {
+			fmt.Fprint(os.Stderr, "install-agent: --hooks needs an agent (try: claude codex)\n")
+			return 2
+		}
+		return dispatchInstallAgentHooks(name, shell, strings.TrimSpace(*asName), *project, *dryRun, *uninstall, *check)
+	}
 	if *dryRun {
-		fmt.Fprint(os.Stderr, "install-agent: --dry-run requires --mcp\n")
+		fmt.Fprint(os.Stderr, "install-agent: --dry-run requires --mcp or --hooks\n")
 		return 2
 	}
 
@@ -838,6 +866,375 @@ func opencodeMCPWriter() mcpWriter {
 				return "", err
 			}
 			return fmt.Sprintf("opencode: removed mcp.bashy from %s", path), nil
+		},
+	}
+}
+
+// --- turn-boundary inbox hooks (Sprint 321) ----------------------------------
+
+// inboxHookEvents are the turn-boundary events both harnesses fire and both
+// honor additionalContext for: once per session and once per user turn. Any
+// other event would either not be turn-scoped (PreToolUse) or not
+// model-visible in the same way, so the installer wires exactly these two.
+var inboxHookEvents = []string{"SessionStart", "UserPromptSubmit"}
+
+// inboxHookCommand is the exact command a harness hook runs. as is the baked
+// registered identity ("" leaves attribution ambient, in which case the hook
+// stays silent unless the session resolves one itself).
+func inboxHookCommand(shell, event, as string) string {
+	cmd := shell + " inbox-hook --for " + event
+	if as != "" {
+		cmd += " --as " + as
+	}
+	return cmd
+}
+
+// hookWriter installs one agent's turn-boundary inbox hooks through the same
+// merge-config mechanism as the shell/MCP writers: read the agent's config,
+// add only our entries, write back everything else untouched.
+type hookWriter struct {
+	// entry renders exactly what install would write, without touching disk.
+	entry func(shell, as string, project bool) string
+	// install merges the hook entries into the agent's config.
+	install func(shell, as string, project bool) (string, error)
+	// uninstall removes previously installed hook entries.
+	uninstall func(shell, as string, project bool) (string, error)
+	// check verifies the entries are present (static; no harness launch).
+	check func(shell, as string, project bool) error
+}
+
+func hookWriters() map[string]hookWriter {
+	return map[string]hookWriter{
+		"claude": claudeHookWriter(),
+		"codex":  codexHookWriter(),
+	}
+}
+
+func dispatchInstallAgentHooks(name, shell, as string, project, dryRun, uninstall, check bool) int {
+	w, ok := hookWriters()[name]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "install-agent: no inbox-hook writer for %q (supported: claude codex) — generic notify and the MCP skill export are not inbox hooks\n", name)
+		return 1
+	}
+	if dryRun && uninstall {
+		fmt.Fprint(os.Stderr, "install-agent: --dry-run cannot be combined with --uninstall\n")
+		return 2
+	}
+	if check && (dryRun || uninstall) {
+		fmt.Fprint(os.Stderr, "install-agent: --check cannot be combined with --dry-run or --uninstall\n")
+		return 2
+	}
+	switch {
+	case dryRun:
+		fmt.Print(w.entry(shell, as, project))
+		return 0
+	case check:
+		if err := w.check(shell, as, project); err != nil {
+			fmt.Fprintf(os.Stderr, "install-agent: %s hooks: CHECK FAILED: %v\n", name, err)
+			return 1
+		}
+		fmt.Printf("install-agent: %s hooks: OK\n", name)
+		return 0
+	case uninstall:
+		msg, err := w.uninstall(shell, as, project)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "install-agent: %s hooks: %v\n", name, err)
+			return 1
+		}
+		fmt.Println(msg)
+		return 0
+	default:
+		msg, err := w.install(shell, as, project)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "install-agent: %s hooks: %v\n", name, err)
+			return 1
+		}
+		fmt.Println(msg)
+		return 0
+	}
+}
+
+// claudeInboxHookEntry is one settings.json hook-group element for event: the
+// documented shape (hooks-guide: {"hooks": {"SessionStart": [{"hooks":
+// [{"type": "command", "command": ...}]}]}}). No matcher: SessionStart must
+// fire for startup/resume/clear/compact, and UserPromptSubmit ignores
+// matchers. timeout 30 bounds the hook past the slowest local snapshot
+// (the cross-host delivery pass caps at 20s) without stalling the turn.
+func claudeInboxHookEntry(command string) map[string]any {
+	return map[string]any{
+		"hooks": []any{
+			map[string]any{"type": "command", "command": command, "timeout": 30},
+		},
+	}
+}
+
+// claudeHookHasCommand reports whether the settings map already carries an
+// inbox-hook command for event. as=="" matches any identity the command was
+// baked with, so --check works without repeating --as.
+func claudeHookHasCommand(m map[string]any, event string) bool {
+	hooks, _ := m["hooks"].(map[string]any)
+	arr, _ := hooks[event].([]any)
+	want := "inbox-hook --for " + event
+	for _, el := range arr {
+		elm, _ := el.(map[string]any)
+		sub, _ := elm["hooks"].([]any)
+		for _, h := range sub {
+			hm, _ := h.(map[string]any)
+			if hm["type"] != "command" {
+				continue
+			}
+			if cmd, _ := hm["command"].(string); strings.Contains(cmd, want) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// mergeClaudeInboxHooks ensures both turn-boundary hook groups exist, adding
+// only missing entries. Idempotent: a second run changes nothing.
+func mergeClaudeInboxHooks(m map[string]any, shell, as string) (changed bool) {
+	hooks, _ := m["hooks"].(map[string]any)
+	if hooks == nil {
+		hooks = map[string]any{}
+		m["hooks"] = hooks
+		changed = true
+	}
+	for _, event := range inboxHookEvents {
+		if claudeHookHasCommand(m, event) {
+			continue
+		}
+		arr, _ := hooks[event].([]any)
+		hooks[event] = append(arr, claudeInboxHookEntry(inboxHookCommand(shell, event, as)))
+		changed = true
+	}
+	return changed
+}
+
+// stripClaudeInboxHooks removes every hook-group element that carries an
+// inbox-hook command, pruning emptied events and the hooks key itself so
+// uninstall leaves no residue. Unrelated hooks pass through untouched.
+func stripClaudeInboxHooks(m map[string]any) (changed bool) {
+	hooks, _ := m["hooks"].(map[string]any)
+	if hooks == nil {
+		return false
+	}
+	for _, event := range inboxHookEvents {
+		arr, _ := hooks[event].([]any)
+		if arr == nil {
+			continue
+		}
+		kept := make([]any, 0, len(arr))
+		for _, el := range arr {
+			if claudeHookElementIsInbox(el) {
+				changed = true
+				continue
+			}
+			kept = append(kept, el)
+		}
+		if len(kept) == 0 {
+			delete(hooks, event)
+		} else if len(kept) != len(arr) {
+			hooks[event] = kept
+		}
+	}
+	if len(hooks) == 0 {
+		delete(m, "hooks")
+	}
+	return changed
+}
+
+func claudeHookElementIsInbox(el any) bool {
+	elm, _ := el.(map[string]any)
+	sub, _ := elm["hooks"].([]any)
+	for _, h := range sub {
+		hm, _ := h.(map[string]any)
+		if hm["type"] == "command" {
+			if cmd, _ := hm["command"].(string); strings.Contains(cmd, "inbox-hook") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func claudeHookWriter() hookWriter {
+	return hookWriter{
+		entry: func(shell, as string, project bool) string {
+			m := map[string]any{}
+			mergeClaudeInboxHooks(m, shell, as)
+			b, _ := json.MarshalIndent(map[string]any{"hooks": m["hooks"]}, "", "  ")
+			scope := claudeSettingsPath(project)
+			return fmt.Sprintf("# merge into %s under \"hooks\" (existing keys preserved):\n%s\n", scope, b)
+		},
+		install: func(shell, as string, project bool) (string, error) {
+			path := claudeSettingsPath(project)
+			changed := false
+			err := mergeJSONFile(path, func(m map[string]any) {
+				changed = mergeClaudeInboxHooks(m, shell, as)
+			})
+			if err != nil {
+				return "", err
+			}
+			if !changed {
+				return fmt.Sprintf("claude: inbox hooks already present in %s", path), nil
+			}
+			return fmt.Sprintf("claude: wrote SessionStart + UserPromptSubmit inbox hooks to %s (restart claude to pick them up)", path), nil
+		},
+		uninstall: func(_ string, _ string, project bool) (string, error) {
+			path := claudeSettingsPath(project)
+			changed := false
+			err := mergeJSONFile(path, func(m map[string]any) {
+				changed = stripClaudeInboxHooks(m)
+			})
+			if err != nil {
+				return "", err
+			}
+			if !changed {
+				return fmt.Sprintf("claude: no inbox hooks in %s", path), nil
+			}
+			return fmt.Sprintf("claude: removed inbox hooks from %s", path), nil
+		},
+		check: func(_ string, _ string, project bool) error {
+			path := claudeSettingsPath(project)
+			m, err := readJSONFile(path)
+			if err != nil {
+				return fmt.Errorf("%s: %w", path, err)
+			}
+			for _, event := range inboxHookEvents {
+				if !claudeHookHasCommand(m, event) {
+					return fmt.Errorf("%s has no inbox-hook for %s (run `bashy install-agent claude --hooks [--as NAME]`)", path, event)
+				}
+			}
+			return nil
+		},
+	}
+}
+
+// Codex reads turn hooks from inline [hooks] tables in config.toml (official
+// hooks reference: [[hooks.SessionStart]] + [[hooks.SessionStart.hooks]] with
+// type/command; UserPromptSubmit ignores matchers). Hooks are stable-enabled
+// in Codex 0.157.1 (features list: hooks = stable true), so no [features]
+// edit is needed. New hooks require one trust review (/hooks) before they
+// first run — the installer says so; it cannot approve them itself.
+const (
+	codexHookBeginMark = "# BEGIN managed by `bashy install-agent codex --hooks` (inbox unread hints; remove with --hooks --uninstall)"
+	codexHookEndMark   = "# END managed by `bashy install-agent codex --hooks`"
+)
+
+func codexInboxHookBlock(shell, as string) string {
+	lines := []string{
+		codexHookBeginMark,
+		"[[hooks.SessionStart]]",
+		"",
+		"[[hooks.SessionStart.hooks]]",
+		"type = \"command\"",
+		fmt.Sprintf("command = %q", inboxHookCommand(shell, "SessionStart", as)),
+		"timeout = 30",
+		"",
+		"[[hooks.UserPromptSubmit]]",
+		"",
+		"[[hooks.UserPromptSubmit.hooks]]",
+		"type = \"command\"",
+		fmt.Sprintf("command = %q", inboxHookCommand(shell, "UserPromptSubmit", as)),
+		"timeout = 30",
+		codexHookEndMark,
+		" ",
+	}
+	return strings.Join(lines, "\n")
+}
+
+// replaceCodexHookBlock swaps any previously managed block for the new one so
+// a changed shell path or --as identity updates in place; appends when absent.
+func replaceCodexHookBlock(data, block string) string {
+	trimmed := strings.TrimRight(block, " \n") + "\n"
+	if begin, end := strings.Index(data, codexHookBeginMark), strings.Index(data, codexHookEndMark); begin >= 0 && end > begin {
+		after := data[end+len(codexHookEndMark):]
+		after = strings.TrimLeft(after, "\n")
+		head := strings.TrimRight(data[:begin], "\n")
+		if head == "" {
+			return trimmed + after
+		}
+		if after == "" {
+			return head + "\n\n" + trimmed
+		}
+		return head + "\n\n" + trimmed + "\n" + after
+	}
+	if strings.TrimSpace(data) == "" {
+		return trimmed
+	}
+	return strings.TrimRight(data, "\n") + "\n\n" + trimmed
+}
+
+// removeCodexHookBlock deletes the managed block, collapsing the blank lines
+// around it so uninstall restores the file's prior shape.
+func removeCodexHookBlock(data string) (string, bool) {
+	begin, end := strings.Index(data, codexHookBeginMark), strings.Index(data, codexHookEndMark)
+	if begin < 0 || end < begin {
+		return data, false
+	}
+	after := data[end+len(codexHookEndMark):]
+	after = strings.TrimLeft(after, "\n")
+	head := strings.TrimRight(data[:begin], "\n")
+	switch {
+	case head == "":
+		return after, true
+	case after == "":
+		return head + "\n", true
+	default:
+		return head + "\n\n" + after, true
+	}
+}
+
+func codexHookWriter() hookWriter {
+	return hookWriter{
+		entry: func(shell, as string, _ bool) string { return codexInboxHookBlock(shell, as) },
+		install: func(shell, as string, _ bool) (string, error) {
+			path := codexMCPConfigPath()
+			data, err := os.ReadFile(path)
+			if err != nil && !os.IsNotExist(err) {
+				return "", err
+			}
+			before := string(data)
+			after := replaceCodexHookBlock(before, codexInboxHookBlock(shell, as))
+			if after == before && strings.Contains(before, codexHookBeginMark) {
+				return fmt.Sprintf("codex: inbox hooks already present in %s", path), nil
+			}
+			if err := writeFileAtomic(path, []byte(after)); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("codex: wrote SessionStart + UserPromptSubmit inbox hooks to %s (approve them once under /hooks before they first run)", path), nil
+		},
+		uninstall: func(_ string, _ string, _ bool) (string, error) {
+			path := codexMCPConfigPath()
+			data, err := os.ReadFile(path)
+			if err != nil {
+				if os.IsNotExist(err) {
+					return fmt.Sprintf("codex: no %s to clean", path), nil
+				}
+				return "", err
+			}
+			after, ok := removeCodexHookBlock(string(data))
+			if !ok {
+				return fmt.Sprintf("codex: no inbox hooks in %s", path), nil
+			}
+			if err := writeFileAtomic(path, []byte(after)); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("codex: removed inbox hooks from %s", path), nil
+		},
+		check: func(_ string, _ string, _ bool) error {
+			path := codexMCPConfigPath()
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("%s: %w", path, err)
+			}
+			for _, event := range inboxHookEvents {
+				if !strings.Contains(string(data), "inbox-hook --for "+event) {
+					return fmt.Errorf("%s has no inbox-hook for %s (run `bashy install-agent codex --hooks [--as NAME]`)", path, event)
+				}
+			}
+			return nil
 		},
 	}
 }

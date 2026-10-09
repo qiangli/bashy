@@ -605,6 +605,13 @@ var deliverSessionMail = func(ctx context.Context, repoRoot, reader string) (wea
 }
 
 func snapshotUnifiedInbox(reader string, limit int, includeBus bool) (inboxBatch, error) {
+	return snapshotInbox(reader, limit, includeBus, true)
+}
+
+// snapshotInbox is snapshotUnifiedInbox with the relay delivery pass optional:
+// the per-command unread hint reads local stores only, so an ordinary command
+// never waits on the network or files relay mail as a side effect.
+func snapshotInbox(reader string, limit int, includeBus, deliver bool) (inboxBatch, error) {
 	var batch inboxBatch
 
 	// LOCAL DELIVERY FIRST (Sprint 217, the email model). Mail from another
@@ -615,7 +622,7 @@ func snapshotUnifiedInbox(reader string, limit int, includeBus bool) (inboxBatch
 	// unpaired host, or one outside any checkout, skips it silently — the
 	// inbox works exactly as before. A relay ERROR is reported as a warning,
 	// never as an empty inbox: absence of evidence is not "no mail".
-	if deliverSessionMail != nil {
+	if deliver && deliverSessionMail != nil {
 		if cwd, err := os.Getwd(); err == nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			rep, derr := deliverSessionMail(ctx, cwd, reader)
