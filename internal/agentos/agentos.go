@@ -2209,7 +2209,16 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	if advisorEnabled() || hintsEnabled() {
 		a := newAdvisor()
 		if hintsEnabled() {
-			opts = append(opts, interp.WithAuditHandler(newNudger(a.mem).onAudit))
+			// One audit handler is installed (the option is last-wins), so the
+			// two proactive hinters that share the session memory are composed
+			// here: the nudger (legacy-tool → agentic counterpart) and the inbox
+			// reader hint (board-reading commands → `bashy inbox`).
+			nd := newNudger(a.mem)
+			ih := newInboxHinter(a.mem)
+			opts = append(opts, interp.WithAuditHandler(func(ev interp.AuditEvent) {
+				nd.onAudit(ev)
+				ih.onAudit(ev)
+			}))
 		}
 		if advisorEnabled() {
 			mws = append(mws, advisorHandler(a))

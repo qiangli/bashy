@@ -255,7 +255,7 @@ func resolveInboxReader(as string) (string, error) {
 			return "", err
 		}
 		if !strings.EqualFold(self, requested) {
-			return "", fmt.Errorf("inbox: authenticated agent %q cannot read as %q; each registered name owns its own cursors", self, requested)
+			return "", fmt.Errorf("inbox: authenticated agent %q cannot read as %q; each registered name owns its own cursors. %s", self, requested, inboxReaderHint)
 		}
 		return self, nil
 	}
@@ -278,7 +278,7 @@ func resolveInboxReader(as string) (string, error) {
 	// Someone who owns a cursor is by definition an inbox owner.
 	addr, kind, ok := bus.ResolveSendTarget(as)
 	if !ok || kind == bus.TargetRole {
-		return "", fmt.Errorf("inbox: --as %q owns no mailbox here; choose an agent from `bashy agent list --all` or a person from `bashy person list` (`bashy whois %s` says what it resolves to)", as, as)
+		return "", fmt.Errorf("inbox: --as %q owns no mailbox here; establish an identity first — declare BASHY_AGENT=NAME (or register with `bashy agent add` / `bashy person add`), then choose an agent from `bashy agent list --all` or a person from `bashy person list` (`bashy whois %s` says what it resolves to). %s", as, as, inboxReaderHint)
 	}
 	return addr, nil
 }
