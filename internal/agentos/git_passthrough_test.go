@@ -189,7 +189,9 @@ func TestGitPassthroughPreamblePipeline(t *testing.T) {
 	// Create a wrapper script that acts as BASHY_SELF and invokes the test helper.
 	wrapperDir := t.TempDir()
 	wrapperScript := filepath.Join(wrapperDir, "bashy-wrapper.sh")
-	wrapperContent := fmt.Sprintf("#!/bin/sh\nexport %s=1\nexec %s -test.run=^TestGitPassthroughHelper$ -- \"$@\"\n",
+	// `git -C DIR` re-enters as `bashy -c 'awd "$@"' bashy awd DIR -- SELF git ...`;
+	// the wrapper plays the shell's awd (cd for one command) and re-dispatches.
+	wrapperContent := fmt.Sprintf("#!/bin/sh\nexport %s=1\nif [ \"$1\" = -c ]; then shift 3; d=$1; shift 2; cd \"$d\" || exit 1; exec \"$@\"; fi\nexec %s -test.run=^TestGitPassthroughHelper$ -- \"$@\"\n",
 		gitPassthroughHelper, shellQuote(os.Args[0]))
 	if err := os.WriteFile(wrapperScript, []byte(wrapperContent), 0o755); err != nil {
 		t.Fatal(err)

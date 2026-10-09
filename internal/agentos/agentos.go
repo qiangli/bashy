@@ -1390,8 +1390,10 @@ func dispatch() {
 			// Global options before the verb (-C DIR, --no-pager, …) are
 			// applied as real git would; cobra never sees them.
 			dirs, stripped, gerr := splitGitGlobals(rest)
-			if gerr == nil {
-				gerr = applyGitDirs(dirs)
+			if gerr == nil && len(dirs) > 0 {
+				// -C DIR is `awd DIR -- bashy git ...`: one chdir
+				// mechanism for every verb, not a git-private copy.
+				dispatchExit(gitAwdRun(gitAwdArgs(bashySelfPath(), dirs, stripped)))
 			}
 			if gerr != nil {
 				fmt.Fprintln(os.Stderr, gerr)

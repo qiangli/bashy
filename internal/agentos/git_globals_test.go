@@ -59,42 +59,6 @@ func runGitDoor(t *testing.T, cwd string, args ...string) (string, string, int) 
 	return stdout.String(), stderr.String(), code
 }
 
-func TestGitDashCLogFromOtherCwd(t *testing.T) {
-	repo := gitGlobalsRepo(t)
-	want, err := exec.Command(gitscm.Path(), "-C", repo, "log", "-1", "--format=%h").Output()
-	if err != nil {
-		t.Skip(err)
-	}
-	out, errOut, code := runGitDoor(t, t.TempDir(), "-C", repo, "log", "-1", "--format=%h")
-	if code != 0 || strings.TrimSpace(out) != strings.TrimSpace(string(want)) {
-		t.Fatalf("git -C log: code=%d out=%q stderr=%q want %q", code, out, errOut, want)
-	}
-}
-
-func TestGitDashCStatusShortFromOtherCwd(t *testing.T) {
-	repo := gitGlobalsRepo(t)
-	out, errOut, code := runGitDoor(t, t.TempDir(), "-C", repo, "status", "--short")
-	if code != 0 || !strings.Contains(out, "?? new.txt") {
-		t.Fatalf("git -C status --short: code=%d out=%q stderr=%q", code, out, errOut)
-	}
-}
-
-func TestGitDashCRelativeAndRepeated(t *testing.T) {
-	repo := gitGlobalsRepo(t)
-	parent := filepath.Dir(repo)
-	out, errOut, code := runGitDoor(t, t.TempDir(), "-C", parent, "-C", filepath.Base(repo), "--no-pager", "status", "--short")
-	if code != 0 || !strings.Contains(out, "?? new.txt") {
-		t.Fatalf("repeated -C: code=%d out=%q stderr=%q", code, out, errOut)
-	}
-}
-
-func TestGitDashCBadDirFailsLikeGit(t *testing.T) {
-	_, errOut, code := runGitDoor(t, t.TempDir(), "-C", "/nonexistent-s404", "status")
-	if code != 128 || !strings.Contains(errOut, "cannot change to") {
-		t.Fatalf("bad -C dir: code=%d stderr=%q", code, errOut)
-	}
-}
-
 func TestGitDashCExternalStillWorks(t *testing.T) {
 	repo := gitGlobalsRepo(t)
 	out, errOut, code := runGitDoor(t, t.TempDir(), "--external", "-C", repo, "status", "--short")
@@ -138,6 +102,24 @@ func TestSplitGitGlobals(t *testing.T) {
 		}
 		if err != nil || strings.Join(rest, "\x00") != strings.Join(tc.rest, "\x00") || strings.Join(dirs, "\x00") != strings.Join(tc.dirs, "\x00") {
 			t.Errorf("%q: dirs=%q rest=%q err=%v; want dirs=%q rest=%q", tc.in, dirs, rest, err, tc.dirs, tc.rest)
+		}
+	}
+}
+
+// -C is not a git-private chdir: it is rewritten to the one mechanism every
+// verb shares, `awd DIR -- bashy git ...` (the end-to-end path re-execs the
+// binary, so it is verified on the built bashy, not here).
+func TestGitDashCRewritesToAwd(t *testing.T) {
+	cases := []struct {
+		dirs, rest, want []string
+	}{
+		{[]string{"/r"}, []string{"log", "-1"}, []string{"/r", "--", "SELF", "git", "log", "-1"}},
+		{[]string{"/p", "r"}, []string{"status", "--short"}, []string{"/p", "--", "SELF", "git", "-C", "r", "status", "--short"}},
+	}
+	for _, tc := range cases {
+		got := gitAwdArgs("SELF", tc.dirs, tc.rest)
+		if strings.Join(got, "\x00") != strings.Join(tc.want, "\x00") {
+			t.Errorf("dirs=%q rest=%q: got %q want %q", tc.dirs, tc.rest, got, tc.want)
 		}
 	}
 }

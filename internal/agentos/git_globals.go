@@ -2,7 +2,6 @@ package agentos
 
 import (
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -49,23 +48,16 @@ func splitGitGlobals(args []string) (dirs, rest []string, err error) {
 	return dirs, args[i:], nil
 }
 
-// applyGitDirs performs the -C directory changes cumulatively, like git.
-func applyGitDirs(dirs []string) error {
-	for _, d := range dirs {
-		if err := os.Chdir(d); err != nil {
-			return &gitExitError{code: 128, msg: fmt.Sprintf("fatal: cannot change to '%s': %s", d, chdirReason(err))}
-		}
-	}
-	return nil
-}
+// gitAwdRun runs `bashy awd` (a seam: tests must not re-exec the binary).
+var gitAwdRun = dispatchAwd
 
-func chdirReason(err error) string {
-	if pe, ok := err.(*os.PathError); ok {
-		err = pe.Err
+// gitAwdArgs rewrites `bashy git -C D1 [-C D2 ...] REST` as
+// `awd D1 -- bashy git [-C D2 ...] REST`. Each hop runs in the previous
+// directory, so repeated and relative -C resolve exactly as in git.
+func gitAwdArgs(self string, dirs, rest []string) []string {
+	args := []string{dirs[0], "--", self, "git"}
+	for _, d := range dirs[1:] {
+		args = append(args, "-C", d)
 	}
-	s := err.Error()
-	if s != "" {
-		s = strings.ToUpper(s[:1]) + s[1:]
-	}
-	return s
+	return append(args, rest...)
 }
