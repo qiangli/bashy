@@ -73,8 +73,8 @@ testee_path=bin/bash.exe
 export BASH53_USERLAND=bin/yoke.exe
 if [ -n "${BASH53_RELEASE_DIR:-}" ]; then
   testee_path="$BASH53_RELEASE_DIR/bash.exe"
-  export BASH53_USERLAND="$BASH53_RELEASE_DIR/bashy.exe"
-  for member in "$testee_path" "$BASH53_USERLAND"; do
+  export BASH53_USERLAND=bin/coreutils.exe
+  for member in "$testee_path" "$BASH53_RELEASE_DIR/bashy.exe"; do
     [ -f "$member" ] || { echo "gate: missing release member: $member" >&2; exit 2; }
   done
 fi
@@ -85,6 +85,9 @@ if [ -z "${BASH53_RELEASE_DIR:-}" ]; then
   CGO_ENABLED=0 go build -o bin/bash.exe ./cmd/bash || exit 2
 else
   echo "gate: published product pair: $BASH53_RELEASE_DIR (no product build)"
+  # bashy's multicall --list interface is selected by the coreutils alias.
+  # Copy the published bytes; the helper must never compile a replacement.
+  cp "$BASH53_RELEASE_DIR/bashy.exe" "$BASH53_USERLAND" || exit 2
 fi
 go build -o bin/bash53suite.exe ./tools/bash53suite || exit 2
 testee_full=$("$testee_path" --version)

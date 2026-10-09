@@ -19,7 +19,7 @@ class ReleaseGateTest(unittest.TestCase):
                 p.write_text('#!/bin/bash\n' + body)
                 p.chmod(0o755)
             executable('product/bash.exe', 'echo published-shell\n')
-            executable('product/bashy.exe', 'echo published-userland\n')
+            executable('product/bashy.exe', '[[ ${0##*/} == coreutils.exe ]] || exit 2\necho cat\n')
             executable('tools/go', '''case "$*" in
 'env GOOS') echo windows;;
 'build -o bin/bash53suite.exe ./tools/bash53suite') exit 0;;
@@ -34,7 +34,7 @@ esac
 *' -list '*) echo fixture;;
 *)
 [[ "$*" == *"-bash $BASH53_RELEASE_DIR/bash.exe"* ]] || exit 90
-[[ "$*" == *"-userland $BASH53_RELEASE_DIR/bashy.exe"* ]] || exit 91
+"$BASH53_USERLAND" --list >/dev/null || exit 91
 echo '  PASS  fixture  (1ms)'
 echo 'Results: 1 passed, 0 failed, 0 skipped';;
 esac
@@ -46,6 +46,8 @@ esac
             self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
             self.assertFalse((root/'bin/bash.exe').exists())
             self.assertFalse((root/'bin/yoke.exe').exists())
+            self.assertEqual((root/'bin/coreutils.exe').read_bytes(),
+                             (root/'product/bashy.exe').read_bytes())
             self.assertIn('published-shell', result.stdout)
             (root/'product/bash.exe').unlink()
             missing = subprocess.run(['/bin/bash', str(GATE), str(root)], env=env,
