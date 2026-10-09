@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -20,8 +21,16 @@ import (
 // bashy rather than being fetched from the origin that serves the archive.
 // binmgr refuses the download if the digest does not match. Archive licence
 // (MIT LICENSE.txt, permissive ThirdPartyNotices.txt): download + exec only,
-// recorded in docs/fence-toolchain-licenses.md.
+// recorded in docs/fence-toolchain-licenses.md. The Linux and macOS archives
+// carry the MIT LICENSE.txt; the Windows zip carries the Microsoft .NET Library
+// licence terms instead, so Windows downloads only after the explicit opt-in
+// below (dotnetAcceptLicenseEnv) or when BASHPP_DOTNET names an installed dotnet.
 const dotnetSDKVersion = "10.0.401"
+
+const (
+	dotnetOverrideEnv      = "BASHPP_DOTNET"
+	dotnetAcceptLicenseEnv = "BASHY_DOTNET_ACCEPT_LICENSE"
+)
 
 type dotnetAsset struct{ file, sha512 string }
 
@@ -56,10 +65,41 @@ func dotnetSDKTool(platform string) (binmgr.Tool, error) {
 	}, nil
 }
 
+func dotnetSDKCached(tool binmgr.Tool) bool {
+	root, err := binmgr.CacheDir()
+	if err != nil {
+		return false
+	}
+	entry := tool.Assets[binmgr.Platform()].Entrypoint
+	_, err = os.Stat(filepath.Join(root, tool.Name, tool.Version, filepath.FromSlash(entry)))
+	return err == nil
+}
+
+// dotnetLicenseGate refuses the Windows SDK download until the caller has
+// accepted Microsoft's terms for it; other platforms ship the MIT archive.
+func dotnetLicenseGate(platform string, getenv func(string) string) error {
+	if !strings.HasPrefix(platform, "windows/") || getenv(dotnetAcceptLicenseEnv) == "1" {
+		return nil
+	}
+	return fmt.Errorf("the .NET SDK for Windows is distributed under the Microsoft .NET Library licence terms (not MIT; see LICENSE.txt in the archive) and is not downloaded without your consent: set %s=1 to accept them and download SDK %s, or set %s to an installed dotnet.exe", dotnetAcceptLicenseEnv, dotnetSDKVersion, dotnetOverrideEnv)
+}
+
 func provisionedDotnet(ctx context.Context) ([]string, string, error) {
+	if override := os.Getenv(dotnetOverrideEnv); override != "" {
+		bin, err := exec.LookPath(override)
+		if err != nil {
+			return nil, "", fmt.Errorf("%s=%q: %w", dotnetOverrideEnv, override, err)
+		}
+		return []string{bin}, "selected " + dotnetOverrideEnv + " " + bin, nil
+	}
 	tool, err := dotnetSDKTool(binmgr.Platform())
 	if err != nil {
 		return nil, "", err
+	}
+	if !dotnetSDKCached(tool) {
+		if err := dotnetLicenseGate(binmgr.Platform(), os.Getenv); err != nil {
+			return nil, "", err
+		}
 	}
 	bin, err := binmgr.Ensure(ctx, tool)
 	if err != nil {

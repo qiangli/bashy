@@ -56,6 +56,7 @@ func TestDotnetSDKPinsAreVerifiedArchives(t *testing.T) {
 func TestDotnetResolverUsesCacheAndSetsEnvironment(t *testing.T) {
 	cache := t.TempDir()
 	t.Setenv("BASHY_BIN_CACHE", cache)
+	t.Setenv(dotnetOverrideEnv, "")
 	for _, k := range []string{"DOTNET_CLI_HOME", "NUGET_PACKAGES", "DOTNET_ROOT", "DOTNET_NOLOGO", "DOTNET_CLI_TELEMETRY_OPTOUT", "DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "DOTNET_MULTILEVEL_LOOKUP"} {
 		t.Setenv(k, "")
 		os.Unsetenv(k)
@@ -102,5 +103,47 @@ func TestDotnetEnvKeepsCallerStateRoots(t *testing.T) {
 		if strings.Contains(win, "/c/") {
 			t.Fatalf("msys path leaked: %q", win)
 		}
+	}
+}
+
+func TestDotnetWindowsDownloadNeedsLicenseAcceptance(t *testing.T) {
+	none := func(string) string { return "" }
+	err := dotnetLicenseGate("windows/amd64", none)
+	if err == nil || !strings.Contains(err.Error(), dotnetAcceptLicenseEnv) || !strings.Contains(err.Error(), dotnetOverrideEnv) || !strings.Contains(err.Error(), "not MIT") {
+		t.Fatalf("windows gate err = %v", err)
+	}
+	if err := dotnetLicenseGate("windows/arm64", func(k string) string {
+		if k == dotnetAcceptLicenseEnv {
+			return "1"
+		}
+		return ""
+	}); err != nil {
+		t.Fatalf("accepted windows gate err = %v", err)
+	}
+	for _, p := range []string{"linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64"} {
+		if err := dotnetLicenseGate(p, none); err != nil {
+			t.Errorf("%s: MIT archive gated: %v", p, err)
+		}
+	}
+}
+
+func TestDotnetOverrideBypassesProvisioning(t *testing.T) {
+	t.Setenv("BASHY_BIN_CACHE", t.TempDir())
+	name := "my-dotnet"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	exe := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(dotnetOverrideEnv, exe)
+	argv, why, err := provisionedDotnet(context.Background())
+	if err != nil || len(argv) != 1 || argv[0] != exe || !strings.Contains(why, dotnetOverrideEnv) {
+		t.Fatalf("argv=%v why=%q err=%v", argv, why, err)
+	}
+	t.Setenv(dotnetOverrideEnv, filepath.Join(t.TempDir(), "absent"))
+	if _, _, err := provisionedDotnet(context.Background()); err == nil {
+		t.Fatal("a missing override must be an error, not a silent fall back to download")
 	}
 }

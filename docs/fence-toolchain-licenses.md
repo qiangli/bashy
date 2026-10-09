@@ -41,6 +41,30 @@ bundled parts are named; a one-word label is never the whole story.
 | `c`, `cpp` on Windows via `bashy clang` (`yoke/external/clang`) | llvm-mingw (mstorsjo) | llvm-mingw ISC; built toolchain "primarily LLVM Apache-2 with exceptions"; mingw-w64 CRT ZPL / public domain / BSD | download + exec, permissive |
 | `go` | `yoke/external/gotoolchain`: Go 1.27.1 (also the lowering SDK, `sh/lower/go_sdk.go`) | BSD-3-Clause | download + exec, permissive |
 
+## `fsharp` source files (`.fs`, `.fsx`; Sprint 379)
+
+F# source files run through `dotnet fsi`; the island resolver's `dotnet` row
+(`internal/agentos/dotnet.go`) provisions the .NET SDK 10.0.401 (release
+10.0.12, 2026-09-08) with `binmgr`: cache-first, the archive pinned per
+platform by the SHA-512 in Microsoft's release metadata (committed in the
+source, so the anchor ships with bashy), refused on mismatch. Download + exec
+only; nothing from the SDK is linked into bashy. `BASHPP_DOTNET` names an
+installed dotnet instead and skips the download.
+
+All six pins were checked against the downloaded bytes (2026-10-09), and the
+root `LICENSE.txt` of each archive was read:
+
+| Platform | Asset | Root `LICENSE.txt` | Class |
+|---|---|---|---|
+| Linux x64 / arm64 (glibc) | `dotnet-sdk-10.0.401-linux-{x64,arm64}.tar.gz` | MIT (.NET Foundation) | download + exec, permissive |
+| macOS x64 / arm64 | `dotnet-sdk-10.0.401-osx-{x64,arm64}.tar.gz` | MIT; `LICENSE.txt` sha256 `cfc21f5e…7310`, `ThirdPartyNotices.txt` sha256 `2dc8f8c5…cc7a`, no GPL/LGPL entry | download + exec, permissive |
+| Windows x64 / arm64 | `dotnet-sdk-10.0.401-win-{x64,arm64}.zip` | **Microsoft .NET Library licence terms** (not MIT: use to "design, develop and test your programs"); the zip also carries closed Microsoft redistributables such as `vcruntime140_cor3.dll` under `shared/Microsoft.WindowsDesktop.App` | download + exec, **proprietary**: opt-in only |
+
+Because the Windows terms are not permissive, the Windows download is refused
+unless `BASHY_DOTNET_ACCEPT_LICENSE=1` is set (the message names the licence and
+`BASHPP_DOTNET` as the alternative). A cached SDK is used without the opt-in.
+Linux musl is not provisioned (no `linux-musl` row); use `BASHPP_DOTNET`.
+
 ## Text and manifest fences
 
 The tool behind each is a CLI the fence drives with a verb table.
