@@ -93,6 +93,7 @@ import (
 	"github.com/qiangli/yoke/pkg/gomod"
 	"github.com/qiangli/yoke/pkg/handoff"
 	"github.com/qiangli/yoke/pkg/herald"
+	"github.com/qiangli/yoke/pkg/instance"
 	"github.com/qiangli/yoke/pkg/jobs"
 	"github.com/qiangli/yoke/pkg/judge"
 	"github.com/qiangli/yoke/pkg/kb"
@@ -145,7 +146,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "notify", "activity", "run", "agentic", "commands", "inspect", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -424,6 +425,8 @@ func newBusFrontDoorCmd(name string) (*cobra.Command, string, bool) {
 		return newUnifiedInboxCmd(), "inbox", true
 	case "notify":
 		return bus.NewNotifyCmd(), "notify", true
+	case "instance":
+		return instance.NewCmd(nil), "instance", true
 	default:
 		return nil, "", false
 	}
@@ -1066,7 +1069,7 @@ func dispatch() {
 			dispatchExit(1)
 		}
 		dispatchExit(0)
-	case "mb", "messages", "inbox", "notify":
+	case "mb", "messages", "inbox", "notify", "instance":
 		// The host communication front doors all share pkg/bus's fleet seams:
 		// identity, role/name resolution, and fleet selection. Mounting the
 		// command without this wire-up makes the feature look present while

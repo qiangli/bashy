@@ -567,6 +567,7 @@ var verbSynopsis = map[string]string{
 	"ycode":       "the engine for agents declared in YAML: run an agent.yaml (--file) or the builtin one; its session controls live here too",
 	"supervisord": "supervise ONE bashy dag root in the foreground: restart with bounded backoff, forward TERM/INT to its process group, reap orphans as PID 1",
 	"inbox":       "read/watch every inbound source, or query an explicit durable agent/human mailbox",
+	"instance":    "conversations on a family: list, open (prints the BASHY_PRINCIPAL/BASHY_INSTANCE export line), retire",
 	"notify":      "send one subject-only notification to an agent or role",
 	"activity":    "activity-event contract: subscribe to system activity, see why an event reached you",
 	"foreman":     "drive a persistent, steerable agent session (chat elevated)",
