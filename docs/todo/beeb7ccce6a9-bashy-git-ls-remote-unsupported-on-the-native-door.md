@@ -3,11 +3,12 @@ id: beeb7ccce6a9
 kind: bug
 title: bashy git ls-remote unsupported on the native door
 seq: 422
-status: todo
+status: wontfix
 priority: p1
 labels:
     - git
 created: 2026-10-09T05:25:23.144587Z
+closed: 2026-10-09T06:00:50.188114Z
 ---
 
-`bashy git ls-remote origin` fails with 'unknown git subcommand "ls-remote"' and has no unimplemented-verb hint or native handler; agents use it routinely. Add a native ls-remote (go-git remote List) or at least an --external hint entry.  Found by the Sprint 404 smoke (story 2324bae4d6fa) of bashy git through the native one-door; fails identically with and without -C, so it is independent of the -C fix.  (found by the Sprint 404 smoke, 2026-10-09; native engine only, works with --external)
+By design, closed 2026-10-09: ls-remote is host-only in the one-door (yoke/git/external.go names ls-remote among verbs callers send to the host); bashy git --external=true ls-remote works (verified on b3c770f4) and internal callers (sdlc deploy_tag) already use yokegit.RunChecked. Reopen only if a native ls-remote is wanted.
