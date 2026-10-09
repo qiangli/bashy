@@ -17,8 +17,8 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261009071524-54a8fb26235e
 	github.com/qiangli/ycode v0.3.1-dev.0.20261008213158-d9151603b281
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261009071820-0975af122eb6
-	github.com/qiangli/yoke/external/otel v0.0.0-20261009071820-0975af122eb6
+	github.com/qiangli/yoke v0.0.0-20261009073833-dddfffe1f47b
+	github.com/qiangli/yoke/external/otel v0.0.0-20261009073833-dddfffe1f47b
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
@@ -352,8 +352,8 @@ require (
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/qiangli/gfy v0.0.0-20261009070616-1a9d12418c8d // indirect
 	github.com/qiangli/outpost v0.14.38-0.20261009072711-92878114d7b4 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261009071820-0975af122eb6 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261009071820-0975af122eb6 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261009073833-dddfffe1f47b // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261009073833-dddfffe1f47b // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
@@ -515,7 +515,7 @@ replace github.com/perses/perses => github.com/qiangli/perses v0.0.0-20260426190
 
 replace github.com/ergochat/readline => github.com/qiangli/readline v0.1.4-0.20261009064530-fb482a5af0cb
 
-replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20261009064157-78765bf2b70b
+replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20261009073819-83ce2ea49b53
 
 // Podman embed: bashy mounts yoke's in-process podman engine, which consumes
 // the qiangli/podman fork + the pkg/oci wrapper. Cross-module replaces don't
