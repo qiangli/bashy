@@ -10,10 +10,12 @@ package agentos
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qiangli/yoke/pkg/bus"
 	"github.com/qiangli/yoke/pkg/meet"
@@ -359,6 +361,92 @@ func TestInboxHookEmptyStaysSilent(t *testing.T) {
 	}
 }
 
+// TestInboxHookLargeBoardStaysFast is the Sprint 321 hook-latency regression
+// test (conductor live test 2026-10-09: inbox-hook took 34-101 s on a host
+// with ~3500 board posts and hundreds of meet rooms, so Claude Code killed it
+// at its 30 s hook timeout). Root cause: every directed board post re-read
+// and re-parsed the whole sprint queue through bus.HostRoles. A board with
+// thousands of posts plus a megabyte-scale sprint queue must still serve the
+// hook in well under the 30 s harness timeout.
+func TestInboxHookLargeBoardStaysFast(t *testing.T) {
+	isolateUnifiedInbox(t)
+	isolateHintState(t)
+	reader := inboxTestReader
+	seedLargeSprintQueue(t, 400)
+	seedLargeBoard(t, reader, 2500)
+
+	start := time.Now()
+	var stdout, stderr bytes.Buffer
+	if rc := dispatchInboxHookTo([]string{"--as", reader}, strings.NewReader(`{"hook_event_name":"SessionStart"}`), &stdout, &stderr); rc != 0 {
+		t.Fatalf("hook exit=%d stderr=%q", rc, stderr.String())
+	}
+	elapsed := time.Since(start)
+	if stdout.String() == "" {
+		t.Fatal("seeded mail produced no hook envelope")
+	}
+	if elapsed >= 5*time.Second {
+		t.Fatalf("hook took %v on a large board, budget is 5s", elapsed)
+	}
+	t.Logf("hook on 2500-post board with 400-story queue: %v", elapsed)
+}
+
+// seedLargeBoard appends n directed posts straight to the board log. It
+// bypasses bus.PostMessage (which re-reads the board per post) because the
+// cost under test is the READ path, not the write path.
+func seedLargeBoard(t *testing.T, reader string, n int) {
+	t.Helper()
+	dir := os.Getenv("BASHY_MB_DIR")
+	f, err := os.OpenFile(filepath.Join(dir, "posts.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	for i := 1; i <= n; i++ {
+		if err := enc.Encode(bus.Post{
+			SchemaVersion: "v1",
+			Seq:           int64(i),
+			At:            "2026-10-09T00:00:00Z",
+			From:          "conductor",
+			To:            reader,
+			Topic:         "harness",
+			Body:          fmt.Sprintf("bulk seeded mail %d", i),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// seedLargeSprintQueue writes a megabyte-scale sprint queue into the isolated
+// sprint store. The inbox read path resolves role addresses through
+// bus.HostRoles on every directed post, and the weave source re-reads this
+// file per call — that per-post re-read is the cost this test pins down.
+func seedLargeSprintQueue(t *testing.T, stories int) {
+	t.Helper()
+	dir := os.Getenv("BASHY_SPRINT_DIR")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pad := strings.Repeat("x", 8*1024)
+	list := make([]map[string]any, 0, stories)
+	for i := 1; i <= stories; i++ {
+		list = append(list, map[string]any{
+			"id":         i,
+			"title":      fmt.Sprintf("bulk story %d", i),
+			"column":     "doing",
+			"continuity": pad,
+		})
+	}
+	q := map[string]any{"next_id": 1, "next_story_id": stories + 1, "stories": list}
+	b, err := json.Marshal(q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "queue.json"), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestInboxHookDoesNotConsume(t *testing.T) {
 	isolateUnifiedInbox(t)
 	isolateHintState(t)
@@ -372,6 +460,40 @@ func TestInboxHookDoesNotConsume(t *testing.T) {
 	prepared := unifiedTurnPreamble(reader)
 	if !strings.Contains(prepared.Text, "seeded board mail") {
 		t.Fatalf("mail missing from managed delivery after hook: %q", prepared.Text)
+	}
+}
+
+// TestInboxHookCommandCarriesStoresAndIdentity pins what the installed hook
+// entries must carry so the hook finds the right stores: the absolute bashy
+// binary (stores resolve from the harness's own environment, so no store path
+// is baked), the turn event, and the baked identity that scopes the read to
+// the instance's own cursors and authorized role mail.
+func TestInboxHookCommandCarriesStoresAndIdentity(t *testing.T) {
+	withAs := inboxHookCommand("/bin/bashy", "SessionStart", "alice")
+	for _, want := range []string{"/bin/bashy", "inbox-hook", "--for SessionStart", "--as alice"} {
+		if !strings.Contains(withAs, want) {
+			t.Errorf("hook command %q missing %q", withAs, want)
+		}
+	}
+	withoutAs := inboxHookCommand("/bin/bashy", "UserPromptSubmit", "")
+	if !strings.Contains(withoutAs, "--for UserPromptSubmit") {
+		t.Errorf("hook command %q missing the event", withoutAs)
+	}
+	if strings.Contains(withoutAs, "--as") {
+		t.Errorf("empty identity must leave attribution ambient, not bake --as: %q", withoutAs)
+	}
+	m := map[string]any{}
+	mergeClaudeInboxHooks(m, "/bin/bashy", "alice")
+	for _, event := range inboxHookEvents {
+		if !claudeHookHasCommand(m, event) {
+			t.Errorf("merged claude settings carry no hook for %s", event)
+		}
+	}
+	block := codexInboxHookBlock("/bin/bashy", "alice")
+	for _, event := range inboxHookEvents {
+		if !strings.Contains(block, "inbox-hook --for "+event+" --as alice") {
+			t.Errorf("codex block missing hook for %s: %q", event, block)
+		}
 	}
 }
 

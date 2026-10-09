@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/qiangli/coreutils/pkg/lockfile"
@@ -624,10 +625,45 @@ func snapshotUnifiedInbox(reader string, limit int, includeBus bool) (inboxBatch
 	return snapshotInbox(reader, limit, includeBus, true)
 }
 
+// snapshotRolesMu serializes the memoized role-table window below.
+// bus.HostRoles is a process-global func var that the board scan consults on
+// every directed post, so the swap must be exclusive. Snapshots never nest,
+// so one mutex is enough.
+var snapshotRolesMu sync.Mutex
+
+// memoizeHostRoles scopes one stable role table to a single snapshot. The
+// board scan resolves role addresses through bus.HostRoles on EVERY directed
+// post, and the weave source re-reads and re-parses the whole sprint queue
+// per call — megabytes × thousands of posts, tens of seconds, past the 30 s
+// harness hook timeout on a busy host. Roles cannot change meaningfully
+// inside one read-only snapshot, so evaluating once per snapshot keeps exact
+// semantics at constant cost. The previous table is restored afterwards, so
+// the next snapshot (watch tick, next command) still sees fresh roles.
+func memoizeHostRoles() func() {
+	snapshotRolesMu.Lock()
+	prev := bus.HostRoles
+	if prev == nil {
+		snapshotRolesMu.Unlock()
+		return func() {}
+	}
+	var once sync.Once
+	var roles []bus.HostRole
+	bus.HostRoles = func() []bus.HostRole {
+		once.Do(func() { roles = prev() })
+		return roles
+	}
+	return func() {
+		bus.HostRoles = prev
+		snapshotRolesMu.Unlock()
+	}
+}
+
 // snapshotInbox is snapshotUnifiedInbox with the relay delivery pass optional:
 // the per-command unread hint reads local stores only, so an ordinary command
 // never waits on the network or files relay mail as a side effect.
 func snapshotInbox(reader string, limit int, includeBus, deliver bool) (inboxBatch, error) {
+	restoreRoles := memoizeHostRoles()
+	defer restoreRoles()
 	var batch inboxBatch
 	state, err := loadMailboxState(mailboxSpec{Key: "agent:" + reader, Address: reader, Kind: "agent"})
 	if err != nil {

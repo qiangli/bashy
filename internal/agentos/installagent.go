@@ -958,8 +958,10 @@ func dispatchInstallAgentHooks(name, shell, as string, project, dryRun, uninstal
 // documented shape (hooks-guide: {"hooks": {"SessionStart": [{"hooks":
 // [{"type": "command", "command": ...}]}]}}). No matcher: SessionStart must
 // fire for startup/resume/clear/compact, and UserPromptSubmit ignores
-// matchers. timeout 30 bounds the hook past the slowest local snapshot
-// (the cross-host delivery pass caps at 20s) without stalling the turn.
+// matchers. timeout 30 is the harness ceiling, not a budget: the hook reads
+// local stores only and answers in about a second on a busy host, so a
+// timeout means something else is wrong. (It used to run the cross-host
+// delivery pass, capped at 20s; Sprint 321 keeps the hook local-only.)
 func claudeInboxHookEntry(command string) map[string]any {
 	return map[string]any{
 		"hooks": []any{

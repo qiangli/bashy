@@ -423,7 +423,12 @@ func dispatchInboxHookTo(args []string, stdin io.Reader, stdout, stderr io.Write
 	}
 	fp, fpOK := inboxSourcesFingerprint(reader)
 	st := loadInboxHintArrivals()
-	hint, next, ran := checkUnreadArrivals(reader, fp, fpOK, st, liveUnreadSnapshot, inboxSourcesFingerprint)
+	// Local stores only, like the per-command hint: the hook must finish in
+	// well under the harness timeout, so it never waits on the relay delivery
+	// pass (up to 20 s on the network) and never files relay mail as a side
+	// effect. Cross-host mail still surfaces via managed turn delivery and
+	// `bashy inbox`, which keep the delivery pass.
+	hint, next, ran := checkUnreadArrivals(reader, fp, fpOK, st, localUnreadSnapshot, inboxSourcesFingerprint)
 	if ran {
 		next.save()
 	}
