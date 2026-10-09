@@ -89,7 +89,7 @@ jobs:
           retention-days: 3
       - uses: actions/upload-artifact@v4
         with:
-          name: bashy-darwin-${{ matrix.arch }}-sbom
+          name: sbom-bashy-darwin-${{ matrix.arch }}
           path: ${{ runner.temp }}/darwin-sbom/*
           if-no-files-found: ignore
           retention-days: 7
