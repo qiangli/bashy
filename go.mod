@@ -6,7 +6,7 @@ toolchain go1.27.1
 
 require (
 	github.com/aymanbagabas/go-pty v0.2.3
-	github.com/bashsharp/bashsharp v0.0.0-20261008183624-b516e93402ec
+	github.com/bashsharp/bashsharp v0.0.0-20261009071830-bbf9eeee733a
 	github.com/creack/pty/v2 v2.0.1
 	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0
 	github.com/ergochat/readline v0.1.3
@@ -14,11 +14,11 @@ require (
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pkg/sftp v1.13.10
-	github.com/qiangli/coreutils v0.0.0-20261009003803-be4e9974548c
+	github.com/qiangli/coreutils v0.0.0-20261009071524-54a8fb26235e
 	github.com/qiangli/ycode v0.3.1-dev.0.20261008213158-d9151603b281
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261009043153-5b5ecadff150
-	github.com/qiangli/yoke/external/otel v0.0.0-20261009043153-5b5ecadff150
+	github.com/qiangli/yoke v0.0.0-20261009071820-0975af122eb6
+	github.com/qiangli/yoke/external/otel v0.0.0-20261009071820-0975af122eb6
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
@@ -350,10 +350,10 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
-	github.com/qiangli/gfy v0.0.0-20260920194528-5f76a171a47d // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261008212151-4c77fc85db49 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261009043153-5b5ecadff150 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261009043153-5b5ecadff150 // indirect
+	github.com/qiangli/gfy v0.0.0-20261009070616-1a9d12418c8d // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261009072018-eb965a6382b1 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261009071820-0975af122eb6 // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261009071820-0975af122eb6 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
@@ -503,28 +503,28 @@ require (
 // unmerged Bash 5.3 interp patches). Resolve it as a flat sibling: inside the
 // dhnt umbrella ../sh is the sh submodule; in a standalone clone, clone
 // github.com/qiangli/sh next to this repo as ./sh.
-replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261009000119-db0286b044aa
+replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261009065157-d3d7766e8a47
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
-replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261009003803-be4e9974548c
+replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261009071524-54a8fb26235e
 
 replace github.com/jaegertracing/jaeger => github.com/qiangli/jaeger v0.0.0-20260426223533-5aaa7eb1f040
 
 replace github.com/perses/perses => github.com/qiangli/perses v0.0.0-20260426190059-de437951b5e6
 
-replace github.com/ergochat/readline => github.com/qiangli/readline v0.1.4-0.20260919214158-38ad08e83676
+replace github.com/ergochat/readline => github.com/qiangli/readline v0.1.4-0.20261009064530-fb482a5af0cb
 
-replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20260426003157-db9cd0a2004b
+replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20261009064157-78765bf2b70b
 
 // Podman embed: bashy mounts yoke's in-process podman engine, which consumes
 // the qiangli/podman fork + the pkg/oci wrapper. Cross-module replaces don't
 // propagate from yoke's go.mod, so bashy (the main module) restates them.
-replace go.podman.io/podman/v6 => github.com/qiangli/podman/v6 v6.0.0-20260723062102-d454baa0afec
+replace go.podman.io/podman/v6 => github.com/qiangli/podman/v6 v6.0.0-20261009064533-4a9784029284
 
 // The AgentOS file-management surface uses the maintained qiangli/filebrowser
 // fork. Keep it as an exact flat sibling in umbrella and standalone builds.
-replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/v2 v2.0.0-20261002203458-0b059ae20b79
+replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/v2 v2.0.0-20261009064700-9c1237190cff
 
 // gotreesitter: pinned local fork of upstream v0.16.0 (../gotreesitter,
 // hosted as qiangli/gotreesitter, module path kept as upstream's) with the
@@ -535,7 +535,7 @@ replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/
 // the transitive qiangli/gfy -> odvcencio imports, which a module-path rename
 // could not reach. Restated here because yoke's replace is not transitive.
 // Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
-replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261006115113-c8a5d22bb3f0
+replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261009064153-466dad1c3aef
 
 replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261008103721-fcd123d55aca
 
