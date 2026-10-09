@@ -1,6 +1,6 @@
 # Agent shell proof and output recovery — Sprint 379, Story 1527
 
-Recorded 2026-10-08 on macOS arm64. This is a bounded delivery record, not
+Recorded 2026-10-08; follow-up 2026-10-09 on macOS arm64. This is a bounded delivery record, not
 an assertion that every agent passed. No agent was removed from scope.
 The earlier Claude/OpenCode evidence remains in [matrix.md](matrix.md).
 
@@ -15,7 +15,7 @@ The earlier Claude/OpenCode evidence remains in [matrix.md](matrix.md).
    shared shim writer; graduate `out` only with recovery/error coverage.
 4. Run module builds/vet and focused tests, then commit in each repository.
 
-## Results and remaining work
+## Results and remaining work (2026-10-08 baseline)
 
 | CLI | Version | Observed result | Remaining limit/blocker |
 |---|---|---|---|
@@ -28,6 +28,9 @@ The earlier Claude/OpenCode evidence remains in [matrix.md](matrix.md).
 Y6's full live-agent acceptance remains open for these limitations. In
 particular, shim unit/e2e tests are not counted as AGY/Gemini/Copilot model
 turns, and Aider's `/run` is not counted as an LLM turn.
+
+The 2026-10-09 follow-up below supersedes AGY's blocked verdict and adds
+fresh evidence for every remaining client. Default Codex routing is still open.
 
 ## Reproduction and transcripts
 
@@ -209,3 +212,209 @@ No full suite ran on the development host. No push or CI run was requested
 under the worker contract; no CI URL exists for this delivery. Integration
 must publish yoke `2e89c45` first and update bashy's yoke module pin to include the
 shared shim writer before standalone CI, then bump umbrella pins.
+
+## Follow-up: 2026-10-09 (same story, partial delivery)
+
+No client was dropped. The current verdicts are:
+
+| Client | Verdict | Evidence / remaining work |
+|---|---|---|
+| Codex 0.157.1 | **FAIL: default routing** | Two fresh model turns, without `--ignore-user-config`, still execute `/bin/zsh`. Setting `shell_environment_policy.set.SHELL` also leaves the executable unchanged. Zero matching bashy episodes. No default-routing fix or generated-config regression is delivered. |
+| AGY 1.3.1 | **PASS: model-driven shell execution** | `gemini-3.1-pro-high` chose `run_command`, returned the expected integer, and bashy independently recorded exit 0. The earlier quota blocker did not recur; no ten-minute quota retry was needed. |
+| Gemini 0.63.0 | **BLOCKED: client eligibility** | Fresh authenticated attempt still returns `IneligibleTierError` / `UNSUPPORTED_CLIENT` / `free-tier`, exit 1. AI Studio has a documented free API-key path, but no Gemini/Google API key is available in this process. |
+| Copilot 1.0.93 | **BLOCKED: authentication** | Fresh attempt with inherited GitHub tokens removed returns `No authentication information found.`, exit 1. A free plan exists; browser/device OAuth or a supported token is still needed. |
+| Aider 0.86.2 | **BLOCKED: model provider adapter** | A real model-driven PTY attempt using installed LiteLLM's `chatgpt/gpt-5.2` provider fails with `ChatgptException - argument of type 'NoneType' is not iterable`. Zero matching bashy episodes. Earlier deterministic `/run` PASS remains valid but is not a model-driven PASS. |
+
+### Codex: root-cause boundary, not a generated-config fix
+
+The installer lives in **bashy**, `internal/agentos/installagent.go`, not in
+yoke. `codexInstaller` writes a bash-named exec wrapper and prints a `chsh`
+recipe. It does not generate `config.toml` or change the account shell by
+default. There is therefore no generated Codex shell configuration to test.
+The prior `--ignore-user-config` was a confounder, but removing it does not
+repair this behavior.
+
+The upstream selection code uses `getpwuid_r(...).pw_shell`, derives its type,
+and prefers that existing account-shell executable over PATH. It does not
+consult `$SHELL` to select the executable. See
+[Codex shell detection source](https://github.com/openai/codex/blob/main/codex-rs/shell-command/src/shell_detect.rs)
+(`default_user_shell`, `get_shell_path`) and the
+[configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference).
+This source was inspected on the follow-up date; the installed CLI behavior
+below is the direct evidence for version 0.157.1.
+
+The installed parser independently rejects the candidate top-level setting:
+
+```sh
+codex app-server --strict-config -c 'shell="/tmp/s379-followup/codex/install-home/.bashy/shims/bash"' --listen off
+# exit 1
+# Error: unknown configuration field `shell` in -c/--config override
+```
+
+Fresh isolated install HOME, isolated CODEX_HOME using the existing account's
+subscription authentication, PATH beginning with the generated shim directory,
+`SHELL` pointing at bashy, `BASHY_AGENTIC=1`, reduction off, and a fresh
+`BASHY_EXECHIST` store. The first run had no config file; the second used:
+
+```toml
+[shell_environment_policy.set]
+SHELL = "/tmp/s379-followup/codex/install-home/.bashy/shims/bash"
+```
+
+Both used the original unqualified prompt from this document:
+
+```sh
+codex exec --skip-git-repo-check --ephemeral --json \
+  -s danger-full-access '<prompt>'
+```
+
+Both returned exit 0 and this completed execution event (projected fields):
+
+```json
+{"type":"command_execution","command":"/bin/zsh -lc 'seq 3791527 3791527'","aggregated_output":"3.79153e+06\n3.79153e+06\n","exit_code":0,"status":"completed"}
+```
+
+No matching bashy `seq` episode was present. The CLI's exit 0 and its reported
+output are not acceptance. No account-wide `chsh` was performed. This request
+remains blocked on a supported upstream default-shell override (or a separately
+chosen account-shell deployment). An ignored config key, a prompt asking for
+an explicit shell, or a fabricated config-unit PASS would not fix the root.
+There is **no yoke patch** in this delivery.
+
+### AGY: fresh end-to-end PASS
+
+After `bashy install-agent agy --shell "$BASHY"`, prepend its emitted shim
+directory to PATH, retain the real authenticated HOME, and set the same
+execution-log environment described above:
+
+```sh
+agy --print '<prompt>' --model gemini-3.1-pro-high \
+  --log-file "$PROOF/agy.log" --print-timeout 90s \
+  --output-format stream-json --dangerously-skip-permissions
+# exit 0
+```
+
+Relevant stream events (conversation identifiers omitted):
+
+```json
+{"step_type":"tool","state":"DONE","tool_name":"run_command","tool_info":{"name":"run_command","parameters":{"CommandLine":"seq 3791527 3791527"},"output":"3791527\r\n"}}
+{"event":"result","result":{"status":"SUCCESS","response":"3791527\n","num_turns":1}}
+```
+
+Independent execution-log record (only cwd omitted):
+
+```json
+{"schema":"bashy-execlog-v1","canon_ver":1,"stage":"episode","at":"2026-10-09T09:10:37.070678Z","episode":"ep-3ef111c3a271b1fc","pid":46302,"ppid":44891,"seq":1,"cmd":"seq","template":"seq <N> <N>","argv":["seq","3791527","3791527"],"exit":0,"observed":true,"duration_ms":0,"effects":["pure"],"redaction":{"scrubber":"redact/1","n":0}}
+```
+
+A preceding default-model attempt also completed with exit 0 and a successful
+bashy episode at `2026-10-09T09:09:49.558722Z`; the explicit-model rerun above
+makes the model selection reproducible. Initial `error_message` stream events
+alone were not treated as a final verdict. Neither completed attempt returned
+the prior HTTP 429 quota error.
+
+### Gemini and Copilot: exact fresh blockers and free paths
+
+With the generated shim directory at the front of PATH and the original
+unqualified prompt, Gemini still fails before shell execution:
+
+```sh
+GEMINI_CLI_TRUST_WORKSPACE=true gemini -p '<prompt>' \
+  --approval-mode yolo --output-format stream-json
+# exit 1; zero matching bashy episodes
+```
+
+```text
+Error authenticating: IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products: https://antigravity.google
+reasonCode: 'UNSUPPORTED_CLIENT'
+tierId: 'free-tier'
+```
+
+The CLI's [authentication guide](https://geminicli.com/docs/get-started/authentication/)
+and [plans](https://geminicli.com/plans/) document an AI Studio API-key free tier.
+This is a potential non-paid alternative, not a proven usable account on this
+host. A presence-only environment check reported `GEMINI_API_KEY: absent` and
+`GOOGLE_API_KEY: absent`; no credential values were printed. The authenticated
+consumer path above remains ineligible.
+
+```sh
+env -u GITHUB_TOKEN -u GH_TOKEN copilot -p '<prompt>' \
+  --allow-all-tools --no-ask-user
+# exit 1; zero matching bashy episodes
+```
+
+```text
+Error: No authentication information found.
+
+Copilot can be authenticated with GitHub using an OAuth Token or a Fine-Grained Personal Access Token.
+
+To authenticate, you can use any of the following methods:
+  • Start 'copilot' and run the '/login' command
+  • Set the COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN environment variable
+  • Run 'gh auth login' to authenticate with the GitHub CLI
+```
+
+GitHub documents [Copilot Free](https://docs.github.com/en/copilot/how-tos/manage-your-account/get-started-with-a-copilot-plan)
+and [CLI OAuth authentication](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli).
+The CLI is available on all plans. The blocker is a usable login, not a proven
+requirement to buy a subscription. No purchase, signup, or browser authorization
+was completed by this worker.
+
+### Aider: subscription-backed model attempt, no shell proof
+
+The installed LiteLLM 1.81.10 includes a `chatgpt` OAuth provider. This attempt used a
+private mode-0600 temporary auth record containing the existing Codex account's
+access/identity tokens, **no refresh token** and no metered API key. The private
+copy was removed after the attempt. Nothing from the auth record is in this
+document or commit.
+
+With a PTY, `CHATGPT_TOKEN_DIR` pointing at that private directory, `SHELL`
+pointing at bashy as emitted by `install-agent aider`, an empty YAML config,
+`BASHY_AGENTIC=1`, and a fresh execution-log store:
+
+```sh
+aider --config "$PROOF/config.yml" --env-file /dev/null --no-git \
+  --no-check-update --no-analytics --yes-always --model chatgpt/gpt-5.2 \
+  --message 'Choose and run a shell command that prints the one-integer sequence from 3791527 through 3791527. Use your shell command facility; do not edit files. Report the actual command output.'
+```
+
+```text
+Aider v0.86.2
+Main model: chatgpt/gpt-5.2 with whole edit format
+litellm.APIConnectionError: APIConnectionError: ChatgptException - argument of
+ type 'NoneType' is not iterable
+Retrying in 0.2 seconds...
+```
+
+The same error recurred through the displayed 32-second retry delay. No model
+answer or shell-command proposal arrived, and no matching bashy episode was
+recorded. The outer PTY harness reached its 120-second cap; its process-group
+termination raised `PermissionError: [Errno 1] Operation not permitted`, so no
+reliable client exit code was captured. The PTY closed and the child was absent
+from the subsequent process check. This is **not** an exit-0 or routing PASS.
+Diagnosing the external Aider/LiteLLM adapter remains outside this bashy-only
+worker's patch scope.
+
+### Follow-up validation
+
+The follow-up changes documentation only; no production fix, red/green unit
+regression, generated-config test, or new yoke patch is claimed. The existing
+proof binary reports `de929cc`, matching this workspace's `de929cc9` base.
+Live client probes ran on the authenticated development host; no conformance
+suite or full unit suite ran there.
+
+All commands below ran on the development host with Go 1.27.1, captured to
+separate log files with `rc=$?` immediately after the command (no pipeline gate):
+
+- `go build ./...`: first attempt exit 143 with an empty diagnostic log.
+- `GOFLAGS=-p=2 go build ./...`: bounded-parallelism retry **exit 0**.
+- `go vet ./internal/agentos`: **exit 0**.
+- `go test ./internal/agentos -run 'Test(InstallAgentShimPreservesAgentOSEntryPoint|OutGraduatedInAtlasAndDefaultCatalog)$' -count=1`: **exit 0**, package result `ok`, 1.458s. Both named tests exist; neither is skipped.
+- `git diff --check`: **exit 0**.
+
+The successful Go build/vet logs were empty, and the focused-test log contained
+the successful package result. These checks preserve the existing implementation;
+they do not turn any blocked live-client verdict into PASS.
+
+No push or CI run was performed. Story 1527 remains open for default Codex
+routing and the three blocked client proofs above.
