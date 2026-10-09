@@ -1,0 +1,23 @@
+# Gemini CLI — custom tool definition (bashy examples/fleet, Sprint 406)
+# source:  https://github.com/google-gemini/gemini-cli  (Apache-2.0)
+# install: npm install -g @google/gemini-cli
+# add:     bashy tool add --force examples/fleet/tools/gemini.yaml
+#          (--force while the retired built-in gemini entry still exists)
+# models:  -m; GOOGLE_GEMINI_BASE_URL speaks the Gemini wire protocol only, so
+#          OpenAI-compatible or Ollama endpoints need a translating proxy
+# status:  unverified — round 2 (needs a Gemini-protocol shim for local models)
+name: gemini
+kind: cli
+display: Gemini CLI
+cli:
+  binary: gemini
+  launch:
+    exec: gemini --yolo -m {model} -p {prompt}
+    prompt_position: last
+    env_markers:
+      - GEMINI_CLI
+    watchdog:
+      max_runtime: 30m
+      mem_limit: 8g
+    notes: -p is one-shot; --output-format json|stream-json for structured output.
+quirks: Gemini protocol only

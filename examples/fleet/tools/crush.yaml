@@ -1,0 +1,37 @@
+# Crush (Charm) — custom tool definition (bashy examples/fleet, Sprint 406)
+# source:  https://github.com/charmbracelet/crush  (FSL-1.1-MIT)
+# install: npm install -g @charmland/crush   (or brew install charmbracelet/tap/crush)
+# add:     bashy tool add examples/fleet/tools/crush.yaml
+# models:  -m accepts model or provider/model; providers (type openai, anthropic,
+#          ollama) and their base_url live in crush.json
+# status:  verified: 2026-10-09 on crush v0.98.1 — bashy delegate e2e on macOS arm64:
+#          an OpenAI-compatible cloud endpoint (glm-5.3), local Ollama (qwen3.5:9b)
+#          and the bashy model door (qwen3:8b); pong + calc each (pong = endpoint answers, calc = fix a one-line bug, gate = its test passes).
+#          Result: all six cells pass except calc via the door's qwen3:8b.
+name: crush
+kind: cli
+display: Crush
+cli:
+  binary: crush
+  launch:
+    exec: crush run -q -m bashy/{model} {prompt}
+    prompt_position: last
+    key_env:
+      - OPENAI_API_KEY
+    env:
+      - XDG_CONFIG_HOME={state_dir}/config
+      - XDG_DATA_HOME={state_dir}/data
+    setup: |
+      # crush reads providers from $XDG_CONFIG_HOME/crush/crush.json and expands
+      # $VARS itself, so the key stays a reference, never a value on disk.
+      base={base_url}; model={model}
+      mkdir -p {state_dir}/config/crush
+      cat > {state_dir}/config/crush/crush.json <<EOF
+      {"providers": {"bashy": {"type": "openai", "base_url": "$base", "api_key": "\$OPENAI_API_KEY",
+        "models": [{"id": "$model", "name": "$model", "context_window": 131072, "default_max_tokens": 8192}]}}}
+      EOF
+    watchdog:
+      max_runtime: 30m
+      mem_limit: 8g
+    notes: crush run is non-interactive; -q hides the spinner; -c DIR sets the working directory.
+quirks: endpoints configured in crush.json, not the environment

@@ -1,0 +1,18 @@
+# qwen3:8b served by the bashy model door (`bashy llm`, port 24556) — custom
+# model (bashy examples/fleet, Sprint 406). The door's owner token is the key:
+# export DOOR_API_KEY from `bashy llm env --json` (env.OPENAI_API_KEY).
+# Note: the door serves qwen3:8b with a 40,960-token window; CLIs that require
+# more (hermes needs 64K) refuse it.
+# add: bashy model add examples/fleet/models/door-qwen3-8b.yaml
+name: door-qwen3-8b
+kind: local
+provider: openai-compat
+base_url: http://127.0.0.1:24556/v1
+api_key_ref: door
+model: qwen3:8b
+ids:
+  mini-swe-agent: openai/qwen3:8b
+  aider: openai/qwen3:8b
+  openhands: openai/qwen3:8b
+band: 1
+band_source: operator

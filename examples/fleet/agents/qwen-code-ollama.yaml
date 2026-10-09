@@ -1,0 +1,11 @@
+# A custom agent binding: Qwen Code on a local Ollama model (bashy examples/fleet,
+# Sprint 406). Add the tool and the model first, then the binding:
+#   bashy tool add examples/fleet/tools/qwen-code.yaml
+#   bashy model add examples/fleet/models/ollama-qwen3.5-9b.yaml
+#   bashy agent add examples/fleet/agents/qwen-code-ollama.yaml
+#   bashy delegate qwen-code-ollama "fix the failing test"
+agents:
+  - name: qwen-code-ollama
+    tool: qwen-code
+    model: ollama-qwen3.5-9b
+    description: Qwen Code CLI driving a local Ollama model

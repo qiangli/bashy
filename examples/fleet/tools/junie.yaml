@@ -1,0 +1,21 @@
+# Junie CLI (JetBrains) — custom tool definition (bashy examples/fleet, Sprint 406)
+# source:  https://junie.jetbrains.com/docs/junie-headless.html  (proprietary)
+# install: npm install -g @jetbrains/junie
+# add:     bashy tool add examples/fleet/tools/junie.yaml
+# models:  bring-your-own-key and custom endpoints are documented; the exact
+#          flags are UNVERIFIED, so no {model} placeholder yet
+# status:  unverified — round 2
+# bench:   Terminal-Bench 2.0 71%
+name: junie
+kind: cli
+display: Junie CLI
+cli:
+  binary: junie
+  launch:
+    exec: junie {prompt}
+    prompt_position: last
+    watchdog:
+      max_runtime: 30m
+      mem_limit: 8g
+    notes: Headless runs are trusted by design (no approval prompts). Auth via --auth or JUNIE_API_KEY.
+quirks: model and endpoint flags unverified

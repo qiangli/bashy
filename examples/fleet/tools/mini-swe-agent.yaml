@@ -1,0 +1,34 @@
+# mini-SWE-agent — custom tool definition (bashy examples/fleet, Sprint 406)
+# source:  https://github.com/SWE-agent/mini-swe-agent  (MIT)
+# install: uv tool install mini-swe-agent
+# add:     bashy tool add examples/fleet/tools/mini-swe-agent.yaml
+# models:  -m takes a litellm model string; give the bound model a tool-specific
+#          id, e.g. `bashy model add ... --id mini-swe-agent=openai/glm-5.3` or
+#          `--id mini-swe-agent=ollama_chat/qwen3.5:9b`. OpenAI-compatible
+#          endpoints read OPENAI_API_BASE / OPENAI_API_KEY (litellm).
+# status:  verified: 2026-10-09 on mini-swe-agent 2.4.6 — bashy delegate e2e on macOS arm64:
+#          an OpenAI-compatible cloud endpoint (glm-5.3), local Ollama (qwen3.5:9b)
+#          and the bashy model door (qwen3:8b); pong + calc each (pong = endpoint answers, calc = fix a one-line bug, gate = its test passes).
+#          Result: all six cells pass.
+# bench:   SWE-bench Verified 76.8% (Claude 4.5 Opus, 2026-02); Terminal-Bench 4.0 19.1%
+name: mini-swe-agent
+kind: cli
+display: mini-SWE-agent
+aliases:
+  - mini
+cli:
+  binary: mini
+  launch:
+    exec: mini --yolo --exit-immediately -m {model} -t {prompt}
+    prompt_position: last
+    key_env:
+      - OPENAI_API_KEY
+    env:
+      - OPENAI_API_BASE={base_url}
+      - MSWEA_COST_TRACKING=ignore_errors
+      - MSWEA_CONFIGURED=true
+    watchdog:
+      max_runtime: 30m
+      mem_limit: 4g
+    notes: --yolo runs without confirmation; --exit-immediately exits when the agent finishes instead of prompting.
+quirks: bash-only agent (no file-edit tools); tiny and transparent

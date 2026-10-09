@@ -1,0 +1,17 @@
+# GLM-5.3 on the Z.ai GLM Coding Plan, OpenAI-compatible endpoint — custom model
+# (bashy examples/fleet, Sprint 406). The credential is named, never inlined:
+# put the key under the zai ref (ZAI_API_KEY, the vault, or secrets.map).
+# add: bashy model add examples/fleet/models/glm-5.3-coding-plan.yaml
+# Tools that want a litellm model string get a tool-specific id.
+name: glm-5.3-coding-plan
+kind: api
+provider: openai-compat
+base_url: https://api.z.ai/api/coding/paas/v4
+api_key_ref: zai
+model: glm-5.3
+ids:
+  mini-swe-agent: openai/glm-5.3
+  aider: openai/glm-5.3
+  openhands: openai/glm-5.3
+band: 4
+band_source: declared

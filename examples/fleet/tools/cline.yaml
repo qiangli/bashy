@@ -1,0 +1,34 @@
+# Cline CLI — custom tool definition (bashy examples/fleet, Sprint 406)
+# source:  https://github.com/cline/cline  (Apache-2.0)
+# install: npm install -g cline
+# add:     bashy tool add --force examples/fleet/tools/cline.yaml
+#          (--force while the retired built-in cline entry still exists)
+# models:  -m selects the model for the provider chosen with -P (default: cline);
+#          OpenAI-compatible base URLs are configured with `cline auth`
+# status:  verified: 2026-10-09 on cline 3.0.70 — bashy delegate e2e on macOS arm64:
+#          an OpenAI-compatible cloud endpoint (glm-5.3), local Ollama (qwen3.5:9b)
+#          and the bashy model door (qwen3:8b); pong + calc each (pong = endpoint answers, calc = fix a one-line bug, gate = its test passes).
+#          Result: all six cells pass.
+name: cline
+kind: cli
+display: Cline CLI
+cli:
+  binary: cline
+  launch:
+    exec: cline --yolo --json -m {model} {prompt}
+    prompt_position: last
+    key_env:
+      - OPENAI_API_KEY
+    env_markers:
+      - CLINE_ACTIVE
+    env:
+      - HOME={state_dir}/home
+    setup: |
+      # cline keeps provider auth under ~/.cline; HOME is bashy's private copy.
+      mkdir -p {state_dir}/home
+      cline auth -p openai -k "$OPENAI_API_KEY" -b {base_url} -m {model} > /dev/null
+    watchdog:
+      max_runtime: 30m
+      mem_limit: 8g
+    notes: The positional prompt runs in act mode with auto-approve; --yolo widens it for unattended runs; --json emits NDJSON.
+quirks: provider set with -P or cline auth

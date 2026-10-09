@@ -1,0 +1,44 @@
+# Hermes Agent (Nous Research) — custom tool definition (bashy examples/fleet, Sprint 406)
+# source:  https://github.com/NousResearch/hermes-agent  (MIT)
+# add:     bashy tool add --force examples/fleet/tools/hermes.yaml
+#          (--force while the retired built-in hermes entry still exists)
+# models:  -m with --provider (zai, openai-api, ...); OPENAI_BASE_URL for
+#          OpenAI-compatible endpoints; built-in zai provider reads GLM_API_KEY
+# install: hermes refuses wheel builds; use the vendor installer, or a source
+#          checkout + `uv sync --frozen` (run .venv/bin/hermes)
+# status:  verified: 2026-10-09 on hermes v0.21.6 — bashy delegate e2e on macOS arm64:
+#          an OpenAI-compatible cloud endpoint (glm-5.3), local Ollama (qwen3.5:9b)
+#          and the bashy model door (qwen3:8b); pong + calc each (pong = endpoint answers, calc = fix a one-line bug, gate = its test passes).
+#          Result: cloud and Ollama cells pass; door fails: hermes needs a 64K context window.
+name: hermes
+kind: cli
+display: Hermes Agent
+cli:
+  binary: hermes
+  launch:
+    exec: hermes --yolo --provider custom -m {model} -z {prompt}
+    prompt_position: last
+    key_env:
+      - OPENAI_API_KEY
+    env_markers:
+      - HERMES_AGENT
+    env:
+      - HERMES_HOME={state_dir}
+    setup: |
+      # hermes reads its custom endpoint from $HERMES_HOME/config.yaml.
+      base={base_url}; model={model}
+      cat > {state_dir}/config.yaml <<EOF
+      model:
+        provider: custom
+        base_url: $base
+        api_key: $OPENAI_API_KEY
+        default: $model
+      EOF
+      chmod 600 {state_dir}/config.yaml
+    watchdog:
+      max_runtime: 30m
+      mem_limit: 8g
+    notes: >-
+      -z is the documented one-prompt contract (final text only on stdout). The
+      chat --oneshot -q form also exists. Native ACP via `hermes acp`.
+quirks: provider chosen with --provider or hermes model; -z prints only the final answer

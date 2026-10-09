@@ -1,0 +1,23 @@
+# Factory Droid — custom tool definition (bashy examples/fleet, Sprint 406)
+# source:  https://docs.factory.ai/cli/droid-exec/overview  (proprietary)
+# install: vendor installer (https://app.factory.ai/cli)
+# add:     bashy tool add examples/fleet/tools/droid.yaml
+# models:  -m custom:<name> for bring-your-own-key models declared in droid's
+#          customModels (generic-chat-completion-api = OpenAI-compatible)
+# status:  unverified — NEEDS A FACTORY ACCOUNT; deferred from the S406 e2e round
+# bench:   Terminal-Bench 2.0 77.3% (GPT-5.3-Codex)
+name: droid
+kind: cli
+display: Factory Droid
+cli:
+  binary: droid
+  launch:
+    exec: droid exec --auto high -m {model} {prompt}
+    prompt_position: last
+    watchdog:
+      max_runtime: 30m
+      mem_limit: 8g
+    notes: >-
+      droid exec is the headless mode (-o json|stream-json for structured output).
+      --auto high allows edits and commands; --skip-permissions-unsafe allows all.
+quirks: vendor account required even in bring-your-own-key mode (unverified)

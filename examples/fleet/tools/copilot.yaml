@@ -1,0 +1,20 @@
+# GitHub Copilot CLI — custom tool definition (bashy examples/fleet, Sprint 406)
+# source:  https://github.com/github/copilot-cli  (proprietary)
+# install: npm install -g @github/copilot
+# add:     bashy tool add examples/fleet/tools/copilot.yaml
+# models:  --model; bring-your-own-key via COPILOT_PROVIDER_BASE_URL,
+#          COPILOT_PROVIDER_API_KEY, COPILOT_PROVIDER_TYPE and COPILOT_MODEL
+# status:  unverified — NEEDS A GITHUB ACCOUNT; deferred from the S406 e2e round
+name: copilot
+kind: cli
+display: GitHub Copilot CLI
+cli:
+  binary: copilot
+  launch:
+    exec: copilot --allow-all -s --model {model} -p {prompt}
+    prompt_position: last
+    watchdog:
+      max_runtime: 30m
+      mem_limit: 8g
+    notes: -p is one-shot; -s prints only the agent's answer; --output-format json for structured output.
+quirks: GitHub sign-in may be required even with bring-your-own-key (unverified)

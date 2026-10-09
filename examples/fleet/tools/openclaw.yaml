@@ -1,0 +1,40 @@
+# OpenClaw — custom tool definition (bashy examples/fleet, Sprint 406)
+# source:  https://github.com/openclaw/openclaw  (MIT)
+# install: npm install -g openclaw
+# add:     bashy tool add --force examples/fleet/tools/openclaw.yaml
+#          (--force while the retired built-in openclaw entry still exists)
+# models:  --model provider/model (e.g. ollama/qwen3.5:9b); providers in its config
+# status:  verified: 2026-10-09 on openclaw 2026.6.35 — bashy delegate e2e on macOS arm64:
+#          an OpenAI-compatible cloud endpoint (glm-5.3), local Ollama (qwen3.5:9b)
+#          and the bashy model door (qwen3:8b); pong + calc each (pong = endpoint answers, calc = fix a one-line bug, gate = its test passes).
+#          Result: pong everywhere and cloud calc pass; calc on qwen3.5:9b and via the door fail.
+name: openclaw
+kind: cli
+display: OpenClaw
+cli:
+  binary: openclaw
+  launch:
+    exec: openclaw agent --local --agent main --json --model bashy/{model} -m {prompt}
+    prompt_position: last
+    key_env:
+      - OPENAI_API_KEY
+    env_markers:
+      - OPENCLAW
+    env:
+      - OPENCLAW_STATE_DIR={state_dir}
+      - OPENCLAW_CONFIG_PATH={state_dir}/openclaw.json
+    setup: |
+      # openclaw registers custom models in openclaw.json and expands ${VARS}.
+      base={base_url}; model={model}
+      cat > {state_dir}/openclaw.json <<EOF
+      {"agents": {"defaults": {"model": {"primary": "bashy/$model"}}},
+       "models": {"providers": {"bashy": {"baseUrl": "$base", "apiKey": "\${OPENAI_API_KEY}", "api": "openai-completions",
+         "models": [{"id": "$model", "name": "$model"}]}}}}
+      EOF
+    watchdog:
+      max_runtime: 30m
+      mem_limit: 8g
+    notes: >-
+      agent --local runs the embedded agent (provider keys from the environment)
+      instead of routing through the OpenClaw gateway; -m is the message.
+quirks: chat-gateway lineage; security-sensitive

@@ -1,0 +1,30 @@
+# Aider — custom tool definition (bashy examples/fleet, Sprint 406)
+# source:  https://github.com/Aider-AI/aider  (Apache-2.0)
+# install: pip install aider-install && aider-install
+# add:     bashy tool add --force examples/fleet/tools/aider.yaml
+#          (--force while the retired built-in aider entry still exists)
+# models:  --model; OpenAI-compatible via OPENAI_API_BASE / OPENAI_API_KEY,
+#          Ollama via ollama_chat/<tag> with OLLAMA_API_BASE
+# status:  verified: 2026-10-09 on aider 0.86.2 — bashy delegate e2e on macOS arm64:
+#          an OpenAI-compatible cloud endpoint (glm-5.3), local Ollama (qwen3.5:9b)
+#          and the bashy model door (qwen3:8b); pong + calc each (pong = endpoint answers, calc = fix a one-line bug, gate = its test passes).
+#          Result: pong everywhere and Ollama/door calc pass; cloud calc fails (aider edits only files it is given).
+name: aider
+kind: cli
+display: Aider
+cli:
+  binary: aider
+  launch:
+    exec: aider --yes-always --no-git --model {model} --message {prompt}
+    prompt_position: last
+    key_env:
+      - OPENAI_API_KEY
+    env:
+      - OPENAI_API_BASE={base_url}
+    watchdog:
+      max_runtime: 30m
+      mem_limit: 8g
+    notes: >-
+      --message must stay the final argument. aider edits only files added to the
+      chat; it has no read tool, so name the files in the prompt.
+quirks: pair-programming tool, no file discovery

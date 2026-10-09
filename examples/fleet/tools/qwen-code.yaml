@@ -1,0 +1,31 @@
+# Qwen Code — custom tool definition (bashy examples/fleet, Sprint 406)
+# source:  https://github.com/QwenLM/qwen-code  (Apache-2.0)
+# install: npm install -g @qwen-code/qwen-code
+# add:     bashy tool add examples/fleet/tools/qwen-code.yaml
+# models:  -m selects the model; OpenAI-compatible endpoints via
+#          OPENAI_BASE_URL / OPENAI_API_KEY (Ollama: http://127.0.0.1:11434/v1)
+# status:  verified: 2026-10-09 on qwen-code 0.25.0 — bashy delegate e2e on macOS arm64:
+#          an OpenAI-compatible cloud endpoint (glm-5.3), local Ollama (qwen3.5:9b)
+#          and the bashy model door (qwen3:8b); pong + calc each (pong = endpoint answers, calc = fix a one-line bug, gate = its test passes).
+#          Result: all six cells pass except calc via the door's qwen3:8b.
+name: qwen-code
+kind: cli
+display: Qwen Code
+aliases:
+  - qwen
+cli:
+  binary: qwen
+  launch:
+    exec: qwen --yolo --auth-type openai -m {model} {prompt}
+    prompt_position: last
+    key_env:
+      - OPENAI_API_KEY
+    env:
+      - OPENAI_BASE_URL={base_url}
+    watchdog:
+      max_runtime: 30m
+      mem_limit: 8g
+    notes: >-
+      The positional prompt runs one-shot (-p is deprecated). --yolo accepts all
+      actions; -o json|stream-json gives structured output.
+quirks: Gemini-CLI lineage

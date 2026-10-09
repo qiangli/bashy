@@ -1,0 +1,32 @@
+# OpenHands CLI — custom tool definition (bashy examples/fleet, Sprint 406)
+# source:  https://github.com/OpenHands/OpenHands-CLI  (MIT)
+# install: uv tool install openhands --python 3.12
+# add:     bashy tool add examples/fleet/tools/openhands.yaml
+# models:  no --model flag; with --override-with-envs it reads LLM_MODEL,
+#          LLM_BASE_URL and LLM_API_KEY (litellm model strings: openai/<id>,
+#          ollama/<tag>, anthropic/<id>)
+# status:  verified: 2026-10-09 on openhands 1.16.0 — bashy delegate e2e on macOS arm64:
+#          an OpenAI-compatible cloud endpoint (glm-5.3), local Ollama (qwen3.5:9b)
+#          and the bashy model door (qwen3:8b); pong + calc each (pong = endpoint answers, calc = fix a one-line bug, gate = its test passes).
+#          Result: all six cells pass.
+# bench:   SWE-bench Verified 71.8% (GPT-5, 2025-08)
+name: openhands
+kind: cli
+display: OpenHands CLI
+cli:
+  binary: openhands
+  launch:
+    exec: openhands --headless --json --override-with-envs -t {prompt}
+    prompt_position: last
+    key_env:
+      - LLM_API_KEY
+    env:
+      - LLM_MODEL={model}
+      - LLM_BASE_URL={base_url}
+    watchdog:
+      max_runtime: 30m
+      mem_limit: 8g
+    notes: >-
+      --headless auto-approves actions and requires --task. The model and endpoint
+      come from LLM_MODEL / LLM_BASE_URL, so a bashy binding cannot select them yet.
+quirks: model chosen by environment, not argv

@@ -1,0 +1,20 @@
+# Grok Build (xAI) — custom tool definition (bashy examples/fleet, Sprint 406)
+# source:  https://x.ai  (proprietary)
+# install: vendor installer
+# add:     bashy tool add examples/fleet/tools/grok.yaml
+# models:  xAI models only (GROK_CODE_XAI_API_KEY); custom endpoints UNVERIFIED
+# status:  unverified — round 2
+# bench:   Terminal-Bench 4.0 37.6% (Grok 4.7)
+name: grok
+kind: cli
+display: Grok Build
+cli:
+  binary: grok
+  launch:
+    exec: grok -p {prompt}
+    prompt_position: last
+    watchdog:
+      max_runtime: 30m
+      mem_limit: 8g
+    notes: --output-format streaming-json for structured output; unattended flag unverified.
+quirks: xAI only
