@@ -23,7 +23,9 @@ func TestCommandsRegistryArgsDisambiguation(t *testing.T) {
 		{[]string{"set"}, false, []string{"set"}},          // the builtin's record
 		{[]string{"rm", "gl"}, true, []string{"rm", "gl"}}, // CRUD
 		{[]string{"set", "gl", "--set", "x=1"}, true, []string{"set", "gl", "--set", "x=1"}},
-		{[]string{"rm", "--json"}, false, []string{"rm", "--json"}}, // a flag is not a name
+		{[]string{"rm", "--json"}, false, []string{"rm", "--json"}},  // a flag is not a name
+		{[]string{"add", "--help"}, true, []string{"add", "--help"}}, // the verb's own help
+		{[]string{"rm", "-h"}, true, []string{"rm", "-h"}},
 		{[]string{"add", "gl", "--set", "script=x"}, true, nil},
 		{[]string{"list"}, true, nil},
 		{[]string{"schema", "--json"}, true, nil},

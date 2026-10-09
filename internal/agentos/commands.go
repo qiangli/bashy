@@ -50,7 +50,15 @@ func commandsRegistryArgs(args []string) ([]string, bool) {
 	if containsString(commandsNamelessWords, args[0]) {
 		return args, true
 	}
-	if !containsString(commandsCRUDWords, args[0]) || len(args) < 2 || strings.HasPrefix(args[1], "-") {
+	if !containsString(commandsCRUDWords, args[0]) || len(args) < 2 {
+		return args, false
+	}
+	// `commands add --help` is the registry verb's own help, as for every
+	// other noun; any other leading flag keeps the lister's meaning.
+	if args[1] == "-h" || args[1] == "--help" {
+		return args, true
+	}
+	if strings.HasPrefix(args[1], "-") {
 		return args, false
 	}
 	if args[0] == "show" {
