@@ -2,7 +2,7 @@
 
 // Windows ConPTY runner for the interactive POSIX survey. Build from the bashy
 // module with GOOS=windows go build -o posix-pty-windows.exe
-// ./scripts/posix-pty-windows.go. The six scripts mirror posix-parity-pty.sh.
+// ./tools/posix-pty-windows. The six scripts mirror posix-parity-pty.sh.
 // Without an independent upstream Bash 5.3 oracle this records execution,
 // output, and exit status only; it does not assert POSIX conformance.
 package main
