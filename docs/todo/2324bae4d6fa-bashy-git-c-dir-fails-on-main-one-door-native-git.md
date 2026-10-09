@@ -9,7 +9,7 @@ labels:
     - git
 created: 2026-10-09T04:16:45.826933Z
 weave: 1
-assignee: claude-sonnet5.5
+assignee: claude-opus5.5
 sprint: 404
 sprint_id: d0936923-9388-5532-b329-e23e58422343
 sprint_title: bashy git -C regression and canonical reinstall
