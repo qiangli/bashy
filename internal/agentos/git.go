@@ -4,11 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/qiangli/yoke/external/gitscm"
 	outgit "github.com/qiangli/yoke/git"
 )
 
@@ -910,4 +913,76 @@ func legacyGitLogArgs(args []string) bool {
 		}
 	}
 	return pos <= 1
+}
+
+// dispatchGit is the `bashy git` front door.
+//
+// One door (sprint 252): `bashy git` defaults to the pure-Go engine — sprint
+// 252 closed the subset gaps (cherry, revert, stash, worktree, clean, apply,
+// remote) that once justified shelling out. --external selects the REAL, full
+// git — git-for-windows MinGit on Windows, system git on unix — provisioned +
+// checksum-verified (the previous behavior of this entry). `git-scm` stays
+// pinned to real git: it is the explicit escape hatch when the engine cannot
+// serve.
+//
+// It lives in a named function, not inline in the dispatch switch, so the
+// project write guard below has a regression test that drives the real door
+// without a real git, a real repo, or a re-exec.
+func dispatchGit(args []string) {
+	external, rest, splitErr := splitGitExternal(args)
+	if splitErr != nil {
+		fmt.Fprintln(os.Stderr, splitErr)
+		dispatchExit(1)
+	}
+	// The project write guard, FIRST and on BOTH doors. `git commit` is shimmed
+	// to `command bashy git commit` in every bashy session, so this in-process
+	// dispatch — not the ExecHandler ring — is the path an agent actually takes;
+	// sprint 252's refactor dropped the call from it and every `bashy git
+	// commit/push/merge/rebase/reset --hard` went unchecked against another
+	// agent's claim. Before any engine work: a refusal must not provision a git
+	// binary, re-dispatch through awd, or touch the repo. coordGuard reads -C
+	// itself, so the claim is evaluated for the directory the write lands in.
+	if code := coordGuard(rest); code != 0 {
+		dispatchExit(code)
+	}
+	var cmd *cobra.Command
+	if external {
+		cmd = gitscm.NewGitSCMCmd()
+	} else {
+		// Global options before the verb (-C DIR, --no-pager, …) are
+		// applied as real git would; cobra never sees them.
+		dirs, stripped, gerr := splitGitGlobals(rest)
+		if gerr == nil && len(dirs) > 0 {
+			// -C DIR is `awd DIR -- bashy git ...`: one chdir
+			// mechanism for every verb, not a git-private copy.
+			dispatchExit(gitAwdRun(gitAwdArgs(bashySelfPath(), dirs, stripped)))
+		}
+		if gerr != nil {
+			fmt.Fprintln(os.Stderr, gerr)
+			code := 128
+			var gexit *gitExitError
+			if errors.As(gerr, &gexit) {
+				code = gexit.code
+			}
+			dispatchExit(code)
+		}
+		rest = stripped
+		cmd = gitCmd()
+	}
+	cmd.SilenceErrors = true
+	cmd.SetArgs(rest)
+	if err := cmd.Execute(); err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			dispatchExit(childExitStatus(err))
+		}
+		code := 1
+		var gexit *gitExitError
+		if errors.As(err, &gexit) {
+			code = gexit.code
+		}
+		fmt.Fprintln(os.Stderr, err)
+		dispatchExit(code)
+	}
+	dispatchExit(0)
 }

@@ -1388,59 +1388,7 @@ func dispatch() {
 		}
 		dispatchExit(0)
 	case "git":
-		// One door (sprint 252): `bashy git` defaults to the pure-Go
-		// engine — sprint 252 closed the subset gaps (cherry, revert,
-		// stash, worktree, clean, apply, remote) that once justified
-		// shelling out. --external selects the REAL, full git —
-		// git-for-windows MinGit on Windows, system git on unix —
-		// provisioned + checksum-verified (the previous behavior of
-		// this entry). `git-scm` stays pinned to real git: it is the
-		// explicit escape hatch when the engine cannot serve.
-		external, rest, splitErr := splitGitExternal(os.Args[2:])
-		if splitErr != nil {
-			fmt.Fprintln(os.Stderr, splitErr)
-			dispatchExit(1)
-		}
-		var cmd *cobra.Command
-		if external {
-			cmd = gitscm.NewGitSCMCmd()
-		} else {
-			// Global options before the verb (-C DIR, --no-pager, …) are
-			// applied as real git would; cobra never sees them.
-			dirs, stripped, gerr := splitGitGlobals(rest)
-			if gerr == nil && len(dirs) > 0 {
-				// -C DIR is `awd DIR -- bashy git ...`: one chdir
-				// mechanism for every verb, not a git-private copy.
-				dispatchExit(gitAwdRun(gitAwdArgs(bashySelfPath(), dirs, stripped)))
-			}
-			if gerr != nil {
-				fmt.Fprintln(os.Stderr, gerr)
-				code := 128
-				var gexit *gitExitError
-				if errors.As(gerr, &gexit) {
-					code = gexit.code
-				}
-				dispatchExit(code)
-			}
-			rest = stripped
-			cmd = gitCmd()
-		}
-		cmd.SilenceErrors = true
-		cmd.SetArgs(rest)
-		if err := cmd.Execute(); err != nil {
-			var exit *exec.ExitError
-			if errors.As(err, &exit) {
-				dispatchExit(childExitStatus(err))
-			}
-			code := 1
-			var gexit *gitExitError
-			if errors.As(err, &gexit) {
-				code = gexit.code
-			}
-			fmt.Fprintln(os.Stderr, err)
-			dispatchExit(code)
-		}
-		dispatchExit(0)
+		dispatchGit(os.Args[2:])
 	case "git-scm":
 		// Explicit real-git spelling: always the provisioned binary,
 		// never the pure-Go engine. --external is accepted and ignored

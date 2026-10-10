@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -131,6 +132,42 @@ var gitGlobalFlagsWithValue = map[string]bool{
 	"--namespace": true, "--exec-path": true,
 }
 
+// gitArgvDir resolves the directory a git argv would RUN in: every `-C DIR`
+// hop applies inside the one before it, exactly as real git resolves them —
+// and exactly as gitAwdArgs rewrites them into nested `awd` hops.
+//
+// The guard has to ask about the target, not the cwd. `bashy git -C ../other
+// commit` writes ../other's project, so evaluating the claim where the command
+// was TYPED either refuses the wrong project or (the live case) misses a
+// conflict entirely. The alternative — guarding only inside the child the -C
+// re-dispatch spawns — leaves the guard conditional on a re-exec that the plain
+// and --external doors never perform.
+func gitArgvDir(cwd string, args []string) string {
+	dir := cwd
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-C":
+			if i+1 >= len(args) {
+				return dir // malformed; real git fails on it too
+			}
+			if d := args[i+1]; filepath.IsAbs(d) {
+				dir = d
+			} else {
+				dir = filepath.Join(dir, d)
+			}
+			i++
+		case gitGlobalFlagsWithValue[a]:
+			i++ // a global whose value is a separate argument
+		case strings.HasPrefix(a, "-"):
+			// a valueless global, or --opt=value
+		default:
+			return dir // the verb: no global option follows
+		}
+	}
+	return dir
+}
+
 // isGitWrite decides whether git's own arguments mutate shared state.
 func isGitWrite(args []string) bool {
 	for i := 0; i < len(args); i++ {
@@ -198,7 +235,9 @@ func coordEnabled() bool {
 //
 // That is not hypothetical: it was live in the first build of this feature, and a
 // second agent committed straight through it during the very test meant to prove it
-// could not. Two choke points, because there are two paths.
+// could not. Two choke points, because there are two paths. It went live a second
+// time in sprint 252, when the one-door `git` refactor dropped the call and left
+// `bashy git commit` unchecked again — hence dispatchGit's regression test.
 //
 // Returns 0 to proceed, or the exit code to die with.
 func coordGuard(args []string) int {
@@ -206,7 +245,7 @@ func coordGuard(args []string) int {
 		return 0
 	}
 	cwd, _ := os.Getwd()
-	roots := handoff.ProjectRoots(projectRootOf(cwd))
+	roots := handoff.ProjectRoots(projectRootOf(gitArgvDir(cwd, args)))
 	if err := coordEnforceFn(roots, "git "+strings.Join(args, " ")); err != nil {
 		var conf *coord.Conflict
 		if errors.As(err, &conf) {
