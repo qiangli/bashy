@@ -18,7 +18,7 @@ require (
 	github.com/qiangli/ycode v0.3.1-dev.0.20261009202524-02ba64f64493
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261010022445-bf71bf71a47f
-	github.com/qiangli/yoke/external/otel v0.0.0-20261009232517-9365756c4833
+	github.com/qiangli/yoke/external/otel v0.0.0-20261010022445-bf71bf71a47f
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
@@ -351,9 +351,9 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/qiangli/gfy v0.0.0-20261009070616-1a9d12418c8d // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261009220445-10ceea6e5d42 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261009232517-9365756c4833 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261009232517-9365756c4833 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261010024528-ab95d4b5f012 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261010022445-bf71bf71a47f // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261010022445-bf71bf71a47f // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
