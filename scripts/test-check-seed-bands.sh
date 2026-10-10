@@ -33,7 +33,7 @@ band_source: seeded
 notes: seeded $1
 EOF
 }
-run() { (cd "$tmp/repo" && sh "$checker" "$@"); }
+run() { (cd "$tmp/repo" && BASHY_SEED_LINT=0 sh "$checker" "$@"); }
 expect_ok() {
   if ! run "$@"; then echo "expected success: $*" >&2; exit 1; fi
 }

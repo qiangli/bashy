@@ -17,6 +17,16 @@ done
 [ -n "$yoke_dir" ] || yoke_dir=../yoke
 models=$yoke_dir/pkg/fleet/baseline/models
 [ -d "$models" ] || { echo "seed models directory not found: $models" >&2; exit 1; }
+# Seed lint (plan §E): every non-retired agent seed is L3+ and binds a
+# curated (built-in, non-retired, non-hidden) tool and model. The rule lives
+# in yoke as a Go test so there is one implementation; BASHY_SEED_LINT=0
+# skips it (this script's own fixture test has no Go module).
+if [ "${BASHY_SEED_LINT:-1}" != 0 ]; then
+  if ! (cd "$yoke_dir" && go test ./pkg/fleet -run '^TestSeedLint$' -count=1 >&2); then
+    echo "release seed check failed: seed lint (go test ./pkg/fleet -run TestSeedLint in $yoke_dir)" >&2
+    exit 1
+  fi
+fi
 stamp=$yoke_dir/pkg/fleet/baseline/seed-bands.txt
 [ -f "$stamp" ] || { echo "seed bands stamp not found: $stamp" >&2; exit 1; }
 seed_date=$(awk -F: '/^[[:space:]]*date[[:space:]]*:/ { sub(/^[[:space:]]*/, "", $2); sub(/[[:space:]]*$/, "", $2); print $2; exit }' "$stamp")
