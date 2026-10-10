@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -177,7 +178,12 @@ func modelArgs(model string) []string {
 // prepares the caller workspace and model endpoint before reentering ycode
 // with a generated config.
 func dispatchYcode(args []string) int {
-	args, err := genieApplyEffort(args)
+	args, yolo, err := ycodeYoloFlag(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy ycode:", err)
+		return 2
+	}
+	args, err = genieApplyEffort(args)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy ycode:", err)
 		return 2
@@ -190,7 +196,28 @@ func dispatchYcode(args []string) int {
 		fmt.Fprintln(os.Stderr, "bashy ycode: config discovery is not wired in this build")
 		return 2
 	}
-	if !YcodeHasExplicitConfig(args) {
+	explicit := YcodeHasExplicitConfig(args)
+	if yolo && explicit {
+		fmt.Fprintln(os.Stderr, "bashy ycode: --yolo cannot be combined with --file, YCODE_CONFIG, or a local agent.yaml; select your custom YOLO file with --file")
+		return 2
+	}
+	if !explicit {
+		previous, hadPrevious := os.LookupEnv("GENIE_HARNESS_CONFIG")
+		defer func() {
+			if hadPrevious {
+				os.Setenv("GENIE_HARNESS_CONFIG", previous)
+			} else {
+				os.Unsetenv("GENIE_HARNESS_CONFIG")
+			}
+		}()
+		profile := "agent.yaml"
+		if yolo {
+			profile = "agent-yolo.yaml"
+		}
+		if err := os.Setenv("GENIE_HARNESS_CONFIG", profile); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy ycode:", err)
+			return 2
+		}
 		entryArgs, sessionID := ycodeSessionPrefix(args)
 		if recipeArgs, selected, err := ycodeGenieRecipeArgs(entryArgs); selected {
 			if err != nil {
@@ -205,12 +232,53 @@ func dispatchYcode(args []string) int {
 			fmt.Fprintln(os.Stderr, "bashy ycode:", err)
 			return 2
 		}
+		config = filepath.Join(filepath.Dir(config), profile)
 		if err := os.Setenv("YCODE_CONFIG", config); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy ycode:", err)
 			return 2
 		}
 	}
 	return YcodeMain(args)
+}
+
+// ycodeYoloFlag selects an authored profile; it never changes a compiled
+// policy. Stop at a prompt operand or --, and preserve values of other flags.
+func ycodeYoloFlag(args []string) ([]string, bool, error) {
+	var rest []string
+	yolo, commandSeen := false, false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return append(rest, args[i:]...), yolo, nil
+		}
+		if arg == "--yolo" || strings.HasPrefix(arg, "--yolo=") {
+			enabled := true
+			if strings.HasPrefix(arg, "--yolo=") {
+				var err error
+				enabled, err = strconv.ParseBool(strings.TrimPrefix(arg, "--yolo="))
+				if err != nil {
+					return nil, false, fmt.Errorf("--yolo requires a boolean value")
+				}
+			}
+			yolo = enabled
+			continue
+		}
+		if !strings.HasPrefix(arg, "-") {
+			if commandSeen || !(isYcodeUtility(arg) || arg == "web" || arg == "repl" || arg == "resume" || arg == "prompt" || arg == "acp" || arg == "session") {
+				return append(rest, args[i:]...), yolo, nil
+			}
+			commandSeen = true
+		}
+		rest = append(rest, arg)
+		switch arg {
+		case "-m", "--model", "--effort", "--session", "-f", "--file", "--config", "-c", "--command", "--query", "--output":
+			if i+1 < len(args) {
+				i++
+				rest = append(rest, args[i])
+			}
+		}
+	}
+	return rest, yolo, nil
 }
 
 func ycodeSessionPrefix(args []string) ([]string, string) {

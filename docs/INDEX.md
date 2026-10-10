@@ -1,5 +1,7 @@
 # bashy docs index
 
+- `plan-ycode-yolo.md` — Sprint 415: explicit Genie YOLO profile selection, recipe propagation and regression checks.
+
 - `plan-interactive-depth.md` — Sprint 379 Story 1511: shared PTY/ConPTY assertions, native execution evidence and declared interactive limitations.
 
 One line (or a short paragraph) per load-bearing doc under `docs/`, moved verbatim from `CLAUDE.md` §Doc index on 2026-09-20. `CLAUDE.md` only points here; when you add a doc, add its entry here.

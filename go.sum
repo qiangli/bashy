@@ -927,8 +927,12 @@ github.com/qiangli/sh/v3 v3.0.0-20261010183127-da25e2efc36b h1:xWTge/7xuaEVaEAxl
 github.com/qiangli/sh/v3 v3.0.0-20261010183127-da25e2efc36b/go.mod h1:ZFYKF5yRZk5SSMzb1/Shustc5RWl/YmgE9cVykg+hzg=
 github.com/qiangli/ycode v0.3.1-dev.0.20261010190905-e4199a12b571 h1:VkQcBvLdqS1SEItzdQ+iOPGgtqvEbpXoUX/VQytu0fo=
 github.com/qiangli/ycode v0.3.1-dev.0.20261010190905-e4199a12b571/go.mod h1:t8oZ2J0CrK62R2itdlDvlISSz2Ar3FKQ+MV6p1IoJAk=
+github.com/qiangli/ycode v0.3.1-dev.0.20261010202242-bb961507a756 h1:Nwm2tgYeWC763UZu51wnTQ6iD+aaWyIa60KBKHS3/ZQ=
+github.com/qiangli/ycode v0.3.1-dev.0.20261010202242-bb961507a756/go.mod h1:3KcGurO9Iy8fQmV0WzFuvxz9WmvsvKbWoau1fB54VCc=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261010190905-e4199a12b571 h1:TKHnC/cKDZLlcUufdf6OEDJ/3CYmhZLaZb4ZM9UaQ2Q=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261010190905-e4199a12b571/go.mod h1:+ZCbIbIbjxqk8derYesSoxwxIMOylG87DtzJqzOUGGM=
+github.com/qiangli/ycode/examples/genie v0.0.0-20261010202242-bb961507a756 h1:jc9UzM35Jh04rSkPWcioTjkBqvB/if6OWVVkZ9g1P/U=
+github.com/qiangli/ycode/examples/genie v0.0.0-20261010202242-bb961507a756/go.mod h1:+ZCbIbIbjxqk8derYesSoxwxIMOylG87DtzJqzOUGGM=
 github.com/qiangli/yoke v0.0.0-20261010193123-dc4e2b178750 h1:qd0JieKfV2qb5lh83pmx8ttHLRDyO7RgwXM9GYgqPjg=
 github.com/qiangli/yoke v0.0.0-20261010193123-dc4e2b178750/go.mod h1:Vpw+JcY6aXtCFdjyokP3zkFiGOyzK6sXHaCQRki6v6E=
 github.com/qiangli/yoke/external/otel v0.0.0-20261010193123-dc4e2b178750 h1:P5eXD/3lfUmG7fyiV4rGLruFK4cmm+JxWyE+4VCRvgY=

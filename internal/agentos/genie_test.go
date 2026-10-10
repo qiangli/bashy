@@ -412,7 +412,7 @@ func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
 		t.Fatal(err)
 	}
 	self := filepath.Join(root, "bashy-self")
-	if err := os.WriteFile(self, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$CAPTURE_ARGS\"\nprintf '%s\\n' \"$GENIE_MODE\" > \"$CAPTURE_MODE\"\nprintf '%s\\n' \"$GENIE_YCODE_SESSION\" > \"$CAPTURE_SESSION\"\n"), 0o700); err != nil {
+	if err := os.WriteFile(self, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$CAPTURE_ARGS\"\nprintf '%s\\n' \"$GENIE_MODE\" > \"$CAPTURE_MODE\"\nprintf '%s\\n' \"$GENIE_YCODE_SESSION\" > \"$CAPTURE_SESSION\"\nprintf '%s\\n' \"$GENIE_HARNESS_CONFIG\" > \"$CAPTURE_PROFILE\"\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("BASHY_SELF", self)
@@ -445,11 +445,26 @@ func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
 		{"session-prompt", "prompt", "", []string{"--session", "s387-session", "prompt", "hello"}},
 		{"session-positional", "chat", "", []string{"--session=s387-session", "hello"}},
 		{"acp", "acp", "s387-local-model", []string{"-m", "s387-local-model", "acp"}},
+		{"yolo", "chat", "", []string{"--yolo"}},
+		{"yolo-web", "web", "s387-local-model", []string{"web", "--yolo", "-m", "s387-local-model"}},
+		{"yolo-session", "prompt", "", []string{"--yolo", "--session", "s387-session", "prompt", "hello"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			capture := filepath.Join(root, tc.name+".args")
 			modeCapture := filepath.Join(root, tc.name+".mode")
 			sessionCapture := filepath.Join(root, tc.name+".session")
+			profileCapture := filepath.Join(root, tc.name+".profile")
+			t.Setenv("CAPTURE_PROFILE", profileCapture)
+			t.Cleanup(func() {
+				data, err := os.ReadFile(profileCapture)
+				want := "agent.yaml"
+				if strings.HasPrefix(tc.name, "yolo") {
+					want = "agent-yolo.yaml"
+				}
+				if err != nil || strings.TrimSpace(string(data)) != want {
+					t.Errorf("recipe profile = %q, err %v, want %s", data, err, want)
+				}
+			})
 			t.Setenv("CAPTURE_ARGS", capture)
 			t.Setenv("CAPTURE_MODE", modeCapture)
 			t.Setenv("CAPTURE_SESSION", sessionCapture)
@@ -476,7 +491,7 @@ func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
 			}
 			sessionData, err := os.ReadFile(sessionCapture)
 			wantSession := ""
-			if strings.HasPrefix(tc.name, "session-") {
+			if strings.HasPrefix(tc.name, "session-") || tc.name == "yolo-session" {
 				wantSession = "s387-session"
 			}
 			if err != nil || strings.TrimSpace(string(sessionData)) != wantSession {
