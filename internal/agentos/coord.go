@@ -5,6 +5,7 @@ package agentos
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -12,10 +13,17 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 
+	_ "github.com/qiangli/yoke/pkg/fleet/fleetkinds"
 	"github.com/qiangli/yoke/pkg/handoff"
 	"github.com/qiangli/yoke/pkg/policy/coord"
 	coreskills "github.com/qiangli/yoke/pkg/skills"
 )
+
+func init() {
+	if _, ok := coord.LookupKind("command"); !ok {
+		coord.RegisterKind(coord.Kind{Name: "command", Match: coord.MatchName})
+	}
+}
 
 // coordHandler refuses a WRITE when another agent already holds this project.
 //
@@ -186,4 +194,56 @@ func coordGuard(args []string) int {
 		return coordExitRefused
 	}
 	return 0
+}
+
+// resolveCommandVerb unwraps `bashy X` / `command bashy X` and resolves registered commands.
+func resolveCommandVerb(args []string) string {
+	for len(args) > 1 && (baseName(args[0]) == "bashy" || baseName(args[0]) == "command") {
+		args = args[1:]
+	}
+	if len(args) == 0 {
+		return ""
+	}
+	verb := baseName(args[0])
+	if r, ok := registeredLookup(verb); ok && r.Name != "" {
+		return r.Name
+	}
+	return verb
+}
+
+// isClaimExemptCommand reports whether a command verb is exempt from claim guarding.
+// The coordination and help tools must stay usable while blocked.
+func isClaimExemptCommand(verb string) bool {
+	if verb == "" || verb == "bashy" || strings.HasPrefix(verb, "-") {
+		return true
+	}
+	switch verb {
+	case "claim", "inbox", "ping", "mb", "meet", "help":
+		return true
+	default:
+		return false
+	}
+}
+
+// claimGuardMiddleware stops an agent from running a command claimed by another agent.
+// It covers BOTH front-door verbs (Dispatch -> observing chain) and in-shell external commands.
+func claimGuardMiddleware(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
+	return func(ctx context.Context, args []string) error {
+		if !coordEnabled() || len(args) == 0 {
+			return next(ctx, args)
+		}
+		verb := resolveCommandVerb(args)
+		if isClaimExemptCommand(verb) {
+			return next(ctx, args)
+		}
+		if err := coord.Guard(ctx, coord.Self(), coord.Use{Kind: "command", Name: verb}); err != nil {
+			var conf *coord.Conflict
+			if errors.As(err, &conf) {
+				fmt.Fprint(os.Stderr, conf.Error())
+				return interp.ExitStatus(coordExitRefused)
+			}
+			return err
+		}
+		return next(ctx, args)
+	}
 }
