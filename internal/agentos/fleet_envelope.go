@@ -9,16 +9,16 @@ import (
 	"io"
 
 	"github.com/spf13/cobra"
+
+	"github.com/qiangli/yoke/pkg/fleet"
 )
 
-// fleetListSchemaVersion is the versioned envelope `bashy tool|model|agent
-// list --json` (and the hidden plurals) emit from the front door. The fleet
-// registry (yoke/pkg/fleet) still writes a bare JSON array; the release bar
-// (docs/release-bar.md) requires a top-level schema_version on every probed
-// --json surface, and the five-point rule does not accept an array. The
-// envelope is additive: `items` is the array exactly as the registry wrote
-// it, so a consumer that selected `.[]` now selects `.items[]`.
-const fleetListSchemaVersion = "bashy-fleet-list-v1"
+// fleetListSchemaVersion is the versioned envelope every registry `list
+// --json` emits. The registry (yoke/pkg/fleet WriteListJSON) writes it itself
+// now, with the view; the front-door wrapper below only covers a list verb
+// that still writes a bare array, so the release bar's top-level
+// schema_version holds on every probed --json surface.
+const fleetListSchemaVersion = fleet.ListSchemaVersion
 
 type fleetListEnvelope struct {
 	SchemaVersion string          `json:"schema_version"`
@@ -27,7 +27,7 @@ type fleetListEnvelope struct {
 }
 
 // wrapFleetListEnvelope rewrites the registry's `list --json` array into the
-// bashy-fleet-list-v1 envelope on the way out. The bare noun shares the
+// registry list envelope on the way out. The bare noun shares the
 // list verb's RunE (fleet.newRoot), so the root is wrapped too unless the
 // front door already gave it another body (`bashy agent` is the roster).
 // Anything that is not a JSON array — the text table, or a registry that

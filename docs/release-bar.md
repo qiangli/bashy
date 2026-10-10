@@ -43,9 +43,10 @@ remain named gaps. The additive `skill probe` version preserves existing keys.
 Front-door envelopes (Story 1533, part 4d–4h). Where a verb's body lives in
 yoke and still writes a bare JSON array, the bashy front door adds the
 envelope on the way out rather than changing the probe to an unrelated
-subcommand: `tool|model|agent list --json` (and the hidden plurals) emit
-`bashy-fleet-list-v1` with the registry's array under `items`, passing an
-object through untouched once the registry grows its own envelope. The
+subcommand. `tool|model|agent|skill list --json` (and the hidden plurals)
+emit `bashy-registry-list-v1` (`kind`, `view`, `items`), written by the
+registry itself since Sprint 406; the front door wraps only a list verb
+that still writes a bare array and passes an envelope through untouched. The
 other probed surfaces in that slice are bashy-owned: `conform --list --json`
 (`bashy-conform-v1`), `install-agent --json` (`bashy-install-agent-v1`),
 `mcp tools --json` (`bashy-mcp-tools-v1`, the profile `serve` would expose,

@@ -211,10 +211,14 @@ func runFleetNounLifecycleTest(t *testing.T, driver fleetNounDriver) {
 				if err != nil {
 					t.Fatalf("%s list --custom --json failed: %v (stderr: %s)", driver.noun, err, stderr)
 				}
-				var listRows []map[string]any
-				if err := json.Unmarshal([]byte(listOut), &listRows); err != nil {
-					t.Fatalf("%s list JSON unmarshal failed: %v\n%s", driver.noun, err, listOut)
+				var listEnv struct {
+					SchemaVersion string           `json:"schema_version"`
+					Items         []map[string]any `json:"items"`
 				}
+				if err := json.Unmarshal([]byte(listOut), &listEnv); err != nil || listEnv.SchemaVersion != fleetListSchemaVersion {
+					t.Fatalf("%s list JSON is not the %s envelope: %v\n%s", driver.noun, fleetListSchemaVersion, err, listOut)
+				}
+				listRows := listEnv.Items
 				found := false
 				for _, row := range listRows {
 					if row["name"] == name {

@@ -19,12 +19,12 @@ Candidate: `story-1533-development-snapshot`. A covered dispatch is not a record
 | notify | 4b | experimental | — | missing | yes | darwin, linux, windows | none |
 | whois | 4b | preview | embedded inbox skill | bashy-whois-v1 (`whois self --json`) | yes | darwin, linux, windows | none |
 | app | 4c | experimental | — | dhnt-app-meta-v1 (`app meta --json`) | yes | darwin, linux, windows | none |
-| models | 4d | experimental | genie external-model resolution | bashy-fleet-list-v1 (`models list --json`) | yes | darwin, linux, windows | none |
-| tools | 4d | experimental | weave launcher (tool contract) | bashy-fleet-list-v1 (`tools list --json`) | yes | darwin, linux, windows | none |
-| agents | 4d | preview | CI failure router script | bashy-fleet-list-v1 (`agents list --json`) | yes | darwin, linux, windows | none |
-| model | 4d | experimental | genie external-model resolution | bashy-fleet-list-v1 (`model list --json`) | yes | darwin, linux, windows | none |
-| tool | 4d | experimental | weave launcher (tool contract) | bashy-fleet-list-v1 (`tool list --json`) | yes | darwin, linux, windows | none |
-| agent | 4d | preview | embedded conductor skill | bashy-fleet-list-v1 (`agent list --json`) | yes | darwin, linux, windows | none |
+| models | 4d | experimental | genie external-model resolution | bashy-registry-list-v1 (`models list --json`) | yes | darwin, linux, windows | none |
+| tools | 4d | experimental | weave launcher (tool contract) | bashy-registry-list-v1 (`tools list --json`) | yes | darwin, linux, windows | none |
+| agents | 4d | preview | CI failure router script | bashy-registry-list-v1 (`agents list --json`) | yes | darwin, linux, windows | none |
+| model | 4d | experimental | genie external-model resolution | bashy-registry-list-v1 (`model list --json`) | yes | darwin, linux, windows | none |
+| tool | 4d | experimental | weave launcher (tool contract) | bashy-registry-list-v1 (`tool list --json`) | yes | darwin, linux, windows | none |
+| agent | 4d | preview | embedded conductor skill | bashy-registry-list-v1 (`agent list --json`) | yes | darwin, linux, windows | none |
 | chat | 4d | experimental | CI failure router script | bashy-chat-v1 (`chat --agent claude --dry-run --json --instruction release-bar probe`) | yes | darwin, linux, windows | none |
 | context | 4e | preview | — | bashy-context-v1 (`context --json`) | yes | darwin, linux, windows | none |
 | inspect | 4e | preview | embedded bashy skill | bashy-context-v1 (`inspect context --json`) | yes | darwin, linux, windows | none |

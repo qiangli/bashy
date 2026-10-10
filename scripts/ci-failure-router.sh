@@ -98,7 +98,7 @@ preflight() {
 	# check (a wrong pick, not an error). Assert the PATH bashy actually emits a
 	# real kind before we trust its selection. (Cost: one local `agents list`.)
 	local kinds
-	# `agents list --json` is the bashy-fleet-list-v1 envelope ({items: [...]});
+	# `agents list --json` is the bashy-registry-list-v1 envelope ({items: [...]});
 	# older binaries emit the bare array, so unwrap either shape.
 	kinds="$(bashy agents list --json 2>/dev/null | jq -r '(if type == "object" then .items else . end) | [.[] | select(.kind == "subscription" or .kind == "api")] | length' 2>/dev/null)"
 	if [[ -z "$kinds" || "$kinds" == "0" ]]; then

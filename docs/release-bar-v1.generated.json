@@ -549,7 +549,7 @@
       "json_gap": null,
       "atlas_gap": null,
       "dispatch_gap": null,
-      "json_schema": "bashy-fleet-list-v1",
+      "json_schema": "bashy-registry-list-v1",
       "json_probe": [
         "list",
         "--json"
@@ -587,7 +587,7 @@
       "json_gap": null,
       "atlas_gap": null,
       "dispatch_gap": null,
-      "json_schema": "bashy-fleet-list-v1",
+      "json_schema": "bashy-registry-list-v1",
       "json_probe": [
         "list",
         "--json"
@@ -625,7 +625,7 @@
       "json_gap": null,
       "atlas_gap": null,
       "dispatch_gap": null,
-      "json_schema": "bashy-fleet-list-v1",
+      "json_schema": "bashy-registry-list-v1",
       "json_probe": [
         "list",
         "--json"
@@ -663,7 +663,7 @@
       "json_gap": null,
       "atlas_gap": null,
       "dispatch_gap": null,
-      "json_schema": "bashy-fleet-list-v1",
+      "json_schema": "bashy-registry-list-v1",
       "json_probe": [
         "list",
         "--json"
@@ -701,7 +701,7 @@
       "json_gap": null,
       "atlas_gap": null,
       "dispatch_gap": null,
-      "json_schema": "bashy-fleet-list-v1",
+      "json_schema": "bashy-registry-list-v1",
       "json_probe": [
         "list",
         "--json"
@@ -739,7 +739,7 @@
       "json_gap": null,
       "atlas_gap": null,
       "dispatch_gap": null,
-      "json_schema": "bashy-fleet-list-v1",
+      "json_schema": "bashy-registry-list-v1",
       "json_probe": [
         "list",
         "--json"
