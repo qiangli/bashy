@@ -556,6 +556,65 @@ func runDagDispatch(args []string, stdout, stderr io.Writer) int {
 	return dag.ExitCodeOf(err)
 }
 
+// runWeaveDispatch mounts the per-repo weave runner and runs it.
+//
+// Same host contract as runSprintDispatch below, and for the same reason: the
+// weave tree sets SilenceErrors throughout, so collapsing Execute()'s error to
+// `exit 1` discarded BOTH halves of what weave.IsStructuredExit/ExitCode exist
+// to tell a host — whether anything was printed, and which stable
+// weavecli.Exit* code the subverb chose. bashy does not replace or add any RunE
+// here (configureWeaveResourceAdmission only installs hooks), so yoke's three
+// reporters still cover the whole tree and the print below is the backstop for
+// an error none of them saw rather than the common path.
+func runWeaveDispatch(args []string, stdout, stderr io.Writer) int {
+	cmd := weave.NewWeaveCmd()
+	configureWeaveResourceAdmission(cmd)
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
+	cmd.SetArgs(args)
+	err := cmd.Execute()
+	if err == nil {
+		return 0
+	}
+	if !weave.IsStructuredExit(err) {
+		fmt.Fprintf(stderr, "bashy weave: %v\n", err)
+	}
+	return weave.ExitCode(err)
+}
+
+// runSprintDispatch mounts the sprint board and runs it.
+//
+// The error classification is the host half of the contract weave.IsStructuredExit
+// documents, and it is load-bearing. Every command in the sprint tree sets
+// SilenceErrors so a subverb's own envelope is never double-printed; mapping
+// Execute()'s error straight to `exit 1`, as this used to, therefore produced a
+// non-zero exit with ZERO bytes on both streams for anything the tree did not
+// report itself. Two sprints lost time to it (todos 4a18c41ef997, 491a03436cbb).
+//
+// So: a structured exit was already printed by the subverb and carries its own
+// stable code — stay silent and use it. Anything else reached here unprinted and
+// the host MUST surface it. sprint_errors.go now reports bashy's own additions
+// before they get this far, which leaves this branch for a genuinely unhandled
+// error rather than for the common case.
+func runSprintDispatch(args []string, stdout, stderr io.Writer) int {
+	cmd := newSprintCmd()
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
+	cmd.SetArgs(args)
+	err := cmd.Execute()
+	if err == nil {
+		return 0
+	}
+	if code, reported := sprintErrorReported(err); reported {
+		return code
+	}
+	if weave.IsStructuredExit(err) {
+		return weave.ExitCode(err)
+	}
+	fmt.Fprintf(stderr, "bashy sprint: %v\n", err)
+	return weave.ExitCode(err)
+}
+
 func isFrontDoorInvocation(name string) bool {
 	if name == "remote" {
 		return true
@@ -717,13 +776,7 @@ func dispatch() {
 	case "agentic":
 		dispatchExit(dispatchAgentic(os.Args[2:]))
 	case "weave":
-		cmd := weave.NewWeaveCmd()
-		configureWeaveResourceAdmission(cmd)
-		cmd.SetArgs(os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+		dispatchExit(runWeaveDispatch(os.Args[2:], os.Stdout, os.Stderr))
 	case "llm":
 		cmd := broker.NewCmd()
 		cmd.SetArgs(os.Args[2:])
@@ -737,12 +790,7 @@ func dispatch() {
 		// execution). Shares the AgentOS state root; user-global board.
 		// newSprintCmd wraps it so `sprint --help` also carries the ACTIVE
 		// owner-accountability contract, not only the plan/handoff mechanics.
-		cmd := newSprintCmd()
-		cmd.SetArgs(os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+		dispatchExit(runSprintDispatch(os.Args[2:], os.Stdout, os.Stderr))
 	case "resource", "resources":
 		cmd := resources.NewCommand()
 		cmd.SetArgs(os.Args[2:])

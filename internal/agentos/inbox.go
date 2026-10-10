@@ -442,8 +442,39 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 // coord ledger is bypassed (BASHY_CLAIM=0|off).
 var localInboxWatchers sync.Map
 
+// errInboxWatcherLive refuses a SECOND watcher for one identity, and the
+// refusal has to say who the first one is.
+//
+// One registered name may have exactly one consuming reader, because two loops
+// advance the same source cursors. That rule is right; the message was not. It
+// named only the rule, so an external manager whose `sprint take --watch` was
+// refused could not tell whether a real sibling watch was running, or whether a
+// card from an earlier process in the SAME harness session was still on the
+// board holding the name — the shape Sprint 412 and 329 both hit, where the
+// holder is anchored to the harness parent PID and therefore looks live to
+// every check. Without the holder's pid and mode there is nothing to act on.
+//
+// So the holder is looked up and reported. The lookup is best-effort: the
+// refusal itself must never depend on the diagnostic succeeding, so a failed
+// read just omits the detail.
 func errInboxWatcherLive(id inboxWatcherIdentity) error {
-	return fmt.Errorf("inbox: %s %q already has a live inbox watcher", id.kind, id.name)
+	detail := ""
+	if card, live, err := room.Find(id.claimID); err == nil && live {
+		mode := strings.TrimSpace(card.Mode)
+		if mode == "" {
+			mode = "unknown"
+		}
+		owner := ""
+		if anchor := inboxWatcherAnchor(card); anchor > 0 && anchor != card.PID {
+			owner = fmt.Sprintf(", owned by the session at pid %d", anchor)
+		}
+		detail = fmt.Sprintf(" (holder: pid %d%s, mode %q, task %q)", card.PID, owner, mode, strings.TrimSpace(card.Task))
+	}
+	return fmt.Errorf("inbox: %s %q already has a live inbox watcher%s; one identity may have only one consuming reader, because two would advance the same cursors.\n"+
+		"  see it:     `bashy agent list --all` (the watcher row for %[2]s) — nothing was consumed and no cursor moved\n"+
+		"  stop it:    end that process; its card is retired when it exits\n"+
+		"  one-shot:   `bashy inbox --as %[2]s --peek` reads without consuming and needs no watcher at all",
+		id.kind, id.name, detail)
 }
 
 // retireInboxWatcherCard removes exactly this watcher's own card.

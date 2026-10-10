@@ -182,4 +182,6 @@ Weave-round verification + retro reports (historical, not load-bearing):
 
 - [Product startup signal contract](plan-startup-signal-contract.md) — pinned runtime overlay, asynchronous ignore scope and deterministic gates.
 
+- [Sprint 413 sprint watch / inbox-ack diagnostics](plan-sprint-413-sprint-watch-inbox-ack-diagnostics.md) — why `sprint --watch` and `inbox-ack` exited 1 with no stderr, the bashy half of the sprint tree's self-reporting contract, explained watch exits, and the yoke stale-heartbeat render patch reported for integration.
+
 - `public-claims-evidence.md` — current public-claim sources, platform boundaries, yash measurement units, registry counting rule, and RC recheck commands (Sprint 379 B6).
