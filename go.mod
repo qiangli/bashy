@@ -15,7 +15,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/coreutils v0.0.0-20261009201221-a50cc1f27e6f
-	github.com/qiangli/ycode v0.3.1-dev.0.20261010113205-6e5b0e4da14c
+	github.com/qiangli/ycode v0.3.1-dev.0.20261010125425-84f62a3ed9dd
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261010113109-4928952258ef
 	github.com/qiangli/yoke/external/otel v0.0.0-20261010113109-4928952258ef
@@ -537,6 +537,6 @@ replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/
 // Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
 replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261009064153-466dad1c3aef
 
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261010113205-6e5b0e4da14c
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261010125425-84f62a3ed9dd
 
 tool github.com/qiangli/outpost/cmd/outpost
