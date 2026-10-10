@@ -15,9 +15,9 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/coreutils v0.0.0-20261009201221-a50cc1f27e6f
-	github.com/qiangli/ycode v0.3.1-dev.0.20261010173527-a803cd8478dc
+	github.com/qiangli/ycode v0.3.1-dev.0.20261010181835-56b03375e648
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261010175254-f2f9febb04dd
+	github.com/qiangli/yoke v0.0.0-20261010183228-761e3b44586b
 	github.com/qiangli/yoke/external/otel v0.0.0-20261010150054-5c32c2a188e6
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
@@ -352,7 +352,7 @@ require (
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/qiangli/gfy v0.0.0-20261009070616-1a9d12418c8d // indirect
 	github.com/qiangli/outpost v0.14.38-0.20261010024528-ab95d4b5f012 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261010175254-f2f9febb04dd // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261010183228-761e3b44586b // indirect
 	github.com/qiangli/yoke/pkg/oci v0.0.0-20261010150054-5c32c2a188e6 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
@@ -503,7 +503,7 @@ require (
 // unmerged Bash 5.3 interp patches). Resolve it as a flat sibling: inside the
 // dhnt umbrella ../sh is the sh submodule; in a standalone clone, clone
 // github.com/qiangli/sh next to this repo as ./sh.
-replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261010100544-719be405bbb6
+replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261010183127-da25e2efc36b
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
@@ -537,6 +537,6 @@ replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/
 // Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
 replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261009064153-466dad1c3aef
 
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261010173527-a803cd8478dc
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261010181835-56b03375e648
 
 tool github.com/qiangli/outpost/cmd/outpost
