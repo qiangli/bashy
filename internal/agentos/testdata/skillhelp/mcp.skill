@@ -1,0 +1,84 @@
+---
+name: bashy-mcp
+description: "serve bashy commands to agents over the Model Context Protocol (stdio)"
+---
+# bashy mcp
+
+## Usage
+  bashy mcp serve [--transport stdio|http] [--listen ADDR] [--allow EFFECTS]
+                       [--tools default|all|NAME,...] [--max-output BYTES]
+       bashy mcp tools [--tools default|all|NAME,...] [--json]
+
+Serve bashy commands to agents over the Model Context Protocol.
+
+  serve --transport stdio   run the MCP server over stdio (default)
+  serve --transport http    loopback HTTP at /mcp (default 127.0.0.1:0)
+  tools                     print the tools a profile would serve, without serving
+                            (--json: the bashy-mcp-tools-v1 envelope)
+  --tools default           registered tools plus available core commands
+  --tools all               all canonical registry commands and visible verbs for this OS
+  --allow EFFECTS           grant destroy,spend,cred,priv (comma-separated)
+
+```json mcp
+{
+  "_meta": {
+    "bashy.effects": [
+      "exec"
+    ],
+    "bashy.os": [
+      "darwin",
+      "linux",
+      "windows"
+    ]
+  },
+  "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "readOnlyHint": false
+  },
+  "description": "serve bashy commands to agents over the Model Context Protocol (stdio) — ",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "args": {
+        "description": "Command arguments in order, including options and operands.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "dir": {
+        "type": "string"
+      },
+      "stdin": {
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "name": "mcp",
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "exit_code": {
+        "description": "process exit status (0 success, 2 usage error, …)",
+        "type": "integer"
+      },
+      "stderr": {
+        "description": "captured standard error",
+        "type": "string"
+      },
+      "stdout": {
+        "description": "captured standard output",
+        "type": "string"
+      }
+    },
+    "required": [
+      "stdout",
+      "stderr",
+      "exit_code"
+    ],
+    "type": "object"
+  }
+}
+```

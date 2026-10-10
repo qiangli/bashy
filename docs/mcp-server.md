@@ -42,6 +42,16 @@ tools (per-flag schemas plus `stdin`/`dir`/`env`):
 Every profile additionally carries the registered commands and the `bashy`
 script tool below.
 
+`bashy mcp tools --json` includes a `definitions` array containing the actual
+MCP `tools/list` objects for that profile, alongside the existing name arrays.
+For a front-door verb, `bashy help --format mcp CMD` prints the same object as
+`bashy mcp tools --tools CMD --json`. `--format skill` prints its existing help
+as a skill document with that object in a closing `json mcp` fence; `--format
+classic` prints the original help. `BASHY_HELP_FORMAT` also selects a format.
+Root `bashy CMD --help` defaults to skill when fleet detects an agent tool or
+`BASHY_AGENTIC=1`, otherwise classic, independently of terminal attachment.
+
+
 With `--tools all`, visible front-door verbs are also direct tools; each runs
 as a bashy subprocess with the policy gate applied before dispatch. They can
 also be selected by name with `--tools`. Builtins stay script-only, and

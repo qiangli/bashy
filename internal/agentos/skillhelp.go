@@ -58,7 +58,7 @@ func classicHelp(args []string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := classicHelpCommand(ctx, args)
-	cmd.Env = append(os.Environ(), "BASHY_HELP_FORMAT=classic")
+	cmd.Env = append(os.Environ(), "BASHY_HELP_FORMAT=classic", "BASHY_HINTS=off")
 	// Several hand-written help handlers write to stderr and exit 2. Both
 	// streams are help input; a nonzero status with no help remains an error.
 	out, err := cmd.CombinedOutput()
