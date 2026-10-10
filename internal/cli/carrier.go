@@ -64,6 +64,11 @@ func MaybeRunJobCarrierHelper() {
 // consult it: they must never spawn processes their host did not ask for.
 var newCLIJobCarrier = platformJobCarrier
 
+// JobCarrier returns the OS-backed carrier for a bashy-owned runner that
+// executes user scripts with background jobs. A nil result means bash-mode
+// runners should retain their synthetic job handles on this platform.
+func JobCarrier() interp.JobCarrier { return newCLIJobCarrier() }
+
 // unsupportedJobCarrier is wired on platforms with no OS-backed carrier when
 // the shell runs in POSIX/sh mode. Opting into WithJobCarrier is a strict
 // contract — the runner never degrades to the synthetic g<N> identity — so a

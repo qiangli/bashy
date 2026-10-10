@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/qiangli/bashy/internal/cli"
 )
 
 // TestMain isolates the registered-command ring and the compiled host's
@@ -69,6 +71,9 @@ func foreignReExec() bool {
 }
 
 func TestMain(m *testing.M) {
+	// Carrier helpers re-exec this binary; intercept them before the generic
+	// foreign-re-exec guard and before package test isolation.
+	cli.MaybeRunJobCarrierHelper()
 	// The supervisord integration tests re-exec this binary as a scripted
 	// stand-in for the dag root (supervisord_test.go). Gated by its own env
 	// var and checked first so its `dag … svc` argv reaches the child, not the

@@ -40,6 +40,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/qiangli/bashy/internal/cli"
 	"github.com/qiangli/yoke/pkg/dag"
 )
 
@@ -68,6 +69,9 @@ func (dagBashPPInterp) Run(ctx context.Context, t *dag.Task, tio dag.TaskIO) dag
 		// First appended = outermost: the target's declared-effects cap is
 		// judged before any bashy middleware sees the command.
 		interp.ExecHandlers(dag.CapExecHandler()),
+	}
+	if carrier := cli.JobCarrier(); carrier != nil {
+		opts = append(opts, interp.WithJobCarrier(carrier))
 	}
 	// posix=false: a ```bashpp body is agentic by construction. No initial
 	// dry-run — `bashy dag -n` plans without running any body at all.

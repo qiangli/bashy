@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -72,6 +73,22 @@ func runDagBody(t *testing.T, lang, effects, body string, extra ...string) (int,
 		t.Fatalf("envelope did not report the smoke target: %s", raw)
 	}
 	return code, env
+}
+
+func TestDagBashPPBackgroundBangIsLivePID(t *testing.T) {
+	// A bsh fence must publish the same probeable PID as a standalone script.
+	// The delayed nonzero exit also proves wait uses that PID to find the job.
+	body := `(sleep 0.5; exit 7) &
+pid=$!
+printf 'PID=%s\n' "$pid"
+kill -0 "$pid" || exit 21
+wait "$pid"
+printf 'WAIT=%s\n' "$?"`
+	code, env := runDagBody(t, "bsh", "", body)
+	task := env.Result.Tasks[0]
+	if code != 0 || task.Status != "done" || task.ExitCode != 0 || !regexp.MustCompile(`^PID=[0-9]+\nWAIT=7\n$`).MatchString(task.Stdout) {
+		t.Fatalf("background PID/wait: exit %d task %s/%d\nstdout=%s\nstderr=%s", code, task.Status, task.ExitCode, task.Stdout, task.Stderr)
+	}
 }
 
 // The Sprint 203 fixture, byte-for-byte, as a ```bashpp dag body. Its pinned
