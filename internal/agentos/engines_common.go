@@ -6,7 +6,6 @@ package agentos
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -91,38 +90,28 @@ func ollamaInstanceName(args []string) string {
 }
 
 // guardSandbox guards the podman/oci/sandbox front door.
-// Returns 0 to proceed, or coordExitRefused (9) on conflict.
+// Returns 0 to proceed (also when the ledger itself fails — see claimCheckUnavailable),
+// or coordExitRefused (9) on conflict.
 func guardSandbox(args []string) int {
 	if !coordEnabled() {
 		return 0
 	}
 	machine := podmanMachineName(args)
-	if err := coord.Guard(context.Background(), coord.Self(), coord.Use{Kind: "sandbox", Name: machine}); err != nil {
-		var conf *coord.Conflict
-		if errors.As(err, &conf) {
-			fmt.Fprint(os.Stderr, conf.Error())
-			return coordExitRefused
-		}
-		fmt.Fprintln(os.Stderr, err)
+	if claimRefused(claimGuardFn(context.Background(), coord.Self(), coord.Use{Kind: "sandbox", Name: machine})) {
 		return coordExitRefused
 	}
 	return 0
 }
 
 // guardOllama guards the managed ollama front door.
-// Returns 0 to proceed, or coordExitRefused (9) on conflict.
+// Returns 0 to proceed (also when the ledger itself fails — see claimCheckUnavailable),
+// or coordExitRefused (9) on conflict.
 func guardOllama(args []string) int {
 	if !coordEnabled() {
 		return 0
 	}
 	instance := ollamaInstanceName(args)
-	if err := coord.Guard(context.Background(), coord.Self(), coord.Use{Kind: "ollama", Name: instance}); err != nil {
-		var conf *coord.Conflict
-		if errors.As(err, &conf) {
-			fmt.Fprint(os.Stderr, conf.Error())
-			return coordExitRefused
-		}
-		fmt.Fprintln(os.Stderr, err)
+	if claimRefused(claimGuardFn(context.Background(), coord.Self(), coord.Use{Kind: "ollama", Name: instance})) {
 		return coordExitRefused
 	}
 	return 0

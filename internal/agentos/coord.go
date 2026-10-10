@@ -10,6 +10,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync/atomic"
 
 	"mvdan.cc/sh/v3/interp"
 
@@ -198,11 +199,56 @@ func coordGuard(args []string) int {
 	}
 	cwd, _ := os.Getwd()
 	roots := handoff.ProjectRoots(projectRootOf(cwd))
-	if err := coord.Enforce(roots, "git "+strings.Join(args, " ")); err != nil {
-		fmt.Fprintf(os.Stderr, "\nbashy: refusing `git %s`\n\n%v\n", strings.Join(args, " "), err)
-		return coordExitRefused
+	if err := coordEnforceFn(roots, "git "+strings.Join(args, " ")); err != nil {
+		var conf *coord.Conflict
+		if errors.As(err, &conf) {
+			fmt.Fprintf(os.Stderr, "\nbashy: refusing `git %s`\n\n%v\n", strings.Join(args, " "), err)
+			return coordExitRefused
+		}
+		claimCheckUnavailable(err)
 	}
 	return 0
+}
+
+// coordEnforceFn and claimGuardFn are the ledger calls the guards make, held in
+// vars so a test can stand in a failing ledger without corrupting a real one.
+var (
+	coordEnforceFn = coord.Enforce
+	claimGuardFn   = coord.Guard
+)
+
+// claimCheckWarned records that this process has already said the ledger is down.
+var claimCheckWarned atomic.Bool
+
+// claimCheckUnavailable is the fail-OPEN half of every guard.
+//
+// Only a *coord.Conflict is a refusal. Anything else coord.Guard/Enforce returns —
+// a lock it could not take, an unreadable ~/.bashy/coord, a short read — is a fault
+// in the advisory ledger, not a verdict about the command, and an advisory ledger
+// that bricks every command in an agent session the moment its own storage hiccups
+// has stopped being advisory. So the guard says so once per process, on stderr,
+// and lets the command run.
+func claimCheckUnavailable(err error) {
+	if claimCheckWarned.CompareAndSwap(false, true) {
+		fmt.Fprintf(os.Stderr, "bashy: claim check unavailable: %v; proceeding\n", err)
+	}
+}
+
+// claimRefused classifies a guard error: true (after printing the conflict) when
+// the command must die with coordExitRefused, false when it may proceed — either
+// because there was no error or because the ledger itself failed (see
+// claimCheckUnavailable).
+func claimRefused(err error) bool {
+	if err == nil {
+		return false
+	}
+	var conf *coord.Conflict
+	if errors.As(err, &conf) {
+		fmt.Fprint(os.Stderr, conf.Error())
+		return true
+	}
+	claimCheckUnavailable(err)
+	return false
 }
 
 // resolveCommandVerb unwraps `bashy X` / `command bashy X` and resolves registered commands.
@@ -245,13 +291,8 @@ func claimGuardMiddleware(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 		if isClaimExemptCommand(verb) {
 			return next(ctx, args)
 		}
-		if err := coord.Guard(ctx, coord.Self(), coord.Use{Kind: "command", Name: verb}); err != nil {
-			var conf *coord.Conflict
-			if errors.As(err, &conf) {
-				fmt.Fprint(os.Stderr, conf.Error())
-				return interp.ExitStatus(coordExitRefused)
-			}
-			return err
+		if claimRefused(claimGuardFn(ctx, coord.Self(), coord.Use{Kind: "command", Name: verb})) {
+			return interp.ExitStatus(coordExitRefused)
 		}
 		return next(ctx, args)
 	}
