@@ -22,6 +22,9 @@ cli:
       - OPENAI_API_KEY
     env:
       - OPENAI_BASE_URL={base_url}
+      - OPENAI_MODEL={model}
+    steer_exec: qwen --yolo --auth-type openai -m {model}
+    acp_exec: qwen --acp --yolo --auth-type openai
     watchdog:
       max_runtime: 30m
       mem_limit: 8g
