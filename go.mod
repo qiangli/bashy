@@ -15,9 +15,9 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/coreutils v0.0.0-20261009201221-a50cc1f27e6f
-	github.com/qiangli/ycode v0.3.1-dev.0.20261010150224-0ac16f618a9b
+	github.com/qiangli/ycode v0.3.1-dev.0.20261010173527-a803cd8478dc
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261010154800-bffcda988649
+	github.com/qiangli/yoke v0.0.0-20261010175254-f2f9febb04dd
 	github.com/qiangli/yoke/external/otel v0.0.0-20261010150054-5c32c2a188e6
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
@@ -352,7 +352,7 @@ require (
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/qiangli/gfy v0.0.0-20261009070616-1a9d12418c8d // indirect
 	github.com/qiangli/outpost v0.14.38-0.20261010024528-ab95d4b5f012 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261010154800-bffcda988649 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261010175254-f2f9febb04dd // indirect
 	github.com/qiangli/yoke/pkg/oci v0.0.0-20261010150054-5c32c2a188e6 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
@@ -515,7 +515,7 @@ replace github.com/perses/perses => github.com/qiangli/perses v0.0.0-20260426190
 
 replace github.com/ergochat/readline => github.com/qiangli/readline v0.1.4-0.20261009064530-fb482a5af0cb
 
-replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20261009073819-83ce2ea49b53
+replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20261010173850-e788634a5b71
 
 // Podman embed: bashy mounts yoke's in-process podman engine, which consumes
 // the qiangli/podman fork + the pkg/oci wrapper. Cross-module replaces don't
@@ -537,6 +537,6 @@ replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/
 // Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
 replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261009064153-466dad1c3aef
 
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261010150224-0ac16f618a9b
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261010173527-a803cd8478dc
 
 tool github.com/qiangli/outpost/cmd/outpost
