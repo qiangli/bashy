@@ -300,7 +300,7 @@ func maybeHintUnreadMail(argv []string) {
 // emitUnreadHint is the testable body behind maybeHintUnreadMail: same gate,
 // caller-chosen writer and mode.
 func emitUnreadHint(argv []string, w io.Writer, agent bool) {
-	if !hintsEnabled() {
+	if !hintsEnabled() || chatInboxOff() {
 		return
 	}
 	if len(argv) == 0 {
@@ -327,6 +327,15 @@ func emitUnreadHint(argv []string, w io.Writer, agent bool) {
 		return
 	}
 	(&nudger{agent: agent, w: w}).emit("inbox", hint)
+}
+
+// chatInboxOff reports a session launched by `bashy chat` with
+// BASHY_CHAT_INBOX=off (the agent bench's unattended PTY): the host's mail is
+// kept out of that session, so the unread hint — counts and sender names —
+// must stay out too. Every bashy the agent runs inherits the variable. Tool
+// nudges are unaffected; BASHY_HINTS=off silences those.
+func chatInboxOff() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("BASHY_CHAT_INBOX")), "off")
 }
 
 // hintsForceOff reports the explicit kill switches (BASHY_AGENTIC master off,
@@ -400,7 +409,7 @@ func dispatchInboxHookTo(args []string, stdin io.Reader, stdout, stderr io.Write
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if hintsForceOff() {
+	if hintsForceOff() || chatInboxOff() {
 		return 0
 	}
 	event := strings.TrimSpace(*forName)

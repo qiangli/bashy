@@ -588,3 +588,33 @@ func TestHookWriterRejectsNonHookAgents(t *testing.T) {
 		t.Errorf("dry-run must succeed, got %d", rc)
 	}
 }
+
+// Sprint 413 #1838: a chat session launched with BASHY_CHAT_INBOX=off (the
+// agent bench's unattended PTY) inherits that variable into every bashy the
+// agent runs. The unread hint must stay silent there — no count, no sender
+// names — while an ordinary session with the same mail still gets it.
+func TestUnreadHintSilentUnderChatInboxOff(t *testing.T) {
+	isolateUnifiedInbox(t)
+	isolateHintState(t)
+	reader := inboxTestReader
+	t.Setenv("BASHY_PRINCIPAL", "dhnt:agent/"+reader)
+	seedHintMail(t, reader)
+
+	t.Setenv("BASHY_CHAT_INBOX", "off")
+	var buf bytes.Buffer
+	emitUnreadHint([]string{"status"}, &buf, true)
+	if got := buf.String(); got != "" {
+		t.Fatalf("BASHY_CHAT_INBOX=off leaked an unread hint: %q", got)
+	}
+	var out, errb bytes.Buffer
+	if rc := dispatchInboxHookTo([]string{"--for", "SessionStart"}, nil, &out, &errb); rc != 0 || out.Len() != 0 {
+		t.Fatalf("inbox-hook under BASHY_CHAT_INBOX=off: rc=%d stdout=%q", rc, out.String())
+	}
+
+	t.Setenv("BASHY_CHAT_INBOX", "")
+	buf.Reset()
+	emitUnreadHint([]string{"status"}, &buf, true)
+	if !strings.Contains(buf.String(), "conductor") {
+		t.Fatalf("normal session lost its unread hint: %q", buf.String())
+	}
+}
