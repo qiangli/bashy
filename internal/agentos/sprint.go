@@ -38,6 +38,11 @@ func newSprintCmd() *cobra.Command {
 	cmd.AddCommand(newSprintInboxAckCmd())
 	cmd.AddCommand(newSprintMonitorCmd())
 	cmd.AddCommand(newSprintWaitCmd())
+	// LAST, after every edit above. yoke installed its own three reporters
+	// while it built this tree; attachSprintWatch replaced two RunEs and the
+	// three AddCommands arrived afterwards, so those paths have no reporter at
+	// all and the tree's SilenceErrors swallowed them. See sprint_errors.go.
+	installSprintErrorReporting(cmd)
 	return cmd
 }
 
@@ -62,18 +67,29 @@ func attachSprintWatch(cmd *cobra.Command, takeover bool) {
 		defer stop()
 		cmd.SetContext(ctx)
 		defer cmd.SetContext(parent)
+		// Everything below this point used to be reported by NOBODY. These are
+		// bashy's own guards, installed on top of a tree whose every command
+		// sets SilenceErrors, and `--watch` is the only way to reach them —
+		// which is exactly why the bug looked like "--watch fails and start
+		// does not". sprint_errors.go now reports them; the classification
+		// here is what gives each one the right exit status.
 		id, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
-			return fmt.Errorf("sprint must be an integer: %q", args[0])
+			return sprintUsagef("sprint must be an integer: %q", args[0])
 		}
 		explicit, _ := cmd.Flags().GetString("owner")
 		owner, err := weave.SprintClaimIdentity(id, explicit, takeover)
 		if err != nil {
-			return err
+			return sprintUsage(err)
 		}
+		// BEFORE the claim, deliberately. A watch that cannot register its
+		// reader must fail with the seat untouched rather than take the lease
+		// and then die holding it.
 		claim, err := registerSprintInboxWatcher(owner)
 		if err != nil {
-			return fmt.Errorf("sprint %s --watch: %w", cmd.Name(), err)
+			return sprintUsagef("--watch cannot attach an inbox stream for %s, so the seat was NOT claimed: %w\n"+
+				"  without --watch the same command claims the seat and exits; the seat then has no delivery path and goes stale, "+
+				"so fix the stream rather than dropping the flag", owner, err)
 		}
 		defer claim.leave()
 		if err := original(cmd, args); err != nil {
