@@ -4,13 +4,16 @@
 package agentos
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/qiangli/yoke/pkg/binmgr"
+	"github.com/qiangli/yoke/pkg/policy/coord"
 )
 
 // engineAlias normalizes a front-door engine alias to its canonical engine name.
@@ -30,6 +33,110 @@ func engineAlias(name string) string {
 		return "podman"
 	}
 	return name
+}
+
+// podmanMachineName extracts the target machine name from podman/oci/sandbox arguments,
+// defaulting to "bashy".
+func podmanMachineName(args []string) string {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--connection" || a == "-c" {
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+		} else if strings.HasPrefix(a, "--connection=") {
+			return strings.TrimPrefix(a, "--connection=")
+		} else if strings.HasPrefix(a, "-c=") {
+			return strings.TrimPrefix(a, "-c=")
+		} else if a == "--machine" {
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+		} else if strings.HasPrefix(a, "--machine=") {
+			return strings.TrimPrefix(a, "--machine=")
+		}
+	}
+	for i := 0; i < len(args); i++ {
+		if args[i] == "machine" && i+2 < len(args) {
+			sub := args[i+1]
+			name := args[i+2]
+			if !strings.HasPrefix(sub, "-") && !strings.HasPrefix(name, "-") {
+				return name
+			}
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("CONTAINER_CONNECTION")); v != "" {
+		return v
+	}
+	return "bashy"
+}
+
+// ollamaInstanceName extracts the target instance name from ollama arguments,
+// defaulting to "bashy".
+func ollamaInstanceName(args []string) string {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--instance" {
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+		} else if strings.HasPrefix(a, "--instance=") {
+			return strings.TrimPrefix(a, "--instance=")
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("BASHY_OLLAMA_INSTANCE")); v != "" {
+		return v
+	}
+	return "bashy"
+}
+
+// guardSandbox guards the podman/oci/sandbox front door.
+// Returns 0 to proceed, or coordExitRefused (9) on conflict.
+func guardSandbox(args []string) int {
+	if !coordEnabled() {
+		return 0
+	}
+	machine := podmanMachineName(args)
+	if err := coord.Guard(context.Background(), coord.Self(), coord.Use{Kind: "sandbox", Name: machine}); err != nil {
+		var conf *coord.Conflict
+		if errors.As(err, &conf) {
+			fmt.Fprint(os.Stderr, conf.Error())
+			return coordExitRefused
+		}
+		fmt.Fprintln(os.Stderr, err)
+		return coordExitRefused
+	}
+	return 0
+}
+
+// guardOllama guards the managed ollama front door.
+// Returns 0 to proceed, or coordExitRefused (9) on conflict.
+func guardOllama(args []string) int {
+	if !coordEnabled() {
+		return 0
+	}
+	instance := ollamaInstanceName(args)
+	if err := coord.Guard(context.Background(), coord.Self(), coord.Use{Kind: "ollama", Name: instance}); err != nil {
+		var conf *coord.Conflict
+		if errors.As(err, &conf) {
+			fmt.Fprint(os.Stderr, conf.Error())
+			return coordExitRefused
+		}
+		fmt.Fprintln(os.Stderr, err)
+		return coordExitRefused
+	}
+	return 0
+}
+
+// guardEngine runs the front-door guard for container and LLM engines.
+func guardEngine(name string, args []string) int {
+	switch engineAlias(name) {
+	case "podman":
+		return guardSandbox(args)
+	case "ollama":
+		return guardOllama(args)
+	}
+	return 0
 }
 
 // ollamaCloudTarget reports whether an `ollama` invocation targets ollama.com's

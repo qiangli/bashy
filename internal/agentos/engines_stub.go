@@ -33,6 +33,9 @@ import (
 //	Tier 4  none available → point at install or a paired host node — never a
 //	        rebuild.
 func dispatchEngine(arg string) {
+	if code := guardEngine(arg, os.Args[2:]); code != 0 {
+		dispatchExit(code)
+	}
 	name := engineAlias(arg) // `bashy docker` -> podman engine
 	switch name {
 	case "podman", "ollama":

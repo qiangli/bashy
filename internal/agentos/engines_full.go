@@ -19,6 +19,9 @@ import (
 // the default lean worker (which cross-compiles to every platform with
 // CGO_ENABLED=0) and from every Windows build.
 func dispatchEngine(arg string) {
+	if code := guardEngine(arg, os.Args[2:]); code != 0 {
+		dispatchExit(code)
+	}
 	arg = engineAlias(arg) // `bashy docker` -> podman engine
 	switch arg {
 	case "podman":

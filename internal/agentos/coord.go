@@ -23,6 +23,12 @@ func init() {
 	if _, ok := coord.LookupKind("command"); !ok {
 		coord.RegisterKind(coord.Kind{Name: "command", Match: coord.MatchName})
 	}
+	if _, ok := coord.LookupKind("sandbox"); !ok {
+		coord.RegisterKind(coord.Kind{Name: "sandbox", Match: coord.MatchName})
+	}
+	if _, ok := coord.LookupKind("ollama"); !ok {
+		coord.RegisterKind(coord.Kind{Name: "ollama", Match: coord.MatchName})
+	}
 }
 
 // coordHandler refuses a WRITE when another agent already holds this project.

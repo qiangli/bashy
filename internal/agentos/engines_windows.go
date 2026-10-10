@@ -15,6 +15,9 @@ import (
 // dispatchEngine wires the Windows-capable Podman machine frontend when bashy
 // is built with -tags bashy_engines. Ollama remains a unix host feature.
 func dispatchEngine(arg string) {
+	if code := guardEngine(arg, os.Args[2:]); code != 0 {
+		dispatchExit(code)
+	}
 	arg = engineAlias(arg) // `bashy docker` -> podman engine
 	switch arg {
 	case "podman":

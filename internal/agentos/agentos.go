@@ -635,6 +635,9 @@ func dispatch() {
 	// platform-tagged dispatchEngine so the rest of AgentOS (shell, git, dag,
 	// weave, the binmgr-managed externals) cross-compiles to Windows.
 	if os.Args[1] == "ollama" && isDoorServe(os.Args[2:]) {
+		if code := guardOllama(os.Args[2:]); code != 0 {
+			dispatchExit(code)
+		}
 		dispatchExit(runOllamaDoor(os.Args[3:]))
 	}
 	// `bashy ollama status [--json]` is bashy's own read-only probe of the
