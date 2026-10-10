@@ -345,18 +345,41 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 	// race between two fresh processes and also refuses two watcher loops in
 	// one process, since both would otherwise advance the same source cursors.
 	// Keyed by owner identity name under kind "inbox".
-	grant, lock, err := coord.AcquireAttachedRef(context.Background(), coord.Request{
-		Ref:    coord.Ref{Kind: "inbox", Name: id.name},
-		Holder: principal.Ref{Name: id.name},
-		Intent: task,
-		Mode:   coord.ModeAttached,
-	})
-	if err != nil {
-		var conf *coord.Conflict
-		if errors.As(err, &conf) || errors.Is(err, lockfile.ErrHeld) {
-			return inboxWatcherClaim{}, fmt.Errorf("inbox: %s %q already has a live inbox watcher", id.kind, id.name)
+	//
+	// BASHY_CLAIM=0|off bypasses the ledger: a watcher must still start when the
+	// advisory ledger is unavailable or switched off. Exclusivity then rests on
+	// the in-process table (two loops in one process) and room.Join (two
+	// processes), which is what the lease only duplicated.
+	var (
+		grant coord.Grant
+		lock  *lockfile.Lock
+	)
+	if claimDisabled() {
+		if _, held := localInboxWatchers.LoadOrStore(id.claimID, struct{}{}); held {
+			return inboxWatcherClaim{}, errInboxWatcherLive(id)
 		}
-		return inboxWatcherClaim{}, fmt.Errorf("inbox: claim watcher identity %q: %w", id.name, err)
+	} else {
+		var err error
+		grant, lock, err = coord.AcquireAttachedRef(context.Background(), coord.Request{
+			Ref:    coord.Ref{Kind: "inbox", Name: id.name},
+			Holder: principal.Ref{Name: id.name},
+			Intent: task,
+			Mode:   coord.ModeAttached,
+		})
+		if err != nil {
+			var conf *coord.Conflict
+			if errors.As(err, &conf) || errors.Is(err, lockfile.ErrHeld) {
+				return inboxWatcherClaim{}, errInboxWatcherLive(id)
+			}
+			return inboxWatcherClaim{}, fmt.Errorf("inbox: claim watcher identity %q: %w", id.name, err)
+		}
+	}
+	releaseLease := func() {
+		if lock == nil {
+			localInboxWatchers.Delete(id.claimID)
+			return
+		}
+		_ = coord.ReleaseAttached(coord.DefaultDir(), grant.Claim, lock)
 	}
 	cwd, _ := os.Getwd()
 	ownerPID := os.Getppid()
@@ -388,7 +411,11 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 		Cwd:          cwd,
 	}
 	if err := room.Join(card); err != nil {
-		_ = coord.ReleaseAttached(coord.DefaultDir(), grant.Claim, lock)
+		releaseLease()
+		var live *room.ErrLive
+		if lock == nil && errors.As(err, &live) {
+			return inboxWatcherClaim{}, errInboxWatcherLive(id)
+		}
 		return inboxWatcherClaim{}, fmt.Errorf("inbox: register watcher %q: %w", id.name, err)
 	}
 	anchor := inboxWatcherAnchor(card)
@@ -399,8 +426,8 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 			// watcher process must take. Releasing one and keeping the other
 			// leaves the identity half-held, which reads as available in one
 			// surface and taken in the other.
-			room.Leave(card.ID)
-			_ = coord.ReleaseAttached(coord.DefaultDir(), grant.Claim, lock)
+			retireInboxWatcherCard(card)
+			releaseLease()
 		},
 		ownerLive: func() error {
 			if inboxOwnerRelation(os.Getpid(), anchor) == inboxOwnerGone {
@@ -409,6 +436,36 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 			return nil
 		},
 	}, nil
+}
+
+// localInboxWatchers holds the claim ids of this process's watchers while the
+// coord ledger is bypassed (BASHY_CLAIM=0|off).
+var localInboxWatchers sync.Map
+
+func errInboxWatcherLive(id inboxWatcherIdentity) error {
+	return fmt.Errorf("inbox: %s %q already has a live inbox watcher", id.kind, id.name)
+}
+
+// retireInboxWatcherCard removes exactly this watcher's own card.
+//
+// room.Leave cannot: it presents the watcher's PID, but a card carrying a
+// session digest is HELD by its OwnerPID (the agent session, which outlives
+// every watcher it starts), so Leave sees a live card held by someone else and
+// leaves it on the board — a restart in the same session is then refused until
+// the session exits. The watcher's lifetime ends here; the session's does not.
+// So retire as the card's actual holder, but only after confirming the card on
+// disk is still the one this watcher wrote (same writer PID and session
+// digest), so a stale exit never deletes a different holder's card.
+func retireInboxWatcherCard(card room.Card) {
+	cur, live, err := room.Find(card.ID)
+	if err != nil || !live || cur.ID != card.ID || cur.PID != card.PID || cur.SessionClaim != card.SessionClaim {
+		return
+	}
+	holder := cur.PID
+	if cur.OwnerPID != 0 && cur.SessionClaim != "" {
+		holder = cur.OwnerPID
+	}
+	room.LeavePID(cur.ID, holder)
 }
 
 // inboxWatcherIdentity is the resolved holder of one watcher lease. Two identity

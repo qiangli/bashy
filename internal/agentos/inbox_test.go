@@ -634,7 +634,10 @@ func TestDottedInboxWatcherRefusesInteractiveClaim(t *testing.T) {
 	}
 	defer watcher.leave()
 	claimID := room.AgentClaimID(name)
-	if err := room.Join(room.Card{ID: claimID, Nick: name, Mode: "interactive", PID: os.Getppid()}); err == nil || !strings.Contains(err.Error(), "already live") {
+	// A holder that is neither the watcher nor its owning session: under a tool
+	// session the watcher card is held by OwnerPID (this process's parent), so
+	// the parent itself would be the same holder revising its own card.
+	if err := room.Join(room.Card{ID: claimID, Nick: name, Mode: "interactive", PID: 1}); err == nil || !strings.Contains(err.Error(), "already live") {
 		t.Fatalf("interactive against dotted watcher claim error = %v", err)
 	}
 }

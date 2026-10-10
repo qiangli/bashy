@@ -164,6 +164,12 @@ func projectRootOf(dir string) string {
 	return dir
 }
 
+// claimDisabled reports the explicit operator switch: BASHY_CLAIM=0|off.
+func claimDisabled() bool {
+	v := os.Getenv("BASHY_CLAIM")
+	return v == "0" || strings.EqualFold(v, "off")
+}
+
 // coordEnabled gates the whole mechanism.
 //
 // It keys on coreskills.DetectAgent(), NOT weavecli.IsAgent(). That distinction is
@@ -173,7 +179,7 @@ func projectRootOf(dir string) string {
 // no-op in EXACTLY the sessions that collided. (The same wrong gate is why the
 // advisor and the nudges are off in a normal Claude session today.)
 func coordEnabled() bool {
-	if v := os.Getenv("BASHY_CLAIM"); v == "0" || strings.EqualFold(v, "off") {
+	if claimDisabled() {
 		return false
 	}
 	_, isAgent := coreskills.DetectAgent()
