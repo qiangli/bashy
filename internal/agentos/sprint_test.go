@@ -214,7 +214,7 @@ func TestExternalSprintStartWatchClaimsActiveSprintThenStreamsInbox(t *testing.T
 // companion expands it. Reads through the coreutils skills loader used by
 // `bashy skill`, exercising the same path an agent would.
 func TestConductorSkillCarriesOwnerChecklist(t *testing.T) {
-	body, ok := skills.Body("conductor")
+	body, ok := skills.CommandDoc("conductor")
 	if !ok {
 		t.Fatal("conductor SKILL.md not embedded")
 	}
@@ -236,7 +236,7 @@ func TestConductorSkillCarriesOwnerChecklist(t *testing.T) {
 		}
 	}
 
-	ref, ok := skills.Reference("conductor")
+	ref, ok := skills.CommandReference("conductor")
 	if !ok {
 		t.Fatal("conductor reference.md not embedded")
 	}
@@ -255,7 +255,7 @@ func TestConductorSkillCarriesOwnerChecklist(t *testing.T) {
 // vendor-neutral .agents export and Claude's .claude export. Keep the owner
 // decision outside Bashy and keep the existing-sprint path ownership-neutral.
 func TestSprintSkillRequiresAnExplicitManagerAndReusesActiveOwnership(t *testing.T) {
-	body, ok := skills.Body("sprint")
+	body, ok := skills.CommandDoc("sprint")
 	if !ok {
 		t.Fatal("sprint SKILL.md not embedded")
 	}

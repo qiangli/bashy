@@ -189,19 +189,23 @@ func TestSkillHelpGoldens(t *testing.T) {
 	}
 }
 
+// The canonical doc leads; the command's own preamble still follows it
+// rather than being dropped, since a command's preamble can carry
+// runtime-assembled content (sprint's owner-accountability contract) that a
+// static moved doc does not repeat — see skillHelp's doc comment.
 func TestSkillHelpLongDocument(t *testing.T) {
 	entry, _ := atlas.Lookup("sprint")
 	got, err := skillHelp("sprint", "Old preamble.\n\nUsage:\n  sprint [flags]\n\nAvailable Commands:\n  show  Read a card\n\nFlags:\n  -h help\n", entry, "Canonical long doc.")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Canonical long doc.", "## Usage\n  sprint [flags]", "## Commands\n  show", "## Flags\n  -h"} {
+	for _, want := range []string{"Canonical long doc.", "Old preamble.", "## Usage\n  sprint [flags]", "## Commands\n  show", "## Flags\n  -h"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q", want)
 		}
 	}
-	if strings.Contains(got, "Old preamble") {
-		t.Fatal("optional long doc did not replace preamble")
+	if strings.Index(got, "Canonical long doc.") > strings.Index(got, "Old preamble.") {
+		t.Fatal("canonical long doc must lead, ahead of the command's own preamble")
 	}
 }
 

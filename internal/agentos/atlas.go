@@ -296,6 +296,28 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Effects:   []string{atlas.EffRead, atlas.EffWrite},
 		Stability: atlas.StabilityExperimental,
 	},
+	// supervisor, knowledge-transfer and force-agent-shell are pseudo-commands
+	// (Sprint 406): they own no front-door case of their own, only a doc moved
+	// into bashy/commands/*; bare `bashy NAME` prints it via isSkillDocName's
+	// generic fallback, same as `bashy skill show NAME` would. Classified read
+	// only, like a help verb — the doc viewer has no side effect of its own
+	// (force-agent-shell's machine-checkable contract runs, with its own
+	// effects, only under `bashy skill run force-agent-shell`).
+	"supervisor": {
+		Stage: atlas.StageCross, Group: atlas.GroupOrch, Tier: atlas.TierUserland,
+		Caps: []string{atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
+		Stability: atlas.StabilityExperimental,
+	},
+	"knowledge-transfer": {
+		Stage: atlas.StageCross, Group: atlas.GroupOrch, Tier: atlas.TierUserland,
+		Caps: []string{atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
+		Stability: atlas.StabilityExperimental,
+	},
+	"force-agent-shell": {
+		Stage: atlas.StageCross, Group: atlas.GroupOrch, Tier: atlas.TierUserland,
+		Caps: []string{atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
+		Stability: atlas.StabilityExperimental,
+	},
 }
 
 // toolAtlasRecord resolves one in-process (coreutils-class) tool.
@@ -404,6 +426,19 @@ func verbAtlasRecord(name string, hidden bool) (r atlasRecord) {
 	// coverage ratchet now fails on it by name.
 	r.Group, r.Tier, r.Stage = "", "", ""
 	return r
+}
+
+// lookupEntry resolves name's atlas.Entry the same way every record builder
+// here does: the shared atlas first, then bashy's own local table — so a
+// bashy-owned pseudo-command (no shared-atlas row of its own, only a
+// bashyOwnedVerbAtlas entry) still resolves to a real Entry instead of
+// reporting "no atlas entry" to a caller that only knows the shared table.
+func lookupEntry(name string) (atlas.Entry, bool) {
+	if e, ok := atlas.Lookup(name); ok {
+		return e, true
+	}
+	e, ok := bashyOwnedVerbAtlas[name]
+	return e, ok
 }
 
 func fillFromAtlas(r *atlasRecord) {

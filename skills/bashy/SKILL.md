@@ -12,6 +12,27 @@ of agent-native verbs that run *in-process*, identically on Linux, macOS,
 and Windows. The extensions are additive: they never change what valid
 bash means.
 
+## bashy is all you need
+
+`bashy` is the only skill this binary installs — and it does not need to be
+more than one, because **every bashy command is a skill too**: `bashy <cmd>
+--help` renders the same skill+MCP document a dedicated skill folder would
+(frontmatter, prose, and a `json mcp` tool definition in one file), not just
+a usage string.
+
+- List what is reachable here: `bashy skill list` (verified, env-gated) or
+  `bashy commands --agentic` (the full agentic surface).
+- Load one: `bashy <cmd> --help` — agent-detected sessions get the skill+MCP
+  form automatically; force it either way with `--format classic` (plain
+  usage) or `--format mcp` (the tool definition alone).
+- A command whose help needs more than its own usage string carries a
+  companion doc under `bashy/commands/<cmd>.md` (optionally
+  `bashy/reference/<cmd>.md`) that `--help --format skill` folds in ahead of
+  the generated sections — `conductor`, `steward`, `sprint`, `inbox`,
+  `supervisor`, `knowledge-transfer`, and `force-agent-shell` all work this
+  way now; `bashy skill show conductor` (and friends) still read the same
+  doc directly.
+
 ## First hop (do this once per session)
 
     bashy inspect context --json

@@ -109,7 +109,7 @@ func TestConductorAndHarnessRecipesUseStageVerbs(t *testing.T) {
 		}
 		return string(b)
 	}
-	conductor := read("skills/conductor/SKILL.md")
+	conductor := read("skills/bashy/commands/conductor.md")
 	for _, want := range []string{
 		`bashy kb context --for "<story title>" --rings repo,host --budget 700`,
 		`bashy kb note add --candidate --ring agent --episode "<sprint-run>"`,

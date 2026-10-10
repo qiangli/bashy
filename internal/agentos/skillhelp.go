@@ -14,6 +14,7 @@ import (
 	"time"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/qiangli/bashy/skills"
 	"github.com/qiangli/coreutils/tool"
 	yokemcp "github.com/qiangli/yoke/mcp"
 	"github.com/qiangli/yoke/pkg/atlas"
@@ -129,7 +130,7 @@ func dispatchFormattedHelp(args []string) (int, bool) {
 	if format == "classic" && args[0] != "help" {
 		return 0, false
 	}
-	entry, ok := atlas.Lookup(name)
+	entry, ok := lookupEntry(name)
 	if !ok {
 		fmt.Fprintf(os.Stderr, "bashy help: no atlas entry for %q\n", name)
 		return 2, true
@@ -146,7 +147,7 @@ func dispatchFormattedHelp(args []string) (int, bool) {
 	} else {
 		output, err = classicHelp(request)
 		if err == nil && format == "skill" {
-			output, err = skillHelp(name, output, entry, "")
+			output, err = skillHelp(name, output, entry, commandLongDoc(name))
 		}
 	}
 	if err != nil {
@@ -157,9 +158,33 @@ func dispatchFormattedHelp(args []string) (int, bool) {
 	return 0, true
 }
 
+// commandLongDoc returns the prose body of a command's moved doc
+// (skills/bashy/commands/<name>.md), for use as skillHelp's optional long
+// document — stripped of its own frontmatter block, since skillHelp
+// synthesizes its own. Returns "" when the command has no moved doc, in
+// which case skillHelp falls back to the classic preamble as before.
+func commandLongDoc(name string) string {
+	doc, ok := skills.CommandDoc(name)
+	if !ok {
+		return ""
+	}
+	const fence = "---\n"
+	if !strings.HasPrefix(doc, fence) {
+		return strings.TrimSpace(doc)
+	}
+	if end := strings.Index(doc[len(fence):], "\n---\n"); end >= 0 {
+		return strings.TrimSpace(doc[len(fence)+end+len("\n---\n"):])
+	}
+	return strings.TrimSpace(doc)
+}
+
 // skillHelp converts existing Cobra or hand-written help, never regenerating
 // the classic source. Long prose preceding Usage remains prose; an optional
-// canonical long document replaces that preamble.
+// canonical long document is shown first, ahead of it, never instead of it —
+// a command's own Long can carry runtime-assembled content (sprint's
+// owner-accountability contract, appended in newSprintCmd) that a static
+// moved doc does not repeat, and dropping it would be a silent content loss
+// for exactly the agent audience the canonical doc exists to serve.
 func skillHelp(name, classic string, entry atlas.Entry, longDoc string) (string, error) {
 	definition, err := helpMCPTool(name, entry)
 	if err != nil {
@@ -177,7 +202,6 @@ func skillHelp(name, classic string, entry atlas.Entry, longDoc string) (string,
 		b.WriteString(strings.TrimSpace(longDoc))
 		b.WriteString("\n\n")
 	}
-	inSections := false
 	for _, line := range strings.Split(strings.TrimRight(classic, "\n"), "\n") {
 		trimmed := strings.TrimSpace(line)
 		heading, tail, hasColon := strings.Cut(trimmed, ":")
@@ -195,12 +219,11 @@ func skillHelp(name, classic string, entry atlas.Entry, longDoc string) (string,
 			}
 		}
 		if section != "" {
-			inSections = true
 			fmt.Fprintf(&b, "## %s\n", section)
 			if strings.TrimSpace(tail) != "" {
 				fmt.Fprintf(&b, "  %s\n", strings.TrimSpace(tail))
 			}
-		} else if longDoc == "" || inSections {
+		} else {
 			b.WriteString(line)
 			b.WriteByte('\n')
 		}

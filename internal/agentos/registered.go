@@ -216,7 +216,7 @@ func reservedCommandName(name string) (string, bool) {
 		}
 		return atlas.OriginLabel(e.Origin), true
 	}
-	if isEmbeddedSkillName(name) {
+	if isSkillDocName(name) {
 		return "embedded skill", true
 	}
 	if slices.Contains(fleet.ReservedCommandWords(), name) {

@@ -181,7 +181,12 @@ var (
 	// plural (docs/bashy-command-noun-number-policy.md).
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "invoke", "verify", "doctor", "context", "audit",
 		"agents", "models", "tools", "people", "skills", "secrets", "apps", "messages", "issue", "resources",
-		"command"}
+		"command",
+		// Pseudo-commands with no front-door case of their own (Sprint 406):
+		// bare `bashy NAME` prints the doc moved into bashy/commands/*.md via
+		// isSkillDocName's generic fallback. No shim, same as every other name
+		// in this list — a doc viewer is not something a script should alias.
+		"supervisor", "knowledge-transfer", "force-agent-shell"}
 
 	// curatedHiddenVerbs are yoke commands (bashy-added, verbs AND in-process
 	// tools) that WORK but are not yet
@@ -573,6 +578,7 @@ func isFrontDoorInvocation(name string) bool {
 		verbs,
 		hiddenVerbsCatalog(),
 		skills.Names(),
+		skills.CommandNames(),
 		{"help", "serve", "steward", "conductor", "jobs", "fg", "bg", "kill"},
 	} {
 		for _, known := range names {
@@ -1789,7 +1795,7 @@ func dispatch() {
 	if rec, ok := registeredLookup(os.Args[1]); ok {
 		dispatchExit(runRegisteredFrontDoor(rec, os.Args[2:]))
 	}
-	if isEmbeddedSkillName(os.Args[1]) {
+	if isSkillDocName(os.Args[1]) {
 		cmd := coreskills.NewSkillsCmd(skillsOptions()...)
 		cmd.SetArgs([]string{"show", os.Args[1]})
 		if err := cmd.Execute(); err != nil {
@@ -1833,10 +1839,18 @@ func isMissingCommandToken(name string) bool {
 	return true
 }
 
-func isEmbeddedSkillName(name string) bool {
-	for _, skillName := range skills.Names() {
-		if skillName == name {
-			return true
+// isSkillDocName reports whether name resolves to a full skill body through
+// the skill catalog: either its own top-level embedded folder (today, only
+// "bashy") or a front-door command whose doc moved into bashy/commands/* and
+// is bridged back under its own name by commandDocSource. Generalizes what
+// used to be a literal walk of the embedded skill directories, so a command
+// that gains a moved doc is picked up here without a second, per-name list.
+func isSkillDocName(name string) bool {
+	for _, known := range [][]string{skills.Names(), skills.CommandNames()} {
+		for _, n := range known {
+			if n == name {
+				return true
+			}
 		}
 	}
 	return false
@@ -1872,6 +1886,12 @@ func dispatchCoreutilsTool(name string, args []string, stdio tool.Stdio) int {
 func skillsOptions() []coreskills.Option {
 	opts := []coreskills.Option{
 		coreskills.WithSource(coreskills.EmbedSource(skills.FS, coreskills.RingEmbedded)),
+		// Bridges the moved command docs (skills/bashy/commands/*) back in
+		// under their own names, so `skill show/run conductor|sprint|...`
+		// keeps resolving after their top-level skill folder folded into
+		// bashy's. Same ring as the embed above; a later source still shadows
+		// it on a name collision.
+		coreskills.WithSource(commandDocSource{}),
 		coreskills.WithHostVersion("bashy", cli.BashyVersion()),
 	}
 	// The org catalog pulled by `bashy skill sync`. Mounted BEFORE

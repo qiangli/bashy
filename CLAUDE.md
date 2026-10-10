@@ -559,41 +559,39 @@ constructor; see [build evidence](docs/public-claims-evidence.md).
 
 ## Skills
 
-`skills/` holds the tier-2 **workspace** agentic skills bashy ships (the
-userland is tier 1, clusters tier 3). They are **compiled into the `bashy`
-binary** via the `//go:embed` directive in `skills/embed.go` (surfaced by
-`bashy skill`), so adding a skill means dropping its directory here AND adding
-it to that directive. Each is a self-contained Anthropic skill
-(`SKILL.md` actionable checklist + optional `reference.md` deep companion),
-brand-neutral and driven by bashy's own tools:
+**`bashy` is the only installed skill** (Sprint 406). `skills/bashy/` is a
+tier-2 **workspace** agentic skill — the userland is tier 1, clusters tier 3 —
+compiled into the `bashy` binary via the `//go:embed all:bashy` directive in
+`skills/embed.go` (surfaced by `bashy skill`). It is brand-neutral and driven
+by bashy's own tools, and its `SKILL.md` says plainly that it is all you need:
+**every bashy command is a skill too**. `bashy <cmd> --help` renders the same
+skill+MCP document a dedicated skill folder would (see
+`internal/agentos/skillhelp.go`); list the surface with `bashy skill list` /
+`bashy commands --agentic`, pick a format with `--format classic|mcp`.
 
-- `skills/bashy/` — how to drive bashy itself as an agent (start with
-  `bashy inspect context --json`; dry-run/check/run envelopes; code-intel verbs).
-- `skills/conductor/` — drive a fleet of agent CLIs to a verified goal over
-  `bashy sprint` + `bashy weave` (decompose → isolate → gate → converge, loop
-  until a verifier passes); TDD-at-fleet-scale is the canonical mode.
-- `skills/knowledge-transfer/` — agent-to-agent knowledge transfer via
-  `bashy kb`: the MENTOR loop (distill private memory / in-context recall
-  into reconciled candidate pages; select durable+team-relevant+non-derivable;
-  redaction gate; `xfer:<source>` idempotence tags; procedures route to
-  `skills learn`, prose to kb) and the MENTEE loop (search-before-task →
-  validate-through-use → pointers-not-copies localization). Hard rules:
-  transferred ≠ validated (a second agent promotes), kb reads foreign stores
-  but never writes them.
-- `skills/steward/` — the steward role: the host's authority record, the
-  handover contract, and the tick loop.
-- `skills/inbox/` — read the fleet message board (`bashy mb`) at the
-  START of a turn, before planning, so a second agent doesn't redo or contradict
-  work already taken. Requires `has=bashy`.
-- `skills/sprint/` — the sprint seat: card, goals, stories, checkpoint,
-  handoff.
+A command whose help needs more than its own generated usage carries a
+companion doc instead of a second top-level skill folder:
+`skills/bashy/commands/<cmd>.md` (optional `skills/bashy/reference/<cmd>.md`,
+and `skills/bashy/commands/<cmd>.dhnt` for a machine-checkable contract) —
+still embedded through the one `bashy` folder. `--help --format skill` folds
+that doc in ahead of the generated Usage/Commands/Flags sections
+(`commandLongDoc` in skillhelp.go); the doc's own frontmatter+body is also
+bridged back into the skill catalog under the command's name by
+`commandDocSource` (internal/agentos/commanddocs.go), so `bashy skill show
+conductor` / `bashy skill show sprint` / `bashy skill run force-agent-shell`
+keep resolving exactly as if each still had its own folder. `conductor`,
+`steward`, `supervisor`, `inbox`, `sprint`, `knowledge-transfer`, and
+`force-agent-shell` all carry a doc this way today; `skills.CommandNames()`
+and `bashy skill list` are the sources of truth for the set, not this prose.
+`steward`/`conductor` have their own front-door case (`bashy steward`,
+`bashy conductor`); `supervisor`/`knowledge-transfer`/`force-agent-shell` have
+none — bare `bashy NAME` for those three falls through to the generic
+`isSkillDocName` dispatcher (agentos.go), which is the same mechanism a
+`skill show NAME` would hit.
 
-`skills/embed.go` and `bashy skill list` are the sources of truth for the set
-(seven today); this prose drifts, they don't.
-
-**Record vs canonical.** `SKILL.md` is the on-disk canonical form of every
-skill — the de facto standard third-party harnesses read — and `bashy skill
-show <name>` prints it byte-identical. `bashy skill show --yaml|--json`,
+**Record vs canonical.** `SKILL.md` is the on-disk canonical form of the
+`bashy` skill — the de facto standard third-party harnesses read — and `bashy
+skill show bashy` prints it byte-identical. `bashy skill show --yaml|--json`,
 `add <file.yaml>|-`, and `export --yaml` project the same folder to and from
 a `kind: skill` RECORD (a lossless bundle: frontmatter fields + files verbatim,
 identity derived from the `skill.dhnt` canonical line, never from the YAML).
@@ -603,11 +601,12 @@ skills are immutable), never by hand under `~/.config/bashy`. Design of
 record: the umbrella's `docs/bashy-action-model.md`. Ecosystem-specific and internal
 operational skills, including `go-repo-health`, live in the umbrella's
 `skills/` overlay and are not compiled into the public binary.
-- `skills/force-agent-shell/` — attested check that agentic CLIs route their
-  shell commands through bashy (so the pure-Go userland, the advisor, and OTel
-  apply to everything an agent runs). Run as a convergence gate before an
-  unattended fleet run: `bashy skill run force-agent-shell` (exit 0 iff the
-  contract holds); wiring is `bashy install-agent <agent>` (`--check` to verify).
+
+`bashy skill run force-agent-shell` keeps working unchanged — attested check
+that agentic CLIs route their shell commands through bashy (so the pure-Go
+userland, the advisor, and OTel apply to everything an agent runs). Run as a
+convergence gate before an unattended fleet run (exit 0 iff the contract
+holds); wiring is `bashy install-agent <agent>` (`--check` to verify).
 
 ## Plans
 
