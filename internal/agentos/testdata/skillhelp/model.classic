@@ -26,12 +26,14 @@ BASHY_*_DIR. Precedence is embedded -> shared -> cloud -> local. A local file
 with overlay: true merges its present fields onto the next lower entry;
 an older full file remains a complete replacement until migrated.
 
-By default, list shows selected definitions from the embedded, shared, and
-cloud rings and hides local custom definitions. --custom shows only local;
---all shows every ring; --ring all|embedded|shared|cloud|local selects a precise
-ring. These flags are alternatives. A local override of a seeded name has
-RING local because local supplied the selected definition. Text and JSON use
-the same view; only text prints a hint when custom definitions are hidden.
+By default, list shows the selected definition per name across ALL rings,
+local custom definitions included. --custom shows only local; --builtin shows
+only embedded (--ring embedded spells the same view); --active shows only
+entries usable on this host now, with no network; --all shows every ring,
+including otherwise hidden entries; --ring all|embedded|shared|cloud|local
+selects a precise ring. These flags are alternatives. A local override of a
+seeded name has RING local because local supplied the selected definition.
+Text and JSON use the same view.
 
 Usage:
   model [flags]
@@ -56,8 +58,10 @@ Available Commands:
   verify      Check that an entry is usable on this host
 
 Flags:
+      --active         show only entries usable on this host now
       --all            show every ring, including otherwise hidden entries
       --band int       only models in exactly this band (1-5)
+      --builtin        show only embedded definitions
       --custom         show only local custom definitions
   -h, --help           help for model
       --json           emit JSON

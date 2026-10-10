@@ -564,6 +564,11 @@ func writeJSONFile(t *testing.T, path string, value any) {
 func useAgentsHome(t *testing.T, home string) {
 	t.Helper()
 	t.Setenv("BASHY_ROOM_DIR", filepath.Join(home, "room"))
+	// The fleet catalog must not read the host's own store or shared rings.
+	t.Setenv("BASHY_FLEET_DIR", filepath.Join(home, "fleet"))
+	for _, k := range []string{"BASHY_TOOLS_PATH", "BASHY_MODELS_PATH", "BASHY_AGENTS_PATH"} {
+		t.Setenv(k, "")
+	}
 	old := agentsHomeDir
 	agentsHomeDir = func() (string, error) { return home, nil }
 	t.Cleanup(func() { agentsHomeDir = old })

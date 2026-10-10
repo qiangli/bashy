@@ -929,10 +929,8 @@ github.com/qiangli/ycode v0.3.1-dev.0.20261009202524-02ba64f64493 h1:MJwaHY9J9jV
 github.com/qiangli/ycode v0.3.1-dev.0.20261009202524-02ba64f64493/go.mod h1:hb6IigQXlXPNmLX6r+f9sMPwuoFKO0oP2gZzAYg0ntE=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261009202524-02ba64f64493 h1:i/niZNPuhgBIUqIf0jZNBKktp63G1QclZAZ8wrhYeeo=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261009202524-02ba64f64493/go.mod h1:+ZCbIbIbjxqk8derYesSoxwxIMOylG87DtzJqzOUGGM=
-github.com/qiangli/yoke v0.0.0-20261009232517-9365756c4833 h1:vrCD8NR+X4cAGMJ12ZGAcPVlT+lKUtslrRzekwMEOSA=
-github.com/qiangli/yoke v0.0.0-20261009232517-9365756c4833/go.mod h1:14j/svl9rJSw0lVuA6Bha8KG9o61sjqc5CS1gZI/Le4=
-github.com/qiangli/yoke v0.0.0-20261010004713-a717d8395672 h1:D1kjyQkhpuke3wHSnBus0b52MGoSkFUmAnDRijGUz8k=
-github.com/qiangli/yoke v0.0.0-20261010004713-a717d8395672/go.mod h1:14j/svl9rJSw0lVuA6Bha8KG9o61sjqc5CS1gZI/Le4=
+github.com/qiangli/yoke v0.0.0-20261010013036-9d95511981bf h1:htByyPWt8A7WXGN6pFidHrMK9KQQP1ja+zrg+akMcIQ=
+github.com/qiangli/yoke v0.0.0-20261010013036-9d95511981bf/go.mod h1:14j/svl9rJSw0lVuA6Bha8KG9o61sjqc5CS1gZI/Le4=
 github.com/qiangli/yoke/external/otel v0.0.0-20261009232517-9365756c4833 h1:CvL/aG9vhIlnek0CuQ6auJAK7/WI468jnPwxFC+oDUY=
 github.com/qiangli/yoke/external/otel v0.0.0-20261009232517-9365756c4833/go.mod h1:89r2PcLF/qnPCk89v66vOqevuMw7UFc4AZCRoWLzopU=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261009232517-9365756c4833 h1:Qh2h1S+g6kBZNANCdghoaQQhtNji6VtDqw5elZnz280=
