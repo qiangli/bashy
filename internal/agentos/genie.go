@@ -160,6 +160,7 @@ func dispatchGenieWithHandoff(args []string, handoff bool) int {
 		mode = "chat"
 	}
 	os.Setenv("GENIE_MODE", mode)
+	genieApplyApproval()
 	return runSelf(append([]string{"run", "--target", target, bundle}, args...), os.Stdin, os.Stdout, os.Stderr)
 }
 

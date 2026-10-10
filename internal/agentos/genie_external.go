@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/qiangli/yoke/pkg/agentlaunch"
 	"github.com/qiangli/yoke/pkg/broker"
 	"github.com/qiangli/yoke/pkg/broker/door"
 	"github.com/qiangli/yoke/pkg/fleet"
@@ -135,6 +136,18 @@ func (g genieExternal) apply() {
 	os.Setenv("GENIE_EXTERNAL_CONTEXT", strconv.FormatInt(g.Context, 10))
 	os.Setenv("OPENAI_BASE_URL", g.BaseURL)
 	os.Setenv("OPENAI_API_KEY", g.Key)
+}
+
+// genieApplyApproval enables genie's workspace-scoped auto approval only when
+// the host permits an unattended agent launch and the caller has not chosen a
+// GENIE_APPROVAL policy of its own.
+func genieApplyApproval() {
+	if _, set := os.LookupEnv("GENIE_APPROVAL"); set {
+		return
+	}
+	if allowed, _ := agentlaunch.UnsafeLaunchAllowed(); allowed {
+		os.Setenv("GENIE_APPROVAL", "auto")
+	}
 }
 
 // genieEnsureDoor starts the host's model door; a seam so tests never start a
