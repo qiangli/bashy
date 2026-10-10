@@ -312,6 +312,12 @@ func (r *shellOutputReducer) wrapSinks(out, errOut io.Writer) (io.Writer, io.Wri
 
 func (r *shellOutputReducer) middleware(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 	return func(ctx context.Context, argv []string) error {
+		// Background commands may outlive this script. They must not hold a
+		// shared capture window that buffers later foreground writes until
+		// the background handler returns; $! makes that loss deterministic.
+		if interp.HandlerCtx(ctx).Async() {
+			return next(ctx, argv)
+		}
 		r.begin(argv)
 		err := next(ctx, argv)
 		status := 0

@@ -68,11 +68,10 @@ type agentsComment struct {
 }
 
 type agentsQueueStory struct {
-	ID   int64 `json:"id"`
-	Runs []struct {
-		Repo string `json:"repo"`
-		ID   int64  `json:"id"`
-	} `json:"runs"`
+	ID      int64             `json:"id"`
+	Column  string            `json:"column"`
+	Updated time.Time         `json:"updated_at,omitempty"`
+	Runs    []agentsSprintRun `json:"runs"`
 }
 
 type agentsSprintBoard struct {
@@ -98,8 +97,10 @@ type agentsSprintLease struct {
 }
 
 type agentsSprintRun struct {
-	Repo string `json:"repo"`
-	ID   int64  `json:"id"`
+	Repo  string    `json:"repo"`
+	ID    int64     `json:"id"`
+	Queue string    `json:"queue,omitempty"`
+	Born  time.Time `json:"born,omitempty"`
 }
 
 type agentsSprintBox struct {
@@ -537,12 +538,14 @@ func reconciledAgentRoster() ([]agentAssignment, error) {
 	if err != nil {
 		return nil, err
 	}
-	byRun := make(map[string]agentsSprint)
+	bySprint := make(map[int64]agentsSprint)
+	var links []weave.SprintRunLink
 	var out []agentAssignment
 	now := time.Now()
 	for _, sprint := range sprints {
+		bySprint[sprint.ID] = sprint
 		for _, run := range sprint.Runs {
-			byRun[runKey(run.Repo, run.ID)] = sprint
+			links = append(links, weave.SprintRunLink{Sprint: sprint.ID, Done: sprint.Column == "done", UpdatedAt: sprint.Updated, Repo: run.Repo, ID: run.ID, Queue: run.Queue, Born: run.Born})
 		}
 		if !activeSprintColumn(sprint.Column) || sprint.Lease == nil || strings.TrimSpace(sprint.Lease.Holder) == "" {
 			continue
@@ -591,19 +594,26 @@ func reconciledAgentRoster() ([]agentAssignment, error) {
 			// Older per-repo queues carried only the sprint/run link. Keep that
 			// link visible when the global sprint board is absent; the board is
 			// still preferred because it supplies the conductor/deadline facts.
+			queueLinks := append([]weave.SprintRunLink(nil), links...)
+			queueSprints := make(map[int64]agentsSprint, len(bySprint))
+			for id, sprint := range bySprint {
+				queueSprints[id] = sprint
+			}
 			for _, story := range q.Stories {
+				if _, global := bySprint[story.ID]; global {
+					continue
+				}
+				queueSprints[story.ID] = agentsSprint{ID: story.ID, Column: story.Column, Updated: story.Updated}
 				for _, run := range story.Runs {
-					key := runKey(run.Repo, run.ID)
-					if _, ok := byRun[key]; !ok {
-						byRun[key] = agentsSprint{ID: story.ID}
-					}
+					queueLinks = append(queueLinks, weave.SprintRunLink{Sprint: story.ID, Done: story.Column == "done", UpdatedAt: story.Updated, Repo: run.Repo, ID: run.ID, Queue: run.Queue, Born: run.Born})
 				}
 			}
 			for _, item := range q.Items {
 				if !agentItemActive(item) {
 					continue
 				}
-				sprint, hasSprint := byRun[runKey(repo, item.ID)]
+				sprintID := weave.SprintForRun(queueLinks, repo, item.ID, entry.Name(), item.Created)
+				sprint, hasSprint := queueSprints[sprintID]
 				a := agentAssignment{
 					Agent: agentItemName(item), Role: "worker", Owner: item.Owner,
 					Repo: repo, Run: item.ID, State: item.State, Title: item.Title,

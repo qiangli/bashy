@@ -41,10 +41,7 @@ func TestAgentRosterFiltersToWorkingAssignments(t *testing.T) {
 		{ID: 1, Title: "working task", State: "working", Tool: "codex", Owner: "codex-worker", WrapperPID: os.Getpid(), StartedAt: time.Now().Add(-2 * time.Minute)},
 		{ID: 2, Title: "paused task", State: "paused", Tool: "claude", Owner: "claude-worker"},
 		{ID: 3, Title: "done task", State: "done", Tool: "agy", Owner: "agy-worker"},
-	}, Stories: []agentsQueueStory{{ID: 9, Runs: []struct {
-		Repo string `json:"repo"`
-		ID   int64  `json:"id"`
-	}{{Repo: "demo", ID: 1}}}}})
+	}, Stories: []agentsQueueStory{{ID: 9, Runs: []agentsSprintRun{{Repo: "demo", ID: 1}}}}})
 	var out bytes.Buffer
 	if err := renderAgentRoster(&out, false); err != nil {
 		t.Fatal(err)
@@ -802,4 +799,37 @@ func TestSprintConductorHealthReportsAnOverrunCycle(t *testing.T) {
 			t.Fatalf("health = %q, want stale", health)
 		}
 	})
+}
+
+func TestAgentRosterRunGenerationRejectsReusedIDs(t *testing.T) {
+	home, sprintDir := t.TempDir(), t.TempDir()
+	useAgentsHome(t, home)
+	t.Setenv("BASHY_SPRINT_DIR", sprintDir)
+	old, now := time.Now().Add(-24*time.Hour), time.Now()
+	writeAgentsQueue(t, home, "demo-a1", agentsQueue{Root: "/work/demo", Items: []agentsQueueItem{{ID: 7, Title: "new-generation", State: "working", Owner: "worker", WrapperPID: os.Getpid(), Created: now, StartedAt: now}}})
+	oldSprint := agentsSprint{ID: 331, Column: "done", Updated: old, Runs: []agentsSprintRun{{Repo: "demo", ID: 7, Queue: "demo-a1", Born: old}}}
+	writeJSONFile(t, filepath.Join(sprintDir, "queue.json"), agentsSprintBoard{Stories: []agentsSprint{oldSprint}})
+	check := func(want int64) {
+		t.Helper()
+		rows, err := reconciledAgentRoster()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range rows {
+			if row.Title == "new-generation" {
+				if row.Sprint != want {
+					t.Fatalf("reused run attributed to %d, want %d", row.Sprint, want)
+				}
+				return
+			}
+		}
+		t.Fatal("new run not visible")
+	}
+	check(0)
+	current := agentsSprint{ID: 413, Column: "doing", Updated: now, Runs: []agentsSprintRun{{Repo: "demo", ID: 7, Queue: "demo-a1", Born: now}}}
+	writeJSONFile(t, filepath.Join(sprintDir, "queue.json"), agentsSprintBoard{Stories: []agentsSprint{oldSprint, current}})
+	check(413)
+	oldSprint.Runs[0].Born = time.Time{} // Legacy closed card predates the new run.
+	writeJSONFile(t, filepath.Join(sprintDir, "queue.json"), agentsSprintBoard{Stories: []agentsSprint{oldSprint}})
+	check(0)
 }
