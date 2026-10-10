@@ -3,13 +3,11 @@ package agentos
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -19,6 +17,7 @@ import (
 	"github.com/qiangli/yoke/pkg/bus"
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/meet"
+	"github.com/qiangli/yoke/pkg/policy/coord"
 	"github.com/qiangli/yoke/pkg/principal"
 	"github.com/qiangli/yoke/pkg/room"
 	"github.com/qiangli/yoke/pkg/weave"
@@ -342,20 +341,19 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 		return inboxWatcherClaim{}, err
 	}
 
-	// The kernel lock is the watcher lease. It closes the read-before-write
+	// The attached-mode coord claim is the watcher lease. It closes the read-before-write
 	// race between two fresh processes and also refuses two watcher loops in
 	// one process, since both would otherwise advance the same source cursors.
-	// This guard is generic — a person must not run two concurrent watchers of
-	// their own cursors any more than an agent may — so it is keyed on the
-	// resolved claim id, which is namespaced per identity kind.
-	claimDir := filepath.Join(room.Dir(), "claims")
-	if err := os.MkdirAll(claimDir, 0o700); err != nil {
-		return inboxWatcherClaim{}, fmt.Errorf("inbox: prepare watcher claims: %w", err)
-	}
-	claimPath := filepath.Join(claimDir, fmt.Sprintf("inbox-%x.lock", sha256.Sum256([]byte(id.claimID))))
-	claim, err := lockfile.TryAcquire(claimPath, lockfile.Holder{Name: id.name, Intent: "watch inbox"})
+	// Keyed by owner identity name under kind "inbox".
+	grant, lock, err := coord.AcquireAttachedRef(context.Background(), coord.Request{
+		Ref:    coord.Ref{Kind: "inbox", Name: id.name},
+		Holder: principal.Ref{Name: id.name},
+		Intent: task,
+		Mode:   coord.ModeAttached,
+	})
 	if err != nil {
-		if errors.Is(err, lockfile.ErrHeld) {
+		var conf *coord.Conflict
+		if errors.As(err, &conf) || errors.Is(err, lockfile.ErrHeld) {
 			return inboxWatcherClaim{}, fmt.Errorf("inbox: %s %q already has a live inbox watcher", id.kind, id.name)
 		}
 		return inboxWatcherClaim{}, fmt.Errorf("inbox: claim watcher identity %q: %w", id.name, err)
@@ -390,7 +388,7 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 		Cwd:          cwd,
 	}
 	if err := room.Join(card); err != nil {
-		_ = claim.Release()
+		_ = coord.ReleaseAttached(coord.DefaultDir(), grant.Claim, lock)
 		return inboxWatcherClaim{}, fmt.Errorf("inbox: register watcher %q: %w", id.name, err)
 	}
 	anchor := inboxWatcherAnchor(card)
@@ -402,7 +400,7 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 			// leaves the identity half-held, which reads as available in one
 			// surface and taken in the other.
 			room.Leave(card.ID)
-			_ = claim.Release()
+			_ = coord.ReleaseAttached(coord.DefaultDir(), grant.Claim, lock)
 		},
 		ownerLive: func() error {
 			if inboxOwnerRelation(os.Getpid(), anchor) == inboxOwnerGone {

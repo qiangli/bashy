@@ -15,6 +15,7 @@ func TestInboxRefusalNamesInboxAndIdentity(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("BASHY_ROOT", t.TempDir())
 	t.Setenv("BASHY_PRINCIPAL", "") // not an authenticated agent
+	t.Setenv("BASHY_INSTANCE", "")
 
 	_, err := resolveInboxReader("no-such-identity-xyz-404")
 	if err == nil {

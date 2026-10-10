@@ -78,6 +78,7 @@ func isolateUnifiedInbox(t *testing.T) {
 	t.Setenv("BASHY_MB_DIR", t.TempDir())
 	t.Setenv("BASHY_MAILBOX_DIR", t.TempDir())
 	t.Setenv("BASHY_ROOM_DIR", t.TempDir())
+	t.Setenv("BASHY_COORD_DIR", t.TempDir())
 	// The peer these tests talk to ("claude-opus5") used to ship in the
 	// embedded fleet baseline; that ring is tools-only now, so the test ring
 	// supplies the binding the same way an operator's overlay would.
@@ -521,6 +522,33 @@ func TestSprintInboxWatcherAdvertisesAttachedStream(t *testing.T) {
 	if card.Mode != "sprint-inbox" || !room.HasCapability(card, room.CapInboxStream) || room.HasCapability(card, room.CapInboxDelivery) {
 		t.Fatalf("sprint watcher advertised the wrong delivery contract: %#v", card)
 	}
+}
+
+func TestSprintInboxWatcherExclusivityViaCoord(t *testing.T) {
+	isolateUnifiedInbox(t)
+	const name = "sprint-watcher-sentinel"
+	if err := fleet.New().SaveAgent(fleet.Agent{Name: name, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
+		t.Fatal(err)
+	}
+	claim, err := registerSprintInboxWatcher(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Second claim fails while first is held.
+	if _, err := registerSprintInboxWatcher(name); err == nil || !strings.Contains(err.Error(), "already has a live inbox watcher") {
+		t.Fatalf("second sprint watcher claim error = %v, want conflict", err)
+	}
+
+	// Release first claim.
+	claim.leave()
+
+	// Third claim succeeds after release.
+	claim2, err := registerSprintInboxWatcher(name)
+	if err != nil {
+		t.Fatalf("subsequent sprint watcher claim failed: %v", err)
+	}
+	claim2.leave()
 }
 
 func TestInboxWatcherRefusesASecondLiveClaimOfTheSameIdentity(t *testing.T) {
