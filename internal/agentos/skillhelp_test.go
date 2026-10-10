@@ -58,6 +58,11 @@ func TestSkillHelpClassicSnapshots(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := skillHelpProcess(t, "classic", name, "--help")
 			path := filepath.Join("testdata", "skillhelp", name+".classic")
+			if os.Getenv("BASHY_UPDATE_SKILL_GOLDEN") == "1" {
+				if err := os.WriteFile(path, got, 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
 			want, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)

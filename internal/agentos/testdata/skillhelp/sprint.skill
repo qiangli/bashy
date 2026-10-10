@@ -9,6 +9,45 @@ description: "cross-repo plan/continuity board (peer to weave)"
 Translate the user's request into Bashy sprint commands. This skill is the
 agent-facing `/sprint` adapter; do not build or invoke a second prompt parser.
 
+## Default maintenance sprint — #9999
+
+Use #9999 for a quick fix or an urgent task unrelated to the current sprint.
+Commands that address one sprint default to #9999 when its operand is omitted;
+explicit sprint operands always take precedence. `bashy sprint` still shows
+the whole board, and `sprint add` creates a new ordinary numbered sprint.
+
+Repository `bashy todo add "fix something"` defaults to #9999 and tracks the
+repository automatically. Use `--sprint N` for another sprint or `--no-sprint`
+for an unlinked todo. Personal todos remain unlinked by default; maintenance
+stories use a repository store (`--repo` or `--base-dir`). Zero still means
+unlinked, including `todo edit ID --sprint 0`.
+
+#9999 is reserved and created on first selection; ordinary numbering skips it
+without jumping ahead. It follows the same lifecycle and authorization rules
+as other sprints. Read its card and the story, keep an active manager when
+coordinating work, and move backlog/done to doing before claiming. Never assume
+filing a story reopens the sprint or appoints a manager. Its built-in brief
+provides the initial goal/plan; each fix's story carries scope and acceptance.
+
+```text
+bashy todo add "fix something" --note "Problem, expected behavior, verification"
+bashy sprint show
+bashy sprint take --owner YOUR_REGISTERED_AGENT
+bashy sprint move doing
+bashy sprint claim STORY_ID --owner YOUR_REGISTERED_AGENT
+bashy sprint submit STORY_ID --as YOUR_REGISTERED_AGENT -m "delivery evidence"
+bashy sprint accept STORY_ID -m "manager verification"
+bashy sprint handoff -m "completed work and remaining stories"
+```
+
+Reuse the existing manager instead of taking an occupied lease. Acceptance is
+performed by the current manager under the normal lease checks. For a comment
+without a sprint operand, use `sprint comment -m "text"`. Start, stop, end and
+advance work normally; no recurring flag is needed for an individual fix.
+Delivery commits carry `Sprint: #9999`, `Story:` and `Story-ID:` trailers.
+This is a host-wide default across repositories; portable UUIDs do not sync
+manager leases or threads across machines.
+
 ## Resolve the manager
 
 - Never choose a default manager or guess an identity.
@@ -64,6 +103,27 @@ sprint is the conductor's PLAN/HANDOFF layer — the cross-repo kanban
 above weave. A sprint is one initiative that spans multiple repos; its
 runs are executed per-repo by `bashy weave`. The board is user-global;
 `bashy sprint` (no subcommand) shows it.
+
+DEFAULT SPRINT — #9999 Maintenance. Omit the sprint operand on commands
+that address one sprint to select #9999: sprint show, sprint take --owner
+NAME, sprint claim STORY, sprint submit STORY -m "evidence", and sprint
+accept STORY -m "verified evidence". Explicit sprint operands always win.
+Repository todo add also defaults to #9999; --sprint N selects another
+sprint and --no-sprint creates a standalone todo. Personal todos remain
+standalone by default. For comments use sprint comment -m "text" when
+omitting the sprint; positional text follows an explicit sprint.
+
+#9999 is reserved: ordinary numbering skips it without jumping ahead.
+It is created automatically when first selected and behaves like any other
+sprint: normal manager eligibility/lease, kanban, start/stop/end/advance,
+claim/submit/accept, evidence and commit trailers. A backlog or done sprint
+must be moved to doing before claims. Filing work does not reopen it or pick
+a manager. The default card ships a maintenance brief; individual stories
+carry their own scope and acceptance. Use it for an urgent fix unrelated to
+your active sprint, or a quick new session. Maintenance is shared across
+repos on this host; its UUID travels with stories, but leases and threads
+are not synchronized between hosts. Board/status/who remain whole-board
+views; sprint add still creates a new numbered sprint.
 
 Each sprint card carries a spec-ref, acceptance, a kanban column, a
 CONTINUITY record (the resume brief), a conductor LEASE, and cross-repo

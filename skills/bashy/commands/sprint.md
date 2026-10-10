@@ -8,6 +8,45 @@ description: Start or direct a Bashy sprint while requiring an explicit canonica
 Translate the user's request into Bashy sprint commands. This skill is the
 agent-facing `/sprint` adapter; do not build or invoke a second prompt parser.
 
+## Default maintenance sprint — #9999
+
+Use #9999 for a quick fix or an urgent task unrelated to the current sprint.
+Commands that address one sprint default to #9999 when its operand is omitted;
+explicit sprint operands always take precedence. `bashy sprint` still shows
+the whole board, and `sprint add` creates a new ordinary numbered sprint.
+
+Repository `bashy todo add "fix something"` defaults to #9999 and tracks the
+repository automatically. Use `--sprint N` for another sprint or `--no-sprint`
+for an unlinked todo. Personal todos remain unlinked by default; maintenance
+stories use a repository store (`--repo` or `--base-dir`). Zero still means
+unlinked, including `todo edit ID --sprint 0`.
+
+#9999 is reserved and created on first selection; ordinary numbering skips it
+without jumping ahead. It follows the same lifecycle and authorization rules
+as other sprints. Read its card and the story, keep an active manager when
+coordinating work, and move backlog/done to doing before claiming. Never assume
+filing a story reopens the sprint or appoints a manager. Its built-in brief
+provides the initial goal/plan; each fix's story carries scope and acceptance.
+
+```text
+bashy todo add "fix something" --note "Problem, expected behavior, verification"
+bashy sprint show
+bashy sprint take --owner YOUR_REGISTERED_AGENT
+bashy sprint move doing
+bashy sprint claim STORY_ID --owner YOUR_REGISTERED_AGENT
+bashy sprint submit STORY_ID --as YOUR_REGISTERED_AGENT -m "delivery evidence"
+bashy sprint accept STORY_ID -m "manager verification"
+bashy sprint handoff -m "completed work and remaining stories"
+```
+
+Reuse the existing manager instead of taking an occupied lease. Acceptance is
+performed by the current manager under the normal lease checks. For a comment
+without a sprint operand, use `sprint comment -m "text"`. Start, stop, end and
+advance work normally; no recurring flag is needed for an individual fix.
+Delivery commits carry `Sprint: #9999`, `Story:` and `Story-ID:` trailers.
+This is a host-wide default across repositories; portable UUIDs do not sync
+manager leases or threads across machines.
+
 ## Resolve the manager
 
 - Never choose a default manager or guess an identity.

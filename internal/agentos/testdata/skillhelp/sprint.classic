@@ -3,6 +3,27 @@ above weave. A sprint is one initiative that spans multiple repos; its
 runs are executed per-repo by `bashy weave`. The board is user-global;
 `bashy sprint` (no subcommand) shows it.
 
+DEFAULT SPRINT — #9999 Maintenance. Omit the sprint operand on commands
+that address one sprint to select #9999: sprint show, sprint take --owner
+NAME, sprint claim STORY, sprint submit STORY -m "evidence", and sprint
+accept STORY -m "verified evidence". Explicit sprint operands always win.
+Repository todo add also defaults to #9999; --sprint N selects another
+sprint and --no-sprint creates a standalone todo. Personal todos remain
+standalone by default. For comments use sprint comment -m "text" when
+omitting the sprint; positional text follows an explicit sprint.
+
+#9999 is reserved: ordinary numbering skips it without jumping ahead.
+It is created automatically when first selected and behaves like any other
+sprint: normal manager eligibility/lease, kanban, start/stop/end/advance,
+claim/submit/accept, evidence and commit trailers. A backlog or done sprint
+must be moved to doing before claims. Filing work does not reopen it or pick
+a manager. The default card ships a maintenance brief; individual stories
+carry their own scope and acceptance. Use it for an urgent fix unrelated to
+your active sprint, or a quick new session. Maintenance is shared across
+repos on this host; its UUID travels with stories, but leases and threads
+are not synchronized between hosts. Board/status/who remain whole-board
+views; sprint add still creates a new numbered sprint.
+
 Each sprint card carries a spec-ref, acceptance, a kanban column, a
 CONTINUITY record (the resume brief), a conductor LEASE, and cross-repo
 run links {repo, id}. Durability (survive Ctrl+C / SIGKILL / token
