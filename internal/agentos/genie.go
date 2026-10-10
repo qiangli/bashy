@@ -34,7 +34,7 @@ import (
 	"github.com/qiangli/yoke/pkg/broker/door"
 )
 
-const genieUsage = `usage: bashy genie [-m MODEL] "MESSAGE"   one turn in this directory; the answer on stdout
+const genieUsage = `usage: bashy genie [-m MODEL] [--effort LEVEL] "MESSAGE"   one turn in this directory; the answer on stdout
        ... | bashy genie [-m MODEL]       the same, the message read from stdin
        bashy genie [-m MODEL]             hand off terminal use to bashy ycode
        bashy genie web [-m MODEL]         hand off the browser chat page to bashy ycode web
@@ -51,7 +51,9 @@ The model is picked for this host unless -m (or GENIE_MODEL_ID) names one.
 that provider's OpenAI-compatible endpoint and starts no local model server —
 the way to run genie on a host too small for a local model.
 Environment: GENIE_BAR (bundle path), GENIE_SOURCE (source directory),
-GENIE_MODEL_ID (model override), YCODE_BIN (another ycode; default: the
+GENIE_MODEL_ID (model override), GENIE_EFFORT (reasoning effort sent with every
+model request: none|minimal|low|medium|high|xhigh; --effort LEVEL sets it, and a
+fleet agent binding's declared effort arrives the same way), YCODE_BIN (another ycode; default: the
 built-in bashy ycode); the bundle's dag.md documents the rest.
 `
 
@@ -62,6 +64,11 @@ func dispatchGenie(args []string) int {
 func dispatchGenieWithHandoff(args []string, handoff bool) int {
 	if handoff {
 		os.Unsetenv("GENIE_YCODE_SESSION")
+	}
+	args, err := genieApplyEffort(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy genie:", err)
+		return 2
 	}
 	prefixLiteral := len(args) > 0 && args[0] == "--" ||
 		len(args) > 2 && (args[0] == "-m" || args[0] == "--model") && args[2] == "--" ||
@@ -105,6 +112,9 @@ func dispatchGenieWithHandoff(args []string, handoff bool) int {
 	if literalMessage {
 		// The first parse already removed --; a second parse would mistake
 		// literal message text such as -filter for an option.
+	} else if args, err = genieApplyEffort(args); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy genie:", err)
+		return 2
 	} else if again, rest, err := genieModelFlag(args); err != nil {
 		fmt.Fprintln(os.Stderr, "bashy genie:", err)
 		return 2
@@ -166,6 +176,11 @@ func modelArgs(model string) []string {
 // prepares the caller workspace and model endpoint before reentering ycode
 // with a generated config.
 func dispatchYcode(args []string) int {
+	args, err := genieApplyEffort(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy ycode:", err)
+		return 2
+	}
 	if YcodeMain == nil {
 		fmt.Fprintln(os.Stderr, "bashy ycode: not in this build")
 		return 2
@@ -314,6 +329,79 @@ func genieModelFlag(args []string) (string, []string, error) {
 		}
 	}
 	return model, rest, nil
+}
+
+// genieEfforts are the reasoning-effort levels genie's model requests accept
+// (GENIE_EFFORT in the genie bundle).
+var genieEfforts = []string{"none", "minimal", "low", "medium", "high", "xhigh"}
+
+func genieValidEffort(effort string) (string, error) {
+	effort = strings.ToLower(strings.TrimSpace(effort))
+	for _, level := range genieEfforts {
+		if effort == level {
+			return effort, nil
+		}
+	}
+	return "", fmt.Errorf("effort %q is not one of %s", effort, strings.Join(genieEfforts, ", "))
+}
+
+// genieEffortFlag takes --effort LEVEL (or --effort=LEVEL) from the option
+// words before the message, leaving every other word in place. Like
+// genieModelFlag it stops at the first word that is not an option and at --.
+func genieEffortFlag(args []string) (string, []string, error) {
+	effort := ""
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--" || !strings.HasPrefix(arg, "-"):
+			return effort, append(rest, args[i:]...), nil
+		case arg == "--effort" || strings.HasPrefix(arg, "--effort="):
+			value := strings.TrimPrefix(arg, "--effort=")
+			if arg == "--effort" {
+				if i+1 >= len(args) {
+					return "", nil, fmt.Errorf("--effort needs a level (%s)", strings.Join(genieEfforts, ", "))
+				}
+				i++
+				value = args[i]
+			}
+			level, err := genieValidEffort(value)
+			if err != nil {
+				return "", nil, fmt.Errorf("--effort: %w", err)
+			}
+			effort = level
+		case (arg == "-m" || arg == "--model") && i+1 < len(args):
+			rest = append(rest, arg, args[i+1])
+			i++
+		default:
+			rest = append(rest, arg)
+		}
+	}
+	return effort, rest, nil
+}
+
+// genieApplyEffort exports the run's reasoning effort as GENIE_EFFORT, which
+// the genie bundle puts on every model request. --effort wins; otherwise the
+// environment's own value stands, which is how a fleet agent binding's
+// declared effort reaches genie. A bad value is refused here rather than
+// forwarded to a provider that would reject every request.
+func genieApplyEffort(args []string) ([]string, error) {
+	effort, rest, err := genieEffortFlag(args)
+	if err != nil {
+		return nil, err
+	}
+	if effort == "" {
+		env := strings.TrimSpace(os.Getenv("GENIE_EFFORT"))
+		if env == "" {
+			os.Unsetenv("GENIE_EFFORT")
+			return rest, nil
+		}
+		if effort, err = genieValidEffort(env); err != nil {
+			return nil, fmt.Errorf("GENIE_EFFORT: %w", err)
+		}
+	}
+	os.Setenv("GENIE_EFFORT", effort)
+	return rest, nil
 }
 
 // genieHome is where the installed bundle lives: $BASHY_HOME/genie, else
