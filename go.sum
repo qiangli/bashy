@@ -921,6 +921,8 @@ github.com/qiangli/outpost v0.14.38-0.20261010024528-ab95d4b5f012 h1:742Rv2DgXBV
 github.com/qiangli/outpost v0.14.38-0.20261010024528-ab95d4b5f012/go.mod h1:qgtnUUn1E1w4jy6h/WP2Dl/MEmI+lmVE66xyt3Zy7P0=
 github.com/qiangli/outpost v0.14.38-0.20261010222738-54087a004047 h1:/sN/WGO5Gf3vGygH1QgZJnc8pNqS28ubolikqIJ6fhc=
 github.com/qiangli/outpost v0.14.38-0.20261010222738-54087a004047/go.mod h1:/vM/NR3ANC5qe+FCoXuhB762YfAA7euBWCSjXoBfyeU=
+github.com/qiangli/outpost v0.14.38-0.20261010232706-c80793aeea3a h1:vtxq2LYuk2ENxtRF0oQGrMnv/O50DjdT9+GgYSVGHKo=
+github.com/qiangli/outpost v0.14.38-0.20261010232706-c80793aeea3a/go.mod h1:5wwYJcL/Efqz54eBiujthiiXJN3OtHg7scqETw9237c=
 github.com/qiangli/podman/v6 v6.0.0-20261009064533-4a9784029284 h1:xY4UGrfax5NP7uMWtQf8rKjVZalnOzjgRmUvlLsY1YE=
 github.com/qiangli/podman/v6 v6.0.0-20261009064533-4a9784029284/go.mod h1:+C+QQBrwX7y74xeelGZiKVldep+jKG8uX9FM8ll/qaU=
 github.com/qiangli/readline v0.1.4-0.20261009064530-fb482a5af0cb h1:/vWYlrAFfL18rpxo2A/LYQQBB10prsoxdQiU4+WYuhQ=
@@ -935,6 +937,8 @@ github.com/qiangli/yoke v0.0.0-20261010210316-43e460bd49f6 h1:6vDt4Qktk0muQonivo
 github.com/qiangli/yoke v0.0.0-20261010210316-43e460bd49f6/go.mod h1:Vpw+JcY6aXtCFdjyokP3zkFiGOyzK6sXHaCQRki6v6E=
 github.com/qiangli/yoke v0.0.0-20261010222016-1ea229078706 h1:vOhZ3SVEmo5xjyZtDiaMMeCOVzeku5s+vThfnCAW+mI=
 github.com/qiangli/yoke v0.0.0-20261010222016-1ea229078706/go.mod h1:Vpw+JcY6aXtCFdjyokP3zkFiGOyzK6sXHaCQRki6v6E=
+github.com/qiangli/yoke v0.0.0-20261010231603-5272b6b937e1 h1:L9JN62T2EyzQjFvdf1JDOuJlbNQjbGhKI6Xg9diLql0=
+github.com/qiangli/yoke v0.0.0-20261010231603-5272b6b937e1/go.mod h1:Vpw+JcY6aXtCFdjyokP3zkFiGOyzK6sXHaCQRki6v6E=
 github.com/qiangli/yoke/external/otel v0.0.0-20261010193123-dc4e2b178750 h1:P5eXD/3lfUmG7fyiV4rGLruFK4cmm+JxWyE+4VCRvgY=
 github.com/qiangli/yoke/external/otel v0.0.0-20261010193123-dc4e2b178750/go.mod h1:89r2PcLF/qnPCk89v66vOqevuMw7UFc4AZCRoWLzopU=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261010193123-dc4e2b178750 h1:3t2KCJf1VZxfgjLf0Oulo7CDAne3S4A4vzS1PTuJwo8=
