@@ -135,7 +135,7 @@ func TestClaimGuardSkipsRegistryLookupForShippedVerbs(t *testing.T) {
 }
 
 func BenchmarkClaimGuardMiddlewareShippedVerb(b *testing.B) {
-	b.Setenv("CLAUDE_CODE", "1")
+	b.Setenv("CLAUDECODE", "1")
 	b.Setenv("BASHY_COORD_DIR", b.TempDir())
 	mw := claimGuardMiddleware(func(context.Context, []string) error { return nil })
 	argv := []string{"ls", "-l"}

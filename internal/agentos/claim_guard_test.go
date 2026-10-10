@@ -28,7 +28,10 @@ func setupIsolatedCoord(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("BASHY_COORD_DIR", dir)
-	t.Setenv("CLAUDE_CODE", "1")
+	// CLAUDECODE is the marker Claude Code actually exports and the one
+	// fleet.DetectTool recognizes; CLAUDE_CODE is not a marker, so a clean
+	// (agent-free) host would leave coordEnabled false and the guard unexercised.
+	t.Setenv("CLAUDECODE", "1")
 	return dir
 }
 

@@ -99,6 +99,11 @@ func TestAgenticExampleProductEntries(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte(provider), 0700); err != nil {
 		t.Fatal(err)
 	}
+	// codex is a managed (pinned) tool: without the operator override the
+	// launcher downloads the real pin into the isolated cache and runs it,
+	// which never reaches this fixture and blocks on auth/network. The override
+	// is the launcher's own explicit-binary path, so it stays governed.
+	t.Setenv("BASHY_TOOL_BINARY_CODEX", filepath.Join(bin, "codex"))
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
 	launcher := "#!/bin/sh\nexec " + quote(exe) + " -test.run=TestAgenticExampleCLIHelper -- \"$@\"\n"
 	if err := os.WriteFile(filepath.Join(bin, "bashy"), []byte(launcher), 0700); err != nil {
