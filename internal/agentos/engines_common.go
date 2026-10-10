@@ -7,11 +7,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/qiangli/yoke/pkg/binmgr"
+	"github.com/qiangli/yoke/pkg/broker/door"
 	"github.com/qiangli/yoke/pkg/policy/coord"
 )
 
@@ -34,34 +38,60 @@ func engineAlias(name string) string {
 	return name
 }
 
-// podmanMachineName extracts the target machine name from podman/oci/sandbox arguments,
-// defaulting to "bashy".
+// podmanGlobalValueFlags are podman's global options whose value is a separate
+// argument (`--root /x`). Skipping only the flag would leave the value looking
+// like the subcommand. Boolean globals (--remote, --debug, --syslog, ...) are
+// not listed: they take no value.
+var podmanGlobalValueFlags = map[string]bool{
+	"--cdi-spec-dir": true, "--cgroup-manager": true, "--config": true, "--conmon": true,
+	"--context": true, "--cpu-profile": true, "--default-mounts-file": true,
+	"--events-backend": true, "--hooks-dir": true, "--host": true, "-H": true,
+	"--identity": true, "--imagestore": true, "--log-level": true, "--max-workers": true,
+	"--memory-profile": true, "--module": true, "--namespace": true,
+	"--network-backend": true, "--network-config-dir": true, "--out": true,
+	"--pull-option": true, "--registries-conf": true, "--root": true,
+	"--runroot": true, "--runtime": true, "--runtime-flag": true,
+	"--ssh": true, "--storage-driver": true, "--storage-opt": true,
+	"--tls-ca-file": true, "--tls-cert-file": true, "--tls-details-file": true, "--tls-key-file": true,
+	"--tmpdir": true, "--url": true, "--volumepath": true,
+}
+
+// podmanMachineName resolves the engine target of a podman/oci/sandbox
+// invocation, defaulting to "bashy".
+//
+// It reads GLOBAL flags only: -c/--connection (and bashy's --machine) select
+// the target before the subcommand, and from the subcommand on every argument
+// is that command's own payload — `podman run -c 512 alpine` passes -c as CPU
+// shares and runs on the default target. Parsing stops at the subcommand.
 func podmanMachineName(args []string) string {
-	for i := 0; i < len(args); i++ {
+	i := 0
+	for ; i < len(args); i++ {
 		a := args[i]
-		if a == "--connection" || a == "-c" {
-			if i+1 < len(args) {
-				return args[i+1]
+		if a == "--" || a == "-" || !strings.HasPrefix(a, "-") {
+			break
+		}
+		name, val, hasVal := strings.Cut(a, "=")
+		switch {
+		case name == "--connection" || name == "-c" || name == "--machine":
+			if !hasVal && i+1 < len(args) {
+				i++
+				val = args[i]
 			}
-		} else if strings.HasPrefix(a, "--connection=") {
-			return strings.TrimPrefix(a, "--connection=")
-		} else if strings.HasPrefix(a, "-c=") {
-			return strings.TrimPrefix(a, "-c=")
-		} else if a == "--machine" {
-			if i+1 < len(args) {
-				return args[i+1]
+			if v := strings.TrimSpace(val); v != "" {
+				return v
 			}
-		} else if strings.HasPrefix(a, "--machine=") {
-			return strings.TrimPrefix(a, "--machine=")
+		case !strings.HasPrefix(a, "--") && strings.HasPrefix(a, "-c") && len(a) > 2:
+			if v := strings.TrimSpace(a[2:]); v != "" { // pflag's -cNAME form
+				return v
+			}
+		case podmanGlobalValueFlags[name] && !hasVal:
+			i++
 		}
 	}
-	for i := 0; i < len(args); i++ {
-		if args[i] == "machine" && i+2 < len(args) {
-			sub := args[i+1]
-			name := args[i+2]
-			if !strings.HasPrefix(sub, "-") && !strings.HasPrefix(name, "-") {
-				return name
-			}
+	if i+2 < len(args) && args[i] == "machine" {
+		sub, name := args[i+1], args[i+2]
+		if !strings.HasPrefix(sub, "-") && !strings.HasPrefix(name, "-") {
+			return name
 		}
 	}
 	if v := strings.TrimSpace(os.Getenv("CONTAINER_CONNECTION")); v != "" {
@@ -70,63 +100,94 @@ func podmanMachineName(args []string) string {
 	return "bashy"
 }
 
-// ollamaInstanceName extracts the target instance name from ollama arguments,
-// defaulting to "bashy".
-func ollamaInstanceName(args []string) string {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if a == "--instance" {
-			if i+1 < len(args) {
-				return args[i+1]
-			}
-		} else if strings.HasPrefix(a, "--instance=") {
-			return strings.TrimPrefix(a, "--instance=")
+// ollamaInstanceName names the ollama instance an invocation will reach, derived
+// from the endpoint the engine is actually routed to — never from a separate
+// selector the router does not read. applyOllamaIsolationEnv (engines_stub.go)
+// routes by OLLAMA_HOST, falling back to bashy's managed endpoint, so this does
+// the same: unset or a managed endpoint is "bashy", an explicit OLLAMA_HOST is
+// its normalized host:port (scheme, path, token and credentials dropped).
+func ollamaInstanceName() string {
+	raw := strings.TrimSpace(os.Getenv("OLLAMA_HOST"))
+	if raw == "" {
+		return "bashy"
+	}
+	scheme := ""
+	if i := strings.Index(raw, "://"); i >= 0 {
+		scheme, raw = strings.ToLower(raw[:i]), raw[i+3:]
+	}
+	if i := strings.IndexByte(raw, '/'); i >= 0 {
+		raw = raw[:i]
+	}
+	if i := strings.LastIndexByte(raw, '@'); i >= 0 {
+		raw = raw[i+1:]
+	}
+	host, port, err := net.SplitHostPort(raw)
+	if err != nil {
+		host, port = strings.Trim(raw, "[]"), "11434"
+		if scheme == "https" {
+			port = "443"
 		}
 	}
-	if v := strings.TrimSpace(os.Getenv("BASHY_OLLAMA_INSTANCE")); v != "" {
-		return v
+	host = strings.ToLower(host)
+	switch host {
+	case "", "localhost", "0.0.0.0", "::":
+		host = "127.0.0.1"
 	}
-	return "bashy"
+	if host == "127.0.0.1" && (port == "11435" || port == strconv.Itoa(door.Port())) {
+		return "bashy" // the managed raw engine or its door
+	}
+	return net.JoinHostPort(host, port)
+}
+
+// engineClaimUse is the coord use an engine front-door invocation takes beyond
+// the command claim, resolved from the same arguments and environment the
+// engine will run with.
+func engineClaimUse(name string, args []string) (coord.Use, bool) {
+	switch engineAlias(name) {
+	case "podman":
+		return coord.Use{Kind: "sandbox", Name: podmanMachineName(args)}, true
+	case "ollama":
+		return coord.Use{Kind: "ollama", Name: ollamaInstanceName()}, true
+	}
+	return coord.Use{}, false
+}
+
+// engineClaimCovered is set by claimGuardMiddleware once its single Guard call
+// has already included the engine use, so the front door does not guard twice.
+// It only counts while a front-door invocation is running through the observing
+// chain (frontDoorObserving).
+var engineClaimCovered atomic.Bool
+
+func engineGuardCovered() bool {
+	return frontDoorObserving.Load() && engineClaimCovered.Load()
+}
+
+// guardEngineUse guards one engine front door. Returns 0 to proceed (also when
+// the ledger itself fails — see claimCheckUnavailable), or coordExitRefused (9)
+// on conflict.
+func guardEngineUse(name string, args []string) int {
+	if !coordEnabled() || engineGuardCovered() {
+		return 0
+	}
+	use, ok := engineClaimUse(name, args)
+	if !ok {
+		return 0
+	}
+	if claimRefused(claimGuardFn(context.Background(), coord.Self(), use)) {
+		return coordExitRefused
+	}
+	return 0
 }
 
 // guardSandbox guards the podman/oci/sandbox front door.
-// Returns 0 to proceed (also when the ledger itself fails — see claimCheckUnavailable),
-// or coordExitRefused (9) on conflict.
-func guardSandbox(args []string) int {
-	if !coordEnabled() {
-		return 0
-	}
-	machine := podmanMachineName(args)
-	if claimRefused(claimGuardFn(context.Background(), coord.Self(), coord.Use{Kind: "sandbox", Name: machine})) {
-		return coordExitRefused
-	}
-	return 0
-}
+func guardSandbox(args []string) int { return guardEngineUse("podman", args) }
 
-// guardOllama guards the managed ollama front door.
-// Returns 0 to proceed (also when the ledger itself fails — see claimCheckUnavailable),
-// or coordExitRefused (9) on conflict.
-func guardOllama(args []string) int {
-	if !coordEnabled() {
-		return 0
-	}
-	instance := ollamaInstanceName(args)
-	if claimRefused(claimGuardFn(context.Background(), coord.Self(), coord.Use{Kind: "ollama", Name: instance})) {
-		return coordExitRefused
-	}
-	return 0
-}
+// guardOllama guards the managed ollama front door. Its target comes from the
+// resolved endpoint, so args do not select it.
+func guardOllama(args []string) int { return guardEngineUse("ollama", args) }
 
 // guardEngine runs the front-door guard for container and LLM engines.
-func guardEngine(name string, args []string) int {
-	switch engineAlias(name) {
-	case "podman":
-		return guardSandbox(args)
-	case "ollama":
-		return guardOllama(args)
-	}
-	return 0
-}
+func guardEngine(name string, args []string) int { return guardEngineUse(name, args) }
 
 // ollamaCloudTarget reports whether an `ollama` invocation targets ollama.com's
 // HOSTED CLOUD rather than the local runtime: a ":cloud"-suffixed model (e.g.
