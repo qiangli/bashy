@@ -14,11 +14,11 @@ require (
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pkg/sftp v1.13.10
-	github.com/qiangli/coreutils v0.0.0-20261009201221-a50cc1f27e6f
-	github.com/qiangli/ycode v0.3.1-dev.0.20261010181835-56b03375e648
+	github.com/qiangli/coreutils v0.0.0-20261010190610-9ab2513fb087
+	github.com/qiangli/ycode v0.3.1-dev.0.20261010190905-e4199a12b571
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261010185833-2925a0719c8a
-	github.com/qiangli/yoke/external/otel v0.0.0-20261010150054-5c32c2a188e6
+	github.com/qiangli/yoke v0.0.0-20261010190706-77f67a30958b
+	github.com/qiangli/yoke/external/otel v0.0.0-20261010190706-77f67a30958b
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
@@ -352,8 +352,8 @@ require (
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/qiangli/gfy v0.0.0-20261009070616-1a9d12418c8d // indirect
 	github.com/qiangli/outpost v0.14.38-0.20261010024528-ab95d4b5f012 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261010185833-2925a0719c8a // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261010150054-5c32c2a188e6 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261010190706-77f67a30958b // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261010190706-77f67a30958b // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
@@ -507,7 +507,7 @@ replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261010183127-da25e2e
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
-replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261009201221-a50cc1f27e6f
+replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261010190610-9ab2513fb087
 
 replace github.com/jaegertracing/jaeger => github.com/qiangli/jaeger v0.0.0-20260426223533-5aaa7eb1f040
 
@@ -537,6 +537,6 @@ replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/
 // Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
 replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261009064153-466dad1c3aef
 
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261010181835-56b03375e648
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261010190905-e4199a12b571
 
 tool github.com/qiangli/outpost/cmd/outpost
