@@ -14,6 +14,8 @@ import (
 
 	"mvdan.cc/sh/v3/interp"
 
+	"github.com/qiangli/coreutils/tool"
+	"github.com/qiangli/yoke/pkg/atlas"
 	_ "github.com/qiangli/yoke/pkg/fleet/fleetkinds"
 	"github.com/qiangli/yoke/pkg/handoff"
 	"github.com/qiangli/yoke/pkg/policy/coord"
@@ -257,19 +259,47 @@ func claimRefused(err error) bool {
 	return false
 }
 
-// resolveCommandVerb unwraps `bashy X` / `command bashy X` and resolves registered commands.
-func resolveCommandVerb(args []string) string {
+// claimRegisteredLookup is the registered-ring lookup the claim guard uses,
+// held in a var so a test can count how often a command pays for it.
+var claimRegisteredLookup = registeredLookup
+
+// isShippedVerb reports whether name is a command bashy itself ships — a shell
+// builtin, a coreutils applet, or a front-door verb. A registered record can
+// never shadow one (see reservedCommandName), so resolving it through the ring
+// is wasted work: registeredLookup stats and lists the ring directories on
+// every call. In-memory lookups only.
+func isShippedVerb(name string) bool {
+	if interp.IsBuiltin(name) || tool.Lookup(name) != nil {
+		return true
+	}
+	if _, ok := atlas.Lookup(name); ok {
+		return true
+	}
+	for _, list := range [][]string{alwaysShimVerbs, directFrontDoorVerbs, agentModeShimVerbs, hiddenFrontDoorVerbs, curatedHiddenVerbs, {"docker", "sandbox"}, dispatchOnlyNames} {
+		if slices.Contains(list, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveCommandVerb unwraps `bashy X` / `command bashy X`, returning the verb
+// and the arguments after it. A registered command alias resolves to its
+// canonical name; shipped commands skip the ring lookup entirely.
+func resolveCommandVerb(args []string) (verb string, rest []string) {
 	for len(args) > 1 && (baseName(args[0]) == "bashy" || baseName(args[0]) == "command") {
 		args = args[1:]
 	}
 	if len(args) == 0 {
-		return ""
+		return "", nil
 	}
-	verb := baseName(args[0])
-	if r, ok := registeredLookup(verb); ok && r.Name != "" {
-		return r.Name
+	verb = baseName(args[0])
+	if !isShippedVerb(verb) {
+		if r, ok := claimRegisteredLookup(verb); ok && r.Name != "" {
+			verb = r.Name
+		}
 	}
-	return verb
+	return verb, args[1:]
 }
 
 // isClaimExemptCommand reports whether a command verb is exempt from claim guarding.
@@ -288,17 +318,30 @@ func isClaimExemptCommand(verb string) bool {
 
 // claimGuardMiddleware stops an agent from running a command claimed by another agent.
 // It covers BOTH front-door verbs (Dispatch -> observing chain) and in-shell external commands.
+//
+// One invocation takes ONE coord.Guard call: the command use, plus the engine
+// use when the verb is a container/LLM front door. Each Guard call takes
+// claims.lock, reads the ledger and enumerates backends, so the front door
+// reuses this call (engineClaimCovered) instead of making its own.
 func claimGuardMiddleware(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 	return func(ctx context.Context, args []string) error {
 		if !coordEnabled() || len(args) == 0 {
 			return next(ctx, args)
 		}
-		verb := resolveCommandVerb(args)
+		verb, rest := resolveCommandVerb(args)
 		if isClaimExemptCommand(verb) {
 			return next(ctx, args)
 		}
-		if claimRefused(claimGuardFn(ctx, coord.Self(), coord.Use{Kind: "command", Name: verb})) {
+		uses := []coord.Use{{Kind: "command", Name: verb}}
+		engineUse, isEngine := engineClaimUse(verb, rest)
+		if isEngine {
+			uses = append(uses, engineUse)
+		}
+		if claimRefused(claimGuardFn(ctx, coord.Self(), uses...)) {
 			return interp.ExitStatus(coordExitRefused)
+		}
+		if isEngine {
+			engineClaimCovered.Store(true)
 		}
 		return next(ctx, args)
 	}
