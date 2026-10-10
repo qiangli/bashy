@@ -78,13 +78,13 @@ basic-auth password (with user "oauth2", which GitHub accepts).`,
 		gitAddCmd(),
 		gitCommitCmd(),
 		gitStatusCmd(),
-		gitLogCmd(),
+		gitLogCmd(&external),
 		gitPushCmd(),
 		gitPullCmd(),
 		gitFetchCmd(),
 		gitBranchCmd(),
 		gitCheckoutCmd(),
-		gitDiffCmd(),
+		gitDiffCmd(&external),
 		gitRemoteCmd(),
 		gitShowCmd(),
 		gitRevParseCmd(),
@@ -118,13 +118,7 @@ basic-auth password (with user "oauth2", which GitHub accepts).`,
 		if len(args) == 0 {
 			return cmd.Help()
 		}
-		var res *outgit.ExecResult
-		var err error
-		if external {
-			res, err = outgit.RunExternal(cmd.Context(), ".", args)
-		} else {
-			res, err = outgit.Exec(cmd.Context(), ".", args)
-		}
+		res, err := outgit.ExecOrExternal(cmd.Context(), ".", args, external)
 		if err == nil {
 			return renderGitResult(cmd, res)
 		}
@@ -136,9 +130,9 @@ basic-auth password (with user "oauth2", which GitHub accepts).`,
 			if external {
 				return fmt.Errorf("git %s is not served by the native engine, and no host git binary took it.\n%s", verb, hint)
 			}
-			return fmt.Errorf("git %s is not served by bashy's native git engine.\n%s\n(retry with --external where a host git binary exists)", verb, hint)
+			return fmt.Errorf("git %s is not served by bashy's native git engine.\n%s\n(retry with --external=true where a host git binary exists)", verb, hint)
 		}
-		return fmt.Errorf("unknown git subcommand %q — see \"bashy git --help\" for the supported set", verb)
+		return err
 	}
 	return cmd
 }
@@ -313,22 +307,20 @@ func gitAddCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			repo := "."
 			if all || (len(args) == 1 && args[0] == ".") {
-				result, err := outgit.Add(outgit.AddOptions{RepoPath: repo, All: true})
+				_, err := outgit.Add(outgit.AddOptions{RepoPath: repo, All: true})
 				if err != nil {
 					return err
 				}
-				fmt.Fprintln(cmd.OutOrStdout(), result.Message)
 				return nil
 			}
 			if len(args) == 0 {
 				return fmt.Errorf("nothing to add — pass a path or -A")
 			}
 			for _, p := range args {
-				result, err := outgit.Add(outgit.AddOptions{RepoPath: repo, Path: p})
+				_, err := outgit.Add(outgit.AddOptions{RepoPath: repo, Path: p})
 				if err != nil {
 					return err
 				}
-				fmt.Fprintln(cmd.OutOrStdout(), result.Message)
 			}
 			return nil
 		},
@@ -445,7 +437,7 @@ func gitStatusCmd() *cobra.Command {
 	return cmd
 }
 
-func gitLogCmd() *cobra.Command {
+func gitLogCmd(external *bool) *cobra.Command {
 	var number int
 	cmd := &cobra.Command{
 		Use:   "log [path]",
@@ -458,17 +450,22 @@ func gitLogCmd() *cobra.Command {
 		// log; parse by hand so they reach it instead of dying in cobra.
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			selected, rest, err := splitGitExternal(args)
+			if err != nil {
+				return err
+			}
+			args = rest
+			if selected {
+				*external = true
+			}
 			for _, a := range args {
 				if a == "-h" || a == "--help" {
 					return cmd.Help()
 				}
 			}
 			if !legacyGitLogArgs(args) {
-				res, err := outgit.Exec(cmd.Context(), ".", append([]string{"log"}, args...))
+				res, err := outgit.ExecOrExternal(cmd.Context(), ".", append([]string{"log"}, args...), *external)
 				if err != nil {
-					if errors.Is(err, outgit.ErrUnsupported) {
-						return fmt.Errorf("git log %s is not served by bashy's native git engine; retry with --external to run it on a host git", strings.Join(args, " "))
-					}
 					return err
 				}
 				return renderGitResult(cmd, res)
@@ -706,17 +703,37 @@ func gitCheckoutCmd() *cobra.Command {
 	return cmd
 }
 
-func gitDiffCmd() *cobra.Command {
-	var staged bool
+func gitDiffCmd(external *bool) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "diff [rev1 [rev2]]",
 		Short: "Show changes (summary for the working tree, full patch between revisions)",
-		Args:  cobra.MaximumNArgs(2),
+		Args:  cobra.ArbitraryArgs,
 		Example: `  bashy git diff                    # working-tree summary
   bashy git diff --staged
   bashy git diff HEAD~1 HEAD        # full patch between commits
   bashy git diff main..feature-x`,
+		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			selected, rest, err := splitGitExternal(args)
+			if err != nil {
+				return err
+			}
+			args = rest
+			if selected {
+				*external = true
+			}
+			for _, arg := range args {
+				if arg == "--help" || arg == "-h" {
+					return cmd.Help()
+				}
+				if strings.HasPrefix(arg, "-") {
+					res, err := outgit.ExecOrExternal(cmd.Context(), ".", append([]string{"diff"}, args...), *external)
+					if err != nil {
+						return err
+					}
+					return renderGitResult(cmd, res)
+				}
+			}
 			// Revision arguments switch to commit-to-commit patch mode.
 			if len(args) > 0 {
 				revA, revB := args[0], ""
@@ -738,10 +755,7 @@ func gitDiffCmd() *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			label := "Working tree changes:"
-			wantStaged := staged
-			if wantStaged {
-				label = "Staged changes:"
-			}
+			wantStaged := false
 			matched := false
 			for _, e := range entries {
 				if e.Staged == wantStaged {
@@ -758,7 +772,6 @@ func gitDiffCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&staged, "staged", false, "Show staged (index) changes instead of working-tree changes")
 	return cmd
 }
 

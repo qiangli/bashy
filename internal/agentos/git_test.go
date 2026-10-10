@@ -3,6 +3,7 @@ package agentos
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -55,8 +56,8 @@ func TestGitCommandWiring(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(prev) })
 
 	// add a.txt
-	if out, err := run(t, "add", "a.txt"); err != nil {
-		t.Fatalf("add: %v\n%s", err, out)
+	if out, err := run(t, "add", "a.txt"); err != nil || out != "" {
+		t.Fatalf("add: err=%v, output=%q; want silent success", err, out)
 	}
 
 	// status — should not be clean
@@ -296,8 +297,8 @@ func TestGitParityVerbsWiring(t *testing.T) {
 	}
 
 	// rm --cached keeps the file on disk
-	if out, err := run(t, "rm", "--cached", "feat.txt"); err != nil {
-		t.Fatalf("rm --cached: %v\n%s", err, out)
+	if out, err := run(t, "rm", "--cached", "feat.txt"); err != nil || out != "" {
+		t.Fatalf("rm --cached: err=%v, output=%q; want silent success", err, out)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "feat.txt")); err != nil {
 		t.Errorf("rm --cached deleted the file: %v", err)
@@ -369,8 +370,8 @@ func TestGitUnimplementedVerbsError(t *testing.T) {
 		t.Errorf("rebase -i: %v", err)
 	}
 
-	// Truly unknown verb.
-	if _, err := run("frobnicate"); err == nil || !strings.Contains(err.Error(), "unknown git subcommand") {
+	// Truly unknown verbs carry the engine's external fallback hint too.
+	if _, err := run("frobnicate"); err == nil || !strings.Contains(err.Error(), "--external=true") {
 		t.Errorf("frobnicate: %v", err)
 	}
 
@@ -578,5 +579,85 @@ func TestGitStatusShortPassthrough(t *testing.T) {
 		if !strings.Contains(out, "?? new.txt") {
 			t.Fatalf("status %s: expected porcelain untracked line, got %q", flag, out)
 		}
+	}
+}
+
+func TestGitCachedDiffAndExternalFallback(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH (needed to check patch application and host fallback)")
+	}
+	dir := t.TempDir()
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prev) })
+	run := func(args ...string) (string, error) {
+		root := gitCmd()
+		buf := &bytes.Buffer{}
+		root.SetOut(buf)
+		root.SetErr(buf)
+		root.SetArgs(args)
+		err := root.Execute()
+		return buf.String(), err
+	}
+	if out, err := run("init"); err != nil {
+		t.Fatalf("init: %v, %s", err, out)
+	}
+	file := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(file, []byte("old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := run("add", "a.txt"); err != nil || out != "" {
+		t.Fatalf("add: err=%v, output=%q", err, out)
+	}
+	if out, err := run("commit", "-m", "base", "--author-name", "T", "--author-email", "t@e"); err != nil {
+		t.Fatalf("commit: %v, %s", err, out)
+	}
+	if _, err := run("log", "--author=T"); err == nil || !strings.Contains(err.Error(), "--external=true") {
+		t.Fatalf("native log unsupported flag: %v", err)
+	}
+	if out, err := run("log", "--external=true", "--author=T"); err != nil || !strings.Contains(out, "base") {
+		t.Fatalf("host log fallback: err=%v, output=%q", err, out)
+	}
+	if err := os.WriteFile(file, []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := run("add", "a.txt"); err != nil || out != "" {
+		t.Fatalf("add changed file: err=%v, output=%q", err, out)
+	}
+	patch, err := run("diff", "--cached", "--binary")
+	if err != nil || !strings.Contains(patch, "diff --git a/a.txt b/a.txt") || !strings.Contains(patch, "+new") {
+		t.Fatalf("diff --cached --binary: err=%v, patch=%q", err, patch)
+	}
+	staged, err := run("diff", "--staged")
+	if err != nil || staged != patch {
+		t.Fatalf("diff --staged: err=%v, patch=%q; want %q", err, staged, patch)
+	}
+	if out, err := exec.Command("git", "reset", "--mixed", "HEAD").CombinedOutput(); err != nil {
+		t.Fatalf("host git reset: %v, %s", err, out)
+	}
+	apply := exec.Command("git", "apply", "--cached", "-")
+	apply.Stdin = strings.NewReader(patch)
+	if out, err := apply.CombinedOutput(); err != nil {
+		t.Fatalf("host git could not apply staged patch: %v, %s\n%s", err, out, patch)
+	}
+	if out, err := exec.Command("git", "diff", "--cached").Output(); err != nil || !strings.Contains(string(out), "+new") {
+		t.Fatalf("applied patch missing from index: err=%v, patch=%s", err, out)
+	}
+
+	// --stat is supported by host git, while the native engine returns
+	// ErrUnsupported. The fallback must preserve that argv and its output.
+	if _, err := run("diff", "--cached", "--stat"); err == nil || !strings.Contains(err.Error(), "--external=true") || strings.Contains(err.Error(), "unknown flag") {
+		t.Fatalf("native unsupported flag: %v", err)
+	}
+	if out, err := run("diff", "--external=true", "--cached", "--stat"); err != nil || !strings.Contains(out, "a.txt") || strings.Contains(out, "unknown flag") {
+		t.Fatalf("host fallback: err=%v, output=%q", err, out)
+	}
+	if out, err := run("--external=true", "diff", "--cached", "--stat"); err != nil || !strings.Contains(out, "a.txt") {
+		t.Fatalf("host fallback with door flag first: err=%v, output=%q", err, out)
 	}
 }

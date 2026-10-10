@@ -120,11 +120,10 @@ func gitConfigCmd() *cobra.Command {
 			if len(args) == 2 {
 				value = args[1]
 			}
-			result, err := outgit.ConfigSet("", key, value, global, unset)
+			_, err := outgit.ConfigSet("", key, value, global, unset)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), result.Message)
 			return nil
 		},
 	}
@@ -173,7 +172,7 @@ func gitTagCmd() *cobra.Command {
 			if len(args) > 1 {
 				commit = args[1]
 			}
-			result, err := outgit.TagCreate(outgit.TagOptions{
+			_, err := outgit.TagCreate(outgit.TagOptions{
 				Name:     args[0],
 				Commit:   commit,
 				Message:  message,
@@ -182,7 +181,6 @@ func gitTagCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(out, result.Message)
 			return nil
 		},
 	}
@@ -239,7 +237,9 @@ anything precious out of the tree first.`,
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), result.Message)
+			if hard || (!soft && !mixed && len(args) == 0) {
+				fmt.Fprintln(cmd.OutOrStdout(), result.Message)
+			}
 			return nil
 		},
 	}
@@ -270,7 +270,9 @@ func gitRmCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), result.Message)
+			if !cached {
+				fmt.Fprintln(cmd.OutOrStdout(), result.Message)
+			}
 			return nil
 		},
 	}
