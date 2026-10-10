@@ -1,0 +1,65 @@
+List inference backends.
+
+Fields:
+  NAME      canonical, version-explicit model name; aliases are also accepted
+  BAND      normalized capability peg: L1 basic, L4 steerable minimum, L5 frontier; '-' is
+            unpegged and '~' means not measured. Agents inherit this band
+  KIND      authentication path: subscription, api, or local; not billing mode
+  PROVIDER  backend/provider family used for authentication and routing
+  TARGET    default provider-side id passed to a tool; a tool-specific id may
+            override it, which `agents show NAME` displays
+  ALIASES   alternate accepted names, including a derived family alias
+  RING      source of the selected definition (explained below)
+
+Bands are comparable across providers; vendor tier names are not mapped
+positionally. For pegged rows JSON reports the numeric band and band_source
+(declared, operator, measured, or cascade); unpegged rows omit both.
+JSON source is the model's cloud/local inference path, not its RING.
+
+RING is the source of this selected definition, not where an executable or
+model runs: embedded = compiled baseline (the tool launch contracts plus the
+seeded model/agent roster; BASHY_FLEET_SEEDS=off drops the roster, never the
+contracts); shared = read-only directory from BASHY_TOOLS_PATH,
+BASHY_MODELS_PATH, or BASHY_AGENTS_PATH; cloud = organization catalog cached by
+sync; local = writable host override under BASHY_FLEET_DIR or the noun-specific
+BASHY_*_DIR. Precedence is embedded -> shared -> cloud -> local. A local file
+with overlay: true merges its present fields onto the next lower entry;
+an older full file remains a complete replacement until migrated.
+
+By default, list shows selected definitions from the embedded, shared, and
+cloud rings and hides local custom definitions. --custom shows only local;
+--all shows every ring; --ring all|embedded|shared|cloud|local selects a precise
+ring. These flags are alternatives. A local override of a seeded name has
+RING local because local supplied the selected definition. Text and JSON use
+the same view; only text prints a hint when custom definitions are hidden.
+
+Usage:
+  model [flags]
+  model [command]
+
+Available Commands:
+  add         Add an inference backend to the local store
+  budget      Inspect configured budgets and outstanding reservations
+  edit        Open an entry in $EDITOR
+  help        Help about any command
+  limits      Inspect known account limits, resets and unavailable sources
+  list        List inference backends
+  migrate     Review and migrate a full-copy local override to a sparse overlay
+  rm          Remove an entry from the local store
+  schema      List fields accepted by --set, --unset, and --field
+  set         Modify an inference backend
+  show        Print a model's definition
+  sync        Pull the org catalog into the overlay ring
+  usage       Observe model usage and spend across shared accounts
+  verify      Check that an entry is usable on this host
+
+Flags:
+      --all            show every ring, including otherwise hidden entries
+      --band int       only models in exactly this band (1-5)
+      --custom         show only local custom definitions
+  -h, --help           help for model
+      --json           emit JSON
+      --min-band int   only models in this band or above (1-5)
+      --ring string    show exactly one ring: all, embedded, shared, cloud, or local
+
+Use "model [command] --help" for more information about a command.

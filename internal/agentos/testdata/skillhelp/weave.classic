@@ -1,0 +1,69 @@
+weave is the per-repo EXECUTION engine: a local, filesystem-based
+orchestrator that runs agentic CLIs (codex, claude, agy, opencode, ...)
+in parallel over ONE repo. Seed a queue of issues (runs), fan tools out
+across them in isolated git-clone workspaces so they never clobber each
+other, then pull the converged work back into the repo. Entirely local —
+no server, no forge.
+
+For the CROSS-REPO plan/handoff layer above weave — the sprint kanban,
+conductor lease, continuity record, and checkpoints — see `bashy sprint`.
+
+Common-case usage:
+
+  bashy weave add "fix null deref in cache" --priority p0
+  bashy weave start -- codex --dangerously-skip-permissions "<body>"
+  bashy weave list                           # runs in flight
+  bashy weave pull                           # absorb merged work
+
+Usage:
+  weave [flags]
+  weave [command]
+
+Available Commands:
+  abandon      Tear down a weave (workspace + branch + any running wrapper)
+  add          Seed an issue into the queue
+  attach       Interactively watch and steer a running subagent
+  autopilot    Autonomously drive THIS repo's run queue (claim→launch→verify→merge) with failover
+  baton        Show THIS repo's single-driver lock + campaign handoff note (cross-repo handoff: `bashy sprint`)
+  check        List every subcommand and its implementation status
+  comment      Append a comment to an issue's history thread
+  comments     Show an issue's history thread
+  doctor       Reap limbo states and audit the lifecycle of every open item
+  finalize     Terminalize an explicitly observed-idle interactive run
+  fleet        Show each fleet member's availability (installed? on PATH? cooling down? signed in? model usable?)
+  gc           Report (or, with --apply, reclaim) orphan and legacy weave state across every queue on this machine
+  guide        Print the CONDUCTOR playbook (a.k.a. `weave docs`) — how to take over + run a campaign
+  heartbeat    Periodically drive autopilot in the background with idle shutdown
+  help         Help about any command
+  kill         Stop the running wrapper precisely, preserve workspace + branch
+  link         Record that one issue needs another first (parallel safety, as data)
+  list         Show active weaves (--all: every queue on the machine)
+  log          Print (or --follow) the captured PTY log of an issue's subagent
+  memory       Inspect or export persistent weave memory
+  next         Peek at the next issue 'weave start' would claim (non-mutating)
+  open         Surface an issue's workspace path (file:// URL)
+  pause        Cleanly suspend every running weave worker
+  point        Set an issue's story points (sprint planning; 8 = ~30m cap)
+  prio         Set an issue's priority tier (or --auto to LLM-rank the queue)
+  prune        Remove workspace directories and merged branches for terminal items
+  pull         Fast-forward your local main with the merged agent branches
+  recall       Recall persistent memory observations related to a query
+  reconcile    Settle a retained reservation after verifying its recorded child group stopped
+  remember     Append a manual persistent memory observation
+  reset        Tear down every weave and remove all weave state for this project
+  resume       Relaunch paused weave workers from their recorded launch specs
+  reverify     Refresh an issue's git and verify attestation from its workspace
+  review       Re-verify submitted work in a fresh clean-room checkout
+  salvage      Review and merge the committed work of a killed/failed item (via pull's gate)
+  say          Inject a line into a running subagent's terminal
+  sealed-image Build Linux agent images for sealed booths
+  shell        Drop into a shell inside the issue's workspace
+  split        Break an oversized issue into children, keeping the link to the parent
+  start        Allocate a workspace and launch an agent
+  status       Show an issue's reconciled state, merge status, and verify result
+  wait         Block until issue(s) reach a terminal state
+
+Flags:
+  -h, --help   help for weave
+
+Use "weave [command] --help" for more information about a command.

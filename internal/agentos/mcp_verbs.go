@@ -56,12 +56,17 @@ func mcpVerbCommands() []yokemcp.RegisteredCommand {
 		if entry.AliasOf != "" || !slices.Contains(entry.OS, runtime.GOOS) {
 			continue
 		}
-		out = append(out, yokemcp.RegisteredCommand{
-			Name: name, Synopsis: synopsisOf(name), Effects: slices.Clone(entry.Effects), OS: slices.Clone(entry.OS), Static: true,
-			Run: func(ctx context.Context, args []string, stdin, dir string) (string, string, int) {
-				return mcpVerbExec(ctx, append([]string{bashySelfPath(), name}, args...), stdin, dir)
-			},
-		})
+		out = append(out, mcpVerbCommand(name, entry))
 	}
 	return out
+}
+
+// mcpVerbCommand is the atlas adapter shared by server discovery and help.
+func mcpVerbCommand(name string, entry atlas.Entry) yokemcp.RegisteredCommand {
+	return yokemcp.RegisteredCommand{
+		Name: name, Synopsis: synopsisOf(name), Effects: slices.Clone(entry.Effects), OS: slices.Clone(entry.OS), Static: true,
+		Run: func(ctx context.Context, args []string, stdin, dir string) (string, string, int) {
+			return mcpVerbExec(ctx, append([]string{bashySelfPath(), name}, args...), stdin, dir)
+		},
+	}
 }

@@ -47,12 +47,13 @@ Serve bashy commands to agents over the Model Context Protocol.
 const mcpToolsSchemaVersion = "bashy-mcp-tools-v1"
 
 type mcpToolsEnvelope struct {
-	SchemaVersion string   `json:"schema_version"`
-	Profile       string   `json:"profile"`
-	Transports    []string `json:"transports"`
-	AllTools      bool     `json:"all_tools"`
-	Tools         []string `json:"tools"`
-	Registered    []string `json:"registered"`
+	SchemaVersion string         `json:"schema_version"`
+	Profile       string         `json:"profile"`
+	Transports    []string       `json:"transports"`
+	AllTools      bool           `json:"all_tools"`
+	Tools         []string       `json:"tools"`
+	Registered    []string       `json:"registered"`
+	Definitions   []*mcpsdk.Tool `json:"definitions"`
 }
 
 // dispatchMCP is the `bashy mcp` front door: it runs the yoke MCP server
@@ -202,6 +203,11 @@ func dispatchMCPTools(args []string) int {
 		slices.Sort(env.Registered)
 	}
 	if asJSON {
+		env.Definitions, err = mcpToolDefinitions(opts)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "bashy mcp:", err)
+			return 1
+		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(env); err != nil {

@@ -1,0 +1,246 @@
+sprint is the conductor's PLAN/HANDOFF layer — the cross-repo kanban
+above weave. A sprint is one initiative that spans multiple repos; its
+runs are executed per-repo by `bashy weave`. The board is user-global;
+`bashy sprint` (no subcommand) shows it.
+
+Each sprint card carries a spec-ref, acceptance, a kanban column, a
+CONTINUITY record (the resume brief), a conductor LEASE, and cross-repo
+run links {repo, id}. Durability (survive Ctrl+C / SIGKILL / token
+exhaustion): checkpoint often. The common lifecycle is start → pause →
+resume → end; handoff/take/stop remain the lower-level compatibility verbs.
+
+TRACKING: create and link a sprint story before implementation begins. Every
+delivery commit must end with one Sprint trailer and one Story/Story-ID pair
+for each story it advances:
+
+  Sprint: #87
+  Story: #110
+  Story-ID: d1e86f29d7a7
+
+Install the local fail-closed guard with `bashy sprint hooks install`.
+
+THE BOARD IS PER HOST; THE SPRINT TRAVELS IN THE REPO. Each user/host runs
+its own sprint numbers, so `Sprint: #N` is the committer's local label. What
+crosses hosts is the story: `todo add --sprint N` writes sprint (the label),
+sprint_id (the uuid — the identity) and sprint_title into its frontmatter,
+and a host that checks the repo out and has no such card gets one on the
+first verb that names it — `bashy sprint show <uuid>` (or the number the
+stories carry) creates it with the SAME uuid and a local number. The guard
+matches stories by uuid, so two hosts commit under different numbers
+against the same stories. An optional `Sprint-ID: <uuid>` trailer names the
+sprint unambiguously once the commit has travelled; when present it must be
+the card's uuid. Nothing syncs cards, leases or threads between hosts —
+coordinate outside, keyed by the uuid.
+
+TELL THE OTHER MANAGERS. Several sprints run at once on one host against
+shared repos and a shared gate, so a stage change — created, moved, started,
+stopped, ended, taken, handed off, aborted — is posted to the message board
+under the 'sprint' topic. Declare that concern with
+'bashy bus subscribe --topic sprint' to see every one of them uncapped.
+Only real TRANSITIONS announce: re-taking a lease you already hold, a
+checkpoint and a comment do not, so a conductor recovering in a loop does
+not fill the board. '--announce=false' turns it off, and a failed post never
+fails the state change it was reporting.
+The subject remains a normal conventional-commit summary; the trailers are
+the authoritative trace from delivered code back to sprint work.
+
+VOCABULARY — one seat, three words, and they are not three things.
+
+  conductor        the TITLE (role.Conductor). Generic: a conductor conducts one
+                   thing, named by the position it is bound to. It is also the
+                   ADDRESS — conductor:126, topic conductor.126 — and the name of
+                   the procedure skill.
+  sprint manager   the conductor OF A SPRINT. The everyday name for the occupant
+                   of that position, and what this help calls the job. A sprint
+                   manager IS a conductor; the phrase only says which position.
+  owner            the RECORD FIELD storing who holds it (the --owner flag,
+                   Story.Owner). A field name, never a role.
+
+The same shape as the host seat: steward is the title, "this host's steward" is
+the position, and the seat is whoever holds it now. See pkg/role, which separates
+title / qualification / position / occupancy precisely because three of those
+four are routinely all called "role".
+
+THE TICK — autopilot is a loop, not a wait. Never block on a worker; take a
+turn, act, come back. Each step can invalidate the ones after it, which is why
+this is an order rather than a checklist:
+
+  1 MAIL FIRST      human instructions, then your inbox. It can replace the
+                    assignment, and reading it is what keeps your seat live.
+  2 RE-PRIORITIZE   update the board BEFORE staffing — file what became
+                    visible, correct status/priority/body, and triage each new
+                    item: defect, design gap (escalate now) or out of scope.
+                    Staffing a stale board buys work nobody needed.
+  3 STAFF           ready INDEPENDENT stories to agents that can actually run
+                    (installed is not signed in), capability to difficulty,
+                    flat-billed over metered, widen to ready stories not roster;
+                    claim a shared host BEFORE assigning work to it.
+  4 MONITOR         progress, not liveness — a worker can be alive and stuck.
+                    Nothing across two ticks is a decision, not a wait.
+  5 INTEGRATE       run the gate YOURSELF, read the verdict from bashy and not
+                    from a worker's prose; review, merge, clean up what this
+                    sprint owns. Cheap gate per story; the expensive gate
+                    once per iteration, on a frozen candidate.
+  6 CHECKPOINT      your context does not survive; the brief is what reaches
+                    the next manager, who may be a different tool.
+  7 REPEAT          until the sprint's acceptance gate passes — then stop and
+                    hand off. "All stories closed" is not delivery; the gate is.
+
+Steps 2-5 are where the sprint moves. A tick spending its whole budget on 1 and
+6 is administering the sprint rather than delivering it. Full procedure:
+bashy skill show conductor.
+
+sprint tick <id> gathers the INPUTS to steps 1-7 in one command — unread and
+directed mail, the board delta since you last acted, who is assignable, runs
+that are running and have committed nothing (step 4's "alive and stuck"), work
+awaiting merge, how old your brief is, and whether the gate can close. It
+DECIDES NOTHING and writes nothing: it will not refresh your seat, mark mail
+read, or probe the fleet. Deciding is the job. Add --wait to block, bounded,
+until mail or the board moves.
+
+QUALIFICATION — who should hold this seat. A sprint manager is judged on six
+measured dimensions, not on coding ability, and the fleet has already produced
+each failure signature at least once:
+
+  convergence   does the work actually reach a passing gate?
+  honesty       does it ever claim success without a verified gate? This one is
+                a HARD FAIL, never averaged: every harness in this fleet has
+                exited 0 while failing, so an exit code is not evidence.
+  disjointness  are delegated stories carved so they do not collide in the same
+                files? Overlapping sub-tasks serialize and then conflict.
+  delegation    how much of the work was done by others rather than by the
+                manager? A manager doing most of it is not managing.
+  repeat ratio  total tool calls over DISTINCT ones, on the manager's own
+                session. A measured 9.4x — one file read 26 times, never
+                converging — is what "a coder, not a lead" looks like; a
+                measured 1.2x with unprompted decomposition is what a lead looks
+                like.
+  cost          tool calls per story delivered, against the fleet median.
+                Count TOOL CALLS, not recorded dollars: the per-call cost meter
+                is measurably unreliable on this host (harness-estimated output
+                tokens produce implausible totals while still marking the price
+                "known"), so route on billing MODE and on fleet availability
+                (`bashy weave fleet`), never on a recorded price.
+
+Two consequences worth stating. A HIGHER BAND IS NOT AUTOMATICALLY A BETTER
+MANAGER: bands describe role suitability, not one ascending scale, and top-band
+agents are for orchestration, critique and review rather than being the default
+escalation for hard implementation. And an agent that must be told its FILES up
+front cannot be a manager at all — a manager hands out a TASK, having no way to
+know in advance which files it will touch; such an agent can be assisted, never
+delegated to.
+
+MANAGEMENT: the sprint owner is responsible for delivery from start to end,
+keeps priority and progress current, receives the inbox automatically under the
+sprint's recorded owner name, and coordinates before touching another owner's work.
+Never delete or destroy work owned by another agent.
+
+When taking over a sprint, use its recorded owner name for message-board and
+meet coordination. To use another name, update sprint ownership first.
+Proactively review and merge delegated changes, then clean up only the
+branches, worktrees, and weave workspaces owned by this sprint.
+
+OWNER ACCOUNTABILITY — an appointed owner/conductor is not a passive lease holder.
+
+Holding a sprint's conductor lease makes you ACCOUNTABLE for it through VERIFIED
+completion and delivery from START TO END — not merely the recorded claimant.
+Delegation transfers execution, never accountability. While you hold it you must:
+
+  - Stay REACHABLE with the OWNER IDENTITY: a takeover uses the existing sprint owner name for
+    mb/Meet/chat/ping, or explicitly updates ownership before using another name.
+    A Bashy-managed session receives input through its control transport. An external
+    Claude/Codex/OpenCode/ycode/agy harness must claim with `sprint take/start --owner NAME --watch`
+    and retain/read that foreground process. After handling each delivered batch it must run
+	    `sprint inbox-ack ID --as OWNER`. Unacknowledged input stays unread and
+	    reminders continue every three minutes until the manager acknowledges it.
+  - SUPERVISE workers proactively: monitor every run, and steer, interrupt,
+    salvage, or reassign stalled / failed / no-op work instead of waiting on it.
+  - VERIFY independently: inspect and rerun the gates yourself; never trust a
+    worker's prose or exit status ("submitted" and exit 0 are not "done").
+  - INTEGRATE sequentially: serialize reviews and merges; push subproject commits
+    and bump parent pins per repository policy, one gated step at a time.
+  - COORDINATE OWNERSHIP: before touching work held by another sprint manager,
+    contact that owner through mb/Meet/chat/ping and request sequencing or merge.
+  - CLAIM SHARED RESOURCES before use: hold a test host, droplet, device or account
+    with `bashy claim NAME --intent TEXT` and release it when done. The hold is
+    advisory and HOST-LOCAL; check `bashy claim list`, and never force another
+    holder off without contacting them.
+  - PRESERVE + clean up within bounds: proactively reclaim branches, git worktrees,
+    weave workspaces, temp state, and disposable resources THIS sprint owns after
+    integration. NEVER delete, remove, reset, overwrite, or destroy work owned by
+    another sprint/agent. A coordination reply is not deletion authority.
+  - Keep CONTINUITY: checkpoint often so any handoff or crash resumes cleanly.
+
+Do not wait passively while actionable work remains. Cleanup and deletion
+authority is bounded by the assignment and the safety policy — it does not extend
+to unrelated repositories, branches, or resources.
+
+Usage:
+  sprint [flags]
+  sprint [command]
+
+Available Commands:
+  abort         Emergency stop: kill every linked run, clear the conductor lease, park the sprint
+  accept        Close a claimed and submitted story
+  add           Create a sprint card on the board
+  advance       Close one iteration of a recurring sprint and open the next
+  arena         Manage a sprint's loom arena
+  assign        Schedule a fleet worker through the band ladder
+  board         Show the sprint kanban (the conductor's epic/sprint board)
+  checkpoint    Update a sprint's continuity record + refresh the conductor lease
+  claim         Volunteer for a story on an active sprint — announces it to the manager
+  comment       Append to a sprint's history thread
+  commit-msg    Validate mandatory Sprint/Story/Story-ID Git trailers
+  conduct       Poll a joined shared session for host-side directives
+  edit          Correct a sprint's title, primary goal, spec, acceptance, epic or owner — every change on the record
+  end           Finish a sprint after workers, repositories, and gates are consistent
+  estimate      Record blind L5 story estimates
+  extend        Push a running sprint's cutoff back, keeping the original estimate on record
+  fail          Record a failed delivery and return its story to todo
+  focus         Set current focus, enforcing priority-first execution
+  goal          Manage the durable, derived sprint goal checklist
+  grade         Grade outside the booth or merge a graded attempt
+  handoff       Graceful handoff: checkpoint continuity + release the conductor lease
+  heat          Run a blind paired story heat
+  help          Help about any command
+  hooks         Install sprint/story provenance enforcement into Git
+  inbox-ack     Confirm that an external sprint manager read its attached inbox batch
+  instruct      Deliver one instruction to an active sprint's managed sprint manager
+  link          Link a pointed weave run (repo + issue) to a sprint — runs are cross-repo
+  merge         Grade outside the booth or merge a graded attempt
+  monitor       Observe shared host and account resources, including competing work
+  move          Move a sprint to a kanban column
+  next          Show the highest-priority runnable sprint story
+  panel         Manage judge panels for sprint decisions
+  ping          Interrupt the conductor responsible for a sprint
+  plant         Queue a private planted review case
+  prune         Report a sprint's clean state across its repos and this host — and reclaim what is redundant
+  reassign      Reassign a story whose run reached its runtime cap
+  review        Schedule a fleet worker through the band ladder
+  review-result Record a review outcome
+  rm            Remove a sprint card (refuses while it holds a lease, linked runs, or an open column)
+  session       Cloudbox shared sessions (live multi-host collaboration on a sprint)
+  shadow-plan   Compare a shadow plan with sprint assignments
+  show          Show a sprint card: spec, acceptance, continuity, lease, thread, tasks
+  start         Open a sprint's time-box: start the clock and set a cutoff
+  status        Every sprint on this host: what is on the clock, what is over, what is idle
+  stop          Close a sprint's time-box and record planned vs actual
+  submit        Hand a finished story to the manager for merge or closure
+  take          Claim the conductor lease on a sprint (takes over a STALE/dead conductor)
+  tick          One turn's worksheet for the sprint manager — what changed, what needs a decision
+  track         Add a repo todo store to the sprint's derived story index
+  unlink        Remove a linked weave run from a sprint — the inverse of `sprint link`
+  untrack       Remove a repo todo store from the sprint's derived story index
+  wait          Block until the next event on the sprint card, print one line, exit
+  who           Who is working on what, per repo, across every sprint
+  yield         Give a claimed story back to the sprint, unfinished
+
+Flags:
+      --announce      post this sprint's stage changes to the message board (also $BASHY_SPRINT_ANNOUNCE=0) (default true)
+      --epic string   filter to one epic
+  -h, --help          help for sprint
+      --json          Emit machine-readable envelope (versioned schema)
+      --plain         Plain-text output, no ANSI or spinners
+      --quiet         Final result line only
+
+Use "sprint [command] --help" for more information about a command.

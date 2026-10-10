@@ -588,6 +588,9 @@ func dispatch() {
 	if len(os.Args) < 2 {
 		return
 	}
+	if code, handled := dispatchFormattedHelp(os.Args[1:]); handled {
+		dispatchExit(code)
+	}
 	// L1 of the skills advertisement ladder: agent driving + agent-naive
 	// repo + not hinted here before → one stderr pointer. Zero repo writes.
 	maybeAdvertiseSkillHint()
