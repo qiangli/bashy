@@ -87,10 +87,14 @@ func selfFetchCmd() *cobra.Command {
 func selfInstallCmd() *cobra.Command {
 	var version, dir, seed string
 	var source, service, userMode, systemMode bool
-	cmd := &cobra.Command{Use: "install [path]", Short: "Install the bashy product and optional outpost service", Long: `Install bashy, outpost, bash and sh together. By default, use the four files
+	cmd := &cobra.Command{Use: "install [path]", Short: "Install bashy, bash, sh, and a dormant outpost", Long: `Install bashy, outpost, bash and sh together. By default, use the four files
 beside this executable (works offline). --version fetches a verified release.
 --dir selects the install directory; [path] selects the bashy executable path.
---source preserves the developer-only single-binary build/install workflow.`, Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+--source preserves the developer-only single-binary build/install workflow.
+
+The default install leaves outpost unconfigured: outpost installed, dormant until ` + "`bashy login`" + `.
+--service is the expert option to register and start the service
+during installation.`, Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		if dir != "" && len(args) > 0 {
 			return errors.New("--dir and a target path are mutually exclusive")
 		}
@@ -170,31 +174,47 @@ beside this executable (works offline). --version fetches a verified release.
 				return err
 			}
 		}
-		if service {
-			args := []string{"service", "install"}
-			if userMode {
-				args = append(args, "--user")
-			}
-			if systemMode {
-				args = append(args, "--system")
-			}
-			child := exec.CommandContext(cmd.Context(), filepath.Join(filepath.Dir(target), binmgr.BinaryName("outpost")), args...)
+		if serviceArgs := selfInstallServiceArgs(service, userMode, systemMode); serviceArgs != nil {
+			child := exec.CommandContext(cmd.Context(), filepath.Join(filepath.Dir(target), binmgr.BinaryName("outpost")), serviceArgs...)
 			child.Stdin, child.Stdout, child.Stderr = cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr()
 			if err := child.Run(); err != nil {
 				return fmt.Errorf("register service: %w", err)
 			}
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "installed %s\n", target)
+		fmt.Fprint(cmd.OutOrStdout(), selfInstallSummary(target, service))
 		return nil
 	}}
 	cmd.Flags().StringVar(&version, "version", envOr("BASHY_SELF_VERSION", "latest"), "Release tag to fetch instead of using adjacent files")
 	cmd.Flags().StringVar(&dir, "dir", "", "Install all product executables into this directory")
 	cmd.Flags().StringVar(&seed, "seed", "", "Import a verified offline tool seed before installation")
 	cmd.Flags().BoolVar(&source, "source", false, "Build only bashy from the current source checkout")
-	cmd.Flags().BoolVar(&service, "service", false, "Register the installed outpost service")
+	cmd.Flags().BoolVar(&service, "service", false, "Expert: register and start the installed outpost service (default leaves it dormant)")
 	cmd.Flags().BoolVar(&userMode, "user", false, "Register a per-user service")
 	cmd.Flags().BoolVar(&systemMode, "system", false, "Register a system service")
 	return cmd
+}
+
+func selfInstallSummary(target string, service bool) string {
+	if service {
+		return fmt.Sprintf("installed %s\n", target)
+	}
+	return fmt.Sprintf("installed %s; outpost installed, dormant until `bashy login`\n", target)
+}
+
+// selfInstallServiceArgs keeps service registration an explicit opt-in. A nil
+// result means the product install must not start or configure outpost.
+func selfInstallServiceArgs(service, userMode, systemMode bool) []string {
+	if !service {
+		return nil
+	}
+	args := []string{"service", "install"}
+	if userMode {
+		args = append(args, "--user")
+	}
+	if systemMode {
+		args = append(args, "--system")
+	}
+	return args
 }
 
 // selfInstallEUID is a seam so the root refusal is testable unprivileged.

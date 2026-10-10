@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -166,6 +167,31 @@ func TestSelfCommandIncludesBuildAndSourceInstall(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "--source") {
 		t.Fatalf("self install help missing --source:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "outpost installed, dormant until `bashy login`") {
+		t.Fatalf("self install help missing dormant outpost contract:\n%s", out.String())
+	}
+}
+
+func TestSelfInstallSummaryKeepsOutpostDormantWithoutService(t *testing.T) {
+	target := filepath.Join("bin", releaseBinaryName())
+	if got, want := selfInstallSummary(target, false), "installed "+target+"; outpost installed, dormant until `bashy login`\n"; got != want {
+		t.Fatalf("default install summary = %q, want %q", got, want)
+	}
+	if got := selfInstallSummary(target, true); strings.Contains(got, "dormant") {
+		t.Fatalf("--service install summary unexpectedly dormant: %q", got)
+	}
+}
+
+func TestSelfInstallServiceArgsRequireExpertFlag(t *testing.T) {
+	if got := selfInstallServiceArgs(false, false, false); got != nil {
+		t.Fatalf("default install service args = %q, want none", got)
+	}
+	if got, want := selfInstallServiceArgs(true, true, false), []string{"service", "install", "--user"}; !slices.Equal(got, want) {
+		t.Fatalf("user service args = %q, want %q", got, want)
+	}
+	if got, want := selfInstallServiceArgs(true, false, true), []string{"service", "install", "--system"}; !slices.Equal(got, want) {
+		t.Fatalf("system service args = %q, want %q", got, want)
 	}
 }
 
