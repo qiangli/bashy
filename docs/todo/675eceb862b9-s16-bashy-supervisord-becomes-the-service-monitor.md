@@ -3,7 +3,7 @@ id: 675eceb862b9
 kind: feature
 title: 'S16 bashy supervisord becomes the service monitor: reconcile units, health probes, restart policy, start limits, live reload, status socket, PID1 mode'
 seq: 1885
-status: assigned
+status: done
 priority: p1
 labels:
     - yoke
@@ -12,6 +12,7 @@ assignee: codex-gpt6-sol
 sprint: 418
 sprint_id: 9891800f-8da5-5338-92bc-1d75755ca548
 sprint_title: 'Agent ecosystem synergy: agentic tools compose like a|b|c through bashy extension points'
+closed: 2026-10-11T15:42:08.211051Z
 closed_by: codex-gpt6-sol
 ---
 
