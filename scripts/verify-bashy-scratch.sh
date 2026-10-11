@@ -66,11 +66,15 @@ fi
 deps_tmp=$(mktemp "${TMPDIR:-/tmp}/bashy-scratch-deps.XXXXXX")
 smoke_tmp=
 smoke_image=
+smoke_volume=
 smoke_runtime=
 cleanup() {
 	rm -f "$deps_tmp"
 	if [ -n "$smoke_tmp" ] && [ -d "$smoke_tmp" ]; then
 		rm -rf "$smoke_tmp"
+	fi
+	if [ -n "$smoke_runtime" ] && [ -n "$smoke_volume" ]; then
+		"$smoke_runtime" volume rm -f "$smoke_volume" >/dev/null 2>&1 || true
 	fi
 	if [ -n "$smoke_runtime" ] && [ -n "$smoke_image" ]; then
 		"$smoke_runtime" image rm -f "$smoke_image" >/dev/null 2>&1 || true
@@ -89,7 +93,12 @@ echo "verify-bashy-scratch: PASS scratch dependency graph contains no purego"
 run_smoke() {
 	"$1" --version >/dev/null || fail "bashy --version failed from the scratch artifact"
 	"$1" supervisord --help >/dev/null || fail "bashy supervisord --help failed from the scratch artifact"
-	echo "verify-bashy-scratch: PASS bashy --version and supervisord --help"
+	set +e
+	"$1" supervisord DAG.md root >/dev/null 2>&1
+	status=$?
+	set -e
+	[ "$status" = 2 ] || fail "bashy supervisord DAG.md TARGET was not refused (exit $status)"
+	echo "verify-bashy-scratch: PASS bashy --version, supervisord --help and the retired-form refusal"
 }
 
 host_os=$(go env GOOS)
@@ -129,13 +138,55 @@ fi
 
 smoke_tmp=$(mktemp -d "${TMPDIR:-/tmp}/bashy-scratch-smoke.XXXXXX")
 cp "$artifact" "$smoke_tmp/bashy"
-printf '%s\n' 'FROM scratch' 'COPY bashy /bashy' 'ENTRYPOINT ["/bashy"]' >"$smoke_tmp/Containerfile"
+# The image is the Sprint 418 S19 shape: the entrypoint is the service monitor
+# as PID 1, and the dag root it serves is a unit (exec: bashy dag DAG.md
+# TARGET) shipped in the shared unit ring. Only /bashy is a payload; the unit
+# and the one-target DAG are data.
+printf '%s\n' '## Tasks' '' '### root' 'Root target of the smoke unit.' '' '```bash' \
+	'echo scratch-root-ran' '```' >"$smoke_tmp/DAG.md"
+printf '%s\n' 'name: root' 'kind: service' 'enabled: true' \
+	'exec: [bashy, dag, /srv/DAG.md, root]' \
+	'restart: {backoff: {min: 100ms, max: 1s}}' \
+	'stop: {timeout: 2s}' >"$smoke_tmp/root.yaml"
+printf '%s\n' 'FROM scratch' 'COPY bashy /bashy' \
+	'COPY DAG.md /srv/DAG.md' 'COPY root.yaml /etc/bashy/services/root.yaml' \
+	'ENV BASHY_SERVICES_PATH=/etc/bashy/services BASHY_HOME=/run/bashy' \
+	'ENTRYPOINT ["/bashy", "supervisord", "--pid1"]' >"$smoke_tmp/Containerfile"
 smoke_image="localhost/bashy-scratch-smoke:$$"
 "$smoke_runtime" build --platform linux/amd64 --network none \
 	-f "$smoke_tmp/Containerfile" -t "$smoke_image" "$smoke_tmp" >/dev/null ||
 	fail "$smoke_runtime could not build the FROM scratch smoke image"
-"$smoke_runtime" run --rm --platform linux/amd64 "$smoke_image" --version >/dev/null ||
+"$smoke_runtime" run --rm --platform linux/amd64 --entrypoint /bashy "$smoke_image" --version >/dev/null ||
 	fail "bashy --version failed in the FROM scratch image"
-"$smoke_runtime" run --rm --platform linux/amd64 "$smoke_image" supervisord --help >/dev/null ||
+"$smoke_runtime" run --rm --platform linux/amd64 --entrypoint /bashy "$smoke_image" supervisord --help >/dev/null ||
 	fail "bashy supervisord --help failed in the FROM scratch image"
+
+# The new entrypoint: bashy supervisord --pid1 (--until-done is the CMD, so the
+# one-shot root's completion ends the container) runs the root unit as PID 1.
+# A unit's output goes to its service log under BASHY_HOME, so BASHY_HOME is a
+# named volume and a second container reads the log back with `service logs`.
+smoke_volume="bashy-scratch-smoke-$$"
+"$smoke_runtime" run --rm --platform linux/amd64 -v "$smoke_volume:/run/bashy" --tmpfs /tmp \
+	"$smoke_image" --until-done >"$smoke_tmp/run.out" 2>&1 ||
+	fail "bashy supervisord --pid1 did not run the root unit to completion in the FROM scratch image: $(cat "$smoke_tmp/run.out")"
+grep -q 'root: active -> inactive (completed (exit 0))' "$smoke_tmp/run.out" ||
+	fail "the monitor did not report the root unit completed: $(cat "$smoke_tmp/run.out")"
+unit_log=$("$smoke_runtime" run --rm --platform linux/amd64 -v "$smoke_volume:/run/bashy" \
+	--entrypoint /bashy "$smoke_image" service logs root 2>&1) ||
+	fail "bashy service logs root failed in the FROM scratch image: $unit_log"
+printf '%s\n' "$unit_log" | grep -q 'scratch-root-ran' ||
+	fail "the root unit's dag target did not run under the PID 1 monitor: $unit_log"
+echo "verify-bashy-scratch: PASS supervisord --pid1 ran the root unit in the FROM scratch image"
+
+# The old DAG.md TARGET form is refused (exit 2) with a pointer to the unit form.
+set +e
+refused=$("$smoke_runtime" run --rm --platform linux/amd64 --entrypoint /bashy "$smoke_image" \
+	supervisord /srv/DAG.md root 2>&1)
+refused_status=$?
+set -e
+[ "$refused_status" = 2 ] ||
+	fail "supervisord DAG.md TARGET exited $refused_status in the FROM scratch image, want 2: $refused"
+printf '%s\n' "$refused" | grep -q 'exec: \[bashy, dag, /srv/DAG.md, root\]' ||
+	fail "the refusal does not point at the unit form: $refused"
+echo "verify-bashy-scratch: PASS supervisord DAG.md TARGET refused with the unit form"
 echo "verify-bashy-scratch: PASS real FROM scratch smoke via $smoke_runtime"

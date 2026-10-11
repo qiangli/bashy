@@ -109,8 +109,8 @@ func (p unitPolicy) wantsRestart(ex childExit) bool {
 	return ex.code != 0 || ex.signaled || ex.err != nil
 }
 
-// backoffLadder is the bounded exponential restart delay both supervisord
-// modes share: start at min, double per consecutive failure, stop at max, and
+// backoffLadder is the bounded exponential restart delay every unit
+// shares: start at min, double per consecutive failure, stop at max, and
 // start over once a run lasted healthyAfter.
 type backoffLadder struct {
 	min, max, healthyAfter time.Duration

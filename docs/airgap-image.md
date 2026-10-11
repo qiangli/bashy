@@ -544,7 +544,7 @@ externals variant is a separate story.
 | verbs | `sprint` | works | sprint is the conductor's PLAN/HANDOFF layer  the cross-repo kanban |
 | verbs | `stats` | works | stats is a unix filter over results JSONL: one record per attempt, fie |
 | verbs | `supervise` | works | Drive worker agents against a goal decomposed into tasks, IN the curre |
-| verbs | `supervisord` | works | usage: bashy supervisord [flags] DAG.md TARGET |
+| verbs | `supervisord` | works | usage: bashy supervisord [--pid1] [--until-done] [--socket PATH] [--poll DUR] |
 | verbs | `tessaro` | works | Tessaro is the front door to your dhnt mesh  pooled LLMs + durable age |
 | verbs | `todo` | works | todo tracks work as simple items (todo -> doing -> done, or blocked).  |
 | verbs | `tofu` | not usable offline | bin-managed external: would download - Error: tofu: binmgr: fetch rele |

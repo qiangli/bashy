@@ -1,6 +1,7 @@
-# bashy service and the bashy supervisord monitor (Sprint 418 S16)
+# bashy service and the bashy supervisord monitor (Sprint 418 S16, S19)
 
-**Status:** S16 implemented in `internal/agentos/supervisord*.go`, 2026-10-11.
+**Status:** S16 implemented in `internal/agentos/supervisord*.go`, 2026-10-11. S19
+(the dag root becomes a unit; the `DAG.md TARGET` form is refused) landed on top.
 
 **Contract of record:** yoke `docs/bashy-service-design.md` (S15). It covers
 the unit schema, the rings and seeds, the port rule, the `pkg/service`
@@ -59,13 +60,12 @@ unit-name branches.
 
 ## The monitor
 
-`bashy supervisord` with no operands runs the monitor. With `DAG.md TARGET` it
-runs the Sprint 218 single dag root supervisor, unchanged. S19 switches the
-DAG callers to a recipe unit and retires that mode; this story does not
-touch them.
+`bashy supervisord` takes no operands and runs the monitor. The Sprint 218 form
+`bashy supervisord DAG.md TARGET` is retired (S19) and refused; see
+[A dag root is a unit](#a-dag-root-is-a-unit).
 
 ```
-bashy supervisord [--pid1] [--socket PATH] [--poll DUR]
+bashy supervisord [--pid1] [--until-done] [--socket PATH] [--poll DUR]
 ```
 
 ### Concurrency model
@@ -289,7 +289,7 @@ All tests are in `internal/agentos`.
 
 | Acceptance | Test |
 |---|---|
-| Backoff doubles, caps and resets after a healthy run | `TestBackoffLadderDoublesCapsAndResetsAfterHealthyRun`; the dag-root mode's `TestSupervisordBackoffDoublesCapsAndResetsAfterHealthyRun` still passes on the shared ladder |
+| Backoff doubles, caps and resets after a healthy run | `TestBackoffLadderDoublesCapsAndResetsAfterHealthyRun`; the same sequence on a dag-root unit, `TestDagRootUnitBackoffDoublesCapsAndResetsAfterHealthyRun` |
 | Start limit leaves the unit failed and notifies once; `start` resets it | `TestStartLimiterRefusesBeyondBurstWithinWindow`, `TestMonitorStartLimitMovesCrashLoopToFailed` |
 | Health failure restarts the unit | `TestMonitorHealthFailureRestartsWithProbe` |
 | Foreign listener reported as failed, with the reason | `TestMonitorForeignListenerOnUnitPortIsFailedWithReason` |
@@ -299,11 +299,71 @@ All tests are in `internal/agentos`.
 | Status `--json` schema golden | `TestServiceStatusJSONGolden` |
 | Built-in, internal and custom units through the same verbs, plus an operator override | `TestServiceMonitorSeedInternalAndCustomShareOneMechanism` |
 
+## A dag root is a unit
+
+Sprint 218's `bashy supervisord DAG.md TARGET` was a second supervisor beside
+the monitor. S19 removes it. A dag root is an ordinary unit whose exec is
+`bashy dag DAG.md TARGET`:
+
+```yaml
+name: root
+kind: service
+enabled: true
+exec: [bashy, dag, /srv/DAG.md, root]
+restart: {backoff: {min: 1s, max: 30s, healthy_after: 30s}}
+stop: {timeout: 10s}
+```
+
+A leading `bashy` in `exec` is replaced by the monitor's own executable, so the
+root runs the same bashy that supervises it. The unit is added with
+`bashy service add -f root.yaml`, or shipped read-only in a directory on
+`$BASHY_SERVICES_PATH`; `bashy service run root` runs just that unit in the
+foreground (the replacement for running the old form by hand).
+
+**The old form is refused.** `bashy supervisord DAG.md TARGET`, and the flags
+only it had (`--min-backoff`, `--max-backoff`, `--healthy-after`, `--grace`),
+exit 2 and print the `root.yaml` that replaces the invocation, with the
+operands and any flag values already filled in, plus the commands to use it.
+Nothing is run.
+
+**The Sprint 218 contract is unit semantics**, proven by the old tests ported
+onto a dag-root unit (`supervisord_test.go`):
+
+| Sprint 218 | Unit field or behaviour | Test |
+|---|---|---|
+| exit 0 completes; supervisor exits 0 | a clean exit completes the unit; it is not restarted | `TestDagRootUnitCompletesOnExitZero` |
+| `--min-backoff/--max-backoff/--healthy-after` | `restart.backoff.min/max/healthy_after` | `TestDagRootUnitBackoffDoublesCapsAndResetsAfterHealthyRun` |
+| restart a failing root; group cleaned up first | restart policy; `Deactivate` before every restart | same, and `TestDagRootUnitRestartsARealChildUntilItCompletes` |
+| TERM/INT forwarded to the whole group | the declared stop signal to the unit's group | `TestMonitorForwardsTermToARealProcessGroup` |
+| `--grace`, then KILL | `stop.timeout`, then KILL | `TestMonitorKillsARealChildThatIgnoresTerm` |
+| signal during the backoff sleep exits without restarting | the same, for any unit | `TestMonitorSignalDuringBackoffExitsWithoutRestarting` |
+| PID 1 reaping without losing the root's status | `--pid1` / subreaper reaper | `TestServiceMonitorReapsOrphansAsSubreaper` |
+| argv, DAG path and stdio reach the root | `exec` argv; output in the unit log | `TestDagRootUnitPropagatesArgvAndInheritsOutput` |
+| the old form is refused | exit 2 with the unit form | `TestSupervisordRefusesTheRetiredDAGForm`, `TestSupervisordRefusalNamesTheUnitForm`, e2e `TestE2EAllListedCommandsDispatch` |
+
+**What changed on purpose.**
+
+- The `dag --json -n` preflight is gone. A root that can never succeed (an
+  unknown target, an unparseable file) is bounded by the start limit (5 starts
+  in 5 minutes by default) and left **failed** with `start limit hit`, rather
+  than refused before the first start. `TestDagRootUnitThatNeverSucceedsEndsFailedAtTheStartLimit`.
+- The root's output goes to the unit log (`bashy service logs root`), not the
+  monitor's own stdout.
+- `--until-done` ends the monitor once every enabled unit has completed (exit
+  0) or failed (exit 1). It is how a one-shot root, such as the scratch-image
+  smoke, ends its container; a long-running root never trips it.
+
+**The scratch image.** The FROM-scratch image's entrypoint is
+`/bashy supervisord --pid1`. The root unit and its DAG are data in the image
+(`/etc/bashy/services/root.yaml` on `BASHY_SERVICES_PATH`, `/srv/DAG.md`);
+`BASHY_HOME` is a writable volume for logs and the control socket.
+`scripts/verify-bashy-scratch.sh` builds exactly that image, runs it with
+`--until-done`, reads the root's output back with `service logs root`, and
+checks that the old form is refused inside the image.
+
 ## Out of scope here
 
 - **S17:** replacing the private start/stop copies (svcd, meet, sdlc,
   schedule, loom, the llm door) with these units.
 - **S18:** outpost init, outpost and meet as internal-capability owners, and
   the exposure reconciler and admin toggles re-pointed to this socket.
-- **S19:** switching the dag-root callers to a recipe unit and retiring the
-  `DAG.md TARGET` mode.

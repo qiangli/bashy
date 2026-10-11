@@ -5,7 +5,7 @@ package agentos
 
 import (
 	"bytes"
-	"encoding/json"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -18,261 +18,286 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/service"
 )
 
-// ─── fakes: no processes, no clock ────────────────────────────────────────
+// The Sprint 218 `bashy supervisord DAG.md TARGET` contract — restart with
+// bounded backoff, TERM/INT forwarding with a bounded grace, PID 1 reaping —
+// is now unit semantics under the one monitor (Sprint 418 S19). These tests
+// are the old supervisor's tests ported onto a unit whose exec is
+// `bashy dag DAG.md TARGET`: fake provider and fake clock for the policy,
+// re-exec'd copies of this test binary for the real processes.
 
-// fakeChild is one scripted run. exit is delivered when the test says so.
-type fakeChild struct {
-	exit    chan childExit
-	signals []os.Signal
-	killed  int
-	mu      sync.Mutex
+// unitClock is the monitor's clock, moved by the test so a run's length is a
+// stated fact.
+type unitClock struct {
+	mu sync.Mutex
+	t  time.Time
 }
 
-func newFakeChild() *fakeChild { return &fakeChild{exit: make(chan childExit, 1)} }
-
-func (c *fakeChild) Wait() childExit { return <-c.exit }
-func (c *fakeChild) Signal(sig os.Signal) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.signals = append(c.signals, sig)
-	return nil
-}
-func (c *fakeChild) Kill() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.killed++
-	return nil
-}
-
-// fakeClock makes after() fire immediately while recording the delay asked
-// for, and lets the test move "now" so a run's length is a stated fact.
-type fakeClock struct {
-	mu     sync.Mutex
-	t      time.Time
-	slept  []time.Duration
-	fireOn chan struct{} // when non-nil, after() blocks until the test fires it
-}
-
-func (c *fakeClock) now() time.Time {
+func (c *unitClock) now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.t
 }
-func (c *fakeClock) advance(d time.Duration) {
+
+func (c *unitClock) advance(d time.Duration) {
 	c.mu.Lock()
 	c.t = c.t.Add(d)
 	c.mu.Unlock()
 }
-func (c *fakeClock) after(d time.Duration) <-chan time.Time {
-	c.mu.Lock()
-	c.slept = append(c.slept, d)
-	c.mu.Unlock()
-	ch := make(chan time.Time, 1)
-	if c.fireOn != nil {
-		go func() { <-c.fireOn; ch <- c.t }()
-		return ch
-	}
-	ch <- c.t
-	return ch
-}
-func (c *fakeClock) sleeps() []time.Duration {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return append([]time.Duration(nil), c.slept...)
-}
 
-func fakeSupervisor(t *testing.T, clk *fakeClock, sigs chan os.Signal, runs ...*fakeChild) (*supervisor, *bytes.Buffer) {
+func waitUntil(t *testing.T, what string, ok func() bool) {
 	t.Helper()
-	var log bytes.Buffer
-	i := 0
-	s := &supervisor{
-		self: "fake-bashy", dagFile: "DAG.md", target: "svc",
-		minBackoff: time.Second, maxBackoff: 8 * time.Second, healthyAfter: 30 * time.Second, grace: 5 * time.Second,
-		log: &log, after: clk.after, now: clk.now, signals: sigs, preflightDone: true,
-		start: func() (supervisedChild, error) {
-			if i >= len(runs) {
-				t.Fatalf("supervisor spawned a %dth child; only %d were scripted", i+1, len(runs))
-			}
-			c := runs[i]
-			i++
-			return c, nil
-		},
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if ok() {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
 	}
-	return s, &log
+	t.Fatalf("timed out waiting for %s", what)
 }
 
-func TestSupervisordCompletesOnExitZero(t *testing.T) {
-	clk := &fakeClock{}
-	c := newFakeChild()
-	s, log := fakeSupervisor(t, clk, make(chan os.Signal), c)
-	c.exit <- childExit{code: 0}
-	if code := s.run(); code != 0 {
-		t.Fatalf("exit = %d, want 0\n%s", code, log)
+// waitRunning waits for the nth incarnation of name to be up as far as the
+// monitor can see, so a scripted exit cannot arrive before it is tracked.
+func waitRunning(t *testing.T, m *monitor, prov *fakeProvider, name string, n int) {
+	t.Helper()
+	waitUntil(t, fmt.Sprintf("%s incarnation %d running", name, n), func() bool {
+		if prov.count(prov.acts, name) < n {
+			return false
+		}
+		switch unitStatus(t, m, name).State {
+		case service.Starting, service.Active, service.Degraded:
+			return true
+		}
+		return false
+	})
+}
+
+// restartDelays are the "restarting in D" delays of name's transitions, in order.
+func restartDelays(el *eventLog, name string) []string {
+	el.mu.Lock()
+	defer el.mu.Unlock()
+	var out []string
+	for _, e := range el.events {
+		if _, d, ok := strings.Cut(e.Reason, "restarting in "); ok && e.Unit == name {
+			out = append(out, d)
+		}
 	}
-	if len(clk.sleeps()) != 0 || c.killed != 0 {
-		t.Fatalf("a completed root must not be restarted or killed: sleeps=%v killed=%d", clk.sleeps(), c.killed)
+	return out
+}
+
+// dagRootUnit is the unit that replaces `bashy supervisord DAG.md TARGET`.
+func dagRootUnit(dag, target string) fleet.Service {
+	return fleet.Service{Name: "root", Kind: fleet.KindService, Enabled: true,
+		Exec: []string{"bashy", "dag", dag, target},
+		Restart: fleet.ServiceRestart{Backoff: fleet.ServiceBackoff{Min: "10ms", Max: "40ms", HealthyAfter: "1h"},
+			StartLimit: fleet.ServiceStartLim{Burst: 50, Interval: "1m"}},
+		Stop: fleet.ServiceStop{Timeout: "500ms"}}
+}
+
+// ─── policy, with no processes and no waiting ─────────────────────────────
+
+// A clean exit completes the unit: it is not restarted, killed again or
+// notified, and stays down.
+func TestDagRootUnitCompletesOnExitZero(t *testing.T) {
+	u := testUnit("root", true)
+	set := &unitSet{units: map[string]fleet.Service{u.Name: u}}
+	prov := newFakeProvider(fleet.ServiceProviderProcess)
+	prov.crash["root"] = 0
+	m, el, _ := testMonitor(t, set, prov)
+	waitUntil(t, "root completed", func() bool {
+		st := unitStatus(t, m, "root")
+		return st.State == service.Inactive && strings.Contains(st.Reason, "completed (")
+	})
+	time.Sleep(50 * time.Millisecond) // longer than the backoff: a restart would show
+	if n := prov.count(prov.acts, "root"); n != 1 {
+		t.Fatalf("a completed root was started %d times", n)
 	}
-	if !strings.Contains(log.String(), "completed (exit 0)") {
-		t.Fatalf("log:\n%s", log)
+	el.mu.Lock()
+	notified := len(el.notified)
+	el.mu.Unlock()
+	if notified != 0 {
+		t.Fatalf("a completed root must not notify, got %d", notified)
 	}
 }
 
 // Crash, crash, crash: the delay doubles from min and stops at max; a run
-// that lasts healthy-after puts the ladder back at min. No real time passes.
-func TestSupervisordBackoffDoublesCapsAndResetsAfterHealthyRun(t *testing.T) {
-	clk := &fakeClock{}
-	runs := []*fakeChild{newFakeChild(), newFakeChild(), newFakeChild(), newFakeChild(), newFakeChild(), newFakeChild(), newFakeChild()}
-	s, log := fakeSupervisor(t, clk, make(chan os.Signal), runs...)
-	// runs 0-4 crash instantly; run 5 is healthy then crashes; run 6 completes.
-	for i, c := range runs[:5] {
-		c.exit <- childExit{code: 1 + i}
+// that lasts healthy_after puts the ladder back at min. Every exit's group is
+// cleaned up before the replacement starts. No real time passes in the run.
+func TestDagRootUnitBackoffDoublesCapsAndResetsAfterHealthyRun(t *testing.T) {
+	u := testUnit("root", true)
+	u.Restart.Backoff = fleet.ServiceBackoff{Min: "1ms", Max: "8ms", HealthyAfter: "30s"}
+	set := &unitSet{units: map[string]fleet.Service{u.Name: u}}
+	prov := newFakeProvider(fleet.ServiceProviderProcess)
+	clk := &unitClock{t: time.Unix(1_800_000_000, 0)}
+	m := newMonitor()
+	m.now = clk.now
+	m.checkPorts = nil
+	el := runMonitor(t, m, set, prov)
+
+	// Runs 1-5 crash instantly; run 6 is healthy for 31s then is killed;
+	// run 7 completes.
+	for i := 1; i <= 5; i++ {
+		waitRunning(t, m, prov, "root", i)
+		prov.die("root", i)
 	}
-	go func() {
-		// The healthy run: let the supervisor observe a long life before the crash.
-		for len(clk.sleeps()) < 5 {
-			time.Sleep(time.Millisecond)
-		}
-		clk.advance(31 * time.Second)
-		runs[5].exit <- childExit{code: 137, signaled: true}
-		for len(clk.sleeps()) < 6 {
-			time.Sleep(time.Millisecond)
-		}
-		runs[6].exit <- childExit{code: 0}
-	}()
-	if code := s.run(); code != 0 {
-		t.Fatalf("exit = %d\n%s", code, log)
+	waitRunning(t, m, prov, "root", 6)
+	clk.advance(31 * time.Second)
+	prov.die("root", 137)
+	waitRunning(t, m, prov, "root", 7)
+	prov.die("root", 0)
+	waitUntil(t, "root completed", func() bool {
+		return strings.Contains(unitStatus(t, m, "root").Reason, "completed (")
+	})
+
+	want := []string{"1ms", "2ms", "4ms", "8ms", "8ms", "1ms"}
+	if got := restartDelays(el, "root"); fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("backoff sequence = %v, want %v", got, want)
 	}
-	want := []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second, 8 * time.Second, 1 * time.Second}
-	if got := clk.sleeps(); fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Fatalf("backoff sequence = %v, want %v\n%s", got, want, log)
-	}
-	// Every crashed run's group is told to go, then killed before the restart.
-	for i, c := range runs[:6] {
-		if len(c.signals) != 1 || c.signals[0] != syscall.SIGTERM || c.killed != 1 {
-			t.Errorf("run %d: signals=%v killed=%d, want one TERM then one KILL of the old group", i, c.signals, c.killed)
-		}
-	}
-	if !strings.Contains(log.String(), "killed by signal (status 137); restarting in 1s") {
-		t.Fatalf("log:\n%s", log)
+	if n := prov.count(prov.deacts, "root"); n != 7 {
+		t.Fatalf("Deactivate (TERM then KILL of the old group) ran %d times, want once per exit (7)", n)
 	}
 }
 
-func TestSupervisordForwardsSignalAndExitsCleanlyWhenChildStops(t *testing.T) {
-	clk := &fakeClock{fireOn: make(chan struct{})}
+// A signal while a unit sleeps out its backoff ends the monitor now: no
+// restart, and no waiting for the delay.
+func TestMonitorSignalDuringBackoffExitsWithoutRestarting(t *testing.T) {
+	u := testUnit("root", true)
+	u.Restart.Backoff = fleet.ServiceBackoff{Min: "1h", Max: "1h", HealthyAfter: "1h"}
+	set := &unitSet{units: map[string]fleet.Service{u.Name: u}}
+	prov := newFakeProvider(fleet.ServiceProviderProcess)
+	prov.crash["root"] = 2
+	m := newMonitor()
+	m.checkPorts = nil
+	m.load = set.load
+	m.providers = service.Providers{fleet.ServiceProviderProcess: prov}
+	var log lockedBuffer
+	m.log = &log
 	sigs := make(chan os.Signal, 1)
-	c := newFakeChild()
-	s, log := fakeSupervisor(t, clk, sigs, c)
 	done := make(chan int, 1)
-	go func() { done <- s.run() }()
+	go func() { done <- m.run(sigs) }()
+	waitUntil(t, "root sleeping out its backoff", func() bool {
+		return strings.Contains(unitStatus(t, m, "root").Reason, "restarting in 1h")
+	})
 	sigs <- syscall.SIGTERM
-	// The child honours the forwarded TERM before the grace timer fires.
-	for {
-		c.mu.Lock()
-		n := len(c.signals)
-		c.mu.Unlock()
-		if n == 1 {
-			break
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Fatalf("exit = %d, want 0 (a stop is not a failure)\n%s", code, log.String())
 		}
-		time.Sleep(time.Millisecond)
+	case <-time.After(10 * time.Second):
+		t.Fatalf("the signal did not end the backoff wait\n%s", log.String())
 	}
-	if c.signals[0] != syscall.SIGTERM {
-		t.Fatalf("forwarded %v, want SIGTERM", c.signals[0])
-	}
-	c.exit <- childExit{code: 143, signaled: true}
-	if code := <-done; code != 0 {
-		t.Fatalf("exit = %d, want 0 (a stop is not a failure)\n%s", code, log)
-	}
-	if c.killed != 0 {
-		t.Fatalf("child was killed although it stopped within the grace\n%s", log)
-	}
-	if got := clk.sleeps(); len(got) != 1 || got[0] != 5*time.Second {
-		t.Fatalf("grace timer = %v, want [5s]", got)
+	if n := prov.count(prov.acts, "root"); n != 1 {
+		t.Fatalf("root was started %d times, want 1", n)
 	}
 }
 
-func TestSupervisordKillsGroupWhenGraceExpires(t *testing.T) {
-	clk := &fakeClock{fireOn: make(chan struct{})}
-	sigs := make(chan os.Signal, 1)
-	c := newFakeChild()
-	s, log := fakeSupervisor(t, clk, sigs, c)
-	done := make(chan int, 1)
-	go func() { done <- s.run() }()
-	sigs <- os.Interrupt
-	for len(clk.sleeps()) < 1 {
-		time.Sleep(time.Millisecond)
-	}
-	close(clk.fireOn) // the grace expires; the child has ignored INT
-	for {
-		c.mu.Lock()
-		k := c.killed
-		c.mu.Unlock()
-		if k == 1 {
-			break
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
+}
+
+// ─── the retired form is refused, with the unit that replaces it ──────────
+
+func TestSupervisordRefusesTheRetiredDAGForm(t *testing.T) {
+	for _, args := range [][]string{
+		{"DAG.md", "svc"},
+		{"DAG.md"},
+		{"DAG.md", "a", "b"},
+		{"--grace", "5s", "DAG.md", "svc"},
+		{"--min-backoff=2s", "--max-backoff=8s", "--healthy-after", "1m", "DAG.md", "svc"},
+		{"--pid1", "DAG.md", "svc"},
+		{"--no-such", "DAG.md", "a"},
+		{"--", "DAG.md", "svc"},
+		{"--grace=1s"},
+	} {
+		if retiredDAGForm(args) == nil {
+			t.Errorf("supervisord %v: not recognised as the retired form", args)
 		}
-		time.Sleep(time.Millisecond)
+		if code := dispatchSupervisord(args); code != 2 {
+			t.Errorf("supervisord %v: exit %d, want 2", args, code)
+		}
 	}
-	c.exit <- childExit{code: 137, signaled: true}
-	if code := <-done; code != 0 {
-		t.Fatalf("exit = %d, want 0\n%s", code, log)
-	}
-	if !strings.Contains(log.String(), "grace expired; killing") || !strings.Contains(log.String(), "killed (killed by signal (status 137))") {
-		t.Fatalf("log:\n%s", log)
-	}
-}
-
-func TestSupervisordSignalDuringBackoffExitsWithoutRestarting(t *testing.T) {
-	clk := &fakeClock{fireOn: make(chan struct{})}
-	sigs := make(chan os.Signal, 1)
-	c := newFakeChild()
-	s, log := fakeSupervisor(t, clk, sigs, c) // only ONE run scripted
-	c.exit <- childExit{code: 2}
-	done := make(chan int, 1)
-	go func() { done <- s.run() }()
-	for len(clk.sleeps()) < 1 {
-		time.Sleep(time.Millisecond)
-	}
-	sigs <- syscall.SIGTERM
-	if code := <-done; code != 0 {
-		t.Fatalf("exit = %d\n%s", code, log)
-	}
-	if !strings.Contains(log.String(), "while waiting to restart; exiting") {
-		t.Fatalf("log:\n%s", log)
+	for _, args := range [][]string{nil, {"--pid1"}, {"--until-done"}, {"--socket", "/x/s.sock"}, {"--socket=/x/s.sock", "--poll", "1s"}} {
+		if retiredDAGForm(args) != nil {
+			t.Errorf("supervisord %v: the monitor's own flags were refused as the retired form", args)
+		}
 	}
 }
 
-func TestSupervisordUsageAndValidation(t *testing.T) {
+func TestSupervisordRefusalNamesTheUnitForm(t *testing.T) {
+	msg := retiredDAGForm([]string{"--grace", "5s", "--min-backoff", "2s", "ops/DAG.md", "serve"}).message()
+	for _, want := range []string{
+		"the `DAG.md TARGET` form was retired",
+		"exec: [bashy, dag, ops/DAG.md, serve]",
+		"restart: {backoff: {min: 2s}}",
+		"stop: {timeout: 5s}",
+		"bashy service add -f root.yaml",
+		"bashy supervisord --pid1",
+		"bashy service run root",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("refusal lacks %q:\n%s", want, msg)
+		}
+	}
+	// The unit it prints is a valid declaration, with the flags carried over.
+	var yaml []string
+	for _, l := range strings.Split(msg, "\n") {
+		if strings.HasPrefix(l, "  ") && !strings.HasPrefix(l, "  # ") && !strings.HasPrefix(l, "  bashy ") {
+			yaml = append(yaml, strings.TrimPrefix(l, "  "))
+		}
+	}
+	u, err := fleet.ParseService("root", []byte(strings.Join(yaml, "\n")), nil)
+	if err != nil {
+		t.Fatalf("the printed unit does not parse: %v\n%s", err, strings.Join(yaml, "\n"))
+	}
+	if err := u.Validate(); err != nil {
+		t.Fatalf("the printed unit is invalid: %v", err)
+	}
+	if !u.Enabled || fmt.Sprint(u.Exec) != "[bashy dag ops/DAG.md serve]" ||
+		u.Restart.Backoff.Min != "2s" || u.Stop.Timeout != "5s" {
+		t.Fatalf("printed unit lost the operands: %+v", u)
+	}
+}
+
+func TestSupervisordHelpAndFlagErrors(t *testing.T) {
 	for _, tc := range []struct {
 		args []string
 		code int
 	}{
 		{[]string{"--help"}, 0},
 		{[]string{"-h"}, 0},
-		// No operands is the service monitor (supervisord_service.go); its
-		// own flag errors are usage errors too.
 		{[]string{"--no-such"}, 2},
 		{[]string{"--poll"}, 2},
-		{[]string{"DAG.md"}, 2},
-		{[]string{"DAG.md", "a", "b"}, 2},
-		{[]string{"--no-such", "DAG.md", "a"}, 2},
-		{[]string{filepath.Join(t.TempDir(), "missing.md"), "a"}, 2},
 	} {
 		if code := dispatchSupervisord(tc.args); code != tc.code {
 			t.Errorf("supervisord %v: exit %d, want %d", tc.args, code, tc.code)
 		}
 	}
-	s := &supervisor{minBackoff: 2 * time.Second, maxBackoff: time.Second, dagFile: "x"}
-	if err := s.validate(); err == nil || !strings.Contains(err.Error(), "max-backoff") {
-		t.Errorf("min > max accepted: %v", err)
-	}
 }
 
-// ─── the real thing: this test binary stands in for the dag root ──────────
+// ─── the real thing: this test binary stands in for `bashy dag` ───────────
 
 // supervisordTestChild is what the re-exec'd test binary runs (main_test.go).
-// It answers the preflight (`dag --json -n FILE TARGET`) with a plan and runs
-// the root (`dag FILE TARGET`) per BASHY_SUPERVISORD_TEST_CHILD:
+// It is the dag root a unit execs (`bashy dag FILE TARGET`), scripted by
+// BASHY_SUPERVISORD_TEST_CHILD:
 //
 //	exit:N            print argv, exit N
 //	count:FILE        append one line to FILE, exit 1 (until FILE has 3 lines: exit 0)
@@ -282,11 +307,6 @@ func TestSupervisordUsageAndValidation(t *testing.T) {
 func supervisordTestChild() int {
 	script := os.Getenv("BASHY_SUPERVISORD_TEST_CHILD")
 	args := os.Args[1:]
-	if len(args) >= 2 && args[0] == "dag" && args[1] == "--json" {
-		// The plan the real runner would print for the fixture in dagFixture.
-		fmt.Println(`{"schema_version":"dag-v1","status":"ok","result":{"plan":[{"name":"a"},{"name":"b"},{"name":"svc"}]}}`)
-		return 0
-	}
 	fmt.Printf("child argv: %s\n", strings.Join(args, " "))
 	mode, arg, _ := strings.Cut(script, ":")
 	switch mode {
@@ -340,8 +360,22 @@ func dagFixture(t *testing.T) string {
 	return p
 }
 
-// realSupervisor drives the loop against re-exec'd copies of this test binary.
-func realSupervisor(t *testing.T, script string, dagFile string) (*supervisor, *os.File, *bytes.Buffer) {
+// realUnit is a monitor driving the dag-root unit against re-exec'd copies of
+// this test binary, the unit's stdout going to out.
+type realUnit struct {
+	m    *monitor
+	prov *processProvider
+	out  *os.File
+	log  *lockedBuffer
+	sigs chan os.Signal
+	done chan int
+	dag  string
+}
+
+// startRealUnit runs the monitor over one dag-root unit (mutate edits it).
+// With untilDone the monitor returns when the root settles, like the
+// container entrypoint; otherwise it runs until signaled. r may be nil.
+func startRealUnit(t *testing.T, script string, untilDone bool, r *reaper, mutate func(*fleet.Service)) *realUnit {
 	t.Helper()
 	out, err := os.CreateTemp(t.TempDir(), "stdout")
 	if err != nil {
@@ -351,15 +385,50 @@ func realSupervisor(t *testing.T, script string, dagFile string) (*supervisor, *
 	// TempDir cleanup fails the test after every assertion has passed.
 	t.Cleanup(func() { out.Close() })
 	t.Setenv("BASHY_SUPERVISORD_TEST_CHILD", script)
-	var log bytes.Buffer
-	s := &supervisor{
-		self: os.Args[0], dagFile: dagFile, target: "svc",
-		minBackoff: 10 * time.Millisecond, maxBackoff: 40 * time.Millisecond, healthyAfter: time.Hour, grace: 500 * time.Millisecond,
-		log: &log, stdin: nil, stdout: out, stderr: out,
-		after: time.After, now: time.Now, signals: make(chan os.Signal),
+	dag := dagFixture(t)
+	u := dagRootUnit(dag, "svc")
+	if mutate != nil {
+		mutate(&u)
 	}
-	s.start = s.startDagChild
-	return s, out, &log
+	set := &unitSet{units: map[string]fleet.Service{u.Name: u}}
+	prov := newProcessProvider(os.Args[0], "", r)
+	prov.stdout, prov.stderr = out, out
+	m := newMonitor()
+	m.checkPorts = nil
+	m.load = set.load
+	m.providers = service.Providers{fleet.ServiceProviderProcess: prov}
+	m.untilDone = untilDone
+	if r != nil {
+		m.probe = func(ctx context.Context, u fleet.Service, p unitPolicy) (error, bool) { return runProbe(ctx, u, p, r) }
+	}
+	ru := &realUnit{m: m, prov: prov, out: out, log: &lockedBuffer{}, sigs: make(chan os.Signal, 2), done: make(chan int, 1), dag: dag}
+	m.log = ru.log
+	go func() { ru.done <- m.run(ru.sigs) }()
+	t.Cleanup(func() {
+		select {
+		case <-ru.done:
+		default:
+			ru.sigs <- os.Interrupt
+			select {
+			case <-ru.done:
+			case <-time.After(10 * time.Second):
+				t.Error("monitor did not shut down")
+			}
+		}
+	})
+	return ru
+}
+
+func (ru *realUnit) wait(t *testing.T) int {
+	t.Helper()
+	select {
+	case code := <-ru.done:
+		ru.done <- code
+		return code
+	case <-time.After(30 * time.Second):
+		t.Fatalf("monitor did not return\n%s\n%s", ru.log.String(), readAll(t, ru.out))
+		return -1
+	}
 }
 
 func readAll(t *testing.T, f *os.File) string {
@@ -369,111 +438,6 @@ func readAll(t *testing.T, f *os.File) string {
 		t.Fatal(err)
 	}
 	return string(b)
-}
-
-// argv, the DAG path and the Requires order reach the root untouched, and
-// the root's output lands on the supervisor's own stdout.
-func TestSupervisordPropagatesArgvAndInheritsOutput(t *testing.T) {
-	dag := dagFixture(t)
-	s, out, log := realSupervisor(t, "exit:0", dag)
-	if code := s.run(); code != 0 {
-		t.Fatalf("exit = %d\n%s\n%s", code, log, readAll(t, out))
-	}
-	got := readAll(t, out)
-	if want := "child argv: dag " + dag + " svc\n"; !strings.Contains(got, want) {
-		t.Fatalf("child output %q does not carry %q", got, want)
-	}
-	if !strings.Contains(log.String(), "plan: a -> b -> svc") {
-		t.Fatalf("the Requires order was not reported:\n%s", log)
-	}
-}
-
-func TestSupervisordRestartsARealChildUntilItCompletes(t *testing.T) {
-	dag := dagFixture(t)
-	counter := filepath.Join(t.TempDir(), "runs")
-	s, out, log := realSupervisor(t, "count:"+counter, dag)
-	if code := s.run(); code != 0 {
-		t.Fatalf("exit = %d\n%s\n%s", code, log, readAll(t, out))
-	}
-	b, _ := os.ReadFile(counter)
-	if n := strings.Count(string(b), "\n"); n != 3 {
-		t.Fatalf("root ran %d times, want 3 (two crashes, then exit 0)\n%s", n, log)
-	}
-	if strings.Count(log.String(), "restarting in") != 2 || !strings.Contains(log.String(), "restarting in 10ms") || !strings.Contains(log.String(), "restarting in 20ms") {
-		t.Fatalf("log:\n%s", log)
-	}
-}
-
-// A preflight the runner rejects is a diagnostic and an exit, not a loop.
-func TestSupervisordPreflightFailureNeverRestarts(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("the helper's exit-status shape is unix")
-	}
-	dag := dagFixture(t)
-	s, out, log := realSupervisor(t, "exit:0", dag)
-	s.target = "nosuch"
-	// The helper answers every `dag --json -n` with the fixture plan, so
-	// route the preflight to a runner that refuses: the real dag itself.
-	bin := os.Getenv("BASHY_E2E_BIN")
-	if bin == "" {
-		if p, err := exec.LookPath("bashy"); err == nil {
-			bin = p
-		}
-	}
-	if bin == "" {
-		t.Skip("no bashy binary on PATH to run the real preflight")
-	}
-	s.self = bin
-	code := s.run()
-	if code == 0 {
-		t.Fatalf("unknown target planned successfully?\n%s\n%s", log, readAll(t, out))
-	}
-	if strings.Contains(log.String(), "restarting") {
-		t.Fatalf("an unplannable root was restarted:\n%s", log)
-	}
-	if !strings.Contains(readAll(t, out), "nosuch") {
-		t.Fatalf("the runner's own diagnostic was not passed through:\n%s", readAll(t, out))
-	}
-}
-
-func TestSupervisordForwardsTermToARealProcessGroup(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX signals")
-	}
-	dag := dagFixture(t)
-	sigs := make(chan os.Signal, 1)
-	s, out, log := realSupervisor(t, "hold", dag)
-	s.signals = sigs
-	done := make(chan int, 1)
-	go func() { done <- s.run() }()
-	waitForOutput(t, out, "child holding")
-	sigs <- syscall.SIGTERM
-	if code := <-done; code != 0 {
-		t.Fatalf("exit = %d\n%s", code, log)
-	}
-	if !strings.Contains(log.String(), "stopped (killed by signal (status 143))") {
-		t.Fatalf("the child did not die of the forwarded TERM:\n%s", log)
-	}
-}
-
-func TestSupervisordKillsARealChildThatIgnoresTerm(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX signals")
-	}
-	dag := dagFixture(t)
-	sigs := make(chan os.Signal, 1)
-	s, out, log := realSupervisor(t, "ignore-term", dag)
-	s.signals = sigs
-	done := make(chan int, 1)
-	go func() { done <- s.run() }()
-	waitForOutput(t, out, "child holding")
-	sigs <- syscall.SIGTERM
-	if code := <-done; code != 0 {
-		t.Fatalf("exit = %d\n%s", code, log)
-	}
-	if !strings.Contains(log.String(), "grace expired") || !strings.Contains(log.String(), "killed (killed by signal (status 137))") {
-		t.Fatalf("log:\n%s", log)
-	}
 }
 
 func waitForOutput(t *testing.T, f *os.File, want string) {
@@ -488,4 +452,87 @@ func waitForOutput(t *testing.T, f *os.File, want string) {
 	t.Fatalf("child never printed %q: %q", want, readAll(t, f))
 }
 
-var _ = json.Marshal
+// argv and the DAG path reach the root untouched, and the root's output lands
+// on the supervisor's own stdout; a clean exit completes the unit and, as the
+// container entrypoint, the monitor.
+func TestDagRootUnitPropagatesArgvAndInheritsOutput(t *testing.T) {
+	ru := startRealUnit(t, "exit:0", true, nil, nil)
+	if code := ru.wait(t); code != 0 {
+		t.Fatalf("exit = %d\n%s\n%s", code, ru.log.String(), readAll(t, ru.out))
+	}
+	got := readAll(t, ru.out)
+	if want := "child argv: dag " + ru.dag + " svc\n"; !strings.Contains(got, want) {
+		t.Fatalf("child output %q does not carry %q", got, want)
+	}
+	if !strings.Contains(ru.log.String(), "completed (exit 0)") {
+		t.Fatalf("log:\n%s", ru.log.String())
+	}
+}
+
+func TestDagRootUnitRestartsARealChildUntilItCompletes(t *testing.T) {
+	counter := filepath.Join(t.TempDir(), "runs")
+	ru := startRealUnit(t, "count:"+counter, true, nil, nil)
+	if code := ru.wait(t); code != 0 {
+		t.Fatalf("exit = %d\n%s\n%s", code, ru.log.String(), readAll(t, ru.out))
+	}
+	b, _ := os.ReadFile(counter)
+	if n := strings.Count(string(b), "\n"); n != 3 {
+		t.Fatalf("root ran %d times, want 3 (two crashes, then exit 0)\n%s", n, ru.log.String())
+	}
+	log := ru.log.String()
+	if strings.Count(log, "restarting in") != 2 || !strings.Contains(log, "restarting in 10ms") || !strings.Contains(log, "restarting in 20ms") {
+		t.Fatalf("log:\n%s", log)
+	}
+}
+
+// A root that can never succeed (an unknown target, an unparseable file) is
+// restarted only up to the start limit, then left failed: the monitor
+// returns 1 instead of looping.
+func TestDagRootUnitThatNeverSucceedsEndsFailedAtTheStartLimit(t *testing.T) {
+	ru := startRealUnit(t, "exit:2", true, nil, func(u *fleet.Service) {
+		u.Restart.StartLimit = fleet.ServiceStartLim{Burst: 3, Interval: "1m"}
+	})
+	if code := ru.wait(t); code != 1 {
+		t.Fatalf("exit = %d, want 1 (failed)\n%s", code, ru.log.String())
+	}
+	if n := strings.Count(readAll(t, ru.out), "child argv:"); n != 3 {
+		t.Fatalf("root was started %d times, want exactly the burst (3)\n%s", n, ru.log.String())
+	}
+	if !strings.Contains(ru.log.String(), "start limit hit: 3 starts within 1m0s") {
+		t.Fatalf("log:\n%s", ru.log.String())
+	}
+}
+
+func TestMonitorForwardsTermToARealProcessGroup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX signals")
+	}
+	ru := startRealUnit(t, "hold", false, nil, nil)
+	waitForOutput(t, ru.out, "child holding")
+	ru.sigs <- syscall.SIGTERM
+	if code := ru.wait(t); code != 0 {
+		t.Fatalf("exit = %d\n%s", code, ru.log.String())
+	}
+	if st := ru.prov.Status("root"); st.LastExit == nil || *st.LastExit != 143 {
+		t.Fatalf("the child did not die of the forwarded TERM (143): %+v\n%s", st, ru.log.String())
+	}
+}
+
+func TestMonitorKillsARealChildThatIgnoresTerm(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX signals")
+	}
+	ru := startRealUnit(t, "ignore-term", false, nil, nil)
+	waitForOutput(t, ru.out, "child holding")
+	start := time.Now()
+	ru.sigs <- syscall.SIGTERM
+	if code := ru.wait(t); code != 0 {
+		t.Fatalf("exit = %d\n%s", code, ru.log.String())
+	}
+	if st := ru.prov.Status("root"); st.LastExit == nil || *st.LastExit != 137 {
+		t.Fatalf("the child was not killed when the grace (stop.timeout 500ms) expired (137): %+v\n%s", st, ru.log.String())
+	}
+	if time.Since(start) < 400*time.Millisecond {
+		t.Fatalf("killed after %v, before the grace elapsed", time.Since(start))
+	}
+}

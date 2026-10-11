@@ -124,6 +124,9 @@ type monitor struct {
 	// monitor returns once none of them wants to run any more.
 	only  map[string]bool
 	force bool
+	// untilDone: return once no enabled unit wants to run any more (every one
+	// completed or failed), like `service run` over the whole registry.
+	untilDone bool
 
 	msgs     chan any
 	units    map[string]*unitRun
@@ -167,7 +170,7 @@ func (m *monitor) later(d time.Duration, unit string, gen int, kind string) {
 }
 
 // run is the loop. It returns when shutdown completes or, under `service run`,
-// when no selected unit wants to run any more; the code is 0 unless a unit
+// when no selected unit (--until-done: no enabled unit) wants to run any more; the code is 0 unless a unit
 // it was asked to run ended failed.
 func (m *monitor) run(signals <-chan os.Signal) int {
 	defer m.cancel()
@@ -203,7 +206,7 @@ func (m *monitor) run(signals <-chan os.Signal) int {
 // finished: shutting down and everything is down, or (service run) nothing
 // selected wants to run.
 func (m *monitor) finished() (int, bool) {
-	if !m.stopping && m.only == nil {
+	if !m.stopping && m.only == nil && !m.untilDone {
 		return 0, false
 	}
 	code := 0
@@ -211,7 +214,7 @@ func (m *monitor) finished() (int, bool) {
 		if u.busy || u.waiting || u.st.State != service.Inactive && u.st.State != service.Failed {
 			return 0, false
 		}
-		if m.only != nil && !m.stopping && m.wantUp(u) && !u.latched {
+		if (m.only != nil || m.untilDone) && !m.stopping && m.wantUp(u) && !u.latched {
 			return 0, false
 		}
 		if u.st.State == service.Failed {
@@ -720,6 +723,11 @@ func (m *monitor) onConfigured(v msgConfigured) {
 // orders it); force (a second signal) cuts every grace short.
 func (m *monitor) shutdown(force bool) {
 	m.stopping = true
+	// A unit sleeping out its restart backoff has nothing to stop: the signal
+	// ends the wait now instead of after the delay.
+	for _, u := range m.units {
+		u.waiting = false
+	}
 	if force {
 		m.cancel()
 	}

@@ -232,6 +232,13 @@ func TestE2EAllListedCommandsDispatch(t *testing.T) {
 		t.Errorf("coreutils execution smoke failed (%q, exit %d): %s", s, code, firstLineOf(smoke))
 	}
 
+	// The retired `supervisord DAG.md TARGET` form is refused with the unit
+	// that replaces it, never run (Sprint 418 S19).
+	if o, code := runBashy(bin, "supervisord", "DAG.md", "svc"); code != 2 ||
+		!strings.Contains(o, "exec: [bashy, dag, DAG.md, svc]") || !strings.Contains(o, "bashy service add") {
+		t.Errorf("supervisord DAG.md TARGET: exit %d, want 2 with the unit form: %s", code, firstLineOf(o))
+	}
+
 	// Native front-door verbs (safe, side-effect-free `--help`) + engine verbs
 	// (docker/podman/ollama — the regression class) are really invoked.
 	native := set("install-agent", "weave", "sprint", "claim", "chat", "agent", "model", "tool", "person", "sdlc", "web", "dag",

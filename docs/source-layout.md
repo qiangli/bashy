@@ -65,8 +65,8 @@ The annotated file-by-file map of the repo, moved verbatim from `CLAUDE.md` §So
     provider and rotating unit logs), `_health` (http/tcp/exec probes, foreign
     listener check), `_ipc` (control socket, delegated internal provider),
     `_service` (`bashy service` mount + runtime verbs, monitor wiring); the
-    Sprint 218 one-dag-root mode stays in `supervisord.go`, the reaper in
-    `_linux`. See `docs/bashy-service-design.md`.
+    retired Sprint 218 `DAG.md TARGET` form is only recognised, to be refused
+    with its unit (S19), in `supervisord.go`; the reaper is in `_linux`. See `docs/bashy-service-design.md`.
   - `internal/agentos/advisor*.go` — the **space-time advisor**: a non-intrusive
     post-exec `ExecHandler` middleware that, only when a command fails, appends one
     advisory hint explaining a space-determined failure (wrong cwd, host gone

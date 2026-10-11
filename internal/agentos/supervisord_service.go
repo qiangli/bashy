@@ -26,8 +26,7 @@ import (
 	"github.com/qiangli/yoke/pkg/service"
 )
 
-const supervisordMonitorUsage = `usage: bashy supervisord [--pid1] [--socket PATH] [--poll DUR]
-       bashy supervisord [flags] DAG.md TARGET      (one dag root; see below)
+const supervisordMonitorUsage = `usage: bashy supervisord [--pid1] [--until-done] [--socket PATH] [--poll DUR]
 
 The service monitor: keep every enabled unit in ` + "`bashy service list`" + ` in its
 desired state, in the foreground. Each process unit runs as a foreground child
@@ -42,13 +41,17 @@ restarting other units. Status is served on a local socket (` + "`bashy service\
 room timeline and failed also reaches the notify sinks. TERM/INT stop every
 unit, dependents first, and exit 0.
 
+A dag root is a unit whose exec is ` + "`bashy dag DAG.md TARGET`" + `; the old
+` + "`bashy supervisord DAG.md TARGET`" + ` form is refused (exit 2) with that unit spelled out.
+
 flags:
   --pid1          container entrypoint: reap orphaned descendants (PID 1 or a
                   Linux child subreaper; refused where neither is possible)
+  --until-done    exit once no enabled unit wants to run any more (every one
+                  completed or failed): 0 if none failed, else 1
   --socket PATH   control socket (default BASHY_HOME/service/supervisord.sock)
   --poll DUR      re-read the registry this often as well (default %v)
 
-With DAG.md TARGET it supervises exactly one bashy dag root (Sprint 218):
 `
 
 const supervisordPoll = 5 * time.Second
@@ -58,6 +61,7 @@ func dispatchSupervisordMonitor(args []string) int {
 	fs := flag.NewFlagSet("supervisord", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	pid1 := fs.Bool("pid1", false, "")
+	untilDone := fs.Bool("until-done", false, "")
 	sock := fs.String("socket", supervisordSocket(), "")
 	poll := fs.Duration("poll", supervisordPoll, "")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
@@ -84,6 +88,7 @@ func dispatchSupervisordMonitor(args []string) int {
 	}
 	m := newServiceMonitor(r, serviceHome(), os.Stderr)
 	m.pollEvery = *poll
+	m.untilDone = *untilDone
 	stop, err := m.serveControl(*sock)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy supervisord:", err)
@@ -96,7 +101,6 @@ func dispatchSupervisordMonitor(args []string) int {
 
 func supervisordHelp(w io.Writer) {
 	fmt.Fprintf(w, supervisordMonitorUsage, supervisordPoll)
-	fmt.Fprintf(w, supervisordUsage, supervisordMinBackoff, supervisordMaxBackoff, supervisordHealthyAfter, supervisordGrace)
 }
 
 // newServiceMonitor wires the production monitor: the registry as desired

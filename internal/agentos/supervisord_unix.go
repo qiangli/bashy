@@ -10,7 +10,7 @@ import (
 	"syscall"
 )
 
-// ownProcessGroupAttr makes the dag root the leader of a new process group
+// ownProcessGroupAttr makes a unit's process the leader of a new process group
 // (pgid == its pid), so one kill(-pgid) reaches every descendant that did not
 // deliberately leave the group (a setsid'd daemon is, by design, not ours).
 func ownProcessGroupAttr() *syscall.SysProcAttr {

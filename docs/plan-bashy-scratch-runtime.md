@@ -11,8 +11,11 @@ default.
 
 The profile deliberately adds no OCI framework, supervisor configuration, or
 release abstraction. Cloudbox copies this exact file into its separate scratch
-image and invokes the already-shipped `bashy supervisord DAG.md TARGET` front
-door.
+image. The image entrypoint is `bashy supervisord --pid1`: the service monitor
+as PID 1. The dag root it serves is a unit whose exec is `bashy dag DAG.md
+TARGET` (Sprint 418 S19; the old `bashy supervisord DAG.md TARGET` form is
+refused with a pointer to the unit form). See `bashy-service-design.md`, "A dag
+root is a unit".
 
 ## Verification
 
@@ -27,9 +30,15 @@ fails unless all deterministic checks pass:
 
 On linux/amd64 it executes the artifact directly. On another host it uses a
 usable Podman, Docker, or nerdctl runtime to build a literal `FROM scratch`
-image. Both execution paths exercise `bashy --version` and
-`bashy supervisord --help`. If cross-host execution and a usable runtime are
-both unavailable, the command smoke is reported as skipped while the
-deterministic structural and dependency checks still gate the artifact. Setting
-`BASHY_SCRATCH_RUNTIME` requests a particular runtime and fails closed if that
-runtime cannot be used.
+image with the new entrypoint (`ENTRYPOINT ["/bashy", "supervisord", "--pid1"]`),
+a unit for the root in `/etc/bashy/services` (on `BASHY_SERVICES_PATH`) and a
+one-target `DAG.md`. Both execution paths exercise `bashy --version`,
+`bashy supervisord --help` and the refusal of the retired `DAG.md TARGET` form
+(exit 2). The runtime path additionally runs the image with `--until-done` and
+passes only if the monitor reports the root unit completed and
+`bashy service logs root` (from the same `BASHY_HOME` volume) shows the target
+ran, then checks the refusal inside the image. If cross-host execution and a
+usable runtime are both unavailable, the command smoke is reported as skipped
+while the deterministic structural and dependency checks still gate the
+artifact. Setting `BASHY_SCRATCH_RUNTIME` requests a particular runtime and
+fails closed if that runtime cannot be used.
