@@ -427,7 +427,7 @@ func newBusFrontDoorCmd(name string) (*cobra.Command, string, bool) {
 	wireMessageBoard()
 	switch name {
 	case "mb", "messages":
-		return bus.NewMessageBoardCmdWithSprintResolver(weave.ResolveSprintScope), "mb", true
+		return bus.NewMessageBoardCmdWithSprintResolver(weave.ResolveSprintScopeByHandle), "mb", true
 	case "inbox":
 		return newUnifiedInboxCmd(), "inbox", true
 	case "notify":

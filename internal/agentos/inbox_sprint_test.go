@@ -11,29 +11,33 @@ import (
 
 func TestSprintScopedInboxAndBoardPreserveCursor(t *testing.T) {
 	isolateUnifiedInbox(t)
-	seedSprintBoard(t, []map[string]any{seededStory(418, "", time.Now().UTC())})
+	story := seededStory(418, "", time.Now().UTC())
+	story["uuid"] = "a1111111-b222-c333-d444-e55555555555"
+	seedSprintBoard(t, []map[string]any{story})
 	t.Setenv("BASHY_PRINCIPAL", "dhnt:agent/"+inboxTestReader)
 	for _, body := range []string{"Sprint 418 review", "Sprint 419 unrelated"} {
 		if err := bus.PostMessage(bus.Post{From: "peer", To: inboxTestReader, Body: body}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, name := range []string{"inbox", "mb"} {
-		cmd, _, ok := newBusFrontDoorCmd(name)
-		if !ok {
-			t.Fatalf("%s not mounted", name)
-		}
-		var out bytes.Buffer
-		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"--as", inboxTestReader, "--sprint", "418"})
-		if err := cmd.Execute(); err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
-		if !strings.Contains(out.String(), "Sprint 418 review") || strings.Contains(out.String(), "Sprint 419 unrelated") {
-			t.Fatalf("%s scope result: %s", name, out.String())
-		}
-		if got := bus.SeenSeq(inboxTestReader); got != 0 {
-			t.Fatalf("%s advanced board cursor to %d", name, got)
+	for _, handle := range []string{"418", "a1111111-b222-c333-d444-e55555555555"} {
+		for _, name := range []string{"inbox", "mb"} {
+			cmd, _, ok := newBusFrontDoorCmd(name)
+			if !ok {
+				t.Fatalf("%s not mounted", name)
+			}
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetArgs([]string{"--as", inboxTestReader, "--sprint", handle})
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			if !strings.Contains(out.String(), "Sprint 418 review") || strings.Contains(out.String(), "Sprint 419 unrelated") {
+				t.Fatalf("%s scope result: %s", name, out.String())
+			}
+			if got := bus.SeenSeq(inboxTestReader); got != 0 {
+				t.Fatalf("%s advanced board cursor to %d", name, got)
+			}
 		}
 	}
 }

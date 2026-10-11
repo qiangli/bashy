@@ -312,14 +312,14 @@ type mailboxFilter struct {
 	since                                         time.Time
 	all                                           bool
 	limit                                         int
-	sprint                                        int64
+	sprint                                        string
 	scope                                         *bus.SprintScope
 }
 
 // validate resolves --since once per command so a typo fails before any read.
 func (f *mailboxFilter) validate(now time.Time) error {
-	if f.sprint != 0 {
-		scope, err := weave.ResolveSprintScope(f.sprint)
+	if f.sprint != "" {
+		scope, err := weave.ResolveSprintScopeByHandle(f.sprint)
 		if err != nil {
 			return err
 		}
@@ -416,7 +416,7 @@ func addMailboxFilterFlags(cmd *cobra.Command, f *mailboxFilter) {
 	p.StringVar(&f.order, "sort", "unread", "order: unread, newest, oldest, or source")
 	p.BoolVar(&f.all, "all", false, "include acknowledged history")
 	p.IntVarP(&f.limit, "limit", "n", 0, "maximum records (0 = all)")
-	p.Int64Var(&f.sprint, "sprint", 0, "show only records about this sprint without changing mailbox state")
+	p.StringVar(&f.sprint, "sprint", "", "show only records about this sprint number or UUID without changing mailbox state")
 }
 func renderMailbox(cmd *cobra.Command, items []mailboxItem, jsonOut bool) error {
 	if jsonOut {
