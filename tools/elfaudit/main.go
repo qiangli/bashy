@@ -4,7 +4,6 @@ package main
 import (
 	"debug/buildinfo"
 	"debug/elf"
-	"debug/macho"
 	"fmt"
 	"os"
 	"strings"
@@ -30,8 +29,8 @@ func main() {
 
 // auditBashySignal guards inherited-signal parity for shipped cmd/bashy
 // artifacts. Linux needs runtime.fwdSig in a fixed-address ELF symbol table;
-// Darwin needs the pre-Go C constructor. Pure-Go Darwin releases are rejected
-// before publication. This check is cross-host: macOS release builders can
+// Darwin needs the product runtime overlay's snapshot accessor. Plain go build
+// Darwin artifacts are rejected before publication. This check is cross-host: macOS release builders can
 // audit Linux ELF files without executing them.
 func auditBashySignal(path string) error {
 	build, err := buildinfo.ReadFile(path)
@@ -47,24 +46,16 @@ func auditBashySignal(path string) error {
 	}
 	switch settings["GOOS"] {
 	case "darwin":
-		if settings["CGO_ENABLED"] != "1" {
-			return fmt.Errorf("%s is pure-Go Darwin cmd/bashy; build natively with cgo to retain the pre-Go inherited-signal constructor", path)
-		}
-		f, err := macho.Open(path)
-		if err != nil {
-			return fmt.Errorf("open Darwin Bashy Mach-O %s: %w", path, err)
-		}
-		defer f.Close()
-		if f.Symtab == nil {
-			return fmt.Errorf("%s lacks a Mach-O symbol table for the inherited-signal constructor", path)
-		}
-		for _, symbol := range f.Symtab.Syms {
-			if symbol.Name == "_snapshot_inherited_ignores" {
-				fmt.Printf("elfaudit: PASS %s retains Darwin pre-Go inherited-signal constructor\n", path)
+		// Mach-O is always PIE, so Darwin cannot use the ELF fwdSig reader.
+		// The product runtime overlay exposes the snapshot instead; the tag
+		// can only link against that overlay, with or without cgo.
+		for _, tag := range strings.Split(settings["-tags"], ",") {
+			if tag == "bashy_runtime_snapshot" {
+				fmt.Printf("elfaudit: PASS %s reads the product runtime inherited-signal snapshot\n", path)
 				return nil
 			}
 		}
-		return fmt.Errorf("%s lacks the pre-Go inherited-signal constructor", path)
+		return fmt.Errorf("%s lacks the product runtime inherited-signal snapshot; build Darwin cmd/bashy with scripts/go-product.sh", path)
 	case "linux":
 		// Continue with the ELF check below.
 	default:

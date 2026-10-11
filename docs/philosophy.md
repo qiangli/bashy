@@ -195,9 +195,8 @@ A philosophy that forbids nothing is decoration. This one has teeth:
   is a directory, not a SaaS.
 - **No non-permissive dependency may be compiled in, linked, embedded, or vendored.**
   MIT/BSD/Apache only. Download-and-exec is not bundling; linking is.
-- The core is Go. Linux and Windows release builds use `CGO_ENABLED=0`;
-  the Darwin `bashy` release uses `CGO_ENABLED=1` to link the pre-Go C constructor
-  that snapshots inherited ignored signals before the Go runtime changes them.
+- The core is Go. Release builds use `CGO_ENABLED=0` on Linux, macOS and
+  Windows; the product runtime build preserves inherited ignored signals.
   See [public-claims-evidence.md](public-claims-evidence.md) and
   `scripts/build-native-darwin-release.sh`.
 - **Compatibility may never be traded for performance.** An optimization that breaks

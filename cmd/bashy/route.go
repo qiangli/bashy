@@ -32,8 +32,8 @@ func utilityInvocation(argv0 string) bool {
 }
 
 // installInheritedSignalIgnores applies the entry snapshot only to shell
-// routes. Cgo builds capture it in a pre-Go constructor; Linux pure-Go builds
-// read the runtime's ELF snapshot through multicall. The interpreter needs
+// routes. Product builds read the runtime overlay's snapshot; other Linux
+// builds read the runtime's ELF snapshot through multicall. The interpreter needs
 // these names in BASHY_HARD_IGNORE to keep inherited SIG_IGN immutable.
 func installInheritedSignalIgnores() {
 	captured := preGoIgnoredSignals()

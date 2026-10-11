@@ -29,7 +29,37 @@ const insertion = `
 const helpers = `
 // Default off. Only the Bashy product build links this immutable value to "1".
 var bashyInheritedIgnore string
+
+// bashyInheritedIgnoredSignals reports the caller's inherited SIG_IGN
+// dispositions as a bitmask (bit n is signal n), without cgo. initsig snapshots
+// runtime-managed signals in fwdSig before installing handlers; _SigDefault
+// signals keep their inherited action until Notify, so read those live.
+//
+//go:linkname bashyInheritedIgnoredSignals
+func bashyInheritedIgnoredSignals() uint64 {
+	var mask uint64
+	for i := uint32(1); i < _NSIG && i < 64; i++ {
+		t := &sigtable[i]
+		if t.flags == 0 {
+			continue
+		}
+		if t.flags&_SigDefault != 0 {
+			if atomic.Load(&handlingSig[i]) == 0 && getsig(i) == _SIG_IGN {
+				mask |= 1 << i
+			}
+			continue
+		}
+		if atomic.Loaduintptr(&fwdSig[i]) == _SIG_IGN {
+			mask |= 1 << i
+		}
+	}
+	return mask
+}
 `
+
+// snapshotTag selects cmd/bashy's pure-Go reader of the overlay accessor.
+// Builds without the overlay never see the tag, so they never link it.
+const snapshotTag = "bashy_runtime_snapshot"
 
 func main() {
 	if err := run(); err != nil {
@@ -114,11 +144,27 @@ func run() error {
 			return err
 		}
 		ldflags := ""
+		tags := snapshotTag
 		remaining := []string{}
 		for i := 1; i < len(args); i++ {
 			arg := args[i]
 			if arg == "-overlay" || strings.HasPrefix(arg, "-overlay=") {
 				return fmt.Errorf("caller overlay unsupported; refusing to replace it")
+			}
+			if arg == "-tags" || strings.HasPrefix(arg, "-tags=") {
+				value, ok := strings.CutPrefix(arg, "-tags=")
+				if !ok {
+					i++
+					if i == len(args) {
+						return fmt.Errorf("missing -tags value")
+					}
+					value = args[i]
+				}
+				// Go accepts comma- or space-separated lists; emit commas.
+				if fields := strings.Fields(strings.ReplaceAll(value, ",", " ")); len(fields) > 0 {
+					tags = strings.Join(append(fields, snapshotTag), ",")
+				}
+				continue
 			}
 			if arg == "-ldflags" {
 				i++
@@ -132,14 +178,14 @@ func run() error {
 				remaining = append(remaining, arg)
 			}
 		}
-		if strings.Contains(os.Getenv("GOFLAGS"), "-overlay") || strings.Contains(os.Getenv("GOFLAGS"), "-ldflags") {
-			return fmt.Errorf("GOFLAGS overlay/ldflags unsupported; pass flags explicitly")
+		if goflags := os.Getenv("GOFLAGS"); strings.Contains(goflags, "-overlay") || strings.Contains(goflags, "-ldflags") || strings.Contains(goflags, "-tags") {
+			return fmt.Errorf("GOFLAGS overlay/ldflags/tags unsupported; pass flags explicitly")
 		}
 		if strings.Contains(ldflags, "runtime.bashyInheritedIgnore") {
 			return fmt.Errorf("caller cannot override the product startup contract")
 		}
 		ldflags += " -X runtime.bashyInheritedIgnore=1"
-		args = append([]string{args[0], "-overlay=" + path, "-ldflags=" + ldflags}, remaining...)
+		args = append([]string{args[0], "-overlay=" + path, "-ldflags=" + ldflags, "-tags=" + tags}, remaining...)
 	}
 	cmd := goCommand(args...)
 	if buildRoot != "" {

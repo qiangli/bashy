@@ -1,4 +1,4 @@
-//go:build cgo && (linux || darwin)
+//go:build linux || darwin
 
 package main
 
@@ -16,15 +16,22 @@ import (
 // A native parent can mark a signal ignored before exec. The Go runtime
 // replaces some of those dispositions before main, so this exercises the
 // actual single-file sh entry rather than an interpreter constructed in Go.
+// Product builds must keep the contract with and without cgo on every Unix.
 func TestSingleBinaryInheritedIgnoredSignals(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the single Bashy executable")
 	}
+	for _, cgo := range []string{"0", "1"} {
+		t.Run("cgo="+cgo, func(t *testing.T) { checkProductInheritedIgnores(t, cgo) })
+	}
+}
+
+func checkProductInheritedIgnores(t *testing.T, cgo string) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "bashy")
 	build := exec.Command("./scripts/go-product.sh", "build", "-o", bin, "./cmd/bashy")
 	build.Dir = filepath.Join("..", "..")
-	build.Env = append(os.Environ(), "CGO_ENABLED=1")
+	build.Env = append(os.Environ(), "CGO_ENABLED="+cgo)
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build single Bashy executable: %v\n%s", err, out)
 	}

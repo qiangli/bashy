@@ -31,6 +31,13 @@ frozen release candidate before the tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The Darwin `bashy` release now builds with `CGO_ENABLED=0`, like Linux and
+  Windows. The product runtime build exposes the Go runtime's snapshot of
+  inherited ignored signals to pure Go, replacing the pre-Go C constructor.
+  See [build evidence](docs/public-claims-evidence.md).
+
 ### Corrected
 
 - Public claims now distinguish shipped Unix job control from the Windows

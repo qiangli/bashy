@@ -12,7 +12,7 @@ Phases 1-8 built bashy into a solid Bash-compatible script runner (~60-70% of sc
 
 ## Constraints
 
-1. **Go core** — the original no-CGo release rule is superseded: Darwin `bashy` releases link the pre-Go C constructor with `CGO_ENABLED=1` to preserve inherited ignored signals. Linux/Windows release builds use `CGO_ENABLED=0`; see [public-claims-evidence.md](public-claims-evidence.md).
+1. **Go core** — no-CGo release rule: every release builds with `CGO_ENABLED=0`; the product runtime build preserves inherited ignored signals (Darwin included); see [public-claims-evidence.md](public-claims-evidence.md).
 2. **Permissive licenses only** — All third-party dependencies must use MIT, BSD, Apache 2.0, or equivalent permissive licenses. No GPL/LGPL.
 3. **Backwards compatible** — All existing `go test ./...` must continue to pass.
 

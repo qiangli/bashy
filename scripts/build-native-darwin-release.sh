@@ -6,7 +6,6 @@ tag=$1; arch=$2; outdir=$3
 [[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?-dev$ ]] || { echo "invalid release tag: $tag" >&2; exit 2; }
 [[ $arch == amd64 || $arch == arm64 ]] || { echo "invalid arch: $arch" >&2; exit 2; }
 [[ $(go env GOOS) == darwin && $(go env GOARCH) == "$arch" ]] || { echo "native darwin/$arch builder required" >&2; exit 1; }
-[[ $(go env CGO_ENABLED) == 1 ]] || { echo "native Darwin release requires cgo" >&2; exit 1; }
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 mkdir -p "$outdir"
@@ -19,7 +18,7 @@ shell_commit=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p
 [[ -n $shell_commit ]] || { echo "missing sh fork replace in go.mod" >&2; exit 1; }
 shell_time=
 base=${tag#v}; base=${base%-dev}
-CGO_ENABLED=1 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -ldflags "-w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$tag' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=$shell_commit' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=$shell_time'" -o "$stage/bashy" ./cmd/bashy
+CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -ldflags "-w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$tag' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=$shell_commit' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=$shell_time'" -o "$stage/bashy" ./cmd/bashy
 ./scripts/verify-bashy-signal-artifact.sh "$stage/bashy"
 go run ./tools/bashysignalprobe "$stage/bashy"
 ./scripts/verify-meet-spa-release.sh "$stage/bashy" "darwin_$arch"

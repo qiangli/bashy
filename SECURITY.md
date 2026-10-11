@@ -81,9 +81,8 @@ Out of scope:
 
 Known limits are documented rather than hidden. In particular the secret
 output firewall guarantee ends at `execve`. Shipped binaries preserve inherited
-signal dispositions through the product runtime build; Darwin `bashy` also
-links a pre-Go C constructor with `CGO_ENABLED=1` to snapshot ignored signals
-before Go runtime initialization. See [build evidence](docs/public-claims-evidence.md).
+signal dispositions through the product runtime build, which snapshots ignored
+signals before Go installs its handlers on every Unix release, without cgo. See [build evidence](docs/public-claims-evidence.md).
 A report that these limits exist is not a vulnerability; a way around a guarantee that is
 documented to hold is.
 

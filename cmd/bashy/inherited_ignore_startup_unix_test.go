@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"syscall"
 	"testing"
 	"time"
@@ -24,9 +23,6 @@ func TestInheritedIgnoreDuringStartup(t *testing.T) {
 		t.Skip("builds startup-instrumented executable profiles")
 	}
 	for _, cgo := range []string{"1", "0"} {
-		if cgo == "0" && runtime.GOOS != "linux" {
-			continue // one-file snapshot recovery is currently Linux-specific
-		}
 		t.Run("cgo="+cgo, func(t *testing.T) {
 			dir := t.TempDir()
 			bin := filepath.Join(dir, "bashy")

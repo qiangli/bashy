@@ -87,19 +87,29 @@ The shell and userland are Go. [`.goreleaser.yaml`](../.goreleaser.yaml) uses
 `CGO_ENABLED=0` for Linux/Windows builds. The native Darwin job in
 [release.yml](../.github/workflows/release.yml) invokes
 [`build-native-darwin-release.sh`](../scripts/build-native-darwin-release.sh),
-which builds **`cmd/bashy` with `CGO_ENABLED=1`**. It links the project's
-`pre-Go C constructor`, `snapshot_inherited_ignores`, from
-[`inherited_ignore_cgo_unix.go`](../cmd/bashy/inherited_ignore_cgo_unix.go).
-The constructor calls `sigaction` before Go runtime initialization to remember
-inherited `SIG_IGN` dispositions, which the runtime can otherwise change.
-The Darwin artifact is therefore not a fully static, CGo-free executable.
-The separate Darwin `bash`, `sh` and `outpost` products use `CGO_ENABLED=0`.
+which also builds **`cmd/bashy` with `CGO_ENABLED=0`**. No release links C.
+
+A POSIX shell must remember signals its parent ignored, but the Go runtime
+replaces most inherited `SIG_IGN` dispositions before `main`. Its `initsig`
+first records each one in `runtime.fwdSig`. The product build
+([`tools/productgo`](../tools/productgo/main.go), run by
+[`scripts/go-product.sh`](../scripts/go-product.sh)) overlays the runtime so
+inherited ignores stay ignored, and adds an accessor that returns that snapshot.
+[`inherited_ignore_runtime.go`](../cmd/bashy/inherited_ignore_runtime.go)
+reads it in pure Go under the `bashy_runtime_snapshot` build tag, which only
+the product build sets. Darwin previously linked a pre-Go C constructor for
+this, because Mach-O executables are always position-independent and macOS
+has no `/proc/self/mem`, so the Linux ELF symbol reader cannot work there.
 
 [`tools/elfaudit/main.go`](../tools/elfaudit/main.go) rejects a Darwin `bashy`
-without CGo and the retained Mach-O constructor symbol. The constructor is
-separate from the optional local `native/siglaunch.c.in` launcher and from
-Bash's test-fixture C helpers. FIPS selects the Go cryptographic module; it
-does not remove this platform linkage requirement.
+built without the product runtime snapshot, and a Linux `bashy` without the
+`runtime.fwdSig` ELF symbol that non-product builds fall back to. Neither path
+uses the optional local `native/siglaunch.c.in` launcher or Bash's test-fixture
+C helpers. FIPS selects the Go cryptographic module and does not change linkage.
+
+The Linux `bashy` is not fully static even with `CGO_ENABLED=0`: the locale
+gate loads glibc dynamically through purego. The `bashy self image` artifact is
+built without it.
 
 The module declares **`go 1.27` / `toolchain go1.27.1`**. Release CI selects
 Go 1.27.1. Bash compatibility remains **5.3**, with the

@@ -16,11 +16,10 @@ judged, never trusted.
 > still change before 1.0 through RFCs. Every number this project states
 > names its corpus: [docs/claims.md](https://github.com/bashsharp/bashsharp/blob/main/docs/claims.md).
 
-The shell and userland are Go. Linux and Windows release builds use
-`CGO_ENABLED=0`; the Darwin `bashy` release uses `CGO_ENABLED=1` to link the
-pre-Go C constructor that snapshots inherited ignored signals before the Go
-runtime changes them. It is not a fully static, CGo-free release. See
-[build evidence](docs/public-claims-evidence.md).
+The shell and userland are Go. Release builds use `CGO_ENABLED=0` on Linux,
+macOS and Windows; inherited ignored signals are preserved by bashy's product
+runtime build, not by C. The Linux `bashy` still loads glibc dynamically for its
+locale gate. See [build evidence](docs/public-claims-evidence.md).
 
 ## Ten minutes
 
