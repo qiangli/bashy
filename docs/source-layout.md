@@ -59,6 +59,14 @@ The annotated file-by-file map of the repo, moved verbatim from `CLAUDE.md` §So
     keep that package an import leaf), `exechist.go`, `release.go`,
     `agents.go`, `shellsession.go` + `session/` (the live-session socket, with
     peer-credential checks per OS).
+  - `internal/agentos/supervisord*.go` — `bashy supervisord`, the **service
+    monitor** (Sprint 418 S16): `_monitor` (the one-goroutine reconciler and
+    policy), `_policy` (backoff ladder, start limiter), `_process` (the process
+    provider and rotating unit logs), `_health` (http/tcp/exec probes, foreign
+    listener check), `_ipc` (control socket, delegated internal provider),
+    `_service` (`bashy service` mount + runtime verbs, monitor wiring); the
+    Sprint 218 one-dag-root mode stays in `supervisord.go`, the reaper in
+    `_linux`. See `docs/bashy-service-design.md`.
   - `internal/agentos/advisor*.go` — the **space-time advisor**: a non-intrusive
     post-exec `ExecHandler` middleware that, only when a command fails, appends one
     advisory hint explaining a space-determined failure (wrong cwd, host gone

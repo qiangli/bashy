@@ -157,11 +157,12 @@ var (
 	// `awd` is a shell builtin inside every script already; the front door only
 	// routes the bare invocation to it, so it must never become a shim either.
 	// `supervisord` shares its name with a widely installed program; bare
-	// `supervisord` stays the host's, `bashy supervisord` is ours.
+	// `supervisord` stays the host's, `bashy supervisord` is ours. `service`
+	// likewise: bare `service` is service(8).
 	// `llm` likewise belongs to a popular unrelated CLI; the local gateway is
 	// reached only as `bashy llm`.
 	// `limit` is a wrapper verb like awd; bare `limit` is csh's builtin, never ours.
-	directFrontDoorVerbs = []string{"ycode", "install-agent", "mb", "ping", "out", "full", "awd", "supervisord", "llm", "limit", "proxy", "outpost", "mod", "explain", "approve"}
+	directFrontDoorVerbs = []string{"ycode", "install-agent", "mb", "ping", "out", "full", "awd", "supervisord", "service", "llm", "limit", "proxy", "outpost", "mod", "explain", "approve"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "pwsh", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
@@ -1085,6 +1086,12 @@ func dispatch() {
 		// group → reap orphans as PID 1 (Sprint 218). Not a shim: a host's
 		// own supervisord (the Python one) must keep resolving bare.
 		dispatchExit(dispatchSupervisord(os.Args[2:]))
+	case "service":
+		// Service units (Sprint 418): the declarations and desired state
+		// (yoke fleet.NewServiceCmd) plus the runtime verbs over the
+		// running `bashy supervisord` monitor. Direct-only: bare `service`
+		// is the host's SysV/BSD service(8).
+		dispatchExit(dispatchService(os.Args[2:]))
 	case "supervise":
 		// Conductor-as-a-verb: one supervisor agent drives a fleet of workers
 		// against a goal decomposed into GATED tasks, in the current working

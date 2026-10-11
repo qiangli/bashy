@@ -33,3 +33,6 @@ func signalProcessGroup(p *os.Process, sig os.Signal) error {
 func killProcessGroup(p *os.Process) error {
 	return signalProcessGroup(p, syscall.SIGKILL)
 }
+
+// isAddrInUse: on unix errors.Is(err, syscall.EADDRINUSE) already answers.
+func isAddrInUse(error) bool { return false }

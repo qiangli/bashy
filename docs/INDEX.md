@@ -1,5 +1,6 @@
 # bashy docs index
 
+- `bashy-service-design.md` — Sprint 418 S16: `bashy supervisord` as the service monitor over every enabled `bashy service` unit (process provider, delegated internal provider, health/restart/start-limit policy, live reload, control socket, `--pid1`), the runtime verbs and the acceptance evidence. The unit schema and provider contract are yoke's S15 doc.
 - `plan-ycode-yolo.md` — Sprint 415: explicit Genie YOLO profile selection, recipe propagation and regression checks.
 
 - `plan-interactive-depth.md` — Sprint 379 Story 1511: shared PTY/ConPTY assertions, native execution evidence and declared interactive limitations.

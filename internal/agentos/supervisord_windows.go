@@ -4,6 +4,7 @@
 package agentos
 
 import (
+	"errors"
 	"os"
 	"syscall"
 
@@ -30,3 +31,6 @@ func killProcessGroup(p *os.Process) error {
 	}
 	return nil
 }
+
+// isAddrInUse recognizes Winsock's spelling of EADDRINUSE.
+func isAddrInUse(err error) bool { return errors.Is(err, windows.WSAEADDRINUSE) }

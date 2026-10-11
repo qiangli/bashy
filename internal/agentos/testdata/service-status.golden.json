@@ -1,0 +1,44 @@
+{
+  "schema_version": "bashy-service-status-v1",
+  "monitor": {
+    "running": true,
+    "pid": 1234,
+    "socket": "/run/bashy/service/supervisord.sock"
+  },
+  "units": [
+    {
+      "unit": "bad",
+      "provider": "process",
+      "enabled": true,
+      "state": "failed",
+      "since": "2026-10-11T12:00:00Z",
+      "restarts": 1,
+      "last_exit": 3,
+      "reason": "start limit hit: 2 starts within 1m0s"
+    },
+    {
+      "unit": "off",
+      "provider": "process",
+      "enabled": false,
+      "state": "inactive",
+      "since": "2026-10-11T12:00:00Z"
+    },
+    {
+      "unit": "web",
+      "provider": "process",
+      "enabled": true,
+      "state": "active",
+      "since": "2026-10-11T12:00:00Z",
+      "pid": 4242,
+      "health": "ok",
+      "ports": [
+        "loopback:18080/tcp",
+        "lan:18081/tcp"
+      ],
+      "exposed": [
+        "app:web",
+        "mesh:web"
+      ]
+    }
+  ]
+}

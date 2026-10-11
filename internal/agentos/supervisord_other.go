@@ -15,6 +15,7 @@ func startReaper() *reaper { return nil }
 type reaper struct{}
 
 func (*reaper) arm()                       {}
+func (*reaper) disarm()                    {}
 func (*reaper) watch(int)                  {}
 func (*reaper) take(int) (childExit, bool) { return childExit{}, false }
 func (*reaper) stop()                      {}
