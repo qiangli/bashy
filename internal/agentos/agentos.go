@@ -161,7 +161,7 @@ var (
 	// `llm` likewise belongs to a popular unrelated CLI; the local gateway is
 	// reached only as `bashy llm`.
 	// `limit` is a wrapper verb like awd; bare `limit` is csh's builtin, never ours.
-	directFrontDoorVerbs = []string{"ycode", "install-agent", "mb", "ping", "out", "full", "awd", "supervisord", "llm", "limit", "proxy", "outpost", "mod", "explain"}
+	directFrontDoorVerbs = []string{"ycode", "install-agent", "mb", "ping", "out", "full", "awd", "supervisord", "llm", "limit", "proxy", "outpost", "mod", "explain", "approve"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "pwsh", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
@@ -1265,6 +1265,21 @@ func dispatch() {
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
+			dispatchExit(1)
+		}
+		dispatchExit(0)
+	case "approve":
+		// The one queue of decisions waiting for a human (yoke pkg/ask): a
+		// yielded @confirm, an ACP permission request, a chat grant. Direct
+		// front door only: bare `approve` is never shimmed.
+		cmd := ask.NewApproveCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			var exit *ask.ApprovalExit
+			if errors.As(err, &exit) {
+				dispatchExit(exit.Code)
+			}
 			dispatchExit(1)
 		}
 		dispatchExit(0)

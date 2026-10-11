@@ -28,11 +28,18 @@
 //     (weavecli.ExitInputRequired), one line naming the operation, its
 //     token and the resume form; nothing with a side effect runs after the
 //     yield point. See rfcs/0001-agentic-yield.md.
-//   - `fn --confirm=TOKEN:yes,TOKEN:no ARG…` is the resume form: the answers
-//     a harness (or a human at a later terminal) supplies per operation. A
-//     token is derived from the operation's exact argv, so an answer applies
-//     to that operation and no other, whatever order the replay dispatches
-//     them in. Bare `--confirm` is accepted and means the default.
+//   - A yield also raises an approval in the shared ask queue (yoke pkg/ask,
+//     source "confirm"): token, exact argv, effects, requester, sprint and
+//     session, listed by `bashy approve list` and settled once by
+//     `bashy approve allow|deny ID`. There is no second log.
+//   - `fn --confirm=TOKEN:yes,TOKEN:no ARG…` is the resume form `bashy approve`
+//     prints. A token is derived from the operation's exact argv, but it is
+//     only 32 bits, so `yes` is redeemed through ask.Resolve with the same
+//     session and exact argv the approval was raised with: an allow runs the
+//     operation once and is then spent (a duplicate resume yields again), a
+//     deny stays refused, and a `yes` with no matching decision is never
+//     taken on the caller's word. `no` always refuses. Bare `--confirm` is
+//     accepted and means the default.
 //
 // PowerShell mapping (pinned in confirm_test.go): pure/read = no ShouldProcess
 // call; write/net/exec/remote/persist = ConfirmImpact Medium (auto-confirmed
@@ -63,6 +70,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 
 	"github.com/qiangli/coreutils/pkg/weavecli"
+	"github.com/qiangli/yoke/pkg/ask"
 	"github.com/qiangli/yoke/pkg/atlas"
 	"github.com/qiangli/yoke/pkg/ctty"
 )
@@ -86,6 +94,7 @@ type confirmState struct {
 	fn      string
 	mode    confirmMode
 	answers map[string]bool // operation token → yes/no, from --confirm=
+	session string          // scopes raised and redeemed approvals to this caller
 	yielded bool
 }
 
@@ -107,7 +116,7 @@ func confirmDecorator(ctx context.Context, c *nativeDecoratorCall, args []interp
 	if len(args) != 0 {
 		return errors.New("confirm takes no arguments: the confirmed operations are derived from the effects each command declares")
 	}
-	st := &confirmState{fn: c.Name, answers: map[string]bool{}}
+	st := &confirmState{fn: c.Name, answers: map[string]bool{}, session: confirmSession()}
 	if len(c.Args) > 0 {
 		if flag, ok := c.Args[0].(string); ok {
 			consumed := true
@@ -298,13 +307,14 @@ func confirmHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 			if impact != impactHigh {
 				return next(ctx, args)
 			}
-			yes, answered := st.answers[tok]
+			yes, answered := st.resumeAnswer(tok, args)
 			if !answered {
 				var err error
 				yes, err = confirmAsk(st.fn, op, eff)
 				if err != nil {
 					st.yielded = true
-					emitConfirmYield(stderr, st.fn, tok, op, eff, err)
+					id, raiseErr := raiseConfirmApproval(st.session, tok, op, args, effects)
+					emitConfirmYield(stderr, st.fn, tok, op, eff, id, errors.Join(err, raiseErr))
 					return interp.ExitStatus(weavecli.ExitInputRequired)
 				}
 			}
@@ -317,17 +327,74 @@ func confirmHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 	}
 }
 
+// confirmSession names the caller an approval belongs to, stable across the
+// yield and its resume (separate processes): the launcher-assigned session
+// claim, episode or instance when the run has one. A direct terminal without
+// one uses its parent shell, agent and working directory: the directory alone
+// could let a different terminal in the same checkout redeem a decision.
+func confirmSession() string {
+	for _, k := range []string{"BASHY_SESSION_CLAIM", "BASHY_EPISODE", "BASHY_INSTANCE_UUID"} {
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			return v
+		}
+	}
+	cwd, _ := os.Getwd()
+	return fmt.Sprintf("terminal:%d:%s:%s", os.Getppid(), os.Getenv("BASHY_AGENT"), cwd)
+}
+
+// resumeAnswer reads the --confirm= answer for one operation. answered=false
+// means there is none to act on and the operation must be asked or yielded:
+// no flag for the token, or a `yes` with no unspent allow behind it. A `no`
+// refuses on its own; a `yes` is honoured only as the redemption of a recorded
+// decision, and the decision (not the flag) is what settles it.
+func (st *confirmState) resumeAnswer(tok string, argv []string) (yes, answered bool) {
+	claim, ok := st.answers[tok]
+	if !ok {
+		return false, false
+	}
+	if !claim {
+		return false, true
+	}
+	d, ok := ask.Resolve(ask.SourceConfirm, tok, st.session, argv)
+	if !ok {
+		return false, false
+	}
+	return d.Allowed(), true
+}
+
+// raiseConfirmApproval persists the yielded operation in the shared approval
+// queue and returns its id. Failing to persist still yields (nothing runs);
+// the caller reports the error so the human knows no approval exists.
+func raiseConfirmApproval(session, tok, op string, argv, effects []string) (string, error) {
+	r, err := ask.Raise(ask.ApprovalSpec{
+		Source:  ask.SourceConfirm,
+		Token:   tok,
+		Argv:    argv,
+		Effects: effects,
+		Session: session,
+		Prompt:  fmt.Sprintf("@confirm wants to run: %s", op),
+	})
+	if err != nil {
+		return "", fmt.Errorf("could not raise an approval: %w", err)
+	}
+	return r.ID, nil
+}
+
 // emitConfirmYield writes the one line a harness needs: the operation, its
-// token, why no answer arrived, and the exact resume form. A JSON envelope
-// (error.code "input_required") only under explicit BASHY_AGENTIC — a format
-// is a contract, never sniffed.
-func emitConfirmYield(w io.Writer, fn, tok, op, eff string, cause error) {
+// token, why no answer arrived, the approval to decide, and the exact resume
+// form. A JSON envelope (error.code "input_required") only under explicit
+// BASHY_AGENTIC — a format is a contract, never sniffed.
+func emitConfirmYield(w io.Writer, fn, tok, op, eff, approvalID string, cause error) {
 	mode := weavecli.OutputPlain
 	if weavecli.IsAgent() {
 		mode = weavecli.OutputJSON
 	}
-	err := fmt.Errorf("input required: confirm %s: %s (effects: %s): %v; resume with %s --confirm=%s:yes ... or --confirm=%s:no ...",
-		tok, op, eff, cause, fn, tok, tok)
+	decide := ""
+	if approvalID != "" {
+		decide = fmt.Sprintf("; approval %s: `bashy approve allow %s` or `bashy approve deny %s`", approvalID[:8], approvalID[:8], approvalID[:8])
+	}
+	err := fmt.Errorf("input required: confirm %s: %s (effects: %s): %v%s; resume with %s --confirm=%s:yes ... or --confirm=%s:no ...",
+		tok, op, eff, cause, decide, fn, tok, tok)
 	weavecli.EmitError(w, mode, fn, weavecli.ExitInputRequired, err)
 }
 

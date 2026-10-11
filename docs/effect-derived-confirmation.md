@@ -66,12 +66,27 @@ made per invocation of a target, and an absent decorator is identity.
   status 6; the call's status is 6 whatever the body's last command said.
   Under `BASHY_AGENTIC=1` the line is a `weavecli` envelope
   (`error.code: "input_required"`).
-- `fn --confirm=TOKEN:yes,TOKEN:no ARG…` — the resume form. A token is eight
-  hex digits of SHA-256 over the operation's exact argv, so an answer binds
-  to that operation and no other, in whatever order a replay dispatches
-  them. An operation with no answer still asks (or yields). Bare `--confirm`
-  is accepted and means the default. A malformed list is a decorator
-  diagnostic, never a guess.
+- A yield also **raises an approval in the shared ask queue** (yoke
+  `pkg/ask`, source `confirm`): token, exact argv, declared effects,
+  requester, sprint and session, listed by `bashy approve list`, settled once
+  by `bashy approve allow|deny ID`. There is no second log. The session is
+  the launcher's `BASHY_SESSION_CLAIM` (else `BASHY_EPISODE`, else
+  `BASHY_INSTANCE_UUID`, else the working directory), so the yield and its
+  resume — separate processes — agree on it. The yield line names the
+  approval id. `BASHY_AGENTIC` never auto-allows; the default permission mode
+  `auto` raises nothing.
+- `fn --confirm=TOKEN:yes,TOKEN:no ARG…` — the resume form `bashy approve`
+  prints. A token is eight hex digits of SHA-256 over the operation's exact
+  argv, so an answer binds to that operation and no other, in whatever order
+  a replay dispatches them. Because 32 bits is short, `yes` is redeemed
+  through `ask.Resolve(source, token, session, argv)`: only a decision raised
+  for the same session **and** exact argv counts. An allow runs the operation
+  once and is spent (a duplicate resume asks, or yields again); a deny stays
+  refused on every replay; a `yes` with no matching decision is not taken on
+  the caller's word. `no` always refuses and consumes nothing. An operation
+  with no usable answer still asks (or yields). Bare `--confirm` is accepted
+  and means the default. A malformed list is a decorator diagnostic, never a
+  guess.
 
 Only the FIRST argument is inspected, so a function's own flags are never
 stolen. `@confirm` takes no arguments (there is nothing to configure: the
