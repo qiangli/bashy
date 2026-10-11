@@ -585,6 +585,7 @@ var verbSynopsis = map[string]string{
 	"dag":                "agent-first markdown DAG task runner",
 	"transpile":          "compile Bash++ source to ordinary Go with source maps",
 	"explain":            "explain go: the table of Go constructs that differ in Bash#; resolve a refusal to its row and workaround",
+	"tmpl":               "render a Go text/template file against JSON data with a pure function set (no exec, env, file or network funcs)",
 	"schedule":           "modern cron: run a command on a cron/interval/at schedule",
 	"secret":             "managed API-key/token vault for the shell",
 	"secrets":            "hidden alias for bashy secret",

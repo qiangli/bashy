@@ -33,6 +33,7 @@ import (
 //	                  with no `tasks:` pointer keeps the three verbs, no
 //	                  matter what tasks.md the caller's directory happens
 //	                  to carry
+//	~~~tmpl as t      t.render('{"k":"v"}') — a pure Go text/template over JSON data; read only
 //	~~~compose        reserved: refuses by name until the engine has a native path
 
 // K8s: a manifest applied through kubectl, or played locally by podman.
@@ -80,10 +81,18 @@ var skillRow = polyglot.Text{Type: "skill", FileName: "skill/SKILL.md", Tool: "s
 	DiscoveredVerb: &polyglot.Verb{Args: []string{"run", "skill", "--target", "{target}"}, Env: []string{"BASHY_SKILLS_DIR={root}"}},
 }
 
+// Tmpl: a Go text/template file. The one verb renders it against the call's
+// JSON argument (`t.render('{"name":"x"}')`); the function set is pure, so
+// the verb only reads.
+var tmplRow = polyglot.Text{Type: "tmpl", FileName: "fence.tmpl", Tool: "tmpl", Verbs: []polyglot.Verb{
+	{Name: "render", Args: []string{"render", "{file}", "--data"}, Effects: []string{"read"}},
+}}
+
 func init() {
 	k8s := polyglot.TextRow("k8s", []string{"kube"}, k8sRow)
 	polyglot.RegisterLanguage(k8s)
 	polyglot.RegisterLanguage(polyglot.TextRow("helm", nil, helmRow))
+	polyglot.RegisterLanguage(polyglot.TextRow("tmpl", []string{"gotmpl"}, tmplRow))
 	skill := polyglot.TextRow("skill", nil, skillRow)
 	skill.InterpretedOnly = true
 	polyglot.RegisterLanguage(skill)

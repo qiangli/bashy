@@ -33,6 +33,7 @@ import (
 
 	"github.com/qiangli/bashy/internal/agentos/session"
 	"github.com/qiangli/bashy/internal/cli"
+	"github.com/qiangli/bashy/internal/tmpl"
 	"github.com/qiangli/bashy/skills"
 
 	_ "github.com/qiangli/yoke/cmds/all"
@@ -162,7 +163,7 @@ var (
 	// `llm` likewise belongs to a popular unrelated CLI; the local gateway is
 	// reached only as `bashy llm`.
 	// `limit` is a wrapper verb like awd; bare `limit` is csh's builtin, never ours.
-	directFrontDoorVerbs = []string{"ycode", "install-agent", "mb", "ping", "out", "full", "awd", "supervisord", "service", "llm", "limit", "proxy", "outpost", "mod", "explain", "approve"}
+	directFrontDoorVerbs = []string{"ycode", "install-agent", "mb", "ping", "out", "full", "awd", "supervisord", "service", "llm", "limit", "proxy", "outpost", "mod", "explain", "approve", "tmpl"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "pwsh", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
@@ -753,6 +754,8 @@ func dispatch() {
 		dispatchExit(transpile.Main(transpilePathArgs(os.Args[2:])))
 	case "explain":
 		dispatchExit(dispatchExplain(os.Args[2:], os.Stdout, os.Stderr))
+	case "tmpl":
+		dispatchExit(tmpl.Main(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	case "full":
 		dispatchExit(dispatchFull(os.Args[2:]))
 	case "ycode":

@@ -181,6 +181,13 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Caps: []string{atlas.CapJSON, atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
 		Stability: atlas.StabilityExperimental,
 	},
+	// tmpl renders a pure Go text/template: no exec, env, file or network
+	// function exists, so the only effect is reading its inputs.
+	"tmpl": {
+		Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierUserland,
+		Effects:   []string{atlas.EffRead},
+		Stability: atlas.StabilityExperimental,
+	},
 	// approve settles the queue of pending human decisions. Allowing a held
 	// operation grants authority, so it is declared priv: a @confirm body
 	// cannot dispatch it without the human answering for it.

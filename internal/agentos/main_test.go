@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/qiangli/bashy/internal/cli"
+	"github.com/qiangli/bashy/internal/tmpl"
 )
 
 // TestMain isolates the registered-command ring and the compiled host's
@@ -20,6 +21,9 @@ import (
 // BASHY_COMMANDS_DIR / BASHY_SKILLS_DIR at their own temp dir.
 // toolFenceEchoEnv switches the test binary into a portable echo (polyglot_tool_row_test.go).
 const toolFenceEchoEnv = "BASHY_TOOLFENCE_TEST_ECHO"
+
+// tmplTestChildEnv switches the test binary into `bashy tmpl` (polyglot_tmpl_test.go).
+const tmplTestChildEnv = "BASHY_TMPL_TEST_CHILD"
 
 // isolationSentinel marks a process whose BASHY_SHIM_DIR the top-level TestMain
 // already pointed at a throwaway dir. It is inherited across the package's
@@ -80,6 +84,11 @@ func TestMain(m *testing.M) {
 	// foreignReExec backstop below.
 	if os.Getenv("BASHY_SUPERVISORD_TEST_CHILD") != "" {
 		os.Exit(supervisordTestChild())
+	}
+	// The tmpl fence tests re-exec this binary as `bashy tmpl` (selfVerb
+	// answers with os.Executable, which is the test binary here).
+	if os.Getenv(tmplTestChildEnv) != "" && len(os.Args) > 1 && os.Args[1] == "tmpl" {
+		os.Exit(tmpl.Main(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	}
 	// Any invocation that is not `go test` — the toolFenceEchoEnv echo mode and
 	// the generic foreignReExec backstop — echoes its arguments and exits 0

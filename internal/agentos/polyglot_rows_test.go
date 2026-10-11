@@ -16,6 +16,7 @@ func TestTextRowsRegistered(t *testing.T) {
 		"kube":    {true, false, []string{"apply"}},
 		"helm":    {true, false, []string{"template", "install", "upgrade", "uninstall"}},
 		"skill":   {true, true, []string{"run", "verify", "probe"}},
+		"tmpl":    {true, false, []string{"render"}},
 		"dag":     {true, true, nil},
 		"compose": {true, false, nil},
 		"tf":      {true, false, []string{"validate", "init", "plan", "apply", "destroy", "output"}},
