@@ -31,7 +31,7 @@ exec:
   - -e
   - DISCORD_BOT_TOKEN
   - -v
-  - ~/.local/share/bashy/services/openclaw-gateway:/home/node/.openclaw
+  - openclaw-data:/home/node/.openclaw
   - ghcr.io/openclaw/openclaw@sha256:d0ded1dd76939b2bf4d67ef2d13247b8b160aa5666331d4a0b0e58811182cbb8
   - node
   - openclaw.mjs
@@ -41,7 +41,6 @@ exec:
   - --bind
   - lan
   - --allow-unconfigured
-workdir: ~/.local/share/bashy/services/openclaw-gateway
 settings:
   image: "ghcr.io/openclaw/openclaw:2026.9.8"
   image_digest: "sha256:d0ded1dd76939b2bf4d67ef2d13247b8b160aa5666331d4a0b0e58811182cbb8"
@@ -64,12 +63,10 @@ restart:
   backoff: {min: 1s, max: 30s, healthy_after: 30s}
   start_limit: {burst: 5, interval: 1m}
 stop: {signal: TERM, timeout: 20s}
-# These vault references are the declarative secrets_env equivalent for bot
-# channels.  Add only the channels used by this host; values never enter YAML.
+# Bot channel credentials may be added as service secrets only when those
+# channels are enabled; absent optional tokens must not block gateway start.
 secrets:
   - {env: OPENCLAW_GATEWAY_TOKEN, ref: openclaw/gateway-token}
-  - {env: TELEGRAM_BOT_TOKEN, ref: openclaw/telegram-bot-token}
-  - {env: DISCORD_BOT_TOKEN, ref: openclaw/discord-bot-token}
 expose:
   app:
     name: openclaw

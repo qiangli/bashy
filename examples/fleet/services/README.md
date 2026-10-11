@@ -17,7 +17,8 @@ and enable it with `bashy service enable NAME`.
   invoked via a generic OCI launcher (`podman`) in the foreground, preserving
   the full Node dependency tree without bespoke package managers, declared HTTP
   health `/health` on port 18789, app tunnel elevation and mesh exposure, and
-  vault secret references for bot tokens.
+  a required gateway token reference. Add bot token references only for
+  channels enabled on that host. The host must have Podman available.
 
 Both recipes are intentionally **unverified**.  Do not stamp them verified
 until a live S16 monitor and S18 exposure run has retained its gateway logs.

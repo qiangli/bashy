@@ -225,8 +225,8 @@ func TestCodyncHostPinnedDownloadDeclaration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExpandExec failed: %v", err)
 	}
-	if len(argv) < 4 || argv[0] != "/test/path/codync-host" || argv[1] != "serve" || argv[3] != "19222" {
-		t.Errorf("ExpandExec argv = %v, want [/test/path/codync-host serve --port 19222]", argv)
+	if len(argv) != 6 || argv[0] != "/test/path/codync-host" || argv[1] != "serve" || argv[3] != "19222" || argv[4] != "--bind" || argv[5] != "127.0.0.1" {
+		t.Errorf("ExpandExec argv = %v, want loopback-bound Codync host", argv)
 	}
 
 	// Health check
@@ -309,11 +309,11 @@ func TestOpenClawGatewayOCILauncherDeclaration(t *testing.T) {
 	if secretsMap["OPENCLAW_GATEWAY_TOKEN"] != "openclaw/gateway-token" {
 		t.Errorf("missing OPENCLAW_GATEWAY_TOKEN secret ref")
 	}
-	if secretsMap["TELEGRAM_BOT_TOKEN"] != "openclaw/telegram-bot-token" {
-		t.Errorf("missing TELEGRAM_BOT_TOKEN secret ref")
+	if _, ok := secretsMap["TELEGRAM_BOT_TOKEN"]; ok {
+		t.Error("optional Telegram token must not block base gateway start")
 	}
-	if secretsMap["DISCORD_BOT_TOKEN"] != "openclaw/discord-bot-token" {
-		t.Errorf("missing DISCORD_BOT_TOKEN secret ref")
+	if _, ok := secretsMap["DISCORD_BOT_TOKEN"]; ok {
+		t.Error("optional Discord token must not block base gateway start")
 	}
 
 	// Expose: app tunnel + mesh
