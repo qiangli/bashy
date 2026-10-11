@@ -5,15 +5,21 @@ package agentos
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/toolcmd"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -59,8 +65,8 @@ func TestFleetExamplesHeadersAndSecretsGuard(t *testing.T) {
 	if err != nil || len(toolFiles) == 0 {
 		t.Fatalf("no tool files found under %s/tools: %v", fleetDir, err)
 	}
-	if len(toolFiles) != 15 {
-		t.Errorf("expected 15 tool files, found %d", len(toolFiles))
+	if len(toolFiles) != 16 {
+		t.Errorf("expected 16 tool files, found %d", len(toolFiles))
 	}
 
 	modelFiles, err := filepath.Glob(filepath.Join(fleetDir, "models", "*.yaml"))
@@ -124,6 +130,141 @@ func TestFleetExamplesHeadersAndSecretsGuard(t *testing.T) {
 			t.Errorf("%s: contains long hex secret pattern %q", rel, match)
 		}
 	}
+}
+
+func TestCodyncDeclarationLoopbackCommands(t *testing.T) {
+	fleetDir := mustFleetExamplesDir(t)
+	setupIsolatedFleetStore(t)
+	file := filepath.Join(fleetDir, "tools", "codync.yaml")
+	if _, stderr, err := executeFleetCmd(t, fleet.NewToolsCmd(), "add", "--force", file); err != nil {
+		t.Fatalf("tool add codync: %v (stderr: %s)", err, stderr)
+	}
+
+	cat := fleet.New()
+	tool, ok := cat.Tool("codync")
+	if !ok {
+		t.Fatal("codync missing after isolated import")
+	}
+	wantEffects := map[string][]string{
+		"bots": {"read", "net"}, "send": {"agent-run"},
+		"approve": {"agent-run"}, "usage": {"read", "net"},
+	}
+	for name, want := range wantEffects {
+		got, found := tool.Command(name)
+		if !found {
+			t.Errorf("codync:%s missing", name)
+		} else if !slices.Equal(got.Effects, want) {
+			t.Errorf("codync:%s effects = %v, want %v", name, got.Effects, want)
+		}
+	}
+
+	root := fleet.NewToolsCmd()
+	root.AddCommand(toolcmd.NewCmd())
+	list, stderr, err := executeFleetCmd(t, root, "cmd", "list", "codync", "--json")
+	if err != nil {
+		t.Fatalf("tool cmd list codync: %v (stderr: %s)", err, stderr)
+	}
+	for _, ref := range []string{"codync:bots", "codync:send", "codync:approve", "codync:usage"} {
+		if !strings.Contains(list, `"ref": "`+ref+`"`) {
+			t.Errorf("tool cmd list omitted %s: %s", ref, list)
+		}
+	}
+
+	token := "fake-loopback-bearer"
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenFile, []byte(token+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODYNC_TOKEN_FILE", tokenFile)
+
+	type call struct {
+		method string
+		body   map[string]any
+	}
+	calls := make(chan call, 8)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"version":"fake"}`))
+			return
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer "+token {
+			http.Error(w, "bad bearer", http.StatusUnauthorized)
+			return
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		calls <- call{method: strings.TrimPrefix(r.URL.Path, "/api/"), body: body}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+	t.Setenv("CODYNC_URL", server.URL)
+
+	probe := tool.VersionProbeArgv()
+	if out, err := exec.CommandContext(context.Background(), probe[0], probe[1:]...).CombinedOutput(); err != nil {
+		t.Fatalf("running-host availability probe failed: %v: %s", err, out)
+	}
+
+	runs := []struct {
+		name   string
+		args   []string
+		method string
+		body   map[string]any
+	}{
+		{"bots", nil, "sync", map[string]any{"since": float64(0)}},
+		{"send", []string{"--yes", "bot-7", "review this"}, "send", map[string]any{"botId": "bot-7", "text": "review this"}},
+		{"approve", []string{"permission-9", "allow"}, "respondPermission", map[string]any{"entryId": "permission-9", "optionId": "allow_once"}},
+		{"usage", nil, "usage", map[string]any{}},
+	}
+	for _, tc := range runs {
+		t.Run(tc.name, func(t *testing.T) {
+			decl, _ := tool.Command(tc.name)
+			res, err := toolcmd.Run(context.Background(), tool, decl, strings.Join(tc.args, " "), toolcmd.Options{
+				Catalog: cat, Dir: t.TempDir(), Argv: tc.args,
+			})
+			if err != nil {
+				t.Fatalf("codync:%s: %v (result: %+v)", tc.name, err, res)
+			}
+			got := <-calls
+			if got.method != tc.method || !mapsEqual(got.body, tc.body) {
+				t.Fatalf("codync:%s call = %s %#v, want %s %#v", tc.name, got.method, got.body, tc.method, tc.body)
+			}
+		})
+	}
+
+	approve, _ := tool.Command("approve")
+	if res, err := toolcmd.Run(context.Background(), tool, approve, "permission-10 deny", toolcmd.Options{
+		Catalog: cat, Dir: t.TempDir(), Argv: []string{"permission-10", "deny"},
+	}); err != nil {
+		t.Fatalf("codync:approve deny: %v (result: %+v)", err, res)
+	}
+	if got := <-calls; got.method != "respondPermission" || !mapsEqual(got.body, map[string]any{
+		"entryId": "permission-10", "optionId": "reject_once",
+	}) {
+		t.Fatalf("codync:approve deny call = %s %#v", got.method, got.body)
+	}
+
+	send, _ := tool.Command("send")
+	if res, err := toolcmd.Run(context.Background(), tool, send, "bot-7 unsafe", toolcmd.Options{
+		Catalog: cat, Dir: t.TempDir(), Argv: []string{"bot-7", "unsafe"},
+	}); err == nil || res.ExitCode == 0 {
+		t.Fatalf("codync:send without --yes was not refused: err=%v result=%+v", err, res)
+	}
+	select {
+	case got := <-calls:
+		t.Fatalf("codync:send without --yes reached host: %s %#v", got.method, got.body)
+	default:
+	}
+}
+
+func mapsEqual(a, b map[string]any) bool {
+	aj, _ := json.Marshal(a)
+	bj, _ := json.Marshal(b)
+	return bytes.Equal(aj, bj)
 }
 
 // fleetNounDriver defines operations for a fleet noun (tool, model, agent)

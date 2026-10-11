@@ -12,6 +12,32 @@ bashy tool list --custom
 bashy tool verify qwen-code
 ```
 
+Codync is a daemon integration rather than another model-calling CLI. Its
+example exposes the running host's loopback API as `codync:bots`,
+`codync:send`, `codync:approve`, and `codync:usage`:
+
+```sh
+bashy tool add examples/fleet/tools/codync.yaml
+bashy tool cmd list codync
+bashy tool cmd run codync:send -- --yes BOT "Review the current change"
+```
+
+The adapter reads `${CODYNC_TOKEN_FILE:-~/.codync/token}` and talks only to
+`${CODYNC_URL:-http://127.0.0.1:19222}`. `send` deliberately requires
+`--yes`, because it starts agent work. The tool's version probe calls the
+host health endpoint, so an installed binary with a stopped host is not
+reported as usable. To give an MCP client Codync's team tools, register this
+stdio server (replace `BOT` with the calling Codync bot id):
+
+```json
+{"mcpServers":{"codync-team":{"command":"codync-host","args":["mcp","team","--bot","BOT"]}}}
+```
+
+The reverse composition is also supported by Codync: configure a custom bot
+with ACP command `bashy acp` to drive a Bashy agent. Those two live directions
+are manager gates; the example remains `unverified` until they pass against a
+real running host.
+
 `--force` is needed for a name that still belongs to a built-in entry. That
 applies to aider, cline, gemini, goose, hermes and openclaw until those
 built-in entries are retired.
@@ -20,7 +46,7 @@ built-in entries are retired.
 
 | Folder | Holds |
 |---|---|
-| `tools/` | third-party agent CLIs: how bashy launches each one headless |
+| `tools/` | third-party agent CLIs and daemon adapters: how bashy invokes each one |
 | `models/` | models outside the curated list: older generations, local Ollama tags, OpenAI-compatible endpoints |
 | `agents/` | `tool:model` bindings outside the curated L3–L5 families |
 

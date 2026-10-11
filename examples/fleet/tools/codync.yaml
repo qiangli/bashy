@@ -1,0 +1,64 @@
+# Codync — loopback host adapter (bashy examples/fleet, Sprint 418)
+# source:  https://github.com/leepokai/Codync (Apache-2.0)
+# host:    codync-host v2.13.2; install/start it with the vendor package or the
+#          separately owned examples/fleet/services declaration (S20). This
+#          adapter is data only: nothing is vendored and it downloads nothing.
+# add:     bashy tool add examples/fleet/tools/codync.yaml
+# use:     bashy tool cmd run codync:bots
+#          bashy tool cmd run codync:send -- --yes BOT "TEXT"
+#          bashy tool cmd run codync:approve -- ID allow|deny
+#          bashy tool cmd run codync:usage
+# api:     POST ${CODYNC_URL:-http://127.0.0.1:19222}/api/METHOD with the
+#          bearer token from ${CODYNC_TOKEN_FILE:-~/.codync/token}.
+# mcp:     {"mcpServers":{"codync-team":{"command":"codync-host","args":["mcp","team","--bot","BOT"]}}}
+# reverse: a Codync custom bot whose ACP command is `bashy acp` can drive any
+#          Bashy agent; the manager owns that live reverse-ACP gate.
+# release: the separately installed host was specified against v2.13.2; this
+#          API-only adapter has no downloaded artifact of its own to pin.
+# status:  unverified — declaration and fake-loopback gates pass; the Sprint
+#          manager must run the live Codync host, reverse ACP and native gates
+#          before replacing this line with a dated verified stamp.
+name: codync
+kind: cli
+display: Codync host
+aliases:
+  - codync-host
+cli:
+  # The declared commands are a Bashy API adapter. codync-host is the daemon
+  # reached over loopback and the stdio MCP server named in the header above.
+  binary: bashy
+  launch:
+    # A tool verification probes the running host's unauthenticated health
+    # endpoint. Merely finding codync-host (or bashy) on PATH is not enough.
+    version_probe_exec: bashy -c eval${IFS}"$(printf${IFS}%s${IFS}c2V0IC1ldQp1cmw9JHtDT0RZTkNfVVJMOi1odHRwOi8vMTI3LjAuMC4xOjE5MjIyfQpjdXJsIC1mc1MgIiR1cmwvaGVhbHRoIg==|base64${IFS}-d)"
+    exec: bashy -c eval${IFS}"$(printf${IFS}%s${IFS}c2V0IC1ldQp1cmw9JHtDT0RZTkNfVVJMOi1odHRwOi8vMTI3LjAuMC4xOjE5MjIyfQpjdXJsIC1mc1MgIiR1cmwvaGVhbHRoIg==|base64${IFS}-d)" codync-health {prompt}
+    prompt_position: last
+    notes: >-
+      The compact base64 payloads keep each Bashy -c body one argv token; tool
+      exec templates are whitespace-delimited flag lists, not shell strings.
+commands:
+  - name: bots
+    slash: bots
+    mode: print
+    effects: [read, net]
+    exec: bashy -c eval${IFS}"$(printf${IFS}%s${IFS}c2V0IC1ldQp1cmw9JHtDT0RZTkNfVVJMOi1odHRwOi8vMTI3LjAuMC4xOjE5MjIyfQpmaWxlPSR7Q09EWU5DX1RPS0VOX0ZJTEU6LSRIT01FLy5jb2R5bmMvdG9rZW59CnRlc3QgLXIgIiRmaWxlIgpJRlM9IHJlYWQgLXIgdG9rZW4gPCAiJGZpbGUiCmN1cmwgLWZzUyAtWCBQT1NUIC1IICJBdXRob3JpemF0aW9uOiBCZWFyZXIgJHRva2VuIiAtSCAiQ29udGVudC1UeXBlOiBhcHBsaWNhdGlvbi9qc29uIiAtLWRhdGEgIntcInNpbmNlXCI6MH0iICIkdXJsL2FwaS9zeW5jIg==|base64${IFS}-d)" codync:bots
+  - name: send
+    slash: send {args}
+    mode: print
+    effects: [agent-run]
+    exec: bashy -c eval${IFS}"$(printf${IFS}%s${IFS}c2V0IC1ldQp1cmw9JHtDT0RZTkNfVVJMOi1odHRwOi8vMTI3LjAuMC4xOjE5MjIyfQpmaWxlPSR7Q09EWU5DX1RPS0VOX0ZJTEU6LSRIT01FLy5jb2R5bmMvdG9rZW59CnRlc3QgLXIgIiRmaWxlIgpJRlM9IHJlYWQgLXIgdG9rZW4gPCAiJGZpbGUiCnRlc3QgIiQjIiAtZXEgMwp0ZXN0ICIkMSIgPSAtLXllcwpib3Q9JDIKdGV4dD0kMwpqc29uKCkgeyBsb2NhbCBzPSQxOyBzPSR7cy8vXFwvXFxcXH07IHM9JHtzLy9cIi9cXFwifTsgcz0ke3MvLyQnXG4nL1xcbn07IHByaW50ZiAnIiVzIicgIiRzIjsgfQpib2R5PSJ7XCJib3RJZFwiOiQoanNvbiAiJGJvdCIpLFwidGV4dFwiOiQoanNvbiAiJHRleHQiKX0iIApjdXJsIC1mc1MgLVggUE9TVCAtSCAiQXV0aG9yaXphdGlvbjogQmVhcmVyICR0b2tlbiIgLUggIkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vanNvbiIgLS1kYXRhICIkYm9keSIgIiR1cmwvYXBpL3NlbmQi|base64${IFS}-d)" codync:send {args}
+  - name: approve
+    slash: approve {args}
+    mode: print
+    effects: [agent-run]
+    exec: bashy -c eval${IFS}"$(printf${IFS}%s${IFS}c2V0IC1ldQp1cmw9JHtDT0RZTkNfVVJMOi1odHRwOi8vMTI3LjAuMC4xOjE5MjIyfQpmaWxlPSR7Q09EWU5DX1RPS0VOX0ZJTEU6LSRIT01FLy5jb2R5bmMvdG9rZW59CnRlc3QgLXIgIiRmaWxlIgpJRlM9IHJlYWQgLXIgdG9rZW4gPCAiJGZpbGUiCnRlc3QgIiQjIiAtZXEgMgppZD0kMQpjYXNlICQyIGluIGFsbG93KSBvcHRpb249YWxsb3dfb25jZTs7IGRlbnkpIG9wdGlvbj1yZWplY3Rfb25jZTs7ICopIGVjaG8gImRlY2lzaW9uIG11c3QgYmUgYWxsb3cgb3IgZGVueSIgPiYyOyBleGl0IDI7OyBlc2FjCmpzb24oKSB7IGxvY2FsIHM9JDE7IHM9JHtzLy9cXC9cXFxcfTsgcz0ke3MvL1wiL1xcXCJ9OyBzPSR7cy8vJCdcbicvXFxufTsgcHJpbnRmICciJXMiJyAiJHMiOyB9CmJvZHk9IntcImVudHJ5SWRcIjokKGpzb24gIiRpZCIpLFwib3B0aW9uSWRcIjokKGpzb24gIiRvcHRpb24iKX0iIApjdXJsIC1mc1MgLVggUE9TVCAtSCAiQXV0aG9yaXphdGlvbjogQmVhcmVyICR0b2tlbiIgLUggIkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vanNvbiIgLS1kYXRhICIkYm9keSIgIiR1cmwvYXBpL3Jlc3BvbmRQZXJtaXNzaW9uIg==|base64${IFS}-d)" codync:approve {args}
+  - name: usage
+    slash: usage
+    mode: print
+    effects: [read, net]
+    exec: bashy -c eval${IFS}"$(printf${IFS}%s${IFS}c2V0IC1ldQp1cmw9JHtDT0RZTkNfVVJMOi1odHRwOi8vMTI3LjAuMC4xOjE5MjIyfQpmaWxlPSR7Q09EWU5DX1RPS0VOX0ZJTEU6LSRIT01FLy5jb2R5bmMvdG9rZW59CnRlc3QgLXIgIiRmaWxlIgpJRlM9IHJlYWQgLXIgdG9rZW4gPCAiJGZpbGUiCmN1cmwgLWZzUyAtWCBQT1NUIC1IICJBdXRob3JpemF0aW9uOiBCZWFyZXIgJHRva2VuIiAtSCAiQ29udGVudC1UeXBlOiBhcHBsaWNhdGlvbi9qc29uIiAtLWRhdGEgInt9IiAiJHVybC9hcGkvdXNhZ2Ui|base64${IFS}-d)" codync:usage
+quirks: >-
+  API adapter for a running loopback-only Codync host; codync-host mcp team
+  --bot BOT is the separately exposed stdio MCP team server.
+integration:
+  detect: ${CODYNC_HOME:-~/.codync}
