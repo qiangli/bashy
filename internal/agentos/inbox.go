@@ -88,6 +88,7 @@ chronological stream, newest last; each record shows its time, source and sender
   bashy inbox --from alice            only messages whose sender matches
   bashy inbox --search profile        only messages containing this text
   bashy inbox --since 2h              only messages from the last two hours
+  bashy inbox --sprint 418            only messages about sprint 418
   bashy inbox --wait 15m              wait for one batch (still not consumed)
   bashy inbox --watch                 follow new inputs; delivery acknowledges them
   bashy inbox --watch --wait 15m      follow for at most 15 minutes
@@ -181,6 +182,9 @@ pretends such a session was adopted.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if watch && filter.sprint != 0 {
+				return fmt.Errorf("inbox: --watch cannot be combined with --sprint (a scoped view must preserve every cursor)")
+			}
 			if wait < 0 {
 				return fmt.Errorf("inbox: --wait must not be negative")
 			}
@@ -241,6 +245,7 @@ pretends such a session was adopted.`,
 	f.StringVar(&filter.from, "from", "", "only messages whose sender contains this text")
 	f.StringVar(&filter.search, "search", "", "only messages containing this text (body/sender/recipient/topic/room/source)")
 	f.StringVar(&filter.sinceRaw, "since", "", "only messages at or after this time (duration like 2h or 3d, or RFC3339 / YYYY-MM-DD)")
+	f.Int64Var(&filter.sprint, "sprint", 0, "show only records about this sprint without advancing any cursor")
 	f.BoolVar(&watch, "watch", false, "follow all inbound sources until interrupted")
 	f.IntVarP(&limit, "limit", "n", 0, "show at most this many records per source (0 = no cap; a capped source remains unread)")
 	f.BoolVar(&jsonOut, "json", false, "emit one "+unifiedInboxSchema+" object per line (NDJSON); a bounded read with no mail emits one envelope line with no events")
