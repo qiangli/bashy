@@ -484,6 +484,9 @@ func TestServiceStatusJSONGolden(t *testing.T) {
 	sock := shortSocket(t)
 	at := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
 	m := newMonitor()
+	// The fake provider does not bind ports. Keep the fixed golden ports
+	// independent of listeners elsewhere on the test host.
+	m.checkPorts = nil
 	m.now = func() time.Time { return at }
 	web := testUnit("web", true)
 	web.Ports = []fleet.ServicePort{{Name: "http", Port: 18080}, {Name: "admin", Port: 18081, Bind: "lan"}}
