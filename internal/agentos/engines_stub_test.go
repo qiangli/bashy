@@ -6,6 +6,8 @@
 package agentos
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -30,5 +32,34 @@ func TestEngineFallbackMessageNoRebuild(t *testing.T) {
 func TestResolveEngineBinaryUnknown(t *testing.T) {
 	if got := resolveEngineBinary("definitely-not-an-engine-xyz"); got != "" {
 		t.Errorf("unknown engine should resolve to empty, got %q", got)
+	}
+}
+
+func TestCachedOllamaUsesOnlyPinnedVersion(t *testing.T) {
+	cache := t.TempDir()
+	t.Setenv("BASHY_BIN_CACHE", cache)
+	entry := ollamaEntrypoint()
+	if entry == "" {
+		t.Skip("no official Ollama release asset on this platform")
+	}
+	newer := filepath.Join(cache, "ollama", "v999.0.0", filepath.FromSlash(entry))
+	if err := os.MkdirAll(filepath.Dir(newer), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(newer, []byte("newer"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := cachedOllama(ollamaPinnedVersion, entry); got != "" {
+		t.Fatalf("unpinned cache was selected: %q", got)
+	}
+	pinned := filepath.Join(cache, "ollama", ollamaPinnedVersion, filepath.FromSlash(entry))
+	if err := os.MkdirAll(filepath.Dir(pinned), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pinned, []byte("pinned"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := cachedOllama(ollamaPinnedVersion, entry); got != pinned {
+		t.Fatalf("pinned cache = %q, want %q", got, pinned)
 	}
 }

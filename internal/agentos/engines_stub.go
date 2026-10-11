@@ -90,23 +90,23 @@ func provisionEngine(name string) string {
 	return ""
 }
 
-// provisionOllama fetches the official ollama release for this platform (Tree
-// extraction: ollama + its sibling ggml runner libs) into bashy's managed cache
-// and returns the ollama entrypoint path. Returns "" (→ install/mesh message) on
-// any error, or on platforms whose official asset bashy can't yet extract
-// (linux ships .tar.zst — zstd, unsupported by binmgr's tar.gz/zip extractor).
+const ollamaPinnedVersion = "v0.40.1"
+
+// provisionOllama fetches the pinned official ollama release for this platform
+// (Tree extraction: ollama + its sibling ggml runner libs) into bashy's managed
+// cache and returns the entrypoint path. Returns "" on resolution/install error.
 func provisionOllama(ctx context.Context) string {
 	entry := ollamaEntrypoint()
 	if entry == "" {
 		return ""
 	}
-	if p := cachedOllama(entry); p != "" {
+	if p := cachedOllama(ollamaPinnedVersion, entry); p != "" {
 		return p // already extracted — no network, no "fetching" line
 	}
 	t, err := binmgr.ResolveGitHub(ctx, binmgr.GitHubSpec{
 		Name:       "ollama",
 		Repo:       ollamaOfficialRepo(),
-		Version:    "latest",
+		Version:    ollamaPinnedVersion,
 		Tree:       true,
 		Entrypoint: entry,
 		AssetMatch: ollamaAssetMatch,
@@ -122,27 +122,18 @@ func provisionOllama(ctx context.Context) string {
 	return path
 }
 
-// cachedOllama returns an already-extracted ollama entrypoint from binmgr's cache
-// (any version, newest wins) so a cache hit needs no GitHub round-trip. Mirrors
-// binmgr.Ensure's layout: <CacheDir>/ollama/<version>/<entry>.
-func cachedOllama(entry string) string {
+// cachedOllama returns only the release with a committed binmgr checksum pin.
+// Mirrors binmgr.Ensure's layout: <CacheDir>/ollama/<version>/<entry>.
+func cachedOllama(version, entry string) string {
 	root, err := binmgr.CacheDir()
 	if err != nil {
 		return ""
 	}
-	matches, _ := filepath.Glob(filepath.Join(root, "ollama", "*", filepath.FromSlash(entry)))
-	best := ""
-	var bestMod int64
-	for _, m := range matches {
-		fi, err := os.Stat(m)
-		if err != nil || !isExecutable(m) {
-			continue
-		}
-		if mt := fi.ModTime().UnixNano(); best == "" || mt > bestMod {
-			best, bestMod = m, mt
-		}
+	path := filepath.Join(root, "ollama", version, filepath.FromSlash(entry))
+	if _, err := os.Stat(path); err == nil && isExecutable(path) {
+		return path
 	}
-	return best
+	return ""
 }
 
 // ollamaOfficialRepo is the upstream ollama release repo; $BASHY_OLLAMA_REPO
