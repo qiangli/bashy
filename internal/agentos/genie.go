@@ -35,7 +35,7 @@ import (
 	"github.com/qiangli/yoke/pkg/broker/door"
 )
 
-const genieUsage = `usage: bashy genie [-m MODEL] [--effort LEVEL] "MESSAGE"   one turn in this directory; the answer on stdout
+const genieUsage = `usage: bashy genie [-m MODEL] [--effort LEVEL] [--yolo] "MESSAGE"   one turn in this directory; the answer on stdout
        ... | bashy genie [-m MODEL]       the same, the message read from stdin
        bashy genie [-m MODEL]             hand off terminal use to bashy ycode
        bashy genie web [-m MODEL]         hand off the browser chat page to bashy ycode web
@@ -46,6 +46,10 @@ const genieUsage = `usage: bashy genie [-m MODEL] [--effort LEVEL] "MESSAGE"   o
        bashy genie build [--from DIR]     package genie from a checkout (ycode/examples/genie), else from the builtin source
        bashy genie doctor [--json]        bundle, bashy, ycode, host facts and the model pick
 
+--yolo runs the authored YOLO profile (agent-yolo.yaml: net in the effects ceiling, no
+approval prompts) and is the default for unattended sessions — a weave worker or
+BASHY_UNATTENDED_AGENT=1; --yolo=false opts out. An attended session keeps the default
+profile.
 The model is picked for this host unless -m (or GENIE_MODEL_ID) names one.
 -m may name an API model from the model registry (bashy model add NAME
 --set kind=api,base_url=URL,model=ID,api_key_ref=SECRET): genie then runs on
@@ -66,7 +70,28 @@ func dispatchGenieWithHandoff(args []string, handoff bool) int {
 	if handoff {
 		os.Unsetenv("GENIE_YCODE_SESSION")
 	}
-	args, err := genieApplyEffort(args)
+	args, yolo, yoloSet, err := genieYoloFlag(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy genie:", err)
+		return 2
+	}
+	if !yoloSet && unattendedAgentContext() {
+		yolo = true
+	}
+	if yolo {
+		// The recipe reads the profile from the environment; restore it so an
+		// in-process caller never inherits this call's choice.
+		previous, had := os.LookupEnv("GENIE_HARNESS_CONFIG")
+		defer func() {
+			if had {
+				os.Setenv("GENIE_HARNESS_CONFIG", previous)
+			} else {
+				os.Unsetenv("GENIE_HARNESS_CONFIG")
+			}
+		}()
+		os.Setenv("GENIE_HARNESS_CONFIG", "agent-yolo.yaml")
+	}
+	args, err = genieApplyEffort(args)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy genie:", err)
 		return 2
@@ -128,11 +153,11 @@ func dispatchGenieWithHandoff(args []string, handoff bool) int {
 	}
 	if mode == "web" && handoff {
 		fmt.Fprintln(os.Stderr, "bashy genie web: use `bashy ycode web`")
-		return runSelf(append([]string{"ycode"}, append(modelArgs(model), "web")...), os.Stdin, os.Stdout, os.Stderr)
+		return runSelf(append(yoloArgs(yolo, "ycode"), append(modelArgs(model), "web")...), os.Stdin, os.Stdout, os.Stderr)
 	}
 	if handoff && target == "chat" && mode == "" && len(args) == 0 && isTerminal(os.Stdin) {
 		fmt.Fprintln(os.Stderr, "bashy genie: opening `bashy ycode`")
-		return runSelf(append([]string{"ycode"}, modelArgs(model)...), os.Stdin, os.Stdout, os.Stderr)
+		return runSelf(append(yoloArgs(yolo, "ycode"), modelArgs(model)...), os.Stdin, os.Stdout, os.Stderr)
 	}
 	bundle, err := genieBundle()
 	if err != nil {
@@ -165,6 +190,15 @@ func dispatchGenieWithHandoff(args []string, handoff bool) int {
 	return runSelf(append([]string{"run", "--target", target, bundle}, args...), os.Stdin, os.Stdout, os.Stderr)
 }
 
+// yoloArgs is lead plus --yolo when the authored YOLO profile is selected, for
+// handing a genie invocation's choice on to bashy ycode.
+func yoloArgs(yolo bool, lead ...string) []string {
+	if yolo {
+		return append(lead, "--yolo")
+	}
+	return lead
+}
+
 func modelArgs(model string) []string {
 	if model == "" {
 		return nil
@@ -178,7 +212,9 @@ func modelArgs(model string) []string {
 // prepares the caller workspace and model endpoint before reentering ycode
 // with a generated config.
 func dispatchYcode(args []string) int {
-	args, yolo, err := ycodeYoloFlag(args)
+	args, yolo, yoloSet, err := yoloFlagScan(args, func(arg string) bool {
+		return isYcodeUtility(arg) || arg == "web" || arg == "repl" || arg == "resume" || arg == "prompt" || arg == "acp" || arg == "session"
+	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy ycode:", err)
 		return 2
@@ -197,6 +233,9 @@ func dispatchYcode(args []string) int {
 		return 2
 	}
 	explicit := YcodeHasExplicitConfig(args)
+	if !yoloSet && !explicit && unattendedAgentContext() {
+		yolo = true
+	}
 	if yolo && explicit {
 		fmt.Fprintln(os.Stderr, "bashy ycode: --yolo cannot be combined with --file, YCODE_CONFIG, or a local agent.yaml; select your custom YOLO file with --file")
 		return 2
@@ -244,12 +283,32 @@ func dispatchYcode(args []string) int {
 // ycodeYoloFlag selects an authored profile; it never changes a compiled
 // policy. Stop at a prompt operand or --, and preserve values of other flags.
 func ycodeYoloFlag(args []string) ([]string, bool, error) {
+	rest, yolo, _, err := yoloFlagScan(args, func(arg string) bool {
+		return isYcodeUtility(arg) || arg == "web" || arg == "repl" || arg == "resume" || arg == "prompt" || arg == "acp" || arg == "session"
+	})
+	return rest, yolo, err
+}
+
+// genieYoloFlag is ycodeYoloFlag for bashy genie's subcommands; set reports
+// whether --yolo[=bool] was given at all (an explicit =false opts out of the
+// unattended default).
+func genieYoloFlag(args []string) (rest []string, yolo, set bool, err error) {
+	return yoloFlagScan(args, func(arg string) bool {
+		switch arg {
+		case "web", "repl", "resume", "prompt", "acp", "session", "solve", "smoke":
+			return true
+		}
+		return false
+	})
+}
+
+func yoloFlagScan(args []string, isCommand func(string) bool) ([]string, bool, bool, error) {
 	var rest []string
-	yolo, commandSeen := false, false
+	yolo, set, commandSeen := false, false, false
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
-			return append(rest, args[i:]...), yolo, nil
+			return append(rest, args[i:]...), yolo, set, nil
 		}
 		if arg == "--yolo" || strings.HasPrefix(arg, "--yolo=") {
 			enabled := true
@@ -257,15 +316,15 @@ func ycodeYoloFlag(args []string) ([]string, bool, error) {
 				var err error
 				enabled, err = strconv.ParseBool(strings.TrimPrefix(arg, "--yolo="))
 				if err != nil {
-					return nil, false, fmt.Errorf("--yolo requires a boolean value")
+					return nil, false, false, fmt.Errorf("--yolo requires a boolean value")
 				}
 			}
-			yolo = enabled
+			yolo, set = enabled, true
 			continue
 		}
 		if !strings.HasPrefix(arg, "-") {
-			if commandSeen || !(isYcodeUtility(arg) || arg == "web" || arg == "repl" || arg == "resume" || arg == "prompt" || arg == "acp" || arg == "session") {
-				return append(rest, args[i:]...), yolo, nil
+			if commandSeen || !isCommand(arg) {
+				return append(rest, args[i:]...), yolo, set, nil
 			}
 			commandSeen = true
 		}
@@ -278,7 +337,26 @@ func ycodeYoloFlag(args []string) ([]string, bool, error) {
 			}
 		}
 	}
-	return rest, yolo, nil
+	return rest, yolo, set, nil
+}
+
+// unattendedAgentEnv marks a session no human answers: a managed sprint
+// manager (launchSprintOwnerForeman sets it) or any other launcher that opts in.
+const unattendedAgentEnv = "BASHY_UNATTENDED_AGENT"
+
+// unattendedAgentContext reports whether this genie/ycode runs without a human
+// at its approval prompts: a weave worker (its issue and agent are in the
+// environment) or a session launched with BASHY_UNATTENDED_AGENT set. Such a
+// session must run the authored YOLO profile; the default profile's
+// incomplete-preflight remedy wraps commands, weave worker launches included,
+// in @contain(net: "deny") and leaves the workers offline.
+func unattendedAgentContext() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(unattendedAgentEnv))) {
+	case "", "0", "false", "off", "no":
+	default:
+		return true
+	}
+	return strings.TrimSpace(os.Getenv("WEAVE_ISSUE")) != "" && strings.TrimSpace(os.Getenv("WEAVE_AGENT")) != ""
 }
 
 func ycodeSessionPrefix(args []string) ([]string, string) {

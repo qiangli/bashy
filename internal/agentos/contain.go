@@ -18,6 +18,10 @@ import (
 //	bashy contain --net deny -- CMD [ARGS...]      (the wrapper)
 //	@contain(net: "deny") f() { python -m pytest; } (the decorator; wrapper ≡ decorator)
 //
+// net "model" is deny plus an allowlist proxy to the model APIs, for an agent
+// worker that must still call its model. It is opt-in and never proves the
+// network off, so the effect layer does not discharge net under it.
+//
 // Under @contain every EXTERNAL child a function starts is re-executed through
 // `bashy contain --net deny --`, so the kernel — not the child's good
 // behaviour — keeps it off the network. That is what lets an effect cap that
@@ -35,13 +39,30 @@ const containUnsupportedStatus = 125
 
 type containKey struct{}
 
-// containScope is what a @contain(net: "deny"[, provider: P]) scope carries.
-type containScope struct{ provider string }
+// containScope is what a @contain(net: "deny"|"model"[, provider: P]) scope
+// carries. model is deny plus the model-egress allowlist proxy.
+type containScope struct {
+	provider string
+	model    bool
+}
 
-// containNetFrom reports whether ctx is inside a @contain(net: "deny") scope.
+// containNetFrom reports whether ctx is inside a @contain(net: "deny") scope,
+// the only scope that proves the network is off. A "model" scope is NOT proof
+// of no network: it never discharges the net effect.
 func containNetFrom(ctx context.Context) bool {
-	_, ok := ctx.Value(containKey{}).(containScope)
-	return ok
+	v, ok := ctx.Value(containKey{}).(containScope)
+	return ok && !v.model
+}
+
+// containModelFrom reports whether ctx is inside a @contain(net: "model") scope.
+func containModelFrom(ctx context.Context) bool {
+	v, ok := ctx.Value(containKey{}).(containScope)
+	return ok && v.model
+}
+
+func containScopeFrom(ctx context.Context) (containScope, bool) {
+	v, ok := ctx.Value(containKey{}).(containScope)
+	return v, ok
 }
 
 // containProviderFrom is the scope's provider ("" = the host default).
@@ -54,12 +75,21 @@ func withContainNet(ctx context.Context, provider string) context.Context {
 	return context.WithValue(ctx, containKey{}, containScope{provider: provider})
 }
 
+// withContainModel enters a model scope. Scopes only tighten: inside a deny
+// scope a nested model scope stays deny.
+func withContainModel(ctx context.Context, provider string) context.Context {
+	if containNetFrom(ctx) {
+		return ctx
+	}
+	return context.WithValue(ctx, containKey{}, containScope{provider: provider, model: true})
+}
+
 func containDecorator(stderr io.Writer) nativeDecoratorFunc {
 	return func(ctx context.Context, c *nativeDecoratorCall, args []interp.DecoratorArg) error {
 		if c.Advised != "" {
 			return errors.New("contain is a declaration and never applied by advice")
 		}
-		const usage = `contain takes net: "deny" [, provider: builtin|native|image|custom], or image: "NAME@sha256:..." [, workdir:, out:, env: "A,B", ro: "HOST:CTR,...", provider: builtin|custom]`
+		const usage = `contain takes net: "deny"|"model" [, provider: builtin|native|image|custom], or image: "NAME@sha256:..." [, workdir:, out:, env: "A,B", ro: "HOST:CTR,...", provider: builtin|custom]`
 		net, provider := "", ""
 		img := &containImageSpec{}
 		list := func(v string) []string {
@@ -103,18 +133,22 @@ func containDecorator(stderr io.Writer) nativeDecoratorFunc {
 		if img.Workdir != "" || img.Out != "" || img.Env != nil || img.RO != nil {
 			return errors.New(usage)
 		}
-		if net != "deny" {
+		if net != "deny" && net != "model" {
 			return errors.New(usage)
 		}
 		if provider != "" && !validContainProvider(provider) {
 			return fmt.Errorf("contain: unknown provider %q (builtin, native, image, custom)", provider)
 		}
-		if err := containSupportedFor(provider); err != nil {
+		if err := containSupportedForNet(net, provider); err != nil {
 			c.Status = containUnsupportedStatus
 			fmt.Fprintf(stderr, "%s: contain: %v\n", c.Name, err)
 			return nil
 		}
-		c.Next(withContainNet(ctx, provider))
+		if net == "model" {
+			c.Next(withContainModel(ctx, provider))
+		} else {
+			c.Next(withContainNet(ctx, provider))
+		}
 		return nil
 	}
 }
@@ -246,15 +280,20 @@ func containedEffects(ctx context.Context, cmd string, effects []string) []strin
 
 // containHandler is the innermost rung: a command reaching it is about to be
 // executed as an external child, so inside a @contain scope it is re-executed
-// through `bashy contain --net deny --`.
+// through `bashy contain --net deny --` (--net model in a model scope).
 func containHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 	return func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 		return func(ctx context.Context, args []string) error {
-			if len(args) == 0 || !containNetFrom(ctx) {
+			scope, ok := containScopeFrom(ctx)
+			if len(args) == 0 || !ok {
 				return next(ctx, args)
 			}
-			wrapped := []string{bashySelfPath(), "contain", "--net", "deny"}
-			if p := containProviderFrom(ctx); p != "" {
+			mode := "deny"
+			if scope.model {
+				mode = "model"
+			}
+			wrapped := []string{bashySelfPath(), "contain", "--net", mode}
+			if p := scope.provider; p != "" {
 				wrapped = append(wrapped, "--provider", p)
 			}
 			wrapped = append(append(wrapped, "--"), args...)
@@ -265,12 +304,16 @@ func containHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 
 func dispatchContain(args []string) int {
 	usage := func(w io.Writer) {
-		fmt.Fprintln(w, "usage: bashy contain --net deny [--provider builtin|native|image|custom] -- command [args...]")
+		fmt.Fprintln(w, "usage: bashy contain --net deny|model [--provider builtin|native|image|custom] -- command [args...]")
 		fmt.Fprintln(w, "  run one command with enforced network isolation: native (Linux network namespace,")
 		fmt.Fprintln(w, "  macOS Seatbelt) where the OS has it, else bashy's own image with no network")
 		fmt.Fprintln(w, "  providers: builtin (default: native where the OS has it, else bashy's image), native,")
 		fmt.Fprintln(w, "  image (bashy's own image everywhere), custom (BASHY_CONTAIN_CUSTOM wrapper command).")
 		fmt.Fprintln(w, "  BASHY_CONTAIN_PROVIDER sets the host default; BASHY_CONTAIN_IMAGE overrides the image.")
+		fmt.Fprintln(w, "  --net deny is fully offline (no proxy, no proxy variables) and is the only mode that proves no network.")
+		fmt.Fprintln(w, "  --net model is deny plus a loopback allowlist proxy to the model door and the registry's API-model")
+		fmt.Fprintln(w, "  endpoints (plus BASHY_CONTAIN_ALLOW_HOST), so an agent worker can call its model; it does NOT")
+		fmt.Fprintln(w, "  discharge the net effect. macOS native only; elsewhere it fails closed (125).")
 	}
 	net, provider := "", ""
 	i := 0
@@ -298,13 +341,13 @@ func dispatchContain(args []string) int {
 		}
 	}
 command:
-	if net != "deny" || i >= len(args) || provider != "" && !validContainProvider(provider) {
+	if net != "deny" && net != "model" || i >= len(args) || provider != "" && !validContainProvider(provider) {
 		usage(os.Stderr)
 		return 2
 	}
-	if err := containSupportedFor(provider); err != nil {
+	if err := containSupportedForNet(net, provider); err != nil {
 		fmt.Fprintf(os.Stderr, "bashy contain: %v\n", err)
 		return containUnsupportedStatus
 	}
-	return runContainedWith(provider, args[i:])
+	return runContainedWith(provider, args[i:], net == "model")
 }

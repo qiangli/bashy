@@ -75,10 +75,24 @@ func containSupportedFor(provider string) error {
 	return nil
 }
 
-func runContainedWith(provider string, argv []string) int {
+// containSupportedForNet is containSupportedFor plus the model mode, which
+// only the native macOS provider can serve (a loopback proxy the Seatbelt
+// profile admits); everywhere else it fails closed rather than quietly
+// behaving like deny.
+func containSupportedForNet(net, provider string) error {
+	if err := containSupportedFor(provider); err != nil {
+		return err
+	}
+	if net == "model" && (resolveContainProvider(provider) != containNative || !nativeModelEgress) {
+		return errors.New(`net "model" needs the native provider on macOS (Seatbelt); use net "deny" for an offline tree`)
+	}
+	return nil
+}
+
+func runContainedWith(provider string, argv []string, model bool) int {
 	switch resolveContainProvider(provider) {
 	case containNative:
-		return runNativeContained(argv)
+		return runNativeContained(argv, model)
 	case containCustom:
 		return runCustomContained(argv)
 	}

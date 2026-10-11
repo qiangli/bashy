@@ -172,7 +172,10 @@ func launchSprintOwnerForeman(ctx context.Context, id string, req weave.SprintOw
 	// Foreman arguments: Foreman's persisted state has no environment field,
 	// so the lease token remains only in the manager process environment and
 	// the lease-token file used to create this request.
-	out, err := runSprintOwnerCommand(ctx, bashySelfPath(), args, req.Cwd, sprintOwnerLaunchEnv(os.Environ(), req.Env))
+	env := sprintOwnerLaunchEnv(os.Environ(), req.Env)
+	// No human answers a managed manager's prompts: its genie must run the YOLO profile.
+	env = append(env, unattendedAgentEnv+"=1")
+	out, err := runSprintOwnerCommand(ctx, bashySelfPath(), args, req.Cwd, env)
 	if err != nil {
 		return fmt.Errorf("start managed session %s: %w: %s", id, err, strings.TrimSpace(string(out)))
 	}
