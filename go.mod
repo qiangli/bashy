@@ -6,7 +6,7 @@ toolchain go1.27.1
 
 require (
 	github.com/aymanbagabas/go-pty v0.2.3
-	github.com/bashsharp/bashsharp v0.0.0-20261009161804-00e6e0be94f9
+	github.com/bashsharp/bashsharp v0.0.0-20261011195316-5dc2ae1af119
 	github.com/creack/pty/v2 v2.0.1
 	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0
 	github.com/ergochat/readline v0.1.3

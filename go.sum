@@ -100,6 +100,8 @@ github.com/bahlo/generic-list-go v0.2.0 h1:5sz/EEAK+ls5wF+NeqDpk5+iNdMDXrh3z3nPn
 github.com/bahlo/generic-list-go v0.2.0/go.mod h1:2KvAjgMlE5NNynlg/5iLrrCCZ2+5xWbdbCW3pNTGyYg=
 github.com/bashsharp/bashsharp v0.0.0-20261009161804-00e6e0be94f9 h1:S/pAoqrqqJudU9F/8fcPf7tzGPg11aRNV5OcJe7PwqA=
 github.com/bashsharp/bashsharp v0.0.0-20261009161804-00e6e0be94f9/go.mod h1:yDPy3g4T7tLtaP4a02dBbMIyL1DOrcxkM/zmRVIYWD4=
+github.com/bashsharp/bashsharp v0.0.0-20261011195316-5dc2ae1af119 h1:x++qZmLG94te+XrzOEQHK9HrdD81tN5/lIsI0L59BZU=
+github.com/bashsharp/bashsharp v0.0.0-20261011195316-5dc2ae1af119/go.mod h1:yDPy3g4T7tLtaP4a02dBbMIyL1DOrcxkM/zmRVIYWD4=
 github.com/benbjohnson/clock v1.3.5 h1:VvXlSJBzZpA/zum6Sj74hxwYI2DIxRWuNIoXAzHZz5o=
 github.com/benbjohnson/clock v1.3.5/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
