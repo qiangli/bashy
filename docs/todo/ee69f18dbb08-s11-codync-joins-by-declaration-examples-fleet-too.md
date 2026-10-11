@@ -3,12 +3,11 @@ id: ee69f18dbb08
 kind: feature
 title: 'S11 Codync joins by declaration: examples/fleet/tools/codync.yaml with codync:* commands'
 seq: 1873
-status: assigned
+status: blocked
 priority: p2
 labels:
     - bashy
 created: 2026-10-11T03:52:05.810281Z
-weave: 26
 assignee: codex-gpt5.6-sol
 sprint: 418
 sprint_id: 9891800f-8da5-5338-92bc-1d75755ca548
