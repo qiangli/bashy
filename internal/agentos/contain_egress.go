@@ -2,11 +2,10 @@ package agentos
 
 // Sprint: #421; Story: #1906; Story-ID: e853e9f1e2d9
 //
-// Contained model egress. `bashy contain --net deny` takes the network away
-// from a child tree, and the tree includes any agent worker started inside
-// the scope (a manager that wraps `weave start` in an @contain envelope hands
-// the worker the same kernel profile). A genie worker so contained could never
-// reach its own model API. The profile cannot name a host (Seatbelt accepts
+// Contained model egress, opt-in as `bashy contain --net model` /
+// @contain(net: "model"). `--net deny` stays fully offline (no proxy, no proxy
+// variables): the effect layer reads it as proof of no network. A model scope
+// is deny plus this allowlist, so it never discharges the net effect. The profile cannot name a host (Seatbelt accepts
 // only "*" or "localhost" there), so the model providers are reached through a
 // CONNECT-only proxy that bashy runs OUTSIDE the sandbox on a loopback port;
 // the profile allows that one port and the host-local model door, and the
@@ -36,9 +35,6 @@ const (
 	// containAllowHostEnv adds endpoints (host, host:port or URL, comma
 	// separated) to the model-egress allowlist.
 	containAllowHostEnv = "BASHY_CONTAIN_ALLOW_HOST"
-	// containModelEgressEnv set to off/0/false keeps a contained tree fully
-	// offline: no proxy, no door.
-	containModelEgressEnv = "BASHY_CONTAIN_MODEL_EGRESS"
 )
 
 // containEgress is what a contained tree may reach besides local unix sockets.
@@ -121,20 +117,9 @@ func buildContainEgress(endpoints []string, doorPort int) containEgress {
 	return out
 }
 
-func containModelEgressEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(containModelEgressEnv))) {
-	case "off", "0", "false", "no":
-		return false
-	}
-	return true
-}
-
 // loadContainEgress is the host's allowlist: the registry's API models, the
 // door, and BASHY_CONTAIN_ALLOW_HOST. A seam so tests never read the registry.
 var loadContainEgress = func() containEgress {
-	if !containModelEgressEnabled() {
-		return containEgress{}
-	}
 	var endpoints []string
 	if models, _ := fleet.New().Models(); models != nil {
 		for _, m := range models {

@@ -54,3 +54,44 @@ func TestDispatchContainRunsCommand(t *testing.T) {
 		t.Fatalf("contained false: exit %d, want 1", code)
 	}
 }
+
+func TestModelScopeDoesNotDischargeNet(t *testing.T) {
+	ctx := withContainModel(context.Background(), "")
+	if containNetFrom(ctx) || !containModelFrom(ctx) {
+		t.Fatalf("model scope must not count as a net-off scope")
+	}
+	got := containedEffects(ctx, "python3", []string{atlas.EffExec, atlas.EffNet})
+	if !slices.Contains(got, atlas.EffNet) {
+		t.Fatalf("model scope dropped net: %v", got)
+	}
+	deny := withContainNet(context.Background(), "")
+	if nested := withContainModel(deny, ""); !containNetFrom(nested) {
+		t.Fatalf("a model scope inside deny must stay deny")
+	}
+}
+
+func TestContainHandlerWrapsModelScope(t *testing.T) {
+	var got []string
+	chain := containHandler()(func(ctx context.Context, args []string) error { got = args; return nil })
+	if err := chain(withContainModel(context.Background(), ""), []string{"echo", "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) < 5 || got[1] != "contain" || got[2] != "--net" || got[3] != "model" {
+		t.Fatalf("wrapped argv = %v, want contain --net model", got)
+	}
+	if err := chain(withContainNet(context.Background(), ""), []string{"echo", "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	if got[3] != "deny" {
+		t.Fatalf("deny scope wrapped as %v", got)
+	}
+}
+
+func TestDispatchContainModelFailsClosedWithoutNativeEgress(t *testing.T) {
+	if nativeModelEgress {
+		t.Skip("native model egress available")
+	}
+	if code := dispatchContain([]string{"--net", "model", "--", "true"}); code != containUnsupportedStatus {
+		t.Fatalf("model without native egress: exit %d, want %d", code, containUnsupportedStatus)
+	}
+}

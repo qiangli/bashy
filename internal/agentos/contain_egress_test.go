@@ -34,15 +34,7 @@ func TestContainEgressSplitsProvidersFromLoopback(t *testing.T) {
 	}
 }
 
-func TestContainModelEgressCanBeSwitchedOff(t *testing.T) {
-	t.Setenv(containModelEgressEnv, "off")
-	if got := loadContainEgress(); !got.empty() {
-		t.Fatalf("BASHY_CONTAIN_MODEL_EGRESS=off left an allowlist: %+v", got)
-	}
-}
-
 func TestContainAllowHostEnvAddsEndpoints(t *testing.T) {
-	t.Setenv(containModelEgressEnv, "")
 	t.Setenv(containAllowHostEnv, "llm.corp.example:8443, https://other.example")
 	got := loadContainEgress()
 	for _, want := range []string{"llm.corp.example:8443", "other.example:443"} {

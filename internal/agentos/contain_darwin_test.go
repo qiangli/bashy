@@ -53,7 +53,7 @@ func TestContainNativeReachesOnlyAllowedModelEndpoint(t *testing.T) {
 	}
 
 	curl := func(args string) int {
-		return runNativeContained([]string{"sh", "-c", "curl -sf -m 5 -o /dev/null " + args})
+		return runNativeContained([]string{"sh", "-c", "curl -sf -m 5 -o /dev/null " + args}, true)
 	}
 	viaProxy := `--noproxy '' -x "$http_proxy" `
 	if code := curl(viaProxy + model.URL); code != 0 {
@@ -64,5 +64,24 @@ func TestContainNativeReachesOnlyAllowedModelEndpoint(t *testing.T) {
 	}
 	if code := curl(viaProxy + stranger.URL); code == 0 {
 		t.Fatalf("an endpoint outside the allowlist was reachable through the proxy")
+	}
+}
+
+func TestContainNativeDenyStaysOffline(t *testing.T) {
+	if nativeContainSupported() != nil {
+		t.Skip("no Seatbelt on this host")
+	}
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("no curl(1)")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "x") }))
+	defer srv.Close()
+	old := loadContainEgress
+	defer func() { loadContainEgress = old }()
+	loadContainEgress = func() containEgress {
+		return containEgress{Remote: []string{strings.TrimPrefix(srv.URL, "http://")}}
+	}
+	if code := runNativeContained([]string{"sh", "-c", `test -z "$HTTPS_PROXY$http_proxy" && ! curl -sf -m 5 -o /dev/null ` + srv.URL}, false); code != 0 {
+		t.Fatalf("deny must have no proxy variables and no reachable endpoint: exit %d", code)
 	}
 }

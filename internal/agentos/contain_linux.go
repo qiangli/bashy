@@ -16,6 +16,8 @@ import (
 
 func nativeContainSupported() error { return nil }
 
+const nativeModelEgress = false
+
 func containCmd(argv []string) *exec.Cmd {
 	cmd := exec.Command(argv[0], argv[1:]...)
 	uid, gid := os.Getuid(), os.Getgid()
@@ -28,7 +30,7 @@ func containCmd(argv []string) *exec.Cmd {
 	return cmd
 }
 
-func runNativeContained(argv []string) int {
+func runNativeContained(argv []string, _ bool) int {
 	path, err := exec.LookPath(argv[0])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "bashy contain: %s: %v\n", argv[0], err)

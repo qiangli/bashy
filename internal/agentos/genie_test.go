@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -31,6 +32,7 @@ func writeGenieSource(t *testing.T, dir string) {
 
 func stubYcodeConfigSelection(t *testing.T) {
 	t.Helper()
+	unattendedOff(t)
 	saved := YcodeHasExplicitConfig
 	YcodeHasExplicitConfig = func(args []string) bool {
 		if os.Getenv("YCODE_CONFIG") != "" {
@@ -501,5 +503,107 @@ func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
 				t.Fatalf("model not passed to recipe: %q", os.Getenv("GENIE_MODEL_ID"))
 			}
 		})
+	}
+}
+
+// unattendedOff keeps a test host that is itself a weave worker from turning
+// the default-profile tests into unattended (YOLO) ones.
+func unattendedOff(t *testing.T) {
+	t.Helper()
+	for _, k := range []string{unattendedAgentEnv, "WEAVE_ISSUE", "WEAVE_AGENT"} {
+		t.Setenv(k, "")
+	}
+}
+
+func TestUnattendedAgentContext(t *testing.T) {
+	unattendedOff(t)
+	if unattendedAgentContext() {
+		t.Fatal("a bare environment is attended")
+	}
+	t.Setenv("WEAVE_ISSUE", "40")
+	if unattendedAgentContext() {
+		t.Fatal("WEAVE_ISSUE alone (no agent) is not a worker")
+	}
+	t.Setenv("WEAVE_AGENT", "genie")
+	if !unattendedAgentContext() {
+		t.Fatal("a weave worker is unattended")
+	}
+	t.Setenv("WEAVE_ISSUE", "")
+	t.Setenv(unattendedAgentEnv, "1")
+	if !unattendedAgentContext() {
+		t.Fatal("BASHY_UNATTENDED_AGENT=1 is unattended")
+	}
+	t.Setenv(unattendedAgentEnv, "0")
+	t.Setenv("WEAVE_AGENT", "")
+	if unattendedAgentContext() {
+		t.Fatal("BASHY_UNATTENDED_AGENT=0 is attended")
+	}
+}
+
+func TestGenieYoloFlag(t *testing.T) {
+	for _, tc := range []struct {
+		args, want []string
+		yolo, set  bool
+	}{
+		{[]string{"--yolo", "-m", "x", "hello"}, []string{"-m", "x", "hello"}, true, true},
+		{[]string{"-m", "x", "--yolo", "hello"}, []string{"-m", "x", "hello"}, true, true},
+		{[]string{"--yolo=false", "hello"}, []string{"hello"}, false, true},
+		{[]string{"solve", "--yolo", "task"}, []string{"solve", "task"}, true, true},
+		{[]string{"hello", "--yolo"}, []string{"hello", "--yolo"}, false, false},
+		{[]string{"--", "--yolo"}, []string{"--", "--yolo"}, false, false},
+	} {
+		got, yolo, set, err := genieYoloFlag(tc.args)
+		if err != nil || yolo != tc.yolo || set != tc.set || !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%q: args %q yolo %v set %v err %v", tc.args, got, yolo, set, err)
+		}
+	}
+}
+
+func TestGenieYoloSelectsAuthoredProfile(t *testing.T) {
+	unattendedOff(t)
+	if runtime.GOOS == "windows" {
+		t.Skip("the child-process capture uses /bin/sh")
+	}
+	root := t.TempDir()
+	bar := filepath.Join(root, "genie.bar")
+	if err := os.WriteFile(bar, []byte("stub"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	self := filepath.Join(root, "bashy-self")
+	if err := os.WriteFile(self, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$CAPTURE_ARGS\"\nprintf '%s\\n' \"$GENIE_HARNESS_CONFIG\" > \"$CAPTURE_PROFILE\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BASHY_SELF", self)
+	t.Setenv("GENIE_BAR", bar)
+	t.Setenv("GENIE_EXTERNAL_MODEL", "")
+	t.Setenv("GENIE_HARNESS_CONFIG", "previous")
+	t.Chdir(t.TempDir())
+	run := func(name string, env map[string]string, args ...string) (string, string) {
+		for k, v := range env {
+			t.Setenv(k, v)
+		}
+		t.Setenv("CAPTURE_ARGS", filepath.Join(root, name+".args"))
+		t.Setenv("CAPTURE_PROFILE", filepath.Join(root, name+".profile"))
+		if code := dispatchGenie(args); code != 0 {
+			t.Fatalf("%s: exit %d", name, code)
+		}
+		if os.Getenv("GENIE_HARNESS_CONFIG") != "previous" {
+			t.Fatalf("%s: profile leaked into the parent environment", name)
+		}
+		argv, _ := os.ReadFile(filepath.Join(root, name+".args"))
+		profile, _ := os.ReadFile(filepath.Join(root, name+".profile"))
+		return string(argv), strings.TrimSpace(string(profile))
+	}
+	if argv, profile := run("plain", nil, "-m", "m1", "hello"); profile != "previous" || strings.Contains(argv, "--yolo") {
+		t.Fatalf("attended default changed the profile: %q / %q", profile, argv)
+	}
+	if argv, profile := run("flag", nil, "--yolo", "-m", "m1", "hello"); profile != "agent-yolo.yaml" || strings.Contains(argv, "--yolo") || !strings.Contains(argv, "hello") {
+		t.Fatalf("--yolo: profile %q argv %q", profile, argv)
+	}
+	if _, profile := run("worker", map[string]string{"WEAVE_ISSUE": "40", "WEAVE_AGENT": "genie"}, "-m", "m1", "hello"); profile != "agent-yolo.yaml" {
+		t.Fatalf("weave worker profile = %q, want agent-yolo.yaml", profile)
+	}
+	if _, profile := run("optout", nil, "--yolo=false", "-m", "m1", "hello"); profile != "previous" {
+		t.Fatalf("--yolo=false in a worker profile = %q, want the default", profile)
 	}
 }

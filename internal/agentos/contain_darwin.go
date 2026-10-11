@@ -15,8 +15,8 @@ import (
 
 // On macOS the child runs under a Seatbelt profile that denies every network
 // operation except local unix-domain sockets (which never leave the host),
-// the host-local model door, and the one loopback port of the model-egress
-// proxy (contain_egress.go). Seatbelt cannot name a remote host, so provider
+// and, only for net "model", the host-local model door and the one loopback
+// port of the model-egress proxy (contain_egress.go). Seatbelt cannot name a remote host, so provider
 // hosts are never opened in the profile itself.
 
 const seatbeltExec = "/usr/bin/sandbox-exec"
@@ -44,8 +44,13 @@ func nativeContainSupported() error {
 	return nil
 }
 
-func runNativeContained(argv []string) int {
-	egress := loadContainEgress()
+const nativeModelEgress = true
+
+func runNativeContained(argv []string, model bool) int {
+	var egress containEgress
+	if model {
+		egress = loadContainEgress()
+	}
 	ports := slices.Clone(egress.LoopbackPorts)
 	var env []string
 	if len(egress.Remote) > 0 {

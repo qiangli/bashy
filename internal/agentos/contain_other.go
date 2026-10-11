@@ -13,4 +13,6 @@ func nativeContainSupported() error {
 	return fmt.Errorf("no native network isolation on %s", runtime.GOOS)
 }
 
-func runNativeContained([]string) int { return containUnsupportedStatus }
+const nativeModelEgress = false
+
+func runNativeContained([]string, bool) int { return containUnsupportedStatus }
