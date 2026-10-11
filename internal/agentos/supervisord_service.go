@@ -146,6 +146,9 @@ func resolveUnitRuntime(ctx context.Context, u fleet.Service) (service.Runtime, 
 		}
 		kv, ok := secrets.ResolveAgentKey(os.Environ(), s.Ref)
 		if !ok {
+			if s.Optional {
+				continue
+			}
 			return rt, fmt.Errorf("secret %s (ref %q) is not bound on this host", s.Env, s.Ref)
 		}
 		_, v, _ := strings.Cut(kv, "=")
