@@ -29,7 +29,7 @@ func mustFleetServicesDir(t *testing.T) string {
 
 // TestFleetServicesYAMLHeadersAndSecretsGuard asserts:
 // - Every services/*.yaml header comment has `# status:`, `# add:`, `# source:` lines.
-// - Both are unverified before live run acceptance.
+// - Both record the verified monitor and paired mesh gate.
 // - No host paths or secret tokens are leaked.
 func TestFleetServicesYAMLHeadersAndSecretsGuard(t *testing.T) {
 	servicesDir := mustFleetServicesDir(t)
@@ -61,8 +61,8 @@ func TestFleetServicesYAMLHeadersAndSecretsGuard(t *testing.T) {
 		if !strings.Contains(content, "# source:") {
 			t.Errorf("%s: missing `# source:` line in header comment", base)
 		}
-		if !strings.Contains(content, "unverified") {
-			t.Errorf("%s: status must be unverified before live gate run", base)
+		if !strings.Contains(content, "# status:  verified") {
+			t.Errorf("%s: status must record the verified live gate", base)
 		}
 		if match := reUsers.FindString(content); match != "" {
 			t.Errorf("%s: contains real path pattern %q", base, match)

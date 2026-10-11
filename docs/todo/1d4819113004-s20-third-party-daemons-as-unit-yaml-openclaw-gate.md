@@ -3,13 +3,13 @@ id: 1d4819113004
 kind: feature
 title: 'S20 Third-party daemons as unit YAML: OpenClaw gateway and codync-host examples, supervised and exposed with no outpost code'
 seq: 1889
-status: blocked
+status: assigned
 priority: p2
 labels:
     - bashy
 created: 2026-10-11T05:07:54.951199Z
 weave: 28
-assignee: agy-gemini3.8-flash
+assignee: codex-gpt6-sol
 sprint: 418
 sprint_id: 9891800f-8da5-5338-92bc-1d75755ca548
 sprint_title: 'Agent ecosystem synergy: agentic tools compose like a|b|c through bashy extension points'

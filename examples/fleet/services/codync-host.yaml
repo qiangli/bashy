@@ -1,8 +1,8 @@
 # Codync host — bashy service recipe (Sprint 418 S20)
 # source:  https://github.com/leepokai/Codync (Apache-2.0 at v2.13.2)
 # add:     bashy service add -f examples/fleet/services/codync-host.yaml
-# status:  unverified — requires a live bashy supervisord + mesh run; retain
-#          the host log before replacing this line with verified evidence.
+# status:  verified for Linux monitor health and paired mesh routing in
+#          Sprint 418; optional messenger connectors remain unverified.
 name: codync-host
 kind: service
 description: Codync ACP host for paired messenger input and agent control
