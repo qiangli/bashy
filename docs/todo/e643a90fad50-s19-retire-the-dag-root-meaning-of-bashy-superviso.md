@@ -3,11 +3,13 @@ id: e643a90fad50
 kind: chore
 title: 'S19 Retire the dag-root meaning of bashy supervisord: dag roots become units; scratch image entrypoint becomes bashy supervisord --pid1'
 seq: 1888
-status: todo
+status: assigned
 priority: p2
 labels:
     - bashy
 created: 2026-10-11T05:07:52.624501Z
+weave: 27
+assignee: claude-sonnet5.5
 sprint: 418
 sprint_id: 9891800f-8da5-5338-92bc-1d75755ca548
 sprint_title: 'Agent ecosystem synergy: agentic tools compose like a|b|c through bashy extension points'
