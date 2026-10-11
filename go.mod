@@ -351,7 +351,7 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/qiangli/gfy v0.0.0-20261009070616-1a9d12418c8d // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261011021242-20777bb18824 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261011021546-721513b9f6a1 // indirect
 	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261011020932-a12f3f6ba74d // indirect
 	github.com/qiangli/yoke/pkg/oci v0.0.0-20261011020932-a12f3f6ba74d // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
