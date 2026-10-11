@@ -271,6 +271,9 @@ func dispatchContain(args []string) int {
 		fmt.Fprintln(w, "  providers: builtin (default: native where the OS has it, else bashy's image), native,")
 		fmt.Fprintln(w, "  image (bashy's own image everywhere), custom (BASHY_CONTAIN_CUSTOM wrapper command).")
 		fmt.Fprintln(w, "  BASHY_CONTAIN_PROVIDER sets the host default; BASHY_CONTAIN_IMAGE overrides the image.")
+		fmt.Fprintln(w, "  macOS native: the model door and the registry's API-model endpoints (plus BASHY_CONTAIN_ALLOW_HOST)")
+		fmt.Fprintln(w, "  stay reachable through a loopback allowlist proxy so an agent worker can still call its model;")
+		fmt.Fprintln(w, "  BASHY_CONTAIN_MODEL_EGRESS=off keeps the tree fully offline.")
 	}
 	net, provider := "", ""
 	i := 0
