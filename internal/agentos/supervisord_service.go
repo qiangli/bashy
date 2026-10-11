@@ -130,6 +130,14 @@ func resolveUnitRuntime(ctx context.Context, u fleet.Service) (service.Runtime, 
 		rt.Env[k] = v
 	}
 	for _, s := range u.Secrets {
+		// A service declares the exact environment name its process consumes.
+		// A host may bind that name directly; the vault ref remains the fallback
+		// for hosts that use secrets.map. Model credential suffix conventions do
+		// not cover arbitrary service environment names.
+		if value, ok := os.LookupEnv(s.Env); ok && strings.TrimSpace(value) != "" {
+			rt.Env[s.Env] = value
+			continue
+		}
 		kv, ok := secrets.ResolveAgentKey(os.Environ(), s.Ref)
 		if !ok {
 			return rt, fmt.Errorf("secret %s (ref %q) is not bound on this host", s.Env, s.Ref)
