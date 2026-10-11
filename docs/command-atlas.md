@@ -428,7 +428,7 @@ browser fetch`) · discovery (`commands`). Eighteen more bashy-added commands
 stay visible by name (`inspect oci sandbox ollama peer dks login tessaro release
 transpile dhnt otel duration tz ntp sntp clip ast`, plus `agentic` — a
 **Bash++ reserved word**, never a hide candidate). The
-remaining 22 — `supervise judge pair sdlc schedule herald · define lexicon
+remaining 23 — `supervise judge pair sdlc schedule herald acp · define lexicon
 search sota · check conform · run out full · podman docker · sphere · self web
 · tokens posix-gate` — are **curated-hidden**: `status: "experimental"`,
 `hidden: true`, out of the default listing and `--agentic`, back under
@@ -436,6 +436,17 @@ search sota · check conform · run out full · podman docker · sphere · self 
 their bare shims intact** (`curatedHiddenVerbs` in `agentos.go` is a separate
 list from `hiddenFrontDoorVerbs`, which also strips the shim). A command
 graduates by leaving that list with a gate in hand.
+
+`acp` is the one entry in that list with no bare shim, because it is also a
+`directFrontDoorVerbs` entry: it is the one-token spelling of `herald acp`
+(the dispatch arm prepends the subcommand and does nothing else), and what it
+serves is a JSON-RPC server on stdin/stdout. An ACP host configures ONE
+command string — Zed's `agent_servers` entry, a Codync bot's `command:` — so
+the short spelling exists for that slot, not for a script to call; a bare
+three-letter `acp` function in every interactive shell is a footgun with no
+upside. It inherits herald's maturity claim because it IS herald's code, so
+`bashy acp --help` and `bashy herald acp --help` print the same text
+(`TestACPHelpIsHeraldACPHelpByteForByte`).
 
 **The container engine has one canonical name and three spellings** (operator,
 2026-09-13): `oci` is the **standard** name — the O3 pillar (ollama · oci ·

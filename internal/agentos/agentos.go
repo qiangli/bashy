@@ -163,7 +163,11 @@ var (
 	// `llm` likewise belongs to a popular unrelated CLI; the local gateway is
 	// reached only as `bashy llm`.
 	// `limit` is a wrapper verb like awd; bare `limit` is csh's builtin, never ours.
-	directFrontDoorVerbs = []string{"ycode", "install-agent", "mb", "ping", "out", "full", "awd", "supervisord", "service", "llm", "limit", "proxy", "outpost", "mod", "explain", "approve", "tmpl"}
+	// `acp` is likewise direct-only: it is the protocol's name, not bashy's, and
+	// the one thing an ACP host puts in its `command:` slot. A bare shim would
+	// put a JSON-RPC server behind a three-letter word in every interactive
+	// shell, which no script should ever reach by accident.
+	directFrontDoorVerbs = []string{"ycode", "install-agent", "mb", "ping", "out", "full", "awd", "supervisord", "service", "llm", "limit", "proxy", "outpost", "mod", "explain", "approve", "tmpl", "acp"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "pwsh", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
@@ -219,6 +223,10 @@ var (
 	curatedHiddenVerbs = []string{
 		// higher-tier orchestration, layered over weave/dag/chat
 		"supervise", "judge", "pair", "sdlc", "schedule", "herald",
+		// `acp` is herald's ACP server under its protocol name. It inherits
+		// herald's maturity claim exactly: same code, so it cannot be more
+		// proven than the verb it aliases.
+		"acp",
 		// agent consumption surfaces: `mcp serve` runs the MCP server
 		// over stdio (experimental until the surface is proven)
 		"mcp",
@@ -1266,6 +1274,21 @@ func dispatch() {
 		// the peer claimed completion and nothing verified it. That is what
 		// lets a remote agent compose with && like any other command.
 		dispatchExit(herald.Run(context.Background(), os.Args[2:]))
+	case "acp":
+		// `bashy acp` IS `bashy herald acp` — the same server, one token
+		// shorter. The spelling exists because an ACP host does not configure a
+		// verb tree, it configures ONE command string: Zed's agent_servers
+		// entry, a Codync bot's `command:`. A two-word command in that slot is
+		// a second thing to get wrong, and `herald` is a bashy word an ACP host
+		// operator has no reason to know — the protocol's name is the only
+		// handle they have.
+		//
+		// Prepending the subcommand (the doctor/context/audit idiom above) is
+		// deliberately the whole implementation: the permission relay, the gate,
+		// the session map and the EOF grace all stay in yoke's herald, so the
+		// alias cannot drift from the verb it aliases. `bashy acp --help` and
+		// `bashy herald acp --help` print the same text for the same reason.
+		dispatchExit(herald.Run(context.Background(), append([]string{"acp"}, os.Args[2:]...)))
 	case "ask":
 		// Ask the HUMAN for an ad-hoc value over a channel the calling program
 		// does not own (controlling terminal → GUI askpass → out-of-band

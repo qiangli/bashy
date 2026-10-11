@@ -196,6 +196,20 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Caps: []string{atlas.CapJSON}, Effects: []string{atlas.EffPriv},
 		Stability: atlas.StabilityExperimental,
 	},
+	// acp serves this host to an external ACP client (Zed, a Codync bot) over
+	// newline-delimited JSON-RPC on stdin/stdout. Same body as `herald acp`, so
+	// the classification is herald's: a CROSS-stage orchestration verb that
+	// operates a client on this node. It differs from herald in direction —
+	// herald DIALS a peer, acp ANSWERS one — which changes who opens the
+	// connection, not what the verb costs: a prompt turn still execs the local
+	// agent and spends metered inference. The shared atlas has no row for it
+	// (`acp` there is a package role, not a verb), so bashy classifies it here.
+	"acp": {
+		Stage: atlas.StageCross, Group: atlas.GroupOrch, Tier: atlas.TierUserland,
+		Caps:      []string{atlas.CapJSON, atlas.CapNeedsNetwork, atlas.CapSpawnsProcesses},
+		Effects:   []string{atlas.EffExec, atlas.EffNet, atlas.EffSpend},
+		Stability: atlas.StabilityExperimental,
+	},
 	"full": {
 		Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapSpawnsProcesses}, Effects: []string{atlas.EffExec},
