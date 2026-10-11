@@ -5,8 +5,8 @@
 #          calls that running host; it neither vendors nor downloads Codync.
 # add:     bashy tool add examples/fleet/tools/codync.yaml
 # use:     bashy tool cmd run codync:bots
-#          bashy tool cmd run codync:send -- --yes BOT TEXT
-#          bashy tool cmd run codync:approve -- --yes ID allow|deny
+#          bashy tool cmd run codync:send --yes -- BOT TEXT
+#          bashy tool cmd run codync:approve --yes -- ID allow|deny
 #          bashy tool cmd run codync:usage
 # api:     POST http://127.0.0.1:19222/api/METHOD, bearer token read (and
 #          whitespace-trimmed) from ~/.codync/token by the HTTP transport.
@@ -14,9 +14,13 @@
 #          {"command":"codync-host","args":["mcp","team","--bot","BOT"]}}}.
 # reverse: a Codync custom bot with ACP command `bashy acp` drives any Bashy
 #          agent; the manager owns that live reverse-ACP gate.
-# status:  unverified — the declaration and fake-loopback checks pass; only
-#          the manager's live Codync host, MCP-team, reverse-ACP and remote
-#          gates may replace this with a dated verified stamp.
+# verified: 2026-10-11 — manager imported this declaration with exact
+#           Bashy 22d3a3ec on the claimed Linux host. All four commands
+#           listed available against Codync host v2.13.2; bots and usage
+#           returned HTTP 200, and send with --yes delivered the exact
+#           botId/text to the existing Sprint418 test bot (HTTP 200).
+#           The same send without --yes was refused before HTTP.
+#           MCP-team and reverse-ACP are separate S10 gates.
 name: codync
 kind: cli
 display: Codync host
@@ -41,7 +45,7 @@ commands:
       body: {since: 0}
   - name: send
     mode: http
-    effects: [net, write]
+    effects: [net, write, agent-run]
     http:
       method: POST
       url: http://127.0.0.1:19222
