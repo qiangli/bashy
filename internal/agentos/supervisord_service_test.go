@@ -217,6 +217,7 @@ func TestServiceMonitorSeedInternalAndCustomShareOneMechanism(t *testing.T) {
 
 	// Output lands in the unit's rotating log; `service logs` reads it.
 	waitFile(t, filepath.Join(home, "service", "worker", "output.log"), "child argv: worker --mode fast")
+	waitFile(t, filepath.Join(home, "service", "schedule", "output.log"), "child argv: schedule daemon")
 	if out := svcRun(t, "logs", "schedule"); !strings.Contains(out, "child argv: schedule daemon") {
 		t.Fatalf("service logs schedule:\n%s", out)
 	}
