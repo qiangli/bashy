@@ -3,7 +3,7 @@ id: ee69f18dbb08
 kind: feature
 title: 'S11 Codync joins by declaration: examples/fleet/tools/codync.yaml with codync:* commands'
 seq: 1873
-status: assigned
+status: done
 priority: p2
 labels:
     - bashy
@@ -12,6 +12,8 @@ assignee: codex-gpt6-sol
 sprint: 418
 sprint_id: 9891800f-8da5-5338-92bc-1d75755ca548
 sprint_title: 'Agent ecosystem synergy: agentic tools compose like a|b|c through bashy extension points'
+closed: 2026-10-11T13:41:25.436772Z
+closed_by: codex-gpt6-sol
 ---
 
 Custom tool yaml for codync-host (Apache-2.0, download+exec, never vendored): commands codync:bots, codync:send BOT TEXT (effects agent-run, --yes), codync:approve ID allow|deny, codync:usage over its loopback API (POST /api/METHOD, bearer token from the codync token file); declare codync-host mcp team as an MCP server. Header documents the reverse direction: a Codync bot with command bashy acp drives any bashy agent. Availability probe checks the running host, not just the binary. Acceptance: tool cmd list shows codync:*; codync:send reaches a running host; file stamped verified only after a live run.
