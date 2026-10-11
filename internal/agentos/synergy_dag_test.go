@@ -119,18 +119,19 @@ func newSynergyEnv(t *testing.T) synergyEnv {
 		t.Fatal(err)
 	}
 	stubLog := filepath.Join(home, "stub")
-	write := func(name, reply string) string {
+	write := func(name, reply, action string) string {
 		p := filepath.Join(stubs, name)
 		body := "#!/bin/sh\n" +
 			"printf '%s\\n' \"$*\" >> \"$SYNERGY_STUB_LOG." + name + "\"\n" +
+			action +
 			"printf '%s\\n' '" + reply + "'\n"
 		if err := os.WriteFile(p, []byte(body), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		return p
 	}
-	claude := write("claude", "PLAN: 1) add the fixture 2) add the test 3) keep every receipt")
-	codex := write("codex", "IMPLEMENTED: deterministic fixture outcome")
+	claude := write("claude", "PLAN: create synergy_result.txt with SYNERGY_OK and verify it", "")
+	codex := write("codex", "IMPLEMENTED: deterministic fixture outcome", "printf 'SYNERGY_OK\\n' > synergy_result.txt\n")
 	tmp := filepath.Join(home, "tmp")
 	if err := os.MkdirAll(tmp, 0o755); err != nil {
 		t.Fatal(err)
@@ -293,6 +294,10 @@ func TestSynergyDAGBoundedFixture(t *testing.T) {
 			t.Fatalf("task %d = %+v, want %s done exit 0", i, task, synergyTargets[i])
 		}
 	}
+	artifact, err := os.ReadFile(filepath.Join(env.work, "synergy_result.txt"))
+	if err != nil || string(artifact) != "SYNERGY_OK\n" {
+		t.Fatalf("implementer artifact = %q, want SYNERGY_OK with one newline (%v)", artifact, err)
+	}
 
 	// --- every raw outcome exists and exited 0 -------------------------------
 	rawDir := filepath.Join(env.state, "raw")
@@ -438,7 +443,7 @@ func TestSynergyDAGBoundedFixture(t *testing.T) {
 	if n := strings.Count(string(claudeLog), "\n"); n != 1 {
 		t.Fatalf("planner launched %d times, want exactly 1 (the unpaired refusal and /approve must invoke no agent):\n%s", n, claudeLog)
 	}
-	if !strings.Contains(string(claudeLog), "plan bounded-synergy-fixture") {
+	if !strings.Contains(string(claudeLog), "Plan bounded-synergy-fixture") {
 		t.Fatalf("planner did not receive the sender's message:\n%s", claudeLog)
 	}
 	codexLog, err := os.ReadFile(env.stubLog + ".codex")
@@ -479,5 +484,56 @@ func TestSynergyDAGBoundedFixture(t *testing.T) {
 		// behaviour for an already-paired sender, and exactly why the step
 		// checks the receipt instead of trusting exit 0.
 		t.Fatalf("planner launches after the second run = %d, want 2:\n%s", strings.Count(string(b), "\n"), b)
+	}
+}
+
+// TestSynergyDAGRejectsEmptyImplementation proves that a successful agent
+// process and nonempty reply cannot advance a todo without the promised file.
+func TestSynergyDAGRejectsEmptyImplementation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the planner/implementer stand-ins are POSIX sh scripts")
+	}
+	bin, root := synergyBashyBinary(t)
+	dag := filepath.Join(root, "examples", "dag", "synergy", "dag.md")
+	env := newSynergyEnv(t)
+	refusal := "#!/bin/sh\nprintf '%s\\n' 'cannot implement: no source material'\n"
+	if err := os.WriteFile(filepath.Join(env.home, "stubs", "codex"), []byte(refusal), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out, errOut, code := env.run(t, bin, 3*time.Minute,
+		"dag", "-f", dag, "-B", "--json", "STATE_DIR="+env.state, "done-notification")
+	if code == 0 || strings.TrimSpace(out) != "" {
+		t.Fatalf("nonempty refusal advanced the DAG: exit=%d stdout=%s stderr=%s", code, out, errOut)
+	}
+	var result synergyDagEnvelope
+	if err := json.Unmarshal([]byte(errOut), &result); err != nil {
+		t.Fatalf("failed DAG envelope: %v\nstderr=%s", err, errOut)
+	}
+	if !result.Result.Failed || len(result.Result.Tasks) != 6 {
+		t.Fatalf("refusal should stop at the sixth target: %+v", result.Result.Tasks)
+	}
+	last := result.Result.Tasks[5]
+	if last.Name != "codex-implementation" || last.Status != "failed" || last.ExitCode == 0 {
+		t.Fatalf("refusal should fail codex-implementation: %+v", last)
+	}
+	if _, err := os.Stat(filepath.Join(env.work, "synergy_result.txt")); !os.IsNotExist(err) {
+		t.Fatalf("refusal unexpectedly created the artifact: %v", err)
+	}
+	for _, name := range []string{"approval.approve-request.status", "done.todo-done.status", "done.notify.status"} {
+		if _, err := os.Stat(filepath.Join(env.state, "raw", name)); !os.IsNotExist(err) {
+			t.Fatalf("%s exists after refusal: %v", name, err)
+		}
+	}
+	todoID, err := os.ReadFile(filepath.Join(env.state, "todo-id"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	todo, todoErr, todoCode := env.run(t, bin, time.Minute, "todo", "show", strings.TrimSpace(string(todoID)), "--user", "--json")
+	if todoCode != 0 || !strings.Contains(todo, `"status": "doing"`) {
+		t.Fatalf("refused implementation should leave the todo doing: exit=%d stdout=%s stderr=%s", todoCode, todo, todoErr)
+	}
+	chat, err := os.ReadFile(filepath.Join(env.state, "raw", "impl.chat.out"))
+	if err != nil || !strings.Contains(string(chat), "cannot implement") {
+		t.Fatalf("nonempty implementer refusal was not recorded: %q (%v)", chat, err)
 	}
 }

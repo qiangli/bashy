@@ -18,7 +18,7 @@ not prove, and the list of live gates that stay with the manager.
 | 3 | `pair-approve` | `app pair approve CODE --allow ask,approve`, `app devices --json` | device id | `paired … as <ID>`; cross-checked in the devices JSON |
 | 4 | `paired-input` | `meet dm …` (now relayed to the agent), `meet list`, `meet contributions --json` | DM room id | the `ID` column of the `dm-*-<channel>-<sender>` row |
 | 5 | `claude-plan` | `kb note add --candidate`, `kb list --json`, `todo add --json` | kb slug, kb page id, todo id | `added note <slug>`; `.pages[slug].id`; `.id` |
-| 6 | `codex-implementation` | `todo start`, `chat --agent AGENT --json -m …` | todo id prefix; **none** for chat | `doing <prefix> — …`; the `bashy-chat-v1` envelope has no turn id |
+| 6 | `codex-implementation` | `todo start`, `chat --agent AGENT --json -m …`, exact artifact check | todo id prefix; **none** for chat | `doing <prefix> — …`; the `bashy-chat-v1` envelope has no turn id; `cmp` checks `EXPECTED_PATH` against `EXPECTED_CONTENT` plus one newline |
 | 7 | `approval-request` | `approve request --json -- bashy todo done ID` | approval id (+ token) | `.id`, `.token`, `.state` must be `pending` |
 | 8 | `approve` | `meet dm … "/approve ID"`, `approve show ID --json` | approval id | `allow <id> (…)`; `.state=allow`, `.decision.by=<channel>:<sender>` |
 | 9 | `done-notification` | `todo done`, `todo show --json`, `notify --json`, `chat timeline`, `activity tail` | todo id prefix; **none** for notify / timeline / activity | `done <prefix> — …`; the others carry no id (see below) |
@@ -78,6 +78,8 @@ the receipt before trusting exit 0:
   second pass against the same host does — the test asserts it);
 - a missing pair code, device id, room id, slug, page id, todo id, approval
   id or token fails the run (`need`);
+- a nonempty implementer reply without the expected file, or a file whose
+  bytes differ from `EXPECTED_CONTENT` plus one newline, fails before approval;
 - an approval that is not `pending`, a `/approve` that does not answer
   `allow <the requested id>`, or a decision not recorded as `by
   <channel>:<sender>` fails the run;
@@ -119,10 +121,11 @@ bin/bashy dag -f examples/dag/synergy/dag.md -n done-notification   # ordered pl
 By hand, with stubbed turns, against a scratch home:
 
 ```sh
-H=$(mktemp -d); printf '#!/bin/sh\necho PLAN\n' >"$H/claude"; printf '#!/bin/sh\necho DONE\n' >"$H/codex"; chmod +x "$H"/claude "$H"/codex
-env -i PATH="$PATH" HOME="$H" BASHY_HOME="$H/bashy-home" BASHY_HINTS=off \
+BASHY_BIN=$(pwd)/bin/bashy; DAG=$(pwd)/examples/dag/synergy/dag.md
+H=$(mktemp -d); printf '#!/bin/sh\necho PLAN\n' >"$H/claude"; printf '#!/bin/sh\nprintf "SYNERGY_OK\\n" > synergy_result.txt\necho DONE\n' >"$H/codex"; chmod +x "$H"/claude "$H"/codex
+( cd "$H"; env -i PATH="$PATH" HOME="$H" BASHY_HOME="$H/bashy-home" BASHY_HINTS=off \
     BASHY_TOOL_BINARY_CLAUDE="$H/claude" BASHY_TOOL_BINARY_CODEX="$H/codex" \
-    bin/bashy dag -f examples/dag/synergy/dag.md -B STATE_DIR="$H/state" done-notification
+    "$BASHY_BIN" dag -f "$DAG" -B STATE_DIR="$H/state" done-notification )
 cat "$H/state/event-ids.ndjson"
 ```
 
@@ -130,6 +133,9 @@ Live (no stubs): leave the two `BASHY_TOOL_BINARY_*` variables unset, run from
 a session that carries an agent identity, and revoke a previous pairing first
 (`bashy meet dm --channel fixture --sender alice --revoke`) — the fixture
 refuses an already-paired sender rather than passing through.
+The planner and implementer prompts name the default artifact
+`synergy_result.txt` and exact line `SYNERGY_OK`; override both with
+`EXPECTED_PATH=... EXPECTED_CONTENT=...` for a different private task.
 
 ## What this does NOT prove — manager-owned live gates
 

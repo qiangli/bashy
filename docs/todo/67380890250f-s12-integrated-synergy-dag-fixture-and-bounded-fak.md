@@ -3,18 +3,17 @@ id: 67380890250f
 kind: test
 title: S12 integrated synergy DAG fixture and bounded fake gate
 seq: 1893
-status: done
+status: assigned
 priority: p2
 labels:
     - bashy
     - dag
 created: 2026-10-11T09:39:43.518126Z
 weave: 36
-assignee: claude-fable5.1
+assignee: codex-gpt6-sol
 sprint: 418
 sprint_id: 9891800f-8da5-5338-92bc-1d75755ca548
 sprint_title: 'Agent ecosystem synergy: agentic tools compose like a|b|c through bashy extension points'
-closed: 2026-10-11T11:38:57.745485Z
 resolution: fixed
 closed_by: claude-fable5.1-j
 ---
@@ -28,3 +27,5 @@ Manager review 10:42 UTC: Codex Terra #34 submitted `2c6b1d88`, but `event-ids.n
 Manager recovery 10:51 UTC: GLM/Ycode #35 stayed on an external model connection for about ten minutes with no output, source edit or commit, then exited -1. Manager inspected child process, job logs and private Git tree and recorded the environment failure; `weave abandon 35 --disposition empty` removed only this empty workspace. No fixture source was delivered by #35. The same story is ready for a fresh bounded worker; the preserved #34 commit is still the source starting point, and the event-ID/confirm corrections above remain mandatory.
 
 Manager independent verdict 2026-10-11 11:39 UTC: reviewed `1b0b35ce` scripts/tests for receipt-derived IDs, raw stdout/stderr/status, fail-closed approval and real Bashy commands. Private candidate `BASHY_E2E_BIN=<private binary> GOWORK=off go test -short -timeout 10m ./internal/agentos -run TestSynergyDAG -count=1 -v` passed. Managed merge gate at Bashy `2f6accf7` passed `go build ./...`, `go test ./internal/... ./tools/...`, and Bash 86/86. The first merge attempt was stale after an S20 target edit; the second found an inaccurate S20 recipe status header, fixed at `6abc1815`; the third passed. Weave auto-closed this scoped child, and `sprint accept` confirmed it was already closed. Original S12 `07917b37185b` remains open for exact Linux real-agent DAG, actual messenger ingress and two-host approval gates; no live result is inferred from this bounded fixture.
+
+Manager rework 2026-10-11 14:04 UTC: a real Dragon Claude/Codex run returned a false green when both agents answered that they could not implement, but the fixture accepted a nonempty reply and marked the todo done. The same child is reopened under the Sprint 418 manager for a minimal exact-artifact check before approval, todo completion and notification; no new feature story was filed. The private concrete-spec rerun did create byte-exact `SYNERGY_OK\n`, while the original Linux/two-host acceptance remains open. Sanitized live outcomes: `/tmp/s418-s12-live/evidence/REPORT.md`. Rework source and negative regression belong to this child; acceptance of this source correction does not close original S12.

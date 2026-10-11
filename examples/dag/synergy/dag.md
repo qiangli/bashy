@@ -12,6 +12,8 @@ vars:
   STATE_DIR ?= .synergy-state
   KB_RING ?= host
   TODO_SCOPE ?= --user
+  EXPECTED_PATH ?= synergy_result.txt
+  EXPECTED_CONTENT ?= SYNERGY_OK
 ---
 
 # Agent ecosystem synergy — bounded fixture
@@ -196,7 +198,8 @@ Effects: read, write, exec, net, persist, spend
 ```bash
 set -euo pipefail
 . "$STATE_DIR/lib.sh"
-run_step paired.meet-dm "$BASHY" meet dm "$PLANNER" --channel "$CHANNEL" --sender "$SENDER" "plan $TASK"
+run_step paired.meet-dm "$BASHY" meet dm "$PLANNER" --channel "$CHANNEL" --sender "$SENDER" \
+  "Plan $TASK: the implementer must create $EXPECTED_PATH in this working directory with exactly $EXPECTED_CONTENT followed by one newline."
 reply=$(<"$RAW/paired.meet-dm.out")
 case $reply in
   *"message not delivered"*|*"is not paired for"*|"(agent returned no text)"*|"")
@@ -284,7 +287,7 @@ case $STARTED_ID in
 esac
 run_step impl.chat "$BASHY" chat --agent "$IMPLEMENTER" --json \
   --task "implement todo:$TODO_ID" \
-  -m "Implement todo:$TODO_ID ($TASK) following plan kb:$KB_SLUG. Reply with what you changed."
+  -m "Implement todo:$TODO_ID ($TASK) following plan kb:$KB_SLUG. Create $EXPECTED_PATH in this working directory with exactly $EXPECTED_CONTENT followed by one newline. Reply with what you changed."
 envelope=$(<"$RAW/impl.chat.out")
 case $envelope in
   *'"schema_version":"bashy-chat-v1"'*) ;;
@@ -295,6 +298,12 @@ case $envelope in
   *) need "" "codex-implementation: the implementer turn did not exit 0: $envelope" ;;
 esac
 if [[ $envelope =~ \"output\":\"\" ]]; then need "" "codex-implementation: the implementer returned no output"; fi
+need "$EXPECTED_PATH" "codex-implementation: EXPECTED_PATH is empty"
+if [ ! -f "$EXPECTED_PATH" ]; then
+  need "" "codex-implementation: implementer returned text but did not create $EXPECTED_PATH"
+fi
+printf '%s\n' "$EXPECTED_CONTENT" >"$STATE_DIR/expected-artifact"
+run_step impl.artifact-verify cmp "$STATE_DIR/expected-artifact" "$EXPECTED_PATH"
 ledger codex-implementation "todo start" "todo start stdout: 'doing <id-prefix> — <title>' (prefix of todo add .id)" "$STARTED_ID" impl.todo-start
 ledger codex-implementation "chat" "bashy-chat-v1 envelope" "" impl.chat "bashy-chat-v1 carries agent, nick, model, cwd, args, exit_code and output but no turn or session id"
 ```
