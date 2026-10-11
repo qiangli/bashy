@@ -16,6 +16,8 @@ judged, never trusted.
 > still change before 1.0 through RFCs. Every number this project states
 > names its corpus: [docs/claims.md](https://github.com/bashsharp/bashsharp/blob/main/docs/claims.md).
 
+Deciding whether to use it, or which part of it is for you: [docs/why-bashy.md](docs/why-bashy.md).
+
 The shell and userland are Go. Release builds use `CGO_ENABLED=0` on Linux,
 macOS and Windows; inherited ignored signals are preserved by bashy's product
 runtime build, not by C. The Linux `bashy` still loads glibc dynamically for its
