@@ -1,0 +1,81 @@
+# OpenClaw Gateway — bashy service recipe (Sprint 418 S20)
+# source:  https://github.com/openclaw/openclaw (MIT)
+# add:     bashy service add -f examples/fleet/services/openclaw-gateway.yaml
+# status:  unverified — requires a live bashy supervisord + tunnel/mesh run;
+#          retain the gateway log before replacing this line with verified evidence.
+#
+# Pinned OCI image artifact:
+#   image:  ghcr.io/openclaw/openclaw:2026.9.8
+#   digest: sha256:d0ded1dd76939b2bf4d67ef2d13247b8b160aa5666331d4a0b0e58811182cbb8
+#   platforms:
+#     linux/amd64: sha256:5139eb3ca71ba20d3cd3aa933338e63dbff857d384e482fbdb7dd557849e5529
+#     linux/arm64: sha256:d9af04f6ff74936e0dab1a780251f89a85ae70189529c8139eaf5e1c6be534fb
+#
+# The recipe invokes a generic OCI launcher (Podman or Docker) in the foreground.
+# The container runs OpenClaw gateway with its full pinned Node dependency tree,
+# published loopback port, declared health probe (/health), and bot token secrets.
+name: openclaw-gateway
+kind: service
+description: OpenClaw gateway for messenger ingress and the bashy LLM door
+provider: process
+exec:
+  - podman
+  - run
+  - --rm
+  - -p
+  - "127.0.0.1:{port.gateway}:18789"
+  - -e
+  - OPENCLAW_GATEWAY_TOKEN
+  - -e
+  - TELEGRAM_BOT_TOKEN
+  - -e
+  - DISCORD_BOT_TOKEN
+  - -v
+  - ~/.local/share/bashy/services/openclaw-gateway:/home/node/.openclaw
+  - ghcr.io/openclaw/openclaw@sha256:d0ded1dd76939b2bf4d67ef2d13247b8b160aa5666331d4a0b0e58811182cbb8
+  - node
+  - openclaw.mjs
+  - gateway
+  - --port
+  - "18789"
+  - --bind
+  - lan
+  - --allow-unconfigured
+workdir: ~/.local/share/bashy/services/openclaw-gateway
+settings:
+  image: "ghcr.io/openclaw/openclaw:2026.9.8"
+  image_digest: "sha256:d0ded1dd76939b2bf4d67ef2d13247b8b160aa5666331d4a0b0e58811182cbb8"
+  linux_amd64: "sha256:5139eb3ca71ba20d3cd3aa933338e63dbff857d384e482fbdb7dd557849e5529"
+  linux_arm64: "sha256:d9af04f6ff74936e0dab1a780251f89a85ae70189529c8139eaf5e1c6be534fb"
+ports:
+  - name: gateway
+    port: 18789
+    bind: loopback
+    protocol: tcp
+health:
+  http: /health
+  port: gateway
+  interval: 10s
+  timeout: 3s
+  failures: 3
+  start_period: 45s
+restart:
+  policy: on-failure
+  backoff: {min: 1s, max: 30s, healthy_after: 30s}
+  start_limit: {burst: 5, interval: 1m}
+stop: {signal: TERM, timeout: 20s}
+# These vault references are the declarative secrets_env equivalent for bot
+# channels.  Add only the channels used by this host; values never enter YAML.
+secrets:
+  - {env: OPENCLAW_GATEWAY_TOKEN, ref: openclaw/gateway-token}
+  - {env: TELEGRAM_BOT_TOKEN, ref: openclaw/telegram-bot-token}
+  - {env: DISCORD_BOT_TOKEN, ref: openclaw/discord-bot-token}
+expose:
+  app:
+    name: openclaw
+    port: gateway
+    require_login: true
+    elevation: true
+  mesh:
+    - {name: openclaw-gateway, port: gateway}
+enabled: false

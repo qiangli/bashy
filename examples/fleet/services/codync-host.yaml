@@ -1,0 +1,48 @@
+# Codync host — bashy service recipe (Sprint 418 S20)
+# source:  https://github.com/leepokai/Codync (AGPL-3.0-only)
+# add:     bashy service add -f examples/fleet/services/codync-host.yaml
+# status:  unverified — requires a live bashy supervisord + mesh run; retain
+#          the host log before replacing this line with verified evidence.
+name: codync-host
+kind: service
+description: Codync ACP host for paired messenger input and agent control
+provider: process
+download:
+  github: leepokai/Codync
+  version: v2.13.2
+  member: codync-host
+  sha256:
+    darwin/arm64: 7c59d120f81b5bd582ec1340cbf775d390a2fb434d8d47d7104887e4a2e9d621
+    darwin/amd64: 0a0d642f2119f4b5362f5330c78c92dac5c512970643884c36c35bcbe46251c9
+    linux/arm64: 39449983897d520f00c62ceaf911cbd435fc04a317cfef23cacfa59eb6e133b3
+    linux/amd64: 422d342f1369f0a9ebf3943ff2e5a8b5aba0382809d10d211daae289d3b320a4
+exec: ["{download}", serve, --port, "{port.host}"]
+workdir: ~/.codync
+ports:
+  - name: host
+    port: 19222
+    bind: loopback
+    protocol: tcp
+# Codync's documented foreground endpoint is not a public health contract;
+# use its declared listener until the vendor publishes one.
+health:
+  tcp: true
+  port: host
+  interval: 10s
+  timeout: 3s
+  failures: 3
+  start_period: 30s
+restart:
+  policy: on-failure
+  backoff: {min: 1s, max: 30s, healthy_after: 30s}
+  start_limit: {burst: 5, interval: 1m}
+stop: {signal: TERM, timeout: 20s}
+# Codync normally creates its local bearer token itself.  The references below
+# are optional operator-managed messenger credentials inherited by ACP agents.
+secrets:
+  - {env: TELEGRAM_BOT_TOKEN, ref: codync/telegram-bot-token}
+  - {env: DISCORD_BOT_TOKEN, ref: codync/discord-bot-token}
+expose:
+  mesh:
+    - {name: codync, port: host}
+enabled: false
