@@ -1,0 +1,78 @@
+# Codync — loopback host adapter (bashy examples/fleet, Sprint 418)
+# source:  https://github.com/leepokai/Codync (Apache-2.0, v2.13.2)
+# release: the companion services/codync-host.yaml pins the official v2.13.2
+#          host artifact and its per-platform SHA-256 digests. This adapter
+#          calls that running host; it neither vendors nor downloads Codync.
+# add:     bashy tool add examples/fleet/tools/codync.yaml
+# use:     bashy tool cmd run codync:bots
+#          bashy tool cmd run codync:send -- --yes BOT TEXT
+#          bashy tool cmd run codync:approve -- --yes ID allow|deny
+#          bashy tool cmd run codync:usage
+# api:     POST http://127.0.0.1:19222/api/METHOD, bearer token read (and
+#          whitespace-trimmed) from ~/.codync/token by the HTTP transport.
+# mcp:     Codync's team server is stdio: {"mcpServers":{"codync-team":
+#          {"command":"codync-host","args":["mcp","team","--bot","BOT"]}}}.
+# reverse: a Codync custom bot with ACP command `bashy acp` drives any Bashy
+#          agent; the manager owns that live reverse-ACP gate.
+# status:  unverified — the declaration and fake-loopback checks pass; only
+#          the manager's live Codync host, MCP-team, reverse-ACP and remote
+#          gates may replace this with a dated verified stamp.
+name: codync
+kind: cli
+display: Codync host
+aliases: [codync-host]
+cli:
+  binary: codync-host
+  launch:
+    exec: codync-host tui {prompt}
+    prompt_position: last
+    # `status` asks the installed host whether it is running; PATH presence is
+    # deliberately not treated as availability.
+    version_probe_exec: codync-host status
+commands:
+  - name: bots
+    mode: http
+    effects: [read, net]
+    http:
+      method: POST
+      url: http://127.0.0.1:19222
+      path: /api/sync
+      token_file: ~/.codync/token
+      body: {since: 0}
+  - name: send
+    mode: http
+    effects: [net, write]
+    http:
+      method: POST
+      url: http://127.0.0.1:19222
+      path: /api/send
+      token_file: ~/.codync/token
+      args:
+        - {name: bot, field: botId, required: true}
+        - {name: text, required: true}
+  - name: approve
+    mode: http
+    effects: [net, write]
+    http:
+      method: POST
+      url: http://127.0.0.1:19222
+      path: /api/respondPermission
+      token_file: ~/.codync/token
+      args:
+        - {name: id, field: entryId, required: true}
+        - name: decision
+          field: optionId
+          required: true
+          enum: {allow: allow_once, deny: reject_once}
+  - name: usage
+    mode: http
+    effects: [read, net]
+    http:
+      method: POST
+      url: http://127.0.0.1:19222
+      path: /api/usage
+      token_file: ~/.codync/token
+      body: {}
+quirks: >-
+  All commands use the generic typed HTTP transport. No shell, eval, curl,
+  string-built JSON, or Codync-specific runner branch is involved.
