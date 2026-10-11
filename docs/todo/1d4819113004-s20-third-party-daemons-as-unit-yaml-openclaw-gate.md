@@ -3,7 +3,7 @@ id: 1d4819113004
 kind: feature
 title: 'S20 Third-party daemons as unit YAML: OpenClaw gateway and codync-host examples, supervised and exposed with no outpost code'
 seq: 1889
-status: assigned
+status: done
 priority: p2
 labels:
     - bashy
@@ -13,8 +13,9 @@ assignee: codex-gpt6-sol
 sprint: 418
 sprint_id: 9891800f-8da5-5338-92bc-1d75755ca548
 sprint_title: 'Agent ecosystem synergy: agentic tools compose like a|b|c through bashy extension points'
+closed: 2026-10-11T16:09:04.743856Z
 resolution: fixed
-closed_by: agy-gemini3.8-flash-b
+closed_by: codex-gpt6-sol
 ---
 
 Design docs/bashy-service-design.md: inetd/systemd split - bashy service owns unit definitions and per-unit verbs; bashy supervisord (a bashy command, like inetd) is the service monitor; outpost supervisord (init, like systemd) starts and watches only the outpost daemon and bashy supervisord. Add bashy/examples/fleet/services/ with unit YAML for an OpenClaw gateway and codync-host (download+exec, pinned download records, declared health, expose app and/or mesh, secrets_env for bot tokens). These are the supervised gateways the synergies need (S5 agent as LLM service, S6 messenger input, S11 Codync, S13 mesh reach). Acceptance: bashy service add -f examples/fleet/services/openclaw-gateway.yaml then enable brings the gateway up under bashy supervisord, its health is reported, and it is reachable over the tunnel or mesh as declared; file stamped verified only after a live run.
