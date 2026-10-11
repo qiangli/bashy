@@ -203,17 +203,27 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Caps: []string{atlas.CapSpawnsProcesses}, Effects: []string{atlas.EffExec},
 		Stability: atlas.StabilityExperimental,
 	},
-	// supervisord keeps ONE dag root running in the foreground — the process
-	// half of DEPLOY that nothing else owns (sdlc routes, release packages,
-	// schedule fires; none of them stays up). Tier is workspace: it runs the
-	// project's own DAG.md and reaches nothing outside the tree. Effects are
-	// what it does itself: exec the root. It is a daemon-shaped command that
+	// supervisord is the service monitor — it keeps every enabled service
+	// unit running in the foreground, the process half of DEPLOY that nothing
+	// else owns — or, given DAG.md TARGET, one dag root. Effects are what it
+	// does itself: exec the units. It is a daemon-shaped command that
 	// never daemonizes. Partial on Windows: no process groups or signals, so
 	// the graceful phase is a CTRL_BREAK and the kill reaches the child only;
 	// orphan reaping is a Linux contract.
 	"supervisord": {
 		Stage: atlas.StageDeploy, Group: atlas.GroupOrch, Tier: atlas.TierWorkspace,
 		Caps:    []string{atlas.CapSpawnsProcesses, atlas.CapDaemon},
+		Effects: []string{atlas.EffExec},
+		OS:      atlas.OSes(), Partial: []string{atlas.OSWindows},
+		Stability: atlas.StabilityExperimental,
+	},
+	// service is the unit registry (declarations, overlays, desired state —
+	// local config files) plus client verbs over the running supervisord's
+	// control socket. It execs nothing itself except `service run`, which runs
+	// one unit in the foreground under the monitor's policy.
+	"service": {
+		Stage: atlas.StageDeploy, Group: atlas.GroupOrch, Tier: atlas.TierWorkspace,
+		Caps:    []string{atlas.CapSpawnsProcesses},
 		Effects: []string{atlas.EffExec},
 		OS:      atlas.OSes(), Partial: []string{atlas.OSWindows},
 		Stability: atlas.StabilityExperimental,

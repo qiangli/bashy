@@ -23,16 +23,19 @@ import (
 // before os/exec's Wait does, and then Wait fails with ECHILD and the exit
 // status — the one fact restart policy depends on — is lost. Rather than
 // peeking at siginfo layouts, the reaper keeps what it took: arm() before a
-// spawn empties the stash and stashes everything reaped until watch(pid) names
-// the child (the spawn window is microseconds and a stale pid cannot be the
-// live child's), after which only that pid is kept; execChild.Wait consults
-// take(pid) when its own wait comes back empty. Orphans are reaped and
-// counted, never stored.
+// spawn opens a window in which everything reaped is stashed, until watch(pid)
+// names the child (the spawn window is microseconds and a stale pid cannot be
+// the live child's); from then on only the pids of live main children are
+// kept. execChild.Wait consults take(pid) when its own wait comes back empty.
+// The service monitor owns many main children at once (one per unit plus exec
+// probes), so mains is a set and the spawn window a count. Orphans are reaped
+// and counted, never stored.
 type reaper struct {
-	mu     sync.Mutex
-	main   int // 0 = spawning: stash every pid
-	stash  map[int]childExit
-	orphan int // adopted orphans reaped (a test's only observable)
+	mu       sync.Mutex
+	mains    map[int]bool // live children some Wait will ask about
+	spawning int          // >0 = inside a spawn window: stash every pid
+	stash    map[int]childExit
+	orphan   int // adopted orphans reaped (a test's only observable)
 
 	chld chan os.Signal
 	done chan struct{}
@@ -50,7 +53,7 @@ func startReaper() *reaper {
 }
 
 func newReaper() *reaper {
-	r := &reaper{stash: map[int]childExit{}, chld: make(chan os.Signal, 1), done: make(chan struct{})}
+	r := &reaper{mains: map[int]bool{}, stash: map[int]childExit{}, chld: make(chan os.Signal, 1), done: make(chan struct{})}
 	signal.Notify(r.chld, syscall.SIGCHLD)
 	go r.loop()
 	return r
@@ -77,7 +80,7 @@ func (r *reaper) reap() {
 		}
 		r.mu.Lock()
 		switch {
-		case r.main == 0 || pid == r.main:
+		case r.spawning > 0 || r.mains[pid]:
 			code, signaled := 0, false
 			if ws.Signaled() {
 				code, signaled = 128+int(ws.Signal()), true
@@ -92,34 +95,55 @@ func (r *reaper) reap() {
 	}
 }
 
-// arm is called before a spawn: nothing stashed can belong to the next child.
+// arm is called before a spawn: until watch names the new child, every pid
+// reaped might be it.
 func (r *reaper) arm() {
 	r.mu.Lock()
-	r.main = 0
-	r.stash = map[int]childExit{}
+	if r.mains == nil {
+		r.mains = map[int]bool{}
+	}
+	r.spawning++
 	r.mu.Unlock()
 }
 
-// watch names the live child; everything stashed for another pid during the
-// spawn window was an orphan.
+// disarm closes a spawn window whose Start failed.
+func (r *reaper) disarm() {
+	r.mu.Lock()
+	r.spawning--
+	r.sweep()
+	r.mu.Unlock()
+}
+
+// watch names the live child; once no spawn is in flight, everything stashed
+// for a pid that is not a live main child was an orphan.
 func (r *reaper) watch(pid int) {
 	r.mu.Lock()
-	r.main = pid
+	r.spawning--
+	r.mains[pid] = true
+	r.sweep()
+	r.mu.Unlock()
+}
+
+func (r *reaper) sweep() {
+	if r.spawning > 0 {
+		return
+	}
 	for p := range r.stash {
-		if p != pid {
+		if !r.mains[p] {
 			delete(r.stash, p)
 			r.orphan++
 		}
 	}
-	r.mu.Unlock()
 }
 
-// take hands back the status of the main child if the reaper collected it.
+// take hands back the status of a main child if the reaper collected it, and
+// forgets the pid: its Wait has returned, so the number may be reused.
 func (r *reaper) take(pid int) (childExit, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	ex, ok := r.stash[pid]
 	delete(r.stash, pid)
+	delete(r.mains, pid)
 	return ex, ok
 }
 

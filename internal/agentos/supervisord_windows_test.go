@@ -4,3 +4,5 @@
 package agentos
 
 func signalIgnoreTerm() {}
+
+func processGone(int) bool { return true }

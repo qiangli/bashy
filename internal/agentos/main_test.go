@@ -126,6 +126,11 @@ func TestMain(m *testing.M) {
 	os.Setenv("BASHY_COMMANDS_DIR", filepath.Join(dir, "commands"))
 	os.Setenv("BASHY_COMMANDS_PATH", "")
 	os.Setenv("BASHY_SKILLS_DIR", filepath.Join(dir, "skills"))
+	// Service units and the supervisord control socket: a test that reaches
+	// the monitor must never see the host's units or a host monitor.
+	os.Setenv("BASHY_SERVICES_DIR", filepath.Join(dir, "services"))
+	os.Setenv("BASHY_SERVICES_PATH", "")
+	os.Setenv("BASHY_SUPERVISORD_SOCKET", filepath.Join(dir, "supervisord.sock"))
 	// The self path is this test binary: a real ensure would re-run the whole
 	// suite as `<test> podman info`.
 	ensurePodmanMachineHook = func(string) error { return nil }

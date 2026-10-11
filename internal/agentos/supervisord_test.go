@@ -249,7 +249,10 @@ func TestSupervisordUsageAndValidation(t *testing.T) {
 	}{
 		{[]string{"--help"}, 0},
 		{[]string{"-h"}, 0},
-		{nil, 2},
+		// No operands is the service monitor (supervisord_service.go); its
+		// own flag errors are usage errors too.
+		{[]string{"--no-such"}, 2},
+		{[]string{"--poll"}, 2},
 		{[]string{"DAG.md"}, 2},
 		{[]string{"DAG.md", "a", "b"}, 2},
 		{[]string{"--no-such", "DAG.md", "a"}, 2},

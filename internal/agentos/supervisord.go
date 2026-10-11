@@ -24,10 +24,13 @@
 // file is a diagnostic and an exit, never a restart loop, and the plan's order
 // is printed so an operator sees what "the root" pulls in.
 //
-// Deliberately NOT here (KISS, Sprint 218): daemonizing, pidfiles, a control
-// socket, HTTP/RPC/UI, log files, config files, service scripts, watching the
-// DAG file, multiple programs, readiness protocols, mounts, TTY setup, or
-// anything a kernel boots. A host that wants those has outpost.
+// Deliberately NOT in this mode (KISS, Sprint 218): daemonizing, pidfiles, a
+// control socket, log files, config files, watching the DAG file, multiple
+// programs, readiness protocols, mounts, TTY setup, or anything a kernel
+// boots. `bashy supervisord` with no operands is the service monitor over
+// every enabled `bashy service` unit (Sprint 418 S16; supervisord_monitor.go,
+// docs/bashy-service-design.md), which has the socket, logs and many units;
+// S19 moves the dag-root callers onto a recipe unit and retires this mode.
 package agentos
 
 import (
@@ -72,9 +75,42 @@ flags:
   --grace DUR          TERM/INT → KILL grace (default %v)
 `
 
-// dispatchSupervisord implements `bashy supervisord`. It runs before shell flag
-// parsing and uses the process stdio directly, as the dag child will.
+// dispatchSupervisord implements `bashy supervisord`: with DAG.md TARGET
+// operands the one-root supervisor below; without, the service monitor
+// (supervisord_service.go). It runs before shell flag parsing and uses the
+// process stdio directly, as the dag child will.
 func dispatchSupervisord(args []string) int {
+	if !supervisordDAGMode(args) {
+		return dispatchSupervisordMonitor(args)
+	}
+	return dispatchSupervisordDAG(args)
+}
+
+// supervisordDAGMode: an operand, or a flag only the one-root mode has.
+func supervisordDAGMode(args []string) bool {
+	valued := map[string]bool{"min-backoff": true, "max-backoff": true, "healthy-after": true, "grace": true,
+		"socket": false, "poll": false}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			return i+1 < len(args)
+		}
+		if !strings.HasPrefix(a, "-") {
+			return true
+		}
+		name, _, hasVal := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		dag, known := valued[name]
+		if dag {
+			return true
+		}
+		if known && !hasVal {
+			i++
+		}
+	}
+	return false
+}
+
+func dispatchSupervisordDAG(args []string) int {
 	fs := flag.NewFlagSet("supervisord", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	s := &supervisor{
@@ -240,10 +276,12 @@ func (s *supervisor) run() int {
 			return code
 		}
 	}
-	backoff := s.minBackoff
+	ladder := newBackoffLadder(s.minBackoff, s.maxBackoff, s.healthyAfter)
 	for {
+		var backoff time.Duration
 		child, err := s.start()
 		if err != nil {
+			backoff = ladder.delay(0)
 			s.logf("cannot start %s: %v", strings.Join(append([]string{s.self}, s.dagArgv()...), " "), err)
 		} else {
 			started := s.now()
@@ -259,9 +297,7 @@ func (s *supervisor) run() int {
 				s.logf("%s completed (exit 0); done", s.target)
 				return 0
 			}
-			if s.now().Sub(started) >= s.healthyAfter {
-				backoff = s.minBackoff // a healthy run starts the ladder over
-			}
+			backoff = ladder.delay(s.now().Sub(started)) // a healthy run starts the ladder over
 			// Whatever the root left behind in its group is told to go now and
 			// is killed before the replacement starts, so a straggler never
 			// holds the port the restart needs. Both are no-ops on an empty group.
@@ -280,7 +316,6 @@ func (s *supervisor) run() int {
 		if child != nil {
 			_ = child.Kill()
 		}
-		backoff = min(backoff*2, s.maxBackoff)
 	}
 }
 
@@ -322,30 +357,44 @@ func (s *supervisor) startDagChild() (supervisedChild, error) {
 	cmd.Env = os.Environ()
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = s.stdin, s.stdout, s.stderr
 	cmd.SysProcAttr = ownProcessGroupAttr()
-	if s.reaper != nil {
-		s.reaper.arm()
+	return startTracked(cmd, s.reaper)
+}
+
+// startTracked starts cmd inside a reaper spawn window (r may be nil), so the
+// status of a child the reaper collects first is never lost. Both supervisord
+// modes and the monitor's exec probes spawn through it.
+func startTracked(cmd *exec.Cmd, r *reaper) (*execChild, error) {
+	if r != nil {
+		r.arm()
 	}
 	if err := cmd.Start(); err != nil {
+		if r != nil {
+			r.disarm()
+		}
 		return nil, err
 	}
-	if s.reaper != nil {
-		s.reaper.watch(cmd.Process.Pid)
+	if r != nil {
+		r.watch(cmd.Process.Pid)
 	}
-	return &execChild{cmd: cmd, reaper: s.reaper}, nil
+	return &execChild{cmd: cmd, reaper: r}, nil
 }
 
 func (c *execChild) Wait() childExit {
 	err := c.cmd.Wait()
+	// take also forgets the pid, so it runs whichever way the wait went.
+	var stashed childExit
+	var ok bool
+	if c.reaper != nil {
+		stashed, ok = c.reaper.take(c.cmd.Process.Pid)
+	}
 	if ps := c.cmd.ProcessState; ps != nil {
 		code, signaled := procStatus(ps)
 		return childExit{code: code, signaled: signaled}
 	}
 	// The wait itself failed. On Linux that is the reaper having collected our
 	// child first (ECHILD); it kept the status for exactly this moment.
-	if c.reaper != nil {
-		if ws, ok := c.reaper.take(c.cmd.Process.Pid); ok {
-			return ws
-		}
+	if ok {
+		return stashed
 	}
 	return childExit{code: 1, err: err}
 }
