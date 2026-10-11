@@ -5,15 +5,20 @@ package agentos
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/toolcmd"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -29,6 +34,120 @@ func mustFleetExamplesDir(t *testing.T) string {
 		t.Fatalf("examples/fleet dir not found at %s: %v", fleetDir, err)
 	}
 	return fleetDir
+}
+
+// TestCodyncDeclarationLoopbackCommands proves the example is data-only:
+// import/list work in an isolated registry and the generic HTTP runner sends
+// the documented POST methods, typed bodies and bearer token. The live host
+// (and therefore its status probe) belongs to the manager gate.
+func TestCodyncDeclarationLoopbackCommands(t *testing.T) {
+	fleetDir := mustFleetExamplesDir(t)
+	setupIsolatedFleetStore(t)
+	file := filepath.Join(fleetDir, "tools", "codync.yaml")
+	if _, stderr, err := executeFleetCmd(t, fleet.NewToolsCmd(), "add", "--force", file); err != nil {
+		t.Fatalf("tool add codync: %v (stderr: %s)", err, stderr)
+	}
+	show, stderr, err := executeFleetCmd(t, fleet.NewToolsCmd(), "show", "--json", "codync")
+	if err != nil || !strings.Contains(show, `"name": "codync"`) {
+		t.Fatalf("tool show codync: out=%s err=%v stderr=%s", show, err, stderr)
+	}
+	root := fleet.NewToolsCmd()
+	root.AddCommand(toolcmd.NewCmd())
+	list, stderr, err := executeFleetCmd(t, root, "cmd", "list", "codync", "--json")
+	if err != nil {
+		t.Fatalf("tool cmd list codync: %v (stderr: %s)", err, stderr)
+	}
+	for _, ref := range []string{"codync:bots", "codync:send", "codync:approve", "codync:usage"} {
+		if !strings.Contains(list, `"ref": "`+ref+`"`) {
+			t.Errorf("tool cmd list omitted %s: %s", ref, list)
+		}
+	}
+
+	cat := fleet.New()
+	tool, ok := cat.Tool("codync")
+	if !ok {
+		t.Fatal("codync missing after isolated import")
+	}
+	if got := tool.VersionProbeArgv(); !slices.Equal(got, []string{"codync-host", "status"}) {
+		t.Errorf("availability probe = %v, want codync-host status", got)
+	}
+	for _, name := range []string{"bots", "send", "approve", "usage"} {
+		cmd, ok := tool.Command(name)
+		if !ok || cmd.Mode != fleet.ToolCommandHTTP || cmd.HTTP == nil {
+			t.Errorf("codync:%s is not a native HTTP declaration: %#v", name, cmd)
+		}
+	}
+
+	const token = "fake-loopback-bearer"
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenFile, []byte(token+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	type call struct {
+		method string
+		body   map[string]any
+	}
+	calls := make(chan call, 5)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer "+token {
+			http.Error(w, "bad request", http.StatusUnauthorized)
+			return
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		calls <- call{strings.TrimPrefix(r.URL.Path, "/api/"), body}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	run := func(name string, argv []string, wantMethod string, wantBody map[string]any, yes bool) {
+		t.Helper()
+		cmd, _ := tool.Command(name)
+		cmd.HTTP = &fleet.ToolCommandHTTPAction{Method: cmd.HTTP.Method, URL: server.URL, Path: cmd.HTTP.Path, TokenFile: tokenFile, Body: cmd.HTTP.Body, Args: cmd.HTTP.Args}
+		res, err := toolcmd.Run(context.Background(), tool, cmd, "", toolcmd.Options{Catalog: cat, Dir: t.TempDir(), Argv: argv, Yes: yes})
+		if err != nil {
+			t.Fatalf("codync:%s: %v (result: %+v)", name, err, res)
+		}
+		got := <-calls
+		if got.method != wantMethod || !mapsEqual(got.body, wantBody) {
+			t.Fatalf("codync:%s call = %s %#v, want %s %#v", name, got.method, got.body, wantMethod, wantBody)
+		}
+	}
+	run("bots", nil, "sync", map[string]any{"since": float64(0)}, false)
+	run("send", []string{"bot-7", "review this"}, "send", map[string]any{"botId": "bot-7", "text": "review this"}, true)
+	run("approve", []string{"permission-9", "allow"}, "respondPermission", map[string]any{"entryId": "permission-9", "optionId": "allow_once"}, true)
+	// An empty YAML object canonicalizes through the registry as the HTTP
+	// transport's empty body (JSON null); Codync's usage method has no inputs.
+	run("usage", nil, "usage", nil, false)
+
+	approve, _ := tool.Command("approve")
+	approve.HTTP = &fleet.ToolCommandHTTPAction{Method: approve.HTTP.Method, URL: server.URL, Path: approve.HTTP.Path, TokenFile: tokenFile, Args: approve.HTTP.Args}
+	if _, err := toolcmd.Run(context.Background(), tool, approve, "", toolcmd.Options{Catalog: cat, Dir: t.TempDir(), Argv: []string{"permission-10", "deny"}, Yes: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-calls; got.method != "respondPermission" || !mapsEqual(got.body, map[string]any{"entryId": "permission-10", "optionId": "reject_once"}) {
+		t.Fatalf("codync:approve deny call = %s %#v", got.method, got.body)
+	}
+
+	send, _ := tool.Command("send")
+	send.HTTP = &fleet.ToolCommandHTTPAction{Method: send.HTTP.Method, URL: server.URL, Path: send.HTTP.Path, TokenFile: tokenFile, Args: send.HTTP.Args}
+	if res, err := toolcmd.Run(context.Background(), tool, send, "", toolcmd.Options{Catalog: cat, Dir: t.TempDir(), Argv: []string{"bot-7", "unsafe"}}); err == nil || res.Refusal == "" {
+		t.Fatalf("codync:send without --yes was not refused: err=%v result=%+v", err, res)
+	}
+	select {
+	case got := <-calls:
+		t.Fatalf("codync:send without --yes reached host: %s %#v", got.method, got.body)
+	default:
+	}
+}
+
+func mapsEqual(a, b map[string]any) bool {
+	aj, _ := json.Marshal(a)
+	bj, _ := json.Marshal(b)
+	return bytes.Equal(aj, bj)
 }
 
 func executeFleetCmd(t *testing.T, cmd *cobra.Command, args ...string) (string, string, error) {
@@ -59,8 +178,8 @@ func TestFleetExamplesHeadersAndSecretsGuard(t *testing.T) {
 	if err != nil || len(toolFiles) == 0 {
 		t.Fatalf("no tool files found under %s/tools: %v", fleetDir, err)
 	}
-	if len(toolFiles) != 15 {
-		t.Errorf("expected 15 tool files, found %d", len(toolFiles))
+	if len(toolFiles) != 16 {
+		t.Errorf("expected 16 tool files, found %d", len(toolFiles))
 	}
 
 	modelFiles, err := filepath.Glob(filepath.Join(fleetDir, "models", "*.yaml"))

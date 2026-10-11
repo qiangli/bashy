@@ -12,6 +12,17 @@ bashy tool list --custom
 bashy tool verify qwen-code
 ```
 
+`tools/codync.yaml` is a different kind of custom tool: it is a declarative
+adapter for a running local Codync host, not a launcher or a download recipe.
+Its commands use the typed HTTP transport against the host's loopback API and
+read the documented bearer token from `~/.codync/token`. The companion
+`services/codync-host.yaml` owns the Apache-2.0 v2.13.2 host artifact and its
+release digests. `codync-host status` is the availability probe; a binary on
+`PATH` alone is not enough. The header records the `codync-host mcp team`
+stdio server and the reverse `bashy acp` bot direction. It remains unverified
+until the manager records the live-host, MCP-team, reverse-ACP, and remote
+gates.
+
 `--force` is needed for a name that still belongs to a built-in entry. That
 applies to aider, cline, gemini, goose, hermes and openclaw until those
 built-in entries are retired.
