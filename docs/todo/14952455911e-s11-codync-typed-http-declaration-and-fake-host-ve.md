@@ -3,11 +3,13 @@ id: 14952455911e
 kind: feature
 title: S11 Codync typed HTTP declaration and fake host verification
 seq: 1891
-status: todo
+status: blocked
 priority: p1
 labels:
     - bashy
 created: 2026-10-11T08:46:56.642929Z
+weave: 29
+assignee: codex-gpt5.6-terra
 sprint: 418
 sprint_id: 9891800f-8da5-5338-92bc-1d75755ca548
 sprint_title: 'Agent ecosystem synergy: agentic tools compose like a|b|c through bashy extension points'
