@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -304,6 +305,9 @@ func TestSupervisordHelpAndFlagErrors(t *testing.T) {
 //	hold              print argv, ignore nothing, block until signaled
 //	ignore-term       block; on TERM keep going (only KILL ends it)
 //	orphan:FILE       spawn a grandchild that outlives us, write its pid to FILE, exit 0
+//	listen:PORT       listen on 127.0.0.1:PORT and block
+//	monitor:ROOT,PORT run a service monitor (logs and ownership under ROOT)
+//	                  over one unit that is this binary in listen:PORT mode
 func supervisordTestChild() int {
 	script := os.Getenv("BASHY_SUPERVISORD_TEST_CHILD")
 	args := os.Args[1:]
@@ -344,9 +348,35 @@ func supervisordTestChild() int {
 	case "grandchild":
 		_, _ = io.ReadAll(os.Stdin) // EOF when the parent is gone
 		return 0
+	case "listen":
+		l, err := net.Listen("tcp", "127.0.0.1:"+arg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 3
+		}
+		defer l.Close()
+		select {}
+	case "monitor":
+		root, port, _ := strings.Cut(arg, ",")
+		m := newMonitor()
+		m.load = func() ([]fleet.Service, []error) { return []fleet.Service{listenerUnit(port)}, nil }
+		m.providers = service.Providers{fleet.ServiceProviderProcess: newProcessProvider(os.Args[0], root, nil)}
+		m.resolve = resolveUnitRuntime
+		m.log = os.Stderr
+		return m.run(make(chan os.Signal))
 	}
 	fmt.Fprintln(os.Stderr, "unknown script", script)
 	return 9
+}
+
+// listenerUnit is a process unit that holds port: this binary in listen mode.
+func listenerUnit(port string) fleet.Service {
+	n, _ := strconv.Atoi(port)
+	u := testUnit("listener", true)
+	u.Exec = []string{os.Args[0], "listen"}
+	u.Env = map[string]string{"BASHY_SUPERVISORD_TEST_CHILD": "listen:" + port}
+	u.Ports = []fleet.ServicePort{{Port: n}}
+	return u
 }
 
 func dagFixture(t *testing.T) string {

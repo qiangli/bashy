@@ -23,8 +23,10 @@ import (
 
 // processProvider is the `provider: process` runtime (S16): a unit's exec runs
 // as a FOREGROUND child in its own process group, which the monitor owns for
-// the child's whole life — no daemonizing, no pidfile, so stop is a signal to
-// a group we created and a wait we are guaranteed to get. It is mechanism
+// the child's whole life — no daemonizing, so stop is a signal to a group we
+// created and a wait we are guaranteed to get. The one thing that outlives
+// this monitor is an ownership record (supervisord_owner.go): it lets a
+// successor stop exactly the group a hard-killed monitor left. It is mechanism
 // only: whether an exit is restarted, when, and how often is the monitor's
 // policy, identical for every unit.
 type processProvider struct {
@@ -47,6 +49,7 @@ type procUnit struct {
 	stopping bool
 	done     chan struct{} // closed when the child's wait returned
 	log      io.Closer
+	owner    string // ownership record path; removed once the child is waited
 }
 
 func newProcessProvider(self, logRoot string, r *reaper) *processProvider {
@@ -129,7 +132,9 @@ func (p *processProvider) Activate(_ context.Context, u fleet.Service, rt servic
 		}
 		return err
 	}
-	unit := &procUnit{child: child, print: fingerprint(argv, env, dir), pol: policyOf(u), done: make(chan struct{}), log: logc,
+	pol := policyOf(u)
+	unit := &procUnit{child: child, print: fingerprint(argv, env, dir), pol: pol, done: make(chan struct{}), log: logc,
+		owner: recordOwner(p.logRoot, u.Name, cmd.Process.Pid, pol),
 		status: service.Status{Unit: u.Name, Provider: p.Name(), Enabled: u.Enabled, State: service.Starting,
 			Since: p.now(), PID: cmd.Process.Pid}}
 	p.mu.Lock()
@@ -145,6 +150,9 @@ func (p *processProvider) Activate(_ context.Context, u fleet.Service, rt servic
 func (p *processProvider) wait(name string, u *procUnit, rt service.Runtime) {
 	ex := u.child.Wait()
 	_ = u.child.Signal(syscall.SIGTERM)
+	if u.owner != "" {
+		_ = os.Remove(u.owner)
+	}
 	p.mu.Lock()
 	code := ex.code
 	from := u.status.State
