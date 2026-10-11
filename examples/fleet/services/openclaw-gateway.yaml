@@ -1,8 +1,8 @@
 # OpenClaw Gateway — bashy service recipe (Sprint 418 S20)
 # source:  https://github.com/openclaw/openclaw (MIT)
 # add:     bashy service add -f examples/fleet/services/openclaw-gateway.yaml
-# status:  unverified — requires a live bashy supervisord + tunnel/mesh run;
-#          retain the gateway log before replacing this line with verified evidence.
+# status:  paired mesh route and withdrawal verified on Linux/Mac in Sprint 418;
+#          messenger channel prompts remain a separate live gate.
 #
 # Pinned OCI image artifact:
 #   image:  ghcr.io/openclaw/openclaw:2026.9.8
@@ -57,7 +57,7 @@ health:
   interval: 10s
   timeout: 3s
   failures: 3
-  start_period: 45s
+  start_period: 180s
 restart:
   policy: on-failure
   backoff: {min: 1s, max: 30s, healthy_after: 30s}
