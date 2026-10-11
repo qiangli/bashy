@@ -329,7 +329,9 @@ func confirmHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 
 // confirmSession names the caller an approval belongs to, stable across the
 // yield and its resume (separate processes): the launcher-assigned session
-// claim, episode or instance when the run has one, else the working directory.
+// claim, episode or instance when the run has one. A direct terminal without
+// one uses its parent shell, agent and working directory: the directory alone
+// could let a different terminal in the same checkout redeem a decision.
 func confirmSession() string {
 	for _, k := range []string{"BASHY_SESSION_CLAIM", "BASHY_EPISODE", "BASHY_INSTANCE_UUID"} {
 		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
@@ -337,7 +339,7 @@ func confirmSession() string {
 		}
 	}
 	cwd, _ := os.Getwd()
-	return "cwd:" + cwd
+	return fmt.Sprintf("terminal:%d:%s:%s", os.Getppid(), os.Getenv("BASHY_AGENT"), cwd)
 }
 
 // resumeAnswer reads the --confirm= answer for one operation. answered=false
