@@ -3,11 +3,12 @@ id: 675eceb862b9
 kind: feature
 title: 'S16 bashy supervisord becomes the service monitor: reconcile units, health probes, restart policy, start limits, live reload, status socket, PID1 mode'
 seq: 1885
-status: todo
+status: assigned
 priority: p1
 labels:
     - yoke
 created: 2026-10-11T05:07:45.651934Z
+assignee: codex-gpt6-sol
 sprint: 418
 sprint_id: 9891800f-8da5-5338-92bc-1d75755ca548
 sprint_title: 'Agent ecosystem synergy: agentic tools compose like a|b|c through bashy extension points'
@@ -20,3 +21,5 @@ Operator rod-not-fish requirement 2026-10-10 PDT: implement reusable service dec
 Conductor 2026-10-11: S15 provider interface is merged in yoke main. Own `bashy/internal/agentos/supervisord*` and monitor/runtime code; coordinate the shared IPC/status contract with S18 and keep S19's DAG caller switch separate. Verify on a claimed Linux venue with `go test ./internal/agentos/...` from bashy and `go test ./pkg/service/... ./pkg/fleet/...` from yoke, plus explicit PID1/reaping and live unit toggle probes. Commit with `Agent:` trailer.
 
 Manager rework 2026-10-11 12:37 UTC: the source and original S16 unit tests had been accepted at 08:19, but an isolated claimed-Linux S18 hard-kill gate exposed a monitor ownership regression. Outpost init restarted a SIGKILLed Bashy monitor, while its foreground process unit survived as an orphan and kept port 28643. The new monitor correctly refused the listener as foreign, so the enabled unit failed instead of recovering. Reopen this existing monitor story for a bounded process-ownership correction and repeatable regression test. Keep foreign-listener protection for genuinely unrelated processes; do not infer ownership from port alone or kill arbitrary PIDs. Use the smallest portable mechanism with an explicit Linux hard-kill regression, focused Mac/Windows compile or native tests where available. Manager owns the exact isolated DO init gate and S18 verdict. Own only Bashy `internal/agentos/supervisord*`/direct process lifecycle files; preserve all existing service behavior and full service inventory. No new framework, child story or primary-host process changes. Verify focused `GOWORK=off go test -short -timeout 5m ./internal/agentos -run 'Test.*(Supervisord|Service|Process|Orphan)'` on a private tree, then manager performs repository and claimed-Linux gates. Prior acceptance/source history is retained, and S18 remains open.
+
+Manager verification 2026-10-11 13:15 UTC: Opus5.5 source `861e8961` was directly reviewed and merged as `22d3a3ec`, pushed and pinned. Exact private Mac real-process orphan/foreign-listener/record tests passed; the mandatory `go build ./... && go test ./internal/... ./tools/... && make test-bash` gate passed with `GOFLAGS=-p=1` (Bash 86/86). On claimed Linux, the exact `22d3a3ec` binary SHA256 `03e4eb903a9da7f33c2158f9261b3397bcd1076ef1ad2be584ff363b0ecc1765` ran under private Outpost init `92784c2`. After SIGKILL of only its private monitor PID 234114, init PID 234079 remained, a new monitor PID 240640 stopped owned orphan PID 237638 and restored the unit at PID 240656, active/health ok and HTTP 200. An unrelated listener PID 232425 stayed HTTP 200 before and after. Raw status/process/HTTP evidence is `/root/s418/s16-hardkill-private/gate.log` and `monitor.log`; I inspected both. Private processes and ports were cleaned, and the primary monitor and seven active services remained healthy. This resolves the reopened S16 regression; S18 full paired service coverage remains separate and open.
