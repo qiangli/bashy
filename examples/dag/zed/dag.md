@@ -2,7 +2,7 @@
 name: zed
 description: bashy dag front door for Zed — fetch, focused check/clippy, build, test and the editor CLI binary, as one dependency graph over the Cargo workspace
 type: dag
-default: check
+default: smoke
 vars:
   CHECK_CRATE ?= sum_tree
   TEST_CRATE ?= sum_tree
@@ -40,13 +40,13 @@ cargo fetch --locked
 ```
 
 ### check
-`cargo check -p <crate>` on a focused crate (`sum_tree` by default; set
+`cargo check --locked -p <crate>` on a focused crate (`sum_tree` by default; set
 `CHECK_CRATE=zed` on the command line to check the editor crate).
 Requires: fetch
 Effects: read, write
 
 ```bash
-cargo check -p "$CHECK_CRATE"
+cargo check --locked -p "$CHECK_CRATE"
 ```
 
 ### clippy
@@ -60,7 +60,7 @@ Effects: read, write
 ```
 
 ### build
-The `zed` binary, debug profile (`cargo build -p zed`). Minutes the first
+The `zed` binary, debug profile (`cargo build --locked -p zed`). Minutes the first
 time, incremental after; `target/` is gitignored.
 Requires: fetch
 Sources: Cargo.toml Cargo.lock crates
@@ -69,18 +69,18 @@ Effects: read, write
 Timeout: 1h
 
 ```bash
-cargo build -p zed
+cargo build --locked -p zed
 ```
 
 ### test
-One crate's unit tests through `cargo test -p <small crate>`.
+One crate's unit tests through `cargo test --locked -p <small crate>`.
 `sum_tree` by default — a small data structure crate with focused unit tests;
 `TEST_CRATE=collections` on the command line picks another focused workspace crate.
 Requires: fetch
 Effects: read, write
 
 ```bash
-cargo test -p "$TEST_CRATE"
+cargo test --locked -p "$TEST_CRATE"
 ```
 
 ### smoke
