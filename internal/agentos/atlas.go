@@ -181,6 +181,14 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Caps: []string{atlas.CapJSON, atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
 		Stability: atlas.StabilityExperimental,
 	},
+	// approve settles the queue of pending human decisions. Allowing a held
+	// operation grants authority, so it is declared priv: a @confirm body
+	// cannot dispatch it without the human answering for it.
+	"approve": {
+		Stage: atlas.StageCross, Group: atlas.GroupPlatform, Tier: atlas.TierUserland,
+		Caps: []string{atlas.CapJSON}, Effects: []string{atlas.EffPriv},
+		Stability: atlas.StabilityExperimental,
+	},
 	"full": {
 		Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapSpawnsProcesses}, Effects: []string{atlas.EffExec},

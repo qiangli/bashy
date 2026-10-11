@@ -591,6 +591,7 @@ var verbSynopsis = map[string]string{
 	"bus":                "agent notification bus: `bus publish` a change, `bus watch` for one (kb holds facts; the bus carries changes)",
 	"herald":             "reach an agent that is not on this host, over A2A: `herald add` a peer, `herald send` it a task, and gate the result",
 	"ask":                "ask the HUMAN operator for an ad-hoc value (a token, an OTP) — never the model; returns a path, not the value",
+	"approve":            "list and decide pending approvals (a yielded @confirm, ACP permission request, chat grant): `approve allow ID` prints the --confirm=TOKEN:yes resume flag",
 	"skill":              "tier-2 workspace skills, env-gated: list applicable here, probe the coordinate, show one",
 	"skills":             "hidden alias for bashy skill",
 	"craft":              "the living skill graph: what running skills has taught this host, per skill or per capability",
