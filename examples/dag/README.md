@@ -1,6 +1,6 @@
 # `bashy dag` as a project's front door
 
-Fifteen real repositories, each driven by ONE `dag.md` at its root instead of
+Sixteen real repositories, each driven by ONE `dag.md` at its root instead of
 a `Makefile`, a `justfile`, a `cargo`/`npm run`/`pnpm`/`uv run` alias list, a
 `cmake -B …` walkthrough, or a README full of incantations:
 
@@ -15,6 +15,7 @@ a `Makefile`, a `justfile`, a `cargo`/`npm run`/`pnpm`/`uv run` alias list, a
 | [`codex/dag.md`](codex/dag.md) | [openai/codex](https://github.com/openai/codex) | Rust (`codex-rs/` Cargo workspace under the repo root, `justfile`) | `fetch` · `fmt-check` · `clippy` · `build` · `test` · `smoke` · `run` |
 | [`bun/dag.md`](bun/dag.md) | [oven-sh/bun](https://github.com/oven-sh/bun) | Bun workspace + Rust (nightly-pinned Cargo workspace) | `install` · `lint` · `typecheck` · `fmt-check-rust` · `rust-check` · `smoke` |
 | [`mise/dag.md`](mise/dag.md) | [jdx/mise](https://github.com/jdx/mise) | Rust (Cargo workspace, upstream Mise task front doors) | `build` · `test` · `smoke` · `run` |
+| [`zed/dag.md`](zed/dag.md) | [zed-industries/zed](https://github.com/zed-industries/zed) | Rust (Cargo workspace, `rust-toolchain.toml`) | `fetch` · `check` · `clippy` · `build` · `test` · `smoke` · `run` |
 | [`ffmpeg/dag.md`](ffmpeg/dag.md) | [FFmpeg/FFmpeg](https://github.com/FFmpeg/FFmpeg) | C (`configure` + GNU make, in-tree) | `configure` · `build` · `test` · `smoke` · `run` |
 | [`curl/dag.md`](curl/dag.md) | [curl/curl](https://github.com/curl/curl) | C (CMake) | `configure` · `build` · `test` · `smoke` · `run` |
 | [`git/dag.md`](git/dag.md) | [git/git](https://github.com/git/git) | C (GNU make, in-tree) | `build` · `test` · `smoke` · `run` |
@@ -103,7 +104,7 @@ compiled by `rustc` into a small worker when the body is prepared (std-only,
 no crate dependencies, `BASHPP_RUSTC` overrides the compiler), run in the
 invoking directory, `Result<T, E>` errors and panics surfacing as call
 failures. Each Rust example carries TWO fence targets. `smoke` needs no
-build: `rs.uv()` / `rs.codex()` / `rs.bun()` / `rs.mise()` read the checkout's own
+build: `rs.uv()` / `rs.codex()` / `rs.bun()` / `rs.mise()` / `rs.zed()` read the checkout's own
 coordinates (crate version, MSRV, the `rust-toolchain.toml` channel, workspace
 members, locked packages) and the shell body cross-checks the answer against
 the same files with builtins alone. `run` is the launcher proper: after the
@@ -141,7 +142,7 @@ not bashy's. Codex keeps its workspace under `codex-rs/`, so its cargo
 targets `cd codex-rs && …` and its fence names `codex-rs/…` paths; Bun's
 Rust workspace only resolves after the native build has vendored
 `vendor/lolhtml`, so its `rust-check` is a documented target and the gate
-runs the Bun-side lanes plus the fence. The four checked-in Rust examples
+runs the Bun-side lanes plus the fence. The five checked-in Rust examples
 are the launch shape for a Cargo repo: `bashy dag run` = fetch → build →
 launch, one file, no wrapper script.
 
