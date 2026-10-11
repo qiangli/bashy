@@ -1081,10 +1081,10 @@ func dispatch() {
 		}
 		dispatchExit(0)
 	case "supervisord":
-		// The intentionally small foreground supervisor of ONE dag root:
-		// spawn → restart with bounded backoff → forward TERM/INT to the
-		// group → reap orphans as PID 1 (Sprint 218). Not a shim: a host's
-		// own supervisord (the Python one) must keep resolving bare.
+		// The service monitor (Sprint 418 S16): restart with bounded backoff,
+		// forward TERM/INT to each unit's group, reap orphans as PID 1. The
+		// Sprint 218 `DAG.md TARGET` form is refused (S19). Not a shim: a
+		// host's own supervisord (the Python one) must keep resolving bare.
 		dispatchExit(dispatchSupervisord(os.Args[2:]))
 	case "service":
 		// Service units (Sprint 418): the declarations and desired state

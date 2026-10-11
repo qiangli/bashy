@@ -213,8 +213,9 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 	},
 	// supervisord is the service monitor — it keeps every enabled service
 	// unit running in the foreground, the process half of DEPLOY that nothing
-	// else owns — or, given DAG.md TARGET, one dag root. Effects are what it
-	// does itself: exec the units. It is a daemon-shaped command that
+	// else owns; a dag root is a unit whose exec is `bashy dag DAG.md TARGET`
+	// (the Sprint 218 operand form is refused). Effects are what it does
+	// itself: exec the units. It is a daemon-shaped command that
 	// never daemonizes. Partial on Windows: no process groups or signals, so
 	// the graceful phase is a CTRL_BREAK and the kill reaches the child only;
 	// orphan reaping is a Linux contract.

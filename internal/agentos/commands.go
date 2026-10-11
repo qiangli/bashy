@@ -573,7 +573,7 @@ var verbSynopsis = map[string]string{
 	"limit":              "run one command under k8s-style resource limits on its whole process tree: --memory, --pids, --disk (the @limit wrapper)",
 	"genie":              "solve a task in this repository with genie, the local-model SWE agent (own model server, no vendor): TASK, build, doctor",
 	"ycode":              "the engine for agents declared in YAML: run an agent.yaml (--file) or the builtin one; its session controls live here too",
-	"supervisord":        "the service monitor: keep every enabled service unit running (health, restart backoff, start limits, live reload, status socket; --pid1 for containers); or one dag root with DAG.md TARGET",
+	"supervisord":        "the service monitor: keep every enabled service unit running (health, restart backoff, start limits, live reload, status socket; --pid1 for containers). A dag root is a unit: exec bashy dag DAG.md TARGET",
 	"service":            "service units: declare, override, enable/disable built-in, internal and third-party daemons; status/start/stop/restart/logs/run them under bashy supervisord",
 	"inbox":              "read/watch every inbound source, or query an explicit durable agent/human mailbox",
 	"instance":           "conversations on a family: list, open (prints the BASHY_PRINCIPAL/BASHY_INSTANCE export line), retire",
