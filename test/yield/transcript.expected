@@ -7,7 +7,7 @@ exit=0
 state: victim=present after=absent
 == 2 unattended run: the yield — exit 6, nothing destroyed ==
 marker
-clean: input required: confirm e9d85167: rm -rf victim (effects: destroy): no channel reaches a human (the harness owns input: BASHY_ASK_HANDLER); resume with clean --confirm=e9d85167:yes ... or --confirm=e9d85167:no ...
+clean: input required: confirm e9d85167: rm -rf victim (effects: destroy): no channel reaches a human (the harness owns input: BASHY_ASK_HANDLER); approval ID: `bashy approve allow ID` or `bashy approve deny ID`; resume with clean --confirm=e9d85167:yes ... or --confirm=e9d85167:no ...
 clean: not run after yield: mkdir after
 cleaned
 exit=6
@@ -15,14 +15,23 @@ state: victim=present after=absent
 == 3 the harness pauses and asks the human ==
 resume form: clean --confirm=e9d85167:yes|no
 human answered: yes
-== 4 replay with the human's answer ==
+== 4 record the answer, then replay with it ==
+--confirm=e9d85167:yes
+allow ID (token e9d85167)
+exit=0
 marker
 cleaned
 exit=0
 state: victim=absent after=present
-== 5 an answer for another operation makes no progress ==
+== 5 an answer for another operation, or a spent one, makes no progress ==
 marker
-clean: input required: confirm e9d85167: rm -rf victim (effects: destroy): no channel reaches a human (the harness owns input: BASHY_ASK_HANDLER); resume with clean --confirm=e9d85167:yes ... or --confirm=e9d85167:no ...
+clean: input required: confirm e9d85167: rm -rf victim (effects: destroy): no channel reaches a human (the harness owns input: BASHY_ASK_HANDLER); approval ID: `bashy approve allow ID` or `bashy approve deny ID`; resume with clean --confirm=e9d85167:yes ... or --confirm=e9d85167:no ...
+clean: not run after yield: mkdir after
+cleaned
+exit=6
+state: victim=present after=absent
+marker
+clean: input required: confirm e9d85167: rm -rf victim (effects: destroy): no channel reaches a human (the harness owns input: BASHY_ASK_HANDLER); approval ID: `bashy approve allow ID` or `bashy approve deny ID`; resume with clean --confirm=e9d85167:yes ... or --confirm=e9d85167:no ...
 clean: not run after yield: mkdir after
 cleaned
 exit=6
@@ -45,7 +54,7 @@ marker
   "status": "error",
   "error": {
     "code": "input_required",
-    "message": "input required: confirm e9d85167: rm -rf victim (effects: destroy): no channel reaches a human (BASHY_AGENTIC); resume with clean --confirm=e9d85167:yes ... or --confirm=e9d85167:no ..."
+    "message": "input required: confirm e9d85167: rm -rf victim (effects: destroy): no channel reaches a human (BASHY_AGENTIC); approval ID: `bashy approve allow ID` or `bashy approve deny ID`; resume with clean --confirm=e9d85167:yes ... or --confirm=e9d85167:no ..."
   }
 }
 clean: not run after yield: mkdir after

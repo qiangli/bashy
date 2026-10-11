@@ -12,15 +12,19 @@
 #                  (with the high-impact one's token) and performs none.
 #   2  handoff   — an unattended `clean` YIELDS: exit 6, the high-impact
 #                  operation not performed, every later side effect refused.
-#   3  pause+ask — the driver pauses, takes the resume form OFF the yield
-#                  line, and obtains the answer from the human. Here the
-#                  human's reply is the RECORDED one in ./answer ("yes",
+#   3  pause+ask — the yield also raised an approval in the shared ask queue.
+#                  The driver pauses, takes the token and the approval id OFF
+#                  the yield line, and obtains the answer from the human. Here
+#                  the human's reply is the RECORDED one in ./answer ("yes",
 #                  recorded 2026-09-20); the driver never invents it, and a
 #                  missing recording makes THIS script exit 6 in turn.
-#   4  replay    — `clean --confirm=TOKEN:yes` completes: exit 0, converged.
+#   4  replay    — the answer is recorded with `bashy approve allow ID` (which
+#                  prints the resume flag), then `clean --confirm=TOKEN:yes`
+#                  redeems it: exit 0, converged. The allow is single-use.
 #   5  boundary  — an answer for a DIFFERENT token makes no progress: the
 #                  same stable token is named again (a harness seeing the
-#                  same token twice has its stop condition).
+#                  same token twice has its stop condition). So does a
+#                  repeat of the spent yes from step 4.
 #   6  failure   — `--confirm=TOKEN:no` refuses that operation (126 inside,
 #                  body continues, exit 0) and the victim survives.
 #   7  boundary  — a malformed --confirm= is a diagnostic (exit 1), not a
@@ -31,7 +35,8 @@
 #                  --what-if as an ordinary word and rm just runs.
 #
 # Every path in the fixture is relative and the SUT runs on a scrubbed
-# environment, so the transcript — tokens included — is byte-stable.
+# environment, so the transcript — tokens included — is byte-stable. The
+# approval ask-queue lives in the work dir and its random ids are scrubbed.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 bashy=${1:-bashy}
@@ -63,6 +68,7 @@ sut() {
 	shift
 	st=0
 	(cd "$work/$dir" && /usr/bin/env -i HOME="$HOME" PATH=/usr/bin:/bin \
+		BASHY_ASK_DIR="$work/ask" BASHY_SESSION_CLAIM=yield-fixture \
 		$envs "$bashy" "$@" 2>&1) || st=$?
 	echo "exit=$st"
 }
@@ -89,6 +95,8 @@ loop() {
 	echo "== 3 the harness pauses and asks the human =="
 	tok=$(printf '%s\n' "$yield" |
 		sed -n 's/.*resume with clean --confirm=\([0-9a-f]\{8\}\):yes.*/\1/p')
+	aid=$(printf '%s\n' "$yield" |
+		sed -n 's/.*bashy approve allow \([0-9a-f]\{8\}\).*/\1/p')
 	echo "resume form: clean --confirm=$tok:yes|no"
 	if [ ! -f "$here/answer" ]; then
 		echo "input required: no recorded human answer in $here/answer" >&2
@@ -97,13 +105,20 @@ loop() {
 	answer=$(cat "$here/answer")
 	echo "human answered: $answer"
 
-	echo "== 4 replay with the human's answer =="
+	echo "== 4 record the answer, then replay with it =="
+	case $answer in
+	yes) verb=allow ;;
+	*) verb=deny ;;
+	esac
+	sut w -- approve "$verb" "$aid"
 	sut w BASHY_ASK_HANDLER=recorded -- --bashsharp "$here/clean.bsh" "--confirm=$tok:$answer"
 	state w
 
-	echo "== 5 an answer for another operation makes no progress =="
+	echo "== 5 an answer for another operation, or a spent one, makes no progress =="
 	fresh w
 	sut w BASHY_ASK_HANDLER=recorded -- --bashsharp "$here/clean.bsh" --confirm=deadbeef:yes
+	state w
+	sut w BASHY_ASK_HANDLER=recorded -- --bashsharp "$here/clean.bsh" "--confirm=$tok:yes"
 	state w
 
 	echo "== 6 the human said no: refused, body continues =="
@@ -128,7 +143,11 @@ loop() {
 	state w
 }
 
-out=$(loop)
+out=$(loop | sed \
+	-e 's/approval [0-9a-f]\{8\}:/approval ID:/' \
+	-e 's/approve allow [0-9a-f]\{8\}/approve allow ID/g' \
+	-e 's/approve deny [0-9a-f]\{8\}/approve deny ID/g' \
+	-e 's/^\(allow\|deny\) [0-9a-f]\{8\} (token/\1 ID (token/')
 if [ "$out" = "$(cat "$here/transcript.expected")" ]; then
 	echo "yield: PASS ($bashy)"
 else

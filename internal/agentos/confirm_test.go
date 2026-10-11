@@ -50,12 +50,14 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/qiangli/coreutils/pkg/weavecli"
+	"github.com/qiangli/yoke/pkg/ask"
 )
 
 // stubAsk replaces the human seam for one test. answer is what the human
 // says; err non-nil means nobody could be asked (the yield).
 func stubAsk(t *testing.T, answer bool, err error) *[]string {
 	t.Helper()
+	t.Setenv(ask.DirEnv, t.TempDir())
 	prev := confirmAsk
 	var asked []string
 	confirmAsk = func(fn, op, effects string) (bool, error) {
@@ -64,6 +66,26 @@ func stubAsk(t *testing.T, answer bool, err error) *[]string {
 	}
 	t.Cleanup(func() { confirmAsk = prev })
 	return &asked
+}
+
+// decideConfirm settles the pending @confirm approval for tok the way
+// `bashy approve allow|deny` does, through the shared ask contract.
+func decideConfirm(t *testing.T, tok, verdict string) ask.Request {
+	t.Helper()
+	pending, err := ask.PendingApprovals()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range pending {
+		if r.Approval.Source == ask.SourceConfirm && r.Approval.Token == tok {
+			if _, err := ask.Decide(r.ID, ask.Decision{Verdict: verdict}, ask.DecideOpts{Token: tok}); err != nil {
+				t.Fatal(err)
+			}
+			return r
+		}
+	}
+	t.Fatalf("no pending confirm approval for token %s", tok)
+	return ask.Request{}
 }
 
 // confirmScript is the shape every case runs: one @confirm function whose
@@ -203,7 +225,7 @@ func TestConfirmHighImpactAsksTheHuman(t *testing.T) {
 	})
 }
 
-var yieldLineRE = regexp.MustCompile(`^clean: input required: confirm ([0-9a-f]{8}): (rm -rf \S+) \(effects: destroy\): no channel reaches a human; resume with clean --confirm=([0-9a-f]{8}):yes \.\.\. or --confirm=([0-9a-f]{8}):no \.\.\.$`)
+var yieldLineRE = regexp.MustCompile(`^clean: input required: confirm ([0-9a-f]{8}): (rm -rf \S+) \(effects: destroy\): no channel reaches a human; approval [0-9a-f]{8}: .bashy approve allow [0-9a-f]{8}. or .bashy approve deny [0-9a-f]{8}.; resume with clean --confirm=([0-9a-f]{8}):yes \.\.\. or --confirm=([0-9a-f]{8}):no \.\.\.$`)
 
 func TestConfirmUnattendedYields(t *testing.T) {
 	asked := stubAsk(t, false, errConfirmUnattended)
@@ -325,6 +347,9 @@ func TestConfirmResumeAnswers(t *testing.T) {
 		asked := stubAsk(t, false, errConfirmUnattended)
 		w := confirmWork(t)
 		tok := confirmToken([]string{"rm", "-rf", w + "/victim"})
+		runConfirm(t, w, w, nil)
+		decideConfirm(t, tok, ask.VerdictAllow)
+		*asked = nil
 		out, errOut := runConfirm(t, w, "--confirm="+tok+":yes "+w, nil)
 		if len(*asked) != 0 {
 			t.Errorf("asked with an answer supplied: %v", *asked)
@@ -353,6 +378,9 @@ func TestConfirmResumeAnswers(t *testing.T) {
 	})
 	t.Run("an answer for another operation does not apply", func(t *testing.T) {
 		asked := stubAsk(t, false, errConfirmUnattended)
+		runConfirm(t, work, work, nil)
+		decideConfirm(t, tok, ask.VerdictAllow)
+		*asked = nil
 		out, errOut := runConfirm(t, work, "--confirm=deadbeef:yes,"+tok+":yes,"+"cafef00d:no "+work, nil)
 		// The answer for this operation's token applied; the others were
 		// simply never consulted.
@@ -468,7 +496,9 @@ func TestConfirmHarnessLoop(t *testing.T) {
 	if resume == nil {
 		t.Fatalf("no resume form on stderr: %q", errOut)
 	}
-	// The harness obtained "yes" from its human and replays.
+	// The harness obtained "yes" from its human (`bashy approve allow`) and replays.
+	tok := confirmToken([]string{"rm", "-rf", work + "/victim"})
+	decideConfirm(t, tok, ask.VerdictAllow)
 	out, errOut = runConfirm(t, work, resume[1]+":yes "+work, nil)
 	if !strings.HasSuffix(out, "status 0\n") || errOut != "" {
 		t.Fatalf("replay: stdout %q stderr %q", out, errOut)
@@ -579,5 +609,137 @@ func TestConfirmTokenPreservesArgvIdentity(t *testing.T) {
 	// All three should have the same effect classification.
 	if strings.Join(e1, ",") != strings.Join(e2, ",") || strings.Join(e1, ",") != strings.Join(e3, ",") {
 		t.Errorf("effects differ: %v %v %v", e1, e2, e3)
+	}
+}
+
+// TestConfirmYieldRaisesSharedApproval pins the bridge: a yield persists ONE
+// approval in the shared ask queue carrying token, exact argv, effects,
+// requester and the stable session; re-running the yield does not list another.
+func TestConfirmYieldRaisesSharedApproval(t *testing.T) {
+	stubAsk(t, false, errConfirmUnattended)
+	t.Setenv("BASHY_SESSION_CLAIM", "sess-a")
+	t.Setenv("BASHY_SPRINT", "418")
+	work := confirmWork(t)
+	runConfirm(t, work, work, nil)
+	runConfirm(t, work, work, nil)
+
+	pending, err := ask.PendingApprovals()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("pending approvals = %d, want 1 (idempotent raise)", len(pending))
+	}
+	r := pending[0]
+	a := r.Approval
+	wantArgv := []string{"rm", "-rf", work + "/victim"}
+	if !r.IsApproval() || a.Source != ask.SourceConfirm || a.Token != confirmToken(wantArgv) ||
+		strings.Join(a.Argv, "\x00") != strings.Join(wantArgv, "\x00") ||
+		strings.Join(a.Effects, ",") != "destroy" || a.Session != "sess-a" || a.Sprint != "418" ||
+		r.Requester.PID == 0 || r.Requester.Principal == "" {
+		t.Errorf("approval = %+v requester = %+v", a, r.Requester)
+	}
+}
+
+// TestConfirmApprovalLifecycle is the same-token resume: yield, allow, resume
+// runs once, and a duplicate resume with the spent token yields again.
+func TestConfirmApprovalLifecycle(t *testing.T) {
+	asked := stubAsk(t, false, errConfirmUnattended)
+	work := confirmWork(t)
+	tok := confirmToken([]string{"rm", "-rf", work + "/victim"})
+	runConfirm(t, work, work, nil)
+	decideConfirm(t, tok, ask.VerdictAllow)
+	*asked = nil
+
+	out, errOut := runConfirm(t, work, "--confirm="+tok+":yes "+work, nil)
+	if !strings.HasSuffix(out, "status 0\n") || errOut != "" || exists(t, filepath.Join(work, "victim")) {
+		t.Fatalf("resume: stdout %q stderr %q", out, errOut)
+	}
+
+	// A second victim, same token is impossible (token is argv identity), so
+	// replay the same operation: the allow is spent.
+	if err := os.MkdirAll(filepath.Join(work, "victim"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out, errOut = runConfirm(t, work, "--confirm="+tok+":yes "+work, nil)
+	if !strings.HasSuffix(out, "status 6\n") || !strings.Contains(errOut, "input required: confirm "+tok) {
+		t.Errorf("duplicate resume: stdout %q stderr %q", out, errOut)
+	}
+	if !exists(t, filepath.Join(work, "victim")) {
+		t.Error("a spent allow authorised the operation twice")
+	}
+	if len(*asked) != 1 {
+		t.Errorf("duplicate resume asked %d times, want 1 (fell back to ask, then yielded)", len(*asked))
+	}
+}
+
+func TestConfirmApprovalDenyStaysRefused(t *testing.T) {
+	stubAsk(t, false, errConfirmUnattended)
+	work := confirmWork(t)
+	tok := confirmToken([]string{"rm", "-rf", work + "/victim"})
+	runConfirm(t, work, work, nil)
+	decideConfirm(t, tok, ask.VerdictDeny)
+
+	for i := 0; i < 2; i++ {
+		for _, ans := range []string{"yes", "no"} {
+			out, errOut := runConfirm(t, work, "--confirm="+tok+":"+ans+" "+work, nil)
+			if !strings.HasSuffix(out, "status 0\n") || !strings.Contains(errOut, "clean: declined "+tok+": rm -rf ") {
+				t.Errorf("round %d %s: stdout %q stderr %q", i, ans, out, errOut)
+			}
+			if !exists(t, filepath.Join(work, "victim")) {
+				t.Fatalf("round %d %s: a denied operation ran", i, ans)
+			}
+		}
+	}
+}
+
+// A decision for the same token but another session or argv must never
+// authorise this operation (the token is only 32 bits).
+func TestConfirmApprovalIsScopedToSessionAndArgv(t *testing.T) {
+	stubAsk(t, false, errConfirmUnattended)
+	work := confirmWork(t)
+	argv := []string{"rm", "-rf", work + "/victim"}
+	tok := confirmToken(argv)
+
+	t.Setenv("BASHY_SESSION_CLAIM", "sess-a")
+	runConfirm(t, work, work, nil)
+	decideConfirm(t, tok, ask.VerdictAllow)
+
+	t.Setenv("BASHY_SESSION_CLAIM", "sess-b")
+	out, _ := runConfirm(t, work, "--confirm="+tok+":yes "+work, nil)
+	if !strings.HasSuffix(out, "status 6\n") || !exists(t, filepath.Join(work, "victim")) {
+		t.Fatalf("another session redeemed the allow: %q", out)
+	}
+
+	// Same token, different argv: a forged record under the same short token.
+	other := []string{"rm", "-rf", work + "/elsewhere"}
+	r, err := ask.Raise(ask.ApprovalSpec{Source: ask.SourceConfirm, Token: tok, Argv: other, Session: "sess-b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ask.Decide(r.ID, ask.Decision{Verdict: ask.VerdictAllow}, ask.DecideOpts{}); err != nil {
+		t.Fatal(err)
+	}
+	out, _ = runConfirm(t, work, "--confirm="+tok+":yes "+work, nil)
+	if !strings.HasSuffix(out, "status 6\n") || !exists(t, filepath.Join(work, "victim")) {
+		t.Fatalf("an allow for different argv authorised this operation: %q", out)
+	}
+
+	// The original session still redeems its own allow.
+	t.Setenv("BASHY_SESSION_CLAIM", "sess-a")
+	out, errOut := runConfirm(t, work, "--confirm="+tok+":yes "+work, nil)
+	if !strings.HasSuffix(out, "status 0\n") || errOut != "" || exists(t, filepath.Join(work, "victim")) {
+		t.Fatalf("own session resume: stdout %q stderr %q", out, errOut)
+	}
+}
+
+// A bare yes with no recorded allow is the caller's word, not a decision.
+func TestConfirmUnbackedYesIsNotAnAuthorisation(t *testing.T) {
+	stubAsk(t, false, errConfirmUnattended)
+	work := confirmWork(t)
+	tok := confirmToken([]string{"rm", "-rf", work + "/victim"})
+	out, errOut := runConfirm(t, work, "--confirm="+tok+":yes "+work, nil)
+	if !strings.HasSuffix(out, "status 6\n") || !strings.Contains(errOut, "approval ") || !exists(t, filepath.Join(work, "victim")) {
+		t.Errorf("stdout %q stderr %q", out, errOut)
 	}
 }
