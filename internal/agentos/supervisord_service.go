@@ -95,6 +95,12 @@ func dispatchSupervisordMonitor(args []string) int {
 		return 1
 	}
 	defer stop()
+	// Holding the socket proves no other monitor serves this home: what a
+	// hard-killed predecessor left running is ours to stop before any unit
+	// checks its ports.
+	for _, line := range reclaimOrphans(serviceHome()) {
+		m.logf("%s", line)
+	}
 	m.logf("monitoring service units (socket %s, pid %d)", *sock, os.Getpid())
 	return m.run(sigs)
 }

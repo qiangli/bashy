@@ -141,6 +141,26 @@ port 8637/tcp (127.0.0.1:8637) is held by a foreign listener
 
 Retrying cannot evict another program, so the monitor does not retry.
 
+### A hard-killed monitor's units
+
+A monitor that is SIGKILLed (or OOM-killed) cannot stop its units, so a
+foreground unit survives it and keeps its ports; outpost then restarts the
+monitor. Each running process unit therefore leaves an ownership record,
+`BASHY_HOME/service/NAME/owner.json`: the child's pid and kernel start time,
+the same pair for the monitor that started it, and the unit's stop signal
+and grace. It is removed when the child is waited for.
+
+At startup, after winning the control socket (so no live monitor serves
+this home), the successor reads every record. It stops a recorded process
+group only when its leader still has the recorded start time and the
+recording monitor is gone: the declared signal, the grace, then KILL. A
+record whose pid has a different start time (reused) is dropped without
+signaling anything, and one whose monitor is still alive is left alone.
+Ownership is never inferred from a port: a listener with no matching
+record is still reported as foreign. Start times come from `/proc/PID/stat`
+(with the boot id) on Linux, `kern.proc.pid` on macOS and `GetProcessTimes`
+on Windows; on other systems no record is written and nothing is reclaimed.
+
 ### Live reload
 
 The monitor reloads the registry in three cases:
@@ -179,7 +199,8 @@ Linux).
 
 `processProvider` implements `service.Provider` for `provider: process`.
 
-- **Foreground only:** no daemonizing and no pidfile. The child is the
+- **Foreground only:** no daemonizing. The only state that outlives the
+  monitor is the ownership record described above. The child is the
   leader of a new process group (`ownProcessGroupAttr`). Stop sends the
   declared signal to the group, waits `stop.timeout` (default 10s), then
   sends KILL.
@@ -293,6 +314,7 @@ All tests are in `internal/agentos`.
 | Start limit leaves the unit failed and notifies once; `start` resets it | `TestStartLimiterRefusesBeyondBurstWithinWindow`, `TestMonitorStartLimitMovesCrashLoopToFailed` |
 | Health failure restarts the unit | `TestMonitorHealthFailureRestartsWithProbe` |
 | Foreign listener reported as failed, with the reason | `TestMonitorForeignListenerOnUnitPortIsFailedWithReason` |
+| Hard-killed monitor's orphan is reclaimed by its successor; unproven pids are spared | `TestServiceMonitorReclaimsOrphanOfHardKilledMonitor` (`supervisord_owner_unix_test.go`), `TestReclaimOrphansSparesUnprovenProcesses`, `TestProcessProviderOwnershipRecordLifecycle` |
 | Live enable, disable and reconfigure; no bystander restarts | `TestMonitorLiveEnableDisableLeavesOtherUnitsAlone` |
 | `requires` ordering | `TestMonitorRequiresOrdering` |
 | PID1 / subreaper reaping on Linux; many main children | `TestServiceMonitorReapsOrphansAsSubreaper`, `TestReaperKeepsEveryLiveMainChild` (`supervisord_linux_test.go`) |
