@@ -15,10 +15,10 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/coreutils v0.0.0-20261010190610-9ab2513fb087
-	github.com/qiangli/ycode v0.3.1-dev.0.20261010202242-bb961507a756
+	github.com/qiangli/ycode v0.3.1-dev.0.20261011021240-aa0d91dd60d2
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261010231603-5272b6b937e1
-	github.com/qiangli/yoke/external/otel v0.0.0-20261010193123-dc4e2b178750
+	github.com/qiangli/yoke v0.0.0-20261011020932-a12f3f6ba74d
+	github.com/qiangli/yoke/external/otel v0.0.0-20261011020932-a12f3f6ba74d
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
@@ -351,9 +351,9 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/qiangli/gfy v0.0.0-20261009070616-1a9d12418c8d // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261010232706-c80793aeea3a // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261010193123-dc4e2b178750 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261010193123-dc4e2b178750 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261011021242-20777bb18824 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261011020932-a12f3f6ba74d // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261011020932-a12f3f6ba74d // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
@@ -535,8 +535,8 @@ replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/
 // the transitive qiangli/gfy -> odvcencio imports, which a module-path rename
 // could not reach. Restated here because yoke's replace is not transitive.
 // Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
-replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261009064153-466dad1c3aef
+replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261011020812-226bfcd2c541
 
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261010202242-bb961507a756
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2
 
 tool github.com/qiangli/outpost/cmd/outpost
