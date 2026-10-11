@@ -610,10 +610,13 @@ func (m *monitor) onProvider(v msgProvider) {
 		ex := childExit{code: 1}
 		if st := u.prov.Status(u.decl.Name); st.LastExit != nil {
 			ex.code = *st.LastExit
-		} else if v.ev.To == service.Inactive {
+		} else if v.ev.To == service.Inactive && u.decl.ProviderName() != fleet.ServiceProviderInternal {
 			ex.code = 0
 		}
 		reason := v.ev.Reason
+		if reason == "" && u.decl.ProviderName() == fleet.ServiceProviderInternal {
+			reason = "owner went inactive"
+		}
 		// Clean up what the child left (its group, its log) quietly — this is
 		// not a stop anyone asked for — then apply the restart policy.
 		m.deactivate(u, false, reason, func(u *unitRun) { m.afterExit(u, ex, reason) })
@@ -894,7 +897,7 @@ func (m *monitor) hosted(req ctlRequest) ctlResponse {
 	for _, u := range m.units {
 		if u.decl.ProviderName() == fleet.ServiceProviderInternal && u.decl.Owner == req.Owner {
 			st := m.status(u)
-			st.Enabled = m.wantUp(u)
+			st.Enabled = m.wantUp(u) && d.wants(u.decl.Name)
 			out = append(out, st)
 		}
 	}

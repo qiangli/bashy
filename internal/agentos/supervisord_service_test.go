@@ -161,7 +161,7 @@ func TestServiceMonitorSeedInternalAndCustomShareOneMechanism(t *testing.T) {
 	// Internal capability hosted by the custom unit's process.
 	internal := filepath.Join(home, "cap.yaml")
 	writeUnitFile(t, internal, "name: cap\nkind: service\nprovider: internal\ncapability: test.cap\nowner: worker\n"+
-		"settings: {level: one}\nenabled: true\n")
+		"settings: {level: one}\nrestart: {policy: on-failure, backoff: {min: 200ms, max: 200ms}}\nenabled: true\n")
 	svcRun(t, "add", "-f", internal)
 
 	var logMu sync.Mutex
@@ -214,6 +214,50 @@ func TestServiceMonitorSeedInternalAndCustomShareOneMechanism(t *testing.T) {
 	if st["cap"].PID != 0 || st["cap"].Provider != fleet.ServiceProviderInternal || capImpl.settings["level"] != "one" {
 		t.Fatalf("internal unit: %+v settings=%v", st["cap"], capImpl.settings)
 	}
+
+	// The owner can disappear while the declaration stays enabled. This is
+	// a service loss, not a clean process exit: the monitor must back off,
+	// authorize a new delegation, and then accept the restarted owner's
+	// report. During backoff it must not tell the owner to run ahead of it.
+	if err := owner.prov.Deactivate(context.Background(), "cap"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ctlCall(sock, ctlRequest{Op: "report", Status: owner.prov.Status("cap")}, 2*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	svcWait(t, "internal owner restart backoff", func(s map[string]service.Status) bool {
+		return s["cap"].State == service.Inactive && strings.Contains(s["cap"].Reason, "restarting")
+	})
+	if desired, err := ctlCall(sock, ctlRequest{Op: "desired", Owner: "worker"}, 2*time.Second); err != nil {
+		t.Fatal(err)
+	} else {
+		for _, row := range desired.Units {
+			if row.Unit == "cap" && row.Enabled {
+				t.Fatal("internal unit was desired before the monitor reactivated it")
+			}
+		}
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		desired, err := ctlCall(sock, ctlRequest{Op: "desired", Owner: "worker"}, 2*time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		authorized := false
+		for _, row := range desired.Units {
+			authorized = authorized || row.Unit == "cap" && row.Enabled
+		}
+		if authorized {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("monitor did not authorize the restarted internal owner")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	owner.prov = service.NewInternal("worker", reg)
+	owner.sync(t, "worker")
+	svcWait(t, "restarted internal owner reported active", stateIs("cap", service.Active))
 
 	// Output lands in the unit's rotating log; `service logs` reads it.
 	waitFile(t, filepath.Join(home, "service", "worker", "output.log"), "child argv: worker --mode fast")

@@ -239,6 +239,16 @@ func (d *delegatedInternal) Status(unit string) service.Status {
 	return service.Status{Unit: unit, Provider: d.Name(), State: service.Inactive}
 }
 
+// wants reports whether this monitor has actually activated the delegation.
+// The declaration alone is not enough: an owner must not restart a unit while
+// the monitor is backing off or has latched it down.
+func (d *delegatedInternal) wants(unit string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	u, ok := d.units[unit]
+	return ok && u.want
+}
+
 // report records the owner's view and forwards a transition to the monitor.
 func (d *delegatedInternal) report(st service.Status) error {
 	d.mu.Lock()

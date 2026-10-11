@@ -1,4 +1,5 @@
 # Codync — loopback host adapter (bashy examples/fleet, Sprint 418)
+# status:  verified on Codync v2.13.2 for declared bots, send and usage commands; MCP-team and reverse-ACP remain S10 gates
 # source:  https://github.com/leepokai/Codync (Apache-2.0, v2.13.2)
 # release: the companion services/codync-host.yaml pins the official v2.13.2
 #          host artifact and its per-platform SHA-256 digests. This adapter
