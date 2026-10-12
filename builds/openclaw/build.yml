@@ -1,0 +1,81 @@
+      - name: apply security override (http-cache-semantics >=4.3.0, GHSA-ch52-4w7c-c8xp)
+        env:
+          OPENCLAW_DIR: ${{ github.workspace }}/src
+        run: bash fork/bashy-build/scripts/apply-override.sh
+      - name: regenerate lockfile for the override only
+        working-directory: src
+        run: pnpm install --lockfile-only --ignore-scripts
+      - name: assert lockfile diff touches only http-cache-semantics
+        env:
+          OPENCLAW_DIR: ${{ github.workspace }}/src
+        run: bash fork/bashy-build/scripts/assert-lockfile-diff.sh
+      - name: install from the verified lockfile (no implicit scripts)
+        working-directory: src
+        run: |
+          # --ignore-scripts: lifecycle scripts are supply-chain surface.
+          # Only the documented build entrypoints below run, explicitly.
+          pnpm install --frozen-lockfile --ignore-scripts
+      - name: audit gate (a) — prod must be clean at high
+        working-directory: src
+        run: pnpm audit --prod --audit-level high
+      - name: audit gate (b,c) — full audit vs reviewed exceptions
+        working-directory: src
+        run: |
+          # `|| true`: pnpm exits nonzero when findings exist; the gate
+          # script below renders the verdict (fail-closed on unknown shapes).
+          mkdir -p ../out
+          pnpm audit --json > ../out/audit-full.json || true
+          pnpm audit --prod --json > "${RUNNER_TEMP}/audit-prod.json" || true
+          node ../fork/bashy-build/scripts/audit-gate.mjs \
+            --full ../out/audit-full.json \
+            --prod "${RUNNER_TEMP}/audit-prod.json" \
+            --exceptions ../fork/bashy-build/audit-exceptions
+      - name: SBOM (CycloneDX)
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: ./src
+          format: cyclonedx-json
+          output-file: out/openclaw-gateway-sbom.cyclonedx.json
+      - name: apply no-tracking + OTel-local config
+        run: |
+          set -euo pipefail
+          set -a; . fork/bashy-build/no-tracking.env; . fork/bashy-build/otel.env; set +a
+          {
+            echo "DO_NOT_TRACK=$DO_NOT_TRACK"
+            echo "OPENCLAW_NO_AUTO_UPDATE=$OPENCLAW_NO_AUTO_UPDATE"
+            echo "OPENCLAW_TELEMETRY_ENDPOINT=$OPENCLAW_TELEMETRY_ENDPOINT"
+            echo "OPENCLAW_EXTENSIONS=$OPENCLAW_EXTENSIONS"
+            echo "OPENCLAW_DISABLE_BONJOUR=$OPENCLAW_DISABLE_BONJOUR"
+            echo "OTEL_EXPORTER_OTLP_ENDPOINT=$OTEL_EXPORTER_OTLP_ENDPOINT"
+            echo "OTEL_EXPORTER_OTLP_PROTOCOL=$OTEL_EXPORTER_OTLP_PROTOCOL"
+            echo "OTEL_SERVICE_NAME=$OTEL_SERVICE_NAME"
+          } >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/gateway-config"
+          cp fork/bashy-build/openclaw-bashy.json "$RUNNER_TEMP/gateway-config/openclaw.json"
+          echo "OPENCLAW_CONFIG_PATH=$RUNNER_TEMP/gateway-config/openclaw.json" >> "$GITHUB_ENV"
+      - name: build gateway dist
+        working-directory: src
+        run: pnpm run build:docker
+      - name: pack gateway tarball
+        working-directory: src
+        run: |
+          set -euo pipefail
+          # prepack/postpack below are the upstream build's own documented
+          # entrypoints (package.json scripts), run here explicitly and
+          # audibly — not as silent install lifecycle.
+          npm pack --ignore-scripts=false
+          # shellcheck disable=SC2012 # npm pack names are plain ASCII
+          TARBALL="$(ls -t openclaw-*.tgz | head -1)"
+          mv "$TARBALL" "../out/openclaw-gateway-${GITHUB_REF_NAME}.tgz"
+          ls -la ../out/openclaw-gateway-*.tgz
+      - name: build gateway OCI image (pinned upstream Dockerfile)
+        run: |
+          set -euo pipefail
+          docker build \
+            --file src/Dockerfile \
+            --build-arg OPENCLAW_EXTENSIONS="diagnostics-otel" \
+            --tag "openclaw-gateway:${GITHUB_REF_NAME}" \
+            src
+          docker inspect "openclaw-gateway:${GITHUB_REF_NAME}" \
+            --format='{{.Id}}' > out/openclaw-gateway-image.digest
+          cat out/openclaw-gateway-image.digest

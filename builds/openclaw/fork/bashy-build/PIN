@@ -1,7 +1,30 @@
-# Pinned upstream OpenClaw source for the bashy VERIFIED BUILD.
-# Bump only after reviewing the upstream release diff (see builds/openclaw/README.md).
-# ONLY official stable release tags are accepted by the workflow
-# (no main/dev branches, no pre-releases, no RCs).
-OPENCLAW_REPO=openclaw/openclaw
-OPENCLAW_TAG=v2026.10.2
-OPENCLAW_SHA=b8952d477f0c932d8ddc6da5c89cab5a169b6ff1
+# bashy verified build declaration for the OpenClaw gateway (builds/README.md).
+# Shell-sourceable KEY=VALUE only. builds/render.sh renders ../fork from this
+# file + files/ + build.yml + builds/_shared, and ships it verbatim as the
+# fork's bashy-build/PIN. Bump only after reviewing the upstream release diff
+# (see builds/openclaw/README.md). ONLY official stable release tags are
+# accepted (no main/dev branches, no pre-releases, no RCs).
+TOOL=openclaw
+FORK_REPO=qiangli/openclaw
+UPSTREAM_REPO=https://github.com/openclaw/openclaw
+UPSTREAM_SLUG=openclaw/openclaw
+UPSTREAM_TAG=v2026.10.2
+UPSTREAM_COMMIT=b8952d477f0c932d8ddc6da5c89cab5a169b6ff1
+# Toolchain kind: pnpm/Node build steps are tool-specific (build.yml next to
+# this file: security override + lockfile assertion + audit gate + SBOM +
+# pack + OCI image). No separate audit job.
+KIND=custom
+# Node 24 (upstream Dockerfile node:24-bookworm), pnpm 12.5.1 (upstream
+# packageManager); used by build.yml.
+NODE_VERSION=24
+PNPM_VERSION=12.5.1
+COSIGN_VERSION=v3.1.3
+MATRIX="openclaw-gateway=ubuntu-24.04"
+APT_PACKAGES="strace iproute2 curl"
+PRE_BUILD_GATES=""
+EGRESS_TARGET=src
+RELEASE_EXTRA="PIN=openclaw-pin.txt audit-exceptions=audit-exceptions"
+RELEASE_ASSETS="openclaw-gateway-${GITHUB_REF_NAME:-TAG}.tgz openclaw-gateway-sbom.cyclonedx.json openclaw-gateway-image.digest openclaw-pin.txt audit-exceptions audit-full.json"
+RELEASE_EXECUTABLES=""
+RELEASE_NOTE="No tracking; OTel points only at the local collector 127.0.0.1:31415."
+RELEASE_GATES="pinned commit, security override + lockfile-diff assertion, pnpm audit vs reviewed exceptions, CycloneDX SBOM, no-egress."

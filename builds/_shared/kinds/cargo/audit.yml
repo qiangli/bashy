@@ -1,0 +1,37 @@
+      - name: pinned rust toolchain + pinned cargo-audit / cargo-cyclonedx
+        run: |
+          set -euo pipefail
+          . fork/bashy-build/PIN
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --no-self-update
+          echo "RUSTUP_TOOLCHAIN=$RUST_TOOLCHAIN" >>"$GITHUB_ENV"
+          export RUSTUP_TOOLCHAIN=$RUST_TOOLCHAIN
+          cargo install --locked "cargo-audit@$CARGO_AUDIT_VERSION"
+          cargo install --locked "cargo-cyclonedx@$CARGO_CYCLONEDX_VERSION"
+      - name: cargo audit (deny warnings)
+        working-directory: src
+        run: |
+          set -euo pipefail
+          ignores=()
+          # bashy-build/audit-ignore: one advisory id per line, each with a
+          # justification comment; empty means nothing is waived.
+          while read -r id _; do
+            [[ -z $id || $id == \#* ]] || ignores+=(--ignore "$id")
+          done <../fork/bashy-build/audit-ignore
+          cargo audit --deny warnings --file Cargo.lock ${ignores[@]+"${ignores[@]}"}
+      - name: SBOM (CycloneDX, bashy feature set)
+        working-directory: src
+        run: |
+          set -euo pipefail
+          . ../fork/bashy-build/PIN
+          feat=()
+          if [[ -f ../fork/bashy-build/features.env ]]; then
+            . ../fork/bashy-build/features.env
+            feat=(--no-default-features --features "$FEATURES")
+          fi
+          cargo cyclonedx --manifest-path "$CARGO_SBOM_MANIFEST" --format json \
+            ${feat[@]+"${feat[@]}"} --override-filename bashy-sbom
+          sbom=$(find "$(dirname "$CARGO_SBOM_MANIFEST")" -maxdepth 1 -name 'bashy-sbom*.json' | head -n1)
+          [[ -n $sbom ]] || { echo "SBOM for $CARGO_SBOM_MANIFEST not produced"; exit 1; }
+          mkdir -p ../out
+          jq -e '.bomFormat == "CycloneDX" and (.components | length) > 0' "$sbom" >/dev/null
+          cp "$sbom" "../out/$TOOL-$UPSTREAM_TAG.cdx.json"

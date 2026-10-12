@@ -1,0 +1,9 @@
+      - name: host build dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: echo "LIBCLANG_PATH=$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib" >>"$GITHUB_ENV"
+      - name: pinned rust toolchain
+        run: |
+          set -euo pipefail
+          . fork/bashy-build/PIN
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --no-self-update
+          echo "RUSTUP_TOOLCHAIN=$RUST_TOOLCHAIN" >>"$GITHUB_ENV"

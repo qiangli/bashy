@@ -6,7 +6,9 @@
 #     -rc/-beta/-dev/pre-release suffix);
 #   - the bashy tag (when given) is bashy-${UPSTREAM_TAG}-N;
 #   - SRC_DIR's HEAD is exactly UPSTREAM_COMMIT and the tag resolves to it;
-#   - the source's rust-toolchain.toml channel equals RUST_TOOLCHAIN.
+#   - when PIN declares RUST_TOOLCHAIN, the source's rust-toolchain.toml
+#     channel equals it.
+# Shared by every builds/<tool> (builds/_shared; rendered by builds/render.sh).
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -36,7 +38,11 @@ tagged=$(git -C "$src" rev-parse "refs/tags/$UPSTREAM_TAG^{commit}") ||
 [[ $tagged == "$UPSTREAM_COMMIT" ]] || die "tag $UPSTREAM_TAG -> $tagged != pinned $UPSTREAM_COMMIT"
 [[ -z $(git -C "$src" status --porcelain) ]] || die "upstream checkout is not pristine"
 
-channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' "$src/rust-toolchain.toml")
-[[ $channel == "$RUST_TOOLCHAIN" ]] || die "rust-toolchain.toml channel $channel != pinned $RUST_TOOLCHAIN"
+note=""
+if [[ -n ${RUST_TOOLCHAIN:-} ]]; then
+	channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' "$src/rust-toolchain.toml")
+	[[ $channel == "$RUST_TOOLCHAIN" ]] || die "rust-toolchain.toml channel $channel != pinned $RUST_TOOLCHAIN"
+	note=" (toolchain $RUST_TOOLCHAIN)"
+fi
 
-echo "verify-pin: $UPSTREAM_SLUG $UPSTREAM_TAG = $UPSTREAM_COMMIT (toolchain $RUST_TOOLCHAIN) OK"
+echo "verify-pin: $UPSTREAM_SLUG $UPSTREAM_TAG = $UPSTREAM_COMMIT$note OK"

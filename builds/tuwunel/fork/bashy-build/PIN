@@ -1,12 +1,36 @@
-# bashy verified build pin for tuwunel (shell-sourceable; KEY=VALUE only).
-# The workflow refuses to build unless the checked-out upstream tag resolves
-# to UPSTREAM_COMMIT and the bashy tag is bashy-${UPSTREAM_TAG}-N.
+# bashy verified build declaration for tuwunel (builds/README.md).
+# Shell-sourceable KEY=VALUE only. builds/render.sh renders ../fork from this
+# file + files/ + builds/_shared, and ships it verbatim as the fork's
+# bashy-build/PIN. The workflow refuses to build unless the checked-out
+# upstream tag resolves to UPSTREAM_COMMIT and the bashy tag is
+# bashy-${UPSTREAM_TAG}-N.
+TOOL=tuwunel
+FORK_REPO=qiangli/tuwunel
 UPSTREAM_REPO=https://github.com/matrix-construct/tuwunel
 UPSTREAM_SLUG=matrix-construct/tuwunel
 UPSTREAM_TAG=v1.9.4
 UPSTREAM_COMMIT=f473d9a4a8342514302884041e0ccfea1ad503fc
-# Must equal the channel in the tag's rust-toolchain.toml.
+# Toolchain kind: build/audit job steps come from builds/_shared/kinds/cargo.
+KIND=cargo
+# Must equal the channel in the tag's rust-toolchain.toml (verify-pin.sh).
 RUST_TOOLCHAIN=1.95.0
 CARGO_AUDIT_VERSION=0.22.2
 CARGO_CYCLONEDX_VERSION=0.5.9
+CARGO_PACKAGE=tuwunel
+CARGO_BIN=tuwunel
+CARGO_SBOM_MANIFEST=src/main/Cargo.toml
 COSIGN_VERSION=v3.1.3
+# Build matrix: ASSET=RUNNER; each leg uploads out/ASSET.
+MATRIX="tuwunel-linux-amd64=ubuntu-24.04 tuwunel-linux-arm64=ubuntu-24.04-arm tuwunel-darwin-arm64=macos-15 tuwunel-darwin-amd64=macos-15-intel"
+APT_PACKAGES="clang libclang-dev pkg-config strace util-linux iproute2 curl"
+# Run as bashy-build/GATE src before the build (feature/telemetry-crate gate).
+PRE_BUILD_GATES="check-features.sh"
+# Argument of bashy-build/no-egress-test.sh (a GitHub expression is allowed).
+EGRESS_TARGET='out/${{ matrix.asset }}'
+# Release: SRC=ASSET copies from bashy-build/, the assets that must exist,
+# the ones that are executables, and the release-notes lines.
+RELEASE_EXTRA="tuwunel.toml=tuwunel-bashy.toml"
+RELEASE_ASSETS="tuwunel-linux-amd64 tuwunel-linux-arm64 tuwunel-darwin-arm64 tuwunel-darwin-amd64 tuwunel-$UPSTREAM_TAG.cdx.json tuwunel-bashy.toml"
+RELEASE_EXECUTABLES="tuwunel-linux-amd64 tuwunel-linux-arm64 tuwunel-darwin-arm64 tuwunel-darwin-amd64"
+RELEASE_NOTE="No telemetry, crash reporting, update checks or OpenTelemetry export are compiled in."
+RELEASE_GATES="pinned commit, feature gate, cargo audit --deny warnings, CycloneDX SBOM, no-egress."

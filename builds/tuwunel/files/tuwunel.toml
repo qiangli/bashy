@@ -1,0 +1,40 @@
+# bashy no-tracking baseline for tuwunel v1.9.4. Shipped in the release as
+# tuwunel-bashy.toml; the no-egress gate runs the built server with exactly
+# this file (plus TUWUNEL_SERVER_NAME / TUWUNEL_PORT / TUWUNEL_DATABASE_PATH
+# from the environment). Line references are to tuwunel-example.toml at v1.9.4.
+[global]
+
+# Loopback only (:67). bashy exposes the server through its own front door.
+address = ["127.0.0.1"]
+
+# No open sign-up (:767).
+allow_registration = false
+
+# No federation: no outbound server-to-server traffic (:897), no device-name
+# (:1185) or presence (:2280) federation, no trusted key servers (:1369 —
+# the default is ["matrix.org"]) and never query them first (:1380).
+allow_federation = false
+allow_device_name_federation = false
+allow_outgoing_presence = false
+trusted_servers = []
+query_trusted_key_servers_first = false
+query_trusted_key_servers_first_on_join = false
+
+# Crash/perf reporting OFF (:3128). The bashy build does not compile the
+# sentry_telemetry feature at all; this is defence in depth. The hard-coded
+# default endpoint (src/core/config/mod.rs:6133-6136) is never reached.
+sentry = false
+sentry_send_panic = false
+sentry_send_error = false
+sentry_send_server_name = false
+
+# OTLP/Jaeger span export OFF (:1305). v1.9.4 only links an OTLP exporter
+# through perf_measurements, which also pulls in sentry_telemetry, and the
+# exporter is gRPC-only (Cargo.toml:333-339) — it cannot target bashy's
+# local collector (http://127.0.0.1:31415). See ../README.md §OpenTelemetry.
+allow_jaeger = false
+tracing_flame = false
+
+# URL previews are compiled out (no url_preview feature); deny everything in
+# case a future build re-enables it (:2790).
+url_preview_domain_explicit_denylist = ["*"]

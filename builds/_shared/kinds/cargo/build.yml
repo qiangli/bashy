@@ -1,0 +1,15 @@
+      - name: cargo build --release (locked)
+        working-directory: src
+        run: |
+          set -euo pipefail
+          . ../fork/bashy-build/PIN
+          # Optional bashy-build/features.env: FEATURES replaces the defaults.
+          feat=()
+          if [[ -f ../fork/bashy-build/features.env ]]; then
+            . ../fork/bashy-build/features.env
+            feat=(--no-default-features --features "$FEATURES")
+          fi
+          cargo build --locked --release -p "$CARGO_PACKAGE" --bin "$CARGO_BIN" ${feat[@]+"${feat[@]}"}
+          mkdir -p ../out
+          cp "target/release/$CARGO_BIN" "../out/${{ matrix.asset }}"
+          "../out/${{ matrix.asset }}" --version
