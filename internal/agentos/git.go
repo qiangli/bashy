@@ -383,7 +383,11 @@ func gitStatusCmd() *cobra.Command {
 				// Porcelain short form is served by the engine
 				// (nativeStatus --short); other status flags stay
 				// loud cobra errors, never silent approximations.
-				res, err := outgit.Exec(cmd.Context(), ".", []string{"status", "--short"})
+				form := "--short"
+				if porcelain {
+					form = "--porcelain" // differs for submodule content (" M", not " m")
+				}
+				res, err := outgit.Exec(cmd.Context(), ".", []string{"status", form})
 				if err != nil {
 					return err
 				}
