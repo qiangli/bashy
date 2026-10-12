@@ -194,20 +194,21 @@ jobs:
         # Upstream's documented release build: prepack (scripts/openclaw-prepack.ts)
         # refuses to pack without the full build AND the Control UI bundle.
         run: pnpm build && pnpm ui:build
-      - name: pack gateway tarball
+      - name: pack gateway tarball (upstream self-contained package)
         working-directory: src
         run: |
           set -euo pipefail
-          # prepack/postpack below are the upstream build's own documented
-          # entrypoints (package.json scripts), run here explicitly and
-          # audibly — not as silent install lifecycle.
-          # pnpm pack (not npm): the workspace has workspace: runtime deps
-          # (@openclaw/ai) that only pnpm rewrites to concrete versions.
-          pnpm pack
-          # shellcheck disable=SC2012 # npm pack names are plain ASCII
-          TARBALL="$(ls -t openclaw-*.tgz | head -1)"
-          mv "$TARBALL" "../out/openclaw-gateway-${GITHUB_REF_NAME}.tgz"
-          ls -la ../out/openclaw-gateway-*.tgz
+          # Upstream's prepack refuses plain root packing: @openclaw/ai is a
+          # workspace:* dependency that only the official release automation
+          # publishes separately. Its documented self-contained path bundles
+          # @openclaw/ai into the tarball, so nothing is fetched from the npm
+          # registry at install time. It cleans and rebuilds the package
+          # artifacts itself (upstream's own build, not ours).
+          node scripts/package-openclaw-for-docker.mjs \
+            --allow-unreleased-changelog \
+            --output-dir "$GITHUB_WORKSPACE/out" \
+            --output-name "openclaw-gateway-${GITHUB_REF_NAME}.tgz"
+          ls -la "$GITHUB_WORKSPACE"/out/openclaw-gateway-*.tgz
       - name: build gateway OCI image (pinned upstream Dockerfile)
         run: |
           set -euo pipefail
