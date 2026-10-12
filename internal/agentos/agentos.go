@@ -89,6 +89,7 @@ import (
 	"github.com/qiangli/yoke/pkg/chat"
 	"github.com/qiangli/yoke/pkg/craft"
 	"github.com/qiangli/yoke/pkg/dag"
+	"github.com/qiangli/yoke/pkg/feed"
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/gate"
 	"github.com/qiangli/yoke/pkg/gomod"
@@ -147,7 +148,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -223,6 +224,9 @@ var (
 	curatedHiddenVerbs = []string{
 		// higher-tier orchestration, layered over weave/dag/chat
 		"supervise", "judge", "pair", "sdlc", "schedule", "herald",
+		// bashy-feed epic (Sprint 422 F1): signed posts to user-owned sinks.
+		// Experimental until the cloudbox index and viewer (Sprint 423) land.
+		"feed",
 		// `acp` is herald's ACP server under its protocol name. It inherits
 		// herald's maturity claim exactly: same code, so it cannot be more
 		// proven than the verb it aliases.
@@ -440,6 +444,8 @@ func newBusFrontDoorCmd(name string) (*cobra.Command, string, bool) {
 		return newUnifiedInboxCmd(), "inbox", true
 	case "notify":
 		return bus.NewNotifyCmd(), "notify", true
+	case "feed":
+		return feed.NewCmd(), "feed", true
 	case "instance":
 		return instance.NewCmd(nil), "instance", true
 	default:
@@ -1153,7 +1159,7 @@ func dispatch() {
 			dispatchExit(1)
 		}
 		dispatchExit(0)
-	case "mb", "messages", "inbox", "notify", "instance":
+	case "mb", "messages", "inbox", "notify", "instance", "feed":
 		// The host communication front doors all share pkg/bus's fleet seams:
 		// identity, role/name resolution, and fleet selection. Mounting the
 		// command without this wire-up makes the feature look present while

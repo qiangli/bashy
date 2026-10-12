@@ -590,6 +590,7 @@ var verbSynopsis = map[string]string{
 	"secret":             "managed API-key/token vault for the shell",
 	"secrets":            "hidden alias for bashy secret",
 	"bus":                "agent notification bus: `bus publish` a change, `bus watch` for one (kb holds facts; the bus carries changes)",
+	"feed":               "federated signed feed: `feed post` to your sinks, `feed follow` others, `feed fetch` + verify, `feed read`",
 	"herald":             "reach an agent that is not on this host, over A2A: `herald add` a peer, `herald send` it a task, and gate the result",
 	"acp":                "serve this host to an ACP client (Zed, a Codync bot) over JSON-RPC on stdin/stdout — the one-word spelling of `herald acp`",
 	"ask":                "ask the HUMAN operator for an ad-hoc value (a token, an OTP) — never the model; returns a path, not the value",
