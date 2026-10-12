@@ -217,7 +217,8 @@ jobs:
           REPLACEMENT_URL="https://registry.npmjs.org/http-cache-semantics/-/http-cache-semantics-4.3.0.tgz"
           REPLACEMENT_INTEGRITY="sha512-M5t5LlJpS1UHMjvwRQVdFHvPISGeLAxNcrWuJkeGh0KxsqCHZ1O3NXZU/8x7cD0BDcGW8kapxMKTvwlqrNkHkA=="
           curl -sSL --fail "$REPLACEMENT_URL" -o "${RUNNER_TEMP}/http-cache-semantics-4.3.0.tgz"
-          node fork/bashy-build/scripts/patch-bundled.mjs \
+          # Python tarfile handles the GNU LongLink/PAX entries in upstream's tarball.
+          python3 fork/bashy-build/scripts/patch_bundled.py \
             --tarball "$TARBALL" \
             --replacement "${RUNNER_TEMP}/http-cache-semantics-4.3.0.tgz" \
             --integrity "$REPLACEMENT_INTEGRITY" \
@@ -229,7 +230,7 @@ jobs:
           # which only exists after packing — hence patch-then-fix, in this order.
       - name: security gate — no http-cache-semantics <4.3.0 in the shipped tarball
         run: |
-          node fork/bashy-build/scripts/patch-bundled.mjs --verify-only \
+          python3 fork/bashy-build/scripts/patch_bundled.py --verify-only \
             --tarball "out/openclaw-gateway-${GITHUB_REF_NAME}.tgz"
       - name: build gateway OCI image (pinned upstream Dockerfile)
         run: |

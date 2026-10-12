@@ -4,7 +4,7 @@
 # listed here. It is a SECURITY PATCH of npm's bundled dependency in the
 # RUNTIME graph, not a dev-only exception: the scoped workspace override
 # (make-fetch-happen>http-cache-semantics >= 4.3.0, see apply-override.sh)
-# pins the resolvable path, and patch-bundled.mjs replaces npm's immutable
+# pins the resolvable path, and patch_bundled.py replaces npm's immutable
 # bundled 4.2.0 copy inside the shipped tarball (verified by its --verify-only
 # gate before signing). An audit exception would wrongly imply the vulnerable
 # version still ships.
@@ -20,4 +20,4 @@
 # The full audit JSON is published as a release asset on every tag build.
 
 GHSA-vfj7-8cjw-p6xm | braces | dev-only transitive dep (lit-analyzer, stylelint -> fast-glob/micromatch -> braces@3.0.3); never in the --prod graph; no patched version published for the affected range | reviewed-on: 2026-10-12 | evidence: `pnpm audit --prod --audit-level high` = 0 high/0 critical at v2026.10.2; lockfile pins braces@3.0.3 under micromatch@4.0.8 only
-GHSA-ch52-4w7c-c8xp | http-cache-semantics | BUILD-ENV: dev path only (sigstore -> make-fetch-happen -> http-cache-semantics@4.2.0), never in the --prod graph; the SHIPPED tarball's npm-bundled copy is replaced with registry 4.3.0 (repo-pinned sha512) by scripts/patch-bundled.mjs and the build fails if any copy < 4.3.0 ships; no workspace override (upstream's inventory check would enforce it against npm's bundled copy) | reviewed-on: 2026-10-12 | evidence: fork runs 38310356556 + 38315009120 (inventory check), operator decision
+GHSA-ch52-4w7c-c8xp | http-cache-semantics | BUILD-ENV: dev path only (sigstore -> make-fetch-happen -> http-cache-semantics@4.2.0), never in the --prod graph; the SHIPPED tarball's npm-bundled copy is replaced with registry 4.3.0 (repo-pinned sha512) by scripts/patch_bundled.py and the build fails if any copy < 4.3.0 ships; no workspace override (upstream's inventory check would enforce it against npm's bundled copy) | reviewed-on: 2026-10-12 | evidence: fork runs 38310356556 + 38315009120 (inventory check), operator decision

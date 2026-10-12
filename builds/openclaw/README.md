@@ -88,7 +88,7 @@ deliberately does NOT list it):
 4. `pnpm install --frozen-lockfile` installs from the verified lockfile.
 5. **Bundled-copy patch (shipped path).** After upstream's
    `scripts/package-openclaw-for-docker.mjs` writes the gateway tarball and
-   BEFORE any signing, `fork/bashy-build/scripts/patch-bundled.mjs`
+   BEFORE any signing, `fork/bashy-build/scripts/patch_bundled.py`
    replaces EVERY bundled `http-cache-semantics < 4.3.0` inside the tarball
    with the registry `http-cache-semantics@4.3.0` tarball — verifying its
    registry `dist.integrity` sha512 before use (fail closed on mismatch) —
@@ -98,7 +98,7 @@ deliberately does NOT list it):
    place rather than regenerated because the anchore step scans `./src`
    (whose `node_modules` still holds the pre-patch tree); only an in-place
    edit describes the shipped tarball truthfully.
-6. **Tarball gate.** `patch-bundled.mjs --verify-only` FAILS the build if
+6. **Tarball gate.** `patch_bundled.py --verify-only` FAILS the build if
    any `http-cache-semantics < 4.3.0` remains anywhere in the shipped
    tarball. Runs after the patch, before signing.
 
@@ -268,7 +268,7 @@ config `bashy-build/openclaw-bashy.json`) are overridable via env.
   is patched, not excepted (see the security section above).
 - CycloneDX SBOM published as a release asset, updated in place for the
   bundled patch so it describes the shipped tarball.
-- Bundled-copy patch + tarball gate (`patch-bundled.mjs`): no
+- Bundled-copy patch + tarball gate (`patch_bundled.py`): no
   `http-cache-semantics < 4.3.0` remains in the shipped tarball.
 - No-egress gate (strace + in-process guard hook) passes before signing.
 - Every asset keylessly signed: `cosign sign-blob --bundle <asset>.sigstore.json`
