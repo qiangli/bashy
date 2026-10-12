@@ -1,0 +1,7 @@
+# Pinned upstream OpenClaw source for the bashy VERIFIED BUILD.
+# Bump only after reviewing the upstream release diff (see builds/openclaw/README.md).
+# ONLY official stable release tags are accepted by the workflow
+# (no main/dev branches, no pre-releases, no RCs).
+OPENCLAW_REPO=openclaw/openclaw
+OPENCLAW_TAG=v2026.9.8
+OPENCLAW_SHA=fc23bc864e4553c2d215e479eeec47b67a0bf943

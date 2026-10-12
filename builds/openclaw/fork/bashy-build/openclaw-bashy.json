@@ -1,0 +1,39 @@
+{
+  "gateway": {
+    "mode": "local",
+    "port": 18789,
+    "bind": "loopback"
+  },
+  "telemetry": {
+    "enabled": false
+  },
+  "update": {
+    "checkOnStart": false
+  },
+  "models": {
+    "catalogRefresh": {
+      "enabled": false
+    }
+  },
+  "discovery": {
+    "mdns": {
+      "mode": "off"
+    }
+  },
+  "plugins": {
+    "allow": ["diagnostics-otel"],
+    "entries": {
+      "diagnostics-otel": { "enabled": true }
+    }
+  },
+  "diagnostics": {
+    "enabled": true,
+    "otel": {
+      "enabled": true,
+      "endpoint": "http://127.0.0.1:4318",
+      "protocol": "http/protobuf",
+      "serviceName": "openclaw-gateway",
+      "logs": false
+    }
+  }
+}

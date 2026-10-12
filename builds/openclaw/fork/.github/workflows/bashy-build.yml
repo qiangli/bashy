@@ -1,0 +1,256 @@
+# bashy-build — bashy VERIFIED BUILD of the OpenClaw gateway.
+#
+# This file is a TEMPLATE. It lives in bashy at
+# builds/openclaw/fork/.github/workflows/bashy-build.yml and the manager
+# installs the whole builds/openclaw/fork/ tree as-is at the root of the
+# mirror fork (github.com/qiangli/openclaw) on a `bashy-build` branch, so
+# this workflow and bashy-build/ land at the fork root. It NEVER runs in
+# bashy itself.
+#
+# Operator rules (absolute):
+#   - Only official stable upstream release tags listed in bashy-build/PIN
+#     are built. main/dev branches, pre-releases and RCs are REFUSED.
+#   - bashy never starts a third-party-built service: this workflow checks out
+#     the PINNED upstream (openclaw/openclaw tag v2026.9.8), verifies the
+#     commit sha against bashy-build/PIN, and builds it on fork CI.
+#   - NO TRACKING: build-time env + forced gateway config disable telemetry,
+#     analytics, crash reporting, phone-home and auto-update checks; the
+#     no-egress gate (bashy-build/no-egress-test.sh) FAILS the run if the
+#     built gateway dials anything but localhost.
+#   - OTel (diagnostics-otel) is enabled and points ONLY at the local OTLP
+#     collector on 127.0.0.1:4318 — never a vendor default.
+#
+# Trigger: push of tags `bashy-v*` (e.g. bashy-v2026.9.8-1) on the
+# `bashy-build` branch. No workflow_dispatch.
+#
+# Every third-party action below is pinned by commit sha (version in comment).
+# Tool pins: Node 24 (matches upstream Dockerfile node:24-bookworm base),
+# pnpm 12.5.1 (upstream packageManager), cosign v3.1.3.
+#
+# NOTE on package manager: upstream is pnpm-based (pnpm-lock.yaml,
+# packageManager pnpm@12.5.1, no package-lock.json), so this build uses
+# `pnpm install --frozen-lockfile` from the upstream lockfile.
+# See builds/openclaw/README.md in bashy.
+
+name: bashy-build
+
+on:
+  push:
+    tags:
+      - 'bashy-v*'
+
+# One tag can have only one producer.
+concurrency:
+  group: bashy-build-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: verified gateway build + sign + release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the fork GitHub release + upload assets
+      id-token: write # keyless Sigstore signing (cosign + attest)
+      attestations: write # actions/attest provenance bundles
+    env:
+      COSIGN_VERSION: v3.1.3
+    steps:
+      - name: Resolve release tag
+        id: tag
+        shell: bash
+        env:
+          REF_TAG: ${{ github.ref_name }}
+        run: |
+          case "$REF_TAG" in
+            bashy-v*) ;;
+            *) echo "FAIL: tag '$REF_TAG' must match bashy-v*" >&2; exit 1 ;;
+          esac
+          echo "value=$REF_TAG" >> "$GITHUB_OUTPUT"
+          echo "Release tag: $REF_TAG"
+
+      - name: Check out fork (PIN + configs + gate live here)
+        # actions/checkout v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Read pinned upstream ref
+        shell: bash
+        run: |
+          set -a; . ./bashy-build/PIN; set +a
+          # Refuse anything but an official stable release tag.
+          case "$OPENCLAW_TAG" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "FAIL: PIN tag '$OPENCLAW_TAG' is not an official release tag" >&2; exit 1 ;;
+          esac
+          case "$OPENCLAW_TAG" in
+            *-*|*beta*|*rc*|*alpha*|*dev*)
+              echo "FAIL: PIN tag '$OPENCLAW_TAG' looks like a pre-release/RC" >&2; exit 1 ;;
+          esac
+          {
+            echo "OPENCLAW_REPO=$OPENCLAW_REPO"
+            echo "OPENCLAW_TAG=$OPENCLAW_TAG"
+            echo "OPENCLAW_SHA=$OPENCLAW_SHA"
+          } >> "$GITHUB_ENV"
+          echo "Pinned upstream: $OPENCLAW_REPO $OPENCLAW_TAG $OPENCLAW_SHA"
+
+      - name: Check out pinned upstream
+        # actions/checkout v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: openclaw/openclaw
+          ref: refs/tags/${{ env.OPENCLAW_TAG }}
+          path: upstream
+
+      - name: Verify checked-out commit == pinned sha
+        shell: bash
+        run: |
+          GOT="$(git -C upstream rev-parse HEAD)"
+          if [ "$GOT" != "$OPENCLAW_SHA" ]; then
+            echo "FAIL: upstream HEAD $GOT != pinned $OPENCLAW_SHA" >&2
+            exit 1
+          fi
+          echo "Upstream commit verified: $GOT"
+
+      - name: Set up Node 24
+        # actions/setup-node v6.5.0
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24
+
+      - name: Set up pnpm 12.5.1 (upstream packageManager)
+        # pnpm/action-setup v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 12.5.1
+          run_install: false
+
+      - name: Install from upstream lockfile (no implicit scripts)
+        shell: bash
+        working-directory: upstream
+        run: |
+          # --ignore-scripts: lifecycle scripts are supply-chain surface.
+          # Only the documented build entrypoints below run, explicitly.
+          pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Audit gate (high and above fails)
+        shell: bash
+        working-directory: upstream
+        run: pnpm audit --audit-level high
+
+      - name: SBOM (CycloneDX)
+        # anchore/sbom-action v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
+        with:
+          path: ./upstream
+          format: cyclonedx-json
+          output-file: ${{ runner.temp }}/sbom/openclaw-gateway-sbom.cyclonedx.json
+
+      - name: Apply no-tracking + OTel-local config
+        shell: bash
+        run: |
+          set -a; . ./bashy-build/no-tracking.env; . ./bashy-build/otel.env; set +a
+          {
+            echo "DO_NOT_TRACK=$DO_NOT_TRACK"
+            echo "OPENCLAW_NO_AUTO_UPDATE=$OPENCLAW_NO_AUTO_UPDATE"
+            echo "OPENCLAW_TELEMETRY_ENDPOINT=$OPENCLAW_TELEMETRY_ENDPOINT"
+            echo "OPENCLAW_EXTENSIONS=$OPENCLAW_EXTENSIONS"
+            echo "OPENCLAW_DISABLE_BONJOUR=$OPENCLAW_DISABLE_BONJOUR"
+            echo "OTEL_EXPORTER_OTLP_ENDPOINT=$OTEL_EXPORTER_OTLP_ENDPOINT"
+            echo "OTEL_EXPORTER_OTLP_PROTOCOL=$OTEL_EXPORTER_OTLP_PROTOCOL"
+            echo "OTEL_SERVICE_NAME=$OTEL_SERVICE_NAME"
+          } >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/gateway-config"
+          cp ./bashy-build/openclaw-bashy.json "$RUNNER_TEMP/gateway-config/openclaw.json"
+          echo "OPENCLAW_CONFIG_PATH=$RUNNER_TEMP/gateway-config/openclaw.json" >> "$GITHUB_ENV"
+
+      - name: Build gateway dist
+        shell: bash
+        working-directory: upstream
+        run: pnpm run build:docker
+
+      - name: Pack gateway tarball
+        shell: bash
+        working-directory: upstream
+        run: |
+          # prepack/postpack below are the upstream build's own documented
+          # entrypoints (package.json scripts), run here explicitly and
+          # audibly — not as silent install lifecycle.
+          npm pack --ignore-scripts=false
+          TARBALL="$(ls -t openclaw-*.tgz | head -1)"
+          mv "$TARBALL" "${{ runner.temp }}/openclaw-gateway-${{ steps.tag.outputs.value }}.tgz"
+          ls -la "${{ runner.temp }}/openclaw-gateway-"*.tgz
+
+      - name: NO-TRACKING no-egress gate (before signing)
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq strace iproute2 curl
+          ./bashy-build/no-egress-test.sh ./upstream
+
+      - name: Build gateway OCI image (pinned upstream Dockerfile)
+        shell: bash
+        run: |
+          docker build \
+            --file upstream/Dockerfile \
+            --build-arg OPENCLAW_EXTENSIONS="diagnostics-otel" \
+            --tag "openclaw-gateway:${{ steps.tag.outputs.value }}" \
+            upstream
+          docker inspect "openclaw-gateway:${{ steps.tag.outputs.value }}" \
+            --format='{{.Id}}' > "${{ runner.temp }}/openclaw-gateway-image.digest"
+          cat "${{ runner.temp }}/openclaw-gateway-image.digest"
+
+      - name: Stage release assets + SHA256SUMS
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/assets"
+          cp "${{ runner.temp }}/openclaw-gateway-${{ steps.tag.outputs.value }}.tgz" "$RUNNER_TEMP/assets/"
+          cp "${{ runner.temp }}/sbom/openclaw-gateway-sbom.cyclonedx.json" "$RUNNER_TEMP/assets/"
+          cp "${{ runner.temp }}/openclaw-gateway-image.digest" "$RUNNER_TEMP/assets/"
+          cp ./bashy-build/PIN "$RUNNER_TEMP/assets/openclaw-pin.txt"
+          (cd "$RUNNER_TEMP/assets" && sha256sum ./* > SHA256SUMS)
+          cat "$RUNNER_TEMP/assets/SHA256SUMS"
+
+      - name: Install cosign (pinned)
+        # sigstore/cosign-installer v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac
+        with:
+          cosign-release: v3.1.3
+
+      - name: Keyless-sign every asset (Sigstore bundles)
+        shell: bash
+        working-directory: ${{ runner.temp }}/assets
+        run: |
+          for f in ./*; do
+            case "$f" in
+              *.sigstore.json) continue ;;
+            esac
+            cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"
+          done
+          ls -la ./*.sigstore.json
+
+      - name: Attest tarball + SBOM provenance
+        # actions/attest v2
+        uses: actions/attest@ce27ba3b4a9a139d9a20a4a07d69fabb52f1e5bc
+        with:
+          subject-path: |
+            ${{ runner.temp }}/assets/openclaw-gateway-${{ steps.tag.outputs.value }}.tgz,
+            ${{ runner.temp }}/assets/openclaw-gateway-sbom.cyclonedx.json
+
+      - name: Publish fork release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          gh release create "$TAG" \
+            --title "OpenClaw gateway verified build $TAG" \
+            --notes "bashy-CI-built, keylessly Sigstore-signed build of $OPENCLAW_REPO@$OPENCLAW_TAG ($OPENCLAW_SHA). No tracking; OTel points only at the local collector. See builds/openclaw/README.md in bashy." \
+            "${{ runner.temp }}"/assets/*
+
+      - name: Keep assets for inspection
+        # actions/upload-artifact v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: openclaw-gateway-${{ steps.tag.outputs.value }}
+          path: ${{ runner.temp }}/assets/*
+          if-no-files-found: error
+          retention-days: 30
