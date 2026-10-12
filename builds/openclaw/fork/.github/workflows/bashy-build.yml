@@ -174,7 +174,9 @@ jobs:
           echo "OPENCLAW_CONFIG_PATH=$RUNNER_TEMP/gateway-config/openclaw.json" >> "$GITHUB_ENV"
       - name: build gateway dist
         working-directory: src
-        run: pnpm run build:docker
+        # Upstream's documented release build: prepack (scripts/openclaw-prepack.ts)
+        # refuses to pack without the full build AND the Control UI bundle.
+        run: pnpm build && pnpm ui:build
       - name: pack gateway tarball
         working-directory: src
         run: |
