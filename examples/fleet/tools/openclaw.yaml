@@ -8,6 +8,17 @@
 #          an OpenAI-compatible cloud endpoint (glm-5.3), local Ollama (qwen3.5:9b)
 #          and the bashy model door (qwen3:8b); pong + calc each (pong = endpoint answers, calc = fix a one-line bug, gate = its test passes).
 #          Result: pong everywhere and cloud calc pass; calc on qwen3.5:9b and via the door fail.
+# use:     bashy tool cmd run openclaw:send --yes -- --channel discord --target channel:ID --message TEXT
+#          bashy tool cmd run openclaw:send --yes -- --dry-run --channel discord --target channel:ID --message TEXT
+#          bashy tool cmd run openclaw:approve --yes -- ID allow-once|allow-always|deny
+#          (`openclaw approvals pending [--json]` lists pending approvals; decision
+#          words verified against https://docs.openclaw.ai/cli/approvals)
+# gateway: the pinned gateway image ghcr.io/openclaw/openclaw:2026.9.8 runs from
+#          examples/fleet/services/openclaw-gateway.yaml (loopback 18789); the openclaw
+#          CLI must be installed on the host (npm install -g openclaw@2026.9.8) for the
+#          commands to list as available.
+# mcp:     {"mcpServers":{"openclaw":{"command":"openclaw","args":["mcp","serve","--token-file","~/.openclaw/gateway.token"]}}}
+#          (note: `bashy skill export --mcp` direction is the reverse — bashy skills out to MCP clients)
 name: openclaw
 kind: cli
 display: OpenClaw
@@ -37,6 +48,17 @@ cli:
     notes: >-
       agent --local runs the embedded agent (provider keys from the environment)
       instead of routing through the OpenClaw gateway; -m is the message.
+commands:
+  - name: send
+    slash: send {args}
+    mode: print
+    effects: [net, write]
+    exec: openclaw message send --json {args}
+  - name: approve
+    slash: approve {args}
+    mode: print
+    effects: [net, write]
+    exec: openclaw approvals resolve --json {args}
 quirks: chat-gateway lineage; security-sensitive
 integration:
   detect: ${OPENCLAW_STATE_DIR:-~/.openclaw}
