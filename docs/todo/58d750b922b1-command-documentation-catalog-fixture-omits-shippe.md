@@ -6,7 +6,6 @@ seq: 1896
 status: done
 priority: p2
 created: 2026-10-12T15:52:38.763453Z
-weave: 48
 assignee: s9999-docfixture
 sprint: 9999
 sprint_id: 559b491b-4bab-57d3-bad4-5ceb9acbb9da
