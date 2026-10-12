@@ -1,0 +1,77 @@
+      # Ollama is not a Go binary by itself: `ollama serve` discovers and runs
+      # llama.cpp/ggml payloads from lib/ollama. Linux follows the CPU portion
+      # of upstream Dockerfile/release.yaml via its `cpu` CMake preset. Darwin
+      # uses upstream's release script, which builds the CPU runner and MLX
+      # Metal payload for the selected architecture.
+      - name: build upstream Ollama runtime archive (Go + cgo + CMake)
+        working-directory: src
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          . ../fork/bashy-build/PIN
+          case $ASSET in
+            ollama-linux-amd64.tgz) os=linux; arch=amd64 ;;
+            ollama-linux-arm64.tgz) os=linux; arch=arm64 ;;
+            ollama-darwin-arm64.tgz) os=darwin; arch=arm64 ;;
+            ollama-darwin-amd64.tgz) os=darwin; arch=amd64 ;;
+            *) echo "unknown matrix asset $ASSET"; exit 1 ;;
+          esac
+          [[ $(go env GOOS) == "$os" && $(go env GOARCH) == "$arch" ]] ||
+            { echo "runner $(go env GOOS)/$(go env GOARCH) != asset $os/$arch"; exit 1; }
+
+          stage=$RUNNER_TEMP/ollama-stage
+          rm -rf "$stage"
+          mkdir -p "$stage/bin" "$stage/lib/ollama" ../out
+
+          # Upstream release.yaml/Dockerfile generate this notice into every
+          # runtime payload. Keep the project MIT license beside it as well.
+          cmake -S . -B build/bashy-go-license \
+            -DOLLAMA_LLAMA_BACKENDS= -DOLLAMA_MLX_BACKENDS= \
+            -DOLLAMA_PAYLOAD_INSTALL_PREFIX="$stage" \
+            -DOLLAMA_GO_LICENSE_TARGETS="$os/$arch"
+          cmake --build build/bashy-go-license --target ollama-go-license
+          cp LICENSE "$stage/lib/ollama/OLLAMA_LICENSE"
+
+          if [[ $os == linux ]]; then
+            # Upstream Dockerfile's llama-server-cpu stage: the pinned
+            # llama.cpp source, CPU/all-variants preset, then its install
+            # component into lib/ollama.
+            cmake -S llama/server --preset cpu -DCMAKE_INSTALL_PREFIX="$stage"
+            cmake --build --preset cpu --parallel
+            cmake --install build/llama-server-cpu \
+              --prefix "$stage" --component llama-server --strip
+
+            # Upstream Dockerfile's Go build, with the same cgo/PIE/release
+            # settings plus deterministic path/build-id removal.
+            CGO_ENABLED=1 CGO_CFLAGS=-O3 CGO_CXXFLAGS=-O3 \
+              go build -trimpath -buildmode=pie \
+                -ldflags "-s -w -buildid= $GO_LDFLAGS" \
+                -o "$stage/bin/ollama" .
+          else
+            # This is the upstream release entry point. Limiting ARCHS keeps
+            # the four bashy assets independent; `build` emits the complete
+            # per-arch dist tree without making the universal app/DMG.
+            VERSION=${UPSTREAM_TAG#v} ./scripts/build_darwin.sh -a "$arch" build
+            cp "dist/darwin-$arch/ollama" "$stage/bin/ollama"
+            cp -R "dist/darwin-$arch/lib/ollama/." "$stage/lib/ollama/"
+          fi
+
+          test -x "$stage/bin/ollama"
+          test -x "$stage/lib/ollama/llama-server"
+          test -x "$stage/lib/ollama/llama-quantize"
+          test -s "$stage/lib/ollama/GO_LICENSE"
+          test -s "$stage/lib/ollama/OLLAMA_LICENSE"
+          find "$stage/lib/ollama" -type f -print | sort
+          "$stage/bin/ollama" --version
+          tar -czf "../out/$ASSET" -C "$stage" bin lib
+
+          # Prove the signed unit, rather than the unarchived staging tree, has
+          # the executable and every runtime directory `ollama serve` needs.
+          verify=$RUNNER_TEMP/ollama-verify
+          rm -rf "$verify" && mkdir -p "$verify"
+          tar -xzf "../out/$ASSET" -C "$verify"
+          test -x "$verify/bin/ollama"
+          test -x "$verify/lib/ollama/llama-server"
+          test -s "$verify/lib/ollama/GO_LICENSE"
+          "$verify/bin/ollama" --version

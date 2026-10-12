@@ -1,0 +1,51 @@
+# bashy verified build declaration for ollama (builds/README.md).
+# Shell-sourceable KEY=VALUE only. builds/render.sh renders ../fork from this
+# file + files/ + build.yml + builds/_shared, and ships it verbatim as the
+# fork's bashy-build/PIN. The workflow refuses to build unless the checked-out
+# upstream tag resolves to UPSTREAM_COMMIT and the bashy tag is
+# bashy-${UPSTREAM_TAG}-N.
+#
+# v0.40.3 is GitHub's latest stable release (non-draft, non-prerelease) as of
+# 2026-10-12. `git ls-remote --tags` resolves the lightweight tag directly to
+# the commit below. Upstream LICENSE at this tag: MIT.
+TOOL=ollama
+FORK_REPO=qiangli/ollama
+UPSTREAM_REPO=https://github.com/ollama/ollama
+UPSTREAM_SLUG=ollama/ollama
+UPSTREAM_TAG=v0.40.3
+UPSTREAM_COMMIT=eab97e9f92b9a25c2d52d2cc6c1b1c99bd9fae21
+# The shared Go kind supplies exact-toolchain setup and the reachable
+# govulncheck/CycloneDX audit. Ollama overrides only build.yml because its
+# release payload includes cgo-built llama.cpp/ggml runners from CMake.
+KIND=go
+GO_TOOLCHAIN=1.26.0
+# Same-minor security toolchain override. The tag predates stdlib fixes through
+# Go 1.26.9; builds/_shared gates that this is >= GO_TOOLCHAIN and still 1.26.x.
+GO_TOOLCHAIN_SECURITY=1.26.9
+# Security-only module overrides. The first four are the reachable fixes;
+# x/mod, x/sync, x/sys and x/term are the exact dependency upgrades required
+# by those fixed x/* versions. The shared gate permits no other go.mod change.
+GO_SECURITY_OVERRIDES="golang.org/x/crypto@v0.57.0 golang.org/x/image@v0.45.0 golang.org/x/net@v0.60.0 golang.org/x/text@v0.42.0 golang.org/x/mod@v0.41.0 golang.org/x/sync@v0.23.0 golang.org/x/sys@v0.48.0 golang.org/x/term@v0.46.0"
+GOVULNCHECK_VERSION=v1.9.0
+GO_SBOM_VERSION=v1.12.0
+GO_PACKAGE=.
+# These are upstream release.yaml's two version/mode stamps. build.yml adds
+# -trimpath, -s -w and an empty build id without adding timestamps or paths.
+GO_LDFLAGS="-X=github.com/ollama/ollama/version.Version=${UPSTREAM_TAG#v} -X=github.com/ollama/ollama/server.mode=release"
+GO_BUILD_TAGS=""
+GO_BUILD_FLAGS=""
+GO_BUILD_ENV=""
+GO_VERSION_ARG=--version
+COSIGN_VERSION=v3.1.3
+# Each native runner builds its own architecture; every output is a tgz with
+# upstream's install layout, bin/ollama plus lib/ollama runtime payloads.
+MATRIX="ollama-linux-amd64.tgz=ubuntu-24.04 ollama-linux-arm64.tgz=ubuntu-24.04-arm ollama-darwin-arm64.tgz=macos-26-xlarge ollama-darwin-amd64.tgz=macos-15-intel"
+GO_CGO="ollama-linux-amd64.tgz=1 ollama-linux-arm64.tgz=1 ollama-darwin-arm64.tgz=1 ollama-darwin-amd64.tgz=1"
+APT_PACKAGES="build-essential cmake ninja-build git curl jq strace util-linux iproute2"
+PRE_BUILD_GATES=""
+EGRESS_TARGET='out/${{ matrix.asset }}'
+RELEASE_EXTRA="PIN=ollama-pin.txt otel.env=ollama-otel.env no-tracking.env=ollama-no-tracking.env vuln-ignore=vuln-ignore"
+RELEASE_ASSETS="ollama-linux-amd64.tgz ollama-linux-arm64.tgz ollama-darwin-arm64.tgz ollama-darwin-amd64.tgz ollama-$UPSTREAM_TAG.cdx.json ollama-$UPSTREAM_TAG.govulncheck.json ollama-pin.txt ollama-otel.env ollama-no-tracking.env vuln-ignore"
+RELEASE_EXECUTABLES=""
+RELEASE_NOTE="CPU runners are included everywhere; Darwin also includes upstream's Metal MLX payload. Cloud features are disabled by OLLAMA_NO_CLOUD=1. Go 1.26.9 and the PIN-declared x/* security updates close every reachable govulncheck finding without waivers. CUDA, ROCm and Vulkan are intentionally deferred as separately provisioned upstream payloads."
+RELEASE_GATES="pinned stable tag and MIT license, pinned Go toolchain, upstream CMake/script cgo build, complete runtime archive, govulncheck (reachable findings fail; no waivers), CycloneDX SBOM, no-egress."
