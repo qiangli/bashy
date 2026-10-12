@@ -1624,3 +1624,9 @@ tags.cncf.io/container-device-interface/specs-go v1.1.0 h1:QRZVeAceQM+zTZe12eyfu
 tags.cncf.io/container-device-interface/specs-go v1.1.0/go.mod h1:u86hoFWqnh3hWz3esofRFKbI261bUlvUfLKGrDhJkgQ=
 github.com/qiangli/yoke v0.0.0-20261012201120-759e43bffd47 h1:AY0j4QNleJI6OoHh8pbCk6kooaEJOPOCDf0BRpoqp6E=
 github.com/qiangli/yoke v0.0.0-20261012201120-759e43bffd47/go.mod h1:+F/sAepZnUVd1Q3mtJaEqDEyqzzPsktOHVb/Kw7CgdM=
+github.com/qiangli/yoke/external/otel v0.0.0-20261012201120-759e43bffd47 h1:CaG1oFJN0fr1wNPtkI+DjaWXbK41RHECBzX/ooHnBHY=
+github.com/qiangli/yoke/external/otel v0.0.0-20261012201120-759e43bffd47/go.mod h1:b1acxoKfKOCqPYcpPrHD9LL8T5Ggoxuu68xAcs1MN3E=
+github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261012201120-759e43bffd47 h1:rTKUrsNOZBc8EY9/60NqmJnTCrMprFLqhAVE118YQf0=
+github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261012201120-759e43bffd47/go.mod h1:WhqDD/Wr3vFiZpnJtWK3Yndh6GsESeqmjbXACWs/MVE=
+github.com/qiangli/yoke/pkg/oci v0.0.0-20261012201120-759e43bffd47 h1:mbgTR1dVXqGSDMyo0CEjeSViMTLaY1URbglxvrD64ws=
+github.com/qiangli/yoke/pkg/oci v0.0.0-20261012201120-759e43bffd47/go.mod h1:6C4qL6P3pnOyKPKnklS6GPRhFZE9Jw33p9xJBrieJh8=
