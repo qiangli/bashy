@@ -117,6 +117,19 @@ jobs:
           set -euo pipefail
           . fork/bashy-build/PIN
           for gate in $PRE_BUILD_GATES; do "fork/bashy-build/$gate" src; done
+      - name: hoisted node_modules for the whole build (bundledDependencies)
+        working-directory: src
+        # Upstream sets nodeLinker: isolated in pnpm-workspace.yaml, but its
+        # package declares bundledDependencies, which pnpm packs only from a
+        # hoisted layout (pnpm pack: 'bundleDependencies does not work with
+        # nodeLinker: isolated'). A CLI flag on install does not reach pack, so
+        # set it in the workspace file for every pnpm step. Layout only: the
+        # lockfile is unchanged (asserted below) and the audit gates are not.
+        run: |
+          set -euo pipefail
+          grep -q '^nodeLinker: isolated$' pnpm-workspace.yaml
+          sed -i 's/^nodeLinker: isolated$/nodeLinker: hoisted/' pnpm-workspace.yaml
+          grep -n '^nodeLinker:' pnpm-workspace.yaml
       - name: apply security override (http-cache-semantics >=4.3.0, GHSA-ch52-4w7c-c8xp)
         env:
           OPENCLAW_DIR: ${{ github.workspace }}/src
@@ -137,7 +150,7 @@ jobs:
           # packs those only from a hoisted node_modules
           # (ERR_PNPM_BUNDLED_DEPENDENCIES_WITHOUT_HOISTED). Layout only — the
           # lockfile stays frozen and the audit gates are unchanged.
-          pnpm install --frozen-lockfile --ignore-scripts --config.node-linker=hoisted
+          pnpm install --frozen-lockfile --ignore-scripts
       - name: audit gate (a) — prod must be clean at high
         working-directory: src
         run: pnpm audit --prod --audit-level high
