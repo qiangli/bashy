@@ -280,7 +280,7 @@ HOOK
 // bashy-dm: forward OpenClaw inbound chat messages to `bashy meet dm`.
 // Trusted gateway code (not sandboxed): keep it short, bounded, idempotent.
 import { execFileSync } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -288,18 +288,18 @@ const BASHY = process.env.BASHY_BIN || "bashy";
 const KINDS = ["telegram", "discord", "slack", "matrix"];
 const asArray = (v) => (v == null ? [] : Array.isArray(v) ? v : [v]);
 
+const MAX_PHOTO = 25 * 1024 * 1024; // bound each download
+
 async function download(url, dir) {
-  const res = await fetch(url);
+  // Node's fetch body is a web stream (no .pipe); buffer it under a cap.
+  const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
   if (!res.ok) throw new Error(`download ${res.status}: ${url}`);
-  const name = new URL(url).pathname.split("/").pop() || "photo";
+  if (Number(res.headers.get("content-length") ?? 0) > MAX_PHOTO) throw new Error(`too large: ${url}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > MAX_PHOTO) throw new Error(`too large: ${url}`);
+  const name = (new URL(url).pathname.split("/").pop() || "photo").replace(/[^A-Za-z0-9._-]/g, "_");
   const dest = join(dir, `${Date.now()}-${name}`);
-  await new Promise((resolve, reject) => {
-    const out = createWriteStream(dest);
-    res.body.pipe(out);
-    res.body.on("error", reject);
-    out.on("finish", resolve);
-    out.on("error", reject);
-  });
+  writeFileSync(dest, buf, { mode: 0o600 });
   return dest;
 }
 
@@ -329,7 +329,9 @@ export default async function handler(event) {
   const args = ["meet", "dm", "--channel", kind, "--sender", sender];
   if (thread) args.push("--thread", thread);
   for (const f of attach) args.push("--attach", f);
-  if (text) args.push(text);
+  // "--" ends flag parsing: chat text such as "--sender X" or "--attach PATH"
+  // must stay message text, never become flags (sender spoofing, host files).
+  if (text) args.push("--", text);
 
   let reply = "";
   try {
