@@ -215,15 +215,15 @@ Tell the human, verbatim:
 > updates in and note the room id (Room settings → Advanced, starts `!`).
 > Do not paste the token to me.
 
-No homeserver account? On a Linux host, the next section sets up a
-self-hosted Matrix chat server and its bot account instead.
+No homeserver account? On a Linux host, the next section sets up an
+experimental self-hosted Matrix chat server and its bot account instead.
 
 Collect `MATRIX_ACCESS_TOKEN` with 3b; the room id is not a secret and the
 human may tell you it directly. Restart the gateway.
 
 Channel args: `--channel matrix --target room:ROOM_ID`.
 
-### Self-hosted Matrix chat (optional, Linux only)
+### Self-hosted Matrix chat (optional, experimental, Linux only)
 
 Run this only when the human asks for Matrix chat **and** has no homeserver
 account to use. It installs a private homeserver (tuwunel, Apache-2.0) on this
@@ -231,8 +231,15 @@ host: loopback-only, registration and federation off. Then the Matrix chat
 section above goes ahead with a bot account it creates. Say "Matrix chat" to the
 human throughout.
 
-**Linux hosts only in this release** (amd64/arm64). On macOS or Windows, tell
-the human, verbatim:
+**Experimental, Linux hosts only in this release** (amd64/arm64). The server
+binary is upstream's release asset, verified by sha256 only; a bashy-built,
+signed build is planned. Before installing, tell the human, verbatim:
+
+> The self-hosted Matrix chat server is experimental in this release: bashy
+> installs upstream's published binary and checks its hash, but does not yet
+> build or sign it. Continue only if that is acceptable to you.
+
+On macOS or Windows, tell the human, verbatim:
 
 > A self-hosted Matrix chat server is only available on Linux hosts in this
 > release. Use an existing Matrix chat account (for example on matrix.org),
