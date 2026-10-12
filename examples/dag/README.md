@@ -1,6 +1,6 @@
 # `bashy dag` as a project's front door
 
-Sixteen real repositories, each driven by ONE `dag.md` at its root instead of
+Eighteen real repositories, each driven by ONE `dag.md` at its root instead of
 a `Makefile`, a `justfile`, a `cargo`/`npm run`/`pnpm`/`uv run` alias list, a
 `cmake -B …` walkthrough, or a README full of incantations:
 
@@ -8,6 +8,8 @@ a `Makefile`, a `justfile`, a `cargo`/`npm run`/`pnpm`/`uv run` alias list, a
 |---|---|---|---|
 | [`mini-swe-agent/dag.md`](mini-swe-agent/dag.md) | [SWE-agent/mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent) | Python (uv) | `sync` · `test` · `test-full` · `lint` · `docs` · `run` · `smoke` |
 | [`nanochat/dag.md`](nanochat/dag.md) | [karpathy/nanochat](https://github.com/karpathy/nanochat) | Python (uv) | `sync` · `test` · `smoke` · `runcpu` · `chat-cli` |
+| [`openenv/dag.md`](openenv/dag.md) | [huggingface/OpenEnv](https://github.com/huggingface/OpenEnv) | Python (uv) | `sync` · `test` · `smoke` |
+| [`harbor/dag.md`](harbor/dag.md) | [harbor-framework/harbor](https://github.com/harbor-framework/harbor) | Python (uv) | `sync` · `smoke` |
 | [`opencode/dag.md`](opencode/dag.md) | [anomalyco/opencode](https://github.com/anomalyco/opencode) | TypeScript (Bun workspace) | `install` · `typecheck` · `lint` · `test` · `test-config` · `run` · `smoke` |
 | [`openclaw/dag.md`](openclaw/dag.md) | [openclaw/openclaw](https://github.com/openclaw/openclaw) | TypeScript (pnpm workspace, Node) | `install` · `typecheck` · `format-check` · `lint` · `build` · `test` · `test-unit-fast` · `test-file` · `run` · `smoke` |
 | [`hermes-agent/dag.md`](hermes-agent/dag.md) | [NousResearch/Hermes-Agent](https://github.com/NousResearch/Hermes-Agent) | Python (uv) + TypeScript (npm workspace) | `sync` · `test` · `lint` · `run` · `install-tui` · `build-ink` · `typecheck-tui` · `test-tui` · `smoke` |
