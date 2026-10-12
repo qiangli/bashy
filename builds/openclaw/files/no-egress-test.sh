@@ -118,9 +118,13 @@ echo "PASS: gateway answered its local health endpoint"
 
 # The gate: any connect() to a non-loopback address FAILS the build.
 # Loopback forms: 127.x.x.x and ::1 (IPv4-mapped ::ffff:127.x included).
-if grep -E 'connect\(' "$TRACE" | grep -Ev '127\.[0-9]+\.[0-9]+\.[0-9]+|::1|ffff:127' | grep -q .; then
+# Only network sockets count: AF_UNIX connects (glibc nscd, local IPC) are
+# not egress. A connect counts when it is AF_INET/AF_INET6 to a non-loopback
+# address.
+egress() { grep -E 'connect\(.*sa_family=AF_INET6?[,)]' "$TRACE" | grep -Ev 'inet_addr\("127\.|inet_pton\(AF_INET6, "(::1|::ffff:127\.)'; }
+if egress | grep -q .; then
   echo "FAIL: non-localhost connection attempt detected:" >&2
-  grep -E 'connect\(' "$TRACE" | grep -Ev '127\.[0-9]+\.[0-9]+\.[0-9]+|::1|ffff:127' >&2
+  egress >&2
   exit 1
 fi
 echo "PASS: no connection attempts outside localhost in $RUN_SECONDS s window"
