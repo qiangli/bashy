@@ -90,6 +90,37 @@
             --output-dir "$GITHUB_WORKSPACE/out" \
             --output-name "openclaw-gateway-${GITHUB_REF_NAME}.tgz"
           ls -la "$GITHUB_WORKSPACE"/out/openclaw-gateway-*.tgz
+      - name: security patch — replace bundled http-cache-semantics <4.3.0 (GHSA-ch52-4w7c-c8xp)
+        run: |
+          set -euo pipefail
+          # npm 12.x bundles its own http-cache-semantics 4.2.0 and bundled
+          # deps ignore overrides, so the workspace override above cannot move
+          # the copy shipped inside the tarball. Patch it here, after packing
+          # and before signing: verify the registry dist.integrity (sha512)
+          # before use, repack deterministically, and fix the already-published
+          # SBOM in place (it must already have run — see below).
+          TARBALL="out/openclaw-gateway-${GITHUB_REF_NAME}.tgz"
+          SBOM="out/openclaw-gateway-sbom.cyclonedx.json"
+          test -f "$TARBALL" || { echo "missing $TARBALL" >&2; exit 1; }
+          test -f "$SBOM" || { echo "missing $SBOM (SBOM step must run before this patch)" >&2; exit 1; }
+          META="$(npm view http-cache-semantics@4.3.0 dist.tarball dist.integrity --json)"
+          REPLACEMENT_URL="$(node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s)['dist.tarball']))" <<<"$META")"
+          REPLACEMENT_INTEGRITY="$(node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s)['dist.integrity']))" <<<"$META")"
+          curl -sSL --fail "$REPLACEMENT_URL" -o "${RUNNER_TEMP}/http-cache-semantics-4.3.0.tgz"
+          node fork/bashy-build/scripts/patch-bundled.mjs \
+            --tarball "$TARBALL" \
+            --replacement "${RUNNER_TEMP}/http-cache-semantics-4.3.0.tgz" \
+            --integrity "$REPLACEMENT_INTEGRITY" \
+            --sbom "$SBOM"
+          # The SBOM is patched in place (not regenerated) on purpose: the
+          # anchore step scans ./src, whose node_modules still holds the
+          # pre-patch tree, so regenerating after patching would reproduce the
+          # stale 4.2.0 entry. The SBOM must describe the SHIPPED tarball,
+          # which only exists after packing — hence patch-then-fix, in this order.
+      - name: security gate — no http-cache-semantics <4.3.0 in the shipped tarball
+        run: |
+          node fork/bashy-build/scripts/patch-bundled.mjs --verify-only \
+            --tarball "out/openclaw-gateway-${GITHUB_REF_NAME}.tgz"
       - name: build gateway OCI image (pinned upstream Dockerfile)
         run: |
           set -euo pipefail

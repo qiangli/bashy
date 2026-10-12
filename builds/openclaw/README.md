@@ -55,22 +55,52 @@ and pnpm 12.5.1 to match.
 3. The manager syncs the tree to the fork's `bashy-build` branch and cuts a
    release tag `bashy-v<upstream>-<n>` (e.g. `bashy-v2026.10.2-1`).
 
-## Security override (GHSA-ch52-4w7c-c8xp)
+## Security override + runtime patch (GHSA-ch52-4w7c-c8xp)
 
 `http-cache-semantics` resolves to **4.2.0** at the PIN (via
-`make-fetch-happen@16.0.1`). CI applies a security-only override
-**`http-cache-semantics >= 4.3.0`** before install, without weakening
-reproducibility:
+`make-fetch-happen@16.0.1`). npm itself (12.x, a RUNTIME dependency of the
+gateway) bundles its own copy at 4.2.0, and bundled dependencies ignore
+overrides — so this is a **runtime-graph security patch in two layers**,
+not a dev-only exception (see also the `audit-exceptions` header, which
+deliberately does NOT list it):
 
-1. `fork/bashy-build/scripts/apply-override.sh` writes `pnpm.overrides`
-   into the upstream `package.json`.
+1. **Scoped workspace override (resolvable path).** CI applies
+   `make-fetch-happen>http-cache-semantics: '>=4.3.0'` — a pnpm
+   parent>child selector, not a global override — via
+   `fork/bashy-build/scripts/apply-override.sh` into the upstream
+   `pnpm-workspace.yaml`. The narrow form is required: a global
+   `http-cache-semantics` override makes upstream's own
+   `scripts/generate-npm-package-lock.mts` validation fail the pack step,
+   because its broad rule charges the immutable bundled copy against the
+   range (`node_modules/npm/node_modules/http-cache-semantics locked
+   4.2.0, expected >=4.3.0`). The scoped form is understood by that
+   checker (verified against v2026.10.2 source: it parses parent>child via
+   `@pnpm/parse-overrides`, drops object-valued entries from the broad
+   rules, and enforces the child rule only beneath a matched parent), while
+   still pinning the dev-graph path.
 2. `pnpm install --lockfile-only` regenerates the lockfile.
 3. `fork/bashy-build/scripts/assert-lockfile-diff.sh` compares HEAD vs
    regenerated `pnpm-lock.yaml` snapshot-block by snapshot-block (plus
    importer pins) and FAILS unless every change is an
    `http-cache-semantics` entry or a dependent block whose changed lines
-   all name `http-cache-semantics`.
+   all name `http-cache-semantics`. It keys on the package name, so the
+   scoped override passes unchanged.
 4. `pnpm install --frozen-lockfile` installs from the verified lockfile.
+5. **Bundled-copy patch (shipped path).** After upstream's
+   `scripts/package-openclaw-for-docker.mjs` writes the gateway tarball and
+   BEFORE any signing, `fork/bashy-build/scripts/patch-bundled.mjs`
+   replaces EVERY bundled `http-cache-semantics < 4.3.0` inside the tarball
+   with the registry `http-cache-semantics@4.3.0` tarball — verifying its
+   registry `dist.integrity` sha512 before use (fail closed on mismatch) —
+   repacks deterministically (sorted entries, fixed mtime), and updates the
+   CycloneDX SBOM component(s) for that package (version + purl) with a
+   `bashy security patch GHSA-ch52-4w7c-c8xp` note. The SBOM is patched in
+   place rather than regenerated because the anchore step scans `./src`
+   (whose `node_modules` still holds the pre-patch tree); only an in-place
+   edit describes the shipped tarball truthfully.
+6. **Tarball gate.** `patch-bundled.mjs --verify-only` FAILS the build if
+   any `http-cache-semantics < 4.3.0` remains anywhere in the shipped
+   tarball. Runs after the patch, before signing.
 
 ## Audit policy (braces GHSA-vfj7-8cjw-p6xm)
 
@@ -224,8 +254,8 @@ config `bashy-build/openclaw-bashy.json`) are overridable via env.
   workflow refuses to run outside `qiangli/openclaw`; upstream checkout at
   `refs/tags/v2026.10.2` equals the pinned commit sha, the tag resolves to
   it, and the tree is pristine (shared `verify-pin.sh`).
-- Security-only override `http-cache-semantics >= 4.3.0` applied; lockfile
-  regeneration verified to touch only that package, then
+- Scoped security override `make-fetch-happen>http-cache-semantics >= 4.3.0`
+  applied; lockfile regeneration verified to touch only that package, then
   `pnpm install --frozen-lockfile --ignore-scripts` from the verified
   lockfile (upstream is pnpm-based — `pnpm-lock.yaml`, `packageManager
   pnpm@12.5.1`, no `package-lock.json`; Node 24 matches the upstream
@@ -234,8 +264,12 @@ config `bashy-build/openclaw-bashy.json`) are overridable via env.
   `build:docker` + pack entrypoints, run explicitly.
 - Audit gate: `pnpm audit --prod --audit-level high` clean, plus the full
   audit vs reviewed exceptions (`audit-gate.mjs`); `audit-full.json` and
-  `audit-exceptions` published as release assets.
-- CycloneDX SBOM published as a release asset.
+  `audit-exceptions` published as release assets. `http-cache-semantics`
+  is patched, not excepted (see the security section above).
+- CycloneDX SBOM published as a release asset, updated in place for the
+  bundled patch so it describes the shipped tarball.
+- Bundled-copy patch + tarball gate (`patch-bundled.mjs`): no
+  `http-cache-semantics < 4.3.0` remains in the shipped tarball.
 - No-egress gate (strace + in-process guard hook) passes before signing.
 - Every asset keylessly signed: `cosign sign-blob --bundle <asset>.sigstore.json`
   (cosign v3.1.3 via pinned installer), each bundle self-verified against

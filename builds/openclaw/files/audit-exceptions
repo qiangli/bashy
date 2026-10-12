@@ -1,4 +1,14 @@
 # Reviewed audit exceptions for the bashy fork build.
+#
+# NOTE on GHSA-ch52-4w7c-c8xp (http-cache-semantics): it is DELIBERATELY NOT
+# listed here. It is a SECURITY PATCH of npm's bundled dependency in the
+# RUNTIME graph, not a dev-only exception: the scoped workspace override
+# (make-fetch-happen>http-cache-semantics >= 4.3.0, see apply-override.sh)
+# pins the resolvable path, and patch-bundled.mjs replaces npm's immutable
+# bundled 4.2.0 copy inside the shipped tarball (verified by its --verify-only
+# gate before signing). An audit exception would wrongly imply the vulnerable
+# version still ships.
+#
 # Format: ADVISORY | package | reason | reviewed-on: YYYY-MM-DD | evidence
 # Policy (enforced by scripts/audit-gate.mjs):
 #   (a) `pnpm audit --prod --audit-level high` must report nothing (exit 0);
