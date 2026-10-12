@@ -44,6 +44,11 @@ bashy sprint accept last STORY_ID -m "manager verification"
 
 ## Start a new sprint
 
+Create the card with `bashy sprint add "Title"` (or add `--json` for structured
+output). Bashy allocates and returns the next available number; do not supply
+a number or a `next` selector. Use that returned ID for the plan and lifecycle
+commands below. Sprint 9999 is historical and has no special maintenance role.
+
 Before taking or starting the seat, inspect the affected code, read every linked
 story, and write or update the master execution plan. Record both orientation
 facts on the card; Bashy refuses `take` and `start` when either is absent:

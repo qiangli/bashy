@@ -128,6 +128,9 @@ recently created card. Omitted sprint selection uses that same last card; it
 does not create a sprint. Use `--no-sprint` for a standalone repository todo.
 Personal todos remain standalone by default. Read `bashy sprint --help`.
 
+Create a sprint with `bashy sprint add "Title"`: it automatically allocates and
+returns the next available number. No number or `next` selector is required.
+
 Sprint stories are closed by their manager using `sprint accept` after
 verification; generic `todo done` cannot close a sprint story.
 
