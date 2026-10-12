@@ -11,6 +11,13 @@
 #          Result: pong everywhere and cloud calc pass; calc on qwen3.5:9b and via the door fail.
 # use:     bashy tool cmd run openclaw:send --yes -- --channel discord --target channel:ID --message TEXT
 #          bashy tool cmd run openclaw:send --yes -- --dry-run --channel discord --target channel:ID --message TEXT
+# inbound: paired-chat messages reach this host through an OpenClaw internal
+#          hook on `message:received` (HOOK.md + handler.js in the gateway
+#          state dir, NOT here — this file stays send-only): the gateway
+#          downloads the photos, then the hook calls
+#          `bashy meet dm --channel KIND --sender ID --attach <files>` and
+#          relays the printed reply back to the sender's chat. Install fence:
+#          skills/bashy/commands/feed-setup.md step 3d (idempotent, no secrets).
 #          bashy tool cmd run openclaw:approve --yes -- ID allow-once|allow-always|deny
 #          (`openclaw approvals pending [--json]` lists pending approvals; decision
 #          words verified against https://docs.openclaw.ai/cli/approvals)

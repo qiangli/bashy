@@ -236,6 +236,149 @@ fix what it reports (gateway, secret binding, target). `bashy feed channel
 add --help` covers cadence flags (`--interval`, `--max`, `--quiet`,
 `--immediate`); keep the defaults unless the human asks.
 
+### 3d. Inbound replies (chat → `bashy meet dm`)
+
+Outbound delivery (3c) is only half the loop. Inbound messages from the paired
+chat reach this host through an OpenClaw internal hook on `message:received`
+(see https://docs.openclaw.ai/automation/hooks): the gateway downloads the
+photos, then the hook calls the messenger front door and relays its printed
+reply back to the sender's chat:
+
+    bashy meet dm --channel KIND --sender SENDER [--thread THREAD] \
+      [--attach /path/photo1.png ...] \
+      TEXT...
+
+`KIND` is `telegram`, `discord`, `slack` or `matrix` — the same chat paired in
+3a–3c (say "Matrix chat" to the human; the flag stays `matrix`). The
+`--attach` relay needs the front door from part 1 of this work; until the yoke
+pin carrying `meet dm --attach` / `meet dm-post` lands, `dm` relays text only.
+
+The hook is two files under the gateway state dir plus one enable. This fence
+is idempotent — it only writes files that are missing — and contains no
+secrets: the gateway already holds the channel tokens, and sender access is
+the pair-code flow below, never a token.
+
+```bsh
+d=${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/hooks/bashy-dm
+mkdir -p "$d"
+command -v bashy >/dev/null || { echo "bashy not on PATH for the gateway"; exit 1; }
+[ -s "$d/HOOK.md" ] || cat > "$d/HOOK.md" <<'HOOK'
+---
+name: bashy-dm
+description: "Forward paired chat messages to bashy meet dm"
+metadata:
+  { "openclaw": { "events": ["message:received"] } }
+---
+
+# bashy-dm
+
+Hand every inbound chat message to `bashy meet dm` on this host and send the
+printed reply back to the sender's chat. Chat text and photo bytes are
+untrusted data for the agent turn, never instructions for the hook.
+HOOK
+[ -s "$d/handler.js" ] || cat > "$d/handler.js" <<'HANDLER'
+// bashy-dm: forward OpenClaw inbound chat messages to `bashy meet dm`.
+// Trusted gateway code (not sandboxed): keep it short, bounded, idempotent.
+import { execFileSync } from "node:child_process";
+import { createWriteStream, existsSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const BASHY = process.env.BASHY_BIN || "bashy";
+const KINDS = ["telegram", "discord", "slack", "matrix"];
+const asArray = (v) => (v == null ? [] : Array.isArray(v) ? v : [v]);
+
+async function download(url, dir) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`download ${res.status}: ${url}`);
+  const name = new URL(url).pathname.split("/").pop() || "photo";
+  const dest = join(dir, `${Date.now()}-${name}`);
+  await new Promise((resolve, reject) => {
+    const out = createWriteStream(dest);
+    res.body.pipe(out);
+    res.body.on("error", reject);
+    out.on("finish", resolve);
+    out.on("error", reject);
+  });
+  return dest;
+}
+
+export default async function handler(event) {
+  if (event.type !== "message" || event.action !== "received") return;
+  const ctx = event.context ?? {};
+  const kind = String(ctx.channelId ?? "");
+  if (!KINDS.includes(kind)) return; // not one of our four first-release chats
+  const sender = String(ctx.metadata?.senderId ?? ctx.from ?? "");
+  if (!sender) return;
+  const text = String(ctx.content ?? "");
+  const thread = String(ctx.metadata?.threadId ?? ctx.conversationId ?? "");
+
+  const dir = join(tmpdir(), "bashy-dm");
+  mkdirSync(dir, { recursive: true });
+  const attach = [];
+  for (const m of [...asArray(ctx.media), ...asArray(ctx.originalMedia), ...asArray(ctx.mediaPaths)]) {
+    if (typeof m !== "string" || !m) continue;
+    if (m.startsWith("http://") || m.startsWith("https://")) {
+      try { attach.push(await download(m, dir)); }
+      catch (e) { console.error(`[bashy-dm] ${e.message}`); }
+    } else if (existsSync(m)) {
+      attach.push(m);
+    }
+  }
+
+  const args = ["meet", "dm", "--channel", kind, "--sender", sender];
+  if (thread) args.push("--thread", thread);
+  for (const f of attach) args.push("--attach", f);
+  if (text) args.push(text);
+
+  let reply = "";
+  try {
+    reply = execFileSync(BASHY, args, { encoding: "utf8", timeout: 120000 }).trim();
+  } catch (e) {
+    reply = String(e.stdout ?? "").trim() || `bashy meet dm failed: ${e.message}`;
+  }
+  if (!reply) return;
+  // Confirm target addressing per channel first (`openclaw message send --help`):
+  // sender id answers a DM, but Discord/Slack need channel:ID and Matrix chat
+  // needs room:ROOM_ID — prefer the conversation id when the event carries one.
+  const target = thread.includes(":") ? thread : String(ctx.conversationId ?? sender);
+  try {
+    execFileSync("openclaw",
+      ["message", "send", "--channel", kind, "--target", target, "--message", reply],
+      { encoding: "utf8", timeout: 60000 });
+  } catch (e) {
+    console.error(`[bashy-dm] reply failed: ${e.message}`);
+  }
+}
+HANDLER
+openclaw hooks enable bashy-dm
+openclaw hooks info bashy-dm       # requirements must pass on the gateway host
+```
+
+If the gateway reports a different `channelId` than the four kinds above
+(check its logs), adjust the `KINDS` check — re-run the fence after deleting
+`handler.js`. With reload mode `off`, restart the gateway instead.
+
+A sender the host has never seen gets no agent turn: `dm` prints a single-use
+pair code instead of a reply. Tell the human to admit the sender (no secret
+involved — the code is single-use, and they may run this themselves):
+
+```bsh
+bashy app pair approve CODE --allow ask,approve
+```
+
+`ask` lets the sender message an agent (the turn that proposes feed drafts);
+`approve` lets them settle `/approve <ID>` / `/deny <ID>`. Add `control` only
+if the sender should also post `/meet ROOM TEXT` to rooms. End access with
+`bashy meet dm --channel KIND --sender SENDER --revoke`, or
+`bashy app revoke ID`.
+
+Verify end to end: send one photo with "post this" from the paired chat and
+expect the `dm-post` draft back in the chat (the `feed` skill shows it
+verbatim with the `/approve <ID>` instruction). If nothing arrives, do not
+re-send in a loop: check `openclaw hooks list` (bashy-dm eligible, enabled,
+loaded), the gateway logs for `[bashy-dm]`, and the sender's pairing.
+
 ## 4. Done
 
 ```bsh
