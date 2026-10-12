@@ -3,5 +3,5 @@
 # ONLY official stable release tags are accepted by the workflow
 # (no main/dev branches, no pre-releases, no RCs).
 OPENCLAW_REPO=openclaw/openclaw
-OPENCLAW_TAG=v2026.9.8
-OPENCLAW_SHA=fc23bc864e4553c2d215e479eeec47b67a0bf943
+OPENCLAW_TAG=v2026.10.2
+OPENCLAW_SHA=b8952d477f0c932d8ddc6da5c89cab5a169b6ff1

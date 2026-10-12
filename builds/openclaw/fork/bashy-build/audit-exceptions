@@ -1,0 +1,12 @@
+# Reviewed audit exceptions for the bashy fork build.
+# Format: ADVISORY | package | reason | reviewed-on: YYYY-MM-DD | evidence
+# Policy (enforced by scripts/audit-gate.mjs):
+#   (a) `pnpm audit --prod --audit-level high` must report nothing (exit 0);
+#       additionally, the excepted package must not appear in the --prod
+#       graph at ANY severity.
+#   (b) On the full audit, any high/critical advisory NOT listed here fails.
+#   (c) An entry EXPIRES (fails the build) when the advisory now lists a
+#       patched version, or when the package appears in the --prod graph.
+# The full audit JSON is published as a release asset on every tag build.
+
+GHSA-vfj7-8cjw-p6xm | braces | dev-only transitive dep (lit-analyzer, stylelint -> fast-glob/micromatch -> braces@3.0.3); never in the --prod graph; no patched version published for the affected range | reviewed-on: 2026-10-12 | evidence: `pnpm audit --prod --audit-level high` = 0 high/0 critical at v2026.10.2; lockfile pins braces@3.0.3 under micromatch@4.0.8 only

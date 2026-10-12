@@ -11,17 +11,22 @@
 #   - Only official stable upstream release tags listed in bashy-build/PIN
 #     are built. main/dev branches, pre-releases and RCs are REFUSED.
 #   - bashy never starts a third-party-built service: this workflow checks out
-#     the PINNED upstream (openclaw/openclaw tag v2026.9.8), verifies the
+#     the PINNED upstream (openclaw/openclaw tag v2026.10.2), verifies the
 #     commit sha against bashy-build/PIN, and builds it on fork CI.
+#   - A security-only pnpm override (http-cache-semantics >=4.3.0,
+#     GHSA-ch52-4w7c-c8xp) is applied before install; the lockfile
+#     regeneration must touch only that package
+#     (bashy-build/scripts/assert-lockfile-diff.sh) before the frozen install.
 #   - NO TRACKING: build-time env + forced gateway config disable telemetry,
 #     analytics, crash reporting, phone-home and auto-update checks; the
-#     no-egress gate (bashy-build/no-egress-test.sh) FAILS the run if the
+#     no-egress gate (bashy-build/no-egress-test.sh, plus the
+#     scripts/no-egress-guard.mjs in-process hook) FAILS the run if the
 #     built gateway dials anything but localhost.
-#   - OTel (diagnostics-otel) is enabled and points ONLY at the local OTLP
-#     collector on 127.0.0.1:4318 — never a vendor default.
+#   - OTel (diagnostics-otel) is enabled and points ONLY at bashy's local OTLP
+#     collector on 127.0.0.1:31415 — never a vendor default.
 #
-# Trigger: push of tags `bashy-v*` (e.g. bashy-v2026.9.8-1) on the
-# `bashy-build` branch. No workflow_dispatch.
+# Trigger: push of tags `bashy-v*` (e.g. bashy-v2026.10.2-1) on the
+# `bashy-build` branch. No manual-dispatch trigger.
 #
 # Every third-party action below is pinned by commit sha (version in comment).
 # Tool pins: Node 24 (matches upstream Dockerfile node:24-bookworm base),
@@ -123,7 +128,24 @@ jobs:
           version: 12.5.1
           run_install: false
 
-      - name: Install from upstream lockfile (no implicit scripts)
+      - name: Apply security override (http-cache-semantics >=4.3.0)
+        shell: bash
+        env:
+          OPENCLAW_DIR: ${{ github.workspace }}/upstream
+        run: bash "${{ github.workspace }}/bashy-build/scripts/apply-override.sh"
+
+      - name: Regenerate lockfile for override only
+        shell: bash
+        working-directory: upstream
+        run: pnpm install --lockfile-only --ignore-scripts
+
+      - name: Assert lockfile diff touches only http-cache-semantics
+        shell: bash
+        env:
+          OPENCLAW_DIR: ${{ github.workspace }}/upstream
+        run: bash "${{ github.workspace }}/bashy-build/scripts/assert-lockfile-diff.sh"
+
+      - name: Install from verified lockfile (no implicit scripts)
         shell: bash
         working-directory: upstream
         run: |
@@ -131,10 +153,23 @@ jobs:
           # Only the documented build entrypoints below run, explicitly.
           pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Audit gate (high and above fails)
+      - name: Audit gate (a) — prod must be clean at high
         shell: bash
         working-directory: upstream
-        run: pnpm audit --audit-level high
+        run: pnpm audit --prod --audit-level high
+
+      - name: Audit gate (b,c) — full audit vs reviewed exceptions
+        shell: bash
+        working-directory: upstream
+        run: |
+          # `|| true`: pnpm exits nonzero when findings exist; the gate
+          # script below renders the verdict (fail-closed on unknown shapes).
+          pnpm audit --json > "${RUNNER_TEMP}/audit-full.json" || true
+          pnpm audit --prod --json > "${RUNNER_TEMP}/audit-prod.json" || true
+          node "${{ github.workspace }}/bashy-build/scripts/audit-gate.mjs" \
+            --full "${RUNNER_TEMP}/audit-full.json" \
+            --prod "${RUNNER_TEMP}/audit-prod.json" \
+            --exceptions "${{ github.workspace }}/bashy-build/audit-exceptions"
 
       - name: SBOM (CycloneDX)
         # anchore/sbom-action v0
@@ -206,6 +241,8 @@ jobs:
           cp "${{ runner.temp }}/sbom/openclaw-gateway-sbom.cyclonedx.json" "$RUNNER_TEMP/assets/"
           cp "${{ runner.temp }}/openclaw-gateway-image.digest" "$RUNNER_TEMP/assets/"
           cp ./bashy-build/PIN "$RUNNER_TEMP/assets/openclaw-pin.txt"
+          cp ./bashy-build/audit-exceptions "$RUNNER_TEMP/assets/"
+          cp "${{ runner.temp }}/audit-full.json" "$RUNNER_TEMP/assets/"
           (cd "$RUNNER_TEMP/assets" && sha256sum ./* > SHA256SUMS)
           cat "$RUNNER_TEMP/assets/SHA256SUMS"
 

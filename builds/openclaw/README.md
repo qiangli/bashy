@@ -15,20 +15,23 @@ the whole `fork/` tree as-is at the root of the mirror fork
 - `fork/bashy-build/` → runtime files the workflow needs (PIN, no-tracking
   env, OTel env, gateway config, no-egress gate, mock collector)
 
-Trigger: push of tags matching `bashy-v*` (e.g. `bashy-v2026.9.8-1`) on that
-branch. No `workflow_dispatch`. The release is published ON THE FORK with
+Trigger: push of tags matching `bashy-v*` (e.g. `bashy-v2026.10.2-1`) on that
+branch. No manual-dispatch trigger. The release is published ON THE FORK with
 `GITHUB_TOKEN` (`contents: write`), signed keyless via cosign bundles
 (`id-token: write`).
 
 ## Pinned upstream (`fork/bashy-build/PIN`)
 
-`openclaw/openclaw` tag `v2026.9.8`, commit
-`fc23bc864e4553c2d215e479eeec47b67a0bf943` (MIT licensed). The tag object was
-corroborated out-of-band (annotated tag → that commit). The workflow checks
-out `refs/tags/v2026.9.8` from upstream and FAILS unless `git rev-parse HEAD`
+`openclaw/openclaw` tag `v2026.10.2`, commit
+`b8952d477f0c932d8ddc6da5c89cab5a169b6ff1` (MIT licensed). The workflow checks
+out `refs/tags/v2026.10.2` from upstream and FAILS unless `git rev-parse HEAD`
 equals the pinned sha. PIN bumps are deliberate: only official stable release
 tags are accepted — the workflow REFUSES `main`/dev branches, pre-releases
 and RCs before checkout.
+
+Toolchain (from the pinned `package.json`): `packageManager` pnpm@12.5.1
+(corepack), `engines.node` >=24.16 <25 or >=26.1 — the workflow pins Node 24
+and pnpm 12.5.1 to match.
 
 ## How to bump the pin
 
@@ -39,11 +42,50 @@ and RCs before checkout.
    knob table below against the new tag's docs/source, and update source
    lines.
 3. The manager syncs the tree to the fork's `bashy-build` branch and cuts a
-   release tag `bashy-v<upstream>-<n>` (e.g. `bashy-v2026.9.8-1`).
+   release tag `bashy-v<upstream>-<n>` (e.g. `bashy-v2026.10.2-1`).
+
+## Security override (GHSA-ch52-4w7c-c8xp)
+
+`http-cache-semantics` resolves to **4.2.0** at the PIN (via
+`make-fetch-happen@16.0.1`). CI applies a security-only override
+**`http-cache-semantics >= 4.3.0`** before install, without weakening
+reproducibility:
+
+1. `fork/bashy-build/scripts/apply-override.sh` writes `pnpm.overrides`
+   into the upstream `package.json`.
+2. `pnpm install --lockfile-only` regenerates the lockfile.
+3. `fork/bashy-build/scripts/assert-lockfile-diff.sh` compares HEAD vs
+   regenerated `pnpm-lock.yaml` snapshot-block by snapshot-block (plus
+   importer pins) and FAILS unless every change is an
+   `http-cache-semantics` entry or a dependent block whose changed lines
+   all name `http-cache-semantics`.
+4. `pnpm install --frozen-lockfile` installs from the verified lockfile.
+
+## Audit policy (braces GHSA-vfj7-8cjw-p6xm)
+
+At v2026.10.2, `pnpm audit --prod --audit-level high` reports 0 high /
+0 critical; `braces@3.0.3` appears only via dev tooling (lit-analyzer,
+stylelint → fast-glob/micromatch → `micromatch@4.0.8 → braces@3.0.3` in
+`pnpm-lock.yaml`). Narrow, reviewed exception — enforced by
+`fork/bashy-build/scripts/audit-gate.mjs` against
+`fork/bashy-build/audit-exceptions`:
+
+- (a) `pnpm audit --prod --audit-level high` must exit 0; additionally the
+  gate FAILS if `braces` appears in the `--prod` audit JSON at any severity.
+- (b) On the full audit JSON, any high/critical advisory other than exactly
+  the listed exception(s) FAILS.
+- (c) An exception EXPIRES (fails the build) when its advisory now lists a
+  patched/fixed version, or when its package appears in the `--prod` graph.
+  An excepted advisory absent from the audit is a review note, not a failure.
+
+The parser accepts npm v1 (`advisories`), npm v2+ (`vulnerabilities`), and
+pnpm array shapes; anything else with non-empty content fails closed. The
+full audit JSON plus the exceptions file ship as release assets
+(`audit-full.json`, `audit-exceptions`).
 
 ## No-tracking knobs
 
-All source lines below are at the pinned tag (`v2026.9.8`).
+All source lines below are at the pinned tag (`v2026.10.2`).
 
 | Knob | Effect | Upstream source |
 |---|---|---|
@@ -67,6 +109,37 @@ Applied via [`fork/bashy-build/no-tracking.env`](fork/bashy-build/no-tracking.en
 [`fork/bashy-build/openclaw-bashy.json`](fork/bashy-build/openclaw-bashy.json)
 (gateway config file).
 
+### In-place update check (verified against v2026.10.2 source)
+
+Config/env kills above, and the exact code paths they gate (read-only
+upstream source at
+`https://raw.githubusercontent.com/openclaw/openclaw/v2026.10.2/...`):
+
+| Kill | What it kills | v2026.10.2 source |
+|---|---|---|
+| `update.checkOnStart: false` (config) | Gateway startup update check; daily telemetry update check | `src/infra/update-startup.ts:280`, `src/infra/telemetry.ts:106-113` (`isUpdateCheckDisabled`) |
+| `OPENCLAW_NO_AUTO_UPDATE=1` (env) | Same as above, independent of config file | `src/infra/update-startup.ts:279-281`, `src/infra/telemetry.ts:106-113` |
+| `telemetry.enabled: false` (config) | Anonymous feature-stats POST (sent only when `enabled === true`) | `src/config/zod-schema.telemetry.ts` (shape + "Disabled by default" help), `src/infra/telemetry.ts:354`, `src/cli/telemetry-cli.ts:67-81` |
+| `DO_NOT_TRACK=1` (env) | Telemetry regardless of config | `src/infra/telemetry.ts:115-118`, `:204-205` |
+| `CI=true` (env) | Telemetry (pipelines are not installs) | `src/infra/telemetry.ts:99-104` |
+
+Egress endpoints that must stay silent, and where they are pinned:
+
+- `https://registry.npmjs.org/` (`openclaw` package) — the in-place update
+  check target. Pinned in `src/infra/update-check.ts:131-132`
+  (`PUBLIC_NPM_REGISTRY_URL`, `PUBLIC_NPM_PACKAGE_NAME`); production
+  resolution stays on public npm with only a loopback test seam
+  (`:153-166`, `resolveUpdateRegistryTarget`).
+- `https://telemetry.openclaw.ai/api/latest-version` — the daily update
+  request endpoint (GET, or POST with the feature payload only when stats
+  are enabled). Pinned in `src/infra/telemetry.ts:24`
+  (`DEFAULT_TELEMETRY_ENDPOINT`); status reasons in `:193-222`.
+
+Out of scope by design: `openclaw update status` (`src/cli/update-cli.ts:415-416`)
+is an explicit operator command and always probes git/registry — the kill
+switches do not gate it, and the no-egress test does not run it. Full airgap
+(zero egress to any host) is not claimed.
+
 Corrections vs the previous draft: `OPENCLAW_CONFIG_DIR` never existed
 upstream and is gone — config reaches the gateway through
 `OPENCLAW_CONFIG_PATH` (a file path;
@@ -87,10 +160,10 @@ enables both and points export ONLY at the local collector.
 | `plugins.allow: ["diagnostics-otel"]` + `entries.diagnostics-otel.enabled: true` (config) | Loads the exporter plugin | `docs/gateway/opentelemetry/setup.md` § Quick start (`plugins.allow` / `entries`) |
 | `diagnostics.enabled: true` + `diagnostics.otel.enabled: true` (config) | Turns on the diagnostics surface and the OTLP pipeline | same doc (Quick start); field ref `docs/gateway/config-observability.md` § Diagnostics (`otel.enabled`, default `false`) |
 | `OPENCLAW_EXTENSIONS=diagnostics-otel` (build) | Selects the plugin for source/docker builds (`--build-arg`) | `Dockerfile` (`ARG OPENCLAW_EXTENSIONS`); `docs/install/docker.md` § Observability (`export OPENCLAW_EXTENSIONS="diagnostics-otel"`) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318` | Local collector only | `docs/gateway/opentelemetry/configuration.md` (`OTEL_EXPORTER_OTLP_ENDPOINT` fallback for `diagnostics.otel.endpoint`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:31415` | Bashy's local collector only | `docs/gateway/opentelemetry/configuration.md` (`OTEL_EXPORTER_OTLP_ENDPOINT` fallback for `diagnostics.otel.endpoint`) |
 | `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf` | OTLP/HTTP; only `http/protobuf` enables plugin-owned export | same doc (`OTEL_EXPORTER_OTLP_PROTOCOL` row) |
 | `OTEL_SERVICE_NAME=openclaw-gateway` | Service name fallback | same doc (`OTEL_SERVICE_NAME` row; default service name is `openclaw`) |
-| `diagnostics.otel` in `openclaw-bashy.json` | `enabled: true`, local endpoint, logs off | same doc (`diagnostics.otel.*` field reference) |
+| `diagnostics.otel` in `openclaw-bashy.json` | `enabled: true`, local endpoint `http://127.0.0.1:31415`, logs off | same doc (`diagnostics.otel.*` field reference) |
 
 Applied via [`fork/bashy-build/otel.env`](fork/bashy-build/otel.env) and the
 `plugins` + `diagnostics` blocks in
@@ -111,18 +184,24 @@ The no-egress gate stages `openclaw-bashy.json` (which sets
 `OPENCLAW_CONFIG_PATH` at the file, and polls
 `http://127.0.0.1:18789/healthz`.
 
-## No-egress gate (`no-egress-test.sh` + `mock-otlp-collector.py`)
+## No-egress gate (`no-egress-test.sh` + `mock-otlp-collector.py` + `scripts/no-egress-guard.mjs`)
 
 Runs BEFORE signing in the workflow:
 
 1. Positive control: a connect to an unroutable TEST-NET-1 address from
    inside `unshare -rn` (user + network namespace, loopback only) must FAIL —
    otherwise the sandbox proves nothing.
-2. Starts the mock OTLP collector (stands in for the local collector)
-   and the freshly built gateway in the same isolated namespace under
-   `strace -e trace=%network`, with `OPENCLAW_CONFIG_PATH` exported.
+2. Starts the mock OTLP collector on 127.0.0.1:31415 (stands in for bashy's
+   local collector) and the freshly built gateway in the same isolated
+   namespace under `strace -e trace=%network`, with `OPENCLAW_CONFIG_PATH`
+   exported.
 3. Waits for `/healthz`, lets it run so startup and maintenance jobs would
    fire, then FAILS on any `connect()` to a non-loopback address.
+4. Second layer: a `NODE_OPTIONS --import` guard hook wraps
+   `fetch`/`http.request`/`https.request` in the gateway process, aborts any
+   attempt at `registry.npmjs.org` / `telemetry.openclaw.ai`, and logs it —
+   the log must stay empty. strace proves loopback-only; the hook names
+   WHICH kill switch would have failed.
 
 Defaults (`GATEWAY_ARGV=gateway`, health `http://127.0.0.1:18789/healthz`,
 config `bashy-build/openclaw-bashy.json`) are overridable via env.
@@ -130,27 +209,46 @@ config `bashy-build/openclaw-bashy.json`) are overridable via env.
 ## What is verified
 
 - PIN tag is an official stable release; upstream checkout at
-  `refs/tags/v2026.9.8` equals the pinned commit sha.
-- `pnpm install --frozen-lockfile --ignore-scripts` from the upstream
+  `refs/tags/v2026.10.2` equals the pinned commit sha.
+- Security-only override `http-cache-semantics >= 4.3.0` applied; lockfile
+  regeneration verified to touch only that package, then
+  `pnpm install --frozen-lockfile --ignore-scripts` from the verified
   lockfile (upstream is pnpm-based — `pnpm-lock.yaml`, `packageManager
   pnpm@12.5.1`, no `package-lock.json`; Node 24 matches the upstream
   Dockerfile `node:24-bookworm` base and the supported range in
   `openclaw.mjs`). Lifecycle scripts stay off except the documented
   `build:docker` + pack entrypoints, run explicitly.
-- `pnpm audit --audit-level high` gate.
+- Audit gate: `pnpm audit --prod --audit-level high` clean, plus the full
+  audit vs reviewed exceptions (`audit-gate.mjs`); `audit-full.json` and
+  `audit-exceptions` published as release assets.
 - CycloneDX SBOM published as a release asset.
-- No-egress gate passes before signing.
+- No-egress gate (strace + in-process guard hook) passes before signing.
 - Every asset keylessly signed: `cosign sign-blob --bundle <asset>.sigstore.json`
   (cosign v3.1.3 via pinned installer) AND `actions/attest` provenance —
   identity is this workflow at the release tag, issuer
   `https://token.actions.githubusercontent.com`.
 - Release assets: gateway tarball, CycloneDX SBOM, image digest,
-  `openclaw-pin.txt`, `SHA256SUMS`, plus one `.sigstore.json` bundle per asset.
+  `openclaw-pin.txt`, `audit-full.json`, `audit-exceptions`, `SHA256SUMS`,
+  plus one `.sigstore.json` bundle per asset.
 
 ## Sigstore identity for binmgr to pin
 
 ```
-https://github.com/qiangli/openclaw/.github/workflows/bashy-build.yml@refs/tags/bashy-v2026.9.8-1
+https://github.com/qiangli/openclaw/.github/workflows/bashy-build.yml@refs/tags/bashy-v2026.10.2-1
 ```
 
 issuer `https://token.actions.githubusercontent.com`.
+
+## Validation (local, no CI / no install / no podman)
+
+```sh
+python3 -c 'import yaml, sys; yaml.safe_load(open(sys.argv[1]))' \
+  fork/.github/workflows/bashy-build.yml
+for f in fork/bashy-build/scripts/*.sh; do bash -n "$f" || exit 1; done
+for f in fork/bashy-build/scripts/*.mjs; do node --check "$f" || exit 1; done
+# must all print nothing (scoped to workflow + scripts so this README's own
+# prose is out of scope):
+grep -rn 'uses:.*@v[0-9]' fork/.github/workflows/bashy-build.yml
+grep -rn 'workflow_dispatch' fork/.github/workflows fork/bashy-build
+grep -rn '4318' fork/.github/workflows fork/bashy-build
+```

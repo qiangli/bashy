@@ -3,11 +3,16 @@
 #
 # Starts the freshly built gateway inside a Linux network namespace (only
 # loopback up: no route to the outside world) under `strace -e trace=%network`,
-# with a mock OTLP collector on 127.0.0.1:4318 standing in for the local
+# with a mock OTLP collector on 127.0.0.1:31415 standing in for bashy's local
 # collector. FAILS (non-zero exit) if the gateway attempts ANY connection to
 # an address other than loopback (127.0.0.0/8, ::1).
 #
-# Gateway invocation follows the pinned upstream (openclaw/openclaw v2026.9.8):
+# Second layer: a NODE_OPTIONS guard hook (scripts/no-egress-guard.mjs) wraps
+# fetch/http.request/https.request in the gateway process, logs every attempt
+# at the update/telemetry hosts to $BASHY_EGRESS_LOG, and aborts it. The log
+# must stay empty even though strace already asserts loopback-only traffic.
+#
+# Gateway invocation follows the pinned upstream (openclaw/openclaw v2026.10.2):
 # `node openclaw.mjs gateway` reads JSON5 config from the file named by
 # OPENCLAW_CONFIG_PATH (default ~/.openclaw/openclaw.json), refuses to start
 # unless gateway.mode=local, binds loopback on gateway.port (default 18789),
@@ -22,7 +27,7 @@
 #                       (default: http://127.0.0.1:18789/healthz)
 #   OPENCLAW_CONFIG_PATH
 #                       gateway config file (default: <conf-dir>/openclaw-bashy.json)
-#   OTLP_MOCK_PORT      mock collector port (default: 4318)
+#   OTLP_MOCK_PORT      mock collector port (default: 31415, bashy's local collector)
 #   BASHY_OPENCLAW_DIR  directory holding no-tracking.env / otel.env
 #                       (default: this script's directory)
 #
@@ -37,7 +42,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CONF_DIR="${BASHY_OPENCLAW_DIR:-$SCRIPT_DIR}"
 GATEWAY_ARGV="${GATEWAY_ARGV:-gateway}"
 GATEWAY_HEALTH_URL="${GATEWAY_HEALTH_URL:-http://127.0.0.1:18789/healthz}"
-OTLP_MOCK_PORT="${OTLP_MOCK_PORT:-4318}"
+OTLP_MOCK_PORT="${OTLP_MOCK_PORT:-31415}"
 OPENCLAW_CONFIG_PATH="${OPENCLAW_CONFIG_PATH:-$CONF_DIR/openclaw-bashy.json}"
 
 for tool in unshare strace python3 node ip curl; do
@@ -60,6 +65,11 @@ trap 'rm -rf "$WORK"' EXIT
 TRACE="$WORK/trace.log"
 MOCK_LOG="$WORK/otlp-mock.log"
 READY="$WORK/ready"
+# Second-layer guard: aborts + logs guarded-host attempts in-process.
+# Inherited by inner.sh through the unshare environment (same filesystem).
+export BASHY_EGRESS_LOG="$WORK/egress.log"
+: > "$BASHY_EGRESS_LOG"
+export NODE_OPTIONS="--import $CONF_DIR/scripts/no-egress-guard.mjs ${NODE_OPTIONS:-}"
 
 # The sandbox must genuinely block egress, or a passing test proves nothing:
 # a connect to a TEST-NET-1 documentation address (RFC 5737, unroutable)
@@ -114,5 +124,12 @@ if grep -E 'connect\(' "$TRACE" | grep -Ev '127\.[0-9]+\.[0-9]+\.[0-9]+|::1|ffff
   exit 1
 fi
 echo "PASS: no connection attempts outside localhost in $RUN_SECONDS s window"
+# Second-layer verdict: the in-process guard must also have seen nothing.
+if [ -s "$BASHY_EGRESS_LOG" ]; then
+  echo "FAIL: in-process guard logged guarded-host attempts:" >&2
+  cat "$BASHY_EGRESS_LOG" >&2
+  exit 1
+fi
+echo "PASS: in-process guard saw zero guarded-host attempts"
 echo "--- OTLP mock saw (local collector path only) ---"
 cat "$MOCK_LOG"

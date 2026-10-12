@@ -1,9 +1,10 @@
 """Mock OTLP/HTTP collector for the no-egress gate.
 
-Listens ONLY on 127.0.0.1:4318 inside the sandbox net namespace and logs every
-request line to stdout. The no-egress test asserts the gateway talks to nothing
-except localhost; this mock proves the local-collector path works while the
-strace analysis proves nothing else was dialled.
+Listens ONLY on 127.0.0.1:31415 (bashy's local collector endpoint) inside the
+sandbox net namespace and logs every request line to stdout. The no-egress
+test asserts the gateway talks to nothing except localhost; this mock proves
+the local-collector path works while the strace analysis proves nothing else
+was dialled.
 """
 
 import sys
@@ -31,7 +32,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 4318
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 31415
     server = HTTPServer(("127.0.0.1", port), Handler)
     print(f"OTLP-MOCK listening on 127.0.0.1:{port}", flush=True)
     server.serve_forever()

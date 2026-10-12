@@ -30,7 +30,7 @@
     "enabled": true,
     "otel": {
       "enabled": true,
-      "endpoint": "http://127.0.0.1:4318",
+      "endpoint": "http://127.0.0.1:31415",
       "protocol": "http/protobuf",
       "serviceName": "openclaw-gateway",
       "logs": false
