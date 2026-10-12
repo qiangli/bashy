@@ -133,7 +133,11 @@ jobs:
         run: |
           # --ignore-scripts: lifecycle scripts are supply-chain surface.
           # Only the documented build entrypoints below run, explicitly.
-          pnpm install --frozen-lockfile --ignore-scripts
+          # Hoisted layout: the package declares bundledDependencies, and pnpm
+          # packs those only from a hoisted node_modules
+          # (ERR_PNPM_BUNDLED_DEPENDENCIES_WITHOUT_HOISTED). Layout only — the
+          # lockfile stays frozen and the audit gates are unchanged.
+          pnpm install --frozen-lockfile --ignore-scripts --config.node-linker=hoisted
       - name: audit gate (a) — prod must be clean at high
         working-directory: src
         run: pnpm audit --prod --audit-level high
