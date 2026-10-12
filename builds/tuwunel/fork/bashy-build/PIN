@@ -25,6 +25,8 @@ MATRIX="tuwunel-linux-amd64=ubuntu-24.04 tuwunel-linux-arm64=ubuntu-24.04-arm tu
 APT_PACKAGES="clang libclang-dev pkg-config strace util-linux iproute2 curl"
 # Run as bashy-build/GATE src before the build (feature/telemetry-crate gate).
 PRE_BUILD_GATES="check-features.sh"
+# Shared helper scripts copied from builds/_shared into bashy-build/.
+SHARED_FILES="egress-verdict.sh"
 # Argument of bashy-build/no-egress-test.sh (a GitHub expression is allowed).
 EGRESS_TARGET='out/${{ matrix.asset }}'
 # Release: SRC=ASSET copies from bashy-build/, the assets that must exist,

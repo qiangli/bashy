@@ -41,6 +41,8 @@ MATRIX="zot-linux-amd64=ubuntu-24.04 zot-linux-arm64=ubuntu-24.04-arm zot-darwin
 GO_CGO="zot-linux-amd64=0 zot-linux-arm64=0 zot-darwin-arm64=0 zot-darwin-amd64=0"
 APT_PACKAGES="strace util-linux iproute2 curl"
 PRE_BUILD_GATES=""
+# Shared helper scripts copied from builds/_shared into bashy-build/.
+SHARED_FILES="egress-verdict.sh"
 # Argument of bashy-build/no-egress-test.sh (a GitHub expression is allowed).
 EGRESS_TARGET='out/${{ matrix.asset }}'
 # Release: SRC=ASSET copies from bashy-build/, the assets that must exist,

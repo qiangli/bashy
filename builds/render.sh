@@ -11,6 +11,7 @@
 #                                 missing falls back to builds/_shared/kinds/$KIND/
 #   builds/_shared/bashy-build.yml  the workflow skeleton (pin/build/audit/release)
 #   builds/_shared/verify-pin.sh    the shared provenance gate
+#   builds/_shared/$SHARED_FILES    shared helper scripts the tool declares
 #
 # Templates use @@VAR@@ (a tool.env variable; unknown names fail), @@MATRIX@@,
 # @@INCLUDE name@@ (a fragment) and #@@IF name@@ / #@@ELSE@@ / #@@END@@
@@ -43,6 +44,13 @@ done
 [[ $UPSTREAM_COMMIT =~ ^[0-9a-f]{40}$ ]] || die "UPSTREAM_COMMIT must be a full 40-hex sha"
 for f in otel.env no-egress-test.sh; do
 	[[ -f $dir/files/$f ]] || die "files/$f is required (builds/README.md conventions)"
+done
+# SHARED_FILES: helper scripts copied from _shared/ into bashy-build/ next to
+# the tool's own files, so one reviewed copy serves every tool that declares it.
+for f in ${SHARED_FILES:-}; do
+	if [[ $f == */* ]]; then die "SHARED_FILES entry $f must be a plain file name"; fi
+	[[ -f $shared/$f ]] || die "SHARED_FILES names $f, which is not in builds/_shared"
+	if [[ -f $dir/files/$f ]]; then die "files/$f shadows the shared builds/_shared/$f"; fi
 done
 # Rule 2: OTel goes to bashy's local collector, never anywhere else.
 grep -qx 'OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:31415' "$dir/files/otel.env" ||
@@ -111,6 +119,10 @@ cp -R "$dir/files/." "$tmp/bashy-build/"
 cp "$dir/tool.env" "$tmp/bashy-build/PIN"
 cp "$shared/verify-pin.sh" "$tmp/bashy-build/verify-pin.sh"
 chmod +x "$tmp/bashy-build/verify-pin.sh"
+for f in ${SHARED_FILES:-}; do
+	cp "$shared/$f" "$tmp/bashy-build/$f"
+	if [[ $f == *.sh ]]; then chmod +x "$tmp/bashy-build/$f"; fi
+done
 
 rm -rf "$out"
 mkdir -p "$(dirname "$out")"

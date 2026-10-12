@@ -5,19 +5,26 @@
 # upstream tag resolves to UPSTREAM_COMMIT and the bashy tag is
 # bashy-${UPSTREAM_TAG}-N.
 #
-# The pin is the release yoke runs today: external/otel/stack/execstore.go
-# victoriaMetricsVersion. Upstream LICENSE at this tag: Apache-2.0.
+# Upstream LICENSE at this tag: Apache-2.0 (checked at the tag, not HEAD).
+# This pin is AHEAD of yoke: external/otel/stack/execstore.go victoriaMetricsVersion
+# still names v1.147.0. It was bumped to clear every REACHABLE govulncheck
+# finding on the fork CI; yoke's flip to this release is its own story,
+# after the fork CI is green and the bashy tag is cut.
 TOOL=victoria-metrics
 FORK_REPO=qiangli/victoria-metrics
 UPSTREAM_REPO=https://github.com/VictoriaMetrics/VictoriaMetrics
 UPSTREAM_SLUG=VictoriaMetrics/VictoriaMetrics
-UPSTREAM_TAG=v1.147.0
-# Annotated tag object 1791215d0b6af0657d698d8edcc193f66f4f23e3 -> this commit.
-UPSTREAM_COMMIT=3ac6505d7ff2c02b1c7878d92525e7b681e9cadc
+UPSTREAM_TAG=v1.154.0
+# Annotated tag object e282add54bf37b36d523ea32f35b7d6e064fb8c9 -> this commit.
+UPSTREAM_COMMIT=29c43cd2fee05409499a4d1b38e950e1b7f13bd4
 # Toolchain kind: build/audit job steps come from builds/_shared/kinds/go.
 KIND=go
 # Must equal the go/toolchain directive in the tag's go.mod (setup.yml gates it).
-GO_TOOLCHAIN=1.26.4
+GO_TOOLCHAIN=1.27.2
+# Recorded security override: build on a LATER PATCH of the same Go minor than
+# the tag's go.mod names, when that patch carries a stdlib security fix the
+# tag's own toolchain lacks. Empty = none; the tag's toolchain is used as-is.
+GO_TOOLCHAIN_SECURITY_OVERRIDE=
 GOVULNCHECK_VERSION=v1.9.0
 GO_SBOM_VERSION=v1.12.0
 GO_PACKAGE=./app/victoria-metrics
@@ -36,6 +43,8 @@ MATRIX="victoria-metrics-linux-amd64=ubuntu-24.04 victoria-metrics-linux-arm64=u
 GO_CGO="victoria-metrics-linux-amd64=1 victoria-metrics-linux-arm64=1 victoria-metrics-darwin-arm64=0 victoria-metrics-darwin-amd64=0"
 APT_PACKAGES="build-essential strace util-linux iproute2 curl"
 PRE_BUILD_GATES=""
+# Shared helper scripts copied from builds/_shared into bashy-build/.
+SHARED_FILES="egress-verdict.sh"
 # Argument of bashy-build/no-egress-test.sh (a GitHub expression is allowed).
 EGRESS_TARGET='out/${{ matrix.asset }}'
 # Release: SRC=ASSET copies from bashy-build/, the assets that must exist,

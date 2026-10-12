@@ -15,10 +15,14 @@ match their declarations.
 ```
 builds/
   render.sh                 render.sh TOOL [OUT]  -> builds/TOOL/fork (generated)
-  check.sh                  regenerate-and-diff gate (+ bash -n, shellcheck, actionlint)
+  check.sh                  regenerate-and-diff gate (+ bash -n, shellcheck,
+                            actionlint, the shared verdict's self-test)
   _shared/
     bashy-build.yml         workflow skeleton: pin -> build matrix -> [audit] -> release
     verify-pin.sh           provenance gate, shipped into every fork
+    egress-verdict.sh       THE strace verdict, shipped into every fork that
+                            declares SHARED_FILES (sourced by no-egress-test.sh)
+    egress-verdict-test.sh  its self-test; check.sh runs it (not shipped)
     kinds/cargo/            setup.yml / build.yml / audit.yml steps for Rust tools
     kinds/go/               the same three for Go tools
   <tool>/
@@ -35,16 +39,21 @@ builds/
 |---|---|---|---|---|---|
 | `openclaw` | `openclaw/openclaw` | `v2026.10.2` | see its README | `custom` | the OpenClaw gateway |
 | `tuwunel` | `matrix-construct/tuwunel` | `v1.9.4` | Apache-2.0 | `cargo` | the Matrix homeserver |
-| `victoria-logs` | `VictoriaMetrics/VictoriaLogs` | `v1.51.0` | Apache-2.0 | `go` | yoke `external/otel/stack` |
-| `victoria-metrics` | `VictoriaMetrics/VictoriaMetrics` | `v1.147.0` | Apache-2.0 | `go` | yoke `external/otel/stack` |
-| `victoria-traces` | `VictoriaMetrics/VictoriaTraces` | `v0.9.4` | Apache-2.0 | `go` | yoke `external/otel/stack` |
+| `victoria-logs` | `VictoriaMetrics/VictoriaLogs` | `v1.53.0` | Apache-2.0 | `go` | yoke `external/otel/stack` |
+| `victoria-metrics` | `VictoriaMetrics/VictoriaMetrics` | `v1.154.0` | Apache-2.0 | `go` | yoke `external/otel/stack` |
+| `victoria-traces` | `VictoriaMetrics/VictoriaTraces` | `v0.12.0` | Apache-2.0 | `go` | yoke `external/otel/stack` |
 | `gitea` | `go-gitea/gitea` | `v28.1.0` | MIT | `go` (own `build.yml`) | yoke `external/loom` |
 | `kopia` | `kopia/kopia` | `v0.23.1` | Apache-2.0 | `go` | yoke `external/kopia` |
 | `zot` | `project-zot/zot` | `v2.1.21` | Apache-2.0 | `go` | yoke `external/zot` |
 
 Each pin is the release yoke runs today, read from `external/<tool>` or
-`pkg/fleet/baseline/services/<tool>.yaml`. Every license above was checked at
-the pinned tag, not at HEAD.
+`pkg/fleet/baseline/services/<tool>.yaml` — except the three Victoria
+components, whose pins **lead** yoke (`external/otel/stack/execstore.go` still
+names `v1.147.0` / `v1.51.0` / `v0.9.4`). They were bumped to the latest stable
+upstream tags to clear every REACHABLE `govulncheck` finding on the fork CI;
+yoke's flip to the signed fork releases follows once that CI is green and the
+bashy tags are cut. Every license above was checked at the pinned tag, not at
+HEAD.
 
 ### Not yet addable
 
@@ -124,17 +133,44 @@ Shell-sourceable `KEY=VALUE` only. It is shipped verbatim as
 | `MATRIX` | `ASSET=RUNNER ...`; each leg's artifact is named `ASSET` |
 | `APT_PACKAGES` | Linux host packages (include the no-egress tools: `strace iproute2 curl`, ...) |
 | `PRE_BUILD_GATES` | scripts in `files/` run as `<gate> src` before the build |
+| `SHARED_FILES` | plain file names under `_shared/`, copied into `bashy-build/` next to the tool's own `files/`; `*.sh` is made executable. One reviewed copy serves every tool that declares it (`egress-verdict.sh` today). A name that also exists in the tool's `files/` fails the render — no silent shadowing |
 | `EGRESS_TARGET` | argument of `no-egress-test.sh` (may be a `${{ }}` expression) |
 | `RELEASE_EXTRA` | `SRC=ASSET` copies from `bashy-build/` into the release |
 | `RELEASE_ASSETS` | files that must exist before signing |
 | `RELEASE_EXECUTABLES` | assets to `chmod +x` |
 | `RELEASE_NOTE`, `RELEASE_GATES` | release-notes lines |
 | kind keys | `cargo`: `RUST_TOOLCHAIN CARGO_AUDIT_VERSION CARGO_CYCLONEDX_VERSION CARGO_PACKAGE CARGO_BIN CARGO_SBOM_MANIFEST`, optional `files/features.env` (`FEATURES` -> `--no-default-features --features`), required `files/audit-ignore` |
-| kind keys | `go`: `GO_TOOLCHAIN GO_PACKAGE GO_LDFLAGS GO_BUILD_TAGS GO_BUILD_FLAGS GO_BUILD_ENV GO_CGO GO_VERSION_ARG GOVULNCHECK_VERSION GO_SBOM_VERSION`, required `files/vuln-ignore` |
+| kind keys | `go`: `GO_TOOLCHAIN GO_PACKAGE GO_LDFLAGS GO_BUILD_TAGS GO_BUILD_FLAGS GO_BUILD_ENV GO_CGO GO_VERSION_ARG GOVULNCHECK_VERSION GO_SBOM_VERSION`, optional `GO_TOOLCHAIN_SECURITY_OVERRIDE`, required `files/vuln-ignore` |
 
 Templates use `@@KEY@@`. A key that is not declared fails the render. That
 includes keys a tool's own fragments use, such as openclaw's `NODE_VERSION` and
 `PNPM_VERSION`.
+
+### `GO_TOOLCHAIN_SECURITY_OVERRIDE` (the `go` kind)
+
+`GO_TOOLCHAIN` must equal the `go`/`toolchain` directive in the pinned tag's
+`go.mod` — the kind's setup step gates that, so a pin bump cannot silently
+build on whatever the runner ships. That leaves one real gap: an upstream tag
+whose own toolchain **predates a Go stdlib security fix**, with no later
+upstream tag yet. Waiving the finding is not an option (reachable
+vulnerabilities are never waived; `vuln-ignore` is for unreachable ones), and
+bumping `GO_TOOLCHAIN` would be a lie about what upstream builds with.
+
+So the declaration may name a *recorded security override*:
+
+```
+GO_TOOLCHAIN=1.27.1                     # what the tag's go.mod says
+GO_TOOLCHAIN_SECURITY_OVERRIDE=1.27.2   # what bashy builds with, and why (comment)
+```
+
+Both the `build` and `audit` jobs then run `GOTOOLCHAIN=go<override>`, so the
+shipped binary and the vulnerability report agree. The gate accepts **exactly**
+the declared value and nothing else: it must be `MAJOR.MINOR.PATCH`, stay on
+the upstream Go minor, and be a strictly later patch — an override can never
+become a language-version change. Choose the newest patch of that minor. It is
+shipped in `PIN` (and so in the `<tool>-pin.txt` release asset), the step logs
+it, and the declaration's `RELEASE_GATES` names it in the release notes. The
+override retires itself the moment an upstream tag carries the fix.
 
 ## Conventions every tool must follow (render.sh enforces the first two)
 
@@ -144,9 +180,20 @@ includes keys a tool's own fragments use, such as openclaw's `NODE_VERSION` and
 2. `files/no-egress-test.sh TARGET` is the runtime gate. It must start the
    built artifact in an isolated network (Linux: `unshare` netns + `strace`),
    exercise it over loopback, and **fail** on any non-loopback connection
-   attempt. Its harness is tool-specific: a server needs a readiness probe and
-   a CLI needs representative invocations. Copy the closest existing one:
-   tuwunel for a native binary, or openclaw for a Node app with an OTLP mock.
+   attempt. The **harness** is tool-specific — a server needs a readiness probe
+   and a CLI needs representative invocations — but the **verdict** is not:
+   declare `SHARED_FILES="egress-verdict.sh"`, source it, and call
+   `egress_verdict "$log" PORT...`. Copy the closest existing harness: tuwunel
+   for a native binary, or openclaw for a Node app with an OTLP mock.
+
+   The verdict is one reviewed decision, so a judgement call lands once:
+   **AF_UNIX is local IPC, never egress.** A connect to the glibc nscd or
+   systemd-resolved socket is a file on this host, not a packet leaving it;
+   counting it as egress is what failed the Linux leg on tuwunel and then on
+   all three Victoria forks. A lookup that does leave still appears as the
+   AF_INET/AF_INET6 send to port 53 that follows, which the verdict catches.
+   openclaw's harness keeps its own POSIX-sh grep verdict (different trace
+   flags, different shell).
 3. No-tracking knobs go in `files/no-tracking.env` and/or a shipped config
    file. Document each knob in the tool README with its upstream source line.
 4. Audit waivers live in a reviewed file in `files/` with one justification

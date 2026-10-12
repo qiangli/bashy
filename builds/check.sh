@@ -4,7 +4,8 @@
 # Regenerate-and-diff gate: renders every builds/<tool>/tool.env (or the named
 # tools) into a scratch dir and fails if builds/<tool>/fork differs, so the
 # committed fork trees stay reproducible from their declarations. Also syntax-
-# checks the rendered scripts, and runs shellcheck / actionlint when present.
+# checks the rendered scripts, runs the shared verdict's self-test, and runs
+# the shellcheck / actionlint linters when present.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -21,6 +22,8 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 rc=0
+# The one shared strace verdict every fork's no-egress gate sources.
+"$here/_shared/egress-verdict-test.sh" || rc=1
 for t in "${tools[@]}"; do
 	"$here/render.sh" "$t" "$tmp/$t" >/dev/null
 	if ! diff -r "$tmp/$t" "$here/$t/fork"; then

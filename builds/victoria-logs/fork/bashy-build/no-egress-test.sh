@@ -28,6 +28,9 @@
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
+# The ONE shared strace verdict (builds/_shared/egress-verdict.sh).
+# shellcheck source=/dev/null
+. "$here/egress-verdict.sh"
 bin=${1:?usage: no-egress-test.sh BINARY}
 bin=$(cd "$(dirname "$bin")" && pwd)/$(basename "$bin")
 port=${EGRESS_PORT:-19428}
@@ -120,41 +123,10 @@ INNER
 	sudo unshare --net -- bash "$inner" || die "server run failed (see above)"
 	[[ -s $log ]] || die "no strace log recorded"
 
-	local bad=() line fam host p
-	while IFS= read -r line; do
-		case $line in
-		*sa_family=AF_INET6*)
-			fam=inet6
-			host=$(sed -n 's/.*inet_pton(AF_INET6, "\([^"]*\)".*/\1/p' <<<"$line")
-			p=$(sed -n 's/.*sin6_port=htons(\([0-9]*\)).*/\1/p' <<<"$line")
-			;;
-		*sa_family=AF_INET,*)
-			fam=inet
-			host=$(sed -n 's/.*sin_addr=inet_addr("\([^"]*\)").*/\1/p' <<<"$line")
-			p=$(sed -n 's/.*sin_port=htons(\([0-9]*\)).*/\1/p' <<<"$line")
-			;;
-		*sa_family=AF_UNIX*)
-			# Local IPC is fine, except a resolver socket: that is a lookup.
-			case $line in
-			*nscd* | *systemd/resolve* | *mDNSResponder*) bad+=("$line") ;;
-			esac
-			continue
-			;;
-		*) continue ;; # AF_UNSPEC (UDP disconnect), AF_NETLINK, no address
-		esac
-		case $host in
-		127.0.0.1 | ::1 | ::ffff:127.0.0.1)
-			[[ $p == "$port" || $p == "$otlp_port" ]] && continue
-			;;
-		esac
-		bad+=("$fam $host:$p :: $line")
-	done <"$log"
-
-	if ((${#bad[@]})); then
-		printf 'no-egress: outbound attempt: %s\n' "${bad[@]}" >&2
-		die "${#bad[@]} outbound connection attempt(s) other than loopback:{$port,$otlp_port}"
-	fi
-	echo "no-egress: linux: $(grep -c . "$log") traced socket syscalls, none leave loopback:{$port,$otlp_port} OK"
+	# The verdict itself is the ONE shared copy: bashy-build/egress-verdict.sh
+	# (builds/_shared/egress-verdict.sh). AF_UNIX is local IPC, never egress.
+	egress_verdict "$log" "$port" "$otlp_port" ||
+		die "outbound connection attempt(s) other than loopback:{$port,$otlp_port}"
 }
 
 darwin() {

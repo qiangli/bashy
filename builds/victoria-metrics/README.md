@@ -10,12 +10,12 @@ workflow checks out the upstream tag fresh on every run.
 | | |
 |---|---|
 | Upstream | `https://github.com/VictoriaMetrics/VictoriaMetrics` |
-| License at the tag | **Apache-2.0** (`LICENSE`, verified at `v1.147.0`) |
-| Pinned release | `v1.147.0` (annotated tag object `1791215d…`) → commit `3ac6505d7ff2c02b1c7878d92525e7b681e9cadc` |
-| Why this tag | the release yoke runs today: `external/otel/stack/execstore.go` `victoriaMetricsVersion` |
-| Toolchain | Go `1.26.4` (the tag's `go.mod`; upstream's own builder image is `golang:1.26.4`) |
-| Trigger | push of tag `bashy-v1.147.0-N` on `bashy-build` (first: `bashy-v1.147.0-1`) |
-| Signing identity | `https://github.com/qiangli/victoria-metrics/.github/workflows/bashy-build.yml@refs/tags/bashy-v1.147.0-1` |
+| License at the tag | **Apache-2.0** (`LICENSE`, verified at `v1.154.0`) |
+| Pinned release | `v1.154.0` (annotated tag object `e282add5…`) → commit `29c43cd2fee05409499a4d1b38e950e1b7f13bd4` |
+| Why this tag | latest stable upstream release. It **leads** yoke, which still names `v1.147.0` in `external/otel/stack/execstore.go` `victoriaMetricsVersion`: the bump clears every REACHABLE `govulncheck` finding, and yoke's flip follows once this fork's CI is green and the bashy tag is cut |
+| Toolchain | Go `1.27.2` (the tag's `go.mod`; upstream's own builder image is `golang:1.27.2`) |
+| Trigger | push of tag `bashy-v1.154.0-N` on `bashy-build` (first: `bashy-v1.154.0-1`) |
+| Signing identity | `https://github.com/qiangli/victoria-metrics/.github/workflows/bashy-build.yml@refs/tags/bashy-v1.154.0-1` |
 | Issuer | `https://token.actions.githubusercontent.com` |
 
 ## Layout
@@ -32,8 +32,12 @@ files/no-egress-test.sh      runtime gate: the built server makes no outbound co
 files/vuln-ignore            govulncheck waivers (one OSV id + justification; empty)
 ```
 
+`tool.env` declares `SHARED_FILES="egress-verdict.sh"`, so `render.sh` also
+copies `../_shared/egress-verdict.sh` into `bashy-build/`: the one reviewed
+strace verdict every tool's `no-egress-test.sh` sources.
+
 Shared (`../_shared`): the workflow skeleton, the `go` kind's setup/build/audit
-steps, and `verify-pin.sh`.
+steps, `verify-pin.sh`, and `egress-verdict.sh`.
 
 ## Build configuration, and how it differs from upstream
 
@@ -45,15 +49,15 @@ Upstream's released archives are produced by
 |---|---|---|
 | `CGO_ENABLED` | `1` on linux/amd64 and linux/arm64, `0` on darwin | **same** (`GO_CGO` in `tool.env`) |
 | `-trimpath` | not used | **added** |
-| `-ldflags` | `-X …/lib/buildinfo.Version=victoria-metrics-$(DATEINFO_TAG)-$(BUILDINFO_TAG)` — a build **timestamp** plus `git describe` | `-s -w -buildid= -X …/lib/buildinfo.Version=victoria-metrics-v1.147.0` |
+| `-ldflags` | `-X …/lib/buildinfo.Version=victoria-metrics-$(DATEINFO_TAG)-$(BUILDINFO_TAG)` — a build **timestamp** plus `git describe` | `-s -w -buildid= -X …/lib/buildinfo.Version=victoria-metrics-v1.154.0` |
 | platforms | linux (amd64, arm64, arm, 386, ppc64le, s390x), darwin (amd64, arm64), freebsd, openbsd, windows/amd64 | the four bashy ships: linux amd64/arm64, darwin amd64/arm64 (see `../README.md` §Windows legs) |
 
 The ldflags change is the point: upstream's stamp embeds the second the build
 started, so two builds of the same tag can never match. Every value bashy
-stamps comes from `PIN`, so re-running `bashy-v1.147.0-1` reproduces the bytes.
+stamps comes from `PIN`, so re-running `bashy-v1.154.0-1` reproduces the bytes.
 `-version` still reports a `vX.Y.Z` that `buildinfo.ShortVersion()` can parse.
 
-## No tracking: every knob at v1.147.0
+## No tracking: every knob at v1.154.0
 
 victoria-metrics has **no update checker and no usage reporting**. Its outbound
 surface is one flag, and the service is configured by flags, not environment
@@ -91,9 +95,12 @@ again and stops it.
 - **Linux (authoritative):** a fresh network namespace (`sudo unshare --net`,
   only `lo`), the server traced with
   `strace -f -e trace=connect,sendto,sendmsg,sendmmsg` and run unprivileged via
-  `setpriv`. Any AF_INET/AF_INET6 attempt other than loopback to its own port or
-  to `127.0.0.1:31415` — including DNS and attempts the namespace makes fail —
-  or a connect to a resolver socket fails the build.
+  `setpriv`. The verdict is the ONE shared copy, `bashy-build/egress-verdict.sh`:
+  any AF_INET/AF_INET6 attempt other than loopback to its own port or to
+  `127.0.0.1:31415` fails the build, including DNS and attempts the namespace
+  itself makes fail. AF_UNIX is local IPC (the glibc nscd / systemd-resolved
+  socket is a file on this host), so it is never egress — a lookup that does
+  leave shows up as the AF_INET send to port 53 that follows.
 - **macOS:** `sandbox-exec` denies all `network-outbound` except
   `localhost:18428` and `localhost:31415`, and denies the mDNSResponder socket;
   any Sandbox deny for the process in the unified log fails the build.
@@ -106,12 +113,23 @@ trace frame names a called function — unless it is listed with a justification
 in `files/vuln-ignore` (empty today). It then writes a CycloneDX SBOM with the
 pinned `cyclonedx-gomod` (`v1.12.0`).
 
+`vuln-ignore` is for **unreachable** findings only; a reachable one is never
+waived — which is why the pin moved. The first fork CI run at `v1.147.0` failed
+the audit on reachable findings: the Go stdlib batch of 2026-10-08, plus
+module findings in `golang.org/x/text`, `golang.org/x/net`,
+`google.golang.org/grpc` and `go.opentelemetry.io/otel` across the three
+Victoria forks. At `v1.154.0` the module graph is at or past every fixed
+version, and `govulncheck ./...` reports **zero reachable** (measured locally
+with the pinned `govulncheck v1.9.0`, built with the toolchain this build
+uses, against the vulndb of 2026-10-12; the CI run on `ubuntu-24.04` is the
+authority). See `docs/plan-victoria-fork-ci-green.md`.
+
 ## Release assets
 
 ```
 victoria-metrics-linux-amd64              victoria-metrics-linux-arm64
 victoria-metrics-darwin-arm64             victoria-metrics-darwin-amd64
-victoria-metrics-v1.147.0.cdx.json         victoria-metrics-v1.147.0.govulncheck.json
+victoria-metrics-v1.154.0.cdx.json         victoria-metrics-v1.154.0.govulncheck.json
 victoria-metrics-pin.txt                  victoria-metrics-otel.env
 victoria-metrics-no-tracking.env          vuln-ignore
 SHA256SUMS
@@ -119,7 +137,7 @@ SHA256SUMS
 
 Each gets a sibling `<asset>.sigstore.json` bundle (binmgr's default location).
 URL shape:
-`https://github.com/qiangli/victoria-metrics/releases/download/bashy-v1.147.0-1/<asset>`.
+`https://github.com/qiangli/victoria-metrics/releases/download/bashy-v1.154.0-1/<asset>`.
 
 ## Operator steps (not in bashy CI)
 
@@ -128,9 +146,9 @@ URL shape:
 git switch --orphan bashy-build
 cp -R <bashy>/builds/victoria-metrics/fork/. .
 git add .github/workflows/bashy-build.yml bashy-build
-git commit -m "bashy-build: victoria-metrics v1.147.0 verified build"
+git commit -m "bashy-build: victoria-metrics v1.154.0 verified build"
 git push -u origin bashy-build
-git tag bashy-v1.147.0-1 && git push origin bashy-v1.147.0-1
+git tag bashy-v1.154.0-1 && git push origin bashy-v1.154.0-1
 ```
 
 Then repoint the yoke pin: `external/otel/stack/execstore.go`'s

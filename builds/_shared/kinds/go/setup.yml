@@ -19,7 +19,30 @@
           [[ -n $want ]] || { echo "src/go.mod declares no go/toolchain version"; exit 1; }
           [[ $want == "$GO_TOOLCHAIN" ]] ||
             { echo "PIN GO_TOOLCHAIN $GO_TOOLCHAIN != upstream go.mod $want"; exit 1; }
+          # GO_TOOLCHAIN_SECURITY_OVERRIDE: the ONE sanctioned reason to build
+          # on something other than the tag's own toolchain — the tag names a
+          # patch release that predates a Go stdlib security fix, and no
+          # upstream tag carrying it exists yet. It must stay on the upstream
+          # minor (so it is a patch bump, never a language-version change) and
+          # must be a strictly later patch. It is shipped in PIN, so the
+          # release asset records exactly what built the binary; the review
+          # decision is justified in the comment above the key in tool.env.
+          # Reachable vulnerabilities are never waived (see bashy-build/vuln-ignore).
+          effective=$GO_TOOLCHAIN
+          if [[ -n ${GO_TOOLCHAIN_SECURITY_OVERRIDE:-} ]]; then
+            [[ $GO_TOOLCHAIN =~ ^([0-9]+\.[0-9]+)(\.([0-9]+))?$ ]] ||
+              { echo "PIN GO_TOOLCHAIN $GO_TOOLCHAIN is not MAJOR.MINOR[.PATCH]"; exit 1; }
+            minor=${BASH_REMATCH[1]} patch=${BASH_REMATCH[3]:-0}
+            [[ $GO_TOOLCHAIN_SECURITY_OVERRIDE =~ ^([0-9]+\.[0-9]+)\.([0-9]+)$ ]] ||
+              { echo "PIN GO_TOOLCHAIN_SECURITY_OVERRIDE $GO_TOOLCHAIN_SECURITY_OVERRIDE is not MAJOR.MINOR.PATCH"; exit 1; }
+            [[ ${BASH_REMATCH[1]} == "$minor" ]] ||
+              { echo "security override ${BASH_REMATCH[1]} must stay on the upstream Go minor $minor"; exit 1; }
+            ((BASH_REMATCH[2] > patch)) ||
+              { echo "security override $GO_TOOLCHAIN_SECURITY_OVERRIDE is not a later patch than $GO_TOOLCHAIN"; exit 1; }
+            effective=$GO_TOOLCHAIN_SECURITY_OVERRIDE
+            echo "recorded security override: building with go$effective, not the tag's go$GO_TOOLCHAIN"
+          fi
           # GOTOOLCHAIN makes every `go` command use exactly that release, no
           # matter what setup-go resolved, so the build is toolchain-exact.
-          echo "GOTOOLCHAIN=go$GO_TOOLCHAIN" >>"$GITHUB_ENV"
-          GOTOOLCHAIN="go$GO_TOOLCHAIN" go version
+          echo "GOTOOLCHAIN=go$effective" >>"$GITHUB_ENV"
+          GOTOOLCHAIN="go$effective" go version

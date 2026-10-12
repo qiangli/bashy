@@ -45,6 +45,8 @@ MATRIX="gitea-linux-amd64=ubuntu-24.04 gitea-linux-arm64=ubuntu-24.04-arm gitea-
 GO_CGO="gitea-linux-amd64=0 gitea-linux-arm64=0 gitea-darwin-arm64=0 gitea-darwin-amd64=0"
 APT_PACKAGES="strace util-linux iproute2 curl"
 PRE_BUILD_GATES=""
+# Shared helper scripts copied from builds/_shared into bashy-build/.
+SHARED_FILES="egress-verdict.sh"
 # Argument of bashy-build/no-egress-test.sh (a GitHub expression is allowed).
 EGRESS_TARGET='out/${{ matrix.asset }}'
 # Release: SRC=ASSET copies from bashy-build/, the assets that must exist,

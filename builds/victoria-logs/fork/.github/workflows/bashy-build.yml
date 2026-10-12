@@ -4,7 +4,7 @@
 # shared skeleton builds/_shared/bashy-build.yml — edit those, not this file.
 # Installed on the `bashy-build` branch of github.com/qiangli/victoria-logs from
 # bashy's builds/victoria-logs/fork/. Triggered ONLY by pushing a tag
-# bashy-<upstream tag>-N (e.g. bashy-v1.51.0-1) at that branch.
+# bashy-<upstream tag>-N (e.g. bashy-v1.53.0-1) at that branch.
 #
 # Pipeline (fail-closed): pin (provenance) -> build matrix (tool gates, build,
 # no-egress gate) + audit/SBOM -> release (cosign keyless sign-blob --bundle
@@ -130,10 +130,33 @@ jobs:
           [[ -n $want ]] || { echo "src/go.mod declares no go/toolchain version"; exit 1; }
           [[ $want == "$GO_TOOLCHAIN" ]] ||
             { echo "PIN GO_TOOLCHAIN $GO_TOOLCHAIN != upstream go.mod $want"; exit 1; }
+          # GO_TOOLCHAIN_SECURITY_OVERRIDE: the ONE sanctioned reason to build
+          # on something other than the tag's own toolchain — the tag names a
+          # patch release that predates a Go stdlib security fix, and no
+          # upstream tag carrying it exists yet. It must stay on the upstream
+          # minor (so it is a patch bump, never a language-version change) and
+          # must be a strictly later patch. It is shipped in PIN, so the
+          # release asset records exactly what built the binary; the review
+          # decision is justified in the comment above the key in tool.env.
+          # Reachable vulnerabilities are never waived (see bashy-build/vuln-ignore).
+          effective=$GO_TOOLCHAIN
+          if [[ -n ${GO_TOOLCHAIN_SECURITY_OVERRIDE:-} ]]; then
+            [[ $GO_TOOLCHAIN =~ ^([0-9]+\.[0-9]+)(\.([0-9]+))?$ ]] ||
+              { echo "PIN GO_TOOLCHAIN $GO_TOOLCHAIN is not MAJOR.MINOR[.PATCH]"; exit 1; }
+            minor=${BASH_REMATCH[1]} patch=${BASH_REMATCH[3]:-0}
+            [[ $GO_TOOLCHAIN_SECURITY_OVERRIDE =~ ^([0-9]+\.[0-9]+)\.([0-9]+)$ ]] ||
+              { echo "PIN GO_TOOLCHAIN_SECURITY_OVERRIDE $GO_TOOLCHAIN_SECURITY_OVERRIDE is not MAJOR.MINOR.PATCH"; exit 1; }
+            [[ ${BASH_REMATCH[1]} == "$minor" ]] ||
+              { echo "security override ${BASH_REMATCH[1]} must stay on the upstream Go minor $minor"; exit 1; }
+            ((BASH_REMATCH[2] > patch)) ||
+              { echo "security override $GO_TOOLCHAIN_SECURITY_OVERRIDE is not a later patch than $GO_TOOLCHAIN"; exit 1; }
+            effective=$GO_TOOLCHAIN_SECURITY_OVERRIDE
+            echo "recorded security override: building with go$effective, not the tag's go$GO_TOOLCHAIN"
+          fi
           # GOTOOLCHAIN makes every `go` command use exactly that release, no
           # matter what setup-go resolved, so the build is toolchain-exact.
-          echo "GOTOOLCHAIN=go$GO_TOOLCHAIN" >>"$GITHUB_ENV"
-          GOTOOLCHAIN="go$GO_TOOLCHAIN" go version
+          echo "GOTOOLCHAIN=go$effective" >>"$GITHUB_ENV"
+          GOTOOLCHAIN="go$effective" go version
       - name: pre-build gates (PRE_BUILD_GATES)
         run: |
           set -euo pipefail
@@ -217,12 +240,55 @@ jobs:
           go-version-file: src/go.mod
           check-latest: false
           cache: false
+      - name: pin the exact toolchain (PIN GO_TOOLCHAIN == upstream go.mod)
+        run: |
+          set -euo pipefail
+          . fork/bashy-build/PIN
+          # The declaration must name what the upstream release builds with:
+          # go.mod's `toolchain` line when it has one, else its `go` line. A
+          # pin bump that forgets GO_TOOLCHAIN fails here instead of silently
+          # building on whatever the runner image happens to ship.
+          want=$(sed -n 's/^toolchain go\([0-9][0-9.]*\)[[:space:]]*$/\1/p' src/go.mod | head -n1)
+          if [[ -z $want ]]; then
+            want=$(sed -n 's/^go \([0-9][0-9.]*\)[[:space:]]*$/\1/p' src/go.mod | head -n1)
+          fi
+          [[ -n $want ]] || { echo "src/go.mod declares no go/toolchain version"; exit 1; }
+          [[ $want == "$GO_TOOLCHAIN" ]] ||
+            { echo "PIN GO_TOOLCHAIN $GO_TOOLCHAIN != upstream go.mod $want"; exit 1; }
+          # GO_TOOLCHAIN_SECURITY_OVERRIDE: the ONE sanctioned reason to build
+          # on something other than the tag's own toolchain — the tag names a
+          # patch release that predates a Go stdlib security fix, and no
+          # upstream tag carrying it exists yet. It must stay on the upstream
+          # minor (so it is a patch bump, never a language-version change) and
+          # must be a strictly later patch. It is shipped in PIN, so the
+          # release asset records exactly what built the binary; the review
+          # decision is justified in the comment above the key in tool.env.
+          # Reachable vulnerabilities are never waived (see bashy-build/vuln-ignore).
+          effective=$GO_TOOLCHAIN
+          if [[ -n ${GO_TOOLCHAIN_SECURITY_OVERRIDE:-} ]]; then
+            [[ $GO_TOOLCHAIN =~ ^([0-9]+\.[0-9]+)(\.([0-9]+))?$ ]] ||
+              { echo "PIN GO_TOOLCHAIN $GO_TOOLCHAIN is not MAJOR.MINOR[.PATCH]"; exit 1; }
+            minor=${BASH_REMATCH[1]} patch=${BASH_REMATCH[3]:-0}
+            [[ $GO_TOOLCHAIN_SECURITY_OVERRIDE =~ ^([0-9]+\.[0-9]+)\.([0-9]+)$ ]] ||
+              { echo "PIN GO_TOOLCHAIN_SECURITY_OVERRIDE $GO_TOOLCHAIN_SECURITY_OVERRIDE is not MAJOR.MINOR.PATCH"; exit 1; }
+            [[ ${BASH_REMATCH[1]} == "$minor" ]] ||
+              { echo "security override ${BASH_REMATCH[1]} must stay on the upstream Go minor $minor"; exit 1; }
+            ((BASH_REMATCH[2] > patch)) ||
+              { echo "security override $GO_TOOLCHAIN_SECURITY_OVERRIDE is not a later patch than $GO_TOOLCHAIN"; exit 1; }
+            effective=$GO_TOOLCHAIN_SECURITY_OVERRIDE
+            echo "recorded security override: building with go$effective, not the tag's go$GO_TOOLCHAIN"
+          fi
+          # GOTOOLCHAIN makes every `go` command use exactly that release, no
+          # matter what setup-go resolved, so the build is toolchain-exact.
+          echo "GOTOOLCHAIN=go$effective" >>"$GITHUB_ENV"
+          GOTOOLCHAIN="go$effective" go version
       - name: pinned govulncheck + cyclonedx-gomod
         run: |
           set -euo pipefail
           . fork/bashy-build/PIN
-          echo "GOTOOLCHAIN=go$GO_TOOLCHAIN" >>"$GITHUB_ENV"
-          export GOTOOLCHAIN=go$GO_TOOLCHAIN
+          # GOTOOLCHAIN comes from the step above, so govulncheck is BUILT with
+          # the same release that builds the artifact: its type checker has to
+          # understand the sources, and the stdlib it judges must be that one.
           go version
           go install "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION"
           go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@$GO_SBOM_VERSION"
