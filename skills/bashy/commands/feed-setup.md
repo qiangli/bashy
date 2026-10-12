@@ -227,26 +227,15 @@ Tell the human, verbatim:
 > updates in and note the room id (Room settings → Advanced, starts `!`).
 > Do not paste the token to me.
 
-No homeserver account? On a Linux host, the next section sets up an
-experimental self-hosted Matrix chat server and its bot account instead.
+No homeserver account? On a Linux or macOS host, the next section sets up a
+self-hosted Matrix chat server (bashy's signed build) and its bot account instead.
 
 Collect `MATRIX_ACCESS_TOKEN` with 3b; the room id is not a secret and the
 human may tell you it directly. Restart the gateway.
 
 Channel args: `--channel matrix --target room:ROOM_ID`.
 
-### Self-hosted Matrix chat (optional, experimental, Linux only)
-
-> **BLOCKED in this release.** bashy never starts a server built by a third
-> party. The tuwunel binary available today is upstream's release asset, so
-> this step refuses to install or start it until the bashy-CI-built,
-> Sigstore-signed homeserver build exists. Tell the human, verbatim:
->
-> > A self-hosted Matrix chat server is not available yet: bashy only runs
-> > server builds it has built and signed itself, and that build is still
-> > in progress. Use an existing Matrix chat account in the meantime.
->
-> Do not run S1–S4 below.
+### Self-hosted Matrix chat (optional; Linux and macOS)
 
 Run this only when the human asks for Matrix chat **and** has no homeserver
 account to use. It installs a private homeserver (tuwunel, Apache-2.0) on this
@@ -254,32 +243,31 @@ host: loopback-only, registration and federation off. Then the Matrix chat
 section above goes ahead with a bot account it creates. Say "Matrix chat" to the
 human throughout.
 
-**Experimental, Linux hosts only in this release** (amd64/arm64). The server
-binary is upstream's release asset, verified by sha256 only; a bashy-built,
-signed build is planned. Before installing, tell the human, verbatim:
+bashy installs **its own build**: tuwunel built by bashy CI from the pinned
+official upstream release, keylessly Sigstore-signed. `bashy tool install
+tuwunel` verifies the signature (exact build identity and issuer) and the
+sha256 before anything is installed, and refuses otherwise. Linux and macOS
+(amd64/arm64); there is no Windows build, so on Windows tell the human,
+verbatim:
 
-> The self-hosted Matrix chat server is experimental in this release: bashy
-> installs upstream's published binary and checks its hash, but does not yet
-> build or sign it. Continue only if that is acceptable to you.
+> A self-hosted Matrix chat server is not available on Windows. Use an
+> existing Matrix chat account (for example on matrix.org), or run this setup
+> on a Linux or macOS machine.
 
-On macOS or Windows, tell the human, verbatim:
-
-> A self-hosted Matrix chat server is only available on Linux hosts in this
-> release. Use an existing Matrix chat account (for example on matrix.org),
-> or run this setup on a Linux machine.
-
-Then fall back to the Matrix chat section above. Every step below is safe to
-re-run.
+**Delivery still needs the gateway.** S1–S4 set up the server and its accounts
+today. Posting feed updates into the room goes through the OpenClaw gateway,
+which stays blocked until its bashy-signed build ships (section 3); tell the
+human that delivery into Matrix chat turns on then. Every step below is safe
+to re-run.
 
 **S1. Install and declare.** Ask the human for a server name (it becomes part of
 every user id, `@owner:NAME`, and **cannot change after the first start**).
 `localhost` is fine for a LAN-only trial. Ask before installing.
 
 ```bsh
-[ "$(uname -s)" = Linux ] || echo "not Linux: stop, use an existing Matrix chat account"
+case "$(uname -s)" in Linux|Darwin) ;; *) echo "no signed build for this OS: use an existing Matrix chat account" >&2; false ;; esac
 NAME=localhost                                  # the server name the human chose
-echo "BLOCKED: no bashy-signed tuwunel build yet; do not install or start it" >&2; false
-# bashy tool install tuwunel                    # prints "installed tuwunel -> PATH"
+bashy tool install tuwunel                      # verifies Sigstore + sha256; prints "installed tuwunel -> PATH"
 bashy service show matrix-chat >/dev/null 2>&1 || bashy service add --optional matrix-chat
 bashy service set matrix-chat --set settings.binary=PATH --set settings.server_name="$NAME"
 bashy service show matrix-chat --yaml           # note settings.data_dir (default ${BASHY_HOME:-$HOME/.bashy}/matrix-chat)
@@ -327,8 +315,7 @@ Never paste the owner password into chat. Tell the human, verbatim:
 **S3. Start and wait.**
 
 ```bsh
-echo "BLOCKED: matrix-chat may only start from a bashy-signed build" >&2; false
-# bashy service enable matrix-chat              # or: bashy service start matrix-chat
+bashy service enable matrix-chat                # or: bashy service start matrix-chat (refused unless the build is verified)
 for i in $(seq 30); do
   curl -sf http://127.0.0.1:6167/_matrix/client/versions >/dev/null && break
   sleep 1
