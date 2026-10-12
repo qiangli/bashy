@@ -77,7 +77,7 @@ basic-auth password (with user "oauth2", which GitHub accepts).`,
 		gitInitCmd(),
 		gitAddCmd(),
 		gitCommitCmd(),
-		gitStatusCmd(),
+		gitStatusCmd(&external),
 		gitLogCmd(&external),
 		gitPushCmd(),
 		gitPullCmd(),
@@ -95,7 +95,7 @@ basic-auth password (with user "oauth2", which GitHub accepts).`,
 		gitTagCmd(),
 		gitResetCmd(),
 		gitRmCmd(),
-		gitLsFilesCmd(),
+		gitLsFilesCmd(&external),
 		gitBlameCmd(),
 		gitGrepCmd(),
 	)
@@ -168,6 +168,9 @@ func splitGitExternal(args []string) (external bool, rest []string, err error) {
 type gitExitError struct {
 	code int
 	msg  string
+	// silent: git already wrote its own stderr (or, like diff --quiet,
+	// deliberately nothing); the dispatcher sets only the exit status.
+	silent bool
 }
 
 func (e *gitExitError) Error() string { return e.msg }
@@ -183,7 +186,7 @@ func renderGitResult(cmd *cobra.Command, res *outgit.ExecResult) error {
 		fmt.Fprint(cmd.ErrOrStderr(), res.Stderr)
 	}
 	if res.ExitCode != 0 {
-		return &gitExitError{code: res.ExitCode, msg: fmt.Sprintf("git: exit status %d", res.ExitCode)}
+		return &gitExitError{code: res.ExitCode, msg: fmt.Sprintf("git: exit status %d", res.ExitCode), silent: true}
 	}
 	return nil
 }
@@ -371,23 +374,33 @@ func gitCommitCmd() *cobra.Command {
 	return cmd
 }
 
-func gitStatusCmd() *cobra.Command {
-	var short, porcelain bool
+// gitStatusCmd: any flagged form (--short, --porcelain, -u…, -b, …) is
+// git's machine contract and goes to the engine verbatim — byte-identical
+// to host git, or a loud decline (--external hands it to host git). Only
+// the bare form renders bashy's own human summary.
+func gitStatusCmd(external *bool) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "status [path]",
-		Short:   "Show working tree status",
-		Args:    cobra.MaximumNArgs(1),
-		Example: `  bashy git status`,
+		Use:   "status [path]",
+		Short: "Show working tree status",
+		Example: `  bashy git status
+  bashy git status --porcelain     # host-git identical (engine-native)`,
+		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if short || porcelain {
-				// Porcelain short form is served by the engine
-				// (nativeStatus --short); other status flags stay
-				// loud cobra errors, never silent approximations.
-				form := "--short"
-				if porcelain {
-					form = "--porcelain" // differs for submodule content (" M", not " m")
+			selected, rest, err := splitGitExternal(args)
+			if err != nil {
+				return err
+			}
+			args = rest
+			if selected {
+				*external = true
+			}
+			for _, arg := range args {
+				if arg == "--help" || arg == "-h" {
+					return cmd.Help()
 				}
-				res, err := outgit.Exec(cmd.Context(), ".", []string{"status", form})
+			}
+			if len(args) > 1 || (len(args) == 1 && strings.HasPrefix(args[0], "-")) {
+				res, err := outgit.ExecOrExternal(cmd.Context(), ".", append([]string{"status"}, args...), *external)
 				if err != nil {
 					return err
 				}
@@ -436,8 +449,6 @@ func gitStatusCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVarP(&short, "short", "s", false, "Porcelain short format (engine-native)")
-	cmd.Flags().BoolVar(&porcelain, "porcelain", false, "Alias for --short")
 	return cmd
 }
 
@@ -975,11 +986,13 @@ func dispatchGit(args []string) {
 			dispatchExit(gitAwdRun(gitAwdArgs(bashySelfPath(), dirs, stripped)))
 		}
 		if gerr != nil {
-			fmt.Fprintln(os.Stderr, gerr)
 			code := 128
 			var gexit *gitExitError
 			if errors.As(gerr, &gexit) {
 				code = gexit.code
+			}
+			if gexit == nil || !gexit.silent {
+				fmt.Fprintln(os.Stderr, gerr)
 			}
 			dispatchExit(code)
 		}
@@ -998,7 +1011,9 @@ func dispatchGit(args []string) {
 		if errors.As(err, &gexit) {
 			code = gexit.code
 		}
-		fmt.Fprintln(os.Stderr, err)
+		if gexit == nil || !gexit.silent {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		dispatchExit(code)
 	}
 	dispatchExit(0)

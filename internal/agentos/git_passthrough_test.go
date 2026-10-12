@@ -229,3 +229,77 @@ func TestGitPassthroughPreamblePipeline(t *testing.T) {
 		t.Fatalf("expected empty stderr, got: %q", stderr.String())
 	}
 }
+
+// Decision reads through the front door: flagged status / ls-files forms
+// reach the engine verbatim and match host git byte for byte, and
+// diff --quiet signals only through its exit status (no stderr line).
+func TestGitDecisionReadsMatchHostGit(t *testing.T) {
+	gitBin := gitscm.Path()
+	repo := t.TempDir()
+	host := func(args ...string) string {
+		t.Helper()
+		c := exec.Command(gitBin, args...)
+		c.Dir = repo
+		c.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := c.Output()
+		if err != nil {
+			if _, ok := err.(*exec.ExitError); !ok {
+				t.Skipf("host git unavailable: %v", err)
+			}
+		}
+		return string(out)
+	}
+	host("init", "-q")
+	for name, body := range map[string]string{"a.txt": "a\n", "AGENTS.md": "# agent\n"} {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	host("add", "-A")
+	host("commit", "-q", "-m", "init")
+	if err := os.WriteFile(filepath.Join(repo, "a.txt"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".git", "info", "exclude"), []byte("secret.json\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"secret.json", "new/one.txt"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(repo, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repo, name), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	front := func(args ...string) (string, string, int) {
+		var stdout, stderr bytes.Buffer
+		cmd := exec.Command(os.Args[0], "-test.run=^TestGitPassthroughHelper$")
+		cmd.Dir = repo
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		cmd.Env = append(os.Environ(), gitPassthroughHelper+"=1", "BASHY_TEST_GIT_VERB=git",
+			"BASHY_TEST_GIT_ARGS="+strings.Join(args, "\x1f"))
+		code := 0
+		if err := cmd.Run(); err != nil {
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) {
+				t.Fatalf("%v: %v", args, err)
+			}
+			code = exitErr.ExitCode()
+		}
+		return stdout.String(), stderr.String(), code
+	}
+	for _, args := range [][]string{
+		{"status", "--porcelain"},
+		{"status", "--short", "-uall"},
+		{"ls-files", "-o", "--exclude-standard"},
+		{"ls-files", "-m"},
+	} {
+		got, stderr, code := front(args...)
+		if want := host(args...); got != want || code != 0 {
+			t.Errorf("bashy git %v = %q (exit %d, stderr %q); host git = %q", args, got, code, stderr, want)
+		}
+	}
+	if out, stderr, code := front("diff", "--quiet"); code != 1 || out != "" || stderr != "" {
+		t.Errorf("bashy git diff --quiet = exit %d, stdout %q, stderr %q; want exit 1 and no output", code, out, stderr)
+	}
+}

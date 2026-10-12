@@ -281,42 +281,36 @@ func gitRmCmd() *cobra.Command {
 	return cmd
 }
 
-func gitLsFilesCmd() *cobra.Command {
-	var (
-		modified bool
-		others   bool
-	)
-	cmd := &cobra.Command{
+// gitLsFilesCmd forwards its argv to the engine verbatim: ls-files output
+// feeds decisions, so it is byte-identical to host git or a loud decline.
+func gitLsFilesCmd(external *bool) *cobra.Command {
+	return &cobra.Command{
 		Use:   "ls-files",
-		Short: "List tracked files (or modified/untracked with flags)",
+		Short: "List index files (-m modified, -d deleted, -o --exclude-standard untracked, -s stage)",
 		Example: `  bashy git ls-files
-  bashy git ls-files -m     # modified
-  bashy git ls-files -o     # untracked`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			mode := outgit.LsFilesCached
-			if modified && others {
-				return fmt.Errorf("ls-files: -m and -o are mutually exclusive")
-			}
-			if modified {
-				mode = outgit.LsFilesModified
-			}
-			if others {
-				mode = outgit.LsFilesOthers
-			}
-			paths, err := outgit.LsFiles("", mode)
+  bashy git ls-files -m
+  bashy git ls-files -o --exclude-standard`,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			selected, rest, err := splitGitExternal(args)
 			if err != nil {
 				return err
 			}
-			out := cmd.OutOrStdout()
-			for _, p := range paths {
-				fmt.Fprintln(out, p)
+			if selected {
+				*external = true
 			}
-			return nil
+			for _, arg := range rest {
+				if arg == "--help" || arg == "-h" {
+					return cmd.Help()
+				}
+			}
+			res, err := outgit.ExecOrExternal(cmd.Context(), ".", append([]string{"ls-files"}, rest...), *external)
+			if err != nil {
+				return err
+			}
+			return renderGitResult(cmd, res)
 		},
 	}
-	cmd.Flags().BoolVarP(&modified, "modified", "m", false, "List files with worktree modifications")
-	cmd.Flags().BoolVarP(&others, "others", "o", false, "List untracked files")
-	return cmd
 }
 
 func gitBlameCmd() *cobra.Command {
