@@ -222,9 +222,11 @@ jobs:
           SBOM="out/openclaw-gateway-sbom.cyclonedx.json"
           test -f "$TARBALL" || { echo "missing $TARBALL" >&2; exit 1; }
           test -f "$SBOM" || { echo "missing $SBOM (SBOM step must run before this patch)" >&2; exit 1; }
-          META="$(npm view http-cache-semantics@4.3.0 dist.tarball dist.integrity --json)"
-          REPLACEMENT_URL="$(node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s)['dist.tarball']))" <<<"$META")"
-          REPLACEMENT_INTEGRITY="$(node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s)['dist.integrity']))" <<<"$META")"
+          # Pinned in the repo, never taken from the registry at build time
+          # (the registry must not be its own trust anchor). Integrity matches
+          # the upstream pnpm lockfile's resolution for http-cache-semantics@4.3.0.
+          REPLACEMENT_URL="https://registry.npmjs.org/http-cache-semantics/-/http-cache-semantics-4.3.0.tgz"
+          REPLACEMENT_INTEGRITY="sha512-M5t5LlJpS1UHMjvwRQVdFHvPISGeLAxNcrWuJkeGh0KxsqCHZ1O3NXZU/8x7cD0BDcGW8kapxMKTvwlqrNkHkA=="
           curl -sSL --fail "$REPLACEMENT_URL" -o "${RUNNER_TEMP}/http-cache-semantics-4.3.0.tgz"
           node fork/bashy-build/scripts/patch-bundled.mjs \
             --tarball "$TARBALL" \
