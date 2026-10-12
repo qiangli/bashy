@@ -1,0 +1,10 @@
+# govulncheck waivers for the bashy zot verified build.
+#
+# One OSV id per line (GO-YYYY-NNNN), followed by a justification on the same
+# line or in the comment above it. The audit job fails on any REACHABLE
+# vulnerability — one whose first trace frame names a called function — that is
+# not listed here. An empty list (this file) means nothing is waived.
+#
+# A waiver is a review decision, not a convenience: record who accepted it,
+# why the reachable path cannot be exploited in bashy's configuration, and what
+# would retire it (an upstream pin bump, almost always).

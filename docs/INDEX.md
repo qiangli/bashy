@@ -188,5 +188,6 @@ Weave-round verification + retro reports (historical, not load-bearing):
 
 - [Sprint 413 sprint watch / inbox-ack diagnostics](plan-sprint-413-sprint-watch-inbox-ack-diagnostics.md) — why `sprint --watch` and `inbox-ack` exited 1 with no stderr, the bashy half of the sprint tree's self-reporting contract, explained watch exits, and the yoke stale-heartbeat render patch reported for integration.
 - [Shared fork-build-sign pipeline](plan-shared-fork-build-pipeline.md) — `builds/render.sh` renders every verified-build fork from one `tool.env` + shared skeleton; `builds/check.sh` is the regenerate-and-diff gate.
+- [The `go` build kind and the Go service declarations](plan-builds-go-kind-services.md) — `builds/_shared/kinds/go` (pinned setup-go from the upstream go.mod, upstream CGO per leg, reproducible ldflags, reachability-gated govulncheck) and the victoria-logs/metrics/traces, gitea, kopia and zot declarations; why act_runner, seaweedfs and the Windows legs are blocked.
 
 - `public-claims-evidence.md` — current public-claim sources, platform boundaries, yash measurement units, registry counting rule, and RC recheck commands (Sprint 379 B6).

@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+# no-egress-test.sh BINARY
+#
+# Release gate, run BEFORE signing: start the built victoria-logs bound to
+# 127.0.0.1 with the shipped no-tracking environment (bashy-build/
+# no-tracking.env: proxies cleared) and otel.env (OTel SDK disabled, exporter
+# pinned at bashy's local collector), exercise its ingest and query surfaces
+# over loopback, let it idle, and FAIL on any outbound connection attempt
+# other than loopback to its own port or to 127.0.0.1:31415.
+#
+# victoria-logs has no update checker and no usage reporting; the egress a
+# misconfiguration COULD cause is -pushmetrics.url (upstream default: empty,
+# and bashy never sets it). This gate is what proves it stayed empty.
+#
+# Linux (authoritative): the server runs in a fresh network namespace
+# (only `lo`) under `strace -f -e trace=connect,sendto,sendmsg,sendmmsg`,
+# so every attempt — including ones the namespace makes fail
+# (ENETUNREACH) and DNS — is recorded and judged. Needs root via sudo
+# (unshare --net), strace, setpriv, ip, curl.
+#
+# macOS: the server runs under sandbox-exec with all network-outbound
+# denied except localhost:PORT and localhost:31415 (and the mDNSResponder
+# socket denied, so a DNS lookup is an attempt too); any Sandbox deny for
+# the process in the unified log is a failure.
+#
+# Env: EGRESS_PORT (default 19428), EGRESS_OBSERVE_SECONDS (default 30),
+#      EGRESS_READY_SECONDS (default 180).
+set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+bin=${1:?usage: no-egress-test.sh BINARY}
+bin=$(cd "$(dirname "$bin")" && pwd)/$(basename "$bin")
+port=${EGRESS_PORT:-19428}
+observe=${EGRESS_OBSERVE_SECONDS:-30}
+ready_max=${EGRESS_READY_SECONDS:-180}
+
+die() { echo "no-egress: FAIL: $*" >&2; exit 1; }
+[[ -x $bin ]] || die "$bin is not executable"
+
+command -v curl >/dev/null || die "curl is not on PATH (fail-closed)"
+
+work=$(mktemp -d "${TMPDIR:-/tmp}/victoria-logs-egress.XXXXXX")
+chmod 755 "$work"
+mkdir -p "$work/data" "$work/home"
+
+# The server's whole environment: no inherited proxies, tokens or endpoints.
+envfile=$work/server.env
+{
+	echo "HOME=$work/home"
+	echo "PATH=/usr/bin:/bin"
+	grep -E '^[A-Z_]+=' "$here/no-tracking.env"
+	grep -E '^[A-Z_]+=' "$here/otel.env"
+} >"$envfile"
+
+health=http://127.0.0.1:$port/health
+# bashy's local OTLP collector (yoke external/internal/serviceenv
+# LocalCollectorHostPort). Loopback to this port is the ONLY destination
+# besides the service's own port that the verdict below tolerates.
+otlp_port=31415
+
+cat >"$work/run.sh" <<RUN
+set -uo pipefail
+# victoria-logs is flag-configured (upstream app/vlstorage + lib/httpserver):
+# -httpListenAddr defaults to every interface, so it is pinned to loopback,
+# and -pushmetrics.url is deliberately NOT passed (empty = no remote write).
+exec '$bin' \\
+	--storageDataPath='$work/data' \\
+	--httpListenAddr=127.0.0.1:$port
+RUN
+chmod +x "$work/run.sh"
+
+probe() {
+	# Loopback traffic over the health, metrics, query and ingest surfaces;
+	# the answers do not matter, only that the server stays local.
+	local base=http://127.0.0.1:$port
+	curl -sS -o /dev/null "$base/health" || true
+	curl -sS -o /dev/null "$base/metrics" || true
+	curl -sS -o /dev/null --get --data-urlencode 'query=*' "$base/select/logsql/query" || true
+	curl -sS -o /dev/null -X POST -H 'Content-Type: application/stream+json' \
+		-d '{"_msg":"bashy no-egress probe","level":"info"}' \
+		"$base/insert/jsonline?_stream_fields=level" || true
+}
+
+wait_ready() { # PID
+	local i
+	for ((i = 0; i < ready_max; i++)); do
+		kill -0 "$1" 2>/dev/null || return 1
+		curl -fsS -o /dev/null "$health" && return 0
+		sleep 1
+	done
+	return 1
+}
+
+linux() {
+	local log=$work/strace.log inner=$work/inner.sh
+	local ruid rgid
+	ruid=$(id -u) rgid=$(id -g)
+	# Everything below runs inside the new network namespace.
+	cat >"$inner" <<INNER
+set -uo pipefail
+ip link set lo up
+$(declare -f probe wait_ready)
+port=$port ready_max=$ready_max health='$health'
+strace -f -qq -e trace=connect,sendto,sendmsg,sendmmsg -e signal=none -o '$log' \\
+	setpriv --reuid=$ruid --regid=$rgid --init-groups -- \\
+	env -i \$(cat '$envfile') bash '$work/run.sh' >'$work/server.log' 2>&1 &
+tracer=\$!
+if ! wait_ready \$tracer; then
+	echo "server did not become ready on $health" >&2
+	tail -n 60 '$work/server.log' >&2 || true
+	pkill -KILL -P \$tracer || true
+	exit 1
+fi
+probe
+sleep $observe
+probe
+pkill -TERM -P \$tracer || true
+wait \$tracer || true
+INNER
+	sudo unshare --net -- bash "$inner" || die "server run failed (see above)"
+	[[ -s $log ]] || die "no strace log recorded"
+
+	local bad=() line fam host p
+	while IFS= read -r line; do
+		case $line in
+		*sa_family=AF_INET6*)
+			fam=inet6
+			host=$(sed -n 's/.*inet_pton(AF_INET6, "\([^"]*\)".*/\1/p' <<<"$line")
+			p=$(sed -n 's/.*sin6_port=htons(\([0-9]*\)).*/\1/p' <<<"$line")
+			;;
+		*sa_family=AF_INET,*)
+			fam=inet
+			host=$(sed -n 's/.*sin_addr=inet_addr("\([^"]*\)").*/\1/p' <<<"$line")
+			p=$(sed -n 's/.*sin_port=htons(\([0-9]*\)).*/\1/p' <<<"$line")
+			;;
+		*sa_family=AF_UNIX*)
+			# Local IPC is fine, except a resolver socket: that is a lookup.
+			case $line in
+			*nscd* | *systemd/resolve* | *mDNSResponder*) bad+=("$line") ;;
+			esac
+			continue
+			;;
+		*) continue ;; # AF_UNSPEC (UDP disconnect), AF_NETLINK, no address
+		esac
+		case $host in
+		127.0.0.1 | ::1 | ::ffff:127.0.0.1)
+			[[ $p == "$port" || $p == "$otlp_port" ]] && continue
+			;;
+		esac
+		bad+=("$fam $host:$p :: $line")
+	done <"$log"
+
+	if ((${#bad[@]})); then
+		printf 'no-egress: outbound attempt: %s\n' "${bad[@]}" >&2
+		die "${#bad[@]} outbound connection attempt(s) other than loopback:{$port,$otlp_port}"
+	fi
+	echo "no-egress: linux: $(grep -c . "$log") traced socket syscalls, none leave loopback:{$port,$otlp_port} OK"
+}
+
+darwin() {
+	local profile=$work/no-egress.sb start pid
+	cat >"$profile" <<SB
+(version 1)
+(allow default)
+(deny network-outbound (remote ip "*:*"))
+(allow network-outbound (remote ip "localhost:$port"))
+(allow network-outbound (remote ip "localhost:$otlp_port"))
+(deny network-outbound (remote unix-socket (path-literal "/private/var/run/mDNSResponder")))
+SB
+	start=$(date '+%Y-%m-%d %H:%M:%S')
+	# shellcheck disable=SC2046
+	env -i $(cat "$envfile") sandbox-exec -f "$profile" bash "$work/run.sh" >"$work/server.log" 2>&1 &
+	pid=$!
+	if ! wait_ready "$pid"; then
+		tail -n 60 "$work/server.log" >&2 || true
+		kill -KILL "$pid" 2>/dev/null || true
+		die "server did not become ready on $health"
+	fi
+	probe
+	sleep "$observe"
+	probe
+	kill -TERM "$pid" 2>/dev/null || true
+	wait "$pid" || true
+	sleep 2 # let the unified log flush
+
+	local denies
+	denies=$(log show --style syslog --start "$start" \
+		--predicate 'sender == "Sandbox" AND eventMessage CONTAINS "network-outbound"' 2>/dev/null |
+		grep -E "victoria-logs\(|$(basename "$bin")\(" || true)
+	if [[ -n $denies ]]; then
+		echo "$denies" >&2
+		die "sandbox denied outbound network attempt(s)"
+	fi
+	echo "no-egress: darwin: no sandbox network-outbound denies for $(basename "$bin") OK"
+}
+
+case $(uname -s) in
+Linux) linux ;;
+Darwin) darwin ;;
+*) die "unsupported OS $(uname -s)" ;;
+esac
