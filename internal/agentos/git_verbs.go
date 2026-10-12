@@ -2,8 +2,6 @@ package agentos
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -44,47 +42,12 @@ func gitMergeCmd() *cobra.Command {
 	return cmd
 }
 
-func gitMergeBaseCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:     "merge-base <rev1> <rev2>",
-		Short:   "Find the best common ancestor of two revisions",
-		Args:    cobra.ExactArgs(2),
-		Example: `  bashy git merge-base main feature-x`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			bases, err := outgit.MergeBase("", args[0], args[1])
-			if err != nil {
-				return err
-			}
-			for _, b := range bases {
-				fmt.Fprintln(cmd.OutOrStdout(), b)
-			}
-			return nil
-		},
-	}
+func gitMergeBaseCmd(external *bool) *cobra.Command {
+	return gitEngineCmd("merge-base", "Print the best common ancestor of two commits (--is-ancestor tests ancestry)", "  bashy git merge-base main feature-x\n  bashy git merge-base --is-ancestor A B", external, nil)
 }
 
-func gitRevListCmd() *cobra.Command {
-	var count bool
-	cmd := &cobra.Command{
-		Use:   "rev-list --count <rev | rev1..rev2>",
-		Short: "Count commits in a range",
-		Args:  cobra.ExactArgs(1),
-		Example: `  bashy git rev-list --count HEAD
-  bashy git rev-list --count main..feature-x`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if !count {
-				return fmt.Errorf("rev-list: only --count is supported")
-			}
-			n, err := outgit.RevListCount("", args[0])
-			if err != nil {
-				return err
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), n)
-			return nil
-		},
-	}
-	cmd.Flags().BoolVar(&count, "count", false, "Print the number of commits instead of listing them")
-	return cmd
+func gitRevListCmd(external *bool) *cobra.Command {
+	return gitEngineCmd("rev-list", "List (or --count) commits reachable from a revision", "  bashy git rev-list --count HEAD\n  bashy git rev-list main..feature-x", external, nil)
 }
 
 func gitConfigCmd() *cobra.Command {
@@ -313,83 +276,10 @@ func gitLsFilesCmd(external *bool) *cobra.Command {
 	}
 }
 
-func gitBlameCmd() *cobra.Command {
-	var lineRange string
-	cmd := &cobra.Command{
-		Use:   "blame <file>",
-		Short: "Show what commit and author last modified each line",
-		Args:  cobra.ExactArgs(1),
-		Example: `  bashy git blame main.go
-  bashy git blame -L 10,20 main.go`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			start, end := 0, 0
-			if lineRange != "" {
-				parts := strings.SplitN(lineRange, ",", 2)
-				if len(parts) != 2 {
-					return fmt.Errorf("blame: -L wants start,end")
-				}
-				var err error
-				if start, err = strconv.Atoi(parts[0]); err != nil {
-					return fmt.Errorf("blame: bad -L start %q", parts[0])
-				}
-				if end, err = strconv.Atoi(parts[1]); err != nil {
-					return fmt.Errorf("blame: bad -L end %q", parts[1])
-				}
-			}
-			lines, err := outgit.Blame("", args[0], start, end)
-			if err != nil {
-				return err
-			}
-			out := cmd.OutOrStdout()
-			for _, l := range lines {
-				fmt.Fprintf(out, "%s (%s %s %4d) %s\n", l.Hash, l.Author, l.Date, l.LineNo, l.Text)
-			}
-			return nil
-		},
-	}
-	cmd.Flags().StringVarP(&lineRange, "lines", "L", "", "Annotate only lines start,end")
-	return cmd
+func gitBlameCmd(external *bool) *cobra.Command {
+	return gitEngineCmd("blame", "Annotate file lines with the commit that last changed them", "  bashy git blame README.md", external, nil)
 }
 
-func gitGrepCmd() *cobra.Command {
-	var (
-		ignoreCase bool
-		filesOnly  bool
-	)
-	cmd := &cobra.Command{
-		Use:   "grep <pattern> [path...]",
-		Short: "Search committed content (HEAD tree) with a regexp",
-		Args:  cobra.MinimumNArgs(1),
-		Example: `  bashy git grep "func main"
-  bashy git grep -i todo internal/`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			matches, err := outgit.Grep(outgit.GrepOptions{
-				Pattern:    args[0],
-				IgnoreCase: ignoreCase,
-				FilesOnly:  filesOnly,
-				Paths:      args[1:],
-			})
-			if err != nil {
-				return err
-			}
-			if len(matches) == 0 {
-				// Match git grep: no output, exit 1.
-				cmd.SilenceUsage = true
-				cmd.SilenceErrors = true
-				return fmt.Errorf("no matches")
-			}
-			out := cmd.OutOrStdout()
-			for _, m := range matches {
-				if filesOnly {
-					fmt.Fprintln(out, m.File)
-					continue
-				}
-				fmt.Fprintf(out, "%s:%d:%s\n", m.File, m.LineNo, m.Content)
-			}
-			return nil
-		},
-	}
-	cmd.Flags().BoolVarP(&ignoreCase, "ignore-case", "i", false, "Case-insensitive matching")
-	cmd.Flags().BoolVarP(&filesOnly, "files-with-matches", "l", false, "Print only the names of matching files")
-	return cmd
+func gitGrepCmd(external *bool) *cobra.Command {
+	return gitEngineCmd("grep", "Search tracked files for a pattern", "  bashy git grep -n TODO\n  bashy git grep -l needle", external, nil)
 }

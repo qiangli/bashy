@@ -265,15 +265,16 @@ func TestGitParityVerbsWiring(t *testing.T) {
 		t.Errorf("ls-files: %v\n%s", err, out)
 	}
 
-	// blame with -L
-	out, err = run(t, "blame", "-L", "2,2", "a.txt")
-	if err != nil || !strings.Contains(out, "line2") {
-		t.Errorf("blame: %v\n%s", err, out)
+	// blame: host git's format is not reproduced natively, so it fails
+	// loudly and names --external rather than print a lookalike.
+	if _, err = run(t, "blame", "-L", "2,2", "a.txt"); err == nil || !strings.Contains(err.Error(), "--external=true") {
+		t.Errorf("blame: want a decline naming --external=true, got %v", err)
 	}
 
-	// grep hit and miss (miss exits non-zero, like git grep)
-	out, err = run(t, "grep", "line2")
-	if err != nil || !strings.Contains(out, "a.txt:2:") {
+	// grep hit and miss (miss exits non-zero, like git grep); line
+	// numbers only with -n, as in host git
+	out, err = run(t, "grep", "-n", "line2")
+	if err != nil || !strings.Contains(out, "a.txt:2:line2") {
 		t.Errorf("grep: %v\n%s", err, out)
 	}
 	if _, err = run(t, "grep", "no-such-string-anywhere"); err == nil {

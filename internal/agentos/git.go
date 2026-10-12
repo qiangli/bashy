@@ -82,22 +82,22 @@ basic-auth password (with user "oauth2", which GitHub accepts).`,
 		gitPushCmd(),
 		gitPullCmd(),
 		gitFetchCmd(),
-		gitBranchCmd(),
+		gitBranchCmd(&external),
 		gitCheckoutCmd(),
 		gitDiffCmd(&external),
-		gitRemoteCmd(),
-		gitShowCmd(),
-		gitRevParseCmd(),
+		gitRemoteCmd(&external),
+		gitShowCmd(&external),
+		gitRevParseCmd(&external),
 		gitMergeCmd(),
-		gitMergeBaseCmd(),
-		gitRevListCmd(),
+		gitMergeBaseCmd(&external),
+		gitRevListCmd(&external),
 		gitConfigCmd(),
 		gitTagCmd(),
 		gitResetCmd(),
 		gitRmCmd(),
 		gitLsFilesCmd(&external),
-		gitBlameCmd(),
-		gitGrepCmd(),
+		gitBlameCmd(&external),
+		gitGrepCmd(&external),
 	)
 	// Runtime git errors (diverged pull, dirty merge, bad revision …)
 	// are conditions, not usage mistakes — don't dump help text after
@@ -479,6 +479,9 @@ func gitLogCmd(external *bool) *cobra.Command {
 				}
 			}
 			if !legacyGitLogArgs(args) {
+				// Every git-shaped form (including bare log, -n N and
+				// pathspecs) is the engine's: host-git identical or a
+				// loud decline.
 				res, err := outgit.ExecOrExternal(cmd.Context(), ".", append([]string{"log"}, args...), *external)
 				if err != nil {
 					return err
@@ -646,45 +649,10 @@ func gitFetchCmd() *cobra.Command {
 	return cmd
 }
 
-func gitBranchCmd() *cobra.Command {
-	var (
-		del   bool
-		force bool
-	)
-	cmd := &cobra.Command{
-		Use:   "branch [name]",
-		Short: "List, create, or delete branches",
-		Args:  cobra.MaximumNArgs(1),
-		Example: `  bashy git branch                     # list, marks current with *
-  bashy git branch feature-x          # create
-  bashy git branch -d old-branch      # delete`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			name := ""
-			if len(args) > 0 {
-				name = args[0]
-			}
-			result, branches, err := outgit.Branch(outgit.BranchOptions{
-				Name:   name,
-				Delete: del,
-				Force:  force,
-			})
-			if err != nil {
-				return err
-			}
-			out := cmd.OutOrStdout()
-			if branches != nil {
-				for _, b := range branches {
-					fmt.Fprintln(out, b)
-				}
-				return nil
-			}
-			fmt.Fprintln(out, result.Message)
-			return nil
-		},
-	}
-	cmd.Flags().BoolVarP(&del, "delete", "d", false, "Delete the named branch")
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "Force operation (with --delete)")
-	return cmd
+func gitBranchCmd(external *bool) *cobra.Command {
+	return gitEngineCmd("branch", "List, create, or delete branches",
+		"  bashy git branch                     # list, marks current with *\n  bashy git branch feature-x          # create\n  bashy git branch -d old-branch      # delete",
+		external, nil)
 }
 
 func gitCheckoutCmd() *cobra.Command {
@@ -790,157 +758,48 @@ func gitDiffCmd(external *bool) *cobra.Command {
 	return cmd
 }
 
-func gitRemoteCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:     "remote",
-		Short:   "List configured remotes",
-		Example: `  bashy git remote`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			_, remotes, err := outgit.Remotes(".")
-			if err != nil {
-				return err
-			}
-			out := cmd.OutOrStdout()
-			for _, r := range remotes {
-				for _, u := range r.URLs {
-					fmt.Fprintf(out, "%s\t%s\n", r.Name, u)
-				}
-			}
-			return nil
-		},
-	}
+func gitRemoteCmd(external *bool) *cobra.Command {
+	return gitEngineCmd("remote", "List configured remotes (-v with URLs)", "  bashy git remote -v", external, nil)
 }
 
-func gitShowCmd() *cobra.Command {
-	var noPatch bool
-	cmd := &cobra.Command{
-		Use:   "show [commit]",
-		Short: "Show a commit: metadata, message, and the patch it introduced",
-		Args:  cobra.MaximumNArgs(1),
-		Example: `  bashy git show
-  bashy git show HEAD~1
-  bashy git show --no-patch v1.2.3`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			commit := ""
-			if len(args) > 0 {
-				commit = args[0]
-			}
-			_, info, err := outgit.Show(outgit.ShowOptions{Commit: commit})
-			if err != nil {
-				// Host git exits 128 on every show runtime failure
-				// (bad object, no repo); carry it through the door.
-				return &gitExitError{code: 128, msg: err.Error()}
-			}
-			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "commit %s\n", info.Hash)
-			fmt.Fprintf(out, "Author: %s <%s>\n", info.Author, info.Email)
-			fmt.Fprintf(out, "Date:   %s\n\n", info.Date)
-			fmt.Fprintln(out, info.Message)
-			if !noPatch && info.Patch != "" {
-				fmt.Fprint(out, info.Patch)
-			}
-			return nil
-		},
-	}
-	cmd.Flags().BoolVarP(&noPatch, "no-patch", "s", false, "Suppress the patch output (metadata + message only)")
-	return cmd
+func gitShowCmd(external *bool) *cobra.Command {
+	return gitEngineCmd("show", "Show a commit: metadata, message, and the patch it introduced",
+		"  bashy git show\n  bashy git show HEAD~1", external, nil)
 }
 
-// gitRevParseCmd implements the subset of `git rev-parse` bashy's
-// build scripts need to stamp the binary with commit + dirty metadata
-// without shelling out to system git. Three forms:
-//
-//	bashy git rev-parse HEAD                  → full 40-char SHA
-//	bashy git rev-parse --short[=N] HEAD      → abbreviated SHA (default 7)
-//	bashy git rev-parse --is-dirty            → "true"/"false" + exit 0/1
-//
-// --is-dirty is a bashy convenience, not real git: it returns the
-// same boolean the Makefile derived from `git diff --quiet` so the new
-// scripts can compute the ldDirty stamp pure-Go.
-func gitRevParseCmd() *cobra.Command {
-	var (
-		short    int
-		shortSet bool
-		isDirty  bool
-	)
-	cmd := &cobra.Command{
-		Use:   "rev-parse [HEAD]",
-		Short: "Resolve HEAD to a SHA (or report worktree dirtiness)",
-		Args:  cobra.MaximumNArgs(1),
-		Example: `  bashy git rev-parse HEAD
-  bashy git rev-parse --short HEAD
-  bashy git rev-parse --short=12 HEAD
-  bashy git rev-parse --is-dirty`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Only HEAD is supported as the rev argument — that's
-			// the only thing the build scripts ever ask about.
-			if len(args) == 1 && args[0] != "HEAD" {
-				return fmt.Errorf("rev-parse: only HEAD is supported, got %q", args[0])
+// gitRevParseCmd: git-shaped argv goes to the engine verbatim; only the
+// bashy extension --is-dirty (true/false + exit 0/1) is answered here.
+func gitRevParseCmd(external *bool) *cobra.Command {
+	return gitEngineCmd("rev-parse", "Resolve revisions and repository paths (+ bashy --is-dirty)",
+		"  bashy git rev-parse HEAD\n  bashy git rev-parse --abbrev-ref HEAD\n  bashy git rev-parse --is-dirty",
+		external, func(cmd *cobra.Command, args []string) (bool, error) {
+			if len(args) != 1 || args[0] != "--is-dirty" {
+				return false, nil
 			}
-			opts := outgit.RevParseOptions{}
-			if shortSet {
-				if short <= 0 {
-					short = 7
-				}
-				opts.Short = short
-			}
-			res, err := outgit.RevParse(opts)
+			res, err := outgit.RevParse(outgit.RevParseOptions{})
 			if err != nil {
-				return err
+				return true, err
 			}
-			out := cmd.OutOrStdout()
-			if isDirty {
-				// Match `git diff --quiet` exit-code semantics:
-				// 0 = clean, 1 = dirty. Stdout always reports
-				// "true"/"false" so scripts can read either signal.
-				if res.Dirty {
-					fmt.Fprintln(out, "true")
-					dispatchExit(1)
-				}
-				fmt.Fprintln(out, "false")
-				return nil
+			if res.Dirty {
+				fmt.Fprintln(cmd.OutOrStdout(), "true")
+				dispatchExit(1)
 			}
-			if opts.Short > 0 {
-				fmt.Fprintln(out, res.Short)
-				return nil
-			}
-			fmt.Fprintln(out, res.Hash)
-			return nil
-		},
-	}
-	cmd.Flags().IntVar(&short, "short", 7, "Abbreviate SHA to N chars when --short is passed; full 40-char SHA when omitted (bare --short uses N=7)")
-	// NoOptDefVal lets `bashy git rev-parse --short HEAD` work — without
-	// it, cobra greedily consumes "HEAD" as the value for --short and
-	// fails to parse it as int. Passing --short alone now means "use 7".
-	cmd.Flags().Lookup("short").NoOptDefVal = "7"
-	cmd.Flags().BoolVar(&isDirty, "is-dirty", false, "Print true/false and exit 0/1 based on worktree dirtiness")
-	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-		shortSet = cmd.Flags().Changed("short")
-		return nil
-	}
-	return cmd
+			fmt.Fprintln(cmd.OutOrStdout(), "false")
+			return true, nil
+		})
 }
 
 // legacyGitLogArgs reports whether args fit the dedicated log command's own
 // shape: -n/--number N plus at most one repository path.
 func legacyGitLogArgs(args []string) bool {
-	pos := 0
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "-n" || a == "--number":
-			i++
-			if i >= len(args) {
-				return false
-			}
-		case strings.HasPrefix(a, "--number="):
-		case strings.HasPrefix(a, "-"):
-			return false
-		default:
-			pos++
+	// Only bashy's own --number spelling selects the typed summary;
+	// -n N, bare log and pathspecs are git's and go to the engine.
+	for _, a := range args {
+		if a == "--number" || strings.HasPrefix(a, "--number=") {
+			return true
 		}
 	}
-	return pos <= 1
+	return false
 }
 
 // dispatchGit is the `bashy git` front door.
@@ -1017,4 +876,41 @@ func dispatchGit(args []string) {
 		dispatchExit(code)
 	}
 	dispatchExit(0)
+}
+
+// gitEngineCmd is a `bashy git <verb>` whose argv reaches the engine
+// verbatim: its output is byte-identical to host git, or it declines
+// loudly (--external hands it to a host git). local, when set, answers
+// bashy-only extensions first and reports whether it handled them.
+func gitEngineCmd(verb, short, example string, external *bool, local func(*cobra.Command, []string) (bool, error)) *cobra.Command {
+	return &cobra.Command{
+		Use:                verb,
+		Short:              short,
+		Example:            example,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			selected, rest, err := splitGitExternal(args)
+			if err != nil {
+				return err
+			}
+			if selected {
+				*external = true
+			}
+			for _, a := range rest {
+				if a == "-h" || a == "--help" {
+					return cmd.Help()
+				}
+			}
+			if local != nil {
+				if handled, err := local(cmd, rest); handled || err != nil {
+					return err
+				}
+			}
+			res, err := outgit.ExecOrExternal(cmd.Context(), ".", append([]string{verb}, rest...), *external)
+			if err != nil {
+				return err
+			}
+			return renderGitResult(cmd, res)
+		},
+	}
 }
