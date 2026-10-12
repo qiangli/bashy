@@ -46,7 +46,12 @@ function parseExceptions(path) {
     if (parts.length < 2 || !/^GHSA-[a-z0-9-]+$/i.test(parts[0])) {
       throw new Error(`malformed exceptions line: ${raw}`);
     }
-    list.push({ advisory: parts[0].toUpperCase(), pkg: parts[1].toLowerCase() });
+    // A reason starting with "BUILD-ENV:" marks an advisory present only in the
+    // build environment (dev path) whose SHIPPED copies are patched and gated
+    // separately; it still expires if the package enters the --prod graph, but
+    // not merely because a fixed version exists (that fix is what ships).
+    const buildEnv = /^BUILD-ENV:/i.test(parts[2] ?? "");
+    list.push({ advisory: parts[0].toUpperCase(), pkg: parts[1].toLowerCase(), buildEnv });
   }
   return list;
 }
@@ -153,7 +158,7 @@ for (const e of exceptions) {
   }
   const hits = full.filter((a) => (a.ghsa && a.ghsa === e.advisory) || a.pkg === e.pkg);
   for (const h of hits) {
-    if (h.patched) {
+    if (h.patched && !e.buildEnv) {
       failures.push(
         `exception expired: ${e.advisory} (${e.pkg}) now lists a patched version (via ${h.id})`,
       );

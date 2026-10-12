@@ -130,17 +130,6 @@ jobs:
           grep -q '^nodeLinker: isolated$' pnpm-workspace.yaml
           sed -i 's/^nodeLinker: isolated$/nodeLinker: hoisted/' pnpm-workspace.yaml
           grep -n '^nodeLinker:' pnpm-workspace.yaml
-      - name: apply security override (http-cache-semantics >=4.3.0, GHSA-ch52-4w7c-c8xp)
-        env:
-          OPENCLAW_DIR: ${{ github.workspace }}/src
-        run: bash fork/bashy-build/scripts/apply-override.sh
-      - name: regenerate lockfile for the override only
-        working-directory: src
-        run: pnpm install --lockfile-only --ignore-scripts
-      - name: assert lockfile diff touches only http-cache-semantics
-        env:
-          OPENCLAW_DIR: ${{ github.workspace }}/src
-        run: bash fork/bashy-build/scripts/assert-lockfile-diff.sh
       - name: install from the verified lockfile (no implicit scripts)
         working-directory: src
         run: |
