@@ -144,6 +144,43 @@ func TestCodyncDeclarationLoopbackCommands(t *testing.T) {
 	}
 }
 
+// TestOpenclawDeclarationSendApprove proves the Sprint 410 example is
+// data-only: openclaw.yaml validates and its send/approve print commands
+// exist with mutating effects (NeedsConfirmation true).
+func TestOpenclawDeclarationSendApprove(t *testing.T) {
+	fleetDir := mustFleetExamplesDir(t)
+	data, err := os.ReadFile(filepath.Join(fleetDir, "tools", "openclaw.yaml"))
+	if err != nil {
+		t.Fatalf("read openclaw.yaml: %v", err)
+	}
+	tool, err := fleet.ParseTool("openclaw", data, nil)
+	if err != nil {
+		t.Fatalf("ParseTool openclaw: %v", err)
+	}
+	if errs, _ := tool.ValidateCommands(); len(errs) != 0 {
+		t.Fatalf("ValidateCommands: %v", errs)
+	}
+	wantExec := map[string]string{
+		"send":    "openclaw message send --json {args}",
+		"approve": "openclaw approvals resolve --json {args}",
+	}
+	for name, exec := range wantExec {
+		cmd, ok := tool.Command(name)
+		if !ok {
+			t.Fatalf("openclaw:%s missing", name)
+		}
+		if cmd.Mode != fleet.ToolCommandPrint {
+			t.Errorf("openclaw:%s mode = %q, want print", name, cmd.Mode)
+		}
+		if cmd.Exec != exec {
+			t.Errorf("openclaw:%s exec = %q, want %q", name, cmd.Exec, exec)
+		}
+		if need, why := cmd.NeedsConfirmation(); !need {
+			t.Errorf("openclaw:%s NeedsConfirmation = false (%q), want true (mutating effects)", name, why)
+		}
+	}
+}
+
 func mapsEqual(a, b map[string]any) bool {
 	aj, _ := json.Marshal(a)
 	bj, _ := json.Marshal(b)

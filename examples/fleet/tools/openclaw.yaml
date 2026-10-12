@@ -17,6 +17,8 @@
 #          examples/fleet/services/openclaw-gateway.yaml (loopback 18789); the openclaw
 #          CLI must be installed on the host (npm install -g openclaw@2026.9.8) for the
 #          commands to list as available.
+# mcp:     {"mcpServers":{"openclaw":{"command":"openclaw","args":["mcp","serve","--token-file","~/.openclaw/gateway.token"]}}}
+#          (note: `bashy skill export --mcp` direction is the reverse — bashy skills out to MCP clients)
 name: openclaw
 kind: cli
 display: OpenClaw
