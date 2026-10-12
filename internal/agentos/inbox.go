@@ -63,8 +63,11 @@ type unifiedInboxOrigin struct {
 
 type inboxBatch struct {
 	events []unifiedInboxEvent
-	acks   []func() error
-	warns  []string
+	// before provenance collapse, for exact turn acknowledgements of seeded
+	// Meet copies that share one rendered MB record.
+	rawEvents []unifiedInboxEvent
+	acks      []func() error
+	warns     []string
 }
 
 func newUnifiedInboxCmd() *cobra.Command {
@@ -942,6 +945,7 @@ func snapshotInbox(reader string, limit int, includeBus, deliver bool) (inboxBat
 		event := &batch.events[i]
 		event.FromParty, event.FromHandle = inboxSenderIdentity(event.From, event.FromParty)
 	}
+	batch.rawEvents = append([]unifiedInboxEvent(nil), batch.events...)
 	batch.events = collapseProvenanceDuplicates(batch.events)
 	sortInboxEvents(batch.events)
 	return batch, nil

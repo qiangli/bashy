@@ -53,6 +53,7 @@ func wireMessageBoard() {
 	// view over MB/Meet/role stores; pkg/bus remains the owner of pending delivery
 	// and no additional spool is introduced.
 	bus.PrepareTurnInbox = unifiedTurnPreamble
+	bus.PrepareTurnItems = unifiedTurnItems
 	// Whoever adds an inbox source owns its change gate. The hook above makes
 	// every managed session's relay read the board and meet stores too, so the
 	// relay's poll gate must see THOSE move — coreutils' default fingerprint
