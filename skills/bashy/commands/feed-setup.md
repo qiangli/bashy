@@ -215,10 +215,152 @@ Tell the human, verbatim:
 > updates in and note the room id (Room settings → Advanced, starts `!`).
 > Do not paste the token to me.
 
+No homeserver account? On a Linux host, the next section sets up a
+self-hosted Matrix chat server and its bot account instead.
+
 Collect `MATRIX_ACCESS_TOKEN` with 3b; the room id is not a secret and the
 human may tell you it directly. Restart the gateway.
 
 Channel args: `--channel matrix --target room:ROOM_ID`.
+
+### Self-hosted Matrix chat (optional, Linux only)
+
+Run this only when the human asks for Matrix chat **and** has no homeserver
+account to use. It installs a private homeserver (tuwunel, Apache-2.0) on this
+host: loopback-only, registration and federation off. Then the Matrix chat
+section above goes ahead with a bot account it creates. Say "Matrix chat" to the
+human throughout.
+
+**Linux hosts only in this release** (amd64/arm64). On macOS or Windows, tell
+the human, verbatim:
+
+> A self-hosted Matrix chat server is only available on Linux hosts in this
+> release. Use an existing Matrix chat account (for example on matrix.org),
+> or run this setup on a Linux machine.
+
+Then fall back to the Matrix chat section above. Every step below is safe to
+re-run.
+
+**S1. Install and declare.** Ask the human for a server name (it becomes part of
+every user id, `@owner:NAME`, and **cannot change after the first start**).
+`localhost` is fine for a LAN-only trial. Ask before installing.
+
+```bsh
+[ "$(uname -s)" = Linux ] || echo "not Linux: stop, use an existing Matrix chat account"
+NAME=localhost                                  # the server name the human chose
+bashy tool install tuwunel                      # prints "installed tuwunel -> PATH"
+bashy service show matrix-chat >/dev/null 2>&1 || bashy service add --optional matrix-chat
+bashy service set matrix-chat --set settings.binary=PATH --set settings.server_name="$NAME"
+bashy service show matrix-chat --yaml           # note settings.data_dir (default ${BASHY_HOME:-$HOME/.bashy}/matrix-chat)
+```
+
+Replace `PATH` with the path `bashy tool install` printed. Do not change
+`server_name` once the server has started; that needs a fresh database.
+
+**S2. Owner and bot accounts, registration staying off.** Mint both passwords
+into the vault; they are never printed and never written to a file you create:
+
+```bsh
+bashy secret get MATRIX_OWNER_PASSWORD >/dev/null 2>&1 || bashy secret gen | bashy secret set MATRIX_OWNER_PASSWORD
+bashy secret get MATRIX_FEEDBOT_PASSWORD >/dev/null 2>&1 || bashy secret gen | bashy secret set MATRIX_FEEDBOT_PASSWORD
+```
+
+Ask the human for the owner's user name (`OWNER`, e.g. their first name).
+tuwunel creates accounts from its admin console while the server is stopped
+(the database is locked while it runs). The first user created becomes admin:
+
+```bsh
+bashy service stop matrix-chat || true          # RocksDB lock; ignore "not running"
+BIN=PATH                                        # settings.binary from S1
+DATA=DATA_DIR                                   # settings.data_dir from S1
+env TUWUNEL_SERVER_NAME="$NAME" TUWUNEL_DATABASE_PATH="$DATA/db" \
+    TUWUNEL_ALLOW_REGISTRATION=false TUWUNEL_ALLOW_FEDERATION=false \
+    TUWUNEL_ADDRESS=127.0.0.1 TUWUNEL_PORT=6167 \
+  "$BIN" --test=smoke -O admin_execute_errors_ignore=true \
+    --execute "users create-user OWNER $(bashy secret get MATRIX_OWNER_PASSWORD)" \
+    --execute "users make-user-admin @OWNER:$NAME" \
+    --execute "users create-user feedbot $(bashy secret get MATRIX_FEEDBOT_PASSWORD)"
+```
+
+`admin_execute_errors_ignore` makes a re-run harmless (an existing user is
+reported, not fatal). The two passwords are in this one command's argv for
+the second it runs, so local `ps` can see them briefly. That is acceptable on
+a single-user host. On a shared host, change both passwords from Element
+afterwards.
+
+Never paste the owner password into chat. Tell the human, verbatim:
+
+> Your Matrix chat password is in the vault. In your own terminal, run
+> `bashy secret get MATRIX_OWNER_PASSWORD` to read it when you sign in.
+
+**S3. Start and wait.**
+
+```bsh
+bashy service enable matrix-chat                # or: bashy service start matrix-chat
+for i in $(seq 30); do
+  curl -sf http://127.0.0.1:6167/_matrix/client/versions >/dev/null && break
+  sleep 1
+done
+curl -sf http://127.0.0.1:6167/_matrix/client/versions >/dev/null || bashy service logs matrix-chat
+```
+
+**S4. Bot token, straight into the vault.** The password goes in on stdin
+and the token comes out on a pipe. Neither is echoed:
+
+```bsh
+bashy secret get MATRIX_ACCESS_TOKEN >/dev/null 2>&1 ||
+  bashy secret get MATRIX_FEEDBOT_PASSWORD |
+    jq -Rc '{type:"m.login.password",identifier:{type:"m.id.user",user:"feedbot"},password:.}' |
+    curl -sf -X POST -H 'Content-Type: application/json' --data-binary @- \
+      http://127.0.0.1:6167/_matrix/client/v3/login |
+    jq -er .access_token | bashy secret set MATRIX_ACCESS_TOKEN
+m=${XDG_CONFIG_HOME:-$HOME/.config}/bashy/secrets.map
+mkdir -p "$(dirname "$m")"
+grep -q '^MATRIX_ACCESS_TOKEN=' "$m" 2>/dev/null ||
+  echo 'MATRIX_ACCESS_TOKEN=@MATRIX_ACCESS_TOKEN' >> "$m"
+```
+
+**S5. Room, OpenClaw, test message.** The bot creates a private room and
+invites the owner. The token reaches curl as a header on stdin, never in argv:
+
+```bsh
+hdr() { printf 'Authorization: Bearer '; bashy secret get MATRIX_ACCESS_TOKEN; }
+hdr | curl -sf -H @- -H 'Content-Type: application/json' -X POST \
+  --data "{\"preset\":\"private_chat\",\"name\":\"bashy feed\",\"invite\":[\"@OWNER:$NAME\"]}" \
+  http://127.0.0.1:6167/_matrix/client/v3/createRoom | jq -r .room_id
+```
+
+Run it once only. If a `matrix` feed channel already exists (`bashy feed
+doctor`), reuse its room. The room id (`!…`) is not a secret.
+Point OpenClaw's Matrix chat channel at homeserver `http://127.0.0.1:6167`
+as user `@feedbot:NAME`. Check `openclaw --help` for the exact key; do not
+guess. Then restart the gateway the 3b way so it picks up `MATRIX_ACCESS_TOKEN`.
+Continue with 3c using `--channel matrix --target room:ROOM_ID`, and 3d if the
+human wants replies.
+
+**S6. Phone.** The unit listens on 127.0.0.1 only. A phone needs a reachable
+address, so first rebind it to the LAN (ask the human; this exposes the login
+endpoint to their network, with registration still off):
+
+```bsh
+bashy service show matrix-chat --yaml           # find the bind address field (127.0.0.1)
+bashy service set matrix-chat --set FIELD=0.0.0.0   # FIELD = that dotted path
+bashy service restart matrix-chat
+```
+
+Then tell the human, verbatim (fill in `LAN_IP`, the host's LAN address, and
+`OWNER:NAME`):
+
+> Install Element on your phone. On the sign-in screen choose "Edit" next to
+> the homeserver and enter `http://LAN_IP:6167`. Sign in as `OWNER` with the
+> password from `bashy secret get MATRIX_OWNER_PASSWORD`. Accept the invite
+> to the "bashy feed" room from feedbot and tell me when you see the test
+> message.
+
+With `server_name` set to `localhost`, user ids still read `@OWNER:localhost`;
+that is expected. The phone reaches the server by LAN address, not by name.
+
+**S7.** Finish with step 4: `bashy feed doctor` must exit 0.
 
 ### 3c. Register the channel and send ONE test message
 
