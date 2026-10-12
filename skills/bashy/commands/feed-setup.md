@@ -132,10 +132,16 @@ Every bot token goes through this pattern, and nothing else:
 p=$(bashy ask --name TELEGRAM_BOT_TOKEN --prompt "Telegram bot token from @BotFather") &&
   bashy secret set TELEGRAM_BOT_TOKEN < "$p"
 rm -f "$p"
+m=${XDG_CONFIG_HOME:-$HOME/.config}/bashy/secrets.map
+mkdir -p "$(dirname "$m")"
+grep -q '^TELEGRAM_BOT_TOKEN=' "$m" 2>/dev/null ||
+  echo 'TELEGRAM_BOT_TOKEN=@TELEGRAM_BOT_TOKEN' >> "$m"
 ```
 
 `bashy ask` hides the typed value and prints only the path. Substitute the
-NAME and prompt per channel below. To hand the vaulted value to the gateway,
+NAME and prompt per channel below. The `secrets.map` line holds only a
+reference (`@NAME`), never the value; without it `bashy secret env` renders
+nothing for this token. To hand the vaulted value to the gateway,
 restart it in an environment rendered by the vault — the value is never
 written to argv or to a file you create:
 
