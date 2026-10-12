@@ -133,9 +133,9 @@ which also turns on `tuwunel-core/sentry_telemetry` (`src/main/Cargo.toml:171-17
 so OTLP cannot be had without compiling in crash reporting. The exporter is
 also gRPC-only (`Cargo.toml:333-339`: `opentelemetry-otlp` with
 `grpc-tonic`), so it could not target bashy's collector at
-`http://127.0.0.1:4318` (OTLP/HTTP) anyway. `otel.env` sets
+`http://127.0.0.1:31415` (OTLP/HTTP) anyway. `otel.env` sets
 `OTEL_SDK_DISABLED=true` and, should a future pin enable OTel, names
-`http://127.0.0.1:4318` as the only permitted endpoint. Revisit when upstream
+`http://127.0.0.1:31415` as the only permitted endpoint. Revisit when upstream
 decouples OTLP from Sentry and offers an HTTP exporter.
 
 ### No-egress gate

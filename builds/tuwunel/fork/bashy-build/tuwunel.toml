@@ -31,7 +31,7 @@ sentry_send_server_name = false
 # OTLP/Jaeger span export OFF (:1305). v1.9.4 only links an OTLP exporter
 # through perf_measurements, which also pulls in sentry_telemetry, and the
 # exporter is gRPC-only (Cargo.toml:333-339) — it cannot target bashy's
-# local collector (http://127.0.0.1:4318). See ../README.md §OpenTelemetry.
+# local collector (http://127.0.0.1:31415). See ../README.md §OpenTelemetry.
 allow_jaeger = false
 tracing_flame = false
 
