@@ -1,0 +1,217 @@
+# tuwunel — bashy verified build
+
+bashy runs the Matrix chat homeserver (tuwunel) only from a **bashy-CI-built,
+keylessly Sigstore-signed build of the official upstream release tag**. This
+directory is the template for that build. `fork/` is installed as the
+`bashy-build` branch of `github.com/qiangli/tuwunel`; it carries no upstream
+source — the workflow checks out the upstream tag fresh on every run.
+
+| | |
+|---|---|
+| Upstream | `https://github.com/matrix-construct/tuwunel` |
+| Pinned release | `v1.9.4` (annotated tag object `024cce75…`) → commit `f473d9a4a8342514302884041e0ccfea1ad503fc` |
+| Toolchain | Rust `1.95.0` (the tag's `rust-toolchain.toml`) |
+| Trigger | push of tag `bashy-v1.9.4-N` on `bashy-build` (first: `bashy-v1.9.4-1`) |
+| Signing identity | `https://github.com/qiangli/tuwunel/.github/workflows/bashy-build.yml@refs/tags/bashy-v1.9.4-1` |
+| Issuer | `https://token.actions.githubusercontent.com` |
+
+## Layout
+
+```
+fork/.github/workflows/bashy-build.yml   the only workflow on the bashy-build branch
+fork/bashy-build/PIN                     upstream repo/tag/commit + tool versions (single source of truth)
+fork/bashy-build/features.env            the exact Cargo feature set; forbidden features and crates
+fork/bashy-build/tuwunel.toml            no-tracking runtime baseline (shipped as tuwunel-bashy.toml)
+fork/bashy-build/otel.env                OpenTelemetry environment (disabled; local collector only)
+fork/bashy-build/verify-pin.sh           provenance gate: tag shape, HEAD == pinned commit, toolchain
+fork/bashy-build/check-features.sh       feature gate: no Sentry/OTel/tokio-console crate resolved
+fork/bashy-build/no-egress-test.sh       runtime gate: the built server makes no outbound connection
+fork/bashy-build/audit-ignore            cargo-audit waivers (one id + justification per line; empty)
+```
+
+## Pipeline
+
+All jobs have least-privilege permissions (`permissions: {}` at the top;
+`contents: read` for every job except `release`); every action is pinned by
+commit sha. The workflow refuses to run outside `qiangli/tuwunel`.
+
+1. **pin** — reads `PIN`; refuses an upstream tag that is not
+   `vMAJOR.MINOR.PATCH` (rc/beta/dev refused), a bashy tag that is not
+   `bashy-<upstream tag>-N`, and an upstream GitHub release that is a draft
+   or pre-release.
+2. **build** ×4 — checks out `matrix-construct/tuwunel` at
+   `refs/tags/v1.9.4`; `verify-pin.sh` fails unless `HEAD` and the tag both
+   resolve to the pinned commit, the tree is pristine and the toolchain
+   matches; `check-features.sh`; `cargo build --locked --release -p tuwunel
+   --bin tuwunel --no-default-features --features "$FEATURES"`;
+   `no-egress-test.sh` on the built binary. Native runners only:
+
+   | asset | runner |
+   |---|---|
+   | `tuwunel-linux-amd64` | `ubuntu-24.04` |
+   | `tuwunel-linux-arm64` | `ubuntu-24.04-arm` |
+   | `tuwunel-darwin-arm64` | `macos-15` |
+   | `tuwunel-darwin-amd64` | `macos-15-intel` |
+
+3. **audit** — pinned `cargo-audit` (`0.22.2`) runs
+   `cargo audit --deny warnings` over the tag's `Cargo.lock` (any advisory,
+   including unmaintained/yanked/unsound, fails unless waived with a reason in
+   `audit-ignore`); pinned `cargo-cyclonedx` (`0.5.9`) writes a CycloneDX JSON
+   SBOM for the bashy feature set.
+4. **release** — only after every gate above: `SHA256SUMS`;
+   `cosign sign-blob --yes --bundle ASSET.sigstore.json ASSET` (keyless, cosign
+   `v3.1.3`) for every asset, `SHA256SUMS` included, each immediately verified
+   with `cosign verify-blob` against the exact identity and issuer;
+   `actions/attest` build provenance over `SHA256SUMS`; `gh release create` on
+   the fork.
+
+Release assets (binmgr's default bundle location is the asset URL +
+`.sigstore.json`):
+
+```
+tuwunel-linux-amd64          tuwunel-linux-amd64.sigstore.json
+tuwunel-linux-arm64          tuwunel-linux-arm64.sigstore.json
+tuwunel-darwin-arm64         tuwunel-darwin-arm64.sigstore.json
+tuwunel-darwin-amd64         tuwunel-darwin-amd64.sigstore.json
+tuwunel-v1.9.4.cdx.json      tuwunel-v1.9.4.cdx.json.sigstore.json
+tuwunel-bashy.toml           tuwunel-bashy.toml.sigstore.json
+SHA256SUMS                   SHA256SUMS.sigstore.json
+```
+
+URL shape: `https://github.com/qiangli/tuwunel/releases/download/bashy-v1.9.4-1/<asset>`.
+
+## No tracking: every knob at v1.9.4
+
+Source lines are at the `v1.9.4` tag (read from `raw.githubusercontent.com`).
+
+### Compile time (`src/main/Cargo.toml`)
+
+| Feature | Source | What it does | bashy build |
+|---|---|---|---|
+| `default` | `src/main/Cargo.toml:76-88` | brotli, element_hacks, gzip, io_uring, jemalloc, jemalloc_conf, media_thumbnail, release_max_log_level, systemd, url_preview, zstd | **not used** (`--no-default-features`) |
+| `sentry_telemetry` | `src/main/Cargo.toml:188-195`; `src/router/Cargo.toml:89-93`; `src/core/Cargo.toml:45` | links `sentry`, `sentry-tower`, `sentry-tracing`, `reqwest`: crash/panic/perf reporting to sentry.io | **off** |
+| `perf_measurements` | `src/main/Cargo.toml:165-173`; `src/core/Cargo.toml:38` | links `opentelemetry`, `opentelemetry-otlp`, `opentelemetry_sdk`, `tracing-opentelemetry`, `tracing-flame` **and enables `tuwunel-core/sentry_telemetry`** | **off** |
+| `tokio_console` | `src/main/Cargo.toml:201-204` | `console-subscriber` listener | **off** |
+| `jemalloc_prof`, `jemalloc_stats` | `src/main/Cargo.toml:145-150` | allocator profiling | **off** |
+| `url_preview` | `src/main/Cargo.toml:208-210` | server fetches arbitrary URLs users post (third-party egress) | **off** |
+| `io_uring`, `systemd` | `src/main/Cargo.toml:122-128`, `196-199` | Linux-only I/O backend; sd_notify | **off** (portable feature set; bashy supervises the process) |
+
+Enabled: `brotli_compression element_hacks gzip_compression jemalloc
+jemalloc_conf media_thumbnail release_max_log_level zstd_compression`
+(`features.env`). `check-features.sh` fails the build if any forbidden
+feature is listed **or** any of `sentry*`, `opentelemetry*`,
+`tracing-opentelemetry`, `tracing-flame`, `console-subscriber` appears in the
+resolved dependency graph (verified locally on darwin-arm64: the bashy set
+resolves none; adding `sentry_telemetry` is caught).
+
+### Runtime (`tuwunel-example.toml`, `src/core/config/mod.rs`)
+
+| Key | Source | Upstream default | bashy (`tuwunel.toml`) |
+|---|---|---|---|
+| `sentry` | `tuwunel-example.toml:3128` | `false` | `false` (not compiled in) |
+| `sentry_endpoint` | `tuwunel-example.toml:3132`; hard-coded default `src/core/config/mod.rs:6133-6136` (`…ingest.us.sentry.io`) | built-in sentry.io DSN | unreachable (not compiled in) |
+| `sentry_send_server_name` / `sentry_send_panic` / `sentry_send_error` | `tuwunel-example.toml:3137,3155,3161` | `false` / `true` / `true` | `false` |
+| `allow_jaeger` (OTLP span export) | `tuwunel-example.toml:1305` | `false` | `false` |
+| `tracing_flame` | `tuwunel-example.toml:1319` | `false` | `false` |
+| `allow_federation` | `tuwunel-example.toml:897` | `true` | `false` |
+| `allow_registration` | `tuwunel-example.toml:767` | `false` | `false` |
+| `trusted_servers` | `tuwunel-example.toml:1369` | `["matrix.org"]` | `[]` |
+| `query_trusted_key_servers_first[_on_join]` | `tuwunel-example.toml:1380,1393` | `false` / `true` | `false` |
+| `allow_outgoing_presence` | `tuwunel-example.toml:2280` | `true` | `false` |
+| `allow_device_name_federation` | `tuwunel-example.toml:1185` | `false` | `false` |
+| `address` | `tuwunel-example.toml:67` | `["127.0.0.1", "::1"]` | `["127.0.0.1"]` |
+| `url_preview_domain_explicit_denylist` | `tuwunel-example.toml:2790` | `[]` | `["*"]` (feature compiled out anyway) |
+
+**Update checks / announcements:** none exist at v1.9.4 — there is no
+`check_for_updates`/`announcements` key in `tuwunel-example.toml` or
+`src/core/config/mod.rs` (searched: zero matches).
+
+### OpenTelemetry
+
+Not enabled. v1.9.4 links an OTLP exporter only through `perf_measurements`,
+which also turns on `tuwunel-core/sentry_telemetry` (`src/main/Cargo.toml:171-172`),
+so OTLP cannot be had without compiling in crash reporting. The exporter is
+also gRPC-only (`Cargo.toml:333-339`: `opentelemetry-otlp` with
+`grpc-tonic`), so it could not target bashy's collector at
+`http://127.0.0.1:4318` (OTLP/HTTP) anyway. `otel.env` sets
+`OTEL_SDK_DISABLED=true` and, should a future pin enable OTel, names
+`http://127.0.0.1:4318` as the only permitted endpoint. Revisit when upstream
+decouples OTLP from Sentry and offers an HTTP exporter.
+
+### No-egress gate
+
+`no-egress-test.sh` starts the built binary with `tuwunel-bashy.toml` +
+`otel.env`, bound to `127.0.0.1:18448`, registration and federation off,
+probes client/federation/well-known/register endpoints over loopback, idles
+30 s, probes again and stops it.
+
+- **Linux (authoritative):** a fresh network namespace (`sudo unshare --net`,
+  only `lo`), the server traced with `strace -f -e
+  trace=connect,sendto,sendmsg,sendmmsg` and run unprivileged via `setpriv`.
+  Any AF_INET/AF_INET6 attempt other than loopback to its own port —
+  including DNS to `127.0.0.53` and attempts the namespace makes fail — or a
+  connect to a resolver socket fails the build.
+- **macOS:** `sandbox-exec` denies all `network-outbound` except
+  `localhost:18448` and the mDNSResponder socket; any Sandbox deny for the
+  process in the unified log fails the build.
+
+## Windows feasibility
+
+No Windows job. Upstream does not support Windows at v1.9.4: the tag's
+`rust-toolchain.toml` lists only Linux targets (gnu/musl, x86_64/aarch64),
+upstream's CI (`.github/workflows/*.yml`) builds and its releases ship only
+Linux artifacts (deb/rpm/OCI/static), and the code is Unix-first (22 files
+behind `cfg(unix)`, e.g. `src/main/health.rs` Unix-socket health check,
+`src/core/log/journald.rs`). RocksDB itself builds on Windows (MSVC) through
+`rust-rocksdb`, but tuwunel pins its own fork
+(`github.com/matrix-construct/rust-rocksdb`, `Cargo.toml:441-442`) that has
+no Windows CI either. Revisit only if upstream adds a Windows target. Windows
+hosts run the Linux build in bashy's Linux VM/container.
+
+macOS is also not an upstream release target (the apple targets are
+commented out in `rust-toolchain.toml`); the source does carry
+`target_os = "macos"`/`target_vendor = "apple"` branches
+(`src/core/config/regenerate/write.rs`, `src/core/alloc/je.rs`), so the
+darwin jobs are expected to build, but they are the least-proven legs of
+the pipeline. The release job needs all four; if a darwin leg cannot be
+made green, remove it from the `build` matrix and from the asset check in
+`release` rather than weakening any gate.
+
+## Operator steps
+
+```sh
+# in a clone of github.com/qiangli/tuwunel
+git switch --orphan bashy-build
+cp -R <bashy>/builds/tuwunel/fork/. .
+git add .github/workflows/bashy-build.yml bashy-build
+git commit -m "bashy-build: tuwunel v1.9.4 verified build"
+git push origin bashy-build
+git tag -a bashy-v1.9.4-1 -m "bashy build of tuwunel v1.9.4" && git push origin bashy-v1.9.4-1
+```
+
+To bump: edit `PIN` (tag, commit, toolchain), re-read the knob tables above at
+the new tag, cut `bashy-<new tag>-1`. A rebuild of the same upstream tag is
+`-2`, `-3`, … — the identity changes with the tag, so the yoke pin's
+`sigstore.identity` must be updated to the tag that produced the assets.
+
+## binmgr pin (yoke fleet tool `tuwunel`)
+
+Replaces the upstream-asset pin in yoke `pkg/fleet/baseline/tools/tuwunel.yaml`
+(`cli.managed`). These assets are raw executables, not `.zst`.
+
+```yaml
+managed:
+  source: github-release
+  version: bashy-v1.9.4-1
+  license: Apache-2.0
+  license_url: https://github.com/matrix-construct/tuwunel/blob/v1.9.4/LICENSE
+  service: true
+  sigstore:
+    identity: https://github.com/qiangli/tuwunel/.github/workflows/bashy-build.yml@refs/tags/bashy-v1.9.4-1
+    issuer: https://token.actions.githubusercontent.com
+  assets:
+    linux/amd64:  {url: "https://github.com/qiangli/tuwunel/releases/download/{version}/tuwunel-linux-amd64",  sha256: <from SHA256SUMS>}
+    linux/arm64:  {url: "https://github.com/qiangli/tuwunel/releases/download/{version}/tuwunel-linux-arm64",  sha256: <from SHA256SUMS>}
+    darwin/arm64: {url: "https://github.com/qiangli/tuwunel/releases/download/{version}/tuwunel-darwin-arm64", sha256: <from SHA256SUMS>}
+    darwin/amd64: {url: "https://github.com/qiangli/tuwunel/releases/download/{version}/tuwunel-darwin-amd64", sha256: <from SHA256SUMS>}
+```

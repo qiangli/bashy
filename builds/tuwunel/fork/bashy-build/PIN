@@ -1,0 +1,12 @@
+# bashy verified build pin for tuwunel (shell-sourceable; KEY=VALUE only).
+# The workflow refuses to build unless the checked-out upstream tag resolves
+# to UPSTREAM_COMMIT and the bashy tag is bashy-${UPSTREAM_TAG}-N.
+UPSTREAM_REPO=https://github.com/matrix-construct/tuwunel
+UPSTREAM_SLUG=matrix-construct/tuwunel
+UPSTREAM_TAG=v1.9.4
+UPSTREAM_COMMIT=f473d9a4a8342514302884041e0ccfea1ad503fc
+# Must equal the channel in the tag's rust-toolchain.toml.
+RUST_TOOLCHAIN=1.95.0
+CARGO_AUDIT_VERSION=0.22.2
+CARGO_CYCLONEDX_VERSION=0.5.9
+COSIGN_VERSION=v3.1.3
