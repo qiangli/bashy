@@ -33,13 +33,20 @@ if (before === after) {
 // only 2-space non-snapshot key and is handled separately below).
 function snapshotBlocks(text) {
   const map = new Map();
+  // pnpm >= 10 lockfiles hold several YAML documents ('---'); the same
+  // package key can appear in more than one, so every key is per-document.
+  let doc = 0;
   let section = null;
   let key = null;
   for (const line of text.split('\n')) {
+    if (line === '---') { doc++; section = null; key = null; continue; }
     const sec = line.match(/^(\S[^:]*):$/);
     if (sec) { section = sec[1]; key = null; continue; }
     if ((section === 'packages' || section === 'snapshots') && /^ {2}\S.*:$/.test(line)) {
-      key = line.trim();
+      // packages: and snapshots: reuse the same package keys, so the section
+      // is part of the key; otherwise a snapshots block overwrites the
+      // packages block holding resolution/integrity and hides its changes.
+      key = doc + '|' + section + '|' + line.trim();
       map.set(key, []);
     } else if (key !== null) {
       map.get(key).push(line);
@@ -50,12 +57,14 @@ function snapshotBlocks(text) {
 // Importer pins: (importer, package) -> 'specifier@version' text.
 function importerPins(text) {
   const map = new Map();
+  let doc = 0;
   let importer = null;
   let pkg = null;
   let inDeps = false;
   for (const line of text.split('\n')) {
     let m;
-    if (/^ {2}\S.*:$/.test(line)) { importer = line.trim().replace(/:$/, ''); pkg = null; inDeps = false; }
+    if (line === '---') { doc++; importer = null; pkg = null; inDeps = false; continue; }
+    if (/^ {2}\S.*:$/.test(line)) { importer = doc + '|' + line.trim().replace(/:$/, ''); pkg = null; inDeps = false; }
     else if (/^ {4}(dependencies|devDependencies|optionalDependencies):$/.test(line)) { inDeps = true; pkg = null; }
     else if (/^ {4}\S/.test(line)) { inDeps = false; pkg = null; }
     else if (inDeps && (m = line.match(/^ {6}(\S+):$/))) { pkg = m[1]; }
@@ -85,7 +94,10 @@ for (const [key, blines] of sb) {
   if (!alines) { offenders.push('removed snapshot ' + key); continue; }
   // A dependent block (e.g. make-fetch-happen) may change only by moving its
   // http-cache-semantics pin; every changed line must name the package.
-  const bad = changedLines(blines, alines).filter((l) => !l.includes('$PKG'));
+  // Registry metadata drift: a 'deprecated:' notice can appear or change on
+  // regeneration without any version/integrity move. Allow exactly that line
+  // shape; every other changed line must name the overridden package.
+  const bad = changedLines(blines, alines).filter((l) => !l.includes('$PKG') && !/^ {4}deprecated: /.test(l));
   if (bad.length > 0) offenders.push('snapshot ' + key + ': ' + bad.slice(0, 3).join(' | '));
 }
 for (const key of sa.keys()) {
@@ -98,6 +110,17 @@ for (const [key, v] of ib) {
 }
 for (const key of ia.keys()) {
   if (!ib.has(key) && !key.includes('$PKG')) offenders.push('+importer ' + key);
+}
+// Whole-file safety net, independent of the block parsers above: every line
+// added or removed anywhere must name the overridden package or be a registry
+// 'deprecated:' notice. Catches sections the parsers do not model.
+// Lines inside the overridden package's own blocks (its resolution/integrity
+// lines do not repeat the name) are the only unnamed lines allowed to move.
+const ownLines = new Set();
+for (const m of [sb, sa]) for (const [k, ls] of m) if (k.includes('$PKG')) for (const l of ls) ownLines.add(l);
+for (const l of changedLines(before.split('\n'), after.split('\n'))) {
+  if (l.includes('$PKG') || ownLines.has(l) || /^ {4}deprecated: /.test(l)) continue;
+  offenders.push('line: ' + l.trim().slice(0, 120));
 }
 if (offenders.length > 0) {
   console.error('assert-lockfile-diff: FAIL — lockfile changes outside $PKG:');
