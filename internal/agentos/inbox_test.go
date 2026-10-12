@@ -447,15 +447,6 @@ func TestUnifiedTurnPreambleSurfacesSourceFailureWithoutAcknowledging(t *testing
 	}
 }
 
-func TestInboxRefusesWatchWithLimit(t *testing.T) {
-	isolateUnifiedInbox(t)
-	cmd := newUnifiedInboxCmd()
-	cmd.SetArgs([]string{"--as", "alice", "--watch", "--limit", "1"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "cannot be combined") {
-		t.Fatalf("watch+limit error = %v", err)
-	}
-}
-
 func TestInboxWatcherPublishesActiveRosterPresenceForItsLifetime(t *testing.T) {
 	isolateUnifiedInbox(t)
 	const name = "inbox-sentinel-test"

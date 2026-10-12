@@ -197,9 +197,6 @@ pretends such a session was adopted.`,
 			if watch && peek {
 				return fmt.Errorf("inbox: --watch cannot be combined with --peek (the same unread batch would repeat forever)")
 			}
-			if watch && limit > 0 {
-				return fmt.Errorf("inbox: --watch cannot be combined with --limit (a capped source intentionally remains unread)")
-			}
 			if err := filter.validate(time.Now()); err != nil {
 				return err
 			}
@@ -250,7 +247,7 @@ pretends such a session was adopted.`,
 	f.StringVar(&filter.sinceRaw, "since", "", "only messages at or after this time (duration like 2h or 3d, or RFC3339 / YYYY-MM-DD)")
 	f.StringVar(&filter.sprint, "sprint", "", "show only records about this sprint number or UUID without advancing any cursor")
 	f.BoolVar(&watch, "watch", false, "follow all inbound sources until interrupted")
-	f.IntVarP(&limit, "limit", "n", 0, "show at most this many records per source (0 = no cap; a capped source remains unread)")
+	f.IntVarP(&limit, "limit", "n", 0, "show at most this many records per source (0 = no cap; the omitted tail stays unread, and --watch acknowledges only what it showed)")
 	f.BoolVar(&jsonOut, "json", false, "emit one "+unifiedInboxSchema+" object per line (NDJSON); a bounded read with no mail emits one envelope line with no events")
 	cmd.AddCommand(newMailboxListCmd(false), newMailboxReadCmd(false), newMailboxAckCmd(false), newMailboxPreserveCmd(false), newMailboxOrganizeCmd(false), newHumanMailboxCmd())
 	cmd.CompletionOptions.DisableDefaultCmd = true
@@ -823,6 +820,10 @@ func snapshotInbox(reader string, limit int, includeBus, deliver bool) (inboxBat
 			}
 		}
 	}
+	var roleTopics map[string]string
+	if limit > 0 {
+		roleTopics = hostRoleTopics()
+	}
 	appendLimited := func(source string, events []unifiedInboxEvent, ack func() error) {
 		// Explicit ack is per record, not a source high-water mark: advancing
 		// a cursor here would hide earlier unacknowledged mail. Filter before
@@ -851,8 +852,22 @@ func snapshotInbox(reader string, limit int, includeBus, deliver bool) (inboxBat
 			batch.warns = append(batch.warns, fmt.Sprintf("%s: %d more record(s) remain unread because of --limit", source, len(events)-limit))
 		}
 		batch.events = append(batch.events, shown...)
-		if len(shown) > 0 && !capped && ack != nil {
+		if len(shown) == 0 || ack == nil {
+			return
+		}
+		if !capped {
 			batch.acks = append(batch.acks, ack)
+			return
+		}
+		// A capped source has no safe whole-source watermark: it would consume
+		// the omitted tail and any record that lands before the ack. Acknowledge
+		// exactly the rendered records; the source cursor advances only over
+		// their contiguous acknowledged prefix.
+		for _, event := range shown {
+			e := event
+			batch.acks = append(batch.acks, func() error {
+				return acknowledgeTurnInboxItem(reader, e, batch.rawEvents, roleTopics)
+			})
 		}
 	}
 

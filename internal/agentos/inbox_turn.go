@@ -20,12 +20,7 @@ func unifiedTurnItems(reader string) ([]admission.Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	roleTopics := map[string]string{}
-	if bus.HostRoles != nil {
-		for _, role := range bus.HostRoles() {
-			roleTopics["role:"+role.Label] = role.Topic
-		}
-	}
+	roleTopics := hostRoleTopics()
 	items := make([]admission.Item, 0, len(batch.events))
 	for _, event := range batch.events {
 		e := event
@@ -43,6 +38,16 @@ func unifiedTurnItems(reader string) ([]admission.Item, error) {
 		})
 	}
 	return items, nil
+}
+
+func hostRoleTopics() map[string]string {
+	roleTopics := map[string]string{}
+	if bus.HostRoles != nil {
+		for _, role := range bus.HostRoles() {
+			roleTopics["role:"+role.Label] = role.Topic
+		}
+	}
+	return roleTopics
 }
 
 func turnInboxID(e unifiedInboxEvent) string {
@@ -75,6 +80,13 @@ func acknowledgeTurnInboxItem(reader string, event unifiedInboxEvent, raw []unif
 		return nil
 	}); err != nil {
 		return err
+	}
+	if event.Source == "bus" {
+		snapshot, err := bus.SnapshotInbox(reader)
+		if err != nil {
+			return err
+		}
+		return snapshot.CommitItem(event.Seq)
 	}
 	if strings.HasPrefix(event.Source, "role:") {
 		topic := roles[event.Source]

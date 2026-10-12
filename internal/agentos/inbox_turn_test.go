@@ -170,10 +170,14 @@ func TestUnifiedTurnItemAckIsPrefixMonotonicAndKeepsLateMail(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// --limit keeps the tail unread and never consumes on a peek.
+	// --limit keeps the tail unread; its acks are per rendered record and a
+	// snapshot (peek) never applies them.
 	capped, err := snapshotInbox(inboxTestReader, 2, false, false)
-	if err != nil || len(capped.events) != 2 || len(capped.acks) != 0 {
+	if err != nil || len(capped.events) != 2 || len(capped.acks) != 2 {
 		t.Fatalf("capped snapshot: events=%d acks=%d err=%v", len(capped.events), len(capped.acks), err)
+	}
+	if got := bus.SeenSeq(inboxTestReader); got != 0 {
+		t.Fatalf("capped peek consumed mail: cursor %d", got)
 	}
 	items, err := unifiedTurnItems(inboxTestReader)
 	if err != nil || len(items) != 3 {
@@ -211,5 +215,196 @@ func TestUnifiedTurnItemAckIsPrefixMonotonicAndKeepsLateMail(t *testing.T) {
 	again, err := snapshotInbox(inboxTestReader, 0, false, false)
 	if err != nil || len(again.events) != 1 || again.events[0].Body != "late" {
 		t.Fatalf("late mail was not preserved: %+v, %v", again.events, err)
+	}
+}
+
+func cappedBodies(events []unifiedInboxEvent) string {
+	bodies := make([]string, 0, len(events))
+	for _, e := range events {
+		bodies = append(bodies, e.Body)
+	}
+	return strings.Join(bodies, ",")
+}
+
+// watchOneBatch runs the real watch loop (render, then acknowledge) for exactly
+// the first snapshot; every later poll sees an empty inbox so the test controls
+// which batches are consumed.
+func watchOneBatch(t *testing.T, limit int, out *bytes.Buffer) {
+	t.Helper()
+	calls := 0
+	poll := sprintWatchTestPoll(func(reader string, _ int, includeBus bool) (inboxBatch, error) {
+		calls++
+		if calls > 1 {
+			return inboxBatch{}, nil
+		}
+		return snapshotInbox(reader, limit, includeBus, false)
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	defer cancel()
+	if err := runUnifiedInboxWithPoll(ctx, out, &bytes.Buffer{}, inboxTestReader, limit, false, false, true, 0, poll); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCappedWatchAcknowledgesExactlyDisplayedMBRecords(t *testing.T) {
+	isolateUnifiedInbox(t)
+	wireMessageBoard()
+	for i := 1; i <= 12; i++ {
+		if err := bus.PostMessage(bus.Post{From: "human", To: inboxTestReader, Body: fmt.Sprintf("post-%02d", i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A peek, however often repeated, never consumes the capped window.
+	for i := 0; i < 2; i++ {
+		peek, err := snapshotInbox(inboxTestReader, 2, false, false)
+		if err != nil || cappedBodies(peek.events) != "post-01,post-02" || bus.SeenSeq(inboxTestReader) != 0 {
+			t.Fatalf("peek %d: %q cursor=%d err=%v", i, cappedBodies(peek.events), bus.SeenSeq(inboxTestReader), err)
+		}
+	}
+	var out bytes.Buffer
+	watchOneBatch(t, 2, &out)
+	if !strings.Contains(out.String(), "post-01") || !strings.Contains(out.String(), "post-02") || strings.Contains(out.String(), "post-03") {
+		t.Fatalf("watch rendered the wrong window: %s", out.String())
+	}
+	if got := bus.SeenSeq(inboxTestReader); got != 2 {
+		t.Fatalf("cursor = %d, want exactly the displayed prefix 2 (not the full-source watermark)", got)
+	}
+	if err := bus.PostMessage(bus.Post{From: "human", To: inboxTestReader, Body: "post-late"}); err != nil {
+		t.Fatal(err)
+	}
+	next, err := snapshotInbox(inboxTestReader, 2, false, false)
+	if err != nil || cappedBodies(next.events) != "post-03,post-04" {
+		t.Fatalf("next batch repeated the first two or skipped the tail: %q, %v", cappedBodies(next.events), err)
+	}
+	if err := acknowledgeInboxBatch(next); err != nil {
+		t.Fatal(err)
+	}
+	if got := bus.SeenSeq(inboxTestReader); got != 4 {
+		t.Fatalf("cursor after second batch = %d, want 4", got)
+	}
+	rest, err := snapshotInbox(inboxTestReader, 0, false, false)
+	if err != nil || len(rest.events) != 9 || rest.events[0].Body != "post-05" || rest.events[8].Body != "post-late" {
+		t.Fatalf("tail or late mail lost: %q, %v", cappedBodies(rest.events), err)
+	}
+}
+
+func TestCappedWatchAcknowledgesExactlyDisplayedRoleAndBusRecords(t *testing.T) {
+	isolateUnifiedInbox(t)
+	wireMessageBoard()
+	const topic = "conductor.408"
+	prior := bus.HostRoles
+	bus.HostRoles = func() []bus.HostRole {
+		return []bus.HostRole{{Label: "conductor:408", Topic: topic, Holder: inboxTestReader}}
+	}
+	t.Cleanup(func() { bus.HostRoles = prior })
+	for i := 0; i < 12; i++ {
+		if err := bus.Publish(bus.Notification{Principal: "human", To: topic, Body: fmt.Sprintf("role-%02d", i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 5; i++ {
+		if err := bus.Publish(bus.Notification{Principal: "human", To: inboxTestReader, Body: fmt.Sprintf("direct-%d", i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	peek, err := snapshotInbox(inboxTestReader, 2, true, false)
+	if err != nil || len(peek.events) != 4 {
+		t.Fatalf("capped snapshot: %q, %v", cappedBodies(peek.events), err)
+	}
+	again, err := snapshotInbox(inboxTestReader, 2, true, false)
+	if err != nil || cappedBodies(again.events) != cappedBodies(peek.events) {
+		t.Fatalf("peek consumed mail: %q then %q, %v", cappedBodies(peek.events), cappedBodies(again.events), err)
+	}
+
+	// Sprint inbox watch: render the capped batch, acknowledge on the manager's
+	// acknowledgement, then a record lands before the next read.
+	reads := 0
+	rt := sprintWatchRuntime{ackEvery: time.Second}
+	calls := 0
+	rt.poll = sprintWatchTestPoll(func(reader string, _ int, includeBus bool) (inboxBatch, error) {
+		calls++
+		if calls > 1 {
+			return inboxBatch{}, nil
+		}
+		return snapshotInbox(reader, 2, includeBus, false)
+	})
+	rt.ackSeq = func(int64, string) (int64, error) {
+		reads++
+		if reads == 2 {
+			if err := bus.Publish(bus.Notification{Principal: "human", To: topic, Body: "role-late"}); err != nil {
+				return 0, err
+			}
+			return 1, nil
+		}
+		if reads > 2 {
+			return 1, nil
+		}
+		return 0, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	defer cancel()
+	var out bytes.Buffer
+	if err := runSprintInboxWatch(ctx, &out, &bytes.Buffer{}, 408, inboxTestReader, rt); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"role-00", "role-01"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("watch did not render %s: %s", want, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "role-02") {
+		t.Fatalf("watch rendered beyond the cap: %s", out.String())
+	}
+	next, err := snapshotInbox(inboxTestReader, 0, true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roles, directs []string
+	for _, e := range next.events {
+		if strings.HasPrefix(e.Body, "role-") {
+			roles = append(roles, e.Body)
+		} else {
+			directs = append(directs, e.Body)
+		}
+	}
+	if len(roles) != 11 || roles[0] != "role-02" || roles[10] != "role-late" {
+		t.Fatalf("role tail/late mail wrong after capped ack: %v", roles)
+	}
+	if len(directs) != 3 {
+		t.Fatalf("bus tail after capped ack = %v, want only the 3 undisplayed records", directs)
+	}
+	batch2, err := snapshotInbox(inboxTestReader, 2, true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(cappedBodies(batch2.events), "role-00") || strings.Contains(cappedBodies(batch2.events), "role-01") {
+		t.Fatalf("next batch repeated displayed records: %q", cappedBodies(batch2.events))
+	}
+}
+
+func TestCappedWatchAcknowledgesExactlyDisplayedMeetRecords(t *testing.T) {
+	isolateUnifiedInbox(t)
+	wireMessageBoard()
+	wireMeet()
+	st, err := meet.Create(meet.CreateOptions{Topic: "capped", Board: true, Participants: []string{inboxTestReader}, Human: "human"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 4; i++ {
+		if err := meet.AppendEvent(st.ID, meet.Event{Speaker: "human", Kind: "message", Text: fmt.Sprintf("meet-%d", i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var out bytes.Buffer
+	watchOneBatch(t, 2, &out)
+	if !strings.Contains(out.String(), "meet-1") || !strings.Contains(out.String(), "meet-2") || strings.Contains(out.String(), "meet-3") {
+		t.Fatalf("watch rendered the wrong window: %s", out.String())
+	}
+	if err := meet.AppendEvent(st.ID, meet.Event{Speaker: "human", Kind: "message", Text: "meet-late"}); err != nil {
+		t.Fatal(err)
+	}
+	rest, err := snapshotInbox(inboxTestReader, 0, false, false)
+	if err != nil || cappedBodies(rest.events) != "meet-3,meet-4,meet-late" {
+		t.Fatalf("meet tail or late mail wrong: %q, %v", cappedBodies(rest.events), err)
 	}
 }
