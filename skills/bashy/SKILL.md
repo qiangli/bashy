@@ -119,18 +119,17 @@ way kb is: this repo's when you are in one, the host's otherwise.
 
     bashy todo list              # what is open here, priority first
     bashy todo add "<title>"     # record work so it outlives this session
-    bashy sprint claim STORY_ID # claim default maintenance work
-    bashy sprint submit STORY_ID -m "delivery evidence"
+    bashy sprint claim last STORY_ID # claim selected sprint work
+    bashy sprint submit last STORY_ID -m "delivery evidence"
 
-Repository `todo add` defaults to reserved **Sprint #9999 — Maintenance** for
-one-off fixes, including urgent work unrelated to your current sprint. Use
-`--sprint N` to select another sprint or `--no-sprint` for an unlinked todo;
-personal todos remain unlinked by default. Commands addressing one sprint
-also default to #9999 when its operand is omitted; explicit operands win.
-#9999 follows ordinary lifecycle and manager lease rules: read the card,
-coordinate with its manager, and move it to doing before claims. The manager
-verifies submissions and runs `sprint accept`; generic `todo done` cannot
-close a sprint story. See `bashy sprint --help` for the complete workflow.
+All sprints use the same lifecycle and acceptance rules; no sprint number is
+reserved for maintenance. Select a sprint explicitly or use `last` for the most
+recently created card. Omitted sprint selection uses that same last card; it
+does not create a sprint. Use `--no-sprint` for a standalone repository todo.
+Personal todos remain standalone by default. Read `bashy sprint --help`.
+
+Sprint stories are closed by their manager using `sprint accept` after
+verification; generic `todo done` cannot close a sprint story.
 
 ## Run commands like an agent, not like a human
 

@@ -470,12 +470,11 @@ PATH=/bin:/usr/bin:$(dirname $(which go)) go test ./...
 
 ## Workflow
 
-Quick unrelated fixes use the reserved default **Sprint #9999 — Maintenance**.
-Repository `bashy todo add` selects it unless `--sprint N` or `--no-sprint`
-is given. Sprint commands that address one card also select #9999 when the
-sprint operand is omitted (`sprint show`, `sprint claim STORY_ID`). Explicit
-operands win. #9999 follows ordinary lifecycle, manager lease, evidence and
-acceptance rules; read `bashy sprint --help` for the full workflow.
+All sprints use the same lifecycle and acceptance rules; no sprint number is
+reserved for maintenance. Select a sprint explicitly or use `last` for the most
+recently created card. Omitted sprint selection uses that same last card; it
+does not create a sprint. Use `--no-sprint` for a standalone repository todo.
+Personal todos remain standalone by default. Read `bashy sprint --help`.
 
 Read `docs/TODO.md` to know what is open — it is the scoreboard and the todo
 list. A todo needs no sprint to exist; sprint work is tracked as stories on
