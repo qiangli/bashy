@@ -111,6 +111,9 @@ type monitor struct {
 	// probe runs the declared probe; checkPorts refuses foreign listeners.
 	probe      func(context.Context, fleet.Service, unitPolicy) (error, bool)
 	checkPorts func(fleet.Service) error
+	// checkBuild is the supply-chain gate: a unit whose binary is not a
+	// verified bashy-signed build is refused before activation.
+	checkBuild func(fleet.Service) error
 	// events receives every transition (the room timeline, S3); failed also
 	// reaches notify (the sinks, S7). Both are called off the loop.
 	events func(service.Event)
@@ -143,6 +146,7 @@ func newMonitor() *monitor {
 			return runProbe(ctx, u, p, nil)
 		},
 		checkPorts: checkPorts,
+		checkBuild: checkServiceBuildHook,
 		now:        time.Now,
 		log:        io.Discard,
 		msgs:       make(chan any, 64),
@@ -497,6 +501,12 @@ func (m *monitor) activate(u *unitRun, exempt bool) {
 		m.fail(u, fmt.Sprintf("start limit hit: %d starts within %v", u.pol.burst, u.pol.burstWindow))
 		return
 	}
+	if m.checkBuild != nil {
+		if err := m.checkBuild(u.decl); err != nil {
+			m.fail(u, err.Error())
+			return
+		}
+	}
 	if u.decl.ProviderName() == fleet.ServiceProviderProcess && m.checkPorts != nil {
 		if err := m.checkPorts(u.decl); err != nil {
 			m.fail(u, err.Error())
@@ -840,7 +850,7 @@ func (m *monitor) control(req ctlRequest) ctlResponse {
 		resp.Units = m.statuses(names)
 	case "start":
 		u, ok := unit()
-		if !ok {
+		if !ok || !m.buildAllowed(u, &resp) {
 			return resp
 		}
 		u.held, u.latched, u.waiting = false, false, false
@@ -856,7 +866,7 @@ func (m *monitor) control(req ctlRequest) ctlResponse {
 		resp.Units = []service.Status{m.status(u)}
 	case "restart":
 		u, ok := unit()
-		if !ok {
+		if !ok || !m.buildAllowed(u, &resp) {
 			return resp
 		}
 		u.held, u.latched, u.waiting = false, false, false
@@ -878,6 +888,33 @@ func (m *monitor) control(req ctlRequest) ctlResponse {
 		resp.OK, resp.Error = false, fmt.Sprintf("unknown op %q", req.Op)
 	}
 	return resp
+}
+
+// buildAllowed refuses an explicit start/restart of a unit whose binary is
+// not a verified bashy-signed build, so the operator sees the refusal at the
+// prompt rather than only as a failed state.
+func (m *monitor) buildAllowed(u *unitRun, resp *ctlResponse) bool {
+	if m.checkBuild == nil {
+		return true
+	}
+	if err := m.checkBuild(u.decl); err != nil {
+		resp.OK, resp.Error = false, err.Error()
+		return false
+	}
+	return true
+}
+
+// checkServiceBuildHook is the gate newMonitor installs; tests substitute it.
+var checkServiceBuildHook = checkServiceBuild
+
+// checkServiceBuild is the default build gate: the host catalog's
+// fleet.(*Catalog).CheckServiceBuild. A unit naming no tool pin passes
+// without reading the catalog.
+func checkServiceBuild(u fleet.Service) error {
+	if strings.TrimSpace(u.Tool) == "" {
+		return nil
+	}
+	return fleet.New().CheckServiceBuild(u)
 }
 
 // hosted serves the internal-unit owner side of the protocol through the

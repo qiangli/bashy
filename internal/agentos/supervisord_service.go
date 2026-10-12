@@ -340,6 +340,11 @@ func newServiceCtlCmd(op string) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if op != "stop" {
+				if err := refuseUnsignedBuild(args[0]); err != nil {
+					return err
+				}
+			}
 			resp, err := ctlCall(supervisordSocket(), ctlRequest{Op: op, Unit: args[0]}, 5*time.Second)
 			if err != nil {
 				if errors.Is(err, errNoMonitor) {
@@ -432,8 +437,12 @@ func newServiceRunCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if _, ok := fleet.New().Service(args[0]); !ok {
+			u, ok := fleet.New().Service(args[0])
+			if !ok {
 				return fmt.Errorf("no service %q", args[0])
+			}
+			if err := checkServiceBuild(u); err != nil {
+				return err
 			}
 			sigs := make(chan os.Signal, 2)
 			signal.Notify(sigs, syscall.SIGTERM, os.Interrupt)
@@ -450,6 +459,18 @@ func newServiceRunCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// refuseUnsignedBuild is the client-side supply-chain gate for start and
+// restart: a declared unit whose binary is not a verified bashy-signed build
+// is refused before the request reaches the monitor (which gates again at
+// activation). An unknown name is left to the monitor to report.
+func refuseUnsignedBuild(name string) error {
+	u, ok := fleet.New().Service(name)
+	if !ok {
+		return nil
+	}
+	return checkServiceBuild(u)
 }
 
 type exitCodeError int
