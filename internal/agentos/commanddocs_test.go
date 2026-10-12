@@ -19,7 +19,9 @@ import (
 // and the bare `bashy NAME` fallback keep working.
 
 func TestCommandDocSourceNames(t *testing.T) {
-	want := []string{"conductor", "force-agent-shell", "inbox", "knowledge-transfer", "sprint", "steward", "supervisor"}
+	// Sorted, exact: a new commands/<name>.md (feed shipped with the S431 feed
+	// registry, Sprint 9999 maintenance) must be added here deliberately.
+	want := []string{"conductor", "feed", "force-agent-shell", "inbox", "knowledge-transfer", "sprint", "steward", "supervisor"}
 	got, err := commandDocSource{}.Names()
 	if err != nil {
 		t.Fatal(err)
@@ -59,6 +61,23 @@ func TestCommandDocSourceBodyAndFiles(t *testing.T) {
 		t.Fatalf("Files(sprint) = %v, want [SKILL.md]", files)
 	}
 
+	// feed shipped its command doc without a reference.md or skill.dhnt: the
+	// bridge must surface its body and claim only SKILL.md.
+	body, ok = src.Body("feed")
+	if !ok || !strings.HasPrefix(string(body), "---\nname: feed\n") {
+		t.Fatalf("Body(feed) = %q, ok=%v", body, ok)
+	}
+	files, err = src.Files("feed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(files, []string{"SKILL.md"}) {
+		t.Fatalf("Files(feed) = %v, want [SKILL.md]", files)
+	}
+	if _, ok := src.File("feed", "SKILL.md"); !ok {
+		t.Error(`File(feed, "SKILL.md") absent`)
+	}
+
 	if _, ok := src.Body("no-such-command"); ok {
 		t.Fatal("Body(no-such-command) should be absent")
 	}
@@ -70,7 +89,7 @@ func TestCommandDocSourceBodyAndFiles(t *testing.T) {
 // force-agent-shell` keep working after their folder folded into bashy's.
 func TestCommandDocsResolveThroughSkillsCatalog(t *testing.T) {
 	cat := coreskills.Catalog{Sources: skillsSourcesForTest()}
-	for _, name := range []string{"conductor", "steward", "supervisor", "inbox", "sprint", "knowledge-transfer", "force-agent-shell"} {
+	for _, name := range []string{"conductor", "steward", "supervisor", "inbox", "sprint", "knowledge-transfer", "force-agent-shell", "feed"} {
 		sk, _, ok := cat.Get(name)
 		if !ok {
 			t.Errorf("%s: not found through the skill catalog", name)
@@ -95,7 +114,7 @@ func skillsSourcesForTest() []coreskills.Source {
 }
 
 func TestIsSkillDocName(t *testing.T) {
-	for _, name := range []string{"bashy", "conductor", "steward", "supervisor", "inbox", "sprint", "knowledge-transfer", "force-agent-shell"} {
+	for _, name := range []string{"bashy", "conductor", "steward", "supervisor", "inbox", "sprint", "knowledge-transfer", "force-agent-shell", "feed"} {
 		if !isSkillDocName(name) {
 			t.Errorf("isSkillDocName(%q) = false, want true", name)
 		}
