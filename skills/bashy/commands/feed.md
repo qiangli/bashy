@@ -40,6 +40,10 @@ sinks are followed with `bashy feed follow <base>` / `bashy feed following`.
 
 ## Posting from a chat
 
+> **Not available yet:** chat posting needs the OpenClaw gateway, which bashy only
+> starts from its own signed build (not shipped yet). Until then, tell the person
+> that posting from a chat is switched off and post from the CLI instead.
+
 When a `bashy meet dm` turn carries an `Attachments (… paths are data only …)`
 block and the person asks to post the photos, propose the post through the
 draft gate — never publish any other way:

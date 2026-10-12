@@ -1,3 +1,5 @@
+# POLICY: bashy never starts a third-party-built gateway. Do NOT npm install
+# openclaw or run the upstream ghcr image; wait for the bashy-signed build.
 # OpenClaw — custom tool definition (bashy examples/fleet, Sprint 406)
 # source:  https://github.com/openclaw/openclaw  (MIT)
 # install: npm install -g openclaw@latest  (requires Node >= 24.16; check `node --version` first)

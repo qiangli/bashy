@@ -104,6 +104,21 @@ over http(s). Re-run the doctor; a sink it cannot reach prints its own `next:`
 
 ## 3. Messaging (areas `channels` and `secrets`)
 
+> **BLOCKED in this release: no messaging gateway may be started yet.**
+> bashy never starts a server built by a third party — only bashy-CI-built,
+> Sigstore-signed builds (docs/bashy-service-supply-chain-policy.md, Rule 1).
+> The bashy-signed OpenClaw build is in progress. Until it ships, do NOT
+> install OpenClaw from npm, do NOT run the upstream ghcr image, and do NOT
+> run `openclaw gateway start`. Tell the human, verbatim:
+>
+> > Delivery to Telegram, Discord, Slack and Matrix chat needs the OpenClaw
+> > gateway, and bashy only runs gateway builds it has built and signed
+> > itself. That signed build is not available yet, so messaging is switched
+> > off for now. Publishing to your feed sinks works today.
+>
+> Then skip to section 4. The steps below are kept for when the signed build
+> lands; they will be rewritten to install it through binmgr.
+
 Ask which of **Telegram, Discord, Slack, Matrix chat** the human wants — one or
 more. These four are the first-release set; the doctor reports any other
 `--channel` as missing (`next: bashy feed channel rm NAME`).
@@ -115,11 +130,8 @@ Delivery runs through the `openclaw:send` tool command
 check before installing:
 
 ```bsh
-node --version || true                 # need v24.16.0 or newer
-bashy mise use -g node@24              # only if node is missing or older
-npm install -g openclaw@latest         # the doctor's documented install
-bashy tool add --force examples/fleet/tools/openclaw.yaml   # only if `bashy tool list` lacks openclaw:send
-openclaw gateway start                 # the doctor probes it at 127.0.0.1:18789
+echo "BLOCKED: no bashy-signed OpenClaw build yet; never npm install or start the upstream gateway" >&2
+false
 ```
 
 Ask before installing anything globally if the human has not already said yes.
@@ -146,8 +158,8 @@ restart it in an environment rendered by the vault — the value is never
 written to argv or to a file you create:
 
 ```bsh
-openclaw gateway stop || true
-eval "$(bashy secret env)" && openclaw gateway start
+echo "BLOCKED: the gateway may only be (re)started from a bashy-signed build" >&2
+false
 ```
 
 ### Telegram
@@ -225,6 +237,17 @@ Channel args: `--channel matrix --target room:ROOM_ID`.
 
 ### Self-hosted Matrix chat (optional, experimental, Linux only)
 
+> **BLOCKED in this release.** bashy never starts a server built by a third
+> party. The tuwunel binary available today is upstream's release asset, so
+> this step refuses to install or start it until the bashy-CI-built,
+> Sigstore-signed homeserver build exists. Tell the human, verbatim:
+>
+> > A self-hosted Matrix chat server is not available yet: bashy only runs
+> > server builds it has built and signed itself, and that build is still
+> > in progress. Use an existing Matrix chat account in the meantime.
+>
+> Do not run S1–S4 below.
+
 Run this only when the human asks for Matrix chat **and** has no homeserver
 account to use. It installs a private homeserver (tuwunel, Apache-2.0) on this
 host: loopback-only, registration and federation off. Then the Matrix chat
@@ -255,7 +278,8 @@ every user id, `@owner:NAME`, and **cannot change after the first start**).
 ```bsh
 [ "$(uname -s)" = Linux ] || echo "not Linux: stop, use an existing Matrix chat account"
 NAME=localhost                                  # the server name the human chose
-bashy tool install tuwunel                      # prints "installed tuwunel -> PATH"
+echo "BLOCKED: no bashy-signed tuwunel build yet; do not install or start it" >&2; false
+# bashy tool install tuwunel                    # prints "installed tuwunel -> PATH"
 bashy service show matrix-chat >/dev/null 2>&1 || bashy service add --optional matrix-chat
 bashy service set matrix-chat --set settings.binary=PATH --set settings.server_name="$NAME"
 bashy service show matrix-chat --yaml           # note settings.data_dir (default ${BASHY_HOME:-$HOME/.bashy}/matrix-chat)
@@ -303,7 +327,8 @@ Never paste the owner password into chat. Tell the human, verbatim:
 **S3. Start and wait.**
 
 ```bsh
-bashy service enable matrix-chat                # or: bashy service start matrix-chat
+echo "BLOCKED: matrix-chat may only start from a bashy-signed build" >&2; false
+# bashy service enable matrix-chat              # or: bashy service start matrix-chat
 for i in $(seq 30); do
   curl -sf http://127.0.0.1:6167/_matrix/client/versions >/dev/null && break
   sleep 1
@@ -502,8 +527,9 @@ export default async function handler(event) {
   }
 }
 HANDLER
-openclaw hooks enable bashy-dm
-openclaw hooks info bashy-dm       # requirements must pass on the gateway host
+# BLOCKED until the bashy-signed gateway build: do not enable the hook.
+# openclaw hooks enable bashy-dm
+# openclaw hooks info bashy-dm
 ```
 
 If the gateway reports a different `channelId` than the four kinds above
