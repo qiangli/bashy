@@ -63,7 +63,9 @@
           # prepack/postpack below are the upstream build's own documented
           # entrypoints (package.json scripts), run here explicitly and
           # audibly — not as silent install lifecycle.
-          npm pack --ignore-scripts=false
+          # pnpm pack (not npm): the workspace has workspace: runtime deps
+          # (@openclaw/ai) that only pnpm rewrites to concrete versions.
+          pnpm pack
           # shellcheck disable=SC2012 # npm pack names are plain ASCII
           TARBALL="$(ls -t openclaw-*.tgz | head -1)"
           mv "$TARBALL" "../out/openclaw-gateway-${GITHUB_REF_NAME}.tgz"

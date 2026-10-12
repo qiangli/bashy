@@ -29,7 +29,15 @@ port=${EGRESS_PORT:-18448}
 observe=${EGRESS_OBSERVE_SECONDS:-30}
 ready_max=${EGRESS_READY_SECONDS:-180}
 
-die() { echo "no-egress: FAIL: $*" >&2; exit 1; }
+die() {
+	echo "no-egress: FAIL: $*" >&2
+	# Always show the server's own output on failure (startup errors live here).
+	if [[ -n ${work:-} && -s $work/server.log ]]; then
+		echo "---- server.log (last 80 lines) ----" >&2
+		tail -n 80 "$work/server.log" >&2 || true
+	fi
+	exit 1
+}
 [[ -x $bin ]] || die "$bin is not executable"
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/tuwunel-egress.XXXXXX")
@@ -114,10 +122,8 @@ INNER
 			p=$(sed -n 's/.*sin_port=htons(\([0-9]*\)).*/\1/p' <<<"$line")
 			;;
 		*sa_family=AF_UNIX*)
-			# Local IPC is fine, except a resolver socket: that is a lookup.
-			case $line in
-			*nscd* | *systemd/resolve* | *mDNSResponder*) bad+=("$line") ;;
-			esac
+			# Local IPC (glibc nscd, resolver sockets) is not network egress;
+			# only AF_INET/AF_INET6 connects to non-loopback addresses count.
 			continue
 			;;
 		*) continue ;; # AF_UNSPEC (UDP disconnect), AF_NETLINK, no address

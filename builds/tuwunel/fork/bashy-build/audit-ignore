@@ -1,0 +1,4 @@
+# RUSTSEC-2024-0449 | unsafe-libyaml | "unmaintained" informational notice, not a
+# vulnerability; vulnerabilities stay denied. Reviewed 2026-10-12 (Sprint 433,
+# operator decision); re-checked every build; remove when upstream drops the crate.
+RUSTSEC-2024-0449
