@@ -1,0 +1,25 @@
+      - name: pinned Go toolchain (from the upstream go.mod)
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: src/go.mod
+          check-latest: false
+          cache: false
+      - name: pin the exact toolchain (PIN GO_TOOLCHAIN == upstream go.mod)
+        run: |
+          set -euo pipefail
+          . fork/bashy-build/PIN
+          # The declaration must name what the upstream release builds with:
+          # go.mod's `toolchain` line when it has one, else its `go` line. A
+          # pin bump that forgets GO_TOOLCHAIN fails here instead of silently
+          # building on whatever the runner image happens to ship.
+          want=$(sed -n 's/^toolchain go\([0-9][0-9.]*\)[[:space:]]*$/\1/p' src/go.mod | head -n1)
+          if [[ -z $want ]]; then
+            want=$(sed -n 's/^go \([0-9][0-9.]*\)[[:space:]]*$/\1/p' src/go.mod | head -n1)
+          fi
+          [[ -n $want ]] || { echo "src/go.mod declares no go/toolchain version"; exit 1; }
+          [[ $want == "$GO_TOOLCHAIN" ]] ||
+            { echo "PIN GO_TOOLCHAIN $GO_TOOLCHAIN != upstream go.mod $want"; exit 1; }
+          # GOTOOLCHAIN makes every `go` command use exactly that release, no
+          # matter what setup-go resolved, so the build is toolchain-exact.
+          echo "GOTOOLCHAIN=go$GO_TOOLCHAIN" >>"$GITHUB_ENV"
+          GOTOOLCHAIN="go$GO_TOOLCHAIN" go version

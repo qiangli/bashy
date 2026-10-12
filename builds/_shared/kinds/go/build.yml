@@ -1,0 +1,38 @@
+      - name: go build (upstream CGO/tags, -trimpath, reproducible ldflags)
+        working-directory: src
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          . ../fork/bashy-build/PIN
+          # GO_CGO declares, per matrix asset, what the UPSTREAM release does
+          # (several projects enable cgo on linux and disable it elsewhere).
+          cgo=
+          for pair in $GO_CGO; do
+            [[ ${pair%%=*} == "$ASSET" ]] || continue
+            cgo=${pair#*=}
+          done
+          case $cgo in
+          0 | 1) ;;
+          *) echo "PIN GO_CGO has no 0/1 entry for $ASSET"; exit 1 ;;
+          esac
+          tags=()
+          [[ -z ${GO_BUILD_TAGS:-} ]] || tags=(-tags "$GO_BUILD_TAGS")
+          flags=()
+          if [[ -n ${GO_BUILD_FLAGS:-} ]]; then read -r -a flags <<<"$GO_BUILD_FLAGS"; fi
+          envs=(CGO_ENABLED="$cgo")
+          if [[ -n ${GO_BUILD_ENV:-} ]]; then
+            read -r -a build_env <<<"$GO_BUILD_ENV"
+            envs+=("${build_env[@]}")
+          fi
+          mkdir -p ../out
+          # -trimpath and -buildid= drop the build path and the action id, and
+          # GO_LDFLAGS stamps only PIN-derived values (no build date, no `git
+          # describe`), so re-running the same bashy tag rebuilds the same bytes.
+          env "${envs[@]}" go build -trimpath \
+            ${tags[@]+"${tags[@]}"} ${flags[@]+"${flags[@]}"} \
+            -ldflags "-s -w -buildid= $GO_LDFLAGS" \
+            -o "../out/$ASSET" "$GO_PACKAGE"
+          # Smoke the artifact: a binary that cannot report its own version is
+          # not a release candidate.
+          "../out/$ASSET" "$GO_VERSION_ARG"

@@ -1,0 +1,13 @@
+{
+  "storage": {
+    "rootDirectory": "{{DATA_DIR}}/registry"
+  },
+  "http": {
+    "address": "{{ADDR}}",
+    "port": "{{PORT}}"
+  },
+  "log": {
+    "level": "info"
+  },
+  "extensions": {}
+}

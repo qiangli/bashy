@@ -20,6 +20,7 @@ builds/
     bashy-build.yml         workflow skeleton: pin -> build matrix -> [audit] -> release
     verify-pin.sh           provenance gate, shipped into every fork
     kinds/cargo/            setup.yml / build.yml / audit.yml steps for Rust tools
+    kinds/go/               the same three for Go tools
   <tool>/
     tool.env                THE declaration (shipped verbatim as bashy-build/PIN)
     files/                  tool-specific files, copied into bashy-build/
@@ -27,6 +28,59 @@ builds/
     README.md               knob tables, upstream evidence, binmgr pin
     fork/                   GENERATED — never edit by hand
 ```
+
+## Tools
+
+| tool | upstream | pinned tag | license at the tag | kind | who runs it |
+|---|---|---|---|---|---|
+| `openclaw` | `openclaw/openclaw` | `v2026.10.2` | see its README | `custom` | the OpenClaw gateway |
+| `tuwunel` | `matrix-construct/tuwunel` | `v1.9.4` | Apache-2.0 | `cargo` | the Matrix homeserver |
+| `victoria-logs` | `VictoriaMetrics/VictoriaLogs` | `v1.51.0` | Apache-2.0 | `go` | yoke `external/otel/stack` |
+| `victoria-metrics` | `VictoriaMetrics/VictoriaMetrics` | `v1.147.0` | Apache-2.0 | `go` | yoke `external/otel/stack` |
+| `victoria-traces` | `VictoriaMetrics/VictoriaTraces` | `v0.9.4` | Apache-2.0 | `go` | yoke `external/otel/stack` |
+| `gitea` | `go-gitea/gitea` | `v28.1.0` | MIT | `go` (own `build.yml`) | yoke `external/loom` |
+| `kopia` | `kopia/kopia` | `v0.23.1` | Apache-2.0 | `go` | yoke `external/kopia` |
+| `zot` | `project-zot/zot` | `v2.1.21` | Apache-2.0 | `go` | yoke `external/zot` |
+
+Each pin is the release yoke runs today, read from `external/<tool>` or
+`pkg/fleet/baseline/services/<tool>.yaml`. Every license above was checked at
+the pinned tag, not at HEAD.
+
+### Not yet addable
+
+Two services in the audit are **blocked**, and neither is a licensing problem —
+both are permissive (`seaweedfs/seaweedfs` Apache-2.0, `gitea/act_runner` MIT).
+Each needs a pipeline decision first, so no declaration exists for them:
+
+- **`act_runner`** — there is **no upstream on GitHub**. Its home is
+  `gitea.com/gitea/act_runner` and its binaries are published on
+  `dl.gitea.com` (which is why yoke resolves it with a `binmgr.URLSpec`, not a
+  `GitHubSpec`). The shared pipeline's provenance gate is GitHub-shaped end to
+  end: `actions/checkout` of `UPSTREAM_SLUG`, and a `pin` job that requires a
+  non-draft, non-pre-release **GitHub** release at the tag. Supporting it means
+  teaching the skeleton a second forge, which is a `_shared/` change, not a
+  declaration.
+- **`seaweedfs`** — its release tags are bare `X.Y` (`4.48`, the version
+  `pkg/fleet/baseline/services/seaweedfs.yaml` pins; there is no `v`-prefixed
+  equivalent — the last `v*` tag is `v3.33`). The pipeline refuses any upstream
+  tag that is not a plain `vX.Y.Z` in three places (`render.sh`,
+  `verify-pin.sh`, the `pin` job), and the workflow's own trigger is
+  `bashy-v*`, so `bashy-4.48-1` would not even fire. Widening the release-tag
+  shape is again a `_shared/` change, and it re-renders every existing fork, so
+  it wants its own slice.
+
+### Windows legs
+
+No tool declares a Windows matrix leg yet, even where upstream ships one
+(gitea publishes windows/amd64 and windows/arm64; the Victoria components
+publish windows/amd64). The blocker is the skeleton, not the declarations: its
+own steps are bash (`set -euo pipefail`, `. fork/bashy-build/PIN`,
+`verify-pin.sh`) and would run under PowerShell on a `windows-*` runner, and
+`no-egress-test.sh` is built on `unshare`/`strace` and `sandbox-exec`, with no
+Windows equivalent. Adding Windows means a `defaults.run.shell: bash` (or
+per-step `shell:`) in `_shared/bashy-build.yml` plus a Windows no-egress
+harness — a `_shared/` slice of its own. Windows hosts run the Linux build in
+bashy's Linux VM/container meanwhile.
 
 ## What the shared pipeline does (every tool)
 
@@ -65,7 +119,7 @@ Shell-sourceable `KEY=VALUE` only. It is shipped verbatim as
 | `TOOL` | directory name; fork is `FORK_REPO=qiangli/$TOOL` |
 | `UPSTREAM_REPO`, `UPSTREAM_SLUG` | upstream URL and `owner/repo` |
 | `UPSTREAM_TAG`, `UPSTREAM_COMMIT` | pinned release tag and its full 40-hex commit |
-| `KIND` | step-fragment kind under `_shared/kinds/` (`cargo`), or `custom` (the tool supplies its own fragments) |
+| `KIND` | step-fragment kind under `_shared/kinds/` (`cargo`, `go`), or `custom` (the tool supplies its own fragments) |
 | `COSIGN_VERSION` | cosign release used to sign (`v3.1.3`) |
 | `MATRIX` | `ASSET=RUNNER ...`; each leg's artifact is named `ASSET` |
 | `APT_PACKAGES` | Linux host packages (include the no-egress tools: `strace iproute2 curl`, ...) |
@@ -76,6 +130,7 @@ Shell-sourceable `KEY=VALUE` only. It is shipped verbatim as
 | `RELEASE_EXECUTABLES` | assets to `chmod +x` |
 | `RELEASE_NOTE`, `RELEASE_GATES` | release-notes lines |
 | kind keys | `cargo`: `RUST_TOOLCHAIN CARGO_AUDIT_VERSION CARGO_CYCLONEDX_VERSION CARGO_PACKAGE CARGO_BIN CARGO_SBOM_MANIFEST`, optional `files/features.env` (`FEATURES` -> `--no-default-features --features`), required `files/audit-ignore` |
+| kind keys | `go`: `GO_TOOLCHAIN GO_PACKAGE GO_LDFLAGS GO_BUILD_TAGS GO_BUILD_FLAGS GO_BUILD_ENV GO_CGO GO_VERSION_ARG GOVULNCHECK_VERSION GO_SBOM_VERSION`, required `files/vuln-ignore` |
 
 Templates use `@@KEY@@`. A key that is not declared fails the render. That
 includes keys a tool's own fragments use, such as openclaw's `NODE_VERSION` and
@@ -108,8 +163,10 @@ includes keys a tool's own fragments use, such as openclaw's `NODE_VERSION` and
    write `setup.yml` / `build.yml` / (optional) `audit.yml` next to `tool.env`.
    These are workflow steps at 6-space indent. The build steps must leave the
    release outputs in `out/`. For a toolchain that a second tool will reuse,
-   move the fragments to `_shared/kinds/<kind>/` instead. The upcoming CLI
-   migration will probably add `go`.
+   move the fragments to `_shared/kinds/<kind>/` instead. A tool may also
+   override ONE fragment of an existing kind and inherit the rest: `gitea` is
+   `KIND=go` with its own `build.yml`, because the `bindata` tag embeds a
+   vite-built frontend that the generic Go build knows nothing about.
 4. `builds/render.sh <tool> && builds/check.sh`. Commit `tool.env`, `files/`,
    the fragments and the generated `fork/`.
 5. Operator (not in bashy CI): in a clone of `qiangli/<tool>`, run
