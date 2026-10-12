@@ -171,6 +171,10 @@ jobs:
             --prod "${RUNNER_TEMP}/audit-prod.json" \
             --exceptions "${{ github.workspace }}/bashy-build/audit-exceptions"
 
+      - name: Prepare SBOM output directory
+        shell: bash
+        run: mkdir -p "$RUNNER_TEMP/sbom"
+
       - name: SBOM (CycloneDX)
         # anchore/sbom-action v0
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
