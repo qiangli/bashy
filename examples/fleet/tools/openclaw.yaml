@@ -1,6 +1,7 @@
 # OpenClaw — custom tool definition (bashy examples/fleet, Sprint 406)
 # source:  https://github.com/openclaw/openclaw  (MIT)
-# install: npm install -g openclaw
+# install: npm install -g openclaw@latest  (requires Node >= 24.16; check `node --version` first)
+# setup:   skills/bashy/commands/feed-setup.md (feed channels: Telegram, Discord, Slack, Matrix chat)
 # add:     bashy tool add --force examples/fleet/tools/openclaw.yaml
 #          (--force while the retired built-in openclaw entry still exists)
 # models:  --model provider/model (e.g. ollama/qwen3.5:9b); providers in its config
