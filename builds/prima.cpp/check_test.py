@@ -62,6 +62,73 @@ class CompilerInputs(unittest.TestCase):
                     item=tarfile.TarInfo(name); item.type=kind; item.linkname='elsewhere'; t.addfile(item)
                 with self.assertRaises(ValueError): merge.merge(root,root/'result',root/'report.json')
 
+class Preparation(unittest.TestCase):
+    def test_dependency_metadata_matches_pin(self):
+        declaration=dict(line.split('=',1) for line in
+                         (ROOT/'tool.env').read_text().splitlines())
+        metadata=(ROOT/'files/dependencies.json').read_bytes()
+        self.assertEqual(metadata,(ROOT/'fork/bashy-build/dependencies.json').read_bytes())
+        dependencies=json.loads(metadata)
+        self.assertEqual(dependencies['source']['tag'],declaration['UPSTREAM_TAG'])
+        self.assertEqual(dependencies['source']['commit'],declaration['UPSTREAM_COMMIT'])
+        core=next(item for item in dependencies['linked']
+                  if item['name']=='prima.cpp/llama.cpp/ggml')
+        self.assertEqual(core['version'],declaration['UPSTREAM_COMMIT'])
+        self.assertEqual(core['purl'],f"pkg:github/qiangli/prima.cpp@{declaration['UPSTREAM_COMMIT']}")
+
+    def test_reviewed_pin_and_fail_closed_guards(self):
+        # Candidate 0.1.1-1 passed verify-pin.sh but all four prepare steps
+        # rejected the reviewed HEAD because prepare.py still pinned 0.1.0.
+        sha='542d01932a88372a184037c5939048f355dcbd57'
+        old='f4ea9845dc91a18793921492e50ef23ec799e93e'
+        pin=(ROOT/'fork/bashy-build/PIN').read_text()
+        self.assertIn(f'UPSTREAM_COMMIT={sha}\n',pin)
+        self.assertEqual(pin,(ROOT/'tool.env').read_text())
+        self.assertEqual((ROOT/'files/prepare.py').read_bytes(),
+                         (ROOT/'fork/bashy-build/prepare.py').read_bytes())
+        for script in [ROOT/'files/prepare.py', ROOT/'fork/bashy-build/prepare.py']:
+            spec=importlib.util.spec_from_file_location('prepare',script)
+            module=importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            self.assertEqual(module.SOURCE,sha)
+            cases=[(old,'',True,module.NNG,True,'wrong source',0),
+                   ('0'*40,'',True,module.NNG,True,'wrong source',0),
+                   (sha,' M source.cpp',True,module.NNG,True,'dirty source',0),
+                   (sha,'',False,module.NNG,True,'',0),
+                   (sha,'',True,'0'*40,True,'nng tag moved',1),
+                   (sha,'',True,module.NNG,False,'nng license changed',1),
+                   (sha,'',True,module.NNG,True,None,1)]
+            for head,dirty,license_ok,nng,nng_license_ok,error,clones in cases:
+                with self.subTest(script=script,head=head,dirty=dirty,
+                                  license_ok=license_ok,nng=nng,nng_license_ok=nng_license_ok), \
+                     tempfile.TemporaryDirectory() as d:
+                    src=Path(d)
+                    (src/'LICENSE').write_text('fixture')
+                    (src/'common').mkdir()
+                    profiler=src/'common/profiler.cpp'
+                    original='static void external_fio_impl() {}\nvoid device_disk_rnd_bw() {}\n'
+                    profiler.write_text(original)
+                    (src/'CMakeLists.txt').write_text('# fixture\n')
+                    license_sha='0ed0eea0d0f31b7f07774a7cac64f9fd20351faf51fab447e9444734448d0452'
+                    nng_license='353da18316279d3eded2dd973f21af1cce87acf8'
+                    with patch.object(module,'git',side_effect=[head,dirty,nng,
+                                      nng_license if nng_license_ok else '0'*40]), \
+                         patch.object(module.hashlib,'sha256') as digest, \
+                         patch.object(module.subprocess,'run') as clone, \
+                         patch('sys.stdout',new_callable=io.StringIO):
+                        digest.return_value.hexdigest.return_value=license_sha if license_ok else '0'*64
+                        if error is not None:
+                            with self.assertRaisesRegex(AssertionError,error):
+                                module.prepare(src)
+                            self.assertEqual(profiler.read_text(),original)
+                            self.assertFalse((src/'bashy-overlay.cmake').exists())
+                        else:
+                            module.prepare(src)
+                            self.assertIn('*read_bw = 0.1f;',profiler.read_text())
+                            self.assertEqual((src/'bashy-overlay.cmake').read_bytes(),
+                                             (script.parent/'overlay.cmake').read_bytes())
+                        self.assertEqual(clone.call_count,clones)
+
 class Contract(unittest.TestCase):
     def test_source_gate_fails_closed(self):
         sha='542d01932a88372a184037c5939048f355dcbd57'

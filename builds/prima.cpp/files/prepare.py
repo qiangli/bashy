@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent
-SOURCE = 'f4ea9845dc91a18793921492e50ef23ec799e93e'
+SOURCE = '542d01932a88372a184037c5939048f355dcbd57'
 NNG = '29aff2bacc9e2cfa6dcc52155d2816582617f918'
 
 def git(root, *args):
