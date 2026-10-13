@@ -1,0 +1,39 @@
+{
+  "schema": "bashy-blocked-source-candidate-v1",
+  "tool": "prima.cpp",
+  "status": "blocked",
+  "source": {
+    "repository": "qiangli/prima.cpp",
+    "commit": "f4ea9845dc91a18793921492e50ef23ec799e93e",
+    "license": "MIT",
+    "license_path": "LICENSE",
+    "license_sha256": "0ed0eea0d0f31b7f07774a7cac64f9fd20351faf51fab447e9444734448d0452",
+    "official_release_tag": null
+  },
+  "rejected_release": {
+    "tag": "shard-binaries",
+    "commit": "1ea4707ea41dd4c89088c9c045d0049907f1d201",
+    "reason": "Links libzmq (MPL-2.0); predates the nng replacement. Not the nng-3 source."
+  },
+  "dependency_candidates": [
+    {
+      "repository": "nanomsg/nng",
+      "tag": "v1.9.0",
+      "commit": "29aff2bacc9e2cfa6dcc52155d2816582617f918",
+      "license": "MIT",
+      "license_path": "LICENSE.txt",
+      "license_git_blob": "353da18316279d3eded2dd973f21af1cce87acf8",
+      "audit": "pending"
+    }
+  ],
+  "proposed_platforms": ["darwin-arm64", "darwin-amd64", "linux-amd64", "linux-arm64"],
+  "platform_status": "Awaiting manager confirmation; Windows unsupported, never fall back to upstream assets",
+  "blockers": [
+    "No reviewed official stable upstream release tag for the permissive candidate",
+    "Fork divergence ca4b56adceae0434082b9ec85936e2fb40d1d058 and f4ea9845dc91a18793921492e50ef23ec799e93e needs policy review",
+    "Complete C/C++ dependency inventory, high/critical vulnerability audit and artifact SBOM pending",
+    "HiGHS selection and fio runtime shellout need explicit permissive dependency decisions",
+    "Runtime no-egress proof with an actual model and configured ring peers pending on every supported platform",
+    "Reviewed workflow installation and hosted build/signature evidence pending; worker may not push"
+  ]
+}

@@ -188,6 +188,7 @@ Weave-round verification + retro reports (historical, not load-bearing):
 
 - [Sprint 413 sprint watch / inbox-ack diagnostics](plan-sprint-413-sprint-watch-inbox-ack-diagnostics.md) — why `sprint --watch` and `inbox-ack` exited 1 with no stderr, the bashy half of the sprint tree's self-reporting contract, explained watch exits, and the yoke stale-heartbeat render patch reported for integration.
 - [Shared fork-build-sign pipeline](plan-shared-fork-build-pipeline.md) — `builds/render.sh` renders every verified-build fork from one `tool.env` + shared skeleton; `builds/check.sh` is the regenerate-and-diff gate.
+- [Prima verified build admission](plan-prima-verified-build.md) — Sprint 436 #2029: blocked source lineage, pinned MIT candidate, hosted inspection and separate outpost consumer contract.
 - [The `go` build kind and the Go service declarations](plan-builds-go-kind-services.md) — `builds/_shared/kinds/go` (pinned setup-go from the upstream go.mod, upstream CGO per leg, reproducible ldflags, reachability-gated govulncheck) and the victoria-logs/metrics/traces, gitea, kopia and zot declarations; why the Windows legs are blocked (act_runner and seaweedfs are no longer — see the second-forge plan below).
 - [Victoria fork CI: one shared egress verdict, and pins that clear govulncheck](plan-victoria-fork-ci-green.md) — `builds/_shared/egress-verdict.sh` (AF_UNIX is local IPC) + `SHARED_FILES`, the Victoria pin bumps to v1.154.0/v1.53.0/v0.12.0, and the gated `GO_TOOLCHAIN_SECURITY_OVERRIDE`.
 
