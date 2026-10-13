@@ -735,6 +735,101 @@ class WindowsCompilerProbe(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'mismatch'):
                 module.probe(root/'clang.exe', root/'clang++.exe')
 
+class WindowsCompilerSelection(unittest.TestCase):
+    # Run 38465115827: setup-msys2 installed CLANG64, but find_toolchain
+    # consulted PATH first and selected C:\Program Files\LLVM\bin\clang.exe
+    # (x86_64-pc-windows-msvc). Selection must be <msys2-location>/clang64/bin
+    # FIRST and ONLY: no PATH lookup, no Program Files fallback, no other
+    # MSYS2 shell.
+    def _module(self):
+        spec = importlib.util.spec_from_file_location(
+            'windows_compilers', ROOT/'files/windows-compilers.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def _pair(self, directory, triple='x86_64-w64-windows-gnu'):
+        macros = ('"#define __clang__ 1" "#define __MINGW64__ 1" '
+                  '"#define __x86_64__ 1" "#define __SIZEOF_POINTER__ 8" '
+                  '"#define __cplusplus 202002L"')
+        for name in ('clang.exe', 'clang++.exe'):
+            script = directory/name
+            script.write_text('#!/bin/sh\n'
+                              f'if [ "$1" = -dumpmachine ]; then echo "{triple}"; exit 0; fi\n'
+                              'if [ "$1" = --version ]; then echo "clang version 19.1.7"; exit 0; fi\n'
+                              f'printf "%s\\n" {macros}\n')
+            script.chmod(0o755)
+
+    def test_selects_msys2_clang64_ahead_of_path_llvm(self):
+        module = self._module()
+        with tempfile.TemporaryDirectory() as msys, tempfile.TemporaryDirectory() as llvm:
+            clang64 = Path(msys)/'clang64'/'bin'
+            clang64.mkdir(parents=True)
+            self._pair(clang64)
+            llvm_bin = Path(llvm)/'bin'
+            llvm_bin.mkdir()
+            self._pair(llvm_bin, triple='x86_64-pc-windows-msvc')
+            old_path, old_location = os.environ.get('PATH', ''), os.environ.get(module.MSYS2_LOCATION_ENV)
+            os.environ['PATH'] = str(llvm_bin) + os.pathsep + old_path
+            os.environ[module.MSYS2_LOCATION_ENV] = msys
+            try:
+                self.assertEqual(module.find_toolchain(), clang64)
+                records = module.probe(clang64/'clang.exe', clang64/'clang++.exe')
+                self.assertEqual([r['target'] for r in records],
+                                 ['x86_64-w64-windows-gnu']*2)
+            finally:
+                os.environ['PATH'] = old_path
+                if old_location is None:
+                    os.environ.pop(module.MSYS2_LOCATION_ENV, None)
+                else:
+                    os.environ[module.MSYS2_LOCATION_ENV] = old_location
+
+    def test_missing_clang64_pair_fails_without_path_fallback(self):
+        module = self._module()
+        with tempfile.TemporaryDirectory() as msys, tempfile.TemporaryDirectory() as llvm:
+            llvm_bin = Path(llvm)/'bin'
+            llvm_bin.mkdir()
+            self._pair(llvm_bin, triple='x86_64-pc-windows-msvc')
+            old_path, old_location = os.environ.get('PATH', ''), os.environ.get(module.MSYS2_LOCATION_ENV)
+            os.environ['PATH'] = str(llvm_bin) + os.pathsep + old_path
+            os.environ[module.MSYS2_LOCATION_ENV] = msys
+            try:
+                with self.assertRaisesRegex(ValueError, 'clang64'):
+                    module.find_toolchain()
+            finally:
+                os.environ['PATH'] = old_path
+                if old_location is None:
+                    os.environ.pop(module.MSYS2_LOCATION_ENV, None)
+                else:
+                    os.environ[module.MSYS2_LOCATION_ENV] = old_location
+
+    def test_no_path_or_program_files_lookup_in_source(self):
+        import inspect
+        module = self._module()
+        discovery = (ROOT/'files/windows-compilers.py').read_text()
+        self.assertIn('MSYS2_LOCATION', discovery)
+        self.assertIn('clang64/bin', discovery)
+        self.assertNotIn('import shutil', discovery)
+        # The selection body itself must name only the CLANG64 dir: no PATH
+        # lookup, no Program Files literal, no scan of other MSYS2 shells.
+        # (Prose comments elsewhere may cite the old LLVM path as history.)
+        body = inspect.getsource(module.find_toolchain)
+        self.assertIn('clang64_dir()', body)
+        for token in ['which', 'PATH', 'Program Files', 'glob']:
+            self.assertNotIn(token, body)
+
+    def test_setup_wires_msys2_location_into_probe(self):
+        setup = (ROOT/'setup.yml').read_text()
+        self.assertIn('id: msys2', setup)
+        self.assertIn('steps.msys2.outputs.msys2-location', setup)
+        self.assertIn('MSYS2_LOCATION', setup)
+        self.assertLess(setup.index('id: msys2'),
+                        setup.index('steps.msys2.outputs.msys2-location'))
+        workflow = (ROOT/'fork/.github/workflows/bashy-build.yml').read_text()
+        self.assertIn('id: msys2', workflow)
+        self.assertIn('steps.msys2.outputs.msys2-location', workflow)
+        self.assertIn('MSYS2_LOCATION', workflow)
+
 class CollectInputsDepfiles(unittest.TestCase):
     def _module(self):
         spec = importlib.util.spec_from_file_location(

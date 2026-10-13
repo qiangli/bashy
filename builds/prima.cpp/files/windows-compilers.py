@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """Discover a native MinGW clang pair targeting x86_64-w64-windows-gnu.
 
-CI run 38462299969 failed here: the only clang on PATH was
-C:\\Program Files\\LLVM\\bin\\clang.exe, which targets x86_64-pc-windows-msvc.
-That compiler must be refused, not used: MSVC-target objects cannot link the
-MinGW static build. This probe therefore demands the gnu triple, MinGW
-target macros and no _MSC_VER, and refuses to install or cross-compile.
+CI run 38465115827 failed here: msys2/setup-msys2 had installed CLANG64
+(clang, cmake, make, ninja), but the probe picked the first clang on PATH,
+C:\\Program Files\\LLVM\\bin\\clang.exe, which targets
+x86_64-pc-windows-msvc. That compiler must never be selected: MSVC-target
+objects cannot link the MinGW static build. This probe therefore looks ONLY
+in <msys2-location>/clang64/bin (wired from the setup-msys2 step output via
+the MSYS2_LOCATION environment variable, defaulting to C:/msys64), demands
+the gnu triple, MinGW target macros and no _MSC_VER, and refuses to install
+or cross-compile.
 """
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 
 TARGET = 'x86_64-w64-windows-gnu'
@@ -50,19 +53,38 @@ def probe(cc, cxx):
     return records
 
 
+# Environment variable carrying the setup-msys2 step's msys2-location
+# output (see builds/prima.cpp/setup.yml). Falls back to the default
+# install root when unset (local runs outside CI).
+MSYS2_LOCATION_ENV = 'MSYS2_LOCATION'
+DEFAULT_MSYS2_ROOT = Path('C:/msys64')
+# Pinned MSYS2 shell: only CLANG64 carries the MinGW clang packages.
+CLANG64_SUBDIR = Path('clang64/bin')
+
+
+def msys2_root():
+    location = os.environ.get(MSYS2_LOCATION_ENV, '').strip()
+    if location:
+        return Path(location)
+    return DEFAULT_MSYS2_ROOT
+
+
+def clang64_dir():
+    return msys2_root() / CLANG64_SUBDIR
+
+
 def find_toolchain():
-    candidates = []
-    cc = shutil.which('clang')
-    if cc:
-        candidates.append(Path(cc).parent)
-    # Prefer the pinned CLANG64 environment over any other MSYS2 shell.
-    candidates.append(Path('C:/msys64/clang64/bin'))
-    candidates += sorted(Path('C:/msys64').glob('*/bin'))
-    for directory in dict.fromkeys(candidates):
-        cc, cxx = directory / 'clang.exe', directory / 'clang++.exe'
-        if cc.is_file() and cxx.is_file():
-            return directory
-    raise ValueError('no MinGW clang pair installed (want CLANG64 from pinned setup-msys2)')
+    # The pinned CLANG64 environment ONLY: never consult the process search
+    # list (on the hosted runner it resolves to an x86_64-pc-windows-msvc
+    # compiler) nor any other MSYS2 shell.
+    directory = clang64_dir()
+    cc, cxx = directory / 'clang.exe', directory / 'clang++.exe'
+    if cc.is_file() and cxx.is_file():
+        return directory
+    raise ValueError(
+        f'no MinGW clang pair installed (want {directory}/clang.exe and '
+        f'{directory}/clang++.exe from pinned setup-msys2 CLANG64; '
+        f'set {MSYS2_LOCATION_ENV} from steps.msys2.outputs.msys2-location)')
 
 
 def tool_versions(directory):

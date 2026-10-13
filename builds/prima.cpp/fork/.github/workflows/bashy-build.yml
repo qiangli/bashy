@@ -138,6 +138,7 @@ jobs:
       - name: prepare pinned CMake dependencies and reviewed overlay
         run: python3 fork/bashy-build/prepare.py src
       - name: provision pinned MinGW clang toolchain (Windows)
+        id: msys2
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
         with:
@@ -157,6 +158,11 @@ jobs:
           cache: false
       - name: native Windows MinGW + clang compilers
         if: runner.os == 'Windows'
+        env:
+          # Hand the probe the exact MSYS2 root setup-msys2 installed, so
+          # windows-compilers.py searches <msys2-location>/clang64/bin ONLY
+          # and can never fall back to C:\Program Files\LLVM (MSVC-target).
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
         run: python3 fork/bashy-build/windows-compilers.py
       - name: pre-build gates (PRE_BUILD_GATES)
         run: |
