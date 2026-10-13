@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Turn reviewed inventory + compiled file closure into SBOM and gate reports."""
-import hashlib
 import json
 from pathlib import Path
-import re
+import runpy
 import sys
 import urllib.request
 
@@ -11,24 +10,12 @@ root=Path(__file__).resolve().parent
 out=Path('out')
 inventory=json.loads((root/'dependencies.json').read_text())
 scan=json.loads((out/'prima-licenses.json').read_text())
-allowed={'mit','bsd-new','bsd-simplified','bsd-original','apache-2.0','isc','public-domain'}
-errors=[]
 inputs=json.loads((out/'prima-inputs.json').read_text())
-expected={f['path'] for f in inputs}
-observed=set()
-for f in scan['files']:
-    if f.get('type') == 'file':
-        path=f['path']
-        if path.startswith('audit-inputs/'): path=path[len('audit-inputs/'):]
-        observed.add(path)
-if not expected or observed != expected:
-    raise ValueError('ScanCode must cover every compiler input, on all four platforms')
-for f in scan['files']:
-    if f.get('scan_errors'): errors.append(f"scan error: {f['path']}")
-    for detection in f.get('license_detections',[]):
-        expression=detection['license_expression']
-        ids=set(re.findall(r'[a-z][a-z0-9.+-]*',expression))-{'and','or','with'}
-        if not ids <= allowed: errors.append(f"unreviewed license {expression}: {f['path']}")
+# Load the adjacent hyphenated module without changing the process import path.
+review=runpy.run_path(str(root/'license-review.py'))
+errors, corrections=review['audit_licenses'](scan, inputs, Path('audit-inputs'), inventory)
+scan['bashy_reviewed_findings']=corrections
+(out/'prima-licenses.json').write_text(json.dumps(scan,indent=2)+'\n')
 # Headers without their own license inherit the pinned root license; preserve all findings.
 components=[]
 for dep in inventory['linked']:
