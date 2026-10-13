@@ -99,32 +99,31 @@ runs single-node inference, the nng multipart/timeout test, and two-rank
 inference with a `1,1` layer split. Every subprocess has a deadline. Linux runs
 unprivileged inside a loopback-only network namespace with outbound syscall
 tracing, including failed attempts. Darwin uses a sandbox allowing only explicit
-loopback ring ports. Windows uses a disposable dynamic WFP policy
-(`files/windows-net-guard.c`, compiled on the runner with the same MinGW
-provision) explicitly permitting exactly the same loopback ports for the
-exercise processes — WFP filters loopback traffic, Windows Firewall would
-not, and a BLOCK veto wins over any PERMIT so the permits cannot weaken
-the denies. A matched ALE block is WSAEACCES, never silence, so the
-external 443 control to TEST-NET-1 is a single classified attempt
-(`files/wfp-verdict.h`, unit-tested): immediate WSAEACCES passes, and a
-silent drop passes only with a CLASSIFY_DROP net event proving our deny
-filter matched the flow — bare silence fails as a filter miss (run
-38472050604). Like an exercise failure, every control failure dumps the
-bound TCP table so the next failure names what the exercise actually
-bound (IPv4 loopback vs IPv6). All
-three enforcement points carry exactly the same allowlist: the
+loopback ring ports. Windows uses the built-in Windows Defender Firewall
+(`files/windows-defender-egress.ps1`, run elevated, no custom native code):
+disposable outbound BLOCK rules on the exact exercise programs — the
+interpreter, the CLI, the ring test, and the server executable when
+present. Loopback is not filtered by Windows Firewall, so the ring and
+engine loopback traffic works unimpeded with no allowlist. The negative
+control — an outbound TCP 443 connect from the blocked interpreter to
+unroutable TEST-NET-1 — must fail AND appear as DROP in the firewall
+dropped-packet log (logging is enabled by the gate at the known log path
+and restored afterwards); a connected control means no enforcement and
+fails. A Get-NetTCPConnection sampler watches the whole run and any
+allowed non-loopback connection from an exercise program fails the gate.
+All three enforcement points cover the same traffic: the
 seven ring-test ports — 5599 (multipart), 5600 (rcvtimeo), 5601
 (single-message), 5602-5605 — plus the rank-offset
 engine ports 19000/19001 (data) and 19100/19101 (signal). Port 5601 was
 missing until candidate -3 run 38414127942, where its denied connect hung the
 Mac ring test and tripped the Linux verdict; non-loopback destinations remain
 denied on all platforms. Enforcement is proven by a positive control whose
-denial is observed directly in the attempt's own output — EPERM on Darwin,
-WSAEACCES plus UDP delivery/denial proofs on Windows; the unified log is
+denial is observed directly — EPERM on Darwin,
+a blocked-and-logged 443 control plus the sampler verdict on Windows; the unified log is
 not a reliable sandbox observer (hosted macos-15 run 38411861522 recorded no
 denial there), so its absence neither passes nor fails the gate, while any
 observed engine denial — EPERM in the engine log or a unified-log match on
-Darwin, WSAEACCES past the guard marker on Windows —
+Darwin, a denial signature in the Windows exercise output —
 fails the job. Engine or ring failure under the deny profile also fails the
 job. Every Linux failure path reprints the buffered `*-egress.txt` evidence
 to the step log before exiting, and the workflow uploads that file with

@@ -127,89 +127,76 @@ SB
   } >>"out/$asset-egress.txt"
   ;;
 MINGW*|MSYS*)
-  # Hosted Windows gate. A disposable dynamic WFP policy explicitly permits
-  # exactly the pinned prima loopback ports (ring 5599-5605, engine data
-  # 19000/19001, engine signal 19100/19101) for the exercise processes — WFP
-  # filters loopback, Windows Firewall would not. A BLOCK veto wins over any
-  # PERMIT, so the explicit loopback permits cannot weaken the denies below.
-  # Controls retry a cold-start-tolerant deadline and, like an exercise
-  # failure, dump the bound TCP table so the next failure names what the
-  # exercise actually bound (IPv4 loopback vs IPv6). Enforcement is proven
-  # by positive
-  # controls whose verdicts are observed DIRECTLY in the guard's own stdout
-  # (WSAEACCES / delivery proof) before the marker line; anything after the
-  # marker is exercise output and must show no denial signature. The WFP
-  # filters are keyed on exact executable paths, which scopes policy more
-  # strongly than a post-hoc netstat owner check, so no netstat step follows.
+  # Hosted Windows gate on the built-in Windows Defender Firewall: an
+  # elevated PowerShell step installs disposable outbound BLOCK rules on
+  # the exact exercise programs (no custom native code — CI run 38473601546
+  # segfaulted the previous custom WFP-API harness). Loopback is not
+  # filtered by Windows Firewall, so the ring/exercise loopback works
+  # unimpeded and needs no allowlist. Enforcement is proven by a negative
+  # control (an outbound TCP 443 connect from the blocked interpreter)
+  # that must fail AND appear as DROP in the firewall dropped-packet log
+  # (logging is enabled by the gate and restored afterwards). The gate
+  # passes only if the exercise succeeds AND the control is blocked and
+  # logged; any observed allowed non-loopback connection fails it.
   [[ ${GITHUB_ACTIONS:-} == true && ${RUNNER_ENVIRONMENT:-} == github-hosted ]] || {
     echo 'native gate requires a GitHub-hosted runner' >&2; exit 1;
   }
   case $(hostname | tr '[:upper:]' '[:lower:]') in *dragon*) echo 'Dragon native gate prohibited' >&2; exit 1;; esac
   command -v python3 >/dev/null || { echo 'missing python3' >&2; exit 1; }
+  command -v powershell.exe >/dev/null || { echo 'missing powershell.exe' >&2; exit 1; }
   [[ $asset == prima-windows-amd64 ]] || { echo "unsupported Windows asset: $asset" >&2; exit 1; }
   binexe=$bin.exe
   [[ -f $binexe ]] || { echo "missing Windows CLI executable: $binexe" >&2; exit 1; }
   ringexe=$(pwd)/build/bin/prima-ring-test.exe
   [[ -f $ringexe ]] || { echo "missing Windows ring test: $ringexe" >&2; exit 1; }
-  # Compile only on the hosted Windows image, using the verified MinGW clang
-  # from the build leg (windows-compilers.py): no bare gcc, which names no
-  # pinned package in the CLANG64 provision.
-  cc=${BASHY_WINDOWS_CC:?verified Windows C compiler missing (windows-compilers.py)}
-  "$cc" -std=c11 -Wall -Wextra -Werror -municode "$here/windows-net-guard.c" \
-    -o "$work/net-guard.exe" -lfwpuclnt -lws2_32 -lrpcrt4 -liphlpapi
-  # Native paths for CreateProcess and WFP app-id filtering.
+  # Native paths: the gate keys rules on exact executable paths, and the
+  # exercise interpreter below is the blocked program, so the control and
+  # the exercise run under this same python. The firewall API rejects
+  # forward slashes in -Program paths ("invalid characters"), so rule
+  # programs use backslashes; PowerShell accepts either form everywhere
+  # else, so only the rule programs are converted.
+  winpath() { cygpath -m "$1" | tr '/' '\\'; }
   pyexe=$(python3 -c 'import sys; print(sys.executable)')
-  pyexe=$(cygpath -m "$pyexe")
-  binexe=$(cygpath -m "$binexe")
-  ringexe=$(cygpath -m "$ringexe")
+  pyexe=$(winpath "$pyexe")
+  binexe=$(winpath "$binexe")
+  ringexe=$(winpath "$ringexe")
   model_win=$(cygpath -m "$work/model.gguf")
   exercise_win=$(cygpath -m "$here/exercise.py")
-  # The guard is a native executable: every path it opens (pidfile) or
-  # filters/spawns (app ids, command line) must be a Windows path.
-  pid_win=$(cygpath -m "$work/pid")
-  if "$work/net-guard.exe" --app "$pyexe" --app "$binexe" --app "$ringexe" -- \
-      "$pid_win" "$pyexe" "$exercise_win" "$binexe" "$model_win" "$ringexe" \
-      >"out/$asset-egress.txt" 2>&1; then
-    echo 'no-egress: windows: exercise succeeded under the WFP deny policy'
+  gate_win=$(cygpath -m "$here/windows-defender-egress.ps1")
+  out_win=$(cygpath -m "$(pwd)/out/$asset-egress.txt")
+  gatework_win=$(cygpath -m "$work")
+  gate_args=(-PythonExe "$pyexe" -CliExe "$binexe" -RingExe "$ringexe"
+             -ExercisePy "$exercise_win" -ModelFile "$model_win"
+             -OutFile "$out_win" -WorkDir "$gatework_win")
+  serverexe=$(dirname "$bin")/prima-server-windows-amd64.exe
+  if [[ -f $serverexe ]]; then
+    gate_args+=(-ServerExe "$(winpath "$serverexe")")
+  fi
+  if powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$gate_win" "${gate_args[@]}" \
+      >"$work/gate-console.txt" 2>&1; then
+    echo 'no-egress: windows: exercise succeeded under the Defender deny policy'
   else
     rc=$?
-    echo "no-egress: windows: exercise failed under the WFP deny policy (rc=$rc)" >&2
-    cat "out/$asset-egress.txt" >&2 || true
+    echo "no-egress: windows: Defender gate failed (rc=$rc)" >&2
+    cat "$work/gate-console.txt" >&2 || true
     exit 1
   fi
-  marker='WFP exercise filters installed; multi-process job active'
-  controls=$(sed "/$marker/q" "out/$asset-egress.txt")
-  exercise=$(sed -n "/$marker/,\$p" "out/$asset-egress.txt")
-  # Deny-filter inventory is proven installed before any control runs.
-  grep -qF 'WFP deny filters installed' <<<"$controls" || {
-    echo 'no-egress: windows: missing deny-filter inventory proof' >&2; exit 1; }
-  # Positive controls directly observed: the off-allowlist and IPv6 TCP
-  # denials, three UDP verdicts, and one allowed-loopback proof. The
-  # external 443 control has two honest verdicts: an explicit ALE deny
-  # (WSAEACCES), or a silent drop the guard accepts ONLY with a
-  # CLASSIFY_DROP net event proving our deny filter matched the flow
-  # (run 38472050604: bare silence with no such event is a filter miss and
-  # fails inside the guard, so reaching here with that line is impossible).
-  for proof in 'WFP control denied family=2 type=1 port=5606 WSAEACCES' \
-               'WFP control denied family=23 type=1 port=5599 WSAEACCES' \
-               'WFP UDP control delivered family=2 port=5599' \
-               'WFP UDP control denied family=2 port=5606' \
-               'WFP UDP control denied family=23 port=5599' \
-               'WFP configured loopback control allowed'; do
-    grep -qF "$proof" <<<"$controls" || {
-      echo "no-egress: windows: missing positive-control proof: $proof" >&2; exit 1; }
-  done
-  if ! grep -qF 'WFP control denied family=2 type=1 port=443 WSAEACCES' <<<"$controls" && \
-     ! grep -qF 'WFP control silent-drop family=2 type=1 port=443 matched filter=' <<<"$controls"; then
-    echo 'no-egress: windows: missing external-control proof (explicit 443 deny or proven silent-drop)' >&2; exit 1
-  fi
-  # All three exercise stages passed with no denial signature past the marker.
-  [[ $(grep -c '^PASS:' <<<"$exercise") == 3 ]] || {
+  # The evidence file decides: the blocked-and-logged control proof, three
+  # PASS stages, the no-egress sampler verdict, and the cleanup proof must
+  # all be present. A connected control or an allowed non-loopback
+  # connection fails here even if the gate step above exited 0.
+  grep -qF 'Defender control blocked' "out/$asset-egress.txt" || {
+    echo 'no-egress: windows: missing blocked-control proof' >&2; exit 1; }
+  grep -qF 'pfirewall.log' "out/$asset-egress.txt" || {
+    echo 'no-egress: windows: missing firewall-log proof' >&2; exit 1; }
+  [[ $(grep -c '^PASS:' "out/$asset-egress.txt") == 3 ]] || {
     echo 'no-egress: windows: exercise stages did not all PASS' >&2; exit 1; }
-  grep -q 'exercise reaped; job closed; dynamic WFP policy removed' "out/$asset-egress.txt" || {
-    echo 'no-egress: windows: guard did not confirm policy removal' >&2; exit 1; }
-  if grep -Ei 'WSAEACCES|WFP gate failure|operation not permitted|EPERM' <<<"$exercise"; then
-    echo 'no-egress: windows: exercise output shows a denied network attempt' >&2; exit 1
+  grep -qF 'no non-loopback connections observed' "out/$asset-egress.txt" || {
+    echo 'no-egress: windows: missing no-egress sampler verdict' >&2; exit 1; }
+  grep -qF 'Defender block rules removed; firewall logging restored' "out/$asset-egress.txt" || {
+    echo 'no-egress: windows: gate did not confirm policy removal' >&2; exit 1; }
+  if grep -Ei 'CONTROL-CONNECTED|allowed non-loopback connection' "out/$asset-egress.txt"; then
+    echo 'no-egress: windows: evidence shows a connected control or an allowed connection' >&2; exit 1
   fi
   ;;
 *) exit 1 ;;

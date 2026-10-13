@@ -633,43 +633,31 @@ class WindowsTarget(unittest.TestCase):
         self.assertIn('cygpath -m "$src"',script)
 
     def test_windows_gate_proves_no_egress(self):
+        # Rework 8, CI run 38473601546 (tag 0.1.2-9): the custom WFP-API
+        # harness segfaulted. The Windows leg now drives the built-in
+        # Windows Defender Firewall from an elevated PowerShell step, with
+        # no custom native code anywhere in the gate.
         script=(ROOT/'files/no-egress-test.sh').read_text()
         self.assertIn('MINGW*|MSYS*)',script)
         self.assertIn('native gate requires a GitHub-hosted runner',script)
         self.assertIn('Dragon native gate prohibited',script)
-        self.assertIn('-lfwpuclnt -lws2_32 -lrpcrt4',script)
-        self.assertIn('WFP exercise filters installed; multi-process job active',script)
-        for proof in ['port=443 WSAEACCES','port=5606 WSAEACCES',
-                      'UDP control delivered','UDP control denied',
-                      'configured loopback control allowed']:
+        self.assertIn('powershell.exe',script)
+        self.assertIn('windows-defender-egress.ps1',script)
+        self.assertIn('Defender deny policy',script)
+        # The firewall API rejects forward slashes in -Program paths, so
+        # rule programs are converted to backslashes (live noviwin1 proof).
+        self.assertIn('winpath',script)
+        self.assertIn("tr '/' '\\\\'",script)
+        for proof in ['Defender control blocked',
+                      'pfirewall.log',
+                      'no non-loopback connections observed',
+                      'Defender block rules removed; firewall logging restored']:
             self.assertIn(proof,script)
         self.assertIn("grep -c '^PASS:'",script)
-        self.assertIn('shows a denied network attempt',script)
-        self.assertIn('pid_win=$(cygpath -m',script)
-
-    def test_guard_tiles_full_port_complement(self):
-        guard=(ROOT/'files/windows-net-guard.c').read_text()
-        allowed=sorted(int(p) for p in re.search(
-            r'allowed_ports\[\] = \{([^}]+)\}',guard)[1].split(','))
-        self.assertEqual(allowed,self.ALLOWED)
-        ranges=re.findall(r'\{(\d+),\s*(\d+)\}',guard[
-            guard.index('blocked_ranges'):guard.index('};',guard.index('blocked_ranges'))])
-        blocked=set()
-        for lo,hi in ranges:
-            blocked.update(range(int(lo),int(hi)+1))
-        self.assertEqual(blocked,set(range(65536))-set(self.ALLOWED))
-        for token in ['FWPM_SESSION_FLAG_DYNAMIC','KILL_ON_JOB_CLOSE',
-                      'WSAEACCES','remove dynamic policy',
-                      'FWP_MATCH_GREATER_OR_EQUAL','FWP_MATCH_LESS_OR_EQUAL']:
-            self.assertIn(token,guard)
-        self.assertNotIn('ActiveProcessLimit',guard)
-
-    def test_guard_reuses_reviewed_wfp_layer_ids(self):
-        prima=(ROOT/'files/windows-net-guard.c').read_text()
-        ollama=(ROOT.parent/'ollama/files/windows-net-guard.c').read_text()
-        for name in ['connect4','connect6','app_id','remote_address','remote_port']:
-            pattern=re.compile(r'static const GUID '+name+r' = \{[^}]+\{[^}]+\}\};')
-            self.assertEqual(pattern.search(prima)[0],pattern.search(ollama)[0])
+        self.assertIn('CONTROL-CONNECTED|allowed non-loopback connection',script)
+        for token in ['net-guard','wfp-verdict.h','windows-net-guard.c',
+                      '-lfwpuclnt','BASHY_WINDOWS_CC:?',"pid_win=$(cygpath -m"]:
+            self.assertNotIn(token,script)
 
     def test_exercise_kill_is_portable(self):
         exercise=(ROOT/'files/exercise.py').read_text()
@@ -680,36 +668,25 @@ class WindowsTarget(unittest.TestCase):
     def test_windows_files_ship_in_fork(self):
         for name in ['build.sh','exercise.py','merge-inputs.py','verify-asset.py',
                      'license-review.py','dependencies.json','collect-inputs.py',
-                     'windows-compilers.py','windows-net-guard.c','wfp-verdict.h','no-egress-test.sh']:
+                     'windows-compilers.py','windows-defender-egress.ps1','no-egress-test.sh']:
             self.assertEqual((ROOT/'fork/bashy-build'/name).read_bytes(),
                              (ROOT/'files'/name).read_bytes(),name)
         self.assertIn('prima-windows-amd64',merge.ASSETS)
         self.assertIn('prima-windows-amd64.exe',verify.ASSETS)
 
-class WindowsLoopbackPermit(unittest.TestCase):
-    # CI run 38470420904 (tag 0.1.2-7): the Windows leg compiled and linked
-    # but died at the no-egress gate with "WFP gate failure: control connect
-    # deadline". That line comes only from denied(): a nonblocking TCP control
-    # returned WSAEWOULDBLOCK and select() saw no ALE verdict inside 2s. The
-    # external control targets unroutable TEST-NET-1, which never answers, so
-    # a slow first verdict on a cold runner trips a short single-shot
-    # deadline; an unblocked loopback/IPv6 attempt would refuse fast instead.
-    # The guard now permits the loopback allowlist explicitly, tolerates a
-    # slow first verdict with retries, and dumps the bound table on every
-    # failure path — while a real outbound attempt still fails the gate.
-    ALLOWED = [5599, 5600, 5601, 5602, 5603, 5604, 5605,
-               19000, 19001, 19100, 19101]
-
-    def _guard(self):
-        return (ROOT/'files/windows-net-guard.c').read_text()
+class WindowsDefenderGate(unittest.TestCase):
+    # Rework 8, CI run 38473601546 (tag 0.1.2-9): the custom WFP-API
+    # harness segfaulted in fork/bashy-build/no-egress-test.sh. Three CI
+    # rounds had gone to that custom native code. The Windows leg now
+    # drives the built-in Windows Defender Firewall from an elevated
+    # PowerShell step: disposable outbound BLOCK rules on the exact
+    # exercise programs. Loopback is not filtered by Windows Firewall, so
+    # the ring/exercise loopback works unimpeded with no allowlist.
+    def _gate(self):
+        return (ROOT/'files/windows-defender-egress.ps1').read_text()
 
     def _script(self):
         return (ROOT/'files/no-egress-test.sh').read_text()
-
-    def _permit_ranges(self):
-        guard = self._guard()
-        body = re.search(r'allowed_ranges\[\]\[2\] = \{(.*?)\};', guard, re.S)[1]
-        return [(int(lo), int(hi)) for lo, hi in re.findall(r'\{(\d+),\s*(\d+)\}', body)]
 
     def _exercise(self):
         spec = importlib.util.spec_from_file_location(
@@ -718,119 +695,137 @@ class WindowsLoopbackPermit(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
-    def test_permit_ranges_tile_exact_allowlist(self):
-        guard = self._guard()
-        ports = sorted(int(p) for p in re.search(
-            r'allowed_ports\[\] = \{([^}]+)\}', guard)[1].split(','))
-        self.assertEqual(ports, self.ALLOWED)
-        covered = set()
-        for lo, hi in self._permit_ranges():
-            self.assertLessEqual(lo, hi)
-            covered.update(range(lo, hi + 1))
-        self.assertEqual(covered, set(self.ALLOWED))
-        self.assertIn('_Static_assert', guard)
+    def test_no_custom_native_code(self):
+        # The gate compiles nothing and ships no C sources or headers.
+        self.assertFalse((ROOT/'files/windows-net-guard.c').exists())
+        self.assertFalse((ROOT/'files/wfp-verdict.h').exists())
+        self.assertFalse((ROOT/'fork/bashy-build/windows-net-guard.c').exists())
+        self.assertFalse((ROOT/'fork/bashy-build/wfp-verdict.h').exists())
+        self.assertFalse((ROOT/'fork/bashy-build/net-guard.exe').exists())
+        for token in ['Fwpm', 'FWPM_', '-lfwpuclnt', 'net-guard.exe',
+                      'windows-net-guard.c', 'wfp-verdict.h']:
+            self.assertNotIn(token, self._gate())
+            self.assertNotIn(token, self._script())
 
-    def test_permits_are_loopback_only(self):
-        guard = self._guard()
-        self.assertIn('FWP_ACTION_PERMIT', guard)
-        self.assertIn('"loopback allowlist permit"', guard)
-        # Exactly two IPv4-remote filter conditions pin 127.0.0.1: the
-        # permit's EQUAL and the deny's NOT_EQUAL. (The control sockets also
-        # dial loopback via htonl, which is not a filter condition.)
-        # No other destination is permitted.
-        self.assertEqual(guard.count('conditionValue.uint32 = 0x7f000001'), 2)
-        self.assertIn('FWP_MATCH_EQUAL', guard)
-        self.assertIn('BLOCK veto wins', guard)
+    def test_gate_script_ships_in_fork(self):
+        self.assertTrue((ROOT/'files/windows-defender-egress.ps1').is_file())
+        self.assertEqual((ROOT/'fork/bashy-build/windows-defender-egress.ps1').read_bytes(),
+                         (ROOT/'files/windows-defender-egress.ps1').read_bytes())
 
-    def test_denies_still_cover_everything_else(self):
-        guard = self._guard()
-        self.assertIn('"IPv6 deny"', guard)
-        self.assertIn('FWP_MATCH_NOT_EQUAL', guard)
-        self.assertIn('"non-loopback deny"', guard)
-        self.assertIn('"outside-allowlist deny"', guard)
-        blocked = set()
-        body = guard[guard.index('blocked_ranges'):guard.index('};', guard.index('blocked_ranges'))]
-        for lo, hi in re.findall(r'\{(\d+),\s*(\d+)\}', body):
-            blocked.update(range(int(lo), int(hi) + 1))
-        self.assertEqual(blocked, set(range(65536)) - set(self.ALLOWED))
+    def test_block_rules_cover_every_exercise_program(self):
+        gate = self._gate()
+        # One disposable outbound BLOCK rule per program, keyed on the
+        # exact executable path, installed for every profile.
+        self.assertIn('New-NetFirewallRule', gate)
+        self.assertIn('-Direction Outbound', gate)
+        self.assertIn('-Action Block', gate)
+        self.assertIn('-Program', gate)
+        self.assertIn('-Profile Any', gate)
+        for param in ['$PythonExe', '$CliExe', '$RingExe']:
+            self.assertIn(param, gate)
+        self.assertIn('$ServerExe', gate)
+        # Installed count is verified before any control runs.
+        self.assertIn('block rules installed', gate)
+        self.assertIn('block rules missing', gate)
 
-    def test_external_control_is_deterministic(self):
-        # Rework 7, CI run 38472050604 (tag 0.1.2-8): the external 443
-        # control to TEST-NET-1 timed out with neither an explicit deny nor
-        # a connection. A matched ALE block is WSAEACCES, never silence, so
-        # retrying the silence could not tell a slow verdict from a filter
-        # miss (runner fabric drop). The external control is now a single
-        # classified attempt: immediate WSAEACCES passes, silence passes
-        # only with a net-event proof that our filter matched, and anything
-        # else fails with its verdict attached.
-        guard = self._guard()
-        self.assertNotIn('CONTROL_ATTEMPTS', guard)
-        self.assertNotIn('verdict pending', guard)
-        self.assertIn('denied_external(engine, AF_INET, 443)', guard)
-        self.assertIn('wfp_classify_tcp_verdict', guard)
-        external = int(re.search(r'#define EXTERNAL_DEADLINE_SEC (\d+)', guard)[1])
-        self.assertLessEqual(external, 5)
-        # Fast denies run first so their WSAEACCES proves app-id matching
-        # for this process before the external verdict is read.
-        self.assertLess(guard.index('denied(AF_INET, SOCK_STREAM, 5606, FALSE)'),
-                        guard.index('denied_external(engine, AF_INET, 443)'))
-        self.assertIn('DATAGRAM_DEADLINE_SEC', guard)
+    def test_loopback_needs_no_allowlist(self):
+        # Windows Firewall does not filter loopback, so there is no port
+        # allowlist to tile, permit, or drift from exercise.py.
+        gate = self._gate()
+        self.assertIn('not filtered', gate)
+        for token in ['PERMIT', 'allowed_ports', 'allowed_ranges',
+                      '5599', '19000', 'FwpmFilterAdd']:
+            self.assertNotIn(token, gate)
 
-    def test_silent_drop_requires_proven_match(self):
-        # Silence is accepted for the external control ONLY with a
-        # CLASSIFY_DROP net event carrying one of OUR deny filter IDs at
-        # our ALE layer: "proven installed" (filter enumeration) plus
-        # "proven matched" (net events). Bare silence fails with the
-        # filter-miss/runner-drop diagnosis, never a bare deadline.
-        guard = self._guard()
-        self.assertIn('record_deny_id(id)', guard)
-        self.assertIn('verify_deny_filters_installed(engine, &sublayer.subLayerKey)', guard)
-        self.assertIn('FwpmFilterGetById0(engine, deny_ids[k], &filter)', guard)
-        self.assertIn('FwpmNetEventCreateEnumHandle0', guard)
-        self.assertIn('FwpmNetEventEnum0', guard)
-        self.assertIn('FWPM_NET_EVENT_TYPE_CLASSIFY_DROP', guard)
-        self.assertIn('WFP control silent-drop family=%d type=%d port=%u matched filter=%llu', guard)
-        self.assertIn('silent with no matching CLASSIFY_DROP event', guard)
-        self.assertNotIn('control connect deadline', guard)
+    def test_control_must_fail_and_appear_in_firewall_log(self):
+        gate = self._gate()
+        # The negative control is an outbound TCP 443 connect from the
+        # blocked interpreter to unroutable TEST-NET-1.
+        self.assertIn('192.0.2.1', gate)
+        self.assertIn('443', gate)
+        self.assertIn('CONTROL-CONNECTED', gate)
+        # A connected control means no enforcement: fail.
+        self.assertIn('despite the block rule', gate)
+        # Dropped-packet logging is enabled for the gate (known log path)
+        # and the control failure must appear there as DROP.
+        self.assertIn('Set-NetFirewallProfile', gate)
+        self.assertIn('-LogBlocked True', gate)
+        self.assertIn('pfirewall.log', gate)
+        self.assertIn('DROP TCP', gate)
+        self.assertIn('is not in the firewall log', gate)
 
-    def test_gate_stays_strict(self):
+    def test_sampler_fails_on_allowed_non_loopback(self):
+        gate = self._gate()
+        # A Get-NetTCPConnection sampler watches the whole gate: any
+        # Established/SynSent connection from an exercise program to a
+        # non-loopback peer fails it. The control's own TEST-NET-1 attempt
+        # is proven via the firewall log instead, so the sampler ignores it.
+        self.assertIn('Get-NetTCPConnection', gate)
+        self.assertIn('Established', gate)
+        self.assertIn('SynSent', gate)
+        self.assertIn('127.0.0.1', gate)
+        self.assertIn('::1', gate)
+        self.assertIn('OwningProcess', gate)
+        self.assertIn('allowed non-loopback connection', gate)
+
+    def test_rules_and_logging_restored(self):
+        gate = self._gate()
+        # Cleanup is unconditional: rules removed and per-profile logging
+        # restored in a finally block, with a proof line the bash leg
+        # requires in the evidence file.
+        self.assertIn('finally', gate)
+        self.assertIn('Remove-NetFirewallRule', gate)
+        self.assertIn('LogBlocked', gate)
+        self.assertIn('LogFileName', gate)
+        # Profiles are enabled for the gate and restored: rules enforce
+        # nothing under a disabled profile (live noviwin1 proof: both
+        # networks are Public with that firewall off).
+        self.assertIn('-Enabled True', gate)
+        self.assertIn('profiles enabled', gate)
+        self.assertIn('Defender block rules removed; firewall logging restored', gate)
+        # The gate refuses to run unelevated instead of silently
+        # installing no rules.
+        self.assertIn('Administrator', gate)
+
+    def test_reporting_never_throws(self):
+        # Under the script's Stop preference a bare Write-Error throws,
+        # which would skip the evidence append and the failed flag. Every
+        # error report carries -ErrorAction Continue (live noviwin1 proof:
+        # the first repro failed inside New-NetFirewallRule and the catch
+        # itself threw, hiding the cause from the evidence file).
+        gate = self._gate()
+        writers = [line for line in gate.splitlines()
+                   if line.lstrip().startswith('Write-Error')]
+        self.assertTrue(writers)
+        for line in writers:
+            self.assertIn('-ErrorAction Continue', line)
+        # Native stderr merged with 2>&1 throws under Stop with the first
+        # stderr line as the message (live noviwin1 proof: the control's
+        # own traceback masked its outcome). Both child runs use file
+        # redirects instead.
+        code = [line for line in gate.splitlines()
+                if not line.lstrip().startswith('#')]
+        self.assertNotIn('2>&1', '\n'.join(code))
+        self.assertIn('-RedirectStandardError', gate)
+
+    def test_exercise_must_fully_pass(self):
+        gate = self._gate()
+        # The exit code travels as a marker line: .ExitCode stays empty
+        # after a manual .WaitForExit() on some hosts (live noviwin1
+        # proof), so the gate never reads it. The 600s Wait-Job is the
+        # outer backstop over the exercise's own per-stage deadlines.
+        self.assertIn('EXERCISE-RC=', gate)
+        self.assertIn('Wait-Job', gate)
+        self.assertIn('-Timeout 600', gate)
+        # The exercise never reads .ExitCode; the single remaining use is
+        # the control's Start-Process -Wait, which does populate it.
+        self.assertEqual(gate.count('.ExitCode'), 1)
+        self.assertIn('^PASS:', gate)
+        self.assertIn('did not all PASS', gate)
+        self.assertIn('shows a denied network attempt', gate)
         script = self._script()
-        # A real outbound attempt still fails: the deny-filter inventory,
-        # the off-allowlist and IPv6 proofs, the external control's two
-        # honest verdicts (explicit deny OR proven silent-drop -- bare
-        # silence never satisfies either), three PASS stages, the removal
-        # confirmation, and the post-marker denial sweep all stay.
-        self.assertIn('WFP deny filters installed', script)
-        for proof in ['WFP control denied family=2 type=1 port=5606 WSAEACCES',
-                      'WFP control denied family=23 type=1 port=5599 WSAEACCES',
-                      'WFP UDP control delivered family=2 port=5599',
-                      'WFP UDP control denied family=2 port=5606',
-                      'WFP UDP control denied family=23 port=5599',
-                      'WFP configured loopback control allowed']:
-            self.assertIn(proof, script)
-        self.assertIn('WFP control denied family=2 type=1 port=443 WSAEACCES', script)
-        self.assertIn('WFP control silent-drop family=2 type=1 port=443 matched filter=', script)
-        self.assertIn('missing external-control proof', script)
-        self.assertIn("grep -c '^PASS:'", script)
-        self.assertIn('exercise reaped; job closed; dynamic WFP policy removed', script)
-        self.assertIn("grep -Ei 'WSAEACCES|WFP gate failure|operation not permitted|EPERM'", script)
-
-    def test_failures_dump_bound_addresses(self):
-        guard = self._guard()
-        self.assertIn('#include <iphlpapi.h>', guard)
-        self.assertIn('static void log_bound_addresses(void)', guard)
-        self.assertGreaterEqual(guard.count('log_bound_addresses();'), 8)
-        self.assertIn('GetExtendedTcpTable', guard)
-        self.assertIn('WFP bound TCP6', guard)
-        # Diagnostics never fail the gate and never trip the post-marker
-        # denial sweep.
-        body = guard[guard.index('static void log_bound_addresses(void)'):]
-        body = body[:body.index('static int tcp_attempt(')]
-        self.assertNotIn('checked(', body)
-        self.assertNotIn('exit(', body)
-        for token in ['WSAEACCES', 'WFP gate failure', 'EPERM']:
-            self.assertNotIn(token, body)
-        self.assertIn('-liphlpapi', self._script())
+        self.assertIn('Defender control blocked', script)
+        self.assertIn('no non-loopback connections observed', script)
 
     def test_exercise_snapshots_bounds_before_reap(self):
         text = (ROOT/'files/exercise.py').read_text()
@@ -838,7 +833,7 @@ class WindowsLoopbackPermit(unittest.TestCase):
         self.assertIn("os.name != 'nt'", text)
         self.assertIn('if failure is not None:\n                _log_bound_addresses()', text)
         body = text[text.index('def _log_bound_addresses():'):text.index('def run_stage(')]
-        for token in ['WSAEACCES', 'WFP gate failure', 'EPERM']:
+        for token in ['WSAEACCES', 'Firewall gate failure', 'EPERM']:
             self.assertNotIn(token, body)
 
     def test_bound_snapshot_is_quiet_off_windows(self):
@@ -897,94 +892,6 @@ class WindowsLoopbackPermit(unittest.TestCase):
                 module.run_stage('fixture-quiet', [('rank', ok)], 30)
         self.assertEqual(bound.call_count, 0)
         self.assertIn('PASS: fixture-quiet', out.getvalue())
-
-class WfpVerdictClassifier(unittest.TestCase):
-    # Rework 7, CI run 38472050604 (tag 0.1.2-8): the external 443 control
-    # timed out with neither an explicit deny nor a connection, and the
-    # guard retried the silence. The classifier below is the unit under
-    # test: one nonblocking TCP attempt maps to exactly one verdict, and
-    # only DENIED passes unconditionally -- SILENT_DROP passes for the
-    # external control alone and only with a net-event proof (pinned in
-    # WindowsLoopbackPermit), never by retry.
-    CASES = [
-        # (sync_error, select_ready, so_error) -> verdict
-        ('WFP_WSAEACCES', '0', 'WFP_WSAEACCES', 'WFP_VERDICT_DENIED'),
-        ('WFP_WSAEACCES', '1', '0', 'WFP_VERDICT_DENIED'),
-        ('0', '0', '0', 'WFP_VERDICT_CONNECTED'),
-        ('WFP_WSAECONNREFUSED', '0', 'WFP_WSAECONNREFUSED', 'WFP_VERDICT_REFUSED'),
-        ('10022', '0', '10022', 'WFP_VERDICT_OTHER_ERROR'),
-        ('WFP_WSAEWOULDBLOCK', '0', 'WFP_WSAEWOULDBLOCK', 'WFP_VERDICT_SILENT_DROP'),
-        ('WFP_WSAEWOULDBLOCK', '-1', 'WFP_WSAEWOULDBLOCK', 'WFP_VERDICT_SILENT_DROP'),
-        ('WFP_WSAEWOULDBLOCK', '1', 'WFP_WSAEACCES', 'WFP_VERDICT_DENIED'),
-        ('WFP_WSAEWOULDBLOCK', '1', '0', 'WFP_VERDICT_CONNECTED'),
-        ('WFP_WSAEWOULDBLOCK', '1', 'WFP_WSAECONNREFUSED', 'WFP_VERDICT_REFUSED'),
-        ('WFP_WSAEWOULDBLOCK', '1', '10054', 'WFP_VERDICT_OTHER_ERROR'),
-    ]
-
-    def _compiler(self):
-        import shutil
-        compiler = shutil.which('cc') or shutil.which('gcc')
-        self.assertIsNotNone(compiler, 'a C compiler is required to test the verdict classifier')
-        return compiler
-
-    def test_verdict_table(self):
-        header = ROOT/'files/wfp-verdict.h'
-        self.assertTrue(header.is_file())
-        rows = '\n'.join(
-            f'    {{{sync}, {ready}, {so}, {want}}},'
-            for sync, ready, so, want in self.CASES)
-        harness = (f'#include <stdio.h>\n#include "wfp-verdict.h"\n'
-                   f'static const struct {{ int sync, ready, so, want; }} cases[] = {{\n{rows}\n}};\n'
-                   'int main(void) {\n'
-                   '    int fails = 0;\n'
-                   '    for (unsigned i = 0; i < sizeof(cases)/sizeof(cases[0]); i++) {\n'
-                   '        int got = wfp_classify_tcp_verdict(cases[i].sync, cases[i].ready, cases[i].so);\n'
-                   '        if (got != cases[i].want) {\n'
-                   '            printf("FAIL case %u: sync=%d ready=%d so=%d got=%d want=%d\\n",\n'
-                   '                   i, cases[i].sync, cases[i].ready, cases[i].so, got, cases[i].want);\n'
-                   '            fails++;\n'
-                   '        }\n'
-                   '    }\n'
-                   '    if (!fails) puts("VERDICT-TABLE-OK");\n'
-                   '    return fails != 0;\n'
-                   '}\n')
-        with tempfile.TemporaryDirectory() as d:
-            src = Path(d)/'verdict-harness.c'
-            exe = Path(d)/'verdict-harness'
-            src.write_text(harness)
-            compile = subprocess.run([self._compiler(), '-std=c11', '-Wall', '-Wextra', '-Werror',
-                                      '-I', str(header.parent), str(src), '-o', str(exe)],
-                                     capture_output=True, text=True, timeout=60)
-            self.assertEqual(compile.returncode, 0, compile.stderr)
-            run = subprocess.run([str(exe)], capture_output=True, text=True, timeout=30)
-            self.assertEqual(run.returncode, 0, run.stdout)
-            self.assertIn('VERDICT-TABLE-OK', run.stdout)
-
-    def test_header_binds_documented_winsock_values(self):
-        # The header duplicates Winsock ABI values so non-Windows builds
-        # compile; the guard _Static_asserts each against the real
-        # constant, so drift fails the Windows compile, not the gate.
-        header = (ROOT/'files/wfp-verdict.h').read_text()
-        for name, value in [('WFP_WSAEACCES', '10013'), ('WFP_WSAEWOULDBLOCK', '10035'),
-                            ('WFP_WSAECONNREFUSED', '10061')]:
-            self.assertIn(f'#define {name} {value}', header)
-        guard = (ROOT/'files/windows-net-guard.c').read_text()
-        self.assertIn('#include "wfp-verdict.h"', guard)
-        for name in ['WSAEACCES', 'WSAEWOULDBLOCK', 'WSAECONNREFUSED']:
-            self.assertIn(f'_Static_assert({name} == WFP_{name}', guard)
-
-    def test_deny_table_covers_every_protect_round(self):
-        # protect() records six deny IDs per guarded image (self, the
-        # exercise image, each --app image); the table must hold several
-        # rounds, and overflow must fail loudly, never wrap.
-        guard = (ROOT/'files/windows-net-guard.c').read_text()
-        capacity = int(re.search(r'#define MAX_DENY_FILTERS (\d+)', guard)[1])
-        self.assertGreaterEqual(capacity, 6 * 3)
-        self.assertIn('deny filter table overflow', guard)
-
-    def test_classifier_header_ships_in_fork(self):
-        self.assertEqual((ROOT/'fork/bashy-build/wfp-verdict.h').read_bytes(),
-                         (ROOT/'files/wfp-verdict.h').read_bytes())
 
 class WindowsCompilerProbe(unittest.TestCase):
     # The exact run 38462299969 failure: an MSVC-target clang must be
@@ -1265,15 +1172,20 @@ class WindowsPinnedBuildTools(unittest.TestCase):
         self.assertNotIn('"C:/msys64', script)
         self.assertIn('BASHY_MINGW_ROOT', script)
 
-    def test_no_egress_gate_compiles_guard_with_verified_clang(self):
+    def test_no_egress_gate_compiles_nothing(self):
+        # Rework 8: the Defender gate compiles nothing -- no verified-clang
+        # compile line, no bare gcc, no WFP link libraries anywhere in the
+        # Windows leg. (windows-compilers.py still provisions the toolchain
+        # for build.sh; the gate itself just stopped consuming it.)
         script = (ROOT/'files/no-egress-test.sh').read_text()
         windows = script[script.index('MINGW*|MSYS*)'):]
-        self.assertIn('cc=${BASHY_WINDOWS_CC:?', windows)
-        self.assertIn('"$cc" -std=c11', windows)
-        self.assertIn('-lfwpuclnt -lws2_32 -lrpcrt4', windows)
+        for token in ['BASHY_WINDOWS_CC', '"$cc" -std=c11', '-lfwpuclnt',
+                      'windows-net-guard.c', 'net-guard.exe']:
+            self.assertNotIn(token, windows)
         for line in windows.splitlines():
             stripped = line.lstrip()
             self.assertFalse(stripped.startswith('gcc '), line)
+        self.assertIn('powershell.exe', windows)
 
     def test_rendered_workflow_installs_all_pinned_packages(self):
         module = self._module()
