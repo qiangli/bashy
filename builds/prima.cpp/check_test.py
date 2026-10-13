@@ -329,6 +329,39 @@ class ExerciseDiagnostics(unittest.TestCase):
         self.assertNotIn('PASS:', output)
         self.assertLess(len(output), 68000)
 
+    def test_stdout_bound_is_capture_only(self):
+        # Candidate -5 run 38418158569: preexec_fn RLIMIT_FSIZE capped every
+        # file the engine wrote (Metal/cache/model), killing the single-rank
+        # Darwin engine with SIGXFSZ after 2.2s. The bound must apply only to
+        # captured stdout, never to engine-owned files.
+        text = (ROOT/'files/exercise.py').read_text()
+        self.assertNotIn('RLIMIT_FSIZE', text)
+        self.assertNotIn('setrlimit', text)
+        self.assertNotIn('preexec_fn', text)
+        self.assertIn('stdout=subprocess.PIPE', text)
+
+    def test_engine_owned_files_are_not_limited(self):
+        # A 2 MiB engine-owned file write must pass: under the old
+        # process-wide RLIMIT_FSIZE=1MiB the same child died (SIGXFSZ on
+        # Darwin, EFBIG exit 1 here) instead of evaluating.
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d)/'engine-owned.bin'
+            output, error = self.stage([('0', self.command(
+                f'import pathlib; pathlib.Path({str(target)!r})'
+                '.write_bytes(b"m"*2000000); print("eval time")'))])
+            self.assertIsNone(error, output)
+            self.assertIn('PASS: fixture', output)
+            self.assertEqual(target.stat().st_size, 2000000)
+
+    def test_excess_stdout_reports_log_limit(self):
+        output, error = self.stage([('0', self.command(
+            'import os; os.write(1, b"x"*2000000); print("eval time")'))])
+        self.assertIsInstance(error, RuntimeError)
+        self.assertIn('log limit exceeded', str(error))
+        self.assertIn('log_limit_exceeded=True', output)
+        self.assertNotIn('PASS:', output)
+        self.assertLess(len(output), 68000)
+
     def test_linux_retains_trace_before_exercise_failure_exit(self):
         text = (ROOT/'files/no-egress-test.sh').read_text()
         failure = text[text.index('namespace exercise failed'):text.index('if [[ ! -s $work/trace ]]')]
