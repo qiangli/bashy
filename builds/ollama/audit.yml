@@ -45,7 +45,10 @@
           cyclonedx-gomod app -json -licenses -main ./cmd/runner -output ../out/runner-sbom.cdx.json .
           jq -e '.bomFormat == "CycloneDX" and (.components | length) > 0' ../out/runner-sbom.cdx.json >/dev/null
       - name: bind target-specific compiled modules and native libraries into SBOM
-        run: python3 fork/bashy-build/audit-runner.py aggregate-sbom --out out
+        run: |
+          set -euo pipefail
+          python3 fork/bashy-build/audit-runner.py native-licenses --out out --review fork/bashy-build/license-review.json --output out/runner-native-licenses.json
+          python3 fork/bashy-build/audit-runner.py aggregate-sbom --out out
       - name: OSV scan of the five-target compiled-input SBOM
         run: |
           set -euo pipefail

@@ -47,8 +47,10 @@ class AuditPolicy(unittest.TestCase):
             for target in TARGETS:
                 stem = "runner-" + target
                 files = {"cmd/runner/main.go": "a" * 64}
-                if target == "darwin-arm64": files["ml/backend/ggml/ggml-metal.metal"] = "b" * 64
+                native_files = {"vendor/native/runner.c": "c" * 64}
+                if target == "darwin-arm64": native_files["ml/backend/ggml/ggml-metal.metal"] = "b" * 64
                 (out / (stem + ".inputs.json")).write_text(json.dumps({"schema": "bashy-runner-source-inputs-v1", "files": files}))
+                (out / (stem + ".compiler-inputs.json")).write_text(json.dumps({"schema": "bashy-runner-compiler-inputs-v1", "files": native_files, "invocations": 1}))
                 (out / (stem + ".deps.json")).write_text(json.dumps({"ImportPath": "example.org/dep", "Module": {"Path": "example.org/dep", "Version": "v1.0.0"}}) + "\n")
                 (out / (stem + (".exe" if target == "windows-amd64" else ""))).write_bytes(b"fixture")
             bindir = Path(td) / "bin"; bindir.mkdir()
@@ -60,16 +62,47 @@ class AuditPolicy(unittest.TestCase):
             self.run_audit("inventory", "--out", out, "--report", out / "linked.json", env=env)
             data = json.loads((out / "linked.json").read_text())
             self.assertEqual({x["target"] for x in data["targets"]}, set(TARGETS))
-            inputs = json.loads((out / "runner-darwin-arm64.inputs.json").read_text())
+            inputs = json.loads((out / "runner-darwin-arm64.compiler-inputs.json").read_text())
             inputs["files"].pop("ml/backend/ggml/ggml-metal.metal")
-            (out / "runner-darwin-arm64.inputs.json").write_text(json.dumps(inputs))
+            (out / "runner-darwin-arm64.compiler-inputs.json").write_text(json.dumps(inputs))
             self.assertIn("generated Metal", self.run_audit("inventory", "--out", out, "--report", out / "linked.json", env=env, ok=False).stderr)
+
+    def test_native_license_review_requires_exact_hash_permissive_id_and_notice(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td)
+            for target in TARGETS:
+                name = "runner-" + target + ".compiler-inputs.json"
+                path = "vendor/native/a.metal" if target == "darwin-arm64" else "vendor/native/a.c"
+                files = {path: "a" * 64}
+                if target == "darwin-arm64": files["vendor/native/a.c"] = "a" * 64
+                (out / name).write_text(json.dumps({"schema": "bashy-runner-compiler-inputs-v1", "files": files}))
+            review = out / "review.json"
+            review.write_text(json.dumps({"schema": "bashy-runner-native-license-review-v1", "inputs": {}}))
+            args = ("native-licenses", "--out", out, "--review", review, "--output", out / "licenses.json")
+            self.assertIn("exact hash", self.run_audit(*args, ok=False).stderr)
+            path = "vendor/native/a.c"
+            review.write_text(json.dumps({"schema": "bashy-runner-native-license-review-v1", "inputs": {path: {"sha256": "a" * 64, "license": "GPL-3.0", "notice": "GPL notice"}}}))
+            self.assertIn("non-permissive", self.run_audit(*args, ok=False).stderr)
+            review.write_text(json.dumps({"schema": "bashy-runner-native-license-review-v1", "inputs": {path: {"sha256": "b" * 64, "license": "MIT", "notice": "MIT notice"}}}))
+            self.assertIn("exact hash", self.run_audit(*args, ok=False).stderr)
+            review.write_text(json.dumps({"schema": "bashy-runner-native-license-review-v1", "inputs": {path: {"sha256": "a" * 64, "license": "MIT"}, "vendor/native/a.metal": {"sha256": "a" * 64, "license": "MIT", "notice": "MIT notice"}}}))
+            self.assertIn("explicit notice", self.run_audit(*args, ok=False).stderr)
+            review.write_text(json.dumps({"schema": "bashy-runner-native-license-review-v1", "inputs": {path: {"sha256": "a" * 64, "license": "MIT", "notice": "MIT notice"}, "vendor/native/a.metal": {"sha256": "a" * 64, "license": "MIT", "notice": "MIT notice"}}}))
+            self.run_audit(*args)
+            generated_review = {path: {"sha256": "a" * 64, "license": "MIT", "notice": "MIT notice"}}
+            generated_review_path = out / "generated-review.json"
+            generated_review_path.write_text(json.dumps({"schema": "bashy-runner-native-license-review-v1", "inputs": generated_review}))
+            self.assertIn("darwin-arm64:vendor/native/a.metal",
+                          self.run_audit("native-licenses", "--out", out, "--review",
+                                         generated_review_path,
+                                         "--output", out / "licenses.json", ok=False).stderr)
 
     def test_cyclonedx_aggregates_all_target_module_graphs_and_native_links(self):
         with tempfile.TemporaryDirectory() as td:
             out = Path(td)
             (out / "runner-sbom.cdx.json").write_text(json.dumps({"bomFormat": "CycloneDX", "components": []}))
             (out / "runner-licenses.json").write_text(json.dumps({"packages": [{"package": "example.org/dep/pkg", "license": "MIT"}]}))
+            (out / "runner-native-licenses.json").write_text(json.dumps({"inputs": []}))
             rows = []
             for target in TARGETS:
                 (out / f"runner-{target}.deps.json").write_text(json.dumps({"ImportPath": "example.org/dep/pkg", "Module": {"Path": "example.org/dep", "Version": "v1.2.3"}}) + "\n")

@@ -129,7 +129,7 @@ class Recipe(unittest.TestCase):
         mock.mkdir()
         go = mock / "go"
         go.write_text('''#!/usr/bin/env python3
-import os, pathlib, sys
+import os, pathlib, subprocess, sys
 args = sys.argv[1:]
 assert os.environ['GOWORK'] == 'off'
 assert os.environ['CGO_ENABLED'] == '1'
@@ -138,6 +138,8 @@ if args[0] == 'env':
  print({'GOHOSTOS':os.environ['TEST_HOST'].split('/')[0], 'GOHOSTARCH':os.environ['TEST_HOST'].split('/')[1], 'GOVERSION':'go1.27.2'}[args[1]])
 elif args[0] == 'build':
  assert args[1:3] == ['-mod=readonly','-trimpath'] and args[-1] == './cmd/runner'
+ dep = pathlib.Path(os.environ['BASHY_COMPILER_CAPTURE_DIR']) / 'fake.d'
+ subprocess.run([os.environ['CC'], '-MF', str(dep), str(pathlib.Path.cwd() / 'cmd/runner/main.go')], check=True)
  pathlib.Path(args[args.index('-o')+1]).write_bytes(b'FAKE compiler bytes: never release')
 elif args[0] == 'generate':
  assert os.environ['TEST_HOST'] == 'darwin/arm64'
@@ -147,6 +149,17 @@ elif args[0] == 'list':
 else: raise RuntimeError(args)
 ''')
         go.chmod(0o755)
+        import subprocess
+        fake_cc = mock / "fake-cc"
+        fake_cc.write_text('''#!/usr/bin/env python3
+import pathlib, sys
+args=sys.argv[1:]
+dep=pathlib.Path(args[args.index('-MF')+1])
+dep.write_text('object: ' + args[-1] + '\\n')
+''')
+        fake_cc.chmod(0o755)
+        for name in ("gcc", "g++", "clang", "clang++"):
+            (mock / name).symlink_to(fake_cc)
         env = dict(os.environ, PATH=str(mock) + os.pathsep + os.environ["PATH"])
         for target in TARGETS:
             with self.subTest(target=target):
