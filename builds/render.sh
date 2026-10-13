@@ -55,7 +55,20 @@ done
 # release tag is always bashy-<the pinned upstream tag>-N, which needs no form
 # of its own: both gates compare the captured middle against UPSTREAM_TAG.
 # shellcheck disable=SC2034  # read indirectly, as @@UPSTREAM_TAG_REGEX@@ etc.
+SOURCE_ADMISSION=${SOURCE_ADMISSION:-official-release}
+case $SOURCE_ADMISSION in
+official-release) ;;
+prima-first-party)
+ [[ $TOOL == prima.cpp && $UPSTREAM_SLUG == qiangli/prima.cpp && $UPSTREAM_TAG_FORM == bashy-prima-X.Y.Z ]] || die "first-party exception is restricted to prima.cpp"
+ ;;
+*) die "unknown SOURCE_ADMISSION" ;;
+esac
 case ${UPSTREAM_TAG_FORM:=vX.Y.Z} in
+bashy-prima-X.Y.Z)
+ [[ $SOURCE_ADMISSION == prima-first-party ]] || die "prima tag requires explicit first-party admission"
+ UPSTREAM_TAG_REGEX='^bashy-prima-[0-9]+\.[0-9]+\.[0-9]+$'
+ BASHY_TAG_GLOB='bashy-bashy-prima-*'
+ ;;
 vX.Y.Z)
 	UPSTREAM_TAG_REGEX='^v[0-9]+\.[0-9]+\.[0-9]+$'
 	BASHY_TAG_GLOB='bashy-v*'

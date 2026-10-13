@@ -1,0 +1,4 @@
+      - name: native CMake build
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: fork/bashy-build/build.sh src "$ASSET"
