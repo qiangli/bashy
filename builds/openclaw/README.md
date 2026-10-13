@@ -168,8 +168,9 @@ list it — an exception would wrongly imply the vulnerable version ships):
    ships every layer, so this image is only the merge view the next step
    flattens — saving it would distribute the vulnerability.
 7. **Merged-`/app` image gate.** `docker cp` copies `/app` back out of a
-   fresh container from the LAYERED image; `diff -r installed/package
-   image-app` proves the image's `/app` IS the shipped runtime, and
+   fresh container from the LAYERED image; `compare_trees.py
+   installed/package image-app` proves the image's `/app` IS the shipped
+   runtime (link-aware: pnpm's dangling symlinks compare as links), and
    `patch_bundled.py --verify-only` over the image-extracted tree FAILS
    the build if any `http-cache-semantics < 4.3.0` remains IN THE MERGED
    `/app`. The tarball gate (step 4's `--verify-only` re-run after the

@@ -353,8 +353,13 @@ jobs:
           # Prove the LAYERED image's merged /app (not just the tarball) is
           # patched: copy /app back out of a fresh container from the layered
           # image and run the same vulnerable-version gate over it. Then
-          # prove the image's /app IS the shipped runtime: diff -r against
-          # installed/package (content compare; COPY preserves content).
+          # prove the image's /app IS the shipped runtime: compare_trees.py
+          # against installed/package (manifest of path + type + sha256 /
+          # link-target; COPY preserves content). Plain `diff -r` follows
+          # symlinks and exits 2 on pnpm's dangling links
+          # (node_modules/.pnpm/..., @anthropic-ai/sdk, openai, ...: No such
+          # file or directory); the manifest compares links as links, so
+          # identical trees with the same dangling links compare equal.
           # Both fail closed. NOTE: this gate sees the MERGED view only — it
           # cannot see the vulnerable copy surviving in the lower layers, so
           # the archive gate below (over the saved flattened image) is what
@@ -366,7 +371,7 @@ jobs:
           test -f image-app/openclaw.mjs || { echo "missing image-app/openclaw.mjs in the shipped image" >&2; exit 1; }
           test -d image-app/node_modules || { echo "node_modules missing in the shipped image" >&2; exit 1; }
           test -d image-app/dist || { echo "dist missing in the shipped image" >&2; exit 1; }
-          diff -r installed/package image-app
+          python3 fork/bashy-build/scripts/compare_trees.py installed/package image-app
           echo "image gate: shipped image /app is identical to the shipped runtime tree"
           rm -f "${RUNNER_TEMP}/image-app.tgz"
           tar -czf "${RUNNER_TEMP}/image-app.tgz" -C . image-app
@@ -413,7 +418,7 @@ jobs:
           rm -rf ./final-image-app
           docker cp openclaw-final-verify:/app ./final-image-app
           docker rm openclaw-final-verify
-          diff -r installed/package final-image-app
+          python3 fork/bashy-build/scripts/compare_trees.py installed/package final-image-app
           echo "final image identity gate: flattened /app equals signed runtime tree"
           # The import has consumed these temporary copies. Reclaim them
           # before docker save writes the release archive on the same runner.

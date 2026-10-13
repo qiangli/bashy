@@ -16,7 +16,7 @@
 #
 # The result is the LAYERED shipped image: FROM the pinned Dockerfile-built
 # base, with /app replaced by the exact patched runtime that the tarball
-# ships (proven by `diff -r installed/package image-app` in build.yml,
+# ships (proven by compare_trees.py installed/package image-app in build.yml,
 # where image-app is /app copied back out of a container from THIS image,
 # and by patch_bundled.py --verify-only passing on BOTH the tarball and
 # the image-extracted tree). This image is NEVER distributed: its lower
