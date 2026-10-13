@@ -360,6 +360,7 @@ jobs:
           tar -czf "${RUNNER_TEMP}/image-app.tgz" -C . image-app
           python3 fork/bashy-build/scripts/patch_bundled.py --verify-only \
             --tarball "${RUNNER_TEMP}/image-app.tgz"
+          rm -rf image-app "${RUNNER_TEMP}/image-app.tgz"
       - name: flatten + patch the full rootfs + import the distributable image
         run: |
           set -euo pipefail
@@ -390,6 +391,57 @@ jobs:
             REPLACEMENT_INTEGRITY="sha512-M5t5LlJpS1UHMjvwRQVdFHvPISGeLAxNcrWuJkeGh0KxsqCHZ1O3NXZU/8x7cD0BDcGW8kapxMKTvwlqrNkHkA==" \
             SCRIPTS_DIR="fork/bashy-build/scripts" \
             fork/bashy-build/flatten-image.sh
+      - name: final image identity gate — flattened /app equals signed runtime tree
+        run: |
+          set -euo pipefail
+          # The full-rootfs patch runs after the layered-image comparison.
+          # Verify its final output too: the image we distribute must carry
+          # exactly the /app bytes in the separately signed runtime tarball.
+          docker create --name openclaw-final-verify "openclaw-gateway:${GITHUB_REF_NAME}"
+          rm -rf ./final-image-app
+          docker cp openclaw-final-verify:/app ./final-image-app
+          docker rm openclaw-final-verify
+          diff -r installed/package final-image-app
+          echo "final image identity gate: flattened /app equals signed runtime tree"
+          # The import has consumed these temporary copies. Reclaim them
+          # before docker save writes the release archive on the same runner.
+          rm -rf final-image-app "${RUNNER_TEMP}/flat"
+      - name: SBOM of the final whole image (OS and application)
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: openclaw-gateway:${{ github.ref_name }}
+          format: cyclonedx-json
+          output-file: out/${{ matrix.asset }}-image-sbom.cyclonedx.json
+      - name: install cosign for verified Grype installation (pinned; must equal PIN COSIGN_VERSION)
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+      - name: whole-image vulnerability gate (high and critical)
+        run: |
+          set -euo pipefail
+          # Grype reads the local final image, including Debian and Node
+          # packages. Its JSON report is signed with the other release assets.
+          # No exceptions or waivers: findings at high or above stop release.
+          # Grype installer provenance (reviewed 2026-10-13): install.sh for
+          # the pinned v0.120.1 release, fetched from the exact published
+          # source https://raw.githubusercontent.com/anchore/grype/v0.120.1/install.sh
+          # (24892 bytes, sha256 4bc8e844d1ca0b74082cb51e1587d58c35150756954660db3d3078e57c81cbfd,
+          # corroborated by two independent fetches). A tag in the URL alone
+          # is not authentication: the file is verified by hash BEFORE
+          # execution, and DOWNLOAD_TAG_INSTALL_SCRIPT=false keeps the
+          # verified script from re-fetching an unverified copy of itself.
+          mkdir -p "${RUNNER_TEMP}/bin"
+          GRYPE_INSTALL_SH="${RUNNER_TEMP}/grype-install-v0.120.1.sh"
+          curl -fsSL https://raw.githubusercontent.com/anchore/grype/v0.120.1/install.sh \
+            -o "$GRYPE_INSTALL_SH"
+          echo "4bc8e844d1ca0b74082cb51e1587d58c35150756954660db3d3078e57c81cbfd  $GRYPE_INSTALL_SH" \
+            | sha256sum -c -
+          DOWNLOAD_TAG_INSTALL_SCRIPT=false \
+            sh "$GRYPE_INSTALL_SH" -v v0.120.1 -b "${RUNNER_TEMP}/bin"
+          GRYPE_CHECK_FOR_APP_UPDATE=false \
+            "${RUNNER_TEMP}/bin/grype" \
+            "docker:openclaw-gateway:${GITHUB_REF_NAME}" \
+            --fail-on high -o json > "out/${{ matrix.asset }}-image-grype.json"
       - name: save the distributable image + archive gate + digest
         run: |
           set -euo pipefail
