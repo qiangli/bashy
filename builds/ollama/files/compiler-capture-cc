@@ -4,8 +4,13 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import uuid
+import importlib.util
+spec = importlib.util.spec_from_file_location("evidence", Path(__file__).with_name("compiler-evidence.py"))
+evidence = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(evidence)
 
 kind = Path(sys.argv[0]).name
 compiler = os.environ.get("BASHY_REAL_CXX" if "cxx" in kind else "BASHY_REAL_CC")
@@ -13,10 +18,12 @@ root = Path(os.environ["BASHY_COMPILER_CAPTURE_DIR"])
 args = sys.argv[1:]
 if not compiler:
     sys.exit("compiler-capture: selected compiler is unset")
+compiler = shutil.which(compiler)
+if not compiler:
+    sys.exit("compiler-capture: compiler not found")
 root.mkdir(parents=True, exist_ok=True)
-is_compile = "-c" in args
-source_exts = (".c", ".cc", ".cpp", ".cxx", ".m", ".mm")
-is_native = is_compile and any(Path(arg).suffix.lower() in source_exts for arg in args)
+source_exts = (".c", ".cc", ".cpp", ".cxx", ".m", ".mm", ".h", ".hh", ".hpp", ".hxx")
+is_native = any(Path(arg).suffix.lower() in source_exts for arg in args)
 run_args = list(args)
 depfile = None
 if is_native:
@@ -27,13 +34,23 @@ if is_native:
     # and append private depfile options so output/object semantics stay intact.
     run_args += ["-MMD", "-MF", str(depfile)]
 record = {"compiler": compiler, "argv": args, "captured": is_native,
-          "depfile": str(depfile) if depfile else None}
-fd = os.open(root / "invocations.jsonl", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-try:
-    os.write(fd, (json.dumps(record, sort_keys=True) + "\n").encode())
-finally:
-    os.close(fd)
+          "depfile": str(depfile) if depfile else None, "cwd": str(Path.cwd()), "executed_argv": run_args,
+          "roots": {key: str(Path(os.environ[key]).resolve()) for key in ("BASHY_COMPILER_SOURCE", "BASHY_COMPILER_GOROOT", "BASHY_COMPILER_TMP", "BASHY_MINGW_ROOT") if key in os.environ}}
 result = subprocess.run([compiler, *run_args])
-if result.returncode == 0 and depfile is not None and not depfile.is_file():
-    sys.exit("compiler-capture: compiler succeeded without producing its unique dependency file")
+record["returncode"] = result.returncode
+try:
+    if result.returncode == 0 and depfile is not None:
+        store = root / "content"
+        store.mkdir(exist_ok=True)
+        record["inputs"] = evidence.snapshot(depfile, store)
+except (OSError, ValueError) as exc:
+    record["error"] = str(exc)
+    result.returncode = 1
+finally:
+    # One record per invocation: append-to-one-file is not atomic on all hosts.
+    records = root / "invocations"
+    records.mkdir(exist_ok=True)
+    (records / (uuid.uuid4().hex + ".json")).write_text(json.dumps(record, sort_keys=True) + "\n")
+if record.get("error"):
+    sys.exit("compiler-capture: " + record["error"])
 sys.exit(result.returncode)

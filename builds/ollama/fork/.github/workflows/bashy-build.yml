@@ -134,10 +134,7 @@ jobs:
           cache: false
       - name: native Windows MinGW compilers
         if: runner.os == 'Windows'
-        run: |
-          test -x /c/msys64/mingw64/bin/gcc.exe
-          test -x /c/msys64/mingw64/bin/g++.exe
-          echo 'C:/msys64/mingw64/bin' >> "$GITHUB_PATH"
+        run: python3 fork/bashy-build/windows-compilers.py
       - name: pre-build gates (PRE_BUILD_GATES)
         run: |
           set -euo pipefail
@@ -159,6 +156,17 @@ jobs:
             out/*-native.log
             out/*-egress.txt
           if-no-files-found: error
+          retention-days: 7
+      - name: upload diagnostic compiler input evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.asset }}-compiler-evidence
+          path: |
+            out/*.compiler-inputs/**
+            out/*.compiler-inputs.json
+            out/*compiler-identity.json
+          if-no-files-found: warn
           retention-days: 7
 
       - name: upload unsigned build outputs

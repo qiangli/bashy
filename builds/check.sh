@@ -31,6 +31,8 @@ for t in "${tools[@]}"; do
 	if [[ $t == ollama ]]; then
 		python3 "$here/ollama/test_recipe.py" || rc=1
 		python3 "$here/ollama/test_native_gate.py" || rc=1
+		PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s "$here/ollama" -p test_compiler_evidence.py -v || rc=1
+		PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s "$here/ollama" -p test_audit.py -v || rc=1
 	fi
 	"$here/render.sh" "$t" "$tmp/$t" >/dev/null
 	if ! diff -r "$tmp/$t" "$here/$t/fork"; then

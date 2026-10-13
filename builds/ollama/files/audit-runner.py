@@ -95,72 +95,58 @@ def inventory(out, report):
 
 def compiler_inputs(capture, source, generated, output):
     capture, source = Path(capture), Path(source).resolve()
-    log = capture / "invocations.jsonl"
-    if not log.is_file(): fail("cgo compiler invocation log is missing")
+    logs = sorted((capture / "invocations").glob("*.json"))
+    if not logs: fail("cgo compiler invocation log is missing")
     try:
-        invocations = [json.loads(line) for line in log.read_text().splitlines() if line]
+        invocations = [json.loads(log.read_text()) for log in logs]
     except (json.JSONDecodeError, OSError) as exc:
         fail(f"malformed compiler invocation log: {exc}")
-    captured = [row for row in invocations if row.get("captured") is True]
+    captured = [row for row in invocations if row.get("captured") is True and row.get("returncode") == 0]
     depfiles = sorted((capture / "depfiles").glob("*.d"))
-    if len(captured) != len(depfiles):
-        fail(f"captured cgo compile/dependency-file count differs: {len(captured)} vs {len(depfiles)}")
-    if not invocations or not depfiles: fail("cgo compiler invocation or dependency files are missing")
-    paths, system_headers = set(), set()
-    if sys_platform() == "darwin":
-        system_roots = ("/usr/include/", "/System/Library/Frameworks/",
-                        "/Library/Developer/CommandLineTools/SDKs/",
-                        "/Library/Developer/CommandLineTools/usr/include/",
-                        "/Library/Developer/CommandLineTools/usr/lib/clang/",
-                        "/Applications/Xcode.app/Contents/Developer/Platforms/",
-                        "/Applications/Xcode.app/Contents/Developer/Toolchains/")
-    elif sys_platform() == "linux":
-        system_roots = ("/usr/include/", "/usr/lib/gcc/", "/usr/lib/clang/", "/usr/local/lib/clang/")
-    else:
-        system_roots = ()
-    for dep in depfiles:
-        try:
-            raw = dep.read_text(errors="strict").replace("\\\r\n", " ").replace("\\\n", " ")
-        except (OSError, UnicodeError) as exc:
-            fail(f"cannot read compiler dependency file {dep.name}: {exc}")
-        match = re.search(r"(?<!\\):\s", raw)
-        if not match: fail(f"malformed compiler dependency file: {dep.name}")
-        body = raw[match.end():]
-        names, token, escaped = [], [], False
-        for char in body:
-            if escaped:
-                token.append(char); escaped = False
-            elif char == "\\": escaped = True
-            elif char.isspace():
-                if token: names.append("".join(token)); token = []
-            else: token.append(char)
-        if escaped: token.append("\\")
-        if token: names.append("".join(token))
-        for name in names:
-            p = Path(name)
-            if not p.is_absolute(): p = source / p
-            resolved = p.resolve()
-            if not resolved.is_file(): fail(f"compiler dependency is missing: {name}")
+    if any(row.get("error") for row in invocations): fail("compiler capture failed")
+    if not captured: fail("successful compiler input evidence is missing")
+    if any(not Path(row["depfile"]).is_file() for row in captured):
+        fail("compiler dependency file is missing")
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("evidence", Path(__file__).with_name("compiler-evidence.py"))
+    evidence = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(evidence)
+    paths, system_headers, trusted = {}, set(), []
+    for row in captured:
+        if row.get("error") or not row.get("cwd") or not row.get("inputs"):
+            fail("missing compile-time input evidence or failed capture")
+        if evidence.dependencies(Path(row["depfile"])) != [item["name"] for item in row["inputs"]]:
+            fail("dependency closure differs from compile-time evidence")
+        for item in row["inputs"]:
+            digest = item["sha256"]
+            if not re.fullmatch(r"[0-9a-f]{64}", digest): fail("invalid content digest")
+            blob = capture / "content" / digest
+            if not blob.is_file() or hashlib.sha256(blob.read_bytes()).hexdigest() != digest:
+                fail("missing or corrupt compile-time content")
             try:
-                rel = resolved.relative_to(source).as_posix()
-                paths.add(rel)
-            except ValueError:
-                external = str(resolved)
-                if external.startswith(system_roots):
-                    system_headers.add(external)
-                else:
-                    fail(f"unreviewed external native compiler dependency: {external}")
+                category, rel = evidence.origin(item["path"], row["roots"])
+            except ValueError as exc: fail(str(exc))
+            if (category, rel) != (item["origin"], item["relative"]): fail("input origin mismatch")
+            if Path(row["roots"]["BASHY_COMPILER_SOURCE"]).resolve() != source:
+                fail("capture source root mismatch")
+            if category == "source":
+                if rel in paths and paths[rel] != digest: fail("compiler input changed between invocations")
+                paths[rel] = digest
+            elif category == "system": system_headers.add(item["path"])
+            elif category in ("go-generated", "go-toolchain"): trusted.append(item)
+            else: fail("unreviewed external native compiler dependency")
     # Metal source is generated after go generate and may not appear in a C depfile.
     metal_root = Path(generated)
     for p in metal_root.rglob("*"):
         if p.is_file() and (p.name.endswith(".metal") or p.name.endswith(".metallib") or
                             p.name.endswith(".metal.h") or p.name.endswith(".metal.go")):
-            paths.add(p.resolve().relative_to(source).as_posix())
+            paths[p.resolve().relative_to(source).as_posix()] = hashlib.sha256(p.read_bytes()).hexdigest()
     if not paths: fail("no repository-owned C/C++ compiler dependencies were captured")
-    files = {p: hashlib.sha256((source / p).read_bytes()).hexdigest() for p in sorted(paths)}
+    files = dict(sorted(paths.items()))
     data = {"schema": "bashy-runner-compiler-inputs-v1", "files": files,
             "invocations": len(invocations), "dependency_files": len(depfiles),
-            "system_headers": sorted(system_headers)}
+            "system_headers": sorted(system_headers), "trusted_go_inputs": trusted,
+            "compiler_invocations": invocations}
     Path(output).write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
 
 

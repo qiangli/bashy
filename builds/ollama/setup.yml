@@ -6,7 +6,4 @@
           cache: false
       - name: native Windows MinGW compilers
         if: runner.os == 'Windows'
-        run: |
-          test -x /c/msys64/mingw64/bin/gcc.exe
-          test -x /c/msys64/mingw64/bin/g++.exe
-          echo 'C:/msys64/mingw64/bin' >> "$GITHUB_PATH"
+        run: python3 fork/bashy-build/windows-compilers.py
