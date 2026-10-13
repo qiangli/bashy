@@ -1,0 +1,13 @@
+      - name: frontend dependencies (upstream frozen lockfile)
+        working-directory: src/frontend
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: upstream embedded-server build
+        working-directory: src
+        run: |
+          set -euo pipefail
+          # Upstream's backend-embed target builds frontend, copies it into the
+          # Go embed package, then builds ./backend/cmd with the embed tag.
+          REACT_APP_HEADLAMP_SIDEBAR_DEFAULT_OPEN=false CGO_ENABLED=0 make backend-embed
+          mkdir -p ../out
+          cp backend/headlamp-server "../out/${{ matrix.asset }}"
+          "../out/${{ matrix.asset }}" -version

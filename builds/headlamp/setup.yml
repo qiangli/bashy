@@ -1,0 +1,38 @@
+      - name: pinned Go toolchain (backend/go.mod)
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '@@GO_TOOLCHAIN_SECURITY_OVERRIDE@@'
+          check-latest: false
+          cache: false
+      - name: assert upstream and security toolchains
+        run: |
+          set -euo pipefail
+          . fork/bashy-build/PIN
+          [[ $(sed -n 's/^toolchain go\([0-9.]*\)$/\1/p' src/backend/go.mod) == "$GO_TOOLCHAIN" ]]
+          [[ $GO_TOOLCHAIN_SECURITY_OVERRIDE == 1.26.9 ]]
+          echo "GOTOOLCHAIN=go$GO_TOOLCHAIN_SECURITY_OVERRIDE" >> "$GITHUB_ENV"
+      - name: pinned Node and npm
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '@@NODE_VERSION@@'
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+      - name: pin npm major
+        run: npm install --global 'npm@@@NPM_VERSION@@'
+      - name: apply declared Go security overrides
+        working-directory: src/backend
+        run: |
+          set -euo pipefail
+          . ../../fork/bashy-build/PIN
+          for module in $GO_SECURITY_OVERRIDES; do go get "$module"; done
+          [[ -z $(git status --porcelain -- . ':!go.mod' ':!go.sum') ]]
+          for module in $GO_SECURITY_OVERRIDES; do
+            path=${module%@*}; version=${module##*@}
+            [[ $(go list -m -f '{{.Version}}' "$path") == "$version" ]] || exit 1
+          done
+      - name: apply pinned frontend security overrides
+        run: |
+          set -euo pipefail
+          node fork/bashy-build/npm-security-overrides.mjs src/frontend
+          npm --prefix src/frontend install --package-lock-only --ignore-scripts --no-audit --no-fund
+          [[ -z $(git -C src status --porcelain -- frontend ':!frontend/package.json' ':!frontend/package-lock.json') ]]

@@ -1,0 +1,8 @@
+ARG IMAGE_BASE
+FROM ${IMAGE_BASE}
+ARG TARGETARCH
+RUN addgroup -S headlamp && adduser -S -G headlamp headlamp && apk add --no-cache ca-certificates
+COPY --chmod=0755 headlamp-linux-${TARGETARCH} /headlamp/headlamp-server
+USER headlamp
+EXPOSE 4466
+ENTRYPOINT ["/headlamp/headlamp-server", "-in-cluster", "-tracing-enabled=false", "-metrics-enabled=false", "-listen-addr=0.0.0.0", "-port=4466"]
