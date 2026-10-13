@@ -12,6 +12,7 @@
 #include <rpc.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wchar.h>
 
 static const GUID connect4 = {0xc38d57d1,0x05a7,0x4c33,{0x90,0x4f,0x7f,0xbc,0xee,0xe6,0x0e,0x82}};
@@ -103,6 +104,49 @@ static void denied(int family, int type, UINT16 port, BOOL external) {
     printf("WFP control denied family=%d type=%d port=%u WSAEACCES\n", family, type, port);
 }
 
+/* A successful UDP sendto only means Winsock accepted the bytes. Observe a
+ * local receiver to prove whether WFP actually delivered the datagram. */
+static void datagram_control(int family, UINT16 port, BOOL expect_delivery) {
+    SOCKET receiver = socket(family, SOCK_DGRAM, IPPROTO_UDP);
+    SOCKET sender = socket(family, SOCK_DGRAM, IPPROTO_UDP);
+    if (receiver == INVALID_SOCKET || sender == INVALID_SOCKET)
+        checked(WSAGetLastError(), "datagram control socket");
+    struct sockaddr_storage address = {0};
+    int length;
+    if (family == AF_INET) {
+        struct sockaddr_in *v4 = (struct sockaddr_in *)&address;
+        v4->sin_family = AF_INET;
+        v4->sin_port = htons(port);
+        v4->sin_addr.s_addr = htonl(0x7f000001);
+        length = sizeof(*v4);
+    } else {
+        struct sockaddr_in6 *v6 = (struct sockaddr_in6 *)&address;
+        v6->sin6_family = AF_INET6;
+        v6->sin6_port = htons(port);
+        v6->sin6_addr.s6_addr[15] = 1;
+        length = sizeof(*v6);
+    }
+    if (bind(receiver, (SOCKADDR *)&address, length)) checked(WSAGetLastError(), "datagram control bind");
+    int sent = sendto(sender, "control", 7, 0, (SOCKADDR *)&address, length);
+    if (sent != 7 && (sent != SOCKET_ERROR || WSAGetLastError() != WSAEACCES))
+        checked(WSAGetLastError() ? WSAGetLastError() : 1, "datagram control send");
+    fd_set reads;
+    FD_ZERO(&reads);
+    FD_SET(receiver, &reads);
+    struct timeval timeout = {1, 0};
+    int ready = select(0, &reads, NULL, NULL, &timeout);
+    if (ready == SOCKET_ERROR) checked(WSAGetLastError(), "datagram control receive");
+    if ((ready == 1) != expect_delivery) checked(1, "datagram delivery verdict");
+    if (ready == 1) {
+        char received[8];
+        if (recvfrom(receiver, received, sizeof(received), 0, NULL, NULL) != 7 ||
+            memcmp(received, "control", 7) != 0) checked(1, "datagram content verdict");
+    }
+    closesocket(sender);
+    closesocket(receiver);
+    printf("WFP UDP control %s family=%d port=%u\n", expect_delivery ? "delivered" : "denied", family, port);
+}
+
 static void allowed(UINT16 port) {
     SOCKET listener = socket(AF_INET, SOCK_STREAM, 0), client = socket(AF_INET, SOCK_STREAM, 0);
     if (listener == INVALID_SOCKET || client == INVALID_SOCKET) checked(WSAGetLastError(), "allow socket");
@@ -169,12 +213,12 @@ int wmain(int argc, wchar_t **argv) {
     DWORD length = GetModuleFileNameW(NULL, self, 32768);
     wincheck(length && length < 32768, "self path");
     protect(engine, sublayer.subLayerKey, self, port);
-    for (int i = 0; i < 2; i++) {
-        int type = i ? SOCK_DGRAM : SOCK_STREAM;
-        denied(AF_INET, type, 443, TRUE);
-        denied(AF_INET, type, (UINT16)(port + 1), FALSE);
-        denied(AF_INET6, type, port, FALSE);
-    }
+    denied(AF_INET, SOCK_STREAM, 443, TRUE);
+    denied(AF_INET, SOCK_STREAM, (UINT16)(port + 1), FALSE);
+    denied(AF_INET6, SOCK_STREAM, port, FALSE);
+    datagram_control(AF_INET, port, TRUE);
+    datagram_control(AF_INET, (UINT16)(port + 1), FALSE);
+    datagram_control(AF_INET6, port, FALSE);
     allowed(port);
     protect(engine, sublayer.subLayerKey, argv[3], port);
     HANDLE job = CreateJobObjectW(NULL, NULL);
