@@ -66,7 +66,7 @@ if $windows; then
   # Ship the exact compiler OpenMP runtime the exes were built against.
   cc_dir=$(dirname "$BASHY_WINDOWS_CC")
   omp_dll=''
-  for dir in "$cc_dir" "$cc_dir/../lib" "$cc_dir/../bin" 'C:/msys64/mingw64/bin'; do
+  for dir in "$cc_dir" "$cc_dir/../lib" "$cc_dir/../bin" 'C:/msys64/clang64/bin' 'C:/msys64/mingw64/bin'; do
     if [[ -f $dir/libomp.dll ]]; then omp_dll=$dir/libomp.dll; break; fi
   done
   [[ -n $omp_dll ]] || { echo 'libomp.dll not found beside the verified clang' >&2; exit 1; }

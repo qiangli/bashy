@@ -568,12 +568,47 @@ class WindowsTarget(unittest.TestCase):
         self.assertIn("if: runner.os == 'Windows'",setup)
         self.assertIn('python3 fork/bashy-build/windows-compilers.py',setup)
         discovery=(ROOT/'files/windows-compilers.py').read_text()
-        self.assertIn('x86_64-w64-mingw32',discovery)
+        self.assertIn('x86_64-w64-windows-gnu',discovery)
+        self.assertNotIn('x86_64-w64-mingw32',discovery)
         self.assertIn('-dumpmachine',discovery)
         self.assertIn('__clang__',discovery)
         self.assertIn('BASHY_WINDOWS_CC',discovery)
         for manager in ['choco install','scoop install','apt-get install']:
             self.assertNotIn(manager,discovery)
+
+    def test_setup_provisions_pinned_clang64_before_probing(self):
+        setup=(ROOT/'setup.yml').read_text()
+        self.assertIn('msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0',setup)
+        self.assertIn('msystem: CLANG64',setup)
+        for package in ['mingw-w64-clang-x86_64-clang','mingw-w64-clang-x86_64-compiler-rt',
+                        'mingw-w64-clang-x86_64-lld','mingw-w64-clang-x86_64-cmake',
+                        'mingw-w64-clang-x86_64-make','mingw-w64-clang-x86_64-ninja']:
+            self.assertIn(package,setup)
+        self.assertLess(setup.index('provision pinned MinGW clang toolchain'),
+                        setup.index('native Windows MinGW + clang compilers'))
+        workflow=(ROOT/'fork/.github/workflows/bashy-build.yml').read_text()
+        self.assertIn('msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0',workflow)
+        self.assertIn('msystem: CLANG64',workflow)
+        self.assertLess(workflow.index('provision pinned MinGW clang toolchain'),
+                        workflow.index('native Windows MinGW + clang compilers'))
+
+    def test_probe_inventory_and_toolchain_record_agree(self):
+        spec=importlib.util.spec_from_file_location(
+            'windows_compilers',ROOT/'files/windows-compilers.py')
+        module=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        setup=(ROOT/'setup.yml').read_text()
+        inventory=json.loads((ROOT/'files/dependencies.json').read_text())
+        windows=inventory['toolchain']['windows']
+        self.assertEqual(module.TARGET,'x86_64-w64-windows-gnu')
+        self.assertEqual(module.MSYSTEM,windows['msystem'])
+        self.assertIn(module.MSYSTEM,setup)
+        self.assertIn(module.SETUP_ACTION,setup)
+        self.assertEqual(windows['provisioner'],module.SETUP_ACTION)
+        self.assertEqual(list(module.PACKAGES),windows['packages'])
+        for package in module.PACKAGES:
+            self.assertIn(package,setup)
+        self.assertEqual(windows['generator'],'MinGW Makefiles')
 
     def test_build_uses_mingw_clang_static_with_shipped_omp(self):
         script=(ROOT/'files/build.sh').read_text()
@@ -635,12 +670,116 @@ class WindowsTarget(unittest.TestCase):
 
     def test_windows_files_ship_in_fork(self):
         for name in ['build.sh','exercise.py','merge-inputs.py','verify-asset.py',
-                     'license-review.py','dependencies.json',
+                     'license-review.py','dependencies.json','collect-inputs.py',
                      'windows-compilers.py','windows-net-guard.c','no-egress-test.sh']:
             self.assertEqual((ROOT/'fork/bashy-build'/name).read_bytes(),
                              (ROOT/'files'/name).read_bytes(),name)
         self.assertIn('prima-windows-amd64',merge.ASSETS)
         self.assertIn('prima-windows-amd64.exe',verify.ASSETS)
+
+class WindowsCompilerProbe(unittest.TestCase):
+    # The exact run 38462299969 failure: an MSVC-target clang must be
+    # refused, never used for the MinGW static link.
+    def _module(self):
+        spec = importlib.util.spec_from_file_location(
+            'windows_compilers', ROOT/'files/windows-compilers.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def _pair(self, directory, triple, macros, version='clang version 19.1.7'):
+        for name in ('clang.exe', 'clang++.exe'):
+            script = directory/name
+            script.write_text('#!/bin/sh\n'
+                              f'if [ "$1" = -dumpmachine ]; then echo "{triple}"; exit 0; fi\n'
+                              f'if [ "$1" = --version ]; then echo "{version}"; exit 0; fi\n'
+                              f'printf "%s\\n" {macros}\n')
+            script.chmod(0o755)
+
+    def test_mingw_clang_pair_passes(self):
+        module = self._module()
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            macros = '"#define __clang__ 1" "#define __MINGW64__ 1" "#define __x86_64__ 1" "#define __SIZEOF_POINTER__ 8" "#define __cplusplus 202002L"'
+            self._pair(root, 'x86_64-w64-windows-gnu', macros)
+            records = module.probe(root/'clang.exe', root/'clang++.exe')
+            self.assertEqual([r['target'] for r in records],
+                             ['x86_64-w64-windows-gnu']*2)
+
+    def test_msvc_target_clang_is_refused(self):
+        module = self._module()
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            macros = '"#define __clang__ 1" "#define _MSC_VER 1940" "#define __x86_64__ 1" "#define __SIZEOF_POINTER__ 8" "#define __cplusplus 202002L"'
+            self._pair(root, 'x86_64-pc-windows-msvc', macros)
+            with self.assertRaisesRegex(ValueError, 'x86_64-pc-windows-msvc|MSVC'):
+                module.probe(root/'clang.exe', root/'clang++.exe')
+
+    def test_gnu_triple_without_mingw_macros_is_refused(self):
+        module = self._module()
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            macros = '"#define __clang__ 1" "#define __x86_64__ 1" "#define __SIZEOF_POINTER__ 8" "#define __cplusplus 202002L"'
+            self._pair(root, 'x86_64-w64-windows-gnu', macros)
+            with self.assertRaisesRegex(ValueError, 'MinGW'):
+                module.probe(root/'clang.exe', root/'clang++.exe')
+
+    def test_mismatched_pair_is_refused(self):
+        module = self._module()
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            macros = '"#define __clang__ 1" "#define __MINGW64__ 1" "#define __x86_64__ 1" "#define __SIZEOF_POINTER__ 8" "#define __cplusplus 202002L"'
+            self._pair(root, 'x86_64-w64-windows-gnu', macros)
+            (root/'clang++.exe').write_text((root/'clang++.exe').read_text().replace(
+                'clang version 19.1.7', 'clang version 18.1.8'))
+            with self.assertRaisesRegex(ValueError, 'mismatch'):
+                module.probe(root/'clang.exe', root/'clang++.exe')
+
+class CollectInputsDepfiles(unittest.TestCase):
+    def _module(self):
+        spec = importlib.util.spec_from_file_location(
+            'collect', ROOT/'files/collect-inputs.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_rule_split_keeps_drive_letter_targets(self):
+        module = self._module()
+        tail = module.rule_prerequisites('CMakeFiles/a.dir/b.obj: C:/src/a.cpp C:/build/c.h')
+        self.assertIn('C:/src/a.cpp', tail)
+        self.assertIn('C:/build/c.h', tail)
+        tail = module.rule_prerequisites('CMakeFiles/a.dir/b.o: /src/a.cpp \\\n /build/c.h')
+        self.assertIn('/src/a.cpp', tail)
+        self.assertIn('/build/c.h', tail)
+
+    def test_obj_d_and_toolchain_record_join_closure(self):
+        module = self._module()
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            src, build, dest = root/'src', root/'build', root/'dest'
+            (src/'deps/nng').mkdir(parents=True)
+            (src/'LICENSE').write_bytes(b'MIT')
+            (src/'deps/nng/LICENSE.txt').write_bytes(b'MIT')
+            (src/'a.cpp').write_bytes(b'int main() {}')
+            depdir = build/'CMakeFiles/a.dir'
+            depdir.mkdir(parents=True)
+            (depdir/'a.obj.d').write_text(f'a.obj: {src}/a.cpp\n')
+            toolchain = root/'toolchain.json'
+            toolchain.write_bytes(b'{"schema": "fixture"}')
+            old = os.environ.get('BASHY_TOOLCHAIN_JSON')
+            os.environ['BASHY_TOOLCHAIN_JSON'] = str(toolchain)
+            try:
+                module.collect(src, build, dest, root/'report.json')
+            finally:
+                if old is None:
+                    del os.environ['BASHY_TOOLCHAIN_JSON']
+                else:
+                    os.environ['BASHY_TOOLCHAIN_JSON'] = old
+            report = json.loads((root/'report.json').read_text())
+            by_path = {row['path']: row['sha256'] for row in report}
+            self.assertEqual(by_path['TOOLCHAIN.json'], hashlib.sha256(b'{"schema": "fixture"}').hexdigest())
+            self.assertTrue((dest/'TOOLCHAIN.json').is_file())
+            self.assertIn('a.cpp', by_path)
 
 class ExerciseDiagnostics(unittest.TestCase):
     @classmethod
