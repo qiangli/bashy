@@ -13,9 +13,11 @@
 #   builds/_shared/verify-pin.sh    the shared provenance gate
 #   builds/_shared/$SHARED_FILES    shared helper scripts the tool declares
 #
-# Templates use @@VAR@@ (a tool.env variable; unknown names fail), @@MATRIX@@,
-# @@INCLUDE name@@ (a fragment) and #@@IF name@@ / #@@ELSE@@ / #@@END@@
-# (fragment present?). See builds/README.md.
+# Templates use @@VAR@@ (a tool.env variable or one of the values derived
+# below; unknown names fail), @@MATRIX@@, @@INCLUDE name@@ (a fragment),
+# #@@IF name@@ / #@@ELSE@@ / #@@END@@ (fragment present?) and
+# #@@IFEQ VAR value@@ / #@@ELSE@@ / #@@END@@ (variable equals value?).
+# See builds/README.md.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -40,8 +42,67 @@ for v in TOOL FORK_REPO UPSTREAM_SLUG UPSTREAM_TAG UPSTREAM_COMMIT KIND COSIGN_V
 done
 [[ $TOOL == "$tool" ]] || die "TOOL=$TOOL does not match directory $tool"
 [[ $FORK_REPO == "qiangli/$tool" ]] || die "FORK_REPO must be qiangli/$tool"
-[[ $UPSTREAM_TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "UPSTREAM_TAG $UPSTREAM_TAG is not a plain release tag"
 [[ $UPSTREAM_COMMIT =~ ^[0-9a-f]{40}$ ]] || die "UPSTREAM_COMMIT must be a full 40-hex sha"
+
+# --- the DECLARED release-tag form ------------------------------------------
+# Most upstreams tag vMAJOR.MINOR.PATCH, but not all: seaweedfs ships bare
+# `4.48` and its last v-prefixed tag is v3.33. The shape is DECLARED, never
+# sniffed from the pin, so a typo in a bumped tag is still refused.
+#
+# This case is the ONE place a form is mapped to its shape. The regex is
+# substituted into the workflow's pin job AND into the shipped
+# bashy-build/verify-pin.sh, so the two gates cannot drift apart. The bashy
+# release tag is always bashy-<the pinned upstream tag>-N, which needs no form
+# of its own: both gates compare the captured middle against UPSTREAM_TAG.
+# shellcheck disable=SC2034  # read indirectly, as @@UPSTREAM_TAG_REGEX@@ etc.
+case ${UPSTREAM_TAG_FORM:=vX.Y.Z} in
+vX.Y.Z)
+	UPSTREAM_TAG_REGEX='^v[0-9]+\.[0-9]+\.[0-9]+$'
+	BASHY_TAG_GLOB='bashy-v*'
+	;;
+X.Y)
+	UPSTREAM_TAG_REGEX='^[0-9]+\.[0-9]+$'
+	BASHY_TAG_GLOB='bashy-[0-9]*'
+	;;
+*) die "UPSTREAM_TAG_FORM $UPSTREAM_TAG_FORM is not a declared release-tag form (vX.Y.Z, X.Y)" ;;
+esac
+[[ $UPSTREAM_TAG =~ $UPSTREAM_TAG_REGEX ]] ||
+	die "UPSTREAM_TAG $UPSTREAM_TAG is not the declared $UPSTREAM_TAG_FORM release-tag form"
+
+# --- the upstream forge -----------------------------------------------------
+# A GitHub upstream is checked out with actions/checkout; anything else is
+# cloned from UPSTREAM_REPO with plain git (act_runner's home is gitea.com).
+# The forge is DERIVED from the URL rather than declared, so the two cannot
+# disagree. The pin gate is identical either way: verify-pin.sh still demands
+# that HEAD and the tag both be UPSTREAM_COMMIT over a pristine tree, so a
+# second forge buys no weaker provenance.
+[[ $UPSTREAM_REPO == https://* ]] || die "UPSTREAM_REPO must be an https:// URL"
+[[ $UPSTREAM_REPO == */$UPSTREAM_SLUG ]] ||
+	die "UPSTREAM_REPO $UPSTREAM_REPO does not end in UPSTREAM_SLUG $UPSTREAM_SLUG"
+# shellcheck disable=SC2034  # read indirectly, as #@@IFEQ UPSTREAM_FORGE ...@@
+if [[ $UPSTREAM_REPO == https://github.com/* ]]; then
+	UPSTREAM_FORGE=github
+	: "${UPSTREAM_API_BASE:=https://api.github.com}"
+else
+	UPSTREAM_FORGE=git
+	# No default is possible off GitHub, and the pin job cannot check a release
+	# it cannot query, so this is required rather than inferred. The endpoint
+	# must answer /repos/SLUG/releases/tags/TAG with .draft and .prerelease
+	# (gitea's /api/v1 does; it is the same REST shape).
+	[[ -n ${UPSTREAM_API_BASE:-} ]] ||
+		die "a non-GitHub UPSTREAM_REPO must declare UPSTREAM_API_BASE (the forge's release-API root)"
+fi
+
+# --- GO_SECURITY_OVERRIDES (the module half of a recorded override) ---------
+# Syntax only; the workflow enforces the real gate (the go.mod diff). Checking
+# it here means a typo fails at render time instead of in CI.
+if [[ -n ${GO_SECURITY_OVERRIDES:-} ]]; then
+	[[ $KIND == go ]] || die "GO_SECURITY_OVERRIDES is a go-kind key, but KIND=$KIND"
+	for spec in $GO_SECURITY_OVERRIDES; do
+		[[ $spec =~ ^[^@[:space:]]+@v[0-9][0-9A-Za-z.+-]*$ ]] ||
+			die "GO_SECURITY_OVERRIDES entry $spec is not module@vVERSION"
+	done
+fi
 for f in otel.env no-egress-test.sh; do
 	[[ -f $dir/files/$f ]] || die "files/$f is required (builds/README.md conventions)"
 done
@@ -79,19 +140,44 @@ subst() { # LINE -> LINE with every @@VAR@@ replaced
 }
 
 render() { # TEMPLATE
-	local line skip=0 frag pair
+	# Conditionals NEST, so the state is a stack, not a flag: one digit per
+	# open #@@IF@@/#@@IFEQ@@ saying whether its current branch emits. A line
+	# is emitted only when every open conditional does, so a false outer
+	# branch cannot be re-opened by an inner #@@END@@ — with a single flag,
+	# the forge conditional inside #@@IF audit@@ leaked the audit job's steps
+	# into the build job of every tool without an audit fragment, and the
+	# regenerate-and-diff gate could not see it (the output was still
+	# deterministic, and still valid YAML).
+	local line stack="" frag pair cond
 	while IFS= read -r line || [[ -n $line ]]; do
 		case $line in
+		'#@@IFEQ '*'@@')
+			# #@@IFEQ VAR value@@ — a derived/declared variable equals value.
+			cond=${line#'#@@IFEQ '}
+			cond=${cond%@@}
+			frag=${cond%% *}
+			[[ -n ${!frag+x} ]] || die "template references undeclared #@@IFEQ $frag@@"
+			if [[ ${!frag} == "${cond#* }" ]]; then stack+="1"; else stack+="0"; fi
+			continue
+			;;
 		'#@@IF '*'@@')
 			frag=${line#'#@@IF '}
 			frag=${frag%@@}
-			[[ -n $(fragment "$frag") ]] && skip=0 || skip=1
+			if [[ -n $(fragment "$frag") ]]; then stack+="1"; else stack+="0"; fi
 			continue
 			;;
-		'#@@ELSE@@') skip=$((1 - skip)); continue ;;
-		'#@@END@@') skip=0; continue ;;
+		'#@@ELSE@@')
+			[[ -n $stack ]] || die "#@@ELSE@@ without an open conditional in ${1##*/}"
+			stack=${stack%?}$((1 - ${stack: -1}))
+			continue
+			;;
+		'#@@END@@')
+			[[ -n $stack ]] || die "#@@END@@ without an open conditional in ${1##*/}"
+			stack=${stack%?}
+			continue
+			;;
 		esac
-		((skip)) && continue
+		[[ $stack == *0* ]] && continue
 		case $line in
 		'@@MATRIX@@')
 			for pair in $MATRIX; do
@@ -107,6 +193,7 @@ render() { # TEMPLATE
 		*) subst "$line" ;;
 		esac
 	done <"$1"
+	[[ -z $stack ]] || die "unclosed #@@IF@@/#@@IFEQ@@ in ${1##*/}"
 }
 
 [[ -n $(fragment build) ]] || die "no build fragment: add $tool/build.yml or a builds/_shared/kinds/$KIND/build.yml"
@@ -117,7 +204,9 @@ mkdir -p "$tmp/.github/workflows" "$tmp/bashy-build"
 render "$shared/bashy-build.yml" >"$tmp/.github/workflows/bashy-build.yml"
 cp -R "$dir/files/." "$tmp/bashy-build/"
 cp "$dir/tool.env" "$tmp/bashy-build/PIN"
-cp "$shared/verify-pin.sh" "$tmp/bashy-build/verify-pin.sh"
+# verify-pin.sh is rendered, not copied: it carries @@UPSTREAM_TAG_REGEX@@ so
+# the release-tag form has exactly one definition (the case above).
+render "$shared/verify-pin.sh" >"$tmp/bashy-build/verify-pin.sh"
 chmod +x "$tmp/bashy-build/verify-pin.sh"
 for f in ${SHARED_FILES:-}; do
 	cp "$shared/$f" "$tmp/bashy-build/$f"

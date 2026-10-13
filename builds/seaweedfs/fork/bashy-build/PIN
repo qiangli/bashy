@@ -1,0 +1,80 @@
+# bashy verified build declaration for seaweedfs (builds/README.md).
+# Shell-sourceable KEY=VALUE only. builds/render.sh renders ../fork from this
+# file + files/ + builds/_shared, and ships it verbatim as the fork's
+# bashy-build/PIN. The workflow refuses to build unless the checked-out
+# upstream tag resolves to UPSTREAM_COMMIT and the bashy tag is
+# bashy-${UPSTREAM_TAG}-N.
+#
+# The pin is the release yoke runs today: pkg/fleet/baseline/services/
+# seaweedfs.yaml. Upstream LICENSE at this tag: Apache-2.0.
+TOOL=seaweedfs
+FORK_REPO=qiangli/seaweedfs
+UPSTREAM_REPO=https://github.com/seaweedfs/seaweedfs
+UPSTREAM_SLUG=seaweedfs/seaweedfs
+# seaweedfs tags releases BARE MAJOR.MINOR — 4.48 is the current latest stable,
+# and the last v-prefixed tag upstream ever cut is v3.33. UPSTREAM_TAG_FORM
+# declares that shape, so the pin job, verify-pin.sh and the workflow trigger
+# (bashy-[0-9]*) all expect `4.48` and the bashy tag is bashy-4.48-N.
+UPSTREAM_TAG=4.48
+UPSTREAM_TAG_FORM=X.Y
+# Lightweight tag -> this commit directly.
+UPSTREAM_COMMIT=530be3e37337488ecc34d58441e0bc476e121c93
+# Toolchain kind: build/audit job steps come from builds/_shared/kinds/go.
+KIND=go
+# Must equal the go/toolchain directive in the tag's go.mod (setup.yml gates it).
+# 4.48's go.mod has no `toolchain` line, so this is its `go 1.26.6` directive.
+GO_TOOLCHAIN=1.26.6
+# Recorded security override, toolchain half. go1.26.6 is the Go release the
+# tag names, and govulncheck reports 12 REACHABLE stdlib vulnerabilities in it
+# (GO-2026-6599/6600/6603/6605/6607..6613/6617), every one fixed in go1.26.9.
+# Reachable findings are never waived, and no later seaweedfs tag exists yet,
+# so the build and the audit both run on the newest patch of the tag's own Go
+# minor. Retires itself when an upstream tag ships on go1.26.9 or later.
+GO_TOOLCHAIN_SECURITY_OVERRIDE=1.26.9
+# Recorded security override, module half. On go1.26.9 five REACHABLE findings
+# remain (GO-2026-6603/6610/6611/6612/6617) in golang.org/x/net, which 4.48
+# requires at v0.58.0; all five are fixed in v0.60.0. The workflow applies this
+# with `go get` to the SAME tree the audit and the build use, and refuses any
+# go.mod change outside this module's require line. Retires itself when an
+# upstream tag requires x/net v0.60.0 or later.
+GO_SECURITY_OVERRIDES="golang.org/x/net@v0.60.0"
+GOVULNCHECK_VERSION=v1.9.0
+GO_SBOM_VERSION=v1.12.0
+GO_PACKAGE=./weed
+# Upstream's release ldflags (.github/workflows/binaries_release1.yml and
+# binaries_release2.yml, the plain `weed` asset), minus `-s -w` and the
+# `-extldflags -static` that a CGO_ENABLED=0 pure-Go link does not use:
+# COMMIT comes from the pin, so the stamp stays reproducible. The version
+# itself is a compile-time constant (weed/util/version/constants.go names
+# MAJOR 4 / MINOR 48, i.e. exactly this tag), not an ldflag.
+GO_LDFLAGS="-X github.com/seaweedfs/seaweedfs/weed/util/version.COMMIT=$UPSTREAM_COMMIT"
+# No tags: upstream's plain `weed` release asset leaves build_flags commented
+# out. The 5BytesOffset / elastic,gocdk,rclone,sqlite,... tag sets build the
+# separate `large_disk` and `full` assets, which yoke does not run.
+GO_BUILD_TAGS=""
+GO_BUILD_FLAGS=""
+# Upstream's release pre_command also exports this alongside CGO_ENABLED=0. It
+# governs the build process rather than the resulting binary (a shipped godebug
+# default would have to come from go.mod or a //go:debug directive), and is
+# carried here only so the build environment matches upstream's.
+GO_BUILD_ENV="GODEBUG=http2client=0"
+GO_VERSION_ARG=version
+COSIGN_VERSION=v3.1.3
+# Build matrix: ASSET=RUNNER; each leg uploads out/ASSET. Free standard runners.
+MATRIX="weed-linux-amd64=ubuntu-24.04 weed-linux-arm64=ubuntu-24.04-arm weed-darwin-arm64=macos-15 weed-darwin-amd64=macos-15-intel"
+# CGO per asset, as the UPSTREAM release does: every release workflow's
+# pre_command is `export CGO_ENABLED=0`, on linux and darwin alike.
+GO_CGO="weed-linux-amd64=0 weed-linux-arm64=0 weed-darwin-arm64=0 weed-darwin-amd64=0"
+APT_PACKAGES="strace util-linux iproute2 curl"
+PRE_BUILD_GATES=""
+# Shared helper scripts copied from builds/_shared into bashy-build/.
+SHARED_FILES="egress-verdict.sh"
+# Argument of bashy-build/no-egress-test.sh (a GitHub expression is allowed).
+EGRESS_TARGET='out/${{ matrix.asset }}'
+# Release: SRC=ASSET copies from bashy-build/, the assets that must exist,
+# the ones that are executables, and the release-notes lines.
+RELEASE_EXTRA="PIN=seaweedfs-pin.txt otel.env=seaweedfs-otel.env no-tracking.env=seaweedfs-no-tracking.env vuln-ignore=vuln-ignore"
+RELEASE_ASSETS="weed-linux-amd64 weed-linux-arm64 weed-darwin-arm64 weed-darwin-amd64 seaweedfs-$UPSTREAM_TAG.cdx.json seaweedfs-$UPSTREAM_TAG.govulncheck.json seaweedfs-pin.txt seaweedfs-otel.env seaweedfs-no-tracking.env vuln-ignore"
+RELEASE_EXECUTABLES="weed-linux-amd64 weed-linux-arm64 weed-darwin-arm64 weed-darwin-amd64"
+RELEASE_NOTE="Usage reporting is off: every weed subcommand that starts a master is launched with telemetry disabled, so nothing is sent to telemetry.seaweedfs.com. The only OTLP destination is bashy's local collector 127.0.0.1:31415."
+RELEASE_GATES="pinned commit, pinned Go toolchain (recorded security override go1.26.9), recorded module security override (golang.org/x/net@v0.60.0, gated go.mod diff), govulncheck (reachable, unwaived = fail), CycloneDX SBOM, no-egress."

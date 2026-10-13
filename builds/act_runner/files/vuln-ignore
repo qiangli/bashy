@@ -1,0 +1,16 @@
+# govulncheck waivers for the bashy act_runner verified build.
+#
+# One OSV id per line (GO-YYYY-NNNN), followed by a justification on the same
+# line or in the comment above it. The audit job fails on any REACHABLE
+# vulnerability — one whose first trace frame names a called function — that is
+# not listed here. An empty list (this file) means nothing is waived.
+#
+# A waiver is a review decision, not a convenience: record who accepted it,
+# why the reachable path cannot be exploited in bashy's configuration, and what
+# would retire it (an upstream pin bump, almost always).
+#
+# NOTHING IS WAIVED HERE. The 10 reachable stdlib findings v5.0.0's own
+# go1.27.1 toolchain carries are FIXED rather than waived, by the recorded
+# GO_TOOLCHAIN_SECURITY_OVERRIDE=1.27.2 in ../tool.env; under that toolchain
+# govulncheck reports no reachable vulnerability at all, in the stdlib or in
+# any dependency.

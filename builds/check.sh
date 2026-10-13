@@ -31,6 +31,35 @@ for t in "${tools[@]}"; do
 		rc=1
 		continue
 	fi
+	# Structural checks the regenerate-and-diff cannot make. A bug in
+	# conditional rendering leaks the steps of a SUPPRESSED job into its
+	# predecessor: the output stays deterministic (so the diff reproduces) and
+	# stays valid YAML (so actionlint accepts it), but the workflow is wrong.
+	# Both invariants below are fixed by the skeleton's shape: every job that
+	# checks out `src` runs the pin gate exactly once, and the job set is
+	# `pin build release` plus `audit` iff the tool has an audit fragment.
+	wf=$tmp/$t/.github/workflows/bashy-build.yml
+	jobs=$(awk '/^jobs:$/ {j = 1; next} j && /^  [a-z][a-z0-9_-]*:$/ {gsub(/[ :]/, ""); printf "%s ", $0}' "$wf")
+	gates=$(grep -c 'name: verify HEAD == pinned commit' "$wf" || true)
+	kind=$(
+		set +u
+		# shellcheck source=/dev/null
+		. "$here/$t/tool.env" >/dev/null 2>&1
+		echo "$KIND"
+	)
+	if [[ -f $here/$t/audit.yml || -f $here/_shared/kinds/$kind/audit.yml ]]; then
+		want_jobs="pin build audit release " want_gates=2
+	else
+		want_jobs="pin build release " want_gates=1
+	fi
+	if [[ $jobs != "$want_jobs" ]]; then
+		echo "check: $t: rendered jobs [$jobs] != expected [$want_jobs]" >&2
+		rc=1
+	fi
+	if [[ $gates != "$want_gates" ]]; then
+		echo "check: $t: $gates pin-gate steps in the workflow, expected $want_gates (a suppressed job's steps leaked?)" >&2
+		rc=1
+	fi
 	for s in "$tmp/$t"/bashy-build/*.sh "$tmp/$t"/bashy-build/scripts/*.sh; do
 		[[ -f $s ]] || continue
 		bash -n "$s" || rc=1

@@ -5,6 +5,8 @@
 # Installed on the `bashy-build` branch of github.com/@@FORK_REPO@@ from
 # bashy's builds/@@TOOL@@/fork/. Triggered ONLY by pushing a tag
 # bashy-<upstream tag>-N (e.g. bashy-@@UPSTREAM_TAG@@-1) at that branch.
+# Upstream tags this release @@UPSTREAM_TAG_FORM@@, so the trigger is
+# @@BASHY_TAG_GLOB@@ and the pin job holds the tag to exactly that shape.
 #
 # Pipeline (fail-closed): pin (provenance) -> build matrix (tool gates, build,
 # no-egress gate) + audit/SBOM -> release (cosign keyless sign-blob --bundle
@@ -21,7 +23,7 @@ name: bashy-build
 on:
   push:
     tags:
-      - "bashy-v*"
+      - "@@BASHY_TAG_GLOB@@"
 
 permissions: {}
 
@@ -58,12 +60,20 @@ jobs:
         run: |
           set -euo pipefail
           . fork/bashy-build/PIN
-          [[ $UPSTREAM_TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "refusing non-release upstream tag $UPSTREAM_TAG"; exit 1; }
-          [[ $BASHY_TAG =~ ^bashy-(v[0-9]+\.[0-9]+\.[0-9]+)-[1-9][0-9]*$ && ${BASH_REMATCH[1]} == "$UPSTREAM_TAG" ]] ||
+          # The declared release-tag form (tool.env UPSTREAM_TAG_FORM). The
+          # regex comes from builds/render.sh, the ONE place that maps a form
+          # to its shape, so this job and verify-pin.sh cannot drift apart.
+          upstream_tag_re='@@UPSTREAM_TAG_REGEX@@'
+          [[ $UPSTREAM_TAG =~ $upstream_tag_re ]] || { echo "refusing non-release upstream tag $UPSTREAM_TAG (not @@UPSTREAM_TAG_FORM@@)"; exit 1; }
+          # bashy-<the pinned upstream tag>-N, whatever shape that tag has.
+          [[ $BASHY_TAG =~ ^bashy-(.+)-[1-9][0-9]*$ && ${BASH_REMATCH[1]} == "$UPSTREAM_TAG" ]] ||
             { echo "tag $BASHY_TAG must be bashy-$UPSTREAM_TAG-N"; exit 1; }
-          # The upstream GitHub release must exist and be neither draft nor pre-release.
+          # The upstream release must exist and be neither draft nor pre-release.
+          # UPSTREAM_API_BASE is https://api.github.com for a GitHub upstream and
+          # the forge's own REST root otherwise; gitea answers the identical
+          # /repos/SLUG/releases/tags/TAG shape, with the same .draft/.prerelease.
           rel=$(curl -fsSL -H 'Accept: application/vnd.github+json' \
-            "https://api.github.com/repos/$UPSTREAM_SLUG/releases/tags/$UPSTREAM_TAG")
+            "@@UPSTREAM_API_BASE@@/repos/$UPSTREAM_SLUG/releases/tags/$UPSTREAM_TAG")
           [[ $(jq -r '.prerelease' <<<"$rel") == false && $(jq -r '.draft' <<<"$rel") == false ]] ||
             { echo "upstream $UPSTREAM_TAG is a draft or pre-release"; exit 1; }
           echo "upstream_tag=$UPSTREAM_TAG" >>"$GITHUB_OUTPUT"
@@ -86,6 +96,7 @@ jobs:
         with:
           persist-credentials: false
           path: fork
+#@@IFEQ UPSTREAM_FORGE github@@
       - name: checkout official upstream release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -95,6 +106,23 @@ jobs:
           fetch-tags: true
           persist-credentials: false
           path: src
+#@@ELSE@@
+      - name: clone official upstream release tag (@@UPSTREAM_REPO@@)
+        env:
+          UPSTREAM_TAG_REF: ${{ needs.pin.outputs.upstream_tag }}
+        run: |
+          set -euo pipefail
+          . fork/bashy-build/PIN
+          # Upstream is not on GitHub, so there is no actions/checkout for it:
+          # clone the official tag straight from UPSTREAM_REPO (no credentials
+          # are configured for it, so this is an anonymous read). The pin gate
+          # in the next step is the SAME one every tool runs — HEAD and the tag
+          # must both be UPSTREAM_COMMIT over a pristine tree — so a second
+          # forge buys no weaker provenance than actions/checkout does.
+          git -c advice.detachedHead=false clone --depth 1 --single-branch \
+            --branch "$UPSTREAM_TAG_REF" "$UPSTREAM_REPO" src
+          echo "cloned $UPSTREAM_REPO at $UPSTREAM_TAG_REF -> $(git -C src rev-parse HEAD)"
+#@@END@@
       - name: verify HEAD == pinned commit
         run: fork/bashy-build/verify-pin.sh src "$GITHUB_REF_NAME"
       - name: host build dependencies (linux)
@@ -133,6 +161,7 @@ jobs:
         with:
           persist-credentials: false
           path: fork
+#@@IFEQ UPSTREAM_FORGE github@@
       - name: checkout official upstream release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -142,6 +171,23 @@ jobs:
           fetch-tags: true
           persist-credentials: false
           path: src
+#@@ELSE@@
+      - name: clone official upstream release tag (@@UPSTREAM_REPO@@)
+        env:
+          UPSTREAM_TAG_REF: ${{ needs.pin.outputs.upstream_tag }}
+        run: |
+          set -euo pipefail
+          . fork/bashy-build/PIN
+          # Upstream is not on GitHub, so there is no actions/checkout for it:
+          # clone the official tag straight from UPSTREAM_REPO (no credentials
+          # are configured for it, so this is an anonymous read). The pin gate
+          # in the next step is the SAME one every tool runs — HEAD and the tag
+          # must both be UPSTREAM_COMMIT over a pristine tree — so a second
+          # forge buys no weaker provenance than actions/checkout does.
+          git -c advice.detachedHead=false clone --depth 1 --single-branch \
+            --branch "$UPSTREAM_TAG_REF" "$UPSTREAM_REPO" src
+          echo "cloned $UPSTREAM_REPO at $UPSTREAM_TAG_REF -> $(git -C src rev-parse HEAD)"
+#@@END@@
       - name: verify HEAD == pinned commit
         run: fork/bashy-build/verify-pin.sh src "$GITHUB_REF_NAME"
 @@INCLUDE audit@@

@@ -1,0 +1,39 @@
+# bashy's no-tracking baseline configuration for act_runner (gitea-runner).
+#
+# Shipped as the act_runner-bashy.yaml release asset and used by
+# no-egress-test.sh. Upstream's own config.example.yaml documents every key
+# with its default; only the keys bashy pins are set here, and each one is
+# justified in ../README.md with the upstream source line it comes from.
+#
+# {{DATA_DIR}} / {{ADDR}} / {{PORT}} / {{SECRET}} are substituted by the
+# caller (no-egress-test.sh does, and so does yoke when it launches the
+# cache server).
+
+log:
+  # Default would be info; stay there explicitly rather than inheriting it.
+  level: info
+
+runner:
+  # Never skip TLS verification of the Gitea instance (upstream default, pinned
+  # so a future default change cannot silently weaken it).
+  insecure: false
+
+cache:
+  # THE no-tracking knob for act_runner. Left empty, the cache server asks the
+  # kernel which local address would reach the internet by dialling
+  # 8.8.8.8:80 (act/common/outbound_ip.go:24, reached from
+  # act/artifactcache/handler.go:159 when Options.OutboundIP is unset) — a
+  # real UDP connect to a third party's resolver on every start. Pinning the
+  # host removes the probe entirely; it is also correct for bashy, whose jobs
+  # reach the cache over loopback.
+  host: "{{ADDR}}"
+  # Fixed port instead of `0`, which picks a random free one.
+  port: {{PORT}}
+  # Cache blobs stay under bashy's own state directory.
+  dir: "{{DATA_DIR}}"
+  # Required by `gitea-runner cache-server`: the shared secret a runner must
+  # present. Generated per deployment, never a shipped constant.
+  external_secret: "{{SECRET}}"
+  # Reuse a cached action rather than re-fetching it from the remote on every
+  # job: fewer outbound requests for the same inputs.
+  offline_mode: true
