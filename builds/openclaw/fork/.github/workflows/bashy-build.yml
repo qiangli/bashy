@@ -453,8 +453,13 @@ jobs:
             -o "$GRYPE_INSTALL_SH"
           echo "4bc8e844d1ca0b74082cb51e1587d58c35150756954660db3d3078e57c81cbfd  $GRYPE_INSTALL_SH" \
             | sha256sum -c -
+          # install.sh usage is [-v] [-b DIR] [TAG]: -v verifies the
+          # checksum signature (cosign, installed above), the tag is
+          # positional, and every flag must precede it — `-v v0.120.1 -b DIR`
+          # stops option parsing at the tag so -b is silently dropped and the
+          # binary lands in ./bin instead of $RUNNER_TEMP/bin.
           DOWNLOAD_TAG_INSTALL_SCRIPT=false \
-            sh "$GRYPE_INSTALL_SH" -v v0.120.1 -b "${RUNNER_TEMP}/bin"
+            sh "$GRYPE_INSTALL_SH" -v -b "${RUNNER_TEMP}/bin" v0.120.1
           test -x "${RUNNER_TEMP}/bin/grype" || { echo "grype binary not found at ${RUNNER_TEMP}/bin/grype (install dir must be \$RUNNER_TEMP/bin, not ./bin)" >&2; ls -la "${RUNNER_TEMP}/bin/" 2>&1 || true; ls -la ./bin/ 2>&1 || true; exit 1; }
           "${RUNNER_TEMP}/bin/grype" version 2>&1 | grep -q "0.120.1" || { echo "grype version mismatch: expected 0.120.1" >&2; "${RUNNER_TEMP}/bin/grype" version 2>&1 || true; exit 1; }
           GRYPE_CHECK_FOR_APP_UPDATE=false \
