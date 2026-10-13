@@ -60,14 +60,10 @@ Linux)
     cat "out/$asset-egress.txt" >&2 || true
     exit 1
   fi
-  # Loopback allowlist: ring-test ports 5599 (multipart), 5600 (rcvtimeo),
-  # 5601 (single-message) per pinned common/zmq_nng_shim_test.cpp, plus the
-  # rank-offset engine ports 19000/19001 (data) and 19100/19101 (signal).
-  # Port 5601 was missing here and in the Darwin profile below: under the
-  # sandbox the ring test's third case hung on a denied connect (candidate -3
-  # run 38414127942 Mac legs), and the verdict flagged its loopback connect
-  # as egress. Everything else stays fail-closed (see egress-verdict.sh).
-  if ! egress_verdict "$work/trace" 5599 5600 5601 19000 19001 19100 19101; then
+  # Loopback allowlist: pinned Prima 0.1.1 shim tests use 5599-5605;
+  # rank-offset engine ports use 19000/19001 (data) and 19100/19101
+  # (signal). Everything else stays fail-closed (see egress-verdict.sh).
+  if ! egress_verdict "$work/trace" 5599 5600 5601 5602 5603 5604 5605 19000 19001 19100 19101; then
     python3 "$here/exercise.py" --trace "$work/trace" >>"out/$asset-egress.txt"
     exit 1
   fi
@@ -85,7 +81,7 @@ Darwin)
 (version 1)
 (allow default)
 (deny network-outbound)
-(allow network-outbound (remote ip "localhost:5599") (remote ip "localhost:5600") (remote ip "localhost:5601") (remote ip "localhost:19000") (remote ip "localhost:19001") (remote ip "localhost:19100") (remote ip "localhost:19101"))
+(allow network-outbound (remote ip "localhost:5599") (remote ip "localhost:5600") (remote ip "localhost:5601") (remote ip "localhost:5602") (remote ip "localhost:5603") (remote ip "localhost:5604") (remote ip "localhost:5605") (remote ip "localhost:19000") (remote ip "localhost:19001") (remote ip "localhost:19100") (remote ip "localhost:19101"))
 SB
   if sandbox-exec -f "$work/profile.sb" \
       python3 -c 'import socket; socket.create_connection(("192.0.2.1", 443), 2)' 2>"$work/control"; then

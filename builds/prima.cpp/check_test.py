@@ -179,8 +179,8 @@ class NoEgressLinuxDiagnostics(unittest.TestCase):
 
     def test_detection_not_weakened(self):
         linux=self._linux()
-        # Same verdict, same loopback ports plus ring-test 5601, still fatal.
-        self.assertIn('egress_verdict "$work/trace" 5599 5600 5601 19000 19001 19100 19101',linux)
+        # The exact Prima 0.1.1 ring and engine ports still use the fatal verdict.
+        self.assertIn('egress_verdict "$work/trace" 5599 5600 5601 5602 5603 5604 5605 19000 19001 19100 19101',linux)
         self.assertIn('exit 1',linux)
 
     def test_fork_matches_files(self):
@@ -245,7 +245,7 @@ class NoEgressDarwinObserver(unittest.TestCase):
     def test_policy_not_weakened(self):
         text=self._script()
         self.assertIn('(deny network-outbound)',text)
-        for port in ['5599','5600','5601','19000','19001','19100','19101']:
+        for port in ['5599','5600','5601','5602','5603','5604','5605','19000','19001','19100','19101']:
             self.assertIn(f'localhost:{port}',text)
         for line in text.splitlines():
             if 'allow network-outbound' in line:
@@ -264,31 +264,24 @@ class NoEgressDarwinObserver(unittest.TestCase):
         self.assertEqual((ROOT/'fork/bashy-build/no-egress-test.sh').read_text(),
                          (ROOT/'files/no-egress-test.sh').read_text())
 
-class NoEgressRingPort5601(unittest.TestCase):
-    # Candidate -3 run 38414127942: all four native builds passed but every
-    # no-egress leg failed. Both allowlists carried only ring-test ports
-    # 5599/5600, yet the pinned ring test (common/zmq_nng_shim_test.cpp @
-    # f4ea9845dc91a18793921492e50ef23ec799e93e) binds/connects three
-    # loopback ports: 5599 (multipart round-trip), 5600 (rcvtimeo), 5601
-    # (single-message send/recv). Under the Darwin sandbox the denied 5601
-    # connect hangs the ring test's blocking recv until the 30s exercise
-    # timeout; on Linux the same loopback connect trips the strace verdict.
-    # Both enforcement points must therefore allow loopback 5601, and the
-    # Darwin profile must allow nothing but loopback.
-    RING_PORTS = ['5599', '5600', '5601']
+class NoEgressRingPorts(unittest.TestCase):
+    # First-party Prima tag bashy-prima-0.1.1 @ 542d0193 adds shim tests on
+    # fixed loopback ports 5602-5605. Keep both enforcement points aligned
+    # with the complete 5599-5605 ring, and allow no other destinations.
+    RING_PORTS = ['5599', '5600', '5601', '5602', '5603', '5604', '5605']
     ENGINE_PORTS = ['19000', '19001', '19100', '19101']
 
     def _script(self):
         return (ROOT/'files/no-egress-test.sh').read_text()
 
-    def test_linux_verdict_allows_all_seven_loopback_ports(self):
+    def test_linux_verdict_allows_exact_loopback_ports(self):
         calls=[l for l in self._script().splitlines()
                if 'egress_verdict "$work/trace"' in l]
         self.assertEqual(len(calls),1)
         self.assertEqual(re.findall(r'\b\d{4,5}\b',calls[0]),
                          self.RING_PORTS+self.ENGINE_PORTS)
 
-    def test_darwin_profile_allows_all_seven_loopback_ports(self):
+    def test_darwin_profile_allows_exact_loopback_ports(self):
         allows=[l for l in self._script().splitlines()
                 if '(allow network-outbound' in l]
         self.assertEqual(len(allows),1)
