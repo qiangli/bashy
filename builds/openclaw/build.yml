@@ -89,7 +89,12 @@
           TARBALL="out/${{ matrix.asset }}-${GITHUB_REF_NAME}.tgz"
           tar -czf "$TARBALL" -C installed package
           ls -la "$TARBALL"
-          tar -tzf "$TARBALL" | head -n 20
+          # Bounded listing without the SIGPIPE trap: `| head -n 20` closes
+          # the pipe early, so tar dies with 141 and `pipefail` fails a
+          # healthy build. awk prints the first 20 entries but consumes the
+          # whole listing, so tar runs to EOF (exit 0); a genuinely corrupt
+          # tarball still fails the step via pipefail.
+          tar -tzf "$TARBALL" | awk 'NR <= 20'
       - name: unit-test the patch/gate scripts (fail fast)
         run: |
           set -euo pipefail
