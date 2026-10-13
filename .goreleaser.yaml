@@ -15,6 +15,40 @@ before:
 
 builds:
   - id: bashy
+    # Each Linux target is compiled through an isolated Go workspace whose
+    # yoke checkout and runner gzip were built natively from this go.mod pin.
+    tool: ./scripts/build-release-bashy.sh
+    main: ./cmd/bashy
+    binary: bashy
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    tags:
+      - embed_runner
+    hooks:
+      post:
+        - cmd: ./scripts/verify-bashy-signal-artifact.sh "{{ .Path }}"
+          output: true
+        # Runs for every target. The script checks every artifact's recorded Go
+        # tags and serves the native Linux artifact before publication.
+        - cmd: ./scripts/verify-meet-spa-release.sh "{{ .Path }}" "{{ .Target }}"
+          output: true
+        - cmd: ./scripts/verify-runner-release.sh "{{ .Path }}" "{{ .Os }}" "{{ .Arch }}"
+          output: true
+        - cmd: ./scripts/generate-release-sbom.sh "{{ .Path }}" "{{ .Os }}" "{{ .Arch }}" dist/sbom
+          output: true
+    ldflags:
+      - -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ .Tag }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit={{ .Env.SHELL_RUNTIME_COMMIT }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime={{ .Env.SHELL_RUNTIME_COMMIT_TIME }}'
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+  # Windows has no supported native runner build at the pinned yoke revision.
+  # Preserve the existing package definition, but the post-build gate refuses
+  # it as INCOMPLETE until a genuinely native pinned Windows runner exists.
+  - id: bashy-windows
     tool: ./scripts/go-product.sh
     main: ./cmd/bashy
     binary: bashy
@@ -26,16 +60,15 @@ builds:
       post:
         - cmd: ./scripts/verify-bashy-signal-artifact.sh "{{ .Path }}"
           output: true
-        # Runs for every target. The script checks every artifact's recorded Go
-        # tags and serves the native Linux artifact before publication.
         - cmd: ./scripts/verify-meet-spa-release.sh "{{ .Path }}" "{{ .Target }}"
+          output: true
+        - cmd: ./scripts/verify-runner-release.sh "{{ .Path }}" "{{ .Os }}" "{{ .Arch }}"
           output: true
         - cmd: ./scripts/generate-release-sbom.sh "{{ .Path }}" "{{ .Os }}" "{{ .Arch }}" dist/sbom
           output: true
     ldflags:
       - -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ .Tag }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit={{ .Env.SHELL_RUNTIME_COMMIT }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime={{ .Env.SHELL_RUNTIME_COMMIT_TIME }}'
     goos:
-      - linux
       - windows
     goarch:
       - amd64
@@ -121,7 +154,7 @@ archives:
     formats: [binary]
     name_template: "bashy-scratch-{{ .Os }}-{{ .Arch }}"
   - id: bashy
-    ids: [bashy, outpost, bash, sh]
+    ids: [bashy, bashy-windows, outpost, bash, sh]
     name_template: "bashy-{{ .Os }}-{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:

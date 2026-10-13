@@ -42,6 +42,26 @@ fi
 ./scripts/verify-release-asset-set.sh release-dist
 for arch in amd64 arm64; do cmp "release-native/bashy-darwin-$arch.tar.gz" "release-dist/bashy-darwin-$arch.tar.gz"; done
 ./scripts/verify-release-provenance.sh release-dist/checksums.txt
+# The signed checksum manifest binds every archive. Inspect the exact packaged
+# Bashy binaries as well: the target and yoke module pin must be recorded, and
+# Windows must remain the explicit fail-closed/incomplete runner lane.
+verify_archive() {
+ local os=$1 arch=$2 archive="release-dist/bashy-$1-$2.tar.gz" tmp
+ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' RETURN
+ if [[ $os == windows ]]; then
+  archive="release-dist/bashy-windows-$arch.zip"
+  python3 - "$archive" "$tmp" <<'PY'
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as z: z.extract('bashy.exe', sys.argv[2])
+PY
+  ./scripts/verify-runner-release.sh "$tmp/bashy.exe" "$os" "$arch"
+ else
+  tar -xzf "$archive" -C "$tmp" bashy
+  ./scripts/verify-runner-release.sh "$tmp/bashy" "$os" "$arch"
+ fi
+ rm -rf "$tmp"; trap - RETURN
+}
+for os in linux darwin windows; do for arch in amd64 arm64; do verify_archive "$os" "$arch"; done; done
 # Upload in a draft; a failed upload cannot expose an incomplete candidate.
 gh release upload "$TAG" -R "$REPO" release-native/* release-dist/outpost-*.sha256 --clobber
 gh release upload "$TAG" -R "$REPO" release-dist/checksums.txt --clobber

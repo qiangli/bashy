@@ -14,12 +14,24 @@ name="bashy-darwin-$arch.tar.gz"
 [[ ! -e "$outdir/$name" ]] || { echo "refusing to overwrite $outdir/$name" >&2; exit 1; }
 stage=$(mktemp -d "${TMPDIR:-/tmp}/bashy-darwin-release.XXXXXX")
 trap 'rm -rf "$stage"' EXIT
+runner_work="$stage/runner-build"
+runner_input="$stage/runner-input"
+workspace="$stage/runner-workspace"
+./scripts/pinned-yoke-runner.sh build darwin "$arch" "$runner_input" "$runner_work"
+./scripts/pinned-yoke-runner.sh workspace darwin "$arch" \
+  "$runner_input/runner-darwin-$arch.gz" "$runner_input/runner-darwin-$arch.json" "$workspace" > "$stage/runner.env"
+set -a
+# Generated in this private stage directory.
+# shellcheck disable=SC1091
+source "$stage/runner.env"
+set +a
 shell_commit=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
 [[ -n $shell_commit ]] || { echo "missing sh fork replace in go.mod" >&2; exit 1; }
 shell_time=
 base=${tag#v}; base=${base%-dev}
-CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -ldflags "-w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$tag' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=$shell_commit' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=$shell_time'" -o "$stage/bashy" ./cmd/bashy
+CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -tags embed_runner -ldflags "-w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$tag' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=$shell_commit' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=$shell_time'" -o "$stage/bashy" ./cmd/bashy
 ./scripts/verify-bashy-signal-artifact.sh "$stage/bashy"
+./scripts/verify-runner-release.sh "$stage/bashy" darwin "$arch"
 go run ./tools/bashysignalprobe "$stage/bashy"
 ./scripts/verify-meet-spa-release.sh "$stage/bashy" "darwin_$arch"
 ./scripts/generate-release-sbom.sh "$stage/bashy" darwin "$arch" "${RUNNER_TEMP:-/tmp}/darwin-sbom"
@@ -29,7 +41,7 @@ outpost_commit=${OUTPOST_COMMIT:-}
 for shell in bash sh; do
  CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -ldflags "-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$tag'" -o "$stage/$shell" "./cmd/$shell"
 done
-(cd ../outpost && CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" go build -trimpath -tags fb_archives -ldflags "-s -w -X github.com/qiangli/outpost/internal/agent.releaseTag=$tag -X github.com/qiangli/outpost/internal/agent.ldCommit=$outpost_commit -X github.com/qiangli/outpost/internal/agent.ldDirty=false" -o "$stage/outpost" ./cmd/outpost)
+(cd ../outpost && GOWORK=off CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" go build -trimpath -tags fb_archives -ldflags "-s -w -X github.com/qiangli/outpost/internal/agent.releaseTag=$tag -X github.com/qiangli/outpost/internal/agent.ldCommit=$outpost_commit -X github.com/qiangli/outpost/internal/agent.ldDirty=false" -o "$stage/outpost" ./cmd/outpost)
 cp README.md LICENSE "$stage/"
 cp ../outpost/LICENSE "$stage/LICENSE.outpost"
 COPYFILE_DISABLE=1 tar -czf "$stage/$name" -C "$stage" bashy outpost bash sh README.md LICENSE LICENSE.outpost

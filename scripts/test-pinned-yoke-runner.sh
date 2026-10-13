@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root=$(cd "$(dirname "$0")/.." && pwd)
+script="$root/scripts/pinned-yoke-runner.sh"
+wrapper="$root/scripts/build-release-bashy.sh"
+workflow="$root/.github/workflows/release.yml"
+config="$root/.goreleaser.yaml"
+grep -q 'GOMODCACHE="$work/gomodcache"' "$script"
+grep -q 'GOCACHE="$work/gocache"' "$script"
+! grep -q 'go list -m' "$script" "$root/scripts/verify-runner-release.sh"
+grep -q 'go work init' "$script"
+grep -q 'stale gzip in clean checkout' "$script"
+grep -q 'stale gzip present before native build' "$script"
+! grep -Eq '/Users/|chmod.*(go/pkg/mod|GOMODCACHE)|mv.*runner.*\.gz' "$script" "$wrapper"
+grep -q 'ubuntu-24.04-arm' "$workflow"
+grep -q 'macos-15-intel' "$workflow"
+grep -q 'verify-release-provenance.sh.*runner-linux' "$workflow"
+grep -q 'build-release-bashy.sh' "$config"
+grep -q 'bashy-windows' "$config"
+grep -q 'refusing to package' "$root/scripts/verify-runner-release.sh"
+echo "pinned yoke runner integration: PASS"
