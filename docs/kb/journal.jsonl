@@ -3,3 +3,4 @@
 {"op":"add","slug":"windows-posix-locale-packages-do-not-service-big5-hkscs-end-to-e","id":"01a0cabb-137e-7dda-aa23-5a64be7ba67c","tool":"codex-gpt5.6-sol-k","host":"dragon","episode":"weave-issue-11","at":"2026-09-22T20:07:32.992003Z"}
 {"op":"add","slug":"derive-no-egress-allowlists-from-the-pinned-test-s-full-port-set","id":"01a135b8-73bb-79ee-b8d2-1a6343b732fa","tool":"muse-conductor-i","host":"dragon","episode":"weave-issue-87","at":"2026-10-13T14:44:03.131965Z"}
 {"op":"add","slug":"windows-gates-must-hand-native-exes-cygpath-converted-paths","id":"01a136d8-1431-72b7-91ca-b0f6f6ab4af1","tool":"muse-spark1.3-w106-b","host":"dragon","episode":"weave-issue-106","at":"2026-10-13T19:58:13.041584Z"}
+{"op":"add","slug":"mingw-clang-windows-builds-need-wno-error-downgrades-for-socket","id":"01a13724-c923-76b6-a74e-48660200d59f","tool":"muse-spark1.3-i","host":"dragon","episode":"weave-issue-113","at":"2026-10-13T21:22:00.099846Z"}
