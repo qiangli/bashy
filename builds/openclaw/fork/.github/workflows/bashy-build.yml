@@ -455,6 +455,8 @@ jobs:
             | sha256sum -c -
           DOWNLOAD_TAG_INSTALL_SCRIPT=false \
             sh "$GRYPE_INSTALL_SH" -v v0.120.1 -b "${RUNNER_TEMP}/bin"
+          test -x "${RUNNER_TEMP}/bin/grype" || { echo "grype binary not found at ${RUNNER_TEMP}/bin/grype (install dir must be \$RUNNER_TEMP/bin, not ./bin)" >&2; ls -la "${RUNNER_TEMP}/bin/" 2>&1 || true; ls -la ./bin/ 2>&1 || true; exit 1; }
+          "${RUNNER_TEMP}/bin/grype" version 2>&1 | grep -q "0.120.1" || { echo "grype version mismatch: expected 0.120.1" >&2; "${RUNNER_TEMP}/bin/grype" version 2>&1 || true; exit 1; }
           GRYPE_CHECK_FOR_APP_UPDATE=false \
             "${RUNNER_TEMP}/bin/grype" \
             "docker:openclaw-gateway:${GITHUB_REF_NAME}" \
