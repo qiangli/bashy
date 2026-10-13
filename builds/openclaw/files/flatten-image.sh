@@ -60,33 +60,20 @@ fi
 
 echo "flatten: reading runtime config from $SOURCE_IMAGE"
 docker inspect "$SOURCE_IMAGE" --format='{{json .Config}}' >"$WORK_DIR/source-config.json"
-python3 - "$WORK_DIR/source-config.json" "$WORK_DIR/changes.tsv" <<'EOF'
-import json, sys
-cfg = json.load(open(sys.argv[1]))
-out = open(sys.argv[2], "w")
-def emit(kind, value):
-    out.write(f"{kind}\t{value}\n")
-for e in cfg.get("Env") or []:
-    emit("ENV", e)
-if cfg.get("User"):
-    emit("USER", cfg["User"])
-if cfg.get("WorkingDir"):
-    emit("WORKDIR", cfg["WorkingDir"])
-if cfg.get("Entrypoint") is not None:
-    emit("ENTRYPOINT", json.dumps(cfg["Entrypoint"]))
-if cfg.get("Cmd") is not None:
-    emit("CMD", json.dumps(cfg["Cmd"]))
-for k in sorted((cfg.get("Labels") or {})):
-    emit("LABEL", f"{k}={(cfg['Labels'])[k]}")
-out.close()
-EOF
+# One complete `docker import --change` instruction per record, NUL-separated:
+# `docker import` joins --change arguments with newlines and parses them as
+# Dockerfile instructions, so a LABEL value with spaces passed unquoted splits
+# into bare words and fails the import (can't find = in "gateway"). The
+# builder emits each record Dockerfile-quoted (CMD/ENTRYPOINT as JSON arrays,
+# ENV/LABEL/WORKDIR/USER values quoted when they hold whitespace or
+# shell-special characters); NUL framing means bash never re-splits a value.
+python3 "$SCRIPTS_DIR/build_import_changes.py" \
+  "$WORK_DIR/source-config.json" "$WORK_DIR/changes.nul"
 CHANGES=()
-while IFS=$'\t' read -r kind value; do
-  [[ -n $kind ]] || continue
-  # shellcheck disable=SC2086  # value is one Dockerfile instruction argument
-  CHANGES+=(--change "$kind $value")
-done <"$WORK_DIR/changes.tsv"
-cat "$WORK_DIR/changes.tsv"
+while IFS= read -r -d '' change; do
+  CHANGES+=(--change "$change")
+done <"$WORK_DIR/changes.nul"
+tr '\0' '\n' <"$WORK_DIR/changes.nul"
 
 echo "flatten: importing single-layer $TARGET_IMAGE"
 tar -C "$ROOTFS" -cf - . | docker import "${CHANGES[@]}" - "$TARGET_IMAGE"
