@@ -133,30 +133,15 @@ jobs:
           set -euo pipefail
           . fork/bashy-build/PIN
           for gate in $PRE_BUILD_GATES; do "fork/bashy-build/$gate" src; done
-      - name: hoisted node_modules for the whole build (bundledDependencies)
-        working-directory: src
-        # Upstream sets nodeLinker: isolated in pnpm-workspace.yaml, but its
-        # package declares bundledDependencies, which pnpm packs only from a
-        # hoisted layout (pnpm pack: 'bundleDependencies does not work with
-        # nodeLinker: isolated'). A CLI flag on install does not reach pack, so
-        # set it in the workspace file for every pnpm step. Layout only: the
-        # lockfile is unchanged and the audit gates are not.
-        # Portable sed: this step runs on Linux AND macOS runners, and BSD sed
-        # needs an explicit backup suffix where GNU sed accepts a bare -i.
-        run: |
-          set -euo pipefail
-          grep -q '^nodeLinker: isolated$' pnpm-workspace.yaml
-          sed -i.bak 's/^nodeLinker: isolated$/nodeLinker: hoisted/' pnpm-workspace.yaml
-          rm -f pnpm-workspace.yaml.bak
-          grep -n '^nodeLinker:' pnpm-workspace.yaml
       - name: install from the verified lockfile (no implicit scripts)
         working-directory: src
         run: |
           # --ignore-scripts: lifecycle scripts are supply-chain surface.
           # Only the documented build entrypoints below run, explicitly.
-          # Hoisted layout: the package declares bundledDependencies, and pnpm
-          # packs those only from a hoisted node_modules
-          # (ERR_PNPM_BUNDLED_DEPENDENCIES_WITHOUT_HOISTED).
+          # The workspace keeps upstream's own nodeLinker (isolated, per
+          # pnpm-workspace.yaml): nothing here needs the hoisted layout now
+          # that the npm-pack path is gone — the shipped tree is assembled
+          # per the upstream Dockerfile instead (see below).
           pnpm install --frozen-lockfile --ignore-scripts
       - name: audit gate (a) — prod must be clean at high
         working-directory: src
@@ -194,119 +179,151 @@ jobs:
           echo "OPENCLAW_CONFIG_PATH=$RUNNER_TEMP/gateway-config/openclaw.json" >> "$GITHUB_ENV"
       - name: build gateway dist
         working-directory: src
-        # Upstream's documented release build: prepack (scripts/openclaw-prepack.ts)
-        # refuses to pack without the full build AND the Control UI bundle.
+        # Native replay of the upstream Dockerfile `build` stage. Upstream
+        # runs `pnpm build:docker` + `pnpm ui:build`; `build:docker` exits 1
+        # outside Docker, while plain `pnpm build` passed in fork CI — so the
+        # native replay builds with `pnpm build && pnpm ui:build`.
         run: pnpm build && pnpm ui:build
-      - name: pack gateway tarball (upstream self-contained package)
-        working-directory: src
+      - name: install production dependencies in a separate copy
         run: |
           set -euo pipefail
-          # Upstream's prepack refuses plain root packing: @openclaw/ai is a
-          # workspace:* dependency that only the official release automation
-          # publishes separately. Its documented self-contained path bundles
-          # @openclaw/ai into the tarball, so nothing is fetched from the npm
-          # registry at install time. It cleans and rebuilds the package
-          # artifacts itself (upstream's own build, not ours).
-          # INTERMEDIATE, not a release asset: the packager tarball carries NO
-          # lock file — package.json `files` declares neither package-lock.json
-          # nor npm-shrinkwrap.json, and the tarball check forbids an
-          # undeclared shrinkwrap — so the next steps generate the npm lock
-          # for the packed tree and install from it. The tarball holds only
-          # the bundled node_modules, not the full install.
-          # It goes to RUNNER_TEMP (never out/, which is uploaded as-is) and
-          # the next steps stage it into the fully installed tree that ships.
-          mkdir -p "$RUNNER_TEMP/pack"
-          node scripts/package-openclaw-for-docker.mjs \
-            --allow-unreleased-changelog \
-            --output-dir "$RUNNER_TEMP/pack" \
-            --output-name "openclaw-gateway-${GITHUB_REF_NAME}.tgz"
-          ls -la "$RUNNER_TEMP/pack/openclaw-gateway-${GITHUB_REF_NAME}.tgz"
-      - name: stage the shipped tree and generate its npm lock
-        working-directory: src
+          # Native replay of the upstream Dockerfile `production-deps` stage:
+          # a SEPARATE copy holding only the install inputs, then
+          # `pnpm install --frozen-lockfile --prod`. Kept apart from src/
+          # so dev dependencies from the build install above can never leak
+          # into the shipped node_modules.
+          # Input set = the Dockerfile `dependency-inputs` stage: the root
+          # manifests, the workspace member manifests pnpm needs to resolve
+          # (packages/*, extensions/*, plus ui/ — a literal workspace member
+          # whose package.json upstream copies explicitly), patches, and the
+          # root node-*.mjs helpers. examples/ ships no manifests upstream
+          # (the Dockerfile does not copy it either). Plain cp (not cp -n):
+          # a missing input must fail here, not produce a half-resolved
+          # install. The workspace file keeps upstream's nodeLinker: isolated.
+          rm -rf prod
+          mkdir -p prod/ui prod/packages prod/patches prod/extensions
+          cp src/package.json src/pnpm-lock.yaml src/pnpm-workspace.yaml src/.npmrc prod/
+          cp src/node-*.mjs prod/
+          cp src/ui/package.json prod/ui/
+          cp -a src/packages/. prod/packages/
+          cp -a src/patches/. prod/patches/
+          cp -a src/extensions/. prod/extensions/
+          cd prod
+          # --ignore-scripts: lifecycle scripts are supply-chain surface
+          # (same rule as the build install above). Native legs build for
+          # their own OS/arch, so no --config.supportedArchitectures
+          # override: pnpm resolves for the runner it runs on, which is the
+          # platform whose tree this leg ships.
+          pnpm install --frozen-lockfile --prod --ignore-scripts
+          test -d node_modules || { echo "node_modules missing after pnpm install --prod" >&2; exit 1; }
+      - name: assemble the runtime tree (upstream Docker runtime, natively)
         run: |
           set -euo pipefail
-          # The packager tarball ships NO lock file (see the pack step), so
-          # generate it here with upstream's own generateNpmPackageLock, run
-          # against the PACKED manifest — not the source root. Upstream's
-          # packager validates the lock for the source root, but its normalizer
-          # drops workspace: specs and the pack rewrites the manifest
-          # (@openclaw/ai workspace:* becomes the staged exact version with
-          # hoisted aligned deps, workspace: devDeps stripped, platform
-          # optionals added), so a source-generated lock would fail the
-          # fail-closed npm ci below against the packed tree.
-          # write-npm-lock.mts vendors the tarball-bundled @openclaw/ai copy
-          # (built from the pinned source in this run) to vendor-openclaw-ai/
-          # and points the packed manifest at it with a file: spec: the exact
-          # version exists nowhere in pnpm-lock.yaml (workspace link only), so
-          # the generator's pnpm cross-check throws for the plain spec, while
-          # a link entry skips that check and its transitive deps stay pinned.
-          # Every other resolved version is still anchored to pnpm-lock.yaml by
-          # the generator itself. On failure the script prints the tarball's
-          # top-level entries and the packed dependency keys, and npm ci below
-          # stays fail-closed on any manifest/lock mismatch.
-          PACKED="$RUNNER_TEMP/pack/openclaw-gateway-${GITHUB_REF_NAME}.tgz"
-          test -f "$PACKED" || { echo "missing $PACKED" >&2; exit 1; }
-          rm -rf ../installed
-          mkdir -p ../installed
-          tar -xzf "$PACKED" -C ../installed
-          test -f ../installed/package/package.json || { echo "missing installed/package/package.json" >&2; exit 1; }
-          node --import ./scripts/tsx.mjs \
-            ../fork/bashy-build/scripts/write-npm-lock.mts \
-            --package-dir ../installed/package \
-            --tarball "$PACKED"
-          test -f ../installed/package/package-lock.json || { echo "missing generated installed/package/package-lock.json" >&2; exit 1; }
-      - name: install the shipped tree from the generated lock (fully installed artifact)
+          # Native replay of the upstream Dockerfile `runtime-assets` stage +
+          # final-stage COPY list (see Dockerfile at the pinned tag): dist
+          # from the build above, node_modules from the separate prod
+          # install, everything else from src/.
+          RUNTIME="runtime/package"
+          rm -rf runtime
+          mkdir -p "$RUNTIME"
+          # pnpm's isolated layout is a .pnpm store of real dirs + symlinks:
+          # keep them as links (plain cp -a, NEVER --dereference —
+          # dereferencing explodes the tree and broke the linux-arm64 repro).
+          cp -a prod/node_modules "$RUNTIME/node_modules"
+          cp -a src/dist "$RUNTIME/dist"
+          cp src/package.json src/pnpm-lock.yaml src/pnpm-workspace.yaml "$RUNTIME/"
+          cp -a src/patches "$RUNTIME/patches"
+          cp src/node-version.mjs src/node-sqlite.mjs src/node-runtime-update.mjs \
+            src/node-runtime-recovery.mjs src/node-runtime-env.mjs \
+            src/cli-root-options.mjs src/gateway-run-argv.mjs src/gateway-shutdown-budget.mjs \
+            src/node-host-launcher.mjs src/node-compile-cache.mjs \
+            src/docker-entrypoint.mjs src/openclaw.mjs "$RUNTIME/"
+          cp -a src/extensions "$RUNTIME/extensions"
+          cp -a src/skills src/docs src/qa "$RUNTIME/"
+          # Upstream's `node scripts/prune-docker-plugin-dist.mjs`, the way
+          # the Dockerfile runs it (OPENCLAW_EXTENSIONS + bundled-plugin-dir
+          # env, repo root as cwd — the script resolves its root from the
+          # cwd). Its lib imports are script-relative, so the script tree is
+          # staged here only for this step and replaced by the shipped
+          # bootstrap set below. Selection matches the OCI build arg and the
+          # shipped gateway config (diagnostics-otel -> local collector).
+          cp -a src/scripts "$RUNTIME/scripts"
+          cd "$RUNTIME"
+          OPENCLAW_EXTENSIONS="diagnostics-otel" OPENCLAW_BUNDLED_PLUGIN_DIR="extensions" \
+            node scripts/prune-docker-plugin-dist.mjs
+          # Shipped scripts/ = exactly what upstream ships (Dockerfile
+          # final-stage COPY lines): package.json `files` scripts/* via
+          # copy-bootstrap-scripts.mjs, plus guard-inventory-utils.mjs.
+          node scripts/docker/copy-bootstrap-scripts.mjs ./.runtime-bootstrap
+          rm -rf ./scripts
+          mv ./.runtime-bootstrap/scripts ./scripts
+          rm -rf ./.runtime-bootstrap
+          mkdir -p scripts/lib
+          cp ../../src/scripts/lib/guard-inventory-utils.mjs scripts/lib/
+          cd ../..
+          # Dockerfile `runtime-assets` RUN tail, adapted: drop build
+          # metadata from dist, materialize the @openclaw/ai workspace link
+          # into a real dir (packages/ sources do not ship, so the link
+          # would dangle — upstream does the same copy-over), and remove the
+          # self-install links of the build.
+          find "$RUNTIME/dist" -type f \
+            \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' -o -name '*.map' \) -delete
+          if [ -L "$RUNTIME/node_modules/@openclaw/ai" ]; then
+            ai_target="$(readlink -f "$RUNTIME/node_modules/@openclaw/ai")"
+            ai_tmp="$(mktemp -d)"
+            cp -a "$ai_target" "$ai_tmp/ai"
+            rm "$RUNTIME/node_modules/@openclaw/ai"
+            mv "$ai_tmp/ai" "$RUNTIME/node_modules/@openclaw/ai"
+            rmdir "$ai_tmp"
+          fi
+          rm -rf "$RUNTIME/node_modules/openclaw" \
+            "$RUNTIME/node_modules/.bin/openclaw" \
+            "$RUNTIME"/node_modules/.pnpm/openclaw@*/node_modules/openclaw
+          # Keep only the platform packages the selected plugins require
+          # (Dockerfile lines: required-platform-packages + the
+          # claude-agent-sdk-linux-* prune). Selection is computed with
+          # upstream's own script against the pinned source.
+          node src/scripts/lib/docker-plugin-selection.mjs src/extensions \
+            "diagnostics-otel" --required-platform-packages \
+            > "$RUNNER_TEMP/openclaw-required-platform-packages"
+          if ! grep -q '^@anthropic-ai/claude-agent-sdk-' \
+              "$RUNNER_TEMP/openclaw-required-platform-packages"; then
+            if [ -d "$RUNTIME/node_modules/@anthropic-ai" ]; then
+              find "$RUNTIME/node_modules/@anthropic-ai" -maxdepth 1 -type d \
+                -name 'claude-agent-sdk-linux-*' -exec rm -rf {} +
+            fi
+          fi
+          # Fail-closed assembly check: the tree must start the gateway
+          # (openclaw.mjs + dist + node_modules) with no further install.
+          test -f "$RUNTIME/openclaw.mjs" || { echo "missing $RUNTIME/openclaw.mjs" >&2; exit 1; }
+          test -d "$RUNTIME/dist" || { echo "missing $RUNTIME/dist" >&2; exit 1; }
+          test -d "$RUNTIME/node_modules" || { echo "missing $RUNTIME/node_modules" >&2; exit 1; }
+          test -f "$RUNTIME/package.json" || { echo "missing $RUNTIME/package.json" >&2; exit 1; }
+          test -f "$RUNTIME/pnpm-lock.yaml" || { echo "missing $RUNTIME/pnpm-lock.yaml" >&2; exit 1; }
+      - name: tar the runtime tree (per-platform signed artifact)
         run: |
           set -euo pipefail
-          # The signed artifact is the FULLY INSTALLED tree, per platform:
-          # install every dependency here in CI from the lock the previous
-          # step generated, so the user host never touches the npm registry —
-          # including npm 12.x itself (a runtime dependency), which bundles
-          # the vulnerable http-cache-semantics 4.2.0 (GHSA-ch52-4w7c-c8xp)
-          # that the patch step below replaces. Per-platform because native
-          # modules (if any) compile for their own OS/arch.
-          test -f installed/package/package.json || { echo "missing installed/package/package.json" >&2; exit 1; }
-          test -f installed/package/package-lock.json || { echo "missing generated installed/package/package-lock.json" >&2; exit 1; }
-          cd installed/package
-          # --ignore-scripts: lifecycle scripts are supply-chain surface, and
-          # upstream documents no install-script build for the gateway — the
-          # documented build (pnpm build + ui:build, run above on src/)
-          # already produced dist/. The no-egress gate proves the installed
-          # tree starts without install scripts. If a future pin adds a native
-          # module that needs its install script, run ONLY that package's
-          # documented build here (e.g. `npm rebuild <pkg>`) — never drop
-          # --ignore-scripts globally.
-          # --omit=dev: runtime tree only. npm's default layout is hoisted
-          # (flat), so no flag is needed for that. --no-audit/--no-fund: no
-          # extra registry round-trips beyond the install itself.
-          # Fail-closed: `npm ci` refuses unless package.json and the lock
-          # agree, so the lock resolves everything installed; after this step
-          # the tree is self-contained and the gateway must start with NO
-          # network (asserted by the no-egress gate, which starts it).
-          npm ci --omit=dev --ignore-scripts --no-audit --no-fund
-          test -d node_modules || { echo "node_modules missing after npm ci" >&2; exit 1; }
-          test -f openclaw.mjs || { echo "missing installed/package/openclaw.mjs" >&2; exit 1; }
-      - name: tar the installed tree (per-platform signed artifact)
-        run: |
-          set -euo pipefail
-          # One tarball per matrix leg: native modules (if any) make the
-          # installed tree platform-specific. Portable tar: macOS ships bsdtar
-          # (no GNU --sort/--mtime flags), so no cross-platform
-          # bit-reproducibility is attempted here — patch_bundled.py repacks
-          # deterministically (gzip mtime=0) after the security patch.
+          # One tarball per matrix leg: native modules make the prod install
+          # platform-specific, so each leg ships its own tree (free GitHub
+          # runners only). Symlinks stay symlinks (no --dereference — see
+          # the assembly step). Portable tar: macOS ships bsdtar (no GNU
+          # --sort/--mtime flags), so no cross-platform bit-reproducibility
+          # is attempted here — patch_bundled.py repacks deterministically
+          # (gzip mtime=0) after the security patch.
           TARBALL="out/${{ matrix.asset }}-${GITHUB_REF_NAME}.tgz"
-          tar -czf "$TARBALL" -C installed package
+          tar -czf "$TARBALL" -C runtime package
           ls -la "$TARBALL"
           tar -tzf "$TARBALL" | head -n 20
-      - name: SBOM of the installed tree (CycloneDX)
-        # Pinned anchore/sbom-action (same pin as before); it now scans the
-        # fully installed per-platform tree, so the SBOM describes what ships.
-        # patch_bundled.py then updates it in place for the security patch
-        # (regenerating would reproduce the stale pre-patch tree, which no
-        # longer exists as a scan target after install).
+      - name: SBOM of the runtime tree (CycloneDX)
+        # Pinned anchore/sbom-action (same pin as before); it scans the
+        # assembled per-platform runtime tree, so the SBOM describes what
+        # ships. patch_bundled.py then updates it in place for the security
+        # patch (regenerating would reproduce the stale pre-patch tree,
+        # which no longer exists as a scan target once the tarball is the
+        # artifact — only the tarball is patched, not the on-disk tree).
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
-          path: ./installed/package
+          path: ./runtime/package
           format: cyclonedx-json
           output-file: out/${{ matrix.asset }}-sbom.cyclonedx.json
       - name: security patch — replace bundled http-cache-semantics <4.3.0 (GHSA-ch52-4w7c-c8xp)
@@ -314,10 +331,12 @@ jobs:
           set -euo pipefail
           # npm 12.x bundles its own http-cache-semantics 4.2.0 and bundled
           # deps ignore overrides, so no workspace override can move the copy
-          # shipped inside node_modules/npm. Patch it here, after the install
-          # and before signing: verify the registry dist.integrity (sha512)
-          # before use, repack deterministically, and fix the already-published
-          # SBOM in place (it must already have run — see below).
+          # shipped inside the pnpm tree (in practice
+          # package/node_modules/.pnpm/npm@12.1.0/node_modules/npm/node_modules/http-cache-semantics).
+          # Patch it here, after the tarball and before signing: verify the
+          # registry dist.integrity (sha512) before use, repack
+          # deterministically, and fix the already-published SBOM in place
+          # (it must already have run — see below).
           TARBALL="out/${{ matrix.asset }}-${GITHUB_REF_NAME}.tgz"
           SBOM="out/${{ matrix.asset }}-sbom.cyclonedx.json"
           test -f "$TARBALL" || { echo "missing $TARBALL" >&2; exit 1; }
@@ -328,14 +347,15 @@ jobs:
           REPLACEMENT_URL="https://registry.npmjs.org/http-cache-semantics/-/http-cache-semantics-4.3.0.tgz"
           REPLACEMENT_INTEGRITY="sha512-M5t5LlJpS1UHMjvwRQVdFHvPISGeLAxNcrWuJkeGh0KxsqCHZ1O3NXZU/8x7cD0BDcGW8kapxMKTvwlqrNkHkA=="
           curl -sSL --fail "$REPLACEMENT_URL" -o "${RUNNER_TEMP}/http-cache-semantics-4.3.0.tgz"
-          # Python tarfile handles the GNU LongLink/PAX entries in the tarball.
+          # Python tarfile handles the GNU LongLink/PAX entries in the tarball,
+          # and its node_modules/<pkg> match also covers pnpm's .pnpm layout.
           python3 fork/bashy-build/scripts/patch_bundled.py \
             --tarball "$TARBALL" \
             --replacement "${RUNNER_TEMP}/http-cache-semantics-4.3.0.tgz" \
             --integrity "$REPLACEMENT_INTEGRITY" \
             --sbom "$SBOM"
           # The SBOM is patched in place (not regenerated) on purpose: only the
-          # tarball is patched, so the on-disk installed tree still holds the
+          # tarball is patched, so the on-disk runtime tree still holds the
           # pre-patch copy and regenerating would reproduce the stale 4.2.0
           # entry. The SBOM must describe the SHIPPED tarball — hence the
           # in-place fix, in this order.
@@ -345,7 +365,7 @@ jobs:
             --tarball "out/${{ matrix.asset }}-${GITHUB_REF_NAME}.tgz"
       - name: build gateway OCI image (pinned upstream Dockerfile)
         # Linux only: macOS runners have no Docker daemon, and the signed
-        # per-platform artifacts are the installed-tree tarballs above. The
+        # per-platform artifacts are the runtime-tree tarballs above. The
         # image still builds on both Linux legs (one digest per leg).
         if: runner.os == 'Linux'
         run: |
@@ -359,7 +379,7 @@ jobs:
             --format='{{.Id}}' > "out/${{ matrix.asset }}-image.digest"
           cat "out/${{ matrix.asset }}-image.digest"
       - name: no-egress gate (before signing)
-        run: fork/bashy-build/no-egress-test.sh "installed/package"
+        run: fork/bashy-build/no-egress-test.sh "runtime/package"
 
       - name: upload unsigned build outputs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

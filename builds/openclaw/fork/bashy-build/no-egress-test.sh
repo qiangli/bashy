@@ -12,8 +12,12 @@
 # at the update/telemetry hosts to $BASHY_EGRESS_LOG, and aborts it. The log
 # must stay empty even though strace already asserts loopback-only traffic.
 #
-# Gateway invocation follows the pinned upstream (openclaw/openclaw v2026.10.2):
-# `node openclaw.mjs gateway` reads JSON5 config from the file named by
+# Gateway invocation follows the pinned upstream (openclaw/openclaw v2026.10.2)
+# Dockerfile: ENTRYPOINT ["tini", "-s", "--", "node", "/app/docker-entrypoint.mjs"]
+# CMD ["node", "openclaw.mjs", "gateway"]. The entrypoint is container
+# activation (tini supervision plus `openclaw.mjs doctor --fix` before it
+# execs the CMD); this gate starts the CMD itself — `node openclaw.mjs
+# gateway` — which reads JSON5 config from the file named by
 # OPENCLAW_CONFIG_PATH (default ~/.openclaw/openclaw.json), refuses to start
 # unless gateway.mode=local, binds loopback on gateway.port (default 18789),
 # and answers the /healthz liveness probe as soon as the server can answer.
@@ -21,9 +25,10 @@
 # Usage:
 #   ./bashy-build/no-egress-test.sh <gateway-dir> [run-seconds]
 #
-# In CI <gateway-dir> is the fully installed tree (installed/package:
-# package/ incl. node_modules), installed per platform from the generated
-# lock — the gate proves that tree starts with no registry access.
+# In CI <gateway-dir> is the assembled runtime tree (runtime/package:
+# package/ incl. node_modules, per the upstream Dockerfile copy list),
+# installed per platform from the frozen lockfile — the gate proves that
+# tree starts with no registry access.
 #
 # Environment (all optional):
 #   GATEWAY_ARGV        argv appended to `node openclaw.mjs` (default: gateway)
