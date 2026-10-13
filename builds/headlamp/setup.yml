@@ -19,17 +19,6 @@
           cache-dependency-path: src/frontend/package-lock.json
       - name: pin npm major
         run: npm install --global 'npm@@@NPM_VERSION@@'
-      - name: apply declared Go security overrides
-        working-directory: src/backend
-        run: |
-          set -euo pipefail
-          . ../../fork/bashy-build/PIN
-          for module in $GO_SECURITY_OVERRIDES; do go get "$module"; done
-          [[ -z $(git status --porcelain -- . ':!go.mod' ':!go.sum') ]]
-          for module in $GO_SECURITY_OVERRIDES; do
-            path=${module%@*}; version=${module##*@}
-            [[ $(go list -m -f '{{.Version}}' "$path") == "$version" ]] || exit 1
-          done
       - name: apply pinned frontend security overrides
         run: |
           set -euo pipefail

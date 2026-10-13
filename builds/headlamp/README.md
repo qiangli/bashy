@@ -26,12 +26,19 @@ authoritative, with a sandboxed macOS smoke.
 ## Security gates
 
 Go `1.26.7` is the tag's toolchain; `1.26.9` is the same-minor stdlib security
-override. `GO_SECURITY_OVERRIDES` records module-only upgrades and the workflow
-must fail on every reachable govulncheck finding; `vuln-ignore` is empty. With
-the vulnerability DB dated 2026-10-08, four reachable init paths remain
-(`GO-2026-5064`, `GO-2026-5338`, `GO-2026-5622`, `GO-2026-5932`) and have no
-fixed module release. CI therefore intentionally refuses to sign until an
-upstream fix exists; they are not waived.
+override. No Go module override is applied. Headlamp cannot inherit the shared
+Go setup/audit without a shared change: its module is `backend/go.mod`, while
+the shared Go kind currently gates only `src/go.mod`, and its OCI image needs a
+job after both the binary matrix and audit. This declaration therefore remains
+`KIND=custom` and the workflow fails on every reachable govulncheck finding;
+`vuln-ignore` is empty.
+
+Status: **blocked on upstream** for `GO-2026-5064`, `GO-2026-5338`,
+`GO-2026-5622`, and `GO-2026-5932`. With the vulnerability DB dated
+2026-10-08, all four are reachable through init paths and have no fixed module
+release. CI intentionally refuses to sign until upstream fixes them; none is
+waived. The same four IDs are recorded in the rendered PIN as
+`BLOCKED_ON_UPSTREAM`.
 
 The frontend build applies four exact security-only dependency overrides
 (`js-yaml`, `browserslist`, `fast-uri`, `source-map-js`) before the frozen
