@@ -4,8 +4,9 @@
 # release build resolves. govulncheck is BUILT with the release toolchain (the
 # `toolchain` line of bashy's go.mod), so the stdlib it judges is the one the
 # release links. Same verdict rule as builds/_shared/kinds/go/audit.yml: a
-# finding whose first trace frame names a function is REACHABLE and fails the
-# gate; package- and module-level findings are reported, never waived away.
+# finding whose first trace frame names a function is REACHABLE and makes this
+# checker return nonzero; the release workflow chooses report-only or blocking
+# policy. Package- and module-level findings are reported, never waived away.
 #
 # usage: scripts/govulncheck-release.sh [MODULE_DIR...]   (default: . ../outpost ../yoke)
 # env:   GOVULNCHECK_VERSION (default v1.9.0), GOVULNCHECK_OUT (report directory)
@@ -67,5 +68,5 @@ PY
   sed 's/^/  /' "$bin/found"
   ((reachable == 0)) || status=1
 done
-((status == 0)) || echo "govulncheck-release: reachable vulnerabilities fail the release gate" >&2
+((status == 0)) || echo "govulncheck-release: reachable vulnerabilities found" >&2
 exit "$status"

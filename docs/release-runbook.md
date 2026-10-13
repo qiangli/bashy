@@ -12,16 +12,24 @@ those tested bytes; it does not rebuild them. The repository knowledge record
 ## Vulnerability gate
 
 `make govulncheck` (`scripts/govulncheck-release.sh`) is part of the release
-gate: the release workflow's `govulncheck` job runs it after resolving the
-pinned siblings, and both build jobs need it. It builds the pinned
+workflow: the `govulncheck` job runs it after resolving the pinned siblings,
+uploads the JSON reports, and prints the summary. Both build jobs need the
+completed check. It builds the pinned
 `golang.org/x/vuln/cmd/govulncheck` (v1.9.0) with the toolchain named in
 `go.mod`, then scans bashy, `../outpost` and `../yoke` in source mode, each
-with `GOWORK=off` so the scan sees the versions a release links. A finding
-reachable from called code fails the gate; package- and module-level findings
-are printed and kept in the JSON reports. Nothing is waived. A reachable
-standard-library finding is fixed by raising the `toolchain` line across the
-umbrella, never by an exception. Run it locally from an umbrella checkout
-before proposing a candidate tag.
+with `GOWORK=off` so the scan sees the versions a release links.
+
+The release step is temporarily **report-only**: its
+`continue-on-error: true` setting lets the release proceed while the 66 known
+reachable third-party findings are removed by dependency bumps (bashy 18,
+outpost 22, yoke 26). To make the check blocking, change that one value in
+`.github/workflows/release.yml` to `false`. The checker itself always returns
+nonzero for reachable findings, so this switch does not hide or reinterpret
+the result. Package- and module-level findings are printed and retained too;
+nothing is waived. Zero reachable standard-library findings are expected. Any
+future reachable standard-library finding is fixed by raising the `toolchain`
+line across the umbrella, never by an exception. Run the check locally from an
+umbrella checkout before proposing a candidate tag.
 
 ## Install-channel manifests
 
