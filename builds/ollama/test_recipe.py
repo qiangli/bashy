@@ -136,7 +136,7 @@ assert os.environ['GOWORK'] == 'off'
 assert os.environ['CGO_ENABLED'] == '1'
 assert os.environ['GOTOOLCHAIN'] == 'local'
 if args[0] == 'env':
- print({'GOHOSTOS':os.environ['TEST_HOST'].split('/')[0], 'GOHOSTARCH':os.environ['TEST_HOST'].split('/')[1], 'GOVERSION':'go1.27.2'}[args[1]])
+ print({'GOHOSTOS':os.environ['TEST_HOST'].split('/')[0], 'GOHOSTARCH':os.environ['TEST_HOST'].split('/')[1], 'GOVERSION':'go1.27.2', 'GOROOT':str(pathlib.Path.cwd() / 'goroot')}[args[1]])
 elif args[0] == 'build':
  assert args[1:3] == ['-mod=readonly','-trimpath'] and args[-1] == './cmd/runner'
  subprocess.run([os.environ['CC'], '-c', str(pathlib.Path.cwd() / 'llama/llama.cpp/native.c')], check=True)
@@ -155,6 +155,8 @@ else: raise RuntimeError(args)
         fake_cc.write_text('''#!/usr/bin/env python3
 import pathlib, sys
 args=sys.argv[1:]
+if args == ['--version']: print('fake compiler fixture'); sys.exit(0)
+if args == ['-dumpmachine']: print('fixture-target'); sys.exit(0)
 assert '-MMD' in args and '-MF' in args
 dep=pathlib.Path(args[args.index('-MF')+1])
 source=next(x for x in args if x.endswith(('.c', '.cpp')))
@@ -198,7 +200,7 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         compiler = self.root / "adversarial-cc"
         compiler.write_text("#!/usr/bin/env python3\nimport pathlib, sys, time\na=sys.argv[1:]\nassert a.count('-c') == 1\nsrc=next(x for x in a if x.endswith('.c'))\np=pathlib.Path(a[a.index('-MF')+1])\ntime.sleep(.03)\np.write_text('obj: ' + src + '\\n')\n")
         compiler.chmod(0o755)
-        env = dict(os.environ, BASHY_REAL_CC=str(compiler), BASHY_COMPILER_CAPTURE_DIR=str(capture))
+        env = dict(os.environ, BASHY_REAL_CC=str(compiler), BASHY_COMPILER_CAPTURE_DIR=str(capture), BASHY_COMPILER_SOURCE=str(self.root))
         source = self.root / "one.c"
         source.write_text("int x;\n")
         command = [str(self.helpers / "compiler-capture-cc"), "-c", "-DKEEP=1", str(source)]

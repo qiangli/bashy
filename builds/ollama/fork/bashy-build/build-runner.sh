@@ -28,9 +28,14 @@ if [[ $os == darwin ]]; then
 else
   real_cc=gcc real_cxx=g++
 fi
+python3 "$here/compiler-identity.py" "$out/$asset.compiler-identity.json" "$real_cc" "$real_cxx"
 capture="$out/$asset.compiler-inputs"
 mkdir -p "$capture"
 export BASHY_COMPILER_CAPTURE_DIR="$capture"
+export BASHY_COMPILER_SOURCE="$src" BASHY_COMPILER_GOROOT="$(go env GOROOT)"
+export BASHY_COMPILER_TMP="$(mktemp -d)"
+export TMPDIR="$BASHY_COMPILER_TMP" GOTMPDIR="$BASHY_COMPILER_TMP"
+trap 'rm -rf "$BASHY_COMPILER_TMP"' EXIT
 export BASHY_REAL_CC="$real_cc" BASHY_REAL_CXX="$real_cxx"
 export CC="$here/compiler-capture-cc" CXX="$here/compiler-capture-cxx"
 cd "$src"
