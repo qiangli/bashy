@@ -19,6 +19,39 @@ class AuditPolicy(unittest.TestCase):
             self.fail("unexpected audit success")
         return p
 
+    def test_compiler_inputs_reject_outside_source_module_cache_dependencies(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            source = root / "source"; source.mkdir()
+            capture = root / "capture"; (capture / "depfiles").mkdir(parents=True)
+            local = source / "native.c"; local.write_text("int x;\n")
+            outside = root / "module-cache" / "native.h"
+            outside.parent.mkdir(); outside.write_text("#define X 1\n")
+            depfile = capture / "depfiles" / "one.d"
+            depfile.write_text(f"obj.o: {local} {outside}\n")
+            (capture / "invocations.jsonl").write_text(json.dumps({"captured": True, "argv": ["-c", str(local)]}) + "\n")
+            result = self.run_audit("compiler-inputs", "--capture", capture, "--source", source,
+                                    "--generated", source, "--output", root / "inputs.json", ok=False)
+            self.assertIn("unreviewed external native compiler dependency", result.stderr)
+            self.assertIn("module-cache", result.stderr)
+
+    def test_compiler_inputs_records_reviewed_system_headers_separately(self):
+        import sys
+        if sys.platform != "linux": self.skipTest("fixture uses the reviewed Linux system include root")
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); source = root / "source"; source.mkdir()
+            capture = root / "capture"; (capture / "depfiles").mkdir(parents=True)
+            local = source / "native.c"; local.write_text("int x;\n")
+            system = Path("/usr/include/stdio.h")
+            if not system.is_file(): self.skipTest("system header fixture unavailable")
+            (capture / "depfiles" / "one.d").write_text(f"obj.o: {local} {system}\n")
+            (capture / "invocations.jsonl").write_text(json.dumps({"captured": True}) + "\n")
+            self.run_audit("compiler-inputs", "--capture", capture, "--source", source,
+                           "--generated", source, "--output", root / "inputs.json")
+            data = json.loads((root / "inputs.json").read_text())
+            self.assertEqual(data["system_headers"], [str(system)])
+            self.assertEqual(list(data["files"]), ["native.c"])
+
     def test_license_report_fails_closed_and_accepts_permissive_only(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
