@@ -277,9 +277,22 @@
           # Grype reads the local final image, including Debian and Node
           # packages. Its JSON report is signed with the other release assets.
           # No exceptions or waivers: findings at high or above stop release.
+          # Grype installer provenance (reviewed 2026-10-13): install.sh for
+          # the pinned v0.120.1 release, fetched from the exact published
+          # source https://raw.githubusercontent.com/anchore/grype/v0.120.1/install.sh
+          # (24892 bytes, sha256 4bc8e844d1ca0b74082cb51e1587d58c35150756954660db3d3078e57c81cbfd,
+          # corroborated by two independent fetches). A tag in the URL alone
+          # is not authentication: the file is verified by hash BEFORE
+          # execution, and DOWNLOAD_TAG_INSTALL_SCRIPT=false keeps the
+          # verified script from re-fetching an unverified copy of itself.
           mkdir -p "${RUNNER_TEMP}/bin"
+          GRYPE_INSTALL_SH="${RUNNER_TEMP}/grype-install-v0.120.1.sh"
           curl -fsSL https://raw.githubusercontent.com/anchore/grype/v0.120.1/install.sh \
-            | sh -s -- -v v0.120.1 -b "${RUNNER_TEMP}/bin"
+            -o "$GRYPE_INSTALL_SH"
+          echo "4bc8e844d1ca0b74082cb51e1587d58c35150756954660db3d3078e57c81cbfd  $GRYPE_INSTALL_SH" \
+            | sha256sum -c -
+          DOWNLOAD_TAG_INSTALL_SCRIPT=false \
+            sh "$GRYPE_INSTALL_SH" -v v0.120.1 -b "${RUNNER_TEMP}/bin"
           GRYPE_CHECK_FOR_APP_UPDATE=false \
             "${RUNNER_TEMP}/bin/grype" \
             "docker:openclaw-gateway:${GITHUB_REF_NAME}" \
