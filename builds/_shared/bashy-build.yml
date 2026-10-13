@@ -172,10 +172,14 @@ jobs:
 
   audit:
     name: audit + SBOM
+#@@IFEQ TOOL ollama@@
+    needs: [pin, build]
+#@@ELSE@@
 #@@IFEQ KIND cmake@@
     needs: [pin, build]
 #@@ELSE@@
     needs: pin
+#@@END@@
 #@@END@@
     runs-on: ubuntu-24.04
     permissions:
