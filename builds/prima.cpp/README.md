@@ -144,9 +144,16 @@ hashes, inference limits and validation. The first-party repair is not applied
 as a producer overlay; the source pin and hosted gate remain red.
 
 The producer now reports per-rank configured endpoints, PID, pre-cleanup exit
-status, warmup/evaluation markers and cleanup status. One 90-second deadline
-covers both ranks; successful master evaluation alone never passes. Each child
-log is capped at 1 MiB and displayed as bounded head/tail excerpts. Linux
+status, warmup/evaluation markers, per-rank log-limit evidence
+(log_limit_exceeded, observed stdout bytes) and cleanup status. One 90-second
+deadline covers both ranks; successful master evaluation alone never passes.
+Each rank's piped stdout is drained by a bounded pump that keeps the first
+1 MiB per log; excess kills the rank and fails the stage with an explicit
+log-limit error. The engine process itself runs with no file-size limit, so
+its own files (Metal cache, model writes) are unconstrained — candidate -5
+run 38418158569 showed the previous process-wide RLIMIT_FSIZE=1MiB killing
+the single-rank Darwin engine with SIGXFSZ after 2.2s. Logs display as
+bounded head/tail excerpts. Linux
 exercise failures retain timestamped outbound/shutdown syscall excerpts in the
 egress artifact and step log; the full trace is still used for the egress
 verdict when the exercise succeeds. Trace overflow fails closed. The generated

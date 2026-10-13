@@ -2,15 +2,16 @@
 """Bounded inference gate; diagnostics never turn a failed rank into success."""
 import os
 import pathlib
-import resource
 import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 LOG_LIMIT = 1024 * 1024
 EXCERPT = 32768
+_CHUNK = 65536
 
 
 def dump_log(path):
@@ -26,26 +27,96 @@ def dump_log(path):
             print(log.read(EXCERPT).decode('utf-8', errors='replace'), flush=True)
 
 
-def limit_log():
-    # Native Unix lanes only. A runaway child fails (SIGXFSZ), never fills disk.
-    resource.setrlimit(resource.RLIMIT_FSIZE, (LOG_LIMIT, LOG_LIMIT))
+def _drain(label, pipe, path, stats, lock, kill):
+    """Copy one rank's piped stdout to path, keeping at most LOG_LIMIT bytes.
+
+    Only captured stdout is bounded. The engine process itself runs with no
+    file-size limit, so its own files (Metal cache, model writes) are
+    unconstrained. On excess the rank is killed and the stage fails closed.
+    """
+    observed = 0
+    written = 0
+    error = None
+    try:
+        # Unbuffered: the pre-cleanup snapshot reads this file through a new
+        # descriptor, so drained bytes must reach disk immediately, not sit
+        # in this writer's buffer until the rank exits.
+        with open(path, 'wb', buffering=0) as log:
+            while True:
+                # read1: a single underlying read. Plain read(n) may wait
+                # for more bytes than the child has written, which would
+                # stall the drain (and the warmup/evaluation evidence with
+                # it) until the rank exits or is killed.
+                chunk = pipe.read1(_CHUNK)
+                if not chunk:
+                    break
+                observed += len(chunk)
+                with lock:
+                    stats[label]['observed'] = observed
+                if written < LOG_LIMIT:
+                    keep = chunk[:LOG_LIMIT - written]
+                    log.write(keep)
+                    written += len(keep)
+                if observed > LOG_LIMIT:
+                    with lock:
+                        if not stats[label]['exceeded']:
+                            stats[label]['exceeded'] = True
+                            kill()
+                        stats[label]['observed'] = observed
+                # Past the limit the rest is discarded so the child never
+                # blocks on a full pipe while the killer acts.
+    except Exception as exc:  # a dead pump must never read as success
+        error = str(exc)
+    finally:
+        try:
+            pipe.close()
+        except OSError:
+            pass
+        with lock:
+            stats[label]['observed'] = observed
+            if error is not None:
+                stats[label]['pump_error'] = error
+
+
+def _over_limit(peers, stats, lock):
+    with lock:
+        return [label for label, _, _, _ in peers if stats[label]['exceeded']]
 
 
 def run_stage(name, commands, timeout, evaluation=None):
     with tempfile.TemporaryDirectory() as directory:
         peers = []
+        stats = {}
+        lock = threading.Lock()
         started = time.monotonic()
         failure = None
         try:
             for label, command in commands:
                 path = pathlib.Path(directory) / f'{label}.log'
-                with path.open('wb') as log:
-                    peer = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
-                                            start_new_session=True, preexec_fn=limit_log)
-                peers.append((label, peer, path))
+                stats[label] = {'exceeded': False, 'observed': 0}
+                peer = subprocess.Popen(command, stdout=subprocess.PIPE,
+                                        stderr=subprocess.STDOUT,
+                                        start_new_session=True)
+
+                def kill(peer=peer):
+                    try:
+                        os.killpg(peer.pid, signal.SIGKILL)
+                    except (ProcessLookupError, PermissionError):
+                        pass  # already exited; the monitor below still fails closed
+
+                pump = threading.Thread(target=_drain,
+                                        args=(label, peer.stdout, path, stats, lock, kill),
+                                        daemon=True)
+                peers.append((label, peer, path, pump))
+                pump.start()
                 print(f'stage={name} rank={label} pid={peer.pid} started', flush=True)
             while True:
-                statuses = [peer.poll() for _, peer, _ in peers]
+                statuses = [peer.poll() for _, peer, _, _ in peers]
+                over = _over_limit(peers, stats, lock)
+                if over:
+                    raise RuntimeError(
+                        f'{name}: log limit exceeded ({LOG_LIMIT} bytes): ranks={over} '
+                        f'statuses={statuses}')
                 if any(code is not None and code != 0 for code in statuses):
                     raise RuntimeError(f'{name}: child failed: {statuses}')
                 if all(code == 0 for code in statuses):
@@ -53,8 +124,20 @@ def run_stage(name, commands, timeout, evaluation=None):
                 if time.monotonic() - started >= timeout:
                     raise TimeoutError(f'{name}: deadline={timeout}s statuses={statuses}')
                 time.sleep(0.05)
+            # Ranks exited; let the drains reach EOF so a burst that outran
+            # the last poll is still enforced before success is declared.
+            for _, _, _, pump in peers:
+                pump.join(timeout=5)
+            over = _over_limit(peers, stats, lock)
+            if over:
+                raise RuntimeError(
+                    f'{name}: log limit exceeded ({LOG_LIMIT} bytes): ranks={over}')
+            errors = {label: stats[label]['pump_error'] for label, _, _, _ in peers
+                      if stats[label].get('pump_error')}
+            if errors:
+                raise RuntimeError(f'{name}: log capture failed: {errors}')
             if evaluation is not None:
-                log = next(path for label, _, path in peers if label == evaluation)
+                log = next(path for label, _, path, _ in peers if label == evaluation)
                 if 'eval time' not in log.read_text(errors='replace'):
                     raise RuntimeError(f'{name}: master did not evaluate')
         except BaseException as error:
@@ -65,19 +148,30 @@ def run_stage(name, commands, timeout, evaluation=None):
             # SIGKILL for a native failure or infer master success from its log.
             print(f'stage={name} elapsed={time.monotonic()-started:.3f}s '
                   f'result={failure or "completed"}', flush=True)
-            for label, peer, path in peers:
-                text = path.read_text(errors='replace')
+            for label, peer, path, _ in peers:
+                with lock:
+                    snap = dict(stats[label])
+                try:
+                    text = path.read_text(errors='replace')
+                except FileNotFoundError:
+                    text = ''
                 print(f'rank={label} pid={peer.pid} pre_cleanup_status={peer.poll()} '
-                      f'warmup={"warming up" in text} evaluation={"eval time" in text}', flush=True)
-            for label, peer, path in peers:
+                      f'warmup={"warming up" in text} evaluation={"eval time" in text} '
+                      f'log_limit_exceeded={snap["exceeded"]} log_bytes={snap["observed"]}',
+                      flush=True)
+            for label, peer, path, pump in peers:
                 if peer.poll() is None:
                     try:
                         os.killpg(peer.pid, signal.SIGKILL)
-                    except ProcessLookupError:
+                    except (ProcessLookupError, PermissionError):
                         pass # exited between poll and kill; still reap below
                 peer.wait(timeout=5)
+                pump.join(timeout=5)
                 print(f'---- rank={label} final_status={peer.returncode} log ----', flush=True)
-                dump_log(path)
+                try:
+                    dump_log(path)
+                except FileNotFoundError:
+                    print(f'(no log captured for rank={label})', flush=True)
         print(f'PASS: {name}', flush=True)
 
 
