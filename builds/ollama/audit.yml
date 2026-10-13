@@ -1,4 +1,76 @@
-      - name: unresolved runner security admission (fail closed)
+      - name: pinned runner Go toolchain for audit analyzers
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.2'
+          check-latest: false
+          cache: false
+      - name: download all five native build records
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: out
+          merge-multiple: true
+      - name: pinned Go analysis tools
         run: |
-          echo 'BLOCKED: compiled Go/cgo inputs, generated Metal, native linked dependencies, licenses, vulnerability audit and SBOM require review.' >&2
-          exit 1
+          set -euo pipefail
+          . fork/bashy-build/PIN
+          export GOBIN="$RUNNER_TEMP/bin" PATH="$RUNNER_TEMP/bin:$PATH"
+          GOTOOLCHAIN=local go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          GOTOOLCHAIN=local go install github.com/google/go-licenses@v1.6.0
+          GOTOOLCHAIN=local go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.12.0
+          GOTOOLCHAIN=local go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.2.2
+          go version
+          govulncheck -version
+          osv-scanner --version
+      - name: native linked-library inventory for every shipped executable
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends llvm
+          python3 fork/bashy-build/audit-runner.py inventory --out out --report out/runner-linked-libraries.json
+      - name: compiled-input permissive license review and notices
+        working-directory: src
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/bin:$PATH" GOWORK=off GOENV=off GOTOOLCHAIN=local CGO_ENABLED=1
+          go-licenses check --allowed_licenses=MIT,BSD-2-Clause,BSD-3-Clause,Apache-2.0 ./cmd/runner
+          mkdir -p ../out/notices
+          go-licenses save --save_path=../out/notices ./cmd/runner
+          go-licenses report --template '{{range .}}{{.Name}},{{.License}}{{"\n"}}{{end}}' ./cmd/runner > ../out/runner-licenses.csv
+          python3 ../fork/bashy-build/audit-runner.py licenses --report ../out/runner-licenses.csv --notices ../out/notices --output ../out/runner-licenses.json
+      - name: CycloneDX SBOM for the compiled runner package
+        working-directory: src
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/bin:$PATH" GOWORK=off GOENV=off GOTOOLCHAIN=local CGO_ENABLED=1
+          cyclonedx-gomod app -json -licenses -main ./cmd/runner -output ../out/runner-sbom.cdx.json .
+          jq -e '.bomFormat == "CycloneDX" and (.components | length) > 0' ../out/runner-sbom.cdx.json >/dev/null
+      - name: bind target-specific compiled modules and native libraries into SBOM
+        run: python3 fork/bashy-build/audit-runner.py aggregate-sbom --out out
+      - name: OSV scan of the five-target compiled-input SBOM
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/bin:$PATH"
+          osv-scanner scan source -L out/runner-sbom.cdx.json --format json > out/runner-osv.json
+          python3 fork/bashy-build/audit-runner.py osv --report out/runner-osv.json
+      - name: govulncheck binary reachability for all five target builds
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/bin:$PATH"
+          for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64; do
+            binary="out/runner-$target"
+            [[ $target != windows-amd64 ]] || binary+='.exe'
+            govulncheck -mode=binary "$binary" >"out/runner-$target.govulncheck.txt"
+          done
+      - name: Grype complete CycloneDX SBOM (fail on any severity)
+        env:
+          GRYPE_VERSION: v0.93.0
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/anchore/grype/v0.93.0/install.sh | sh -s -- -v "$GRYPE_VERSION" -b "$RUNNER_TEMP/bin"
+          "$RUNNER_TEMP/bin/grype" "sbom:out/runner-sbom.cdx.json" --fail-on negligible -o json > out/runner-grype.json
+          python3 fork/bashy-build/audit-runner.py grype --report out/runner-grype.json
+      - name: verify complete reports and generated Metal inputs
+        run: |
+          set -euo pipefail
+          commit=$(git -C src rev-parse HEAD)
+          python3 fork/bashy-build/audit-runner.py final --out out --commit "$commit"

@@ -65,7 +65,13 @@ class Recipe(unittest.TestCase):
         self.assertIn('--certificate-identity "$EXPECTED_IDENTITY"', wf)
         self.assertIn('--certificate-oidc-issuer "$OIDC_ISSUER"', wf)
         self.assertIn("subject-checksums: dist/SHA256SUMS", wf)
-        self.assertIn("exit 1", wf.split("unresolved runner security admission")[1].split("release:")[0])
+        audit = wf.split("audit + SBOM", 1)[1].split("  release:", 1)[0]
+        for required in ("govulncheck", "osv-scanner", "grype", "CycloneDX", "runner-linked-libraries.json", "runner-licenses.json"):
+            self.assertIn(required, audit)
+        self.assertIn("needs: [pin, build]", audit)
+        self.assertNotIn("unresolved runner security admission", audit)
+        self.assertTrue((self.helpers / "audit-runner.py").is_file())
+        self.assertIn("runner-NOTICES.txt", (self.helpers / "audit-runner.py").read_text())
         for target in TARGETS:
             self.assertIn("- asset: runner-" + target, wf)
         pin = (self.helpers / "PIN").read_text()
