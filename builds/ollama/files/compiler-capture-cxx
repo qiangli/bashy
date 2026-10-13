@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+"""Record cgo compiler invocations and preserve their dependency files."""
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+kind = Path(sys.argv[0]).name
+compiler = os.environ.get("BASHY_REAL_CXX" if "cxx" in kind else "BASHY_REAL_CC")
+root = Path(os.environ["BASHY_COMPILER_CAPTURE_DIR"])
+args = sys.argv[1:]
+record = {"compiler": compiler, "argv": args}
+with (root / "invocations.jsonl").open("a") as stream:
+    stream.write(json.dumps(record, sort_keys=True) + "\n")
+result = subprocess.run([compiler, *args])
+if result.returncode == 0:
+    for i, arg in enumerate(args[:-1]):
+        if arg == "-MF":
+            dep = Path(args[i + 1])
+            if dep.is_file():
+                dest = root / "depfiles" / f"{len(list((root / 'depfiles').glob('*.d'))):06d}.d"
+                dest.parent.mkdir(exist_ok=True)
+                shutil.copyfile(dep, dest)
+            break
+sys.exit(result.returncode)

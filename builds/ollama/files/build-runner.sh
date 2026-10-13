@@ -23,10 +23,16 @@ bash "$here/source-guard.sh" "$src"
 # No caller-selected optimization flags, overlays, alternate compilers or tags.
 unset CGO_CFLAGS CGO_CPPFLAGS CGO_CXXFLAGS CGO_LDFLAGS GOEXPERIMENT
 if [[ $os == darwin ]]; then
-  export CC=clang CXX=clang++ MACOSX_DEPLOYMENT_TARGET=14.0
+  real_cc=clang real_cxx=clang++
+  export MACOSX_DEPLOYMENT_TARGET=14.0
 else
-  export CC=gcc CXX=g++
+  real_cc=gcc real_cxx=g++
 fi
+capture="$out/$asset.compiler-inputs"
+mkdir -p "$capture"
+export BASHY_COMPILER_CAPTURE_DIR="$capture"
+export BASHY_REAL_CC="$real_cc" BASHY_REAL_CXX="$real_cxx"
+export CC="$here/compiler-capture-cc" CXX="$here/compiler-capture-cxx"
 cd "$src"
 if [[ $os/$arch == darwin/arm64 ]]; then
   go generate ./ml/backend/ggml/ggml/src/ggml-metal
@@ -38,4 +44,6 @@ go list -mod=readonly -deps -json ./cmd/runner > "$out/$asset.deps.json"
 exe=$asset
 [[ $os != windows ]] || exe=$asset.exe
 go build -mod=readonly -trimpath -o "$out/$exe" ./cmd/runner
+python3 "$here/audit-runner.py" compiler-inputs --capture "$capture" --source "$src" \
+  --generated "$src/ml/backend/ggml/ggml/src/ggml-metal" --output "$out/$asset.compiler-inputs.json"
 python3 "$here/package-runner.py" package "$out/$exe" "$out/$asset.gz" "$out/$asset.json" "$os/$arch" "$UPSTREAM_COMMIT" "$GO_TOOLCHAIN"

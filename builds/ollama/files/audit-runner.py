@@ -2,6 +2,7 @@
 """Fail-closed compiled-input audit helpers for the official runner recipe."""
 import argparse
 import csv
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -50,9 +51,15 @@ def inventory(out, report):
             fail(f"{stem}: source input inventory missing or has wrong schema")
         if any(not isinstance(path, str) or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest) for path, digest in inputs["files"].items()):
             fail(f"{stem}: malformed compiled-source input path or SHA-256")
+        native = load_json(out / f"{stem}.compiler-inputs.json")
+        if native.get("schema") != "bashy-runner-compiler-inputs-v1" or not native.get("files") or not native.get("invocations"):
+            fail(f"{stem}: actual cgo compiler invocations/dependencies are missing")
+        if any(not re.fullmatch(r"[0-9a-f]{64}", digest) for digest in native["files"].values()):
+            fail(f"{stem}: malformed native compiler-input digest")
         # Build-time Metal generation is an input to the arm64 Darwin artifact.
         if target == "darwin-arm64":
-            generated = [p for p in inputs["files"] if "ggml-metal" in p and p.endswith((".metal", ".metallib", ".metal.go", ".metal.h"))]
+            generated = [p for p in native["files"] if "ggml-metal" in p and
+                         (p.endswith(".metal") or p.endswith(".metallib") or p.endswith(".metal.go") or p.endswith(".metal.h"))]
             if not generated:
                 fail("darwin-arm64: generated Metal shader input is absent from the compiled-input inventory")
         deps = out / f"{stem}.deps.json"
@@ -81,8 +88,66 @@ def inventory(out, report):
         modules = sorted({(p.get("Module") or {}).get("Path", "") + "@" + (p.get("Module") or {}).get("Version", "") for p in packages if (p.get("Module") or {}).get("Path")})
         rows.append({"target": target, "executable": binary.name, "deps_inventory": deps.name, "compiled_modules": modules,
                      "source_inputs": inputs["schema"], "linked_libraries": sorted(set(libs)),
+                     "native_compiler_inputs": f"{stem}.compiler-inputs.json",
                      "linkage_policy": "platform system libraries only; no third-party native library linked"})
     Path(report).write_text(json.dumps({"schema": "bashy-runner-linked-libraries-v1", "targets": rows}, indent=2, sort_keys=True) + "\n")
+
+
+def compiler_inputs(capture, source, generated, output):
+    capture, source = Path(capture), Path(source).resolve()
+    log = capture / "invocations.jsonl"
+    if not log.is_file(): fail("cgo compiler invocation log is missing")
+    invocations = [json.loads(line) for line in log.read_text().splitlines() if line]
+    depfiles = sorted((capture / "depfiles").glob("*.d"))
+    if not invocations or not depfiles: fail("cgo compiler invocation or dependency files are missing")
+    paths = set()
+    for dep in depfiles:
+        raw = dep.read_text(errors="strict").replace("\\\n", " ")
+        # Dependency targets can contain escaped spaces; paths with spaces are rejected below.
+        if ":" not in raw: fail(f"malformed compiler dependency file: {dep.name}")
+        for name in raw.split(":", 1)[1].split():
+            p = Path(name)
+            if not p.is_absolute(): p = source / p
+            try: rel = p.resolve().relative_to(source).as_posix()
+            except ValueError: continue  # SDK/toolchain headers are platform-provided.
+            if p.is_file(): paths.add(rel)
+    # Metal source is generated after go generate and may not appear in a C depfile.
+    metal_root = Path(generated)
+    for p in metal_root.rglob("*"):
+        if p.is_file() and (p.name.endswith(".metal") or p.name.endswith(".metallib") or
+                            p.name.endswith(".metal.h") or p.name.endswith(".metal.go")):
+            paths.add(p.resolve().relative_to(source).as_posix())
+    if not paths: fail("no repository-owned C/C++ compiler dependencies were captured")
+    files = {p: hashlib.sha256((source / p).read_bytes()).hexdigest() for p in sorted(paths)}
+    data = {"schema": "bashy-runner-compiler-inputs-v1", "files": files,
+            "invocations": len(invocations), "dependency_files": len(depfiles)}
+    Path(output).write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+
+
+def review_native_licenses(out, review_path, output):
+    review = load_json(review_path)
+    if review.get("schema") != "bashy-runner-native-license-review-v1":
+        fail("native license review has wrong schema")
+    reviewed = review.get("inputs", {})
+    result = []
+    for target in TARGETS:
+        name = f"runner-{target}.compiler-inputs.json"
+        native = load_json(Path(out) / name)
+        for path, digest in native["files"].items():
+            row = reviewed.get(path)
+            if not row or row.get("sha256") != digest:
+                fail(f"unreviewed native compiler input (exact hash required): {target}:{path}")
+            license_id = row.get("license")
+            if license_id not in PERMISSIVE:
+                fail(f"non-permissive or unknown native compiler license for {path}: {license_id}")
+            notice = row.get("notice")
+            if not isinstance(notice, str) or not notice.strip():
+                fail(f"explicit notice missing for reviewed native compiler input: {path}")
+            result.append({"target": target, "path": path, "sha256": digest,
+                           "license": license_id, "notice": notice})
+    Path(output).write_text(json.dumps({"schema": "bashy-runner-native-license-review-v1",
+        "policy": "exact SHA-256 match; MIT/BSD/Apache-2.0 only; explicit notice required", "inputs": result},
+        indent=2, sort_keys=True) + "\n")
 
 
 def licenses(report, notices, output):
@@ -139,6 +204,13 @@ def aggregate_sbom(out):
             key = ("platform:" + lib, target["target"])
             bom.setdefault("components", []).append({"type": "library", "group": "platform-provided", "name": lib,
                 "properties": [{"name": "bashy:target", "value": target["target"]}, {"name": "bashy:origin", "value": "operating-system SDK/runtime; not bundled"}]})
+    native_review = load_json(out / "runner-native-licenses.json")
+    for item in native_review.get("inputs", []):
+        bom.setdefault("components", []).append({"type": "file", "name": item["path"],
+            "hashes": [{"alg": "SHA-256", "content": item["sha256"]}],
+            "licenses": [{"license": {"id": item["license"]}}],
+            "properties": [{"name": "bashy:compiled-target", "value": item["target"]},
+                           {"name": "bashy:notice", "value": item["notice"]}]})
     bom.setdefault("properties", []).append({"name": "bashy:compiled-targets", "value": ",".join(TARGETS)})
     bom["components"].sort(key=lambda x: (x.get("purl", ""), x.get("name", ""), str(x.get("properties", []))))
     path.write_text(json.dumps(bom, indent=2, sort_keys=True) + "\n")
@@ -172,7 +244,7 @@ def grype(report):
 
 
 def final(out, commit):
-    required = ["runner-linked-libraries.json", "runner-licenses.json", "runner-sbom.cdx.json", "runner-osv.json", "runner-grype.json"]
+    required = ["runner-linked-libraries.json", "runner-licenses.json", "runner-native-licenses.json", "runner-sbom.cdx.json", "runner-osv.json", "runner-grype.json"]
     for name in required:
         if not (out / name).is_file() or (out / name).stat().st_size == 0:
             fail(f"required audit evidence missing: {name}")
@@ -190,7 +262,29 @@ def final(out, commit):
     notice_files = [p for p in notices.rglob("*") if p.is_file() and p.stat().st_size]
     if not notice_files:
         fail("third-party notices are missing")
-    (out / "runner-NOTICES.txt").write_text("Notices generated from the compiled runner package graph.\n\n" + "\n".join(p.read_text(errors="replace") for p in sorted(notice_files)))
+    native_review = load_json(out / "runner-native-licenses.json")
+    if native_review.get("schema") != "bashy-runner-native-license-review-v1":
+        fail("native compiler license review has wrong schema")
+    expected_native = {}
+    for target in TARGETS:
+        native = load_json(out / f"runner-{target}.compiler-inputs.json")
+        for path, digest in native.get("files", {}).items():
+            expected_native[(target, path, digest)] = None
+    for item in native_review.get("inputs", []):
+        key = (item.get("target"), item.get("path"), item.get("sha256"))
+        if key not in expected_native or expected_native[key] is not None:
+            fail(f"native license review has duplicate or extraneous input: {key[0]}:{key[1]}")
+        if item.get("license") not in PERMISSIVE or not isinstance(item.get("notice"), str) or not item["notice"].strip():
+            fail(f"native license review has unresolved license or notice: {key[1]}")
+        expected_native[key] = True
+    unresolved = [f"{target}:{path}" for (target, path, _), value in expected_native.items() if value is None]
+    if unresolved:
+        fail("native license review omitted compiled inputs: " + ", ".join(unresolved[:8]))
+    native_notices = "\n\n".join(f"{x['path']} (SHA-256 {x['sha256']}, {x['license']})\n{x['notice']}"
+                                    for x in native_review.get("inputs", []))
+    (out / "runner-NOTICES.txt").write_text("Notices generated from compiled Go and native inputs.\n\n" +
+        "\n".join(p.read_text(errors="replace") for p in sorted(notice_files)) +
+        ("\n\nNative compiler-input notices:\n" + native_notices if native_notices else ""))
     vulnerability_record = {"schema": "bashy-runner-vulnerability-review-v1", "upstream_commit": commit,
         "policy": "zero OSV SBOM findings, zero Grype SBOM findings, and zero govulncheck reachable findings in each shipped binary",
         "osv_report": "runner-osv.json", "grype_report": "runner-grype.json",
@@ -199,20 +293,23 @@ def final(out, commit):
     (out / "runner-vulnerabilities.json").write_text(json.dumps(vulnerability_record, indent=2, sort_keys=True) + "\n")
     if not commit or not re.fullmatch(r"[0-9a-f]{40}", commit):
         fail("expected official upstream commit was not supplied")
-    print(f"compiled-input audit complete for {commit}: five binaries, five Go dependency records, native linkage, license review, vulnerabilities, SBOM, and notices")
+    print(f"compiled-input audit complete for {commit}: five binaries, five Go dependency records, exact native-input license review, native linkage, vulnerabilities, SBOM, and notices")
 
 
 def main():
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="mode", required=True)
     q = sub.add_parser("inventory"); q.add_argument("--out", type=Path, required=True); q.add_argument("--report", type=Path, required=True)
+    q = sub.add_parser("compiler-inputs"); q.add_argument("--capture", required=True); q.add_argument("--source", required=True); q.add_argument("--generated", required=True); q.add_argument("--output", required=True)
+    q = sub.add_parser("native-licenses"); q.add_argument("--out", required=True); q.add_argument("--review", required=True); q.add_argument("--output", required=True)
     q = sub.add_parser("licenses"); q.add_argument("--report", required=True); q.add_argument("--notices", required=True); q.add_argument("--output", required=True)
     q = sub.add_parser("osv"); q.add_argument("--report", required=True)
     q = sub.add_parser("grype"); q.add_argument("--report", required=True)
     q = sub.add_parser("aggregate-sbom"); q.add_argument("--out", type=Path, required=True)
     q = sub.add_parser("final"); q.add_argument("--out", type=Path, required=True); q.add_argument("--commit", required=True)
     a = p.parse_args()
-    {"inventory": lambda: inventory(a.out, a.report), "licenses": lambda: licenses(a.report, a.notices, a.output),
+    {"inventory": lambda: inventory(a.out, a.report), "compiler-inputs": lambda: compiler_inputs(a.capture, a.source, a.generated, a.output),
+     "native-licenses": lambda: review_native_licenses(a.out, a.review, a.output), "licenses": lambda: licenses(a.report, a.notices, a.output),
      "osv": lambda: osv(a.report), "grype": lambda: grype(a.report), "aggregate-sbom": lambda: aggregate_sbom(a.out), "final": lambda: final(a.out, a.commit)}[a.mode]()
 
 
