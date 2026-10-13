@@ -54,7 +54,7 @@ Darwin)
 (version 1)
 (allow default)
 (deny network-outbound)
-(allow network-outbound (remote ip "127.0.0.1:$port"))
+(allow network-outbound (remote ip "localhost:$port"))
 SB
   # Includes wrong-loopback-port, IPv4, IPv6 and UDP denial controls.
   sandbox-exec -f "$work/profile.sb" python3 "$here/native-gate.py" --deny-controls "$port" >>"$out/$asset-egress.txt" 2>&1
