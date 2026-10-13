@@ -226,6 +226,50 @@ class CompilerInputs(unittest.TestCase):
                     item=tarfile.TarInfo(name); item.type=kind; item.linkname='elsewhere'; t.addfile(item)
                 with self.assertRaises(ValueError): merge.merge(root,root/'result',root/'report.json')
 
+    def test_windows_style_entries_merge_and_unknown_still_rejected(self):
+        # CI run 38483154929 (tag 0.1.2-11): the Windows leg declared
+        # manifest paths with backslash separators (native WindowsPath str
+        # from collect-inputs.py) while MSYS2 tar stores forward slashes,
+        # so the audit failed with a nameless 'unexpected archive entry'.
+        # Declared, hashed Windows entries (TOOLCHAIN.json, libomp.dll,
+        # backslash src paths) must merge into POSIX report paths; anything
+        # undeclared is still rejected, and the error names the entry.
+        bodies={'LICENSE':b'MIT','deps/nng/LICENSE.txt':b'MIT',
+                'TOOLCHAIN.json':b'{"schema": "fixture"}','libomp.dll':b'dll'}
+        declared={'LICENSE':'LICENSE','deps/nng/LICENSE.txt':'deps\\nng\\LICENSE.txt',
+                  'TOOLCHAIN.json':'TOOLCHAIN.json','libomp.dll':'libomp.dll'}
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            for asset in merge.ASSETS:
+                if asset=='prima-windows-amd64':
+                    rows=[{'path':declared[name],
+                           'sha256':hashlib.sha256(body).hexdigest()}
+                          for name,body in bodies.items()]
+                    names=list(bodies)
+                else:
+                    rows=[{'path':'LICENSE','sha256':hashlib.sha256(b'MIT').hexdigest()}]
+                    names=['LICENSE']
+                (root/f'{asset}-inputs.json').write_text(json.dumps(rows))
+                with tarfile.open(root/f'{asset}-inputs.tar.gz','w:gz') as t:
+                    for name in names:
+                        body=bodies[name] if asset=='prima-windows-amd64' else b'MIT'
+                        item=tarfile.TarInfo('./'+name); item.size=len(body)
+                        t.addfile(item,io.BytesIO(body))
+            merge.merge(root,root/'result',root/'report.json')
+            report=json.loads((root/'report.json').read_text())
+            windows={row['path'] for row in report if row['path'].startswith('prima-windows-amd64/')}
+            self.assertEqual(windows,{f'prima-windows-amd64/{name}' for name in bodies})
+            self.assertTrue((root/'result/prima-windows-amd64/deps/nng/LICENSE.txt').is_file())
+            self.assertTrue((root/'result/prima-windows-amd64/TOOLCHAIN.json').is_file())
+            self.assertTrue((root/'result/prima-windows-amd64/libomp.dll').is_file())
+            with tarfile.open(root/'prima-windows-amd64-inputs.tar.gz','w:gz') as t:
+                for name in list(bodies)+['crt/unknown.dll']:
+                    body=bodies.get(name,b'unknown')
+                    item=tarfile.TarInfo('./'+name); item.size=len(body)
+                    t.addfile(item,io.BytesIO(body))
+            with self.assertRaisesRegex(ValueError,r'unexpected archive entry: crt/unknown\.dll'):
+                merge.merge(root,root/'bad',root/'bad.json')
+
 class Preparation(unittest.TestCase):
     def test_dependency_metadata_matches_pin(self):
         declaration=dict(line.split('=',1) for line in

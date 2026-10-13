@@ -51,7 +51,10 @@ def collect(src, build, dest, report):
         target = dest/rel
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(p, target)
-        records.append({'path': str(rel), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()})
+        # POSIX separators: on Windows str(rel) carries backslashes while
+        # MSYS2 tar stores forward slashes, which merge-inputs.py would
+        # reject as unexpected entries. as_posix keeps both sides aligned.
+        records.append({'path': rel.as_posix(), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()})
     # The pinned Windows toolchain record (see windows-compilers.py) joins
     # the closure so its package versions land in the inputs tarball and SBOM.
     toolchain = os.environ.get('BASHY_TOOLCHAIN_JSON')

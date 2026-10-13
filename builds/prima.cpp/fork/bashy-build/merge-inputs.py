@@ -10,24 +10,32 @@ ASSETS = ('prima-linux-amd64', 'prima-linux-arm64',
           'prima-darwin-amd64', 'prima-darwin-arm64',
           'prima-windows-amd64')
 
+def canonical(raw):
+    # The Windows leg declares manifest paths with backslash separators
+    # (native WindowsPath str from collect-inputs.py; e.g. TOOLCHAIN.json
+    # and libomp.dll join the closure there) while MSYS2 tar stores forward
+    # slashes. Canonicalize both sides to POSIX so declared, hashed Windows
+    # entries verify; anything not declared is still rejected below.
+    return str(PurePosixPath(raw.replace('\\', '/')))
+
 def merge(source, destination, report):
     records = []
     for asset in ASSETS:
         expected = json.loads((source / f'{asset}-inputs.json').read_text())
-        hashes = {row['path']: row['sha256'] for row in expected}
+        hashes = {canonical(row['path']): row['sha256'] for row in expected}
         if not hashes or len(hashes) != len(expected):
             raise ValueError('empty or duplicate input manifest')
         seen = set()
         with tarfile.open(source / f'{asset}-inputs.tar.gz', 'r:gz') as archive:
             for member in archive:
-                path = PurePosixPath(member.name)
+                path = PurePosixPath(member.name.replace('\\', '/'))
                 if path.is_absolute() or '..' in path.parts:
-                    raise ValueError('unsafe archive path')
+                    raise ValueError(f'unsafe archive path: {member.name}')
                 if member.isdir():
                     continue
                 name = str(path)
                 if not member.isfile() or name not in hashes or name in seen:
-                    raise ValueError('unexpected archive entry')
+                    raise ValueError(f'unexpected archive entry: {name}')
                 data = archive.extractfile(member).read()
                 if hashlib.sha256(data).hexdigest() != hashes[name]:
                     raise ValueError('compiler input hash mismatch')
