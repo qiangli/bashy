@@ -3,7 +3,7 @@ id: 20aa3b1da3e9
 kind: bug
 title: Resolve Prima compiled-input license audit findings without weakening policy
 seq: 1915
-status: assigned
+status: done
 priority: p0
 created: 2026-10-13T15:35:52.555099Z
 weave: 93
@@ -11,6 +11,8 @@ assignee: codex-gpt6-astra
 sprint: 436
 sprint_id: 20ad6f7b-d3d3-5ebf-973c-0bbb999db96f
 sprint_title: 'Sphere regression recovery: p2p sharding + local inference back on, bashy-built engines'
+closed: 2026-10-13T16:20:17.166293Z
+closed_by: s436-codex-manager
 ---
 
 Hosted candidate 0.1.1-2 run 38420930156: all four native/no-egress lanes PASS; audit failed ScanCode with 604 NNG files `mit AND cpal-1.0`, 4 first-party common/zmq_nng_shim.hpp `mit AND mpl-2.0` (comment says instead of MPL), 4 NNG src/supplemental/sha1/sha1.c `fpl` (real Freeware Public License). Pinned NNG v1.9.0 @29aff2 has canonical MIT headers/Licence; source clone /tmp/s436-nng-v1.9.0. Resolve safely: disable unneeded NNG WebSocket/WSS so SHA1/FPL is absent from compiled-input closure, preserve TCP ring. For CPAL/MPL scanner false positives, inspect exact evidence and implement narrow reviewed-file logic tied to pinned NNG MIT license/hash and source-text absence of those terms, or another fail-closed precise method; do not globally allow CPAL/MPL/FPL. Add focused positive/negative tests, generated fork parity, retain full four-platform compiler-input audit, OSV/grype/SBOM/no-egress. Commit worker story and code with trailers; no push, no Dragon native build/container/full suite. Manager merges then immutable -3 hosted run.
