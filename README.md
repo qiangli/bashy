@@ -75,7 +75,7 @@ commands, run deterministically.
   enums, deep `readonly`, contracts and `agentic`. Off with `--no-bashsharp`
   or `--posix`, where none of it exists.
 - **The islands bring their own toolchains.** A fence never resolves its
-  tool from your `PATH`: bashy provisions what it uses — Go 1.27.1, `zig cc`
+  tool from your `PATH`: bashy provisions what it uses — Go 1.27.2, `zig cc`
   for C/C++, a uv-managed CPython, Node + `typescript`, a rustup toolchain —
   downloaded from the vendor once, checksum-verified against a pin in this
   repo, cached — so the same program means the same thing on every machine.
@@ -279,7 +279,7 @@ Bash's own test suite.
 
 ## Development
 
-Builds require `go 1.27` and select `toolchain go1.27.1`, as recorded in
+Builds require `go 1.27` and select `toolchain go1.27.2`, as recorded in
 [`go.mod`](go.mod). Product versions come from the release tag; use
 `bashy --version` to identify the installed build.
 

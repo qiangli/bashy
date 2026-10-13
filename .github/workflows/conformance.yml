@@ -50,7 +50,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
-          go-version: 1.27.1
+          go-version: 1.27.2
       # The bash-5.3 tests/ tree is a gitignored symlink locally. Fetch the exact
       # upstream source the engine targets — the bash-5.3 RELEASE, matching the
       # local external/bash-5.3 symlink — pinned by sha256, and symlink it.
@@ -131,7 +131,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
-          go-version: 1.27.1
+          go-version: 1.27.2
       - name: Provision all seven corpus locales through Ubuntu glibc
         shell: bash
         run: ./scripts/provision-windows-wsl-locales.sh
@@ -162,7 +162,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
-          go-version: 1.27.1
+          go-version: 1.27.2
       - name: Measure targeted Windows platform behavior
         if: inputs.probe_mode != 'pipe'
         shell: bash
