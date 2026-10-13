@@ -1,0 +1,12 @@
+{
+  "schema": "bashy-prima-dependencies-v1",
+  "source": {"repository": "qiangli/prima.cpp", "tag": "bashy-prima-0.1.0", "commit": "f4ea9845dc91a18793921492e50ef23ec799e93e", "license": "MIT", "classification": "first-party", "decision": "qiangli S436 Story 2029, 2026-10-13"},
+  "linked": [
+    {"name": "prima.cpp/llama.cpp/ggml", "license": "MIT", "version": "f4ea9845dc91a18793921492e50ef23ec799e93e", "purl": "pkg:github/qiangli/prima.cpp@f4ea9845dc91a18793921492e50ef23ec799e93e", "scope": "vendored inference core and first-party ring modifications"},
+    {"name": "nng", "license": "MIT", "version": "1.9.0", "commit": "29aff2bacc9e2cfa6dcc52155d2816582617f918", "purl": "pkg:github/nanomsg/nng@v1.9.0", "scope": "static, TLS and HTTP disabled"},
+    {"name": "nlohmann/json", "license": "MIT", "version": "3.11.3", "purl": "pkg:github/nlohmann/json@v3.11.3", "scope": "common/json.hpp"}
+  ],
+  "excluded": {"ZeroMQ/cppzmq": "replaced by nng shim", "HiGHS": "USE_HIGHS never defined", "fio": "external_fio_impl replaced with conservative fixed bandwidth estimates; no subprocess", "libcurl": "LLAMA_CURL=OFF", "OpenMP": "GGML_OPENMP=OFF", "llamafile": "GGML_LLAMAFILE=OFF", "base64.hpp": "Unlicense, only used by unbuilt llava-cli", "CUDA/ROCm/SYCL/Vulkan/Kompute/RPC": "disabled; no submodules fetched"},
+  "system": {"linux": "libc, libm, libpthread, libdl, libstdc++, libgcc runtime; captured by ldd per architecture", "darwin": "libSystem, libc++, Foundation/Metal/MetalKit on arm64; captured by otool -L"},
+  "audit_limit": "C/C++ scanners cannot prove absence of vulnerabilities in a fork or recover vendored upstream ancestry. License scan covers verified compiler dependency files from all four target builds plus Metal source; SBOM includes file hashes. Grype and OSV reports are time-specific database evidence, not a claim of complete vulnerability knowledge."
+}

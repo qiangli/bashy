@@ -1,0 +1,9 @@
+@@INCLUDE setup@@
+      - name: download compiler input evidence from all four native builds
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: prima-*
+          path: native-inputs
+          merge-multiple: true
+      - name: dependency license and vulnerability audit with SBOM
+        run: fork/bashy-build/audit.sh src
