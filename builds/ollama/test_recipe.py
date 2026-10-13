@@ -18,7 +18,8 @@ HEADERS = ["cmd/runner/main.go", "llama/llama.cpp/vendor/nlohmann/json.hpp",
            "llama/llama.cpp/vendor/nlohmann/json_fwd.hpp",
            "llama/llama.cpp/vendor/miniaudio/miniaudio.h",
            "llama/llama.cpp/vendor/stb/stb_image.h",
-           "ml/backend/ggml/ggml/src/ggml-metal/metal.go"]
+           "ml/backend/ggml/ggml/src/ggml-metal/metal.go", "llama/llama.cpp/native.c",
+           "llama/llama.cpp/native.cpp"]
 
 
 def run(*args, ok=True, **kwargs):
@@ -138,8 +139,8 @@ if args[0] == 'env':
  print({'GOHOSTOS':os.environ['TEST_HOST'].split('/')[0], 'GOHOSTARCH':os.environ['TEST_HOST'].split('/')[1], 'GOVERSION':'go1.27.2'}[args[1]])
 elif args[0] == 'build':
  assert args[1:3] == ['-mod=readonly','-trimpath'] and args[-1] == './cmd/runner'
- dep = pathlib.Path(os.environ['BASHY_COMPILER_CAPTURE_DIR']) / 'fake.d'
- subprocess.run([os.environ['CC'], '-MF', str(dep), str(pathlib.Path.cwd() / 'cmd/runner/main.go')], check=True)
+ subprocess.run([os.environ['CC'], '-c', str(pathlib.Path.cwd() / 'llama/llama.cpp/native.c')], check=True)
+ subprocess.run([os.environ['CXX'], '-c', str(pathlib.Path.cwd() / 'llama/llama.cpp/native.cpp')], check=True)
  pathlib.Path(args[args.index('-o')+1]).write_bytes(b'FAKE compiler bytes: never release')
 elif args[0] == 'generate':
  assert os.environ['TEST_HOST'] == 'darwin/arm64'
@@ -154,8 +155,10 @@ else: raise RuntimeError(args)
         fake_cc.write_text('''#!/usr/bin/env python3
 import pathlib, sys
 args=sys.argv[1:]
+assert '-MMD' in args and '-MF' in args
 dep=pathlib.Path(args[args.index('-MF')+1])
-dep.write_text('object: ' + args[-1] + '\\n')
+source=next(x for x in args if x.endswith(('.c', '.cpp')))
+dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama.cpp/vendor/nlohmann/json.hpp') + '\\n')
 ''')
         fake_cc.chmod(0o755)
         for name in ("gcc", "g++", "clang", "clang++"):
@@ -167,6 +170,11 @@ dep.write_text('object: ' + args[-1] + '\\n')
                 env["TEST_HOST"] = target.replace("-", "/")
                 out = self.root / target
                 run("bash", str(self.helpers / "build-runner.sh"), str(src), str(out), asset, env=env)
+                captured = json.loads((out / (asset + ".compiler-inputs.json")).read_text())
+                self.assertIn("llama/llama.cpp/native.c", captured["files"])
+                self.assertIn("llama/llama.cpp/vendor/nlohmann/json.hpp", captured["files"])
+                self.assertIn("llama/llama.cpp/native.cpp", captured["files"])
+                self.assertEqual(captured["dependency_files"], 2)
                 data = json.loads((out / (asset + ".json")).read_text())
                 raw = (out / data["executable"]).read_bytes()
                 gz = (out / data["gzip"]).read_bytes()
@@ -185,6 +193,24 @@ dep.write_text('object: ' + args[-1] + '\\n')
         self.assertIn("native builder required", p.stderr)
         run("bash", str(self.helpers / "build-runner.sh"), str(src), str(self.root / "bad"),
             "runner-windows-arm64", env=env, ok=False)
+    def test_capture_is_unique_under_parallel_compiles_and_keeps_compiler_argv(self):
+        capture = self.root / "capture"
+        compiler = self.root / "adversarial-cc"
+        compiler.write_text("#!/usr/bin/env python3\nimport pathlib, sys, time\na=sys.argv[1:]\nassert a.count('-c') == 1\nsrc=next(x for x in a if x.endswith('.c'))\np=pathlib.Path(a[a.index('-MF')+1])\ntime.sleep(.03)\np.write_text('obj: ' + src + '\\n')\n")
+        compiler.chmod(0o755)
+        env = dict(os.environ, BASHY_REAL_CC=str(compiler), BASHY_COMPILER_CAPTURE_DIR=str(capture))
+        source = self.root / "one.c"
+        source.write_text("int x;\n")
+        command = [str(self.helpers / "compiler-capture-cc"), "-c", "-DKEEP=1", str(source)]
+        procs = [subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(12)]
+        statuses = [p.communicate() + (p.returncode,) for p in procs]
+        self.assertEqual([row[2] for row in statuses], [0] * len(procs), str(statuses))
+        rows = [json.loads(line) for line in (capture / "invocations.jsonl").read_text().splitlines()]
+        depfiles = list((capture / "depfiles").glob("*.d"))
+        self.assertEqual(len(rows), 12)
+        self.assertEqual(len({row["depfile"] for row in rows}), 12)
+        self.assertEqual(len(depfiles), 12)
+        self.assertTrue(all(row["captured"] and "-DKEEP=1" in row["argv"] for row in rows))
 
 
 if __name__ == "__main__":

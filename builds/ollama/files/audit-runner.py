@@ -97,20 +97,59 @@ def compiler_inputs(capture, source, generated, output):
     capture, source = Path(capture), Path(source).resolve()
     log = capture / "invocations.jsonl"
     if not log.is_file(): fail("cgo compiler invocation log is missing")
-    invocations = [json.loads(line) for line in log.read_text().splitlines() if line]
+    try:
+        invocations = [json.loads(line) for line in log.read_text().splitlines() if line]
+    except (json.JSONDecodeError, OSError) as exc:
+        fail(f"malformed compiler invocation log: {exc}")
+    captured = [row for row in invocations if row.get("captured") is True]
     depfiles = sorted((capture / "depfiles").glob("*.d"))
+    if len(captured) != len(depfiles):
+        fail(f"captured cgo compile/dependency-file count differs: {len(captured)} vs {len(depfiles)}")
     if not invocations or not depfiles: fail("cgo compiler invocation or dependency files are missing")
-    paths = set()
+    paths, system_headers = set(), set()
+    if sys_platform() == "darwin":
+        system_roots = ("/usr/include/", "/System/Library/Frameworks/",
+                        "/Library/Developer/CommandLineTools/SDKs/",
+                        "/Library/Developer/CommandLineTools/usr/include/",
+                        "/Library/Developer/CommandLineTools/usr/lib/clang/",
+                        "/Applications/Xcode.app/Contents/Developer/Platforms/",
+                        "/Applications/Xcode.app/Contents/Developer/Toolchains/")
+    elif sys_platform() == "linux":
+        system_roots = ("/usr/include/", "/usr/lib/gcc/", "/usr/lib/clang/", "/usr/local/lib/clang/")
+    else:
+        system_roots = ()
     for dep in depfiles:
-        raw = dep.read_text(errors="strict").replace("\\\n", " ")
-        # Dependency targets can contain escaped spaces; paths with spaces are rejected below.
-        if ":" not in raw: fail(f"malformed compiler dependency file: {dep.name}")
-        for name in raw.split(":", 1)[1].split():
+        try:
+            raw = dep.read_text(errors="strict").replace("\\\r\n", " ").replace("\\\n", " ")
+        except (OSError, UnicodeError) as exc:
+            fail(f"cannot read compiler dependency file {dep.name}: {exc}")
+        match = re.search(r"(?<!\\):\s", raw)
+        if not match: fail(f"malformed compiler dependency file: {dep.name}")
+        body = raw[match.end():]
+        names, token, escaped = [], [], False
+        for char in body:
+            if escaped:
+                token.append(char); escaped = False
+            elif char == "\\": escaped = True
+            elif char.isspace():
+                if token: names.append("".join(token)); token = []
+            else: token.append(char)
+        if escaped: token.append("\\")
+        if token: names.append("".join(token))
+        for name in names:
             p = Path(name)
             if not p.is_absolute(): p = source / p
-            try: rel = p.resolve().relative_to(source).as_posix()
-            except ValueError: continue  # SDK/toolchain headers are platform-provided.
-            if p.is_file(): paths.add(rel)
+            resolved = p.resolve()
+            if not resolved.is_file(): fail(f"compiler dependency is missing: {name}")
+            try:
+                rel = resolved.relative_to(source).as_posix()
+                paths.add(rel)
+            except ValueError:
+                external = str(resolved)
+                if external.startswith(system_roots):
+                    system_headers.add(external)
+                else:
+                    fail(f"unreviewed external native compiler dependency: {external}")
     # Metal source is generated after go generate and may not appear in a C depfile.
     metal_root = Path(generated)
     for p in metal_root.rglob("*"):
@@ -120,8 +159,14 @@ def compiler_inputs(capture, source, generated, output):
     if not paths: fail("no repository-owned C/C++ compiler dependencies were captured")
     files = {p: hashlib.sha256((source / p).read_bytes()).hexdigest() for p in sorted(paths)}
     data = {"schema": "bashy-runner-compiler-inputs-v1", "files": files,
-            "invocations": len(invocations), "dependency_files": len(depfiles)}
+            "invocations": len(invocations), "dependency_files": len(depfiles),
+            "system_headers": sorted(system_headers)}
     Path(output).write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+
+
+def sys_platform():
+    import sys
+    return sys.platform
 
 
 def review_native_licenses(out, review_path, output):
