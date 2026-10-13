@@ -39,7 +39,14 @@ The root MIT license SHA-256 is
 `0ed0eea0d0f31b7f07774a7cac64f9fd20351faf51fab447e9444734448d0452`.
 
 The CMake overlay supplies the nng, profiler and network-utils wiring missing
-from the source CMake target. nng v1.9.0 is fetched as source and checked against
+from the source CMake target. On Windows only, it also downgrades the
+clang-default-error classes (`-Wint-conversion`,
+`-Wincompatible-pointer-types`, `-Wimplicit-function-declaration`) to warnings
+for the nng target: run 38468420048 failed at 45% because the pinned
+`win_tcpconn.c:263-264` passes SOCKET to `CancelIoEx(HANDLE, ...)`, and the
+sibling classes join the same guarded block preemptively so a latent
+Windows-only branch cannot fail a later run one error at a time. Pinned
+source bytes are unchanged. nng v1.9.0 is fetched as source and checked against
 `29aff2bacc9e2cfa6dcc52155d2816582617f918` and its license blob. nng links
 statically with TLS, HTTP, WS and WSS off; TCP stays enabled. `prepare.py` removes fio execution entirely,
 using fixed 0.1 GB/s disk estimates. HiGHS is excluded: this product uses the

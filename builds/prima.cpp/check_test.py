@@ -981,6 +981,54 @@ class WindowsPinnedBuildTools(unittest.TestCase):
         for package in module.PACKAGES:
             self.assertIn(package, workflow)
 
+class WindowsNngWarningDowngrade(unittest.TestCase):
+    # CI run 38468420048 (tag 0.1.2-6): the Windows leg fails at 45% in
+    # the pinned nng dep, win_tcpconn.c:263-264 passing SOCKET to
+    # CancelIoEx's HANDLE parameter, which newer clang promotes from
+    # -Wint-conversion to an error by default. The reviewed overlay
+    # downgrades just the clang-default-error classes to warnings, for the
+    # nng target on Windows only; pinned source bytes stay untouched.
+    CLASSES = ['int-conversion', 'incompatible-pointer-types',
+               'implicit-function-declaration']
+
+    def _overlay(self):
+        return (ROOT/'files/overlay.cmake').read_text()
+
+    def test_downgrade_is_windows_only_and_nng_only(self):
+        overlay = self._overlay()
+        self.assertIn('if(WIN32)', overlay)
+        guarded = overlay[overlay.index('if(WIN32)'):]
+        self.assertIn('target_compile_options(nng PRIVATE', guarded)
+        for cls in self.CLASSES:
+            self.assertIn(f'-Wno-error={cls}', guarded)
+        # The nng target exists by then: the downgrade follows its
+        # add_subdirectory, and every -Wno-error flag stays inside the
+        # WIN32 guard (the rationale comment above the guard may name the
+        # classes, but no flag may precede it).
+        self.assertLess(overlay.index('add_subdirectory'),
+                        overlay.index('if(WIN32)'))
+        head = overlay[:overlay.index('if(WIN32)')]
+        self.assertNotIn('-Wno-error=', head)
+
+    def test_downgrade_stays_narrow(self):
+        overlay = self._overlay()
+        # No global downgrade, no silencing: warnings stay visible, and no
+        # other target (llama, common, prima-ring-test) is touched.
+        self.assertNotIn('add_compile_options', overlay)
+        self.assertNotIn('-Wno-int-conversion', overlay)
+        self.assertNotIn('-w', overlay.replace('-Wno-error', ''))
+        self.assertEqual(overlay.count('target_compile_options(nng'), 1)
+        self.assertNotIn('target_compile_options(llama', overlay)
+        self.assertNotIn('target_compile_options(common', overlay)
+
+    def test_pins_still_assert_exact_source_bytes(self):
+        # The flag change must not loosen the source pins: prepare.py still
+        # asserts the reviewed source/nng SHAs and license blob.
+        prepare = (ROOT/'files/prepare.py').read_text()
+        self.assertIn("SOURCE = 'a0d55d961c8fc1b694de63bd0b2aebdb8365cf2b'", prepare)
+        self.assertIn("NNG = '29aff2bacc9e2cfa6dcc52155d2816582617f918'", prepare)
+        self.assertIn('nng license changed', prepare)
+
 class CollectInputsDepfiles(unittest.TestCase):
     def _module(self):
         spec = importlib.util.spec_from_file_location(
