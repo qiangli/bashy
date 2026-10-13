@@ -3,7 +3,7 @@ id: b4d41189948b
 kind: feature
 title: 'Ollama verified build: builds/ollama (Go+cgo, 4 platforms, signed) from latest stable upstream tag'
 seq: 1898
-status: assigned
+status: done
 priority: p1
 labels:
     - supply-chain
@@ -13,6 +13,8 @@ assignee: codex-gpt5.6-sol
 sprint: 434
 sprint_id: f0fadef8-daec-5fc2-9c78-40979f01a0a7
 sprint_title: bashy verified builds for binmgr tools and services (fork, build, sign, distribute)
+closed: 2026-10-13T04:05:43.096693Z
+closed_by: s434-manager
 ---
 
 Conductor decision (operator delegated) for 3054b43b: option (c) then (a). yoke 6f38e3d4 (removes ollama download + PATH fallback) stays UNMERGED until a bashy-signed ollama build is green and binmgr installs it; then both land in the same yoke pin.
