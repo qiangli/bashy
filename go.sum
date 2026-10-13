@@ -963,6 +963,8 @@ github.com/qiangli/yoke v0.0.0-20261012204002-613e424a5db0 h1:ReLPFR//HgZpbrgEjT
 github.com/qiangli/yoke v0.0.0-20261012204002-613e424a5db0/go.mod h1:+F/sAepZnUVd1Q3mtJaEqDEyqzzPsktOHVb/Kw7CgdM=
 github.com/qiangli/yoke v0.0.0-20261012224728-23a0f3315e63 h1:sj1urPKumV/KnjNa+yYvV2DLsK7L+4JGzbZIjInTRwM=
 github.com/qiangli/yoke v0.0.0-20261012224728-23a0f3315e63/go.mod h1:+F/sAepZnUVd1Q3mtJaEqDEyqzzPsktOHVb/Kw7CgdM=
+github.com/qiangli/yoke v0.0.0-20261013031258-988c110b1c14 h1:f7WuHHofxUN2EMYAPr0e5wLtZWb7uV8xpjuWNuRg40E=
+github.com/qiangli/yoke v0.0.0-20261013031258-988c110b1c14/go.mod h1:+F/sAepZnUVd1Q3mtJaEqDEyqzzPsktOHVb/Kw7CgdM=
 github.com/qiangli/yoke/external/otel v0.0.0-20261011233035-9bf57932e30a h1:hQgNKmysLIqhwaPIjY6AOXknWveFZ5imPJN2wBAEk/I=
 github.com/qiangli/yoke/external/otel v0.0.0-20261011233035-9bf57932e30a/go.mod h1:89r2PcLF/qnPCk89v66vOqevuMw7UFc4AZCRoWLzopU=
 github.com/qiangli/yoke/external/otel v0.0.0-20261012101314-f815c718ce99 h1:KpDZceyxxMlG5B/0jK/q9ZG9BdYMU9TLjfGbD7k4S9I=
@@ -975,6 +977,8 @@ github.com/qiangli/yoke/external/otel v0.0.0-20261012201704-ceaeba133437 h1:HqKl
 github.com/qiangli/yoke/external/otel v0.0.0-20261012201704-ceaeba133437/go.mod h1:b1acxoKfKOCqPYcpPrHD9LL8T5Ggoxuu68xAcs1MN3E=
 github.com/qiangli/yoke/external/otel v0.0.0-20261012224728-23a0f3315e63 h1:nkshWvMNzzUTTw7B31c11gnSgakP/dmm2Y2gOpGAQV4=
 github.com/qiangli/yoke/external/otel v0.0.0-20261012224728-23a0f3315e63/go.mod h1:EAnthRrVQWqzxbgLoJQ5UVq9tnOBKch+JWy+706sInM=
+github.com/qiangli/yoke/external/otel v0.0.0-20261013031258-988c110b1c14 h1:ES5K9ISe60Tq5j74MTLdPJ5l36rDmUHNOGwxWcr2B4Y=
+github.com/qiangli/yoke/external/otel v0.0.0-20261013031258-988c110b1c14/go.mod h1:EAnthRrVQWqzxbgLoJQ5UVq9tnOBKch+JWy+706sInM=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261011233035-9bf57932e30a h1:tF3gMN3HYvvt//eoFr/HOuh/G71mqFG+sXZVV3TuQ5Q=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261011233035-9bf57932e30a/go.mod h1:WhqDD/Wr3vFiZpnJtWK3Yndh6GsESeqmjbXACWs/MVE=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261012101314-f815c718ce99 h1:h6HRq9b//ORB3PHsVdlpfN5AVCYpXl1dWBJiY9QxxY0=
