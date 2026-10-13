@@ -36,6 +36,139 @@ class Audit(unittest.TestCase):
             finally:
                 os.chdir(old)
 
+class LicenseReview(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.tree = Path(self.temp.name)
+        self.review = runpy.run_path(str(ROOT/'files/license-review.py'))
+        self.inventory = json.loads((ROOT/'files/dependencies.json').read_text())
+        self.inputs, self.scan = [], {'files': []}
+        for asset in merge.ASSETS:
+            for p in (ROOT/'testdata/license-review').rglob('*'):
+                if not p.is_file(): continue
+                name = str(p.relative_to(ROOT/'testdata/license-review'))
+                expression = ('mit AND cpal-1.0' if name.endswith('tcp.h') else
+                              'mit AND mpl-2.0' if name.endswith('shim.hpp') else 'mit')
+                self.add(f'{asset}/{name}', p.read_bytes(), expression)
+
+    def add(self, path, body, expression):
+        p = self.tree/path
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(body)
+        self.inputs.append({'path': path, 'sha256': hashlib.sha256(body).hexdigest()})
+        self.scan['files'].append({'path': 'audit-inputs/'+path, 'type': 'file',
+                                  'license_detections': [{'license_expression': expression}]})
+
+    def result(self):
+        return self.review['audit_licenses'](self.scan, self.inputs, self.tree, self.inventory)
+
+    def change_bytes(self, suffix, body):
+        for row in self.inputs:
+            if row['path'].endswith(suffix):
+                (self.tree/row['path']).write_bytes(body)
+                row['sha256'] = hashlib.sha256(body).hexdigest()
+
+    def test_exact_reviewed_files_on_all_platforms(self):
+        errors, corrections = self.result()
+        self.assertEqual(errors, [])
+        self.assertEqual(len(corrections), 8)
+        self.assertEqual({r['reviewed'] for r in corrections}, {'mit'})
+        self.assertEqual(self.scan['files'][0]['license_detections'][0]['license_expression'], 'mit')
+
+    def test_changed_source_bytes_even_with_updated_inventory_fail(self):
+        for suffix, body in [('tcp.h', b'// MIT License CPAL-1.0'),
+                             ('shim.hpp', b'// MPL-2.0'),
+                             ('tcp.h', b'// MIT License changed')]:
+            with self.subTest(suffix=suffix, body=body):
+                self.change_bytes(suffix, body)
+                self.assertTrue(self.result()[0])
+
+    def test_changed_root_license_fails(self):
+        self.change_bytes('LICENSE.txt', b'MIT')
+        self.change_bytes('/LICENSE', b'MIT')
+        self.assertEqual(len(self.result()[0]), 8)
+
+    def test_changed_pins_fail(self):
+        self.inventory['linked'][1]['commit'] = '0'*40
+        self.assertEqual(len(self.result()[0]), 8)
+        self.inventory = json.loads((ROOT/'files/dependencies.json').read_text())
+        self.inventory['source']['commit'] = '0'*40
+        self.assertEqual(len(self.result()[0]), 8)
+
+    def test_other_paths_and_nonpermissive_expressions_fail(self):
+        for expr in ['cpal-1.0', 'mpl-2.0', 'fpl', 'mit AND cpal-1.0 AND gpl-2.0',
+                     'mit OR cpal-1.0', '']:
+            self.scan['files'][0]['license_detections'][0]['license_expression'] = expr
+            self.assertTrue(self.result()[0], expr)
+        self.add('prima-linux-amd64/other/tcp.h',
+                 (ROOT/'testdata/license-review/deps/nng/include/nng/compat/nanomsg/tcp.h').read_bytes(),
+                 'mit AND cpal-1.0')
+        self.assertTrue(self.result()[0])
+
+    def test_sha1_closure_fails_even_if_scanner_reports_mit(self):
+        self.add('prima-linux-amd64/deps/nng/src/supplemental/sha1/sha1.c', b'fixture', 'mit')
+        self.assertIn('excluded SHA1', self.result()[0][0])
+
+    def test_errors_missing_platform_duplicates_and_hash_mismatch_fail(self):
+        self.scan['files'][0]['scan_errors'] = ['scanner failed']
+        self.assertTrue(self.result()[0])
+        self.scan['files'][0].pop('scan_errors')
+        (self.tree/self.inputs[0]['path']).write_bytes(b'tampered')
+        with self.assertRaisesRegex(ValueError, 'hash mismatch'): self.result()
+        self.inputs = self.inputs[4:]
+        self.scan['files'] = self.scan['files'][4:]
+        with self.assertRaisesRegex(ValueError, 'all four platforms'): self.result()
+        self.inputs.append(self.inputs[0])
+        with self.assertRaisesRegex(ValueError, 'every compiler input'): self.result()
+
+    def test_audit_preserves_raw_findings_sbom_and_osv_gate(self):
+        import contextlib
+        import shutil
+        for vulnerabilities in [False, True]:
+            with self.subTest(vulnerabilities=vulnerabilities):
+                out = self.tree/'out'
+                out.mkdir(exist_ok=True)
+                tree = self.tree/'audit-inputs'
+                tree.mkdir(exist_ok=True)
+                for asset in merge.ASSETS:
+                    shutil.copytree(self.tree/asset, tree/asset, dirs_exist_ok=True)
+                (out/'prima-inputs.json').write_text(json.dumps(self.inputs))
+                (out/'prima-licenses.json').write_text(json.dumps(self.scan))
+                response = {'results': [{} for _ in range(4)]}
+                if vulnerabilities: response['results'][0] = {'vulns': [{'id': 'fixture'}]}
+                old = Path.cwd()
+                try:
+                    os.chdir(self.tree)
+                    with patch('urllib.request.urlopen', return_value=io.BytesIO(json.dumps(response).encode())) as request:
+                        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                            if vulnerabilities:
+                                with self.assertRaises(SystemExit) as caught:
+                                    runpy.run_path(str(ROOT/'files/audit.py'))
+                                self.assertEqual(caught.exception.code, 1)
+                            else:
+                                runpy.run_path(str(ROOT/'files/audit.py'))
+                        self.assertEqual(request.call_count, 1)
+                finally:
+                    os.chdir(old)
+                report = json.loads((out/'prima-licenses.json').read_text())
+                self.assertEqual(report['files'], self.scan['files'])
+                self.assertEqual(len(report['bashy_reviewed_findings']), 8)
+                self.assertTrue((out/'prima-sbom.cdx.json').is_file())
+                self.assertTrue((out/'prima-osv.json').is_file())
+
+    def test_overlay_disables_websockets_preserves_tcp(self):
+        overlay = (ROOT/'files/overlay.cmake').read_text()
+        for flag, value in [('NNG_TRANSPORT_WS', 'OFF'), ('NNG_TRANSPORT_WSS', 'OFF'),
+                            ('NNG_SUPP_SHA1', 'OFF'), ('NNG_TRANSPORT_TCP', 'ON')]:
+            setting = f'set({flag} {value} CACHE BOOL "" FORCE)'
+            self.assertIn(setting, overlay)
+            self.assertLess(overlay.index(setting), overlay.index('add_subdirectory'))
+
+    def test_generated_review_parity(self):
+        for name in ['audit.py', 'license-review.py', 'license-review.json', 'overlay.cmake']:
+            self.assertEqual((ROOT/'files'/name).read_bytes(), (ROOT/'fork/bashy-build'/name).read_bytes())
+
 class CompilerInputs(unittest.TestCase):
     def test_requires_all_platforms_and_exact_contents(self):
         with tempfile.TemporaryDirectory() as d:

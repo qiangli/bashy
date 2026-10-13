@@ -27,7 +27,7 @@ The root MIT license SHA-256 is
 The CMake overlay supplies the nng, profiler and network-utils wiring missing
 from the source CMake target. nng v1.9.0 is fetched as source and checked against
 `29aff2bacc9e2cfa6dcc52155d2816582617f918` and its license blob. nng links
-statically with TLS and HTTP off. `prepare.py` removes fio execution entirely,
+statically with TLS, HTTP, WS and WSS off; TCP stays enabled. `prepare.py` removes fio execution entirely,
 using fixed 0.1 GB/s disk estimates. HiGHS is excluded: this product uses the
 source's non-HiGHS scheduling fallback or an explicit layer split, not the
 optional HiGHS optimizer. Model downloads, RPC, OpenMP, BLAS and non-Metal GPU
@@ -162,3 +162,48 @@ egress artifact and step log; the full trace is still used for the egress
 verdict when the exercise succeeds. Trace overflow fails closed. The generated
 fork is reproduced from these files. Focused fixture tests require no native
 build, model execution or container.
+
+## Candidate 0.1.1-2 license review (Story 1915)
+
+Run `38420930156` passed all four native/no-egress lanes, then failed its
+ScanCode gate: 604 `mit AND cpal-1.0` findings in NNG (152 distinct paths),
+four `mit AND mpl-2.0` shim findings, and four `fpl` SHA1 findings.
+The failure log and all four downloaded input archives were inspected.
+
+`files/license-review.json` records exact path/SHA-256 pairs from NNG commit
+`29aff2bacc9e2cfa6dcc52155d2816582617f918`. Every listed file has an MIT
+header and no CPAL/Common Public Attribution, MPL/Mozilla or FPL/Freeware
+Public terms. These hashes were compared against all hosted compiler inputs.
+Corrections require that exact NNG pin, the reviewed Prima source pin, the
+canonical NNG MIT license SHA-256 in the same platform archive, unchanged
+file bytes and the exact expression `mit AND cpal-1.0`. New paths, edits,
+pins or additional license findings require fresh review.
+
+The first-party `common/zmq_nng_shim.hpp` at source commit `542d0193` has
+SHA-256 `b66c7bdf7824065cc35911512228b91f04137c064d7d713fa349242446613a56`.
+Its single MPL reference says “MIT-licensed nng (libnng) instead of MPL-2.0
+ZeroMQ.” The exact file was read from that commit and compared to the
+hosted archives. Only this path, hash, expression and negated reference,
+with the pinned first-party MIT root license, receive an MIT correction.
+All raw scanner findings remain in `prima-licenses.json`; the additional
+`bashy_reviewed_findings` field records each correction, hash and reason.
+No new release asset or consumer allowlist entry is needed.
+
+SHA1's FPL notice is real and receives no correction. NNG's pinned
+`cmake/NNGOptions.cmake` enables SHA1 whenever WS or WSS is enabled, overriding
+the effect of disabling HTTP alone. The overlay forces WS/WSS/SHA1 off and
+TCP on before adding NNG. The audit also rejects any compiler input under
+`deps/nng/src/supplemental/sha1/`, even with a permissive scanner result.
+There is no global CPAL, MPL or FPL allowance.
+
+Local validation: 48 Python tests, 11 shared egress cases, 19 toolchain cases,
+producer regeneration/structural checks, and the explicit worker gate pass.
+A replay of the hosted failure expressions against all 880 hash-verified
+archived inputs produces 608 corrections and 12 SHA1 rejections (eight
+source/header closure entries plus four FPL findings). This replay is not a
+new ScanCode scan. A stale local 0.1.0 shim was rejected during development;
+the committed fixture and rule use the verified 0.1.1 bytes. Native compiled
+closure exclusion, ScanCode, OSV, Grype, SBOM and four-platform no-egress must
+all pass again on the manager's immutable `-3` candidate before signing.
+No native build, container, full suite or push was performed here. CMake is
+absent from the local PATH, so no optional CMake script-mode probe ran.
