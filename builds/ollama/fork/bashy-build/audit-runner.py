@@ -42,6 +42,25 @@ def go_packages(path):
     return packages
 
 
+def needed_libraries(output, stem):
+    lines = output.splitlines()
+    openings = [i for i, line in enumerate(lines) if line.strip() == "NeededLibraries ["]
+    if len(openings) != 1:
+        fail(f"{stem}: linked-library table is absent or ambiguous")
+    start = openings[0] + 1
+    try:
+        end = next(i for i in range(start, len(lines)) if lines[i].strip() == "]")
+    except StopIteration:
+        fail(f"{stem}: linked-library table is unterminated")
+    libs = []
+    for line in lines[start:end]:
+        value = line.strip()
+        if not value or value == line:
+            fail(f"{stem}: malformed linked-library entry")
+        libs.append(value)
+    return libs
+
+
 def inventory(out, report):
     rows = []
     for target in TARGETS:
@@ -72,14 +91,7 @@ def inventory(out, report):
         proc = subprocess.run(["llvm-readobj", "--needed-libs", str(binary)], text=True, capture_output=True)
         if proc.returncode:
             fail(f"cannot read native linked-library table for {stem}: {proc.stderr.strip()}")
-        # llvm-readobj emits one `  <library>` line under NeededLibraries.
-        libs = []
-        for line in proc.stdout.splitlines():
-            value = line.strip()
-            if value and value not in {"NeededLibraries [", "]"} and not value.endswith(":"):
-                libs.append(value)
-        if "NeededLibraries [" not in proc.stdout:
-            fail(f"{stem}: linked-library table is absent (cannot claim native inventory)")
+        libs = needed_libraries(proc.stdout, stem)
         family = target.split("-")[0]
         allowed = {name.lower() for name in SYSTEM_LIBS[family]} if family == "windows" else SYSTEM_LIBS[family]
         unknown = sorted(name for name in set(libs) if (name.lower() if family == "windows" else name) not in allowed)

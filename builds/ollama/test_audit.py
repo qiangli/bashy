@@ -2,15 +2,31 @@
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
+import importlib.util
+
+sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "builds/ollama/files/audit-runner.py"
 TARGETS = ("linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64", "windows-amd64")
+spec = importlib.util.spec_from_file_location("audit_runner", SCRIPT)
+audit_runner = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(audit_runner)
 
 
 class AuditPolicy(unittest.TestCase):
+    def test_linked_library_parser_ignores_readobj_file_metadata(self):
+        report = "File: runner-linux-amd64\nFormat: elf64-x86-64\nArch: x86_64\nAddressSize: 64bit\nNeededLibraries [\n  libc.so.6\n  libm.so.6\n]\nLoadName: <Not found>\n"
+        self.assertEqual(audit_runner.needed_libraries(report, "runner-linux-amd64"),
+                         ["libc.so.6", "libm.so.6"])
+        for bad in [report.replace("NeededLibraries [", "Other ["),
+                    report.replace("  libc.so.6", "libc.so.6"),
+                    report.replace("\n]\n", "\n")]:
+            with self.subTest(report=bad), self.assertRaises(SystemExit):
+                audit_runner.needed_libraries(bad, "runner-linux-amd64")
     def run_audit(self, *args, ok=True, env=None):
         p = subprocess.run(["python3", str(SCRIPT), *map(str, args)], text=True, capture_output=True, env=env)
         if ok and p.returncode:
