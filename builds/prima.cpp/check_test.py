@@ -686,6 +686,186 @@ class WindowsTarget(unittest.TestCase):
         self.assertIn('prima-windows-amd64',merge.ASSETS)
         self.assertIn('prima-windows-amd64.exe',verify.ASSETS)
 
+class WindowsLoopbackPermit(unittest.TestCase):
+    # CI run 38470420904 (tag 0.1.2-7): the Windows leg compiled and linked
+    # but died at the no-egress gate with "WFP gate failure: control connect
+    # deadline". That line comes only from denied(): a nonblocking TCP control
+    # returned WSAEWOULDBLOCK and select() saw no ALE verdict inside 2s. The
+    # external control targets unroutable TEST-NET-1, which never answers, so
+    # a slow first verdict on a cold runner trips a short single-shot
+    # deadline; an unblocked loopback/IPv6 attempt would refuse fast instead.
+    # The guard now permits the loopback allowlist explicitly, tolerates a
+    # slow first verdict with retries, and dumps the bound table on every
+    # failure path — while a real outbound attempt still fails the gate.
+    ALLOWED = [5599, 5600, 5601, 5602, 5603, 5604, 5605,
+               19000, 19001, 19100, 19101]
+
+    def _guard(self):
+        return (ROOT/'files/windows-net-guard.c').read_text()
+
+    def _script(self):
+        return (ROOT/'files/no-egress-test.sh').read_text()
+
+    def _permit_ranges(self):
+        guard = self._guard()
+        body = re.search(r'allowed_ranges\[\]\[2\] = \{(.*?)\};', guard, re.S)[1]
+        return [(int(lo), int(hi)) for lo, hi in re.findall(r'\{(\d+),\s*(\d+)\}', body)]
+
+    def _exercise(self):
+        spec = importlib.util.spec_from_file_location(
+            'prima_exercise', ROOT/'files/exercise.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_permit_ranges_tile_exact_allowlist(self):
+        guard = self._guard()
+        ports = sorted(int(p) for p in re.search(
+            r'allowed_ports\[\] = \{([^}]+)\}', guard)[1].split(','))
+        self.assertEqual(ports, self.ALLOWED)
+        covered = set()
+        for lo, hi in self._permit_ranges():
+            self.assertLessEqual(lo, hi)
+            covered.update(range(lo, hi + 1))
+        self.assertEqual(covered, set(self.ALLOWED))
+        self.assertIn('_Static_assert', guard)
+
+    def test_permits_are_loopback_only(self):
+        guard = self._guard()
+        self.assertIn('FWP_ACTION_PERMIT', guard)
+        self.assertIn('"loopback allowlist permit"', guard)
+        # Exactly two IPv4-remote filter conditions pin 127.0.0.1: the
+        # permit's EQUAL and the deny's NOT_EQUAL. (The control sockets also
+        # dial loopback via htonl, which is not a filter condition.)
+        # No other destination is permitted.
+        self.assertEqual(guard.count('conditionValue.uint32 = 0x7f000001'), 2)
+        self.assertIn('FWP_MATCH_EQUAL', guard)
+        self.assertIn('BLOCK veto wins', guard)
+
+    def test_denies_still_cover_everything_else(self):
+        guard = self._guard()
+        self.assertIn('"IPv6 deny"', guard)
+        self.assertIn('FWP_MATCH_NOT_EQUAL', guard)
+        self.assertIn('"non-loopback deny"', guard)
+        self.assertIn('"outside-allowlist deny"', guard)
+        blocked = set()
+        body = guard[guard.index('blocked_ranges'):guard.index('};', guard.index('blocked_ranges'))]
+        for lo, hi in re.findall(r'\{(\d+),\s*(\d+)\}', body):
+            blocked.update(range(int(lo), int(hi) + 1))
+        self.assertEqual(blocked, set(range(65536)) - set(self.ALLOWED))
+
+    def test_controls_tolerate_cold_start(self):
+        guard = self._guard()
+        deadline = int(re.search(r'#define CONTROL_DEADLINE_SEC (\d+)', guard)[1])
+        self.assertGreaterEqual(deadline, 10)
+        attempts = int(re.search(r'#define CONTROL_ATTEMPTS (\d+)', guard)[1])
+        self.assertGreaterEqual(attempts, 2)
+        self.assertIn('attempt < CONTROL_ATTEMPTS', guard)
+        # The stable failure signature stays, now naming its endpoint.
+        self.assertIn('control connect deadline family=%d type=%d port=%u', guard)
+        self.assertIn('denied(AF_INET, SOCK_STREAM, 443, TRUE)', guard)
+        self.assertIn('DATAGRAM_DEADLINE_SEC', guard)
+
+    def test_gate_stays_strict(self):
+        script = self._script()
+        # A real outbound attempt still fails: the external control and its
+        # proof, the off-allowlist and IPv6 proofs, three PASS stages, the
+        # removal confirmation, and the post-marker denial sweep all stay.
+        for proof in ['WFP control denied family=2 type=1 port=443 WSAEACCES',
+                      'WFP control denied family=2 type=1 port=5606 WSAEACCES',
+                      'WFP control denied family=23 type=1 port=5599 WSAEACCES',
+                      'WFP UDP control delivered family=2 port=5599',
+                      'WFP UDP control denied family=2 port=5606',
+                      'WFP UDP control denied family=23 port=5599',
+                      'WFP configured loopback control allowed']:
+            self.assertIn(proof, script)
+        self.assertIn("grep -c '^PASS:'", script)
+        self.assertIn('exercise reaped; job closed; dynamic WFP policy removed', script)
+        self.assertIn("grep -Ei 'WSAEACCES|WFP gate failure|operation not permitted|EPERM'", script)
+
+    def test_failures_dump_bound_addresses(self):
+        guard = self._guard()
+        self.assertIn('#include <iphlpapi.h>', guard)
+        self.assertIn('static void log_bound_addresses(void)', guard)
+        self.assertGreaterEqual(guard.count('log_bound_addresses();'), 8)
+        self.assertIn('GetExtendedTcpTable', guard)
+        self.assertIn('WFP bound TCP6', guard)
+        # Diagnostics never fail the gate and never trip the post-marker
+        # denial sweep.
+        body = guard[guard.index('static void log_bound_addresses(void)'):]
+        body = body[:body.index('static void denied(')]
+        self.assertNotIn('checked(', body)
+        self.assertNotIn('exit(', body)
+        for token in ['WSAEACCES', 'WFP gate failure', 'EPERM']:
+            self.assertNotIn(token, body)
+        self.assertIn('-liphlpapi', self._script())
+
+    def test_exercise_snapshots_bounds_before_reap(self):
+        text = (ROOT/'files/exercise.py').read_text()
+        self.assertIn('def _log_bound_addresses():', text)
+        self.assertIn("os.name != 'nt'", text)
+        self.assertIn('if failure is not None:\n                _log_bound_addresses()', text)
+        body = text[text.index('def _log_bound_addresses():'):text.index('def run_stage(')]
+        for token in ['WSAEACCES', 'WFP gate failure', 'EPERM']:
+            self.assertNotIn(token, body)
+
+    def test_bound_snapshot_is_quiet_off_windows(self):
+        if os.name == 'nt':
+            self.skipTest('Windows runs the real netstat path')
+        import contextlib
+        module = self._exercise()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            module._log_bound_addresses()
+        self.assertEqual(out.getvalue(), '')
+
+    def test_bound_snapshot_filters_windows_listeners(self):
+        import contextlib
+        import types
+        module = self._exercise()
+        output = ('Active Connections\r\n'
+                  '  Proto  Local Address          Foreign Address        State           PID\r\n'
+                  '  TCP    127.0.0.1:19000        0.0.0.0:0              LISTENING       1234\r\n'
+                  '  TCP    [::1]:19001            [::]:0                 LISTENING       1234\r\n'
+                  '  TCP    10.0.0.4:443           93.184.216.34:443      ESTABLISHED     99\r\n')
+        with patch.object(module.shutil, 'which', return_value='netstat.exe'), \
+             patch.object(module.os, 'name', 'nt'), \
+             patch.object(module.subprocess, 'run',
+                          return_value=types.SimpleNamespace(stdout=output)):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                module._log_bound_addresses()
+        lines = out.getvalue().splitlines()
+        self.assertTrue(lines)
+        self.assertTrue(all(line.startswith('bound: ') for line in lines))
+        self.assertTrue(any('127.0.0.1:19000' in line for line in lines))
+        self.assertTrue(any('[::1]:19001' in line for line in lines))
+        self.assertFalse(any('ESTABLISHED' in line for line in lines))
+
+    def test_failed_stage_logs_bounds_and_still_fails(self):
+        import contextlib
+        import sys
+        module = self._exercise()
+        fail = [sys.executable, '-c', 'import sys; sys.exit(1)']
+        with patch.object(module, '_log_bound_addresses') as bound:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                with self.assertRaisesRegex(RuntimeError, 'child failed'):
+                    module.run_stage('fixture-bound', [('rank', fail)], 30)
+        self.assertEqual(bound.call_count, 1)
+
+    def test_passing_stage_stays_quiet(self):
+        import contextlib
+        import sys
+        module = self._exercise()
+        ok = [sys.executable, '-c', 'pass']
+        with patch.object(module, '_log_bound_addresses') as bound:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                module.run_stage('fixture-quiet', [('rank', ok)], 30)
+        self.assertEqual(bound.call_count, 0)
+        self.assertIn('PASS: fixture-quiet', out.getvalue())
+
 class WindowsCompilerProbe(unittest.TestCase):
     # The exact run 38462299969 failure: an MSVC-target clang must be
     # refused, never used for the MinGW static link.

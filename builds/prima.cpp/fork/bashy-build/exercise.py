@@ -2,6 +2,7 @@
 """Bounded inference gate; diagnostics never turn a failed rank into success."""
 import os
 import pathlib
+import shutil
 import signal
 import subprocess
 import sys
@@ -99,6 +100,31 @@ def _over_limit(peers, stats, lock):
         return [label for label, _, _, _ in peers if stats[label]['exceeded']]
 
 
+def _log_bound_addresses():
+    """Best-effort bound-socket snapshot for Windows gate diagnostics.
+
+    Runs BEFORE hung peers are reaped, so a stalled rank's listeners are
+    still visible, and names IPv4 loopback vs IPv6 binds for the next gate
+    failure. Windows only; a no-op elsewhere. Never fails the stage:
+    diagnostics must not become a second gate.
+    """
+    if os.name != 'nt':
+        return
+    try:
+        viewer = shutil.which('netstat')
+        if viewer is None:
+            return
+        probe = subprocess.run([viewer, '-ano', '-p', 'TCP'], capture_output=True,
+                               text=True, timeout=10, errors='replace')
+        for line in (probe.stdout or '').splitlines():
+            lower = line.lower()
+            if '127.0.0.1' in lower or '::1' in lower or \
+                    '0.0.0.0' in lower or '[::]' in lower or 'listening' in lower:
+                print(f'bound: {line.strip()}', flush=True)
+    except Exception as exc:
+        print(f'bound: snapshot unavailable ({exc})', flush=True)
+
+
 def run_stage(name, commands, timeout, evaluation=None):
     with tempfile.TemporaryDirectory() as directory:
         peers = []
@@ -172,6 +198,10 @@ def run_stage(name, commands, timeout, evaluation=None):
                       f'warmup={"warming up" in text} evaluation={"eval time" in text} '
                       f'log_limit_exceeded={snap["exceeded"]} log_bytes={snap["observed"]}',
                       flush=True)
+            # Hung peers are still bound here; snapshot before the kill loop
+            # below reaps them. Successful stages stay quiet.
+            if failure is not None:
+                _log_bound_addresses()
             for label, peer, path, pump in peers:
                 if peer.poll() is None:
                     _kill_peer(peer) # exited between poll and kill; still reap below

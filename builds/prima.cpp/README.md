@@ -101,8 +101,12 @@ unprivileged inside a loopback-only network namespace with outbound syscall
 tracing, including failed attempts. Darwin uses a sandbox allowing only explicit
 loopback ring ports. Windows uses a disposable dynamic WFP policy
 (`files/windows-net-guard.c`, compiled on the runner with the same MinGW
-provision) allowlisting exactly the same loopback ports for the exercise
-processes — WFP filters loopback traffic, Windows Firewall would not. All
+provision) explicitly permitting exactly the same loopback ports for the
+exercise processes — WFP filters loopback traffic, Windows Firewall would
+not, and a BLOCK veto wins over any PERMIT so the permits cannot weaken
+the denies. Controls retry a cold-start-tolerant deadline and, like an
+exercise failure, dump the bound TCP table so the next failure names what
+the exercise actually bound (IPv4 loopback vs IPv6). All
 three enforcement points carry exactly the same allowlist: the
 seven ring-test ports — 5599 (multipart), 5600 (rcvtimeo), 5601
 (single-message), 5602-5605 — plus the rank-offset

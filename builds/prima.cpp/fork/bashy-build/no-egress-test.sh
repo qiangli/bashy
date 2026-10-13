@@ -127,10 +127,15 @@ SB
   } >>"out/$asset-egress.txt"
   ;;
 MINGW*|MSYS*)
-  # Hosted Windows gate. A disposable dynamic WFP policy allowlists exactly
-  # the pinned prima loopback ports (ring 5599-5605, engine data 19000/19001,
-  # engine signal 19100/19101) for the exercise processes — WFP filters
-  # loopback, Windows Firewall would not. Enforcement is proven by positive
+  # Hosted Windows gate. A disposable dynamic WFP policy explicitly permits
+  # exactly the pinned prima loopback ports (ring 5599-5605, engine data
+  # 19000/19001, engine signal 19100/19101) for the exercise processes — WFP
+  # filters loopback, Windows Firewall would not. A BLOCK veto wins over any
+  # PERMIT, so the explicit loopback permits cannot weaken the denies below.
+  # Controls retry a cold-start-tolerant deadline and, like an exercise
+  # failure, dump the bound TCP table so the next failure names what the
+  # exercise actually bound (IPv4 loopback vs IPv6). Enforcement is proven
+  # by positive
   # controls whose verdicts are observed DIRECTLY in the guard's own stdout
   # (WSAEACCES / delivery proof) before the marker line; anything after the
   # marker is exercise output and must show no denial signature. The WFP
@@ -151,7 +156,7 @@ MINGW*|MSYS*)
   # pinned package in the CLANG64 provision.
   cc=${BASHY_WINDOWS_CC:?verified Windows C compiler missing (windows-compilers.py)}
   "$cc" -std=c11 -Wall -Wextra -Werror -municode "$here/windows-net-guard.c" \
-    -o "$work/net-guard.exe" -lfwpuclnt -lws2_32 -lrpcrt4
+    -o "$work/net-guard.exe" -lfwpuclnt -lws2_32 -lrpcrt4 -liphlpapi
   # Native paths for CreateProcess and WFP app-id filtering.
   pyexe=$(python3 -c 'import sys; print(sys.executable)')
   pyexe=$(cygpath -m "$pyexe")

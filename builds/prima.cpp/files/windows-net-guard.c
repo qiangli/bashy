@@ -1,19 +1,33 @@
 /* Hosted Windows only. Prima no-egress gate: a disposable dynamic WFP policy
- * allowlists exactly the pinned prima loopback ports for the exercise
+ * explicitly permits exactly the pinned prima loopback ports for the exercise
  * processes, then spawns the multi-process exercise (exercise.py driving the
  * CLI, two server ranks and the ring test) inside a Windows job object so
  * cleanup is unconditional.
  *
  * Enforcement model (per protected executable, by exact file path):
+ *   - IPv4 loopback (127.0.0.1) to the pinned allowlist explicitly
+ *     PERMITted, one filter per contiguous range;
  *   - IPv6 completely denied;
  *   - IPv4 to any remote address other than 127.0.0.1 denied;
  *   - TCP/UDP ports outside the pinned allowlist denied via four filters
  *     that tile the complement of the allowlist over [0, 65535].
- * WFP ALE_AUTH_CONNECT covers TCP, UDP and non-error ICMP, including
- * loopback, so loopback traffic IS filtered (Windows Firewall would not be).
+ * A WFP BLOCK veto wins over any PERMIT regardless of weight, so the
+ * explicit loopback permits cannot weaken the denies: traffic the denies
+ * match stays denied, and allowed loopback is decided by a rule instead of
+ * by the absence of one. WFP ALE_AUTH_CONNECT covers TCP, UDP and
+ * non-error ICMP, including loopback, so loopback traffic IS filtered
+ * (Windows Firewall would not be).
  * The dynamic session exists before CreateProcess and is removed after the
  * reap; the job owns cleanup with KILL_ON_JOB_CLOSE. There is deliberately
  * no single-process limit: the exercise runs several cooperating processes.
+ *
+ * Diagnostics: every control names its endpoint on failure and dumps the
+ * local bound TCP table (IPv4 loopback vs IPv6), and the same dump runs
+ * when the exercise child fails or exceeds the outer deadline, so the next
+ * failure says what the exercise actually bound. Dumps never fail the gate.
+ * The external control targets unroutable TEST-NET-1, which never answers,
+ * so its deadline is cold-start-tolerant with retries: a slow first ALE
+ * verdict must not read as missing enforcement.
  *
  * Pinned allowlist (prima 0.1.x ring + engine ports; keep in sync with
  * no-egress-test.sh and exercise.py):
@@ -29,6 +43,7 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <fwpmu.h>
+#include <iphlpapi.h>
 #include <rpc.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,9 +58,23 @@ static const GUID remote_port = {0xc35a604d,0xd22b,0x4e1a,{0x91,0xb4,0x68,0xf6,0
 
 static const UINT16 allowed_ports[] = {5599, 5600, 5601, 5602, 5603, 5604, 5605,
                                        19000, 19001, 19100, 19101};
+/* Contiguous ranges tiling allowed_ports; one explicit PERMIT filter each. */
+static const UINT16 allowed_ranges[][2] = {{5599, 5605}, {19000, 19001},
+                                           {19100, 19101}};
 /* Tiles of the complement of allowed_ports over [0, 65535]. */
 static const UINT16 blocked_ranges[][2] = {{0, 5598}, {5606, 18999},
                                            {19002, 19099}, {19102, 65535}};
+_Static_assert(sizeof(allowed_ports) / sizeof(allowed_ports[0]) == 11,
+               "pinned allowlist size");
+_Static_assert((5605u - 5599u + 1u) + (19001u - 19000u + 1u) + (19101u - 19100u + 1u) == 11,
+               "permit ranges tile the allowlist");
+/* Cold hosted starts deliver the first ALE verdict slowly; TEST-NET-1 never
+ * answers, so a short single-shot deadline fails the gate instead of the
+ * verdict. Retry patiently; a genuinely unblocked attempt still ends in a
+ * refusal or a repeated silence and fails. */
+#define CONTROL_DEADLINE_SEC 15
+#define CONTROL_ATTEMPTS 3
+#define DATAGRAM_DEADLINE_SEC 5
 
 static void checked(DWORD status, const char *operation) {
     if (status) {
@@ -60,7 +89,7 @@ static void wincheck(BOOL ok, const char *operation) {
 static void protect(HANDLE engine, GUID sublayer, const wchar_t *exe) {
     FWP_BYTE_BLOB *app = NULL;
     checked(FwpmGetAppIdFromFileName0(exe, &app), "app identity");
-    FWPM_FILTER_CONDITION0 conditions[3] = {0};
+    FWPM_FILTER_CONDITION0 conditions[4] = {0};
     conditions[0].fieldKey = app_id;
     conditions[0].matchType = FWP_MATCH_EQUAL;
     conditions[0].conditionValue.type = FWP_BYTE_BLOB_TYPE;
@@ -68,9 +97,32 @@ static void protect(HANDLE engine, GUID sublayer, const wchar_t *exe) {
     FWPM_FILTER0 filter = {0};
     filter.displayData.name = L"Bashy hosted prima no-egress";
     filter.subLayerKey = sublayer;
-    filter.action.type = FWP_ACTION_BLOCK;
     filter.weight.type = FWP_EMPTY;
     filter.filterCondition = conditions;
+    /* Explicit loopback allowlist: 127.0.0.1 within the pinned ranges is
+     * PERMITted, one filter per contiguous range. A BLOCK veto wins over any
+     * PERMIT, so these permits cannot weaken the denies below; they decide
+     * allowed loopback explicitly instead of leaving it to the absence of
+     * a block. */
+    filter.action.type = FWP_ACTION_PERMIT;
+    filter.layerKey = connect4;
+    for (size_t i = 0; i < sizeof(allowed_ranges) / sizeof(allowed_ranges[0]); i++) {
+        conditions[1].fieldKey = remote_address;
+        conditions[1].matchType = FWP_MATCH_EQUAL;
+        conditions[1].conditionValue.type = FWP_UINT32;
+        conditions[1].conditionValue.uint32 = 0x7f000001; /* WFP host byte order */
+        conditions[2].fieldKey = remote_port;
+        conditions[2].matchType = FWP_MATCH_GREATER_OR_EQUAL;
+        conditions[2].conditionValue.type = FWP_UINT16;
+        conditions[2].conditionValue.uint16 = allowed_ranges[i][0];
+        conditions[3].fieldKey = remote_port;
+        conditions[3].matchType = FWP_MATCH_LESS_OR_EQUAL;
+        conditions[3].conditionValue.type = FWP_UINT16;
+        conditions[3].conditionValue.uint16 = allowed_ranges[i][1];
+        filter.numFilterConditions = 4;
+        checked(FwpmFilterAdd0(engine, &filter, NULL, NULL), "loopback allowlist permit");
+    }
+    filter.action.type = FWP_ACTION_BLOCK;
     /* IPv6 completely denied: every configured endpoint is IPv4 loopback. */
     filter.layerKey = connect6;
     filter.numFilterConditions = 1;
@@ -84,59 +136,135 @@ static void protect(HANDLE engine, GUID sublayer, const wchar_t *exe) {
     checked(FwpmFilterAdd0(engine, &filter, NULL, NULL), "non-loopback deny");
     /* Ports outside the pinned allowlist denied, one range filter each. */
     conditions[1].fieldKey = remote_port;
+    conditions[1].matchType = FWP_MATCH_GREATER_OR_EQUAL;
     conditions[1].conditionValue.type = FWP_UINT16;
     conditions[2].fieldKey = remote_port;
+    conditions[2].matchType = FWP_MATCH_LESS_OR_EQUAL;
     conditions[2].conditionValue.type = FWP_UINT16;
     filter.numFilterConditions = 3;
     for (size_t i = 0; i < sizeof(blocked_ranges) / sizeof(blocked_ranges[0]); i++) {
-        conditions[1].matchType = FWP_MATCH_GREATER_OR_EQUAL;
         conditions[1].conditionValue.uint16 = blocked_ranges[i][0];
-        conditions[2].matchType = FWP_MATCH_LESS_OR_EQUAL;
         conditions[2].conditionValue.uint16 = blocked_ranges[i][1];
         checked(FwpmFilterAdd0(engine, &filter, NULL, NULL), "outside-allowlist deny");
     }
     FwpmFreeMemory0((void **)&app);
 }
 
+/* Diagnostic only: dump loopback listeners so the next gate failure names
+ * what the exercise actually bound (IPv4 127.0.0.1 vs IPv6 ::1). Never
+ * fails: diagnostics must not become a second gate. */
+static void log_bound_addresses(void) {
+    for (int v6 = 0; v6 <= 1; v6++) {
+        ULONG family = v6 ? AF_INET6 : AF_INET;
+        DWORD size = 0;
+        GetExtendedTcpTable(NULL, &size, FALSE, family, TCP_TABLE_OWNER_PID_LISTENER, 0);
+        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || size == 0) continue;
+        BYTE *table = malloc(size);
+        if (!table) continue;
+        if (GetExtendedTcpTable(table, &size, FALSE, family, TCP_TABLE_OWNER_PID_LISTENER, 0)) {
+            free(table);
+            continue;
+        }
+        if (!v6) {
+            MIB_TCPTABLE_OWNER_PID *tcp = (MIB_TCPTABLE_OWNER_PID *)table;
+            for (DWORD i = 0; i < tcp->dwNumEntries; i++) {
+                IN_ADDR addr;
+                addr.S_un.S_addr = tcp->table[i].dwLocalAddr;
+                char text[INET_ADDRSTRLEN] = {0};
+                if (!InetNtopA(AF_INET, &addr, text, sizeof(text))) text[0] = 0;
+                printf("WFP bound TCP %s:%u pid=%lu\n", text,
+                       (unsigned)ntohs((u_short)tcp->table[i].dwLocalPort),
+                       (unsigned long)tcp->table[i].dwOwningPid);
+            }
+        } else {
+            MIB_TCP6TABLE_OWNER_PID *tcp = (MIB_TCP6TABLE_OWNER_PID *)table;
+            for (DWORD i = 0; i < tcp->dwNumEntries; i++) {
+                IN6_ADDR addr;
+                char text[INET6_ADDRSTRLEN] = {0};
+                memcpy(&addr, tcp->table[i].ucLocalAddr, sizeof(addr));
+                if (!InetNtopA(AF_INET6, &addr, text, sizeof(text))) text[0] = 0;
+                printf("WFP bound TCP6 %s:%u pid=%lu\n", text,
+                       (unsigned)ntohs((u_short)tcp->table[i].dwLocalPort),
+                       (unsigned long)tcp->table[i].dwOwningPid);
+            }
+        }
+        free(table);
+    }
+    fflush(stdout);
+}
+
 static void denied(int family, int type, UINT16 port, BOOL external) {
-    SOCKET s = socket(family, type, 0);
-    if (s == INVALID_SOCKET) checked(WSAGetLastError(), "control socket");
-    /* Missing enforcement must not wait for an external route timeout. */
-    u_long nonblocking = 1;
-    if (ioctlsocket(s, FIONBIO, &nonblocking)) checked(WSAGetLastError(), "nonblocking");
-    int rc;
-    if (family == AF_INET) {
-        struct sockaddr_in address = {0};
-        address.sin_family = AF_INET;
-        address.sin_port = htons(port);
-        address.sin_addr.s_addr = htonl(external ? 0xc0000201 : 0x7f000001);
-        rc = type == SOCK_DGRAM ? sendto(s, "control", 7, 0, (SOCKADDR *)&address, sizeof(address)) :
-                                 connect(s, (SOCKADDR *)&address, sizeof(address));
-    } else {
-        struct sockaddr_in6 address = {0};
-        address.sin6_family = AF_INET6;
-        address.sin6_port = htons(port);
-        address.sin6_addr.s6_addr[15] = 1;
-        rc = type == SOCK_DGRAM ? sendto(s, "control", 7, 0, (SOCKADDR *)&address, sizeof(address)) :
-                                 connect(s, (SOCKADDR *)&address, sizeof(address));
+    /* A slow first ALE verdict must not read as missing enforcement: retry
+     * a generous deadline before failing, and name the endpoint plus the
+     * bound table when it still fails. */
+    for (int attempt = 1; attempt <= CONTROL_ATTEMPTS; attempt++) {
+        SOCKET s = socket(family, type, 0);
+        if (s == INVALID_SOCKET) {
+            log_bound_addresses();
+            checked(WSAGetLastError(), "control socket");
+        }
+        u_long nonblocking = 1;
+        if (ioctlsocket(s, FIONBIO, &nonblocking)) {
+            int status = WSAGetLastError();
+            closesocket(s);
+            log_bound_addresses();
+            checked((DWORD)status, "nonblocking");
+        }
+        int rc;
+        if (family == AF_INET) {
+            struct sockaddr_in address = {0};
+            address.sin_family = AF_INET;
+            address.sin_port = htons(port);
+            address.sin_addr.s_addr = htonl(external ? 0xc0000201 : 0x7f000001);
+            rc = type == SOCK_DGRAM ? sendto(s, "control", 7, 0, (SOCKADDR *)&address, sizeof(address)) :
+                                     connect(s, (SOCKADDR *)&address, sizeof(address));
+        } else {
+            struct sockaddr_in6 address = {0};
+            address.sin6_family = AF_INET6;
+            address.sin6_port = htons(port);
+            address.sin6_addr.s6_addr[15] = 1;
+            rc = type == SOCK_DGRAM ? sendto(s, "control", 7, 0, (SOCKADDR *)&address, sizeof(address)) :
+                                     connect(s, (SOCKADDR *)&address, sizeof(address));
+        }
+        int error = WSAGetLastError();
+        if (type == SOCK_STREAM && rc == SOCKET_ERROR && error == WSAEWOULDBLOCK) {
+            fd_set writes, errors;
+            FD_ZERO(&writes); FD_ZERO(&errors);
+            FD_SET(s, &writes); FD_SET(s, &errors);
+            struct timeval timeout = {CONTROL_DEADLINE_SEC, 0};
+            int ready = select(0, NULL, &writes, &errors, &timeout);
+            if (ready <= 0) {
+                closesocket(s);
+                if (attempt < CONTROL_ATTEMPTS) {
+                    printf("WFP control verdict pending family=%d type=%d port=%u attempt=%d\n",
+                           family, type, port, attempt);
+                    fflush(stdout);
+                    Sleep(1000);
+                    continue;
+                }
+                fprintf(stderr, "WFP gate failure: control connect deadline family=%d type=%d port=%u external=%d\n",
+                        family, type, port, (int)external);
+                log_bound_addresses();
+                exit(1);
+            }
+            int size = sizeof(error);
+            if (getsockopt(s, SOL_SOCKET, SO_ERROR, (char *)&error, &size)) {
+                int status = WSAGetLastError();
+                closesocket(s);
+                log_bound_addresses();
+                checked((DWORD)status, "control socket error");
+            }
+        }
+        closesocket(s);
+        if (rc != SOCKET_ERROR || error != WSAEACCES) {
+            fprintf(stderr, "control did not get WSAEACCES: family=%d type=%d port=%u rc=%d error=%d\n",
+                    family, type, port, rc, error);
+            log_bound_addresses();
+            exit(1);
+        }
+        printf("WFP control denied family=%d type=%d port=%u WSAEACCES\n", family, type, port);
+        return;
     }
-    int error = WSAGetLastError();
-    if (type == SOCK_STREAM && rc == SOCKET_ERROR && error == WSAEWOULDBLOCK) {
-        fd_set writes, errors;
-        FD_ZERO(&writes); FD_ZERO(&errors);
-        FD_SET(s, &writes); FD_SET(s, &errors);
-        struct timeval timeout = {2, 0};
-        if (select(0, NULL, &writes, &errors, &timeout) <= 0) checked(1, "control connect deadline");
-        int size = sizeof(error);
-        if (getsockopt(s, SOL_SOCKET, SO_ERROR, (char *)&error, &size)) checked(WSAGetLastError(), "control socket error");
-    }
-    closesocket(s);
-    if (rc != SOCKET_ERROR || error != WSAEACCES) {
-        fprintf(stderr, "control did not get WSAEACCES: family=%d type=%d port=%u rc=%d error=%d\n",
-                family, type, port, rc, error);
-        exit(1);
-    }
-    printf("WFP control denied family=%d type=%d port=%u WSAEACCES\n", family, type, port);
 }
 
 /* A successful UDP sendto only means Winsock accepted the bytes. Observe a
@@ -168,14 +296,30 @@ static void datagram_control(int family, UINT16 port, BOOL expect_delivery) {
     fd_set reads;
     FD_ZERO(&reads);
     FD_SET(receiver, &reads);
-    struct timeval timeout = {1, 0};
+    struct timeval timeout = {DATAGRAM_DEADLINE_SEC, 0};
     int ready = select(0, &reads, NULL, NULL, &timeout);
-    if (ready == SOCKET_ERROR) checked(WSAGetLastError(), "datagram control receive");
-    if ((ready == 1) != expect_delivery) checked(1, "datagram delivery verdict");
+    if (ready == SOCKET_ERROR) {
+        int status = WSAGetLastError();
+        closesocket(sender);
+        closesocket(receiver);
+        log_bound_addresses();
+        checked((DWORD)status, "datagram control receive");
+    }
+    if ((ready == 1) != expect_delivery) {
+        closesocket(sender);
+        closesocket(receiver);
+        log_bound_addresses();
+        checked(1, "datagram delivery verdict");
+    }
     if (ready == 1) {
         char received[8];
         if (recvfrom(receiver, received, sizeof(received), 0, NULL, NULL) != 7 ||
-            memcmp(received, "control", 7) != 0) checked(1, "datagram content verdict");
+            memcmp(received, "control", 7) != 0) {
+            closesocket(sender);
+            closesocket(receiver);
+            log_bound_addresses();
+            checked(1, "datagram content verdict");
+        }
     }
     closesocket(sender);
     closesocket(receiver);
@@ -193,9 +337,21 @@ static void allowed(UINT16 port) {
     address.sin_port = htons(port);
     address.sin_addr.s_addr = htonl(0x7f000001);
     if (bind(listener, (SOCKADDR *)&address, sizeof(address)) || listen(listener, 1) ||
-        connect(client, (SOCKADDR *)&address, sizeof(address))) checked(WSAGetLastError(), "allowed loopback");
+        connect(client, (SOCKADDR *)&address, sizeof(address))) {
+        int status = WSAGetLastError();
+        closesocket(client);
+        closesocket(listener);
+        log_bound_addresses();
+        checked((DWORD)status, "allowed loopback");
+    }
     SOCKET accepted = accept(listener, NULL, NULL);
-    if (accepted == INVALID_SOCKET) checked(WSAGetLastError(), "accept control");
+    if (accepted == INVALID_SOCKET) {
+        int status = WSAGetLastError();
+        closesocket(client);
+        closesocket(listener);
+        log_bound_addresses();
+        checked((DWORD)status, "accept control");
+    }
     shutdown(client, SD_SEND);
     char byte;
     if (recv(accepted, &byte, 1, 0) != 0) checked(1, "control EOF");
@@ -269,8 +425,8 @@ int wmain(int argc, wchar_t **argv) {
         if (!wcscmp(argv[i], L"--app") && i + 1 < dashdash)
             protect(engine, sublayer.subLayerKey, argv[i + 1]);
     }
-    /* allowed_ports documents the allowlist the range tiles below cover;
-     * check_test.py verifies the tiling against this same list. */
+    /* allowed_ports documents the allowlist the permit and block range tiles
+     * cover; check_test.py verifies both tilings against this same list. */
     (void)allowed_ports;
     HANDLE job = CreateJobObjectW(NULL, NULL);
     wincheck(job != NULL, "create job");
@@ -306,10 +462,14 @@ int wmain(int argc, wchar_t **argv) {
     DWORD code = 1;
     if (wait != WAIT_OBJECT_0) {
         fprintf(stderr, "exercise exceeded the outer deadline\n");
+        /* Hung ranks are still bound here: name IPv4 loopback vs IPv6
+         * before the job kill reaps them. */
+        log_bound_addresses();
         TerminateJobObject(job, 1);
         wincheck(WaitForSingleObject(process.hProcess, 5000) == WAIT_OBJECT_0, "wait exercise");
     }
     wincheck(GetExitCodeProcess(process.hProcess, &code), "exit status");
+    if (code != 0) log_bound_addresses();
     CloseHandle(process.hProcess);
     CloseHandle(job);
     checked(FwpmEngineClose0(engine), "remove dynamic policy");
