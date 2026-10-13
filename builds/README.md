@@ -109,6 +109,10 @@ bashy's Linux VM/container meanwhile.
   each `PRE_BUILD_GATES` script as `bashy-build/<gate> src`,
   then the `build` steps (which write their outputs to `out/`); then
   `bashy-build/no-egress-test.sh "$EGRESS_TARGET"`, then uploads `out/*`.
+  A tool may also declare an `egress-evidence.yml` step fragment (rendered
+  from `@@INCLUDE egress-evidence@@` right after the gate): it uploads the
+  gate evidence file with `if: always()` so a gate failure still leaves its
+  cause in an artifact. Tools without the fragment render byte-identically.
 - **audit** (only when an `audit` fragment exists): the same checkout + pin
   verification, then the same `setup` steps as the build job — the `go` kind's
   audit fragment `@@INCLUDE setup@@`s it rather than keeping a second copy, so

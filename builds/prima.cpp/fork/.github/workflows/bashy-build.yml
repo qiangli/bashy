@@ -126,6 +126,14 @@ jobs:
         run: fork/bashy-build/build.sh src "$ASSET"
       - name: no-egress gate (before signing)
         run: fork/bashy-build/no-egress-test.sh "out/${{ matrix.asset }}"
+      - name: upload no-egress gate evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.asset }}-egress
+          path: out/*-egress.txt
+          if-no-files-found: warn
+          retention-days: 3
 
       - name: upload unsigned build outputs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
