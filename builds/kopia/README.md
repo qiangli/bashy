@@ -106,12 +106,13 @@ from one place (`cli/update_check.go` consults it directly in
 `maybeCheckForUpdates()`, and it is also the flag's own `Envar`), so it holds
 for every invocation and every argv order.
 
-`files/no-tracking.env` states the policy; it is the same privacy pair yoke's
-`external/kopia` launcher uses.
+`files/no-tracking.env` states the environment and global-flag policy used by
+the headless launcher.
 
 | Knob | Source | Upstream default | bashy |
 |---|---|---|---|
-| `KOPIA_CHECK_FOR_UPDATES` | `cli/update_check.go` `checkForUpdatesEnvar` at the pinned tag | unset — updates **are** checked (a periodic GitHub release query) | **`false`** in `no-tracking.env`, so it applies to `repository create` and `server start` alike |
+| `KOPIA_CHECK_FOR_UPDATES` | [`cli/command_repository_connect.go` at v0.23.1](https://github.com/kopia/kopia/blob/v0.23.1/cli/command_repository_connect.go#L62-L74) | unset — updates **are** checked (a periodic GitHub release query) | **`false`** in `no-tracking.env`, so it applies to `repository create` and `server start` alike |
+| `--no-persist-credentials` | [`cli/app.go` strategy at v0.23.1](https://github.com/kopia/kopia/blob/v0.23.1/cli/app.go#L234-L246) and [flag default](https://github.com/kopia/kopia/blob/v0.23.1/cli/app.go#L272-L281) | credentials are persisted; [Darwin selects macOS Keychain by default](https://github.com/kopia/kopia/blob/v0.23.1/cli/password_darwin.go) | passed globally to repository create and server start; `KOPIA_PASSWORD` supplies the password without persistence |
 | `--otlp-trace` | upstream flag reference, <https://kopia.io/docs/reference/command-line/flags/> | off | **passed** as a global flag, before the subcommand; `otel.env` decides where the spans go |
 | `--address` | `server start` | `127.0.0.1:51515` | `127.0.0.1:<port>` (stated) |
 | `--insecure` / `--without-password` | `server start` | off | **on**: plain HTTP with no server-level auth, because the mesh is the boundary and the listener is loopback |
@@ -138,8 +139,10 @@ exactly two destinations: loopback to its own port, and `127.0.0.1:31415`.
 built server bound to `127.0.0.1:15151` with `no-tracking.env` + `otel.env`,
 probes `/`, `/api/v1/repo/status` and `/api/v1/sources` over loopback, idles
 30 s, probes again and stops it. Both kopia invocations — `repository create`
-and `server start` — run under the tracer, so the update check cannot hide in
-the setup step.
+and `server start` — run under the tracer with `--no-persist-credentials`, so
+the update check cannot hide in the setup step and a headless macOS runner
+never waits on Keychain. Any failure prints the complete repository-create and
+server stdout/stderr logs before exiting.
 
 - **Linux (authoritative):** a fresh network namespace (`sudo unshare --net`,
   only `lo`), traced with `strace -f -e

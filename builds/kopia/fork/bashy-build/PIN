@@ -76,5 +76,5 @@ EGRESS_TARGET='out/${{ matrix.asset }}'
 RELEASE_EXTRA="PIN=kopia-pin.txt otel.env=kopia-otel.env no-tracking.env=kopia-no-tracking.env vuln-ignore=vuln-ignore"
 RELEASE_ASSETS="kopia-linux-amd64 kopia-linux-arm64 kopia-darwin-arm64 kopia-darwin-amd64 kopia-$UPSTREAM_TAG.cdx.json kopia-$UPSTREAM_TAG.govulncheck.json kopia-pin.txt kopia-otel.env kopia-no-tracking.env vuln-ignore"
 RELEASE_EXECUTABLES="kopia-linux-amd64 kopia-linux-arm64 kopia-darwin-arm64 kopia-darwin-amd64"
-RELEASE_NOTE="The GitHub update check is off (KOPIA_CHECK_FOR_UPDATES=false, in kopia-no-tracking.env) and the only OTLP destination is bashy's local collector 127.0.0.1:31415."
+RELEASE_NOTE="The GitHub update check is off (KOPIA_CHECK_FOR_UPDATES=false, in kopia-no-tracking.env), credentials are not persisted, and the only OTLP destination is bashy's local collector 127.0.0.1:31415."
 RELEASE_GATES="pinned commit, pinned Go toolchain (EOL-minor security override: built with go1.26.9, not the tag's end-of-life go1.25.11), reviewed module security overrides (23 require lines, from the five fixes listed in kopia-pin.txt), govulncheck of the shipped package (reachable, unwaived = fail; 0 reachable, nothing waived), CycloneDX SBOM, no-egress."

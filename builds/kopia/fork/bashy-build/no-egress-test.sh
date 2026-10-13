@@ -14,9 +14,12 @@
 # passing it before the subcommand is an "unknown long flag" and both
 # invocations below simply fail. The envar reaches them through the server
 # environment assembled above, and the gate proves the query is really off.
-# --otlp-trace IS a global flag and stays one, before the subcommand; otel.env
-# points it only at 127.0.0.1:31415 — the single non-service destination the
-# verdict tolerates.
+# Both invocations also carry --no-persist-credentials: at v0.23.1 credential
+# persistence is on by default, and macOS uses Keychain by default. The
+# repository password comes only from KOPIA_PASSWORD, so this gate stays
+# headless. --otlp-trace IS a global flag and remains before the server
+# subcommand; otel.env points it only at 127.0.0.1:31415 — the single
+# non-service destination the verdict tolerates.
 #
 # Linux (authoritative): the server runs in a fresh network namespace
 # (only `lo`) under `strace -f -e trace=connect,sendto,sendmsg,sendmmsg`,
@@ -42,8 +45,44 @@ bin=$(cd "$(dirname "$bin")" && pwd)/$(basename "$bin")
 port=${EGRESS_PORT:-15151}
 observe=${EGRESS_OBSERVE_SECONDS:-30}
 ready_max=${EGRESS_READY_SECONDS:-180}
+repo_create_log=
+server_log=
 
-die() { echo "no-egress: FAIL: $*" >&2; exit 1; }
+dump_log() { # LABEL PATH
+	local label=$1 path=$2
+	echo "----- no-egress: $label -----" >&2
+	if [[ -n $path && -f $path ]]; then
+		if [[ -s $path ]]; then
+			cat "$path" >&2
+		else
+			echo "(empty)" >&2
+		fi
+	else
+		echo "(not created)" >&2
+	fi
+	echo "----- no-egress: end $label -----" >&2
+}
+
+dump_failure_logs() {
+	dump_log "repository create output" "$repo_create_log"
+	dump_log "server stdout/stderr" "$server_log"
+}
+
+die() {
+	trap - ERR
+	echo "no-egress: FAIL: $*" >&2
+	dump_failure_logs
+	exit 1
+}
+
+on_error() {
+	local status=$?
+	trap - ERR
+	echo "no-egress: FAIL: unexpected command failure (exit $status)" >&2
+	dump_failure_logs
+	exit "$status"
+}
+trap on_error ERR
 [[ -x $bin ]] || die "$bin is not executable"
 
 command -v curl >/dev/null || die "curl is not on PATH (fail-closed)"
@@ -51,6 +90,8 @@ command -v curl >/dev/null || die "curl is not on PATH (fail-closed)"
 work=$(mktemp -d "${TMPDIR:-/tmp}/kopia-egress.XXXXXX")
 chmod 755 "$work"
 mkdir -p "$work/data" "$work/home"
+repo_create_log=$work/repository-create.log
+server_log=$work/server.log
 
 # The server's whole environment: no inherited proxies, tokens or endpoints.
 envfile=$work/server.env
@@ -60,6 +101,7 @@ envfile=$work/server.env
 	grep -E '^[A-Z_]+=' "$here/no-tracking.env"
 	grep -E '^[A-Z_]+=' "$here/otel.env"
 	echo "KOPIA_PASSWORD=bashy-no-egress-probe"
+	echo "KOPIA_CHECK_FOR_UPDATES=false"
 } >"$envfile"
 
 health=http://127.0.0.1:$port/
@@ -69,15 +111,14 @@ health=http://127.0.0.1:$port/
 otlp_port=31415
 
 cat >"$work/run.sh" <<RUN
-set -uo pipefail
-# Same argv shape yoke's external/kopia launcher uses (the privacy envars
-# from the environment + a filesystem repo + an insecure loopback server).
-# Flag reference:
-# https://kopia.io/docs/reference/command-line/flags/
+set -euo pipefail
+# Keep the repository password in the environment and explicitly disable
+# persistence on both invocations. On macOS this avoids Keychain access.
 cfg='$work/kopia.config'
-'$bin' --config-file="\$cfg" \\
-	repository create filesystem --path='$work/repo'
-exec '$bin' --config-file="\$cfg" --otlp-trace \\
+'$bin' --config-file="\$cfg" --no-persist-credentials \\
+	repository create filesystem --path='$work/repo' \\
+	>'$repo_create_log' 2>&1
+exec '$bin' --config-file="\$cfg" --no-persist-credentials --otlp-trace \\
 	server start --address=127.0.0.1:$port --insecure --without-password
 RUN
 chmod +x "$work/run.sh"
@@ -113,11 +154,10 @@ $(declare -f probe wait_ready)
 port=$port ready_max=$ready_max health='$health'
 strace -f -qq -e trace=connect,sendto,sendmsg,sendmmsg -e signal=none -o '$log' \\
 	setpriv --reuid=$ruid --regid=$rgid --init-groups -- \\
-	env -i \$(cat '$envfile') bash '$work/run.sh' >'$work/server.log' 2>&1 &
+	env -i \$(cat '$envfile') bash '$work/run.sh' >'$server_log' 2>&1 &
 tracer=\$!
 if ! wait_ready \$tracer; then
 	echo "server did not become ready on $health" >&2
-	tail -n 60 '$work/server.log' >&2 || true
 	pkill -KILL -P \$tracer || true
 	exit 1
 fi
@@ -148,10 +188,9 @@ darwin() {
 SB
 	start=$(date '+%Y-%m-%d %H:%M:%S')
 	# shellcheck disable=SC2046
-	env -i $(cat "$envfile") sandbox-exec -f "$profile" bash "$work/run.sh" >"$work/server.log" 2>&1 &
+	env -i $(cat "$envfile") sandbox-exec -f "$profile" bash "$work/run.sh" >"$server_log" 2>&1 &
 	pid=$!
 	if ! wait_ready "$pid"; then
-		tail -n 60 "$work/server.log" >&2 || true
 		kill -KILL "$pid" 2>/dev/null || true
 		die "server did not become ready on $health"
 	fi
