@@ -4,7 +4,7 @@
 # shared skeleton builds/_shared/bashy-build.yml — edit those, not this file.
 # Installed on the `bashy-build` branch of github.com/qiangli/zot from
 # bashy's builds/zot/fork/. Triggered ONLY by pushing a tag
-# bashy-<upstream tag>-N (e.g. bashy-v2.1.21-1) at that branch.
+# bashy-<upstream tag>-N (e.g. bashy-v2.1.22-1) at that branch.
 #
 # Pipeline (fail-closed): pin (provenance) -> build matrix (tool gates, build,
 # no-egress gate) + audit/SBOM -> release (cosign keyless sign-blob --bundle
@@ -76,7 +76,7 @@ jobs:
     permissions:
       contents: read
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - asset: zot-linux-amd64

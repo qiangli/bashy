@@ -9,12 +9,12 @@ directory is the declaration for that build. `fork/` is installed as the
 | | |
 |---|---|
 | Upstream | `https://github.com/project-zot/zot` |
-| License at the tag | **Apache-2.0** (`LICENSE`, verified at `v2.1.21`) |
-| Pinned release | `v2.1.21` (lightweight tag) → commit `6429ce645b13f5a72275d793ae42df51739bb0ca` |
+| License at the tag | **Apache-2.0** (`LICENSE`, verified at `v2.1.22`) |
+| Pinned release | `v2.1.22` (lightweight tag) → commit `6bbc7e56db2b7a64eee589324efe5813245e3a28` |
 | Why this tag | the release yoke runs today: `pkg/fleet/baseline/services/zot.yaml` `settings.version` |
-| Toolchain | Go `1.26.3` (the tag's `go.mod`) |
-| Trigger | push of tag `bashy-v2.1.21-N` on `bashy-build` (first: `bashy-v2.1.21-1`) |
-| Signing identity | `https://github.com/qiangli/zot/.github/workflows/bashy-build.yml@refs/tags/bashy-v2.1.21-1` |
+| Toolchain | Go `1.27.0` (the tag's `go.mod`) |
+| Trigger | push of tag `bashy-v2.1.22-N` on `bashy-build` (first: `bashy-v2.1.22-1`) |
+| Signing identity | `https://github.com/qiangli/zot/.github/workflows/bashy-build.yml@refs/tags/bashy-v2.1.22-1` |
 | Issuer | `https://token.actions.githubusercontent.com` |
 
 ## Layout
@@ -53,7 +53,7 @@ Upstream's `zot-<os>-<arch>` asset comes from the `Makefile`'s `binary` target:
 
 `make ui` does not build from the pinned tree. It downloads
 `zui.tgz` from the releases of a **second** upstream repository
-(`project-zot/zui` at `ZUI_VERSION := commit-a7feb46`), or clones and `npm
+(`project-zot/zui` at `ZUI_VERSION := commit-8e8457d`), or clones and `npm
 install`s it when the download fails. Either way the web bundle linked into the
 binary would come from a source this pipeline cannot pin to a commit, cannot
 verify a tag signature for, and cannot put in the SBOM — and `commit-a7feb46`
@@ -71,7 +71,7 @@ Note that dropping `ui` also drops its dependency expansion
 (`UI_DEPENDENCIES := search,mgmt,userprefs`), but those three are listed
 explicitly above, so the tag set is unchanged apart from `ui` itself.
 
-## No tracking: every knob at v2.1.21
+## No tracking: every knob at v2.1.22
 
 zot has **no update checker and no usage reporting**. Its entire outbound
 surface is the optional extensions, and they are configuration, not flags:
@@ -134,7 +134,7 @@ pinned `cyclonedx-gomod` (`v1.12.0`).
 ```
 zot-linux-amd64                zot-linux-arm64
 zot-darwin-arm64               zot-darwin-amd64
-zot-v2.1.21.cdx.json           zot-v2.1.21.govulncheck.json
+zot-v2.1.22.cdx.json           zot-v2.1.22.govulncheck.json
 zot-pin.txt                    zot-bashy.json
 zot-otel.env                   zot-no-tracking.env
 vuln-ignore                    SHA256SUMS
@@ -142,7 +142,7 @@ vuln-ignore                    SHA256SUMS
 
 Each gets a sibling `<asset>.sigstore.json` bundle (binmgr's default location).
 URL shape:
-`https://github.com/qiangli/zot/releases/download/bashy-v2.1.21-1/<asset>`.
+`https://github.com/qiangli/zot/releases/download/bashy-v2.1.22-1/<asset>`.
 
 ## Operator steps (not in bashy CI)
 
@@ -151,9 +151,9 @@ URL shape:
 git switch --orphan bashy-build
 cp -R <bashy>/builds/zot/fork/. .
 git add .github/workflows/bashy-build.yml bashy-build
-git commit -m "bashy-build: zot v2.1.21 verified build"
+git commit -m "bashy-build: zot v2.1.22 verified build"
 git push -u origin bashy-build
-git tag bashy-v2.1.21-1 && git push origin bashy-v2.1.21-1
+git tag bashy-v2.1.22-1 && git push origin bashy-v2.1.22-1
 ```
 
 Then repoint the yoke pin: `external/zot`'s `Spec()` resolves

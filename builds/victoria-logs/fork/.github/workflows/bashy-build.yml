@@ -76,7 +76,7 @@ jobs:
     permissions:
       contents: read
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - asset: victoria-logs-linux-amd64
