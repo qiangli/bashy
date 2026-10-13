@@ -1,0 +1,30 @@
+# Dockerfile.shipped — build the DISTRIBUTABLE patched image from the base image.
+#
+# The base image is the pinned upstream Dockerfile built verbatim from the
+# pinned source checkout (src/Dockerfile at UPSTREAM_COMMIT). Its /app holds
+# a vulnerable bundled copy (npm 12.x bundles http-cache-semantics 4.2.0,
+# GHSA-ch52-4w7c-c8xp, and bundled deps ignore overrides), so the workflow
+# NEVER ships the base image. Instead it:
+#
+#   1. extracts the base image's /app to installed/package,
+#   2. patches the extracted-tree tarball (patch_bundled.py, pinned
+#      http-cache-semantics@4.3.0 tarball, integrity-checked),
+#   3. re-extracts the PATCHED tarball over installed/package, so the
+#      on-disk tree is byte-identical to what the tarball ships,
+#   4. builds THIS Dockerfile with BASE_IMAGE=<the base image> and build
+#      context installed/ (which holds package/, the patched tree).
+#
+# The result is the shipped image: FROM the pinned Dockerfile-built base,
+# with /app replaced by the exact patched runtime that the tarball ships
+# (proven by `diff -r installed/package image-app` in build.yml, where
+# image-app is /app copied back out of a container from THIS image, and by
+# patch_bundled.py --verify-only passing on BOTH the tarball and the
+# image-extracted tree). The workflow then `docker save`s this image to the
+# per-arch <asset>-<tag>.oci.tar release asset (`docker load -i` it) and
+# records its sha256 + image ID in <asset>-image.digest. Both files are
+# cosign-signed at release like every other asset.
+#
+# Nothing here reaches the network: COPY is from the local build context.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+COPY package/ /app/

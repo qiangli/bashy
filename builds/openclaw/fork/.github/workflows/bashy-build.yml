@@ -171,7 +171,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/gateway-config"
           cp fork/bashy-build/openclaw-bashy.json "$RUNNER_TEMP/gateway-config/openclaw.json"
           echo "OPENCLAW_CONFIG_PATH=$RUNNER_TEMP/gateway-config/openclaw.json" >> "$GITHUB_ENV"
-      - name: build the pinned upstream Dockerfile (the real runtime)
+      - name: build the pinned upstream Dockerfile (UNSHIPPED base image)
         run: |
           set -euo pipefail
           # The shipped runtime is the Dockerfile's own final stage, built
@@ -185,22 +185,22 @@ jobs:
           # Dockerfile is the simpler faithful path the conductor directed.
           # Each Linux leg builds natively on its own arch (amd64 on
           # ubuntu-24.04, arm64 on ubuntu-24.04-arm); no cross-building.
-          # Nothing is pushed to any registry: the image stays local, the
-          # next step extracts its built /app tree, and the release signs
-          # the extracted tarball plus this digest file with cosign.
+          # This base image is NEVER shipped, signed, or pushed: npm 12.x
+          # bundles a vulnerable http-cache-semantics 4.2.0
+          # (GHSA-ch52-4w7c-c8xp) that bundled deps hide from overrides, so
+          # the next steps extract its /app, patch the extracted tree, and
+          # build the SHIPPED image (Dockerfile.shipped) from the patched
+          # tree. Nothing is pushed to any registry at any point.
           mkdir -p out
           docker build \
             --file src/Dockerfile \
             --build-arg OPENCLAW_EXTENSIONS="diagnostics-otel" \
-            --tag "openclaw-gateway:${GITHUB_REF_NAME}" \
+            --tag "openclaw-gateway-base:${GITHUB_REF_NAME}" \
             src
-          docker inspect "openclaw-gateway:${GITHUB_REF_NAME}" \
-            --format='{{.Id}}' > "out/${{ matrix.asset }}-image.digest"
-          cat "out/${{ matrix.asset }}-image.digest"
-      - name: extract the built /app runtime tree (per-arch signed artifact)
+      - name: extract the base /app runtime tree (pre-patch)
         run: |
           set -euo pipefail
-          # Extract the final stage's /app — dist, node_modules, manifests,
+          # Extract the base image's /app — dist, node_modules, manifests,
           # skills/docs — exactly as the Dockerfile built it, on this leg's
           # native arch. The tar keeps the long-standing package/ top dir so
           # the SBOM, patch, no-egress gate and binmgr pins keep working;
@@ -208,7 +208,7 @@ jobs:
           # No bit-reproducibility is attempted here — patch_bundled.py
           # repacks deterministically (gzip mtime=0) after the security patch.
           mkdir -p out
-          docker create --name openclaw-extract "openclaw-gateway:${GITHUB_REF_NAME}"
+          docker create --name openclaw-extract "openclaw-gateway-base:${GITHUB_REF_NAME}"
           rm -rf ./runtime-app ./installed
           docker cp openclaw-extract:/app ./runtime-app
           docker rm openclaw-extract
@@ -240,34 +240,123 @@ jobs:
           # shipped inside node_modules/npm. Patch it here, after the extract
           # and before signing: verify the registry dist.integrity (sha512)
           # before use, repack deterministically, and fix the already-published
-          # SBOM in place (it must already have run — see below). If the
-          # Dockerfile-built tree carries no bundled copy below 4.3.0, the
-          # patch is a no-op and the gate below still enforces the bound.
+          # SBOM in place (it must already have run — see below).
+          # Gate-first (fail-closed both ways): --verify-only decides. When
+          # the extracted tree is already clean there is nothing to patch and
+          # the step is a loud no-op (patch_bundled.py itself REFUSES a
+          # silent no-op, so an unconditional call would fail a clean tree);
+          # when vulnerable copies remain, the patch below must clear them or
+          # the tarball gate fails the build.
           TARBALL="out/${{ matrix.asset }}-${GITHUB_REF_NAME}.tgz"
           SBOM="out/${{ matrix.asset }}-sbom.cyclonedx.json"
           test -f "$TARBALL" || { echo "missing $TARBALL" >&2; exit 1; }
           test -f "$SBOM" || { echo "missing $SBOM (SBOM step must run before this patch)" >&2; exit 1; }
-          # Pinned in the repo, never taken from the registry at build time
-          # (the registry must not be its own trust anchor). Integrity matches
-          # the upstream pnpm lockfile's resolution for http-cache-semantics@4.3.0.
-          REPLACEMENT_URL="https://registry.npmjs.org/http-cache-semantics/-/http-cache-semantics-4.3.0.tgz"
-          REPLACEMENT_INTEGRITY="sha512-M5t5LlJpS1UHMjvwRQVdFHvPISGeLAxNcrWuJkeGh0KxsqCHZ1O3NXZU/8x7cD0BDcGW8kapxMKTvwlqrNkHkA=="
-          curl -sSL --fail "$REPLACEMENT_URL" -o "${RUNNER_TEMP}/http-cache-semantics-4.3.0.tgz"
-          # Python tarfile handles the GNU LongLink/PAX entries in the tarball.
-          python3 fork/bashy-build/scripts/patch_bundled.py \
-            --tarball "$TARBALL" \
-            --replacement "${RUNNER_TEMP}/http-cache-semantics-4.3.0.tgz" \
-            --integrity "$REPLACEMENT_INTEGRITY" \
-            --sbom "$SBOM"
-          # The SBOM is patched in place (not regenerated) on purpose: only the
-          # tarball is patched, so the on-disk installed tree still holds the
-          # pre-patch copy and regenerating would reproduce the stale 4.2.0
-          # entry. The SBOM must describe the SHIPPED tarball — hence the
-          # in-place fix, in this order.
-      - name: security gate — no http-cache-semantics <4.3.0 in the shipped tarball
+          if python3 fork/bashy-build/scripts/patch_bundled.py --verify-only \
+            --tarball "$TARBALL"; then
+            echo "security patch: tree already holds no http-cache-semantics < 4.3.0 — no-op (gate still enforced below)"
+          else
+            # Pinned in the repo, never taken from the registry at build time
+            # (the registry must not be its own trust anchor). Integrity matches
+            # the upstream pnpm lockfile's resolution for http-cache-semantics@4.3.0.
+            REPLACEMENT_URL="https://registry.npmjs.org/http-cache-semantics/-/http-cache-semantics-4.3.0.tgz"
+            REPLACEMENT_INTEGRITY="sha512-M5t5LlJpS1UHMjvwRQVdFHvPISGeLAxNcrWuJkeGh0KxsqCHZ1O3NXZU/8x7cD0BDcGW8kapxMKTvwlqrNkHkA=="
+            curl -sSL --fail "$REPLACEMENT_URL" -o "${RUNNER_TEMP}/http-cache-semantics-4.3.0.tgz"
+            # Python tarfile handles the GNU LongLink/PAX entries in the tarball.
+            python3 fork/bashy-build/scripts/patch_bundled.py \
+              --tarball "$TARBALL" \
+              --replacement "${RUNNER_TEMP}/http-cache-semantics-4.3.0.tgz" \
+              --integrity "$REPLACEMENT_INTEGRITY" \
+              --sbom "$SBOM"
+            # The SBOM is patched in place (not regenerated) on purpose: only the
+            # tarball is patched, so the on-disk installed tree still holds the
+            # pre-patch copy and regenerating would reproduce the stale 4.2.0
+            # entry. The SBOM must describe the SHIPPED tarball — hence the
+            # in-place fix, in this order.
+          fi
+      - name: re-stage the exact shipped runtime + tarball gate
         run: |
+          set -euo pipefail
+          # The tarball (patched when it needed it) is a signed artifact. Put
+          # its exact bytes back on disk: from here on, installed/package IS
+          # the shipped runtime — the tree the shipped image is COPYed from
+          # below AND the tree the skeleton's no-egress gate starts after all
+          # build steps. Re-extract (never hand-sync) so drift is impossible.
+          TARBALL="out/${{ matrix.asset }}-${GITHUB_REF_NAME}.tgz"
+          rm -rf installed/package
+          mkdir -p installed
+          tar -xzf "$TARBALL" -C installed
+          test -f installed/package/openclaw.mjs || { echo "missing installed/package/openclaw.mjs after re-stage" >&2; exit 1; }
+          test -d installed/package/node_modules || { echo "node_modules missing after re-stage" >&2; exit 1; }
+          test -d installed/package/dist || { echo "dist missing after re-stage" >&2; exit 1; }
+          # Tarball gate: no http-cache-semantics <4.3.0 in the shipped tarball.
           python3 fork/bashy-build/scripts/patch_bundled.py --verify-only \
-            --tarball "out/${{ matrix.asset }}-${GITHUB_REF_NAME}.tgz"
+            --tarball "$TARBALL"
+      - name: build the shipped image (patched /app, distributable)
+        run: |
+          set -euo pipefail
+          # fork/bashy-build/Dockerfile.shipped is FROM the unshipped base
+          # image with the re-staged patched tree COPYed over /app — nothing
+          # else changes, no network touched (COPY is from the local build
+          # context). This is the image the .oci.tar below is saved from.
+          docker build \
+            --file fork/bashy-build/Dockerfile.shipped \
+            --build-arg "BASE_IMAGE=openclaw-gateway-base:${GITHUB_REF_NAME}" \
+            --tag "openclaw-gateway:${GITHUB_REF_NAME}" \
+            installed
+      - name: image gate — the shipped image itself holds no http-cache-semantics <4.3.0
+        run: |
+          set -euo pipefail
+          # Prove the SHIPPED image (not just the tarball) is patched: copy
+          # /app back out of a fresh container from the shipped image and run
+          # the same vulnerable-version gate over it. Then prove the image's
+          # /app IS the shipped runtime: diff -r against installed/package
+          # (content compare; COPY preserves content). Both fail closed.
+          docker create --name openclaw-verify "openclaw-gateway:${GITHUB_REF_NAME}"
+          rm -rf ./image-app
+          docker cp openclaw-verify:/app ./image-app
+          docker rm openclaw-verify
+          test -f image-app/openclaw.mjs || { echo "missing image-app/openclaw.mjs in the shipped image" >&2; exit 1; }
+          test -d image-app/node_modules || { echo "node_modules missing in the shipped image" >&2; exit 1; }
+          test -d image-app/dist || { echo "dist missing in the shipped image" >&2; exit 1; }
+          diff -r installed/package image-app
+          echo "image gate: shipped image /app is identical to the shipped runtime tree"
+          rm -f "${RUNNER_TEMP}/image-app.tgz"
+          tar -czf "${RUNNER_TEMP}/image-app.tgz" -C . image-app
+          python3 fork/bashy-build/scripts/patch_bundled.py --verify-only \
+            --tarball "${RUNNER_TEMP}/image-app.tgz"
+      - name: save the distributable OCI image + digest
+        run: |
+          set -euo pipefail
+          # The distributable artifact: a `docker save` tar of the SHIPPED
+          # (patched) image. Load it with `docker load -i <file>`; no
+          # registry, no daemon at build time beyond the local one, nothing
+          # pushed anywhere. The digest file binds the shipped image ID to
+          # the tar's sha256; both files are cosign-signed at release like
+          # every other asset, verifiable against the workflow identity.
+          mkdir -p out
+          OCI_TAR="out/${{ matrix.asset }}-${GITHUB_REF_NAME}.oci.tar"
+          DIGEST="out/${{ matrix.asset }}-image.digest"
+          IMAGE_ID="$(docker inspect "openclaw-gateway:${GITHUB_REF_NAME}" --format='{{.Id}}')"
+          docker save "openclaw-gateway:${GITHUB_REF_NAME}" -o "$OCI_TAR"
+          SHA="$(sha256sum "$OCI_TAR" | awk '{print $1}')"
+          {
+            echo "image: openclaw-gateway:${GITHUB_REF_NAME}"
+            echo "image_id: $IMAGE_ID"
+            echo "oci_tar: $(basename "$OCI_TAR")"
+            echo "sha256:$SHA"
+          } > "$DIGEST"
+          cat "$DIGEST"
+          # Fail-closed self-checks before upload: the digest must re-verify
+          # (catches truncation) and the tar must round-trip through
+          # `docker load` back to the same image ID (proves distributability).
+          test "$(sha256sum < "$OCI_TAR" | awk '{print $1}')" = "$SHA" \
+            || { echo "digest re-verify failed for $OCI_TAR" >&2; exit 1; }
+          tar -tf "$OCI_TAR" manifest.json >/dev/null \
+            || { echo "$OCI_TAR has no manifest.json — not a docker-save image tar" >&2; exit 1; }
+          docker load -i "$OCI_TAR"
+          test "$(docker inspect "openclaw-gateway:${GITHUB_REF_NAME}" --format='{{.Id}}')" = "$IMAGE_ID" \
+            || { echo "round-tripped image ID mismatch" >&2; exit 1; }
+          echo "OCI image self-checks passed: digest re-verifies, docker load round-trips to $IMAGE_ID"
       - name: no-egress gate (before signing)
         run: fork/bashy-build/no-egress-test.sh "installed/package"
 
