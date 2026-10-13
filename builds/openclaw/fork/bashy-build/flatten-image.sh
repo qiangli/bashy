@@ -7,12 +7,12 @@
 # view (where the patched /app already wins) into a single-layer image, so
 # the distributed archive physically cannot carry the lower-layer copy:
 #
-#   1. `docker create` (no code runs) + `docker export` the layered image,
+#   1. `docker create` (no code runs) + stream `docker export` into rootfs,
 #   2. extract the rootfs and run patch_rootfs.py over the WHOLE tree —
 #      gate-first: loud no-op when already clean, otherwise replace every
 #      bundled copy below --min-version (including copies OUTSIDE /app such
 #      as the Node base's own npm tree) with the pinned fixed release,
-#   3. re-tar and `docker import` as the target image, re-applying the
+#   3. stream the re-tar into `docker import` as the target image, re-applying the
 #      source image's runtime config (Entrypoint, Cmd, Env, User,
 #      WorkingDir, Labels) as --change flags read from `docker inspect`
 #      at build time — never hardcoded here, so a Dockerfile config change
@@ -43,10 +43,9 @@ mkdir -p "$ROOTFS"
 echo "flatten: exporting $SOURCE_IMAGE"
 CID="$(docker create "$SOURCE_IMAGE")"
 trap 'docker rm "$CID" >/dev/null 2>&1 || true' EXIT
-docker export "$CID" -o "$WORK_DIR/rootfs.tar"
+docker export "$CID" | tar -xf - -C "$ROOTFS"
 docker rm "$CID" >/dev/null
 trap - EXIT
-tar -xf "$WORK_DIR/rootfs.tar" -C "$ROOTFS"
 
 echo "flatten: full-rootfs vulnerable-copy gate (patch when needed)"
 if python3 "$SCRIPTS_DIR/patch_rootfs.py" --verify-only \
@@ -90,8 +89,7 @@ done <"$WORK_DIR/changes.tsv"
 cat "$WORK_DIR/changes.tsv"
 
 echo "flatten: importing single-layer $TARGET_IMAGE"
-tar -C "$ROOTFS" -cf "$WORK_DIR/flat.tar" .
-docker import "${CHANGES[@]}" "$WORK_DIR/flat.tar" "$TARGET_IMAGE"
+tar -C "$ROOTFS" -cf - . | docker import "${CHANGES[@]}" - "$TARGET_IMAGE"
 
 echo "flatten: config-parity check (source vs flattened)"
 docker inspect "$TARGET_IMAGE" --format='{{json .Config}}' >"$WORK_DIR/target-config.json"

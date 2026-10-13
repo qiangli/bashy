@@ -420,10 +420,12 @@ these files are gzip-compressed Docker archives
 `.gz` directly (it sniffs the compression); a tar without `manifest.json`
 fails the archive gate, as does any file at or above the 2 GiB limit.
 Each leg also
-publishes its own CycloneDX SBOM (`<asset>-sbom.cyclonedx.json`, scanned
+publishes its runtime-tree CycloneDX SBOM (`<asset>-sbom.cyclonedx.json`, scanned
 from its extracted tree, then patched in place so it describes the shipped
 tarball AND the flattened image's `/app` — same `/app` bytes; it does not
-enumerate the base-OS files outside `/app`), its own full-audit
+enumerate the base-OS files outside `/app`), a final whole-image CycloneDX
+SBOM (`<asset>-image-sbom.cyclonedx.json`), and the fail-on-high Grype image
+report (`<asset>-image-grype.json`). It also publishes its own full-audit
 JSON (`<asset>-audit-full.json`), and its digest file
 (`<asset>-image.digest`: the FLATTENED image ID plus the COMPRESSED image
 tar's sha256, byte size, and layer count — verify with `sha256sum`
@@ -484,10 +486,16 @@ grep sha256: <asset>-image.digest  # compare against sha256sum of the .docker.ta
 - Flatten + full-rootfs patch + single-layer import per leg
   (`flatten-image.sh` + `patch_rootfs.py`, gate-first incl. copies outside
   `/app`), with runtime config inherited from the layered image and
-  parity-checked — then the archive gate (`gate_image_archive.py`) proves
+  parity-checked. A final `diff -r` compares the flattened image's `/app`
+  against the re-staged signed runtime tree, after the full-rootfs patch;
+  this catches any change to `/app` during flattening. The archive gate
+  (`gate_image_archive.py`) proves
   the DISTRIBUTED bytes hold no vulnerable copy in ANY layer, anywhere in
   the filesystem. Covered by `test_gate_image_archive.py`, which CI runs
   before anything it guards.
+- CycloneDX SBOM and Grype vulnerability scan of the final whole image,
+  including OS packages. High or critical findings stop release; no
+  vulnerability exceptions are applied to this image scan.
 - Docker-save per leg: `docker save` of the flattened single-layer image
   piped through deterministic gzip to `<asset>-<tag>.docker.tar.gz`
   (gzip-compressed Docker archive format, not OCI layout)
@@ -507,7 +515,8 @@ grep sha256: <asset>-image.digest  # compare against sha256sum of the .docker.ta
   tar, and digest file are all signed, so the image's digest/identity
   verifies offline from the release assets.
 - Release assets: two extracted-tree gateway tarballs + two gzip-compressed
-  single-layer image tars (Linux amd64/arm64), two CycloneDX SBOMs, two full-audit
+  single-layer image tars (Linux amd64/arm64), two runtime-tree and two
+  whole-image CycloneDX SBOMs, two whole-image Grype reports, two full-audit
   JSONs, two image digests, `openclaw-pin.txt`, `audit-exceptions`,
   `SHA256SUMS`, plus one `.sigstore.json` bundle per asset. macOS assets
   deferred (see "What ships").
