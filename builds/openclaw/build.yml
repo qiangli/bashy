@@ -5,11 +5,14 @@
         # hoisted layout (pnpm pack: 'bundleDependencies does not work with
         # nodeLinker: isolated'). A CLI flag on install does not reach pack, so
         # set it in the workspace file for every pnpm step. Layout only: the
-        # lockfile is unchanged (asserted below) and the audit gates are not.
+        # lockfile is unchanged and the audit gates are not.
+        # Portable sed: this step runs on Linux AND macOS runners, and BSD sed
+        # needs an explicit backup suffix where GNU sed accepts a bare -i.
         run: |
           set -euo pipefail
           grep -q '^nodeLinker: isolated$' pnpm-workspace.yaml
-          sed -i 's/^nodeLinker: isolated$/nodeLinker: hoisted/' pnpm-workspace.yaml
+          sed -i.bak 's/^nodeLinker: isolated$/nodeLinker: hoisted/' pnpm-workspace.yaml
+          rm -f pnpm-workspace.yaml.bak
           grep -n '^nodeLinker:' pnpm-workspace.yaml
       - name: install from the verified lockfile (no implicit scripts)
         working-directory: src
@@ -18,8 +21,7 @@
           # Only the documented build entrypoints below run, explicitly.
           # Hoisted layout: the package declares bundledDependencies, and pnpm
           # packs those only from a hoisted node_modules
-          # (ERR_PNPM_BUNDLED_DEPENDENCIES_WITHOUT_HOISTED). Layout only — the
-          # lockfile stays frozen and the audit gates are unchanged.
+          # (ERR_PNPM_BUNDLED_DEPENDENCIES_WITHOUT_HOISTED).
           pnpm install --frozen-lockfile --ignore-scripts
       - name: audit gate (a) — prod must be clean at high
         working-directory: src
@@ -29,19 +31,15 @@
         run: |
           # `|| true`: pnpm exits nonzero when findings exist; the gate
           # script below renders the verdict (fail-closed on unknown shapes).
+          # Per-asset file name: every matrix leg uploads out/* and the
+          # release merges them, so a shared audit-full.json would collide.
           mkdir -p ../out
-          pnpm audit --json > ../out/audit-full.json || true
+          pnpm audit --json > "../out/${{ matrix.asset }}-audit-full.json" || true
           pnpm audit --prod --json > "${RUNNER_TEMP}/audit-prod.json" || true
           node ../fork/bashy-build/scripts/audit-gate.mjs \
-            --full ../out/audit-full.json \
+            --full "../out/${{ matrix.asset }}-audit-full.json" \
             --prod "${RUNNER_TEMP}/audit-prod.json" \
             --exceptions ../fork/bashy-build/audit-exceptions
-      - name: SBOM (CycloneDX)
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
-        with:
-          path: ./src
-          format: cyclonedx-json
-          output-file: out/openclaw-gateway-sbom.cyclonedx.json
       - name: apply no-tracking + OTel-local config
         run: |
           set -euo pipefail
@@ -74,22 +72,87 @@
           # @openclaw/ai into the tarball, so nothing is fetched from the npm
           # registry at install time. It cleans and rebuilds the package
           # artifacts itself (upstream's own build, not ours).
+          # INTERMEDIATE, not a release asset: the packager writes package.json
+          # plus a GENERATED package-lock.json but NO node_modules, so every
+          # dependency would be fetched from the npm registry on the user host.
+          # It goes to RUNNER_TEMP (never out/, which is uploaded as-is) and
+          # the next step installs it into the fully installed tree that ships.
+          mkdir -p "$RUNNER_TEMP/pack"
           node scripts/package-openclaw-for-docker.mjs \
             --allow-unreleased-changelog \
-            --output-dir "$GITHUB_WORKSPACE/out" \
+            --output-dir "$RUNNER_TEMP/pack" \
             --output-name "openclaw-gateway-${GITHUB_REF_NAME}.tgz"
-          ls -la "$GITHUB_WORKSPACE"/out/openclaw-gateway-*.tgz
+          ls -la "$RUNNER_TEMP/pack/openclaw-gateway-${GITHUB_REF_NAME}.tgz"
+      - name: install the shipped tree from the generated lock (fully installed artifact)
+        run: |
+          set -euo pipefail
+          # The signed artifact is the FULLY INSTALLED tree, per platform:
+          # unpack the packager tarball and install every dependency here in CI,
+          # so the user host never touches the npm registry — including npm
+          # 12.x itself (a runtime dependency), which bundles the vulnerable
+          # http-cache-semantics 4.2.0 (GHSA-ch52-4w7c-c8xp) that the patch
+          # step below replaces. Per-platform because native modules (if any)
+          # compile for their own OS/arch.
+          PACKED="$RUNNER_TEMP/pack/openclaw-gateway-${GITHUB_REF_NAME}.tgz"
+          test -f "$PACKED" || { echo "missing $PACKED" >&2; exit 1; }
+          rm -rf installed
+          mkdir -p installed
+          tar -xzf "$PACKED" -C installed
+          test -f installed/package/package.json || { echo "missing installed/package/package.json" >&2; exit 1; }
+          test -f installed/package/package-lock.json || { echo "missing generated installed/package/package-lock.json" >&2; exit 1; }
+          cd installed/package
+          # --ignore-scripts: lifecycle scripts are supply-chain surface, and
+          # upstream documents no install-script build for the gateway — the
+          # documented build (pnpm build + ui:build, run above on src/)
+          # already produced dist/. The no-egress gate proves the installed
+          # tree starts without install scripts. If a future pin adds a native
+          # module that needs its install script, run ONLY that package's
+          # documented build here (e.g. `npm rebuild <pkg>`) — never drop
+          # --ignore-scripts globally.
+          # --omit=dev: runtime tree only. npm's default layout is hoisted
+          # (flat), so no flag is needed for that. --no-audit/--no-fund: no
+          # extra registry round-trips beyond the install itself.
+          # Fail-closed: `npm ci` refuses unless package.json and the lock
+          # agree, so the lock resolves everything installed; after this step
+          # the tree is self-contained and the gateway must start with NO
+          # network (asserted by the no-egress gate, which starts it).
+          npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+          test -d node_modules || { echo "node_modules missing after npm ci" >&2; exit 1; }
+          test -f openclaw.mjs || { echo "missing installed/package/openclaw.mjs" >&2; exit 1; }
+      - name: tar the installed tree (per-platform signed artifact)
+        run: |
+          set -euo pipefail
+          # One tarball per matrix leg: native modules (if any) make the
+          # installed tree platform-specific. Portable tar: macOS ships bsdtar
+          # (no GNU --sort/--mtime flags), so no cross-platform
+          # bit-reproducibility is attempted here — patch_bundled.py repacks
+          # deterministically (gzip mtime=0) after the security patch.
+          TARBALL="out/${{ matrix.asset }}-${GITHUB_REF_NAME}.tgz"
+          tar -czf "$TARBALL" -C installed package
+          ls -la "$TARBALL"
+          tar -tzf "$TARBALL" | head -n 20
+      - name: SBOM of the installed tree (CycloneDX)
+        # Pinned anchore/sbom-action (same pin as before); it now scans the
+        # fully installed per-platform tree, so the SBOM describes what ships.
+        # patch_bundled.py then updates it in place for the security patch
+        # (regenerating would reproduce the stale pre-patch tree, which no
+        # longer exists as a scan target after install).
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: ./installed/package
+          format: cyclonedx-json
+          output-file: out/${{ matrix.asset }}-sbom.cyclonedx.json
       - name: security patch — replace bundled http-cache-semantics <4.3.0 (GHSA-ch52-4w7c-c8xp)
         run: |
           set -euo pipefail
           # npm 12.x bundles its own http-cache-semantics 4.2.0 and bundled
-          # deps ignore overrides, so the workspace override above cannot move
-          # the copy shipped inside the tarball. Patch it here, after packing
+          # deps ignore overrides, so no workspace override can move the copy
+          # shipped inside node_modules/npm. Patch it here, after the install
           # and before signing: verify the registry dist.integrity (sha512)
           # before use, repack deterministically, and fix the already-published
           # SBOM in place (it must already have run — see below).
-          TARBALL="out/openclaw-gateway-${GITHUB_REF_NAME}.tgz"
-          SBOM="out/openclaw-gateway-sbom.cyclonedx.json"
+          TARBALL="out/${{ matrix.asset }}-${GITHUB_REF_NAME}.tgz"
+          SBOM="out/${{ matrix.asset }}-sbom.cyclonedx.json"
           test -f "$TARBALL" || { echo "missing $TARBALL" >&2; exit 1; }
           test -f "$SBOM" || { echo "missing $SBOM (SBOM step must run before this patch)" >&2; exit 1; }
           # Pinned in the repo, never taken from the registry at build time
@@ -98,22 +161,26 @@
           REPLACEMENT_URL="https://registry.npmjs.org/http-cache-semantics/-/http-cache-semantics-4.3.0.tgz"
           REPLACEMENT_INTEGRITY="sha512-M5t5LlJpS1UHMjvwRQVdFHvPISGeLAxNcrWuJkeGh0KxsqCHZ1O3NXZU/8x7cD0BDcGW8kapxMKTvwlqrNkHkA=="
           curl -sSL --fail "$REPLACEMENT_URL" -o "${RUNNER_TEMP}/http-cache-semantics-4.3.0.tgz"
-          # Python tarfile handles the GNU LongLink/PAX entries in upstream's tarball.
+          # Python tarfile handles the GNU LongLink/PAX entries in the tarball.
           python3 fork/bashy-build/scripts/patch_bundled.py \
             --tarball "$TARBALL" \
             --replacement "${RUNNER_TEMP}/http-cache-semantics-4.3.0.tgz" \
             --integrity "$REPLACEMENT_INTEGRITY" \
             --sbom "$SBOM"
-          # The SBOM is patched in place (not regenerated) on purpose: the
-          # anchore step scans ./src, whose node_modules still holds the
-          # pre-patch tree, so regenerating after patching would reproduce the
-          # stale 4.2.0 entry. The SBOM must describe the SHIPPED tarball,
-          # which only exists after packing — hence patch-then-fix, in this order.
+          # The SBOM is patched in place (not regenerated) on purpose: only the
+          # tarball is patched, so the on-disk installed tree still holds the
+          # pre-patch copy and regenerating would reproduce the stale 4.2.0
+          # entry. The SBOM must describe the SHIPPED tarball — hence the
+          # in-place fix, in this order.
       - name: security gate — no http-cache-semantics <4.3.0 in the shipped tarball
         run: |
           python3 fork/bashy-build/scripts/patch_bundled.py --verify-only \
-            --tarball "out/openclaw-gateway-${GITHUB_REF_NAME}.tgz"
+            --tarball "out/${{ matrix.asset }}-${GITHUB_REF_NAME}.tgz"
       - name: build gateway OCI image (pinned upstream Dockerfile)
+        # Linux only: macOS runners have no Docker daemon, and the signed
+        # per-platform artifacts are the installed-tree tarballs above. The
+        # image still builds on both Linux legs (one digest per leg).
+        if: runner.os == 'Linux'
         run: |
           set -euo pipefail
           docker build \
@@ -122,5 +189,5 @@
             --tag "openclaw-gateway:${GITHUB_REF_NAME}" \
             src
           docker inspect "openclaw-gateway:${GITHUB_REF_NAME}" \
-            --format='{{.Id}}' > out/openclaw-gateway-image.digest
-          cat out/openclaw-gateway-image.digest
+            --format='{{.Id}}' > "out/${{ matrix.asset }}-image.digest"
+          cat "out/${{ matrix.asset }}-image.digest"

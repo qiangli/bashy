@@ -3,7 +3,10 @@
 bashy never starts a third-party-built service. This directory holds the
 template the mirror fork needs to build the OpenClaw gateway from pinned
 upstream source on fork CI, with tracking removed and OpenTelemetry pointed
-only at the local collector.
+only at the local collector. The signed artifact is the **fully installed
+tree** (`package/` incl. `node_modules`), installed per platform from the
+packager's generated lock — the user host never touches the npm registry
+(see "What ships" below).
 
 ## Where this runs (fork model)
 
@@ -19,8 +22,9 @@ the whole `fork/` tree as-is at the root of the mirror fork
 see `../README.md`) from the sources here: `tool.env` (the declaration,
 shipped verbatim as `bashy-build/PIN`), `files/` (copied into
 `bashy-build/`), and the tool-specific workflow steps `setup.yml` (Node +
-pnpm) and `build.yml` (override, lockfile assertion, audit gate, SBOM, pack,
-OCI image), which slot into the shared skeleton
+pnpm) and `build.yml` (frozen pnpm install, audit gates, upstream pack,
+per-platform npm install of the shipped tree, SBOM of the installed tree,
+bundled-copy patch + verify, OCI image on Linux), which slot into the shared skeleton
 `../_shared/bashy-build.yml` (pin → build → release with sign, self-verify,
 attest, publish). Edit the sources, never `fork/` by hand. Paths below that
 name `fork/bashy-build/X` come from `files/X`.
@@ -55,52 +59,67 @@ and pnpm 12.5.1 to match.
 3. The manager syncs the tree to the fork's `bashy-build` branch and cuts a
    release tag `bashy-v<upstream>-<n>` (e.g. `bashy-v2026.10.2-1`).
 
-## Security override + runtime patch (GHSA-ch52-4w7c-c8xp)
+## Security patch (GHSA-ch52-4w7c-c8xp)
 
 `http-cache-semantics` resolves to **4.2.0** at the PIN (via
 `make-fetch-happen@16.0.1`). npm itself (12.x, a RUNTIME dependency of the
 gateway) bundles its own copy at 4.2.0, and bundled dependencies ignore
-overrides — so this is a **runtime-graph security patch in two layers**,
-not a dev-only exception (see also the `audit-exceptions` header, which
-deliberately does NOT list it):
+overrides — so no workspace override can move the copy that ships (a global
+override makes upstream's own `scripts/generate-npm-package-lock.mts`
+validation fail the pack step: its broad rule charges the immutable bundled
+copy against the range, `node_modules/npm/node_modules/http-cache-semantics
+locked 4.2.0, expected >=4.3.0`). The control is therefore a
+**runtime-tree security patch**, not a dev-only exception and not an audit
+exception (see the `audit-exceptions` header, which deliberately does NOT
+list it — an exception would wrongly imply the vulnerable version ships):
 
-1. **Scoped workspace override (resolvable path).** CI applies
-   `make-fetch-happen>http-cache-semantics: '>=4.3.0'` — a pnpm
-   parent>child selector, not a global override — via
-   `fork/bashy-build/scripts/apply-override.sh` into the upstream
-   `pnpm-workspace.yaml`. The narrow form is required: a global
-   `http-cache-semantics` override makes upstream's own
-   `scripts/generate-npm-package-lock.mts` validation fail the pack step,
-   because its broad rule charges the immutable bundled copy against the
-   range (`node_modules/npm/node_modules/http-cache-semantics locked
-   4.2.0, expected >=4.3.0`). The scoped form is understood by that
-   checker (verified against v2026.10.2 source: it parses parent>child via
-   `@pnpm/parse-overrides`, drops object-valued entries from the broad
-   rules, and enforces the child rule only beneath a matched parent), while
-   still pinning the dev-graph path.
-2. `pnpm install --lockfile-only` regenerates the lockfile.
-3. `fork/bashy-build/scripts/assert-lockfile-diff.sh` compares HEAD vs
-   regenerated `pnpm-lock.yaml` snapshot-block by snapshot-block (plus
-   importer pins) and FAILS unless every change is an
-   `http-cache-semantics` entry or a dependent block whose changed lines
-   all name `http-cache-semantics`. It keys on the package name, so the
-   scoped override passes unchanged.
-4. `pnpm install --frozen-lockfile` installs from the verified lockfile.
-5. **Bundled-copy patch (shipped path).** After upstream's
-   `scripts/package-openclaw-for-docker.mjs` writes the gateway tarball and
-   BEFORE any signing, `fork/bashy-build/scripts/patch_bundled.py`
-   replaces EVERY bundled `http-cache-semantics < 4.3.0` inside the tarball
-   with the registry `http-cache-semantics@4.3.0` tarball — verifying its
-   registry `dist.integrity` sha512 before use (fail closed on mismatch) —
-   repacks deterministically (sorted entries, fixed mtime), and updates the
-   CycloneDX SBOM component(s) for that package (version + purl) with a
-   `bashy security patch GHSA-ch52-4w7c-c8xp` note. The SBOM is patched in
-   place rather than regenerated because the anchore step scans `./src`
-   (whose `node_modules` still holds the pre-patch tree); only an in-place
-   edit describes the shipped tarball truthfully.
+1. **Frozen pnpm install for the build.** CI installs `src/` with
+   `pnpm install --frozen-lockfile --ignore-scripts` (hoisted layout for
+   `bundledDependencies`), runs the audit gates, then upstream's documented
+   build (`pnpm build && pnpm ui:build`).
+2. **Upstream pack (intermediate, never signed).** Upstream's
+   `scripts/package-openclaw-for-docker.mjs` writes the gateway tarball to
+   `RUNNER_TEMP`, not `out/`: it carries `package.json` plus a GENERATED
+   `package-lock.json` but NO `node_modules`. Run against THAT tarball, the
+   post-pack patcher finds nothing to patch (fork run 38322543946) — the
+   vulnerable copy only exists once installed, which is why the signed
+   artifact is the installed tree below.
+3. **Per-platform install from the generated lock.** Each matrix leg unpacks
+   the packager tarball into `installed/` and runs
+   `npm ci --omit=dev --ignore-scripts --no-audit --no-fund` inside
+   `installed/package`. `--ignore-scripts`: lifecycle scripts are
+   supply-chain surface and upstream documents no install-script build for
+   the gateway (the documented build already produced `dist/` in step 1);
+   if a future pin adds a native module that needs its install script, only
+   that package's documented build runs — never a global un-ignore.
+   `--omit=dev` ships the runtime tree only; npm's default layout is
+   hoisted. `npm ci` FAILS unless `package.json` and the lock agree, so the
+   lock resolves everything installed — no network is needed after this step.
+4. **Installed-tree tarball (the signed artifact).** Each leg tars
+   `installed/package` (incl. `node_modules`) to
+   `out/<asset>-${GITHUB_REF_NAME}.tgz` (see "What ships").
+5. **Bundled-copy patch (shipped path).** BEFORE any signing,
+   `fork/bashy-build/scripts/patch_bundled.py` replaces EVERY bundled
+   `http-cache-semantics < 4.3.0` inside the installed-tree tarball
+   (in practice `package/node_modules/npm/node_modules/http-cache-semantics`,
+   covered by `test_patch_bundled.py`) with the registry
+   `http-cache-semantics@4.3.0` tarball — verifying its registry
+   `dist.integrity` sha512 (repo-pinned in `build.yml`, matching the
+   upstream pnpm lockfile's 4.3.0 resolution) before use, fail closed on
+   mismatch — repacks deterministically, asserts every other entry
+   unchanged, and updates the CycloneDX SBOM component(s) for that package
+   (version + purl) with a `bashy security patch GHSA-ch52-4w7c-c8xp` note.
+   The SBOM is patched in place rather than regenerated because only the
+   tarball is patched: the on-disk installed tree still holds the pre-patch
+   copy, so regenerating would reproduce the stale 4.2.0 entry.
 6. **Tarball gate.** `patch_bundled.py --verify-only` FAILS the build if
    any `http-cache-semantics < 4.3.0` remains anywhere in the shipped
    tarball. Runs after the patch, before signing.
+
+(`files/scripts/apply-override.sh` and `assert-lockfile-diff.sh` are
+retired: no workspace override is applied, for the inventory-check reason
+above. The dev-graph path is covered by the `audit-exceptions` BUILD-ENV
+entry instead.)
 
 ## Audit policy (braces GHSA-vfj7-8cjw-p6xm)
 
@@ -121,8 +140,10 @@ stylelint → fast-glob/micromatch → `micromatch@4.0.8 → braces@3.0.3` in
 
 The parser accepts npm v1 (`advisories`), npm v2+ (`vulnerabilities`), and
 pnpm array shapes; anything else with non-empty content fails closed. The
-full audit JSON plus the exceptions file ship as release assets
-(`audit-full.json`, `audit-exceptions`).
+full audit JSON ships per leg as a release asset
+(`<asset>-audit-full.json`, e.g. `openclaw-gateway-linux-amd64-audit-full.json`;
+per-leg names because all four legs upload `out/*` into one merged release),
+plus the shared `audit-exceptions` file.
 
 ## No-tracking knobs
 
@@ -227,7 +248,11 @@ The no-egress gate stages `openclaw-bashy.json` (which sets
 
 ## No-egress gate (`no-egress-test.sh` + `mock-otlp-collector.py` + `scripts/no-egress-guard.mjs`)
 
-Runs BEFORE signing in the workflow:
+Runs BEFORE signing in the workflow, against the fully installed tree
+(`installed/package` — so it also proves the shipped tree starts with no
+registry access). Linux legs only: macOS runners have neither `unshare(1)`
+nor `strace(1)`, so the script exits 0 with a loud `SKIP` there and the two
+Linux legs enforce the gate before signing:
 
 1. Positive control: a connect to an unroutable TEST-NET-1 address from
    inside `unshare -rn` (user + network namespace, loopback only) must FAIL —
@@ -247,6 +272,38 @@ Runs BEFORE signing in the workflow:
 Defaults (`GATEWAY_ARGV=gateway`, health `http://127.0.0.1:18789/healthz`,
 config `bashy-build/openclaw-bashy.json`) are overridable via env.
 
+## What ships (fully installed tree, per platform)
+
+Why the installed tree: upstream's packager tarball carries `package.json`
+plus a GENERATED `package-lock.json` but NO `node_modules`, so shipping it
+would make every user host fetch ALL dependencies — including npm 12.1.0,
+which bundles the vulnerable `http-cache-semantics` 4.2.0 — from the npm
+registry at install time, outside every gate. Installing in CI from the
+generated lock moves that fetch inside the gates (audit, SBOM, patch,
+no-egress) and the signed tarball then runs with no registry access.
+
+Per-platform because native modules (if any) compile for their own OS/arch:
+each leg installs (`npm ci`) and tars its own tree on its own runner (free
+GitHub runners only).
+
+| Matrix asset | Runner | Signed tarball |
+|---|---|---|
+| `openclaw-gateway-linux-amd64` | `ubuntu-24.04` | `openclaw-gateway-linux-amd64-<tag>.tgz` |
+| `openclaw-gateway-linux-arm64` | `ubuntu-24.04-arm` | `openclaw-gateway-linux-arm64-<tag>.tgz` |
+| `openclaw-gateway-darwin-arm64` | `macos-15` | `openclaw-gateway-darwin-arm64-<tag>.tgz` |
+| `openclaw-gateway-darwin-amd64` | `macos-15-intel` | `openclaw-gateway-darwin-amd64-<tag>.tgz` |
+
+Each tarball holds `package/` incl. `node_modules` (patched: no
+`http-cache-semantics < 4.3.0` anywhere — see the security section). To run
+one: unpack and run `node openclaw.mjs gateway` from `package/` — no
+`npm install`, no registry access. Each leg also publishes its own CycloneDX
+SBOM (`<asset>-sbom.cyclonedx.json`, scanned from its installed tree, then
+patched in place) and its own full-audit JSON (`<asset>-audit-full.json`).
+The two Linux legs additionally publish their OCI image digest
+(`<asset>-image.digest`; macOS runners have no Docker daemon, so there is no
+Darwin digest). Shared by all legs: `openclaw-pin.txt`, `audit-exceptions`,
+`SHA256SUMS`, plus one `.sigstore.json` keyless bundle per asset.
+
 ## What is verified
 
 - PIN tag is a plain `vX.Y.Z` release whose upstream GitHub release is
@@ -254,30 +311,37 @@ config `bashy-build/openclaw-bashy.json`) are overridable via env.
   workflow refuses to run outside `qiangli/openclaw`; upstream checkout at
   `refs/tags/v2026.10.2` equals the pinned commit sha, the tag resolves to
   it, and the tree is pristine (shared `verify-pin.sh`).
-- Scoped security override `make-fetch-happen>http-cache-semantics >= 4.3.0`
-  applied; lockfile regeneration verified to touch only that package, then
-  `pnpm install --frozen-lockfile --ignore-scripts` from the verified
-  lockfile (upstream is pnpm-based — `pnpm-lock.yaml`, `packageManager
-  pnpm@12.5.1`, no `package-lock.json`; Node 24 matches the upstream
-  Dockerfile `node:24-bookworm` base and the supported range in
-  `openclaw.mjs`). Lifecycle scripts stay off except the documented
-  `build:docker` + pack entrypoints, run explicitly.
+- Frozen pnpm install for the build: `pnpm install --frozen-lockfile
+  --ignore-scripts` from the pinned lockfile (upstream is pnpm-based —
+  `pnpm-lock.yaml`, `packageManager pnpm@12.5.1`; Node 24 matches the
+  upstream Dockerfile `node:24-bookworm` base and the supported range in
+  `openclaw.mjs`). Lifecycle scripts stay off; only the documented
+  `pnpm build` + `ui:build` + pack entrypoints run, explicitly.
+- Installed-tree install per platform: `npm ci --omit=dev --ignore-scripts`
+  from the packager's generated lock inside `installed/package`
+  (`npm ci` fails unless `package.json` and the lock agree); the tree must
+  contain `node_modules` and `openclaw.mjs`.
 - Audit gate: `pnpm audit --prod --audit-level high` clean, plus the full
-  audit vs reviewed exceptions (`audit-gate.mjs`); `audit-full.json` and
-  `audit-exceptions` published as release assets. `http-cache-semantics`
-  is patched, not excepted (see the security section above).
-- CycloneDX SBOM published as a release asset, updated in place for the
-  bundled patch so it describes the shipped tarball.
-- Bundled-copy patch + tarball gate (`patch_bundled.py`): no
-  `http-cache-semantics < 4.3.0` remains in the shipped tarball.
-- No-egress gate (strace + in-process guard hook) passes before signing.
+  audit vs reviewed exceptions (`audit-gate.mjs`); per-leg
+  `<asset>-audit-full.json` and shared `audit-exceptions` published as
+  release assets. `http-cache-semantics` is patched, not excepted (see the
+  security section above).
+- CycloneDX SBOM per leg, scanned from its installed tree and updated in
+  place for the bundled patch so it describes the shipped tarball.
+- Bundled-copy patch + tarball gate (`patch_bundled.py`) per leg: no
+  `http-cache-semantics < 4.3.0` remains in the shipped installed-tree
+  tarball.
+- No-egress gate (strace + in-process guard hook) passes on the Linux legs
+  before signing (macOS legs SKIP — no `unshare`/`strace` there); it starts
+  the gateway from the installed tree.
 - Every asset keylessly signed: `cosign sign-blob --bundle <asset>.sigstore.json`
   (cosign v3.1.3 via pinned installer), each bundle self-verified against
   the exact identity, AND `actions/attest` provenance over every asset in
   `SHA256SUMS` — identity is this workflow at the release tag, issuer
   `https://token.actions.githubusercontent.com`.
-- Release assets: gateway tarball, CycloneDX SBOM, image digest,
-  `openclaw-pin.txt`, `audit-full.json`, `audit-exceptions`, `SHA256SUMS`,
+- Release assets: four installed-tree gateway tarballs (one per OS/arch),
+  four CycloneDX SBOMs, four full-audit JSONs, two Linux image digests,
+  `openclaw-pin.txt`, `audit-exceptions`, `SHA256SUMS`,
   plus one `.sigstore.json` bundle per asset.
 
 ## Sigstore identity for binmgr to pin

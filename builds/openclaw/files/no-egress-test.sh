@@ -21,6 +21,10 @@
 # Usage:
 #   ./bashy-build/no-egress-test.sh <gateway-dir> [run-seconds]
 #
+# In CI <gateway-dir> is the fully installed tree (installed/package:
+# package/ incl. node_modules), installed per platform from the generated
+# lock — the gate proves that tree starts with no registry access.
+#
 # Environment (all optional):
 #   GATEWAY_ARGV        argv appended to `node openclaw.mjs` (default: gateway)
 #   GATEWAY_HEALTH_URL  local URL polled until the gateway is up
@@ -33,8 +37,17 @@
 #
 # Fail-closed: missing strace/unshare/python3, a gateway that never comes up,
 # or a positive-control egress probe that unexpectedly succeeds all FAIL.
+#
+# Linux-only: macOS has neither unshare(1) nor strace(1), so the per-platform
+# matrix legs on macOS SKIP here (loudly, never silently) and the Linux legs
+# enforce the gate before signing (operator decision S434).
 
 set -euo pipefail
+
+case "$(uname -s)" in
+  Linux) ;;
+  *) echo "SKIP: no-egress gate runs on Linux only (needs unshare + strace; this host is $(uname -s)) — Linux legs enforce it before signing" >&2; exit 0 ;;
+esac
 
 GATEWAY_DIR="${1:?usage: no-egress-test.sh <gateway-dir> [run-seconds]}"
 RUN_SECONDS="${2:-25}"
