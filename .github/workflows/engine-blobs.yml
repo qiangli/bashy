@@ -46,7 +46,7 @@ jobs:
           git -C ../yoke submodule update --init --depth 1 external/podman/src || true
       - uses: actions/setup-go@v6
         with:
-          go-version: 1.27.1
+          go-version: 1.27.2
       - name: Build + publish engine blobs (from permissive source)
         shell: bash
         env:
@@ -85,7 +85,7 @@ jobs:
           git -C ../yoke checkout --quiet "$rev"
       - uses: actions/setup-go@v6
         with:
-          go-version: 1.27.1
+          go-version: 1.27.2
       - name: Build + publish otel blob (all platforms)
         shell: bash
         env:

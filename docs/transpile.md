@@ -4,7 +4,7 @@
 
 ## Compiler Build Toolchain
 
-The Bashy module declares `go 1.27` and `toolchain go1.27.1` in
+The Bashy module declares `go 1.27` and `toolchain go1.27.2` in
 [`go.mod`](../go.mod), following the Sprint 398 toolchain update. Build Bashy and the
 generated artifacts with the reviewed Go 1.27 toolchain for the complete source
 profile. An older explicit `GOTOOLCHAIN=local` build cannot check independent

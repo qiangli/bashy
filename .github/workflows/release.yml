@@ -29,8 +29,36 @@ jobs:
           REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: ./scripts/verify-release-tag-vacant.sh
-  darwin:
+  # Release gate: pinned govulncheck over bashy, outpost and yoke at the pinned
+  # sibling versions; a vulnerability reachable from called code blocks the
+  # build (docs/release-runbook.md).
+  govulncheck:
     needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.2
+      - name: Resolve pinned siblings (go.mod)
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./scripts/resolve-pinned-siblings.sh
+      - name: govulncheck (source mode; reachable findings fail)
+        shell: bash
+        env:
+          GOVULNCHECK_OUT: ${{ runner.temp }}/govulncheck
+        run: make govulncheck | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: govulncheck
+          path: ${{ runner.temp }}/govulncheck/*.json
+          if-no-files-found: ignore
+          retention-days: 7
+  darwin:
+    needs: [preflight, govulncheck]
     permissions:
       contents: read
       id-token: write
@@ -51,7 +79,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v6
         with:
-          go-version: 1.27.1
+          go-version: 1.27.2
       - name: Resolve pinned siblings (go.mod)
         shell: bash
         env:
@@ -59,7 +87,7 @@ jobs:
         run: ./scripts/resolve-pinned-siblings.sh
       - uses: actions/setup-go@v6
         with:
-          go-version: 1.27.1
+          go-version: 1.27.2
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -94,7 +122,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
   goreleaser:
-    needs: preflight
+    needs: [preflight, govulncheck]
     outputs:
       seed_summary: ${{ steps.seed-bands.outputs.summary }}
     runs-on: ubuntu-latest
@@ -104,7 +132,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v6
         with:
-          go-version: 1.27.1
+          go-version: 1.27.2
       - name: Resolve pinned siblings (go.mod)
         shell: bash
         env:
@@ -121,7 +149,7 @@ jobs:
           echo "$summary" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-go@v6
         with:
-          go-version: 1.27.1
+          go-version: 1.27.2
       - uses: actions/setup-node@v6
         with:
           node-version: 22

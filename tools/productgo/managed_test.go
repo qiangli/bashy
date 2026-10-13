@@ -18,7 +18,7 @@ func TestProductDownloadedToolchain(t *testing.T) {
 	}
 	dir := t.TempDir()
 	cache := filepath.Join(dir, "modcache")
-	root := filepath.Join(cache, "golang.org", "toolchain@v0.0.1-go1.27.1."+runtime.GOOS+"-"+runtime.GOARCH)
+	root := filepath.Join(cache, "golang.org", "toolchain@v0.0.1-go1.27.2."+runtime.GOOS+"-"+runtime.GOARCH)
 	if err := os.CopyFS(root, os.DirFS(runtime.GOROOT())); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func main(){
 	}
 	cmd := exec.Command("../../scripts/go-product.sh", "build", "-o", bin, source)
 	cmd.Env = append(os.Environ(), "BASHY_EXE=", "GOROOT="+root, "GOMODCACHE="+cache,
-		"GOTOOLCHAIN=go1.27.1", "PATH="+filepath.Join(root, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GOTOOLCHAIN=go1.27.2", "PATH="+filepath.Join(root, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"TMPDIR="+tmp, "CGO_ENABLED=0")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("cached SDK product build: %v\n%s", err, out)

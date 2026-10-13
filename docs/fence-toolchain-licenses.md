@@ -39,7 +39,7 @@ bundled parts are named; a one-word label is never the whole story.
 | `c`, `cpp` / `cxx` | `yoke/external/zigcc`: Zig 0.16.0 `zig cc` / `zig c++` | Archive `LICENSE`: MIT. Bundled under `lib/`: libc++, libc++abi, libunwind Apache-2.0-with-LLVM-exception; musl MIT; wasi-libc Apache/MIT; **mingw-w64 ZPL-2.1** (parts public domain / BSD / LGPL per its `COPYING`); **glibc headers, csu and abilists LGPL-2.1+** (`lib/libc/glibc/LICENSES`) | download + exec, permissive compiler; the libc trees are compile-time inputs to workers built on the user's machine, never distributed by bashy |
 | `c`, `cpp` on Windows via `sh/polyglot/msvc.go` | host MSVC + Windows SDK headers found through vswhere | proprietary, host-supplied | never downloaded or provisioned by bashy |
 | `c`, `cpp` on Windows via `bashy clang` (`yoke/external/clang`) | llvm-mingw (mstorsjo) | llvm-mingw ISC; built toolchain "primarily LLVM Apache-2 with exceptions"; mingw-w64 CRT ZPL / public domain / BSD | download + exec, permissive |
-| `go` | `yoke/external/gotoolchain`: Go 1.27.1 (also the lowering SDK, `sh/lower/go_sdk.go`) | BSD-3-Clause | download + exec, permissive |
+| `go` | `yoke/external/gotoolchain`: Go 1.27.2 (also the lowering SDK, `sh/lower/go_sdk.go`) | BSD-3-Clause | download + exec, permissive |
 
 ## Text and manifest fences
 
