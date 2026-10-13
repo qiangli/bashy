@@ -180,10 +180,17 @@ MINGW*|MSYS*)
   marker='WFP exercise filters installed; multi-process job active'
   controls=$(sed "/$marker/q" "out/$asset-egress.txt")
   exercise=$(sed -n "/$marker/,\$p" "out/$asset-egress.txt")
-  # Positive controls directly observed: two TCP denials plus the IPv6 denial,
-  # three UDP verdicts, and one allowed-loopback proof.
-  for proof in 'WFP control denied family=2 type=1 port=443 WSAEACCES' \
-               'WFP control denied family=2 type=1 port=5606 WSAEACCES' \
+  # Deny-filter inventory is proven installed before any control runs.
+  grep -qF 'WFP deny filters installed' <<<"$controls" || {
+    echo 'no-egress: windows: missing deny-filter inventory proof' >&2; exit 1; }
+  # Positive controls directly observed: the off-allowlist and IPv6 TCP
+  # denials, three UDP verdicts, and one allowed-loopback proof. The
+  # external 443 control has two honest verdicts: an explicit ALE deny
+  # (WSAEACCES), or a silent drop the guard accepts ONLY with a
+  # CLASSIFY_DROP net event proving our deny filter matched the flow
+  # (run 38472050604: bare silence with no such event is a filter miss and
+  # fails inside the guard, so reaching here with that line is impossible).
+  for proof in 'WFP control denied family=2 type=1 port=5606 WSAEACCES' \
                'WFP control denied family=23 type=1 port=5599 WSAEACCES' \
                'WFP UDP control delivered family=2 port=5599' \
                'WFP UDP control denied family=2 port=5606' \
@@ -192,6 +199,10 @@ MINGW*|MSYS*)
     grep -qF "$proof" <<<"$controls" || {
       echo "no-egress: windows: missing positive-control proof: $proof" >&2; exit 1; }
   done
+  if ! grep -qF 'WFP control denied family=2 type=1 port=443 WSAEACCES' <<<"$controls" && \
+     ! grep -qF 'WFP control silent-drop family=2 type=1 port=443 matched filter=' <<<"$controls"; then
+    echo 'no-egress: windows: missing external-control proof (explicit 443 deny or proven silent-drop)' >&2; exit 1
+  fi
   # All three exercise stages passed with no denial signature past the marker.
   [[ $(grep -c '^PASS:' <<<"$exercise") == 3 ]] || {
     echo 'no-egress: windows: exercise stages did not all PASS' >&2; exit 1; }

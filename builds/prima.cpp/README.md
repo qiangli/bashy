@@ -104,9 +104,14 @@ loopback ring ports. Windows uses a disposable dynamic WFP policy
 provision) explicitly permitting exactly the same loopback ports for the
 exercise processes — WFP filters loopback traffic, Windows Firewall would
 not, and a BLOCK veto wins over any PERMIT so the permits cannot weaken
-the denies. Controls retry a cold-start-tolerant deadline and, like an
-exercise failure, dump the bound TCP table so the next failure names what
-the exercise actually bound (IPv4 loopback vs IPv6). All
+the denies. A matched ALE block is WSAEACCES, never silence, so the
+external 443 control to TEST-NET-1 is a single classified attempt
+(`files/wfp-verdict.h`, unit-tested): immediate WSAEACCES passes, and a
+silent drop passes only with a CLASSIFY_DROP net event proving our deny
+filter matched the flow — bare silence fails as a filter miss (run
+38472050604). Like an exercise failure, every control failure dumps the
+bound TCP table so the next failure names what the exercise actually
+bound (IPv4 loopback vs IPv6). All
 three enforcement points carry exactly the same allowlist: the
 seven ring-test ports — 5599 (multipart), 5600 (rcvtimeo), 5601
 (single-message), 5602-5605 — plus the rank-offset

@@ -680,7 +680,7 @@ class WindowsTarget(unittest.TestCase):
     def test_windows_files_ship_in_fork(self):
         for name in ['build.sh','exercise.py','merge-inputs.py','verify-asset.py',
                      'license-review.py','dependencies.json','collect-inputs.py',
-                     'windows-compilers.py','windows-net-guard.c','no-egress-test.sh']:
+                     'windows-compilers.py','windows-net-guard.c','wfp-verdict.h','no-egress-test.sh']:
             self.assertEqual((ROOT/'fork/bashy-build'/name).read_bytes(),
                              (ROOT/'files'/name).read_bytes(),name)
         self.assertIn('prima-windows-amd64',merge.ASSETS)
@@ -754,31 +754,63 @@ class WindowsLoopbackPermit(unittest.TestCase):
             blocked.update(range(int(lo), int(hi) + 1))
         self.assertEqual(blocked, set(range(65536)) - set(self.ALLOWED))
 
-    def test_controls_tolerate_cold_start(self):
+    def test_external_control_is_deterministic(self):
+        # Rework 7, CI run 38472050604 (tag 0.1.2-8): the external 443
+        # control to TEST-NET-1 timed out with neither an explicit deny nor
+        # a connection. A matched ALE block is WSAEACCES, never silence, so
+        # retrying the silence could not tell a slow verdict from a filter
+        # miss (runner fabric drop). The external control is now a single
+        # classified attempt: immediate WSAEACCES passes, silence passes
+        # only with a net-event proof that our filter matched, and anything
+        # else fails with its verdict attached.
         guard = self._guard()
-        deadline = int(re.search(r'#define CONTROL_DEADLINE_SEC (\d+)', guard)[1])
-        self.assertGreaterEqual(deadline, 10)
-        attempts = int(re.search(r'#define CONTROL_ATTEMPTS (\d+)', guard)[1])
-        self.assertGreaterEqual(attempts, 2)
-        self.assertIn('attempt < CONTROL_ATTEMPTS', guard)
-        # The stable failure signature stays, now naming its endpoint.
-        self.assertIn('control connect deadline family=%d type=%d port=%u', guard)
-        self.assertIn('denied(AF_INET, SOCK_STREAM, 443, TRUE)', guard)
+        self.assertNotIn('CONTROL_ATTEMPTS', guard)
+        self.assertNotIn('verdict pending', guard)
+        self.assertIn('denied_external(engine, AF_INET, 443)', guard)
+        self.assertIn('wfp_classify_tcp_verdict', guard)
+        external = int(re.search(r'#define EXTERNAL_DEADLINE_SEC (\d+)', guard)[1])
+        self.assertLessEqual(external, 5)
+        # Fast denies run first so their WSAEACCES proves app-id matching
+        # for this process before the external verdict is read.
+        self.assertLess(guard.index('denied(AF_INET, SOCK_STREAM, 5606, FALSE)'),
+                        guard.index('denied_external(engine, AF_INET, 443)'))
         self.assertIn('DATAGRAM_DEADLINE_SEC', guard)
+
+    def test_silent_drop_requires_proven_match(self):
+        # Silence is accepted for the external control ONLY with a
+        # CLASSIFY_DROP net event carrying one of OUR deny filter IDs at
+        # our ALE layer: "proven installed" (filter enumeration) plus
+        # "proven matched" (net events). Bare silence fails with the
+        # filter-miss/runner-drop diagnosis, never a bare deadline.
+        guard = self._guard()
+        self.assertIn('record_deny_id(id)', guard)
+        self.assertIn('verify_deny_filters_installed(engine, &sublayer.subLayerKey)', guard)
+        self.assertIn('FwpmFilterGetById0(engine, deny_ids[k], &filter)', guard)
+        self.assertIn('FwpmNetEventCreateEnumHandle0', guard)
+        self.assertIn('FwpmNetEventEnum0', guard)
+        self.assertIn('FWPM_NET_EVENT_TYPE_CLASSIFY_DROP', guard)
+        self.assertIn('WFP control silent-drop family=%d type=%d port=%u matched filter=%llu', guard)
+        self.assertIn('silent with no matching CLASSIFY_DROP event', guard)
+        self.assertNotIn('control connect deadline', guard)
 
     def test_gate_stays_strict(self):
         script = self._script()
-        # A real outbound attempt still fails: the external control and its
-        # proof, the off-allowlist and IPv6 proofs, three PASS stages, the
-        # removal confirmation, and the post-marker denial sweep all stay.
-        for proof in ['WFP control denied family=2 type=1 port=443 WSAEACCES',
-                      'WFP control denied family=2 type=1 port=5606 WSAEACCES',
+        # A real outbound attempt still fails: the deny-filter inventory,
+        # the off-allowlist and IPv6 proofs, the external control's two
+        # honest verdicts (explicit deny OR proven silent-drop -- bare
+        # silence never satisfies either), three PASS stages, the removal
+        # confirmation, and the post-marker denial sweep all stay.
+        self.assertIn('WFP deny filters installed', script)
+        for proof in ['WFP control denied family=2 type=1 port=5606 WSAEACCES',
                       'WFP control denied family=23 type=1 port=5599 WSAEACCES',
                       'WFP UDP control delivered family=2 port=5599',
                       'WFP UDP control denied family=2 port=5606',
                       'WFP UDP control denied family=23 port=5599',
                       'WFP configured loopback control allowed']:
             self.assertIn(proof, script)
+        self.assertIn('WFP control denied family=2 type=1 port=443 WSAEACCES', script)
+        self.assertIn('WFP control silent-drop family=2 type=1 port=443 matched filter=', script)
+        self.assertIn('missing external-control proof', script)
         self.assertIn("grep -c '^PASS:'", script)
         self.assertIn('exercise reaped; job closed; dynamic WFP policy removed', script)
         self.assertIn("grep -Ei 'WSAEACCES|WFP gate failure|operation not permitted|EPERM'", script)
@@ -793,7 +825,7 @@ class WindowsLoopbackPermit(unittest.TestCase):
         # Diagnostics never fail the gate and never trip the post-marker
         # denial sweep.
         body = guard[guard.index('static void log_bound_addresses(void)'):]
-        body = body[:body.index('static void denied(')]
+        body = body[:body.index('static int tcp_attempt(')]
         self.assertNotIn('checked(', body)
         self.assertNotIn('exit(', body)
         for token in ['WSAEACCES', 'WFP gate failure', 'EPERM']:
@@ -865,6 +897,94 @@ class WindowsLoopbackPermit(unittest.TestCase):
                 module.run_stage('fixture-quiet', [('rank', ok)], 30)
         self.assertEqual(bound.call_count, 0)
         self.assertIn('PASS: fixture-quiet', out.getvalue())
+
+class WfpVerdictClassifier(unittest.TestCase):
+    # Rework 7, CI run 38472050604 (tag 0.1.2-8): the external 443 control
+    # timed out with neither an explicit deny nor a connection, and the
+    # guard retried the silence. The classifier below is the unit under
+    # test: one nonblocking TCP attempt maps to exactly one verdict, and
+    # only DENIED passes unconditionally -- SILENT_DROP passes for the
+    # external control alone and only with a net-event proof (pinned in
+    # WindowsLoopbackPermit), never by retry.
+    CASES = [
+        # (sync_error, select_ready, so_error) -> verdict
+        ('WFP_WSAEACCES', '0', 'WFP_WSAEACCES', 'WFP_VERDICT_DENIED'),
+        ('WFP_WSAEACCES', '1', '0', 'WFP_VERDICT_DENIED'),
+        ('0', '0', '0', 'WFP_VERDICT_CONNECTED'),
+        ('WFP_WSAECONNREFUSED', '0', 'WFP_WSAECONNREFUSED', 'WFP_VERDICT_REFUSED'),
+        ('10022', '0', '10022', 'WFP_VERDICT_OTHER_ERROR'),
+        ('WFP_WSAEWOULDBLOCK', '0', 'WFP_WSAEWOULDBLOCK', 'WFP_VERDICT_SILENT_DROP'),
+        ('WFP_WSAEWOULDBLOCK', '-1', 'WFP_WSAEWOULDBLOCK', 'WFP_VERDICT_SILENT_DROP'),
+        ('WFP_WSAEWOULDBLOCK', '1', 'WFP_WSAEACCES', 'WFP_VERDICT_DENIED'),
+        ('WFP_WSAEWOULDBLOCK', '1', '0', 'WFP_VERDICT_CONNECTED'),
+        ('WFP_WSAEWOULDBLOCK', '1', 'WFP_WSAECONNREFUSED', 'WFP_VERDICT_REFUSED'),
+        ('WFP_WSAEWOULDBLOCK', '1', '10054', 'WFP_VERDICT_OTHER_ERROR'),
+    ]
+
+    def _compiler(self):
+        import shutil
+        compiler = shutil.which('cc') or shutil.which('gcc')
+        self.assertIsNotNone(compiler, 'a C compiler is required to test the verdict classifier')
+        return compiler
+
+    def test_verdict_table(self):
+        header = ROOT/'files/wfp-verdict.h'
+        self.assertTrue(header.is_file())
+        rows = '\n'.join(
+            f'    {{{sync}, {ready}, {so}, {want}}},'
+            for sync, ready, so, want in self.CASES)
+        harness = (f'#include <stdio.h>\n#include "wfp-verdict.h"\n'
+                   f'static const struct {{ int sync, ready, so, want; }} cases[] = {{\n{rows}\n}};\n'
+                   'int main(void) {\n'
+                   '    int fails = 0;\n'
+                   '    for (unsigned i = 0; i < sizeof(cases)/sizeof(cases[0]); i++) {\n'
+                   '        int got = wfp_classify_tcp_verdict(cases[i].sync, cases[i].ready, cases[i].so);\n'
+                   '        if (got != cases[i].want) {\n'
+                   '            printf("FAIL case %u: sync=%d ready=%d so=%d got=%d want=%d\\n",\n'
+                   '                   i, cases[i].sync, cases[i].ready, cases[i].so, got, cases[i].want);\n'
+                   '            fails++;\n'
+                   '        }\n'
+                   '    }\n'
+                   '    if (!fails) puts("VERDICT-TABLE-OK");\n'
+                   '    return fails != 0;\n'
+                   '}\n')
+        with tempfile.TemporaryDirectory() as d:
+            src = Path(d)/'verdict-harness.c'
+            exe = Path(d)/'verdict-harness'
+            src.write_text(harness)
+            compile = subprocess.run([self._compiler(), '-std=c11', '-Wall', '-Wextra', '-Werror',
+                                      '-I', str(header.parent), str(src), '-o', str(exe)],
+                                     capture_output=True, text=True, timeout=60)
+            self.assertEqual(compile.returncode, 0, compile.stderr)
+            run = subprocess.run([str(exe)], capture_output=True, text=True, timeout=30)
+            self.assertEqual(run.returncode, 0, run.stdout)
+            self.assertIn('VERDICT-TABLE-OK', run.stdout)
+
+    def test_header_binds_documented_winsock_values(self):
+        # The header duplicates Winsock ABI values so non-Windows builds
+        # compile; the guard _Static_asserts each against the real
+        # constant, so drift fails the Windows compile, not the gate.
+        header = (ROOT/'files/wfp-verdict.h').read_text()
+        for name, value in [('WFP_WSAEACCES', '10013'), ('WFP_WSAEWOULDBLOCK', '10035'),
+                            ('WFP_WSAECONNREFUSED', '10061')]:
+            self.assertIn(f'#define {name} {value}', header)
+        guard = (ROOT/'files/windows-net-guard.c').read_text()
+        self.assertIn('#include "wfp-verdict.h"', guard)
+        for name in ['WSAEACCES', 'WSAEWOULDBLOCK', 'WSAECONNREFUSED']:
+            self.assertIn(f'_Static_assert({name} == WFP_{name}', guard)
+
+    def test_deny_table_covers_every_protect_round(self):
+        # protect() records six deny IDs per guarded image (self, the
+        # exercise image, each --app image); the table must hold several
+        # rounds, and overflow must fail loudly, never wrap.
+        guard = (ROOT/'files/windows-net-guard.c').read_text()
+        capacity = int(re.search(r'#define MAX_DENY_FILTERS (\d+)', guard)[1])
+        self.assertGreaterEqual(capacity, 6 * 3)
+        self.assertIn('deny filter table overflow', guard)
+
+    def test_classifier_header_ships_in_fork(self):
+        self.assertEqual((ROOT/'fork/bashy-build/wfp-verdict.h').read_bytes(),
+                         (ROOT/'files/wfp-verdict.h').read_bytes())
 
 class WindowsCompilerProbe(unittest.TestCase):
     # The exact run 38462299969 failure: an MSVC-target clang must be

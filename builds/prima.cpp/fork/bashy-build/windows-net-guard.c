@@ -26,17 +26,28 @@
  * when the exercise child fails or exceeds the outer deadline, so the next
  * failure says what the exercise actually bound. Dumps never fail the gate.
  * The external control targets unroutable TEST-NET-1, which never answers,
- * so its deadline is cold-start-tolerant with retries: a slow first ALE
- * verdict must not read as missing enforcement.
+ * so a missing ALE block reads as silence (select timeout), not as a fast
+ * verdict: CI run 38472050604 timed out there with no explicit deny. A
+ * BLOCK at ALE_AUTH_CONNECT surfaces as WSAEACCES, never as silence, so a
+ * single attempt is classified (wfp-verdict.h) and silence passes the
+ * control ONLY when a CLASSIFY_DROP net event proves OUR deny filter
+ * matched the flow; silence with no such event means the filter missed and
+ * the runner fabric dropped the SYN, and fails with that diagnosis.
+ * Retrying the silence cannot tell those apart, so the external control
+ * does not retry. The fast loopback/IPv6 denies run first: their WSAEACCES
+ * proves app-id matching for this process before the external verdict is
+ * read. The real exercise stays strict: any denial past the marker fails.
  *
  * Pinned allowlist (prima 0.1.x ring + engine ports; keep in sync with
  * no-egress-test.sh and exercise.py):
  *   ring 5599-5605, engine data 19000/19001, engine signal 19100/19101.
  *
  * Usage: guard.exe --app EXE [--app EXE ...] -- PIDFILE EXECUTABLE [ARGS...]
- * Controls print directly-observed verdicts (WSAEACCES / delivery proof) to
- * stdout BEFORE the marker line "WFP exercise filters installed"; the gate
- * script splits the log there and refuses denial signatures after it.
+ * Controls print directly-observed verdicts (WSAEACCES / delivery proof,
+ * plus the deny-filter inventory and -- for the external control only -- a
+ * net-event-proven silent-drop) to stdout BEFORE the marker line
+ * "WFP exercise filters installed"; the gate script splits the log there
+ * and refuses denial signatures after it.
  */
 #define _WIN32_WINNT 0x0602
 #include <winsock2.h>
@@ -49,6 +60,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
+#include "wfp-verdict.h"
+
+/* The classifier's Winsock values must stay bound to the real ones; drift
+ * would fork the Linux-tested verdict table from the Windows gate. */
+_Static_assert(WSAEACCES == WFP_WSAEACCES, "WSAEACCES binding");
+_Static_assert(WSAEWOULDBLOCK == WFP_WSAEWOULDBLOCK, "WSAEWOULDBLOCK binding");
+_Static_assert(WSAECONNREFUSED == WFP_WSAECONNREFUSED, "WSAECONNREFUSED binding");
 
 static const GUID connect4 = {0xc38d57d1,0x05a7,0x4c33,{0x90,0x4f,0x7f,0xbc,0xee,0xe6,0x0e,0x82}};
 static const GUID connect6 = {0x4a72393b,0x319f,0x44bc,{0x84,0xc3,0xba,0x54,0xdc,0xb3,0xb6,0xb4}};
@@ -68,13 +86,33 @@ _Static_assert(sizeof(allowed_ports) / sizeof(allowed_ports[0]) == 11,
                "pinned allowlist size");
 _Static_assert((5605u - 5599u + 1u) + (19001u - 19000u + 1u) + (19101u - 19100u + 1u) == 11,
                "permit ranges tile the allowlist");
-/* Cold hosted starts deliver the first ALE verdict slowly; TEST-NET-1 never
- * answers, so a short single-shot deadline fails the gate instead of the
- * verdict. Retry patiently; a genuinely unblocked attempt still ends in a
- * refusal or a repeated silence and fails. */
+/* Loopback/IPv6 denies land synchronously (no network involved), so one
+ * attempt with a generous select fallback is enough; the external control
+ * below gets its own short deadline because a matched ALE block is
+ * immediate while an unmatched SYN to TEST-NET-1 stays silent. */
 #define CONTROL_DEADLINE_SEC 15
-#define CONTROL_ATTEMPTS 3
+#define EXTERNAL_DEADLINE_SEC 5
 #define DATAGRAM_DEADLINE_SEC 5
+
+/* Deny filter IDs captured from FwpmFilterAdd0: the "proven installed"
+ * half of the external silent-drop acceptance (the "proven matched" half
+ * is a CLASSIFY_DROP net event carrying one of these IDs). */
+/* Six deny IDs per protect() call (IPv6 + non-loopback + four range
+ * tiles); protect() runs once per guarded executable (self, the exercise
+ * image, and each --app image), so size for several rounds with headroom.
+ * The installed-verification and the external control both run while only
+ * self's six are recorded. */
+#define MAX_DENY_FILTERS 64
+static UINT64 deny_ids[MAX_DENY_FILTERS];
+static size_t deny_count = 0;
+
+static void record_deny_id(UINT64 id) {
+    if (deny_count >= MAX_DENY_FILTERS) {
+        fprintf(stderr, "WFP gate failure: deny filter table overflow\n");
+        exit(1);
+    }
+    deny_ids[deny_count++] = id;
+}
 
 static void checked(DWORD status, const char *operation) {
     if (status) {
@@ -126,14 +164,22 @@ static void protect(HANDLE engine, GUID sublayer, const wchar_t *exe) {
     /* IPv6 completely denied: every configured endpoint is IPv4 loopback. */
     filter.layerKey = connect6;
     filter.numFilterConditions = 1;
-    checked(FwpmFilterAdd0(engine, &filter, NULL, NULL), "IPv6 deny");
+    {
+        UINT64 id = 0;
+        checked(FwpmFilterAdd0(engine, &filter, &id, NULL), "IPv6 deny");
+        record_deny_id(id);
+    }
     filter.layerKey = connect4;
     filter.numFilterConditions = 2;
     conditions[1].fieldKey = remote_address;
     conditions[1].matchType = FWP_MATCH_NOT_EQUAL;
     conditions[1].conditionValue.type = FWP_UINT32;
     conditions[1].conditionValue.uint32 = 0x7f000001; /* WFP host byte order */
-    checked(FwpmFilterAdd0(engine, &filter, NULL, NULL), "non-loopback deny");
+    {
+        UINT64 id = 0;
+        checked(FwpmFilterAdd0(engine, &filter, &id, NULL), "non-loopback deny");
+        record_deny_id(id);
+    }
     /* Ports outside the pinned allowlist denied, one range filter each. */
     conditions[1].fieldKey = remote_port;
     conditions[1].matchType = FWP_MATCH_GREATER_OR_EQUAL;
@@ -143,11 +189,80 @@ static void protect(HANDLE engine, GUID sublayer, const wchar_t *exe) {
     conditions[2].conditionValue.type = FWP_UINT16;
     filter.numFilterConditions = 3;
     for (size_t i = 0; i < sizeof(blocked_ranges) / sizeof(blocked_ranges[0]); i++) {
+        UINT64 id = 0;
         conditions[1].conditionValue.uint16 = blocked_ranges[i][0];
         conditions[2].conditionValue.uint16 = blocked_ranges[i][1];
-        checked(FwpmFilterAdd0(engine, &filter, NULL, NULL), "outside-allowlist deny");
+        checked(FwpmFilterAdd0(engine, &filter, &id, NULL), "outside-allowlist deny");
+        record_deny_id(id);
     }
     FwpmFreeMemory0((void **)&app);
+}
+
+/* "Proven installed": every deny filter ID captured above must still
+ * resolve by ID inside our sublayer (direct lookup, no enumeration
+ * pagination to get wrong). Runs after protect(self) and before any
+ * control, so a later silent external verdict is read against confirmed
+ * policy, not assumed policy. */
+static void verify_deny_filters_installed(HANDLE engine, const GUID *sublayer) {
+    size_t found = 0;
+    for (size_t k = 0; k < deny_count; k++) {
+        FWPM_FILTER0 *filter = NULL;
+        DWORD status = FwpmFilterGetById0(engine, deny_ids[k], &filter);
+        if (status) {
+            fprintf(stderr, "WFP gate failure: deny filter lookup %llu: %lu\n",
+                    (unsigned long long)deny_ids[k], (unsigned long)status);
+            exit(1);
+        }
+        if (memcmp(&filter->subLayerKey, sublayer, sizeof(GUID)) == 0)
+            found++;
+        FwpmFreeMemory0((void **)&filter);
+    }
+    printf("WFP deny filters installed count=%u matched=%u\n",
+           (unsigned)deny_count, (unsigned)found);
+    fflush(stdout);
+    if (found != deny_count) {
+        fprintf(stderr, "WFP gate failure: deny filters missing (%u of %u in our sublayer)\n",
+                (unsigned)found, (unsigned)deny_count);
+        exit(1);
+    }
+}
+
+/* "Proven matched": scan recent CLASSIFY_DROP net events for one carrying
+ * our ALE_CONNECT_V4 deny filter ID at or after 'since'. Returns the
+ * matching filter ID, or 0 when no such event exists -- the run-38472050604
+ * silence with no event here is the filter-miss/runner-drop case (b), not
+ * a slow verdict, and must fail, not pass. */
+static UINT64 external_drop_matched(HANDLE engine, const FILETIME *since) {
+    FWPM_NET_EVENT_ENUM_TEMPLATE0 enum_template = {0};
+    HANDLE enum_handle = NULL;
+    checked(FwpmNetEventCreateEnumHandle0(engine, &enum_template, &enum_handle),
+            "net event enum handle");
+    FWPM_NET_EVENT0 **events = NULL;
+    UINT32 returned = 0;
+    checked(FwpmNetEventEnum0(engine, enum_handle, 256, &events, &returned),
+            "net event enum");
+    UINT64 matched = 0;
+    for (UINT32 i = 0; i < returned && !matched; i++) {
+        FWPM_NET_EVENT0 *event = events[i];
+        if (event->type != FWPM_NET_EVENT_TYPE_CLASSIFY_DROP)
+            continue;
+        if (!event->classifyDrop)
+            continue;
+        if (CompareFileTime(&event->header.timeStamp, since) < 0)
+            continue;
+        if (memcmp(&event->classifyDrop->layerId, &connect4, sizeof(GUID)) != 0)
+            continue;
+        for (size_t k = 0; k < deny_count; k++) {
+            if (event->classifyDrop->filterId == deny_ids[k]) {
+                matched = deny_ids[k];
+                break;
+            }
+        }
+    }
+    FwpmFreeMemory0((void **)&events);
+    checked(FwpmNetEventDestroyEnumHandle0(engine, enum_handle),
+            "net event enum destroy");
+    return matched;
 }
 
 /* Diagnostic only: dump loopback listeners so the next gate failure names
@@ -193,78 +308,116 @@ static void log_bound_addresses(void) {
     fflush(stdout);
 }
 
-static void denied(int family, int type, UINT16 port, BOOL external) {
-    /* A slow first ALE verdict must not read as missing enforcement: retry
-     * a generous deadline before failing, and name the endpoint plus the
-     * bound table when it still fails. */
-    for (int attempt = 1; attempt <= CONTROL_ATTEMPTS; attempt++) {
-        SOCKET s = socket(family, type, 0);
-        if (s == INVALID_SOCKET) {
-            log_bound_addresses();
-            checked(WSAGetLastError(), "control socket");
-        }
-        u_long nonblocking = 1;
-        if (ioctlsocket(s, FIONBIO, &nonblocking)) {
-            int status = WSAGetLastError();
-            closesocket(s);
-            log_bound_addresses();
-            checked((DWORD)status, "nonblocking");
-        }
-        int rc;
-        if (family == AF_INET) {
-            struct sockaddr_in address = {0};
-            address.sin_family = AF_INET;
-            address.sin_port = htons(port);
-            address.sin_addr.s_addr = htonl(external ? 0xc0000201 : 0x7f000001);
-            rc = type == SOCK_DGRAM ? sendto(s, "control", 7, 0, (SOCKADDR *)&address, sizeof(address)) :
-                                     connect(s, (SOCKADDR *)&address, sizeof(address));
-        } else {
-            struct sockaddr_in6 address = {0};
-            address.sin6_family = AF_INET6;
-            address.sin6_port = htons(port);
-            address.sin6_addr.s6_addr[15] = 1;
-            rc = type == SOCK_DGRAM ? sendto(s, "control", 7, 0, (SOCKADDR *)&address, sizeof(address)) :
-                                     connect(s, (SOCKADDR *)&address, sizeof(address));
-        }
-        int error = WSAGetLastError();
-        if (type == SOCK_STREAM && rc == SOCKET_ERROR && error == WSAEWOULDBLOCK) {
-            fd_set writes, errors;
-            FD_ZERO(&writes); FD_ZERO(&errors);
-            FD_SET(s, &writes); FD_SET(s, &errors);
-            struct timeval timeout = {CONTROL_DEADLINE_SEC, 0};
-            int ready = select(0, NULL, &writes, &errors, &timeout);
-            if (ready <= 0) {
-                closesocket(s);
-                if (attempt < CONTROL_ATTEMPTS) {
-                    printf("WFP control verdict pending family=%d type=%d port=%u attempt=%d\n",
-                           family, type, port, attempt);
-                    fflush(stdout);
-                    Sleep(1000);
-                    continue;
-                }
-                fprintf(stderr, "WFP gate failure: control connect deadline family=%d type=%d port=%u external=%d\n",
-                        family, type, port, (int)external);
-                log_bound_addresses();
-                exit(1);
-            }
-            int size = sizeof(error);
-            if (getsockopt(s, SOL_SOCKET, SO_ERROR, (char *)&error, &size)) {
+/* One nonblocking TCP attempt with a bounded select fallback, classified
+ * by wfp_classify_tcp_verdict. Returns the verdict; SO_ERROR and select
+ * outputs are valid only for the WOULDBLOCK path the classifier reads. */
+static int tcp_attempt(int family, UINT16 port, DWORD dest_v4, long deadline_sec,
+                       int *sync_error, int *so_error) {
+    SOCKET s = socket(family, SOCK_STREAM, 0);
+    if (s == INVALID_SOCKET) {
+        log_bound_addresses();
+        checked(WSAGetLastError(), "control socket");
+    }
+    u_long nonblocking = 1;
+    if (ioctlsocket(s, FIONBIO, &nonblocking)) {
+        int status = WSAGetLastError();
+        closesocket(s);
+        log_bound_addresses();
+        checked((DWORD)status, "nonblocking");
+    }
+    int rc;
+    if (family == AF_INET) {
+        struct sockaddr_in address = {0};
+        address.sin_family = AF_INET;
+        address.sin_port = htons(port);
+        address.sin_addr.s_addr = htonl(dest_v4);
+        rc = connect(s, (SOCKADDR *)&address, sizeof(address));
+    } else {
+        struct sockaddr_in6 address = {0};
+        address.sin6_family = AF_INET6;
+        address.sin6_port = htons(port);
+        address.sin6_addr.s6_addr[15] = 1;
+        rc = connect(s, (SOCKADDR *)&address, sizeof(address));
+    }
+    *sync_error = WSAGetLastError();
+    int ready = 0;
+    *so_error = *sync_error;
+    if (rc == SOCKET_ERROR && *sync_error == WSAEWOULDBLOCK) {
+        fd_set writes, errors;
+        FD_ZERO(&writes); FD_ZERO(&errors);
+        FD_SET(s, &writes); FD_SET(s, &errors);
+        struct timeval timeout = {(long)deadline_sec, 0};
+        ready = select(0, NULL, &writes, &errors, &timeout);
+        if (ready > 0) {
+            int size = sizeof(*so_error);
+            if (getsockopt(s, SOL_SOCKET, SO_ERROR, (char *)so_error, &size)) {
                 int status = WSAGetLastError();
                 closesocket(s);
                 log_bound_addresses();
                 checked((DWORD)status, "control socket error");
             }
         }
-        closesocket(s);
-        if (rc != SOCKET_ERROR || error != WSAEACCES) {
-            fprintf(stderr, "control did not get WSAEACCES: family=%d type=%d port=%u rc=%d error=%d\n",
-                    family, type, port, rc, error);
-            log_bound_addresses();
-            exit(1);
-        }
-        printf("WFP control denied family=%d type=%d port=%u WSAEACCES\n", family, type, port);
+    }
+    closesocket(s);
+    (void)rc;
+    return wfp_classify_tcp_verdict(*sync_error, ready, *so_error);
+}
+
+static void denied(int family, int type, UINT16 port, BOOL external) {
+    /* Fast loopback/IPv6 denies: no network is involved, so a matched ALE
+     * block is synchronous WSAEACCES and anything else (including silence)
+     * means no enforcement. Single attempt: silence here must fail loudly,
+     * never retry into ambiguity. */
+    (void)type;
+    int sync_error = 0, so_error = 0;
+    int verdict = tcp_attempt(family, port, external ? 0xc0000201 : 0x7f000001,
+                              CONTROL_DEADLINE_SEC, &sync_error, &so_error);
+    if (verdict != WFP_VERDICT_DENIED) {
+        fprintf(stderr, "control did not get WSAEACCES: family=%d type=%d port=%u verdict=%d sync_error=%d so_error=%d\n",
+                family, type, port, verdict, sync_error, so_error);
+        log_bound_addresses();
+        exit(1);
+    }
+    printf("WFP control denied family=%d type=%d port=%u WSAEACCES\n", family, type, port);
+}
+
+/* The external negative control (TEST-NET-1 TCP 443, never answers):
+ *   - explicit ALE block -> WSAEACCES, the legacy proof line, PASS;
+ *   - silence -> PASS only with a CLASSIFY_DROP net event proving OUR deny
+ *     filter matched the flow (a slow-but-real verdict); silence with no
+ *     such event is the run-38472050604 filter-miss/runner-drop case and
+ *     fails with that diagnosis instead of a bare deadline;
+ *   - connect/refuse/other -> no enforcement, fail.
+ * Silence acceptance applies to THIS control only; the exercise stays
+ * strict (any denial past the marker fails the gate script). */
+static void denied_external(HANDLE engine, int family, UINT16 port) {
+    FILETIME since;
+    GetSystemTimeAsFileTime(&since);
+    int sync_error = 0, so_error = 0;
+    int verdict = tcp_attempt(family, port, 0xc0000201,
+                              EXTERNAL_DEADLINE_SEC, &sync_error, &so_error);
+    if (verdict == WFP_VERDICT_DENIED) {
+        printf("WFP control denied family=%d type=%d port=%u WSAEACCES\n",
+               family, SOCK_STREAM, port);
         return;
     }
+    if (verdict == WFP_VERDICT_SILENT_DROP) {
+        UINT64 matched = external_drop_matched(engine, &since);
+        if (matched) {
+            printf("WFP control silent-drop family=%d type=%d port=%u matched filter=%llu\n",
+                   family, SOCK_STREAM, port, (unsigned long long)matched);
+            return;
+        }
+        fprintf(stderr, "WFP gate failure: external control silent with no matching CLASSIFY_DROP event "
+                "family=%d type=%d port=%u (filter missed the flow or the runner fabric dropped the SYN)\n",
+                family, SOCK_STREAM, port);
+        log_bound_addresses();
+        exit(1);
+    }
+    fprintf(stderr, "control not denied: family=%d type=%d port=%u verdict=%d sync_error=%d so_error=%d\n",
+            family, SOCK_STREAM, port, verdict, sync_error, so_error);
+    log_bound_addresses();
+    exit(1);
 }
 
 /* A successful UDP sendto only means Winsock accepted the bytes. Observe a
@@ -407,9 +560,14 @@ int wmain(int argc, wchar_t **argv) {
     DWORD length = GetModuleFileNameW(NULL, self, 32768);
     wincheck(length && length < 32768, "self path");
     protect(engine, sublayer.subLayerKey, self);
-    denied(AF_INET, SOCK_STREAM, 443, TRUE);
+    verify_deny_filters_installed(engine, &sublayer.subLayerKey);
+    /* Fast denies first: their WSAEACCES proves app-id matching for this
+     * process before the external verdict is read. The external control
+     * runs last so its verdict (or proven silence) cannot be mistaken for
+     * a cold-start delay in the fast path. */
     denied(AF_INET, SOCK_STREAM, 5606, FALSE);
     denied(AF_INET6, SOCK_STREAM, 5599, FALSE);
+    denied_external(engine, AF_INET, 443);
     datagram_control(AF_INET, 5599, TRUE);
     datagram_control(AF_INET, 5606, FALSE);
     datagram_control(AF_INET6, 5599, FALSE);
