@@ -249,7 +249,7 @@ try {
     # Read the rule programs back and compare case-insensitively against
     # the resolved paths: a rule the API normalized or rejected proves
     # itself here, before the control runs, instead of as a timeout later.
-    $rulePrograms = @(Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $installed |
+    $rulePrograms = @($installed | Get-NetFirewallApplicationFilter |
         ForEach-Object { $_.Program })
     Note "Defender installed rule programs: $($rulePrograms -join '; ')"
     foreach ($need in $resolvedPrograms) {
