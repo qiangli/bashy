@@ -199,3 +199,5 @@ Weave-round verification + retro reports (historical, not load-bearing):
 - [Prima two-rank timeout](plan-prima-two-rank-timeout.md) — candidate -4 authenticated evidence, bounded producer diagnostics and required first-party shutdown repair; gate remains red.
 
 - [Official Ollama runner recipe plan](plan-official-ollama-runner-recipe.md) — Sprint 436 source pin, native matrix and release holds.
+
+- [Official Ollama native gate plan, Story 1920](plan-ollama-native-gate-1920.md) — hosted protocol, confinement and evidence; Dragon limited to harness validation.

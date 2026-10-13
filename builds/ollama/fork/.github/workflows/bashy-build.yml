@@ -125,7 +125,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends build-essential python3
+          sudo apt-get install -y --no-install-recommends build-essential python3 strace iproute2 util-linux lsof
       - name: pinned runner Go toolchain
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -149,6 +149,17 @@ jobs:
         run: bash fork/bashy-build/build-runner.sh src out "$RUNNER_ASSET"
       - name: no-egress gate (before signing)
         run: fork/bashy-build/no-egress-test.sh "out/${{ matrix.asset }}"
+      - name: upload native protocol and network evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.asset }}-native-evidence
+          path: |
+            out/*-native.json
+            out/*-native.log
+            out/*-egress.txt
+          if-no-files-found: error
+          retention-days: 7
 
       - name: upload unsigned build outputs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

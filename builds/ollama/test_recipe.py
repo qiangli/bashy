@@ -72,6 +72,17 @@ class Recipe(unittest.TestCase):
         self.assertIn("UPSTREAM_COMMIT=" + PIN, pin)
         self.assertIn("UPSTREAM_SLUG=ollama/ollama", pin)
         run("bash", str(self.helpers / "no-egress-test.sh"), ok=False)
+        # An ordinary host and a self-hosted Actions runner must both stop before
+        # fetching a model, probing tools or starting the supplied executable.
+        for hosted in ("", "self-hosted"):
+            env = dict(os.environ, GITHUB_ACTIONS="true", RUNNER_ENVIRONMENT=hosted)
+            refusal = run("bash", str(self.helpers / "no-egress-test.sh"),
+                          "nonexistent/runner-linux-amd64", env=env, ok=False)
+            self.assertIn("requires a GitHub-hosted runner", refusal.stderr)
+        self.assertIn("if: always()", wf)
+        self.assertIn("out/*-native.json", wf)
+        self.assertIn("out/*-egress.txt", wf)
+        self.assertIn("runner-windows-amd64-native.json", pin)
 
     def test_source_guards(self):
         src = self.fixture()
