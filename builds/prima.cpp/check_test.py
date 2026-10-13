@@ -48,7 +48,8 @@ class LicenseReview(unittest.TestCase):
             for p in (ROOT/'testdata/license-review').rglob('*'):
                 if not p.is_file(): continue
                 name = str(p.relative_to(ROOT/'testdata/license-review'))
-                expression = ('mit AND cpal-1.0' if name.endswith(('tcp.h', 'stub.c')) else
+                expression = ('mit AND cpal-1.0' if ('/platform/windows/win_' in name or
+                              name.endswith(('tcp.h', 'stub.c'))) else
                               'mit AND mpl-2.0' if name.endswith('shim.hpp') else 'mit')
                 self.add(f'{asset}/{name}', p.read_bytes(), expression)
 
@@ -72,7 +73,7 @@ class LicenseReview(unittest.TestCase):
     def test_exact_reviewed_files_on_all_platforms(self):
         errors, corrections = self.result()
         self.assertEqual(errors, [])
-        self.assertEqual(len(corrections), 15)
+        self.assertEqual(len(corrections), 120)
         self.assertEqual({r['reviewed'] for r in corrections}, {'mit'})
         self.assertEqual(self.scan['files'][0]['license_detections'][0]['license_expression'], 'mit')
 
@@ -105,6 +106,48 @@ class LicenseReview(unittest.TestCase):
                 self.assertIn(path, '\n'.join(self.result()[0]))
                 scan['license_detections'][0]['license_expression'] = 'mit AND cpal-1.0'
 
+    def test_windows_platform_false_positive_requires_exact_reviewed_bytes(self):
+        # CI run 38484129698 (tag 0.1.2-12): all five builds green, audit
+        # failed only on 'mit AND cpal-1.0' findings for nng Windows platform
+        # files. The pinned bytes carry the standard NNG MIT header; the CPAL
+        # half is ScanCode rule cpal-1.0_11 matching the '(LICENSE.txt) ...
+        # distribution' phrasing, firing even on files with no Capitar line
+        # (e.g. win_pipe.c). Each file is reviewed only at its exact pinned
+        # hash; other expressions and changed bytes still fail.
+        reviewed = json.loads((ROOT/'files/license-review.json').read_text())
+        wins = sorted(p for p in reviewed['nng_files'] if '/platform/windows/win_' in p)
+        self.assertEqual(len(wins), 21)
+        for name in wins:
+            body = (ROOT/'testdata/license-review'/name).read_bytes()
+            self.assertEqual(hashlib.sha256(body).hexdigest(), reviewed['nng_files'][name], name)
+            self.assertIn(b'terms of the MIT License', body, name)
+        errors, corrections = self.result()
+        self.assertEqual(errors, [])
+        win_rows = {(row['path'], row['sha256'], row['detected']) for row in corrections
+                    if '/platform/windows/win_' in row['path']}
+        self.assertEqual(win_rows, {(f'{asset}/{name}', reviewed['nng_files'][name], 'mit AND cpal-1.0')
+                                    for asset in merge.ASSETS for name in wins})
+        self.assertEqual({row['reviewed'] for row in corrections}, {'mit'})
+        name = 'deps/nng/src/platform/windows/win_tcpconn.c'
+        expected = reviewed['nng_files'][name]
+        body = (ROOT/'testdata/license-review'/name).read_bytes()
+        self.assertIn(b'Copyright 2018 Capitar IT Group BV', body)
+        for asset in merge.ASSETS:
+            path = f'{asset}/{name}'
+            row = next(row for row in self.inputs if row['path'] == path)
+            scan = next(row for row in self.scan['files'] if row['path'] == 'audit-inputs/'+path)
+            for changed in (body + b'\n// changed\n', body + b'\n// CPAL-1.0\n'):
+                with self.subTest(asset=asset, changed=changed[-20:]):
+                    (self.tree/path).write_bytes(changed)
+                    row['sha256'] = hashlib.sha256(changed).hexdigest()
+                    self.assertIn(path, '\n'.join(self.result()[0]))
+                    (self.tree/path).write_bytes(body)
+                    row['sha256'] = expected
+            with self.subTest(asset=asset, expression='cpal-1.0'):
+                scan['license_detections'][0]['license_expression'] = 'cpal-1.0'
+                self.assertIn(path, '\n'.join(self.result()[0]))
+                scan['license_detections'][0]['license_expression'] = 'mit AND cpal-1.0'
+
     def test_changed_source_bytes_even_with_updated_inventory_fail(self):
         for suffix, body in [('tcp.h', b'// MIT License CPAL-1.0'),
                              ('shim.hpp', b'// MPL-2.0'),
@@ -116,14 +159,14 @@ class LicenseReview(unittest.TestCase):
     def test_changed_root_license_fails(self):
         self.change_bytes('LICENSE.txt', b'MIT')
         self.change_bytes('/LICENSE', b'MIT')
-        self.assertEqual(len(self.result()[0]), 15)
+        self.assertEqual(len(self.result()[0]), 120)
 
     def test_changed_pins_fail(self):
         self.inventory['linked'][1]['commit'] = '0'*40
-        self.assertEqual(len(self.result()[0]), 15)
+        self.assertEqual(len(self.result()[0]), 120)
         self.inventory = json.loads((ROOT/'files/dependencies.json').read_text())
         self.inventory['source']['commit'] = '0'*40
-        self.assertEqual(len(self.result()[0]), 15)
+        self.assertEqual(len(self.result()[0]), 120)
 
     def test_other_paths_and_nonpermissive_expressions_fail(self):
         for expr in ['cpal-1.0', 'mpl-2.0', 'fpl', 'mit AND cpal-1.0 AND gpl-2.0',
@@ -184,7 +227,7 @@ class LicenseReview(unittest.TestCase):
                     os.chdir(old)
                 report = json.loads((out/'prima-licenses.json').read_text())
                 self.assertEqual(report['files'], self.scan['files'])
-                self.assertEqual(len(report['bashy_reviewed_findings']), 15)
+                self.assertEqual(len(report['bashy_reviewed_findings']), 120)
                 self.assertTrue((out/'prima-sbom.cdx.json').is_file())
                 self.assertTrue((out/'prima-osv.json').is_file())
 

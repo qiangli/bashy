@@ -1,4 +1,5 @@
-"""Exact-byte adjudications of ScanCode 32.5.0 findings from run 38420930156.
+"""Exact-byte adjudications of ScanCode 32.5.0 findings from runs 38420930156
+and 38484129698 (rework 11: NNG Windows platform files, same MIT-header rule).
 
 No additional license is allowed. A changed pin, file, expression, or license
 requires fresh review. Raw ScanCode findings remain in prima-licenses.json.

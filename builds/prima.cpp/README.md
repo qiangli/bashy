@@ -255,3 +255,28 @@ closure exclusion, ScanCode, OSV, Grype, SBOM and four-platform no-egress must
 all pass again on the manager's immutable `-3` candidate before signing.
 No native build, container, full suite or push was performed here. CMake is
 absent from the local PATH, so no optional CMake script-mode probe ran.
+
+## Candidate 0.1.2-12 Windows license review (Story 2029, rework 11)
+
+Run `38484129698` passed all five native builds, then failed its ScanCode
+gate only on `mit AND cpal-1.0` findings for NNG Windows platform files
+(`deps/nng/src/platform/windows/win_*.c/.h`). The pinned NNG v1.9.0 commit
+`29aff2bacc9e2cfa6dcc52155d2816582617f918` headers are plain MIT ("This
+software is supplied under the terms of the MIT License ... LICENSE.txt").
+A local ScanCode 32.5.0 scan of the pinned bytes shows every Windows
+platform file reports `mit AND cpal-1.0`: the CPAL half is rule
+`cpal-1.0_11` matching the "(LICENSE.txt) ... distribution" phrasing, and
+fires even on files with no Capitar line (e.g. `win_pipe.c`).
+
+`files/license-review.json` gains exact path/SHA-256 pairs for the 21
+Windows platform library files (18 `win_*.c` compiled into the Windows nng
+static lib plus the 3 `win_*.h` headers they include; the `win_ipc_sec_test`
+test source is never built with `NNG_TESTS=OFF` and `CMakeLists.txt` is
+never a compiler input, so neither is pinned). The existing adjudication
+rule is unchanged: exact NNG and source pins, the canonical NNG MIT license
+in the same platform archive, unchanged bytes, the exact expression
+`mit AND cpal-1.0`, an MIT header, and no CPAL/MPL/FPL terms in the reviewed
+bytes. Any other expression, path, pin, or byte change still fails, and
+there is still no general CPAL allowance. Focused fixture tests replay the
+hosted findings (120 corrections across the five platform archives) and
+reject changed bytes, added CPAL text, and a CPAL-only expression.
