@@ -31,7 +31,7 @@
 # carry that four-file glibc closure (~1.8 MB) beside the binary; (b) is the
 # only truly static artifact. This is a property of the shipped lean binary
 # (it does not run on musl/Alpine either), not of these images.
-ARG GO_IMAGE=docker.io/library/golang:1.27.1-bookworm
+ARG GO_IMAGE=docker.io/library/golang:1.27.2-bookworm
 
 # ---------------------------------------------------------------------------
 # builder — the pure-Go bashy (CGO off, no C launcher) in its cross-compiled
