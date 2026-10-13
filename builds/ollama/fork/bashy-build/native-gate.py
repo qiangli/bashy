@@ -124,13 +124,25 @@ def stream(port, cancel=False):
         conn.close()
 
 
+def check_windows_owner(output, pid, port):
+    listeners = []
+    for line in output.splitlines():
+        fields = line.split()
+        if len(fields) != 5 or fields[0] != 'TCP' or fields[3] != 'LISTENING':
+            continue
+        endpoint = fields[1]
+        if endpoint.rsplit(':', 1)[-1] == str(port):
+            listeners.append((endpoint, fields[4]))
+    require(listeners == [(f'127.0.0.1:{port}', str(pid))],
+            f'wrong listener ownership/bind: {listeners}')
+    return f'TCP 127.0.0.1:{port} LISTENING {pid}'
+
+
 def check_owner(pid, port):
     if os.name == 'nt':
-        script = (f'$x=@(Get-NetTCPConnection -State Listen -LocalPort {port} -ErrorAction Stop); '
-                  f'if($x.Count -ne 1 -or $x[0].OwningProcess -ne {pid} -or '
-                  '$x[0].LocalAddress -ne "127.0.0.1"){exit 1}; $x | ConvertTo-Json -Compress')
-        return subprocess.check_output(['powershell.exe', '-NoProfile', '-NonInteractive',
-                                        '-Command', script], text=True, timeout=15).strip()
+        output = subprocess.check_output(['netstat.exe', '-ano', '-p', 'tcp'],
+                                         text=True, timeout=15)
+        return check_windows_owner(output, pid, port)
     output = subprocess.check_output(['lsof', '-nP', '-a', '-p', str(pid),
                                       '-iTCP', '-sTCP:LISTEN', '-Fpn'], text=True, timeout=10)
     addresses = [line[1:] for line in output.splitlines() if line.startswith('n')]

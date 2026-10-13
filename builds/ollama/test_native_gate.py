@@ -152,6 +152,17 @@ class NativeContract(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     gate.check_owner(99, 18997)
 
+    def test_windows_bind_owner_requires_unique_loopback_listener(self):
+        good = '  TCP    127.0.0.1:18997    0.0.0.0:0    LISTENING    99\n'
+        self.assertIn('127.0.0.1:18997', gate.check_windows_owner(good, 99, 18997))
+        for bad in [good.replace('    99', '    98'),
+                    good.replace('127.0.0.1', '0.0.0.0'),
+                    good + good,
+                    good + '  TCP    [::]:18997    [::]:0    LISTENING    99\n',
+                    '']:
+            with self.subTest(output=bad), self.assertRaises(RuntimeError):
+                gate.check_windows_owner(bad, 99, 18997)
+
     def test_final_verdict_requires_both_gates(self):
         with tempfile.TemporaryDirectory() as root:
             path, log = Path(root) / 'evidence', Path(root) / 'network'
