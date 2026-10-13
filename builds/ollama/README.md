@@ -95,7 +95,8 @@ parent gates; this recipe alone does not make embedded inference work.
 
 `bash builds/check.sh ollama` runs regeneration/diff, shell syntax,
 shellcheck/actionlint when installed, shared gate self-tests and
-`python3 builds/ollama/test_recipe.py` plus `test_native_gate.py`. The former uses a fixture Git repo and
+`python3 builds/ollama/test_recipe.py`, `test_native_gate.py`, `test_audit.py`,
+and `test_compiler_evidence.py`. The former uses a fixture Git repo and
 a fake compiler to test five target recipes, native mismatch/unsupported
 rejection, pristine/source guards, gzip determinism and digest metadata.
 No local runner compilation, model execution, container or full suite occurs.
@@ -171,3 +172,34 @@ The conductor must review/install the generated fork and run all five hosted
 lanes. A missing platform PASS is still a release blocker. The Windows helper
 has not been compiled or executed locally; its first native verification is that
 hosted lane. This worker does not claim any of the five runtime lanes passed.
+
+
+## Compiler evidence (Story 1927)
+
+Each compiler invocation records its cwd, original/executed argv, exit status,
+and unique dependency file. Before returning to Go, the wrapper resolves relative
+inputs in that cwd and saves their SHA-256 and bytes in a content-addressed store.
+Separate invocation files and atomic blob writes support parallel compiles. The
+collector verifies blob hashes and dependency closure after Go deletes its work
+files; it never reopens vanished temporary inputs. Repository C/C++/headers and
+Metal remain in the exact-hash native license review inventory.
+
+The builder allocates private Go temp/cache directories. Only Go's cgo probe
+names and known generated cgo files under numbered Go work-package directories,
+and runtime/cgo under the pinned GOROOT, receive Go provenance. Symlinks are
+resolved before classification; arbitrary temp files and module-cache native
+inputs fail closed. Trusted Go inputs still carry path, SHA-256 and saved content.
+This classification is build provenance, not a new third-party license clearance.
+
+Windows setup discovers GCC/G++ on PATH and under installed MSYS2 environments,
+requiring matching versions/installations, the x86_64-w64-mingw32 target and
+GCC/MinGW/64-bit/C++ macros. It records and exports exact selected paths; the
+build rechecks the pair and records executable hashes and versions. The Windows
+Go compiler command explicitly invokes Python because CreateProcess does not
+interpret shebangs. No compiler is installed or silently substituted.
+
+The compiler-evidence artifact uses `always()` independently of no-egress and
+audit outcomes. Unsigned release inputs retain normal success conditions, and
+signing still requires pin, all native builds, and audit. Diagnostic bytes are
+not a release verdict. Hosted confirmation and exact native license review remain
+required; the bounded local fixtures do not execute native compilers or runners.

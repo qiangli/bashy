@@ -130,7 +130,7 @@ class Recipe(unittest.TestCase):
         mock.mkdir()
         go = mock / "go"
         go.write_text('''#!/usr/bin/env python3
-import os, pathlib, subprocess, sys
+import os, pathlib, shlex, subprocess, sys
 args = sys.argv[1:]
 assert os.environ['GOWORK'] == 'off'
 assert os.environ['CGO_ENABLED'] == '1'
@@ -139,8 +139,8 @@ if args[0] == 'env':
  print({'GOHOSTOS':os.environ['TEST_HOST'].split('/')[0], 'GOHOSTARCH':os.environ['TEST_HOST'].split('/')[1], 'GOVERSION':'go1.27.2', 'GOROOT':str(pathlib.Path.cwd() / 'goroot')}[args[1]])
 elif args[0] == 'build':
  assert args[1:3] == ['-mod=readonly','-trimpath'] and args[-1] == './cmd/runner'
- subprocess.run([os.environ['CC'], '-c', str(pathlib.Path.cwd() / 'llama/llama.cpp/native.c')], check=True)
- subprocess.run([os.environ['CXX'], '-c', str(pathlib.Path.cwd() / 'llama/llama.cpp/native.cpp')], check=True)
+ subprocess.run([*shlex.split(os.environ['CC']), '-c', str(pathlib.Path.cwd() / 'llama/llama.cpp/native.c')], check=True)
+ subprocess.run([*shlex.split(os.environ['CXX']), '-c', str(pathlib.Path.cwd() / 'llama/llama.cpp/native.cpp')], check=True)
  pathlib.Path(args[args.index('-o')+1]).write_bytes(b'FAKE compiler bytes: never release')
 elif args[0] == 'generate':
  assert os.environ['TEST_HOST'] == 'darwin/arm64'
@@ -153,10 +153,12 @@ else: raise RuntimeError(args)
         import subprocess
         fake_cc = mock / "fake-cc"
         fake_cc.write_text('''#!/usr/bin/env python3
-import pathlib, sys
+import os, pathlib, sys
 args=sys.argv[1:]
 if args == ['--version']: print('fake compiler fixture'); sys.exit(0)
-if args == ['-dumpmachine']: print('fixture-target'); sys.exit(0)
+if args == ['-dumpmachine']: print('x86_64-w64-mingw32' if os.environ.get('GOOS') == 'windows' else 'fixture-target'); sys.exit(0)
+if args == ['-dumpfullversion']: print('14.2'); sys.exit(0)
+if args[0] == '-dM': print('#define __GNUC__ 14\\n#define __MINGW64__ 1\\n#define __x86_64__ 1\\n#define __SIZEOF_POINTER__ 8\\n#define __cplusplus 201703L'); sys.exit(0)
 assert '-MMD' in args and '-MF' in args
 dep=pathlib.Path(args[args.index('-MF')+1])
 source=next(x for x in args if x.endswith(('.c', '.cpp')))
@@ -165,7 +167,11 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         fake_cc.chmod(0o755)
         for name in ("gcc", "g++", "clang", "clang++"):
             (mock / name).symlink_to(fake_cc)
-        env = dict(os.environ, PATH=str(mock) + os.pathsep + os.environ["PATH"])
+        cygpath = mock / "cygpath"
+        cygpath.write_text("#!/usr/bin/env python3\nimport sys\nprint(sys.argv[-1])\n")
+        cygpath.chmod(0o755)
+        env = dict(os.environ, PATH=str(mock) + os.pathsep + os.environ["PATH"],
+                   BASHY_WINDOWS_CC=str(mock / 'gcc'), BASHY_WINDOWS_CXX=str(mock / 'g++'))
         for target in TARGETS:
             with self.subTest(target=target):
                 asset = "runner-" + target
@@ -207,7 +213,7 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         procs = [subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(12)]
         statuses = [p.communicate() + (p.returncode,) for p in procs]
         self.assertEqual([row[2] for row in statuses], [0] * len(procs), str(statuses))
-        rows = [json.loads(line) for line in (capture / "invocations.jsonl").read_text().splitlines()]
+        rows = [json.loads(p.read_text()) for p in (capture / "invocations").glob("*.json")]
         depfiles = list((capture / "depfiles").glob("*.d"))
         self.assertEqual(len(rows), 12)
         self.assertEqual(len({row["depfile"] for row in rows}), 12)

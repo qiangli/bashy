@@ -95,10 +95,10 @@ def inventory(out, report):
 
 def compiler_inputs(capture, source, generated, output):
     capture, source = Path(capture), Path(source).resolve()
-    log = capture / "invocations.jsonl"
-    if not log.is_file(): fail("cgo compiler invocation log is missing")
+    logs = sorted((capture / "invocations").glob("*.json"))
+    if not logs: fail("cgo compiler invocation log is missing")
     try:
-        invocations = [json.loads(line) for line in log.read_text().splitlines() if line]
+        invocations = [json.loads(log.read_text()) for log in logs]
     except (json.JSONDecodeError, OSError) as exc:
         fail(f"malformed compiler invocation log: {exc}")
     captured = [row for row in invocations if row.get("captured") is True and row.get("returncode") == 0]
@@ -115,6 +115,8 @@ def compiler_inputs(capture, source, generated, output):
     for row in captured:
         if row.get("error") or not row.get("cwd") or not row.get("inputs"):
             fail("missing compile-time input evidence or failed capture")
+        if evidence.dependencies(Path(row["depfile"])) != [item["name"] for item in row["inputs"]]:
+            fail("dependency closure differs from compile-time evidence")
         for item in row["inputs"]:
             digest = item["sha256"]
             if not re.fullmatch(r"[0-9a-f]{64}", digest): fail("invalid content digest")
@@ -122,7 +124,7 @@ def compiler_inputs(capture, source, generated, output):
             if not blob.is_file() or hashlib.sha256(blob.read_bytes()).hexdigest() != digest:
                 fail("missing or corrupt compile-time content")
             try:
-                category, rel = evidence.origin(Path(item["path"]), row["roots"])
+                category, rel = evidence.origin(item["path"], row["roots"])
             except ValueError as exc: fail(str(exc))
             if (category, rel) != (item["origin"], item["relative"]): fail("input origin mismatch")
             if Path(row["roots"]["BASHY_COMPILER_SOURCE"]).resolve() != source:
