@@ -7,7 +7,8 @@ only at the local collector. Each Linux arch ships TWO signed forms of the
 same patched runtime: the **Dockerfile-built runtime tree** (`package/`
 incl. `node_modules`), extracted from the pinned official upstream
 Dockerfile's built `/app` and security-patched, AND a **distributable
-single-layer image tar** (`docker save` of the flattened image, whose `/app`
+gzip-compressed single-layer image tar** (`docker save` of the flattened
+image piped through `gzip -n`, whose `/app`
 is that exact patched tree — `docker load -i` it; Docker archive format, not
 OCI layout) — the user host never touches the npm registry (see "What ships"
 below).
@@ -33,7 +34,7 @@ Dockerfile build (unshipped base) + `/app` extract, SBOM of the extracted
 tree, gate-first bundled-copy patch, re-stage of the exact shipped runtime,
 layered-image build (never distributed), flatten + full-rootfs patch +
 single-layer import, tarball + merged-`/app` + archive-layer
-vulnerable-version gates, docker-save image tar + digest per leg), which slot
+vulnerable-version gates, gzip-compressed docker-save image tar + digest per leg), which slot
 into the shared skeleton `../_shared/bashy-build.yml` (pin → build → release
 with sign, self-verify, attest, publish). Edit the sources, never `fork/`
 by hand. Paths below that name `fork/bashy-build/X` come from `files/X`.
@@ -55,8 +56,8 @@ tree (`Dockerfile.shipped`: FROM the base, COPY the patched tree over
 vulnerable copy), flatten its merged view to a SINGLE-LAYER image
 (`flatten-image.sh`: export, full-rootfs patch incl. copies outside `/app`,
 import with config parity), and sign/publish BOTH the extracted-tree
-tarball AND a `docker save` tar of the flattened image (Docker archive
-format, `.docker.tar`) for Linux amd64/arm64, gated over the distributed
+tarball AND a gzip-compressed `docker save` tar of the flattened image
+(Docker archive format, `.docker.tar.gz`) for Linux amd64/arm64, gated over the distributed
 archive layers. macOS
 assets are deferred explicitly until a valid build path exists (macOS
 runners have no Docker daemon, and the old native pack path is what died).
@@ -185,19 +186,29 @@ list it — an exception would wrongly imply the vulnerable version ships):
    parity-checked afterwards. Known delta: `docker import` carries no
    HEALTHCHECK metadata — the gateway's `/healthz` `/readyz` endpoints are
    unchanged; orchestrators define their own probes.
-9. **Docker-save + archive gate + digest.** `docker save` writes the
-   FLATTENED image to `out/<asset>-${GITHUB_REF_NAME}.docker.tar`
-   (`docker load -i` it — the distributable image; Docker archive format,
-   hence the extension, NOT an OCI layout);
-   `gate_image_archive.py --archive` FAILS the build if ANY layer holds
-   `http-cache-semantics < 4.3.0` anywhere in the filesystem, and refuses
-   non-docker-save archives outright. `out/<asset>-image.digest` binds the
-   flattened image ID to that tar's sha256, plus byte size and layer
-   count. Self-checks before upload: the digest re-verifies, the image is
-   exactly 1 layer, the tar is under the 2 GiB release-file limit
-   (flattening also shrinks it — the patched `/app` is stored once, not
-   twice), and `docker load` round-trips to the same image ID. Tarball,
-   image tar, and digest are all cosign-signed at release.
+9. **Docker-save + gzip + archive gate + digest.** `docker save` writes the
+   FLATTENED image through deterministic gzip (`gzip -n`) to
+   `out/<asset>-${GITHUB_REF_NAME}.docker.tar.gz`
+   (`docker load -i` it — the distributable image; gzip-compressed Docker
+   archive format, hence the extension, NOT an OCI layout). Compression is
+   required: the single-layer save holds the whole rootfs (2.9 GiB
+   uncompressed at the pin) and hard-fails the 2 GiB release-file limit
+   uncompressed.
+   `gate_image_archive.py --archive` opens the EXACT distributed `.gz`
+   file — transparently decompressing it, so the scan covers the exact
+   distributed content — and FAILS the build if ANY layer holds
+   `http-cache-semantics < 4.3.0` anywhere in the filesystem; it refuses
+   non-docker-save archives outright and FAILS archives at or above the
+   2 GiB limit (`--max-bytes`). `out/<asset>-image.digest` binds the
+   flattened image ID to the COMPRESSED tarball's sha256, plus compressed
+   byte size and layer count. Self-checks before upload: the digest
+   re-verifies, the image is exactly 1 layer, the compressed tarball is
+   under the 2 GiB release-file limit (checked twice: the gate script's
+   `--max-bytes` plus the shell `test`, both on the compressed bytes), and
+   the distributed `.gz` file itself `docker load`s to the same image ID.
+   Tarball, compressed image tar, and digest are all cosign-signed at
+   release, so digest and signature bind the exact compressed bytes the
+   gate checked.
 
 (No workspace override is applied: npm-bundled copies ignore overrides,
 and the dev-graph path is covered by the `audit-exceptions` BUILD-ENV
@@ -370,7 +381,9 @@ no-egress) and the signed artifacts then run with no registry access —
 the user host never runs `npm install`. No registry-built npm tree and no
 ghcr image ships: all images are built locally on the leg from pinned
 source and never pushed; what is published is the patched extracted-`/app`
-tarball, the `docker save` tar of the FLATTENED single-layer image, and
+tarball, the gzip-compressed `docker save` tar of the FLATTENED
+single-layer image (`.docker.tar.gz` — compression is required: the
+uncompressed save exceeds the 2 GiB release-file limit), and
 the digest file binding them — all cosign-signed. The layered intermediate
 images (`openclaw-gateway-base`, `openclaw-gateway-layered`) are never
 saved, signed, or pushed: saving the layered image would distribute the
@@ -383,8 +396,8 @@ rootfs, flattens to a single layer, and ships both forms on its own runner
 
 | Matrix asset | Runner | Signed runtime tarball | Signed image tar (docker-save) |
 |---|---|---|---|
-| `openclaw-gateway-linux-amd64` | `ubuntu-24.04` | `openclaw-gateway-linux-amd64-<tag>.tgz` | `openclaw-gateway-linux-amd64-<tag>.docker.tar` |
-| `openclaw-gateway-linux-arm64` | `ubuntu-24.04-arm` | `openclaw-gateway-linux-arm64-<tag>.tgz` | `openclaw-gateway-linux-arm64-<tag>.docker.tar` |
+| `openclaw-gateway-linux-amd64` | `ubuntu-24.04` | `openclaw-gateway-linux-amd64-<tag>.tgz` | `openclaw-gateway-linux-amd64-<tag>.docker.tar.gz` |
+| `openclaw-gateway-linux-arm64` | `ubuntu-24.04-arm` | `openclaw-gateway-linux-arm64-<tag>.tgz` | `openclaw-gateway-linux-arm64-<tag>.docker.tar.gz` |
 
 macOS assets are DEFERRED explicitly until a valid build path exists
 (macOS runners have no Docker daemon for this path, and the old native
@@ -395,19 +408,21 @@ Each tarball holds `package/` incl. `node_modules` (patched: no
 one: unpack and run `node openclaw.mjs gateway` from `package/` — no
 `npm install`, no registry access. Each image tar is the same patched
 runtime as a loadable single-layer image: `docker load -i
-openclaw-gateway-linux-<arch>-<tag>.docker.tar`, then run
+openclaw-gateway-linux-<arch>-<tag>.docker.tar.gz`, then run
 `openclaw-gateway:<tag>` (pick the tar matching your arch). Format note:
-despite any older name, these tars are Docker archive format
-(`manifest.json` + layer tars), NOT OCI layout — `docker load` reads them;
-a tar without `manifest.json` fails the archive gate. Each leg also
+these files are gzip-compressed Docker archives
+(`manifest.json` + layer tars), NOT OCI layout — `docker load` reads the
+`.gz` directly (it sniffs the compression); a tar without `manifest.json`
+fails the archive gate, as does any file at or above the 2 GiB limit.
+Each leg also
 publishes its own CycloneDX SBOM (`<asset>-sbom.cyclonedx.json`, scanned
 from its extracted tree, then patched in place so it describes the shipped
 tarball AND the flattened image's `/app` — same `/app` bytes; it does not
 enumerate the base-OS files outside `/app`), its own full-audit
 JSON (`<asset>-audit-full.json`), and its digest file
-(`<asset>-image.digest`: the FLATTENED image ID plus the image tar's
-sha256, byte size, and layer count — verify with `sha256sum` against the
-tar, and with cosign below).
+(`<asset>-image.digest`: the FLATTENED image ID plus the COMPRESSED image
+tar's sha256, byte size, and layer count — verify with `sha256sum`
+against the `.docker.tar.gz`, and with cosign below).
 Shared by all legs: `openclaw-pin.txt`, `audit-exceptions`,
 `SHA256SUMS`, plus one `.sigstore.json` keyless bundle per asset:
 
@@ -418,7 +433,7 @@ cosign verify-blob --bundle ASSET.sigstore.json \
     https://github.com/qiangli/openclaw/.github/workflows/bashy-build.yml@refs/tags/TAG \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   ASSET
-grep sha256: <asset>-image.digest  # compare against sha256sum of the .docker.tar
+grep sha256: <asset>-image.digest  # compare against sha256sum of the .docker.tar.gz
 ```
 
 ## What is verified
@@ -469,11 +484,13 @@ grep sha256: <asset>-image.digest  # compare against sha256sum of the .docker.ta
   the filesystem. Covered by `test_gate_image_archive.py`, which CI runs
   before anything it guards.
 - Docker-save per leg: `docker save` of the flattened single-layer image
-  to `<asset>-<tag>.docker.tar` (Docker archive format, not OCI layout)
-  with `<asset>-image.digest` binding flattened image ID to tar sha256
-  (+ bytes, layer count); digest re-verified, exactly 1 layer enforced,
-  under the 2 GiB release-file limit, and `docker load` round-tripped to
-  the same image ID before upload.
+  piped through deterministic gzip to `<asset>-<tag>.docker.tar.gz`
+  (gzip-compressed Docker archive format, not OCI layout)
+  with `<asset>-image.digest` binding flattened image ID to compressed-tar
+  sha256 (+ compressed bytes, layer count); digest re-verified, exactly 1
+  layer enforced, compressed bytes under the 2 GiB release-file limit
+  (gate `--max-bytes` plus shell `test`), and the distributed `.gz` file
+  itself `docker load`ed to the same image ID before upload.
 - No-egress gate (strace + in-process guard hook) passes on every leg
   before signing; it starts the gateway from the re-staged patched tree —
   the exact runtime that ships in both artifacts (same `/app` bytes).
@@ -481,11 +498,11 @@ grep sha256: <asset>-image.digest  # compare against sha256sum of the .docker.ta
   (cosign v3.1.3 via pinned installer), each bundle self-verified against
   the exact identity, AND `actions/attest` provenance over every asset in
   `SHA256SUMS` — identity is this workflow at the release tag, issuer
-  `https://token.actions.githubusercontent.com`. Tarball, image tar, and
-  digest file are all signed, so the image's digest/identity verifies
-  offline from the release assets.
-- Release assets: two extracted-tree gateway tarballs + two single-layer
-  image tars (Linux amd64/arm64), two CycloneDX SBOMs, two full-audit
+  `https://token.actions.githubusercontent.com`. Tarball, compressed image
+  tar, and digest file are all signed, so the image's digest/identity
+  verifies offline from the release assets.
+- Release assets: two extracted-tree gateway tarballs + two gzip-compressed
+  single-layer image tars (Linux amd64/arm64), two CycloneDX SBOMs, two full-audit
   JSONs, two image digests, `openclaw-pin.txt`, `audit-exceptions`,
   `SHA256SUMS`, plus one `.sigstore.json` bundle per asset. macOS assets
   deferred (see "What ships").

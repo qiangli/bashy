@@ -373,33 +373,41 @@ jobs:
       - name: save the distributable image + archive gate + digest
         run: |
           set -euo pipefail
-          # The distributable artifact: a `docker save` tar of the FLATTENED
-          # single-layer image. NOTE on format: `docker save` writes the
+          # The distributable artifact: the FLATTENED single-layer image's
+          # `docker save` output piped through deterministic gzip (`gzip -n`,
+          # no name/timestamp in the header so the bytes are reproducible),
+          # named *.docker.tar.gz. Compression is REQUIRED, not cosmetic:
+          # the single-layer save holds the whole rootfs (2.9 GiB
+          # uncompressed at the pin) and hard-fails the 2 GiB release-file
+          # limit uncompressed. NOTE on format: `docker save` writes the
           # Docker archive format (manifest.json + layer tars), NOT an OCI
-          # layout — hence the .docker.tar extension; load it with
-          # `docker load -i <file>`. No registry, nothing pushed anywhere.
-          # The digest file binds the flattened image ID to the tar's sha256
-          # (+ byte size and layer count); all files are cosign-signed at
-          # release like every other asset, verifiable against the workflow
-          # identity.
+          # layout — the asset is that same archive gzip-compressed; load it
+          # with `docker load -i <file>` (the daemon sniffs the compression).
+          # No registry, nothing pushed anywhere.
+          # The digest file binds the flattened image ID to the COMPRESSED
+          # tarball's sha256 (+ compressed byte size and layer count); the
+          # skeleton signs every release asset, so digest and cosign
+          # signature both bind the exact compressed bytes the archive gate
+          # checked below — verifiable against the workflow identity.
           mkdir -p out
-          IMAGE_TAR="out/${{ matrix.asset }}-${GITHUB_REF_NAME}.docker.tar"
+          IMAGE_TAR="out/${{ matrix.asset }}-${GITHUB_REF_NAME}.docker.tar.gz"
           DIGEST="out/${{ matrix.asset }}-image.digest"
           IMAGE_ID="$(docker inspect "openclaw-gateway:${GITHUB_REF_NAME}" --format='{{.Id}}')"
-          docker save "openclaw-gateway:${GITHUB_REF_NAME}" -o "$IMAGE_TAR"
+          docker save "openclaw-gateway:${GITHUB_REF_NAME}" | gzip -n > "$IMAGE_TAR"
           SHA="$(sha256sum "$IMAGE_TAR" | awk '{print $1}')"
           BYTES="$(wc -c <"$IMAGE_TAR")"
-          # Layer-wide vulnerable-copy gate over the DISTRIBUTED bytes (fails
-          # the build on any http-cache-semantics < 4.3.0 in ANY layer,
-          # anywhere in the filesystem — this is the gate the lower-layer
-          # leak needs, and it runs before signing).
+          # Layer-wide vulnerable-copy gate over the EXACT DISTRIBUTED bytes
+          # (fails the build on any http-cache-semantics < 4.3.0 in ANY
+          # layer, anywhere in the filesystem — this is the gate the
+          # lower-layer leak needs; it transparently decompresses the .gz
+          # and also enforces the 2 GiB size limit, all before signing).
           python3 fork/bashy-build/scripts/gate_image_archive.py --archive "$IMAGE_TAR"
-          LAYERS="$(python3 -c 'import json,sys,tarfile; print(len(json.load(tarfile.open(sys.argv[1], "r:").extractfile("manifest.json"))[0]["Layers"]))' "$IMAGE_TAR")"
+          LAYERS="$(python3 -c 'import json,sys,tarfile; print(len(json.load(tarfile.open(sys.argv[1], "r:*").extractfile("manifest.json"))[0]["Layers"]))' "$IMAGE_TAR")"
           {
             echo "image: openclaw-gateway:${GITHUB_REF_NAME}"
             echo "image_id: $IMAGE_ID"
             echo "image_tar: $(basename "$IMAGE_TAR")"
-            echo "format: docker-save (Docker archive format, not OCI layout; load with docker load -i)"
+            echo "format: gzip-compressed docker-save (Docker archive format, not OCI layout; load with docker load -i)"
             echo "sha256:$SHA"
             echo "bytes: $BYTES"
             echo "layers: $LAYERS"
@@ -407,23 +415,25 @@ jobs:
           cat "$DIGEST"
           # Fail-closed self-checks before upload: the digest must re-verify
           # (catches truncation); the flattened image must be single-layer
-          # (proves no lower layer can smuggle the vulnerable copy); the tar
-          # must round-trip through `docker load` back to the same image ID
-          # (proves distributability). The archive gate above already proved
-          # the distributed bytes hold no vulnerable copy in any layer.
+          # (proves no lower layer can smuggle the vulnerable copy); the
+          # COMPRESSED tarball must round-trip through `docker load` back to
+          # the same image ID (proves the distributed file itself loads).
+          # The archive gate above already proved the distributed bytes hold
+          # no vulnerable copy in any layer and fit the release limit.
           test "$(sha256sum < "$IMAGE_TAR" | awk '{print $1}')" = "$SHA" \
             || { echo "digest re-verify failed for $IMAGE_TAR" >&2; exit 1; }
           test "$LAYERS" = "1" \
             || { echo "$IMAGE_TAR has $LAYERS layers, expected 1 (not flattened?)" >&2; exit 1; }
           # GitHub releases refuse files >= 2 GiB; fail here with a message
-          # instead of a late release-upload error. Flattening also SHRINKS
-          # the artifact (the patched /app is stored once, not twice).
+          # instead of a late release-upload error (belt-and-braces beside
+          # the gate script's own --max-bytes enforcement, measured here on
+          # the same compressed bytes that ship).
           test "$BYTES" -lt 2147483648 \
             || { echo "$IMAGE_TAR is $BYTES bytes (>= 2 GiB release limit)" >&2; exit 1; }
           docker load -i "$IMAGE_TAR"
           test "$(docker inspect "openclaw-gateway:${GITHUB_REF_NAME}" --format='{{.Id}}')" = "$IMAGE_ID" \
             || { echo "round-tripped image ID mismatch" >&2; exit 1; }
-          echo "image self-checks passed: archive gate clean, single layer, digest re-verifies, docker load round-trips to $IMAGE_ID"
+          echo "image self-checks passed: archive gate clean, single layer, digest re-verifies, compressed tarball docker-loads to $IMAGE_ID"
       - name: no-egress gate (before signing)
         run: fork/bashy-build/no-egress-test.sh "installed/package"
 

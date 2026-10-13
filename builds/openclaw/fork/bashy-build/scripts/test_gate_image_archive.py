@@ -5,9 +5,17 @@ Proves the review blocker stays fixed: a layered docker-save archive whose
 UPPER layer carries the patched /app (so a merged-view /app-only gate
 passes) still distributes the vulnerable copy in a LOWER layer, and the
 archive gate fails it; the flattened single-layer archive passes.
+
+The distributed asset is that archive gzip-compressed (*.docker.tar.gz —
+the uncompressed save exceeds the 2 GiB release limit), so a second class
+proves the gate opens the EXACT compressed bytes: vulnerable layers are
+still caught through the compression, non-docker-save content is still
+refused (never passed), corrupt input fails closed, and the --max-bytes
+size gate fails oversized assets with a message.
 """
 
 import base64
+import gzip
 import hashlib
 import io
 import json
@@ -158,6 +166,161 @@ class ImageArchiveGate(unittest.TestCase):
         r = run(GATE, "--archive", path)
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("no manifest.json", r.stderr)
+
+
+def gzip_bytes(raw):
+    # mtime=0 like the release pipeline's `gzip -n`: deterministic bytes.
+    return gzip.compress(raw, mtime=0)
+
+
+def save_tgz(path, layers):
+    """Write the docker-save-shaped tar from save_tar, then gzip it.
+
+    Returns the raw (uncompressed) size; the file on disk is the exact
+    distributed form: a gzip-compressed docker-save archive.
+    """
+    tmp = path + ".plain"
+    save_tar(tmp, layers)
+    with open(tmp, "rb") as f:
+        raw = f.read()
+    os.remove(tmp)
+    with open(path, "wb") as f:
+        f.write(gzip_bytes(raw))
+    return len(raw)
+
+
+class CompressedImageArchiveGate(unittest.TestCase):
+    """The gate over the EXACT distributed bytes (*.docker.tar.gz)."""
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+
+    def archive(self, name, layers):
+        path = os.path.join(self.d, name)
+        save_tgz(path, layers)
+        return path
+
+    def test_compressed_layered_archive_with_vulnerable_lower_layer_fails(self):
+        # Same lower-layer leak as the plain-tar test, but through the
+        # compression the release ships: the gate must still name the
+        # lower layer, proving the scan covers the distributed content.
+        lower = layer_bytes([
+            (APP_COPY + "/package.json", pkg_json("4.2.0")),
+            (BASE_COPY + "/package.json", pkg_json("4.2.0")),
+        ])
+        upper = layer_bytes([
+            (APP_COPY + "/package.json", pkg_json("4.3.0")),
+        ])
+        path = self.archive("layered.docker.tar.gz", [lower, upper])
+        r = run(GATE, "--archive", path)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("below 4.3.0", r.stderr)
+        self.assertIn("layer0", r.stderr)
+
+    def test_compressed_fully_patched_archive_passes(self):
+        layer = layer_bytes([
+            (APP_COPY + "/package.json", pkg_json("4.3.0")),
+            (BASE_COPY + "/package.json", pkg_json("4.3.0")),
+        ])
+        path = self.archive("flat.docker.tar.gz", [layer])
+        r = run(GATE, "--archive", path)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("1 layer(s)", r.stdout)
+        self.assertIn("2 copy/copies checked", r.stdout)
+
+    def test_compressed_oci_layout_is_refused_not_passed(self):
+        # Format refusal must survive compression: a gzipped OCI layout
+        # is still an OCI layout, never a passing archive.
+        plain = os.path.join(self.d, "oci.tar")
+        with tarfile.open(plain, "w") as tf:
+            for name in ("index.json", "oci-layout"):
+                data = b"{}"
+                ti = tarfile.TarInfo(name)
+                ti.size = len(data)
+                tf.addfile(ti, io.BytesIO(data))
+        path = os.path.join(self.d, "oci.docker.tar.gz")
+        with open(plain, "rb") as f:
+            raw = f.read()
+        os.remove(plain)
+        with open(path, "wb") as f:
+            f.write(gzip_bytes(raw))
+        r = run(GATE, "--archive", path)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("OCI layout", r.stderr)
+
+    def test_truncated_gzip_is_refused(self):
+        # A truncated download must fail closed, never scan-or-pass.
+        layer = layer_bytes([(APP_COPY + "/package.json", pkg_json("4.3.0"))])
+        path = self.archive("cut.docker.tar.gz", [layer])
+        with open(path, "rb") as f:
+            raw = f.read()
+        with open(path, "wb") as f:
+            f.write(raw[:len(raw) // 2])
+        r = run(GATE, "--archive", path)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("FAIL", r.stderr)
+
+    def test_gzip_of_non_tar_is_refused(self):
+        # Right extension, wrong content: gzip wrapping non-tar bytes
+        # must be refused, never treated as a clean scan.
+        path = os.path.join(self.d, "fake.docker.tar.gz")
+        with open(path, "wb") as f:
+            f.write(gzip_bytes(b"hello, not a tar archive"))
+        r = run(GATE, "--archive", path)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("FAIL", r.stderr)
+
+    def test_max_bytes_fails_oversized_clean_archive(self):
+        # The size gate fires on byte size alone, even when the layer
+        # scan is clean: an oversized asset fails here, not at upload.
+        layer = layer_bytes([(APP_COPY + "/package.json", pkg_json("4.3.0"))])
+        path = self.archive("big.docker.tar.gz", [layer])
+        r = run(GATE, "--archive", path, "--max-bytes", "10")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("release limit", r.stderr)
+
+    def test_max_bytes_boundary_is_fail_closed(self):
+        # Releases refuse files >= 2 GiB, so size == limit fails and only
+        # strictly-below passes.
+        layer = layer_bytes([(APP_COPY + "/package.json", pkg_json("4.3.0"))])
+        path = self.archive("edge.docker.tar.gz", [layer])
+        size = os.path.getsize(path)
+        r = run(GATE, "--archive", path, "--max-bytes", str(size))
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("release limit", r.stderr)
+        r = run(GATE, "--archive", path, "--max-bytes", str(size + 1))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_negative_max_bytes_is_refused(self):
+        layer = layer_bytes([(APP_COPY + "/package.json", pkg_json("4.3.0"))])
+        path = self.archive("neg.docker.tar.gz", [layer])
+        r = run(GATE, "--archive", path, "--max-bytes", "-1")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("FAIL", r.stderr)
+
+    def test_garbage_manifest_is_refused(self):
+        # Right shape, unparseable manifest.json: refused with a message,
+        # never a traceback pass or fail.
+        layer = layer_bytes([(APP_COPY + "/package.json", pkg_json("4.3.0"))])
+        plain = os.path.join(self.d, "garbage.tar")
+        with tarfile.open(plain, "w") as tf:
+            for name, data in [("manifest.json", b"not json{"),
+                               ("config.json", b"{}"),
+                               ("layer0/layer.tar", layer)]:
+                ti = tarfile.TarInfo(name)
+                ti.size = len(data)
+                tf.addfile(ti, io.BytesIO(data))
+        path = os.path.join(self.d, "garbage.docker.tar.gz")
+        with open(plain, "rb") as f:
+            raw = f.read()
+        os.remove(plain)
+        with open(path, "wb") as f:
+            f.write(gzip_bytes(raw))
+        r = run(GATE, "--archive", path)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("FAIL", r.stderr)
+        self.assertIn("manifest.json", r.stderr)
+        self.assertNotIn("Traceback", r.stdout + r.stderr)
 
 
 class PatchRootfs(unittest.TestCase):
