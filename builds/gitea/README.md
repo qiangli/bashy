@@ -70,6 +70,27 @@ Two deliberate differences: the stamp comes from `PIN` instead of `git
 describe`, so the build is reproducible; and `main.Tags` records `bindata`, the
 tag set actually linked, rather than upstream's empty `TAGS` variable.
 
+### Toolchain and module security overrides
+
+v28.1.0's `go.mod` pins `toolchain go1.27.1`, which predates the go1.27.2
+stdlib fixes, and v28.1.0 is the current gitea release — so there is no
+upstream tag to move to. 1.27 is a supported minor, so this is the ordinary
+in-minor shape: the newest patch of the tag's own minor, no language-version
+change.
+
+```
+GO_TOOLCHAIN=1.27.1                     # what the tag's go.mod says
+GO_TOOLCHAIN_SECURITY_OVERRIDE=1.27.2   # security override
+GO_SECURITY_OVERRIDES="golang.org/x/net@v0.60.0"
+```
+
+`qiangli/gitea` run 38326618659 measured 12 reachable stdlib findings at the
+tag's own go1.27.1, plus 5 in `golang.org/x/net` v0.59.0
+(`GO-2026-6603`/`6610`/`6611`/`6612`/`6617`). The toolchain override clears the
+first group and the module override the second; nothing else in the graph moves
+with it. The result is **zero** reachable findings and an empty `vuln-ignore`.
+Both retire themselves the moment a gitea tag carries the fixes.
+
 **sqlite needs no cgo at this tag.** `models/db/driver_sqlite_modernc.go` is
 `//go:build !sqlite_mattn` — the pure-Go modernc driver is the default, and the
 cgo `mattn` driver is behind an opt-in tag. A `CGO_ENABLED=0` binary therefore
@@ -130,10 +151,21 @@ probes again and stops it.
 ## Audit
 
 The `audit` job runs the pinned `govulncheck` (`v1.9.0`) in source mode over
-`./...` and fails on any vulnerability that is **reachable** — one whose first
-trace frame names a called function — unless it is listed with a justification
-in `files/vuln-ignore` (empty today). It then writes a CycloneDX SBOM with the
-pinned `cyclonedx-gomod` (`v1.12.0`).
+**the package the release builds** (`.`), with the same build tags and
+build environment, and fails on any vulnerability that is **reachable** — one
+whose first trace frame names a called function — unless it is listed with a
+justification in `files/vuln-ignore` (empty today). Scoping it to the shipped
+package is what makes "reachable" mean reachable *in the signed artifact*
+(`builds/README.md` §What the audit judges). It then writes a CycloneDX SBOM
+with the pinned `cyclonedx-gomod` (`v1.12.0`), generated with the same tags so
+its component list is the artifact's too.
+
+`govulncheck` and `cyclonedx-gomod` are themselves installed with a separately
+pinned toolchain (`GO_AUDIT_TOOLCHAIN`, go1.27.2), independent of the one that
+builds the binary: `govulncheck` v1.9.0 declares `go 1.26.0` in its own
+`go.mod`, so coupling the two would make the audit fail to install on any tool
+pinned to an older Go. The analysis itself still runs at this tool's effective
+toolchain.
 
 The SBOM covers the Go module graph. Gitea's frontend dependencies are build-time
 only (vite emits static assets; no npm package is shipped or executed at

@@ -46,30 +46,63 @@ Upstream's `zot-<os>-<arch>` asset comes from the `Makefile`'s `binary` target:
 | `-buildmode` | `pie` (`BUILDMODE_FLAGS`, dropped only for freebsd) | **same** (`GO_BUILD_FLAGS`) |
 | `-trimpath` | **already used** | same |
 | `-ldflags` | `-s -w -X buildinfo.{ReleaseTag,Commit,BinaryType,GoVersion}`, with `ReleaseTag`/`Commit` from `git describe` | `-s -w -buildid=` + the same four, from `PIN` |
-| build tags | `EXTENSIONS` = `sync,search,scrub,metrics,lint,ui,mgmt,profile,userprefs,imagetrust,events` (+ the `ui` dependencies) | **the same set minus `ui`** — see below |
+| build tags | `EXTENSIONS` = `sync,search,scrub,metrics,lint,ui,mgmt,profile,userprefs,imagetrust,events` (+ the `ui` dependencies) | **the same set minus `ui`, `search`, `sync` and `imagetrust`** — see below |
 | platforms | linux, darwin and windows per `OS`/`ARCH`; the release publishes `zot-<os>-<arch>` plus `-minimal`, `-debug`, `zli`, `zb` and `zxp` | the four bashy ships, server binary only: linux amd64/arm64, darwin amd64/arm64 (see `../README.md` §Windows legs) |
 
-## Extension set: why `ui` is dropped
+## Extension set: four tags dropped
 
-`make ui` does not build from the pinned tree. It downloads
-`zui.tgz` from the releases of a **second** upstream repository
-(`project-zot/zui` at `ZUI_VERSION := commit-8e8457d`), or clones and `npm
-install`s it when the download fails. Either way the web bundle linked into the
-binary would come from a source this pipeline cannot pin to a commit, cannot
-verify a tag signature for, and cannot put in the SBOM — and `commit-a7feb46`
-is not a release tag at all.
+`GO_BUILD_TAGS` is upstream's extension list minus `ui`, `search`, `sync` and
+`imagetrust`:
 
-So `GO_BUILD_TAGS` is upstream's extension list with `ui` removed:
-`events,imagetrust,lint,metrics,mgmt,profile,scrub,search,sync,userprefs`.
-Every registry capability survives; only the browser UI is absent, which bashy
-does not use — `outpost` exposes zot over the mesh as `registry`, and the OCI
-distribution API is the whole interface. `buildinfo.BinaryType` is stamped
-`bashy-no-ui` so a running binary says so. Revisit if upstream ever vendors
-zui into its own tree or publishes it as a pinned Go module.
+```
+events,lint,metrics,mgmt,profile,scrub,userprefs
+```
+
+`buildinfo.BinaryType` is stamped `bashy-minimal` so a running binary says so.
+`GO_AUDIT_TAGS` repeats the set, so govulncheck and the SBOM describe exactly
+this build.
+
+### `ui` — a dependency this pipeline cannot pin
+
+`make ui` does not build from the pinned tree. It downloads `zui.tgz` from the
+releases of a **second** upstream repository (`project-zot/zui` at
+`ZUI_VERSION := commit-8e8457d`), or clones and `npm install`s it when the
+download fails. Either way the web bundle linked into the binary would come
+from a source this pipeline cannot pin to a commit, cannot verify a tag
+signature for, and cannot put in the SBOM — and `commit-a7feb46` is not a
+release tag at all. bashy does not use it in any case: `outpost` exposes zot
+over the mesh as `registry`, and the OCI distribution API is the whole
+interface. Revisit if upstream ever vendors zui into its own tree or publishes
+it as a pinned Go module.
 
 Note that dropping `ui` also drops its dependency expansion
-(`UI_DEPENDENCIES := search,mgmt,userprefs`), but those three are listed
-explicitly above, so the tag set is unchanged apart from `ui` itself.
+(`UI_DEPENDENCIES := search,mgmt,userprefs`), but `mgmt` and `userprefs` are
+listed explicitly above, so only `search` goes with it — for its own reasons.
+
+### `search`, `sync`, `imagetrust` — unfixable findings, in code zot never runs
+
+Each of these three links a dependency carrying a vulnerability with **no
+upstream fix**, and each is already disabled at runtime by the empty
+`extensions` map in `files/config.json`:
+
+| tag | what it links | finding | upstream fix |
+|---|---|---|---|
+| `search` | `github.com/aquasecurity/trivy` (CVE scanning, with its own vulnerability-database download) | `GO-2026-4919` | none |
+| `sync` | `github.com/chrismellard/docker-credential-acr-env`, through go-containerregistry's `authn` resolver (registry-to-registry pulls) | `GO-2026-6225` | none |
+| `imagetrust` | `golang.org/x/crypto/openpgp`, through `sigstore/cosign` -> `sigstore/rekor`'s pgp type (cosign/notation signature verification) | `GO-2026-5932` | none — `x/crypto/openpgp` is deprecated and frozen upstream |
+
+Reachable findings are never waived, so the choice was between an unfixable
+finding in a signed artifact and three capabilities zot's bashy configuration
+never turns on. Measured at the pinned commit, with the audit scoped to
+`./cmd/zot`: all ten upstream extension tags leave those three reachable; the
+set above leaves them unreachable (module-level only) and, with
+`GO_SECURITY_OVERRIDES` applied, leaves **zero** reachable findings and an
+empty `vuln-ignore`.
+
+Dropping `search` also removes the trivy vulnerability-database download, which
+was already absent from the runtime configuration, and `sync` the only code
+path that pulls from a remote registry — so this narrows the outbound surface
+as well. Revisit each tag when its dependency ships a fix.
 
 ## No tracking: every knob at v2.1.22
 
@@ -77,11 +110,15 @@ zot has **no update checker and no usage reporting**. Its entire outbound
 surface is the optional extensions, and they are configuration, not flags:
 `files/config.json` (released as `zot-bashy.json`) keeps `"extensions"` an
 **empty map**, which mirrors what yoke's `external/zot` `ensureConfig()` seeds.
+For the three outbound extensions this build also drops the **build tag**, so
+the configuration is not the only thing standing between the service and the
+network — the code is not in the binary (see §Extension set).
 
 | Knob | Source | Upstream default | bashy |
 |---|---|---|---|
-| `extensions.sync` | `examples/README.md` | absent | **absent** — no pulls from remote registries |
-| `extensions.search` (CVE scanning) | `examples/README.md` | absent | **absent** — no trivy vulnerability-database download |
+| `extensions.sync` | `examples/README.md` | absent | **absent** — no pulls from remote registries; the `sync` build tag is off too, so the code is not linked |
+| `extensions.search` (CVE scanning) | `examples/README.md` | absent | **absent** — no trivy vulnerability-database download; the `search` build tag is off too, so the code is not linked |
+| `extensions.trust` (cosign/notation verification) | `examples/README.md` | absent | **absent** — the `imagetrust` build tag is off too, so the sigstore stack is not linked |
 | `extensions.events` | `examples/README.md` | absent | **absent** — no outbound event sink |
 | `extensions.metrics` (`zxp` node exporter) | `examples/README.md` | absent | **absent** |
 | `http.address` | `examples/README.md` | `127.0.0.1` in the examples, but required | `127.0.0.1` (stated) |
@@ -124,10 +161,21 @@ loopback, idles 30 s, probes again and stops it.
 ## Audit
 
 The `audit` job runs the pinned `govulncheck` (`v1.9.0`) in source mode over
-`./...` and fails on any vulnerability that is **reachable** — one whose first
-trace frame names a called function — unless it is listed with a justification
-in `files/vuln-ignore` (empty today). It then writes a CycloneDX SBOM with the
-pinned `cyclonedx-gomod` (`v1.12.0`).
+**the package the release builds** (`./cmd/zot`), with the same build tags and
+build environment, and fails on any vulnerability that is **reachable** — one
+whose first trace frame names a called function — unless it is listed with a
+justification in `files/vuln-ignore` (empty today). Scoping it to the shipped
+package is what makes "reachable" mean reachable *in the signed artifact*
+(`builds/README.md` §What the audit judges). It then writes a CycloneDX SBOM
+with the pinned `cyclonedx-gomod` (`v1.12.0`), generated with the same tags so
+its component list is the artifact's too.
+
+`govulncheck` and `cyclonedx-gomod` are themselves installed with a separately
+pinned toolchain (`GO_AUDIT_TOOLCHAIN`, go1.27.2), independent of the one that
+builds the binary: `govulncheck` v1.9.0 declares `go 1.26.0` in its own
+`go.mod`, so coupling the two would make the audit fail to install on any tool
+pinned to an older Go. The analysis itself still runs at this tool's effective
+toolchain.
 
 ## Release assets
 

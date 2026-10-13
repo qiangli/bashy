@@ -108,10 +108,21 @@ again and stops it.
 ## Audit
 
 The `audit` job runs the pinned `govulncheck` (`v1.9.0`) in source mode over
-`./...` and fails on any vulnerability that is **reachable** — one whose first
-trace frame names a called function — unless it is listed with a justification
-in `files/vuln-ignore` (empty today). It then writes a CycloneDX SBOM with the
-pinned `cyclonedx-gomod` (`v1.12.0`).
+**the package the release builds** (`./app/victoria-traces`), with the same build tags and
+build environment, and fails on any vulnerability that is **reachable** — one
+whose first trace frame names a called function — unless it is listed with a
+justification in `files/vuln-ignore` (empty today). Scoping it to the shipped
+package is what makes "reachable" mean reachable *in the signed artifact*
+(`builds/README.md` §What the audit judges). It then writes a CycloneDX SBOM
+with the pinned `cyclonedx-gomod` (`v1.12.0`), generated with the same tags so
+its component list is the artifact's too.
+
+`govulncheck` and `cyclonedx-gomod` are themselves installed with a separately
+pinned toolchain (`GO_AUDIT_TOOLCHAIN`, go1.27.2), independent of the one that
+builds the binary: `govulncheck` v1.9.0 declares `go 1.26.0` in its own
+`go.mod`, so coupling the two would make the audit fail to install on any tool
+pinned to an older Go. The analysis itself still runs at this tool's effective
+toolchain.
 
 `vuln-ignore` is for **unreachable** findings only; a reachable one is never
 waived — which is why the pin moved. The first fork CI run at `v0.9.4` failed

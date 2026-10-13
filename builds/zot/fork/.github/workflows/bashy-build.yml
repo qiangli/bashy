@@ -140,31 +140,70 @@ jobs:
           [[ -n $want ]] || { echo "src/go.mod declares no go/toolchain version"; exit 1; }
           [[ $want == "$GO_TOOLCHAIN" ]] ||
             { echo "PIN GO_TOOLCHAIN $GO_TOOLCHAIN != upstream go.mod $want"; exit 1; }
+          # governum: a Go MAJOR.MINOR[.PATCH] as ONE comparable integer, so a
+          # minor move orders correctly against a patch move (go1.26.9 is newer
+          # than go1.25.11, which string order gets backwards). Both callers
+          # below regex-validate their argument first, so it cannot fail here.
+          governum() {
+            [[ ${1#go} =~ ^([0-9]+)\.([0-9]+)(\.([0-9]+))?$ ]] || return 1
+            printf '%d%03d%03d\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[4]:-0}"
+          }
           # GO_TOOLCHAIN_SECURITY_OVERRIDE: the ONE sanctioned reason to build
           # on something other than the tag's own toolchain — the tag names a
-          # patch release that predates a Go stdlib security fix, and no
-          # upstream tag carrying it exists yet. It must stay on the upstream
-          # minor (so it is a patch bump, never a language-version change) and
-          # must be a strictly later patch. It is shipped in PIN, so the
+          # release that predates a Go stdlib security fix, and no upstream tag
+          # carrying a fixed toolchain exists yet. It is shipped in PIN, so the
           # release asset records exactly what built the binary; the review
           # decision is justified in the comment above the key in tool.env.
           # Reachable vulnerabilities are never waived (see bashy-build/vuln-ignore).
+          #
+          # Exactly two shapes are allowed:
+          #
+          #   in-minor patch bump — the ordinary case. A strictly later patch
+          #   of the tag's own minor, so the language version never moves.
+          #
+          #   EOL-minor security override — the tag's minor is no longer
+          #   supported (1.26 1.27, written down once in
+          #   builds/render.sh: Go fixes only its two newest minors, so go1.27
+          #   shipping retired 1.25). An unsupported minor gets NO security
+          #   fixes at all, so there is no later patch to move to and staying
+          #   put cannot be made safe — kopia v0.23.1 builds with go1.25.11.
+          #   The move is then to the OLDEST supported minor's latest patch:
+          #   the smallest language-version jump that gets fixes again.
+          #
+          # Refused either way: a downgrade or a no-op, and a minor jump while
+          # the tag's own minor IS still supported — there a later patch
+          # exists, and the patch bump is the whole of what review sanctioned.
           effective=$GO_TOOLCHAIN
           if [[ -n ${GO_TOOLCHAIN_SECURITY_OVERRIDE:-} ]]; then
-            [[ $GO_TOOLCHAIN =~ ^([0-9]+\.[0-9]+)(\.([0-9]+))?$ ]] ||
+            [[ $GO_TOOLCHAIN =~ ^([0-9]+\.[0-9]+)(\.[0-9]+)?$ ]] ||
               { echo "PIN GO_TOOLCHAIN $GO_TOOLCHAIN is not MAJOR.MINOR[.PATCH]"; exit 1; }
-            minor=${BASH_REMATCH[1]} patch=${BASH_REMATCH[3]:-0}
-            [[ $GO_TOOLCHAIN_SECURITY_OVERRIDE =~ ^([0-9]+\.[0-9]+)\.([0-9]+)$ ]] ||
+            tag_minor=${BASH_REMATCH[1]}
+            [[ $GO_TOOLCHAIN_SECURITY_OVERRIDE =~ ^([0-9]+\.[0-9]+)\.[0-9]+$ ]] ||
               { echo "PIN GO_TOOLCHAIN_SECURITY_OVERRIDE $GO_TOOLCHAIN_SECURITY_OVERRIDE is not MAJOR.MINOR.PATCH"; exit 1; }
-            [[ ${BASH_REMATCH[1]} == "$minor" ]] ||
-              { echo "security override ${BASH_REMATCH[1]} must stay on the upstream Go minor $minor"; exit 1; }
-            ((BASH_REMATCH[2] > patch)) ||
-              { echo "security override $GO_TOOLCHAIN_SECURITY_OVERRIDE is not a later patch than $GO_TOOLCHAIN"; exit 1; }
+            override_minor=${BASH_REMATCH[1]}
+            (($(governum "$GO_TOOLCHAIN_SECURITY_OVERRIDE") > $(governum "$GO_TOOLCHAIN"))) ||
+              { echo "security override $GO_TOOLCHAIN_SECURITY_OVERRIDE is not later than the tag's go$GO_TOOLCHAIN"; exit 1; }
+            label="security override"
+            if [[ $override_minor != "$tag_minor" ]]; then
+              # Supported minors, OLDEST FIRST (builds/render.sh).
+              supported='1.26 1.27'
+              for minor in $supported; do
+                if [[ $minor == "$tag_minor" ]]; then
+                  echo "go$tag_minor is still a supported minor: the override must be a later patch of go$tag_minor, not a jump to go$override_minor"
+                  exit 1
+                fi
+              done
+              [[ $override_minor == "${supported%% *}" ]] ||
+                { echo "EOL-minor override $GO_TOOLCHAIN_SECURITY_OVERRIDE must move to the OLDEST supported minor go${supported%% *}, not go$override_minor"; exit 1; }
+              label="EOL-minor security override"
+            fi
             effective=$GO_TOOLCHAIN_SECURITY_OVERRIDE
-            echo "recorded security override: building with go$effective, not the tag's go$GO_TOOLCHAIN"
+            echo "recorded $label: building with go$effective, not the tag's go$GO_TOOLCHAIN"
           fi
           # GOTOOLCHAIN makes every `go` command use exactly that release, no
-          # matter what setup-go resolved, so the build is toolchain-exact.
+          # matter what setup-go resolved, so the build is toolchain-exact. It
+          # is also how the step below, and the audit job's own steps, learn
+          # the effective version without recomputing it.
           echo "GOTOOLCHAIN=go$effective" >>"$GITHUB_ENV"
           GOTOOLCHAIN="go$effective" go version
       - name: GO_SECURITY_OVERRIDES (reviewed module bumps, gated go.mod diff)
@@ -190,13 +229,15 @@ jobs:
           #
           # What makes this safe is the gate below, not `go get` itself:
           # `go get` may change ONLY the require lines of EXACTLY the declared
-          # modules. Any other go.mod edit fails the build — a new or removed
-          # require, a changed go/toolchain directive, a replace/exclude/retract
-          # edit, or an undeclared module moved as a transitive effect (if one
-          # is genuinely needed, declare it too, so it is reviewed). go.sum is
-          # deliberately NOT gated: `go get` has to add the new hashes.
-          # There is no `go mod tidy` — tidy rewrites the whole graph, which
-          # this gate could not tell apart from a supply-chain substitution.
+          # modules, plus the go/toolchain directives within the bounds the
+          # effective toolchain already sets (see the directive gate below).
+          # Any other go.mod edit fails the build — a new or removed require,
+          # a replace/exclude/retract edit, or an undeclared module moved as a
+          # transitive effect (if one is genuinely needed, declare it too, so
+          # it is reviewed). go.sum is deliberately NOT gated: `go get` has to
+          # add the new hashes. There is no `go mod tidy` — tidy rewrites the
+          # whole graph, which this gate could not tell apart from a
+          # supply-chain substitution.
           #
           # This step runs in both the build and the audit job, after the same
           # verify-pin.sh, so the SAME overridden tree is what govulncheck
@@ -230,6 +271,61 @@ jobs:
           done
           sort -u -o "$RUNNER_TEMP/gomod.allowed" "$RUNNER_TEMP/gomod.allowed"
           gated src/go.mod >"$RUNNER_TEMP/gomod.after"
+          # --- the go/toolchain directive gate (BEGIN) -------------------------
+          # kinds/go/toolchain-gate-test.sh extracts everything between this
+          # marker and the matching END one and drives it against synthetic
+          # go.mod views, so keep both markers on their own lines.
+          # A dependency that carries a security fix can itself require a newer
+          # LANGUAGE version: golang.org/x/net v0.60.0 and golang.org/x/crypto
+          # v0.56.0 both declare `go 1.26.0`, so taking either fix into a module
+          # whose own `go` line is older forces `go get` to raise that line. The
+          # fix is unreachable otherwise, so the directive may rise — but never
+          # past the toolchain this build actually runs, which the step above
+          # already gated. That cap is what keeps the allowance honest: under an
+          # in-minor patch override it confines the language version to the tag's
+          # own minor, and under an EOL-minor override it permits exactly the move
+          # that override already sanctioned, and nothing beyond it. A directive
+          # that drops, or one above the effective toolchain, stays refused.
+          #
+          # The `toolchain` line may only be dropped or lowered: GOTOOLCHAIN in
+          # the environment is what actually selects the release, so a lower or
+          # absent line changes nothing, while a higher one would be a build on
+          # something other than the gated toolchain.
+          [[ ${GOTOOLCHAIN:-} == go* ]] ||
+            { echo "GOTOOLCHAIN is unset: the toolchain step must run before this one"; exit 1; }
+          effective=${GOTOOLCHAIN#go}
+          governum() { # a Go version (bare or go-prefixed) as one comparable integer
+            [[ ${1#go} =~ ^([0-9]+)\.([0-9]+)(\.([0-9]+))?$ ]] || return 1
+            printf '%d%03d%03d\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[4]:-0}"
+          }
+          # Unlike the step above, these compare values read out of go.mod, so a
+          # version this gate cannot parse must make the comparison FALSE rather
+          # than abort mid-expression: both wrappers fail closed into "refused".
+          govlt() { local a b; a=$(governum "$1") && b=$(governum "$2") && ((a < b)); }
+          govle() { local a b; a=$(governum "$1") && b=$(governum "$2") && ((a <= b)); }
+          directive() { awk -F'\t' -v key="$1" '$1 == key {print $2}' "$2"; }
+          go_before=$(directive go "$RUNNER_TEMP/gomod.before")
+          go_after=$(directive go "$RUNNER_TEMP/gomod.after")
+          tc_before=$(directive toolchain "$RUNNER_TEMP/gomod.before")
+          tc_after=$(directive toolchain "$RUNNER_TEMP/gomod.after")
+          directives_ok=1
+          if [[ $go_after != "$go_before" ]]; then
+            if govlt "$go_before" "$go_after" && govle "$go_after" "$effective"; then
+              echo "go directive raised: ${go_before:-(none)} -> ${go_after:-(none)} (at or below the effective go$effective)"
+            else
+              echo "refused go directive change: ${go_before:-(none)} -> ${go_after:-(none)} (must rise, and not past the effective go$effective)"
+              directives_ok=0
+            fi
+          fi
+          if [[ $tc_after != "$tc_before" ]]; then
+            if [[ -z $tc_after ]] || govle "$tc_after" "$effective"; then
+              echo "toolchain directive changed: ${tc_before:-(none)} -> ${tc_after:-(none)} (GOTOOLCHAIN=go$effective still selects the release)"
+            else
+              echo "refused toolchain directive change: ${tc_before:-(none)} -> ${tc_after:-(none)} (above the effective go$effective)"
+              directives_ok=0
+            fi
+          fi
+          # --- the go/toolchain directive gate (END) ---------------------------
           # `diff` exits 1 when the files differ, which is the expected case
           # here, so its status is absorbed rather than tripping pipefail.
           { diff "$RUNNER_TEMP/gomod.before" "$RUNNER_TEMP/gomod.after" || true; } |
@@ -241,13 +337,17 @@ jobs:
             exit 0
           fi
           # Every line that differs, in either direction, must be a require
-          # line of a declared module.
+          # line of a declared module, or a go/toolchain directive the gate
+          # above accepted.
           refused=0
           while IFS=$'\t' read -r field path _; do
             [[ -n $field ]] || continue
-            if [[ $field == require ]] && grep -qxF "$path" "$RUNNER_TEMP/gomod.allowed"; then
-              continue
-            fi
+            skip=0
+            case $field in
+            require) if grep -qxF "$path" "$RUNNER_TEMP/gomod.allowed"; then skip=1; fi ;;
+            go | toolchain) skip=$directives_ok ;;
+            esac
+            if ((skip)); then continue; fi
             echo "  refused go.mod change: $field ${path:-(empty)}"
             refused=1
           done < <(sed 's/^[<>] //' "$RUNNER_TEMP/gomod.diff")
@@ -332,6 +432,10 @@ jobs:
           path: src
       - name: verify HEAD == pinned commit
         run: fork/bashy-build/verify-pin.sh src "$GITHUB_REF_NAME"
+      # The audit job judges the SAME tree the build job compiles, so it
+      # reuses the build job's setup verbatim rather than keeping a second
+      # copy: the pinned toolchain, the recorded toolchain override and the
+      # reviewed module overrides are ONE fragment, and cannot drift apart.
       - name: pinned Go toolchain (from the upstream go.mod)
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -353,31 +457,70 @@ jobs:
           [[ -n $want ]] || { echo "src/go.mod declares no go/toolchain version"; exit 1; }
           [[ $want == "$GO_TOOLCHAIN" ]] ||
             { echo "PIN GO_TOOLCHAIN $GO_TOOLCHAIN != upstream go.mod $want"; exit 1; }
+          # governum: a Go MAJOR.MINOR[.PATCH] as ONE comparable integer, so a
+          # minor move orders correctly against a patch move (go1.26.9 is newer
+          # than go1.25.11, which string order gets backwards). Both callers
+          # below regex-validate their argument first, so it cannot fail here.
+          governum() {
+            [[ ${1#go} =~ ^([0-9]+)\.([0-9]+)(\.([0-9]+))?$ ]] || return 1
+            printf '%d%03d%03d\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[4]:-0}"
+          }
           # GO_TOOLCHAIN_SECURITY_OVERRIDE: the ONE sanctioned reason to build
           # on something other than the tag's own toolchain — the tag names a
-          # patch release that predates a Go stdlib security fix, and no
-          # upstream tag carrying it exists yet. It must stay on the upstream
-          # minor (so it is a patch bump, never a language-version change) and
-          # must be a strictly later patch. It is shipped in PIN, so the
+          # release that predates a Go stdlib security fix, and no upstream tag
+          # carrying a fixed toolchain exists yet. It is shipped in PIN, so the
           # release asset records exactly what built the binary; the review
           # decision is justified in the comment above the key in tool.env.
           # Reachable vulnerabilities are never waived (see bashy-build/vuln-ignore).
+          #
+          # Exactly two shapes are allowed:
+          #
+          #   in-minor patch bump — the ordinary case. A strictly later patch
+          #   of the tag's own minor, so the language version never moves.
+          #
+          #   EOL-minor security override — the tag's minor is no longer
+          #   supported (1.26 1.27, written down once in
+          #   builds/render.sh: Go fixes only its two newest minors, so go1.27
+          #   shipping retired 1.25). An unsupported minor gets NO security
+          #   fixes at all, so there is no later patch to move to and staying
+          #   put cannot be made safe — kopia v0.23.1 builds with go1.25.11.
+          #   The move is then to the OLDEST supported minor's latest patch:
+          #   the smallest language-version jump that gets fixes again.
+          #
+          # Refused either way: a downgrade or a no-op, and a minor jump while
+          # the tag's own minor IS still supported — there a later patch
+          # exists, and the patch bump is the whole of what review sanctioned.
           effective=$GO_TOOLCHAIN
           if [[ -n ${GO_TOOLCHAIN_SECURITY_OVERRIDE:-} ]]; then
-            [[ $GO_TOOLCHAIN =~ ^([0-9]+\.[0-9]+)(\.([0-9]+))?$ ]] ||
+            [[ $GO_TOOLCHAIN =~ ^([0-9]+\.[0-9]+)(\.[0-9]+)?$ ]] ||
               { echo "PIN GO_TOOLCHAIN $GO_TOOLCHAIN is not MAJOR.MINOR[.PATCH]"; exit 1; }
-            minor=${BASH_REMATCH[1]} patch=${BASH_REMATCH[3]:-0}
-            [[ $GO_TOOLCHAIN_SECURITY_OVERRIDE =~ ^([0-9]+\.[0-9]+)\.([0-9]+)$ ]] ||
+            tag_minor=${BASH_REMATCH[1]}
+            [[ $GO_TOOLCHAIN_SECURITY_OVERRIDE =~ ^([0-9]+\.[0-9]+)\.[0-9]+$ ]] ||
               { echo "PIN GO_TOOLCHAIN_SECURITY_OVERRIDE $GO_TOOLCHAIN_SECURITY_OVERRIDE is not MAJOR.MINOR.PATCH"; exit 1; }
-            [[ ${BASH_REMATCH[1]} == "$minor" ]] ||
-              { echo "security override ${BASH_REMATCH[1]} must stay on the upstream Go minor $minor"; exit 1; }
-            ((BASH_REMATCH[2] > patch)) ||
-              { echo "security override $GO_TOOLCHAIN_SECURITY_OVERRIDE is not a later patch than $GO_TOOLCHAIN"; exit 1; }
+            override_minor=${BASH_REMATCH[1]}
+            (($(governum "$GO_TOOLCHAIN_SECURITY_OVERRIDE") > $(governum "$GO_TOOLCHAIN"))) ||
+              { echo "security override $GO_TOOLCHAIN_SECURITY_OVERRIDE is not later than the tag's go$GO_TOOLCHAIN"; exit 1; }
+            label="security override"
+            if [[ $override_minor != "$tag_minor" ]]; then
+              # Supported minors, OLDEST FIRST (builds/render.sh).
+              supported='1.26 1.27'
+              for minor in $supported; do
+                if [[ $minor == "$tag_minor" ]]; then
+                  echo "go$tag_minor is still a supported minor: the override must be a later patch of go$tag_minor, not a jump to go$override_minor"
+                  exit 1
+                fi
+              done
+              [[ $override_minor == "${supported%% *}" ]] ||
+                { echo "EOL-minor override $GO_TOOLCHAIN_SECURITY_OVERRIDE must move to the OLDEST supported minor go${supported%% *}, not go$override_minor"; exit 1; }
+              label="EOL-minor security override"
+            fi
             effective=$GO_TOOLCHAIN_SECURITY_OVERRIDE
-            echo "recorded security override: building with go$effective, not the tag's go$GO_TOOLCHAIN"
+            echo "recorded $label: building with go$effective, not the tag's go$GO_TOOLCHAIN"
           fi
           # GOTOOLCHAIN makes every `go` command use exactly that release, no
-          # matter what setup-go resolved, so the build is toolchain-exact.
+          # matter what setup-go resolved, so the build is toolchain-exact. It
+          # is also how the step below, and the audit job's own steps, learn
+          # the effective version without recomputing it.
           echo "GOTOOLCHAIN=go$effective" >>"$GITHUB_ENV"
           GOTOOLCHAIN="go$effective" go version
       - name: GO_SECURITY_OVERRIDES (reviewed module bumps, gated go.mod diff)
@@ -403,13 +546,15 @@ jobs:
           #
           # What makes this safe is the gate below, not `go get` itself:
           # `go get` may change ONLY the require lines of EXACTLY the declared
-          # modules. Any other go.mod edit fails the build — a new or removed
-          # require, a changed go/toolchain directive, a replace/exclude/retract
-          # edit, or an undeclared module moved as a transitive effect (if one
-          # is genuinely needed, declare it too, so it is reviewed). go.sum is
-          # deliberately NOT gated: `go get` has to add the new hashes.
-          # There is no `go mod tidy` — tidy rewrites the whole graph, which
-          # this gate could not tell apart from a supply-chain substitution.
+          # modules, plus the go/toolchain directives within the bounds the
+          # effective toolchain already sets (see the directive gate below).
+          # Any other go.mod edit fails the build — a new or removed require,
+          # a replace/exclude/retract edit, or an undeclared module moved as a
+          # transitive effect (if one is genuinely needed, declare it too, so
+          # it is reviewed). go.sum is deliberately NOT gated: `go get` has to
+          # add the new hashes. There is no `go mod tidy` — tidy rewrites the
+          # whole graph, which this gate could not tell apart from a
+          # supply-chain substitution.
           #
           # This step runs in both the build and the audit job, after the same
           # verify-pin.sh, so the SAME overridden tree is what govulncheck
@@ -443,6 +588,61 @@ jobs:
           done
           sort -u -o "$RUNNER_TEMP/gomod.allowed" "$RUNNER_TEMP/gomod.allowed"
           gated src/go.mod >"$RUNNER_TEMP/gomod.after"
+          # --- the go/toolchain directive gate (BEGIN) -------------------------
+          # kinds/go/toolchain-gate-test.sh extracts everything between this
+          # marker and the matching END one and drives it against synthetic
+          # go.mod views, so keep both markers on their own lines.
+          # A dependency that carries a security fix can itself require a newer
+          # LANGUAGE version: golang.org/x/net v0.60.0 and golang.org/x/crypto
+          # v0.56.0 both declare `go 1.26.0`, so taking either fix into a module
+          # whose own `go` line is older forces `go get` to raise that line. The
+          # fix is unreachable otherwise, so the directive may rise — but never
+          # past the toolchain this build actually runs, which the step above
+          # already gated. That cap is what keeps the allowance honest: under an
+          # in-minor patch override it confines the language version to the tag's
+          # own minor, and under an EOL-minor override it permits exactly the move
+          # that override already sanctioned, and nothing beyond it. A directive
+          # that drops, or one above the effective toolchain, stays refused.
+          #
+          # The `toolchain` line may only be dropped or lowered: GOTOOLCHAIN in
+          # the environment is what actually selects the release, so a lower or
+          # absent line changes nothing, while a higher one would be a build on
+          # something other than the gated toolchain.
+          [[ ${GOTOOLCHAIN:-} == go* ]] ||
+            { echo "GOTOOLCHAIN is unset: the toolchain step must run before this one"; exit 1; }
+          effective=${GOTOOLCHAIN#go}
+          governum() { # a Go version (bare or go-prefixed) as one comparable integer
+            [[ ${1#go} =~ ^([0-9]+)\.([0-9]+)(\.([0-9]+))?$ ]] || return 1
+            printf '%d%03d%03d\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[4]:-0}"
+          }
+          # Unlike the step above, these compare values read out of go.mod, so a
+          # version this gate cannot parse must make the comparison FALSE rather
+          # than abort mid-expression: both wrappers fail closed into "refused".
+          govlt() { local a b; a=$(governum "$1") && b=$(governum "$2") && ((a < b)); }
+          govle() { local a b; a=$(governum "$1") && b=$(governum "$2") && ((a <= b)); }
+          directive() { awk -F'\t' -v key="$1" '$1 == key {print $2}' "$2"; }
+          go_before=$(directive go "$RUNNER_TEMP/gomod.before")
+          go_after=$(directive go "$RUNNER_TEMP/gomod.after")
+          tc_before=$(directive toolchain "$RUNNER_TEMP/gomod.before")
+          tc_after=$(directive toolchain "$RUNNER_TEMP/gomod.after")
+          directives_ok=1
+          if [[ $go_after != "$go_before" ]]; then
+            if govlt "$go_before" "$go_after" && govle "$go_after" "$effective"; then
+              echo "go directive raised: ${go_before:-(none)} -> ${go_after:-(none)} (at or below the effective go$effective)"
+            else
+              echo "refused go directive change: ${go_before:-(none)} -> ${go_after:-(none)} (must rise, and not past the effective go$effective)"
+              directives_ok=0
+            fi
+          fi
+          if [[ $tc_after != "$tc_before" ]]; then
+            if [[ -z $tc_after ]] || govle "$tc_after" "$effective"; then
+              echo "toolchain directive changed: ${tc_before:-(none)} -> ${tc_after:-(none)} (GOTOOLCHAIN=go$effective still selects the release)"
+            else
+              echo "refused toolchain directive change: ${tc_before:-(none)} -> ${tc_after:-(none)} (above the effective go$effective)"
+              directives_ok=0
+            fi
+          fi
+          # --- the go/toolchain directive gate (END) ---------------------------
           # `diff` exits 1 when the files differ, which is the expected case
           # here, so its status is absorbed rather than tripping pipefail.
           { diff "$RUNNER_TEMP/gomod.before" "$RUNNER_TEMP/gomod.after" || true; } |
@@ -454,13 +654,17 @@ jobs:
             exit 0
           fi
           # Every line that differs, in either direction, must be a require
-          # line of a declared module.
+          # line of a declared module, or a go/toolchain directive the gate
+          # above accepted.
           refused=0
           while IFS=$'\t' read -r field path _; do
             [[ -n $field ]] || continue
-            if [[ $field == require ]] && grep -qxF "$path" "$RUNNER_TEMP/gomod.allowed"; then
-              continue
-            fi
+            skip=0
+            case $field in
+            require) if grep -qxF "$path" "$RUNNER_TEMP/gomod.allowed"; then skip=1; fi ;;
+            go | toolchain) skip=$directives_ok ;;
+            esac
+            if ((skip)); then continue; fi
             echo "  refused go.mod change: $field ${path:-(empty)}"
             refused=1
           done < <(sed 's/^[<>] //' "$RUNNER_TEMP/gomod.diff")
@@ -468,26 +672,62 @@ jobs:
             { echo "GO_SECURITY_OVERRIDES: go.mod changed outside the require lines of $GO_SECURITY_OVERRIDES"; exit 1; }
           echo "GO_SECURITY_OVERRIDES: applied; go.mod changed only in the declared require lines:"
           sed 's/^/  /' "$RUNNER_TEMP/gomod.diff"
-      - name: pinned govulncheck + cyclonedx-gomod
+      - name: pinned audit tools (built with their OWN pinned toolchain)
         run: |
           set -euo pipefail
           . fork/bashy-build/PIN
-          # GOTOOLCHAIN comes from the step above, so govulncheck is BUILT with
-          # the same release that builds the artifact: its type checker has to
-          # understand the sources, and the stdlib it judges must be that one.
-          go version
-          go install "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION"
-          go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@$GO_SBOM_VERSION"
-      - name: govulncheck (source mode) vs reviewed waivers
+          # The audit TOOLS are built with GO_AUDIT_TOOLCHAIN (declared once,
+          # in builds/render.sh), which is INDEPENDENT of the toolchain that
+          # builds the artifact. govulncheck is a Go module with a `go` line of
+          # its own — v1.9.0 declares `go 1.26.0` — so `go install` under an
+          # older pinned toolchain fails outright, before any analysis happens:
+          # kopia v0.23.1 builds with go1.25.11, and that is exactly how
+          # qiangli/kopia run 38326642419 died. Tying the two together would
+          # hold every tool's audit hostage to its upstream's toolchain age.
+          #
+          # Keeping them independent gives the audit nothing it should not
+          # have: `go install pkg@version` resolves in module-agnostic mode and
+          # never reads src/go.mod, so GO_AUDIT_TOOLCHAIN cannot reach the
+          # module being judged.
+          GOTOOLCHAIN=go1.27.2 go install "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION"
+          GOTOOLCHAIN=go1.27.2 go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@$GO_SBOM_VERSION"
+          # The ANALYSIS still runs at the module's own effective toolchain:
+          # govulncheck shells out to `go`, and GOTOOLCHAIN in the environment
+          # (exported by the toolchain step above) pins that to the release the
+          # artifact is built with — so the stdlib govulncheck judges and the
+          # language version it type-checks are the artifact's, not the audit
+          # tool's.
+          echo "audit tools built with: go1.27.2 (govulncheck $GOVULNCHECK_VERSION, cyclonedx-gomod $GO_SBOM_VERSION)"
+          echo "analysis toolchain:     $(go version)"
+      - name: govulncheck (source mode, the SHIPPED build configuration)
         working-directory: src
         run: |
           set -euo pipefail
           . ../fork/bashy-build/PIN
           mkdir -p ../out
           report=../out/$TOOL-$UPSTREAM_TAG.govulncheck.json
+          # Scope: the package the release actually builds (GO_PACKAGE), with
+          # the tags it is built with (GO_AUDIT_TAGS) and the same GO_BUILD_ENV.
+          # "Reachable" then means reachable IN THE ARTIFACT, which is the only
+          # question a release gate can honestly answer.
+          #
+          # `./...` cannot answer it: it makes every package in the repository
+          # a root, including test helpers and the extension packages a reduced
+          # tag set deliberately keeps out of the binary. Build tags do not
+          # save it — zot's pkg/extensions/search/cve/trivy carries no build
+          # constraint at all, so `./...` calls trivy's unfixed GO-2026-4919
+          # reachable in a binary that links none of it, and the only ways out
+          # would be a waiver (never, for a reachable finding) or refusing to
+          # ship a tool that is not actually vulnerable.
+          tags=()
+          [[ -z ${GO_AUDIT_TAGS:-} ]] || tags=(-tags "$GO_AUDIT_TAGS")
+          envs=()
+          if [[ -n ${GO_BUILD_ENV:-} ]]; then read -r -a envs <<<"$GO_BUILD_ENV"; fi
+          echo "govulncheck scope: $GO_PACKAGE${GO_AUDIT_TAGS:+ -tags $GO_AUDIT_TAGS}"
           # govulncheck exits 3 when it finds anything, so the status is
           # deferred: the waiver gate below renders the verdict.
-          govulncheck -format json ./... >"$report" || true
+          env ${envs[@]+"${envs[@]}"} govulncheck -format json \
+            ${tags[@]+"${tags[@]}"} "$GO_PACKAGE" >"$report" || true
           [[ -s $report ]] || { echo "govulncheck produced no report"; exit 1; }
           # A finding whose first trace frame names a function is REACHABLE
           # from called code; module-only findings are informational.
@@ -511,7 +751,14 @@ jobs:
           . ../fork/bashy-build/PIN
           mkdir -p ../out
           sbom=../out/$TOOL-$UPSTREAM_TAG.cdx.json
-          cyclonedx-gomod app -json -licenses -main "$GO_PACKAGE" -output "$sbom" .
+          # cyclonedx-gomod reads the build constraints from the environment,
+          # taking the build tags through GOFLAGS. Tags change Go's module
+          # selection, so without them the SBOM of a reduced build would list
+          # dependencies the shipped binary does not contain.
+          envs=()
+          if [[ -n ${GO_BUILD_ENV:-} ]]; then read -r -a envs <<<"$GO_BUILD_ENV"; fi
+          [[ -z ${GO_AUDIT_TAGS:-} ]] || envs+=("GOFLAGS=-tags=$GO_AUDIT_TAGS")
+          env ${envs[@]+"${envs[@]}"} cyclonedx-gomod app -json -licenses -main "$GO_PACKAGE" -output "$sbom" .
           jq -e '.bomFormat == "CycloneDX" and (.components | length) > 0' "$sbom" >/dev/null
       - name: upload audit outputs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

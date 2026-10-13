@@ -45,7 +45,7 @@ builds/
 | `victoria-traces` | `VictoriaMetrics/VictoriaTraces` | `v0.12.0` | Apache-2.0 | `go` | yoke `external/otel/stack` |
 | `gitea` | `go-gitea/gitea` | `v28.1.0` | MIT | `go` (own `build.yml`) | yoke `external/loom` |
 | `kopia` | `kopia/kopia` | `v0.23.1` | Apache-2.0 | `go` | yoke `external/kopia` |
-| `zot` | `project-zot/zot` | `v2.1.21` | Apache-2.0 | `go` | yoke `external/zot` |
+| `zot` | `project-zot/zot` | `v2.1.22` | Apache-2.0 | `go` | yoke `external/zot` |
 | `seaweedfs` | `seaweedfs/seaweedfs` | `4.48` | Apache-2.0 | `go` | yoke `external/seaweedfs` |
 | `act_runner` | `gitea/runner` (**gitea.com**) | `v5.0.0` | MIT | `go` | yoke `external/actrunner` |
 
@@ -110,7 +110,10 @@ bashy's Linux VM/container meanwhile.
   then the `build` steps (which write their outputs to `out/`); then
   `bashy-build/no-egress-test.sh "$EGRESS_TARGET"`, then uploads `out/*`.
 - **audit** (only when an `audit` fragment exists): the same checkout + pin
-  verification, then the `audit` steps (writing SBOM and other outputs to `out/`).
+  verification, then the same `setup` steps as the build job — the `go` kind's
+  audit fragment `@@INCLUDE setup@@`s it rather than keeping a second copy, so
+  the overridden tree cannot drift between the two jobs — then the `audit`
+  steps (writing SBOM and other outputs to `out/`).
 - **release**: copies `RELEASE_EXTRA` files from `bashy-build/`, chmods
   `RELEASE_EXECUTABLES`, fails if any `RELEASE_ASSETS` file is missing, writes
   `SHA256SUMS`, then `cosign sign-blob --bundle` signs every asset (cosign
@@ -147,7 +150,7 @@ Shell-sourceable `KEY=VALUE` only. It is shipped verbatim as
 | `RELEASE_EXECUTABLES` | assets to `chmod +x` |
 | `RELEASE_NOTE`, `RELEASE_GATES` | release-notes lines |
 | kind keys | `cargo`: `RUST_TOOLCHAIN CARGO_AUDIT_VERSION CARGO_CYCLONEDX_VERSION CARGO_PACKAGE CARGO_BIN CARGO_SBOM_MANIFEST`, optional `files/features.env` (`FEATURES` -> `--no-default-features --features`), required `files/audit-ignore` |
-| kind keys | `go`: `GO_TOOLCHAIN GO_PACKAGE GO_LDFLAGS GO_BUILD_TAGS GO_BUILD_FLAGS GO_BUILD_ENV GO_CGO GO_VERSION_ARG GOVULNCHECK_VERSION GO_SBOM_VERSION`, optional `GO_TOOLCHAIN_SECURITY_OVERRIDE` and `GO_SECURITY_OVERRIDES`, required `files/vuln-ignore` |
+| kind keys | `go`: `GO_TOOLCHAIN GO_PACKAGE GO_LDFLAGS GO_BUILD_TAGS GO_BUILD_FLAGS GO_BUILD_ENV GO_CGO GO_VERSION_ARG GOVULNCHECK_VERSION GO_SBOM_VERSION`, `GO_AUDIT_TAGS` (required once `GO_BUILD_TAGS` is non-empty), optional `GO_TOOLCHAIN_SECURITY_OVERRIDE`, `GO_SECURITY_OVERRIDES`, `GO_AUDIT_TOOLCHAIN` and `GO_SUPPORTED_MINORS`, required `files/vuln-ignore` |
 
 Templates use `@@KEY@@`. A key that is not declared fails the render. That
 includes keys a tool's own fragments use, such as openclaw's `NODE_VERSION` and
@@ -242,13 +245,38 @@ GO_TOOLCHAIN_SECURITY_OVERRIDE=1.27.2   # what bashy builds with, and why (comme
 ```
 
 Both the `build` and `audit` jobs then run `GOTOOLCHAIN=go<override>`, so the
-shipped binary and the vulnerability report agree. The gate accepts **exactly**
-the declared value and nothing else: it must be `MAJOR.MINOR.PATCH`, stay on
-the upstream Go minor, and be a strictly later patch — an override can never
-become a language-version change. Choose the newest patch of that minor. It is
-shipped in `PIN` (and so in the `<tool>-pin.txt` release asset), the step logs
-it, and the declaration's `RELEASE_GATES` names it in the release notes. The
-override retires itself the moment an upstream tag carries the fix.
+shipped binary and the vulnerability report agree. It is shipped in `PIN` (and
+so in the `<tool>-pin.txt` release asset), the step logs it, and the
+declaration's `RELEASE_GATES` names it in the release notes. The override
+retires itself the moment an upstream tag carries the fix.
+
+The gate accepts **exactly two shapes** and nothing else. The value must be
+`MAJOR.MINOR.PATCH` and strictly later than `GO_TOOLCHAIN` either way — a
+downgrade and a no-op are always refused.
+
+**In-minor patch bump** — the ordinary case, and the only one allowed while the
+tag's minor is still supported. A later patch of the tag's own minor, so the
+language version never moves. Choose the newest patch of that minor.
+`builds/gitea` (`1.27.1` -> `1.27.2`) is the worked example.
+
+**EOL-minor security override** — Go ships security fixes for its two newest
+minors only, so a minor goes end-of-life the moment the next one is released
+(go1.27 retired 1.25). A pin on a retired minor has **no later patch to move
+to**, and staying put cannot be made safe at any patch level. Only then may the
+override leave the upstream minor, and only to the **oldest supported minor's
+latest patch** — the smallest language-version jump that gets fixes again:
+
+```
+GO_TOOLCHAIN=1.25.11                    # a minor that no longer gets fixes
+GO_TOOLCHAIN_SECURITY_OVERRIDE=1.26.9   # EOL-minor security override
+```
+
+`builds/kopia` is the worked example. A jump while the tag's minor **is** still
+supported is refused (there a later patch exists, and the patch bump is the
+whole of what review sanctioned), as is a jump to anything but the oldest
+supported minor. The supported set is `GO_SUPPORTED_MINORS` in
+`builds/render.sh` — oldest first, one place — and keeping it current is part
+of reacting to a Go release.
 
 #### `GO_SECURITY_OVERRIDES` — the module half
 
@@ -267,14 +295,35 @@ needs no override gets.
 
 What makes this safe is the gate, not `go get`: afterwards `go.mod` may differ
 **only in the require lines of exactly the declared modules**. Anything else
-fails the build — a new or removed require, a changed `go`/`toolchain`
-directive, a `replace`/`exclude`/`retract` edit, or an undeclared module moved
-as a transitive effect (if one is genuinely needed, declare it too, so it is
-reviewed). The comparison is over `go mod edit -json`, not the file text, so a
-reformat or a moved block cannot hide a real change. `go.sum` is deliberately
-**not** gated: `go get` has to add the new hashes. There is no `go mod tidy` —
-tidy rewrites the whole graph, which this gate could not tell apart from a
-supply-chain substitution.
+fails the build — a new or removed require, a `replace`/`exclude`/`retract`
+edit, or an undeclared module moved as a transitive effect (if one is genuinely
+needed, declare it too, so it is reviewed). The comparison is over `go mod edit
+-json`, not the file text, so a reformat or a moved block cannot hide a real
+change. `go.sum` is deliberately **not** gated: `go get` has to add the new
+hashes. There is no `go mod tidy` — tidy rewrites the whole graph, which this
+gate could not tell apart from a supply-chain substitution.
+
+Taking several fixes into an old graph can move a lot of require lines, and
+each one has to be named. The list is then **derived, not hand-picked**: run
+`go get` for the fixes you need, read off every module MVS moved, and declare
+each at the version MVS selected. Pinning the selected version is what keeps
+the extra entries no-ops — naming a module at a version *below* what MVS picked
+would silently downgrade it. Regenerate the whole list when the pin moves
+rather than patching it. `builds/kopia` is the worked example: five fixes, 23
+declared modules.
+
+**The `go` and `toolchain` directives have their own gate.** A dependency
+carrying a security fix can require a newer *language* version — `x/net`
+v0.60.0 and `x/crypto` v0.56.0 both declare `go 1.26.0` — so taking the fix
+into an older module forces `go get` to raise `go.mod`'s `go` line. The fix is
+unreachable otherwise, so the directive may rise, but **never past the
+toolchain this build actually runs**, which the step above has already gated.
+That cap is what keeps the allowance honest: under an in-minor patch override
+it confines the language version to the tag's own minor, and under an
+EOL-minor override it permits exactly the move that override already
+sanctioned. A directive that drops, or one above the effective toolchain, is
+refused. The `toolchain` line may only be dropped or lowered — `GOTOOLCHAIN` in
+the environment is what selects the release.
 
 The step runs in **both** the `build` and the `audit` job, after the same
 `verify-pin.sh`, so the same overridden tree is what govulncheck judges and
@@ -288,6 +337,52 @@ stdlib findings fixed by `GO_TOOLCHAIN_SECURITY_OVERRIDE=1.26.9`, then 5
 remaining `golang.org/x/net` findings fixed by
 `GO_SECURITY_OVERRIDES="golang.org/x/net@v0.60.0"`, for zero reachable
 findings and an empty `vuln-ignore`.
+
+### What the audit judges (the `go` kind)
+
+`govulncheck` runs in source mode over **the package the release builds**
+(`GO_PACKAGE`), with the build tags the release is built with (`GO_AUDIT_TAGS`)
+and the same `GO_BUILD_ENV`. "Reachable" then means reachable *in the signed
+artifact*, which is the only question a release gate can honestly answer. The
+CycloneDX SBOM is generated with the same tags (through `GOFLAGS`), because
+tags change Go's module selection — otherwise the SBOM of a reduced build would
+list dependencies the binary does not contain.
+
+`./...` cannot answer that question. It makes every package in the repository a
+root: test helpers, and the extension packages a reduced tag set deliberately
+keeps out of the binary. Build tags do not save it — zot's
+`pkg/extensions/search/cve/trivy` carries no build constraint at all, so
+`./...` calls trivy's unfixed `GO-2026-4919` reachable in a binary that links
+none of it. The only ways out would be a waiver (never, for a reachable
+finding) or refusing to ship a tool that is not actually vulnerable.
+
+`GO_AUDIT_TAGS` must therefore be the tags the release is **built** with, and
+`render.sh` requires it as soon as `GO_BUILD_TAGS` is non-empty, even to say
+"none" — the audit configuration is never left to a default. The one sanctioned
+divergence is a tag that needs generated sources the audit job does not produce:
+`builds/gitea` builds with `bindata` and audits without it, because `bindata`
+selects the generated `modules/public/bindata.go` over the `!bindata`
+filesystem fallback, which changes which file serves an embedded asset, not
+which modules the binary requires.
+
+### The audit tools have their own toolchain
+
+`govulncheck` and `cyclonedx-gomod` are installed with `GO_AUDIT_TOOLCHAIN`
+(`builds/render.sh`, go1.27.2 today), **independent** of the toolchain that
+builds the artifact. They are Go modules with `go` lines of their own:
+`govulncheck` v1.9.0 declares `go 1.26.0`, so `go install` under an older
+pinned toolchain fails outright, before any analysis happens — which is how
+`qiangli/kopia` run 38326642419 died on kopia v0.23.1's go1.25.11. Coupling the
+two would hold every tool's audit hostage to its upstream's toolchain age.
+
+This gives the audit nothing it should not have. `go install pkg@version`
+resolves in module-agnostic mode and never reads `src/go.mod`, so
+`GO_AUDIT_TOOLCHAIN` cannot reach the module being judged; and the **analysis**
+still runs at the module's own effective toolchain, because `govulncheck` shells
+out to `go` and `GOTOOLCHAIN` in the environment pins that to the release the
+artifact is built with. So the stdlib `govulncheck` judges and the language
+version it type-checks are the artifact's, not the audit tool's. Keep
+`GO_AUDIT_TOOLCHAIN` at the newest patch of the newest supported minor.
 
 ## Conventions every tool must follow (render.sh enforces the first two)
 

@@ -8,9 +8,13 @@
 # API over loopback, let it idle, and FAIL on any outbound connection attempt
 # other than loopback to its own port or to 127.0.0.1:31415.
 #
-# Both kopia invocations carry --no-check-for-updates, which is kopia's one
-# documented outbound call (a GitHub release query); the gate proves it is
-# really off. --otlp-trace is kopia's supported OTLP exporter, and otel.env
+# Kopia's one documented outbound call is its periodic GitHub release query,
+# and no-tracking.env turns it off with KOPIA_CHECK_FOR_UPDATES=false rather
+# than a flag: `--[no-]check-for-updates` is not a global flag at this tag, so
+# passing it before the subcommand is an "unknown long flag" and both
+# invocations below simply fail. The envar reaches them through the server
+# environment assembled above, and the gate proves the query is really off.
+# --otlp-trace IS a global flag and stays one, before the subcommand; otel.env
 # points it only at 127.0.0.1:31415 — the single non-service destination the
 # verdict tolerates.
 #
@@ -66,13 +70,14 @@ otlp_port=31415
 
 cat >"$work/run.sh" <<RUN
 set -uo pipefail
-# Same argv shape yoke's external/kopia launcher uses (kopiaPrivacyArgs +
-# a filesystem repo + an insecure loopback server). Flag reference:
+# Same argv shape yoke's external/kopia launcher uses (the privacy envars
+# from the environment + a filesystem repo + an insecure loopback server).
+# Flag reference:
 # https://kopia.io/docs/reference/command-line/flags/
 cfg='$work/kopia.config'
-'$bin' --config-file="\$cfg" --no-check-for-updates \\
+'$bin' --config-file="\$cfg" \\
 	repository create filesystem --path='$work/repo'
-exec '$bin' --config-file="\$cfg" --no-check-for-updates --otlp-trace \\
+exec '$bin' --config-file="\$cfg" --otlp-trace \\
 	server start --address=127.0.0.1:$port --insecure --without-password
 RUN
 chmod +x "$work/run.sh"

@@ -58,17 +58,61 @@ dependency at this tag (`github.com/kopia/htmluibuild` in `go.mod`), so it
 arrives through `go.sum` like everything else — no second, unpinned upstream to
 download, and the SBOM covers it.
 
+### Toolchain: an EOL-minor security override
+
+v0.23.1's `go.mod` pins `toolchain go1.25.11`, and **Go 1.25 is no longer a
+supported minor** now that 1.27 has shipped — Go fixes only its two newest
+minors, so go1.25.11 is the last 1.25 release there will ever be. There is no
+later patch to move to, and v0.23.1 is the current kopia release, so no
+upstream tag carries a newer toolchain either. Staying on the tag's toolchain
+therefore cannot be made safe at any patch level.
+
+That is the one case `GO_TOOLCHAIN_SECURITY_OVERRIDE` may leave the upstream
+minor, and then only to the **oldest supported minor's latest patch** — the
+smallest language-version jump that gets security fixes again:
+
+```
+GO_TOOLCHAIN=1.25.11                    # what the tag's go.mod says
+GO_TOOLCHAIN_SECURITY_OVERRIDE=1.26.9   # EOL-minor security override
+```
+
+The move clears every reachable stdlib finding on its own. What it leaves are
+11 reachable findings in dependencies, all with published fixes, which
+`GO_SECURITY_OVERRIDES` takes: `golang.org/x/net` v0.60.0,
+`golang.org/x/crypto`, `google.golang.org/grpc` v1.83.1, `golang.org/x/text`
+and the otel OTLP trace exporter v1.45.0. Taking the x/net and x/crypto fixes
+into a graph this old moves 23 require lines by MVS and raises `go.mod`'s own
+`go` directive from 1.25.8 to 1.26.0 (both releases declare it), so the
+declaration names every module that moves — see `builds/README.md`
+§`GO_SECURITY_OVERRIDES` — and the directive gate allows the rise only up to
+the effective toolchain the override already sanctioned. The result is **zero**
+reachable findings and an empty `vuln-ignore`.
+
+Both halves retire themselves the moment a kopia tag ships on a supported Go.
+
 ## No tracking: every knob at v0.23.1
 
-Kopia's one documented outbound call is its GitHub release check, and it is a
-**flag**, not a configuration key, so the launcher must pass it on every
-invocation. `files/no-tracking.env` states the policy; it is the same
-`kopiaPrivacyArgs()` pair yoke's `external/kopia` launcher uses.
+Kopia's one documented outbound call is its periodic GitHub release check, and
+bashy turns it off with an **environment variable**, not a flag.
+
+The flag looks tempting and does not work. At this tag
+`--[no-]check-for-updates` is declared by the repository *connect* options
+(`cli/command_repository_connect.go`), so it only parses after a subcommand
+that installs them: negating it in the global position — before `server
+start`, which is where a launcher naturally puts a privacy flag — is an
+"unknown long flag" and kills the invocation. That is what made the no-egress
+gate fail before this build. `KOPIA_CHECK_FOR_UPDATES` is the same switch read
+from one place (`cli/update_check.go` consults it directly in
+`maybeCheckForUpdates()`, and it is also the flag's own `Envar`), so it holds
+for every invocation and every argv order.
+
+`files/no-tracking.env` states the policy; it is the same privacy pair yoke's
+`external/kopia` launcher uses.
 
 | Knob | Source | Upstream default | bashy |
 |---|---|---|---|
-| `--no-check-for-updates` | upstream flag reference, <https://kopia.io/docs/reference/command-line/flags/> | updates **are** checked (a periodic GitHub release query) | **passed on every invocation**, including `repository create` |
-| `--otlp-trace` | same reference | off | **passed**; `otel.env` decides where the spans go |
+| `KOPIA_CHECK_FOR_UPDATES` | `cli/update_check.go` `checkForUpdatesEnvar` at the pinned tag | unset — updates **are** checked (a periodic GitHub release query) | **`false`** in `no-tracking.env`, so it applies to `repository create` and `server start` alike |
+| `--otlp-trace` | upstream flag reference, <https://kopia.io/docs/reference/command-line/flags/> | off | **passed** as a global flag, before the subcommand; `otel.env` decides where the spans go |
 | `--address` | `server start` | `127.0.0.1:51515` | `127.0.0.1:<port>` (stated) |
 | `--insecure` / `--without-password` | `server start` | off | **on**: plain HTTP with no server-level auth, because the mesh is the boundary and the listener is loopback |
 
@@ -110,10 +154,21 @@ the setup step.
 ## Audit
 
 The `audit` job runs the pinned `govulncheck` (`v1.9.0`) in source mode over
-`./...` and fails on any vulnerability that is **reachable** — one whose first
-trace frame names a called function — unless it is listed with a justification
-in `files/vuln-ignore` (empty today). It then writes a CycloneDX SBOM with the
-pinned `cyclonedx-gomod` (`v1.12.0`).
+**the package the release builds** (`.`), with the same build tags and
+build environment, and fails on any vulnerability that is **reachable** — one
+whose first trace frame names a called function — unless it is listed with a
+justification in `files/vuln-ignore` (empty today). Scoping it to the shipped
+package is what makes "reachable" mean reachable *in the signed artifact*
+(`builds/README.md` §What the audit judges). It then writes a CycloneDX SBOM
+with the pinned `cyclonedx-gomod` (`v1.12.0`), generated with the same tags so
+its component list is the artifact's too.
+
+`govulncheck` and `cyclonedx-gomod` are themselves installed with a separately
+pinned toolchain (`GO_AUDIT_TOOLCHAIN`, go1.27.2), independent of the one that
+builds the binary: `govulncheck` v1.9.0 declares `go 1.26.0` in its own
+`go.mod`, so coupling the two would make the audit fail to install on any tool
+pinned to an older Go. The analysis itself still runs at this tool's effective
+toolchain.
 
 ## Release assets
 

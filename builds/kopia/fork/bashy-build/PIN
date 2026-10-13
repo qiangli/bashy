@@ -18,6 +18,35 @@ UPSTREAM_COMMIT=72ec08fd8edb86c67ed27099bf1b955e1f308ffa
 KIND=go
 # Must equal the go/toolchain directive in the tag's go.mod (setup.yml gates it).
 GO_TOOLCHAIN=1.25.11
+# EOL-minor security override. Go 1.25 is no longer a supported minor now that
+# 1.27 has shipped (Go fixes only its two newest minors), so go1.25.11 is the
+# LAST 1.25 release there will ever be: there is no later patch to move to, and
+# v0.23.1 is the current kopia release, so no upstream tag carries a newer
+# toolchain either. Staying put therefore cannot be made safe, which is the one
+# case setup.yml lets the override leave the tag's minor — and then only to the
+# OLDEST supported minor's latest patch, the smallest language-version jump
+# that gets security fixes again. Measured at the pinned commit: the move to
+# go1.26.9 clears every reachable stdlib finding on its own, leaving only the
+# module findings GO_SECURITY_OVERRIDES below fixes.
+GO_TOOLCHAIN_SECURITY_OVERRIDE=1.26.9
+# Module half of the same override. At go1.26.9 the shipped package still has
+# 11 reachable findings, all of them in dependencies with published fixes:
+#   golang.org/x/net    -> v0.60.0  GO-2026-6603/6610/6611/6612/6617
+#   golang.org/x/crypto -> v0.56.0  GO-2026-6354, GO-2026-6355
+#   google.golang.org/grpc -> v1.83.1  GO-2026-6061, GO-2026-6348
+#   golang.org/x/text   -> v0.39.0  GO-2026-5970
+#   otlptracegrpc       -> v1.45.0  GO-2026-6505
+# The list below is DERIVED, not hand-picked: taking those five fixes into a
+# graph this old moves 23 require lines by MVS, and the go.mod diff gate
+# refuses any module it was not told about — so every module MVS moves is named
+# here, each at the version MVS actually selects (which is at or above the fix
+# in every case). Pinning the selected version is what keeps it a no-op rather
+# than a downgrade; regenerate the whole list when the kopia pin moves, do not
+# patch it by hand. Taking the x/net and x/crypto fixes also raises go.mod's
+# own `go` directive from 1.25.8 to 1.26.0, because those releases declare it;
+# setup.yml allows that only up to the effective toolchain, which the override
+# above has already gated.
+GO_SECURITY_OVERRIDES="golang.org/x/text@v0.42.0 golang.org/x/crypto@v0.57.0 golang.org/x/net@v0.60.0 google.golang.org/grpc@v1.83.1 go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc@v1.45.0 cel.dev/expr@v0.25.2 github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp@v1.33.0 github.com/go-logr/logr@v1.4.4 github.com/spiffe/go-spiffe/v2@v2.7.0 go.opentelemetry.io/contrib/detectors/gcp@v1.44.0 go.opentelemetry.io/otel@v1.45.0 go.opentelemetry.io/otel/exporters/otlp/otlptrace@v1.45.0 go.opentelemetry.io/otel/metric@v1.45.0 go.opentelemetry.io/otel/sdk@v1.45.0 go.opentelemetry.io/otel/sdk/metric@v1.45.0 go.opentelemetry.io/otel/trace@v1.45.0 go.opentelemetry.io/proto/otlp@v1.11.0 golang.org/x/mod@v0.41.0 golang.org/x/sync@v0.23.0 golang.org/x/sys@v0.48.0 golang.org/x/term@v0.46.0 google.golang.org/genproto/googleapis/api@v0.0.0-20260803160001-6ac0973c030d google.golang.org/genproto/googleapis/rpc@v0.0.0-20260803160001-6ac0973c030d"
 GOVULNCHECK_VERSION=v1.9.0
 GO_SBOM_VERSION=v1.12.0
 GO_PACKAGE=.
@@ -47,5 +76,5 @@ EGRESS_TARGET='out/${{ matrix.asset }}'
 RELEASE_EXTRA="PIN=kopia-pin.txt otel.env=kopia-otel.env no-tracking.env=kopia-no-tracking.env vuln-ignore=vuln-ignore"
 RELEASE_ASSETS="kopia-linux-amd64 kopia-linux-arm64 kopia-darwin-arm64 kopia-darwin-amd64 kopia-$UPSTREAM_TAG.cdx.json kopia-$UPSTREAM_TAG.govulncheck.json kopia-pin.txt kopia-otel.env kopia-no-tracking.env vuln-ignore"
 RELEASE_EXECUTABLES="kopia-linux-amd64 kopia-linux-arm64 kopia-darwin-arm64 kopia-darwin-amd64"
-RELEASE_NOTE="The GitHub update check is off (--no-check-for-updates) and the only OTLP destination is bashy's local collector 127.0.0.1:31415."
-RELEASE_GATES="pinned commit, pinned Go toolchain, govulncheck (reachable, unwaived = fail), CycloneDX SBOM, no-egress."
+RELEASE_NOTE="The GitHub update check is off (KOPIA_CHECK_FOR_UPDATES=false, in kopia-no-tracking.env) and the only OTLP destination is bashy's local collector 127.0.0.1:31415."
+RELEASE_GATES="pinned commit, pinned Go toolchain (EOL-minor security override: built with go1.26.9, not the tag's end-of-life go1.25.11), reviewed module security overrides (23 require lines, from the five fixes listed in kopia-pin.txt), govulncheck of the shipped package (reachable, unwaived = fail; 0 reachable, nothing waived), CycloneDX SBOM, no-egress."

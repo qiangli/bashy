@@ -184,12 +184,22 @@ the next three, each service's gRPC listener at its HTTP port + 10000
 ## Audit
 
 The `audit` job runs the pinned `govulncheck` (`v1.9.0`) in source mode over
-`./...`, **on the same overridden tree the build uses**, and fails on any
-vulnerability that is reachable — one whose first trace frame names a called
+**the package the release builds** (`./weed`), with the same build tags and
+build environment, **on the same overridden tree the build uses**, and fails on
+any vulnerability that is reachable — one whose first trace frame names a called
 function — unless it is listed with a justification in `files/vuln-ignore`
-(empty). It then writes a CycloneDX SBOM with the pinned `cyclonedx-gomod`
-(`v1.12.0`), so the SBOM records `golang.org/x/net v0.60.0` — what actually
-shipped — rather than the tag's `v0.58.0`.
+(empty). Scoping it to the shipped package is what makes "reachable" mean
+reachable *in the signed artifact* (`builds/README.md` §What the audit judges).
+It then writes a CycloneDX SBOM with the pinned `cyclonedx-gomod` (`v1.12.0`),
+generated with the same tags, so the SBOM records `golang.org/x/net v0.60.0` —
+what actually shipped — rather than the tag's `v0.58.0`.
+
+`govulncheck` and `cyclonedx-gomod` are themselves installed with a separately
+pinned toolchain (`GO_AUDIT_TOOLCHAIN`, go1.27.2), independent of the one that
+builds the binary: `govulncheck` v1.9.0 declares `go 1.26.0` in its own
+`go.mod`, so coupling the two would make the audit fail to install on any tool
+pinned to an older Go. The analysis itself still runs at this tool's effective
+toolchain.
 
 ## Release assets
 

@@ -24,6 +24,9 @@ trap 'rm -rf "$tmp"' EXIT
 rc=0
 # The one shared strace verdict every fork's no-egress gate sources.
 "$here/_shared/egress-verdict-test.sh" || rc=1
+# The go kind's toolchain + go.mod-directive gates, which otherwise only ever
+# run on a release runner.
+"$here/_shared/kinds/go/toolchain-gate-test.sh" || rc=1
 for t in "${tools[@]}"; do
 	"$here/render.sh" "$t" "$tmp/$t" >/dev/null
 	if ! diff -r "$tmp/$t" "$here/$t/fork"; then

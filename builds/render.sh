@@ -103,6 +103,54 @@ if [[ -n ${GO_SECURITY_OVERRIDES:-} ]]; then
 			die "GO_SECURITY_OVERRIDES entry $spec is not module@vVERSION"
 	done
 fi
+
+# --- go-kind toolchain policy -----------------------------------------------
+# Two facts about the Go RELEASE CYCLE rather than about any one upstream, so
+# they are written down once, here, and substituted into the shared go
+# fragments. Both are overridable from tool.env if a tool ever needs to differ.
+if [[ $KIND == go ]]; then
+	# GO_AUDIT_TOOLCHAIN builds the audit TOOLS (govulncheck, cyclonedx-gomod)
+	# and nothing else. It is deliberately INDEPENDENT of the toolchain that
+	# builds the artifact: govulncheck is a module with a `go` line of its own
+	# (v1.9.0 declares `go 1.26.0`), so installing it under an older pinned
+	# toolchain fails before any analysis happens — which is how qiangli/kopia
+	# run 38326642419 died on kopia v0.23.1's go1.25.11. Keep it at the newest
+	# patch of the newest supported minor. See _shared/kinds/go/audit.yml.
+	: "${GO_AUDIT_TOOLCHAIN:=1.27.2}"
+	[[ $GO_AUDIT_TOOLCHAIN =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+		die "GO_AUDIT_TOOLCHAIN $GO_AUDIT_TOOLCHAIN is not MAJOR.MINOR.PATCH"
+	# GO_SUPPORTED_MINORS: the Go minors upstream still ships security fixes
+	# for, OLDEST FIRST. Go supports the two newest minors, so go1.27 shipping
+	# retired 1.25 — it gets no further fixes at any patch level. The toolchain
+	# gate reads this to tell an in-minor patch bump from an EOL-minor security
+	# override (_shared/kinds/go/setup.yml); keep it current when Go releases a
+	# minor, which is also when a pin on the retired minor needs the override.
+	: "${GO_SUPPORTED_MINORS:=1.26 1.27}"
+	for minor in $GO_SUPPORTED_MINORS; do
+		[[ $minor =~ ^[0-9]+\.[0-9]+$ ]] ||
+			die "GO_SUPPORTED_MINORS entry $minor is not MAJOR.MINOR"
+	done
+	# Syntax only, as above; setup.yml decides whether the move is sanctioned.
+	if [[ -n ${GO_TOOLCHAIN_SECURITY_OVERRIDE:-} ]]; then
+		[[ $GO_TOOLCHAIN_SECURITY_OVERRIDE =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+			die "GO_TOOLCHAIN_SECURITY_OVERRIDE $GO_TOOLCHAIN_SECURITY_OVERRIDE is not MAJOR.MINOR.PATCH"
+	fi
+	# GO_AUDIT_TAGS: the build tags govulncheck and the SBOM analyze with. They
+	# must be the tags the release is BUILT with, so that what the audit judges
+	# is the artifact. A tool that builds with tags therefore has to declare
+	# this, even to say "none" — the audit configuration is never left to a
+	# default. The one sanctioned divergence is a tag that needs generated
+	# sources the audit job does not produce (gitea's `bindata` embeds a vite
+	# build), which changes which file supplies an asset, not which modules the
+	# binary requires.
+	if [[ -n ${GO_BUILD_TAGS:-} && -z ${GO_AUDIT_TAGS+x} ]]; then
+		die "GO_BUILD_TAGS is set, so tool.env must declare GO_AUDIT_TAGS (what the audit analyzes with; empty is a decision, not a default)"
+	fi
+else
+	for v in GO_TOOLCHAIN_SECURITY_OVERRIDE GO_AUDIT_TAGS; do
+		[[ -z ${!v:-} ]] || die "$v is a go-kind key, but KIND=$KIND"
+	done
+fi
 for f in otel.env no-egress-test.sh; do
 	[[ -f $dir/files/$f ]] || die "files/$f is required (builds/README.md conventions)"
 done
