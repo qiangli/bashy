@@ -504,6 +504,13 @@ var frontDoorObserving atomic.Bool
 // the private exit signal only delays process exit until observers have seen
 // the real status.
 func Dispatch() {
+	// Ollama v0.21.2 starts its inference subprocess by re-executing
+	// os.Executable() with argv[1] == "runner". Handle that protocol before
+	// shell/front-door dispatch so it reaches only the runner embedded in this
+	// signed Bashy build.
+	if len(os.Args) > 1 && os.Args[1] == "runner" {
+		dispatchExit(dispatchEmbeddedOllamaRunner(os.Args[2:]))
+	}
 	// A fence never resolves its tool from PATH (Sprint 213): the island
 	// tool resolver is installed before anything can plan an island — the
 	// interp runner, the Go front end behind `transpile`, `check --prepare`.
