@@ -66,7 +66,13 @@ runs single-node inference, the nng multipart/timeout test, and two-rank
 inference with a `1,1` layer split. Every subprocess has a deadline. Linux runs
 unprivileged inside a loopback-only network namespace with outbound syscall
 tracing, including failed attempts. Darwin uses a sandbox allowing only explicit
-loopback ring ports. Enforcement is proven by a positive control whose EPERM
+loopback ring ports. Both allowlists carry exactly seven loopback ports: the
+three ring-test ports from pinned `common/zmq_nng_shim_test.cpp` — 5599
+(multipart), 5600 (rcvtimeo), 5601 (single-message) — plus the rank-offset
+engine ports 19000/19001 (data) and 19100/19101 (signal). Port 5601 was
+missing until candidate -3 run 38414127942, where its denied connect hung the
+Mac ring test and tripped the Linux verdict; non-loopback destinations remain
+denied on both platforms. Enforcement is proven by a positive control whose EPERM
 denial is observed directly in the attempt's own stderr; the unified log is
 not a reliable sandbox observer (hosted macos-15 run 38411861522 recorded no
 denial there), so its absence neither passes nor fails the gate, while any
