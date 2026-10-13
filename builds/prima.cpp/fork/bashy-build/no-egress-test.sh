@@ -15,17 +15,50 @@ case $(uname -s) in
 Linux)
   # Trace the entire process tree, including denied attempts, in a loopback-only namespace.
   # Output intentionally belongs to the unprivileged runner.
+  #
+  # Fail-safe diagnostics: the namespace exercise runs redirected into
+  # out/$asset-egress.txt so the artifact carries the full log, but every
+  # failure path below reprints that file to stderr first. A gate failure
+  # must leave its cause in the hosted step log even when the evidence
+  # artifact cannot be uploaded (candidate -2 run 38411861522 left no cause
+  # anywhere: the redirect hid the failure and the step exit skipped upload).
+  # Detection is not weakened: the verdict below still fails on any
+  # non-loopback attempt, including attempts the namespace itself denied.
   # shellcheck disable=SC2024
-  sudo unshare --net -- bash -c '
+  if sudo unshare --net -- bash -c '
     set -euo pipefail
+    echo "no-egress: linux: namespace entered; bringing loopback up"
     ip link set lo up
+    echo "no-egress: linux: tracing exercise"
     strace -f -qq -s 256 -e trace=connect,sendto,sendmsg,sendmmsg -o "$1/trace" \
       setpriv --reuid="$2" --regid="$3" --init-groups \
       env -i PATH=/usr/bin:/bin HOME="$1/home" \
       python3 "$4/exercise.py" "$5" "$1/model.gguf" "$6"
-  ' bash "$work" "$(id -u)" "$(id -g)" "$here" "$bin" "$ring" >"out/$asset-egress.txt" 2>&1
-  [[ -s $work/trace ]] || { echo "missing syscall observations"; exit 1; }
-  egress_verdict "$work/trace" 5599 5600 19000 19001 19100 19101
+    echo "no-egress: linux: exercise finished"
+  ' bash "$work" "$(id -u)" "$(id -g)" "$here" "$bin" "$ring" >"out/$asset-egress.txt" 2>&1; then
+    : # namespace exercise completed; the verdict below decides
+  else
+    rc=$?
+    echo "no-egress: linux: namespace exercise failed (rc=$rc)" >&2
+    if [[ -s $work/trace ]]; then
+      echo 'no-egress: linux: syscalls were traced, so unshare/strace worked; suspect the exercise (binary, ring test or model)' >&2
+    else
+      echo 'no-egress: linux: no syscall observations; suspect unshare/namespace setup, strace, or setpriv' >&2
+    fi
+    echo "---- out/$asset-egress.txt ----" >&2
+    cat "out/$asset-egress.txt" >&2 || true
+    exit 1
+  fi
+  if [[ ! -s $work/trace ]]; then
+    echo 'no-egress: linux: missing syscall observations' >&2
+    echo "---- out/$asset-egress.txt ----" >&2
+    cat "out/$asset-egress.txt" >&2 || true
+    exit 1
+  fi
+  if ! egress_verdict "$work/trace" 5599 5600 19000 19001 19100 19101; then
+    cat "$work/trace" >>"out/$asset-egress.txt"
+    exit 1
+  fi
   cat "$work/trace" >>"out/$asset-egress.txt"
   ;;
 Darwin)

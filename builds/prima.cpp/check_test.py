@@ -95,6 +95,78 @@ class Contract(unittest.TestCase):
         self.assertIn('needs: [pin, build, audit]',workflow)
         self.assertEqual(workflow.count('name: verify HEAD == pinned commit'),2)
 
+class NoEgressLinuxDiagnostics(unittest.TestCase):
+    # Candidate -2 run 38411861522 failed every Linux gate with no cause in
+    # the hosted logs: the namespace exercise runs redirected into
+    # out/$asset-egress.txt, and the step exit skipped the artifact upload.
+    # Every Linux failure path must therefore reprint the evidence file to
+    # stderr, distinguish namespace-setup failure (no trace) from an exercise
+    # failure (trace present), and stay fail-closed without weakening the
+    # outbound-attempt verdict.
+    def _script(self):
+        return (ROOT/'files/no-egress-test.sh').read_text()
+
+    def _linux(self):
+        text=self._script()
+        start=text.index('Linux)')
+        return text[start:text.index('Darwin)')]
+
+    def test_failures_reprint_evidence_to_stderr(self):
+        linux=self._linux()
+        # Both the exercise-failure and the missing-trace paths dump the
+        # buffered evidence file to the step log before exiting.
+        self.assertEqual(linux.count('cat "out/$asset-egress.txt" >&2'),2)
+        self.assertIn('---- out/$asset-egress.txt ----',linux)
+
+    def test_setup_failure_distinguished_from_exercise_failure(self):
+        linux=self._linux()
+        self.assertIn('suspect unshare/namespace setup, strace, or setpriv',linux)
+        self.assertIn('suspect the exercise (binary, ring test or model)',linux)
+
+    def test_detection_not_weakened(self):
+        linux=self._linux()
+        # Same verdict, same loopback ring ports, still fatal on verdict.
+        self.assertIn('egress_verdict "$work/trace" 5599 5600 19000 19001 19100 19101',linux)
+        self.assertIn('exit 1',linux)
+
+    def test_fork_matches_files(self):
+        self.assertEqual((ROOT/'fork/bashy-build/no-egress-test.sh').read_text(),
+                         self._script())
+
+class NoEgressEvidenceUpload(unittest.TestCase):
+    # Gate evidence must upload even when the gate fails, or the next blind
+    # failure repeats run 38411861522. The upload covers only the egress
+    # evidence file; unsigned build outputs still upload on success only, and
+    # signing still waits on every gate via the release job's needs.
+    def _workflow(self):
+        return (ROOT/'fork/.github/workflows/bashy-build.yml').read_text()
+
+    def test_evidence_upload_runs_on_failure(self):
+        workflow=self._workflow()
+        self.assertIn('name: upload no-egress gate evidence',workflow)
+        self.assertIn('if: always()',workflow)
+        self.assertIn('out/*-egress.txt',workflow)
+
+    def test_evidence_fragment_is_declared(self):
+        self.assertEqual((ROOT/'egress-evidence.yml').read_text(),
+                         '      - name: upload no-egress gate evidence\n'
+                         '        if: always()\n'
+                         '        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2\n'
+                         '        with:\n'
+                         '          name: ${{ matrix.asset }}-egress\n'
+                         '          path: out/*-egress.txt\n'
+                         '          if-no-files-found: warn\n'
+                         '          retention-days: 3\n')
+
+    def test_unsigned_upload_still_success_only(self):
+        workflow=self._workflow()
+        unsigned=workflow[workflow.index('name: upload unsigned build outputs'):]
+        self.assertNotIn('if: always()',unsigned.split('name: upload audit outputs')[0])
+
+    def test_signing_still_waits_on_all_gates(self):
+        workflow=self._workflow()
+        self.assertIn('needs: [pin, build, audit]',workflow)
+
 class NoEgressDarwinObserver(unittest.TestCase):
     # Hosted macos-15 run 38411861522 failed with 'sandbox observer cannot see
     # control denial': the unified log is not a reliable observer for sandbox

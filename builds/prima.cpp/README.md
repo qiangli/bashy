@@ -72,7 +72,12 @@ not a reliable sandbox observer (hosted macos-15 run 38411861522 recorded no
 denial there), so its absence neither passes nor fails the gate, while any
 observed engine denial — EPERM in the engine log or a unified-log match —
 fails the job. Engine or ring failure under the deny profile also fails the
-job. This is bounded scenario evidence, not all-path coverage.
+job. Every Linux failure path reprints the buffered `*-egress.txt` evidence
+to the step log before exiting, and the workflow uploads that file with
+`if: always()`, so a gate failure always leaves its cause in the hosted log
+and in the per-leg artifact (Linux legs of the same run left neither).
+Unsigned build outputs still upload on success only, and signing still waits
+on every gate. This is bounded scenario evidence, not all-path coverage.
 
 Only after pin, all four builds/no-egress tests and the audit pass does the
 release job sign every file and SHA256SUMS keylessly, self-verify the exact
