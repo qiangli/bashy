@@ -66,9 +66,13 @@ runs single-node inference, the nng multipart/timeout test, and two-rank
 inference with a `1,1` layer split. Every subprocess has a deadline. Linux runs
 unprivileged inside a loopback-only network namespace with outbound syscall
 tracing, including failed attempts. Darwin uses a sandbox allowing only explicit
-loopback ring ports and requires a visible positive-control denial before
-checking engine denial logs. Missing observer evidence, model failures or ring
-timeouts fail the job. This is bounded scenario evidence, not all-path coverage.
+loopback ring ports. Enforcement is proven by a positive control whose EPERM
+denial is observed directly in the attempt's own stderr; the unified log is
+not a reliable sandbox observer (hosted macos-15 run 38411861522 recorded no
+denial there), so its absence neither passes nor fails the gate, while any
+observed engine denial — EPERM in the engine log or a unified-log match —
+fails the job. Engine or ring failure under the deny profile also fails the
+job. This is bounded scenario evidence, not all-path coverage.
 
 Only after pin, all four builds/no-egress tests and the audit pass does the
 release job sign every file and SHA256SUMS keylessly, self-verify the exact
