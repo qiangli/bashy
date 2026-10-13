@@ -3,6 +3,7 @@ import importlib.util
 import hashlib
 import io
 import json
+import re
 import tarfile
 import runpy
 import os
@@ -125,8 +126,8 @@ class NoEgressLinuxDiagnostics(unittest.TestCase):
 
     def test_detection_not_weakened(self):
         linux=self._linux()
-        # Same verdict, same loopback ring ports, still fatal on verdict.
-        self.assertIn('egress_verdict "$work/trace" 5599 5600 19000 19001 19100 19101',linux)
+        # Same verdict, same loopback ports plus ring-test 5601, still fatal.
+        self.assertIn('egress_verdict "$work/trace" 5599 5600 5601 19000 19001 19100 19101',linux)
         self.assertIn('exit 1',linux)
 
     def test_fork_matches_files(self):
@@ -191,7 +192,7 @@ class NoEgressDarwinObserver(unittest.TestCase):
     def test_policy_not_weakened(self):
         text=self._script()
         self.assertIn('(deny network-outbound)',text)
-        for port in ['5599','5600','19000','19001','19100','19101']:
+        for port in ['5599','5600','5601','19000','19001','19100','19101']:
             self.assertIn(f'localhost:{port}',text)
         for line in text.splitlines():
             if 'allow network-outbound' in line:
@@ -209,5 +210,45 @@ class NoEgressDarwinObserver(unittest.TestCase):
     def test_fork_matches_files(self):
         self.assertEqual((ROOT/'fork/bashy-build/no-egress-test.sh').read_text(),
                          (ROOT/'files/no-egress-test.sh').read_text())
+
+class NoEgressRingPort5601(unittest.TestCase):
+    # Candidate -3 run 38414127942: all four native builds passed but every
+    # no-egress leg failed. Both allowlists carried only ring-test ports
+    # 5599/5600, yet the pinned ring test (common/zmq_nng_shim_test.cpp @
+    # f4ea9845dc91a18793921492e50ef23ec799e93e) binds/connects three
+    # loopback ports: 5599 (multipart round-trip), 5600 (rcvtimeo), 5601
+    # (single-message send/recv). Under the Darwin sandbox the denied 5601
+    # connect hangs the ring test's blocking recv until the 30s exercise
+    # timeout; on Linux the same loopback connect trips the strace verdict.
+    # Both enforcement points must therefore allow loopback 5601, and the
+    # Darwin profile must allow nothing but loopback.
+    RING_PORTS = ['5599', '5600', '5601']
+    ENGINE_PORTS = ['19000', '19001', '19100', '19101']
+
+    def _script(self):
+        return (ROOT/'files/no-egress-test.sh').read_text()
+
+    def test_linux_verdict_allows_all_seven_loopback_ports(self):
+        calls=[l for l in self._script().splitlines()
+               if 'egress_verdict "$work/trace"' in l]
+        self.assertEqual(len(calls),1)
+        self.assertEqual(re.findall(r'\b\d{4,5}\b',calls[0]),
+                         self.RING_PORTS+self.ENGINE_PORTS)
+
+    def test_darwin_profile_allows_all_seven_loopback_ports(self):
+        allows=[l for l in self._script().splitlines()
+                if '(allow network-outbound' in l]
+        self.assertEqual(len(allows),1)
+        self.assertEqual(sorted(re.findall(r'localhost:(\d+)',allows[0]),key=int),
+                         self.RING_PORTS+self.ENGINE_PORTS)
+
+    def test_darwin_profile_allows_only_loopback(self):
+        allows=[l for l in self._script().splitlines()
+                if '(allow network-outbound' in l]
+        self.assertEqual(len(allows),1)
+        remotes=re.findall(r'remote ip "([^"]+)"',allows[0])
+        self.assertTrue(remotes)
+        for remote in remotes:
+            self.assertTrue(remote.startswith('localhost:'),remote)
 
 if __name__=='__main__': unittest.main()
