@@ -2,7 +2,7 @@ module github.com/qiangli/bashy
 
 go 1.27
 
-toolchain go1.27.1
+toolchain go1.27.2
 
 require (
 	github.com/aymanbagabas/go-pty v0.2.3
@@ -14,11 +14,11 @@ require (
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pkg/sftp v1.13.10
-	github.com/qiangli/coreutils v0.0.0-20261011232922-f6f06c08ba64
+	github.com/qiangli/coreutils v0.0.0-20261013004930-226a73d9a214
 	github.com/qiangli/ycode v0.3.1-dev.0.20261011021240-aa0d91dd60d2
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261013031258-988c110b1c14
-	github.com/qiangli/yoke/external/otel v0.0.0-20261013031258-988c110b1c14
+	github.com/qiangli/yoke v0.0.0-20261013081942-b0f5fd30710d
+	github.com/qiangli/yoke/external/otel v0.0.0-20261013081942-b0f5fd30710d
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
@@ -350,10 +350,10 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
-	github.com/qiangli/gfy v0.0.0-20261009070616-1a9d12418c8d // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261011233146-4b98f75cb9b3 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261012201704-ceaeba133437 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261012201704-ceaeba133437 // indirect
+	github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261013082928-065b77d8db45 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261013081942-b0f5fd30710d // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261013081942-b0f5fd30710d // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
