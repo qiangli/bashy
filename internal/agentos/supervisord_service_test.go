@@ -151,6 +151,24 @@ func TestServiceMonitorSeedInternalAndCustomShareOneMechanism(t *testing.T) {
 	t.Setenv("BASHY_SUPERVISORD_SOCKET", sock)
 	t.Setenv("BASHY_SUPERVISORD_TEST_CHILD", "hold")
 
+	// The production seed set grows independently of this mechanism test.
+	// Explicitly turn every default off before selecting the one seed under
+	// test, so a newly enabled default cannot start a process or claim a port.
+	cat := fleet.New()
+	defaults, errs := cat.Services()
+	for _, err := range errs {
+		t.Fatal(err)
+	}
+	for _, unit := range defaults {
+		if !unit.Enabled {
+			continue
+		}
+		unit.Enabled = false
+		if err := cat.SaveService(unit); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	// Seeded built-in: enabled through the generic toggle, no file copied.
 	svcRun(t, "enable", "schedule")
 	// Fresh custom (external) declaration.

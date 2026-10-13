@@ -16,12 +16,13 @@ import (
 // activation and at an explicit start/restart, the CLI before it asks the
 // monitor, and `service run`. No network: the refusal precedes any install.
 
-// The default gate is the host catalog's CheckServiceBuild: the baseline
-// tuwunel pin carries no Sigstore identity yet, so a unit running it is
-// refused with the policy message; a unit naming no tool is unaffected.
+// The default gate is the host catalog's CheckServiceBuild: a service pin
+// without a Sigstore identity is refused with the policy message; a unit
+// naming no tool is unaffected.
 func TestCheckServiceBuildRefusesUnsignedToolPin(t *testing.T) {
 	isolateFleet(t)
-	err := checkServiceBuild(fleet.Service{Name: "matrix-chat", Tool: "tuwunel"})
+	tool := saveUnsignedServiceTool(t)
+	err := checkServiceBuild(fleet.Service{Name: "unsigned-service", Tool: tool})
 	if !errors.Is(err, fleet.ErrUnsignedServiceBuild) || !strings.Contains(err.Error(), "bashy only runs bashy-signed server builds") {
 		t.Fatalf("err = %v", err)
 	}
@@ -71,13 +72,14 @@ func TestMonitorRefusesUnsignedBuildBeforeActivation(t *testing.T) {
 func TestServiceCLIRefusesUnsignedBuild(t *testing.T) {
 	isolateFleet(t)
 	t.Setenv("BASHY_SUPERVISORD_SOCKET", t.TempDir()+"/none.sock")
-	if err := fleet.New().SaveService(fleet.Service{Name: "matrix-chat", Kind: fleet.KindService,
-		Exec: []string{"tuwunel"}, Tool: "tuwunel"}); err != nil {
+	tool := saveUnsignedServiceTool(t)
+	if err := fleet.New().SaveService(fleet.Service{Name: "unsigned-service", Kind: fleet.KindService,
+		Exec: []string{tool}, Tool: tool}); err != nil {
 		t.Fatal(err)
 	}
 	for _, verb := range []string{"enable", "start", "restart", "run"} {
 		cmd := newServiceCmd()
-		cmd.SetArgs([]string{verb, "matrix-chat"})
+		cmd.SetArgs([]string{verb, "unsigned-service"})
 		cmd.SetOut(new(strings.Builder))
 		cmd.SetErr(new(strings.Builder))
 		err := cmd.Execute()
@@ -85,6 +87,19 @@ func TestServiceCLIRefusesUnsignedBuild(t *testing.T) {
 			t.Fatalf("%s: err = %v", verb, err)
 		}
 	}
+}
+
+func saveUnsignedServiceTool(t *testing.T) string {
+	t.Helper()
+	const name = "unsigned-service-fixture"
+	tool := fleet.Tool{Name: name, Kind: fleet.ToolKindCLI, CLI: fleet.ToolCLI{Managed: &fleet.ToolManaged{
+		Version: "v0.0.0-test",
+		Service: true,
+	}}}
+	if err := fleet.New().SaveTool(tool); err != nil {
+		t.Fatal(err)
+	}
+	return name
 }
 
 func isolateFleet(t *testing.T) {
