@@ -30,6 +30,13 @@ on:
       - "@@BASHY_TAG_GLOB@@"
 
 permissions: {}
+#@@IFEQ TOOL ollama@@
+
+# Windows' default is PowerShell; the native runner recipe uses Git Bash.
+defaults:
+  run:
+    shell: bash
+#@@END@@
 
 concurrency:
   group: bashy-build-${{ github.ref }}

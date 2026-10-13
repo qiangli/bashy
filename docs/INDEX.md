@@ -197,3 +197,5 @@ Weave-round verification + retro reports (historical, not load-bearing):
 - `public-claims-evidence.md` — current public-claim sources, platform boundaries, yash measurement units, registry counting rule, and RC recheck commands (Sprint 379 B6).
 
 - [Prima two-rank timeout](plan-prima-two-rank-timeout.md) — candidate -4 authenticated evidence, bounded producer diagnostics and required first-party shutdown repair; gate remains red.
+
+- [Official Ollama runner recipe plan](plan-official-ollama-runner-recipe.md) — Sprint 436 source pin, native matrix and release holds.

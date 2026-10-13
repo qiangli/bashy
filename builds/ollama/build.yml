@@ -1,0 +1,4 @@
+      - name: build unpatched upstream runner and deterministic gzip
+        env:
+          RUNNER_ASSET: ${{ matrix.asset }}
+        run: bash fork/bashy-build/build-runner.sh src out "$RUNNER_ASSET"

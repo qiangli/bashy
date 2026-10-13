@@ -28,6 +28,9 @@ rc=0
 # run on a release runner.
 "$here/_shared/kinds/go/toolchain-gate-test.sh" || rc=1
 for t in "${tools[@]}"; do
+	if [[ $t == ollama ]]; then
+		python3 "$here/ollama/test_recipe.py" || rc=1
+	fi
 	"$here/render.sh" "$t" "$tmp/$t" >/dev/null
 	if ! diff -r "$tmp/$t" "$here/$t/fork"; then
 		echo "check: $t: fork/ is stale — run builds/render.sh $t" >&2

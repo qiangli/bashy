@@ -38,6 +38,7 @@ builds/
 
 | tool | upstream | pinned tag | license at the tag | kind | who runs it |
 |---|---|---|---|---|---|
+| `ollama` | `ollama/ollama` | `v0.21.2` | MIT root; full input review pending | `custom` | [runner recipe, release blocked](ollama/README.md) |
 | `openclaw` | `openclaw/openclaw` | `v2026.10.2` | see its README | `custom` | the OpenClaw gateway |
 | `tuwunel` | `matrix-construct/tuwunel` | `v1.9.4` | Apache-2.0 | `cargo` | the Matrix homeserver |
 | `victoria-logs` | `VictoriaMetrics/VictoriaLogs` | `v1.53.0` | Apache-2.0 | `go` | yoke `external/otel/stack` |

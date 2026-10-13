@@ -1,0 +1,4 @@
+      - name: unresolved runner security admission (fail closed)
+        run: |
+          echo 'BLOCKED: compiled Go/cgo inputs, generated Metal, native linked dependencies, licenses, vulnerability audit and SBOM require review.' >&2
+          exit 1
