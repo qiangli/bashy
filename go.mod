@@ -17,8 +17,8 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261013004930-226a73d9a214
 	github.com/qiangli/ycode v0.3.1-dev.0.20261011021240-aa0d91dd60d2
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261013085125-43e1f4159979
-	github.com/qiangli/yoke/external/otel v0.0.0-20261013085125-43e1f4159979
+	github.com/qiangli/yoke v0.0.0-20261013093701-8e4c9f6bb5bc
+	github.com/qiangli/yoke/external/otel v0.0.0-20261013093701-8e4c9f6bb5bc
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
@@ -351,9 +351,9 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261013085803-d5d078fbe1b0 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261013085125-43e1f4159979 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261013085125-43e1f4159979 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261013095713-10afc0927fe6 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261013093701-8e4c9f6bb5bc // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261013093701-8e4c9f6bb5bc // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
