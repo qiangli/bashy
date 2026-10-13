@@ -48,7 +48,7 @@ class LicenseReview(unittest.TestCase):
             for p in (ROOT/'testdata/license-review').rglob('*'):
                 if not p.is_file(): continue
                 name = str(p.relative_to(ROOT/'testdata/license-review'))
-                expression = ('mit AND cpal-1.0' if name.endswith('tcp.h') else
+                expression = ('mit AND cpal-1.0' if name.endswith(('tcp.h', 'stub.c')) else
                               'mit AND mpl-2.0' if name.endswith('shim.hpp') else 'mit')
                 self.add(f'{asset}/{name}', p.read_bytes(), expression)
 
@@ -72,9 +72,38 @@ class LicenseReview(unittest.TestCase):
     def test_exact_reviewed_files_on_all_platforms(self):
         errors, corrections = self.result()
         self.assertEqual(errors, [])
-        self.assertEqual(len(corrections), 8)
+        self.assertEqual(len(corrections), 12)
         self.assertEqual({r['reviewed'] for r in corrections}, {'mit'})
         self.assertEqual(self.scan['files'][0]['license_detections'][0]['license_expression'], 'mit')
+
+    def test_websocket_disabled_stub_requires_exact_reviewed_bytes(self):
+        name = 'deps/nng/src/supplemental/websocket/stub.c'
+        expected = 'ba3d1139e784b4913095d0f9bb161e6d493513d0a6e96e6d8e507659a56099ee'
+        body = (ROOT/'testdata/license-review'/name).read_bytes()
+        self.assertEqual(hashlib.sha256(body).hexdigest(), expected)
+        self.assertIn(b'terms of the MIT License', body)
+        self.assertIn(b'when websocket support is unconfigured', body)
+        errors, corrections = self.result()
+        self.assertEqual(errors, [])
+        self.assertEqual({(row['path'], row['sha256'], row['detected']) for row in corrections
+                          if row['path'].endswith(name)},
+                         {(f'{asset}/{name}', expected, 'mit AND cpal-1.0')
+                          for asset in merge.ASSETS})
+        for asset in merge.ASSETS:
+            path = f'{asset}/{name}'
+            row = next(row for row in self.inputs if row['path'] == path)
+            scan = next(row for row in self.scan['files'] if row['path'] == 'audit-inputs/'+path)
+            for changed in (body + b'\n// changed\n', body + b'\n// CPAL-1.0\n'):
+                with self.subTest(asset=asset, changed=changed[-20:]):
+                    (self.tree/path).write_bytes(changed)
+                    row['sha256'] = hashlib.sha256(changed).hexdigest()
+                    self.assertIn(path, '\n'.join(self.result()[0]))
+                    (self.tree/path).write_bytes(body)
+                    row['sha256'] = expected
+            with self.subTest(asset=asset, expression='cpal-1.0'):
+                scan['license_detections'][0]['license_expression'] = 'cpal-1.0'
+                self.assertIn(path, '\n'.join(self.result()[0]))
+                scan['license_detections'][0]['license_expression'] = 'mit AND cpal-1.0'
 
     def test_changed_source_bytes_even_with_updated_inventory_fail(self):
         for suffix, body in [('tcp.h', b'// MIT License CPAL-1.0'),
@@ -87,14 +116,14 @@ class LicenseReview(unittest.TestCase):
     def test_changed_root_license_fails(self):
         self.change_bytes('LICENSE.txt', b'MIT')
         self.change_bytes('/LICENSE', b'MIT')
-        self.assertEqual(len(self.result()[0]), 8)
+        self.assertEqual(len(self.result()[0]), 12)
 
     def test_changed_pins_fail(self):
         self.inventory['linked'][1]['commit'] = '0'*40
-        self.assertEqual(len(self.result()[0]), 8)
+        self.assertEqual(len(self.result()[0]), 12)
         self.inventory = json.loads((ROOT/'files/dependencies.json').read_text())
         self.inventory['source']['commit'] = '0'*40
-        self.assertEqual(len(self.result()[0]), 8)
+        self.assertEqual(len(self.result()[0]), 12)
 
     def test_other_paths_and_nonpermissive_expressions_fail(self):
         for expr in ['cpal-1.0', 'mpl-2.0', 'fpl', 'mit AND cpal-1.0 AND gpl-2.0',
@@ -116,8 +145,10 @@ class LicenseReview(unittest.TestCase):
         self.scan['files'][0].pop('scan_errors')
         (self.tree/self.inputs[0]['path']).write_bytes(b'tampered')
         with self.assertRaisesRegex(ValueError, 'hash mismatch'): self.result()
-        self.inputs = self.inputs[4:]
-        self.scan['files'] = self.scan['files'][4:]
+        missing = merge.ASSETS[0] + '/'
+        self.inputs = [row for row in self.inputs if not row['path'].startswith(missing)]
+        self.scan['files'] = [row for row in self.scan['files']
+                              if not row['path'].startswith('audit-inputs/'+missing)]
         with self.assertRaisesRegex(ValueError, 'all four platforms'): self.result()
         self.inputs.append(self.inputs[0])
         with self.assertRaisesRegex(ValueError, 'every compiler input'): self.result()
@@ -153,7 +184,7 @@ class LicenseReview(unittest.TestCase):
                     os.chdir(old)
                 report = json.loads((out/'prima-licenses.json').read_text())
                 self.assertEqual(report['files'], self.scan['files'])
-                self.assertEqual(len(report['bashy_reviewed_findings']), 8)
+                self.assertEqual(len(report['bashy_reviewed_findings']), 12)
                 self.assertTrue((out/'prima-sbom.cdx.json').is_file())
                 self.assertTrue((out/'prima-osv.json').is_file())
 

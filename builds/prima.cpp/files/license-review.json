@@ -155,6 +155,7 @@
     "deps/nng/src/supplemental/tls/tls_common.c": "1e9ab4b02a4b6a3730ce150611360f63fb6ae10613d697b9572fde9df238039b",
     "deps/nng/src/supplemental/util/idhash.c": "fd9e26a92b05366b995168cdbf73440f7a27f322ac9d8f7c13f62d01e5c264cb",
     "deps/nng/src/supplemental/util/options.c": "4bdb012ea83b98e489325f5f749ddafaf4d2db15fdb0ee77e9b0442c448939dc",
+    "deps/nng/src/supplemental/websocket/stub.c": "ba3d1139e784b4913095d0f9bb161e6d493513d0a6e96e6d8e507659a56099ee",
     "deps/nng/src/supplemental/websocket/websocket.c": "b68d28bff9b22d4dd840c528325594f039de85367a85d5dc8fb1b88e63089dcd",
     "deps/nng/src/supplemental/websocket/websocket.h": "222441cc9e46e298b2b95e0009253e8bab570f9f58563c2b8442481a2b558a2d"
   }
