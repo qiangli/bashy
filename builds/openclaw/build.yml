@@ -72,32 +72,64 @@
           # @openclaw/ai into the tarball, so nothing is fetched from the npm
           # registry at install time. It cleans and rebuilds the package
           # artifacts itself (upstream's own build, not ours).
-          # INTERMEDIATE, not a release asset: the packager writes package.json
-          # plus a GENERATED package-lock.json but NO node_modules, so every
-          # dependency would be fetched from the npm registry on the user host.
+          # INTERMEDIATE, not a release asset: the packager tarball carries NO
+          # lock file — package.json `files` declares neither package-lock.json
+          # nor npm-shrinkwrap.json, and the tarball check forbids an
+          # undeclared shrinkwrap — so the next steps generate the npm lock
+          # for the packed tree and install from it. The tarball holds only
+          # the bundled node_modules, not the full install.
           # It goes to RUNNER_TEMP (never out/, which is uploaded as-is) and
-          # the next step installs it into the fully installed tree that ships.
+          # the next steps stage it into the fully installed tree that ships.
           mkdir -p "$RUNNER_TEMP/pack"
           node scripts/package-openclaw-for-docker.mjs \
             --allow-unreleased-changelog \
             --output-dir "$RUNNER_TEMP/pack" \
             --output-name "openclaw-gateway-${GITHUB_REF_NAME}.tgz"
           ls -la "$RUNNER_TEMP/pack/openclaw-gateway-${GITHUB_REF_NAME}.tgz"
+      - name: stage the shipped tree and generate its npm lock
+        working-directory: src
+        run: |
+          set -euo pipefail
+          # The packager tarball ships NO lock file (see the pack step), so
+          # generate it here with upstream's own generateNpmPackageLock, run
+          # against the PACKED manifest — not the source root. Upstream's
+          # packager validates the lock for the source root, but its normalizer
+          # drops workspace: specs and the pack rewrites the manifest
+          # (@openclaw/ai workspace:* becomes the staged exact version with
+          # hoisted aligned deps, workspace: devDeps stripped, platform
+          # optionals added), so a source-generated lock would fail the
+          # fail-closed npm ci below against the packed tree.
+          # write-npm-lock.mts vendors the tarball-bundled @openclaw/ai copy
+          # (built from the pinned source in this run) to vendor-openclaw-ai/
+          # and points the packed manifest at it with a file: spec: the exact
+          # version exists nowhere in pnpm-lock.yaml (workspace link only), so
+          # the generator's pnpm cross-check throws for the plain spec, while
+          # a link entry skips that check and its transitive deps stay pinned.
+          # Every other resolved version is still anchored to pnpm-lock.yaml by
+          # the generator itself. On failure the script prints the tarball's
+          # top-level entries and the packed dependency keys, and npm ci below
+          # stays fail-closed on any manifest/lock mismatch.
+          PACKED="$RUNNER_TEMP/pack/openclaw-gateway-${GITHUB_REF_NAME}.tgz"
+          test -f "$PACKED" || { echo "missing $PACKED" >&2; exit 1; }
+          rm -rf ../installed
+          mkdir -p ../installed
+          tar -xzf "$PACKED" -C ../installed
+          test -f ../installed/package/package.json || { echo "missing installed/package/package.json" >&2; exit 1; }
+          node --import ./scripts/tsx.mjs \
+            ../fork/bashy-build/scripts/write-npm-lock.mts \
+            --package-dir ../installed/package \
+            --tarball "$PACKED"
+          test -f ../installed/package/package-lock.json || { echo "missing generated installed/package/package-lock.json" >&2; exit 1; }
       - name: install the shipped tree from the generated lock (fully installed artifact)
         run: |
           set -euo pipefail
           # The signed artifact is the FULLY INSTALLED tree, per platform:
-          # unpack the packager tarball and install every dependency here in CI,
-          # so the user host never touches the npm registry — including npm
-          # 12.x itself (a runtime dependency), which bundles the vulnerable
-          # http-cache-semantics 4.2.0 (GHSA-ch52-4w7c-c8xp) that the patch
-          # step below replaces. Per-platform because native modules (if any)
-          # compile for their own OS/arch.
-          PACKED="$RUNNER_TEMP/pack/openclaw-gateway-${GITHUB_REF_NAME}.tgz"
-          test -f "$PACKED" || { echo "missing $PACKED" >&2; exit 1; }
-          rm -rf installed
-          mkdir -p installed
-          tar -xzf "$PACKED" -C installed
+          # install every dependency here in CI from the lock the previous
+          # step generated, so the user host never touches the npm registry —
+          # including npm 12.x itself (a runtime dependency), which bundles
+          # the vulnerable http-cache-semantics 4.2.0 (GHSA-ch52-4w7c-c8xp)
+          # that the patch step below replaces. Per-platform because native
+          # modules (if any) compile for their own OS/arch.
           test -f installed/package/package.json || { echo "missing installed/package/package.json" >&2; exit 1; }
           test -f installed/package/package-lock.json || { echo "missing generated installed/package/package-lock.json" >&2; exit 1; }
           cd installed/package

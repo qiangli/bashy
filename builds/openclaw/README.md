@@ -79,13 +79,31 @@ list it — an exception would wrongly imply the vulnerable version ships):
    build (`pnpm build && pnpm ui:build`).
 2. **Upstream pack (intermediate, never signed).** Upstream's
    `scripts/package-openclaw-for-docker.mjs` writes the gateway tarball to
-   `RUNNER_TEMP`, not `out/`: it carries `package.json` plus a GENERATED
-   `package-lock.json` but NO `node_modules`. Run against THAT tarball, the
-   post-pack patcher finds nothing to patch (fork run 38322543946) — the
-   vulnerable copy only exists once installed, which is why the signed
-   artifact is the installed tree below.
-3. **Per-platform install from the generated lock.** Each matrix leg unpacks
-   the packager tarball into `installed/` and runs
+   `RUNNER_TEMP`, not `out/`: it carries `package.json` plus the bundled
+   `node_modules` but NO lock file (`package.json` `files` declares neither
+   `package-lock.json` nor `npm-shrinkwrap.json`, and the tarball check
+   forbids an undeclared shrinkwrap — fork run 38326581681 failed on exactly
+   this: no `installed/package/package-lock.json`). Run against THAT
+   tarball, the post-pack patcher finds nothing to patch (fork run
+   38322543946) — the vulnerable copy only exists once installed, which is
+   why the signed artifact is the installed tree below.
+3. **Lock generation for the packed tree, then per-platform install.**
+   Each matrix leg unpacks the packager tarball into `installed/` and runs
+   `fork/bashy-build/scripts/write-npm-lock.mts` (via upstream's own loader,
+   `node --import ./scripts/tsx.mjs`, from `src/`), which imports upstream's
+   `scripts/generate-npm-package-lock.mts`, generates the lock for the PACKED
+   manifest — the source-root lock would omit `@openclaw/ai` (the generator
+   drops `workspace:` specs) and miss the pack's manifest rewrites, so
+   `npm ci` would fail closed — and writes it to
+   `installed/package/package-lock.json`. The tarball-bundled `@openclaw/ai`
+   copy (built from the pinned source in this run) is vendored to
+   `vendor-openclaw-ai/` and referenced with a `file:` spec: the exact
+   version exists nowhere in `pnpm-lock.yaml` (workspace link only), so the
+   generator's pnpm cross-check throws for the plain spec, while a link entry
+   skips that check and its transitive deps stay pinned; every other resolved
+   version is still anchored to `pnpm-lock.yaml` by the generator itself. On
+   failure the script prints the tarball's top-level entries and the packed
+   dependency keys. The leg then runs
    `npm ci --omit=dev --ignore-scripts --no-audit --no-fund` inside
    `installed/package`. `--ignore-scripts`: lifecycle scripts are
    supply-chain surface and upstream documents no install-script build for
@@ -275,12 +293,14 @@ config `bashy-build/openclaw-bashy.json`) are overridable via env.
 ## What ships (fully installed tree, per platform)
 
 Why the installed tree: upstream's packager tarball carries `package.json`
-plus a GENERATED `package-lock.json` but NO `node_modules`, so shipping it
-would make every user host fetch ALL dependencies — including npm 12.1.0,
-which bundles the vulnerable `http-cache-semantics` 4.2.0 — from the npm
-registry at install time, outside every gate. Installing in CI from the
-generated lock moves that fetch inside the gates (audit, SBOM, patch,
-no-egress) and the signed tarball then runs with no registry access.
+but NO lock file (see the security section), so shipping it would make every
+user host fetch ALL dependencies — including npm 12.x, which bundles the
+vulnerable `http-cache-semantics` 4.2.0 — from the npm registry at install
+time, outside every gate. Generating the lock for the packed tree with
+upstream's generator and installing in CI from it moves that fetch inside the
+gates (audit, SBOM, patch, no-egress) and the signed tarball then runs with
+no registry access. The shipped tree keeps the generated `package-lock.json`
+plus `vendor-openclaw-ai/` (the `file:` link target for `@openclaw/ai`).
 
 Per-platform because native modules (if any) compile for their own OS/arch:
 each leg installs (`npm ci`) and tars its own tree on its own runner (free
@@ -317,10 +337,13 @@ Darwin digest). Shared by all legs: `openclaw-pin.txt`, `audit-exceptions`,
   upstream Dockerfile `node:24-bookworm` base and the supported range in
   `openclaw.mjs`). Lifecycle scripts stay off; only the documented
   `pnpm build` + `ui:build` + pack entrypoints run, explicitly.
-- Installed-tree install per platform: `npm ci --omit=dev --ignore-scripts`
-  from the packager's generated lock inside `installed/package`
-  (`npm ci` fails unless `package.json` and the lock agree); the tree must
-  contain `node_modules` and `openclaw.mjs`.
+- Installed-tree install per platform: `write-npm-lock.mts` generates
+  `installed/package/package-lock.json` for the packed manifest with
+  upstream's pnpm-anchored generator (`@openclaw/ai` via the vendored
+  `file:` link, everything else registry-pinned), then
+  `npm ci --omit=dev --ignore-scripts` installs from it inside
+  `installed/package` (`npm ci` fails unless `package.json` and the lock
+  agree); the tree must contain `node_modules` and `openclaw.mjs`.
 - Audit gate: `pnpm audit --prod --audit-level high` clean, plus the full
   audit vs reviewed exceptions (`audit-gate.mjs`); per-leg
   `<asset>-audit-full.json` and shared `audit-exceptions` published as
@@ -359,6 +382,9 @@ python3 -c 'import yaml, sys; yaml.safe_load(open(sys.argv[1]))' \
   fork/.github/workflows/bashy-build.yml
 for f in fork/bashy-build/scripts/*.sh; do bash -n "$f" || exit 1; done
 for f in fork/bashy-build/scripts/*.mjs; do node --check "$f" || exit 1; done
+# .mts files carry type annotations, so node --check cannot parse them —
+# importing loads them through type stripping without running main:
+node --input-type=module -e "await import('./fork/bashy-build/scripts/write-npm-lock.mts')" || exit 1
 # must all print nothing (scoped to workflow + scripts so this README's own
 # prose is out of scope):
 grep -rn 'uses:.*@v[0-9]' fork/.github/workflows/bashy-build.yml
