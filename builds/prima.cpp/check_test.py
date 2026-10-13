@@ -95,4 +95,47 @@ class Contract(unittest.TestCase):
         self.assertIn('needs: [pin, build, audit]',workflow)
         self.assertEqual(workflow.count('name: verify HEAD == pinned commit'),2)
 
+class NoEgressDarwinObserver(unittest.TestCase):
+    # Hosted macos-15 run 38411861522 failed with 'sandbox observer cannot see
+    # control denial': the unified log is not a reliable observer for sandbox
+    # denies. The Darwin branch must therefore prove enforcement with a
+    # directly-observed EPERM positive control, keep the sandbox policy
+    # unchanged, and stay fail-closed on any observed engine denial.
+    def _script(self):
+        return (ROOT/'files/no-egress-test.sh').read_text()
+
+    def test_positive_control_is_directly_observed_eperm(self):
+        text=self._script()
+        self.assertIn('operation not permitted',text)
+        self.assertIn('EPERM',text)
+        # The control's own stderr is the observer: denial must be grepped
+        # from the control output file, and control success must fail.
+        self.assertRegex(text,r'2>"\$work/control"')
+        self.assertIn('control connection succeeded under the deny profile',text)
+        # The blind unified-log observer must not gate the control: its
+        # absence used to fail the job with this message.
+        self.assertNotIn('sandbox observer cannot see control denial',text)
+
+    def test_policy_not_weakened(self):
+        text=self._script()
+        self.assertIn('(deny network-outbound)',text)
+        for port in ['5599','5600','19000','19001','19100','19101']:
+            self.assertIn(f'localhost:{port}',text)
+        for line in text.splitlines():
+            if 'allow network-outbound' in line:
+                self.assertIn('localhost',line)
+
+    def test_engine_stays_fail_closed(self):
+        text=self._script()
+        # Engine failure under the deny profile fails the job.
+        self.assertIn('engine failed under the deny profile',text)
+        # A denied attempt the engine survived is still egress.
+        self.assertIn('engine log shows a denied network attempt',text)
+        # The unified-log sweep is retained as a fail-closed signal only.
+        self.assertIn('unified log shows an engine network denial',text)
+
+    def test_fork_matches_files(self):
+        self.assertEqual((ROOT/'fork/bashy-build/no-egress-test.sh').read_text(),
+                         (ROOT/'files/no-egress-test.sh').read_text())
+
 if __name__=='__main__': unittest.main()
