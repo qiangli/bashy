@@ -30,7 +30,8 @@ Linux)
     echo "no-egress: linux: namespace entered; bringing loopback up"
     ip link set lo up
     echo "no-egress: linux: tracing exercise"
-    strace -f -qq -s 256 -e trace=connect,sendto,sendmsg,sendmmsg -o "$1/trace" \
+    ulimit -f 16384 # bounded trace file; exceeding the cap fails the exercise
+    strace -f -qq -tt -T -s 64 -e trace=connect,sendto,sendmsg,sendmmsg,shutdown -o "$1/trace" \
       setpriv --reuid="$2" --regid="$3" --init-groups \
       env -i PATH=/usr/bin:/bin HOME="$1/home" \
       python3 "$4/exercise.py" "$5" "$1/model.gguf" "$6"
@@ -42,6 +43,10 @@ Linux)
     echo "no-egress: linux: namespace exercise failed (rc=$rc)" >&2
     if [[ -s $work/trace ]]; then
       echo 'no-egress: linux: syscalls were traced, so unshare/strace worked; suspect the exercise (binary, ring test or model)' >&2
+      {
+        echo '---- bounded syscall trace (diagnostic only; exercise failed) ----'
+        python3 "$here/exercise.py" --trace "$work/trace"
+      } >>"out/$asset-egress.txt"
     else
       echo 'no-egress: linux: no syscall observations; suspect unshare/namespace setup, strace, or setpriv' >&2
     fi
@@ -63,10 +68,10 @@ Linux)
   # run 38414127942 Mac legs), and the verdict flagged its loopback connect
   # as egress. Everything else stays fail-closed (see egress-verdict.sh).
   if ! egress_verdict "$work/trace" 5599 5600 5601 19000 19001 19100 19101; then
-    cat "$work/trace" >>"out/$asset-egress.txt"
+    python3 "$here/exercise.py" --trace "$work/trace" >>"out/$asset-egress.txt"
     exit 1
   fi
-  cat "$work/trace" >>"out/$asset-egress.txt"
+  python3 "$here/exercise.py" --trace "$work/trace" >>"out/$asset-egress.txt"
   ;;
 Darwin)
   # The sandbox profile denies every outbound connection except the explicit

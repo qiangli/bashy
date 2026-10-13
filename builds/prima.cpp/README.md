@@ -132,3 +132,23 @@ Conductor next steps: review/install `fork/` in the source repository's
 `bashy-build` branch, push the distinct artifact tag, inspect every job and
 published bundle, independently verify/download and commit consumer SHA pins,
 then run Outpost's two-host proof. The worker does not push or publish.
+
+## Candidate -4 two-rank shutdown failure
+
+Authenticated run `38416093564` reaches rank-0 generation and evaluation on
+Linux amd64 and Darwin arm64, then times out waiting for rank 1. Source review
+found unchecked nonblocking STOP sends after asynchronous nng dial, plus an
+unsynchronized shared stop pointer. See the [diagnosis and required source
+repair](../../docs/plan-prima-two-rank-timeout.md) for exact sites, evidence
+hashes, inference limits and validation. The first-party repair is not applied
+as a producer overlay; the source pin and hosted gate remain red.
+
+The producer now reports per-rank configured endpoints, PID, pre-cleanup exit
+status, warmup/evaluation markers and cleanup status. One 90-second deadline
+covers both ranks; successful master evaluation alone never passes. Each child
+log is capped at 1 MiB and displayed as bounded head/tail excerpts. Linux
+exercise failures retain timestamped outbound/shutdown syscall excerpts in the
+egress artifact and step log; the full trace is still used for the egress
+verdict when the exercise succeeds. Trace overflow fails closed. The generated
+fork is reproduced from these files. Focused fixture tests require no native
+build, model execution or container.

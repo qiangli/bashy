@@ -251,4 +251,123 @@ class NoEgressRingPort5601(unittest.TestCase):
         for remote in remotes:
             self.assertTrue(remote.startswith('localhost:'),remote)
 
+class ExerciseDiagnostics(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location('exercise', ROOT/'files/exercise.py')
+        cls.exercise = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.exercise)
+
+    def stage(self, commands, timeout=2, evaluation='0'):
+        import contextlib
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            try:
+                self.exercise.run_stage('fixture', commands, timeout, evaluation)
+            except (RuntimeError, TimeoutError) as error:
+                return output.getvalue(), error
+        return output.getvalue(), None
+
+    def command(self, body):
+        import sys
+        return [sys.executable, '-c', body]
+
+    def test_both_ranks_must_exit_and_master_evaluate(self):
+        output, error = self.stage([
+            ('1', self.command('print("worker finished")')),
+            ('0', self.command('print("eval time")'))])
+        self.assertIsNone(error)
+        self.assertIn('PASS: fixture', output)
+        output, error = self.stage([('0', self.command('print("no evaluation")'))])
+        self.assertIsInstance(error, RuntimeError)
+        self.assertNotIn('PASS:', output)
+
+    def test_master_evaluation_does_not_pass_stuck_worker(self):
+        output, error = self.stage([
+            ('1', self.command('import time; print("warming up", flush=True); time.sleep(30)')),
+            ('0', self.command('print("eval time")'))], timeout=0.3)
+        self.assertIsInstance(error, TimeoutError)
+        self.assertIn('pre_cleanup_status=None warmup=True evaluation=False', output)
+        self.assertIn('pre_cleanup_status=0 warmup=False evaluation=True', output)
+        self.assertIn('final_status=-9', output)
+        self.assertNotIn('PASS:', output)
+
+    def test_worker_exit_failure_is_not_hidden_by_master(self):
+        output, error = self.stage([
+            ('1', self.command('raise SystemExit(7)')),
+            ('0', self.command('print("eval time")'))])
+        self.assertIsInstance(error, RuntimeError)
+        self.assertIn('final_status=7', output)
+        self.assertNotIn('PASS:', output)
+
+    def test_timeout_retains_ring_or_single_output(self):
+        output, error = self.stage([('ring', self.command(
+            'import time; print("ring entered", flush=True); time.sleep(30)'))],
+            timeout=0.3, evaluation=None)
+        self.assertIsInstance(error, TimeoutError)
+        self.assertIn('ring entered', output)
+        self.assertNotIn('PASS:', output)
+
+    def test_trace_excerpt_is_bounded_and_labeled(self):
+        import contextlib
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d)/'trace'
+            path.write_bytes(b'HEAD' + b'x'*200000 + b'TAIL')
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.exercise.dump_log(path)
+            text = output.getvalue()
+            self.assertIn('HEAD', text)
+            self.assertIn('TAIL', text)
+            self.assertIn('omitted', text)
+            self.assertLess(len(text), 66000)
+
+    def test_runaway_output_fails_closed(self):
+        output, error = self.stage([('0', self.command(
+            'import os; os.write(1, b"x"*2000000); os.write(1, b"more")'))])
+        self.assertIsInstance(error, RuntimeError)
+        self.assertNotIn('PASS:', output)
+        self.assertLess(len(output), 68000)
+
+    def test_linux_retains_trace_before_exercise_failure_exit(self):
+        text = (ROOT/'files/no-egress-test.sh').read_text()
+        failure = text[text.index('namespace exercise failed'):text.index('if [[ ! -s $work/trace ]]')]
+        self.assertIn('python3 "$here/exercise.py" --trace "$work/trace"', failure)
+        self.assertLess(failure.index('--trace'), failure.index('exit 1'))
+        self.assertIn('-e trace=connect,sendto,sendmsg,sendmmsg,shutdown', text)
+        self.assertIn('ulimit -f 16384', text)
+        self.assertIn('egress_verdict "$work/trace"', text)
+
+    def test_linux_exercise_failure_artifact_contains_trace(self):
+        with tempfile.TemporaryDirectory() as d:
+            work = Path(d)
+            (work/'out').mkdir()
+            (work/'bin').mkdir()
+            (work/'bin/uname').write_text('#!/bin/sh\necho Linux\n')
+            (work/'bin/sudo').write_text(
+                '#!/usr/bin/env python3\n'
+                'import pathlib, sys\n'
+                'for arg in sys.argv[1:]:\n'
+                ' p = pathlib.Path(arg)\n'
+                ' if len(arg) < 200 and "\\n" not in arg and (p/"model.gguf").is_file():\n'
+                '  (p/"trace").write_text("123 connect signal port 19101 = EINPROGRESS\\n")\n'
+                'print("fixture: both ranks entered warmup")\n'
+                'raise SystemExit(1)\n')
+            for path in (work/'bin').iterdir():
+                path.chmod(0o755)
+            result = subprocess.run(['/bin/bash', str(ROOT/'fork/bashy-build/no-egress-test.sh'),
+                                     str(work/'prima-linux-amd64')], cwd=work,
+                                    env={**os.environ, 'PATH': str(work/'bin')+':'+os.environ['PATH']},
+                                    capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            evidence = (work/'out/prima-linux-amd64-egress.txt').read_text()
+            self.assertIn('fixture: both ranks entered warmup', evidence)
+            self.assertIn('bounded syscall trace', evidence)
+            self.assertIn('connect signal port 19101', evidence)
+            self.assertIn('connect signal port 19101', result.stderr)
+
+    def test_fork_matches_exercise(self):
+        self.assertEqual((ROOT/'files/exercise.py').read_bytes(),
+                         (ROOT/'fork/bashy-build/exercise.py').read_bytes())
+
 if __name__=='__main__': unittest.main()
