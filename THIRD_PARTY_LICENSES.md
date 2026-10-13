@@ -107,7 +107,7 @@ on 2026-10-02.
 
 ## Product Go runtime overlay
 
-Product Unix binaries compile a narrowly modified Go 1.27.1 runtime using a
+Product Unix binaries compile a narrowly modified Go 1.27.2 runtime using a
 source overlay. Copyright The Go Authors, BSD-3-Clause; full notice in
 [`tools/productgo/GO-LICENSE`](tools/productgo/GO-LICENSE). The original source
 is supplied by the pinned Go toolchain and verified by SHA-256 before applying

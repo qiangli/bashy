@@ -7,7 +7,8 @@ Go replaces ordinary inherited ignores. Blocking them in a launcher also fails
 because Go unblocks fatal signals on its threads.
 
 The product build now uses `scripts/go-product.sh`. It creates a private source
-overlay for Go 1.27.1's `runtime/signal_unix.go`, verifies the original SHA-256,
+overlay for Go 1.27.2's `runtime/signal_unix.go` (byte-identical to 1.27.1's,
+so the pinned hash carried over), verifies the original SHA-256,
 and enables the change with `-X runtime.bashyInheritedIgnore=1`. The installed
 GOROOT is never written. An unknown version/source is an error. The generated
 source retains the Go authors' copyright and BSD license notice; the Go runtime
@@ -33,7 +34,7 @@ startup contract. Nested signal regression builds use the same product wrapper.
 The wrapper supports `build` only; `run`/`test` are rejected rather than
 misinterpreting a target program's arguments. It accepts explicit linker flags
 but rejects changes to the runtime activation, caller overlays, and GOFLAGS
-linker overrides. It requires the selected toolchain to be Go 1.27.1 and fails
+linker overrides. It requires the selected toolchain to be Go 1.27.2 and fails
 on a newer selected toolchain instead of downloading or switching silently.
 Artifact/DAG callers supplying BASHY_EXE keep that managed Go executor for both
 the driver bootstrap and every Go subprocess, even without host Go on PATH.

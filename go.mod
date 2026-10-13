@@ -2,11 +2,11 @@ module github.com/qiangli/bashy
 
 go 1.27
 
-toolchain go1.27.1
+toolchain go1.27.2
 
 require (
 	github.com/aymanbagabas/go-pty v0.2.3
-	github.com/bashsharp/bashsharp v0.0.0-20261011195316-5dc2ae1af119
+	github.com/bashsharp/bashsharp v0.0.0-20261013005017-a85df1acfc75
 	github.com/creack/pty/v2 v2.0.1
 	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0
 	github.com/ergochat/readline v0.1.3
@@ -14,11 +14,11 @@ require (
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pkg/sftp v1.13.10
-	github.com/qiangli/coreutils v0.0.0-20261011232922-f6f06c08ba64
+	github.com/qiangli/coreutils v0.0.0-20261013004930-226a73d9a214
 	github.com/qiangli/ycode v0.3.1-dev.0.20261011021240-aa0d91dd60d2
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261013031258-988c110b1c14
-	github.com/qiangli/yoke/external/otel v0.0.0-20261013031258-988c110b1c14
+	github.com/qiangli/yoke v0.0.0-20261013004956-8d0c3c08a1c6
+	github.com/qiangli/yoke/external/otel v0.0.0-20261013004956-8d0c3c08a1c6
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
@@ -350,10 +350,10 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
-	github.com/qiangli/gfy v0.0.0-20261009070616-1a9d12418c8d // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261011233146-4b98f75cb9b3 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261012201704-ceaeba133437 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261012201704-ceaeba133437 // indirect
+	github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261013005002-596331973671 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261013004956-8d0c3c08a1c6 // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261013004956-8d0c3c08a1c6 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
@@ -503,28 +503,28 @@ require (
 // unmerged Bash 5.3 interp patches). Resolve it as a flat sibling: inside the
 // dhnt umbrella ../sh is the sh submodule; in a standalone clone, clone
 // github.com/qiangli/sh next to this repo as ./sh.
-replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261011220423-0321fab37d54
+replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261013004909-8f2dec0915fb
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
-replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261011232922-f6f06c08ba64
+replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261013004930-226a73d9a214
 
 replace github.com/jaegertracing/jaeger => github.com/qiangli/jaeger v0.0.0-20260426223533-5aaa7eb1f040
 
 replace github.com/perses/perses => github.com/qiangli/perses v0.0.0-20260426190059-de437951b5e6
 
-replace github.com/ergochat/readline => github.com/qiangli/readline v0.1.4-0.20261009064530-fb482a5af0cb
+replace github.com/ergochat/readline => github.com/qiangli/readline v0.1.4-0.20261013004858-df59d4e258e4
 
-replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20261010173850-e788634a5b71
+replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20261013004936-43768325f25c
 
 // Podman embed: bashy mounts yoke's in-process podman engine, which consumes
 // the qiangli/podman fork + the pkg/oci wrapper. Cross-module replaces don't
 // propagate from yoke's go.mod, so bashy (the main module) restates them.
-replace go.podman.io/podman/v6 => github.com/qiangli/podman/v6 v6.0.0-20261009064533-4a9784029284
+replace go.podman.io/podman/v6 => github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb
 
 // The AgentOS file-management surface uses the maintained qiangli/filebrowser
 // fork. Keep it as an exact flat sibling in umbrella and standalone builds.
-replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/v2 v2.0.0-20261009064700-9c1237190cff
+replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/v2 v2.0.0-20261013004903-9c7b5c8e3d09
 
 // gotreesitter: pinned local fork of upstream v0.16.0 (../gotreesitter,
 // hosted as qiangli/gotreesitter, module path kept as upstream's) with the
@@ -535,7 +535,7 @@ replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/
 // the transitive qiangli/gfy -> odvcencio imports, which a module-path rename
 // could not reach. Restated here because yoke's replace is not transitive.
 // Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
-replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261011020812-226bfcd2c541
+replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261013004852-f03173f827ed
 
 replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2
 

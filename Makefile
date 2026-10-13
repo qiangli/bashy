@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-sh build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-powershell smoke-dag-csharp smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist check-seed-bands tidy clean help
+.PHONY: dag build build-bash build-sh build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-powershell smoke-dag-csharp smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist check-seed-bands govulncheck tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -282,6 +282,12 @@ dist:
 ## check-seed-bands: Apply the seed freshness rule to VERSION (for release builds).
 check-seed-bands:
 	@scripts/check-seed-bands.sh "$(VERSION)"
+
+## govulncheck: Release gate. Pinned govulncheck (v1.9.0, built with the go.mod
+## toolchain) in source mode over bashy, ../outpost and ../yoke; a reachable
+## finding fails, package/module-level findings are reported.
+govulncheck:
+	@scripts/govulncheck-release.sh
 
 BASH_TEST_TIMEOUT := 60
 # jobs runs a long sequence of real backgrounded sleeps (job-control timing);

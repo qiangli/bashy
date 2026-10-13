@@ -99,8 +99,8 @@ func run() error {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return err
 	}
-	if cfg.GOVERSION != "go1.27.1" {
-		return fmt.Errorf("requires go1.27.1, found %s", cfg.GOVERSION)
+	if cfg.GOVERSION != "go1.27.2" {
+		return fmt.Errorf("requires go1.27.2, found %s", cfg.GOVERSION)
 	}
 	buildRoot := ""
 	if cfg.GOOS == "linux" || cfg.GOOS == "darwin" {

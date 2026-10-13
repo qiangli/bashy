@@ -228,7 +228,7 @@ make help               # every target with its `## ` doc line
 
 Build shipped binaries through `scripts/go-product.sh build` (used by Make,
 DAG artifact builds and release configuration). It applies a source-hash-pinned
-Go 1.27.1 overlay so ordinary inherited asynchronous signal ignores survive
+Go 1.27.2 overlay so ordinary inherited asynchronous signal ignores survive
 before main. It never modifies the installed GOROOT. Plain upstream `go build`
 does not supply this early-startup contract. The wrapper is build-only; use
 ordinary `go test` to run tests, whose product-building helpers use the wrapper.
