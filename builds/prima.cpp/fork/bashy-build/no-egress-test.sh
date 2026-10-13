@@ -156,7 +156,13 @@ MINGW*|MSYS*)
   # programs use backslashes; PowerShell accepts either form everywhere
   # else, so only the rule programs are converted.
   winpath() { cygpath -m "$1" | tr '/' '\\'; }
-  pyexe=$(python3 -c 'import sys; print(sys.executable)')
+  # realpath, not sys.executable verbatim: the invoking python3 may be a
+  # hostedtoolcache launcher or shim whose path differs from the running
+  # image the firewall matches -Program rules against (run 38481498544:
+  # TimeoutError with no DROP). The gate re-canonicalizes and also blocks
+  # the interpreter's self-reported image, so this is the first of two
+  # resolutions, not the only one.
+  pyexe=$(python3 -c 'import sys, os; print(os.path.realpath(sys.executable))')
   pyexe=$(winpath "$pyexe")
   binexe=$(winpath "$binexe")
   ringexe=$(winpath "$ringexe")

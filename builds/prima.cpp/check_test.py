@@ -1439,4 +1439,76 @@ class ExerciseDiagnostics(unittest.TestCase):
         self.assertEqual((ROOT/'files/exercise.py').read_bytes(),
                          (ROOT/'fork/bashy-build/exercise.py').read_bytes())
 
+class WindowsDefenderRunnerMismatch(unittest.TestCase):
+    # Rework 9, CI run 38481498544 (tag 0.1.2-10): the gate PASSED live on
+    # noviwin1 but failed on the windows-2025 runner with "no DROP for
+    # 192.0.2.1:443" after a TimeoutError, not an immediate WinError 10013
+    # access denied: the block rule most likely did not match the control
+    # process (hostedtoolcache python vs a shim, 8.3 short names, case).
+    # The gate now canonicalizes every rule program, blocks the control
+    # interpreter's self-reported image too, reads the installed rule
+    # programs back for comparison, polls the log through a share-read
+    # handle, records the ActiveStore policy, and lets the control prove
+    # the rule matched via immediate access-denied OR a logged DROP.
+    def _gate(self):
+        return (ROOT/'files/windows-defender-egress.ps1').read_text()
+
+    def _script(self):
+        return (ROOT/'files/no-egress-test.sh').read_text()
+
+    def test_rule_programs_are_canonicalized_and_compared(self):
+        gate = self._gate()
+        # Raw vs resolved paths are both logged for the exact program list.
+        self.assertIn('Defender rule program raw=', gate)
+        self.assertIn('resolved=', gate)
+        self.assertIn('FullName', gate)
+        # The control interpreter reports its own image; both paths are
+        # blocked when they differ (shim re-exec case).
+        self.assertIn('self-reported=', gate)
+        self.assertIn('realpath(sys.executable)', gate)
+        self.assertIn('blocking both paths', gate)
+        # Installed rules are read back and compared case-insensitively
+        # before the control runs, instead of surfacing as a timeout later.
+        self.assertIn('Get-NetFirewallApplicationFilter', gate)
+        self.assertIn('ToLowerInvariant', gate)
+        self.assertIn('no rule carries', gate)
+        # The bash leg resolves symlinks first; the gate re-canonicalizes,
+        # so this is the first of two resolutions, not the only one.
+        self.assertIn('os.path.realpath(sys.executable)', self._script())
+
+    def test_firewall_log_uses_share_read_poll(self):
+        gate = self._gate()
+        # pfirewall.log is held open and buffered: share-read handle, and
+        # the ~30s poll is retained.
+        self.assertIn('FileShare', gate)
+        self.assertIn('ReadWrite', gate)
+        self.assertIn('StreamReader', gate)
+        self.assertIn('-lt 30', gate)
+        # Both dropped and allowed logging are switched on (cmdlet plus
+        # netsh belt and braces) and restored afterwards.
+        self.assertIn('droppedconnections enable', gate)
+        self.assertIn('allowedconnections enable', gate)
+        self.assertIn('LogAllowed', gate)
+
+    def test_active_store_policy_is_recorded_and_enforced(self):
+        gate = self._gate()
+        # A GPO/managed override can leave a profile disabled in the
+        # ActiveStore while the persistent store looks enabled: record the
+        # effective state and fail closed on any managed disable.
+        self.assertIn('-PolicyStore ActiveStore', gate)
+        self.assertIn('ActiveStore profile', gate)
+        self.assertIn('GPO', gate)
+
+    def test_control_proves_rule_matched(self):
+        gate = self._gate()
+        # Immediate access-denied (10013) is rule-matched proof even when
+        # the DROP line never lands; a bare timeout with no DROP still
+        # fails, now with the compared paths attached.
+        self.assertIn('10013', gate)
+        self.assertIn('TimeoutError', gate)
+        self.assertIn('rule matched', gate)
+        self.assertIn('is not in the firewall log', gate)
+        self.assertIn('Defender control blocked', gate)
+        self.assertIn('control image:', gate)
+
 if __name__=='__main__': unittest.main()
