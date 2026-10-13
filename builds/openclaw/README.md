@@ -111,14 +111,19 @@ locked 4.2.0, expected >=4.3.0`). The control is therefore a
 exception (see the `audit-exceptions` header, which deliberately does NOT
 list it — an exception would wrongly imply the vulnerable version ships):
 
-1. **Frozen pnpm install for the audit gates.** CI installs `src/` with
+1. **Frozen pnpm install for the audit gates.** Each Linux runner first
+   removes unused preinstalled Android, Haskell, .NET, and hosted toolchain
+   files and prunes its Docker cache to make room for the pinned build. CI
+   then installs `src/` with
    `pnpm install --frozen-lockfile --ignore-scripts` and runs the audit
    gates. This tree is the audit basis only — the shipped runtime is built
    by the pinned upstream Dockerfile in its own stages (step 2), never
    from this tree.
 2. **Pinned Dockerfile build (UNSHIPPED base image).** Each Linux leg
    runs `docker build --file src/Dockerfile
-   --build-arg OPENCLAW_EXTENSIONS="diagnostics-otel"` against the pinned
+   --build-arg OPENCLAW_EXTENSIONS="diagnostics-otel"
+   --build-arg OPENCLAW_DOCKER_BUILD_NODE_OPTIONS="--max-old-space-size=4608"
+   --build-arg OPENCLAW_DOCKER_BUILD_TSDOWN_MAX_OLD_SPACE_MB=4608` against the pinned
    source checkout, natively on its own arch, tagged
    `openclaw-gateway-base:<bashy-tag>`. The Dockerfile performs its own
    frozen pnpm installs, the `build:docker` + `ui:build` builds, and the

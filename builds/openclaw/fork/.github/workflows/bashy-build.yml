@@ -115,6 +115,16 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y --no-install-recommends strace iproute2 curl
+      - name: reclaim runner disk for the pinned Dockerfile build
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          df -h /
+          # Hosted runners carry toolchains and images this Linux-only build
+          # does not use. Reclaim them before pnpm and Docker write layers.
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet /opt/hostedtoolcache
+          docker system prune --all --force --volumes
+          df -h /
       - name: set up Node (NODE_VERSION, matches upstream Dockerfile base)
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -191,10 +201,15 @@ jobs:
           # the next steps extract its /app, patch the extracted tree, and
           # build the SHIPPED image (Dockerfile.shipped) from the patched
           # tree. Nothing is pushed to any registry at any point.
+          # The upstream default 8 GiB Node heap was OOM-killed on the
+          # 8 GiB proof VM. Its tsdown script documents a 4352 MiB minimum;
+          # 4608 MiB leaves headroom for native allocations and the runner.
           mkdir -p out
           docker build \
             --file src/Dockerfile \
             --build-arg OPENCLAW_EXTENSIONS="diagnostics-otel" \
+            --build-arg OPENCLAW_DOCKER_BUILD_NODE_OPTIONS="--max-old-space-size=4608" \
+            --build-arg OPENCLAW_DOCKER_BUILD_TSDOWN_MAX_OLD_SPACE_MB=4608 \
             --tag "openclaw-gateway-base:${GITHUB_REF_NAME}" \
             src
       - name: extract the base /app runtime tree (pre-patch)
