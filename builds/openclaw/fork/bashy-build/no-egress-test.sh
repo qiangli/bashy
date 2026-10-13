@@ -21,9 +21,10 @@
 # Usage:
 #   ./bashy-build/no-egress-test.sh <gateway-dir> [run-seconds]
 #
-# In CI <gateway-dir> is the fully installed tree (installed/package:
-# package/ incl. node_modules), installed per platform from the generated
-# lock — the gate proves that tree starts with no registry access.
+# In CI <gateway-dir> is the Dockerfile-extracted runtime tree
+# (installed/package: package/ incl. node_modules), extracted per Linux
+# arch from the pinned upstream Dockerfile's built /app — the gate proves
+# that tree starts with no registry access.
 #
 # Environment (all optional):
 #   GATEWAY_ARGV        argv appended to `node openclaw.mjs` (default: gateway)
@@ -38,9 +39,8 @@
 # Fail-closed: missing strace/unshare/python3, a gateway that never comes up,
 # or a positive-control egress probe that unexpectedly succeeds all FAIL.
 #
-# Linux-only: macOS has neither unshare(1) nor strace(1), so the per-platform
-# matrix legs on macOS SKIP here (loudly, never silently) and the Linux legs
-# enforce the gate before signing (operator decision S434).
+# Linux-only: non-Linux hosts SKIP here (loudly, never silently). The
+# matrix is Linux-only, so the gate enforces on every leg before signing.
 
 set -euo pipefail
 

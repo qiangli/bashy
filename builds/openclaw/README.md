@@ -3,10 +3,10 @@
 bashy never starts a third-party-built service. This directory holds the
 template the mirror fork needs to build the OpenClaw gateway from pinned
 upstream source on fork CI, with tracking removed and OpenTelemetry pointed
-only at the local collector. The signed artifact is the **fully installed
-tree** (`package/` incl. `node_modules`), installed per platform from the
-packager's generated lock — the user host never touches the npm registry
-(see "What ships" below).
+only at the local collector. The signed artifact is the **Dockerfile-built
+runtime tree** (`package/` incl. `node_modules`), extracted from the pinned
+official upstream Dockerfile's built `/app` on each Linux arch — the user
+host never touches the npm registry (see "What ships" below).
 
 ## Where this runs (fork model)
 
@@ -22,12 +22,31 @@ the whole `fork/` tree as-is at the root of the mirror fork
 see `../README.md`) from the sources here: `tool.env` (the declaration,
 shipped verbatim as `bashy-build/PIN`), `files/` (copied into
 `bashy-build/`), and the tool-specific workflow steps `setup.yml` (Node +
-pnpm) and `build.yml` (frozen pnpm install, audit gates, upstream pack,
-per-platform npm install of the shipped tree, SBOM of the installed tree,
-bundled-copy patch + verify, OCI image on Linux), which slot into the shared skeleton
+pnpm for the audit gates) and `build.yml` (frozen pnpm install for the
+audit gates, audit gates, pinned upstream Dockerfile build + `/app`
+extract, SBOM of the extracted tree, bundled-copy patch + verify, image
+digest per leg), which slot into the shared skeleton
 `../_shared/bashy-build.yml` (pin → build → release with sign, self-verify,
 attest, publish). Edit the sources, never `fork/` by hand. Paths below that
 name `fork/bashy-build/X` come from `files/X`.
+
+## Why the Dockerfile path (build 16 post-mortem)
+
+Fork build 16 (run 38343035125) failed all four legs in runtime assembly:
+the previous native path ran the upstream packager
+(`scripts/package-openclaw-for-docker.mjs`) plus a generated npm lock and
+`npm ci`, and the packager's staging runs an upstream script inside the
+packed `runtime/package` tree, which lacks
+`src/shared/non-packaged-plugin-dirs.ts`. The conductor directed the
+simpler faithful path used now: build the pinned official `v2026.10.2`
+upstream Dockerfile in CI — the Dockerfile's real final runtime, never a
+reimplementation of its staging scripts — sign/publish the image digest,
+and extract its built `/app` runtime tree for Linux amd64/arm64. macOS
+assets are deferred explicitly until a valid build path exists (macOS
+runners have no Docker daemon, and the old native pack path is what died).
+Nothing is pushed to any registry and no registry-built npm or ghcr
+artifact ships: the image stays local to the leg that built it, and the
+signed tarballs are its extracted `/app` tree.
 
 Trigger: push of tags matching `bashy-v*` (e.g. `bashy-v2026.10.2-1`) on that
 branch. No manual-dispatch trigger. The release is published ON THE FORK with
@@ -73,54 +92,32 @@ locked 4.2.0, expected >=4.3.0`). The control is therefore a
 exception (see the `audit-exceptions` header, which deliberately does NOT
 list it — an exception would wrongly imply the vulnerable version ships):
 
-1. **Frozen pnpm install for the build.** CI installs `src/` with
-   `pnpm install --frozen-lockfile --ignore-scripts` (hoisted layout for
-   `bundledDependencies`), runs the audit gates, then upstream's documented
-   build (`pnpm build && pnpm ui:build`).
-2. **Upstream pack (intermediate, never signed).** Upstream's
-   `scripts/package-openclaw-for-docker.mjs` writes the gateway tarball to
-   `RUNNER_TEMP`, not `out/`: it carries `package.json` plus the bundled
-   `node_modules` but NO lock file (`package.json` `files` declares neither
-   `package-lock.json` nor `npm-shrinkwrap.json`, and the tarball check
-   forbids an undeclared shrinkwrap — fork run 38326581681 failed on exactly
-   this: no `installed/package/package-lock.json`). Run against THAT
-   tarball, the post-pack patcher finds nothing to patch (fork run
-   38322543946) — the vulnerable copy only exists once installed, which is
-   why the signed artifact is the installed tree below.
-3. **Lock generation for the packed tree, then per-platform install.**
-   Each matrix leg unpacks the packager tarball into `installed/` and runs
-   `fork/bashy-build/scripts/write-npm-lock.mts` (via upstream's own loader,
-   `node --import ./scripts/tsx.mjs`, from `src/`), which imports upstream's
-   `scripts/generate-npm-package-lock.mts`, generates the lock for the PACKED
-   manifest — the source-root lock would omit `@openclaw/ai` (the generator
-   drops `workspace:` specs) and miss the pack's manifest rewrites, so
-   `npm ci` would fail closed — and writes it to
-   `installed/package/package-lock.json`. The tarball-bundled `@openclaw/ai`
-   copy (built from the pinned source in this run) is vendored to
-   `vendor-openclaw-ai/` and referenced with a `file:` spec: the exact
-   version exists nowhere in `pnpm-lock.yaml` (workspace link only), so the
-   generator's pnpm cross-check throws for the plain spec, while a link entry
-   skips that check and its transitive deps stay pinned; every other resolved
-   version is still anchored to `pnpm-lock.yaml` by the generator itself. On
-   failure the script prints the tarball's top-level entries and the packed
-   dependency keys. The leg then runs
-   `npm ci --omit=dev --ignore-scripts --no-audit --no-fund` inside
-   `installed/package`. `--ignore-scripts`: lifecycle scripts are
-   supply-chain surface and upstream documents no install-script build for
-   the gateway (the documented build already produced `dist/` in step 1);
-   if a future pin adds a native module that needs its install script, only
-   that package's documented build runs — never a global un-ignore.
-   `--omit=dev` ships the runtime tree only; npm's default layout is
-   hoisted. `npm ci` FAILS unless `package.json` and the lock agree, so the
-   lock resolves everything installed — no network is needed after this step.
-4. **Installed-tree tarball (the signed artifact).** Each leg tars
-   `installed/package` (incl. `node_modules`) to
-   `out/<asset>-${GITHUB_REF_NAME}.tgz` (see "What ships").
-5. **Bundled-copy patch (shipped path).** BEFORE any signing,
+1. **Frozen pnpm install for the audit gates.** CI installs `src/` with
+   `pnpm install --frozen-lockfile --ignore-scripts` and runs the audit
+   gates. This tree is the audit basis only — the shipped runtime is built
+   by the pinned upstream Dockerfile in its own stages (step 2), never
+   from this tree.
+2. **Pinned Dockerfile build (the real runtime, never signed directly).**
+   Each Linux leg runs `docker build --file src/Dockerfile
+   --build-arg OPENCLAW_EXTENSIONS="diagnostics-otel"` against the pinned
+   source checkout, natively on its own arch. The Dockerfile performs its
+   own frozen pnpm installs, the `build:docker` + `ui:build` builds, and
+   the production-deps merge into the final stage's `/app`. Nothing is
+   pushed to any registry; the image stays local to the leg that built it.
+3. **`/app` extract + tarball (the signed artifact).** Each leg creates a
+   container from its local image, copies out `/app` (`dist`,
+   `node_modules`, manifests, skills/docs — exactly as the Dockerfile
+   built it) to `installed/package` (keeping the long-standing `package/`
+   top dir), and tars it to `out/<asset>-${GITHUB_REF_NAME}.tgz` (see
+   "What ships"). The leg also records its local image ID to
+   `out/<asset>-image.digest`; both files are cosign-signed at release,
+   binding the tarball to the exact image it was extracted from.
+4. **Bundled-copy patch (shipped path).** BEFORE any signing,
    `fork/bashy-build/scripts/patch_bundled.py` replaces EVERY bundled
-   `http-cache-semantics < 4.3.0` inside the installed-tree tarball
-   (in practice `package/node_modules/npm/node_modules/http-cache-semantics`,
-   covered by `test_patch_bundled.py`) with the registry
+   `http-cache-semantics < 4.3.0` inside the extracted-tree tarball
+   (in practice `package/node_modules/npm/node_modules/http-cache-semantics`
+   when the tree carries an npm copy, covered by
+   `test_patch_bundled.py`) with the registry
    `http-cache-semantics@4.3.0` tarball — verifying its registry
    `dist.integrity` sha512 (repo-pinned in `build.yml`, matching the
    upstream pnpm lockfile's 4.3.0 resolution) before use, fail closed on
@@ -128,16 +125,19 @@ list it — an exception would wrongly imply the vulnerable version ships):
    unchanged, and updates the CycloneDX SBOM component(s) for that package
    (version + purl) with a `bashy security patch GHSA-ch52-4w7c-c8xp` note.
    The SBOM is patched in place rather than regenerated because only the
-   tarball is patched: the on-disk installed tree still holds the pre-patch
-   copy, so regenerating would reproduce the stale 4.2.0 entry.
-6. **Tarball gate.** `patch_bundled.py --verify-only` FAILS the build if
+   tarball is patched: the on-disk extracted tree still holds the pre-patch
+   copy, so regenerating would reproduce the stale 4.2.0 entry. If the
+   Dockerfile-built tree carries no bundled copy below 4.3.0, the patch is
+   a no-op and the gate below still enforces the bound.
+5. **Tarball gate.** `patch_bundled.py --verify-only` FAILS the build if
    any `http-cache-semantics < 4.3.0` remains anywhere in the shipped
    tarball. Runs after the patch, before signing.
 
-(`files/scripts/apply-override.sh` and `assert-lockfile-diff.sh` are
-retired: no workspace override is applied, for the inventory-check reason
-above. The dev-graph path is covered by the `audit-exceptions` BUILD-ENV
-entry instead.)
+(No workspace override is applied: npm-bundled copies ignore overrides,
+and the dev-graph path is covered by the `audit-exceptions` BUILD-ENV
+entry instead. The old pack-path helpers `write-npm-lock.mts`,
+`apply-override.sh` and `assert-lockfile-diff.sh` are removed — the
+Dockerfile path needs none of them.)
 
 ## Audit policy (braces GHSA-vfj7-8cjw-p6xm)
 
@@ -266,11 +266,11 @@ The no-egress gate stages `openclaw-bashy.json` (which sets
 
 ## No-egress gate (`no-egress-test.sh` + `mock-otlp-collector.py` + `scripts/no-egress-guard.mjs`)
 
-Runs BEFORE signing in the workflow, against the fully installed tree
+Runs BEFORE signing in the workflow, against the Dockerfile-extracted tree
 (`installed/package` — so it also proves the shipped tree starts with no
-registry access). Linux legs only: macOS runners have neither `unshare(1)`
-nor `strace(1)`, so the script exits 0 with a loud `SKIP` there and the two
-Linux legs enforce the gate before signing:
+registry access). The matrix is Linux-only, so the gate enforces on every
+leg before signing (the script still exits 0 with a loud `SKIP` on
+non-Linux hosts, which no longer occur in the matrix):
 
 1. Positive control: a connect to an unroutable TEST-NET-1 address from
    inside `unshare -rn` (user + network namespace, loopback only) must FAIL —
@@ -290,38 +290,39 @@ Linux legs enforce the gate before signing:
 Defaults (`GATEWAY_ARGV=gateway`, health `http://127.0.0.1:18789/healthz`,
 config `bashy-build/openclaw-bashy.json`) are overridable via env.
 
-## What ships (fully installed tree, per platform)
+## What ships (Dockerfile-built runtime tree, per Linux arch)
 
-Why the installed tree: upstream's packager tarball carries `package.json`
-but NO lock file (see the security section), so shipping it would make every
-user host fetch ALL dependencies — including npm 12.x, which bundles the
-vulnerable `http-cache-semantics` 4.2.0 — from the npm registry at install
-time, outside every gate. Generating the lock for the packed tree with
-upstream's generator and installing in CI from it moves that fetch inside the
-gates (audit, SBOM, patch, no-egress) and the signed tarball then runs with
-no registry access. The shipped tree keeps the generated `package-lock.json`
-plus `vendor-openclaw-ai/` (the `file:` link target for `@openclaw/ai`).
+Why the extracted tree: the Dockerfile's final stage already merges the
+production install with the built `dist/` into `/app`, so extracting it
+moves every dependency fetch inside the gates (audit, SBOM, patch,
+no-egress) and the signed tarball then runs with no registry access —
+the user host never runs `npm install`. No registry-built npm tree and no
+ghcr image ships: the image is built locally on the leg from pinned source
+and never pushed; only its extracted `/app` tarball and its digest file
+are published, both cosign-signed.
 
-Per-platform because native modules (if any) compile for their own OS/arch:
-each leg installs (`npm ci`) and tars its own tree on its own runner (free
-GitHub runners only).
+Per-arch because native modules (if any) compile for their own arch: each
+leg builds the Dockerfile natively and tars its own `/app` on its own
+runner (free GitHub runners only).
 
 | Matrix asset | Runner | Signed tarball |
 |---|---|---|
 | `openclaw-gateway-linux-amd64` | `ubuntu-24.04` | `openclaw-gateway-linux-amd64-<tag>.tgz` |
 | `openclaw-gateway-linux-arm64` | `ubuntu-24.04-arm` | `openclaw-gateway-linux-arm64-<tag>.tgz` |
-| `openclaw-gateway-darwin-arm64` | `macos-15` | `openclaw-gateway-darwin-arm64-<tag>.tgz` |
-| `openclaw-gateway-darwin-amd64` | `macos-15-intel` | `openclaw-gateway-darwin-amd64-<tag>.tgz` |
+
+macOS assets are DEFERRED explicitly until a valid build path exists
+(macOS runners have no Docker daemon for this path, and the old native
+pack path is what died in build 16).
 
 Each tarball holds `package/` incl. `node_modules` (patched: no
 `http-cache-semantics < 4.3.0` anywhere — see the security section). To run
 one: unpack and run `node openclaw.mjs gateway` from `package/` — no
 `npm install`, no registry access. Each leg also publishes its own CycloneDX
-SBOM (`<asset>-sbom.cyclonedx.json`, scanned from its installed tree, then
-patched in place) and its own full-audit JSON (`<asset>-audit-full.json`).
-The two Linux legs additionally publish their OCI image digest
-(`<asset>-image.digest`; macOS runners have no Docker daemon, so there is no
-Darwin digest). Shared by all legs: `openclaw-pin.txt`, `audit-exceptions`,
+SBOM (`<asset>-sbom.cyclonedx.json`, scanned from its extracted tree, then
+patched in place), its own full-audit JSON (`<asset>-audit-full.json`), and
+its local image digest (`<asset>-image.digest`, the `docker inspect` image
+ID the tarball was extracted from — the binding between image and tarball).
+Shared by all legs: `openclaw-pin.txt`, `audit-exceptions`,
 `SHA256SUMS`, plus one `.sigstore.json` keyless bundle per asset.
 
 ## What is verified
@@ -331,41 +332,41 @@ Darwin digest). Shared by all legs: `openclaw-pin.txt`, `audit-exceptions`,
   workflow refuses to run outside `qiangli/openclaw`; upstream checkout at
   `refs/tags/v2026.10.2` equals the pinned commit sha, the tag resolves to
   it, and the tree is pristine (shared `verify-pin.sh`).
-- Frozen pnpm install for the build: `pnpm install --frozen-lockfile
+- Frozen pnpm install for the audit gates: `pnpm install --frozen-lockfile
   --ignore-scripts` from the pinned lockfile (upstream is pnpm-based —
   `pnpm-lock.yaml`, `packageManager pnpm@12.5.1`; Node 24 matches the
   upstream Dockerfile `node:24-bookworm` base and the supported range in
-  `openclaw.mjs`). Lifecycle scripts stay off; only the documented
-  `pnpm build` + `ui:build` + pack entrypoints run, explicitly.
-- Installed-tree install per platform: `write-npm-lock.mts` generates
-  `installed/package/package-lock.json` for the packed manifest with
-  upstream's pnpm-anchored generator (`@openclaw/ai` via the vendored
-  `file:` link, everything else registry-pinned), then
-  `npm ci --omit=dev --ignore-scripts` installs from it inside
-  `installed/package` (`npm ci` fails unless `package.json` and the lock
-  agree); the tree must contain `node_modules` and `openclaw.mjs`.
+  `openclaw.mjs`). Lifecycle scripts stay off. This tree is the audit
+  basis only; the shipped runtime comes from the Dockerfile below.
+- Pinned Dockerfile build per Linux arch: `docker build --file
+  src/Dockerfile --build-arg OPENCLAW_EXTENSIONS="diagnostics-otel"` from
+  the pinned checkout, natively per leg; the extracted tree must contain
+  `node_modules`, `dist`, and `openclaw.mjs`. Nothing is pushed to a
+  registry.
 - Audit gate: `pnpm audit --prod --audit-level high` clean, plus the full
   audit vs reviewed exceptions (`audit-gate.mjs`); per-leg
   `<asset>-audit-full.json` and shared `audit-exceptions` published as
   release assets. `http-cache-semantics` is patched, not excepted (see the
   security section above).
-- CycloneDX SBOM per leg, scanned from its installed tree and updated in
+- CycloneDX SBOM per leg, scanned from its extracted tree and updated in
   place for the bundled patch so it describes the shipped tarball.
 - Bundled-copy patch + tarball gate (`patch_bundled.py`) per leg: no
-  `http-cache-semantics < 4.3.0` remains in the shipped installed-tree
-  tarball.
-- No-egress gate (strace + in-process guard hook) passes on the Linux legs
-  before signing (macOS legs SKIP — no `unshare`/`strace` there); it starts
-  the gateway from the installed tree.
+  `http-cache-semantics < 4.3.0` remains in the shipped extracted-tree
+  tarball (no-op when the tree carries no such copy — still enforced).
+- No-egress gate (strace + in-process guard hook) passes on every leg
+  before signing; it starts the gateway from the extracted tree.
 - Every asset keylessly signed: `cosign sign-blob --bundle <asset>.sigstore.json`
   (cosign v3.1.3 via pinned installer), each bundle self-verified against
   the exact identity, AND `actions/attest` provenance over every asset in
   `SHA256SUMS` — identity is this workflow at the release tag, issuer
-  `https://token.actions.githubusercontent.com`.
-- Release assets: four installed-tree gateway tarballs (one per OS/arch),
-  four CycloneDX SBOMs, four full-audit JSONs, two Linux image digests,
+  `https://token.actions.githubusercontent.com`. The per-leg image digest
+  file is signed too, binding each tarball to the exact local image it was
+  extracted from.
+- Release assets: two extracted-tree gateway tarballs (Linux amd64/arm64),
+  two CycloneDX SBOMs, two full-audit JSONs, two image digests,
   `openclaw-pin.txt`, `audit-exceptions`, `SHA256SUMS`,
-  plus one `.sigstore.json` bundle per asset.
+  plus one `.sigstore.json` bundle per asset. macOS assets deferred (see
+  "What ships").
 
 ## Sigstore identity for binmgr to pin
 
@@ -382,9 +383,6 @@ python3 -c 'import yaml, sys; yaml.safe_load(open(sys.argv[1]))' \
   fork/.github/workflows/bashy-build.yml
 for f in fork/bashy-build/scripts/*.sh; do bash -n "$f" || exit 1; done
 for f in fork/bashy-build/scripts/*.mjs; do node --check "$f" || exit 1; done
-# .mts files carry type annotations, so node --check cannot parse them —
-# importing loads them through type stripping without running main:
-node --input-type=module -e "await import('./fork/bashy-build/scripts/write-npm-lock.mts')" || exit 1
 # must all print nothing (scoped to workflow + scripts so this README's own
 # prose is out of scope):
 grep -rn 'uses:.*@v[0-9]' fork/.github/workflows/bashy-build.yml
