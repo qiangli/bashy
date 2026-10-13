@@ -100,11 +100,14 @@ class Evidence(unittest.TestCase):
                                ('C:/Go/src/runtime/cgo/gcc_libinit.c', 'go-toolchain'),
                                ('C:/temp/private/go-build123/b012/pkg.cgo2.c', 'go-generated'),
                                ('C:/temp/private/cgo-gcc-input-123.c', 'go-generated'),
+                               ('C:/temp/private/go-link-123/trivial.c', 'go-generated'),
                                ('C:/msys64/ucrt64/include/stdio.h', 'system')]:
             self.assertEqual(evidence.origin(path, roots)[0], expected)
         for path in ('C:/src-other/native.c', 'C:/Go/pkg/evil.c', 'C:/Go/src/evil.c',
                      'C:/temp/cgo-gcc-input-123.c', 'C:/temp/private/evil.c',
                      'C:/temp/private/go-build123/b012/evil.h', 'C:/src/../evil.c',
+                     'C:/temp/private/go-link-123/evil.c',
+                     'C:/temp/private/go-link-123/nested/trivial.c',
                      'C:/msys64/other/include/evil.h', 'C:/msys64/ucrt64/bin/evil.c'):
             with self.assertRaises(ValueError, msg=path): evidence.origin(path, roots)
 
@@ -113,6 +116,9 @@ class Evidence(unittest.TestCase):
             dep = Path(td) / 'input.d'
             dep.write_text('C:/out/object.o: relative\\ name.c \\\n C:/temp/generated.c\n')
             self.assertEqual(evidence.dependencies(dep), ['relative name.c', 'C:/temp/generated.c'])
+            dep.write_text('obj.o: \\\r\n C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\private\\cgo-gcc-input-123.c\r\n')
+            self.assertEqual(evidence.dependencies(dep),
+                             ['C:/Users/RUNNER~1/AppData/Local/Temp/private/cgo-gcc-input-123.c'])
             dep.write_text('no dependency rule')
             with self.assertRaises(ValueError): evidence.dependencies(dep)
 

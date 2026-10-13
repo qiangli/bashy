@@ -10,7 +10,34 @@ def dependencies(depfile):
     match = re.search(r'(?<!\\):\s', raw)
     if not match:
         raise ValueError('malformed compiler dependency file')
-    return [re.sub(r'\\(.)', r'\1', s) for s in re.findall(r'(?:\\.|[^\s\\])+', raw[match.end():])]
+    names, current = [], []
+    body = raw[match.end():]
+    i = 0
+    while i < len(body):
+        char = body[i]
+        if char.isspace():
+            if current:
+                names.append(''.join(current))
+                current = []
+        elif char == '\\':
+            if i + 1 >= len(body):
+                raise ValueError('malformed compiler dependency escape')
+            following = body[i + 1]
+            if following.isspace():
+                current.append(following)
+                i += 1
+            elif re.match(r'^[A-Za-z]:', ''.join(current)):
+                # MinGW emits literal backslashes in absolute source paths.
+                current.append('/')
+            else:
+                current.append(following)
+                i += 1
+        else:
+            current.append(char)
+        i += 1
+    if current:
+        names.append(''.join(current))
+    return names
 
 
 def portable_path(value):
@@ -39,7 +66,7 @@ def origin(path, environment=None):
         if label == 'go-toolchain' and not rel.startswith('src/runtime/cgo/'):
             break
         if label == 'go-generated' and not re.fullmatch(
-                r'(cgo-gcc-input-[0-9]+\.c|go-build[0-9]+/b[0-9]+/(generated\.c|_cgo_(export\.[ch]|main\.c)|[^/]+\.cgo[12]\.[ch]))', rel):
+                r'(cgo-gcc-input-[0-9]+\.c|go-link-[0-9]+/trivial\.c|go-build[0-9]+/b[0-9]+/(generated\.c|_cgo_(export\.[ch]|main\.c)|[^/]+\.cgo[12]\.[ch]))', rel):
             break
         return label, rel
     # Only reviewed system SDK/include roots; never a blanket /tmp or module cache exemption.
