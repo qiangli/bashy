@@ -126,5 +126,73 @@ SB
     cat "$work/control"
   } >>"out/$asset-egress.txt"
   ;;
+MINGW*|MSYS*)
+  # Hosted Windows gate. A disposable dynamic WFP policy allowlists exactly
+  # the pinned prima loopback ports (ring 5599-5605, engine data 19000/19001,
+  # engine signal 19100/19101) for the exercise processes — WFP filters
+  # loopback, Windows Firewall would not. Enforcement is proven by positive
+  # controls whose verdicts are observed DIRECTLY in the guard's own stdout
+  # (WSAEACCES / delivery proof) before the marker line; anything after the
+  # marker is exercise output and must show no denial signature. The WFP
+  # filters are keyed on exact executable paths, which scopes policy more
+  # strongly than a post-hoc netstat owner check, so no netstat step follows.
+  [[ ${GITHUB_ACTIONS:-} == true && ${RUNNER_ENVIRONMENT:-} == github-hosted ]] || {
+    echo 'native gate requires a GitHub-hosted runner' >&2; exit 1;
+  }
+  case $(hostname | tr '[:upper:]' '[:lower:]') in *dragon*) echo 'Dragon native gate prohibited' >&2; exit 1;; esac
+  for tool in gcc python3; do command -v "$tool" >/dev/null || { echo "missing $tool" >&2; exit 1; }; done
+  [[ $asset == prima-windows-amd64 ]] || { echo "unsupported Windows asset: $asset" >&2; exit 1; }
+  binexe=$bin.exe
+  [[ -f $binexe ]] || { echo "missing Windows CLI executable: $binexe" >&2; exit 1; }
+  ringexe=$(pwd)/build/bin/prima-ring-test.exe
+  [[ -f $ringexe ]] || { echo "missing Windows ring test: $ringexe" >&2; exit 1; }
+  # Compile only on the hosted Windows image, using the same MinGW provision
+  # as the build leg.
+  gcc -std=c11 -Wall -Wextra -Werror -municode "$here/windows-net-guard.c" \
+    -o "$work/net-guard.exe" -lfwpuclnt -lws2_32 -lrpcrt4
+  # Native paths for CreateProcess and WFP app-id filtering.
+  pyexe=$(python3 -c 'import sys; print(sys.executable)')
+  pyexe=$(cygpath -m "$pyexe")
+  binexe=$(cygpath -m "$binexe")
+  ringexe=$(cygpath -m "$ringexe")
+  model_win=$(cygpath -m "$work/model.gguf")
+  exercise_win=$(cygpath -m "$here/exercise.py")
+  # The guard is a native executable: every path it opens (pidfile) or
+  # filters/spawns (app ids, command line) must be a Windows path.
+  pid_win=$(cygpath -m "$work/pid")
+  if "$work/net-guard.exe" --app "$pyexe" --app "$binexe" --app "$ringexe" -- \
+      "$pid_win" "$pyexe" "$exercise_win" "$binexe" "$model_win" "$ringexe" \
+      >"out/$asset-egress.txt" 2>&1; then
+    echo 'no-egress: windows: exercise succeeded under the WFP deny policy'
+  else
+    rc=$?
+    echo "no-egress: windows: exercise failed under the WFP deny policy (rc=$rc)" >&2
+    cat "out/$asset-egress.txt" >&2 || true
+    exit 1
+  fi
+  marker='WFP exercise filters installed; multi-process job active'
+  controls=$(sed "/$marker/q" "out/$asset-egress.txt")
+  exercise=$(sed -n "/$marker/,\$p" "out/$asset-egress.txt")
+  # Positive controls directly observed: two TCP denials plus the IPv6 denial,
+  # three UDP verdicts, and one allowed-loopback proof.
+  for proof in 'WFP control denied family=2 type=1 port=443 WSAEACCES' \
+               'WFP control denied family=2 type=1 port=5606 WSAEACCES' \
+               'WFP control denied family=23 type=1 port=5599 WSAEACCES' \
+               'WFP UDP control delivered family=2 port=5599' \
+               'WFP UDP control denied family=2 port=5606' \
+               'WFP UDP control denied family=23 port=5599' \
+               'WFP configured loopback control allowed'; do
+    grep -qF "$proof" <<<"$controls" || {
+      echo "no-egress: windows: missing positive-control proof: $proof" >&2; exit 1; }
+  done
+  # All three exercise stages passed with no denial signature past the marker.
+  [[ $(grep -c '^PASS:' <<<"$exercise") == 3 ]] || {
+    echo 'no-egress: windows: exercise stages did not all PASS' >&2; exit 1; }
+  grep -q 'exercise reaped; job closed; dynamic WFP policy removed' "out/$asset-egress.txt" || {
+    echo 'no-egress: windows: guard did not confirm policy removal' >&2; exit 1; }
+  if grep -Ei 'WSAEACCES|WFP gate failure|operation not permitted|EPERM' <<<"$exercise"; then
+    echo 'no-egress: windows: exercise output shows a denied network attempt' >&2; exit 1
+  fi
+  ;;
 *) exit 1 ;;
 esac

@@ -72,7 +72,7 @@ class LicenseReview(unittest.TestCase):
     def test_exact_reviewed_files_on_all_platforms(self):
         errors, corrections = self.result()
         self.assertEqual(errors, [])
-        self.assertEqual(len(corrections), 12)
+        self.assertEqual(len(corrections), 15)
         self.assertEqual({r['reviewed'] for r in corrections}, {'mit'})
         self.assertEqual(self.scan['files'][0]['license_detections'][0]['license_expression'], 'mit')
 
@@ -116,14 +116,14 @@ class LicenseReview(unittest.TestCase):
     def test_changed_root_license_fails(self):
         self.change_bytes('LICENSE.txt', b'MIT')
         self.change_bytes('/LICENSE', b'MIT')
-        self.assertEqual(len(self.result()[0]), 12)
+        self.assertEqual(len(self.result()[0]), 15)
 
     def test_changed_pins_fail(self):
         self.inventory['linked'][1]['commit'] = '0'*40
-        self.assertEqual(len(self.result()[0]), 12)
+        self.assertEqual(len(self.result()[0]), 15)
         self.inventory = json.loads((ROOT/'files/dependencies.json').read_text())
         self.inventory['source']['commit'] = '0'*40
-        self.assertEqual(len(self.result()[0]), 12)
+        self.assertEqual(len(self.result()[0]), 15)
 
     def test_other_paths_and_nonpermissive_expressions_fail(self):
         for expr in ['cpal-1.0', 'mpl-2.0', 'fpl', 'mit AND cpal-1.0 AND gpl-2.0',
@@ -149,7 +149,7 @@ class LicenseReview(unittest.TestCase):
         self.inputs = [row for row in self.inputs if not row['path'].startswith(missing)]
         self.scan['files'] = [row for row in self.scan['files']
                               if not row['path'].startswith('audit-inputs/'+missing)]
-        with self.assertRaisesRegex(ValueError, 'all four platforms'): self.result()
+        with self.assertRaisesRegex(ValueError, 'all five platforms'): self.result()
         self.inputs.append(self.inputs[0])
         with self.assertRaisesRegex(ValueError, 'every compiler input'): self.result()
 
@@ -184,7 +184,7 @@ class LicenseReview(unittest.TestCase):
                     os.chdir(old)
                 report = json.loads((out/'prima-licenses.json').read_text())
                 self.assertEqual(report['files'], self.scan['files'])
-                self.assertEqual(len(report['bashy_reviewed_findings']), 12)
+                self.assertEqual(len(report['bashy_reviewed_findings']), 15)
                 self.assertTrue((out/'prima-sbom.cdx.json').is_file())
                 self.assertTrue((out/'prima-osv.json').is_file())
 
@@ -211,7 +211,7 @@ class CompilerInputs(unittest.TestCase):
                     item=tarfile.TarInfo('./LICENSE'); item.size=7
                     t.addfile(item,io.BytesIO(b'fixture'))
             merge.merge(root,root/'result',root/'report.json')
-            self.assertEqual(len(json.loads((root/'report.json').read_text())),4)
+            self.assertEqual(len(json.loads((root/'report.json').read_text())),5)
             (root/f'{merge.ASSETS[0]}-inputs.json').write_text(json.dumps([{'path':'LICENSE','sha256':'0'*64}]))
             with self.assertRaises(ValueError): merge.merge(root,root/'bad',root/'bad.json')
             (root/f'{merge.ASSETS[0]}-inputs.json').unlink()
@@ -243,8 +243,10 @@ class Preparation(unittest.TestCase):
     def test_reviewed_pin_and_fail_closed_guards(self):
         # Candidate 0.1.1-1 passed verify-pin.sh but all four prepare steps
         # rejected the reviewed HEAD because prepare.py still pinned 0.1.0.
-        sha='542d01932a88372a184037c5939048f355dcbd57'
-        old='f4ea9845dc91a18793921492e50ef23ec799e93e'
+        # Repinned to the reviewed 0.1.2 source (Windows ring shims + server
+        # sources carried); the superseded 0.1.1 pin is the wrong-source case.
+        sha='a0d55d961c8fc1b694de63bd0b2aebdb8365cf2b'
+        old='542d01932a88372a184037c5939048f355dcbd57'
         pin=(ROOT/'fork/bashy-build/PIN').read_text()
         self.assertIn(f'UPSTREAM_COMMIT={sha}\n',pin)
         self.assertEqual(pin,(ROOT/'tool.env').read_text())
@@ -295,14 +297,14 @@ class Preparation(unittest.TestCase):
 
 class Contract(unittest.TestCase):
     def test_source_gate_fails_closed(self):
-        sha='542d01932a88372a184037c5939048f355dcbd57'
-        tag='bashy-bashy-prima-0.1.1-1'
+        sha='a0d55d961c8fc1b694de63bd0b2aebdb8365cf2b'
+        tag='bashy-bashy-prima-0.1.2-2'
         with tempfile.TemporaryDirectory() as d:
             git=Path(d)/'git'
             git.write_text('#!/bin/sh\n'
                 'case "$3 $4" in\n'
                 ' "rev-parse HEAD") echo "$TEST_HEAD" ;;\n'
-                ' "rev-parse refs/tags/bashy-prima-0.1.1^{commit}")\n'
+                ' "rev-parse refs/tags/bashy-prima-0.1.2^{commit}")\n'
                 '  [ -n "$TEST_TAG" ] || exit 1; echo "$TEST_TAG" ;;\n'
                 ' "status --porcelain") printf "%s" "$TEST_DIRTY" ;;\n'
                 ' *) exit 99 ;;\nesac\n')
@@ -325,24 +327,27 @@ class Contract(unittest.TestCase):
     def test_source_and_raw_asset_contract(self):
         declaration=(ROOT/'tool.env').read_text()
         self.assertEqual(declaration,(ROOT/'fork/bashy-build/PIN').read_text())
-        self.assertIn('UPSTREAM_TAG=bashy-prima-0.1.1\n',declaration)
-        self.assertIn('UPSTREAM_COMMIT=542d01932a88372a184037c5939048f355dcbd57\n',declaration)
+        self.assertIn('UPSTREAM_TAG=bashy-prima-0.1.2\n',declaration)
+        self.assertIn('UPSTREAM_COMMIT=a0d55d961c8fc1b694de63bd0b2aebdb8365cf2b\n',declaration)
         assets={'prima-linux-amd64','prima-linux-arm64',
-                'prima-darwin-arm64','prima-darwin-amd64'}
+                'prima-darwin-arm64','prima-darwin-amd64',
+                'prima-server-linux-amd64','prima-server-linux-arm64',
+                'prima-server-darwin-arm64','prima-server-darwin-amd64',
+                'prima-windows-amd64.exe','prima-server-windows-amd64.exe'}
         self.assertEqual(verify.ASSETS,assets)
         declared=re.search(r'^RELEASE_EXECUTABLES="([^"]+)"$',declaration,re.M)[1]
         self.assertEqual(set(declared.split()),assets)
         for asset in assets:
-            verify.validate_inputs('bashy-bashy-prima-0.1.1-1',asset,'a'*64)
-        for tag in ['bashy-bashy-prima-0.1.0-1','bashy-prima-0.1.1',
-                    'bashy-bashy-prima-0.1.1-0','bashy-bashy-prima-0.1.1-1-rc']:
+            verify.validate_inputs('bashy-bashy-prima-0.1.2-2',asset,'a'*64)
+        for tag in ['bashy-bashy-prima-0.1.0-1','bashy-prima-0.1.2',
+                    'bashy-bashy-prima-0.1.2-0','bashy-bashy-prima-0.1.2-2-rc']:
             with self.assertRaises(ValueError):
                 verify.validate_inputs(tag,'prima-linux-amd64','a'*64)
 
     def test_reject_untrusted_inputs(self):
         for tag,asset,sha in [('main','prima-linux-amd64','a'*64),
-                              ('bashy-bashy-prima-0.1.1-1','../prima','a'*64),
-                              ('bashy-bashy-prima-0.1.1-1','prima-linux-amd64','latest')]:
+                              ('bashy-bashy-prima-0.1.2-2','../prima','a'*64),
+                              ('bashy-bashy-prima-0.1.2-2','prima-linux-amd64','latest')]:
             with self.assertRaises(ValueError): verify.validate_inputs(tag,asset,sha)
 
     def test_signed_checksum_still_requires_consumer_pin(self):
@@ -352,25 +357,25 @@ class Contract(unittest.TestCase):
             (root/asset).write_bytes(data)
             (root/'SHA256SUMS').write_text(f'{sha}  {asset}\n')
             with patch.object(verify.subprocess,'run') as run:
-                verify.verify(root,'bashy-bashy-prima-0.1.1-1',asset,sha)
+                verify.verify(root,'bashy-bashy-prima-0.1.2-2',asset,sha)
                 self.assertEqual(run.call_count,2)
                 self.assertIn('--certificate-identity',run.call_args.args[0])
                 for call in run.call_args_list:
                     args=call.args[0]
                     self.assertEqual(args[args.index('--certificate-identity')+1],
                         'https://github.com/qiangli/prima.cpp/.github/workflows/bashy-build.yml'
-                        '@refs/tags/bashy-bashy-prima-0.1.1-1')
+                        '@refs/tags/bashy-bashy-prima-0.1.2-2')
                     self.assertEqual(args[args.index('--certificate-oidc-issuer')+1],
                                      'https://token.actions.githubusercontent.com')
                     self.assertTrue(call.kwargs['check'])
-                with self.assertRaises(ValueError): verify.verify(root,'bashy-bashy-prima-0.1.1-1',asset,'0'*64)
+                with self.assertRaises(ValueError): verify.verify(root,'bashy-bashy-prima-0.1.2-2',asset,'0'*64)
                 (root/'SHA256SUMS').write_text(f'{sha}  {asset}\n'*2)
-                with self.assertRaises(ValueError): verify.verify(root,'bashy-bashy-prima-0.1.1-1',asset,sha)
+                with self.assertRaises(ValueError): verify.verify(root,'bashy-bashy-prima-0.1.2-2',asset,sha)
 
     def test_signature_failure_stops_verification(self):
         with tempfile.TemporaryDirectory() as d, patch.object(verify.subprocess,'run',side_effect=subprocess.CalledProcessError(1,'cosign')):
             with self.assertRaises(subprocess.CalledProcessError):
-                verify.verify(Path(d),'bashy-bashy-prima-0.1.1-1','prima-linux-amd64','a'*64)
+                verify.verify(Path(d),'bashy-bashy-prima-0.1.2-2','prima-linux-amd64','a'*64)
 
     def test_first_party_exception_is_narrow(self):
         text=(ROOT.parent/'render.sh').read_text()
@@ -527,6 +532,115 @@ class NoEgressRingPorts(unittest.TestCase):
         self.assertTrue(remotes)
         for remote in remotes:
             self.assertTrue(remote.startswith('localhost:'),remote)
+
+class WindowsTarget(unittest.TestCase):
+    # Windows-amd64 restores the proven win-build recipe (MinGW Makefiles +
+    # clang, static toolchain, nng static, libomp.dll alongside) as a fifth
+    # signed release leg on the free windows-2025 runner: CLI
+    # prima-windows-amd64.exe, server prima-server-windows-amd64.exe and the
+    # compiler OpenMP runtime. Same pin, audit, no-egress and Sigstore gates
+    # as the other platforms. Nothing here compiles or runs Windows code;
+    # hosted CI owns that proof.
+    ALLOWED = [5599, 5600, 5601, 5602, 5603, 5604, 5605, 19000, 19001, 19100, 19101]
+
+    def test_release_declares_windows_asset(self):
+        declaration=(ROOT/'tool.env').read_text()
+        self.assertIn('prima-windows-amd64=windows-2025',declaration)
+        self.assertIn('WINDOWS_SHELL=bash',declaration)
+        executables=re.search(r'^RELEASE_EXECUTABLES="([^"]+)"$',declaration,re.M)[1].split()
+        self.assertIn('prima-windows-amd64.exe',executables)
+        self.assertIn('prima-server-windows-amd64.exe',executables)
+        assets=re.search(r'^RELEASE_ASSETS="([^"]+)"$',declaration,re.M)[1].split()
+        for name in ['prima-windows-amd64.exe','prima-server-windows-amd64.exe','libomp.dll']:
+            self.assertIn(name,assets)
+        self.assertIn('five native builds',declaration)
+
+    def test_workflow_runs_bash_on_windows(self):
+        workflow=(ROOT/'fork/.github/workflows/bashy-build.yml').read_text()
+        self.assertIn('- asset: prima-windows-amd64\n            runner: windows-2025',workflow)
+        self.assertIn('shell: bash',workflow)
+        self.assertIn('native Windows MinGW + clang compilers',workflow)
+        self.assertIn('python3 fork/bashy-build/windows-compilers.py',workflow)
+
+    def test_setup_discovers_windows_compilers(self):
+        setup=(ROOT/'setup.yml').read_text()
+        self.assertIn('python3 fork/bashy-build/prepare.py src',setup)
+        self.assertIn("if: runner.os == 'Windows'",setup)
+        self.assertIn('python3 fork/bashy-build/windows-compilers.py',setup)
+        discovery=(ROOT/'files/windows-compilers.py').read_text()
+        self.assertIn('x86_64-w64-mingw32',discovery)
+        self.assertIn('-dumpmachine',discovery)
+        self.assertIn('__clang__',discovery)
+        self.assertIn('BASHY_WINDOWS_CC',discovery)
+        for manager in ['choco install','scoop install','apt-get install']:
+            self.assertNotIn(manager,discovery)
+
+    def test_build_uses_mingw_clang_static_with_shipped_omp(self):
+        script=(ROOT/'files/build.sh').read_text()
+        self.assertIn("prima-windows-amd64) [[ $(uname -m) == x86_64 ]]; windows=true ;;",script)
+        self.assertIn("-G 'MinGW Makefiles'",script)
+        self.assertIn('BASHY_WINDOWS_CC',script)
+        self.assertIn('-DCMAKE_EXE_LINKER_FLAGS=-static',script)
+        self.assertIn('openmp=ON',script)
+        self.assertIn('build/bin/llama-cli.exe "out/$asset.exe"',script)
+        self.assertIn('build/bin/llama-server.exe "out/$server_asset.exe"',script)
+        self.assertIn('libomp.dll',script)
+        self.assertIn('unexpected Windows dynamic dependency',script)
+        self.assertIn('cygpath -m "$src"',script)
+
+    def test_windows_gate_proves_no_egress(self):
+        script=(ROOT/'files/no-egress-test.sh').read_text()
+        self.assertIn('MINGW*|MSYS*)',script)
+        self.assertIn('native gate requires a GitHub-hosted runner',script)
+        self.assertIn('Dragon native gate prohibited',script)
+        self.assertIn('-lfwpuclnt -lws2_32 -lrpcrt4',script)
+        self.assertIn('WFP exercise filters installed; multi-process job active',script)
+        for proof in ['port=443 WSAEACCES','port=5606 WSAEACCES',
+                      'UDP control delivered','UDP control denied',
+                      'configured loopback control allowed']:
+            self.assertIn(proof,script)
+        self.assertIn("grep -c '^PASS:'",script)
+        self.assertIn('shows a denied network attempt',script)
+        self.assertIn('pid_win=$(cygpath -m',script)
+
+    def test_guard_tiles_full_port_complement(self):
+        guard=(ROOT/'files/windows-net-guard.c').read_text()
+        allowed=sorted(int(p) for p in re.search(
+            r'allowed_ports\[\] = \{([^}]+)\}',guard)[1].split(','))
+        self.assertEqual(allowed,self.ALLOWED)
+        ranges=re.findall(r'\{(\d+),\s*(\d+)\}',guard[
+            guard.index('blocked_ranges'):guard.index('};',guard.index('blocked_ranges'))])
+        blocked=set()
+        for lo,hi in ranges:
+            blocked.update(range(int(lo),int(hi)+1))
+        self.assertEqual(blocked,set(range(65536))-set(self.ALLOWED))
+        for token in ['FWPM_SESSION_FLAG_DYNAMIC','KILL_ON_JOB_CLOSE',
+                      'WSAEACCES','remove dynamic policy',
+                      'FWP_MATCH_GREATER_OR_EQUAL','FWP_MATCH_LESS_OR_EQUAL']:
+            self.assertIn(token,guard)
+        self.assertNotIn('ActiveProcessLimit',guard)
+
+    def test_guard_reuses_reviewed_wfp_layer_ids(self):
+        prima=(ROOT/'files/windows-net-guard.c').read_text()
+        ollama=(ROOT.parent/'ollama/files/windows-net-guard.c').read_text()
+        for name in ['connect4','connect6','app_id','remote_address','remote_port']:
+            pattern=re.compile(r'static const GUID '+name+r' = \{[^}]+\{[^}]+\}\};')
+            self.assertEqual(pattern.search(prima)[0],pattern.search(ollama)[0])
+
+    def test_exercise_kill_is_portable(self):
+        exercise=(ROOT/'files/exercise.py').read_text()
+        self.assertIn('def _kill_peer(peer):',exercise)
+        self.assertEqual(exercise.count('_kill_peer(peer)'),3)
+        self.assertNotIn('os.killpg(peer.pid',exercise)
+
+    def test_windows_files_ship_in_fork(self):
+        for name in ['build.sh','exercise.py','merge-inputs.py','verify-asset.py',
+                     'license-review.py','dependencies.json',
+                     'windows-compilers.py','windows-net-guard.c','no-egress-test.sh']:
+            self.assertEqual((ROOT/'fork/bashy-build'/name).read_bytes(),
+                             (ROOT/'files'/name).read_bytes(),name)
+        self.assertIn('prima-windows-amd64',merge.ASSETS)
+        self.assertIn('prima-windows-amd64.exe',verify.ASSETS)
 
 class ExerciseDiagnostics(unittest.TestCase):
     @classmethod

@@ -10,7 +10,8 @@ import re
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = {'prima-linux-amd64', 'prima-linux-arm64',
-          'prima-darwin-amd64', 'prima-darwin-arm64'}
+          'prima-darwin-amd64', 'prima-darwin-arm64',
+          'prima-windows-amd64'}
 ALLOWED = {'mit', 'bsd-new', 'bsd-simplified', 'bsd-original',
            'apache-2.0', 'isc', 'public-domain'}
 
@@ -22,9 +23,9 @@ def audit_licenses(scan, inputs, tree, inventory):
                 for f in scan['files'] if f.get('type') == 'file']
     if (not hashes or len(hashes) != len(inputs) or
             len(observed) != len(set(observed)) or set(observed) != set(hashes)):
-        raise ValueError('ScanCode must cover every compiler input, on all four platforms')
+        raise ValueError('ScanCode must cover every compiler input, on all five platforms')
     if {p.split('/')[0] for p in hashes} != ASSETS:
-        raise ValueError('compiler inputs must include all four platforms')
+        raise ValueError('compiler inputs must include all five platforms')
     data = {}
     for path, digest in hashes.items():
         parts = PurePosixPath(path)

@@ -12,7 +12,8 @@ import sys
 
 ASSETS = {'prima-linux-amd64','prima-linux-arm64','prima-darwin-arm64','prima-darwin-amd64',
           'prima-server-linux-amd64','prima-server-linux-arm64',
-          'prima-server-darwin-arm64','prima-server-darwin-amd64'}
+          'prima-server-darwin-arm64','prima-server-darwin-amd64',
+          'prima-windows-amd64.exe','prima-server-windows-amd64.exe'}
 
 def validate_inputs(tag, asset, sha):
     if not re.fullmatch(r'bashy-bashy-prima-0\.1\.[12]-[1-9][0-9]*',tag):

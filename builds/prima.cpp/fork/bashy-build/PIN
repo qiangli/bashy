@@ -8,13 +8,14 @@ UPSTREAM_TAG_FORM=bashy-prima-X.Y.Z
 SOURCE_ADMISSION=prima-first-party
 KIND=cmake
 COSIGN_VERSION=v3.1.3
-MATRIX="prima-linux-amd64=ubuntu-24.04 prima-linux-arm64=ubuntu-24.04-arm prima-darwin-arm64=macos-15 prima-darwin-amd64=macos-15-intel"
+WINDOWS_SHELL=bash
+MATRIX="prima-linux-amd64=ubuntu-24.04 prima-linux-arm64=ubuntu-24.04-arm prima-darwin-arm64=macos-15 prima-darwin-amd64=macos-15-intel prima-windows-amd64=windows-2025"
 APT_PACKAGES="cmake ninja-build strace iproute2 curl python3-venv"
 PRE_BUILD_GATES=""
 SHARED_FILES="egress-verdict.sh"
 EGRESS_TARGET='out/${{ matrix.asset }}'
 RELEASE_EXTRA="PIN=prima-pin.txt otel.env=prima-otel.env dependencies.json=prima-dependencies.json"
-RELEASE_EXECUTABLES="prima-linux-amd64 prima-linux-arm64 prima-darwin-arm64 prima-darwin-amd64 prima-server-linux-amd64 prima-server-linux-arm64 prima-server-darwin-arm64 prima-server-darwin-amd64"
-RELEASE_ASSETS="prima-linux-amd64 prima-linux-arm64 prima-darwin-arm64 prima-darwin-amd64 prima-server-linux-amd64 prima-server-linux-arm64 prima-server-darwin-arm64 prima-server-darwin-amd64 prima-pin.txt prima-dependencies.json prima-sbom.cdx.json prima-vulnerabilities.json prima-licenses.json prima-osv.json prima-inputs.json prima-NOTICES.txt"
-RELEASE_NOTE="First-party MIT prima.cpp; reviewed nng ring patches. CLI worker and OpenAI server roles. No upstream binaries. CPU on Linux/Intel macOS; Metal on Apple Silicon. HiGHS, fio, CURL, CUDA, OpenMP, RPC and native CPU specialization disabled."
-RELEASE_GATES="exact source and nng SHA/license pins; dependency license and vulnerability audit; SBOM; four native builds of CLI and server; isolated no-egress inference and ring test; exact Sigstore identity verification"
+RELEASE_EXECUTABLES="prima-linux-amd64 prima-linux-arm64 prima-darwin-arm64 prima-darwin-amd64 prima-server-linux-amd64 prima-server-linux-arm64 prima-server-darwin-arm64 prima-server-darwin-amd64 prima-windows-amd64.exe prima-server-windows-amd64.exe"
+RELEASE_ASSETS="prima-linux-amd64 prima-linux-arm64 prima-darwin-arm64 prima-darwin-amd64 prima-server-linux-amd64 prima-server-linux-arm64 prima-server-darwin-arm64 prima-server-darwin-amd64 prima-windows-amd64.exe prima-server-windows-amd64.exe libomp.dll prima-pin.txt prima-dependencies.json prima-sbom.cdx.json prima-vulnerabilities.json prima-licenses.json prima-osv.json prima-inputs.json prima-NOTICES.txt"
+RELEASE_NOTE="First-party MIT prima.cpp; reviewed nng ring patches. CLI worker and OpenAI server roles. No upstream binaries. CPU on Linux/Intel macOS; Metal on Apple Silicon; MinGW+clang static on Windows with shipped libomp.dll. HiGHS, fio, CURL, CUDA, RPC and native CPU specialization disabled; OpenMP off on Linux/Darwin."
+RELEASE_GATES="exact source and nng SHA/license pins; dependency license and vulnerability audit; SBOM; five native builds of CLI and server; isolated no-egress inference and ring test; exact Sigstore identity verification"

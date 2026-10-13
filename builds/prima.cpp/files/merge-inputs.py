@@ -7,7 +7,8 @@ import sys
 import tarfile
 
 ASSETS = ('prima-linux-amd64', 'prima-linux-arm64',
-          'prima-darwin-amd64', 'prima-darwin-arm64')
+          'prima-darwin-amd64', 'prima-darwin-arm64',
+          'prima-windows-amd64')
 
 def merge(source, destination, report):
     records = []

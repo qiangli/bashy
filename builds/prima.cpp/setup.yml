@@ -1,0 +1,5 @@
+      - name: prepare pinned CMake dependencies and reviewed overlay
+        run: python3 fork/bashy-build/prepare.py src
+      - name: native Windows MinGW + clang compilers
+        if: runner.os == 'Windows'
+        run: python3 fork/bashy-build/windows-compilers.py

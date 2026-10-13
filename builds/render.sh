@@ -106,6 +106,17 @@ else
 		die "a non-GitHub UPSTREAM_REPO must declare UPSTREAM_API_BASE (the forge's release-API root)"
 fi
 
+# --- WINDOWS_SHELL (Git Bash default for Windows runners) --------------------
+# Tools with a windows-* matrix leg run their build and gate scripts under Git
+# Bash, because Windows' default shell is PowerShell. Declared as
+# WINDOWS_SHELL=bash in tool.env (prima.cpp); anything else renders no
+# workflow-wide shell default. Defaults to empty so tools without a Windows
+# leg render byte-identical output with or without this conditional.
+: "${WINDOWS_SHELL:=}"
+if [[ -n $WINDOWS_SHELL && $WINDOWS_SHELL != bash ]]; then
+	die "WINDOWS_SHELL=$WINDOWS_SHELL is not a declared shell default (bash)"
+fi
+
 # --- GO_SECURITY_OVERRIDES (the module half of a recorded override) ---------
 # Syntax only; the workflow enforces the real gate (the go.mod diff). Checking
 # it here means a typo fails at render time instead of in CI.

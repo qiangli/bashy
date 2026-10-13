@@ -27,6 +27,14 @@ on:
 
 permissions: {}
 
+# Windows' default is PowerShell; the native build and gate scripts need Git Bash.
+# (TOOL ollama keeps its own block above; this one serves tools that declare
+# WINDOWS_SHELL=bash instead. A tool matching both would render duplicate keys,
+# so declare at most one of the two.)
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: bashy-build-${{ github.ref }}
   cancel-in-progress: false
@@ -91,6 +99,8 @@ jobs:
             runner: macos-15
           - asset: prima-darwin-amd64
             runner: macos-15-intel
+          - asset: prima-windows-amd64
+            runner: windows-2025
     steps:
       - name: checkout bashy-build
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -115,6 +125,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends cmake ninja-build strace iproute2 curl python3-venv
       - name: prepare pinned CMake dependencies and reviewed overlay
         run: python3 fork/bashy-build/prepare.py src
+      - name: native Windows MinGW + clang compilers
+        if: runner.os == 'Windows'
+        run: python3 fork/bashy-build/windows-compilers.py
       - name: pre-build gates (PRE_BUILD_GATES)
         run: |
           set -euo pipefail
@@ -168,7 +181,7 @@ jobs:
         run: fork/bashy-build/verify-pin.sh src "$GITHUB_REF_NAME"
       - name: prepare pinned CMake dependencies and reviewed overlay
         run: python3 fork/bashy-build/prepare.py src
-      - name: download compiler input evidence from all four native builds
+      - name: download compiler input evidence from all five native builds
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: prima-*

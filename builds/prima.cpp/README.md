@@ -7,10 +7,12 @@ The current candidate pins first-party source tag `bashy-prima-0.1.2` at
 `prima-OS-ARCH` (CLI worker) and `prima-server-OS-ARCH` (leader API server)
 from the same source and audit input set. The 0.1.2 source carries the reviewed
 Windows ring compatibility changes from the earlier `win-build` branch and the
-server's speculative source dependency. The current matrix still covers Linux
-and macOS; Windows build, signed asset, consumer pin, and live peer evidence
-remain required in Sprint 436 before service acceptance. Existing 0.1.1
-release evidence below remains historical and does not prove the 0.1.2 candidate.
+server's speculative source dependency. The matrix now covers Linux, macOS and
+Windows (`prima-windows-amd64.exe`, `prima-server-windows-amd64.exe`,
+`libomp.dll` on `windows-2025`); hosted build, signed asset, consumer pin,
+and live peer evidence remain required in Sprint 436 before service
+acceptance. Existing 0.1.1 release evidence below remains historical and
+does not prove the 0.1.2 candidate.
 
 Sprint 436 / #2029 / `17ba375e3318`. This is a CI implementation and artifact
 contract. **Hosted build, audit, no-egress, signing and release evidence are
@@ -53,15 +55,22 @@ backends are disabled. The product is `llama-cli`, not `llama-server` or llava.
 | `prima-linux-arm64` | `ubuntu-24.04-arm` | CPU |
 | `prima-darwin-arm64` | `macos-15` | Metal compiled and embedded, CPU smoke |
 | `prima-darwin-amd64` | `macos-15-intel` | CPU |
+| `prima-windows-amd64` | `windows-2025` | CPU, MinGW Makefiles + clang, static toolchain, shipped `libomp.dll` |
 
 These are standard runners, free for public repositories per
 [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 No Dragon build or container is required. The Apple Silicon job must compile
 Metal; the hosted runtime test requests CPU execution, so it does not attest
-GPU execution on consumer hardware. Windows is unsupported and must fail closed.
+GPU execution on consumer hardware. The Windows job builds both roles as
+`prima-windows-amd64.exe` (CLI) and `prima-server-windows-amd64.exe`
+(server) from the carried `win-build` sources (`win_compat.h` shims, winsock
+`network-utils`, `PERFORMANCE_INFORMATION` fix, stubbed disk profiler), links
+the toolchain statically with nng static, and ships the exact compiler
+`libomp.dll` beside the executables. Workflow steps run under Git Bash
+(`WINDOWS_SHELL=bash`), since Windows defaults to PowerShell.
 
 Each native build uploads its compiler dependency inputs, SHA-256 inventory,
-linkage report and CMake cache. The audit requires all four input sets, verifies
+linkage report and CMake cache. The audit requires all five input sets, verifies
 archive contents against their inventories, and scans the combined tree with
 ScanCode 32.5.0. It rejects scanner errors and unreviewed license expressions.
 CycloneDX records reviewed packages and every input file hash. OSV checks the
@@ -71,7 +80,10 @@ license texts/notices and compiler inputs accompany the signed release.
 
 `dependencies.json` records included, excluded and host-system dependencies.
 Compiler and OS runtime libraries are reported by `ldd`/`otool`; they are not
-bundled. The scanners cannot prove the absence of vulnerabilities in a C++
+bundled — except on Windows, where the exact compiler `libomp.dll` the
+MinGW+clang build linked against is staged beside the executables, recorded
+in the compiler-input manifest, and shipped as a signed release asset. The
+scanners cannot prove the absence of vulnerabilities in a C++
 fork or infer all vendored ancestry. Database evidence is time-specific; a
 zero scanner finding must not be described as a complete security proof.
 
@@ -80,17 +92,23 @@ runs single-node inference, the nng multipart/timeout test, and two-rank
 inference with a `1,1` layer split. Every subprocess has a deadline. Linux runs
 unprivileged inside a loopback-only network namespace with outbound syscall
 tracing, including failed attempts. Darwin uses a sandbox allowing only explicit
-loopback ring ports. Both allowlists carry exactly seven loopback ports: the
-three ring-test ports from pinned `common/zmq_nng_shim_test.cpp` — 5599
-(multipart), 5600 (rcvtimeo), 5601 (single-message) — plus the rank-offset
+loopback ring ports. Windows uses a disposable dynamic WFP policy
+(`files/windows-net-guard.c`, compiled on the runner with the same MinGW
+provision) allowlisting exactly the same loopback ports for the exercise
+processes — WFP filters loopback traffic, Windows Firewall would not. All
+three enforcement points carry exactly the same allowlist: the
+seven ring-test ports — 5599 (multipart), 5600 (rcvtimeo), 5601
+(single-message), 5602-5605 — plus the rank-offset
 engine ports 19000/19001 (data) and 19100/19101 (signal). Port 5601 was
 missing until candidate -3 run 38414127942, where its denied connect hung the
 Mac ring test and tripped the Linux verdict; non-loopback destinations remain
-denied on both platforms. Enforcement is proven by a positive control whose EPERM
-denial is observed directly in the attempt's own stderr; the unified log is
+denied on all platforms. Enforcement is proven by a positive control whose
+denial is observed directly in the attempt's own output — EPERM on Darwin,
+WSAEACCES plus UDP delivery/denial proofs on Windows; the unified log is
 not a reliable sandbox observer (hosted macos-15 run 38411861522 recorded no
 denial there), so its absence neither passes nor fails the gate, while any
-observed engine denial — EPERM in the engine log or a unified-log match —
+observed engine denial — EPERM in the engine log or a unified-log match on
+Darwin, WSAEACCES past the guard marker on Windows —
 fails the job. Engine or ring failure under the deny profile also fails the
 job. Every Linux failure path reprints the buffered `*-egress.txt` evidence
 to the step log before exiting, and the workflow uploads that file with
@@ -99,21 +117,24 @@ and in the per-leg artifact (Linux legs of the same run left neither).
 Unsigned build outputs still upload on success only, and signing still waits
 on every gate. This is bounded scenario evidence, not all-path coverage.
 
-Only after pin, all four builds/no-egress tests and the audit pass does the
+Only after pin, all five builds/no-egress tests and the audit pass does the
 release job sign every file and SHA256SUMS keylessly, self-verify the exact
 identity/issuer, attest checksums and publish. Neither the source tag nor these
 local tests are signing evidence.
 
 ## Consumer contract
 
-Candidate release tag: `bashy-bashy-prima-0.1.1-1`. The doubled `bashy`
+Candidate release tag: `bashy-bashy-prima-0.1.2-2` (`-1` predates the Windows
+leg). The doubled `bashy`
 preserves the shared `bashy-<source-tag>-N` convention. The source tag and
 artifact tag are distinct; the latter points to the reviewed generated
 `bashy-build` tree, not the source commit.
 
 For a reviewed release tag `T`:
 
-- Repository: `qiangli/prima.cpp`; files are the four raw executables above.
+- Repository: `qiangli/prima.cpp`; files are the eight unix raw executables
+  above plus `prima-windows-amd64.exe`, `prima-server-windows-amd64.exe`
+  and `libomp.dll`.
 - Exact certificate identity:
   `https://github.com/qiangli/prima.cpp/.github/workflows/bashy-build.yml@refs/tags/T`.
 - Exact issuer: `https://token.actions.githubusercontent.com`.

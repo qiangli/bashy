@@ -37,6 +37,16 @@ defaults:
   run:
     shell: bash
 #@@END@@
+#@@IFEQ WINDOWS_SHELL bash@@
+
+# Windows' default is PowerShell; the native build and gate scripts need Git Bash.
+# (TOOL ollama keeps its own block above; this one serves tools that declare
+# WINDOWS_SHELL=bash instead. A tool matching both would render duplicate keys,
+# so declare at most one of the two.)
+defaults:
+  run:
+    shell: bash
+#@@END@@
 
 concurrency:
   group: bashy-build-${{ github.ref }}

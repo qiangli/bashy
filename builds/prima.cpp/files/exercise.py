@@ -78,6 +78,22 @@ def _drain(label, pipe, path, stats, lock, kill):
                 stats[label]['pump_error'] = error
 
 
+def _kill_peer(peer):
+    """Terminate one rank's process group (POSIX) or process (Windows).
+
+    os.killpg does not exist on Windows; the exercise never spawns
+    grandchildren, so terminating the process itself is equivalent there.
+    """
+    killpg = getattr(os, 'killpg', None)
+    try:
+        if killpg is None:
+            peer.kill()
+        else:
+            killpg(peer.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass  # already exited; the monitor below still fails closed
+
+
 def _over_limit(peers, stats, lock):
     with lock:
         return [label for label, _, _, _ in peers if stats[label]['exceeded']]
@@ -99,10 +115,7 @@ def run_stage(name, commands, timeout, evaluation=None):
                                         start_new_session=True)
 
                 def kill(peer=peer):
-                    try:
-                        os.killpg(peer.pid, signal.SIGKILL)
-                    except (ProcessLookupError, PermissionError):
-                        pass  # already exited; the monitor below still fails closed
+                    _kill_peer(peer)
 
                 pump = threading.Thread(target=_drain,
                                         args=(label, peer.stdout, path, stats, lock, kill),
@@ -161,10 +174,7 @@ def run_stage(name, commands, timeout, evaluation=None):
                       flush=True)
             for label, peer, path, pump in peers:
                 if peer.poll() is None:
-                    try:
-                        os.killpg(peer.pid, signal.SIGKILL)
-                    except (ProcessLookupError, PermissionError):
-                        pass # exited between poll and kill; still reap below
+                    _kill_peer(peer) # exited between poll and kill; still reap below
                 peer.wait(timeout=5)
                 pump.join(timeout=5)
                 print(f'---- rank={label} final_status={peer.returncode} log ----', flush=True)
