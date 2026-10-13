@@ -102,6 +102,18 @@ jobs:
           - asset: prima-windows-amd64
             runner: windows-2025
     steps:
+      # Windows runners check out with core.autocrlf=true by default, which
+      # rewrites LF to CRLF in the working tree. The prepare/audit gates hash
+      # exact source bytes (e.g. src/LICENSE), so the conversion breaks the
+      # pin on Windows while linux/darwin stay green. Disable it globally
+      # BEFORE either checkout below, so both the fork scripts and the pinned
+      # source land byte-identical on every OS. The hash checks themselves are
+      # unchanged. No-op on non-Windows runners.
+      - name: disable line-ending conversion (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
       - name: checkout bashy-build
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
