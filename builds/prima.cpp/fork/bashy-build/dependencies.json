@@ -1,8 +1,8 @@
 {
   "schema": "bashy-prima-dependencies-v1",
-  "source": {"repository": "qiangli/prima.cpp", "tag": "bashy-prima-0.1.1", "commit": "542d01932a88372a184037c5939048f355dcbd57", "license": "MIT", "classification": "first-party", "decision": "qiangli S436 Story 2029, 2026-10-13"},
+  "source": {"repository": "qiangli/prima.cpp", "tag": "bashy-prima-0.1.2", "commit": "a0d55d961c8fc1b694de63bd0b2aebdb8365cf2b", "license": "MIT", "classification": "first-party", "decision": "qiangli S436 Story 2029, 2026-10-13"},
   "linked": [
-    {"name": "prima.cpp/llama.cpp/ggml", "license": "MIT", "version": "542d01932a88372a184037c5939048f355dcbd57", "purl": "pkg:github/qiangli/prima.cpp@542d01932a88372a184037c5939048f355dcbd57", "scope": "vendored inference core and first-party ring modifications"},
+    {"name": "prima.cpp/llama.cpp/ggml", "license": "MIT", "version": "a0d55d961c8fc1b694de63bd0b2aebdb8365cf2b", "purl": "pkg:github/qiangli/prima.cpp@a0d55d961c8fc1b694de63bd0b2aebdb8365cf2b", "scope": "vendored inference core and first-party ring modifications"},
     {"name": "nng", "license": "MIT", "version": "1.9.0", "commit": "29aff2bacc9e2cfa6dcc52155d2816582617f918", "purl": "pkg:github/nanomsg/nng@v1.9.0", "scope": "static TCP ring; TLS, HTTP, WS and WSS disabled; SHA1 excluded"},
     {"name": "nlohmann/json", "license": "MIT", "version": "3.11.3", "purl": "pkg:github/nlohmann/json@v3.11.3", "scope": "common/json.hpp"}
   ],

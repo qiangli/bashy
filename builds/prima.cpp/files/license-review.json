@@ -1,7 +1,7 @@
 {
   "nng_commit": "29aff2bacc9e2cfa6dcc52155d2816582617f918",
   "nng_license_sha256": "40138c116893285687962cf132b1a9cb545a502d0626f19a9103e34221cd58fd",
-  "source_commit": "542d01932a88372a184037c5939048f355dcbd57",
+  "source_commit": "a0d55d961c8fc1b694de63bd0b2aebdb8365cf2b",
   "source_license_sha256": "0ed0eea0d0f31b7f07774a7cac64f9fd20351faf51fab447e9444734448d0452",
   "shim_sha256": "b66c7bdf7824065cc35911512228b91f04137c064d7d713fa349242446613a56",
   "nng_files": {

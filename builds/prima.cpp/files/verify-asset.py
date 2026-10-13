@@ -10,10 +10,12 @@ import re
 import subprocess
 import sys
 
-ASSETS = {'prima-linux-amd64','prima-linux-arm64','prima-darwin-arm64','prima-darwin-amd64'}
+ASSETS = {'prima-linux-amd64','prima-linux-arm64','prima-darwin-arm64','prima-darwin-amd64',
+          'prima-server-linux-amd64','prima-server-linux-arm64',
+          'prima-server-darwin-arm64','prima-server-darwin-amd64'}
 
 def validate_inputs(tag, asset, sha):
-    if not re.fullmatch(r'bashy-bashy-prima-0\.1\.1-[1-9][0-9]*',tag):
+    if not re.fullmatch(r'bashy-bashy-prima-0\.1\.[12]-[1-9][0-9]*',tag):
         raise ValueError('unexpected release tag')
     if asset not in ASSETS: raise ValueError('unsupported asset')
     if not re.fullmatch('[0-9a-f]{64}',sha): raise ValueError('full pinned SHA-256 required')

@@ -1,5 +1,17 @@
 # Prima first-party verified build
 
+## Sprint 436 service candidate
+
+The current candidate pins first-party source tag `bashy-prima-0.1.2` at
+`a0d55d961c8fc1b694de63bd0b2aebdb8365cf2b`. It builds and signs both
+`prima-OS-ARCH` (CLI worker) and `prima-server-OS-ARCH` (leader API server)
+from the same source and audit input set. The 0.1.2 source carries the reviewed
+Windows ring compatibility changes from the earlier `win-build` branch and the
+server's speculative source dependency. The current matrix still covers Linux
+and macOS; Windows build, signed asset, consumer pin, and live peer evidence
+remain required in Sprint 436 before service acceptance. Existing 0.1.1
+release evidence below remains historical and does not prove the 0.1.2 candidate.
+
 Sprint 436 / #2029 / `17ba375e3318`. This is a CI implementation and artifact
 contract. **Hosted build, audit, no-egress, signing and release evidence are
 pending. No artifact SHA is approved by this commit.**
