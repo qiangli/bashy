@@ -6,8 +6,8 @@ pending. No artifact SHA is approved by this commit.**
 
 ## Reviewed source
 
-`bashy-prima-0.1.0` peels to
-`f4ea9845dc91a18793921492e50ef23ec799e93e` in `qiangli/prima.cpp` (remote tag
+`bashy-prima-0.1.1` peels to
+`542d01932a88372a184037c5939048f355dcbd57` in `qiangli/prima.cpp` (remote tag
 and main checked 2026-10-13). The operator admits this as first-party MIT source;
 the official-upstream-release rule does not apply. The exception is restricted
 in the renderer to this repository and its `bashy-prima-X.Y.Z` source tags.
@@ -18,7 +18,9 @@ The assigned umbrella policy worker records this decision in
 Compared with `1ea4707ea41dd4c89088c9c045d0049907f1d201`, the source includes
 `ca4b56ad` (MIT nng transport shim, atomic multipart forwarding, timeout tests,
 fio failure fallback) and `f4ea9845` (parallel Make dependency ordering).
-The six-file diff was reviewed; the old `shard-binaries` asset is not used.
+The 0.1.1 source adds the bounded two-rank STOP handshake repair merged at
+`542d0193`, including atomic stop state and transport regression tests. The old
+`shard-binaries` asset is not used.
 The root MIT license SHA-256 is
 `0ed0eea0d0f31b7f07774a7cac64f9fd20351faf51fab447e9444734448d0452`.
 
@@ -92,7 +94,7 @@ local tests are signing evidence.
 
 ## Consumer contract
 
-First candidate release tag: `bashy-bashy-prima-0.1.0-1`. The doubled `bashy`
+Candidate release tag: `bashy-bashy-prima-0.1.1-1`. The doubled `bashy`
 preserves the shared `bashy-<source-tag>-N` convention. The source tag and
 artifact tag are distinct; the latter points to the reviewed generated
 `bashy-build` tree, not the source commit.
@@ -140,8 +142,9 @@ Linux amd64 and Darwin arm64, then times out waiting for rank 1. Source review
 found unchecked nonblocking STOP sends after asynchronous nng dial, plus an
 unsynchronized shared stop pointer. See the [diagnosis and required source
 repair](../../docs/plan-prima-two-rank-timeout.md) for exact sites, evidence
-hashes, inference limits and validation. The first-party repair is not applied
-as a producer overlay; the source pin and hosted gate remain red.
+hashes, inference limits and validation. The first-party repair is now pinned
+as source tag `bashy-prima-0.1.1`, not applied as a producer overlay. Hosted build, no-egress and signing evidence
+for `bashy-bashy-prima-0.1.1-1` remain pending.
 
 The producer now reports per-rank configured endpoints, PID, pre-cleanup exit
 status, warmup/evaluation markers, per-rank log-limit evidence

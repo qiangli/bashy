@@ -63,10 +63,55 @@ class CompilerInputs(unittest.TestCase):
                 with self.assertRaises(ValueError): merge.merge(root,root/'result',root/'report.json')
 
 class Contract(unittest.TestCase):
+    def test_source_gate_fails_closed(self):
+        sha='542d01932a88372a184037c5939048f355dcbd57'
+        tag='bashy-bashy-prima-0.1.1-1'
+        with tempfile.TemporaryDirectory() as d:
+            git=Path(d)/'git'
+            git.write_text('#!/bin/sh\n'
+                'case "$3 $4" in\n'
+                ' "rev-parse HEAD") echo "$TEST_HEAD" ;;\n'
+                ' "rev-parse refs/tags/bashy-prima-0.1.1^{commit}")\n'
+                '  [ -n "$TEST_TAG" ] || exit 1; echo "$TEST_TAG" ;;\n'
+                ' "status --porcelain") printf "%s" "$TEST_DIRTY" ;;\n'
+                ' *) exit 99 ;;\nesac\n')
+            git.chmod(0o755)
+            cases=[(sha,sha,'',tag,True,' OK'),
+                   ('0'*40,sha,'',tag,False,'HEAD'),
+                   (sha,'0'*40,'',tag,False,'!= pinned'),
+                   (sha,'','',tag,False,'missing from checkout'),
+                   (sha,sha,' M source.cpp',tag,False,'not pristine'),
+                   (sha,sha,'','bashy-bashy-prima-0.1.0-1',False,'does not build')]
+            for head,source_tag,dirty,release,passes,message in cases:
+                with self.subTest(head=head,source_tag=source_tag,dirty=dirty,release=release):
+                    result=subprocess.run(['/bin/bash',str(ROOT/'fork/bashy-build/verify-pin.sh'),d,release],
+                        env={**os.environ,'PATH':d+':'+os.environ['PATH'],
+                             'TEST_HEAD':head,'TEST_TAG':source_tag,'TEST_DIRTY':dirty},
+                        capture_output=True,text=True,timeout=5)
+                    self.assertEqual(result.returncode==0,passes,result.stderr)
+                    self.assertIn(message,result.stdout+result.stderr)
+
+    def test_source_and_raw_asset_contract(self):
+        declaration=(ROOT/'tool.env').read_text()
+        self.assertEqual(declaration,(ROOT/'fork/bashy-build/PIN').read_text())
+        self.assertIn('UPSTREAM_TAG=bashy-prima-0.1.1\n',declaration)
+        self.assertIn('UPSTREAM_COMMIT=542d01932a88372a184037c5939048f355dcbd57\n',declaration)
+        assets={'prima-linux-amd64','prima-linux-arm64',
+                'prima-darwin-arm64','prima-darwin-amd64'}
+        self.assertEqual(verify.ASSETS,assets)
+        declared=re.search(r'^RELEASE_EXECUTABLES="([^"]+)"$',declaration,re.M)[1]
+        self.assertEqual(set(declared.split()),assets)
+        for asset in assets:
+            verify.validate_inputs('bashy-bashy-prima-0.1.1-1',asset,'a'*64)
+        for tag in ['bashy-bashy-prima-0.1.0-1','bashy-prima-0.1.1',
+                    'bashy-bashy-prima-0.1.1-0','bashy-bashy-prima-0.1.1-1-rc']:
+            with self.assertRaises(ValueError):
+                verify.validate_inputs(tag,'prima-linux-amd64','a'*64)
+
     def test_reject_untrusted_inputs(self):
         for tag,asset,sha in [('main','prima-linux-amd64','a'*64),
-                              ('bashy-bashy-prima-0.1.0-1','../prima','a'*64),
-                              ('bashy-bashy-prima-0.1.0-1','prima-linux-amd64','latest')]:
+                              ('bashy-bashy-prima-0.1.1-1','../prima','a'*64),
+                              ('bashy-bashy-prima-0.1.1-1','prima-linux-amd64','latest')]:
             with self.assertRaises(ValueError): verify.validate_inputs(tag,asset,sha)
 
     def test_signed_checksum_still_requires_consumer_pin(self):
@@ -76,17 +121,25 @@ class Contract(unittest.TestCase):
             (root/asset).write_bytes(data)
             (root/'SHA256SUMS').write_text(f'{sha}  {asset}\n')
             with patch.object(verify.subprocess,'run') as run:
-                verify.verify(root,'bashy-bashy-prima-0.1.0-1',asset,sha)
+                verify.verify(root,'bashy-bashy-prima-0.1.1-1',asset,sha)
                 self.assertEqual(run.call_count,2)
                 self.assertIn('--certificate-identity',run.call_args.args[0])
-                with self.assertRaises(ValueError): verify.verify(root,'bashy-bashy-prima-0.1.0-1',asset,'0'*64)
+                for call in run.call_args_list:
+                    args=call.args[0]
+                    self.assertEqual(args[args.index('--certificate-identity')+1],
+                        'https://github.com/qiangli/prima.cpp/.github/workflows/bashy-build.yml'
+                        '@refs/tags/bashy-bashy-prima-0.1.1-1')
+                    self.assertEqual(args[args.index('--certificate-oidc-issuer')+1],
+                                     'https://token.actions.githubusercontent.com')
+                    self.assertTrue(call.kwargs['check'])
+                with self.assertRaises(ValueError): verify.verify(root,'bashy-bashy-prima-0.1.1-1',asset,'0'*64)
                 (root/'SHA256SUMS').write_text(f'{sha}  {asset}\n'*2)
-                with self.assertRaises(ValueError): verify.verify(root,'bashy-bashy-prima-0.1.0-1',asset,sha)
+                with self.assertRaises(ValueError): verify.verify(root,'bashy-bashy-prima-0.1.1-1',asset,sha)
 
     def test_signature_failure_stops_verification(self):
         with tempfile.TemporaryDirectory() as d, patch.object(verify.subprocess,'run',side_effect=subprocess.CalledProcessError(1,'cosign')):
             with self.assertRaises(subprocess.CalledProcessError):
-                verify.verify(Path(d),'bashy-bashy-prima-0.1.0-1','prima-linux-amd64','a'*64)
+                verify.verify(Path(d),'bashy-bashy-prima-0.1.1-1','prima-linux-amd64','a'*64)
 
     def test_first_party_exception_is_narrow(self):
         text=(ROOT.parent/'render.sh').read_text()
