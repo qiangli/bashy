@@ -140,15 +140,17 @@ MINGW*|MSYS*)
     echo 'native gate requires a GitHub-hosted runner' >&2; exit 1;
   }
   case $(hostname | tr '[:upper:]' '[:lower:]') in *dragon*) echo 'Dragon native gate prohibited' >&2; exit 1;; esac
-  for tool in gcc python3; do command -v "$tool" >/dev/null || { echo "missing $tool" >&2; exit 1; }; done
+  command -v python3 >/dev/null || { echo 'missing python3' >&2; exit 1; }
   [[ $asset == prima-windows-amd64 ]] || { echo "unsupported Windows asset: $asset" >&2; exit 1; }
   binexe=$bin.exe
   [[ -f $binexe ]] || { echo "missing Windows CLI executable: $binexe" >&2; exit 1; }
   ringexe=$(pwd)/build/bin/prima-ring-test.exe
   [[ -f $ringexe ]] || { echo "missing Windows ring test: $ringexe" >&2; exit 1; }
-  # Compile only on the hosted Windows image, using the same MinGW provision
-  # as the build leg.
-  gcc -std=c11 -Wall -Wextra -Werror -municode "$here/windows-net-guard.c" \
+  # Compile only on the hosted Windows image, using the verified MinGW clang
+  # from the build leg (windows-compilers.py): no bare gcc, which names no
+  # pinned package in the CLANG64 provision.
+  cc=${BASHY_WINDOWS_CC:?verified Windows C compiler missing (windows-compilers.py)}
+  "$cc" -std=c11 -Wall -Wextra -Werror -municode "$here/windows-net-guard.c" \
     -o "$work/net-guard.exe" -lfwpuclnt -lws2_32 -lrpcrt4
   # Native paths for CreateProcess and WFP app-id filtering.
   pyexe=$(python3 -c 'import sys; print(sys.executable)')

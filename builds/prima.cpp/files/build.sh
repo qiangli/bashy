@@ -15,13 +15,17 @@ esac
 openmp=OFF
 if $windows; then
   # Native MinGW-target clang pair, discovered by windows-compilers.py in the
-  # setup step. No fallback compiler: the recipe is MinGW Makefiles + clang.
-  [[ -n ${BASHY_WINDOWS_CC:-} && -n ${BASHY_WINDOWS_CXX:-} ]] ||
+  # setup step. No fallback compiler and no PATH-resolved build tools: the
+  # recipe is MinGW Makefiles + clang + the pinned mingw32-make.exe, all
+  # handed in as BASHY_WINDOWS_* paths (run 38466935835: the make package
+  # installs mingw32-make.exe, never make.exe).
+  [[ -n ${BASHY_WINDOWS_CC:-} && -n ${BASHY_WINDOWS_CXX:-} && -n ${BASHY_WINDOWS_MAKE:-} ]] ||
     { echo 'verified Windows clang pair missing (windows-compilers.py)' >&2; exit 1; }
   openmp=ON
-  cmake -S "$src" -B build -G 'MinGW Makefiles' -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  "${BASHY_WINDOWS_CMAKE:-cmake}" -S "$src" -B build -G 'MinGW Makefiles' -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
     -DCMAKE_C_COMPILER="$BASHY_WINDOWS_CC" -DCMAKE_CXX_COMPILER="$BASHY_WINDOWS_CXX" \
+    -DCMAKE_MAKE_PROGRAM="$BASHY_WINDOWS_MAKE" \
     -DCMAKE_EXE_LINKER_FLAGS=-static \
     -DGGML_NATIVE=OFF -DGGML_METAL=OFF \
     -DGGML_CUDA=OFF -DGGML_HIPBLAS=OFF -DGGML_VULKAN=OFF -DGGML_SYCL=OFF -DGGML_RPC=OFF -DGGML_KOMPUTE=OFF \
@@ -52,8 +56,11 @@ if $windows; then
   # refuse unreviewed third-party runtime dependencies; the system-DLL set
   # itself is recorded, not allowlisted, so a new Windows SDK import cannot
   # silently pass as reviewed.
-  objdump=$(command -v objdump || command -v llvm-objdump) ||
-    { echo 'no objdump/llvm-objdump for DLL import evidence' >&2; exit 1; }
+  # The DLL-import evidence tool is the pinned clang64/bin/llvm-objdump.exe
+  # (package mingw-w64-clang-x86_64-llvm-tools), handed in by
+  # windows-compilers.py: no PATH-resolved objdump, whose name and target
+  # vary across the MSYS2 shells.
+  objdump=${BASHY_WINDOWS_OBJDUMP:?verified LLVM objdump missing (windows-compilers.py)}
   : >"out/$asset-dlls.txt"
   for binary in "out/$asset.exe" "out/$server_asset.exe"; do
     echo "== $binary ==" >>"out/$asset-dlls.txt"
@@ -64,9 +71,15 @@ if $windows; then
     echo 'unexpected Windows dynamic dependency' >&2; exit 1
   fi
   # Ship the exact compiler OpenMP runtime the exes were built against.
+  # windows-compilers.py already refused a toolchain without
+  # clang64/bin/libomp.dll (pinned package
+  # mingw-w64-clang-x86_64-llvm-openmp), so the first candidate always hits.
+  # No C:/msys64 literal: the hosted MSYS2 root arrives as MSYS2_LOCATION
+  # (run 38466935835: D:\a\_temp\msys64) and differs per run, so every
+  # candidate is rooted at the verified compiler paths.
   cc_dir=$(dirname "$BASHY_WINDOWS_CC")
   omp_dll=''
-  for dir in "$cc_dir" "$cc_dir/../lib" "$cc_dir/../bin" 'C:/msys64/clang64/bin' 'C:/msys64/mingw64/bin'; do
+  for dir in "$cc_dir" "${BASHY_MINGW_ROOT:-$cc_dir/..}/bin"; do
     if [[ -f $dir/libomp.dll ]]; then omp_dll=$dir/libomp.dll; break; fi
   done
   [[ -n $omp_dll ]] || { echo 'libomp.dll not found beside the verified clang' >&2; exit 1; }

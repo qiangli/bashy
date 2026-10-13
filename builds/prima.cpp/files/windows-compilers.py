@@ -10,6 +10,18 @@ in <msys2-location>/clang64/bin (wired from the setup-msys2 step output via
 the MSYS2_LOCATION environment variable, defaulting to C:/msys64), demands
 the gnu triple, MinGW target macros and no _MSC_VER, and refuses to install
 or cross-compile.
+
+CI run 38466935835 failed one step later in this same probe: the MSYS2
+package mingw-w64-clang-x86_64-make installs mingw32-make.exe, NOT
+make.exe, so requiring clang64/bin/make.exe can never pass. The pinned
+build tool is therefore clang64/bin/mingw32-make.exe, handed to CMake as
+CMAKE_MAKE_PROGRAM under the MinGW Makefiles generator. The same audit
+added the packages that own the other Windows-leg names the later steps
+need: mingw-w64-clang-x86_64-llvm-openmp owns clang64/bin/libomp.dll (the
+shipped OpenMP runtime; it is not a runtime dependency of the clang
+package, so it must be installed explicitly) and
+mingw-w64-clang-x86_64-llvm-tools owns clang64/bin/llvm-objdump.exe
+(the DLL-import evidence tool).
 """
 import json
 import os
@@ -23,7 +35,16 @@ MSYSTEM = 'CLANG64'
 # Explicit install set, kept in sync with builds/prima.cpp/setup.yml.
 PACKAGES = ('mingw-w64-clang-x86_64-clang', 'mingw-w64-clang-x86_64-compiler-rt',
             'mingw-w64-clang-x86_64-lld', 'mingw-w64-clang-x86_64-cmake',
-            'mingw-w64-clang-x86_64-make', 'mingw-w64-clang-x86_64-ninja')
+            'mingw-w64-clang-x86_64-make', 'mingw-w64-clang-x86_64-ninja',
+            'mingw-w64-clang-x86_64-llvm-openmp',
+            'mingw-w64-clang-x86_64-llvm-tools')
+# Pinned CMake generator and the exact executable names the pinned packages
+# install into clang64/bin. The make package installs mingw32-make.exe
+# (never make.exe); the llvm-tools package installs llvm-objdump.exe.
+GENERATOR = 'MinGW Makefiles'
+TOOLS = {'cmake': 'cmake.exe', 'make': 'mingw32-make.exe',
+         'ninja': 'ninja.exe', 'objdump': 'llvm-objdump.exe'}
+OMP_DLL = 'libomp.dll'
 
 
 def probe(cc, cxx):
@@ -88,15 +109,22 @@ def find_toolchain():
 
 
 def tool_versions(directory):
+    # Every build tool is required under its exact pinned executable name:
+    # run 38466935835 proved a bare 'make.exe' assumption fails the leg,
+    # and the DLL evidence and OpenMP shipping steps need their own pinned
+    # names just as much. No PATH lookup: only clang64/bin counts.
     versions = {}
-    for name in ('cmake', 'make', 'ninja'):
-        tool = directory / (name + '.exe')
+    for name, exe in TOOLS.items():
+        tool = directory / exe
         if not tool.is_file():
-            if name != 'ninja':
-                raise ValueError(f'pinned toolchain is missing {tool}')
-            continue
+            raise ValueError(f'pinned toolchain is missing {tool}')
         out = subprocess.check_output([str(tool), '--version'], text=True).strip()
-        versions[name] = dict(path=str(tool.resolve()), version=out.splitlines()[0] if out else '')
+        versions[name] = dict(path=str(tool.resolve()), exe=exe,
+                              version=out.splitlines()[0] if out else '')
+    omp = directory / OMP_DLL
+    if not omp.is_file():
+        raise ValueError(f'pinned toolchain is missing {omp}')
+    versions['openmp_runtime'] = dict(path=str(omp.resolve()), exe=OMP_DLL)
     try:
         listing = subprocess.check_output(['pacman', '-Q', *PACKAGES],
                                           text=True, stderr=subprocess.DEVNULL).strip()
@@ -120,6 +148,8 @@ def main():
     toolchain = {'schema': 'bashy-prima-windows-toolchain-v1',
                  'target': TARGET, 'msystem': MSYSTEM,
                  'setup_action': SETUP_ACTION, 'packages': list(PACKAGES),
+                 'generator': GENERATOR,
+                 'make_program': versions['make']['path'],
                  'compilers': records, 'tools': versions}
     Path('out').mkdir(exist_ok=True)
     Path('out/windows-compiler-identity.json').write_text(json.dumps(records, indent=2) + '\n')
@@ -129,10 +159,8 @@ def main():
     with open(os.environ['GITHUB_ENV'], 'a') as f:
         f.write('BASHY_WINDOWS_CC=' + records[0]['path'] + '\n')
         f.write('BASHY_WINDOWS_CXX=' + records[1]['path'] + '\n')
-        for name in ('cmake', 'make'):
-            tool = directory / (name + '.exe')
-            if tool.is_file():
-                f.write(f'BASHY_WINDOWS_{name.upper()}=' + str(tool) + '\n')
+        for name in ('cmake', 'make', 'ninja', 'objdump'):
+            f.write(f'BASHY_WINDOWS_{name.upper()}=' + versions[name]['path'] + '\n')
         f.write('BASHY_MINGW_ROOT=' + str(directory.parent) + '\n')
         f.write('BASHY_TOOLCHAIN_JSON=' + str(Path('out/windows-toolchain.json').resolve()) + '\n')
 

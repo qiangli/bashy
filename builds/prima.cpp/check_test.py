@@ -582,7 +582,9 @@ class WindowsTarget(unittest.TestCase):
         self.assertIn('msystem: CLANG64',setup)
         for package in ['mingw-w64-clang-x86_64-clang','mingw-w64-clang-x86_64-compiler-rt',
                         'mingw-w64-clang-x86_64-lld','mingw-w64-clang-x86_64-cmake',
-                        'mingw-w64-clang-x86_64-make','mingw-w64-clang-x86_64-ninja']:
+                        'mingw-w64-clang-x86_64-make','mingw-w64-clang-x86_64-ninja',
+                        'mingw-w64-clang-x86_64-llvm-openmp',
+                        'mingw-w64-clang-x86_64-llvm-tools']:
             self.assertIn(package,setup)
         self.assertLess(setup.index('provision pinned MinGW clang toolchain'),
                         setup.index('native Windows MinGW + clang compilers'))
@@ -609,6 +611,13 @@ class WindowsTarget(unittest.TestCase):
         for package in module.PACKAGES:
             self.assertIn(package,setup)
         self.assertEqual(windows['generator'],'MinGW Makefiles')
+        self.assertEqual(windows['generator'],module.GENERATOR)
+        self.assertEqual(windows['make_program'],'clang64/bin/mingw32-make.exe')
+        self.assertEqual(windows['objdump'],'clang64/bin/llvm-objdump.exe')
+        self.assertEqual(windows['openmp_runtime'],'clang64/bin/libomp.dll')
+        self.assertEqual(module.TOOLS['make'],'mingw32-make.exe')
+        self.assertEqual(module.TOOLS['objdump'],'llvm-objdump.exe')
+        self.assertEqual(module.OMP_DLL,'libomp.dll')
 
     def test_build_uses_mingw_clang_static_with_shipped_omp(self):
         script=(ROOT/'files/build.sh').read_text()
@@ -829,6 +838,148 @@ class WindowsCompilerSelection(unittest.TestCase):
         self.assertIn('id: msys2', workflow)
         self.assertIn('steps.msys2.outputs.msys2-location', workflow)
         self.assertIn('MSYS2_LOCATION', workflow)
+
+class WindowsPinnedBuildTools(unittest.TestCase):
+    # Run 38466935835: the probe required clang64/bin/make.exe, but the
+    # MSYS2 package mingw-w64-clang-x86_64-make installs mingw32-make.exe.
+    # The pinned build tool is mingw32-make.exe (CMAKE_MAKE_PROGRAM under
+    # MinGW Makefiles); the same audit pinned llvm-objdump.exe
+    # (mingw-w64-clang-x86_64-llvm-tools) for the DLL evidence step and
+    # libomp.dll (mingw-w64-clang-x86_64-llvm-openmp) for the shipped
+    # runtime, and rooted every later Windows step at those verified paths
+    # instead of PATH-resolved names or a C:/msys64 literal.
+    def _module(self):
+        spec = importlib.util.spec_from_file_location(
+            'windows_compilers', ROOT/'files/windows-compilers.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def _clang64(self, root, triple='x86_64-w64-windows-gnu', tools=('cmake.exe', 'mingw32-make.exe', 'ninja.exe', 'llvm-objdump.exe'), omp=True):
+        macros = ('"#define __clang__ 1" "#define __MINGW64__ 1" '
+                  '"#define __x86_64__ 1" "#define __SIZEOF_POINTER__ 8" '
+                  '"#define __cplusplus 202002L"')
+        for name in ('clang.exe', 'clang++.exe'):
+            script = root/name
+            script.write_text('#!/bin/sh\n'
+                              f'if [ "$1" = -dumpmachine ]; then echo "{triple}"; exit 0; fi\n'
+                              'if [ "$1" = --version ]; then echo "clang version 19.1.7"; exit 0; fi\n'
+                              f'printf "%s\\n" {macros}\n')
+            script.chmod(0o755)
+        for name in tools:
+            tool = root/name
+            tool.write_text('#!/bin/sh\necho "fixture 1.0"\n')
+            tool.chmod(0o755)
+        if omp:
+            (root/'libomp.dll').write_bytes(b'fixture')
+
+    def test_make_exe_alone_is_not_accepted(self):
+        # The 38466935835 layout has mingw32-make.exe but no make.exe;
+        # conversely, a bare make.exe must never satisfy the probe. The
+        # refusal names the pinned executable.
+        module = self._module()
+        with tempfile.TemporaryDirectory() as d:
+            clang64 = Path(d)/'clang64'/'bin'
+            clang64.mkdir(parents=True)
+            self._clang64(clang64, tools=('cmake.exe', 'make.exe', 'ninja.exe', 'llvm-objdump.exe'))
+            with self.assertRaisesRegex(ValueError, r'mingw32-make\.exe'):
+                module.tool_versions(clang64)
+
+    def test_pinned_tool_set_passes_and_records_exe_names(self):
+        module = self._module()
+        with tempfile.TemporaryDirectory() as d:
+            clang64 = Path(d)/'clang64'/'bin'
+            clang64.mkdir(parents=True)
+            self._clang64(clang64)
+            versions = module.tool_versions(clang64)
+            pinned = clang64.resolve()
+            self.assertEqual(versions['make']['exe'], 'mingw32-make.exe')
+            self.assertEqual(versions['objdump']['exe'], 'llvm-objdump.exe')
+            self.assertEqual(versions['openmp_runtime']['exe'], 'libomp.dll')
+            for key in ('cmake', 'make', 'ninja', 'objdump'):
+                self.assertEqual(Path(versions[key]['path']).parent, pinned)
+            self.assertEqual(Path(versions['openmp_runtime']['path']).parent, pinned)
+            self.assertEqual(versions['pacman'], 'unavailable')
+
+    def test_missing_objdump_or_omp_runtime_fails_closed(self):
+        module = self._module()
+        with tempfile.TemporaryDirectory() as d:
+            clang64 = Path(d)/'clang64'/'bin'
+            clang64.mkdir(parents=True)
+            self._clang64(clang64, tools=('cmake.exe', 'mingw32-make.exe', 'ninja.exe'))
+            with self.assertRaisesRegex(ValueError, r'llvm-objdump\.exe'):
+                module.tool_versions(clang64)
+            self._clang64(clang64)
+            (clang64/'libomp.dll').unlink()
+            with self.assertRaisesRegex(ValueError, r'libomp\.dll'):
+                module.tool_versions(clang64)
+
+    def test_probe_records_generator_and_make_program(self):
+        module = self._module()
+        with tempfile.TemporaryDirectory() as msys, tempfile.TemporaryDirectory() as work:
+            clang64 = Path(msys)/'clang64'/'bin'
+            clang64.mkdir(parents=True)
+            self._clang64(clang64)
+            path_file, env_file = Path(work)/'path', Path(work)/'env'
+            path_file.write_text('')
+            env_file.write_text('')
+            old = {key: os.environ.get(key) for key in
+                   ('PATH', module.MSYS2_LOCATION_ENV, 'GITHUB_PATH', 'GITHUB_ENV')}
+            os.environ[module.MSYS2_LOCATION_ENV] = msys
+            os.environ['GITHUB_PATH'] = str(path_file)
+            os.environ['GITHUB_ENV'] = str(env_file)
+            cwd = Path.cwd()
+            try:
+                os.chdir(work)
+                module.main()
+            finally:
+                os.chdir(cwd)
+                for key, value in old.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+            toolchain = json.loads((Path(work)/'out'/'windows-toolchain.json').read_text())
+            pinned = clang64.resolve()
+            self.assertEqual(toolchain['generator'], 'MinGW Makefiles')
+            self.assertEqual(toolchain['make_program'], str(pinned/'mingw32-make.exe'))
+            env = env_file.read_text()
+            for var, exe in [('BASHY_WINDOWS_CMAKE', 'cmake.exe'),
+                             ('BASHY_WINDOWS_MAKE', 'mingw32-make.exe'),
+                             ('BASHY_WINDOWS_NINJA', 'ninja.exe'),
+                             ('BASHY_WINDOWS_OBJDUMP', 'llvm-objdump.exe')]:
+                self.assertIn(f'{var}={pinned}', env)
+                self.assertIn(exe, env)
+
+    def test_build_pins_make_program_and_verified_tools(self):
+        script = (ROOT/'files/build.sh').read_text()
+        self.assertIn('-DCMAKE_MAKE_PROGRAM="$BASHY_WINDOWS_MAKE"', script)
+        self.assertIn('"${BASHY_WINDOWS_CMAKE:-cmake}" -S "$src" -B build', script)
+        self.assertIn('objdump=${BASHY_WINDOWS_OBJDUMP:?', script)
+        self.assertNotIn('command -v objdump', script)
+        self.assertNotIn('command -v llvm-objdump', script)
+        # The hosted MSYS2 root is per-run (D:\a\_temp\msys64 in run
+        # 38466935835): no quoted install-root path may survive (comments
+        # may still name the old literal as history).
+        self.assertNotIn("'C:/msys64", script)
+        self.assertNotIn('"C:/msys64', script)
+        self.assertIn('BASHY_MINGW_ROOT', script)
+
+    def test_no_egress_gate_compiles_guard_with_verified_clang(self):
+        script = (ROOT/'files/no-egress-test.sh').read_text()
+        windows = script[script.index('MINGW*|MSYS*)'):]
+        self.assertIn('cc=${BASHY_WINDOWS_CC:?', windows)
+        self.assertIn('"$cc" -std=c11', windows)
+        self.assertIn('-lfwpuclnt -lws2_32 -lrpcrt4', windows)
+        for line in windows.splitlines():
+            stripped = line.lstrip()
+            self.assertFalse(stripped.startswith('gcc '), line)
+
+    def test_rendered_workflow_installs_all_pinned_packages(self):
+        module = self._module()
+        workflow = (ROOT/'fork/.github/workflows/bashy-build.yml').read_text()
+        for package in module.PACKAGES:
+            self.assertIn(package, workflow)
 
 class CollectInputsDepfiles(unittest.TestCase):
     def _module(self):
