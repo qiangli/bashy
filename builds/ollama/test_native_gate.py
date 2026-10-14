@@ -138,6 +138,31 @@ class NativeContract(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'escaped'):
                 gate.deny_controls(18997)
 
+    def test_deny_controls_avoid_allowlisted_same_port_loopback(self):
+        # Seatbelt expands "localhost" in the (remote ip "localhost:PORT")
+        # allow rule to 127.0.0.1 AND ::1, so a same-port ::1 probe is
+        # policy-allowed (ECONNREFUSED) rather than denied, and a gate that
+        # asserts denial there fails every darwin run (CI run 38503381935).
+        # Every probed loopback endpoint must be a wrong-port one the
+        # profile actually denies, on both families.
+        seen = []
+        def connect(self, address):
+            seen.append(('connect', address))
+            raise PermissionError(1, 'denied')
+        def sendto(self, data, address):
+            seen.append(('sendto', address))
+            raise PermissionError(1, 'denied')
+        with patch.object(socket.socket, 'connect', connect), \
+             patch.object(socket.socket, 'sendto', sendto):
+            gate.deny_controls(18997)
+        self.assertTrue(seen)
+        for _, address in seen:
+            host, remote = address
+            if host in ('127.0.0.1', '::1'):
+                self.assertNotEqual(remote, 18997)
+        self.assertIn(('connect', ('::1', 18998)), seen)
+        self.assertIn(('connect', ('127.0.0.1', 18998)), seen)
+
     def test_embedding_rejects_empty_zero_nan_and_wrong_types(self):
         for vector in [[], [0, 0], [float('nan')], [float('inf')], ['1'], [True]]:
             with self.subTest(vector=vector), self.assertRaises(RuntimeError):

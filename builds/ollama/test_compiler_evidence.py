@@ -103,7 +103,46 @@ class Evidence(unittest.TestCase):
         self.assertIn('needs: [pin, build, audit]', workflow)
         self.assertNotIn('continue-on-error:', workflow)
         upload = workflow.split('- name: upload unsigned build outputs')[1].split('- name:', 1)[0]
-        self.assertNotIn('always()', upload)
+        self.assertIn('if: always()', upload)
+
+    def test_persist_shared_blob_under_parallel_writers(self):
+        # Parallel cgo compilations snapshot identical headers at once and
+        # race on one blob name. Every writer must land the exact bytes with
+        # no temp-file litter, and a complete blob must be reused in place.
+        import concurrent.futures
+        with tempfile.TemporaryDirectory() as td:
+            store = Path(td)
+            content = b'parallel header bytes'
+            digest = hashlib.sha256(content).hexdigest()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+                list(pool.map(lambda _: evidence._persist(store, digest, content), range(32)))
+            self.assertEqual((store / digest).read_bytes(), content)
+            self.assertEqual(sorted(p.name for p in store.iterdir()), [digest])
+            os.utime(store / digest, (0, 0))
+            evidence._persist(store, digest, content)
+            self.assertEqual((store / digest).stat().st_mtime_ns, 0)
+
+    def test_persist_retries_locked_replace_with_backoff(self):
+        # Windows file locking refuses os.replace onto a blob another writer
+        # holds open ([WinError 5]): the store must back off and retry, never
+        # fail the compile on the first locked attempt.
+        with tempfile.TemporaryDirectory() as td:
+            store = Path(td)
+            content = b'locked blob bytes'
+            digest = hashlib.sha256(content).hexdigest()
+            calls = []
+            real_replace = os.replace
+            def flaky(src, dst):
+                calls.append((src, dst))
+                if len(calls) == 1:
+                    raise PermissionError(13, 'denied')
+                return real_replace(src, dst)
+            with patch.object(os, 'replace', side_effect=flaky):
+                with patch('time.sleep') as nap:
+                    evidence._persist(store, digest, content)
+            self.assertEqual((store / digest).read_bytes(), content)
+            self.assertEqual(len(calls), 2)
+            nap.assert_called_once()
 
     def test_portable_origin_is_narrow(self):
         roots = {'BASHY_COMPILER_SOURCE': 'C:/src', 'BASHY_COMPILER_TMP': 'C:/temp/private',

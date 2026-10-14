@@ -42,6 +42,22 @@ upstream dispatcher engines and their cgo inputs. No CUDA/ROCm/Vulkan/MLX
 shared library is bundled or qualified. Optional library loading and CPU ISA
 portability still require native verification.
 
+On Windows only, the recipe exports a required (not caller-selected)
+`CGO_CXXFLAGS=-include cstdlib`: the needed `llama/.../models` package
+(`llama-graph.h` via llamarunner) calls `getenv`/`atoi` without including
+`<cstdlib>`, which MinGW clang in strict C++17 rejects while glibc/libc++
+provide transitively. The header is force-included through toolchain flags
+because editing the source would trip the pristine-tree pin gate; no upstream
+byte changes.
+
+The Darwin `no-egress` denial controls probe wrong-port loopback endpoints
+only: Seatbelt expands `localhost` in the
+`(remote ip "localhost:PORT")` allow rule to both 127.0.0.1 and ::1, so a
+same-port ::1 probe is policy-allowed (connection refused) rather than
+denied. Any gate failure prints the verdict and the captured evidence to the
+step log via a fail-loud exit trap, and all evidence uploads run under
+`if: always()`.
+
 ## Signed release artifact contract
 
 For each `runner-OS-ARCH`, require:

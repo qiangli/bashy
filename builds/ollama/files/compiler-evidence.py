@@ -92,19 +92,58 @@ def origin(path, environment=None):
     raise ValueError(f'unreviewed external native compiler dependency: {path}')
 
 
+def _persist(store, digest, content):
+    """Copy content bytes into the content-addressed store.
+
+    Parallel cgo compilations snapshot identical headers at once, so
+    concurrent writers race on the same blob name (same digest means same
+    bytes). Windows file locking refuses an atomic replace onto a blob that
+    another writer still holds open ([WinError 5] Access is denied), so never
+    a bare os.replace onto an existing or locked path: fast-path a blob that
+    is already complete, otherwise copy to a private temp file and retry the
+    atomic replace with backoff until the lock clears.
+    """
+    import tempfile
+    import time
+    blob = store / digest
+    try:
+        if blob.is_file() and blob.stat().st_size == len(content):
+            return
+    except OSError:
+        pass
+    fd, pending = tempfile.mkstemp(dir=store)
+    try:
+        with os.fdopen(fd, 'wb') as f:
+            f.write(content)
+        delay = 0.05
+        for _ in range(12):
+            try:
+                if blob.is_file() and blob.stat().st_size == len(content):
+                    return  # a racing writer stored these exact bytes first
+            except OSError:
+                pass
+            try:
+                os.replace(pending, blob)
+                return
+            except PermissionError:
+                time.sleep(delay)
+                delay = min(delay * 2, 2.0)
+        # Bounded wait over: one last replace surfaces the real error.
+        os.replace(pending, blob)
+    finally:
+        try:
+            os.unlink(pending)
+        except OSError:
+            pass
+
+
 def snapshot(depfile, store):
     rows = []
     for name in dependencies(depfile):
         path = Path(name).resolve()  # compiler's cwd, never the repository root
         content = path.read_bytes()
         digest = hashlib.sha256(content).hexdigest()
-        blob = store / digest
-        # Atomic replacement avoids concurrent writers truncating a shared blob.
-        import tempfile
-        with tempfile.NamedTemporaryFile(dir=store, delete=False) as f:
-            f.write(content)
-            pending = f.name
-        os.replace(pending, blob)
+        _persist(store, digest, content)
         category, relative = origin(path)
         rows.append(dict(path=str(path), name=name, origin=category, relative=relative, sha256=digest))
     if not rows:

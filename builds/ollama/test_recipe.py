@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -258,6 +259,24 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
                     str(out / data["executable"]), str(out / "again.gz"), str(out / "again.json"),
                     data["target"], data["upstream_commit"], "1.27.2")
                 self.assertEqual(gz, (out / "again.gz").read_bytes())
+        # Windows must never resolve a stock gcc/g++/clang: lab hosts and
+        # minimal images have no GCC on PATH, and the verified MinGW clang
+        # pair is the only compiler the recipe may use there. A PATH with
+        # every other tool but no stock compiler must still build.
+        lean = self.root / "lean-bin"
+        lean.mkdir()
+        for tool, target in [("go", mock / "go"), ("python3", Path(sys.executable)),
+                             ("bash", Path(shutil.which("bash"))),
+                             ("git", Path(shutil.which("git"))),
+                             ("cygpath", mock / "cygpath")]:
+            (lean / tool).symlink_to(target)
+        for tool in ("mkdir", "mktemp", "rm", "grep", "awk", "sort", "cat", "dirname"):
+            (lean / tool).symlink_to(shutil.which(tool))
+        lean_env = dict(env, PATH=str(lean), TEST_HOST="windows/amd64")
+        lean_out = self.root / "windows-lean"
+        run(str(lean / "bash"), str(self.helpers / "build-runner.sh"),
+            str(src), str(lean_out), "runner-windows-amd64", env=lean_env)
+        self.assertTrue((lean_out / "runner-windows-amd64.exe").is_file())
         env["TEST_HOST"] = "linux/amd64"
         p = run("bash", str(self.helpers / "build-runner.sh"), str(src), str(self.root / "bad"),
                 "runner-windows-amd64", env=env, ok=False)
