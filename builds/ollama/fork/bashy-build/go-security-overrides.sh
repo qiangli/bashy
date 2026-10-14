@@ -8,7 +8,9 @@
 # go list / go build / go-licenses / SBOM / govulncheck reads the module graph,
 # so inputs, deps, SBOM and binaries all reflect the same overridden tree.
 #
-# S436/#2028: golang.org/x/image@v0.47.0. No vuln ignore list.
+# S436/#2028: nine x/* modules at their MVS-selected versions plus
+# github.com/buger/jsonparser@v1.1.2 (GO-2026-4514). The one OSV waiver
+# (GO-2026-5932) lives in vuln-ignore for the audit job's OSV gate.
 #
 # Gate (not `go get` itself) is what makes this safe: afterwards go.mod may
 # differ ONLY in the require lines of exactly the declared modules, plus the

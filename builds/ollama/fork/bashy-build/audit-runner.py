@@ -372,7 +372,32 @@ def no_findings(report, tool, predicate):
         fail(f"{tool}: unresolved vulnerability findings ({len(found)}); see {report}")
 
 
-def osv(report):
+def vuln_ignored_ids(path=None):
+    # Reviewed OSV waivers live in the vuln-ignore file shipped next to this
+    # script (builds/ollama/files/vuln-ignore): one GO-YYYY-NNNN id per line
+    # with its justification, `#` comments and blank lines allowed. A missing
+    # file waives nothing. A non-comment line whose first token is not an OSV
+    # id fails closed: a waiver file the gate cannot read exactly is refused.
+    sibling = Path(__file__).with_name("vuln-ignore")
+    target = Path(path) if path is not None else sibling
+    try:
+        text = target.read_text()
+    except OSError:
+        return set()
+    ids = set()
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        token = line.split()[0]
+        if not re.fullmatch(r"GO-[0-9]+-[0-9]+", token):
+            fail(f"malformed vuln-ignore entry: {line}")
+        ids.add(token)
+    return ids
+
+
+def osv(report, ignore=None):
+    ignored = vuln_ignored_ids(ignore)
     def findings(data):
         found = []
         def walk(value):
@@ -384,7 +409,9 @@ def osv(report):
             elif isinstance(value, list):
                 for child in value: walk(child)
         walk(data)
-        return found
+        # Exact id match only: a waived id excuses that finding, every other
+        # finding still fails. No prefix, substring or family matching.
+        return [v for v in found if not (isinstance(v, dict) and v.get("id") in ignored)]
     no_findings(report, "OSV-Scanner", findings)
 
 
@@ -453,7 +480,7 @@ def main():
     q = sub.add_parser("compiler-inputs"); q.add_argument("--capture", required=True); q.add_argument("--source", required=True); q.add_argument("--generated", required=True); q.add_argument("--output", required=True)
     q = sub.add_parser("native-licenses"); q.add_argument("--out", required=True); q.add_argument("--review", required=True); q.add_argument("--output", required=True)
     q = sub.add_parser("licenses"); q.add_argument("--report", required=True); q.add_argument("--notices", required=True); q.add_argument("--output", required=True)
-    q = sub.add_parser("osv"); q.add_argument("--report", required=True)
+    q = sub.add_parser("osv"); q.add_argument("--report", required=True); q.add_argument("--ignore", default=None)
     q = sub.add_parser("grype"); q.add_argument("--report", required=True)
     q = sub.add_parser("aggregate-sbom"); q.add_argument("--out", type=Path, required=True)
     q = sub.add_parser("final"); q.add_argument("--out", type=Path, required=True); q.add_argument("--commit", required=True)
@@ -461,7 +488,7 @@ def main():
     {"inventory": lambda: inventory(a.out, a.report), "merge-inputs": lambda: merge_inputs(a.out),
      "compiler-inputs": lambda: compiler_inputs(a.capture, a.source, a.generated, a.output),
      "native-licenses": lambda: review_native_licenses(a.out, a.review, a.output), "licenses": lambda: licenses(a.report, a.notices, a.output),
-     "osv": lambda: osv(a.report), "grype": lambda: grype(a.report), "aggregate-sbom": lambda: aggregate_sbom(a.out), "final": lambda: final(a.out, a.commit)}[a.mode]()
+     "osv": lambda: osv(a.report, a.ignore), "grype": lambda: grype(a.report), "aggregate-sbom": lambda: aggregate_sbom(a.out), "final": lambda: final(a.out, a.commit)}[a.mode]()
 
 
 if __name__ == "__main__":

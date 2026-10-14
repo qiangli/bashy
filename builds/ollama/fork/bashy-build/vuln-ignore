@@ -1,0 +1,16 @@
+# OSV waivers for the bashy ollama verified build.
+#
+# One OSV id per line (GO-YYYY-NNNN), followed by a justification on the same
+# line or in the comment above it. The audit job fails on any OSV finding
+# whose id is not listed here. Matching is by exact id only. An empty list
+# means nothing is waived.
+#
+# A waiver is a review decision, not a convenience: record who accepted it,
+# why the finding cannot be exploited in bashy's configuration, and what
+# would retire it (an upstream pin bump, almost always).
+
+# Deprecated golang.org/x/crypto openpgp package: no fixed version exists,
+# not reachable per govulncheck source mode on all targets. Accepted by
+# s436-manager 2026-10-14. Retire when x/crypto removes openpgp or ollama
+# drops the dependency.
+GO-2026-5932 deprecated package, no fixed version exists, not reachable per govulncheck source mode on all targets, accepted by s436-manager 2026-10-14, retire when x/crypto removes openpgp or ollama drops the dependency

@@ -92,6 +92,32 @@ class AuditPolicy(unittest.TestCase):
             report.write_text(json.dumps({"matches": [{"vulnerability": {"id": "CVE-1"}}]}))
             self.assertIn("findings", self.run_audit("grype", "--report", report, ok=False).stderr)
 
+    def test_osv_gate_honours_vuln_ignore_by_exact_id(self):
+        # S436/#2028: the one reviewed waiver (GO-2026-5932, unreachable
+        # deprecated x/crypto openpgp) excuses exactly that id; every other
+        # finding still fails, including near-miss ids.
+        with tempfile.TemporaryDirectory() as td:
+            report = Path(td) / "scan.json"
+            waived = {"results": [{"packages": [{"vulnerabilities": [{"id": "GO-2026-5932"}]}]}]}
+            report.write_text(json.dumps(waived)); self.run_audit("osv", "--report", report)
+            mixed = {"results": [{"packages": [{"vulnerabilities": [{"id": "GO-2026-5932"}, {"id": "GO-2026-0000"}]}]}]}
+            report.write_text(json.dumps(mixed))
+            self.assertIn("findings", self.run_audit("osv", "--report", report, ok=False).stderr)
+            near_miss = {"results": [{"packages": [{"vulnerabilities": [{"id": "GO-2026-593"}]}]}]}
+            report.write_text(json.dumps(near_miss))
+            self.assertIn("findings", self.run_audit("osv", "--report", report, ok=False).stderr)
+            # An explicit alternate ignore file is honoured the same way, and
+            # only for the ids it lists.
+            ignore = Path(td) / "ignore"
+            ignore.write_text("# comment\n\nGO-2026-0000 waived here\n")
+            other = {"results": [{"packages": [{"vulnerabilities": [{"id": "GO-2026-0000"}]}]}]}
+            report.write_text(json.dumps(other))
+            self.run_audit("osv", "--report", report, "--ignore", ignore)
+            self.assertIn("findings", self.run_audit("osv", "--report", report, ok=False).stderr)
+            # A waiver file the gate cannot read exactly fails closed.
+            ignore.write_text("not-an-id\n")
+            self.assertIn("malformed", self.run_audit("osv", "--report", report, "--ignore", ignore, ok=False).stderr)
+
     def test_inventory_requires_every_target_and_generated_metal(self):
         # Link-aware inventory: each target's build-time linkage record is
         # reviewed in its native format. No llvm-readobj on PATH is needed.

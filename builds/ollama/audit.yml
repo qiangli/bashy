@@ -35,7 +35,10 @@
           # Same overridden tree the build job compiles: PIN
           # GO_SECURITY_OVERRIDES applied after the pin gates, before
           # go-licenses/SBOM/govulncheck read the module graph. S436/#2028:
-          # golang.org/x/image@v0.47.0. No vuln ignore list.
+          # nine x/* modules at their MVS-selected versions plus
+          # github.com/buger/jsonparser@v1.1.2 (GO-2026-4514). The OSV gate
+          # honours the one reviewed waiver in bashy-build/vuln-ignore
+          # (GO-2026-5932, unreachable deprecated x/crypto openpgp).
           export GOWORK=off GOENV=off GOTOOLCHAIN=local
           bash fork/bashy-build/go-security-overrides.sh src
       - name: compiled-input permissive license review and notices
@@ -105,10 +108,16 @@
           done
       - name: Grype complete CycloneDX SBOM (fail on any severity)
         env:
-          GRYPE_VERSION: v0.93.0
+          GRYPE_VERSION: v0.120.1
         run: |
           set -euo pipefail
-          curl -fsSL https://raw.githubusercontent.com/anchore/grype/v0.93.0/install.sh | sh -s -- -v "$GRYPE_VERSION" -b "$RUNNER_TEMP/bin"
+          # The version pin is the positional TAG. install.sh -v is NOT the
+          # version: it requests cosign signature verification, and cosign is
+          # not on the runners (verified against the published ubuntu-24.04
+          # image software list; the flag fails the install without it).
+          # Tarball SHA-256 verification against the release checksums.txt is
+          # unconditional in install.sh and stays.
+          curl -fsSL https://raw.githubusercontent.com/anchore/grype/v0.120.1/install.sh | sh -s -- -b "$RUNNER_TEMP/bin" "$GRYPE_VERSION"
           "$RUNNER_TEMP/bin/grype" "sbom:out/runner-sbom.cdx.json" --fail-on negligible -o json > out/runner-grype.json
           python3 fork/bashy-build/audit-runner.py grype --report out/runner-grype.json
       - name: verify complete reports and generated Metal inputs

@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -52,7 +53,7 @@ class Recipe(unittest.TestCase):
         # fixture pins the nine x/* modules below the override, so
         # build-runner.sh must bump each to its reviewed version (the
         # derived MVS closure of the x/image fix) before compiling.
-        (src / "go.mod").write_text("module example.org/runner\n\ngo 1.24.1\n\nrequire golang.org/x/crypto v0.43.0\nrequire golang.org/x/image v0.22.0\nrequire golang.org/x/mod v0.30.0\nrequire golang.org/x/net v0.46.0\nrequire golang.org/x/sync v0.17.0\nrequire golang.org/x/sys v0.37.0\nrequire golang.org/x/term v0.36.0\nrequire golang.org/x/text v0.30.0\nrequire golang.org/x/tools v0.38.0\n")
+        (src / "go.mod").write_text("module example.org/runner\n\ngo 1.24.1\n\nrequire golang.org/x/crypto v0.43.0\nrequire golang.org/x/image v0.22.0\nrequire golang.org/x/mod v0.30.0\nrequire golang.org/x/net v0.46.0\nrequire golang.org/x/sync v0.17.0\nrequire golang.org/x/sys v0.37.0\nrequire golang.org/x/term v0.36.0\nrequire golang.org/x/text v0.30.0\nrequire golang.org/x/tools v0.38.0\nrequire github.com/buger/jsonparser v1.1.1\n")
         (src / "go.sum").write_text("")
         run("git", "init", "-q", str(src))
         run("git", "-C", str(src), "add", ".")
@@ -76,6 +77,17 @@ class Recipe(unittest.TestCase):
         audit = wf.split("audit + SBOM", 1)[1].split("  release:", 1)[0]
         for required in ("govulncheck", "osv-scanner", "grype", "CycloneDX", "runner-linked-libraries.json", "runner-licenses.json", "merge-inputs"):
             self.assertIn(required, audit)
+        # Grype v0.93.0 cannot migrate today's DB; the pinned install stays
+        # at v0.120.1 (Apache-2.0, already license-checked). The pin is the
+        # positional TAG: install.sh -v requests cosign signature verification
+        # (cosign is not on the runners; the flag fails the install without
+        # it), so the step must not pass -v. Tarball SHA-256 verification is
+        # unconditional in install.sh.
+        self.assertIn("GRYPE_VERSION: v0.120.1", audit)
+        self.assertIn("anchore/grype/v0.120.1/install.sh", audit)
+        self.assertIn('-b "$RUNNER_TEMP/bin" "$GRYPE_VERSION"', audit)
+        self.assertNotIn('-v "$GRYPE_VERSION"', audit)
+        self.assertNotIn("v0.93.0", audit)
         self.assertNotIn("llvm-readobj", audit)
         self.assertTrue((self.helpers / "windows-defender-egress.ps1").is_file())
         self.assertFalse((self.helpers / "windows-net-guard.c").exists())
@@ -133,12 +145,14 @@ class Recipe(unittest.TestCase):
         # helper, and its application after the pin gates in BOTH jobs.
         pin = (self.helpers / "PIN").read_text()
         # The declaration is the derived MVS closure of the x/image fix
-        # (nine x/* modules at exactly the selected versions).
+        # (nine x/* modules at exactly the selected versions) plus the
+        # jsonparser GO-2026-4514 fix (a leaf module: no further MVS moves).
         self.assertIn("golang.org/x/image@v0.47.0", pin)
         for spec in ("golang.org/x/crypto@v0.57.0", "golang.org/x/mod@v0.41.0",
                      "golang.org/x/net@v0.59.0", "golang.org/x/sync@v0.24.0",
                      "golang.org/x/sys@v0.49.0", "golang.org/x/term@v0.46.0",
-                     "golang.org/x/text@v0.43.0", "golang.org/x/tools@v0.51.0"):
+                     "golang.org/x/text@v0.43.0", "golang.org/x/tools@v0.51.0",
+                     "github.com/buger/jsonparser@v1.1.2"):
             self.assertIn(spec, pin)
         self.assertTrue((self.helpers / "go-security-overrides.sh").is_file())
         run("bash", "-n", str(self.helpers / "go-security-overrides.sh"))
@@ -153,9 +167,17 @@ class Recipe(unittest.TestCase):
         self.assertIn("GO_SECURITY_OVERRIDES (reviewed module bumps", audit)
         self.assertLess(audit.index("GO_SECURITY_OVERRIDES (reviewed module bumps"),
                         audit.index("compiled-input permissive license review"))
-        # No vuln ignore list anywhere in the recipe.
-        self.assertNotIn("vuln-ignore", wf)
-        self.assertFalse((RECIPE / "files/vuln-ignore").exists())
+        # Exactly one reviewed OSV waiver (S436/#2028): GO-2026-5932, the
+        # unreachable deprecated x/crypto openpgp finding with no fixed
+        # version. The OSV gate honours it by exact id; nothing else is waived.
+        self.assertTrue((RECIPE / "files/vuln-ignore").is_file())
+        waivers = (RECIPE / "files/vuln-ignore").read_text()
+        self.assertIn("GO-2026-5932", waivers)
+        self.assertEqual(len(re.findall(r"GO-[0-9]+-[0-9]+", waivers)), 1)
+        self.assertIn("vuln-ignore", wf)
+        gate = (RECIPE / "files/audit-runner.py").read_text()
+        self.assertIn("vuln-ignore", gate)
+        self.assertIn("vuln_ignored_ids", gate)
 
     def test_native_license_review_pins_every_compiled_input(self):
         # The committed review must admit exactly the permissive set
@@ -379,16 +401,18 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
                      "golang.org/x/mod v0.41.0", "golang.org/x/net v0.59.0",
                      "golang.org/x/sync v0.24.0", "golang.org/x/sys v0.49.0",
                      "golang.org/x/term v0.46.0", "golang.org/x/text v0.43.0",
-                     "golang.org/x/tools v0.51.0"):
+                     "golang.org/x/tools v0.51.0",
+                     "github.com/buger/jsonparser v1.1.2"):
             self.assertIn(spec, gomod)
         self.assertNotIn("v0.22.0", gomod)
+        self.assertNotIn("jsonparser v1.1.1", gomod)
         # The no-op path: a tree already carrying the fix exits 0 with no
         # changes (upstream caught up == retire the override). The helper
         # itself has no pin gate, so it is driven directly with the same
         # Go environment the build job exports.
         noop = self.root / "noop-src"
         noop.mkdir()
-        (noop / "go.mod").write_text("module example.org/runner\n\ngo 1.26.0\n\nrequire golang.org/x/crypto v0.57.0\nrequire golang.org/x/image v0.47.0\nrequire golang.org/x/mod v0.41.0\nrequire golang.org/x/net v0.59.0\nrequire golang.org/x/sync v0.24.0\nrequire golang.org/x/sys v0.49.0\nrequire golang.org/x/term v0.46.0\nrequire golang.org/x/text v0.43.0\nrequire golang.org/x/tools v0.51.0\n")
+        (noop / "go.mod").write_text("module example.org/runner\n\ngo 1.26.0\n\nrequire golang.org/x/crypto v0.57.0\nrequire golang.org/x/image v0.47.0\nrequire golang.org/x/mod v0.41.0\nrequire golang.org/x/net v0.59.0\nrequire golang.org/x/sync v0.24.0\nrequire golang.org/x/sys v0.49.0\nrequire golang.org/x/term v0.46.0\nrequire golang.org/x/text v0.43.0\nrequire golang.org/x/tools v0.51.0\nrequire github.com/buger/jsonparser v1.1.2\n")
         go_env = dict(env, GOWORK="off", CGO_ENABLED="1", GOTOOLCHAIN="local")
         again = run("bash", str(self.helpers / "go-security-overrides.sh"), str(noop), env=go_env)
         self.assertIn("already satisfied", again.stdout + again.stderr)
