@@ -157,6 +157,10 @@ Required observations, with bounded waits and response sizes:
    requires SIGTERM status and no process-group descendants; Windows requires
    the guard to terminate/reap its job before removing the WFP policy. Windows
    is a controlled forced-shutdown proof, not a graceful signal-handler claim.
+   The gate ends the runner with process termination (TerminateProcess exit
+   marker 1): the pinned upstream reads no stdin stop command and its own
+   server ends runners with Process.Kill, so no graceful exit exists to wait
+   for — only termination, reaping, and proof that no listener remains.
 
 | Native hosts | Enforcement and evidence |
 |---|---|

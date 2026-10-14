@@ -6,12 +6,13 @@ import http.server
 import importlib.util
 import json
 from pathlib import Path
+import signal
 import socket
 import sys
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.dont_write_bytecode = True
 FILES = Path(__file__).resolve().parent / 'files'
@@ -162,6 +163,30 @@ class NativeContract(unittest.TestCase):
                 self.assertNotEqual(remote, 18997)
         self.assertIn(('connect', ('::1', 18998)), seen)
         self.assertIn(('connect', ('127.0.0.1', 18998)), seen)
+
+    def test_shutdown_runner_forces_windows_terminate(self):
+        # The pinned upstream reads no stdin command and installs no
+        # catchable terminate handler (its own server ends runners with
+        # Process.Kill), so on Windows the gate must terminate rather than
+        # ask: TerminateProcess reports exit code 1, never a graceful 0.
+        proc = Mock()
+        proc.wait.return_value = 1
+        self.assertEqual(gate.shutdown_runner(proc, windows=True), 1)
+        proc.terminate.assert_called_once_with()
+        proc.stdin.write.assert_not_called()
+        proc.wait.return_value = 0
+        with self.assertRaisesRegex(RuntimeError, 'Windows shutdown'):
+            gate.shutdown_runner(proc, windows=True)
+
+    def test_shutdown_runner_keeps_unix_sigterm(self):
+        proc = Mock()
+        proc.wait.return_value = -signal.SIGTERM
+        self.assertEqual(gate.shutdown_runner(proc, windows=False),
+                         -signal.SIGTERM)
+        proc.terminate.assert_called_once_with()
+        proc.wait.return_value = 0
+        with self.assertRaisesRegex(RuntimeError, 'shutdown status'):
+            gate.shutdown_runner(proc, windows=False)
 
     def test_embedding_rejects_empty_zero_nan_and_wrong_types(self):
         for vector in [[], [0, 0], [float('nan')], [float('inf')], ['1'], [True]]:
