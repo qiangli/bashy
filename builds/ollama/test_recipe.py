@@ -517,6 +517,19 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         self.assertEqual(len(depfiles), 12)
         self.assertTrue(all(row["captured"] and "-DKEEP=1" in row["argv"] for row in rows))
 
+    def test_assemble_payload_prunes_directories_before_hashing(self):
+        # Run 38555533555: the ollama audit artifacts contain directories
+        # (notices/, runner-*.compiler-inputs/), and sha256sum -- * fails
+        # on them. The shared template must prune dist/ subdirectories
+        # after the missing-asset check and before hashing.
+        wf = (self.fork / ".github/workflows/bashy-build.yml").read_text()
+        step = wf.split("assemble release payload", 1)[1].split("- name:", 1)[0]
+        prune = "find dist -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +"
+        self.assertIn(prune, step)
+        self.assertIn("sha256sum", step)
+        self.assertLess(step.index("missing"), step.index(prune))
+        self.assertLess(step.index(prune), step.index("sha256sum"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
