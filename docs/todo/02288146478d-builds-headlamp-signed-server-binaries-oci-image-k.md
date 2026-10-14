@@ -8,7 +8,6 @@ priority: p2
 labels:
     - supply-chain
 created: 2026-10-13T00:04:00.396947Z
-weave: 69
 assignee: codex-gpt5.6-sol
 sprint: 434
 sprint_id: f0fadef8-daec-5fc2-9c78-40979f01a0a7

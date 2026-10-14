@@ -8,7 +8,6 @@ priority: p1
 labels:
     - supply-chain
 created: 2026-10-12T21:45:34.795997Z
-weave: 60
 assignee: claude-opus5
 sprint: 434
 sprint_id: f0fadef8-daec-5fc2-9c78-40979f01a0a7
