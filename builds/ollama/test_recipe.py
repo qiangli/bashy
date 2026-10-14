@@ -95,6 +95,19 @@ class Recipe(unittest.TestCase):
         self.assertIn("out/*-egress.txt", wf)
         self.assertIn("runner-windows-amd64-native.json", pin)
 
+    def test_licenses_step_fits_pinned_go_licenses(self):
+        # go-licenses v1.6.0 save creates its directory (a pre-created one
+        # fatals with 'already exists'), and report --template takes a
+        # template FILE whose rows use the tool's fields (.LicenseName;
+        # there is no .License). CI run 38537053528 never reached this step.
+        wf = (self.fork / ".github/workflows/bashy-build.yml").read_text()
+        step = wf.split("compiled-input permissive license review", 1)[1].split("- name:", 1)[0]
+        self.assertNotIn("mkdir -p ../out/notices", step)
+        self.assertIn('go-licenses save --save_path=../out/notices', step)
+        self.assertNotIn("report --template '{{", step)
+        self.assertIn('go-licenses report --template "$tmpl"', step)
+        self.assertIn(".LicenseName", step)
+
     def test_no_egress_gate_compiles_nothing(self):
         # The Windows leg enforces via the built-in Defender Firewall: no
         # compiled helper, no WFP link libraries anywhere in the leg.

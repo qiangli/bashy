@@ -35,9 +35,18 @@
           set -euo pipefail
           export PATH="$RUNNER_TEMP/bin:$PATH" GOWORK=off GOENV=off GOTOOLCHAIN=local CGO_ENABLED=1
           go-licenses check --allowed_licenses=MIT,BSD-2-Clause,BSD-3-Clause,Apache-2.0 ./cmd/runner
-          mkdir -p ../out/notices
+          # No mkdir: go-licenses save creates the directory itself and
+          # fatals with 'already exists' if it is pre-created (replay on
+          # CI run 38537053528 artifacts with go-licenses v1.6.0).
           go-licenses save --save_path=../out/notices ./cmd/runner
-          go-licenses report --template '{{range .}}{{.Name}},{{.License}}{{"\n"}}{{end}}' ./cmd/runner > ../out/runner-licenses.csv
+          # report --template takes a template FILE whose rows use the
+          # tool's field names (.Name/.LicenseName; there is no .License),
+          # and printf '%s' adds no trailing blank line: the strict review
+          # rejects even one empty CSV row.
+          tmpl=$(mktemp)
+          printf '%s' '{{range .}}{{.Name}},{{.LicenseName}}{{"\n"}}{{end}}' > "$tmpl"
+          go-licenses report --template "$tmpl" ./cmd/runner > ../out/runner-licenses.csv
+          rm -f "$tmpl"
           python3 ../fork/bashy-build/audit-runner.py licenses --report ../out/runner-licenses.csv --notices ../out/notices --output ../out/runner-licenses.json
       - name: CycloneDX SBOM for the compiled runner package
         working-directory: src

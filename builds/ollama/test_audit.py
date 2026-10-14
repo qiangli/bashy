@@ -248,5 +248,82 @@ class AuditPolicy(unittest.TestCase):
             self.assertEqual(sum(1 for c in bom["components"] if c["name"] == "libc.so.6"), len(TARGETS))
 
 
+    def test_inventory_accepts_ci38537053528_platform_libraries(self):
+        # CI run 38537053528 linked Apple system libraries and the UCRT API
+        # sets that the old allowlist did not know; all are platform
+        # libraries, so the inventory must accept them by exact name.
+        self.assertIn("/usr/lib/libc++.1.dylib", audit_runner.SYSTEM_LIBS["darwin"])
+        self.assertIn("/usr/lib/libresolv.9.dylib", audit_runner.SYSTEM_LIBS["darwin"])
+        self.assertIn("/usr/lib/libobjc.A.dylib", audit_runner.SYSTEM_LIBS["darwin"])
+        expected_crt = {
+            "api-ms-win-crt-convert-l1-1-0.dll", "api-ms-win-crt-environment-l1-1-0.dll",
+            "api-ms-win-crt-filesystem-l1-1-0.dll", "api-ms-win-crt-heap-l1-1-0.dll",
+            "api-ms-win-crt-locale-l1-1-0.dll", "api-ms-win-crt-math-l1-1-0.dll",
+            "api-ms-win-crt-multibyte-l1-1-0.dll", "api-ms-win-crt-private-l1-1-0.dll",
+            "api-ms-win-crt-runtime-l1-1-0.dll", "api-ms-win-crt-stdio-l1-1-0.dll",
+            "api-ms-win-crt-string-l1-1-0.dll", "api-ms-win-crt-time-l1-1-0.dll",
+            "api-ms-win-crt-utility-l1-1-0.dll",
+        }
+        self.assertTrue(expected_crt <= audit_runner.SYSTEM_LIBS["windows"],
+                        audit_runner.SYSTEM_LIBS["windows"] - expected_crt)
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "out"; out.mkdir()
+            for target in TARGETS:
+                stem = "runner-" + target
+                files = {"cmd/runner/main.go": "a" * 64}
+                native_files = {"vendor/native/runner.c": "c" * 64}
+                if target == "darwin-arm64":
+                    native_files["ml/backend/ggml/ggml-metal.metal"] = "b" * 64
+                (out / (stem + ".inputs.json")).write_text(json.dumps(
+                    {"schema": "bashy-runner-source-inputs-v1", "files": files}))
+                (out / (stem + ".compiler-inputs.json")).write_text(json.dumps(
+                    {"schema": "bashy-runner-compiler-inputs-v1",
+                     "files": native_files, "invocations": 1}))
+                (out / (stem + ".deps.json")).write_text(
+                    json.dumps({"ImportPath": "example.org/dep",
+                                "Module": {"Path": "example.org/dep", "Version": "v1.0.0"}}) + "\n")
+                (out / (stem + (".exe" if target == "windows-amd64" else ""))).write_bytes(b"fixture")
+                family = target.split("-")[0]
+                if family == "linux":
+                    (out / (stem + "-linkage.txt")).write_text(
+                        "libc.so.6 => /lib/libc.so.6 (0x00007f0000000000)\n")
+                elif target == "darwin-arm64":
+                    (out / (stem + "-linkage.txt")).write_text(
+                        f"out/{stem}:\n"
+                        "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1.0.0)\n"
+                        "\t/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 1.0.0)\n"
+                        "\t/usr/lib/libresolv.9.dylib (compatibility version 1.0.0, current version 1.0.0)\n"
+                        "\t/usr/lib/libobjc.A.dylib (compatibility version 1.0.0, current version 1.0.0)\n")
+                elif target == "darwin-amd64":
+                    (out / (stem + "-linkage.txt")).write_text(
+                        f"out/{stem}:\n"
+                        "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1.0.0)\n"
+                        "\t/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 1.0.0)\n"
+                        "\t/usr/lib/libresolv.9.dylib (compatibility version 1.0.0, current version 1.0.0)\n")
+                else:
+                    dlls = "\n".join(["== out/runner-windows-amd64.exe ==", "KERNEL32.dll",
+                                      *sorted(expected_crt)]) + "\n"
+                    (out / (stem + "-dlls.txt")).write_text(dlls)
+            self.run_audit("inventory", "--out", out, "--report", out / "linked.json")
+            # No wildcard: a UCRT API set outside the exact 13 is still rejected.
+            record = out / "runner-windows-amd64-dlls.txt"
+            record.write_text(record.read_text() + "api-ms-win-crt-conio-l1-1-0.dll\n")
+            self.assertIn("unreviewed", self.run_audit(
+                "inventory", "--out", out, "--report", out / "linked.json", ok=False).stderr)
+
+    def test_windows_dll_record_rejects_export_table_self_reference(self):
+        # The runner's own cgo //export table line ('a.out.exe') is not a
+        # DLL import: the strict parser must reject it, so only the
+        # case-sensitive build-runner.sh grep keeps it out of the record.
+        with tempfile.TemporaryDirectory() as td:
+            record = Path(td) / "dlls.txt"
+            record.write_text("== out/runner-windows-amd64.exe ==\nKERNEL32.dll\na.out.exe\n")
+            with self.assertRaises(SystemExit):
+                audit_runner.windows_dlls(record, "runner-windows-amd64")
+        recipe = (ROOT / "builds/ollama/files/build-runner.sh").read_text()
+        self.assertIn("grep 'DLL Name:'", recipe)
+        self.assertNotIn("grep -i 'DLL Name:'", recipe)
+
+
 if __name__ == "__main__":
     unittest.main()
