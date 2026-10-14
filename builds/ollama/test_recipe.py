@@ -113,6 +113,34 @@ class Recipe(unittest.TestCase):
         self.assertIn("out/*-egress.txt", wf)
         self.assertIn("runner-windows-amd64-native.json", pin)
 
+    def test_scanner_findings_defer_to_audit_gate(self):
+        # Run 38544523506: osv-scanner exits 1 on ANY finding (including the
+        # reviewed waiver GO-2026-5932), which killed the step under set -e
+        # before the audit-runner.py osv gate (which applies vuln-ignore)
+        # ran. The scanner exit code must never decide: capture it, accept 0
+        # (clean) and 1 (findings written), fail anything else with a clear
+        # message, then always run the gate. Grype with --fail-on behaves
+        # the same way.
+        wf = (self.fork / ".github/workflows/bashy-build.yml").read_text()
+        osv = wf.split("OSV scan of the five-target compiled-input SBOM", 1)[1].split("- name:", 1)[0]
+        self.assertIn("osv-scanner scan source", osv)
+        self.assertIn("|| rc=$?", osv)
+        self.assertIn("$rc -ne 0", osv)
+        self.assertIn("$rc -ne 1", osv)
+        self.assertIn("failed with exit", osv)
+        self.assertIn("audit-runner.py osv", osv)
+        self.assertLess(osv.index("osv-scanner scan source"), osv.index("audit-runner.py osv"))
+        self.assertLess(osv.index("|| rc=$?"), osv.index("audit-runner.py osv"))
+        grype = wf.split("Grype complete CycloneDX SBOM", 1)[1].split("- name:", 1)[0]
+        self.assertIn("--fail-on", grype)
+        self.assertIn("|| rc=$?", grype)
+        self.assertIn("$rc -ne 0", grype)
+        self.assertIn("$rc -ne 1", grype)
+        self.assertIn("failed with exit", grype)
+        self.assertIn("audit-runner.py grype", grype)
+        self.assertLess(grype.index("--fail-on"), grype.index("audit-runner.py grype"))
+        self.assertLess(grype.index("|| rc=$?"), grype.index("audit-runner.py grype"))
+
     def test_licenses_step_fits_pinned_go_licenses(self):
         # go-licenses v1.6.0 save creates its directory (a pre-created one
         # fatals with 'already exists'), and report --template takes a
