@@ -119,8 +119,11 @@ class Recipe(unittest.TestCase):
         # before the audit-runner.py osv gate (which applies vuln-ignore)
         # ran. The scanner exit code must never decide: capture it, accept 0
         # (clean) and 1 (findings written), fail anything else with a clear
-        # message, then always run the gate. Grype with --fail-on behaves
-        # the same way.
+        # message, then always run the gate. Grype runs WITHOUT --fail-on
+        # (--fail-on exits 2 when matches exceed the threshold, seen in the
+        # run-132 replay: scan exit 2 with 32 matches), so it exits 0 with
+        # findings written and the audit-runner.py grype gate decides; any
+        # nonzero grype exit is a real scanner error.
         wf = (self.fork / ".github/workflows/bashy-build.yml").read_text()
         osv = wf.split("OSV scan of the five-target compiled-input SBOM", 1)[1].split("- name:", 1)[0]
         self.assertIn("osv-scanner scan source", osv)
@@ -132,13 +135,15 @@ class Recipe(unittest.TestCase):
         self.assertLess(osv.index("osv-scanner scan source"), osv.index("audit-runner.py osv"))
         self.assertLess(osv.index("|| rc=$?"), osv.index("audit-runner.py osv"))
         grype = wf.split("Grype complete CycloneDX SBOM", 1)[1].split("- name:", 1)[0]
-        self.assertIn("--fail-on", grype)
+        invocation = [line for line in grype.splitlines() if "bin/grype" in line]
+        self.assertEqual(len(invocation), 1)
+        self.assertNotIn("--fail-on", invocation[0])
         self.assertIn("|| rc=$?", grype)
         self.assertIn("$rc -ne 0", grype)
-        self.assertIn("$rc -ne 1", grype)
+        self.assertNotIn("$rc -ne 1", grype)
         self.assertIn("failed with exit", grype)
         self.assertIn("audit-runner.py grype", grype)
-        self.assertLess(grype.index("--fail-on"), grype.index("audit-runner.py grype"))
+        self.assertLess(grype.index("sbom:out/runner-sbom.cdx.json"), grype.index("audit-runner.py grype"))
         self.assertLess(grype.index("|| rc=$?"), grype.index("audit-runner.py grype"))
 
     def test_licenses_step_fits_pinned_go_licenses(self):
