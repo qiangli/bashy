@@ -94,13 +94,31 @@ made cross-host shard formation reliable.
 `b0f5fd30`, outpost `1810aa4`); port resolution (outpost `651191d`); signed
 Prima on all five platforms (`bashy-bashy-prima-0.1.2-13`, yoke `609529ce`);
 Windows ranks and first-form fixes (outpost `c48719d`, `d6dc63a`, `915b665`);
-third-party ollama fallback removed (yoke `cad0d513`); signed runner build
-repaired (bashy `9b9af63e`, `d103f8ae`; tags `bashy-v0.21.2-9` and `-10`
-built all five targets green, audit allowlists in progress); release
-embedding wired on bashy branch `s436/runner-embed` (`63dd22be`), to merge
-once yoke holds the published runner pins.
+third-party ollama fallback removed in yoke (`cad0d513`) and in bashy's lean
+build (`5a6cea0f`: lean `bashy ollama serve` now fails closed instead of
+downloading upstream Ollama); signed runner release `bashy-v0.21.2-15`
+published after the audit was made to pass honestly (bashy `9b9af63e` through
+`08e91b3c`, with reviewed waivers in `vuln-ignore`); yoke pins it (`e2909791`);
+the release wiring embeds it per target (bashy `b16980c4`).
 
-Proof on 2026-10-14 (outpost `15fc954`, one macOS arm64 host and one Windows
+**The engines build is required.** Local inference only works in a bashy
+built with `-tags bashy_engines,embed_runner` (cgo on darwin/linux). Its
+`bashy ollama serve` runs the vendored Ollama server, whose runner re-exec goes
+through bashy's dispatch to the extracted, signature- and digest-verified
+`ycode-runner`. A lean build has no local engine. The next bashy release must
+be the engines build, or local inference regresses for users.
+
+**Known gap: Windows.** `engines_windows.go` never supported the bashy-built
+Ollama engine, and the vendored server does not build for Windows with cgo off
+(`x/mlxrunner` is cgo/MLX). Windows sharding works through signed Prima; a
+Windows local engine is follow-up work, not a regression.
+
+Local inference proof on 2026-10-14 (macOS arm64, engines build of bashy
+`5a6cea0f`): door, `bashy ollama serve`, `bashy runner`, then the extracted
+`ycode-runner` whose sha256 equals the release pin; `llama3.2:1b` answered;
+no upstream Ollama process.
+
+Shard proof on 2026-10-14 (outpost `15fc954`, one macOS arm64 host and one Windows
 amd64 host on the same LAN): `outpost shard trigger <mac> llama3.2:1b` formed
 a 2-rank ring; the leader answered completions at about 45 tokens/s and the
 Windows rank's CPU time rose during each request.
