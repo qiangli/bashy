@@ -1,5 +1,9 @@
 # Official Ollama runner recipe — release blocked
 
+> **Recovery map:** [`files/RECOVERY.md`](files/RECOVERY.md) records the whole
+> local-inference + sphere-shard feature, how it was lost in 2026 while other
+> work was added, how Sprint 436 restored it, and how to recover it again.
+
 Sprint #436 / Story #1917 (`2498b5c36ace`). Source qualification is Yoke
 [`docs/validation/ollama-runner-source-2018.md` at `5e8c4687`](https://github.com/qiangli/yoke/blob/5e8c46870baadd0eb58e68f73a6a5a4ea66f9102/docs/validation/ollama-runner-source-2018.md).
 This recipe pins official `ollama/ollama` **v0.21.2**, peeled commit
