@@ -22,7 +22,16 @@ builds:
       - CGO_ENABLED=0
     flags:
       - -trimpath
+    # embed_runner links yoke's verified runner into the product binary.
+    # The payload files are gitignored; the pre-hook fetches and
+    # verifies the target's signed runner into that slot right before its
+    # build, so a missing runner fails the build instead of shipping bare.
+    tags:
+      - embed_runner
     hooks:
+      pre:
+        - cmd: ./scripts/fetch-signed-runner.sh "{{ .Os }}" "{{ .Arch }}"
+          output: true
       post:
         - cmd: ./scripts/verify-bashy-signal-artifact.sh "{{ .Path }}"
           output: true

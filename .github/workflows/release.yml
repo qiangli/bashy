@@ -97,6 +97,14 @@ jobs:
         with:
           version: 11.17.0
           run_install: false
+      - name: Fetch signed Ollama runner
+        shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          # Verifies the Sigstore bundle + yoke pin before any build; a
+          # missing or unverified runner fails the job here, never ships.
+          ./scripts/fetch-signed-runner.sh darwin "$ARCH"
       - name: Build, audit and probe native one-file Bashy
         shell: bash
         env:
@@ -162,11 +170,25 @@ jobs:
         with:
           version: 11.17.0
           run_install: false
+      - name: Prefetch signed Ollama runners
+        shell: bash
+        run: |
+          # Early fail-closed gate for every GoReleaser target: pins, network
+          # and verifier must work before the long build starts. Each target
+          # re-fetches its own runner in the build pre-hook below, because the
+          # embed slot holds one platform at a time.
+          set -euo pipefail
+          for target in linux/amd64 linux/arm64 windows/amd64; do
+            ./scripts/fetch-signed-runner.sh "${target%/*}" "${target#*/}"
+          done
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
           version: '~> v2'
-          args: release --clean
+          # --parallelism 1: the bashy build embeds one platform's verified
+          # runner per target via a pre-hook that rewrites a shared slot;
+          # parallel target builds would embed each other's runner.
+          args: release --clean --parallelism 1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BASHY_RELEASE_RUN_ID: ${{ github.run_id }}

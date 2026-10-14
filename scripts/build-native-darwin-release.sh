@@ -18,7 +18,12 @@ shell_commit=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p
 [[ -n $shell_commit ]] || { echo "missing sh fork replace in go.mod" >&2; exit 1; }
 shell_time=
 base=${tag#v}; base=${base%-dev}
-CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -ldflags "-w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$tag' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=$shell_commit' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=$shell_time'" -o "$stage/bashy" ./cmd/bashy
+# The product binary embeds the signed Ollama runner (scripts/fetch-signed-runner.sh
+# in release.yml). Refuse to ship a runner-less binary with an explicit error
+# rather than relying on the go:embed failure alone.
+[[ -f ../yoke/external/ollama/runner_embed/ycode-runner.gz && -f ../yoke/external/ollama/runner_embed/ycode-runner.sigstore.json ]] \
+ || { echo "missing verified runner: run scripts/fetch-signed-runner.sh darwin $arch first" >&2; exit 1; }
+CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -tags embed_runner -ldflags "-w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$tag' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=$shell_commit' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=$shell_time'" -o "$stage/bashy" ./cmd/bashy
 ./scripts/verify-bashy-signal-artifact.sh "$stage/bashy"
 go run ./tools/bashysignalprobe "$stage/bashy"
 ./scripts/verify-meet-spa-release.sh "$stage/bashy" "darwin_$arch"
