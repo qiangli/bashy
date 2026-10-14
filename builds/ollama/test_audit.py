@@ -1,4 +1,5 @@
 """Policy tests for compiled-input audit helpers; fixtures are not release evidence."""
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -18,15 +19,43 @@ spec.loader.exec_module(audit_runner)
 
 
 class AuditPolicy(unittest.TestCase):
-    def test_linked_library_parser_ignores_readobj_file_metadata(self):
-        report = "File: runner-linux-amd64\nFormat: elf64-x86-64\nArch: x86_64\nAddressSize: 64bit\nNeededLibraries [\n  libc.so.6\n  libm.so.6\n]\nLoadName: <Not found>\n"
-        self.assertEqual(audit_runner.needed_libraries(report, "runner-linux-amd64"),
-                         ["libc.so.6", "libm.so.6"])
-        for bad in [report.replace("NeededLibraries [", "Other ["),
-                    report.replace("  libc.so.6", "libc.so.6"),
-                    report.replace("\n]\n", "\n")]:
-            with self.subTest(report=bad), self.assertRaises(SystemExit):
-                audit_runner.needed_libraries(bad, "runner-linux-amd64")
+    def test_linkage_parsers_are_format_strict(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            ldd = root / "linux.txt"
+            ldd.write_text("linux-vdso.so.1 (0x00007fffc9d5c000)\n"
+                           "libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007F2B6C200000)\n"
+                           "\t/lib64/ld-linux-x86-64.so.2 (0x00007f2b6c5c0000)\n")
+            self.assertEqual(audit_runner.ldd_libraries(ldd, "runner-linux-amd64"),
+                             ["linux-vdso.so.1", "libc.so.6", "/lib64/ld-linux-x86-64.so.2"])
+            for bad, hint in [("libc.so.6 => not found (0x00007f2b6c200000)", "unmapped"),
+                              ("libc.so.6 => /lib/libc.so.6", "malformed"),
+                              ("not a dynamic executable", "malformed"),
+                              ("", "empty")]:
+                ldd.write_text(bad + "\n" if bad else "")
+                with self.subTest(report=bad), self.assertRaises(SystemExit):
+                    audit_runner.ldd_libraries(ldd, "runner-linux-amd64")
+            otool = root / "darwin.txt"
+            otool.write_text("out/runner-darwin-arm64:\n"
+                             "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1351.0.0)\n")
+            self.assertEqual(audit_runner.otool_libraries(otool, "runner-darwin-arm64"),
+                             ["/usr/lib/libSystem.B.dylib"])
+            for bad in ["\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1351.0.0)\n",
+                        "out/runner-darwin-arm64:\n\t/usr/lib/libSystem.B.dylib\n",
+                        "out/runner-darwin-arm64:\n"]:
+                otool.write_text(bad)
+                with self.subTest(report=bad), self.assertRaises(SystemExit):
+                    audit_runner.otool_libraries(otool, "runner-darwin-arm64")
+            dlls = root / "windows.txt"
+            dlls.write_text("== out/runner-windows-amd64.exe ==\nKERNEL32.dll\nws2_32.dll\n")
+            self.assertEqual(audit_runner.windows_dlls(dlls, "runner-windows-amd64"),
+                             ["KERNEL32.dll", "ws2_32.dll"])
+            for bad in ["KERNEL32.dll\n",
+                        "== out/runner-windows-amd64.exe ==\n",
+                        "== out/runner-windows-amd64.exe ==\nkernel32\n"]:
+                dlls.write_text(bad)
+                with self.subTest(report=bad), self.assertRaises(SystemExit):
+                    audit_runner.windows_dlls(dlls, "runner-windows-amd64")
     def run_audit(self, *args, ok=True, env=None):
         p = subprocess.run(["python3", str(SCRIPT), *map(str, args)], text=True, capture_output=True, env=env)
         if ok and p.returncode:
@@ -58,6 +87,8 @@ class AuditPolicy(unittest.TestCase):
             self.assertIn("findings", self.run_audit("grype", "--report", report, ok=False).stderr)
 
     def test_inventory_requires_every_target_and_generated_metal(self):
+        # Link-aware inventory: each target's build-time linkage record is
+        # reviewed in its native format. No llvm-readobj on PATH is needed.
         with tempfile.TemporaryDirectory() as td:
             out = Path(td) / "out"; out.mkdir()
             for target in TARGETS:
@@ -69,19 +100,57 @@ class AuditPolicy(unittest.TestCase):
                 (out / (stem + ".compiler-inputs.json")).write_text(json.dumps({"schema": "bashy-runner-compiler-inputs-v1", "files": native_files, "invocations": 1}))
                 (out / (stem + ".deps.json")).write_text(json.dumps({"ImportPath": "example.org/dep", "Module": {"Path": "example.org/dep", "Version": "v1.0.0"}}) + "\n")
                 (out / (stem + (".exe" if target == "windows-amd64" else ""))).write_bytes(b"fixture")
-            bindir = Path(td) / "bin"; bindir.mkdir()
-            fake = bindir / "llvm-readobj"
-            fake.write_text("#!/bin/sh\ncase \"$*\" in *darwin*) lib=/usr/lib/libSystem.B.dylib ;; *windows*) lib=KERNEL32.dll ;; *) lib=libc.so.6 ;; esac\nprintf 'NeededLibraries [\\n  %s\\n]\\n' \"$lib\"\n")
-            fake.chmod(0o755)
-            import os
-            env = dict(os.environ, PATH=str(bindir) + os.pathsep + os.environ.get("PATH", ""))
-            self.run_audit("inventory", "--out", out, "--report", out / "linked.json", env=env)
+                family = target.split("-")[0]
+                if family == "linux":
+                    (out / (stem + "-linkage.txt")).write_text(
+                        "linux-vdso.so.1 (0x00007fffc9d5c000)\n"
+                        "libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f2b6c200000)\n"
+                        "/lib64/ld-linux-x86-64.so.2 (0x00007f2b6c5c0000)\n")
+                elif family == "darwin":
+                    (out / (stem + "-linkage.txt")).write_text(
+                        f"out/{stem}:\n"
+                        "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1351.0.0)\n")
+                else:
+                    (out / (stem + "-dlls.txt")).write_text(f"== out/{stem}.exe ==\nKERNEL32.dll\nws2_32.dll\n")
+            self.run_audit("inventory", "--out", out, "--report", out / "linked.json")
             data = json.loads((out / "linked.json").read_text())
             self.assertEqual({x["target"] for x in data["targets"]}, set(TARGETS))
+            by_target = {x["target"]: x for x in data["targets"]}
+            self.assertIn("libc.so.6", by_target["linux-amd64"]["linked_libraries"])
+            self.assertIn("/usr/lib/libSystem.B.dylib", by_target["darwin-arm64"]["linked_libraries"])
+            self.assertIn("KERNEL32.dll", by_target["windows-amd64"]["linked_libraries"])
+            (out / "runner-linux-amd64-linkage.txt").write_text(
+                "libevil.so.1 => /opt/evil/libevil.so.1 (0x00007f2b6c200000)\n")
+            self.assertIn("unreviewed", self.run_audit("inventory", "--out", out, "--report", out / "linked.json", ok=False).stderr)
+            (out / "runner-linux-amd64-linkage.txt").write_text(
+                "libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f2b6c200000)\n")
+            (out / "runner-windows-amd64-dlls.txt").unlink()
+            self.assertIn("DLL record missing", self.run_audit("inventory", "--out", out, "--report", out / "linked.json", ok=False).stderr)
+            (out / "runner-windows-amd64-dlls.txt").write_text("== out/runner-windows-amd64.exe ==\nKERNEL32.dll\n")
             inputs = json.loads((out / "runner-darwin-arm64.compiler-inputs.json").read_text())
             inputs["files"].pop("ml/backend/ggml/ggml-metal.metal")
             (out / "runner-darwin-arm64.compiler-inputs.json").write_text(json.dumps(inputs))
-            self.assertIn("generated Metal", self.run_audit("inventory", "--out", out, "--report", out / "linked.json", env=env, ok=False).stderr)
+            self.assertIn("generated Metal", self.run_audit("inventory", "--out", out, "--report", out / "linked.json", ok=False).stderr)
+
+    def test_merge_inputs_verifies_downloaded_blobs(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "out"; out.mkdir()
+            for target in TARGETS:
+                stem = "runner-" + target
+                body = f"input for {target}".encode()
+                digest = hashlib.sha256(body).hexdigest()
+                (out / (stem + ".compiler-inputs.json")).write_text(json.dumps(
+                    {"schema": "bashy-runner-compiler-inputs-v1", "files": {"vendor/native/a.c": digest},
+                     "invocations": 1, "dependency_files": 1}))
+                store = out / (stem + ".compiler-inputs") / "content"; store.mkdir(parents=True)
+                (store / digest).write_bytes(body)
+            self.run_audit("merge-inputs", "--out", out)
+            victim = "runner-linux-amd64"
+            blob = next((out / (victim + ".compiler-inputs") / "content").glob("*"))
+            blob.write_text("tampered")
+            self.assertIn("hash mismatch", self.run_audit("merge-inputs", "--out", out, ok=False).stderr)
+            blob.unlink()
+            self.assertIn("blob missing", self.run_audit("merge-inputs", "--out", out, ok=False).stderr)
 
     def test_native_license_review_requires_exact_hash_permissive_id_and_notice(self):
         with tempfile.TemporaryDirectory() as td:

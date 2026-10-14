@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Discover a native MinGW clang pair targeting x86_64-w64-windows-gnu.
 
+Shared by every builds/<tool> with a Windows native leg (builds/_shared;
+rendered into each fork's bashy-build/ via SHARED_FILES, which is why this
+file must stay tool-neutral: no TOOL names, no per-tool schema).
+
 CI run 38465115827 failed here: msys2/setup-msys2 had installed CLANG64
 (clang, cmake, make, ninja), but the probe picked the first clang on PATH,
 C:\\Program Files\\LLVM\\bin\\clang.exe, which targets
@@ -29,10 +33,12 @@ from pathlib import Path
 import subprocess
 
 TARGET = 'x86_64-w64-windows-gnu'
-# Pinned provisioner, kept in sync with builds/prima.cpp/setup.yml.
+# Pinned provisioner, kept in sync with builds/prima.cpp/setup.yml and
+# builds/ollama/setup.yml (identical package set).
 SETUP_ACTION = 'msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e'  # v2.33.0
 MSYSTEM = 'CLANG64'
-# Explicit install set, kept in sync with builds/prima.cpp/setup.yml.
+# Explicit install set, kept in sync with builds/prima.cpp/setup.yml and
+# builds/ollama/setup.yml.
 PACKAGES = ('mingw-w64-clang-x86_64-clang', 'mingw-w64-clang-x86_64-compiler-rt',
             'mingw-w64-clang-x86_64-lld', 'mingw-w64-clang-x86_64-cmake',
             'mingw-w64-clang-x86_64-make', 'mingw-w64-clang-x86_64-ninja',
@@ -145,7 +151,7 @@ def main():
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         raise SystemExit(f'no verified native MinGW clang pair: {exc}')
     directory = directory.resolve()
-    toolchain = {'schema': 'bashy-prima-windows-toolchain-v1',
+    toolchain = {'schema': 'bashy-windows-toolchain-v1',
                  'target': TARGET, 'msystem': MSYSTEM,
                  'setup_action': SETUP_ACTION, 'packages': list(PACKAGES),
                  'generator': GENERATOR,

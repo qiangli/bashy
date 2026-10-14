@@ -6,7 +6,6 @@ import hashlib
 import json
 from pathlib import Path
 import re
-import subprocess
 
 TARGETS = ("linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64", "windows-amd64")
 PERMISSIVE = {"MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause"}
@@ -42,23 +41,97 @@ def go_packages(path):
     return packages
 
 
-def needed_libraries(output, stem):
-    lines = output.splitlines()
-    openings = [i for i, line in enumerate(lines) if line.strip() == "NeededLibraries ["]
-    if len(openings) != 1:
-        fail(f"{stem}: linked-library table is absent or ambiguous")
-    start = openings[0] + 1
-    try:
-        end = next(i for i in range(start, len(lines)) if lines[i].strip() == "]")
-    except StopIteration:
-        fail(f"{stem}: linked-library table is unterminated")
+def ldd_libraries(path, stem):
+    # Parse the build-time ldd record (Linux native tool). An unmapped
+    # dependency ('=> not found') or an unparseable line fails closed: the
+    # record must describe a complete, resolvable runtime closure.
     libs = []
-    for line in lines[start:end]:
-        value = line.strip()
-        if not value or value == line:
-            fail(f"{stem}: malformed linked-library entry")
-        libs.append(value)
+    for raw in Path(path).read_text().splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        mapped = re.fullmatch(r"(\S+) => (\S+) \(0x[0-9a-fA-F]+\)", line)
+        direct = re.fullmatch(r"(\S+) \(0x[0-9a-fA-F]+\)", line)
+        if mapped:
+            if mapped.group(2) == "not found":
+                fail(f"{stem}: unmapped shared dependency: {mapped.group(1)}")
+            libs.append(mapped.group(1))
+        elif direct:
+            libs.append(direct.group(1))
+        else:
+            fail(f"{stem}: malformed ldd linkage record: {line}")
+    if not libs:
+        fail(f"{stem}: empty Linux linkage record")
     return libs
+
+
+def otool_libraries(path, stem):
+    # Parse the build-time otool -L record (Darwin native tool): a binary
+    # header line, then one versioned dylib per line.
+    lines = Path(path).read_text().splitlines()
+    if not lines or not lines[0].rstrip().endswith(":"):
+        fail(f"{stem}: malformed otool linkage record (missing binary header)")
+    libs = []
+    for raw in lines[1:]:
+        line = raw.strip()
+        if not line:
+            continue
+        match = re.fullmatch(r"(\S+) \(compatibility version [^)]+, current version [^)]+\)", line)
+        if not match:
+            fail(f"{stem}: malformed otool linkage entry: {line}")
+        libs.append(match.group(1))
+    if not libs:
+        fail(f"{stem}: empty Darwin linkage record")
+    return libs
+
+
+def windows_dlls(path, stem):
+    # Parse the build-time llvm-objdump DLL-import record (Windows native
+    # tool via the pinned BASHY_WINDOWS_OBJDUMP): one '== binary ==' header
+    # per shipped executable, then one DLL name per line.
+    dlls = []
+    seen_header = False
+    for raw in Path(path).read_text().splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("== ") and line.endswith(" =="):
+            seen_header = True
+            continue
+        if not re.fullmatch(r"[A-Za-z0-9_.+-]+\.dll", line, re.IGNORECASE):
+            fail(f"{stem}: malformed DLL import record: {line}")
+        dlls.append(line)
+    if not seen_header or not dlls:
+        fail(f"{stem}: empty or headerless Windows DLL record")
+    return dlls
+
+
+def linked_libraries(out, stem, family):
+    # Link-aware inventory: each platform's build-time record is parsed by
+    # its own format rules and adjudicated against the platform allowlist.
+    # No single cross-format reader: llvm-readobj --needed-libs has no
+    # NeededLibraries table for Mach-O/PE (CI runs 38448516095 and later).
+    if family in ("linux", "darwin"):
+        record = out / f"{stem}-linkage.txt"
+        if not record.is_file() or not record.stat().st_size:
+            fail(f"{stem}: native linkage record missing: {record.name}")
+        libs = ldd_libraries(record, stem) if family == "linux" else otool_libraries(record, stem)
+        if family == "linux":
+            unknown = sorted({lib for lib in libs if lib != "linux-vdso.so.1"
+                              and Path(lib).name not in SYSTEM_LIBS["linux"]
+                              and not Path(lib).name.startswith("ld-linux")})
+        else:
+            unknown = sorted(set(libs) - SYSTEM_LIBS["darwin"])
+    else:
+        record = out / f"{stem}-dlls.txt"
+        if not record.is_file() or not record.stat().st_size:
+            fail(f"{stem}: native DLL record missing: {record.name}")
+        libs = windows_dlls(record, stem)
+        allowed = {name.lower() for name in SYSTEM_LIBS["windows"]}
+        unknown = sorted({lib for lib in set(libs) if lib.lower() not in allowed})
+    if unknown:
+        fail(f"{stem}: unreviewed non-platform linked libraries: {', '.join(unknown)}")
+    return sorted(set(libs))
 
 
 def inventory(out, report):
@@ -88,21 +161,39 @@ def inventory(out, report):
             binary = out / (stem + ".exe")
         if not binary.is_file() or not binary.stat().st_size:
             fail(f"{stem}: native executable missing")
-        proc = subprocess.run(["llvm-readobj", "--needed-libs", str(binary)], text=True, capture_output=True)
-        if proc.returncode:
-            fail(f"cannot read native linked-library table for {stem}: {proc.stderr.strip()}")
-        libs = needed_libraries(proc.stdout, stem)
-        family = target.split("-")[0]
-        allowed = {name.lower() for name in SYSTEM_LIBS[family]} if family == "windows" else SYSTEM_LIBS[family]
-        unknown = sorted(name for name in set(libs) if (name.lower() if family == "windows" else name) not in allowed)
-        if unknown:
-            fail(f"{stem}: unreviewed non-platform linked libraries: {', '.join(unknown)}")
+        libs = linked_libraries(out, stem, target.split("-")[0])
         modules = sorted({(p.get("Module") or {}).get("Path", "") + "@" + (p.get("Module") or {}).get("Version", "") for p in packages if (p.get("Module") or {}).get("Path")})
         rows.append({"target": target, "executable": binary.name, "deps_inventory": deps.name, "compiled_modules": modules,
                      "source_inputs": inputs["schema"], "linked_libraries": sorted(set(libs)),
                      "native_compiler_inputs": f"{stem}.compiler-inputs.json",
                      "linkage_policy": "platform system libraries only; no third-party native library linked"})
     Path(report).write_text(json.dumps({"schema": "bashy-runner-linked-libraries-v1", "targets": rows}, indent=2, sort_keys=True) + "\n")
+
+
+def merge_inputs(out):
+    # Require and verify compiler inputs from every native build before
+    # auditing (prima.cpp merge-inputs.py pattern): each target's reviewed
+    # file manifest must resolve, byte-for-byte, to the capture content
+    # blobs downloaded from that target's build leg. A missing or tampered
+    # blob fails the audit before any license review reads the manifest.
+    for target in TARGETS:
+        stem = f"runner-{target}"
+        native = load_json(out / f"{stem}.compiler-inputs.json")
+        if native.get("schema") != "bashy-runner-compiler-inputs-v1" or not native.get("files"):
+            fail(f"{stem}: compiler-input manifest missing or has wrong schema")
+        if not native.get("invocations") or not native.get("dependency_files"):
+            fail(f"{stem}: compiler invocation evidence is missing")
+        store = out / f"{stem}.compiler-inputs" / "content"
+        for path, digest in native["files"].items():
+            if not re.fullmatch(r"[0-9a-f]{64}", digest):
+                fail(f"{stem}: malformed native compiler-input digest: {path}")
+            blob = store / digest
+            try:
+                data = blob.read_bytes()
+            except OSError:
+                fail(f"{stem}: compiler-input blob missing from downloaded build records: {path}")
+            if hashlib.sha256(data).hexdigest() != digest:
+                fail(f"{stem}: compiler-input blob hash mismatch: {path}")
 
 
 def compiler_inputs(capture, source, generated, output):
@@ -343,6 +434,7 @@ def main():
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="mode", required=True)
     q = sub.add_parser("inventory"); q.add_argument("--out", type=Path, required=True); q.add_argument("--report", type=Path, required=True)
+    q = sub.add_parser("merge-inputs"); q.add_argument("--out", type=Path, required=True)
     q = sub.add_parser("compiler-inputs"); q.add_argument("--capture", required=True); q.add_argument("--source", required=True); q.add_argument("--generated", required=True); q.add_argument("--output", required=True)
     q = sub.add_parser("native-licenses"); q.add_argument("--out", required=True); q.add_argument("--review", required=True); q.add_argument("--output", required=True)
     q = sub.add_parser("licenses"); q.add_argument("--report", required=True); q.add_argument("--notices", required=True); q.add_argument("--output", required=True)
@@ -351,7 +443,8 @@ def main():
     q = sub.add_parser("aggregate-sbom"); q.add_argument("--out", type=Path, required=True)
     q = sub.add_parser("final"); q.add_argument("--out", type=Path, required=True); q.add_argument("--commit", required=True)
     a = p.parse_args()
-    {"inventory": lambda: inventory(a.out, a.report), "compiler-inputs": lambda: compiler_inputs(a.capture, a.source, a.generated, a.output),
+    {"inventory": lambda: inventory(a.out, a.report), "merge-inputs": lambda: merge_inputs(a.out),
+     "compiler-inputs": lambda: compiler_inputs(a.capture, a.source, a.generated, a.output),
      "native-licenses": lambda: review_native_licenses(a.out, a.review, a.output), "licenses": lambda: licenses(a.report, a.notices, a.output),
      "osv": lambda: osv(a.report), "grype": lambda: grype(a.report), "aggregate-sbom": lambda: aggregate_sbom(a.out), "final": lambda: final(a.out, a.commit)}[a.mode]()
 

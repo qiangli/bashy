@@ -67,8 +67,11 @@ class Recipe(unittest.TestCase):
         self.assertIn('--certificate-oidc-issuer "$OIDC_ISSUER"', wf)
         self.assertIn("subject-checksums: dist/SHA256SUMS", wf)
         audit = wf.split("audit + SBOM", 1)[1].split("  release:", 1)[0]
-        for required in ("govulncheck", "osv-scanner", "grype", "CycloneDX", "runner-linked-libraries.json", "runner-licenses.json"):
+        for required in ("govulncheck", "osv-scanner", "grype", "CycloneDX", "runner-linked-libraries.json", "runner-licenses.json", "merge-inputs"):
             self.assertIn(required, audit)
+        self.assertNotIn("llvm-readobj", audit)
+        self.assertTrue((self.helpers / "windows-defender-egress.ps1").is_file())
+        self.assertFalse((self.helpers / "windows-net-guard.c").exists())
         self.assertIn("needs: [pin, build]", audit)
         self.assertNotIn("unresolved runner security admission", audit)
         self.assertTrue((self.helpers / "audit-runner.py").is_file())
@@ -90,6 +93,45 @@ class Recipe(unittest.TestCase):
         self.assertIn("out/*-native.json", wf)
         self.assertIn("out/*-egress.txt", wf)
         self.assertIn("runner-windows-amd64-native.json", pin)
+
+    def test_no_egress_gate_compiles_nothing(self):
+        # The Windows leg enforces via the built-in Defender Firewall: no
+        # compiled helper, no WFP link libraries anywhere in the leg.
+        script = (RECIPE / "files/no-egress-test.sh").read_text()
+        windows = script[script.index("MINGW*|MSYS*)"):]
+        for token in ['"$cc" -std=c11', "-lfwpuclnt", "windows-net-guard.c", "net-guard.exe"]:
+            self.assertNotIn(token, windows)
+        for line in windows.splitlines():
+            stripped = line.lstrip()
+            self.assertFalse(stripped.startswith("gcc "), line)
+        self.assertIn("powershell.exe", windows)
+        self.assertIn("windows-defender-egress.ps1", windows)
+        # Every evidence marker the shell asserts must be emitted by the
+        # Defender script, or the gate can never pass.
+        gate = (RECIPE / "files/windows-defender-egress.ps1").read_text()
+        for marker in ("Defender control blocked", "pfirewall.log", "protocol gate PROTOCOL_PASS",
+                       "no non-loopback connections observed",
+                       "Defender block rules removed; firewall logging restored"):
+            self.assertIn(marker, gate)
+
+    def test_darwin_profile_uses_proven_loopback_form(self):
+        # Prima-proven Seatbelt form (tag bashy-bashy-prima-0.1.2-13, run
+        # 38486571631, green on the hosted macos-15 runners): (remote ip
+        # "localhost:PORT"). The ip4 variant failed CI runs 38448516095 and
+        # later. Reproduced on novidesign.local (macOS 26.3): the ip form
+        # compiles, allows the configured loopback port, and denies
+        # wrong-port and external endpoints (Seatbelt rejects numeric hosts:
+        # "host must be * or localhost in network address").
+        script = (RECIPE / "files/no-egress-test.sh").read_text()
+        darwin = script[script.index("Darwin)"):script.index("MINGW*|MSYS*)")]
+        self.assertIn('(allow network-outbound (remote ip "localhost:$port"))', darwin)
+        self.assertNotIn("remote ip4", darwin)
+        self.assertNotIn("remote ip6", darwin)
+
+    def test_audit_reviews_build_time_records_without_tool_subprocess(self):
+        script = (RECIPE / "files/audit-runner.py").read_text()
+        self.assertNotIn("import subprocess", script)
+        self.assertNotIn('"llvm-readobj"', script)
 
     def test_source_guards(self):
         src = self.fixture()
@@ -156,9 +198,9 @@ else: raise RuntimeError(args)
 import os, pathlib, sys
 args=sys.argv[1:]
 if args == ['--version']: print('fake compiler fixture'); sys.exit(0)
-if args == ['-dumpmachine']: print('x86_64-w64-mingw32' if os.environ.get('GOOS') == 'windows' else 'fixture-target'); sys.exit(0)
+if args == ['-dumpmachine']: print('x86_64-w64-windows-gnu' if os.environ.get('GOOS') == 'windows' else 'fixture-target'); sys.exit(0)
 if args == ['-dumpfullversion']: print('14.2'); sys.exit(0)
-if args[0] == '-dM': print('#define __GNUC__ 14\\n#define __MINGW64__ 1\\n#define __x86_64__ 1\\n#define __SIZEOF_POINTER__ 8\\n#define __cplusplus 201703L'); sys.exit(0)
+if args[0] == '-dM': print('#define __clang__ 1\\n#define __MINGW64__ 1\\n#define __x86_64__ 1\\n#define __SIZEOF_POINTER__ 8\\n#define __cplusplus 201703L'); sys.exit(0)
 assert '-MMD' in args and '-MF' in args
 dep=pathlib.Path(args[args.index('-MF')+1])
 source=next(x for x in args if x.endswith(('.c', '.cpp')))
@@ -170,8 +212,21 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         cygpath = mock / "cygpath"
         cygpath.write_text("#!/usr/bin/env python3\nimport sys\nprint(sys.argv[-1])\n")
         cygpath.chmod(0o755)
+        # Native linkage tools are toolchain like the compilers above: the
+        # test fakes their output, CI runs the real ldd/otool/llvm-objdump
+        # on each native runner.
+        ldd = mock / "ldd"
+        ldd.write_text('#!/bin/sh\nprintf "linux-vdso.so.1 (0x00007fff00000000)\\nlibc.so.6 => /lib/libc.so.6 (0x00007f0000000000)\\n/lib64/ld-linux-x86-64.so.2 (0x00007f0000000000)\\n"\n')
+        ldd.chmod(0o755)
+        otool = mock / "otool"
+        otool.write_text('#!/bin/sh\necho "$2:"\nprintf "\\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1.0.0)\\n"\n')
+        otool.chmod(0o755)
+        objdump = mock / "llvm-objdump"
+        objdump.write_text('#!/bin/sh\nprintf "DLL Name: KERNEL32.dll\\nDLL Name: WS2_32.dll\\n"\n')
+        objdump.chmod(0o755)
         env = dict(os.environ, PATH=str(mock) + os.pathsep + os.environ["PATH"],
-                   BASHY_WINDOWS_CC=str(mock / 'gcc'), BASHY_WINDOWS_CXX=str(mock / 'g++'))
+                   BASHY_WINDOWS_CC=str(mock / 'gcc'), BASHY_WINDOWS_CXX=str(mock / 'g++'),
+                   BASHY_WINDOWS_OBJDUMP=str(mock / 'llvm-objdump'))
         for target in TARGETS:
             with self.subTest(target=target):
                 asset = "runner-" + target
@@ -184,6 +239,14 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
                 self.assertIn("llama/llama.cpp/native.cpp", captured["files"])
                 self.assertEqual(captured["dependency_files"], 2)
                 data = json.loads((out / (asset + ".json")).read_text())
+                if target == "windows-amd64":
+                    dlls = (out / (asset + "-dlls.txt")).read_text()
+                    self.assertIn("== ", dlls)
+                    self.assertIn("KERNEL32.dll", dlls)
+                else:
+                    linkage = (out / (asset + "-linkage.txt")).read_text()
+                    self.assertIn("libc.so.6" if target.startswith("linux-") else "/usr/lib/libSystem.B.dylib",
+                                  linkage)
                 raw = (out / data["executable"]).read_bytes()
                 gz = (out / data["gzip"]).read_bytes()
                 self.assertEqual(gzip.decompress(gz), raw)

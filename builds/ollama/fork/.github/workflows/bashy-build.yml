@@ -144,8 +144,36 @@ jobs:
           go-version: '1.27.2'
           check-latest: false
           cache: false
-      - name: native Windows MinGW compilers
+      - name: provision pinned MinGW clang toolchain (Windows)
+        id: msys2
         if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        with:
+          msystem: CLANG64
+          update: true
+          # Explicit package set, no metapackage: every name is pinned here and
+          # the resolved versions are recorded per build in
+          # out/windows-toolchain.json (see windows-compilers.py, shared with
+          # prima.cpp via builds/_shared). The cgo build consumes only the
+          # verified CC/CXX pair below; cmake/make/ninja/objdump records keep
+          # the toolchain evidence identical across both tools.
+          install: >-
+            mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-compiler-rt
+            mingw-w64-clang-x86_64-lld
+            mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-make
+            mingw-w64-clang-x86_64-ninja
+            mingw-w64-clang-x86_64-llvm-openmp
+            mingw-w64-clang-x86_64-llvm-tools
+          cache: false
+      - name: native Windows MinGW + clang compilers
+        if: runner.os == 'Windows'
+        env:
+          # Hand the probe the exact MSYS2 root setup-msys2 installed, so
+          # windows-compilers.py searches <msys2-location>/clang64/bin ONLY
+          # and can never fall back to C:\Program Files\LLVM (MSVC-target).
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
         run: python3 fork/bashy-build/windows-compilers.py
       - name: pre-build gates (PRE_BUILD_GATES)
         run: |
@@ -235,11 +263,13 @@ jobs:
           go version
           govulncheck -version
           osv-scanner --version
+      - name: verify downloaded compiler-input closure for every native build
+        run: |
+          set -euo pipefail
+          python3 fork/bashy-build/audit-runner.py merge-inputs --out out
       - name: native linked-library inventory for every shipped executable
         run: |
           set -euo pipefail
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends llvm
           python3 fork/bashy-build/audit-runner.py inventory --out out --report out/runner-linked-libraries.json
       - name: compiled-input permissive license review and notices
         working-directory: src

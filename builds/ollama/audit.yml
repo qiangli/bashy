@@ -21,11 +21,13 @@
           go version
           govulncheck -version
           osv-scanner --version
+      - name: verify downloaded compiler-input closure for every native build
+        run: |
+          set -euo pipefail
+          python3 fork/bashy-build/audit-runner.py merge-inputs --out out
       - name: native linked-library inventory for every shipped executable
         run: |
           set -euo pipefail
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends llvm
           python3 fork/bashy-build/audit-runner.py inventory --out out --report out/runner-linked-libraries.json
       - name: compiled-input permissive license review and notices
         working-directory: src

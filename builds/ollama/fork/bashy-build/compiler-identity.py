@@ -11,7 +11,12 @@ import sys
 
 # Revalidate the exact pair at build time, not only the earlier PATH discovery.
 if os.environ.get('GOOS') == 'windows':
-    spec = importlib.util.spec_from_file_location('windows', Path(__file__).with_name('windows-compilers.py'))
+    probe_path = Path(__file__).with_name('windows-compilers.py')
+    if not probe_path.is_file():
+        # Source tree: the probe is shared via builds/_shared and only sits
+        # beside this file in the rendered fork.
+        probe_path = Path(__file__).resolve().parent.parent / '_shared' / 'windows-compilers.py'
+    spec = importlib.util.spec_from_file_location('windows', probe_path)
     windows = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(windows)
     records = windows.probe(Path(sys.argv[2]), Path(sys.argv[3]))

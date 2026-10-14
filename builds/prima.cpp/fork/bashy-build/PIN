@@ -12,7 +12,7 @@ WINDOWS_SHELL=bash
 MATRIX="prima-linux-amd64=ubuntu-24.04 prima-linux-arm64=ubuntu-24.04-arm prima-darwin-arm64=macos-15 prima-darwin-amd64=macos-15-intel prima-windows-amd64=windows-2025"
 APT_PACKAGES="cmake ninja-build strace iproute2 curl python3-venv"
 PRE_BUILD_GATES=""
-SHARED_FILES="egress-verdict.sh"
+SHARED_FILES="egress-verdict.sh windows-compilers.py"
 EGRESS_TARGET='out/${{ matrix.asset }}'
 RELEASE_EXTRA="PIN=prima-pin.txt otel.env=prima-otel.env dependencies.json=prima-dependencies.json"
 RELEASE_EXECUTABLES="prima-linux-amd64 prima-linux-arm64 prima-darwin-arm64 prima-darwin-amd64 prima-server-linux-amd64 prima-server-linux-arm64 prima-server-darwin-arm64 prima-server-darwin-amd64 prima-windows-amd64.exe prima-server-windows-amd64.exe"

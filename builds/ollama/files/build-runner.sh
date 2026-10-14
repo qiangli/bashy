@@ -31,8 +31,8 @@ fi
 real_cc=$(command -v "$real_cc")
 real_cxx=$(command -v "$real_cxx")
 if [[ $os == windows ]]; then
-  real_cc=${BASHY_WINDOWS_CC:?verified Windows GCC missing}
-  real_cxx=${BASHY_WINDOWS_CXX:?verified Windows G++ missing}
+  real_cc=${BASHY_WINDOWS_CC:?verified Windows MinGW clang missing (windows-compilers.py)}
+  real_cxx=${BASHY_WINDOWS_CXX:?verified Windows MinGW clang++ missing (windows-compilers.py)}
 fi
 python3 "$here/compiler-identity.py" "$out/$asset.compiler-identity.json" "$real_cc" "$real_cxx"
 capture="$out/$asset.compiler-inputs"
@@ -71,6 +71,44 @@ go list -mod=readonly -deps -json ./cmd/runner > "$out/$asset.deps.json"
 exe=$asset
 [[ $os != windows ]] || exe=$asset.exe
 go build -mod=readonly -trimpath -o "$out/$exe" ./cmd/runner
+# Link-aware inventory (prima.cpp-proven pattern): record the ACTUAL linkage
+# with the platform's native tool at build time, on the native runner. The
+# audit job reviews these per-target records with per-format parsers; no
+# single cross-format reader (llvm-readobj --needed-libs has no
+# NeededLibraries table for Mach-O/PE, which failed CI runs 38448516095,
+# 38450982320, 38452584047). Build records, audit adjudicates: the grep
+# below fails fast on obvious third-party runtimes, and the audit allowlist
+# admits only reviewed platform libraries.
+case $os in
+linux)
+  ldd "$out/$exe" >"$out/$asset-linkage.txt"
+  cat "$out/$asset-linkage.txt"
+  if grep -Ev '^[[:space:]]*(linux-vdso\.so|/[^ ]*/ld-linux[^ ]*|lib(c|m|pthread|dl|rt|stdc\+\+|gcc_s)\.so[^ ]* => /)' "$out/$asset-linkage.txt"; then
+    echo 'unreviewed Linux runtime dependency' >&2; exit 1
+  fi
+  ;;
+darwin)
+  otool -L "$out/$exe" >"$out/$asset-linkage.txt"
+  cat "$out/$asset-linkage.txt"
+  if otool -L "$out/$exe" | tail -n +2 | grep -Ev '^[[:space:]]+(/usr/lib/|/System/Library/Frameworks/)'; then
+    echo 'non-system Darwin dependency' >&2; exit 1
+  fi
+  ;;
+windows)
+  # The DLL-import evidence tool is the pinned clang64/bin/llvm-objdump.exe
+  # (package mingw-w64-clang-x86_64-llvm-tools), handed in by
+  # windows-compilers.py: no PATH-resolved objdump, whose name and target
+  # vary across the MSYS2 shells.
+  objdump=${BASHY_WINDOWS_OBJDUMP:?verified LLVM objdump missing (windows-compilers.py)}
+  : >"$out/$asset-dlls.txt"
+  echo "== $out/$exe ==" >>"$out/$asset-dlls.txt"
+  "$objdump" -p "$out/$exe" | grep -i 'DLL Name:' | awk '{print $NF}' | sort -u >>"$out/$asset-dlls.txt"
+  cat "$out/$asset-dlls.txt"
+  if grep -Ei 'libzmq|highs|libcurl|nng\.dll|msys-2\.0\.dll|cygwin|python[0-9]*\.dll' "$out/$asset-dlls.txt"; then
+    echo 'unexpected Windows dynamic dependency' >&2; exit 1
+  fi
+  ;;
+esac
 python3 "$here/audit-runner.py" compiler-inputs --capture "$capture" --source "$src" \
   --generated "$src/ml/backend/ggml/ggml/src/ggml-metal" --output "$out/$asset.compiler-inputs.json"
 python3 "$here/package-runner.py" package "$out/$exe" "$out/$asset.gz" "$out/$asset.json" "$os/$arch" "$UPSTREAM_COMMIT" "$GO_TOOLCHAIN"

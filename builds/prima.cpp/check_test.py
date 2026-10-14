@@ -14,6 +14,7 @@ import unittest
 from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parent
+SHARED=ROOT.parent/'_shared'
 spec=importlib.util.spec_from_file_location('verify',ROOT/'files/verify-asset.py')
 verify=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(verify)
@@ -654,7 +655,7 @@ class WindowsTarget(unittest.TestCase):
         self.assertIn('python3 fork/bashy-build/prepare.py src',setup)
         self.assertIn("if: runner.os == 'Windows'",setup)
         self.assertIn('python3 fork/bashy-build/windows-compilers.py',setup)
-        discovery=(ROOT/'files/windows-compilers.py').read_text()
+        discovery=(SHARED/'windows-compilers.py').read_text()
         self.assertIn('x86_64-w64-windows-gnu',discovery)
         self.assertNotIn('x86_64-w64-mingw32',discovery)
         self.assertIn('-dumpmachine',discovery)
@@ -683,7 +684,7 @@ class WindowsTarget(unittest.TestCase):
 
     def test_probe_inventory_and_toolchain_record_agree(self):
         spec=importlib.util.spec_from_file_location(
-            'windows_compilers',ROOT/'files/windows-compilers.py')
+            'windows_compilers',SHARED/'windows-compilers.py')
         module=importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         setup=(ROOT/'setup.yml').read_text()
@@ -755,9 +756,14 @@ class WindowsTarget(unittest.TestCase):
     def test_windows_files_ship_in_fork(self):
         for name in ['build.sh','exercise.py','merge-inputs.py','verify-asset.py',
                      'license-review.py','dependencies.json','collect-inputs.py',
-                     'windows-compilers.py','windows-defender-egress.ps1','no-egress-test.sh']:
+                     'windows-defender-egress.ps1','no-egress-test.sh']:
             self.assertEqual((ROOT/'fork/bashy-build'/name).read_bytes(),
                              (ROOT/'files'/name).read_bytes(),name)
+        # windows-compilers.py is shared via builds/_shared (rendered into
+        # the fork from SHARED_FILES, not from files/).
+        self.assertEqual((ROOT/'fork/bashy-build/windows-compilers.py').read_bytes(),
+                         (SHARED/'windows-compilers.py').read_bytes(),
+                         'windows-compilers.py')
         self.assertIn('prima-windows-amd64',merge.ASSETS)
         self.assertIn('prima-windows-amd64.exe',verify.ASSETS)
 
@@ -985,7 +991,7 @@ class WindowsCompilerProbe(unittest.TestCase):
     # refused, never used for the MinGW static link.
     def _module(self):
         spec = importlib.util.spec_from_file_location(
-            'windows_compilers', ROOT/'files/windows-compilers.py')
+            'windows_compilers', SHARED/'windows-compilers.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module
@@ -1046,7 +1052,7 @@ class WindowsCompilerSelection(unittest.TestCase):
     # MSYS2 shell.
     def _module(self):
         spec = importlib.util.spec_from_file_location(
-            'windows_compilers', ROOT/'files/windows-compilers.py')
+            'windows_compilers', SHARED/'windows-compilers.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module
@@ -1109,7 +1115,7 @@ class WindowsCompilerSelection(unittest.TestCase):
     def test_no_path_or_program_files_lookup_in_source(self):
         import inspect
         module = self._module()
-        discovery = (ROOT/'files/windows-compilers.py').read_text()
+        discovery = (SHARED/'windows-compilers.py').read_text()
         self.assertIn('MSYS2_LOCATION', discovery)
         self.assertIn('clang64/bin', discovery)
         self.assertNotIn('import shutil', discovery)
@@ -1144,7 +1150,7 @@ class WindowsPinnedBuildTools(unittest.TestCase):
     # instead of PATH-resolved names or a C:/msys64 literal.
     def _module(self):
         spec = importlib.util.spec_from_file_location(
-            'windows_compilers', ROOT/'files/windows-compilers.py')
+            'windows_compilers', SHARED/'windows-compilers.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module

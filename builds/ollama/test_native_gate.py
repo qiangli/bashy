@@ -152,13 +152,19 @@ class NativeContract(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     gate.check_owner(99, 18997)
 
-    def test_windows_bind_owner_requires_unique_loopback_listener(self):
+    def test_windows_bind_owner_requires_loopback_only(self):
+        # Loopback-scoped: 127.0.0.1 alone, or with its ::1 companion under
+        # the same pid, passes. A wildcard bind, a foreign owner, or no
+        # loopback listener at all fails.
         good = '  TCP    127.0.0.1:18997    0.0.0.0:0    LISTENING    99\n'
         self.assertIn('127.0.0.1:18997', gate.check_windows_owner(good, 99, 18997))
+        dual = good + '  TCP    [::1]:18997    [::]:0    LISTENING    99\n'
+        self.assertIn('127.0.0.1:18997', gate.check_windows_owner(dual, 99, 18997))
         for bad in [good.replace('    99', '    98'),
                     good.replace('127.0.0.1', '0.0.0.0'),
                     good + good,
                     good + '  TCP    [::]:18997    [::]:0    LISTENING    99\n',
+                    good.replace('127.0.0.1:18997', '127.0.0.1:18998'),
                     '']:
             with self.subTest(output=bad), self.assertRaises(RuntimeError):
                 gate.check_windows_owner(bad, 99, 18997)

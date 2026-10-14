@@ -125,17 +125,30 @@ def stream(port, cancel=False):
 
 
 def check_windows_owner(output, pid, port):
+    # Loopback-scoped, not exact-single: the gated runner binds 127.0.0.1
+    # (pinned llammarunner/ollamarunner both Listen on 127.0.0.1:port), but
+    # the hosted Windows TCP stack may also surface the ::1 companion. Every
+    # listener on the gate port must be loopback AND owned by the gated
+    # runner pid; a wildcard bind or a foreign owner fails. The exact-single
+    # form failed CI runs 38448516095, 38450982320, 38452584047 while the
+    # loopback-only property itself held.
     listeners = []
     for line in output.splitlines():
         fields = line.split()
         if len(fields) != 5 or fields[0] != 'TCP' or fields[3] != 'LISTENING':
             continue
         endpoint = fields[1]
-        if endpoint.rsplit(':', 1)[-1] == str(port):
+        if endpoint == f'127.0.0.1:{port}' or endpoint == f'[::1]:{port}':
             listeners.append((endpoint, fields[4]))
-    require(listeners == [(f'127.0.0.1:{port}', str(pid))],
-            f'wrong listener ownership/bind: {listeners}')
-    return f'TCP 127.0.0.1:{port} LISTENING {pid}'
+        elif endpoint.rsplit(':', 1)[-1].rstrip(']') == str(port):
+            listeners.append((endpoint, fields[4]))
+    require(listeners, f'no loopback listener on port {port}: {output.strip()}')
+    for endpoint, owner in listeners:
+        require(owner == str(pid), f'wrong listener owner for {endpoint}: {owner} != {pid}')
+        require(endpoint in (f'127.0.0.1:{port}', f'[::1]:{port}'),
+                f'non-loopback bind on gate port: {endpoint}')
+    require(len(set(listeners)) == len(listeners), f'duplicate listener rows: {listeners}')
+    return '; '.join(f'TCP {endpoint} LISTENING {owner}' for endpoint, owner in listeners)
 
 
 def check_owner(pid, port):
@@ -172,7 +185,11 @@ def validate_embedding(embedding):
             'invalid/empty/nonfinite embedding')
 
 
-def exercise(binary, fixture, evidence_path, port, guard=None):
+def exercise(binary, fixture, evidence_path, port):
+    # Network enforcement on Windows comes from the Defender Firewall gate
+    # (windows-defender-egress.ps1), which launches this exercise under
+    # disposable outbound BLOCK rules: no launcher, no pidfile, no job
+    # object. The runner is a direct child, so proc.pid is authoritative.
     binary, fixture, evidence_path = map(lambda p: Path(p).resolve(), (binary, fixture, evidence_path))
     spec = json.loads((HERE / 'fixture.json').read_text())
     module = importlib.util.spec_from_file_location('fixture', HERE / 'fetch-fixture.py')
@@ -191,7 +208,7 @@ def exercise(binary, fixture, evidence_path, port, guard=None):
                 'runner_sha256': digest(binary), 'fixture': spec, 'upstream_commit': SOURCE,
                 'platform': platform.platform(), 'checks': {},
                 'network': {'linux': 'netns+strace', 'darwin': 'sandbox-exec+denial-controls',
-                            'windows': 'dynamic-WFP+denial-controls+single-process-job'}[target]}
+                            'windows': 'defender-firewall+denial-controls'}[target]}
     logpath = evidence_path.with_suffix('.log')
     proc = None
     try:
@@ -200,18 +217,14 @@ def exercise(binary, fixture, evidence_path, port, guard=None):
             bind_check.bind(('127.0.0.1', port))
         with tempfile.TemporaryDirectory() as work, open(logpath, 'w') as log:
             argv = [str(binary), '--model', str(fixture), '--port', str(port)]
-            pidfile = Path(work) / 'pid'
-            if target == 'windows':
-                require(guard and Path(guard).is_file(), 'missing Windows WFP guard')
-                argv = [str(Path(guard).resolve()), str(port), str(pidfile)] + argv
             # Preserve only OS loader essentials. No proxy/telemetry/model host env.
             env = {key: os.environ[key] for key in ('PATH', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP',
                                                     'TMPDIR', 'HOME') if key in os.environ}
             proc = subprocess.Popen(argv, stdout=log, stderr=log, stdin=subprocess.PIPE,
                                     env=env, start_new_session=os.name != 'nt')
             evidence['checks']['launched_health'] = wait_health(proc, port, 2)
-            pid = int(pidfile.read_text()) if target == 'windows' else proc.pid
-            evidence['pid'] = pid
+            evidence['pid'] = proc.pid
+            pid = proc.pid
             evidence['checks']['bind_owner'] = check_owner(pid, port)
             loaded = api(port, '/load', {'Operation': 2, 'Parallel': 1, 'BatchSize': 64,
                          'KvSize': 512, 'KvCacheType': 'f16', 'NumThreads': 2,
@@ -269,7 +282,7 @@ def exercise(binary, fixture, evidence_path, port, guard=None):
                         proc.stdin.flush()
                         proc.wait(timeout=5)
                     except (OSError, subprocess.TimeoutExpired):
-                        proc.kill()  # KILL_ON_JOB_CLOSE also removes the runner
+                        proc.kill()
                 proc.wait(timeout=10)
             proc.stdin.close()
         evidence_path.write_text(json.dumps(evidence, indent=2) + '\n')
@@ -292,5 +305,7 @@ if __name__ == '__main__':
         deny_controls(int(sys.argv[2]))
     elif sys.argv[1:2] == ['--finalize']:
         finalize(*sys.argv[2:])
+    elif len(sys.argv) == 5:
+        exercise(sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]))
     else:
-        exercise(*sys.argv[1:4], int(sys.argv[4]), *sys.argv[5:])
+        raise SystemExit('usage: native-gate.py BINARY FIXTURE EVIDENCE PORT')

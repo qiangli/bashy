@@ -78,11 +78,14 @@ def origin(path, environment=None):
     if str(path).startswith(roots):
         return 'system', str(path)
     # MinGW headers must belong to the compiler installation verified at setup.
+    # CLANG64 layout (shared windows-compilers.py probe): clang resource
+    # headers live under lib/clang/<version>/include beside the GCC-runtime
+    # and sysroot prefixes the older ucrt64 layout used.
     root = environment.get('BASHY_MINGW_ROOT')
     if root:
         try:
             rel = path.relative_to(portable_path(root)).as_posix()
-            if rel.startswith(('include/', 'lib/gcc/', 'x86_64-w64-mingw32/include/')):
+            if rel.startswith(('include/', 'lib/clang/', 'lib/gcc/', 'x86_64-w64-mingw32/include/')):
                 return 'system', str(path)
         except ValueError:
             pass
