@@ -42,7 +42,7 @@
 #   RUNNER_BASE_URL     release download base URL (tests serve fixtures)
 set -eu
 
-RUNNER_TAG="bashy-v0.21.2-9"
+RUNNER_TAG="bashy-v0.21.2-15"
 RUNNER_REPO="qiangli/ollama"
 RUNNER_IDENTITY="https://github.com/qiangli/ollama/.github/workflows/bashy-build.yml@refs/tags/${RUNNER_TAG}"
 RUNNER_ISSUER="https://token.actions.githubusercontent.com"

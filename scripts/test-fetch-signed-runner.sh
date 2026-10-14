@@ -33,8 +33,8 @@ EOF
   cat >"$YOKE/external/ollama/runner_embed/extract.go" <<EOF
 package runner_embed
 const (
-  releaseVersion  = "bashy-v0.21.2-9"
-  releaseIdentity = "https://github.com/qiangli/ollama/.github/workflows/bashy-build.yml@refs/tags/bashy-v0.21.2-9"
+  releaseVersion  = "bashy-v0.21.2-15"
+  releaseIdentity = "https://github.com/qiangli/ollama/.github/workflows/bashy-build.yml@refs/tags/bashy-v0.21.2-15"
 )
 var releaseSHA256 = map[string]string{
 "linux/amd64":   "",
@@ -78,7 +78,7 @@ if run_fetch "$t/c1" darwin arm64 >"$t/c1.log" 2>&1; then
   cmp -s "$t/fx/srv/runner-darwin-arm64.gz" "$YOKE/external/ollama/runner_embed/ycode-runner.gz" \
     && cmp -s "$t/fx/srv/runner-darwin-arm64.sigstore.json" "$YOKE/external/ollama/runner_embed/ycode-runner.sigstore.json" \
     && ok "happy path installs verified pair" || bad "happy path output mismatch"
-  grep -q "certificate-identity https://github.com/qiangli/ollama/.github/workflows/bashy-build.yml@refs/tags/bashy-v0.21.2-9" "$STUBLOG" \
+  grep -q "certificate-identity https://github.com/qiangli/ollama/.github/workflows/bashy-build.yml@refs/tags/bashy-v0.21.2-15" "$STUBLOG" \
     && grep -q "certificate-oidc-issuer https://token.actions.githubusercontent.com" "$STUBLOG" \
     && grep -q "\-\-offline" "$STUBLOG" \
     && [ "$(grep -c verify-blob "$STUBLOG")" -eq 2 ] \
