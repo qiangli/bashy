@@ -239,11 +239,17 @@ def compiler_inputs(capture, source, generated, output):
             elif category in ("go-generated", "go-toolchain"): trusted.append(item)
             else: fail("unreviewed external native compiler dependency")
     # Metal source is generated after go generate and may not appear in a C depfile.
+    # Every manifest entry needs its blob in the content-addressed store or
+    # merge_inputs fails the audit, so persist generated Metal bytes alongside
+    # the compile inputs.
     metal_root = Path(generated)
     for p in metal_root.rglob("*"):
         if p.is_file() and (p.name.endswith(".metal") or p.name.endswith(".metallib") or
                             p.name.endswith(".metal.h") or p.name.endswith(".metal.go")):
-            paths[p.resolve().relative_to(source).as_posix()] = hashlib.sha256(p.read_bytes()).hexdigest()
+            data = p.read_bytes()
+            digest = hashlib.sha256(data).hexdigest()
+            paths[p.resolve().relative_to(source).as_posix()] = digest
+            (capture / "content" / digest).write_bytes(data)
     if not paths: fail("no repository-owned C/C++ compiler dependencies were captured")
     files = dict(sorted(paths.items()))
     data = {"schema": "bashy-runner-compiler-inputs-v1", "files": files,

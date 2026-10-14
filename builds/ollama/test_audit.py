@@ -152,6 +152,54 @@ class AuditPolicy(unittest.TestCase):
             blob.unlink()
             self.assertIn("blob missing", self.run_audit("merge-inputs", "--out", out, ok=False).stderr)
 
+    def test_compiler_inputs_stores_generated_metal_blob_for_merge(self):
+        # Generated Metal shaders never appear in a C depfile, so
+        # compiler_inputs must persist their bytes into the
+        # content-addressed store; otherwise merge_inputs fails the audit
+        # with a missing blob for every manifest entry.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            source = root / "source"; source.mkdir()
+            (source / "a.c").write_bytes(b"int x;")
+            metal_rel = "ml/backend/ggml/ggml/src/ggml-metal/ggml-metal-embed.metal"
+            metal = source / metal_rel
+            metal.parent.mkdir(parents=True)
+            metal.write_bytes(b"metal shader bytes")
+            capture = root / "capture"
+            (capture / "invocations").mkdir(parents=True)
+            (capture / "depfiles").mkdir(parents=True)
+            (capture / "content").mkdir(parents=True)
+            digest_a = hashlib.sha256(b"int x;").hexdigest()
+            (capture / "content" / digest_a).write_bytes(b"int x;")
+            src_abs = str((source / "a.c").resolve())
+            dep = capture / "depfiles" / "a.d"
+            dep.write_text(f"obj.o: {src_abs}\n")
+            row = {"captured": True, "returncode": 0, "cwd": str(source),
+                   "depfile": str(dep),
+                   "roots": {"BASHY_COMPILER_SOURCE": str(source.resolve())},
+                   "inputs": [{"name": src_abs, "path": src_abs, "origin": "source",
+                               "relative": "a.c", "sha256": digest_a}]}
+            (capture / "invocations" / "a.json").write_text(json.dumps(row))
+            manifest = root / "out.json"
+            audit_runner.compiler_inputs(str(capture), str(source), str(source), str(manifest))
+            data = json.loads(manifest.read_text())
+            metal_digest = hashlib.sha256(b"metal shader bytes").hexdigest()
+            self.assertEqual(data["files"][metal_rel], metal_digest)
+            blob = capture / "content" / metal_digest
+            self.assertTrue(blob.is_file())
+            self.assertEqual(blob.read_bytes(), b"metal shader bytes")
+            out = root / "mout"; out.mkdir()
+            for target in TARGETS:
+                stem = "runner-" + target
+                (out / (stem + ".compiler-inputs.json")).write_text(json.dumps(data))
+                store = out / (stem + ".compiler-inputs") / "content"
+                store.mkdir(parents=True)
+                for name in (capture / "content").iterdir():
+                    (store / name.name).write_bytes(name.read_bytes())
+            self.run_audit("merge-inputs", "--out", out)
+            ((out / "runner-linux-amd64.compiler-inputs" / "content") / metal_digest).unlink()
+            self.assertIn("blob missing", self.run_audit("merge-inputs", "--out", out, ok=False).stderr)
+
     def test_native_license_review_requires_exact_hash_permissive_id_and_notice(self):
         with tempfile.TemporaryDirectory() as td:
             out = Path(td)
