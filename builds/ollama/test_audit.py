@@ -73,6 +73,12 @@ class AuditPolicy(unittest.TestCase):
             self.assertIn("unresolved", self.run_audit("licenses", "--report", report, "--notices", notices, "--output", output, ok=False).stderr)
             report.write_text("example.org/dep,MIT\n")
             self.run_audit("licenses", "--report", report, "--notices", notices, "--output", output)
+            # MIT-0 (elected for miniaudio's dual Unlicense OR MIT-0,
+            # S436/#2028) is permissive; the Unlicense side is not admitted.
+            report.write_text("example.org/miniaudio,MIT-0\n")
+            self.run_audit("licenses", "--report", report, "--notices", notices, "--output", output)
+            report.write_text("example.org/miniaudio,Unlicense\n")
+            self.assertIn("non-permissive", self.run_audit("licenses", "--report", report, "--notices", notices, "--output", output, ok=False).stderr)
             report.write_text("example.org/dep,GPL-3.0\n")
             self.assertIn("non-permissive", self.run_audit("licenses", "--report", report, "--notices", notices, "--output", output, ok=False).stderr)
 
@@ -221,6 +227,9 @@ class AuditPolicy(unittest.TestCase):
             review.write_text(json.dumps({"schema": "bashy-runner-native-license-review-v1", "inputs": {path: {"sha256": "a" * 64, "license": "MIT"}, "vendor/native/a.metal": {"sha256": "a" * 64, "license": "MIT", "notice": "MIT notice"}}}))
             self.assertIn("explicit notice", self.run_audit(*args, ok=False).stderr)
             review.write_text(json.dumps({"schema": "bashy-runner-native-license-review-v1", "inputs": {path: {"sha256": "a" * 64, "license": "MIT", "notice": "MIT notice"}, "vendor/native/a.metal": {"sha256": "a" * 64, "license": "MIT", "notice": "MIT notice"}}}))
+            self.run_audit(*args)
+            # MIT-0 (elected for miniaudio, S436/#2028) passes the same gate.
+            review.write_text(json.dumps({"schema": "bashy-runner-native-license-review-v1", "inputs": {path: {"sha256": "a" * 64, "license": "MIT-0", "notice": "MIT-0 elected notice"}, "vendor/native/a.metal": {"sha256": "a" * 64, "license": "MIT", "notice": "MIT notice"}}}))
             self.run_audit(*args)
             generated_review = {path: {"sha256": "a" * 64, "license": "MIT", "notice": "MIT notice"}}
             generated_review_path = out / "generated-review.json"

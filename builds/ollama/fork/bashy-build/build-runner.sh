@@ -20,6 +20,10 @@ export GOAMD64=v1 GOARM64=v8.0
 }
 [[ $(go env GOVERSION) == "go$GO_TOOLCHAIN" ]] || { echo 'wrong Go toolchain' >&2; exit 1; }
 bash "$here/source-guard.sh" "$src"
+# Reviewed module bumps (PIN GO_SECURITY_OVERRIDES): after the pin gates, before
+# go list/go build, so the inventory, deps, SBOM and binary all reflect the
+# overridden tree. S436/#2028: golang.org/x/image@v0.47.0. No vuln ignore list.
+bash "$here/go-security-overrides.sh" "$src"
 # No caller-selected optimization flags, overlays, alternate compilers or tags.
 unset CGO_CFLAGS CGO_CPPFLAGS CGO_CXXFLAGS CGO_LDFLAGS GOEXPERIMENT
 # The build compiles exactly ./cmd/runner — never ./... or sibling mains —

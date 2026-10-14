@@ -8,7 +8,10 @@ from pathlib import Path
 import re
 
 TARGETS = ("linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64", "windows-amd64")
-PERMISSIVE = {"MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause"}
+# MIT-0 elected for miniaudio's dual Unlicense OR MIT-0 (S436/#2028): the
+# policy admits MIT, BSD, Apache-2.0, ISC and similar, and MIT-0 is the
+# no-attribution MIT variant.
+PERMISSIVE = {"MIT", "MIT-0", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause"}
 SYSTEM_LIBS = {
     "linux": {"libc.so.6", "libdl.so.2", "libgcc_s.so.1", "libm.so.6", "libpthread.so.0", "libresolv.so.2", "librt.so.1", "libstdc++.so.6"},
     # Darwin: /usr/lib/libc++.1.dylib and /usr/lib/libresolv.9.dylib are Apple
@@ -292,7 +295,7 @@ def review_native_licenses(out, review_path, output):
             result.append({"target": target, "path": path, "sha256": digest,
                            "license": license_id, "notice": notice})
     Path(output).write_text(json.dumps({"schema": "bashy-runner-native-license-review-v1",
-        "policy": "exact SHA-256 match; MIT/BSD/Apache-2.0 only; explicit notice required", "inputs": result},
+        "policy": "exact SHA-256 match; MIT/MIT-0/BSD/Apache-2.0 only; explicit notice required", "inputs": result},
         indent=2, sort_keys=True) + "\n")
 
 
@@ -312,7 +315,7 @@ def licenses(report, notices, output):
             entries.append({"package": name, "license": license_id})
     if not entries:
         fail("compiled Go license report is empty")
-    Path(output).write_text(json.dumps({"schema": "bashy-runner-license-review-v1", "policy": "MIT/BSD/Apache-2.0 only", "packages": entries}, indent=2, sort_keys=True) + "\n")
+    Path(output).write_text(json.dumps({"schema": "bashy-runner-license-review-v1", "policy": "MIT/MIT-0/BSD/Apache-2.0 only", "packages": entries}, indent=2, sort_keys=True) + "\n")
 
 
 def aggregate_sbom(out):

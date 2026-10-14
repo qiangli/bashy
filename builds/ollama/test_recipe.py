@@ -48,6 +48,12 @@ class Recipe(unittest.TestCase):
             path = src / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("source fixture\n")
+        # Minimal module graph for the GO_SECURITY_OVERRIDES gate: the
+        # fixture pins the nine x/* modules below the override, so
+        # build-runner.sh must bump each to its reviewed version (the
+        # derived MVS closure of the x/image fix) before compiling.
+        (src / "go.mod").write_text("module example.org/runner\n\ngo 1.24.1\n\nrequire golang.org/x/crypto v0.43.0\nrequire golang.org/x/image v0.22.0\nrequire golang.org/x/mod v0.30.0\nrequire golang.org/x/net v0.46.0\nrequire golang.org/x/sync v0.17.0\nrequire golang.org/x/sys v0.37.0\nrequire golang.org/x/term v0.36.0\nrequire golang.org/x/text v0.30.0\nrequire golang.org/x/tools v0.38.0\n")
+        (src / "go.sum").write_text("")
         run("git", "init", "-q", str(src))
         run("git", "-C", str(src), "add", ".")
         run("git", "-C", str(src), "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
@@ -100,13 +106,84 @@ class Recipe(unittest.TestCase):
         # fatals with 'already exists'), and report --template takes a
         # template FILE whose rows use the tool's fields (.LicenseName;
         # there is no .License). CI run 38537053528 never reached this step.
+        # S436/#2028: the report covers every shipped target — one
+        # check/report per GOOS/GOARCH with the rows unioned — so
+        # Windows-only compiled modules (mousetrap) reach aggregate-sbom.
         wf = (self.fork / ".github/workflows/bashy-build.yml").read_text()
         step = wf.split("compiled-input permissive license review", 1)[1].split("- name:", 1)[0]
-        self.assertNotIn("mkdir -p ../out/notices", step)
-        self.assertIn('go-licenses save --save_path=../out/notices', step)
         self.assertNotIn("report --template '{{", step)
         self.assertIn('go-licenses report --template "$tmpl"', step)
         self.assertIn(".LicenseName", step)
+        for target in TARGETS:
+            goos, goarch = target.split("-")
+            self.assertIn(f"GOOS=$goos GOARCH=$goarch go-licenses check", step)
+            self.assertIn(f"GOOS=$goos GOARCH=$goarch go-licenses report", step)
+        self.assertIn("sort -u -o ../out/runner-licenses.csv", step)
+        self.assertIn('go-licenses save --save_path="../out/notices-$target"', step)
+        self.assertIn("mousetrap", step)
+        # Portable first-wins notices merge: bare cp -n exits 1 on macOS
+        # when the destination exists (GNU exits 0), which kills the step
+        # under set -euo pipefail (replayed on novidesign.local).
+        self.assertNotIn('cp -n "../out/notices-', step)
+        self.assertIn("if [[ ! -e $dest ]]", step)
+
+    def test_security_override_applies_in_build_and_audit(self):
+        # KIND=custom, so the recipe mirrors the go-kind GO_SECURITY_OVERRIDES
+        # mechanism rather than including it: the declaration, the gated
+        # helper, and its application after the pin gates in BOTH jobs.
+        pin = (self.helpers / "PIN").read_text()
+        # The declaration is the derived MVS closure of the x/image fix
+        # (nine x/* modules at exactly the selected versions).
+        self.assertIn("golang.org/x/image@v0.47.0", pin)
+        for spec in ("golang.org/x/crypto@v0.57.0", "golang.org/x/mod@v0.41.0",
+                     "golang.org/x/net@v0.59.0", "golang.org/x/sync@v0.24.0",
+                     "golang.org/x/sys@v0.49.0", "golang.org/x/term@v0.46.0",
+                     "golang.org/x/text@v0.43.0", "golang.org/x/tools@v0.51.0"):
+            self.assertIn(spec, pin)
+        self.assertTrue((self.helpers / "go-security-overrides.sh").is_file())
+        run("bash", "-n", str(self.helpers / "go-security-overrides.sh"))
+        helper = (self.helpers / "go-security-overrides.sh").read_text()
+        self.assertIn("go get", helper)
+        self.assertIn("go.mod changed outside the require lines", helper)
+        build = (RECIPE / "files/build-runner.sh").read_text()
+        self.assertLess(build.index("source-guard.sh"), build.index("go-security-overrides.sh"))
+        self.assertLess(build.index("go-security-overrides.sh"), build.index("go list -mod=readonly"))
+        wf = (self.fork / ".github/workflows/bashy-build.yml").read_text()
+        audit = wf.split("audit + SBOM", 1)[1].split("  release:", 1)[0]
+        self.assertIn("GO_SECURITY_OVERRIDES (reviewed module bumps", audit)
+        self.assertLess(audit.index("GO_SECURITY_OVERRIDES (reviewed module bumps"),
+                        audit.index("compiled-input permissive license review"))
+        # No vuln ignore list anywhere in the recipe.
+        self.assertNotIn("vuln-ignore", wf)
+        self.assertFalse((RECIPE / "files/vuln-ignore").exists())
+
+    def test_native_license_review_pins_every_compiled_input(self):
+        # The committed review must admit exactly the permissive set
+        # (including elected MIT-0 for miniaudio) with an exact SHA-256 and
+        # an explicit notice per compiled native input.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("audit_runner", RECIPE / "files/audit-runner.py")
+        audit_runner = importlib.util.module_from_spec(spec)
+        prev_flag = sys.dont_write_bytecode
+        sys.dont_write_bytecode = True
+        try:
+            spec.loader.exec_module(audit_runner)
+        finally:
+            sys.dont_write_bytecode = prev_flag
+        review = json.loads((RECIPE / "files/license-review.json").read_text())
+        self.assertEqual(review["schema"], "bashy-runner-native-license-review-v1")
+        self.assertIn("MIT-0", audit_runner.PERMISSIVE)
+        inputs = review["inputs"]
+        self.assertGreaterEqual(len(inputs), 300)
+        mini = inputs["llama/llama.cpp/vendor/miniaudio/miniaudio.h"]
+        self.assertEqual(mini["license"], "MIT-0")
+        self.assertIn("MIT-0", mini["notice"])
+        self.assertEqual(mini["sha256"], "05b75871465913f1e3f5b05f0dcca1d487f3099e653477e071acc40317e68f38")
+        for path, row in inputs.items():
+            with self.subTest(path=path):
+                self.assertIn(row["license"], audit_runner.PERMISSIVE)
+                self.assertRegex(row["sha256"], r"^[0-9a-f]{64}$")
+                self.assertTrue(row["notice"].strip())
 
     def test_no_egress_gate_compiles_nothing(self):
         # The Windows leg enforces via the built-in Defender Firewall: no
@@ -203,6 +280,24 @@ elif args[0] == 'generate':
  assert args[1:] == ['./ml/backend/ggml/ggml/src/ggml-metal']
 elif args[0] == 'list':
  print('{}')
+elif args[0] == 'mod':
+ assert args[1:3] == ['edit', '-json']
+ import re, json
+ text = pathlib.Path('go.mod').read_text()
+ mod = re.search(r'^module\s+(\S+)', text, re.M).group(1)
+ mgo = re.search(r'^go\s+(\S+)', text, re.M)
+ reqs = [{'Path': m.group(1), 'Version': m.group(2), 'Indirect': False} for m in re.finditer(r'^\s*require\s+(\S+)\s+(\S+)', text, re.M)]
+ print(json.dumps({'Module': {'Path': mod}, 'Go': mgo.group(1) if mgo else '', 'Toolchain': '', 'Require': reqs, 'Exclude': [], 'Replace': [], 'Retract': []}))
+elif args[0] == 'get':
+ import re
+ text = pathlib.Path('go.mod').read_text()
+ for spec in args[1:]:
+  module, version = spec.split('@')
+  assert version.startswith('v')
+  updated, count = re.subn(r'(?m)^(\s*require\s+' + re.escape(module) + r'\s+)\S+', r'\g<1>' + version, text)
+  assert count == 1, spec
+  text = updated
+ pathlib.Path('go.mod').write_text(text)
 else: raise RuntimeError(args)
 ''')
         go.chmod(0o755)
@@ -246,6 +341,10 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
                 asset = "runner-" + target
                 env["TEST_HOST"] = target.replace("-", "/")
                 out = self.root / target
+                # CI gives every matrix leg a fresh checkout; the shared
+                # fixture must be restored to pristine so each leg exercises
+                # the override from the pinned tree (verify-pin runs first).
+                run("git", "-C", str(src), "checkout", "--", "go.mod", "go.sum")
                 run("bash", str(self.helpers / "build-runner.sh"), str(src), str(out), asset, env=env)
                 captured = json.loads((out / (asset + ".compiler-inputs.json")).read_text())
                 self.assertIn("llama/llama.cpp/native.c", captured["files"])
@@ -272,6 +371,28 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
                     str(out / data["executable"]), str(out / "again.gz"), str(out / "again.json"),
                     data["target"], data["upstream_commit"], "1.27.2")
                 self.assertEqual(gz, (out / "again.gz").read_bytes())
+        # The reviewed module bump applies in the build: the fixture pins
+        # the x/* modules below the override, and every leg must have raised
+        # each to exactly its declared MVS-selected version.
+        gomod = (src / "go.mod").read_text()
+        for spec in ("golang.org/x/crypto v0.57.0", "golang.org/x/image v0.47.0",
+                     "golang.org/x/mod v0.41.0", "golang.org/x/net v0.59.0",
+                     "golang.org/x/sync v0.24.0", "golang.org/x/sys v0.49.0",
+                     "golang.org/x/term v0.46.0", "golang.org/x/text v0.43.0",
+                     "golang.org/x/tools v0.51.0"):
+            self.assertIn(spec, gomod)
+        self.assertNotIn("v0.22.0", gomod)
+        # The no-op path: a tree already carrying the fix exits 0 with no
+        # changes (upstream caught up == retire the override). The helper
+        # itself has no pin gate, so it is driven directly with the same
+        # Go environment the build job exports.
+        noop = self.root / "noop-src"
+        noop.mkdir()
+        (noop / "go.mod").write_text("module example.org/runner\n\ngo 1.26.0\n\nrequire golang.org/x/crypto v0.57.0\nrequire golang.org/x/image v0.47.0\nrequire golang.org/x/mod v0.41.0\nrequire golang.org/x/net v0.59.0\nrequire golang.org/x/sync v0.24.0\nrequire golang.org/x/sys v0.49.0\nrequire golang.org/x/term v0.46.0\nrequire golang.org/x/text v0.43.0\nrequire golang.org/x/tools v0.51.0\n")
+        go_env = dict(env, GOWORK="off", CGO_ENABLED="1", GOTOOLCHAIN="local")
+        again = run("bash", str(self.helpers / "go-security-overrides.sh"), str(noop), env=go_env)
+        self.assertIn("already satisfied", again.stdout + again.stderr)
+        self.assertIn("golang.org/x/image v0.47.0", (noop / "go.mod").read_text())
         # Windows must never resolve a stock gcc/g++/clang: lab hosts and
         # minimal images have no GCC on PATH, and the verified MinGW clang
         # pair is the only compiler the recipe may use there. A PATH with
@@ -283,10 +404,13 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
                              ("git", Path(shutil.which("git"))),
                              ("cygpath", mock / "cygpath")]:
             (lean / tool).symlink_to(target)
-        for tool in ("mkdir", "mktemp", "rm", "grep", "awk", "sort", "cat", "dirname"):
+        # diff/sed are text tools, not compilers: the override gate needs
+        # them the same way it needs grep/awk/sort, so they stay on PATH.
+        for tool in ("mkdir", "mktemp", "rm", "grep", "awk", "sort", "cat", "dirname", "diff", "sed"):
             (lean / tool).symlink_to(shutil.which(tool))
         lean_env = dict(env, PATH=str(lean), TEST_HOST="windows/amd64")
         lean_out = self.root / "windows-lean"
+        run("git", "-C", str(src), "checkout", "--", "go.mod", "go.sum")
         run(str(lean / "bash"), str(self.helpers / "build-runner.sh"),
             str(src), str(lean_out), "runner-windows-amd64", env=lean_env)
         self.assertTrue((lean_out / "runner-windows-amd64.exe").is_file())

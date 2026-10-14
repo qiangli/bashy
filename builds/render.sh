@@ -121,7 +121,7 @@ fi
 # Syntax only; the workflow enforces the real gate (the go.mod diff). Checking
 # it here means a typo fails at render time instead of in CI.
 if [[ -n ${GO_SECURITY_OVERRIDES:-} ]]; then
-	[[ $KIND == go ]] || die "GO_SECURITY_OVERRIDES is a go-kind key, but KIND=$KIND"
+	[[ $KIND == go || $KIND == custom ]] || die "GO_SECURITY_OVERRIDES is a go/custom key, but KIND=$KIND"
 	for spec in $GO_SECURITY_OVERRIDES; do
 		[[ $spec =~ ^[^@[:space:]]+@v[0-9][0-9A-Za-z.+-]*$ ]] ||
 			die "GO_SECURITY_OVERRIDES entry $spec is not module@vVERSION"

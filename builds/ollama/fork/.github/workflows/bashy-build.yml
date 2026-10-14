@@ -272,24 +272,52 @@ jobs:
         run: |
           set -euo pipefail
           python3 fork/bashy-build/audit-runner.py inventory --out out --report out/runner-linked-libraries.json
+      - name: GO_SECURITY_OVERRIDES (reviewed module bumps, gated go.mod diff)
+        run: |
+          set -euo pipefail
+          # Same overridden tree the build job compiles: PIN
+          # GO_SECURITY_OVERRIDES applied after the pin gates, before
+          # go-licenses/SBOM/govulncheck read the module graph. S436/#2028:
+          # golang.org/x/image@v0.47.0. No vuln ignore list.
+          export GOWORK=off GOENV=off GOTOOLCHAIN=local
+          bash fork/bashy-build/go-security-overrides.sh src
       - name: compiled-input permissive license review and notices
         working-directory: src
         run: |
           set -euo pipefail
           export PATH="$RUNNER_TEMP/bin:$PATH" GOWORK=off GOENV=off GOTOOLCHAIN=local CGO_ENABLED=1
-          go-licenses check --allowed_licenses=MIT,BSD-2-Clause,BSD-3-Clause,Apache-2.0 ./cmd/runner
-          # No mkdir: go-licenses save creates the directory itself and
-          # fatals with 'already exists' if it is pre-created (replay on
-          # CI run 38537053528 artifacts with go-licenses v1.6.0).
-          go-licenses save --save_path=../out/notices ./cmd/runner
-          # report --template takes a template FILE whose rows use the
-          # tool's field names (.Name/.LicenseName; there is no .License),
-          # and printf '%s' adds no trailing blank line: the strict review
-          # rejects even one empty CSV row.
+          # Every shipped target (S436/#2028): the single-GOOS report misses
+          # Windows-only compiled modules (e.g. mousetrap), so
+          # aggregate-sbom cannot see them. Run check/report per GOOS/GOARCH
+          # of the five targets and union the rows; save per target into
+          # fresh dirs (go-licenses save creates its dir and fatals with
+          # 'already exists' if pre-created, CI run 38537053528) then merge.
           tmpl=$(mktemp)
           printf '%s' '{{range .}}{{.Name}},{{.LicenseName}}{{"\n"}}{{end}}' > "$tmpl"
-          go-licenses report --template "$tmpl" ./cmd/runner > ../out/runner-licenses.csv
-          rm -f "$tmpl"
+          : > ../out/runner-licenses.csv
+          for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64; do
+            goos=${target%-*}; goarch=${target#*-}
+            GOOS=$goos GOARCH=$goarch go-licenses check --allowed_licenses=MIT,MIT-0,BSD-2-Clause,BSD-3-Clause,Apache-2.0 ./cmd/runner
+            rm -rf "../out/notices-$target"
+            GOOS=$goos GOARCH=$goarch go-licenses save --save_path="../out/notices-$target" ./cmd/runner
+            GOOS=$goos GOARCH=$goarch go-licenses report --template "$tmpl" ./cmd/runner > "../out/runner-licenses-$target.csv"
+            grep -v '^$' "../out/runner-licenses-$target.csv" >> ../out/runner-licenses.csv || true
+          done
+          rm -f "$tmpl" ../out/runner-licenses-*.csv
+          sort -u -o ../out/runner-licenses.csv ../out/runner-licenses.csv
+          rm -rf ../out/notices
+          mkdir -p ../out/notices
+          for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64; do
+            (cd "../out/notices-$target" && find . -type f) | while IFS= read -r f; do
+              dest="../out/notices/${f#./}"
+              mkdir -p "$(dirname "$dest")"
+              # Portable first-wins dedupe: cp -n exits 1 on macOS when the
+              # destination exists (GNU exits 0), so test first. Same
+              # module@version carries identical bytes on every target.
+              if [[ ! -e $dest ]]; then cp "../out/notices-$target/$f" "$dest"; fi
+            done
+            rm -rf "../out/notices-$target"
+          done
           python3 ../fork/bashy-build/audit-runner.py licenses --report ../out/runner-licenses.csv --notices ../out/notices --output ../out/runner-licenses.json
       - name: CycloneDX SBOM for the compiled runner package
         working-directory: src

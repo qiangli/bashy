@@ -1,5 +1,1526 @@
 {
-  "schema": "bashy-runner-native-license-review-v1",
-  "policy": "Only exact SHA-256 reviewed MIT, Apache-2.0, BSD-2-Clause, or BSD-3-Clause inputs with explicit notices are admitted. Unknown, copyleft, changed, and generated inputs fail closed until individually reviewed.",
-  "inputs": {}
+  "inputs": {
+    "llama/build-info.cpp": {
+      "license": "MIT",
+      "notice": "MIT (generated build stamp under Ollama MIT; LLAMA_BUILD_NUMBER/COMMIT constants only).",
+      "sha256": "7b06f92a826cd3e80ff3d6f40d28d968cc17a198dea3b25acfc9a2e1f041a420"
+    },
+    "llama/llama.cpp/common/common.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "8c5b15e1448096be0d30da21d8d61fdf3eb264bcba1b4310630b70bdeeb6405a"
+    },
+    "llama/llama.cpp/common/common.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "72c98d0fa03faf5b881f91591f13e38e8c7b5c8483af6de0d0146a9e372f038f"
+    },
+    "llama/llama.cpp/common/json-schema-to-grammar.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "27e2d6c22db63244dac05d7be104413e18b7a58a0c807e5ab48fe6b9cf9feb42"
+    },
+    "llama/llama.cpp/common/json-schema-to-grammar.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "d6925f39089f10db6ec889caef0461e9b6f942b944c44191db801fc7ed43568c"
+    },
+    "llama/llama.cpp/common/log.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "751e30d4d983637f9655bc00ed74c032c3426d0b5347cb32fc7f1eb9a3069f5e"
+    },
+    "llama/llama.cpp/common/log.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "ed5c80f7426a036a831df417229b652d66e1f544af11134939e572376c1f8d98"
+    },
+    "llama/llama.cpp/common/sampling.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "b88f10a9331108c5982825887698235431eddddd81669a3628bc8c920c75954f"
+    },
+    "llama/llama.cpp/common/sampling.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "8741c72e8dd0e2fd8970f97b6716b9da97defd5ddd391b16083c7e689a7a9f26"
+    },
+    "llama/llama.cpp/include/llama-cpp.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "c48fd31095d2403a3bf7cbe98333ba0e61a398ee6e83b56f9d8b7237143b9877"
+    },
+    "llama/llama.cpp/include/llama.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "e54ef5682ebc1710b72c0b4055b2fda6a46a69cd7158c46e9a697cb5386cf54f"
+    },
+    "llama/llama.cpp/src/llama-adapter.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "44874b00d717777ce74c0dc0153f24a4306309fd2c3541557472da7eef675e91"
+    },
+    "llama/llama.cpp/src/llama-adapter.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "a64757c83d52a2b67ea5d1eb19ed4d9ad8b655f87cb332f21f7892de0e663eca"
+    },
+    "llama/llama.cpp/src/llama-arch.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5a2d45db98fad34008ff8b7f7656493fa55e466ecc662297f9e3439e6d62afc8"
+    },
+    "llama/llama.cpp/src/llama-arch.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "702498a667e2ac888efcf44ecaa683722e98e4954665cc1d69b235aa92e16d89"
+    },
+    "llama/llama.cpp/src/llama-batch.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "4b5e39df07e6e2ede5f150b713f96ac431f907267ee7288ce8685b4f3f60b73f"
+    },
+    "llama/llama.cpp/src/llama-batch.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "4d480e186751efd1ae112574381ad0679d02dedefc866038fe90f2a11df6936b"
+    },
+    "llama/llama.cpp/src/llama-chat.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "de449f261d9bced32d5be6abdb849168402770d8fbda220eb0a5c03c92723560"
+    },
+    "llama/llama.cpp/src/llama-chat.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "f6ec54b16161032d26c1038efb1f905a961eab9df12b861c246964b19affa539"
+    },
+    "llama/llama.cpp/src/llama-context.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "ae79af8fdfc69ec308af33d14c10566832ae85004556795c1b2d63c50cfc1543"
+    },
+    "llama/llama.cpp/src/llama-context.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "52d4ad130e8d2f7d25928dc1b271a62458228cc74b0b618ebfb130006a30ddfd"
+    },
+    "llama/llama.cpp/src/llama-cparams.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "95ab4b7b72851eb381a3d2ff2e9f18731103ba5f9f5f216882a034319e709297"
+    },
+    "llama/llama.cpp/src/llama-cparams.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "efbdaf6b5192d136475dd0ab0d5560e78f904cbf9f2c7651b8f23ed7d2c6acec"
+    },
+    "llama/llama.cpp/src/llama-grammar.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "6cd9531cab4f8c2a4b3bf62f529ea6c99deb2f9c7da1a3dc3ac5749ab1ce0954"
+    },
+    "llama/llama.cpp/src/llama-grammar.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "8dea6ceac4d5715a6abacebf5a1ad6a9898d1cea84d43beb33590abbf553d7ad"
+    },
+    "llama/llama.cpp/src/llama-graph.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "47977a01d3919b77a2d8a6c09e1201b1899b68121939aa35d51085e1902010ee"
+    },
+    "llama/llama.cpp/src/llama-graph.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "3550e4b3c5e4c25ec1098e9b4f764db8e95f4044c0e1544886869ba67134257c"
+    },
+    "llama/llama.cpp/src/llama-hparams.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5dcdb2cd78b04abc46cd43b88967c68cb5de2741f69963066fac941be6ae2717"
+    },
+    "llama/llama.cpp/src/llama-hparams.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "61c9ddd9ed9ad817f7fcee09d776f7a2702fddf7e2bacd0ccdc26023b7c81b61"
+    },
+    "llama/llama.cpp/src/llama-impl.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "feab5f6d9cbe9112418d18ae94b48629dc0d2f55b221424996034ff8f8e3674e"
+    },
+    "llama/llama.cpp/src/llama-impl.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5cc9f31f81b663cfa912258853f06af073d5230a91bff68d4cbaee2f5d46425c"
+    },
+    "llama/llama.cpp/src/llama-io.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "80800a1835ecf4df2fef6cf711d2b005dab50ad9405d8963ac4cd2b6dae13f74"
+    },
+    "llama/llama.cpp/src/llama-io.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "a172a8407fd17ec7d8159b535f3547075b511dd3931d3c0b087287b0974d994b"
+    },
+    "llama/llama.cpp/src/llama-kv-cache-iswa.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "2c33b34270697c2eef76851ffc3ddde58ad85f82fd5a4092d8b386189a2ee5e4"
+    },
+    "llama/llama.cpp/src/llama-kv-cache-iswa.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "e71817c82a98905025c33f0f67aab7aa200f33444e2a2979888dd05a67e15777"
+    },
+    "llama/llama.cpp/src/llama-kv-cache.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "9908f74dfb7622b288cafb3a367c3872897bdc369754a8608d3ba8687a0409ae"
+    },
+    "llama/llama.cpp/src/llama-kv-cache.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "09f993f955af342138ae5a840a0f1b96dfa38e409f3833fc9cc3a726e746eddb"
+    },
+    "llama/llama.cpp/src/llama-kv-cells.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "10bdacec1d4f5db486b64d58db1fd818c3505d4ba9897a8f8b314ce8f70044d8"
+    },
+    "llama/llama.cpp/src/llama-memory-hybrid.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "08dcd84796a1ce3a1e2b3b76556c2bff3f96b9a161763fd5d2a1b19f731b04fc"
+    },
+    "llama/llama.cpp/src/llama-memory-hybrid.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "207e813d9052d876beab97203332fd37b0cb0e375c40ea8743a9ded4775673df"
+    },
+    "llama/llama.cpp/src/llama-memory-recurrent.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "7747f9cd572f73159525692391d404684877a595101a50f4625a50f8dbd8029b"
+    },
+    "llama/llama.cpp/src/llama-memory-recurrent.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "16a8dc0ae1e9573bd285d8b3b4dd4c4c6381303293086f872fd0be0d1c780186"
+    },
+    "llama/llama.cpp/src/llama-memory.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "1bf48d324cfa5fa57d5c486ec17ddd12b844fc40ec82d72ba113a3fe76a1f2c6"
+    },
+    "llama/llama.cpp/src/llama-memory.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "921f11e74cc9fb78a649b7d2c56d901de8a09a9cedbe204842186c4f716a981c"
+    },
+    "llama/llama.cpp/src/llama-mmap.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "89ace3e4654ef0446c18f6058f40eecd434c54a5cc83a16da119329fb089fb8f"
+    },
+    "llama/llama.cpp/src/llama-mmap.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5eee81187cd4860e16e0fdeed2968de65d084613cb9f85a178eccb3808b98517"
+    },
+    "llama/llama.cpp/src/llama-model-loader.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "6f93ab40dc8dad8be597a1ca87d9779dddbb80bfeb2bf0950162083e4e7d6961"
+    },
+    "llama/llama.cpp/src/llama-model-loader.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "417d239516deaf553f413c65779180e950055d5ec2be5ebaa8bc17e275cfecf8"
+    },
+    "llama/llama.cpp/src/llama-model-saver.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "14b18f8b42f72675dd4d99f524e029a927856bbffa737cc5423d756ae53d3ccc"
+    },
+    "llama/llama.cpp/src/llama-model-saver.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "73fab27a01432ddc9fb7dbe2ab832a70b2ce421fd7fa48f8cbad2eaff593e42c"
+    },
+    "llama/llama.cpp/src/llama-model.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "cc6aa1b78e461a812ec1a3859ee7d1db610051019f4dcd3f5465073f33f25e26"
+    },
+    "llama/llama.cpp/src/llama-model.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "a2779efed159d3bb2ad714e07ccc9dc6f129740ecc6e9d38edc76a623719b76e"
+    },
+    "llama/llama.cpp/src/llama-quant.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "0402f8ca8490d5a661f8565e0faec2cc50a7b10f4dccabb4ed2bfee1441f9e75"
+    },
+    "llama/llama.cpp/src/llama-quant.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "b3adf106d95b8934f690943f2921308b90be5b766c4c8ba250c792de56400201"
+    },
+    "llama/llama.cpp/src/llama-sampling.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Z-algorithm passage adapted from a public-domain implementation).",
+      "sha256": "20640db698058f680f6ecf4bfc89cf05ea629eeb3aadf0638b7b9ae64a9037f0"
+    },
+    "llama/llama.cpp/src/llama-sampling.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "d3cbc9af3b2731733a6a210e5f6acb08b6a786d2d259a5363349c3e7d60fd42d"
+    },
+    "llama/llama.cpp/src/llama-vocab.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "65924bed5c9070ce0f0fc81c99fcc3335c6121093b0bc57787b6a6ad2c45171a"
+    },
+    "llama/llama.cpp/src/llama-vocab.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "7579673b0c53b2fa5330837279738d76fbf5fa623841da717e98d3ffdae3343c"
+    },
+    "llama/llama.cpp/src/llama.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "f0ea4b621780ee0796b3edc87407d042c196319e531e1cec6ededa2850d1b63d"
+    },
+    "llama/llama.cpp/src/models/afmoe.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "c61de4280beb37ca645eb893e7c51ff53a2a40b066c7ebe4d95cb0a353bcf29e"
+    },
+    "llama/llama.cpp/src/models/apertus.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5bf3bfc08c64de334e301f6109bd392b5574efb5d5175b4bde1d2cae228d2d62"
+    },
+    "llama/llama.cpp/src/models/arcee.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "6e81692a4a06fab42e5f9bd37e9a528d5cb4795f5666caa84f1bfb219638cc57"
+    },
+    "llama/llama.cpp/src/models/arctic.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "c381e6addbbce1e2e148df3ad1f4d5109f04c10a5225ca7bde822d3580ce8d00"
+    },
+    "llama/llama.cpp/src/models/arwkv7.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "e0d083e303ee63db0543f820332aa6b37cdb15be253f07e3759701b432007f9e"
+    },
+    "llama/llama.cpp/src/models/baichuan.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "d4b045a39cf933b71f3187f174627ef5979dcfbfb908a6e31a639be31a7a6d03"
+    },
+    "llama/llama.cpp/src/models/bailingmoe.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "43cd612ef04c8ae3d46757650902a574eee9ee53d26b8d7688f4a9e0674fad32"
+    },
+    "llama/llama.cpp/src/models/bailingmoe2.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "b952d584c78882a28d069a3017ec84e845c388b590a4b0246bf263eae612d844"
+    },
+    "llama/llama.cpp/src/models/bert.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "93ced7ad6e9dc48eb5d75440c8fbd075763a8b3bee80fc2959c3f73152a23c5c"
+    },
+    "llama/llama.cpp/src/models/bitnet.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "418736776cd8d14220684dd32d5acbebff483608502c0b62b455d54868c8e617"
+    },
+    "llama/llama.cpp/src/models/bloom.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "570c8bdf59a30dfbdd8608082e05a618794cade3f934881106387dfc1a385b2b"
+    },
+    "llama/llama.cpp/src/models/chameleon.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "96a79485ad2c7732665c202675e57a1175c2912f5ced3d0bd0b71a4d5f1b0c29"
+    },
+    "llama/llama.cpp/src/models/chatglm.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "e2b3e416faa118572386194a6e1cfe512d2ae0d1fa410c9dc944fac8fc098195"
+    },
+    "llama/llama.cpp/src/models/codeshell.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "8fbfbb29b440037328adaaf38d836eb3418bd609672b0b76291be800cb89a712"
+    },
+    "llama/llama.cpp/src/models/cogvlm.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "c679229ab1c310f65abf3424b5376877b331f106eb23c268754374142129d836"
+    },
+    "llama/llama.cpp/src/models/cohere2-iswa.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "4d8a997432bed74730b25ddcea1518502b4db561bcebfb1b4b706baf28521c7e"
+    },
+    "llama/llama.cpp/src/models/command-r.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "d977f7c42a20e5655f4e579522feee5b2389a22ccf170100dffe553b43938f28"
+    },
+    "llama/llama.cpp/src/models/dbrx.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "c98cb8dcaa42e21d98a5b7cf630ab75d889c667648d7e19b5a40f2c5f9293ba4"
+    },
+    "llama/llama.cpp/src/models/deci.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "495de960951612058d85b0babc21f1fa840642e9015622dbc6e78481b6042e0c"
+    },
+    "llama/llama.cpp/src/models/deepseek.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "f696d78f9ff13d11a8ab30b7ad7bb29de0c4b313a00b78aba70485c36145a8b3"
+    },
+    "llama/llama.cpp/src/models/deepseek2.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "73e897aa87984b1a338323b57445b1d7773e5e1cea36501b9054d0077977890b"
+    },
+    "llama/llama.cpp/src/models/dots1.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "bfb6761d0f6775c09eb37bf9ffeed35e73714b3cac1dafcba5ddd56a0843d66a"
+    },
+    "llama/llama.cpp/src/models/dream.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "6642fff2c1dd332698f15bd356ea7b9356b8090f53dc316ceea4f6457057106a"
+    },
+    "llama/llama.cpp/src/models/ernie4-5-moe.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "9e9251c887b1dc54b00ab59704a3cd9cfbb8ad22640b6e02d33a00db84545deb"
+    },
+    "llama/llama.cpp/src/models/ernie4-5.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "062ff03d2b13c517b964b85809a9f4b85a29920d4657585cb73b65e0c5aa2708"
+    },
+    "llama/llama.cpp/src/models/exaone.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "297b110ae58539658d87f6da74f3a4fb37856011e72d7a6f3d806b1d5df2abbe"
+    },
+    "llama/llama.cpp/src/models/exaone4.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "1028eeed361f0691f769830c8acab5235139010218230b20e70dcfc499246dc8"
+    },
+    "llama/llama.cpp/src/models/falcon-h1.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "ba2269322acc6afef9d22f44e5fef686549fb9c1d46e72ff8ab281b46ef30b63"
+    },
+    "llama/llama.cpp/src/models/falcon.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "c0eac239c04c131fbece4e91b5b3dd9efb580f893eb527687720229469060a29"
+    },
+    "llama/llama.cpp/src/models/gemma-embedding.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "37cc55108c00e3609fb4c7a263043a1a3d4bf61e93172294cc16a1cebc00cb3c"
+    },
+    "llama/llama.cpp/src/models/gemma.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "e7a91c34e3a3126159f8a84f4e061c1ffbf1782a60fc94fa5481134a578fa084"
+    },
+    "llama/llama.cpp/src/models/gemma2-iswa.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "57ffd71eec363156e3e87e1798cb2428019a6609a8dad8fe12b3da0520012c22"
+    },
+    "llama/llama.cpp/src/models/gemma3.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5296dd562ea5181dd77faf84e9f70d87f6df598fee9a9ba769e11c1a8a34141a"
+    },
+    "llama/llama.cpp/src/models/gemma3n-iswa.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "a8e4494697951c6f665f665844ef4151b68f2dce169f36f243acca4c1fafa3d4"
+    },
+    "llama/llama.cpp/src/models/glm4-moe.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "3fba0446933013e77c554361eff341359ca0b02b389e6834682d41a35358787e"
+    },
+    "llama/llama.cpp/src/models/glm4.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "44411ed16b8ce713d1ffa52c50b869ea2bd57b37d8d034f3352ea4e2913369c0"
+    },
+    "llama/llama.cpp/src/models/gpt2.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "be886fb547e73d1a5511d6fff0d89ef8b971d49cbaab75b6d45a16fc7f2c61c7"
+    },
+    "llama/llama.cpp/src/models/gptneox.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "d4d0706e482754e93af769706cb0ed2b5e13e30156e0bb7e2052d38c60a323a7"
+    },
+    "llama/llama.cpp/src/models/granite-hybrid.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "ce88de794dedf25dfb3c6a966e21d115f97091b07f01b32849e60c8928112bd3"
+    },
+    "llama/llama.cpp/src/models/granite.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "d426e5a39eb46fdbe3cfe5911aecd0bca33041f9b11ee2762790218d69964ad5"
+    },
+    "llama/llama.cpp/src/models/graph-context-mamba.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "9c51db4035a9c657ebf6b49beb872b19f679b3472143d4e14ab512cbc3017c86"
+    },
+    "llama/llama.cpp/src/models/grok.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "af7baaaca4297dc103f44931b530ad47586a6cdfd261456ffb9636a82decaf35"
+    },
+    "llama/llama.cpp/src/models/grovemoe.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "7940fde81c66acf4bd09507d6081ede8e7e0b6ac3f057e7e54d8342782f0347e"
+    },
+    "llama/llama.cpp/src/models/hunyuan-dense.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "d6b9a20b32f0ace0b1972ca211eb4ad399a383e9cd045b5ae76f9fa9c757ebe4"
+    },
+    "llama/llama.cpp/src/models/hunyuan-moe.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "aa37b20dccb0919d03526da9e96deae21d7ce2ec29e361a6b1879733d17e3c35"
+    },
+    "llama/llama.cpp/src/models/internlm2.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "14a4c5a803574ababd7dc14e080b26cf3540300be0221276c3f344185c9ccea7"
+    },
+    "llama/llama.cpp/src/models/jais.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "c247878ad0cef0ca2e8c14ae387b629d1849bae0b3b6142cbb36678630b3aebb"
+    },
+    "llama/llama.cpp/src/models/jamba.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "e2c6704b80e1024d727d7d96c2ac7aa201e7d8ccded2deda622a006b051533e3"
+    },
+    "llama/llama.cpp/src/models/lfm2.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "1c678c2e2f0124cc282418c85b21e1cde27a1ad54bad782170890cab3fa93962"
+    },
+    "llama/llama.cpp/src/models/llada-moe.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "90767704151f38e64f3615c0e155ba969f089e2541ac29b1c9f7c15522f21ea1"
+    },
+    "llama/llama.cpp/src/models/llada.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "864dbb918ea1103199cd793a81f5da487624ac0cf7d8f80c5d48449da6639412"
+    },
+    "llama/llama.cpp/src/models/llama-iswa.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "dee0c89429906b729ec91006985275e9fcbcefdafa799dba3d98cd6720a5aad9"
+    },
+    "llama/llama.cpp/src/models/llama.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "fd08109771135da167d9992fe4fcbe1feb1871492ba89991c91c22433f4a2cc7"
+    },
+    "llama/llama.cpp/src/models/mamba.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "d029b0494d151fa354811047cfadb6154af8724817fbd08b5dc2fda13234245b"
+    },
+    "llama/llama.cpp/src/models/minicpm3.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "f718902e218766d993c13fee5b33ab7178108fd3bac2287ba01545e82291f806"
+    },
+    "llama/llama.cpp/src/models/minimax-m2.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "606fd3bc884e9c6dabd4da45f6080b954242cbfb612494a29c50bb165f391bcc"
+    },
+    "llama/llama.cpp/src/models/mistral3.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5c5fae0beec3bcaf2d8afe22a1ee7f5478fa96baef3259f4d0dbde599a04ccac"
+    },
+    "llama/llama.cpp/src/models/models.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "fa785b57d3878b055dd9be3503f936888107c63cf86c4ec17d2d8f07d71e1cc3"
+    },
+    "llama/llama.cpp/src/models/mpt.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "f99dd9d67efd5a1ad47e14a460bf659e83a58a190dd93ecb5088284cb3ff7d9b"
+    },
+    "llama/llama.cpp/src/models/nemotron-h.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "694854fcc7a4f83b56782308c1496e95d6de1191493f7281720abfbf7e5c31da"
+    },
+    "llama/llama.cpp/src/models/nemotron.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "83d9ba0988a32bd6587829d4a473c2c89262af8bc1a1b86516f548c8e59bceb6"
+    },
+    "llama/llama.cpp/src/models/neo-bert.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "96c4bb57e918d44a763a95b7d3b2aaad170eda7a69b6f81caadd4c9c96b22e79"
+    },
+    "llama/llama.cpp/src/models/olmo.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "24334977a533fea9c466a4203fa388e0150068244b61b675275046b8819f2f60"
+    },
+    "llama/llama.cpp/src/models/olmo2.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "c1a0256af531c4940d48f606783e395da74fcedec33643fb10ae48f9096adcc8"
+    },
+    "llama/llama.cpp/src/models/olmoe.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "2473a9306b68c349c176e653844ebf28c39cb8723a45075619d726fffe390d70"
+    },
+    "llama/llama.cpp/src/models/openai-moe-iswa.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "f653446c259770c45900eb9a81e9eb19eb7f8d757c4c4e1f153934c4aca6054c"
+    },
+    "llama/llama.cpp/src/models/openelm.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "8f4f7d2f0b3b00cd63548f2f6e6ab75d486d324f95495720f4c5652d6c3208f0"
+    },
+    "llama/llama.cpp/src/models/orion.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "59cd947694f52beb2a03c6bb6c55d5d55b038ed2ebbd84cac5f0c28a973b8447"
+    },
+    "llama/llama.cpp/src/models/pangu-embedded.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "9ce16437a397f2b1ba485e4b53407860b938840c88519685eb8260f91d1ffa24"
+    },
+    "llama/llama.cpp/src/models/phi2.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5dc0993c1f5e7cd5c585bc4a5d9ce27094333f72697c4d66870b9fb9afd82958"
+    },
+    "llama/llama.cpp/src/models/phi3.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "9fa05a30cde6062ba1bf259407d62cd9953902ff5213d10b7c4693b09df27db7"
+    },
+    "llama/llama.cpp/src/models/plamo.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "e18b5127f5bf1d6db228bfbcbd19a10c1234841d58170bd4aedfb038c268fd88"
+    },
+    "llama/llama.cpp/src/models/plamo2.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "81944a3c4178e4a69fb36211f4cc1d48e56327ad55e649bcac8c7235929aa71f"
+    },
+    "llama/llama.cpp/src/models/plm.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "185a4d74f8c17271eeefd73b8136877a1dbe54c8b96bad92fb731cb646a18d3c"
+    },
+    "llama/llama.cpp/src/models/qwen.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "833b58fa4951d1f43369f932e7b27c54962dc9c4c54172d49cab8e034fa3e659"
+    },
+    "llama/llama.cpp/src/models/qwen2.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5f44f50fa8766678493c7bff3ccd051d3edf7b975077d69edd678737407cff57"
+    },
+    "llama/llama.cpp/src/models/qwen2moe.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "43dac1c64f4b789307ada126f37afcd0395f8e780359429e9bdc885afba93f72"
+    },
+    "llama/llama.cpp/src/models/qwen2vl.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "7f40c32d6ae8356acf55215a93fc17447fc37868f6922c385d35616ac723ea11"
+    },
+    "llama/llama.cpp/src/models/qwen3.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "d72ec8566784bea0760daf214c31ed7e9f3377648ce4eed0cf571004d0acd491"
+    },
+    "llama/llama.cpp/src/models/qwen3moe.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "517dc279b3ab0ef9d5e457230e51c0b30271cc3f078cd63f9898ba09ce124849"
+    },
+    "llama/llama.cpp/src/models/qwen3next.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "ea3beb90a87b02a41b4b1544ac0085c60ce0c5fbcde5a82072be7db3c9ebb189"
+    },
+    "llama/llama.cpp/src/models/qwen3vl-moe.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "e01a2a1d068170e647ad3f57a5b8a474d311bfa6a711ee31ab023925aa15fc13"
+    },
+    "llama/llama.cpp/src/models/qwen3vl.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "d739e95e43795d26ff5f376821eaa2a90f557205531ca87c06f9dd054e72f6a0"
+    },
+    "llama/llama.cpp/src/models/refact.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "d04f786124a5530e6abd2d3934e5cf526cb8607e0c4e78aea5bde834c46932b1"
+    },
+    "llama/llama.cpp/src/models/rnd1.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "d5c5d1f358b9752f7de7d304f57d729c1c07ff50d4535bc6e9ffec83554f9ab5"
+    },
+    "llama/llama.cpp/src/models/rwkv6-base.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "723eddc575645ba7084f000d867752fc9ae32ff01fe749e5791b1238efeb4d51"
+    },
+    "llama/llama.cpp/src/models/rwkv6.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "4462b9e09c23877954ec2b2f1022b08f552afca9152d5ac9a9626c3d5c9d938f"
+    },
+    "llama/llama.cpp/src/models/rwkv6qwen2.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "0b1736c74051dea570e1d3b0f3e0501bf530b33ea04611cec1359cdb4eff1335"
+    },
+    "llama/llama.cpp/src/models/rwkv7-base.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "47a2f7296cb25f38bcfa251b7a47ddaa873115da2a46cc69ce01578b5ad5674a"
+    },
+    "llama/llama.cpp/src/models/rwkv7.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "8528e81e3c84da5cb8aab8fb50f1cf0e142e56b1a3f0e236554e98da9b8f52ea"
+    },
+    "llama/llama.cpp/src/models/seed-oss.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "ce44ec2414a3541fcfbfece7e49f80c7bfc6732898bfdd90af221335bfdb1b71"
+    },
+    "llama/llama.cpp/src/models/smallthinker.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "39a2119161c8cd3c40bc4b7623f122ed3699fcc0194c1929f1292e903085bc67"
+    },
+    "llama/llama.cpp/src/models/smollm3.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "e65f1fe661a9a6bd2a324faabaf85185bff5e9af86671708e528c4877601c804"
+    },
+    "llama/llama.cpp/src/models/solar.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "56dd431f0fc95a4f80a5c88fcf9d8791e90782e741e1e6994766f7ad7347a19f"
+    },
+    "llama/llama.cpp/src/models/stablelm.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "7881d0716da3923c7680e44a6dcdabbc552cb4f0d23bda279e70e6083cb956ae"
+    },
+    "llama/llama.cpp/src/models/starcoder.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "1e5f44d910e5df695bece71660e8dd791fcba18c5014925af18b40ed271da2a2"
+    },
+    "llama/llama.cpp/src/models/starcoder2.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5efd50419a63afaf5cb380b024f579a3cdda1b7b391a7dc0571ef712505852d2"
+    },
+    "llama/llama.cpp/src/models/t5-dec.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "c6e9ea8c5cbbbb00f926aba85b91d14d3636b72c4bfce36cb4265eb6331e80b1"
+    },
+    "llama/llama.cpp/src/models/t5-enc.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "6064c3069eabdfe135dbc6d6fd3b9d67e4bf1d85b2123f410d2be3e040e16cbb"
+    },
+    "llama/llama.cpp/src/models/wavtokenizer-dec.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "58deb69054e94eb1e3cafd7ce0b2ea39da4038e35f7634b87d0bb648c9cbb034"
+    },
+    "llama/llama.cpp/src/models/xverse.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "0d1fc8cc12ce048331b9913d10e8840d1624ed38b053f34967b7fa54e235a80a"
+    },
+    "llama/llama.cpp/src/unicode-data.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; generated codepoint tables via scripts/gen-unicode-data.py).",
+      "sha256": "95170cd1c105a5b41a1b2dce73b0fae8ce8011ef7897600828bb2babe8b26e5d"
+    },
+    "llama/llama.cpp/src/unicode-data.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; generated codepoint tables via scripts/gen-unicode-data.py).",
+      "sha256": "1854f4494e5666db6036f0bf4cf818e01588b40b48a89e3372e775c4d5174402"
+    },
+    "llama/llama.cpp/src/unicode.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "d1955f1d681bd55340aa33cc5f02cdc924bfdc06ca48f50bdf7337a542af00bd"
+    },
+    "llama/llama.cpp/src/unicode.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "0452257ac4496aa96fbe4caeaf67ae57f596081eda6632e8c0ae31a9d8a2166b"
+    },
+    "llama/llama.cpp/tools/mtmd/clip-graph.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "b61f64d75a94e6e3bec8b7b90bca96ac74536fd9983d66e9471fc0ea5f1744f5"
+    },
+    "llama/llama.cpp/tools/mtmd/clip-impl.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "987eff3024f94d6d42b434fcbf68a8ac7ea20321be02fbd06f1fc5b230c33258"
+    },
+    "llama/llama.cpp/tools/mtmd/clip-model.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "8ba55897a4c20e8d45b9811e595cc046d05413cb1985cf1a147e0101e9b87015"
+    },
+    "llama/llama.cpp/tools/mtmd/clip.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "09fbdd42ec1244d09f0cc61e06564186cbf8d72138d281adbc8e7211c3c11b41"
+    },
+    "llama/llama.cpp/tools/mtmd/clip.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "2a550edd706cfee4e8c79f7b4429aeec5ada44d70b3ae787805ad390885e1788"
+    },
+    "llama/llama.cpp/tools/mtmd/models/cogvlm.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "704f4c0d4de38e553b47f3e075361811bbc1b78138e5114c3152afe4603f3749"
+    },
+    "llama/llama.cpp/tools/mtmd/models/glm4v.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "2f495aec3a4cd3f409815823ac86981dad37e4d753712e8c4c0cae93b3dcdb9f"
+    },
+    "llama/llama.cpp/tools/mtmd/models/internvl.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "361a464d39ed77bccc8edd75b67334a17a77532c3130d8f6d002563a5962142e"
+    },
+    "llama/llama.cpp/tools/mtmd/models/kimivl.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "4b7b2598130afd9b15f3edcaf471eba9089d001cd7a6f4e4d33afd4ab3be5e38"
+    },
+    "llama/llama.cpp/tools/mtmd/models/llama4.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "fe5bd209572d45e273fbf07bb5e7286cd3a38e05079c613bf7b50f7072d25fb7"
+    },
+    "llama/llama.cpp/tools/mtmd/models/llava.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "f592787a29c779816564153a64c8da663e6d12b41105d16ba0e5090b77e26c99"
+    },
+    "llama/llama.cpp/tools/mtmd/models/minicpmv.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "9647448f2676213a0fd1eeb9a63f50c15ddfeb4eb11357efb817f416ef8b0147"
+    },
+    "llama/llama.cpp/tools/mtmd/models/models.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "add71e0baeea6e127faf6eb256aefea8ae8b06ef161bf929e9be4cfa6461085b"
+    },
+    "llama/llama.cpp/tools/mtmd/models/pixtral.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "71812b293790f6a5793402f776d503c828e2ef156038bc524e51e11a4d50034a"
+    },
+    "llama/llama.cpp/tools/mtmd/models/qwen2vl.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "e26fcfb2f1f5464fddccad9e4c05e13c92abdc728073fab58d08421a2bf91019"
+    },
+    "llama/llama.cpp/tools/mtmd/models/qwen3vl.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "558792de0d87f515cdd1f9959e0f626f1bc98c67d39fcbbd431942f5593e016c"
+    },
+    "llama/llama.cpp/tools/mtmd/models/siglip.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "3c2de656053dc753f94c8f9ec632179962270f304a3d56d01f0242529e4ec551"
+    },
+    "llama/llama.cpp/tools/mtmd/models/whisper-enc.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "79c8420afbe924d094ba37ea840c04a7d0381ef1e2581edd6b5eb8e5cb478ff6"
+    },
+    "llama/llama.cpp/tools/mtmd/mtmd-audio.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "18d923ff4af1a1e6def9480dcc85ad540f12e109c35c802fe0df359a4c22a551"
+    },
+    "llama/llama.cpp/tools/mtmd/mtmd-audio.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "ca38887a792cbaf026248ccd8cef9f8fbba76da2e137ef91039e4e9ad3f08589"
+    },
+    "llama/llama.cpp/tools/mtmd/mtmd-helper.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "8e5a43b310bd3e31020335c18886b043e1953b310556d6ad069e77d745fefde3"
+    },
+    "llama/llama.cpp/tools/mtmd/mtmd-helper.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5867ff366731ba316fb927c3a520ebd7984fc8af6b2bad864638e71fd2e11e24"
+    },
+    "llama/llama.cpp/tools/mtmd/mtmd.cpp": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "4dcf0843c2d08b453728d7414babf3b46ed0c813ba6e9f369aec1fcfdf2b06e4"
+    },
+    "llama/llama.cpp/tools/mtmd/mtmd.h": {
+      "license": "MIT",
+      "notice": "MIT (llama.cpp LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "04661755678730b93d7ce0273f275baa900b492233c6071f4efa33a23c0e211a"
+    },
+    "llama/llama.cpp/vendor/miniaudio/miniaudio.h": {
+      "license": "MIT-0",
+      "notice": "MIT-0 elected from dual Unlicense OR MIT-0 (Copyright 2025 David Reid; alternatives at end of file).",
+      "sha256": "05b75871465913f1e3f5b05f0dcca1d487f3099e653477e071acc40317e68f38"
+    },
+    "llama/llama.cpp/vendor/nlohmann/json.hpp": {
+      "license": "MIT",
+      "notice": "MIT (SPDX-License-Identifier: MIT; Copyright 2013-2025 Niels Lohmann).",
+      "sha256": "aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63"
+    },
+    "llama/llama.cpp/vendor/nlohmann/json_fwd.hpp": {
+      "license": "MIT",
+      "notice": "MIT (SPDX-License-Identifier: MIT; Copyright 2013-2025 Niels Lohmann).",
+      "sha256": "fb6aa70cbece087f37ab4685c182b287c53be54f785f981b9db9d30d2d028b37"
+    },
+    "llama/llama.cpp/vendor/stb/stb_image.h": {
+      "license": "MIT",
+      "notice": "MIT elected from dual MIT OR Unlicense (Copyright (c) 2017 Sean Barrett; alternatives at end of file).",
+      "sha256": "594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3"
+    },
+    "llama/sampling_ext.cpp": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "fa66f4225d864452d8557c42ca74c4119796e061349a3c1ca11fcc29dc30f433"
+    },
+    "llama/sampling_ext.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "3b5f90ec202f13cd983031e733a01e08878994df834b67fee2cb7b1e1a7ebdaf"
+    },
+    "ml/backend/ggml/ggml/include/ggml-alloc.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "984379615a62f751f9e2f794afac2eda23753ce988b1e433114baa2beb349158"
+    },
+    "ml/backend/ggml/ggml/include/ggml-backend.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "113beaff0e34d56a2d2bb817a5e4c24d8a62aba16fb7b2d8d34f46f47eb64e40"
+    },
+    "ml/backend/ggml/ggml/include/ggml-blas.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "e76cb8594dc9866d99e7d63191b9fff6ab8b50244b4a28ce3af0f962964a6b5b"
+    },
+    "ml/backend/ggml/ggml/include/ggml-cpp.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "bc15ba002c68685df23faae42df0d2b3d58032011f88b649021ab92485862c72"
+    },
+    "ml/backend/ggml/ggml/include/ggml-cpu.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "6d57ebc3df51169c0f0d4d6e9459595fa0568fa1b515546735067c6ecfd4bc63"
+    },
+    "ml/backend/ggml/ggml/include/ggml-metal.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "322f36cd30f3e9e7aad7b5b9bc63078012fd0b7706ac4e24f5721b604f3d8980"
+    },
+    "ml/backend/ggml/ggml/include/ggml-opt.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "2919321813be96e0f5d6ba36e7ed634a518de0fbe834902ad8f5a402f906e302"
+    },
+    "ml/backend/ggml/ggml/include/ggml.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "af1167867c448d27814d437718f9046970e852f5d6cde7652a792bf07e8e769c"
+    },
+    "ml/backend/ggml/ggml/include/gguf.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5828550900a10f237af689b3c56c24435f60f4426472889276642a46ee66198b"
+    },
+    "ml/backend/ggml/ggml/include/ollama-debug.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "527bbb705c0b4cafc15aed330b00d405cf52d0f009265bedd3ec9b71bd9e8500"
+    },
+    "ml/backend/ggml/ggml/src/ggml-alloc.c": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "44ca607dbc5687bafa053b989ebcb35b3f22db7a78dd46fae982d0ddeb858a7e"
+    },
+    "ml/backend/ggml/ggml/src/ggml-backend-impl.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "bcb4bd55d25695b8f11f33572b6ac68623a235a0248929f872edf067f94f31d8"
+    },
+    "ml/backend/ggml/ggml/src/ggml-backend-reg.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "4e3823c647471fc70c18a1348b84f91a39c95c85700e95b4876253beda1aeac7"
+    },
+    "ml/backend/ggml/ggml/src/ggml-backend.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "9625e33d3ae6eb2cc593d3c2b265725d6dc7c57e15e39f939dea2584e8f974ed"
+    },
+    "ml/backend/ggml/ggml/src/ggml-blas/ggml-blas.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "1ff1db717967daa48059cc97b31989a1a61502818b0dc308c323289ea6dbd102"
+    },
+    "ml/backend/ggml/ggml/src/ggml-common.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "518f0ab72c8b6d529df09aa10c63349c323e25fb933d9d69bcab5f84125f879a"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/amx/amx.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "9d098ceee6a8114d4a660ff269064a27aa25b8a4f205d1e6984d17bec5104f0d"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/arch-fallback.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "7de31a8564f539bed593842f113db3057bbbcb81ed8fc520c6aa558b8bf64870"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/arch/arm/cpu-feats.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "9c6f7e49fa52f6ffe45a6e5daf31052c039ff1744842dbb1a650fccc3c014432"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/arch/arm/quants.c": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "bca39e4a4dca6aee63c880e1174346d9da0fdbcec592937b106fbe8335bd0a22"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/arch/arm/repack.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "d3b6a46337f17b237471bf08057408dc4e76f9ce6b14d432910fd845d3aa90e3"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/arch/x86/cpu-feats.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "b0f6aaaeb0b12a4f3e15ceec14d0c2031633f91e864a6c15954a001d6390f6d4"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/arch/x86/quants.c": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "b1e602aff1d03d0c6d2c5a2bce887d9c6f39599fe73520154fc6746d9bd7122e"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/arch/x86/repack.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "1c2650ffbc0aa67a88d74d695debcafc9454d5b976c51d87173bcf6c9fc13344"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/binary-ops.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5b04cd9d9ec0fcaaf62b999afeae6e080363ef59166df3e5aac12209efbafd8e"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/binary-ops.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5915519c4e2227db28239b2a5d3b8a5f9022730cc0ddb7880b24748ee78cd1f9"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/common.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "467dd740ed86101cb5896611048c7a86f9a057a4be816b1b8270e08abeea8939"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/ggml-cpu-impl.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "524f0a6ee9061b523f5f04fe1fb911788c7898c3c0092651c8b88d58a17540f1"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/ggml-cpu.c": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "9cf9e218009e33508af6dfbdd83e742e77bc42b974e11eeec9ec357460503f06"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/ggml-cpu.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "88eefd3d317c6ac824b4575800f97981e6f01274fd47059236cbbf1ebb2debb7"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/hbm.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "3c75b5aaf9b51d17060ecfb93cb5f8b22ce3974d7eff3d76dec2156d2f194b80"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/llamafile/sgemm.cpp": {
+      "license": "MIT",
+      "notice": "MIT (full MIT text in file header; Copyright 2024 Mozilla Foundation; llamafile sgemm under ggml MIT).",
+      "sha256": "11b91b332add6275f4471b54455033f52a0db88e50fb83071a53e918693fa199"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/llamafile/sgemm.h": {
+      "license": "MIT",
+      "notice": "MIT (full MIT text in file header; Copyright 2024 Mozilla Foundation; llamafile sgemm under ggml MIT).",
+      "sha256": "6ec12aa9244a8ffb13ae56b2e391f905b1d152ae25ff45da6a66e18daf650b3b"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/ops.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; embedded YaRN passage noted MIT licensed, Copyright 2023 Jeffrey Quesnelle and Bowen Peng).",
+      "sha256": "ac0e107fac9b2fe37aedee2b25bb360ed9b2d6cdb34121e5e3d3165880000294"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/ops.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "29c32b0ec90a7f63b0401d49458e807e0803c8ecd36daf61e3d99df516204e22"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/quants.c": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "287e3d17ac4b758edc3cf83a9c72fa974c54cdde34f34864b1f01d776a476988"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/quants.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "0693f63014ec989f8689053cb24b80f0a5604507da7d6bae0ff44a0128460d9b"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/repack.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "68d71092caadfb705af23b8fbdb37c466f10f6fbc0cd13c151e210968f4b18a3"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/repack.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "7466f8c54e1ab2274183dcd988539be65002ffff8c49d4caac9ae3f1ce730762"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/simd-mappings.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "0cc7633e7719550866b4b1d1a6a962ab42a980d0ba59c7525b5439fa4adca990"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/traits.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "a85bd3ff50c91cb67d14221988544664dfe5975db0811b330dc4a2f385239de4"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/traits.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "26e1b41879091a663325848aa82a4023b459fd1e688b3b0e2a9bde3e72a3a764"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/unary-ops.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "2174483110fa31bc2b85459d4a1392be0809693e62c4048338c32d3bc0ac62ee"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/unary-ops.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "280b7979055079d43bdde7790a7290bf04f75640481c59abc2364c46d6ac6d8e"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/vec.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "6c16d7e955a99fd362ec684727cdbf38677ed8ba1f568b150c3a7ad592d3bfcd"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cpu/vec.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "ca25bbc94ef7ea71b2754b7c526e1776fd0076d1777da2444286a03d2ed9167c"
+    },
+    "ml/backend/ggml/ggml/src/ggml-impl.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "8df97ee48dcc2cca64e23ff68db43c8b5c44c7cbe5b36dd6f10d769e48032baa"
+    },
+    "ml/backend/ggml/ggml/src/ggml-metal/ggml-metal-common.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "513e18d272c58982c677fd1dcdbb5a5fb95b4831785de5da5dd84b1d20f88921"
+    },
+    "ml/backend/ggml/ggml/src/ggml-metal/ggml-metal-common.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "4c69de12a20585115b7dd544aa0509c950ed580ec8ba2e8c4cc7097db8e7e795"
+    },
+    "ml/backend/ggml/ggml/src/ggml-metal/ggml-metal-context.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "ec9dff563a1dd237aeedd56d6a328c9239aa9afd4f3b10ab3383eed8f2ae3955"
+    },
+    "ml/backend/ggml/ggml/src/ggml-metal/ggml-metal-context.m": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "c351771e9408cb3bb570a662a3a7a805f18546e5ff2106435cd38df649c5ac02"
+    },
+    "ml/backend/ggml/ggml/src/ggml-metal/ggml-metal-device.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "a1f31e8ef1dca91b1067479febadb70771f322dc6fd20103f986ad74f7ad31c8"
+    },
+    "ml/backend/ggml/ggml/src/ggml-metal/ggml-metal-device.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "07c53cc682606589c6305a2971ffd4425ca81a9ff9afdb22d3603705d3940994"
+    },
+    "ml/backend/ggml/ggml/src/ggml-metal/ggml-metal-device.m": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "7ce7e6328fee0ad5a6499c17252ed264ff001269b59ff6a11ca41746d4ec5620"
+    },
+    "ml/backend/ggml/ggml/src/ggml-metal/ggml-metal-embed.metal": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "db67b4ac8acf6e662482a32bc685b7842b7c0af1784b53011d2c400cdf293e8d"
+    },
+    "ml/backend/ggml/ggml/src/ggml-metal/ggml-metal-impl.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "a05444ea12397ecdb3433cc1afa7d06d88972b91031946cdb3308966e2004700"
+    },
+    "ml/backend/ggml/ggml/src/ggml-metal/ggml-metal-ops.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "006d7d80e2991c283cb2f631fcd6acc92e21b14d0e15f5daf7f6862a7d43cb01"
+    },
+    "ml/backend/ggml/ggml/src/ggml-metal/ggml-metal-ops.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5eb3c70d67185383dfb29c4432b8e354fe20613d9362bbcce5dd569ff755341a"
+    },
+    "ml/backend/ggml/ggml/src/ggml-metal/ggml-metal.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "fa0b5f48282b844b2de7fea2ea412b9ba75bc429f088dce7c5ec374fbfda56a1"
+    },
+    "ml/backend/ggml/ggml/src/ggml-metal/ggml-metal.metal": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "5146b35911a1725902f3190610f8feb6b443b60ac784b702f2216db783b6e7b8"
+    },
+    "ml/backend/ggml/ggml/src/ggml-opt.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "224300292d24e77ac4b1a56d7e376d33248163a5b7757f7e21ad13c0b4ec5786"
+    },
+    "ml/backend/ggml/ggml/src/ggml-quants.c": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "1c68f65110984d3b96315a5f3ccd9b78440747c38faff16a076739ee5b8493aa"
+    },
+    "ml/backend/ggml/ggml/src/ggml-quants.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "6f58b733994b3dfa91770c74e5a60e478b6570e851e6d80db25e42d99314b3bd"
+    },
+    "ml/backend/ggml/ggml/src/ggml-threading.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "13a18d885393722b7c9f42d4cf8575a4d41699926d656f78a867fa4fac9dad20"
+    },
+    "ml/backend/ggml/ggml/src/ggml-threading.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "9652729043ed91482392c1aa08af5d813190d0ace2e7982d2539d28240ab8d8b"
+    },
+    "ml/backend/ggml/ggml/src/ggml.c": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "505daa4d8fef61ac033c3821011dad2abd8d0d3219ee760305554a6ab9c73b24"
+    },
+    "ml/backend/ggml/ggml/src/ggml.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "a41a30b6b7c074e5f8535934328396376be27afb28d3f947a9cadc3a4791acf6"
+    },
+    "ml/backend/ggml/ggml/src/gguf.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "999085bfbc5596ba419b72893ff8583c1debb1333f4e677148f8d318bd5eda0f"
+    },
+    "ml/backend/ggml/ggml/src/mem_dxgi_pdh.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "30f65847ada8e109435718d79927bf5554a22d450ef8b38fb4e024681de3c7b1"
+    },
+    "ml/backend/ggml/ggml/src/mem_hip.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "ba36772ce28b6fdf083675f68a3901c0f9917bd5f8d4e7f832da4f600162dd46"
+    },
+    "ml/backend/ggml/ggml/src/mem_nvml.cpp": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "9d1e65950464fa8c5a5464da72784569411f472b73d0dd5c95878c9f7262f14f"
+    },
+    "ml/backend/ggml/ggml/src/ollama-debug.c": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
+      "sha256": "ef1a5cd3851e4e415b519d058b83a05f6ed0dd8b98091c3cf686d6835ede7880"
+    },
+    "x/imagegen/mlx/mlx.c": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "4cae86c148a5ca21c188d253f446eb1f69a7be2f86cfaf4212b22b3dd39b101e"
+    },
+    "x/imagegen/mlx/mlx.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "3f972ab5c303a80238df0cf71bc651f0cb2334c8ad309728f0d0b62a7fc55b51"
+    },
+    "x/imagegen/mlx/mlx_dynamic.c": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "45794f1d8f86960998b6b3fd0153985a98e091422eba0febf9ff4a4acafce952"
+    },
+    "x/imagegen/mlx/mlx_dynamic.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "b20bb398530ca12d1fe5b0a115f427a8abc9daf12af7d4fa5e1496f871efaae7"
+    },
+    "x/imagegen/mlx/mlx_error_handler.c": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "3cf85cd2dd1ca234a84cf7142e48e487a5c7800b669b4a0ab27eb79eb891cf01"
+    },
+    "x/imagegen/mlx/mlx_error_handler.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "2ac98f0258375eb9e16c5c7ffcaf647de7556c48c9bdba843a8bc43368d6704e"
+    },
+    "x/mlxrunner/mlx/dynamic.c": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "9eee07a1c09ee0e96e3f8fa21dafcd55515d0fd1e0f6628ffa8b25306488848b"
+    },
+    "x/mlxrunner/mlx/dynamic.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "65e677c17b46f8e93906bf065aa3abeb577a46697e3fc9dafb4d033d838fce32"
+    },
+    "x/mlxrunner/mlx/generated.c": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "ec73c0327b8b7240c13494a0f8c93f771a102e27c9294789cc8da8f0a832b56a"
+    },
+    "x/mlxrunner/mlx/generated.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "be30d0c816bbdd438a9704519d4ce4b2685dea3364a169a348b22010355b4c00"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/array.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "d2205ba0ce146ff722f2ca97c170facb19b28784e7ffa47a07cdad69651c9801"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/closure.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "b43a6d7c0e943a8df0f67377d49d92f4fa76eea79eed049adaff80e05ed854f7"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/compile.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "448c6aafe37d52c82f63311a8ab3e1b876f7b0d7fcdc250d91a0ac1105a4b531"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/cuda.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "ee99d74dc4131dca3ec7ab7d9015ff109481ee6fbcf3c015de7ebfdcc7df2644"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/device.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "3e7556aab2f97fddf943b8f6e30b62064ee589705ad1643716bdd7ea37d6fe2f"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/distributed.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "68b1dcbdc8dc8c1b4d58220caa7aec2396776282691e99999ff6547b52f7e28e"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/distributed_group.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "26334e23cabc877a77a85ee212f8c498f35ae9426036b99957a106afe28a0c0e"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/error.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "80090e79eb9add61961885e7aa491b9f47d1b838d188303734490e528b0db2c2"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/export.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "723346c34761fb87c9a03a133ecff8f9fd8f83a3d80e680d63557c58739e11c1"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/fast.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "b24116ec6a5558e976cbdb14474c2e8f88710bf68f7cb5da02d5ba3fa4b385be"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/fft.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "21a73e39cb7a8f3a69590fff88017f524ff0a9761027c9bf0441f97afb88ffec"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/half.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "90d57285c4b8436fbea18758661e84bf962c13179d545bbaac52b176de899ed8"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/io.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "3a076e00fbfbec9d45160b61695e19b72377389cde4d79e0a317cc58abb2a4bd"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/io_types.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "892e3108eb50b8414091b67d01241ad6b1ccd815fca60cdc707e5e96dbb226f6"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/linalg.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "10512f19bfcf3f1f6ed9e3de07d43f84dd3492833e7b0ab6e0288ba552f73266"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/map.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "4d5df4eef2757ca76b83dea06935568611d439ad3a8687c3b0df739902377a4d"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/memory.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "850ae0be9ac300cfae23ee259441dca2a1e2055606427ac26f3d967b5c03a6e8"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/metal.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "58ebd8b50add425f046d5fb5ef1bc747eff347b79db8a2b01f6af3967435b8be"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/mlx.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "aeb941792b77d0de4101d3299f8f24bebfaa478965c466151adbf02702249c76"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/ops.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "d540165d1321768a4039d0d436e004959e197026b6f9ec964730e3a03746d586"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/optional.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "b0f20e24bd02cba4c2f624cd83f68a096a9d4ae6b2e4c4eb30d13719660ecf36"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/random.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "7b21eea9c4b0b19636365b114f36d54ed1e534d9b353446b37aae8f9c3ef4df3"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/stream.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "560e537e50cdc313c6651ab55e9a116721c591efff778de7b293440ee39cabaf"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/string.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "29b3cfafb60b536a27c2ad96f9868c892e9242754868e1b770f55b7cf34ef598"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/transforms.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "2cf31bbda041fdf60a83243cff2f9d000cff148b153f406158f8e77ff2072ceb"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/transforms_impl.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "2700a13d26aa07339a815b4762b74d9bd6ffa0a9a21298be828ca367b5817701"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/vector.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "b75108edace10f99f01da0dcb08a146d1449dcfcaaa24aa7b66e48e9f227e2c7"
+    },
+    "x/mlxrunner/mlx/include/mlx/c/version.h": {
+      "license": "MIT",
+      "notice": "MIT (Ollama LICENSE; Copyright (c) Ollama).",
+      "sha256": "d1c9aecddd98ad6c16b7c56c056f5b1040a633c4548fe97297481fd625450810"
+    }
+  },
+  "policy": "Only exact SHA-256 reviewed MIT, MIT-0, Apache-2.0, BSD-2-Clause, or BSD-3-Clause inputs with explicit notices are admitted. Unknown, copyleft, changed, and generated inputs fail closed until individually reviewed. MIT-0 elected for miniaudio dual Unlicense OR MIT-0.",
+  "schema": "bashy-runner-native-license-review-v1"
 }
