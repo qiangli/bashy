@@ -358,6 +358,36 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Caps: []string{atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
 		Stability: atlas.StabilityExperimental,
 	},
+	"vuln": {
+		Stage: atlas.StageTest, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
+		Caps:      []string{atlas.CapJSON, atlas.CapReadOnly, atlas.CapSpawnsProcesses},
+		Effects:   []string{atlas.EffRead, atlas.EffExec},
+		Stability: atlas.StabilityExperimental,
+	},
+	"govulncheck": {
+		Stage: atlas.StageTest, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
+		Caps:      []string{atlas.CapReadOnly, atlas.CapSpawnsProcesses},
+		Effects:   []string{atlas.EffRead, atlas.EffExec},
+		Stability: atlas.StabilityExperimental,
+	},
+	"osv-scanner": {
+		Stage: atlas.StageTest, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
+		Caps:      []string{atlas.CapReadOnly, atlas.CapSpawnsProcesses},
+		Effects:   []string{atlas.EffRead, atlas.EffExec},
+		Stability: atlas.StabilityExperimental,
+	},
+	"osvscanner": {
+		Stage: atlas.StageTest, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
+		Caps:    []string{atlas.CapReadOnly, atlas.CapSpawnsProcesses},
+		Effects: []string{atlas.EffRead, atlas.EffExec}, AliasOf: "osv-scanner",
+		Stability: atlas.StabilityExperimental,
+	},
+	"grype": {
+		Stage: atlas.StageTest, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
+		Caps:      []string{atlas.CapReadOnly, atlas.CapSpawnsProcesses},
+		Effects:   []string{atlas.EffRead, atlas.EffExec},
+		Stability: atlas.StabilityExperimental,
+	},
 }
 
 // toolAtlasRecord resolves one in-process (coreutils-class) tool.

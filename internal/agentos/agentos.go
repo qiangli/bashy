@@ -62,6 +62,8 @@ import (
 	"github.com/qiangli/yoke/external/gh"
 	"github.com/qiangli/yoke/external/gitscm"
 	"github.com/qiangli/yoke/external/gotoolchain"
+	"github.com/qiangli/yoke/external/govulncheck"
+	"github.com/qiangli/yoke/external/grype"
 	"github.com/qiangli/yoke/external/helm"
 	"github.com/qiangli/yoke/external/kopia"
 	"github.com/qiangli/yoke/external/kubectl"
@@ -69,6 +71,7 @@ import (
 	"github.com/qiangli/yoke/external/meshagent"
 	"github.com/qiangli/yoke/external/mise"
 	"github.com/qiangli/yoke/external/node"
+	"github.com/qiangli/yoke/external/osvscanner"
 	"github.com/qiangli/yoke/external/pwsh"
 	"github.com/qiangli/yoke/external/python"
 	"github.com/qiangli/yoke/external/rclone"
@@ -152,6 +155,7 @@ var (
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
+		"vuln", "govulncheck", "osv-scanner", "grype",
 	}
 	// Direct-only front doors are callable as `bashy NAME` and belong in the
 	// command catalog, but must not become bare shell shims. In particular,
@@ -188,7 +192,7 @@ var (
 	// plural (docs/bashy-command-noun-number-policy.md).
 	hiddenFrontDoorVerbs = []string{"bootstrap", "upgrade", "invoke", "verify", "doctor", "context", "audit",
 		"agents", "models", "tools", "people", "skills", "secrets", "apps", "messages", "issue", "resources",
-		"command",
+		"command", "osvscanner",
 		// Pseudo-commands with no front-door case of their own (Sprint 406):
 		// bare `bashy NAME` prints the doc moved into bashy/commands/*.md via
 		// isSkillDocName's generic fallback. No shim, same as every other name
@@ -1759,6 +1763,44 @@ func dispatch() {
 			dispatchExit(1)
 		}
 		dispatchExit(0)
+	case "govulncheck":
+		// Go vulnerability checker (BSD-3-Clause) via binmgr.
+		cmd := govulncheck.NewGovulncheckCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			var exit *exec.ExitError
+			if errors.As(err, &exit) {
+				dispatchExit(childExitStatus(err))
+			}
+			dispatchExit(1)
+		}
+		dispatchExit(0)
+	case "osv-scanner", "osvscanner":
+		// google/osv-scanner (Apache-2.0) via binmgr.
+		cmd := osvscanner.NewOsvScannerCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			var exit *exec.ExitError
+			if errors.As(err, &exit) {
+				dispatchExit(childExitStatus(err))
+			}
+			dispatchExit(1)
+		}
+		dispatchExit(0)
+	case "grype":
+		// anchore/grype (Apache-2.0) via binmgr.
+		cmd := grype.NewGrypeCmd()
+		cmd.SetArgs(os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			var exit *exec.ExitError
+			if errors.As(err, &exit) {
+				dispatchExit(childExitStatus(err))
+			}
+			dispatchExit(1)
+		}
+		dispatchExit(0)
+	case "vuln":
+		dispatchExit(dispatchVuln(os.Args[2:]))
 	case "outpost":
 		if err := meshagent.Exec(context.Background(), os.Args[2:]...); err != nil {
 			fmt.Fprintln(os.Stderr, err)

@@ -669,6 +669,11 @@ var verbSynopsis = map[string]string{
 	"peer":               "the sphere tier: peer-direct pooled p2p inference/compute across your own machines (via outpost)",
 	"tessaro":            "Tessaro account: sign in/out, status, open the portal (via outpost)",
 	"login":              "sign in to Tessaro — pair this machine with the portal",
+	"vuln":               "local vulnerability self-check with pinned govulncheck, osv-scanner, grype",
+	"govulncheck":        "Go vulnerability checker (managed binary built with managed Go)",
+	"osv-scanner":        "google/osv-scanner vulnerability scanner for dependencies (managed external)",
+	"osvscanner":         "hidden alias for bashy osv-scanner",
+	"grype":              "anchore/grype vulnerability scanner for container images and filesystems (managed external)",
 }
 
 // merge the declarative registry's synopses into verbSynopsis so registry CLIs
