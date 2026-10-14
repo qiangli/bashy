@@ -118,35 +118,71 @@ class AuditPolicy(unittest.TestCase):
             ignore.write_text("not-an-id\n")
             self.assertIn("malformed", self.run_audit("osv", "--report", report, "--ignore", ignore, ok=False).stderr)
 
-    def test_govulncheck_gate_honours_vuln_ignore_by_exact_id(self):
-        # S436/#2028: the eight recorded Ollama-module waivers excuse exactly
-        # those ids; every other finding still fails, and reports the gate
+    def test_govulncheck_gate_fails_only_on_unwaived_reachable(self):
+        # S436/#2028 standing verdict rule (same as
+        # scripts/govulncheck-release.sh and builds/_shared/kinds/go/audit.yml):
+        # REACHABLE (the trace's first frame names a function) and unlisted
+        # fails; REACHABLE and waived passes; module-level and package-level
+        # findings are reported and pass even when unlisted (GO-2026-5750
+        # stays out of vuln-ignore for exactly this reason). Reports the gate
         # cannot read exactly fail closed.
         waived = ["GO-2025-4251", "GO-2025-3824", "GO-2025-3695", "GO-2025-3689",
                   "GO-2025-3559", "GO-2025-3582", "GO-2025-3558", "GO-2025-3557"]
+        mod = "github.com/ollama/ollama"
+        def trace(level):
+            if level == "reachable":
+                return [{"module": mod, "version": "v0.21.2",
+                         "package": mod + "/llama", "function": "Accept"}]
+            if level == "package":
+                return [{"module": mod, "version": "v0.21.2",
+                         "package": mod + "/llama"}]
+            return [{"module": mod, "version": "v0.21.2"}]
         def write_reports(out, by_target):
             for target in TARGETS:
                 docs = [{"config": {"scanner_name": "govulncheck", "scan_mode": "binary"}}]
-                for vid in by_target.get(target, []):
-                    docs.append({"finding": {"osv": vid, "trace": [
-                        {"module": "github.com/ollama/ollama", "version": "v0.21.2"}]}})
+                for vid, level in by_target.get(target, []):
+                    docs.append({"finding": {"osv": vid, "trace": trace(level)}})
                 (out / f"runner-{target}.govulncheck.json").write_text(
                     "\n".join(json.dumps(d, indent=2) for d in docs) + "\n")
+        def summary_of(out):
+            return json.loads((out / "runner-govulncheck.json").read_text())
         with tempfile.TemporaryDirectory() as td:
             out = Path(td) / "out"; out.mkdir()
-            write_reports(out, {t: list(waived) for t in TARGETS})
+            # Reachable and waived on every target passes, with a JSON summary.
+            write_reports(out, {t: [(v, "reachable") for v in waived] for t in TARGETS})
             self.run_audit("govulncheck", "--out", out)
+            summary = summary_of(out)
+            self.assertEqual(summary["schema"], "bashy-runner-govulncheck-review-v1")
+            self.assertEqual(set(summary["targets"]), set(TARGETS))
+            self.assertEqual(summary["targets"]["linux-amd64"]["unwaived"], [])
+            self.assertEqual(set(summary["targets"]["linux-amd64"]["waived"]), set(waived))
             # A clean scan (no findings at all) also passes.
             write_reports(out, {})
             self.run_audit("govulncheck", "--out", out)
-            # One unlisted id on one target fails, naming the id and target.
-            write_reports(out, {"linux-amd64": ["GO-2026-0000"]})
+            # One reachable unlisted id on one target fails, naming id and target.
+            write_reports(out, {"linux-amd64": [("GO-2026-0000", "reachable")]})
             p = self.run_audit("govulncheck", "--out", out, ok=False)
             self.assertIn("GO-2026-0000", p.stderr)
             self.assertIn("linux-amd64", p.stderr)
+            # The JSON summary is still written on failure.
+            self.assertEqual(summary_of(out)["targets"]["linux-amd64"]["unwaived"], ["GO-2026-0000"])
             # Near-miss ids are not waived: exact match only.
-            write_reports(out, {"linux-amd64": ["GO-2025-425"]})
+            write_reports(out, {"linux-amd64": [("GO-2025-425", "reachable")]})
             self.assertIn("findings", self.run_audit("govulncheck", "--out", out, ok=False).stderr)
+            # Module-level unlisted is reported and passes (GO-2026-5750).
+            write_reports(out, {"darwin-arm64": [("GO-2026-5750", "module")]})
+            p = self.run_audit("govulncheck", "--out", out)
+            self.assertIn("reported GO-2026-5750 darwin-arm64 module", p.stdout)
+            summary = summary_of(out)
+            self.assertEqual(summary["targets"]["darwin-arm64"]["reported"],
+                             [{"id": "GO-2026-5750", "level": "module"}])
+            self.assertEqual(summary["targets"]["darwin-arm64"]["unwaived"], [])
+            # Package-level unlisted is reported and passes.
+            write_reports(out, {"linux-amd64": [("GO-2026-0000", "package")]})
+            p = self.run_audit("govulncheck", "--out", out)
+            self.assertIn("reported GO-2026-0000 linux-amd64 package", p.stdout)
+            self.assertEqual(summary_of(out)["targets"]["linux-amd64"]["reported"],
+                             [{"id": "GO-2026-0000", "level": "package"}])
             # Advisory metadata alone neither excuses nor accuses.
             with tempfile.TemporaryDirectory() as td2:
                 out2 = Path(td2) / "out"; out2.mkdir()
@@ -162,8 +198,16 @@ class AuditPolicy(unittest.TestCase):
                 "govulncheck", "--out", out, "--ignore", ignore, ok=False).stderr)
             # An explicit alternate ignore file is honoured the same way.
             ignore.write_text("# comment\n\nGO-2026-0000 waived here\n")
-            write_reports(out, {"linux-amd64": ["GO-2026-0000"]})
+            write_reports(out, {"linux-amd64": [("GO-2026-0000", "reachable")]})
             self.run_audit("govulncheck", "--out", out, "--ignore", ignore)
+            # A --targets subset replays a partial local scan (e.g. the two
+            # -12 binaries); unknown targets fail closed.
+            write_reports(out, {"darwin-arm64": [("GO-2026-5750", "module")]})
+            p = self.run_audit("govulncheck", "--out", out, "--targets", "darwin-arm64")
+            self.assertIn("reported GO-2026-5750 darwin-arm64 module", p.stdout)
+            self.assertEqual(set(summary_of(out)["targets"]), {"darwin-arm64"})
+            self.assertIn("subset", self.run_audit(
+                "govulncheck", "--out", out, "--targets", "plan9-amd64", ok=False).stderr)
 
     def test_govulncheck_gate_fails_closed_on_unreadable_reports(self):
         with tempfile.TemporaryDirectory() as td:
