@@ -118,6 +118,69 @@ class AuditPolicy(unittest.TestCase):
             ignore.write_text("not-an-id\n")
             self.assertIn("malformed", self.run_audit("osv", "--report", report, "--ignore", ignore, ok=False).stderr)
 
+    def test_grype_gate_honours_vuln_ignore_by_direct_or_related_id(self):
+        # S436/#2028: a grype match is waived when its vulnerability id OR
+        # any relatedVulnerabilities id equals a waived id (exact match
+        # only). The aggregated SBOM can list one module twice, so one
+        # waived id may match more than once; every match is printed, and
+        # only unwaived matches fail.
+        def match(vid, related=(), name="golang.org/x/crypto", version="v0.45.0",
+                  fix=("v0.46.0",), atype="go-module"):
+            m = {"vulnerability": {"id": vid, "fix": {"versions": list(fix)}},
+                 "artifact": {"type": atype, "name": name, "version": version}}
+            if related:
+                m["relatedVulnerabilities"] = [{"id": r} for r in related]
+            return m
+        with tempfile.TemporaryDirectory() as td:
+            report = Path(td) / "grype.json"
+            # Waived by direct id (GO-2026-5932 is in the shipped vuln-ignore).
+            report.write_text(json.dumps({"matches": [match("GO-2026-5932")]}))
+            p = self.run_audit("grype", "--report", report)
+            self.assertIn("waived GO-2026-5932", p.stdout)
+            self.assertIn("golang.org/x/crypto@v0.45.0", p.stdout)
+            # The same waived id matched twice (SBOM lists modules twice).
+            report.write_text(json.dumps({"matches": [match("GO-2026-5932"),
+                                                      match("GO-2026-5932")]}))
+            p = self.run_audit("grype", "--report", report)
+            self.assertEqual(p.stdout.count("waived GO-2026-5932"), 2)
+            # Waived by related alias: the match id is unlisted, but a
+            # related id equals the waived id.
+            report.write_text(json.dumps({"matches": [match("CVE-2025-00000",
+                                                            related=("GO-2026-5932",))]}))
+            p = self.run_audit("grype", "--report", report)
+            self.assertIn("waived CVE-2025-00000", p.stdout)
+            # Unwaived fails, and the finding line names the id, the related
+            # ids, the artifact type/name/version, and the fix versions.
+            report.write_text(json.dumps({"matches": [match("GO-2026-0000",
+                                                            related=("CVE-2025-00001",))]}))
+            p = self.run_audit("grype", "--report", report, ok=False)
+            self.assertIn("findings", p.stderr)
+            for token in ("GO-2026-0000", "CVE-2025-00001", "go-module",
+                          "golang.org/x/crypto", "v0.45.0", "v0.46.0"):
+                self.assertIn(token, p.stdout)
+            # A waived match alongside an unwaived one still fails, on the
+            # unwaived match only.
+            report.write_text(json.dumps({"matches": [match("GO-2026-5932"),
+                                                      match("GO-2026-0000")]}))
+            p = self.run_audit("grype", "--report", report, ok=False)
+            self.assertIn("findings", p.stderr)
+            self.assertIn("waived GO-2026-5932", p.stdout)
+            self.assertIn("GO-2026-0000", p.stdout)
+            # Near-miss ids are not waived: exact match only.
+            report.write_text(json.dumps({"matches": [match("GO-2026-593")]}))
+            self.assertIn("findings", self.run_audit("grype", "--report", report, ok=False).stderr)
+            # An explicit alternate ignore file is honoured the same way.
+            ignore = Path(td) / "ignore"
+            ignore.write_text("# comment\n\nGO-2026-0000 waived here\n")
+            report.write_text(json.dumps({"matches": [match("GO-2026-0000")]}))
+            p = self.run_audit("grype", "--report", report, "--ignore", ignore)
+            self.assertIn("waived GO-2026-0000", p.stdout)
+            self.assertIn("findings", self.run_audit("grype", "--report", report, ok=False).stderr)
+            # A waiver file the gate cannot read exactly fails closed.
+            ignore.write_text("not-an-id\n")
+            self.assertIn("malformed", self.run_audit(
+                "grype", "--report", report, "--ignore", ignore, ok=False).stderr)
+
     def test_govulncheck_gate_fails_only_on_unwaived_reachable(self):
         # S436/#2028 standing verdict rule (same as
         # scripts/govulncheck-release.sh and builds/_shared/kinds/go/audit.yml):

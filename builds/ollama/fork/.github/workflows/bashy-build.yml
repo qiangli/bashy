@@ -365,7 +365,7 @@ jobs:
             if [[ $rc -ne 0 && $rc -ne 3 ]]; then echo "govulncheck failed with exit $rc for $target" >&2; exit "$rc"; fi
           done
           python3 fork/bashy-build/audit-runner.py govulncheck --out out
-      - name: Grype complete CycloneDX SBOM (fail on any severity)
+      - name: Grype complete CycloneDX SBOM (fail on unwaived findings)
         env:
           GRYPE_VERSION: v0.120.1
         run: |
@@ -381,7 +381,11 @@ jobs:
           # exits 2 when matches exceed the threshold, seen in the run-132
           # replay: scan exit 2 with 32 matches), so the gate below — not
           # the scanner exit code — decides. Any nonzero exit is a real
-          # scanner error.
+          # scanner error. The gate honours the reviewed waivers in
+          # fork/bashy-build/vuln-ignore by exact id: a match is waived
+          # when its vulnerability id or any related id equals a waived id
+          # (the aggregated SBOM can list one module twice, so one waived
+          # id may match more than once); only unwaived matches fail.
           rc=0
           "$RUNNER_TEMP/bin/grype" "sbom:out/runner-sbom.cdx.json" -o json > out/runner-grype.json || rc=$?
           if [[ $rc -ne 0 ]]; then echo "grype failed with exit $rc" >&2; exit "$rc"; fi
@@ -391,7 +395,13 @@ jobs:
           set -euo pipefail
           commit=$(git -C src rev-parse HEAD)
           python3 fork/bashy-build/audit-runner.py final --out out --commit "$commit"
+      # Reports must survive a gate failure: the skeleton's trailing
+      # "upload audit outputs" step runs with if: always() for ollama, so
+      # runner-grype.json and the other reports are uploaded even when a
+      # gate above fails (S436/#2028: the grype ids were unknown because
+      # the report was never uploaded).
       - name: upload audit outputs
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: audit

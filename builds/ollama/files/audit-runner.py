@@ -415,8 +415,58 @@ def osv(report, ignore=None):
     no_findings(report, "OSV-Scanner", findings)
 
 
-def grype(report):
-    no_findings(report, "Grype", lambda d: d.get("matches", []))
+def grype_artifact_label(match):
+    artifact = match.get("artifact") if isinstance(match, dict) else None
+    if not isinstance(artifact, dict):
+        return "unknown-type unknown-name@unknown-version"
+    atype = artifact.get("type") or "unknown-type"
+    name = artifact.get("name") or "unknown-name"
+    version = artifact.get("version") or "unknown-version"
+    return f"{atype} {name}@{version}"
+
+
+def grype(report, ignore=None):
+    # SBOM gate with reviewed waivers (same vuln-ignore file as the OSV and
+    # govulncheck gates): a match is waived when its vulnerability id OR any
+    # relatedVulnerabilities id equals a waived id (exact match only). The
+    # aggregated SBOM can list one module twice, so one waived id may match
+    # more than once; every match is still printed, waived or not. Only
+    # unwaived matches fail.
+    ignored = vuln_ignored_ids(ignore)
+    data = load_json(report)
+    matches = data.get("matches", [])
+    if not isinstance(matches, list):
+        fail(f"malformed grype report {report}")
+    waived = 0
+    unwaived = 0
+    for match in matches:
+        if not isinstance(match, dict):
+            fail(f"malformed grype match in {report}")
+        vuln = match.get("vulnerability")
+        if not isinstance(vuln, dict):
+            fail(f"malformed grype match in {report}")
+        vid = vuln.get("id") or "unknown"
+        related = match.get("relatedVulnerabilities") or []
+        if not isinstance(related, list):
+            fail(f"malformed grype match in {report}")
+        rids = sorted({r.get("id") for r in related
+                       if isinstance(r, dict) and r.get("id")})
+        label = grype_artifact_label(match)
+        if (vid in ignored) or any(rid in ignored for rid in rids):
+            waived += 1
+            print(f"waived {vid} {label}")
+            continue
+        fix = vuln.get("fix") or {}
+        versions = fix.get("versions") or [] if isinstance(fix, dict) else []
+        if not isinstance(versions, list):
+            versions = []
+        unwaived += 1
+        print(f"{vid} related={','.join(rids) if rids else 'none'} "
+              f"artifact={label} fix={','.join(str(v) for v in versions) if versions else 'none'}")
+    if unwaived:
+        fail(f"Grype: unresolved vulnerability findings ({unwaived}); see {report}")
+    print(f"grype: no unwaived vulnerability findings "
+          f"({len(matches)} matches, {waived} waived; report: {Path(report).name})")
 
 
 def govulncheck_stream(path):
@@ -558,7 +608,7 @@ def final(out, commit):
         "\n".join(p.read_text(errors="replace") for p in sorted(notice_files)) +
         ("\n\nNative compiler-input notices:\n" + native_notices if native_notices else ""))
     vulnerability_record = {"schema": "bashy-runner-vulnerability-review-v1", "upstream_commit": commit,
-        "policy": "zero non-waived OSV SBOM findings, zero Grype SBOM findings, and zero non-waived reachable govulncheck findings in each shipped binary (waivers: vuln-ignore; module- and package-level findings reported only)",
+        "policy": "zero non-waived OSV SBOM findings, zero non-waived Grype SBOM findings, and zero non-waived reachable govulncheck findings in each shipped binary (waivers: vuln-ignore; module- and package-level findings reported only)",
         "osv_report": "runner-osv.json", "grype_report": "runner-grype.json",
         "govulncheck_reports": [f"runner-{target}.govulncheck.json" for target in TARGETS],
         "unresolved_findings": 0}
@@ -577,7 +627,7 @@ def main():
     q = sub.add_parser("native-licenses"); q.add_argument("--out", required=True); q.add_argument("--review", required=True); q.add_argument("--output", required=True)
     q = sub.add_parser("licenses"); q.add_argument("--report", required=True); q.add_argument("--notices", required=True); q.add_argument("--output", required=True)
     q = sub.add_parser("osv"); q.add_argument("--report", required=True); q.add_argument("--ignore", default=None)
-    q = sub.add_parser("grype"); q.add_argument("--report", required=True)
+    q = sub.add_parser("grype"); q.add_argument("--report", required=True); q.add_argument("--ignore", default=None)
     q = sub.add_parser("govulncheck"); q.add_argument("--out", type=Path, required=True); q.add_argument("--ignore", default=None); q.add_argument("--targets", default=",".join(TARGETS))
     q = sub.add_parser("aggregate-sbom"); q.add_argument("--out", type=Path, required=True)
     q = sub.add_parser("final"); q.add_argument("--out", type=Path, required=True); q.add_argument("--commit", required=True)
@@ -585,7 +635,7 @@ def main():
     {"inventory": lambda: inventory(a.out, a.report), "merge-inputs": lambda: merge_inputs(a.out),
      "compiler-inputs": lambda: compiler_inputs(a.capture, a.source, a.generated, a.output),
      "native-licenses": lambda: review_native_licenses(a.out, a.review, a.output), "licenses": lambda: licenses(a.report, a.notices, a.output),
-     "osv": lambda: osv(a.report, a.ignore), "grype": lambda: grype(a.report), "govulncheck": lambda: govulncheck(a.out, a.ignore, a.targets), "aggregate-sbom": lambda: aggregate_sbom(a.out), "final": lambda: final(a.out, a.commit)}[a.mode]()
+     "osv": lambda: osv(a.report, a.ignore), "grype": lambda: grype(a.report, a.ignore), "govulncheck": lambda: govulncheck(a.out, a.ignore, a.targets), "aggregate-sbom": lambda: aggregate_sbom(a.out), "final": lambda: final(a.out, a.commit)}[a.mode]()
 
 
 if __name__ == "__main__":
