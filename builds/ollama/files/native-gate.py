@@ -36,10 +36,17 @@ def digest(path):
 
 
 def deny_controls(port):
-    """EPERM/EACCES, not timeout/refused/unreachable, proves sandbox enforcement."""
+    """EPERM/EACCES, not timeout/refused/unreachable, proves sandbox enforcement.
+
+    Never probe an allowlisted endpoint: Seatbelt expands "localhost" in the
+    (remote ip "localhost:PORT") allow rule to both 127.0.0.1 and ::1, so a
+    same-port ::1 control is policy-ALLOWED and fails closed here with
+    ECONNREFUSED instead of EPERM (darwin CI run 38503381935). The
+    wrong-port ::1 control below still proves IPv6 enforcement.
+    """
     for family, host, remote in [(socket.AF_INET, '192.0.2.1', 443),
                                   (socket.AF_INET, '127.0.0.1', port + 1),
-                                  (socket.AF_INET6, '::1', port)]:
+                                  (socket.AF_INET6, '::1', port + 1)]:
         for kind in (socket.SOCK_STREAM, socket.SOCK_DGRAM):
             with socket.socket(family, kind) as s:
                 s.settimeout(2)

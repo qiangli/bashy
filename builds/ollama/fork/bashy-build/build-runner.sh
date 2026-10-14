@@ -22,17 +22,33 @@ export GOAMD64=v1 GOARM64=v8.0
 bash "$here/source-guard.sh" "$src"
 # No caller-selected optimization flags, overlays, alternate compilers or tags.
 unset CGO_CFLAGS CGO_CPPFLAGS CGO_CXXFLAGS CGO_LDFLAGS GOEXPERIMENT
-if [[ $os == darwin ]]; then
-  real_cc=clang real_cxx=clang++
-  export MACOSX_DEPLOYMENT_TARGET=14.0
-else
-  real_cc=gcc real_cxx=g++
-fi
-real_cc=$(command -v "$real_cc")
-real_cxx=$(command -v "$real_cxx")
+# The build compiles exactly ./cmd/runner — never ./... or sibling mains —
+# so only the runner's required package closure compiles.
 if [[ $os == windows ]]; then
+  # REQUIRED, not caller-selected: llama/llama.cpp/src/llama-graph.h calls
+  # getenv/atoi without including <cstdlib>. Glibc/libc++ transitively
+  # provide them; MinGW clang in strict C++17 does not (CI run 38503381935:
+  # models package, xverse.cpp "use of undeclared identifier 'atoi'").
+  # Force-include the header through the toolchain flags: editing src/ would
+  # trip the pristine-tree pin gate, and the models package is a needed
+  # runner input (llamarunner), so no thinner package set avoids it.
+  export CGO_CXXFLAGS="-include cstdlib"
+fi
+if [[ $os == windows ]]; then
+  # The verified MinGW clang pair is the ONLY compiler on Windows: resolving
+  # a stock gcc/g++ first fails silently (set -e, no diagnostic) on hosts
+  # whose PATH has no GCC, even though the result is discarded below.
   real_cc=${BASHY_WINDOWS_CC:?verified Windows MinGW clang missing (windows-compilers.py)}
   real_cxx=${BASHY_WINDOWS_CXX:?verified Windows MinGW clang++ missing (windows-compilers.py)}
+else
+  if [[ $os == darwin ]]; then
+    real_cc=clang real_cxx=clang++
+    export MACOSX_DEPLOYMENT_TARGET=14.0
+  else
+    real_cc=gcc real_cxx=g++
+  fi
+  real_cc=$(command -v "$real_cc") || { echo "build-runner: missing C compiler $real_cc" >&2; exit 1; }
+  real_cxx=$(command -v "$real_cxx") || { echo "build-runner: missing C++ compiler $real_cxx" >&2; exit 1; }
 fi
 python3 "$here/compiler-identity.py" "$out/$asset.compiler-identity.json" "$real_cc" "$real_cxx"
 capture="$out/$asset.compiler-inputs"

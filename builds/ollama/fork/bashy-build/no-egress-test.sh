@@ -14,7 +14,29 @@ bin=$1
 bin=$(cd "$(dirname "$bin")" && pwd)/$(basename "$bin")
 out=$(dirname "$bin")
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+# Fail-loud diagnostics: any non-zero exit below (including a bare set -e
+# exit from an unguarded step) prints the gate verdict and the captured
+# evidence to stderr before cleanup, so a red step always names its cause in
+# the hosted log even when the evidence artifact cannot be uploaded (darwin
+# CI run 38503381935 exited 1 with no diagnostic).
+fail_loud() {
+  fail_rc=$?
+  if ((fail_rc != 0)); then
+    echo "no-egress: FAIL ${asset:-unknown asset} (rc=$fail_rc)" >&2
+    if [[ -n ${out:-} && -n ${asset:-} && -f $out/$asset-native.json ]]; then
+      echo "---- $out/$asset-native.json (gate verdict) ----" >&2
+      cat "$out/$asset-native.json" >&2 || true
+    else
+      echo 'no-egress: no verdict file (gate failed before evidence init)' >&2
+    fi
+    if [[ -n ${out:-} && -n ${asset:-} && -f $out/$asset-egress.txt ]]; then
+      echo "---- $out/$asset-egress.txt (captured evidence) ----" >&2
+      cat "$out/$asset-egress.txt" >&2 || true
+    fi
+  fi
+  rm -rf "${work:-}"
+}
+trap fail_loud EXIT
 mkdir -p "$work/home"
 # Invalidate stale evidence before any fixture/tool/runtime operation.
 python3 -c 'import json,sys; open(sys.argv[1], "w").write(json.dumps({"status":"FAIL", "error":"native gate incomplete"})+"\n")' "$out/$asset-native.json"
@@ -46,10 +68,16 @@ Linux)
   }
   [[ -s $work/trace ]] || { echo 'missing network trace' >&2; exit 1; }
   cat "$work/trace" >>"$out/$asset-egress.txt"
-  egress_verdict "$work/trace" "$port" >>"$out/$asset-egress.txt"
+  egress_verdict "$work/trace" "$port" >>"$out/$asset-egress.txt" || {
+    echo 'no-egress: linux: egress verdict failed' >&2; exit 1;
+  }
   ;;
 Darwin)
-  command -v sandbox-exec >/dev/null
+  command -v sandbox-exec >/dev/null || { echo 'no-egress: darwin: missing sandbox-exec' >&2; exit 1; }
+  # lsof lives in /usr/sbin on macOS, which is absent from minimal PATHs
+  # (lab-host reproduction: FileNotFoundError inside the protocol exercise).
+  # The exercise below re-execs with env -i, so extend PATH here, once.
+  case :$PATH: in *:/usr/sbin:*) ;; *) PATH=$PATH:/usr/sbin;; esac
   # Proven Seatbelt form (prima.cpp tag bashy-bashy-prima-0.1.2-13, run
   # 38486571631, green on the hosted macos-15 runners): (remote ip
   # "localhost:PORT"). The ip4 variant failed CI runs 38448516095 and
@@ -61,7 +89,11 @@ Darwin)
 (allow network-outbound (remote ip "localhost:$port"))
 SB
   # Includes wrong-loopback-port, IPv4, IPv6 and UDP denial controls.
-  sandbox-exec -f "$work/profile.sb" python3 "$here/native-gate.py" --deny-controls "$port" >>"$out/$asset-egress.txt" 2>&1
+  # The IPv6 control probes a wrong port: Seatbelt expands "localhost" to
+  # ::1, so a same-port ::1 probe is policy-allowed (see native-gate.py).
+  sandbox-exec -f "$work/profile.sb" python3 "$here/native-gate.py" --deny-controls "$port" >>"$out/$asset-egress.txt" 2>&1 || {
+    echo 'no-egress: darwin: denial controls failed (sandbox profile not enforced?)' >&2; exit 1;
+  }
   env -i PATH="$PATH" HOME="$work/home" sandbox-exec -f "$work/profile.sb" \
     python3 "$here/native-gate.py" "${args[@]}" >>"$out/$asset-egress.txt" 2>&1 || {
     cat "$out/$asset-egress.txt" >&2; exit 1;
@@ -148,5 +180,7 @@ MINGW*|MSYS*)
 *) echo 'unsupported native gate platform' >&2; exit 1;;
 esac
 # Only publish PASS after both protocol and platform enforcement have passed.
-python3 "$here/native-gate.py" --finalize "$out/$asset-native.json" "$out/$asset-egress.txt"
+python3 "$here/native-gate.py" --finalize "$out/$asset-native.json" "$out/$asset-egress.txt" || {
+  echo 'no-egress: finalize failed (protocol or network verdict missing)' >&2; exit 1;
+}
 cat "$out/$asset-native.json"
