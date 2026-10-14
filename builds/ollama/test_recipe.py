@@ -145,6 +145,22 @@ class Recipe(unittest.TestCase):
         self.assertIn("audit-runner.py grype", grype)
         self.assertLess(grype.index("sbom:out/runner-sbom.cdx.json"), grype.index("audit-runner.py grype"))
         self.assertLess(grype.index("|| rc=$?"), grype.index("audit-runner.py grype"))
+        # S436/#2028: govulncheck -mode=binary exits 3 on the waived
+        # Ollama-module advisories, which killed the step under set -e before
+        # any gate ran. The scanner exit code must never decide: scan with
+        # -json per target, accept 0 (clean) and 3 (findings written), fail
+        # anything else with a clear message, then always run the
+        # audit-runner.py govulncheck gate (which applies vuln-ignore).
+        gov = wf.split("govulncheck binary reachability", 1)[1].split("- name:", 1)[0]
+        self.assertIn("govulncheck -mode=binary -json", gov)
+        self.assertIn("runner-$target.govulncheck.json", gov)
+        self.assertIn("|| rc=$?", gov)
+        self.assertIn("$rc -ne 0", gov)
+        self.assertIn("$rc -ne 3", gov)
+        self.assertIn("failed with exit", gov)
+        self.assertIn("audit-runner.py govulncheck", gov)
+        self.assertLess(gov.index("govulncheck -mode=binary -json"), gov.index("audit-runner.py govulncheck"))
+        self.assertLess(gov.index("|| rc=$?"), gov.index("audit-runner.py govulncheck"))
 
     def test_licenses_step_fits_pinned_go_licenses(self):
         # go-licenses v1.6.0 save creates its directory (a pre-created one
@@ -200,13 +216,18 @@ class Recipe(unittest.TestCase):
         self.assertIn("GO_SECURITY_OVERRIDES (reviewed module bumps", audit)
         self.assertLess(audit.index("GO_SECURITY_OVERRIDES (reviewed module bumps"),
                         audit.index("compiled-input permissive license review"))
-        # Exactly one reviewed OSV waiver (S436/#2028): GO-2026-5932, the
-        # unreachable deprecated x/crypto openpgp finding with no fixed
-        # version. The OSV gate honours it by exact id; nothing else is waived.
+        # Nine reviewed waivers (S436/#2028): GO-2026-5932, the unreachable
+        # deprecated x/crypto openpgp finding with no fixed version, plus the
+        # eight Ollama-module advisories with no patched version anywhere
+        # (operator-accepted, Sprint 436). The OSV and govulncheck gates
+        # honour them by exact id; nothing else is waived.
         self.assertTrue((RECIPE / "files/vuln-ignore").is_file())
         waivers = (RECIPE / "files/vuln-ignore").read_text()
         self.assertIn("GO-2026-5932", waivers)
-        self.assertEqual(len(re.findall(r"GO-[0-9]+-[0-9]+", waivers)), 1)
+        for vid in ("GO-2025-4251", "GO-2025-3824", "GO-2025-3695", "GO-2025-3689",
+                    "GO-2025-3559", "GO-2025-3582", "GO-2025-3558", "GO-2025-3557"):
+            self.assertIn(vid, waivers)
+        self.assertEqual(len(re.findall(r"GO-[0-9]+-[0-9]+", waivers)), 9)
         self.assertIn("vuln-ignore", wf)
         gate = (RECIPE / "files/audit-runner.py").read_text()
         self.assertIn("vuln-ignore", gate)

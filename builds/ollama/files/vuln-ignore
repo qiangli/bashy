@@ -14,3 +14,29 @@
 # s436-manager 2026-10-14. Retire when x/crypto removes openpgp or ollama
 # drops the dependency.
 GO-2026-5932 deprecated package, no fixed version exists, not reachable per govulncheck source mode on all targets, accepted by s436-manager 2026-10-14, retire when x/crypto removes openpgp or ollama drops the dependency
+# Ollama module advisories (github.com/ollama/ollama), recorded 2026-10-14.
+# Every entry below has NO patched version in the Go vulnerability database or
+# in GitHub's advisory database (first_patched_version null) for any Ollama
+# release, so no version bump can clear it; every Ollama build, including the
+# official upstream binaries, carries them. govulncheck -mode=binary flags all
+# Ollama symbols because these records carry no per-symbol detail.
+# Risk accepted by the operator (dhnt), 2026-10-14, Sprint 436, on the
+# recommendation of s436-manager. This build ships ONLY cmd/runner: a
+# loopback-only child process exposing health, completion and embedding, with
+# outbound network access blocked, loading models only from the host's local
+# model store. Retire each entry when upstream ships a fix (then bump
+# UPSTREAM_TAG) or when the advisory is withdrawn/narrowed to symbols the
+# runner does not contain. Review again at every UPSTREAM_TAG bump.
+#
+# Not applicable to the runner (server-only code paths):
+GO-2025-4251 CVE-2025-63389 critical: missing authentication on the Ollama server model-management API (/api/pull, /api/delete); the runner exposes no model-management API.
+GO-2025-3824 CVE-2025-51471 medium: cross-domain token exposure in the server registry pull flow; the runner never pulls from a registry.
+GO-2025-3695 CVE-2025-1975 high: server denial of service via the pull manifest; the runner never parses pull manifests.
+# Applicable: crafted model file at load time. Impact limited to a crash or an
+# in-process memory read of the local runner process; models come only from the
+# host's local model store; loopback only; outbound network blocked.
+GO-2025-3689 CVE-2024-8063 high: divide by zero on a crafted GGUF model.
+GO-2025-3559 CVE-2025-0317 high: divide by zero on a crafted GGUF model.
+GO-2025-3582 CVE-2025-0312 high: null pointer dereference on a crafted GGUF model.
+GO-2025-3558 CVE-2024-12055 high: out-of-bounds read on a crafted GGUF model.
+GO-2025-3557 CVE-2025-0315 high: unbounded memory allocation on a crafted GGUF model.

@@ -118,6 +118,71 @@ class AuditPolicy(unittest.TestCase):
             ignore.write_text("not-an-id\n")
             self.assertIn("malformed", self.run_audit("osv", "--report", report, "--ignore", ignore, ok=False).stderr)
 
+    def test_govulncheck_gate_honours_vuln_ignore_by_exact_id(self):
+        # S436/#2028: the eight recorded Ollama-module waivers excuse exactly
+        # those ids; every other finding still fails, and reports the gate
+        # cannot read exactly fail closed.
+        waived = ["GO-2025-4251", "GO-2025-3824", "GO-2025-3695", "GO-2025-3689",
+                  "GO-2025-3559", "GO-2025-3582", "GO-2025-3558", "GO-2025-3557"]
+        def write_reports(out, by_target):
+            for target in TARGETS:
+                docs = [{"config": {"scanner_name": "govulncheck", "scan_mode": "binary"}}]
+                for vid in by_target.get(target, []):
+                    docs.append({"finding": {"osv": vid, "trace": [
+                        {"module": "github.com/ollama/ollama", "version": "v0.21.2"}]}})
+                (out / f"runner-{target}.govulncheck.json").write_text(
+                    "\n".join(json.dumps(d, indent=2) for d in docs) + "\n")
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "out"; out.mkdir()
+            write_reports(out, {t: list(waived) for t in TARGETS})
+            self.run_audit("govulncheck", "--out", out)
+            # A clean scan (no findings at all) also passes.
+            write_reports(out, {})
+            self.run_audit("govulncheck", "--out", out)
+            # One unlisted id on one target fails, naming the id and target.
+            write_reports(out, {"linux-amd64": ["GO-2026-0000"]})
+            p = self.run_audit("govulncheck", "--out", out, ok=False)
+            self.assertIn("GO-2026-0000", p.stderr)
+            self.assertIn("linux-amd64", p.stderr)
+            # Near-miss ids are not waived: exact match only.
+            write_reports(out, {"linux-amd64": ["GO-2025-425"]})
+            self.assertIn("findings", self.run_audit("govulncheck", "--out", out, ok=False).stderr)
+            # Advisory metadata alone neither excuses nor accuses.
+            with tempfile.TemporaryDirectory() as td2:
+                out2 = Path(td2) / "out"; out2.mkdir()
+                for target in TARGETS:
+                    (out2 / f"runner-{target}.govulncheck.json").write_text(
+                        json.dumps({"osv": {"id": "GO-2026-0000"}}) + "\n")
+                self.run_audit("govulncheck", "--out", out2)
+            # A waiver file the gate cannot read exactly fails closed.
+            ignore = Path(td) / "ignore"
+            ignore.write_text("not-an-id\n")
+            write_reports(out, {})
+            self.assertIn("malformed", self.run_audit(
+                "govulncheck", "--out", out, "--ignore", ignore, ok=False).stderr)
+            # An explicit alternate ignore file is honoured the same way.
+            ignore.write_text("# comment\n\nGO-2026-0000 waived here\n")
+            write_reports(out, {"linux-amd64": ["GO-2026-0000"]})
+            self.run_audit("govulncheck", "--out", out, "--ignore", ignore)
+
+    def test_govulncheck_gate_fails_closed_on_unreadable_reports(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "out"; out.mkdir()
+            self.assertIn("cannot read",
+                          self.run_audit("govulncheck", "--out", out, ok=False).stderr)
+            for target in TARGETS:
+                (out / f"runner-{target}.govulncheck.json").write_text(
+                    "" if target == "linux-amd64" else "{}\n")
+            p = self.run_audit("govulncheck", "--out", out, ok=False)
+            self.assertIn("empty", p.stderr)
+            (out / "runner-linux-amd64.govulncheck.json").write_text("{truncated\n")
+            self.assertIn("invalid", self.run_audit("govulncheck", "--out", out, ok=False).stderr)
+            (out / "runner-linux-amd64.govulncheck.json").write_text('[{"finding": 1}]\n')
+            self.assertIn("malformed", self.run_audit("govulncheck", "--out", out, ok=False).stderr)
+            (out / "runner-linux-amd64.govulncheck.json").write_text(
+                json.dumps({"finding": {"trace": []}}) + "\n")
+            self.assertIn("malformed", self.run_audit("govulncheck", "--out", out, ok=False).stderr)
+
     def test_inventory_requires_every_target_and_generated_metal(self):
         # Link-aware inventory: each target's build-time linkage record is
         # reviewed in its native format. No llvm-readobj on PATH is needed.

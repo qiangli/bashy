@@ -350,11 +350,21 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="$RUNNER_TEMP/bin:$PATH"
+          # govulncheck -mode=binary flags every Ollama-module symbol because
+          # the Ollama advisories carry no per-symbol detail and no patched
+          # version exists for any Ollama release (S436/#2028), so the gate
+          # below — not the scanner exit code — decides. Accept 0 (clean) and
+          # 3 (findings written); any other code is a real scanner error. The
+          # per-target JSON stays in the audit outputs for the gate and the
+          # final evidence check.
           for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64; do
             binary="out/runner-$target"
             [[ $target != windows-amd64 ]] || binary+='.exe'
-            govulncheck -mode=binary "$binary" >"out/runner-$target.govulncheck.txt"
+            rc=0
+            govulncheck -mode=binary -json "$binary" >"out/runner-$target.govulncheck.json" || rc=$?
+            if [[ $rc -ne 0 && $rc -ne 3 ]]; then echo "govulncheck failed with exit $rc for $target" >&2; exit "$rc"; fi
           done
+          python3 fork/bashy-build/audit-runner.py govulncheck --out out
       - name: Grype complete CycloneDX SBOM (fail on any severity)
         env:
           GRYPE_VERSION: v0.120.1
