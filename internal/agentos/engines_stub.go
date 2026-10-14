@@ -12,51 +12,30 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"github.com/qiangli/yoke/external/podman/winhelper"
 	"github.com/qiangli/yoke/pkg/binmgr"
-	"github.com/qiangli/yoke/pkg/broker"
-	"github.com/qiangli/yoke/pkg/broker/door"
 )
 
-// dispatchEngine (lean build). The container/LLM engines are not LINKED into this
-// binary — by design (docs/bashy-execution-path.md: "exec, never link"). But a
-// command listed in `bashy commands` must still work with no rebuild, so we walk
-// the dispatch ladder:
-//
-//	Tier 3  host $PATH or bashy's binmgr cache — exec transparently.
-//	Tier 2  provision: fetch the pinned UPSTREAM release (engines_podman.go for
-//	        podman, the official ollama release below), sha256-verified, into the
-//	        cache → exec (docs/licensing-supply-chain-policy.md: download+exec,
-//	        never linked or bundled).
-//	Tier 4  none available → point at install or a paired host node — never a
-//	        rebuild.
+// dispatchEngine uses an external podman in the lean build. Local Ollama
+// requires the bashy-built engine and its embedded signed runner.
 func dispatchEngine(arg string) {
 	if code := guardEngine(arg, os.Args[2:]); code != 0 {
 		dispatchExit(code)
 	}
 	name := engineAlias(arg) // `bashy docker` -> podman engine
 	switch name {
-	case "podman", "ollama":
-		if name == "ollama" {
-			if blocked, msg := ollamaCloudGate(os.Args[2:]); blocked {
-				fmt.Fprint(os.Stderr, msg)
-				dispatchExit(2)
-			}
-		}
+	case "ollama":
+		fmt.Fprint(os.Stderr, engineNotFoundMessage(name))
+		dispatchExit(1)
+	case "podman":
 		bin := resolveEngineBinary(name)
 		if bin == "" {
 			bin = provisionEngine(name)
 		}
 		if bin != "" {
-			if name == "ollama" {
-				applyOllamaIsolationEnv() // keep the lean ollama isolated like the embedded one
-			}
-			if name == "podman" {
-				applyPodmanHelperEnv()     // Windows: without this a machine start serves NO endpoint
-				applyManagedPodmanEnv(bin) // managed podman: its own conmon/crun/netavark (linux), gvproxy/vfkit (darwin)
-			}
+			applyPodmanHelperEnv()     // Windows: without this a machine start serves NO endpoint
+			applyManagedPodmanEnv(bin) // managed podman: its own conmon/crun/netavark (linux), gvproxy/vfkit (darwin)
 			dispatchExit(execEnginePassthrough(bin, os.Args[2:]))
 		}
 		fmt.Fprint(os.Stderr, engineNotFoundMessage(name))
@@ -78,125 +57,7 @@ func provisionEngine(name string) string {
 	if name == "podman" {
 		return provisionPodman(context.Background())
 	}
-	if name == "ollama" {
-		// ollama is embedded (cgo) only in the -tags bashy_engines host build.
-		// In the lean binary there is no bashy-built ollama blob to fetch; instead
-		// pull the OFFICIAL ollama release — MIT-licensed, so download+exec of the
-		// permissive upstream binary is allowed (docs/licensing-supply-chain-policy.md;
-		// not bundled — a separate process). It ships as a tarball of the ollama
-		// binary + its ggml runner libs, so we tree-extract and exec in place.
-		return provisionOllama(context.Background())
-	}
 	return ""
-}
-
-const ollamaPinnedVersion = "v0.40.1"
-
-// provisionOllama fetches the pinned official ollama release for this platform
-// (Tree extraction: ollama + its sibling ggml runner libs) into bashy's managed
-// cache and returns the entrypoint path. Returns "" on resolution/install error.
-func provisionOllama(ctx context.Context) string {
-	entry := ollamaEntrypoint()
-	if entry == "" {
-		return ""
-	}
-	if p := cachedOllama(ollamaPinnedVersion, entry); p != "" {
-		return p // already extracted — no network, no "fetching" line
-	}
-	t, err := binmgr.ResolveGitHub(ctx, binmgr.GitHubSpec{
-		Name:       "ollama",
-		Repo:       ollamaOfficialRepo(),
-		Version:    ollamaPinnedVersion,
-		Tree:       true,
-		Entrypoint: entry,
-		AssetMatch: ollamaAssetMatch,
-	})
-	if err != nil {
-		return ""
-	}
-	fmt.Fprintln(os.Stderr, "bashy ollama: fetching the official ollama runtime ("+t.Version+") — first run only…")
-	path, err := binmgr.Ensure(ctx, t)
-	if err != nil {
-		return ""
-	}
-	return path
-}
-
-// cachedOllama returns only the release with a committed binmgr checksum pin.
-// Mirrors binmgr.Ensure's layout: <CacheDir>/ollama/<version>/<entry>.
-func cachedOllama(version, entry string) string {
-	root, err := binmgr.CacheDir()
-	if err != nil {
-		return ""
-	}
-	path := filepath.Join(root, "ollama", version, filepath.FromSlash(entry))
-	if _, err := os.Stat(path); err == nil && isExecutable(path) {
-		return path
-	}
-	return ""
-}
-
-// ollamaOfficialRepo is the upstream ollama release repo; $BASHY_OLLAMA_REPO
-// overrides it for forks/mirrors.
-func ollamaOfficialRepo() string {
-	if r := strings.TrimSpace(os.Getenv("BASHY_OLLAMA_REPO")); r != "" {
-		return r
-	}
-	return "ollama/ollama"
-}
-
-// ollamaEntrypoint is the ollama executable's path within the official archive
-// for this platform ("" = not auto-provisionable here). The linux archive keeps
-// the executable under bin/ and its runners under lib/ollama, which it finds
-// relative to itself.
-func ollamaEntrypoint() string {
-	switch runtime.GOOS {
-	case "darwin":
-		return "ollama"
-	case "windows":
-		return "ollama.exe"
-	case "linux":
-		return "bin/ollama"
-	default:
-		return ""
-	}
-}
-
-// ollamaAssetMatch selects the plain (non -rocm/-mlx/-jetpack) official ollama
-// asset bashy can extract for this platform: the universal darwin .tgz, the
-// per-arch windows .zip or the per-arch linux .tar.zst.
-func ollamaAssetMatch(name, goos, goarch string) bool {
-	n := strings.ToLower(name)
-	switch goos {
-	case "darwin":
-		return n == "ollama-darwin.tgz"
-	case "windows":
-		return n == "ollama-windows-"+goarch+".zip"
-	case "linux":
-		return n == "ollama-linux-"+goarch+".tar.zst"
-	}
-	return false
-}
-
-// applyOllamaIsolationEnv points a freshly-exec'd official ollama at bashy's own
-// port + model store (matching the embedded managed daemon: never 11434, models
-// under ~/.agents/bashy/ollama) unless the caller set them explicitly — so the
-// lean ollama never fights a host ollama.
-func applyOllamaIsolationEnv() {
-	if strings.TrimSpace(os.Getenv("OLLAMA_HOST")) == "" {
-		// The raw engine (the door's child) gets its port from the door; a
-		// client verb goes through the door, token in the URL path.
-		if os.Getenv(broker.EngineModeEnv) != "" {
-			os.Setenv("OLLAMA_HOST", "127.0.0.1:11435")
-		} else if host, err := door.OllamaHost(); err == nil {
-			os.Setenv("OLLAMA_HOST", host)
-		}
-	}
-	if strings.TrimSpace(os.Getenv("OLLAMA_MODELS")) == "" {
-		if home, err := os.UserHomeDir(); err == nil {
-			os.Setenv("OLLAMA_MODELS", filepath.Join(home, ".agents", "bashy", "ollama", "models"))
-		}
-	}
 }
 
 // applyPodmanHelperEnv provisions podman's Windows helper binaries and
@@ -285,32 +146,6 @@ func sameFile(a, b string) bool {
 	return ea == nil && eb == nil && os.SameFile(fa, fb)
 }
 
-func execEnginePassthrough(bin string, args []string) int {
-	cmd := binmgr.Command(context.Background(), bin, args...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	if podmanStartsMachine(args) {
-		cmd.Dir = engineDaemonDir()
-	}
-	if err := cmd.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "bashy: %s: %v\n", bin, err)
-		return 1
-	}
-	// bashy is only the front door: a termination signal meant for
-	// `bashy ollama serve` must reach the engine, or the engine is orphaned
-	// holding its port and model memory while bashy exits.
-	stop := forwardSignals(cmd.Process)
-	err := cmd.Wait()
-	stop()
-	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			return ee.ExitCode()
-		}
-		fmt.Fprintf(os.Stderr, "bashy: %s: %v\n", bin, err)
-		return 1
-	}
-	return 0
-}
-
 func engineNotFoundMessage(arg string) string {
 	switch arg {
 	case "podman":
@@ -318,15 +153,11 @@ func engineNotFoundMessage(arg string) string {
 			"  Check network access to github.com releases (bashy fetches a pinned podman for " + binmgr.Platform() + "),\n" +
 			"  install podman yourself, or run containers on a paired host node over the mesh.\n"
 	default: // ollama
-		return "bashy ollama: could not fetch the official ollama runtime.\n" +
-			"  Check network access to github.com/ollama/ollama releases, install ollama\n" +
-			"  (https://ollama.com/download), or run it on a paired host node over the mesh.\n"
+		return "bashy ollama: local inference requires the engines build (-tags bashy_engines,embed_runner) with the embedded signed runner.\n"
 	}
 }
 
-// probeOllamaEngine (lean build): a host or cached ollama is used as-is;
-// otherwise the official release is provisionable on platforms whose asset
-// bashy can extract. Never provisions here.
+// probeOllamaEngine (lean build): local Ollama is unavailable.
 func probeOllamaEngine() ollamaEngineProbe {
-	return ollamaEngineProbe{Build: "lean", Binary: resolveEngineBinary("ollama"), Provisionable: ollamaEntrypoint() != ""}
+	return ollamaEngineProbe{Build: "lean"}
 }
