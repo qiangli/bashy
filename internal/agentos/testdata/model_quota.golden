@@ -1,9 +1,9 @@
-LABEL     ACCOUNT       WINDOW  USED  RESETS                LIMIT             TOKENS/BAL  SOURCE   AGE    STATUS
-agy       google-pro    -       -     -                     -                 -           -        -      unmeasured
-claude    claude-max    5h      62%   Mon 15:04 (in 1h40m)  -                 1200        fixture  1m30s  ok
-codex     chatgpt-pro   week    12%   -                     -                 -           -        -      ok
-deepseek  deepseek-key  -       -     -                     -                 4.5 USD     -        -      ok
-glm       glm-pro       5h      -     -                     12000 credits/5h  -           -        -      unmeasured
-kimi      kimi-key      -       -     -                     -                 -           -        -      not-configured
-local     local         -       -     -                     -                 -           -        -      unmeasured
-muse      muse-pro      -       -     -                     -                 -           -        -      unmeasured
+LABEL     ACCOUNT       WINDOW  USED  RESETS                LIMIT             TOKENS/BAL  SOURCE                     AGE    STATUS          PREDICT      IMMUNE
+agy       google-pro    -       -     -                     -                 -           -                          -      unmeasured      -            -
+claude    claude-max    5h      62%   Mon 15:04 (in 1h40m)  -                 1200        fixture                    1m30s  ok              warn in 45m  warn
+codex     chatgpt-pro   week    12%   -                     -                 -           -                          -      ok              -            -
+deepseek  deepseek-key  -       -     -                     -                 4.5 USD     -                          -      ok              -            -
+glm       glm-pro       5h      -     -                     12000 credits/5h  -           -                          -      unmeasured      -            -
+kimi      kimi-key      -       -     -                     -                 -           -                          -      not-configured  -            -
+local     local         -       -     -                     -                 -           -                          -      unmeasured      -            -
+muse      muse-pro      -       -     -                     -                 -           vendor-error (matcher) 2m  2m0s   rate-limited    -            -

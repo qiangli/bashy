@@ -71,7 +71,20 @@ func quotaEffects(p quotaProbe) string {
 	return strings.Join(p.Probe.Run.Effects, ", ")
 }
 func modelQuotaConsentCommand(verb string, resolve quotaProbeResolver, change func(string) error) *cobra.Command {
-	return &cobra.Command{Use: verb + " RECORD/PROBEID", Short: verb + " a declared usage probe", SilenceUsage: true, Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	return &cobra.Command{Use: verb + " RECORD/PROBEID|analyzer", Short: verb + " a declared usage probe or analyzer", SilenceUsage: true, Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		if args[0] == "analyzer" {
+			var err error
+			if verb == "enable" {
+				err = llmbudget.EnableAnalyzer()
+			} else {
+				err = llmbudget.DisableAnalyzer()
+			}
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s analyzer\n", verb)
+			return err
+		}
 		if !strings.Contains(args[0], "/") {
 			return fmt.Errorf("expected RECORD/PROBEID")
 		}

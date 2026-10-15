@@ -14,6 +14,7 @@ import (
 
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/llmbudget"
+	"github.com/qiangli/yoke/pkg/quotaobs"
 	"github.com/qiangli/yoke/pkg/snippet"
 	"github.com/qiangli/yoke/pkg/weave"
 	"github.com/spf13/cobra"
@@ -23,8 +24,8 @@ func quotaNow() time.Time    { return time.Date(2026, 10, 19, 13, 24, 0, 0, time
 func quotaPtr[T any](v T) *T { return &v }
 func quotaFixture() []llmbudget.QuotaRow {
 	return []llmbudget.QuotaRow{
-		{Account: "claude-max", Label: "claude", Configured: true, Provider: "anthropic", Plan: "max", Window: "5h", UsedPercent: quotaPtr(62.0), ResetAt: quotaPtr(quotaNow().Add(100 * time.Minute)), Tokens: quotaPtr(1200.0), Source: "fixture", ObservedAt: quotaPtr(quotaNow().Add(-90 * time.Second)), Status: "ok", Headroom: quotaPtr(.38), SuggestedWorkers: quotaPtr(2), Classification: "measured"},
-		{Account: "muse-pro", Label: "muse", Provider: "openai-compat", Configured: true, Status: "unmeasured"},
+		{Account: "claude-max", Label: "claude", Configured: true, Provider: "anthropic", Plan: "max", Window: "5h", UsedPercent: quotaPtr(62.0), ResetAt: quotaPtr(quotaNow().Add(100 * time.Minute)), Tokens: quotaPtr(1200.0), Source: "fixture", ObservedAt: quotaPtr(quotaNow().Add(-90 * time.Second)), Status: "ok", Headroom: quotaPtr(.38), SuggestedWorkers: quotaPtr(2), Classification: "measured", Predict: "warn in 45m", Immune: "warn"},
+		{Account: "muse-pro", Label: "muse", Provider: "openai-compat", Configured: true, Status: "rate-limited", Source: "vendor-error (matcher) 2m", ObservedAt: quotaPtr(quotaNow().Add(-2 * time.Minute)), Classification: "observed"},
 		{Account: "chatgpt-pro", Label: "codex", Provider: "openai", Configured: true, Window: "week", UsedPercent: quotaPtr(12.0), Status: "ok"},
 		{Account: "google-pro", Label: "agy", Provider: "google", Configured: true, Status: "unmeasured"},
 		{Account: "glm-pro", Label: "glm", Provider: "openai-compat", Configured: true, Window: "5h", Limit: "12000 credits/5h", Status: "unmeasured"},
@@ -78,7 +79,8 @@ func TestQuotaJSONAndDeadline(t *testing.T) {
 				}
 				return quotaFixture(), nil
 			}
-			cmd := modelQuotaCommandWithMetadata(collect, func([]llmbudget.QuotaRow, time.Time) error { return nil }, quotaNow, func() ([]quotaProbeMetadata, error) { return []quotaProbeMetadata{{timeout: 25 * time.Second}}, nil })
+			ingested := 0
+			cmd := modelQuotaCommandWithMetadataAndIngest(collect, func([]llmbudget.QuotaRow, time.Time) error { return nil }, quotaNow, func() ([]quotaProbeMetadata, error) { return []quotaProbeMetadata{{timeout: 25 * time.Second}}, nil }, func(context.Context, time.Time) error { ingested++; return nil })
 			args := []string{"--all", "--json", "--provider", "claude"}
 			if refresh {
 				args = append(args, "--refresh")
@@ -86,6 +88,9 @@ func TestQuotaJSONAndDeadline(t *testing.T) {
 			out, _, err := executeQuota(cmd, args...)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if ingested != map[bool]int{false: 0, true: 1}[refresh] {
+				t.Fatalf("ingest calls: %d", ingested)
 			}
 			var envelope struct {
 				Schema     string `json:"schema_version"`
@@ -282,6 +287,23 @@ func TestQuotaConsentRoundTrip(t *testing.T) {
 			t.Fatal(string(raw))
 		}
 	}
+	for _, verb := range []string{"enable", "disable"} {
+		out, _, err := executeQuota(modelQuotaConsentCommand(verb, resolve, llmbudget.EnableProbe), "analyzer")
+		if err != nil || !strings.Contains(out, verb+" analyzer") {
+			t.Fatalf("%q %v", out, err)
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var policy llmbudget.Policy
+		if err := json.Unmarshal(raw, &policy); err != nil {
+			t.Fatal(err)
+		}
+		if policy.Analyzer.Enabled != (verb == "enable") {
+			t.Fatal(string(raw))
+		}
+	}
 }
 
 func isolateQuotaCatalog(t *testing.T) {
@@ -400,6 +422,69 @@ func TestQuotaHints(t *testing.T) {
 	var buf bytes.Buffer
 	if err := renderQuotaHints(&buf, rows, nil); err != nil || buf.Len() != 0 {
 		t.Fatalf("%q %v", buf.String(), err)
+	}
+}
+
+func TestQuotaHintDedupesFreshAccount(t *testing.T) {
+	rows := []llmbudget.QuotaRow{{Account: "a", Source: "probe:plan:a/fast", ObservedAt: quotaPtr(quotaNow()), Status: "ok"}, {Account: "b", Status: "unmeasured"}}
+	probes := []quotaProbeMetadata{{id: "probe:plan:a/fast", account: "a", selector: "a/fast", net: true, enabled: true}, {account: "a", selector: "a/slow", net: true}, {account: "b", selector: "b/z", net: true}, {account: "b", selector: "b/a", net: true}}
+	var out bytes.Buffer
+	if err := renderQuotaHints(&out, rows, probes); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := out.String(), "hint: bashy model quota enable b/a\n"; got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestQuotaLogFilterAndJSON(t *testing.T) {
+	var got llmbudget.LogFilter
+	entry := llmbudget.LogEntry{At: quotaNow(), Source: "vendor-error", Account: "a", Tool: "claude", Excerpt: "redacted fixture", Parsed: &quotaobs.ParsedSignal{Kind: "exhausted", Window: "5h", ResetAt: quotaPtr(quotaNow().Add(time.Hour))}, Classification: "observed", Analysis: "limit reached"}
+	log := func(_ context.Context, f llmbudget.LogFilter) []llmbudget.LogEntry {
+		got = f
+		return []llmbudget.LogEntry{entry}
+	}
+	out, _, err := executeQuota(modelQuotaLogCommand(log, quotaNow), "--account", "a", "--since", "2h", "--limit", "7")
+	if err != nil || got.Account != "a" || !got.Since.Equal(quotaNow().Add(-2*time.Hour)) || got.Limit != 7 || !strings.Contains(out, "exhausted") || strings.Contains(out, entry.Excerpt) {
+		t.Fatalf("%+v %q %v", got, out, err)
+	}
+	out, _, err = executeQuota(modelQuotaLogCommand(log, quotaNow), "--json")
+	if err != nil || !strings.Contains(out, `"excerpt":"redacted fixture"`) {
+		t.Fatalf("%q %v", out, err)
+	}
+}
+
+func TestQuotaAnalyzeConsentHint(t *testing.T) {
+	called := 0
+	analyze := func(_ context.Context, _ llmbudget.AnalyzeOptions) (llmbudget.AnalyzeResult, error) {
+		called++
+		return llmbudget.AnalyzeResult{Hint: "enable the analyzer with quota enable analyzer"}, nil
+	}
+	log := func(context.Context, llmbudget.LogFilter) []llmbudget.LogEntry {
+		return []llmbudget.LogEntry{{Classification: "observed"}}
+	}
+	out, _, err := executeQuota(modelQuotaAnalyzeCommand(analyze, log, quotaNow))
+	if err != nil || called != 1 || !strings.Contains(out, "quota enable analyzer") {
+		t.Fatalf("%q %v", out, err)
+	}
+	out, _, err = executeQuota(modelQuotaAnalyzeCommand(analyze, log, quotaNow), "--dry-run")
+	if err != nil || called != 1 || !strings.Contains(out, "1 observations") {
+		t.Fatalf("%q %v", out, err)
+	}
+}
+
+func TestQuotaForecastRender(t *testing.T) {
+	f := llmbudget.AccountForecast{Account: "a", Window: "5h", UsedPercent: 62, TokensPerPercent: 123, CoefficientOfVariation: .2, BurnRate: 14, P50: quotaPtr(quotaNow().Add(time.Hour)), P90: quotaPtr(quotaNow().Add(2 * time.Hour)), ResetAt: quotaNow().Add(3 * time.Hour), Verdict: "warning", Confidence: .8, Regime: "stable"}
+	forecast := func(context.Context, time.Time) []llmbudget.AccountForecast {
+		return []llmbudget.AccountForecast{f, {Account: "b"}}
+	}
+	out, _, err := executeQuota(modelQuotaForecastCommand(forecast, quotaNow), "--account", "a")
+	if err != nil || !strings.Contains(out, "TOKENS/%") || !strings.Contains(out, "123.0") || !strings.Contains(out, "warning") || strings.Contains(out, " b ") {
+		t.Fatalf("%q %v", out, err)
+	}
+	out, _, err = executeQuota(modelQuotaForecastCommand(forecast, quotaNow), "--account", "a", "--json")
+	if err != nil || !strings.Contains(out, `"account":"a"`) || strings.Contains(out, `"account":"b"`) {
+		t.Fatalf("%q %v", out, err)
 	}
 }
 

@@ -23,6 +23,10 @@ func modelQuotaCommand(collect func(context.Context, llmbudget.QuotaOptions) ([]
 }
 
 func modelQuotaCommandWithMetadata(collect func(context.Context, llmbudget.QuotaOptions) ([]llmbudget.QuotaRow, error), overlay func([]llmbudget.QuotaRow, time.Time) error, clock func() time.Time, metadata func() ([]quotaProbeMetadata, error)) *cobra.Command {
+	return modelQuotaCommandWithMetadataAndIngest(collect, overlay, clock, metadata, llmbudget.Ingest)
+}
+
+func modelQuotaCommandWithMetadataAndIngest(collect func(context.Context, llmbudget.QuotaOptions) ([]llmbudget.QuotaRow, error), overlay func([]llmbudget.QuotaRow, time.Time) error, clock func() time.Time, metadata func() ([]quotaProbeMetadata, error), ingest func(context.Context, time.Time) error) *cobra.Command {
 	var opt llmbudget.QuotaOptions
 	var jsonOut bool
 	cmd := &cobra.Command{Use: "quota", Short: "View account quota, resets and recorded cooldowns", SilenceUsage: true, Args: cobra.NoArgs,
@@ -32,7 +36,8 @@ Fields:
   LABEL: account display label; ACCOUNT: billing account identity; LIMIT: declared plan limit.
   WINDOW: observation window; USED: percentage used; RESETS: local reset time and time remaining.
   TOKENS/BAL: observed tokens or account balance (with its unit).
-  SOURCE: observation source; AGE: rounded time since observation; STATUS: availability.
+	  SOURCE: observation source; AGE: rounded time since observation; STATUS: availability.
+	  PREDICT: advisory exhaustion forecast; IMMUNE: protection level.
   Unknown cells are '-'. JSON also includes headroom, stale, suggested_workers and classification.`}
 	cmd.Flags().BoolVar(&opt.All, "all", false, "include accounts without configured agents")
 	cmd.Flags().BoolVar(&opt.Refresh, "refresh", false, "refresh enabled sources (declared probe timeouts, at most 40 seconds)")
@@ -54,6 +59,11 @@ Fields:
 		if err != nil {
 			return err
 		}
+		if opt.Refresh {
+			if err := ingest(ctx, opt.Now); err != nil {
+				return err
+			}
+		}
 		rows = append([]llmbudget.QuotaRow(nil), rows...)
 		if err = overlay(rows, opt.Now); err != nil {
 			return err
@@ -71,7 +81,7 @@ Fields:
 		}
 		return renderQuotaHints(cmd.OutOrStdout(), rows, probes)
 	}
-	cmd.AddCommand(modelQuotaTestCommand(resolveQuotaProbes, runQuotaProbe, time.Now), modelQuotaConsentCommand("enable", resolveQuotaProbes, llmbudget.EnableProbe), modelQuotaConsentCommand("disable", resolveQuotaProbes, llmbudget.DisableProbe), modelQuotaCaptureCommand(time.Now))
+	cmd.AddCommand(modelQuotaTestCommand(resolveQuotaProbes, runQuotaProbe, time.Now), modelQuotaConsentCommand("enable", resolveQuotaProbes, llmbudget.EnableProbe), modelQuotaConsentCommand("disable", resolveQuotaProbes, llmbudget.DisableProbe), modelQuotaCaptureCommand(time.Now), modelQuotaLogCommand(llmbudget.QuotaLog, time.Now), modelQuotaAnalyzeCommand(llmbudget.Analyze, llmbudget.QuotaLog, time.Now), modelQuotaForecastCommand(llmbudget.Forecast, time.Now), modelQuotaIngestCommand(llmbudget.Ingest, time.Now))
 	return cmd
 }
 
@@ -101,7 +111,7 @@ func renderModelQuota(out io.Writer, rows []llmbudget.QuotaRow, now time.Time, l
 	rows = append([]llmbudget.QuotaRow(nil), rows...)
 	sortQuotaRows(rows)
 	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "LABEL\tACCOUNT\tWINDOW\tUSED\tRESETS\tLIMIT\tTOKENS/BAL\tSOURCE\tAGE\tSTATUS")
+	fmt.Fprintln(w, "LABEL\tACCOUNT\tWINDOW\tUSED\tRESETS\tLIMIT\tTOKENS/BAL\tSOURCE\tAGE\tSTATUS\tPREDICT\tIMMUNE")
 	for _, r := range rows {
 		used, reset, quantity, age := "-", "-", "-", "-"
 		if r.UsedPercent != nil {
@@ -128,7 +138,7 @@ func renderModelQuota(out io.Writer, rows []llmbudget.QuotaRow, now time.Time, l
 		if r.ObservedAt != nil {
 			age = now.Sub(*r.ObservedAt).Round(time.Second).String()
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", quotaCell(r.Label), quotaCell(r.Account), quotaCell(r.Window), used, reset, quotaCell(r.Limit), quotaCell(quantity), quotaCell(r.Source), age, quotaCell(r.Status))
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", quotaCell(r.Label), quotaCell(r.Account), quotaCell(r.Window), used, reset, quotaCell(r.Limit), quotaCell(quantity), quotaCell(r.Source), age, quotaCell(r.Status), quotaCell(r.Predict), quotaCell(r.Immune))
 	}
 	return w.Flush()
 }
@@ -257,9 +267,9 @@ func sortQuotaRows(rows []llmbudget.QuotaRow) {
 }
 
 type quotaProbeMetadata struct {
-	account, selector string
-	timeout           time.Duration
-	net, enabled      bool
+	id, account, selector string
+	timeout               time.Duration
+	net, enabled          bool
 }
 
 // Read declarations and consent only; never execute a probe to discover hints.
@@ -326,7 +336,7 @@ func loadQuotaProbeMetadata() ([]quotaProbeMetadata, error) {
 		if v, ok := overrides[id]; ok {
 			enabled = v
 		}
-		out = append(out, quotaProbeMetadata{account: account, selector: selector, timeout: p.Run.Timeout, net: net, enabled: enabled})
+		out = append(out, quotaProbeMetadata{id: id, account: account, selector: selector, timeout: p.Run.Timeout, net: net, enabled: enabled})
 	}
 	for _, m := range models {
 		if !m.Active() {
@@ -364,9 +374,13 @@ func quotaRefreshTimeout(probes []quotaProbeMetadata) time.Duration {
 
 func renderQuotaHints(out io.Writer, rows []llmbudget.QuotaRow, probes []quotaProbeMetadata) error {
 	accounts := map[string]bool{}
+	freshSource := map[string]bool{}
 	hints := map[string]bool{}
 	for _, r := range rows {
 		accounts[r.Account] = true
+		if !r.Stale && r.Source != "" && r.ObservedAt != nil {
+			freshSource[r.Account+"\x00"+r.Source] = true
+		}
 		if r.Status != "not-configured" {
 			continue
 		}
@@ -376,10 +390,22 @@ func renderQuotaHints(out io.Writer, rows []llmbudget.QuotaRow, probes []quotaPr
 			}
 		}
 	}
+	enabledFresh := map[string]bool{}
 	for _, p := range probes {
-		if accounts[p.account] && p.net && !p.enabled {
-			hints["hint: bashy model quota enable "+p.selector] = true
+		if p.enabled && freshSource[p.account+"\x00"+p.id] {
+			enabledFresh[p.account] = true
 		}
+	}
+	chosen := map[string]string{}
+	for _, p := range probes {
+		if accounts[p.account] && p.net && !p.enabled && !enabledFresh[p.account] {
+			if old := chosen[p.account]; old == "" || p.selector < old {
+				chosen[p.account] = p.selector
+			}
+		}
+	}
+	for _, selector := range chosen {
+		hints["hint: bashy model quota enable "+selector] = true
 	}
 	lines := make([]string, 0, len(hints))
 	for hint := range hints {
