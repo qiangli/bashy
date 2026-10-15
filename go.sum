@@ -935,6 +935,8 @@ github.com/qiangli/yoke v0.0.0-20261015162534-d5600a1fd118 h1:yoTNZ84n8h+rSKZLmI
 github.com/qiangli/yoke v0.0.0-20261015162534-d5600a1fd118/go.mod h1:UVkWUE/pNAMC/XxaKnyZyHqkOUK8DvCYJKDwkJToQss=
 github.com/qiangli/yoke v0.0.0-20261015164420-2d01063fc034 h1:E171s8nHbX5E/nqZt7hnSDbI2bVMc6yBhs8BrLTXYNg=
 github.com/qiangli/yoke v0.0.0-20261015164420-2d01063fc034/go.mod h1:UVkWUE/pNAMC/XxaKnyZyHqkOUK8DvCYJKDwkJToQss=
+github.com/qiangli/yoke v0.0.0-20261015171941-aa3cd4b23d4e h1:KykK7fKEXjWg7ec+Rlqv3MIGzrsOdF8o2INolJrL+Yc=
+github.com/qiangli/yoke v0.0.0-20261015171941-aa3cd4b23d4e/go.mod h1:UVkWUE/pNAMC/XxaKnyZyHqkOUK8DvCYJKDwkJToQss=
 github.com/qiangli/yoke/external/otel v0.0.0-20261014151034-4094fdf0ff26 h1:dyGRQeKgE3v+3GBL0cDHxTnxYzm4DrupP+e3iEjPq3o=
 github.com/qiangli/yoke/external/otel v0.0.0-20261014151034-4094fdf0ff26/go.mod h1:T/QcacDbXpopQO/SQITqPj+vnkVtKgztKF8RJumTkrc=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261014151034-4094fdf0ff26 h1:zUrXeCz2p2QMVp6+9HImjr3bCv38CTPdJNCiS642hOQ=
