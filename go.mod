@@ -12,13 +12,14 @@ require (
 	github.com/ergochat/readline v0.1.3
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-git/v5 v5.19.1
+	github.com/itchyny/gojq v0.12.19
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/coreutils v0.0.0-20261013041512-6c4cf31f268c
 	github.com/qiangli/ycode v0.3.1-dev.0.20261011021240-aa0d91dd60d2
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261015174458-5110727f87f5
-	github.com/qiangli/yoke/external/otel v0.0.0-20261014151034-4094fdf0ff26
+	github.com/qiangli/yoke/external/otel v0.0.0-20261015174458-5110727f87f5
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
@@ -226,7 +227,6 @@ require (
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/ipfs/go-cid v0.5.0 // indirect
-	github.com/itchyny/gojq v0.12.19 // indirect
 	github.com/itchyny/timefmt-go v0.1.8 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
@@ -352,8 +352,8 @@ require (
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 // indirect
 	github.com/qiangli/outpost v0.14.38-0.20261014151136-f7f0005dc4c6 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261014151034-4094fdf0ff26 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261014151034-4094fdf0ff26 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261015174458-5110727f87f5 // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261015174458-5110727f87f5 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
