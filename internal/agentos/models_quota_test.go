@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -317,6 +318,7 @@ func isolateQuotaCatalog(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("BASHY_HOME", filepath.Join(home, ".bashy"))
 }
 func TestQuotaResolveProbes(t *testing.T) {
 	isolateQuotaCatalog(t)
@@ -407,7 +409,6 @@ func TestQuotaHints(t *testing.T) {
 	probes := []quotaProbeMetadata{
 		{account: "deepseek-key", selector: "deepseek/balance", net: true},
 		{account: "deepseek-key", selector: "deepseek/balance", net: true},
-		{account: "deepseek-key", selector: "deepseek/enabled", net: true, enabled: true},
 		{account: "deepseek-key", selector: "deepseek/read"},
 		{account: "absent", selector: "absent/balance", net: true},
 	}
@@ -426,7 +427,7 @@ func TestQuotaHints(t *testing.T) {
 }
 
 func TestQuotaHintDedupesFreshAccount(t *testing.T) {
-	rows := []llmbudget.QuotaRow{{Account: "a", Source: "probe:plan:a/fast", ObservedAt: quotaPtr(quotaNow()), Status: "ok"}, {Account: "b", Status: "unmeasured"}}
+	rows := []llmbudget.QuotaRow{{Account: "a", Source: "probe:plan:a/fast", ObservedAt: quotaPtr(quotaNow().Add(-time.Hour)), Stale: true, Status: "ok"}, {Account: "b", Status: "unmeasured"}}
 	probes := []quotaProbeMetadata{{id: "probe:plan:a/fast", account: "a", selector: "a/fast", net: true, enabled: true}, {account: "a", selector: "a/slow", net: true}, {account: "b", selector: "b/z", net: true}, {account: "b", selector: "b/a", net: true}}
 	var out bytes.Buffer
 	if err := renderQuotaHints(&out, rows, probes); err != nil {
@@ -434,6 +435,92 @@ func TestQuotaHintDedupesFreshAccount(t *testing.T) {
 	}
 	if got, want := out.String(), "hint: bashy model quota enable b/a\n"; got != want {
 		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestQuotaHintRespectsSiblingModelConsent(t *testing.T) {
+	isolateQuotaCatalog(t)
+	policyPath := filepath.Join(t.TempDir(), "policy.json")
+	t.Setenv("BASHY_LLM_BUDGET_POLICY", policyPath)
+	if err := os.WriteFile(policyPath, []byte(`{"version":1,"probe_consent":["probe:model:kimi-k3/balance"]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	probes, err := loadQuotaProbeMetadata()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	rows := []llmbudget.QuotaRow{{Account: "moonshot", Status: "unmeasured", Stale: true}}
+	if err := renderQuotaHints(&out, rows, probes); err != nil || strings.Contains(out.String(), "kimi-k2.6/balance") || strings.Contains(out.String(), "quota enable") {
+		t.Fatalf("unexpected sibling hint: %q %v", out.String(), err)
+	}
+}
+
+func TestQuotaIngestBackfillsWeaveLogs(t *testing.T) {
+	isolateQuotaCatalog(t)
+	t.Setenv("BASHY_MODELS_DIR", t.TempDir())
+	cat := fleet.New()
+	for _, model := range []fleet.Model{
+		{Name: "backfill-codex", Provider: "openai", Kind: fleet.ModelKindSubscription, Plan: "account-a"},
+		{Name: "backfill-zai", Provider: "zai", Kind: fleet.ModelKindSubscription, Plan: "account-a"},
+		{Name: "backfill-gemini", Provider: "google", Kind: fleet.ModelKindSubscription, Plan: "account-b"},
+	} {
+		if err := cat.SaveModel(model); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := cat.SaveAgent(fleet.Agent{Name: "backfill-agent", Tool: "codex", Model: "backfill-codex"}); err != nil {
+		t.Fatal(err)
+	}
+	queueDir := filepath.Join(os.Getenv("HOME"), ".bashy", "weave", "quota-fixture")
+	logsDir := filepath.Join(queueDir, "logs")
+	if err := os.MkdirAll(logsDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	queue := `{"items":[{"id":1,"tool":"codex","owner":"codex-a","launch_spec":{"agent":"backfill-agent","model":"provider-side-codex"}},{"id":2,"tool":"opencode","owner":"glm-b","launch_spec":{"model":"backfill-zai"}},{"id":3,"tool":"agy","owner":"agy-c","launch_spec":{"model":"backfill-gemini"}},{"id":4,"tool":"codex","launch_spec":{"model":"backfill-codex"}}]}`
+	if err := os.WriteFile(filepath.Join(queueDir, "queue.json"), []byte(queue), 0600); err != nil {
+		t.Fatal(err)
+	}
+	fixtures := []string{
+		strings.Repeat("ordinary output\n", 2000) + "You've hit your usage limit. Try again at 11:41 AM.\n",
+		`{"error":{"code":"1308","message":"Usage limit reached for 5 hour. Your limit will reset at 2026-10-19 17:34:44"}}`,
+		`{"error":{"code":429,"message":"Quota exceeded","status":"RESOURCE_EXHAUSTED"}}`,
+		"old usage limit reached",
+	}
+	for i, fixture := range fixtures {
+		path := filepath.Join(logsDir, fmt.Sprintf("issue-%d.log", i+1))
+		if err := os.WriteFile(path, []byte(fixture), 0600); err != nil {
+			t.Fatal(err)
+		}
+		mtime := quotaNow().Add(-time.Hour)
+		if i == 3 {
+			mtime = quotaNow().Add(-31 * 24 * time.Hour)
+		}
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if dirs := quotaQueueDirs(); len(dirs) != 1 || dirs[0] != queueDir {
+		t.Fatalf("queue discovery: %v", dirs)
+	}
+	for pass := 0; pass < 2; pass++ {
+		out, _, err := executeQuota(modelQuotaIngestCommand(func(context.Context, time.Time) error { return nil }, quotaNow), "--logs-since", "30d")
+		if err != nil || !strings.Contains(out, "account-a weave: 2") || !strings.Contains(out, "account-b weave: 1") {
+			t.Fatalf("pass %d: %q %v", pass, out, err)
+		}
+		observations, err := quotaobs.Read(time.Time{}, nil)
+		if err != nil || len(observations) != 3 {
+			t.Fatalf("pass %d: %d observations, %v", pass, len(observations), err)
+		}
+		for _, o := range observations {
+			if o.Source != "weave" || o.Model == "" || o.Account == "" || o.Agent == "" {
+				t.Fatalf("incomplete observation: %+v", o)
+			}
+		}
+	}
+	out, _, err := executeQuota(modelQuotaIngestCommand(func(context.Context, time.Time) error { return nil }, quotaNow), "--logs-since", "bad")
+	if err == nil || out != "" {
+		t.Fatalf("invalid duration accepted: %q %v", out, err)
 	}
 }
 

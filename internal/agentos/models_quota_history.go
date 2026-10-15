@@ -5,11 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/llmbudget"
+	"github.com/qiangli/yoke/pkg/quotaobs"
+	"github.com/qiangli/yoke/pkg/weave"
 	"github.com/spf13/cobra"
 )
 
@@ -133,11 +140,160 @@ func renderQuotaForecast(out io.Writer, rows []llmbudget.AccountForecast, loc *t
 }
 
 func modelQuotaIngestCommand(ingest func(context.Context, time.Time) error, clock func() time.Time) *cobra.Command {
-	return &cobra.Command{Use: "ingest", Short: "Pull quota samples into forecast history", Args: cobra.NoArgs, SilenceUsage: true, RunE: func(cmd *cobra.Command, _ []string) error {
-		if err := ingest(cmd.Context(), clock()); err != nil {
+	var logsSince string
+	cmd := &cobra.Command{Use: "ingest", Short: "Pull quota samples and weave logs into quota history", Args: cobra.NoArgs, SilenceUsage: true, RunE: func(cmd *cobra.Command, _ []string) error {
+		d, err := quotaLogsDuration(logsSince)
+		if err != nil || d < 0 {
+			return fmt.Errorf("invalid --logs-since duration %q", logsSince)
+		}
+		now := clock()
+		counts, err := ingestQuotaWeaveLogs(cmd.Context(), quotaQueueDirs(), now.Add(-d), now)
+		if err != nil {
 			return err
 		}
-		_, err := io.WriteString(cmd.OutOrStdout(), "quota history ingested\n")
-		return err
+		if err := ingest(cmd.Context(), now); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(cmd.OutOrStdout(), "quota history ingested\n"); err != nil {
+			return err
+		}
+		accounts := make([]string, 0, len(counts))
+		for account := range counts {
+			accounts = append(accounts, account)
+		}
+		sort.Strings(accounts)
+		for _, account := range accounts {
+			sources := make([]string, 0, len(counts[account]))
+			for source := range counts[account] {
+				sources = append(sources, source)
+			}
+			sort.Strings(sources)
+			for _, source := range sources {
+				if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s %s: %d\n", account, source, counts[account][source]); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	}}
+	cmd.Flags().StringVar(&logsSince, "logs-since", "30d", "scan weave PTY logs modified within this duration")
+	return cmd
+}
+
+func quotaLogsDuration(s string) (time.Duration, error) {
+	if days, ok := strings.CutSuffix(s, "d"); ok {
+		n, err := strconv.ParseInt(days, 10, 64)
+		if err != nil || n < 0 || n > int64((1<<63-1)/int64(24*time.Hour)) {
+			return 0, fmt.Errorf("invalid duration")
+		}
+		return time.Duration(n) * 24 * time.Hour, nil
+	}
+	return time.ParseDuration(s)
+}
+
+type quotaWeaveQueue struct {
+	Items []struct {
+		ID         int64  `json:"id"`
+		Tool       string `json:"tool"`
+		Owner      string `json:"owner"`
+		LaunchSpec *struct {
+			Agent string `json:"agent"`
+			Model string `json:"model"`
+		} `json:"launch_spec"`
+	} `json:"items"`
+}
+
+// Scan only the conventional PTY logs for recorded runs. The queue supplies
+// the tool and model even when the log has no structured metadata of its own.
+func ingestQuotaWeaveLogs(ctx context.Context, dirs []string, since, now time.Time) (map[string]map[string]int, error) {
+	counts := map[string]map[string]int{}
+	cat := fleet.New()
+	for _, dir := range dirs {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		data, err := os.ReadFile(filepath.Join(dir, "queue.json"))
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		var queue quotaWeaveQueue
+		if err := json.Unmarshal(data, &queue); err != nil {
+			return nil, fmt.Errorf("%s: %w", filepath.Join(dir, "queue.json"), err)
+		}
+		for _, run := range queue.Items {
+			if run.ID <= 0 {
+				continue
+			}
+			path := filepath.Join(dir, "logs", fmt.Sprintf("issue-%d.log", run.ID))
+			stat, err := os.Stat(path)
+			if os.IsNotExist(err) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			if !stat.Mode().IsRegular() || stat.ModTime().Before(since) || stat.ModTime().After(now) {
+				continue
+			}
+			tail, err := quotaLogTail(path, 16*1024)
+			if err != nil {
+				return nil, err
+			}
+			model := ""
+			if run.LaunchSpec != nil {
+				model = run.LaunchSpec.Model
+			}
+			for _, o := range weave.ObservationsFromLog(run.Tool, model, tail, stat.ModTime()) {
+				o.Agent = run.Owner
+				modelName := model
+				if run.LaunchSpec != nil && run.LaunchSpec.Agent != "" {
+					if a, ok := cat.Agent(run.LaunchSpec.Agent); ok {
+						modelName = a.Model
+					}
+				}
+				if m, ok := cat.Model(modelName); ok {
+					o.Plan = m.Plan
+					o.Account = quotaModelAccount(m)
+				}
+				if o.Account == "" {
+					o.Account = o.Plan
+				}
+				if o.Account == "" {
+					o.Account = "unresolved"
+				}
+				if err := quotaobs.Record(ctx, o); err != nil {
+					return nil, err
+				}
+				if counts[o.Account] == nil {
+					counts[o.Account] = map[string]int{}
+				}
+				counts[o.Account][o.Source]++
+			}
+		}
+	}
+	return counts, nil
+}
+
+func quotaLogTail(path string, limit int64) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	stat, err := f.Stat()
+	if err != nil {
+		return "", err
+	}
+	start := stat.Size() - limit
+	if start < 0 {
+		start = 0
+	}
+	if _, err := f.Seek(start, io.SeekStart); err != nil {
+		return "", err
+	}
+	b, err := io.ReadAll(io.LimitReader(f, limit))
+	return string(b), err
 }

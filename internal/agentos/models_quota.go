@@ -374,13 +374,9 @@ func quotaRefreshTimeout(probes []quotaProbeMetadata) time.Duration {
 
 func renderQuotaHints(out io.Writer, rows []llmbudget.QuotaRow, probes []quotaProbeMetadata) error {
 	accounts := map[string]bool{}
-	freshSource := map[string]bool{}
 	hints := map[string]bool{}
 	for _, r := range rows {
 		accounts[r.Account] = true
-		if !r.Stale && r.Source != "" && r.ObservedAt != nil {
-			freshSource[r.Account+"\x00"+r.Source] = true
-		}
 		if r.Status != "not-configured" {
 			continue
 		}
@@ -390,15 +386,15 @@ func renderQuotaHints(out io.Writer, rows []llmbudget.QuotaRow, probes []quotaPr
 			}
 		}
 	}
-	enabledFresh := map[string]bool{}
+	enabledAccount := map[string]bool{}
 	for _, p := range probes {
-		if p.enabled && freshSource[p.account+"\x00"+p.id] {
-			enabledFresh[p.account] = true
+		if p.enabled {
+			enabledAccount[p.account] = true
 		}
 	}
 	chosen := map[string]string{}
 	for _, p := range probes {
-		if accounts[p.account] && p.net && !p.enabled && !enabledFresh[p.account] {
+		if accounts[p.account] && p.net && !enabledAccount[p.account] {
 			if old := chosen[p.account]; old == "" || p.selector < old {
 				chosen[p.account] = p.selector
 			}
