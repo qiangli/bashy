@@ -23,8 +23,14 @@ func quotaNow() time.Time    { return time.Date(2026, 10, 19, 13, 24, 0, 0, time
 func quotaPtr[T any](v T) *T { return &v }
 func quotaFixture() []llmbudget.QuotaRow {
 	return []llmbudget.QuotaRow{
-		{Provider: "claude", Plan: "max", Window: "5h", UsedPercent: quotaPtr(62.0), ResetAt: quotaPtr(quotaNow().Add(100 * time.Minute)), Tokens: quotaPtr(1200.0), Source: "fixture", ObservedAt: quotaPtr(quotaNow().Add(-90 * time.Second)), Status: "ok", Headroom: quotaPtr(.38), SuggestedWorkers: quotaPtr(2), Classification: "measured"},
-		{Provider: "unknown", Status: "unmeasured"},
+		{Account: "claude-max", Label: "claude", Configured: true, Provider: "anthropic", Plan: "max", Window: "5h", UsedPercent: quotaPtr(62.0), ResetAt: quotaPtr(quotaNow().Add(100 * time.Minute)), Tokens: quotaPtr(1200.0), Source: "fixture", ObservedAt: quotaPtr(quotaNow().Add(-90 * time.Second)), Status: "ok", Headroom: quotaPtr(.38), SuggestedWorkers: quotaPtr(2), Classification: "measured"},
+		{Account: "muse-pro", Label: "muse", Provider: "openai-compat", Configured: true, Status: "unmeasured"},
+		{Account: "chatgpt-pro", Label: "codex", Provider: "openai", Configured: true, Window: "week", UsedPercent: quotaPtr(12.0), Status: "ok"},
+		{Account: "google-pro", Label: "agy", Provider: "google", Configured: true, Status: "unmeasured"},
+		{Account: "glm-pro", Label: "glm", Provider: "openai-compat", Configured: true, Window: "5h", Limit: "12000 credits/5h", Status: "unmeasured"},
+		{Account: "deepseek-key", Label: "deepseek", Provider: "openai-compat", Configured: true, Balance: quotaPtr(4.5), BalanceUnit: "USD", Status: "ok"},
+		{Account: "kimi-key", Label: "kimi", Provider: "openai-compat", Status: "not-configured"},
+		{Account: "local", Label: "local", Provider: "ollama", Configured: true, Status: "unmeasured"},
 	}
 }
 func executeQuota(cmd *cobra.Command, args ...string) (string, string, error) {
@@ -55,6 +61,7 @@ func TestQuotaRenderGolden(t *testing.T) {
 	}
 }
 func TestQuotaJSONAndDeadline(t *testing.T) {
+	isolateQuotaCatalog(t)
 	for _, refresh := range []bool{false, true} {
 		t.Run(map[bool]string{false: "cached", true: "refresh"}[refresh], func(t *testing.T) {
 			collect := func(ctx context.Context, opt llmbudget.QuotaOptions) ([]llmbudget.QuotaRow, error) {
@@ -64,14 +71,14 @@ func TestQuotaJSONAndDeadline(t *testing.T) {
 				deadline, ok := ctx.Deadline()
 				limit := 5 * time.Second
 				if refresh {
-					limit = 20 * time.Second
+					limit = 30 * time.Second
 				}
 				if !ok || time.Until(deadline) > limit || time.Until(deadline) < limit-time.Second {
 					t.Fatal("deadline", deadline)
 				}
 				return quotaFixture(), nil
 			}
-			cmd := modelQuotaCommand(collect, func([]llmbudget.QuotaRow, time.Time) error { return nil }, quotaNow)
+			cmd := modelQuotaCommandWithMetadata(collect, func([]llmbudget.QuotaRow, time.Time) error { return nil }, quotaNow, func() ([]quotaProbeMetadata, error) { return []quotaProbeMetadata{{timeout: 25 * time.Second}}, nil })
 			args := []string{"--all", "--json", "--provider", "claude"}
 			if refresh {
 				args = append(args, "--refresh")
@@ -88,11 +95,11 @@ func TestQuotaJSONAndDeadline(t *testing.T) {
 			if err = json.Unmarshal([]byte(out), &envelope); err != nil {
 				t.Fatal(err)
 			}
-			if envelope.Schema != fleet.ListSchemaVersion || envelope.Kind != "quota" || envelope.View != "all" || len(envelope.Items) != 2 {
+			if envelope.Schema != fleet.ListSchemaVersion || envelope.Kind != "quota" || envelope.View != "all" || len(envelope.Items) != 8 {
 				t.Fatal(out)
 			}
 			for _, r := range envelope.Items {
-				for _, key := range []string{"headroom", "stale", "suggested_workers", "classification", "status"} {
+				for _, key := range []string{"headroom", "stale", "suggested_workers", "classification", "status", "account", "label", "configured", "provider"} {
 					if _, ok := r[key]; !ok {
 						t.Fatalf("missing %s: %s", key, out)
 					}
@@ -113,9 +120,9 @@ func TestQuotaCooldownOverlay(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "tool_cooldowns.json"), []byte(raw), 0600); err != nil {
 		t.Fatal(err)
 	}
-	rows := []llmbudget.QuotaRow{{Provider: "vendor", Status: "unmeasured"}, {Provider: "vendor", ResetAt: quotaPtr(quotaNow().Add(2 * time.Hour)), Status: "ok"}, {Provider: "other", Status: "ok"}}
+	rows := []llmbudget.QuotaRow{{Account: "plan-a", Provider: "vendor", Status: "unmeasured"}, {Account: "plan-a", Provider: "vendor", ResetAt: quotaPtr(quotaNow().Add(2 * time.Hour)), Status: "ok"}, {Account: "plan-b", Provider: "vendor", Status: "ok"}}
 	agents := []fleet.Agent{{Name: "agent", Tool: "fixture", Model: "model"}}
-	model := func(string) (fleet.Model, bool) { return fleet.Model{Provider: "vendor"}, true }
+	model := func(string) (fleet.Model, bool) { return fleet.Model{Provider: "vendor", Plan: "plan-a"}, true }
 	if err := overlayQuotaSeats(rows, agents, model, []string{dir}, weave.SeatQuotaStatus, quotaNow()); err != nil {
 		t.Fatal(err)
 	}
@@ -336,7 +343,10 @@ func TestQuotaViewDoesNotRunDisabledProbe(t *testing.T) {
 type quotaCountingAdapter struct{ calls *int }
 
 func (quotaCountingAdapter) Kind() string { return "probe" }
-func (a quotaCountingAdapter) Collect(context.Context, llmbudget.SourceConfig, time.Time) (llmbudget.SourceResult, error) {
+func (a quotaCountingAdapter) Collect(_ context.Context, source llmbudget.SourceConfig, _ time.Time) (llmbudget.SourceResult, error) {
+	if source.ID != "probe:model:quota-consent-fixture/q" {
+		return llmbudget.SourceResult{}, nil
+	}
 	*a.calls++
 	return llmbudget.SourceResult{}, errors.New("disabled probe executed")
 }
@@ -349,5 +359,138 @@ func TestQuotaRealSnippetRedaction(t *testing.T) {
 	r, err := runQuotaProbe(context.Background(), p)
 	if err != nil || r.Exit != 0 || strings.Contains(string(r.Stderr), "quota-fixture-secret") || !strings.Contains(string(r.Stderr), "***") {
 		t.Fatalf("redaction failed: exit=%d err=%v", r.Exit, err)
+	}
+}
+
+func TestQuotaSortWindows(t *testing.T) {
+	rows := []llmbudget.QuotaRow{}
+	for _, w := range []string{"-", "concurrent", "month", "week", "day", "5h"} {
+		rows = append(rows, llmbudget.QuotaRow{Label: "same", Account: "a", Window: w})
+	}
+	rows = append(rows, llmbudget.QuotaRow{Label: "aaa", Window: "month"}, llmbudget.QuotaRow{Label: "zzz", Window: "5h"}, llmbudget.QuotaRow{Label: "same", Account: "z", Window: "5h"})
+	sortQuotaRows(rows)
+	var got []string
+	for _, r := range rows {
+		got = append(got, r.Label+":"+r.Window)
+	}
+	want := "aaa:month same:5h same:5h same:day same:week same:month same:concurrent same:- zzz:5h"
+	if strings.Join(got, " ") != want {
+		t.Fatal(got)
+	}
+}
+
+func TestQuotaHints(t *testing.T) {
+	missing := llmbudget.QuotaRow{Account: "claude-max", Status: "not-configured", Limitations: []string{"no snapshot at /fixture/.bashy/quota/claude.json"}}
+	rows := []llmbudget.QuotaRow{missing, missing, {Account: "deepseek-key", Status: "unmeasured"}}
+	probes := []quotaProbeMetadata{
+		{account: "deepseek-key", selector: "deepseek/balance", net: true},
+		{account: "deepseek-key", selector: "deepseek/balance", net: true},
+		{account: "deepseek-key", selector: "deepseek/enabled", net: true, enabled: true},
+		{account: "deepseek-key", selector: "deepseek/read"},
+		{account: "absent", selector: "absent/balance", net: true},
+	}
+	cmd := modelQuotaCommandWithMetadata(func(context.Context, llmbudget.QuotaOptions) ([]llmbudget.QuotaRow, error) { return rows, nil }, func([]llmbudget.QuotaRow, time.Time) error { return nil }, quotaNow, func() ([]quotaProbeMetadata, error) { return probes, nil })
+	out, stderr, err := executeQuota(cmd)
+	want := "hint: bashy model quota enable deepseek/balance\nhint: register bashy model quota capture --to ~/.bashy/quota/claude.json as the Claude statusLine command\n"
+	if err != nil || stderr != "" || !strings.HasSuffix(out, want) || strings.Count(out, "hint:") != 2 {
+		t.Fatalf("%q %q %v", out, stderr, err)
+	}
+	rows[0].Status, rows[1].Status = "ok", "not-configured"
+	rows[1].Limitations = []string{"missing credential"}
+	var buf bytes.Buffer
+	if err := renderQuotaHints(&buf, rows, nil); err != nil || buf.Len() != 0 {
+		t.Fatalf("%q %v", buf.String(), err)
+	}
+}
+
+func TestQuotaRefreshTimeout(t *testing.T) {
+	for _, tc := range []struct{ declared, want time.Duration }{
+		{0, 15 * time.Second}, {2 * time.Second, 7 * time.Second}, {25 * time.Second, 30 * time.Second}, {30 * time.Second, 35 * time.Second}, {time.Minute, 40 * time.Second},
+	} {
+		if got := quotaRefreshTimeout([]quotaProbeMetadata{{timeout: tc.declared}}); got != tc.want {
+			t.Fatalf("%s: %s != %s", tc.declared, got, tc.want)
+		}
+	}
+}
+
+func TestQuotaMetadata(t *testing.T) {
+	isolateQuotaCatalog(t)
+	cat := fleet.New()
+	m := fleet.Model{Name: "quota-metadata-fixture", Provider: "fixture", APIKeyRef: "fixture-account", Usage: []fleet.UsageProbe{{ID: "balance", Run: snippet.Snippet{Body: "echo fixture", Effects: []string{"read", "net"}, Timeout: 25 * time.Second}}}}
+	if err := cat.SaveModel(m); err != nil {
+		t.Fatal(err)
+	}
+	policy := filepath.Join(t.TempDir(), "policy.json")
+	t.Setenv("BASHY_LLM_BUDGET_POLICY", policy)
+	for _, enabled := range []bool{false, true} {
+		p := llmbudget.Policy{Version: 1}
+		if enabled {
+			p.ProbeConsent = []string{"probe:model:quota-metadata-fixture/balance"}
+		}
+		raw, _ := json.Marshal(p)
+		if err := os.WriteFile(policy, raw, 0600); err != nil {
+			t.Fatal(err)
+		}
+		metadata, err := loadQuotaProbeMetadata()
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, p := range metadata {
+			if p.account == "fixture-account" {
+				found = true
+				if p.enabled != enabled || !p.net || p.timeout != 25*time.Second || p.selector != "quota-metadata-fixture/balance" {
+					t.Fatalf("%+v", p)
+				}
+			}
+		}
+		if !found {
+			t.Fatal("missing fixture probe")
+		}
+	}
+}
+
+func TestQuotaCooldownAccountTools(t *testing.T) {
+	models := map[string]fleet.Model{
+		"subscription": {Provider: "shared", Plan: "plan", APIKeyRef: "ignored"},
+		"api":          {Provider: "shared", APIKeyRef: "key"},
+		"probe":        {Name: "probe", Provider: "shared", Usage: []fleet.UsageProbe{{ID: "q"}}},
+		"local-model":  {Provider: "shared", Kind: fleet.ModelKindLocal, Plan: "ignored"},
+	}
+	agents := []fleet.Agent{
+		{Name: "subscription-agent", Model: "subscription", Tool: "claude"},
+		{Name: "api-agent", Model: "api", Tool: "opencode"},
+		{Name: "probe-agent", Model: "probe", Tool: "probe-tool"},
+		{Name: "local-agent", Model: "local-model", Tool: "local-tool"},
+	}
+	rows := []llmbudget.QuotaRow{}
+	for _, account := range []string{"plan", "key", "probe", "local", "unrelated"} {
+		rows = append(rows, llmbudget.QuotaRow{Account: account, Label: account, Provider: "shared", Status: "unmeasured"})
+	}
+	calls := map[string]int{}
+	status := func(_ []string, tool, model, agent string, _ time.Time) (bool, string) {
+		calls[tool]++
+		if tool == "opencode" {
+			return false, ""
+		}
+		return true, "cooling-down until " + quotaNow().Add(time.Hour).Format(time.RFC3339)
+	}
+	err := overlayQuotaSeats(rows, agents, func(name string) (fleet.Model, bool) { m, ok := models[name]; return m, ok }, nil, status, quotaNow())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		want := "cooling-down"
+		if r.Account == "key" || r.Account == "unrelated" {
+			want = "unmeasured"
+		}
+		if r.Status != want || r.Label != r.Account {
+			t.Fatalf("%+v", r)
+		}
+	}
+	for _, tool := range []string{"claude", "opencode", "probe-tool", "local-tool"} {
+		if calls[tool] != 1 {
+			t.Fatal(calls)
+		}
 	}
 }
