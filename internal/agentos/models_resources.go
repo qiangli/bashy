@@ -23,6 +23,7 @@ func newModelsResourcesCmd() *cobra.Command {
 		}
 		cmd.AddCommand(child)
 	}
+	cmd.AddCommand(modelQuotaCommand(llmbudget.Quota, overlayModelQuota, time.Now))
 	return cmd
 }
 func modelResourcesCommand(verb string, collect func(context.Context, llmbudget.ReportOptions) (*llmbudget.Report, error)) *cobra.Command {

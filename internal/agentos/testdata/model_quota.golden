@@ -1,0 +1,3 @@
+PROVIDER  PLAN  WINDOW  USED  RESETS                TOKENS/BAL  SOURCE   AGE    STATUS
+claude    max   5h      62%   Mon 15:04 (in 1h40m)  1200        fixture  1m30s  ok
+unknown   -     -       -     -                     -           -        -      unmeasured
