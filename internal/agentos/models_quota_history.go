@@ -196,6 +196,8 @@ type quotaWeaveQueue struct {
 		ID         int64  `json:"id"`
 		Tool       string `json:"tool"`
 		Owner      string `json:"owner"`
+		State      string `json:"state"`
+		ExitCode   *int   `json:"exit_code"`
 		LaunchSpec *struct {
 			Agent string `json:"agent"`
 			Model string `json:"model"`
@@ -246,7 +248,12 @@ func ingestQuotaWeaveLogs(ctx context.Context, dirs []string, since, now time.Ti
 			if run.LaunchSpec != nil {
 				model = run.LaunchSpec.Model
 			}
-			for _, o := range weave.ObservationsFromLog(run.Tool, model, tail, stat.ModTime()) {
+			exited := quotaWeaveTerminalState(run.State)
+			exitCode := 0
+			if run.ExitCode != nil {
+				exitCode = *run.ExitCode
+			}
+			for _, o := range weave.ObservationsFromLog(run.Tool, model, tail, stat.ModTime(), exited, exitCode) {
 				o.Agent = run.Owner
 				modelName := model
 				if run.LaunchSpec != nil && run.LaunchSpec.Agent != "" {
@@ -275,6 +282,14 @@ func ingestQuotaWeaveLogs(ctx context.Context, dirs []string, since, now time.Ti
 		}
 	}
 	return counts, nil
+}
+
+func quotaWeaveTerminalState(state string) bool {
+	switch state {
+	case "submitted", "no-op", "failed", "killed", "done", "abandoned":
+		return true
+	}
+	return false
 }
 
 func quotaLogTail(path string, limit int64) (string, error) {

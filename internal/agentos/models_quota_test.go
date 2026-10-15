@@ -477,7 +477,7 @@ func TestQuotaIngestBackfillsWeaveLogs(t *testing.T) {
 	if err := os.MkdirAll(logsDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	queue := `{"items":[{"id":1,"tool":"codex","owner":"codex-a","launch_spec":{"agent":"backfill-agent","model":"provider-side-codex"}},{"id":2,"tool":"opencode","owner":"glm-b","launch_spec":{"model":"backfill-zai"}},{"id":3,"tool":"agy","owner":"agy-c","launch_spec":{"model":"backfill-gemini"}},{"id":4,"tool":"codex","launch_spec":{"model":"backfill-codex"}}]}`
+	queue := `{"items":[{"id":1,"tool":"codex","owner":"codex-a","state":"failed","exit_code":1,"launch_spec":{"agent":"backfill-agent","model":"provider-side-codex"}},{"id":2,"tool":"opencode","owner":"glm-b","state":"failed","exit_code":1,"launch_spec":{"model":"backfill-zai"}},{"id":3,"tool":"agy","owner":"agy-c","state":"failed","exit_code":1,"launch_spec":{"model":"backfill-gemini"}},{"id":4,"tool":"codex","state":"failed","exit_code":1,"launch_spec":{"model":"backfill-codex"}}]}`
 	if err := os.WriteFile(filepath.Join(queueDir, "queue.json"), []byte(queue), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -521,6 +521,72 @@ func TestQuotaIngestBackfillsWeaveLogs(t *testing.T) {
 	out, _, err := executeQuota(modelQuotaIngestCommand(func(context.Context, time.Time) error { return nil }, quotaNow), "--logs-since", "bad")
 	if err == nil || out != "" {
 		t.Fatalf("invalid duration accepted: %q %v", out, err)
+	}
+}
+
+func TestQuotaIngestBackfillRespectsRunOutcome(t *testing.T) {
+	isolateQuotaCatalog(t)
+	queueDir := t.TempDir()
+	logsDir := filepath.Join(queueDir, "logs")
+	if err := os.MkdirAll(logsDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	queue := `{"items":[{"id":1,"tool":"codex","state":"done","exit_code":0},{"id":2,"tool":"codex","state":"failed","exit_code":1},{"id":3,"tool":"codex","state":"running","exit_code":1},{"id":4,"tool":"claude","state":"running"}]}`
+	if err := os.WriteFile(filepath.Join(queueDir, "queue.json"), []byte(queue), 0600); err != nil {
+		t.Fatal(err)
+	}
+	reset := quotaNow().Add(24 * time.Hour).Truncate(time.Second)
+	logs := []string{
+		"The release notes mention quota and rate limit behavior.\n",
+		"You've hit your usage limit. Try again at 11:41 AM.\n",
+		"A draft discussion mentions quota and rate limit settings.\n",
+		fmt.Sprintf(`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","resetsAt":%d,"rateLimitType":"seven_day","unifiedWindows":{"seven_day":{"utilization":0.91}}}}`, reset.Unix()),
+	}
+	for i, log := range logs {
+		path := filepath.Join(logsDir, fmt.Sprintf("issue-%d.log", i+1))
+		if err := os.WriteFile(path, []byte(log), 0600); err != nil {
+			t.Fatal(err)
+		}
+		mtime := quotaNow().Add(-time.Hour)
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
+	}
+	counts, err := ingestQuotaWeaveLogs(context.Background(), []string{queueDir}, quotaNow().Add(-24*time.Hour), quotaNow())
+	if err != nil {
+		t.Fatal(err)
+	}
+	observations, err := quotaobs.Read(time.Time{}, nil)
+	if counts["unresolved"]["weave"] != 2 {
+		t.Fatalf("counts = %+v, observations = %+v, want two vendor observations", counts, observations)
+	}
+	if err != nil || len(observations) != 2 {
+		t.Fatalf("observations = %+v, error = %v", observations, err)
+	}
+	var codex, claude int
+	for _, o := range observations {
+		switch o.Tool {
+		case "codex":
+			codex++
+			if !strings.Contains(o.Excerpt, "You've hit your usage limit") {
+				t.Fatalf("codex excerpt = %q", o.Excerpt)
+			}
+		case "claude":
+			claude++
+			tool, ok := fleet.New().Tool("claude")
+			if !ok {
+				t.Fatal("claude tool not found")
+			}
+			signals := fleet.MatchSignals(tool.UsageSignals, o.Excerpt, nil, o.At)
+			if len(signals) != 1 || signals[0].Window != "week" || signals[0].ResetAt == nil || !signals[0].ResetAt.Equal(reset) {
+				t.Fatalf("claude signal = %+v, want week reset %s", signals, reset)
+			}
+		default:
+			t.Fatalf("unexpected observation: %+v", o)
+		}
+	}
+	if codex != 1 || claude != 1 {
+		t.Fatalf("codex = %d, claude = %d", codex, claude)
 	}
 }
 
