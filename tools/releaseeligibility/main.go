@@ -6,11 +6,17 @@ package main
 
 import (
 	"debug/buildinfo"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
 	"unicode"
+
+	"github.com/qiangli/yoke/external/loom"
+	"github.com/qiangli/yoke/external/seaweedfs"
+	"github.com/qiangli/yoke/external/zot"
+	"github.com/qiangli/yoke/pkg/binmgr"
 )
 
 // otelPlatforms mirrors the PLATFORMS matrix in scripts/publish-otel-blob.sh:
@@ -62,9 +68,103 @@ func checkReleaseAssets(dir string) error {
 	return nil
 }
 
+// capability is a release-required engine/service and its pinned binmgr tool.
+type capability struct {
+	name string
+	tool binmgr.Tool
+}
+
+// requiredCapabilities reuses the yoke binmgr pins as the single source of
+// truth for which engines/services ship and what they are pinned to.
+func requiredCapabilities() []capability {
+	return []capability{
+		{"prima", binmgr.PrimaTool()},
+		{"zot", zot.ZotTool},
+		{"gitea/loom", loom.LoomTool},
+		{"seaweedfs", seaweedfs.SeaweedfsTool},
+	}
+}
+
+// checkSignedAssets requires, for every capability and every supported OS
+// platform (windows included), a pinned asset that is signed: a Sigstore
+// identity on the tool plus a committed digest or a per-asset bundle.
+func checkSignedAssets(caps []capability) error {
+	var problems []string
+	for _, c := range caps {
+		for _, plat := range otelPlatforms {
+			goos, _, _ := strings.Cut(plat, "/")
+			a, ok := c.tool.Assets[plat]
+			switch {
+			case !ok || a.URL == "":
+				problems = append(problems, fmt.Sprintf("%s: no signed asset for %s (%s)", c.name, goos, plat))
+			case c.tool.Sigstore == nil || (a.SHA256 == "" && a.SigstoreBundle == "" && !pinned(c.tool, plat)):
+				problems = append(problems, fmt.Sprintf("%s: asset %s for %s (%s) is unsigned/unpinned", c.name, a.URL, goos, plat))
+			}
+		}
+	}
+	if len(problems) > 0 {
+		return fmt.Errorf("release-required assets missing:\n  %s", strings.Join(problems, "\n  "))
+	}
+	return nil
+}
+
+func pinned(t binmgr.Tool, plat string) bool {
+	_, ok := binmgr.PinnedSHA256(t.Name, t.Version, plat)
+	return ok
+}
+
+// checkTierVerdict requires a PASS dhnt.tier-smoke/v1 record for commit.
+func checkTierVerdict(path, commit string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read tier verdict record: %w", err)
+	}
+	var rec struct {
+		Schema  string `json:"schema"`
+		Verdict string `json:"verdict"`
+		Commit  string `json:"commit"`
+	}
+	if err := json.Unmarshal(data, &rec); err != nil {
+		return fmt.Errorf("parse tier verdict record %s: %w", path, err)
+	}
+	if rec.Schema != "dhnt.tier-smoke/v1" {
+		return fmt.Errorf("tier verdict %s: schema %q, want dhnt.tier-smoke/v1", path, rec.Schema)
+	}
+	if rec.Commit != commit {
+		return fmt.Errorf("tier verdict %s is for commit %q, candidate is %q", path, rec.Commit, commit)
+	}
+	if rec.Verdict != "PASS" {
+		return fmt.Errorf("tier verdict for %s is %q, want PASS", commit, rec.Verdict)
+	}
+	return nil
+}
+
 func main() {
+	signed := flag.Bool("signed-assets", false, "verify every release-required capability pins a signed asset for every supported OS")
+	tier := flag.String("tier-verdict", "", "path to the dhnt.tier-smoke/v1 verdict record; requires --commit")
+	commit := flag.String("commit", "", "candidate commit the tier verdict must name")
 	assets := flag.String("assets", "", "verify release asset directory DIR carries the required otel blobs")
 	flag.Parse()
+	if *signed {
+		if err := checkSignedAssets(requiredCapabilities()); err != nil {
+			fmt.Fprintf(os.Stderr, "releaseeligibility: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("releaseeligibility: PASS signed assets")
+		return
+	}
+	if *tier != "" {
+		if *commit == "" {
+			fmt.Fprintln(os.Stderr, "usage: releaseeligibility --tier-verdict FILE --commit SHA")
+			os.Exit(2)
+		}
+		if err := checkTierVerdict(*tier, *commit); err != nil {
+			fmt.Fprintf(os.Stderr, "releaseeligibility: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("releaseeligibility: PASS tier verdict %s\n", *commit)
+		return
+	}
 	if *assets != "" {
 		if flag.NArg() != 0 {
 			fmt.Fprintln(os.Stderr, "usage: releaseeligibility --assets DIR")

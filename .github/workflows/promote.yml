@@ -42,6 +42,9 @@ on:
         description: 'Space-separated OS gate that must all be green in refs/qa/<version>/<os>'
         required: false
         default: 'linux darwin windows'
+      tier_verdict:
+        description: 'Location (https URL or repo-relative file) of the dhnt.tier-smoke/v1 verdict record for the candidate commit; defaults to the TIER_VERDICT repository variable'
+        required: false
 
 permissions:
   contents: write
@@ -137,6 +140,21 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ steps.src.outputs.commit }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.2
+      - name: release eligibility (signed assets per OS + tier verdict)
+        env:
+          COMMIT: ${{ steps.src.outputs.commit }}
+          TIER_VERDICT: ${{ github.event.inputs.tier_verdict || vars.TIER_VERDICT }}
+        run: |
+          [ -n "$TIER_VERDICT" ] || { echo "::error::no tier verdict location: set the tier_verdict input or TIER_VERDICT variable"; exit 1; }
+          case "$TIER_VERDICT" in
+            https://*) curl -fsSL --retry 3 -o /tmp/tier-verdict.json "$TIER_VERDICT" ;;
+            *) cp "$TIER_VERDICT" /tmp/tier-verdict.json ;;
+          esac
+          go run ./tools/releaseeligibility --signed-assets
+          go run ./tools/releaseeligibility --tier-verdict /tmp/tier-verdict.json --commit "$COMMIT"
       - name: download the tested pre-release assets
         env:
           GH_TOKEN: ${{ github.token }}
