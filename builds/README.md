@@ -51,7 +51,7 @@ builds/
 | `act_runner` | `gitea/runner` (**gitea.com**) | `v5.0.0` | MIT | `go` | yoke `external/actrunner` |
 | `k3s` | `k3s-io/k3s` | `v1.36.1+k3s1` | Apache-2.0 | `go` (own `build.yml`, `audit.yml`) | the outpost runtime image |
 | `cni-plugins` | `containernetworking/plugins` | `v1.5.1` | Apache-2.0 | `go` (own `build.yml`, `audit.yml`) | the outpost runtime image |
-| `metrics-server` | `kubernetes-sigs/metrics-server` | `v0.8.1` | Apache-2.0 | `go` | the outpost runtime image ([audit blocked at this pin](metrics-server/README.md#audit--release-blocked-at-this-pin)) |
+| `metrics-server` | `kubernetes-sigs/metrics-server` | `v0.9.0` | Apache-2.0 | `go` | the outpost runtime image |
 
 Each pin is the release yoke runs today, read from `external/<tool>` or
 `pkg/fleet/baseline/services/<tool>.yaml` — except the three Victoria

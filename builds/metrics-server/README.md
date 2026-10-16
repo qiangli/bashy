@@ -9,11 +9,11 @@ upstream source — the workflow checks out the upstream tag fresh on every run.
 | | |
 |---|---|
 | Upstream | `https://github.com/kubernetes-sigs/metrics-server` |
-| License at the tag | **Apache-2.0** (`LICENSE`, verified at `v0.8.1`) |
-| Pinned release | `v0.8.1` (annotated tag `1be06a21…`) → commit `9ce65a47f9262e19e482c259ace815f01135a898` |
-| Toolchain | Go `1.24.12` (the tag's `go.mod`), built with the EOL-minor security override `1.26.9` |
-| Trigger | push of tag `bashy-v0.8.1-N` on `bashy-build` (first: `bashy-v0.8.1-1`) |
-| Signing identity | `https://github.com/qiangli/metrics-server/.github/workflows/bashy-build.yml@refs/tags/bashy-v0.8.1-1` |
+| License at the tag | **Apache-2.0** (`LICENSE`, verified at `v0.9.0`) |
+| Pinned release | `v0.9.0` (lightweight tag) → commit `2a7c4b2c7d46552ff47f4aeaa3a735c582587ecd` |
+| Toolchain | Go `1.26.4` (the tag's `go.mod`), built with the in-minor security override `1.26.9` |
+| Trigger | push of tag `bashy-v0.9.0-N` on `bashy-build` (first: `bashy-v0.9.0-1`) |
+| Signing identity | `https://github.com/qiangli/metrics-server/.github/workflows/bashy-build.yml@refs/tags/bashy-v0.9.0-1` |
 | Issuer | `https://token.actions.githubusercontent.com` |
 
 ## Layout
@@ -26,7 +26,8 @@ files/no-tracking.env     proxy clearing
 files/vuln-ignore         govulncheck waivers (empty)
 ```
 
-Setup, build and audit are the `go` kind's, unchanged.
+Setup, build and audit are the `go` kind's, unchanged; `GO_SECURITY_OVERRIDES`
+is the only non-default knob (§Audit).
 
 ## Build configuration, and how it differs from upstream
 
@@ -38,31 +39,31 @@ with these differences:
 | | upstream release | bashy build |
 |---|---|---|
 | artifact | container image | the static binary `metrics-server-linux-{amd64,arm64}` (the image lays it out itself) |
-| toolchain | the tag's go1.24.12 | go1.26.9 (go1.24 is end-of-life) |
+| toolchain | the tag's go1.26.4 | go1.26.9 (stdlib security patches) |
+| modules | the tag's go.mod | 19 require lines raised within their major (`GO_SECURITY_OVERRIDES`) |
 | ldflags | `gitVersion`, `gitCommit`, `buildDate` | the same from the pin, no `buildDate` |
 
-## Audit — release blocked at this pin
+## Audit
 
-govulncheck of `./cmd/metrics-server` under go1.26.9, at the pinned commit:
-every stdlib finding is settled; these **module** findings stay reachable:
+govulncheck v1.9.0 of `./cmd/metrics-server` under go1.26.9 at the pinned
+commit: every stdlib finding is settled by the toolchain patch. These module
+findings are reachable at the tag's own `go.mod`:
 
 | module | at the tag | fixed in | findings |
 |---|---|---|---|
-| `github.com/prometheus/prometheus` | v0.304.2 | v0.311.3 | GO-2026-5264, -5381, -5662, -5710 (module-wide OSVs, so any import counts as reachable) |
-| `golang.org/x/net` | v0.40.0 | v0.60.0 | 7 |
-| `go.opentelemetry.io/otel/{sdk,exporters/otlp/otlptrace,…/otlptracegrpc}` | v1.35.0 | v1.45.0 | GO-2026-4394, -6505 |
-| `google.golang.org/grpc` | v1.72.0 | v1.83.1 | GO-2026-6061, -6348 |
-| `golang.org/x/text` | v0.25.0 | v0.42.0 (x/net's floor) | GO-2026-5970 |
+| `golang.org/x/net` | v0.56.0 | v0.60.0 | GO-2026-6603, -6610, -6611, -6612, -6617 |
+| `google.golang.org/grpc` | v1.81.1 | v1.83.1 | GO-2026-6061, -6348 |
+| `go.opentelemetry.io/otel/{sdk,exporters/otlp/otlptrace,…/otlptracegrpc}` | v1.44.0 | v1.45.0 | GO-2026-6505 |
+| `golang.org/x/text` | v0.38.0 | v0.39.0 (x/net v0.60.0 takes it to v0.42.0) | GO-2026-5970 |
 
-`GO_SECURITY_OVERRIDES` cannot express that fix set. MVS changes 56 require
-lines: 55 move, including `k8s.io/{api,apimachinery,client-go}` to v0.35.3
-against an apiserver at v0.33.7, and one is **added**
-(`github.com/cenkalti/backoff/v5`, which otlptracegrpc v1.45.0 needs). The
-graph then also needs `go mod tidy` before it builds.
-The module gate refuses both, by design. Waiving reachable findings is not an
-option either. So `GO_SECURITY_OVERRIDES` is empty, and the audit job fails
-at this pin until the pin moves to an upstream tag that carries the fixes
-(`v0.9.0` exists; not evaluated here).
+`GO_SECURITY_OVERRIDES` raises x/net, grpc and otlptracegrpc, and declares
+the 16 require lines MVS moves with them, so the module gate admits exactly
+that set: 19 require lines, each within its major, none added, the `go`
+directive unchanged, and the tree builds with `-mod=readonly` and no
+`go mod tidy`. govulncheck is then clean (0 reachable); `vuln-ignore` stays
+empty. v0.8.1 was not fixable this way (55 moves including
+`k8s.io/{api,apimachinery,client-go}` across minors, and one added require);
+v0.9.0 is what made the pin auditable.
 
 ## Release assets
 
@@ -78,9 +79,9 @@ each with a `.sigstore.json` bundle, plus `SHA256SUMS`.
 git switch --orphan bashy-build
 cp -R <bashy>/builds/metrics-server/fork/. .
 git add .github/workflows/bashy-build.yml bashy-build
-git commit -m "bashy-build: metrics-server v0.8.1 verified build"
+git commit -m "bashy-build: metrics-server v0.9.0 verified build"
 git push -u origin bashy-build
-git tag bashy-v0.8.1-1 && git push origin bashy-v0.8.1-1
+git tag bashy-v0.9.0-1 && git push origin bashy-v0.9.0-1
 ```
 
 Then pin the release in binmgr against the signing identity and issuer above.
