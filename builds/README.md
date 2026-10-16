@@ -323,9 +323,10 @@ for each entry. **Empty or absent is a no-op**, which is what every tool that
 needs no override gets.
 
 What makes this safe is the gate, not `go get`: afterwards `go.mod` may differ
-**only in the require lines of exactly the declared modules**. Anything else
-fails the build — a new or removed require, a `replace`/`exclude`/`retract`
-edit, or an undeclared module moved as a transitive effect (if one is genuinely
+**only in the require lines of exactly the declared modules** (and in a
+same-path replace a `replace:` entry raises, below). Anything else
+fails the build — a new or removed require, an `exclude`/`retract` edit, any
+other `replace` edit, or an undeclared module moved as a transitive effect (if one is genuinely
 needed, declare it too, so it is reviewed). The comparison is over `go mod edit
 -json`, not the file text, so a reformat or a moved block cannot hide a real
 change. `go.sum` is deliberately **not** gated: `go get` has to add the new
@@ -340,6 +341,59 @@ the extra entries no-ops — naming a module at a version *below* what MVS picke
 would silently downgrade it. Regenerate the whole list when the pin moves
 rather than patching it. `builds/kopia` is the worked example: five fixes, 23
 declared modules.
+
+**A same-path `replace` may be raised — and nothing else about a replace may
+change.** Some upstreams pin a dependency with a `replace` whose target is the
+*same* module path (k3s: `golang.org/x/net => golang.org/x/net v0.57.0`). The
+replace wins over any require line, so a plain `go get` there moves an inert
+require and the vulnerable code still ships. For exactly that shape an entry may
+be written `replace:MODULE@vVERSION`:
+
+```
+GO_SECURITY_OVERRIDES="replace:golang.org/x/net@v0.60.0 golang.org/x/net@v0.60.0 ..."
+```
+
+The step first runs `go mod edit -replace OLD=MODULE@vVERSION` for each
+`replace:` entry (OLD is the replace's left side as `go.mod` writes it, with its
+version if it has one), then `go get`s every entry as before, so the require line
+agrees with the replacement (the `replace:` entry's own require line is allowed
+to move). The **replace gate** then judges every replace line that differs.
+Allowed, and only when declared:
+
+- the target path is the **same** module path as the source, before and after;
+- the new version is a **fixed release** (`vX.Y.Z`, optionally `+incompatible`
+  exactly when the old one was) — no pre-release, no pseudo-version;
+- it is in the **same major** version (`v0.12.3 → v0.22.0` is in v0);
+- it is **strictly higher** than the old one, and equal to the declared one.
+
+Refused: an undeclared replace move; a changed target path (including raising a
+replace that points to a *different* path, such as a fork); an added or removed
+replace line (a changed left-side version counts as both); a lowered or
+unchanged-but-declared-different version; a crossed major; a gained or dropped
+`+incompatible`; a local-path replace. A declared `replace:` entry for a module
+`go.mod` does not replace is refused too. After the `go get`s the step runs
+`go mod download` of every declared module, so `go.sum` carries full hashes for
+`-mod=readonly` and `go mod vendor` builds.
+
+Why it is allowed: the upstream already chose *this* module and *this* major
+when it wrote the replace; raising the version to a fixed release within that
+major is the same review decision as a require bump, it is the only way the fix
+reaches the binary, and it cannot substitute a different source. Anything that
+could — a new path, a new line, a local directory — stays refused. The rule's
+self-test is `builds/_shared/kinds/go/toolchain-gate-test.sh` (run by
+`builds/check.sh`), which extracts the gate between its `the replace gate
+(BEGIN)`/`(END)` markers in `kinds/go/setup.yml` and drives it with these
+`replace_case`s: *unchanged*; *same path raised within the major*; *same path v0
+minor raised (ebpf)*; *raised from a pseudo-version, +incompatible kept*;
+*versioned left side kept*; *declared and already satisfied*; *other replaces
+untouched alongside* (accepted) — and *undeclared replace raised*; *raised past
+the declared version*; *lowered*; *crossed a major*; *crossed v0 -> v1*;
+*crossed a major, minor also higher*; *crossed v0 -> v1, minor also higher*;
+*gained +incompatible*; *dropped +incompatible*; *pre-release target*;
+*pseudo-version target*; *target path changed*; *different-path replace
+raised*; *replace line added*; *replace line removed*; *left-side version
+changed (add + remove)*; *local-path replace*; *declared but go.mod has no
+replace* (refused). `builds/k3s` is the worked example (`x/net`, `cilium/ebpf`).
 
 **The `go` and `toolchain` directives have their own gate.** A dependency
 carrying a security fix can require a newer *language* version — `x/net`

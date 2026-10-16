@@ -129,8 +129,9 @@ fi
 if [[ -n ${GO_SECURITY_OVERRIDES:-} ]]; then
 	[[ $KIND == go || $KIND == custom ]] || die "GO_SECURITY_OVERRIDES is a go/custom key, but KIND=$KIND"
 	for spec in $GO_SECURITY_OVERRIDES; do
-		[[ $spec =~ ^[^@[:space:]]+@v[0-9][0-9A-Za-z.+-]*$ ]] ||
-			die "GO_SECURITY_OVERRIDES entry $spec is not module@vVERSION"
+		# replace:module@vVERSION raises a same-path replace (builds/README.md).
+		[[ $spec =~ ^(replace:)?[^@:[:space:]]+@v[0-9][0-9A-Za-z.+-]*$ ]] ||
+			die "GO_SECURITY_OVERRIDES entry $spec is not [replace:]module@vVERSION"
 	done
 fi
 
