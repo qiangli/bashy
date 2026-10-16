@@ -77,7 +77,13 @@ X.Y)
 	UPSTREAM_TAG_REGEX='^[0-9]+\.[0-9]+$'
 	BASHY_TAG_GLOB='bashy-[0-9]*'
 	;;
-*) die "UPSTREAM_TAG_FORM $UPSTREAM_TAG_FORM is not a declared release-tag form (vX.Y.Z, X.Y)" ;;
+vX.Y.Z+k3sN)
+	# k3s tags the Kubernetes release it ships plus its own build counter
+	# (v1.36.1+k3s1); -rc tags stay refused.
+	UPSTREAM_TAG_REGEX='^v[0-9]+\.[0-9]+\.[0-9]+\+k3s[1-9][0-9]*$'
+	BASHY_TAG_GLOB='bashy-v*'
+	;;
+*) die "UPSTREAM_TAG_FORM $UPSTREAM_TAG_FORM is not a declared release-tag form (vX.Y.Z, X.Y, vX.Y.Z+k3sN)" ;;
 esac
 [[ $UPSTREAM_TAG =~ $UPSTREAM_TAG_REGEX ]] ||
 	die "UPSTREAM_TAG $UPSTREAM_TAG is not the declared $UPSTREAM_TAG_FORM release-tag form"

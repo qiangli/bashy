@@ -49,6 +49,7 @@ builds/
 | `zot` | `project-zot/zot` | `v2.1.22` | Apache-2.0 | `go` | yoke `external/zot` |
 | `seaweedfs` | `seaweedfs/seaweedfs` | `4.48` | Apache-2.0 | `go` | yoke `external/seaweedfs` |
 | `act_runner` | `gitea/runner` (**gitea.com**) | `v5.0.0` | MIT | `go` | yoke `external/actrunner` |
+| `k3s` | `k3s-io/k3s` | `v1.36.1+k3s1` | Apache-2.0 | `go` (own `build.yml`, `audit.yml`) | the outpost runtime image |
 
 Each pin is the release yoke runs today, read from `external/<tool>` or
 `pkg/fleet/baseline/services/<tool>.yaml` — except the three Victoria
@@ -154,7 +155,7 @@ Shell-sourceable `KEY=VALUE` only. It is shipped verbatim as
 | `TOOL` | directory name; fork is `FORK_REPO=qiangli/$TOOL` |
 | `UPSTREAM_REPO`, `UPSTREAM_SLUG` | upstream URL and `owner/repo`. The URL's host decides the forge (see §Non-GitHub upstreams); `UPSTREAM_REPO` must end in `UPSTREAM_SLUG` |
 | `UPSTREAM_TAG`, `UPSTREAM_COMMIT` | pinned release tag and its full 40-hex commit |
-| `UPSTREAM_TAG_FORM` | optional; the shape of upstream's release tags — `vX.Y.Z` (default) or `X.Y`. See §The declared release-tag form |
+| `UPSTREAM_TAG_FORM` | optional; the shape of upstream's release tags — `vX.Y.Z` (default), `X.Y` or `vX.Y.Z+k3sN`. See §The declared release-tag form |
 | `UPSTREAM_API_BASE` | optional for a GitHub upstream (defaults to `https://api.github.com`), **required** otherwise: the forge's REST root, which must answer `/repos/SLUG/releases/tags/TAG` with `.draft` and `.prerelease` |
 | `KIND` | step-fragment kind under `_shared/kinds/` (`cargo`, `go`), or `custom` (the tool supplies its own fragments) |
 | `COSIGN_VERSION` | cosign release used to sign (`v3.1.3`) |
@@ -211,6 +212,10 @@ The **bashy** tag needs no form of its own. Both gates match
 `UPSTREAM_TAG`, which has already been held to the declared shape — so
 `bashy-4.48-1` and `bashy-v2.1.21-3` are both exactly `bashy-<the pinned
 upstream tag>-N` with no second copy of the form anywhere.
+
+k3s tags `vX.Y.Z+k3sN` (`v1.36.1+k3s1`): the Kubernetes release plus k3s's
+build counter. Its form keeps the `bashy-v*` trigger; its bashy tag is
+`bashy-v1.36.1+k3s1-N`.
 
 Adding a form means one more `case` arm (its regex and its trigger glob).
 Keep arms narrow: the point is to refuse an `-rc1`, a `-dev` or a typo, not to
