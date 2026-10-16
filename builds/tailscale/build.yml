@@ -1,0 +1,41 @@
+      # tailscale's own build: upstream build_dist.sh at the pinned tag (plain
+      # `go build`, cgo off, version stamps) for both shipped binaries, with
+      # the declared feature tags.
+      - name: go build tailscale + tailscaled (static, -trimpath, reproducible ldflags)
+        working-directory: src
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          . ../fork/bashy-build/PIN
+          cgo=
+          for pair in $GO_CGO; do
+            [[ ${pair%%=*} == "$ASSET" ]] || continue
+            cgo=${pair#*=}
+          done
+          [[ $cgo == 0 ]] || { echo "PIN GO_CGO must be 0 for $ASSET (upstream builds cgo-free)"; exit 1; }
+          [[ $(go env GOOS) == linux ]] || { echo "tailscale is built on linux runners only"; exit 1; }
+          arch=$(go env GOARCH)
+          [[ $ASSET == "tailscale-linux-$arch" ]] || { echo "MATRIX asset $ASSET does not match runner arch $arch"; exit 1; }
+          mkdir -p ../out
+          for pkg in "$GO_PACKAGE" "$TAILSCALE_CLI_PACKAGE"; do
+            out=../out/${pkg##*/}-linux-$arch
+            env CGO_ENABLED=0 go build -mod=readonly -trimpath -buildvcs=false -tags "$GO_BUILD_TAGS" \
+              -ldflags "-s -w -buildid= $GO_LDFLAGS" -o "$out" "$pkg"
+            # Static means no ELF interpreter: the binaries must run FROM scratch.
+            if readelf -l "$out" | grep -q 'Requesting program interpreter'; then
+              echo "$out is dynamically linked"; readelf -l "$out" | grep -A1 INTERP; exit 1
+            fi
+            # The build record carries every declared omit tag.
+            go version -m "$out" | tee "$RUNNER_TEMP/buildinfo"
+            for tag in ${GO_BUILD_TAGS//,/ }; do
+              grep -qE "^[[:space:]]+build[[:space:]]+-tags=(.*,)?$tag(,.*)?$" "$RUNNER_TEMP/buildinfo" ||
+                { echo "$out was not built with $tag"; exit 1; }
+            done
+            # Smoke: the binary reports the pinned version and commit.
+            "$out" "$GO_VERSION_ARG" | tee "$RUNNER_TEMP/version"
+            grep -qx "${UPSTREAM_TAG#v}" "$RUNNER_TEMP/version" || { echo "$out does not report ${UPSTREAM_TAG#v}"; exit 1; }
+            grep -qF "tailscale commit: $UPSTREAM_COMMIT" "$RUNNER_TEMP/version" || { echo "$out does not report $UPSTREAM_COMMIT"; exit 1; }
+          done
+          # The go.mod/go.sum the release builds from must be the pinned ones.
+          [[ -z $(git status --porcelain -- go.mod go.sum) ]] || { echo "the build rewrote go.mod/go.sum"; git diff -- go.mod go.sum; exit 1; }

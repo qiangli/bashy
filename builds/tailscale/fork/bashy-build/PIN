@@ -1,0 +1,59 @@
+# bashy verified build declaration for tailscale (builds/README.md).
+# Shell-sourceable KEY=VALUE only. builds/render.sh renders ../fork from this
+# file + files/ + build.yml + audit.yml + builds/_shared, and ships it verbatim
+# as the fork's bashy-build/PIN. The workflow refuses to build unless the
+# checked-out upstream tag resolves to UPSTREAM_COMMIT and the bashy tag is
+# bashy-${UPSTREAM_TAG}-N.
+#
+# The outpost runtime image's tailnet agent: tailscaled and its CLI.
+# Upstream LICENSE at this tag: BSD-3-Clause.
+TOOL=tailscale
+FORK_REPO=qiangli/tailscale
+UPSTREAM_REPO=https://github.com/tailscale/tailscale
+UPSTREAM_SLUG=tailscale/tailscale
+# Newest stable release (even minor = stable track).
+UPSTREAM_TAG=v1.104.1
+# Annotated tag 7f4efe814ff14b064eb080344389ceb9ea2d37ac -> this commit.
+UPSTREAM_COMMIT=9a522a9786c97eb7910c01ccb7bd66557b04c910
+# Toolchain kind: setup comes from builds/_shared/kinds/go; build.yml and
+# audit.yml are tailscale's own (two binaries, see README.md).
+KIND=go
+# Must equal the go directive in the tag's go.mod (setup.yml gates it).
+GO_TOOLCHAIN=1.27.1
+# In-minor security patch: go1.27.1's stdlib has 11 findings reachable from
+# the two binaries (GO-2026-6603..-6617); go1.27.2 settles all of them.
+GO_TOOLCHAIN_SECURITY_OVERRIDE=1.27.2
+GO_SECURITY_OVERRIDES=""
+GOVULNCHECK_VERSION=v1.9.0
+GO_SBOM_VERSION=v1.12.0
+GO_PACKAGE=./cmd/tailscaled
+TAILSCALE_CLI_PACKAGE=./cmd/tailscale
+# Upstream build_dist.sh stamps (cmd/mkversion at the tag: short 1.104.1,
+# long 1.104.1-t<9-hex commit>), plus the commit stamp so -buildvcs=false
+# keeps `--version` naming the pin.
+GO_LDFLAGS="-X tailscale.com/version.longStamp=${UPSTREAM_TAG#v}-t${UPSTREAM_COMMIT:0:9} -X tailscale.com/version.shortStamp=${UPSTREAM_TAG#v} -X tailscale.com/version.gitCommitStamp=$UPSTREAM_COMMIT"
+# Upstream feature tags, three removed: logtail (log uploads to
+# log.tailscale.com), clientupdate (self-update) and cloud (the
+# 169.254.169.254 metadata probe tailscaled makes at startup on cloud VMs).
+GO_BUILD_TAGS="ts_omit_logtail,ts_omit_clientupdate,ts_omit_cloud"
+GO_AUDIT_TAGS="ts_omit_logtail,ts_omit_clientupdate,ts_omit_cloud"
+GO_BUILD_FLAGS=""
+GO_BUILD_ENV=""
+GO_VERSION_ARG=--version
+COSIGN_VERSION=v3.1.3
+# Build matrix: ASSET=RUNNER; each leg uploads both binaries for its arch.
+MATRIX="tailscale-linux-amd64=ubuntu-24.04 tailscale-linux-arm64=ubuntu-24.04-arm"
+# CGO per asset: upstream builds tailscale and tailscaled with cgo off.
+GO_CGO="tailscale-linux-amd64=0 tailscale-linux-arm64=0"
+APT_PACKAGES="strace util-linux iproute2"
+PRE_BUILD_GATES=""
+SHARED_FILES="egress-verdict.sh"
+# Argument of bashy-build/no-egress-test.sh: the directory with both binaries.
+EGRESS_TARGET='out'
+# Release: SRC=ASSET copies from bashy-build/, the assets that must exist,
+# the ones that are executables, and the release-notes lines.
+RELEASE_EXTRA="PIN=tailscale-pin.txt otel.env=tailscale-otel.env no-tracking.env=tailscale-no-tracking.env vuln-ignore=vuln-ignore"
+RELEASE_EXECUTABLES="tailscale-linux-amd64 tailscaled-linux-amd64 tailscale-linux-arm64 tailscaled-linux-arm64"
+RELEASE_ASSETS="$RELEASE_EXECUTABLES tailscale-$UPSTREAM_TAG.cdx.json tailscale-$UPSTREAM_TAG.govulncheck.json tailscale-pin.txt tailscale-otel.env tailscale-no-tracking.env vuln-ignore"
+RELEASE_NOTE="Static, cgo-free tailscale and tailscaled. Log upload, self-update and cloud-metadata probing are compiled out (ts_omit_logtail, ts_omit_clientupdate, ts_omit_cloud); no-tracking.env also sets TS_NO_LOGS_NO_SUPPORT. tailscaled dials nothing until it is pointed at a control server."
+RELEASE_GATES="pinned commit, pinned Go toolchain (security override: built with go1.27.2, not the tag's go1.27.1), static (no ELF interpreter), omitted features absent from the build record, govulncheck of both shipped packages (reachable, unwaived = fail), CycloneDX SBOM, no-egress."
