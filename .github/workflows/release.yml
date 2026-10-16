@@ -134,6 +134,13 @@ jobs:
           # Verifies the Sigstore bundle + yoke pin before any build; a
           # missing or unverified runner fails the job here, never ships.
           ./scripts/fetch-signed-runner.sh darwin "$ARCH"
+      - name: Prefetch native build modules
+        shell: bash
+        run: |
+          # Match the product build's module mode and tags while network is
+          # available. The build itself must work from this cache alone.
+          GOWORK=off GOFLAGS=-mod=mod go mod download all
+          GOWORK=off GOFLAGS=-mod=mod CGO_ENABLED=0 go list -deps -tags embed_runner,bashy_runtime_snapshot ./cmd/bashy >/dev/null
       - name: Build, audit and probe native one-file Bashy
         shell: bash
         env:

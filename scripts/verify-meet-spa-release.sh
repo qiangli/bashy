@@ -37,21 +37,29 @@ esac
 
 state_dir=$(mktemp -d "${TMPDIR:-/tmp}/bashy-meet-spa.XXXXXX")
 port=${BASHY_MEET_SMOKE_PORT:-18641}
+server_pid=
 
 cleanup() {
-	BASHY_MEET_DIR="$state_dir" "$artifact" meet service stop --port "$port" >/dev/null 2>&1 || true
+	if [ -n "$server_pid" ]; then
+		kill "$server_pid" 2>/dev/null || true
+		wait "$server_pid" 2>/dev/null || true
+	fi
 	rm -rf "$state_dir"
 }
 trap cleanup EXIT HUP INT TERM
 
-BASHY_MEET_DIR="$state_dir" "$artifact" meet service start --port "$port" >/dev/null
+BASHY_MEET_DIR="$state_dir" "$artifact" meet serve --port "$port" >"$state_dir/server.log" 2>&1 &
+server_pid=$!
 
 body=$state_dir/index.html
 ready=false
 i=0
-while [ "$i" -lt 50 ]; do
+while [ "$i" -lt 150 ]; do
 	if curl -fsS "http://127.0.0.1:$port/" >"$body" 2>/dev/null; then
 		ready=true
+		break
+	fi
+	if ! kill -0 "$server_pid" 2>/dev/null; then
 		break
 	fi
 	i=$((i + 1))
@@ -60,6 +68,7 @@ done
 
 if [ "$ready" != true ]; then
 	echo "meet SPA release gate: $target server did not become ready" >&2
+	cat "$state_dir/server.log" >&2
 	exit 1
 fi
 if grep -Fq 'built without the web room' "$body"; then
