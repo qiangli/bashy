@@ -2,8 +2,9 @@
 # no-egress-test.sh BINARY
 #
 # Release gate, run BEFORE signing: start the built k3s as a single-node
-# control plane (`k3s server --disable-agent`, the shape outpost's
-# server-entrypoint runs) bound to 127.0.0.1, with the shipped no-tracking.env
+# control plane (`k3s server --cluster-init --disable-agent`, the shape
+# outpost's server-entrypoint runs; this build has no sqlite, so the datastore
+# is embedded etcd) bound to 127.0.0.1, with the shipped no-tracking.env
 # and otel.env environment, exercise the Kubernetes API over loopback, let it
 # idle, and FAIL on any outbound connection attempt other than loopback to its
 # own ports or to 127.0.0.1:31415.
@@ -51,17 +52,19 @@ envfile=$work/server.env
 # Loopback ports the control plane talks to itself on: the supervisor
 # (--https-listen-port), the internal apiserver (--apiserver-port), and the
 # controller-manager / cloud-controller / scheduler secure ports k3s fixes at
-# 10257 / 10258 / 10259. Plus bashy's local OTLP collector (yoke
+# 10257 / 10258 / 10259, and embedded etcd's client / peer / metrics ports
+# 2379 / 2380 / 2381. Plus bashy's local OTLP collector (yoke
 # external/internal/serviceenv LocalCollectorHostPort). Nothing else passes.
 api_port=$((port + 1))
 otlp_port=31415
-allowed=("$port" "$api_port" 10257 10258 10259 "$otlp_port")
+allowed=("$port" "$api_port" 10257 10258 10259 2379 2380 2381 "$otlp_port")
 kubeconfig=$work/kubeconfig
 
 cat >"$work/run.sh" <<RUN
 set -uo pipefail
 exec '$bin' server \\
 	--data-dir='$work/data' \\
+	--cluster-init \\
 	--disable-agent \\
 	--disable-cloud-controller \\
 	--disable-helm-controller \\
@@ -125,6 +128,6 @@ sudo unshare --net -- bash "$inner" || die "server run failed (see above)"
 [[ -s $log ]] || die "no strace log recorded"
 
 # The verdict itself is the ONE shared copy: bashy-build/egress-verdict.sh
-# (builds/_shared/egress-verdict.sh). AF_UNIX (kine's socket) is local IPC.
+# (builds/_shared/egress-verdict.sh). AF_UNIX is local IPC.
 egress_verdict "$log" "${allowed[@]}" ||
 	die "outbound connection attempt(s) other than loopback:{${allowed[*]}}"

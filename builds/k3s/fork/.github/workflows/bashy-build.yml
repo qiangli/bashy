@@ -126,7 +126,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends strace util-linux iproute2 curl musl-tools linux-libc-dev
+          sudo apt-get install -y --no-install-recommends strace util-linux iproute2 curl
       - name: pinned Go toolchain (from the upstream go.mod)
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -386,19 +386,12 @@ jobs:
             fi
             cp -v "manifests/$m" pkg/deploy/embed/
           done
-      - name: kernel UAPI headers for musl-gcc
+      - name: cgo-free overlay (two reviewed upstream files, tree untouched)
+        working-directory: src
         run: |
           set -euo pipefail
-          # musl-gcc searches only musl's own include dir. The btrfs snapshotter
-          # needs <linux/btrfs.h> and friends, so expose exactly the kernel
-          # UAPI trees (and nothing of glibc's) through one -isystem dir.
-          kh=$RUNNER_TEMP/kernel-headers
-          mkdir -p "$kh"
-          ln -s /usr/include/linux "$kh/linux"
-          ln -s /usr/include/asm-generic "$kh/asm-generic"
-          ln -s "/usr/include/$(gcc -dumpmachine)/asm" "$kh/asm"
-          echo "KERNEL_HEADERS=$kh" >>"$GITHUB_ENV"
-          musl-gcc --version | head -n1
+          ../fork/bashy-build/cgo-free-overlay.sh . "$RUNNER_TEMP/cgo-free"
+          echo "K3S_OVERLAY=$RUNNER_TEMP/cgo-free/overlay.json" >>"$GITHUB_ENV"
       - name: go build k3s + containerd-shim-runc-v2 (static, -trimpath, reproducible ldflags)
         working-directory: src
         env:
@@ -411,7 +404,7 @@ jobs:
             [[ ${pair%%=*} == "$ASSET" ]] || continue
             cgo=${pair#*=}
           done
-          [[ $cgo == 1 ]] || { echo "PIN GO_CGO must be 1 for $ASSET (k3s links sqlite and btrfs through cgo)"; exit 1; }
+          [[ $cgo == 0 ]] || { echo "PIN GO_CGO must be 0 for $ASSET (bashy links no cgo sqlite; runc is the one cgo build)"; exit 1; }
           [[ $(go env GOOS) == linux ]] || { echo "k3s is built on linux runners only"; exit 1; }
           arch=$(go env GOARCH)
           [[ $ASSET == "k3s-linux-$arch" ]] || { echo "MATRIX asset $ASSET does not match runner arch $arch"; exit 1; }
@@ -424,12 +417,10 @@ jobs:
           ldflags+=" -X github.com/containerd/containerd/v2/version.Package=$(modpath github.com/containerd/containerd/v2)"
           ldflags+=" -X sigs.k8s.io/cri-tools/pkg/version.Version=$(modver sigs.k8s.io/cri-tools)"
           mkdir -p ../out
-          # Static link against musl (MIT). glibc is LGPL, so a static glibc
-          # link is not a permissive artifact; musl is also upstream's libc.
-          env CGO_ENABLED=1 CC=musl-gcc \
-            CGO_CFLAGS="$K3S_CGO_CFLAGS -isystem $KERNEL_HEADERS" \
-            go build -mod=readonly -trimpath -buildvcs=false -tags "$GO_BUILD_TAGS" \
-            -ldflags "-s -w -buildid= $ldflags -extldflags '-static'" \
+          # No cgo: no C toolchain, no libc, static by construction.
+          env CGO_ENABLED=0 \
+            go build -mod=readonly -trimpath -buildvcs=false -overlay "$K3S_OVERLAY" -tags "$GO_BUILD_TAGS" \
+            -ldflags "-s -w -buildid= $ldflags" \
             -o "../out/$ASSET" "$GO_PACKAGE"
           # The shim, as containerd's own Makefile ships it: CGO_ENABLED=0.
           env CGO_ENABLED=0 go build -mod=readonly -trimpath -buildvcs=false \
@@ -437,6 +428,11 @@ jobs:
             -o "../out/containerd-shim-runc-v2-linux-$arch" "$SHIM_PACKAGE"
           # The go.mod/go.sum the release builds from must be the pinned ones.
           [[ -z $(git status --porcelain -- go.mod go.sum) ]] || { echo "the build rewrote go.mod/go.sum"; git diff -- go.mod go.sum; exit 1; }
+          # Pure-Go sqlite only, never mattn/go-sqlite3: the cgo driver must
+          # not be in the shipped binary at all.
+          if go version -m "../out/$ASSET" | grep -E 'CGO_ENABLED=1|mattn/go-sqlite3'; then
+            echo "../out/$ASSET links cgo or mattn/go-sqlite3"; exit 1
+          fi
           # Static means no ELF interpreter: the binaries must run FROM scratch.
           for b in "../out/$ASSET" "../out/containerd-shim-runc-v2-linux-$arch"; do
             if readelf -l "$b" | grep -q 'Requesting program interpreter'; then
@@ -732,6 +728,17 @@ jobs:
           GOTOOLCHAIN=go1.27.2 go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@$GO_SBOM_VERSION"
           echo "audit tools built with: go1.27.2 (govulncheck $GOVULNCHECK_VERSION, cyclonedx-gomod $GO_SBOM_VERSION)"
           echo "analysis toolchain:     $(go version)"
+      - name: the build's cgo-free overlay, applied to the audited tree
+        working-directory: src
+        run: |
+          set -euo pipefail
+          # govulncheck type-checks from disk and ignores `go build -overlay`,
+          # so the audit job (which ships nothing) writes the SAME two
+          # replacement files the build overlays into its own checkout.
+          ov=$RUNNER_TEMP/cgo-free
+          ../fork/bashy-build/cgo-free-overlay.sh . "$ov"
+          cp -v "$ov/builtins_linux.go" pkg/containerd/builtins_linux.go
+          cp -v "$ov/proctile.go" pkg/proctitle/proctile.go
       - name: govulncheck (source mode, the SHIPPED packages and tags)
         working-directory: src
         run: |
@@ -739,13 +746,11 @@ jobs:
           . ../fork/bashy-build/PIN
           mkdir -p ../out
           report=../out/$TOOL-$UPSTREAM_TAG.govulncheck.json
-          # Both shipped packages, with the tags k3s is built with. The shim is
-          # built with no tags and CGO_ENABLED=0, so this graph is a superset
+          # Both shipped packages, with the tags and CGO_ENABLED=0 k3s is built
+          # with. The shim is built with no tags, so this graph is a superset
           # of the shim's: a finding reachable in the shim is reachable here.
-          # cgo stays on (the runner's gcc) because k3s's btrfs and sqlite
-          # packages only type-check with it.
           echo "govulncheck scope: $GO_PACKAGE $SHIM_PACKAGE -tags $GO_AUDIT_TAGS"
-          CGO_ENABLED=1 govulncheck -format json -tags "$GO_AUDIT_TAGS" \
+          CGO_ENABLED=0 govulncheck -format json -tags "$GO_AUDIT_TAGS" \
             "$GO_PACKAGE" "$SHIM_PACKAGE" >"$report" || true
           [[ -s $report ]] || { echo "govulncheck produced no report"; exit 1; }
           # A finding whose first trace frame names a function is REACHABLE
@@ -770,7 +775,7 @@ jobs:
           sbom=../out/$TOOL-$UPSTREAM_TAG.cdx.json
           # The k3s main package's module graph; the shim's module
           # (github.com/k3s-io/containerd/v2) is a component of it.
-          CGO_ENABLED=1 GOFLAGS="-tags=$GO_AUDIT_TAGS" \
+          CGO_ENABLED=0 GOFLAGS="-tags=$GO_AUDIT_TAGS" \
             cyclonedx-gomod app -json -licenses -main "$GO_PACKAGE" -output "$sbom" .
           jq -e '.bomFormat == "CycloneDX" and (.components | length) > 0' "$sbom" >/dev/null
       - name: upload audit outputs

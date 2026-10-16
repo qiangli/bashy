@@ -12,6 +12,17 @@
           GOTOOLCHAIN=go@@GO_AUDIT_TOOLCHAIN@@ go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@$GO_SBOM_VERSION"
           echo "audit tools built with: go@@GO_AUDIT_TOOLCHAIN@@ (govulncheck $GOVULNCHECK_VERSION, cyclonedx-gomod $GO_SBOM_VERSION)"
           echo "analysis toolchain:     $(go version)"
+      - name: the build's cgo-free overlay, applied to the audited tree
+        working-directory: src
+        run: |
+          set -euo pipefail
+          # govulncheck type-checks from disk and ignores `go build -overlay`,
+          # so the audit job (which ships nothing) writes the SAME two
+          # replacement files the build overlays into its own checkout.
+          ov=$RUNNER_TEMP/cgo-free
+          ../fork/bashy-build/cgo-free-overlay.sh . "$ov"
+          cp -v "$ov/builtins_linux.go" pkg/containerd/builtins_linux.go
+          cp -v "$ov/proctile.go" pkg/proctitle/proctile.go
       - name: govulncheck (source mode, the SHIPPED packages and tags)
         working-directory: src
         run: |
@@ -19,13 +30,11 @@
           . ../fork/bashy-build/PIN
           mkdir -p ../out
           report=../out/$TOOL-$UPSTREAM_TAG.govulncheck.json
-          # Both shipped packages, with the tags k3s is built with. The shim is
-          # built with no tags and CGO_ENABLED=0, so this graph is a superset
+          # Both shipped packages, with the tags and CGO_ENABLED=0 k3s is built
+          # with. The shim is built with no tags, so this graph is a superset
           # of the shim's: a finding reachable in the shim is reachable here.
-          # cgo stays on (the runner's gcc) because k3s's btrfs and sqlite
-          # packages only type-check with it.
           echo "govulncheck scope: $GO_PACKAGE $SHIM_PACKAGE -tags $GO_AUDIT_TAGS"
-          CGO_ENABLED=1 govulncheck -format json -tags "$GO_AUDIT_TAGS" \
+          CGO_ENABLED=0 govulncheck -format json -tags "$GO_AUDIT_TAGS" \
             "$GO_PACKAGE" "$SHIM_PACKAGE" >"$report" || true
           [[ -s $report ]] || { echo "govulncheck produced no report"; exit 1; }
           # A finding whose first trace frame names a function is REACHABLE
@@ -50,6 +59,6 @@
           sbom=../out/$TOOL-$UPSTREAM_TAG.cdx.json
           # The k3s main package's module graph; the shim's module
           # (github.com/k3s-io/containerd/v2) is a component of it.
-          CGO_ENABLED=1 GOFLAGS="-tags=$GO_AUDIT_TAGS" \
+          CGO_ENABLED=0 GOFLAGS="-tags=$GO_AUDIT_TAGS" \
             cyclonedx-gomod app -json -licenses -main "$GO_PACKAGE" -output "$sbom" .
           jq -e '.bomFormat == "CycloneDX" and (.components | length) > 0' "$sbom" >/dev/null

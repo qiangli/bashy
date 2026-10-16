@@ -25,6 +25,7 @@ run.
 tool.env                  the declaration (shipped as PIN)
 build.yml                 k3s's own build steps (replaces the go kind's build.yml)
 audit.yml                 govulncheck over BOTH shipped packages + SBOM
+files/cgo-free-overlay.sh the two-file go build -overlay that lets k3s build CGO_ENABLED=0
 files/no-egress-test.sh   runtime gate: a bare control plane makes no outbound connection
 files/otel.env            OpenTelemetry environment (disabled; local collector only)
 files/no-tracking.env     proxy clearing
@@ -41,8 +42,9 @@ Upstream `scripts/download` + `scripts/build` + `scripts/package-cli`:
 | | upstream release | bashy build |
 |---|---|---|
 | network fetches at build time | k3s-root tarball (busybox, iptables, conntrack, … — GPL userland), runc clone, containerd clone, Helm charts from k3s.io | **none** beyond the Go modules `go.sum` pins |
-| `k3s` | `./cmd/server`, cgo, static (`-extldflags -static`) in an alpine (musl) image | **same package and tags minus `libsqlite3`**, static against musl via Ubuntu's `musl-gcc` |
-| sqlite | system `libsqlite3` (tag) | go-sqlite3's bundled amalgamation (public domain) |
+| `k3s` | `./cmd/server`, cgo, static (`-extldflags -static`) in an alpine (musl) image | **same package, `CGO_ENABLED=0`**: upstream tags minus the cgo-only `libsqlite3`/`sqlite_omit_load_extension`/`netcgo`, plus containerd's `no_btrfs`; static by construction, no C toolchain |
+| sqlite / datastore | `mattn/go-sqlite3` (cgo) against system `libsqlite3`; sqlite is the default datastore | **not linked**: kine's `!cgo` driver compiles sqlite out. The datastore is **embedded etcd** — the image must run `k3s server --cluster-init` |
+| btrfs snapshotter | cgo, linked | **not linked** (`no_btrfs`); overlayfs/native/etc. remain |
 | `containerd-shim-runc-v2` | from a containerd clone, cgo static | from the containerd module k3s's `go.mod` pins (`k3s-io/containerd/v2`), `CGO_ENABLED=0` as containerd ships it |
 | `runc` | built with `seccomp` (links libseccomp, LGPL-2.1) | **not built here** — a separate pipeline (`builds/runc`) |
 | CNI plugins | `rancher/plugins` + flannel cni-plugin clones | **not built here** — separate pipelines |
@@ -51,15 +53,43 @@ Upstream `scripts/download` + `scripts/build` + `scripts/package-cli`:
 | ldflags | `VERSIONFLAGS` incl. build date | the same stamps from the pin; no build date |
 
 The build fails if a binary has an ELF interpreter (not static), if
+`go version -m` shows `CGO_ENABLED=1` or `mattn/go-sqlite3`, if
 `k3s --version` does not report the pinned tag, or if the build rewrote
 `go.mod`/`go.sum`.
 
-The kernel UAPI headers the btrfs snapshotter compiles against come from
-`linux-libc-dev` (GPL-2.0 WITH Linux-syscall-note): headers only, nothing of
-them is linked.
+### Why CGO_ENABLED=0, and the overlay
+
+bashy uses pure-Go sqlite only and never `mattn/go-sqlite3`. kine (k3s's
+datastore shim) already has a `!cgo` path that compiles its sqlite driver out;
+it cannot take `modernc.org/sqlite` without patching (it registers the
+`sqlite3` driver name `mattn/go-sqlite3` provides), so the datastore is
+embedded etcd instead.
+
+Tags alone do not get k3s to build without cgo. Two upstream files import a
+cgo-only package unconditionally, which leaves an import with no buildable
+files. `files/cgo-free-overlay.sh` writes replacements for exactly those two
+files and a `go build -overlay` map. It does not edit the checkout, so the
+`go.mod`/`go.sum` gate still applies, and each replacement is checked to be the
+intended edit, so a tag that moves either file fails the build:
+
+| upstream file | replacement |
+|---|---|
+| `pkg/containerd/builtins_linux.go` | the same file minus the one `plugins/snapshots/btrfs/plugin` import (`no_btrfs` excludes that package's every file) |
+| `pkg/proctitle/proctile.go` | a no-op `SetProcTitle`, like upstream's own windows file (`erikdubbelboer/gspt` is cgo-only; only the `ps` process title is lost) |
+
+The audit job applies the same two files to its own checkout, because
+govulncheck ignores `-overlay`, so the audited source and tags match the
+shipped ones.
+
+**runc stays the one cgo build** in the runtime image: its `nsenter` is C and
+runs before the Go runtime starts. It gets its own pipeline later
+(`builds/runc`), not here.
 
 ## Runtime notes for the image that consumes this
 
+- Start the server with `--cluster-init` (embedded etcd); with no sqlite in
+  the binary, a server without it, and with no `--datastore-endpoint`, does
+  not start.
 - k3s calls `iptables`/`ip6tables`(-save/-restore), `ipset`, `nft`, `mount`,
   `modprobe` at runtime (agent side: kube-proxy, flannel, network policy,
   kubelet). None of these are in this release; the server with
@@ -70,7 +100,7 @@ them is linked.
 ## Audit
 
 `audit.yml` runs govulncheck in source mode over `./cmd/server` and the shim
-package together, with the k3s build tags and cgo on; the SBOM is
+package together, with the k3s build tags, `CGO_ENABLED=0` and the overlay files applied; the SBOM is
 `cyclonedx-gomod app` of `./cmd/server`, whose module graph contains the shim's
 module. Reachable, unwaived findings fail the release; `files/vuln-ignore` is
 empty. A finding the toolchain override does not settle is fixed through
