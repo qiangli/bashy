@@ -430,6 +430,7 @@ externals variant is a separate story.
 | shell | `-c (arithmetic, printf)` | works | 42 |
 | shell | `echo $HOME (non-tty stdout)` | stated | prints $HOME: Stage 0 output canonicalization (output_reduce.go); a tt |
 | shell | `network (curl)` | absent | no network tools in the image; --network=none besides |
+| verbs | `acp` | works | Serve this machine as an ACP agent over stdin/stdout |
 | verbs | `act` | not usable offline | bin-managed external: would download - Error: act: resolve: binmgr: fe |
 | verbs | `act-runner` | not usable offline | bin-managed external: would download - act-runner runs Gitea's act_run |
 | verbs | `activity` | works | usage: bashy activity {status\|subscribe\|unsubscribe\|interests\|tail |
@@ -437,12 +438,13 @@ externals variant is a separate story.
 | verbs | `agentic` | works | usage: bashy agentic [--] ACTION [ARG...] |
 | verbs | `agents` | works | Show all live named and ad-hoc work reconciled from sprint leases, wea |
 | verbs | `app` | works | app serves bashy's Apps  its surfaces in a browser at one address. |
+| verbs | `approve` | works | approve is the one queue of decisions waiting for a human. |
 | verbs | `apps` | works | app serves bashy's Apps  its surfaces in a browser at one address. |
 | verbs | `ask` | works | ask requests a value from the person at the keyboard, over a channel t |
 | verbs | `audit` | works | usage: bashy inspect audit {status\|tail [N]\|verify\|export\|path} |
 | verbs | `awd` | works | bash builtin |
 | verbs | `bootstrap` | works | bashy self fetches and caches a released bashy binary using the same |
-| verbs | `bus` | works | bus is how agents on this host tell each other something changed. |
+| verbs | `bus` | works | Messages to you: bashy inbox (peek by default; --from/--search/--since |
 | verbs | `capability` | works | The routing table behind capability-routed delegation: which agent |
 | verbs | `cargo` | not usable offline | engine / remote-by-design (by design): Error: rust: fetch sha256 sidec |
 | verbs | `chat` | works | talk to an agent  a live governed session (no instruction) or a one-sh |
@@ -465,24 +467,33 @@ externals variant is a separate story.
 | verbs | `docker` | not usable offline | engine / remote-by-design (by design): bashy podman: fetching podman < |
 | verbs | `doctl` | not usable offline | bin-managed external: would download - Error: doctl: binmgr: fetch rel |
 | verbs | `doctor` | works | usage: doctor [--json] |
+| verbs | `explain` | works | usage: bashy explain go [--json\|--tsv\|--md] [ROW-ID \| REFUSAL TEXT. |
+| verbs | `feed` | works | feed publishes signed markdown posts to sinks you own (git/GitHub, rcl |
+| verbs | `force-agent-shell` | works | --- |
 | verbs | `foreman` | works | foreman <ver> |
 | verbs | `full` | present | runs in-process; --version/--help rc=2: bashy full: line 1: command: - |
 | verbs | `gate` | works | gate runs the project's gate  the command that decides pass/fail  and |
 | verbs | `gcloud` | not usable offline | engine / remote-by-design (by design): Error: gcloud: gcloud not found |
-| verbs | `genie` | works | usage: bashy genie [-m MODEL] "MESSAGE"   one turn in this directory;  |
+| verbs | `genie` | works | usage: bashy genie [-m MODEL] [--effort LEVEL] [--yolo] "MESSAGE"   on |
 | verbs | `gh` | not usable offline | bin-managed external: would download - Error: gh: resolve: binmgr: fet |
-| verbs | `git` | not usable offline | bin-managed external: would download - Error: gitscm: no system git on |
-| verbs | `git-scm` | not usable offline | bin-managed external: would download - Error: gitscm: no system git on |
+| verbs | `git` | works | bashy git is a small, self-contained git client for the typical |
+| verbs | `git-scm` | not usable offline | bin-managed external: would download - gitscm: no system git on PATH ( |
+| verbs | `gitea` | not usable offline | bin-managed external: would download - Error: gitea: binmgr: fetch rel |
 | verbs | `go` | not usable offline | engine / remote-by-design (by design): Error: gotoolchain: fetch relea |
+| verbs | `govulncheck` | present | runs in-process; --version/--help rc=1: Error: govulncheck: ensure man |
+| verbs | `grype` | not usable offline | bin-managed external: would download - Error: grype: resolve: binmgr:  |
 | verbs | `handoff` | works | handoff captures everything a successor needs and passes the work on. |
 | verbs | `helm` | not usable offline | engine / remote-by-design (by design): Error: helm: resolve latest ver |
 | verbs | `herald` | works | herald reaches agents that are not on this host. |
 | verbs | `inbox` | works | inbox is one read-through view over the existing message board, Meet |
 | verbs | `inspect` | works | usage: bashy inspect [ASPECT] [--json\|--plain] |
+| verbs | `install-agent` | works | usage: bashy install-agent <agent> [--shell PATH] [--project] [--check |
+| verbs | `instance` | works | conversations (instances) on a family: list, open, retire |
 | verbs | `invoke` | works | talk to an agent  a live governed session (no instruction) or a one-sh |
 | verbs | `issue` | works | todo tracks work as simple items (todo -> doing -> done, or blocked).  |
 | verbs | `judge` | works | judge reads a piece of work and renders an opinion on it. |
 | verbs | `kb` | works | kb is agent memory as a wiki of small markdown pages (YAML frontmatter |
+| verbs | `knowledge-transfer` | works | --- |
 | verbs | `kopia` | not usable offline | bin-managed external: would download - kopia runs the Kopia repository |
 | verbs | `kubectl` | not usable offline | engine / remote-by-design (by design): Error: kubectl: resolve stable  |
 | verbs | `lexicon` | works | lexicon is the project's jargon, projected from the registries that al |
@@ -490,12 +501,13 @@ externals variant is a separate story.
 | verbs | `llm` | works | llm is the host's one door to its model capacity (port 24556, "AILLM"  |
 | verbs | `login` | not usable offline | engine / remote-by-design (by design): tessaro: this machine isn't con |
 | verbs | `loom` | not usable offline | bin-managed external: would download - loom runs Gitea  downloaded, sh |
-| verbs | `mb` | works | mb is the host's message board  one shared, append-only board every ag |
+| verbs | `mb` | works | Messages to you: bashy inbox (peek by default; --from/--search/--since |
 | verbs | `mcp` | present | runs in-process; --version/--help rc=2: usage: bashy mcp serve [--tran |
 | verbs | `meet` | works | Run a turn-taking planning meeting across agentic CLIs and a human. |
-| verbs | `messages` | works | mb is the host's message board  one shared, append-only board every ag |
+| verbs | `messages` | works | Messages to you: bashy inbox (peek by default; --from/--search/--since |
 | verbs | `mirror` | works | mirror keeps a destination in sync with a source directory: an initial |
 | verbs | `mise` | not usable offline | bin-managed external: would download - Error: mise: resolve: binmgr: f |
+| verbs | `mod` | works | mod treats every Bash# project as a Go module. A multi-repo workspace  |
 | verbs | `model` | works | List inference backends. |
 | verbs | `models` | works | List inference backends. |
 | verbs | `node` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/ |
@@ -503,7 +515,10 @@ externals variant is a separate story.
 | verbs | `npm` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/ |
 | verbs | `npx` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/ |
 | verbs | `oci` | not usable offline | engine / remote-by-design (by design): bashy podman: fetching podman < |
-| verbs | `ollama` | not usable offline | engine / remote-by-design (by design): bashy ollama: could not fetch t |
+| verbs | `ollama` | not usable offline | engine / remote-by-design (by design): bashy ollama: local inference r |
+| verbs | `ollama` | not usable offline | engine / remote-by-design (by design): bashy ollama: local inference r |
+| verbs | `osv-scanner` | not usable offline | bin-managed external: would download - Error: osv-scanner: resolve: bi |
+| verbs | `osvscanner` | not usable offline | bin-managed external: would download - Error: osv-scanner: resolve: bi |
 | verbs | `otel` | works | Query OTEL telemetry with bounded agent-readable summaries |
 | verbs | `out` | works | out reprints the full, un-reduced bytes that an elision marker spilled |
 | verbs | `outpost` | present | runs in-process; --version/--help rc=1: meshagent: outpost mesh agent  |
@@ -511,7 +526,7 @@ externals variant is a separate story.
 | verbs | `peer` | works | sphere is dhnt execution tier 4: multi-node, PEER-DIRECT pooled infere |
 | verbs | `people` | works | Human principals  who the names in prose refer to |
 | verbs | `person` | works | Human principals  who the names in prose refer to |
-| verbs | `ping` | works | ping is the front door to this host's message board, and to the classi |
+| verbs | `ping` | works | Messages to you: bashy inbox (peek by default; --from/--search/--since |
 | verbs | `pip` | not usable offline | engine / remote-by-design (by design): Error: python/uv: fetch sha256  |
 | verbs | `pnpm` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/ |
 | verbs | `podman` | not usable offline | engine / remote-by-design (by design): bashy podman: fetching podman < |
@@ -537,6 +552,7 @@ externals variant is a separate story.
 | verbs | `secret` | works | secrets fetches your API keys/tokens from cloudbox's encrypted vault |
 | verbs | `secrets` | works | secrets fetches your API keys/tokens from cloudbox's encrypted vault |
 | verbs | `self` | works | bashy self fetches and caches a released bashy binary using the same |
+| verbs | `service` | works | Service units: one YAML declaration per daemon, built-in or third part |
 | verbs | `skill` | works | skills lists, inspects, and probes the tier-2 workspace skills availab |
 | verbs | `skills` | works | skills lists, inspects, and probes the tier-2 workspace skills availab |
 | verbs | `sota` | works | sota grounds a synthesis agent in REAL web-search results (`bashy sear |
@@ -544,8 +560,10 @@ externals variant is a separate story.
 | verbs | `sprint` | works | sprint is the conductor's PLAN/HANDOFF layer  the cross-repo kanban |
 | verbs | `stats` | works | stats is a unix filter over results JSONL: one record per attempt, fie |
 | verbs | `supervise` | works | Drive worker agents against a goal decomposed into tasks, IN the curre |
-| verbs | `supervisord` | works | usage: bashy supervisord [--pid1] [--until-done] [--socket PATH] [--poll DUR] |
+| verbs | `supervisor` | works | --- |
+| verbs | `supervisord` | works | usage: bashy supervisord [--pid1] [--until-done] [--only NAME] [--sock |
 | verbs | `tessaro` | works | Tessaro is the front door to your dhnt mesh  pooled LLMs + durable age |
+| verbs | `tmpl` | works | usage: bashy tmpl render [--engine ENGINE] FILE [--data JSON\|-] [--da |
 | verbs | `todo` | works | todo tracks work as simple items (todo -> doing -> done, or blocked).  |
 | verbs | `tofu` | not usable offline | bin-managed external: would download - Error: tofu: binmgr: fetch rele |
 | verbs | `tokens` | works | tokens (qiangli/coreutils) <ver> |
@@ -555,10 +573,12 @@ externals variant is a separate story.
 | verbs | `upgrade` | works | bashy self fetches and caches a released bashy binary using the same |
 | verbs | `uv` | not usable offline | engine / remote-by-design (by design): Error: python/uv: fetch sha256  |
 | verbs | `verify` | works | verify runs bashy's formal test batteries. The four suites are a preci |
+| verbs | `vuln` | works | usage: vuln [--self] [--json] [PATH...] |
 | verbs | `weave` | works | weave is the per-repo EXECUTION engine: a local, filesystem-based |
 | verbs | `web` | works | web inspection helpers |
 | verbs | `whois` | works | Resolve a name to a principal and say how to reach it. |
 | verbs | `yarn` | not usable offline | engine / remote-by-design (by design): Error: Get "https://nodejs.org/ |
+| verbs | `ycode` | works | Run the YAML-native genie harness |
 | verbs | `zig` | present | runs in-process; --version/--help rc=1: Error: Get "https://ziglang.or |
 | verbs | `zot` | not usable offline | bin-managed external: would download - zot runs the Zot OCI registry   |
 <!-- airgap-table:end -->
