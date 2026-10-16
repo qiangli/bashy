@@ -1,7 +1,7 @@
 // Copyright (c) 2025 qiangli
 // See LICENSE for licensing information
 
-//go:build !bashy_engines || (windows && (!remote || !containers_image_openpgp))
+//go:build !bashy_engines || (!windows && !cgo && !containers_image_openpgp) || (windows && (!remote || !containers_image_openpgp))
 
 package agentos
 
@@ -17,8 +17,8 @@ import (
 	"github.com/qiangli/yoke/pkg/binmgr"
 )
 
-// dispatchEngine uses an external podman in the lean build. Local Ollama
-// requires the bashy-built engine and its embedded signed runner.
+// dispatchEngine uses external Podman when the native dependencies are absent.
+// Ollama is embedded whenever bashy_engines is set, independently of Podman.
 func dispatchEngine(arg string) {
 	if code := guardEngine(arg, os.Args[2:]); code != 0 {
 		dispatchExit(code)
@@ -26,8 +26,7 @@ func dispatchEngine(arg string) {
 	name := engineAlias(arg) // `bashy docker` -> podman engine
 	switch name {
 	case "ollama":
-		fmt.Fprint(os.Stderr, engineNotFoundMessage(name))
-		dispatchExit(1)
+		dispatchOllamaEngine()
 	case "podman":
 		bin := resolveEngineBinary(name)
 		if bin == "" {
@@ -155,9 +154,4 @@ func engineNotFoundMessage(arg string) string {
 	default: // ollama
 		return "bashy ollama: local inference requires the engines build (-tags bashy_engines,embed_runner) with the embedded signed runner.\n"
 	}
-}
-
-// probeOllamaEngine (lean build): local Ollama is unavailable.
-func probeOllamaEngine() ollamaEngineProbe {
-	return ollamaEngineProbe{Build: "lean"}
 }
