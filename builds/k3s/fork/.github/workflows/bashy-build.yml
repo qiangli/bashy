@@ -4,7 +4,7 @@
 # shared skeleton builds/_shared/bashy-build.yml — edit those, not this file.
 # Installed on the `bashy-build` branch of github.com/qiangli/k3s from
 # bashy's builds/k3s/fork/. Triggered ONLY by pushing a tag
-# bashy-<upstream tag>-N (e.g. bashy-v1.36.1+k3s1-1) at that branch.
+# bashy-<upstream tag>-N (e.g. bashy-v1.37.1+k3s1-1) at that branch.
 # Upstream tags this release vX.Y.Z+k3sN, so the trigger is
 # bashy-v* and the pin job holds the tag to exactly that shape.
 #
@@ -500,12 +500,21 @@ jobs:
             fi
             cp -v "manifests/$m" pkg/deploy/embed/
           done
-      - name: cgo-free overlay (two reviewed upstream files, tree untouched)
+      - name: go mod vendor + the reviewed overlay (sha256-pinned upstream files, tree untouched)
         working-directory: src
         run: |
           set -euo pipefail
-          ../fork/bashy-build/cgo-free-overlay.sh . "$RUNNER_TEMP/cgo-free"
-          echo "K3S_OVERLAY=$RUNNER_TEMP/cgo-free/overlay.json" >>"$GITHUB_ENV"
+          # go.mod/go.sum as GO_SECURITY_OVERRIDES left them: nothing after this
+          # point may change them (checked after the build).
+          echo "K3S_GOMOD_SUM=$(cat go.mod go.sum | sha256sum | cut -d' ' -f1)" >>"$GITHUB_ENV"
+          # go refuses an -overlay of any file under GOMODCACHE, and one file
+          # the overlay replaces is in the containerd module, so k3s builds
+          # -mod=vendor from the vendor/ tree `go mod vendor` writes from that
+          # go.mod/go.sum. vendor/ is generated, never edited: the overlay maps
+          # its one file like the others.
+          go mod vendor
+          ../fork/bashy-build/k3s-overlay.sh . "$RUNNER_TEMP/k3s-overlay"
+          echo "K3S_OVERLAY=$RUNNER_TEMP/k3s-overlay/overlay.json" >>"$GITHUB_ENV"
       - name: go build k3s + containerd-shim-runc-v2 (static, -trimpath, reproducible ldflags)
         working-directory: src
         env:
@@ -523,7 +532,8 @@ jobs:
           arch=$(go env GOARCH)
           [[ $ASSET == "k3s-linux-$arch" ]] || { echo "MATRIX asset $ASSET does not match runner arch $arch"; exit 1; }
           # Upstream version.sh reads these from go.mod (get-module-version /
-          # get-module-path); -mod=readonly keeps the read from rewriting it.
+          # get-module-path); -mod=readonly keeps the read from rewriting it
+          # (and reads the module graph, not vendor/).
           modver() { go list -mod=readonly -m -f '{{if .Replace}}{{.Replace.Version}}{{else}}{{.Version}}{{end}}' "$1"; }
           modpath() { go list -mod=readonly -m -f '{{if .Replace}}{{.Replace.Path}}{{else}}{{.Path}}{{end}}' "$1"; }
           ldflags="$GO_LDFLAGS"
@@ -533,15 +543,35 @@ jobs:
           mkdir -p ../out
           # No cgo: no C toolchain, no libc, static by construction.
           env CGO_ENABLED=0 \
-            go build -mod=readonly -trimpath -buildvcs=false -overlay "$K3S_OVERLAY" -tags "$GO_BUILD_TAGS" \
+            go build -mod=vendor -trimpath -buildvcs=false -overlay "$K3S_OVERLAY" -tags "$GO_BUILD_TAGS" \
             -ldflags "-s -w -buildid= $ldflags" \
             -o "../out/$ASSET" "$GO_PACKAGE"
-          # The shim, as containerd's own Makefile ships it: CGO_ENABLED=0.
+          # The shim, as containerd's own Makefile ships it: CGO_ENABLED=0. It
+          # is not a k3s import, so it is not in vendor/: the module cache.
           env CGO_ENABLED=0 go build -mod=readonly -trimpath -buildvcs=false \
             -ldflags "-s -w -buildid= -X github.com/containerd/containerd/v2/version.Version=$(modver github.com/containerd/containerd/v2)" \
             -o "../out/containerd-shim-runc-v2-linux-$arch" "$SHIM_PACKAGE"
-          # The go.mod/go.sum the release builds from must be the pinned ones.
-          [[ -z $(git status --porcelain -- go.mod go.sum) ]] || { echo "the build rewrote go.mod/go.sum"; git diff -- go.mod go.sum; exit 1; }
+          # The go.mod/go.sum the release builds from must be the pinned ones,
+          # as GO_SECURITY_OVERRIDES (gated) left them.
+          [[ $(cat go.mod go.sum | sha256sum | cut -d' ' -f1) == "$K3S_GOMOD_SUM" ]] || { echo "the build rewrote go.mod/go.sum"; git diff -- go.mod go.sum; exit 1; }
+          # Regression tripwire (README.md §"Removed and changed vs upstream
+          # k3s — regression map"): nothing compiled out for a no-fix advisory
+          # may come back. `go version -m` lists the linked MODULES; openpgp is
+          # a package of golang.org/x/crypto, so the package graph the binary
+          # was built from is checked too.
+          forbidden() { # paths on stdin -> those that are, or are under, a K3S_FORBIDDEN entry
+            awk -v list="$K3S_FORBIDDEN" 'BEGIN {n = split(list, f, " ")}
+              {for (i = 1; i <= n; i++) if ($0 == f[i] || index($0, f[i] "/") == 1) {print; next}}'
+          }
+          hits=$({
+            for b in "../out/$ASSET" "../out/containerd-shim-runc-v2-linux-$arch"; do
+              go version -m "$b" | awk '$1 == "dep" || $1 == "=>" {print $2}'
+            done
+            CGO_ENABLED=0 go list -mod=vendor -overlay "$K3S_OVERLAY" -tags "$GO_BUILD_TAGS" -deps "$GO_PACKAGE"
+            CGO_ENABLED=0 go list -mod=readonly -deps "$SHIM_PACKAGE"
+          } | forbidden | sort -u)
+          [[ -z $hits ]] || { echo "regression: compiled-out modules/packages are linked again:"; echo "$hits"; exit 1; }
+          echo "tripwire: none of K3S_FORBIDDEN is linked ($K3S_FORBIDDEN)"
           # Pure-Go sqlite only, never mattn/go-sqlite3: the cgo driver must
           # not be in the shipped binary at all.
           if go version -m "../out/$ASSET" | grep -E 'CGO_ENABLED=1|mattn/go-sqlite3'; then
@@ -956,17 +986,20 @@ jobs:
           GOTOOLCHAIN=go1.27.2 go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@$GO_SBOM_VERSION"
           echo "audit tools built with: go1.27.2 (govulncheck $GOVULNCHECK_VERSION, cyclonedx-gomod $GO_SBOM_VERSION)"
           echo "analysis toolchain:     $(go version)"
-      - name: the build's cgo-free overlay, applied to the audited tree
+      - name: the build's vendor/ and overlay, applied to the audited tree
         working-directory: src
         run: |
           set -euo pipefail
           # govulncheck type-checks from disk and ignores `go build -overlay`,
-          # so the audit job (which ships nothing) writes the SAME two
-          # replacement files the build overlays into its own checkout.
-          ov=$RUNNER_TEMP/cgo-free
-          ../fork/bashy-build/cgo-free-overlay.sh . "$ov"
-          cp -v "$ov/builtins_linux.go" pkg/containerd/builtins_linux.go
-          cp -v "$ov/proctile.go" pkg/proctitle/proctile.go
+          # so the audit job (which ships nothing) generates the same vendor/
+          # and writes the SAME files the build overlays into its own checkout
+          # (an empty backing = the build deletes that file).
+          go mod vendor
+          ov=$RUNNER_TEMP/k3s-overlay
+          ../fork/bashy-build/k3s-overlay.sh . "$ov"
+          while IFS=$'\t' read -r target backing; do
+            if [[ -z $backing ]]; then rm -v "$target"; else cp -v "$backing" "$target"; fi
+          done <"$ov/apply.tsv"
       - name: govulncheck (source mode, the SHIPPED packages and tags)
         working-directory: src
         run: |
@@ -974,12 +1007,19 @@ jobs:
           . ../fork/bashy-build/PIN
           mkdir -p ../out
           report=../out/$TOOL-$UPSTREAM_TAG.govulncheck.json
-          # Both shipped packages, with the tags and CGO_ENABLED=0 k3s is built
-          # with. The shim is built with no tags, so this graph is a superset
-          # of the shim's: a finding reachable in the shim is reachable here.
-          echo "govulncheck scope: $GO_PACKAGE $SHIM_PACKAGE -tags $GO_AUDIT_TAGS"
-          CGO_ENABLED=0 govulncheck -format json -tags "$GO_AUDIT_TAGS" \
-            "$GO_PACKAGE" "$SHIM_PACKAGE" >"$report" || true
+          # Both shipped packages, CGO_ENABLED=0, each from where the build
+          # takes it: k3s from vendor/ with its tags, the shim (not a k3s
+          # import, so not vendored) from the module cache. The shim's run
+          # keeps the k3s tags, a superset of the none it is built with. Both
+          # JSON streams go to the one report; jq -s reads them together.
+          echo "govulncheck scope: $GO_PACKAGE (-mod=vendor) + $SHIM_PACKAGE (-mod=readonly), -tags $GO_AUDIT_TAGS"
+          {
+            CGO_ENABLED=0 GOFLAGS=-mod=vendor govulncheck -format json -tags "$GO_AUDIT_TAGS" "$GO_PACKAGE" || true
+            CGO_ENABLED=0 GOFLAGS=-mod=readonly govulncheck -format json -tags "$GO_AUDIT_TAGS" "$SHIM_PACKAGE" || true
+          } >"$report"
+          # Both runs must have analyzed something: a load error leaves no SBOM message.
+          [[ $(jq -s '[.[] | select(has("SBOM"))] | length' "$report") == 2 ]] ||
+            { echo "govulncheck did not analyze both packages"; exit 1; }
           [[ -s $report ]] || { echo "govulncheck produced no report"; exit 1; }
           # A finding whose first trace frame names a function is REACHABLE
           # from called code; module-only findings are informational.
@@ -1001,9 +1041,10 @@ jobs:
           . ../fork/bashy-build/PIN
           mkdir -p ../out
           sbom=../out/$TOOL-$UPSTREAM_TAG.cdx.json
-          # The k3s main package's module graph; the shim's module
+          # The k3s main package's module graph, from vendor/ as built (so the
+          # compiled-out modules are absent); the shim's module
           # (github.com/k3s-io/containerd/v2) is a component of it.
-          CGO_ENABLED=0 GOFLAGS="-tags=$GO_AUDIT_TAGS" \
+          CGO_ENABLED=0 GOFLAGS="-tags=$GO_AUDIT_TAGS -mod=vendor" \
             cyclonedx-gomod app -json -licenses -main "$GO_PACKAGE" -output "$sbom" .
           jq -e '.bomFormat == "CycloneDX" and (.components | length) > 0' "$sbom" >/dev/null
       - name: upload audit outputs

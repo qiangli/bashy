@@ -12,17 +12,20 @@
           GOTOOLCHAIN=go@@GO_AUDIT_TOOLCHAIN@@ go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@$GO_SBOM_VERSION"
           echo "audit tools built with: go@@GO_AUDIT_TOOLCHAIN@@ (govulncheck $GOVULNCHECK_VERSION, cyclonedx-gomod $GO_SBOM_VERSION)"
           echo "analysis toolchain:     $(go version)"
-      - name: the build's cgo-free overlay, applied to the audited tree
+      - name: the build's vendor/ and overlay, applied to the audited tree
         working-directory: src
         run: |
           set -euo pipefail
           # govulncheck type-checks from disk and ignores `go build -overlay`,
-          # so the audit job (which ships nothing) writes the SAME two
-          # replacement files the build overlays into its own checkout.
-          ov=$RUNNER_TEMP/cgo-free
-          ../fork/bashy-build/cgo-free-overlay.sh . "$ov"
-          cp -v "$ov/builtins_linux.go" pkg/containerd/builtins_linux.go
-          cp -v "$ov/proctile.go" pkg/proctitle/proctile.go
+          # so the audit job (which ships nothing) generates the same vendor/
+          # and writes the SAME files the build overlays into its own checkout
+          # (an empty backing = the build deletes that file).
+          go mod vendor
+          ov=$RUNNER_TEMP/k3s-overlay
+          ../fork/bashy-build/k3s-overlay.sh . "$ov"
+          while IFS=$'\t' read -r target backing; do
+            if [[ -z $backing ]]; then rm -v "$target"; else cp -v "$backing" "$target"; fi
+          done <"$ov/apply.tsv"
       - name: govulncheck (source mode, the SHIPPED packages and tags)
         working-directory: src
         run: |
@@ -30,12 +33,19 @@
           . ../fork/bashy-build/PIN
           mkdir -p ../out
           report=../out/$TOOL-$UPSTREAM_TAG.govulncheck.json
-          # Both shipped packages, with the tags and CGO_ENABLED=0 k3s is built
-          # with. The shim is built with no tags, so this graph is a superset
-          # of the shim's: a finding reachable in the shim is reachable here.
-          echo "govulncheck scope: $GO_PACKAGE $SHIM_PACKAGE -tags $GO_AUDIT_TAGS"
-          CGO_ENABLED=0 govulncheck -format json -tags "$GO_AUDIT_TAGS" \
-            "$GO_PACKAGE" "$SHIM_PACKAGE" >"$report" || true
+          # Both shipped packages, CGO_ENABLED=0, each from where the build
+          # takes it: k3s from vendor/ with its tags, the shim (not a k3s
+          # import, so not vendored) from the module cache. The shim's run
+          # keeps the k3s tags, a superset of the none it is built with. Both
+          # JSON streams go to the one report; jq -s reads them together.
+          echo "govulncheck scope: $GO_PACKAGE (-mod=vendor) + $SHIM_PACKAGE (-mod=readonly), -tags $GO_AUDIT_TAGS"
+          {
+            CGO_ENABLED=0 GOFLAGS=-mod=vendor govulncheck -format json -tags "$GO_AUDIT_TAGS" "$GO_PACKAGE" || true
+            CGO_ENABLED=0 GOFLAGS=-mod=readonly govulncheck -format json -tags "$GO_AUDIT_TAGS" "$SHIM_PACKAGE" || true
+          } >"$report"
+          # Both runs must have analyzed something: a load error leaves no SBOM message.
+          [[ $(jq -s '[.[] | select(has("SBOM"))] | length' "$report") == 2 ]] ||
+            { echo "govulncheck did not analyze both packages"; exit 1; }
           [[ -s $report ]] || { echo "govulncheck produced no report"; exit 1; }
           # A finding whose first trace frame names a function is REACHABLE
           # from called code; module-only findings are informational.
@@ -57,8 +67,9 @@
           . ../fork/bashy-build/PIN
           mkdir -p ../out
           sbom=../out/$TOOL-$UPSTREAM_TAG.cdx.json
-          # The k3s main package's module graph; the shim's module
+          # The k3s main package's module graph, from vendor/ as built (so the
+          # compiled-out modules are absent); the shim's module
           # (github.com/k3s-io/containerd/v2) is a component of it.
-          CGO_ENABLED=0 GOFLAGS="-tags=$GO_AUDIT_TAGS" \
+          CGO_ENABLED=0 GOFLAGS="-tags=$GO_AUDIT_TAGS -mod=vendor" \
             cyclonedx-gomod app -json -licenses -main "$GO_PACKAGE" -output "$sbom" .
           jq -e '.bomFormat == "CycloneDX" and (.components | length) > 0' "$sbom" >/dev/null
