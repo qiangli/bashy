@@ -4,7 +4,7 @@
 # shared skeleton builds/_shared/bashy-build.yml — edit those, not this file.
 # Installed on the `bashy-build` branch of github.com/qiangli/runc from
 # bashy's builds/runc/fork/. Triggered ONLY by pushing a tag
-# bashy-<upstream tag>-N (e.g. bashy-v1.4.2-1) at that branch.
+# bashy-<upstream tag>-N (e.g. bashy-v1.5.2-1) at that branch.
 # Upstream tags this release vX.Y.Z, so the trigger is
 # bashy-v* and the pin job holds the tag to exactly that shape.
 #
@@ -369,8 +369,8 @@ jobs:
           . fork/bashy-build/PIN
           for gate in $PRE_BUILD_GATES; do "fork/bashy-build/$gate" src; done
       # runc's own build: upstream `make static` at the pinned tag (cgo,
-      # static, BUILDTAGS + netgo osusergo), minus the seccomp tag, linked
-      # against musl instead of glibc.
+      # static, BUILDTAGS + netgo osusergo), minus the seccomp and libpathrs
+      # tags, linked against musl instead of glibc, from the tag's vendor/.
       - name: kernel UAPI headers for musl-gcc
         run: |
           set -euo pipefail
@@ -385,7 +385,7 @@ jobs:
           ln -s "/usr/include/$(gcc -dumpmachine)/asm" "$kh/asm"
           echo "KERNEL_HEADERS=$kh" >>"$GITHUB_ENV"
           musl-gcc --version | head -n1
-      - name: go build runc (static musl cgo, no seccomp, -trimpath, reproducible ldflags)
+      - name: go build runc (static musl cgo, no seccomp, vendor/, -trimpath, reproducible ldflags)
         working-directory: src
         env:
           ASSET: ${{ matrix.asset }}
@@ -399,31 +399,35 @@ jobs:
           done
           [[ $cgo == 1 ]] || { echo "PIN GO_CGO must be 1 for $ASSET (nsenter is C)"; exit 1; }
           [[ ,$GO_BUILD_TAGS, != *,seccomp,* ]] || { echo "GO_BUILD_TAGS may not carry seccomp (libseccomp is LGPL)"; exit 1; }
+          [[ ,$GO_BUILD_TAGS, != *,libpathrs,* ]] || { echo "GO_BUILD_TAGS may not carry libpathrs (a C library; pathrs-lite is pure Go)"; exit 1; }
+          # The kind's audit judges the tree under GO_BUILD_ENV; this build
+          # hard-codes the same cgo environment, so the two must agree.
+          [[ $GO_BUILD_ENV == CGO_ENABLED=1 ]] || { echo "PIN GO_BUILD_ENV must be CGO_ENABLED=1 (what this build and the audit use)"; exit 1; }
           [[ $(go env GOOS) == linux ]] || { echo "runc is built on linux runners only"; exit 1; }
           arch=$(go env GOARCH)
           [[ $ASSET == "runc-linux-$arch" ]] || { echo "MATRIX asset $ASSET does not match runner arch $arch"; exit 1; }
-          # The tag vendors its modules, but GO_SECURITY_OVERRIDES moved go.mod
-          # past vendor/modules.txt, so the build resolves modules from go.sum
-          # (-mod=mod) instead of the stale vendor tree. go.mod/go.sum are
-          # snapshotted here and must be byte-identical after the build.
-          sum=$(cat go.mod go.sum | sha256sum)
+          # Every module comes from the tag's vendor/ (-mod=vendor); nothing is
+          # fetched at build time.
           mkdir -p ../out
           # Static link against musl (MIT). glibc is LGPL, so a static glibc
           # link is not a permissive artifact.
           env CGO_ENABLED=1 CC=musl-gcc CGO_CFLAGS="-isystem $KERNEL_HEADERS" \
-            go build -mod=mod -trimpath -buildvcs=false -tags "$GO_BUILD_TAGS" \
+            go build -mod=vendor -trimpath -buildvcs=false -tags "$GO_BUILD_TAGS" \
             -ldflags "-s -w -buildid= $GO_LDFLAGS -linkmode external -extldflags '-static'" \
             -o "../out/$ASSET" "$GO_PACKAGE"
-          [[ $(cat go.mod go.sum | sha256sum) == "$sum" ]] || { echo "the build rewrote go.mod/go.sum"; exit 1; }
+          # The go.mod/go.sum/vendor the release builds from must be the pinned ones.
+          [[ -z $(git status --porcelain -- go.mod go.sum vendor) ]] || { echo "the build rewrote go.mod/go.sum/vendor"; exit 1; }
           # Static means no ELF interpreter: runc must run FROM scratch.
           if readelf -l "../out/$ASSET" | grep -q 'Requesting program interpreter'; then
             echo "../out/$ASSET is dynamically linked"; readelf -l "../out/$ASSET" | grep -A1 INTERP; exit 1
           fi
           # The binary's own build record: cgo on, no seccomp tag, and neither
-          # libseccomp-golang nor anything else seccomp-shaped linked.
+          # libseccomp-golang nor anything else seccomp-shaped linked, and no
+          # go-pathrs (the libpathrs binding).
           go version -m "../out/$ASSET" | tee "$RUNNER_TEMP/buildinfo"
           grep -qE '^[[:space:]]+build[[:space:]]+CGO_ENABLED=1$' "$RUNNER_TEMP/buildinfo" || { echo "not a cgo build"; exit 1; }
           if grep -qE 'seccomp' "$RUNNER_TEMP/buildinfo"; then echo "seccomp is linked or tagged"; exit 1; fi
+          if grep -qE 'libpathrs|go-pathrs' "$RUNNER_TEMP/buildinfo"; then echo "libpathrs is linked or tagged"; exit 1; fi
           # Smoke: the binary reports the pinned release and no libseccomp.
           "../out/$ASSET" "$GO_VERSION_ARG" | tee "$RUNNER_TEMP/version"
           grep -qx "runc version ${UPSTREAM_TAG#v}" "$RUNNER_TEMP/version" || { echo "runc does not report ${UPSTREAM_TAG#v}"; exit 1; }
@@ -463,11 +467,10 @@ jobs:
           path: src
       - name: verify HEAD == pinned commit
         run: fork/bashy-build/verify-pin.sh src "$GITHUB_REF_NAME"
-      # The kind's audit (builds/_shared/kinds/go/audit.yml) for runc's build
-      # shape: CGO_ENABLED=1 (nsenter) and -mod=mod, because
-      # GO_SECURITY_OVERRIDES moves go.mod past the tag's vendor/modules.txt.
-      # Same setup fragment as the build job, so the audited tree and
-      # toolchain are the shipped ones.
+      # The audit job judges the SAME tree the build job compiles, so it
+      # reuses the build job's setup verbatim rather than keeping a second
+      # copy: the pinned toolchain, the recorded toolchain override and the
+      # reviewed module overrides are ONE fragment, and cannot drift apart.
       - name: pinned Go toolchain (from the upstream go.mod)
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -708,9 +711,27 @@ jobs:
         run: |
           set -euo pipefail
           . fork/bashy-build/PIN
-          # See builds/README.md §The audit tools have their own toolchain.
+          # The audit TOOLS are built with GO_AUDIT_TOOLCHAIN (declared once,
+          # in builds/render.sh), which is INDEPENDENT of the toolchain that
+          # builds the artifact. govulncheck is a Go module with a `go` line of
+          # its own — v1.9.0 declares `go 1.26.0` — so `go install` under an
+          # older pinned toolchain fails outright, before any analysis happens:
+          # kopia v0.23.1 builds with go1.25.11, and that is exactly how
+          # qiangli/kopia run 38326642419 died. Tying the two together would
+          # hold every tool's audit hostage to its upstream's toolchain age.
+          #
+          # Keeping them independent gives the audit nothing it should not
+          # have: `go install pkg@version` resolves in module-agnostic mode and
+          # never reads src/go.mod, so GO_AUDIT_TOOLCHAIN cannot reach the
+          # module being judged.
           GOTOOLCHAIN=go1.27.2 go install "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION"
           GOTOOLCHAIN=go1.27.2 go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@$GO_SBOM_VERSION"
+          # The ANALYSIS still runs at the module's own effective toolchain:
+          # govulncheck shells out to `go`, and GOTOOLCHAIN in the environment
+          # (exported by the toolchain step above) pins that to the release the
+          # artifact is built with — so the stdlib govulncheck judges and the
+          # language version it type-checks are the artifact's, not the audit
+          # tool's.
           echo "audit tools built with: go1.27.2 (govulncheck $GOVULNCHECK_VERSION, cyclonedx-gomod $GO_SBOM_VERSION)"
           echo "analysis toolchain:     $(go version)"
       - name: govulncheck (source mode, the SHIPPED build configuration)
@@ -720,18 +741,36 @@ jobs:
           . ../fork/bashy-build/PIN
           mkdir -p ../out
           report=../out/$TOOL-$UPSTREAM_TAG.govulncheck.json
-          # The shipped package with its tags and cgo on: the cgo files
-          # (nsenter, userns) are part of the graph only under CGO_ENABLED=1.
-          # The runner's gcc type-checks them; nothing is linked here.
-          echo "govulncheck scope: $GO_PACKAGE -tags $GO_AUDIT_TAGS (CGO_ENABLED=1, -mod=mod)"
-          CGO_ENABLED=1 GOFLAGS=-mod=mod govulncheck -format json -tags "$GO_AUDIT_TAGS" \
-            "$GO_PACKAGE" >"$report" || true
+          # Scope: the package the release actually builds (GO_PACKAGE), with
+          # the tags it is built with (GO_AUDIT_TAGS) and the same GO_BUILD_ENV.
+          # "Reachable" then means reachable IN THE ARTIFACT, which is the only
+          # question a release gate can honestly answer.
+          #
+          # `./...` cannot answer it: it makes every package in the repository
+          # a root, including test helpers and the extension packages a reduced
+          # tag set deliberately keeps out of the binary. Build tags do not
+          # save it — zot's pkg/extensions/search/cve/trivy carries no build
+          # constraint at all, so `./...` calls trivy's unfixed GO-2026-4919
+          # reachable in a binary that links none of it, and the only ways out
+          # would be a waiver (never, for a reachable finding) or refusing to
+          # ship a tool that is not actually vulnerable.
+          tags=()
+          [[ -z ${GO_AUDIT_TAGS:-} ]] || tags=(-tags "$GO_AUDIT_TAGS")
+          envs=()
+          if [[ -n ${GO_BUILD_ENV:-} ]]; then read -r -a envs <<<"$GO_BUILD_ENV"; fi
+          echo "govulncheck scope: $GO_PACKAGE${GO_AUDIT_TAGS:+ -tags $GO_AUDIT_TAGS}"
+          # govulncheck exits 3 when it finds anything, so the status is
+          # deferred: the waiver gate below renders the verdict.
+          env ${envs[@]+"${envs[@]}"} govulncheck -format json \
+            ${tags[@]+"${tags[@]}"} "$GO_PACKAGE" >"$report" || true
           [[ -s $report ]] || { echo "govulncheck produced no report"; exit 1; }
           # A finding whose first trace frame names a function is REACHABLE
           # from called code; module-only findings are informational.
           jq -rs '[.[] | select(has("finding")) | .finding
                    | select(.trace[0].function != null) | .osv]
                   | unique | .[]' "$report" | sed '/^$/d' | sort -u >"$RUNNER_TEMP/found"
+          # bashy-build/vuln-ignore: one OSV id per line, each with a
+          # justification comment; empty means nothing is waived.
           grep -Ev '^[[:space:]]*(#|$)' ../fork/bashy-build/vuln-ignore |
             awk '{print $1}' | sort -u >"$RUNNER_TEMP/waived" || true
           if comm -23 "$RUNNER_TEMP/found" "$RUNNER_TEMP/waived" | grep -q .; then
@@ -747,13 +786,15 @@ jobs:
           . ../fork/bashy-build/PIN
           mkdir -p ../out
           sbom=../out/$TOOL-$UPSTREAM_TAG.cdx.json
-          CGO_ENABLED=1 GOFLAGS="-mod=mod -tags=$GO_AUDIT_TAGS" \
-            cyclonedx-gomod app -json -licenses -main "$GO_PACKAGE" -output "$sbom" .
+          # cyclonedx-gomod reads the build constraints from the environment,
+          # taking the build tags through GOFLAGS. Tags change Go's module
+          # selection, so without them the SBOM of a reduced build would list
+          # dependencies the shipped binary does not contain.
+          envs=()
+          if [[ -n ${GO_BUILD_ENV:-} ]]; then read -r -a envs <<<"$GO_BUILD_ENV"; fi
+          [[ -z ${GO_AUDIT_TAGS:-} ]] || envs+=("GOFLAGS=-tags=$GO_AUDIT_TAGS")
+          env ${envs[@]+"${envs[@]}"} cyclonedx-gomod app -json -licenses -main "$GO_PACKAGE" -output "$sbom" .
           jq -e '.bomFormat == "CycloneDX" and (.components | length) > 0' "$sbom" >/dev/null
-          # No seccomp binding may appear in the shipped module graph.
-          if jq -e '[.components[].name] | any(test("seccomp"))' "$sbom" >/dev/null; then
-            echo "the SBOM lists a seccomp component"; exit 1
-          fi
       - name: upload audit outputs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
