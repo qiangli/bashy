@@ -107,6 +107,13 @@ log=$work/strace.log inner=$work/inner.sh
 cat >"$inner" <<INNER
 set -uo pipefail
 ip link set lo up
+# k3s refuses to start without a default route (it derives the node IP from
+# it). Give the namespace one that leads nowhere: a dummy link with an
+# unanswerable gateway (else lo itself). Any dial through it is still
+# recorded by strace and judged.
+{ ip link add bashy0 type dummy && ip addr add 10.255.0.2/24 dev bashy0 &&
+	ip link set bashy0 up && ip route add default via 10.255.0.1 dev bashy0; } ||
+	ip route add default dev lo
 $(declare -f kubectl probe wait_ready)
 bin='$bin' kubeconfig='$kubeconfig' ready_max=$ready_max
 strace -f -qq -e trace=connect,sendto,sendmsg,sendmmsg -e signal=none -o '$log' \\

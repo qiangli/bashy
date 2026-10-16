@@ -55,6 +55,7 @@ cat >"$inner" <<INNER
 set -uo pipefail
 ip link set lo up
 rc=0
+mkdir -p '$work/state'
 r() { env -i \$(cat '$envfile') '$bin' --root '$work/state' "\$@"; }
 r --version >>'$work/runc.log' 2>&1 || { echo "--version failed" >&2; rc=1; }
 r features >>'$work/runc.log' 2>&1 || { echo "features failed" >&2; rc=1; }

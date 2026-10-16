@@ -16,8 +16,9 @@
           . ../fork/bashy-build/PIN
           # setup-go read go.mod's `go 1.20`, and go1.20 ignores GOTOOLCHAIN, so
           # the step above installs the effective release; prove it is in use.
-          [[ $(go env GOVERSION) == "$GOTOOLCHAIN" ]] ||
-            { echo "go is $(go env GOVERSION), the setup gate selected $GOTOOLCHAIN"; exit 1; }
+          # setup-go also exports GOTOOLCHAIN=local, so compare to the pin.
+          [[ $(go env GOVERSION) == "go@@GO_TOOLCHAIN_SECURITY_OVERRIDE@@" ]] ||
+            { echo "go is $(go env GOVERSION), the pin selected go@@GO_TOOLCHAIN_SECURITY_OVERRIDE@@"; exit 1; }
           cgo=
           for pair in $GO_CGO; do
             [[ ${pair%%=*} == "$ASSET" ]] || continue

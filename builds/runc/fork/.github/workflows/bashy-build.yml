@@ -1014,6 +1014,11 @@ jobs:
           . ../fork/bashy-build/PIN
           mkdir -p ../out
           sbom=../out/$TOOL-$UPSTREAM_TAG.cdx.json
+          # cyclonedx-gomod versions the main module from the checkout's tags,
+          # and fails ("git: unsupported object type") on any fetched tag
+          # go-git cannot resolve to a commit. Keep only the pinned tag in
+          # this scratch checkout; no source file is touched.
+          { git tag -l | grep -vxF "$UPSTREAM_TAG" || true; } | xargs -r git tag -d >/dev/null
           # cyclonedx-gomod reads the build constraints from the environment,
           # taking the build tags through GOFLAGS. Tags change Go's module
           # selection, so without them the SBOM of a reduced build would list

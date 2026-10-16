@@ -500,8 +500,9 @@ jobs:
           . ../fork/bashy-build/PIN
           # setup-go read go.mod's `go 1.20`, and go1.20 ignores GOTOOLCHAIN, so
           # the step above installs the effective release; prove it is in use.
-          [[ $(go env GOVERSION) == "$GOTOOLCHAIN" ]] ||
-            { echo "go is $(go env GOVERSION), the setup gate selected $GOTOOLCHAIN"; exit 1; }
+          # setup-go also exports GOTOOLCHAIN=local, so compare to the pin.
+          [[ $(go env GOVERSION) == "go1.26.9" ]] ||
+            { echo "go is $(go env GOVERSION), the pin selected go1.26.9"; exit 1; }
           cgo=
           for pair in $GO_CGO; do
             [[ ${pair%%=*} == "$ASSET" ]] || continue
@@ -928,8 +929,9 @@ jobs:
         run: |
           set -euo pipefail
           . fork/bashy-build/PIN
-          [[ $(go env GOVERSION) == "$GOTOOLCHAIN" ]] ||
-            { echo "go is $(go env GOVERSION), the setup gate selected $GOTOOLCHAIN"; exit 1; }
+          # setup-go also exports GOTOOLCHAIN=local, so compare to the pin.
+          [[ $(go env GOVERSION) == "go1.26.9" ]] ||
+            { echo "go is $(go env GOVERSION), the pin selected go1.26.9"; exit 1; }
           # See builds/README.md §The audit tools have their own toolchain.
           GOTOOLCHAIN=go1.27.2 go install "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION"
           GOTOOLCHAIN=go1.27.2 go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@$GO_SBOM_VERSION"
