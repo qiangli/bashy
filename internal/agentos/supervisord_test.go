@@ -236,7 +236,7 @@ func TestSupervisordRefusesTheRetiredDAGForm(t *testing.T) {
 			t.Errorf("supervisord %v: exit %d, want 2", args, code)
 		}
 	}
-	for _, args := range [][]string{nil, {"--pid1"}, {"--until-done"}, {"--socket", "/x/s.sock"}, {"--socket=/x/s.sock", "--poll", "1s"}} {
+	for _, args := range [][]string{nil, {"--pid1"}, {"--until-done"}, {"--only", "root"}, {"--socket", "/x/s.sock"}, {"--socket=/x/s.sock", "--poll", "1s"}} {
 		if retiredDAGForm(args) != nil {
 			t.Errorf("supervisord %v: the monitor's own flags were refused as the retired form", args)
 		}
@@ -496,6 +496,65 @@ func TestDagRootUnitPropagatesArgvAndInheritsOutput(t *testing.T) {
 	}
 	if !strings.Contains(ru.log.String(), "completed (exit 0)") {
 		t.Fatalf("log:\n%s", ru.log.String())
+	}
+}
+
+// The production catalog adds enabled built-in units even when a scratch
+// image supplies its own services path. Without selection, --until-done waits
+// for those long-running units after the one-shot root completes.
+func TestUntilDoneSelectedRootWithEmbeddedServices(t *testing.T) {
+	t.Setenv("BASHY_SERVICES_PATH", "")
+	cat := fleet.New(fleet.WithRoot(t.TempDir()), fleet.WithoutLocalStore(), fleet.WithoutCloudOverlay())
+	units, errs := cat.Services()
+	if len(errs) != 0 {
+		t.Fatalf("embedded services: %v", errs)
+	}
+	var background fleet.Service
+	for _, u := range units {
+		if u.Enabled {
+			background = u
+			break
+		}
+	}
+	if background.Name == "" {
+		t.Fatal("expected an enabled embedded service")
+	}
+	dag := dagFixture(t)
+	root := dagRootUnit(dag, "svc")
+	set := &unitSet{units: map[string]fleet.Service{root.Name: root, background.Name: background}}
+
+	withoutSelection := newMonitor()
+	withoutSelection.load = set.load
+	withoutSelection.untilDone = true
+	withoutSelection.reload()
+	withoutSelection.units[root.Name].latched = true
+	withoutSelection.units[background.Name].st.State = service.Active
+	if _, done := withoutSelection.finished(); done {
+		t.Fatal("unselected monitor exited while an enabled built-in unit remained active")
+	}
+
+	t.Setenv("BASHY_SUPERVISORD_TEST_CHILD", "exit:0")
+	prov := newProcessProvider(os.Args[0], "", nil)
+	var output lockedBuffer
+	prov.stdout, prov.stderr = &output, &output
+	m := newMonitor()
+	m.load = set.load
+	m.providers = service.Providers{fleet.ServiceProviderProcess: prov}
+	m.checkPorts = nil
+	m.only = map[string]bool{root.Name: true}
+	m.untilDone = true
+	var log lockedBuffer
+	m.log = &log
+	done := make(chan int, 1)
+	go func() { done <- m.run(make(chan os.Signal)) }()
+	select {
+	case code := <-done:
+		if code != 0 || !strings.Contains(log.String(), "root: active -> inactive (completed (exit 0))") {
+			t.Fatalf("selected root exit %d; log:\n%s", code, log.String())
+		}
+	case <-time.After(10 * time.Second):
+		m.cancel()
+		t.Fatalf("selected root did not finish; log:\n%s", log.String())
 	}
 }
 

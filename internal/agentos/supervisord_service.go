@@ -26,7 +26,7 @@ import (
 	"github.com/qiangli/yoke/pkg/service"
 )
 
-const supervisordMonitorUsage = `usage: bashy supervisord [--pid1] [--until-done] [--socket PATH] [--poll DUR]
+const supervisordMonitorUsage = `usage: bashy supervisord [--pid1] [--until-done] [--only NAME] [--socket PATH] [--poll DUR]
 
 The service monitor: keep every enabled unit in ` + "`bashy service list`" + ` in its
 desired state, in the foreground. Each process unit runs as a foreground child
@@ -49,6 +49,7 @@ flags:
                   Linux child subreaper; refused where neither is possible)
   --until-done    exit once no enabled unit wants to run any more (every one
                   completed or failed): 0 if none failed, else 1
+  --only NAME     monitor just this unit (use with --until-done for one-shot jobs)
   --socket PATH   control socket (default BASHY_HOME/service/supervisord.sock)
   --poll DUR      re-read the registry this often as well (default %v)
 
@@ -62,6 +63,7 @@ func dispatchSupervisordMonitor(args []string) int {
 	fs.SetOutput(io.Discard)
 	pid1 := fs.Bool("pid1", false, "")
 	untilDone := fs.Bool("until-done", false, "")
+	only := fs.String("only", "", "")
 	sock := fs.String("socket", supervisordSocket(), "")
 	poll := fs.Duration("poll", supervisordPoll, "")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
@@ -89,6 +91,9 @@ func dispatchSupervisordMonitor(args []string) int {
 	m := newServiceMonitor(r, serviceHome(), os.Stderr)
 	m.pollEvery = *poll
 	m.untilDone = *untilDone
+	if *only != "" {
+		m.only = map[string]bool{*only: true}
+	}
 	stop, err := m.serveControl(*sock)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy supervisord:", err)

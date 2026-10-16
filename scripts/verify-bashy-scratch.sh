@@ -2,7 +2,7 @@
 # Build and verify the one lean linux/amd64 Bashy artifact consumed by Cloudbox.
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+root=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 artifact=${BASHY_SCRATCH_ARTIFACT:-bin/scratch/bashy-linux-amd64}
 case "$artifact" in
 	/*) ;;
@@ -68,16 +68,25 @@ smoke_tmp=
 smoke_image=
 smoke_volume=
 smoke_runtime=
+timeout_cmd=
+if command -v timeout >/dev/null 2>&1; then
+	timeout_cmd=timeout
+elif command -v gtimeout >/dev/null 2>&1; then
+	timeout_cmd=gtimeout
+fi
+runtime_command() {
+	"$timeout_cmd" --kill-after=5s 90s "$smoke_runtime" "$@"
+}
 cleanup() {
 	rm -f "$deps_tmp"
 	if [ -n "$smoke_tmp" ] && [ -d "$smoke_tmp" ]; then
 		rm -rf "$smoke_tmp"
 	fi
 	if [ -n "$smoke_runtime" ] && [ -n "$smoke_volume" ]; then
-		"$smoke_runtime" volume rm -f "$smoke_volume" >/dev/null 2>&1 || true
+		runtime_command volume rm -f "$smoke_volume" >/dev/null 2>&1 || true
 	fi
 	if [ -n "$smoke_runtime" ] && [ -n "$smoke_image" ]; then
-		"$smoke_runtime" image rm -f "$smoke_image" >/dev/null 2>&1 || true
+		runtime_command image rm -f "$smoke_image" >/dev/null 2>&1 || true
 	fi
 }
 trap cleanup EXIT HUP INT TERM
@@ -113,16 +122,20 @@ fi
 # An installed but stopped daemon is not an available runtime; deterministic
 # structural checks above still provide a useful gate on cross-build hosts.
 if [ -n "${BASHY_SCRATCH_RUNTIME:-}" ]; then
+	[ -n "$timeout_cmd" ] || fail "a timeout command is required for container smoke"
 	command -v "$BASHY_SCRATCH_RUNTIME" >/dev/null 2>&1 || fail "requested runtime not found: $BASHY_SCRATCH_RUNTIME"
-	if ! "$BASHY_SCRATCH_RUNTIME" info >/dev/null 2>&1; then
+	smoke_runtime=$BASHY_SCRATCH_RUNTIME
+	if ! runtime_command info >/dev/null 2>&1; then
 		fail "requested runtime is not usable: $BASHY_SCRATCH_RUNTIME"
 	fi
-	smoke_runtime=$BASHY_SCRATCH_RUNTIME
 else
 	for candidate in podman docker nerdctl; do
-		if command -v "$candidate" >/dev/null 2>&1 && "$candidate" info >/dev/null 2>&1; then
+		if [ -n "$timeout_cmd" ] && command -v "$candidate" >/dev/null 2>&1; then
 			smoke_runtime=$candidate
-			break
+			if runtime_command info >/dev/null 2>&1; then
+				break
+			fi
+			smoke_runtime=
 		fi
 	done
 fi
@@ -153,25 +166,26 @@ printf '%s\n' 'FROM scratch' 'COPY bashy /bashy' \
 	'ENV BASHY_SERVICES_PATH=/etc/bashy/services BASHY_HOME=/run/bashy' \
 	'ENTRYPOINT ["/bashy", "supervisord", "--pid1"]' >"$smoke_tmp/Containerfile"
 smoke_image="localhost/bashy-scratch-smoke:$$"
-"$smoke_runtime" build --platform linux/amd64 --network none \
-	-f "$smoke_tmp/Containerfile" -t "$smoke_image" "$smoke_tmp" >/dev/null ||
-	fail "$smoke_runtime could not build the FROM scratch smoke image"
-"$smoke_runtime" run --rm --platform linux/amd64 --entrypoint /bashy "$smoke_image" --version >/dev/null ||
+runtime_command build --platform linux/amd64 --network none \
+	-f "$smoke_tmp/Containerfile" -t "$smoke_image" "$smoke_tmp" >"$smoke_tmp/build.out" 2>&1 ||
+	fail "$smoke_runtime could not build the FROM scratch smoke image: $(cat "$smoke_tmp/build.out")"
+runtime_command run --rm --platform linux/amd64 --entrypoint /bashy "$smoke_image" --version >/dev/null ||
 	fail "bashy --version failed in the FROM scratch image"
-"$smoke_runtime" run --rm --platform linux/amd64 --entrypoint /bashy "$smoke_image" supervisord --help >/dev/null ||
+runtime_command run --rm --platform linux/amd64 --entrypoint /bashy "$smoke_image" supervisord --help >/dev/null ||
 	fail "bashy supervisord --help failed in the FROM scratch image"
 
-# The new entrypoint: bashy supervisord --pid1 (--until-done is the CMD, so the
-# one-shot root's completion ends the container) runs the root unit as PID 1.
+# The entrypoint runs the selected root as PID 1. The embedded catalog also
+# contains enabled long-running services, so --only root makes completion of
+# this one-shot unit end the container.
 # A unit's output goes to its service log under BASHY_HOME, so BASHY_HOME is a
 # named volume and a second container reads the log back with `service logs`.
 smoke_volume="bashy-scratch-smoke-$$"
-"$smoke_runtime" run --rm --platform linux/amd64 -v "$smoke_volume:/run/bashy" --tmpfs /tmp \
-	"$smoke_image" --until-done >"$smoke_tmp/run.out" 2>&1 ||
+runtime_command run --rm --platform linux/amd64 -v "$smoke_volume:/run/bashy" --tmpfs /tmp \
+	"$smoke_image" --until-done --only root >"$smoke_tmp/run.out" 2>&1 ||
 	fail "bashy supervisord --pid1 did not run the root unit to completion in the FROM scratch image: $(cat "$smoke_tmp/run.out")"
 grep -q 'root: active -> inactive (completed (exit 0))' "$smoke_tmp/run.out" ||
 	fail "the monitor did not report the root unit completed: $(cat "$smoke_tmp/run.out")"
-unit_log=$("$smoke_runtime" run --rm --platform linux/amd64 -v "$smoke_volume:/run/bashy" \
+unit_log=$(runtime_command run --rm --platform linux/amd64 -v "$smoke_volume:/run/bashy" \
 	--entrypoint /bashy "$smoke_image" service logs root 2>&1) ||
 	fail "bashy service logs root failed in the FROM scratch image: $unit_log"
 printf '%s\n' "$unit_log" | grep -q 'scratch-root-ran' ||
@@ -180,7 +194,7 @@ echo "verify-bashy-scratch: PASS supervisord --pid1 ran the root unit in the FRO
 
 # The old DAG.md TARGET form is refused (exit 2) with a pointer to the unit form.
 set +e
-refused=$("$smoke_runtime" run --rm --platform linux/amd64 --entrypoint /bashy "$smoke_image" \
+refused=$(runtime_command run --rm --platform linux/amd64 --entrypoint /bashy "$smoke_image" \
 	supervisord /srv/DAG.md root 2>&1)
 refused_status=$?
 set -e

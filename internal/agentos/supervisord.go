@@ -68,7 +68,7 @@ func retiredDAGForm(args []string) *retiredDAG {
 	r := &retiredDAG{flags: map[string]string{}}
 	var operands []string
 	found := false
-	monitorValued := map[string]bool{"socket": true, "poll": true}
+	monitorValued := map[string]bool{"socket": true, "poll": true, "only": true}
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if a == "--" {

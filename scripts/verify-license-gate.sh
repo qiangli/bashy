@@ -30,7 +30,7 @@ for arg in "$@"; do
 done
 
 if (( report_only )); then
-  args=("-report-only" "${args[@]}")
+  args=("-report-only" ${args[@]+"${args[@]}"})
 fi
 
 out="${LICENSE_GATE_OUT:-}"
@@ -38,10 +38,10 @@ if [[ -n "$out" ]]; then
   mkdir -p "$out"
   # Save JSON report if not already requested as JSON
   if (( ! has_json )); then
-    go run ./tools/licensegate -json "${args[@]}" > "$out/licensegate.json" 2>/dev/null || true
+    go run ./tools/licensegate -json ${args[@]+"${args[@]}"} > "$out/licensegate.json" 2>/dev/null || true
   fi
   # Run gate, save findings, and stream to stdout
-  go run ./tools/licensegate "${args[@]}" | tee "$out/findings.txt"
+  go run ./tools/licensegate ${args[@]+"${args[@]}"} | tee "$out/findings.txt"
 else
-  exec go run ./tools/licensegate "${args[@]}"
+  exec go run ./tools/licensegate ${args[@]+"${args[@]}"}
 fi
