@@ -92,7 +92,11 @@ chmod +x "$work/run.sh"
 # address (the server's own tunnel reconnects to wss://$nsaddr:$port once it
 # is up and drops 127.0.0.1), so the kubeconfig's loopback server URL is not
 # the one to probe.
-kubectl() { "$bin" kubectl --kubeconfig="$kubeconfig" --server="https://$nsaddr:$port" --request-timeout=5s "$@"; }
+# k3s dispatches its embedded kubectl by argv0 basename (reexec), so call it
+# through a symlink named kubectl; `$bin kubectl` would hand the extra word to
+# kubectl's own root command ("unknown command kubectl").
+ln -sf "$bin" "$work/kubectl"
+kubectl() { "$work/kubectl" --kubeconfig="$kubeconfig" --server="https://$nsaddr:$port" --request-timeout=5s "$@"; }
 
 probe() {
 	# Loopback traffic over the API: discovery, a list, a write and a read.
