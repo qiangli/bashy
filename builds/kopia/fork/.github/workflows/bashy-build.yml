@@ -231,7 +231,20 @@ jobs:
           # not an option, so the declaration may name the exact modules to
           # raise and nothing else:
           #
-          #   GO_SECURITY_OVERRIDES="golang.org/x/net@v0.60.0 ..."
+          #   GO_SECURITY_OVERRIDES="golang.org/x/text@v0.42.0 replace:golang.org/x/net@v0.60.0 ..."
+          #
+          # A plain module@vVERSION entry is applied with `go get` and may move
+          # only that module's require line. A replace:module@vVERSION entry is
+          # for a module the upstream go.mod already pins with a SAME-PATH
+          # replace (golang.org/x/net => golang.org/x/net v0.57.0): there `go
+          # get` alone moves an inert require line, because the replace wins.
+          # Such an entry raises the replace's version (`go mod edit -replace`),
+          # then `go get`s the module so the require line agrees. The replace
+          # gate below allows exactly that edit: same target path, a release
+          # version (no pre-release, no pseudo-version), in the same major,
+          # strictly higher, equal to the declared one. Refused: a changed
+          # target path, an added or removed replace line, a lowered version,
+          # a crossed major, a local-path replace, an undeclared replace move.
           #
           # Empty or absent is a no-op, which is what every tool that needs no
           # override gets. It is shipped in PIN (and so in the <tool>-pin.txt
@@ -244,7 +257,8 @@ jobs:
           # modules, plus the go/toolchain directives within the bounds the
           # effective toolchain already sets (see the directive gate below).
           # Any other go.mod edit fails the build — a new or removed require,
-          # a replace/exclude/retract edit, or an undeclared module moved as a
+          # an exclude/retract edit, a replace edit the replace gate does not
+          # sanction, or an undeclared module moved as a
           # transitive effect (if one is genuinely needed, declare it too, so
           # it is reviewed). go.sum is deliberately NOT gated: `go get` has to
           # add the new hashes. There is no `go mod tidy` — tidy rewrites the
@@ -275,13 +289,35 @@ jobs:
           }
           gated src/go.mod >"$RUNNER_TEMP/gomod.before"
           : >"$RUNNER_TEMP/gomod.allowed"
+          : >"$RUNNER_TEMP/gomod.replace"
+          # Replace edits first, so every `go get` below resolves the graph
+          # the raised replacements produce.
           for spec in $GO_SECURITY_OVERRIDES; do
-            [[ $spec == *@v* ]] || { echo "GO_SECURITY_OVERRIDES entry $spec is not module@vVERSION"; exit 1; }
+            [[ ${spec#replace:} == *@v* ]] || { echo "GO_SECURITY_OVERRIDES entry $spec is not [replace:]module@vVERSION"; exit 1; }
+            [[ $spec == replace:* ]] || continue
+            spec=${spec#replace:}
+            mod=${spec%@*}
+            printf '%s\t%s\n' "$mod" "${spec##*@}" >>"$RUNNER_TEMP/gomod.replace"
+            # The replace's left side as go.mod writes it (path, or path@version).
+            old=$(awk -F'\t' -v m="$mod" '$1 == "replace" && $2 == m {print $2 ($3 == "" ? "" : "@" $3)}' "$RUNNER_TEMP/gomod.before")
+            [[ -n $old ]] || { echo "GO_SECURITY_OVERRIDES: replace:$spec, but go.mod has no replace for $mod"; exit 1; }
+            [[ $old != *$'\n'* ]] || { echo "GO_SECURITY_OVERRIDES: replace:$spec is ambiguous, go.mod replaces $mod more than once"; exit 1; }
+            echo "security override: go mod edit -replace $old=$spec"
+            (cd src && go mod edit -replace "$old=$spec")
+          done
+          mods=()
+          for spec in $GO_SECURITY_OVERRIDES; do
+            spec=${spec#replace:}
+            mods+=("${spec%@*}")
             echo "${spec%@*}" >>"$RUNNER_TEMP/gomod.allowed"
             echo "security override: go get $spec"
             (cd src && go get "$spec")
           done
           sort -u -o "$RUNNER_TEMP/gomod.allowed" "$RUNNER_TEMP/gomod.allowed"
+          # Full go.sum hashes for every overridden module, not only the
+          # go.mod hashes `go get` may stop at, so `go mod vendor` and
+          # -mod=readonly builds find them. go.sum is not gated (above).
+          (cd src && go mod download "${mods[@]}")
           gated src/go.mod >"$RUNNER_TEMP/gomod.after"
           # --- the go/toolchain directive gate (BEGIN) -------------------------
           # kinds/go/toolchain-gate-test.sh extracts everything between this
@@ -338,6 +374,83 @@ jobs:
             fi
           fi
           # --- the go/toolchain directive gate (END) ---------------------------
+          # --- the replace gate (BEGIN) ----------------------------------------
+          # kinds/go/toolchain-gate-test.sh drives this block as well. Every
+          # replace line that differs must be a declared replace: entry raising
+          # a SAME-PATH replace to a release in the same major. Any other replace
+          # change clears replaces_ok, which refuses the whole go.mod diff.
+          semver() { # VERSION -> "MAJOR MINOR PATCH PRERELEASE INCOMPATIBLE", or fail
+            [[ $1 =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z.-]+)?(\+incompatible)?$ ]] || return 1
+            echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[3]} ${BASH_REMATCH[4]:--} ${BASH_REMATCH[5]:--}"
+          }
+          # replace_raise OLD NEW: NEW is a release, same major, strictly higher.
+          replace_raise() {
+            local o n v
+            v=$(semver "$1") || { echo "unparseable version $1"; return 1; }
+            read -ra o <<<"$v"
+            v=$(semver "$2") || { echo "unparseable version $2"; return 1; }
+            read -ra n <<<"$v"
+            [[ ${n[3]} == - ]] || { echo "$2 is a pre-release or pseudo-version, not a fixed release"; return 1; }
+            [[ ${n[0]} == "${o[0]}" && ${n[4]} == "${o[4]}" ]] || { echo "$1 -> $2 crosses a major version"; return 1; }
+            local i
+            for i in 1 2; do
+              ((n[i] == o[i])) && continue
+              ((n[i] > o[i])) && return 0
+              echo "$1 -> $2 lowers the version"; return 1
+            done
+            # Same MAJOR.MINOR.PATCH: higher only when the old one was a pre-release.
+            [[ ${o[3]} != - ]] || { echo "$1 -> $2 does not raise the version"; return 1; }
+          }
+          replaces_ok=1
+          # OLDPATH|OLDVERSION|NEWPATH|NEWVERSION: `|` because tab is IFS
+          # whitespace to `read`, which would collapse an empty version field.
+          replace_lines() { awk -F'\t' '$1 == "replace" {print $2 "|" $3 "|" $4 "|" $5}' "$1" | LC_ALL=C sort; }
+          replace_lines "$RUNNER_TEMP/gomod.before" >"$RUNNER_TEMP/replace.before"
+          replace_lines "$RUNNER_TEMP/gomod.after" >"$RUNNER_TEMP/replace.after"
+          # Keyed by the left side (path + optional version): a key present on
+          # one side only is an added or removed replace line.
+          while IFS='|' read -r side kpath kver; do
+            echo "refused replace change: $side $kpath${kver:+@$kver}"
+            replaces_ok=0
+          done < <(LC_ALL=C comm -3 <(cut -d'|' -f1,2 "$RUNNER_TEMP/replace.before" | LC_ALL=C sort -u) \
+                                    <(cut -d'|' -f1,2 "$RUNNER_TEMP/replace.after" | LC_ALL=C sort -u) |
+                   awk -F'\t' '{if ($1 != "") print "removed|" $1; else print "added|" $2}')
+          while IFS='|' read -r opath over bpath bver; do
+            [[ -n $opath ]] || continue
+            apath='' aver=''
+            IFS='|' read -r apath aver < <(awk -F'|' -v p="$opath" -v v="$over" '$1 == p && $2 == v {print $3 "|" $4}' "$RUNNER_TEMP/replace.after") || true
+            [[ -n ${apath:-} ]] || continue # removed: reported above
+            [[ $apath == "$bpath" && ${aver:-} == "$bver" ]] && continue
+            what="$opath => $bpath ${bver:-(local)} -> $apath ${aver:-(local)}"
+            want=$(awk -F'\t' -v m="$opath" '$1 == m {print $2}' "$RUNNER_TEMP/gomod.replace")
+            why=
+            if [[ -z $want ]]; then
+              why="not declared as replace:$opath@..."
+            elif [[ $bpath != "$opath" || $apath != "$opath" ]]; then
+              why="only a same-path replace may be raised, and its target path may not change"
+            elif [[ -z $bver || -z ${aver:-} ]]; then
+              why="a local-path replace is never raised"
+            elif [[ $aver != "$want" ]]; then
+              why="the declared version is $want"
+            else
+              why=$(replace_raise "$bver" "$aver") && why=
+            fi
+            if [[ -n $why ]]; then
+              echo "refused replace change: $what ($why)"
+              replaces_ok=0
+            else
+              echo "replace raised: $what"
+            fi
+          done <"$RUNNER_TEMP/replace.before"
+          # Every declared replace: entry names a replace the upstream go.mod has.
+          while IFS=$'\t' read -r mod ver; do
+            [[ -n $mod ]] || continue
+            if ! awk -F'|' -v m="$mod" '$1 == m {f = 1} END {exit !f}' "$RUNNER_TEMP/replace.before"; then
+              echo "refused replace:$mod@$ver: go.mod has no replace for $mod"
+              replaces_ok=0
+            fi
+          done <"$RUNNER_TEMP/gomod.replace"
+          # --- the replace gate (END) ------------------------------------------
           # `diff` exits 1 when the files differ, which is the expected case
           # here, so its status is absorbed rather than tripping pipefail.
           { diff "$RUNNER_TEMP/gomod.before" "$RUNNER_TEMP/gomod.after" || true; } |
@@ -358,14 +471,15 @@ jobs:
             case $field in
             require) if grep -qxF "$path" "$RUNNER_TEMP/gomod.allowed"; then skip=1; fi ;;
             go | toolchain) skip=$directives_ok ;;
+            replace) skip=$replaces_ok ;;
             esac
             if ((skip)); then continue; fi
             echo "  refused go.mod change: $field ${path:-(empty)}"
             refused=1
           done < <(sed 's/^[<>] //' "$RUNNER_TEMP/gomod.diff")
           ((refused == 0)) ||
-            { echo "GO_SECURITY_OVERRIDES: go.mod changed outside the require lines of $GO_SECURITY_OVERRIDES"; exit 1; }
-          echo "GO_SECURITY_OVERRIDES: applied; go.mod changed only in the declared require lines:"
+            { echo "GO_SECURITY_OVERRIDES: go.mod changed outside the declared lines of $GO_SECURITY_OVERRIDES"; exit 1; }
+          echo "GO_SECURITY_OVERRIDES: applied; go.mod changed only in the declared require/replace lines:"
           sed 's/^/  /' "$RUNNER_TEMP/gomod.diff"
       - name: pre-build gates (PRE_BUILD_GATES)
         run: |
@@ -553,7 +667,20 @@ jobs:
           # not an option, so the declaration may name the exact modules to
           # raise and nothing else:
           #
-          #   GO_SECURITY_OVERRIDES="golang.org/x/net@v0.60.0 ..."
+          #   GO_SECURITY_OVERRIDES="golang.org/x/text@v0.42.0 replace:golang.org/x/net@v0.60.0 ..."
+          #
+          # A plain module@vVERSION entry is applied with `go get` and may move
+          # only that module's require line. A replace:module@vVERSION entry is
+          # for a module the upstream go.mod already pins with a SAME-PATH
+          # replace (golang.org/x/net => golang.org/x/net v0.57.0): there `go
+          # get` alone moves an inert require line, because the replace wins.
+          # Such an entry raises the replace's version (`go mod edit -replace`),
+          # then `go get`s the module so the require line agrees. The replace
+          # gate below allows exactly that edit: same target path, a release
+          # version (no pre-release, no pseudo-version), in the same major,
+          # strictly higher, equal to the declared one. Refused: a changed
+          # target path, an added or removed replace line, a lowered version,
+          # a crossed major, a local-path replace, an undeclared replace move.
           #
           # Empty or absent is a no-op, which is what every tool that needs no
           # override gets. It is shipped in PIN (and so in the <tool>-pin.txt
@@ -566,7 +693,8 @@ jobs:
           # modules, plus the go/toolchain directives within the bounds the
           # effective toolchain already sets (see the directive gate below).
           # Any other go.mod edit fails the build — a new or removed require,
-          # a replace/exclude/retract edit, or an undeclared module moved as a
+          # an exclude/retract edit, a replace edit the replace gate does not
+          # sanction, or an undeclared module moved as a
           # transitive effect (if one is genuinely needed, declare it too, so
           # it is reviewed). go.sum is deliberately NOT gated: `go get` has to
           # add the new hashes. There is no `go mod tidy` — tidy rewrites the
@@ -597,13 +725,35 @@ jobs:
           }
           gated src/go.mod >"$RUNNER_TEMP/gomod.before"
           : >"$RUNNER_TEMP/gomod.allowed"
+          : >"$RUNNER_TEMP/gomod.replace"
+          # Replace edits first, so every `go get` below resolves the graph
+          # the raised replacements produce.
           for spec in $GO_SECURITY_OVERRIDES; do
-            [[ $spec == *@v* ]] || { echo "GO_SECURITY_OVERRIDES entry $spec is not module@vVERSION"; exit 1; }
+            [[ ${spec#replace:} == *@v* ]] || { echo "GO_SECURITY_OVERRIDES entry $spec is not [replace:]module@vVERSION"; exit 1; }
+            [[ $spec == replace:* ]] || continue
+            spec=${spec#replace:}
+            mod=${spec%@*}
+            printf '%s\t%s\n' "$mod" "${spec##*@}" >>"$RUNNER_TEMP/gomod.replace"
+            # The replace's left side as go.mod writes it (path, or path@version).
+            old=$(awk -F'\t' -v m="$mod" '$1 == "replace" && $2 == m {print $2 ($3 == "" ? "" : "@" $3)}' "$RUNNER_TEMP/gomod.before")
+            [[ -n $old ]] || { echo "GO_SECURITY_OVERRIDES: replace:$spec, but go.mod has no replace for $mod"; exit 1; }
+            [[ $old != *$'\n'* ]] || { echo "GO_SECURITY_OVERRIDES: replace:$spec is ambiguous, go.mod replaces $mod more than once"; exit 1; }
+            echo "security override: go mod edit -replace $old=$spec"
+            (cd src && go mod edit -replace "$old=$spec")
+          done
+          mods=()
+          for spec in $GO_SECURITY_OVERRIDES; do
+            spec=${spec#replace:}
+            mods+=("${spec%@*}")
             echo "${spec%@*}" >>"$RUNNER_TEMP/gomod.allowed"
             echo "security override: go get $spec"
             (cd src && go get "$spec")
           done
           sort -u -o "$RUNNER_TEMP/gomod.allowed" "$RUNNER_TEMP/gomod.allowed"
+          # Full go.sum hashes for every overridden module, not only the
+          # go.mod hashes `go get` may stop at, so `go mod vendor` and
+          # -mod=readonly builds find them. go.sum is not gated (above).
+          (cd src && go mod download "${mods[@]}")
           gated src/go.mod >"$RUNNER_TEMP/gomod.after"
           # --- the go/toolchain directive gate (BEGIN) -------------------------
           # kinds/go/toolchain-gate-test.sh extracts everything between this
@@ -660,6 +810,83 @@ jobs:
             fi
           fi
           # --- the go/toolchain directive gate (END) ---------------------------
+          # --- the replace gate (BEGIN) ----------------------------------------
+          # kinds/go/toolchain-gate-test.sh drives this block as well. Every
+          # replace line that differs must be a declared replace: entry raising
+          # a SAME-PATH replace to a release in the same major. Any other replace
+          # change clears replaces_ok, which refuses the whole go.mod diff.
+          semver() { # VERSION -> "MAJOR MINOR PATCH PRERELEASE INCOMPATIBLE", or fail
+            [[ $1 =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z.-]+)?(\+incompatible)?$ ]] || return 1
+            echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[3]} ${BASH_REMATCH[4]:--} ${BASH_REMATCH[5]:--}"
+          }
+          # replace_raise OLD NEW: NEW is a release, same major, strictly higher.
+          replace_raise() {
+            local o n v
+            v=$(semver "$1") || { echo "unparseable version $1"; return 1; }
+            read -ra o <<<"$v"
+            v=$(semver "$2") || { echo "unparseable version $2"; return 1; }
+            read -ra n <<<"$v"
+            [[ ${n[3]} == - ]] || { echo "$2 is a pre-release or pseudo-version, not a fixed release"; return 1; }
+            [[ ${n[0]} == "${o[0]}" && ${n[4]} == "${o[4]}" ]] || { echo "$1 -> $2 crosses a major version"; return 1; }
+            local i
+            for i in 1 2; do
+              ((n[i] == o[i])) && continue
+              ((n[i] > o[i])) && return 0
+              echo "$1 -> $2 lowers the version"; return 1
+            done
+            # Same MAJOR.MINOR.PATCH: higher only when the old one was a pre-release.
+            [[ ${o[3]} != - ]] || { echo "$1 -> $2 does not raise the version"; return 1; }
+          }
+          replaces_ok=1
+          # OLDPATH|OLDVERSION|NEWPATH|NEWVERSION: `|` because tab is IFS
+          # whitespace to `read`, which would collapse an empty version field.
+          replace_lines() { awk -F'\t' '$1 == "replace" {print $2 "|" $3 "|" $4 "|" $5}' "$1" | LC_ALL=C sort; }
+          replace_lines "$RUNNER_TEMP/gomod.before" >"$RUNNER_TEMP/replace.before"
+          replace_lines "$RUNNER_TEMP/gomod.after" >"$RUNNER_TEMP/replace.after"
+          # Keyed by the left side (path + optional version): a key present on
+          # one side only is an added or removed replace line.
+          while IFS='|' read -r side kpath kver; do
+            echo "refused replace change: $side $kpath${kver:+@$kver}"
+            replaces_ok=0
+          done < <(LC_ALL=C comm -3 <(cut -d'|' -f1,2 "$RUNNER_TEMP/replace.before" | LC_ALL=C sort -u) \
+                                    <(cut -d'|' -f1,2 "$RUNNER_TEMP/replace.after" | LC_ALL=C sort -u) |
+                   awk -F'\t' '{if ($1 != "") print "removed|" $1; else print "added|" $2}')
+          while IFS='|' read -r opath over bpath bver; do
+            [[ -n $opath ]] || continue
+            apath='' aver=''
+            IFS='|' read -r apath aver < <(awk -F'|' -v p="$opath" -v v="$over" '$1 == p && $2 == v {print $3 "|" $4}' "$RUNNER_TEMP/replace.after") || true
+            [[ -n ${apath:-} ]] || continue # removed: reported above
+            [[ $apath == "$bpath" && ${aver:-} == "$bver" ]] && continue
+            what="$opath => $bpath ${bver:-(local)} -> $apath ${aver:-(local)}"
+            want=$(awk -F'\t' -v m="$opath" '$1 == m {print $2}' "$RUNNER_TEMP/gomod.replace")
+            why=
+            if [[ -z $want ]]; then
+              why="not declared as replace:$opath@..."
+            elif [[ $bpath != "$opath" || $apath != "$opath" ]]; then
+              why="only a same-path replace may be raised, and its target path may not change"
+            elif [[ -z $bver || -z ${aver:-} ]]; then
+              why="a local-path replace is never raised"
+            elif [[ $aver != "$want" ]]; then
+              why="the declared version is $want"
+            else
+              why=$(replace_raise "$bver" "$aver") && why=
+            fi
+            if [[ -n $why ]]; then
+              echo "refused replace change: $what ($why)"
+              replaces_ok=0
+            else
+              echo "replace raised: $what"
+            fi
+          done <"$RUNNER_TEMP/replace.before"
+          # Every declared replace: entry names a replace the upstream go.mod has.
+          while IFS=$'\t' read -r mod ver; do
+            [[ -n $mod ]] || continue
+            if ! awk -F'|' -v m="$mod" '$1 == m {f = 1} END {exit !f}' "$RUNNER_TEMP/replace.before"; then
+              echo "refused replace:$mod@$ver: go.mod has no replace for $mod"
+              replaces_ok=0
+            fi
+          done <"$RUNNER_TEMP/gomod.replace"
+          # --- the replace gate (END) ------------------------------------------
           # `diff` exits 1 when the files differ, which is the expected case
           # here, so its status is absorbed rather than tripping pipefail.
           { diff "$RUNNER_TEMP/gomod.before" "$RUNNER_TEMP/gomod.after" || true; } |
@@ -680,14 +907,15 @@ jobs:
             case $field in
             require) if grep -qxF "$path" "$RUNNER_TEMP/gomod.allowed"; then skip=1; fi ;;
             go | toolchain) skip=$directives_ok ;;
+            replace) skip=$replaces_ok ;;
             esac
             if ((skip)); then continue; fi
             echo "  refused go.mod change: $field ${path:-(empty)}"
             refused=1
           done < <(sed 's/^[<>] //' "$RUNNER_TEMP/gomod.diff")
           ((refused == 0)) ||
-            { echo "GO_SECURITY_OVERRIDES: go.mod changed outside the require lines of $GO_SECURITY_OVERRIDES"; exit 1; }
-          echo "GO_SECURITY_OVERRIDES: applied; go.mod changed only in the declared require lines:"
+            { echo "GO_SECURITY_OVERRIDES: go.mod changed outside the declared lines of $GO_SECURITY_OVERRIDES"; exit 1; }
+          echo "GO_SECURITY_OVERRIDES: applied; go.mod changed only in the declared require/replace lines:"
           sed 's/^/  /' "$RUNNER_TEMP/gomod.diff"
       - name: pinned audit tools (built with their OWN pinned toolchain)
         run: |

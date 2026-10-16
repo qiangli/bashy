@@ -1,0 +1,101 @@
+# bashy verified build declaration for k3s (builds/README.md).
+# Shell-sourceable KEY=VALUE only. builds/render.sh renders ../fork from this
+# file + files/ + builds/_shared, and ships it verbatim as the fork's
+# bashy-build/PIN. The workflow refuses to build unless the checked-out
+# upstream tag resolves to UPSTREAM_COMMIT and the bashy tag is
+# bashy-${UPSTREAM_TAG}-N.
+#
+# The pin is the newest stable k3s release whose bashy build audits clean
+# (operator decision 2026-10-16: k3s option 1, no waivers): govulncheck 0
+# reachable with the overrides, tags and overlay below. Upstream LICENSE at
+# this tag: Apache-2.0. README.md §"Removed and changed vs upstream k3s —
+# regression map" is the per-change record.
+TOOL=k3s
+FORK_REPO=qiangli/k3s
+UPSTREAM_REPO=https://github.com/k3s-io/k3s
+UPSTREAM_SLUG=k3s-io/k3s
+UPSTREAM_TAG=v1.37.1+k3s1
+UPSTREAM_TAG_FORM=vX.Y.Z+k3sN
+# Lightweight tag -> this commit directly.
+UPSTREAM_COMMIT=356c025475bbefaa09cf0d7e48e8e2adbbde57db
+# Toolchain kind: setup steps come from builds/_shared/kinds/go; build.yml and
+# audit.yml are k3s's own (CGO_ENABLED=0, vendor/ + an overlay, two binaries,
+# see README.md).
+KIND=go
+# Must equal the go directive in the tag's go.mod (setup.yml gates it).
+GO_TOOLCHAIN=1.26.8
+# Security override, in-minor patch bump: go1.26.8 predates the stdlib fixes
+# in go1.26.9 and v1.37.1+k3s1 is the pinned release. 1.26 is a supported
+# minor, so this is the ordinary shape — the newest patch of the tag's own
+# minor, no language-version change.
+GO_TOOLCHAIN_SECURITY_OVERRIDE=1.26.9
+# Module security overrides (builds/README.md §GO_SECURITY_OVERRIDES). k3s pins
+# golang.org/x/net and github.com/cilium/ebpf with SAME-PATH replaces, so only
+# the replace: form reaches the binary:
+#   replace:golang.org/x/net@v0.60.0       GO-2026-6603 -6610 -6611 -6612 -6617
+#   replace:github.com/cilium/ebpf@v0.22.0 GO-2026-6238 (v0.12.3 -> v0.22.0, in v0)
+# Every other entry is a require line MVS moves as a consequence of those two
+# (go get of both, read off every moved module at the version MVS selected);
+# they are declared so the gate can review them. x/sys and x/crypto stay
+# replaced by k3s (v0.47.0, v0.54.0), so their require moves are inert.
+# The no-fix findings (GO-2024-3218, GO-2026-4883, -4887, -5932) are not
+# overridden but compiled out: see GO_BUILD_TAGS and bashy-build/k3s-overlay.sh.
+GO_SECURITY_OVERRIDES="replace:golang.org/x/net@v0.60.0 replace:github.com/cilium/ebpf@v0.22.0 github.com/docker/docker-credential-helpers@v0.9.3 github.com/google/go-containerregistry@v0.20.6 golang.org/x/crypto@v0.57.0 golang.org/x/mod@v0.41.0 golang.org/x/sync@v0.23.0 golang.org/x/sys@v0.48.0 golang.org/x/telemetry@v0.0.0-20260811182544-a038080d80e5 golang.org/x/term@v0.46.0 golang.org/x/text@v0.42.0 golang.org/x/tools@v0.49.0"
+GOVULNCHECK_VERSION=v1.9.0
+GO_SBOM_VERSION=v1.12.0
+# The k3s multicall binary (server, agent, kubectl, crictl, ctr, containerd).
+GO_PACKAGE=./cmd/server
+# The containerd shim, built from the containerd module k3s pins (its go.mod
+# replace: github.com/k3s-io/containerd/v2), so it needs no second checkout.
+SHIM_PACKAGE=github.com/containerd/containerd/v2/cmd/containerd-shim-runc-v2
+# Upstream scripts/build VERSIONFLAGS, from the pin only: no build date and no
+# `git describe`, so the same bashy tag rebuilds the same bytes. The kubelet
+# reports component-base's gitVersion as its node version, so it must be set.
+# build.yml appends the containerd and crictl versions read from go.mod.
+GO_LDFLAGS="-X github.com/k3s-io/k3s/pkg/version.Version=$UPSTREAM_TAG -X github.com/k3s-io/k3s/pkg/version.GitCommit=${UPSTREAM_COMMIT:0:8} -X github.com/k3s-io/k3s/pkg/version.UpstreamGolang=go${GO_TOOLCHAIN_SECURITY_OVERRIDE:-$GO_TOOLCHAIN} -X k8s.io/client-go/pkg/version.gitVersion=$UPSTREAM_TAG -X k8s.io/client-go/pkg/version.gitCommit=$UPSTREAM_COMMIT -X k8s.io/client-go/pkg/version.gitTreeState=clean -X k8s.io/component-base/version.gitVersion=$UPSTREAM_TAG -X k8s.io/component-base/version.gitCommit=$UPSTREAM_COMMIT -X k8s.io/component-base/version.gitTreeState=clean"
+# Upstream scripts/build TAGS for a static linux build, built CGO_ENABLED=0:
+# minus the cgo-only `libsqlite3`, `sqlite_omit_load_extension` and `netcgo`,
+# plus containerd's `no_btrfs` (its btrfs snapshotter is cgo-only). Without cgo
+# kine compiles its sqlite driver out (kine pkg/drivers/sqlite !cgo), so
+# mattn/go-sqlite3 is not linked and the datastore is embedded etcd: the image
+# must run `k3s server --cluster-init`. The `seccomp` tag selects containerd's
+# pure-Go profile generator; nothing in this graph links libseccomp.
+# `no_cri_dockerd` is k3s's own tag: the embedded cri-dockerd (--docker) is not
+# compiled, and `k3s agent --docker` fails with "cri-dockerd disabled at build
+# time" (GO-2026-4883, GO-2026-4887 in github.com/docker/docker, no fix).
+GO_BUILD_TAGS="static_build,ctrd,osusergo,providerless,urfave_cli_no_docs,apparmor,seccomp,no_btrfs,no_cri_dockerd"
+GO_AUDIT_TAGS="static_build,ctrd,osusergo,providerless,urfave_cli_no_docs,apparmor,seccomp,no_btrfs,no_cri_dockerd"
+# Modules that must never be in the shipped k3s (`go version -m`) nor its
+# package graph (`go list -deps`): build.yml's regression tripwire. Each was
+# compiled out for a no-fix advisory; README.md's regression map says how.
+K3S_FORBIDDEN="github.com/spegel-org/spegel github.com/k3s-io/spegel github.com/libp2p/go-libp2p-kad-dht github.com/docker/docker golang.org/x/crypto/openpgp github.com/containers/ocicrypt github.com/containerd/imgcrypt github.com/Mirantis/cri-dockerd github.com/pdtpartners/nix-snapshotter"
+GO_BUILD_FLAGS=""
+GO_BUILD_ENV=""
+GO_VERSION_ARG=--version
+# Manifests embedded in pkg/deploy, as upstream scripts/build copies them. Only
+# the ones that reference NO container image: coredns, local-storage,
+# metrics-server and traefik pull upstream images (traefik also needs charts
+# fetched from k3s.io), so they are not in the binary at all.
+K3S_MANIFESTS="ccm.yaml rolebindings.yaml runtimes.yaml"
+COSIGN_VERSION=v3.1.3
+# Build matrix: ASSET=RUNNER; each leg uploads out/ASSET and the shim.
+MATRIX="k3s-linux-amd64=ubuntu-24.04 k3s-linux-arm64=ubuntu-24.04-arm"
+# No cgo, so no C toolchain and no libc: the binary is static by construction.
+# The upstream files that need cgo unconditionally, or that import a no-fix
+# advisory path, are replaced at build time by bashy-build/k3s-overlay.sh (go
+# build -overlay over the tree and its `go mod vendor` output; neither is
+# edited). runc is the one cgo build in the runtime image (nsenter), in its own
+# pipeline.
+GO_CGO="k3s-linux-amd64=0 k3s-linux-arm64=0"
+APT_PACKAGES="strace util-linux iproute2 curl"
+PRE_BUILD_GATES=""
+SHARED_FILES="egress-verdict.sh"
+# Argument of bashy-build/no-egress-test.sh (a GitHub expression is allowed).
+EGRESS_TARGET='out/${{ matrix.asset }}'
+# Release: SRC=ASSET copies from bashy-build/, the assets that must exist,
+# the ones that are executables, and the release-notes lines.
+RELEASE_EXTRA="PIN=k3s-pin.txt otel.env=k3s-otel.env no-tracking.env=k3s-no-tracking.env vuln-ignore=vuln-ignore"
+RELEASE_ASSETS="k3s-linux-amd64 k3s-linux-arm64 containerd-shim-runc-v2-linux-amd64 containerd-shim-runc-v2-linux-arm64 k3s-$UPSTREAM_TAG.cdx.json k3s-$UPSTREAM_TAG.govulncheck.json k3s-pin.txt k3s-otel.env k3s-no-tracking.env vuln-ignore"
+RELEASE_EXECUTABLES="k3s-linux-amd64 k3s-linux-arm64 containerd-shim-runc-v2-linux-amd64 containerd-shim-runc-v2-linux-arm64"
+RELEASE_NOTE="Static, cgo-free k3s multicall binary and containerd-shim-runc-v2. The datastore is embedded etcd (run the server with --cluster-init); sqlite and the btrfs snapshotter are not linked. Compiled out for no-fix advisories: the embedded registry mirror (--embedded-registry, spegel), the Docker runtime (--docker, cri-dockerd), the nix snapshotter, and CRI encrypted-image decryption (imgcrypt/ocicrypt). No k3s-root userland, no runc, no CNI plugins and no Helm charts are embedded; only the image-free manifests (ccm, rolebindings, runtimes) are, so coredns, local-storage, metrics-server and traefik are never deployed from upstream images."
+RELEASE_GATES="pinned commit, pinned Go toolchain (security override: built with go1.26.9, not the tag's go1.26.8), GO_SECURITY_OVERRIDES (x/net and cilium/ebpf same-path replaces raised, plus the require lines they move), CGO_ENABLED=0 with the reviewed sha256-pinned overlay, no go-sqlite3 linked, none of K3S_FORBIDDEN linked, static (no ELF interpreter), govulncheck of the shipped packages (reachable, unwaived = fail), CycloneDX SBOM, no-egress."

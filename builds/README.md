@@ -49,6 +49,13 @@ builds/
 | `zot` | `project-zot/zot` | `v2.1.22` | Apache-2.0 | `go` | yoke `external/zot` |
 | `seaweedfs` | `seaweedfs/seaweedfs` | `4.48` | Apache-2.0 | `go` | yoke `external/seaweedfs` |
 | `act_runner` | `gitea/runner` (**gitea.com**) | `v5.0.0` | MIT | `go` | yoke `external/actrunner` |
+| `k3s` | `k3s-io/k3s` | `v1.36.1+k3s1` | Apache-2.0 | `go` (own `build.yml`, `audit.yml`) | the outpost runtime image ([audit blocked at this pin](k3s/README.md#release-blocked-at-this-pin)) |
+| `cni-plugins` | `containernetworking/plugins` | `v1.5.1` | Apache-2.0 | `go` (own `build.yml`, `audit.yml`) | the outpost runtime image |
+| `metrics-server` | `kubernetes-sigs/metrics-server` | `v0.9.0` | Apache-2.0 | `go` | the outpost runtime image |
+| `runc` | `opencontainers/runc` | `v1.5.2` | Apache-2.0 | `go` (own `build.yml`) | the outpost runtime image |
+| `coredns` | `coredns/coredns` | `v1.14.7` | Apache-2.0 | `go` | the outpost runtime image (k3s cluster DNS) |
+| `pause` | `kubernetes/kubernetes` (`build/pause`) | `v1.37.1` | Apache-2.0 | `go` (own `build.yml`, `audit.yml`; ships a pure-Go port of `pause.c`) | the outpost runtime image (k3s `--pause-image`) |
+| `tailscale` | `tailscale/tailscale` | `v1.104.1` | BSD-3-Clause | `go` (own `build.yml`, `audit.yml`) | the outpost runtime image |
 
 Each pin is the release yoke runs today, read from `external/<tool>` or
 `pkg/fleet/baseline/services/<tool>.yaml` — except the three Victoria
@@ -154,7 +161,7 @@ Shell-sourceable `KEY=VALUE` only. It is shipped verbatim as
 | `TOOL` | directory name; fork is `FORK_REPO=qiangli/$TOOL` |
 | `UPSTREAM_REPO`, `UPSTREAM_SLUG` | upstream URL and `owner/repo`. The URL's host decides the forge (see §Non-GitHub upstreams); `UPSTREAM_REPO` must end in `UPSTREAM_SLUG` |
 | `UPSTREAM_TAG`, `UPSTREAM_COMMIT` | pinned release tag and its full 40-hex commit |
-| `UPSTREAM_TAG_FORM` | optional; the shape of upstream's release tags — `vX.Y.Z` (default) or `X.Y`. See §The declared release-tag form |
+| `UPSTREAM_TAG_FORM` | optional; the shape of upstream's release tags — `vX.Y.Z` (default), `X.Y` or `vX.Y.Z+k3sN`. See §The declared release-tag form |
 | `UPSTREAM_API_BASE` | optional for a GitHub upstream (defaults to `https://api.github.com`), **required** otherwise: the forge's REST root, which must answer `/repos/SLUG/releases/tags/TAG` with `.draft` and `.prerelease` |
 | `KIND` | step-fragment kind under `_shared/kinds/` (`cargo`, `go`), or `custom` (the tool supplies its own fragments) |
 | `COSIGN_VERSION` | cosign release used to sign (`v3.1.3`) |
@@ -211,6 +218,10 @@ The **bashy** tag needs no form of its own. Both gates match
 `UPSTREAM_TAG`, which has already been held to the declared shape — so
 `bashy-4.48-1` and `bashy-v2.1.21-3` are both exactly `bashy-<the pinned
 upstream tag>-N` with no second copy of the form anywhere.
+
+k3s tags `vX.Y.Z+k3sN` (`v1.36.1+k3s1`): the Kubernetes release plus k3s's
+build counter. Its form keeps the `bashy-v*` trigger; its bashy tag is
+`bashy-v1.36.1+k3s1-N`.
 
 Adding a form means one more `case` arm (its regex and its trigger glob).
 Keep arms narrow: the point is to refuse an `-rc1`, a `-dev` or a typo, not to
@@ -312,9 +323,10 @@ for each entry. **Empty or absent is a no-op**, which is what every tool that
 needs no override gets.
 
 What makes this safe is the gate, not `go get`: afterwards `go.mod` may differ
-**only in the require lines of exactly the declared modules**. Anything else
-fails the build — a new or removed require, a `replace`/`exclude`/`retract`
-edit, or an undeclared module moved as a transitive effect (if one is genuinely
+**only in the require lines of exactly the declared modules** (and in a
+same-path replace a `replace:` entry raises, below). Anything else
+fails the build — a new or removed require, an `exclude`/`retract` edit, any
+other `replace` edit, or an undeclared module moved as a transitive effect (if one is genuinely
 needed, declare it too, so it is reviewed). The comparison is over `go mod edit
 -json`, not the file text, so a reformat or a moved block cannot hide a real
 change. `go.sum` is deliberately **not** gated: `go get` has to add the new
@@ -329,6 +341,59 @@ the extra entries no-ops — naming a module at a version *below* what MVS picke
 would silently downgrade it. Regenerate the whole list when the pin moves
 rather than patching it. `builds/kopia` is the worked example: five fixes, 23
 declared modules.
+
+**A same-path `replace` may be raised — and nothing else about a replace may
+change.** Some upstreams pin a dependency with a `replace` whose target is the
+*same* module path (k3s: `golang.org/x/net => golang.org/x/net v0.57.0`). The
+replace wins over any require line, so a plain `go get` there moves an inert
+require and the vulnerable code still ships. For exactly that shape an entry may
+be written `replace:MODULE@vVERSION`:
+
+```
+GO_SECURITY_OVERRIDES="replace:golang.org/x/net@v0.60.0 golang.org/x/net@v0.60.0 ..."
+```
+
+The step first runs `go mod edit -replace OLD=MODULE@vVERSION` for each
+`replace:` entry (OLD is the replace's left side as `go.mod` writes it, with its
+version if it has one), then `go get`s every entry as before, so the require line
+agrees with the replacement (the `replace:` entry's own require line is allowed
+to move). The **replace gate** then judges every replace line that differs.
+Allowed, and only when declared:
+
+- the target path is the **same** module path as the source, before and after;
+- the new version is a **fixed release** (`vX.Y.Z`, optionally `+incompatible`
+  exactly when the old one was) — no pre-release, no pseudo-version;
+- it is in the **same major** version (`v0.12.3 → v0.22.0` is in v0);
+- it is **strictly higher** than the old one, and equal to the declared one.
+
+Refused: an undeclared replace move; a changed target path (including raising a
+replace that points to a *different* path, such as a fork); an added or removed
+replace line (a changed left-side version counts as both); a lowered or
+unchanged-but-declared-different version; a crossed major; a gained or dropped
+`+incompatible`; a local-path replace. A declared `replace:` entry for a module
+`go.mod` does not replace is refused too. After the `go get`s the step runs
+`go mod download` of every declared module, so `go.sum` carries full hashes for
+`-mod=readonly` and `go mod vendor` builds.
+
+Why it is allowed: the upstream already chose *this* module and *this* major
+when it wrote the replace; raising the version to a fixed release within that
+major is the same review decision as a require bump, it is the only way the fix
+reaches the binary, and it cannot substitute a different source. Anything that
+could — a new path, a new line, a local directory — stays refused. The rule's
+self-test is `builds/_shared/kinds/go/toolchain-gate-test.sh` (run by
+`builds/check.sh`), which extracts the gate between its `the replace gate
+(BEGIN)`/`(END)` markers in `kinds/go/setup.yml` and drives it with these
+`replace_case`s: *unchanged*; *same path raised within the major*; *same path v0
+minor raised (ebpf)*; *raised from a pseudo-version, +incompatible kept*;
+*versioned left side kept*; *declared and already satisfied*; *other replaces
+untouched alongside* (accepted) — and *undeclared replace raised*; *raised past
+the declared version*; *lowered*; *crossed a major*; *crossed v0 -> v1*;
+*crossed a major, minor also higher*; *crossed v0 -> v1, minor also higher*;
+*gained +incompatible*; *dropped +incompatible*; *pre-release target*;
+*pseudo-version target*; *target path changed*; *different-path replace
+raised*; *replace line added*; *replace line removed*; *left-side version
+changed (add + remove)*; *local-path replace*; *declared but go.mod has no
+replace* (refused). `builds/k3s` is the worked example (`x/net`, `cilium/ebpf`).
 
 **The `go` and `toolchain` directives have their own gate.** A dependency
 carrying a security fix can require a newer *language* version — `x/net`
