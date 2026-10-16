@@ -87,7 +87,12 @@ exec '$bin' server \\
 RUN
 chmod +x "$work/run.sh"
 
-kubectl() { "$bin" kubectl --kubeconfig="$kubeconfig" --request-timeout=5s "$@"; }
+# The admin kubeconfig supplies the credentials; the address is the namespace
+# one. With no --bind-address the supervisor is reachable on the advertise
+# address (the server's own tunnel reconnects to wss://$nsaddr:$port once it
+# is up and drops 127.0.0.1), so the kubeconfig's loopback server URL is not
+# the one to probe.
+kubectl() { "$bin" kubectl --kubeconfig="$kubeconfig" --server="https://$nsaddr:$port" --request-timeout=5s "$@"; }
 
 probe() {
 	# Loopback traffic over the API: discovery, a list, a write and a read.
@@ -103,7 +108,7 @@ wait_ready() { # PID
 	local i
 	for ((i = 0; i < ready_max; i++)); do
 		kill -0 "$1" 2>/dev/null || return 1
-		[[ -s $kubeconfig ]] && kubectl get --raw /readyz >/dev/null 2>&1 && return 0
+		[[ -s $kubeconfig ]] && kubectl get --raw /readyz >/dev/null 2>"$work/ready.err" && return 0
 		sleep 1
 	done
 	return 1
@@ -123,12 +128,14 @@ ip addr add $nsaddr/24 dev bashy0
 ip link set bashy0 up
 ip route add default via 10.255.0.1 dev bashy0
 $(declare -f kubectl probe wait_ready)
-bin='$bin' kubeconfig='$kubeconfig' ready_max=$ready_max
+bin='$bin' kubeconfig='$kubeconfig' ready_max=$ready_max nsaddr=$nsaddr port=$port work='$work'
 strace -f -qq -e trace=connect,sendto,sendmsg,sendmmsg -e signal=none -o '$log' \\
 	env -i \$(cat '$envfile') bash '$work/run.sh' >'$work/server.log' 2>&1 &
 tracer=\$!
 if ! wait_ready \$tracer; then
-	echo "k3s server did not become ready on 127.0.0.1:$port" >&2
+	echo "k3s server did not become ready on $nsaddr:$port; last probe error:" >&2
+	cat '$work/ready.err' >&2 || true
+	ss -ltn >&2 || true
 	tail -n 80 '$work/server.log' >&2 || true
 	pkill -KILL -P \$tracer || true
 	exit 1

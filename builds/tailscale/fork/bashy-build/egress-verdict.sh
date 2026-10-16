@@ -30,6 +30,10 @@
 #   everything else      no address to judge: AF_UNSPEC (UDP disconnect),
 #                        AF_NETLINK (route/interface queries), truncated lines.
 #
+# EGRESS_LOCAL_ADDRS (optional, space-separated) names addresses that exist
+# only inside the caller's network namespace (e.g. an RFC 1918 address on a
+# dummy link); they are judged exactly like loopback: allowed ports only.
+#
 # On failure every offending line is printed and the function returns 1; the
 # caller renders the fatal message (and, for a server harness, the server log).
 # On success it prints the one-line summary.
@@ -66,12 +70,19 @@ egress_verdict() {
 		esac
 		ok=0
 		case $host in
-		127.0.0.1 | ::1 | ::ffff:127.0.0.1)
-			for allow in "${allowed[@]}"; do
-				[[ $p == "$allow" ]] && ok=1 && break
+		127.0.0.1 | ::1 | ::ffff:127.0.0.1) ok=2 ;;
+		*)
+			for allow in ${EGRESS_LOCAL_ADDRS:-}; do
+				[[ $host == "$allow" ]] && ok=2 && break
 			done
 			;;
 		esac
+		if ((ok == 2)); then
+			ok=0
+			for allow in "${allowed[@]}"; do
+				[[ $p == "$allow" ]] && ok=1 && break
+			done
+		fi
 		((ok)) || bad+=("$fam $host:$p :: $line")
 	done <"$log"
 

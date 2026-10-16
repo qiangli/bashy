@@ -57,6 +57,15 @@ t 'DNS to a non-loopback resolver' 1 \
 t 'v6 egress' 1 \
 	'1 connect(3, {sa_family=AF_INET6, sin6_port=htons(443), inet_pton(AF_INET6, "2606:4700::1", &sin6_addr), sin6_flowinfo=0}, 28) = -1 ENETUNREACH' 18428 31415
 
+# EGRESS_LOCAL_ADDRS: a namespace-only address is judged like loopback.
+nsl='1 connect(3, {sa_family=AF_INET, sin_port=htons(%s), sin_addr=inet_addr("%s")}, 16) = 0'
+EGRESS_LOCAL_ADDRS=10.255.0.2
+t 'local addr on an allowed port' 0 "$(printf "$nsl" 16443 10.255.0.2)" 16443 16444
+t 'local addr on a port that is not allowed' 1 "$(printf "$nsl" 443 10.255.0.2)" 16443 16444
+t 'other addr on an allowed port' 1 "$(printf "$nsl" 16443 10.255.0.9)" 16443 16444
+unset EGRESS_LOCAL_ADDRS
+t 'local addr without EGRESS_LOCAL_ADDRS' 1 "$(printf "$nsl" 16443 10.255.0.2)" 16443 16444
+
 if ((fail)); then
 	echo "egress-verdict-test: $pass passed, $fail FAILED" >&2
 	exit 1

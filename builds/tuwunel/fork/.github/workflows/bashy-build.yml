@@ -57,6 +57,7 @@ jobs:
         id: pin
         env:
           BASHY_TAG: ${{ github.ref_name }}
+          GH_API_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           . fork/bashy-build/PIN
@@ -72,7 +73,14 @@ jobs:
           # UPSTREAM_API_BASE is https://api.github.com for a GitHub upstream and
           # the forge's own REST root otherwise; gitea answers the identical
           # /repos/SLUG/releases/tags/TAG shape, with the same .draft/.prerelease.
-          rel=$(curl -fsSL -H 'Accept: application/vnd.github+json' \
+          # Unauthenticated calls from a shared runner IP are rate-limited, so
+          # a GitHub upstream is queried with the job's own read-only token.
+          auth=()
+          if [[ "https://api.github.com" == https://api.github.com && -n ${GH_API_TOKEN:-} ]]; then
+            auth=(-H "Authorization: Bearer $GH_API_TOKEN")
+          fi
+          rel=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+            -H 'Accept: application/vnd.github+json' ${auth[@]+"${auth[@]}"} \
             "https://api.github.com/repos/$UPSTREAM_SLUG/releases/tags/$UPSTREAM_TAG")
           [[ $(jq -r '.prerelease' <<<"$rel") == false && $(jq -r '.draft' <<<"$rel") == false ]] ||
             { echo "upstream $UPSTREAM_TAG is a draft or pre-release"; exit 1; }

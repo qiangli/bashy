@@ -65,6 +65,7 @@ jobs:
         id: pin
         env:
           BASHY_TAG: ${{ github.ref_name }}
+          GH_API_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           . fork/bashy-build/PIN
