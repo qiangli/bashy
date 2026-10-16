@@ -92,11 +92,21 @@ chmod +x "$work/run.sh"
 # address (the server's own tunnel reconnects to wss://$nsaddr:$port once it
 # is up and drops 127.0.0.1), so the kubeconfig's loopback server URL is not
 # the one to probe.
-# k3s dispatches its embedded kubectl by argv0 basename (reexec), so call it
-# through a symlink named kubectl; `$bin kubectl` would hand the extra word to
-# kubectl's own root command ("unknown command kubectl").
-ln -sf "$bin" "$work/kubectl"
-kubectl() { "$work/kubectl" --kubeconfig="$kubeconfig" --server="https://$nsaddr:$port" --request-timeout=5s "$@"; }
+# The multicall subcommands, run as upstream users run them: the binary named
+# `k3s`, `k3s kubectl|crictl|ctr ARGS` (regression map row 16; before it,
+# `k3s kubectl` failed: unknown command "kubectl" for "kubectl").
+ln -sf "$bin" "$work/k3s"
+multicall() { # NAME EXPECTED-TEXT ARGS...
+	local name=$1 want=$2 got
+	shift 2
+	got=$("$work/k3s" "$name" "$@" 2>&1) || die "k3s $name $*: exit $?: $got"
+	[[ $got == *"$want"* ]] || die "k3s $name $*: no '$want' in: $got"
+	echo "no-egress: k3s $name $*: ok"
+}
+multicall kubectl 'Client Version: ' version --client
+multicall crictl 'crictl version ' --version
+multicall ctr 'ctr github.com/' --version
+kubectl() { "$work/k3s" kubectl --kubeconfig="$kubeconfig" --server="https://$nsaddr:$port" --request-timeout=5s "$@"; }
 
 probe() {
 	# Loopback traffic over the API: discovery, a list, a write and a read.

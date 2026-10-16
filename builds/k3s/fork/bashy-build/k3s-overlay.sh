@@ -43,6 +43,14 @@
 #              not through -overlay: this script copies the package's
 #              sha256-pinned files into vendor/ and lists it in modules.txt —
 #              the one write to the build's generated vendor/ tree.
+#   multicall  cmd/server/main.go                 `k3s kubectl|crictl|ctr ARGS`
+#              run like the `kubectl|crictl|ctr` links (reexec with argv
+#              [NAME ARGS...]), as upstream's cmd/k3s wrapper does by exec'ing
+#              its data-dir link; this build ships cmd/server as `k3s` with no
+#              wrapper, and cmd/server's own subcommands hand the unshifted
+#              os.Args to the tool ("unknown command \"kubectl\" for
+#              \"kubectl\""). crictl also gets the wrapper's CRI_CONFIG_FILE
+#              search (cmd/server/zz_bashy_cli.go, added).
 set -euo pipefail
 
 usage='usage: k3s-overlay.sh SRC OUTDIR'
@@ -292,6 +300,120 @@ if ! grep -qx "$pkg" "$src/vendor/modules.txt"; then
 		"$src/vendor/modules.txt" >"$out/modules.txt"
 	cp "$out/modules.txt" "$src/vendor/modules.txt"
 fi
+
+# --- multicall: cmd/server/main.go --------------------------------------------
+f=$src/cmd/server/main.go
+begin "$f" 294fe5e4156c8645417618c8f1e152cab0c79e8a5a72ba54d8338ac170f666c4
+drop 12 '	"github.com/k3s-io/k3s/pkg/cli/crictl"'
+drop 13 '	"github.com/k3s-io/k3s/pkg/cli/ctr"'
+drop 15 '	"github.com/k3s-io/k3s/pkg/cli/kubectl"'
+drop 29 '	crictl2 "sigs.k8s.io/cri-tools/cmd/crictl"'
+swap 35 '	reexec.Register("crictl", crictl2.Main)' \
+	'	reexec.Register("crictl", bashyCrictlMain)'
+swap 63 '		cmds.NewKubectlCommand(kubectl.Run),' \
+	'		cmds.NewKubectlCommand(bashyExternalCLI("kubectl")),'
+swap 64 '		cmds.NewCRICTL(crictl.Run),' \
+	'		cmds.NewCRICTL(bashyExternalCLI("crictl")),'
+swap 65 '		cmds.NewCtrCommand(ctr.Run),' \
+	'		cmds.NewCtrCommand(bashyExternalCLI("ctr")),'
+commit "$f"
+write "$src/cmd/server/zz_bashy_cli.go" <<'EOF'
+package main
+
+// Added by the bashy k3s build (builds/k3s/files/k3s-overlay.sh). Upstream
+// ships cmd/server as k3s-server behind the cmd/k3s wrapper, which runs
+// `k3s kubectl|crictl|ctr ARGS` by exec'ing its data-dir link NAME -> k3s-server
+// with argv [NAME ARGS...] (setting CRI_CONFIG_FILE for crictl), so the reexec
+// table below dispatches it. This build ships cmd/server itself as `k3s`; these
+// give its subcommands and its crictl link the same argv and environment.
+
+import (
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
+
+	"github.com/k3s-io/k3s/pkg/configfilearg"
+	"github.com/k3s-io/k3s/pkg/datadir"
+	"github.com/k3s-io/k3s/pkg/util/home"
+	"github.com/k3s-io/k3s/pkg/version"
+	"github.com/moby/sys/reexec"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/pflag"
+	"github.com/urfave/cli/v2"
+	crictl2 "sigs.k8s.io/cri-tools/cmd/crictl"
+)
+
+var bashyExternalCLIActions = []string{"crictl", "ctr", "kubectl"}
+
+// bashyExternalCLI runs NAME as its argv0 link would: os.Args = [NAME ARGS...].
+func bashyExternalCLI(name string) cli.ActionFunc {
+	return func(ctx *cli.Context) error {
+		os.Args = append([]string{name}, ctx.Args().Slice()...)
+		if !reexec.Init() {
+			return errors.New(name + " is not registered for reexec")
+		}
+		return nil
+	}
+}
+
+// bashyCrictlMain is cmd/k3s externalCLI("crictl", ...): CRI_CONFIG_FILE, then crictl.
+func bashyCrictlMain() {
+	if os.Getenv("CRI_CONFIG_FILE") == "" {
+		os.Setenv("CRI_CONFIG_FILE", bashyFindCriConfig(bashyFindDataDir(os.Args)))
+	}
+	crictl2.Main()
+}
+
+// bashyFindDataDir is cmd/k3s findDataDir.
+func bashyFindDataDir(args []string) string {
+	dataDir := os.Getenv(version.ProgramUpper + "_DATA_DIR")
+	if dataDir != "" {
+		return dataDir
+	}
+	fs := pflag.NewFlagSet("data-dir-set", pflag.ContinueOnError)
+	fs.ParseErrorsWhitelist.UnknownFlags = true
+	fs.SetOutput(io.Discard)
+	fs.StringVarP(&dataDir, "data-dir", "d", "", "Data directory")
+	fs.Parse(args)
+	if dataDir != "" {
+		return dataDir
+	}
+	dataDir = configfilearg.MustFindString(args, "data-dir", bashyExternalCLIActions...)
+	if d, err := datadir.Resolve(dataDir); err == nil {
+		dataDir = d
+	} else {
+		logrus.Warnf("Failed to resolve user home directory: %s", err)
+	}
+	return dataDir
+}
+
+// bashyFindCriConfig is cmd/k3s findCriConfig.
+func bashyFindCriConfig(dataDir string) string {
+	const criDefaultConfigPath = "/etc/crictl.yaml"
+	searchList := []string{filepath.Join(dataDir, "agent", criDefaultConfigPath)}
+
+	if homeDataDir, err := home.Resolve(datadir.DefaultHomeDataDir); err == nil {
+		searchList = append(searchList, filepath.Join(homeDataDir, "agent", criDefaultConfigPath))
+	} else {
+		logrus.Warnf("Failed to resolve user home directory: %s", err)
+	}
+
+	searchList = append(searchList, filepath.Join(datadir.DefaultDataDir, "agent", criDefaultConfigPath))
+	searchList = append(searchList, criDefaultConfigPath)
+
+	for _, path := range searchList {
+		_, err := os.Stat(path)
+		if err == nil {
+			return path
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			logrus.Warnf("Failed to %s", err)
+		}
+	}
+	return ""
+}
+EOF
 
 # The map, in go's -overlay JSON shape. Paths are absolute runner paths with no
 # characters JSON would need escaped; refuse rather than mis-encode one.
