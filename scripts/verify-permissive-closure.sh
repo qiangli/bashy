@@ -4,6 +4,7 @@
 # 2. No outpost in the binary's dependency closure
 # 3. No non-permissive tree-sitter grammars (dropped in Sprint 369: caddy, disassembly, jq, ebnf, nim)
 # 4. License gate passes on the compiled binary via bashy release sbom
+# 5. License gate passes on full shipped dependency graph (bashy, yoke, sh, outpost) and vendored/third_party dirs
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -60,4 +61,9 @@ if [[ -z "$bin" ]]; then
 fi
 
 go run ./cmd/bashy release sbom --check-only --gate "$bin"
+
+# 5. Full shipped Go dependency graph & vendored/third_party license gate (report-only)
+echo "==> Verifying shipped Go dependency graph license gate (report-only)..."
+./scripts/verify-license-gate.sh --report-only
+
 echo "==> Permissive closure verification PASSED."
