@@ -1,0 +1,60 @@
+      # runc's own build: upstream `make static` at the pinned tag (cgo,
+      # static, BUILDTAGS + netgo osusergo), minus the seccomp tag, linked
+      # against musl instead of glibc.
+      - name: kernel UAPI headers for musl-gcc
+        run: |
+          set -euo pipefail
+          # musl-gcc searches only musl's own include dir. nsenter needs
+          # <linux/limits.h>, <linux/netlink.h> and <linux/types.h>, so expose
+          # exactly the kernel UAPI trees (and nothing of glibc's) through one
+          # -isystem dir.
+          kh=$RUNNER_TEMP/kernel-headers
+          mkdir -p "$kh"
+          ln -s /usr/include/linux "$kh/linux"
+          ln -s /usr/include/asm-generic "$kh/asm-generic"
+          ln -s "/usr/include/$(gcc -dumpmachine)/asm" "$kh/asm"
+          echo "KERNEL_HEADERS=$kh" >>"$GITHUB_ENV"
+          musl-gcc --version | head -n1
+      - name: go build runc (static musl cgo, no seccomp, -trimpath, reproducible ldflags)
+        working-directory: src
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          . ../fork/bashy-build/PIN
+          cgo=
+          for pair in $GO_CGO; do
+            [[ ${pair%%=*} == "$ASSET" ]] || continue
+            cgo=${pair#*=}
+          done
+          [[ $cgo == 1 ]] || { echo "PIN GO_CGO must be 1 for $ASSET (nsenter is C)"; exit 1; }
+          [[ ,$GO_BUILD_TAGS, != *,seccomp,* ]] || { echo "GO_BUILD_TAGS may not carry seccomp (libseccomp is LGPL)"; exit 1; }
+          [[ $(go env GOOS) == linux ]] || { echo "runc is built on linux runners only"; exit 1; }
+          arch=$(go env GOARCH)
+          [[ $ASSET == "runc-linux-$arch" ]] || { echo "MATRIX asset $ASSET does not match runner arch $arch"; exit 1; }
+          # The tag vendors its modules, but GO_SECURITY_OVERRIDES moved go.mod
+          # past vendor/modules.txt, so the build resolves modules from go.sum
+          # (-mod=mod) instead of the stale vendor tree. go.mod/go.sum are
+          # snapshotted here and must be byte-identical after the build.
+          sum=$(cat go.mod go.sum | sha256sum)
+          mkdir -p ../out
+          # Static link against musl (MIT). glibc is LGPL, so a static glibc
+          # link is not a permissive artifact.
+          env CGO_ENABLED=1 CC=musl-gcc CGO_CFLAGS="-isystem $KERNEL_HEADERS" \
+            go build -mod=mod -trimpath -buildvcs=false -tags "$GO_BUILD_TAGS" \
+            -ldflags "-s -w -buildid= $GO_LDFLAGS -linkmode external -extldflags '-static'" \
+            -o "../out/$ASSET" "$GO_PACKAGE"
+          [[ $(cat go.mod go.sum | sha256sum) == "$sum" ]] || { echo "the build rewrote go.mod/go.sum"; exit 1; }
+          # Static means no ELF interpreter: runc must run FROM scratch.
+          if readelf -l "../out/$ASSET" | grep -q 'Requesting program interpreter'; then
+            echo "../out/$ASSET is dynamically linked"; readelf -l "../out/$ASSET" | grep -A1 INTERP; exit 1
+          fi
+          # The binary's own build record: cgo on, no seccomp tag, and neither
+          # libseccomp-golang nor anything else seccomp-shaped linked.
+          go version -m "../out/$ASSET" | tee "$RUNNER_TEMP/buildinfo"
+          grep -qE '^[[:space:]]+build[[:space:]]+CGO_ENABLED=1$' "$RUNNER_TEMP/buildinfo" || { echo "not a cgo build"; exit 1; }
+          if grep -qE 'seccomp' "$RUNNER_TEMP/buildinfo"; then echo "seccomp is linked or tagged"; exit 1; fi
+          # Smoke: the binary reports the pinned release and no libseccomp.
+          "../out/$ASSET" "$GO_VERSION_ARG" | tee "$RUNNER_TEMP/version"
+          grep -qx "runc version ${UPSTREAM_TAG#v}" "$RUNNER_TEMP/version" || { echo "runc does not report ${UPSTREAM_TAG#v}"; exit 1; }
+          if grep -q '^libseccomp:' "$RUNNER_TEMP/version"; then echo "runc reports a linked libseccomp"; exit 1; fi
