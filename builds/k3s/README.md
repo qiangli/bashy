@@ -106,6 +106,59 @@ module. Reachable, unwaived findings fail the release; `files/vuln-ignore` is
 empty. A finding the toolchain override does not settle is fixed through
 `GO_SECURITY_OVERRIDES` (builds/README.md), never waived.
 
+### Release blocked at this pin
+
+govulncheck v1.9.0 under go1.26.9 (stdlib settled) reports 24 reachable
+module findings at the tag's `go.mod`. `GO_SECURITY_OVERRIDES` can settle 9
+of them: raising pion/dtls/v3 v3.1.4, quic-go/webtransport-go v0.11.1,
+otlptracegrpc and otel/sdk v1.45.0 and x/text v0.41.0 moves 24 require lines
+in total, each within its major, none added, the `go` directive unchanged,
+and the tree still builds:
+
+```
+github.com/go-logr/logr@v1.4.4
+github.com/grpc-ecosystem/grpc-gateway/v2@v2.29.0
+github.com/pion/dtls/v3@v3.1.4
+github.com/quic-go/quic-go@v0.60.0
+github.com/quic-go/webtransport-go@v0.11.1
+go.opentelemetry.io/otel@v1.45.0
+go.opentelemetry.io/otel/exporters/otlp/otlptrace@v1.45.0
+go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc@v1.45.0
+go.opentelemetry.io/otel/metric@v1.45.0
+go.opentelemetry.io/otel/sdk@v1.45.0
+go.opentelemetry.io/otel/trace@v1.45.0
+go.opentelemetry.io/proto/otlp@v1.11.0
+golang.org/x/crypto@v0.51.0
+golang.org/x/mod@v0.38.0
+golang.org/x/net@v0.57.0
+golang.org/x/oauth2@v0.36.0
+golang.org/x/sync@v0.22.0
+golang.org/x/sys@v0.47.0
+golang.org/x/telemetry@v0.0.0-20260708182218-49f421fb7959
+golang.org/x/text@v0.41.0
+golang.org/x/tools@v0.48.0
+google.golang.org/genproto/googleapis/api@v0.0.0-20260803160001-6ac0973c030d
+google.golang.org/genproto/googleapis/rpc@v0.0.0-20260803160001-6ac0973c030d
+google.golang.org/grpc@v1.83.0
+```
+
+The other 15 stay reachable, and the gate cannot express their fix. Five
+modules are pinned by k3s's own `replace` directives, so `go get` moves only
+an inert require line and the gate refuses a replace edit by design:
+
+| module (replaced to) | fixed in | findings |
+|---|---|---|
+| `golang.org/x/net` v0.49.0 | v0.60.0 | GO-2026-4918, -5026, -6603, -6610, -6611, -6612, -6617 |
+| `google.golang.org/grpc` v1.79.3 | v1.83.1 | GO-2026-6061, -6348, -6443 |
+| `github.com/cilium/ebpf` v0.12.3 | v0.22.0 (crosses a minor k3s pins) | GO-2026-6238 |
+| `github.com/docker/docker` v25.0.15-…d2dbc0547253 | no fix | GO-2026-4883, -4887 |
+| `golang.org/x/crypto` v0.47.0 | no fix (openpgp) | GO-2026-5932 |
+
+and `github.com/libp2p/go-libp2p-kad-dht` v0.39.0 has no fixed version
+(GO-2024-3218). So `GO_SECURITY_OVERRIDES` stays empty and the audit job
+fails at this pin until an upstream k3s tag carries the replace bumps and
+the unfixed modules are gone or fixed upstream.
+
 ## Release assets
 
 `k3s-linux-{amd64,arm64}`, `containerd-shim-runc-v2-linux-{amd64,arm64}`,

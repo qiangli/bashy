@@ -49,7 +49,7 @@ builds/
 | `zot` | `project-zot/zot` | `v2.1.22` | Apache-2.0 | `go` | yoke `external/zot` |
 | `seaweedfs` | `seaweedfs/seaweedfs` | `4.48` | Apache-2.0 | `go` | yoke `external/seaweedfs` |
 | `act_runner` | `gitea/runner` (**gitea.com**) | `v5.0.0` | MIT | `go` | yoke `external/actrunner` |
-| `k3s` | `k3s-io/k3s` | `v1.36.1+k3s1` | Apache-2.0 | `go` (own `build.yml`, `audit.yml`) | the outpost runtime image |
+| `k3s` | `k3s-io/k3s` | `v1.36.1+k3s1` | Apache-2.0 | `go` (own `build.yml`, `audit.yml`) | the outpost runtime image ([audit blocked at this pin](k3s/README.md#release-blocked-at-this-pin)) |
 | `cni-plugins` | `containernetworking/plugins` | `v1.5.1` | Apache-2.0 | `go` (own `build.yml`, `audit.yml`) | the outpost runtime image |
 | `metrics-server` | `kubernetes-sigs/metrics-server` | `v0.9.0` | Apache-2.0 | `go` | the outpost runtime image |
 
