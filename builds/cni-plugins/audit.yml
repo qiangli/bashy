@@ -13,8 +13,9 @@
         run: |
           set -euo pipefail
           . fork/bashy-build/PIN
-          [[ $(go env GOVERSION) == "$GOTOOLCHAIN" ]] ||
-            { echo "go is $(go env GOVERSION), the setup gate selected $GOTOOLCHAIN"; exit 1; }
+          # setup-go also exports GOTOOLCHAIN=local, so compare to the pin.
+          [[ $(go env GOVERSION) == "go@@GO_TOOLCHAIN_SECURITY_OVERRIDE@@" ]] ||
+            { echo "go is $(go env GOVERSION), the pin selected go@@GO_TOOLCHAIN_SECURITY_OVERRIDE@@"; exit 1; }
           # See builds/README.md §The audit tools have their own toolchain.
           GOTOOLCHAIN=go@@GO_AUDIT_TOOLCHAIN@@ go install "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION"
           GOTOOLCHAIN=go@@GO_AUDIT_TOOLCHAIN@@ go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@$GO_SBOM_VERSION"

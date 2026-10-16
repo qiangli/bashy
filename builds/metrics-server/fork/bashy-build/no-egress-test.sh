@@ -100,8 +100,10 @@ wait \$tracer || true
 INNER
 sudo unshare --net -- bash "$inner" || die "server run failed (see above)"
 [[ -s $log ]] || die "no strace log recorded"
-grep -q "127.0.0.1:$api_port" "$work/server.log" ||
-	{ tail -n 40 "$work/server.log" >&2; die "metrics-server never dialled its apiserver (the gate observed nothing)"; }
+# The strace log is the authority on what was dialled: the server's own
+# log need not mention the apiserver address within the window.
+grep -q "sin_port=htons($api_port)" "$log" ||
+	{ tail -n 40 "$work/server.log" >&2; tail -n 40 "$log" >&2; die "metrics-server never dialled its apiserver (the gate observed nothing)"; }
 
 # The verdict itself is the ONE shared copy: bashy-build/egress-verdict.sh
 # (builds/_shared/egress-verdict.sh). AF_UNIX is local IPC.

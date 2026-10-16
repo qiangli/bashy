@@ -9,6 +9,8 @@
 # idle, and FAIL on any outbound connection attempt other than loopback to its
 # own ports or to 127.0.0.1:31415.
 #
+# --flannel-backend=none: a control plane without an agent runs no CNI, but
+# k3s still resolves the host-local CNI binary on PATH unless flannel is off.
 # k3s has no update checker and no usage reporting; a server without an agent
 # pulls no image. This gate is what proves the bare control plane stays local.
 #
@@ -59,6 +61,10 @@ api_port=$((port + 1))
 otlp_port=31415
 allowed=("$port" "$api_port" 10257 10258 10259 2379 2380 2381 "$otlp_port")
 kubeconfig=$work/kubeconfig
+# Exists only inside the namespace (RFC 1918, on a dummy link): the apiserver's
+# endpoint reconciler refuses a loopback advertise address.
+nsaddr=10.255.0.2
+export EGRESS_LOCAL_ADDRS=$nsaddr
 
 cat >"$work/run.sh" <<RUN
 set -uo pipefail
@@ -69,10 +75,11 @@ exec '$bin' server \\
 	--disable-cloud-controller \\
 	--disable-helm-controller \\
 	--disable-network-policy \\
+	--flannel-backend=none \\
 	--disable=traefik,servicelb,metrics-server,coredns,local-storage \\
 	--egress-selector-mode=disabled \\
-	--bind-address=127.0.0.1 \\
-	--advertise-address=127.0.0.1 \\
+	--advertise-address=$nsaddr \\
+	--node-ip=$nsaddr \\
 	--https-listen-port=$port \\
 	--apiserver-port=$api_port \\
 	--write-kubeconfig='$kubeconfig' \\
@@ -80,7 +87,16 @@ exec '$bin' server \\
 RUN
 chmod +x "$work/run.sh"
 
-kubectl() { "$bin" kubectl --kubeconfig="$kubeconfig" --request-timeout=5s "$@"; }
+# The admin kubeconfig supplies the credentials; the address is the namespace
+# one. With no --bind-address the supervisor is reachable on the advertise
+# address (the server's own tunnel reconnects to wss://$nsaddr:$port once it
+# is up and drops 127.0.0.1), so the kubeconfig's loopback server URL is not
+# the one to probe.
+# k3s dispatches its embedded kubectl by argv0 basename (reexec), so call it
+# through a symlink named kubectl; `$bin kubectl` would hand the extra word to
+# kubectl's own root command ("unknown command kubectl").
+ln -sf "$bin" "$work/kubectl"
+kubectl() { "$work/kubectl" --kubeconfig="$kubeconfig" --server="https://$nsaddr:$port" --request-timeout=5s "$@"; }
 
 probe() {
 	# Loopback traffic over the API: discovery, a list, a write and a read.
@@ -96,7 +112,7 @@ wait_ready() { # PID
 	local i
 	for ((i = 0; i < ready_max; i++)); do
 		kill -0 "$1" 2>/dev/null || return 1
-		[[ -s $kubeconfig ]] && kubectl get --raw /readyz >/dev/null 2>&1 && return 0
+		[[ -s $kubeconfig ]] && kubectl get --raw /readyz >/dev/null 2>"$work/ready.err" && return 0
 		sleep 1
 	done
 	return 1
@@ -107,13 +123,23 @@ log=$work/strace.log inner=$work/inner.sh
 cat >"$inner" <<INNER
 set -uo pipefail
 ip link set lo up
+# k3s refuses to start without a default route (it derives the node IP from
+# it). Give the namespace one that leads nowhere: a dummy link with an
+# unanswerable gateway. Any dial through it is still
+# recorded by strace and judged.
+ip link add bashy0 type dummy
+ip addr add $nsaddr/24 dev bashy0
+ip link set bashy0 up
+ip route add default via 10.255.0.1 dev bashy0
 $(declare -f kubectl probe wait_ready)
-bin='$bin' kubeconfig='$kubeconfig' ready_max=$ready_max
+bin='$bin' kubeconfig='$kubeconfig' ready_max=$ready_max nsaddr=$nsaddr port=$port work='$work'
 strace -f -qq -e trace=connect,sendto,sendmsg,sendmmsg -e signal=none -o '$log' \\
 	env -i \$(cat '$envfile') bash '$work/run.sh' >'$work/server.log' 2>&1 &
 tracer=\$!
 if ! wait_ready \$tracer; then
-	echo "k3s server did not become ready on 127.0.0.1:$port" >&2
+	echo "k3s server did not become ready on $nsaddr:$port; last probe error:" >&2
+	cat '$work/ready.err' >&2 || true
+	ss -ltn >&2 || true
 	tail -n 80 '$work/server.log' >&2 || true
 	pkill -KILL -P \$tracer || true
 	exit 1

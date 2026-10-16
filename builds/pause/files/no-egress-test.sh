@@ -56,7 +56,7 @@ sudo unshare --net -- bash "$inner" || die "pause run failed (see above)"
 cat "$work/pause.log"
 grep -qx 'Shutting down, got signal: Terminated' "$work/pause.log" ||
 	die "pause did not report SIGTERM as pause.c does"
-touch "$log"
+sudo touch "$log" && sudo chmod a+r "$log"
 
 # The verdict itself is the ONE shared copy: bashy-build/egress-verdict.sh
 # (builds/_shared/egress-verdict.sh). AF_UNIX is local IPC.

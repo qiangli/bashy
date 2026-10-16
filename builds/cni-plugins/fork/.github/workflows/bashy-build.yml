@@ -57,6 +57,7 @@ jobs:
         id: pin
         env:
           BASHY_TAG: ${{ github.ref_name }}
+          GH_API_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           . fork/bashy-build/PIN
@@ -72,7 +73,14 @@ jobs:
           # UPSTREAM_API_BASE is https://api.github.com for a GitHub upstream and
           # the forge's own REST root otherwise; gitea answers the identical
           # /repos/SLUG/releases/tags/TAG shape, with the same .draft/.prerelease.
-          rel=$(curl -fsSL -H 'Accept: application/vnd.github+json' \
+          # Unauthenticated calls from a shared runner IP are rate-limited, so
+          # a GitHub upstream is queried with the job's own read-only token.
+          auth=()
+          if [[ "https://api.github.com" == https://api.github.com && -n ${GH_API_TOKEN:-} ]]; then
+            auth=(-H "Authorization: Bearer $GH_API_TOKEN")
+          fi
+          rel=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+            -H 'Accept: application/vnd.github+json' ${auth[@]+"${auth[@]}"} \
             "https://api.github.com/repos/$UPSTREAM_SLUG/releases/tags/$UPSTREAM_TAG")
           [[ $(jq -r '.prerelease' <<<"$rel") == false && $(jq -r '.draft' <<<"$rel") == false ]] ||
             { echo "upstream $UPSTREAM_TAG is a draft or pre-release"; exit 1; }
@@ -500,8 +508,9 @@ jobs:
           . ../fork/bashy-build/PIN
           # setup-go read go.mod's `go 1.20`, and go1.20 ignores GOTOOLCHAIN, so
           # the step above installs the effective release; prove it is in use.
-          [[ $(go env GOVERSION) == "$GOTOOLCHAIN" ]] ||
-            { echo "go is $(go env GOVERSION), the setup gate selected $GOTOOLCHAIN"; exit 1; }
+          # setup-go also exports GOTOOLCHAIN=local, so compare to the pin.
+          [[ $(go env GOVERSION) == "go1.26.9" ]] ||
+            { echo "go is $(go env GOVERSION), the pin selected go1.26.9"; exit 1; }
           cgo=
           for pair in $GO_CGO; do
             [[ ${pair%%=*} == "$ASSET" ]] || continue
@@ -928,8 +937,9 @@ jobs:
         run: |
           set -euo pipefail
           . fork/bashy-build/PIN
-          [[ $(go env GOVERSION) == "$GOTOOLCHAIN" ]] ||
-            { echo "go is $(go env GOVERSION), the setup gate selected $GOTOOLCHAIN"; exit 1; }
+          # setup-go also exports GOTOOLCHAIN=local, so compare to the pin.
+          [[ $(go env GOVERSION) == "go1.26.9" ]] ||
+            { echo "go is $(go env GOVERSION), the pin selected go1.26.9"; exit 1; }
           # See builds/README.md §The audit tools have their own toolchain.
           GOTOOLCHAIN=go1.27.2 go install "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION"
           GOTOOLCHAIN=go1.27.2 go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@$GO_SBOM_VERSION"
