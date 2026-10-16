@@ -1,0 +1,47 @@
+      # cni-plugins' own build: upstream build_linux.sh + scripts/release.sh at
+      # the pinned tag (-mod=vendor, CGO_ENABLED=0), restricted to the declared
+      # CNI_PLUGINS. Nothing is fetched: every module is in the tag's vendor/.
+      - name: the effective toolchain itself (go1.20 predates GOTOOLCHAIN)
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '@@GO_TOOLCHAIN_SECURITY_OVERRIDE@@'
+          check-latest: false
+          cache: false
+      - name: go build the CNI plugins (static, -trimpath, reproducible ldflags)
+        working-directory: src
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          . ../fork/bashy-build/PIN
+          # setup-go read go.mod's `go 1.20`, and go1.20 ignores GOTOOLCHAIN, so
+          # the step above installs the effective release; prove it is in use.
+          [[ $(go env GOVERSION) == "$GOTOOLCHAIN" ]] ||
+            { echo "go is $(go env GOVERSION), the setup gate selected $GOTOOLCHAIN"; exit 1; }
+          cgo=
+          for pair in $GO_CGO; do
+            [[ ${pair%%=*} == "$ASSET" ]] || continue
+            cgo=${pair#*=}
+          done
+          [[ $cgo == 0 ]] || { echo "PIN GO_CGO must be 0 for $ASSET (upstream releases CGO_ENABLED=0)"; exit 1; }
+          [[ $(go env GOOS) == linux ]] || { echo "the CNI plugins are built on linux runners only"; exit 1; }
+          arch=$(go env GOARCH)
+          [[ $ASSET == "cni-plugins-linux-$arch" ]] || { echo "MATRIX asset $ASSET does not match runner arch $arch"; exit 1; }
+          mkdir -p ../out
+          for p in $CNI_PLUGINS; do
+            name=${p##*/}
+            out=../out/cni-$name-linux-$arch
+            env CGO_ENABLED=0 go build -mod=vendor -trimpath -buildvcs=false \
+              -ldflags "-s -w -buildid= $GO_LDFLAGS" -o "$out" "./plugins/$p"
+            # Static means no ELF interpreter: the plugins must run FROM scratch.
+            if readelf -l "$out" | grep -q 'Requesting program interpreter'; then
+              echo "$out is dynamically linked"; readelf -l "$out" | grep -A1 INTERP; exit 1
+            fi
+            # Smoke: with no CNI_COMMAND a plugin prints its about string
+            # ("CNI <name> plugin <version>") and exits 0; it must name the pin.
+            env -i "$out" 2>"$RUNNER_TEMP/about" || { cat "$RUNNER_TEMP/about"; exit 1; }
+            cat "$RUNNER_TEMP/about"
+            grep -qF "$UPSTREAM_TAG" "$RUNNER_TEMP/about" || { echo "$out does not report $UPSTREAM_TAG"; exit 1; }
+          done
+          # The go.mod/go.sum/vendor the release builds from must be the pinned ones.
+          [[ -z $(git status --porcelain -- go.mod go.sum vendor) ]] || { echo "the build rewrote go.mod/go.sum/vendor"; exit 1; }

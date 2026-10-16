@@ -1,0 +1,59 @@
+      # The kind's audit (builds/_shared/kinds/go/audit.yml), widened to the
+      # CNI_PLUGINS this release ships. Same setup fragment as the build job,
+      # plus the same explicit effective toolchain, so the audited tree and
+      # toolchain are the shipped ones.
+@@INCLUDE setup@@
+      - name: the effective toolchain itself (go1.20 predates GOTOOLCHAIN)
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '@@GO_TOOLCHAIN_SECURITY_OVERRIDE@@'
+          check-latest: false
+          cache: false
+      - name: pinned audit tools (built with their OWN pinned toolchain)
+        run: |
+          set -euo pipefail
+          . fork/bashy-build/PIN
+          [[ $(go env GOVERSION) == "$GOTOOLCHAIN" ]] ||
+            { echo "go is $(go env GOVERSION), the setup gate selected $GOTOOLCHAIN"; exit 1; }
+          # See builds/README.md §The audit tools have their own toolchain.
+          GOTOOLCHAIN=go@@GO_AUDIT_TOOLCHAIN@@ go install "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION"
+          GOTOOLCHAIN=go@@GO_AUDIT_TOOLCHAIN@@ go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@$GO_SBOM_VERSION"
+          echo "audit tools built with: go@@GO_AUDIT_TOOLCHAIN@@ (govulncheck $GOVULNCHECK_VERSION, cyclonedx-gomod $GO_SBOM_VERSION)"
+          echo "analysis toolchain:     $(go version)"
+      - name: govulncheck (source mode, the SHIPPED plugins)
+        working-directory: src
+        run: |
+          set -euo pipefail
+          . ../fork/bashy-build/PIN
+          mkdir -p ../out
+          report=../out/$TOOL-$UPSTREAM_TAG.govulncheck.json
+          pkgs=()
+          for p in $CNI_PLUGINS; do pkgs+=("./plugins/$p"); done
+          echo "govulncheck scope: ${pkgs[*]}"
+          CGO_ENABLED=0 govulncheck -format json "${pkgs[@]}" >"$report" || true
+          [[ -s $report ]] || { echo "govulncheck produced no report"; exit 1; }
+          # A finding whose first trace frame names a function is REACHABLE
+          # from called code; module-only findings are informational.
+          jq -rs '[.[] | select(has("finding")) | .finding
+                   | select(.trace[0].function != null) | .osv]
+                  | unique | .[]' "$report" | sed '/^$/d' | sort -u >"$RUNNER_TEMP/found"
+          grep -Ev '^[[:space:]]*(#|$)' ../fork/bashy-build/vuln-ignore |
+            awk '{print $1}' | sort -u >"$RUNNER_TEMP/waived" || true
+          if comm -23 "$RUNNER_TEMP/found" "$RUNNER_TEMP/waived" | grep -q .; then
+            echo "govulncheck: unwaived vulnerabilities reachable from called code:"
+            comm -23 "$RUNNER_TEMP/found" "$RUNNER_TEMP/waived" | sed 's/^/  /'
+            exit 1
+          fi
+          echo "govulncheck: no unwaived reachable vulnerability ($(wc -l <"$RUNNER_TEMP/found") reachable, all waived or none)"
+      - name: SBOM (CycloneDX, the module the plugins are built from)
+        working-directory: src
+        run: |
+          set -euo pipefail
+          . ../fork/bashy-build/PIN
+          mkdir -p ../out
+          sbom=../out/$TOOL-$UPSTREAM_TAG.cdx.json
+          # All plugins are one module with one vendor/; `app -main` takes a
+          # single main package, so this is the module's SBOM — a superset of
+          # every shipped plugin's components.
+          CGO_ENABLED=0 cyclonedx-gomod mod -json -licenses -output "$sbom" .
+          jq -e '.bomFormat == "CycloneDX" and (.components | length) > 0' "$sbom" >/dev/null
