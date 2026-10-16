@@ -188,11 +188,15 @@ jobs:
           # bashy ships two archive families (bashy-* + bash-*) + checksums.txt — all
           # promoted byte-identical. Archive names are unversioned (no ${VER} in the
           # glob), unlike outpost's versioned naming.
+          # dist/otel-* carries the otel stack orchestrator blobs
+          # (otel-<goos>-<goarch>.gz + NOTICE): binmgr fetches them from the
+          # LATEST (stable) release, so a promotion that drops them breaks
+          # `bashy otel serve` on every fresh host.
           gh release create "${VER}" -R "${REPO}" \
             --title "${VER}" \
             --notes-file /tmp/notes.md \
             --latest \
-            dist/bashy-* dist/bash-* dist/outpost-* dist/checksums.txt
+            dist/bashy-* dist/bash-* dist/outpost-* dist/otel-* dist/checksums.txt
           echo "released ${VER} as --latest from the tested ${DEV} bytes"
 
       - name: register stable product release

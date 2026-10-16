@@ -212,13 +212,57 @@ jobs:
             /usr/lib/bashy/bin/bashy --version
             /usr/lib/bashy/bin/bashy -c "echo apk-ok"
             /usr/lib/bashy/bin/outpost --version'
+  # The otel stack orchestrator blob, built HERE — not in engine-blobs.yml.
+  # engine-blobs.yml listens on `release: published`, but that event never
+  # fires for our releases: the draft is created by the GoReleaser step below
+  # and published by publish-complete-dev-release.sh, both authenticated with
+  # GITHUB_TOKEN, and GitHub does not start workflow runs for events created
+  # with GITHUB_TOKEN. So every release since the trigger was introduced
+  # shipped without otel-<goos>-<goarch>.gz and `bashy otel serve` failed on a
+  # fresh host with "binmgr: otel: no prebuilt blob".
+  #
+  # This job runs after the draft exists (needs goreleaser) and before publish
+  # finalizes it, so the blobs land in the candidate, its checksums.txt and
+  # the asset-set QA below. One ubuntu runner cross-compiles every platform
+  # (pure Go, CGO_ENABLED=0) — decoupled from the macOS build matrix, so a
+  # slow or failed native/podman build cannot block or be blocked by it.
+  # scripts/publish-otel-blob.sh stays the single implementation; the otel job
+  # in engine-blobs.yml remains as the manual-backfill path (workflow_dispatch).
+  otel:
+    needs: [goreleaser]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Clone the pinned yoke
+        shell: bash
+        run: |
+          # The pinned yoke source (embed scripts write into its tree): the
+          # commit bashy's go.mod requires.
+          rev=$(sed -n 's|^[[:space:]]*github.com/qiangli/yoke v[^ ]*-\([0-9a-f]\{12\}\)$|\1|p' go.mod)
+          test -n "$rev"
+          git clone --quiet --filter=blob:none https://github.com/qiangli/yoke.git ../yoke
+          git -C ../yoke checkout --quiet "$rev"
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.2
+      - name: Build + publish otel blobs to this candidate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: ./scripts/publish-otel-blob.sh "$TAG"
   publish:
     permissions:
       contents: write
       id-token: write
       attestations: write
     name: verify complete draft and publish candidate
-    needs: [darwin, goreleaser]
+    needs: [darwin, goreleaser, otel]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

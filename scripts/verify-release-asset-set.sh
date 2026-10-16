@@ -26,16 +26,25 @@ expected=$(
   for fmt in apk deb rpm; do printf '%s\n' "bashy_${base#v}-dev_linux_$arch.$fmt"; done
  done
  printf '%s\n' bashy-scratch-linux-amd64 bashy-scratch-linux-arm64 checksums.txt
+ # The otel stack orchestrator blobs (binmgr fetches otel-<goos>-<goarch>.gz
+ # from the latest release) plus their NOTICE. Built by the release
+ # workflow's otel job via scripts/publish-otel-blob.sh — keep this list in
+ # step with that script's PLATFORMS. A candidate without them fails here, so
+ # an otel-less release can never publish or promote.
+ for p in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64; do
+  printf '%s\n' "otel-${p%/*}-${p#*/}.gz"
+ done
+ printf '%s\n' otel-blob-NOTICE.txt
 )
 expected=$(printf '%s\n' "$expected" | LC_ALL=C sort)
 actual=$(find "$dir" -maxdepth 1 -type f -exec basename {} \; | LC_ALL=C sort)
 if [[ $actual != "$expected" ]]; then
- echo "release asset set differs from required 33 files" >&2
+ echo "release asset set differs from required 39 files" >&2
  diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") >&2 || true
  exit 1
 fi
 (cd "$dir" && sha256sum -c checksums.txt --status)
-[[ $(wc -l < "$dir/checksums.txt" | tr -d ' ') == 32 ]] || { echo "checksum count must be 32" >&2; exit 1; }
+[[ $(wc -l < "$dir/checksums.txt" | tr -d ' ') == 38 ]] || { echo "checksum count must be 38" >&2; exit 1; }
 checksummed=$(sed -n 's/^[[:xdigit:]]\{64\}  //p' "$dir/checksums.txt" | LC_ALL=C sort)
 expected_checksums=$(printf '%s\n' "$expected" | sed '/^checksums.txt$/d')
 [[ $checksummed == "$expected_checksums" ]] || { echo "checksum entries differ from release assets" >&2; exit 1; }
@@ -63,4 +72,4 @@ for os_name in ('linux', 'darwin', 'windows'):
             if normalized.count(name) != 1:
                 raise SystemExit(f'{os_name}/{arch}: missing or duplicate product member {name}')
 PY_ARCHIVES
-echo "release asset set: PASS 27 files and 26 checksums"
+echo "release asset set: PASS 39 files and 38 checksums"

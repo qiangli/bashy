@@ -8,6 +8,73 @@ import (
 	"testing"
 )
 
+func TestOtelAssetsPresent(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range requiredOtelAssets() {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("blob"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := checkReleaseAssets(dir); err != nil {
+		t.Fatalf("checkReleaseAssets = %v, want nil", err)
+	}
+}
+
+func TestOtelAssetsMissing(t *testing.T) {
+	// An empty asset directory is missing every blob.
+	if err := checkReleaseAssets(t.TempDir()); err == nil ||
+		!strings.Contains(err.Error(), "otel-darwin-arm64.gz") {
+		t.Fatalf("empty dir checkReleaseAssets = %v, want missing-blob error", err)
+	}
+	// One absent platform is still flagged, naming the exact asset binmgr
+	// would fail to fetch.
+	dir := t.TempDir()
+	for _, name := range requiredOtelAssets() {
+		if name == "otel-windows-amd64.gz" {
+			continue
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("blob"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := checkReleaseAssets(dir); err == nil ||
+		!strings.Contains(err.Error(), "otel-windows-amd64.gz") {
+		t.Fatalf("partial dir checkReleaseAssets = %v, want otel-windows-amd64.gz error", err)
+	}
+}
+
+func TestOtelAssetsNonexistentDir(t *testing.T) {
+	if err := checkReleaseAssets(filepath.Join(t.TempDir(), "no-such-dir")); err == nil {
+		t.Fatal("checkReleaseAssets = nil for missing directory, want error")
+	}
+}
+
+func TestOtelPlatformsMatchPublishScript(t *testing.T) {
+	// Guards drift between this check and its producer: the platform set must
+	// equal the PLATFORMS matrix in scripts/publish-otel-blob.sh.
+	raw, err := os.ReadFile(filepath.Join("..", "..", "scripts", "publish-otel-blob.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var script []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), `PLATFORMS="`); ok {
+			script = strings.Fields(strings.TrimSuffix(v, `"`))
+		}
+	}
+	if len(script) == 0 {
+		t.Fatal("PLATFORMS not found in scripts/publish-otel-blob.sh")
+	}
+	if len(script) != len(otelPlatforms) {
+		t.Fatalf("publish script PLATFORMS = %v, want %v", script, otelPlatforms)
+	}
+	for i := range script {
+		if script[i] != otelPlatforms[i] {
+			t.Fatalf("publish script PLATFORMS = %v, want %v", script, otelPlatforms)
+		}
+	}
+}
+
 func TestRejectCoreProbeArtifact(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the diagnostic Bashy artifact")
