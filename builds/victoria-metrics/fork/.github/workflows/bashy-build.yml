@@ -27,6 +27,14 @@ on:
 
 permissions: {}
 
+# Windows' default is PowerShell; the native build and gate scripts need Git Bash.
+# (TOOL ollama keeps its own block above; this one serves tools that declare
+# WINDOWS_SHELL=bash instead. A tool matching both would render duplicate keys,
+# so declare at most one of the two.)
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: bashy-build-${{ github.ref }}
   cancel-in-progress: false
@@ -97,6 +105,8 @@ jobs:
             runner: macos-15
           - asset: victoria-metrics-darwin-amd64
             runner: macos-15-intel
+          - asset: victoria-metrics-windows-amd64.exe
+            runner: windows-2025
     steps:
       # Windows runners check out with core.autocrlf=true by default, which
       # rewrites LF to CRLF in the working tree. The prepare/audit gates hash

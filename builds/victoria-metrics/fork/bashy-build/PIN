@@ -19,6 +19,7 @@ UPSTREAM_TAG=v1.154.0
 UPSTREAM_COMMIT=29c43cd2fee05409499a4d1b38e950e1b7f13bd4
 # Toolchain kind: build/audit job steps come from builds/_shared/kinds/go.
 KIND=go
+WINDOWS_SHELL=bash
 # Must equal the go/toolchain directive in the tag's go.mod (setup.yml gates it).
 GO_TOOLCHAIN=1.27.2
 # Recorded security override: build on a LATER PATCH of the same Go minor than
@@ -37,20 +38,20 @@ GO_BUILD_ENV=""
 GO_VERSION_ARG=-version
 COSIGN_VERSION=v3.1.3
 # Build matrix: ASSET=RUNNER; each leg uploads out/ASSET.
-MATRIX="victoria-metrics-linux-amd64=ubuntu-24.04 victoria-metrics-linux-arm64=ubuntu-24.04-arm victoria-metrics-darwin-arm64=macos-15 victoria-metrics-darwin-amd64=macos-15-intel"
+MATRIX="victoria-metrics-linux-amd64=ubuntu-24.04 victoria-metrics-linux-arm64=ubuntu-24.04-arm victoria-metrics-darwin-arm64=macos-15 victoria-metrics-darwin-amd64=macos-15-intel victoria-metrics-windows-amd64.exe=windows-2025"
 # CGO per asset, as the UPSTREAM release does: deployment/docker/Makefile
-# app-via-docker-linux-{amd64,arm64} set CGO_ENABLED=1, the darwin legs set 0.
-GO_CGO="victoria-metrics-linux-amd64=1 victoria-metrics-linux-arm64=1 victoria-metrics-darwin-arm64=0 victoria-metrics-darwin-amd64=0"
+# app-via-docker-linux-{amd64,arm64} set CGO_ENABLED=1, the darwin and Windows legs set 0.
+GO_CGO="victoria-metrics-linux-amd64=1 victoria-metrics-linux-arm64=1 victoria-metrics-darwin-arm64=0 victoria-metrics-darwin-amd64=0 victoria-metrics-windows-amd64.exe=0"
 APT_PACKAGES="build-essential strace util-linux iproute2 curl"
 PRE_BUILD_GATES=""
 # Shared helper scripts copied from builds/_shared into bashy-build/.
-SHARED_FILES="egress-verdict.sh"
+SHARED_FILES="egress-verdict.sh windows-defender-egress.ps1 go-windows-egress.sh go-service-exercise.py"
 # Argument of bashy-build/no-egress-test.sh (a GitHub expression is allowed).
 EGRESS_TARGET='out/${{ matrix.asset }}'
 # Release: SRC=ASSET copies from bashy-build/, the assets that must exist,
 # the ones that are executables, and the release-notes lines.
 RELEASE_EXTRA="PIN=victoria-metrics-pin.txt otel.env=victoria-metrics-otel.env no-tracking.env=victoria-metrics-no-tracking.env vuln-ignore=vuln-ignore"
-RELEASE_ASSETS="victoria-metrics-linux-amd64 victoria-metrics-linux-arm64 victoria-metrics-darwin-arm64 victoria-metrics-darwin-amd64 victoria-metrics-$UPSTREAM_TAG.cdx.json victoria-metrics-$UPSTREAM_TAG.govulncheck.json victoria-metrics-pin.txt victoria-metrics-otel.env victoria-metrics-no-tracking.env vuln-ignore"
-RELEASE_EXECUTABLES="victoria-metrics-linux-amd64 victoria-metrics-linux-arm64 victoria-metrics-darwin-arm64 victoria-metrics-darwin-amd64"
+RELEASE_ASSETS="victoria-metrics-linux-amd64 victoria-metrics-linux-arm64 victoria-metrics-darwin-arm64 victoria-metrics-darwin-amd64 victoria-metrics-$UPSTREAM_TAG.cdx.json victoria-metrics-$UPSTREAM_TAG.govulncheck.json victoria-metrics-pin.txt victoria-metrics-otel.env victoria-metrics-no-tracking.env vuln-ignore victoria-metrics-windows-amd64.exe"
+RELEASE_EXECUTABLES="victoria-metrics-linux-amd64 victoria-metrics-linux-arm64 victoria-metrics-darwin-arm64 victoria-metrics-darwin-amd64 victoria-metrics-windows-amd64.exe"
 RELEASE_NOTE="No update check, no usage reporting and no remote write: -pushmetrics.url is never passed and the HTTP server is bound to loopback."
 RELEASE_GATES="pinned commit, pinned Go toolchain, govulncheck (reachable, unwaived = fail), CycloneDX SBOM, no-egress."

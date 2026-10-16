@@ -60,6 +60,14 @@ def configuration(tool, binary, work, port, here):
         urls = [f"http://127.0.0.1:{port}/", f"http://127.0.0.1:{port}/bashy-probe/",
                 f"http://127.0.0.1:{port+1}/cluster/status",
                 f"http://127.0.0.1:{port+1}/dir/status", f"http://127.0.0.1:{port+3}/"]
+    elif tool in ("victoria-logs", "victoria-metrics", "victoria-traces"):
+        argv = [binary, f"--storageDataPath={data}",
+                f"--httpListenAddr=127.0.0.1:{port}"]
+        query = {"victoria-logs": "/select/logsql/query?query=%2A",
+                 "victoria-metrics": "/api/v1/query?query=up",
+                 "victoria-traces": "/select/jaeger/api/services"}[tool]
+        urls = [f"http://127.0.0.1:{port}{path}" for path in
+                ("/health", "/metrics", query)]
     else:
         raise ValueError(f"unsupported service: {tool}")
     return argv, env, urls
@@ -98,6 +106,19 @@ def exercise(tool, binary, work, port, here):
             for phase in range(2):
                 for url in urls:
                     print(f"probe {url}: {request(url)}", flush=True)
+                if tool.startswith("victoria-"):
+                    path, body, content_type = {
+                        "victoria-logs": ("/insert/jsonline?_stream_fields=level",
+                            b'{"_msg":"bashy no-egress probe","level":"info"}',
+                            "application/stream+json"),
+                        "victoria-metrics": ("/api/v1/import/prometheus",
+                            b"bashy_probe 1\n", "text/plain"),
+                        "victoria-traces": ("/insert/opentelemetry/v1/traces",
+                            b"{}", "application/json"),
+                    }[tool]
+                    ingest = urllib.request.Request(f"http://127.0.0.1:{port}{path}",
+                        data=body, headers={"Content-Type": content_type}, method="POST")
+                    print(f"ingest {path}: {request(ingest)}", flush=True)
                 if phase == 0:
                     time.sleep(30)
             if proc.poll() is not None:

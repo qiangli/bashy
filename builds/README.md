@@ -88,7 +88,8 @@ Git Bash and the Windows Defender Firewall no-egress harness. `KIND=go`
 also supports native Windows builds: declare `WINDOWS_SHELL=bash`, use the
 full `<name>-windows-amd64.exe` asset name in `MATRIX`, `GO_CGO`,
 `RELEASE_ASSETS` and `RELEASE_EXECUTABLES`, and select `windows-2025`.
-Gitea (loom), SeaweedFS and zot declare these legs with `CGO_ENABLED=0`.
+Gitea (loom), SeaweedFS, zot, VictoriaLogs, VictoriaMetrics and VictoriaTraces
+declare these legs with `CGO_ENABLED=0`.
 Gitea runs its Node/pnpm frontend and bindata generation on Windows too.
 
 The Go service gates reuse Ollama's prima-derived Defender harness, now in

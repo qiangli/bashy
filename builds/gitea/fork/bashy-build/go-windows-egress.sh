@@ -11,6 +11,9 @@ case $tool in
   gitea) port=13880 ;;
   zot) port=15000 ;;
   seaweedfs) port=15333 ;;
+  victoria-logs) port=19428 ;;
+  victoria-metrics) port=18428 ;;
+  victoria-traces) port=10428 ;;
   *) echo "unsupported service: $tool" >&2; exit 1 ;;
 esac
 [[ -f $bin && $bin == *.exe ]] || { echo 'missing Windows executable' >&2; exit 1; }

@@ -38,6 +38,32 @@ class ServiceExercise(unittest.TestCase):
                     self.assertEqual(config["extensions"], {})
                     self.assertEqual(config["http"]["address"], "127.0.0.1")
 
+    def test_victoria_exercises_health_query_and_post_ingest(self):
+        for tool in ("victoria-logs", "victoria-metrics", "victoria-traces"):
+            with self.subTest(tool=tool), tempfile.TemporaryDirectory() as temp:
+                work = Path(temp)
+                proc = Mock()
+                proc.poll.return_value = None
+                with patch.object(exercise.subprocess, "Popen", return_value=proc) as start, \
+                     patch.object(exercise, "request", return_value=200) as probe, \
+                     patch.object(exercise.time, "sleep") as sleep:
+                    exercise.exercise(tool, "service.exe", work, 19428, BUILDS/tool/"files")
+                argv = start.call_args.args[0]
+                self.assertIn("--httpListenAddr=127.0.0.1:19428", argv)
+                self.assertFalse(any("pushmetrics" in arg for arg in argv))
+                env = start.call_args.kwargs["env"]
+                self.assertEqual(env["OTEL_SDK_DISABLED"], "true")
+                self.assertEqual(env["HTTP_PROXY"], "")
+                posts = [call.args[0] for call in probe.call_args_list
+                         if isinstance(call.args[0], exercise.urllib.request.Request)]
+                self.assertEqual(len(posts), 2)
+                self.assertTrue(all(req.method == "POST" and req.data for req in posts))
+                self.assertTrue(all(req.full_url.startswith("http://127.0.0.1:19428/")
+                                    for req in posts))
+                sleep.assert_called_once_with(30)
+                proc.terminate.assert_called_once()
+                proc.wait.assert_called_once()
+
     def run_mock(self, proc, statuses):
         with tempfile.TemporaryDirectory() as temp:
             work = Path(temp)
