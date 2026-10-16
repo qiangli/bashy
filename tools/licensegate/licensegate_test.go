@@ -4,10 +4,12 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -511,5 +513,24 @@ func TestRunGateCleanWithExceptions(t *testing.T) {
 	}
 	if !matched || ex == nil {
 		t.Fatal("expected exception to match")
+	}
+}
+
+func TestRunGateReportOnly(t *testing.T) {
+	opts := GateOptions{
+		Targets:    []string{"."},
+		ReportOnly: true,
+	}
+
+	var stdout, stderr bytes.Buffer
+	report, err := RunGate(opts, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("expected nil error in ReportOnly mode, got: %v", err)
+	}
+	if report == nil {
+		t.Fatal("expected non-nil report")
+	}
+	if !strings.Contains(stdout.String(), "licensegate summary:") {
+		t.Errorf("expected summary line in stdout, got:\n%s", stdout.String())
 	}
 }

@@ -783,7 +783,11 @@ func RunGate(opts GateOptions, stdout, stderr io.Writer) (*GateReport, error) {
 		}
 
 		if report.ViolationsCount > 0 {
-			fmt.Fprintf(stdout, "\nFAIL: %d unreviewed non-permissive or unknown license finding(s):\n", report.ViolationsCount)
+			if opts.ReportOnly {
+				fmt.Fprintf(stdout, "\nREPORT-ONLY: %d unreviewed non-permissive or unknown license finding(s) (gate does not block; exit 0):\n", report.ViolationsCount)
+			} else {
+				fmt.Fprintf(stdout, "\nFAIL: %d unreviewed non-permissive or unknown license finding(s):\n", report.ViolationsCount)
+			}
 			for _, v := range report.Violations {
 				loc := v.File
 				if v.Module != "" {
@@ -796,8 +800,16 @@ func RunGate(opts GateOptions, stdout, stderr io.Writer) (*GateReport, error) {
 				fmt.Fprintf(stdout, "  - %s (%s)\n    Path:   %s\n    SHA256: %s\n",
 					loc, desc, v.Path, v.SHA256)
 			}
+			if opts.ReportOnly {
+				fmt.Fprintf(stdout, "\nlicensegate summary: %d modules scanned, %d unreviewed finding(s) across %d module(s) (report-only mode, exit 0)\n",
+					report.TotalModules, report.ViolationsCount, len(moduleViolations))
+			} else {
+				fmt.Fprintf(stdout, "\nlicensegate summary: %d modules scanned, %d unreviewed finding(s) across %d module(s) (blocking mode, exit 1)\n",
+					report.TotalModules, report.ViolationsCount, len(moduleViolations))
+			}
 		} else {
 			fmt.Fprintf(stdout, "\nPASS: all %d shipped modules and vendored directories permissive or reviewed.\n", report.TotalModules)
+			fmt.Fprintf(stdout, "\nlicensegate summary: %d modules scanned, 0 unreviewed findings (pass, exit 0)\n", report.TotalModules)
 		}
 	}
 

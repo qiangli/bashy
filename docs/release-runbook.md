@@ -31,6 +31,22 @@ future reachable standard-library finding is fixed by raising the `toolchain`
 line across the umbrella, never by an exception. Run the check locally from an
 umbrella checkout before proposing a candidate tag.
 
+## License gate
+
+`scripts/verify-license-gate.sh` (`make license-gate`) verifies that bashy's
+full shipped Go dependency graph (cmd/bashy, cmd/bash, cmd/sh, outpost) plus
+vendored/third_party directories contains only permissive licenses.
+
+The release check is temporarily **report-only**: `release.yml` omits `license-gate`
+from the release build `needs` lists and runs `scripts/verify-license-gate.sh` in
+`--report-only` mode (`LICENSE_GATE_REPORT_ONLY=1`) while the 11 known MPL-2.0
+dependencies (hashicorp memberlist/yamux/golang-lru/multierror/errwrap/sockaddr/go-immutable-radix,
+libp2p go-yamux, cyphar filepath-securejoin) are removed in separate tracks.
+Policy forbids exceptions for them (scripts/license-review.json remains empty).
+To make the check blocking, add `license-gate` back to the release `needs` lists
+in `.github/workflows/release.yml` (and remove `--report-only`). The checker
+prints all findings and uploads report artifacts regardless of mode; nothing is waived.
+
 ## Install-channel manifests
 
 After promotion, download all `bashy-<os>-<arch>` archives plus
