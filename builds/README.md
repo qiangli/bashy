@@ -83,16 +83,28 @@ shape, and these two are where to look when a third odd upstream arrives.
 
 ### Windows legs
 
-No tool declares a Windows matrix leg yet, even where upstream ships one
-(gitea publishes windows/amd64 and windows/arm64; the Victoria components
-publish windows/amd64). The blocker is the skeleton, not the declarations: its
-own steps are bash (`set -euo pipefail`, `. fork/bashy-build/PIN`,
-`verify-pin.sh`) and would run under PowerShell on a `windows-*` runner, and
-`no-egress-test.sh` is built on `unshare`/`strace` and `sandbox-exec`, with no
-Windows equivalent. Adding Windows means a `defaults.run.shell: bash` (or
-per-step `shell:`) in `_shared/bashy-build.yml` plus a Windows no-egress
-harness — a `_shared/` slice of its own. Windows hosts run the Linux build in
-bashy's Linux VM/container meanwhile.
+Prima and Ollama already ship signed Windows legs on `windows-2025` using
+Git Bash and the Windows Defender Firewall no-egress harness. `KIND=go`
+also supports native Windows builds: declare `WINDOWS_SHELL=bash`, use the
+full `<name>-windows-amd64.exe` asset name in `MATRIX`, `GO_CGO`,
+`RELEASE_ASSETS` and `RELEASE_EXECUTABLES`, and select `windows-2025`.
+Gitea (loom), SeaweedFS and zot declare these legs with `CGO_ENABLED=0`.
+Gitea runs its Node/pnpm frontend and bindata generation on Windows too.
+
+The Go service gates reuse Ollama's prima-derived Defender harness, now in
+`_shared/windows-defender-egress.ps1`. A service exercise starts the pinned
+binary with its shipped no-tracking configuration, probes its loopback HTTP
+surfaces and observes it for 30 seconds. Disposable outbound block rules
+cover both the executable and the exercise interpreter. The gate requires a
+blocked negative control (access-denied or a firewall DROP), successful
+exercise evidence, no observed non-loopback connection, and policy cleanup.
+It runs only on GitHub-hosted Windows runners. Linux still uses the shared
+`egress-verdict.sh` strace verdict; macOS uses sandbox-exec. The Windows
+firewall permits loopback generally, unlike the Unix gates' port allowlists.
+
+A successful cross-build is compile evidence, not a Windows runtime gate.
+Every Windows leg must pass its native smoke and no-egress exercise before
+signing; tools without a Windows leg use a Linux venue on Windows hosts.
 
 ## What the shared pipeline does (every tool)
 

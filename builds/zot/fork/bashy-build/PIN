@@ -16,6 +16,7 @@ UPSTREAM_TAG=v2.1.22
 UPSTREAM_COMMIT=6bbc7e56db2b7a64eee589324efe5813245e3a28
 # Toolchain kind: build/audit job steps come from builds/_shared/kinds/go.
 KIND=go
+WINDOWS_SHELL=bash
 # Must equal the go/toolchain directive in the tag's go.mod (setup.yml gates it).
 GO_TOOLCHAIN=1.27.0
 # Security override, in-minor patch bump: go1.27.0 predates the go1.27.2 stdlib
@@ -63,20 +64,20 @@ GO_BUILD_ENV="GOEXPERIMENT=jsonv2"
 GO_VERSION_ARG=--version
 COSIGN_VERSION=v3.1.3
 # Build matrix: ASSET=RUNNER; each leg uploads out/ASSET.
-MATRIX="zot-linux-amd64=ubuntu-24.04 zot-linux-arm64=ubuntu-24.04-arm zot-darwin-arm64=macos-15 zot-darwin-amd64=macos-15-intel"
+MATRIX="zot-linux-amd64=ubuntu-24.04 zot-linux-arm64=ubuntu-24.04-arm zot-darwin-arm64=macos-15 zot-darwin-amd64=macos-15-intel zot-windows-amd64.exe=windows-2025"
 # CGO per asset, as the UPSTREAM release does: every `go build` in the Makefile
 # is prefixed with CGO_ENABLED=0.
-GO_CGO="zot-linux-amd64=0 zot-linux-arm64=0 zot-darwin-arm64=0 zot-darwin-amd64=0"
+GO_CGO="zot-linux-amd64=0 zot-linux-arm64=0 zot-darwin-arm64=0 zot-darwin-amd64=0 zot-windows-amd64.exe=0"
 APT_PACKAGES="strace util-linux iproute2 curl"
 PRE_BUILD_GATES=""
 # Shared helper scripts copied from builds/_shared into bashy-build/.
-SHARED_FILES="egress-verdict.sh"
+SHARED_FILES="egress-verdict.sh windows-defender-egress.ps1 go-windows-egress.sh go-service-exercise.py"
 # Argument of bashy-build/no-egress-test.sh (a GitHub expression is allowed).
 EGRESS_TARGET='out/${{ matrix.asset }}'
 # Release: SRC=ASSET copies from bashy-build/, the assets that must exist,
 # the ones that are executables, and the release-notes lines.
 RELEASE_EXTRA="PIN=zot-pin.txt config.json=zot-bashy.json otel.env=zot-otel.env no-tracking.env=zot-no-tracking.env vuln-ignore=vuln-ignore"
-RELEASE_ASSETS="zot-linux-amd64 zot-linux-arm64 zot-darwin-arm64 zot-darwin-amd64 zot-$UPSTREAM_TAG.cdx.json zot-$UPSTREAM_TAG.govulncheck.json zot-pin.txt zot-bashy.json zot-otel.env zot-no-tracking.env vuln-ignore"
-RELEASE_EXECUTABLES="zot-linux-amd64 zot-linux-arm64 zot-darwin-arm64 zot-darwin-amd64"
+RELEASE_ASSETS="zot-linux-amd64 zot-linux-arm64 zot-darwin-arm64 zot-darwin-amd64 zot-$UPSTREAM_TAG.cdx.json zot-$UPSTREAM_TAG.govulncheck.json zot-pin.txt zot-bashy.json zot-otel.env zot-no-tracking.env vuln-ignore zot-windows-amd64.exe"
+RELEASE_EXECUTABLES="zot-linux-amd64 zot-linux-arm64 zot-darwin-arm64 zot-darwin-amd64 zot-windows-amd64.exe"
 RELEASE_NOTE="No update check and no usage reporting; the extensions map is empty (no sync, no CVE feed, no events) and the ui web bundle, the trivy CVE scanner, the sync credential helpers and the sigstore image-trust stack are not linked in at all (buildinfo.BinaryType is stamped bashy-minimal)."
 RELEASE_GATES="pinned commit, pinned Go toolchain (security override: built with go1.27.2, not the tag's go1.27.0), reviewed module security overrides (golang.org/x/net@v0.60.0, otlptracegrpc and otlptracehttp @v1.45.0), govulncheck of the shipped package and tag set (reachable, unwaived = fail; 0 reachable, nothing waived), CycloneDX SBOM, no-egress."

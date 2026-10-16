@@ -27,6 +27,14 @@ on:
 
 permissions: {}
 
+# Windows' default is PowerShell; the native build and gate scripts need Git Bash.
+# (TOOL ollama keeps its own block above; this one serves tools that declare
+# WINDOWS_SHELL=bash instead. A tool matching both would render duplicate keys,
+# so declare at most one of the two.)
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: bashy-build-${{ github.ref }}
   cancel-in-progress: false
@@ -97,6 +105,8 @@ jobs:
             runner: macos-15
           - asset: gitea-darwin-amd64
             runner: macos-15-intel
+          - asset: gitea-windows-amd64.exe
+            runner: windows-2025
     steps:
       # Windows runners check out with core.autocrlf=true by default, which
       # rewrites LF to CRLF in the working tree. The prepare/audit gates hash
@@ -377,6 +387,7 @@ jobs:
       # toolchain has to run before `go generate`. Upstream equivalents at the
       # pinned tag: .github/actions/node-setup, `make deps-frontend`,
       # `make frontend` (= pnpm exec vite build), tools/build-release.sh.
+      # These steps also run on windows-2025 under WINDOWS_SHELL=bash.
       - name: set up Node (NODE_VERSION, upstream .github/actions/node-setup)
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:

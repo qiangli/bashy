@@ -27,6 +27,14 @@ on:
 
 permissions: {}
 
+# Windows' default is PowerShell; the native build and gate scripts need Git Bash.
+# (TOOL ollama keeps its own block above; this one serves tools that declare
+# WINDOWS_SHELL=bash instead. A tool matching both would render duplicate keys,
+# so declare at most one of the two.)
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: bashy-build-${{ github.ref }}
   cancel-in-progress: false
@@ -97,6 +105,8 @@ jobs:
             runner: macos-15
           - asset: weed-darwin-amd64
             runner: macos-15-intel
+          - asset: weed-windows-amd64.exe
+            runner: windows-2025
     steps:
       # Windows runners check out with core.autocrlf=true by default, which
       # rewrites LF to CRLF in the working tree. The prepare/audit gates hash
@@ -398,6 +408,10 @@ jobs:
           if [[ -n ${GO_BUILD_ENV:-} ]]; then
             read -r -a build_env <<<"$GO_BUILD_ENV"
             envs+=("${build_env[@]}")
+          fi
+          # Native Windows assets must keep .exe through every release step.
+          if [[ $(go env GOOS) == windows && $ASSET != *.exe ]]; then
+            echo "Windows MATRIX asset must end in .exe: $ASSET"; exit 1
           fi
           mkdir -p ../out
           # -trimpath and -buildid= drop the build path and the action id, and

@@ -21,6 +21,7 @@ UPSTREAM_TAG_FORM=X.Y
 UPSTREAM_COMMIT=530be3e37337488ecc34d58441e0bc476e121c93
 # Toolchain kind: build/audit job steps come from builds/_shared/kinds/go.
 KIND=go
+WINDOWS_SHELL=bash
 # Must equal the go/toolchain directive in the tag's go.mod (setup.yml gates it).
 # 4.48's go.mod has no `toolchain` line, so this is its `go 1.26.6` directive.
 GO_TOOLCHAIN=1.26.6
@@ -61,20 +62,20 @@ GO_BUILD_ENV="GODEBUG=http2client=0"
 GO_VERSION_ARG=version
 COSIGN_VERSION=v3.1.3
 # Build matrix: ASSET=RUNNER; each leg uploads out/ASSET. Free standard runners.
-MATRIX="weed-linux-amd64=ubuntu-24.04 weed-linux-arm64=ubuntu-24.04-arm weed-darwin-arm64=macos-15 weed-darwin-amd64=macos-15-intel"
+MATRIX="weed-linux-amd64=ubuntu-24.04 weed-linux-arm64=ubuntu-24.04-arm weed-darwin-arm64=macos-15 weed-darwin-amd64=macos-15-intel weed-windows-amd64.exe=windows-2025"
 # CGO per asset, as the UPSTREAM release does: every release workflow's
 # pre_command is `export CGO_ENABLED=0`, on linux and darwin alike.
-GO_CGO="weed-linux-amd64=0 weed-linux-arm64=0 weed-darwin-arm64=0 weed-darwin-amd64=0"
+GO_CGO="weed-linux-amd64=0 weed-linux-arm64=0 weed-darwin-arm64=0 weed-darwin-amd64=0 weed-windows-amd64.exe=0"
 APT_PACKAGES="strace util-linux iproute2 curl"
 PRE_BUILD_GATES=""
 # Shared helper scripts copied from builds/_shared into bashy-build/.
-SHARED_FILES="egress-verdict.sh"
+SHARED_FILES="egress-verdict.sh windows-defender-egress.ps1 go-windows-egress.sh go-service-exercise.py"
 # Argument of bashy-build/no-egress-test.sh (a GitHub expression is allowed).
 EGRESS_TARGET='out/${{ matrix.asset }}'
 # Release: SRC=ASSET copies from bashy-build/, the assets that must exist,
 # the ones that are executables, and the release-notes lines.
 RELEASE_EXTRA="PIN=seaweedfs-pin.txt otel.env=seaweedfs-otel.env no-tracking.env=seaweedfs-no-tracking.env vuln-ignore=vuln-ignore"
-RELEASE_ASSETS="weed-linux-amd64 weed-linux-arm64 weed-darwin-arm64 weed-darwin-amd64 seaweedfs-$UPSTREAM_TAG.cdx.json seaweedfs-$UPSTREAM_TAG.govulncheck.json seaweedfs-pin.txt seaweedfs-otel.env seaweedfs-no-tracking.env vuln-ignore"
-RELEASE_EXECUTABLES="weed-linux-amd64 weed-linux-arm64 weed-darwin-arm64 weed-darwin-amd64"
+RELEASE_ASSETS="weed-linux-amd64 weed-linux-arm64 weed-darwin-arm64 weed-darwin-amd64 seaweedfs-$UPSTREAM_TAG.cdx.json seaweedfs-$UPSTREAM_TAG.govulncheck.json seaweedfs-pin.txt seaweedfs-otel.env seaweedfs-no-tracking.env vuln-ignore weed-windows-amd64.exe"
+RELEASE_EXECUTABLES="weed-linux-amd64 weed-linux-arm64 weed-darwin-arm64 weed-darwin-amd64 weed-windows-amd64.exe"
 RELEASE_NOTE="Usage reporting is off: every weed subcommand that starts a master is launched with telemetry disabled, so nothing is sent to telemetry.seaweedfs.com. The only OTLP destination is bashy's local collector 127.0.0.1:31415."
 RELEASE_GATES="pinned commit, pinned Go toolchain (recorded security override go1.26.9), recorded module security override (golang.org/x/net@v0.60.0, gated go.mod diff), govulncheck (reachable, unwaived = fail), CycloneDX SBOM, no-egress."

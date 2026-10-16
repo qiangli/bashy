@@ -25,6 +25,10 @@
             read -r -a build_env <<<"$GO_BUILD_ENV"
             envs+=("${build_env[@]}")
           fi
+          # Native Windows assets must keep .exe through every release step.
+          if [[ $(go env GOOS) == windows && $ASSET != *.exe ]]; then
+            echo "Windows MATRIX asset must end in .exe: $ASSET"; exit 1
+          fi
           mkdir -p ../out
           # -trimpath and -buildid= drop the build path and the action id, and
           # GO_LDFLAGS stamps only PIN-derived values (no build date, no `git

@@ -275,7 +275,7 @@ class Recipe(unittest.TestCase):
         self.assertIn("windows-defender-egress.ps1", windows)
         # Every evidence marker the shell asserts must be emitted by the
         # Defender script, or the gate can never pass.
-        gate = (RECIPE / "files/windows-defender-egress.ps1").read_text()
+        gate = (RECIPE.parent / "_shared/windows-defender-egress.ps1").read_text()
         for marker in ("Defender control blocked", "pfirewall.log", "protocol gate PROTOCOL_PASS",
                        "no non-loopback connections observed",
                        "Defender block rules removed; firewall logging restored"):

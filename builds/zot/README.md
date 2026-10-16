@@ -209,3 +209,12 @@ Then repoint the yoke pin: `external/zot`'s `Spec()` resolves
 `zot-<os>-<arch>` by exact name; it has to become the signed fork release
 above, verified against the signing identity and issuer in the table at the
 top. The bashy asset names are the same shape, so `assetMatch` needs no change.
+
+## Windows
+
+The pinned v2.1.22 commit cross-builds for `GOOS=windows GOARCH=amd64
+CGO_ENABLED=0` with the declared `events,lint,metrics,mgmt,profile,scrub,userprefs`
+tags, `GOEXPERIMENT=jsonv2` and `-buildmode=pie` on Go 1.27.2. The recipe
+therefore includes `zot-windows-amd64.exe` on `windows-2025`; the native
+version smoke and shared Defender no-egress gate must pass before signing.
+No upstream source changes are needed.

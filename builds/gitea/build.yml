@@ -3,6 +3,7 @@
       # toolchain has to run before `go generate`. Upstream equivalents at the
       # pinned tag: .github/actions/node-setup, `make deps-frontend`,
       # `make frontend` (= pnpm exec vite build), tools/build-release.sh.
+      # These steps also run on windows-2025 under WINDOWS_SHELL=bash.
       - name: set up Node (NODE_VERSION, upstream .github/actions/node-setup)
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:

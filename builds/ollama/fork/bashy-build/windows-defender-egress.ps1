@@ -138,7 +138,7 @@ $failed = $false
 try {
     # Profiles on and dropped-packet logging on, saving prior state for
     # restore. Rules cannot enforce anything under a disabled profile
-    # (live noviwin1 proof on the prima gate: both networks are Public with
+    # (live Windows proof on the prima gate: both networks are Public with
     # that profile's firewall off, so a block rule matched nothing and the
     # control timed out unlogged), so the gate enables every profile it
     # relies on.
@@ -348,7 +348,7 @@ try {
     # Internal per-stage deadlines bound it; the 600s Wait-Job below is the
     # backstop. The job reports the exit code as a marker line:
     # Start-Process -PassThru with a manual wait leaves the process
-    # exit-code property empty on some hosts (live noviwin1 proof on the
+    # exit-code property empty on some hosts (live Windows proof on the
     # prima gate), so the gate never reads it. File redirects, not pipes
     # or 2>&1, so a chatty stage can never deadlock the gate or trip the
     # Stop preference. PYTHONUTF8 keeps model output (non-ASCII tokenizer

@@ -34,6 +34,9 @@ here=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=/dev/null
 . "$here/egress-verdict.sh"
 bin=${1:?usage: no-egress-test.sh BINARY}
+case $(uname -s) in
+MINGW*|MSYS*) exec "$here/go-windows-egress.sh" "$bin" zot ;;
+esac
 bin=$(cd "$(dirname "$bin")" && pwd)/$(basename "$bin")
 port=${EGRESS_PORT:-15000}
 observe=${EGRESS_OBSERVE_SECONDS:-30}
