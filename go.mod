@@ -515,7 +515,7 @@ replace github.com/perses/perses => github.com/qiangli/perses v0.0.0-20260426190
 
 replace github.com/ergochat/readline => github.com/qiangli/readline v0.1.4-0.20261013004858-df59d4e258e4
 
-replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20261013004936-43768325f25c
+replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20261016181410-b0d0bbba93ab
 
 // Podman embed: bashy mounts yoke's in-process podman engine, which consumes
 // the qiangli/podman fork + the pkg/oci wrapper. Cross-module replaces don't

@@ -6,14 +6,13 @@
 package agentos
 
 import (
-	"fmt"
 	"os"
 
 	podmanengine "github.com/qiangli/yoke/external/podman/engine"
 )
 
 // dispatchEngine wires the Windows-capable Podman machine frontend when bashy
-// is built with -tags bashy_engines. Ollama remains a unix host feature.
+// is built with the Podman remote tags, alongside the embedded Ollama server.
 func dispatchEngine(arg string) {
 	if code := guardEngine(arg, os.Args[2:]); code != 0 {
 		dispatchExit(code)
@@ -28,8 +27,7 @@ func dispatchEngine(arg string) {
 		}
 		dispatchExit(0)
 	case "ollama":
-		fmt.Fprintln(os.Stderr, "bashy ollama: not supported in the Windows engine build")
-		dispatchExit(1)
+		dispatchOllamaEngine()
 	case "dks":
 		// Dedicated rootful DKS (k3s) machine — Windows uses the WSL/Hyper-V
 		// provider under the hood via the same podman machine API.
@@ -40,9 +38,4 @@ func dispatchEngine(arg string) {
 		}
 		dispatchExit(0)
 	}
-}
-
-// probeOllamaEngine (Windows engine build): ollama stays a unix host feature.
-func probeOllamaEngine() ollamaEngineProbe {
-	return ollamaEngineProbe{Build: "unsupported"}
 }
