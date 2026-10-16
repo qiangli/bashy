@@ -527,7 +527,7 @@ func TestServiceStatusJSONGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != string(want) {
+	if string(got) != strings.ReplaceAll(string(want), "\r\n", "\n") {
 		t.Fatalf("status --json drifted from %s:\n%s", golden, got)
 	}
 

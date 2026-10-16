@@ -175,8 +175,8 @@ func TestFrontDoorGitWriteGuardHonoursClaimOff(t *testing.T) {
 }
 
 func TestGitArgvDir(t *testing.T) {
-	cwd := filepath.Join(string(filepath.Separator), "w")
-	abs := filepath.Join(string(filepath.Separator), "b")
+	cwd := filepath.Join(t.TempDir(), "w")
+	abs := filepath.Join(t.TempDir(), "b")
 	for _, tc := range []struct {
 		args []string
 		want string

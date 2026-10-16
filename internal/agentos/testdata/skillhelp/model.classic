@@ -47,6 +47,7 @@ Available Commands:
   limits      Inspect known account limits, resets and unavailable sources
   list        List inference backends
   migrate     Review and migrate a full-copy local override to a sparse overlay
+  quota       View account quota, resets and recorded cooldowns
   retire      retire a registry entry
   rm          Remove an entry from the local store
   schema      List fields accepted by --set, --unset, and --field

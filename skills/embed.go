@@ -91,7 +91,7 @@ func read(name, file string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	return string(data), true
+	return strings.ReplaceAll(string(data), "\r\n", "\n"), true
 }
 
 // readBashy reads bashy/<dir>/<name><ext>, rejecting a name that is not a
@@ -105,5 +105,5 @@ func readBashy(dir, name, ext string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	return string(data), true
+	return strings.ReplaceAll(string(data), "\r\n", "\n"), true
 }

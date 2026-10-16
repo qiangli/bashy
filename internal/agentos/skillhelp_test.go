@@ -67,6 +67,7 @@ func TestSkillHelpClassicSnapshots(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			want = bytes.ReplaceAll(want, []byte("\r\n"), []byte("\n"))
 			clearHelpAgentMarkers(t)
 			human := skillHelpProcess(t, "", name, "--help")
 			if !bytes.Equal(human, want) {
@@ -187,6 +188,7 @@ func TestSkillHelpGoldens(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			want = bytes.ReplaceAll(want, []byte("\r\n"), []byte("\n"))
 			if !bytes.Equal(got, want) {
 				t.Fatalf("skill golden %s changed:\n%s", name, got)
 			}

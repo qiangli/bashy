@@ -53,7 +53,7 @@ func TestQuotaRenderGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.String() != string(want) {
+	if out.String() != strings.ReplaceAll(string(want), "\r\n", "\n") {
 		t.Fatalf("render mismatch\ngot:\n%s\nwant:\n%s", out.String(), want)
 	}
 	var local bytes.Buffer

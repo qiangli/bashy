@@ -85,14 +85,18 @@ func synergyBashyBinary(t *testing.T) (bin, root string) {
 	if p := strings.TrimSpace(os.Getenv("BASHY_E2E_BIN")); p != "" {
 		return p, root
 	}
-	built := filepath.Join(root, "bin", "bashy")
+	suffix := ""
+	if runtime.GOOS == "windows" {
+		suffix = ".exe"
+	}
+	built := filepath.Join(root, "bin", "bashy"+suffix)
 	if st, err := os.Stat(built); err == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
 		return built, root
 	}
 	if testing.Short() {
 		t.Skip("needs a built bashy: run `make build-bashy` or set BASHY_E2E_BIN (not built under -short)")
 	}
-	out := filepath.Join(t.TempDir(), "bashy")
+	out := filepath.Join(t.TempDir(), "bashy"+suffix)
 	cmd := exec.Command("go", "build", "-o", out, "./cmd/bashy")
 	cmd.Dir = root
 	if b, err := cmd.CombinedOutput(); err != nil {

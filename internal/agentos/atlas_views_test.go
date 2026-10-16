@@ -94,7 +94,11 @@ func TestAtlasFilterTier(t *testing.T) {
 		}
 		names = append(names, r.Name)
 	}
-	for _, want := range []string{"weave", "sprint", "dag", "loom"} {
+	wants := []string{"weave", "sprint", "dag"}
+	if runtime.GOOS != "windows" { // loom's atlas entry is not supported on Windows.
+		wants = append(wants, "loom")
+	}
+	for _, want := range wants {
 		if !slices.Contains(names, want) {
 			t.Errorf("workspace tier missing %q (got %v)", want, names)
 		}
