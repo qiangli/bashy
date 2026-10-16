@@ -9,6 +9,8 @@
 # idle, and FAIL on any outbound connection attempt other than loopback to its
 # own ports or to 127.0.0.1:31415.
 #
+# --flannel-backend=none: a control plane without an agent runs no CNI, but
+# k3s still resolves the host-local CNI binary on PATH unless flannel is off.
 # k3s has no update checker and no usage reporting; a server without an agent
 # pulls no image. This gate is what proves the bare control plane stays local.
 #
@@ -69,6 +71,7 @@ exec '$bin' server \\
 	--disable-cloud-controller \\
 	--disable-helm-controller \\
 	--disable-network-policy \\
+	--flannel-backend=none \\
 	--disable=traefik,servicelb,metrics-server,coredns,local-storage \\
 	--egress-selector-mode=disabled \\
 	--bind-address=127.0.0.1 \\
