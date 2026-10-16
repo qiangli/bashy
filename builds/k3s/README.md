@@ -79,7 +79,8 @@ advisory paths: some upstream files import a removed package
 unconditionally. `files/k3s-overlay.sh SRC OUTDIR` writes edited copies of
 exactly those files and a `go build -overlay` map (`OUTDIR/overlay.json`),
 plus `OUTDIR/apply.tsv` (`TARGET<TAB>BACKING`, empty BACKING = the file is
-deleted) for the audit job. It never edits the checkout or `vendor/`.
+deleted) for the audit job. It never edits the checkout; its one write to the
+generated `vendor/` adds flannel's nftables package (row 15).
 
 **Every replaced file is identified by the SHA-256 of its exact upstream
 text** (the tag's file, or for the containerd file, the version `go.mod`
@@ -122,9 +123,11 @@ repository.
 | 12 | **vendor build** | — | `go mod vendor` in the build and audit jobs, k3s built `-mod=vendor` | — | none (same module versions) | go.mod/go.sum hash recorded after the override step must match after the build | — | `bf9f6fc7` |
 | 13 | **image-free manifests only** | `manifests/` (all, copied by `scripts/build`) | only `K3S_MANIFESTS="ccm.yaml rolebindings.yaml runtimes.yaml"` copied into `pkg/deploy/embed/`; build fails if one names an `image:` | — | coredns, local-storage, metrics-server and traefik are never deployed by k3s (cluster DNS, the `local-path` StorageClass, `kubectl top` and ingress are absent until the consumer deploys its own) | build.yml manifest step (`image:` → fail) | deploy those from bashy-built images | `a28ca109` |
 | 14 | **add-ons and helm-controller** | `scripts/download` (Helm charts from k3s.io), `scripts/build` ldflag `helm-controller …/chart.DefaultJobImage=rancher/klipper-helm:<version>` | no charts fetched or embedded; the `DefaultJobImage` stamp is not set; no k3s-root userland, runc, CNI plugins or self-extracting data dir | — | helm-controller still runs but has no bundled HelmChart to install; a user-created `HelmChart` would launch `rancher/klipper-helm:latest` (unpinned upstream image) — run the server with `--disable-helm-controller` (and `--disable=traefik,servicelb,metrics-server`) unless you supply a bashy-built job image | — (declaration) | supply the job image via the HelmChart `jobImage` field, or an upstream build | `a28ca109` |
+| 15 | **flannel traffic manager: iptables → nftables** | `pkg/agent/flannel/flannel.go` line 92 hardcodes `&iptables.IPTablesManager{}` (`flannel-io/flannel` v0.28.4 `pkg/trafficmngr/iptables`, which execs `iptables`/`ip6tables`(-save/-restore)) and ignores `--nftables` | `files/k3s-overlay.sh` edits `pkg/agent/flannel/flannel.go` (sha256 `00b4b72c…`): line 30 imports `pkg/trafficmngr/nftables`, line 92 is `&nftables.NFTablesManager{}`, line 95's error says `nftables`. Upstream never imports that package, so `go mod vendor` omits it and go reads `vendor/modules.txt` from disk (not through `-overlay`): the script copies its three files from the module cache (sha256 `8c14e14c…` `nftables.go`, `3fda7f9e…` `utils.go`, `f20f3166…` `nftables_windows.go`) into `vendor/` and adds its `modules.txt` line — its one write to the generated `vendor/`. No module is added (`sigs.k8s.io/knftables` v0.0.22 was already linked) | — | the agent's flannel creates **no iptables-based masquerade/forward rules** (no `FLANNEL-POSTRTG`/`FLANNEL-FWD` chains in `iptables-save`) and needs no `iptables` binary; it execs `nft` instead and keeps the same rules in its own tables `ip flannel-ipv4` and `ip6 flannel-ipv6` (chains `postrtg`, `forward`; `nft list table ip flannel-ipv4`), logging `Starting flannel in nftables mode...`. Both tables are created even on an IPv4-only node; with no `nft` on PATH the agent fails: `failed to initialize flannel nftables manager`. kube-proxy and the network policy controller are unchanged (the latter still links `coreos/go-iptables`) | overlay sha256 checks (flannel.go and the three vendored files); tripwire: `github.com/flannel-io/flannel/pkg/trafficmngr/iptables` in the package graph → fail; `-mod=vendor` fails if the vendored package is missing | provide `iptables` and an upstream build (upstream has no nftables switch for flannel at this tag) | `TBD` |
 
 The **tripwire** is `K3S_FORBIDDEN` in `tool.env`:
-`github.com/spegel-org/spegel github.com/k3s-io/spegel github.com/libp2p/go-libp2p-kad-dht github.com/docker/docker golang.org/x/crypto/openpgp github.com/containers/ocicrypt github.com/containerd/imgcrypt github.com/Mirantis/cri-dockerd github.com/pdtpartners/nix-snapshotter`.
+`github.com/spegel-org/spegel github.com/k3s-io/spegel github.com/libp2p/go-libp2p-kad-dht github.com/docker/docker golang.org/x/crypto/openpgp github.com/containers/ocicrypt github.com/containerd/imgcrypt github.com/Mirantis/cri-dockerd github.com/pdtpartners/nix-snapshotter github.com/flannel-io/flannel/pkg/trafficmngr/iptables`
+(the last guards row 15, not an advisory).
 After building, build.yml lists every module `go version -m` reports for
 **both** binaries (the `dep` and `=>` lines) and every package of the graph
 they were built from (`go list -deps` with the same tags, `-mod=vendor` and
@@ -132,7 +135,7 @@ overlay for k3s, `-mod=readonly` for the shim), and fails the leg if any path
 equals, or is under, a `K3S_FORBIDDEN` entry. The package graph is what makes
 `golang.org/x/crypto/openpgp` checkable at all: it is a package of
 `golang.org/x/crypto`, which stays linked. Run against upstream's unmodified
-graph, the same check reports all nine prefixes.
+graph, the same check reports all ten prefixes.
 
 ### What else in bashy is affected: nothing
 
@@ -183,8 +186,8 @@ bashy `cmd/bashy` and the pinned yoke:
   the binary, a server without it, and with no `--datastore-endpoint`, does
   not start.
 - k3s calls `iptables`/`ip6tables`(-save/-restore), `ipset`, `nft`, `mount`,
-  `modprobe` at runtime (agent side: kube-proxy, flannel, network policy,
-  kubelet). None of these are in this release; the server with
+  `modprobe` at runtime (agent side: kube-proxy, network policy, kubelet);
+  flannel calls only `nft` (row 15). None of these are in this release; the server with
   `--disable-agent` needs none of them.
 - The agent pulls the pause image (`--pause-image`) and anything a manifest
   names; serve those from bashy-built images.

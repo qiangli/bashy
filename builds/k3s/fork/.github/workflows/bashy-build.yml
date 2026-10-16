@@ -518,8 +518,10 @@ jobs:
           # go refuses an -overlay of any file under GOMODCACHE, and one file
           # the overlay replaces is in the containerd module, so k3s builds
           # -mod=vendor from the vendor/ tree `go mod vendor` writes from that
-          # go.mod/go.sum. vendor/ is generated, never edited: the overlay maps
-          # its one file like the others.
+          # go.mod/go.sum. vendor/ is generated: the overlay maps its one
+          # containerd file like the others, and adds the one package upstream
+          # never imports (flannel's nftables traffic manager) plus its
+          # modules.txt line, because go reads modules.txt from disk.
           go mod vendor
           ../fork/bashy-build/k3s-overlay.sh . "$RUNNER_TEMP/k3s-overlay"
           echo "K3S_OVERLAY=$RUNNER_TEMP/k3s-overlay/overlay.json" >>"$GITHUB_ENV"

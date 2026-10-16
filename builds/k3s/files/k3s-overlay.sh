@@ -5,7 +5,8 @@
 # compiles with, and OUTDIR/apply.tsv (TARGET<TAB>BACKING, BACKING empty =
 # delete), which the audit job applies to its own tree because govulncheck
 # ignores -overlay. The checked-out tree is never edited, so the go.mod/go.sum
-# and `git status` gates still see the pinned source.
+# and `git status` gates still see the pinned source; the one write is to the
+# generated vendor/ (flannel's nftables package, below).
 #
 # Every replaced file is identified by the SHA-256 of its exact upstream text
 # at the pinned tag (and, for the one module file, at the module version k3s's
@@ -34,6 +35,14 @@
 #              pulls are not supported. Drops containerd/imgcrypt ->
 #              containers/ocicrypt -> golang.org/x/crypto/openpgp
 #              (GO-2026-5932; no fix).
+#   nftables   pkg/agent/flannel/flannel.go       flannel's traffic manager is
+#              its nftables one (upstream hardcodes the iptables one and ignores
+#              --nftables): the runtime image ships `nft`, not `iptables`.
+#              Upstream never imports flannel's nftables package, so `go mod
+#              vendor` leaves it out and go reads vendor/modules.txt from disk,
+#              not through -overlay: this script copies the package's
+#              sha256-pinned files into vendor/ and lists it in modules.txt —
+#              the one write to the build's generated vendor/ tree.
 set -euo pipefail
 
 usage='usage: k3s-overlay.sh SRC OUTDIR'
@@ -253,6 +262,36 @@ drop 691 '		return []containerd.RemoteOpt{opt}'
 drop 692 '	}'
 swap 693 '	return nil' '	return nil // bashy k3s build: no imgcrypt (ocicrypt -> x/crypto/openpgp), encrypted images are not decrypted'
 commit "$f"
+
+# --- nftables: pkg/agent/flannel/flannel.go -----------------------------------
+f=$src/pkg/agent/flannel/flannel.go
+begin "$f" 00b4b72c2148240e6728907300c9f22f238e667769ba0ea33bc69efe575394cf
+swap 30 '	"github.com/flannel-io/flannel/pkg/trafficmngr/iptables"' \
+	'	"github.com/flannel-io/flannel/pkg/trafficmngr/nftables"'
+swap 92 '	trafficMngr := &iptables.IPTablesManager{}' \
+	'	trafficMngr := &nftables.NFTablesManager{} // bashy k3s build: the runtime image has nft, no iptables'
+swap 95 '		return errors.WithMessage(err, "failed to initialize flannel ipTables manager")' \
+	'		return errors.WithMessage(err, "failed to initialize flannel nftables manager")'
+commit "$f"
+fl=$(cd "$src" && go list -mod=readonly -m -f '{{.Dir}}' github.com/flannel-io/flannel)
+[[ -d $fl ]] || die "github.com/flannel-io/flannel: module not in the module cache (run \`go mod vendor\` first)"
+pkg=github.com/flannel-io/flannel/pkg/trafficmngr/nftables
+mkdir -p "$src/vendor/$pkg"
+while read -r name want; do
+	got=$(sha256 "$fl/pkg/trafficmngr/nftables/$name")
+	[[ $got == "$want" ]] || die "$fl/pkg/trafficmngr/nftables/$name: sha256 $got, expected $want"
+	cp "$fl/pkg/trafficmngr/nftables/$name" "$src/vendor/$pkg/$name"
+done <<'EOF'
+nftables.go 8c14e14c64469fafeda75173696ef24e7772d00dee780d832bb73a7012386211
+nftables_windows.go f20f31663eb27c465bc50b5c09079a4b4d7685b002bee4e14f86f90776962559
+utils.go 3fda7f9e7b3b03a5e016522c2a3cae12a77c17c63b093fb2d900152774f00b3a
+EOF
+if ! grep -qx "$pkg" "$src/vendor/modules.txt"; then
+	[[ $(grep -cx "${pkg%/*}/iptables" "$src/vendor/modules.txt") == 1 ]] || die "vendor/modules.txt does not list ${pkg%/*}/iptables once"
+	awk -v after="${pkg%/*}/iptables" -v pkg="$pkg" '{print} $0 == after {print pkg}' \
+		"$src/vendor/modules.txt" >"$out/modules.txt"
+	cp "$out/modules.txt" "$src/vendor/modules.txt"
+fi
 
 # The map, in go's -overlay JSON shape. Paths are absolute runner paths with no
 # characters JSON would need escaped; refuse rather than mis-encode one.

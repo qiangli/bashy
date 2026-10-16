@@ -68,7 +68,10 @@ GO_AUDIT_TAGS="static_build,ctrd,osusergo,providerless,urfave_cli_no_docs,apparm
 # Modules that must never be in the shipped k3s (`go version -m`) nor its
 # package graph (`go list -deps`): build.yml's regression tripwire. Each was
 # compiled out for a no-fix advisory; README.md's regression map says how.
-K3S_FORBIDDEN="github.com/spegel-org/spegel github.com/k3s-io/spegel github.com/libp2p/go-libp2p-kad-dht github.com/docker/docker golang.org/x/crypto/openpgp github.com/containers/ocicrypt github.com/containerd/imgcrypt github.com/Mirantis/cri-dockerd github.com/pdtpartners/nix-snapshotter"
+# flannel's iptables traffic manager is listed so the nftables switch (map
+# row 15) cannot silently revert; github.com/coreos/go-iptables stays linked
+# (k3s's network policy controller, via kube-router).
+K3S_FORBIDDEN="github.com/spegel-org/spegel github.com/k3s-io/spegel github.com/libp2p/go-libp2p-kad-dht github.com/docker/docker golang.org/x/crypto/openpgp github.com/containers/ocicrypt github.com/containerd/imgcrypt github.com/Mirantis/cri-dockerd github.com/pdtpartners/nix-snapshotter github.com/flannel-io/flannel/pkg/trafficmngr/iptables"
 GO_BUILD_FLAGS=""
 GO_BUILD_ENV=""
 GO_VERSION_ARG=--version
