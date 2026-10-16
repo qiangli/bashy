@@ -201,3 +201,19 @@ git tag bashy-v28.1.0-1 && git push origin bashy-v28.1.0-1
 Then repoint the yoke pin: `external/loom`'s `Spec()` resolves
 `go-gitea/gitea` from GitHub today; it has to become the signed fork release
 above, verified against the signing identity and issuer in the table at the top.
+
+## Windows exercise home directory
+
+The CI-only service exercise sets both `HOME` and `USERPROFILE` to its
+disposable temporary directory (including when running as an administrator).
+At the pinned commit, `modules/util/path.go:HomeDir` uses `USERPROFILE`, then
+`HOMEDRIVE` + `HOMEPATH` on Windows; `HOME` alone is insufficient.
+`modules/setting/ssh.go:loadSSHFrom` calls this even with `DISABLE_SSH=true`.
+The exercise's sanitized environment previously omitted all Windows home
+variables, causing exit 1 with `Failed to get home directory: cannot get
+home directory` before readiness. No elevated-user bypass is required.
+
+The shared exercise prints the last 32 KiB of combined service stdout/stderr
+on failure, after process cleanup and before deleting temporary state. Startup
+failures therefore retain their actual diagnosis in CI logs. Successful runs
+retain the full log for the Defender denial-signature check.

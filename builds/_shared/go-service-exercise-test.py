@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Bounded mock tests: never start a service or change firewall policy."""
+import contextlib
+import io
 import importlib.util
 import json
 from pathlib import Path
@@ -19,8 +21,10 @@ class ServiceExercise(unittest.TestCase):
         for tool, port in (("gitea", 13880), ("seaweedfs", 15333), ("zot", 15000)):
             with self.subTest(tool=tool), tempfile.TemporaryDirectory() as temp:
                 work = Path(temp)
-                with patch.dict(exercise.os.environ, {"HTTP_PROXY": "bad", "SECRET_TOKEN": "secret"}):
+                with patch.dict(exercise.os.environ, {"HTTP_PROXY": "bad", "SECRET_TOKEN": "secret", "USERPROFILE": "ambient-home"}):
                     argv, env, urls = exercise.configuration(tool, "service.exe", work, port, BUILDS/tool/"files")
+                self.assertEqual(env["USERPROFILE"], str(work))
+                self.assertEqual(env["HOME"], str(work))
                 self.assertEqual(env["HTTP_PROXY"], "")
                 self.assertNotIn("SECRET_TOKEN", env)
                 self.assertEqual(env["OTEL_SDK_DISABLED"], "true")
@@ -79,6 +83,30 @@ class ServiceExercise(unittest.TestCase):
             self.run_mock(proc, [])
         proc.terminate.assert_called_once()
         proc.wait.assert_called_once()
+
+    def test_startup_failure_prints_bounded_combined_log_for_every_tool(self):
+        for tool in ("gitea", "zot", "seaweedfs", "victoria-logs",
+                     "victoria-metrics", "victoria-traces"):
+            with self.subTest(tool=tool), tempfile.TemporaryDirectory() as temp:
+                proc = Mock(returncode=1)
+                proc.poll.return_value = 1
+
+                def start(*args, **kwargs):
+                    self.assertIs(kwargs["stdout"], kwargs["stderr"])
+                    kwargs["stdout"].write("discarded-prefix" + "x" * 40000 + "fatal: startup cause")
+                    kwargs["stdout"].flush()
+                    return proc
+
+                console = io.StringIO()
+                with patch.object(exercise.subprocess, "Popen", side_effect=start), \
+                     contextlib.redirect_stdout(console):
+                    with self.assertRaisesRegex(RuntimeError, "before readiness: 1"):
+                        exercise.exercise(tool, "service.exe", Path(temp), 13880,
+                                          BUILDS/tool/"files")
+                self.assertIn("fatal: startup cause", console.getvalue())
+                self.assertNotIn("discarded-prefix", console.getvalue())
+                self.assertLess(len(console.getvalue()), 33000)
+                proc.wait.assert_called_once()
 
     def test_probe_failure_fails_and_is_reaped(self):
         proc = Mock()

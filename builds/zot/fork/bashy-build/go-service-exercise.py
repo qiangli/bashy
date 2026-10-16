@@ -22,6 +22,9 @@ def configuration(tool, binary, work, port, here):
     env = {k: v for k, v in os.environ.items()
            if k.upper() in {"SYSTEMROOT", "WINDIR", "PATH", "TEMP", "TMP", "COMSPEC"}}
     env["HOME"] = str(work)
+    # Windows home lookup uses USERPROFILE, including Gitea's SSH settings
+    # initialization even with DISABLE_SSH=true. Keep it in the temp sandbox.
+    env["USERPROFILE"] = str(work)
     for name in ("no-tracking.env", "otel.env"):
         for line in (here / name).read_text().splitlines():
             if line and not line.startswith("#") and "=" in line:
@@ -86,6 +89,7 @@ def request(url):
 def exercise(tool, binary, work, port, here):
     argv, env, urls = configuration(tool, binary, work, port, here)
     log = work / "service.log"
+    completed = False
     with log.open("w", encoding="utf-8") as output:
         proc = subprocess.Popen(argv, cwd=work, env=env, stdout=output, stderr=output)
         try:
@@ -123,15 +127,29 @@ def exercise(tool, binary, work, port, here):
                     time.sleep(30)
             if proc.poll() is not None:
                 raise RuntimeError("service exited during observation")
+            completed = True
         finally:
-            proc.terminate()
             try:
-                proc.wait(timeout=15)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=5)
-    # The Defender harness also rejects denial signatures in this output.
-    print(log.read_text(encoding="utf-8", errors="replace"), flush=True)
+                proc.terminate()
+                try:
+                    proc.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=5)
+            finally:
+                # Emit diagnostics even on startup/probe/cleanup failure, before
+                # TemporaryDirectory removes them. Bound both memory and output.
+                output.flush()
+                with log.open("rb") as captured:
+                    captured.seek(0, os.SEEK_END)
+                    size = captured.tell()
+                    # Successful runs retain the full log for the Defender
+                    # denial-signature check; failed runs cannot pass anyway.
+                    captured.seek(0 if completed else max(0, size - 32768))
+                    tail = captured.read().decode("utf-8", errors="replace")
+                scope = "full log" if completed else "last 32768 bytes"
+                print(f"service stdout/stderr ({scope}; total {size}):\n{tail}",
+                      flush=True)
 
 
 def main():
