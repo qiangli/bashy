@@ -24,8 +24,8 @@
 #      EnsureRunner enforces at runtime. An empty or missing pin refuses.
 #   4. Verifies the executable's bundle over those exact decompressed bytes
 #      (this is the bundle embedded for runtime verification).
-#   5. Atomically writes ycode-runner.gz + ycode-runner.sigstore.json into
-#      yoke's runner_embed dir (gitignored build inputs, never committed).
+#   5. Writes ycode-runner.gz + ycode-runner.sigstore.json into yoke's
+#      checkout and the pinned Go module used by release builds.
 #
 # The embedded bundle MUST be the signature over the final executable bytes:
 # extract.go runs binmgr.VerifySignedBlob over the installed executable, which
@@ -213,8 +213,23 @@ EOF
 verify_blob "$stage/exe" "$stage/${exe}.sigstore.json"
 
 [ -d "$embed_dir" ] || die "embed dir missing: $embed_dir"
-mv "$stage/$gz" "$embed_dir/ycode-runner.gz" || die "cannot install ycode-runner.gz"
-mv "$stage/${exe}.sigstore.json" "$embed_dir/ycode-runner.sigstore.json" || die "cannot install bundle"
+# CI checks out yoke for pin verification, but product builds load that same
+# version from the Go module cache. Stage both source locations.
+build_embed_dir=$embed_dir
+if [ -z "${YOKE_DIR+x}" ]; then
+  command -v go >/dev/null 2>&1 || die "go is required to locate the release module"
+  build_yoke_dir=$(GOWORK=off go list -m -f '{{.Dir}}' github.com/qiangli/yoke) \
+    || die "cannot locate pinned yoke module"
+  build_embed_dir=$build_yoke_dir/external/ollama/runner_embed
+  [ -d "$build_embed_dir" ] || die "build embed dir missing: $build_embed_dir"
+  cmp -s "$extract_go" "$build_embed_dir/extract.go" \
+    || die "checkout and build module have different runner pins"
+fi
+for destination in "$embed_dir" "$build_embed_dir"; do
+  chmod u+w "$destination" || die "cannot make embed dir writable: $destination"
+  cp "$stage/$gz" "$destination/ycode-runner.gz" || die "cannot install ycode-runner.gz"
+  cp "$stage/${exe}.sigstore.json" "$destination/ycode-runner.sigstore.json" || die "cannot install bundle"
+done
 trap - EXIT HUP INT TERM
 rm -rf "$stage"
 
@@ -222,3 +237,6 @@ echo "fetch-signed-runner: ${os}/${arch} verified"
 echo "  identity: $RUNNER_IDENTITY"
 echo "  executable sha256: $exe_sha"
 echo "  wrote: $embed_dir/ycode-runner.gz + ycode-runner.sigstore.json"
+if [ "$build_embed_dir" != "$embed_dir" ]; then
+  echo "  build module: $build_embed_dir/ycode-runner.gz + ycode-runner.sigstore.json"
+fi
