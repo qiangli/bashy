@@ -346,10 +346,16 @@ import (
 
 var bashyExternalCLIActions = []string{"crictl", "ctr", "kubectl"}
 
+// urfave/cli's own version printer, captured before main's cmds.NewApp replaces
+// the package-global one with k3s's ("k3s version ..."). A link (or upstream's
+// wrapper exec) reaches the tool before NewApp runs; a subcommand does not.
+var bashyVersionPrinter = cli.VersionPrinter
+
 // bashyExternalCLI runs NAME as its argv0 link would: os.Args = [NAME ARGS...].
 func bashyExternalCLI(name string) cli.ActionFunc {
 	return func(ctx *cli.Context) error {
 		os.Args = append([]string{name}, ctx.Args().Slice()...)
+		cli.VersionPrinter = bashyVersionPrinter
 		if !reexec.Init() {
 			return errors.New(name + " is not registered for reexec")
 		}
