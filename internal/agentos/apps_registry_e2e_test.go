@@ -23,7 +23,7 @@ func appsEnv(t *testing.T) []string {
 	return append(scratchStoreEnv(t), "BASHY_APPS_DIR="+filepath.Join(t.TempDir(), "apps"), "BASHY_APPS_PATH=")
 }
 
-func freePort(t *testing.T) int {
+func freeAppPort(t *testing.T) int {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -71,7 +71,7 @@ func TestE2ERegisteredAppFlow(t *testing.T) {
 	}
 
 	// Serve and go through the console exactly as a browser would.
-	port := freePort(t)
+	port := freeAppPort(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	srv := exec.CommandContext(ctx, bin, "app", "serve", "--port", strconv.Itoa(port))

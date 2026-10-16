@@ -14,10 +14,25 @@ import (
 	"github.com/qiangli/yoke/pkg/fleet"
 )
 
-const stubEngineScript = `case "$1" in
-methods) printf '%s\n' '{"name":"render","effects":["exec"]}' ;;
-render) printf 'reg[%s]' "$3" ;;
-esac`
+func TestStubTmplEngineProcess(t *testing.T) {
+	if os.Getenv("BASHY_TEST_STUB_TMPL_ENGINE") != "1" {
+		return
+	}
+	for i, arg := range os.Args {
+		if arg != "--" || i+1 >= len(os.Args) {
+			continue
+		}
+		switch os.Args[i+1] {
+		case "methods":
+			os.Stdout.WriteString(`{"name":"render","effects":["exec"]}`)
+		case "render":
+			if len(os.Args) > i+3 {
+				os.Stdout.WriteString("reg[" + os.Args[len(os.Args)-1] + "]")
+			}
+		}
+		os.Exit(0)
+	}
+}
 
 const stubShellFunctionEngine = `eng() {
   case "$1" in
@@ -51,10 +66,10 @@ func tmplEngineFence(t *testing.T, script string) (out, failure string) {
 	return stdout.String(), failure
 }
 
-func registerStubEngine(t *testing.T, name, script string) {
+func registerStubEngine(t *testing.T, name string) {
 	t.Helper()
 	ringDir(t)
-	writeRecord(t, fleet.Command{Name: name, Exec: []string{shPath(t), "-c", script, name, fleet.ArgsToken}})
+	writeRecord(t, fleet.Command{Name: name, Exec: []string{os.Args[0], "-test.run=^TestStubTmplEngineProcess$", "--", fleet.ArgsToken}, Env: []string{"BASHY_TEST_STUB_TMPL_ENGINE=1"}})
 }
 
 func TestTmplFenceEngineFunction(t *testing.T) {
@@ -69,7 +84,7 @@ func TestTmplFenceEngineFunction(t *testing.T) {
 }
 
 func TestTmplFenceEngineRegisteredCommand(t *testing.T) {
-	registerStubEngine(t, "stubtmpl", stubEngineScript)
+	registerStubEngine(t, "stubtmpl")
 	out, failure := tmplEngineFence(t, "~~~tmpl as T !stubtmpl\nhello\n~~~\nr := T.render('{\"a\":1}')\necho \"$r\"\n")
 	if strings.TrimSpace(out) != `reg[{"a":1}]` {
 		t.Fatalf("out=%q failure=%q", out, failure)
@@ -113,7 +128,7 @@ func runTmplCLI(args ...string) (int, string, string) {
 }
 
 func TestTmplCLIEngineRegisteredCommand(t *testing.T) {
-	registerStubEngine(t, "stubtmpl", stubEngineScript)
+	registerStubEngine(t, "stubtmpl")
 	file := writeFixture(t, "hello {{ upper .name }}!")
 	code, out, errs := runTmplCLI("render", "--engine", "stubtmpl", file, "--data", `{"name":"x"}`)
 	if code != 0 || out != `reg[{"name":"x"}]` {

@@ -52,7 +52,17 @@ func isHelpVerb(name string) bool {
 }
 
 var classicHelpCommand = func(ctx context.Context, args []string) *exec.Cmd {
-	return exec.CommandContext(ctx, bashySelfPath(), args...)
+	// Help is dispatched by the running CLI. Its binary may have any filename
+	// (for example, the e2e build), so PATH lookup through bashySelfPath is
+	// insufficient here.
+	self := strings.TrimSpace(os.Getenv("BASHY_SELF"))
+	if self == "" {
+		self, _ = os.Executable()
+	}
+	if self == "" {
+		self = bashySelfPath()
+	}
+	return exec.CommandContext(ctx, self, args...)
 }
 
 func classicHelp(args []string) (string, error) {

@@ -26,7 +26,7 @@ func TestE2ECustomLauncher(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "example upstream "+r.URL.Path) }))
 	defer up.Close()
 	_, upPort, _ := net.SplitHostPort(up.Listener.Addr().String())
-	port := freePort(t)
+	port := freeAppPort(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	srv := exec.CommandContext(ctx, bin, "app", "serve", "--port", strconv.Itoa(port), "--launcher", dir)
