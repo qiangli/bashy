@@ -59,8 +59,24 @@ jobs:
           path: ${{ runner.temp }}/govulncheck/*.json
           if-no-files-found: ignore
           retention-days: 7
+  license-gate:
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.2
+      - name: Resolve pinned siblings (go.mod)
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./scripts/resolve-pinned-siblings.sh
+      - name: Shipped dependency license gate
+        shell: bash
+        run: ./scripts/verify-license-gate.sh
   darwin:
-    needs: [preflight, govulncheck]
+    needs: [preflight, govulncheck, license-gate]
     permissions:
       contents: read
       id-token: write
@@ -132,7 +148,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
   goreleaser:
-    needs: [preflight, govulncheck]
+    needs: [preflight, govulncheck, license-gate]
     outputs:
       seed_summary: ${{ steps.seed-bands.outputs.summary }}
     runs-on: ubuntu-latest

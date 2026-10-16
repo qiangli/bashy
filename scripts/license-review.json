@@ -1,0 +1,5 @@
+{
+  "schema": "bashy-license-review-v1",
+  "policy": "Permissive licenses only (MIT, Apache-2.0, BSD, ISC, 0BSD, CC0, Unlicense, Zlib). Exact-file reviewed exceptions with SHA-256 digest and non-empty reason are required for any copyleft (GPL, LGPL, AGPL, MPL, CPAL, SSPL) or unknown license.",
+  "exceptions": []
+}
