@@ -204,6 +204,7 @@ Available Commands:
   arena         Manage a sprint's loom arena
   assign        Schedule a fleet worker through the band ladder
   board         Show the sprint kanban (the conductor's epic/sprint board)
+  capability    List impacted capability IDs and record their verdicts or waivers for the sprint end gate
   checkpoint    Update a sprint's continuity record + refresh the conductor lease
   claim         Volunteer for a story on an active sprint — announces it to the manager
   comment       Append to a sprint's history thread
