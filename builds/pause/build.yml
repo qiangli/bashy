@@ -1,0 +1,47 @@
+      # pause's own build: the shipped program is bashy's pure-Go port of the
+      # tag's build/pause/linux/pause.c (bashy-build/pause), so the pinned tag
+      # is the specification it is checked against, not the source compiled.
+      - name: the tag's pause.c is the one the port was reviewed against
+        working-directory: src
+        run: |
+          set -euo pipefail
+          . ../fork/bashy-build/PIN
+          got=$(sha256sum build/pause/linux/pause.c | awk '{print $1}')
+          [[ $got == "$PAUSE_C_SHA256" ]] ||
+            { echo "build/pause/linux/pause.c changed upstream ($got != PIN $PAUSE_C_SHA256): re-review bashy-build/pause"; exit 1; }
+          tag=$(sed -n 's/^TAG ?= *//p' build/pause/Makefile)
+          [[ $tag == "$PAUSE_VERSION" ]] || { echo "build/pause/Makefile TAG $tag != PIN PAUSE_VERSION $PAUSE_VERSION"; exit 1; }
+          echo "pause.c sha256 $got, pause $tag: the reviewed specification"
+      - name: go build pause (the port, CGO_ENABLED=0, stdlib only, -trimpath, reproducible ldflags)
+        working-directory: fork/bashy-build/pause
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          . ../PIN
+          cgo=
+          for pair in $GO_CGO; do
+            [[ ${pair%%=*} == "$ASSET" ]] || continue
+            cgo=${pair#*=}
+          done
+          [[ $cgo == 0 ]] || { echo "PIN GO_CGO must be 0 for $ASSET (the port is pure Go)"; exit 1; }
+          [[ $(go env GOOS) == linux ]] || { echo "pause is built on linux runners only"; exit 1; }
+          arch=$(go env GOARCH)
+          [[ $ASSET == "pause-linux-$arch" ]] || { echo "MATRIX asset $ASSET does not match runner arch $arch"; exit 1; }
+          # Standard library only: the module requires nothing.
+          [[ $(go list -m all | wc -l) == 1 ]] || { echo "the pause port requires a module:"; go list -m all; exit 1; }
+          CGO_ENABLED=0 go test ./...
+          out=$GITHUB_WORKSPACE/out
+          mkdir -p "$out"
+          CGO_ENABLED=0 go build -trimpath -buildvcs=false \
+            -ldflags "-s -w -buildid= $GO_LDFLAGS" -o "$out/$ASSET" .
+          # Static means no ELF interpreter: pause runs FROM scratch.
+          if readelf -l "$out/$ASSET" | grep -q 'Requesting program interpreter'; then
+            echo "$out/$ASSET is dynamically linked"; exit 1
+          fi
+          go version -m "$out/$ASSET" | tee "$RUNNER_TEMP/buildinfo"
+          grep -qE '^[[:space:]]+build[[:space:]]+CGO_ENABLED=0$' "$RUNNER_TEMP/buildinfo" || { echo "not a CGO_ENABLED=0 build"; exit 1; }
+          if grep -qE '^[[:space:]]+dep[[:space:]]' "$RUNNER_TEMP/buildinfo"; then echo "a non-stdlib module is linked"; exit 1; fi
+          # Smoke: the binary reports the pinned pause version, as pause.c -v does.
+          "$out/$ASSET" "$GO_VERSION_ARG" | tee "$RUNNER_TEMP/version"
+          grep -qx "pause.go v$PAUSE_VERSION-$UPSTREAM_TAG-bashy" "$RUNNER_TEMP/version" || { echo "pause does not report v$PAUSE_VERSION"; exit 1; }

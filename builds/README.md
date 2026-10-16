@@ -52,7 +52,9 @@ builds/
 | `k3s` | `k3s-io/k3s` | `v1.36.1+k3s1` | Apache-2.0 | `go` (own `build.yml`, `audit.yml`) | the outpost runtime image ([audit blocked at this pin](k3s/README.md#release-blocked-at-this-pin)) |
 | `cni-plugins` | `containernetworking/plugins` | `v1.5.1` | Apache-2.0 | `go` (own `build.yml`, `audit.yml`) | the outpost runtime image |
 | `metrics-server` | `kubernetes-sigs/metrics-server` | `v0.9.0` | Apache-2.0 | `go` | the outpost runtime image |
-| `runc` | `opencontainers/runc` | `v1.4.2` | Apache-2.0 | `go` (own `build.yml`, `audit.yml`) | the outpost runtime image |
+| `runc` | `opencontainers/runc` | `v1.5.2` | Apache-2.0 | `go` (own `build.yml`) | the outpost runtime image |
+| `coredns` | `coredns/coredns` | `v1.14.7` | Apache-2.0 | `go` | the outpost runtime image (k3s cluster DNS) |
+| `pause` | `kubernetes/kubernetes` (`build/pause`) | `v1.37.1` | Apache-2.0 | `go` (own `build.yml`, `audit.yml`; ships a pure-Go port of `pause.c`) | the outpost runtime image (k3s `--pause-image`) |
 | `tailscale` | `tailscale/tailscale` | `v1.104.1` | BSD-3-Clause | `go` (own `build.yml`, `audit.yml`) | the outpost runtime image |
 
 Each pin is the release yoke runs today, read from `external/<tool>` or
