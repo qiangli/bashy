@@ -7,10 +7,8 @@ status: todo
 priority: p1
 labels:
     - remote
+    - post-1.0
 created: 2026-09-30T17:19:12.148081Z
-sprint: 402
-sprint_id: 107fb1ff-6f9c-5bc1-8896-a26f792a6fd8
-sprint_title: 'bashy dag post-1.0: reusable task graphs and remote execution'
 ---
 
 Owner 2026-09-30: extend dag's existing Host:/--mesh dispatch: for -H, sync the target's declared Sources (content-addressed, changed files only) into a stable remote workspace over the peer channel, run the same dag target there, stream stdout/stderr and exit status, copy declared Generates back. Acceptance: red/green; e2e 'bashy dag -H novidesign.local test' on a small repo; second run transfers only deltas.
