@@ -56,9 +56,14 @@ func TestClassSectionsTaxonomy(t *testing.T) {
 	// foreman was a member here; it is now a suppressed internal (Bashy #40),
 	// so it no longer resolves as a coreutils-class agent tool.
 	agentAt := func(venue, name string) bool { return has(s.Agent[venue], name) }
-	for _, name := range []string{"graph", "ast", "chat", "meet", "kb", "whois"} {
+	for _, name := range []string{"graph", "ast"} {
 		if !agentAt(atlas.TierUserland, name) {
 			t.Errorf("agent/userland missing %q", name)
+		}
+	}
+	for _, name := range []string{"chat", "meet", "kb", "whois"} {
+		if !agentAt(atlas.TierWorkplace, name) {
+			t.Errorf("agent/workplace missing %q", name)
 		}
 	}
 	// POSIX applets in the net/code-intel groups are userland, not agent
