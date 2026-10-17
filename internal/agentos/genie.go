@@ -24,13 +24,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/qiangli/yoke/pkg/broker/door"
 )
@@ -727,18 +725,32 @@ type genieDoctorReport struct {
 	ModelChoice   json.RawMessage `json:"model_choice,omitempty"`
 	ModelError    string          `json:"model_error,omitempty"`
 	Door          string          `json:"door"`
+	DoorStatus    door.Status     `json:"door_status"`
 }
 
-// genieDoorStatus reports the host's model door (genie is its client): up
-// when /health answers at all (401 without a token still means up), else down.
-func genieDoorStatus() string {
-	url := door.BaseURL()
-	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(url + "/health")
+// genieDoorStatus reports the host's model door (genie is its client) from the
+// same door.Probe `bashy llm status` uses: one code path, one down message.
+func genieDoorStatus(ctx context.Context) (string, door.Status) {
+	st, err := door.Probe(ctx)
 	if err != nil {
-		return "down at " + url + " (start it with `bashy llm up`)"
+		return "unknown: " + err.Error(), st
 	}
-	resp.Body.Close()
-	return "up at " + url
+	if !st.Up {
+		return "down: " + st.Error + " (start it with `bashy llm up`, or `bashy llm up --service`)", st
+	}
+	var backends []string
+	for _, b := range st.Backends {
+		backends = append(backends, fmt.Sprintf("%s present=%t healthy=%t", b.Name, b.Present, b.Healthy))
+	}
+	line := fmt.Sprintf("up at %s (pid %d", st.Listen, st.PID)
+	if st.Version != "" {
+		line += ", version " + st.Version
+	}
+	line += fmt.Sprintf("); backends: %s; %d local models, %d agent entries", strings.Join(backends, ", "), st.LocalModels, st.AgentEntries)
+	if st.Error != "" {
+		line += "; warning: " + st.Error
+	}
+	return line, st
 }
 
 func genieDoctor(args []string, stdout, stderr io.Writer) int {
@@ -796,7 +808,7 @@ func genieDoctor(args []string, stdout, stderr io.Writer) int {
 	} else {
 		report.YcodeError = "ycode version: " + err.Error()
 	}
-	report.Door = genieDoorStatus()
+	report.Door, report.DoorStatus = genieDoorStatus(context.Background())
 	if asJSON {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")

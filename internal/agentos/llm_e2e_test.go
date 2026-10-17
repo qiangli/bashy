@@ -7,10 +7,13 @@ package agentos
 
 import (
 	"fmt"
+	"net"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/qiangli/yoke/pkg/broker/door"
 	"github.com/qiangli/yoke/pkg/cligw"
 )
 
@@ -41,6 +44,27 @@ func TestE2ELLMFrontDoor(t *testing.T) {
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("bashy llm env missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestE2ELLMStatusReachable(t *testing.T) {
+	bin := bashyBinary(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	env := []string{"BASHY_HOME=" + filepath.Join(t.TempDir(), "bashy-home"), door.PortEnv + "=" + strconv.Itoa(port)}
+
+	out, stderr, code := runBashyStdEnv(bin, env, "llm", "status", "--json")
+	if code != 1 {
+		t.Fatalf("bashy llm status with no door exited %d, want 1: %s", code, stderr)
+	}
+	for _, want := range []string{door.StatusSchemaVersion, `"up": false`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("bashy llm status --json missing %q:\n%s", want, out)
 		}
 	}
 }
