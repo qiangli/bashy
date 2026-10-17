@@ -7,11 +7,13 @@ package agentos
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qiangli/yoke/pkg/broker"
 	"github.com/qiangli/yoke/pkg/fleet"
@@ -105,6 +107,62 @@ func TestEnsureSupervisordRunningWiresToFleet(t *testing.T) {
 
 	if err := broker.EnsureSupervisordRunning(context.Background()); err != nil {
 		t.Fatalf("EnsureSupervisordRunning: %v", err)
+	}
+}
+
+// `llm down --service` has no effect unless init() wired
+// broker.StopServiceNow to the same control path `bashy service stop llm`
+// uses (Sprint 455 F9): a direct signal to the door pid races the monitor's
+// own bookkeeping of a disable and can restart the unit once before the
+// disable catches up. This proves the seam reaches supervisord's "stop" op
+// on its control socket, against a temp socket path — never the real
+// ~/.bashy — and never a real exec of this binary.
+func TestStopServiceNowWiresToSupervisordStop(t *testing.T) {
+	t.Setenv("BASHY_HOME", t.TempDir())
+	sockDir, err := os.MkdirTemp("", "ysn")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	defer os.RemoveAll(sockDir)
+	sock := filepath.Join(sockDir, "supervisord.sock")
+	t.Setenv("BASHY_SUPERVISORD_SOCKET", sock)
+
+	if broker.StopServiceNow == nil {
+		t.Fatal("broker.StopServiceNow is nil after init")
+	}
+
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	got := make(chan ctlRequest, 1)
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		var req ctlRequest
+		if err := json.NewDecoder(c).Decode(&req); err != nil {
+			return
+		}
+		got <- req
+		_ = json.NewEncoder(c).Encode(ctlResponse{OK: true})
+	}()
+
+	if err := broker.StopServiceNow(context.Background(), broker.ServiceUnit); err != nil {
+		t.Fatalf("StopServiceNow: %v", err)
+	}
+
+	select {
+	case req := <-got:
+		if req.Op != "stop" || req.Unit != broker.ServiceUnit {
+			t.Fatalf("request = %+v, want op=stop unit=%q", req, broker.ServiceUnit)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("supervisord never received the stop request")
 	}
 }
 

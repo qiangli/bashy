@@ -452,6 +452,37 @@ func TestMonitorLiveEnableDisableLeavesOtherUnitsAlone(t *testing.T) {
 	}
 }
 
+// TestMonitorAfterExitRereadsDisabledBeforeRestart is Sprint 455 F9's
+// regression: `llm down --service` persists the unit disabled (fleet
+// SetServiceEnabled, a direct catalog write, not a `bashy service disable`
+// that also reloads the monitor), then the door exits non-zero before the
+// monitor's next poll rereads the registry. The restart decision must read
+// the registry fresh at that moment rather than trust the stale cached
+// decl, or the unit is restarted once (twice, observed live on Windows)
+// before the disable catches up.
+func TestMonitorAfterExitRereadsDisabledBeforeRestart(t *testing.T) {
+	u := testUnit("llm", true)
+	set := &unitSet{units: map[string]fleet.Service{u.Name: u}}
+	prov := newFakeProvider(fleet.ServiceProviderProcess)
+	m, _, _ := testMonitor(t, set, prov)
+	waitState(t, m, "llm", service.Active)
+
+	disabled := u
+	disabled.Enabled = false
+	set.put(disabled)
+
+	prov.die("llm", 1)
+
+	st := waitState(t, m, "llm", service.Inactive)
+	if st.Restarts != 0 {
+		t.Fatalf("a unit disabled before its exit was restarted: %+v", st)
+	}
+	time.Sleep(30 * time.Millisecond)
+	if n := prov.count(prov.acts, "llm"); n != 1 {
+		t.Fatalf("activations = %d, want exactly 1 (no restart)", n)
+	}
+}
+
 // requires orders starts: a dependent starts only once what it requires is
 // active, and a dependent of a disabled unit is failed with that reason.
 func TestMonitorRequiresOrdering(t *testing.T) {

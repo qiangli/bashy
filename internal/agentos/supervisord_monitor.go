@@ -641,6 +641,7 @@ func (m *monitor) onProvider(v msgProvider) {
 func (m *monitor) afterExit(u *unitRun, ex childExit, reason string) {
 	ran := m.now().Sub(u.startedAt)
 	u.st.Health = "" // the verdict was about an incarnation that is gone
+	m.refreshEnabled(u)
 	if !m.wantUp(u) {
 		m.transition(u, service.Inactive, reason)
 		return
@@ -658,6 +659,26 @@ func (m *monitor) afterExit(u *unitRun, ex childExit, reason string) {
 		return
 	}
 	m.fail(u, reason)
+}
+
+// refreshEnabled rereads u's enabled bit from the registry right before a
+// restart decision, instead of trusting reload's last cached snapshot: a
+// disable written directly to the catalog (fleet's SetServiceEnabled, what
+// `bashy llm down --service` calls, rather than `bashy service disable`
+// which also pokes this monitor to reload) would otherwise not be seen
+// until the next poll tick, during which an exit the disable raced can
+// still be restarted (Sprint 455 F9).
+func (m *monitor) refreshEnabled(u *unitRun) {
+	if m.load == nil {
+		return
+	}
+	all, _ := m.load()
+	for _, d := range all {
+		if d.Name == u.decl.Name {
+			u.decl.Enabled = d.Enabled
+			return
+		}
+	}
 }
 
 func (m *monitor) onTimer(v msgTimer) {

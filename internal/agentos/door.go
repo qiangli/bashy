@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/qiangli/yoke/pkg/broker"
 	"github.com/qiangli/yoke/pkg/fleet"
@@ -35,6 +36,15 @@ func init() {
 	// supervisord` with no further arguments.
 	broker.EnsureSupervisordRunning = func(ctx context.Context) error {
 		return fleet.EnsureSupervisordRunning(ctx, []string{bashySelfPath(), "supervisord"})
+	}
+	// `llm down --service` prefers this over signalling the door pid
+	// directly (Sprint 455 F9): the same control path `bashy service stop
+	// llm` uses, so the stop goes through supervisord's own bookkeeping
+	// instead of racing it. errNoMonitor surfaces as-is when nothing
+	// answers the socket.
+	broker.StopServiceNow = func(ctx context.Context, unit string) error {
+		_, err := ctlCall(supervisordSocket(), ctlRequest{Op: "stop", Unit: unit}, 5*time.Second)
+		return err
 	}
 }
 
