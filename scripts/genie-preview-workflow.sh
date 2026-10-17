@@ -19,6 +19,7 @@
 # Env:   BASHY (path to bashy), GENIE_PREVIEW_LOCAL_MODEL (default qwen3:1.7b),
 #        GENIE_PREVIEW_CLOUD_MODEL (default: auto-pick), GENIE_PREVIEW_LEGS,
 #        GENIE_PREVIEW_PULL_TIMEOUT (s, 1800), GENIE_PREVIEW_TURN_TIMEOUT (s, 600),
+#        GENIE_REQUEST_TIMEOUT_MS (ms, defaults to TURN_TIMEOUT*1000, caller wins),
 #        GENIE_PREVIEW_UP_TIMEOUT (s, 120), GENIE_PREVIEW_ISOLATE=1.
 #
 # --isolate runs against a throwaway BASHY_HOME and door port, so a host that
@@ -76,6 +77,12 @@ summary_line() { # summary_line [RC_LOCAL] [RC_CLOUD] [VERDICT]
 		"$_rcl" "$_rcc" "$_v" "$_np" "$_nf" "$_ns"
 }
 
+effective_request_timeout_ms() { # effective_request_timeout_ms [TURN_TIMEOUT] [CALLER_REQ_TIMEOUT]
+	_tt="${1:-${TURN_TIMEOUT:-600}}"
+	_rt="${2:-${GENIE_REQUEST_TIMEOUT_MS:-}}"
+	printf '%s' "${_rt:-$((_tt * 1000))}"
+}
+
 summary_self_test() {
 	_t_pass=0
 	_t_fail=0
@@ -103,6 +110,23 @@ summary_self_test() {
 	_check 1 1 "result: local=1 cloud=1 exit=1 (0 pass, 2 fail, 0 cloud skipped)"
 	_check 1 3 "result: local=1 cloud=3 exit=1 (0 pass, 1 fail, 1 cloud skipped)"
 
+	_check_timeout() { # _check_timeout TURN_TIMEOUT CALLER_REQ WANT
+		_got="$(effective_request_timeout_ms "$1" "$2")"
+		if [ "$_got" = "$3" ]; then
+			_t_pass=$((_t_pass + 1))
+		else
+			echo "genie-preview self-test: FAIL: timeout turn=$1 caller=$2" >&2
+			echo "  got:  $_got" >&2
+			echo "  want: $3" >&2
+			_t_fail=$((_t_fail + 1))
+		fi
+	}
+
+	_check_timeout 600 "" 600000
+	_check_timeout 1500 "" 1500000
+	_check_timeout 600 999999 999999
+	_check_timeout 1500 50000 50000
+
 	if [ "$_t_fail" -gt 0 ]; then
 		echo "genie-preview self-test: $_t_pass passed, $_t_fail FAILED" >&2
 		exit 1
@@ -119,7 +143,7 @@ while [ $# -gt 0 ]; do
 		--keep-model) KEEP_MODEL=1; shift ;;
 		--isolate) ISOLATE=1; shift ;;
 		--self-test) summary_self_test ;;
-		-h | --help) sed -n '2,33p' "$0"; exit 0 ;;
+		-h | --help) sed -n '2,34p' "$0"; exit 0 ;;
 		*) echo "genie-preview: unknown flag $1" >&2; exit 2 ;;
 	esac
 done
@@ -270,6 +294,7 @@ turn() {
 	mkdir -p "$dir"
 	out="$SCRATCH/$leg.out"
 	err="$SCRATCH/$leg.err"
+	export GENIE_REQUEST_TIMEOUT_MS="${GENIE_REQUEST_TIMEOUT_MS:-$((TURN_TIMEOUT * 1000))}"
 	say "[$leg] one turn on $model (timeout ${TURN_TIMEOUT}s)"
 	(cd "$dir" && run_timed "$TURN_TIMEOUT" "$BASHY" genie -m "$model" "$PROMPT") >"$out" 2>"$err"
 	trc=$?
@@ -329,6 +354,7 @@ ensure_door() {
 say "bashy=$("$BASHY" --version 2>&1 | { read -r l; printf '%s' "$l"; }) os=$(uname -s 2>/dev/null || echo unknown) isolate=$ISOLATE"
 
 leg_local() {
+	export GENIE_REQUEST_TIMEOUT_MS="${GENIE_REQUEST_TIMEOUT_MS:-$((TURN_TIMEOUT * 1000))}"
 	say "[local] model $LOCAL_MODEL"
 	ensure_door || return 1
 	model_names >"$SCRATCH/models.before"
@@ -383,6 +409,7 @@ pick_cloud() {
 }
 
 leg_cloud() {
+	export GENIE_REQUEST_TIMEOUT_MS="${GENIE_REQUEST_TIMEOUT_MS:-$((TURN_TIMEOUT * 1000))}"
 	model="$CLOUD_MODEL"
 	if [ -z "$model" ]; then
 		model="$(pick_cloud)" || model=""
