@@ -15,7 +15,7 @@
 #
 # Usage: scripts/genie-preview-workflow.sh [--local-model M] [--cloud-model M]
 #                                          [--legs local,cloud] [--keep-model]
-#                                          [--isolate]
+#                                          [--isolate] [--self-test]
 # Env:   BASHY (path to bashy), GENIE_PREVIEW_LOCAL_MODEL (default qwen3:1.7b),
 #        GENIE_PREVIEW_CLOUD_MODEL (default: auto-pick), GENIE_PREVIEW_LEGS,
 #        GENIE_PREVIEW_PULL_TIMEOUT (s, 1800), GENIE_PREVIEW_TURN_TIMEOUT (s, 600),
@@ -42,6 +42,75 @@ UP_TIMEOUT="${GENIE_PREVIEW_UP_TIMEOUT:-120}"
 ISOLATE="${GENIE_PREVIEW_ISOLATE:-0}"
 KEEP_MODEL=0
 
+summary_line() { # summary_line [RC_LOCAL] [RC_CLOUD] [VERDICT]
+	_rcl="${1:-${rc_local:-}}"
+	[ -n "$_rcl" ] || _rcl=-1
+	_rcc="${2:-${rc_cloud:-}}"
+	[ -n "$_rcc" ] || _rcc=-1
+	if [ $# -ge 3 ] && [ -n "${3:-}" ]; then
+		_v="$3"
+	else
+		_v=0
+		[ "$_rcl" = 0 ] || [ "$_rcl" = -1 ] || _v=1
+		if [ "$_rcc" = 3 ]; then
+			[ "$_v" = 0 ] && _v=3
+		elif [ "$_rcc" != 0 ] && [ "$_rcc" != -1 ]; then
+			_v=1
+		fi
+	fi
+	_np=0
+	_nf=0
+	_ns=0
+	case "$_rcl" in
+		0) _np=$((_np + 1)) ;;
+		-1) ;;
+		*) _nf=$((_nf + 1)) ;;
+	esac
+	case "$_rcc" in
+		0) _np=$((_np + 1)) ;;
+		3) _ns=$((_ns + 1)) ;;
+		-1) ;;
+		*) _nf=$((_nf + 1)) ;;
+	esac
+	printf 'result: local=%s cloud=%s exit=%s (%d pass, %d fail, %d cloud skipped)' \
+		"$_rcl" "$_rcc" "$_v" "$_np" "$_nf" "$_ns"
+}
+
+summary_self_test() {
+	_t_pass=0
+	_t_fail=0
+	_check() { # _check RC_LOCAL RC_CLOUD WANT_LINE
+		_got="$(summary_line "$1" "$2")"
+		if [ "$_got" = "$3" ]; then
+			_t_pass=$((_t_pass + 1))
+		else
+			echo "genie-preview self-test: FAIL: local=$1 cloud=$2" >&2
+			echo "  got:  $_got" >&2
+			echo "  want: $3" >&2
+			_t_fail=$((_t_fail + 1))
+		fi
+	}
+
+	_check 0 -1 "result: local=0 cloud=-1 exit=0 (1 pass, 0 fail, 0 cloud skipped)"
+	_check 1 -1 "result: local=1 cloud=-1 exit=1 (0 pass, 1 fail, 0 cloud skipped)"
+	_check -1 0 "result: local=-1 cloud=0 exit=0 (1 pass, 0 fail, 0 cloud skipped)"
+	_check -1 1 "result: local=-1 cloud=1 exit=1 (0 pass, 1 fail, 0 cloud skipped)"
+	_check -1 3 "result: local=-1 cloud=3 exit=3 (0 pass, 0 fail, 1 cloud skipped)"
+	_check 0 0 "result: local=0 cloud=0 exit=0 (2 pass, 0 fail, 0 cloud skipped)"
+	_check 0 1 "result: local=0 cloud=1 exit=1 (1 pass, 1 fail, 0 cloud skipped)"
+	_check 0 3 "result: local=0 cloud=3 exit=3 (1 pass, 0 fail, 1 cloud skipped)"
+	_check 1 0 "result: local=1 cloud=0 exit=1 (1 pass, 1 fail, 0 cloud skipped)"
+	_check 1 1 "result: local=1 cloud=1 exit=1 (0 pass, 2 fail, 0 cloud skipped)"
+	_check 1 3 "result: local=1 cloud=3 exit=1 (0 pass, 1 fail, 1 cloud skipped)"
+
+	if [ "$_t_fail" -gt 0 ]; then
+		echo "genie-preview self-test: $_t_pass passed, $_t_fail FAILED" >&2
+		exit 1
+	fi
+	echo "genie-preview self-test: all $_t_pass cases passed"
+	exit 0
+}
+
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--local-model) LOCAL_MODEL="${2:-}"; shift 2 ;;
@@ -49,6 +118,7 @@ while [ $# -gt 0 ]; do
 		--legs) LEGS="${2:-}"; shift 2 ;;
 		--keep-model) KEEP_MODEL=1; shift ;;
 		--isolate) ISOLATE=1; shift ;;
+		--self-test) summary_self_test ;;
 		-h | --help) sed -n '2,33p' "$0"; exit 0 ;;
 		*) echo "genie-preview: unknown flag $1" >&2; exit 2 ;;
 	esac
@@ -342,5 +412,5 @@ if [ "$rc_cloud" = 3 ]; then
 elif [ "$rc_cloud" != 0 ] && [ "$rc_cloud" != -1 ]; then
 	verdict=1
 fi
-say "result: local=$rc_local cloud=$rc_cloud exit=$verdict (0 pass, 1 fail, 3 cloud skipped)"
+say "$(summary_line "$rc_local" "$rc_cloud" "$verdict")"
 exit "$verdict"
