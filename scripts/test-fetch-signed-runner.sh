@@ -30,6 +30,13 @@ with open(sys.argv[1], 'rb') as f, gzip.GzipFile(sys.argv[2], 'wb', mtime=0) as 
 EOF
   printf 'fixture-gz-bundle' >"$SRV/runner-darwin-arm64.gz.sigstore.json"
   printf 'fixture-exe-bundle' >"$SRV/runner-darwin-arm64.sigstore.json"
+  for target in linux-amd64 linux-arm64 windows-amd64; do
+    cp "$SRV/runner-darwin-arm64.gz" "$SRV/runner-$target.gz"
+    cp "$SRV/runner-darwin-arm64.gz.sigstore.json" "$SRV/runner-$target.gz.sigstore.json"
+    exe=runner-$target
+    [ "$target" = windows-amd64 ] && exe=$exe.exe
+    cp "$SRV/runner-darwin-arm64.sigstore.json" "$SRV/$exe.sigstore.json"
+  done
   cat >"$YOKE/external/ollama/runner_embed/extract.go" <<EOF
 package runner_embed
 const (
@@ -37,11 +44,11 @@ const (
   releaseIdentity = "https://github.com/qiangli/ollama/.github/workflows/bashy-build.yml@refs/tags/bashy-v0.21.2-15"
 )
 var releaseSHA256 = map[string]string{
-"linux/amd64":   "",
-"linux/arm64":   "",
+"linux/amd64":   "$EXE_SHA",
+"linux/arm64":   "$EXE_SHA",
 "darwin/amd64":  "",
 "darwin/arm64":  "$EXE_SHA",
-"windows/amd64": "",
+"windows/amd64": "$EXE_SHA",
 }
 EOF
   printf '{"fixture":"trusted-root"}' >"$YOKE/pkg/binmgr/sigstore/trusted_root.json"
@@ -86,6 +93,24 @@ if run_fetch "$t/c1" darwin arm64 >"$t/c1.log" 2>&1; then
 else
   bad "happy path failed: $(cat "$t/c1.log")"
 fi
+
+# GoReleaser's bashy build hook runs for every linux/windows arch pair.
+# Run that same command with fixture assets and a stub verifier for each one.
+tm=$(mktemp -d "${TMPDIR:-/tmp}/fr-test.XXXXXX")
+make_fixture "$tm/fx"
+for target in linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
+  os=${target%/*} arch=${target#*/}
+  if run_fetch "$tm/${os}-${arch}" "$os" "$arch" >"$tm/${os}-${arch}.log" 2>&1; then
+    case $target in
+      windows/arm64) grep -q 'skipping windows/arm64' "$tm/${os}-${arch}.log" \
+        && ok "GoReleaser hook $target skipped" || bad "GoReleaser hook $target did not log skip" ;;
+      *) grep -q "fetch-signed-runner: $target verified" "$tm/${os}-${arch}.log" \
+        && ok "GoReleaser hook $target verified" || bad "GoReleaser hook $target did not verify" ;;
+    esac
+  else
+    bad "GoReleaser hook $target failed: $(cat "$tm/${os}-${arch}.log")"
+  fi
+done
 
 # 1b. Single-arg form accepted.
 t2=$(mktemp -d "${TMPDIR:-/tmp}/fr-test.XXXXXX")
@@ -143,13 +168,20 @@ else
   ok "empty pin refused"
 fi
 
-# 5. Unsupported target: refused.
+# 5. GoReleaser target without a signed runner: skipped before any fetch.
 t6=$(mktemp -d "${TMPDIR:-/tmp}/fr-test.XXXXXX")
 make_fixture "$t6/fx"
-if run_fetch "$t6/c" plan9 arm64 >"$t6/c.log" 2>&1; then
-  bad "unsupported target accepted"
+if run_fetch "$t6/c" windows arm64 >"$t6/c.log" 2>&1; then
+  if grep -q 'fetch-signed-runner: skipping windows/arm64: no signed runner' "$t6/c.log" \
+    && [ ! -e "$YOKE/external/ollama/runner_embed/ycode-runner.gz" ] \
+    && [ ! -e "$STUBLOG" ] \
+    && [ -z "$(ls -A "$t6/c/cache")" ]; then
+    ok "windows/arm64 skipped without fetch or install"
+  else
+    bad "windows/arm64 skip had unexpected side effects: $(cat "$t6/c.log")"
+  fi
 else
-  ok "unsupported target refused"
+  bad "windows/arm64 skip failed: $(cat "$t6/c.log")"
 fi
 
 # 6. Verifier rejection fails closed.

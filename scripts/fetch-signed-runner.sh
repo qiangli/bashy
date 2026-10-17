@@ -5,10 +5,11 @@
 # Usage: ./scripts/fetch-signed-runner.sh OS ARCH
 #    e.g. ./scripts/fetch-signed-runner.sh darwin arm64
 #
-# Supported targets (the only ones the signed release publishes):
+# Signed targets (the only ones the pinned release publishes):
 #   linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
+# Other build targets have no runner to embed; the release hook skips them.
 #
-# What it does, fail-closed at every step:
+# For signed targets, every fetch and verification step fails closed:
 #   1. Downloads runner-OS-ARCH.gz, its Sigstore bundle
 #      (runner-OS-ARCH.gz.sigstore.json) and the raw executable's bundle
 #      (runner-OS-ARCH.sigstore.json, windows: runner-windows-amd64.exe)
@@ -61,10 +62,11 @@ else
   die "usage: $0 OS ARCH (e.g. $0 darwin arm64)"
 fi
 
-# The signed release publishes exactly these five; anything else fails.
+# Only these targets have signed assets in the pinned release. GoReleaser also
+# builds windows/arm64, so a target without an asset must let that build proceed.
 case ${os}/${arch} in
   linux/amd64|linux/arm64|darwin/amd64|darwin/arm64|windows/amd64) ;;
-  *) die "unsupported target ${os}/${arch}: no signed runner exists" ;;
+  *) echo "fetch-signed-runner: skipping ${os}/${arch}: no signed runner in ${RUNNER_TAG}"; exit 0 ;;
 esac
 
 script_dir=$(dirname -- "$0")
