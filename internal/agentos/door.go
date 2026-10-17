@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/qiangli/yoke/pkg/broker"
+	"github.com/qiangli/yoke/pkg/fleet"
 )
 
 // The host's model door (Sprint 302, yoke pkg/broker): ONE process per host,
@@ -21,6 +22,13 @@ import (
 func init() {
 	broker.EngineArgv = func() []string { return []string{bashySelfPath(), "ollama", "serve"} }
 	broker.SelfArgv = func() []string { return []string{bashySelfPath(), "llm", "serve"} }
+	// A fresh fleet.New() per call, not a cached Catalog, so it honors
+	// BASHY_HOME (and the other fleet env overrides) as of the call — the
+	// same lazy-load pattern dispatchService uses for `bashy service
+	// enable/disable`, which this seam composes with.
+	broker.SetServiceEnabled = func(ctx context.Context, unit string, enabled bool) error {
+		return fleet.New().SetServiceEnabled(ctx, unit, enabled)
+	}
 }
 
 // isDoorServe reports whether `bashy ollama ARGS` asks for the door rather

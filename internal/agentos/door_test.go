@@ -6,11 +6,14 @@ package agentos
 // Sprint: #302; Story: #964; Story-ID: c2f2a971dc77
 
 import (
+	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/qiangli/yoke/pkg/broker"
+	"github.com/qiangli/yoke/pkg/fleet"
 )
 
 // `bashy ollama serve` is the door, except for the door's own engine child.
@@ -38,6 +41,35 @@ func TestDoorEngineArgv(t *testing.T) {
 	}
 	if self := broker.SelfArgv(); len(self) != 3 || !strings.HasSuffix(strings.Join(self[1:], " "), "llm serve") {
 		t.Fatalf("self argv %v", self)
+	}
+}
+
+// `llm up/down --service` has no effect unless init() wired
+// broker.SetServiceEnabled to a real service layer. This proves the seam is
+// live and actually reaches pkg/fleet's Catalog.SetServiceEnabled on the
+// "llm" unit, against a temp fleet root — never the real ~/.bashy.
+func TestSetServiceEnabledWiresToFleetCatalog(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BASHY_HOME", home)
+	t.Setenv("BASHY_FLEET_DIR", filepath.Join(home, "fleet"))
+
+	if broker.SetServiceEnabled == nil {
+		t.Fatal("broker.SetServiceEnabled is nil after init")
+	}
+
+	before, ok := fleet.New().Service(broker.ServiceUnit)
+	if !ok {
+		t.Fatalf("no %q service unit in a fresh fleet catalog", broker.ServiceUnit)
+	}
+	want := !before.Enabled
+
+	if err := broker.SetServiceEnabled(context.Background(), broker.ServiceUnit, want); err != nil {
+		t.Fatalf("SetServiceEnabled: %v", err)
+	}
+
+	after, ok := fleet.New().Service(broker.ServiceUnit)
+	if !ok || after.Enabled != want {
+		t.Fatalf("service %+v, want enabled=%v", after, want)
 	}
 }
 
