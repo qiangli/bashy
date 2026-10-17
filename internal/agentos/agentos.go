@@ -1055,12 +1055,7 @@ func dispatch() {
 		// later grew a real governed interactive session plus sessions/steer/
 		// attach/interrupt/timeline, so `chat` is canonical again and `invoke`
 		// remains the hidden compatibility spelling for existing one-shot callers.
-		cmd := chat.NewChatCmd()
-		cmd.SetArgs(os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+		dispatchExit(runChatCmd(os.Args[2:], os.Stdout, os.Stderr))
 	case "coach":
 		// Run ONE agent under the LLM-free auto-coach: watch its tool.call stream
 		// and, when it loops, ESC it out and tell it to deliver. A report channel,
