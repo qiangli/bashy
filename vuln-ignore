@@ -1,0 +1,11 @@
+# OSV waivers for the bashy executable, one exact GO-YYYY-NNNN id per line.
+# This entry applies only to the opt-in bashy_engines build tag. The default
+# and embed_runner builds do not link the affected OpenPGP package.
+#
+# GO-2026-5932 has no fixed golang.org/x/crypto version: openpgp is deprecated
+# and remains linked through go.podman.io/image/v5/signature in the Podman
+# engine's image-signature path. That path can process untrusted signatures;
+# this waiver records an unpatched dependency, not non-reachability. Recorded
+# by Story #2102 for s443-manager review. Retire when go.podman.io/image/v5
+# replaces OpenPGP in this path, then rescan.
+GO-2026-5932 no fixed x/crypto version; Podman image-signature OpenPGP dependency in bashy_engines; retire when upstream replaces it

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Release gate: pinned govulncheck in source mode over bashy and the siblings it
-# ships (outpost, yoke), each as its own module with GOWORK=off — exactly what a
-# release build resolves. govulncheck is BUILT with the release toolchain (the
-# `toolchain` line of bashy's go.mod), so the stdlib it judges is the one the
+# Release gate: pinned govulncheck in source mode over the bashy executable's
+# release tag sets and the siblings it ships (outpost, yoke), each as its own
+# module with GOWORK=off — exactly what a release build resolves.
+# govulncheck is BUILT with the release toolchain (the `toolchain` line of
+# bashy's go.mod), so the stdlib it judges is the one the
 # release links. Same verdict rule as builds/_shared/kinds/go/audit.yml: a
 # finding whose first trace frame names a function is REACHABLE and makes this
 # checker return nonzero; the release workflow chooses report-only or blocking
@@ -32,9 +33,19 @@ echo "govulncheck $version built with $have"
 status=0
 for dir in "$@"; do
   mod=$(cd "$dir" && go list -m)
-  report=$out/$(basename "$mod").govulncheck.json
+  tags_sets=('')
+  target=./...
+  if [[ $mod == github.com/qiangli/bashy ]]; then
+    tags_sets=('' embed_runner bashy_engines)
+    target=./cmd/bashy
+  fi
+  for tags in "${tags_sets[@]}"; do
+  name=$(basename "$mod")${tags:+.$tags}
+  report=$out/$name.govulncheck.json
+  tag_args=()
+  [[ -z $tags ]] || tag_args=(-tags "$tags")
   # govulncheck exits 3 when it finds anything; the verdict is rendered below.
-  (cd "$dir" && "$bin/govulncheck" -format json ./...) >"$report" || true
+  (cd "$dir" && "$bin/govulncheck" -format json "${tag_args[@]}" "$target") >"$report" || true
   # One line per OSV at its most precise level: REACHABLE (a called symbol),
   # package (imported, vulnerable code not called) or module (required only).
   # Exit 2 means the stream carries no govulncheck config, i.e. no report.
@@ -64,9 +75,19 @@ PY
   reachable=$(grep -c '^REACHABLE' "$bin/found" || true)
   pkg=$(grep -c '^package' "$bin/found" || true)
   modonly=$(grep -c '^module' "$bin/found" || true)
-  echo "$mod: $reachable reachable, $pkg package-level, $modonly module-only (report: $report)"
+  echo "$mod${tags:+ [$tags]}: $reachable reachable, $pkg package-level, $modonly module-only (report: $report)"
   sed 's/^/  /' "$bin/found"
-  ((reachable == 0)) || status=1
+  if [[ $mod == github.com/qiangli/bashy && $tags == bashy_engines ]]; then
+    awk '$1 == "REACHABLE" { print $2 }' "$bin/found" >"$bin/reachable"
+    awk '!/^([[:space:]]*#|[[:space:]]*$)/ { print $1 }' vuln-ignore | sort -u >"$bin/waived"
+    unwaived=$(comm -23 "$bin/reachable" "$bin/waived" | tee "$bin/unwaived" | wc -l | tr -d ' ')
+    echo "  $unwaived unwaived reachable"
+    sed 's/^/    /' "$bin/unwaived"
+    ((unwaived == 0)) || status=1
+  else
+    ((reachable == 0)) || status=1
+  fi
+  done
 done
 ((status == 0)) || echo "govulncheck-release: reachable vulnerabilities found" >&2
 exit "$status"
