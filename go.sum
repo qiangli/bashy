@@ -955,6 +955,8 @@ github.com/qiangli/yoke v0.0.0-20261017184042-9c3dbc2afdad h1:y6fvY7iODnBtdjls8C
 github.com/qiangli/yoke v0.0.0-20261017184042-9c3dbc2afdad/go.mod h1:Fb4+mJTiKKxwdWn4DocYoBuhSlvScwiinI1GUfewgZQ=
 github.com/qiangli/yoke v0.0.0-20261017195553-af4008ef8783 h1:LSAc01SDR6az3oZU17te6E4r+aHpOuCj4uKmlgoCzWI=
 github.com/qiangli/yoke v0.0.0-20261017195553-af4008ef8783/go.mod h1:Fb4+mJTiKKxwdWn4DocYoBuhSlvScwiinI1GUfewgZQ=
+github.com/qiangli/yoke v0.0.0-20261017204950-7732937b1fdf h1:DK+nB7u8J4F4HZZQO7jWzApyaniSAKDMDvD9BvPHsBI=
+github.com/qiangli/yoke v0.0.0-20261017204950-7732937b1fdf/go.mod h1:Fb4+mJTiKKxwdWn4DocYoBuhSlvScwiinI1GUfewgZQ=
 github.com/qiangli/yoke/external/otel v0.0.0-20261017114819-c90777a6c242 h1:4YpdHh9HIWb1OIo+ADSttePaD14zcwXvZD6fwjPFV+U=
 github.com/qiangli/yoke/external/otel v0.0.0-20261017114819-c90777a6c242/go.mod h1:T/QcacDbXpopQO/SQITqPj+vnkVtKgztKF8RJumTkrc=
 github.com/qiangli/yoke/external/otel v0.0.0-20261017161155-54f1c720ea83 h1:AUXt+z3CblAfqKRjmv42320C2JkQzxsZbHAFWNblU18=
@@ -963,6 +965,8 @@ github.com/qiangli/yoke/external/otel v0.0.0-20261017184042-9c3dbc2afdad h1:eefd
 github.com/qiangli/yoke/external/otel v0.0.0-20261017184042-9c3dbc2afdad/go.mod h1:T/QcacDbXpopQO/SQITqPj+vnkVtKgztKF8RJumTkrc=
 github.com/qiangli/yoke/external/otel v0.0.0-20261017195553-af4008ef8783 h1:8033cGm19etw4lMRu787/GG90Z1I8gzGf/Q15ItsWEQ=
 github.com/qiangli/yoke/external/otel v0.0.0-20261017195553-af4008ef8783/go.mod h1:T/QcacDbXpopQO/SQITqPj+vnkVtKgztKF8RJumTkrc=
+github.com/qiangli/yoke/external/otel v0.0.0-20261017204950-7732937b1fdf h1:ecArSYlLYhDVm5ExRt6P73QzdnSEkB5yZgGbl1Q3ZvM=
+github.com/qiangli/yoke/external/otel v0.0.0-20261017204950-7732937b1fdf/go.mod h1:T/QcacDbXpopQO/SQITqPj+vnkVtKgztKF8RJumTkrc=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261017114819-c90777a6c242 h1:j9dxGK8pVXm5R30rY/RTXUXbYoOELh5Tjiq3ALkx9Co=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261017114819-c90777a6c242/go.mod h1:UnJ5Aw/zCOdFgHdziuLv9sU0t/KT8dcOrGfmwcm6X4E=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261017161155-54f1c720ea83 h1:wlXG2dXHgrpkbadR+40pmLuHvJSnxbvPYYA3Q3Do4hw=
@@ -971,6 +975,8 @@ github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261017184042-9c3dbc2afdad h1:pR0VzZu4
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261017184042-9c3dbc2afdad/go.mod h1:UnJ5Aw/zCOdFgHdziuLv9sU0t/KT8dcOrGfmwcm6X4E=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261017195553-af4008ef8783 h1:9LUyd0cXs2P71n8plKYZyeFiuy+EsL4uNUb53qPE71s=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261017195553-af4008ef8783/go.mod h1:UnJ5Aw/zCOdFgHdziuLv9sU0t/KT8dcOrGfmwcm6X4E=
+github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261017204950-7732937b1fdf h1:CUFMXLvdXwG1jlZAdHG4bPZZss1E5vbBXloVT2bI6UA=
+github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261017204950-7732937b1fdf/go.mod h1:UnJ5Aw/zCOdFgHdziuLv9sU0t/KT8dcOrGfmwcm6X4E=
 github.com/qiangli/yoke/pkg/oci v0.0.0-20261017114819-c90777a6c242 h1:GTmcKVZNIcpnqUcEq9RUit3cEV/X4QSwNDLIJ11q9k0=
 github.com/qiangli/yoke/pkg/oci v0.0.0-20261017114819-c90777a6c242/go.mod h1:WgmQ7NDV8dDN6eY+E934CcxHBPnhohlKr01OgqAx4qY=
 github.com/qiangli/yoke/pkg/oci v0.0.0-20261017161155-54f1c720ea83 h1:ezVusvFp/J9xJ2J7qRhMtY/hsWQ0IbdDFw0meZIB6NQ=
@@ -979,6 +985,8 @@ github.com/qiangli/yoke/pkg/oci v0.0.0-20261017184042-9c3dbc2afdad h1:/Htc/E7Klz
 github.com/qiangli/yoke/pkg/oci v0.0.0-20261017184042-9c3dbc2afdad/go.mod h1:WgmQ7NDV8dDN6eY+E934CcxHBPnhohlKr01OgqAx4qY=
 github.com/qiangli/yoke/pkg/oci v0.0.0-20261017195553-af4008ef8783 h1:DDKFxC7jR2qV09uv4DqMK7sMkJPjgyOmmgBNSL6nrpU=
 github.com/qiangli/yoke/pkg/oci v0.0.0-20261017195553-af4008ef8783/go.mod h1:WgmQ7NDV8dDN6eY+E934CcxHBPnhohlKr01OgqAx4qY=
+github.com/qiangli/yoke/pkg/oci v0.0.0-20261017204950-7732937b1fdf h1:nUWpYjeEM8pw7a8pMfulh0ij9qAngYCj4XCUrMoEIRs=
+github.com/qiangli/yoke/pkg/oci v0.0.0-20261017204950-7732937b1fdf/go.mod h1:WgmQ7NDV8dDN6eY+E934CcxHBPnhohlKr01OgqAx4qY=
 github.com/quic-go/qpack v0.6.0 h1:g7W+BMYynC1LbYLSqRt8PBg5Tgwxn214ZZR34VIOjz8=
 github.com/quic-go/qpack v0.6.0/go.mod h1:lUpLKChi8njB4ty2bFLX2x4gzDqXwUpaO1DP9qMDZII=
 github.com/quic-go/quic-go v0.59.1 h1:0Gmua0HW1Tv7ANR7hUYwRyD0MG5OJfgvYSZasGZzBic=
