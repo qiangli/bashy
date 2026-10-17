@@ -92,11 +92,28 @@ chmod +x "$work/run.sh"
 # address (the server's own tunnel reconnects to wss://$nsaddr:$port once it
 # is up and drops 127.0.0.1), so the kubeconfig's loopback server URL is not
 # the one to probe.
-# k3s dispatches its embedded kubectl by argv0 basename (reexec), so call it
-# through a symlink named kubectl; `$bin kubectl` would hand the extra word to
-# kubectl's own root command ("unknown command kubectl").
-ln -sf "$bin" "$work/kubectl"
-kubectl() { "$work/kubectl" --kubeconfig="$kubeconfig" --server="https://$nsaddr:$port" --request-timeout=5s "$@"; }
+# The multicall subcommands, run as upstream users run them: the binary named
+# `k3s`, `k3s kubectl|crictl|ctr ARGS` (regression map row 16; before it,
+# `k3s kubectl` failed: unknown command "kubectl" for "kubectl").
+ln -sf "$bin" "$work/k3s"
+# EXPECTED is a glob over the whole output. Output carrying k3s's own version
+# line fails whatever the glob: that is k3s's urfave VersionPrinter leaking
+# into the crictl/ctr path (the bashy-v1.37.1+k3s1-9 symptom).
+multicall() { # NAME EXPECTED-GLOB ARGS...
+	local name=$1 want=$2 got
+	shift 2
+	got=$("$work/k3s" "$name" "$@" 2>&1) || die "k3s $name $*: exit $?: $got"
+	[[ $got != *"k3s version "* ]] || die "k3s $name $*: printed k3s's version: $got"
+	# shellcheck disable=SC2053 # $want is a glob
+	[[ $got == $want ]] || die "k3s $name $*: output does not match '$want': $got"
+	echo "no-egress: k3s $name $*: ok"
+}
+multicall kubectl '*Client Version: *' version --client
+# crictl: "crictl github.com/k3s-io/containerd/v2 v1.37.0-k3s1"
+multicall crictl 'crictl *' --version
+# ctr: "ctr github.com/k3s-io/containerd/v2 v2.x.y-k3s1"
+multicall ctr 'ctr github.com/*' --version
+kubectl() { "$work/k3s" kubectl --kubeconfig="$kubeconfig" --server="https://$nsaddr:$port" --request-timeout=5s "$@"; }
 
 probe() {
 	# Loopback traffic over the API: discovery, a list, a write and a read.
