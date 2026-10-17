@@ -29,6 +29,13 @@ func init() {
 	broker.SetServiceEnabled = func(ctx context.Context, unit string, enabled bool) error {
 		return fleet.New().SetServiceEnabled(ctx, unit, enabled)
 	}
+	// `llm up --service` starts the monitor rather than the door itself, so
+	// supervisord — not this call — is what restarts the door on a crash or
+	// at boot. The argv matches dispatchSupervisord's own invocation: `bashy
+	// supervisord` with no further arguments.
+	broker.EnsureSupervisordRunning = func(ctx context.Context) error {
+		return fleet.EnsureSupervisordRunning(ctx, []string{bashySelfPath(), "supervisord"})
+	}
 }
 
 // isDoorServe reports whether `bashy ollama ARGS` asks for the door rather

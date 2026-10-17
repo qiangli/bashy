@@ -7,6 +7,7 @@ package agentos
 
 import (
 	"context"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,6 +71,40 @@ func TestSetServiceEnabledWiresToFleetCatalog(t *testing.T) {
 	after, ok := fleet.New().Service(broker.ServiceUnit)
 	if !ok || after.Enabled != want {
 		t.Fatalf("service %+v, want enabled=%v", after, want)
+	}
+}
+
+// `llm up --service` has no effect unless init() wired
+// broker.EnsureSupervisordRunning to pkg/fleet's own EnsureSupervisordRunning.
+// This proves the seam is live and actually reaches it, against a temp fleet
+// root — never the real ~/.bashy, and never a real exec of this binary: a
+// fake listener already answers the control socket, so
+// fleet.EnsureSupervisordRunning takes its documented no-op short-circuit
+// ("idempotent... argv is never touched") rather than spawning anything.
+func TestEnsureSupervisordRunningWiresToFleet(t *testing.T) {
+	t.Setenv("BASHY_HOME", t.TempDir())
+	// A short dir, not t.TempDir(): a unix socket path must fit sun_path
+	// (~104 bytes on macOS/BSD), and t.TempDir() nests the test's own name.
+	sockDir, err := os.MkdirTemp("", "ysd")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	defer os.RemoveAll(sockDir)
+	sock := filepath.Join(sockDir, "supervisord.sock")
+	t.Setenv("BASHY_SUPERVISORD_SOCKET", sock)
+
+	if broker.EnsureSupervisordRunning == nil {
+		t.Fatal("broker.EnsureSupervisordRunning is nil after init")
+	}
+
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	if err := broker.EnsureSupervisordRunning(context.Background()); err != nil {
+		t.Fatalf("EnsureSupervisordRunning: %v", err)
 	}
 }
 
