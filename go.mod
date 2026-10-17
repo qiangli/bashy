@@ -14,12 +14,13 @@ require (
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/itchyny/gojq v0.12.19
 	github.com/modelcontextprotocol/go-sdk v1.8.0
+	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
 	github.com/pkg/sftp v1.13.10
-	github.com/qiangli/coreutils v0.0.0-20261013041512-6c4cf31f268c
+	github.com/qiangli/coreutils v0.0.0-20261017070323-6b80c78e8fa4
 	github.com/qiangli/ycode v0.3.1-dev.0.20261011021240-aa0d91dd60d2
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261016224718-61be2116b8d9
-	github.com/qiangli/yoke/external/otel v0.0.0-20261016224718-61be2116b8d9
+	github.com/qiangli/yoke v0.0.0-20261017064111-105780eae153
+	github.com/qiangli/yoke/external/otel v0.0.0-20261017064111-105780eae153
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.45.0
@@ -312,7 +313,6 @@ require (
 	github.com/nwaples/rardecode/v2 v2.2.3 // indirect
 	github.com/nxadm/tail v1.4.11 // indirect
 	github.com/odvcencio/gotreesitter v0.16.0 // indirect
-	github.com/ollama/ollama v0.0.0-00010101000000-000000000000 // indirect
 	github.com/opencontainers/cgroups v0.0.6 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
@@ -354,9 +354,9 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261016183626-05791dff79be // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261016224718-61be2116b8d9 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261016224718-61be2116b8d9 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261017073534-e2e16b06cad7 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261017064111-105780eae153 // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261017064111-105780eae153 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
