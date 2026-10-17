@@ -208,7 +208,7 @@ func dispatchCommands(args []string) int {
 			fmt.Println("  --features     machine-readable one-command feature/gap report")
 			fmt.Println("Command Atlas views:")
 			fmt.Printf("  --view VIEW    classic | %s\n", strings.Join(atlasViews, " | "))
-			fmt.Println("  --tier T       filter by execution tier (userland/workspace/sandbox/…)")
+			fmt.Println("  --tier T       filter by execution tier (userland/workplace/sandbox/…)")
 			fmt.Println("  --group G      filter by functional group (fileutils/code-intel/…)")
 			fmt.Println("  --cap C        filter by agentic capability (json/read-only/…)")
 			fmt.Println("  --effect E     filter by security effect (destroy/cred/priv/remote/net/…)")
@@ -349,7 +349,7 @@ func printAgenticCommands(w io.Writer) {
 	fmt.Fprint(w, `agentic bashy commands — the 1.0.0 core first (bashy commands for the full first screen):
   bashy agent list               the registered tool:model bindings; agent whoami = this process
   bashy model list / tool list   the inference backends and the agentic CLIs this host can drive
-  bashy skill list               tier-2 workspace skills applicable here
+  bashy skill list               tier-2 workplace skills applicable here
   bashy chat AGENT "..."         one governed instruction to an agent (delegate: hand off a task)
   bashy sprint / todo            the cross-repo board and this repo's committed task list
   bashy kb context --for TASK --rings repo,host --forms note,page --budget 700 --json
@@ -595,7 +595,7 @@ var verbSynopsis = map[string]string{
 	"acp":                "serve this host to an ACP client (Zed, a Codync bot) over JSON-RPC on stdin/stdout — the one-word spelling of `herald acp`",
 	"ask":                "ask the HUMAN operator for an ad-hoc value (a token, an OTP) — never the model; returns a path, not the value",
 	"approve":            "list and decide pending approvals (a yielded @confirm, ACP permission request, chat grant): `approve allow ID` prints the --confirm=TOKEN:yes resume flag",
-	"skill":              "tier-2 workspace skills, env-gated: list applicable here, probe the coordinate, show one",
+	"skill":              "tier-2 workplace skills, env-gated: list applicable here, probe the coordinate, show one",
 	"skills":             "hidden alias for bashy skill",
 	"craft":              "the living skill graph: what running skills has taught this host, per skill or per capability",
 	"kb":                 "ring-aware knowledge stages: context/search, observe, validate, and candidate note add (JSON-capable)",

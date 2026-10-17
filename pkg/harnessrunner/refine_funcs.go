@@ -27,6 +27,12 @@ import (
 // from proven targets.
 const ScopeDeclared = "declared"
 
+// ScopeWorkspace is the effect scope meaning the weave clone (the working
+// filesystem view), not a command tier. It keeps the historical "workspace"
+// string so behavior and any persisted or compared values are unchanged;
+// it is deliberately NOT mapped to the workplace tier.
+const ScopeWorkspace = "workspace"
+
 type funcSummary struct {
 	name      string
 	body      *syntax.Stmt

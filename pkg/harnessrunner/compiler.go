@@ -226,7 +226,7 @@ func compileCall(argv []string, allStatic bool, intent *Intent) {
 		if name == "read" {
 			intent.Effects = append(intent.Effects, Effect{Kind: atlas.EffRead, Scope: "process", Target: "stdin", Source: "builtin:read", Certainty: "exact"})
 		} else if name == "pwd" {
-			intent.Effects = append(intent.Effects, Effect{Kind: atlas.EffRead, Scope: atlas.TierWorkspace, Target: intent.Cwd, Source: "builtin:pwd", Certainty: "exact"})
+			intent.Effects = append(intent.Effects, Effect{Kind: atlas.EffRead, Scope: ScopeWorkspace, Target: intent.Cwd, Source: "builtin:pwd", Certainty: "exact"})
 		} else {
 			appendMaximumEffects(intent, fact)
 		}
@@ -332,7 +332,7 @@ func compileRedirect(redir *syntax.Redirect, intent *Intent) {
 		// basic coding step (`echo x > f; cat f`) to a human approver, which
 		// a headless agent turns into a rejection. Outside the workspace the
 		// possible destroy stays, so policy still sees it.
-		if !strings.Contains(op, ">>") && scope != atlas.TierWorkspace {
+		if !strings.Contains(op, ">>") && scope != ScopeWorkspace {
 			intent.Effects = append(intent.Effects, Effect{Kind: atlas.EffDestroy, Scope: scope, Target: target, Source: "redirection:" + op, Certainty: "possible"})
 		}
 	case strings.Contains(op, "<"):

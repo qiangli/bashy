@@ -39,7 +39,7 @@ import (
 // venueOrder is the locked six-venue stack (+ account front door) used to
 // order the agent/ext section (dhnt docs/execution-tiers.md).
 var venueOrder = []string{
-	atlas.TierUserland, atlas.TierWorkspace, atlas.TierSandbox,
+	atlas.TierUserland, atlas.TierWorkplace, atlas.TierSandbox,
 	atlas.TierSphere, atlas.TierCluster, atlas.TierCloud, atlas.TierAccount,
 }
 

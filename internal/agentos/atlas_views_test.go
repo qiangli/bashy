@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/qiangli/yoke/pkg/atlas"
 )
 
 // captureCommands runs dispatchCommands with stdout captured.
@@ -76,7 +78,7 @@ func TestAtlasViewTierJSON(t *testing.T) {
 
 func TestAtlasFilterTier(t *testing.T) {
 	t.Setenv("BASHY_AGENTIC", "")
-	out, code := captureCommands(t, "--tier", "workspace", "--json")
+	out, code := captureCommands(t, "--tier", "workplace", "--json")
 	if code != 0 {
 		t.Fatalf("exit = %d", code)
 	}
@@ -84,13 +86,13 @@ func TestAtlasFilterTier(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got.Filter["tier"] != "workspace" {
+	if got.Filter["tier"] != "workplace" {
 		t.Errorf("filter = %v", got.Filter)
 	}
 	var names []string
 	for _, r := range got.Commands {
-		if r.Tier != "workspace" {
-			t.Errorf("%s: tier %q leaked through the workspace filter", r.Name, r.Tier)
+		if r.Tier != "workplace" {
+			t.Errorf("%s: tier %q leaked through the workplace filter", r.Name, r.Tier)
 		}
 		names = append(names, r.Name)
 	}
@@ -100,12 +102,12 @@ func TestAtlasFilterTier(t *testing.T) {
 	}
 	for _, want := range wants {
 		if !slices.Contains(names, want) {
-			t.Errorf("workspace tier missing %q (got %v)", want, names)
+			t.Errorf("workplace tier missing %q (got %v)", want, names)
 		}
 	}
 	// sdlc is curated-hidden (experimental): absent by default, present with --all.
 	if slices.Contains(names, "sdlc") {
-		t.Errorf("experimental sdlc leaked into the default workspace view")
+		t.Errorf("experimental sdlc leaked into the default workplace view")
 	}
 }
 
@@ -224,13 +226,98 @@ func TestAtlasViewClassicAliasesDefault(t *testing.T) {
 	}
 }
 
+// TestAtlasWorkplaceTierCanonical (Sprint 449 S3): tier 2 is `workplace`
+// everywhere command discovery renders it. Exactly six canonical tiers in
+// stack order; the account front door is represented separately, never a
+// seventh tier; `--tier workspace` is rejected with the ordinary
+// unknown-value error (no alias, no special hint).
+func TestAtlasWorkplaceTierCanonical(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "")
+	wantTiers := []string{"userland", "workplace", "sandbox", "sphere", "cluster", "cloud"}
+	if !slices.Equal(atlas.Tiers(), wantTiers) {
+		t.Errorf("atlas.Tiers() = %v, want %v", atlas.Tiers(), wantTiers)
+	}
+	if slices.Contains(atlas.Tiers(), atlas.TierAccount) {
+		t.Errorf("atlas.Tiers() = %v: account must stay separately represented, never a seventh tier", atlas.Tiers())
+	}
+	// JSON agrees on the vocabulary.
+	out, code := captureCommands(t, "--view", "tier", "--os", "any", "--json")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	var got atlasJSON
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !slices.Equal(got.Tiers, wantTiers) {
+		t.Errorf("json tiers = %v, want %v", got.Tiers, wantTiers)
+	}
+	// --tier workplace filters in text and JSON alike, and both agree.
+	text, code := captureCommands(t, "--tier", "workplace", "--plain")
+	if code != 0 {
+		t.Fatalf("text exit = %d", code)
+	}
+	if !strings.Contains(text, "tier=workplace") {
+		t.Errorf("text filter header missing tier=workplace:\n%s", text)
+	}
+	jout, code := captureCommands(t, "--tier", "workplace", "--json")
+	if code != 0 {
+		t.Fatalf("json exit = %d", code)
+	}
+	var filtered atlasJSON
+	if err := json.Unmarshal([]byte(jout), &filtered); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if filtered.Filter["tier"] != "workplace" {
+		t.Errorf("json filter = %v", filtered.Filter)
+	}
+	if len(filtered.Commands) == 0 {
+		t.Fatal("workplace filter returned no commands")
+	}
+	for _, r := range filtered.Commands {
+		if r.Tier != "workplace" {
+			t.Errorf("%s: tier %q leaked through the workplace filter", r.Name, r.Tier)
+		}
+		if !strings.Contains(text, r.Name) {
+			t.Errorf("text/json disagree: %q in JSON but missing from text", r.Name)
+		}
+	}
+	// --tier workspace is rejected exactly like any unknown tier: exit 2
+	// with the ordinary vocabulary error, no alias and no special hint.
+	for _, bad := range []string{"workspace", "bogus-tier"} {
+		var badCode int
+		errOut := captureStderr(t, func() { badCode = dispatchAtlas(atlasRequest{tier: bad}) })
+		if badCode != 2 {
+			t.Errorf("--tier %q exit = %d, want 2", bad, badCode)
+		}
+		wantErr := "commands: unknown tier \"" + bad + "\" (tiers: " + strings.Join(wantTiers, " ") + ")\n"
+		if errOut != wantErr {
+			t.Errorf("--tier %q stderr = %q, want %q", bad, errOut, wantErr)
+		}
+	}
+	// The account front door stays separately represented: login carries
+	// the account tier without making it a seventh tier.
+	found := false
+	for _, r := range liveAtlas(false) {
+		if r.Name == "login" {
+			found = true
+			if r.Tier != atlas.TierAccount {
+				t.Errorf("login tier = %q, want %q", r.Tier, atlas.TierAccount)
+			}
+		}
+	}
+	if !found {
+		t.Error("login missing from the live atlas")
+	}
+}
+
 func TestAtlasTextTierView(t *testing.T) {
 	t.Setenv("BASHY_AGENTIC", "")
 	out, code := captureCommands(t, "--view", "tier", "--plain")
 	if code != 0 {
 		t.Fatalf("exit = %d", code)
 	}
-	for _, want := range []string{"tier userland", "tier workspace", "tier sandbox"} {
+	for _, want := range []string{"tier userland", "tier workplace", "tier sandbox"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("tier view missing %q header", want)
 		}

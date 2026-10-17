@@ -93,7 +93,7 @@ func resolveOperand(intent *Intent, operand string) string {
 func scopeFor(intent *Intent, target string) string {
 	root := intent.Cwd
 	if target == root || strings.HasPrefix(target, root+string(filepath.Separator)) {
-		return atlas.TierWorkspace
+		return ScopeWorkspace
 	}
 	return atlas.TierUserland
 }

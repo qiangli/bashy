@@ -68,6 +68,9 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 	for _, tr := range atlas.Tiers() {
 		tiers[tr] = true
 	}
+	// The account front door is represented separately from the six
+	// canonical tiers — never a seventh tier — so entries may carry it.
+	tiers[atlas.TierAccount] = true
 	caps := map[string]bool{}
 	for _, c := range atlas.Capabilities() {
 		caps[c] = true
@@ -140,8 +143,8 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 		r.Tier != atlas.TierUserland || r.Resolver != "bashy-in-process" {
 		t.Errorf("grep = %+v, want coreutils/textutils/userland", r)
 	}
-	if r := byName["weave"]; r.Tier != atlas.TierWorkspace {
-		t.Errorf("weave tier = %q, want workspace", r.Tier)
+	if r := byName["weave"]; r.Tier != atlas.TierWorkplace {
+		t.Errorf("weave tier = %q, want workplace", r.Tier)
 	}
 	if r := byName["docker"]; r.AliasOf != "oci" || r.Tier != atlas.TierSandbox {
 		t.Errorf("docker = %+v, want alias_of oci, tier sandbox", r)

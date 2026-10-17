@@ -83,7 +83,7 @@ func appendKBEffects(intent *Intent, argv []string, kinds []string) {
 		for _, kind := range kinds {
 			intent.Effects = append(intent.Effects, Effect{
 				Kind:      kind,
-				Scope:     atlas.TierWorkspace,
+				Scope:     ScopeWorkspace,
 				Target:    target,
 				Source:    "command:kb",
 				Certainty: "exact",

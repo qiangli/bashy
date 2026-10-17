@@ -241,7 +241,7 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 	// the graceful phase is a CTRL_BREAK and the kill reaches the child only;
 	// orphan reaping is a Linux contract.
 	"supervisord": {
-		Stage: atlas.StageDeploy, Group: atlas.GroupOrch, Tier: atlas.TierWorkspace,
+		Stage: atlas.StageDeploy, Group: atlas.GroupOrch, Tier: atlas.TierWorkplace,
 		Caps:    []string{atlas.CapSpawnsProcesses, atlas.CapDaemon},
 		Effects: []string{atlas.EffExec},
 		OS:      atlas.OSes(), Partial: []string{atlas.OSWindows},
@@ -252,7 +252,7 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 	// control socket. It execs nothing itself except `service run`, which runs
 	// one unit in the foreground under the monitor's policy.
 	"service": {
-		Stage: atlas.StageDeploy, Group: atlas.GroupOrch, Tier: atlas.TierWorkspace,
+		Stage: atlas.StageDeploy, Group: atlas.GroupOrch, Tier: atlas.TierWorkplace,
 		Caps:    []string{atlas.CapSpawnsProcesses},
 		Effects: []string{atlas.EffExec},
 		OS:      atlas.OSes(), Partial: []string{atlas.OSWindows},
@@ -281,7 +281,7 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 	},
 	// release turns a .goreleaser.yaml into named, checksummed artifacts. It
 	// serves DEPLOY: no other verb owns what bytes leave this machine or under
-	// what name. Tier is workspace — it reads and writes one project tree and
+	// what name. Tier is workplace — it reads and writes one project tree and
 	// nothing outside it. Group is toolchains: the embedded stages are the
 	// build and packaging side of the surface, next to the go/cmake/clang
 	// provisioners it drives (the closed group vocabulary, which lives in
@@ -295,7 +295,7 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 	"release": {
 		Stage:     atlas.StageDeploy,
 		Group:     atlas.GroupToolchains,
-		Tier:      atlas.TierWorkspace,
+		Tier:      atlas.TierWorkplace,
 		Caps:      []string{atlas.CapJSON, atlas.CapSpawnsProcesses},
 		Effects:   []string{atlas.EffExec, atlas.EffRead, atlas.EffWrite, atlas.EffNet},
 		Stability: atlas.StabilityExperimental,
@@ -577,7 +577,7 @@ var atlasGroupDisplayOrder = []string{
 // tierSynopsis mirrors the locked one-liners in dhnt docs/execution-tiers.md.
 var tierSynopsis = map[string]string{
 	atlas.TierUserland:  "single-node, native",
-	atlas.TierWorkspace: "single-node, fs-isolated",
+	atlas.TierWorkplace: "agent work and collaboration",
 	atlas.TierSandbox:   "single-node, OS-isolated (OCI)",
 	atlas.TierSphere:    "multi-node, peer-direct",
 	atlas.TierCluster:   "your own many machines, orchestrated",

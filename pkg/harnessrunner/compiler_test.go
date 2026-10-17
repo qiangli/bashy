@@ -155,7 +155,7 @@ func TestCompileIntentClassifiesSimpleCommandListsAndWorkspaceRedirects(t *testi
 	// headless turn rejects an unanswered ask: a workspace truncation must
 	// be a plain write.
 	for _, e := range intent.Effects {
-		if e.Kind == atlas.EffDestroy || e.Scope != atlas.TierWorkspace {
+		if e.Kind == atlas.EffDestroy || e.Scope != ScopeWorkspace {
 			t.Fatalf("workspace compound carries %+v; want only workspace read/write effects", e)
 		}
 	}

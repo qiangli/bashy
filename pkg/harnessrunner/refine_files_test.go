@@ -73,7 +73,7 @@ EOF`, atlas.EffWrite, "pkg/new.py"},
 			if e.Kind == atlas.EffPure {
 				continue
 			}
-			if e.Scope != atlas.TierWorkspace {
+			if e.Scope != ScopeWorkspace {
 				t.Errorf("%q: effect %+v not in workspace scope", tc.script, e)
 			}
 			if e.Kind == tc.kind && e.Target == want {
@@ -92,7 +92,7 @@ func TestFileRefinersLabelOutsideTargetsUserland(t *testing.T) {
 		intent := compileIn(t, dir, script)
 		outside := false
 		for _, e := range intent.Effects {
-			if e.Kind != atlas.EffPure && e.Scope != atlas.TierWorkspace {
+			if e.Kind != atlas.EffPure && e.Scope != ScopeWorkspace {
 				outside = true
 			}
 		}
@@ -144,7 +144,7 @@ func TestFunctionsCompileAtTheirCallSites(t *testing.T) {
 	if !intent.Complete {
 		t.Fatalf("provable function incomplete: %+v", intent.Unsupported)
 	}
-	if kinds := effectKinds(intent); kinds[atlas.EffRead] != atlas.TierWorkspace {
+	if kinds := effectKinds(intent); kinds[atlas.EffRead] != ScopeWorkspace {
 		t.Fatalf("function body effects not merged: %+v", intent.Effects)
 	}
 	undecorated := compileIn(t, dir, "tests() { python3 -m pytest -q; }\ntests")
@@ -185,7 +185,7 @@ tests`)
 	precise := compileIn(t, dir, `@effects("read")
 function show() { cat pkg/a.py; }
 show`)
-	if !precise.Complete || effectKinds(precise)[atlas.EffRead] != atlas.TierWorkspace {
+	if !precise.Complete || effectKinds(precise)[atlas.EffRead] != ScopeWorkspace {
 		t.Fatalf("a provable decorated body must keep its precise effects: %+v", precise.Effects)
 	}
 }

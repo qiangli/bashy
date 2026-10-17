@@ -75,8 +75,8 @@ func TestClassSectionsTaxonomy(t *testing.T) {
 		}
 	}
 	for _, name := range []string{"weave", "sprint", "dag"} {
-		if !agentAt(atlas.TierWorkspace, name) {
-			t.Errorf("agent/workspace missing %q", name)
+		if !agentAt(atlas.TierWorkplace, name) {
+			t.Errorf("agent/workplace missing %q", name)
 		}
 	}
 	// The taught names are listed; the engines behind them are experimental.

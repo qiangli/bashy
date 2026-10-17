@@ -490,8 +490,8 @@ func TestReleaseIsCataloguedAndClassified(t *testing.T) {
 	if r.Group == "" || r.Tier == "" || r.Stage == "" {
 		t.Fatalf("`release` has no atlas classification: %+v", r)
 	}
-	if r.Stage != "deploy" || r.Tier != "workspace" {
-		t.Errorf("release = %+v, want deploy/workspace", r)
+	if r.Stage != "deploy" || r.Tier != "workplace" {
+		t.Errorf("release = %+v, want deploy/workplace", r)
 	}
 	// Local-first on a warm cache, one network fetch on a cold one: an
 	// extended config provisions the pinned release engine once, then it is
