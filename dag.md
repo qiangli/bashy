@@ -83,11 +83,13 @@ ext=""
 [ "$goos" = windows ] && ext=.exe
 BUILD_ID=""
 # git through bashy too: on Windows it is the MinGit bashy provisioned, and a
-# PATH-restricted rebuild has no other git.
+# PATH-restricted rebuild has no other git. describe and diff --quiet need
+# --external=true: the native engine refuses them, which stamped every
+# self-contained rebuild "-dirty" and never with its tag.
 if [ -e .git ] && "$BASHY_EXE" git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  BUILD_ID=$("$BASHY_EXE" git describe --tags --exact-match HEAD 2>/dev/null || "$BASHY_EXE" git rev-parse --short=7 HEAD 2>/dev/null || true)
+  BUILD_ID=$("$BASHY_EXE" git --external=true describe --tags --exact-match HEAD 2>/dev/null || "$BASHY_EXE" git rev-parse --short=7 HEAD 2>/dev/null || true)
   if [ -n "$BUILD_ID" ]; then
-    if ! "$BASHY_EXE" git diff --quiet --ignore-submodules -- 2>/dev/null || ! "$BASHY_EXE" git diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+    if ! "$BASHY_EXE" git --external=true diff --quiet --ignore-submodules -- 2>/dev/null || ! "$BASHY_EXE" git --external=true diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
       BUILD_ID="${BUILD_ID}-dirty"
     fi
   fi

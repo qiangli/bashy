@@ -36,7 +36,7 @@ const commandsSchemaVersion = "bashy-commands-v1"
 // `edit` and `verify` all name commands too. `list` and `schema` take no
 // name and collide with nothing.
 var (
-	commandsCRUDWords     = []string{"add", "register", "show", "set", "rm", "edit", "verify"}
+	commandsCRUDWords     = []string{"add", "register", "show", "set", "rm", "edit", "verify", "retire", "unretire"}
 	commandsNamelessWords = []string{"list", "schema"}
 )
 
