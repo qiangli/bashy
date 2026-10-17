@@ -17,7 +17,7 @@ require (
 	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/coreutils v0.0.0-20261017161126-57fabfa8ef4f
-	github.com/qiangli/ycode v0.3.1-dev.0.20261011021240-aa0d91dd60d2
+	github.com/qiangli/ycode v0.3.1-dev.0.20261017160131-399679c030a1
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261017161155-54f1c720ea83
 	github.com/qiangli/yoke/external/otel v0.0.0-20261017161155-54f1c720ea83
