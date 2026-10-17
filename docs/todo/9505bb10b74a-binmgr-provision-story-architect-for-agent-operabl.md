@@ -4,6 +4,7 @@ kind: feature
 title: Binmgr-provision Story Architect for agent-operable screenwriting
 seq: 351
 status: todo
+priority: p2
 created: 2026-09-30T07:29:25.018426Z
 sprint: 382
 sprint_id: 52e1124d-d9d2-5528-bbfa-80f6b8538c1d

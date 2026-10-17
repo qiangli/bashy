@@ -4,6 +4,7 @@ kind: feature
 title: Binmgr-provision Kdenlive as an agent-operable video editor
 seq: 347
 status: todo
+priority: p2
 labels:
     - mcp
     - video

@@ -4,6 +4,7 @@ kind: feature
 title: Binmgr-provision GIMP as an agent-operable image editor
 seq: 348
 status: todo
+priority: p2
 labels:
     - mcp
     - image

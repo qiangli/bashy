@@ -4,6 +4,7 @@ kind: feature
 title: Binmgr-provision Kitsu for agent-operable series production tracking
 seq: 354
 status: todo
+priority: p2
 created: 2026-09-30T07:29:25.273713Z
 sprint: 382
 sprint_id: 52e1124d-d9d2-5528-bbfa-80f6b8538c1d

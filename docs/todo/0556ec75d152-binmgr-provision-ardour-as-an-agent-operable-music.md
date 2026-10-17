@@ -4,6 +4,7 @@ kind: feature
 title: Binmgr-provision Ardour as an agent-operable music editor
 seq: 350
 status: todo
+priority: p2
 labels:
     - mcp
     - music

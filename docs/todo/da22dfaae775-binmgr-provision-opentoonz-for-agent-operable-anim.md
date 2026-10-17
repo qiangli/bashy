@@ -4,6 +4,7 @@ kind: feature
 title: Binmgr-provision OpenToonz for agent-operable animated series
 seq: 355
 status: todo
+priority: p2
 created: 2026-09-30T07:29:25.356319Z
 sprint: 382
 sprint_id: 52e1124d-d9d2-5528-bbfa-80f6b8538c1d

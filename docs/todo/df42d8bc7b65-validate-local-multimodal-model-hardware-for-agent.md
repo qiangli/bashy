@@ -4,6 +4,7 @@ kind: spike
 title: Validate local multimodal model hardware for agent media editing
 seq: 356
 status: todo
+priority: p1
 created: 2026-09-30T07:39:48.317848Z
 sprint: 382
 sprint_id: 52e1124d-d9d2-5528-bbfa-80f6b8538c1d

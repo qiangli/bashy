@@ -4,6 +4,7 @@ kind: feature
 title: Binmgr-provision Blender for agent-operable 3D and VFX
 seq: 353
 status: todo
+priority: p1
 created: 2026-09-30T07:29:25.193415Z
 sprint: 382
 sprint_id: 52e1124d-d9d2-5528-bbfa-80f6b8538c1d

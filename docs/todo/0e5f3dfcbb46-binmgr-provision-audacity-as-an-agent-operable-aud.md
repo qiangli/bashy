@@ -4,6 +4,7 @@ kind: feature
 title: Binmgr-provision Audacity as an agent-operable audio editor
 seq: 349
 status: todo
+priority: p2
 labels:
     - mcp
     - audio
