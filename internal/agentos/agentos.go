@@ -732,6 +732,14 @@ func dispatch() {
 	if os.Args[1] == "ollama" && len(os.Args) > 2 && os.Args[2] == "status" {
 		dispatchExit(runOllamaStatus(os.Args[3:]))
 	}
+	// A pull the genie recipe asks for is bound by the front door's policy
+	// and the model store's free disk (genie_pull.go); the user's own
+	// `bashy ollama pull` carries no policy and is untouched.
+	if os.Args[1] == "ollama" {
+		if code := genieGuardOllamaPull(os.Args[2:], os.Stderr); code != 0 {
+			dispatchExit(code)
+		}
+	}
 	dispatchEngine(os.Args[1])
 	// The observability stack (`bashy otel`) compiles in the OpenTelemetry
 	// Collector + VictoriaMetrics/Logs + Jaeger + Perses + k8s/aws SDKs (~193 MB,

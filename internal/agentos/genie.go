@@ -33,7 +33,7 @@ import (
 	"github.com/qiangli/yoke/pkg/broker/door"
 )
 
-const genieUsage = `usage: bashy genie [-m MODEL] [--effort LEVEL] [--yolo] "MESSAGE"   one turn in this directory; the answer on stdout
+const genieUsage = `usage: bashy genie [-m MODEL] [--effort LEVEL] [--yolo] [--pull] "MESSAGE"   one turn in this directory; the answer on stdout
        ... | bashy genie [-m MODEL]       the same, the message read from stdin
        bashy genie [-m MODEL]             hand off terminal use to bashy ycode
        bashy genie web [-m MODEL]         hand off the browser chat page to bashy ycode web
@@ -48,7 +48,12 @@ const genieUsage = `usage: bashy genie [-m MODEL] [--effort LEVEL] [--yolo] "MES
 approval prompts) and is the default for unattended sessions — a weave worker or
 BASHY_UNATTENDED_AGENT=1; --yolo=false opts out. An attended session keeps the default
 profile.
+-h/--help on any entry prints this and touches nothing.
 The model is picked for this host unless -m (or GENIE_MODEL_ID) names one.
+A picked model the host does not have is downloaded only when the disk has room
+for it (its weights plus 5 GB), and, in a session with no terminal on stdin,
+only with --pull; without it the turn stops and says so — name a model already
+on the host with -m (bashy ollama list) or run again with --pull.
 -m may name an API model from the model registry (bashy model add NAME
 --set kind=api,base_url=URL,model=ID,api_key_ref=SECRET): genie then runs on
 that provider's OpenAI-compatible endpoint and starts no local model server —
@@ -65,10 +70,22 @@ func dispatchGenie(args []string) int {
 }
 
 func dispatchGenieWithHandoff(args []string, handoff bool) int {
+	// Help first, before any flag can be misread as a message and before the
+	// bundle, the door or a model download: E1 F8 was `prompt --help` running
+	// a turn.
+	if genieHelpRequested(args) {
+		fmt.Fprint(os.Stdout, genieUsage)
+		return 0
+	}
 	if handoff {
 		os.Unsetenv("GENIE_YCODE_SESSION")
 	}
 	args, yolo, yoloSet, err := genieYoloFlag(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy genie:", err)
+		return 2
+	}
+	args, pull, _, err := boolFlagScan(args, "--pull", genieCommandWord)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy genie:", err)
 		return 2
@@ -184,6 +201,10 @@ func dispatchGenieWithHandoff(args []string, handoff bool) int {
 		mode = "chat"
 	}
 	os.Setenv("GENIE_MODE", mode)
+	// GENIE_MODEL_ID is set by now for every explicit choice (-m local tag,
+	// -m registered API model, the environment); anything else is the
+	// recipe's auto-pick.
+	genieExportPullPolicy(strings.TrimSpace(os.Getenv("GENIE_MODEL_ID")) != "", pull)
 	genieApplyApproval()
 	return runSelf(append([]string{"run", "--target", target, bundle}, args...), os.Stdin, os.Stdout, os.Stderr)
 }
@@ -210,20 +231,32 @@ func modelArgs(model string) []string {
 // prepares the caller workspace and model endpoint before reentering ycode
 // with a generated config.
 func dispatchYcode(args []string) int {
-	args, yolo, yoloSet, err := yoloFlagScan(args, func(arg string) bool {
-		return isYcodeUtility(arg) || arg == "web" || arg == "repl" || arg == "resume" || arg == "prompt" || arg == "acp" || arg == "session"
-	})
+	args, yolo, yoloSet, err := yoloFlagScan(args, ycodeCommandWord)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy ycode:", err)
 		return 2
 	}
-	args, err = genieApplyEffort(args)
+	args, pull, _, err := boolFlagScan(args, "--pull", ycodeCommandWord)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy ycode:", err)
 		return 2
 	}
 	if YcodeMain == nil {
 		fmt.Fprintln(os.Stderr, "bashy ycode: not in this build")
+		return 2
+	}
+	if ycodeHelpRequested(args) {
+		// ycode's own help for the entry asked about, straight from its
+		// compiled document: no genie recipe, no builtin config written
+		// under the home, no model (E1 F8). bashy's flags come off first;
+		// ycode knows --session.
+		fmt.Fprintln(os.Stdout, "bashy ycode [-m MODEL] [--effort LEVEL] [--yolo] [--pull] [--session ID] [COMMAND ...]  the builtin genie on a model picked for this host (bashy genie --help); ycode's own help follows.")
+		fmt.Fprintln(os.Stdout)
+		return YcodeMain(ycodeStripBashyFlags(args))
+	}
+	args, err = genieApplyEffort(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bashy ycode:", err)
 		return 2
 	}
 	if YcodeHasExplicitConfig == nil {
@@ -262,6 +295,9 @@ func dispatchYcode(args []string) int {
 				return 2
 			}
 			os.Setenv("GENIE_YCODE_SESSION", sessionID)
+			if pull {
+				recipeArgs = append([]string{"--pull"}, recipeArgs...)
+			}
 			return dispatchGenieWithHandoff(recipeArgs, false)
 		}
 		config, err := builtinGenieConfig()
@@ -278,12 +314,25 @@ func dispatchYcode(args []string) int {
 	return YcodeMain(args)
 }
 
+// ycodeCommandWord is a word that names a bashy ycode entry (ycode's own
+// utilities and the execution entries), as opposed to prompt text.
+func ycodeCommandWord(arg string) bool {
+	return isYcodeUtility(arg) || arg == "web" || arg == "repl" || arg == "resume" || arg == "prompt" || arg == "acp" || arg == "session"
+}
+
+// genieCommandWord is a word that names a bashy genie subcommand.
+func genieCommandWord(arg string) bool {
+	switch arg {
+	case "web", "repl", "resume", "prompt", "acp", "session", "solve", "smoke", "build", "doctor", "pull":
+		return true
+	}
+	return false
+}
+
 // ycodeYoloFlag selects an authored profile; it never changes a compiled
 // policy. Stop at a prompt operand or --, and preserve values of other flags.
 func ycodeYoloFlag(args []string) ([]string, bool, error) {
-	rest, yolo, _, err := yoloFlagScan(args, func(arg string) bool {
-		return isYcodeUtility(arg) || arg == "web" || arg == "repl" || arg == "resume" || arg == "prompt" || arg == "acp" || arg == "session"
-	})
+	rest, yolo, _, err := yoloFlagScan(args, ycodeCommandWord)
 	return rest, yolo, err
 }
 
@@ -301,28 +350,36 @@ func genieYoloFlag(args []string) (rest []string, yolo, set bool, err error) {
 }
 
 func yoloFlagScan(args []string, isCommand func(string) bool) ([]string, bool, bool, error) {
+	return boolFlagScan(args, "--yolo", isCommand)
+}
+
+// boolFlagScan takes one boolean flag (NAME or NAME=bool) out of the option
+// words of a ycode/genie invocation: anywhere before --, before the message
+// text, and on either side of the one command word. set reports whether it
+// was given at all; the values of other flags are preserved.
+func boolFlagScan(args []string, name string, isCommand func(string) bool) ([]string, bool, bool, error) {
 	var rest []string
-	yolo, set, commandSeen := false, false, false
+	value, set, commandSeen := false, false, false
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
-			return append(rest, args[i:]...), yolo, set, nil
+			return append(rest, args[i:]...), value, set, nil
 		}
-		if arg == "--yolo" || strings.HasPrefix(arg, "--yolo=") {
+		if arg == name || strings.HasPrefix(arg, name+"=") {
 			enabled := true
-			if strings.HasPrefix(arg, "--yolo=") {
+			if strings.HasPrefix(arg, name+"=") {
 				var err error
-				enabled, err = strconv.ParseBool(strings.TrimPrefix(arg, "--yolo="))
+				enabled, err = strconv.ParseBool(strings.TrimPrefix(arg, name+"="))
 				if err != nil {
-					return nil, false, false, fmt.Errorf("--yolo requires a boolean value")
+					return nil, false, false, fmt.Errorf("%s requires a boolean value", name)
 				}
 			}
-			yolo, set = enabled, true
+			value, set = enabled, true
 			continue
 		}
 		if !strings.HasPrefix(arg, "-") {
 			if commandSeen || !isCommand(arg) {
-				return append(rest, args[i:]...), yolo, set, nil
+				return append(rest, args[i:]...), value, set, nil
 			}
 			commandSeen = true
 		}
@@ -335,7 +392,84 @@ func yoloFlagScan(args []string, isCommand func(string) bool) ([]string, bool, b
 			}
 		}
 	}
-	return rest, yolo, set, nil
+	return rest, value, set, nil
+}
+
+// genieValueFlag reports whether a bashy genie/ycode option word takes the
+// next word as its value.
+func genieValueFlag(arg string) bool {
+	switch arg {
+	case "-m", "--model", "--effort", "--session", "-f", "--file", "--config", "-c", "--command", "--query", "--output":
+		return true
+	}
+	return false
+}
+
+// genieHelpRequested reports whether a bashy genie invocation asks for help:
+// -h or --help among the option words — before --, before the message text,
+// on either side of the subcommand word, and anywhere in a session view's
+// own words. `help` as the first word is the same request.
+func genieHelpRequested(args []string) bool {
+	command := ""
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--":
+			return false
+		case arg == "-h" || arg == "--help":
+			return true
+		case genieValueFlag(arg):
+			i++
+		case strings.HasPrefix(arg, "-"):
+		case arg == "help" && i == 0:
+			return true
+		case command == "" && genieCommandWord(arg):
+			command = arg
+		case command == "session":
+			// session's own verbs and operands; its --help is still ours.
+		default:
+			return false // the message has started
+		}
+	}
+	return false
+}
+
+// ycodeHelpRequested reports whether a bashy ycode invocation asks for help:
+// -h or --help anywhere before --. ycode's own parser reads a flag wherever
+// it stands, so the same words would have been help there too.
+func ycodeHelpRequested(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--":
+			return false
+		case arg == "-h" || arg == "--help":
+			return true
+		case genieValueFlag(arg):
+			i++
+		}
+	}
+	return false
+}
+
+// ycodeStripBashyFlags removes the option words bashy adds over ycode's own
+// surface (-m/--model and --effort with their values; --yolo and --pull are
+// already taken off by their scans) so ycode's parser never sees them.
+func ycodeStripBashyFlags(args []string) []string {
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--":
+			return append(rest, args[i:]...)
+		case arg == "-m" || arg == "--model" || arg == "--effort":
+			i++
+		case strings.HasPrefix(arg, "--model=") || strings.HasPrefix(arg, "--effort="):
+		default:
+			rest = append(rest, arg)
+		}
+	}
+	return rest
 }
 
 // unattendedAgentEnv marks a session no human answers: a managed sprint
