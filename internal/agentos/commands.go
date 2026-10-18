@@ -80,7 +80,7 @@ func runCommandsRegistry(args []string) int {
 	defer resetRegisteredIndex()
 	cmd := fleet.NewCommandsCmd(fleet.WithReservedNames(reservedCommandName), fleet.WithCommandProbe(scriptSyntaxProbe))
 	cmd.Use = "commands"
-	cmd.SetArgs(args)
+	setCobraArgs(cmd, args)
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "bashy commands: %v\n", err)
 		return fleet.ExitCode(err)

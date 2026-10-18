@@ -575,7 +575,7 @@ func dispatchOut(args []string) int {
 		return dispatchOutEnvelope(os.Stdout, rest, list, asJSON)
 	}
 	cmd := reduce.NewOutCmd(shellOutputStore)
-	cmd.SetArgs(args)
+	setCobraArgs(cmd, args)
 	cmd.SetOut(os.Stdout)
 	cmd.SetErr(os.Stderr)
 	if err := cmd.Execute(); err != nil {

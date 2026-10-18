@@ -477,7 +477,7 @@ func releaseJSON(w io.Writer, v any) error {
 // agent can tell "I called it wrong" from "the release failed".
 func dispatchRelease(args []string) int {
 	cmd := releaseCmd()
-	cmd.SetArgs(args)
+	setCobraArgs(cmd, args)
 	cmd.SilenceErrors = true
 	if err := cmd.Execute(); err != nil {
 		msg := err.Error()

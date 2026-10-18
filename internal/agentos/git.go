@@ -859,7 +859,7 @@ func dispatchGit(args []string) {
 		cmd = gitCmd()
 	}
 	cmd.SilenceErrors = true
-	cmd.SetArgs(rest)
+	setCobraArgs(cmd, rest)
 	if err := cmd.Execute(); err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {

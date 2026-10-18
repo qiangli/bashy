@@ -193,7 +193,7 @@ func notifyServiceFailed(ev service.Event) {
 // poll; with no monitor the write simply stands.
 func dispatchService(args []string) int {
 	cmd := newServiceCmd()
-	cmd.SetArgs(args)
+	setCobraArgs(cmd, args)
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "bashy service:", err)
 		var ec interface{ ExitCode() int }

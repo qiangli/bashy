@@ -14,7 +14,7 @@ import (
 // (bad flags, out-of-range band) and non-dry-run failures stay non-zero.
 func runChatCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := chat.NewChatCmd()
-	cmd.SetArgs(args)
+	setCobraArgs(cmd, args)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
 	cmd.SilenceErrors = true

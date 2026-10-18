@@ -412,6 +412,9 @@ var confirmAsk = askHumanToConfirm
 // an unattended call yields at once instead of blocking for a claim that
 // may never come — the harness is the one that can reach the human.
 func askHumanToConfirm(fn, op, effects string) (bool, error) {
+	if noInputRequested() {
+		return false, fmt.Errorf("%w (--no-input)", errConfirmUnattended)
+	}
 	if weavecli.IsAgent() {
 		return false, fmt.Errorf("%w (BASHY_AGENTIC)", errConfirmUnattended)
 	}

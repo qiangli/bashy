@@ -574,7 +574,7 @@ func runDagDispatch(args []string, stdout, stderr io.Writer) int {
 	dag.AddCapacityCommands(cmd, sprintCapacityServices())
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
-	cmd.SetArgs(args)
+	setCobraArgs(cmd, args)
 	err := cmd.Execute()
 	var dagErr *dag.Error
 	if err != nil && !errors.As(err, &dagErr) {
@@ -598,7 +598,7 @@ func runWeaveDispatch(args []string, stdout, stderr io.Writer) int {
 	configureWeaveResourceAdmission(cmd)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
-	cmd.SetArgs(args)
+	setCobraArgs(cmd, args)
 	err := cmd.Execute()
 	if err == nil {
 		return 0
@@ -627,7 +627,7 @@ func runSprintDispatch(args []string, stdout, stderr io.Writer) int {
 	cmd := newSprintCmd()
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
-	cmd.SetArgs(args)
+	setCobraArgs(cmd, args)
 	err := cmd.Execute()
 	if err == nil {
 		return 0
@@ -757,7 +757,7 @@ func dispatch() {
 		dispatchExit(dispatchHelp(os.Args[2:]))
 	case "proxy":
 		cmd := newProxyCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -816,7 +816,7 @@ func dispatch() {
 		dispatchExit(runWeaveDispatch(os.Args[2:], os.Stdout, os.Stderr))
 	case "llm":
 		cmd := broker.NewCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy llm:", err)
 			dispatchExit(1)
@@ -830,7 +830,7 @@ func dispatch() {
 		dispatchExit(runSprintDispatch(os.Args[2:], os.Stdout, os.Stderr))
 	case "resource", "resources":
 		cmd := resources.NewCommand()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy resource:", err)
 			dispatchExit(1)
@@ -854,7 +854,7 @@ func dispatch() {
 		} else {
 			hcmd = handoff.NewResumeCmd()
 		}
-		hcmd.SetArgs(os.Args[2:])
+		setCobraArgs(hcmd, os.Args[2:])
 		if err := hcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy "+os.Args[1]+":", err)
 			dispatchExit(1)
@@ -868,7 +868,7 @@ func dispatch() {
 			}
 			return handoff.ProjectRoots(projectRootOf(cwd))
 		})
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy claim:", err)
 			dispatchExit(1)
@@ -887,7 +887,7 @@ func dispatch() {
 		// moment this starts storing vocabulary rather than projecting it, it has
 		// become the hand-written glossary that always goes stale.
 		lcmd := newLexiconCmd()
-		lcmd.SetArgs(os.Args[2:])
+		setCobraArgs(lcmd, os.Args[2:])
 		if err := lcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy lexicon:", err)
 			dispatchExit(1)
@@ -905,7 +905,7 @@ func dispatch() {
 		// never echoed: repeating a key into a terminal or an agent transcript
 		// is how it ends up somewhere permanent.
 		dcmd := newDefineCmd()
-		dcmd.SetArgs(os.Args[2:])
+		setCobraArgs(dcmd, os.Args[2:])
 		if err := dcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy define:", err)
 			dispatchExit(1)
@@ -920,7 +920,7 @@ func dispatch() {
 		// `weave add --from-todo` seeds a run from a repo todo. The record format (YAML-
 		// frontmatter markdown) is shared with the model in coreutils/pkg/issue.
 		tcmd := todo.NewTodoCmd()
-		tcmd.SetArgs(os.Args[2:])
+		setCobraArgs(tcmd, os.Args[2:])
 		if err := tcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy todo:", err)
 			dispatchExit(1)
@@ -971,7 +971,7 @@ func dispatch() {
 		// or writes the journal; nothing above puts an agent on the host. See
 		// internal/agentos/steward.go.
 		scmd.AddCommand(newStewardStartCmd(), newStewardStopCmd())
-		scmd.SetArgs(os.Args[2:])
+		setCobraArgs(scmd, os.Args[2:])
 		if err := scmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy steward:", err)
 			dispatchExit(1)
@@ -987,7 +987,7 @@ func dispatch() {
 			return sc.Execute()
 		}
 		ccmd := board.NewConductorCommand(renderConductorSkill, nil)
-		ccmd.SetArgs(os.Args[2:])
+		setCobraArgs(ccmd, os.Args[2:])
 		if err := ccmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy conductor:", err)
 			dispatchExit(1)
@@ -1013,7 +1013,7 @@ func dispatch() {
 		// agent that can both write and approve will fix the code and bless its own fix.
 		// A pair may never approve. Only the gate may. So it can safely have the keyboard.
 		pcmd := pair.NewPairCmd()
-		pcmd.SetArgs(os.Args[2:])
+		setCobraArgs(pcmd, os.Args[2:])
 		if err := pcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy pair:", err)
 			dispatchExit(1)
@@ -1024,7 +1024,7 @@ func dispatch() {
 		// maps to the one role that behaves the way judge did: prose, no keyboard, an
 		// unverified claim. Reach for `pair --role break` instead.
 		jcmd := judge.NewJudgeCmd()
-		jcmd.SetArgs(os.Args[2:])
+		setCobraArgs(jcmd, os.Args[2:])
 		if err := jcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy judge:", err)
 			dispatchExit(1)
@@ -1039,7 +1039,7 @@ func dispatch() {
 		// its exit status be the verdict. They never disagreed about semantics, only
 		// about where the command lives. This is the one place it lives.
 		gcmd := gate.NewGateCmd()
-		gcmd.SetArgs(os.Args[2:])
+		setCobraArgs(gcmd, os.Args[2:])
 		if err := gcmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy gate:", err)
 			dispatchExit(1)
@@ -1061,7 +1061,7 @@ func dispatch() {
 		// and, when it loops, ESC it out and tell it to deliver. A report channel,
 		// never an author. See dhnt docs/live-agent-coaching-design.md (P0).
 		cmd := chat.NewCoachCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1073,7 +1073,7 @@ func dispatch() {
 		// Heavier ISOLATED work routes to `weave`/the conductor. See
 		// bashy/docs/delegate-verb-design.md.
 		cmd := chat.NewDelegateCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1083,7 +1083,7 @@ func dispatch() {
 		// turns; a dedicated notes-only secretary keeps and files the minutes.
 		wireMeet()
 		cmd := meet.NewMeetCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy meet:", err)
 			dispatchExit(1)
@@ -1105,7 +1105,7 @@ func dispatch() {
 		// an unrelated GET /apps — same word, different namespace.
 		wireWebConsole()
 		cmd := webconsole.NewAppsCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy app:", err)
 			dispatchExit(1)
@@ -1131,7 +1131,7 @@ func dispatch() {
 		// itself — the verdict is objective, not the agent's claim. See
 		// dhnt/docs/agentic-design-pattern-gaps.md.
 		cmd := supervise.NewSuperviseCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy supervise:", err)
 			dispatchExit(1)
@@ -1149,7 +1149,7 @@ func dispatch() {
 		// The living agent (tool:model) × capability matrix behind
 		// capability-routed delegation — the routing table for `chat --capability`.
 		cmd := capability.NewCapabilityCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy capability:", err)
 			dispatchExit(1)
@@ -1167,7 +1167,7 @@ func dispatch() {
 		// never-shimmed class with `time` and `kill`.
 		wireMessageBoard()
 		cmd := bus.NewPingCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy ping:", err)
 			dispatchExit(1)
@@ -1182,7 +1182,7 @@ func dispatch() {
 		if !ok {
 			return
 		}
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintf(os.Stderr, "bashy %s: %v\n", label, err)
 			dispatchExit(1)
@@ -1193,7 +1193,7 @@ func dispatch() {
 		// differences, pass^k, cost per solve (yoke pkg/stats): the numbers
 		// behind every scoreboard row.
 		cmd := stats.NewCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy stats:", err)
 			dispatchExit(1)
@@ -1207,7 +1207,7 @@ func dispatch() {
 		// them together would invite reading a routing estimate as a
 		// measurement.
 		cmd := capability.NewLeaderboardCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy leaderboard:", err)
 			dispatchExit(1)
@@ -1217,14 +1217,14 @@ func dispatch() {
 		// Workflow control plane: intake/deployment/approval boundary that
 		// delegates implementation planning and sprint execution to agents.
 		cmd := sdlc.NewSDLCCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
 		dispatchExit(0)
 	case "web":
 		cmd := webinspect.NewWebCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1234,7 +1234,7 @@ func dispatch() {
 		// find-things primitive `bashy sota` builds on. See
 		// dhnt docs/bashy-sota-research-design.md.
 		cmd := search.NewSearchCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1245,7 +1245,7 @@ func dispatch() {
 		// construction), or --hitchhike on the agent's own web-search tool. See
 		// dhnt docs/bashy-sota-research-design.md.
 		cmd := sota.NewSotaCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1253,7 +1253,7 @@ func dispatch() {
 	case "secret", "secrets":
 		cmd := secrets.NewSecretsCmd()
 		cmd.Use = os.Args[1]
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			// The command silences cobra's own reporting; without this line a
 			// 403 or a missing token exits 1 saying nothing.
@@ -1271,7 +1271,7 @@ func dispatch() {
 		// host supplies the names, exactly as it does for steward.OpenRoom.
 		wireMessageBoard()
 		cmd := bus.NewBusCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		err := cmd.Execute()
 		// bus.Reported means the command already wrote the failure in the form the
 		// caller asked for — printing a second, plain-text copy would corrupt the
@@ -1315,7 +1315,7 @@ func dispatch() {
 		// rendezvous), and hand back a path rather than the value. Local-first:
 		// no network, no pairing — unlike `secrets`, which is the cloudbox vault.
 		cmd := ask.NewAskCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			dispatchExit(1)
@@ -1326,7 +1326,7 @@ func dispatch() {
 		// yielded @confirm, an ACP permission request, a chat grant. Direct
 		// front door only: bare `approve` is never shimmed.
 		cmd := ask.NewApproveCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			var exit *ask.ApprovalExit
@@ -1354,7 +1354,7 @@ func dispatch() {
 		// the admission gates, `run` executes + attests, `promote`
 		// renders the review bundle. Sources: see skillsOptions.
 		cmd := coreskills.NewSkillsCmd(skillsOptions()...)
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy skill:", err)
 			dispatchExit(coreskills.ExitCode(err))
@@ -1367,7 +1367,7 @@ func dispatch() {
 		// `skills run` writes — per skill, or pooled per capability so
 		// interchangeable implementations share one track record.
 		cmd := craft.NewCraftCmd(craftOptions()...)
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy craft:", err)
 			dispatchExit(craft.ExitCode(err))
@@ -1381,7 +1381,7 @@ func dispatch() {
 		// validate) after the task completes.
 		cmd := kb.NewKBCmd()
 		cmd.AddCommand(newKBRecallCmd(), newKBContextCmd())
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy kb:", err)
 			dispatchExit(1)
@@ -1401,7 +1401,7 @@ func dispatch() {
 		// self-contained store + optional daemon, with an agentic prompt/context
 		// delivered to the fired command. The host cron/crontab are untouched.
 		cmd := schedule.NewScheduleCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1478,7 +1478,7 @@ func dispatch() {
 		// my code pass?" — and get bash's conformance suites instead. `verify`
 		// remains a hidden alias; the general pass/fail question is `bashy gate`.
 		cmd := verifyCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1488,7 +1488,7 @@ func dispatch() {
 		// selected candidate. This is the bashy-side migration of outpost's
 		// direct release-bootstrap lane, without touching outpost itself.
 		cmd := selfCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1498,7 +1498,7 @@ func dispatch() {
 		// functional while `bashy self ...` becomes the documented surface.
 		cmd := selfCmd()
 		cmd.Use = os.Args[1]
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1517,7 +1517,7 @@ func dispatch() {
 		}
 		cmd := gitscm.NewGitSCMCmd()
 		cmd.SilenceErrors = true
-		cmd.SetArgs(rest)
+		setCobraArgs(cmd, rest)
 		if err := cmd.Execute(); err != nil {
 			var exit *exec.ExitError
 			if errors.As(err, &exit) {
@@ -1529,7 +1529,7 @@ func dispatch() {
 		dispatchExit(0)
 	case "remote":
 		cmd := remoteCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1549,7 +1549,7 @@ func dispatch() {
 		// export it after package initialization, immediately before `bashy go`.
 		applyAllProxyFallback()
 		cmd := gotoolchain.NewGoCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1558,7 +1558,7 @@ func dispatch() {
 		// Self-provisioning CMake (binmgr download -> verify -> cache; no system
 		// CMake needed). Pure-Go fetch + cross-platform, same shape as bashy go.
 		cmd := cmake.NewCmakeCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1568,7 +1568,7 @@ func dispatch() {
 		// (binmgr), the system clang on macOS/Linux. The compiler half of the
 		// self-contained cross-platform build userland (cmake is the other half).
 		cmd := clang.NewClangCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1578,7 +1578,7 @@ func dispatch() {
 		// `cc` already compiles with, fronted as a language of its own so a
 		// `~~~zig` fence's runner can name it.
 		cmd := zigcc.NewZigCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1600,7 +1600,7 @@ func dispatch() {
 		case "yarn":
 			cmd = node.NewYarnCmd()
 		}
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1618,7 +1618,7 @@ func dispatch() {
 		case "uv":
 			cmd = python.NewUvCmd()
 		}
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1628,7 +1628,7 @@ func dispatch() {
 		// checksum-verified by binmgr. The power-user layer over the native
 		// provisioners (.tool-versions / mise.toml, the long tail of languages).
 		cmd := mise.NewMiseCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1647,7 +1647,7 @@ func dispatch() {
 		case "rust":
 			cmd = rust.NewRustCmd()
 		}
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1656,7 +1656,7 @@ func dispatch() {
 		// Optional direct front door over the exact runtime cache used by the
 		// powershell and csharp fence workers.
 		cmd := pwsh.NewCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1665,7 +1665,7 @@ func dispatch() {
 		// Platform curl (built into Windows 10+, universal on unix); a pinned,
 		// checksum-verified curl.se/windows build on a bare Windows node.
 		cmd := curlbin.NewCurlCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1675,7 +1675,7 @@ func dispatch() {
 		// downloads/verifies/caches it; not compiled in). bashy is the "OS of
 		// binaries" host.
 		cmd := loom.NewLoomCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1684,7 +1684,7 @@ func dispatch() {
 		// OCI registry (images + Ollama models): run Zot as a managed
 		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
 		cmd := zot.NewZotCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1693,7 +1693,7 @@ func dispatch() {
 		// Object/blob store (S3 gateway): run SeaweedFS as a managed
 		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
 		cmd := seaweedfs.NewSeaweedfsCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1702,7 +1702,7 @@ func dispatch() {
 		// Snapshot-backup repository server: run Kopia as a managed
 		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
 		cmd := kopia.NewKopiaCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1712,7 +1712,7 @@ func dispatch() {
 		// compiled in) — test CI on a host node before pushing. Needs a container
 		// engine (bashy podman, unix host). Transparent passthrough.
 		cmd := act.NewActCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1724,7 +1724,7 @@ func dispatch() {
 		// `daemon --docker-host <bashy podman sock>` gives the tier-3 sandbox
 		// executor: `runs-on: sandbox` jobs run in an OCI container.
 		cmd := actrunner.NewCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1733,7 +1733,7 @@ func dispatch() {
 		// The GitHub CLI (cli/cli, MIT) via binmgr — open PRs, trigger/watch the
 		// real github runs, `gh api`. With act+go+git it closes the CI/CD loop.
 		cmd := gh.NewGhCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1742,7 +1742,7 @@ func dispatch() {
 		// Transparent passthrough to a binmgr-managed rclone (MIT) — the transfer
 		// engine + a NAS-style file server (`rclone serve …`). Not compiled in.
 		cmd := rclone.NewRcloneCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1751,7 +1751,7 @@ func dispatch() {
 		// Kubernetes CLI (Apache-2.0) via binmgr (dl.k8s.io) — targets the DKS
 		// cluster by default (external/kube: KUBECONFIG → outpost's DKS kubeconfig).
 		cmd := kubectl.NewKubectlCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1761,7 +1761,7 @@ func dispatch() {
 		// (get.helm.sh) — installs charts onto the DKS cluster (same default
 		// kubeconfig as `bashy kubectl`).
 		cmd := helm.NewHelmCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1769,7 +1769,7 @@ func dispatch() {
 	case "govulncheck":
 		// Go vulnerability checker (BSD-3-Clause) via binmgr.
 		cmd := govulncheck.NewGovulncheckCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			var exit *exec.ExitError
 			if errors.As(err, &exit) {
@@ -1781,7 +1781,7 @@ func dispatch() {
 	case "osv-scanner", "osvscanner":
 		// google/osv-scanner (Apache-2.0) via binmgr.
 		cmd := osvscanner.NewOsvScannerCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			var exit *exec.ExitError
 			if errors.As(err, &exit) {
@@ -1793,7 +1793,7 @@ func dispatch() {
 	case "grype":
 		// anchore/grype (Apache-2.0) via binmgr.
 		cmd := grype.NewGrypeCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			var exit *exec.ExitError
 			if errors.As(err, &exit) {
@@ -1819,7 +1819,7 @@ func dispatch() {
 		// front door to the paired outpost service executable. Service code
 		// stays behind this process boundary; bashy owns the userland shell.
 		cmd := sphere.NewSphereCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1829,7 +1829,7 @@ func dispatch() {
 		// outpost agent at runtime (same exec-never-link discipline as sphere);
 		// `tessaro open` works even without it.
 		cmd := tessaro.NewTessaroCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1837,7 +1837,7 @@ func dispatch() {
 	case "login":
 		// Shortcut for `bashy tessaro login` — pair this machine with Tessaro.
 		cmd := tessaro.NewLoginCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1848,7 +1848,7 @@ func dispatch() {
 		// transfer; our own orchestration). Node B keeps a live replica of a dir
 		// on node A — point --dest at the replica's exposed rclone.
 		cmd := mirror.NewMirrorCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1871,7 +1871,7 @@ func dispatch() {
 		case "kill":
 			cmd = jobs.KillCommand()
 		}
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1888,7 +1888,7 @@ func dispatch() {
 	// verb self-provisions (download → verify → cache → exec) and passes through.
 	if e, ok := registry.Lookup(os.Args[1]); ok {
 		cmd := e.NewCmd()
-		cmd.SetArgs(os.Args[2:])
+		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -2201,7 +2201,7 @@ func runFleet(noun string, args []string) {
 		dispatchExit(2)
 	}
 	cmd.Use = typed
-	cmd.SetArgs(args)
+	setCobraArgs(cmd, args)
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "bashy %s: %v\n", typed, err)
 		dispatchExit(exit(err))
