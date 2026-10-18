@@ -99,7 +99,7 @@ func TestScriptRecipeInstalledFilesMatchGenerator(t *testing.T) {
 func TestScriptRecipeRejectsMissingAndDuplicateRows(t *testing.T) {
 	saved := lensTriggerDecls
 	defer func() { lensTriggerDecls = saved }()
-	lensTriggerDecls = append(append([]TriggerRow(nil), saved...), TriggerRow{Intent: "missing command"})
+	lensTriggerDecls = append(append([]TriggerRow(nil), saved...), TriggerRow{Intent: "missing command", Example: "example is not a runnable recipe"})
 	if _, err := scriptRecipeTasks(); err == nil {
 		t.Fatal("missing recipe command accepted")
 	}

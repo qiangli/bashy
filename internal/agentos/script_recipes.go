@@ -19,9 +19,6 @@ func scriptRecipeTasks() ([]scriptRecipeTask, error) {
 	seen := make(map[string]bool)
 	for _, row := range TriggerRows() {
 		command := strings.TrimSpace(row.Recipe)
-		if command == "" {
-			command = strings.TrimSpace(row.Example)
-		}
 		if command == "" || strings.ContainsAny(command, "\r\n") {
 			return nil, fmt.Errorf("invalid recipe command for %q", row.Intent)
 		}

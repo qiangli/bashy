@@ -409,7 +409,7 @@ func TestScriptHelpDerivedFromVocabulary(t *testing.T) {
 	// Mutating a declaration changes the output — nothing is hand-copied.
 	saved := lensTriggerDecls
 	defer func() { lensTriggerDecls = saved }()
-	lensTriggerDecls = append(append([]TriggerRow(nil), saved...), TriggerRow{Intent: "script task probe", Trigger: "lens -t probe", Word: "lens -t probe", Gloss: "probe", Example: "lens -t probe unique-script-probe-2140"})
+	lensTriggerDecls = append(append([]TriggerRow(nil), saved...), TriggerRow{Intent: "script task probe", Trigger: "lens -t probe", Word: "lens -t probe", Gloss: "probe", Recipe: "bashy lens -t probe unique-script-probe-2140"})
 	after, err := scriptHelp("sprint", classic, entry, "")
 	if err != nil {
 		t.Fatal(err)
@@ -423,7 +423,7 @@ func TestScriptHelpDerivedFromVocabulary(t *testing.T) {
 	// Also prove CommonOptionsVocabulary mutation propagates (via TriggerRows).
 	savedVocab := CommonOptionsVocabulary
 	defer func() { CommonOptionsVocabulary = savedVocab }()
-	CommonOptionsVocabulary = append(append([]CommonOption(nil), savedVocab...), CommonOption{Option: "--probe-opt", Meaning: "probe", Intent: "probe opt", Prior: "test", Example: "bashy adapt --probe-opt -- cmd probe-vocab-2140", Gloss: "probe"})
+	CommonOptionsVocabulary = append(append([]CommonOption(nil), savedVocab...), CommonOption{Option: "--probe-opt", Meaning: "probe", Intent: "probe opt", Prior: "test", Recipe: "bashy adapt --probe-opt -- cmd probe-vocab-2140", Gloss: "probe"})
 	after2, err := scriptHelp("sprint", classic, entry, "")
 	if err != nil {
 		t.Fatal(err)
