@@ -28,6 +28,14 @@ func helpFormat(explicit, environment string, agentic bool, detect func() (strin
 		format = environment
 	}
 	if format == "" {
+		if band, ok := helpBand(); ok {
+			if band >= 1 && band <= 2 {
+				return "script", nil
+			}
+			if band >= 3 {
+				return "skill", nil
+			}
+		}
 		_, agent := detect()
 		if agentic || agent {
 			return "skill", nil
@@ -39,6 +47,56 @@ func helpFormat(explicit, environment string, agentic bool, detect func() (strin
 		return format, nil
 	}
 	return "", fmt.Errorf("unknown help format %q (want skill, classic, mcp, or script)", format)
+}
+
+// helpBand returns the identified agent's capability band via the existing
+// fleet binding/principal lookup. It uses BASHY_AGENT and fleet.New()
+// (binding/principal) — no second registry or new global environment policy.
+// Missing or unknown band is reported as not ok so the caller falls through
+// to the human/agent defaults.
+func helpBand() (int, bool) {
+	if helpBandLookup != nil {
+		return helpBandLookup()
+	}
+	return fleetHelpBand()
+}
+
+var helpBandLookup func() (int, bool)
+
+func fleetHelpBand() (int, bool) {
+	name := strings.TrimSpace(os.Getenv("BASHY_AGENT"))
+	if name == "" {
+		return 0, false
+	}
+	cat := fleet.New()
+	// Principal lookup is the existing fleet identity check (agent vs person).
+	if _, kind, ok := cat.CanonicalPrincipal(name); ok {
+		if kind == fleet.KindPerson {
+			return 0, false
+		}
+	}
+	// Binding is the existing fleet binding lookup (agent -> tool/model).
+	a, _, _, err := cat.Binding(name)
+	if err != nil {
+		return 0, false
+	}
+	ladder, err := cat.Ladder()
+	if err != nil {
+		return 0, false
+	}
+	standings, _ := cat.Standings(ladder)
+	standing, ok := standings[a.Name]
+	if !ok {
+		return 0, false
+	}
+	band := standing.Band
+	if a.BandSource == fleet.BandCascade && a.Band > 0 {
+		band = a.Band
+	}
+	if band < 1 || band > fleet.MaxBand {
+		return 0, false
+	}
+	return band, true
 }
 
 // Only the front-door verb surface is converted. Shell builtins and applets

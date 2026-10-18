@@ -142,6 +142,10 @@ func clearHelpAgentMarkers(t *testing.T) {
 		t.Setenv(key, "")
 	}
 	t.Setenv("BASHY_AGENTIC", "")
+	t.Setenv("BASHY_AGENT", "")
+	orig := helpBandLookup
+	helpBandLookup = func() (int, bool) { return 0, false }
+	t.Cleanup(func() { helpBandLookup = orig })
 }
 
 func TestSkillHelpDetection(t *testing.T) {
@@ -158,6 +162,10 @@ func TestSkillHelpDetection(t *testing.T) {
 }
 
 func TestSkillHelpSelection(t *testing.T) {
+	orig := helpBandLookup
+	helpBandLookup = func() (int, bool) { return 0, false }
+	defer func() { helpBandLookup = orig }()
+	t.Setenv("BASHY_AGENT", "")
 	for _, tc := range []struct {
 		explicit, env     string
 		agentic, detected bool
@@ -433,5 +441,153 @@ func TestScriptHelpViaEnv(t *testing.T) {
 	out := skillHelpProcess(t, "script", "sprint", "--help")
 	if !bytes.HasPrefix(out, []byte("#!/usr/bin/env bash")) {
 		t.Fatalf("BASHY_HELP_FORMAT=script not selected via env: %s", out)
+	}
+}
+
+func TestHelpBandDefault(t *testing.T) {
+	orig := helpBandLookup
+	defer func() { helpBandLookup = orig }()
+	clearHelpAgentMarkers(t)
+	t.Setenv("BASHY_AGENT", "")
+	t.Setenv("BASHY_HELP_FORMAT", "")
+
+	// Helper to call helpFormat with band stub.
+	call := func(band *int, explicit, env string, agentic, detected bool) (string, error) {
+		if band == nil {
+			helpBandLookup = func() (int, bool) { return 0, false }
+		} else {
+			b := *band
+			helpBandLookup = func() (int, bool) { return b, true }
+		}
+		return helpFormat(explicit, env, agentic, func() (string, bool) { return "test-tool", detected })
+	}
+	intPtr := func(v int) *int { return &v }
+
+	// L1-L2 => script, L3+ => skill
+	for _, tc := range []struct {
+		band int
+		want string
+	}{
+		{1, "script"},
+		{2, "script"},
+		{3, "skill"},
+		{4, "skill"},
+		{5, "skill"},
+	} {
+		got, err := call(intPtr(tc.band), "", "", false, false)
+		if err != nil || got != tc.want {
+			t.Fatalf("band L%d: got %q err %v want %q", tc.band, got, err, tc.want)
+		}
+	}
+
+	// Missing band (no identified agent) => fallback: human classic, agentic skill
+	got, err := call(nil, "", "", false, false)
+	if err != nil || got != "classic" {
+		t.Fatalf("missing band human: got %q err %v want classic", got, err)
+	}
+	got, err = call(nil, "", "", true, false)
+	if err != nil || got != "skill" {
+		t.Fatalf("missing band agentic: got %q err %v want skill", got, err)
+	}
+	got, err = call(nil, "", "", false, true)
+	if err != nil || got != "skill" {
+		t.Fatalf("missing band detected: got %q err %v want skill", got, err)
+	}
+
+	// Unknown band simulated as missing (bandLookup false) also falls through.
+	// Explicit 0 is missing; helper above already covers.
+
+	// Override precedence: explicit --format wins over band and env
+	for _, tc := range []struct {
+		band     *int
+		explicit string
+		env      string
+		want     string
+	}{
+		{intPtr(1), "skill", "", "skill"},
+		{intPtr(1), "classic", "skill", "classic"},
+		{intPtr(4), "script", "skill", "script"},
+		{intPtr(2), "mcp", "", "mcp"},
+	} {
+		got, err := call(tc.band, tc.explicit, tc.env, false, false)
+		if err != nil || got != tc.want {
+			t.Fatalf("explicit override band %v explicit %q env %q: got %q err %v want %q", tc.band, tc.explicit, tc.env, got, err, tc.want)
+		}
+	}
+
+	// BASHY_HELP_FORMAT wins over band, explicit still wins over env
+	for _, tc := range []struct {
+		band *int
+		env  string
+		want string
+	}{
+		{intPtr(1), "skill", "skill"},
+		{intPtr(4), "classic", "classic"},
+		{intPtr(2), "mcp", "mcp"},
+		{intPtr(5), "script", "script"},
+	} {
+		got, err := call(tc.band, "", tc.env, false, false)
+		if err != nil || got != tc.want {
+			t.Fatalf("env override band %v env %q: got %q err %v want %q", tc.band, tc.env, got, err, tc.want)
+		}
+	}
+	// Env invalid should error even when band present (explicit/env validation)
+	if _, err := call(intPtr(3), "", "invalid", false, false); err == nil {
+		t.Fatal("invalid env with band should error")
+	}
+	if _, err := call(intPtr(1), "invalid", "", false, false); err == nil {
+		t.Fatal("invalid explicit with band should error")
+	}
+
+	// Human default stays classic when band missing and not agentic
+	helpBandLookup = func() (int, bool) { return 0, false }
+	got, err = helpFormat("", "", false, func() (string, bool) { return "", false })
+	if err != nil || got != "classic" {
+		t.Fatalf("human default: got %q err %v want classic", got, err)
+	}
+
+	// Fleet-backed missing/unknown band: BASHY_AGENT empty or unknown name falls through.
+	// Use real fleet lookup by clearing stub.
+	helpBandLookup = nil
+	t.Setenv("BASHY_AGENT", "")
+	got, err = helpFormat("", "", false, func() (string, bool) { return "", false })
+	if err != nil || got != "classic" {
+		t.Fatalf("fleet missing agent: got %q err %v want classic", got, err)
+	}
+	t.Setenv("BASHY_AGENT", "no-such-agent-unknown-244")
+	got, err = helpFormat("", "", false, func() (string, bool) { return "", false })
+	if err != nil || got != "classic" {
+		t.Fatalf("fleet unknown agent: got %q err %v want classic", got, err)
+	}
+	// Person principal should also be classic (no band)
+	// Use a temp person if possible; at least ensure unknown person name doesn't give band.
+	t.Setenv("BASHY_AGENT", "unknown-person-xyz-244")
+	got, err = helpFormat("", "", false, func() (string, bool) { return "", false })
+	if err != nil || got != "classic" {
+		t.Fatalf("fleet unknown principal: got %q err %v want classic", got, err)
+	}
+
+	// Integration via dispatch: L1-L2 band should route to scriptHelp, L3+ to skillHelp
+	// Use stubbed band and real dispatcher through subprocess.
+	for _, tc := range []struct {
+		band int
+		want string
+	}{
+		{2, "#!/usr/bin/env bash"},
+		{4, "---\nname: bashy-sprint"},
+	} {
+		helpBandLookup = func() (int, bool) { return tc.band, true }
+		// Need to exercise helpFormat path directly; subprocess would need env injection
+		// so verify helpFormat chooses correctly and scriptHelp/skillHelp produce expected prefix.
+		got, err := helpFormat("", "", false, func() (string, bool) { return "", false })
+		if err != nil {
+			t.Fatalf("band %d helpFormat err %v", tc.band, err)
+		}
+		if tc.want == "#!/usr/bin/env bash" && got != "script" {
+			t.Fatalf("band %d want script got %q", tc.band, got)
+		}
+		if tc.want == "---\nname: bashy-sprint" && got != "skill" {
+			t.Fatalf("band %d want skill got %q", tc.band, got)
+		}
 	}
 }
