@@ -35,10 +35,10 @@ func helpFormat(explicit, environment string, agentic bool, detect func() (strin
 		return "classic", nil
 	}
 	switch format {
-	case "skill", "classic", "mcp":
+	case "skill", "classic", "mcp", "script":
 		return format, nil
 	}
-	return "", fmt.Errorf("unknown help format %q (want skill, classic, or mcp)", format)
+	return "", fmt.Errorf("unknown help format %q (want skill, classic, mcp, or script)", format)
 }
 
 // Only the front-door verb surface is converted. Shell builtins and applets
@@ -156,8 +156,13 @@ func dispatchFormattedHelp(args []string) (int, bool) {
 		}
 	} else {
 		output, err = classicHelp(request)
-		if err == nil && format == "skill" {
-			output, err = skillHelp(name, output, entry, commandLongDoc(name))
+		if err == nil {
+			switch format {
+			case "skill":
+				output, err = skillHelp(name, output, entry, commandLongDoc(name))
+			case "script":
+				output, err = scriptHelp(name, output, entry, commandLongDoc(name))
+			}
 		}
 	}
 	if err != nil {
@@ -317,6 +322,59 @@ func mcpToolDefinitions(opts yokemcp.Options) ([]*mcpsdk.Tool, error) {
 		params.Cursor = page.NextCursor
 	}
 	return result, nil
+}
+
+// scriptHelp is the --format=script rendering: example-first, one exact
+// bashy command per task, no prose decisions (single spelling, no "or"),
+// with --no-input filled where appropriate. Examples are derived from the
+// published adoption vocabulary (TriggerRows/CommonOptionsVocabulary), never
+// from a duplicated hardcoded table. A mutating declaration therefore changes
+// the output (covered by TestScriptHelpDerivedFromVocabulary).
+func scriptHelp(name, classic string, _ atlas.Entry, _ string) (string, error) {
+	var b strings.Builder
+	b.WriteString("#!/usr/bin/env bash\n")
+	fmt.Fprintf(&b, "# bashy %s — script (one exact command per task, --no-input where needed)\n", name)
+	b.WriteString("# Examples derived from TriggerRows/CommonOptionsVocabulary — one command per task\n")
+	for _, r := range TriggerRows() {
+		example := strings.TrimSpace(r.Example)
+		if example == "" {
+			continue
+		}
+		// Every task is one exact spelling; the word is the typed trigger.
+		fmt.Fprintf(&b, "# %s (%s)\n", r.Intent, r.Gloss)
+		// The example already contains --no-input where the vocabulary says it
+		// should (e.g. apt install). No second spelling or decision prose.
+		// Help lists copyable commands. Running the help text itself must not
+		// execute every example, including mutating ones such as apt install.
+		fmt.Fprintf(&b, "# %s\n", example)
+	}
+	// Ensure the short usage follows the examples (example-first) but keep it
+	// as a comment so the file remains an executable script with no ambiguity.
+	b.WriteString("\n# Usage\n")
+	foundUsage := false
+	for _, line := range strings.Split(classic, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		if strings.HasPrefix(lower, "usage:") || strings.HasPrefix(trimmed, "bashy "+name) || strings.HasPrefix(trimmed, name+" ") {
+			fmt.Fprintf(&b, "# %s\n", trimmed)
+			foundUsage = true
+			break
+		}
+	}
+	if !foundUsage {
+		// Fallback: first non-empty line of classic help.
+		for _, line := range strings.Split(strings.TrimSpace(classic), "\n") {
+			if t := strings.TrimSpace(line); t != "" {
+				fmt.Fprintf(&b, "# %s\n", t)
+				break
+			}
+		}
+	}
+	b.WriteString("# See `bashy help common-options` for vocabulary.\n")
+	return b.String(), nil
 }
 
 // declaredLongFlags is the set of long flag names the command itself declares

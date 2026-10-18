@@ -261,3 +261,177 @@ func TestSkillHelpMCPMatchesServer(t *testing.T) {
 		}
 	}
 }
+
+func TestScriptHelpFormat(t *testing.T) {
+	for _, tc := range []struct {
+		explicit string
+		want     string
+		isErr    bool
+	}{
+		{"script", "script", false},
+		{"skill", "skill", false},
+		{"classic", "classic", false},
+		{"mcp", "mcp", false},
+		{"unknown", "", true},
+		{"", "classic", false},
+	} {
+		env := ""
+		if tc.explicit == "" {
+			clearHelpAgentMarkers(t)
+		}
+		got, err := helpFormat(tc.explicit, env, false, func() (string, bool) { return "", false })
+		if tc.isErr && err == nil {
+			t.Fatalf("helpFormat(%q) expected error", tc.explicit)
+		}
+		if !tc.isErr && got != tc.want {
+			t.Fatalf("helpFormat(%q)=%q want %q err %v", tc.explicit, got, tc.want, err)
+		}
+	}
+}
+
+func TestScriptHelpExplicit(t *testing.T) {
+	out := skillHelpProcess(t, "classic", "help", "--format=script", "sprint")
+	if !bytes.HasPrefix(out, []byte("#!/usr/bin/env bash\n")) {
+		t.Fatalf("script help lacks shebang: %s", out)
+	}
+	if !bytes.Contains(out, []byte("bashy sprint")) {
+		t.Fatalf("script help lacks verb header: %s", out)
+	}
+	// Explicit skill/classic/mcp must remain exactly as before.
+	skill := skillHelpProcess(t, "classic", "help", "--format", "skill", "sprint")
+	if !bytes.HasPrefix(skill, []byte("---\nname: bashy-sprint\n")) {
+		t.Fatal("skill format regressed")
+	}
+	classic := skillHelpProcess(t, "classic", "help", "--format", "classic", "sprint")
+	if bytes.HasPrefix(classic, []byte("#!/usr/bin/env bash")) {
+		t.Fatal("classic format returned script")
+	}
+	mcp := skillHelpProcess(t, "classic", "help", "--format=mcp", "sprint")
+	if !json.Valid(mcp) {
+		t.Fatal("mcp format regressed")
+	}
+}
+
+func TestScriptHelpExampleFirst(t *testing.T) {
+	out := string(skillHelpProcess(t, "classic", "help", "--format=script", "weave"))
+	// Examples must appear before Usage prose (example-first).
+	rows := TriggerRows()
+	if len(rows) == 0 {
+		t.Fatal("no trigger rows")
+	}
+	firstExample := rows[0].Example
+	idxExample := strings.Index(out, firstExample)
+	idxUsage := strings.Index(out, "# Usage")
+	if idxExample < 0 {
+		t.Fatalf("script output lacks first example %q", firstExample)
+	}
+	if idxUsage >= 0 && idxExample > idxUsage {
+		t.Fatalf("example-first violated: example at %d after usage at %d", idxExample, idxUsage)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(out), "#!/usr/bin/env bash") {
+		t.Fatal("script does not start with shebang")
+	}
+}
+
+func TestScriptHelpOnePerTask(t *testing.T) {
+	entry, _ := atlas.Lookup("sprint")
+	out, err := scriptHelp("sprint", "Usage:\n  sprint [flags]\n", entry, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := TriggerRows()
+	// One exact command per task: each Example appears once as a comment,
+	// so executing the help text cannot run every example.
+	lines := strings.Split(out, "\n")
+	lineSet := map[string]int{}
+	for _, l := range lines {
+		lineSet[strings.TrimSpace(l)]++
+	}
+	for _, r := range rows {
+		example := strings.TrimSpace(r.Example)
+		if lineSet["# "+example] != 1 {
+			t.Errorf("example %q appears %d times, want 1", example, lineSet["# "+example])
+		}
+	}
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+			t.Fatalf("script help has executable line %q", line)
+		}
+	}
+}
+
+func TestScriptHelpNoProseDecisions(t *testing.T) {
+	out := string(skillHelpProcess(t, "classic", "help", "--format=script", "sprint"))
+	lower := strings.ToLower(out)
+	// Script must not contain decision prose — single spelling, no "choose"/"or" alternatives.
+	for _, phrase := range []string{"missing options exit 2 here", "choose", " or "} {
+		// " or " is too broad: allow only the decision-like "Missing options" check.
+		if phrase == " or " {
+			continue
+		}
+		if strings.Contains(lower, phrase) {
+			t.Fatalf("script help contains prose decision %q", phrase)
+		}
+	}
+	if strings.Contains(out, "Missing options exit 2 here") {
+		t.Fatalf("script help must not contain skill footer decision prose")
+	}
+}
+
+func TestScriptHelpNoInputFilled(t *testing.T) {
+	out := string(skillHelpProcess(t, "classic", "help", "--format=script", "sprint"))
+	if !strings.Contains(out, "--no-input") {
+		t.Fatalf("script help lacks --no-input where appropriate: %s", out)
+	}
+	// The vocabulary's --no-input example must be present verbatim.
+	for _, r := range TriggerRows() {
+		if r.Trigger == "--no-input" {
+			if !strings.Contains(out, r.Example) {
+				t.Fatalf("script lacks vocabulary --no-input example %q", r.Example)
+			}
+		}
+	}
+}
+
+func TestScriptHelpDerivedFromVocabulary(t *testing.T) {
+	entry, _ := atlas.Lookup("sprint")
+	classic := "Usage:\n  sprint [flags]\n"
+	before, err := scriptHelp("sprint", classic, entry, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Mutating a declaration changes the output — nothing is hand-copied.
+	saved := lensTriggerDecls
+	defer func() { lensTriggerDecls = saved }()
+	lensTriggerDecls = append(append([]TriggerRow(nil), saved...), TriggerRow{Intent: "script task probe", Trigger: "lens -t probe", Word: "lens -t probe", Gloss: "probe", Example: "lens -t probe unique-script-probe-2140"})
+	after, err := scriptHelp("sprint", classic, entry, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(before, "unique-script-probe-2140") {
+		t.Fatal("before already contains probe")
+	}
+	if !strings.Contains(after, "unique-script-probe-2140") || !strings.Contains(after, "lens -t probe") {
+		t.Fatalf("scriptHelp does not follow lens declarations: %s", after)
+	}
+	// Also prove CommonOptionsVocabulary mutation propagates (via TriggerRows).
+	savedVocab := CommonOptionsVocabulary
+	defer func() { CommonOptionsVocabulary = savedVocab }()
+	CommonOptionsVocabulary = append(append([]CommonOption(nil), savedVocab...), CommonOption{Option: "--probe-opt", Meaning: "probe", Intent: "probe opt", Prior: "test", Example: "bashy adapt --probe-opt -- cmd probe-vocab-2140", Gloss: "probe"})
+	after2, err := scriptHelp("sprint", classic, entry, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(after2, "probe-vocab-2140") {
+		t.Fatalf("scriptHelp does not follow CommonOptionsVocabulary: %s", after2)
+	}
+}
+
+func TestScriptHelpViaEnv(t *testing.T) {
+	// Env-driven selection parallels skill/mcp tests.
+	out := skillHelpProcess(t, "script", "sprint", "--help")
+	if !bytes.HasPrefix(out, []byte("#!/usr/bin/env bash")) {
+		t.Fatalf("BASHY_HELP_FORMAT=script not selected via env: %s", out)
+	}
+}
