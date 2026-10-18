@@ -45,7 +45,6 @@ import (
 	"github.com/qiangli/yoke/pkg/jobs"
 	"github.com/qiangli/yoke/pkg/judge"
 	"github.com/qiangli/yoke/pkg/kb"
-	"github.com/qiangli/yoke/pkg/kbmemory"
 	"github.com/qiangli/yoke/pkg/meet"
 	"github.com/qiangli/yoke/pkg/mirror"
 	"github.com/qiangli/yoke/pkg/pair"
@@ -280,7 +279,7 @@ func cobraVerb(name string) *cobra.Command {
 // missing from the other.
 func schemaKBCmd() *cobra.Command {
 	cmd := kb.NewKBCmd()
-	cmd.AddCommand(newKBRecallCmd(), newKBContextCmd(), newKBAskCmd(), kbmemory.NewMemoryCmd())
+	cmd.AddCommand(newKBRecallCmd(), newKBContextCmd(), newKBAskCmd(), newKBMemoryCmd())
 	return cmd
 }
 func schemaToolCmd() *cobra.Command {

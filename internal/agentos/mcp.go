@@ -263,9 +263,15 @@ func mcpOptions(allow, profile string) (yokemcp.Options, error) {
 	if profile != "default" {
 		exposeDB := profile == "all" || slices.Contains(opts.Tools, "db_lifecycle") || slices.Contains(opts.Tools, "db")
 		exposeMemory := profile == "all" || slices.Contains(opts.Tools, "kb_memory")
+		// Retrieval rides the kb_memory family selector (both verbs live in
+		// the `kb memory` tree) and is also selectable by its own tool name.
+		exposeRetrieve := exposeMemory || slices.Contains(opts.Tools, "kb_memory_retrieve")
+		exposeSync := exposeMemory || slices.Contains(opts.Tools, "kb_memory_index_sync")
 		// Direct registered tools are selected through Registered, not the
 		// core command list passed to Yoke's registry lookup.
-		opts.Tools = slices.DeleteFunc(opts.Tools, func(name string) bool { return name == "db_lifecycle" || name == "kb_memory" })
+		opts.Tools = slices.DeleteFunc(opts.Tools, func(name string) bool {
+			return name == "db_lifecycle" || name == "kb_memory" || name == "kb_memory_retrieve" || name == "kb_memory_index_sync"
+		})
 		verbs := mcpVerbCommands()
 		var selected []yokemcp.RegisteredCommand
 		for _, verb := range verbs {
@@ -291,6 +297,12 @@ func mcpOptions(allow, profile string) (yokemcp.Options, error) {
 		if exposeMemory {
 			direct = append(direct, kbmemory.MCPCommand)
 		}
+		if exposeRetrieve {
+			direct = append(direct, kbmemory.MCPRetrieveCommand)
+		}
+		if exposeSync {
+			direct = append(direct, kbmemory.MCPSyncIndexCommand)
+		}
 		registered := opts.Registered
 		opts.Registered = func() []yokemcp.RegisteredCommand {
 			out := registered()
@@ -304,8 +316,11 @@ func mcpOptions(allow, profile string) (yokemcp.Options, error) {
 	registered := opts.Registered
 	opts.Registered = func() []yokemcp.RegisteredCommand {
 		// kb_memory runs the same cobra command as `bashy kb memory`, so
-		// both surfaces share one parser, one Run and one exit code.
-		return append(registered(), dbcmd.MCPCommand(), kbmemory.MCPCommand())
+		// both surfaces share one parser, one Run and one exit code. The
+		// retrieval tools run the same `kb memory retrieve` / `kb memory
+		// index-sync` commands the CLI dispatches.
+		return append(registered(), dbcmd.MCPCommand(), kbmemory.MCPCommand(),
+			kbmemory.MCPRetrieveCommand(), kbmemory.MCPSyncIndexCommand())
 	}
 	return opts, nil
 }
