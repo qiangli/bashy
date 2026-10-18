@@ -267,10 +267,11 @@ func mcpOptions(allow, profile string) (yokemcp.Options, error) {
 		// the `kb memory` tree) and is also selectable by its own tool name.
 		exposeRetrieve := exposeMemory || slices.Contains(opts.Tools, "kb_memory_retrieve")
 		exposeSync := exposeMemory || slices.Contains(opts.Tools, "kb_memory_index_sync")
+		exposeMaintain := exposeMemory || slices.Contains(opts.Tools, "kb_memory_maintain")
 		// Direct registered tools are selected through Registered, not the
 		// core command list passed to Yoke's registry lookup.
 		opts.Tools = slices.DeleteFunc(opts.Tools, func(name string) bool {
-			return name == "db_lifecycle" || name == "kb_memory" || name == "kb_memory_retrieve" || name == "kb_memory_index_sync"
+			return name == "db_lifecycle" || name == "kb_memory" || name == "kb_memory_retrieve" || name == "kb_memory_index_sync" || name == "kb_memory_maintain"
 		})
 		verbs := mcpVerbCommands()
 		var selected []yokemcp.RegisteredCommand
@@ -303,6 +304,9 @@ func mcpOptions(allow, profile string) (yokemcp.Options, error) {
 		if exposeSync {
 			direct = append(direct, kbmemory.MCPSyncIndexCommand)
 		}
+		if exposeMaintain {
+			direct = append(direct, kbmemory.MCPMaintainCommand)
+		}
 		registered := opts.Registered
 		opts.Registered = func() []yokemcp.RegisteredCommand {
 			out := registered()
@@ -320,7 +324,7 @@ func mcpOptions(allow, profile string) (yokemcp.Options, error) {
 		// retrieval tools run the same `kb memory retrieve` / `kb memory
 		// index-sync` commands the CLI dispatches.
 		return append(registered(), dbcmd.MCPCommand(), kbmemory.MCPCommand(),
-			kbmemory.MCPRetrieveCommand(), kbmemory.MCPSyncIndexCommand())
+			kbmemory.MCPRetrieveCommand(), kbmemory.MCPSyncIndexCommand(), kbmemory.MCPMaintainCommand())
 	}
 	return opts, nil
 }

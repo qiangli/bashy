@@ -16,6 +16,7 @@ import (
 //
 //	kb memory retrieve TARGET --index INDEX   scoped lexical recall + freshness
 //	kb memory index-sync TARGET --index INDEX explicit index build/reconcile
+//	kb memory maintain VERB TARGET [ID]       explicit candidates/supersede/expire/delete/export/import/backup/restore
 //
 // Retrieval commands run the same parsers and envelopes as their MCP tools
 // (kbmemory.MCPRetrieveCommand/MCPSyncIndexCommand), so the CLI and MCP share
@@ -23,6 +24,6 @@ import (
 // capture already uses.
 func newKBMemoryCmd() *cobra.Command {
 	cmd := kbmemory.NewMemoryCmd()
-	cmd.AddCommand(kbmemory.NewRetrieveCmd(), kbmemory.NewSyncIndexCmd())
+	cmd.AddCommand(kbmemory.NewRetrieveCmd(), kbmemory.NewSyncIndexCmd(), kbmemory.NewMaintainCmd())
 	return cmd
 }
