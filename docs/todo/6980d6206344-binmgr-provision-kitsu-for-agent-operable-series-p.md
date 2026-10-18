@@ -3,9 +3,10 @@ id: 6980d6206344
 kind: feature
 title: Binmgr-provision Kitsu for agent-operable series production tracking
 seq: 354
-status: todo
+status: assigned
 priority: p2
 created: 2026-09-30T07:29:25.273713Z
+assignee: agy-gemini3.8-flash
 sprint: 382
 sprint_id: 52e1124d-d9d2-5528-bbfa-80f6b8538c1d
 sprint_title: Agent-operable open-source creative tools through binmgr and registered commands
