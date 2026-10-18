@@ -21,14 +21,25 @@ const (
 	commonOptionsMatrixFile   = "testdata/common_options_matrix.txt"
 )
 
-// commonOptionNames is the documented common-option vocabulary
-// (docs/common-options.md in the dhnt umbrella is the authority).
-var commonOptionNames = []string{"dry-run", "explain", "fields", "json", "no-input", "null", "plain", "quiet"}
+// commonOptionNames is the audited matrix scope: the six PRIMARY common options
+// (Sprint 446 master plan) plus the --depth/--since amendment, all rows of the
+// vocabulary table in docs/common-options.md (dhnt umbrella, the authority).
+// The table's global/naming flags (--help, --verbose, --quiet, --debug, --yes,
+// --force) are deliberately NOT matrix columns: they are naming rules, not
+// per-tool capabilities. --quiet is still lint-checked (must be bool). --plain
+// is not a common option.
+var commonOptionNames = []string{"depth", "dry-run", "explain", "fields", "json", "no-input", "null", "since"}
 
 // Tools whose --help is not safe to execute (posix gate/provider runners; man
-// excludes them too). They are recorded in the matrix as help-excluded rather
-// than silently skipped.
-var helpExcludedTools = map[string]bool{"posix-providers": true, "posix-gate": true}
+// excludes them too). They never become a fourth status: each cell is
+// "unsupported", justified by the tool's source, and the set is checked
+// separately in TestHelpExcludedToolsAreUnsupported.
+var helpExcludedTools = map[string]string{
+	"posix-gate":      "cmds/posixgate/posixgate.go parses only --profile/--manifest/--shell/--bindir/--multicall",
+	"posix-providers": "cmds/posixproviders/posixproviders.go top level takes only subcommands; --json exists only under `list`",
+}
+
+var matrixStatuses = []string{"supported", "native-mapped", "unsupported"}
 
 // Tools with their own non-pflag grammar (expression languages, subcommand
 // dispatchers): --help lists no pflag options, so no common option can be
@@ -85,9 +96,9 @@ func TestCommonOptionsVocabularyReport(t *testing.T) {
 	// running tool handlers in the test process or inventing flag declarations.
 	names := tool.Names()
 	for _, name := range names {
-		if helpExcludedTools[name] {
+		if _, excluded := helpExcludedTools[name]; excluded {
 			for _, opt := range commonOptionNames {
-				matrix = append(matrix, matrixEntry(name, opt, "help-excluded"))
+				matrix = append(matrix, matrixEntry(name, opt, "unsupported"))
 			}
 			continue
 		}
@@ -140,6 +151,14 @@ func TestCommonOptionsVocabularyReport(t *testing.T) {
 		t.Errorf("new short option %q: not in reviewed baseline; remove it or review and update %s", n, commonOptionsBaselineFile)
 	}
 	golden := readGolden(t, commonOptionsMatrixFile)
+	if want := len(names) * len(commonOptionNames); len(matrix) != want {
+		t.Errorf("matrix has %d cells, want %d tools x %d options", len(matrix), len(names), len(commonOptionNames))
+	}
+	for _, cell := range matrix {
+		if f := strings.Split(cell, "\t"); len(f) != 3 || !slices.Contains(matrixStatuses, f[2]) {
+			t.Errorf("matrix cell %q: status must be one of %v", cell, matrixStatuses)
+		}
+	}
 	if !slices.Equal(matrix, golden) {
 		t.Errorf("common-option matrix differs from %s (review, then BASHY_UPDATE_COMMON_OPTIONS=1):\n%s", commonOptionsMatrixFile, lineDiff(golden, matrix))
 	}
@@ -211,10 +230,6 @@ func commonOptionStatus(opt string, flags map[string]helpFlag) string {
 				return "native-mapped"
 			}
 		}
-	case "quiet":
-		if declared && f.Type == "bool" {
-			return "supported"
-		}
 	default:
 		if declared {
 			return "supported"
@@ -245,7 +260,7 @@ func TestVocabularyToolHelp(t *testing.T) {
 	if name == "" {
 		return
 	}
-	if helpExcludedTools[name] {
+	if _, excluded := helpExcludedTools[name]; excluded {
 		os.Exit(2)
 	}
 	dir := t.TempDir()
@@ -306,6 +321,23 @@ func vocabularyHelpFlags(help string) []helpFlag {
 	return flags
 }
 
+func TestHelpExcludedToolsAreUnsupported(t *testing.T) {
+	registered := tool.Names()
+	for name, why := range helpExcludedTools {
+		if !slices.Contains(registered, name) || why == "" {
+			t.Errorf("help exclusion %q is stale or unjustified", name)
+		}
+		for _, opt := range commonOptionNames {
+			if want := matrixEntry(name, opt, "unsupported"); !slices.Contains(readGolden(t, commonOptionsMatrixFile), want) {
+				t.Errorf("golden lacks %q", want)
+			}
+		}
+	}
+	if len(helpExcludedTools) != 2 {
+		t.Errorf("help exclusion list changed; review: %v", helpExcludedTools)
+	}
+}
+
 func TestCommonOptionFindingRules(t *testing.T) {
 	for _, tc := range []struct {
 		flag  tool.ArgFlag
@@ -337,7 +369,7 @@ func TestCommonOptionFindingRules(t *testing.T) {
 	fm := flagsOf("      --json            structured output (exit 2 if the command has no structured output)\n" +
 		"      --null            use the command's native NUL-delimited spelling (-z/--zero/--null-data)\n" +
 		"  -z, --zero            nul\n      --quiet           q\n      --explain         e\n")
-	for opt, want := range map[string]string{"json": "unsupported", "null": "native-mapped", "quiet": "supported", "explain": "supported", "fields": "unsupported", "dry-run": "unsupported"} {
+	for opt, want := range map[string]string{"json": "unsupported", "null": "native-mapped", "explain": "supported", "fields": "unsupported", "dry-run": "unsupported"} {
 		if got := commonOptionStatus(opt, fm); got != want {
 			t.Errorf("status(%s)=%s want %s", opt, got, want)
 		}
