@@ -81,14 +81,18 @@ func mailboxDir() (string, error) {
 		_ = os.Chmod(d, 0o700)
 		return d, nil
 	}
-	u, err := user.Current()
-	if err != nil {
-		return "", err
+	// Same ladder as the other stores (audit, activity, skills): BASHY_HOME,
+	// then $HOME — never the passwd home, which ignores an isolated HOME.
+	var d string
+	if home := strings.TrimSpace(os.Getenv("BASHY_HOME")); home != "" {
+		d = filepath.Join(home, "inbox")
+	} else {
+		h, err := os.UserHomeDir()
+		if err != nil || strings.TrimSpace(h) == "" {
+			return "", fmt.Errorf("inbox: no home directory (set BASHY_MAILBOX_DIR, BASHY_HOME or HOME)")
+		}
+		d = filepath.Join(h, ".bashy", "inbox")
 	}
-	if strings.TrimSpace(u.HomeDir) == "" {
-		return "", fmt.Errorf("inbox: current OS user has no home directory")
-	}
-	d := filepath.Join(u.HomeDir, ".bashy", "inbox")
 	if err := os.MkdirAll(d, 0o700); err != nil {
 		return "", err
 	}
