@@ -102,7 +102,6 @@ import (
 	"github.com/qiangli/yoke/pkg/instance"
 	"github.com/qiangli/yoke/pkg/jobs"
 	"github.com/qiangli/yoke/pkg/judge"
-	"github.com/qiangli/yoke/pkg/kb"
 	"github.com/qiangli/yoke/pkg/lexicon"
 	"github.com/qiangli/yoke/pkg/meet"
 	"github.com/qiangli/yoke/pkg/mirror"
@@ -1392,12 +1391,11 @@ func dispatch() {
 		// wiki pages under ~/.bashy/kb. The loop: `search` before a task,
 		// `add` when nothing relevant exists, `retro` (update/supersede/
 		// validate) after the task completes.
-		cmd := kb.NewKBCmd()
-		cmd.AddCommand(newKBRecallCmd(), newKBContextCmd(), newKBAskCmd())
+		cmd := schemaKBCmd()
 		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy kb:", err)
-			dispatchExit(1)
+			dispatchExit(kbExitCode(err))
 		}
 		dispatchExit(0)
 	case "tool", "tools", "model", "models", "agent", "agents", "person", "people", "whois":

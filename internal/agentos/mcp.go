@@ -22,6 +22,7 @@ import (
 	dbcmd "github.com/qiangli/yoke/cmds/db"
 	yokemcp "github.com/qiangli/yoke/mcp"
 	"github.com/qiangli/yoke/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/kbmemory"
 	"github.com/qiangli/yoke/pkg/policy/audit"
 )
 
@@ -261,9 +262,10 @@ func mcpOptions(allow, profile string) (yokemcp.Options, error) {
 	}
 	if profile != "default" {
 		exposeDB := profile == "all" || slices.Contains(opts.Tools, "db_lifecycle") || slices.Contains(opts.Tools, "db")
+		exposeMemory := profile == "all" || slices.Contains(opts.Tools, "kb_memory")
 		// Direct registered tools are selected through Registered, not the
 		// core command list passed to Yoke's registry lookup.
-		opts.Tools = slices.DeleteFunc(opts.Tools, func(name string) bool { return name == "db_lifecycle" })
+		opts.Tools = slices.DeleteFunc(opts.Tools, func(name string) bool { return name == "db_lifecycle" || name == "kb_memory" })
 		verbs := mcpVerbCommands()
 		var selected []yokemcp.RegisteredCommand
 		for _, verb := range verbs {
@@ -282,13 +284,28 @@ func mcpOptions(allow, profile string) (yokemcp.Options, error) {
 			}
 			return out
 		}
-		if !exposeDB {
-			return opts, nil
+		var direct []func() yokemcp.RegisteredCommand
+		if exposeDB {
+			direct = append(direct, dbcmd.MCPCommand)
 		}
+		if exposeMemory {
+			direct = append(direct, kbmemory.MCPCommand)
+		}
+		registered := opts.Registered
+		opts.Registered = func() []yokemcp.RegisteredCommand {
+			out := registered()
+			for _, command := range direct {
+				out = append(out, command())
+			}
+			return out
+		}
+		return opts, nil
 	}
 	registered := opts.Registered
 	opts.Registered = func() []yokemcp.RegisteredCommand {
-		return append(registered(), dbcmd.MCPCommand())
+		// kb_memory runs the same cobra command as `bashy kb memory`, so
+		// both surfaces share one parser, one Run and one exit code.
+		return append(registered(), dbcmd.MCPCommand(), kbmemory.MCPCommand())
 	}
 	return opts, nil
 }

@@ -1,11 +1,13 @@
 package agentos
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
 
 	graphcmd "github.com/qiangli/yoke/cmds/graph"
+	"github.com/qiangli/yoke/pkg/kbmemory"
 	"github.com/qiangli/yoke/pkg/recall"
 	"github.com/qiangli/yoke/pkg/scope"
 )
@@ -110,4 +112,15 @@ func newKBAskCmd() *cobra.Command {
 		return nil
 	}
 	return cmd
+}
+
+// kbExitCode keeps `kb memory`'s contract exit code (input, conflict,
+// timeout, cancel) on the CLI, so it matches the kb_memory MCP tool that runs
+// the same command. Every other kb failure keeps kb's historical 1.
+func kbExitCode(err error) int {
+	var ee *kbmemory.ExitError
+	if errors.As(err, &ee) {
+		return ee.Code
+	}
+	return 1
 }

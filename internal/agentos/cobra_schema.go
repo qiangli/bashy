@@ -45,6 +45,7 @@ import (
 	"github.com/qiangli/yoke/pkg/jobs"
 	"github.com/qiangli/yoke/pkg/judge"
 	"github.com/qiangli/yoke/pkg/kb"
+	"github.com/qiangli/yoke/pkg/kbmemory"
 	"github.com/qiangli/yoke/pkg/meet"
 	"github.com/qiangli/yoke/pkg/mirror"
 	"github.com/qiangli/yoke/pkg/pair"
@@ -274,9 +275,12 @@ func cobraVerb(name string) *cobra.Command {
 	return nil
 }
 
+// schemaKBCmd is the one kb tree: the runtime dispatch and the schema
+// projection both build it here, so `kb memory` cannot be mounted in one and
+// missing from the other.
 func schemaKBCmd() *cobra.Command {
 	cmd := kb.NewKBCmd()
-	cmd.AddCommand(newKBRecallCmd(), newKBContextCmd(), newKBAskCmd())
+	cmd.AddCommand(newKBRecallCmd(), newKBContextCmd(), newKBAskCmd(), kbmemory.NewMemoryCmd())
 	return cmd
 }
 func schemaToolCmd() *cobra.Command {
