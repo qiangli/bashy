@@ -1108,6 +1108,8 @@ github.com/qiangli/readline v0.1.4-0.20261013004858-df59d4e258e4 h1:jFEDhq2xCnc7
 github.com/qiangli/readline v0.1.4-0.20261013004858-df59d4e258e4/go.mod h1:a0jdwCqW+MTJWBjQRHa9kRNipGLv1Y8Ep26hoLGNTQ8=
 github.com/qiangli/sh/v3 v3.0.0-20261014083225-477b218e535d h1:WeYsXOry8H3Bhhz0FqHjKvrTOHGmp0YiDcZsSm0+7BM=
 github.com/qiangli/sh/v3 v3.0.0-20261014083225-477b218e535d/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
+github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb h1:LLfdQXY/uXHpJm9eYP0sdcFg4IHQHzIOUwslX9TpqxI=
+github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb/go.mod h1:tcNzv5p84E0skkmJn038y+hWJbLQXQqEnQfeh5r2JLM=
 github.com/qiangli/ycode v0.3.1-dev.0.20261017214433-ffb708d14c35 h1:uf2PzKMlod7IDSxmCtZGZX1t9ykhKB6es5zxOy34ZsY=
 github.com/qiangli/ycode v0.3.1-dev.0.20261017214433-ffb708d14c35/go.mod h1:LL1lZmmudz0ttCDl4XQQ6O3ENyjkiYaxw+HsbZcokEI=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2 h1:bFDhUDkjVspcsLYaKnlN4hZAja61IZdNQ+0YYoGoTJc=
@@ -1120,6 +1122,8 @@ github.com/qiangli/yoke v0.0.0-20261018091145-11c5e5bb3b2e h1:EFo14AwAFsCIvu6Fay
 github.com/qiangli/yoke v0.0.0-20261018091145-11c5e5bb3b2e/go.mod h1:tNJ8gsNe+sldp4mtueqvVu2UIt82UicV7zYL6X2F8R8=
 github.com/qiangli/yoke v0.0.0-20261018091806-4d1eda4151a9 h1:kRWxQc4azEoDaG0bt3OrN0k4OgZN7yue0nFEfsxQjeo=
 github.com/qiangli/yoke v0.0.0-20261018091806-4d1eda4151a9/go.mod h1:tNJ8gsNe+sldp4mtueqvVu2UIt82UicV7zYL6X2F8R8=
+github.com/qiangli/yoke v0.0.0-20261018092502-8708159f39db h1:CM4UWUzz7FWu6TbTOCkB8VWf1IRCAnYu5oPeOF10S5M=
+github.com/qiangli/yoke v0.0.0-20261018092502-8708159f39db/go.mod h1:9SoGGfG++3YtQ3QNcGHe5O2OjHENLPVwHbm4MfCroH8=
 github.com/qiangli/yoke/external/otel v0.0.0-20261017214100-19415c55382f h1:RzD7uB+1eQmnImyKiGMYTdWZRdVWwqExGlhAnYqx7c0=
 github.com/qiangli/yoke/external/otel v0.0.0-20261017214100-19415c55382f/go.mod h1:T/QcacDbXpopQO/SQITqPj+vnkVtKgztKF8RJumTkrc=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261017214100-19415c55382f h1:yO/RgnZ36Gns0TLOy2N+EfmI/QCwjOGN/GlVW0qY/Fo=

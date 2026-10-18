@@ -19,7 +19,7 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261018024844-02b24ff1db5d
 	github.com/qiangli/ycode v0.3.1-dev.0.20261017214433-ffb708d14c35
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261018091806-4d1eda4151a9
+	github.com/qiangli/yoke v0.0.0-20261018092502-8708159f39db
 	github.com/qiangli/yoke/external/otel v0.0.0-20261017214100-19415c55382f
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
@@ -586,6 +586,8 @@ replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/
 // could not reach. Restated here because yoke's replace is not transitive.
 // Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
 replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261013004852-f03173f827ed
+
+replace modernc.org/sqlite => github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb
 
 replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2
 
