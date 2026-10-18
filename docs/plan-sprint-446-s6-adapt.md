@@ -129,3 +129,32 @@ These are focused Dragon gates, not whole-package or crossvet acceptance.
 Manager owns the claimed remote-host gate and publication. No yoke pin is
 committed before publication. The yoke tree is `/tmp/s446-adapt-yoke`;
 continuation SHA is reported in the delivery message rather than self-embedded.
+
+### Recovered continuation verification (2026-10-18)
+
+The repeated continuation request found the changes already committed and both
+worktrees clean; no implementation was duplicated. Yoke main had advanced to
+1137f7a890d5c3973e47732ef12869ed754aa015. Rebased the three unpublished
+commits onto that published main without conflicts:
+
+- Correctly attributed first phase: 78ca3220c001fc27ed9bd0fd836ebf4840222f5a
+  became 1df3a26c71278a90b83637741c7ea542fb04f1c1 (original incorrectly
+  attributed commit remains 9797313cb8e4e46dd62873eaf1a269fa31c54bf0).
+- Consistent dependency pins: 31b2cbf54035f039a27c845799a8690ad7c79751
+  became 78ef7f24edd05b072e02b4a30b7b9fa01b970db7.
+- Lens integration: 00fc0d8a62482da872912738a2a39bde3d97e239 became
+  68c9aaf80b8f2b03adf6e05f1758afe0fc955fb0.
+
+All retain codex-gpt6-astra author/committer and the exact S6 trailers. The new
+pin candidate was delivered directly to s446-manager for early publication and
+Sprint 453 consumption. Bashy front-door commit d6ef480243812cd9d1be8c46b70384d916efb19c
+already follows current Bashy main e46f80a0; no replay was needed. The manager
+must publish yoke before the Bashy dependency pin can be committed.
+
+Rechecked focused Dragon gates after the rebase; inspected both JSON verdicts:
+`/tmp/s446-s6-recheck-yoke.json` passed (34.178s, adapt/fleet), and
+`/tmp/s446-s6-recheck-bashy.json` passed (41.813s, skills/AgentOS). They use
+GOWORK=/tmp/s446-adapt-207.work; these establish focused workspace compilation
+and behavior, not standalone module or whole-package/crossvet acceptance.
+At the final publication check origin/main remained 1137f7a8, so the Bashy
+published yoke pin remains the outstanding manager-dependent integration step.
