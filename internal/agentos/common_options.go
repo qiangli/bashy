@@ -177,6 +177,7 @@ func applyCommonOptions(root *cobra.Command, args []string) ([]string, error) {
 			}
 		})
 	}
+	installGraphStreams(target)
 	if o.explain {
 		explainOnly(target)
 	}

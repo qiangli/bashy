@@ -533,7 +533,9 @@ func TestSynergyDAGRejectsEmptyImplementation(t *testing.T) {
 		t.Fatal(err)
 	}
 	todo, todoErr, todoCode := env.run(t, bin, time.Minute, "todo", "show", strings.TrimSpace(string(todoID)), "--user", "--json")
-	if todoCode != 0 || !strings.Contains(todo, `"status": "doing"`) {
+	// todo show --json is a bashy-graph-v1 frame (Sprint 446 S19); the item's
+	// status is a compact node attr.
+	if todoCode != 0 || !strings.Contains(todo, `"status":"doing"`) {
 		t.Fatalf("refused implementation should leave the todo doing: exit=%d stdout=%s stderr=%s", todoCode, todo, todoErr)
 	}
 	chat, err := os.ReadFile(filepath.Join(env.state, "raw", "impl.chat.out"))

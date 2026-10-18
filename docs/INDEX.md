@@ -209,3 +209,4 @@ Weave-round verification + retro reports (historical, not load-bearing):
 - [Sprint 446 schema and vocabulary audit](sprint-446-schema-lint.md) — derived Cobra flag metadata, report-only common-options lint, and Part B verification.
 
 - `plan-sprint-446-s6-adapt.md` — S6 native invocation adapters, validation evidence and S2/S3/S19 integration limits.
+- `plan-sprint-446-s19-graph-streams.md` — S19 bashy-graph-v1 `--json` for sprint/todo/agent/claim/mb/meet and `-` address input on sprint claim and mb send.
