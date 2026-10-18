@@ -423,6 +423,89 @@ absorb the rest via reassignment (§8). Patterns observed across campaigns:
 
 ## 8. Monitor — event-driven, and actively
 
+### Read evidence deltas with a reader-owned cursor
+
+Follow Yoke's
+[`docs/recipes/conductor-run-deltas.md`](https://github.com/qiangli/yoke/blob/1e90afa7c581cccb58a5532ebc6d6de78d0bf4c3/docs/recipes/conductor-run-deltas.md)
+(published at `1e90afa7`). Use a Bashy build carrying that behavior; check
+`bashy lens --help` for `--since` time/duration support and `--cursor-out`.
+An older binary's file-only delta help is not evidence of run-history support.
+
+Allocate one cursor for each **exact run locator and reader identity**. Two
+readers must never advance the same cursor. Keep the opaque envelope with the
+run's evidence: it can contain workspace paths, binds provider, locator and
+output format, and expires after 24 hours. A `listing` cursor cannot resume
+`jsonl`, or another run. Replace `ID` and `conductor-a` in this recipe:
+
+```sh
+# First observation of this run by this reader.
+bashy lens -t listing run:ID --since=10m \
+  --cursor-out=run-ID.conductor-a.cursor.json > run-ID.conductor-a.delta.jsonl
+# At the next supervision wake, after inspecting/processing the first batch:
+bashy lens -t listing run:ID --since=@run-ID.conductor-a.cursor.json \
+  --cursor-out=run-ID.conductor-a.cursor.json > run-ID.conductor-a.next.jsonl
+```
+
+Check each command's exit status before treating its output as a valid batch.
+`--cursor-out` atomically saves the envelope **only after stdout succeeds**;
+that is output delivery, not downstream acknowledgement. Preserve each saved
+batch until processing succeeds; retry processing it before another poll can
+overwrite it. For a consumer that must control acknowledgement, omit
+`--cursor-out`, retain the JSONL batch including its final `t:cursor` row, and
+save that row's `.cursor` envelope only after lens and processing both succeed.
+Never advance a checkpoint from a failed or partial batch.
+
+Read the `bashy-node-v1` evidence rows for what they actually establish:
+
+- **`file`**: current workspace metadata in the initial time interval; resume
+  compares path, size, mode and mtime, including removals. This is not an audit
+  of intermediate edits, same-metadata rewrites, or already-deleted files.
+  Ignored/untracked files count; `.git` and symlink targets do not.
+- **`commit`**: first-parent history from the persisted base or previous head.
+  Initial filtering uses Git committer time, not proof of process activity time.
+- **`log-line`**: complete persisted log lines only. A run launched within the
+  interval can supply raw lines. An older log spanning the cutoff needs per-line
+  RFC3339 timestamps; ambiguous untimestamped lines fail explicitly. In that
+  case start deliberately with `--since=start`, then resume by cursor for raw
+  appended lines. Incomplete trailing lines await a later read.
+
+An unchanged successful poll emits only the cursor, or no stdout evidence rows
+with `--cursor-out`. Preserve this **no observed delta** meaning. It does not
+prove completion, failure, liveness or a stall. Use `bashy weave status ID` and
+the existing process/PTY checks separately for health; only an independently
+run goal gate establishes delivery. Resolvers without run-source support retain
+entity snapshots for start/resume and reject time selectors; snapshots are not
+file/commit/log history.
+
+On expiry, changed source handles, log rotation/truncation/anchor mismatch, or a
+Git head no longer descending from the checkpoint, preserve the failed cursor
+for diagnosis. Confirm the current retained sources, then explicitly restart:
+
+```sh
+bashy lens -t listing run:ID --since=start \
+  --cursor-out=run-ID.conductor-a.restarted.cursor.json > run-ID.conductor-a.replay.jsonl
+```
+
+Process and deduplicate the replay against retained evidence before adopting the
+new cursor. Key commits by full SHA; file observations by path plus change and
+metadata; log lines by source identity/generation plus offset and content, never
+offset alone across rotation. Do not deduplicate repeated log text at distinct
+offsets. Restart replays current evidence, cannot restore deleted history, and
+still obeys limits. Missing workspace/base/start metadata cannot establish
+history; report the gap instead of manufacturing an empty interval.
+
+**Bound the supervision budget as well as each read.** Each poll is capped at
+256 commits, 16,384 workspace entries and 1 MiB of new log data. Resume avoids
+rereading consumed log prefixes and prior commits; file inventories remain
+capped scans. Sources must remain stable during a poll and logs append-only.
+A limit error fails the whole batch without a new cursor; it is not a complete
+empty interval. Do not hot-loop or repeatedly restart an over-limit source.
+Prefer one delta read per run on an event wake; if periodic evidence checks are
+needed, choose a finite budget up front (for example, at most ten reads per run
+over a ten-minute observation window, at least one minute apart, then reassess).
+Record errors and health separately; empty deltas do not justify faster polling
+or automatic acceptance. Use the event-driven wait below between observations.
+
 Use weave's own waiting, **not** host `sleep` loops (they time out the conductor
 and add no signal). One backgrounded wait per story wakes the conductor exactly
 when a run terminates:

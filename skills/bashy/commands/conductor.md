@@ -654,6 +654,35 @@ stuck in a loop, because it only reads its queue between turns and that turn is 
 going to end.
 
 ### 8. Monitor — event-driven, actively
+At each supervision wake, read concrete evidence for each active run with lens
+(requires Yoke `1e90afa7` or later). Keep a **separate cursor per run and reader**:
+replace `ID` and `conductor-a` below with the exact run and your reader identity.
+
+```sh
+# First read; keep these files with this reader's run evidence.
+bashy lens -t listing run:ID --since=10m \
+  --cursor-out=run-ID.conductor-a.cursor.json > run-ID.conductor-a.delta.jsonl
+# Next wake: resume the same run, reader and listing format.
+bashy lens -t listing run:ID --since=@run-ID.conductor-a.cursor.json \
+  --cursor-out=run-ID.conductor-a.cursor.json > run-ID.conductor-a.next.jsonl
+```
+
+Check lens's exit status and inspect the saved batch before the next read.
+`--cursor-out` atomically advances only after output succeeds; it does **not**
+acknowledge downstream processing. Retain an unprocessed batch and retry its
+processing before polling again. Without `--cursor-out`, the final JSONL
+`t:cursor` record holds the envelope; save it only after processing succeeds.
+No evidence rows (cursor-only without `--cursor-out`) means **no observed delta**,
+not completion, failure, or a healthy process. Check `bashy weave status ID`
+separately and run the goal gate yourself.
+
+The cursor expires after 24 hours. Preserve rejected checkpoints; deliberately
+restart with `--since=start` on expiry or source discontinuity, and deduplicate
+replayed evidence. Never turn errors or limit failures into an empty success.
+Use the bounded polling and recovery recipe in the bundled reference, §8,
+which follows Yoke's
+[`docs/recipes/conductor-run-deltas.md`](https://github.com/qiangli/yoke/blob/1e90afa7c581cccb58a5532ebc6d6de78d0bf4c3/docs/recipes/conductor-run-deltas.md).
+
 One backgrounded wait per story; act on every wake (NOT host `sleep` loops):
 ```sh
 bashy weave wait --issue N --timeout 50m &
