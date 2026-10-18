@@ -76,10 +76,23 @@ def invoke(binary, args, cwd, env):
     # local catalog data. Only the envelope version and exit status are evidence.
     if result.returncode:
         return None, 'exit ' + str(result.returncode)
+    return parse_probe(result.stdout)
+
+
+def parse_probe(stdout):
     try:
-        return json.loads(result.stdout), None
+        return json.loads(stdout), None
     except ValueError:
-        return None, 'stdout is not a single JSON value'
+        pass
+    # A graph producer's --json is a bashy-graph-v1 JSONL stream (Sprint 446
+    # S19); its declared header record is the envelope.
+    try:
+        header = json.loads(stdout.split('\n', 1)[0])
+    except ValueError:
+        header = None
+    if isinstance(header, dict) and header.get('t') == 'header' and header.get('schema_version') == 'bashy-graph-v1':
+        return header, None
+    return None, 'stdout is not a single JSON value'
 
 
 # Minimal DAG file the `dag --json --list` probe lists. A bare probe

@@ -56,6 +56,15 @@ class ReleaseBarTest(unittest.TestCase):
             self.assertIsNone(bar.envelope_version(payload))
         self.assertEqual('bashy-commands-v1', bar.envelope_version({'schema_version': 'bashy-commands-v1'}))
 
+    def test_graph_stream_header_is_the_probe_envelope(self):
+        frame = ('{"t":"header","schema_version":"bashy-graph-v1","source":"todo:/r","rev":"sha256:00"}\n'
+                 '{"t":"cursor","cursor":{}}\n')
+        payload, err = bar.parse_probe(frame)
+        self.assertIsNone(err)
+        self.assertEqual('bashy-graph-v1', bar.envelope_version(payload))
+        for stdout in ('{"a":1}\n{"b":2}\n', '{"t":"node","schema_version":"bashy-node-v1"}\n{}\n', 'text'):
+            self.assertEqual((None, 'stdout is not a single JSON value'), bar.parse_probe(stdout))
+
     def test_dispatch_pass_requires_same_candidate_and_named_test(self):
         record = dict(candidate='abc', os='linux', test=bar.DISPATCH_TEST, passed=True, run_url='https://example.test/run')
         self.assertTrue(bar.dispatch_pass([record], 'abc', 'linux'))
