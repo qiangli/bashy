@@ -165,7 +165,7 @@ for MODE in persistent memory; do
   bashy kb memory index-sync "$MEM" --index "$IDX" --json
   bashy kb memory retrieve "$MEM" --index "$IDX" --text "backup" --tags recipes \
     --mode lexical --limit 5 --json
-  bashy kb context --for "how do I back up a database" --rings agent \
+  bashy kb context --for "backup" --rings agent \
     --memory-target "$MEM" --memory-index "$IDX" --memory-mode lexical \
     --memory-tags recipes --budget 700 --json
   # keep the records before the owner session ends
@@ -178,7 +178,9 @@ echo "artifacts in $W"
 `$YCODE_DATA_DIR/kb`; without `--rings` it also expects the default repo
 ring (`docs/kb` in the current repository) and fails when that is
 missing. Not every ring is memory-backed: the memory target is added
-alongside whichever rings you name. `kb context` runs before the session stops because a memory target is
+alongside whichever rings you name. Lexical search matches indexed terms, not
+semantic paraphrase: `--for "backup"` finds these records, while a
+paraphrase such as "how do I back up a database" returns no blocks. `kb context` runs before the session stops because a memory target is
 unreachable afterwards (`lifetime_ended`). `--mode semantic|hybrid`
 (and `--memory-mode semantic|hybrid`) report `unsupported`; no embedding
 provider or service is started or contacted. Edits after capture use
