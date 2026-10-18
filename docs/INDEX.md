@@ -204,6 +204,8 @@ Weave-round verification + retro reports (historical, not load-bearing):
 
 - [Ollama compiler evidence repair, Story 1927](plan-ollama-compiler-evidence.md) — compile-time content capture, native Windows compiler discovery, diagnostic uploads and bounded validation.
 
+- `local-multimodal-model-hardware.md` — Sprint 382 Story 356: measured per-model memory, elapsed-time, and admission matrix (Qwen3-VL 8B vision/text, FLUX.2/ACE-Step/Wan2.2 storage admission, Whisper, SAM2), noviwin AMD/no-CUDA negative admission, editor coexistence arithmetic, recommended host/fallbacks, license posture, and the built-in MCP no-prerequisite rule.
+
 - [Sprint 446 schema and vocabulary audit](sprint-446-schema-lint.md) — derived Cobra flag metadata, report-only common-options lint, and Part B verification.
 
 - `plan-sprint-446-s6-adapt.md` — S6 native invocation adapters, validation evidence and S2/S3/S19 integration limits.
