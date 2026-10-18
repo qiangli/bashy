@@ -276,7 +276,7 @@ func cobraVerb(name string) *cobra.Command {
 
 func schemaKBCmd() *cobra.Command {
 	cmd := kb.NewKBCmd()
-	cmd.AddCommand(newKBRecallCmd(), newKBContextCmd())
+	cmd.AddCommand(newKBRecallCmd(), newKBContextCmd(), newKBAskCmd())
 	return cmd
 }
 func schemaToolCmd() *cobra.Command {

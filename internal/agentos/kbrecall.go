@@ -90,3 +90,24 @@ func newKBContextCmd() *cobra.Command {
 	}
 	return cmd
 }
+
+// newKBAskCmd mounts the bounded evidence rounds beside kb context, with the
+// same code-ring reader when running inside a git repository.
+func newKBAskCmd() *cobra.Command {
+	var extra []recall.Reader
+	if root, ok := scope.FindGitRoot(); ok {
+		extra = append(extra, graphcmd.NewCodeRing(root))
+	}
+	cmd := recall.NewAskCmd(extra...)
+
+	// Ask reads across rings, so inherited single-store flags cannot apply.
+	cmd.PersistentPreRunE = func(c *cobra.Command, _ []string) error {
+		for _, f := range []string{"dir", "repo", "user", "base-dir"} {
+			if fl := c.Flags().Lookup(f); fl != nil && fl.Changed {
+				return fmt.Errorf("--%s selects ONE kb store; ask reads memory rings, so it cannot honour it", f)
+			}
+		}
+		return nil
+	}
+	return cmd
+}

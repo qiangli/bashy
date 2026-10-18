@@ -5,6 +5,7 @@ package agentos
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,6 +63,28 @@ func TestKBContextSuppressesSingleStoreScopeHeader(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), `"context_version": 1`) {
 		t.Fatalf("context output missing frozen envelope version: %s", stdout.String())
+	}
+}
+
+func TestKBAskMountedWithStepJSON(t *testing.T) {
+	root := isolateKBCommandTest(t)
+	t.Chdir(root)
+	cmd := schemaKBCmd()
+	var stdout, stderr bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{"ask", "missing topic", "--json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("kb ask: %v; stderr=%s", err, stderr.String())
+	}
+	var step struct {
+		SchemaVersion string `json:"schema_version"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &step); err != nil {
+		t.Fatalf("decode kb ask: %v; stdout=%s", err, stdout.String())
+	}
+	if step.SchemaVersion != "bashy-kb-ask-step-v1" {
+		t.Fatalf("kb ask schema_version = %q, want bashy-kb-ask-step-v1; stdout=%s", step.SchemaVersion, stdout.String())
 	}
 }
 
