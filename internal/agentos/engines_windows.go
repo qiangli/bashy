@@ -39,3 +39,9 @@ func dispatchEngine(arg string) {
 		dispatchExit(0)
 	}
 }
+
+func init() {
+	cobraOptionalVerbs["podman"] = podmanengine.NewPodmanCmd
+	cobraOptionalVerbs["docker"] = podmanengine.NewPodmanCmd
+	cobraOptionalVerbs["dks"] = podmanengine.NewDKSCmd
+}

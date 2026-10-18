@@ -6,6 +6,7 @@ package agentos
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -63,8 +64,17 @@ func mcpVerbCommands() []yokemcp.RegisteredCommand {
 
 // mcpVerbCommand is the atlas adapter shared by server discovery and help.
 func mcpVerbCommand(name string, entry atlas.Entry) yokemcp.RegisteredCommand {
+	// Derived flag schemas are descriptive, not an ArgSchema binding: the
+	// latter injects defaults and cannot represent arbitrary operands or all
+	// pflag types. Keep the existing argv transport and classic behavior intact.
+	usage := ""
+	if schemas := cobraSchemas(name); schemas != nil {
+		data, _ := json.Marshal(schemas)
+		usage = "CLI flag schemas by command path (pflag types/defaults; invoke via args): " + string(data)
+	}
 	return yokemcp.RegisteredCommand{
-		Name: name, Synopsis: synopsisOf(name), Effects: slices.Clone(entry.Effects), OS: slices.Clone(entry.OS), Static: true,
+		Usage: usage,
+		Name:  name, Synopsis: synopsisOf(name), Effects: slices.Clone(entry.Effects), OS: slices.Clone(entry.OS), Static: true,
 		Run: func(ctx context.Context, args []string, stdin, dir string) (string, string, int) {
 			return mcpVerbExec(ctx, append([]string{bashySelfPath(), name}, args...), stdin, dir)
 		},

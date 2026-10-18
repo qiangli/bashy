@@ -263,3 +263,31 @@ func TestMCPVerbOSFilter(t *testing.T) {
 		}
 	}
 }
+
+func TestMCPVerbDescribesCobraSchemas(t *testing.T) {
+	ringDir(t)
+	entry, _ := atlas.Lookup("sprint")
+	command := mcpVerbCommand("sprint", entry)
+	const prefix = "CLI flag schemas by command path (pflag types/defaults; invoke via args): "
+	if !strings.HasPrefix(command.Usage, prefix) {
+		t.Fatal("missing derived schemas")
+	}
+	var schemas map[string]tool.ArgSchema
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(command.Usage, prefix)), &schemas); err != nil {
+		t.Fatal(err)
+	}
+	if len(schemas) < 2 {
+		t.Fatalf("missing subcommands: %v", schemas)
+	}
+	definition, err := helpMCPTool("sprint", entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(definition.Description, command.Usage) {
+		t.Fatal("MCP help dropped typed schemas")
+	}
+	// Metadata must never inject defaults or replace the arbitrary argv channel.
+	if command.Schema != nil {
+		t.Fatal("flag metadata became an invocation binding")
+	}
+}

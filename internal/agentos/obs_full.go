@@ -6,6 +6,7 @@
 package agentos
 
 import (
+	"github.com/spf13/cobra"
 	"os"
 
 	"github.com/qiangli/yoke/external/otel/otelcli"
@@ -18,8 +19,7 @@ import (
 // compiled in only for a host build, never the default lean worker.
 func dispatchObs(arg string) {
 	if arg == "otel" {
-		cmd := otelcli.NewCommand()
-		otelquery.AddCommands(cmd)
+		cmd := newOtelCmd()
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			if !otelquery.ErrorAlreadyPrinted(err) {
@@ -30,3 +30,11 @@ func dispatchObs(arg string) {
 		dispatchExit(0)
 	}
 }
+
+func newOtelCmd() *cobra.Command {
+	cmd := otelcli.NewCommand()
+	otelquery.AddCommands(cmd)
+	return cmd
+}
+
+func init() { cobraOptionalVerbs["otel"] = newOtelCmd }

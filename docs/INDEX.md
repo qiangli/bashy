@@ -203,3 +203,5 @@ Weave-round verification + retro reports (historical, not load-bearing):
 - [Official Ollama native gate plan, Story 1920](plan-ollama-native-gate-1920.md) — hosted protocol, confinement and evidence; Dragon limited to harness validation.
 
 - [Ollama compiler evidence repair, Story 1927](plan-ollama-compiler-evidence.md) — compile-time content capture, native Windows compiler discovery, diagnostic uploads and bounded validation.
+
+- [Sprint 446 schema and vocabulary audit](sprint-446-schema-lint.md) — derived Cobra flag metadata, report-only common-options lint, and Part B verification.

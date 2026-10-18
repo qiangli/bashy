@@ -42,3 +42,5 @@ func defaultOllamaNewEngine() {
 		}
 	}
 }
+
+func init() { cobraOptionalVerbs["ollama"] = ollama.NewManagedOllamaCmd }

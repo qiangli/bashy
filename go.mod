@@ -16,13 +16,14 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
 	github.com/pkg/sftp v1.13.10
-	github.com/qiangli/coreutils v0.0.0-20261017213852-cd33e2a2594a
+	github.com/qiangli/coreutils v0.0.0-20261017235345-2d851701aec0
 	github.com/qiangli/ycode v0.3.1-dev.0.20261017214433-ffb708d14c35
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261017233159-e47270a0d5da
 	github.com/qiangli/yoke/external/otel v0.0.0-20261017214100-19415c55382f
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.10
 	go.opentelemetry.io/otel v1.45.0
 	go.opentelemetry.io/otel/sdk v1.45.0
 	go.opentelemetry.io/otel/trace v1.45.0
@@ -386,7 +387,6 @@ require (
 	github.com/sorairolake/lzip-go v0.3.8 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/stangelandcl/ppmd v0.1.1 // indirect
 	github.com/stefanberger/go-pkcs11uri v0.0.0-20230803200340-78284954bff6 // indirect
 	github.com/sylabs/sif/v2 v2.24.0 // indirect

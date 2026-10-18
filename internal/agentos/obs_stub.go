@@ -36,19 +36,7 @@ func dispatchObs(arg string) {
 	if arg != "otel" {
 		return
 	}
-	cmd := otelquery.NewCommand()
-	cmd.AddCommand(&cobra.Command{
-		Use:                "serve",
-		Short:              "Start the OTEL stack (runs the provisioned `otel` binary)",
-		DisableFlagParsing: true, // flags belong to the otel binary, not to us
-		RunE: func(_ *cobra.Command, args []string) error {
-			bin, err := resolveOtelBinary()
-			if err != nil {
-				return err
-			}
-			return execOtel(bin, append([]string{"serve"}, args...))
-		},
-	})
+	cmd := newOtelCmd()
 	cmd.SetArgs(os.Args[2:])
 	if err := cmd.Execute(); err != nil {
 		if !otelquery.ErrorAlreadyPrinted(err) {
@@ -97,3 +85,22 @@ func execOtel(bin string, args []string) error {
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return c.Run()
 }
+
+func newOtelCmd() *cobra.Command {
+	cmd := otelquery.NewCommand()
+	cmd.AddCommand(&cobra.Command{
+		Use:                "serve",
+		Short:              "Start the OTEL stack (runs the provisioned `otel` binary)",
+		DisableFlagParsing: true, // flags belong to the otel binary, not to us
+		RunE: func(_ *cobra.Command, args []string) error {
+			bin, err := resolveOtelBinary()
+			if err != nil {
+				return err
+			}
+			return execOtel(bin, append([]string{"serve"}, args...))
+		},
+	})
+	return cmd
+}
+
+func init() { cobraOptionalVerbs["otel"] = newOtelCmd }
