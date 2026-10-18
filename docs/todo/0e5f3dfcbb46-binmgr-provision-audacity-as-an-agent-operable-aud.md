@@ -3,12 +3,13 @@ id: 0e5f3dfcbb46
 kind: feature
 title: Binmgr-provision Audacity as an agent-operable audio editor
 seq: 349
-status: todo
+status: assigned
 priority: p2
 labels:
     - mcp
     - audio
 created: 2026-09-30T07:12:21.616026Z
+assignee: claude-fable5.1
 sprint: 382
 sprint_id: 52e1124d-d9d2-5528-bbfa-80f6b8538c1d
 sprint_title: Agent-operable open-source creative tools through binmgr and registered commands
