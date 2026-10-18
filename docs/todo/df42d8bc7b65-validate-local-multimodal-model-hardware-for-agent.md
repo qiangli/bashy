@@ -3,12 +3,16 @@ id: df42d8bc7b65
 kind: spike
 title: Validate local multimodal model hardware for agent media editing
 seq: 356
-status: todo
+status: done
 priority: p1
 created: 2026-09-30T07:39:48.317848Z
+weave: 215
+assignee: muse-spark1.3
 sprint: 382
 sprint_id: 52e1124d-d9d2-5528-bbfa-80f6b8538c1d
 sprint_title: Agent-operable open-source creative tools through binmgr and registered commands
+closed: 2026-10-18T07:41:42.682924Z
+closed_by: s382-manager
 ---
 
 Research brief for the agent-only media workflow in sprint #336. Determine a reproducible local hardware baseline for running the Bashy/MCP agent alongside Kdenlive, GIMP, Audacity, Ardour, Natron, Blender, Story Architect, Kitsu, and OpenToonz, with specialized models invoked through local APIs or commands. Keep the model orchestration distinct from editor operations: models inspect or generate assets; agent tools apply edits to native projects.
