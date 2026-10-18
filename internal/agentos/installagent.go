@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/qiangli/yoke/pkg/chat"
+	"github.com/qiangli/yoke/pkg/fleet"
 )
 
 // install-agent wires a coding agent to use bashy as its shell. Each agent
@@ -250,12 +251,21 @@ func claudeInstaller() agentInstaller {
 				return "", fmt.Errorf("CLAUDE_CODE_SHELL is ignored by Claude Code on Windows; the Windows path is CLAUDE_CODE_GIT_BASH_PATH=%s (experimental — see docs/agent-adoption/matrix.md)", shell)
 			}
 			path := claudeSettingsPath(project)
+			prefs, perr := installAgentPrefsProjection()
+			if perr != nil {
+				return "", perr
+			}
 			err := mergeJSONFile(path, func(m map[string]any) {
 				env, _ := m["env"].(map[string]any)
 				if env == nil {
 					env = map[string]any{}
 				}
 				env["CLAUDE_CODE_SHELL"] = shell
+				if prefs != "" {
+					env[fleet.EnvBashyPrefs] = prefs
+				} else {
+					delete(env, fleet.EnvBashyPrefs)
+				}
 				m["env"] = env
 			})
 			if err != nil {
@@ -268,6 +278,7 @@ func claudeInstaller() agentInstaller {
 			err := mergeJSONFile(path, func(m map[string]any) {
 				if env, ok := m["env"].(map[string]any); ok {
 					delete(env, "CLAUDE_CODE_SHELL")
+					delete(env, fleet.EnvBashyPrefs)
 					if len(env) == 0 {
 						delete(m, "env")
 					}
@@ -406,12 +417,21 @@ func shimDir() string {
 // (e.g. agy/antigravity) still lands on bashy.
 var shimNames = []string{"bash", "sh", "zsh"}
 
-// writeShimWithAgentEnv writes a shell shim that sets AGENT env before execing bashy.
-func writeShimWithAgentEnv(path, bashy, agentEnv string) error {
-	if agentEnv == "" {
+// writeShimWithAgentEnv writes a shell shim that exports AGENT and/or the
+// projected BASHY_PREFS before execing bashy; with neither it is the plain shim.
+func writeShimWithAgentEnv(path, bashy, agentEnv, prefs string) error {
+	if agentEnv == "" && prefs == "" {
 		return chat.WriteShellShim(path, bashy)
 	}
-	body := "#!/bin/sh\nAGENT='" + strings.ReplaceAll(agentEnv, "'", "'\"'\"'") + "' export AGENT\nexec '" + strings.ReplaceAll(bashy, "'", "'\"'\"'") + "' \"$@\"\n"
+	q := func(v string) string { return "'" + strings.ReplaceAll(v, "'", "'\"'\"'") + "'" }
+	body := "#!/bin/sh\n"
+	if agentEnv != "" {
+		body += "AGENT=" + q(agentEnv) + " export AGENT\n"
+	}
+	if prefs != "" {
+		body += fleet.EnvBashyPrefs + "=" + q(prefs) + " export " + fleet.EnvBashyPrefs + "\n"
+	}
+	body += "exec " + q(bashy) + " \"$@\"\n"
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
@@ -431,6 +451,45 @@ func writeShimWithAgentEnv(path, bashy, agentEnv string) error {
 		return closeErr
 	}
 	return os.Rename(f.Name(), path)
+}
+
+// installAgentPrefsProjection returns the declared BASHY_PREFS of the
+// installing process as validated JSON for the agent process, or "" when
+// unset. Secret-looking defaults keys are dropped, never copied to disk.
+func installAgentPrefsProjection() (string, error) {
+	raw := strings.TrimSpace(os.Getenv(fleet.EnvBashyPrefs))
+	if raw == "" {
+		return "", nil
+	}
+	p, err := fleet.ParseReaderPrefsJSON(raw)
+	if err != nil {
+		return "", err
+	}
+	for pat, opts := range p.Defaults {
+		for k := range opts {
+			if prefsKeyLooksSecret(k) {
+				delete(opts, k)
+			}
+		}
+		if len(opts) == 0 {
+			delete(p.Defaults, pat)
+		}
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func prefsKeyLooksSecret(k string) bool {
+	k = strings.ToLower(k)
+	for _, w := range []string{"token", "secret", "password", "passwd", "apikey", "api_key", "api-key", "credential", "auth"} {
+		if strings.Contains(k, w) {
+			return true
+		}
+	}
+	return false
 }
 
 func museInstaller() agentInstaller {
@@ -458,13 +517,13 @@ func shimInstaller(agent string) agentInstaller {
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				return "", err
 			}
+			prefs, perr := installAgentPrefsProjection()
+			if perr != nil {
+				return "", perr
+			}
 			for _, name := range shimNames {
 				shimPath := filepath.Join(dir, name)
-				if agentEnv != "" {
-					if err := writeShimWithAgentEnv(shimPath, shell, agentEnv); err != nil {
-						return "", fmt.Errorf("shim %s: %w", name, err)
-					}
-				} else if err := chat.WriteShellShim(shimPath, shell); err != nil {
+				if err := writeShimWithAgentEnv(shimPath, shell, agentEnv, prefs); err != nil {
 					return "", fmt.Errorf("shim %s: %w", name, err)
 				}
 			}
