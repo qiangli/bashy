@@ -460,6 +460,7 @@ jq	-n	--null-input
 jq	-r	--raw-output
 kb add	-f	--file
 kb log	-n	--n
+kb memory	-f	--file
 kb note add	-f	--file
 kb supersede	-f	--file
 kb update	-f	--file
