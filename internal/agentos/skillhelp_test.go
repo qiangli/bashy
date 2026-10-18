@@ -277,6 +277,7 @@ func TestScriptHelpFormat(t *testing.T) {
 		isErr    bool
 	}{
 		{"script", "script", false},
+		{"dag", "dag", false},
 		{"skill", "skill", false},
 		{"classic", "classic", false},
 		{"mcp", "mcp", false},
@@ -327,7 +328,7 @@ func TestScriptHelpExampleFirst(t *testing.T) {
 	if len(rows) == 0 {
 		t.Fatal("no trigger rows")
 	}
-	firstExample := rows[0].Example
+	firstExample := rows[0].Recipe
 	idxExample := strings.Index(out, firstExample)
 	idxUsage := strings.Index(out, "# Usage")
 	if idxExample < 0 {
@@ -348,24 +349,20 @@ func TestScriptHelpOnePerTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows := TriggerRows()
-	// One exact command per task: each Example appears once as a comment,
-	// so executing the help text cannot run every example.
+	// One exact executable command per task, under a selector.
 	lines := strings.Split(out, "\n")
 	lineSet := map[string]int{}
 	for _, l := range lines {
 		lineSet[strings.TrimSpace(l)]++
 	}
 	for _, r := range rows {
-		example := strings.TrimSpace(r.Example)
-		if lineSet["# "+example] != 1 {
-			t.Errorf("example %q appears %d times, want 1", example, lineSet["# "+example])
+		command := strings.TrimSpace(r.Recipe)
+		if lineSet[command] != 1 {
+			t.Errorf("command %q appears %d times, want 1", command, lineSet[command])
 		}
 	}
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
-			t.Fatalf("script help has executable line %q", line)
-		}
+	if !strings.Contains(out, "case \"${1:-}\" in") {
+		t.Fatal("script help lacks task selector")
 	}
 }
 
@@ -392,11 +389,11 @@ func TestScriptHelpNoInputFilled(t *testing.T) {
 	if !strings.Contains(out, "--no-input") {
 		t.Fatalf("script help lacks --no-input where appropriate: %s", out)
 	}
-	// The vocabulary's --no-input example must be present verbatim.
+	// The vocabulary's --no-input recipe must be present verbatim.
 	for _, r := range TriggerRows() {
 		if r.Trigger == "--no-input" {
-			if !strings.Contains(out, r.Example) {
-				t.Fatalf("script lacks vocabulary --no-input example %q", r.Example)
+			if !strings.Contains(out, r.Recipe) {
+				t.Fatalf("script lacks vocabulary --no-input recipe %q", r.Recipe)
 			}
 		}
 	}

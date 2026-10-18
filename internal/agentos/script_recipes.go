@@ -8,48 +8,65 @@ import (
 	"strings"
 )
 
-// scriptRecipeMarkdown projects the existing help=script examples into a
-// bounded, copyable recipe. The script renderer remains the sole owner of
-// command spellings; this function only pairs its task and command lines.
-func scriptRecipeMarkdown(name, script string) (string, error) {
+type scriptRecipeTask struct {
+	name, intent, command string
+}
+
+// scriptRecipeTasks projects S9's trigger rows. Both files use these exact
+// commands; there is no second list of triggers or examples here.
+func scriptRecipeTasks() ([]scriptRecipeTask, error) {
+	var tasks []scriptRecipeTask
+	seen := make(map[string]bool)
+	for _, row := range TriggerRows() {
+		command := strings.TrimSpace(row.Recipe)
+		if command == "" {
+			command = strings.TrimSpace(row.Example)
+		}
+		if command == "" || strings.ContainsAny(command, "\r\n") {
+			return nil, fmt.Errorf("invalid recipe command for %q", row.Intent)
+		}
+		name := recipeTaskName(row.Intent)
+		if name == "" || seen[name] {
+			return nil, fmt.Errorf("invalid or duplicate recipe task %q", row.Intent)
+		}
+		seen[name] = true
+		tasks = append(tasks, scriptRecipeTask{name: name, intent: row.Intent, command: command})
+	}
+	if len(tasks) == 0 {
+		return nil, fmt.Errorf("no trigger rows for recipes")
+	}
+	return tasks, nil
+}
+
+func recipeTaskName(intent string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# bashy %s recipes\n\nSource: `bashy help --format=script %s`\n\n", name, name)
-	lines := strings.Split(script, "\n")
-	count := 0
-	inExamples := false
-	for i := 0; i+1 < len(lines); i++ {
-		line := strings.TrimSpace(lines[i])
-		if strings.HasPrefix(line, "# Examples derived from ") {
-			inExamples = true
-			continue
+	separator := false
+	for _, r := range strings.ToLower(intent) {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			if separator && b.Len() > 0 {
+				b.WriteByte('-')
+			}
+			b.WriteRune(r)
+			separator = false
+		} else {
+			separator = true
 		}
-		if line == "# Usage" {
-			break
-		}
-		if !inExamples {
-			continue
-		}
-		if !strings.HasPrefix(line, "# ") || !strings.HasPrefix(strings.TrimSpace(lines[i+1]), "# ") {
-			continue
-		}
-		task := strings.TrimPrefix(line, "# ")
-		command := strings.TrimPrefix(strings.TrimSpace(lines[i+1]), "# ")
-		// Task lines are emitted by scriptHelp as "intent (gloss)". The
-		// next line must be one command, never another comment or choice.
-		if !strings.HasSuffix(task, ")") || !strings.Contains(task, " (") ||
-			command == "" || strings.Contains(command, "\n") {
-			continue
-		}
-		intent, _, _ := strings.Cut(task, " (")
-		if intent == "" {
-			continue
-		}
-		fmt.Fprintf(&b, "## %s\n\n```bash\n%s\n```\n\n", intent, command)
-		count++
-		i++
 	}
-	if count == 0 {
-		return "", fmt.Errorf("no script examples for %s", name)
+	return b.String()
+}
+
+// scriptRecipeDAG emits a dag.md file. RECIPE_* inputs are supplied as
+// environment variables, so its task bodies match the Bash recipe exactly.
+func scriptRecipeDAG(name string) (string, error) {
+	tasks, err := scriptRecipeTasks()
+	if err != nil {
+		return "", err
 	}
-	return b.String(), nil
+	var b strings.Builder
+	fmt.Fprintf(&b, "---\nname: bashy-%s-recipes\ndescription: S9 trigger recipes for bashy %s\ntype: dag\ndefault: %s\n---\n\n", name, name, tasks[0].name)
+	fmt.Fprintf(&b, "# bashy %s recipes\n\nSource: `bashy help --format=dag %s`\n\n## Tasks\n\n", name, name)
+	for _, task := range tasks {
+		fmt.Fprintf(&b, "### %s\n%s\n\n```bash\n%s\n```\n\n", task.name, task.intent, task.command)
+	}
+	return strings.TrimRight(b.String(), "\n") + "\n", nil
 }

@@ -20,6 +20,7 @@ type TriggerRow struct {
 	Gloss   string // one-phrase meaning used in the skill description
 	Prior   string // where it already lives in the agent's prior (clig.dev etc)
 	Example string // canonical bashy spelling
+	Recipe  string // exact executable command shared by Bash and dag recipes
 }
 
 // CommonOption is one row of the closed long-only vocabulary in
@@ -31,6 +32,7 @@ type CommonOption struct {
 	Prior   string
 	Example string
 	Gloss   string
+	Recipe  string
 	// Engine reports whether applyCommonOptions handles the option for any
 	// bashy-owned command lacking a native spelling.
 	Engine bool
@@ -41,12 +43,12 @@ func (o CommonOption) Key() string { return OptionKey(strings.TrimPrefix(o.Optio
 
 // CommonOptionsVocabulary is the single source of truth for the option rows.
 var CommonOptionsVocabulary = []CommonOption{
-	{Option: "--json", Meaning: "machine output: one JSON value, or NDJSON for streams", Intent: "parse output", Prior: "gh, kubectl, docker --format json", Example: "bashy adapt --json -- ps aux | jq", Gloss: "machine output"},
-	{Option: "--fields", Meaning: "project JSON records to named fields", Intent: "keep only some fields", Prior: "gh --json a,b, jq", Example: "bashy adapt --json --fields=pid,cmd -- ps aux", Gloss: "project fields"},
-	{Option: "--null", Meaning: "NUL-separated records", Intent: "NUL-safe lists", Prior: "find -print0, xargs -0", Example: "find . -print0 | xargs -0", Gloss: "NUL-safe", Engine: true},
-	{Option: "--dry-run", Meaning: "report what would change; change nothing", Intent: "see what would change", Prior: "make -n, rsync -n, kubectl --dry-run", Example: "rm -r build --dry-run", Gloss: "preview"},
-	{Option: "--no-input", Meaning: "never prompt; fail where a prompt would happen", Intent: "avoid hanging on a prompt", Prior: "clig.dev, CI flags", Example: "bashy adapt --no-input -- apt install jq", Gloss: "never prompt", Engine: true},
-	{Option: "--explain", Meaning: "describe each flag and operand; never run", Intent: "understand a command before running it", Prior: "explainshell", Example: "rsync -a src/ dst/ --explain", Gloss: "describe before running", Engine: true},
+	{Option: "--json", Meaning: "machine output: one JSON value, or NDJSON for streams", Intent: "parse output", Prior: "gh, kubectl, docker --format json", Example: "bashy adapt --json -- ps aux | jq", Recipe: "bashy adapter list --json", Gloss: "machine output"},
+	{Option: "--fields", Meaning: "project JSON records to named fields", Intent: "keep only some fields", Prior: "gh --json a,b, jq", Example: "bashy adapt --json --fields=pid,cmd -- ps aux", Recipe: "bashy cut --delimiter=, --fields=1,2 \"${RECIPE_FILE:?set RECIPE_FILE}\"", Gloss: "project fields"},
+	{Option: "--null", Meaning: "NUL-separated records", Intent: "NUL-safe lists", Prior: "find -print0, xargs -0", Example: "find . -print0 | xargs -0", Recipe: "bashy find \"${RECIPE_PATH:-.}\" -print0", Gloss: "NUL-safe", Engine: true},
+	{Option: "--dry-run", Meaning: "report what would change; change nothing", Intent: "see what would change", Prior: "make -n, rsync -n, kubectl --dry-run", Example: "rm -r build --dry-run", Recipe: "bashy rm -r --dry-run --no-input \"${RECIPE_PATH:?set RECIPE_PATH}\"", Gloss: "preview"},
+	{Option: "--no-input", Meaning: "never prompt; fail where a prompt would happen", Intent: "avoid hanging on a prompt", Prior: "clig.dev, CI flags", Example: "bashy adapt --no-input -- apt install jq", Recipe: "bashy rm -i --dry-run --no-input \"${RECIPE_PATH:?set RECIPE_PATH}\"", Gloss: "never prompt", Engine: true},
+	{Option: "--explain", Meaning: "describe each flag and operand; never run", Intent: "understand a command before running it", Prior: "explainshell", Example: "rsync -a src/ dst/ --explain", Recipe: "bashy adapt --explain -- rsync -a \"${RECIPE_SOURCE:?set RECIPE_SOURCE}\" \"${RECIPE_DESTINATION:?set RECIPE_DESTINATION}\"", Gloss: "describe before running", Engine: true},
 	{Option: "--depth", Meaning: "bound a tree walk"},
 	{Option: "--since", Meaning: "filter changes after cursor envelope (bashy-cursor-v1)"},
 }
@@ -55,15 +57,15 @@ var CommonOptionsVocabulary = []CommonOption{
 // the adapter front door; skills/bashy/commands/{lens,adapt}.md must mention
 // every Trigger (checked by TestAdoptionProjectionsMatchSource).
 var lensTriggerDecls = []TriggerRow{
-	{Intent: "read a pdf/docx/html/csv", Trigger: "lens -t md FILE", Word: "lens -t md", Gloss: "read pdf/docx/html/csv", Prior: "markitdown, pdftotext", Example: "lens -t md report.pdf"},
-	{Intent: "convert json to yaml and back", Trigger: "lens -f json -t yaml", Word: "lens -f json -t yaml", Gloss: "json\u2194yaml", Prior: "yq, python yaml", Example: "lens -f json -t yaml < cfg.json"},
-	{Intent: "list an archive or container", Trigger: "lens -t listing FILE", Word: "lens -t listing", Gloss: "list archive/container", Prior: "tar -t, unzip -l", Example: "lens -t listing release.zip"},
-	{Intent: "show a command for PowerShell, cmd, MCP or a skill", Trigger: "lens -f bash -t pwsh", Word: "lens -f bash -t pwsh", Gloss: "render for PowerShell/cmd/MCP/skill", Prior: "— (new, taught by hint)", Example: "lens -f bash -t pwsh --switch=pascal"},
-	{Intent: "read file at a commit without checkout", Trigger: "lens -t md git:REV:PATH", Word: "lens -t md git:REV:PATH", Gloss: "file at a commit", Prior: "git show", Example: "lens -t md git:v1.0:docs/INSTALL.md"},
+	{Intent: "read a pdf/docx/html/csv", Trigger: "lens -t md FILE", Word: "lens -t md", Gloss: "read pdf/docx/html/csv", Prior: "markitdown, pdftotext", Example: "lens -t md report.pdf", Recipe: "bashy lens -t md \"${RECIPE_FILE:?set RECIPE_FILE}\""},
+	{Intent: "convert json to yaml and back", Trigger: "lens -f json -t yaml", Word: "lens -f json -t yaml", Gloss: "json\u2194yaml", Prior: "yq, python yaml", Example: "lens -f json -t yaml < cfg.json", Recipe: "bashy lens -f json -t yaml < \"${RECIPE_FILE:?set RECIPE_FILE}\""},
+	{Intent: "list an archive or container", Trigger: "lens -t listing FILE", Word: "lens -t listing", Gloss: "list archive/container", Prior: "tar -t, unzip -l", Example: "lens -t listing release.zip", Recipe: "bashy lens -t listing \"${RECIPE_FILE:?set RECIPE_FILE}\""},
+	{Intent: "show a command for PowerShell, cmd, MCP or a skill", Trigger: "lens -f bash -t pwsh", Word: "lens -f bash -t pwsh", Gloss: "render for PowerShell/cmd/MCP/skill", Prior: "— (new, taught by hint)", Example: "lens -f bash -t pwsh --switch=pascal", Recipe: "bashy lens -f bash -t pwsh --switch=pascal < \"${RECIPE_FILE:?set RECIPE_FILE}\""},
+	{Intent: "read file at a commit without checkout", Trigger: "lens -t md git:REV:PATH", Word: "lens -t md git:REV:PATH", Gloss: "file at a commit", Prior: "git show", Example: "lens -t md git:v1.0:docs/INSTALL.md", Recipe: "bashy lens -t md \"git:${RECIPE_REV:?set RECIPE_REV}:${RECIPE_PATH:?set RECIPE_PATH}\""},
 }
 
 var adaptTriggerDecls = []TriggerRow{
-	{Intent: "use any common option on a foreign command (git, tar, apt, docker\u2026)", Trigger: "bashy adapt --OPTION -- CMD", Word: "bashy adapt --OPTION -- CMD", Gloss: "common options for any foreign command", Prior: "— (new, taught by hint)", Example: "bashy adapt --json -- git status"},
+	{Intent: "use any common option on a foreign command (git, tar, apt, docker\u2026)", Trigger: "bashy adapt --OPTION -- CMD", Word: "bashy adapt --OPTION -- CMD", Gloss: "common options for any foreign command", Prior: "— (new, taught by hint)", Example: "bashy adapt --json -- git status", Recipe: "bashy adapt --explain -- git status"},
 }
 
 // TriggerRows generates the trigger-word table from the vocabulary and the
@@ -74,7 +76,7 @@ func TriggerRows() []TriggerRow {
 		if o.Intent == "" {
 			continue
 		}
-		rows = append(rows, TriggerRow{Intent: o.Intent, Trigger: o.Option, Word: o.Option, Gloss: o.Gloss, Prior: o.Prior, Example: o.Example})
+		rows = append(rows, TriggerRow{Intent: o.Intent, Trigger: o.Option, Word: o.Option, Gloss: o.Gloss, Prior: o.Prior, Example: o.Example, Recipe: o.Recipe})
 	}
 	rows = append(rows, lensTriggerDecls...)
 	return append(rows, adaptTriggerDecls...)

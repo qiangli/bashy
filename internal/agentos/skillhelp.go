@@ -43,10 +43,10 @@ func helpFormat(explicit, environment string, agentic bool, detect func() (strin
 		return "classic", nil
 	}
 	switch format {
-	case "skill", "classic", "mcp", "script":
+	case "skill", "classic", "mcp", "script", "dag":
 		return format, nil
 	}
-	return "", fmt.Errorf("unknown help format %q (want skill, classic, mcp, or script)", format)
+	return "", fmt.Errorf("unknown help format %q (want skill, classic, mcp, script, or dag)", format)
 }
 
 // helpBand returns the identified agent's capability band via the existing
@@ -198,9 +198,6 @@ func dispatchFormattedHelp(args []string) (int, bool) {
 	if format == "classic" && args[0] != "help" {
 		return 0, false
 	}
-	// An automatically selected low-band view is a recipe. An explicit script
-	// request retains the existing shell-comment format for its callers.
-	recipe := format == "script" && explicit == "" && os.Getenv("BASHY_HELP_FORMAT") == ""
 	entry, ok := lookupEntry(name)
 	if !ok {
 		fmt.Fprintf(os.Stderr, "bashy help: no atlas entry for %q\n", name)
@@ -223,9 +220,8 @@ func dispatchFormattedHelp(args []string) (int, bool) {
 				output, err = skillHelp(name, output, entry, commandLongDoc(name))
 			case "script":
 				output, err = scriptHelp(name, output, entry, commandLongDoc(name))
-				if err == nil && recipe {
-					output, err = scriptRecipeMarkdown(name, output)
-				}
+			case "dag":
+				output, err = scriptRecipeDAG(name)
 			}
 		}
 	}
@@ -388,30 +384,27 @@ func mcpToolDefinitions(opts yokemcp.Options) ([]*mcpsdk.Tool, error) {
 	return result, nil
 }
 
-// scriptHelp is the --format=script rendering: example-first, one exact
-// bashy command per task, no prose decisions (single spelling, no "or"),
-// with --no-input filled where appropriate. Examples are derived from the
-// published adoption vocabulary (TriggerRows/CommonOptionsVocabulary), never
-// from a duplicated hardcoded table. A mutating declaration therefore changes
-// the output (covered by TestScriptHelpDerivedFromVocabulary).
+// scriptHelp renders the Bash recipe. A task selector executes exactly one
+// command from the S9 trigger rows. A declaration change alters this output
+// and the dag.md projection together.
 func scriptHelp(name, classic string, _ atlas.Entry, _ string) (string, error) {
+	tasks, err := scriptRecipeTasks()
+	if err != nil {
+		return "", err
+	}
 	var b strings.Builder
 	b.WriteString("#!/usr/bin/env bash\n")
-	fmt.Fprintf(&b, "# bashy %s — script (one exact command per task, --no-input where needed)\n", name)
-	b.WriteString("# Examples derived from TriggerRows/CommonOptionsVocabulary — one command per task\n")
-	for _, r := range TriggerRows() {
-		example := strings.TrimSpace(r.Example)
-		if example == "" {
-			continue
-		}
-		// Every task is one exact spelling; the word is the typed trigger.
-		fmt.Fprintf(&b, "# %s (%s)\n", r.Intent, r.Gloss)
-		// The example already contains --no-input where the vocabulary says it
-		// should (e.g. apt install). No second spelling or decision prose.
-		// Help lists copyable commands. Running the help text itself must not
-		// execute every example, including mutating ones such as apt install.
-		fmt.Fprintf(&b, "# %s\n", example)
+	fmt.Fprintf(&b, "# bashy %s recipes; save as a .sh file and run with one task name.\n", name)
+	b.WriteString("# Set the RECIPE_* variables named by that task before running.\n")
+	b.WriteString("case \"${1:-}\" in\n")
+	for _, task := range tasks {
+		fmt.Fprintf(&b, "  %s) # %s\n    %s\n    ;;\n", task.name, task.intent, task.command)
 	}
+	b.WriteString("  *) printf 'Available tasks:\\n' >&2\n")
+	for _, task := range tasks {
+		fmt.Fprintf(&b, "     printf '  %s\\n' >&2\n", task.name)
+	}
+	b.WriteString("     exit 2\n     ;;\nesac\n")
 	// Ensure the short usage follows the examples (example-first) but keep it
 	// as a comment so the file remains an executable script with no ambiguity.
 	b.WriteString("\n# Usage\n")
