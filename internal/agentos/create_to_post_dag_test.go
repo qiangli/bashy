@@ -76,7 +76,7 @@ func TestCreateToPostDAGFixture(t *testing.T) {
 	args := []string{"dag", "-f", dag, "-B", "BASHY_CLI=" + shim, "SOURCE=" + source,
 		"STORAGE_ROOT=" + storage, "SINK_ROOT=" + sink}
 	preview := append([]string{}, args...)
-	preview[3] = "-n"
+	preview[3] = "--dry-run"
 	if out, err := run(bin, append(preview, "verify")...); err != nil {
 		t.Fatalf("preview: %v\n%s", err, out)
 	}

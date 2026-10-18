@@ -237,9 +237,9 @@ func TestSynergyDAGCheckAndList(t *testing.T) {
 			t.Fatalf("dag --list lacks target %q:\n%s", name, out)
 		}
 	}
-	plan, errOut, code := env.run(t, bin, time.Minute, "dag", "-f", dag, "-n", "done-notification")
+	plan, errOut, code := env.run(t, bin, time.Minute, "dag", "-f", dag, "--dry-run", "done-notification")
 	if code != 0 {
-		t.Fatalf("dag -n: exit=%d\nstdout=%s\nstderr=%s", code, plan, errOut)
+		t.Fatalf("dag --dry-run: exit=%d\nstdout=%s\nstderr=%s", code, plan, errOut)
 	}
 	last := -1
 	for _, name := range synergyTargets {

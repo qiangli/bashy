@@ -41,8 +41,8 @@ func TestDagDispatchRunsATargetWithCapacityMounted(t *testing.T) {
 func TestDagDispatchDryRunWithCapacityMounted(t *testing.T) {
 	path := writeTestDAG(t)
 	var out, errOut bytes.Buffer
-	if code := runDagDispatch([]string{"--file", path, "-n", "hello"}, &out, &errOut); code != 0 {
-		t.Fatalf("dag -n hello exit = %d stderr=%s", code, errOut.String())
+	if code := runDagDispatch([]string{"--file", path, "--dry-run", "hello"}, &out, &errOut); code != 0 {
+		t.Fatalf("dag --dry-run hello exit = %d stderr=%s", code, errOut.String())
 	}
 	if !strings.Contains(out.String(), "hello") {
 		t.Fatalf("plan did not name the target:\n%s", out.String())
