@@ -93,6 +93,13 @@ func TestSkillHelpMCP(t *testing.T) {
 	if got["name"] != "sprint" || got["inputSchema"] == nil {
 		t.Fatalf("bad MCP object %s", out)
 	}
+	// Explicit help discloses schemas; discovery keeps only the bounded summary.
+	description := got["description"].(string)
+	summary, schemas, ok := strings.Cut(description, "\nCLI flag schemas by command path (pflag types/defaults; invoke via args): ")
+	if !ok || !strings.Contains(schemas, "sprint add") {
+		t.Fatal("explicit MCP help lacks per-path schemas")
+	}
+	got["description"] = summary
 	advertised := skillHelpProcess(t, "classic", "mcp", "tools", "--tools", "sprint", "--json")
 	var env struct {
 		Definitions []json.RawMessage `json:"definitions"`

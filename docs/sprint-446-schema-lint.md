@@ -15,8 +15,16 @@ visibility rules. Hidden commands remain walkable. Build-tagged engine trees
 register their constructors only where those commands are compiled in.
 Hand-parsed commands receive no invented schema.
 
-MCP descriptions contain the serialized path-to-schema map, also consumed by
-skill/MCP help. The existing `args` transport remains intact. These flag-only
+Review fix plan: bound discovery metadata, keep full schemas on the existing
+explicit MCP help channel, regenerate goldens, test the bound for every Cobra
+verb, and rerun the three requested gates before committing.
+
+MCP and skill-help descriptions add at most 2,048 bytes per verb: top-level
+flag names/types, sorted subcommand paths, a truncation marker when needed,
+and the disclosure command. Full path-to-schema maps are available through
+`bashy help VERB --format=mcp` (also `BASHY_HELP_FORMAT=mcp bashy VERB --help`).
+This explicit help includes pflag types/defaults for every path. The existing
+`args` transport remains intact. These flag-only
 schemas are deliberately not passed to `RegisteredCommand.Schema`: its binding
 injects defaults, lacks arbitrary operands, and rejects pflag duration/slice
 values. Descriptive schemas are not a declaration of typed invocation support.
@@ -62,3 +70,21 @@ from indirect to direct in addition to the requested coreutils bump.
 
 Local transcripts: `/tmp/s446-agentos-final.log` (complete package run) and
 `/tmp/s446-schema-lint.log` (earlier focused walker/lint run).
+
+Review-fix verification (2026-10-17; no gate piped):
+
+| Command | Exit |
+| --- | --- |
+| `GOWORK=off go test ./internal/agentos/` | 0 |
+| `GOWORK=off go build ./...` | 0 |
+| `GOOS=windows GOWORK=off go vet ./internal/agentos/` | 0 |
+
+The final whole-package run passed in 160.445s. Tests cover the summary bound
+across all catalogued Cobra verbs, preservation in actual MCP wire descriptions,
+truncation, and complete on-demand schemas. Regenerated `sprint.skill` is
+23,889 bytes (previously 88,266; pre-schema baseline 21,841).
+An earlier package run exited 1 on the golden changed during regeneration;
+the final run above started after regeneration and passed.
+Final transcripts: `/tmp/s446-summary-final-package.log`,
+`/tmp/s446-summary-final-build.log`, and
+`/tmp/s446-summary-final-windows-vet.log`.

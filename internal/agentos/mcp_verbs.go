@@ -6,7 +6,7 @@ package agentos
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -67,16 +67,50 @@ func mcpVerbCommand(name string, entry atlas.Entry) yokemcp.RegisteredCommand {
 	// Derived flag schemas are descriptive, not an ArgSchema binding: the
 	// latter injects defaults and cannot represent arbitrary operands or all
 	// pflag types. Keep the existing argv transport and classic behavior intact.
-	usage := ""
-	if schemas := cobraSchemas(name); schemas != nil {
-		data, _ := json.Marshal(schemas)
-		usage = "CLI flag schemas by command path (pflag types/defaults; invoke via args): " + string(data)
-	}
 	return yokemcp.RegisteredCommand{
-		Usage: usage,
+		Usage: cobraSchemaSummary(name, cobraSchemas(name)),
 		Name:  name, Synopsis: synopsisOf(name), Effects: slices.Clone(entry.Effects), OS: slices.Clone(entry.OS), Static: true,
 		Run: func(ctx context.Context, args []string, stdin, dir string) (string, string, int) {
 			return mcpVerbExec(ctx, append([]string{bashySelfPath(), name}, args...), stdin, dir)
 		},
 	}
+}
+
+// cobraSchemaSummary adds at most 2 KiB to each discovery description. Full
+// schemas are disclosed only by explicit MCP help, never by tools/list.
+const mcpVerbSummaryLimit = 2048
+
+func cobraSchemaSummary(name string, schemas map[string]tool.ArgSchema) string {
+	if schemas == nil {
+		return ""
+	}
+	footer := "; Full per-path flag schemas: bashy help " + name + " --format=mcp (descriptive; invoke via args)."
+	const truncated = "; ... (summary truncated)"
+	var b strings.Builder
+	appendPart := func(part string) bool {
+		if b.Len()+len(part)+len(truncated)+len(footer) > mcpVerbSummaryLimit {
+			b.WriteString(truncated)
+			return false
+		}
+		b.WriteString(part)
+		return true
+	}
+	for _, flag := range schemas[name].Flags {
+		if !appendPart(fmt.Sprintf("; --%s (%s)", flag.Name, flag.Type)) {
+			return b.String() + footer
+		}
+	}
+	paths := make([]string, 0, len(schemas)-1)
+	for path := range schemas {
+		if path != name {
+			paths = append(paths, path)
+		}
+	}
+	slices.Sort(paths)
+	for _, path := range paths {
+		if !appendPart("; Command: " + path) {
+			break
+		}
+	}
+	return b.String() + footer
 }

@@ -148,7 +148,7 @@ func dispatchFormattedHelp(args []string) (int, bool) {
 	var output string
 	if format == "mcp" {
 		var definition *mcpsdk.Tool
-		definition, err = helpMCPTool(name, entry)
+		definition, err = detailedHelpMCPTool(name, entry)
 		if err == nil {
 			var data []byte
 			data, err = json.MarshalIndent(definition, "", "  ")
@@ -240,6 +240,23 @@ func skillHelp(name, classic string, entry atlas.Entry, longDoc string) (string,
 	}
 	fmt.Fprintf(&b, "\n```json mcp\n%s\n```\n", data)
 	return b.String(), nil
+}
+
+// Explicit MCP help is the existing on-demand channel for full flag metadata.
+// Skill help and tools/list retain the bounded discovery description.
+func detailedHelpMCPTool(name string, entry atlas.Entry) (*mcpsdk.Tool, error) {
+	definition, err := helpMCPTool(name, entry)
+	if err != nil {
+		return nil, err
+	}
+	if schemas := cobraSchemas(name); schemas != nil {
+		data, err := json.Marshal(schemas)
+		if err != nil {
+			return nil, err
+		}
+		definition.Description += "\nCLI flag schemas by command path (pflag types/defaults; invoke via args): " + string(data)
+	}
+	return definition, nil
 }
 
 func helpMCPTool(name string, entry atlas.Entry) (*mcpsdk.Tool, error) {

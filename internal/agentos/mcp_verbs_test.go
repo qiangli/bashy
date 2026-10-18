@@ -266,28 +266,83 @@ func TestMCPVerbOSFilter(t *testing.T) {
 
 func TestMCPVerbDescribesCobraSchemas(t *testing.T) {
 	ringDir(t)
-	entry, _ := atlas.Lookup("sprint")
-	command := mcpVerbCommand("sprint", entry)
-	const prefix = "CLI flag schemas by command path (pflag types/defaults; invoke via args): "
-	if !strings.HasPrefix(command.Usage, prefix) {
-		t.Fatal("missing derived schemas")
+	_, _, verbs := commandsCatalog()
+	verbs = append(verbs, hiddenVerbsCatalog()...)
+	slices.Sort(verbs)
+	verbs = slices.Compact(verbs)
+	count := 0
+	var commands []yokemcp.RegisteredCommand
+	for _, name := range verbs {
+		schemas := cobraSchemas(name)
+		if schemas == nil {
+			continue
+		}
+		count++
+		entry, _ := atlas.Lookup(name)
+		command := mcpVerbCommand(name, entry)
+		commands = append(commands, command)
+		if len(command.Usage) > 2048 {
+			t.Errorf("%s summary is %d bytes", name, len(command.Usage))
+		}
+		if !strings.Contains(command.Usage, "bashy help "+name+" --format=mcp") {
+			t.Errorf("%s missing disclosure path", name)
+		}
+		if command.Schema != nil {
+			t.Errorf("%s flag metadata became an invocation binding", name)
+		}
 	}
-	var schemas map[string]tool.ArgSchema
-	if err := json.Unmarshal([]byte(strings.TrimPrefix(command.Usage, prefix)), &schemas); err != nil {
-		t.Fatal(err)
+	if count == 0 {
+		t.Fatal("no Cobra verbs checked")
 	}
-	if len(schemas) < 2 {
-		t.Fatalf("missing subcommands: %v", schemas)
-	}
-	definition, err := helpMCPTool("sprint", entry)
+	t.Logf("bounded summaries checked for %d Cobra verbs", count)
+	definitions, err := mcpToolDefinitions(yokemcp.Options{Registered: func() []yokemcp.RegisteredCommand { return commands }})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(definition.Description, command.Usage) {
-		t.Fatal("MCP help dropped typed schemas")
+	for _, command := range commands {
+		found := false
+		for _, definition := range definitions {
+			if definition.Name == command.Name {
+				found = true
+				if !strings.Contains(definition.Description, command.Usage) {
+					t.Errorf("%s wire description lost summary", command.Name)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("%s missing wire definition", command.Name)
+		}
 	}
-	// Metadata must never inject defaults or replace the arbitrary argv channel.
-	if command.Schema != nil {
-		t.Fatal("flag metadata became an invocation binding")
+
+	entry, _ := atlas.Lookup("sprint")
+	definition, err := detailedHelpMCPTool("sprint", entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const prefix = "CLI flag schemas by command path (pflag types/defaults; invoke via args): "
+	_, data, ok := strings.Cut(definition.Description, prefix)
+	if !ok {
+		t.Fatal("explicit MCP help dropped full schemas")
+	}
+	var schemas map[string]tool.ArgSchema
+	if err := json.Unmarshal([]byte(data), &schemas); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(schemas, cobraSchemas("sprint")) {
+		t.Fatal("explicit help schemas differ from walker")
+	}
+}
+
+func TestMCPVerbSummaryTruncation(t *testing.T) {
+	schemas := map[string]tool.ArgSchema{
+		"root":                              {Flags: []tool.ArgFlag{{Name: "quiet", Type: "bool"}}},
+		"root child":                        {},
+		"root " + strings.Repeat("x", 4096): {},
+	}
+	got := cobraSchemaSummary("root", schemas)
+	if len(got) > 2048 || !strings.Contains(got, "summary truncated") ||
+		!strings.Contains(got, "--quiet (bool)") || !strings.Contains(got, "Command: root child") ||
+		!strings.Contains(got, "bashy help root --format=mcp") {
+		t.Fatalf("bad bounded summary: %s", got)
 	}
 }
