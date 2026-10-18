@@ -419,8 +419,17 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 		Cwd:          cwd,
 	}
 	if err := room.Join(card); err != nil {
-		releaseLease()
 		var live *room.ErrLive
+		if mode == inboxWatcherMode && lock != nil && errors.As(err, &live) {
+			// The identity is live under a card this watch did not write.
+			// A managed session holds its own name exactly this way, so a
+			// watch running inside that same session may share it. Anything
+			// else falls through to the refusal below, unchanged.
+			if adopted, ok := adoptManagedSessionWatch(id, releaseLease); ok {
+				return adopted, nil
+			}
+		}
+		releaseLease()
 		if lock == nil && errors.As(err, &live) {
 			return inboxWatcherClaim{}, errInboxWatcherLive(id)
 		}
@@ -444,6 +453,53 @@ func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatc
 			return nil
 		},
 	}, nil
+}
+
+// adoptManagedSessionWatch shares a managed session's own room identity with
+// an inbox watch running inside that same session, instead of refusing it as
+// a duplicate owner.
+//
+// A managed (foreman) session holds its singleton name card for its whole
+// lifetime, so `inbox --watch` could never register and no supported command
+// could drain that identity's overflow: bounded reads peek by design and
+// `sprint inbox-ack` needs an attached sprint watch the foreman is not.
+//
+// The adoption proves the session instead of taking the identity: the live
+// card must be this name's foreman-mode card, and this process must descend
+// from its holder (the inboxOwnerRelation proof — liveness alone is not
+// identity, a recycled pid must not satisfy it). Nothing is written to the
+// room: there is still exactly one card, still held by the foreman, so leave
+// releases only the kernel lease the watch acquired and never retires the
+// card. Single-consumer exclusion is unchanged — the caller holds the
+// exclusive attached lease, so a second concurrent watch is refused before it
+// gets here — and the claim is offered only while that lease is held
+// (BASHY_CLAIM=0 keeps the old refusal). Unknown ancestry fails closed.
+//
+// The adopted watch drains exactly like any other: the loop renders each
+// batch before its per-source watermarks advance, so no undisplayed record is
+// ever acknowledged, and the ownerLive guard below stops the watch (without
+// consuming) once the owning session is gone.
+func adoptManagedSessionWatch(id inboxWatcherIdentity, releaseLease func()) (inboxWatcherClaim, bool) {
+	incumbent, live, err := room.Find(id.claimID)
+	if err != nil || !live {
+		return inboxWatcherClaim{}, false
+	}
+	if !strings.EqualFold(strings.TrimSpace(incumbent.Mode), "foreman") {
+		return inboxWatcherClaim{}, false
+	}
+	anchor := inboxWatcherAnchor(incumbent)
+	if inboxOwnerRelation(os.Getpid(), anchor) != inboxOwnerLive {
+		return inboxWatcherClaim{}, false
+	}
+	return inboxWatcherClaim{
+		leave: releaseLease,
+		ownerLive: func() error {
+			if inboxOwnerRelation(os.Getpid(), anchor) == inboxOwnerGone {
+				return &inboxOwnerGoneError{agent: id.name, owner: anchor}
+			}
+			return nil
+		},
+	}, true
 }
 
 // localInboxWatchers holds the claim ids of this process's watchers while the
