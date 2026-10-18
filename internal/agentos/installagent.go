@@ -73,7 +73,8 @@ agents:
   aider      Aider         $SHELL guidance (no config file)
   gemini     Gemini CLI    PATH shim dir (~/.bashy/shims)
   copilot    Copilot CLI   PATH shim dir (~/.bashy/shims)
-  agy        Antigravity   PATH shim dir (~/.bashy/shims)
+  agy        Antigravity   PATH shim dir (~/.bashy/shims), AGENT=agy marker
+  muse       Muse          PATH shim dir (~/.bashy/shims), AGENT=muse marker
   codex      Codex CLI     login shell via chsh (reads /etc/passwd; invasive)
 
 --hooks installs the native turn-boundary inbox hook both harnesses support
@@ -152,7 +153,7 @@ With no agent, prints the wiring status of every known agent; --json emits it
 	}
 	ins, ok := installers[name]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "install-agent: unknown agent %q (try: claude opencode aider gemini copilot codex agy)\n", name)
+		fmt.Fprintf(os.Stderr, "install-agent: unknown agent %q (try: claude opencode aider gemini copilot codex agy muse)\n", name)
 		return 2
 	}
 
@@ -226,6 +227,7 @@ func agentInstallers(yes bool) map[string]agentInstaller {
 		"copilot":     shimInstaller("copilot"),
 		"agy":         shimInstaller("agy"),
 		"antigravity": shimInstaller("antigravity"),
+		"muse":        museInstaller(),
 		"codex":       codexInstaller(yes),
 	}
 }
@@ -404,11 +406,50 @@ func shimDir() string {
 // (e.g. agy/antigravity) still lands on bashy.
 var shimNames = []string{"bash", "sh", "zsh"}
 
+// writeShimWithAgentEnv writes a shell shim that sets AGENT env before execing bashy.
+func writeShimWithAgentEnv(path, bashy, agentEnv string) error {
+	if agentEnv == "" {
+		return chat.WriteShellShim(path, bashy)
+	}
+	body := "#!/bin/sh\nAGENT='" + strings.ReplaceAll(agentEnv, "'", "'\"'\"'") + "' export AGENT\nexec '" + strings.ReplaceAll(bashy, "'", "'\"'\"'") + "' \"$@\"\n"
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), ".shell-shim-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if _, err = f.Write([]byte(body)); err == nil {
+		err = f.Chmod(0755)
+	}
+	closeErr := f.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return os.Rename(f.Name(), path)
+}
+
+func museInstaller() agentInstaller {
+	return shimInstaller("muse")
+}
+
 func shimInstaller(agent string) agentInstaller {
 	// launch command name (defaults to the agent name for agy/antigravity).
 	launch := agent
 	if l, ok := map[string]string{"gemini": "gemini", "copilot": "copilot"}[agent]; ok {
 		launch = l
+	}
+	// AGENT env marker for agy/muse so DetectTool sees them and hints/help stay on.
+	agentEnv := ""
+	if agent == "agy" || agent == "antigravity" {
+		agentEnv = "agy"
+	}
+	if agent == "muse" {
+		agentEnv = "muse"
 	}
 	return agentInstaller{
 		name: agent,
@@ -418,15 +459,24 @@ func shimInstaller(agent string) agentInstaller {
 				return "", err
 			}
 			for _, name := range shimNames {
-				if err := chat.WriteShellShim(filepath.Join(dir, name), shell); err != nil {
+				shimPath := filepath.Join(dir, name)
+				if agentEnv != "" {
+					if err := writeShimWithAgentEnv(shimPath, shell, agentEnv); err != nil {
+						return "", fmt.Errorf("shim %s: %w", name, err)
+					}
+				} else if err := chat.WriteShellShim(shimPath, shell); err != nil {
 					return "", fmt.Errorf("shim %s: %w", name, err)
 				}
 			}
-			return fmt.Sprintf(`%s resolves bare "bash" via PATH (gemini-family run_shell_command). Shims written to %s; launch it as:
+			envNote := ""
+			if agentEnv != "" {
+				envNote = fmt.Sprintf(" (AGENT=%s marker set for detection)", agentEnv)
+			}
+			return fmt.Sprintf(`%s resolves bare "bash" via PATH (gemini-family run_shell_command). Shims written to %s%s; launch it as:
 
     PATH=%q:"$PATH" %s
 
-(bashy meet/chat/weave inject this automatically via the launcher.)`, agent, dir, dir, launch), nil
+(bashy meet/chat/weave inject this automatically via the launcher.)`, agent, dir, envNote, dir, launch), nil
 		},
 		uninstall: func(_ bool) (string, error) {
 			dir := shimDir()
@@ -1272,7 +1322,7 @@ const installAgentSchemaVersion = "bashy-install-agent-v1"
 
 // installAgentOrder is the status view's row order: the E2E-verified
 // writers first, then the shim-based agents, then the invasive one.
-var installAgentOrder = []string{"claude", "opencode", "aider", "gemini", "copilot", "agy", "codex"}
+var installAgentOrder = []string{"claude", "opencode", "aider", "gemini", "copilot", "agy", "muse", "codex"}
 
 type installAgentRow struct {
 	Name      string `json:"name"`

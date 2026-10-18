@@ -53,9 +53,13 @@ func (n *nudger) onAudit(ev interp.AuditEvent) {
 	}
 	name := ev.Args[0]
 	// Rules live in coreutils/pkg/nudge — the single source of truth shared with
-	// ycode and any other consumer of the in-process userland. bashy keeps its
-	// own session-memory rate-limiting + emit below.
+	// ycode and any other consumer of the in-process userland, plus declared
+	// adoption rows generated from the vocabulary (failure/improvisation paths).
+	// bashy keeps its own session-memory rate-limiting + emit below.
 	suggest := nudge.Suggest(ev.Args, ev.IsBuiltin)
+	if suggest == "" {
+		suggest = SuggestDeclared(ev.Args, ev.IsBuiltin)
+	}
 	if suggest == "" {
 		return
 	}

@@ -84,7 +84,7 @@ func cobraSchemaSummary(name string, schemas map[string]tool.ArgSchema) string {
 	if schemas == nil {
 		return ""
 	}
-	footer := "; Full per-path flag schemas: bashy help " + name + " --format=mcp (descriptive; invoke via args)."
+	footer := "; Full per-path flag schemas: bashy help " + name + " --format=mcp (descriptive; invoke via args). " + MCPCommonOptionsNote(schemas[name])
 	const truncated = "; ... (summary truncated)"
 	var b strings.Builder
 	appendPart := func(part string) bool {

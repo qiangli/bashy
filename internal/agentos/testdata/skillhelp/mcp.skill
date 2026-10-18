@@ -82,3 +82,6 @@ Serve bashy commands to agents over the Model Context Protocol.
   }
 }
 ```
+
+## Common options
+Common options for mcp: --json=missing --fields=missing --null=missing --dry-run=missing --no-input=mapped --explain=mapped --depth=missing --since=missing. Missing options exit 2 here; for a foreign command or a missing option use `bashy adapt --OPTION -- CMD`. See `bashy help common-options`.

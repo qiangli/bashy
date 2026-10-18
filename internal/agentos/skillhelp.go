@@ -239,6 +239,7 @@ func skillHelp(name, classic string, entry atlas.Entry, longDoc string) (string,
 		}
 	}
 	fmt.Fprintf(&b, "\n```json mcp\n%s\n```\n", data)
+	fmt.Fprintf(&b, "\n## Common options\n%s\n", HelpCommonOptionsFooter(name, declaredLongFlags(name)))
 	return b.String(), nil
 }
 
@@ -316,4 +317,10 @@ func mcpToolDefinitions(opts yokemcp.Options) ([]*mcpsdk.Tool, error) {
 		params.Cursor = page.NextCursor
 	}
 	return result, nil
+}
+
+// declaredLongFlags is the set of long flag names the command itself declares
+// (derived Cobra schema); empty for commands without one.
+func declaredLongFlags(name string) map[string]bool {
+	return declaredFlagSet(cobraSchemas(name)[name])
 }

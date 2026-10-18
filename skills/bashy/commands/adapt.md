@@ -10,6 +10,8 @@ against fleet `adapter` records; the longest prefix wins. No shell string is
 constructed. Native stdout, stderr, stdin and executed exit statuses pass through.
 No executable is downloaded or provisioned.
 
+Trigger word: `bashy adapt --OPTION -- CMD` gives any foreign command the common options.
+
 ```
 bashy adapt --null -- git status
 bashy adapt --dry-run -- git clean -fd

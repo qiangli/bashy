@@ -21,7 +21,7 @@ import (
 func TestCommandDocSourceNames(t *testing.T) {
 	// Sorted, exact: a new commands/<name>.md (feed shipped with the S431 feed
 	// registry, Sprint 9999 maintenance) must be added here deliberately.
-	want := []string{"adapt", "conductor", "feed", "feed-setup", "force-agent-shell", "inbox", "knowledge-transfer", "sprint", "steward", "supervisor"}
+	want := []string{"adapt", "common-options", "conductor", "feed", "feed-setup", "force-agent-shell", "inbox", "knowledge-transfer", "lens", "sprint", "steward", "supervisor"}
 	got, err := commandDocSource{}.Names()
 	if err != nil {
 		t.Fatal(err)
