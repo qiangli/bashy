@@ -198,6 +198,9 @@ func dispatchFormattedHelp(args []string) (int, bool) {
 	if format == "classic" && args[0] != "help" {
 		return 0, false
 	}
+	// An automatically selected low-band view is a recipe. An explicit script
+	// request retains the existing shell-comment format for its callers.
+	recipe := format == "script" && explicit == "" && os.Getenv("BASHY_HELP_FORMAT") == ""
 	entry, ok := lookupEntry(name)
 	if !ok {
 		fmt.Fprintf(os.Stderr, "bashy help: no atlas entry for %q\n", name)
@@ -220,6 +223,9 @@ func dispatchFormattedHelp(args []string) (int, bool) {
 				output, err = skillHelp(name, output, entry, commandLongDoc(name))
 			case "script":
 				output, err = scriptHelp(name, output, entry, commandLongDoc(name))
+				if err == nil && recipe {
+					output, err = scriptRecipeMarkdown(name, output)
+				}
 			}
 		}
 	}
