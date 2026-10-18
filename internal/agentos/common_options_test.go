@@ -16,17 +16,55 @@ import (
 	"github.com/qiangli/coreutils/tool"
 )
 
+const (
+	commonOptionsBaselineFile = "testdata/common_options_short_baseline.txt"
+	commonOptionsMatrixFile   = "testdata/common_options_matrix.txt"
+)
+
+// commonOptionNames is the documented common-option vocabulary
+// (docs/common-options.md in the dhnt umbrella is the authority).
+var commonOptionNames = []string{"dry-run", "explain", "fields", "json", "no-input", "null", "plain", "quiet"}
+
+// Tools whose --help is not safe to execute (posix gate/provider runners; man
+// excludes them too). They are recorded in the matrix as help-excluded rather
+// than silently skipped.
+var helpExcludedTools = map[string]bool{"posix-providers": true, "posix-gate": true}
+
+// Tools with their own non-pflag grammar (expression languages, subcommand
+// dispatchers): --help lists no pflag options, so no common option can be
+// declared; the matrix records every option unsupported. Reviewed list: a tool
+// outside it that parses no flags fails, and a tool in it that starts
+// declaring flags fails, so the list cannot go stale.
+var customGrammarTools = map[string]bool{
+	"ar": true, "ast": true, "ctags": true, "db": true, "ex": true, "find": true,
+	"foreman": true, "gencat": true, "graph": true, "localedef": true, "man": true,
+	"nm": true, "strip": true, "test": true, "time": true, "vi": true, "xargs": true,
+}
+
 // Certification-profile signals are the bashy_cert build tag and applet-specific
-// POSIXLY_CORRECT presence checks (see tool.SchemaFromFlags). This audit neither
-// changes those signals nor normalizes flags. docs/common-options.md in the dhnt
-// umbrella is the vocabulary authority. Existing short options are audit
-// candidates, not violations: new short letters require review against this
-// report. No finding below fails the test or rewrites a certified command.
+// POSIXLY_CORRECT presence checks (see tool.SchemaFromFlags). This lint neither
+// changes those signals nor normalizes flags.
+//
+// Three checks, all blocking:
+//   - off-vocabulary spellings (--dryrun) and a nonbool --quiet fail immediately;
+//     they are never baselined.
+//   - short letters are compared with the reviewed baseline
+//     (testdata/common_options_short_baseline.txt); a new letter fails.
+//   - the tool x common-option matrix is compared with a deterministic golden
+//     (testdata/common_options_matrix.txt): supported / native-mapped / unsupported.
+//
+// A tool whose --help cannot be read (other than the explicit exclusions) fails
+// the audit. Regenerate goldens only after review: BASHY_UPDATE_COMMON_OPTIONS=1
+// (refused while violations exist).
 func TestCommonOptionsVocabularyReport(t *testing.T) {
 	ringDir(t)
-	report := func(path string, flag tool.ArgFlag) {
+	var shorts, violations, matrix []string
+	record := func(path string, flag tool.ArgFlag) {
 		for _, finding := range commonOptionFindings(flag) {
-			t.Logf("%s: %s", path, finding)
+			violations = append(violations, path+": "+finding)
+		}
+		if flag.Shorthand != "" {
+			shorts = append(shorts, shortBaselineEntry(path, flag))
 		}
 	}
 	_, _, verbs := commandsCatalog()
@@ -38,30 +76,165 @@ func TestCommonOptionsVocabularyReport(t *testing.T) {
 		walkCobraSchemas(cobraVerb(name), name, func(path string, schema tool.ArgSchema) {
 			cobraCount++
 			for _, flag := range schema.Flags {
-				report(path, flag)
+				record(path, flag)
 			}
 		})
 	}
 	// Tool flags are invocation-local and the registry exposes no FlagSet getter.
 	// Read their own --help in bounded child processes, like man does, rather than
 	// running tool handlers in the test process or inventing flag declarations.
-	for _, name := range tool.Names() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestVocabularyToolHelp$")
-		cmd.Env = append(os.Environ(), "BASHY_VOCABULARY_TOOL="+name)
-		var output cappedVocabularyOutput
-		cmd.Stdout, cmd.Stderr = &output, io.Discard
-		err := cmd.Run()
-		cancel()
-		if err != nil {
-			t.Logf("%s: help unavailable (%v); audit incomplete for this tool", name, err)
+	names := tool.Names()
+	for _, name := range names {
+		if helpExcludedTools[name] {
+			for _, opt := range commonOptionNames {
+				matrix = append(matrix, matrixEntry(name, opt, "help-excluded"))
+			}
 			continue
 		}
-		for _, flag := range vocabularyHelpFlags(output.String()) {
-			report(name, flag)
+		help, err := toolHelp(name)
+		if err != nil {
+			t.Errorf("%s: help unavailable (%v); audit incomplete for this tool", name, err)
+			continue
+		}
+		flags := vocabularyHelpFlags(help)
+		if custom := customGrammarTools[name]; custom != (len(flags) == 0) {
+			t.Errorf("%s: customGrammarTools=%v but %d flags parsed from --help; review the list", name, custom, len(flags))
+			continue
+		}
+		byName := map[string]helpFlag{}
+		for _, f := range flags {
+			record(name, f.ArgFlag)
+			byName[strings.ReplaceAll(f.Name, "_", "-")] = f
+		}
+		for _, opt := range commonOptionNames {
+			matrix = append(matrix, matrixEntry(name, opt, commonOptionStatus(opt, byName)))
 		}
 	}
-	t.Logf("report-only: inspected %d registered tools and %d cobra command paths", len(tool.Names()), cobraCount)
+	slices.Sort(shorts)
+	shorts = slices.Compact(shorts)
+	slices.Sort(violations)
+	violations = slices.Compact(violations)
+	slices.Sort(matrix)
+	t.Logf("inspected %d registered tools and %d cobra command paths", len(names), cobraCount)
+
+	for _, v := range violations {
+		t.Errorf("common-option vocabulary violation: %s", v)
+	}
+	if os.Getenv("BASHY_UPDATE_COMMON_OPTIONS") == "1" {
+		if len(violations) > 0 || t.Failed() {
+			t.Fatal("refusing to update goldens while violations or incomplete audits exist")
+		}
+		for file, lines := range map[string][]string{commonOptionsBaselineFile: shorts, commonOptionsMatrixFile: matrix} {
+			if err := os.WriteFile(file, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	base := readGolden(t, commonOptionsBaselineFile)
+	for _, line := range base {
+		if strings.HasPrefix(line, "violation") {
+			t.Errorf("baseline must not record violations: %q", line)
+		}
+	}
+	for _, n := range newShortOptions(shorts, base) {
+		t.Errorf("new short option %q: not in reviewed baseline; remove it or review and update %s", n, commonOptionsBaselineFile)
+	}
+	golden := readGolden(t, commonOptionsMatrixFile)
+	if !slices.Equal(matrix, golden) {
+		t.Errorf("common-option matrix differs from %s (review, then BASHY_UPDATE_COMMON_OPTIONS=1):\n%s", commonOptionsMatrixFile, lineDiff(golden, matrix))
+	}
+}
+
+func readGolden(t *testing.T, file string) []string {
+	t.Helper()
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("reviewed golden %s: %v", file, err)
+	}
+	return strings.Split(strings.TrimSpace(string(data)), "\n")
+}
+
+func lineDiff(want, got []string) string {
+	var b strings.Builder
+	n := 0
+	for _, l := range got {
+		if !slices.Contains(want, l) && n < 40 {
+			fmt.Fprintf(&b, "+ %s\n", l)
+			n++
+		}
+	}
+	for _, l := range want {
+		if !slices.Contains(got, l) && n < 40 {
+			fmt.Fprintf(&b, "- %s\n", l)
+			n++
+		}
+	}
+	return b.String()
+}
+
+func matrixEntry(tool, opt, status string) string {
+	return tool + "\t--" + opt + "\t" + status
+}
+
+// toolHelp runs `tool --help` in a bounded child process and fails (rather
+// than skips) on timeout, nonzero exit, or empty output.
+func toolHelp(name string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestVocabularyToolHelp$")
+	cmd.Env = append(os.Environ(), "BASHY_VOCABULARY_TOOL="+name)
+	cmd.WaitDelay = time.Second
+	var output cappedVocabularyOutput
+	cmd.Stdout, cmd.Stderr = &output, io.Discard
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(output.String()) == "" {
+		return "", fmt.Errorf("empty help output")
+	}
+	return output.String(), nil
+}
+
+func commonOptionStatus(opt string, flags map[string]helpFlag) string {
+	f, declared := flags[opt]
+	switch opt {
+	case "json", "fields":
+		if declared && !strings.Contains(f.usage, "exit 2") {
+			return "supported"
+		}
+	case "null":
+		if declared && !strings.Contains(f.usage, "native NUL-delimited spelling") {
+			return "supported"
+		}
+		for _, native := range []string{"zero", "zero-terminated", "null-data"} {
+			if n, ok := flags[native]; ok && n.Type == "bool" {
+				return "native-mapped"
+			}
+		}
+	case "quiet":
+		if declared && f.Type == "bool" {
+			return "supported"
+		}
+	default:
+		if declared {
+			return "supported"
+		}
+	}
+	return "unsupported"
+}
+
+func shortBaselineEntry(path string, flag tool.ArgFlag) string {
+	return fmt.Sprintf("%s\t-%s\t--%s", path, flag.Shorthand, flag.Name)
+}
+
+func newShortOptions(found, baseline []string) []string {
+	var out []string
+	for _, f := range found {
+		if !slices.Contains(baseline, f) {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // A separate process bounds legacy/custom --help handlers and isolates any
@@ -72,7 +245,7 @@ func TestVocabularyToolHelp(t *testing.T) {
 	if name == "" {
 		return
 	}
-	if name == "posix-providers" || name == "posix-gate" {
+	if helpExcludedTools[name] {
 		os.Exit(2)
 	}
 	dir := t.TempDir()
@@ -97,24 +270,28 @@ func (b *cappedVocabularyOutput) Write(p []byte) (int, error) {
 
 func commonOptionFindings(flag tool.ArgFlag) []string {
 	var findings []string
-	if flag.Name == "dryrun" {
-		findings = append(findings, "--dryrun: vocabulary spelling is --dry-run")
+	for bad, good := range map[string]string{"dryrun": "dry-run", "noinput": "no-input"} {
+		if flag.Name == bad {
+			findings = append(findings, fmt.Sprintf("--%s: vocabulary spelling is --%s", bad, good))
+		}
 	}
 	if strings.ReplaceAll(flag.Name, "_", "-") == "quiet" && flag.Type != "bool" {
 		findings = append(findings, fmt.Sprintf("--quiet: expected bool, found %s", flag.Type))
-	}
-	if flag.Shorthand != "" {
-		findings = append(findings, fmt.Sprintf("-%s (--%s): short-option audit candidate; preserve existing letters, add no new letters", flag.Shorthand, flag.Name))
 	}
 	return findings
 }
 
 // pflag help separates the declaration and prose with two or more spaces.
 // Unknown/custom formats are left unclassified rather than guessed as booleans.
-var vocabularyHelpFlag = regexp.MustCompile(`^\s*(?:-([A-Za-z0-9]),\s+)?--([A-Za-z0-9_-]+)(?:[ =]([^\s]+))?\s{2,}`)
+var vocabularyHelpFlag = regexp.MustCompile(`^\s*(?:-([A-Za-z0-9]),\s+)?--([A-Za-z0-9_-]+)(?:[ =]([^\s]+))?\s{2,}(.*)$`)
 
-func vocabularyHelpFlags(help string) []tool.ArgFlag {
-	var flags []tool.ArgFlag
+type helpFlag struct {
+	tool.ArgFlag
+	usage string
+}
+
+func vocabularyHelpFlags(help string) []helpFlag {
+	var flags []helpFlag
 	for _, line := range strings.Split(help, "\n") {
 		m := vocabularyHelpFlag.FindStringSubmatch(line)
 		if m == nil {
@@ -124,7 +301,7 @@ func vocabularyHelpFlags(help string) []tool.ArgFlag {
 		if typ == "" {
 			typ = "bool"
 		}
-		flags = append(flags, tool.ArgFlag{Name: m[2], Shorthand: m[1], Type: typ})
+		flags = append(flags, helpFlag{tool.ArgFlag{Name: m[2], Shorthand: m[1], Type: typ}, m[4]})
 	}
 	return flags
 }
@@ -139,7 +316,7 @@ func TestCommonOptionFindingRules(t *testing.T) {
 		{tool.ArgFlag{Name: "dry_run", Type: "bool"}, 0},
 		{tool.ArgFlag{Name: "quiet", Type: "string"}, 1},
 		{tool.ArgFlag{Name: "quiet", Type: "bool"}, 0},
-		{tool.ArgFlag{Name: "json", Type: "bool", Shorthand: "J"}, 1},
+		{tool.ArgFlag{Name: "json", Type: "bool", Shorthand: "J"}, 0},
 	} {
 		if got := len(commonOptionFindings(tc.flag)); got != tc.count {
 			t.Errorf("%+v: %d findings, want %d", tc.flag, got, tc.count)
@@ -148,5 +325,33 @@ func TestCommonOptionFindingRules(t *testing.T) {
 	flags := vocabularyHelpFlags("  -q, --quiet string   quiet mode\n      --dryrun         preview\n")
 	if len(flags) != 2 || flags[0].Type != "string" || flags[1].Type != "bool" {
 		t.Fatalf("parsed flags: %+v", flags)
+	}
+
+	flagsOf := func(help string) map[string]helpFlag {
+		m := map[string]helpFlag{}
+		for _, f := range vocabularyHelpFlags(help) {
+			m[f.Name] = f
+		}
+		return m
+	}
+	fm := flagsOf("      --json            structured output (exit 2 if the command has no structured output)\n" +
+		"      --null            use the command's native NUL-delimited spelling (-z/--zero/--null-data)\n" +
+		"  -z, --zero            nul\n      --quiet           q\n      --explain         e\n")
+	for opt, want := range map[string]string{"json": "unsupported", "null": "native-mapped", "quiet": "supported", "explain": "supported", "fields": "unsupported", "dry-run": "unsupported"} {
+		if got := commonOptionStatus(opt, fm); got != want {
+			t.Errorf("status(%s)=%s want %s", opt, got, want)
+		}
+	}
+	if got := commonOptionStatus("json", flagsOf("      --json   emit json\n")); got != "supported" {
+		t.Errorf("native json: %s", got)
+	}
+
+	existing := shortBaselineEntry("cat", tool.ArgFlag{Name: "number", Shorthand: "n"})
+	added := shortBaselineEntry("cat", tool.ArgFlag{Name: "newflag", Shorthand: "Z"})
+	if got := newShortOptions([]string{existing, added}, []string{existing}); len(got) != 1 || got[0] != added {
+		t.Fatalf("new short letter not detected: %v", got)
+	}
+	if got := newShortOptions([]string{existing}, []string{existing}); len(got) != 0 {
+		t.Fatalf("baseline short letter flagged: %v", got)
 	}
 }
