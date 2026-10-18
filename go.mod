@@ -19,7 +19,7 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261018024844-02b24ff1db5d
 	github.com/qiangli/ycode v0.3.1-dev.0.20261017214433-ffb708d14c35
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261018024401-bec65ba6674d
+	github.com/qiangli/yoke v0.0.0-20261018041207-98ec59bd7c58
 	github.com/qiangli/yoke/external/otel v0.0.0-20261017214100-19415c55382f
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
@@ -511,7 +511,7 @@ replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261014083225-477b218
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
-replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261017213852-cd33e2a2594a
+replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261018024844-02b24ff1db5d
 
 replace github.com/jaegertracing/jaeger => github.com/qiangli/jaeger v0.0.0-20260426223533-5aaa7eb1f040
 

@@ -917,6 +917,8 @@ github.com/qiangli/coreutils v0.0.0-20261018024844-02b24ff1db5d h1:eCLO0HWO/Fa9d
 github.com/qiangli/coreutils v0.0.0-20261018024844-02b24ff1db5d/go.mod h1:nP8R/LOBZFHjHvzgE+TX3nASmemDaiMjOnei+YPuxq8=
 github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261017213852-cd33e2a2594a h1:6zS3KRLy5B9VeXL2iTmY1/Pb0875R7GekoM5krgwj1Q=
 github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261017213852-cd33e2a2594a/go.mod h1:p0JkVxHS3JKYxDz8kOYvMdPM8YRH94vZoWaFljD1vAg=
+github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261018024844-02b24ff1db5d h1:ZNPgc5QZ+q/3CpNVGnWq7cJcmly44c+rdvVGdMfVDYo=
+github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261018024844-02b24ff1db5d/go.mod h1:p0JkVxHS3JKYxDz8kOYvMdPM8YRH94vZoWaFljD1vAg=
 github.com/qiangli/filebrowser/v2 v2.0.0-20261013004903-9c7b5c8e3d09 h1:8BBH4NPnF6UYP5GbGGu2iM6TS1h3EY+v8ml/555jcsg=
 github.com/qiangli/filebrowser/v2 v2.0.0-20261013004903-9c7b5c8e3d09/go.mod h1:86f/lT85KHk1f2smUl+MdgDvX4nO2lQqA+tWrGZhj0A=
 github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 h1:XHTsT5keRw4zmpOmnwUM1uiAtRlh2eJa/38OLDEtHmA=
@@ -941,6 +943,8 @@ github.com/qiangli/yoke v0.0.0-20261017233159-e47270a0d5da h1:pc6mWwAK0XIjzyPrxn
 github.com/qiangli/yoke v0.0.0-20261017233159-e47270a0d5da/go.mod h1:OGVY7dS1gyRXFCwIKX3NZggF7G1ZQkuVTdzabEa/EHY=
 github.com/qiangli/yoke v0.0.0-20261018024401-bec65ba6674d h1:oLl+dYnb79SrMsVt64XzNeWAhyjj9IMebs+0DbzKq9k=
 github.com/qiangli/yoke v0.0.0-20261018024401-bec65ba6674d/go.mod h1:OGVY7dS1gyRXFCwIKX3NZggF7G1ZQkuVTdzabEa/EHY=
+github.com/qiangli/yoke v0.0.0-20261018041207-98ec59bd7c58 h1:SqDEgevuoNxFRlWZIJQN0Q4TkMMXJ0G1G1pJCiVCf0k=
+github.com/qiangli/yoke v0.0.0-20261018041207-98ec59bd7c58/go.mod h1:tNJ8gsNe+sldp4mtueqvVu2UIt82UicV7zYL6X2F8R8=
 github.com/qiangli/yoke/external/otel v0.0.0-20261017214100-19415c55382f h1:RzD7uB+1eQmnImyKiGMYTdWZRdVWwqExGlhAnYqx7c0=
 github.com/qiangli/yoke/external/otel v0.0.0-20261017214100-19415c55382f/go.mod h1:T/QcacDbXpopQO/SQITqPj+vnkVtKgztKF8RJumTkrc=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261017214100-19415c55382f h1:yO/RgnZ36Gns0TLOy2N+EfmI/QCwjOGN/GlVW0qY/Fo=
