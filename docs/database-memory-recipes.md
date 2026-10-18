@@ -11,7 +11,7 @@ created explicitly.
 ## 1. Discovery
 
 ```bash
-bashy db --help                                  # registered usage for every verb
+bashy db create --help                           # registered usage for every verb (bare `db --help` exits 2)
 bashy db caps --engine sqlite --json             # --engine is required
 bashy db caps --engine bbolt  --json
 bashy db caps --engine bleve  --json
@@ -41,7 +41,7 @@ Destructive verbs additionally need the server started with
 |---|---|---|---|---|
 | sqlite | sql, documents, vectors, objects, timeseries | native (owner heap) | native, WAL, multi-process | backup + restore, both modes |
 | bbolt | kv, objects | supplemental adapter `memkv` | native, single-process flock | backup persistent only; no native restore |
-| bleve | fts | native | native | unsupported — use `db fts` export/rebuild |
+| bleve | fts | native | native | unsupported — use top-level `db export` / `db import` |
 | bonsai | graph | supplemental adapter `memgraph` | native | backup persistent only; memory → `db graph export` |
 
 All eight categories (sql, documents, kv, fts, vectors, objects, graph,
@@ -91,7 +91,7 @@ for MODE in persistent memory; do
   # create
   bashy db create "${T[@]}" --json
   bashy db sql schema apply "${T[@]}" \
-    --sql 'CREATE TABLE notes(id INTEGER PRIMARY KEY, body TEXT NOT NULL)' --json
+    --sql 'CREATE TABLE notes(id INTEGER PRIMARY KEY, body TEXT NOT NULL)' --yes --json
   # populate (values are bound, never interpolated)
   bashy db sql exec "${T[@]}" --sql 'INSERT INTO notes(id, body) VALUES (?, ?)' \
     --param int:1 --param text:hello --json
@@ -104,7 +104,7 @@ for MODE in persistent memory; do
   # logical export/import (export --out must be a new directory)
   bashy db export "${T[@]}" --out "$W/export-$MODE" --json
   bashy db create "${C[@]}" --json
-  bashy db import "${C[@]}" --in "$W/export-$MODE" --json
+  bashy db import "${C[@]}" --in "$W/export-$MODE" --replace --yes --json
   bashy db sql query "${C[@]}" --sql 'SELECT count(*) AS n FROM notes' --json
   # native backup (--out must be a new file) and restore over an existing target
   bashy db backup "${T[@]}" --out "$W/backup-$MODE.db" --json
@@ -118,8 +118,10 @@ done
 echo "artifacts in $W"
 ```
 
-Rules this script depends on: `restore` and `drop` refuse without
-`--yes`; `restore` over an existing target refuses without `--replace`
+Rules this script depends on: `sql schema apply`, `restore` and `drop`
+refuse without `--yes` (`confirmation_required`); importing into a fresh
+copy uses `--replace --yes`, because a merge import requires an
+identical existing table and otherwise fails `conflict`; `restore` over an existing target refuses without `--replace`
 (`exists`); `backup` refuses an existing `--out`. A memory database's
 contents end with its owner session — export or back it up before the
 `trap` stops the session.
@@ -133,6 +135,10 @@ you create is the rank index, and retrieval is `lexical` only.
 #!/usr/bin/env bash
 set -euo pipefail
 W=$(mktemp -d)
+# Prerequisite: kb context reads named KB rings. An empty, private agent
+# ring isolates this recipe from any repo or host KB (none needs to exist).
+export YCODE_DATA_DIR="$W/agent-data"
+mkdir -p "$YCODE_DATA_DIR/kb"
 printf '# Notes\n\nBackups need a new output path.\n' > "$W/notes.md"
 SESSION=$(bashy db session start --idle-ttl 10m --json |
   python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["id"])')
@@ -159,7 +165,7 @@ for MODE in persistent memory; do
   bashy kb memory index-sync "$MEM" --index "$IDX" --json
   bashy kb memory retrieve "$MEM" --index "$IDX" --text "backup" --tags recipes \
     --mode lexical --limit 5 --json
-  bashy kb context --for "how do I back up a database" \
+  bashy kb context --for "how do I back up a database" --rings agent \
     --memory-target "$MEM" --memory-index "$IDX" --memory-mode lexical \
     --memory-tags recipes --budget 700 --json
   # keep the records before the owner session ends
@@ -168,7 +174,11 @@ done
 echo "artifacts in $W"
 ```
 
-`kb context` runs before the session stops because a memory target is
+`kb context --rings agent` reads only the agent ring under
+`$YCODE_DATA_DIR/kb`; without `--rings` it also expects the default repo
+ring (`docs/kb` in the current repository) and fails when that is
+missing. Not every ring is memory-backed: the memory target is added
+alongside whichever rings you name. `kb context` runs before the session stops because a memory target is
 unreachable afterwards (`lifetime_ended`). `--mode semantic|hybrid`
 (and `--memory-mode semantic|hybrid`) report `unsupported`; no embedding
 provider or service is started or contacted. Edits after capture use
