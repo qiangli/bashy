@@ -205,3 +205,5 @@ Weave-round verification + retro reports (historical, not load-bearing):
 - [Ollama compiler evidence repair, Story 1927](plan-ollama-compiler-evidence.md) — compile-time content capture, native Windows compiler discovery, diagnostic uploads and bounded validation.
 
 - [Sprint 446 schema and vocabulary audit](sprint-446-schema-lint.md) — derived Cobra flag metadata, report-only common-options lint, and Part B verification.
+
+- `plan-sprint-446-s6-adapt.md` — S6 native invocation adapters, validation evidence and S2/S3/S19 integration limits.

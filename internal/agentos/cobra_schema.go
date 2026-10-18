@@ -30,6 +30,7 @@ import (
 	"github.com/qiangli/yoke/external/tessaro"
 	"github.com/qiangli/yoke/external/zigcc"
 	"github.com/qiangli/yoke/external/zot"
+	"github.com/qiangli/yoke/pkg/adapt"
 	"github.com/qiangli/yoke/pkg/ask"
 	"github.com/qiangli/yoke/pkg/board"
 	"github.com/qiangli/yoke/pkg/broker"
@@ -84,6 +85,10 @@ func cobraVerb(name string) *cobra.Command {
 		return newProxyCmd()
 	case "llm":
 		return broker.NewCmd()
+	case "adapt":
+		return adapt.NewCmd(adapt.PrepareJSONLens)
+	case "adapter":
+		return fleet.NewAdaptersCmd()
 	case "resource", "resources":
 		return resources.NewCommand()
 	case "lexicon":

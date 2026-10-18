@@ -615,6 +615,8 @@ var verbSynopsis = map[string]string{
 	"commands":           "the 1.0.0 command surface: core first, then every command by origin, tier, POSIX, or bin-managed status; add|set|rm|… registers your own",
 	"command":            "hidden front-door spelling of `commands` (in-shell `command` stays the POSIX builtin)",
 	"inspect":            "self-inspection: resource map, gate decisions, and the index of what answers what",
+	"adapt":              "apply declared native options to a foreign command",
+	"adapter":            "manage declarative invocation adapter rows",
 	"resource":           "host totals and active weave disk, CPU, GPU, and memory usage",
 	"resources":          "hidden alias for bashy resource",
 	"context":            "hidden alias for bashy inspect context",

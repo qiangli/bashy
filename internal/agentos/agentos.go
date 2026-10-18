@@ -82,6 +82,7 @@ import (
 	"github.com/qiangli/yoke/external/tessaro"
 	"github.com/qiangli/yoke/external/zigcc"
 	"github.com/qiangli/yoke/external/zot"
+	"github.com/qiangli/yoke/pkg/adapt"
 	"github.com/qiangli/yoke/pkg/ask"
 	"github.com/qiangli/yoke/pkg/atlas"
 	"github.com/qiangli/yoke/pkg/autofix"
@@ -151,7 +152,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -828,6 +829,18 @@ func dispatch() {
 		// newSprintCmd wraps it so `sprint --help` also carries the ACTIVE
 		// owner-accountability contract, not only the plan/handoff mechanics.
 		dispatchExit(runSprintDispatch(os.Args[2:], os.Stdout, os.Stderr))
+	case "adapt":
+		cmd := adapt.NewCmd(adapt.PrepareJSONLens)
+		cmd.SetArgs(os.Args[2:])
+		dispatchExit(adapt.ExitCode(cmd.Execute()))
+	case "adapter":
+		cmd := fleet.NewAdaptersCmd()
+		setCobraArgs(cmd, os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy adapter:", err)
+			dispatchExit(1)
+		}
+		dispatchExit(0)
 	case "resource", "resources":
 		cmd := resources.NewCommand()
 		setCobraArgs(cmd, os.Args[2:])
