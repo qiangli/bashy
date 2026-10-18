@@ -6,29 +6,54 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-// noInputEnv is set by --no-input; prompt helpers fail fast while it is set.
-// Piped stdin payloads are untouched.
+// noInputEnv is an externally supplied switch; prompt helpers fail fast while
+// it is set. --no-input itself never touches the environment: it raises
+// noInputDepth for the duration of the command body only. Piped stdin payloads
+// are untouched either way.
 const noInputEnv = "BASHY_NO_INPUT"
+
+var noInputDepth atomic.Int32
 
 // normalizeFlagName makes "-" and "_" interchangeable in long flag names.
 func normalizeFlagName(_ *pflag.FlagSet, name string) pflag.NormalizedName {
 	return pflag.NormalizedName(strings.ReplaceAll(name, "_", "-"))
 }
 
-func noInputRequested() bool { return os.Getenv(noInputEnv) != "" }
+func noInputRequested() bool { return noInputDepth.Load() > 0 || os.Getenv(noInputEnv) != "" }
 
-// commonOutputMode resolves --json/--plain/--quiet the way weavecli does for
-// any bashy-owned cobra command.
-func commonOutputMode(cmd *cobra.Command) weavecli.OutputMode {
+// OutputFlags is the one binder for the --json/--plain/--quiet triple on
+// bashy-owned cobra commands (weave, dag and peers).
+type OutputFlags struct{ cmd *cobra.Command }
+
+// BindOutputFlags declares --json, --plain and --quiet on cmd where the
+// command does not already own them, and returns the resolver.
+func BindOutputFlags(cmd *cobra.Command) *OutputFlags {
+	fs := cmd.Flags()
+	for _, f := range []struct{ name, usage string }{
+		{"json", "Machine-readable JSON output"},
+		{"plain", "Plain-text output, no banners"},
+		{"quiet", "Suppress non-essential output"},
+	} {
+		if !ownFlag(cmd, f.name) {
+			fs.Bool(f.name, false, f.usage)
+		}
+	}
+	return &OutputFlags{cmd: cmd}
+}
+
+// Mode resolves the output mode the way weavecli does.
+func (o *OutputFlags) Mode() weavecli.OutputMode {
 	boolFlag := func(name string) (set, val bool) {
-		f := cmd.Flags().Lookup(name)
+		f := o.cmd.Flags().Lookup(name)
 		if f == nil {
 			return false, false
 		}
@@ -38,6 +63,21 @@ func commonOutputMode(cmd *cobra.Command) weavecli.OutputMode {
 	_, plain := boolFlag("plain")
 	_, quiet := boolFlag("quiet")
 	return weavecli.ResolveOutputModeEx(jsonSet, jsonVal, plain, quiet)
+}
+
+// NormalizeOptionKey maps a YAML or environment key (dry_run, DRY_RUN,
+// dryrun, dry-run) to its canonical flag name (dry-run).
+func NormalizeOptionKey(key string) string {
+	k := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(key)), "_", "-")
+	if k == "dryrun" {
+		return "dry-run"
+	}
+	return k
+}
+
+// OptionKey is the official YAML/env spelling of a flag name (dry-run -> dry_run).
+func OptionKey(flag string) string {
+	return strings.ReplaceAll(NormalizeOptionKey(flag), "-", "_")
 }
 
 // setCobraArgs is the single chokepoint for bashy-owned cobra verbs: it
@@ -106,7 +146,15 @@ func applyCommonOptions(root *cobra.Command, args []string) ([]string, error) {
 		case "explain":
 			o.explain = true
 		case "no-input":
-			noInput = true
+			on := true
+			if hasVal {
+				b, perr := strconv.ParseBool(val)
+				if perr != nil {
+					return nil, fmt.Errorf("--no-input: invalid value %q", val)
+				}
+				on = b
+			}
+			noInput = on
 		case "json":
 			return nil, fmt.Errorf("--json unsupported for %s", path)
 		case "fields":
@@ -116,6 +164,9 @@ func applyCommonOptions(root *cobra.Command, args []string) ([]string, error) {
 				}
 				i++
 				val = args[i]
+			}
+			if strings.TrimSpace(strings.ReplaceAll(val, ",", "")) == "" {
+				return nil, fmt.Errorf("--fields requires at least one field name")
 			}
 			o.fields, hasFields = val, true
 		case "null":
@@ -136,6 +187,7 @@ func applyCommonOptions(root *cobra.Command, args []string) ([]string, error) {
 			return nil, fmt.Errorf("--fields unsupported for %s (no native --json)", path)
 		}
 		o.json = true
+		out = withJSONFlag(out)
 		wrapRun(target, func(inner func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
 			return func(c *cobra.Command, a []string) error {
 				real := c.OutOrStdout()
@@ -151,12 +203,35 @@ func applyCommonOptions(root *cobra.Command, args []string) ([]string, error) {
 		})
 	}
 	if noInput {
-		os.Setenv(noInputEnv, "1")
+		wrapRun(target, func(inner func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
+			return func(c *cobra.Command, a []string) error {
+				noInputDepth.Add(1)
+				defer noInputDepth.Add(-1)
+				return inner(c, a)
+			}
+		})
 	}
 	if o.explain {
 		explainOnly(target)
 	}
 	return out, nil
+}
+
+// withJSONFlag makes --fields imply --json unless the caller already gave it.
+func withJSONFlag(args []string) []string {
+	end := len(args)
+	for i, a := range args {
+		if a == "--" {
+			end = i
+			break
+		}
+		if n, _, _ := strings.Cut(strings.TrimPrefix(a, "--"), "="); strings.HasPrefix(a, "--") && string(normalizeFlagName(nil, n)) == "json" {
+			return args
+		}
+	}
+	res := append([]string{}, args[:end]...)
+	res = append(res, "--json")
+	return append(res, args[end:]...)
 }
 
 func wrapRun(c *cobra.Command, wrap func(func(*cobra.Command, []string) error) func(*cobra.Command, []string) error) {

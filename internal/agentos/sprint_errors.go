@@ -144,5 +144,5 @@ func sprintUsagef(format string, a ...any) error {
 // whatever mode the invocation asked for, so an agent driving --json gets an
 // envelope and a human gets a line.
 func sprintErrOutputMode(cmd *cobra.Command) weavecli.OutputMode {
-	return commonOutputMode(cmd)
+	return (&OutputFlags{cmd: cmd}).Mode()
 }

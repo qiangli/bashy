@@ -2,9 +2,14 @@ package agentos
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/qiangli/coreutils/pkg/weavecli"
 	"github.com/spf13/cobra"
 )
 
@@ -92,14 +97,111 @@ func TestFieldsProjects(t *testing.T) {
 	}
 }
 
-func TestNoInputBlocksConfirmPrompt(t *testing.T) {
+func TestNoInputIsCommandScoped(t *testing.T) {
 	t.Setenv(noInputEnv, "")
-	root := testTree(new(bool))
-	if _, err := applyCommonOptions(root, []string{"sub", "--no-input"}); err != nil {
+	var inside []bool
+	var stdin string
+	build := func() *cobra.Command {
+		root := &cobra.Command{Use: "root"}
+		root.AddCommand(&cobra.Command{Use: "sub", RunE: func(c *cobra.Command, a []string) error {
+			inside = append(inside, noInputRequested())
+			_, askErr := askHumanToConfirm("f", "op", "e")
+			if noInputRequested() && askErr == nil {
+				t.Error("prompt must fail under --no-input")
+			}
+			b, _ := io.ReadAll(c.InOrStdin())
+			stdin = string(b)
+			if len(a) > 0 && a[0] == "fail" {
+				return errors.New("boom")
+			}
+			return nil
+		}})
+		return root
+	}
+	exec := func(in string, args ...string) {
+		root := build()
+		root.SetIn(strings.NewReader(in))
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		out, err := applyCommonOptions(root, args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		root.SetArgs(out)
+		_ = root.Execute()
+	}
+	exec("payload", "sub", "--no-input")
+	if stdin != "payload" {
+		t.Fatalf("piped stdin lost: %q", stdin)
+	}
+	exec("", "sub")
+	exec("", "sub", "--no-input", "fail")
+	exec("", "sub")
+	exec("", "sub", "--no-input=false")
+	want := []bool{true, false, true, false, false}
+	if fmt.Sprint(inside) != fmt.Sprint(want) {
+		t.Fatalf("inside = %v, want %v", inside, want)
+	}
+	if noInputRequested() || os.Getenv(noInputEnv) != "" {
+		t.Fatal("no-input leaked past the command")
+	}
+}
+
+func TestFieldsImpliesJSON(t *testing.T) {
+	out, err := applyCommonOptions(testTree(new(bool)), []string{"sub", "--fields", "a", "x"})
+	if err != nil || strings.Join(out, " ") != "sub x --json" {
+		t.Fatalf("out=%v err=%v", out, err)
+	}
+	if _, err := applyCommonOptions(testTree(new(bool)), []string{"sub", "--fields="}); err == nil {
+		t.Fatal("empty --fields must be rejected")
+	}
+}
+
+func TestOptionKeyNormalization(t *testing.T) {
+	for _, k := range []string{"dry_run", "DRY_RUN", "dryrun", "dry-run", " Dry_Run "} {
+		if got := NormalizeOptionKey(k); got != "dry-run" {
+			t.Errorf("%q -> %q", k, got)
+		}
+	}
+	if OptionKey("dry-run") != "dry_run" || OptionKey("dryrun") != "dry_run" {
+		t.Fatal("official key spelling must be dry_run")
+	}
+}
+
+func TestBindOutputFlags(t *testing.T) {
+	c := &cobra.Command{Use: "c"}
+	c.Flags().Bool("json", false, "own")
+	b := BindOutputFlags(c)
+	for _, n := range []string{"json", "plain", "quiet"} {
+		if c.Flags().Lookup(n) == nil {
+			t.Fatalf("missing --%s", n)
+		}
+	}
+	if err := c.ParseFlags([]string{"--plain"}); err != nil {
 		t.Fatal(err)
 	}
-	defer t.Setenv(noInputEnv, "")
-	if _, err := askHumanToConfirm("f", "op", "e"); err == nil {
-		t.Fatal("prompt must fail under --no-input")
+	if got := b.Mode(); got != weavecli.OutputPlain {
+		t.Fatalf("mode %v", got)
+	}
+}
+
+func TestExplainValidatesAndOwnFlagsWin(t *testing.T) {
+	root := &cobra.Command{Use: "root"}
+	ran := false
+	sub := &cobra.Command{Use: "sub", Args: cobra.ExactArgs(1), RunE: func(*cobra.Command, []string) error { ran = true; return nil }}
+	sub.Flags().String("fields", "", "own fields")
+	root.AddCommand(sub)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	out, err := applyCommonOptions(root, []string{"sub", "--fields", "mine", "--explain"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.SetArgs(out)
+	if err := root.Execute(); err == nil || ran {
+		t.Fatalf("explain must still validate operands: err=%v ran=%v", err, ran)
+	}
+	if strings.Join(out, " ") != "sub --fields mine" {
+		t.Fatalf("own --fields must pass through: %v", out)
 	}
 }

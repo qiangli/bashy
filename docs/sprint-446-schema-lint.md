@@ -88,3 +88,16 @@ the final run above started after regeneration and passed.
 Final transcripts: `/tmp/s446-summary-final-package.log`,
 `/tmp/s446-summary-final-build.log`, and
 `/tmp/s446-summary-final-windows-vet.log`.
+
+## S2 review correction (Story #2119 / b96771ed888d)
+
+- `--no-input` no longer calls `os.Setenv`; it raises `noInputDepth` only while the
+  target command's RunE runs (restored on error/panic). `BASHY_NO_INPUT` set by the
+  user is still honored. Stdin is never touched, so piped payloads survive.
+- `--no-input=false` is a no-op; `--fields` implies `--json` and rejects an empty list.
+- `NormalizeOptionKey`/`OptionKey`: YAML/env keys normalize to flag names; `dry_run`
+  is the official key spelling. `BindOutputFlags`/`OutputFlags.Mode` is the exported
+  json/plain/quiet binder (sprint errors use it). weave/dag still declare their own
+  flags inside yoke; adopting the binder there is a yoke change (gap).
+- Gaps: persistent pre-run hooks are not covered by the no-input scope; commands
+  writing to os.Stdout directly bypass `--fields` projection.
