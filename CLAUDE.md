@@ -565,8 +565,10 @@ needs. Release binaries link no C; see [build evidence](docs/public-claims-evide
 ## Skills
 
 **`bashy` is the only installed skill** (Sprint 406). `skills/bashy/` is a
-tier-2 **workspace** agentic skill — the userland is tier 1, clusters tier 3 —
-compiled into the `bashy` binary via the `//go:embed all:bashy` directive in
+tier-2 **workplace** agentic skill — agent work and collaboration in the dhnt
+execution-tiers vocabulary, where the userland is tier 1; the tier is its
+purpose, and it runs from any execution environment (a weave workspace, a
+container, a pod) — compiled into the `bashy` binary via the `//go:embed all:bashy` directive in
 `skills/embed.go` (surfaced by `bashy skill`). It is brand-neutral and driven
 by bashy's own tools, and its `SKILL.md` says plainly that it is all you need:
 **every bashy command is a skill too**. `bashy <cmd> --help` renders the same

@@ -34,11 +34,11 @@ the SAME word denotes a different binding on another machine):
 - **dag** — agent-first markdown DAG task runner (cross stage)
 - **gate** — does this project pass? (the one command that decides) (test stage)
 - **handoff** — pause this session and hand the work to another agent, a scheduler, or tomorrow (cross stage)
-- **kb** — host-shared knowledge base: search before a task, add/retro after (all agents, all repos) (cross …
+- **kb** — ring-aware knowledge stages: context/search, observe, validate, and candidate note add (JSON-capa…
 - **meet** — multi-participant deliberation session with a notes-only secretary (plan stage)
 - **resume** — pick up a handed-off session — any tool, any machine (cross stage)
 - **sdlc** — route intake issues through agentic implementation and deployment gates (deploy stage)
-- **skills** — tier-2 workspace skills, env-gated: list applicable here, probe the coordinate, show one (cross s…
+- **skill** — tier-2 workplace skills, env-gated: list applicable here, probe the coordinate, show one (cross s…
 - **sprint** — cross-repo plan/continuity board (peer to weave) (plan stage)
 - **weave** — per-repo multi-agent workspace orchestrator (code stage)
 

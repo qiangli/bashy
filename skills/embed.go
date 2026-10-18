@@ -1,5 +1,7 @@
-// Package skills embeds the tier-2 workspace skill shipped with the bashy
-// binary, so it resolves from any cwd WITHOUT the source tree present — the
+// Package skills embeds the tier-2 workplace skill (agent work and
+// collaboration; a skill may run from any execution environment — the tier is
+// its purpose, not a location) shipped with the bashy binary, so it resolves
+// from any cwd WITHOUT the source tree present — the
 // skill content is compiled into `bashy`, not read from this repo. Surface it
 // with `bashy skill` (see internal/agentos).
 //

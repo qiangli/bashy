@@ -21,8 +21,11 @@ and the partition now keys on the **origin** axis (§2.6) rather than on group
 heuristics. That is the *classical* lens — what a command **is** and how it
 runs. Agents planning work need more lenses:
 
-- **where it runs** — the execution tier (userland / workspace / sandbox /
-  sphere / cluster / cloud / account, per `dhnt` execution-tiers vocabulary);
+- **what it is for** — the execution tier (userland / workplace / sandbox /
+  sphere / cluster / cloud, per `dhnt`'s execution-tiers vocabulary; `account`
+  is the front door beside the stack). A tier names a command's primary
+  purpose, never where a given invocation runs — `weave` is workplace and `ls`
+  is userland, and both run in a container, on a peer or in a pod;
 - **what it can do for an agent** — structured output, dry-run participation,
   destructiveness, network/pairing requirements, self-provisioning,
   token-budgeted output;
@@ -61,7 +64,7 @@ Each command has one record:
 | `class` | classical: `builtin` \| `coreutils` \| `verb` (unchanged v1 taxonomy) |
 | `subclass` | refines `verb` only: `provisioner` \| `managed-external` \| `""` |
 | `group` | functional lens, one group per command (§2.1) |
-| `tier` | execution-tier lens (§2.2) |
+| `tier` | execution-tier lens — primary purpose, not execution location (§2.2) |
 | `sdlc` | **SDLC-stage lens (§2.2a) — mandatory for every verb; `addVerb` panics without one** |
 | `resolver` | existing: `bash-builtin` \| `bashy-in-process` \| `bashy-front-door` \| `managed-container-or-system` |
 | `caps` | agentic capability flags (§2.3) |
@@ -157,24 +160,34 @@ GNU membership, not a new atlas axis.
 ### 2.2 Tier lens
 
 Vocabulary is locked by `dhnt/docs/execution-tiers.md`:
-`userland` · `workspace` · `sandbox` · `sphere` · `cluster` · `cloud`, plus
-`account` (the front door beside the stack). Naming discipline applies:
-sandbox = OCI/podman only; sphere ≠ cluster; cloud (hosted providers) ≠
-cluster (your own DKS).
+`userland` · `workplace` · `sandbox` · `sphere` · `cluster` · `cloud`; `account`
+(tessaro/login, the front door beside the stack) is represented separately and
+is not a seventh tier. A tier names the command's **primary purpose**, one value
+per command; it never says where an invocation may run. Naming discipline
+applies: `workplace` (tier 2, agent work and collaboration) ≠ `workspace` (a
+weave clone / filesystem view, its paths and persisted fields — never a tier
+name; `--tier workspace` is rejected as an unknown tier, exit 2); sandbox =
+OCI/podman only; sphere ≠ cluster; cloud (hosted providers) ≠ cluster (your
+own DKS).
 
 | tier | commands |
 |---|---|
-| `userland` | everything not listed below — the whole coreutils userland, code-intel, kb/skills, chat/meet/agent/schedule/mirror, git/gh, storage, toolchains, platform, net (default tier) |
-| `workspace` | weave, sprint, dag, loom, sdlc |
-| `sandbox` | podman, docker, act, act-runner |
-| `sphere` | sphere, ollama |
-| `cluster` | kubectl, helm |
-| `cloud` | registry CLIs with `Entry.Tier == 6` (doctl and gcloud today; aws/azure are planned, not shipped) — derived from the registry, never hand-listed here |
-| `account` | tessaro, login |
+| `userland` | everything not listed below — the whole coreutils userland, code-intel, search/mcp, git/gh, storage, toolchains (incl. `mod`: the go.work "workspace" it manages is the filesystem word), platform, net, and `foreman` (userland is the default tier) |
+| `workplace` | the orchestration and knowledge verbs, by purpose: weave, sprint, dag, loom, sdlc, chat/delegate/genie/ycode/coach, meet, todo, kb, skill/craft/define, inbox/mb/notify/handoff/resume/bus/ping, agent/model/tool/person/whois, claim, capability, stats, release/service/supervisord, plus registry CLIs with `Entry.Tier == 2` (gitea) — `bashy commands --tier workplace` is the live list |
+| `sandbox` | oci (`sandbox` visible alias; `podman`/`docker` hidden vendor spellings), act, act-runner |
+| `sphere` | peer (`sphere` hidden alias), ollama, outpost |
+| `cluster` | kubectl, helm, dks |
+| `cloud` | registry CLIs with `Entry.Tier == 6` — doctl, gcloud and tofu at the pinned yoke registry; aws/azure have no registry entry and are planned, not shipped — derived from the registry, never hand-listed here |
 
-The tier means "the tier this command operates/fronts", not "where the binary
-runs" (every binary runs in userland). `foreman` stays `userland`: it manages
-a session on this node; the workspaces it drives are weave's.
+Three separate questions (the old table conflated them): the **primary tier**
+is what the command is *for*; **cross-tier use** is where else it is useful —
+userland tools (coreutils, `git`, `go`, `python`) are used inside a workplace,
+inside a sandbox, on a sphere peer, in a cluster pod and against a cloud host,
+and a workplace verb may run from any of those; the **execution environment**
+is where one invocation actually runs (the native host, a `weave` workspace, an
+OCI container, a peer, a pod, a provider VM), chosen per run and not implied
+by the tier. Every binary runs in userland. `foreman` stays `userland`: it
+manages a session on this node; the workspaces it drives are weave's.
 
 ### 2.2a SDLC lens — the spine
 
@@ -281,7 +294,8 @@ Load-bearing classification notes:
   `bash -s` (`coreutils/pkg/dag/exec_mesh.go`) — arbitrary remote execution
   driven by a markdown file. It was previously tagged only `json`.
 - Registry CLIs derive effects from tier: a tier-4+ provider CLI (doctl) is
-  `remote`; a tier-2 local tool (ripgrep) is `exec`+`net` but **not** remote.
+  `remote`; a tier-1 local tool (ripgrep, `Entry.Tier == 1`) is `exec`+`net`
+  but **not** remote.
 
 ### 2.4 Idioms — the composite lens
 
@@ -583,7 +597,7 @@ bashy commands --view registered    # the ring alone — yours, added with `bash
 bashy commands --os windows         # platform filter (default: THIS host; `any` lifts it; `--all` implies any) — composes with every view
 bashy commands --portable           # only full-support-everywhere commands — composes with every view (`--view posix --portable`)
 bashy commands --view classic       # explicit alias for the default output
-bashy commands --tier workspace     # filter to one tier (implies tier view)
+bashy commands --tier workplace     # filter to one tier (implies tier view); `--tier workspace` is not a tier → exit 2
 bashy commands --group code-intel   # filter to one group
 bashy commands --cap json           # filter to one capability
 bashy commands --effect destroy     # filter to one security effect (cred/priv/remote/…)
@@ -613,7 +627,7 @@ bashy commands --atlas              # full per-command records (the machine surf
 
 ```json
 {"schema_version": "bashy-atlas-v1",
- "tiers": ["userland","workspace","sandbox","sphere","cluster","cloud","account"],
+ "tiers": ["userland","workplace","sandbox","sphere","cluster","cloud"],
  "groups": ["shell","fileutils","textutils","shellutils","code-intel","net",
             "orchestration","knowledge","engines","forge","toolchains",
             "storage","cluster-cloud","platform","account"],
@@ -625,7 +639,7 @@ bashy commands --atlas              # full per-command records (the machine surf
  "commands": [
    {"name":"grep","class":"coreutils","group":"textutils","tier":"userland",
     "resolver":"bashy-in-process","caps":["read-only"],"effects":["read"],"synopsis":"…"},
-   {"name":"weave","class":"verb","group":"orchestration","tier":"workspace",
+   {"name":"weave","class":"verb","group":"orchestration","tier":"workplace",
     "resolver":"bashy-front-door","caps":["json"],"synopsis":"…"},
    {"name":"docker","class":"verb","group":"engines","tier":"sandbox",
     "resolver":"bashy-front-door","alias_of":"podman","caps":["daemon","spawns-processes"]}],
@@ -680,7 +694,7 @@ below are the roadmap (not built yet):
 
 Proposals, explicitly not commitments; each stays honest about what exists.
 
-- **workspace** — promote the conductor skill's deterministic steps to verbs
+- **workplace** — promote the conductor skill's deterministic steps to verbs
   **under the existing trees** (locked decision — no new top-level
   `conduct`): `bashy weave qualify` (the fleet-interview gauntlet as one
   verb), `bashy weave gate` (build the three-clause `--verify`),
@@ -699,10 +713,10 @@ Proposals, explicitly not commitments; each stays honest about what exists.
   bundle-catalog verb is flagged needs-owner (catalog is a DKS-side concern).
 - **cloud** — the declarative registry **is** the extension mechanism: new
   providers are data (`registry.Entry`), and the atlas derives tier/group
-  automatically. doctl and gcloud are registered today; aws and azure are
-  **planned** entries (no `bashy aws` / `bashy azure` exists until the
-  registry row lands), plus optional `Caps` on `registry.Entry` if provider
-  CLIs diverge.
+  automatically. doctl, gcloud and tofu are registered today (`Entry.Tier ==
+  6` at the pinned yoke registry); aws and azure are **planned** entries (no
+  `bashy aws` / `bashy azure` exists until the registry row lands), plus
+  optional `Caps` on `registry.Entry` if provider CLIs diverge.
 
 ## 7. Measurement campaigns — proving the atlas pays for itself
 
