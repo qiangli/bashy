@@ -28,7 +28,8 @@ func runKBContext(t *testing.T, args ...string) (string, error) {
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
 	cmd.SetArgs(append([]string{"context"}, args...))
-	return stdout.String(), cmd.Execute()
+	err := cmd.Execute()
+	return stdout.String(), err
 }
 
 func kbContextFlagSet(t *testing.T) map[string]bool {
