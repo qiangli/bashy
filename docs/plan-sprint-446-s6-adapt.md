@@ -158,3 +158,16 @@ GOWORK=/tmp/s446-adapt-207.work; these establish focused workspace compilation
 and behavior, not standalone module or whole-package/crossvet acceptance.
 At the final publication check origin/main remained 1137f7a8, so the Bashy
 published yoke pin remains the outstanding manager-dependent integration step.
+
+### Repeat-request audit (2026-10-18)
+
+Recovered the same clean commits without replaying implementation or creating a
+story. Remote checks still show yoke main 1137f7a8 and Bashy main e46f80a0.
+Reported pin candidate 78ef7f24 and full candidate 68c9aaf8 to s446-manager again;
+publication remains pending. Both focused Dragon gates were rerun and their
+`bashy-gate-v2` verdicts inspected: `/tmp/s446-s6-recovery-yoke.json` passed
+(50.739s, adapt/fleet), and `/tmp/s446-s6-recovery-bashy.json` passed (56.503s,
+skills/AgentOS). These use the same private workspace and do not establish a
+standalone-module, whole-package or crossvet verdict. No dependency pin, branch,
+published history or implementation was changed in this audit. `bashy kb retro`
+completed; no new durable knowledge required a duplicate KB entry.
