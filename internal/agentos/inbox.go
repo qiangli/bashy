@@ -63,6 +63,9 @@ type unifiedInboxOrigin struct {
 
 type inboxBatch struct {
 	events []unifiedInboxEvent
+	// hintIncomplete means the bounded per-command MB probe may have older
+	// unread records. Explicit inbox reads never set this flag.
+	hintIncomplete bool
 	// before provenance collapse, for exact turn acknowledgements of seeded
 	// Meet copies that share one rendered MB record.
 	rawEvents []unifiedInboxEvent
@@ -781,6 +784,10 @@ func memoizeHostRoles() func() {
 // the per-command unread hint reads local stores only, so an ordinary command
 // never waits on the network or files relay mail as a side effect.
 func snapshotInbox(reader string, limit int, includeBus, deliver bool) (inboxBatch, error) {
+	return snapshotInboxWithHint(reader, limit, includeBus, deliver, false)
+}
+
+func snapshotInboxWithHint(reader string, limit int, includeBus, deliver, hint bool) (inboxBatch, error) {
 	restoreRoles := memoizeHostRoles()
 	defer restoreRoles()
 	var batch inboxBatch
@@ -873,7 +880,14 @@ func snapshotInbox(reader string, limit int, includeBus, deliver bool) (inboxBat
 
 	// Message board, including steward/conductor messages now addressed to the
 	// stable role rather than copied into a role-specific store.
-	directed, other, _, err := bus.Unseen(reader, 0)
+	var directed, other []bus.Post
+	var incomplete bool
+	if hint {
+		directed, other, incomplete, err = bus.HintUnseen(reader)
+		batch.hintIncomplete = incomplete
+	} else {
+		directed, other, _, err = bus.Unseen(reader, 0)
+	}
 	if err != nil {
 		return batch, fmt.Errorf("message board: %w", err)
 	}

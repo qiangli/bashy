@@ -141,15 +141,16 @@ var unreadHintSkipVerbs = map[string]bool{
 // unreadSummary is the attributable shape behind one hint: how many, from
 // which sources, from whom — never bodies.
 type unreadSummary struct {
-	count    int
-	bySource []string // "mb:2", "meet/room:1", ... in first-seen order
-	senders  []string // distinct non-empty From, capped, in first-seen order
+	count      int
+	incomplete bool
+	bySource   []string // "mb:2", "meet/room:1", ... in first-seen order
+	senders    []string // distinct non-empty From, capped, in first-seen order
 }
 
 // summarizeUnreadHint reduces a read-only snapshot to its attributable shape.
 // Empty batches (no unread) report ok=false: silence, not "no mail".
 func summarizeUnreadHint(batch inboxBatch) (unreadSummary, bool) {
-	var s unreadSummary
+	s := unreadSummary{incomplete: batch.hintIncomplete}
 	counts := map[string]int{}
 	var order []string
 	seenSender := map[string]bool{}
@@ -174,7 +175,7 @@ func summarizeUnreadHint(batch inboxBatch) (unreadSummary, bool) {
 			}
 		}
 	}
-	if s.count == 0 {
+	if s.count == 0 && !s.incomplete {
 		return unreadSummary{}, false
 	}
 	for _, src := range order {
@@ -187,7 +188,14 @@ func summarizeUnreadHint(batch inboxBatch) (unreadSummary, bool) {
 // source attribution, sender attribution, and the one reader to run.
 func formatUnreadHint(s unreadSummary) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "you have %d unread (%s)", s.count, strings.Join(s.bySource, ", "))
+	if s.incomplete && s.count == 0 {
+		return "you may have unread mail — run `bashy inbox`"
+	}
+	if s.incomplete {
+		fmt.Fprintf(&b, "you have at least %d unread (%s)", s.count, strings.Join(s.bySource, ", "))
+	} else {
+		fmt.Fprintf(&b, "you have %d unread (%s)", s.count, strings.Join(s.bySource, ", "))
+	}
 	if len(s.senders) > 0 {
 		fmt.Fprintf(&b, " from %s", strings.Join(s.senders, ", "))
 	}
@@ -205,7 +213,7 @@ func liveUnreadSnapshot(reader string) (inboxBatch, error) {
 // localUnreadSnapshot is liveUnreadSnapshot without the relay delivery pass:
 // the per-command hint runs on every verb and must never wait on the network.
 func localUnreadSnapshot(reader string) (inboxBatch, error) {
-	return snapshotInbox(reader, 0, false, false)
+	return snapshotInboxWithHint(reader, 0, false, false, true)
 }
 
 // checkUnreadArrivals is the arrival-scoped gate. fp is the store fingerprint

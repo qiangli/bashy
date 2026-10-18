@@ -8,6 +8,7 @@
 package agentos
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -70,6 +71,56 @@ func TestSummarizeUnreadHintAttribution(t *testing.T) {
 	}
 	if _, ok := summarizeUnreadHint(inboxBatch{}); ok {
 		t.Error("empty batch must report silence, not a hint")
+	}
+}
+
+func TestLocalUnreadHintOldCursorStaysBounded(t *testing.T) {
+	isolateUnifiedInbox(t)
+	reader := inboxTestReader
+	if err := os.MkdirAll(bus.BoardDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(filepath.Join(bus.BoardDir(), "posts.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := bufio.NewWriter(f)
+	enc := json.NewEncoder(w)
+	for i := int64(1); i <= 12000; i++ {
+		if err := enc.Encode(bus.Post{Seq: i, From: "other", To: "someone-else", Body: strings.Repeat("x", 2048)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := enc.Encode(bus.Post{Seq: 12001, From: "manager", To: reader, Body: "new mail"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := bus.MarkSeen(reader, 1000); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	batch, err := localUnreadSnapshot(reader)
+	elapsed := time.Since(start)
+	t.Logf("local unread hint, old cursor + one new arrival after 12000 posts: %s", elapsed)
+	if err != nil || len(batch.events) != 1 || batch.events[0].Seq != 12001 || !batch.hintIncomplete {
+		t.Fatalf("batch=%+v, err=%v", batch, err)
+	}
+	if elapsed > 60*time.Millisecond {
+		t.Fatalf("local hint took %s; want at most 60ms", elapsed)
+	}
+	if bus.SeenSeq(reader) != 1000 {
+		t.Fatal("hint consumed mail")
+	}
+	if sum, ok := summarizeUnreadHint(batch); !ok || !strings.Contains(formatUnreadHint(sum), "at least 1 unread") {
+		t.Fatalf("incomplete hint rendered as exact: %+v, ok=%v", sum, ok)
+	}
+	if sum, ok := summarizeUnreadHint(inboxBatch{hintIncomplete: true}); !ok || formatUnreadHint(sum) != "you may have unread mail — run `bashy inbox`" {
+		t.Fatalf("incomplete empty tail suppressed mail: %+v, ok=%v", sum, ok)
 	}
 }
 
