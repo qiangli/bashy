@@ -763,6 +763,12 @@ func dispatchInstallAgentMCP(name string, project, dryRun, uninstall, check, pro
 		fmt.Fprintf(os.Stderr, "install-agent: no MCP config writer for %q\n", name)
 		return 1
 	}
+	if !uninstall {
+		if _, err := installAgentPrefsProjection(); err != nil {
+			fmt.Fprintf(os.Stderr, "install-agent: %s: %v\n", name, err)
+			return 1
+		}
+	}
 	if dryRun {
 		fmt.Print(w.entry(project))
 		return 0
@@ -795,7 +801,11 @@ func claudeMCPWriter() mcpWriter {
 		if project {
 			args = append(args, "-s", "project")
 		}
-		return append(args, mcpServerName, "--", "bashy", "mcp", "serve")
+		args = append(args, mcpServerName)
+		if prefs, _ := installAgentPrefsProjection(); prefs != "" {
+			args = append(args, "-e", fleet.EnvBashyPrefs+"="+prefs)
+		}
+		return append(args, "--", "bashy", "mcp", "serve")
 	}
 	removeArgv := func(project bool) []string {
 		args := []string{"mcp", "remove"}
@@ -841,6 +851,18 @@ func claudeMCPWriter() mcpWriter {
 // CODEX_HOME): appended verbatim so the file stays in a shape codex reads.
 const codexMCPServerEntry = "[mcp_servers.bashy]\ncommand = \"bashy\"\nargs = [\"mcp\", \"serve\"]\n"
 
+// codexMCPEntry appends the projected BASHY_PREFS as an inline env table in
+// the same section (so uninstall's section scan removes it too); with no
+// prefs it is byte-identical to codexMCPServerEntry.
+func codexMCPEntry() string {
+	prefs, _ := installAgentPrefsProjection()
+	if prefs == "" {
+		return codexMCPServerEntry
+	}
+	q, _ := json.Marshal(prefs)
+	return codexMCPServerEntry + "env = { " + fleet.EnvBashyPrefs + " = " + string(q) + " }\n"
+}
+
 func codexMCPConfigPath() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".codex", "config.toml")
@@ -884,7 +906,7 @@ func writeFileAtomic(path string, data []byte) error {
 
 func codexMCPWriter() mcpWriter {
 	return mcpWriter{
-		entry: func(_ bool) string { return codexMCPServerEntry },
+		entry: func(_ bool) string { return codexMCPEntry() },
 		install: func(_ bool) (string, error) {
 			path := codexMCPConfigPath()
 			data, err := os.ReadFile(path)
@@ -896,9 +918,9 @@ func codexMCPWriter() mcpWriter {
 			}
 			var out string
 			if strings.TrimSpace(string(data)) == "" {
-				out = codexMCPServerEntry
+				out = codexMCPEntry()
 			} else {
-				out = strings.TrimRight(string(data), "\n") + "\n\n" + codexMCPServerEntry
+				out = strings.TrimRight(string(data), "\n") + "\n\n" + codexMCPEntry()
 			}
 			if err := writeFileAtomic(path, []byte(out)); err != nil {
 				return "", err
@@ -955,14 +977,17 @@ func codexMCPWriter() mcpWriter {
 // opencodeMCPEntry renders the JSON fragment install merges under the "mcp"
 // key (shape verified against the opencode config schema's McpLocalConfig:
 // type/command required, command an argv array).
+func opencodeMCPServer() map[string]any {
+	srv := map[string]any{"type": "local", "command": []string{"bashy", "mcp", "serve"}}
+	if prefs, _ := installAgentPrefsProjection(); prefs != "" {
+		srv["environment"] = map[string]string{fleet.EnvBashyPrefs: prefs}
+	}
+	return srv
+}
+
 func opencodeMCPEntry() string {
 	out, _ := json.MarshalIndent(map[string]any{
-		"mcp": map[string]any{
-			"bashy": map[string]any{
-				"type":    "local",
-				"command": []string{"bashy", "mcp", "serve"},
-			},
-		},
+		"mcp": map[string]any{"bashy": opencodeMCPServer()},
 	}, "", "  ")
 	return string(out) + "\n"
 }
@@ -977,7 +1002,7 @@ func opencodeMCPWriter() mcpWriter {
 				if servers == nil {
 					servers = map[string]any{}
 				}
-				servers["bashy"] = map[string]any{"type": "local", "command": []string{"bashy", "mcp", "serve"}}
+				servers["bashy"] = opencodeMCPServer()
 				m["mcp"] = servers
 			})
 			if err != nil {
