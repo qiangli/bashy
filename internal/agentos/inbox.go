@@ -634,6 +634,12 @@ func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader 
 			lastBeat = now
 		}
 		read, changed, sum, sampled := gate.due(now)
+		// A bounded wait must not report EMPTY on the strength of a notifier alone:
+		// a native event can be lost, and the periodic rescan is far longer than
+		// the bound. Read once more at the deadline before giving up.
+		if !deadline.IsZero() && !now.Before(deadline) {
+			read = true
+		}
 		if changed {
 			// Traffic just landed: stay responsive for whatever follows it.
 			interval = poll.min

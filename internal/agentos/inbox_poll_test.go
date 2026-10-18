@@ -115,6 +115,42 @@ func TestInboxWatchDeliversChangeWithinBackoffCeiling(t *testing.T) {
 	}
 }
 
+func TestInboxBoundedWaitReadsQueuedReplyAtDeadlineWhenNotifierUnchanged(t *testing.T) {
+	now := time.Unix(400, 0)
+	stored := false // reply is durable but the notifier never reports it (lost event)
+	reads := 0
+	var out, errOut bytes.Buffer
+	runtime := inboxPollRuntime{
+		min: 10 * time.Millisecond, max: 40 * time.Millisecond, fullRescan: time.Hour,
+		now: func() time.Time { return now },
+		wait: func(_ context.Context, d time.Duration) error {
+			stored = true
+			now = now.Add(d)
+			return nil
+		},
+		snapshot: func(string, int, bool) (inboxBatch, error) {
+			reads++
+			if !stored {
+				return inboxBatch{}, nil
+			}
+			return inboxBatch{events: []unifiedInboxEvent{{Schema: unifiedInboxSchema, Source: "meet", Seq: 1, Body: "queued reply"}}}, nil
+		},
+		fingerprint: func(string) (uint64, bool) { return 1, true },
+	}
+	if err := runUnifiedInboxWithPoll(context.Background(), &out, &errOut, "alice", 0, false, false, false, 100*time.Millisecond, runtime); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "queued reply") {
+		t.Fatalf("bounded wait stdout=%q stderr=%q, want queued reply delivered at the bound", out.String(), errOut.String())
+	}
+	if strings.Contains(errOut.String(), "EMPTY") {
+		t.Fatalf("bounded wait reported EMPTY with a stored reply: %q", errOut.String())
+	}
+	if reads != 2 {
+		t.Fatalf("full reads = %d, want initial read plus one deadline read", reads)
+	}
+}
+
 func TestInboxPollGateSeesEventThatLandsDuringRead(t *testing.T) {
 	var sum uint64 = 1
 	gate := inboxPollGate{
