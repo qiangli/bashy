@@ -922,7 +922,7 @@ ps	--depth	unsupported
 ps	--dry-run	unsupported
 ps	--explain	supported
 ps	--fields	unsupported
-ps	--json	unsupported
+ps	--json	supported
 ps	--no-input	supported
 ps	--null	unsupported
 ps	--since	unsupported
