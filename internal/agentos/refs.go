@@ -4,12 +4,14 @@ import (
 	"sync"
 
 	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/chat"
 	"github.com/qiangli/yoke/pkg/execlog"
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/kb"
 	"github.com/qiangli/yoke/pkg/lexicon"
 	"github.com/qiangli/yoke/pkg/meet"
 	"github.com/qiangli/yoke/pkg/principal"
+	"github.com/qiangli/yoke/pkg/reduce"
 	"github.com/qiangli/yoke/pkg/ref"
 	"github.com/qiangli/yoke/pkg/todo"
 	"github.com/qiangli/yoke/pkg/weave"
@@ -48,6 +50,10 @@ func wireRefResolvers() {
 		fleet.RegisterRefs(g)       // agent tool model skill host
 		principal.RegisterRefs(g)   // person role
 		execlog.RegisterRefs(g, "") // episode
+		chat.RegisterRefs(g, "")    // chat
+		if store, err := shellOutputStore(); err == nil {
+			reduce.RegisterRefs(g, store) // out
+		}
 	})
 }
 
