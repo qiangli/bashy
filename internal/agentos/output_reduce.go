@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/qiangli/yoke/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/reduce"
 	"github.com/qiangli/yoke/pkg/secrets"
 	"golang.org/x/term"
@@ -150,6 +151,7 @@ type shellOutputReducer struct {
 	redactor *secrets.Redactor
 	home     string
 	stage1   bool
+	budget   int
 	outDst   io.Writer
 	errDst   io.Writer
 
@@ -197,15 +199,43 @@ func newShellOutputReducer(out, errOut io.Writer, env []string) (*shellOutputRed
 	if err != nil {
 		return nil, err
 	}
+	budget, err := readerBudgetForEnv(env)
+	if err != nil {
+		return nil, err
+	}
 	home := displayHome(outputEnv(env, "HOME"), runtime.GOOS)
 	if outputParentIsBashy {
 		home = "" // data for the parent bashy's program, not for a model
 	}
 	return &shellOutputReducer{
 		store: store, redactor: shellOutputRedactor(env),
-		home: home, stage1: outputReductionEnabled(env),
+		home: home, stage1: outputReductionEnabled(env), budget: budget,
 		outDst: out, errDst: errOut,
 	}, nil
+}
+
+// readerBudgetForEnv resolves the Stage 1 byte ceiling from the launcher's
+// BASHY_PREFS JSON (yoke/pkg/fleet.ReaderPrefs). Empty means unset and
+// selects the reducer default; zero and negative budgets do the same.
+// Malformed JSON fails closed here so a bad prefs projection can never
+// silently reshape a view: the caller drops reduction entirely.
+func readerBudgetForEnv(env []string) (int, error) {
+	raw := strings.TrimSpace(outputEnv(env, fleet.EnvBashyPrefs))
+	if raw == "" {
+		return 0, nil
+	}
+	prefs, err := fleet.ParseReaderPrefsJSON(raw)
+	if err != nil {
+		return 0, fmt.Errorf("out: %w", err)
+	}
+	if prefs.BudgetBytes <= 0 {
+		return 0, nil
+	}
+	// int is 64-bit on every platform this shell ships for, so the
+	// conversion below cannot narrow. A wrapped value could only arise on a
+	// 32-bit port, where reduce maps non-positive budgets back to its default
+	// and a small positive one stays a safe, fail-closed ceiling.
+	return int(prefs.BudgetBytes), nil
 }
 
 // outputParentEnv carries the pid of the bashy that started a process.
@@ -449,7 +479,15 @@ func (r *shellOutputReducer) emit(dst io.Writer, argv []string, full []byte, ver
 		return err
 	}
 
-	res, err := reduce.Reduce(r.store, body, reduce.Config{TelemetryHintsOnly: telemetryOnly})
+	cfg := reduce.Config{TelemetryHintsOnly: telemetryOnly}
+	if !telemetryOnly {
+		// The Stage 1 elision path, reached only when reduction is enabled
+		// and no full/cert escape stood down. Telemetry-only, failure, and
+		// verdict paths keep the default ceiling so a reader budget can
+		// never compress evidence or the closed hint deduper.
+		cfg.BudgetBytes = r.budget
+	}
+	res, err := reduce.Reduce(r.store, body, cfg)
 	if err != nil {
 		_, writeErr := dst.Write(body)
 		if writeErr != nil {

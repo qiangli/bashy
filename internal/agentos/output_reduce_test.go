@@ -45,6 +45,9 @@ func isolateOutputReduction(t *testing.T) {
 	t.Setenv("BASHY_EXECHIST", "off")
 	t.Setenv("BASHY_OUTPUT_REDUCE", "")
 	t.Setenv("VSC_PROFILE", "")
+	// Reader budgets come from the launcher's BASHY_PREFS projection; an
+	// ambient value would reshape every expectation below.
+	t.Setenv("BASHY_PREFS", "")
 }
 
 func TestOutputReductionActivationPrecedence(t *testing.T) {
