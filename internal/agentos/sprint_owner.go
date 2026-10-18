@@ -2,6 +2,7 @@ package agentos
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -26,6 +27,14 @@ var (
 	sendSprintOwnerTell    = func(id, brief string) (foreman.Ack, error) { return foreman.Tell("", id, brief) }
 	stopSprintOwnerForeman = func(id string) error {
 		_, err := foreman.SendCommand("", id, foreman.Command{Verb: foreman.CommandStop})
+		// A manager that accepts but never answers cannot be stopped over its own
+		// socket (Sprint 457); end it only if foreman proves the process is its own.
+		if ne, ok := errors.AsType[net.Error](err); ok && ne.Timeout() {
+			if terr := foreman.Terminate("", id, "control socket unresponsive"); terr != nil {
+				return fmt.Errorf("%w; %w", err, terr)
+			}
+			return nil
+		}
 		return err
 	}
 	runSprintOwnerCommand = func(ctx context.Context, path string, args []string, dir string, env []string) ([]byte, error) {
