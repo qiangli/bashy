@@ -3,6 +3,7 @@ package agentos
 import (
 	"sync"
 
+	lenscmd "github.com/qiangli/yoke/cmds/lens"
 	"github.com/qiangli/yoke/pkg/bus"
 	"github.com/qiangli/yoke/pkg/chat"
 	"github.com/qiangli/yoke/pkg/execlog"
@@ -54,6 +55,10 @@ func wireRefResolvers() {
 		if store, err := shellOutputStore(); err == nil {
 			reduce.RegisterRefs(g, store) // out
 		}
+		// lens's agent-world providers (sprint, run, agent, mb, meet, bus,
+		// kb, host) read this same registry, so an unwired kind stays
+		// ErrNoResolver and a wired kind's miss stays ErrNotFound.
+		lenscmd.AgentWorldRefs = g
 	})
 }
 
