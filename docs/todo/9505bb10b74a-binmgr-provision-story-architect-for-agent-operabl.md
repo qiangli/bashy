@@ -6,7 +6,6 @@ seq: 351
 status: todo
 priority: p2
 created: 2026-09-30T07:29:25.018426Z
-weave: 235
 sprint: 468
 sprint_id: f49fe122-2ad4-502a-a597-b16faf478de3
 sprint_title: Licensing- and artifact-blocked tools
