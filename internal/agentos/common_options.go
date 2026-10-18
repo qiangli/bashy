@@ -1,10 +1,7 @@
 package agentos
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -99,8 +96,7 @@ func setCobraArgs(cmd *cobra.Command, args []string) {
 }
 
 type commonOpts struct {
-	explain, json bool
-	fields        string
+	explain bool
 }
 
 func ownFlag(c *cobra.Command, name string) bool {
@@ -117,7 +113,7 @@ func applyCommonOptions(root *cobra.Command, args []string) ([]string, error) {
 	}
 	path := target.CommandPath()
 	var o commonOpts
-	hasFields, noInput := false, false
+	noInput := false
 	nullFlag := ""
 	out := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
@@ -158,17 +154,7 @@ func applyCommonOptions(root *cobra.Command, args []string) ([]string, error) {
 		case "json":
 			return nil, fmt.Errorf("--json unsupported for %s", path)
 		case "fields":
-			if !hasVal {
-				if i+1 >= len(args) {
-					return nil, fmt.Errorf("--fields requires a value")
-				}
-				i++
-				val = args[i]
-			}
-			if strings.TrimSpace(strings.ReplaceAll(val, ",", "")) == "" {
-				return nil, fmt.Errorf("--fields requires at least one field name")
-			}
-			o.fields, hasFields = val, true
+			return nil, fmt.Errorf("--fields unsupported for %s (no native --fields or declared lens parser)", path)
 		case "null":
 			for _, n := range []string{"zero", "print0"} {
 				if target.Flags().Lookup(n) != nil {
@@ -181,26 +167,6 @@ func applyCommonOptions(root *cobra.Command, args []string) ([]string, error) {
 			}
 			out = append(out, "--"+nullFlag)
 		}
-	}
-	if hasFields {
-		if !ownFlag(target, "json") {
-			return nil, fmt.Errorf("--fields unsupported for %s (no native --json)", path)
-		}
-		o.json = true
-		out = withJSONFlag(out)
-		wrapRun(target, func(inner func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
-			return func(c *cobra.Command, a []string) error {
-				real := c.OutOrStdout()
-				var buf bytes.Buffer
-				c.SetOut(&buf)
-				runErr := inner(c, a)
-				c.SetOut(real)
-				if err := writeProjected(real, buf.Bytes(), strings.Split(o.fields, ",")); err != nil {
-					return err
-				}
-				return runErr
-			}
-		})
 	}
 	if noInput {
 		wrapRun(target, func(inner func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
@@ -215,23 +181,6 @@ func applyCommonOptions(root *cobra.Command, args []string) ([]string, error) {
 		explainOnly(target)
 	}
 	return out, nil
-}
-
-// withJSONFlag makes --fields imply --json unless the caller already gave it.
-func withJSONFlag(args []string) []string {
-	end := len(args)
-	for i, a := range args {
-		if a == "--" {
-			end = i
-			break
-		}
-		if n, _, _ := strings.Cut(strings.TrimPrefix(a, "--"), "="); strings.HasPrefix(a, "--") && string(normalizeFlagName(nil, n)) == "json" {
-			return args
-		}
-	}
-	res := append([]string{}, args[:end]...)
-	res = append(res, "--json")
-	return append(res, args[end:]...)
 }
 
 func wrapRun(c *cobra.Command, wrap func(func(*cobra.Command, []string) error) func(*cobra.Command, []string) error) {
@@ -272,59 +221,4 @@ func explainOnly(c *cobra.Command) {
 		c.Run = nil
 		c.RunE = body
 	}
-}
-
-func writeProjected(w io.Writer, raw []byte, fields []string) error {
-	trimmed := bytes.TrimSpace(raw)
-	var v any
-	if json.Unmarshal(trimmed, &v) == nil {
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
-		return enc.Encode(projectJSON(v, fields))
-	}
-	var lines []any
-	for _, ln := range bytes.Split(trimmed, []byte("\n")) {
-		if len(bytes.TrimSpace(ln)) == 0 {
-			continue
-		}
-		var rec any
-		if json.Unmarshal(ln, &rec) != nil {
-			_, err := w.Write(raw)
-			return err
-		}
-		lines = append(lines, projectJSON(rec, fields))
-	}
-	enc := json.NewEncoder(w)
-	for _, l := range lines {
-		if err := enc.Encode(l); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func projectJSON(v any, fields []string) any {
-	switch t := v.(type) {
-	case []any:
-		res := make([]any, len(t))
-		for i, e := range t {
-			res[i] = projectJSON(e, fields)
-		}
-		return res
-	case map[string]any:
-		if items, ok := t["items"].([]any); ok {
-			t["items"] = projectJSON(items, fields)
-			return t
-		}
-		res := map[string]any{}
-		for _, f := range fields {
-			if f = strings.TrimSpace(f); f != "" {
-				if val, ok := t[f]; ok {
-					res[f] = val
-				}
-			}
-		}
-		return res
-	}
-	return v
 }

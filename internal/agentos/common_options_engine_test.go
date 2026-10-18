@@ -87,13 +87,33 @@ func TestOwnFlagWins(t *testing.T) {
 	}
 }
 
-func TestFieldsProjects(t *testing.T) {
+func TestUnsupportedFieldsNeverRunsBody(t *testing.T) {
+	// sub has a native --json but no --fields: engine projection is refused.
 	out, ran, err := run(t, "sub", "--json", "--fields", "a")
-	if err != nil || !ran {
-		t.Fatalf("ran=%v err=%v", ran, err)
+	if err == nil || ran || out != "" {
+		t.Fatalf("ran=%v out=%q err=%v", ran, out, err)
 	}
-	if strings.Contains(out, `"b"`) || !strings.Contains(out, `"a": 1`) {
-		t.Fatalf("bad projection: %q", out)
+	if !strings.Contains(err.Error(), "--fields unsupported for root sub") {
+		t.Fatalf("unclear reason: %v", err)
+	}
+}
+
+func TestOwnFieldsFlagTakesPrecedence(t *testing.T) {
+	var got string
+	root := &cobra.Command{Use: "root"}
+	sub := &cobra.Command{Use: "sub", RunE: func(c *cobra.Command, _ []string) error {
+		got, _ = c.Flags().GetString("fields")
+		return nil
+	}}
+	sub.Flags().String("fields", "", "own fields")
+	root.AddCommand(sub)
+	out, err := applyCommonOptions(root, []string{"sub", "--fields", "x,y"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.SetArgs(out)
+	if err := root.Execute(); err != nil || got != "x,y" {
+		t.Fatalf("own --fields not honored: got=%q err=%v", got, err)
 	}
 }
 
@@ -144,16 +164,6 @@ func TestNoInputIsCommandScoped(t *testing.T) {
 	}
 	if noInputRequested() || os.Getenv(noInputEnv) != "" {
 		t.Fatal("no-input leaked past the command")
-	}
-}
-
-func TestFieldsImpliesJSON(t *testing.T) {
-	out, err := applyCommonOptions(testTree(new(bool)), []string{"sub", "--fields", "a", "x"})
-	if err != nil || strings.Join(out, " ") != "sub x --json" {
-		t.Fatalf("out=%v err=%v", out, err)
-	}
-	if _, err := applyCommonOptions(testTree(new(bool)), []string{"sub", "--fields="}); err == nil {
-		t.Fatal("empty --fields must be rejected")
 	}
 }
 
