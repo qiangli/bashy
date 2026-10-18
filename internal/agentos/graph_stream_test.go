@@ -113,6 +113,14 @@ var graphStreamFixtures = map[string]struct {
 		edges:     []string{"claim:name!/vsc-arm held-by person:qiangli", "claim:repo!/yoke held-by agent:s457w2-manager"},
 		forbidden: []string{"heartbeat"},
 	},
+	"claim show": {
+		doc: `{"schema_version":"bashy-claim-v2","kind":"repo","project":"yoke","epoch":7,"rev":30,
+		  "holder":{"kind":"agent","name":"s457w2-manager"},"heartbeat":"2026-10-18T10:49:31Z","pid":1}`,
+		source:    "claim:repo!/yoke",
+		nodes:     []string{"claim:repo!/yoke"},
+		edges:     []string{"claim:repo!/yoke held-by agent:s457w2-manager"},
+		forbidden: []string{"heartbeat"},
+	},
 	"mb": {
 		doc: `{"schema_version":"bashy-mb-v1","seq":2,"at":"2026-08-03T16:48:00Z","from":"qiangli","topic":"announce","body":"wall post"}
 {"schema_version":"bashy-mb-v1","seq":1,"at":"2026-08-03T16:47:52Z","from":"qiangli","to":"codex-gpt5.6-sol","topic":"mb","body":"check the disk\nbefore your next build"}

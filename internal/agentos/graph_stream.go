@@ -50,6 +50,7 @@ var graphProjections = map[string]graphProjection{
 	"agent list":   projectAgentList,
 	"agent show":   projectAgentShow,
 	"claim list":   projectClaimList,
+	"claim show":   projectClaimShow,
 	"mb":           projectMBPosts,
 	"mb show":      projectMBPosts,
 	"meet show":    projectMeetShow,
@@ -469,26 +470,44 @@ func projectClaimList(raw []byte) (*stream.Graph, error) {
 	}
 	b := newGraphBuilder(ref.Locator{Scheme: "claim", Target: "*"}.String())
 	for _, c := range objs(v) {
-		kind, key := str(c, "kind"), firstNonEmpty(str(c, "resource"), str(c, "project"))
-		if kind == "" || key == "" {
-			continue
-		}
-		r := ref.Locator{Scheme: "claim", Target: kind, Inner: []string{key}}.String()
-		attrs := pick(c, "kind", "project", "resource", "mode", "intent", "epoch", "rev", "acquired_at", "members")
-		holder, _ := c["holder"].(jsonObj)
-		if h := str(holder, "name"); h != "" {
-			attrs["holder"] = h
-		}
-		b.node(r, key, "claim", kind, attrs)
-		hk := ref.Kind(str(holder, "kind"))
-		if !ref.Known(hk) {
-			hk = ref.Agent
-		}
-		if h := str(holder, "name"); h != "" {
-			b.edge(r, "held-by", ref.Format(hk, h), nil)
-		}
+		appendClaimNode(b, c)
 	}
 	return b.graph()
+}
+
+func projectClaimShow(raw []byte) (*stream.Graph, error) {
+	c, err := decodeObj(raw)
+	if err != nil {
+		return nil, err
+	}
+	kind, key := str(c, "kind"), firstNonEmpty(str(c, "resource"), str(c, "project"))
+	if kind == "" || key == "" {
+		return nil, errNotProjectable
+	}
+	b := newGraphBuilder(ref.Locator{Scheme: "claim", Target: kind, Inner: []string{key}}.String())
+	appendClaimNode(b, c)
+	return b.graph()
+}
+
+func appendClaimNode(b *graphBuilder, c jsonObj) {
+	kind, key := str(c, "kind"), firstNonEmpty(str(c, "resource"), str(c, "project"))
+	if kind == "" || key == "" {
+		return
+	}
+	r := ref.Locator{Scheme: "claim", Target: kind, Inner: []string{key}}.String()
+	attrs := pick(c, "kind", "project", "resource", "mode", "intent", "epoch", "rev", "acquired_at", "members")
+	holder, _ := c["holder"].(jsonObj)
+	if h := str(holder, "name"); h != "" {
+		attrs["holder"] = h
+	}
+	b.node(r, key, "claim", kind, attrs)
+	hk := ref.Kind(str(holder, "kind"))
+	if !ref.Known(hk) {
+		hk = ref.Agent
+	}
+	if h := str(holder, "name"); h != "" {
+		b.edge(r, "held-by", ref.Format(hk, h), nil)
+	}
 }
 
 // projectMBPosts covers `mb --json` (one post per line, or the typed empty
