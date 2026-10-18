@@ -3,9 +3,11 @@ id: 9505bb10b74a
 kind: feature
 title: Binmgr-provision Story Architect for agent-operable screenwriting
 seq: 351
-status: todo
+status: assigned
 priority: p2
 created: 2026-09-30T07:29:25.018426Z
+weave: 235
+assignee: codex-gpt6-sol
 sprint: 382
 sprint_id: 52e1124d-d9d2-5528-bbfa-80f6b8538c1d
 sprint_title: Agent-operable open-source creative tools through binmgr and registered commands
