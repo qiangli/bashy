@@ -35,6 +35,9 @@ func TestScriptRecipeProjectsTriggerRows(t *testing.T) {
 		t.Fatalf("got %d tasks for %d rows", len(tasks), len(TriggerRows()))
 	}
 	for _, task := range tasks {
+		if strings.HasPrefix(task.command, "bashy rm ") && !strings.Contains(task.command, " --no-input ") {
+			t.Errorf("prompt-capable recipe %q omits --no-input", task.name)
+		}
 		if got := strings.Count(bash, "\n    "+task.command+"\n"); got != 1 {
 			t.Errorf("Bash command %q occurs %d times", task.command, got)
 		}
