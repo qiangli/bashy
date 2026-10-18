@@ -56,7 +56,7 @@ Available Commands:
   reverify     Refresh an issue's git and verify attestation from its workspace
   review       Re-verify submitted work in a fresh clean-room checkout
   salvage      Review and merge the committed work of a killed/failed item (via pull's gate)
-  say          Inject a line into a running subagent's terminal
+  say          Save steering for a run and deliver it to its live terminal
   sealed-image Build Linux agent images for sealed booths
   shell        Drop into a shell inside the issue's workspace
   split        Break an oversized issue into children, keeping the link to the parent
