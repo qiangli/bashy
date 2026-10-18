@@ -589,7 +589,7 @@ lens	--fields	unsupported
 lens	--json	supported
 lens	--no-input	supported
 lens	--null	supported
-lens	--since	unsupported
+lens	--since	supported
 link	--depth	unsupported
 link	--dry-run	unsupported
 link	--explain	supported
