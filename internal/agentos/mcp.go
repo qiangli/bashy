@@ -19,6 +19,7 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/qiangli/bashy/internal/cli"
 	"github.com/qiangli/coreutils/tool"
+	dbcmd "github.com/qiangli/yoke/cmds/db"
 	yokemcp "github.com/qiangli/yoke/mcp"
 	"github.com/qiangli/yoke/pkg/atlas"
 	"github.com/qiangli/yoke/pkg/policy/audit"
@@ -259,6 +260,10 @@ func mcpOptions(allow, profile string) (yokemcp.Options, error) {
 		}
 	}
 	if profile != "default" {
+		exposeDB := profile == "all" || slices.Contains(opts.Tools, "db_lifecycle") || slices.Contains(opts.Tools, "db")
+		// Direct registered tools are selected through Registered, not the
+		// core command list passed to Yoke's registry lookup.
+		opts.Tools = slices.DeleteFunc(opts.Tools, func(name string) bool { return name == "db_lifecycle" })
 		verbs := mcpVerbCommands()
 		var selected []yokemcp.RegisteredCommand
 		for _, verb := range verbs {
@@ -277,6 +282,13 @@ func mcpOptions(allow, profile string) (yokemcp.Options, error) {
 			}
 			return out
 		}
+		if !exposeDB {
+			return opts, nil
+		}
+	}
+	registered := opts.Registered
+	opts.Registered = func() []yokemcp.RegisteredCommand {
+		return append(registered(), dbcmd.MCPCommand())
 	}
 	return opts, nil
 }
