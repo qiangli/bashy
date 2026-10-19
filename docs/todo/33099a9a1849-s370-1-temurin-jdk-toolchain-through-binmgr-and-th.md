@@ -3,15 +3,17 @@ id: 33099a9a1849
 kind: feature
 title: S370.1 Temurin JDK toolchain through binmgr and the bashy java/javac/jar front doors
 seq: 387
-status: todo
+status: wontfix
 priority: p1
 labels:
     - toolchains
     - licensing
 created: 2026-10-01T17:31:45.833161Z
+assignee: s370-manager
 sprint: 370
 sprint_id: d64d3ab6-4bbb-5bca-8a47-3d7e5dbf9bc6
 sprint_title: Java as an optional registered runner fence (no built-in JDK)
+closed: 2026-10-19T07:18:41.130009Z
 ---
 
 Goal
@@ -28,3 +30,5 @@ Implementation contract
 Acceptance
 - A host with no Java runs java -version and compiles+runs a hello program through bashy javac / bashy java from one verified cached JDK on Windows, Linux and macOS.
 - The inventory row exists with per-platform license evidence; the release SBOM is unchanged.
+
+CLOSED WONTFIX 2026-10-18 (operator): Java is not part of the bashy release (OpenJDK GPL-2.0-only WITH Classpath-exception-2.0). Java in Bash# is a custom runner fence: examples/runners/java-runner.sh + java.bsh (Sprint 384 story #2388). Decision record: docs/java-custom-fence-decision.md.

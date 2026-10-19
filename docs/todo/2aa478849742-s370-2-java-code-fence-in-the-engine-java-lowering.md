@@ -3,7 +3,7 @@ id: 2aa478849742
 kind: feature
 title: S370.2 Java code fence in the engine (~~~java), lowering parity
 seq: 399
-status: todo
+status: wontfix
 priority: p1
 labels:
     - bashsharp
@@ -12,6 +12,7 @@ created: 2026-10-02T23:09:31.527561Z
 sprint: 370
 sprint_id: d64d3ab6-4bbb-5bca-8a47-3d7e5dbf9bc6
 sprint_title: 'Java fence: built-in ~~~java like Python, Rust and C/C++, with a provisioned JDK'
+closed: 2026-10-19T07:18:43.230002Z
 ---
 
 Goal
@@ -26,3 +27,5 @@ Implementation contract
 
 Acceptance
 - Unit, interp and syntax tests pass; TestLanguageTable has the row; a fence method is callable by alias with typed arguments and returns a typed value on Windows, Linux and macOS with only the S370.1 JDK provisioned; a second run of an unchanged fence does not recompile; Bash OFF stays 86/86.
+
+CLOSED WONTFIX 2026-10-18 (operator): Java is not part of the bashy release (OpenJDK GPL-2.0-only WITH Classpath-exception-2.0). Java in Bash# is a custom runner fence: examples/runners/java-runner.sh + java.bsh (Sprint 384 story #2388). Decision record: docs/java-custom-fence-decision.md.
