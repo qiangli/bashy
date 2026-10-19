@@ -1,7 +1,7 @@
 # Attribution Notice
 
 This component (`examples/local-knowledge/kb-ui`) includes code and web assets
-ported from `kg-ui` (`/Users/qiangli/projects/poc/dhnt/kg/cmd/kg-ui`),
+ported from `kg-ui` (`kg/cmd/kg-ui` at source revision `644bc8100d6da93a90ddc5819706040398c9e9a5`),
 Copyright (c) 2026 Qiang Li. All rights reserved.
 
 The operator explicitly authorized porting this source into the open-source
