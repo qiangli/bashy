@@ -1,0 +1,30 @@
+#!/usr/bin/env -S bashy --bashsharp
+# A compiler and runtime for a language bashy has no fence for. The runner is
+# REGISTERED once:
+#
+#   bashy commands register java-runner --set exec.0=$PWD/examples/runners/java-runner.sh --set effects.0=exec
+#
+# This script declares nothing — it just names it (!java-runner). The runner
+# compiles and runs the fence in its own scratch directory, never the caller's.
+
+~~~java as j !java-runner
+public class Hello {
+    public static void main(String[] args) {
+        StringBuilder sb = new StringBuilder("hello from java, run by a custom fence");
+        for (String arg : args) {
+            sb.append(" ").append(arg);
+        }
+        System.out.println(sb.toString());
+    }
+}
+~~~
+
+res := j.main("a", "b")
+echo "$res"
+
+@guard("read")
+func peek() {
+  x := j.main("nobody")
+  echo "guarded run status=$? x=[$x]"
+}
+peek()

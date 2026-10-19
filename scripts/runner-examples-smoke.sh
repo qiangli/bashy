@@ -9,6 +9,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd -P)
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/bashy-runners.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+initial_java_home="${JAVA_HOME:-}"
 
 fail() {
 	echo "runner-examples-smoke: FAIL: $*" >&2
@@ -56,5 +57,118 @@ printf '~~~cfg as c !not-a-registered-tool\nx\n~~~\nc.run()\n' >"$tmp/refuse.bsh
 if "$bashy" --bashsharp "$tmp/refuse.bsh" >"$tmp/refuse.out" 2>&1; then fail "unregistered runner accepted"; fi
 expect refuse "$tmp/refuse.out" "PATH is never consulted"
 echo "refusal: ok (unregistered program)"
-[ ! -e "$tmp/rendered.env" ] && [ ! -e "$tmp/app" ] || fail "an example wrote into the caller's directory"
+
+# The registered Java runner (Sprint 384, #2388): private ring registration.
+"$bashy" commands register java-runner --set exec.0="$root/examples/runners/java-runner.sh" --set effects.0=exec >/dev/null 2>&1 || fail "commands register java-runner"
+
+# 1) Java stub legs (always run, no real JDK)
+fake_jh="$tmp/fake-jdk"
+mkdir -p "$fake_jh/bin"
+cat >"$fake_jh/bin/javac" <<'EOF'
+#!/bin/sh
+out="$2"
+mkdir -p "$out"
+touch "$out/Hello.class"
+EOF
+chmod +x "$fake_jh/bin/javac"
+
+cat >"$fake_jh/bin/java" <<'EOF'
+#!/bin/sh
+shift 2
+echo "stub java $*"
+EOF
+chmod +x "$fake_jh/bin/java"
+
+cat >"$tmp/java-stub.bsh" <<'EOF'
+~~~java as j !java-runner
+public class Hello {
+    public static void main(String[] args) {}
+}
+~~~
+res := j.main("a", "b")
+echo "$res"
+
+@guard("read")
+func peek() {
+  x := j.main("nobody")
+  echo "guarded run status=$? x=[$x]"
+}
+peek()
+EOF
+
+(cd "$tmp" && JAVA_HOME="$fake_jh" "$bashy" --bashsharp "$tmp/java-stub.bsh" >"$tmp/java-stub.out" 2>&1) || { cat "$tmp/java-stub.out" >&2; fail "java-stub.bsh"; }
+expect java-stub "$tmp/java-stub.out" "stub java Hello a b"
+expect java-stub "$tmp/java-stub.out" "guarded run status=126"
+
+cat >"$tmp/java-nope.bsh" <<'EOF'
+~~~java as j !java-runner
+public class Hello {}
+~~~
+j.nope()
+EOF
+if (cd "$tmp" && JAVA_HOME="$fake_jh" "$bashy" --bashsharp "$tmp/java-nope.bsh" >"$tmp/java-nope.out" 2>&1); then
+	fail "undeclared java method accepted"
+fi
+
+cat >"$tmp/java-call.bsh" <<'EOF'
+~~~java as j !java-runner
+public class Hello {
+    public static void main(String[] args) {}
+}
+~~~
+j.main()
+EOF
+
+empty_jh="$tmp/empty-jdk"
+mkdir -p "$empty_jh"
+if (cd "$tmp" && JAVA_HOME="$empty_jh" "$bashy" --bashsharp "$tmp/java-call.bsh" >"$tmp/java-empty-jh.out" 2>&1); then
+	fail "empty JAVA_HOME accepted"
+fi
+expect java-empty-jh "$tmp/java-empty-jh.out" "no JDK: set JAVA_HOME or JAVA_RUNNER_FETCH=1"
+
+host_os=$(uname -s | tr '[:upper:]' '[:lower:]')
+host_arch=$(uname -m)
+case "$host_arch" in aarch64) host_arch=arm64 ;; esac
+
+fake_archive="$tmp/fake.tar.gz"
+fake_src="$tmp/fake-src"
+mkdir -p "$fake_src"
+touch "$fake_src/unwanted.txt"
+tar -czf "$fake_archive" -C "$fake_src" .
+
+fake_pin="$tmp/fake-pin.tsv"
+printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+	"$host_os" "$host_arch" "fake-1.0" "file://$fake_archive" \
+	"0000000000000000000000000000000000000000000000000000000000000000" \
+	"GPL-2.0-only WITH Classpath-exception-2.0" > "$fake_pin"
+
+fake_home="$tmp/home"
+mkdir -p "$fake_home"
+
+if (cd "$tmp" && env -u JAVA_HOME BASHY_HOME="$fake_home" JAVA_RUNNER_FETCH=1 JAVA_RUNNER_PIN="$fake_pin" "$bashy" --bashsharp "$tmp/java-call.bsh" >"$tmp/java-mismatch.out" 2>&1); then
+	fail "checksum mismatch accepted"
+fi
+expect java-mismatch "$tmp/java-mismatch.out" "checksum mismatch"
+[ ! -d "$fake_home/custom/java/fake-1.0" ] || [ -z "$(ls -A "$fake_home/custom/java/fake-1.0" 2>/dev/null)" ] || fail "checksum mismatch extracted files"
+echo "java-stub: ok (compiler, registered runner)"
+
+# 2) Java real leg
+java_real_ran=0
+if [ -n "$initial_java_home" ] || [ "${RUNNER_SMOKE_JAVA_FETCH:-0}" = "1" ]; then
+	if [ -n "$initial_java_home" ]; then
+		(cd "$tmp" && JAVA_HOME="$initial_java_home" "$bashy" --bashsharp "$root/examples/runners/java.bsh" >"$tmp/java-real.out" 2>&1) || { cat "$tmp/java-real.out" >&2; fail "java.bsh"; }
+	else
+		(cd "$tmp" && env -u JAVA_HOME JAVA_RUNNER_FETCH=1 "$bashy" --bashsharp "$root/examples/runners/java.bsh" >"$tmp/java-real.out" 2>&1) || { cat "$tmp/java-real.out" >&2; fail "java.bsh"; }
+	fi
+	expect java-real "$tmp/java-real.out" "hello from java, run by a custom fence"
+	echo "java: ok (compiler, registered runner)"
+	java_real_ran=1
+else
+	echo "java-real: NOT RUN (no JDK)"
+fi
+
+[ ! -e "$tmp/rendered.env" ] && [ ! -e "$tmp/app" ] && [ ! -e "$tmp/classes" ] && [ ! -e "$tmp/src" ] || fail "an example wrote into the caller's directory"
+if [ "$java_real_ran" -eq 0 ]; then
+	echo "runner-examples-smoke: java-real NOT RUN"
+fi
 echo "runner-examples-smoke: OK"

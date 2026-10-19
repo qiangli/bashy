@@ -1,0 +1,5 @@
+# Pinned JDK archives for the Java fence runner showcase.
+# The JDK is downloaded and executed only, never shipped or linked, and is not part of the bashy release.
+# os	arch	version	url	sha256	license
+darwin	arm64	21.0.12.1+1	https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_aarch64_mac_hotspot_21.0.12.1_1.tar.gz	3623232f33a9c3baadf304480b2535f9a3cba8a58d42ecbb438ba267315d9998	GPL-2.0-only WITH Classpath-exception-2.0
+linux	x86_64	21.0.12.1+1	https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_linux_hotspot_21.0.12.1_1.tar.gz	ce79869e1307ed8ee1e2baa86a412b1eb5b75d10a01006d788a6f968bcfaee94	GPL-2.0-only WITH Classpath-exception-2.0
