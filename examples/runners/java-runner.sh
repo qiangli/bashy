@@ -49,6 +49,7 @@ java=""
 
 find_cached_jdk() {
 	[ -d "$cache_dir" ] || return 1
+	[ -f "$cache_dir/.marker" ] || return 1
 	if [ -x "$cache_dir/bin/javac" ] && [ -x "$cache_dir/bin/java" ]; then
 		javac="$cache_dir/bin/javac"
 		java="$cache_dir/bin/java"
@@ -115,6 +116,9 @@ else
 		: # JDK found in cache
 	elif [ "${JAVA_RUNNER_FETCH:-0}" = "1" ]; then
 		dl_tmp=$(mktemp "${TMPDIR:-/tmp}/jdk-download.XXXXXX")
+		extract_tmp=""
+		trap '[ -n "$dl_tmp" ] && rm -f "$dl_tmp"; [ -n "$extract_tmp" ] && rm -rf "$extract_tmp"; exit 1' HUP INT TERM
+
 		if command -v curl >/dev/null 2>&1; then
 			curl -sSfL "$pin_url" -o "$dl_tmp" || { rm -f "$dl_tmp"; echo "java-runner: download failed: $pin_url" >&2; exit 1; }
 		elif command -v wget >/dev/null 2>&1; then
@@ -147,16 +151,39 @@ else
 			exit 1
 		fi
 
-		mkdir -p "$cache_dir"
-		tar -xzf "$dl_tmp" -C "$cache_dir" || {
+		mkdir -p "${cache_dir%/*}"
+		extract_tmp=$(mktemp -d "$cache_dir.tmp.XXXXXX") || {
+			rm -f "$dl_tmp"
+			echo "java-runner: failed to create temporary extraction directory" >&2
+			exit 1
+		}
+
+		if ! tar -xzf "$dl_tmp" -C "$extract_tmp"; then
+			rm -rf "$extract_tmp"
 			rm -f "$dl_tmp"
 			echo "java-runner: tar extraction failed" >&2
 			exit 1
-		}
-		touch "$cache_dir/.marker"
+		fi
 		rm -f "$dl_tmp"
+		dl_tmp=""
+
+		if ! touch "$extract_tmp/.marker"; then
+			rm -rf "$extract_tmp"
+			echo "java-runner: failed to write marker" >&2
+			exit 1
+		fi
+
+		rm -rf "$cache_dir"
+		if ! mv "$extract_tmp" "$cache_dir"; then
+			rm -rf "$extract_tmp"
+			echo "java-runner: failed to install JDK to $cache_dir" >&2
+			exit 1
+		fi
+		extract_tmp=""
+		trap - HUP INT TERM
 
 		if ! find_cached_jdk; then
+			rm -rf "$cache_dir"
 			echo "java-runner: javac or java not found in extracted JDK" >&2
 			exit 1
 		fi

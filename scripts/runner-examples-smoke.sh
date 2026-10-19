@@ -150,6 +150,24 @@ if (cd "$tmp" && env -u JAVA_HOME BASHY_HOME="$fake_home" JAVA_RUNNER_FETCH=1 JA
 fi
 expect java-mismatch "$tmp/java-mismatch.out" "checksum mismatch"
 [ ! -d "$fake_home/custom/java/fake-1.0" ] || [ -z "$(ls -A "$fake_home/custom/java/fake-1.0" 2>/dev/null)" ] || fail "checksum mismatch extracted files"
+
+fake_home2="$tmp/home2"
+fake_pin2="$tmp/fake-pin2.tsv"
+printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+	"$host_os" "$host_arch" "unmarked-1.0" "file://$fake_archive" \
+	"0000000000000000000000000000000000000000000000000000000000000000" \
+	"GPL-2.0-only WITH Classpath-exception-2.0" > "$fake_pin2"
+
+fake_cached_jdk="$fake_home2/custom/java/unmarked-1.0"
+mkdir -p "$fake_cached_jdk/bin"
+cp "$fake_jh/bin/javac" "$fake_cached_jdk/bin/javac"
+cp "$fake_jh/bin/java" "$fake_cached_jdk/bin/java"
+chmod +x "$fake_cached_jdk/bin/javac" "$fake_cached_jdk/bin/java"
+
+if (cd "$tmp" && env -u JAVA_HOME -u JAVA_RUNNER_FETCH BASHY_HOME="$fake_home2" JAVA_RUNNER_PIN="$fake_pin2" "$bashy" --bashsharp "$tmp/java-call.bsh" >"$tmp/java-no-marker.out" 2>&1); then
+	fail "cached JDK without .marker accepted"
+fi
+expect java-no-marker "$tmp/java-no-marker.out" "no JDK: set JAVA_HOME or JAVA_RUNNER_FETCH=1"
 echo "java-stub: ok (compiler, registered runner)"
 
 # 2) Java real leg
