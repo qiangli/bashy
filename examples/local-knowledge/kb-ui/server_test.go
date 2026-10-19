@@ -22,7 +22,7 @@ import (
 func setupTestServer(t *testing.T) (*httptest.Server, *BashyCLIAdapter, *SSEHub, string) {
 	t.Helper()
 
-	root := t.TempDir()
+	root := sourceTestRoot(t)
 	docPath := filepath.Join(root, "sample.txt")
 	if err := os.WriteFile(docPath, []byte("knowledge document contents"), 0644); err != nil {
 		t.Fatal(err)
@@ -206,7 +206,7 @@ func TestServerRootsEndpoints(t *testing.T) {
 	}
 
 	// 3. POST /api/roots with valid CSRF header adds a new root
-	newRoot := t.TempDir()
+	newRoot := sourceTestRoot(t)
 	reqBytes, _ := json.Marshal(map[string]string{"path": newRoot})
 	reqBody := string(reqBytes)
 	req, _ = http.NewRequest(http.MethodPost, srv.URL+"/api/roots", strings.NewReader(reqBody))

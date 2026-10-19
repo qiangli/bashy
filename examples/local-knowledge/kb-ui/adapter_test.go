@@ -95,8 +95,22 @@ func TestParseSearchIndexStatus(t *testing.T) {
 	}
 }
 
+func sourceTestRoot(t *testing.T) string {
+	t.Helper()
+	home, e := os.UserHomeDir()
+	if e != nil {
+		t.Fatal(e)
+	}
+	p, e := os.MkdirTemp(home, "bashy-kb-ui-test-")
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(func() { os.RemoveAll(p) })
+	return p
+}
+
 func TestAdapterRootsIntegration(t *testing.T) {
-	root := t.TempDir()
+	root := sourceTestRoot(t)
 	docFile := filepath.Join(root, "guide.txt")
 	if err := os.WriteFile(docFile, []byte("bashy local knowledge guide"), 0644); err != nil {
 		t.Fatal(err)
