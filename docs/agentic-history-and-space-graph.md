@@ -155,6 +155,33 @@ cannot say *"the records behind me were deleted"* is asserting something it can
 no longer support — the absence-of-evidence failure with a citation stapled to
 it.
 
+## Live adoption counters (Sprint 446 S10)
+
+The same record carries adoption evidence as `adopt:` atoms in its `effects`
+list, so `graph history --json` answers "which triggers work" with no new store
+or verb (`internal/agentos/adoption_live.go`):
+
+| atom | when |
+|---|---|
+| `adopt:agent=<tool>` | on any record carrying another `adopt:` atom |
+| `adopt:option=<--opt>` | argv uses a common-options vocabulary flag |
+| `adopt:lens` / `adopt:adapt` | the command is `lens` / `adapt` |
+| `adopt:hint-shown=<cmd>` | the nudger emitted its (budgeted) hint for `<cmd>` |
+| `adopt:hint-followed=<cmd>` | the same agent tool's **next call** ran a suggested shape |
+
+One agent call is one bashy process, so a shown hint is handed to the next
+process of the episode through `hint-pending/<episode>.json` beside the inbox
+hint state (consumed on first read; `BASHY_ADVISOR_NOMEM` disables it). Commands
+later in the call that showed the hint, nested bashy children of it, other
+agent tools, and calls after the next one never count. `BASHY_HINTS=off` means
+no hint and no hint atoms; uses are still recorded. Builtins have no record, so
+a `cd` hint (or an `awd` follow) lands on the next dispatched command's record.
+
+```sh
+bashy graph history --json --since 1h \
+  | jq '[.records[].effects[]? | select(startswith("adopt:"))] | group_by(.) | map({(.[0]): length}) | add'
+```
+
 ## Limits, stated rather than hidden
 
 - **Builtins are invisible.** They never reach the ExecHandler, so `cd` — the
