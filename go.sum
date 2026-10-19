@@ -1088,8 +1088,8 @@ github.com/prometheus/statsd_exporter v0.29.0 h1:2iaiBLpAg/WcdW4nF0UTQfjCE2DXD+1
 github.com/prometheus/statsd_exporter v0.29.0/go.mod h1:3t+fT5ESGc0KBUfadCp43KOnVPFmbAF4c58Osotz3Zk=
 github.com/qiangli/bonsai v0.0.0-20261013041512-fbfc95fa4dda h1:ONMy/PmqSAQA3bzbjNyaDhZYcGxkVJLGP6/AyfNt4Tc=
 github.com/qiangli/bonsai v0.0.0-20261013041512-fbfc95fa4dda/go.mod h1:XPDzA91wEz1K4qkkXyqGpkd41M+zDIY6wkz5Aird7Vs=
-github.com/qiangli/coreutils v0.0.0-20261018113912-178acbc68450 h1:Aqt2ijXsiAYY13KhfC+NcdGPKLHvZrugNm/UGhX0Twk=
-github.com/qiangli/coreutils v0.0.0-20261018113912-178acbc68450/go.mod h1:nP8R/LOBZFHjHvzgE+TX3nASmemDaiMjOnei+YPuxq8=
+github.com/qiangli/coreutils v0.0.0-20261019134046-ccd5c756c64e h1:Kki6LQtii2X+jD7TQoLX6/UzzzexnVMYA4riRgYto44=
+github.com/qiangli/coreutils v0.0.0-20261019134046-ccd5c756c64e/go.mod h1:nP8R/LOBZFHjHvzgE+TX3nASmemDaiMjOnei+YPuxq8=
 github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261018024844-02b24ff1db5d h1:ZNPgc5QZ+q/3CpNVGnWq7cJcmly44c+rdvVGdMfVDYo=
 github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261018024844-02b24ff1db5d/go.mod h1:p0JkVxHS3JKYxDz8kOYvMdPM8YRH94vZoWaFljD1vAg=
 github.com/qiangli/filebrowser/v2 v2.0.0-20261013004903-9c7b5c8e3d09 h1:8BBH4NPnF6UYP5GbGGu2iM6TS1h3EY+v8ml/555jcsg=
@@ -1114,8 +1114,8 @@ github.com/qiangli/ycode v0.3.1-dev.0.20261017214433-ffb708d14c35 h1:uf2PzKMlod7
 github.com/qiangli/ycode v0.3.1-dev.0.20261017214433-ffb708d14c35/go.mod h1:LL1lZmmudz0ttCDl4XQQ6O3ENyjkiYaxw+HsbZcokEI=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2 h1:bFDhUDkjVspcsLYaKnlN4hZAja61IZdNQ+0YYoGoTJc=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2/go.mod h1:+ZCbIbIbjxqk8derYesSoxwxIMOylG87DtzJqzOUGGM=
-github.com/qiangli/yoke v0.0.0-20261019120150-63e34e6504e0 h1:ySBtjvaKnfv5ZG7QkqrMZ/NvrkGotjCls7kcE29ReGQ=
-github.com/qiangli/yoke v0.0.0-20261019120150-63e34e6504e0/go.mod h1:BaUmO3c4cqOQKhXS5tsJAtyTO+HQtwQEZpHvbtZ/d64=
+github.com/qiangli/yoke v0.0.0-20261019160245-b7b8e9c4d020 h1:vrv8ieGoy92fWZO/ZH1fNoliU0gpPyl+35aQ7qGYd1k=
+github.com/qiangli/yoke v0.0.0-20261019160245-b7b8e9c4d020/go.mod h1:WcF0+y21dAYt+54lEwXZk0XrUuYDF9cxR0QlGr/PqSE=
 github.com/qiangli/yoke/external/otel v0.0.0-20261017214100-19415c55382f h1:RzD7uB+1eQmnImyKiGMYTdWZRdVWwqExGlhAnYqx7c0=
 github.com/qiangli/yoke/external/otel v0.0.0-20261017214100-19415c55382f/go.mod h1:T/QcacDbXpopQO/SQITqPj+vnkVtKgztKF8RJumTkrc=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261017214100-19415c55382f h1:yO/RgnZ36Gns0TLOy2N+EfmI/QCwjOGN/GlVW0qY/Fo=
