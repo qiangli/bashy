@@ -5,7 +5,7 @@ type: dag
 default: test
 vars:
   ADDR ?= 127.0.0.1:6674
-  ROOTS ?= .
+  ROOTS ?= ""
   BASHY_BIN ?= bashy
 ---
 
@@ -39,9 +39,13 @@ Requires: build
 Effects: read, write, exec, net
 
 ```bash
-bin/kb-ui --addr 127.0.0.1:16674 --roots . &
+FIXTURE=$(mktemp -d)
+mkdir -p "$FIXTURE/root"
+printf 'local knowledge smoke\n' > "$FIXTURE/root/note.md"
+export BASHY_HOME="$FIXTURE/state"
+bin/kb-ui --addr 127.0.0.1:16674 --roots "$FIXTURE/root" --bashy "$BASHY_BIN" &
 PID=$!
-trap "kill $PID 2>/dev/null || true" EXIT
+trap 'kill "$PID" 2>/dev/null || true; rm -rf "$FIXTURE"' EXIT
 
 # Wait for server to bind
 for i in $(seq 1 30); do
@@ -67,6 +71,8 @@ case "$RES" in
 esac
 
 kill $PID 2>/dev/null || true
+wait $PID 2>/dev/null || true
+rm -rf "$FIXTURE"
 trap - EXIT
 ```
 
