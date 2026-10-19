@@ -1,0 +1,57 @@
+package	pinned	constraints	kinds	usage_sites	license	latest	requires_python	macos_arm64	manylinux_x86_64	musllinux_x86_64	win_amd64	ready_315	pinned_ready_315	gap
+aider-chat	unpinned	>=0.50	cmd,requirements	ycode:evals/specs/ycode-vs-agents.yaml;ycode:evals/specs/ycode-vs-aider.yaml;ycode:internal/eval/harness/requirements.txt;ycode:internal/eval/harness/run_aider_bench.py;ycode:internal/eval/harness/setup.sh;ycode:internal/runtime/agentexec/preset.go	Apache Software License	0.86.2	<3.13,>=3.10	pure	pure	pure	pure	no		requires-python <3.13,>=3.10 excludes 3.15; note: requires-python is capped below 3.13, so it already cannot run on the current 3.13 default; it needs 3.12
+aider-install	unpinned	none	cmd	bashy:examples/fleet/tools/aider.yaml	MIT License	0.2.0	>=3.8	pure	pure	pure	pure	pure		
+boto3	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	Apache-2.0	1.43.114	>=3.10	pure	pure	pure	pure	pure		
+contree-sdk	unpinned	>=0.2.0	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	Apache-2.0	0.3.6	<3.15,>=3.10	pure	pure	pure	pure	no		requires-python <3.15,>=3.10 excludes 3.15; note: requires-python is capped below 3.15, so pip and uv refuse to resolve it on 3.15
+datasets	unpinned	>=4.5.0	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	Apache 2.0	5.1.0	>=3.10.0	pure	pure	pure	pure	pure		
+deepeval	unpinned	>=1.0	cmd,doc,requirements	ycode:docs/evaluation.md;ycode:internal/eval/harness/requirements.txt;ycode:internal/eval/harness/setup.sh	Apache-2.0	4.3.1	<4.0,>=3.9	pure	pure	pure	pure	pure		
+filelock	unpinned	>=3.19.0	external	external:nanochat@dc54a1a/pyproject.toml	MIT	4.2.4	>=3.11	pure	pure	pure	pure	pure		
+harbor	unpinned	none	cmd	bashy:examples/dag/harbor/dag.md	Apache-2.0	0.24.0	>=3.12	pure	pure	pure	pure	pure		
+harbor-ai	unpinned	none	cmd,doc	ycode:docs/leaderboards.md;ycode:internal/eval/harness/run_tbench.py				?	?	?	?	not-on-pypi		PyPI lookup returned 404
+httpx	unpinned	>=0.27.0	cmd,import,requirements	ycode:examples/python-client/main.py;ycode:examples/python-client/requirements.txt	BSD-3-Clause	0.28.1	>=3.8	pure	pure	pure	pure	pure		
+inspect-ai	unpinned	>=0.3	cmd,doc,requirements	ycode:docs/evaluation.md;ycode:internal/eval/harness/requirements.txt;ycode:internal/eval/harness/setup.sh	MIT License	0.3.281	>=3.11	pure	pure	pure	pure	pure		
+ipykernel	unpinned	>=7.1.0	external	external:nanochat@dc54a1a/pyproject.toml	BSD-3-Clause	7.4.0	>=3.11	pure	pure	pure	pure	pure		
+jinja2	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	BSD License	3.1.6	>=3.7	pure	pure	pure	pure	pure		
+kernels	unpinned	>=0.11.7	external	external:nanochat@dc54a1a/pyproject.toml	Apache-2.0	0.17.2	>=3.10	wheel	wheel	wheel	wheel	yes		
+litellm	unpinned	>=1.75.5,!=1.82.7,!=1.82.8	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	MIT	1.106.0	<3.15,>=3.10	wheel	wheel	wheel	wheel	no		requires-python <3.15,>=3.10 excludes 3.15; note: requires-python is capped below 3.15, so pip and uv refuse to resolve it on 3.15
+matplotlib	unpinned	>=3.10.8	external	external:nanochat@dc54a1a/pyproject.toml	Python Software Foundation License	3.11.2	>=3.11	wheel	wheel	wheel	wheel	yes		
+mike	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	BSD-3-Clause	2.2.0		pure	pure	pure	pure	pure		
+mini-swe-agent	unpinned	none	cmd,doc	bashy:examples/fleet/tools/mini-swe-agent.yaml;ycode:examples/agent-mini/README-mini-swe-agent.md	MIT License	2.4.6	>=3.10	pure	pure	pure	pure	pure		
+mkdocs-glightbox	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	MIT	0.5.2	>=3.8	pure	pure	pure	pure	pure		
+mkdocs-include-markdown-plugin	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	Apache-2.0	7.3.0	>=3.9	pure	pure	pure	pure	pure		
+mkdocs-material	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	MIT	9.7.7	>=3.8	pure	pure	pure	pure	pure		
+mkdocs-redirects	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	MIT	1.2.3	>=3.10	pure	pure	pure	pure	pure		
+mkdocstrings	unpinned	>=0.18	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	ISC	1.0.8	>=3.11	pure	pure	pure	pure	pure		
+modal	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	Apache-2.0	1.6.2	<3.16,>=3.10	pure	pure	pure	pure	pure		
+numpy	unpinned	>=1.26.0	external	external:nanochat@dc54a1a/pyproject.toml	BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0	2.5.4	>=3.12	wheel	wheel	wheel	wheel	yes		
+openai	unpinned	!=1.100.0,!=1.100.1	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	Apache-2.0	3.35.1	>=3.10	pure	pure	pure	pure	pure		
+openhands	unpinned	none	cmd	bashy:examples/fleet/tools/openhands.yaml	MIT	1.16.0	==3.12.*	pure	pure	pure	pure	pure		
+pipx	unpinned	none	doc	ycode:examples/agent-mini/README-mini-swe-agent.md	MIT	1.18.4	>=3.11	pure	pure	pure	pure	pure		
+platformdirs	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	MIT	4.13.5	>=3.11	pure	pure	pure	pure	pure		
+portkey-ai	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	MIT License	2.3.4	>=3.8	pure	pure	pure	pure	pure		
+pre-commit	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	MIT	4.7.0	>=3.11	pure	pure	pure	pure	pure		
+prompt-toolkit	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	BSD License	3.0.53	>=3.10	pure	pure	pure	pure	pure		
+psutil	unpinned	>=7.1.0	external	external:nanochat@dc54a1a/pyproject.toml	BSD-3-Clause	7.2.2	>=3.6	wheel	wheel	wheel	wheel	yes		
+pyarrow	unpinned	>=21.0.0	external	external:nanochat@dc54a1a/pyproject.toml	Apache-2.0	26.0.0	>=3.11	wheel	wheel	wheel	wheel	yes		
+pydantic	unpinned	>=2.0	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	MIT	2.14.1	>=3.10	pure	pure	pure	pure	pure		
+pytest	unpinned	>=8.0.0,>=9.0.2	cmd,external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;external:nanochat@dc54a1a/pyproject.toml;ycode:evals/specs/docker-sandboxed.yaml;ycode:examples/agent-mini/pyproject.toml	MIT	9.1.1	>=3.10	pure	pure	pure	pure	pure		
+pytest-asyncio	unpinned	>=1.3.0	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	Apache-2.0	1.4.0	>=3.10	pure	pure	pure	pure	pure		
+pytest-cov	unpinned	>=7.0.0	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	MIT	7.1.0	>=3.9	pure	pure	pure	pure	pure		
+pytest-xdist	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	MIT	3.8.0	>=3.9	pure	pure	pure	pure	pure		
+python-dotenv	unpinned	>=1.2.1	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;external:nanochat@dc54a1a/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	BSD-3-Clause	1.2.4	>=3.10	pure	pure	pure	pure	pure		
+pyyaml	unpinned	none	external,import,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml;ycode:internal/eval/harness/run_aider_bench.py	MIT	6.0.3	>=3.8	sdist-only	sdist-only	sdist-only	sdist-only	no		no cp315-compatible wheel for macos_arm64 (sdist-only), manylinux_x86_64 (sdist-only), musllinux_x86_64 (sdist-only), win_amd64 (sdist-only); newest wheels are cp314; note: an sdist install needs no compiler: it falls back to the pure-Python loader (no libyaml speedups)
+requests	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	Apache-2.0	2.34.2	>=3.10	pure	pure	pure	pure	pure		
+rich	unpinned	none	external,import,pyproject	bashy:examples/manifests/pyproject/app.py;external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	MIT	15.0.0	>=3.9.0	pure	pure	pure	pure	pure		
+ruff	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	MIT	0.17.1	>=3.7	wheel	wheel	wheel	wheel	yes		
+rustbpe	unpinned	>=0.1.0	external	external:nanochat@dc54a1a/pyproject.toml	MIT	0.1.0	>=3.9	sdist-only	sdist-only	sdist-only	sdist-only	no		no cp315-compatible wheel for macos_arm64 (sdist-only), manylinux_x86_64 (sdist-only), musllinux_x86_64 (sdist-only), win_amd64 (sdist-only); newest wheels are cp314
+scancode-toolkit	==32.5.0	==32.5.0	cmd	bashy:builds/prima.cpp/files/audit.sh;bashy:builds/prima.cpp/fork/bashy-build/audit.sh	see PyPI	32.5.0	>=3.10	sdist-only	sdist-only	sdist-only	sdist-only	no	no	no cp315-compatible wheel for macos_arm64 (sdist-only), manylinux_x86_64 (sdist-only), musllinux_x86_64 (sdist-only), win_amd64 (sdist-only); newest wheels are cp314; note: its wheels are version-tagged cp3NN-none-any up to cp314, so the sdist is the only 3.15 route
+setuptools	unpinned	>=65.0.0	external	external:nanochat@dc54a1a/pyproject.toml	MIT	84.0.0	>=3.10	pure	pure	pure	pure	pure		
+swe-rex	unpinned	>=1.4.0	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	MIT License	1.4.0	>=3.10	pure	pure	pure	pure	pure		
+swebench	==4.1.0	==4.1.0,>=2.0	cmd,requirements	ycode:examples/bench/dag.md;ycode:internal/eval/harness/requirements.txt;ycode:internal/eval/harness/setup.sh	MIT License	5.0.2	>=3.10	pure	pure	pure	pure	pure	pure	
+tenacity	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	Apache-2.0	9.2.1	>=3.10	pure	pure	pure	pure	pure		
+textual	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	MIT	8.2.8	<4.0,>=3.9	pure	pure	pure	pure	pure		
+tiktoken	unpinned	>=0.11.0	external	external:nanochat@dc54a1a/pyproject.toml	see PyPI	0.14.0	>=3.9	wheel	wheel	wheel	wheel	yes		
+torch	==2.9.1	==2.9.1	external	external:nanochat@dc54a1a/pyproject.toml	Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT	2.14.1	>=3.10	none	none	none	none	no	no	no cp315-compatible wheel for macos_arm64 (none), manylinux_x86_64 (none), musllinux_x86_64 (none), win_amd64 (none); newest wheels are cp314; note: no 3.15 wheels on any platform; nanochat cannot run under 3.15 until torch ships them
+typer	unpinned	none	external,pyproject	external:mini-swe-agent@04d809c/pyproject.toml;ycode:examples/agent-mini/pyproject.toml	MIT	0.27.3	>=3.10	pure	pure	pure	pure	pure		
+wandb	unpinned	>=0.21.3	external	external:nanochat@dc54a1a/pyproject.toml	MIT License	0.31.0	>=3.10	wheel	wheel	wheel	wheel	yes		
+websockets	unpinned	>=12.0	cmd,import,requirements	ycode:examples/python-client/main.py;ycode:examples/python-client/requirements.txt	BSD-3-Clause	17.2	>=3.11	pure	pure	pure	pure	pure		

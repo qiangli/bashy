@@ -94,6 +94,10 @@ his; the Bash 5.3 conformance work and the Bash# dialect are carried in the
 fork. Campaign identity, regression gates and the product sequence:
 [docs/internal/campaign-and-gates.md](docs/internal/campaign-and-gates.md).
 
+Python packages used across the repos, with CPython 3.15 wheel readiness:
+[docs/python-package-inventory.md](docs/python-package-inventory.md). Refresh it with
+`DHNT_ROOT=<umbrella checkout> bashy python scripts/python-package-inventory.py`.
+
 ## Install
 
 ### Download a release binary
