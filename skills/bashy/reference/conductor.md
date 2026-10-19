@@ -425,8 +425,7 @@ absorb the rest via reassignment (§8). Patterns observed across campaigns:
 
 ### Read evidence deltas with a reader-owned cursor
 
-Follow Yoke's
-[`docs/recipes/conductor-run-deltas.md`](https://github.com/qiangli/yoke/blob/1e90afa7c581cccb58a5532ebc6d6de78d0bf4c3/docs/recipes/conductor-run-deltas.md)
+Follow Yoke's `docs/recipes/conductor-run-deltas.md`
 (published at `1e90afa7`). Use a Bashy build carrying that behavior; check
 `bashy lens --help` for `--since` time/duration support and `--cursor-out`.
 An older binary's file-only delta help is not evidence of run-history support.

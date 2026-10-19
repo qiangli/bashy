@@ -680,8 +680,7 @@ The cursor expires after 24 hours. Preserve rejected checkpoints; deliberately
 restart with `--since=start` on expiry or source discontinuity, and deduplicate
 replayed evidence. Never turn errors or limit failures into an empty success.
 Use the bounded polling and recovery recipe in the bundled reference, §8,
-which follows Yoke's
-[`docs/recipes/conductor-run-deltas.md`](https://github.com/qiangli/yoke/blob/1e90afa7c581cccb58a5532ebc6d6de78d0bf4c3/docs/recipes/conductor-run-deltas.md).
+which follows Yoke's `docs/recipes/conductor-run-deltas.md`.
 
 One backgrounded wait per story; act on every wake (NOT host `sleep` loops):
 ```sh
