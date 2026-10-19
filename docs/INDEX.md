@@ -200,11 +200,11 @@ Weave-round verification + retro reports (historical, not load-bearing):
 
 - [Official Ollama runner recipe plan](plan-official-ollama-runner-recipe.md) — Sprint 436 source pin, native matrix and release holds.
 
-- [Official Ollama native gate plan, Story 1920](plan-ollama-native-gate-1920.md) — hosted protocol, confinement and evidence; Dragon limited to harness validation.
+- [Official Ollama native gate plan, Story 1920](plan-ollama-native-gate-1920.md) — hosted protocol, confinement and evidence; dev-host limited to harness validation.
 
 - [Ollama compiler evidence repair, Story 1927](plan-ollama-compiler-evidence.md) — compile-time content capture, native Windows compiler discovery, diagnostic uploads and bounded validation.
 
-- `local-multimodal-model-hardware.md` — Sprint 382 Story 356: measured per-model memory, elapsed-time, and admission matrix (Qwen3-VL 8B vision/text, FLUX.2/ACE-Step/Wan2.2 storage admission, Whisper, SAM2), noviwin AMD/no-CUDA negative admission, editor coexistence arithmetic, recommended host/fallbacks, license posture, and the built-in MCP no-prerequisite rule.
+- `local-multimodal-model-hardware.md` — Sprint 382 Story 356: measured per-model memory, elapsed-time, and admission matrix (Qwen3-VL 8B vision/text, FLUX.2/ACE-Step/Wan2.2 storage admission, Whisper, SAM2), windows-host AMD/no-CUDA negative admission, editor coexistence arithmetic, recommended host/fallbacks, license posture, and the built-in MCP no-prerequisite rule.
 
 - [Sprint 446 schema and vocabulary audit](sprint-446-schema-lint.md) — derived Cobra flag metadata, report-only common-options lint, and Part B verification.
 

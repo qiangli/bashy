@@ -101,4 +101,4 @@ gates the Darwin legs.
 
 Handoff: manager installs the generated `fork/` diff on the source
 repository's `bashy-build` branch and cuts immutable candidate -4. No
-push or Dragon native build/container from this worker.
+push or dev-host native build/container from this worker.

@@ -24,5 +24,5 @@ The umbrella policy exception is separately assigned under
 `f095c0b50f09`; recorded worker commit `48d53363f`. Binmgr preparation is
 separately assigned under `90ea12d9ef68`, worker commit `8d9dbad1`.
 The conductor owns integration and CI, including any follow-up fixes prompted
-by the hosted evidence. No Dragon native build, model exercise or container
+by the hosted evidence. No dev-host native build, model exercise or container
 is part of this resumed worker's validation.

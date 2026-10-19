@@ -258,7 +258,7 @@ AssumeRoom,ReleaseRoom,HolderName,Assignment}` (the seat-room lifecycle the host
 owns but must not reimplement) and `chat.SessionOptions.AllowUnsafe` (the
 session equivalent of `chat --yolo`, for a session nobody sits at).
 
-## What the live run found (2026-08-05, dragon)
+## What the live run found (2026-08-05, dev-host)
 
 Eight `start → message → stop` cycles against real agents (codex-gpt-5.5,
 ycode-gpt5.6-terra). **Every one of the following was a defect the automated

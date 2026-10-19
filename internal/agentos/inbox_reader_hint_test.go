@@ -36,7 +36,7 @@ func TestInboxReadSuggestMatches(t *testing.T) {
 		{"bus pending", []string{"bus", "pending"}, true},
 		{"bus publish", []string{"bus", "publish", "--topic", "b", "x"}, false},
 		{"ping bare read", []string{"ping"}, true},
-		{"ping host (ICMP)", []string{"ping", "dragon"}, false},
+		{"ping host (ICMP)", []string{"ping", "dev-host"}, false},
 		{"ping send", []string{"ping", "steward", "hi"}, false},
 		{"chat timeline", []string{"chat", "timeline"}, true},
 		{"chat steer", []string{"chat", "steer", "1", "hi"}, false},

@@ -9,7 +9,7 @@ Read authenticated candidate -4 job logs and egress artifacts, compare the
 pinned source with the producer, preserve both-rank success requirements,
 add bounded diagnostics, regenerate the fork, run the lightweight producer
 gate, and commit with the requested trailers. No native compilation, engine
-execution, container, full suite, push, or branch switch on Dragon.
+execution, container, full suite, push, or branch switch on dev-host.
 
 ## Evidence read on 2026-10-13
 

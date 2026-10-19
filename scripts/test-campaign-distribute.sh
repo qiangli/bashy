@@ -993,9 +993,9 @@ sed -e 's/"vk-podman"/"vk-ignored"/g' \
 # carry the nodes the selector can choose, each a distinct worker.
 autocluster="$tmp/autocluster"
 mkdir -p "$autocluster"
-printf 'host=dragon\nbackend=vk-podman\n'      >"$autocluster/dragon"
+printf 'host=dev-host\nbackend=vk-podman\n'      >"$autocluster/dev-host"
 printf 'host=novicortex\nbackend=vk-podman\n'  >"$autocluster/novicortex"
-printf 'host=novidesign\nbackend=vk-podman\n'  >"$autocluster/novidesign"
+printf 'host=remote-macos-host\nbackend=vk-podman\n'  >"$autocluster/remote-macos-host"
 printf 'host=noviextra\nbackend=vk-podman\n'   >"$autocluster/noviextra"
 
 # The fixtures are darwin/arm64/vk-podman; omitting CAMPAIGN_SHARD_BACKEND here
@@ -1016,7 +1016,7 @@ auto_env() {
     "DKS_SELECT_PODS_JSON=$fx/pods-empty.json"
 }
 
-# --- 30. Auto happy path: busy Dragon loses to idle preferred workers; two
+# --- 30. Auto happy path: busy dev-host loses to idle preferred workers; two
 #         roles resolve to two DISTINCT preferred nodes; the persisted map is
 #         written; and the emitted Jobs carry resources.requests matching the
 #         selection request. ------------------------------------------------
@@ -1032,15 +1032,15 @@ esac
 
 placement="$tmp/auto-idle/placement.env"
 [ -s "$placement" ] || fail "auto placement wrote no persisted role=node map"
-grep -qx 'worker-a=novidesign' "$placement" \
-  || fail "auto placement did not resolve worker-a to the top-scoring preferred node (novidesign): $(cat "$placement")"
+grep -qx 'worker-a=remote-macos-host' "$placement" \
+  || fail "auto placement did not resolve worker-a to the top-scoring preferred node (remote-macos-host): $(cat "$placement")"
 grep -qx 'worker-b=novicortex' "$placement" \
   || fail "auto placement did not resolve worker-b to the second distinct preferred node (novicortex): $(cat "$placement")"
 
 auto_nodes=$(awk '/^      nodeName: /{print $2}' "$st/manifests/"*.yaml | sort -u)
 [ "$auto_nodes" = "novicortex
-novidesign" ] || fail "auto Jobs were not pinned to two distinct preferred nodes: $auto_nodes"
-case "$auto_nodes" in *dragon*) fail "busy Dragon was selected over idle preferred workers" ;; esac
+remote-macos-host" ] || fail "auto Jobs were not pinned to two distinct preferred nodes: $auto_nodes"
+case "$auto_nodes" in *dev-host*) fail "busy dev-host was selected over idle preferred workers" ;; esac
 
 # The reservation Kubernetes will enforce must equal the selection request, so
 # the next shard sees this one as used capacity.
@@ -1049,15 +1049,15 @@ for mf in "$st/manifests/"*.yaml; do
   grep -q 'memory: "4Gi"' "$mf" || fail "Job manifest $mf carries no memory request matching the selection (4Gi)"
 done
 
-# --- 31. A busy novicortex drops out and novidesign is selected in its place. -
+# --- 31. A busy novicortex drops out and remote-macos-host is selected in its place. -
 st="$tmp/auto-busy-state"
 out=$(cd "$root" && env $(auto_env) "DKS_SELECT_METRICS_JSON=$fx/metrics-busy-novicortex.json" \
   "FAKE_K8S_STATE=$st" CHUNKS=2 SEED=1 WORKERS="worker-a worker-b" \
   OUT_DIR="$tmp/auto-busy" "$DISTRIBUTE" distribute) \
   || fail "auto placement (busy novicortex) did not complete: $out"
 placement="$tmp/auto-busy/placement.env"
-grep -q '=novidesign$' "$placement" \
-  || fail "with novicortex busy, novidesign should be selected: $(cat "$placement")"
+grep -q '=remote-macos-host$' "$placement" \
+  || fail "with novicortex busy, remote-macos-host should be selected: $(cat "$placement")"
 grep -q '=novicortex$' "$placement" \
   && fail "a busy novicortex (7 of 8 cores) was selected despite insufficient headroom: $(cat "$placement")"
 

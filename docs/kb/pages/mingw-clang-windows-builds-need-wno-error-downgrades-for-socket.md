@@ -8,7 +8,6 @@ description: When a pinned C dependency passes Windows SOCKET (UINT_PTR integer)
 status: candidate
 source:
     tool: muse-spark1.3-i
-    host: dragon
     episode: weave-issue-113
 created: "2026-10-13T21:22:00Z"
 ---

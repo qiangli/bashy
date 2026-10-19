@@ -11,7 +11,7 @@ hashes. Use Linux network namespace plus syscall verdict, Darwin sandbox with
 denial controls, and Windows dynamic WFP filters plus a single-process job.
 Missing dependencies, evidence, fixture, bind, runtime or enforcement fail.
 
-Run only offline harness/recipe regression gates on Dragon. Do not build or run
+Run only offline harness/recipe regression gates on dev-host. Do not build or run
 the native runner here. The conductor reviews, installs the generated fork and
 runs the five hosted lanes; those results, audit, signing and release remain
 separate from this worker's local validation. Commit exact worker paths with
@@ -24,7 +24,7 @@ cases, 3 recipe tests (including all five fake compiler targets), 14 HTTP/contro
 fixture/evidence harness tests, shell syntax, shellcheck, actionlint, and exact
 fork regeneration. `git diff --check` passed. The pinned 1,185,376-byte GGUF was
 fetched and SHA-256 verified; metadata read without model execution reports llama,
-64 embedding dimensions and five blocks. No native build/inference ran on Dragon.
+64 embedding dimensions and five blocks. No native build/inference ran on dev-host.
 
 Hosted status: **unmeasured on all five targets**, including Windows guard
 compilation. The conductor must collect each `-native.json` PASS plus its hash-bound

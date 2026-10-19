@@ -44,8 +44,8 @@ REQ_MEM="${REQ_MEM:-512Mi}"
 LIM_MEM="${LIM_MEM:-2Gi}"
 VENUE="${VENUE:-agent}"                    # agent | vk-podman
 IMAGE_PULL_POLICY="${IMAGE_PULL_POLICY:-Never}"
-DKS_PREFERRED_HOSTS="${DKS_PREFERRED_HOSTS:-novicortex,novidesign}"
-DKS_RESERVED_HOSTS="${DKS_RESERVED_HOSTS:-dragon}"
+DKS_PREFERRED_HOSTS="${DKS_PREFERRED_HOSTS:-novicortex,remote-macos-host}"
+DKS_RESERVED_HOSTS="${DKS_RESERVED_HOSTS:-dev-host}"
 
 yaml_host_values() {
   local list="$1" rest entry out=""
@@ -70,7 +70,7 @@ reserved_values=$(yaml_host_values "$DKS_RESERVED_HOSTS") || exit $?
 # Scheduler-native placement for Indexed Jobs. Unlike the point-in-time native
 # selector, one Indexed Job creates many Pods concurrently, so Kubernetes owns
 # the decision: accurate requests, soft worker preference/control-plane reserve,
-# and physical-host spread keep shards off Dragon without hard-pinning them all
+# and physical-host spread keep shards off dev-host without hard-pinning them all
 # to one snapshot winner. A host can expose several vk-* node objects; spreading
 # by kubernetes.io/hostname would treat those logical venues as independent
 # machines and could concentrate supposedly-distributed shards on one box.

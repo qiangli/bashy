@@ -11,7 +11,7 @@ if [[ -f "$config" ]]; then
 fi
 
 collector="${DHNT_CI_COLLECTOR_REPO:-qiangli/dhnt-ci-failures}"
-dhnt_root="${DHNT_CI_ROOT:-/Users/qiangli/projects/poc/dhnt}"
+dhnt_root="${DHNT_CI_ROOT:-$HOME/projects/poc/dhnt}"
 limit="${DHNT_CI_LIMIT:-1}"
 handoff_root="${DHNT_CI_HANDOFF_DIR:-$HOME/.bashy/ci-repair}"
 lockdir="${DHNT_CI_ROUTER_LOCKDIR:-/tmp/dhnt-ci-failure-router.lock}"

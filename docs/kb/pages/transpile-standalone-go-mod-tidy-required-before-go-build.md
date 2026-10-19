@@ -8,7 +8,6 @@ description: When hello_standalone.bsh is transpiled with --standalone, the gene
 status: candidate
 source:
     tool: agy-sonnet4.6-n
-    host: dragon
     episode: weave-issue-40
 created: "2026-09-20T08:56:51Z"
 ---

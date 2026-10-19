@@ -11,7 +11,7 @@
 - Retries: 0
 - Retry sleep: 0s
 - Rate-limit/API error signals: 0
-- Logs: /Users/qiangli/tests/bashy-eval/runs-current/20260701T151224Z-wrong-cwd-recovery-gnu-bash53-codex-39207/logs
+- Logs: $HOME/tests/bashy-eval/runs-current/20260701T151224Z-wrong-cwd-recovery-gnu-bash53-codex-39207/logs
 
 ## Verifier
 
@@ -23,12 +23,12 @@
 ## Command Log
 
 ```text
-2026-07-01T15:12:39Z	/Users/qiangli/tests/bashy-eval/runs-current/20260701T151224Z-wrong-cwd-recovery-gnu-bash53-codex-39207/work/nested/deep	/workspace/nested/deep	-lc pwd; find ../.. -maxdepth 3 -type f -print | sort | sed "s#^#/#"
-2026-07-01T15:12:49Z	/Users/qiangli/tests/bashy-eval/runs-current/20260701T151224Z-wrong-cwd-recovery-gnu-bash53-codex-39207/work/nested/deep	/workspace/nested/deep	-lc sed -n "1,200p" ../../README.md
-2026-07-01T15:12:49Z	/Users/qiangli/tests/bashy-eval/runs-current/20260701T151224Z-wrong-cwd-recovery-gnu-bash53-codex-39207/work/nested/deep	/workspace/nested/deep	-lc sed -n "1,200p" ../../scripts/report.sh
-2026-07-01T15:12:49Z	/Users/qiangli/tests/bashy-eval/runs-current/20260701T151224Z-wrong-cwd-recovery-gnu-bash53-codex-39207/work/nested/deep	/workspace/nested/deep	-lc cat ../../data/items.tsv
-2026-07-01T15:12:58Z	/Users/qiangli/tests/bashy-eval/runs-current/20260701T151224Z-wrong-cwd-recovery-gnu-bash53-codex-39207/work/nested/deep	/workspace/nested/deep	-lc cd ../.. && scripts/report.sh && test -f out/report.txt && cat out/report.txt
-2026-07-01T15:13:08Z	/Users/qiangli/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
+2026-07-01T15:12:39Z	$HOME/tests/bashy-eval/runs-current/20260701T151224Z-wrong-cwd-recovery-gnu-bash53-codex-39207/work/nested/deep	/workspace/nested/deep	-lc pwd; find ../.. -maxdepth 3 -type f -print | sort | sed "s#^#/#"
+2026-07-01T15:12:49Z	$HOME/tests/bashy-eval/runs-current/20260701T151224Z-wrong-cwd-recovery-gnu-bash53-codex-39207/work/nested/deep	/workspace/nested/deep	-lc sed -n "1,200p" ../../README.md
+2026-07-01T15:12:49Z	$HOME/tests/bashy-eval/runs-current/20260701T151224Z-wrong-cwd-recovery-gnu-bash53-codex-39207/work/nested/deep	/workspace/nested/deep	-lc sed -n "1,200p" ../../scripts/report.sh
+2026-07-01T15:12:49Z	$HOME/tests/bashy-eval/runs-current/20260701T151224Z-wrong-cwd-recovery-gnu-bash53-codex-39207/work/nested/deep	/workspace/nested/deep	-lc cat ../../data/items.tsv
+2026-07-01T15:12:58Z	$HOME/tests/bashy-eval/runs-current/20260701T151224Z-wrong-cwd-recovery-gnu-bash53-codex-39207/work/nested/deep	/workspace/nested/deep	-lc cd ../.. && scripts/report.sh && test -f out/report.txt && cat out/report.txt
+2026-07-01T15:13:08Z	$HOME/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
 ```
 
 ## Notes

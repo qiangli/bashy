@@ -77,7 +77,7 @@ Token/cost availability:
 ## Raw Artifacts
 
 - JSONL: `results/agent-shell-current-20260701.jsonl`
-- Work/log root: `/Users/qiangli/tests/bashy-eval/runs-current`
+- Work/log root: `$HOME/tests/bashy-eval/runs-current`
 - Per-run summaries: `docs/agent-shell-eval/test-20260701T*.md`
 
 ## Repository Verification

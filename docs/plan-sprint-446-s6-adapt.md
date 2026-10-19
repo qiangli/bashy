@@ -125,7 +125,7 @@ Continuation focused gates passed (inspected `bashy-gate-v2` verdicts):
 - `/tmp/s446-s6-bashy-gate.json`: skills and AgentOS discovery/schema checks,
   35.014s. Both packages emitted `ok`.
 
-These are focused Dragon gates, not whole-package or crossvet acceptance.
+These are focused dev-host gates, not whole-package or crossvet acceptance.
 Manager owns the claimed remote-host gate and publication. No yoke pin is
 committed before publication. The yoke tree is `/tmp/s446-adapt-yoke`;
 continuation SHA is reported in the delivery message rather than self-embedded.
@@ -151,7 +151,7 @@ Sprint 453 consumption. Bashy front-door commit d6ef480243812cd9d1be8c46b70384d9
 already follows current Bashy main e46f80a0; no replay was needed. The manager
 must publish yoke before the Bashy dependency pin can be committed.
 
-Rechecked focused Dragon gates after the rebase; inspected both JSON verdicts:
+Rechecked focused dev-host gates after the rebase; inspected both JSON verdicts:
 `/tmp/s446-s6-recheck-yoke.json` passed (34.178s, adapt/fleet), and
 `/tmp/s446-s6-recheck-bashy.json` passed (41.813s, skills/AgentOS). They use
 GOWORK=/tmp/s446-adapt-207.work; these establish focused workspace compilation
@@ -164,7 +164,7 @@ published yoke pin remains the outstanding manager-dependent integration step.
 Recovered the same clean commits without replaying implementation or creating a
 story. Remote checks still show yoke main 1137f7a8 and Bashy main e46f80a0.
 Reported pin candidate 78ef7f24 and full candidate 68c9aaf8 to s446-manager again;
-publication remains pending. Both focused Dragon gates were rerun and their
+publication remains pending. Both focused dev-host gates were rerun and their
 `bashy-gate-v2` verdicts inspected: `/tmp/s446-s6-recovery-yoke.json` passed
 (50.739s, adapt/fleet), and `/tmp/s446-s6-recovery-bashy.json` passed (56.503s,
 skills/AgentOS). These use the same private workspace and do not establish a

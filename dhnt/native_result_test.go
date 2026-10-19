@@ -35,7 +35,7 @@ func nativeResultFixture(t *testing.T, payload []byte) (NativeResult, NativeResu
 			SHA256:          strings.Repeat("b", 64),
 		}},
 		Executor: Executor{
-			Node: "dragon-vk-native", Backend: "vk-native",
+			Node: "dev-host-vk-native", Backend: "vk-native",
 			OS: "darwin", Arch: "arm64",
 		},
 		Result:     Result{Class: ResultPass, ExitCode: &exitCode},

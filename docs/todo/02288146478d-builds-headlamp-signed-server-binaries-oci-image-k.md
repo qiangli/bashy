@@ -16,7 +16,7 @@ closed: 2026-10-13T01:18:31.555161Z
 closed_by: s434-manager
 ---
 
-START FROM the previous attempt: commit b2976d73 on local branch s434/headlamp-b2976d73 of the bashy checkout (/Users/qiangli/projects/poc/dhnt/bashy) - git fetch that path s434/headlamp-b2976d73, cherry-pick it onto your base, then rework.
+START FROM the previous attempt: commit b2976d73 on local branch s434/headlamp-b2976d73 of the bashy checkout ($HOME/projects/poc/dhnt/bashy) - git fetch that path s434/headlamp-b2976d73, cherry-pick it onto your base, then rework.
 
 REWORK of 02288146 (your bashy b2976d73, branch agent/weave-issue-65, NOT merged). Rebase onto bashy main (24680fb5 or newer): 88f90c8f landed the shared GO_SECURITY_OVERRIDES step and render.sh now REFUSES it on KIND=custom: "render: headlamp: GO_SECURITY_OVERRIDES is a go-kind key, but KIND=custom".
 Fix (prefer A): (A) KIND=go and override only the fragments headlamp needs (build.yml for frontend+server+image; keep the shared go setup/audit so the shared override step, its go.mod gate and the audit-tool toolchain apply), like builds/gitea overrides build.yml. (B) only if A is impossible: stay custom and drop GO_SECURITY_OVERRIDES, applying nothing - then govulncheck must still fail for anything reachable. Do NOT edit builds/_shared (claude-opus5 owns it in a60d93b4; if you need a shared change, say so in submit).

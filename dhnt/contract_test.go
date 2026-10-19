@@ -61,7 +61,7 @@ func fixtureRun() Run {
 			SHA256:     sourceDigest,
 		},
 		Inputs:     []Artifact{{Name: "candidate", SHA256: inputDigest}},
-		Executor:   Executor{Node: "dragon-vk-native", Backend: "vk-native", OS: "darwin", Arch: "arm64"},
+		Executor:   Executor{Node: "dev-host-vk-native", Backend: "vk-native", OS: "darwin", Arch: "arm64"},
 		Result:     Result{Class: ResultPass, ExitCode: intPtr(0)},
 		Outputs:    []Artifact{{Name: "tested-candidate", SHA256: inputDigest}},
 		StartedAt:  "2026-07-29T12:00:00Z",

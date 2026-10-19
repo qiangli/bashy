@@ -262,8 +262,8 @@ shell semantics. It is intentionally not a Bashy Make target or public-CI job:
 the VSC suite is licensed and the OSS Bashy repository must not depend on the
 proprietary harness checkout.
 
-**Dragon delivery gate.** A verified Bashy change is not complete when tests
-pass or a commit is pushed. After the umbrella pin is bumped, rebuild on Dragon,
+**dev-host delivery gate.** A verified Bashy change is not complete when tests
+pass or a commit is pushed. After the umbrella pin is bumped, rebuild on dev-host,
 install the canonical binary with `make install` (default
 `~/.local/bin/bashy`), and smoke-test the changed command surface through that
 installed PATH binary. Record the installed path and smoke result in the
@@ -273,7 +273,7 @@ handoff. Do not substitute a repo-local binary for this final check.
 every commit. Before proposing a tag: the authoritative GNU Bash 5.3 gate has
 zero regressions; the 493-TP VSC Bash-only/system-utility gate is green;
 applicable POSIX/compliance and focused tests are green;
-submodule commits and pins are pushed and clean; Dragon has passed the
+submodule commits and pins are pushed and clean; dev-host has passed the
 rebuild/install/smoke gate above (including `bashy model`/`bashy agent` when
 the fleet changes); and changelog/release notes are ready. The steward proposes
 the tag/release after these gates; do not create one merely because a change

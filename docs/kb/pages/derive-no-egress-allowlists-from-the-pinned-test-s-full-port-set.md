@@ -8,7 +8,6 @@ description: When a sandbox profile or strace verdict allowlists loopback ports 
 status: candidate
 source:
     tool: muse-conductor-i
-    host: dragon
     episode: weave-issue-87
 created: "2026-10-13T14:44:03Z"
 ---

@@ -22,7 +22,7 @@
     {
       "metadata": { "name": "unrelated-idle", "namespace": "default" },
       "spec": {
-        "nodeName": "novidesign",
+        "nodeName": "remote-macos-host",
         "containers": [
           {
             "name": "app",

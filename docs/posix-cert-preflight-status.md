@@ -61,7 +61,7 @@ DKS/O3 work; this run does not stand in for distributed/chunked evidence
 (that equivalence claim is tracked separately in
 `workstream-a-equivalence.md`).
 
-Environment: macOS (Darwin 25.5.0, arm64, host `dragon`), `go1.26.5`,
+Environment: macOS (Darwin 25.5.0, arm64, host `dev-host`), `go1.26.5`,
 repo at `fc4b3c5` (branch `agent/weave-issue-34`). `PATH` has no `sh`
 wrapper-shim ahead of `/bin/sh` (the documented local-env gotcha does not
 apply here). `external/bash-5.3` resolves via the gitignored symlink to a

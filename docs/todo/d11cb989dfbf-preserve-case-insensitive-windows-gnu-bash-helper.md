@@ -28,7 +28,7 @@ selection. The existing `TestRunAsHelperDispatchesByArgv0` covers uppercase
 ./tools/bash53suite -run '^TestRunAsHelperDispatchesByArgv0$' -count=1` passed,
 and Windows amd64 test-executable cross-compilation passed (binary SHA-256
 `78ce970beb17f073be4163ef73ced7d60c978d39808aac90ee5d778a546676ed`).
-On noviwin1 that exact executable ran the focused test natively and passed;
+On windows-host that exact executable ran the focused test natively and passed;
 retained log `/tmp/s250-331-windows-focused.log` SHA-256
 `cbae22c15364083755af13a7abcfd136cad3312b58c5b4841416e5efc83e3193`.
 Three-OS test CI remains the release acceptance gate before `v0.28.0-dev`.

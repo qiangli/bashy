@@ -113,7 +113,7 @@ Minimum handoff fields:
 The handoff note should be written to both:
 
 - the collector issue comment thread, for durable shared state;
-- local repair state, for fast recovery by the dragon scheduler/fixer.
+- local repair state, for fast recovery by the dev-host scheduler/fixer.
 
 Suggested local path:
 

@@ -3,7 +3,7 @@
 ## Problem
 
 `scripts/dks-select-node.sh` already scores nodes by `max(live metrics, reserved
-Pod requests)`, penalizes Dragon / control-plane, prefers novicortex / novidesign,
+Pod requests)`, penalizes dev-host / control-plane, prefers novicortex / macos-host,
 and understands physical-host metrics for virtual nodes. But
 `scripts/campaign-distribute-k8s.sh` still **required** a static `WORKER_NODES`
 role=node map and hard-pinned every role — so campaign / free-suite shards
@@ -48,10 +48,10 @@ ledger, and fully hermetic fake-kubectl testing all remain — the auto seam run
 
 ## Tests (`scripts/test-campaign-distribute.sh`, GNU bash + Bashy)
 
-30. Auto happy path: busy Dragon loses to idle novicortex/novidesign; two roles
+30. Auto happy path: busy dev-host loses to idle novicortex/macos-host; two roles
     resolve to two distinct preferred nodes; the persisted map is written; the
     emitted Jobs carry `resources.requests` matching the selection request.
-31. A busy novicortex drops out (insufficient headroom) → novidesign selected.
+31. A busy novicortex drops out (insufficient headroom) → macos-host selected.
 32. Two roles never collide on one node (exclusion feedback).
 33. Insufficient capacity (impossible CPU request) fails closed, no Job created.
 34. Required-but-absent metrics fails closed, no Job created.

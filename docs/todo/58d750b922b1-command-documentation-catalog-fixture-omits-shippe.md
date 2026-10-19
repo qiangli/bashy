@@ -14,4 +14,4 @@ closed: 2026-10-12T16:01:07.619882Z
 closed_by: s9999-maintenance-manager
 ---
 
-Final native make test exposed TestCommandDocSourceNames: actual names contain feed, strict expected list omits it since feed command documentation shipped. Keep exact ordered comparison; update fixture and assert feed body/files resolve. Production unchanged. Worker focused tests only Dragon, manager full native package regression. Raw /tmp/s9999-bashy-native-gate.json and remote bashy-failed-packages.json. Maintenance publication tracked admin2005.
+Final native make test exposed TestCommandDocSourceNames: actual names contain feed, strict expected list omits it since feed command documentation shipped. Keep exact ordered comparison; update fixture and assert feed body/files resolve. Production unchanged. Worker focused tests only dev-host, manager full native package regression. Raw /tmp/s9999-bashy-native-gate.json and remote bashy-failed-packages.json. Maintenance publication tracked admin2005.

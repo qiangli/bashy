@@ -16,4 +16,4 @@ sprint_id: e14729b9-4d75-5803-aca0-594e943ca2df
 sprint_title: Bash# POSIX and full Go test parity on Windows and macOS
 ---
 
-On novidesign.local, Podman oracle startup failed with an SSH handshake EOF. austin-defects.sh then reported 37 false shell diffs because it parsed empty oracle output after OCI failed. posix-parity-pty.sh likewise reported six ERROR rows after the oracle process failed before prompt. Add oracle invocation/preflight checks so infrastructure failures are blocked and never counted as semantic deltas. Validate with a forced OCI failure and rerun on macOS when host storage permits. No Bash# implementation behavior changes.
+On macos-host, Podman oracle startup failed with an SSH handshake EOF. austin-defects.sh then reported 37 false shell diffs because it parsed empty oracle output after OCI failed. posix-parity-pty.sh likewise reported six ERROR rows after the oracle process failed before prompt. Add oracle invocation/preflight checks so infrastructure failures are blocked and never counted as semantic deltas. Validate with a forced OCI failure and rerun on macOS when host storage permits. No Bash# implementation behavior changes.

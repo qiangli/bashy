@@ -12,4 +12,4 @@ resolution: fixed
 closed_by: codex-gpt-5.5-v
 ---
 
-Corrective review of bashy weave run 21 commit 594234d. Import that commit from /Users/qiangli/.bashy/weave/bashy-6497d06f/workspaces/issue-21, then replace localedef --force because it exits 1 on the expected ASCII warning under workflow set -e. Container evidence proves localedef --no-warnings=ascii -i ja_JP -f SHIFT_JIS ja_JP.SJIS exits zero, locale -a includes ja_JP.sjis, and LC_ALL=ja_JP.SJIS locale charmap returns SHIFT_JIS. Keep the change CI-only, validate workflow YAML, commit the corrected series.
+Corrective review of bashy weave run 21 commit 594234d. Import that commit from $HOME/.bashy/weave/bashy-6497d06f/workspaces/issue-21, then replace localedef --force because it exits 1 on the expected ASCII warning under workflow set -e. Container evidence proves localedef --no-warnings=ascii -i ja_JP -f SHIFT_JIS ja_JP.SJIS exits zero, locale -a includes ja_JP.sjis, and LC_ALL=ja_JP.SJIS locale charmap returns SHIFT_JIS. Keep the change CI-only, validate workflow YAML, commit the corrected series.

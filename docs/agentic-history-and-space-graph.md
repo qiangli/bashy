@@ -38,7 +38,7 @@ remote.host:2222                n=3   ok=3    as user@remote.host
     first=2026-08-03 09:12  last=2026-08-05 15:09
 
 $ bashy graph space
-host:dragon                  host      out=1  in=0
+host:dev-host                  host      out=1  in=0
 endpoint:remote.host:2222    endpoint  out=1  in=1
 host:remote.host             host      out=0  in=1
 account:user@remote.host     account   out=0  in=1

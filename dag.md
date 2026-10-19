@@ -751,7 +751,7 @@ Requires: test-bash-fleet-prepare
 set -e
 BASHY_EXE="${BASHY:-bashy}"
 repo="$("$BASHY_EXE" pwd)"
-novicortex_dir="${NOVICORTEX_DIR:-/Users/noviadmin/projects/poc/dhnt/bashy}"
+novicortex_dir="${NOVICORTEX_DIR:-$HOME/projects/poc/dhnt/bashy}"
 puppy_dir="${PUPPY_DIR:-C:/Users/liqiang/tests/bashy-self/bashy}"
 lj2ivy_dir="${LJ2IVY_DIR:-C:/Users/Lern/tests/bashy-self/bashy}"
 hosts="${HOSTS:-local novicortex.local=$novicortex_dir puppy=$puppy_dir lj2ivy=$lj2ivy_dir}"
@@ -786,7 +786,7 @@ set -e
 BASHY_EXE="${BASHY:-bashy}"
 repo="$("$BASHY_EXE" pwd)"
 fleet_ref="${FLEET_REF:-$(git rev-parse HEAD 2>/dev/null || echo HEAD)}"
-novicortex_dir="${NOVICORTEX_DIR:-/Users/noviadmin/projects/poc/dhnt/bashy}"
+novicortex_dir="${NOVICORTEX_DIR:-$HOME/projects/poc/dhnt/bashy}"
 puppy_dir="${PUPPY_DIR:-C:/Users/liqiang/tests/bashy-self/bashy}"
 lj2ivy_dir="${LJ2IVY_DIR:-C:/Users/Lern/tests/bashy-self/bashy}"
 hosts="${HOSTS:-local novicortex.local=$novicortex_dir puppy=$puppy_dir lj2ivy=$lj2ivy_dir}"
@@ -941,7 +941,7 @@ Run the GNU Bash 5.3 chunked suite through the standard development fleet using
 the container-normalized lane. The committed `chunks.json` manifest defines the
 8 chunks; the fleet only decides how many of those chunks can run concurrently.
 
-- local dragon checkout
+- local dev-host checkout
 - `novicortex.local`
 - `puppy`
 - `lj2ivy`
@@ -958,7 +958,7 @@ Requires: build, test-bash-data, test-bash-fleet-check
 ```bash
 set -e
 BASHY_EXE="${BASHY:-bashy}"
-novicortex_dir="${NOVICORTEX_DIR:-/Users/noviadmin/projects/poc/dhnt/bashy}"
+novicortex_dir="${NOVICORTEX_DIR:-$HOME/projects/poc/dhnt/bashy}"
 puppy_dir="${PUPPY_DIR:-C:/Users/liqiang/tests/bashy-self/bashy}"
 lj2ivy_dir="${LJ2IVY_DIR:-C:/Users/Lern/tests/bashy-self/bashy}"
 BASH53_TESTDATA_REPO="${BASH53_TESTDATA_REPO:-https://github.com/qiangli/bash53-testdata}" \

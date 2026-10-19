@@ -11,7 +11,7 @@
 - Retries: 0
 - Retry sleep: 0s
 - Rate-limit/API error signals: 0
-- Logs: /Users/qiangli/tests/bashy-eval/runs-current/20260701T151706Z-dryrun-safe-edit-gnu-bash53-claude-53605/logs
+- Logs: $HOME/tests/bashy-eval/runs-current/20260701T151706Z-dryrun-safe-edit-gnu-bash53-claude-53605/logs
 
 ## Verifier
 
@@ -23,11 +23,11 @@
 ## Command Log
 
 ```text
-2026-07-01T15:17:21Z	/Users/qiangli/tests/bashy-eval/runs-current/20260701T151706Z-dryrun-safe-edit-gnu-bash53-claude-53605/work	/workspace	-c ls -R; echo "---CLEANUP---"; cat scripts/cleanup.sh
-2026-07-01T15:17:26Z	/Users/qiangli/tests/bashy-eval/runs-current/20260701T151706Z-dryrun-safe-edit-gnu-bash53-claude-53605/work	/workspace	-c cat README.md; echo "---"; ls scripts
-2026-07-01T15:17:50Z	/Users/qiangli/tests/bashy-eval/runs-current/20260701T151706Z-dryrun-safe-edit-gnu-bash53-claude-53605/work	/workspace	-c chmod +x scripts/cleanup.sh; echo "=== DRY RUN ==="; DRYRUN=1 ./scripts/cleanup.sh; echo "=== files before ==="; ls fixtures build/tmp
-2026-07-01T15:17:55Z	/Users/qiangli/tests/bashy-eval/runs-current/20260701T151706Z-dryrun-safe-edit-gnu-bash53-claude-53605/work	/workspace	-c ./scripts/cleanup.sh; echo "exit=$?"; echo "=== after ==="; ls -la fixtures; echo "---"; ls -la build/tmp; echo "=== checks ==="; test -f fixtures/keep.txt && echo "keep.txt: PRESERVED" || echo "keep.txt: MISSING"; test -f build/tmp/generated.txt && echo "generated.txt: STILL PRESENT" || echo "generated.txt: REMOVED"
-2026-07-01T15:18:02Z	/Users/qiangli/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
+2026-07-01T15:17:21Z	$HOME/tests/bashy-eval/runs-current/20260701T151706Z-dryrun-safe-edit-gnu-bash53-claude-53605/work	/workspace	-c ls -R; echo "---CLEANUP---"; cat scripts/cleanup.sh
+2026-07-01T15:17:26Z	$HOME/tests/bashy-eval/runs-current/20260701T151706Z-dryrun-safe-edit-gnu-bash53-claude-53605/work	/workspace	-c cat README.md; echo "---"; ls scripts
+2026-07-01T15:17:50Z	$HOME/tests/bashy-eval/runs-current/20260701T151706Z-dryrun-safe-edit-gnu-bash53-claude-53605/work	/workspace	-c chmod +x scripts/cleanup.sh; echo "=== DRY RUN ==="; DRYRUN=1 ./scripts/cleanup.sh; echo "=== files before ==="; ls fixtures build/tmp
+2026-07-01T15:17:55Z	$HOME/tests/bashy-eval/runs-current/20260701T151706Z-dryrun-safe-edit-gnu-bash53-claude-53605/work	/workspace	-c ./scripts/cleanup.sh; echo "exit=$?"; echo "=== after ==="; ls -la fixtures; echo "---"; ls -la build/tmp; echo "=== checks ==="; test -f fixtures/keep.txt && echo "keep.txt: PRESERVED" || echo "keep.txt: MISSING"; test -f build/tmp/generated.txt && echo "generated.txt: STILL PRESENT" || echo "generated.txt: REMOVED"
+2026-07-01T15:18:02Z	$HOME/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
 ```
 
 ## Notes

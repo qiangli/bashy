@@ -86,8 +86,8 @@
 # AUTO PLACEMENT (opt-in; peer campaign / free-suite shards). When WORKER_NODES
 # is UNSET and CAMPAIGN_AUTO_PLACEMENT is truthy, `preflight` resolves each
 # logical WORKERS role to a DISTINCT eligible node with scripts/dks-select-node.sh
-# (the resource-aware selector — max(live metrics, reserved requests), Dragon /
-# control-plane penalty, novicortex/novidesign preference). Each resolution feeds
+# (the resource-aware selector — max(live metrics, reserved requests), dev-host /
+# control-plane penalty, novicortex/remote-macos-host preference). Each resolution feeds
 # the nodes already chosen through DKS_SELECT_EXCLUDE_NODES so one point-in-time
 # preflight cannot pick a node twice, and the resolved role=node map is persisted
 # to a run-local, non-secret file ($CAMPAIGN_K8S_PLACEMENT_FILE, set by

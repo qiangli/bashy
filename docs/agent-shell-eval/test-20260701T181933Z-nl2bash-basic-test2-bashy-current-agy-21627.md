@@ -11,7 +11,7 @@
 - Retries: 0
 - Retry sleep: 0s
 - Rate-limit/API error signals: 0
-- Logs: /Users/qiangli/tests/bashy-eval/runs-nl2bash/20260701T181933Z-nl2bash-basic-test2-bashy-current-agy-21627/logs
+- Logs: $HOME/tests/bashy-eval/runs-nl2bash/20260701T181933Z-nl2bash-basic-test2-bashy-current-agy-21627/logs
 
 ## Verifier
 
@@ -23,11 +23,11 @@
 ## Command Log
 
 ```text
-2026-07-01T18:19:46Z	/Users/qiangli/tests/bashy-eval/runs-nl2bash/20260701T181933Z-nl2bash-basic-test2-bashy-current-agy-21627/work	/workspace	ls -la
-2026-07-01T18:19:48Z	/Users/qiangli/tests/bashy-eval/runs-nl2bash/20260701T181933Z-nl2bash-basic-test2-bashy-current-agy-21627/work	/workspace	chmod +x test2.sh
-2026-07-01T18:19:48Z	/Users/qiangli/tests/bashy-eval/runs-nl2bash/20260701T181933Z-nl2bash-basic-test2-bashy-current-agy-21627/work	/workspace	./test2.sh
-2026-07-01T18:19:49Z	/Users/qiangli/tests/bashy-eval/runs-nl2bash/20260701T181933Z-nl2bash-basic-test2-bashy-current-agy-21627/work	/workspace	ls -la dir1 dir2
-2026-07-01T18:19:51Z	/Users/qiangli/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
+2026-07-01T18:19:46Z	$HOME/tests/bashy-eval/runs-nl2bash/20260701T181933Z-nl2bash-basic-test2-bashy-current-agy-21627/work	/workspace	ls -la
+2026-07-01T18:19:48Z	$HOME/tests/bashy-eval/runs-nl2bash/20260701T181933Z-nl2bash-basic-test2-bashy-current-agy-21627/work	/workspace	chmod +x test2.sh
+2026-07-01T18:19:48Z	$HOME/tests/bashy-eval/runs-nl2bash/20260701T181933Z-nl2bash-basic-test2-bashy-current-agy-21627/work	/workspace	./test2.sh
+2026-07-01T18:19:49Z	$HOME/tests/bashy-eval/runs-nl2bash/20260701T181933Z-nl2bash-basic-test2-bashy-current-agy-21627/work	/workspace	ls -la dir1 dir2
+2026-07-01T18:19:51Z	$HOME/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
 ```
 
 ## Notes

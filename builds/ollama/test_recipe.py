@@ -184,7 +184,7 @@ class Recipe(unittest.TestCase):
         self.assertIn("mousetrap", step)
         # Portable first-wins notices merge: bare cp -n exits 1 on macOS
         # when the destination exists (GNU exits 0), which kills the step
-        # under set -euo pipefail (replayed on novidesign.local).
+        # under set -euo pipefail (replayed on macos-host).
         self.assertNotIn('cp -n "../out/notices-', step)
         self.assertIn("if [[ ! -e $dest ]]", step)
 
@@ -285,7 +285,7 @@ class Recipe(unittest.TestCase):
         # Prima-proven Seatbelt form (tag bashy-bashy-prima-0.1.2-13, run
         # 38486571631, green on the hosted macos-15 runners): (remote ip
         # "localhost:PORT"). The ip4 variant failed CI runs 38448516095 and
-        # later. Reproduced on novidesign.local (macOS 26.3): the ip form
+        # later. Reproduced on macos-host (macOS 26.3): the ip form
         # compiles, allows the configured loopback port, and denies
         # wrong-port and external endpoints (Seatbelt rejects numeric hosts:
         # "host must be * or localhost in network address").

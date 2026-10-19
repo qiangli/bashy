@@ -9,7 +9,7 @@ created: 2026-09-07T20:59:33.961542Z
 sprint: 138
 ---
 
-Urgent user-requested P0 resource incident, investigated 2026-09-07 on Dragon. Fix and deliver promptly; this card does not claim implementation has started.
+Urgent user-requested P0 resource incident, investigated 2026-09-07 on dev-host. Fix and deliver promptly; this card does not claim implementation has started.
 
 CONFIRMED EVIDENCE
 PID 50310, launched by Codex PID 48760 in the dhnt umbrella, runs: bashy sprint start 117 --owner sprint117-manager --for 4h --watch. Observed 50-75% of one CPU core, ~30 CPU minutes over ~3 hours, ~150 MB sampled footprint. The separate schedule daemon PID 72796 was below 1%. Installed bashy.real identifies revision bc9e466254567e2c4d0a97d781d843964fae2126, built with Go 1.26.5. A five-second macOS sample, symbolized using the executable's Go pclntab, shows runSprintInboxWatch -> latestSprintWatchAck -> room.Timeline -> encoding/json.Unmarshal, with JSON scanning/decoding and GC dominating sampled active work. Samples available locally at /tmp/bashy-50310-sample.txt and /tmp/bashy-50310-symbolized.txt; this written evidence must survive those temporary files.

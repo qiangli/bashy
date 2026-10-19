@@ -10,4 +10,4 @@ sprint: 127
 closed: 2026-09-06T04:30:45.047044Z
 ---
 
-Dragon canonical coreutils gate reported TestSprintTickWaitReturnsOnTheFirstChange failed in suite (Open=0, want 1) but passed isolated rerun. Tool-managed autopilot relies on tick/wait to notice dynamically added stories. Make the wait/change observation deterministic and add a repeated regression gate.
+dev-host canonical coreutils gate reported TestSprintTickWaitReturnsOnTheFirstChange failed in suite (Open=0, want 1) but passed isolated rerun. Tool-managed autopilot relies on tick/wait to notice dynamically added stories. Make the wait/change observation deterministic and add a repeated regression gate.

@@ -156,7 +156,7 @@ S358.10.
 
 ### 1.0-claim evidence: lean image on linux/arm64 (2026-10-08, Sprint 379)
 
-Built from bashy main `39ba5d27` on novidesign.local (Apple Silicon) into the
+Built from bashy main `39ba5d27` on macos-host (Apple Silicon) into the
 running podman machine `bashy` (applehv, linux/arm64): the static linux/arm64
 scratch artifact (tags `bashy_scratch`, `-w` + version stamps, 127,349,902
 bytes) wrapped by main's own `bashy self image --arch arm64` through main's

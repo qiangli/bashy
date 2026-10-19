@@ -11,7 +11,7 @@
 - Retries: 0
 - Retry sleep: 0s
 - Rate-limit/API error signals: 0
-- Logs: /Users/qiangli/tests/bashy-eval/runs-nl2bash/20260701T181752Z-nl2bash-basic-test1-gnu-bash53-codex-15946/logs
+- Logs: $HOME/tests/bashy-eval/runs-nl2bash/20260701T181752Z-nl2bash-basic-test1-gnu-bash53-codex-15946/logs
 
 ## Verifier
 
@@ -23,8 +23,8 @@
 ## Command Log
 
 ```text
-2026-07-01T18:17:57Z	/Users/qiangli/tests/bashy-eval/runs-nl2bash/20260701T181752Z-nl2bash-basic-test1-gnu-bash53-codex-15946/work	/workspace	-lc printf %s\\n "#!/usr/bin/env bash" "mkdir -p test" > test1.sh && chmod +x test1.sh && ./test1.sh && test -d test
-2026-07-01T18:17:59Z	/Users/qiangli/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
+2026-07-01T18:17:57Z	$HOME/tests/bashy-eval/runs-nl2bash/20260701T181752Z-nl2bash-basic-test1-gnu-bash53-codex-15946/work	/workspace	-lc printf %s\\n "#!/usr/bin/env bash" "mkdir -p test" > test1.sh && chmod +x test1.sh && ./test1.sh && test -d test
+2026-07-01T18:17:59Z	$HOME/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
 ```
 
 ## Notes

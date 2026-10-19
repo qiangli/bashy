@@ -15,7 +15,7 @@ closed: 2026-10-13T15:15:51.967047Z
 closed_by: s436-codex-manager
 ---
 
-First-party qiangli/prima.cpp source main merged 542d01932a88372a184037c5939048f355dcbd57; annotated/pushed tag bashy-prima-0.1.1 peels to exact commit. Update Bashy builds/prima.cpp declaration/PIN/tool.env/README and generated fork to source tag 0.1.1 and exact SHA; release version becomes bashy-bashy-prima-0.1.1-1, same raw four-platform asset contract and exact workflow identity. Update focused tests; preserve fail-closed source verification and no-egress. Do not change unrelated shared pipeline or binary consumer pins; no Dragon native build/container/full suite, no push. Commit story file and source diff with trailers. Coordinate independent #89 no-egress/log fix; manager merges sequentially.
+First-party qiangli/prima.cpp source main merged 542d01932a88372a184037c5939048f355dcbd57; annotated/pushed tag bashy-prima-0.1.1 peels to exact commit. Update Bashy builds/prima.cpp declaration/PIN/tool.env/README and generated fork to source tag 0.1.1 and exact SHA; release version becomes bashy-bashy-prima-0.1.1-1, same raw four-platform asset contract and exact workflow identity. Update focused tests; preserve fail-closed source verification and no-egress. Do not change unrelated shared pipeline or binary consumer pins; no dev-host native build/container/full suite, no push. Commit story file and source diff with trailers. Coordinate independent #89 no-egress/log fix; manager merges sequentially.
 
 ## Delivery evidence
 

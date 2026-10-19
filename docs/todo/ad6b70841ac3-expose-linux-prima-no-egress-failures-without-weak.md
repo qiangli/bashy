@@ -69,5 +69,5 @@ only; the -3 hosted run is the live proof.
 
 Handoff: manager installs the generated `fork/` diff on the source
 repository's `bashy-build` branch and cuts immutable candidate -3. No push
-or Dragon native build/container from this worker. Worker stories in this
+or dev-host native build/container from this worker. Worker stories in this
 commit; manager must not commit worker stories.

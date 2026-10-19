@@ -12,13 +12,13 @@
 #                          scripts/dks-select-node.sh: Ready, schedulable,
 #                          label-matching nodes with real headroom for THIS
 #                          task's requests, preferring idle capable workers and
-#                          penalizing Dragon/control-plane so the coordination
+#                          penalizing dev-host/control-plane so the coordination
 #                          seat stays responsive. The chosen node is pinned into
 #                          the nodeSelector, so the recorded executor and the
 #                          actual placement cannot drift apart.
 #
 # `auto` is the default because the alternative default was "whatever the
-# scheduler picks", which in practice meant Dragon. Selection FAILS CLOSED: no
+# scheduler picks", which in practice meant dev-host. Selection FAILS CLOSED: no
 # eligible node is a non-zero exit and no manifest, never a Job that quietly
 # lands somewhere unsuitable.
 #

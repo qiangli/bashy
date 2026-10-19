@@ -7,7 +7,7 @@ reporter: qiangli
 created: 2026-07-12T23:22:22.716347Z
 ---
 
-On host dragon-2, run #11 (codex, P1 chunks.json) shows in `weave list` as state=working with dur incrementing (7m11s→7m14s across two calls) and fresh PTY output, yet `bashy weave status 11` prints:
+On host dev-host-2, run #11 (codex, P1 chunks.json) shows in `weave list` as state=working with dur incrementing (7m11s→7m14s across two calls) and fresh PTY output, yet `bashy weave status 11` prints:
 
     state:    working
     killed:   idle 14m57s exceeds --idle-timeout 12m0s

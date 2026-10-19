@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Hosted native inference only. Never execute this workload on Dragon.
+# Hosted native inference only. Never execute this workload on dev-host.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 [[ $# == 1 ]] || { echo 'usage: no-egress-test.sh out/runner-OS-ARCH' >&2; exit 2; }
 [[ ${GITHUB_ACTIONS:-} == true && ${RUNNER_ENVIRONMENT:-} == github-hosted ]] || {
   echo 'native gate requires a GitHub-hosted runner' >&2; exit 1;
 }
-case $(hostname | tr '[:upper:]' '[:lower:]') in *dragon*) echo 'Dragon native gate prohibited' >&2; exit 1;; esac
+case $(hostname | tr '[:upper:]' '[:lower:]') in *dev-host*) echo 'dev-host native gate prohibited' >&2; exit 1;; esac
 asset=$(basename "$1")
 bin=$1
 [[ $asset != runner-windows-amd64 ]] || bin=$1.exe
@@ -112,7 +112,7 @@ MINGW*|MSYS*)
   # (logging is enabled by the gate and restored afterwards). The gate
   # passes only if the protocol exercise records PROTOCOL_PASS AND the
   # control is blocked and logged; any observed allowed non-loopback
-  # connection fails it. (GitHub-hosted and non-Dragon are already
+  # connection fails it. (GitHub-hosted and non-dev-host are already
   # enforced at the top of this script.)
   command -v python3 >/dev/null || { echo 'missing python3' >&2; exit 1; }
   command -v powershell.exe >/dev/null || { echo 'missing powershell.exe' >&2; exit 1; }

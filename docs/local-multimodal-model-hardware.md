@@ -7,7 +7,7 @@ generate creative assets; agent tools apply edits directly to native projects.
 
 ## Evidence capture and methodology
 
-Host evidence was captured directly on claimed host `novidesign.local` (epoch43,
+Host evidence was captured directly on claimed host `macos-host` (epoch43,
 macOS 26.3, Darwin 25.3.0 arm64, Apple M4 Max 14-core, 36.0 GiB unified memory,
 Metal 4) via SSH, prior to verified host cleanup. This corrects the previous
 draft assumption in run219 that remote temporary directories had already been
@@ -20,9 +20,9 @@ checkpoints, virtual environments, and disk preflight logs.
 
 - `measured`: Live telemetry, elapsed request times, process RSS files, model
   allocations, package versions, and disk preflight captured directly from
-  `novidesign.local`.
+  `macos-host`.
 - `admission`: Measured admission / preflight constraint failure on
-  `novidesign.local` (e.g. disk capacity preflight halting model weight
+  `macos-host` (e.g. disk capacity preflight halting model weight
   acquisition) or architecture negative admission (e.g. CUDA-dependent recipes
   on no-CUDA platforms).
 - `published`: Upstream vendor or project engineering specification with canonical link.
@@ -46,11 +46,11 @@ checkpoints, virtual environments, and disk preflight logs.
 | **Wan2.2 TI2V-5B** | 720p Text-Image-to-Video; requires ≥24 GB NVIDIA GPU with offloading, generating 5 s clips in minutes (suitable for background/batch generation, not interactive editor latency); no live run admitted due to storage preflight boundary. Apache-2.0 license | `admission` + `published` ([repo](https://github.com/Wan-Video/Wan2.2), [weights](https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B)) |
 | **Whisper** (`openai-whisper`) | Provisioned Python 3.14.5 venv (`openai-whisper==20250625`, `torch==2.14.1`), test audio `jfk.wav` (352 KB), and downloaded checkpoint `tiny.pt` (`75,572,083 bytes` / ~72.1 MiB); peak RSS file `635,280 KiB` (~620.4 MiB). No transcription output file present; not promoted to inference success. Transcription memory is not the capacity driver | `measured` (env/checkpoint/RSS) + `published` ([whisper](https://github.com/openai/whisper), [whisper.cpp](https://github.com/ggml-org/whisper.cpp)) |
 | **SAM2** (`facebookresearch/sam2`) | Provisioned Python 3.14.5 venv (`sam_2==1.0`, `torch==2.14.1`, `hydra-core==1.3.7`) and downloaded checkpoint `sam2.1_hiera_tiny.pt` (`156,008,466 bytes` / ~148.8 MiB); peak RSS file `844,784 KiB` (~825.0 MiB). No mask propagation output file present; not promoted to inference success. Upstream recipe is CUDA-centered; Apple Silicon MPS path is preliminary and substantially slower | `measured` (env/checkpoint/RSS) + `published` ([sam2](https://github.com/facebookresearch/sam2), [demo](https://github.com/facebookresearch/sam2/blob/main/demo/README.md)) |
-| **noviwin AMD / no-CUDA host** | Negative admission: CUDA-centered execution recipes (SAM2 full pipeline, Wan2.2 ≥24 GB NVIDIA offloading) cannot be admitted on AMD or non-CUDA Windows/Linux environments without significant upstream acceleration rewrites | `admission` + `published` |
+| **windows-host AMD / no-CUDA host** | Negative admission: CUDA-centered execution recipes (SAM2 full pipeline, Wan2.2 ≥24 GB NVIDIA offloading) cannot be admitted on AMD or non-CUDA Windows/Linux environments without significant upstream acceleration rewrites | `admission` + `published` |
 
 ## Host telemetry and verified cleanup
 
-Telemetry measured on `novidesign.local` (epoch43):
+Telemetry measured on `macos-host` (epoch43):
 
 - **Hardware:** Apple M4 Max, 14 cores (14 physical, 14 logical), 36.0 GiB unified memory (`hw.memsize: 38654705664`).
 - **Accelerator / OS:** Metal 4 (`MTLGPUFamilyMetal4`, `MTLGPUFamilyApple9`), 28.1 GiB Metal compute memory available out of 36.0 GiB total; macOS 26.3 (Build 25D125), Darwin 25.3.0 arm64.
@@ -98,14 +98,14 @@ budgeting RAM, GPU VRAM, CPU cores, and storage bandwidth.
    - 64 GB unified memory is the recommended baseline (96 GB+ preferred) for concurrent
      creative application suites.
    - Because unified memory is shared between system applications and GPU buffers,
-     a 36 GB host (like `novidesign.local`) can support Qwen3-VL 8B (11 GiB) and an editor,
+     a 36 GB host (like `macos-host`) can support Qwen3-VL 8B (11 GiB) and an editor,
      but leaves insufficient headroom for concurrent diffusion or multi-stream video pipelines.
    - MPS acceleration is preliminary for SAM2 and unavailable for Wan2.2 CUDA offloading;
      unified memory capacity is not an architectural substitute for CUDA acceleration.
 5. **Storage Reserves:**
    - A dedicated 2 TB+ NVMe drive is essential. Project files, original audio/video media,
      render caches, and model checkpoints compete directly for disk space. As demonstrated
-     by the 97% capacity preflight failure on `novidesign.local`, a 16 GiB free headroom
+     by the 97% capacity preflight failure on `macos-host`, a 16 GiB free headroom
      prevents downloading required model weights.
 
 ## Recommendations and fallbacks

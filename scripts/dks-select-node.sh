@@ -10,12 +10,12 @@
 #   node="$(DKS_SELECT_OS=darwin DKS_SELECT_CPU=2 DKS_SELECT_MEM=4Gi \
 #            scripts/dks-select-node.sh)"
 #
-# WHY: Dragon is the fleet's coordination seat. Left to the default scheduler,
+# WHY: dev-host is the fleet's coordination seat. Left to the default scheduler,
 # every native shard lands wherever the API server feels like putting it, which
-# in practice has been Dragon - the one node that must stay responsive to run
-# the conductor. This selector reserves Dragon (and any control-plane node)
+# in practice has been dev-host - the one node that must stay responsive to run
+# the conductor. This selector reserves dev-host (and any control-plane node)
 # behind a score penalty and prefers idle capable workers (novicortex,
-# novidesign by default), while still failing closed rather than placing a shard
+# remote-macos-host by default), while still failing closed rather than placing a shard
 # on a node that cannot actually hold it.
 #
 # FAIL-CLOSED, ALWAYS. Every unknown is an error, never an optimistic default:
@@ -47,8 +47,8 @@
 #                          whose Pods do not exist yet - see CONCURRENCY below.
 #
 # Preference / reserve:
-#   DKS_SELECT_PREFERRED_HOSTS   default "novicortex,novidesign".
-#   DKS_SELECT_RESERVED_HOSTS    default "dragon".
+#   DKS_SELECT_PREFERRED_HOSTS   default "novicortex,remote-macos-host".
+#   DKS_SELECT_RESERVED_HOSTS    default "dev-host".
 #   DKS_SELECT_PREFERRED_BONUS   default 25 score points.
 #   DKS_SELECT_RESERVE_PENALTY   default 60 score points (also applied to any
 #                                node labelled node-role.kubernetes.io/
@@ -172,8 +172,8 @@ NEED_MEM_Q="${DKS_SELECT_MEM:-0}"
 # Single-dash defaults: an explicitly-EMPTY list means "no preferred hosts" /
 # "reserve nothing", which is a legitimate operator choice. Only a genuinely
 # unset variable falls back to the fleet defaults.
-PREFERRED_HOSTS="${DKS_SELECT_PREFERRED_HOSTS-novicortex,novidesign}"
-RESERVED_HOSTS="${DKS_SELECT_RESERVED_HOSTS-dragon}"
+PREFERRED_HOSTS="${DKS_SELECT_PREFERRED_HOSTS-novicortex,remote-macos-host}"
+RESERVED_HOSTS="${DKS_SELECT_RESERVED_HOSTS-dev-host}"
 PREFERRED_BONUS="${DKS_SELECT_PREFERRED_BONUS:-25}"
 RESERVE_PENALTY="${DKS_SELECT_RESERVE_PENALTY:-60}"
 SPREAD_SELECTOR="${DKS_SELECT_SPREAD_SELECTOR-dhnt.io/lane=native-platform}"
@@ -469,8 +469,8 @@ node_usage() {
 
 # list_contains LIST NAME HOST - comma-separated LIST matched against a node
 # name or its registered host label, case-insensitively. A bare entry also
-# matches a `<entry>-suffix` / `<entry>.suffix` node name, so "dragon" covers a
-# node registered as `dragon-vk-native` without the operator having to know the
+# matches a `<entry>-suffix` / `<entry>.suffix` node name, so "dev-host" covers a
+# node registered as `dev-host-vk-native` without the operator having to know the
 # exact registration spelling.
 list_contains() {
   local list="$1" name="$2" host="$3" entry rest

@@ -18,8 +18,8 @@
 #   capacity           a node without room is dropped, and an empty candidate set
 #                      is a non-zero exit with NO node name on stdout
 #   ties               an exact tie resolves the same way every run
-#   preferred          novicortex/novidesign beat a strictly roomier plain worker
-#   dragon reserve     Dragon loses to any healthy worker, but is still usable
+#   preferred          novicortex/remote-macos-host beat a strictly roomier plain worker
+#   dev-host reserve     dev-host loses to any healthy worker, but is still usable
 #                      when it is the only capacity — a penalty, not a ban
 #   spread             a node already running a sibling shard loses to an idle one
 #   explicit override  EXECUTOR_NODE=<name> consults NOTHING and records verbatim
@@ -112,10 +112,10 @@ contains "baseline pins the winner by its registered-host label" "$err" \
   "pin=outpost.dhnt.io/host=novicortex"
 
 # 2. Metrics are actually consumed: same inventory, same pods, different answer.
-#    novidesign is burning less than novicortex, so it wins once usage is
+#    remote-macos-host is burning less than novicortex, so it wins once usage is
 #    visible. If metrics were ignored this would still say novicortex.
 got=$(run_select "DKS_SELECT_METRICS_JSON=$fx/metrics-idle.json")
-check "live metrics change the selection" "$got" novidesign
+check "live metrics change the selection" "$got" remote-macos-host
 err=$(cat "$tmp/err")
 contains "metrics runs report usage=metrics" "$err" "usage=metrics"
 lacks "metrics runs do not warn about unavailable metrics" "$err" \
@@ -124,7 +124,7 @@ lacks "metrics runs do not warn about unavailable metrics" "$err" \
 # 2b. Live usage far above a node's (zero) requests removes it entirely. This is
 #     the case requests-only scoring cannot see at all.
 got=$(run_select "DKS_SELECT_METRICS_JSON=$fx/metrics-busy-novicortex.json")
-check "a node busy beyond its requests is excluded" "$got" novidesign
+check "a node busy beyond its requests is excluded" "$got" remote-macos-host
 err=$(cat "$tmp/err")
 contains "the busy node is excluded for capacity, not filtered out" "$err" \
   "skip node=novicortex reason=insufficient-capacity"
@@ -141,7 +141,7 @@ contains "no-metrics runs report usage=requests" "$err" "usage=requests"
 
 # 3b. Reserved requests alone are enough to exclude a node.
 got=$(run_select "DKS_SELECT_PODS_JSON=$fx/pods-busy-novicortex.json")
-check "reserved requests exclude a node with no metrics" "$got" novidesign
+check "reserved requests exclude a node with no metrics" "$got" remote-macos-host
 
 # Effective requests are per Pod, not one global init-container maximum. Two
 # init-heavy Pods plus overhead exceed novicortex even though either Pod alone
@@ -153,7 +153,7 @@ cat >"$tmp/pods-two-init.json" <<'EOF'
 ]}
 EOF
 got=$(run_select "DKS_SELECT_PODS_JSON=$tmp/pods-two-init.json")
-check "effective init requests are summed per Pod" "$got" novidesign
+check "effective init requests are summed per Pod" "$got" remote-macos-host
 err=$(cat "$tmp/err")
 contains "two init-heavy Pods exhaust novicortex" "$err" \
   "skip node=novicortex reason=insufficient-capacity"
@@ -167,10 +167,10 @@ check "Succeeded/Failed pod requests are not counted as reserved" "$got" novicor
 #     This is the sharpest edge of the whole design — a node absent from metrics
 #     scores as if idle, so the operator has to be told which node that was.
 got=$(run_select "DKS_SELECT_METRICS_JSON=$fx/metrics-partial.json")
-check "partial metrics still selects" "$got" novidesign
+check "partial metrics still selects" "$got" remote-macos-host
 err=$(cat "$tmp/err")
 contains "partial metrics names the node with no reading" "$err" \
-  "node=novidesign has no metrics.k8s.io reading"
+  "node=remote-macos-host has no metrics.k8s.io reading"
 
 # 3e. Strict mode turns every one of those into a hard failure.
 got=$(run_select "DKS_SELECT_METRICS_JSON=$fx/metrics-partial.json" \
@@ -186,8 +186,8 @@ check "REQUIRE_METRICS total-absence failure prints no node name" "$got" ""
 # the same outpost host label. This is the live peer-DKS shape.
 cat >"$tmp/nodes-virtual-host.json" <<'EOF'
 {"items":[
- {"metadata":{"name":"worker-physical","labels":{"kubernetes.io/os":"linux","kubernetes.io/arch":"arm64","kubernetes.io/hostname":"worker-physical","outpost.dhnt.io/backend":"k3s","outpost.dhnt.io/host":"novidesign","outpost.dhnt.io/runtime":"agent"}},"spec":{},"status":{"allocatable":{"cpu":"8","memory":"16Gi"},"conditions":[{"type":"Ready","status":"True"}]}},
- {"metadata":{"name":"worker-vk-native","labels":{"kubernetes.io/os":"darwin","kubernetes.io/arch":"arm64","kubernetes.io/hostname":"worker-vk-native","outpost.dhnt.io/backend":"vk-native","outpost.dhnt.io/host":"novidesign","outpost.dhnt.io/runtime":"virtual"}},"spec":{},"status":{"allocatable":{"cpu":"14","memory":"36Gi"},"conditions":[{"type":"Ready","status":"True"}]}}
+ {"metadata":{"name":"worker-physical","labels":{"kubernetes.io/os":"linux","kubernetes.io/arch":"arm64","kubernetes.io/hostname":"worker-physical","outpost.dhnt.io/backend":"k3s","outpost.dhnt.io/host":"remote-macos-host","outpost.dhnt.io/runtime":"agent"}},"spec":{},"status":{"allocatable":{"cpu":"8","memory":"16Gi"},"conditions":[{"type":"Ready","status":"True"}]}},
+ {"metadata":{"name":"worker-vk-native","labels":{"kubernetes.io/os":"darwin","kubernetes.io/arch":"arm64","kubernetes.io/hostname":"worker-vk-native","outpost.dhnt.io/backend":"vk-native","outpost.dhnt.io/host":"remote-macos-host","outpost.dhnt.io/runtime":"virtual"}},"spec":{},"status":{"allocatable":{"cpu":"14","memory":"36Gi"},"conditions":[{"type":"Ready","status":"True"}]}}
 ]}
 EOF
 cat >"$tmp/metrics-physical-busy.json" <<'EOF'
@@ -231,8 +231,8 @@ contains "a too-small node is excluded" "$err" \
 
 # 4b. Host pinning narrows to exactly one registered host, and still enforces
 #     capacity rather than trusting the pin.
-got=$(run_select DKS_SELECT_HOST=novidesign)
-check "an explicit host constraint selects that host's node" "$got" novidesign
+got=$(run_select DKS_SELECT_HOST=remote-macos-host)
+check "an explicit host constraint selects that host's node" "$got" remote-macos-host
 got=$(run_select DKS_SELECT_HOST=novitiny)
 check "an explicit host with no room fails closed" "$(last_rc)" 3
 check "an explicit host with no room prints no node name" "$got" ""
@@ -267,14 +267,14 @@ check "an empty node inventory exits 3" "$(last_rc)" 3
 check "an empty node inventory prints no node name" "$got" ""
 
 # ---------------------------------------------------------------------------
-# 6. Determinism. novicortex and novidesign are byte-identical in the fixture, so
+# 6. Determinism. novicortex and remote-macos-host are byte-identical in the fixture, so
 #    this is a genuine tie broken only by the final name key.
 
 err=$(cat "$tmp/err")
 got=$(run_select)
 err=$(cat "$tmp/err")
-contains "novicortex and novidesign tie on score" "$err" "node=novicortex host=novicortex role=preferred score=100"
-contains "novidesign scores identically" "$err" "node=novidesign host=novidesign role=preferred score=100"
+contains "novicortex and remote-macos-host tie on score" "$err" "node=novicortex host=novicortex role=preferred score=100"
+contains "remote-macos-host scores identically" "$err" "node=remote-macos-host host=remote-macos-host role=preferred score=100"
 ties=""
 i=0
 while [ "$i" -lt 5 ]; do
@@ -300,22 +300,22 @@ check "with no preferred hosts the roomiest worker wins" "$got" noviextra
 got=$(run_select DKS_SELECT_PREFERRED_HOSTS=noviextra)
 check "the preferred-host list is configurable" "$got" noviextra
 
-# Dragon is the coordination seat: penalized, never chosen while a healthy
+# dev-host is the coordination seat: penalized, never chosen while a healthy
 # worker exists...
 got=$(run_select)
-lacks "dragon is not selected while workers are available" "$got" dragon
+lacks "dev-host is not selected while workers are available" "$got" dev-host
 err=$(cat "$tmp/err")
-contains "dragon is scored as reserved" "$err" "node=dragon host=dragon role=reserved"
+contains "dev-host is scored as reserved" "$err" "node=dev-host host=dev-host role=reserved"
 
-# ...but a penalty is not a ban. When Dragon is the only capacity, refusing to
+# ...but a penalty is not a ban. When dev-host is the only capacity, refusing to
 # run at all would be worse than running on it.
-got=$(run_select "DKS_SELECT_NODES_JSON=$fx/nodes-dragon-only.json")
-check "dragon is still usable when it is the only capacity" "$got" dragon
-check "dragon-only selection exits 0" "$(last_rc)" 0
+got=$(run_select "DKS_SELECT_NODES_JSON=$fx/nodes-dev-host-only.json")
+check "dev-host is still usable when it is the only capacity" "$got" dev-host
+check "dev-host-only selection exits 0" "$(last_rc)" 0
 
 # The reserve list is configurable, and reserving the preferred hosts moves the
 # choice off them.
-got=$(run_select DKS_SELECT_RESERVED_HOSTS=novicortex,novidesign)
+got=$(run_select DKS_SELECT_RESERVED_HOSTS=novicortex,remote-macos-host)
 check "the reserved-host list is configurable" "$got" noviextra
 
 # A control-plane node is reserved by role, without being named in any list.
@@ -330,20 +330,20 @@ contains "the control-plane node is scored as reserved" "$err" "node=novictl"
 #    from stacking on one host.
 
 got=$(run_select "DKS_SELECT_PODS_JSON=$fx/pods-one-shard-novicortex.json")
-check "a node already running a shard loses to an idle peer" "$got" novidesign
+check "a node already running a shard loses to an idle peer" "$got" remote-macos-host
 err=$(cat "$tmp/err")
 contains "the sibling shard is counted" "$err" "siblingShards=1"
 
 # That shard also RESERVES 250m/512Mi, so the case above cannot tell the spread
-# penalty apart from the plain loss of headroom — novidesign would win either
+# penalty apart from the plain loss of headroom — remote-macos-host would win either
 # way. Two tests pull them apart.
 #
 # First, on the SAME fixture, disabling the penalty must NOT flip the winner:
-# novicortex genuinely has less room, so novidesign still wins on headroom. What
+# novicortex genuinely has less room, so remote-macos-host still wins on headroom. What
 # changes is only novicortex's score, by exactly the penalty.
 got=$(run_select "DKS_SELECT_PODS_JSON=$fx/pods-one-shard-novicortex.json" \
   DKS_SELECT_SPREAD_PENALTY=0)
-check "disabling the penalty does not undo a real reservation" "$got" novidesign
+check "disabling the penalty does not undo a real reservation" "$got" remote-macos-host
 err=$(cat "$tmp/err")
 contains "with the penalty off the sibling costs nothing" "$err" \
   "node=novicortex host=novicortex role=preferred score=96"
@@ -357,15 +357,15 @@ contains "with the penalty on the sibling costs exactly 35" "$err" \
 # sibling count is the only thing that can separate them. This is the case that
 # actually proves the penalty spreads a fan-out.
 got=$(run_select "DKS_SELECT_PODS_JSON=$fx/pods-zero-request-shard-novicortex.json")
-check "a zero-request sibling still pushes the next shard to an idle peer" "$got" novidesign
+check "a zero-request sibling still pushes the next shard to an idle peer" "$got" remote-macos-host
 got=$(run_select "DKS_SELECT_PODS_JSON=$fx/pods-zero-request-shard-novicortex.json" \
   DKS_SELECT_SPREAD_PENALTY=0)
 check "the spread penalty is configurable" "$got" novicortex
 
 # The documented concurrent-fan-out workaround: exclude what you already placed.
 got=$(run_select DKS_SELECT_EXCLUDE_NODES=novicortex)
-check "an excluded node is skipped" "$got" novidesign
-got=$(run_select DKS_SELECT_EXCLUDE_NODES=novicortex,novidesign)
+check "an excluded node is skipped" "$got" remote-macos-host
+got=$(run_select DKS_SELECT_EXCLUDE_NODES=novicortex,remote-macos-host)
 check "an exclusion list is honored in full" "$got" noviextra
 err=$(cat "$tmp/err")
 contains "exclusions are reported" "$err" "skip node=novicortex reason=explicitly-excluded"
@@ -535,12 +535,12 @@ yaml=$(emit_indexed VENUE=agent)
 check "agent Indexed Job emits successfully" "$(last_rc)" 0
 contains "agent Jobs require a runtime-ready physical worker" "$yaml" \
   'outpost.dhnt.io/runtime-ready: "true"'
-contains "Indexed Jobs prefer novicortex and novidesign" "$yaml" \
-  'values: ["novicortex", "novidesign"]'
-contains "Indexed Jobs reserve Dragon without banning it" "$yaml" \
+contains "Indexed Jobs prefer novicortex and remote-macos-host" "$yaml" \
+  'values: ["novicortex", "remote-macos-host"]'
+contains "Indexed Jobs reserve dev-host without banning it" "$yaml" \
   'operator: NotIn'
-contains "Indexed Jobs name Dragon in the reserve preference" "$yaml" \
-  'values: ["dragon"]'
+contains "Indexed Jobs name dev-host in the reserve preference" "$yaml" \
+  'values: ["dev-host"]'
 contains "Indexed Jobs avoid control-plane nodes when workers exist" "$yaml" \
   'key: node-role.kubernetes.io/control-plane'
 contains "Indexed Jobs spread by registered physical host" "$yaml" \
@@ -566,7 +566,7 @@ contains "vk-podman opts into bounded terminal evidence" "$yaml" \
 yaml=$(emit_indexed DKS_PREFERRED_HOSTS='novicortex,not valid')
 check "an invalid preferred-host list fails closed" "$(last_rc)" 2
 check "an invalid preferred-host list emits no manifest" "$yaml" ""
-yaml=$(emit_indexed DKS_RESERVED_HOSTS='dragon,,other')
+yaml=$(emit_indexed DKS_RESERVED_HOSTS='dev-host,,other')
 check "an empty host-list element fails closed" "$(last_rc)" 2
 check "an empty host-list element emits no manifest" "$yaml" ""
 
@@ -691,7 +691,7 @@ run_under_bashy() { # desc, want, "K=V"...
 
 if command -v bashy >/dev/null 2>&1; then
   bashy_bin="$(command -v bashy)"
-  run_under_bashy "bashy: metrics-driven selection" "selected node=novidesign" \
+  run_under_bashy "bashy: metrics-driven selection" "selected node=remote-macos-host" \
     "DKS_SELECT_NODES_JSON=$fx/nodes.json" \
     "DKS_SELECT_METRICS_JSON=$fx/metrics-idle.json"
 
@@ -711,7 +711,7 @@ if command -v bashy >/dev/null 2>&1; then
 
   # Pod-request summing and the spread count are separate jq programs.
   run_under_bashy "bashy: reserved pod requests are summed" \
-    "selected node=novidesign" "DKS_SELECT_NODES_JSON=$fx/nodes.json" \
+    "selected node=remote-macos-host" "DKS_SELECT_NODES_JSON=$fx/nodes.json" \
     "DKS_SELECT_PODS_JSON=$fx/pods-busy-novicortex.json"
   run_under_bashy "bashy: sibling shards are counted" "siblingShards=1" \
     "DKS_SELECT_NODES_JSON=$fx/nodes.json" \

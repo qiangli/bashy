@@ -728,12 +728,12 @@ class WindowsTarget(unittest.TestCase):
         script=(ROOT/'files/no-egress-test.sh').read_text()
         self.assertIn('MINGW*|MSYS*)',script)
         self.assertIn('native gate requires a GitHub-hosted runner',script)
-        self.assertIn('Dragon native gate prohibited',script)
+        self.assertIn('dev-host native gate prohibited',script)
         self.assertIn('powershell.exe',script)
         self.assertIn('windows-defender-egress.ps1',script)
         self.assertIn('Defender deny policy',script)
         # The firewall API rejects forward slashes in -Program paths, so
-        # rule programs are converted to backslashes (live noviwin1 proof).
+        # rule programs are converted to backslashes (live windows-host proof).
         self.assertIn('winpath',script)
         self.assertIn("tr '/' '\\\\'",script)
         for proof in ['Defender control blocked',
@@ -871,7 +871,7 @@ class WindowsDefenderGate(unittest.TestCase):
         self.assertIn('LogBlocked', gate)
         self.assertIn('LogFileName', gate)
         # Profiles are enabled for the gate and restored: rules enforce
-        # nothing under a disabled profile (live noviwin1 proof: both
+        # nothing under a disabled profile (live windows-host proof: both
         # networks are Public with that firewall off).
         self.assertIn('-Enabled True', gate)
         self.assertIn('profiles enabled', gate)
@@ -883,7 +883,7 @@ class WindowsDefenderGate(unittest.TestCase):
     def test_reporting_never_throws(self):
         # Under the script's Stop preference a bare Write-Error throws,
         # which would skip the evidence append and the failed flag. Every
-        # error report carries -ErrorAction Continue (live noviwin1 proof:
+        # error report carries -ErrorAction Continue (live windows-host proof:
         # the first repro failed inside New-NetFirewallRule and the catch
         # itself threw, hiding the cause from the evidence file).
         gate = self._gate()
@@ -893,7 +893,7 @@ class WindowsDefenderGate(unittest.TestCase):
         for line in writers:
             self.assertIn('-ErrorAction Continue', line)
         # Native stderr merged with 2>&1 throws under Stop with the first
-        # stderr line as the message (live noviwin1 proof: the control's
+        # stderr line as the message (live windows-host proof: the control's
         # own traceback masked its outcome). Both child runs use file
         # redirects instead.
         code = [line for line in gate.splitlines()
@@ -904,7 +904,7 @@ class WindowsDefenderGate(unittest.TestCase):
     def test_exercise_must_fully_pass(self):
         gate = self._gate()
         # The exit code travels as a marker line: .ExitCode stays empty
-        # after a manual .WaitForExit() on some hosts (live noviwin1
+        # after a manual .WaitForExit() on some hosts (live windows-host
         # proof), so the gate never reads it. The 600s Wait-Job is the
         # outer backstop over the exercise's own per-stage deadlines.
         self.assertIn('EXERCISE-RC=', gate)
@@ -1534,7 +1534,7 @@ class ExerciseDiagnostics(unittest.TestCase):
 
 class WindowsDefenderRunnerMismatch(unittest.TestCase):
     # Rework 9, CI run 38481498544 (tag 0.1.2-10): the gate PASSED live on
-    # noviwin1 but failed on the windows-2025 runner with "no DROP for
+    # windows-host but failed on the windows-2025 runner with "no DROP for
     # 192.0.2.1:443" after a TimeoutError, not an immediate WinError 10013
     # access denied: the block rule most likely did not match the control
     # process (hostedtoolcache python vs a shim, 8.3 short names, case).

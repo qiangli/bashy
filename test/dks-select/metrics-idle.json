@@ -3,7 +3,7 @@
   "apiVersion": "metrics.k8s.io/v1beta1",
   "items": [
     {
-      "metadata": { "name": "dragon" },
+      "metadata": { "name": "dev-host" },
       "timestamp": "2026-08-02T00:00:00Z",
       "window": "20s",
       "usage": { "cpu": "420000000n", "memory": "4194304Ki" }
@@ -15,7 +15,7 @@
       "usage": { "cpu": "300000000n", "memory": "2097152Ki" }
     },
     {
-      "metadata": { "name": "novidesign" },
+      "metadata": { "name": "remote-macos-host" },
       "timestamp": "2026-08-02T00:00:00Z",
       "window": "20s",
       "usage": { "cpu": "250000000n", "memory": "1048576Ki" }

@@ -5,7 +5,7 @@ Story-ID: `39b5d2028677`. Worker base: `7c377034`; reported candidate:
 
 ## Plan
 
-Reproduce the reported waits on noviwin1.local from copied standalone trees,
+Reproduce the reported waits on windows-host from copied standalone trees,
 trace registration and event delivery, add a regression at the failing seam,
 and fix that seam without lengthening waits or skipping tests. Run module
 build/vet and focused tests, then commit on the worker branch for integration.
@@ -38,7 +38,7 @@ No timeout, dependency, or test-skip changes are involved.
 
 ## Reproduction
 
-On noviwin1.local, before the production fix:
+On windows-host, before the production fix:
 
 ```text
 go test -count=1 -v -run TestInboxWaitBelowMissingStoreAncestor ./internal/agentos
@@ -59,25 +59,25 @@ of store registration.
 
 All commands below use the final production change. Windows runs use Go 1.27.1,
 the toolchain selected by go.mod (the host launcher reports Go 1.27.0 outside
-the module). Dragon uses Go 1.27.1.
+the module). dev-host uses Go 1.27.1.
 
-- Dragon/macOS: `go build ./...`, `go vet ./...`, and
+- dev-host/macOS: `go build ./...`, `go vet ./...`, and
   `go test -count=1 -run 'TestInbox|TestWireMessageBoardGatesRelayOnHostNotifier' ./internal/agentos`:
   exit 0 (focused tests 4.223 seconds).
-- noviwin1.local: `go test -count=10 -v -run
+- windows-host: `go test -count=10 -v -run
   'TestInboxChangeNotifierSeesWriteBelowAnotherNotifiersAncestor|TestInboxWaitBelowMissingStoreAncestor|TestInboxWatchDeliversANewBoardPostWithoutHumanRelay|TestInboxBoundedWaitDoesNotFinishOnOwnMeetPost'
   ./internal/agentos`: exit 0, 14.117 seconds. `go build ./...` and
   `go vet ./...`: exit 0, captured directly with `%ERRORLEVEL%`.
-- noviwin1.local: `go test -count=1 -v ./internal/agentos`: PASS, exit 0,
+- windows-host: `go test -count=1 -v ./internal/agentos`: PASS, exit 0,
   135.027 seconds, including all three new regressions.
-- novidesign.local, Linux arm64 Podman machine `bashy`:
+- macos-host, Linux arm64 Podman machine `bashy`:
   `s379-agentos-linux.test -test.v -test.count=1 -test.run=TestInbox`: PASS,
-  exit 0. The binary was cross-built on Dragon with `GOWORK=off CGO_ENABLED=0
+  exit 0. The binary was cross-built on dev-host with `GOWORK=off CGO_ENABLED=0
   GOOS=linux GOARCH=arm64 go test -c`, and executed only inside the Linux VM.
   Its first launch lacked the fleet test ring. The rerun supplied the unchanged
   pinned yoke `pkg/fleet/testdata/ring` fixture, with that package's compiler
   `-trimpath` mapping the source location to the private remote fixture directory.
-  Raw log: novidesign.local `~/s379-issue8/linux-inbox.log`.
+  Raw log: macos-host `~/s379-issue8/linux-inbox.log`.
 
 Windows raw logs are under `%USERPROFILE%\s379-issue8`: `ancestor-red.log`,
 `green-focused.log`, `build.log`, `vet.log`, and `full-green.log`. The original

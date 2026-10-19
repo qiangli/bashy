@@ -62,7 +62,7 @@ manifest generated from candidate (`-dev`) bytes under a stable version.
 ### Winget validation and submission
 
 Validation is a native Windows gate. Copy the generated `channels/winget`
-directory to `noviwin1.local` and run in PowerShell:
+directory to `windows-host` and run in PowerShell:
 
 ```powershell
 winget validate C:\path\to\winget

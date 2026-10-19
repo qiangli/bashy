@@ -20,7 +20,7 @@ Validation: focused recipe tests and `bash builds/check.sh ollama` (including
 shellcheck/actionlint) are the local gate. These results establish recipe
 behavior only. Five native builds, runtime/no-egress proof, vulnerability and
 compiled-input license admission, SBOM and signed release verification remain
-open. No Dragon heavy build, container, full suite or publication is authorized.
+open. No dev-host heavy build, container, full suite or publication is authorized.
 
 ## Local evidence (2026-10-13)
 

@@ -41,4 +41,4 @@
 - Bashy agentos tests for embedded help/skill contract.
 - Full Coreutils package suite and cross-vet.
 - Full Bashy Go suite plus six-platform lean cross-build gate.
-- Dragon rebuild/install and smoke through the installed PATH binary.
+- dev-host rebuild/install and smoke through the installed PATH binary.

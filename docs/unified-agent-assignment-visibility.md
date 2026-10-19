@@ -103,5 +103,5 @@ state.
 - Interactive singleton behavior and `chat sessions` remain unchanged.
 - Focused room/chat/agentos tests, full Bashy/Coreutils Go suites, and the
   Coreutils cross-platform gate pass.
-- The installed Dragon `bashy` binary passes a live smoke using a harmless
+- The installed dev-host `bashy` binary passes a live smoke using a harmless
   blocked fake/short agent invocation.

@@ -8,7 +8,6 @@ description: 'When provisioning the Bash 5.3 corpus locale set on Windows under 
 status: candidate
 source:
     tool: codex-gpt5.6-sol-k
-    host: dragon
     episode: weave-issue-11
 created: "2026-09-22T20:07:32Z"
 ---

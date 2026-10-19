@@ -17,7 +17,6 @@ status: candidate
 evidence: readelf -l /out/bashy in examples/quickstart/Containerfile builder stage, 2026-09-20, Sprint 216 Story 540; go list -deps shows github.com/qiangli/coreutils/pkg/{ctype,collate} importing github.com/ebitengine/purego on GOOS=linux
 source:
     tool: claude-fable5.1-q
-    host: dragon
     episode: weave-issue-43
 created: "2026-09-20T09:34:07Z"
 ---

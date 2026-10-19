@@ -639,7 +639,7 @@ func runnerFixture(t *testing.T, mode string) (string, RunnerSpec, []string) {
 
 func runnerMetadata() RunnerMetadata {
 	return RunnerMetadata{
-		Node:   "dragon",
+		Node:   "dev-host",
 		PodUID: "01234567-89ab-cdef-0123-456789abcdef",
 	}
 }

@@ -130,7 +130,7 @@ func TestRemoteInstallFake_FreshIdempotentAndUpgrade(t *testing.T) {
 	// We seed by overwriting the fake binary with a known old cached binary (v0.13.1) if present.
 	oldCandidates := []string{
 		filepath.Join(filepath.Dir(os.Getenv("HOME")), "Library", "Caches", "bashy", "bin", "bashy", "v0.13.1", "bashy"),
-		"/Users/qiangli/Library/Caches/bashy/bin/bashy/v0.13.1/bashy",
+		filepath.Join(os.Getenv("HOME"), "Library", "Caches", "bashy", "bin", "bashy", "v0.13.1", "bashy"),
 	}
 	var oldBin string
 	for _, c := range oldCandidates {

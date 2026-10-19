@@ -92,7 +92,7 @@ platform signing must precede packaging/hashing; never modify verified bytes.
 
 `no-egress-test.sh` now runs the hosted-only native protocol/network gate
 specified below (Story #1920, `df0cc6a1965c`). It fails outside GitHub-hosted
-runners and explicitly refuses Dragon. Hosted results are still pending; the
+runners and explicitly refuses dev-host. Hosted results are still pending; the
 local harness tests are not native runtime evidence.
 `audit.yml` remains unchanged and unconditionally fails pending Go/cgo/native dependency
 vulnerability analysis, compiled-input license review, generated-input review,
@@ -189,7 +189,7 @@ proceed while any build/native lane or the separate audit job fails.
 
 ### Worker verification and remaining hosted work
 
-On Dragon: the bounded recipe/harness gate and generated-fork diff are the only
+On dev-host: the bounded recipe/harness gate and generated-fork diff are the only
 execution checks. The 1.2 MB fixture was downloaded and its exact hash and GGUF
 metadata verified by reading bytes; no native build, model load or inference ran.
 The conductor must review/install the generated fork and run all five hosted

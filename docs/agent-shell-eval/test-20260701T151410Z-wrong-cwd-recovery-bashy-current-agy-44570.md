@@ -11,7 +11,7 @@
 - Retries: 0
 - Retry sleep: 0s
 - Rate-limit/API error signals: 0
-- Logs: /Users/qiangli/tests/bashy-eval/runs-current/20260701T151410Z-wrong-cwd-recovery-bashy-current-agy-44570/logs
+- Logs: $HOME/tests/bashy-eval/runs-current/20260701T151410Z-wrong-cwd-recovery-bashy-current-agy-44570/logs
 
 ## Verifier
 
@@ -23,9 +23,9 @@
 ## Command Log
 
 ```text
-2026-07-01T15:14:29Z	/Users/qiangli/tests/bashy-eval/runs-current/20260701T151410Z-wrong-cwd-recovery-bashy-current-agy-44570/work/nested/deep	/workspace/nested/deep	-c pwd
-2026-07-01T15:14:31Z	/Users/qiangli/tests/bashy-eval/runs-current/20260701T151410Z-wrong-cwd-recovery-bashy-current-agy-44570/work/nested/deep	/workspace/nested/deep	-c cd ../.. && bash scripts/report.sh
-2026-07-01T15:14:34Z	/Users/qiangli/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
+2026-07-01T15:14:29Z	$HOME/tests/bashy-eval/runs-current/20260701T151410Z-wrong-cwd-recovery-bashy-current-agy-44570/work/nested/deep	/workspace/nested/deep	-c pwd
+2026-07-01T15:14:31Z	$HOME/tests/bashy-eval/runs-current/20260701T151410Z-wrong-cwd-recovery-bashy-current-agy-44570/work/nested/deep	/workspace/nested/deep	-c cd ../.. && bash scripts/report.sh
+2026-07-01T15:14:34Z	$HOME/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
 ```
 
 ## Notes

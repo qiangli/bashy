@@ -38,7 +38,7 @@ AGGREGATE (8 chunks): 50 passed, 0 failed, 0 skipped, 0 timed out
 ```
 
 Job: `completedIndexes: 0-7`, `succeeded: 8`, all pods on
-`novidesign-4c7adeb6` (dog). Namespace `user-5c6b0a233188`. Wall clock ~20 s.
+`macos-host-4c7adeb6` (dog). Namespace `user-5c6b0a233188`. Wall clock ~20 s.
 
 ## What "50 passed" means — read this before quoting the number
 
@@ -103,9 +103,9 @@ git clone --depth 1 https://github.com/magicant/yash.git .yash-tests   # GPL, gi
 SUITE=yash ARCH=arm64 SQUASH=1 OCI="bashy podman" scripts/build-conformance-image.sh
 # serial baseline:
 bashy podman run --rm --platform linux/arm64 localhost/yash-conformance-k8s:latest
-# side-load into dog (dragon is NoSchedule-tainted, so tolerationless pods land on dog):
+# side-load into dog (dev-host is NoSchedule-tainted, so tolerationless pods land on dog):
 bashy podman save localhost/yash-conformance-k8s:latest \
-  | ssh -C novidesign.local 'bash -lc "podman exec -i novidesign-runtime k3s ctr -n k8s.io images import -"'
+  | ssh -C macos-host 'bash -lc "podman exec -i macos-host-runtime k3s ctr -n k8s.io images import -"'
 # fan out + aggregate:
 NAME=yash-conformance NS=user-5c6b0a233188 IMAGE=localhost/yash-conformance-k8s:latest \
   ARCH=arm64 CHUNKS=8 \
@@ -120,4 +120,4 @@ The licensed **VSC-PCTS POSIX certification** is a single-SUT cert against a
 non-redistributable suite; it is **not** run chunked on DKS and its content is
 never baked into any image, commit, or log. The authoritative POSIX-cert run stays
 single-host + unchunked. This work covered only the open **yash** suite.
-`dragon`'s tainted node and cluster-admin were left untouched.
+`dev-host`'s tainted node and cluster-admin were left untouched.

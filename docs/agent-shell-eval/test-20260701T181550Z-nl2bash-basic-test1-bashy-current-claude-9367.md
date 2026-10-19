@@ -11,7 +11,7 @@
 - Retries: 0
 - Retry sleep: 0s
 - Rate-limit/API error signals: 0
-- Logs: /Users/qiangli/tests/bashy-eval/runs-nl2bash/20260701T181550Z-nl2bash-basic-test1-bashy-current-claude-9367/logs
+- Logs: $HOME/tests/bashy-eval/runs-nl2bash/20260701T181550Z-nl2bash-basic-test1-bashy-current-claude-9367/logs
 
 ## Verifier
 
@@ -23,8 +23,8 @@
 ## Command Log
 
 ```text
-2026-07-01T18:15:59Z	/Users/qiangli/tests/bashy-eval/runs-nl2bash/20260701T181550Z-nl2bash-basic-test1-bashy-current-claude-9367/work	/workspace	./test1.sh
-2026-07-01T18:16:02Z	/Users/qiangli/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
+2026-07-01T18:15:59Z	$HOME/tests/bashy-eval/runs-nl2bash/20260701T181550Z-nl2bash-basic-test1-bashy-current-claude-9367/work	/workspace	./test1.sh
+2026-07-01T18:16:02Z	$HOME/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
 ```
 
 ## Notes

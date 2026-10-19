@@ -8,7 +8,6 @@ description: 'When a Git Bash gate script invokes a native Windows executable (p
 status: candidate
 source:
     tool: muse-spark1.3-w106-b
-    host: dragon
     episode: weave-issue-106
 created: "2026-10-13T19:58:13Z"
 ---

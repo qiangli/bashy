@@ -69,9 +69,9 @@ bashy podman run --rm --platform linux/arm64 localhost/yash-conformance-k8s:late
 
 # 3. side-load into dog's containerd
 bashy podman save localhost/yash-conformance-k8s:latest \
-  | ssh novidesign.local 'podman exec -i novidesign-runtime k3s ctr -n k8s.io images import -'
+  | ssh macos-host 'podman exec -i macos-host-runtime k3s ctr -n k8s.io images import -'
 
-# 4. emit + apply the Indexed Job (8 chunks; pods land on dog — dragon is tainted)
+# 4. emit + apply the Indexed Job (8 chunks; pods land on dog — dev-host is tainted)
 NAME=yash-conformance NS=user-5c6b0a233188 \
   IMAGE=localhost/yash-conformance-k8s:latest ARCH=arm64 CHUNKS=8 \
   SUITE_CMD='./bin/yashsuite-linux-arm64 --tests-dir /yashtests --chunks-manifest /work/yash-chunks.json --shell ./bin/bash-linux-arm64/bash --chunk ${CHUNK}' \

@@ -11,7 +11,7 @@ identity, record their paths/version, and use the selected paths for the build.
 Upload diagnostic evidence with always(), retaining all build/audit/release gates.
 
 Validate with bounded Python fake-compiler/adversarial fixtures, workflow checks,
-and the recipe regeneration gate. No native compilation or runner on Dragon.
+and the recipe regeneration gate. No native compilation or runner on dev-host.
 Hosted five-target execution and exact license clearance remain manager work.
 
 ## Delivery evidence

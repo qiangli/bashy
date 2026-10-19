@@ -66,7 +66,7 @@ backends are disabled. The product is `llama-cli`, not `llama-server` or llava.
 
 These are standard runners, free for public repositories per
 [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
-No Dragon build or container is required. The Apple Silicon job must compile
+No dev-host build or container is required. The Apple Silicon job must compile
 Metal; the hosted runtime test requests CPU execution, so it does not attest
 GPU execution on consumer hardware. The Windows job builds both roles as
 `prima-windows-amd64.exe` (CLI) and `prima-server-windows-amd64.exe`
@@ -175,7 +175,7 @@ not run CMake, an engine or a container.
 
 The repository default gate builds Bashy and runs full Go and Bash suites;
 that heavy gate is deferred to a claimed remote host or hosted CI under the
-operator's Dragon policy. The worker's explicit gate is
+operator's dev-host policy. The worker's explicit gate is
 `bashy gate --command 'bash builds/check.sh && python3 -B builds/prima.cpp/check_test.py'`.
 
 Conductor next steps: review/install `fork/` in the source repository's

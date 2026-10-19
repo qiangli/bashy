@@ -41,7 +41,7 @@ revision and documents the operator-facing contract.
    advancement, and invalid `--all` composition in `pkg/bus` tests.
 2. Run the coreutils short suite and cross-platform `crossvet` gate.
 3. Update Bashy's coreutils sibling pin and run its AgentOS tests and build.
-4. Install the canonical binary on Dragon and perform a real two-process wait
+4. Install the canonical binary on dev-host and perform a real two-process wait
    and send using isolated test identities.
 5. Have the Profile B and Profile C managers use the feature for their next
    coordination exchange.

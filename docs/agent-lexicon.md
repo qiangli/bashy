@@ -279,7 +279,7 @@ always-on tier — and it is exactly what progressive disclosure is for.
 ```
 $ bashy lexicon resolve codex --json
 { "term": "codex", "concept": "binding:codex",
-  "kind": "agent-binding", "host": "dragon-2.local",
+  "kind": "agent-binding", "host": "dev-host-2.local",
   "tool": "codex", "model": "…", "status": "live",
   "scope_note": "an agent binding ON THIS HOST, not a product",
   "use": "bashy handoff --to codex" }

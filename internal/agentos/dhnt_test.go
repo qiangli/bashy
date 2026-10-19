@@ -36,7 +36,7 @@ func TestDhntNativeResultWrapAndVerifyRoundTrip(t *testing.T) {
 			SHA256:          strings.Repeat("b", 64),
 		}},
 		Executor: dhnt.Executor{
-			Node: "dragon-vk-native", Backend: "vk-native",
+			Node: "dev-host-vk-native", Backend: "vk-native",
 			OS: "darwin", Arch: "arm64",
 		},
 		Result:     dhnt.Result{Class: dhnt.ResultPass, ExitCode: &exitCode},

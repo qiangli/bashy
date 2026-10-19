@@ -16,7 +16,7 @@ documenting the explicit `cd` workaround. `--gate-cwd`, named-repo resolution, o
 other new gate capability is a deferred feature and is not part of this story.
 
 `sprint stop 127 --gate "go test ./pkg/weave/ && scripts/crossvet.sh"` fails with
-"stat /Users/qiangli/projects/poc/dhnt/bashy/pkg/weave: directory not found". The gate runs
+"stat $HOME/projects/poc/dhnt/bashy/pkg/weave: directory not found". The gate runs
 in the sprint TRACKED REPO (bashy), while the code this sprint touched lives in coreutils.
 
 A sprint is explicitly CROSS-REPO — sprintRun carries a Repo per run and the umbrella has

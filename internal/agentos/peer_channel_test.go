@@ -37,7 +37,7 @@ func TestPeerChannelConfigRequiresInstallIdentityAndTrust(t *testing.T) {
 		t.Fatal(err)
 	}
 	good := PeerChannelConfig{
-		Address:         "novidesign.local:2223",
+		Address:         "macos-host:2223",
 		User:            "operator",
 		PrivateKeyPath:  "/tmp/bashy-peer-key",
 		HostKeyCallback: ssh.FixedHostKey(signer.PublicKey()),

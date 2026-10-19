@@ -11,7 +11,7 @@
 - Retries: 0
 - Retry sleep: 0s
 - Rate-limit/API error signals: 0
-- Logs: /Users/qiangli/tests/bashy-eval/runs-nl2bash/20260701T182051Z-nl2bash-basic-test3-bashy-current-codex-25935/logs
+- Logs: $HOME/tests/bashy-eval/runs-nl2bash/20260701T182051Z-nl2bash-basic-test3-bashy-current-codex-25935/logs
 
 ## Verifier
 
@@ -23,8 +23,8 @@
 ## Command Log
 
 ```text
-2026-07-01T18:21:11Z	/Users/qiangli/tests/bashy-eval/runs-nl2bash/20260701T182051Z-nl2bash-basic-test3-bashy-current-codex-25935/work	/workspace	-lc chmod +x test3.sh && ./test3.sh && test -f test.json && grep -Eq '^\{"name": "test"\}$' test.json
-2026-07-01T18:21:14Z	/Users/qiangli/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
+2026-07-01T18:21:11Z	$HOME/tests/bashy-eval/runs-nl2bash/20260701T182051Z-nl2bash-basic-test3-bashy-current-codex-25935/work	/workspace	-lc chmod +x test3.sh && ./test3.sh && test -f test.json && grep -Eq '^\{"name": "test"\}$' test.json
+2026-07-01T18:21:14Z	$HOME/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
 ```
 
 ## Notes

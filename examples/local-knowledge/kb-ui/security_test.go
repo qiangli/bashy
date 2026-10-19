@@ -176,7 +176,7 @@ func TestSanitizeBasePrefix(t *testing.T) {
 		{"", "/"},
 		{"/kb", "/kb/"},
 		{"/app/kb/", "/app/kb/"},
-		{"/h/dragon/app/kb", "/h/dragon/app/kb/"},
+		{"/h/dev-host/app/kb", "/h/dev-host/app/kb/"},
 		{`"><script>alert(1)</script>`, "/scriptalert1/script/"},
 	}
 

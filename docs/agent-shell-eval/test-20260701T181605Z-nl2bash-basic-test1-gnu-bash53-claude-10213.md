@@ -11,7 +11,7 @@
 - Retries: 0
 - Retry sleep: 0s
 - Rate-limit/API error signals: 0
-- Logs: /Users/qiangli/tests/bashy-eval/runs-nl2bash/20260701T181605Z-nl2bash-basic-test1-gnu-bash53-claude-10213/logs
+- Logs: $HOME/tests/bashy-eval/runs-nl2bash/20260701T181605Z-nl2bash-basic-test1-gnu-bash53-claude-10213/logs
 
 ## Verifier
 
@@ -23,8 +23,8 @@ mkdir: cannot create directory 'test': File exists
 ## Command Log
 
 ```text
-2026-07-01T18:16:13Z	/Users/qiangli/tests/bashy-eval/runs-nl2bash/20260701T181605Z-nl2bash-basic-test1-gnu-bash53-claude-10213/work	/workspace	-c chmod +x test1.sh && ./test1.sh && test -d test && echo OK
-2026-07-01T18:16:17Z	/Users/qiangli/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
+2026-07-01T18:16:13Z	$HOME/tests/bashy-eval/runs-nl2bash/20260701T181605Z-nl2bash-basic-test1-gnu-bash53-claude-10213/work	/workspace	-c chmod +x test1.sh && ./test1.sh && test -d test && echo OK
+2026-07-01T18:16:17Z	$HOME/projects/poc/dhnt/bashy	/workspace	/workspace/.verify.sh /workspace
 ```
 
 ## Notes

@@ -11,4 +11,4 @@ sprint: 88
 closed: 2026-09-01T05:36:28.769382Z
 ---
 
-Pin reviewed Sprint 97 inert new-file preparation after focused syntax/interp and 188-shape POSIX gates pass; update umbrella sh/Bashy pointers and reinstall Bashy on Dragon.
+Pin reviewed Sprint 97 inert new-file preparation after focused syntax/interp and 188-shape POSIX gates pass; update umbrella sh/Bashy pointers and reinstall Bashy on dev-host.

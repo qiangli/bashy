@@ -28,7 +28,7 @@
 # segfaulted; three CI rounds had gone to that custom native code. This
 # script replaces it with the platform firewall.
 #
-# CI run 38481498544 (tag 0.1.2-10): the gate PASSED live on noviwin1 but
+# CI run 38481498544 (tag 0.1.2-10): the gate PASSED live on windows-host but
 # failed on the windows-2025 runner with "control failure is not in the
 # firewall log: no DROP for 192.0.2.1:443" after a TimeoutError. A timeout
 # (not an immediate WinError 10013 access denied) means the block rule
@@ -150,7 +150,7 @@ $failed = $false
 try {
     # Profiles on and dropped-packet logging on, saving prior state for
     # restore. Rules cannot enforce anything under a disabled profile
-    # (live noviwin1 proof: both networks are Public with that profile's
+    # (live windows-host proof: both networks are Public with that profile's
     # firewall off, so a block rule matched nothing and the control
     # timed out unlogged), so the gate enables every profile it relies on.
     foreach ($profile in $Profiles) {
@@ -357,7 +357,7 @@ try {
     # deadlines bound it; the 600s Wait-Job below is the backstop. The job
     # reports the exit code as a marker line: Start-Process -PassThru
     # with a manual wait leaves the process exit-code property empty on
-    # some hosts (live noviwin1 proof), so the gate never reads it.
+    # some hosts (live windows-host proof), so the gate never reads it.
     # File redirects,
     # not pipes or 2>&1, so a chatty rank can never deadlock the gate or
     # trip the Stop preference. PYTHONUTF8 keeps model output (non-ASCII

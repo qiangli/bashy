@@ -7,7 +7,7 @@ reporter: qiangli
 created: 2026-07-12T23:23:15.112131Z
 ---
 
-On dragon-2, THREE codex runs this session (#11,#12,#13) exhibit the same pattern: the codex agent does real, substantial work and exits 0 (weave marks the run 'submitted'), but never runs 'git commit'. Result: `git log main..HEAD` is empty (0 commits) while `git status` shows a full diff of completed work.
+On dev-host-2, THREE codex runs this session (#11,#12,#13) exhibit the same pattern: the codex agent does real, substantial work and exits 0 (weave marks the run 'submitted'), but never runs 'git commit'. Result: `git log main..HEAD` is empty (0 commits) while `git status` shows a full diff of completed work.
 
 Evidence:
 - #13 (version stamp): 7 files modified + 1 new test (version.go buildID, Makefile ldflags, context.go runtime.build, version_test.go) — all uncommitted, 0 commits, state=submitted exit 0.

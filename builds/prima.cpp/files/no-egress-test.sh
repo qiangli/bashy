@@ -141,7 +141,7 @@ MINGW*|MSYS*)
   [[ ${GITHUB_ACTIONS:-} == true && ${RUNNER_ENVIRONMENT:-} == github-hosted ]] || {
     echo 'native gate requires a GitHub-hosted runner' >&2; exit 1;
   }
-  case $(hostname | tr '[:upper:]' '[:lower:]') in *dragon*) echo 'Dragon native gate prohibited' >&2; exit 1;; esac
+  case $(hostname | tr '[:upper:]' '[:lower:]') in *dev-host*) echo 'dev-host native gate prohibited' >&2; exit 1;; esac
   command -v python3 >/dev/null || { echo 'missing python3' >&2; exit 1; }
   command -v powershell.exe >/dev/null || { echo 'missing powershell.exe' >&2; exit 1; }
   [[ $asset == prima-windows-amd64 ]] || { echo "unsupported Windows asset: $asset" >&2; exit 1; }

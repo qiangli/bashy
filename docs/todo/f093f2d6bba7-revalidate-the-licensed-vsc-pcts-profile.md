@@ -29,7 +29,7 @@ Not run in #110 (on-time/KISS). Inputs ready for the baseline:
 - Frozen linux/amd64 candidate, **SUT digest 0844a95e** — bashy 2db80ed / sh
   831b6b2d / coreutils c0c6cae7 / yoke 578a169, go1.27.1, CGO_ENABLED=0,
   two cold builds byte-identical; manifests in umbrella
-  docs/sprint-110-evidence.md and dragon ~/.bashy/sprint/110/evidence/freeze.
+  docs/sprint-110-evidence.md and dev-host ~/.bashy/sprint/110/evidence/freeze.
   Stage with `CGO_ENABLED=0` and diff /vsc/stage sha256s against it first.
 - Preflight gates on that candidate: see 34046901 / 401837b6 (Sprint #110).
 - GNU control: reuse the retained 2026-08-23 Profile A control per

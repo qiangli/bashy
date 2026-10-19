@@ -12,7 +12,7 @@ byte-promotion evidence contracts.
 
 - Outpost `v0.14.15` added opt-in, bounded terminal evidence for vk-native and
   vk-podman Jobs. `v0.14.18` fixed libpod raw-stream demultiplexing; live
-  aggregation passed on both Dragon and Novidesign podman nodes.
+  aggregation passed on both dev-host and macos-host podman nodes.
 - Outpost `v0.14.16` bounded overlay login during runtime startup, restoring
   unattended k3s recovery after container recreation.
 - Outpost `v0.14.17` added checksum-required HTTPS release-archive
@@ -25,7 +25,7 @@ byte-promotion evidence contracts.
   terminal evidence.
 - `scripts/dks-native-job.sh` now emits source-pinned `smoke`, `build`, `unit`,
   GNU Bash 5.3, and Yash POSIX tasks. Live source-pinned unit and build tasks
-  passed on Dragon and Novidesign respectively.
+  passed on dev-host and macos-host respectively.
 - `scripts/dag-to-k8s-job.sh` supports agent or vk-podman placement, including
   an exact registered-host selector. `scripts/k8s-job-aggregate.sh` fails closed
   when any terminal result is missing.
@@ -36,16 +36,16 @@ byte-promotion evidence contracts.
   verifies the published prerelease source, runs the exact-source DKS gate, and
   atomically authors all required per-OS QA refs. Promotion now requires Linux,
   macOS, and Windows refs pointing at that exact candidate commit.
-- A live source-pinned native Bash 5.3 run completed 86/86 on Dragon. A
+- A live source-pinned native Bash 5.3 run completed 86/86 on dev-host. A
   failed-first/succeeded-second run also exposed and fixed ambiguous retry-Pod
   evidence selection; cleanup now handles Go's read-only toolchain cache.
-- Native capacity is now live on all required platforms: Dragon and Novidesign
+- Native capacity is now live on all required platforms: dev-host and macos-host
   provide darwin/arm64, Lern provides linux/amd64, and Puppy provides
-  windows/amd64. Fresh `v0.19.3-dev` smokes passed on Dragon, Lern, and Puppy,
+  windows/amd64. Fresh `v0.19.3-dev` smokes passed on dev-host, Lern, and Puppy,
   and the three-platform release-gate slice accepted their exact-source
   records.
 - The complete gate then passed with a fresh source-pinned GNU Bash 5.3 run on
-  Dragon: 86 passed, 0 failed, 0 skipped, 0 timed out. The trusted aggregator
+  dev-host: 86 passed, 0 failed, 0 skipped, 0 timed out. The trusted aggregator
   authored `refs/qa/v0.19.3/{linux,darwin,windows}` at the exact candidate
   commit, and the promotion workflow published `v0.19.3` byte-identically.
   Fleet notification was skipped because the workflow's cloudbox webhook
@@ -66,7 +66,7 @@ byte-promotion evidence contracts.
   `metrics.k8s.io` usage and Kubernetes effective Pod requests (including
   per-Pod init-container maxima and Pod overhead). Missing metrics are explicit
   warnings; strict callers can fail closed with `DKS_SELECT_REQUIRE_METRICS=1`.
-- Novicortex and Novidesign are preferred by default. Dragon and Kubernetes
+- Novicortex and macos-host are preferred by default. dev-host and Kubernetes
   control-plane nodes receive a reserve penalty, but remain usable when they are
   the only sufficient capacity. This preserves the steward/control-plane host
   without turning temporary worker loss into a fleet-wide outage.
@@ -81,7 +81,7 @@ byte-promotion evidence contracts.
   Both physical agent nodes and vk-podman nodes retain their required
   selectors/tolerations, and generated Pods opt into bounded terminal evidence.
 - Fixture tests cover live-utilization ranking, requests-only fallback, partial
-  metrics, capacity rejection, taints, deterministic ties, Dragon fallback,
+  metrics, capacity rejection, taints, deterministic ties, dev-host fallback,
   worker preference, shard spreading, secret non-leakage, peer-only targeting,
   generated Job placement, and malformed configuration.
 
@@ -143,7 +143,7 @@ byte-promotion evidence contracts.
   hostPath/emptyDir abstractions. ConfigMap/Secret `envFrom`, projected data
   volumes, init containers, and sidecars are outside the current surface.
 - Ready DKS native capacity currently consists of two darwin/arm64 nodes
-  (`dragon`, `novidesign`), one linux/amd64 node (`lern`), and one
+  (`dev-host`, `macos-host`), one linux/amd64 node (`lern`), and one
   windows/amd64 node (`puppy`). Agent and virtual runtimes are independent:
   Puppy concurrently runs its Linux/WSL k3s-agent node and its Windows
   `vk-native` node.

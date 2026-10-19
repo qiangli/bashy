@@ -4,13 +4,13 @@
   "items": [
     {
       "metadata": {
-        "name": "dragon",
+        "name": "dev-host",
         "labels": {
           "kubernetes.io/os": "darwin",
           "kubernetes.io/arch": "arm64",
-          "kubernetes.io/hostname": "dragon",
+          "kubernetes.io/hostname": "dev-host",
           "outpost.dhnt.io/backend": "vk-native",
-          "outpost.dhnt.io/host": "dragon"
+          "outpost.dhnt.io/host": "dev-host"
         }
       },
       "spec": {
@@ -57,13 +57,13 @@
     },
     {
       "metadata": {
-        "name": "novidesign",
+        "name": "remote-macos-host",
         "labels": {
           "kubernetes.io/os": "darwin",
           "kubernetes.io/arch": "arm64",
-          "kubernetes.io/hostname": "novidesign",
+          "kubernetes.io/hostname": "remote-macos-host",
           "outpost.dhnt.io/backend": "vk-native",
-          "outpost.dhnt.io/host": "novidesign"
+          "outpost.dhnt.io/host": "remote-macos-host"
         }
       },
       "spec": {

@@ -65,7 +65,7 @@ case "$args" in
     printf '%s' Succeeded
     ;;
   *'get pod successful-retry'*'.spec.nodeName'*)
-    printf '%s' dragon-vk-native
+    printf '%s' dev-host-vk-native
     ;;
   *'get pod successful-retry'*'.metadata.ownerReferences'*'.uid'*)
     if [ "${FAKE_FOREIGN_NATIVE_POD:-0}" = 1 ]; then
@@ -77,14 +77,14 @@ case "$args" in
   *'get job retry-job'*'.metadata.uid'*)
     printf '%s' retry-job-uid
     ;;
-  *'get node dragon-vk-native'*'outpost\.dhnt\.io/backend'*)
+  *'get node dev-host-vk-native'*'outpost\.dhnt\.io/backend'*)
     # An unlabelled node answers with the empty string, not an error.
     [ "${FAKE_NO_LABELS:-0}" = 1 ] || printf '%s' vk-native
     ;;
-  *'get node dragon-vk-native'*'kubernetes\.io/os'*)
+  *'get node dev-host-vk-native'*'kubernetes\.io/os'*)
     printf '%s' darwin
     ;;
-  *'get node dragon-vk-native'*'kubernetes\.io/arch'*)
+  *'get node dev-host-vk-native'*'kubernetes\.io/arch'*)
     printf '%s' arm64
     ;;
   *'get pod successful-retry'*'.terminated.message'*)
@@ -92,10 +92,10 @@ case "$args" in
       printf '%s\n' 'DKS_RESULT:{"schema":1,"classification":"pass","task":"bash53","os":"darwin","arch":"arm64","source_ref":"abc123"}'
     elif [ "${FAKE_MULTIPLE_NATIVE_RESULTS:-0}" = 1 ]; then
       printf '%s\n' \
-        'DKS_RESULT:{"schema":"dhnt.run/v1","pipeline":"bashy-release","task":"bash53","run":"failed-darwin-run","source":{"repository":"https://github.com/qiangli/bashy.git","commit":"abc123","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"inputs":[{"name":"candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"executor":{"node":"dragon-vk-native","backend":"vk-native","os":"darwin","arch":"arm64"},"result":{"class":"test-fail","exitCode":1},"outputs":[{"name":"tested-candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"startedAt":"2026-07-29T12:00:00Z","finishedAt":"2026-07-29T12:00:30Z","traceId":"1123456789abcdef0123456789abcdef"}' \
-        'DKS_RESULT:{"schema":"dhnt.run/v1","pipeline":"bashy-release","task":"bash53","run":"darwin-run","source":{"repository":"https://github.com/qiangli/bashy.git","commit":"abc123","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"inputs":[{"name":"candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"executor":{"node":"dragon-vk-native","backend":"vk-native","os":"darwin","arch":"arm64"},"result":{"class":"pass","exitCode":0},"outputs":[{"name":"tested-candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"startedAt":"2026-07-29T12:00:00Z","finishedAt":"2026-07-29T12:01:00Z","traceId":"0123456789abcdef0123456789abcdef"}'
+        'DKS_RESULT:{"schema":"dhnt.run/v1","pipeline":"bashy-release","task":"bash53","run":"failed-darwin-run","source":{"repository":"https://github.com/qiangli/bashy.git","commit":"abc123","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"inputs":[{"name":"candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"executor":{"node":"dev-host-vk-native","backend":"vk-native","os":"darwin","arch":"arm64"},"result":{"class":"test-fail","exitCode":1},"outputs":[{"name":"tested-candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"startedAt":"2026-07-29T12:00:00Z","finishedAt":"2026-07-29T12:00:30Z","traceId":"1123456789abcdef0123456789abcdef"}' \
+        'DKS_RESULT:{"schema":"dhnt.run/v1","pipeline":"bashy-release","task":"bash53","run":"darwin-run","source":{"repository":"https://github.com/qiangli/bashy.git","commit":"abc123","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"inputs":[{"name":"candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"executor":{"node":"dev-host-vk-native","backend":"vk-native","os":"darwin","arch":"arm64"},"result":{"class":"pass","exitCode":0},"outputs":[{"name":"tested-candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"startedAt":"2026-07-29T12:00:00Z","finishedAt":"2026-07-29T12:01:00Z","traceId":"0123456789abcdef0123456789abcdef"}'
     else
-      printf '%s\n' 'DKS_RESULT:{"schema":"dhnt.run/v1","pipeline":"bashy-release","task":"bash53","run":"darwin-run","source":{"repository":"https://github.com/qiangli/bashy.git","commit":"abc123","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"inputs":[{"name":"candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"executor":{"node":"dragon-vk-native","backend":"vk-native","os":"darwin","arch":"arm64"},"result":{"class":"pass","exitCode":0},"outputs":[{"name":"tested-candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"startedAt":"2026-07-29T12:00:00Z","finishedAt":"2026-07-29T12:01:00Z","traceId":"0123456789abcdef0123456789abcdef"}'
+      printf '%s\n' 'DKS_RESULT:{"schema":"dhnt.run/v1","pipeline":"bashy-release","task":"bash53","run":"darwin-run","source":{"repository":"https://github.com/qiangli/bashy.git","commit":"abc123","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"inputs":[{"name":"candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"executor":{"node":"dev-host-vk-native","backend":"vk-native","os":"darwin","arch":"arm64"},"result":{"class":"pass","exitCode":0},"outputs":[{"name":"tested-candidate","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],"startedAt":"2026-07-29T12:00:00Z","finishedAt":"2026-07-29T12:01:00Z","traceId":"0123456789abcdef0123456789abcdef"}'
     fi
     ;;
   *'get pods'*'app=conformance'*)

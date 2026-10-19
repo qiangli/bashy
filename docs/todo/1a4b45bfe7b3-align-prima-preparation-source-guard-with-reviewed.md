@@ -15,7 +15,7 @@ closed: 2026-10-13T15:19:01.470715Z
 closed_by: s436-codex-manager
 ---
 
-Hosted candidate bashy-bashy-prima-0.1.1-1 run 38420049892 failed all four prepare steps before compilation: fork/bashy-build/prepare.py SOURCE still f4ea9845 despite reviewed PIN 542d01932a88. Update builds/prima.cpp/files/prepare.py and generated fork to enforce exact 0.1.1 source via PIN or same SHA, add focused mismatch regression to check_test.py. Preserve fail-closed source/license/nng guards. Commit worker story file and code with Sprint/Story trailers; no push, no Dragon native build/container/full suite. Manager will merge, gate, cut immutable -2 candidate.
+Hosted candidate bashy-bashy-prima-0.1.1-1 run 38420049892 failed all four prepare steps before compilation: fork/bashy-build/prepare.py SOURCE still f4ea9845 despite reviewed PIN 542d01932a88. Update builds/prima.cpp/files/prepare.py and generated fork to enforce exact 0.1.1 source via PIN or same SHA, add focused mismatch regression to check_test.py. Preserve fail-closed source/license/nng guards. Commit worker story file and code with Sprint/Story trailers; no push, no dev-host native build/container/full suite. Manager will merge, gate, cut immutable -2 candidate.
 
 ## Implementation plan
 
