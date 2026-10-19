@@ -149,6 +149,7 @@ func runInteractive(r *interp.Runner, stdin *os.File, stdout, stderr io.Writer) 
 			cfg.DisableCursorPositionQuery = posixMode
 		},
 		PreCommand: func(ctx context.Context, r *interp.Runner) {
+			AgentOSObserveDirectory(r.Dir)
 			if pc := r.Env.Get("PROMPT_COMMAND").String(); pc != "" {
 				pcp := syntax.NewParser(syntax.Variant(lang), syntax.PosixMode(posixMode))
 				if prog, err := pcp.Parse(strings.NewReader(pc), "PROMPT_COMMAND"); err == nil {

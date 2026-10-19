@@ -2264,7 +2264,7 @@ func observingExecMiddlewares() []func(interp.ExecHandlerFunc) interp.ExecHandle
 	if execHistEnabled() {
 		mws = append(mws, execHistHandler(newRecorder()))
 	}
-	mws = append(mws, claimGuardMiddleware)
+	mws = append(mws, indexVisitMiddleware, claimGuardMiddleware)
 	return mws
 }
 

@@ -56,6 +56,7 @@ func init() {
 	cli.AgentOSDispatch = agentos.Dispatch
 	cli.AgentOSWireExec = agentos.WireExec
 	cli.AgentOSShellStartup = agentos.ShellStartup
+	cli.AgentOSObserveDirectory = agentos.ObserveIndexDirectory
 	cli.AgentOSPreamble = agentos.Preamble
 	cli.AgentOSUsage = agentos.Usage
 	cli.AgentOSCommandLineNoExec = agentos.PosixDryRunNoExec

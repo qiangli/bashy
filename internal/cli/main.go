@@ -512,6 +512,8 @@ var (
 	// environment: the AgentOS shell mints its model-door session there
 	// (Sprint 302 Q5). A no-op for the pure bash drop-in.
 	AgentOSShellStartup = func() {}
+	// AgentOSObserveDirectory records directory use without retaining commands.
+	AgentOSObserveDirectory = func(string) {}
 	// posix is passed so AgentOS extensions (e.g. --dry-run) stay inert under
 	// --posix and absent from the pure bash drop-in.
 	AgentOSWireExec func([]interp.RunnerOption, bool, []string, io.Reader, io.Writer, io.Writer) []interp.RunnerOption = func(o []interp.RunnerOption, _ bool, _ []string, in io.Reader, out, err io.Writer) []interp.RunnerOption {
@@ -2832,6 +2834,10 @@ func strictPosixPolicyError(file *syntax.File, name string) error {
 }
 
 func run(r *interp.Runner, reader io.Reader, name string) error {
+	if !cmdlineNoExec() {
+		AgentOSObserveDirectory(r.Dir)
+		defer func() { AgentOSObserveDirectory(r.Dir) }()
+	}
 	if reader == nil {
 		return nil
 	}

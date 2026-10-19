@@ -40,7 +40,7 @@ import (
 // and page status; `recall` only READS, across every ring, and never composes.
 // Nesting changes the path, not the contract.
 func newKBRecallCmd() *cobra.Command {
-	cmd := recall.NewRecallCmd()
+	cmd := recall.NewRecallCmd(indexFileReader{})
 
 	// kb's own PersistentPreRunE resolves ONE store and prints a `kb [scope]
 	// <path>` header. That is meaningless for recall, which reads every ring
