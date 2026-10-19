@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <base href="{{BASE}}">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>kb</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Persistent header: brand + service pills + control. Tabs sit on
+       a second row so the pill strip never wraps under load. -->
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark">kb</span>
+      <span class="brand-sub">local knowledge</span>
+    </div>
+    <div class="pills">
+      <span class="pill conn" id="meta-conn">connecting…</span>
+      <span class="pill system" id="meta-system" hidden title="CPU + memory + load — Opt.2"></span>
+      <span class="pill ollama" id="meta-ollama" hidden title="local Ollama service health"></span>
+      <span class="pill podman" id="meta-podman" hidden title="local Podman service health"></span>
+      <span class="pill disk"   id="meta-disk"   hidden title="data-dir free space"></span>
+    </div>
+    <div class="header-actions">
+      <button class="btn ctrl"  id="btn-pause"  hidden title="pause ingestion">▮▮ pause</button>
+      <button class="btn ctrl"  id="btn-resume" hidden title="resume ingestion">▶ resume</button>
+      <button class="btn theme" id="btn-theme"  title="toggle theme">◐</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <a class="tab" data-tab="explore"  href="#/explore"><span class="tab-ic">⊙</span> explore</a>
+    <a class="tab" data-tab="monitor"  href="#/monitor"><span class="tab-ic">⏱</span> monitor</a>
+    <a class="tab" data-tab="queue"    href="#/queue"><span class="tab-ic">⊛</span> queue</a>
+    <a class="tab" data-tab="insights" href="#/insights"><span class="tab-ic">✦</span> insights</a>
+  </nav>
+
+  <section class="banner" id="banner-disk" hidden></section>
+  <section class="banner" id="banner-pause" hidden></section>
+
+  <!-- =========== EXPLORE TAB =========== -->
+  <main class="tab-panel" data-tab="explore" hidden>
+    <div class="explore-layout">
+      <aside class="rail rail-left card">
+        <div class="search-bar">
+          <input id="search-input" type="search" placeholder="search the graph — label · text · tags…" autocomplete="off" spellcheck="false">
+          <div class="search-opts">
+            <select id="search-mode" title="retrieval mode">
+              <option value="hybrid">hybrid</option>
+              <option value="lexical">lexical</option>
+              <option value="semantic">semantic</option>
+              <option value="rerank">rerank</option>
+            </select>
+            <select id="search-corpus" title="corpus scope">
+              <option value="">user-authored</option>
+              <option value="*">all corpora</option>
+            </select>
+          </div>
+        </div>
+        <div class="rail-section">
+          <div class="rail-h2">results <span class="meta-line" id="results-count"></span></div>
+          <ul id="search-results" class="search-results">
+            <li class="empty">type a query, hit Enter or wait</li>
+          </ul>
+        </div>
+        <div class="rail-section">
+          <div class="rail-h2">type filter</div>
+          <div id="type-filter" class="chip-strip"><span class="empty">loading…</span></div>
+        </div>
+        <div class="rail-section">
+          <div class="rail-h2">artifact filter</div>
+          <div id="artifact-filter" class="chip-strip"><span class="empty">none indexed yet</span></div>
+        </div>
+      </aside>
+
+      <section class="canvas-host card">
+        <header class="canvas-head">
+          <span class="canvas-title">graph</span>
+          <span class="canvas-meta" id="canvas-meta">0 nodes · 0 edges</span>
+          <div class="canvas-actions">
+            <button id="canvas-fit"   class="btn-mini" title="recenter">⟲ fit</button>
+            <button id="canvas-clear" class="btn-mini" title="clear">✕ clear</button>
+            <button id="canvas-engine" class="btn-mini" title="toggle 2D/3D">2D</button>
+          </div>
+        </header>
+        <div id="graph-3d" class="graph-host"></div>
+        <div id="graph-2d" class="graph-host" hidden></div>
+      </section>
+
+      <aside class="rail rail-right card">
+        <div id="node-detail" class="node-detail">
+          <p class="empty">select a node — click a search hit or a node on the canvas.</p>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <!-- =========== MONITOR TAB =========== -->
+  <main class="tab-panel" data-tab="monitor" hidden>
+    <!-- DAG-redesign monitor layout: summary stats row → 6-stage DAG → focused detail
+         → (below the fold) discovery + events.
+         stats/projects/runs/enrichment moved to /insights.
+         models/scheduler render contextually inside #pipeline-detail. -->
+
+    <section class="summary-row" id="summary-row">
+      <div class="summary-metric" id="summary-submitted"><span class="summary-label">submitted</span><span class="summary-value">—</span></div>
+      <div class="summary-metric" id="summary-completed"><span class="summary-label">completed</span><span class="summary-value">—</span></div>
+      <div class="summary-metric" id="summary-skipped"><span class="summary-label">skipped</span><span class="summary-value">—</span></div>
+      <div class="summary-metric" id="summary-errored"><span class="summary-label">errored</span><span class="summary-value">—</span></div>
+      <div class="summary-metric" id="summary-throughput"><span class="summary-label">tp</span><span class="summary-value">—</span></div>
+      <div class="summary-metric" id="summary-queue"><span class="summary-label">queue</span><span class="summary-value">—</span></div>
+      <div class="summary-metric" id="summary-eta"><span class="summary-label">eta</span><span class="summary-value">—</span></div>
+      <div class="summary-metric summary-spacer"></div>
+      <div class="summary-metric summary-ctl" id="summary-ctl"></div>
+    </section>
+
+    <section class="card pipeline" id="pipeline-card">
+      <header class="card-head">
+        <span class="card-title">pipeline DAG</span>
+        <span class="meta-line" id="pipeline-totals"></span>
+      </header>
+      <div id="pipeline-flow" class="pipeline-flow">
+        <div class="stage empty">waiting for /api/substages/live…</div>
+      </div>
+      <div id="pipeline-detail" class="pipeline-detail" hidden></div>
+      <div id="pipeline-eta" class="pipeline-eta" hidden></div>
+    </section>
+
+    <section class="banner" id="banner-llm-down">
+      LLM enrichment unavailable — search &amp; lookup still live
+    </section>
+
+    <!-- Indexed roots management -->
+    <section class="card roots compact" id="roots-card">
+      <header class="card-head">
+        <span class="card-title">indexed roots</span>
+        <span class="meta-line" id="roots-totals"></span>
+      </header>
+      <div class="roots-bar" style="display:flex;gap:0.5rem;padding:0.75rem 1rem;">
+        <input type="text" id="root-input" placeholder="add root (e.g. ~/notes or ./docs)" autocomplete="off" spellcheck="false" style="flex:1;background:var(--bg, #111827);color:inherit;border:1px solid var(--border, #374151);border-radius:4px;padding:0.4rem 0.6rem;">
+        <button type="button" class="btn" id="btn-add-root" style="padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;">+ add root</button>
+      </div>
+      <table id="roots-table" style="width:100%;">
+        <thead><tr>
+          <th>root path</th>
+          <th>resolved path</th>
+          <th>status</th>
+          <th class="num">files</th>
+          <th>includes</th>
+          <th>excludes</th>
+          <th>actions</th>
+        </tr></thead>
+        <tbody id="roots-body">
+          <tr><td colspan="7" class="empty">loading roots…</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Below the fold: operational signals -->
+    <section class="card discovery compact" id="discovery-card">
+      <header class="card-head">
+        <span class="card-title">discovery</span>
+        <span class="meta-line" id="discovery-totals"></span>
+      </header>
+      <div class="discovery-now" id="discovery-now"></div>
+      <div class="discovery-grid">
+        <div class="disc-col">
+          <div class="disc-head">by bucket</div>
+          <div id="discovery-buckets" class="disc-bars"></div>
+        </div>
+        <div class="disc-col">
+          <div class="disc-head">recent skips</div>
+          <ul id="discovery-skips" class="disc-skips"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card events compact" id="events-card">
+      <header class="card-head">
+        <span class="card-title">live activity</span>
+        <span class="meta-line">SSE from /events</span>
+      </header>
+      <div id="events-log" class="event-log">
+        <div class="event empty">no events yet — start a daemon scan or save a watched file</div>
+      </div>
+    </section>
+
+    <!-- Hidden contextual cards: rendered inline by focused-detail JS when an LLM stage is focused.
+         Kept in the DOM (hidden) so loadModels / loadScheduler keep populating the tables; the
+         focused-detail renderer reads from these hidden hosts and inlines a compact copy. -->
+    <section class="card models hidden-host" id="models-card" hidden>
+      <table id="models-table">
+        <thead><tr><th>role</th><th>model</th><th>endpoint</th><th>backend</th><th>state</th><th>actions</th></tr></thead>
+        <tbody id="models-body"></tbody>
+      </table>
+      <div id="picker-pool-meta" hidden></div>
+      <div id="picker-status" hidden></div>
+    </section>
+    <section class="card scheduler hidden-host" id="scheduler-card" hidden>
+      <table id="scheduler-table">
+        <thead><tr><th>backend</th><th>endpoint</th><th>model</th><th class="num">depth</th><th class="num">drained</th><th class="num">overload</th><th class="num">last batch</th></tr></thead>
+        <tbody id="scheduler-body"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <!-- =========== QUEUE TAB =========== -->
+  <main class="tab-panel" data-tab="queue" hidden>
+    <section class="card pool" id="pool-card">
+      <header class="card-head">
+        <span class="card-title">worker pool</span>
+        <span class="meta-line" id="pool-meta"></span>
+      </header>
+      <table id="pool-table">
+        <thead><tr>
+          <th>subpool</th><th class="num">workers</th><th class="num">running</th><th class="num">waiting</th><th class="num">submitted</th><th class="num">rejected</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="cards-grid">
+      <div class="card budget" id="budget-card" hidden>
+        <header class="card-head">
+          <span class="card-title">cpu budget</span>
+          <span class="meta-line">Opt.4 — batch + background workers wait when over cap</span>
+        </header>
+        <div class="budget-stats" id="budget-stats"></div>
+      </div>
+
+      <div class="card ledger" id="ledger-card">
+        <header class="card-head"><span class="card-title">job ledger</span></header>
+        <table id="ledger-table">
+          <thead><tr><th>pending</th><th>running</th><th>done</th><th>failed</th></tr></thead>
+          <tbody><tr id="ledger-row"><td>—</td><td>—</td><td>—</td><td>—</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card failed" id="failed-card">
+      <header class="card-head"><span class="card-title">recent failures</span></header>
+      <table id="failed-table">
+        <thead><tr>
+          <th>id</th><th>path</th><th class="num">attempts</th><th>finished</th><th>error</th>
+        </tr></thead>
+        <tbody><tr><td colspan="5"><em class="empty">loading…</em></td></tr></tbody>
+      </table>
+    </section>
+  </main>
+
+  <!-- =========== INSIGHTS TAB =========== -->
+  <main class="tab-panel" data-tab="insights" hidden>
+    <!-- Graph health + history (moved from monitor as part of the DAG-redesign refactor). -->
+    <section class="cards-grid">
+      <div class="card stats" id="stats-card">
+        <header class="card-head"><span class="card-title">graph</span></header>
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat empty">waiting for /api/stats…</div>
+        </div>
+      </div>
+
+      <div class="card projects" id="projects-card">
+        <header class="card-head"><span class="card-title">projects</span></header>
+        <div id="projects-list" class="projects-list">
+          <div class="stat empty">no codebases detected yet</div>
+        </div>
+      </div>
+
+      <div class="card runs" id="runs-card">
+        <header class="card-head"><span class="card-title">recent ingestion</span></header>
+        <table id="runs-table">
+          <thead><tr><th>when</th><th>extractor</th><th>source</th><th class="num">ts</th><th class="num">dur</th></tr></thead>
+          <tbody id="runs-body">
+            <tr><td colspan="5" class="empty">waiting for /api/runs…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card enrichment" id="enrichment-card" hidden>
+      <header class="card-head">
+        <span class="card-title">enrichment</span>
+        <span class="meta-line">per-stage coverage across live Documents — Opt.1</span>
+      </header>
+      <div class="enrichment-grid" id="enrichment-grid"></div>
+    </section>
+
+    <section class="cards-grid insights-grid">
+      <div class="card insight" id="artifacts-card">
+        <header class="card-head"><span class="card-title">artifact distribution</span></header>
+        <div id="artifacts-list" class="artifact-bars">
+          <div class="empty">no artifacts indexed yet</div>
+        </div>
+      </div>
+
+      <div class="card insight" id="corpus-card">
+        <header class="card-head"><span class="card-title">corpus breakdown</span></header>
+        <div id="corpus-list" class="corpus-list">
+          <div class="empty">user-authored only — no tagged corpora yet</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card insight" id="entities-card">
+      <header class="card-head">
+        <span class="card-title">top entities</span>
+        <span class="meta-line">most-mentioned across the live corpus</span>
+      </header>
+      <table id="entities-table">
+        <thead><tr><th>label</th><th>type</th><th class="num">mentions</th></tr></thead>
+        <tbody><tr><td colspan="3" class="empty">no entities yet — run an NER-enabled daemon</td></tr></tbody>
+      </table>
+    </section>
+  </main>
+
+  <!-- Vendor: three.js MUST load before 3d-force-graph; both before app code. -->
+  <script src="vendor/three.min.js"></script>
+  <script src="vendor/3d-force-graph.min.js"></script>
+  <script src="vendor/vis-network.min.js"></script>
+  <script src="file-viewer.js"></script>
+  <script src="core.js"></script>
+  <script src="monitor.js"></script>
+  <script src="explore.js"></script>
+  <script src="queue.js"></script>
+  <script src="insights.js"></script>
+  <script src="app.js"></script>
+  <!--
+    Loaded last so it can wrap the global fetch installed by all
+    prior modules. No-op when the page isn't iframed (top-level
+    loads short-circuit), so direct access to kg-ui at :6674 is
+    unaffected.
+  -->
+  <script src="embed-bridge.js"></script>
+</body>
+</html>
