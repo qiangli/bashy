@@ -471,6 +471,8 @@ lens	-f	--from
 lens	-h	--help
 lens	-l	--list
 lens	-t	--to
+lens-script	-V	--version
+lens-script	-h	--help
 link	-V	--version
 link	-h	--help
 llm capture export	-o	--output

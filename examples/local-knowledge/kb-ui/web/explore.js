@@ -465,7 +465,11 @@
   window.kgExploreInit = function () {
     if (bootDone) { sizeGraph3D(); return; }
     bootDone = true;
-    init3D();
+    // The shared index has no graph service. Keep the retained graph assets
+    // dormant until a graph adapter is available.
+    const canvas = $("#graph-3d");
+    if (canvas) canvas.textContent = "Graph enrichment unavailable";
+    $("#canvas-engine")?.setAttribute("disabled", "");
     loadTypeFilter();
     loadArtifactFilter();
     $("#search-input")?.addEventListener("input", onSearchInput);
@@ -477,7 +481,6 @@
       else if (graph.engine === "2d" && graph.net2d) graph.net2d.fit();
     });
     $("#canvas-engine")?.addEventListener("click", toggleEngine);
-    seedCanvas();
     // Refresh enrichment dots when ingest events fire — they may have
     // just lifted a stage and the dots should update.
     onEvent("enricher_tick", () => {
