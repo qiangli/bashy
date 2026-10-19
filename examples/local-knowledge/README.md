@@ -50,7 +50,7 @@ bashy dag -f examples/local-knowledge/dag.md run
 
 ```sh
 # Run server with current directory and notes as roots
-go run ./examples/local-knowledge/cmd/kb-ui --addr 127.0.0.1:6674 --roots ~/notes,.
+go run ./examples/local-knowledge/kb-ui --addr 127.0.0.1:6674 --roots ~/notes,.
 ```
 
 Open `http://127.0.0.1:6674/` in your browser.

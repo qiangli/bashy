@@ -1,6 +1,6 @@
 # Attribution Notice
 
-This component (`examples/local-knowledge/cmd/kb-ui`) includes code and web assets
+This component (`examples/local-knowledge/kb-ui`) includes code and web assets
 ported from `kg-ui` (`/Users/qiangli/projects/poc/dhnt/kg/cmd/kg-ui`),
 Copyright (c) 2026 Qiang Li. All rights reserved.
 

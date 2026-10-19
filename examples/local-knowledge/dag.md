@@ -22,7 +22,7 @@ Generates: bin/kb-ui
 
 ```bash
 mkdir -p bin
-go build -o bin/kb-ui ./examples/local-knowledge/cmd/kb-ui
+go build -o bin/kb-ui ./examples/local-knowledge/kb-ui
 ```
 
 ### test
@@ -30,7 +30,7 @@ Run the unit and HTTP boundary tests for kb-ui.
 Effects: read, write, exec, net
 
 ```bash
-go test -v ./examples/local-knowledge/cmd/kb-ui/...
+go test -v ./examples/local-knowledge/kb-ui/...
 ```
 
 ### smoke
