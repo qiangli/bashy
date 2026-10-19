@@ -33,6 +33,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -99,12 +100,14 @@ var (
 type recorder struct {
 	log   *execlog.Writer
 	space *spacegraph.Store
+	adopt *adoptionLive // live adoption tally (adoption_live.go); nil records argv-derived uses only
 }
 
 func newRecorder() *recorder {
 	return &recorder{
 		log:   execlog.Open(execHistDir()),
 		space: spacegraph.Open(craftStoreDir()),
+		adopt: processAdoption(),
 	}
 }
 
@@ -167,8 +170,11 @@ func (r *recorder) writeEpisode(ctx context.Context, argv []string, status int, 
 		Cmd:        baseName(argv[0]),
 		Observed:   observed,
 		DurationMs: d.Milliseconds(),
-		Effects:    effectsFor(argv[0]),
-		Opaque:     isOpaque(argv[0]),
+		// Adoption atoms ride the effects list so `graph history` exposes
+		// them with no new store or field; see adoption_live.go. Clipped so
+		// the append never writes into the atlas's shared slice.
+		Effects: append(slices.Clip(effectsFor(argv[0])), adoptionAtoms(r.adopt, argv)...),
+		Opaque:  isOpaque(argv[0]),
 	}
 	// Exit stays nil when nothing was observed. "The command ran and returned
 	// 0" and "we could not observe an exit" are different claims, and

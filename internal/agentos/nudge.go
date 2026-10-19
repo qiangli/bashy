@@ -36,11 +36,12 @@ type nudger struct {
 	agent bool
 	mem   *memory
 	w     io.Writer
+	live  *adoptionLive // notes emitted hints for the execution record; nil-safe
 }
 
 // newNudger shares the advisor's memory so hint rate-limiting is per session.
 func newNudger(mem *memory) *nudger {
-	return &nudger{agent: weavecli.IsAgentDriven(), mem: mem, w: os.Stderr}
+	return &nudger{agent: weavecli.IsAgentDriven(), mem: mem, w: os.Stderr, live: processAdoption()}
 }
 
 // onAudit is the [interp.WithAuditHandler] callback. It fires once per simple
@@ -67,6 +68,7 @@ func (n *nudger) onAudit(ev interp.AuditEvent) {
 		return // already nudged for this tool this session
 	}
 	n.emit(name, suggest)
+	n.live.hintShown(ev.Args, ev.IsBuiltin, name, suggest)
 }
 
 // nudgeLine is the agent-mode JSON shape (one line on stderr).

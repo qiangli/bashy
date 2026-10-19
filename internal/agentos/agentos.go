@@ -2382,9 +2382,13 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 			// two proactive hinters that share the session memory are composed
 			// here: the nudger (legacy-tool → agentic counterpart) and the inbox
 			// reader hint (board-reading commands → `bashy inbox`).
+			// The live adoption tally observes first, so a command is checked
+			// against the previous call's hints before it can show its own.
 			nd := newNudger(a.mem)
 			ih := newInboxHinter(a.mem)
+			live := processAdoption()
 			opts = append(opts, interp.WithAuditHandler(func(ev interp.AuditEvent) {
+				live.observe(ev.Args, ev.IsBuiltin)
 				nd.onAudit(ev)
 				ih.onAudit(ev)
 			}))

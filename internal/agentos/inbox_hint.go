@@ -88,10 +88,11 @@ type inboxHinter struct {
 	agent bool
 	mem   *memory
 	w     io.Writer
+	live  *adoptionLive // notes emitted hints for the execution record; nil-safe
 }
 
 func newInboxHinter(mem *memory) *inboxHinter {
-	return &inboxHinter{agent: weavecli.IsAgentDriven(), mem: mem, w: os.Stderr}
+	return &inboxHinter{agent: weavecli.IsAgentDriven(), mem: mem, w: os.Stderr, live: processAdoption()}
 }
 
 // onAudit is an [interp.WithAuditHandler] callback. It fires once per simple
@@ -109,6 +110,7 @@ func (h *inboxHinter) onAudit(ev interp.AuditEvent) {
 		return
 	}
 	h.emit(name, suggest)
+	h.live.hintShown(ev.Args, ev.IsBuiltin, name, suggest)
 }
 
 func (h *inboxHinter) emit(tool, suggest string) {
