@@ -34,7 +34,10 @@ func setupTestServer(t *testing.T) (*httptest.Server, *BashyCLIAdapter, *SSEHub,
 	}
 
 	rm := NewRootsManager([]string{root})
-	adapter := NewBashyCLIAdapter("bashy", rm)
+	adapter := realTestAdapter(t, rm)
+	if e := adapter.IndexAdd(context.Background(), root); e != nil {
+		t.Fatal(e)
+	}
 	hub := NewSSEHub()
 
 	handler, err := buildMux(adapter, hub)
@@ -139,27 +142,24 @@ func TestServerFilePreviewSecurity(t *testing.T) {
 		t.Errorf("missing X-Kg headers")
 	}
 
-	// 2. Binary file preview returns 415
+	// 2. Unindexed binary files are unavailable through source preview
 	resp, err = http.Get(srv.URL + "/api/file?uri=" + binaryPath)
 	if err != nil {
 		t.Fatalf("GET /api/file binary: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUnsupportedMediaType {
-		t.Errorf("binary preview: want 415, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("binary preview: want 403, got %d", resp.StatusCode)
 	}
 
-	// 3. Binary file with download=1 returns 200 and attachment header
-	resp, err = http.Get(srv.URL + "/api/file?uri=" + binaryPath + "&download=1")
+	// 3. Download cannot bypass shared eligibility.
+	resp, err = http.Get(srv.URL + "/api/file?uri=" + url.QueryEscape(binaryPath) + "&download=1")
 	if err != nil {
-		t.Fatalf("GET /api/file binary download: %v", err)
+		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("binary download: want 200, got %d", resp.StatusCode)
-	}
-	if !strings.Contains(resp.Header.Get("Content-Disposition"), "attachment") {
-		t.Errorf("missing attachment header on download")
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("unindexed binary download: want403 got%d", resp.StatusCode)
 	}
 
 	// 4. Outside-root file preview returns 403 Forbidden
@@ -207,7 +207,8 @@ func TestServerRootsEndpoints(t *testing.T) {
 
 	// 3. POST /api/roots with valid CSRF header adds a new root
 	newRoot := t.TempDir()
-	reqBody := `{"path":"` + newRoot + `"}`
+	reqBytes, _ := json.Marshal(map[string]string{"path": newRoot})
+	reqBody := string(reqBytes)
 	req, _ = http.NewRequest(http.MethodPost, srv.URL+"/api/roots", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-KB-UI", "1")

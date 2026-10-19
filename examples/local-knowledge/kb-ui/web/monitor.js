@@ -1065,10 +1065,11 @@
       btn.addEventListener("click", async () => {
         const p = btn.getAttribute("data-path");
         if (!p) return;
-        await fetch("api/roots?path=" + encodeURIComponent(p), {
+        const response = await fetch("api/roots?path=" + encodeURIComponent(p), {
           method: "DELETE",
           headers: { "X-KB-UI": "1" },
         });
+        if (!response.ok) { const meta=$("#roots-totals"); if(meta) meta.textContent=await response.text(); return; }
         loadRoots();
       });
     });
@@ -1080,11 +1081,12 @@
       addBtn.addEventListener("click", async () => {
         const p = input.value.trim();
         if (!p) return;
-        await fetch("api/roots", {
+        const response = await fetch("api/roots", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-KB-UI": "1" },
           body: JSON.stringify({ path: p }),
         });
+        if (!response.ok) { const meta=$("#roots-totals"); if(meta) meta.textContent=await response.text(); return; }
         input.value = "";
         loadRoots();
       });

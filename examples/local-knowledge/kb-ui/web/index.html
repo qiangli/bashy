@@ -47,7 +47,7 @@
           <input id="search-input" type="search" placeholder="search the graph — label · text · tags…" autocomplete="off" spellcheck="false">
           <div class="search-opts">
             <select id="search-mode" title="retrieval mode">
-              <option value="hybrid">hybrid</option>
+              <option value="auto">Auto (lexical fallback)</option><option value="hybrid">hybrid</option>
               <option value="lexical">lexical</option>
               <option value="semantic">semantic</option>
               <option value="rerank">rerank</option>
@@ -309,10 +309,12 @@
       </header>
       <table id="entities-table">
         <thead><tr><th>label</th><th>type</th><th class="num">mentions</th></tr></thead>
-        <tbody><tr><td colspan="3" class="empty">no entities yet — run an NER-enabled daemon</td></tr></tbody>
+        <tbody><tr><td colspan="3" class="empty">entity enrichment unavailable in this adapter</td></tr></tbody>
       </table>
     </section>
   </main>
+
+  <p class="empty" role="status">Indexed search and source previews use the shared service. Graph enrichment, legacy queues and disk telemetry are unavailable in this adapter.</p>
 
   <!-- Vendor: three.js MUST load before 3d-force-graph; both before app code. -->
   <script src="vendor/three.min.js"></script>

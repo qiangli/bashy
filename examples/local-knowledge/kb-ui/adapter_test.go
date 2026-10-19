@@ -5,7 +5,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"github.com/qiangli/yoke/pkg/search"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -80,18 +84,13 @@ func TestParseSearchEnvelopeBashySearchV1(t *testing.T) {
 }
 
 func TestParseSearchIndexStatus(t *testing.T) {
-	statusJSON := []byte(`{
-		"state": "ready",
-		"paused": false,
-		"document_count": 42,
-		"disk_usage_bytes": 1048576
-	}`)
+	statusJSON := []byte(`{"schema_version":"bashy-index-v1","enabled":true,"paused":false,"phase":"idle","documents":42,"roots":[]}`)
 
 	status, err := ParseSearchIndexStatus(statusJSON)
 	if err != nil {
 		t.Fatalf("ParseSearchIndexStatus: %v", err)
 	}
-	if status.State != "ready" || status.DocumentCount != 42 || status.DiskUsage != 1048576 {
+	if status.State != "ready" || status.DocumentCount != 42 {
 		t.Fatalf("unexpected status: %+v", status)
 	}
 }
@@ -104,7 +103,10 @@ func TestAdapterRootsIntegration(t *testing.T) {
 	}
 
 	rm := NewRootsManager([]string{root})
-	adapter := NewBashyCLIAdapter("bashy", rm)
+	adapter := realTestAdapter(t, rm)
+	if err := adapter.IndexAdd(context.Background(), root); err != nil {
+		t.Fatal(err)
+	}
 
 	// 1. Check IndexStatus reflects the file
 	status, err := adapter.IndexStatus(context.Background())
@@ -145,5 +147,30 @@ func TestAdapterRootsIntegration(t *testing.T) {
 	status, _ = adapter.IndexStatus(context.Background())
 	if status.Paused || status.State != "ready" {
 		t.Errorf("expected ready status, got %+v", status)
+	}
+}
+
+func realTestAdapter(t *testing.T, roots *RootsManager) *BashyCLIAdapter {
+	t.Helper()
+	t.Setenv("BASHY_HOME", filepath.Join(t.TempDir(), "index-home"))
+	t.Setenv("BASHY_COORD_DIR", filepath.Join(t.TempDir(), "coord"))
+	a := NewBashyCLIAdapter("unused-test-binary", roots)
+	a.run = func(ctx context.Context, args ...string) ([]byte, error) {
+		c := search.NewSearchCmd()
+		c.SetContext(ctx)
+		c.SetArgs(args[1:])
+		var b bytes.Buffer
+		c.SetOut(&b)
+		c.SetErr(io.Discard)
+		e := c.Execute()
+		return b.Bytes(), e
+	}
+	return a
+}
+func TestNestedRecordProvenance(t *testing.T) {
+	b, _ := json.Marshal(map[string]any{"schema_version": "bashy-kb-memory-retrieval-v1", "ok": true, "result": map[string]any{"mode": "lexical", "hits": []any{map[string]any{"ref": "stable-id", "score": 1, "record": map[string]any{"body": "preview", "source": map[string]any{"ref": "file:///allowed/note.md"}}}}}})
+	r, e := ParseSearchEnvelope(b)
+	if e != nil || len(r.Hits) != 1 || r.Hits[0].SourceURI != "file:///allowed/note.md" || r.Hits[0].Body != "preview" {
+		t.Fatal(r, e)
 	}
 }

@@ -8,14 +8,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"os"
+	"net/url"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -67,30 +64,29 @@ type Adapter interface {
 	IndexPause(ctx context.Context) error
 	IndexResume(ctx context.Context) error
 	IndexSync(ctx context.Context) error
+	ReadSource(context.Context, string) (SourceText, error)
 	GetRootsManager() *RootsManager
 }
 
 // ExecCommandBounded executes a command with a bounded context and maximum output buffer size.
+type boundedBuffer struct{ bytes.Buffer }
+
+func (b *boundedBuffer) Write(p []byte) (int, error) {
+	if b.Len()+len(p) > maxCommandOutputBytes {
+		return 0, fmt.Errorf("command output exceeds limit")
+	}
+	return b.Buffer.Write(p)
+}
 func ExecCommandBounded(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr boundedBuffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-
 	err := cmd.Run()
-	output := stdout.Bytes()
-	if len(output) > maxCommandOutputBytes {
-		output = output[:maxCommandOutputBytes]
-	}
-
 	if err != nil {
-		errStr := strings.TrimSpace(stderr.String())
-		if errStr == "" {
-			errStr = strings.TrimSpace(string(output))
-		}
-		return output, fmt.Errorf("%s %v: %w (stderr: %s)", name, args, err, errStr)
+		return nil, fmt.Errorf("%s: %w (%s)", name, err, strings.TrimSpace(stderr.String()))
 	}
-	return output, nil
+	return stdout.Bytes(), nil
 }
 
 // ExecSearchIndexed executes `bashy search --indexed QUERY --json`.
@@ -148,6 +144,9 @@ func ParseSearchEnvelope(data []byte) (*SearchResponse, error) {
 		return nil, fmt.Errorf("decode search response json: %w", err)
 	}
 
+	if ok, exists := raw["ok"].(bool); exists && !ok {
+		return nil, fmt.Errorf("shared retrieval failed: %v", raw["error"])
+	}
 	schemaVer, _ := raw["schema_version"].(string)
 
 	// Shape 1: Shared kbmemory envelope (`bashy-kb-memory-retrieval-v1`)
@@ -166,6 +165,13 @@ func ParseSearchEnvelope(data []byte) (*SearchResponse, error) {
 			score, _ := m["score"].(float64)
 			body, _ := m["body"].(string)
 			uri, _ := m["uri"].(string)
+			if rec, ok := m["record"].(map[string]any); ok {
+				body, _ = rec["body"].(string)
+				if source, ok := rec["source"].(map[string]any); ok {
+					uri, _ = source["ref"].(string)
+				}
+			}
+
 			if uri == "" && strings.HasPrefix(ref, "file://") {
 				uri = ref
 			}
@@ -281,275 +287,171 @@ func ParseSearchEnvelope(data []byte) (*SearchResponse, error) {
 
 // ParseSearchIndexStatus parses the JSON status output from `search index status --json`.
 func ParseSearchIndexStatus(data []byte) (*IndexStatus, error) {
-	if len(data) == 0 {
-		return &IndexStatus{State: "empty"}, nil
+	var raw struct {
+		Schema    string `json:"schema_version"`
+		Enabled   bool   `json:"enabled"`
+		Paused    bool   `json:"paused"`
+		Phase     string `json:"phase"`
+		Documents int    `json:"documents"`
+		LastSync  string `json:"last_sync"`
+		LastError string `json:"last_error"`
+		Roots     []struct {
+			Path       string    `json:"path"`
+			State      string    `json:"state"`
+			Reason     string    `json:"reason"`
+			Documents  int       `json:"documents"`
+			LastUpdate time.Time `json:"last_update"`
+			Error      string    `json:"last_error"`
+		} `json:"roots"`
 	}
-
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("decode index status json: %w", err)
+	if e := json.Unmarshal(data, &raw); e != nil {
+		return nil, e
 	}
-
-	// Reject web search envelope masquerading as index status (e.g. `search "index status"`)
-	if schemaVer, _ := raw["schema_version"].(string); schemaVer == "bashy-search-v1" {
-		return nil, errors.New("output is bashy-search-v1 web search, not index status")
+	if raw.Schema != "bashy-index-v1" {
+		return nil, fmt.Errorf("unsupported index status schema %q", raw.Schema)
 	}
-
-	var status IndexStatus
-	if err := json.Unmarshal(data, &status); err == nil && status.State != "" {
-		return &status, nil
+	state := "ready"
+	if raw.Phase != "" && raw.Phase != "idle" {
+		state = "indexing"
 	}
-
-	st := &IndexStatus{
-		State: "ready",
+	if raw.Paused || !raw.Enabled {
+		state = "paused"
 	}
-	if p, ok := raw["paused"].(bool); ok {
-		st.Paused = p
-		if p {
-			st.State = "paused"
+	if raw.LastError != "" {
+		state = "error"
+	}
+	st := &IndexStatus{State: state, Paused: raw.Paused || !raw.Enabled, DocumentCount: raw.Documents, LastSync: raw.LastSync, Error: raw.LastError, Roots: []RootConfig{}}
+	for _, r := range raw.Roots {
+		status := r.State
+		if status == "watching" {
+			status = "active"
 		}
-	}
-	if cnt, ok := raw["count"].(float64); ok {
-		st.DocumentCount = int(cnt)
-	}
-	if cnt, ok := raw["document_count"].(float64); ok {
-		st.DocumentCount = int(cnt)
-	}
-	if sz, ok := raw["size"].(float64); ok {
-		st.DiskUsage = int64(sz)
+		st.Roots = append(st.Roots, RootConfig{Path: r.Path, Resolved: r.Path, Status: status, Includes: []string{r.Reason}, Excludes: []string{"shared index policy: secrets, ignored files, caches, builds, hidden application state, duplicate worktrees"}, FileCount: r.Documents, UpdatedAt: r.LastUpdate, Error: r.Error})
 	}
 	return st, nil
 }
 
-// BashyCLIAdapter implements Adapter by invoking the public bashy CLI commands
-// and managing local roots.
+// The adapter only translates the public shared-index CLI. It never scans files
+// or treats a backend failure as a successful empty/healthy index.
 type BashyCLIAdapter struct {
-	bashyBin    string
-	rootsMgr    *RootsManager
-	mu          sync.RWMutex
-	paused      bool
-	pausedSince time.Time
+	bashyBin string
+	rootsMgr *RootsManager
+	run      func(context.Context, ...string) ([]byte, error)
 }
 
-// NewBashyCLIAdapter constructs a new CLI adapter.
-func NewBashyCLIAdapter(bashyBin string, rootsMgr *RootsManager) *BashyCLIAdapter {
-	if bashyBin == "" {
-		bashyBin = "bashy"
+func NewBashyCLIAdapter(bin string, roots *RootsManager) *BashyCLIAdapter {
+	if bin == "" {
+		bin = "bashy"
 	}
-	return &BashyCLIAdapter{
-		bashyBin: bashyBin,
-		rootsMgr: rootsMgr,
+	a := &BashyCLIAdapter{bashyBin: bin, rootsMgr: roots}
+	a.run = func(ctx context.Context, args ...string) ([]byte, error) {
+		return ExecCommandBounded(ctx, bin, args...)
 	}
+	return a
 }
-
-func (a *BashyCLIAdapter) GetRootsManager() *RootsManager {
-	return a.rootsMgr
+func (a *BashyCLIAdapter) GetRootsManager() *RootsManager { return a.rootsMgr }
+func (a *BashyCLIAdapter) call(ctx context.Context, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, defaultCommandTimeout)
+	defer cancel()
+	return a.run(ctx, args...)
 }
-
-// QueryIndexed performs indexed search. Calls `bashy search --indexed QUERY --json`.
-// If the underlying command is not yet wired by manager, tolerantly falls back to
-// scanning eligible root documents without fabricating fake data.
-func (a *BashyCLIAdapter) QueryIndexed(ctx context.Context, query string, mode string, corpus string) (*SearchResponse, error) {
+func (a *BashyCLIAdapter) QueryIndexed(ctx context.Context, query, mode, corpus string) (*SearchResponse, error) {
+	if mode == "" {
+		mode = "auto"
+	}
+	if corpus != "" {
+		return nil, fmt.Errorf("corpus selection is unavailable in this adapter")
+	}
 	start := time.Now()
-
-	cmdCtx, cancel := context.WithTimeout(ctx, defaultCommandTimeout)
-	defer cancel()
-
-	var extraArgs []string
-	if mode != "" && mode != "hybrid" {
-		extraArgs = append(extraArgs, "--mode", mode)
+	out, e := a.call(ctx, "search", "--indexed", query, "--mode", mode, "--json")
+	if e != nil {
+		return nil, e
 	}
-
-	out, err := ExecSearchIndexed(cmdCtx, a.bashyBin, query, extraArgs...)
-	if err == nil {
-		resp, parseErr := ParseSearchEnvelope(out)
-		if parseErr == nil {
-			resp.ElapsedMs = time.Since(start).Milliseconds()
-			return resp, nil
-		}
+	r, e := ParseSearchEnvelope(out)
+	if e != nil {
+		return nil, e
 	}
-
-	// If `search --indexed` is pending manager integration (unknown flag),
-	// search eligible root files directly matching the query string in filename or path.
-	// This fulfills: "No data mocks in production. Public CLI expected search --indexed...".
-	qLower := strings.ToLower(strings.TrimSpace(query))
-	hits := make([]SearchHit, 0)
-
-	eligible := a.rootsMgr.GetEligibleRoots()
-	for _, root := range eligible {
-		_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info == nil {
-				return nil
-			}
-			// Skip hidden and git dirs
-			if info.IsDir() {
-				if info.Name() == ".git" || info.Name() == "node_modules" {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if !info.Mode().IsRegular() {
-				return nil
-			}
-
-			name := info.Name()
-			if qLower == "" || strings.Contains(strings.ToLower(name), qLower) || strings.Contains(strings.ToLower(path), qLower) {
-				uri := "file://" + path
-				hits = append(hits, SearchHit{
-					ID:        uri,
-					NodeID:    uri,
-					Label:     name,
-					Type:      "Document",
-					NodeType:  "Document",
-					SourceURI: uri,
-					Score:     1.0,
-				})
-			}
-			if len(hits) >= 100 {
-				return io.EOF // cap results
-			}
-			return nil
-		})
-	}
-
-	return &SearchResponse{
-		Hits:      hits,
-		Count:     len(hits),
-		ElapsedMs: time.Since(start).Milliseconds(),
-		Mode:      "lexical",
-	}, nil
+	r.ElapsedMs = time.Since(start).Milliseconds()
+	return r, nil
 }
-
-// IndexStatus returns the current indexing status.
 func (a *BashyCLIAdapter) IndexStatus(ctx context.Context) (*IndexStatus, error) {
-	cmdCtx, cancel := context.WithTimeout(ctx, defaultCommandTimeout)
-	defer cancel()
-
-	out, err := ExecSearchIndexStatus(cmdCtx, a.bashyBin)
-	if err == nil {
-		st, parseErr := ParseSearchIndexStatus(out)
-		if parseErr == nil && st.DocumentCount > 0 {
-			st.Roots = a.rootsMgr.List()
-			return st, nil
-		}
+	out, e := a.call(ctx, "search", "index", "status", "--json")
+	if e != nil {
+		return nil, e
 	}
-
-	// Reflect real registered roots and real files
-	a.mu.RLock()
-	paused := a.paused
-	since := ""
-	if !a.pausedSince.IsZero() {
-		since = a.pausedSince.Format(time.RFC3339)
+	st, e := ParseSearchIndexStatus(out)
+	if e != nil {
+		return nil, e
 	}
-	a.mu.RUnlock()
-
-	state := "ready"
-	if paused {
-		state = "paused"
-	}
-
-	roots := a.rootsMgr.List()
-	docCount := 0
-	var totalBytes int64 = 0
-
-	for i := range roots {
-		r := &roots[i]
-		count := 0
-		var rBytes int64 = 0
-		_ = filepath.Walk(r.Resolved, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info == nil {
-				return nil
-			}
-			if info.IsDir() {
-				if info.Name() == ".git" || info.Name() == "node_modules" {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if info.Mode().IsRegular() {
-				count++
-				rBytes += info.Size()
-			}
-			return nil
-		})
-		r.FileCount = count
-		r.ByteCount = rBytes
-		docCount += count
-		totalBytes += rBytes
-	}
-
-	return &IndexStatus{
-		State:         state,
-		Paused:        paused,
-		Since:         since,
-		DocumentCount: docCount,
-		Roots:         roots,
-		DiskUsage:     totalBytes,
-		LastSync:      time.Now().UTC().Format(time.RFC3339),
-	}, nil
+	a.rootsMgr.Replace(st.Roots)
+	return st, nil
 }
-
-// IndexAdd adds a root to indexing.
-func (a *BashyCLIAdapter) IndexAdd(ctx context.Context, root string) error {
-	cfg, err := a.rootsMgr.Add(root, nil, nil)
-	if err != nil {
-		return err
+func (a *BashyCLIAdapter) IndexAdd(ctx context.Context, path string) error {
+	root, e := ResolvePath(path)
+	if e != nil {
+		return e
 	}
-
-	cmdCtx, cancel := context.WithTimeout(ctx, defaultCommandTimeout)
-	defer cancel()
-
-	// Best-effort CLI invocation if command exists
-	_ = ExecSearchIndexAdd(cmdCtx, a.bashyBin, cfg.Resolved)
-	return nil
-}
-
-// IndexForget removes a root from indexing.
-func (a *BashyCLIAdapter) IndexForget(ctx context.Context, root string) error {
-	if !a.rootsMgr.Remove(root) {
-		return errors.New("root not found")
+	if _, e = a.call(ctx, "search", "index", "init", "--json"); e != nil {
+		return e
 	}
-
-	cmdCtx, cancel := context.WithTimeout(ctx, defaultCommandTimeout)
-	defer cancel()
-
-	_ = ExecSearchIndexForget(cmdCtx, a.bashyBin, root)
-	return nil
+	_, e = a.call(ctx, "search", "index", "add", root, "--json")
+	if e != nil {
+		return e
+	}
+	_, e = a.IndexStatus(ctx)
+	return e
 }
-
-// IndexPause pauses search index ingestion.
+func (a *BashyCLIAdapter) IndexForget(ctx context.Context, path string) error {
+	root, e := ResolvePath(path)
+	if e != nil {
+		return e
+	}
+	_, e = a.call(ctx, "search", "index", "forget", root, "--json")
+	if e != nil {
+		return e
+	}
+	_, e = a.IndexStatus(ctx)
+	return e
+}
 func (a *BashyCLIAdapter) IndexPause(ctx context.Context) error {
-	a.mu.Lock()
-	a.paused = true
-	a.pausedSince = time.Now().UTC()
-	a.mu.Unlock()
-
-	cmdCtx, cancel := context.WithTimeout(ctx, defaultCommandTimeout)
-	defer cancel()
-
-	_ = ExecSearchIndexPause(cmdCtx, a.bashyBin)
-	return nil
+	_, e := a.call(ctx, "search", "index", "pause", "--json")
+	return e
 }
-
-// IndexResume resumes search index ingestion.
 func (a *BashyCLIAdapter) IndexResume(ctx context.Context) error {
-	a.mu.Lock()
-	a.paused = false
-	a.pausedSince = time.Time{}
-	a.mu.Unlock()
-
-	cmdCtx, cancel := context.WithTimeout(ctx, defaultCommandTimeout)
-	defer cancel()
-
-	_ = ExecSearchIndexResume(cmdCtx, a.bashyBin)
-	return nil
+	_, e := a.call(ctx, "search", "index", "resume", "--json")
+	return e
+}
+func (a *BashyCLIAdapter) IndexSync(ctx context.Context) error {
+	_, e := a.call(ctx, "search", "index", "sync", "--json")
+	return e
 }
 
-// IndexSync triggers immediate index synchronization.
-func (a *BashyCLIAdapter) IndexSync(ctx context.Context) error {
-	cmdCtx, cancel := context.WithTimeout(ctx, defaultCommandTimeout)
-	defer cancel()
+type SourceText struct {
+	ID      string `json:"id"`
+	Updated string `json:"updated"`
+	Body    string `json:"body"`
+	Title   string `json:"title"`
+	Source  struct {
+		Ref string `json:"ref"`
+	} `json:"source"`
+}
 
-	_ = ExecSearchIndexSync(cmdCtx, a.bashyBin)
-	return nil
+func (a *BashyCLIAdapter) ReadSource(ctx context.Context, uri string) (SourceText, error) {
+	if filepath.IsAbs(uri) {
+		uri = fileURI(uri)
+	}
+	out, e := a.call(ctx, "search", "index", "source", uri, "--json")
+	if e != nil {
+		return SourceText{}, e
+	}
+	var r SourceText
+	e = json.Unmarshal(out, &r)
+	return r, e
+}
+func fileURI(path string) string {
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return (&url.URL{Scheme: "file", Path: p}).String()
 }

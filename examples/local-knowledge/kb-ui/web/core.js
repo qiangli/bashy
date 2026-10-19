@@ -35,7 +35,8 @@ function shortenPath(p) {
 }
 
 function humanBytes(n) {
-  if (!n || n <= 0) return "0 B";
+  if (n == null) return "unknown";
+  if (n <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB", "PB"];
   let i = 0;
   while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }

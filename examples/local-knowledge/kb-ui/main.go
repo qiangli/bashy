@@ -51,15 +51,16 @@ Routes:
 				initialRoots = append(initialRoots, r)
 			}
 		}
-	} else {
-		// Default to current working directory if no roots specified
-		if cwd, err := os.Getwd(); err == nil {
-			initialRoots = append(initialRoots, cwd)
-		}
 	}
 
 	rootsMgr := NewRootsManager(initialRoots)
 	adapter := NewBashyCLIAdapter(*bashyBin, rootsMgr)
+	for _, root := range initialRoots {
+		if err := adapter.IndexAdd(context.Background(), root); err != nil {
+			fmt.Fprintln(os.Stderr, "kb-ui:", err)
+			os.Exit(1)
+		}
+	}
 	hub := NewSSEHub()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

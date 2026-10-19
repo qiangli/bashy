@@ -19,7 +19,6 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -173,104 +172,29 @@ func handleSearch(adapter Adapter) http.HandlerFunc {
 
 func handleFilePreview(adapter Adapter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		uri := r.URL.Query().Get("uri")
-		download := r.URL.Query().Get("download") == "1"
-
-		roots := adapter.GetRootsManager().GetEligibleRoots()
-		safePath, err := ValidateFilePreviewPath(uri, roots)
-		if err != nil {
-			if errors.Is(err, ErrOutsideRoot) || errors.Is(err, ErrSymlinkEscapesRoot) || errors.Is(err, ErrSensitiveFile) {
-				http.Error(w, err.Error(), http.StatusForbidden)
-				return
-			}
-			if errors.Is(err, os.ErrNotExist) {
-				http.Error(w, "File not found", http.StatusNotFound)
-				return
-			}
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		preview, e := adapter.ReadSource(r.Context(), r.URL.Query().Get("uri"))
+		if e != nil {
+			http.Error(w, "source unavailable or excluded", http.StatusForbidden)
 			return
 		}
-
-		f, err := os.Open(safePath)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+		content := []byte(preview.Body)
+		if len(content) > maxPreviewBytes {
+			http.Error(w, "preview exceeds limit", http.StatusRequestEntityTooLarge)
 			return
 		}
-		defer f.Close()
-
-		fi, err := f.Stat()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		// Read up to 2MB bounded content
-		limitReader := io.LimitReader(f, maxPreviewBytes)
-		content, err := io.ReadAll(limitReader)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		// Detect MIME
-		mime := http.DetectContentType(content)
-		isBinary := strings.HasPrefix(mime, "application/octet-stream") ||
-			(!strings.HasPrefix(mime, "text/") && !strings.Contains(mime, "json") && !strings.Contains(mime, "xml"))
-
-		// If binary and not downloading, return 415 preview-unavailable as expected by file-viewer.js
-		if isBinary && !download {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnsupportedMediaType)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"mime":  mime,
-				"bytes": fi.Size(),
-			})
-			return
-		}
-
-		hasher := sha256.New()
-		hasher.Write(content)
-		shaHex := hex.EncodeToString(hasher.Sum(nil))
-
-		w.Header().Set("X-Kg-Bytes", fmt.Sprintf("%d", fi.Size()))
-		w.Header().Set("X-Kg-Sha256", shaHex)
-		w.Header().Set("Content-Type", mime)
-
-		if download {
-			filename := filepath.Base(safePath)
-			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-		}
-
-		_, _ = w.Write(content)
-	}
-}
-
-func handleMarkdownPreview(adapter Adapter) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		uri := r.URL.Query().Get("uri")
-		roots := adapter.GetRootsManager().GetEligibleRoots()
-		safePath, err := ValidateFilePreviewPath(uri, roots)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusForbidden)
-			return
-		}
-
-		ext := strings.ToLower(filepath.Ext(safePath))
-		if ext != ".md" && ext != ".markdown" && ext != ".txt" {
-			http.Error(w, "No markdown conversion available for this file type", http.StatusNotFound)
-			return
-		}
-
-		content, err := os.ReadFile(safePath)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-
+		sum := sha256.Sum256(content)
+		w.Header().Set("X-Kg-Bytes", fmt.Sprint(len(content)))
+		w.Header().Set("X-Kg-Sha256", hex.EncodeToString(sum[:]))
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+		if r.URL.Query().Get("download") == "1" {
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", preview.Title+".txt"))
+		}
 		_, _ = w.Write(content)
 	}
 }
+func handleMarkdownPreview(adapter Adapter) http.HandlerFunc { return handleFilePreview(adapter) }
 
 func handleNodeDetail(adapter Adapter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -281,30 +205,12 @@ func handleNodeDetail(adapter Adapter) http.HandlerFunc {
 			return
 		}
 
-		// Try finding the file under roots
-		roots := adapter.GetRootsManager().GetEligibleRoots()
-		safePath, err := ValidateFilePreviewPath(id, roots)
-
-		label := filepath.Base(id)
-		nodeType := "Document"
-		sourceURI := id
-		if !strings.HasPrefix(sourceURI, "file://") && filepath.IsAbs(sourceURI) {
-			sourceURI = "file://" + sourceURI
+		source, err := adapter.ReadSource(r.Context(), id)
+		if err != nil {
+			http.Error(w, "indexed source unavailable", http.StatusNotFound)
+			return
 		}
-
-		node := map[string]any{
-			"node_id":    id,
-			"node_type":  nodeType,
-			"label":      label,
-			"source_uri": sourceURI,
-		}
-
-		if err == nil {
-			if fi, err := os.Stat(safePath); err == nil {
-				node["bytes"] = fi.Size()
-				node["updated_at"] = fi.ModTime().UTC().Format(time.RFC3339)
-			}
-		}
+		node := map[string]any{"node_id": source.ID, "node_type": "Document", "label": source.Title, "source_uri": source.Source.Ref, "text": source.Body, "updated_at": source.Updated}
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -319,6 +225,10 @@ func handleRoots(adapter Adapter, hub *SSEHub) http.HandlerFunc {
 
 		switch r.Method {
 		case http.MethodGet:
+			if _, err := adapter.IndexStatus(r.Context()); err != nil {
+				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"roots": rm.List(),
@@ -340,12 +250,26 @@ func handleRoots(adapter Adapter, hub *SSEHub) http.HandlerFunc {
 				return
 			}
 
-			cfg, err := rm.Add(req.Path, req.Includes, req.Excludes)
+			if len(req.Includes) > 0 || len(req.Excludes) > 0 {
+				http.Error(w, "configure exclusions through the shared index policy", http.StatusBadRequest)
+				return
+			}
+			resolved, err := ResolvePath(req.Path)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			_ = adapter.IndexAdd(r.Context(), cfg.Resolved)
+			if err = adapter.IndexAdd(r.Context(), resolved); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			var cfg RootConfig
+			for _, root := range rm.List() {
+				if root.Resolved == resolved {
+					cfg = root
+					break
+				}
+			}
 
 			hub.Broadcast(map[string]any{
 				"type": "root_added",
@@ -466,22 +390,8 @@ func handleSystem() http.HandlerFunc {
 	}
 }
 
-func handleDisk(adapter Adapter) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		roots := adapter.GetRootsManager().List()
-		var totalBytes int64 = 0
-		for _, r := range roots {
-			totalBytes += r.ByteCount
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"level":       "ok",
-			"avail_bytes": 100 * 1024 * 1024 * 1024, // baseline healthy free space
-			"used_bytes":  totalBytes,
-			"path":        "local-knowledge",
-		})
-	}
+func handleDisk(Adapter) http.HandlerFunc {
+	return handleUnsupported("disk telemetry is unavailable in the shared index adapter")
 }
 
 func handleRuns(adapter Adapter) http.HandlerFunc {
@@ -505,32 +415,13 @@ func handleRuns(adapter Adapter) http.HandlerFunc {
 
 func handleScanLive(adapter Adapter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		st, _ := adapter.IndexStatus(r.Context())
-		roots := adapter.GetRootsManager().List()
-		var snapRoots []map[string]any
-		for _, r := range roots {
-			snapRoots = append(snapRoots, map[string]any{
-				"path":          r.Path,
-				"resolved":      r.Resolved,
-				"status":        r.Status,
-				"emitted":       r.FileCount,
-				"emits_per_sec": 0.0,
-			})
+		st, e := adapter.IndexStatus(r.Context())
+		if e != nil {
+			http.Error(w, e.Error(), http.StatusServiceUnavailable)
+			return
 		}
-
-		docCount := 0
-		if st != nil {
-			docCount = st.DocumentCount
-		}
-
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"roots":         snapRoots,
-			"total_emitted": docCount,
-			"total_bytes":   st.DiskUsage,
-			"total_skipped": 0,
-			"finished_all":  true,
-		})
+		_ = json.NewEncoder(w).Encode(map[string]any{"roots": st.Roots, "total_emitted": st.DocumentCount, "finished_all": st.State == "ready", "state": st.State, "last_sync": st.LastSync})
 	}
 }
 
@@ -542,12 +433,8 @@ func handleSubstagesLive(_ Adapter) http.HandlerFunc {
 	}
 }
 
-func handleGraphQuery(_ Adapter) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		// Graph queries return empty result set cleanly without mock data
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"q":[]}`))
-	}
+func handleGraphQuery(Adapter) http.HandlerFunc {
+	return handleUnsupported("graph enrichment is unavailable; indexed search retains source provenance")
 }
 
 func handleUnsupported(msg string) http.HandlerFunc {

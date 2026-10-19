@@ -224,3 +224,14 @@ func (rm *RootsManager) UpdateCounts(resolved string, fileCount int, byteCount i
 		cfg.UpdatedAt = time.Now().UTC()
 	}
 }
+
+// Replace refreshes the presentation cache from authoritative shared index state.
+func (rm *RootsManager) Replace(roots []RootConfig) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	rm.roots = map[string]*RootConfig{}
+	for _, r := range roots {
+		copy := r
+		rm.roots[r.Resolved] = &copy
+	}
+}
