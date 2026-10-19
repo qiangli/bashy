@@ -55,7 +55,7 @@
       if (!r.ok) throw new Error("HTTP " + r.status);
       const j = await r.json();
       lastHits = j.hits || [];
-      if (counter) counter.textContent = `${lastHits.length} hits · ${j.elapsed_ms || 0}ms`;
+      if (counter) counter.textContent = `${lastHits.length} hits · ${j.mode || "auto"}${j.fallback ? " fallback" : ""} · ${j.elapsed_ms || 0}ms`;
       renderSearchResults(lastHits);
     } catch (e) {
       if (list) list.innerHTML = `<li class="empty">search failed: ${escapeHTML(String(e))}</li>`;

@@ -44,17 +44,17 @@
     <div class="explore-layout">
       <aside class="rail rail-left card">
         <div class="search-bar">
-          <input id="search-input" type="search" placeholder="search the graph — label · text · tags…" autocomplete="off" spellcheck="false">
+          <input id="search-input" type="search" placeholder="search indexed files…" autocomplete="off" spellcheck="false">
           <div class="search-opts">
             <select id="search-mode" title="retrieval mode">
-              <option value="auto">Auto (lexical fallback)</option><option value="hybrid">hybrid</option>
+              <option value="auto">auto</option><option value="hybrid">hybrid</option>
               <option value="lexical">lexical</option>
               <option value="semantic">semantic</option>
-              <option value="rerank">rerank</option>
+              <option value="rerank" disabled>rerank (unavailable)</option>
             </select>
             <select id="search-corpus" title="corpus scope">
-              <option value="">user-authored</option>
-              <option value="*">all corpora</option>
+              <option value="">indexed files</option>
+              <option value="*" disabled>all corpora (unavailable)</option>
             </select>
           </div>
         </div>

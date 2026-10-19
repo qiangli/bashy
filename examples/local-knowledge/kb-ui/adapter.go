@@ -41,6 +41,7 @@ type SearchResponse struct {
 	ElapsedMs int64       `json:"elapsed_ms"`
 	Mode      string      `json:"mode,omitempty"`
 	Count     int         `json:"count"`
+	Fallback  bool        `json:"fallback,omitempty"`
 }
 
 // IndexStatus represents the status of the local search index.
@@ -194,9 +195,10 @@ func ParseSearchEnvelope(data []byte) (*SearchResponse, error) {
 			hits = append(hits, hit)
 		}
 		return &SearchResponse{
-			Hits:  hits,
-			Count: len(hits),
-			Mode:  mode,
+			Hits:     hits,
+			Count:    len(hits),
+			Mode:     mode,
+			Fallback: res["fallback"] == true,
 		}, nil
 	}
 
