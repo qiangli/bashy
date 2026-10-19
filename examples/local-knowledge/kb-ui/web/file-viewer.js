@@ -28,8 +28,8 @@
       <div class="fv-header">
         <span class="fv-uri" title=""></span>
         <div class="fv-tabs" role="tablist">
-          <button type="button" class="fv-tab" data-mode="single" aria-selected="true">original</button>
-          <button type="button" class="fv-tab" data-mode="compare" aria-selected="false">side-by-side</button>
+          <button type="button" class="fv-tab" data-mode="single" aria-selected="true">indexed text</button>
+          <button type="button" class="fv-tab" data-mode="compare" aria-selected="false" disabled>comparison unavailable</button>
         </div>
         <a class="fv-btn fv-download" title="Download as file" target="_blank" rel="noopener">⬇ download</a>
         <button type="button" class="fv-btn fv-copy" title="Copy URI">copy</button>
@@ -129,6 +129,8 @@
   // setMode switches between single-pane and side-by-side. Loads the
   // appropriate sources on entry to each mode.
   function setMode(mode) {
+    // This adapter serves indexed text, not a separate original/markdown cache.
+    mode = "single";
     if (!dialog) return;
     if (mode !== "single" && mode !== "compare") mode = "single";
     currentMode = mode;

@@ -37,7 +37,8 @@ cloud provider is selected automatically. Curated kb pages remain separate;
 Previews return scrubbed indexed text through the shared source API. They cannot
 open arbitrary files, bypass current exclusions, download cloud placeholders or
 serve unindexed binary files. Preview responses are plain text with a restrictive
-content policy. File links retain source provenance.
+content policy. File links retain source provenance. Original-binary previews and the legacy
+original/Markdown comparison are unavailable; the viewer labels its indexed text.
 
 Graph enrichment, the legacy job queue and disk telemetry are explicitly
 unavailable in this adapter. Their offline interface assets are retained for the
