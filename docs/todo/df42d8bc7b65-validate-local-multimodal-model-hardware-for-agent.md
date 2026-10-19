@@ -6,7 +6,6 @@ seq: 356
 status: done
 priority: p1
 created: 2026-09-30T07:39:48.317848Z
-weave: 215
 assignee: muse-spark1.3
 sprint: 382
 sprint_id: 52e1124d-d9d2-5528-bbfa-80f6b8538c1d
