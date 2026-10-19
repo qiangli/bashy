@@ -6,7 +6,7 @@ toolchain go1.27.2
 
 require (
 	github.com/aymanbagabas/go-pty v0.2.3
-	github.com/bashsharp/bashsharp v0.0.0-20261019092338-16d4f56056bc
+	github.com/bashsharp/bashsharp v0.0.0-20261019110739-ec4bfc0515a2
 	github.com/creack/pty/v2 v2.0.1
 	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0
 	github.com/ergochat/readline v0.1.3
@@ -553,7 +553,7 @@ require (
 // unmerged Bash 5.3 interp patches). Resolve it as a flat sibling: inside the
 // dhnt umbrella ../sh is the sh submodule; in a standalone clone, clone
 // github.com/qiangli/sh next to this repo as ./sh.
-replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261019091544-03cfb7340245
+replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261019110026-de35c153b5f6
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
