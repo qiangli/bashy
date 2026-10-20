@@ -16,10 +16,10 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
 	github.com/pkg/sftp v1.13.10
-	github.com/qiangli/coreutils v0.0.0-20261019134046-ccd5c756c64e
+	github.com/qiangli/coreutils v0.0.0-20261019154849-42845e33d023
 	github.com/qiangli/ycode v0.3.1-dev.0.20261017214433-ffb708d14c35
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261019204329-6272910b299b
+	github.com/qiangli/yoke v0.0.0-20261020065811-563a4617303f
 	github.com/qiangli/yoke/external/otel v0.0.0-20261017214100-19415c55382f
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2

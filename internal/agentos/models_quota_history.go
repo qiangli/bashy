@@ -198,6 +198,7 @@ type quotaWeaveQueue struct {
 		Owner      string `json:"owner"`
 		State      string `json:"state"`
 		ExitCode   *int   `json:"exit_code"`
+		Body       string `json:"body"`
 		LaunchSpec *struct {
 			Agent string `json:"agent"`
 			Model string `json:"model"`
@@ -253,7 +254,7 @@ func ingestQuotaWeaveLogs(ctx context.Context, dirs []string, since, now time.Ti
 			if run.ExitCode != nil {
 				exitCode = *run.ExitCode
 			}
-			for _, o := range weave.ObservationsFromLog(run.Tool, model, tail, stat.ModTime(), exited, exitCode) {
+			for _, o := range weave.ObservationsFromLog(run.Tool, model, tail, stat.ModTime(), exited, exitCode, run.Body) {
 				o.Agent = run.Owner
 				modelName := model
 				if run.LaunchSpec != nil && run.LaunchSpec.Agent != "" {
