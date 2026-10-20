@@ -462,7 +462,11 @@ jobs:
           [[ $COSIGN_VERSION == v3.1.3 ]] || { echo "PIN COSIGN_VERSION $COSIGN_VERSION != workflow cosign-release"; exit 1; }
           for pair in $RELEASE_EXTRA; do cp "fork/bashy-build/${pair%%=*}" "dist/${pair#*=}"; done
           for a in $RELEASE_EXECUTABLES; do chmod +x "dist/$a"; done
-          for a in $RELEASE_ASSETS; do
+          # Backend artifacts (incl. transitive libraries) come from the signed
+          # manifests, not a static list: all must exist, match their digest,
+          # and are then published and signed with everything else in dist.
+          derived=$(python3 fork/bashy-build/release-assets-check.py dist "$RELEASE_ASSETS")
+          for a in $derived; do
             [[ -f dist/$a ]] || { echo "missing $a"; exit 1; }
           done
           # release assets are files; evidence directories are not published.

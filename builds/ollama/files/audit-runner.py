@@ -205,6 +205,13 @@ def merge_inputs(out):
                 fail(f"{stem}: compiler-input blob missing from downloaded build records: {path}")
             if hashlib.sha256(data).hexdigest() != digest:
                 fail(f"{stem}: compiler-input blob hash mismatch: {path}")
+        # Build-only toolkit headers seen by nvcc: bound to the pinned SDK, blobs must resolve.
+        for path, digest in (native.get("cuda_toolkit_inputs") or {}).items():
+            blob = store / digest
+            if not re.fullmatch(r"[0-9a-f]{64}", digest) or not blob.is_file() or hashlib.sha256(blob.read_bytes()).hexdigest() != digest:
+                fail(f"{stem}: CUDA toolkit input blob missing or corrupt: {path}")
+        if target == CUDA_TARGET and not any(p.endswith((".cu", ".cuh")) for p in native["files"]):
+            fail(f"{stem}: no .cu/.cuh compile inputs were captured from nvcc")
 
 
 def compiler_inputs(capture, source, generated, output):
@@ -225,7 +232,7 @@ def compiler_inputs(capture, source, generated, output):
     spec = importlib.util.spec_from_file_location("evidence", Path(__file__).with_name("compiler-evidence.py"))
     evidence = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(evidence)
-    paths, system_headers, trusted = {}, set(), []
+    paths, system_headers, trusted, toolkit = {}, set(), [], {}
     for row in captured:
         if row.get("error") or not row.get("cwd") or not row.get("inputs"):
             fail("missing compile-time input evidence or failed capture")
@@ -247,6 +254,7 @@ def compiler_inputs(capture, source, generated, output):
                 if rel in paths and paths[rel] != digest: fail("compiler input changed between invocations")
                 paths[rel] = digest
             elif category == "system": system_headers.add(item["path"])
+            elif category == "cuda-toolkit": toolkit[rel] = digest
             elif category in ("go-generated", "go-toolchain"): trusted.append(item)
             else: fail("unreviewed external native compiler dependency")
     # Metal source is generated after go generate and may not appear in a C depfile.
@@ -266,6 +274,7 @@ def compiler_inputs(capture, source, generated, output):
     data = {"schema": "bashy-runner-compiler-inputs-v1", "files": files,
             "invocations": len(invocations), "dependency_files": len(depfiles),
             "system_headers": sorted(system_headers), "trusted_go_inputs": trusted,
+            "cuda_toolkit_inputs": dict(sorted(toolkit.items())),
             "compiler_invocations": invocations}
     Path(output).write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
 

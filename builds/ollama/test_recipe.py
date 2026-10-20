@@ -701,6 +701,61 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         self.assertIn("candidate", pin)
         self.assertIn("linux-amd64-cuda", wf)
 
+    def test_release_assets_are_derived_from_backend_manifest_fail_closed(self):
+        # Review 2026-10-20: every backend artifact in the manifest (incl.
+        # transitive ggml libs) must be present, hash-verified, and therefore
+        # published and signed; an unlisted shared library must not slip in.
+        tool = self.helpers / "release-assets-check.py"
+        self.assertTrue(tool.exists(), "release-assets-check.py missing")
+        d = Path(tempfile.mkdtemp())
+        (d / "libggml-cuda.so").write_bytes(b"cuda")
+        (d / "libggml-base.so").write_bytes(b"base")
+        (d / "runner.json").write_text(json.dumps({"backend_artifacts": [
+            {"name": "libggml-cuda.so", "sha256": hashlib.sha256(b"cuda").hexdigest()},
+            {"name": "libggml-base.so", "sha256": hashlib.sha256(b"base").hexdigest()}]}))
+        run = lambda *a: subprocess.run(["python3", str(tool), *a], capture_output=True, text=True)
+        ok = run(str(d), "libggml-cuda.so runner.json libggml-base.so")
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        self.assertIn("libggml-base.so", ok.stdout)
+        # manifest-derived artifact absent from the static list is still required
+        (d / "libggml-base.so").unlink()
+        self.assertNotEqual(run(str(d), "libggml-cuda.so runner.json").returncode, 0)
+        (d / "libggml-base.so").write_bytes(b"tampered")
+        self.assertNotEqual(run(str(d), "libggml-cuda.so runner.json").returncode, 0)
+        (d / "libggml-base.so").write_bytes(b"base")
+        (d / "libstray.so.1").write_bytes(b"x")
+        self.assertNotEqual(run(str(d), "libggml-cuda.so runner.json").returncode, 0)
+        wf = (self.fork / ".github/workflows/bashy-build.yml").read_text()
+        step = wf.split("assemble release payload", 1)[1].split("- name:", 1)[0]
+        self.assertIn("release-assets-check.py", step)
+
+    def test_cuda_cu_inputs_enter_compiler_capture(self):
+        # Review 2026-10-20: nvcc/.cu compile inputs must be captured through a
+        # CMake compiler launcher and reach the compiler-input review.
+        launcher = self.helpers / "compiler-capture-launcher"
+        self.assertTrue(launcher.exists(), "compiler-capture-launcher missing")
+        build = (self.helpers / "build-runner.sh").read_text()
+        self.assertIn("CMAKE_CUDA_COMPILER_LAUNCHER", build)
+        self.assertIn("compiler-capture-launcher", build)
+        self.assertIn("--generated", build)
+        d = Path(tempfile.mkdtemp())
+        src = d / "src"; src.mkdir()
+        (src / "k.cu").write_text("__global__ void k(){}\n")
+        fake = d / "fakenvcc"
+        fake.write_text("#!/bin/sh\nwhile [ $# -gt 0 ]; do [ \"$1\" = -MF ] && { shift; echo \"o: $SRCFILE\" > \"$1\"; }; shift; done\n")
+        fake.chmod(0o755)
+        cap = d / "cap"
+        env = dict(os.environ, BASHY_COMPILER_CAPTURE_DIR=str(cap), BASHY_COMPILER_SOURCE=str(src),
+                   BASHY_COMPILER_GOROOT=str(d), BASHY_COMPILER_TMP=str(d), SRCFILE=str(src / "k.cu"))
+        r = subprocess.run([str(launcher), str(fake), "-c", str(src / "k.cu"), "-MD", "-MF", str(d / "cmake.d")],
+                           env=env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        recs = [json.loads(f.read_text()) for f in (cap / "invocations").glob("*.json")]
+        self.assertEqual(len(recs), 1)
+        self.assertTrue(recs[0]["captured"])
+        self.assertTrue((d / "cmake.d").is_file(), "CMake's own depfile must be preserved")
+        self.assertEqual([i["relative"] for i in recs[0]["inputs"]], ["k.cu"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

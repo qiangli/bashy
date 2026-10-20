@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""CMake compiler launcher: LAUNCHER REAL_COMPILER ARGS... (nvcc/.cu, gcc, g++).
+
+Records the invocation and snapshots its dependency file like compiler-capture-cc.
+A depfile CMake already requested with -MF is reused, never overridden.
+"""
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import uuid
+import importlib.util
+spec = importlib.util.spec_from_file_location("evidence", Path(__file__).with_name("compiler-evidence.py"))
+evidence = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(evidence)
+
+if len(sys.argv) < 2:
+    sys.exit("compiler-capture-launcher: real compiler argument missing")
+compiler, args = sys.argv[1], sys.argv[2:]
+root = Path(os.environ["BASHY_COMPILER_CAPTURE_DIR"])
+root.mkdir(parents=True, exist_ok=True)
+source_exts = (".c", ".cc", ".cpp", ".cxx", ".cu", ".cuh", ".h", ".hh", ".hpp", ".hxx")
+is_native = any(Path(arg).suffix.lower() in source_exts for arg in args) and "-c" in args
+run_args, depfile = list(args), None
+if is_native:
+    if "-MF" in args and args.index("-MF") + 1 < len(args):
+        depfile = Path(args[args.index("-MF") + 1])
+    else:
+        depdir = root / "depfiles"
+        depdir.mkdir(parents=True, exist_ok=True)
+        depfile = depdir / (uuid.uuid4().hex + ".d")
+        run_args += ["-MMD", "-MF", str(depfile)]
+record = {"compiler": compiler, "argv": args, "captured": is_native,
+          "depfile": str(depfile) if depfile else None, "cwd": str(Path.cwd()), "executed_argv": run_args,
+          "roots": {key: str(Path(os.environ[key]).resolve()) for key in
+                    ("BASHY_COMPILER_SOURCE", "BASHY_COMPILER_GOROOT", "BASHY_COMPILER_TMP", "BASHY_CUDA_ROOT") if key in os.environ}}
+result = subprocess.run([compiler, *run_args])
+record["returncode"] = result.returncode
+try:
+    if result.returncode == 0 and depfile is not None:
+        store = root / "content"
+        store.mkdir(exist_ok=True)
+        record["inputs"] = evidence.snapshot(depfile, store)
+except (OSError, ValueError) as exc:
+    record["error"] = str(exc)
+    result.returncode = 1
+finally:
+    records = root / "invocations"
+    records.mkdir(exist_ok=True)
+    (records / (uuid.uuid4().hex + ".json")).write_text(json.dumps(record, sort_keys=True) + "\n")
+if record.get("error"):
+    sys.exit("compiler-capture-launcher: " + record["error"])
+sys.exit(result.returncode)

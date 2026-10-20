@@ -35,7 +35,7 @@ if is_native:
     run_args += ["-MMD", "-MF", str(depfile)]
 record = {"compiler": compiler, "argv": args, "captured": is_native,
           "depfile": str(depfile) if depfile else None, "cwd": str(Path.cwd()), "executed_argv": run_args,
-          "roots": {key: str(Path(os.environ[key]).resolve()) for key in ("BASHY_COMPILER_SOURCE", "BASHY_COMPILER_GOROOT", "BASHY_COMPILER_TMP", "BASHY_MINGW_ROOT") if key in os.environ}}
+          "roots": {key: str(Path(os.environ[key]).resolve()) for key in ("BASHY_COMPILER_SOURCE", "BASHY_COMPILER_GOROOT", "BASHY_COMPILER_TMP", "BASHY_MINGW_ROOT", "BASHY_CUDA_ROOT") if key in os.environ}}
 result = subprocess.run([compiler, *run_args])
 record["returncode"] = result.returncode
 try:

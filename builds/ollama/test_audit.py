@@ -343,12 +343,21 @@ class AuditPolicy(unittest.TestCase):
                 stem = "runner-" + target
                 body = f"input for {target}".encode()
                 digest = hashlib.sha256(body).hexdigest()
+                names = {"vendor/native/a.c": digest}
+                if target.endswith("cuda"):
+                    names["ml/backend/ggml/ggml/src/ggml-cuda/k.cu"] = digest
                 (out / (stem + ".compiler-inputs.json")).write_text(json.dumps(
-                    {"schema": "bashy-runner-compiler-inputs-v1", "files": {"vendor/native/a.c": digest},
+                    {"schema": "bashy-runner-compiler-inputs-v1", "files": names,
                      "invocations": 1, "dependency_files": 1}))
                 store = out / (stem + ".compiler-inputs") / "content"; store.mkdir(parents=True)
                 (store / digest).write_bytes(body)
             self.run_audit("merge-inputs", "--out", out)
+            # CUDA target without any captured nvcc .cu input fails closed.
+            cj = out / "runner-linux-amd64-cuda.compiler-inputs.json"
+            good = cj.read_text(); data = json.loads(good)
+            data["files"].pop("ml/backend/ggml/ggml/src/ggml-cuda/k.cu"); cj.write_text(json.dumps(data))
+            self.assertIn(".cu", self.run_audit("merge-inputs", "--out", out, ok=False).stderr)
+            cj.write_text(good)
             victim = "runner-linux-amd64"
             blob = next((out / (victim + ".compiler-inputs") / "content").glob("*"))
             blob.write_text("tampered")
@@ -395,7 +404,10 @@ class AuditPolicy(unittest.TestCase):
             out = root / "mout"; out.mkdir()
             for target in TARGETS:
                 stem = "runner-" + target
-                (out / (stem + ".compiler-inputs.json")).write_text(json.dumps(data))
+                row_data = dict(data)
+                if target.endswith("cuda"):
+                    row_data["files"] = {**data["files"], "ml/backend/ggml/ggml/src/ggml-cuda/k.cu": metal_digest}
+                (out / (stem + ".compiler-inputs.json")).write_text(json.dumps(row_data))
                 store = out / (stem + ".compiler-inputs") / "content"
                 store.mkdir(parents=True)
                 for name in (capture / "content").iterdir():

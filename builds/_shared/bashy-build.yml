@@ -333,9 +333,19 @@ jobs:
           [[ $COSIGN_VERSION == @@COSIGN_VERSION@@ ]] || { echo "PIN COSIGN_VERSION $COSIGN_VERSION != workflow cosign-release"; exit 1; }
           for pair in $RELEASE_EXTRA; do cp "fork/bashy-build/${pair%%=*}" "dist/${pair#*=}"; done
           for a in $RELEASE_EXECUTABLES; do chmod +x "dist/$a"; done
+#@@IFEQ TOOL ollama@@
+          # Backend artifacts (incl. transitive libraries) come from the signed
+          # manifests, not a static list: all must exist, match their digest,
+          # and are then published and signed with everything else in dist.
+          derived=$(python3 fork/bashy-build/release-assets-check.py dist "$RELEASE_ASSETS")
+          for a in $derived; do
+            [[ -f dist/$a ]] || { echo "missing $a"; exit 1; }
+          done
+#@@ELSE@@
           for a in $RELEASE_ASSETS; do
             [[ -f dist/$a ]] || { echo "missing $a"; exit 1; }
           done
+#@@END@@
           # release assets are files; evidence directories are not published.
           find dist -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
           (cd dist && sha256sum -- * >SHA256SUMS && cat SHA256SUMS)

@@ -50,8 +50,18 @@ def origin(path, environment=None):
     path = portable_path(path)
     if environment is None:
         environment = {key: str(Path(os.environ[key]).resolve()) for key in
-                       ("BASHY_COMPILER_SOURCE", "BASHY_COMPILER_GOROOT", "BASHY_COMPILER_TMP", "BASHY_MINGW_ROOT")
+                       ("BASHY_COMPILER_SOURCE", "BASHY_COMPILER_GOROOT", "BASHY_COMPILER_TMP", "BASHY_MINGW_ROOT", "BASHY_CUDA_ROOT")
                        if key in os.environ}
+    cuda = environment.get('BASHY_CUDA_ROOT')
+    if cuda:
+        try:
+            rel = path.relative_to(portable_path(cuda)).as_posix()
+        except ValueError:
+            pass
+        else:
+            if '..' in portable_path(rel).parts:
+                raise ValueError('unreviewed external native compiler dependency: traversal')
+            return 'cuda-toolkit', rel
     for env, label in [('BASHY_COMPILER_SOURCE', 'source'), ('BASHY_COMPILER_GOROOT', 'go-toolchain'),
                        ('BASHY_COMPILER_TMP', 'go-generated')]:
         root = environment.get(env)

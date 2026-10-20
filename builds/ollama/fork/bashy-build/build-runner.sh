@@ -138,8 +138,6 @@ windows)
   fi
   ;;
 esac
-python3 "$here/audit-runner.py" compiler-inputs --capture "$capture" --source "$src" \
-  --generated "$src/ml/backend/ggml/ggml/src/ggml-metal" --output "$out/$asset.compiler-inputs.json"
 backend_args=()
 if [[ $cuda == 1 ]]; then
   # Separate CUDA target: the Go runner alone is NOT CUDA. The backend shared
@@ -158,8 +156,15 @@ if [[ $cuda == 1 ]]; then
   cmake_bin=$(command -v cmake) || { echo 'build-runner: CUDA target requires cmake' >&2; exit 1; }
   [[ $(git -C "$src" rev-parse HEAD) == "$UPSTREAM_COMMIT" ]] || { echo 'backend source commit mismatch' >&2; exit 1; }
   # Dynamic cudart/cuBLAS only: static CUDA runtime linking would embed NVIDIA bytes.
-  "$cmake_bin" --preset 'CUDA 12' -B "$BASHY_COMPILER_TMP/cuda-build" -DCUDA_USE_STATIC=OFF -DGGML_CUDA_STATIC=OFF
-  "$cmake_bin" --build "$BASHY_COMPILER_TMP/cuda-build" --target ggml-cuda
+  # Every nvcc/gcc/g++ compile in the backend build goes through the capture
+  # launcher so .cu/.cuh inputs (and the toolkit headers they pull) reach the
+  # compiler-input license review; the cgo CC/CXX wrappers are not used here.
+  export BASHY_CUDA_ROOT="$cuda_home" BASHY_REAL_NVCC="$nvcc"
+  launcher="$here/compiler-capture-launcher"
+  env -u CC -u CXX "$cmake_bin" --preset 'CUDA 12' -B "$BASHY_COMPILER_TMP/cuda-build" -DCUDA_USE_STATIC=OFF -DGGML_CUDA_STATIC=OFF \
+    -DCMAKE_C_COMPILER="$real_cc" -DCMAKE_CXX_COMPILER="$real_cxx" -DCMAKE_CUDA_HOST_COMPILER="$real_cxx" -DCMAKE_CUDA_COMPILER="$nvcc" \
+    -DCMAKE_C_COMPILER_LAUNCHER="$launcher" -DCMAKE_CXX_COMPILER_LAUNCHER="$launcher" -DCMAKE_CUDA_COMPILER_LAUNCHER="$launcher"
+  env -u CC -u CXX "$cmake_bin" --build "$BASHY_COMPILER_TMP/cuda-build" --target ggml-cuda
   lib=$(find "$BASHY_COMPILER_TMP/cuda-build" -type f -name 'libggml-cuda.so' | LC_ALL=C sort | head -n1)
   [[ -n $lib && ! -L $lib ]] || { echo 'build-runner: libggml-cuda.so was not produced' >&2; exit 1; }
   cp "$lib" "$out/$asset-libggml-cuda.so"
@@ -189,4 +194,7 @@ json.dump({"source_commit": commit, "cuda_toolkit": version, "nvcc_sha256": hash
 PY
   backend_args=("$out/$asset.backend-artifacts.json")
 fi
+# Compiler-input evidence is finalized after any nvcc/CMake backend build so .cu inputs are included.
+python3 "$here/audit-runner.py" compiler-inputs --capture "$capture" --source "$src" \
+  --generated "$src/ml/backend/ggml/ggml/src/ggml-metal" --output "$out/$asset.compiler-inputs.json"
 python3 "$here/package-runner.py" package "$out/$exe" "$out/$asset.gz" "$out/$asset.json" "$os/$arch" "$UPSTREAM_COMMIT" "$GO_TOOLCHAIN" "${backend_args[@]}"
