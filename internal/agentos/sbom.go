@@ -144,6 +144,12 @@ func ClassifyLicense(content string) (string, LicenseClass) {
 
 	norm := strings.ToLower(strings.Join(strings.Fields(content), " "))
 
+	// Check the named license before its text mentions GPL compatibility.
+	// MPL 2.0 itself lists optional GPL secondary licenses in section 1.12.
+	if strings.Contains(norm, "mozilla public license") && (strings.Contains(norm, "version 2.0") || strings.Contains(norm, "v. 2.0") || strings.Contains(norm, "v2.0")) {
+		return "MPL-2.0", LicenseNonPermissive
+	}
+
 	// Check non-permissive (copyleft) licenses first
 	if strings.Contains(norm, "gnu general public license") || strings.Contains(norm, "gnu affero general public license") {
 		if strings.Contains(norm, "version 3") || strings.Contains(norm, "v3") {
@@ -162,9 +168,6 @@ func ClassifyLicense(content string) (string, LicenseClass) {
 			return "LGPL-2.1", LicenseNonPermissive
 		}
 		return "LGPL", LicenseNonPermissive
-	}
-	if strings.Contains(norm, "mozilla public license") && (strings.Contains(norm, "2.0") || strings.Contains(norm, "v. 2.0") || strings.Contains(norm, "v2.0")) {
-		return "MPL-2.0", LicenseNonPermissive
 	}
 	if strings.Contains(norm, "server side public license") {
 		return "SSPL-1.0", LicenseNonPermissive
@@ -229,7 +232,7 @@ func FindLicense(dir string) (string, []byte) {
 		return "", nil
 	}
 	names := []string{
-		"LICENSE", "LICENSE.txt", "LICENSE.md", "LICENCE", "LICENCE.txt", "LICENCE.md",
+		"LICENSE", "LICENSE.txt", "LICENSE.md", "License", "License.txt", "LICENCE", "LICENCE.txt", "LICENCE.md", "UNLICENSE",
 		"LICENSE.MIT", "LICENSE.BSD", "LICENSE.APACHE", "COPYING", "COPYING.txt", "COPYING.md",
 	}
 	for _, n := range names {

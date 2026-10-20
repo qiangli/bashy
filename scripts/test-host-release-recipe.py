@@ -17,7 +17,7 @@ class HostReleaseRecipeTest(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertTrue(value in workflow, f"host workflow lacks {value}")
         builder = (ROOT / "scripts/build-host-release.sh").read_text()
-        self.assertIn("-tags bashy_engines,embed_runner", builder)
+        self.assertIn("-tags bashy_engines,embed_runner,bashy_host", builder)
         recipe = (ROOT / ".goreleaser.yaml").read_text()
         lean = recipe.split("  - id: bashy\n", 1)[1].split("\n  - id:", 1)[0]
         self.assertIn("CGO_ENABLED=0", lean)

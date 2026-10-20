@@ -1,7 +1,7 @@
 // Copyright (c) 2025 qiangli
 // See LICENSE for licensing information
 
-//go:build bashy_engines && !windows && (cgo || containers_image_openpgp)
+//go:build bashy_engines && !bashy_host && !windows && (cgo || containers_image_openpgp)
 
 package agentos
 

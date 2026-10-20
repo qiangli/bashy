@@ -14,12 +14,15 @@ arch=$1 source_sha=$2 outdir=$3
 mkdir -p "$outdir"
 binary="$outdir/bashy-host-linux-$arch"
 scripts/build-meet-spa.sh check
-scripts/go-product.sh build -trimpath -tags bashy_engines,embed_runner \
+# The host serves the embedded Ollama engine. Keep Podman external: its linked
+# engine brings MPL-licensed dependencies into the release binary.
+scripts/go-product.sh build -trimpath -tags bashy_engines,embed_runner,bashy_host \
   -ldflags "-w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-host-$source_sha'" \
   -o "$binary" ./cmd/bashy
 go version -m "$binary" > "$binary.go-version.txt"
 grep -Fq 'bashy_engines' "$binary.go-version.txt"
 grep -Fq 'embed_runner' "$binary.go-version.txt"
+grep -Fq 'bashy_host' "$binary.go-version.txt"
 scripts/verify-bashy-signal-artifact.sh "$binary"
 scripts/generate-release-sbom.sh "$binary" linux "$arch" "$outdir"
 sha=$(sha256sum "$binary")
@@ -31,7 +34,7 @@ with open(path, "w") as f:
     json.dump({"schema": "bashy-host-asset-v1", "source_sha": source,
                "profile": "BASHY_ENGINES=1", "cgo_enabled": True,
                "goos": "linux", "goarch": arch,
-               "go_tags": ["bashy_engines", "embed_runner"],
+               "go_tags": ["bashy_engines", "embed_runner", "bashy_host"],
                "asset": f"bashy-host-linux-{arch}", "sha256": digest},
               f, indent=2, sort_keys=True)
     f.write("\n")

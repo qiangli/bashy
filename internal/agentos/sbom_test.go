@@ -80,6 +80,12 @@ func TestClassifyLicense(t *testing.T) {
 			wantClass: LicenseNonPermissive,
 		},
 		{
+			name:      "MPL-2.0 with GPL secondary-license text",
+			text:      "Mozilla Public License, version 2.0\n1.12. Secondary License means the GNU General Public License, Version 3.0.",
+			wantID:    "MPL-2.0",
+			wantClass: LicenseNonPermissive,
+		},
+		{
 			name:      "LGPL-3.0 non-permissive",
 			text:      "GNU LESSER GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007",
 			wantID:    "LGPL-3.0",
@@ -113,6 +119,22 @@ func TestClassifyLicense(t *testing.T) {
 			}
 			if tc.wantID != "" && id != tc.wantID {
 				t.Errorf("spdxID = %q, want %q", id, tc.wantID)
+			}
+		})
+	}
+}
+
+func TestFindLicenseRecognizesModuleFileNames(t *testing.T) {
+	for _, name := range []string{"License", "License.txt", "UNLICENSE"} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			want := []byte("permission is hereby granted, free of charge, to any person obtaining a copy, to deal in the Software without restriction")
+			if err := os.WriteFile(filepath.Join(dir, name), want, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			gotPath, gotContent := FindLicense(dir)
+			if gotPath != filepath.Join(dir, name) || string(gotContent) != string(want) {
+				t.Fatalf("FindLicense(%q) = %q, %q", dir, gotPath, gotContent)
 			}
 		})
 	}
