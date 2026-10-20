@@ -49,6 +49,13 @@ func dispatchEngine(arg string) {
 		if dks.IsFederation(os.Args[2:]) {
 			dispatchExit(dks.Dispatch(os.Args[3:]))
 		}
+		// The cluster-userland client verbs (use/local/…) are likewise
+		// engine-independent: they ride yoke's dks package (dagrun context,
+		// fail-closed stubs) and must reach it here — before the refusal —
+		// so the lean build serves them exactly as the engine build does.
+		if dks.IsUserland(os.Args[2:]) {
+			dispatchExit(dks.DispatchUserland(os.Args[2:]))
+		}
 		// Provisioning the rootful DKS VM needs the in-process podman
 		// machine libraries, which are only linked in the bashy_engines
 		// build. The lean build can't create a VM.
