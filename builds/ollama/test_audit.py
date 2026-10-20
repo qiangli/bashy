@@ -12,7 +12,7 @@ sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "builds/ollama/files/audit-runner.py"
-TARGETS = ("linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64", "windows-amd64")
+TARGETS = ("linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64", "windows-amd64", "linux-amd64-cuda")
 spec = importlib.util.spec_from_file_location("audit_runner", SCRIPT)
 audit_runner = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(audit_runner)

@@ -165,15 +165,27 @@ if [[ $cuda == 1 ]]; then
   cp "$lib" "$out/$asset-libggml-cuda.so"
   python3 "$here/cuda-link-audit.py" link "$out/$asset-libggml-cuda.so" | tee "$out/$asset-cuda-linkage.txt"
   readelf -d --dyn-syms --wide "$out/$asset-libggml-cuda.so" >>"$out/$asset-cuda-linkage.txt"
-  python3 - "$out/$asset.backend-artifacts.json" "$UPSTREAM_COMMIT" "$nvcc" "$asset-libggml-cuda.so" "$toolkit_sha256" "$CUDA_TOOLKIT_VERSION" "$CUDA_TOOLKIT_SHA256" <<'PY'
+  # Transitive backend libraries (e.g. ggml-base) are release artifacts too; any
+  # NEEDED entry that is neither system nor host-provided NVIDIA must resolve in
+  # the build tree as a real file, or the build fails closed.
+  extra=()
+  while IFS= read -r dep; do
+    [[ -n $dep ]] || continue
+    found=$(find "$BASHY_COMPILER_TMP/cuda-build" -type f -name "$dep" | LC_ALL=C sort | head -n1)
+    [[ -n $found && ! -L $found ]] || { echo "build-runner: unresolved transitive backend library $dep" >&2; exit 1; }
+    cp "$found" "$out/$asset-$dep"
+    readelf -d --dyn-syms --wide "$out/$asset-$dep" >>"$out/$asset-cuda-linkage.txt"
+    extra+=("$asset-$dep")
+  done < <(python3 "$here/cuda-link-audit.py" needed "$out/$asset-libggml-cuda.so")
+  python3 - "$out/$asset.backend-artifacts.json" "$UPSTREAM_COMMIT" "$nvcc" "$asset-libggml-cuda.so" "$toolkit_sha256" "$CUDA_TOOLKIT_VERSION" "$CUDA_TOOLKIT_SHA256" ${extra[@]+"${extra[@]}"} <<'PY'
 import hashlib, json, subprocess, sys
-out, commit, nvcc, lib, toolkit, tk_version, pins = sys.argv[1:]
+out, commit, nvcc, lib, toolkit, tk_version, pins, *more = sys.argv[1:]
 components = [{"archive": e.split("=")[0].rsplit("/", 1)[-1], "sha256": e.split("=")[1]} for e in pins.split()]
 version = subprocess.check_output([nvcc, "--version"], text=True).strip().splitlines()[-1]
 data = open(nvcc, "rb").read()
 json.dump({"source_commit": commit, "cuda_toolkit": version, "nvcc_sha256": hashlib.sha256(data).hexdigest(),
            "preset": "CUDA 12", "toolkit_sha256": toolkit, "toolkit_version": tk_version, "toolkit_components": components,
-           "artifacts": [lib]}, open(out, "w"), sort_keys=True, indent=2)
+           "artifacts": [lib, *more]}, open(out, "w"), sort_keys=True, indent=2)
 PY
   backend_args=("$out/$asset.backend-artifacts.json")
 fi

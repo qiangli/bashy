@@ -31,16 +31,32 @@ def audit_link(text):
     return needed, errors
 
 
+SYSTEM = ("libc.so", "libm.so", "libdl.so", "libpthread.so", "librt.so", "libstdc++.so", "libgcc_s.so", "ld-linux", "libcublasLt.so",
+          "libcudart.so", "libcublas.so", "libnvidia-")
+
+
+def transitive(needed):
+    """NEEDED entries that are neither system nor host-provided NVIDIA: they must ship (e.g. libggml-base)."""
+    return [n for n in needed if not n.startswith(SYSTEM)]
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     link = sub.add_parser("link")
     link.add_argument("so", nargs="?")
     link.add_argument("--readelf-file")
+    need = sub.add_parser("needed")
+    need.add_argument("so", nargs="?")
+    need.add_argument("--readelf-file")
     host = sub.add_parser("host")
     host.add_argument("--ldconfig-file")
     host.add_argument("--cpu-explicit", action="store_true")
     a = ap.parse_args()
+    if a.cmd == "needed":
+        text = open(a.readelf_file).read() if a.readelf_file else subprocess.check_output(["readelf", "-d", "--wide", a.so], text=True)
+        print("\n".join(transitive(re.findall(r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]", text))))
+        return
     if a.cmd == "link":
         if a.readelf_file:
             text = open(a.readelf_file).read()

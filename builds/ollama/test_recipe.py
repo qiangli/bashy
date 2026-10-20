@@ -219,6 +219,37 @@ class Recipe(unittest.TestCase):
         build = (self.helpers / "build-runner.sh").read_text()
         self.assertIn("cuda-link-audit.py\" link", build)
 
+    def test_cuda_audit_release_and_sbom_cover_cuda_target(self):
+        # S451 review: the generated workflow, audit runner and release list
+        # must treat the CUDA target as a sixth native record; its toolkit is
+        # an SBOM component; transitive backend libraries are enumerated; and
+        # the host-runtime fail-closed check is wired into the native gate.
+        wf = (self.fork / ".github/workflows/bashy-build.yml").read_text()
+        self.assertNotIn("all five native", wf)
+        self.assertIn("download all six native build records", wf)
+        self.assertRegex(wf, r"for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64 linux-amd64-cuda; do\s+binary=")
+        text = (self.helpers / "audit-runner.py").read_text()
+        self.assertIn('CUDA_TARGET = "linux-amd64-cuda"', text)
+        self.assertIn("ALL_TARGETS = TARGETS + (CUDA_TARGET,)", text)
+        env = (RECIPE / "tool.env").read_text()
+        assets = re.search(r'^RELEASE_ASSETS="([^"]*)"', env, re.M).group(1).split()
+        for suffix in ("-native.json", "-native.log", "-egress.txt", "-cuda-linkage.txt", ".backend-artifacts.json"):
+            self.assertIn("runner-linux-amd64-cuda" + suffix, assets)
+        sbom = (self.helpers / "audit-runner.py").read_text()
+        self.assertIn("build-only-sdk", sbom)
+        native = (self.helpers / "native-gate.py").read_text()
+        self.assertIn("cuda-link-audit.py", native)
+        self.assertIn("host_runtime", native)
+        tool = self.helpers / "cuda-link-audit.py"
+        d = self.root / "needed"
+        d.mkdir()
+        f = d / "r.txt"
+        f.write_text(" 0x1 (NEEDED) Shared library: [libcudart.so.12]\n 0x1 (NEEDED) Shared library: [libggml-base.so]\n"
+                     " 0x1 (NEEDED) Shared library: [libc.so.6]\n 0x1 (NEEDED) Shared library: [libstdc++.so.6]\n")
+        got = run("python3", str(tool), "needed", "--readelf-file", str(f)).stdout.split()
+        self.assertEqual(got, ["libggml-base.so"])
+        self.assertIn("needed", (self.helpers / "build-runner.sh").read_text())
+
     def test_cuda_manifest_records_toolkit_components(self):
         d = self.root / "tk"
         d.mkdir()
