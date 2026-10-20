@@ -40,6 +40,32 @@ def transitive(needed):
     return [n for n in needed if not n.startswith(SYSTEM)]
 
 
+NEEDED_RE = r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]"
+
+
+def closure(root_so, search, readelf):
+    """Recursive non-system dependency closure of a backend library, resolved as real files under `search`."""
+    import os
+    seen, queue, errors = [], [root_so], []
+    while queue:
+        so = queue.pop(0)
+        text = subprocess.check_output([readelf, "-d", "--wide", so], text=True)
+        for n in re.findall(NEEDED_RE, text):
+            if n.startswith(("libcuda.so", "libnvidia-")):
+                errors.append(f"{os.path.basename(so)} links host driver library {n}")
+            elif n.startswith(SYSTEM) or n in seen:
+                continue
+            else:
+                hits = sorted(os.path.join(r, n) for r, _, fs in os.walk(search) if n in fs)
+                hits = [h for h in hits if not os.path.islink(h)]
+                if not hits:
+                    errors.append(f"unresolved backend dependency {n} (needed by {os.path.basename(so)})")
+                    continue
+                seen.append(n)
+                queue.append(hits[0])
+    return seen, errors
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -49,10 +75,20 @@ def main():
     need = sub.add_parser("needed")
     need.add_argument("so", nargs="?")
     need.add_argument("--readelf-file")
+    clo = sub.add_parser("closure")
+    clo.add_argument("so")
+    clo.add_argument("--search", required=True)
+    clo.add_argument("--readelf", default="readelf")
     host = sub.add_parser("host")
     host.add_argument("--ldconfig-file")
     host.add_argument("--cpu-explicit", action="store_true")
     a = ap.parse_args()
+    if a.cmd == "closure":
+        seen, errors = closure(a.so, a.search, a.readelf)
+        if errors:
+            sys.exit("cuda-link-audit: " + "; ".join(errors))
+        print("\n".join(seen))
+        return
     if a.cmd == "needed":
         text = open(a.readelf_file).read() if a.readelf_file else subprocess.check_output(["readelf", "-d", "--wide", a.so], text=True)
         print("\n".join(transitive(re.findall(r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]", text))))

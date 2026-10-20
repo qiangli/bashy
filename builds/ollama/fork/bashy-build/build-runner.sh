@@ -170,9 +170,10 @@ if [[ $cuda == 1 ]]; then
   cp "$lib" "$out/$asset-libggml-cuda.so"
   python3 "$here/cuda-link-audit.py" link "$out/$asset-libggml-cuda.so" | tee "$out/$asset-cuda-linkage.txt"
   readelf -d --dyn-syms --wide "$out/$asset-libggml-cuda.so" >>"$out/$asset-cuda-linkage.txt"
-  # Transitive backend libraries (e.g. ggml-base) are release artifacts too; any
-  # NEEDED entry that is neither system nor host-provided NVIDIA must resolve in
-  # the build tree as a real file, or the build fails closed.
+  # Transitive backend libraries (e.g. ggml-base) are release artifacts too. The
+  # closure is recursive over every copied library; any NEEDED entry that is
+  # neither system nor host-provided NVIDIA must resolve in the build tree as a
+  # real file, and a host driver (libcuda/libnvidia) link fails the build.
   extra=()
   while IFS= read -r dep; do
     [[ -n $dep ]] || continue
@@ -181,7 +182,7 @@ if [[ $cuda == 1 ]]; then
     cp "$found" "$out/$asset-$dep"
     readelf -d --dyn-syms --wide "$out/$asset-$dep" >>"$out/$asset-cuda-linkage.txt"
     extra+=("$asset-$dep")
-  done < <(python3 "$here/cuda-link-audit.py" needed "$out/$asset-libggml-cuda.so")
+  done < <(python3 "$here/cuda-link-audit.py" closure "$out/$asset-libggml-cuda.so" --search "$BASHY_COMPILER_TMP/cuda-build")
   python3 - "$out/$asset.backend-artifacts.json" "$UPSTREAM_COMMIT" "$nvcc" "$asset-libggml-cuda.so" "$toolkit_sha256" "$CUDA_TOOLKIT_VERSION" "$CUDA_TOOLKIT_SHA256" ${extra[@]+"${extra[@]}"} <<'PY'
 import hashlib, json, subprocess, sys
 out, commit, nvcc, lib, toolkit, tk_version, pins, *more = sys.argv[1:]

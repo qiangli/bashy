@@ -756,6 +756,42 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         self.assertTrue((d / "cmake.d").is_file(), "CMake's own depfile must be preserved")
         self.assertEqual([i["relative"] for i in recs[0]["inputs"]], ["k.cu"])
 
+    def test_backend_dependency_closure_is_recursive_and_fail_closed(self):
+        tool = self.helpers / "cuda-link-audit.py"
+        d = Path(tempfile.mkdtemp())
+        tree = d / "tree"; tree.mkdir()
+        for n in ("libggml-base.so", "libggml-cpu.so", "libggml-cuda.so"):
+            (tree / n).write_bytes(b"x")
+        fake = d / "readelf"
+        fake.write_text("#!/bin/sh\nfor a; do f=$a; done\ncase $(basename $f) in\n"
+            "libggml-cuda.so) echo ' 0x1 (NEEDED) Shared library: [libggml-base.so]'; echo ' 0x1 (NEEDED) Shared library: [libcudart.so.12]';;\n"
+            "libggml-base.so) echo ' 0x1 (NEEDED) Shared library: [libggml-cpu.so]'; echo ' 0x1 (NEEDED) Shared library: [libc.so.6]';;\n"
+            "libggml-cpu.so) echo ' 0x1 (NEEDED) Shared library: [libm.so.6]';;\n"
+            "esac\n")
+        fake.chmod(0o755)
+        run_ = lambda: subprocess.run(["python3", str(tool), "closure", str(tree / "libggml-cuda.so"), "--search", str(tree), "--readelf", str(fake)],
+                                      capture_output=True, text=True)
+        r = run_()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(sorted(r.stdout.split()), ["libggml-base.so", "libggml-cpu.so"])
+        (tree / "libggml-cpu.so").unlink()
+        self.assertNotEqual(run_().returncode, 0, "unresolved nested dep must fail")
+        (tree / "libggml-cpu.so").write_bytes(b"x")
+        fake.write_text(fake.read_text().replace("[libm.so.6]", "[libcuda.so.1]"))
+        self.assertNotEqual(run_().returncode, 0, "nested host-driver dep must fail")
+        build = (self.helpers / "build-runner.sh").read_text()
+        self.assertIn('cuda-link-audit.py" closure', build)
+
+    def test_release_note_and_gates_describe_cuda_six_targets(self):
+        env = (RECIPE / "tool.env").read_text()
+        note = re.search(r'RELEASE_NOTE="([^"]*)"', env).group(1)
+        gates = re.search(r'RELEASE_GATES="([^"]*)"', env).group(1)
+        self.assertNotIn("No bundled CUDA", note)
+        self.assertIn("ggml CUDA backend", note)
+        self.assertIn("host-provided", note)
+        self.assertNotIn("five native", gates)
+        self.assertIn("six native", gates)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
