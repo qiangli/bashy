@@ -157,6 +157,7 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 	},
 	"adapt":   {Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierWorkplace, Caps: []string{atlas.CapSpawnsProcesses}, Effects: []string{atlas.EffExec}, Stability: atlas.StabilityExperimental},
 	"adapter": {Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierWorkplace, Caps: []string{atlas.CapJSON}, Effects: []string{atlas.EffRead, atlas.EffWrite}, Stability: atlas.StabilityExperimental},
+	"infra":   {Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierWorkplace, Caps: []string{atlas.CapJSON}, Effects: []string{atlas.EffRead, atlas.EffWrite}, Stability: atlas.StabilityExperimental},
 	"resource": {
 		Stage: atlas.StageCross, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapJSON, atlas.CapReadOnly}, Effects: []string{atlas.EffRead},

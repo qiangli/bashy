@@ -430,6 +430,7 @@ id	-z	--zero
 inbox	-n	--limit
 inbox human list	-n	--limit
 inbox list	-n	--limit
+infra add	-f	--file
 install	-C	--compare
 install	-D	--create-leading-directories
 install	-P	--preserve-context

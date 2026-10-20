@@ -617,6 +617,7 @@ var verbSynopsis = map[string]string{
 	"inspect":            "self-inspection: resource map, gate decisions, and the index of what answers what",
 	"adapt":              "apply declared native options to a foreign command",
 	"adapter":            "manage declarative invocation adapter rows",
+	"infra":              "register provider access packages (registration only, never provisions)",
 	"resource":           "host totals and active weave disk, CPU, GPU, and memory usage",
 	"resources":          "hidden alias for bashy resource",
 	"context":            "hidden alias for bashy inspect context",

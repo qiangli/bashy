@@ -89,6 +89,8 @@ func cobraVerb(name string) *cobra.Command {
 		return adapt.NewCmd(adapt.PrepareJSONLens)
 	case "adapter":
 		return fleet.NewAdaptersCmd()
+	case "infra":
+		return fleet.NewInfraCmd()
 	case "resource", "resources":
 		return resources.NewCommand()
 	case "lexicon":
