@@ -169,11 +169,15 @@ class Recipe(unittest.TestCase):
         env = (Path(__file__).resolve().parent / "tool.env").read_text()
         for key in ("CUDA_TOOLKIT_VERSION=", "CUDA_TOOLKIT_SHA256="):
             self.assertIn(key, env)
+        # cuda_fp16.h includes nv/target from CCCL, so the CUDA build must
+        # pin that archive as a checked build-only input too.
+        self.assertIn("cuda_cccl/linux-x86_64/cuda_cccl-linux-x86_64-12.8.90-archive.tar.xz=", env)
         install = self.helpers / "install-cuda-toolkit.sh"
         self.assertTrue(install.exists(), "pinned toolkit installer missing")
         text = install.read_text()
         self.assertIn("sha256sum", text)
         self.assertIn("CUDA_TOOLKIT_SHA256", text)
+        self.assertIn('include/nv/target', text)
         build = (self.helpers / "build-runner.sh").read_text()
         self.assertIn("install-cuda-toolkit.sh", build)
         self.assertIn("CUDA_TOOLKIT_SHA256", build)

@@ -23,6 +23,9 @@ fi
 test -f "$dest/lib64/libcudadevrt.a" && test -f "$dest/lib64/libcudart_static.a" || {
   echo 'install-cuda-toolkit: compiler-id device libraries missing' >&2; exit 1;
 }
+test -f "$dest/include/nv/target" || {
+  echo 'install-cuda-toolkit: CCCL nv/target header missing' >&2; exit 1;
+}
 printf '%s\n' "$CUDA_TOOLKIT_VERSION" > "$dest/.bashy-toolkit-version"
 printf '%s' "$CUDA_TOOLKIT_SHA256" | sha256sum | cut -d' ' -f1 > "$dest/.bashy-toolkit-sha256"
 test -x "$dest/bin/nvcc" || { echo 'install-cuda-toolkit: nvcc missing after install' >&2; exit 1; }
