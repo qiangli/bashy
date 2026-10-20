@@ -24,6 +24,10 @@ on:
   push:
     tags:
       - "bashy-v*"
+  # Nonpublishing candidate: pin + build + audit (incl. the CUDA target) on a
+  # branch, no tag. The release job below is tag-only, so a dispatch can never
+  # sign, attest or create a release.
+  workflow_dispatch:
 
 permissions: {}
 
@@ -62,6 +66,7 @@ jobs:
         id: pin
         env:
           BASHY_TAG: ${{ github.ref_name }}
+          BASHY_REF_TYPE: ${{ github.ref_type }}
           GH_API_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -72,8 +77,12 @@ jobs:
           upstream_tag_re='^v[0-9]+\.[0-9]+\.[0-9]+$'
           [[ $UPSTREAM_TAG =~ $upstream_tag_re ]] || { echo "refusing non-release upstream tag $UPSTREAM_TAG (not vX.Y.Z)"; exit 1; }
           # bashy-<the pinned upstream tag>-N, whatever shape that tag has.
-          [[ $BASHY_TAG =~ ^bashy-(.+)-[1-9][0-9]*$ && ${BASH_REMATCH[1]} == "$UPSTREAM_TAG" ]] ||
-            { echo "tag $BASHY_TAG must be bashy-$UPSTREAM_TAG-N"; exit 1; }
+          # candidate dispatch (branch ref): the pin and upstream-release checks
+          # below still run; only the bashy-tag shape is for tag releases.
+          if [[ $BASHY_REF_TYPE == tag ]]; then
+            [[ $BASHY_TAG =~ ^bashy-(.+)-[1-9][0-9]*$ && ${BASH_REMATCH[1]} == "$UPSTREAM_TAG" ]] ||
+              { echo "tag $BASHY_TAG must be bashy-$UPSTREAM_TAG-N"; exit 1; }
+          fi
           # The upstream release must exist and be neither draft nor pre-release.
           # UPSTREAM_API_BASE is https://api.github.com for a GitHub upstream and
           # the forge's own REST root otherwise; gitea answers the identical
@@ -142,7 +151,9 @@ jobs:
           persist-credentials: false
           path: src
       - name: verify HEAD == pinned commit
-        run: fork/bashy-build/verify-pin.sh src "$GITHUB_REF_NAME"
+        env:
+          BASHY_TAG_ARG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: fork/bashy-build/verify-pin.sh src "$BASHY_TAG_ARG"
       - name: host build dependencies (linux)
         if: runner.os == 'Linux'
         run: |
@@ -250,7 +261,9 @@ jobs:
           persist-credentials: false
           path: src
       - name: verify HEAD == pinned commit
-        run: fork/bashy-build/verify-pin.sh src "$GITHUB_REF_NAME"
+        env:
+          BASHY_TAG_ARG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: fork/bashy-build/verify-pin.sh src "$BASHY_TAG_ARG"
       - name: pinned runner Go toolchain for audit analyzers
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -421,6 +434,7 @@ jobs:
 
   release:
     name: sign, attest, publish
+    if: github.ref_type == 'tag'
     needs: [pin, build, audit]
     runs-on: ubuntu-24.04
     permissions:

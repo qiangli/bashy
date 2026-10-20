@@ -685,6 +685,22 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         self.assertLess(step.index("missing"), step.index(prune))
         self.assertLess(step.index(prune), step.index("sha256sum"))
 
+    def test_nonpublishing_candidate_dispatch_builds_and_audits_cuda(self):
+        # S451: the CUDA target needs native build/audit evidence before any
+        # release tag. ollama gets a workflow_dispatch candidate path that
+        # runs pin/build/audit but can never sign, attest or publish.
+        wf = (self.fork / ".github/workflows/bashy-build.yml").read_text()
+        head = wf.split("\njobs:", 1)[0]
+        self.assertIn("workflow_dispatch:", head)
+        self.assertIn("tags:", head)
+        release = wf.split("  release:\n", 1)[1]
+        cond = release.split("runs-on:", 1)[0]
+        self.assertIn("github.ref_type == 'tag'", cond)
+        self.assertNotIn("workflow_dispatch", release)
+        pin = wf.split("  pin:\n", 1)[1].split("\n  build:", 1)[0]
+        self.assertIn("candidate", pin)
+        self.assertIn("linux-amd64-cuda", wf)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

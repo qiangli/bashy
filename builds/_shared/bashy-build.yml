@@ -28,6 +28,12 @@ on:
   push:
     tags:
       - "@@BASHY_TAG_GLOB@@"
+#@@IFEQ TOOL ollama@@
+  # Nonpublishing candidate: pin + build + audit (incl. the CUDA target) on a
+  # branch, no tag. The release job below is tag-only, so a dispatch can never
+  # sign, attest or create a release.
+  workflow_dispatch:
+#@@END@@
 
 permissions: {}
 #@@IFEQ TOOL ollama@@
@@ -78,6 +84,9 @@ jobs:
         id: pin
         env:
           BASHY_TAG: ${{ github.ref_name }}
+#@@IFEQ TOOL ollama@@
+          BASHY_REF_TYPE: ${{ github.ref_type }}
+#@@END@@
           GH_API_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -88,8 +97,17 @@ jobs:
           upstream_tag_re='@@UPSTREAM_TAG_REGEX@@'
           [[ $UPSTREAM_TAG =~ $upstream_tag_re ]] || { echo "refusing non-release upstream tag $UPSTREAM_TAG (not @@UPSTREAM_TAG_FORM@@)"; exit 1; }
           # bashy-<the pinned upstream tag>-N, whatever shape that tag has.
+#@@IFEQ TOOL ollama@@
+          # candidate dispatch (branch ref): the pin and upstream-release checks
+          # below still run; only the bashy-tag shape is for tag releases.
+          if [[ $BASHY_REF_TYPE == tag ]]; then
+            [[ $BASHY_TAG =~ ^bashy-(.+)-[1-9][0-9]*$ && ${BASH_REMATCH[1]} == "$UPSTREAM_TAG" ]] ||
+              { echo "tag $BASHY_TAG must be bashy-$UPSTREAM_TAG-N"; exit 1; }
+          fi
+#@@ELSE@@
           [[ $BASHY_TAG =~ ^bashy-(.+)-[1-9][0-9]*$ && ${BASH_REMATCH[1]} == "$UPSTREAM_TAG" ]] ||
             { echo "tag $BASHY_TAG must be bashy-$UPSTREAM_TAG-N"; exit 1; }
+#@@END@@
 #@@IFEQ SOURCE_ADMISSION official-release@@
           # The upstream release must exist and be neither draft nor pre-release.
           # UPSTREAM_API_BASE is https://api.github.com for a GitHub upstream and
@@ -174,7 +192,13 @@ jobs:
           echo "cloned $UPSTREAM_REPO at $UPSTREAM_TAG_REF -> $(git -C src rev-parse HEAD)"
 #@@END@@
       - name: verify HEAD == pinned commit
+#@@IFEQ TOOL ollama@@
+        env:
+          BASHY_TAG_ARG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: fork/bashy-build/verify-pin.sh src "$BASHY_TAG_ARG"
+#@@ELSE@@
         run: fork/bashy-build/verify-pin.sh src "$GITHUB_REF_NAME"
+#@@END@@
       - name: host build dependencies (linux)
         if: runner.os == 'Linux'
         run: |
@@ -253,7 +277,13 @@ jobs:
           echo "cloned $UPSTREAM_REPO at $UPSTREAM_TAG_REF -> $(git -C src rev-parse HEAD)"
 #@@END@@
       - name: verify HEAD == pinned commit
+#@@IFEQ TOOL ollama@@
+        env:
+          BASHY_TAG_ARG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: fork/bashy-build/verify-pin.sh src "$BASHY_TAG_ARG"
+#@@ELSE@@
         run: fork/bashy-build/verify-pin.sh src "$GITHUB_REF_NAME"
+#@@END@@
 @@INCLUDE audit@@
       - name: upload audit outputs
 #@@IFEQ TOOL ollama@@
@@ -269,6 +299,9 @@ jobs:
 
   release:
     name: sign, attest, publish
+#@@IFEQ TOOL ollama@@
+    if: github.ref_type == 'tag'
+#@@END@@
 #@@IF audit@@
     needs: [pin, build, audit]
 #@@ELSE@@
