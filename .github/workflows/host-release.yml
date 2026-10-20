@@ -45,7 +45,7 @@ jobs:
       CGO_ENABLED: '1'
       # The public proxy intermittently returns HTTP/2 stream errors; Go still
       # checks go.sum when it falls back to the pinned module's source.
-      GOPROXY: https://proxy.golang.org;direct
+      GOPROXY: 'https://proxy.golang.org|direct'
       SOURCE_SHA: ${{ inputs.source_sha }}
       ARCH: ${{ matrix.arch }}
       SIGNING_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/host-release.yml@${{ github.ref }}
