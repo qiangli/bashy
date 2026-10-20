@@ -280,8 +280,8 @@ Replace `PATH` with the path `bashy tool install` printed. Do not change
 into the vault; they are never printed and never written to a file you create:
 
 ```bsh
-bashy secret get MATRIX_OWNER_PASSWORD >/dev/null 2>&1 || bashy secret gen | bashy secret set MATRIX_OWNER_PASSWORD
-bashy secret get MATRIX_FEEDBOT_PASSWORD >/dev/null 2>&1 || bashy secret gen | bashy secret set MATRIX_FEEDBOT_PASSWORD
+bashy secret show MATRIX_OWNER_PASSWORD >/dev/null 2>&1 || bashy secret gen | bashy secret set MATRIX_OWNER_PASSWORD
+bashy secret show MATRIX_FEEDBOT_PASSWORD >/dev/null 2>&1 || bashy secret gen | bashy secret set MATRIX_FEEDBOT_PASSWORD
 ```
 
 Ask the human for the owner's user name (`OWNER`, e.g. their first name).
@@ -296,9 +296,9 @@ env TUWUNEL_SERVER_NAME="$NAME" TUWUNEL_DATABASE_PATH="$DATA/db" \
     TUWUNEL_ALLOW_REGISTRATION=false TUWUNEL_ALLOW_FEDERATION=false \
     TUWUNEL_ADDRESS=127.0.0.1 TUWUNEL_PORT=6167 \
   "$BIN" --test=smoke -O admin_execute_errors_ignore=true \
-    --execute "users create-user OWNER $(bashy secret get MATRIX_OWNER_PASSWORD)" \
+    --execute "users create-user OWNER $(bashy secret show MATRIX_OWNER_PASSWORD)" \
     --execute "users make-user-admin @OWNER:$NAME" \
-    --execute "users create-user feedbot $(bashy secret get MATRIX_FEEDBOT_PASSWORD)"
+    --execute "users create-user feedbot $(bashy secret show MATRIX_FEEDBOT_PASSWORD)"
 ```
 
 `admin_execute_errors_ignore` makes a re-run harmless (an existing user is
@@ -310,7 +310,7 @@ afterwards.
 Never paste the owner password into chat. Tell the human, verbatim:
 
 > Your Matrix chat password is in the vault. In your own terminal, run
-> `bashy secret get MATRIX_OWNER_PASSWORD` to read it when you sign in.
+> `bashy secret show MATRIX_OWNER_PASSWORD` to read it when you sign in.
 
 **S3. Start and wait.**
 
@@ -327,8 +327,8 @@ curl -sf http://127.0.0.1:6167/_matrix/client/versions >/dev/null || bashy servi
 and the token comes out on a pipe. Neither is echoed:
 
 ```bsh
-bashy secret get MATRIX_ACCESS_TOKEN >/dev/null 2>&1 ||
-  bashy secret get MATRIX_FEEDBOT_PASSWORD |
+bashy secret show MATRIX_ACCESS_TOKEN >/dev/null 2>&1 ||
+  bashy secret show MATRIX_FEEDBOT_PASSWORD |
     jq -Rc '{type:"m.login.password",identifier:{type:"m.id.user",user:"feedbot"},password:.}' |
     curl -sf -X POST -H 'Content-Type: application/json' --data-binary @- \
       http://127.0.0.1:6167/_matrix/client/v3/login |
@@ -343,7 +343,7 @@ grep -q '^MATRIX_ACCESS_TOKEN=' "$m" 2>/dev/null ||
 invites the owner. The token reaches curl as a header on stdin, never in argv:
 
 ```bsh
-hdr() { printf 'Authorization: Bearer '; bashy secret get MATRIX_ACCESS_TOKEN; }
+hdr() { printf 'Authorization: Bearer '; bashy secret show MATRIX_ACCESS_TOKEN; }
 hdr | curl -sf -H @- -H 'Content-Type: application/json' -X POST \
   --data "{\"preset\":\"private_chat\",\"name\":\"bashy feed\",\"invite\":[\"@OWNER:$NAME\"]}" \
   http://127.0.0.1:6167/_matrix/client/v3/createRoom | jq -r .room_id
@@ -372,7 +372,7 @@ Then tell the human, verbatim (fill in `LAN_IP`, the host's LAN address, and
 
 > Install Element on your phone. On the sign-in screen choose "Edit" next to
 > the homeserver and enter `http://LAN_IP:6167`. Sign in as `OWNER` with the
-> password from `bashy secret get MATRIX_OWNER_PASSWORD`. Accept the invite
+> password from `bashy secret show MATRIX_OWNER_PASSWORD`. Accept the invite
 > to the "bashy feed" room from feedbot and tell me when you see the test
 > message.
 

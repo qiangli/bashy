@@ -120,7 +120,7 @@ func genieExternalKey(m fleet.Model) (string, error) {
 	cmd.Stdout, cmd.Stderr = &out, os.Stderr
 	if err := cmd.Run(); err != nil {
 		names := secrets.CredentialEnvNames(m.APIKeyRef)
-		return "", fmt.Errorf("model %s: credential %s is not in the environment, not bound in secrets.map, and not a vault secret by that name (bashy secret get %s): %v — bind it on this host: %s=@<vault secret name> in ~/.config/bashy/secrets.map", m.Name, m.APIKeyRef, m.APIKeyRef, err, names[0])
+		return "", fmt.Errorf("model %s: credential %s is not in the environment, not bound in secrets.map, and not a vault secret by that name (bashy secret show %s): %v — bind it on this host: %s=@<vault secret name> in ~/.config/bashy/secrets.map", m.Name, m.APIKeyRef, m.APIKeyRef, err, names[0])
 	}
 	key := strings.TrimSpace(out.String())
 	if key == "" {
