@@ -855,7 +855,9 @@ renice	-h	--help
 renice	-p	--pid
 renice	-u	--user
 resource add	-f	--file
+resource system	-q	--quiet
 resources add	-f	--file
+resources system	-q	--quiet
 resume	-m	--message
 rm	-I	--interactive-once
 rm	-V	--version
