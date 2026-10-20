@@ -199,4 +199,9 @@ fi
 # Compiler-input evidence is finalized after any nvcc/CMake backend build so .cu inputs are included.
 python3 "$here/audit-runner.py" compiler-inputs --capture "$capture" --source "$src" \
   --generated "$src/ml/backend/ggml/ggml/src/ggml-metal" --output "$out/$asset.compiler-inputs.json"
-python3 "$here/package-runner.py" package "$out/$exe" "$out/$asset.gz" "$out/$asset.json" "$os/$arch" "$UPSTREAM_COMMIT" "$GO_TOOLCHAIN" "${backend_args[@]}"
+if [[ $cuda == 1 ]]; then
+  python3 "$here/package-runner.py" package "$out/$exe" "$out/$asset.gz" "$out/$asset.json" "$os/$arch" "$UPSTREAM_COMMIT" "$GO_TOOLCHAIN" "${backend_args[0]}"
+else
+  # macOS ships Bash 3.2, where expanding an empty array under set -u fails.
+  python3 "$here/package-runner.py" package "$out/$exe" "$out/$asset.gz" "$out/$asset.json" "$os/$arch" "$UPSTREAM_COMMIT" "$GO_TOOLCHAIN"
+fi
