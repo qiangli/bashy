@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/qiangli/yoke/external/dks"
 	"github.com/qiangli/yoke/external/podman/winhelper"
 	"github.com/qiangli/yoke/pkg/binmgr"
 )
@@ -40,6 +41,14 @@ func dispatchEngine(arg string) {
 		fmt.Fprint(os.Stderr, engineNotFoundMessage(name))
 		dispatchExit(127)
 	case "dks":
+		// Federation is NOT engine-only: `bashy dks federation …` lives in
+		// the non-engine yoke/external/dks package and is routed here before
+		// the refusal below, so it works on the released lean build (Linux
+		// native-podman planes, Windows) exactly as in the full build. Only
+		// the VM-provisioning verbs refuse here.
+		if dks.IsFederation(os.Args[2:]) {
+			dispatchExit(dks.Dispatch(os.Args[3:]))
+		}
 		// Provisioning the rootful DKS VM needs the in-process podman
 		// machine libraries, which are only linked in the bashy_engines
 		// build. The lean build can't create a VM.

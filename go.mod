@@ -19,7 +19,7 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261019154849-42845e33d023
 	github.com/qiangli/ycode v0.3.1-dev.0.20261017214433-ffb708d14c35
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261020150104-8520a0e9a6a4
+	github.com/qiangli/yoke v0.0.0-20261020164510-72ebf25d1806
 	github.com/qiangli/yoke/external/otel v0.0.0-20261017214100-19415c55382f
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
@@ -593,3 +593,10 @@ replace modernc.org/sqlite => github.com/qiangli/sqlite v1.50.2-0.20261018085128
 replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2
 
 tool github.com/qiangli/outpost/cmd/outpost
+
+// viper v1.4.0 (via the umbrella workspace) requires the pre-split monolithic
+// github.com/ugorji/go v1.1.4, which still contains the codec package that
+// gin imports from github.com/ugorji/go/codec v1.3.1 — an ambiguous import in
+// workspace builds with bashy_engines. v1.2.14 of the root module no longer
+// carries codec. Version-scoped so standalone builds are unaffected.
+replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go v1.2.14

@@ -163,6 +163,22 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 	if r := byName["doctl"]; r.Tier != atlas.TierCloud || r.Subclass != atlas.SubclassManagedExternal {
 		t.Errorf("doctl = %+v, want registry-derived cloud/managed-external", r)
 	}
+	// karmadactl is the tier-5 registry CLI: cluster tier, managed-external,
+	// experimental until W7 graduates it, and no Windows platform (upstream
+	// ships no windows asset — darwin/linux only).
+	if r := byName["karmadactl"]; r.Tier != atlas.TierCluster || r.Subclass != atlas.SubclassManagedExternal {
+		t.Errorf("karmadactl = %+v, want registry-derived cluster/managed-external", r)
+	} else {
+		if r.Stability != atlas.StabilityExperimental {
+			t.Errorf("karmadactl stability = %q, want experimental", r.Stability)
+		}
+		if r.Origin != atlas.OriginExternal {
+			t.Errorf("karmadactl origin = %q, want external (registry-derived)", r.Origin)
+		}
+		if slices.Contains(r.OS, atlas.OSWindows) {
+			t.Errorf("karmadactl OS = %v, want no windows (no upstream asset)", r.OS)
+		}
+	}
 	if r := byName["upgrade"]; !r.Hidden || r.AliasOf != "self" {
 		t.Errorf("upgrade = %+v, want hidden alias of self", r)
 	}
