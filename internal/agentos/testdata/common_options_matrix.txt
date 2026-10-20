@@ -1386,7 +1386,7 @@ watch	--depth	unsupported
 watch	--dry-run	unsupported
 watch	--explain	supported
 watch	--fields	unsupported
-watch	--json	unsupported
+watch	--json	supported
 watch	--no-input	supported
 watch	--null	unsupported
 watch	--since	unsupported
