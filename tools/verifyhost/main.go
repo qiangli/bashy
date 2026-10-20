@@ -41,8 +41,9 @@ func main() {
 	if record.Schema != "bashy-host-asset-v1" || record.Profile != "BASHY_ENGINES=1" || !record.CGOEnabled ||
 		record.GoOS != "linux" || record.Asset != "bashy-host-linux-"+record.GoARCH ||
 		(record.GoARCH != "amd64" && record.GoARCH != "arm64") ||
-		len(record.SourceSHA) != 40 || len(record.GoTags) != 2 ||
-		record.GoTags[0] != "bashy_engines" || record.GoTags[1] != "embed_runner" {
+		len(record.SourceSHA) != 40 || len(record.GoTags) != 3 ||
+		record.GoTags[0] != "bashy_engines" || record.GoTags[1] != "embed_runner" ||
+		record.GoTags[2] != "bashy_host" {
 		fatal(fmt.Errorf("invalid host asset manifest"))
 	}
 	if base := assetName(asset); base != record.Asset {
