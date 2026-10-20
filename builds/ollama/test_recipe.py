@@ -142,7 +142,7 @@ class Recipe(unittest.TestCase):
         (d / "runner").write_bytes(b"exe")
         (d / "lib.so").write_bytes(b"backend")
         ident = d / "id.json"
-        base = {"source_commit": PIN, "cuda_toolkit": "Build cuda_12.x", "nvcc_sha256": "a" * 64,
+        base = {"source_commit": PIN, "cuda_toolkit": "Build cuda_12.x", "nvcc_sha256": "a" * 64, "toolkit_sha256": "b" * 64,
                 "preset": "CUDA 12", "artifacts": ["lib.so"]}
         ident.write_text(json.dumps(base))
         pkg = str(self.helpers / "package-runner.py")
@@ -160,6 +160,30 @@ class Recipe(unittest.TestCase):
         run("python3", *args, str(ident), ok=False)
         hold = run("python3", str(self.helpers / "audit-runner.py"), "final", "--out", str(d), "--commit", PIN, ok=False)
         self.assertIn("CUDA backend not admitted", hold.stdout + hold.stderr)
+
+    def test_cuda_toolkit_pinned_build_only_and_runtime_host_provided(self):
+        # S451.4a operator decision 2026-10-20: the CUDA toolkit is a pinned,
+        # sha256-verified BUILD-ONLY SDK recorded in the manifest/SBOM; driver,
+        # libcuda, cudart and cuBLAS are host-provided dynamically and never
+        # bundled, statically linked or released. Missing runtime fails closed.
+        env = (Path(__file__).resolve().parent / "tool.env").read_text()
+        for key in ("CUDA_TOOLKIT_VERSION=", "CUDA_TOOLKIT_SHA256="):
+            self.assertIn(key, env)
+        install = self.helpers / "install-cuda-toolkit.sh"
+        self.assertTrue(install.exists(), "pinned toolkit installer missing")
+        text = install.read_text()
+        self.assertIn("sha256sum", text)
+        self.assertIn("CUDA_TOOLKIT_SHA256", text)
+        build = (self.helpers / "build-runner.sh").read_text()
+        self.assertIn("install-cuda-toolkit.sh", build)
+        self.assertIn("CUDA_TOOLKIT_SHA256", build)
+        self.assertIn("CUDA_USE_STATIC", build)  # static cudart/cublas link refused
+        package = (self.helpers / "package-runner.py").read_text()
+        self.assertIn("toolkit_sha256", package)
+        self.assertIn("build-only", package)
+        self.assertIn("host-provided", package)
+        for banned in ("libcudart", "libcublas", "libcuda.so"):
+            self.assertIn(banned, package)  # refused as backend artifacts
 
     def test_scanner_findings_defer_to_audit_gate(self):
         # Run 38544523506: osv-scanner exits 1 on ANY finding (including the

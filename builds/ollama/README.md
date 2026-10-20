@@ -247,3 +247,15 @@ linkage/license/vulnerability/SBOM review of the CUDA bytes exists; nvcc
 compiles are not captured by compiler evidence); (3) no GPU on hosted runners,
 so the native gate exercises only CPU fallback and makes no CUDA inference
 claim. Not compiled or run locally.
+
+### CUDA toolkit pin (S451.4a, operator decision 2026-10-20)
+
+`tool.env` pins CUDA 12.8.1 redist components (nvcc, cudart, cuBLAS dev) with
+sha256; `install-cuda-toolkit.sh` verifies each before extraction and the
+toolkit digest is recorded in the manifest (`toolkit_sha256`, role build-only).
+Driver/libcuda/cudart/cuBLAS are host-provided; package-runner refuses them as
+artifacts and the build forces dynamic linking. Remaining blockers: toolkit
+download happens in the build step (must be moved before the no-egress window or
+the gate must allow the pinned fetch), upstream `CUDA 12` preset output path and
+nvcc/cudart/cuBLAS SBOM+audit entries are unverified (no native build on Dragon),
+puppy GPU model-load before release, audit hold remains.

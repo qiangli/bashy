@@ -148,21 +148,28 @@ if [[ $cuda == 1 ]]; then
   # own release asset, and recorded in the manifest as backend-artifacts with
   # the toolchain identity. A missing toolkit fails closed; nothing is
   # substituted or downloaded here.
+  : "${CUDA_TOOLKIT_SHA256:?build-runner: CUDA toolkit pin (CUDA_TOOLKIT_SHA256) required}"
+  cuda_home=${CUDA_HOME:-$BASHY_COMPILER_TMP/cuda-sdk}
+  export CUDA_TOOLKIT_BASE CUDA_TOOLKIT_SHA256 CUDA_TOOLKIT_VERSION
+  bash "$here/install-cuda-toolkit.sh" "$cuda_home"
+  export PATH="$cuda_home/bin:$PATH" CUDAToolkit_ROOT="$cuda_home"
+  toolkit_sha256=$(cat "$cuda_home/.bashy-toolkit-sha256")
   nvcc=$(command -v nvcc) || { echo 'build-runner: CUDA target requires nvcc on PATH' >&2; exit 1; }
   cmake_bin=$(command -v cmake) || { echo 'build-runner: CUDA target requires cmake' >&2; exit 1; }
   [[ $(git -C "$src" rev-parse HEAD) == "$UPSTREAM_COMMIT" ]] || { echo 'backend source commit mismatch' >&2; exit 1; }
-  "$cmake_bin" --preset 'CUDA 12' -B "$BASHY_COMPILER_TMP/cuda-build"
+  # Dynamic cudart/cuBLAS only: static CUDA runtime linking would embed NVIDIA bytes.
+  "$cmake_bin" --preset 'CUDA 12' -B "$BASHY_COMPILER_TMP/cuda-build" -DCUDA_USE_STATIC=OFF -DGGML_CUDA_STATIC=OFF
   "$cmake_bin" --build "$BASHY_COMPILER_TMP/cuda-build" --target ggml-cuda
   lib=$(find "$BASHY_COMPILER_TMP/cuda-build" -type f -name 'libggml-cuda.so' | LC_ALL=C sort | head -n1)
   [[ -n $lib && ! -L $lib ]] || { echo 'build-runner: libggml-cuda.so was not produced' >&2; exit 1; }
   cp "$lib" "$out/$asset-libggml-cuda.so"
-  python3 - "$out/$asset.backend-artifacts.json" "$UPSTREAM_COMMIT" "$nvcc" "$asset-libggml-cuda.so" <<'PY'
+  python3 - "$out/$asset.backend-artifacts.json" "$UPSTREAM_COMMIT" "$nvcc" "$asset-libggml-cuda.so" "$toolkit_sha256" <<'PY'
 import hashlib, json, subprocess, sys
-out, commit, nvcc, lib = sys.argv[1:]
+out, commit, nvcc, lib, toolkit = sys.argv[1:]
 version = subprocess.check_output([nvcc, "--version"], text=True).strip().splitlines()[-1]
 data = open(nvcc, "rb").read()
 json.dump({"source_commit": commit, "cuda_toolkit": version, "nvcc_sha256": hashlib.sha256(data).hexdigest(),
-           "preset": "CUDA 12", "artifacts": [lib]}, open(out, "w"), sort_keys=True, indent=2)
+           "preset": "CUDA 12", "toolkit_sha256": toolkit, "artifacts": [lib]}, open(out, "w"), sort_keys=True, indent=2)
 PY
   backend_args=("$out/$asset.backend-artifacts.json")
 fi

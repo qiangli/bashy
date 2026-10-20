@@ -21,11 +21,15 @@ def backend_record(identity_path, directory, commit):
     identity = json.loads(identity_path.read_text())
     if identity.get("source_commit") != commit:
         raise ValueError("backend source commit does not match the pinned upstream commit")
-    for key in ("cuda_toolkit", "nvcc_sha256", "preset"):
+    for key in ("cuda_toolkit", "nvcc_sha256", "preset", "toolkit_sha256"):
         if not identity.get(key):
             raise ValueError("backend identity missing " + key)
     artifacts = []
     for name in identity.get("artifacts", []):
+        # The toolkit is a build-only SDK; driver/cudart/cuBLAS are host-provided
+        # at runtime and must never ship as backend artifacts.
+        if any(b in Path(name).name for b in ("libcudart", "libcublas", "libcuda.so")):
+            raise ValueError("host-provided CUDA runtime must not be bundled: " + name)
         path = Path(directory) / name
         if path.is_symlink() or not path.is_file() or path.stat().st_size == 0:
             raise ValueError("backend artifact must be a real nonempty file: " + name)
@@ -34,7 +38,8 @@ def backend_record(identity_path, directory, commit):
     if not artifacts:
         raise ValueError("CUDA target requires at least one backend shared library")
     return {"backend_artifacts": artifacts,
-            "backend_identity": {k: identity[k] for k in ("source_commit", "cuda_toolkit", "nvcc_sha256", "preset")},
+            "backend_identity": {k: identity[k] for k in ("source_commit", "cuda_toolkit", "nvcc_sha256", "preset", "toolkit_sha256")},
+            "toolkit_role": "build-only; runtime host-provided",
             "release_admission": "PENDING_CUDA_TOOLCHAIN_LICENSE_AND_AUDIT_REVIEW"}
 
 
