@@ -228,6 +228,8 @@ def exercise(binary, fixture, evidence_path, port):
     target = {'Linux': 'linux', 'Darwin': 'darwin', 'Windows': 'windows'}[platform.system()]
     arch = {'x86_64': 'amd64', 'AMD64': 'amd64', 'arm64': 'arm64', 'aarch64': 'arm64'}[platform.machine()]
     asset = f'runner-{target}-{arch}'
+    if binary.name == asset + '-cuda':
+        asset += '-cuda'  # CPU-fallback protocol only; no GPU on hosted runners, so no CUDA inference claim
     require(binary.name == asset + ('.exe' if target == 'windows' else ''), 'native target mismatch')
     metadata = json.loads(binary.with_name(asset + '.json').read_text())
     require(metadata['target'] == f'{target}/{arch}' and metadata['upstream_commit'] == SOURCE,

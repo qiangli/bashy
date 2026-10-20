@@ -113,6 +113,54 @@ class Recipe(unittest.TestCase):
         self.assertIn("out/*-egress.txt", wf)
         self.assertIn("runner-windows-amd64-native.json", pin)
 
+    def test_cuda_target_carries_backend_artifacts_in_manifest(self):
+        # S451/#2487: a CUDA lane is a SEPARATE Linux amd64 target. A Go-only
+        # runner is not CUDA; the manifest must enumerate every backend shared
+        # library with its digest and a verified source/build identity, and
+        # each library must be its own signed release asset (never a symlink).
+        pin = (self.helpers / "PIN").read_text()
+        asset = "runner-linux-amd64-cuda"
+        self.assertIn(asset + "=ubuntu-24.04", pin)
+        for suffix in ("", ".gz", ".json", ".inputs.json", ".deps.json", "-libggml-cuda.so"):
+            self.assertIn(" " + asset + suffix + " ", pin)
+        # Existing CPU/Metal targets stay untouched.
+        for target in TARGETS:
+            self.assertIn("runner-" + target + "=", pin)
+        build = (self.helpers / "build-runner.sh").read_text()
+        self.assertIn(asset, build)
+        self.assertIn("nvcc", build)
+        self.assertIn("backend-artifacts", build)
+        package = (self.helpers / "package-runner.py").read_text()
+        for key in ("backend_artifacts", "backend_identity", "cuda_toolkit", "source_commit"):
+            self.assertIn(key, package)
+        self.assertNotIn("ln -s", build)
+        self.assertIn("source-guard.sh", pin)
+
+    def test_cuda_manifest_digests_and_audit_hold(self):
+        d = self.root / "cuda"
+        d.mkdir()
+        (d / "runner").write_bytes(b"exe")
+        (d / "lib.so").write_bytes(b"backend")
+        ident = d / "id.json"
+        base = {"source_commit": PIN, "cuda_toolkit": "Build cuda_12.x", "nvcc_sha256": "a" * 64,
+                "preset": "CUDA 12", "artifacts": ["lib.so"]}
+        ident.write_text(json.dumps(base))
+        pkg = str(self.helpers / "package-runner.py")
+        args = [pkg, "package", str(d / "runner"), str(d / "r.gz"), str(d / "runner-linux-amd64-cuda.json"),
+                "linux/amd64", PIN, "1.27.2"]
+        run("python3", *args, str(ident))
+        m = json.loads((d / "runner-linux-amd64-cuda.json").read_text())
+        self.assertEqual(m["backend_artifacts"][0]["sha256"], hashlib.sha256(b"backend").hexdigest())
+        self.assertTrue(m["release_admission"].startswith("PENDING_CUDA"))
+        ident.write_text(json.dumps(dict(base, source_commit="0" * 40)))
+        run("python3", *args, str(ident), ok=False)
+        ident.write_text(json.dumps(base))
+        (d / "lib.so").unlink()
+        (d / "lib.so").symlink_to(d / "runner")
+        run("python3", *args, str(ident), ok=False)
+        hold = run("python3", str(self.helpers / "audit-runner.py"), "final", "--out", str(d), "--commit", PIN, ok=False)
+        self.assertIn("CUDA backend not admitted", hold.stdout + hold.stderr)
+
     def test_scanner_findings_defer_to_audit_gate(self):
         # Run 38544523506: osv-scanner exits 1 on ANY finding (including the
         # reviewed waiver GO-2026-5932), which killed the step under set -e

@@ -9,10 +9,13 @@ mkdir -p "$2"
 out=$(cd "$2" && pwd)
 asset=$3
 case $asset in
-  runner-linux-amd64|runner-linux-arm64|runner-darwin-amd64|runner-darwin-arm64|runner-windows-amd64) ;;
+  runner-linux-amd64|runner-linux-arm64|runner-darwin-amd64|runner-darwin-arm64|runner-windows-amd64|runner-linux-amd64-cuda) ;;
   *) echo "unsupported runner target: $asset" >&2; exit 1;;
 esac
-os=${asset#runner-}; arch=${os##*-}; os=${os%-*}
+cuda=0
+base=$asset
+if [[ $asset == *-cuda ]]; then cuda=1; base=${asset%-cuda}; fi
+os=${base#runner-}; arch=${os##*-}; os=${os%-*}
 export GOWORK=off GOENV=off GOTOOLCHAIN=local CGO_ENABLED=1 GOFLAGS='' GOOS=$os GOARCH=$arch
 export GOAMD64=v1 GOARM64=v8.0
 [[ $(go env GOHOSTOS)/$(go env GOHOSTARCH) == "$os/$arch" ]] || {
@@ -137,4 +140,30 @@ windows)
 esac
 python3 "$here/audit-runner.py" compiler-inputs --capture "$capture" --source "$src" \
   --generated "$src/ml/backend/ggml/ggml/src/ggml-metal" --output "$out/$asset.compiler-inputs.json"
-python3 "$here/package-runner.py" package "$out/$exe" "$out/$asset.gz" "$out/$asset.json" "$os/$arch" "$UPSTREAM_COMMIT" "$GO_TOOLCHAIN"
+backend_args=()
+if [[ $cuda == 1 ]]; then
+  # Separate CUDA target: the Go runner alone is NOT CUDA. The backend shared
+  # library is built from the same pristine pinned tree with the upstream
+  # "CUDA 12" CMake preset, copied (never symlinked) beside the runner as its
+  # own release asset, and recorded in the manifest as backend-artifacts with
+  # the toolchain identity. A missing toolkit fails closed; nothing is
+  # substituted or downloaded here.
+  nvcc=$(command -v nvcc) || { echo 'build-runner: CUDA target requires nvcc on PATH' >&2; exit 1; }
+  cmake_bin=$(command -v cmake) || { echo 'build-runner: CUDA target requires cmake' >&2; exit 1; }
+  [[ $(git -C "$src" rev-parse HEAD) == "$UPSTREAM_COMMIT" ]] || { echo 'backend source commit mismatch' >&2; exit 1; }
+  "$cmake_bin" --preset 'CUDA 12' -B "$BASHY_COMPILER_TMP/cuda-build"
+  "$cmake_bin" --build "$BASHY_COMPILER_TMP/cuda-build" --target ggml-cuda
+  lib=$(find "$BASHY_COMPILER_TMP/cuda-build" -type f -name 'libggml-cuda.so' | LC_ALL=C sort | head -n1)
+  [[ -n $lib && ! -L $lib ]] || { echo 'build-runner: libggml-cuda.so was not produced' >&2; exit 1; }
+  cp "$lib" "$out/$asset-libggml-cuda.so"
+  python3 - "$out/$asset.backend-artifacts.json" "$UPSTREAM_COMMIT" "$nvcc" "$asset-libggml-cuda.so" <<'PY'
+import hashlib, json, subprocess, sys
+out, commit, nvcc, lib = sys.argv[1:]
+version = subprocess.check_output([nvcc, "--version"], text=True).strip().splitlines()[-1]
+data = open(nvcc, "rb").read()
+json.dump({"source_commit": commit, "cuda_toolkit": version, "nvcc_sha256": hashlib.sha256(data).hexdigest(),
+           "preset": "CUDA 12", "artifacts": [lib]}, open(out, "w"), sort_keys=True, indent=2)
+PY
+  backend_args=("$out/$asset.backend-artifacts.json")
+fi
+python3 "$here/package-runner.py" package "$out/$exe" "$out/$asset.gz" "$out/$asset.json" "$os/$arch" "$UPSTREAM_COMMIT" "$GO_TOOLCHAIN" "${backend_args[@]}"

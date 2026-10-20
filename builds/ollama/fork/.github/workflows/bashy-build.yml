@@ -112,6 +112,8 @@ jobs:
             runner: macos-15
           - asset: runner-windows-amd64
             runner: windows-2025
+          - asset: runner-linux-amd64-cuda
+            runner: ubuntu-24.04
     steps:
       # Windows runners check out with core.autocrlf=true by default, which
       # rewrites LF to CRLF in the working tree. The prepare/audit gates hash

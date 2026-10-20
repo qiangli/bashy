@@ -565,7 +565,16 @@ def govulncheck(out, ignore=None, targets=TARGETS):
           f"{total_reported} reported non-reachable; summary: {summary_path.name})")
 
 
+def cuda_hold(out):
+    # A CUDA backend ships NVIDIA toolkit/runtime bytes outside the permissive-only
+    # policy; no review record exists, so any CUDA manifest keeps the audit failed.
+    for manifest in sorted(Path(out).glob("runner-*-cuda.json")):
+        if load_json(manifest).get("release_admission") != "ADMITTED":
+            fail(f"{manifest.name}: CUDA backend not admitted (NVIDIA toolkit/runtime license, linkage, vulnerability and SBOM review absent)")
+
+
 def final(out, commit):
+    cuda_hold(out)
     required = ["runner-linked-libraries.json", "runner-licenses.json", "runner-native-licenses.json", "runner-sbom.cdx.json", "runner-osv.json", "runner-grype.json"]
     for name in required:
         if not (out / name).is_file() or (out / name).stat().st_size == 0:

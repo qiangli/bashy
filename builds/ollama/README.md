@@ -227,3 +227,23 @@ audit outcomes. Unsigned release inputs retain normal success conditions, and
 signing still requires pin, all native builds, and audit. Diagnostic bytes are
 not a release verdict. Hosted confirmation and exact native license review remain
 required; the bounded local fixtures do not execute native compilers or runners.
+
+## CUDA target (Sprint #451 / Story #2487)
+
+`runner-linux-amd64-cuda` is a **separate** matrix target (ubuntu-24.04). The
+Go runner alone is not CUDA: `build-runner.sh` additionally builds
+`libggml-cuda.so` from the same pristine pinned tree with upstream's
+`CUDA 12` CMake preset, copies it (never a symlink) to
+`runner-linux-amd64-cuda-libggml-cuda.so` as its own signed release asset, and
+`package-runner.py` records it in the manifest as `backend_artifacts`
+(name/sha256/size) plus `backend_identity` (source commit == pin, nvcc version
+and sha256, preset). CPU/Metal targets are unchanged.
+
+**Blockers (release stays held):** (1) the hosted runner has no CUDA toolkit;
+installing NVIDIA's toolkit/runtime is outside the permissive-only policy and
+needs a license decision, so the build fails closed without `nvcc`; (2)
+`audit-runner.py final` fails while any CUDA manifest is not `ADMITTED` (no
+linkage/license/vulnerability/SBOM review of the CUDA bytes exists; nvcc
+compiles are not captured by compiler evidence); (3) no GPU on hosted runners,
+so the native gate exercises only CPU fallback and makes no CUDA inference
+claim. Not compiled or run locally.
