@@ -43,6 +43,9 @@ jobs:
     env:
       BASHY_ENGINES: '1'
       CGO_ENABLED: '1'
+      # The public proxy intermittently returns HTTP/2 stream errors; Go still
+      # checks go.sum when it falls back to the pinned module's source.
+      GOPROXY: https://proxy.golang.org;direct
       SOURCE_SHA: ${{ inputs.source_sha }}
       ARCH: ${{ matrix.arch }}
       SIGNING_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/host-release.yml@${{ github.ref }}
@@ -64,6 +67,14 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: 1.27.2
+      - name: Install native engine build headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libgpgme-dev libbtrfs-dev libassuan-dev \
+            libdevmapper-dev libseccomp-dev
       - name: Resolve pinned siblings
         shell: bash
         env:
