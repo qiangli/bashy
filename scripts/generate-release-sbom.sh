@@ -26,7 +26,11 @@ mkdir -p "$outdir"
 # Determine output file name
 name=$(basename "$binary")
 if [[ -n "$target_os" && -n "$target_arch" ]]; then
-  outname="bashy-$target_os-$target_arch.spdx.json"
+  if [[ $name == bashy-host-* ]]; then
+    outname="bashy-host-$target_os-$target_arch.spdx.json"
+  else
+    outname="bashy-$target_os-$target_arch.spdx.json"
+  fi
 else
   outname="$name.spdx.json"
 fi

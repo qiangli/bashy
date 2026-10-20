@@ -1,0 +1,198 @@
+name: signed Bashy host candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full reviewed Bashy source commit (must be on main)
+        required: true
+        type: string
+      release_tag:
+        description: New host-only release tag (used only when publish is true)
+        required: false
+        type: string
+      publish:
+        description: Publish the already-gated host assets as a separate release
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: host-release-${{ inputs.source_sha }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: host linux-${{ matrix.arch }}
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      BASHY_ENGINES: '1'
+      CGO_ENABLED: '1'
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      ARCH: ${{ matrix.arch }}
+      SIGNING_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/host-release.yml@${{ github.ref }}
+      SIGNING_ISSUER: https://token.actions.githubusercontent.com
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+      - name: Verify reviewed source pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ $SOURCE_SHA =~ ^[0-9a-f]{40}$ ]]
+          [[ $(git rev-parse HEAD) == "$SOURCE_SHA" ]]
+          git fetch --quiet origin main
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+          [[ -z $(git status --porcelain) ]]
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.2
+      - name: Resolve pinned siblings
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./scripts/resolve-pinned-siblings.sh
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+          run_install: false
+      - name: Stage verified signed runner
+        shell: bash
+        run: ./scripts/fetch-signed-runner.sh linux "$ARCH"
+      - name: Build and audit BASHY_ENGINES=1 host asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/build-host-release.sh "$ARCH" "$SOURCE_SHA" "$RUNNER_TEMP/host"
+          GOVULNCHECK_OUT="$RUNNER_TEMP/govulncheck" ./scripts/govulncheck-release.sh .
+          cp "$RUNNER_TEMP/govulncheck/bashy.govulncheck.json" \
+            "$RUNNER_TEMP/host/bashy-host-linux-$ARCH.govulncheck.json"
+          "$RUNNER_TEMP/host/bashy-host-linux-$ARCH" ollama status --json > "$RUNNER_TEMP/host/host-status-linux-$ARCH.json"
+          python3 - "$RUNNER_TEMP/host/host-status-linux-$ARCH.json" <<'PY'
+          import json, sys
+          value = json.load(open(sys.argv[1]))
+          if value.get('build') == 'lean' or not value.get('available'):
+              raise SystemExit('engine-enabled host binary reports lean/unavailable')
+          PY
+      - name: Install pinned keyless signer
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+      - name: Sign and verify every host asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/host"
+          for asset in *; do
+            cosign sign-blob --yes --bundle "$asset.sigstore.json" "$asset"
+            cosign verify-blob --bundle "$asset.sigstore.json" \
+              --certificate-identity "$SIGNING_IDENTITY" \
+              --certificate-oidc-issuer "$SIGNING_ISSUER" "$asset"
+          done
+      - name: Verify signed executable through binmgr
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/host"
+          go run ./tools/verifyhost \
+            "$out/bashy-host-linux-$ARCH" \
+            "$out/bashy-host-linux-$ARCH.sigstore.json" \
+            "$out/host-asset-manifest-linux-$ARCH.json" \
+            "$SIGNING_IDENTITY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bashy-host-linux-${{ matrix.arch }}
+          path: ${{ runner.temp }}/host/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    if: inputs.publish == true
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      SIGNING_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/host-release.yml@${{ github.ref }}
+      SIGNING_ISSUER: https://token.actions.githubusercontent.com
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bashy-host-linux-*
+          path: dist
+          merge-multiple: true
+      - name: Verify complete host asset set and source pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ $RELEASE_TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?-host-dev$ ]]
+          [[ $(git rev-parse HEAD) == "$SOURCE_SHA" ]]
+          for arch in amd64 arm64; do
+            test -s "dist/bashy-host-linux-$arch"
+            test -s "dist/bashy-host-linux-$arch.sigstore.json"
+            test -s "dist/bashy-host-linux-$arch.spdx.json"
+            test -s "dist/host-asset-manifest-linux-$arch.json"
+            jq -e --arg source "$SOURCE_SHA" --arg arch "$arch" \
+              '.source_sha == $source and .profile == "BASHY_ENGINES=1" and .goarch == $arch' \
+              "dist/host-asset-manifest-linux-$arch.json"
+          done
+          (cd dist && sha256sum -- * > SHA256SUMS)
+      - name: Install pinned keyless signer
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+      - name: Verify bundles and sign complete digest manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          for asset in *; do
+            [[ $asset == *.sigstore.json || $asset == SHA256SUMS ]] && continue
+            cosign verify-blob --bundle "$asset.sigstore.json" \
+              --certificate-identity "$SIGNING_IDENTITY" \
+              --certificate-oidc-issuer "$SIGNING_ISSUER" "$asset"
+          done
+          cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
+          cosign verify-blob --bundle SHA256SUMS.sigstore.json \
+            --certificate-identity "$SIGNING_IDENTITY" \
+            --certificate-oidc-issuer "$SIGNING_ISSUER" SHA256SUMS
+          sha256sum -c SHA256SUMS --status
+      - name: Publish separate signed host candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "host release tag already exists" >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" dist/* --prerelease \
+            --target "$SOURCE_SHA" \
+            --title "Bashy host candidate $RELEASE_TAG" \
+            --notes "Separate BASHY_ENGINES=1 Linux host assets from reviewed Bashy source $SOURCE_SHA. See signed manifests and SPDX SBOMs."
