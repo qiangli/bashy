@@ -85,13 +85,13 @@ func TestLeanDksUserlandReachesHandler(t *testing.T) {
 }
 
 // TestLeanDksUserlandStubFailsClosed pins the fail-closed half: an
-// unimplemented userland verb (`dks run`) exits 2 with the
+// unimplemented userland verb (`dks logs`) exits 2 with the
 // not-available-yet message having run NOTHING — the echo never executes,
 // so nothing it could print reaches stdout.
 func TestLeanDksUserlandStubFailsClosed(t *testing.T) {
 	t.Setenv("BASHY_HOME", t.TempDir())
 
-	code, stdout, stderr := runLeanDksUserlandDispatch(t, []string{"bashy", "dks", "run", "--", "echo", "hi"})
+	code, stdout, stderr := runLeanDksUserlandDispatch(t, []string{"bashy", "dks", "logs", "--", "echo", "hi"})
 	if code != 2 {
 		t.Fatalf("exit = %d, want 2; stderr:\n%s", code, stderr)
 	}
@@ -103,5 +103,23 @@ func TestLeanDksUserlandStubFailsClosed(t *testing.T) {
 	}
 	if strings.Contains(stderr, "not available in this build") {
 		t.Errorf("stub fell through to the engine refusal; stderr:\n%s", stderr)
+	}
+}
+
+// TestLeanDksUserlandRunWithoutContextNeverRunsLocally pins the real `dks run`
+// (S481.3) on the lean build: with no cluster workspace selected it exits
+// non-zero having run NOTHING locally, and it is not the engine refusal.
+func TestLeanDksUserlandRunWithoutContextNeverRunsLocally(t *testing.T) {
+	t.Setenv("BASHY_HOME", t.TempDir())
+
+	code, stdout, stderr := runLeanDksUserlandDispatch(t, []string{"bashy", "dks", "run", "--", "echo", "hi"})
+	if code == 0 {
+		t.Fatalf("exit = 0, want non-zero without a selected workspace; stderr:\n%s", stderr)
+	}
+	if strings.Contains(stdout, "hi") {
+		t.Errorf("run executed the command locally; stdout:\n%s", stdout)
+	}
+	if strings.Contains(stderr, "not available in this build") {
+		t.Errorf("run fell through to the engine refusal; stderr:\n%s", stderr)
 	}
 }
