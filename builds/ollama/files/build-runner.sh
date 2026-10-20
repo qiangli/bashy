@@ -163,13 +163,17 @@ if [[ $cuda == 1 ]]; then
   lib=$(find "$BASHY_COMPILER_TMP/cuda-build" -type f -name 'libggml-cuda.so' | LC_ALL=C sort | head -n1)
   [[ -n $lib && ! -L $lib ]] || { echo 'build-runner: libggml-cuda.so was not produced' >&2; exit 1; }
   cp "$lib" "$out/$asset-libggml-cuda.so"
-  python3 - "$out/$asset.backend-artifacts.json" "$UPSTREAM_COMMIT" "$nvcc" "$asset-libggml-cuda.so" "$toolkit_sha256" <<'PY'
+  python3 "$here/cuda-link-audit.py" link "$out/$asset-libggml-cuda.so" | tee "$out/$asset-cuda-linkage.txt"
+  readelf -d --dyn-syms --wide "$out/$asset-libggml-cuda.so" >>"$out/$asset-cuda-linkage.txt"
+  python3 - "$out/$asset.backend-artifacts.json" "$UPSTREAM_COMMIT" "$nvcc" "$asset-libggml-cuda.so" "$toolkit_sha256" "$CUDA_TOOLKIT_VERSION" "$CUDA_TOOLKIT_SHA256" <<'PY'
 import hashlib, json, subprocess, sys
-out, commit, nvcc, lib, toolkit = sys.argv[1:]
+out, commit, nvcc, lib, toolkit, tk_version, pins = sys.argv[1:]
+components = [{"archive": e.split("=")[0].rsplit("/", 1)[-1], "sha256": e.split("=")[1]} for e in pins.split()]
 version = subprocess.check_output([nvcc, "--version"], text=True).strip().splitlines()[-1]
 data = open(nvcc, "rb").read()
 json.dump({"source_commit": commit, "cuda_toolkit": version, "nvcc_sha256": hashlib.sha256(data).hexdigest(),
-           "preset": "CUDA 12", "toolkit_sha256": toolkit, "artifacts": [lib]}, open(out, "w"), sort_keys=True, indent=2)
+           "preset": "CUDA 12", "toolkit_sha256": toolkit, "toolkit_version": tk_version, "toolkit_components": components,
+           "artifacts": [lib]}, open(out, "w"), sort_keys=True, indent=2)
 PY
   backend_args=("$out/$asset.backend-artifacts.json")
 fi

@@ -21,7 +21,7 @@ def backend_record(identity_path, directory, commit):
     identity = json.loads(identity_path.read_text())
     if identity.get("source_commit") != commit:
         raise ValueError("backend source commit does not match the pinned upstream commit")
-    for key in ("cuda_toolkit", "nvcc_sha256", "preset", "toolkit_sha256"):
+    for key in ("cuda_toolkit", "nvcc_sha256", "preset", "toolkit_sha256", "toolkit_version", "toolkit_components"):
         if not identity.get(key):
             raise ValueError("backend identity missing " + key)
     artifacts = []
@@ -38,7 +38,7 @@ def backend_record(identity_path, directory, commit):
     if not artifacts:
         raise ValueError("CUDA target requires at least one backend shared library")
     return {"backend_artifacts": artifacts,
-            "backend_identity": {k: identity[k] for k in ("source_commit", "cuda_toolkit", "nvcc_sha256", "preset", "toolkit_sha256")},
+            "backend_identity": {k: identity[k] for k in ("source_commit", "cuda_toolkit", "nvcc_sha256", "preset", "toolkit_sha256", "toolkit_version", "toolkit_components")},
             "toolkit_role": "build-only; runtime host-provided",
             "release_admission": "PENDING_CUDA_TOOLCHAIN_LICENSE_AND_AUDIT_REVIEW"}
 

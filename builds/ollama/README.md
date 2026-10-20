@@ -259,3 +259,17 @@ download happens in the build step (must be moved before the no-egress window or
 the gate must allow the pinned fetch), upstream `CUDA 12` preset output path and
 nvcc/cudart/cuBLAS SBOM+audit entries are unverified (no native build on Dragon),
 puppy GPU model-load before release, audit hold remains.
+
+### CUDA linkage audit and host runtime (S451.4a review)
+
+`files/cuda-link-audit.py link` runs on the built `libggml-cuda.so` (readelf
+`-d --dyn-syms`): it fails unless `libcudart`/`libcublas` are dynamic NEEDED
+entries, and fails on any defined `cuda*`/`cublas*` symbol (static link) or a
+direct `libcuda` NEEDED. `host` fails closed when the host lacks
+libcuda/cudart/cublas; CPU runs only with `--cpu-explicit`. The manifest
+`backend_identity` now carries `toolkit_version` and per-archive
+`toolkit_components` sha256. The pinned fetch happens in the build step, before
+and outside the no-egress gate (which only runs the finished executable).
+Still unverified (no native build on Dragon): the upstream `CUDA 12` preset's
+produced library path, SBOM/audit entries for toolkit components, hosted
+signature, and puppy GPU model-load. Release stays held.

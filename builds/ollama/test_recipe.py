@@ -142,7 +142,7 @@ class Recipe(unittest.TestCase):
         (d / "runner").write_bytes(b"exe")
         (d / "lib.so").write_bytes(b"backend")
         ident = d / "id.json"
-        base = {"source_commit": PIN, "cuda_toolkit": "Build cuda_12.x", "nvcc_sha256": "a" * 64, "toolkit_sha256": "b" * 64,
+        base = {"source_commit": PIN, "toolkit_version": "12.8.1", "toolkit_components": [{"archive": "a.tar.xz", "sha256": "d" * 64}], "cuda_toolkit": "Build cuda_12.x", "nvcc_sha256": "a" * 64, "toolkit_sha256": "b" * 64,
                 "preset": "CUDA 12", "artifacts": ["lib.so"]}
         ident.write_text(json.dumps(base))
         pkg = str(self.helpers / "package-runner.py")
@@ -184,6 +184,58 @@ class Recipe(unittest.TestCase):
         self.assertIn("host-provided", package)
         for banned in ("libcudart", "libcublas", "libcuda.so"):
             self.assertIn(banned, package)  # refused as backend artifacts
+
+    def test_cuda_link_audit_and_host_runtime_fail_closed(self):
+        # S451.4a review: the backend must link NVIDIA libs dynamically only
+        # (NEEDED, no defined cuda*/cublas* symbols), and a host without the
+        # runtime must fail closed; CPU is used only when explicitly requested.
+        tool = self.helpers / "cuda-link-audit.py"
+        self.assertTrue(tool.exists(), "cuda-link-audit.py missing")
+        d = self.root / "link"
+        d.mkdir()
+        good = d / "good.txt"
+        good.write_text(" 0x1 (NEEDED) Shared library: [libcudart.so.12]\n 0x1 (NEEDED) Shared library: [libcublas.so.12]\n"
+                        " 0x1 (NEEDED) Shared library: [libc.so.6]\n\n    10: 0 FUNC GLOBAL DEFAULT UND cudaMalloc\n")
+        run("python3", str(tool), "link", "--readelf-file", str(good))
+        static = d / "static.txt"
+        static.write_text(" 0x1 (NEEDED) Shared library: [libcudart.so.12]\n\n    10: 1000 FUNC GLOBAL DEFAULT 12 cublasCreate_v2\n")
+        run("python3", str(tool), "link", "--readelf-file", str(static), ok=False)
+        nodyn = d / "nodyn.txt"
+        nodyn.write_text(" 0x1 (NEEDED) Shared library: [libc.so.6]\n")
+        run("python3", str(tool), "link", "--readelf-file", str(nodyn), ok=False)
+        bundled = d / "bundled.txt"
+        bundled.write_text(good.read_text().replace("libc.so.6", "libcuda.so.1") + " 0x1 (RPATH) Library rpath: [$ORIGIN]\n")
+        ok = run("python3", str(tool), "link", "--readelf-file", str(bundled), ok=False)
+        self.assertIn("libcuda", ok.stdout + ok.stderr)
+        empty = d / "ldconfig-empty.txt"
+        empty.write_text("libc.so.6 (libc6,x86-64) => /lib/x86_64-linux-gnu/libc.so.6\n")
+        refuse = run("python3", str(tool), "host", "--ldconfig-file", str(empty), ok=False)
+        self.assertIn("fails closed", refuse.stdout + refuse.stderr)
+        cpu = run("python3", str(tool), "host", "--ldconfig-file", str(empty), "--cpu-explicit")
+        self.assertIn("cpu-explicit", cpu.stdout)
+        full = d / "ldconfig-full.txt"
+        full.write_text("libcuda.so.1 => /usr/lib/libcuda.so.1\nlibcudart.so.12 => /x/libcudart.so.12\nlibcublas.so.12 => /x/libcublas.so.12\n")
+        self.assertIn("cuda", run("python3", str(tool), "host", "--ldconfig-file", str(full)).stdout)
+        build = (self.helpers / "build-runner.sh").read_text()
+        self.assertIn("cuda-link-audit.py\" link", build)
+
+    def test_cuda_manifest_records_toolkit_components(self):
+        d = self.root / "tk"
+        d.mkdir()
+        (d / "runner").write_bytes(b"exe")
+        (d / "lib.so").write_bytes(b"backend")
+        comps = [{"archive": "cuda_nvcc-12.8.93.tar.xz", "sha256": "c" * 64}]
+        ident = d / "id.json"
+        ident.write_text(json.dumps({"source_commit": PIN, "cuda_toolkit": "Build cuda_12.8", "nvcc_sha256": "a" * 64,
+                                     "toolkit_sha256": "b" * 64, "toolkit_version": "12.8.1", "toolkit_components": comps,
+                                     "preset": "CUDA 12", "artifacts": ["lib.so"]}))
+        run("python3", str(self.helpers / "package-runner.py"), "package", str(d / "runner"), str(d / "r.gz"),
+            str(d / "runner-linux-amd64-cuda.json"), "linux/amd64", PIN, "1.27.2", str(ident))
+        m = json.loads((d / "runner-linux-amd64-cuda.json").read_text())
+        self.assertEqual(m["backend_identity"]["toolkit_components"], comps)
+        self.assertEqual(m["backend_identity"]["toolkit_version"], "12.8.1")
+        build = (self.helpers / "build-runner.sh").read_text()
+        self.assertIn("toolkit_components", build)
 
     def test_scanner_findings_defer_to_audit_gate(self):
         # Run 38544523506: osv-scanner exits 1 on ANY finding (including the
