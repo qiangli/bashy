@@ -175,6 +175,7 @@ if [[ $cuda == 1 ]]; then
   # neither system nor host-provided NVIDIA must resolve in the build tree as a
   # real file, and a host driver (libcuda/libnvidia) link fails the build.
   extra=()
+  deps=$(python3 "$here/cuda-link-audit.py" closure "$out/$asset-libggml-cuda.so" --search "$BASHY_COMPILER_TMP/cuda-build")
   while IFS= read -r dep; do
     [[ -n $dep ]] || continue
     found=$(find "$BASHY_COMPILER_TMP/cuda-build" -type f -name "$dep" | LC_ALL=C sort | head -n1)
@@ -182,7 +183,7 @@ if [[ $cuda == 1 ]]; then
     cp "$found" "$out/$asset-$dep"
     readelf -d --dyn-syms --wide "$out/$asset-$dep" >>"$out/$asset-cuda-linkage.txt"
     extra+=("$asset-$dep")
-  done < <(python3 "$here/cuda-link-audit.py" closure "$out/$asset-libggml-cuda.so" --search "$BASHY_COMPILER_TMP/cuda-build")
+  done <<<"$deps"
   python3 - "$out/$asset.backend-artifacts.json" "$UPSTREAM_COMMIT" "$nvcc" "$asset-libggml-cuda.so" "$toolkit_sha256" "$CUDA_TOOLKIT_VERSION" "$CUDA_TOOLKIT_SHA256" ${extra[@]+"${extra[@]}"} <<'PY'
 import hashlib, json, subprocess, sys
 out, commit, nvcc, lib, toolkit, tk_version, pins, *more = sys.argv[1:]

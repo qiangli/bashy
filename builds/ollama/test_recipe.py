@@ -782,6 +782,22 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         build = (self.helpers / "build-runner.sh").read_text()
         self.assertIn('cuda-link-audit.py" closure', build)
 
+    def test_build_runner_aborts_when_closure_helper_fails(self):
+        build = (self.helpers / "build-runner.sh").read_text()
+        a = build.index("  extra=()")
+        b = build.index("  python3 - \"$out/$asset.backend-artifacts.json\"")
+        seg = build[a:b]
+        d = Path(tempfile.mkdtemp())
+        (d / "cuda-link-audit.py").write_text("import sys\nprint('libfake.so')\nsys.exit(3)\n")
+        (d / "tree").mkdir(); (d / "tree" / "libfake.so").write_bytes(b"x")
+        (d / "out").mkdir()
+        script = ("set -euo pipefail\nhere=%s out=%s asset=a BASHY_COMPILER_TMP=%s\nmkdir -p \"$BASHY_COMPILER_TMP/cuda-build\"\n"
+                  "cp %s \"$BASHY_COMPILER_TMP/cuda-build/libfake.so\"\nreadelf() { :; }\ntouch \"$out/a-libggml-cuda.so\"\n%s\necho PACKAGED\n"
+                  % (d, d / "out", d / "tmp", d / "tree" / "libfake.so", seg))
+        r = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("PACKAGED", r.stdout)
+
     def test_release_note_and_gates_describe_cuda_six_targets(self):
         env = (RECIPE / "tool.env").read_text()
         note = re.search(r'RELEASE_NOTE="([^"]*)"', env).group(1)
