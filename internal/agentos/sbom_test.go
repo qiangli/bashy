@@ -133,7 +133,9 @@ func TestFindLicenseRecognizesModuleFileNames(t *testing.T) {
 				t.Fatal(err)
 			}
 			gotPath, gotContent := FindLicense(dir)
-			if gotPath != filepath.Join(dir, name) || string(gotContent) != string(want) {
+			gotInfo, gotErr := os.Stat(gotPath)
+			wantInfo, wantErr := os.Stat(filepath.Join(dir, name))
+			if gotErr != nil || wantErr != nil || !os.SameFile(gotInfo, wantInfo) || string(gotContent) != string(want) {
 				t.Fatalf("FindLicense(%q) = %q, %q", dir, gotPath, gotContent)
 			}
 		})
