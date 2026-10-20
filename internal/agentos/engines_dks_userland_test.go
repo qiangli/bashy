@@ -84,25 +84,23 @@ func TestLeanDksUserlandReachesHandler(t *testing.T) {
 	}
 }
 
-// TestLeanDksUserlandStubFailsClosed pins the fail-closed half: an
-// unimplemented userland verb (`dks logs`) exits 2 with the
-// not-available-yet message having run NOTHING — the echo never executes,
-// so nothing it could print reaches stdout.
+// TestLeanDksUserlandStubFailsClosed pins the fail-closed half on the lean
+// build. Every userland verb is real since yoke cc9b96e3 (S481.6 logs/attach),
+// so the check is the verb's own refusal: `dks logs` without a selected
+// workspace exits non-zero having run NOTHING locally, and it is not the
+// engine-build refusal.
 func TestLeanDksUserlandStubFailsClosed(t *testing.T) {
 	t.Setenv("BASHY_HOME", t.TempDir())
 
 	code, stdout, stderr := runLeanDksUserlandDispatch(t, []string{"bashy", "dks", "logs", "--", "echo", "hi"})
-	if code != 2 {
-		t.Fatalf("exit = %d, want 2; stderr:\n%s", code, stderr)
-	}
-	if !strings.Contains(stderr, "not available yet") {
-		t.Errorf("stub did not print its not-available-yet message; stderr:\n%s", stderr)
+	if code == 0 {
+		t.Fatalf("exit = 0, want non-zero without a selected workspace; stderr:\n%s", stderr)
 	}
 	if strings.Contains(stdout, "hi") {
-		t.Errorf("stub ran the local command; stdout:\n%s", stdout)
+		t.Errorf("logs ran the local command; stdout:\n%s", stdout)
 	}
 	if strings.Contains(stderr, "not available in this build") {
-		t.Errorf("stub fell through to the engine refusal; stderr:\n%s", stderr)
+		t.Errorf("logs fell through to the engine refusal; stderr:\n%s", stderr)
 	}
 }
 
