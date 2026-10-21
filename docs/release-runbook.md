@@ -37,15 +37,11 @@ umbrella checkout before proposing a candidate tag.
 full shipped Go dependency graph (cmd/bashy, cmd/bash, cmd/sh, outpost) plus
 vendored/third_party directories contains only permissive licenses.
 
-The release check is temporarily **report-only**: `release.yml` omits `license-gate`
-from the release build `needs` lists and runs `scripts/verify-license-gate.sh` in
-`--report-only` mode (`LICENSE_GATE_REPORT_ONLY=1`) while the 11 known MPL-2.0
-dependencies (hashicorp memberlist/yamux/golang-lru/multierror/errwrap/sockaddr/go-immutable-radix,
-libp2p go-yamux, cyphar filepath-securejoin) are removed in separate tracks.
-Policy forbids exceptions for them (scripts/license-review.json remains empty).
-To make the check blocking, add `license-gate` back to the release `needs` lists
-in `.github/workflows/release.yml` (and remove `--report-only`). The checker
-prints all findings and uploads report artifacts regardless of mode; nothing is waived.
+The release check is **blocking**: native macOS and GoReleaser builds depend on
+the `license-gate` job in `.github/workflows/release.yml`. It runs
+`scripts/verify-license-gate.sh` over the pinned shipped graph and uploads its
+report artifact. `scripts/license-review.json` has zero exceptions; a new
+non-permissive or unknown code license fails the release before builds begin.
 
 ## Install-channel manifests
 

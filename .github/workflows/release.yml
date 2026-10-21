@@ -60,8 +60,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
   # Release check: license gate over bashy, outpost and yoke at the pinned
-  # sibling versions. It is report-only until the 11 known MPL-2.0 findings
-  # are cleared; docs/release-runbook.md documents the one-line blocking switch.
+  # sibling versions. Every release build requires a zero-finding result.
   license-gate:
     needs: preflight
     runs-on: ubuntu-latest
@@ -75,12 +74,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: ./scripts/resolve-pinned-siblings.sh
-      - name: Shipped dependency license gate (report-only)
-        # Blocking switch: remove --report-only and restore license-gate to release needs.
+      - name: Shipped dependency license gate
         shell: bash
         env:
           LICENSE_GATE_OUT: ${{ runner.temp }}/license-gate
-        run: ./scripts/verify-license-gate.sh --report-only | tee -a "$GITHUB_STEP_SUMMARY"
+        run: ./scripts/verify-license-gate.sh | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -89,7 +87,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
   darwin:
-    needs: [preflight, govulncheck]
+    needs: [preflight, govulncheck, license-gate]
     permissions:
       contents: read
       id-token: write
@@ -168,7 +166,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
   goreleaser:
-    needs: [preflight, govulncheck]
+    needs: [preflight, govulncheck, license-gate]
     outputs:
       seed_summary: ${{ steps.seed-bands.outputs.summary }}
     runs-on: ubuntu-latest
