@@ -4,6 +4,7 @@
 package agentos
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"debug/buildinfo"
@@ -13,12 +14,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -396,6 +399,49 @@ func resolveModuleLicenseDir(modPath, modVer string, localRoots []string) string
 	return findModuleLicenseDir(modPath, modVer, localRoots)
 }
 
+var (
+	goListDirsMu    sync.Mutex
+	goListDirsCache = map[string]map[string]string{}
+)
+
+// goListModuleDirs maps each build-list module path to its on-disk directory
+// (the replacement directory for local-path replaces), as the go tool sees it.
+// It is the fallback for modules whose buildinfo path cannot be resolved by
+// the cache/sibling heuristics, e.g. relative replaces in a nested go.mod.
+func goListModuleDirs(dir string) map[string]string {
+	goListDirsMu.Lock()
+	defer goListDirsMu.Unlock()
+	if m, ok := goListDirsCache[dir]; ok {
+		return m
+	}
+	m := map[string]string{}
+	goListDirsCache[dir] = m
+	cmd := exec.Command("go", "list", "-m", "-json", "all")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return m
+	}
+	dec := json.NewDecoder(bytes.NewReader(out))
+	for {
+		var mod struct {
+			Path, Dir string
+			Replace   *struct{ Dir string }
+		}
+		if err := dec.Decode(&mod); err != nil {
+			break
+		}
+		d := mod.Dir
+		if mod.Replace != nil && mod.Replace.Dir != "" {
+			d = mod.Replace.Dir
+		}
+		if d != "" {
+			m[mod.Path] = d
+		}
+	}
+	return m
+}
+
 // sanitizeSPDXID creates a valid SPDX ID from a module or package name.
 func sanitizeSPDXID(name string) string {
 	var b strings.Builder
@@ -611,6 +657,11 @@ func GenerateSBOM(binaryPath string, opts SBOMOptions) (*SPDXDocument, error) {
 		// Locate license
 		dir := resolveModuleLicenseDir(targetDep.Path, targetDep.Version, localRoots)
 		licFile, licBytes := FindLicense(dir)
+		if len(licBytes) == 0 {
+			if d := goListModuleDirs(cwd)[dep.Path]; d != "" {
+				licFile, licBytes = FindLicense(d)
+			}
+		}
 
 		licID, licClass := ClassifyLicense(string(licBytes))
 		if licClass == LicenseUnknown {
