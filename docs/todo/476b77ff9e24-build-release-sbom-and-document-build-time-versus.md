@@ -3,15 +3,18 @@ id: 476b77ff9e24
 kind: task
 title: Build release SBOM and document build-time versus runtime license boundary
 seq: 385
-status: todo
+status: done
 priority: p1
 labels:
     - licensing
     - release
 created: 2026-10-01T17:23:26.533927Z
+assignee: claude-sonnet5.5
 sprint: 350
 sprint_id: 406ae7fe-78aa-5ddc-9508-6e4dbf105b2a
 sprint_title: Bashy release SBOM and license boundary
+closed: 2026-10-21T08:22:47.930493Z
+closed_by: s350-manager
 ---
 
 Goal
