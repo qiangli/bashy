@@ -19,7 +19,7 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261019154849-42845e33d023
 	github.com/qiangli/ycode v0.3.1-dev.0.20261020201152-9526fabcd34a
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261021010400-80e9f1263345
+	github.com/qiangli/yoke v0.0.0-20261021014845-48958b2f2d63
 	github.com/qiangli/yoke/external/otel v0.0.0-20261017214100-19415c55382f
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
@@ -606,10 +606,12 @@ replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go v1.2.14
 // Keep the shipped engine, file manager, and mesh on their permissive forks.
 replace github.com/go-git/go-billy/v5 => github.com/qiangli/yoke/external/go-billy v0.0.0-20261021004834-b008dcc14dfa
 
-replace github.com/hashicorp/go-multierror => github.com/qiangli/yoke/external/multierror v0.0.0-20261021010400-80e9f1263345
+replace github.com/hashicorp/go-multierror => github.com/qiangli/yoke/external/multierror v0.0.0-20261021014845-48958b2f2d63
 
-replace github.com/hashicorp/errwrap => github.com/qiangli/yoke/external/errwrap v0.0.0-20261021010400-80e9f1263345
+replace github.com/hashicorp/errwrap => github.com/qiangli/yoke/external/errwrap v0.0.0-20261021014845-48958b2f2d63
 
 replace github.com/hashicorp/yamux => github.com/qiangli/yamux v0.1.0
 
 replace github.com/libp2p/go-yamux/v5 => github.com/qiangli/yamux/v5 v5.0.0
+
+replace github.com/cyphar/filepath-securejoin => github.com/qiangli/yoke/external/securejoin v0.0.0-20261021014845-48958b2f2d63
