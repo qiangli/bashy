@@ -96,3 +96,20 @@ run" on a bare box with no manual install — under this policy:
 3. Required with no permissive substitute? → build from permissive source via
    `bashy go/cmake/clang`; never ship a non-permissive prebuilt.
 4. In doubt, keep it out and open the question.
+
+## 5. Build-time vs runtime boundary and the release gate (Sprint 350)
+
+| Boundary | Where recorded | Enforced by |
+|---|---|---|
+| **Build-time / linked** (Go modules in `cmd/bashy`, the engine build `-tags bashy_engines,fb_archives`, `cmd/outpost`) | per-artifact SPDX 2.3 SBOMs + `docs/license-inventory.md` + `THIRD_PARTY_LICENSES.md` | `scripts/release-sbom.sh`: `tools/licensegate` (zero exceptions) then `bashy release sbom --dist DIR` (gate) and `--verify` (digest drift) |
+| **Runtime-acquired** (download + exec) | `docs/runtime-acquisition-inventory.md` only | review; never listed in an SBOM as a dependency |
+
+Regenerate everything from a clean checkout with `scripts/release-sbom.sh`
+(`SKIP_ENGINES=1` where the engine build's native deps are missing). The gate
+fails on missing license evidence, a non-permissive or unknown module, a
+missing SBOM, or an SBOM whose root digest differs from the binary on disk.
+`manifest.json` maps every artifact to its sha256 and SBOM. Permissive still
+means BSD/MIT/Apache-2.0 (and ISC/0BSD/CC0/Unlicense/zlib as classified by
+`tools/licensegate`); both classifiers read license files with the same
+`LICENSE|LICENCE|COPYING[.-]suffix` rule (so dual `LICENSE-APACHE`/`LICENSE-MIT`
+modules such as `qiangli/yamux` classify identically).
