@@ -461,6 +461,31 @@ func TestScanModule(t *testing.T) {
 	})
 }
 
+func TestScanModuleCodeLicenseFiles(t *testing.T) {
+	modDir := t.TempDir()
+	for name, content := range map[string]string{
+		"LICENSE":      "Apache License\nVersion 2.0, January 2004",
+		"LICENSE.docs": "SPDX-License-Identifier: CC-BY-SA-4.0",
+		"UNLICENSE":    "This is free and unencumbered software released into the public domain.",
+	} {
+		if err := os.WriteFile(filepath.Join(modDir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	findings, err := ScanModule(ModuleInfo{Path: "example.com/code", Dir: modDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 2 {
+		t.Fatalf("want code LICENSE and UNLICENSE only, got %v", findings)
+	}
+	for _, finding := range findings {
+		if finding.Class != LicensePermissive || finding.File == "LICENSE.docs" {
+			t.Errorf("unexpected code-license finding: %+v", finding)
+		}
+	}
+}
+
 func TestRunGateCleanWithExceptions(t *testing.T) {
 	tempDir := t.TempDir()
 

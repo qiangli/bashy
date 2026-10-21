@@ -92,6 +92,15 @@ var (
 	spdxRegex        = regexp.MustCompile(`(?i)spdx-license-identifier:\s*([^\r\n]+)`)
 )
 
+func isCodeLicenseFile(name string) bool {
+	// LICENSE.docs describes documentation in modules such as go-digest;
+	// it does not license the Go code. A code license must still be present.
+	if strings.EqualFold(name, "LICENSE.docs") {
+		return false
+	}
+	return strings.EqualFold(name, "UNLICENSE") || licenseFileRegex.MatchString(name)
+}
+
 var permissiveSPDX = map[string]bool{
 	"MIT":          true,
 	"APACHE-2.0":   true,
@@ -479,7 +488,7 @@ func FindLicenseFiles(dir string) ([]string, error) {
 		if strings.HasSuffix(name, "-LOGO") || strings.HasSuffix(name, ".png") || strings.HasSuffix(name, ".jpg") {
 			continue
 		}
-		if licenseFileRegex.MatchString(name) {
+		if isCodeLicenseFile(name) {
 			matches = append(matches, filepath.Join(dir, name))
 		}
 	}
@@ -508,7 +517,7 @@ func ScanVendoredDirectories(repoRoot string) ([]string, error) {
 						return nil
 					}
 					subName := subD.Name()
-					if !strings.HasSuffix(subName, "-LOGO") && !strings.HasSuffix(subName, ".png") && licenseFileRegex.MatchString(subName) {
+					if !strings.HasSuffix(subName, "-LOGO") && !strings.HasSuffix(subName, ".png") && isCodeLicenseFile(subName) {
 						licenseFiles = append(licenseFiles, subPath)
 					}
 					return nil
@@ -585,7 +594,7 @@ func ScanModule(mod ModuleInfo) ([]Finding, error) {
 					return nil
 				}
 				subName := subD.Name()
-				if !strings.HasSuffix(subName, "-LOGO") && !strings.HasSuffix(subName, ".png") && licenseFileRegex.MatchString(subName) {
+				if !strings.HasSuffix(subName, "-LOGO") && !strings.HasSuffix(subName, ".png") && isCodeLicenseFile(subName) {
 					raw, err := os.ReadFile(subPath)
 					if err == nil {
 						h := sha256.Sum256(raw)
