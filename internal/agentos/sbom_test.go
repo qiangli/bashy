@@ -315,3 +315,37 @@ func TestReleaseSbomMatrixVerify(t *testing.T) {
 		t.Fatal("verify must fail on digest drift")
 	}
 }
+
+func TestGoListModuleDirsResolvesLocalReplace(t *testing.T) {
+	root := t.TempDir()
+	for name, lic := range map[string]string{
+		"external/ollama/src": "MIT License\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software.\n",
+		"external/podman/src": "                                 Apache License\n                           Version 2.0, January 2004\n                        http://www.apache.org/licenses/\n",
+	} {
+		d := filepath.Join(root, name)
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		os.WriteFile(filepath.Join(d, "LICENSE"), []byte(lic), 0o644)
+		mod := "github.com/ollama/ollama"
+		if strings.Contains(name, "podman") {
+			mod = "go.podman.io/podman/v6"
+		}
+		os.WriteFile(filepath.Join(d, "go.mod"), []byte("module "+mod+"\n\ngo 1.21\n"), 0o644)
+	}
+	gomod := "module example.com/m\n\ngo 1.21\n\nrequire (\n\tgithub.com/ollama/ollama v0.0.0\n\tgo.podman.io/podman/v6 v6.0.0\n)\n\nreplace github.com/ollama/ollama => ./external/ollama/src\n\nreplace go.podman.io/podman/v6 => ./external/podman/src\n"
+	os.WriteFile(filepath.Join(root, "go.mod"), []byte(gomod), 0o644)
+
+	dirs := goListModuleDirs(root)
+	for mod, want := range map[string]string{"github.com/ollama/ollama": "MIT", "go.podman.io/podman/v6": "Apache-2.0"} {
+		d := dirs[mod]
+		if d == "" {
+			t.Fatalf("%s: no dir resolved (%v)", mod, dirs)
+		}
+		_, b := FindLicense(d)
+		id, class := ClassifyLicense(string(b))
+		if class != LicensePermissive || id != want {
+			t.Errorf("%s: got %s/%v, want %s permissive", mod, id, class, want)
+		}
+	}
+}
