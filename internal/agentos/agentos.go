@@ -151,7 +151,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -852,6 +852,16 @@ func dispatch() {
 			dispatchExit(fleet.InfraExitCode(err))
 		}
 		dispatchExit(0)
+	case "token":
+		// Scoped coordination credentials (S490.15b): create mints an
+		// attenuated token into the vault (--to-secret) or, explicitly,
+		// stdout (--stdout); with nowhere safe to put the value, create
+		// refuses rather than printing it. list/revoke never carry values.
+		dispatchExit(dispatchToken(os.Args[2:]))
+	case "fleet":
+		// The coordination-credential verb (S490.15b): master-token
+		// save/mint writes the 0600 master-token file, never printing it.
+		dispatchExit(dispatchFleet(os.Args[2:]))
 	case "resource", "resources":
 		cmd := resources.NewCommand()
 		setCobraArgs(cmd, os.Args[2:])

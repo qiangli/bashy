@@ -618,6 +618,8 @@ var verbSynopsis = map[string]string{
 	"adapt":              "apply declared native options to a foreign command",
 	"adapter":            "manage declarative invocation adapter rows",
 	"infra":              "register provider access packages (registration only, never provisions)",
+	"token":              "mint and manage scoped coordination tokens (attenuated; the value is never printed by default)",
+	"fleet":              "coordination credentials for satellite migrations (master-token save/mint; never printed)",
 	"resource":           "host totals and active weave disk, CPU, GPU, and memory usage",
 	"resources":          "hidden alias for bashy resource",
 	"context":            "hidden alias for bashy inspect context",

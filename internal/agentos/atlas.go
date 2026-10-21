@@ -158,6 +158,27 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 	"adapt":   {Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierWorkplace, Caps: []string{atlas.CapSpawnsProcesses}, Effects: []string{atlas.EffExec}, Stability: atlas.StabilityExperimental},
 	"adapter": {Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierWorkplace, Caps: []string{atlas.CapJSON}, Effects: []string{atlas.EffRead, atlas.EffWrite}, Stability: atlas.StabilityExperimental},
 	"infra":   {Stage: atlas.StageCross, Group: atlas.GroupShellutils, Tier: atlas.TierWorkplace, Caps: []string{atlas.CapJSON}, Effects: []string{atlas.EffRead, atlas.EffWrite}, Stability: atlas.StabilityExperimental},
+	// Scoped coordination credentials (S490.15b): worst case over the
+	// subcommands, so the union is declared. create = net+write (mints
+	// into the vault with --to-secret, prints only with explicit
+	// --stdout), list = net+read (rows, never values), revoke = net+write
+	// (deletes the server-side row).
+	"token": {
+		Stage: atlas.StageCross, Group: atlas.GroupPlatform, Tier: atlas.TierWorkplace,
+		Caps:      []string{atlas.CapJSON, atlas.CapNeedsNetwork, atlas.CapNeedsPairing},
+		Effects:   []string{atlas.EffNet, atlas.EffRead, atlas.EffWrite},
+		Stability: atlas.StabilityExperimental,
+	},
+	// The coordination-credential verb (S490.15b): master-token save reads
+	// a pre-migration agent.json and writes the 0600 master-token file
+	// (read+write+persist); mint attenuates a coord-<host> token over the
+	// network and writes the same file (net+write+persist). Neither prints.
+	"fleet": {
+		Stage: atlas.StageCross, Group: atlas.GroupPlatform, Tier: atlas.TierWorkplace,
+		Caps:      []string{atlas.CapJSON, atlas.CapNeedsNetwork, atlas.CapNeedsPairing},
+		Effects:   []string{atlas.EffNet, atlas.EffRead, atlas.EffWrite, atlas.EffPersist},
+		Stability: atlas.StabilityExperimental,
+	},
 	"resource": {
 		Stage: atlas.StageCross, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapJSON, atlas.CapReadOnly}, Effects: []string{atlas.EffRead},

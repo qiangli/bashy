@@ -91,6 +91,10 @@ func cobraVerb(name string) *cobra.Command {
 		return fleet.NewAdaptersCmd()
 	case "infra":
 		return fleet.NewInfraCmd()
+	case "token":
+		return fleet.NewTokenCmd()
+	case "fleet":
+		return newFleetCmd()
 	case "resource", "resources":
 		return resources.NewCommand()
 	case "lexicon":
