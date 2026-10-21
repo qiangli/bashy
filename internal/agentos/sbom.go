@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
@@ -241,8 +242,26 @@ func FindLicense(dir string) (string, []byte) {
 			return p, data
 		}
 	}
+	// Same file-name rule as tools/licensegate: LICENSE/LICENCE/COPYING with an
+	// optional [.-]suffix (LICENSE-APACHE, LICENSE-MIT), never LICENSE.docs.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", nil
+	}
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() || strings.EqualFold(n, "LICENSE.docs") || !licenseFileNameRE.MatchString(n) {
+			continue
+		}
+		p := filepath.Join(dir, n)
+		if data, err := os.ReadFile(p); err == nil && len(data) > 0 {
+			return p, data
+		}
+	}
 	return "", nil
 }
+
+var licenseFileNameRE = regexp.MustCompile(`(?i)^(LICENSE|LICENCE|COPYING)([.\-].+)?$`)
 
 func encodeModPath(p string) string {
 	var b strings.Builder
@@ -321,6 +340,60 @@ func findModuleLicenseDir(modPath, modVer string, localRoots []string) string {
 	}
 
 	return ""
+}
+
+func moduleSourceURL(modPath string) string {
+	if strings.HasPrefix(modPath, "./") || strings.HasPrefix(modPath, "../") || filepath.IsAbs(modPath) {
+		return "NOASSERTION"
+	}
+	return "https://pkg.go.dev/" + modPath
+}
+
+func licenseEvidence(licFile, licID string) string {
+	if licFile != "" {
+		return filepath.Base(licFile)
+	}
+	if _, ok := firstPartyLicenses[licID]; ok || licID != "" && licID != "UNKNOWN" {
+		return "first-party-registry"
+	}
+	return "none"
+}
+
+// resolveModuleLicenseDir extends findModuleLicenseDir for the cases that
+// diverge between a standalone clone and the umbrella workspace: local-path
+// replaces (./x, ../x) are resolved against every local root, and nested
+// package paths walk up to the enclosing module's directory.
+func resolveModuleLicenseDir(modPath, modVer string, localRoots []string) string {
+	if strings.HasPrefix(modPath, "./") || strings.HasPrefix(modPath, "../") || filepath.IsAbs(modPath) {
+		if filepath.IsAbs(modPath) {
+			if fi, err := os.Stat(modPath); err == nil && fi.IsDir() {
+				return modPath
+			}
+		}
+		for _, root := range localRoots {
+			if root == "" {
+				continue
+			}
+			c := filepath.Join(root, modPath)
+			if fi, err := os.Stat(c); err == nil && fi.IsDir() {
+				return c
+			}
+		}
+		return ""
+	}
+	if d := findModuleLicenseDir(modPath, modVer, localRoots); d != "" {
+		if _, b := FindLicense(d); len(b) > 0 {
+			return d
+		}
+	}
+	for p := path.Dir(modPath); strings.Contains(p, "/"); p = path.Dir(p) {
+		if d := findModuleLicenseDir(p, modVer, localRoots); d != "" {
+			if _, b := FindLicense(d); len(b) > 0 {
+				return d
+			}
+		}
+	}
+	return findModuleLicenseDir(modPath, modVer, localRoots)
 }
 
 // sanitizeSPDXID creates a valid SPDX ID from a module or package name.
@@ -536,8 +609,8 @@ func GenerateSBOM(binaryPath string, opts SBOMOptions) (*SPDXDocument, error) {
 		}
 
 		// Locate license
-		dir := findModuleLicenseDir(targetDep.Path, targetDep.Version, localRoots)
-		_, licBytes := FindLicense(dir)
+		dir := resolveModuleLicenseDir(targetDep.Path, targetDep.Version, localRoots)
+		licFile, licBytes := FindLicense(dir)
 
 		licID, licClass := ClassifyLicense(string(licBytes))
 		if licClass == LicenseUnknown {
@@ -552,8 +625,9 @@ func GenerateSBOM(binaryPath string, opts SBOMOptions) (*SPDXDocument, error) {
 			SPDXID:                pkgID,
 			Name:                  targetDep.Path,
 			VersionInfo:           ver,
-			DownloadLocation:      "NOASSERTION",
+			DownloadLocation:      moduleSourceURL(targetDep.Path),
 			FilesAnalyzed:         false,
+			Comment:               "inclusion=go-module-linked; evidence=" + licenseEvidence(licFile, licID),
 			LicenseConcluded:      licID,
 			LicenseDeclared:       licID,
 			LicenseClassification: licClass,
@@ -627,6 +701,8 @@ func releaseSbomCmd() *cobra.Command {
 		buildTags  string
 		gate       bool
 		checkOnly  bool
+		verify     bool
+		inventory  string
 	)
 
 	cmd := &cobra.Command{
@@ -659,7 +735,7 @@ unknown entry.`,
 
 			// If dist directory is specified, scan for binaries
 			if distDir != "" {
-				return runDistSBOM(cmd.OutOrStdout(), cmd.ErrOrStderr(), distDir, outputPath, gate)
+				return runDistSBOM(cmd.OutOrStdout(), cmd.ErrOrStderr(), distDir, outputPath, inventory, gate, verify)
 			}
 
 			if binaryPath == "" {
@@ -720,56 +796,236 @@ unknown entry.`,
 	f.StringVar(&commit, "commit", "", "Commit SHA override")
 	f.StringVar(&buildTags, "tags", "", "Build tags override")
 	f.BoolVar(&gate, "gate", true, "Fail closed on any non-permissive or unknown license")
+	f.StringVar(&inventory, "inventory", "", "With --dist: also write the human-readable markdown license inventory to this path")
+	f.BoolVar(&verify, "verify", false, "With --dist: fail on missing SBOM, digest drift, or non-permissive license")
 	f.BoolVar(&checkOnly, "check-only", false, "Only validate licenses and gate without writing SBOM")
 
 	return cmd
 }
 
-func runDistSBOM(stdout, stderr io.Writer, distDir, outDir string, gate bool) error {
+type distManifestEntry struct {
+	Artifact string `json:"artifact"`
+	SHA256   string `json:"sha256"`
+	SBOM     string `json:"sbom"`
+	Packages int    `json:"packages"`
+}
+
+type distManifest struct {
+	Artifacts []distManifestEntry `json:"artifacts"`
+}
+
+func isDistBinaryName(n string) bool {
+	if !(strings.HasPrefix(n, "bashy") || strings.HasPrefix(n, "outpost")) {
+		return false
+	}
+	for _, suf := range []string{".tar.gz", ".zip", ".spdx.json", ".sha256", ".json", ".md"} {
+		if strings.HasSuffix(n, suf) {
+			return false
+		}
+	}
+	return true
+}
+
+func fileSHA256(p string) (string, error) {
+	f, err := os.Open(p)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func collectDistBinaries(distDir string) ([]string, error) {
 	entries, err := os.ReadDir(distDir)
 	if err != nil {
-		return fmt.Errorf("read dist dir: %w", err)
+		return nil, fmt.Errorf("read dist dir: %w", err)
 	}
-
 	var binaries []string
 	for _, e := range entries {
 		if e.IsDir() {
-			subEntries, _ := os.ReadDir(filepath.Join(distDir, e.Name()))
-			for _, se := range subEntries {
-				if !se.IsDir() && (strings.HasPrefix(se.Name(), "bashy") || strings.HasPrefix(se.Name(), "bash")) && !strings.HasSuffix(se.Name(), ".spdx.json") && !strings.HasSuffix(se.Name(), ".sha256") {
+			if e.Name() == "sbom" {
+				continue
+			}
+			sub, _ := os.ReadDir(filepath.Join(distDir, e.Name()))
+			for _, se := range sub {
+				if !se.IsDir() && isDistBinaryName(se.Name()) {
 					binaries = append(binaries, filepath.Join(distDir, e.Name(), se.Name()))
 				}
 			}
-		} else if strings.HasPrefix(e.Name(), "bashy") && !strings.HasSuffix(e.Name(), ".tar.gz") && !strings.HasSuffix(e.Name(), ".zip") && !strings.HasSuffix(e.Name(), ".spdx.json") && !strings.HasSuffix(e.Name(), ".sha256") {
+		} else if isDistBinaryName(e.Name()) {
 			binaries = append(binaries, filepath.Join(distDir, e.Name()))
 		}
 	}
-
 	if len(binaries) == 0 {
-		return fmt.Errorf("no release binaries found in %s", distDir)
+		return nil, fmt.Errorf("no release binaries found in %s", distDir)
 	}
+	sort.Strings(binaries)
+	return binaries, nil
+}
 
+// runDistSBOM writes one SPDX SBOM per release artifact plus manifest.json
+// mapping each artifact to its exact sha256 and SBOM. With verify it instead
+// fails closed on a missing SBOM or any digest drift.
+// writeInventory renders the union of the per-artifact SBOMs as a human-readable
+// markdown license inventory (component, version, source, SPDX, evidence,
+// inclusion mechanism, obligations, artifacts carrying it).
+func writeInventory(path string, docs map[string]*SPDXDocument, m distManifest) error {
+	type row struct {
+		pkg  SPDXPackage
+		arts []string
+	}
+	rows := map[string]*row{}
+	for art, doc := range docs {
+		for _, p := range doc.Packages[1:] {
+			k := p.Name + "@" + p.VersionInfo
+			if rows[k] == nil {
+				rows[k] = &row{pkg: p}
+			}
+			rows[k].arts = append(rows[k].arts, art)
+		}
+	}
+	keys := make([]string, 0, len(rows))
+	for k := range rows {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	b.WriteString("# Shipped component license inventory (generated)\n\n")
+	b.WriteString("Generated by `scripts/release-sbom.sh` (`bashy release sbom --dist DIR --inventory FILE`). Do not edit by hand.\n")
+	b.WriteString("Every row is linked into at least one release binary (`inclusion=go-module-linked`); runtime downloads are NOT here — see `docs/runtime-acquisition-inventory.md`.\n\n")
+	b.WriteString("## Artifacts\n\n| Artifact | sha256 | SBOM | Packages |\n|---|---|---|---|\n")
+	for _, a := range m.Artifacts {
+		fmt.Fprintf(&b, "| `%s` | `%s` | `%s` | %d |\n", a.Artifact, a.SHA256, a.SBOM, a.Packages)
+	}
+	b.WriteString("\n## Components\n\n| Component | Version | Source | SPDX | Evidence | Inclusion | Obligations | Artifacts |\n|---|---|---|---|---|---|---|---|\n")
+	for _, k := range keys {
+		r := rows[k]
+		sort.Strings(r.arts)
+		ev := "none"
+		if i := strings.Index(r.pkg.Comment, "evidence="); i >= 0 {
+			ev = r.pkg.Comment[i+len("evidence="):]
+		}
+		fmt.Fprintf(&b, "| `%s` | `%s` | %s | %s | %s | go-module-linked | %s | %s |\n",
+			r.pkg.Name, r.pkg.VersionInfo, r.pkg.DownloadLocation, r.pkg.LicenseConcluded, ev,
+			licenseObligations(r.pkg.LicenseConcluded), strings.Join(r.arts, ", "))
+	}
+	return os.WriteFile(path, []byte(b.String()), 0o644)
+}
+
+func licenseObligations(spdx string) string {
+	switch {
+	case strings.HasPrefix(spdx, "Apache"):
+		return "notice + license text; state changes"
+	case strings.HasPrefix(spdx, "BSD"), spdx == "MIT", spdx == "ISC", spdx == "0BSD":
+		return "retain copyright + license text"
+	case spdx == "" || spdx == "UNKNOWN":
+		return "UNKNOWN (gate fails)"
+	}
+	return "retain license text; review (" + spdx + ")"
+}
+
+func runDistSBOM(stdout, stderr io.Writer, distDir, outDir, inventory string, gate, verify bool) error {
+	binaries, err := collectDistBinaries(distDir)
+	if err != nil {
+		return err
+	}
 	if outDir == "" {
 		outDir = filepath.Join(distDir, "sbom")
 	}
+
+	if verify {
+		raw, err := os.ReadFile(filepath.Join(outDir, "manifest.json"))
+		if err != nil {
+			return fmt.Errorf("SBOM manifest missing: %w", err)
+		}
+		var m distManifest
+		if err := json.Unmarshal(raw, &m); err != nil {
+			return fmt.Errorf("parse manifest: %w", err)
+		}
+		byName := map[string]distManifestEntry{}
+		for _, a := range m.Artifacts {
+			byName[a.Artifact] = a
+		}
+		var problems []string
+		for _, bin := range binaries {
+			rel, _ := filepath.Rel(distDir, bin)
+			rel = filepath.ToSlash(rel)
+			ent, ok := byName[rel]
+			if !ok {
+				problems = append(problems, rel+": no SBOM entry")
+				continue
+			}
+			sum, err := fileSHA256(bin)
+			if err != nil {
+				problems = append(problems, rel+": "+err.Error())
+				continue
+			}
+			if sum != ent.SHA256 {
+				problems = append(problems, fmt.Sprintf("%s: digest drift (binary %s, manifest %s)", rel, sum, ent.SHA256))
+				continue
+			}
+			var doc SPDXDocument
+			sraw, err := os.ReadFile(filepath.Join(outDir, ent.SBOM))
+			if err != nil || json.Unmarshal(sraw, &doc) != nil {
+				problems = append(problems, rel+": SBOM unreadable")
+				continue
+			}
+			if len(doc.Packages) == 0 || len(doc.Packages[0].Checksums) == 0 || doc.Packages[0].Checksums[0].ChecksumValue != sum {
+				problems = append(problems, rel+": SBOM root digest does not match binary")
+				continue
+			}
+			if err := ValidateLicenseGate(&doc); err != nil {
+				problems = append(problems, rel+": "+err.Error())
+			}
+		}
+		if len(problems) > 0 {
+			return fmt.Errorf("release sbom verify failed:\n  - %s", strings.Join(problems, "\n  - "))
+		}
+		fmt.Fprintf(stdout, "release sbom: VERIFIED %d artifacts\n", len(binaries))
+		return nil
+	}
+
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err
 	}
-
+	var m distManifest
+	docs := map[string]*SPDXDocument{}
 	for _, bin := range binaries {
 		doc, err := GenerateSBOM(bin, SBOMOptions{Gate: gate})
 		if err != nil {
 			return fmt.Errorf("%s: %w", bin, err)
 		}
-		outPath := filepath.Join(outDir, doc.Name+".spdx.json")
+		rel, _ := filepath.Rel(distDir, bin)
+		rel = filepath.ToSlash(rel)
+		outName := strings.ReplaceAll(rel, "/", "-") + ".spdx.json"
 		data, err := json.MarshalIndent(doc, "", "  ")
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(outPath, append(data, '\n'), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(outDir, outName), append(data, '\n'), 0o644); err != nil {
 			return err
 		}
-		fmt.Fprintf(stderr, "release sbom: generated %s (%d packages)\n", outPath, len(doc.Packages))
+		docs[rel] = doc
+		m.Artifacts = append(m.Artifacts, distManifestEntry{
+			Artifact: rel,
+			SHA256:   doc.Packages[0].Checksums[0].ChecksumValue,
+			SBOM:     outName,
+			Packages: len(doc.Packages),
+		})
+		fmt.Fprintf(stderr, "release sbom: generated %s (%d packages)\n", filepath.Join(outDir, outName), len(doc.Packages))
 	}
-	return nil
+	if inventory != "" {
+		if err := writeInventory(inventory, docs, m); err != nil {
+			return err
+		}
+	}
+	mdata, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(outDir, "manifest.json"), append(mdata, '\n'), 0o644)
 }

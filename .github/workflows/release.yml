@@ -79,6 +79,14 @@ jobs:
         env:
           LICENSE_GATE_OUT: ${{ runner.temp }}/license-gate
         run: ./scripts/verify-license-gate.sh | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Release SBOM matrix (bashy, engine build, outpost) + digest verify
+        shell: bash
+        run: ./scripts/release-sbom.sh "$RUNNER_TEMP/sbom-matrix"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-sbom-matrix
+          path: ${{ runner.temp }}/sbom-matrix/sbom/*
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: always()
         with:

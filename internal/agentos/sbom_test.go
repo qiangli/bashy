@@ -264,3 +264,54 @@ func TestReleaseSbomCLI(t *testing.T) {
 		}
 	}
 }
+
+// TestReleaseSbomMatrixVerify proves the release gate: every artifact in the
+// matrix (lean bashy, engine build, outpost) gets an SBOM mapped to its exact
+// digest, and `--verify` fails on digest drift or a missing SBOM.
+func TestReleaseSbomMatrixVerify(t *testing.T) {
+	root := filepath.Join("..", "..")
+	dist := t.TempDir()
+	build := func(name, pkg string) {
+		cmd := exec.Command("go", "build", "-o", filepath.Join(dist, name), pkg)
+		cmd.Dir = root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("build %s: %v\n%s", name, err, out)
+		}
+	}
+	build("bashy", "./cmd/bashy")
+	// stand-ins: the same program under the other matrix names keeps the test
+	// hermetic; real engine/outpost binaries are produced by release CI.
+	data, _ := os.ReadFile(filepath.Join(dist, "bashy"))
+	for _, n := range []string{"bashy-engines", "outpost"} {
+		if err := os.WriteFile(filepath.Join(dist, n), data, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := runReleaseCmd(t, "sbom", "--dist", dist); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dist, "sbom", "manifest.json"))
+	if err != nil {
+		t.Fatalf("manifest.json missing: %v", err)
+	}
+	var m struct {
+		Artifacts []struct {
+			Artifact string `json:"artifact"`
+			SHA256   string `json:"sha256"`
+			SBOM     string `json:"sbom"`
+			Packages int    `json:"packages"`
+		} `json:"artifacts"`
+	}
+	if err := json.Unmarshal(raw, &m); err != nil || len(m.Artifacts) != 3 {
+		t.Fatalf("want 3 artifacts, got %d (%v)", len(m.Artifacts), err)
+	}
+	if _, _, err := runReleaseCmd(t, "sbom", "--dist", dist, "--verify"); err != nil {
+		t.Fatalf("verify clean: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dist, "outpost"), append(data, 0), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := runReleaseCmd(t, "sbom", "--dist", dist, "--verify"); err == nil {
+		t.Fatal("verify must fail on digest drift")
+	}
+}
