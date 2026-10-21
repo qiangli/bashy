@@ -7,14 +7,18 @@ Every row is linked into at least one release binary (`inclusion=go-module-linke
 
 | Artifact | sha256 | SBOM | Packages |
 |---|---|---|---|
-| `bashy` | `6940a1304cf671405abe2e8f9872fdadc51eac61822dfb9ba339bcce9359d812` | `bashy.spdx.json` | 235 |
-| `bashy-engines` | `23184b7e24e88b74e836b94a35c86063a6f395eef726fb6ab4fbda7e2167979c` | `bashy-engines.spdx.json` | 348 |
-| `outpost` | `4998cb4d0a0afa630e3c1ed79167050a653d8bbaccf4dea31dced68767844f17` | `outpost.spdx.json` | 252 |
+| `bashy` | `a8946345cf5f12dcd4a51f6af551e4bfeb38afdb024120a474243fa7460df9ab` | `bashy.spdx.json` | 235 |
+| `bashy-engines` | `2201f6ddde46ebd1d15b9c3d930c385c9b388e4312ce114582c4b238f1d32739` | `bashy-engines.spdx.json` | 348 |
+| `outpost` | `dc4e31ac47f2642a24ed3800e3da01f020ed766d2f84ae28a8b2efd1a1537391` | `outpost.spdx.json` | 252 |
 
 ## Components
 
 | Component | Version | Source | SPDX | Evidence | Inclusion | Obligations | Artifacts |
 |---|---|---|---|---|---|---|---|
+| `./yamux/v5` | `(devel)` | NOASSERTION | Apache-2.0 | LICENSE-APACHE | go-module-linked | notice + license text; state changes | outpost |
+| `./yoke/external/go-billy` | `(devel)` | NOASSERTION | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy, bashy-engines, outpost |
+| `./yoke/external/multierror` | `(devel)` | NOASSERTION | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines |
+| `./yoke/external/securejoin` | `(devel)` | NOASSERTION | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines |
 | `charm.land/bubbles/v2` | `v2.2.1` | https://pkg.go.dev/charm.land/bubbles/v2 | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
 | `charm.land/bubbletea/v2` | `v2.0.9` | https://pkg.go.dev/charm.land/bubbletea/v2 | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
 | `charm.land/lipgloss/v2` | `v2.0.6` | https://pkg.go.dev/charm.land/lipgloss/v2 | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
@@ -43,8 +47,9 @@ Every row is linked into at least one release binary (`inclusion=go-module-linke
 | `github.com/asticode/go-astits` | `v1.15.0` | https://pkg.go.dev/github.com/asticode/go-astits | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
 | `github.com/atotto/clipboard` | `v0.1.4` | https://pkg.go.dev/github.com/atotto/clipboard | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
 | `github.com/bahlo/generic-list-go` | `v0.2.0` | https://pkg.go.dev/github.com/bahlo/generic-list-go | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy-engines |
-| `github.com/bashsharp/bashsharp` | `v0.0.0-20261019110739-ec4bfc0515a2` | https://pkg.go.dev/github.com/bashsharp/bashsharp | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
+| `github.com/bashsharp/bashsharp` | `(devel)` | https://pkg.go.dev/github.com/bashsharp/bashsharp | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
 | `github.com/benbjohnson/clock` | `v1.3.5` | https://pkg.go.dev/github.com/benbjohnson/clock | MIT | LICENSE | go-module-linked | retain copyright + license text | outpost |
+| `github.com/benhoyt/goawk` | `v0.0.0-20261018024844-02b24ff1db5d` | https://pkg.go.dev/github.com/benhoyt/goawk | MIT | LICENSE.txt | go-module-linked | retain copyright + license text | bashy, bashy-engines |
 | `github.com/beorn7/perks` | `v1.0.1` | https://pkg.go.dev/github.com/beorn7/perks | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
 | `github.com/bits-and-blooms/bitset` | `v1.24.6` | https://pkg.go.dev/github.com/bits-and-blooms/bitset | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
 | `github.com/blang/semver/v4` | `v4.0.0` | https://pkg.go.dev/github.com/blang/semver/v4 | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines |
@@ -126,13 +131,15 @@ Every row is linked into at least one release binary (`inclusion=go-module-linke
 | `github.com/dunglas/httpsfv` | `v1.1.0` | https://pkg.go.dev/github.com/dunglas/httpsfv | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | outpost |
 | `github.com/dustin/go-humanize` | `v1.0.1` | https://pkg.go.dev/github.com/dustin/go-humanize | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
 | `github.com/ebitengine/purego` | `v0.10.1` | https://pkg.go.dev/github.com/ebitengine/purego | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy, bashy-engines, outpost |
-| `github.com/emicklei/go-restful/v3` | `v3.12.2` | https://pkg.go.dev/github.com/emicklei/go-restful/v3 | MIT | LICENSE | go-module-linked | retain copyright + license text | outpost |
+| `github.com/emicklei/go-restful/v3` | `v3.13.0` | https://pkg.go.dev/github.com/emicklei/go-restful/v3 | MIT | LICENSE | go-module-linked | retain copyright + license text | outpost |
 | `github.com/emirpasic/gods/v2` | `v2.0.0-alpha` | https://pkg.go.dev/github.com/emirpasic/gods/v2 | BSD-2-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy-engines |
 | `github.com/emirpasic/gods` | `v1.18.1` | https://pkg.go.dev/github.com/emirpasic/gods | BSD-2-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
+| `github.com/ergochat/readline` | `v0.1.4-0.20261013004858-df59d4e258e4` | https://pkg.go.dev/github.com/ergochat/readline | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
 | `github.com/fatedier/frp` | `v0.68.1` | https://pkg.go.dev/github.com/fatedier/frp | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
 | `github.com/fatedier/golib` | `v0.6.0` | https://pkg.go.dev/github.com/fatedier/golib | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
 | `github.com/felixge/fgprof` | `v0.9.5` | https://pkg.go.dev/github.com/felixge/fgprof | MIT | LICENSE.txt | go-module-linked | retain copyright + license text | bashy, bashy-engines |
 | `github.com/felixge/httpsnoop` | `v1.1.0` | https://pkg.go.dev/github.com/felixge/httpsnoop | MIT | LICENSE.txt | go-module-linked | retain copyright + license text | bashy, bashy-engines |
+| `github.com/filebrowser/filebrowser/v2` | `v2.0.0-20261021004418-d1d2feab4473` | https://pkg.go.dev/github.com/filebrowser/filebrowser/v2 | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy, bashy-engines, outpost |
 | `github.com/flynn/go-shlex` | `v0.0.0-20150515145356-3f9db97f8568` | https://pkg.go.dev/github.com/flynn/go-shlex | Apache-2.0 | COPYING | go-module-linked | notice + license text; state changes | bashy, bashy-engines, outpost |
 | `github.com/flynn/noise` | `v1.1.0` | https://pkg.go.dev/github.com/flynn/noise | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | outpost |
 | `github.com/fsnotify/fsnotify` | `v1.10.1` | https://pkg.go.dev/github.com/fsnotify/fsnotify | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
@@ -165,7 +172,7 @@ Every row is linked into at least one release binary (`inclusion=go-module-linke
 | `github.com/go-openapi/swag` | `v0.26.0` | https://pkg.go.dev/github.com/go-openapi/swag | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
 | `github.com/go-playground/locales` | `v0.14.1` | https://pkg.go.dev/github.com/go-playground/locales | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines, outpost |
 | `github.com/go-playground/universal-translator` | `v0.18.1` | https://pkg.go.dev/github.com/go-playground/universal-translator | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines, outpost |
-| `github.com/go-playground/validator/v10` | `v10.30.2` | https://pkg.go.dev/github.com/go-playground/validator/v10 | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines, outpost |
+| `github.com/go-playground/validator/v10` | `v10.30.3` | https://pkg.go.dev/github.com/go-playground/validator/v10 | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines, outpost |
 | `github.com/go-viper/mapstructure/v2` | `v2.5.0` | https://pkg.go.dev/github.com/go-viper/mapstructure/v2 | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
 | `github.com/gobwas/httphead` | `v0.1.0` | https://pkg.go.dev/github.com/gobwas/httphead | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
 | `github.com/gobwas/pool` | `v0.2.1` | https://pkg.go.dev/github.com/gobwas/pool | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
@@ -266,6 +273,8 @@ Every row is linked into at least one release binary (`inclusion=go-module-linke
 | `github.com/ncruces/go-strftime` | `v1.0.0` | https://pkg.go.dev/github.com/ncruces/go-strftime | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
 | `github.com/nguyenthenguyen/docx` | `v0.0.0-20230621112118-9c8e795a11db` | https://pkg.go.dev/github.com/nguyenthenguyen/docx | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
 | `github.com/nlpodyssey/gopickle` | `v0.3.0` | https://pkg.go.dev/github.com/nlpodyssey/gopickle | BSD-2-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy-engines |
+| `github.com/odvcencio/gotreesitter` | `v0.0.0-20261013004852-f03173f827ed` | https://pkg.go.dev/github.com/odvcencio/gotreesitter | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
+| `github.com/ollama/ollama` | `v0.0.0-20261016181410-b0d0bbba93ab` | https://pkg.go.dev/github.com/ollama/ollama | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines |
 | `github.com/opencontainers/cgroups` | `v0.0.6` | https://pkg.go.dev/github.com/opencontainers/cgroups | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy-engines |
 | `github.com/opencontainers/go-digest` | `v1.0.0` | https://pkg.go.dev/github.com/opencontainers/go-digest | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy-engines |
 | `github.com/opencontainers/image-spec` | `v1.1.1` | https://pkg.go.dev/github.com/opencontainers/image-spec | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy-engines |
@@ -307,28 +316,17 @@ Every row is linked into at least one release binary (`inclusion=go-module-linke
 | `github.com/prometheus/client_model` | `v0.6.2` | https://pkg.go.dev/github.com/prometheus/client_model | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy, bashy-engines, outpost |
 | `github.com/prometheus/common` | `v0.67.5` | https://pkg.go.dev/github.com/prometheus/common | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy, bashy-engines, outpost |
 | `github.com/prometheus/statsd_exporter` | `v0.29.0` | https://pkg.go.dev/github.com/prometheus/statsd_exporter | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy, bashy-engines |
-| `github.com/qiangli/bonsai` | `v0.0.0-20261013041512-fbfc95fa4dda` | https://pkg.go.dev/github.com/qiangli/bonsai | Apache-2.0 | LICENSE.txt | go-module-linked | notice + license text; state changes | bashy, bashy-engines |
-| `github.com/qiangli/coreutils/third_party/goawk` | `v0.0.0-20261018024844-02b24ff1db5d` | https://pkg.go.dev/github.com/qiangli/coreutils/third_party/goawk | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
-| `github.com/qiangli/coreutils` | `v0.0.0-20261019154849-42845e33d023` | https://pkg.go.dev/github.com/qiangli/coreutils | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
-| `github.com/qiangli/filebrowser/v2` | `v2.0.0-20261021004418-d1d2feab4473` | https://pkg.go.dev/github.com/qiangli/filebrowser/v2 | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy, bashy-engines, outpost |
-| `github.com/qiangli/gfy` | `v0.0.0-20261013004914-30d38f086034` | https://pkg.go.dev/github.com/qiangli/gfy | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
-| `github.com/qiangli/gotreesitter` | `v0.0.0-20261013004852-f03173f827ed` | https://pkg.go.dev/github.com/qiangli/gotreesitter | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
-| `github.com/qiangli/ollama` | `v0.0.0-20261016181410-b0d0bbba93ab` | https://pkg.go.dev/github.com/qiangli/ollama | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines |
-| `github.com/qiangli/podman/v6` | `v6.0.0-20261013004941-fa029d9c82fb` | https://pkg.go.dev/github.com/qiangli/podman/v6 | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy-engines |
-| `github.com/qiangli/readline` | `v0.1.4-0.20261013004858-df59d4e258e4` | https://pkg.go.dev/github.com/qiangli/readline | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
-| `github.com/qiangli/sh/v3` | `v3.0.0-20261019110026-de35c153b5f6` | https://pkg.go.dev/github.com/qiangli/sh/v3 | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
+| `github.com/qiangli/bonsai` | `11abc9c7d21d3944fdaa7b6215e62ee48b923489` | https://pkg.go.dev/github.com/qiangli/bonsai | Apache-2.0 | LICENSE.txt | go-module-linked | notice + license text; state changes | bashy, bashy-engines |
+| `github.com/qiangli/coreutils` | `11abc9c7d21d3944fdaa7b6215e62ee48b923489` | https://pkg.go.dev/github.com/qiangli/coreutils | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
+| `github.com/qiangli/gfy` | `11abc9c7d21d3944fdaa7b6215e62ee48b923489` | https://pkg.go.dev/github.com/qiangli/gfy | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
 | `github.com/qiangli/sqlite` | `v1.50.2-0.20261018085128-5fb52bf328cb` | https://pkg.go.dev/github.com/qiangli/sqlite | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
-| `github.com/qiangli/yamux/v5` | `v5.0.0` | https://pkg.go.dev/github.com/qiangli/yamux/v5 | Apache-2.0 | LICENSE-APACHE | go-module-linked | notice + license text; state changes | outpost |
 | `github.com/qiangli/yamux` | `v0.1.0` | https://pkg.go.dev/github.com/qiangli/yamux | Apache-2.0 | LICENSE-APACHE | go-module-linked | notice + license text; state changes | outpost |
 | `github.com/qiangli/ycode/examples/genie` | `v0.0.0-20261011021240-aa0d91dd60d2` | https://pkg.go.dev/github.com/qiangli/ycode/examples/genie | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
-| `github.com/qiangli/ycode` | `v0.3.1-dev.0.20261020201152-9526fabcd34a` | https://pkg.go.dev/github.com/qiangli/ycode | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
-| `github.com/qiangli/yoke/external/go-billy` | `v0.0.0-20261021004834-b008dcc14dfa` | https://pkg.go.dev/github.com/qiangli/yoke/external/go-billy | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy, bashy-engines, outpost |
-| `github.com/qiangli/yoke/external/multierror` | `v0.0.0-20261021020216-636e2fd289e9` | https://pkg.go.dev/github.com/qiangli/yoke/external/multierror | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines |
-| `github.com/qiangli/yoke/external/securejoin` | `v0.0.0-20261021020216-636e2fd289e9` | https://pkg.go.dev/github.com/qiangli/yoke/external/securejoin | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines |
-| `github.com/qiangli/yoke/pkg/llmgw` | `v0.0.0-20261017214100-19415c55382f` | https://pkg.go.dev/github.com/qiangli/yoke/pkg/llmgw | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
-| `github.com/qiangli/yoke/pkg/oci` | `v0.0.0-20261017214100-19415c55382f` | https://pkg.go.dev/github.com/qiangli/yoke/pkg/oci | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines |
-| `github.com/qiangli/yoke/pkg/provider` | `v0.0.0-20261020150104-8520a0e9a6a4` | https://pkg.go.dev/github.com/qiangli/yoke/pkg/provider | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
-| `github.com/qiangli/yoke` | `v0.0.0-20261021022553-5138f66b43af` | https://pkg.go.dev/github.com/qiangli/yoke | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
+| `github.com/qiangli/ycode` | `11abc9c7d21d3944fdaa7b6215e62ee48b923489` | https://pkg.go.dev/github.com/qiangli/ycode | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
+| `github.com/qiangli/yoke/pkg/llmgw` | `11abc9c7d21d3944fdaa7b6215e62ee48b923489` | https://pkg.go.dev/github.com/qiangli/yoke/pkg/llmgw | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
+| `github.com/qiangli/yoke/pkg/oci` | `11abc9c7d21d3944fdaa7b6215e62ee48b923489` | https://pkg.go.dev/github.com/qiangli/yoke/pkg/oci | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines |
+| `github.com/qiangli/yoke/pkg/provider` | `11abc9c7d21d3944fdaa7b6215e62ee48b923489` | https://pkg.go.dev/github.com/qiangli/yoke/pkg/provider | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
+| `github.com/qiangli/yoke` | `11abc9c7d21d3944fdaa7b6215e62ee48b923489` | https://pkg.go.dev/github.com/qiangli/yoke | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
 | `github.com/quic-go/qpack` | `v0.6.0` | https://pkg.go.dev/github.com/quic-go/qpack | MIT | LICENSE.md | go-module-linked | retain copyright + license text | bashy-engines, outpost |
 | `github.com/quic-go/quic-go` | `v0.59.1` | https://pkg.go.dev/github.com/quic-go/quic-go | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines, outpost |
 | `github.com/quic-go/webtransport-go` | `v0.10.0` | https://pkg.go.dev/github.com/quic-go/webtransport-go | MIT | LICENSE | go-module-linked | retain copyright + license text | outpost |
@@ -422,6 +420,7 @@ Every row is linked into at least one release binary (`inclusion=go-module-linke
 | `go.podman.io/buildah` | `v1.42.1-0.20260421143840-0acb6b8cca85` | https://pkg.go.dev/go.podman.io/buildah | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy-engines |
 | `go.podman.io/common` | `v0.67.2-0.20260423135811-cbaa5f41e643` | https://pkg.go.dev/go.podman.io/common | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy-engines |
 | `go.podman.io/image/v5` | `v5.39.3-0.20260423135811-cbaa5f41e643` | https://pkg.go.dev/go.podman.io/image/v5 | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy-engines |
+| `go.podman.io/podman/v6` | `v6.0.0-20261013004941-fa029d9c82fb` | https://pkg.go.dev/go.podman.io/podman/v6 | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy-engines |
 | `go.podman.io/storage` | `v1.62.1-0.20260423135811-cbaa5f41e643` | https://pkg.go.dev/go.podman.io/storage | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy-engines |
 | `go.uber.org/dig` | `v1.19.0` | https://pkg.go.dev/go.uber.org/dig | MIT | LICENSE | go-module-linked | retain copyright + license text | outpost |
 | `go.uber.org/fx` | `v1.24.0` | https://pkg.go.dev/go.uber.org/fx | MIT | LICENSE | go-module-linked | retain copyright + license text | outpost |
@@ -452,15 +451,15 @@ Every row is linked into at least one release binary (`inclusion=go-module-linke
 | `google.golang.org/protobuf` | `v1.36.12-0.20260120151049-f2248ac996af` | https://pkg.go.dev/google.golang.org/protobuf | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
 | `gopkg.in/evanphx/json-patch.v4` | `v4.13.0` | https://pkg.go.dev/gopkg.in/evanphx/json-patch.v4 | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | outpost |
 | `gopkg.in/inf.v0` | `v0.9.1` | https://pkg.go.dev/gopkg.in/inf.v0 | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | outpost |
-| `gopkg.in/ini.v1` | `v1.67.0` | https://pkg.go.dev/gopkg.in/ini.v1 | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
+| `gopkg.in/ini.v1` | `v1.67.2` | https://pkg.go.dev/gopkg.in/ini.v1 | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
 | `gopkg.in/warnings.v0` | `v0.1.2` | https://pkg.go.dev/gopkg.in/warnings.v0 | BSD-2-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
 | `gopkg.in/yaml.v2` | `v2.4.0` | https://pkg.go.dev/gopkg.in/yaml.v2 | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy, bashy-engines, outpost |
 | `gopkg.in/yaml.v3` | `v3.0.1` | https://pkg.go.dev/gopkg.in/yaml.v3 | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | bashy, bashy-engines, outpost |
 | `gorgonia.org/vecf32` | `v0.9.0` | https://pkg.go.dev/gorgonia.org/vecf32 | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines |
 | `gorgonia.org/vecf64` | `v0.9.0` | https://pkg.go.dev/gorgonia.org/vecf64 | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy-engines |
-| `k8s.io/api` | `v0.35.0` | https://pkg.go.dev/k8s.io/api | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
-| `k8s.io/apimachinery` | `v0.35.0` | https://pkg.go.dev/k8s.io/apimachinery | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
-| `k8s.io/client-go` | `v0.35.0` | https://pkg.go.dev/k8s.io/client-go | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
+| `k8s.io/api` | `v0.35.3` | https://pkg.go.dev/k8s.io/api | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
+| `k8s.io/apimachinery` | `v0.35.4` | https://pkg.go.dev/k8s.io/apimachinery | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
+| `k8s.io/client-go` | `v0.35.3` | https://pkg.go.dev/k8s.io/client-go | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
 | `k8s.io/klog/v2` | `v2.140.0` | https://pkg.go.dev/k8s.io/klog/v2 | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
 | `k8s.io/kube-openapi` | `v0.0.0-20250910181357-589584f1c912` | https://pkg.go.dev/k8s.io/kube-openapi | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
 | `k8s.io/utils` | `v0.0.0-20251002143259-bc988d571ff4` | https://pkg.go.dev/k8s.io/utils | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
@@ -468,6 +467,7 @@ Every row is linked into at least one release binary (`inclusion=go-module-linke
 | `modernc.org/libc` | `v1.72.3` | https://pkg.go.dev/modernc.org/libc | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
 | `modernc.org/mathutil` | `v1.7.1` | https://pkg.go.dev/modernc.org/mathutil | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
 | `modernc.org/memory` | `v1.11.0` | https://pkg.go.dev/modernc.org/memory | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
+| `mvdan.cc/sh/v3` | `v3.0.0-20261019110026-de35c153b5f6` | https://pkg.go.dev/mvdan.cc/sh/v3 | BSD-3-Clause | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines, outpost |
 | `resty.dev/v3` | `v3.0.0-rc.2` | https://pkg.go.dev/resty.dev/v3 | MIT | LICENSE | go-module-linked | retain copyright + license text | bashy, bashy-engines |
 | `sigs.k8s.io/json` | `v0.0.0-20250730193827-2d320260d730` | https://pkg.go.dev/sigs.k8s.io/json | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
 | `sigs.k8s.io/randfill` | `v1.0.0` | https://pkg.go.dev/sigs.k8s.io/randfill | Apache-2.0 | LICENSE | go-module-linked | notice + license text; state changes | outpost |
