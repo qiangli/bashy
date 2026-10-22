@@ -3,6 +3,19 @@
 [![release](https://img.shields.io/github/v/release/qiangli/bashy?label=release)](https://github.com/qiangli/bashy/releases/latest)
 [![tour](https://github.com/bashsharp/tour/actions/workflows/tour.yml/badge.svg)](https://github.com/bashsharp/tour/actions/workflows/tour.yml)
 
+> **Bash is for humans; bashy is for agents.** One binary gives every
+> machine, and every agent on it, the same shell, the same userland and the same
+> tools. **bashy is all you need.**
+
+- **bash + coreutils in pure Go**: one executable per platform, no system bash,
+  no GNU-vs-BSD drift.
+- **GNU Bash 5.3 compatible**: Bash's own 5.3 suite, 86/86.
+- **Built to POSIX.1-2016 (IEEE Std 1003.1-2016)**: 493/493 on the licensed
+  conformance suite; formal certification is in progress.
+- **Bash#, "Go with bash"**: the bash you know, typed Go where you need it.
+- **Yoke, bashy's agentic shell harness**: the name is a backronym, *Bashy's
+  Agentic Shell Harness Yoke*.
+
 `bashy` is one executable per platform, with no system bash dependency — a **drop-in
 Bash 5.3** on Linux, macOS and Windows: same flags, same script semantics,
 Bash-compatible `$BASH_VERSION`, and it passes GNU Bash's own 5.3 test suite (every
@@ -87,6 +100,63 @@ commands, run deterministically.
   checks, `bashy dag` for dependency-ordered tasks in Markdown, `bashy awd`
   for "run this there", registered commands, and the `agentic` yield status
   a harness can act on.
+
+## Layers, tiers and the o-zone
+
+Three words locate any bashy feature. A **layer** says *what language or tool
+surface* you are using, a **tier** says *where the work runs*, and the
+**o-zone** names the three runtime services every tier leans on.
+
+**Layers: bash → Bash# → bashy.** Each layer is cumulative, and a higher one
+may never weaken a lower one.
+
+| Layer | What it is | Also called |
+|---|---|---|
+| **bash** | GNU Bash 5.3 compatibility, POSIX.1-2016 conformance, and the pure-Go coreutils userland | Classic |
+| **Bash#** | Go with bash: typed Go, fenced Python / TypeScript / Rust / C / C++ islands, contracts, `agentic` | the language |
+| **bashy** | the agentic shell harness: tools, policy, durable sessions, coordination, workflow, observability | Yoke |
+
+**Tiers: userland → workplace → sandbox → sphere → cluster → cloud.** A
+command has one primary tier; userland tools work in every tier.
+
+| Tier | Primary purpose | Examples |
+|---|---|---|
+| **userland** | POSIX/coreutils, classic utilities, toolchains | `bashy`, `sed`, `awk`, `jq`, `make` |
+| **workplace** | agent work and collaboration | `weave`, `dag`, `sprint`, `inbox` |
+| **sandbox** | OCI containers | `bashy oci` (`sandbox`) |
+| **sphere** | peer-to-peer capabilities, e.g. pooled LLMs | `bashy sphere` |
+| **cluster** | Kubernetes / DKS orchestration | `bashy kubectl`, `helm` |
+| **cloud** | external providers | `bashy doctl`, `aws`, `gcloud` |
+
+**The o-zone (O3): otel · ollama · oci.** The extended runtime beyond
+coreutils: **otel** for traces and metrics on every run, **ollama** for local
+models, **oci** (podman) for sandboxes. bashy manages all three for you. The
+separately licensed programs (podman, ollama) are downloaded and checksum-verified
+on first use, never bundled.
+
+## bashy, outpost and cloudbox
+
+bashy is one of three pieces that together let agents operate **easily,
+safely, securely, and with each other**, on the machines you already own:
+
+- **bashy**, the agent's shell and toolbox, on every machine.
+- **[outpost](https://github.com/qiangli/outpost)**, the host agent. It runs
+  on your laptops, desktops and servers, serves the apps you choose to expose,
+  and pairs each machine with a satellite so your fleet can reach it.
+- **cloudbox**, the coordination plane, offered as the hosted service
+  [Tessaro](https://tessaro.sh). It handles identity, scoped short-lived
+  tokens, grants, satellites, and the metadata needed to rebuild everything.
+  It **coordinates; it does not host your work.**
+
+Two rules shape all three:
+
+- **Local first.** Compute, GPUs, storage and connections are yours: your
+  machines, your satellites, your choice of cloud or S3 bucket. The cloud is a
+  thin, replaceable relay.
+- **Rod, not fish.** bashy ships simple, composable tools (`--json`,
+  `--dry-run`, idempotent, credentials from a vault), not one-off answers.
+  Named providers in the docs are examples; an agent can wire any backend the
+  tools reach.
 
 Built on the [`qiangli/sh`](https://github.com/qiangli/sh) fork of
 [`mvdan.cc/sh`](https://github.com/mvdan/sh) by Daniel Martí — the engine is
