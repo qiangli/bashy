@@ -22,6 +22,8 @@
 - **Built to POSIX.1-2016 (IEEE Std 1003.1-2016)**: 493/493 on the licensed
   conformance suite; formal certification is in progress.
 - **Bash#, "Go with bash"**: the bash you know, typed Go where you need it.
+  Skills and scripts are two sides of the same coin: read it as a skill, run
+  it as a script.
 - **Yoke, bashy's agentic shell harness**: the name is a backronym, *Bashy's
   Agentic Shell Harness Yoke*.
 
@@ -96,6 +98,11 @@ commands, run deterministically.
   TypeScript / Rust / C / C++ / Go / C# / PowerShell islands, decorators, keyword arguments,
   enums, deep `readonly`, contracts and `agentic`. Off with `--no-bashsharp`
   or `--posix`, where none of it exists.
+- **Skills and scripts: two sides of the same coin.** In Bash# they are one
+  object with two orientations. A skill is prose with fenced code you can run;
+  a script is code with prose around it. An agent **reads** a Bash# file as a
+  skill (what to do, why, with which tools) and **runs** the same file as a
+  script, so the instructions and the automation never drift apart.
 - **The islands bring their own toolchains.** A fence never resolves its
   tool from your `PATH`: bashy provisions what it uses — Go 1.27.2, `zig cc`
   for C/C++, a uv-managed CPython, Node + `typescript`, a rustup toolchain, and one PowerShell 7
