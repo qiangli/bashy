@@ -179,6 +179,34 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Effects:   []string{atlas.EffNet, atlas.EffRead, atlas.EffWrite, atlas.EffPersist},
 		Stability: atlas.StabilityExperimental,
 	},
+	// Satellite pairing invites (S490 f3ab64ae): invite exchanges the
+	// owner Bearer [REDACTED] a short-lived satellite token and mints a single-use
+	// invite code, writing it to a 0600 file (read+write+persist) or
+	// printing it with explicit --stdout (net+write either way).
+	"satellite": {
+		Stage: atlas.StageCross, Group: atlas.GroupPlatform, Tier: atlas.TierWorkplace,
+		Caps:      []string{atlas.CapJSON, atlas.CapNeedsNetwork, atlas.CapNeedsPairing},
+		Effects:   []string{atlas.EffNet, atlas.EffRead, atlas.EffWrite, atlas.EffPersist},
+		Stability: atlas.StabilityExperimental,
+	},
+	// Plan-only recreation dry-run (S490): reproduce --plan reads master
+	// provisioning, hosts, peers, and tokens over the network and reports
+	// recreate actions plus gaps. Read-only; there is no --apply.
+	"reproduce": {
+		Stage: atlas.StageCross, Group: atlas.GroupPlatform, Tier: atlas.TierWorkplace,
+		Caps:      []string{atlas.CapJSON, atlas.CapNeedsNetwork, atlas.CapNeedsPairing},
+		Effects:   []string{atlas.EffNet, atlas.EffRead},
+		Stability: atlas.StabilityExperimental,
+	},
+	// Paired hosts from the master (S490, yoke NewPairedHostCmd): `ls`
+	// joins the master's hosts and peers by host name. Read-only; the
+	// --satellite filter is refused, never guessed.
+	"paired-host": {
+		Stage: atlas.StageCross, Group: atlas.GroupPlatform, Tier: atlas.TierWorkplace,
+		Caps:      []string{atlas.CapJSON, atlas.CapNeedsNetwork, atlas.CapNeedsPairing},
+		Effects:   []string{atlas.EffNet, atlas.EffRead},
+		Stability: atlas.StabilityExperimental,
+	},
 	"resource": {
 		Stage: atlas.StageCross, Group: atlas.GroupDiagnostics, Tier: atlas.TierUserland,
 		Caps: []string{atlas.CapJSON, atlas.CapReadOnly}, Effects: []string{atlas.EffRead},
