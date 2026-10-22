@@ -93,12 +93,13 @@ commands, run deterministically.
   `sort`, `tar`, `jq`, `git`, `make`, … as applets, so the same script means
   the same thing on Windows.
 - **Bash#, Go with bash.** With the flag on: typed Go in shell text, fenced Python /
-  TypeScript / Rust / C / C++ / Go islands, decorators, keyword arguments,
+  TypeScript / Rust / C / C++ / Go / C# / PowerShell islands, decorators, keyword arguments,
   enums, deep `readonly`, contracts and `agentic`. Off with `--no-bashsharp`
   or `--posix`, where none of it exists.
 - **The islands bring their own toolchains.** A fence never resolves its
   tool from your `PATH`: bashy provisions what it uses — Go 1.27.2, `zig cc`
-  for C/C++, a uv-managed CPython, Node + `typescript`, a rustup toolchain —
+  for C/C++, a uv-managed CPython, Node + `typescript`, a rustup toolchain, and one PowerShell 7
+  runtime that serves both the `powershell` and `csharp` fences —
   downloaded from the vendor once, checksum-verified against a pin in this
   repo, cached — so the same program means the same thing on every machine.
   `bashy check --prepare SCRIPT...` pays that download ahead of time;
@@ -134,7 +135,7 @@ may never weaken a lower one.
 | Layer | What it is | Also called |
 |---|---|---|
 | **bash** | GNU Bash 5.3 compatibility, POSIX.1-2016 conformance, and the pure-Go coreutils userland | Classic |
-| **Bash#** | Go with bash: typed Go, fenced Python / TypeScript / Rust / C / C++ islands, contracts, `agentic` | the language |
+| **Bash#** | Go with bash: typed Go, fenced Python / TypeScript / Rust / C / C++ / C# / PowerShell islands, contracts, `agentic` | the language |
 | **bashy** | the agentic shell harness: tools, policy, durable sessions, coordination, workflow, observability | Yoke |
 
 **Tiers: userland → workplace → sandbox → sphere → cluster → cloud.** A
