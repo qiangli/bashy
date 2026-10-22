@@ -158,7 +158,7 @@ Kubernetes cluster.
 | **userland** | POSIX/coreutils, classic utilities, toolchains | `bashy`, `sed`, `awk`, `jq`, `make` |
 | **workplace** | agent work and collaboration | `weave`, `dag`, `sprint`, `inbox` |
 | **sandbox** | OCI containers | `bashy oci` (`sandbox`) |
-| **sphere** | a peer-to-peer mesh formed by the outposts on the machines you own: they share capabilities with each other directly, e.g. pooling their GPUs and local models into one LLM endpoint | `bashy sphere` |
+| **sphere** | a peer-to-peer mesh formed by the outposts on the machines you own: they share capabilities with each other directly: pooling their GPUs and local models into one LLM endpoint, and sharding a model too large for any one machine across several of them | `bashy sphere` |
 | **cluster** | a standard Kubernetes cluster (DKS) whose nodes are those same outposts, plus a satellite as control plane; run ordinary Kubernetes workloads on your own hardware | `bashy kubectl`, `helm` |
 | **cloud** | external providers | `bashy doctl`, `aws`, `gcloud` |
 
