@@ -102,7 +102,8 @@ commands, run deterministically.
   object with two orientations. A skill is prose with fenced code you can run;
   a script is code with prose around it. An agent **reads** a Bash# file as a
   skill (what to do, why, with which tools) and **runs** the same file as a
-  script, so the instructions and the automation never drift apart.
+  script, so the instructions and the automation never drift apart. (More in
+  the post [A Bash# script is a skill](https://www.linkedin.com/feed/update/urn:li:activity:7516083010736181248/).)
 - **The islands bring their own toolchains.** A fence never resolves its
   tool from your `PATH`: bashy provisions what it uses — Go 1.27.2, `zig cc`
   for C/C++, a uv-managed CPython, Node + `typescript`, a rustup toolchain, and one PowerShell 7
