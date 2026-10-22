@@ -41,6 +41,23 @@ func dispatchEngine(arg string) {
 		fmt.Fprint(os.Stderr, engineNotFoundMessage(name))
 		dispatchExit(127)
 	case "dks":
+		// Stock-build client surface (dks_stock.go): top-level help and the
+		// client verbs (status/kubeconfig/shell) run without the engine.
+		// They ride the engine-free yoke packages, so the stock binary
+		// stays free of podman-engine/k3s linkage.
+		if isStockDKSHelp(os.Args[2:]) {
+			dispatchExit(dispatchStockDKSHelp(os.Args[2:]))
+		}
+		if isStockDKSClient(os.Args[2:]) {
+			switch os.Args[2] {
+			case "status":
+				dispatchExit(runStockDKSStatus(os.Args[3:]))
+			case "kubeconfig":
+				dispatchExit(runStockDKSKubeconfig(os.Args[3:]))
+			case "shell":
+				dispatchExit(runStockDKSShell(os.Args[3:]))
+			}
+		}
 		// Federation is NOT engine-only: `bashy dks federation …` lives in
 		// the non-engine yoke/external/dks package and is routed here before
 		// the refusal below, so it works on the released lean build (Linux
@@ -59,9 +76,16 @@ func dispatchEngine(arg string) {
 		// Provisioning the rootful DKS VM needs the in-process podman
 		// machine libraries, which are only linked in the bashy_engines
 		// build. The lean build can't create a VM.
-		fmt.Fprintln(os.Stderr, "bashy dks: not available in this build — the DKS VM provisioner "+
-			"needs the engine build (`-tags bashy_engines`). On Linux, run k3s under rootful podman directly (no VM).")
-		dispatchExit(1)
+		if len(os.Args) > 2 && os.Args[2] == "provision" {
+			fmt.Fprintln(os.Stderr, stockDKSEngineMessage)
+			dispatchExit(1)
+		}
+		if len(os.Args) > 2 {
+			fmt.Fprintf(os.Stderr, "bashy dks: unknown subcommand %q — client verbs: status, kubeconfig, shell, federation, use, local, run, ps, logs, attach, stop, expose. "+
+				"VM provisioning needs the host/engine build (`-tags bashy_engines`). See `bashy dks --help`.\n", os.Args[2])
+			dispatchExit(1)
+		}
+		dispatchExit(dispatchStockDKSHelp(os.Args[2:]))
 	}
 }
 
