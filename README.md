@@ -124,8 +124,8 @@ commands, run deterministically.
   - the userland and workplace agents collaborate in (`weave`, `sprint`, `inbox`);
   - OCI sandboxes (`bashy oci`);
   - local models through ollama;
-  - the peer-to-peer sphere;
-  - Kubernetes clusters;
+  - the sphere, a peer-to-peer mesh of your own machines (their outposts);
+  - Kubernetes clusters built from those same machines;
   - the cloud provider of your choice.
 
   It is more than a bash: it is the agent's whole infrastructure, delivered as
@@ -148,14 +148,18 @@ may never weaken a lower one.
 
 **Tiers: userland → workplace → sandbox → sphere → cluster → cloud.** A
 command has one primary tier; userland tools work in every tier.
+The sphere and the cluster are not someone else's cloud: both are built from
+the hosts you own. Each machine runs an outpost; the outposts form the
+peer-to-peer sphere, and the same outposts join as nodes of a standard
+Kubernetes cluster.
 
 | Tier | Primary purpose | Examples |
 |---|---|---|
 | **userland** | POSIX/coreutils, classic utilities, toolchains | `bashy`, `sed`, `awk`, `jq`, `make` |
 | **workplace** | agent work and collaboration | `weave`, `dag`, `sprint`, `inbox` |
 | **sandbox** | OCI containers | `bashy oci` (`sandbox`) |
-| **sphere** | peer-to-peer capabilities, e.g. pooled LLMs | `bashy sphere` |
-| **cluster** | Kubernetes / DKS orchestration | `bashy kubectl`, `helm` |
+| **sphere** | a peer-to-peer mesh formed by the outposts on the machines you own: they share capabilities with each other directly, e.g. pooling their GPUs and local models into one LLM endpoint | `bashy sphere` |
+| **cluster** | a standard Kubernetes cluster (DKS) whose nodes are those same outposts, plus a satellite as control plane; run ordinary Kubernetes workloads on your own hardware | `bashy kubectl`, `helm` |
 | **cloud** | external providers | `bashy doctl`, `aws`, `gcloud` |
 
 **The o-zone (O3): otel · ollama · oci.** The extended runtime beyond
