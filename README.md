@@ -3,9 +3,18 @@
 [![release](https://img.shields.io/github/v/release/qiangli/bashy?label=release)](https://github.com/qiangli/bashy/releases/latest)
 [![tour](https://github.com/bashsharp/tour/actions/workflows/tour.yml/badge.svg)](https://github.com/bashsharp/tour/actions/workflows/tour.yml)
 
-> **Bash is for humans; bashy is for agents.** One binary gives every
-> machine, and every agent on it, the same shell, the same userland and the same
-> tools. **bashy is all you need.**
+> **Bash is for humans; bashy is for agents.**
+>
+> bashy looks like a shell, and it is one. It was also designed from the
+> ground up as a clean slate for agents: the whole infrastructure an agent
+> needs, shipped as a single tool:
+> - the userland it works in;
+> - the workspaces it shares with other agents;
+> - the sandboxes it runs untrusted code in;
+> - the local models it thinks with;
+> - the peers, clusters and clouds it reaches.
+>
+> One download, every machine, every agent. **bashy is all you need.**
 
 - **bash + coreutils in pure Go**: one executable per platform, no system bash,
   no GNU-vs-BSD drift.
@@ -83,7 +92,7 @@ commands, run deterministically.
 - **The pure-Go userland with it.** `ls`, `sed`, `awk`, `grep`, `find`,
   `sort`, `tar`, `jq`, `git`, `make`, … as applets, so the same script means
   the same thing on Windows.
-- **Bash#** with the flag on: typed Go in shell text, fenced Python /
+- **Bash#, Go with bash.** With the flag on: typed Go in shell text, fenced Python /
   TypeScript / Rust / C / C++ / Go islands, decorators, keyword arguments,
   enums, deep `readonly`, contracts and `agentic`. Off with `--no-bashsharp`
   or `--posix`, where none of it exists.
@@ -99,7 +108,19 @@ commands, run deterministically.
 - **A tool that knows its caller is an agent.** `bashy check` for static
   checks, `bashy dag` for dependency-ordered tasks in Markdown, `bashy awd`
   for "run this there", registered commands, and the `agentic` yield status
-  a harness can act on.
+  a harness can act on. **Rod, not fish:** every command is small, composable
+  and scriptable (`--json`, `--help` that doubles as a skill), so an agent
+  builds what it needs instead of waiting for a feature.
+- **One tool, every tier.** The same binary drives every tier:
+  - the userland and workplace agents collaborate in (`weave`, `sprint`, `inbox`);
+  - OCI sandboxes (`bashy oci`);
+  - local models through ollama;
+  - the peer-to-peer sphere;
+  - Kubernetes clusters;
+  - the cloud provider of your choice.
+
+  It is more than a bash: it is the agent's whole infrastructure, delivered as
+  a single tool. See *Layers, tiers and the o-zone* below.
 
 ## Layers, tiers and the o-zone
 
