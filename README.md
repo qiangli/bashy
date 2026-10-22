@@ -176,7 +176,12 @@ Any of them can manage the others with the same bashy tools:
 - `bashy weave` runs each worker in its own isolated git workspace, then
   verifies and merges the result;
 - `bashy foreman` starts, steers and watches a long-running agent;
-- `bashy inbox` and the message board let agents talk.
+- they talk to each other with the same tools:
+  - `bashy mb` (message board) to send;
+  - `bashy inbox` to read;
+  - `bashy meet` for live rooms, humans included;
+  - `bashy kb` for shared knowledge;
+  - `bashy todo` and `bashy sprint` to hand work over with its context.
 
 A conductor on one vendor can staff workers on the others and review what they
 deliver. That spreads load across subscriptions and models while every agent
