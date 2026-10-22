@@ -93,6 +93,81 @@ func TestTokenAndFleetVerbsResolve(t *testing.T) {
 	}
 }
 
+// TestSatelliteReproducePairedHostVerbsResolve proves the S490 #2644 mount
+// (Story-ID 0a55048e5c6a): `bashy satellite invite --help`, `bashy
+// reproduce --help`, and `bashy paired-host ls --help` resolve through the
+// same constructors dispatch runs, and all three verbs are catalogued (bare
+// shim), described (synopsis/schema), and classified (atlas effects for the
+// MCP descriptors). paired-host is the front-door spelling of yoke's `host`
+// tree: a bare `host` shim would shadow the platform DNS lookup.
+func TestSatelliteReproducePairedHostVerbsResolve(t *testing.T) {
+	ringDir(t)
+	for _, verb := range []string{"satellite", "reproduce", "paired-host"} {
+		if !slices.Contains(alwaysShimVerbs, verb) {
+			t.Errorf("%q not in alwaysShimVerbs (no bare shim, no catalog entry)", verb)
+		}
+		if synopsisOf(verb) == "" {
+			t.Errorf("%q has no synopsis", verb)
+		}
+	}
+	if _, _, verbs := commandsCatalog(); !slices.Contains(verbs, "satellite") ||
+		!slices.Contains(verbs, "reproduce") || !slices.Contains(verbs, "paired-host") {
+		t.Errorf("satellite/reproduce/paired-host missing from the command catalog: %v", verbs)
+	}
+
+	out, err := runFleetVerb(t, "satellite", "invite", "--help")
+	if err != nil {
+		t.Fatalf("satellite invite --help: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "--satellite") || !strings.Contains(out, "--name") {
+		t.Errorf("satellite invite --help hides the required flags:\n%s", out)
+	}
+
+	out, err = runFleetVerb(t, "reproduce", "--help")
+	if err != nil {
+		t.Fatalf("reproduce --help: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "--plan") {
+		t.Errorf("reproduce --help hides the plan-only mode:\n%s", out)
+	}
+
+	out, err = runFleetVerb(t, "paired-host", "ls", "--help")
+	if err != nil {
+		t.Fatalf("paired-host ls --help: %v\n%s", err, out)
+	}
+
+	for verb, want := range map[string][]string{
+		"satellite":   {"satellite", "satellite invite"},
+		"reproduce":   {"reproduce"},
+		"paired-host": {"paired-host", "paired-host ls"},
+	} {
+		schemas := cobraSchemas(verb)
+		for _, path := range want {
+			if _, ok := schemas[path]; !ok {
+				t.Errorf("%s schema missing %q", verb, path)
+			}
+		}
+	}
+
+	// Effects metadata the MCP descriptors carry: satellite invite =
+	// net+write (+read of the paired credential, +persist of the 0600
+	// invite file); reproduce --plan and paired-host ls are net+read.
+	satelliteEffects := verbAtlasRecord("satellite", false).Effects
+	for _, want := range []string{"net", "read", "write", "persist"} {
+		if !slices.Contains(satelliteEffects, want) {
+			t.Errorf("satellite effects = %v, want %q", satelliteEffects, want)
+		}
+	}
+	for _, verb := range []string{"reproduce", "paired-host"} {
+		effects := verbAtlasRecord(verb, false).Effects
+		for _, want := range []string{"net", "read"} {
+			if !slices.Contains(effects, want) {
+				t.Errorf("%s effects = %v, want %q", verb, effects, want)
+			}
+		}
+	}
+}
+
 // TestTokenCreateRefusesWithoutAnOutputSink proves the minted value is never
 // printed by default: without --to-secret or --stdout, create refuses before
 // any network or mint, so no value can leak to the terminal. Hermetic: the

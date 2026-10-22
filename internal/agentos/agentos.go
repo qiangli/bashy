@@ -151,7 +151,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -862,6 +862,21 @@ func dispatch() {
 		// The coordination-credential verb (S490.15b): master-token
 		// save/mint writes the 0600 master-token file, never printing it.
 		dispatchExit(dispatchFleet(os.Args[2:]))
+	case "satellite":
+		// Satellite pairing invites (S490 f3ab64ae): invite mints an
+		// owner-scoped host pairing invite on a satellite (short TTL,
+		// single use), writing the code to a 0600 file or stdout.
+		dispatchExit(dispatchSatellite(os.Args[2:]))
+	case "reproduce":
+		// Plan-only recreation dry-run (S490): reproduce --plan lists the
+		// recreate actions master metadata supports, plus the gaps it
+		// cannot serve. Read-only; there is no --apply in this run.
+		dispatchExit(dispatchReproduce(os.Args[2:]))
+	case "paired-host":
+		// Paired hosts from the master (S490, yoke NewPairedHostCmd):
+		// read-only `ls`. Spelled paired-host, not host, so the bare
+		// shim never shadows the platform DNS lookup (/usr/bin/host).
+		dispatchExit(dispatchPairedHost(os.Args[2:]))
 	case "resource", "resources":
 		cmd := resources.NewCommand()
 		setCobraArgs(cmd, os.Args[2:])
