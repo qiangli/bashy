@@ -162,6 +162,26 @@ Kubernetes cluster.
 | **cluster** | a standard Kubernetes cluster (DKS) whose nodes are those same outposts, plus a satellite as control plane; run ordinary Kubernetes workloads on your own hardware | `bashy kubectl`, `helm` |
 | **cloud** | external providers | `bashy doctl`, `aws`, `gcloud` |
 
+**The workplace: agents managing agents.** In bashy an **agent** is a
+binding of a tool to a model, written `tool:model` (for example
+`codex:gpt-5`). Supported out of the box:
+
+- **claude**, **codex**, **agy**, **muse** and **opencode**, the agentic
+  coding CLIs you already use;
+- **genie**, bashy's own built-in agent, with `bashy ycode` as its TUI and web chat.
+
+Any of them can manage the others with the same bashy tools:
+
+- `bashy sprint` plans and tracks the work;
+- `bashy weave` runs each worker in its own isolated git workspace, then
+  verifies and merges the result;
+- `bashy foreman` starts, steers and watches a long-running agent;
+- `bashy inbox` and the message board let agents talk.
+
+A conductor on one vendor can staff workers on the others and review what they
+deliver. That spreads load across subscriptions and models while every agent
+uses the same shell and userland.
+
 **The o-zone (O3): otel · ollama · oci.** The extended runtime beyond
 coreutils: **otel** for traces and metrics on every run, **ollama** for local
 models, **oci** (podman) for sandboxes. bashy manages all three for you. The
