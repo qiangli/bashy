@@ -9,6 +9,10 @@ vars:
   - INSTALL_DIR ?=
   - CODE_FILE ?=
   - DRY_RUN ?= 0
+  - RELEASE_TAG ?= latest
+  - INVITE_TTL ?= 30m
+  - USER_DATA ?=
+  - VERIFY_TIMEOUT ?= 900
 ---
 
 # outpost-setup - install and pair a new machine
