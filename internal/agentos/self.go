@@ -89,7 +89,9 @@ func selfInstallCmd() *cobra.Command {
 	var source, service, userMode, systemMode bool
 	cmd := &cobra.Command{Use: "install [path]", Short: "Install bashy, bash, sh, and a dormant outpost", Long: `Install bashy, outpost, bash and sh together. By default, use the four files
 beside this executable (works offline). --version fetches a verified release.
---dir selects the install directory; [path] selects the bashy executable path.
+--dir selects the install directory (default $DHNT_BIN_DIR, else
+%LOCALAPPDATA%\\outpost on Windows and ~/.local/bin elsewhere); [path] selects
+the bashy executable path.
 --source preserves the developer-only single-binary build/install workflow.
 
 The default install leaves outpost unconfigured: outpost installed, dormant until ` + "`bashy login`" + `.
@@ -121,6 +123,19 @@ during installation.`, Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Comman
 		target := ""
 		if len(args) == 1 {
 			target = args[0]
+		}
+		if len(args) == 0 && dir == "" && !source {
+			// Default to the standard per-user location rather than "in
+			// place": a release extracted to Downloads must not end up running
+			// from Downloads.
+			d, err := defaultSelfInstallDir()
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(d, 0o755); err != nil {
+				return err
+			}
+			dir = d
 		}
 		if dir != "" {
 			target = filepath.Join(dir, releaseBinaryName())
@@ -368,6 +383,29 @@ func bashyArchiveMatch(name, goos, goarch string) bool {
 		return false
 	}
 	return strings.Contains(n, strings.ToLower(goarch))
+}
+
+// defaultSelfInstallDir is where `bashy self install` puts the product when
+// neither a path nor --dir is given: $DHNT_BIN_DIR (the same knob `make
+// install` honors), else %LOCALAPPDATA%\outpost on Windows and ~/.local/bin
+// elsewhere.
+func defaultSelfInstallDir() (string, error) {
+	if v := strings.TrimSpace(os.Getenv("DHNT_BIN_DIR")); v != "" {
+		return filepath.Abs(v)
+	}
+	if runtime.GOOS == "windows" {
+		if la := os.Getenv("LOCALAPPDATA"); la != "" {
+			return filepath.Join(la, "outpost"), nil
+		}
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", errors.New("cannot resolve the home directory; pass --dir")
+	}
+	if runtime.GOOS == "windows" {
+		return filepath.Join(home, "AppData", "Local", "outpost"), nil
+	}
+	return filepath.Join(home, ".local", "bin"), nil
 }
 
 func resolveSelfInstallTarget(target string) (string, error) {

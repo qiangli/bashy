@@ -342,3 +342,27 @@ func TestSelfInstallServiceRefusesRootBeforeWrites(t *testing.T) {
 		}
 	}
 }
+
+// A release extracted to Downloads must not be installed "in place":
+// self install defaults to the standard per-user directory (elephant,
+// 2026-10-23, ran outpost from Downloads).
+func TestDefaultSelfInstallDir(t *testing.T) {
+	t.Setenv("DHNT_BIN_DIR", "")
+	got, err := defaultSelfInstallDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".local", "bin")
+	if runtime.GOOS == "windows" {
+		want = filepath.Join(os.Getenv("LOCALAPPDATA"), "outpost")
+	}
+	if got != want {
+		t.Fatalf("defaultSelfInstallDir() = %q, want %q", got, want)
+	}
+	custom := t.TempDir()
+	t.Setenv("DHNT_BIN_DIR", custom)
+	if got, _ := defaultSelfInstallDir(); got != custom {
+		t.Fatalf("DHNT_BIN_DIR not honored: %q", got)
+	}
+}

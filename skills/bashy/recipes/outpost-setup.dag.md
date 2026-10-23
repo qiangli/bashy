@@ -95,9 +95,10 @@ fi
 ### install
 Copy bashy, outpost, bash and sh from the extracted release into the install
 directory and make sure that directory is on PATH. outpost stays dormant until
-the `pair` step.
+the `pair` step. Safe to rerun: a complete install of the same release is left
+as is.
 Requires: detect
-Effects: exec, read, write
+Effects: exec, net, persist, read, write
 
 ```bash
 os=$(uname -s)
@@ -106,8 +107,21 @@ case "$os" in
   *) dir="${INSTALL_DIR:-$HOME/.local/bin}"; win=0 ;;
 esac
 if [ "${DRY_RUN:-0}" = 1 ]; then echo "would run: $BASHY self install --dir $dir"; exit 0; fi
-mkdir -p "$dir"
-"$BASHY" self install --dir "$dir" || exit 1
+case "$os" in Windows*|MINGW*|MSYS*) ext=.exe ;; *) ext= ;; esac
+self_dir=$(cd "$(dirname "$BASHY")" && pwd -P)
+want_dir=$(mkdir -p "$dir" && cd "$dir" && pwd -P)
+complete=yes; for m in bashy bash sh outpost; do [ -f "$want_dir/$m$ext" ] || complete=no; done
+if [ "$self_dir" = "$want_dir" ]; then
+  # Running the installed bashy: never install onto itself.
+  missing=; for m in bashy bash sh outpost; do [ -f "$want_dir/$m$ext" ] || missing="$missing $m"; done
+  echo "install: already installed in $dir (running from it)${missing:+; missing:$missing}; to upgrade, run this from a newer extracted release"
+  exit 0
+fi
+if [ "$complete" = yes ] && [ "$("$want_dir/bashy$ext" --version 2>/dev/null | head -1)" = "$("$BASHY" --version 2>/dev/null | head -1)" ]; then
+  echo "install: $dir already has this release"
+else
+  "$BASHY" self install --dir "$dir" || exit 1
+fi
 if [ "$win" = 1 ]; then
   powershell -NoProfile -NonInteractive -Command "\$d='$dir'.Replace('/','\\'); \$p=[Environment]::GetEnvironmentVariable('Path','User'); if (-not (\$p -split ';' | Where-Object { \$_ -eq \$d })) { [Environment]::SetEnvironmentVariable('Path', \$p + ';' + \$d, 'User'); 'added to user Path: ' + \$d } else { 'already on user Path: ' + \$d }" </dev/null
 else
@@ -123,7 +137,8 @@ silently disappears). Windows: no standby or hibernate on AC power, connected
 networks set to Private. macOS: no sleep on power, wake on network. Linux: the
 sleep, suspend and hibernate targets are masked. These need administrator
 rights; without them the step stops and prints exactly what to run elevated,
-rather than half-doing it.
+rather than half-doing it. It changes machine settings, so it runs only as part
+of `setup` or when named explicitly, never as another step's dependency.
 Requires: detect
 Effects: exec, read, write
 
@@ -162,7 +177,8 @@ outpost automatically at logon (Task Scheduler on Windows, launchd on macOS,
 a systemd user unit on Linux). The code comes from `CODE_FILE` (read, then
 deleted) or from the human through `bashy ask`; it is never printed. On a
 headless Linux machine outpost also needs linger to run without a login.
-Requires: install host-prep
+Safe to rerun: a machine already paired with `SATELLITE` is left as is.
+Requires: install
 Effects: exec, net, read, write
 
 ```bash
@@ -174,6 +190,11 @@ esac
 server="${SATELLITE:-https://ai.dhnt.io}"
 name="${NAME:-$(hostname)}"
 if [ "${DRY_RUN:-0}" = 1 ]; then echo "would run: $op register --server $server --code <code> --name $name"; exit 0; fi
+st=$("$op" status 2>/dev/null)
+if printf '%s\n' "$st" | grep -qE '^ +state +active' && printf '%s\n' "$st" | grep -qE "^ +cloudbox +${server%/}\$"; then
+  echo "pair: already paired with $server; nothing to do"
+  exit 0
+fi
 if [ -n "${CODE_FILE:-}" ]; then
   [ -f "$CODE_FILE" ] || { echo "CODE_FILE $CODE_FILE not found" >&2; exit 1; }
   code=$(tr -d ' \r\n' < "$CODE_FILE"); rm -f "$CODE_FILE"

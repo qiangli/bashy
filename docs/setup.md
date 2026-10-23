@@ -235,5 +235,4 @@ If you already have the provider's SSH access to a VM, path 1 works there too.
 - **Supervised `outpost.sshd`** on port **2223** with key authentication, its own
   firewall rule and mDNS by default (the bootstrap keeps 2222).
 - **Windows**: `winget install dhnt.bashy` and Authenticode-signed binaries.
-- `bashy self install` will default to the standard per-user directory, so `--dir`
-  becomes optional.
+- 
