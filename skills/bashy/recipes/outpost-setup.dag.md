@@ -206,10 +206,11 @@ into `USER_DATA` (default `<NAME>.user-data.sh`, mode 0600). Pass it as the VM's
 user-data / custom-data / startup-script. On first boot it downloads bashy for
 the VM's architecture, checks the release checksum, installs bashy and outpost,
 pairs with `SATELLITE` using a single-use invite minted now, and keeps outpost
-running without a login. Mint it shortly before creating the VM: the invite
+running as a boot-time service. Mint it shortly before creating the VM: the invite
 expires (`INVITE_TTL`, default 30m). The script holds a one-time secret; delete
 the file once the VM is created. Linux VMs; Windows VMs follow path 3.
-Effects: exec, net, write
+outpost runs as a dedicated `outpost` account (it refuses to run as root).
+Effects: exec, net, read, write, destroy
 
 ```bash
 [ -n "${NAME:-}" ] || { echo "cloud-init: set NAME=<new host>" >&2; exit 1; }
@@ -234,8 +235,11 @@ curl -fsSL "\$url/checksums.txt" -o checksums.txt
 grep " bashy-linux-\$arch.tar.gz\\\$" checksums.txt | sha256sum -c -
 tar -xzf "bashy-linux-\$arch.tar.gz"
 ./bashy self install --dir /usr/local/bin
-/usr/local/bin/outpost register --server "$SATELLITE" --code "$code" --name "$NAME" --no-service
-/usr/local/bin/outpost service install --system --run-as root
+# outpost refuses to run as root: give it its own account, pair as that
+# account (config lands in its home), then run the boot-time service as it.
+id outpost >/dev/null 2>&1 || useradd --create-home --shell /bin/sh outpost
+su -s /bin/sh outpost -c '/usr/local/bin/outpost register --server "$SATELLITE" --code "$code" --name "$NAME" --no-service'
+/usr/local/bin/outpost service install --system --run-as outpost
 cd /; rm -rf "\$work"
 USERDATA
 unset code
