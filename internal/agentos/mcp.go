@@ -241,7 +241,7 @@ func mcpOptions(allow, profile string) (yokemcp.Options, error) {
 	case "default":
 		_, commands, verbs := commandsCatalog()
 		for _, name := range append(commands, verbs...) {
-			if !isCoreCommand(name) || tool.Lookup(name) == nil {
+			if !isFeaturedCommand(name) || tool.Lookup(name) == nil {
 				continue
 			}
 			if entry, ok := atlas.Lookup(name); ok && entry.AliasOf != "" {

@@ -112,10 +112,10 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 				t.Errorf("%s: cap %q not in vocabulary", r.Name, c)
 			}
 		}
-		switch r.Class {
+		switch r.DispatchClass {
 		case "builtin", "coreutils", "verb":
 		default:
-			t.Errorf("%s: unexpected class %q", r.Name, r.Class)
+			t.Errorf("%s: unexpected class %q", r.Name, r.DispatchClass)
 		}
 	}
 	for _, retired := range []string{"board", "relay"} {
@@ -136,10 +136,10 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 	}
 
 	// Spot invariants.
-	if r := byName["echo"]; r.Class != "builtin" || r.Group != atlas.GroupShell {
+	if r := byName["echo"]; r.DispatchClass != "builtin" || r.Group != atlas.GroupShell {
 		t.Errorf("echo = %+v, want builtin/shell (builtin shadows the tool)", r)
 	}
-	if r := byName["grep"]; r.Class != "coreutils" || r.Group != atlas.GroupTextutils ||
+	if r := byName["grep"]; r.DispatchClass != "coreutils" || r.Group != atlas.GroupTextutils ||
 		r.Tier != atlas.TierUserland || r.Resolver != "bashy-in-process" {
 		t.Errorf("grep = %+v, want coreutils/textutils/userland", r)
 	}
@@ -233,7 +233,7 @@ func TestAtlasCoversEveryCommand(t *testing.T) {
 func TestAtlasVerbStability(t *testing.T) {
 	t.Setenv("BASHY_AGENTIC", "1")
 	for _, r := range liveAtlas(true) {
-		if r.Class == "verb" && r.Stability == "" {
+		if r.DispatchClass == "verb" && r.Stability == "" {
 			t.Errorf("%s: no declared release stability", r.Name)
 		}
 		if isCuratedHidden(r.Name) && r.Stability != atlas.StabilityExperimental {

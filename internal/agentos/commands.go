@@ -28,7 +28,7 @@ import (
 	"github.com/qiangli/yoke/pkg/fleet"
 )
 
-const commandsSchemaVersion = "bashy-commands-v1"
+const commandsSchemaVersion = "bashy-commands-v2"
 
 // commandsCRUDWords are the `commands` sub-verbs that take a NAME. Each is
 // recognized only when a non-flag argument follows: bare `commands rm`
@@ -198,7 +198,7 @@ func dispatchCommands(args []string) int {
 			fmt.Println("a builtins umbrella (shell builtins · in-process GNU coreutils · in-process")
 			fmt.Println("classic tools), the exec'd downloaded externals, and bashy's native agent")
 			fmt.Println("features by execution venue.")
-			fmt.Println("  COMMAND        show one command's class/resolver/synopsis")
+			fmt.Println("  COMMAND        show one command's class (core|skill|external), dispatch, resolver, synopsis")
 			fmt.Println("  -v             also show each coreutils tool's and verb's synopsis")
 			fmt.Println("  --json         machine-readable (default under $BASHY_AGENTIC)")
 			fmt.Println("  --json=false   force text even under $BASHY_AGENTIC (alias --plain)")
@@ -346,7 +346,7 @@ func dispatchCommands(args []string) int {
 }
 
 func printAgenticCommands(w io.Writer) {
-	fmt.Fprint(w, `agentic bashy commands — the 1.0.0 core first (bashy commands for the full first screen):
+	fmt.Fprint(w, `agentic bashy commands — the featured commands first (bashy commands for the full first screen):
   bashy agent list               the registered tool:model bindings; agent whoami = this process
   bashy model list / tool list   the inference backends and the agentic CLIs this host can drive
   bashy skill list               tier-2 workplace skills applicable here
@@ -365,7 +365,7 @@ func printAgenticCommands(w io.Writer) {
   bashy fetch --json URL         built-in URL/REST client with status envelope
 
 discovery:
-  bashy commands                 the 1.0.0 surface: 35 core + visible extras; --all for everything
+  bashy commands                 the featured surface: 35 highlighted commands + visible extras; --all for everything
   bashy commands --view origin   every name by who defined it (bash · GNU · Unix · external · yoke)
   bashy commands --view posix    the 116 POSIX-required utilities: internal (pure Go) vs bin-managed
   bashy commands --view external what is downloaded + exec'd, and the pure-Go debt
@@ -395,6 +395,7 @@ func commandFeatureReport(name string, builtins, core, verbs, hidden []string, g
 		"schema_version": commandsSchemaVersion,
 		"name":           name,
 		"class":          "not-found",
+		"dispatch_class": "not-found",
 		"resolver":       "not-found",
 		"available":      false,
 	}
@@ -404,16 +405,16 @@ func commandFeatureReport(name string, builtins, core, verbs, hidden []string, g
 	}
 	switch {
 	case containsString(builtins, name):
-		out["class"], out["resolver"], out["available"] = "builtin", "bash-builtin", true
+		out["dispatch_class"], out["resolver"], out["available"] = "builtin", "bash-builtin", true
 		atlasFeatureFields(out, name, "builtin", false)
 	case containsString(core, name):
-		out["class"], out["resolver"], out["available"] = "coreutils", "bashy-in-process", true
+		out["dispatch_class"], out["resolver"], out["available"] = "coreutils", "bashy-in-process", true
 		if t := tool.Lookup(name); t != nil && t.Synopsis != "" {
 			out["synopsis"] = t.Synopsis
 		}
 		atlasFeatureFields(out, name, "coreutils", false)
 	case containsString(verbs, name):
-		out["class"], out["resolver"], out["available"] = "verb", "bashy-front-door", true
+		out["dispatch_class"], out["resolver"], out["available"] = "verb", "bashy-front-door", true
 		if s := synopsisOf(name); s != "" {
 			out["synopsis"] = s
 		}
@@ -421,24 +422,24 @@ func commandFeatureReport(name string, builtins, core, verbs, hidden []string, g
 		registeredFeatureFields(out, name)
 	case containsString(hidden, name) && tool.Lookup(name) != nil:
 		// A curated-hidden in-process tool (tokens, posix-gate).
-		out["class"], out["resolver"], out["available"], out["hidden"] = "coreutils", "bashy-in-process", true, true
+		out["dispatch_class"], out["resolver"], out["available"], out["hidden"] = "coreutils", "bashy-in-process", true, true
 		if t := tool.Lookup(name); t != nil && t.Synopsis != "" {
 			out["synopsis"] = t.Synopsis
 		}
 		atlasFeatureFields(out, name, "coreutils", true)
 	case containsString(hidden, name):
-		out["class"], out["resolver"], out["available"], out["hidden"] = "verb", "bashy-front-door", true, true
+		out["dispatch_class"], out["resolver"], out["available"], out["hidden"] = "verb", "bashy-front-door", true, true
 		if s := synopsisOf(name); s != "" {
 			out["synopsis"] = s
 		}
 		atlasFeatureFields(out, name, "verb", true)
 		registeredFeatureFields(out, name)
 	case containsString(gnu.Missing, name):
-		out["class"] = "gnu-coreutils-missing"
+		out["dispatch_class"] = "gnu-coreutils-missing"
 		out["resolver"] = "managed-container-or-system"
 		out["gnu_coreutils_status"] = "missing-from-bashy-native"
 	case containsString(gnu.CoveredByBuiltins, name):
-		out["class"], out["resolver"], out["available"] = "builtin", "bash-builtin", true
+		out["dispatch_class"], out["resolver"], out["available"] = "builtin", "bash-builtin", true
 		out["gnu_coreutils_status"] = "covered-by-bash-builtin"
 	}
 	for _, gap := range gnu.Not100Conformant {
@@ -457,7 +458,7 @@ func commandFeatureReport(name string, builtins, core, verbs, hidden []string, g
 
 // originLine renders the provenance + visibility line of a one-command
 // report: where the command came from, whether POSIX requires it, whether it
-// is 1.0.0 core, and — for a hidden one — why it is hidden and what to type
+// is featured, and — for a hidden one — why it is hidden and what to type
 // instead.
 func originLine(info map[string]any) string {
 	var parts []string
@@ -468,7 +469,7 @@ func originLine(info map[string]any) string {
 		parts = append(parts, "POSIX-required")
 	}
 	if c, ok := info["core"].(bool); ok && c {
-		parts = append(parts, "1.0.0 core")
+		parts = append(parts, "featured")
 	}
 	if st, ok := info["status"].(string); ok && st == "alias" {
 		if a, ok := info["alias_of"].(string); ok && a != "" {
@@ -506,7 +507,7 @@ func originLine(info map[string]any) string {
 }
 
 func printCommandFeature(w io.Writer, info map[string]any) {
-	fmt.Fprintf(w, "%s: %s via %s\n", info["name"], info["class"], info["resolver"])
+	fmt.Fprintf(w, "%s: %s (%s via %s)\n", info["name"], info["class"], info["dispatch_class"], info["resolver"])
 	if line := originLine(info); line != "" {
 		fmt.Fprintf(w, "  %s\n", line)
 	}
@@ -583,6 +584,7 @@ var verbSynopsis = map[string]string{
 	"sdlc":               "route intake issues through agentic implementation and deployment gates",
 	"web":                "web inspection helpers for SDLC verification",
 	"dag":                "agent-first markdown DAG task runner",
+	"src":                "show a command's pinned source, fetch OSS checkouts, and check core and protected paths",
 	"transpile":          "compile Bash++ source to ordinary Go with source maps",
 	"explain":            "explain go: the table of Go constructs that differ in Bash#; resolve a refusal to its row and workaround",
 	"tmpl":               "render a Go text/template file against JSON data with a pure function set (no exec, env, file or network funcs)",

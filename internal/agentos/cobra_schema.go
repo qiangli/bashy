@@ -56,6 +56,7 @@ import (
 	"github.com/qiangli/yoke/pkg/secrets"
 	coreskills "github.com/qiangli/yoke/pkg/skills"
 	"github.com/qiangli/yoke/pkg/sota"
+	"github.com/qiangli/yoke/pkg/src"
 	"github.com/qiangli/yoke/pkg/stats"
 	"github.com/qiangli/yoke/pkg/steward"
 	"github.com/qiangli/yoke/pkg/supervise"
@@ -161,6 +162,8 @@ func cobraVerb(name string) *cobra.Command {
 		return verifyCmd()
 	case "self":
 		return selfCmd()
+	case "src":
+		return src.NewSrcCmd()
 	case "bootstrap", "upgrade":
 		return selfCmd()
 	case "git-scm":

@@ -5,15 +5,54 @@ package agentos
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/qiangli/yoke/external/registry"
 	"github.com/qiangli/yoke/pkg/atlas"
 )
+
+func TestFeaturedSectionsJSONAndCommandClass(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "")
+	out, code := captureCommands(t, "--json", "-v")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	var catalog map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(out), &catalog); err != nil {
+		t.Fatal(err)
+	}
+	if string(catalog["schema_version"]) != `"bashy-commands-v2"` {
+		t.Fatalf("schema = %s", catalog["schema_version"])
+	}
+	var sections map[string]json.RawMessage
+	if err := json.Unmarshal(catalog["sections"], &sections); err != nil {
+		t.Fatal(err)
+	}
+	if len(sections["featured"]) == 0 || sections["core"] != nil {
+		t.Fatalf("sections keys: %v", sections)
+	}
+	out, code = captureCommands(t, "src", "--json")
+	if code != 0 {
+		t.Fatalf("src query exit = %d", code)
+	}
+	var info map[string]any
+	if err := json.Unmarshal([]byte(out), &info); err != nil {
+		t.Fatal(err)
+	}
+	if info["class"] != "core" || info["dispatch_class"] != "verb" || info["stability"] != "experimental" {
+		t.Errorf("src feature report = %v", info)
+	}
+	plain, code := captureCommands(t, "src")
+	if code != 0 || !strings.Contains(plain, "src: core (verb via bashy-front-door)") {
+		t.Errorf("one-command class text: exit %d, output %q", code, plain)
+	}
+}
 
 // TestClassSectionsTaxonomy pins the by-how-it-runs grouping the default
 // `bashy commands` surface renders: the builtins umbrella (shell / coreutils /
@@ -104,12 +143,12 @@ func TestClassSectionsTaxonomy(t *testing.T) {
 			t.Errorf("aliases missing %q", name)
 		}
 	}
-	// The 1.0.0 core: every core row name is a real, visible, bashy-added
-	// command, and core is a subset of agent/* (never of the userland).
-	coreN := 0
-	for _, row := range s.Core {
+	// The featured list: every presentation row name is a real, visible, bashy-added
+	// command, and featured is a subset of agent/* (never of the userland).
+	featuredN := 0
+	for _, row := range s.Featured {
 		for _, n := range row.Commands {
-			coreN++
+			featuredN++
 			found := false
 			for _, venue := range venueOrder {
 				if agentAt(venue, n) {
@@ -117,15 +156,15 @@ func TestClassSectionsTaxonomy(t *testing.T) {
 				}
 			}
 			if !found && !has(s.Diagnostics, n) {
-				t.Errorf("core %q is not a visible bashy-added command", n)
+				t.Errorf("featured %q is not a visible bashy-added command", n)
 			}
 			if has(s.More, n) {
-				t.Errorf("core %q also listed under more", n)
+				t.Errorf("featured %q also listed under more", n)
 			}
 		}
 	}
-	if coreN != 35 {
-		t.Errorf("core has %d commands, want 35 (Sprint 167 decision of record)", coreN)
+	if featuredN != 35 {
+		t.Errorf("featured has %d commands, want 35 (Sprint 167 decision of record)", featuredN)
 	}
 	for _, name := range []string{"inspect", "oci", "sandbox", "ollama", "peer", "dks", "login", "tessaro",
 		"release", "transpile", "dhnt", "otel", "duration", "tz", "ntp", "sntp", "clip", "ast"} {

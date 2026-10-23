@@ -15,16 +15,16 @@ import (
 )
 
 // The `bashy commands` default surface (Sprint 167, bashy 1.0.0) is
-// core-first: the first screen is the 35 commands an agent uses every turn,
+// featured-first: the first screen is the 35 commands an agent uses every turn,
 // then the handful of visible extras, then one line per userland origin with
 // a pointer to the view that expands it, then the count of what is hidden.
 // 325 names in a wall was the problem; a first screen an agent can read in
 // one pass is the fix.
 //
-//	core       — the 1.0.0 core, in seven rows (fleet · session · work ·
+//	featured   — the featured commands, in seven rows (fleet · session · work ·
 //	             knowledge · comms · human · discovery). A PRESENTATION
 //	             grouping — the atlas `group` axis is untouched.
-//	more       — visible yoke commands (bashy-added) that are not core
+//	more       — visible yoke commands (bashy-added) that are not featured
 //	classic    — everything that is not yoke: bash builtins · GNU coreutils ·
 //	             classic Unix · bin-managed externals, as counts (`--view
 //	             origin` lists them)
@@ -43,17 +43,17 @@ var venueOrder = []string{
 	atlas.TierSphere, atlas.TierCluster, atlas.TierCloud, atlas.TierAccount,
 }
 
-// coreRow is one presentation row of the 1.0.0 core.
-type coreRow struct {
+// featuredRow is one presentation row of the featured commands.
+type featuredRow struct {
 	Label    string   `json:"label"`
 	Commands []string `json:"commands"`
 }
 
-// coreRows is the bashy 1.0.0 core: the operator's named list (agent model
+// featuredRows is the bashy featured list: the operator's named list (agent model
 // tool skill chat · sprint todo kb · inbox mb meet ping · dag weave · app ask
 // browser) plus the commands those are built on. The order within a row is
 // deliberate (the noun first, then what acts on it); it is not sorted.
-var coreRows = []coreRow{
+var featuredRows = []featuredRow{
 	{"fleet", []string{"agent", "model", "tool", "skill", "person", "whois", "capability"}},
 	{"session", []string{"chat", "delegate", "foreman", "coach", "handoff", "resume", "claim"}},
 	{"work", []string{"sprint", "todo", "dag", "weave", "gate"}},
@@ -63,9 +63,9 @@ var coreRows = []coreRow{
 	{"discovery", []string{"commands"}},
 }
 
-var coreSet = func() map[string]bool {
+var featuredSet = func() map[string]bool {
 	m := map[string]bool{}
-	for _, row := range coreRows {
+	for _, row := range featuredRows {
 		for _, n := range row.Commands {
 			m[n] = true
 		}
@@ -73,16 +73,16 @@ var coreSet = func() map[string]bool {
 	return m
 }()
 
-// isCoreCommand reports whether name is in the bashy 1.0.0 core.
-func isCoreCommand(name string) bool { return coreSet[name] }
+// isFeaturedCommand reports whether name is in the bashy featured list.
+func isFeaturedCommand(name string) bool { return featuredSet[name] }
 
 // commandSections is the `bashy commands` surface, partitioned. The
 // by-how-it-runs fields (shell / coreutils / classic / external / agent) are
-// the v1 shape and stay; core / more / experimental / aliases are the 1.0.0
+// the v1 shape and stay; featured / more / experimental / aliases are the 1.0.0
 // first-screen layout on top of them.
 type commandSections struct {
-	Core         []coreRow           `json:"core"`                   // the 1.0.0 core, in presentation rows
-	More         []string            `json:"more"`                   // visible bashy-added, not core
+	Featured     []featuredRow       `json:"featured"`               // the featured commands, in presentation rows
+	More         []string            `json:"more"`                   // visible bashy-added, not featured
 	Experimental []string            `json:"experimental,omitempty"` // curated-hidden (only with --all)
 	Aliases      []string            `json:"aliases,omitempty"`      // hidden compatibility aliases (only with --all)
 	Shell        []string            `json:"shell"`                  // bash builtins
@@ -98,7 +98,7 @@ type commandSections struct {
 // classSections partitions the live catalog. It reuses liveAtlas so the
 // grouping stays in lockstep with the atlas the --view/--json paths report;
 // every decision reads a field of the record (Origin, Subclass, Group, Tier,
-// Core, Status, AliasOf), never a name list of its own — except coreRows,
+// Featured, Status, AliasOf), never a name list of its own — except featuredRows,
 // which is the one list this file owns.
 func classSections(all bool) commandSections {
 	goos := runtime.GOOS
@@ -111,8 +111,8 @@ func classSections(all bool) commandSections {
 // classSectionsOn is classSections filtered to one platform ("any" = none).
 func classSectionsOn(all bool, goos string) commandSections {
 	s := commandSections{Agent: map[string][]string{}}
-	for _, row := range coreRows {
-		s.Core = append(s.Core, coreRow{row.Label, append([]string(nil), row.Commands...)})
+	for _, row := range featuredRows {
+		s.Featured = append(s.Featured, featuredRow{row.Label, append([]string(nil), row.Commands...)})
 	}
 	s.Shadowed = registeredShadowed()
 	for _, r := range liveAtlas(all) {
@@ -146,11 +146,11 @@ func classSectionsOn(all bool, goos string) commandSections {
 			s.Classic = append(s.Classic, r.Name)
 		case atlas.OriginExternal:
 			s.External = append(s.External, r.Name)
-		default: // bashy — the agent/ext partition by venue, plus core/more on top
-			if !r.Core {
+		default: // bashy — the agent/ext partition by venue, plus featured/more on top
+			if !r.Featured {
 				s.More = append(s.More, r.Name)
 			}
-			if r.Class == "verb" && r.Group == atlas.GroupDiagnostics {
+			if r.DispatchClass == "verb" && r.Group == atlas.GroupDiagnostics {
 				s.Diagnostics = append(s.Diagnostics, r.Name)
 			} else {
 				s.Agent[r.Tier] = append(s.Agent[r.Tier], r.Name)
@@ -160,15 +160,15 @@ func classSectionsOn(all bool, goos string) commandSections {
 	return s
 }
 
-// printClassSections renders the first screen. In verbose mode each core and
+// printClassSections renders the first screen. In verbose mode each featured and
 // visible-extra command gets its one-line synopsis; otherwise names are
 // wrapped into compact columns. `all` appends the hidden sets.
 func printClassSections(w io.Writer, verbose, all bool, goos string) {
 	s := classSectionsOn(all, goos)
 	syn := synopsisOf
-	coreN := 0
-	for _, row := range s.Core {
-		coreN += len(row.Commands)
+	featuredN := 0
+	for _, row := range s.Featured {
+		featuredN += len(row.Commands)
 	}
 	userland := len(s.Shell) + len(s.Coreutils) + len(s.Classic) + len(s.External)
 	// The hidden count is the EXPERIMENTAL count; hidden spellings of visible
@@ -182,30 +182,30 @@ func printClassSections(w io.Writer, verbose, all bool, goos string) {
 			aliasN++
 		}
 	}
-	total := coreN + len(s.More) + userland + len(s.Registered) + hiddenN + aliasN
+	total := featuredN + len(s.More) + userland + len(s.Registered) + hiddenN + aliasN
 
-	fmt.Fprintf(w, "bashy commands — the 1.0.0 surface: %d core + %d more yoke commands; `--all` for everything (%d)\n",
-		coreN, len(s.More), total)
+	fmt.Fprintf(w, "bashy commands — the 1.0.0 surface: %d featured + %d more yoke commands; `--all` for everything (%d)\n",
+		featuredN, len(s.More), total)
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "core — what an agent uses every turn (%d):\n", coreN)
+	fmt.Fprintf(w, "featured — what an agent uses every turn (%d):\n", featuredN)
 	if verbose {
-		for _, row := range s.Core {
+		for _, row := range s.Featured {
 			printSubSection(w, row.Label, row.Commands, true, syn)
 		}
 	} else {
 		width := 0
-		for _, row := range s.Core {
+		for _, row := range s.Featured {
 			if len(row.Label) > width {
 				width = len(row.Label)
 			}
 		}
-		for _, row := range s.Core {
+		for _, row := range s.Featured {
 			fmt.Fprintf(w, "  %-*s  %s\n", width, row.Label, strings.Join(row.Commands, " "))
 		}
 	}
 
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "more yoke commands — visible, not core (%d):\n", len(s.More))
+	fmt.Fprintf(w, "more yoke commands — visible, not featured (%d):\n", len(s.More))
 	printSubSection(w, "", s.More, verbose, syn)
 
 	fmt.Fprintln(w)

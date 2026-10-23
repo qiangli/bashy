@@ -23,23 +23,25 @@ import (
 	"github.com/qiangli/coreutils/tool"
 	"github.com/qiangli/yoke/external/registry"
 	"github.com/qiangli/yoke/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/src"
 	"github.com/qiangli/yoke/pkg/webconsole"
 )
 
-const atlasSchemaVersion = "bashy-atlas-v1"
+const atlasSchemaVersion = "bashy-atlas-v2"
 
 // atlasRecord is one merged Command Atlas record.
 type atlasRecord struct {
-	Name     string   `json:"name"`
-	Class    string   `json:"class"`
-	Subclass string   `json:"subclass,omitempty"`
-	Group    string   `json:"group"`
-	Tier     string   `json:"tier"`
-	Stage    string   `json:"sdlc"` // SDLC stage: plan|code|test|deploy|cross
-	Resolver string   `json:"resolver"`
-	Caps     []string `json:"caps,omitempty"`
-	Effects  []string `json:"effects,omitempty"`
-	Synopsis string   `json:"synopsis,omitempty"`
+	Name          string   `json:"name"`
+	Class         string   `json:"class"`          // invariant core | skill | external
+	DispatchClass string   `json:"dispatch_class"` // builtin | coreutils | verb
+	Subclass      string   `json:"subclass,omitempty"`
+	Group         string   `json:"group"`
+	Tier          string   `json:"tier"`
+	Stage         string   `json:"sdlc"` // SDLC stage: plan|code|test|deploy|cross
+	Resolver      string   `json:"resolver"`
+	Caps          []string `json:"caps,omitempty"`
+	Effects       []string `json:"effects,omitempty"`
+	Synopsis      string   `json:"synopsis,omitempty"`
 
 	// Web is the browser surface this command declares, if any. It is what
 	// `bashy web-console` discovers instead of carrying a hardcoded tile list,
@@ -50,15 +52,15 @@ type atlasRecord struct {
 	AliasOf string            `json:"alias_of,omitempty"`
 
 	// Origin is the provenance axis (Sprint 167): bash | gnu | unix | external
-	// | bashy — WHO defined the command, as opposed to Class, which says how
-	// it resolves. Posix tags the 116 POSIX-required names across origins.
-	// Core marks the bashy 1.0.0 core; Status is "experimental" on a
+	// | bashy — WHO defined the command. DispatchClass says how it resolves;
+	// Class is the invariant boundary. Posix tags required names across origins.
+	// Featured marks the bashy first-screen list; Status is "experimental" on a
 	// curated-hidden command, absent on a hidden alias, so a reader can tell
 	// "hidden because unproven" from "hidden because it is a second spelling".
-	Origin string `json:"origin,omitempty"`
-	Posix  bool   `json:"posix,omitempty"`
-	Core   bool   `json:"core,omitempty"`
-	Status string `json:"status,omitempty"`
+	Origin   string `json:"origin,omitempty"`
+	Posix    bool   `json:"posix,omitempty"`
+	Featured bool   `json:"featured,omitempty"`
+	Status   string `json:"status,omitempty"`
 	// Stability is the declared release tier. Unlike Status (which marks
 	// curated-hidden commands), it comes from atlas.Entry.Stability and is
 	// never inferred from visibility or execution tier.
@@ -97,12 +99,13 @@ func atlasCatalog(builtins, core, verbs, hidden []string) []atlasRecord {
 		if seen[r.Name] {
 			return
 		}
+		r.Class = string(src.ClassOf(r.Name))
 		seen[r.Name] = true
 		out = append(out, r)
 	}
 	for _, n := range builtins {
 		add(atlasRecord{
-			Name: n, Class: "builtin", Group: atlas.GroupShell,
+			Name: n, DispatchClass: "builtin", Group: atlas.GroupShell,
 			Tier: atlas.TierUserland, Stage: atlas.StageCross,
 			Resolver: "bash-builtin",
 			// The shell owns its builtins; the atlas tables never see them, so
@@ -444,7 +447,7 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 
 // toolAtlasRecord resolves one in-process (coreutils-class) tool.
 func toolAtlasRecord(name string, hidden bool) atlasRecord {
-	r := atlasRecord{Name: name, Class: "coreutils", Resolver: "bashy-in-process", Hidden: hidden}
+	r := atlasRecord{Name: name, DispatchClass: "coreutils", Resolver: "bashy-in-process", Hidden: hidden}
 	fillFromAtlas(&r)
 	if t := tool.Lookup(name); t != nil {
 		r.Synopsis = t.Synopsis
@@ -454,12 +457,12 @@ func toolAtlasRecord(name string, hidden bool) atlasRecord {
 }
 
 // stampSurface sets the 1.0.0-surface fields a record carries on top of its
-// atlas classification: Core for the named core, Status for a curated
+// atlas classification: Featured for the first-screen list, Status for a curated
 // experimental command. Aliases (AliasOf set) get neither: an alias is a
 // spelling, and its target already says what it is.
 func stampSurface(r *atlasRecord) {
-	if r.AliasOf == "" && isCoreCommand(r.Name) {
-		r.Core = true
+	if r.AliasOf == "" && isFeaturedCommand(r.Name) {
+		r.Featured = true
 	}
 	if isCuratedHidden(r.Name) {
 		r.Status = statusExperimental
@@ -480,7 +483,7 @@ func stampSurface(r *atlasRecord) {
 // Entry.Tier — new registry CLIs need no atlas edit).
 func verbAtlasRecord(name string, hidden bool) (r atlasRecord) {
 	r = atlasRecord{
-		Name: name, Class: "verb", Resolver: "bashy-front-door",
+		Name: name, DispatchClass: "verb", Resolver: "bashy-front-door",
 		Hidden: hidden, Synopsis: verbSynopsis[name],
 	}
 	defer stampSurface(&r) // named result: the stamp lands on what is returned
@@ -613,7 +616,7 @@ func liveAtlas(includeHidden bool) []atlasRecord {
 // --- the views ---------------------------------------------------------------
 
 // atlasViews are the non-classic --view values.
-var atlasViews = []string{"tier", "group", "sdlc", "capabilities", "effects", "web", "origin", "posix", "external", "portable", "shipped", "registered"}
+var atlasViews = []string{"class", "tier", "group", "sdlc", "capabilities", "effects", "web", "origin", "posix", "external", "portable", "shipped", "registered"}
 
 // atlasGroupDisplayOrder is the presentation order for the group view:
 // classical userland first, then the extended groups.
@@ -661,6 +664,7 @@ type atlasJSON struct {
 	Capabilities    []string          `json:"capabilities,omitempty"`
 	SecurityEffects []string          `json:"security_effects,omitempty"`
 	Origins         []string          `json:"origins,omitempty"`
+	Classes         []string          `json:"classes,omitempty"`
 	Commands        []atlasRecord     `json:"commands,omitempty"`
 	Idioms          []atlas.Idiom     `json:"idioms,omitempty"`
 }
@@ -771,6 +775,7 @@ func dispatchAtlas(req atlasRequest) int {
 			Capabilities:    atlas.Capabilities(),
 			SecurityEffects: atlas.Effects(),
 			Origins:         atlas.Origins(),
+			Classes:         src.CommandClasses(),
 			Commands:        records,
 		}
 		if len(filter) > 0 {
@@ -785,6 +790,8 @@ func dispatchAtlas(req atlasRequest) int {
 	}
 
 	switch {
+	case req.view == "class":
+		printAtlasByKey(os.Stdout, records, src.CommandClasses(), "class ", func(r atlasRecord) string { return r.Class })
 	case req.view == "posix":
 		printAtlasPosix(os.Stdout, records)
 	case req.view == "external":
@@ -1109,10 +1116,10 @@ func printAtlasExternal(w io.Writer, records []atlasRecord) {
 		// pinned provider — the debt list, nothing else. `why` (the witr
 		// wrapper) and `posix-providers` (the provisioner in front of the ten)
 		// are managed externals like any other wrapped tool.
-		if r.Class == "coreutils" && r.Posix && kind == atlas.SubclassManagedExternal {
+		if r.DispatchClass == "coreutils" && r.Posix && kind == atlas.SubclassManagedExternal {
 			kind = "provider"
 			posixDebt++
-		} else if r.Class == "coreutils" {
+		} else if r.DispatchClass == "coreutils" {
 			kind = atlas.SubclassManagedExternal
 		}
 		byKind[kind] = append(byKind[kind], name)
@@ -1263,6 +1270,7 @@ func printIdioms(w io.Writer, idioms []atlas.Idiom) {
 
 // atlasFeatureFields adds the additive atlas keys to a --features report.
 func atlasFeatureFields(out map[string]any, name string, class string, hidden bool) {
+	out["class"] = string(src.ClassOf(name))
 	var r atlasRecord
 	switch class {
 	case "builtin":
@@ -1294,8 +1302,8 @@ func atlasFeatureFields(out map[string]any, name string, class string, hidden bo
 	if r.Posix {
 		out["posix"] = true
 	}
-	if r.Core {
-		out["core"] = true
+	if r.Featured {
+		out["featured"] = true
 	}
 	if r.Status != "" {
 		out["status"] = r.Status

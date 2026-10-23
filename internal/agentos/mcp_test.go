@@ -118,14 +118,14 @@ func TestMCPProfilesAndSyntheticNames(t *testing.T) {
 		t.Fatal("empty default profile")
 	}
 	for _, name := range opts.Tools {
-		if !isCoreCommand(name) || tool.Lookup(name) == nil {
-			t.Fatalf("noncore default: %s", name)
+		if !isFeaturedCommand(name) || tool.Lookup(name) == nil {
+			t.Fatalf("nonfeatured default: %s", name)
 		}
 	}
-	for _, row := range coreRows {
+	for _, row := range featuredRows {
 		for _, name := range row.Commands {
 			if tool.Lookup(name) != nil && !slices.Contains(opts.Tools, name) {
-				t.Errorf("missing core %s", name)
+				t.Errorf("missing featured %s", name)
 			}
 		}
 	}

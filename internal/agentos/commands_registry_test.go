@@ -89,7 +89,7 @@ func TestCommandsListsRegisteredRing(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &info); err != nil || code != 0 {
 		t.Fatalf("--features: %v %d %s", err, code, out)
 	}
-	for k, want := range map[string]any{"resolver": "bashy-registered", "origin": "registered", "mode": "script", "ring": "local", "class": "verb"} {
+	for k, want := range map[string]any{"resolver": "bashy-registered", "origin": "registered", "mode": "script", "ring": "local", "class": "skill", "dispatch_class": "verb"} {
 		if info[k] != want {
 			t.Errorf("features[%s] = %v, want %v", k, info[k], want)
 		}
