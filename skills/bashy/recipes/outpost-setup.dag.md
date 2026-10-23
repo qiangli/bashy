@@ -13,6 +13,8 @@ vars:
   - INVITE_TTL ?= 30m
   - USER_DATA ?=
   - VERIFY_TIMEOUT ?= 900
+  - ALWAYS_ON ?= 1
+  - AUTHORIZE_KEY ?=
 ---
 
 # outpost-setup - install and pair a new machine
@@ -42,6 +44,11 @@ Variables:
   directory (`%LOCALAPPDATA%\outpost` on Windows, `~/.local/bin` elsewhere).
 - `CODE_FILE` - a file holding the one-time pairing code; it is read once and
   deleted. Empty asks the human with `bashy ask` (never type it into a chat).
+- `ALWAYS_ON` - `1` (default) prepares the machine to stay reachable: no sleep
+  on AC power, a Private network profile on Windows. `0` skips it (laptops).
+- `AUTHORIZE_KEY` - a public key (OpenSSH format, a file or the key text) the
+  `sshd` step authorizes for the supervised `outpost.sshd` unit (port 2223), so
+  agents connect without a password.
 - `DRY_RUN=1` - print what each step would do, change nothing.
 
 The three ways to use it (docs/setup.md):
@@ -108,13 +115,54 @@ else
 fi
 ```
 
+### host-prep
+Make the machine fit to be an always-on outpost (skipped with `ALWAYS_ON=0`):
+it must not sleep, and on Windows its networks must not be **Public** (the
+firewall drops every inbound connection on a Public network, so the machine
+silently disappears). Windows: no standby or hibernate on AC power, connected
+networks set to Private. macOS: no sleep on power, wake on network. Linux: the
+sleep, suspend and hibernate targets are masked. These need administrator
+rights; without them the step stops and prints exactly what to run elevated,
+rather than half-doing it.
+Requires: detect
+Effects: exec, read, write
+
+```bash
+[ "${ALWAYS_ON:-1}" = 0 ] && { echo "host-prep: skipped (ALWAYS_ON=0)"; exit 0; }
+os=$(uname -s)
+case "$os" in
+  Windows*|MINGW*|MSYS*)
+    ps='powercfg /change standby-timeout-ac 0; powercfg /change hibernate-timeout-ac 0; Get-NetConnectionProfile | Where-Object { $_.NetworkCategory -eq "Public" } | ForEach-Object { Set-NetConnectionProfile -InterfaceIndex $_.InterfaceIndex -NetworkCategory Private }; Get-NetConnectionProfile | ForEach-Object { "network: " + $_.InterfaceAlias + " " + $_.NetworkCategory }'
+    if [ "${DRY_RUN:-0}" = 1 ]; then echo "would run (elevated PowerShell): $ps"; exit 0; fi
+    admin=$(powershell -NoProfile -NonInteractive -Command '([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole("Administrators")' </dev/null | tr -d '\r')
+    if [ "$admin" != True ]; then
+      echo "host-prep: needs Administrator. Run this in an elevated PowerShell, then rerun setup:" >&2
+      echo "  $ps" >&2
+      exit 1
+    fi
+    powershell -NoProfile -NonInteractive -Command "$ps" </dev/null ;;
+  Darwin)
+    if [ "${DRY_RUN:-0}" = 1 ]; then echo "would run: sudo pmset -c sleep 0 disksleep 0 womp 1"; exit 0; fi
+    sudo -n pmset -c sleep 0 disksleep 0 womp 1 2>/dev/null || { echo "host-prep: needs sudo. Run: sudo pmset -c sleep 0 disksleep 0 womp 1" >&2; exit 1; }
+    pmset -g | grep -E '^ *(sleep|womp) ' ;;
+  *)
+    if [ "${DRY_RUN:-0}" = 1 ]; then echo "would run: sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target"; exit 0; fi
+    if command -v systemctl >/dev/null 2>&1; then
+      sudo -n systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target >/dev/null 2>&1 || { echo "host-prep: needs sudo. Run: sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target" >&2; exit 1; }
+      echo "host-prep: sleep targets masked"
+    else
+      echo "host-prep: no systemd; leaving sleep settings unchanged"
+    fi ;;
+esac
+```
+
 ### pair
 Exchange the one-time pairing code for this machine's identity and start
 outpost automatically at logon (Task Scheduler on Windows, launchd on macOS,
 a systemd user unit on Linux). The code comes from `CODE_FILE` (read, then
 deleted) or from the human through `bashy ask`; it is never printed. On a
 headless Linux machine outpost also needs linger to run without a login.
-Requires: install
+Requires: install host-prep
 Effects: exec, net, read, write
 
 ```bash
@@ -140,6 +188,34 @@ rc=${PIPESTATUS[0]}; unset code
 case "$os" in Linux) command -v loginctl >/dev/null 2>&1 && loginctl enable-linger "$(whoami)" 2>/dev/null || true ;; esac
 ```
 
+### sshd
+Let agents reach this machine without a password: authorize `AUTHORIZE_KEY`
+for the supervised `outpost.sshd` unit (port 2223, started and kept up by the
+outpost supervisor, with its own firewall rule and mDNS name). The temporary
+`outpost sshd` bootstrap (port 2222) is only for the very first contact and can be
+closed once this step has run. Needs an outpost that has the `outpost.sshd` unit;
+an older outpost is reported, not treated as a failure.
+Requires: pair
+Effects: exec, read, write
+
+```bash
+os=$(uname -s)
+case "$os" in
+  Windows*|MINGW*|MSYS*) op="${INSTALL_DIR:-$LOCALAPPDATA/outpost}/outpost.exe" ;;
+  *) op="${INSTALL_DIR:-$HOME/.local/bin}/outpost" ;;
+esac
+if ! "$op" ssh authorize --help >/dev/null 2>&1; then
+  echo "sshd: this outpost has no outpost.sshd unit yet; upgrade outpost, then rerun: bashy dag -f outpost-setup.dag.md sshd AUTHORIZE_KEY=…"
+  exit 0
+fi
+if [ -n "${AUTHORIZE_KEY:-}" ]; then
+  if [ "${DRY_RUN:-0}" = 1 ]; then echo "would run: $op ssh authorize add <key>"; exit 0; fi
+  if [ -f "$AUTHORIZE_KEY" ]; then "$op" ssh authorize add - < "$AUTHORIZE_KEY"; else printf '%s\n' "$AUTHORIZE_KEY" | "$op" ssh authorize add -; fi || exit 1
+fi
+"$op" ssh authorize ls 2>/dev/null | head -5
+"$op" services 2>/dev/null | grep -E '^ *sshd ' || echo "sshd: unit status not reported (outpost services)"
+```
+
 ### verify
 Check that outpost runs, is paired with the intended server, and reports the
 expected name. Fails (non-zero) otherwise, so an agent can tell success from a
@@ -153,6 +229,7 @@ case "$os" in
   *) op="${INSTALL_DIR:-$HOME/.local/bin}/outpost" ;;
 esac
 want="${SATELLITE:-https://ai.dhnt.io}"
+if [ "${DRY_RUN:-0}" = 1 ]; then echo "would check: $op status reports active and paired with $want"; exit 0; fi
 for i in 1 2 3 4 5 6; do
   st=$("$op" status 2>/dev/null) && break
   sleep 5
@@ -164,8 +241,8 @@ echo "verify: ok"
 ```
 
 ### setup
-The whole job on the new machine: detect, install, pair, verify.
-Requires: detect install pair verify
+The whole job on the new machine: detect, install, host-prep, pair, sshd, verify.
+Requires: detect install host-prep pair sshd verify
 Effects: exec, net, read, write
 
 ```bash
