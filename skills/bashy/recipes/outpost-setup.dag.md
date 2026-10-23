@@ -254,7 +254,7 @@ confirm on the satellite that `NAME` came online, polling up to
 registers but stays offline, first boot failed after pairing: read the VM's boot
 log from the provider console or its serial output (`/var/log/cloud-init-output.log`
 on most Linux images) — every command the user-data ran is there.
-Effects: net, read
+Effects: exec, net, read, write
 
 ```bash
 [ -n "${NAME:-}" ] && [ -n "${SATELLITE:-}" ] || { echo "verify-remote: set NAME and SATELLITE" >&2; exit 1; }
