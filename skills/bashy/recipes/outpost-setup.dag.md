@@ -111,7 +111,7 @@ complete=yes; for m in bashy bash sh outpost; do [ -f "$want_dir/$m$ext" ] || co
 if [ "$self_dir" = "$want_dir" ]; then
   # Running the installed bashy: never install onto itself.
   missing=; for m in bashy bash sh outpost; do [ -f "$want_dir/$m$ext" ] || missing="$missing $m"; done
-  echo "install: already installed in $dir (running from it)${missing:+; missing:$missing}; to upgrade, run this from a newer extracted release"
+  echo "install: already installed in $dir (running from it)${missing:+; missing:$missing}; to upgrade in place: $BASHY self install --version <tag>"
   exit 0
 fi
 if [ "$complete" = yes ] && [ "$("$want_dir/bashy$ext" --version 2>/dev/null | head -1)" = "$("$BASHY" --version 2>/dev/null | head -1)" ]; then
