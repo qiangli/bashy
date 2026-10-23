@@ -211,6 +211,37 @@ func TestServiceSrcGuardRefusesModifiedProtected(t *testing.T) {
 	}
 }
 
+func TestSrcRunExecKeepsCommandForBinaryAndRelease(t *testing.T) {
+	binRes := localRunResolution{Kind: localRunBinary, Binary: "/cache/bashy"}
+	bin, argv, err := srcRunExec(binRes, []string{"jq", "--help"})
+	if err != nil || bin != "/cache/bashy" {
+		t.Fatalf("bin = %q, %v", bin, err)
+	}
+	if len(argv) != 2 || argv[0] != "jq" || argv[1] != "--help" {
+		t.Fatalf("binary argv = %q (the command must reach the binary)", argv)
+	}
+	relRes := localRunResolution{Kind: localRunRelease}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rbin, rargv, err := srcRunExec(relRes, []string{"jq", "--help"})
+	if err != nil || rbin != exe {
+		t.Fatalf("bin = %q, %v", rbin, err)
+	}
+	if len(rargv) != 2 || rargv[0] != "jq" {
+		t.Fatalf("release argv = %q", rargv)
+	}
+	srcRes := localRunResolution{Kind: localRunSource, Unit: "/run/fix.bsh"}
+	_, sargv, err := srcRunExec(srcRes, []string{"sprint", "--foo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sargv) != 2 || sargv[0] != "/run/fix.bsh" || sargv[1] != "--foo" {
+		t.Fatalf("source argv = %q", sargv)
+	}
+}
+
 func TestLocalBuildManifestRoundTrip(t *testing.T) {
 	home := t.TempDir()
 	m := localBuildManifest{Repo: "yoke", Base: "b", Local: "l", State: "modified", Binary: "/bin/x", BuiltAt: nowUTC()}

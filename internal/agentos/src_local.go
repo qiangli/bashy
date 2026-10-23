@@ -353,28 +353,18 @@ verbatim (no flag parsing past the command name).`,
 			if err != nil {
 				return err
 			}
-			rest := append([]string{}, args[1:]...)
-			switch res.Kind {
-			case localRunSource:
-				noticeSrcRun(os.Stderr, res)
-				exe, err := os.Executable()
-				if err != nil || exe == "" {
-					return fmt.Errorf("src run: cannot resolve the interpreter binary")
-				}
-				return execPassthrough(exe, append([]string{res.Unit}, rest...))
-			case localRunBinary:
-				noticeSrcRun(os.Stderr, res)
-				return execPassthrough(res.Binary, rest)
-			default:
-				if res.Notice != "" {
-					fmt.Fprintln(os.Stderr, "src run: "+res.Notice)
-				}
-				exe, err := os.Executable()
-				if err != nil || exe == "" {
-					return fmt.Errorf("src run: cannot resolve the release binary")
-				}
-				return execPassthrough(exe, args)
+			bin, argv, err := srcRunExec(res, args)
+			if err != nil {
+				return err
 			}
+			if res.Kind != localRunRelease || res.Notice != "" {
+				if res.Kind == localRunRelease {
+					fmt.Fprintln(os.Stderr, "src run: "+res.Notice)
+				} else {
+					noticeSrcRun(os.Stderr, res)
+				}
+			}
+			return execPassthrough(bin, argv)
 		},
 	}
 	return cmd
@@ -382,6 +372,29 @@ verbatim (no flag parsing past the command name).`,
 
 func noticeSrcRun(w *os.File, res localRunResolution) {
 	fmt.Fprintf(w, "src run: %s from %s local %s (release %s)\n", res.Kind, res.Repo, shortSHA12(res.Local), shortSHA12(res.Base))
+}
+
+// srcRunExec maps a resolution to the binary and argv to execute: the
+// edited unit replaces the command for source kind (it IS the program),
+// while binary and release kinds keep the full original argv — the
+// command name must reach the binary.
+func srcRunExec(res localRunResolution, args []string) (string, []string, error) {
+	switch res.Kind {
+	case localRunSource:
+		exe, err := os.Executable()
+		if err != nil || exe == "" {
+			return "", nil, fmt.Errorf("src run: cannot resolve the interpreter binary")
+		}
+		return exe, append([]string{res.Unit}, args[1:]...), nil
+	case localRunBinary:
+		return res.Binary, args, nil
+	default:
+		exe, err := os.Executable()
+		if err != nil || exe == "" {
+			return "", nil, fmt.Errorf("src run: cannot resolve the release binary")
+		}
+		return exe, args, nil
+	}
 }
 
 // execPassthrough runs path with args, passing stdio through, and returns
