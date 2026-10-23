@@ -16,7 +16,7 @@ import (
 // with go.mod; the version check below fails closed after an unpaired bump.
 var srcModulePins = map[string]struct{ module, commit string }{
 	"yoke":        {"github.com/qiangli/yoke", "165e4a7fbf94d9d7743793b4e0c2ec5b5f30351b"},
-	"coreutils":   {"github.com/qiangli/coreutils", "42845e33d023245fd0631708986140cc512b186f"},
+	"coreutils":   {"github.com/qiangli/coreutils", "06f9a4fd1e10d37f5be003f3cd674cb7955e8371"},
 	"sh":          {"github.com/qiangli/sh/v3", "de35c153b5f647eb988035abf4a7895552a3869f"},
 	"filebrowser": {"github.com/qiangli/filebrowser/v2", "d1d2feab447319ff2b37b471829b59bc3cace390"},
 }
