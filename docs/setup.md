@@ -15,6 +15,10 @@ other tool is needed on the new machine.
 Status: this describes what works **today**. A shorter flow is planned
 ([coming next](#coming-next)).
 
+The steps in this guide are also a Bash# recipe you can read as a skill and run as
+a script: [`skills/bashy/recipes/outpost-setup.dag.md`](../skills/bashy/recipes/outpost-setup.dag.md)
+(`bashy dag -f outpost-setup.dag.md setup …`).
+
 ## Before you start
 
 **1. Download** the archive for the new machine from the
@@ -123,6 +127,27 @@ Agent notes: run Windows PowerShell with `-NonInteractive -InputFormat None` and
 redirect stdin from `/dev/null`; PowerShell 5 over SSH never sees end-of-input on
 piped stdin, so never pass secrets that way. Copy files with `scp -P 2222` /
 `sftp -P 2222`.
+
+## Cloud servers (DigitalOcean, AWS, Azure, Google Cloud, …)
+
+A cloud VM joins a satellite as one more outpost, next to your Windows, macOS
+and Linux machines. There is nobody at its console, so it is set up at first
+boot from its user-data:
+
+```sh
+bashy fetch https://raw.githubusercontent.com/qiangli/bashy/main/skills/bashy/recipes/outpost-setup.dag.md -o outpost-setup.dag.md
+bashy dag -f outpost-setup.dag.md cloud-init SATELLITE=https://<your-satellite> NAME=<vm-name> RELEASE_TAG=<tag>
+```
+
+This writes `<vm-name>.user-data.sh` (mode 0600). Pass it as the VM's user-data
+(DigitalOcean user data, AWS EC2 user data, Azure custom data, Google Cloud
+startup-script) when creating a Linux VM. On first boot it downloads bashy for the
+VM's architecture, checks the release checksum, installs bashy and outpost into
+`/usr/local/bin`, pairs with the satellite using a single-use invite (valid 30
+minutes by default, `INVITE_TTL`), and registers outpost as a boot-time service.
+Delete the user-data file after the VM is created: it holds the invite.
+
+If you already have the provider's SSH access to a VM, path 1 works there too.
 
 ## Troubleshooting
 
