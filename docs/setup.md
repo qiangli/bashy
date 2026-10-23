@@ -113,7 +113,15 @@ Driving the setup from another machine is what path 3's agent is for.
    On macOS, a browser download is quarantined; clear it once with
    `xattr -dr com.apple.quarantine ~/.local/bin/bashy ~/.local/bin/outpost`.
 
-2. **Pair** with the code from "Before you start":
+2. **Prepare it to stay reachable** (for an always-on outpost; skip on a laptop).
+   As administrator: Windows: never sleep on AC power and set the network to
+   Private (`powercfg /change standby-timeout-ac 0`,
+   `Set-NetConnectionProfile -NetworkCategory Private`); macOS:
+   `sudo pmset -c sleep 0 womp 1`; Linux:
+   `sudo systemctl mask sleep.target suspend.target hibernate.target`.
+   The recipe's `host-prep` step does this for you.
+
+3. **Pair** with the code from "Before you start":
    ```sh
    bashy login --code <code>                                   # Tessaro portal
    bashy login --server https://<your-satellite> --code <code> # a satellite
@@ -122,7 +130,7 @@ Driving the setup from another machine is what path 3's agent is for.
    Windows, a launchd agent on macOS, a systemd user unit on Linux. On a headless
    Linux machine also run `loginctl enable-linger $USER` so it runs without a login.
 
-3. **Check**: `outpost status` shows `state active (paired as <name>)` and the
+4. **Check**: `outpost status` shows `state active (paired as <name>)` and the
    portal or satellite lists the host as online.
 
 ## 2. AI agent, on the new machine
