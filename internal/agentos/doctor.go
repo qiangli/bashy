@@ -33,6 +33,12 @@ type doctorCheck struct {
 	Name   string `json:"name"`
 	Status string `json:"status"` // ok | warn | info
 	Detail string `json:"detail"`
+	// Source provenance (M2): present only on `src: <repo>` rows, which
+	// carry the same fields as the fleet registry record for bashy.
+	Repo     string `json:"repo,omitempty"`
+	SrcState string `json:"src_state,omitempty"`
+	SrcBase  string `json:"src_base,omitempty"`
+	SrcLocal string `json:"src_local,omitempty"`
 }
 
 func dispatchDoctor(args []string) int {
@@ -75,7 +81,7 @@ func dispatchDoctor(args []string) int {
 func collectDoctorChecks() []doctorCheck {
 	checks := collectSelfChecks()
 	add := func(name, status, detail string) {
-		checks = append(checks, doctorCheck{name, status, detail})
+		checks = append(checks, doctorCheck{Name: name, Status: status, Detail: detail})
 	}
 
 	// FIPS 140-3: whether the Go validated cryptographic module (CMVP #5247) is
@@ -144,7 +150,44 @@ func collectDoctorChecks() []doctorCheck {
 	}
 
 	addToolSurfaceChecks(&checks)
+	addSrcProvenanceChecks(&checks)
 	return checks
+}
+
+// addSrcProvenanceChecks reports one row per fetched repo under
+// $BASHY_HOME/src: its State tier (pristine, modified, or
+// modified-protected) with the base release and local HEAD it was derived
+// from. Every row is computed through src.State against the pristine and
+// local branches: a repo whose state cannot be determined is reported as
+// unknown, never as pristine.
+func addSrcProvenanceChecks(checks *[]doctorCheck) {
+	add := func(name, status, detail string) {
+		*checks = append(*checks, doctorCheck{Name: name, Status: status, Detail: detail})
+	}
+	rows := srcProvenance("")
+	if len(rows) == 0 {
+		add("src provenance", "info", "no fetched repos under $BASHY_HOME/src")
+		return
+	}
+	for _, r := range rows {
+		row := doctorCheck{Name: "src: " + r.Repo, Repo: r.Repo, SrcState: r.State, SrcBase: r.Base, SrcLocal: r.Local}
+		switch r.State {
+		case "pristine":
+			row.Status = "ok"
+			row.Detail = "pristine at release " + shortSHA12(r.Base)
+		case "modified":
+			row.Status = "info"
+			row.Detail = "modified: local " + shortSHA12(r.Local) + " diverges from release " + shortSHA12(r.Base)
+		case "modified-protected":
+			row.Status = "warn"
+			row.Detail = "modified-protected: local " + shortSHA12(r.Local) + " rewrites guard-rail paths (merged under approval); release " + shortSHA12(r.Base)
+		default:
+			row.Status = "warn"
+			row.SrcState = "unknown"
+			row.Detail = "state could not be determined; not reporting pristine without checking"
+		}
+		*checks = append(*checks, row)
+	}
 }
 
 // addToolSurfaceChecks reports the two command surfaces `bashy commands` exposes
@@ -155,7 +198,7 @@ func collectDoctorChecks() []doctorCheck {
 // first use by design.
 func addToolSurfaceChecks(checks *[]doctorCheck) {
 	add := func(name, status, detail string) {
-		*checks = append(*checks, doctorCheck{name, status, detail})
+		*checks = append(*checks, doctorCheck{Name: name, Status: status, Detail: detail})
 	}
 
 	// coreutils userland — verify every registered tool is dispatchable (the
@@ -248,7 +291,7 @@ func externalToolStatus(name string) (status, detail string) {
 func collectSelfChecks() []doctorCheck {
 	var checks []doctorCheck
 	add := func(name, status, detail string) {
-		checks = append(checks, doctorCheck{name, status, detail})
+		checks = append(checks, doctorCheck{Name: name, Status: status, Detail: detail})
 	}
 
 	exe, _ := os.Executable()
@@ -282,7 +325,7 @@ func collectSelfChecks() []doctorCheck {
 
 func addSiblingLayoutChecks(checks *[]doctorCheck, root string) {
 	add := func(name, status, detail string) {
-		*checks = append(*checks, doctorCheck{name, status, detail})
+		*checks = append(*checks, doctorCheck{Name: name, Status: status, Detail: detail})
 	}
 	ws, err := gomod.Load(root)
 	if err != nil {

@@ -1375,6 +1375,10 @@ func dispatch() {
 		// yielded @confirm, an ACP permission request, a chat grant. Direct
 		// front door only: bare `approve` is never shimmed.
 		cmd := ask.NewApproveCmd()
+		// M2b: the protected-edit form records a pkg/src ApprovalRecord,
+		// but only after a recorded human allow on the same queue — an
+		// agent cannot self-approve (see approve_src.go).
+		cmd.AddCommand(newApproveSrcCmd())
 		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -2218,6 +2222,11 @@ func runFleet(noun string, args []string) {
 	noun = fleetNoun(noun)
 	switch noun {
 	case "tool":
+		// M2b: `tool show bashy` carries live source provenance (same
+		// fields as the doctor rows) over the registry record.
+		if ok, code := tryBashyToolShow(args); ok {
+			dispatchExit(code)
+		}
 		cmd = fleet.NewToolsCmd()
 		// `tool cmd`: run a tool's declared vendor commands (slash commands,
 		// skills, subcommands) — Sprint #324, yoke/pkg/toolcmd. It needs

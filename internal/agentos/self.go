@@ -130,6 +130,15 @@ during installation.`, Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Comman
 		if source && service {
 			return errors.New("--source builds only bashy; use the paired release to install a service")
 		}
+		if service {
+			// A modified-protected build is never started as a service:
+			// guard-rail rewrites may run in the foreground under their
+			// approval, but the installed service stays on release
+			// provenance until the tree is pristine again.
+			if err := serviceSrcGuard(srcProvenance("")); err != nil {
+				return err
+			}
+		}
 		if service && selfInstallEUID() == 0 {
 			return errors.New("refusing --service as root: a root install writes root-owned files the non-root service user cannot use.\n" +
 				"Install as the regular user, then register the service:\n" +
@@ -257,14 +266,34 @@ func selfInstallServiceArgs(service, userMode, systemMode bool) []string {
 var selfInstallEUID = os.Geteuid
 
 func selfBuildCmd() *cobra.Command {
-	var version string
+	var version, repo string
+	var fromLocal bool
 	cmd := &cobra.Command{
 		Use:   "build [path]",
 		Short: "Build bashy from the current source checkout",
 		Long: `Build bashy from the current source checkout using this bashy binary's
-managed Go toolchain. With no path, writes bin/bashy or bin/bashy.exe.`,
+managed Go toolchain. With no path, writes bin/bashy or bin/bashy.exe.
+
+With --local, build the ` + "`local`" + ` branch tip into the src build cache
+($BASHY_HOME/src/.builds/<repo>/<short-local>/) and record a manifest the
+run-local dispatcher (` + "`bashy src run`" + `) trusts only while it matches
+the live State. --repo selects the source: bashy (this checkout's own local
+branch, the default) or a fetched src repo (yoke, coreutils, sh,
+filebrowser), whose local tip is applied through a Go replace. A diff that
+touches core paths refuses the build.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if fromLocal {
+				if len(args) == 1 {
+					return fmt.Errorf("--local builds into the src build cache; drop the path argument")
+				}
+				out, err := runSelfBuildLocal("", repo)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), out)
+				return nil
+			}
 			target := selfBuildDefaultTarget()
 			if len(args) == 1 {
 				target = args[0]
@@ -281,6 +310,8 @@ managed Go toolchain. With no path, writes bin/bashy or bin/bashy.exe.`,
 		},
 	}
 	cmd.Flags().StringVar(&version, "version", envOr("BASHY_SELF_BUILD_VERSION", "dev"), "Version suffix for the built binary")
+	cmd.Flags().BoolVar(&fromLocal, "local", false, "Build the `local` branch tip into the src build cache")
+	cmd.Flags().StringVar(&repo, "repo", "bashy", "Source repo for --local: bashy, yoke, coreutils, sh, filebrowser")
 	return cmd
 }
 

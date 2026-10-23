@@ -6,6 +6,8 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/qiangli/yoke/pkg/src"
 )
 
@@ -13,7 +15,7 @@ import (
 // carries only the 12-character pseudo-version suffix. Keep these in step
 // with go.mod; the version check below fails closed after an unpaired bump.
 var srcModulePins = map[string]struct{ module, commit string }{
-	"yoke":        {"github.com/qiangli/yoke", "bdede1a9bd76ebe7f867a38e924dfe0ac2beb322"},
+	"yoke":        {"github.com/qiangli/yoke", "44a44a7e31d128f51837e0047e1cfeb2006c3fab"},
 	"coreutils":   {"github.com/qiangli/coreutils", "42845e33d023245fd0631708986140cc512b186f"},
 	"sh":          {"github.com/qiangli/sh/v3", "de35c153b5f647eb988035abf4a7895552a3869f"},
 	"filebrowser": {"github.com/qiangli/filebrowser/v2", "d1d2feab447319ff2b37b471829b59bc3cace390"},
@@ -48,8 +50,17 @@ func srcPinnedCommit(repo string) (string, error) {
 	return "", fmt.Errorf("src: %s module is absent from this build", repo)
 }
 
-func runSrc(args []string) int {
+// bashySrcCmd is the `bashy src` tree: yoke's pkg/src rod plus bashy's own
+// run-local dispatcher verb (see src_local.go). Both the front-door mount
+// and the cobra schema use this constructor so they never diverge.
+func bashySrcCmd() *cobra.Command {
 	cmd := src.NewSrcCmd()
+	cmd.AddCommand(newSrcRunCmd())
+	return cmd
+}
+
+func runSrc(args []string) int {
+	cmd := bashySrcCmd()
 	setCobraArgs(cmd, args)
 	// The upstream src command reads one process VCS stamp. A bashy binary
 	// contains several source repos, so select the linked repo's own pin for
