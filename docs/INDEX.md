@@ -212,3 +212,4 @@ Weave-round verification + retro reports (historical, not load-bearing):
 - `plan-sprint-446-s19-graph-streams.md` — S19 bashy-graph-v1 `--json` for sprint/todo/agent/claim/mb/meet and `-` address input on sprint claim and mb send.
 
 - `database-memory-recipes.md` — Sprint 453 recipes: `db caps`/MCP discovery, the eight-category capability table, complete Bash scripts for the SQL lifecycle and lexical `kb memory`/`kb context` in both storage modes, owner sessions, epoch-fenced holds, and advisory vs enforced boundaries.
+- [setup.md](setup.md) — set up a new Windows/macOS/Linux machine: manual or AI agent, local or remote

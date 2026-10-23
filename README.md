@@ -229,6 +229,9 @@ Python packages used across the repos, with CPython 3.15 wheel readiness:
 
 ## Install
 
+Setting up a new machine end to end (install, pairing, with or without an AI
+agent, locally or from another machine): see [docs/setup.md](docs/setup.md).
+
 ### Download a release binary
 
 Grab the archive for your platform from the
