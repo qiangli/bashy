@@ -38,7 +38,7 @@ Bashy front-door help:
 	bashy help dryrun		show dry-run examples and JSON manifest fields
 	bashy help output		show Stage 1 output-reduction activation and recovery
 	bashy inspect context --json		show exact bashy path and agent capabilities
-	bashy commands			the 1.0.0 surface: 35 core commands first, then the rest
+	bashy commands			the featured surface: 35 highlighted commands first, then the rest
 	bashy commands --agentic	show agent-oriented command discovery
 	bashy commands --view origin	every name by who defined it (bash · GNU · Unix · external · bashy)
 	bashy commands NAME		one command: class, origin, capabilities, gaps

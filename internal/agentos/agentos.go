@@ -151,7 +151,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "src", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -211,12 +211,12 @@ var (
 	// unproven command from an alias; `--all` and `commands NAME` still
 	// answer for every one of them.
 	//
-	// The 1.0.0 core (the 35 that stay visible) is the operator's list of
+	// The featured list (the 35 that stay visible) is the operator's list of
 	// what was used and dogfooded: fleet (agent model tool skill person whois
 	// capability) · session (chat delegate foreman coach handoff resume claim)
 	// · work (sprint todo dag weave gate) · knowledge (kb graph craft secret) ·
 	// comms (inbox mb meet ping notify bus activity) · human (app ask browser
-	// fetch) · discovery (commands) — plus 17 non-core kept visible by name.
+	// fetch) · discovery (commands) — plus 17 other commands kept visible by name.
 	// A command graduates by leaving this list with a gate in hand.
 	//
 	// `podman`/`docker` (vendor spellings) hide behind `oci` (the standard
@@ -252,8 +252,8 @@ var (
 		"podman", "docker",
 		// sphere: the tier word, hidden alias of the canonical peer
 		"sphere",
-		// platform: self is still the install/upgrade path
-		"self", "web",
+		// platform: self is a core install/upgrade path and stays visible.
+		"web",
 		// in-process tools (coreutils-class), same rule: they run, they are
 		// not taught. tokens feeds kb budgeting; posix-gate is the cert kit.
 		"tokens", "posix-gate",
@@ -1541,6 +1541,8 @@ func dispatch() {
 			dispatchExit(1)
 		}
 		dispatchExit(0)
+	case "src":
+		dispatchExit(runSrc(os.Args[2:]))
 	case "bootstrap", "upgrade":
 		// Hidden transitional aliases. They keep old muscle memory/scripts
 		// functional while `bashy self ...` becomes the documented surface.

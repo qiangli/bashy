@@ -10,13 +10,13 @@ grouping), `bashy commands --view/--atlas/--idioms` (the views).
 
 Bashy's command surface (~340 unique names) reaches agents through one flat
 catalog. **Since Sprint 167 (bashy 1.0.0) the default `bashy commands` is
-core-first**: the first screen is the 35 commands an agent uses every turn in
+featured-first**: the first screen is the 35 commands an agent uses every turn in
 seven rows (fleet · session · work · knowledge · comms · human · discovery),
 then the visible extras, then one line of counts for the userland (bash
 builtins · GNU coreutils · classic Unix · bin-managed externals) with the view
 that expands it, then the count of hidden **experimental** commands. 325 names
 in one wall was the problem; a first screen readable in one pass is the fix.
-The underlying class taxonomy (`builtin`/`coreutils`/`verb`, §4) is unchanged,
+The dispatch taxonomy (`builtin`/`coreutils`/`verb`, §4) is preserved as `dispatch_class`,
 and the partition now keys on the **origin** axis (§2.6) rather than on group
 heuristics. That is the *classical* lens — what a command **is** and how it
 runs. Agents planning work need more lenses:
@@ -43,12 +43,12 @@ Design rules:
    table entry, kept honest by coverage tests (a new tool that lacks an atlas
    entry fails the build). No flag-scraping heuristics.
 2. **Schema-stable, presentation-free.** The default `bashy commands` **`--json`**
-   (`bashy-commands-v1`) stays byte-identical — its keys (`builtins`/`coreutils`/
-   `verbs`) are a guarded contract. The default **human text** is the
+   (`bashy-commands-v2`) keeps its catalog keys (`builtins`/`coreutils`/
+   `verbs`) and versions the class and featured field changes. The default **human text** is the
    by-how-it-runs surface (§1); it is a rendering over the same records, not a
    schema, so it may be reorganized without a version bump (`-v --json` adds a
    `sections` object mirroring it). Atlas views carry their own schema id
-   (`bashy-atlas-v1`).
+   (`bashy-atlas-v2`).
 3. **Closed vocabularies.** Groups, tiers, and caps are fixed lists; an
    unknown value in a filter is an exit-2 error that prints the vocabulary,
    and an unknown value in the tables is a test failure.
@@ -61,7 +61,8 @@ Each command has one record:
 |---|---|
 | `name` | command name |
 | `synopsis` | one line (from `tool.Synopsis` / `verbSynopsis`; builtins have none) |
-| `class` | classical: `builtin` \| `coreutils` \| `verb` (unchanged v1 taxonomy) |
+| `class` | invariant boundary: `core` \| `skill` \| `external` ([decision record](bashy-invariant-core.md)) |
+| `dispatch_class` | dispatch kind: `builtin` \| `coreutils` \| `verb` |
 | `subclass` | refines `verb` only: `provisioner` \| `managed-external` \| `""` |
 | `group` | functional lens, one group per command (§2.1) |
 | `tier` | execution-tier lens — primary purpose, not execution location (§2.2) |
@@ -72,7 +73,7 @@ Each command has one record:
 | `origin` | **provenance lens (§2.6) — exclusive: `bash` \| `gnu` \| `unix` \| `external` \| `bashy` \| `registered`; mandatory** |
 | `ring` | registered commands only (§2.9): `shared` \| `local` — which ring the record came from |
 | `posix` | `true` for the 116 POSIX-required names (cross-cuts `origin`) |
-| `core` | `true` for the bashy 1.0.0 core (35 commands, §2.6) |
+| `featured` | `true` for the 35 first-screen commands (§2.6); separate from invariant class |
 | `os` | **platform lens (§2.7)** — the OSes the command is supported on (`darwin` \| `linux` \| `windows`); curated from the Windows/other stubs, cited in `platform.go` |
 | `partial` | supported OSes where it runs with a documented gap (a flag/mode that errors "not supported on windows") |
 | `portable` | `true` = full support on all three — the command a script can use as-is everywhere |
@@ -343,7 +344,7 @@ naming what was dropped (`not on darwin (2), not listed: chcon ps`).
 everything); `--os windows` asks about another host; `--portable` keeps only
 the cross-platform set and composes with any view. `bashy commands NAME` is
 never filtered — on macOS `ps` answers `NOT supported on darwin (only:
-linux)`. The default `--json` (`bashy-commands-v1`) is filtered the same way
+linux)`. The default `--json` (`bashy-commands-v2`) is filtered the same way
 but gains no key: its keys are the guarded contract.
 
 Windows entries are the ones to believe rather than check from a mac
@@ -352,7 +353,7 @@ wants a run on a real Windows host, not a green cross-compile.
 
 ### 2.6 Origin lens — who defined it (Sprint 167)
 
-The class split says how a name *resolves*; the origin says who *defined* it.
+The dispatch class says how a name *resolves*; the origin says who *defined* it.
 The bashy-added group has a name of its own — the **yoke commands** — so it can
 be referred to as easily as the other four (decision 2026-09-13, Sprint 167).
 `bashy commands` minus yoke is the **classic** surface. Every yoke command is
@@ -432,18 +433,18 @@ Origin is stamped per entry in `coreutils/pkg/atlas/origin.go`
 alias inherits it) and ratcheted in `origin_test.go`: every entry has one,
 origin follows subclass, tool-table counts are pinned, aliases inherit.
 
-**The 1.0.0 core and the experimental set.** The visible/hidden split is a
-*maturity* claim, not a removal. `core: true` marks the 35 commands the
+**The featured list and the experimental set.** The visible/hidden split is a
+*maturity* claim, not a removal. `featured: true` marks the 35 commands the
 operator named as used and dogfooded — fleet (`agent model tool skill person
 whois capability`) · session (`chat delegate foreman coach handoff resume
 claim`) · work (`sprint todo dag weave gate`) · knowledge (`kb graph craft
 secret`) · comms (`inbox mb meet ping notify bus activity`) · human (`app ask
-browser fetch`) · discovery (`commands`). Eighteen more bashy-added commands
+browser fetch`) · discovery (`commands`). Other bashy-added commands
 stay visible by name (`inspect oci sandbox ollama peer dks login tessaro release
-transpile dhnt otel duration tz ntp sntp clip ast`, plus `agentic` — a
+transpile dhnt otel duration tz ntp sntp clip ast self src`, plus `agentic` — a
 **Bash++ reserved word**, never a hide candidate). The
-remaining 23 — `supervise judge pair sdlc schedule herald acp · define lexicon
-search sota · check conform · run out full · podman docker · sphere · self web
+curated-hidden set — `supervise judge pair sdlc schedule herald acp · define lexicon
+search sota · check conform · run out full · podman docker · sphere · web
 · tokens posix-gate` — are **curated-hidden**: `status: "experimental"`,
 `hidden: true`, out of the default listing and `--agentic`, back under
 `--all`, answered by `commands NAME`, and **dispatched byte-identically with
@@ -579,11 +580,12 @@ contract with catalog metadata.
 ## 4. The views
 
 Default `bashy commands` **`--json`** stays schema-stable
-(`bashy-commands-v1`; `-v --json` additively carries a `sections` object of the
+(`bashy-commands-v2`; `-v --json` additively carries a `sections` object of the
 by-how-it-runs grouping); the default human text is that same five-section
-surface (§1). Atlas views emit `bashy-atlas-v1`.
+surface (§1). Atlas views emit `bashy-atlas-v2`.
 
 ```
+bashy commands --view class         # invariant core, skill, external
 bashy commands --view tier          # grouped by execution tier, counts per tier
 bashy commands --view group         # the functional-group lens
 bashy commands --view capabilities  # per-cap command lists
@@ -626,7 +628,7 @@ bashy commands --atlas              # full per-command records (the machine surf
 `--atlas --json` shape:
 
 ```json
-{"schema_version": "bashy-atlas-v1",
+{"schema_version": "bashy-atlas-v2",
  "tiers": ["userland","workplace","sandbox","sphere","cluster","cloud"],
  "groups": ["shell","fileutils","textutils","shellutils","code-intel","net",
             "orchestration","knowledge","engines","forge","toolchains",
@@ -637,12 +639,12 @@ bashy commands --atlas              # full per-command records (the machine surf
  "security_effects": ["cred","destroy","exec","net","persist","priv","pure",
                       "read","remote","spend","write"],
  "commands": [
-   {"name":"grep","class":"coreutils","group":"textutils","tier":"userland",
+   {"name":"grep","class":"core","dispatch_class":"coreutils","group":"textutils","tier":"userland",
     "resolver":"bashy-in-process","caps":["read-only"],"effects":["read"],"synopsis":"…"},
-   {"name":"weave","class":"verb","group":"orchestration","tier":"workplace",
+   {"name":"weave","class":"skill","dispatch_class":"verb","group":"orchestration","tier":"workplace",
     "resolver":"bashy-front-door","caps":["json"],"synopsis":"…"},
-   {"name":"docker","class":"verb","group":"engines","tier":"sandbox",
-    "resolver":"bashy-front-door","alias_of":"podman","caps":["daemon","spawns-processes"]}],
+   {"name":"docker","class":"skill","dispatch_class":"verb","group":"engines","tier":"sandbox",
+    "resolver":"bashy-front-door","alias_of":"oci","caps":["daemon","spawns-processes"]}],
  "idioms": [
    {"id":"count-matches","commands":["grep","wc"],"pattern":"grep PAT F | wc -l",
     "fused":"grep -c PAT F","note":"one process, one pipe fewer","tier":"userland"}]}
@@ -757,7 +759,7 @@ specced:
 - `cd bashy && go test ./internal/agentos/...` — merged-catalog coverage,
   per-view rendering, v1 byte-compat guard.
 - E2E: `bashy commands --view tier --json | jq '.schema_version'` →
-  `bashy-atlas-v1`; `bashy commands --tier cloud` → exactly the registry
+  `bashy-atlas-v2`; `bashy commands --tier cloud` → exactly the registry
   cloud entries; bogus vocabulary values → exit 2 + the vocabulary.
 - **How to add a command**: register the tool (or shim the verb), add one
   entry to the `pkg/atlas` table (bashy-side table for bashy-only verbs);

@@ -35,7 +35,7 @@ func TestWalkCobraSchemas(t *testing.T) {
 
 func TestCobraVerbSchemas(t *testing.T) {
 	ringDir(t)
-	for _, name := range []string{"sprint", "weave", "kb", "tool", "model", "agent", "service", "steward"} {
+	for _, name := range []string{"sprint", "weave", "kb", "tool", "model", "agent", "service", "steward", "src"} {
 		schemas := cobraSchemas(name)
 		if len(schemas) < 2 {
 			t.Errorf("%s has no child schemas", name)
@@ -46,5 +46,10 @@ func TestCobraVerbSchemas(t *testing.T) {
 	}
 	if cobraSchemas("not-a-command") != nil {
 		t.Fatal("invented a schema")
+	}
+	for _, path := range []string{"src show", "src fetch", "src check"} {
+		if _, ok := cobraSchemas("src")[path]; !ok {
+			t.Errorf("missing schema %q", path)
+		}
 	}
 }

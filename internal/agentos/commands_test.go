@@ -51,10 +51,13 @@ func TestCommandsCatalogSources(t *testing.T) {
 	if slices.Contains(curatedHiddenVerbs, "agentic") || !slices.Contains(verbs, "agentic") || !slices.Contains(alwaysShimVerbs, "agentic") {
 		t.Errorf("agentic is a Bash++ reserved word and must stay visible and shimmed")
 	}
-	for _, shimmed := range []string{"run", "podman", "sphere", "self", "check"} {
+	for _, shimmed := range []string{"run", "podman", "sphere", "check"} {
 		if !slices.Contains(alwaysShimVerbs, shimmed) {
 			t.Errorf("hiding %q must not remove its bare shim", shimmed)
 		}
+	}
+	if !slices.Contains(verbs, "self") || !slices.Contains(verbs, "src") {
+		t.Error("core source and upgrade verbs must be visible")
 	}
 	// The canonical name is the taught one; the other spellings are aliases.
 	// peer (canonical, visible) ← sphere (tier word, hidden); oci (canonical,
@@ -262,7 +265,7 @@ func TestCommandFeatureReportGrepKnownGap(t *testing.T) {
 	t.Setenv("BASHY_AGENTIC", "")
 	builtins, core, verbs := commandsCatalog()
 	info := commandFeatureReport("grep", builtins, core, verbs, hiddenVerbsCatalog(), gnuCoreutilsReport(core, builtins))
-	if info["class"] != "coreutils" || info["available"] != true {
+	if info["dispatch_class"] != "coreutils" || info["available"] != true {
 		t.Fatalf("unexpected grep feature report: %#v", info)
 	}
 	if _, ok := info["known_gaps"]; !ok {
@@ -274,7 +277,7 @@ func TestCommandFeatureReportMissingGNUCoreutil(t *testing.T) {
 	t.Setenv("BASHY_AGENTIC", "")
 	builtins, core, verbs := commandsCatalog()
 	info := commandFeatureReport("factor", builtins, core, verbs, hiddenVerbsCatalog(), gnuCoreutilsReport(core, builtins))
-	if info["class"] != "gnu-coreutils-missing" && info["class"] != "coreutils" {
+	if info["dispatch_class"] != "gnu-coreutils-missing" && info["dispatch_class"] != "coreutils" {
 		t.Fatalf("unexpected factor feature report: %#v", info)
 	}
 }

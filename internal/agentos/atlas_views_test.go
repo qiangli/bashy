@@ -14,7 +14,55 @@ import (
 	"testing"
 
 	"github.com/qiangli/yoke/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/src"
 )
+
+func TestAtlasViewInvariantClass(t *testing.T) {
+	t.Setenv("BASHY_AGENTIC", "")
+	out, code := captureCommands(t, "--view", "class", "--os", "any", "--json")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	var got atlasJSON
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.SchemaVersion != "bashy-atlas-v2" || got.View != "class" {
+		t.Fatalf("schema/view = %q/%q", got.SchemaVersion, got.View)
+	}
+	byName := map[string]atlasRecord{}
+	for _, r := range got.Commands {
+		byName[r.Name] = r
+	}
+	if len(src.CoreVerbs()) != 14 {
+		t.Fatalf("core verb count = %d", len(src.CoreVerbs()))
+	}
+	for _, name := range src.CoreVerbs() {
+		if r := byName[name]; r.Class != "core" {
+			t.Errorf("%s class = %q", name, r.Class)
+		}
+	}
+	for _, name := range []string{"cd", "ls", "awk", "m4", "ctags", "posix-providers"} {
+		if r := byName[name]; r.Class != "core" {
+			t.Errorf("%s class = %q", name, r.Class)
+		}
+	}
+	if r := byName["src"]; r.Stability != atlas.StabilityExperimental || r.DispatchClass != "verb" {
+		t.Errorf("src metadata = %+v", r)
+	}
+	for _, name := range []string{"sprint", "weave", "kb"} {
+		if r := byName[name]; r.Class != "skill" {
+			t.Errorf("%s class = %q", name, r.Class)
+		}
+	}
+	if r := byName["gh"]; r.Class != "external" {
+		t.Errorf("gh class = %q", r.Class)
+	}
+	plain, code := captureCommands(t, "--view", "class", "--os", "any")
+	if code != 0 || !strings.Contains(plain, "class core") || !strings.Contains(plain, "class skill") || !strings.Contains(plain, "class external") {
+		t.Errorf("class view: exit %d, output %q", code, plain)
+	}
+}
 
 // captureCommands runs dispatchCommands with stdout captured.
 func captureCommands(t *testing.T, args ...string) (string, int) {
@@ -185,8 +233,8 @@ func TestAtlasFullIncludesIdioms(t *testing.T) {
 	}
 }
 
-// The back-compat promise: the default JSON output keeps exactly the
-// bashy-commands-v1 shape — atlas work must never leak keys into it.
+// The default catalog JSON keeps its list shape at v2; per-command class
+// records live in the one-command and atlas views.
 func TestCommandsDefaultJSONUnchanged(t *testing.T) {
 	t.Setenv("BASHY_AGENTIC", "")
 	out, code := captureCommands(t, "--json")
@@ -337,8 +385,8 @@ func TestFeaturesReportGainsAtlasKeys(t *testing.T) {
 	if got["group"] != "textutils" || got["tier"] != "userland" {
 		t.Errorf("grep features: group=%v tier=%v", got["group"], got["tier"])
 	}
-	// Legacy keys unchanged.
-	if got["class"] != "coreutils" || got["resolver"] != "bashy-in-process" {
+	// Dispatch metadata remains available under the versioned key.
+	if got["dispatch_class"] != "coreutils" || got["resolver"] != "bashy-in-process" {
 		t.Errorf("legacy keys changed: %v", got)
 	}
 }
