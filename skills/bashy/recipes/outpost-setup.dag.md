@@ -222,7 +222,7 @@ case "$os" in
   Windows*|MINGW*|MSYS*) op="${INSTALL_DIR:-$LOCALAPPDATA/outpost}/outpost.exe" ;;
   *) op="${INSTALL_DIR:-$HOME/.local/bin}/outpost" ;;
 esac
-if ! "$op" ssh authorize --help >/dev/null 2>&1; then
+if ! "$op" services 2>/dev/null | grep -qE '^ *sshd '; then
   echo "sshd: this outpost has no outpost.sshd unit yet; upgrade outpost, then rerun: bashy dag -f outpost-setup.dag.md sshd AUTHORIZE_KEY=…"
   exit 0
 fi
@@ -373,4 +373,102 @@ done
 if [ "$seen" = yes ]; then echo "verify-remote: $NAME registered but offline after ${limit}s: first boot failed after pairing; read /var/log/cloud-init-output.log on the VM" >&2
 else echo "verify-remote: $NAME never registered: the user-data did not run or could not pair (expired invite? no network?)" >&2; fi
 exit 1
+```
+
+**Validation.** After `setup` (or after adding a machine), an agent runs `check` first; it is
+mandatory. If it passes, the agent **offers** the two optional stages to the
+user and runs them only if the user says yes:
+
+- `spotcheck` - quick, laddered probes of the three layers and six tiers plus
+  local Ollama. Each rung prints `PASS`, `SKIP` (not set up here - not an error)
+  or `FAIL`; the ladder stops at the first `FAIL`. Nothing is installed, started
+  or downloaded.
+- `tutorial` - a short guided tour: one runnable example per layer.
+
+### check
+Mandatory: prove the installation itself works. bashy, bash and outpost run;
+outpost is active and paired (with `SATELLITE` when given); the `outpost.sshd`
+unit is up when this outpost has it. Exits non-zero on any failure, with the
+reason.
+Effects: exec, read
+
+```bash
+os=$(uname -s)
+case "$os" in Windows*|MINGW*|MSYS*) d="${INSTALL_DIR:-$LOCALAPPDATA/outpost}"; x=.exe ;; *) d="${INSTALL_DIR:-$HOME/.local/bin}"; x= ;; esac
+fail=0
+ok()  { echo "PASS  $1"; }
+bad() { echo "FAIL  $1"; fail=1; }
+v=$("$d/bashy$x" --version 2>/dev/null | head -1) && ok "bashy runs: $v" || bad "bashy does not run from $d"
+[ "$("$d/bash$x" -c 'echo $((6*7))' 2>/dev/null)" = 42 ] && ok "bash runs" || bad "bash does not run from $d"
+st=$("$d/outpost$x" status 2>/dev/null) || st=
+printf '%s\n' "$st" | grep -qE '^ +state +active' && ok "outpost active ($(printf '%s\n' "$st" | sed -n 's/^ *agent_name *//p'))" || bad "outpost not active (outpost status)"
+if [ -n "${SATELLITE:-}" ]; then
+  printf '%s\n' "$st" | grep -qE "^ +cloudbox +${SATELLITE%/}\$" && ok "paired with $SATELLITE" || bad "not paired with $SATELLITE"
+fi
+svc=$("$d/outpost$x" services 2>/dev/null)
+if printf '%s\n' "$svc" | grep -qE '^ *sshd '; then
+  printf '%s\n' "$svc" | grep -E '^ *sshd ' | grep -qiE 'active|degraded' && ok "outpost.sshd unit up" || bad "outpost.sshd unit not up (outpost services)"
+else
+  echo "SKIP  outpost.sshd (this outpost predates the unit)"
+fi
+[ "$fail" = 0 ] && echo "check: all mandatory checks passed" || { echo "check: FAILED" >&2; exit 1; }
+```
+
+### spotcheck
+Optional, offered to the user after `check`: one quick probe per layer and per
+tier, plus local Ollama. Layers: Classic (bash + coreutils), Bash#, Yoke (the
+agent framework). Tiers: userland, workplace, sandbox, sphere, cluster, cloud.
+Tiers 3-6 report from outpost's own state and configured providers; nothing is
+started or pulled. `OLLAMA_MODEL=<name>` adds a one-line generation with a model
+that is already present.
+Effects: exec, net, read
+
+```bash
+pass() { echo "PASS  $1"; }
+skip() { echo "SKIP  $1"; }
+stop() { echo "FAIL  $1"; echo "spotcheck: stopped at the first failure" >&2; exit 1; }
+B="$BASHY"
+[ "$(printf 'b\na\n' | sort | head -1)" = a ] && [ "$(echo $((2**10)))" = 1024 ] && pass "layer 1 Classic: bash + coreutils" || stop "layer 1 Classic"
+[ "$("$B" --bashsharp -c 'x := 2 + 3; println(x)' 2>/dev/null)" = 5 ] && pass "layer 2 Bash#" || stop "layer 2 Bash#"
+[ -n "$("$B" commands --agentic 2>/dev/null | head -1)" ] && pass "layer 3 Yoke: agent command catalog" || stop "layer 3 Yoke"
+"$B" ls / >/dev/null 2>&1 && pass "tier 1 userland" || stop "tier 1 userland"
+"$B" kb --help >/dev/null 2>&1 && "$B" sprint --help >/dev/null 2>&1 && pass "tier 2 workplace (kb, sprint)" || stop "tier 2 workplace"
+svc=$(outpost services 2>/dev/null); st=$(outpost status 2>/dev/null)
+printf '%s\n' "$svc" | grep -E '^ *sandbox ' | grep -qi active && pass "tier 3 sandbox (outpost.sandbox active)" || skip "tier 3 sandbox (not enabled on this outpost)"
+printf '%s\n' "$st" | grep -qE '^ +mesh +true' && pass "tier 4 sphere (mesh on)" || skip "tier 4 sphere (mesh off)"
+printf '%s\n' "$st" | grep -qE '^ +cluster +true' && pass "tier 5 cluster (DKS member)" || skip "tier 5 cluster (not a DKS member)"
+"$B" infra list 2>/dev/null | grep -q . && pass "tier 6 cloud (provider configured)" || skip "tier 6 cloud (no provider configured)"
+models=$("$B" ollama list 2>/dev/null | tail -n +2)
+if [ -z "$models" ]; then skip "ollama (no local models; pull one with bashy ollama pull <model>)"
+else
+  pass "ollama ($(printf '%s\n' "$models" | wc -l | tr -d ' ') local model(s))"
+  if [ -n "${OLLAMA_MODEL:-}" ]; then
+    out=$("$B" ollama run "$OLLAMA_MODEL" "Reply with the single word: ready" 2>/dev/null | head -1)
+    [ -n "$out" ] && pass "ollama generation ($OLLAMA_MODEL): $out" || stop "ollama generation with $OLLAMA_MODEL"
+  fi
+fi
+echo "spotcheck: done"
+```
+
+### tutorial
+Optional, offered after `check`: a guided tour with one runnable example per
+layer, each printed before it runs.
+Effects: exec, read
+
+```bash
+B="$BASHY"
+demo() { echo; echo "\$ $1"; eval "$1"; }
+echo "Layer 1 - Classic: GNU Bash 5.3 + POSIX coreutils, in pure Go"
+demo 'printf "%s\n" banana apple cherry | sort | head -2'
+echo; echo "Layer 2 - Bash#: Go-shaped scripting inside bash"
+echo; echo '$ bashy --bashsharp -c '"'"'x := 42; func twice(n int) int { return n * 2 }; y := twice(x); echo "x=$x twice=$y"'"'"
+"$B" --bashsharp -c 'x := 42
+func twice(n int) int { return n * 2 }
+y := twice(x)
+echo "x=$x twice=$y"'
+echo "(more in the Bash# tour: https://github.com/bashsharp/tour)"
+echo; echo "Layer 3 - Yoke: the agent framework (tools, knowledge, coordination)"
+demo '"$B" commands --agentic | head -5'
+demo '"$B" kb --help | head -3'
+echo; echo "Every bashy command is also a skill: try \"$B <command> --help\" or \"$B skill list\"."
 ```

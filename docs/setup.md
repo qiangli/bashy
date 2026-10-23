@@ -217,6 +217,21 @@ VM (or later with `bashy infra harden --droplet <id> --tag bashy-owner-<owner>`)
 
 If you already have the provider's SSH access to a VM, path 1 works there too.
 
+## Validate the new machine
+
+Run after any path above (or after adding a cloud VM):
+
+```sh
+bashy dag -f outpost-setup.dag.md check        # mandatory: install + pairing + sshd work
+bashy dag -f outpost-setup.dag.md spotcheck    # optional: 3 layers, 6 tiers, local Ollama
+bashy dag -f outpost-setup.dag.md tutorial     # optional: one runnable example per layer
+```
+
+`check` must pass. `spotcheck` is a quick ladder (`PASS` / `SKIP` for "not set up
+here" / `FAIL`, stopping at the first failure); it never installs, starts or
+downloads anything. **Agents:** run `check` yourself; then offer `spotcheck` and
+`tutorial` to the user and run them only if the user wants them.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
