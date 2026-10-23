@@ -366,3 +366,13 @@ func TestDefaultSelfInstallDir(t *testing.T) {
 		t.Fatalf("DHNT_BIN_DIR not honored: %q", got)
 	}
 }
+
+// Recipes ask bashy where it is published instead of hard-coding the repo.
+func TestBashyReleaseBaseURL(t *testing.T) {
+	if got := bashyReleaseBaseURL("latest"); got != "https://github.com/"+bashyReleaseRepo+"/releases/latest/download" {
+		t.Fatalf("latest = %q", got)
+	}
+	if got := bashyReleaseBaseURL("v1.2.3"); got != "https://github.com/"+bashyReleaseRepo+"/releases/download/v1.2.3" {
+		t.Fatalf("tag = %q", got)
+	}
+}

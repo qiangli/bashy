@@ -1045,6 +1045,8 @@ github.com/qiangli/ollama v0.0.0-20261016181410-b0d0bbba93ab h1:OHRJGrZUjF6p04I8
 github.com/qiangli/ollama v0.0.0-20261016181410-b0d0bbba93ab/go.mod h1:I2nRWPzJSo6Di2rMFEbnKuWFzlQsc8M/GhlYJ8f/PZU=
 github.com/qiangli/outpost v0.14.38-0.20261021020319-3b38cd70625e h1:EPTArjwKpg2m7/A7Nnran1K4NBs5z+5ybghwqmMtDkw=
 github.com/qiangli/outpost v0.14.38-0.20261021020319-3b38cd70625e/go.mod h1:Dext1xIpAXUFuy1yRI/mLdSi33CumDH007IkUtmK7D8=
+github.com/qiangli/outpost v0.14.38-0.20261023060338-b4b6c2009912 h1:lBzY24l/6xSLVtY8PdiFIPCvmOJaB5GApMAIT5tD8mc=
+github.com/qiangli/outpost v0.14.38-0.20261023060338-b4b6c2009912/go.mod h1:Dext1xIpAXUFuy1yRI/mLdSi33CumDH007IkUtmK7D8=
 github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb h1:sZ0O1FtouYq/ieqiPwCA5s2SQrsTCYTHxJN0PMR7RTw=
 github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb/go.mod h1:G9TZ3lljDx9Cy/MDxevTV4W+VmBelEAF+SJIHLc+zrQ=
 github.com/qiangli/readline v0.1.4-0.20261013004858-df59d4e258e4 h1:jFEDhq2xCnc71hq0C/qEYzIuWQSwINigzSrYUGTvYHc=

@@ -30,11 +30,8 @@ Run it on the new machine, from the folder you extracted the release into:
 bashy dag -f outpost-setup.dag.md setup SATELLITE=https://<your-satellite> NAME=<host>
 ```
 
-Get the file on a machine that has only the release archive:
-
-```sh
-bashy fetch https://raw.githubusercontent.com/qiangli/bashy/main/skills/bashy/recipes/outpost-setup.dag.md -o outpost-setup.dag.md
-```
+Get the file on a machine that has only the release archive: download it with
+`bashy fetch` from the link in bashy's setup guide (`docs/setup.md`).
 
 Variables:
 
@@ -319,6 +316,7 @@ Effects: exec, net, read, write, destroy
 [ -n "${SATELLITE:-}" ] || { echo "cloud-init: set SATELLITE=<satellite URL>" >&2; exit 1; }
 out="${USER_DATA:-$NAME.user-data.sh}"
 tag="${RELEASE_TAG:-latest}"
+url=$("$BASHY" self fetch --print-url --version "$tag") || { echo "cloud-init: this bashy cannot report its release URL; upgrade bashy" >&2; exit 1; }
 if [ "${DRY_RUN:-0}" = 1 ]; then echo "would write $out: install bashy $tag, pair $NAME with $SATELLITE (invite ttl ${INVITE_TTL:-30m})"; exit 0; fi
 inv=$(mktemp); trap 'rm -f "$inv"' EXIT
 "$BASHY" satellite invite --satellite "$SATELLITE" --name "$NAME" --ttl "${INVITE_TTL:-30m}" --to-file "$inv" >/dev/null || exit 1
@@ -329,8 +327,7 @@ cat > "$out" <<USERDATA
 # bashy onboard user-data: install bashy + outpost, pair $NAME with $SATELLITE
 set -eu
 case "\$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) echo "unsupported arch" >&2; exit 1 ;; esac
-base=https://github.com/qiangli/bashy/releases
-if [ "$tag" = latest ]; then url=\$base/latest/download; else url=\$base/download/$tag; fi
+url=$url
 work=\$(mktemp -d); cd "\$work"
 curl -fsSLO "\$url/bashy-linux-\$arch.tar.gz"
 curl -fsSL "\$url/checksums.txt" -o checksums.txt

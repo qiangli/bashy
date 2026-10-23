@@ -67,11 +67,21 @@ func selfCheckCmd() *cobra.Command {
 
 func selfFetchCmd() *cobra.Command {
 	var version string
+	var printURL bool
 	cmd := &cobra.Command{
 		Use:   "fetch",
 		Short: "Download and cache a released bashy binary",
-		Args:  cobra.NoArgs,
+		Long: `Download and cache a released bashy binary.
+
+--print-url prints the release download base for --version instead of
+downloading (assets are <base>/<asset>, e.g. <base>/checksums.txt). Scripts
+and recipes use it so they never hard-code where bashy is published.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if printURL {
+				fmt.Fprintln(cmd.OutOrStdout(), bashyReleaseBaseURL(version))
+				return nil
+			}
 			path, err := ensureBashyRelease(cmd.Context(), version)
 			if err != nil {
 				return err
@@ -81,7 +91,18 @@ func selfFetchCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&version, "version", envOr("BASHY_SELF_VERSION", "latest"), "Release tag to fetch (default latest)")
+	cmd.Flags().BoolVar(&printURL, "print-url", false, "Print the release download base URL for --version and exit")
 	return cmd
+}
+
+// bashyReleaseBaseURL is the download base for a release tag: assets live at
+// <base>/<asset>. "latest" (or empty) follows the repository's latest release.
+func bashyReleaseBaseURL(version string) string {
+	v := strings.TrimSpace(version)
+	if v == "" || v == "latest" {
+		return "https://github.com/" + bashyReleaseRepo + "/releases/latest/download"
+	}
+	return "https://github.com/" + bashyReleaseRepo + "/releases/download/" + v
 }
 
 func selfInstallCmd() *cobra.Command {
@@ -90,7 +111,7 @@ func selfInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "install [path]", Short: "Install bashy, bash, sh, and a dormant outpost", Long: `Install bashy, outpost, bash and sh together. By default, use the four files
 beside this executable (works offline). --version fetches a verified release.
 --dir selects the install directory (default $DHNT_BIN_DIR, else
-%LOCALAPPDATA%\\outpost on Windows and ~/.local/bin elsewhere); [path] selects
+%LOCALAPPDATA%\outpost on Windows and ~/.local/bin elsewhere); [path] selects
 the bashy executable path.
 --source preserves the developer-only single-binary build/install workflow.
 
