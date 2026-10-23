@@ -47,8 +47,13 @@ func TestCobraVerbSchemas(t *testing.T) {
 	if cobraSchemas("not-a-command") != nil {
 		t.Fatal("invented a schema")
 	}
-	for _, path := range []string{"src show", "src fetch", "src check"} {
+	for _, path := range []string{"src show", "src fetch", "src check", "src branch", "src status", "src diff", "src log", "src pr", "src patch", "src upgrade", "src run"} {
 		if _, ok := cobraSchemas("src")[path]; !ok {
+			t.Errorf("missing schema %q", path)
+		}
+	}
+	for _, path := range []string{"approve list", "approve show", "approve allow", "approve deny", "approve wait", "approve request", "approve src"} {
+		if _, ok := cobraSchemas("approve")[path]; !ok {
 			t.Errorf("missing schema %q", path)
 		}
 	}

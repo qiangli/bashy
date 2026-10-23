@@ -56,7 +56,6 @@ import (
 	"github.com/qiangli/yoke/pkg/secrets"
 	coreskills "github.com/qiangli/yoke/pkg/skills"
 	"github.com/qiangli/yoke/pkg/sota"
-	"github.com/qiangli/yoke/pkg/src"
 	"github.com/qiangli/yoke/pkg/stats"
 	"github.com/qiangli/yoke/pkg/steward"
 	"github.com/qiangli/yoke/pkg/supervise"
@@ -151,7 +150,9 @@ func cobraVerb(name string) *cobra.Command {
 	case "ask":
 		return ask.NewAskCmd()
 	case "approve":
-		return ask.NewApproveCmd()
+		acmd := ask.NewApproveCmd()
+		acmd.AddCommand(newApproveSrcCmd())
+		return acmd
 	case "craft":
 		return craft.NewCraftCmd(craftOptions()...)
 	case "kb":
@@ -163,7 +164,7 @@ func cobraVerb(name string) *cobra.Command {
 	case "self":
 		return selfCmd()
 	case "src":
-		return src.NewSrcCmd()
+		return bashySrcCmd()
 	case "bootstrap", "upgrade":
 		return selfCmd()
 	case "git-scm":

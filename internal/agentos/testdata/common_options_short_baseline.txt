@@ -999,6 +999,7 @@ sprint goal evidence	-m	--message
 sprint handoff	-m	--message
 sprint submit	-m	--message
 sprint yield	-m	--message
+src log	-n	--number
 stat	-L	--dereference
 stat	-V	--version
 stat	-c	--format
