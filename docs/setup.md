@@ -147,6 +147,23 @@ VM's architecture, checks the release checksum, installs bashy and outpost into
 minutes by default, `INVITE_TTL`), and registers outpost as a boot-time service.
 Delete the user-data file after the VM is created: it holds the invite.
 
+Then confirm it came online (polls the satellite, up to 15 minutes):
+
+```sh
+bashy dag -f outpost-setup.dag.md verify-remote SATELLITE=https://<your-satellite> NAME=<vm-name>
+```
+
+`cloud-init`, `invite` and `verify-remote` act for the satellite's owner: they
+read the owner's Bearer token from `BASHY_FLEET_TOKEN` (`invite` and
+`cloud-init` fall back to an already-paired machine's own token). If a VM registers but stays
+offline, read its boot log (`/var/log/cloud-init-output.log`) from the provider
+console.
+
+Cleaning up a test VM with `bashy infra trash` needs the provider token in the
+provider's usual variable (for DigitalOcean `DIGITALOCEAN_ACCESS_TOKEN`) and the
+cloudbox ownership tag `bashy-owner-<owner>` on the VM; add it when you create the
+VM (or later with `bashy infra harden --droplet <id> --tag bashy-owner-<owner>`).
+
 If you already have the provider's SSH access to a VM, path 1 works there too.
 
 ## Troubleshooting

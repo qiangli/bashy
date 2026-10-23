@@ -245,3 +245,33 @@ USERDATA
 unset code
 echo "user-data written to $out (0600; holds a single-use invite valid ${INVITE_TTL:-30m}; delete it after the VM is created)"
 ```
+
+### verify-remote
+Run on the agent's machine after creating a cloud VM (or after path 3):
+confirm on the satellite that `NAME` came online, polling up to
+`VERIFY_TIMEOUT` seconds (default 900). Needs the owner Bearer token in
+`BASHY_FLEET_TOKEN`, the same one `invite` and `cloud-init` use. If the host
+registers but stays offline, first boot failed after pairing: read the VM's boot
+log from the provider console or its serial output (`/var/log/cloud-init-output.log`
+on most Linux images) — every command the user-data ran is there.
+Effects: net, read
+
+```bash
+[ -n "${NAME:-}" ] && [ -n "${SATELLITE:-}" ] || { echo "verify-remote: set NAME and SATELLITE" >&2; exit 1; }
+[ -n "${BASHY_FLEET_TOKEN:-}" ] || { echo "verify-remote: set BASHY_FLEET_TOKEN (owner Bearer)" >&2; exit 1; }
+tok=$(curl -s -m 20 -X POST -H "Authorization: Bearer $BASHY_FLEET_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"scopes":["ssh:read"],"ttl":"1h"}' "$SATELLITE/api/v1/tokens/exchange" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+[ -n "$tok" ] || { echo "verify-remote: token exchange on $SATELLITE failed" >&2; exit 1; }
+limit=${VERIFY_TIMEOUT:-900}; start=$(date +%s); seen=no
+while :; do
+  body=$(curl -s -m 20 -H "Authorization: Bearer $tok" "$SATELLITE/api/v1/ssh/hosts")
+  entry=$(printf '%s' "$body" | tr '{' '\n' | grep "\"hostname\":\"$NAME\"")
+  [ -n "$entry" ] && seen=yes
+  if printf '%s' "$entry" | grep -q '"online":true'; then echo "verify-remote: $NAME online after $(( $(date +%s) - start ))s"; exit 0; fi
+  [ $(( $(date +%s) - start )) -ge "$limit" ] && break
+  sleep 15
+done
+if [ "$seen" = yes ]; then echo "verify-remote: $NAME registered but offline after ${limit}s: first boot failed after pairing; read /var/log/cloud-init-output.log on the VM" >&2
+else echo "verify-remote: $NAME never registered: the user-data did not run or could not pair (expired invite? no network?)" >&2; fi
+exit 1
+```
