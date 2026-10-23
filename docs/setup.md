@@ -45,6 +45,10 @@ the profile folder name under `C:\Users` (for example `alexa`).
 
 ## 1. Manual, on the new machine
 
+Run these in any terminal on the new machine: its own keyboard and screen, or a
+remote session you already have on it (for example a cloud VM's console or SSH).
+Driving the setup from another machine is what path 3's agent is for.
+
 1. **Extract and install** into the standard per-user location.
 
    Windows (PowerShell, in the extracted folder):
