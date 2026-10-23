@@ -1,13 +1,56 @@
 # Setting up bashy on a new machine
 
-This guide gets a new Windows, macOS or Linux machine from "nothing installed" to
-"bashy + outpost installed, paired, and reachable". There are three ways to do it:
+This guide takes you from nothing to a working fleet: an account, your own
+satellite, and your machines (PCs and cloud VMs) paired with it. It covers
+Windows, macOS and Linux.
+
+## The onboarding journey
+
+| Stage | What happens | Recommended: an AI agent does it | Manual |
+|---|---|---|---|
+| 1. Account | sign up / log in at ai.dhnt.io and create an owner token for your agents | you sign up in the browser, then hand the token to the agent with `bashy ask` | [stage 1](#stage-1-account) |
+| 2. Satellite | create your own satellite on your cloud account (DigitalOcean today) | the agent provisions it through the portal's provisioning API | [stage 2](#stage-2-satellite) |
+| 3. This machine | install bashy here and pair it with the satellite | the agent runs [path 2](#2-ai-agent-on-the-new-machine) | [path 1](#1-manual-on-the-new-machine) |
+| 4. More machines | add PCs and cloud VMs to the satellite | [path 3](#3-bootstrap-then-an-ai-agent-from-another-machine) for PCs, [cloud servers](#cloud-servers-digitalocean-aws-azure-google-cloud-) for VMs | [path 1](#1-manual-on-the-new-machine) on each PC; cloud-init for VMs |
+
+With an AI agent you only ever do three things yourself: sign up in the browser,
+answer `bashy ask` prompts (tokens, pairing codes, passwords), and, for a PC
+the agent cannot reach yet, start the bootstrap command on it.
+
+### Stage 1: account
+
+1. Sign up or log in at <https://ai.dhnt.io> (GitHub, Google, LinkedIn, …).
+2. Create an owner token for your agents: Cloudbox, then Settings, then Access
+   Tokens, preset **Fleet owner (agents)**. Copy it once.
+3. Give it to your agent through `bashy ask` (never paste it into a chat). The
+   agent keeps it as `BASHY_FLEET_TOKEN` and can mint narrower tokens from it
+   with `bashy token create`.
+
+### Stage 2: satellite
+
+A satellite is your own control plane: it runs on your cloud account, at your
+cost, and your machines pair with it instead of the shared portal.
+
+1. Give the portal a scoped provider token for your cloud account (Cloudbox,
+   then Satellites; for DigitalOcean a custom-scoped API token without delete
+   rights).
+2. Create the satellite: Cloudbox, then Satellites, then Provision, or let the
+   agent call the provisioning API (`POST /api/v1/provisioning/requests`, owner
+   token). Follow it with `bashy infra request ls` / `status`; it is ready when
+   the request says `installed`.
+3. Note its URL (for example `https://<ip-dashed>.sslip.io`): stages 3 and 4
+   pair with it.
+
+### Stage 3 and 4: machines
+
+The rest of this guide. Three paths add a PC; cloud VMs are set up at first boot:
 
 | Path | Where the work happens | Who does it |
 |---|---|---|
 | [1. Manual](#1-manual-on-the-new-machine) | on the new machine | you |
 | [2. AI agent on the machine](#2-ai-agent-on-the-new-machine) | on the new machine | an agent running there, with you answering its prompts |
 | [3. Bootstrap, then an AI agent remotely](#3-bootstrap-then-an-ai-agent-from-another-machine) | you start one command on the new machine; the rest from another machine | an agent on your laptop |
+| [Cloud servers](#cloud-servers-digitalocean-aws-azure-google-cloud-) | the VM's first boot | an agent (or you) generates the user-data |
 
 Every path uses only bashy and outpost. No OpenSSH server, package manager or
 other tool is needed on the new machine.
