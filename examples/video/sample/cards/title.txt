@@ -1,0 +1,3 @@
+bashy
+
+a Bash 5.3-compatible shell for agents

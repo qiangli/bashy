@@ -1,0 +1,5 @@
+# A 30-second sample: a title card, one step, a two-terminal pair, a close.
+card title 3
+step compat
+pair left right
+card close 3
