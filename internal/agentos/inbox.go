@@ -511,7 +511,7 @@ func adoptManagedSessionWatch(id inboxWatcherIdentity, releaseLease func()) (inb
 		// even for the same CLAUDE_CODE_SESSION_ID. Hash match is sufficient.
 		if id.sessionClaim != "" && incumbent.SessionClaim == id.sessionClaim {
 			return inboxWatcherClaim{
-				leave: releaseLease,
+				leave:     releaseLease,
 				ownerLive: func() error { return nil },
 			}, true
 		}
