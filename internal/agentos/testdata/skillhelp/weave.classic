@@ -46,7 +46,7 @@ Available Commands:
   pause        Cleanly suspend every running weave worker
   point        Set an issue's story points (sprint planning; 8 = ~30m cap)
   prio         Set an issue's priority tier (or --auto to LLM-rank the queue)
-  prune        Remove workspace directories and merged branches for terminal items
+  prune        List stale workspaces, caches and merged branches; --apply removes them
   pull         Fast-forward your local main with the merged agent branches
   recall       Recall persistent memory observations related to a query
   reconcile    Settle a retained reservation after verifying its recorded child group stopped

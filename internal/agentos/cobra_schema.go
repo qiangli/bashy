@@ -149,6 +149,8 @@ func cobraVerb(name string) *cobra.Command {
 		return bus.NewBusCmd()
 	case "ask":
 		return ask.NewAskCmd()
+	case "record":
+		return ask.NewRecordCmd()
 	case "approve":
 		acmd := ask.NewApproveCmd()
 		acmd.AddCommand(newApproveSrcCmd())
