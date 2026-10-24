@@ -124,7 +124,9 @@ $("full").onclick=()=>{ const on=document.body.classList.toggle("full"); $("full
 // on this computer). Never while recording, so the microphone stays clean.
 const LANG = "{{LANG}}";
 function voiceFor(lang){ const pick=$("voice")&&$("voice").value; if(pick){ const pv=speechSynthesis.getVoices().find(v=>v.name===pick); if(pv) return pv; } const vs=speechSynthesis.getVoices(); const l=lang.toLowerCase(); return vs.find(v=>v.lang.toLowerCase()===l) || vs.find(v=>v.lang.toLowerCase().startsWith(l.split("-")[0])) || null; }
-function stopListen(){ if("speechSynthesis" in window) speechSynthesis.cancel(); $("listen").textContent="Listen"; document.querySelectorAll(".ln.on").forEach(e=>e.classList.remove("on")); }
+let listening=false, listenRun=0;
+function clearLines(){ document.querySelectorAll(".ln.on").forEach(e=>e.classList.remove("on")); }
+function stopListen(){ listenRun++; listening=false; if("speechSynthesis" in window) speechSynthesis.cancel(); $("listen").textContent="Listen"; clearLines(); }
 function showLine(i){
   document.querySelectorAll(".ln.on").forEach(e=>e.classList.remove("on"));
   const d=document.querySelector('.ln[data-i="'+i+'"]'); if(!d) return; d.classList.add("on");
@@ -132,16 +134,21 @@ function showLine(i){
   else { scrollY=d.offsetTop; $("ptext").style.transform=`translateY(${-scrollY}px)`; }
 }
 $("listen").onclick=()=>{
-  if (speechSynthesis.speaking || speechSynthesis.pending) { stopListen(); return; }
+  // The page keeps its own state: Chrome's speaking/pending flags lag around
+  // start and cancel, and an empty utterance never fires its end event.
+  if (listening) { stopListen(); return; }
+  const run=++listenRun; listening=true; $("listen").textContent="Stop listening";
+  speechSynthesis.cancel(); speechSynthesis.resume();
   const v=voiceFor(LANG); if(!v) msg("No "+LANG+" voice installed; using the default voice.");
-  let last=-1;
-  LINES.forEach((l,i)=>{ if(!l.trim()) return; last=i;
+  const todo=LINES.map((l,i)=>[l,i]).filter(([l])=>l.trim());
+  const done=()=>{ if(run!==listenRun) return; listening=false; $("listen").textContent="Listen"; clearLines(); };
+  if(!todo.length){ done(); return; }
+  todo.forEach(([l,i],k)=>{
     const u=new SpeechSynthesisUtterance(l); u.lang=LANG; if(v) u.voice=v; u.rate=0.95;
-    u.onstart=()=>showLine(i); speechSynthesis.speak(u); });
-  if (last<0) return;
-  const end=new SpeechSynthesisUtterance(""); end.onend=()=>{ $("listen").textContent="Listen"; document.querySelectorAll(".ln.on").forEach(e=>e.classList.remove("on")); };
-  speechSynthesis.speak(end);
-  $("listen").textContent="Stop listening";
+    u.onstart=()=>{ if(run===listenRun) showLine(i); };
+    if(k===todo.length-1){ u.onend=done; u.onerror=done; }
+    speechSynthesis.speak(u);
+  });
 };
 // Look and voice: teleprompter size/font and the Listen voice, remembered
 // per browser (best effort; the page works without storage).
