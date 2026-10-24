@@ -59,7 +59,8 @@ bashy commands add "$NAME" \
   --set args.flags.1.name=script \
   --set args.flags.2.name=max-seconds --set args.flags.2.type=int --set args.flags.2.default=180 \
   --set args.flags.3.name=out \
-  --set args.flags.4.name=timeout --set args.flags.4.type=int --set args.flags.4.default=1200
+  --set args.flags.4.name=timeout --set args.flags.4.type=int --set args.flags.4.default=1200 \
+  --set args.flags.5.name=lang --set args.flags.5.default=en-US
 echo "register: $NAME -> $here/record.bsh"
 ```
 

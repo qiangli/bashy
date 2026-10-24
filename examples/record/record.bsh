@@ -3,7 +3,7 @@
 # take, and print the path of the take.
 #
 #   record photo|video|audio [--prompt TEXT] [--script FILE]
-#          [--max-seconds N] [--out PATH] [--timeout SECONDS]
+#          [--max-seconds N] [--out PATH] [--timeout SECONDS] [--lang TAG]
 #
 # It opens a one-time page on loopback in the person's own browser: a small
 # live preview, a 3-second countdown, Start / Stop / Retake / "Use this". With
@@ -33,8 +33,11 @@ allowing the camera or microphone once in the browser and pressing buttons.
 - A one-time page opens in their browser on this computer: a small live
   preview, a 3-second countdown, Start / Stop / Retake / "Use this".
 - With `--script FILE` the text is a large scrolling teleprompter (speed
-  slider, up/down keys) and a "Full script" view lets them practise first.
-  Write the script for them: short sentences, one idea per line.
+  slider, up/down keys); "Full script" shows it all to practise, and
+  "Listen" reads it aloud in `--lang` (a BCP 47 tag such as en-US, zh-CN,
+  es-ES; default en-US) with the browser's voice on this computer.
+  Write the script for them in their language: short sentences, one idea
+  per line.
 - Only the path of the take is printed (mode 0600), so it composes:
   `ffprobe "$(record video --script s.txt)"`. A failure exits non-zero.
 - Tell the person in chat what is about to open and what to press, then
@@ -63,6 +66,19 @@ import (
 )
 
 func maxTake() int { return 1 << 30 }
+
+// langTag keeps a BCP 47-looking tag (letters, digits, hyphens), else en-US.
+func langTag(s string) string {
+	if s == "" || len(s) > 35 {
+		return "en-US"
+	}
+	for _, r := range s {
+		if !(r == '-' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+			return "en-US"
+		}
+	}
+	return s
+}
 
 func extFor(ct string) string {
 	switch {
@@ -98,7 +114,7 @@ func openURL(u string) error {
 }
 
 // Record serves page for one take and returns the path it was written to.
-func Record(kind, prompt, script, maxSecs, out, timeoutSecs, page string) (string, error) {
+func Record(kind, prompt, script, maxSecs, out, timeoutSecs, lang, page string) (string, error) {
 	if kind != "photo" && kind != "video" && kind != "audio" {
 		return "", fmt.Errorf("record: first argument must be photo, video or audio (got %q)", kind)
 	}
@@ -124,6 +140,7 @@ func Record(kind, prompt, script, maxSecs, out, timeoutSecs, page string) (strin
 		"{{SCRIPT_JSON}}", string(sj),
 		"{{MAX}}", maxSecs,
 		"{{REQUESTER}}", html.EscapeString(who),
+		"{{LANG}}", langTag(lang),
 	).Replace(page)
 
 	type take struct {
@@ -213,7 +230,7 @@ case ${1:-} in
 esac
 kind=$1
 shift
-prompt="" script="" max=180 out="" timeout=1200
+prompt="" script="" max=180 out="" timeout=1200 lang=en-US
 while [ $# -gt 0 ]; do
 	case $1 in
 	--prompt) prompt=$2; shift 2 ;;
@@ -221,12 +238,13 @@ while [ $# -gt 0 ]; do
 	--max-seconds) max=$2; shift 2 ;;
 	--out) out=$2; shift 2 ;;
 	--timeout) timeout=$2; shift 2 ;;
+	--lang) lang=$2; shift 2 ;;
 	-h | --help) sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
 	*) echo "record: unknown argument: $1" >&2; exit 2 ;;
 	esac
 done
 page=$(<"$here/page.html")
-path := go.Record(kind, prompt, script, max, out, timeout, page)
+path := go.Record(kind, prompt, script, max, out, timeout, lang, page)
 # A failed foreign call leaves path empty (its message is already on stderr).
 [ -n "$path" ] || exit 1
 echo "$path"

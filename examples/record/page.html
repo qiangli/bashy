@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="{{LANG}}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>bashy record · {{KIND}}</title>
 <style>
@@ -39,6 +39,8 @@ body.pm .prompter::before{top:22%}
 body.full .prompter{overflow:auto}
 body.full .prompter .text{position:static;transform:none!important;padding:24px 6%;font-size:clamp(1.2rem,2.4vw,2rem)}
 body.full .prompter::before{display:none}
+.ln{min-height:1.4em}
+.ln.on{color:var(--accent)}
 </style></head><body><div class="wrap">
 <header><b>bashy record · {{KIND}}</b><span>requested by {{REQUESTER}} · stays on this computer until you press “Use this”</span></header>
 <div class="prompt">{{PROMPT}}</div>
@@ -53,6 +55,7 @@ body.full .prompter::before{display:none}
 <div class="controls">
   <button class="primary" id="start">Start</button>
   <button id="full" style="display:none">Full script</button>
+  <button id="listen" style="display:none">Listen</button>
   <button class="rec" id="stop" disabled>Stop</button>
   <button id="retake" disabled>Retake</button>
   <button class="ok" id="use" disabled>Use this</button>
@@ -63,10 +66,13 @@ body.full .prompter::before{display:none}
 <script>
 const KIND = "{{KIND}}", SCRIPT = {{SCRIPT_JSON}}, MAX = {{MAX}};
 const $ = id => document.getElementById(id);
+const LINES = SCRIPT ? SCRIPT.split("\n") : [];
+function renderLines(){ const t=$("ptext"); t.innerHTML=""; LINES.forEach((l,i)=>{ const d=document.createElement("div"); d.className="ln"; d.dataset.i=i; d.textContent=l||"\u00a0"; t.appendChild(d); }); }
+
 const preview=$("preview"), playback=$("playback"), still=$("still"), badge=$("badge"), count=$("count");
 let stream, rec, chunks=[], blob=null, timer=null, scrollY=0, rafId=0, t0=0;
 if (KIND==="photo") $("start").textContent="Take photo";
-if (SCRIPT) { $("full").style.display="inline-block"; document.body.classList.add("pm"); $("prompter").style.display="block"; $("speedl").style.display="flex"; $("ptext").textContent=SCRIPT; resetPrompter(); }
+if (SCRIPT) { if ("speechSynthesis" in window) $("listen").style.display="inline-block"; $("full").style.display="inline-block"; document.body.classList.add("pm"); $("prompter").style.display="block"; $("speedl").style.display="flex"; renderLines(); resetPrompter(); }
 function resetPrompter(){ scrollY=0; $("ptext").style.top=$("prompter").clientHeight*0.22+"px"; $("ptext").style.transform="translateY(0)"; }
 function scrollPrompter(ts){ const dt=(ts-(scrollPrompter.last||ts))/1000; scrollPrompter.last=ts; scrollY+=dt*Number($("speed").value); $("ptext").style.transform=`translateY(${-scrollY}px)`; rafId=requestAnimationFrame(scrollPrompter); }
 function msg(t){ $("msg").textContent=t; }
@@ -88,10 +94,11 @@ $("start").onclick = async ()=>{
     return;
   }
   document.body.classList.remove("full"); $("full").textContent="Full script"; $("full").disabled=true;
+  stopListen(); $("listen").disabled=true;
   resetPrompter(); await countdown(3);
   chunks=[]; const type=pickType(); rec=new MediaRecorder(stream, type?{mimeType:type}:{});
   rec.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
-  rec.onstop=()=>{ $("full").disabled=false; if(SCRIPT){document.body.classList.remove("pm"); $("prompter").style.display="none";} blob=new Blob(chunks,{type:rec.mimeType||type||"video/webm"}); playback.src=URL.createObjectURL(blob); playback.style.display="block"; preview.style.display="none"; badge.className="badge"; badge.textContent="review"; cancelAnimationFrame(rafId); scrollPrompter.last=0; $("retake").disabled=false; $("use").disabled=false; msg("Watch it back. “Use this” sends it; “Retake” starts over."); };
+  rec.onstop=()=>{ $("full").disabled=false; $("listen").disabled=false; if(SCRIPT){document.body.classList.remove("pm"); $("prompter").style.display="none";} blob=new Blob(chunks,{type:rec.mimeType||type||"video/webm"}); playback.src=URL.createObjectURL(blob); playback.style.display="block"; preview.style.display="none"; badge.className="badge"; badge.textContent="review"; cancelAnimationFrame(rafId); scrollPrompter.last=0; $("retake").disabled=false; $("use").disabled=false; msg("Watch it back. “Use this” sends it; “Retake” starts over."); };
   rec.start(1000); t0=Date.now(); badge.className="badge rec"; $("stop").disabled=false;
   if (SCRIPT) rafId=requestAnimationFrame(scrollPrompter);
   timer=setInterval(()=>{ const s=Math.floor((Date.now()-t0)/1000); badge.textContent="● "+Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); if(MAX>0&&s>=MAX) $("stop").click(); },250);
@@ -108,5 +115,28 @@ $("use").onclick=async ()=>{
 $("speed").oninput=()=>{ $("speedv").textContent=$("speed").value; };
 document.addEventListener("keydown",e=>{ if(!SCRIPT) return; const r=$("speed"); if(e.key==="ArrowUp"){r.value=Math.min(120,+r.value+5);} else if(e.key==="ArrowDown"){r.value=Math.max(5,+r.value-5);} else return; e.preventDefault(); $("speedv").textContent=r.value; });
 $("full").onclick=()=>{ const on=document.body.classList.toggle("full"); $("full").textContent=on?"Prompter":"Full script"; if(!on) resetPrompter(); };
+// Listen: read the script aloud in the person's language (browser speech,
+// on this computer). Never while recording, so the microphone stays clean.
+const LANG = "{{LANG}}";
+function voiceFor(lang){ const vs=speechSynthesis.getVoices(); const l=lang.toLowerCase(); return vs.find(v=>v.lang.toLowerCase()===l) || vs.find(v=>v.lang.toLowerCase().startsWith(l.split("-")[0])) || null; }
+function stopListen(){ if("speechSynthesis" in window) speechSynthesis.cancel(); $("listen").textContent="Listen"; document.querySelectorAll(".ln.on").forEach(e=>e.classList.remove("on")); }
+function showLine(i){
+  document.querySelectorAll(".ln.on").forEach(e=>e.classList.remove("on"));
+  const d=document.querySelector('.ln[data-i="'+i+'"]'); if(!d) return; d.classList.add("on");
+  if (document.body.classList.contains("full")) { d.scrollIntoView({block:"center",behavior:"smooth"}); }
+  else { scrollY=d.offsetTop; $("ptext").style.transform=`translateY(${-scrollY}px)`; }
+}
+$("listen").onclick=()=>{
+  if (speechSynthesis.speaking || speechSynthesis.pending) { stopListen(); return; }
+  const v=voiceFor(LANG); if(!v) msg("No "+LANG+" voice installed; using the default voice.");
+  let last=-1;
+  LINES.forEach((l,i)=>{ if(!l.trim()) return; last=i;
+    const u=new SpeechSynthesisUtterance(l); u.lang=LANG; if(v) u.voice=v; u.rate=0.95;
+    u.onstart=()=>showLine(i); speechSynthesis.speak(u); });
+  if (last<0) return;
+  const end=new SpeechSynthesisUtterance(""); end.onend=()=>{ $("listen").textContent="Listen"; document.querySelectorAll(".ln.on").forEach(e=>e.classList.remove("on")); };
+  speechSynthesis.speak(end);
+  $("listen").textContent="Stop listening";
+};
 camera();
 </script></body></html>
