@@ -89,6 +89,7 @@ import (
 	"github.com/qiangli/yoke/pkg/board"
 	"github.com/qiangli/yoke/pkg/broker"
 	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/room"
 	"github.com/qiangli/yoke/pkg/capability"
 	"github.com/qiangli/yoke/pkg/chat"
 	"github.com/qiangli/yoke/pkg/craft"
@@ -443,17 +444,87 @@ func newBusFrontDoorCmd(name string) (*cobra.Command, string, bool) {
 	wireMessageBoard()
 	switch name {
 	case "mb", "messages":
-		return bus.NewMessageBoardCmdWithSprintResolver(weave.ResolveSprintScopeByHandle), "mb", true
+		cmd := bus.NewMessageBoardCmdWithSprintResolver(weave.ResolveSprintScopeByHandle)
+		wrapAuthoredClaimErrors(cmd)
+		return cmd, "mb", true
 	case "inbox":
 		return newUnifiedInboxCmd(), "inbox", true
 	case "notify":
-		return bus.NewNotifyCmd(), "notify", true
+		cmd := bus.NewNotifyCmd()
+		wrapAuthoredClaimErrors(cmd)
+		return cmd, "notify", true
 	case "feed":
 		return feed.NewCmd(), "feed", true
 	case "instance":
 		return instance.NewCmd(nil), "instance", true
 	default:
 		return nil, "", false
+	}
+}
+
+// wrapAuthoredClaimErrors enhances "no matching live session claim" refusals
+// with the conflicting holder and how to take the claim, so an attended
+// session that is refused knows whether a foreman or another session holds
+// the seat. When a live foreign holder exists the peek does not hijack;
+// the operator must take the seat explicitly.
+func wrapAuthoredClaimErrors(cmd *cobra.Command) {
+	for _, sub := range cmd.Commands() {
+		orig := sub.RunE
+		if orig == nil {
+			continue
+		}
+		sub.RunE = func(c *cobra.Command, args []string) error {
+			err := orig(c, args)
+			if err == nil || !strings.Contains(err.Error(), "no matching live session claim") {
+				return err
+			}
+			as, _ := c.Flags().GetString("as")
+			if strings.TrimSpace(as) == "" {
+				as, _ = c.Flags().GetString("from")
+			}
+			// Try to resolve canonical name for holder lookup.
+			holderDetail := ""
+			holderMode := ""
+			holderPID := 0
+			if canon := strings.TrimSpace(as); canon != "" {
+				if card, live, ferr := room.Find(room.AgentClaimID(canon)); ferr == nil && live {
+					mode := strings.TrimSpace(card.Mode)
+					if mode == "" {
+						mode = "unknown"
+					}
+					holderMode = mode
+					owner := card.OwnerPID
+					if owner == 0 {
+						owner = card.PID
+					}
+					holderPID = owner
+					holderDetail = fmt.Sprintf(" holder: pid %d, mode %q, task %q, cwd %q, session %q", owner, mode, strings.TrimSpace(card.Task), strings.TrimSpace(card.Cwd), card.SessionClaim)
+				} else if card, live, ferr := room.Find(canon); ferr == nil && live {
+					holderDetail = fmt.Sprintf(" holder: pid %d, mode %q", card.PID, strings.TrimSpace(card.Mode))
+					holderMode = strings.TrimSpace(card.Mode)
+					holderPID = card.PID
+				}
+			}
+			if holderPID != 0 && holderMode != "" {
+				return fmt.Errorf("%w; seat %q is held live by %s pid %d in another session;%s take it with `bashy sprint take` / ask that session to release it, or run `bashy inbox --as %s --peek` in the SAME session only when the seat is stale or you already hold it", err, as, holderMode, holderPID, holderDetail+";", as)
+			}
+			extra := ""
+			if holderDetail != "" {
+				extra = holderDetail + ";"
+			}
+			return fmt.Errorf("%w; seat %q is held by another live session.%s take the claim by running `bashy inbox --as %s --peek` (or `--watch`) in the SAME session (same CLAUDE_CODE_SESSION_ID / session key) before `bashy mb send --as %s ...`, or export BASHY_AGENT=%s when the seat is unclaimed", err, as, extra, as, as, as)
+		}
+	}
+	// Also wrap the parent command itself (e.g. `bashy mb --as X` read)
+	if cmd.RunE != nil {
+		orig := cmd.RunE
+		cmd.RunE = func(c *cobra.Command, args []string) error {
+			err := orig(c, args)
+			if err == nil || !strings.Contains(err.Error(), "no matching live session claim") {
+				return err
+			}
+			return err
+		}
 	}
 }
 

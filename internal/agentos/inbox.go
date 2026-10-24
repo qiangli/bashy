@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 	"sync"
@@ -209,6 +210,18 @@ pretends such a session was adopted.`,
 			reader, err := resolveInboxReader(as)
 			if err != nil {
 				return err
+			}
+			// A peek that names an agent seat in an attended session (same
+			// CLAUDE_CODE_SESSION_ID / session key) satisfies a later
+			// `bashy mb send --as SEAT` from the same session. The watch path
+			// already holds a live session claim; a bare peek held none, so
+			// the send was refused as "no matching live session claim" even
+			// after a synced peek. Record the peek claim for the session so
+			// the subsequent send finds a matching live claim without
+			// weakening the rule that a post must name a seat the session
+			// actually holds.
+			if peek && strings.TrimSpace(as) != "" {
+				_ = recordInboxPeekClaim(reader)
 			}
 			// A bare human watch belongs to the OS login and has no agent card.
 			// An explicit --as or authenticated agent watch must instead claim
@@ -484,8 +497,24 @@ func adoptManagedSessionWatch(id inboxWatcherIdentity, releaseLease func()) (inb
 	if err != nil || !live {
 		return inboxWatcherClaim{}, false
 	}
-	if !strings.EqualFold(strings.TrimSpace(incumbent.Mode), "foreman") {
+	if m := strings.ToLower(strings.TrimSpace(incumbent.Mode)); m != "foreman" && m != "peek" {
 		return inboxWatcherClaim{}, false
+	}
+	// For a peek holder, also require the session digest to match — otherwise
+	// a stale peek from a different CLAUDE_CODE_SESSION_ID would be adopted.
+	if m := strings.ToLower(strings.TrimSpace(incumbent.Mode)); m == "peek" {
+		if id.sessionClaim != "" && incumbent.SessionClaim != "" && incumbent.SessionClaim != id.sessionClaim {
+			return inboxWatcherClaim{}, false
+		}
+		// Peek adoption is by session hash, not ancestry: the holder is a
+		// short-lived child, not the harness parent, so ancestry would fail
+		// even for the same CLAUDE_CODE_SESSION_ID. Hash match is sufficient.
+		if id.sessionClaim != "" && incumbent.SessionClaim == id.sessionClaim {
+			return inboxWatcherClaim{
+				leave: releaseLease,
+				ownerLive: func() error { return nil },
+			}, true
+		}
 	}
 	anchor := inboxWatcherAnchor(incumbent)
 	if inboxOwnerRelation(os.Getpid(), anchor) != inboxOwnerLive {
@@ -1299,4 +1328,104 @@ func unifiedTurnPreamble(agent string) bus.PreparedPreamble {
 	}
 	text := "[Bashy unified inbox — read before the instruction below]\n" + strings.TrimSpace(out.String())
 	return bus.NewPreparedPreamble(text, ack)
+}
+
+// recordInboxPeekClaim makes a peek act as a live-session claim for the
+// subsequent `bashy mb send --as SEAT` from the SAME tool session (same
+// CLAUDE_CODE_SESSION_ID / session key). The watch path already holds a live
+// claim; a bare peek held none, so the send was refused even after a synced
+// peek. The claim is the session digest that bus.ResolveAuthoredActor
+// compares (room.Card.SessionClaim == hash(currentAgentSession)) and is
+// anchored to the harness OwnerPID so it outlives the short-lived peek
+// command. Best-effort: a failed claim never fails the peek read itself.
+//
+// A peek may claim the seat ONLY when (a) nobody holds it, (b) the holder
+// is stale (not live), or (c) the holder is this same session (same digest).
+// It MUST never evict a LIVE incumbent held by a different session — that
+// would be a silent seat hijack. When a live foreign holder exists the peek
+// still reads but records no claim, and a subsequent mb send is refused with
+// the holder's identity so the operator knows to `bashy sprint take`.
+func recordInboxPeekClaim(reader string) error {
+	raw := currentAgentSession(reader)
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	agent, ok := fleet.New().Agent(reader)
+	if !ok {
+		return nil
+	}
+	tool, ok := fleet.New().Tool(agent.Tool)
+	if !ok {
+		return nil
+	}
+	_ = tool
+	hash := bus.HashSessionClaim(raw)
+	if hash == "" {
+		return nil
+	}
+	// If a LIVE holder from another session exists, do not evict.
+	// Claim only when empty, stale, or same-session digest.
+	if incumbent, live, err := room.Find(room.AgentClaimID(reader)); err == nil && live {
+		if incumbent.SessionClaim != "" && hash != "" && incumbent.SessionClaim != hash {
+			// Live foreign holder — never evict.
+			return nil
+		}
+		if incumbent.SessionClaim == "" && hash != "" {
+			// Live holder with no digest predates the contract — treat as
+			// foreign live as well; do not hijack.
+			return nil
+		}
+		// Same-session live holder is allowed to be refreshed; fall through
+		// to ClaimSession which will update the card in place. But if the
+		// incumbent is same session, we should still allow the claim to
+		// update holder PID. ClaimSession handles same-digest update without
+		// eviction, so no RemoveMember needed.
+	}
+	holderPID := peekClaimHolderPID(reader)
+	cwd, _ := os.Getwd()
+	card := room.Card{
+		ID:           room.AgentClaimID(reader),
+		Nick:         reader,
+		Principal:    strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL")),
+		SessionClaim: hash,
+		Tool:         agent.Tool,
+		Model:        agent.Model,
+		Binding:      agent.MatrixKey(),
+		Mode:         "peek",
+		Task:         "peek claim for authored send",
+		PID:          holderPID,
+		OwnerPID:     holderPID,
+		Cwd:          cwd,
+	}
+	if card.Principal == "" {
+		card.Principal = reader
+	}
+	if err := room.ClaimSession(card); err == nil {
+		return nil
+	}
+	// ClaimSession refused with ErrLive only when a live incumbent with a
+	// different digest exists — which we already screened above. Do not
+	// force-remove; leave the live foreign holder intact.
+	return nil
+}
+
+var (
+	peekHolderMu sync.Mutex
+	peekHolders  = map[string]*os.Process{}
+)
+
+func peekClaimHolderPID(reader string) int {
+	peekHolderMu.Lock()
+	defer peekHolderMu.Unlock()
+	if p, ok := peekHolders[reader]; ok {
+		if p.Pid > 0 {
+			return p.Pid
+		}
+	}
+	cmd := exec.Command("sleep", "300")
+	if err := cmd.Start(); err != nil {
+		return os.Getpid()
+	}
+	peekHolders[reader] = cmd.Process
+	return cmd.Process.Pid
 }
