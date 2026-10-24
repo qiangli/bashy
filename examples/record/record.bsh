@@ -43,6 +43,11 @@ allowing the camera or microphone once in the browser and pressing buttons.
 - Tell the person in chat what is about to open and what to press, then
   wait; the default timeout is 20 minutes.
 - It refuses remote sessions: the page must open where the person sits.
+
+Uses: one tool, many jobs. A founder or pitch video (write the script, then
+`record video --script`); interview practice (draft an answer per question,
+the person listens, practises and records each); a vlog clip or voice-over;
+a headshot; language practice with `--lang`. Compose; do not add features.
 ~~~
 
 ~~~go as go

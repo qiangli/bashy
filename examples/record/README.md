@@ -23,6 +23,20 @@ record video --script pitch.txt --max-seconds 75 --out founder.mp4
 ffprobe "$(record audio)"            # composes: only the path is printed
 ```
 
+## One tool, many uses
+
+`record` does one job: get a take from a person. What it is for is up to the
+agent and the person, composed around it, never built into it:
+
+| Use | What the agent does around `record` |
+|---|---|
+| Founder or pitch video | writes the script, runs `record video --script pitch.txt`, assembles with `examples/video` |
+| Interview practice | drafts an answer per question, runs `record video --script answer.txt` for each, gives feedback |
+| Vlog clip | records, then posts it with `examples/vlog` |
+| Voice-over | `record audio --script narration.txt`, muxed over a demo by `examples/video` |
+| Headshot | `record photo` |
+| Language practice | the same, with `--lang es-ES` (Listen reads it aloud) |
+
 ## Anatomy of `record.bsh`
 
 1. **`~~~skill as s`**: the skill, in the format agents read: a name, a
