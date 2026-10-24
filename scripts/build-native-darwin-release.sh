@@ -36,6 +36,8 @@ for shell in bash sh; do
  CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -ldflags "-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$tag'" -o "$stage/$shell" "./cmd/$shell"
 done
 (cd ../outpost && CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" go build -trimpath -tags fb_archives -ldflags "-s -w -X github.com/qiangli/outpost/internal/agent.releaseTag=$tag -X github.com/qiangli/outpost/internal/agent.ldCommit=$outpost_commit -X github.com/qiangli/outpost/internal/agent.ldDirty=false" -o "$stage/outpost" ./cmd/outpost)
+mkdir -p "$outdir/../signature-status"
+./scripts/sign-darwin-release.sh "$stage" "$outdir/../signature-status/darwin-$arch.json"
 cp README.md LICENSE "$stage/"
 cp ../outpost/LICENSE "$stage/LICENSE.outpost"
 COPYFILE_DISABLE=1 tar -czf "$stage/$name" -C "$stage" bashy outpost bash sh README.md LICENSE LICENSE.outpost

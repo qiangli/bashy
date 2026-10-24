@@ -58,6 +58,7 @@ for arch in amd64 arm64; do
 done
 ./scripts/verify-release-provenance.sh published-dist/checksums.txt
 gh release view "$TAG" -R "$REPO" --json body --jq .body > release-notes.md
-printf '\n%s\n' "$SEED_SUMMARY" >> release-notes.md
+signing=$(python3 scripts/release-signing-status.py signature-status)
+printf '\n%s\n%s\n' "$SEED_SUMMARY" "$signing" >> release-notes.md
 gh release edit "$TAG" -R "$REPO" --notes-file release-notes.md
 gh release edit "$TAG" -R "$REPO" --draft=false --prerelease

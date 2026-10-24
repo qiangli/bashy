@@ -195,9 +195,13 @@ jobs:
           DEV: ${{ steps.v.outputs.dev }}
           COMMIT: ${{ steps.src.outputs.commit }}
         run: |
+          gh release view "${DEV}" -R "${REPO}" --json body --jq .body > /tmp/candidate-notes.md
+          darwin=$(python3 scripts/release-signing-status.py read-note /tmp/candidate-notes.md darwin)
+          windows=$(python3 scripts/release-signing-status.py read-note /tmp/candidate-notes.md windows)
           printf '%s\n' \
             "Promoted from ${DEV} after per-OS QA (${{ github.event.inputs.required_os || 'linux darwin windows' }})." \
-            "Byte-identical to the tested pre-release — no rebuild." > /tmp/notes.md
+            "Byte-identical to the tested pre-release — no rebuild." \
+            "Signing: darwin.signed=${darwin} windows.signed=${windows}" > /tmp/notes.md
           # -R is required: this job has no checkout, so gh can't infer the repo from a
           # local git remote (would fail "not a git repository"). No --target: in the
           # tag-push flow the vX.Y.Z tag already exists, so gh attaches to it; passing a
