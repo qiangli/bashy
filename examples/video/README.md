@@ -16,10 +16,21 @@ yourself.
 | bashy | runs every recorded step | MIT |
 
 ```bash
-bashy dag doctor             # check the tools
-bashy dag sample             # build sample/build/demo.mp4 (about 30 s)
-bashy dag build PROJECT=~/my-demo
+bashy dag examples/video doctor                      # check the tools
+bashy dag examples/video sample                      # build sample/build/demo.mp4 (about 30 s)
+bashy dag examples/video build PROJECT=$PWD/my-demo  # your project, from anywhere
 ```
+
+Naming the folder (`bashy dag examples/video …`) runs the recipe inside it, so
+call it from anywhere and pass `PROJECT` as an absolute path.
+
+## Who does what
+
+- **An agent** writes the project (storyboard, cards, step scripts), runs the
+  build, checks `build/demo.mp4` (duration, frames via `ffprobe`), and fixes a
+  failing step by editing its script. Everything is a file and a command.
+- **A human** asks in chat ("make a 2-minute demo of X"), reviews the MP4,
+  and records only what needs a person: the camera take and the narration.
 
 ## A project
 
