@@ -238,13 +238,8 @@ for a in "$@"; do
 done
 set -- "${args[@]}"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-case ${1:-} in
---skill) sed -n '/^~~~skill/,/^~~~$/p' "${BASH_SOURCE[0]}" | sed '1d;$d'; exit 0 ;;
--h | --help | "") sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
-esac
-kind=$1
-shift
-prompt="" script="" max=180 out="" timeout=1200 lang=en-US
+kind="" prompt="" script="" max=180 out="" timeout=1200 lang=en-US
+# The kind is the one positional; the registry passes it after the flags.
 while [ $# -gt 0 ]; do
 	case $1 in
 	--prompt) prompt=$2; shift 2 ;;
@@ -253,10 +248,13 @@ while [ $# -gt 0 ]; do
 	--out) out=$2; shift 2 ;;
 	--timeout) timeout=$2; shift 2 ;;
 	--lang) lang=$2; shift 2 ;;
+	--skill) sed -n '/^~~~skill/,/^~~~$/p' "${BASH_SOURCE[0]}" | sed '1d;$d'; exit 0 ;;
 	-h | --help) sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
-	*) echo "record: unknown argument: $1" >&2; exit 2 ;;
+	-*) echo "record: unknown option: $1" >&2; exit 2 ;;
+	*) if [ -z "$kind" ]; then kind=$1; shift; else echo "record: unexpected argument: $1" >&2; exit 2; fi ;;
 	esac
 done
+[ -n "$kind" ] || { sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2; }
 page=$(<"$here/page.html")
 path := go.Record(kind, prompt, script, max, out, timeout, lang, page)
 # A failed foreign call leaves path empty (its message is already on stderr).
