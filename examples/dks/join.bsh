@@ -1,0 +1,89 @@
+#!/usr/bin/env -S bashy --bashsharp
+# dks-join — join THIS host to its satellite's DKS cluster as a worker, and
+# report the node it became (OS, GPU kind, VRAM).
+#
+#   dks-join [--virtual vk-native|vk-podman|vk-ollama[,…]] [--agent on|off]
+#            [--leave] [--timeout SECONDS]
+#
+# Run it on the host that should become a worker; it composes the host's own
+# Outpost (`builtins set`, `cluster clear`, `cluster join`, `restart`) and
+# then waits for the node to appear. Defaults suit Windows and macOS (a
+# native node, no k3s agent); a Linux host may add vk-podman or --agent on.
+#
+# A skill-tier command: one Bash# file carrying its own skill. Register it
+# with `bashy commands add` (see README.md); bashy's core is untouched.
+
+~~~skill as s
+---
+name: dks-join
+description: Join this computer to its satellite's DKS cluster as a worker (CPU or GPU), or leave it. Use when a host should accept cluster work, for example making a GPU box available for model or video jobs. Run it ON that host (over ssh is fine); it prints the node name and its labels.
+metadata:
+  requires: "has=outpost"
+---
+# dks-join — make this host a cluster worker
+
+Run on the host itself, never ask the person to run commands:
+
+    dks-join                         # native node (Windows/macOS default)
+    dks-join --virtual vk-native,vk-podman   # Linux with podman
+    dks-join --leave                 # stop accepting cluster work
+
+- The host must already be paired with its satellite (`outpost status`).
+- It clears a cluster endpoint cached from an earlier pairing, sets the
+  worker backends, joins, restarts Outpost, then waits until the node shows
+  up and prints its GPU labels (`outpost.dhnt.io/gpu-kind`, `dhnt.io/vram`,
+  `nvidia.com/gpu`).
+- GPUs are vendor-neutral: NVIDIA, AMD, Intel and Apple are labelled by
+  kind; jobs select by capability (kind, VRAM), never by host name.
+- Joining hands the satellite the right to schedule work here: confirm with
+  the person first.
+~~~
+
+op=$(command -v outpost 2>/dev/null)
+[ -n "$op" ] || for c in "$LOCALAPPDATA/outpost/outpost.exe" "$HOME/.local/bin/outpost" /usr/local/bin/outpost; do [ -x "$c" ] && { op=$c; break; }; done
+[ -n "$op" ] || { echo "dks-join: outpost not found on this host" >&2; exit 1; }
+
+virtual="" agent="off" leave=0 timeout=180
+case $(uname -s 2>/dev/null) in Linux) virtual=vk-podman ;; *) virtual=vk-native ;; esac
+while [ $# -gt 0 ]; do
+	case $1 in
+	--virtual) virtual=$2; shift 2 ;;
+	--agent) agent=$2; shift 2 ;;
+	--leave) leave=1; shift ;;
+	--timeout) timeout=$2; shift 2 ;;
+	--skill) sed -n '/^~~~skill/,/^~~~$/p' "${BASH_SOURCE[0]}" | sed '1d;$d'; exit 0 ;;
+	-h | --help) sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	*) echo "dks-join: unknown argument: $1" >&2; exit 2 ;;
+	esac
+done
+
+"$op" status 2>/dev/null | grep -q "state.*active" || { echo "dks-join: this host is not paired with a satellite (outpost status)" >&2; exit 1; }
+name=$("$op" status 2>/dev/null | sed -n 's/^ *agent_name *//p' | head -1)
+
+if [ "$leave" = 1 ]; then
+	"$op" builtins set --cluster off >/dev/null && "$op" restart >/dev/null 2>&1
+	echo "dks-join: $name left the cluster (cluster=off)"
+	exit 0
+fi
+
+echo "dks-join: $name -> worker (virtual=$virtual agent=$agent)"
+"$op" cluster clear --yes >/dev/null 2>&1 || true
+"$op" builtins set --cluster on --cluster-agent "$agent" --cluster-virtual "$virtual" >/dev/null || { echo "dks-join: builtins set failed" >&2; exit 1; }
+"$op" cluster join >/dev/null 2>&1 || true
+"$op" restart >/dev/null 2>&1 || true
+
+# Wait for the node(s) this host registers, then show what the cluster sees.
+kc=$(mktemp)
+trap 'rm -f "$kc"' EXIT
+deadline=$(($(date +%s) + timeout))
+while :; do
+	if "$op" cluster userkubeconfig --output "$kc" >/dev/null 2>&1 &&
+		nodes=$(bashy kubectl --kubeconfig "$kc" get nodes -o name 2>/dev/null | grep -i "node/$name") && [ -n "$nodes" ]; then
+		break
+	fi
+	[ "$(date +%s)" -lt "$deadline" ] || { echo "dks-join: no node for $name after ${timeout}s; check 'outpost services' and 'outpost cluster join --show'" >&2; exit 1; }
+	sleep 5
+done
+for n in $nodes; do
+	bashy kubectl --kubeconfig "$kc" get "$n" -o jsonpath='{.metadata.name}{"  ready="}{.status.conditions[?(@.type=="Ready")].status}{"  os="}{.metadata.labels.kubernetes\.io/os}{"  gpu-kind="}{.metadata.labels.outpost\.dhnt\.io/gpu-kind}{"  vram="}{.status.capacity.dhnt\.io/vram}{"  nvidia.com/gpu="}{.status.capacity.nvidia\.com/gpu}{"\n"}' 2>/dev/null
+done
