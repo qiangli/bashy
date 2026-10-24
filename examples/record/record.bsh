@@ -1,0 +1,232 @@
+#!/usr/bin/env -S bashy --bashsharp
+# record — ask the person at this computer for a photo, a video or a voice
+# take, and print the path of the take.
+#
+#   record photo|video|audio [--prompt TEXT] [--script FILE]
+#          [--max-seconds N] [--out PATH] [--timeout SECONDS]
+#
+# It opens a one-time page on loopback in the person's own browser: a small
+# live preview, a 3-second countdown, Start / Stop / Retake / "Use this". With
+# --script the text is a large scrolling teleprompter (speed slider, up/down
+# keys, a "Full script" view to practise). The take is written mode 0600 and
+# only its path is printed, so it composes:  ffprobe "$(record video …)".
+#
+# A skill-tier command: a Bash# script whose server is a Go fence. Register it
+# once with `bashy commands add` (see README.md); bashy's core is untouched.
+
+~~~skill as s
+---
+name: record
+description: Get a photo, a video or a voice recording of the person at this computer, with no commands for them to type. Use when a task needs their picture, a video of them talking (a pitch, a founder video, a demo voice-over) or a voice note. Run `record photo|video|audio`; it prints the path of the take.
+metadata:
+  requires: "has=bashy"
+---
+# record — a take from the person at this computer
+
+Run it yourself; never ask the person to run anything. Their only acts are
+allowing the camera or microphone once in the browser and pressing buttons.
+
+    record photo --prompt "Headshot for the founder page"
+    record video --script pitch.txt --max-seconds 75 --out founder.mp4
+    record audio --prompt "Say the product name once, slowly"
+
+- A one-time page opens in their browser on this computer: a small live
+  preview, a 3-second countdown, Start / Stop / Retake / "Use this".
+- With `--script FILE` the text is a large scrolling teleprompter (speed
+  slider, up/down keys) and a "Full script" view lets them practise first.
+  Write the script for them: short sentences, one idea per line.
+- Only the path of the take is printed (mode 0600), so it composes:
+  `ffprobe "$(record video --script s.txt)"`. A failure exits non-zero.
+- Tell the person in chat what is about to open and what to press, then
+  wait; the default timeout is 20 minutes.
+- It refuses remote sessions: the page must open where the person sits.
+~~~
+
+~~~go as go
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"html"
+	"io"
+	"net"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+)
+
+func maxTake() int { return 1 << 30 }
+
+func extFor(ct string) string {
+	switch {
+	case strings.HasPrefix(ct, "image/png"):
+		return "png"
+	case strings.HasPrefix(ct, "image/jpeg"):
+		return "jpg"
+	case strings.HasPrefix(ct, "video/mp4"):
+		return "mp4"
+	case strings.HasPrefix(ct, "audio/mp4"):
+		return "m4a"
+	case strings.Contains(ct, "webm"):
+		return "webm"
+	}
+	return "bin"
+}
+
+func visible() bool {
+	if os.Getenv("SSH_CONNECTION") == "" && os.Getenv("SSH_TTY") == "" {
+		return true
+	}
+	return runtime.GOOS == "linux" && (os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "")
+}
+
+func openURL(u string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", u).Start()
+	case "windows":
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", u).Start()
+	}
+	return exec.Command("xdg-open", u).Start()
+}
+
+// Record serves page for one take and returns the path it was written to.
+func Record(kind, prompt, script, maxSecs, out, timeoutSecs, page string) (string, error) {
+	if kind != "photo" && kind != "video" && kind != "audio" {
+		return "", fmt.Errorf("record: first argument must be photo, video or audio (got %q)", kind)
+	}
+	if !visible() {
+		return "", errors.New("record: needs a session whose screen a person can see (this one is remote)")
+	}
+	tok := make([]byte, 16)
+	if _, err := rand.Read(tok); err != nil {
+		return "", err
+	}
+	base := "/" + hex.EncodeToString(tok) + "/"
+	sj, _ := json.Marshal(script)
+	if _, err := strconv.Atoi(maxSecs); err != nil {
+		maxSecs = "180"
+	}
+	who := os.Getenv("BASHY_AGENT")
+	if who == "" {
+		who = "an agent"
+	}
+	page = strings.NewReplacer(
+		"{{KIND}}", kind,
+		"{{PROMPT}}", html.EscapeString(prompt),
+		"{{SCRIPT_JSON}}", string(sj),
+		"{{MAX}}", maxSecs,
+		"{{REQUESTER}}", html.EscapeString(who),
+	).Replace(page)
+
+	type take struct {
+		b  []byte
+		ct string
+	}
+	got := make(chan take, 1)
+	mux := http.NewServeMux()
+	mux.HandleFunc(base, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != base {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		io.WriteString(w, page)
+	})
+	mux.HandleFunc(base+"upload", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "POST only", http.StatusMethodNotAllowed)
+			return
+		}
+		b, err := io.ReadAll(io.LimitReader(r.Body, int64(maxTake()+1)))
+		if err != nil || len(b) == 0 || len(b) > maxTake() {
+			http.Error(w, "empty or too large", http.StatusBadRequest)
+			return
+		}
+		select {
+		case got <- take{b, r.Header.Get("Content-Type")}:
+			io.WriteString(w, "received\n")
+		default:
+			http.Error(w, "already answered", http.StatusConflict)
+		}
+	})
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", err
+	}
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	go srv.Serve(ln)
+	defer srv.Close()
+
+	u := "http://" + ln.Addr().String() + base
+	if err := openURL(u); err != nil {
+		fmt.Fprintf(os.Stderr, "record: open this page on this computer: %s\n", u)
+	} else {
+		fmt.Fprintf(os.Stderr, "record: opened the %s page in your browser; waiting for the take\n", kind)
+	}
+
+	wait, err := strconv.Atoi(timeoutSecs)
+	if err != nil || wait <= 0 {
+		wait = 1200
+	}
+	var t take
+	select {
+	case t = <-got:
+	case <-time.After(time.Duration(wait) * time.Second):
+		return "", fmt.Errorf("record: no %s arrived within %ds", kind, wait)
+	}
+
+	if out == "" {
+		dir, err := os.MkdirTemp("", "bashy-record-")
+		if err != nil {
+			return "", err
+		}
+		out = filepath.Join(dir, kind+"."+extFor(t.ct))
+	}
+	f, err := os.OpenFile(out, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return "", fmt.Errorf("record: %w", err)
+	}
+	if _, err := f.Write(t.b); err != nil {
+		f.Close()
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+	return filepath.Abs(out)
+}
+~~~
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+case ${1:-} in
+--skill) sed -n '/^~~~skill/,/^~~~$/p' "${BASH_SOURCE[0]}" | sed '1d;$d'; exit 0 ;;
+-h | --help | "") sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+esac
+kind=$1
+shift
+prompt="" script="" max=180 out="" timeout=1200
+while [ $# -gt 0 ]; do
+	case $1 in
+	--prompt) prompt=$2; shift 2 ;;
+	--script) script=$(<"$2"); shift 2 ;;
+	--max-seconds) max=$2; shift 2 ;;
+	--out) out=$2; shift 2 ;;
+	--timeout) timeout=$2; shift 2 ;;
+	-h | --help) sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	*) echo "record: unknown argument: $1" >&2; exit 2 ;;
+	esac
+done
+page=$(<"$here/page.html")
+path := go.Record(kind, prompt, script, max, out, timeout, page)
+# A failed foreign call leaves path empty (its message is already on stderr).
+[ -n "$path" ] || exit 1
+echo "$path"

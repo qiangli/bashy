@@ -596,7 +596,6 @@ var verbSynopsis = map[string]string{
 	"herald":             "reach an agent that is not on this host, over A2A: `herald add` a peer, `herald send` it a task, and gate the result",
 	"acp":                "serve this host to an ACP client (Zed, a Codync bot) over JSON-RPC on stdin/stdout — the one-word spelling of `herald acp`",
 	"ask":                "ask the HUMAN operator for an ad-hoc value (a token, an OTP) — never the model; returns a path, not the value",
-	"record":             "ask the person at this computer for a photo, video or voice take (camera page with teleprompter); returns a path",
 	"approve":            "list and decide pending approvals (a yielded @confirm, ACP permission request, chat grant): `approve allow ID` prints the --confirm=TOKEN:yes resume flag; `approve src` records a protected-edit approval only after a human allowed it",
 	"skill":              "tier-2 workplace skills, env-gated: list applicable here, probe the coordinate, show one",
 	"skills":             "hidden alias for bashy skill",

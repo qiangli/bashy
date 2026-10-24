@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bashy record · {{KIND}}</title>
+<style>
+:root{--bg:#111110;--panel:#1c1c1a;--fg:#f1f0eb;--muted:#a3a29b;--accent:#e8b04a;--rec:#e5484d;--ok:#46a758}
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{position:relative;height:100vh;height:100dvh;display:flex;flex-direction:column;gap:8px;padding:10px 12px}
+header{flex:none;display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+header b{font-size:1rem}header span{color:var(--muted);font-size:.85rem}
+.prompt{flex:none;color:var(--muted);font-size:.95rem}
+.stage{flex:1;min-height:0;position:relative;background:#000;border-radius:12px;overflow:hidden}
+video,img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
+#preview{transform:scaleX(-1)}
+.badge{position:absolute;bottom:12px;left:12px;background:rgba(0,0,0,.6);padding:4px 10px;border-radius:99px;font-variant-numeric:tabular-nums;z-index:3}
+.badge.rec{background:var(--rec)}
+.count{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:8rem;font-weight:700;background:rgba(0,0,0,.35);z-index:4}
+.prompter{position:absolute;left:0;right:0;top:0;height:40%;overflow:hidden;z-index:2;background:linear-gradient(rgba(0,0,0,.78) 75%,rgba(0,0,0,0))}
+.prompter .text{position:absolute;left:0;right:0;padding:0 8%;font-size:clamp(1.3rem,3vw,2.3rem);line-height:1.4;white-space:pre-wrap;text-align:center;text-shadow:0 1px 3px #000}
+.prompter::before{content:"";position:absolute;left:6%;right:6%;top:30%;border-top:2px solid var(--accent);opacity:.45;z-index:1}
+.controls{flex:none;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:4px 0}
+button{font:inherit;border:0;border-radius:10px;padding:10px 18px;background:#2b2b28;color:var(--fg);cursor:pointer}
+button.primary{background:var(--accent);color:#1a1a18;font-weight:600}
+button.rec{background:var(--rec);color:#fff;font-weight:600}
+button.ok{background:var(--ok);color:#fff;font-weight:600}
+button:disabled{opacity:.4;cursor:default}
+label{color:var(--muted);font-size:.9rem;display:flex;gap:6px;align-items:center}
+.msg{color:var(--muted)}
+.done{font-size:1.2rem;color:var(--ok)}
+
+body.pm .stage{position:absolute;top:10px;right:12px;width:min(26vw,360px);height:auto;aspect-ratio:16/9;flex:none;z-index:5;border:2px solid #2b2b28}
+body.pm .count{font-size:4rem}
+body.pm header,body.pm .prompt{padding-right:min(28vw,380px)}
+body.pm .main{display:block;flex:1;min-height:0;position:relative;background:var(--panel);border-radius:12px;overflow:hidden}
+body.pm .prompter{position:absolute;inset:0;height:auto;background:none}
+body.pm .prompter .text{font-size:clamp(2rem,4.6vw,4rem);line-height:1.35;text-align:left;padding:0 6%}
+body.pm .prompter::before{top:22%}
+.main{display:contents}
+body.full .prompter{overflow:auto}
+body.full .prompter .text{position:static;transform:none!important;padding:24px 6%;font-size:clamp(1.2rem,2.4vw,2rem)}
+body.full .prompter::before{display:none}
+</style></head><body><div class="wrap">
+<header><b>bashy record · {{KIND}}</b><span>requested by {{REQUESTER}} · stays on this computer until you press “Use this”</span></header>
+<div class="prompt">{{PROMPT}}</div>
+<div class="main" id="main"><div class="prompter" id="prompter" style="display:none"><div class="text" id="ptext"></div></div></div>
+<div class="stage">
+  <video id="preview" autoplay playsinline muted></video>
+  <video id="playback" playsinline controls style="display:none"></video>
+  <img id="still" alt="" style="display:none">
+  <div class="badge" id="badge">camera</div>
+  <div class="count" id="count"></div>
+</div>
+<div class="controls">
+  <button class="primary" id="start">Start</button>
+  <button id="full" style="display:none">Full script</button>
+  <button class="rec" id="stop" disabled>Stop</button>
+  <button id="retake" disabled>Retake</button>
+  <button class="ok" id="use" disabled>Use this</button>
+  <label id="speedl" style="display:none">prompter speed <input id="speed" type="range" min="5" max="120" value="30" style="width:220px"> <b id="speedv">30</b> <span>(↑/↓ while reading)</span></label>
+  <span class="msg" id="msg"></span>
+</div>
+</div>
+<script>
+const KIND = "{{KIND}}", SCRIPT = {{SCRIPT_JSON}}, MAX = {{MAX}};
+const $ = id => document.getElementById(id);
+const preview=$("preview"), playback=$("playback"), still=$("still"), badge=$("badge"), count=$("count");
+let stream, rec, chunks=[], blob=null, timer=null, scrollY=0, rafId=0, t0=0;
+if (KIND==="photo") $("start").textContent="Take photo";
+if (SCRIPT) { $("full").style.display="inline-block"; document.body.classList.add("pm"); $("prompter").style.display="block"; $("speedl").style.display="flex"; $("ptext").textContent=SCRIPT; resetPrompter(); }
+function resetPrompter(){ scrollY=0; $("ptext").style.top=$("prompter").clientHeight*0.22+"px"; $("ptext").style.transform="translateY(0)"; }
+function scrollPrompter(ts){ const dt=(ts-(scrollPrompter.last||ts))/1000; scrollPrompter.last=ts; scrollY+=dt*Number($("speed").value); $("ptext").style.transform=`translateY(${-scrollY}px)`; rafId=requestAnimationFrame(scrollPrompter); }
+function msg(t){ $("msg").textContent=t; }
+async function camera(){
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({video: KIND!=="audio" ? {width:{ideal:1280},height:{ideal:720}} : false, audio: KIND!=="photo"});
+    preview.srcObject = stream; badge.textContent = KIND==="audio" ? "microphone ready" : "camera ready";
+  }catch(e){ msg("Camera/microphone not available: "+e.message+". Allow access in the browser and reload."); $("start").disabled=true; }
+}
+function countdown(n){ return new Promise(res=>{ count.style.display="flex"; const tick=()=>{ if(n===0){count.style.display="none"; res(); return;} count.textContent=n--; setTimeout(tick,1000); }; tick(); }); }
+function pickType(){ const c=["video/mp4;codecs=avc1,mp4a","video/mp4","video/webm;codecs=vp9,opus","video/webm"]; const a=["audio/mp4","audio/webm;codecs=opus","audio/webm"]; for(const t of (KIND==="audio"?a:c)) if(window.MediaRecorder&&MediaRecorder.isTypeSupported(t)) return t; return ""; }
+$("start").onclick = async ()=>{
+  $("start").disabled=true; $("retake").disabled=true; $("use").disabled=true; blob=null;
+  if (KIND==="photo"){
+    await countdown(3);
+    const v=preview, c=document.createElement("canvas"); c.width=v.videoWidth; c.height=v.videoHeight;
+    const g=c.getContext("2d"); g.translate(c.width,0); g.scale(-1,1); g.drawImage(v,0,0);
+    c.toBlob(b=>{ blob=b; still.src=URL.createObjectURL(b); still.style.display="block"; preview.style.display="none"; $("retake").disabled=false; $("use").disabled=false; msg("Happy with it? Press “Use this”, or retake."); },"image/png");
+    return;
+  }
+  document.body.classList.remove("full"); $("full").textContent="Full script"; $("full").disabled=true;
+  resetPrompter(); await countdown(3);
+  chunks=[]; const type=pickType(); rec=new MediaRecorder(stream, type?{mimeType:type}:{});
+  rec.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+  rec.onstop=()=>{ $("full").disabled=false; if(SCRIPT){document.body.classList.remove("pm"); $("prompter").style.display="none";} blob=new Blob(chunks,{type:rec.mimeType||type||"video/webm"}); playback.src=URL.createObjectURL(blob); playback.style.display="block"; preview.style.display="none"; badge.className="badge"; badge.textContent="review"; cancelAnimationFrame(rafId); scrollPrompter.last=0; $("retake").disabled=false; $("use").disabled=false; msg("Watch it back. “Use this” sends it; “Retake” starts over."); };
+  rec.start(1000); t0=Date.now(); badge.className="badge rec"; $("stop").disabled=false;
+  if (SCRIPT) rafId=requestAnimationFrame(scrollPrompter);
+  timer=setInterval(()=>{ const s=Math.floor((Date.now()-t0)/1000); badge.textContent="● "+Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); if(MAX>0&&s>=MAX) $("stop").click(); },250);
+};
+$("stop").onclick=()=>{ clearInterval(timer); $("stop").disabled=true; if(rec&&rec.state!=="inactive") rec.stop(); };
+$("retake").onclick=()=>{ if(SCRIPT){document.body.classList.add("pm"); $("prompter").style.display="block";} blob=null; playback.pause(); playback.style.display="none"; still.style.display="none"; preview.style.display="block"; badge.className="badge"; badge.textContent="camera ready"; resetPrompter(); $("start").disabled=false; $("retake").disabled=true; $("use").disabled=true; msg(""); };
+$("use").onclick=async ()=>{
+  if(!blob) return; $("use").disabled=true; $("retake").disabled=true; msg("Sending…");
+  try{ const r=await fetch("upload",{method:"POST",headers:{"Content-Type":blob.type||"application/octet-stream"},body:blob}); if(!r.ok) throw new Error(await r.text());
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+    document.querySelector(".controls").innerHTML='<span class="done">Sent. You can close this tab.</span>';
+  }catch(e){ msg("Could not send: "+e.message); $("use").disabled=false; $("retake").disabled=false; }
+};
+$("speed").oninput=()=>{ $("speedv").textContent=$("speed").value; };
+document.addEventListener("keydown",e=>{ if(!SCRIPT) return; const r=$("speed"); if(e.key==="ArrowUp"){r.value=Math.min(120,+r.value+5);} else if(e.key==="ArrowDown"){r.value=Math.max(5,+r.value-5);} else return; e.preventDefault(); $("speedv").textContent=r.value; });
+$("full").onclick=()=>{ const on=document.body.classList.toggle("full"); $("full").textContent=on?"Prompter":"Full script"; if(!on) resetPrompter(); };
+camera();
+</script></body></html>

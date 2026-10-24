@@ -151,7 +151,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "record", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "src", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "src", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -1364,17 +1364,6 @@ func dispatch() {
 		// rendezvous), and hand back a path rather than the value. Local-first:
 		// no network, no pairing — unlike `secrets`, which is the cloudbox vault.
 		cmd := ask.NewAskCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "record":
-		// Ask the person at this computer for a photo, video or voice take: a
-		// one-time loopback page in their browser (preview, teleprompter,
-		// retake), the take delivered like an ask value — a path on stdout.
-		cmd := ask.NewRecordCmd()
 		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
