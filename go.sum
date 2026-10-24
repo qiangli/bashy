@@ -1031,10 +1031,10 @@ github.com/prometheus/statsd_exporter v0.29.0 h1:2iaiBLpAg/WcdW4nF0UTQfjCE2DXD+1
 github.com/prometheus/statsd_exporter v0.29.0/go.mod h1:3t+fT5ESGc0KBUfadCp43KOnVPFmbAF4c58Osotz3Zk=
 github.com/qiangli/bonsai v0.0.0-20261013041512-fbfc95fa4dda h1:ONMy/PmqSAQA3bzbjNyaDhZYcGxkVJLGP6/AyfNt4Tc=
 github.com/qiangli/bonsai v0.0.0-20261013041512-fbfc95fa4dda/go.mod h1:XPDzA91wEz1K4qkkXyqGpkd41M+zDIY6wkz5Aird7Vs=
-github.com/qiangli/coreutils v0.0.0-20261024023341-aa6a9332b52f h1:BhHqjQ0nK4obtylzA20Q5gK855RUXmr8sFnLIjybhp8=
-github.com/qiangli/coreutils v0.0.0-20261024023341-aa6a9332b52f/go.mod h1:nP8R/LOBZFHjHvzgE+TX3nASmemDaiMjOnei+YPuxq8=
-github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261024023341-aa6a9332b52f h1:+Yv1z3d79YUrM0cHEwhWwZvMwck2GHQ72DCvhuFUWqE=
-github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261024023341-aa6a9332b52f/go.mod h1:p0JkVxHS3JKYxDz8kOYvMdPM8YRH94vZoWaFljD1vAg=
+github.com/qiangli/coreutils v0.0.0-20261024225029-e90cfead9c08 h1:SxYJzAIkpU2cbtNpwauqoTjTG4FApXiZY+9S9AjbeIE=
+github.com/qiangli/coreutils v0.0.0-20261024225029-e90cfead9c08/go.mod h1:hBvsK5nOqSXj34hHDd2RkP37rNuidm45TiteVfJqVd8=
+github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261024225029-e90cfead9c08 h1:qIms97+CLE/+qiHLVjDSXxTRPc1WbXn8fat8IzQ7yzY=
+github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261024225029-e90cfead9c08/go.mod h1:p0JkVxHS3JKYxDz8kOYvMdPM8YRH94vZoWaFljD1vAg=
 github.com/qiangli/filebrowser/v2 v2.0.0-20261021004418-d1d2feab4473 h1:3L6uJHiZ+gliJlpEjAjdnxTsVNr06+twiJvVpoYLNlI=
 github.com/qiangli/filebrowser/v2 v2.0.0-20261021004418-d1d2feab4473/go.mod h1:B6SGbzVBL1P5wBIfC1J8pX+gSUBrx6J8dBb+UK7ZnTs=
 github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 h1:XHTsT5keRw4zmpOmnwUM1uiAtRlh2eJa/38OLDEtHmA=
