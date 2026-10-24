@@ -3,7 +3,7 @@
 # report the node it became (OS, GPU kind, VRAM).
 #
 #   dks-join [--virtual vk-native|vk-podman|vk-ollama[,…]] [--agent on|off]
-#            [--leave] [--timeout SECONDS]
+#            [--leave] [--status] [--timeout SECONDS]
 #
 # Run it on the host that should become a worker; it composes the host's own
 # Outpost (`builtins set`, `cluster clear`, `cluster join`, `restart`) and
@@ -37,19 +37,22 @@ Run on the host itself, never ask the person to run commands:
   kind; jobs select by capability (kind, VRAM), never by host name.
 - Joining hands the satellite the right to schedule work here: confirm with
   the person first.
+- Run over Outpost's own SSH, the session drops when Outpost restarts (SSH
+  lives inside it). Reconnect and run `dks-join --status` for the result.
 ~~~
 
 op=$(command -v outpost 2>/dev/null)
 [ -n "$op" ] || for c in "$LOCALAPPDATA/outpost/outpost.exe" "$HOME/.local/bin/outpost" /usr/local/bin/outpost; do [ -x "$c" ] && { op=$c; break; }; done
 [ -n "$op" ] || { echo "dks-join: outpost not found on this host" >&2; exit 1; }
 
-virtual="" agent="off" leave=0 timeout=180
+virtual="" agent="off" leave=0 status=0 timeout=180
 case $(uname -s 2>/dev/null) in Linux) virtual=vk-podman ;; *) virtual=vk-native ;; esac
 while [ $# -gt 0 ]; do
 	case $1 in
 	--virtual) virtual=$2; shift 2 ;;
 	--agent) agent=$2; shift 2 ;;
 	--leave) leave=1; shift ;;
+	--status) status=1; shift ;;
 	--timeout) timeout=$2; shift 2 ;;
 	--skill) sed -n '/^~~~skill/,/^~~~$/p' "${BASH_SOURCE[0]}" | sed '1d;$d'; exit 0 ;;
 	-h | --help) sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -66,14 +69,22 @@ if [ "$leave" = 1 ]; then
 	exit 0
 fi
 
+if [ "$status" = 0 ]; then
 echo "dks-join: $name -> worker (virtual=$virtual agent=$agent)"
 "$op" cluster clear --yes >/dev/null 2>&1 || true
 "$op" builtins set --cluster on --cluster-agent "$agent" --cluster-virtual "$virtual" >/dev/null || { echo "dks-join: builtins set failed" >&2; exit 1; }
 "$op" cluster join >/dev/null 2>&1 || true
 "$op" restart >/dev/null 2>&1 || true
+fi
 
 # Wait for the node(s) this host registers, then show what the cluster sees.
-kc=$(mktemp)
+# On Windows keep the kubeconfig at a native path (C:/...): native tools do
+# not read MSYS-style /c/... paths.
+if [ -n "${LOCALAPPDATA:-}" ]; then
+	kc="${LOCALAPPDATA//\\//}/dks-join-$$.kubeconfig"
+else
+	kc=$(mktemp)
+fi
 trap 'rm -f "$kc"' EXIT
 deadline=$(($(date +%s) + timeout))
 while :; do
