@@ -610,12 +610,38 @@ func firstNonEmpty(values ...string) string {
 }
 
 func detectProjectRoot(cwd string) string {
-	for dir := cwd; dir != "" && dir != string(filepath.Separator); dir = filepath.Dir(dir) {
-		for _, marker := range []string{".git", "go.mod", "README.md", ".benchmark"} {
-			if _, err := os.Stat(filepath.Join(dir, marker)); err == nil {
-				return dir
-			}
+	return detectProjectRootWith(cwd, filepath.Dir, hasProjectMarker)
+}
+
+func hasProjectMarker(dir string) bool {
+	for _, marker := range []string{".git", "go.mod", "README.md", ".benchmark"} {
+		if _, err := os.Stat(filepath.Join(dir, marker)); err == nil {
+			return true
 		}
+	}
+	return false
+}
+
+func detectProjectRootWith(cwd string, dirFn func(string) string, hasMarker ...func(string) bool) string {
+	if cwd == "" {
+		return ""
+	}
+	if dirFn == nil {
+		dirFn = filepath.Dir
+	}
+	markerFn := hasProjectMarker
+	if len(hasMarker) > 0 && hasMarker[0] != nil {
+		markerFn = hasMarker[0]
+	}
+	for dir := cwd; ; {
+		if markerFn(dir) {
+			return dir
+		}
+		parent := dirFn(dir)
+		if parent == dir || parent == "" {
+			break
+		}
+		dir = parent
 	}
 	return ""
 }
