@@ -15,7 +15,7 @@ import (
 // carries only the 12-character pseudo-version suffix. Keep these in step
 // with go.mod; the version check below fails closed after an unpaired bump.
 var srcModulePins = map[string]struct{ module, commit string }{
-	"yoke":        {"github.com/qiangli/yoke", "3c473f9428eced37ccc8f2a1cb73fd7f652c58fc"},
+	"yoke":        {"github.com/qiangli/yoke", "2a1fd357cb47a22a5450c2d2949849336ab4cff8"},
 	"coreutils":   {"github.com/qiangli/coreutils", "ffa3754fa6df8bea8e9de5a957d6995620e6c0b3"},
 	"sh":          {"github.com/qiangli/sh/v3", "de35c153b5f647eb988035abf4a7895552a3869f"},
 	"filebrowser": {"github.com/qiangli/filebrowser/v2", "d1d2feab447319ff2b37b471829b59bc3cace390"},
@@ -27,6 +27,11 @@ func srcPinnedCommit(repo string) (string, error) {
 	}
 	if repo == "managed" || repo == "posix-provider" {
 		return "unknown", nil // each external has its own independent pin
+	}
+	if repo == src.RegisteredRepo {
+		// A registered command is a file of its own, not a linked module:
+		// its history is the file's, so there is no release pin to report.
+		return "registered (see the source file's own history)", nil
 	}
 	pin, ok := srcModulePins[repo]
 	if !ok {
