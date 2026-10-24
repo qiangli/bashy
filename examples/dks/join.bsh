@@ -45,6 +45,15 @@ op=$(command -v outpost 2>/dev/null)
 [ -n "$op" ] || for c in "$LOCALAPPDATA/outpost/outpost.exe" "$HOME/.local/bin/outpost" /usr/local/bin/outpost; do [ -x "$c" ] && { op=$c; break; }; done
 [ -n "$op" ] || { echo "dks-join: outpost not found on this host" >&2; exit 1; }
 
+# The command registry passes typed flags as --name=value; accept both forms.
+args=()
+for a in "$@"; do
+	case $a in
+	--*=*) args+=("${a%%=*}" "${a#*=}") ;;
+	*) args+=("$a") ;;
+	esac
+done
+set -- "${args[@]}"
 virtual="" agent="off" leave=0 status=0 timeout=180
 case $(uname -s 2>/dev/null) in Linux) virtual=vk-podman ;; *) virtual=vk-native ;; esac
 while [ $# -gt 0 ]; do

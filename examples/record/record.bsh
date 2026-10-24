@@ -228,6 +228,15 @@ func Record(kind, prompt, script, maxSecs, out, timeoutSecs, lang, page string) 
 }
 ~~~
 
+# The command registry passes typed flags as --name=value; accept both forms.
+args=()
+for a in "$@"; do
+	case $a in
+	--*=*) args+=("${a%%=*}" "${a#*=}") ;;
+	*) args+=("$a") ;;
+	esac
+done
+set -- "${args[@]}"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 case ${1:-} in
 --skill) sed -n '/^~~~skill/,/^~~~$/p' "${BASH_SOURCE[0]}" | sed '1d;$d'; exit 0 ;;
