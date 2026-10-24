@@ -9,6 +9,41 @@ The candidate release is built once from a `vX.Y.Z-dev` tag. Promotion reuses
 those tested bytes; it does not rebuild them. The repository knowledge record
 `kb:release-bashy` owns the full candidate, native-QA and promotion sequence.
 
+## Platform signing setup
+
+Release candidates still publish when credentials are absent. The workflow emits
+one `UNSIGNED: <reason>` notice per affected platform and writes
+`Signing: darwin.signed=true|false windows.signed=true|false` in the candidate notes. Promotion
+copies this status line and every tested asset byte unchanged. A missing flag is
+a QA failure, never evidence of signing. The source release currently has 39
+assets; signing adds no asset names.
+
+For macOS, enroll dhnt, Inc. in the Apple Developer Program, issue a
+**Developer ID Application** certificate, export its `.p12`, and create an App
+Store Connect API key with notarization access. Set these GitHub Actions
+secrets: `APPLE_DEVELOPER_ID_P12_BASE64` (base64 of the `.p12`),
+`APPLE_DEVELOPER_ID_P12_PASSWORD`, `APPLE_NOTARY_KEY_ID`,
+`APPLE_NOTARY_ISSUER_ID`, and `APPLE_NOTARY_KEY_P8` (the private key text).
+The native macOS job imports the certificate into a temporary keychain, signs
+`bashy`, `outpost`, `bash`, and `sh` with hardened runtime and a timestamp,
+then submits a temporary ZIP through `xcrun notarytool submit --wait` before
+building the release tarballs. Bare Mach-O files cannot carry a stapled ticket;
+Gatekeeper may need network access to check Apple's notary service.
+
+For Windows, create an Azure Artifact Signing Public Trust account and
+certificate profile, grant the federated app the **Artifact Signing Certificate
+Profile Signer** role, and add a GitHub OIDC federated credential scoped to this
+release workflow. Set GitHub Actions secrets `AZURE_CLIENT_ID`,
+`AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` and repository variables
+`ARTIFACT_SIGNING_ENDPOINT`, `ARTIFACT_SIGNING_ACCOUNT`,
+`ARTIFACT_SIGNING_PROFILE`. The Windows job uses `azure/login` OIDC and the
+official Azure Artifact Signing action. It signs all four PE files for each
+architecture, then assembles the final ZIPs and raw outpost files. The publish
+job computes SHA-256 sidecars and the complete checksum manifest after signing.
+Run `scripts/verify-signatures.sh DIST darwin|windows true|false` on a native
+QA runner against downloaded published assets; the release workflow does this
+for each candidate.
+
 ## Vulnerability gate
 
 `make govulncheck` (`scripts/govulncheck-release.sh`) is part of the release

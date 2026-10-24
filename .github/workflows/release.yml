@@ -152,11 +152,22 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
           ARCH: ${{ matrix.arch }}
+          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          APPLE_NOTARY_KEY_P8: ${{ secrets.APPLE_NOTARY_KEY_P8 }}
         run: |
           # The binary embeds the SPA artifact committed at the pinned yoke;
           # fail closed if that artifact is stale or the toolchain is missing.
           ./scripts/build-meet-spa.sh check
           ./scripts/build-native-darwin-release.sh "$TAG" "$ARCH" "$RUNNER_TEMP/native"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signature-status-darwin-${{ matrix.arch }}
+          path: ${{ runner.temp }}/signature-status/darwin-${{ matrix.arch }}.json
+          if-no-files-found: error
+          retention-days: 3
       - name: Sign native Bashy archive provenance
         uses: actions/attest@v4
         with:
@@ -254,6 +265,73 @@ jobs:
             /usr/lib/bashy/bin/bashy --version
             /usr/lib/bashy/bin/bashy -c "echo apk-ok"
             /usr/lib/bashy/bin/outpost --version'
+  windows-sign:
+    needs: [goreleaser]
+    runs-on: windows-2025
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check Azure signing configuration
+        id: signing
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARTIFACT_SIGNING_ENDPOINT: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          ARTIFACT_SIGNING_ACCOUNT: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          ARTIFACT_SIGNING_PROFILE: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+        run: ./scripts/check-windows-signing-config.sh windows.json
+      - name: Download draft Windows assets and stage executables
+        if: steps.signing.outputs.signed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p windows-dist
+          gh release download "$TAG" -D windows-dist --pattern 'bashy-windows-*' --pattern 'bash-windows-*' --pattern 'outpost-*-windows-*.exe'
+          python scripts/sign-windows-release.py prepare windows-dist windows-stage
+      - name: Azure login using federated OIDC
+        if: steps.signing.outputs.signed == 'true'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Sign Windows executables
+        if: steps.signing.outputs.signed == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\windows-stage
+          files-folder-filter: exe
+          files-folder-recurse: true
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+      - name: Package and replace draft Windows assets
+        if: steps.signing.outputs.signed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          python scripts/sign-windows-release.py finish windows-dist windows-stage
+          pwsh -NoProfile -File scripts/verify-signatures.ps1 -Dist windows-dist -Signed true
+          gh release upload "$TAG" windows-dist/* --clobber
+          printf '{"signed":true}\n' > windows.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signature-status-windows
+          path: windows.json
+          if-no-files-found: error
+          retention-days: 3
+
   # The otel stack orchestrator blob, built HERE — not in engine-blobs.yml.
   # engine-blobs.yml listens on `release: published`, but that event never
   # fires for our releases: the draft is created by the GoReleaser step below
@@ -304,7 +382,7 @@ jobs:
       id-token: write
       attestations: write
     name: verify complete draft and publish candidate
-    needs: [darwin, goreleaser, otel]
+    needs: [darwin, goreleaser, windows-sign, otel]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -313,6 +391,11 @@ jobs:
           pattern: bashy-darwin-*
           # Not native/: that directory is tracked source (siglaunch).
           path: release-native
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: signature-status-*
+          path: signature-status
           merge-multiple: true
       - name: Verify native provenance and prepare complete signed manifest
         shell: bash
@@ -347,6 +430,34 @@ jobs:
           URL: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_URL }}
           SECRET: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_SECRET }}
         run: ./scripts/register-product-release.sh
+  signature-qa:
+    name: published signature QA / ${{ matrix.platform }}
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: darwin
+            runner: macos-15
+          - platform: windows
+            runner: windows-2025
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download published bytes and verify declared signing status
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          mkdir -p qa-dist
+          gh release download "$TAG" -D qa-dist --pattern "bashy-$PLATFORM-*" --pattern "bash-$PLATFORM-*" --pattern "outpost-v*-$PLATFORM-*"
+          gh release view "$TAG" --json body --jq .body > qa-notes.txt
+          signed=$(python3 scripts/release-signing-status.py read-note qa-notes.txt "$PLATFORM")
+          ./scripts/verify-signatures.sh qa-dist "$PLATFORM" "$signed"
   cleanup:
     name: remove incomplete draft from this run
     if: ${{ always() && needs.preflight.result == 'success' && (needs.darwin.result != 'success' || needs.goreleaser.result != 'success' || needs.publish.result != 'success') }}
