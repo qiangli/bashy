@@ -1,0 +1,236 @@
+{
+  "candidate_commit": "cb3bad6ebf9d637d1a9b9be3a3a959f2dae371e3",
+  "native_research_gate": "PASS_4_OF_4",
+  "operator_admitted": false,
+  "policy_sha256": {
+    "external-python-runtime.json": "bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75",
+    "operator-python-admission.json": "bfedfa9d97509788c7532ad6675a334c2c7bbf84222b3c6a077cd0e0bc371d3f",
+    "prepare_python_host.sh": "2c7bb08fe2d54cfa2b3b1aec0f6dc8a5138b2af921c8daefcaec5431347cef87",
+    "windows-external-runtime.json": "22fdf176901b22b7cbc32be79f57feffcd566767dddd8c2523d58eee493771e0"
+  },
+  "product_admitted": false,
+  "remaining_gates": [
+    "No operator or bare-host product installation was observed; operator-python-admission.json remains unadmitted for all six targets.",
+    "macOS runners already had the exact 3.12.10 interpreter bytes before the official package reinstall. Package receipts record version 0, and changed install-time proves installer receipt update but cannot by itself prove a fresh-host macOS installation.",
+    "Windows VCRUNTIME140.dll loaded from the Python install directory; System32 VCRUNTIME140.dll was inventoried but was not the loaded module. Product VC redistribution and native runtime closure remain separate.",
+    "Notice inventory was retained and byte-verified; full third-party license and redistribution review is not established by this run."
+  ],
+  "review_checkout_line_endings": {
+    "macos": "LF prior review JSON sha256 a0aa3c856c7b3084af97f3551e8d0df6c9a4cf1f85dde205342826c6407fc4a9",
+    "windows": "CRLF checkout of the same prior review JSON sha256 e1cfcbd0f08a48a8a674cedde322b7a0936a22b7ba4ec5d9f2800f642a732513; parsed contents match"
+  },
+  "run_conclusion": "success",
+  "run_id": 40215802421,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40215802421",
+  "schema": "s503-python-installed-four-target-independent-review-v1",
+  "scope": "Official Python.org 3.12.10 native installed-interpreter research on four disposable GitHub-hosted runners; reviewed exact installer and installed executable pins.",
+  "source_installer_review_run": 40213869256,
+  "targets": [
+    {
+      "artifact_id": 12608060521,
+      "artifact_zip_sha256": "da7a4c7fe35c1fc130d7ebe4e18c68044f2310ebebd443c42e1e439a8060a161",
+      "installation_kind": "reinstall_over_existing_ci_framework",
+      "installed_interpreter_sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+      "installer_sha256": "8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4",
+      "machine": "arm64",
+      "module_sha256": {
+        "_bz2": "9514de3597166ab257bb02fe42f125ee5aa268b558f5be866c593923ca90c888",
+        "_lzma": "1c22e45c681b7f15cd941f612c13a0efbfafaa764a0898bda69e2ab660e0bd37",
+        "_ssl": "8ff1de64adb502314c900c628eca4d2f75ad0b1ae76ed8abf6508e76dbba1056",
+        "bz2": "76ab3252924e71e859d7d90e8d3db13b6554975cfcac0fdadced4de7f8779330",
+        "lzma": "58fb9d2fdc8a8af7b25e218f17ea3b51bdfa53bdf40f440ab33c605974ca5c2e",
+        "ssl": "039a0e3f1782e14824b1624c7ffefc2de31714b4a9994424be45a4271966097c",
+        "zlib": "d7057dcfe0c168ef75a2189cf77da74b09bd7f3d9f09d51e34628188c95f648e"
+      },
+      "notice_copies_verified": true,
+      "notice_file_count": 45,
+      "openssl_version": "OpenSSL 3.0.16 11 Feb 2025",
+      "package_receipt_times": {
+        "org.python.Python.PythonApplications-3.12": {
+          "after": "1792948886",
+          "before": "1788758201",
+          "pkgutil_version": "0"
+        },
+        "org.python.Python.PythonDocumentation-3.12": {
+          "after": "1792948886",
+          "before": "1788758201",
+          "pkgutil_version": "0"
+        },
+        "org.python.Python.PythonFramework-3.12": {
+          "after": "1792948886",
+          "before": "1788758201",
+          "pkgutil_version": "0"
+        },
+        "org.python.Python.PythonUnixTools-3.12": {
+          "after": "1792948886",
+          "before": "1788758201",
+          "pkgutil_version": "0"
+        }
+      },
+      "platform": "macosx-10.13-universal2",
+      "prior_interpreter_same_hash": true,
+      "raw_receipt_hashes_verified": true,
+      "result_json_sha256": "68d33fcb8e15e545b44bbeb2c15658e144536152b78a5a2faacaf28741b322d7",
+      "runner_label": "macos-15",
+      "stdlib_roundtrip": {
+        "bz2": true,
+        "lzma": true,
+        "zlib": true
+      },
+      "target": "darwin/arm64",
+      "version": "3.12.10"
+    },
+    {
+      "artifact_id": 12607591781,
+      "artifact_zip_sha256": "4da4cd7c8dea9c95bd0a221aac303f7f396829b9b2e320f755a99c602f4f6c69",
+      "installation_kind": "reinstall_over_existing_ci_framework",
+      "installed_interpreter_sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+      "installer_sha256": "8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4",
+      "machine": "x86_64",
+      "module_sha256": {
+        "_bz2": "9514de3597166ab257bb02fe42f125ee5aa268b558f5be866c593923ca90c888",
+        "_lzma": "1c22e45c681b7f15cd941f612c13a0efbfafaa764a0898bda69e2ab660e0bd37",
+        "_ssl": "8ff1de64adb502314c900c628eca4d2f75ad0b1ae76ed8abf6508e76dbba1056",
+        "bz2": "76ab3252924e71e859d7d90e8d3db13b6554975cfcac0fdadced4de7f8779330",
+        "lzma": "58fb9d2fdc8a8af7b25e218f17ea3b51bdfa53bdf40f440ab33c605974ca5c2e",
+        "ssl": "039a0e3f1782e14824b1624c7ffefc2de31714b4a9994424be45a4271966097c",
+        "zlib": "d7057dcfe0c168ef75a2189cf77da74b09bd7f3d9f09d51e34628188c95f648e"
+      },
+      "notice_copies_verified": true,
+      "notice_file_count": 45,
+      "openssl_version": "OpenSSL 3.0.16 11 Feb 2025",
+      "package_receipt_times": {
+        "org.python.Python.PythonApplications-3.12": {
+          "after": "1792949069",
+          "before": "1787554652",
+          "pkgutil_version": "0"
+        },
+        "org.python.Python.PythonDocumentation-3.12": {
+          "after": "1792949069",
+          "before": "1787554652",
+          "pkgutil_version": "0"
+        },
+        "org.python.Python.PythonFramework-3.12": {
+          "after": "1792949069",
+          "before": "1787554652",
+          "pkgutil_version": "0"
+        },
+        "org.python.Python.PythonUnixTools-3.12": {
+          "after": "1792949069",
+          "before": "1787554652",
+          "pkgutil_version": "0"
+        }
+      },
+      "platform": "macosx-10.13-universal2",
+      "prior_interpreter_same_hash": true,
+      "raw_receipt_hashes_verified": true,
+      "result_json_sha256": "27383d6f44bf4e553bdfa74c79d9b830dc480644ac66bcc9abc144cc47bfdaa6",
+      "runner_label": "macos-15-intel",
+      "stdlib_roundtrip": {
+        "bz2": true,
+        "lzma": true,
+        "zlib": true
+      },
+      "target": "darwin/amd64",
+      "version": "3.12.10"
+    },
+    {
+      "artifact_id": 12607412074,
+      "artifact_zip_sha256": "578d26388ea3334f22811c3b992da0990bad7021452ea5610ccff1abd1fcb448",
+      "installation_kind": "fresh_install",
+      "installed_interpreter_sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a",
+      "installer_sha256": "67b5635e80ea51072b87941312d00ec8927c4db9ba18938f7ad2d27b328b95fb",
+      "loaded_vc": {
+        "MSVCP140.dll": {
+          "path": "C:\\Windows\\SYSTEM32\\MSVCP140.dll",
+          "sha256": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca"
+        },
+        "VCRUNTIME140.dll": {
+          "path": "C:\\Users\\runneradmin\\AppData\\Local\\Bashy\\Python-3.12.10-AMD64\\VCRUNTIME140.dll",
+          "sha256": "052ad6a20d375957e82aa6a3c441ea548d89be0981516ca7eb306e063d5027f4"
+        }
+      },
+      "machine": "AMD64",
+      "module_sha256": {
+        "_bz2": "65f610646d10d5babea080e060d244b546ec52c54012e5e937dc72dcc2e2e7bc",
+        "_lzma": "e3deecc1f59a3b811c608861decd84de1e8df8bafd5e2b39188861318c5a38cf",
+        "_ssl": "0bc527d2dbc50009f43b2ed5d5982c4f63f4b647647ffa9eda612dcda80f6040",
+        "bz2": "a539fc503737c53d5a45272e33a435b8a6b7a8559ba6a425002978038096bd66",
+        "lzma": "da46fa7c6c554a0705cf9a7318279b56fd5f62f71a55ac28e9579616f11129d6",
+        "ssl": "a009473631ff4e7ccab5023866747ccf28ad9c8b3ac8a7bb299895b34a7c23b2",
+        "zlib": null
+      },
+      "notice_copies_verified": true,
+      "notice_file_count": 3,
+      "openssl_version": "OpenSSL 3.0.16 11 Feb 2025",
+      "platform": "win-amd64",
+      "preexisting_requested_install_path": false,
+      "raw_receipt_hashes_verified": true,
+      "registry_after": "{\"PSPath\":\"Microsoft.PowerShell.Core\\\\Registry::HKEY_CURRENT_USER\\\\Software\\\\Python\\\\PythonCore\\\\3.12\\\\InstallPath\",\"(default)\":\"C:\\\\Users\\\\runneradmin\\\\AppData\\\\Local\\\\Bashy\\\\Python-3.12.10-AMD64\\\\\",\"ExecutablePath\":\"C:\\\\Users\\\\runneradmin\\\\AppData\\\\Local\\\\Bashy\\\\Python-3.12.10-AMD64\\\\python.exe\"}",
+      "registry_before": "{\"PSPath\":\"Microsoft.PowerShell.Core\\\\Registry::HKEY_LOCAL_MACHINE\\\\Software\\\\Python\\\\PythonCore\\\\3.12\\\\InstallPath\",\"(default)\":\"C:\\\\hostedtoolcache\\\\windows\\\\Python\\\\3.12.10\\\\x64\\\\\",\"ExecutablePath\":\"C:\\\\hostedtoolcache\\\\windows\\\\Python\\\\3.12.10\\\\x64\\\\python.exe\"}",
+      "result_json_sha256": "54a7d7d7243df29f430e7f68f36d6f739544bc7343835cd0c5ece04b1361778e",
+      "runner_label": "windows-2025",
+      "signature_thumbprint": "DE01DAAE82D04F466A576E178F6B07A839238953",
+      "stdlib_roundtrip": {
+        "bz2": true,
+        "lzma": true,
+        "zlib": true
+      },
+      "system32_vc": {
+        "MSVCP140.dll": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca",
+        "VCRUNTIME140.dll": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7"
+      },
+      "target": "windows/amd64",
+      "version": "3.12.10"
+    },
+    {
+      "artifact_id": 12607916463,
+      "artifact_zip_sha256": "fc8d613385bb4903b114943c754370d86d6537eaeb71140e8a20002b967c2a9d",
+      "installation_kind": "fresh_install",
+      "installed_interpreter_sha256": "7f1ebbbb04164caf8f8073aafa7f82321fb44695e10fe6a9ebaf2138b63892c4",
+      "installer_sha256": "377ac8fd478987940088e879441e702a71b53164d2a1e6f1d51ff77a7e470258",
+      "loaded_vc": {
+        "MSVCP140.dll": {
+          "path": "C:\\Windows\\SYSTEM32\\MSVCP140.dll",
+          "sha256": "167ceac85c2d726c4cd9e39b8881fafdc6de1520c0e67c4f6b271235f9d2a6c5"
+        },
+        "VCRUNTIME140.dll": {
+          "path": "C:\\Users\\runneradmin\\AppData\\Local\\Bashy\\Python-3.12.10-ARM64\\VCRUNTIME140.dll",
+          "sha256": "560cd0ab1ec81b8b2197b119e198453a9c23d2f9e846f15c79a26bf5d75b68c4"
+        }
+      },
+      "machine": "ARM64",
+      "module_sha256": {
+        "_bz2": "7907408913e97380475eecaa5596169a615d24d0a985d122f75ff932a2c84b62",
+        "_lzma": "35491cc5437eddd47d9dba3875b5c1ebdc436c6f1593964542f1dbb50e6c2f1f",
+        "_ssl": "7d511fcfd0a31f20a5bc8c4f26268ff791d9228d5995811a72a7f255f39806bf",
+        "bz2": "a539fc503737c53d5a45272e33a435b8a6b7a8559ba6a425002978038096bd66",
+        "lzma": "da46fa7c6c554a0705cf9a7318279b56fd5f62f71a55ac28e9579616f11129d6",
+        "ssl": "a009473631ff4e7ccab5023866747ccf28ad9c8b3ac8a7bb299895b34a7c23b2",
+        "zlib": null
+      },
+      "notice_copies_verified": true,
+      "notice_file_count": 3,
+      "openssl_version": "OpenSSL 3.0.16 11 Feb 2025",
+      "platform": "win-arm64",
+      "preexisting_requested_install_path": false,
+      "raw_receipt_hashes_verified": true,
+      "registry_after": "",
+      "registry_before": "",
+      "result_json_sha256": "e491e0aed85d90cd9566441de10f91f6b96584ea0d7546c800dd7bf13e923187",
+      "runner_label": "windows-11-arm",
+      "signature_thumbprint": "DE01DAAE82D04F466A576E178F6B07A839238953",
+      "stdlib_roundtrip": {
+        "bz2": true,
+        "lzma": true,
+        "zlib": true
+      },
+      "system32_vc": {
+        "MSVCP140.dll": "167ceac85c2d726c4cd9e39b8881fafdc6de1520c0e67c4f6b271235f9d2a6c5",
+        "VCRUNTIME140.dll": "3c56f4167e2b3d8e6338497731e6aae8cd7ec46bd6789f9423a8d9cf9a630310"
+      },
+      "target": "windows/arm64",
+      "version": "3.12.10"
+    }
+  ]
+}
