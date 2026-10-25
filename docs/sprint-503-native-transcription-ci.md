@@ -4,8 +4,19 @@
 runners after the reviewed admission record is pushed to
 `s503-contract-integration`, or by manual dispatch. It cannot turn green from
 an unreviewed build or a media download. The admission record
-`docs/sprint-503/evidence/native-transcription-admission.json` is absent, so
-all six jobs remain blocked.
+`docs/sprint-503/evidence/native-transcription-admission.json` was added for
+evidence collection at Bashy `52139da7`. It marks the operator transcript
+reference `provisional_machine_agreement`; the final native check still blocks
+acceptance until the recorded excerpt is human confirmed.
+
+As of 2026-10-25 13:45 UTC, [run 40198584884](https://github.com/qiangli/bashy/actions/runs/40198584884)
+passed admission and started all six jobs. Windows ARM stopped at the runner
+identity check because .NET returned mixed-case `Arm64`; this comparison was
+corrected in Bashy `6b3aae4f` for the next run. Ubuntu amd64/arm64, macOS
+arm64 and Windows amd64 passed dependency and controlled-fixture checks, then
+YouTube rejected the operator video's canonical URL from GitHub-hosted egress
+with a bot sign-in error. macOS Intel remained in its native build step at
+that checkpoint. These failures are retained evidence, not native passes.
 
 ## Admission required
 
@@ -20,23 +31,26 @@ The `s503-native-transcription-admission-v2` record must bind:
   on macOS and Windows, records its executable hash, and passes that exact path
   to the source adapter.
 - Independently acquired canonical and shortened operator URL media hashes,
-  499-second duration, a human-reviewed excerpt, score tolerance, and review
-  evidence. Equal media bytes are allowed only after separate acquisitions.
+  499-second duration, score tolerance and review evidence. Equal media bytes
+  are allowed only after separate acquisitions. A provisional reference tied
+  to both auto captions and independent Whisper text permits test execution;
+  final acceptance requires a human-reviewed excerpt.
 - A separate licensed controlled speech WebM at least five seconds long, with
   a reviewed transcript excerpt of at least six words, duration, SHA-256,
   byte count, license and review evidence. Its artifact must be named
   `s503-controlled-speech`, contain only `speech-long.webm`, and be identified
   by an exact successful GitHub run ID and source commit. The current two-second
   `examples/transcribe/webm-opus/testdata/speech.webm` is a codec fixture and
-  is explicitly rejected as the controlled speech case. A longer CC0
-  Wikispeech remux is a candidate, pending native transcript review and
-  publication as the pinned artifact.
+  is explicitly rejected as the controlled speech case. The longer CC0
+  Wikispeech remux was published as artifact `s503-controlled-speech` in
+  successful run `40197393964` and pinned by SHA-256 in the admission record.
 - Six reviewed offline enforcer executable hashes and methods: Linux
   `linux-unshare-net`, macOS `macos-sandbox-deny-network`, Windows
   `windows-firewall-program-block`. Each probe is a real Python TCP attempt to
   `1.1.1.1:443`.
 
-No admission record or controlled speech artifact is created by this workflow.
+This workflow consumes the pinned admission record and controlled speech
+artifact; it does not create either one.
 
 ## What each native job does
 
@@ -76,8 +90,8 @@ receipts and canary reports even when the job fails.
 
 ## Remaining gates
 
-The workflow has been syntax checked locally; no local builds, inference or
-OCI runs were performed. Actual hosted-runner execution must establish whether
+The workflow was syntax checked locally; no local builds, inference or OCI
+runs were performed. Actual hosted-runner execution must establish whether
 Linux permits `sudo unshare --net`, whether macOS `sandbox-exec` behaves on both
 GitHub images, and whether Windows program rules deny the canary on x64 and
 ARM64 without disrupting the runner. Any unsupported target stays red.
