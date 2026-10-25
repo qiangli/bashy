@@ -2,13 +2,16 @@
   "speech_source": "https://upload.wikimedia.org/wikipedia/commons/2/2f/Wikispeech-sample2.opus",
   "source_sha256": "9744230eb367b00f1aa5d0c64572c24b2cc533d5f893294bcaabdd912ed1b5a3",
   "speech_packets": 100,
+  "long_speech_packets": 533,
+  "long_speech_packet_span_ms": 10660,
   "speech_preskip": 312,
   "reference_library": "libopus 1.6.1",
+  "reference_library_sha256": "435581a316f3dd41982f3101caa6be6ec974572e31765cd0e29c7cbe30198609",
   "files": {
+    "speech-long.webm": "ad06a00c9331152d8a1e16277b086f3639a30335a5ad9becfd921891c4165090",
     "speech-reference.pcm": "7096656f366790ca26334d13188b6e478b36254b6f5a28f690466717856d9a27",
     "speech.webm": "dfa1a92759f3ab64c793d16140204efcd9e7c8b84e367a28efd31548da1f04b4",
     "stereo-reference.pcm": "3bfc6642a52b41abdb1c05536cb933437131eab2617a63a7b18f84c2f096c40e",
     "stereo.webm": "5fd825da8bd1915dc15e0fd9ad6eb2637265e11d6a4111de14dd5f7d9dd07bb6"
-  },
-  "reference_library_sha256": "435581a316f3dd41982f3101caa6be6ec974572e31765cd0e29c7cbe30198609"
+  }
 }

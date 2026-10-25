@@ -19,6 +19,20 @@ libopus 1.6.1. The signal and generated test artifacts are dedicated CC0-1.0.
 The two different channels test real codec downmixing, not a mono packet with
 stereo metadata. Both fixtures are short development unit-test inputs.
 
+`speech-long.webm` remuxes all 533 audio packets from that same CC0 source
+into a 10.66-second controlled speech fixture for native end-to-end
+transcription. It retains the source packets and pre-skip without re-encoding.
+The native speech gate must establish the actual transcript reference; this
+fixture and its decoder test alone are not inference evidence.
+The [source file page](https://commons.wikimedia.org/wiki/File:Wikispeech-sample2.opus)
+records the author's actual synthesis input. A reviewed short reference from
+that input is “a text-to-speech tool, to make Wikimedia's projects more
+accessible”. An independent native Darwin arm64 whisper.cpp v1.9.5 CPU probe
+decoded this longer WebM to 10,653 ms of mono PCM16 and transcribed a matching
+clause (with a spelling error in “Wikimedia's”); its source-media and WAV
+SHA-256 values are retained in the Sprint 503 evidence ledger. The six-target
+pipeline gate still has to run this artifact through the real stage chain.
+
 `*-reference.pcm` is independent little-endian 16 kHz mono PCM16 from libopus
 1.6.1, with the 104 output pre-skip samples removed. The decoder gate compares
 sample count, nonzero energy and SNR against these bytes; it is not a transcript

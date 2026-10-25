@@ -77,6 +77,10 @@ skip = struct.unpack_from('<H', head, 10)[0]
 speech = packets[2:102]
 (root/'speech.webm').write_bytes(webm(speech, 1, skip))
 (root/'speech-reference.pcm').write_bytes(reference(speech, skip))
+# Remux the complete CC0 speech for the native end-to-end transcription gate.
+# The original Opus packets and pre-skip are unchanged.
+long_speech = packets[2:]
+(root/'speech-long.webm').write_bytes(webm(long_speech, 1, skip))
 
 err = C.c_int()
 enc = lib.opus_encoder_create(48000, 2, 2049, C.byref(err))
@@ -95,6 +99,6 @@ for frame in range(30):
 lib.opus_encoder_destroy(enc)
 (root/'stereo.webm').write_bytes(webm(stereo, 2, 312))
 (root/'stereo-reference.pcm').write_bytes(reference(stereo, 312))
-manifest = {'speech_source': url, 'source_sha256': hashlib.sha256(source).hexdigest(), 'speech_packets': len(speech), 'speech_preskip': skip, 'reference_library': lib.opus_get_version_string().decode(), 'reference_library_sha256': hashlib.sha256(Path(os.environ['LIBOPUS']).read_bytes()).hexdigest(), 'files': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(root.iterdir()) if p.suffix in ('.webm', '.pcm')}}
+manifest = {'speech_source': url, 'source_sha256': hashlib.sha256(source).hexdigest(), 'speech_packets': len(speech), 'long_speech_packets': len(long_speech), 'long_speech_packet_span_ms': len(long_speech) * 20, 'speech_preskip': skip, 'reference_library': lib.opus_get_version_string().decode(), 'reference_library_sha256': hashlib.sha256(Path(os.environ['LIBOPUS']).read_bytes()).hexdigest(), 'files': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(root.iterdir()) if p.suffix in ('.webm', '.pcm')}}
 (root/'manifest.json').write_text(json.dumps(manifest, indent=2)+'\n')
 print(json.dumps(manifest, indent=2))
