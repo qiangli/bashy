@@ -53,6 +53,26 @@ class FreshSourceGuards(unittest.TestCase):
             self.assertEqual(len(retained), MODULE.MAX_CONFIG_LOG_TAIL_BYTES)
             self.assertTrue(retained.endswith(b"link failure"))
 
+    def test_sdk_is_checked_and_exported_to_restricted_build_env(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sdk = Path(directory) / "MacOSX.sdk"
+            stub = sdk / "usr/lib/libSystem.tbd"
+            stub.parent.mkdir(parents=True)
+            stub.write_bytes(b"native macOS linker stub")
+            env = {"PATH": "/usr/bin:/bin"}
+            with mock.patch.object(MODULE, "command", return_value=str(sdk) + "\n"):
+                receipt = MODULE.macos_sdk(env)
+            self.assertEqual(env["SDKROOT"], str(sdk.resolve(strict=True)))
+            self.assertEqual(receipt["libsystem_stub_sha256"], MODULE.sha256(stub))
+
+    def test_sdk_without_libsystem_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sdk = Path(directory) / "MacOSX.sdk"
+            sdk.mkdir()
+            with mock.patch.object(MODULE, "command", return_value=str(sdk) + "\n"):
+                with self.assertRaisesRegex(RuntimeError, "libSystem"):
+                    MODULE.macos_sdk({"PATH": "/usr/bin:/bin"})
+
     def test_runtime_rejects_module_from_existing_framework(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

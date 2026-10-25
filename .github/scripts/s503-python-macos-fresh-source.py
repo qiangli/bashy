@@ -177,6 +177,18 @@ def brew_openssl(evidence: Path) -> dict:
             "libraries": libraries, "notices": notices}
 
 
+def macos_sdk(env: dict[str, str]) -> dict:
+    """Pass the native SDK to clang in the same restricted environment."""
+    sdk = Path(command(["xcrun", "--sdk", "macosx", "--show-sdk-path"]).strip()).resolve(strict=True)
+    stub = sdk / "usr/lib/libSystem.tbd"
+    require(sdk.is_dir() and stub.is_file() and
+            stub.resolve(strict=True).is_relative_to(sdk),
+            "macOS SDK lacks the native libSystem linker stub")
+    env["SDKROOT"] = str(sdk)
+    return {"path": str(sdk), "libsystem_stub": str(stub),
+            "libsystem_stub_sha256": sha256(stub)}
+
+
 def notice_inventory(root: Path, evidence: Path, label: str) -> dict:
     paths = [path for path in sorted(root.rglob("*")) if path.is_file() and
              not path.is_symlink() and any(word in path.name.lower() for word in NOTICE_WORDS)
@@ -395,9 +407,10 @@ def build(input_dir: Path, evidence: Path) -> dict:
         env["PKG_CONFIG_PATH"] = str(Path(openssl["prefix"]) / "lib/pkgconfig")
         env["CPPFLAGS"] = "-I" + str(Path(openssl["prefix"]) / "include")
         env["LDFLAGS"] = "-L" + str(Path(openssl["prefix"]) / "lib")
+        report["macos_sdk"] = macos_sdk(env)
         report["configure_env"] = {key: env[key] for key in
                                    ("CC", "CONFIG_SITE", "CPPFLAGS", "LDFLAGS",
-                                    "PKG_CONFIG_PATH")}
+                                    "PKG_CONFIG_PATH", "SDKROOT")}
         report["toolchain"] = {"clang": env["CC"], "clang_sha256": sha256(Path(env["CC"])),
                                "clang_version": command([env["CC"], "--version"]).splitlines()[0],
                                "xcode": command(["xcodebuild", "-version"]).splitlines()}
@@ -414,6 +427,14 @@ def build(input_dir: Path, evidence: Path) -> dict:
                                      "exit_code": smoke.returncode,
                                      "output_sha256": sha256(smoke_output),
                                      "output_bytes": smoke_output.stat().st_size}
+        require(smoke.returncode == 0 and smoke_binary.is_file(),
+                "SDK-configured C compiler cannot create a native executable")
+        smoke_run = subprocess.run([str(smoke_binary)], env=env, capture_output=True,
+                                   text=True, errors="replace", timeout=30)
+        report["compiler_smoke"]["executable_sha256"] = sha256(smoke_binary)
+        report["compiler_smoke"]["run_exit_code"] = smoke_run.returncode
+        require(smoke_run.returncode == 0,
+                "SDK-configured C compiler executable cannot run natively")
         configure = [str(extracted / "configure"), "--prefix=" + str(prefix),
                      "--with-ensurepip=no", "--without-readline",
                      "--enable-option-checking=fatal", "--with-openssl=" + openssl["prefix"],

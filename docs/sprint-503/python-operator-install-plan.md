@@ -107,12 +107,22 @@ remaining license and host gates close.
 
 The first hosted source candidate, [run 40218374690](https://github.com/qiangli/bashy/actions/runs/40218374690),
 passed native identity, exact input hashes and detached signature verification
-on both macOS architectures. Both builds stopped during `configure` at
-`C compiler cannot create executables`; the retained build-log tail does not
-contain the linker diagnostic from `config.log`. This is a source-build blocker,
-not an installed-Python or license pass. The follow-up retains a bounded copy
-of `config.log` and the output of a compiler smoke run with the same environment
-to identify the failure before changing the compiler or SDK settings.
+on both macOS architectures, then stopped at `C compiler cannot create
+executables`. [Diagnostic run 40218589731](https://github.com/qiangli/bashy/actions/runs/40218589731)
+retained full `config.log` and same-environment compiler probes. On both native
+architectures, the compiler probe and CPython `configure` link test fail with
+the same exact error: `ld: library 'System' not found`. The restricted source
+build environment had no `SDKROOT`, while `configure` detected the Xcode 16.4
+MacOSX SDK. The retained full `config.log` hashes are
+`6972b15c8b30033730da609b8dcac9c8074980568ad6f43ca5c3fd6539e9a70b`
+(arm64) and `c945982ea7c12a651270cf7ceca967b07837e8b34ea7ec0b12744103cbc9d26b`
+(amd64); both compiler-probe outputs hash to
+`d6539aa345ce31fc39f73abe410d258461eddacfb0d2f6934056374d38a226b3`.
+The corrected candidate resolves that SDK with `xcrun`, checks and
+hashes its `usr/lib/libSystem.tbd` stub, exports `SDKROOT` to the compiler and
+`configure`, and requires a compiled smoke executable to run before the Python
+build. This correction still needs native CI verification. Both earlier runs
+remain source-build failures; neither proves an installed Python or license pass.
 
 ## Host procedure
 
