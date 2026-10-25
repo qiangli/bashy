@@ -1,0 +1,130 @@
+{
+  "schema": "s503-python-installer-artifact-review-v1",
+  "run_id": 40216443981,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40216443981",
+  "run_conclusion": "success",
+  "candidate_commit": "979733b7590c531fc80b271134e634abfdb2e2f8",
+  "scope": "native Python.org installer artifact hashes, signatures, VC prerequisites and private staged-copy verification; no install",
+  "verification": [
+    "GitHub Actions completed successfully on all four requested native runners.",
+    "Downloaded all four bounded artifacts and rehashed each result, verify receipt and signature probe against its result JSON.",
+    "Compared current policy file SHA-256 to every native receipt, the Python.org installer pin, and Windows VC System32 versions and hashes."
+  ],
+  "open_gates": [
+    "Current-policy native installed-interpreter research is pending.",
+    "Operator-host install, loaded VC and product license admission remain untested."
+  ],
+  "product_admitted": false,
+  "targets": [
+    {
+      "target": "darwin/amd64",
+      "runner_label": "macos-15-intel",
+      "artifact_id": 12607422865,
+      "bashy_sha256": "ec4542cf56e9c981f99302f2a1418943cd5ecb42bb6cee58bc374533e3db0d3a",
+      "result_json_sha256": "3a2667064ec3af517f0a9b60cd6e092e0104f2be81af910c88f91111d22054d3",
+      "installer_url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg",
+      "installer_sha256": "8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4",
+      "installer_bytes": 45720356,
+      "staged_copy_verified": true,
+      "signature": "Python Software Foundation Developer ID Installer; Apple notarization trusted",
+      "policy_sha256": {
+        "prepare_python_host.sh": "2067ae0c200252166ede2422e2a1e0706d33386f795665e551c2db44503b8a6f",
+        "external-python-runtime.json": "bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75",
+        "windows-external-runtime.json": "4cb64c7c2376947ed2a30ca3e9dd8ce7d0b0cb50270a78144273102ac97f484f",
+        "operator-python-admission.json": "bfedfa9d97509788c7532ad6675a334c2c7bbf84222b3c6a077cd0e0bc371d3f"
+      },
+      "windows_vc_system32": null,
+      "installed": false,
+      "product_admitted": false
+    },
+    {
+      "target": "darwin/arm64",
+      "runner_label": "macos-15",
+      "artifact_id": 12608011652,
+      "bashy_sha256": "b8896366e8b5dbcb3bbece2f1a158dcc25a907a8f9616d11df7d090478272988",
+      "result_json_sha256": "135cc63ebc8de3ba5d1390228baf32ea72c61425ffd189e700bc2d25496c3bb4",
+      "installer_url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg",
+      "installer_sha256": "8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4",
+      "installer_bytes": 45720356,
+      "staged_copy_verified": true,
+      "signature": "Python Software Foundation Developer ID Installer; Apple notarization trusted",
+      "policy_sha256": {
+        "prepare_python_host.sh": "2067ae0c200252166ede2422e2a1e0706d33386f795665e551c2db44503b8a6f",
+        "external-python-runtime.json": "bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75",
+        "windows-external-runtime.json": "4cb64c7c2376947ed2a30ca3e9dd8ce7d0b0cb50270a78144273102ac97f484f",
+        "operator-python-admission.json": "bfedfa9d97509788c7532ad6675a334c2c7bbf84222b3c6a077cd0e0bc371d3f"
+      },
+      "windows_vc_system32": null,
+      "installed": false,
+      "product_admitted": false
+    },
+    {
+      "target": "windows/amd64",
+      "runner_label": "windows-2025",
+      "artifact_id": 12607772104,
+      "bashy_sha256": "953541365bffb0299dcd3a15ece3f543f3c465293bf3e1f30f157f7963e23c17",
+      "result_json_sha256": "811217b03061b8de93683329bf43cbdaa9932fd03bdf83fec223455b2cc62644",
+      "installer_url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe",
+      "installer_sha256": "67b5635e80ea51072b87941312d00ec8927c4db9ba18938f7ad2d27b328b95fb",
+      "installer_bytes": 26964224,
+      "staged_copy_verified": true,
+      "signature": "CN=Python Software Foundation, O=Python Software Foundation, L=Beaverton, S=Oregon, C=US",
+      "policy_sha256": {
+        "prepare_python_host.sh": "2067ae0c200252166ede2422e2a1e0706d33386f795665e551c2db44503b8a6f",
+        "external-python-runtime.json": "bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75",
+        "windows-external-runtime.json": "4cb64c7c2376947ed2a30ca3e9dd8ce7d0b0cb50270a78144273102ac97f484f",
+        "operator-python-admission.json": "bfedfa9d97509788c7532ad6675a334c2c7bbf84222b3c6a077cd0e0bc371d3f"
+      },
+      "windows_vc_system32": [
+        {
+          "name": "MSVCP140.dll",
+          "path": "C:\\Windows\\System32\\MSVCP140.dll",
+          "sha256": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca",
+          "version": "14.51.36247.0"
+        },
+        {
+          "name": "VCRUNTIME140.dll",
+          "path": "C:\\Windows\\System32\\VCRUNTIME140.dll",
+          "sha256": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7",
+          "version": "14.51.36247.0"
+        }
+      ],
+      "installed": false,
+      "product_admitted": false
+    },
+    {
+      "target": "windows/arm64",
+      "runner_label": "windows-11-arm",
+      "artifact_id": 12607787375,
+      "bashy_sha256": "e1679a43011a0fc9d70650e078d2abedee1ee6351eab50177a89f779bf67074f",
+      "result_json_sha256": "6cd47436b766be09a17608e492ee8d665e3316ca7132c1d7682be3b74ee0a261",
+      "installer_url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-arm64.exe",
+      "installer_sha256": "377ac8fd478987940088e879441e702a71b53164d2a1e6f1d51ff77a7e470258",
+      "installer_bytes": 26202936,
+      "staged_copy_verified": true,
+      "signature": "CN=Python Software Foundation, O=Python Software Foundation, L=Beaverton, S=Oregon, C=US",
+      "policy_sha256": {
+        "prepare_python_host.sh": "2067ae0c200252166ede2422e2a1e0706d33386f795665e551c2db44503b8a6f",
+        "external-python-runtime.json": "bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75",
+        "windows-external-runtime.json": "4cb64c7c2376947ed2a30ca3e9dd8ce7d0b0cb50270a78144273102ac97f484f",
+        "operator-python-admission.json": "bfedfa9d97509788c7532ad6675a334c2c7bbf84222b3c6a077cd0e0bc371d3f"
+      },
+      "windows_vc_system32": [
+        {
+          "name": "MSVCP140.dll",
+          "path": "C:\\Windows\\System32\\MSVCP140.dll",
+          "sha256": "167ceac85c2d726c4cd9e39b8881fafdc6de1520c0e67c4f6b271235f9d2a6c5",
+          "version": "14.51.36247.0"
+        },
+        {
+          "name": "VCRUNTIME140.dll",
+          "path": "C:\\Windows\\System32\\VCRUNTIME140.dll",
+          "sha256": "3c56f4167e2b3d8e6338497731e6aae8cd7ec46bd6789f9423a8d9cf9a630310",
+          "version": "14.51.36247.0"
+        }
+      ],
+      "installed": false,
+      "product_admitted": false
+    }
+  ]
+}

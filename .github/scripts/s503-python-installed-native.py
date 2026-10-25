@@ -18,7 +18,7 @@ import sys
 
 
 BASE = Path("examples/transcribe/dependencies")
-REVIEW = Path("docs/sprint-503/evidence/python-installer-40213869256/review.json")
+REVIEW = Path("docs/sprint-503/evidence/python-installer-40216443981/review.json")
 ARTIFACT_GATE = Path(".github/scripts/s503-python-installer-artifacts.py")
 NOTICE_NAMES = ("license", "licence", "copying", "copyright", "notice", "third_party")
 NOTICE_SUFFIXES = ("", ".txt", ".md", ".rst", ".rtf", ".html", ".htm")
@@ -239,7 +239,7 @@ def main():
               "candidate_commit": os.environ["CANDIDATE_COMMIT"],
               "runner_label": os.environ["RUNNER_LABEL"],
               "expected_target": target,
-              "source_artifact_run": 40213869256,
+              "source_artifact_run": 40216443981,
               "product_admitted": False,
               "operator_admitted": False,
               "result": "BLOCKED",
@@ -267,7 +267,7 @@ def main():
             "prepare_python_host.sh", "external-python-runtime.json",
             "windows-external-runtime.json", "operator-python-admission.json")}
         review = json.loads(REVIEW.read_text())
-        require(review["run_id"] == 40213869256 and review["run_conclusion"] == "success"
+        require(review["run_id"] == 40216443981 and review["run_conclusion"] == "success"
                 and review["product_admitted"] is False, "artifact review identity changed")
         reviewed = next(row for row in review["targets"] if row["target"] == target)
         require(reviewed["staged_copy_verified"] is True and reviewed["installed"] is False,

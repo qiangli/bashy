@@ -11,7 +11,7 @@ on:
       - examples/transcribe/dependencies/external-python-runtime.json
       - examples/transcribe/dependencies/windows-external-runtime.json
       - examples/transcribe/dependencies/operator-python-admission.json
-      - docs/sprint-503/evidence/python-installer-40213869256/review.json
+      - docs/sprint-503/evidence/python-installer-40216443981/review.json
   workflow_dispatch:
 
 permissions:
