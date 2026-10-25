@@ -217,11 +217,20 @@ def dependencies(prefix: Path, files: dict[str, dict]) -> dict[str, dict]:
 
 def runtime(prefix: Path) -> dict:
     executable = prefix / "bin/python3.12"
-    probe = ("import importlib.util,json,ssl,sys,sysconfig\n"
+    probe = ("import importlib,importlib.util,json,ssl,sys,sysconfig\n"
+             "codecs = {}\n"
+             "for name in ('zlib','bz2','lzma'):\n"
+             "    try:\n"
+             "        module = importlib.import_module(name)\n"
+             "        sample = b'bashy-s503-python-source-codec-probe'\n"
+             "        codecs[name] = module.decompress(module.compress(sample)) == sample\n"
+             "    except (ImportError, OSError, ValueError):\n"
+             "        codecs[name] = False\n"
              "print(json.dumps({'version':sys.version.split()[0], 'prefix':sys.prefix, "
              "'builtins':sorted(sys.builtin_module_names), 'stdlib':sorted(sys.stdlib_module_names), "
              "'openssl':ssl.OPENSSL_VERSION, 'modules':{name:importlib.util.find_spec(name) is not None "
-             "for name in ('readline','_dbm','_gdbm','_ssl','_hashlib','zlib','bz2','lzma')}}))")
+             "for name in ('readline','_dbm','_gdbm','_ssl','_hashlib')}, "
+             "'codec_roundtrip': codecs}))")
     output = subprocess.check_output([str(executable), "-I", "-S", "-c", probe],
                                      env=clean_env(), text=True, timeout=30)
     info = json.loads(output)
@@ -231,8 +240,10 @@ def runtime(prefix: Path) -> dict:
         raise RuntimeError("forbidden Python builtin module is linked")
     if any(info["modules"][name] for name in FORBIDDEN_MODULES):
         raise RuntimeError("forbidden Python extension module is installed")
-    if not all(info["modules"][name] for name in ("_ssl", "_hashlib", "zlib", "bz2", "lzma")):
-        raise RuntimeError("required Python transport/archive module is missing")
+    if not all(info["modules"][name] for name in ("_ssl", "_hashlib")):
+        raise RuntimeError("required Python transport module is missing")
+    if not all(info["codec_roundtrip"].get(name) is True for name in ("zlib", "bz2", "lzma")):
+        raise RuntimeError("required Python archive codec import/round-trip failed")
     return info
 
 

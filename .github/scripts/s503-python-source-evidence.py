@@ -79,9 +79,16 @@ def preflight(args) -> dict:
             ("3.12.15", SOURCE, PIN["archive"][2], PIN["archive"][1],
              PIN["signature"][2], KEY_FINGERPRINT),
             "source setup pins differ from independently fixed CI pins")
+    build_headers = {}
+    for name in ("libbz2-dev", "liblzma-dev"):
+        version = subprocess.check_output(
+            ["dpkg-query", "-W", "-f=${Version}", name], text=True, timeout=30).strip()
+        require(bool(version), f"source-build header package absent: {name}")
+        build_headers[name] = version
     return {"schema": "s503-python-source-native-preflight-v1",
             "candidate_commit": args.candidate, "identity": identity,
-            "source_setup_sha256": sha256(SETUP), "status": "PASS"}
+            "source_setup_sha256": sha256(SETUP),
+            "build_header_packages": build_headers, "status": "PASS"}
 
 
 def inputs(args) -> dict:
@@ -170,8 +177,11 @@ def summarize(args) -> dict:
     modules = receipt["runtime"]["modules"]
     require(all(not modules[name] for name in ("readline", "_dbm", "_gdbm")),
             "forbidden Python module present")
-    require(all(modules[name] for name in ("_ssl", "_hashlib", "zlib", "bz2", "lzma")),
-            "required Python module absent")
+    require(all(modules[name] for name in ("_ssl", "_hashlib")),
+            "required Python transport module absent")
+    codec_roundtrip = receipt["runtime"]["codec_roundtrip"]
+    require(all(codec_roundtrip.get(name) is True for name in ("zlib", "bz2", "lzma")),
+            "required Python archive codec round-trip absent")
     require(set(receipt["extension_modules"]) ==
             {name for name in files if name.endswith(".so")},
             "extension module inventory differs")
@@ -212,6 +222,7 @@ def summarize(args) -> dict:
             "source_license_sha256": sha256(license_file),
             "extension_modules": receipt["extension_modules"],
             "runtime_modules": modules,
+            "codec_roundtrip": codec_roundtrip,
             "dynamic_libraries": library_records,
             "receipt_sha256": sha256(receipt_path),
             "license_status": "review_required; no product or redistribution admission",

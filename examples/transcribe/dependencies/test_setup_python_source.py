@@ -3,6 +3,7 @@
 import io
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -19,6 +20,37 @@ class SourceSetupTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+
+    def test_runtime_requires_working_archive_codecs(self):
+        prefix = self.root / "python-prefix"
+        prefix.mkdir()
+        prefix = prefix.resolve()
+        real_check_output = subprocess.check_output
+
+        def run_probe(command, **_):
+            # Dragon's development Python is 3.9, before stdlib_module_names.
+            # Execute the codec probe itself with that unrelated field removed.
+            probe = command[-1].replace("sorted(sys.stdlib_module_names)", "[]")
+            output = real_check_output([sys.executable, "-I", "-S", "-c", probe], text=True)
+            info = json.loads(output)
+            info["version"] = setup.VERSION
+            info["prefix"] = str(prefix)
+            for name in setup.FORBIDDEN_MODULES:
+                info["modules"][name] = False
+            return json.dumps(info)
+
+        with patch.object(setup.subprocess, "check_output", side_effect=run_probe):
+            info = setup.runtime(prefix)
+        self.assertEqual(info["codec_roundtrip"], {"zlib": True, "bz2": True, "lzma": True})
+
+        def missing_native_codec(command, **_):
+            info = json.loads(run_probe(command))
+            info["codec_roundtrip"]["bz2"] = False
+            return json.dumps(info)
+
+        with patch.object(setup.subprocess, "check_output", side_effect=missing_native_codec):
+            with self.assertRaisesRegex(RuntimeError, "archive codec import/round-trip failed"):
+                setup.runtime(prefix)
 
     def test_tampered_archive_fails_before_key_or_build(self):
         archive = self.root / "Python-3.12.15.tar.xz"

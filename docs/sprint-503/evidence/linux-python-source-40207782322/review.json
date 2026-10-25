@@ -4,8 +4,9 @@
   "run_id": 40207782322,
   "run_url": "https://github.com/qiangli/bashy/actions/runs/40207782322",
   "candidate_commit": "91abf1609c614c774c83b01e4de6671e7a7203af",
-  "result": "two_native_source_builds_passed; full receipts retained; byte recheck passed under OS network denial",
-  "scope": "native Linux source-build candidate only; not a signed product installer or license admission",
+  "result": "two_native_source_builds_passed; full receipts retained; byte recheck passed under OS network denial; archive codec claim withdrawn pending functional recheck",
+  "scope": "native Linux source-build candidate only; not a signed product installer, license admission, or proof that bz2/lzma codecs work",
+  "correction": "2026-10-25: runtime.modules.bz2/lzma used find_spec on stdlib wrappers, while both installed manifests lack _bz2/_lzma native extensions. Earlier PASS still proves signed-source build, inventory and offline byte recheck; it does not prove these archive codecs. A later candidate must import and round-trip all required codecs on both native targets.",
   "targets": [
     {
       "runner_label": "ubuntu-24.04",
@@ -137,6 +138,7 @@
     }
   ],
   "open_gates": [
+    "Rebuild both Linux targets with bzip2/xz development headers and prove zlib, bz2 and lzma native import and compression round trips",
     "Review exact system-library package copyrights and redistribution/linking policy per target",
     "Prove operator-host installation and pre-execution Python integrity launcher",
     "Admit Windows and macOS Python installation paths and all other transcription dependencies",

@@ -33,6 +33,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install native archive-codec headers for this candidate build
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libbz2-dev liblzma-dev
+          dpkg-query -W -f='${Package} ${Version}\n' libbz2-dev liblzma-dev
+
       - name: Check runner and download fixed Python.org inputs
         shell: bash
         run: |

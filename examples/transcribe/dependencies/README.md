@@ -98,7 +98,11 @@ source-build and offline byte-recheck gates on amd64 and arm64 in
 [run 40207782322](https://github.com/qiangli/bashy/actions/runs/40207782322).
 The [retained evidence](../../../docs/sprint-503/evidence/linux-python-source-40207782322/review.json)
 records 3,356 installed files, 71 extension modules, and exact system-library
-closure for each target. Its status remains `local_source_build_unadmitted`:
+closure for each target. A later review found that both builds lacked the
+`_bz2` and `_lzma` native modules; the previous presence-only check of their
+Python wrappers did not prove working archive codecs. The functional codec
+gate must pass on a new native run before those codecs are claimed. The
+receipt status remains `local_source_build_unadmitted`:
 library licenses, operator-host installation, and product distribution still
 need review. Python.org's macOS and Windows installers have archive
 provenance but no six-target operator-host installation proof. `elephant` had no
