@@ -106,6 +106,33 @@ def _verify_windows_vc(selected: Path, version: str, arch: str, python_pin: dict
     )
 
 
+def verify_host_python(
+    configured: str, expected_sha256: str, active_executable: str, version: str,
+    system: str, process_arch: str, native_arch: str, translated: bool = False,
+) -> Path:
+    """Verify an explicitly selected host interpreter, without CI image pins.
+
+    The caller supplies the expected digest independently of this invocation.
+    Host Python and its OS runtime remain external prerequisites; this does
+    not authorize downloading or redistributing interpreter/runtime bytes.
+    """
+    if not configured:
+        raise RuntimeError("BASHY_TRANSCRIBE_PYTHON must explicitly name an external interpreter")
+    normalize_os(system)
+    if normalize_arch(process_arch) != normalize_arch(native_arch) or translated:
+        raise RuntimeError("external Python must run natively on the target OS and architecture")
+    if not VERSION.fullmatch(version) or tuple(map(int, version.split("."))) < (3, 10, 0):
+        raise RuntimeError("external Python 3.10 or newer is required")
+    if not SHA256.fullmatch(expected_sha256):
+        raise RuntimeError("BASHY_TRANSCRIBE_PYTHON_SHA256 must be 64 lowercase hexadecimal digits")
+    selected = Path(configured).expanduser().resolve(strict=True)
+    if not selected.is_file() or selected != Path(active_executable).resolve(strict=True):
+        raise RuntimeError("BASHY_TRANSCRIBE_PYTHON must select the active interpreter")
+    if windows_runtime.sha256_file(selected) != expected_sha256:
+        raise RuntimeError("external Python SHA-256 differs from the explicitly configured host pin")
+    return selected
+
+
 def verify_selected_python(configured: str) -> Path:
     """Resolve and verify the interpreter chosen by the direct source adapter."""
     if sys.maxsize <= 2**32:
@@ -114,8 +141,16 @@ def verify_selected_python(configured: str) -> Path:
     process_arch = normalize_arch(platform.machine())
     native_arch = _windows_native_arch() if system == "Windows" else normalize_arch(platform.uname().machine)
     translated = _darwin_translated() if system == "Darwin" else False
-    policy = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
     source_prefix = os.environ.get("BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX", "")
+    host_sha256 = os.environ.get("BASHY_TRANSCRIBE_PYTHON_SHA256", "")
+    if host_sha256:
+        if source_prefix:
+            raise RuntimeError("select either an explicit host Python SHA-256 or a source prefix, not both")
+        return verify_host_python(
+            configured, host_sha256, sys.executable, platform.python_version(),
+            system, process_arch, native_arch, translated,
+        )
+    policy = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
     if source_prefix:
         if system != "Linux":
             raise RuntimeError("Python source receipt is supported only on native Linux")

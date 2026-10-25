@@ -14,6 +14,11 @@ from dependencies import external_python as check
 
 class ExternalPythonTests(unittest.TestCase):
     def setUp(self):
+        self.clean_env = patch.dict(check.os.environ)
+        self.clean_env.start()
+        self.addCleanup(self.clean_env.stop)
+        check.os.environ.pop("BASHY_TRANSCRIBE_PYTHON_SHA256", None)
+        check.os.environ.pop("BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX", None)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         root = Path(self.temp.name)
@@ -114,6 +119,55 @@ class ExternalPythonTests(unittest.TestCase):
             other.write_bytes(b"other")
             with self.assertRaisesRegex(RuntimeError, "active Python differs"):
                 check.verify_selected_python(str(other))
+
+    def test_explicit_host_hash_accepts_supported_native_interpreters(self):
+        digest = hashlib.sha256(self.python.read_bytes()).hexdigest()
+        for system in ("Linux", "Darwin", "Windows"):
+            for machine in ("amd64", "arm64"):
+                with self.subTest(system=system, machine=machine):
+                    self.assertEqual(check.verify_host_python(
+                        str(self.python), digest, str(self.python), "3.14.5",
+                        system, machine, machine,
+                    ), self.python.resolve())
+
+    def test_explicit_host_hash_rejects_drift_wrong_runtime_and_emulation(self):
+        digest = hashlib.sha256(self.python.read_bytes()).hexdigest()
+        args = [str(self.python), digest, str(self.python), "3.14.5", "Darwin", "arm64", "arm64"]
+        for index, value, error in (
+            (1, "0" * 64, "SHA-256 differs"), (1, "invalid", "hexadecimal"),
+            (3, "3.9.20", "3.10 or newer"), (5, "amd64", "natively"),
+        ):
+            with self.subTest(value=value):
+                changed = args.copy()
+                changed[index] = value
+                with self.assertRaisesRegex(RuntimeError, error):
+                    check.verify_host_python(*changed)
+        with self.assertRaisesRegex(RuntimeError, "natively"):
+            check.verify_host_python(*args, translated=True)
+        other = self.python.parent / "other.exe"
+        other.write_bytes(self.python.read_bytes())
+        with self.assertRaisesRegex(RuntimeError, "active interpreter"):
+            check.verify_host_python(str(other), digest, *args[2:])
+        self.python.write_bytes(b"changed after pin selection")
+        with self.assertRaisesRegex(RuntimeError, "SHA-256 differs"):
+            check.verify_host_python(*args)
+
+    def test_explicit_windows_host_does_not_require_ci_policy_or_system_dll_pins(self):
+        digest = hashlib.sha256(self.python.read_bytes()).hexdigest()
+        with patch.dict(check.os.environ, {"BASHY_TRANSCRIBE_PYTHON_SHA256": digest}), patch.object(
+            check, "POLICY_PATH", self.policy_path  # Deliberately absent.
+        ), patch.object(check.sys, "executable", str(self.python)), patch.object(
+            check.platform, "system", return_value="Windows"
+        ), patch.object(check.platform, "machine", return_value="ARM64"), patch.object(
+            check.platform, "python_version", return_value="3.14.5"
+        ), patch.object(check, "_windows_native_arch", return_value="arm64"), patch.object(
+            check, "_verify_windows_vc"
+        ) as vc_check:
+            self.assertEqual(check.verify_selected_python(str(self.python)), self.python.resolve())
+            vc_check.assert_not_called()
+            with patch.dict(check.os.environ, {"BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX": str(self.python.parent)}):
+                with self.assertRaisesRegex(RuntimeError, "not both"):
+                    check.verify_selected_python(str(self.python))
 
 
 if __name__ == "__main__":

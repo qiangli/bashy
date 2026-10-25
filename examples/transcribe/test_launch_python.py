@@ -56,6 +56,7 @@ class LauncherTests(unittest.TestCase):
         self.env = dict(os.environ, BASHY_TRANSCRIBE_PYTHON=str(self.python),
                         LAUNCH_MARKER=str(self.marker), BASHY_HINTS="off")
         self.env.pop("BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX", None)
+        self.env.pop("BASHY_TRANSCRIBE_PYTHON_SHA256", None)
 
     def invoke(self):
         return subprocess.run(
@@ -88,6 +89,34 @@ class LauncherTests(unittest.TestCase):
         result = self.invoke()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("BASHY_TRANSCRIBE_PYTHON is required", result.stderr)
+        self.assertFalse(self.marker.exists())
+
+    def test_explicit_host_hash_works_without_ci_policy(self):
+        self.env["BASHY_TRANSCRIBE_PYTHON_SHA256"] = hashlib.sha256(self.python.read_bytes()).hexdigest()
+        self.policy.unlink()
+        result = self.invoke()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.marker.read_text(encoding="utf-8").splitlines(),
+                         [str(self.launcher.parent.resolve() / "source_youtube.py"), str(self.request)])
+
+    def test_explicit_host_hash_drift_never_executes(self):
+        self.env["BASHY_TRANSCRIBE_PYTHON_SHA256"] = hashlib.sha256(self.python.read_bytes()).hexdigest()
+        self.python.write_text(self.python.read_text(encoding="utf-8") + "# changed\n", encoding="utf-8")
+        result = self.invoke()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SHA-256 differs", result.stderr)
+        self.assertFalse(self.marker.exists())
+
+    def test_explicit_host_invalid_or_ambiguous_pin_never_executes(self):
+        self.env["BASHY_TRANSCRIBE_PYTHON_SHA256"] = "not-a-digest"
+        result = self.invoke()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("hash is invalid", result.stderr)
+        self.assertFalse(self.marker.exists())
+        self.env["BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX"] = str(self.launcher.parent)
+        result = self.invoke()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not both", result.stderr)
         self.assertFalse(self.marker.exists())
 
     @unittest.skipUnless(platform.system() == "Darwin", "non-Linux source prefix rejection")

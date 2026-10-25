@@ -136,6 +136,10 @@ func transcribeFormat(s string) bool {
 func printTranscribeHelp(w io.Writer) {
 	fmt.Fprintln(w, `Usage: bashy transcribe [options] <file-or-url>
 
+Examples:
+  bashy transcribe --output talk.txt ./talk.wav
+  bashy transcribe --format srt --language auto https://youtu.be/_j_PixI3Muo
+
 Options:
   --model ID       Local model (default: default)
   --language TAG   Language or auto detection (default: auto)
@@ -148,5 +152,9 @@ Options:
 
 Selection: bashy transcribe select <acquire|decode|infer|export> <request.json>
 Stages: bashy transcribe stage <acquire|decode|infer|export> --provider NAME <request.json>
-Registered Bash# pipeline unit: transcribe-pipeline. CPU is the default device.`)
+Registered Bash# pipeline unit: transcribe-pipeline. CPU is the default device.
+Setup and extensions: bashy skill show transcribe
+Missing adapter or runtime? Register a provider and check its declared requirements.
+Ambiguous input? Select --source, --decoder, --provider, or --exporter explicitly.
+Prepare the default model before offline use: bashy transcribe-model-setup base`)
 }

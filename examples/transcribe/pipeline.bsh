@@ -17,6 +17,11 @@ body for the command and the text-outer skill step. Use
 `bashy src show transcribe-pipeline` to inspect the registered source and
 `bashy commands set transcribe-pipeline --set exec.2=/absolute/local/file.bsh`
 to compose a local variant. Stub fixtures prove composition only.
+
+For a separately installed native Python 3.10+, set `BASHY_TRANSCRIBE_PYTHON`
+to its absolute path and `BASHY_TRANSCRIBE_PYTHON_SHA256` to its independently
+recorded executable SHA-256. The YouTube adapter verifies that expected digest
+before use; this selects host tooling and does not download or package Python.
 ~~~
 
 set -e

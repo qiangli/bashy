@@ -18,8 +18,6 @@ case "$(uname -s)" in
 esac
 policy=$script_dir/dependencies/external-python-runtime.json
 policy_sha256=bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75
-actual_policy_hash=$(sha256sum -- "$policy") || fail 'cannot hash Python policy'
-[ "${actual_policy_hash%% *}" = "$policy_sha256" ] || fail 'Python policy bytes changed'
 
 case "$(uname -s)/$(uname -m)" in
     Linux/x86_64|Linux/amd64) target=linux/amd64 ;;
@@ -31,10 +29,14 @@ case "$(uname -s)/$(uname -m)" in
     *) fail 'no reviewed OS/architecture target' ;;
 esac
 
-jq -e '.schema == "s503-external-python-runtime-v1" and
-    (.targets | keys == ["darwin/amd64", "darwin/arm64", "linux/amd64",
-                        "linux/arm64", "windows/amd64", "windows/arm64"])' \
-    "$policy" >/dev/null || fail 'Python policy lacks six reviewed targets'
+if [ -z "${BASHY_TRANSCRIBE_PYTHON_SHA256:-}" ]; then
+    actual_policy_hash=$(sha256sum -- "$policy") || fail 'cannot hash Python policy'
+    [ "${actual_policy_hash%% *}" = "$policy_sha256" ] || fail 'Python policy bytes changed'
+    jq -e '.schema == "s503-external-python-runtime-v1" and
+        (.targets | keys == ["darwin/amd64", "darwin/arm64", "linux/amd64",
+                            "linux/arm64", "windows/amd64", "windows/arm64"])' \
+        "$policy" >/dev/null || fail 'Python policy lacks six reviewed targets'
+fi
 
 python=$(realpath -- "$BASHY_TRANSCRIBE_PYTHON") || fail 'selected Python path is absent'
 [ -f "$python" ] || fail 'selected Python is not a regular file'
@@ -43,7 +45,13 @@ case "$python" in
     *) fail 'selected Python path is not absolute' ;;
 esac
 
-if [ -n "${BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX:-}" ]; then
+if [ -n "${BASHY_TRANSCRIBE_PYTHON_SHA256:-}" ]; then
+    [ -z "${BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX:-}" ] ||
+        fail 'select either an explicit host Python SHA-256 or a source prefix, not both'
+    # A caller-selected host runtime has its own byte pin, independent of CI
+    # interpreter/System32 versions. The adapter checks version and native arch.
+    expected=$BASHY_TRANSCRIBE_PYTHON_SHA256
+elif [ -n "${BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX:-}" ]; then
     [ "$target" = linux/amd64 ] || [ "$target" = linux/arm64 ] ||
         fail 'source receipt is supported only on Linux'
     prefix=$(realpath -- "$BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX") ||
