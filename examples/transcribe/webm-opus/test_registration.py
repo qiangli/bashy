@@ -60,6 +60,10 @@ class Registration(unittest.TestCase):
             self.assertEqual(run('transcribe','select','decode','--provider','transcribe-webm-opus',req).stdout.strip(),'transcribe-webm-opus')
             obj=json.loads(req.read_text());obj['artifacts'][0]['path']='unsupported.mp4';req.write_text(json.dumps(obj))
             run('transcribe','select','decode','--provider','transcribe-webm-opus',req,ok=False)
+            obj['artifacts'][0]['path']=str(source)
+            del obj['work_dir']
+            req.write_text(json.dumps(obj))
+            run('transcribe','select','decode','--provider','transcribe-webm-opus',req,ok=False)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

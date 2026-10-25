@@ -21,7 +21,7 @@ bashy transcribe stage decode --provider transcribe-webm-opus request.json
 ```
 
 Registration creates an ordinary command record with
-`provides=transcribe.decode`, v1/decode/`.webm` applicability and
+`provides=transcribe.decode`, v1/decode/`.webm`/absolute `work_dir` applicability and
 `read,write,destroy,exec` effects. The executable receives the request filename
 as one argument. Paths are never evaluated as shell code. Other matches cause
 the existing selector's ambiguity error; explicit provider selection resolves
