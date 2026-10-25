@@ -1,0 +1,198 @@
+{
+  "candidate_commit": "f889cff64b7208f7a9557612cc0e985a6d26057c",
+  "evidence_limits": [
+    "The runner-side model and converted PCM WAV bytes were not uploaded. Their per-job SHA-256 values and PCM format/duration are runner receipts; the immutable model URL and committed source fixtures were independently rehashed.",
+    "The English and Spanish converted WAV hashes differ across runner architectures even though source fixtures, duration, PCM format, detected languages and accepted transcript outputs agree. The converted bytes cannot be compared without retained WAV files.",
+    "Success-path native inference and offline OS denial are proven on these hosted Linux runners; injected CLI failure, timeout and cancellation cleanup were not exercised by this workflow. Source-only unit tests and error-retention code do not replace native failure receipts.",
+    "FFmpeg was installed after binary attestation and used solely for hosted fixture conversion. It is not a linked or shipped CLI input; separate product decoder/license policy remains open.",
+    "Branch-workflow attestations are not tagged release or installer evidence."
+  ],
+  "pins": {
+    "english_source_sha256": "ad06a00c9331152d8a1e16277b086f3639a30335a5ad9becfd921891c4165090",
+    "fixture_index_sha256": "e08522cfbad255435de5a7cc8086ed2fa8898b9bacf86d4e9492890610f53992",
+    "model_bytes": 77691713,
+    "model_sha256_independently_fetched": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
+    "model_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.bin",
+    "spanish_source_sha256": "df23f58c95b54215e136bd6b1865a9aba360010a02822ec56e8854bc8074e2bb",
+    "whisper_cpp_source_archive_sha256": "ff1a9053feb509ff9d7729703355541ae9690073a6b1c40eb692c962e0dc1720",
+    "whisper_cpp_source_version": "1.9.5",
+    "zig_version": "0.15.2"
+  },
+  "product_admitted": false,
+  "remaining_product_gates": [
+    "Independently close exact linked Zig/musl/LLVM/Whisper/GGML source-to-license notices and retained source archive provenance for final binaries.",
+    "Bind reviewed notices, model and dependency policy to signed tagged release binaries and installer pins; prove supported bare-host compatibility and offline inference after installation.",
+    "Complete the macOS and Windows native target gates and both-orientation operator YouTube acquisition/transcript/timing acceptance on all six targets."
+  ],
+  "review_method": "Original GitHub artifact ZIP SHA-256 and CRC; independent retained ELF, source-anchor, link-input, map, CLI, signed attestation, transcript, score, receipt and OS network-denial checks; separately fetched pinned model and repository speech fixtures. No CLI, FFmpeg or model inference executed on Dragon.",
+  "review_result": "NATIVE_LINUX_INFERENCE_AND_OS_OFFLINE_PASS_PRODUCT_BLOCKED",
+  "run_conclusion": "success",
+  "run_id": 40221426915,
+  "schema": "s503-linux-musl-inference-independent-review-v1",
+  "targets": {
+    "amd64": {
+      "artifact_file_count": 85,
+      "artifact_id": 12609840670,
+      "attempts": {
+        "check": "PASS",
+        "offline": "PASS",
+        "online": "PASS",
+        "prepare": "PASS"
+      },
+      "binary_sha256_independently_rehashed": "3f645450720f14df65f0e838321a88543ed70770d4bd38b975b22df2c9283bdb",
+      "build_report_sha256": "bef915a618ba598cf81986d21a917bf17e093c713a2a8bf748a1f26a143ea54b",
+      "cli_help_smoke": "pass_native_runner",
+      "converted_wav_duration_ms_runner_reported": {
+        "en-audio": 10654,
+        "es-audio": 7744
+      },
+      "converted_wav_sha256_runner_reported": {
+        "en-audio": "4a673bbba3a62aa71b7f93dedc99e79459d2d08e85113986ee8906bb23aa1eb3",
+        "es-audio": "1a4f9ce8bb463745c16f4b59f4e731adb0f27823863630238d801eecb94f2a5b"
+      },
+      "elf_machine_number": 62,
+      "elf_static": true,
+      "enforcer_sha256_runner_reported": "a23c8863860669003dc4660039fe642f5795c8c2195898ebc5d01afa1ac3d11c",
+      "ffmpeg_sha256_runner_reported": "ed16af623947494a72e284b6eb8ff225f2da22b38b5d5069c2fd4b4ba3384e41",
+      "ffmpeg_version_runner_reported": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers",
+      "inference_plan_sha256": "7143ccd53d4d2dfb5ade62fdc63ac85d0a34bb7b966bd40a7a11f06c424da6fd",
+      "inference_result_sha256": "ea1c757371352648bea21201b288c9a4fa418bf50d162de621b1f29e02dd97d7",
+      "job_id": 121253639679,
+      "link_map_sha256_independently_rehashed": "58a8e65341e5a7db30de4b4db28b4057e1f1e78b5e77193dd47950ba1e3d057d",
+      "offline_namespace": "net:[4026532216]",
+      "offline_report_sha256": "1c23c46c0e0bed806eb5674635a4e226766b03b04fc7f1e90693d803e1637d3d",
+      "offline_tcp_denied_errno_101_receipts": 4,
+      "online_and_offline_transcripts_match": true,
+      "online_namespace": "net:[4026531833]",
+      "online_report_sha256": "e97236d85512e1b5a36d426e16786011e9e9e5d0f4bf102363c1be18133059a3",
+      "online_tcp_connected_before_after": true,
+      "only_undefined_symbol": [
+        {
+          "binding": 0,
+          "name": "_DYNAMIC",
+          "size": 0,
+          "value": 0,
+          "visibility": 2
+        }
+      ],
+      "original_zip_sha256": "5aa763434066e88d140e16cd08fd550a7c516e5e6f1a81c21ea22cd937c18031",
+      "product_admitted": false,
+      "retained_direct_link_inputs_rehashed": 13,
+      "signed_attestation": "verified exact source commit, workflow, branch and run attempt; subject equals reviewed ELF",
+      "source_anchors_rehashed": 23,
+      "transcripts": {
+        "en-audio": {
+          "intervals_ms": [
+            [
+              0,
+              6060
+            ],
+            [
+              6060,
+              10240
+            ]
+          ],
+          "language": "en",
+          "minimum_score": 0.75,
+          "score": 0.8182,
+          "text": "weekly speech is a text to speech tool, to make weekly media's projects more accessible, for people that, for different reasons, have difficulties reading."
+        },
+        "es-audio": {
+          "intervals_ms": [
+            [
+              0,
+              7560
+            ]
+          ],
+          "language": "es",
+          "minimum_score": 0.625,
+          "score": 0.875,
+          "text": "de todo hay en la vigna del Se\u00f1or, de todo hay en la vigna del Se\u00f1or, de todo hay en la vigna del Se\u00f1or."
+        }
+      },
+      "uploaded_binary_mode": "0o755"
+    },
+    "arm64": {
+      "artifact_file_count": 85,
+      "artifact_id": 12609800392,
+      "attempts": {
+        "check": "PASS",
+        "offline": "PASS",
+        "online": "PASS",
+        "prepare": "PASS"
+      },
+      "binary_sha256_independently_rehashed": "800b28881e3c7e99cbafe9f7d6b219c2969473806f354ebc5244791cf419809b",
+      "build_report_sha256": "72e6a4237788192fc4e841016da5c262f31efd58752cebb15a149b80fa2beda8",
+      "cli_help_smoke": "pass_native_runner",
+      "converted_wav_duration_ms_runner_reported": {
+        "en-audio": 10654,
+        "es-audio": 7744
+      },
+      "converted_wav_sha256_runner_reported": {
+        "en-audio": "a223297364c1113ceadd159828878a5cf596b9b02f15a24ded2ef4fcf8f8c37c",
+        "es-audio": "d949bfc9e1f15a977c81dde2e57320412ba92e16b98f8c875aff627d4534a4bb"
+      },
+      "elf_machine_number": 183,
+      "elf_static": true,
+      "enforcer_sha256_runner_reported": "e0c145c3d4c06686544b1362ed64da819539166a5e1e6fd96093aea4d2539b6a",
+      "ffmpeg_sha256_runner_reported": "dbb8cc21c4b4e0e9bbb750cf74f7af6b023199e1b311eb2f6aec31c9722ceb88",
+      "ffmpeg_version_runner_reported": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers",
+      "inference_plan_sha256": "5bf8996ee9524577851db6c3603c222cf2130a7ca42f3df51043168763972bb5",
+      "inference_result_sha256": "9e0368c9cb38c8ad16054110a97dff13aed17727bef3f0d3a5a550e59ba1803e",
+      "job_id": 121253639565,
+      "link_map_sha256_independently_rehashed": "0cc88941f1022410eb73bd3c3db9264c3df285868914217364454100a1e1c8ef",
+      "offline_namespace": "net:[4026532263]",
+      "offline_report_sha256": "9e55b5b936503c81e5ebab39aa60e3b1e39e20d595ac3aef148016228f217cb0",
+      "offline_tcp_denied_errno_101_receipts": 4,
+      "online_and_offline_transcripts_match": true,
+      "online_namespace": "net:[4026531833]",
+      "online_report_sha256": "8f29682880b5313e370ccb7b8866211550543aad4401aaf26f4d4a2a8ba19817",
+      "online_tcp_connected_before_after": true,
+      "only_undefined_symbol": [
+        {
+          "binding": 0,
+          "name": "_DYNAMIC",
+          "size": 0,
+          "value": 0,
+          "visibility": 2
+        }
+      ],
+      "original_zip_sha256": "7be723e646c59e88ba6ea10fdb50dad151ddc212e7f6c6b65716528f50ab6a56",
+      "product_admitted": false,
+      "retained_direct_link_inputs_rehashed": 13,
+      "signed_attestation": "verified exact source commit, workflow, branch and run attempt; subject equals reviewed ELF",
+      "source_anchors_rehashed": 23,
+      "transcripts": {
+        "en-audio": {
+          "intervals_ms": [
+            [
+              0,
+              6060
+            ],
+            [
+              6060,
+              10240
+            ]
+          ],
+          "language": "en",
+          "minimum_score": 0.75,
+          "score": 0.8182,
+          "text": "weekly speech is a text to speech tool, to make weekly media's projects more accessible, for people that, for different reasons, have difficulties reading."
+        },
+        "es-audio": {
+          "intervals_ms": [
+            [
+              0,
+              7560
+            ]
+          ],
+          "language": "es",
+          "minimum_score": 0.625,
+          "score": 0.875,
+          "text": "de todo hay en la vigna del Se\u00f1or, de todo hay en la vigna del Se\u00f1or, de todo hay en la vigna del Se\u00f1or."
+        }
+      },
+      "uploaded_binary_mode": "0o755"
+    }
+  }
+}
