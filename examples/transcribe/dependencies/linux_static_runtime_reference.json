@@ -1,0 +1,37 @@
+{
+  "schema": "s503-linux-static-runtime-reference-v1",
+  "source_run": "https://github.com/qiangli/bashy/actions/runs/40213025284",
+  "whisper_version": "1.9.5",
+  "source_archive_sha256": "ff1a9053feb509ff9d7729703355541ae9690073a6b1c40eb692c962e0dc1720",
+  "targets": {
+    "linux/amd64": {
+      "runner_label": "ubuntu-24.04",
+      "compiler_version": "x86_64-linux-gnu-gcc-13 (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "build_report_sha256": "31bbc550ea8a930e8eaa21bde996b75e847968ea566edb98b38ad7d92187fb59",
+      "executable_sha256": "d0c1a3c5bb2ac136062b28bc2cc1e539311cd5d2bceea588aaba1165855940f5",
+      "executable_bytes": 4523312,
+      "link_map_sha256": "9f87c5334da9b95abe71e71f16177eb440ccb912e1ed0e1f25fa14bc8a8e4155",
+      "runtime_archive_members": [
+        {"archive": "libgcc_eh.a", "count": 2},
+        {"archive": "libstdc++.a", "count": 98}
+      ],
+      "imported_libraries": ["libm.so.6", "libc.so.6", "/lib64/ld-linux-x86-64.so.2"],
+      "product_admitted": false
+    },
+    "linux/arm64": {
+      "runner_label": "ubuntu-24.04-arm",
+      "compiler_version": "aarch64-linux-gnu-gcc-13 (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "build_report_sha256": "1418e133ff991cac378d39e9285852403c05ade7cc7d6ba1bf363b09bc797599",
+      "executable_sha256": "f87f55ae97d6ab8a0064b01075fe2f754e1ecdaa57644791473a80b5883adcea",
+      "executable_bytes": 4447456,
+      "link_map_sha256": "b886f4f1c2ce6cffc8646b733232141c4e9485518b5f8fb41486e6caf7efe3f1",
+      "runtime_archive_members": [
+        {"archive": "libgcc.a", "count": 11},
+        {"archive": "libgcc_eh.a", "count": 2},
+        {"archive": "libstdc++.a", "count": 98}
+      ],
+      "imported_libraries": ["libm.so.6", "libc.so.6", "/lib/ld-linux-aarch64.so.1"],
+      "product_admitted": false
+    }
+  }
+}

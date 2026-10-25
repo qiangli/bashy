@@ -1,0 +1,65 @@
+name: S503 Linux shared GCC runtime experiment
+
+# Evidence only. A passing probe does not admit the GPL runtime dependency or
+# replace the six-target release gate. No model, media, installer or OCI runs.
+on:
+  push:
+    branches: [s503-contract-integration]
+    paths:
+      - .github/workflows/s503-linux-shared-runtime-probe.yml
+      - examples/transcribe/dependencies/probe_linux_shared_runtime.py
+      - examples/transcribe/dependencies/linux_static_runtime_reference.json
+      - examples/transcribe/dependencies/build_whisper.py
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  shared-gcc-runtime:
+    name: ${{ matrix.platform }} hosted link comparison
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            arch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Probe pinned source with host-provided GCC runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python examples/transcribe/dependencies/probe_linux_shared_runtime.py \
+            --work-dir "$RUNNER_TEMP/s503-shared-gcc-runtime" \
+            --output-dir evidence/shared-gcc-runtime \
+            --static-reference examples/transcribe/dependencies/linux_static_runtime_reference.json \
+            --expected-arch '${{ matrix.arch }}' \
+            --parallel 4
+      - name: Attest experimental binary
+        if: success()
+        uses: actions/attest@v4
+        with:
+          subject-path: evidence/shared-gcc-runtime/whisper-cli
+      - name: Retain evidence including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s503-shared-gcc-runtime-${{ matrix.arch }}
+          path: evidence/shared-gcc-runtime/
+          if-no-files-found: warn
+          retention-days: 14
