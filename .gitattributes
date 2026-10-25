@@ -13,6 +13,7 @@ examples/transcribe/fixtures/*.json text eol=lf
 examples/transcribe/fixtures/*.wav binary
 examples/transcribe/fixtures/*.webm binary
 examples/transcribe/dependencies/notices/sources/*.txt -text
+examples/transcribe/dependencies/notices/source-pins.json text eol=lf
 skills/bashy/commands/transcribe.md text eol=lf
 skills/bashy/commands/transcribe.dhnt text eol=lf
 # Unified patches contain context lines prefixed by one space before tabs.

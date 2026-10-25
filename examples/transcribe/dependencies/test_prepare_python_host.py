@@ -62,7 +62,7 @@ class MacHostPreparationTests(unittest.TestCase):
         self.policy.write_bytes(POLICY.read_bytes())
         self.admission.write_bytes(ADMISSION.read_bytes())
         self.script.write_text(SCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
-        self.env = dict(os.environ, BASHY_HINTS="off")
+        self.env = dict(os.environ, BASHY_HINTS="off", TMPDIR=str(self.root))
 
     def repin_fixture_policy(self, update):
         policy = json.loads(self.policy.read_text(encoding="utf-8"))
@@ -127,6 +127,34 @@ class MacHostPreparationTests(unittest.TestCase):
         result = self.invoke("--verify-artifact", package)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("installer signature is invalid", result.stderr)
+        self.assertEqual(list(self.root.glob("bashy-python-installer.*")), [])
+
+    def test_changed_input_during_staging_rejected_before_signature(self):
+        package = self.root / "replaceable Python.org.pkg"
+        package.write_bytes(b"original installer fixture")
+        digest = hashlib.sha256(package.read_bytes()).hexdigest()
+        self.repin_fixture_policy(lambda pin: pin.update(archive_sha256=digest))
+        script = self.script.read_text(encoding="utf-8").replace(
+            "stage_dir= staged_artifact=",
+            "printf 'changed input' > \"$artifact\"\nstage_dir= staged_artifact=",
+        )
+        self.script.write_text(script, encoding="utf-8")
+        result = self.invoke("--verify-artifact", package)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("staged installer differs from reviewed SHA-256", result.stderr)
+        self.assertNotIn("signature is invalid", result.stderr)
+        self.assertEqual(list(self.root.glob("bashy-python-installer.*")), [])
+
+    def test_unavailable_private_staging_rejected(self):
+        package = self.root / "fake Python.org.pkg"
+        package.write_bytes(b"installer fixture")
+        digest = hashlib.sha256(package.read_bytes()).hexdigest()
+        self.repin_fixture_policy(lambda pin: pin.update(archive_sha256=digest))
+        self.env["TMPDIR"] = str(self.root / "absent")
+        result = self.invoke("--verify-artifact", package)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("private installer staging parent is absent", result.stderr)
+        self.assertNotIn("signature is invalid", result.stderr)
 
     def test_changed_interpreter_never_executes(self):
         marker = self.root / "executed"

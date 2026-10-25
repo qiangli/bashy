@@ -188,13 +188,63 @@ fi
 
 artifact=$(realpath -- "$artifact") || fail 'installer artifact path is absent'
 [ "$(hash_file "$artifact")" = "$installer_sha" ] || fail 'Python.org installer artifact differs from reviewed SHA-256'
+
+# The downloaded pathname may be writable or replaceable. Check and execute
+# the same private copy, including when the operator supplied a symlink.
+stage_dir= staged_artifact=
+cleanup_stage() {
+    local status=$? cleanup_failed=0
+    trap - EXIT
+    if [ -n "$stage_dir" ]; then
+        chmod 700 "$stage_dir" >/dev/null 2>&1 || cleanup_failed=1
+        if [ -n "$staged_artifact" ] && [ -e "$staged_artifact" ]; then
+            chmod 600 "$staged_artifact" >/dev/null 2>&1 || cleanup_failed=1
+            rm -f "$staged_artifact" || cleanup_failed=1
+        fi
+        rmdir "$stage_dir" || cleanup_failed=1
+    fi
+    if [ "$cleanup_failed" -ne 0 ]; then
+        printf 'Python host preparation rejected: private installer cleanup failed\n' >&2
+        status=1
+    fi
+    exit "$status"
+}
+trap cleanup_stage EXIT
+umask 077
 case "$target" in
     darwin/*)
-        signature=$(pkgutil --check-signature "$artifact") || fail 'macOS installer signature is invalid'
-        case "$signature" in *'Developer ID Installer: Python Software Foundation (BMM5U3QVKW)'*) ;; *) fail 'macOS installer signer differs from Python Software Foundation' ;; esac
-        /usr/sbin/spctl --assess --type install "$artifact" || fail 'macOS installer assessment rejected the package' ;;
+        if [ "$mode" = --install ]; then
+            [ "$(id -u)" = 0 ] || fail 'run explicit macOS install as root after reviewing the package plan'
+        fi
+        # A root install must never stage beneath an inherited, user-owned TMPDIR.
+        if [ "$(id -u)" = 0 ]; then stage_parent=/var/tmp
+        else stage_parent=${TMPDIR:-/var/tmp}; fi
+        stage_suffix=.pkg ;;
     windows/*)
-        export BASHY_PYTHON_INSTALLER_ARTIFACT=$artifact
+        [ -n "${LOCALAPPDATA:-}" ] || fail 'LOCALAPPDATA is required for private Windows staging'
+        stage_parent=$(realpath -- "$LOCALAPPDATA") || fail 'Windows staging parent is absent'
+        case "$stage_parent" in [A-Za-z]:/*|[A-Za-z]:\\*) ;; *) fail 'Windows staging parent must be a local absolute path' ;; esac
+        stage_suffix=.exe ;;
+esac
+[ -d "$stage_parent" ] || fail 'private installer staging parent is absent'
+stage_dir=$(mktemp -d -- "$stage_parent/bashy-python-installer.XXXXXXXX") ||
+    fail 'cannot create private installer staging directory'
+chmod 700 "$stage_dir" || fail 'cannot protect installer staging directory'
+staged_artifact=$stage_dir/python-installer$stage_suffix
+cp "$artifact" "$staged_artifact" || fail 'cannot stage installer artifact'
+chmod 500 "$staged_artifact" || fail 'cannot protect staged installer artifact'
+chmod 500 "$stage_dir" || fail 'cannot protect staged installer directory'
+[ "$(hash_file "$staged_artifact")" = "$installer_sha" ] ||
+    fail 'staged installer differs from reviewed SHA-256'
+case "$target" in
+    darwin/*)
+        signature=$(pkgutil --check-signature "$staged_artifact") || fail 'macOS installer signature is invalid'
+        case "$signature" in *'Developer ID Installer: Python Software Foundation (BMM5U3QVKW)'*) ;; *) fail 'macOS installer signer differs from Python Software Foundation' ;; esac
+        /usr/sbin/spctl --assess --type install "$staged_artifact" || fail 'macOS installer assessment rejected the package' ;;
+    windows/*)
+        BASHY_PYTHON_INSTALLER_ARTIFACT=$(cygpath -m "$staged_artifact") ||
+            fail 'cannot pass staged installer path to native Windows signature check'
+        export BASHY_PYTHON_INSTALLER_ARTIFACT
         powershell.exe -NoProfile -NonInteractive -Command '
           $ErrorActionPreference="Stop"
           try {
@@ -206,17 +256,16 @@ case "$target" in
         ' || fail 'Windows installer signature is invalid'
         windows_vc_check ;;
 esac
-[ "$(hash_file "$artifact")" = "$installer_sha" ] || fail 'installer changed during signature verification'
+[ "$(hash_file "$staged_artifact")" = "$installer_sha" ] || fail 'staged installer changed during signature verification'
 printf 'target=%s\ninstaller=%s\ninstaller_sha256=%s\nstatus=verified_artifact_not_installed\n' \
     "$target" "$artifact" "$installer_sha"
 [ "$mode" = --install ] || exit 0
 
 case "$target" in
     darwin/*)
-        [ "$(id -u)" = 0 ] || fail 'run explicit macOS install as root after reviewing the package plan'
         [ ! -e /Library/Frameworks/Python.framework/Versions/3.12 ] ||
             fail 'existing macOS Python 3.12 framework must not be overwritten'
-        /usr/sbin/installer -pkg "$artifact" -target / || fail 'macOS Python.org installer failed'
+        /usr/sbin/installer -pkg "$staged_artifact" -target / || fail 'macOS Python.org installer failed'
         verify_existing "$default_python" ;;
     windows/*)
         [ -n "${LOCALAPPDATA:-}" ] || fail 'LOCALAPPDATA is required for a per-user Windows install'
@@ -224,7 +273,7 @@ case "$target" in
             fail 'Windows install prefix is invalid'
         [ ! -e "$prefix" ] || fail 'Windows install prefix already exists'
         case "$prefix" in [A-Za-z]:/*|[A-Za-z]:\\*) ;; *) fail 'Windows install prefix must be absolute' ;; esac
-        "$artifact" /quiet InstallAllUsers=0 Include_pip=0 Include_test=0 \
+        "$staged_artifact" /quiet InstallAllUsers=0 Include_pip=0 Include_test=0 \
             Include_tcltk=0 Include_launcher=0 PrependPath=0 "TargetDir=$prefix" ||
             fail 'Windows Python.org installer failed; inspect its native log before retrying'
         verify_existing "$prefix/python.exe" ;;
