@@ -30,6 +30,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -246,7 +247,8 @@ def find_toolchain(os_name: str) -> Dict[str, str]:
     }
 
 
-def get_cmake_build_flags(os_name: str, arch_name: str, toolchain: Dict[str, str]) -> List[str]:
+def get_cmake_build_flags(os_name: str, arch_name: str, toolchain: Dict[str, str],
+                          link_map_path: Optional[Path] = None) -> List[str]:
     """Generates strictly CPU-only, no-OpenMP, fail-closed CMake configuration arguments."""
     flags = [
         "-DCMAKE_BUILD_TYPE=Release",
@@ -279,12 +281,86 @@ def get_cmake_build_flags(os_name: str, arch_name: str, toolchain: Dict[str, str
     elif os_name == "windows":
         # Request static GNU-ABI C++ and compiler runtimes, then inspect the
         # actual PE imports. UCRT remains a Windows OS DLL.
-        flags.append("-DCMAKE_EXE_LINKER_FLAGS=-static")
+        linker_flags = "-static"
+        if link_map_path is not None:
+            if any(char.isspace() for char in link_map_path.as_posix()):
+                raise RuntimeError("Windows linker map path must not contain whitespace")
+            linker_flags += f" -Wl,-Map={link_map_path.as_posix()}"
+        flags.append(f"-DCMAKE_EXE_LINKER_FLAGS={linker_flags}")
     elif os_name == "linux":
         # Avoid GPL runtime dependencies
         flags.append("-DCMAKE_EXE_LINKER_FLAGS=-static-libgcc -static-libstdc++")
 
     return flags
+
+
+ARCHIVE_MEMBER = re.compile(r"(?P<archive>[^\s()]+\.a)\((?P<member>[^()]+\.(?:o|obj))\)", re.I)
+DIRECT_OBJECT = re.compile(r"(?<![\w.])(?P<object>[^\s()]+\.(?:o|obj))(?![\w.])", re.I)
+
+
+def _notice_candidate(archive: str) -> str:
+    """Suggest a notice family; the map still needs human source review."""
+    name = Path(archive.replace("\\", "/")).name.lower()
+    if name.startswith(("libwhisper", "libggml")):
+        return "whisper.cpp/GGML MIT"
+    if name.startswith(("libc++", "libunwind", "libclang_rt")):
+        return "LLVM component LICENSE.TXT"
+    if name.startswith("libwinpthread"):
+        return "winpthreads COPYING"
+    if name.startswith(("libmingw", "libucrt", "libmsvcrt", "libmoldname", "libmingwthrd")):
+        return "MinGW-w64 runtime COPYING and source-specific notices"
+    return "unclassified; inspect source and license"
+
+
+def inspect_windows_link_map(map_path: Path, built_exe: Path, build_output: str) -> Dict[str, Any]:
+    """Tie lld's map to the executed CLI link command and collect inputs."""
+    if not map_path.is_file() or map_path.stat().st_size == 0:
+        raise RuntimeError(f"Windows linker map missing or empty: {map_path}")
+    contents = map_path.read_text(encoding="utf-8", errors="replace")
+    if not contents.startswith("Address  Size     Align Out     In      Symbol\n"):
+        raise RuntimeError("Windows linker map is not an lld input-section map")
+    map_arg = f"-Wl,-Map={map_path.as_posix()}"
+    link_commands = [
+        line for line in build_output.splitlines()
+        if map_arg in line and re.search(r"(?:^|\s)-o\s+\S*whisper-cli\.exe(?:\s|$)", line, re.I)
+    ]
+    if len(link_commands) != 1:
+        raise RuntimeError("Windows build log does not identify one final whisper-cli.exe link with this map")
+    members = {(m.group("archive"), m.group("member")) for m in ARCHIVE_MEMBER.finditer(contents)}
+    if not members:
+        raise RuntimeError("Windows linker map contains no linked archive members")
+    inventory = [
+        {
+            "archive": archive,
+            "member": member,
+            "notice_candidate": _notice_candidate(archive),
+            "source_review": bool(re.search(r"cephes|gdtoa|ldexp|wine|pthread", member, re.I)),
+        }
+        for archive, member in sorted(members, key=lambda pair: (pair[0].lower(), pair[1].lower()))
+    ]
+    # Standalone object paths matter too. Exclude archive(member) matches, then
+    # collect only the map's input column to avoid treating symbol names as files.
+    direct_objects = set()
+    for line in contents.splitlines():
+        if ARCHIVE_MEMBER.search(line):
+            continue
+        if not re.match(r"^\s*[0-9a-f]+\s+[0-9a-f]+\s+\d+\s+", line, re.I):
+            continue
+        for match in DIRECT_OBJECT.finditer(line):
+            direct_objects.add(match.group("object"))
+    return {
+        "schema": "s503-windows-link-map-v1",
+        "binary_name": built_exe.name,
+        "binary_sha256": compute_sha256(built_exe),
+        "map_sha256": compute_sha256(map_path),
+        "map_bytes": map_path.stat().st_size,
+        "final_link_command": link_commands[0],
+        "archive_members": inventory,
+        "direct_objects": sorted(direct_objects, key=str.lower),
+        "unclassified_archives": sorted({row["archive"] for row in inventory
+                                         if row["notice_candidate"].startswith("unclassified")}, key=str.lower),
+        "review_status": "inventory only; reconcile source-specific notices before product admission",
+    }
 
 
 def audit_dynamic_libraries(executable_path: Path, os_name: str,
@@ -403,6 +479,7 @@ def build_whisper(
     skip_download: bool = False,
     parallel: int = 4,
     dest_cli: Optional[Path] = None,
+    link_map_file: Optional[Path] = None,
 ) -> Dict[str, Any]:
     os_name, arch_name, runner_label = detect_target()
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -424,7 +501,7 @@ def build_whisper(
         verify_source_archive(owned_archive)
         return _build_verified_source(
             Path(run_name), owned_archive, cache_dir, parallel, dest_cli,
-            os_name, arch_name, runner_label,
+            os_name, arch_name, runner_label, link_map_file or work_dir / f"whisper-cli-{arch_name}.link.map",
         )
 
 
@@ -437,6 +514,7 @@ def _build_verified_source(
     os_name: str,
     arch_name: str,
     runner_label: str,
+    link_map_file: Path,
 ) -> Dict[str, Any]:
     """Build in an invocation-owned tree; cleanup is handled by the caller."""
 
@@ -454,7 +532,13 @@ def _build_verified_source(
     cmake_bin = toolchain["cmake"]
     build_dir = src_dir / "build-static"
 
-    cmake_flags = get_cmake_build_flags(os_name, arch_name, toolchain)
+    map_path = run_dir / "whisper-cli.link.map"
+    # CMake's executable linker flags reach the final whisper-cli link. The
+    # invocation-owned map is copied out only after the verbose link command
+    # and archive members have been checked against the finished binary.
+    cmake_flags = get_cmake_build_flags(
+        os_name, arch_name, toolchain, map_path if os_name == "windows" else None
+    )
 
     # Configure
     config_cmd = [cmake_bin, "-S", str(src_dir), "-B", str(build_dir)] + cmake_flags
@@ -503,6 +587,7 @@ def _build_verified_source(
         "whisper-cli",
         "--parallel",
         str(parallel),
+        "--verbose",
     ]
     build_res = subprocess.run(
         build_cmd,
@@ -536,6 +621,14 @@ def _build_verified_source(
     # Hash executable
     exe_sha256 = compute_sha256(built_exe)
     exe_bytes = built_exe.stat().st_size
+
+    link_inventory = None
+    if os_name == "windows":
+        link_inventory = inspect_windows_link_map(map_path, built_exe, build_res.stdout + "\n" + build_res.stderr)
+        link_map_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(map_path, link_map_file)
+        if compute_sha256(link_map_file) != link_inventory["map_sha256"]:
+            raise RuntimeError("retained Windows linker map SHA-256 mismatch")
 
     # Audit dynamic libraries
     imported_libs = audit_dynamic_libraries(built_exe, os_name, toolchain)
@@ -578,8 +671,13 @@ def _build_verified_source(
         "openmp_disabled": True,
         "gpl_free": True,
         "dependency_audit_scope": "dynamic imports only; static runtime license notices require separate review",
+        "product_admitted": False,
         "status": "built_and_cached",
     }
+    if link_inventory is not None:
+        report["dependency_audit_scope"] = "PE imports and retained linker map; static object notices require review"
+        report["link_map_path"] = str(link_map_file)
+        report["link_map_inventory"] = link_inventory
     return report
 
 
@@ -633,6 +731,12 @@ def main() -> int:
         default=None,
         help="Optional file path to write the JSON report to",
     )
+    parser.add_argument(
+        "--link-map-file",
+        type=Path,
+        default=None,
+        help="Retain the checked Windows whisper-cli linker map at this path",
+    )
 
     args = parser.parse_args()
 
@@ -644,6 +748,7 @@ def main() -> int:
             skip_download=args.skip_download,
             parallel=args.parallel,
             dest_cli=args.dest_cli,
+            link_map_file=args.link_map_file,
         )
     except Exception as e:
         sys.stderr.write(f"whisper-build ERROR: {e}\n")

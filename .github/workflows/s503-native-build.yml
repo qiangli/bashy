@@ -141,6 +141,7 @@ jobs:
           python examples/transcribe/dependencies/build_whisper.py \
             --work-dir "$RUNNER_TEMP/s503-whisper-build" \
             --report-file evidence/build-report.json \
+            --link-map-file evidence/whisper-cli.link.map \
             --parallel 4
 
       - name: Verify artifact SHA-256 against the build report
@@ -162,6 +163,7 @@ jobs:
           assert report['whisper_version'] == '1.9.5'
           assert report['source_archive_sha256'] == 'ff1a9053feb509ff9d7729703355541ae9690073a6b1c40eb692c962e0dc1720'
           assert report['status'] == 'built_and_cached'
+          assert report['product_admitted'] is False
           assert report['cpu_only'] and report['portable_cpu'] and report['openmp_disabled'] and report['gpl_free']
           assert '-DGGML_NATIVE=OFF' in report['build_flags']
           if os.environ['EXPECTED_OS'] == 'Windows':
@@ -187,6 +189,19 @@ jobs:
           assert digest == report['executable_sha256']
           assert artifact.stat().st_size == report['executable_bytes']
           if os.environ['EXPECTED_OS'] == 'Windows':
+              link_map = Path('evidence/whisper-cli.link.map')
+              inventory = report['link_map_inventory']
+              assert inventory['schema'] == 's503-windows-link-map-v1'
+              assert Path(report['link_map_path']).resolve() == link_map.resolve()
+              assert inventory['binary_name'] == artifact.name
+              assert inventory['binary_sha256'] == digest
+              assert link_map.is_file() and link_map.stat().st_size == inventory['map_bytes']
+              assert hashlib.sha256(link_map.read_bytes()).hexdigest() == inventory['map_sha256']
+              assert inventory['archive_members']
+              assert all(row['archive'] and row['member'] and row['notice_candidate']
+                         for row in inventory['archive_members'])
+              Path('evidence/whisper-link-inventory.json').write_text(
+                  json.dumps(inventory, indent=2) + '\n')
               with artifact.open('rb') as binary:
                   assert binary.read(2) == b'MZ'
                   binary.seek(0x3c)

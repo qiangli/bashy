@@ -37,6 +37,67 @@ import build_whisper  # noqa: E402
 
 
 class TestWhisperBuildRecipe(unittest.TestCase):
+    def test_windows_link_map_inventory_is_tied_to_finished_cli(self):
+        """Retain exact linked members, standalone objects and binary/map hashes."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            cli = root / "whisper-cli.exe"
+            cli.write_bytes(b"finished PE fixture")
+            link_map = root / "whisper-cli.link.map"
+            link_map.write_text(
+                "Address  Size     Align Out     In      Symbol\n"
+                "00001000 00001000  4096 .text\n"
+                "00001000 00000010    16         C:/build/libwhisper.a(whisper.cpp.obj):(.text)\n"
+                "00001010 00000010    16         C:/llvm/lib/libc++.a(string.cpp.obj):(.text)\n"
+                "00001020 00000010    16         C:/llvm/lib/libmingwex.a(gdtoa.o):(.text)\n"
+                "00001030 00000010    16         C:/build/CMakeFiles/cli.dir/main.cpp.obj:(.text)\n"
+                "00001040 00000010    16         C:/other/libunknown.a(mystery.o):(.text)\n"
+            )
+            command = f"clang++ -static -Wl,-Map={link_map.as_posix()} main.obj -o bin/whisper-cli.exe"
+            inventory = build_whisper.inspect_windows_link_map(link_map, cli, command)
+            self.assertEqual(inventory["binary_sha256"], hashlib.sha256(cli.read_bytes()).hexdigest())
+            self.assertEqual(inventory["map_sha256"], hashlib.sha256(link_map.read_bytes()).hexdigest())
+            self.assertEqual(len(inventory["archive_members"]), 4)
+            self.assertEqual(inventory["direct_objects"], ["C:/build/CMakeFiles/cli.dir/main.cpp.obj"])
+            notices = {r["member"]: r["notice_candidate"] for r in inventory["archive_members"]}
+            self.assertIn("LLVM", notices["string.cpp.obj"])
+            self.assertIn("MinGW", notices["gdtoa.o"])
+            self.assertIn("MIT", notices["whisper.cpp.obj"])
+            self.assertEqual(inventory["unclassified_archives"], ["C:/other/libunknown.a"])
+            self.assertTrue(next(r for r in inventory["archive_members"] if r["member"] == "gdtoa.o")["source_review"])
+            self.assertIn("inventory only", inventory["review_status"])
+
+    def test_windows_link_map_rejects_missing_or_wrong_final_link(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            cli = root / "whisper-cli.exe"
+            cli.write_bytes(b"PE fixture")
+            link_map = root / "link.map"
+            command = f"clang++ -Wl,-Map={link_map.as_posix()} main.obj -o bin/whisper-cli.exe"
+            with self.assertRaisesRegex(RuntimeError, "missing or empty"):
+                build_whisper.inspect_windows_link_map(link_map, cli, command)
+            link_map.write_text("Address  Size     Align Out     In      Symbol\n"
+                                "00001000 00000010 16 libmingwex.a(gdtoa.o):(.text)\n")
+            with self.assertRaisesRegex(RuntimeError, "does not identify one final"):
+                build_whisper.inspect_windows_link_map(link_map, cli, command.replace("whisper-cli.exe", "other.exe"))
+            with self.assertRaisesRegex(RuntimeError, "does not identify one final"):
+                build_whisper.inspect_windows_link_map(link_map, cli, command.replace("-Map", "-Other"))
+            link_map.write_text("Address  Size     Align Out     In      Symbol\n")
+            with self.assertRaisesRegex(RuntimeError, "no linked archive members"):
+                build_whisper.inspect_windows_link_map(link_map, cli, command)
+
+    def test_windows_link_map_is_requested_on_final_executable_link(self):
+        map_path = Path("C:/runner_temp/whisper-cli.link.map")
+        toolchain = {"c_compiler": "C:/clang.exe", "cxx_compiler": "C:/clang++.exe"}
+        windows_flags = build_whisper.get_cmake_build_flags("windows", "arm64", toolchain, map_path)
+        self.assertIn(f"-DCMAKE_EXE_LINKER_FLAGS=-static -Wl,-Map={map_path.as_posix()}", windows_flags)
+        self.assertEqual(sum(flag.startswith("-DCMAKE_EXE_LINKER_FLAGS=") for flag in windows_flags), 1)
+        linux_flags = build_whisper.get_cmake_build_flags("linux", "arm64", toolchain)
+        self.assertFalse(any("-Map" in flag for flag in linux_flags))
+        with self.assertRaisesRegex(RuntimeError, "must not contain whitespace"):
+            build_whisper.get_cmake_build_flags("windows", "arm64", toolchain,
+                                                Path("C:/runner temp/whisper-cli.link.map"))
+
     def test_pinned_constants(self):
         """Source archive constants must strictly match the supply-chain audit."""
         self.assertEqual(build_whisper.PINNED_VERSION, "1.9.5")
