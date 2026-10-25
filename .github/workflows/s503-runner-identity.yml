@@ -15,7 +15,7 @@ jobs:
   runner-identity:
     name: ${{ matrix.label }} identity
     runs-on: ${{ matrix.label }}
-    timeout-minutes: 5
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -125,3 +125,101 @@ jobs:
           path: evidence/runner-identity.json
           if-no-files-found: error
           retention-days: 14
+
+  launcher:
+    name: ${{ matrix.label }} launcher
+    runs-on: ${{ matrix.label }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {label: ubuntu-24.04, os: Linux, arch: amd64, python_arch: x64, python_version: '3.12.15'}
+          - {label: ubuntu-24.04-arm, os: Linux, arch: arm64, python_arch: arm64, python_version: '3.12.15'}
+          - {label: macos-15-intel, os: Darwin, arch: amd64, python_arch: x64, python_version: '3.12.10'}
+          - {label: macos-15, os: Darwin, arch: arm64, python_arch: arm64, python_version: '3.12.10'}
+          - {label: windows-2025, os: Windows, arch: amd64, python_arch: x64, python_version: '3.12.10'}
+          - {label: windows-11-arm, os: Windows, arch: arm64, python_arch: arm64, python_version: '3.12.10'}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_version }}
+          architecture: ${{ matrix.python_arch }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.2'
+      - name: Build native Bashy on runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/s503-launcher"
+          suffix=''
+          if [[ '${{ matrix.os }}' == Windows ]]; then suffix='.exe'; fi
+          ./scripts/go-product.sh build -trimpath -o "$RUNNER_TEMP/s503-launcher/bashy$suffix" ./cmd/bashy
+      - name: Check exact external Python and pre-exec rejection
+        shell: bash
+        env:
+          EXPECTED_OS: ${{ matrix.os }}
+          EXPECTED_ARCH: ${{ matrix.arch }}
+          TARGET_LABEL: ${{ matrix.label }}
+          CANDIDATE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os, pathlib, platform, subprocess, sys, tempfile
+
+          def require(ok, why):
+              if not ok:
+                  raise SystemExit(why)
+
+          arch = {'x86_64': 'amd64', 'AMD64': 'amd64', 'X64': 'amd64',
+                  'aarch64': 'arm64', 'arm64': 'arm64', 'ARM64': 'arm64'}
+          actual_arch = arch.get(platform.machine(), platform.machine())
+          actual_os = platform.system()
+          require(actual_os == os.environ['EXPECTED_OS'] and
+                  actual_arch == os.environ['EXPECTED_ARCH'], 'non-native runner')
+          target = actual_os.lower().replace('darwin', 'darwin') + '/' + actual_arch
+          policy = json.loads(pathlib.Path('examples/transcribe/dependencies/external-python-runtime.json').read_text())
+          python_sha = hashlib.sha256(pathlib.Path(sys.executable).read_bytes()).hexdigest()
+          require(python_sha == policy['targets'][target]['python_sha256'],
+                  'selected CI Python differs from reviewed policy')
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 's503-launcher'
+          bashy = root / ('bashy.exe' if actual_os == 'Windows' else 'bashy')
+          request = root / 'invalid ; $(literal).json'
+          request.write_text('{}', encoding='utf-8')
+          launcher = pathlib.Path('examples/transcribe/launch_python.sh').resolve()
+          env = dict(os.environ, BASHY_TRANSCRIBE_PYTHON=sys.executable,
+                     BASHY_HINTS='off')
+          env.pop('BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX', None)
+          success = subprocess.run([str(bashy), str(launcher), str(request)],
+                                   env=env, capture_output=True, text=True, timeout=60)
+          require(success.returncode == 1, 'verified interpreter did not run adapter')
+          result = json.loads(success.stdout)
+          require(result['error']['code'] == 'invalid_request' and
+                  'expected a bashy-transcribe-stage-v1' in result['error']['message'],
+                  'adapter did not receive literal request')
+          changed = root / ('changed-python.exe' if actual_os == 'Windows' else 'changed-python')
+          changed.write_bytes(pathlib.Path(sys.executable).read_bytes() + b'changed')
+          env['BASHY_TRANSCRIBE_PYTHON'] = str(changed)
+          rejected = subprocess.run([str(bashy), str(launcher), str(request)],
+                                    env=env, capture_output=True, text=True, timeout=60)
+          require(rejected.returncode != 0 and 'SHA-256 differs' in rejected.stderr and
+                  not rejected.stdout, 'changed interpreter was not rejected before exec')
+          report = {'schema': 's503-python-launcher-native-v1',
+                    'target': target, 'runner_label': os.environ['TARGET_LABEL'],
+                    'candidate_commit': os.environ['CANDIDATE_COMMIT'],
+                    'python_sha256': python_sha, 'policy_sha256': hashlib.sha256(
+                        pathlib.Path('examples/transcribe/dependencies/external-python-runtime.json').read_bytes()).hexdigest(),
+                    'verified_interpreter_reached_adapter': True,
+                    'changed_interpreter_rejected_before_exec': True,
+                    'scope': 'external CI Python and local pre-exec byte guard; no product install or license admission'}
+          (root / 'result.json').write_text(json.dumps(report, indent=2) + '\n')
+          print(json.dumps(report))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: s503-python-launcher-${{ matrix.label }}
+          path: ${{ runner.temp }}/s503-launcher/result.json
+          if-no-files-found: ignore
