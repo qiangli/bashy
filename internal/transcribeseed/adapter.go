@@ -3,6 +3,7 @@
 package transcribeseed
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -39,7 +40,7 @@ func (e *stageFailure) Error() string    { return e.err.Error() }
 func (e *stageFailure) Unwrap() error    { return e.err }
 func failure(code, message string) error { return &stageFailure{code, errors.New(message)} }
 
-// Execute returns a valid v1 error envelope and nonzero status on every failure.
+// Execute returns a structured error envelope and nonzero status on failure.
 // It never emits subprocess stdout as a stage result.
 func Execute(ctx context.Context, adapter string, in c.TranscribeStageInput, cfg Config) (out c.TranscribeStageResult, status int) {
 	out = c.TranscribeStageResult{Version: c.TranscribeStageVersion, Stage: in.Stage}
@@ -84,7 +85,15 @@ func Execute(ctx context.Context, adapter string, in c.TranscribeStageInput, cfg
 // ReadRequest accepts unknown optional fields, but rejects trailing JSON.
 func ReadRequest(r io.Reader) (c.TranscribeStageInput, error) {
 	var in c.TranscribeStageInput
-	d := json.NewDecoder(io.LimitReader(r, 16<<20))
+	const limit = 16 << 20
+	b, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if err != nil {
+		return in, err
+	}
+	if len(b) > limit {
+		return in, errors.New("stage request exceeds 16 MiB")
+	}
+	d := json.NewDecoder(bytes.NewReader(b))
 	if err := d.Decode(&in); err != nil {
 		return in, err
 	}

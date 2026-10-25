@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -451,5 +452,48 @@ func TestRequestWireCompatibility(t *testing.T) {
 		if _, err := ReadRequest(strings.NewReader(body + "{}")); err == nil {
 			t.Fatal("trailing data accepted")
 		}
+	}
+}
+
+func TestConcurrentExportPublishesOnlyOneResult(t *testing.T) {
+	in := request("export")
+	in.Output = filepath.Join(t.TempDir(), "shared.txt")
+	in.Format = "txt"
+	in.Segments = []c.TranscribeSegment{{StartMS: 0, EndMS: 1000, Text: "complete transcript"}}
+	var successes atomic.Int32
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r, status := Execute(context.Background(), "export", in, Config{})
+			if status == 0 {
+				successes.Add(1)
+			} else {
+				if r.Error == nil || len(r.Artifacts) != 0 {
+					t.Error("failed contender reported success artifacts")
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	if successes.Load() != 1 {
+		t.Fatalf("publication successes=%d, want one", successes.Load())
+	}
+	b, err := os.ReadFile(in.Output)
+	if err != nil || string(b) != "complete transcript\n" {
+		t.Fatalf("output=%q err=%v", b, err)
+	}
+	items, err := os.ReadDir(filepath.Dir(in.Output))
+	if err != nil || len(items) != 1 {
+		t.Fatalf("leftovers=%v err=%v", items, err)
+	}
+}
+
+func TestOversizedRequestCannotHideTrailingData(t *testing.T) {
+	valid := `{"version":"bashy-transcribe-stage-v1","stage":"acquire","input":"file"}`
+	input := valid + strings.Repeat(" ", 16<<20) + "{}"
+	if _, err := ReadRequest(strings.NewReader(input)); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("oversized request accepted: %v", err)
 	}
 }
