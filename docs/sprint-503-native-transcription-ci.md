@@ -9,6 +9,30 @@ evidence collection at Bashy `52139da7`. It marks the operator transcript
 reference `provisional_machine_agreement`; the final native check still blocks
 acceptance until the recorded excerpt is human confirmed.
 
+## Controlled local-media evidence
+
+[Run 40203242520](https://github.com/qiangli/bashy/actions/runs/40203242520)
+completed successfully on all six native hosted targets at candidate
+`a80da055a5a5c43cc4b7bc02b438aa108adaddb8`. The manager and a separate
+reviewer downloaded all six artifacts. The [review ledger](sprint-503/evidence/controlled-native-40203242520.json)
+records each job and artifact ID, the online and offline result hashes, 18
+verified TXT/SRT/VTT outputs and 18 output-path receipts per mode, nine skill
+and 18 Bash# function receipt projections per mode, English and Spanish
+automatic language detection, reviewed transcript scores and timing, failure
+cleanup, process cancellation, and live network denial before and after the
+offline replay. Linux used a network namespace, macOS used a sandbox, and
+Windows used eight active per-program firewall rules with Winsock 10013
+denial. The controlled fixture includes real audio and WebM video speech.
+
+As of 2026-10-25 15:02 UTC, the identical controlled workflow and harness
+files were pushed with canonical
+Bashy `4512d073` and pinned by umbrella `bc051e97d`. Its direct
+[run 40204707322](https://github.com/qiangli/bashy/actions/runs/40204707322)
+is collecting separate candidate-linked evidence. The controlled result does
+not establish operator YouTube acquisition, a product dependency installer, or
+the final six-target YouTube acceptance. The operator gate remains at zero
+accepted native targets after GitHub-hosted egress received a bot challenge.
+
 As of 2026-10-25 13:45 UTC, [run 40198584884](https://github.com/qiangli/bashy/actions/runs/40198584884)
 passed admission and started all six jobs. Windows ARM stopped at the runner
 identity check because .NET returned mixed-case `Arm64`; this comparison was
@@ -90,16 +114,17 @@ receipts and canary reports even when the job fails.
 
 ## Remaining gates
 
-The workflow was syntax checked locally; no local builds, inference or OCI
-runs were performed. Actual hosted-runner execution must establish whether
-Linux permits `sudo unshare --net`, whether macOS `sandbox-exec` behaves on both
-GitHub images, and whether Windows program rules deny the canary on x64 and
-ARM64 without disrupting the runner. Any unsupported target stays red.
+The controlled local-media workflow established `sudo unshare --net` on both
+Linux runners, `sandbox-exec` denial on both macOS runners, and program-rule
+denial on both Windows runners without losing the hosted runner. These results
+are tied to the controlled candidate and artifacts above; the separate
+operator YouTube workflow still needs its own six-target execution.
 
 The final job requires `pass` for online download cancellation and local
 pipeline cancellation in both modes. Offline replay records
 `not_tested_offline` for download cancellation while network access is denied.
-The Windows CTRL_BREAK_EVENT path and the controlled partial-download probe
-still need native execution on all six runners. Until those results, the
-required fixture and operator review, and all six artifacts are inspected,
-S503.8 remains **0/6 full native passes**.
+Local-process cancellation and owned scratch cleanup passed in all six
+controlled artifacts. The operator YouTube gate still needs the native
+partial-download probe, canonical and shortened acquisitions, reviewed excerpt,
+and all online and offline pipeline artifacts. S503.8 remains **0/6 full
+operator YouTube native passes**.

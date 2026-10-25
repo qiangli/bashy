@@ -1,0 +1,415 @@
+{
+  "candidate_commit": "a80da055a5a5c43cc4b7bc02b438aa108adaddb8",
+  "github_run_id": 40203242520,
+  "github_run_url": "https://github.com/qiangli/bashy/actions/runs/40203242520",
+  "result": "success",
+  "review": "Downloaded all six uploaded artifacts; manager independently rehashed every export, receipt projection, result, network-denial report, identity and source reference score. A separate reviewer performed the same evidence audit.",
+  "schema": "s503-controlled-native-review-v1",
+  "scope": "Real controlled local audio/video inference on six native hosted targets, online and under OS-enforced network denial. This does not establish operator YouTube acquisition or product dependency installation.",
+  "targets": {
+    "macos-15": {
+      "artifact_id": 12602488548,
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40203242520/artifacts/12602488548",
+      "baseline_connectivity_sha256": "0b39a65739bda5bc2cfc1cd19e713d1005c50a176b6e4257eaa643d28147d8a1",
+      "job_id": 121198679927,
+      "network_denial": {
+        "after_sha256": "8ffaed1c79f7402887ef8a3d464f71b1b8816beb250cf76b65e78e7c9b3a0c49",
+        "before_sha256": "96adf1bd2af0f6f7737284a72be82910071bbd832fae8612b9d436cd57849276"
+      },
+      "offline": {
+        "detected_languages": {
+          "en-audio": {
+            "language": "en",
+            "segments": 2
+          },
+          "es-audio": {
+            "language": "es",
+            "segments": 1
+          }
+        },
+        "export_files_verified": 18,
+        "failure_cleanup": "pass",
+        "function_projection_sha256": "8bd60f04e3bc2806436d34b10437cdd6899a42ba0ccc7a6a571f5e30babe10e0",
+        "path_receipts_verified": 18,
+        "process_cancellation": "pass",
+        "reference_scores": {
+          "en-audio-script": 0.818182,
+          "en-audio-skill": 0.818182,
+          "en-video-script": 0.818182,
+          "en-video-skill": 0.818182,
+          "es-audio-script": 0.875,
+          "es-audio-skill": 0.875
+        },
+        "result_sha256": "49214084edd4eef55ccf5ac9a34fd7bfade9cf9d00d5870fcf33fc213601fbc4",
+        "skill_projection_sha256": "dfeac9b1c4ba440cef64279db2472c144e37586fee5e257795023d2d1ab3a897"
+      },
+      "offline_enforcer": "macos-sandbox-deny-network",
+      "online": {
+        "detected_languages": {
+          "en-audio": {
+            "language": "en",
+            "segments": 2
+          },
+          "es-audio": {
+            "language": "es",
+            "segments": 1
+          }
+        },
+        "export_files_verified": 18,
+        "failure_cleanup": "pass",
+        "function_projection_sha256": "0e494a4e9262e6fd810cbb22c4853cde9274a2a2c8a14b7f17b995147ca8df32",
+        "path_receipts_verified": 18,
+        "process_cancellation": "pass",
+        "reference_scores": {
+          "en-audio-script": 0.818182,
+          "en-audio-skill": 0.818182,
+          "en-video-script": 0.818182,
+          "en-video-skill": 0.818182,
+          "es-audio-script": 0.875,
+          "es-audio-skill": 0.875
+        },
+        "result_sha256": "f4a19ae14090bf05362b550edc2f9d86525bfe136127c0f31248d439fac3bef2",
+        "skill_projection_sha256": "1f4e0fc8aa5e57fd5b404febf38dacfaaeb3744501a0ae67bbe9481f7082e4a6"
+      },
+      "runner_identity_sha256": "f0f63da6f53d7aeb80b03b718499c043923b9270c0411410137f38fb9e2e006c",
+      "target": "darwin/arm64"
+    },
+    "macos-15-intel": {
+      "artifact_id": 12602733838,
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40203242520/artifacts/12602733838",
+      "baseline_connectivity_sha256": "0b39a65739bda5bc2cfc1cd19e713d1005c50a176b6e4257eaa643d28147d8a1",
+      "job_id": 121198679868,
+      "network_denial": {
+        "after_sha256": "7c3429e31425f14aeb332d73d0f30428ccb2e4b668cb740122efe21772ddd49c",
+        "before_sha256": "4e35fc9119f4bd34ba6a1fc400a6b8b0ac3acf8c8887964b3e6b9282ff788233"
+      },
+      "offline": {
+        "detected_languages": {
+          "en-audio": {
+            "language": "en",
+            "segments": 2
+          },
+          "es-audio": {
+            "language": "es",
+            "segments": 1
+          }
+        },
+        "export_files_verified": 18,
+        "failure_cleanup": "pass",
+        "function_projection_sha256": "4be8430982167f6f7e320fe7ff1f3ef6bbce73b0d9f14b12fbff6acaf2884322",
+        "path_receipts_verified": 18,
+        "process_cancellation": "pass",
+        "reference_scores": {
+          "en-audio-script": 0.818182,
+          "en-audio-skill": 0.818182,
+          "en-video-script": 0.818182,
+          "en-video-skill": 0.818182,
+          "es-audio-script": 0.875,
+          "es-audio-skill": 0.875
+        },
+        "result_sha256": "1325b0c18d19b1109c1d14dfb3ce0b34a8d5c57d18e3b06248d984436f0699e7",
+        "skill_projection_sha256": "5f869f19e80a83564567ef75c7791ad399aeb444a4b8ee96faf251600e8ae621"
+      },
+      "offline_enforcer": "macos-sandbox-deny-network",
+      "online": {
+        "detected_languages": {
+          "en-audio": {
+            "language": "en",
+            "segments": 2
+          },
+          "es-audio": {
+            "language": "es",
+            "segments": 1
+          }
+        },
+        "export_files_verified": 18,
+        "failure_cleanup": "pass",
+        "function_projection_sha256": "ee6027d58c0b94356c8e8e7d71ff31be6d5f1df31d19f6824256a70bbca33a8b",
+        "path_receipts_verified": 18,
+        "process_cancellation": "pass",
+        "reference_scores": {
+          "en-audio-script": 0.818182,
+          "en-audio-skill": 0.818182,
+          "en-video-script": 0.818182,
+          "en-video-skill": 0.818182,
+          "es-audio-script": 0.875,
+          "es-audio-skill": 0.875
+        },
+        "result_sha256": "69234848a68cbbc36d5febe69acf1a36c92799ceaf1627b4b0f567c6a05e94f8",
+        "skill_projection_sha256": "8642246cf2ede23b24ce0b10ee54357914cf5d80761504aac79816767823862c"
+      },
+      "runner_identity_sha256": "e30cec1e2e86ad0064da462fd361061e46dd56d9f83824e9235c7378d41736e9",
+      "target": "darwin/amd64"
+    },
+    "ubuntu-24.04": {
+      "artifact_id": 12603078079,
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40203242520/artifacts/12603078079",
+      "baseline_connectivity_sha256": "0b39a65739bda5bc2cfc1cd19e713d1005c50a176b6e4257eaa643d28147d8a1",
+      "job_id": 121198679846,
+      "network_denial": {
+        "after_sha256": "ec13ce956587af0dcbac1e5edfdcc1aafbee3141266681fd35bcb66627331689",
+        "before_sha256": "902ee76532bcfd9cd7dcf0a90721b0070ad2b6bb102b429740e53ce0045206eb"
+      },
+      "offline": {
+        "detected_languages": {
+          "en-audio": {
+            "language": "en",
+            "segments": 2
+          },
+          "es-audio": {
+            "language": "es",
+            "segments": 1
+          }
+        },
+        "export_files_verified": 18,
+        "failure_cleanup": "pass",
+        "function_projection_sha256": "2621c92cf34daf3c23ec607f24f747d135a0210ddf6548083aac68bac8ebaa3c",
+        "path_receipts_verified": 18,
+        "process_cancellation": "pass",
+        "reference_scores": {
+          "en-audio-script": 0.818182,
+          "en-audio-skill": 0.818182,
+          "en-video-script": 0.818182,
+          "en-video-skill": 0.818182,
+          "es-audio-script": 0.875,
+          "es-audio-skill": 0.875
+        },
+        "result_sha256": "c4bb135717256e8964b93da9cacff94e3fd7a0e855608f135ba1da9000e98585",
+        "skill_projection_sha256": "fb0605f6f32ef7cc842199a48d456eaeb41097cb4a107443cfae2594314062c8"
+      },
+      "offline_enforcer": "linux-unshare-net",
+      "online": {
+        "detected_languages": {
+          "en-audio": {
+            "language": "en",
+            "segments": 2
+          },
+          "es-audio": {
+            "language": "es",
+            "segments": 1
+          }
+        },
+        "export_files_verified": 18,
+        "failure_cleanup": "pass",
+        "function_projection_sha256": "8785fdb8cb2a241328663383897dca6923c6d3005b84534fc5505498f06b35cc",
+        "path_receipts_verified": 18,
+        "process_cancellation": "pass",
+        "reference_scores": {
+          "en-audio-script": 0.818182,
+          "en-audio-skill": 0.818182,
+          "en-video-script": 0.818182,
+          "en-video-skill": 0.818182,
+          "es-audio-script": 0.875,
+          "es-audio-skill": 0.875
+        },
+        "result_sha256": "933e8e96cf943ffb719ea1c30b684aa01b9d161e575d39261d0d4376a940fc55",
+        "skill_projection_sha256": "98bd9839cd00264af862326cb05ff8f6e44689b5c62bdea16a6d32e054dc5da3"
+      },
+      "runner_identity_sha256": "d88fcc9e11d4e350fb7536ff5180777d1959028d0d4abe68a087fa6daf950eec",
+      "target": "linux/amd64"
+    },
+    "ubuntu-24.04-arm": {
+      "artifact_id": 12602728045,
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40203242520/artifacts/12602728045",
+      "baseline_connectivity_sha256": "0b39a65739bda5bc2cfc1cd19e713d1005c50a176b6e4257eaa643d28147d8a1",
+      "job_id": 121198679898,
+      "network_denial": {
+        "after_sha256": "8eacc04506cd37ad6c59c90cb3abb2b429a405e6ce368c2d607d4b8b6fb62f1c",
+        "before_sha256": "5da4d7057927283ce3c4d2159e40afdc5aa60e33cb49151afe93c3c52467e8a0"
+      },
+      "offline": {
+        "detected_languages": {
+          "en-audio": {
+            "language": "en",
+            "segments": 2
+          },
+          "es-audio": {
+            "language": "es",
+            "segments": 1
+          }
+        },
+        "export_files_verified": 18,
+        "failure_cleanup": "pass",
+        "function_projection_sha256": "b791399feb5e40da09168827be8d5c115b4d071457f1e56c8894542387e1ee67",
+        "path_receipts_verified": 18,
+        "process_cancellation": "pass",
+        "reference_scores": {
+          "en-audio-script": 0.818182,
+          "en-audio-skill": 0.818182,
+          "en-video-script": 0.818182,
+          "en-video-skill": 0.818182,
+          "es-audio-script": 0.875,
+          "es-audio-skill": 0.875
+        },
+        "result_sha256": "056bc2ad315d44daefcda058718572df4abc6dfd40419695386367e64fff7a65",
+        "skill_projection_sha256": "50db888b856bda6d608715e05c9fff2938ba8e47d1d87097d0739d5683a22a3e"
+      },
+      "offline_enforcer": "linux-unshare-net",
+      "online": {
+        "detected_languages": {
+          "en-audio": {
+            "language": "en",
+            "segments": 2
+          },
+          "es-audio": {
+            "language": "es",
+            "segments": 1
+          }
+        },
+        "export_files_verified": 18,
+        "failure_cleanup": "pass",
+        "function_projection_sha256": "8576ae5302ed2b51cd290565fe62361090a719cec311d3a644486cbbe49cbec2",
+        "path_receipts_verified": 18,
+        "process_cancellation": "pass",
+        "reference_scores": {
+          "en-audio-script": 0.818182,
+          "en-audio-skill": 0.818182,
+          "en-video-script": 0.818182,
+          "en-video-skill": 0.818182,
+          "es-audio-script": 0.875,
+          "es-audio-skill": 0.875
+        },
+        "result_sha256": "ebac6599abaa499b30263f356258333e00edacc30a85beebdacfd6b2944e62dc",
+        "skill_projection_sha256": "5182dd9f06d95fe1d409cfa5dea0681402ef1001bf283cbf755b06d8aecac227"
+      },
+      "runner_identity_sha256": "bd45f1ca2158e861ec67479b3f8f98a55be2ed3e3b6a0edbe8685bef8746cd47",
+      "target": "linux/arm64"
+    },
+    "windows-11-arm": {
+      "active_firewall_rules_sha256": "75a0dcf05c46874de762c03d3e67ab0c86799e3ce02831e17b4bf452ace820d7",
+      "artifact_id": 12602324880,
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40203242520/artifacts/12602324880",
+      "baseline_connectivity_sha256": "a19880bd93ce07a29949b8badbf137d53890f786d7c4740eeade1b426d993afd",
+      "job_id": 121198679678,
+      "network_denial": {
+        "after_sha256": "08e0a7c131494ff06b70b5f8bccffa73f7d2c854e9617fd6605db0483559c31c",
+        "before_sha256": "69afae4de062e50cd8629942b354cef78450ba03210a1fec3df50756a56dcdaf"
+      },
+      "offline": {
+        "detected_languages": {
+          "en-audio": {
+            "language": "en",
+            "segments": 2
+          },
+          "es-audio": {
+            "language": "es",
+            "segments": 1
+          }
+        },
+        "export_files_verified": 18,
+        "failure_cleanup": "pass",
+        "function_projection_sha256": "d62771ddda27bd8e4ff1a0168c0822041090e52d398487db15767ce61f1dc175",
+        "path_receipts_verified": 18,
+        "process_cancellation": "pass",
+        "reference_scores": {
+          "en-audio-script": 0.818182,
+          "en-audio-skill": 0.818182,
+          "en-video-script": 0.818182,
+          "en-video-skill": 0.818182,
+          "es-audio-script": 0.875,
+          "es-audio-skill": 0.875
+        },
+        "result_sha256": "4cda71c689d5ad002681912704c11a3da228b6ca193636d7009e9780afde692a",
+        "skill_projection_sha256": "d1df1c91f964b23a083b43b1655b57c0dff80be0562a98b2a7220d2b7d2d6936"
+      },
+      "offline_enforcer": "windows-firewall-program-block",
+      "online": {
+        "detected_languages": {
+          "en-audio": {
+            "language": "en",
+            "segments": 2
+          },
+          "es-audio": {
+            "language": "es",
+            "segments": 1
+          }
+        },
+        "export_files_verified": 18,
+        "failure_cleanup": "pass",
+        "function_projection_sha256": "c2d1905f54f2a369e06ea09b279451cd08ed119631e6335e59dd8326b4f991fa",
+        "path_receipts_verified": 18,
+        "process_cancellation": "pass",
+        "reference_scores": {
+          "en-audio-script": 0.818182,
+          "en-audio-skill": 0.818182,
+          "en-video-script": 0.818182,
+          "en-video-skill": 0.818182,
+          "es-audio-script": 0.875,
+          "es-audio-skill": 0.875
+        },
+        "result_sha256": "92ad071202e628b723dc9dff2f806d2c1637785fa73689eebbedf9b065d65d4b",
+        "skill_projection_sha256": "bb6e248170af02c94864a5ab810889a7304845a8712f772ebc022fab1ff92fb6"
+      },
+      "runner_identity_sha256": "b8aa8656c9fd043efab9f71255f53a52107557c03c3d789e04c51cd958cc2237",
+      "target": "windows/arm64"
+    },
+    "windows-2025": {
+      "active_firewall_rules_sha256": "3af602bb903f609408c173b3bdbe3c84906a9ddfc8bdbb51aebe9f302a278107",
+      "artifact_id": 12603536169,
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40203242520/artifacts/12603536169",
+      "baseline_connectivity_sha256": "a19880bd93ce07a29949b8badbf137d53890f786d7c4740eeade1b426d993afd",
+      "job_id": 121198679954,
+      "network_denial": {
+        "after_sha256": "35754de74f1345431aef3e38cdde212d4aa09bb3e60142b9f9f1ccdc49429b79",
+        "before_sha256": "26a37f9a2d54f0178da1ea8d05d761b1ac97c6b332426dac5324ec529513b9ff"
+      },
+      "offline": {
+        "detected_languages": {
+          "en-audio": {
+            "language": "en",
+            "segments": 2
+          },
+          "es-audio": {
+            "language": "es",
+            "segments": 1
+          }
+        },
+        "export_files_verified": 18,
+        "failure_cleanup": "pass",
+        "function_projection_sha256": "d30d21819037475ca9576d1a7dcde7c00468a240c846a000f67f8dd76f11b06a",
+        "path_receipts_verified": 18,
+        "process_cancellation": "pass",
+        "reference_scores": {
+          "en-audio-script": 0.818182,
+          "en-audio-skill": 0.818182,
+          "en-video-script": 0.818182,
+          "en-video-skill": 0.818182,
+          "es-audio-script": 0.875,
+          "es-audio-skill": 0.875
+        },
+        "result_sha256": "d914f0a6b85573cfd6a9f624fec2e8e4e105afe4659f446214f2e9c94037eadb",
+        "skill_projection_sha256": "81c0d605573069838ebc4acacd0761ebd129a0583cc24a5306a55d735fccfd8a"
+      },
+      "offline_enforcer": "windows-firewall-program-block",
+      "online": {
+        "detected_languages": {
+          "en-audio": {
+            "language": "en",
+            "segments": 2
+          },
+          "es-audio": {
+            "language": "es",
+            "segments": 1
+          }
+        },
+        "export_files_verified": 18,
+        "failure_cleanup": "pass",
+        "function_projection_sha256": "87163c632c7fe40a50fd0ca0e4a6eafc99f5fe41008949450db789d6a7fe8bc2",
+        "path_receipts_verified": 18,
+        "process_cancellation": "pass",
+        "reference_scores": {
+          "en-audio-script": 0.818182,
+          "en-audio-skill": 0.818182,
+          "en-video-script": 0.818182,
+          "en-video-skill": 0.818182,
+          "es-audio-script": 0.875,
+          "es-audio-skill": 0.875
+        },
+        "result_sha256": "10bffbe931c1a77db83e9866e027dc0fdeaa3d8d63391795dc933961a2cee793",
+        "skill_projection_sha256": "3d38fd069a82d4fe247f0863ab4c6793f71e85e3a52dfa1c5d3a16800e6648b6"
+      },
+      "runner_identity_sha256": "60c27674197a4247b263cf6479352922e49ccc6acd980f5eebecc6791c8aaabb",
+      "target": "windows/amd64"
+    }
+  }
+}
