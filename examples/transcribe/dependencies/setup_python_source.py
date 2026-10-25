@@ -219,7 +219,7 @@ def runtime(prefix: Path) -> dict:
     executable = prefix / "bin/python3.12"
     probe = ("import importlib.util,json,ssl,sys,sysconfig\n"
              "print(json.dumps({'version':sys.version.split()[0], 'prefix':sys.prefix, "
-             "'builtins':list(sys.builtin_module_names), 'stdlib':list(sys.stdlib_module_names), "
+             "'builtins':sorted(sys.builtin_module_names), 'stdlib':sorted(sys.stdlib_module_names), "
              "'openssl':ssl.OPENSSL_VERSION, 'modules':{name:importlib.util.find_spec(name) is not None "
              "for name in ('readline','_dbm','_gdbm','_ssl','_hashlib','zlib','bz2','lzma')}}))")
     output = subprocess.check_output([str(executable), "-I", "-S", "-c", probe],
