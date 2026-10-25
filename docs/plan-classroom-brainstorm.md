@@ -34,3 +34,25 @@ LAN host. Deliver the running classroom link and stop/restart instructions.
   recommended entry point because the DAG runner buffers startup output.
 - Example inherits the repository's BSD-3-Clause license; it does not bundle
   Scrumlr or any third-party service. No Bashy core rebuild is needed.
+
+## Script/skill duality correction
+
+Story acea24e07aeb: make `brainstorm.bsh` the one orchestration body, carrying
+its skill guidance and contract projections. Native serving uses the existing
+tested server; status and verified backup use a Go fence. The old `.sh` path
+is a compatibility shim. `register.sh` uses ordinary command/skill verbs to
+project the same file into `bashy brainstorm` and `bashy skill run brainstorm`.
+The skill defaults to finite status verification; `BRAINSTORM_ACTION=backup`
+takes a snapshot and checks health. The classroom process/data are preserved.
+
+The installed binary supports command records and skill attestations, but
+`src show brainstorm` and `help brainstorm --format=mcp` reject registered
+commands on this version. Use `commands show brainstorm` for executable argv,
+typed argument schema and source discovery; no core rebuild in a live class.
+
+Verification runs against a separate temporary board: script/command status
+equivalence, projected skill text equality, attested status and backup,
+byte-identical private snapshots, invalid-action rejection, and failure without
+a passing attestation. A failed step on this installed version exits before
+emitting a JSON receipt. The temporary server is stopped through its own process
+group; the classroom server remains running throughout.

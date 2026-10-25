@@ -4,13 +4,40 @@ A first-party LAN brainstorming board under the repository's permissive
 [BSD-3-Clause license](../../LICENSE). No accounts, containers,
 database service, external web assets, or AI calls. Students use a browser.
 
-From this directory:
+`brainstorm.bsh` is the canonical Bash# body: an embedded `~~~skill` face,
+a Go fence for status/verified backups, and orchestration of the native board.
+The Go HTTP server and browser page are supporting resources. The `.sh` entry
+point is a compatibility shim, not another implementation.
+
+Register once from this directory:
 
 ```bash
-bashy ./brainstorm.sh
+bashy ./register.sh
+bashy brainstorm serve
 ```
 
-From anywhere, use `bashy /path/to/bashy/examples/brainstorm/brainstorm.sh`.
+The same body can run directly, without registration:
+
+```bash
+bashy --bashsharp /path/to/bashy/examples/brainstorm/brainstorm.bsh serve
+```
+
+The command and executable skill are two orientations of that body:
+
+```bash
+bashy brainstorm status                       # command → Bash# body
+bashy skill show brainstorm                    # embedded skill projection
+bashy skill run brainstorm                     # skill → command → same body
+BRAINSTORM_ACTION=backup bashy skill run brainstorm
+bashy commands show brainstorm                 # executable source + typed args
+```
+
+The skill's default action is a finite, read-only service check, not starting a
+second server. Its contract checks health after the selected action and records
+an attestation. Registration projects skill prose and its canonical contract
+from the `.bsh` source through existing verbs; no hand-edited catalog files or
+core registration. Re-run registration after editing embedded guidance.
+
 The optional DAG target is `bashy dag serve`; some Bashy versions buffer DAG
 output, so the direct command above is preferred for immediately seeing links.
 The first launch builds a small native Go server (Go 1.27+ required). The server
@@ -48,6 +75,10 @@ Wi-Fi client isolation can prevent student access even on the same Wi-Fi.
 Everything works without internet once Go and the executable are available.
 
 Run focused tests with `bashy dag test`. There is no change to the Bashy binary.
+Run `python3 verify-duality.py` after registration to check direct script,
+registered command and attested skill against an isolated temporary board,
+including equivalent status, byte-identical backup contents and rejection of
+failed steps without a passing attestation.
 For the optional browser test, install Playwright separately and set
 `PLAYWRIGHT_MODULE` to its module path and `BRAINSTORM_BIN` to the built server,
 then run `node browser-test.mjs`. `CHROMIUM_PATH` can select an existing browser.

@@ -1,0 +1,119 @@
+#!/usr/bin/env -S bashy --bashsharp
+# One body, two orientations: executable Bash# and its embedded agent skill.
+
+~~~skill as guide
+---
+name: brainstorm
+description: Run or support a local classroom brainstorming board with private writing, teacher reveal, voting and saved ideas. Use for student idea sessions on a shared LAN, or to check and back up an existing session without interrupting it.
+metadata:
+  requires: "has=bashy"
+  step-porota: 'bashy brainstorm "${BRAINSTORM_ACTION:-status}"'
+  check-tests: 'bashy brainstorm status'
+---
+# Classroom brainstorming
+
+This is the prose face of `brainstorm.bsh`, the same executable body used by
+the registered `brainstorm` command. `bashy commands show brainstorm` exposes
+the executable argv and source path; `bashy skill show brainstorm` reads this face.
+
+- `bashy brainstorm status` checks the running service and saved board; output
+  is JSON without student text or the teacher key. Check before starting a server.
+- `bashy brainstorm serve` starts the native foreground service and prints
+  student links and a separate private teacher link. Students need no account.
+  Keep the host awake and use its LAN address; localhost is host-only.
+- `bashy brainstorm backup` prints the path of a private, verified snapshot.
+  Run it before fixes. Never delete or replace a classroom's data to fix code.
+- The teacher guides Write privately → Reveal/discuss → Vote → Results.
+  Reveal ends editing. Three votes belong to each browser participant.
+- `bashy skill run brainstorm` executes `status` through this same command
+  and records an attestation. Set `BRAINSTORM_ACTION=backup` for a snapshot
+  followed by a service check. It does not start a second classroom service.
+- `BRAINSTORM_DATA` selects the data directory; default is
+  `${XDG_DATA_HOME:-$HOME/.local/share}/bashy/brainstorm`.
+  `BRAINSTORM_ADDR` selects the listener; default `0.0.0.0:18091`.
+  Preserve both when supporting an existing class. Never publish the teacher key.
+
+No containers, accounts, external database, web assets, or AI service. The
+native Go server is a supporting implementation; the orchestration and this
+guidance have one source in this file. `--skill` projects the guidance and
+`--contract` projects the executable skill contract for ordinary registration.
+~~~
+
+~~~go as board
+import (
+ "bytes"
+ "encoding/json"
+ "fmt"
+ "net"
+ "net/http"
+ "os"
+ "path/filepath"
+ "time"
+)
+
+func Inspect(action, data, addr string) (string, error) {
+ path := filepath.Join(data, "board.json")
+ raw, err := os.ReadFile(path)
+ if err != nil { return "", err }
+ var saved struct { Version int `json:"version"`; Phase string `json:"phase"`; Revision int `json:"revision"`; Cards []json.RawMessage `json:"cards"` }
+ if err = json.Unmarshal(raw, &saved); err != nil { return "", err }
+ if saved.Version != 1 { return "", fmt.Errorf("unsupported saved board version") }
+ if action == "backup" {
+  dir := filepath.Join(data,"backups")
+  if err = os.MkdirAll(dir,0700); err != nil { return "",err }
+  f,err := os.CreateTemp(dir,"board-"+time.Now().UTC().Format("20060102T150405Z")+"-*.json")
+  if err != nil { return "",err }
+  name:=f.Name(); ok:=false
+  defer func(){if !ok {os.Remove(name)}}()
+  if _,err=f.Write(raw);err!=nil {f.Close();return "",err}
+  if err=f.Sync();err!=nil {f.Close();return "",err}
+  if err=f.Close();err!=nil {return "",err}
+  copied,err:=os.ReadFile(name);if err!=nil{return "",err}
+  if !bytes.Equal(raw,copied){return "",fmt.Errorf("backup verification failed")}
+  ok=true;return name,nil
+ }
+ host,port,err:=net.SplitHostPort(addr);if err!=nil{return "",err}
+ if host==""||host=="0.0.0.0"||host=="::" {host="127.0.0.1"}
+ client:=http.Client{Timeout:3*time.Second,Transport:&http.Transport{Proxy:nil}}
+ res,err:=client.Get("http://"+net.JoinHostPort(host,port)+"/healthz")
+ if err!=nil{return "",fmt.Errorf("board is not reachable: %w",err)}
+ defer res.Body.Close()
+ var health struct{OK bool `json:"ok"`}
+ if res.StatusCode!=200||json.NewDecoder(res.Body).Decode(&health)!=nil||!health.OK{return "",fmt.Errorf("board health check failed")}
+ summary,err:=json.Marshal(map[string]any{"running":true,"phase":saved.Phase,"cards":len(saved.Cards),"revision":saved.Revision,"data":path})
+ return string(summary),err
+}
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+data=${BRAINSTORM_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/bashy/brainstorm}
+addr=${BRAINSTORM_ADDR:-0.0.0.0:18091}
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/brainstorm
+if (( $# > 1 )); then echo 'Usage: brainstorm [serve|status|backup|test|--skill|--contract]' >&2; exit 2; fi
+case ${1:-serve} in
+--skill)
+  copying=false
+  while IFS= read -r line; do
+    if [[ $line == '~~~skill as guide' ]]; then copying=true; continue; fi
+    if [[ $copying == true && $line == '~~~' ]]; then break; fi
+    if [[ $copying == true ]]; then printf '%s\n' "$line"; fi
+  done < "${BASH_SOURCE[0]}"
+  ;;
+--contract) echo 'sokilili burainisutoromu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
+-h|--help) echo 'brainstorm [serve|status|backup|test] — native LAN board; --skill prints its embedded skill' ;;
+serve)
+  mkdir -p "$cache"
+  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$cache/brainstorm" .)
+  exec "$cache/brainstorm" -data "$data" -addr "$addr"
+  ;;
+status|backup)
+  action=$1
+  result := board.Inspect(action, data, addr)
+  [[ -n $result ]] || exit 1
+  printf '%s\n' "$result"
+  ;;
+test) cd "$here/server"; GOWORK=off go test -race ./... ;;
+*) echo 'Usage: brainstorm [serve|status|backup|test|--skill|--contract]' >&2; exit 2 ;;
+esac
