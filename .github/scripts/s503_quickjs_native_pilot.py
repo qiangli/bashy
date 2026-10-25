@@ -127,9 +127,11 @@ def machine_from_binary(path):
     return "unknown-format"
 
 
-def build_qjs(source_root, work_dir, evidence_dir, target):
+def qjs_configure_args(source_root, work_dir, evidence_dir, target):
     build_dir = work_dir / "build"
-    link_map = evidence_dir / "qjs-link.map"
+    # CMake invokes the linker from its build tree, so a relative map path
+    # silently targets that tree (and may leave the map unwritten).
+    link_map = (evidence_dir / "qjs-link.map").resolve()
     if target == "linux/amd64":
         argv = ["cmake", "-S", str(source_root), "-B", str(build_dir),
                 "-DCMAKE_BUILD_TYPE=Release", "-DBUILD_SHARED_LIBS=OFF",
@@ -138,24 +140,51 @@ def build_qjs(source_root, work_dir, evidence_dir, target):
                 "-DCMAKE_EXE_LINKER_FLAGS_RELEASE=-Wl,-Map," + str(link_map)]
     elif target == "windows/arm64":
         argv = ["cmake", "-S", str(source_root), "-B", str(build_dir),
-                "-G", "Visual Studio 17 2022", "-A", "ARM64",
+                "-G", "Visual Studio 18 2026", "-A", "ARM64",
                 "-DBUILD_SHARED_LIBS=OFF", "-DQJS_BUILD_CLI_WITH_MIMALLOC=OFF",
                 "-DQJS_BUILD_CLI_WITH_STATIC_MIMALLOC=OFF",
                 "-DCMAKE_EXE_LINKER_FLAGS_RELEASE=/MAP:" + str(link_map) + " /VERBOSE:LIB"]
     else:
         raise RuntimeError("pilot target is outside the two-runner scope")
+    return argv, link_map
+
+
+def verify_link_records(link_map, build_log, target):
+    require(link_map.is_file() and link_map.stat().st_size > 0, "native linker map missing")
+    map_text = link_map.read_text(encoding="utf-8", errors="replace")
+    if target == "linux/amd64":
+        # GNU ld's map lists input objects and archives under this heading.
+        require("Linker script and memory map" in map_text and
+                ".o" in map_text and ".a" in map_text,
+                "GNU linker map lacks object/archive input coverage")
+    elif target == "windows/arm64":
+        # MSVC /MAP names defining .obj files; /VERBOSE:LIB records the
+        # searched static libraries in the retained build log.
+        log_text = build_log.read_text(encoding="utf-8", errors="replace")
+        require("Publics by Value" in map_text and ".obj" in map_text,
+                "MSVC linker map lacks public/object input coverage")
+        require("Searching " in log_text and ".lib" in log_text.lower(),
+                "MSVC verbose library search record missing")
+    else:
+        raise RuntimeError("pilot target is outside the two-runner scope")
+
+
+def build_qjs(source_root, work_dir, evidence_dir, target):
+    build_dir = work_dir / "build"
+    argv, link_map = qjs_configure_args(source_root, work_dir, evidence_dir, target)
     run_logged(argv, evidence_dir / "configure.log")
     cache = (build_dir / "CMakeCache.txt").read_text(encoding="utf-8")
     for setting in ("BUILD_SHARED_LIBS:BOOL=OFF", "QJS_BUILD_CLI_WITH_MIMALLOC:BOOL=OFF",
                     "QJS_BUILD_CLI_WITH_STATIC_MIMALLOC:BOOL=OFF"):
         require(setting in cache, "CMake option not enforced: " + setting)
+    build_log = evidence_dir / "build.log"
     run_logged(["cmake", "--build", str(build_dir), "--target", "qjs_exe",
-                "--config", "Release", "--parallel", "2"], evidence_dir / "build.log")
+                "--config", "Release", "--parallel", "2"], build_log)
     binaries = [path for path in build_dir.rglob("qjs.exe" if target.startswith("windows") else "qjs")
                 if path.is_file()]
     require(len(binaries) == 1, "expected one native qjs executable")
     require(machine_from_binary(binaries[0]) == target, "qjs architecture mismatch")
-    require(link_map.is_file() and link_map.stat().st_size > 0, "native linker map missing")
+    verify_link_records(link_map, build_log, target)
     run_logged([str(binaries[0]), "--version"], evidence_dir / "qjs-version.log")
     require("\n0.17.0\n" in (evidence_dir / "qjs-version.log").read_text(encoding="utf-8"),
             "qjs version output did not identify pinned version")

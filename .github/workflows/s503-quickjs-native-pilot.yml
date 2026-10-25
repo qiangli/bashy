@@ -30,7 +30,7 @@ jobs:
           - runner: ubuntu-24.04
             target: linux/amd64
             python_arch: x64
-          - runner: windows-11-arm
+          - runner: windows-11-vs2026-arm
             target: windows/arm64
             python_arch: arm64
     env:

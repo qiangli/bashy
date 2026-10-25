@@ -5,9 +5,26 @@ is an **S503.6 research gate**, not a product release or installation path.
 It runs only when the reviewed workflow or pilot script changes on the
 `s503-contract-integration` branch. `workflow_dispatch` additionally requires
 registration on the repository default branch. Two jobs, `ubuntu-24.04` and
-`windows-11-arm`, each have a 30-minute timeout and retain evidence even on
+`windows-11-vs2026-arm`, each have a 30-minute timeout and retain evidence even on
 failure. A passing CI status remains a research result until the retained
 native artifacts receive independent review.
+
+The first research run, [40220541398](https://github.com/qiangli/bashy/actions/runs/40220541398)
+on commit `7c77581a50b840fd36d2c6bbad666a31b6bf36fb`, failed closed on
+both targets. Linux built a native `qjs`, but GNU ld could not open the relative
+`evidence/quickjs-pilot/qjs-link.map` path from CMake's build directory. The
+script correctly refused the missing map. Windows ARM64 configured with the
+`Visual Studio 17 2022` generator, which had no Visual Studio instance on
+that runner. The retained `result.json` files say `product_admitted: false`,
+`research_result: BLOCKED`, and `native_link_notice_closure: BLOCKED`.
+Neither job reached the controlled EJS check. This revision resolves the map
+path to an absolute path and uses GitHub's explicit native
+[`windows-11-vs2026-arm`](https://github.com/actions/runner-images#available-images)
+image with CMake's documented
+[`Visual Studio 18 2026` ARM64 generator](https://cmake.org/cmake/help/v4.2/generator/Visual%20Studio%2018%202026.html).
+It also requires a map with object/archive input coverage, and on Windows a
+retained `/VERBOSE:LIB` search record. A new native run is required to verify
+the fix; no result is inferred from these source changes.
 
 The [pilot script](../../../../.github/scripts/s503_quickjs_native_pilot.py)
 downloads the exact QuickJS-NG `v0.17.0` commit archive

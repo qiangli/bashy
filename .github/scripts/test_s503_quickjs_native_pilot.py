@@ -17,6 +17,34 @@ SPEC.loader.exec_module(PILOT)
 
 
 class PilotGuards(unittest.TestCase):
+    def test_native_configure_uses_absolute_link_map_and_available_arm_generator(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for target in ("linux/amd64", "windows/arm64"):
+                args, link_map = PILOT.qjs_configure_args(
+                    root / "source", root / "work", Path("evidence/quickjs-pilot"), target)
+                self.assertTrue(link_map.is_absolute())
+                self.assertIn(str(link_map), " ".join(args))
+                if target == "windows/arm64":
+                    self.assertEqual(args[args.index("-G") + 1], "Visual Studio 18 2026")
+                    self.assertEqual(args[args.index("-A") + 1], "ARM64")
+
+    def test_link_records_require_native_input_coverage(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            link_map = root / "qjs-link.map"
+            build_log = root / "build.log"
+            build_log.write_text("Searching C:\\sdk\\ucrt.lib\n", encoding="utf-8")
+            link_map.write_text("Linker script and memory map\nLOAD qjs.o\nLOAD libqjs.a\n",
+                                encoding="utf-8")
+            PILOT.verify_link_records(link_map, build_log, "linux/amd64")
+            link_map.write_text("qjs\nPublics by Value\n 0001:0000 main qjs.obj\n",
+                                encoding="utf-8")
+            PILOT.verify_link_records(link_map, build_log, "windows/arm64")
+            build_log.write_text("no library inventory", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "library search record"):
+                PILOT.verify_link_records(link_map, build_log, "windows/arm64")
+
     def test_fetch_requires_exact_size_and_sha(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
