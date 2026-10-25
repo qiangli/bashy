@@ -1,0 +1,48 @@
+{
+  "schema": "s503-controlled-fixtures-v1",
+  "video_authoring": {
+    "run_id": 40199530099,
+    "source_commit": "10d88eb38c89beeb0d4324425a08b084c401c82d",
+    "report_sha256": "2554d44051f3fd262598ba39954f67fe75718bd8b5e8a523892d5fa51ca4d699",
+    "artifact_name": "s503-controlled-video"
+  },
+  "cases": {
+    "en-audio": {
+      "sha256": "ad06a00c9331152d8a1e16277b086f3639a30335a5ad9becfd921891c4165090",
+      "bytes": 48733,
+      "duration_ms": 10660,
+      "decoder": "transcribe-webm-opus",
+      "language": "en",
+      "reference": "a text-to-speech tool, to make Wikimedia's projects more accessible",
+      "min_score": 0.75,
+      "license_evidence": "https://commons.wikimedia.org/w/index.php?title=File:Wikispeech-sample2.opus&oldid=1042404750",
+      "source_sha256": "9744230eb367b00f1aa5d0c64572c24b2cc533d5f893294bcaabdd912ed1b5a3",
+      "authoring": "examples/transcribe/webm-opus/testdata/generate.py; remux all 533 Opus packets without re-encoding"
+    },
+    "en-video": {
+      "sha256": "36c7fb05a66ec3f29d498fb0c97b8b72de0e9243092b51d2f34e02751bcc93de",
+      "bytes": 49475,
+      "duration_ms": 11000,
+      "audio_packet_span_ms": 10660,
+      "decoder": "transcribe-webm-opus",
+      "language": "en",
+      "reference": "a text-to-speech tool, to make Wikimedia's projects more accessible",
+      "min_score": 0.75,
+      "license_evidence": "https://commons.wikimedia.org/w/index.php?title=File:Wikispeech-sample2.opus&oldid=1042404750",
+      "source_sha256": "ad06a00c9331152d8a1e16277b086f3639a30335a5ad9becfd921891c4165090",
+      "authoring": "Hosted run 40199530099, exact command and FFmpeg version in video-authoring.json; VP9 black video plus unchanged Opus speech"
+    },
+    "es-audio": {
+      "sha256": "df23f58c95b54215e136bd6b1865a9aba360010a02822ec56e8854bc8074e2bb",
+      "bytes": 743456,
+      "duration_ms": 7744,
+      "decoder": "transcribe-wav",
+      "language": "es",
+      "reference": "de todo hay en la viña del Señor",
+      "min_score": 0.625,
+      "license_evidence": "https://commons.wikimedia.org/wiki/File:LL-Q1321_(spa)-Rodrigo5260-de_todo_hay_en_la_vi%C3%B1a_del_Se%C3%B1or.wav",
+      "source_sha256": "bf2168307813beb1037c3ee4e9efceee62bfbd0e4920adcc09f74d03e4b5118b",
+      "authoring": "python3 examples/transcribe/fixtures/generate_spanish.py; three unchanged PCM copies with 500 ms silence between"
+    }
+  }
+}

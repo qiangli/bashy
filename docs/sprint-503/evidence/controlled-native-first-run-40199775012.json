@@ -1,0 +1,52 @@
+{
+  "schema": "s503-controlled-native-first-run-v1",
+  "github_run_id": 40199775012,
+  "github_run_url": "https://github.com/qiangli/bashy/actions/runs/40199775012",
+  "workflow_commit": "05df2f719b0cd58917aa9b7665f1b04b5bd332d2",
+  "result": "fail",
+  "scope": "first hosted run; online gate stopped before the six-target offline and negative cases",
+  "targets": {
+    "macos-15-intel": {
+      "job_id": 121188281317,
+      "result": "fail",
+      "failure_class": "reported_output_path_home_abbreviation",
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40199775012/artifacts/12601458142",
+      "first_transcript_sha256": "2032c6e6624548a08f692bac27f45d3169472046229df8c626a47de5ed716b7e"
+    },
+    "macos-15": {
+      "job_id": 121188281479,
+      "result": "fail",
+      "failure_class": "reported_output_path_home_abbreviation",
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40199775012/artifacts/12601148109",
+      "first_transcript_sha256": "2032c6e6624548a08f692bac27f45d3169472046229df8c626a47de5ed716b7e"
+    },
+    "ubuntu-24.04": {
+      "job_id": 121188281474,
+      "result": "fail",
+      "failure_class": "first_online_infer_provider_failed_without_stage_diagnostic",
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40199775012/artifacts/12601216697",
+      "first_transcript_sha256": null
+    },
+    "ubuntu-24.04-arm": {
+      "job_id": 121188281503,
+      "result": "fail",
+      "failure_class": "reported_output_path_home_abbreviation",
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40199775012/artifacts/12601251630",
+      "first_transcript_sha256": "2032c6e6624548a08f692bac27f45d3169472046229df8c626a47de5ed716b7e"
+    },
+    "windows-2025": {
+      "job_id": 121188281490,
+      "result": "fail",
+      "failure_class": "fixture_provenance_report_hash_mismatch",
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40199775012/artifacts/12600963317",
+      "first_transcript_sha256": null
+    },
+    "windows-11-arm": {
+      "job_id": 121188281455,
+      "result": "fail",
+      "failure_class": "fixture_provenance_report_hash_mismatch",
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40199775012/artifacts/12601457868",
+      "first_transcript_sha256": null
+    }
+  }
+}

@@ -1,0 +1,72 @@
+name: S503 author CC0 controlled speech video
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [s503-controlled-native-gate]
+    paths:
+      - .github/workflows/s503-author-controlled-video.yml
+
+permissions:
+  contents: read
+
+jobs:
+  author-video:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Author finite video from pinned CC0 speech and generated color
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          source = Path('examples/transcribe/webm-opus/testdata/speech-long.webm')
+          expected = 'ad06a00c9331152d8a1e16277b086f3639a30335a5ad9becfd921891c4165090'
+          if hashlib.sha256(source.read_bytes()).hexdigest() != expected:
+              raise SystemExit('CC0 Wikispeech audio source changed')
+          PY
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg
+          command -v ffmpeg
+          command -v ffprobe
+          ffmpeg -hide_banner -loglevel error -nostdin -y \
+            -f lavfi -i color=c=black:s=32x32:r=1 \
+            -i examples/transcribe/webm-opus/testdata/speech-long.webm \
+            -map 0:v:0 -map 1:a:0 -c:v libvpx-vp9 -b:v 25k -c:a copy \
+            -t 10.66 -f webm evidence/speech-video.webm
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          import subprocess
+          source = Path('evidence/speech-video.webm')
+          streams = json.loads(subprocess.check_output(['ffprobe', '-v', 'error',
+              '-show_streams', '-show_format', '-of', 'json', str(source)]))
+          codecs = {x['codec_type']: x['codec_name'] for x in streams['streams']}
+          if codecs != {'video': 'vp9', 'audio': 'opus'}:
+              raise SystemExit('authored fixture lacks valid VP9 video and Opus speech')
+          record = {'schema': 's503-controlled-video-authoring-v1',
+                    'audio_source_sha256': 'ad06a00c9331152d8a1e16277b086f3639a30335a5ad9becfd921891c4165090',
+                    'fixture_sha256': hashlib.sha256(source.read_bytes()).hexdigest(),
+                    'bytes': source.stat().st_size, 'duration_seconds': streams['format']['duration'],
+                    'codecs': codecs, 'ffmpeg': subprocess.check_output(['ffmpeg', '-version'],
+                        text=True).splitlines()[0],
+                    'ffmpeg_ubuntu_package_version': subprocess.check_output(
+                        ['dpkg-query', '-W', '-f=${Version}', 'ffmpeg'], text=True).strip(),
+                    'transformation_command': 'ffmpeg -hide_banner -loglevel error -nostdin -y -f lavfi -i color=c=black:s=32x32:r=1 -i examples/transcribe/webm-opus/testdata/speech-long.webm -map 0:v:0 -map 1:a:0 -c:v libvpx-vp9 -b:v 25k -c:a copy -t 10.66 -f webm evidence/speech-video.webm',
+                    'authoring_tool_boundary': 'FFmpeg is used only on hosted CI to author the fixture; it is not a runtime decoder or shipped product dependency.',
+                    'candidate_commit':
+                    subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()}
+          Path('evidence/video-authoring.json').write_text(json.dumps(record, indent=2) + '\n')
+          print(json.dumps(record, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: s503-controlled-video
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 14

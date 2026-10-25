@@ -1,0 +1,219 @@
+name: S503 controlled six-target native transcription
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [s503-controlled-native-gate, s503-contract-integration]
+    paths:
+      - .gitattributes
+      - .github/workflows/s503-controlled-native.yml
+      - .github/scripts/s503-controlled-native-ci.py
+      - examples/transcribe/verify-controlled-native.py
+      - examples/transcribe/verify-youtube-pipeline.py
+      - examples/transcribe/pipeline.bsh
+      - examples/transcribe/fixtures/controlled-native.json
+      - examples/transcribe/fixtures/speech-video.webm
+
+permissions:
+  contents: read
+  actions: read
+  attestations: read
+
+jobs:
+  controlled-native:
+    name: ${{ matrix.label }} controlled media online and OS-offline
+    runs-on: ${{ matrix.label }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {label: ubuntu-24.04, os: Linux, arch: amd64, python_arch: x64, python_version: '3.12.15', whisper_sha256: 1b3a836f005dc98e315baf9009ed7268472b66afcbbbb57fd655764971bc8977}
+          - {label: ubuntu-24.04-arm, os: Linux, arch: arm64, python_arch: arm64, python_version: '3.12.15', whisper_sha256: 318f972f6ca306d5ab47f2ab267d758d21f72a4e4f33dd56cc8a59ef8014fa87}
+          - {label: macos-15-intel, os: macOS, arch: amd64, python_arch: x64, python_version: '3.12.10', whisper_sha256: 0c902c37efcf1e03815163cf25000b169cd31bdcf8d348a4612d8d77abf047f5}
+          - {label: macos-15, os: macOS, arch: arm64, python_arch: arm64, python_version: '3.12.10', whisper_sha256: 20675eeaca1fed471ab7adc5e23c0dc48159c19e81111e38124da47b7b1af0b0}
+          - {label: windows-2025, os: Windows, arch: amd64, python_arch: x64, python_version: '3.12.10', whisper_sha256: f842ae94d0cd86350ba3c22563316b1a9f8a3dfc17745d240f5a791546c04551}
+          - {label: windows-11-arm, os: Windows, arch: arm64, python_arch: arm64, python_version: '3.12.10', whisper_sha256: fef0a20eb2189cad86e40b4ef21d79f319da910b13a7d6ca361cbb096f6ddf16}
+    env:
+      TARGET_LABEL: ${{ matrix.label }}
+      TARGET_OS: ${{ matrix.os }}
+      TARGET_ARCH: ${{ matrix.arch }}
+      EXPECTED_WHISPER_SHA256: ${{ matrix.whisper_sha256 }}
+      CANDIDATE_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_version }}
+          architecture: ${{ matrix.python_arch }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.2'
+      - name: Verify native OS, architecture, Python and external VC runtime
+        shell: bash
+        run: python .github/scripts/s503-controlled-native-ci.py identity
+
+      - name: Build candidate Bashy and pure-Go stage adapters
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/s503-controlled-native/bin"
+          suffix=''
+          if [[ "$TARGET_OS" == Windows ]]; then suffix=.exe; fi
+          ./scripts/go-product.sh build -trimpath -o "$RUNNER_TEMP/s503-controlled-native/bin/bashy$suffix" ./cmd/bashy
+          go build -trimpath -o "$RUNNER_TEMP/s503-controlled-native/bin/transcribe-adapter$suffix" ./examples/transcribe/adapters
+          (cd examples/transcribe/webm-opus && GOWORK=off CGO_ENABLED=0 go build -trimpath \
+            -o "$RUNNER_TEMP/s503-controlled-native/bin/transcribe-webm-opus$suffix" .)
+          "$RUNNER_TEMP/s503-controlled-native/bin/bashy$suffix" --version
+
+      - name: Exercise Windows native pipeline temp paths and cleanup
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          BASHY_BIN: ${{ runner.temp }}/s503-controlled-native/bin/bashy.exe
+          TRANSCRIBE_ADAPTER: ${{ runner.temp }}/s503-controlled-native/bin/transcribe-adapter.exe
+        run: python examples/transcribe/adapters/test_registration.py -k test_pipeline_with_fixture_inference_and_failure_cleanup
+
+      - name: Download pinned native whisper.cpp CPU build
+        uses: actions/download-artifact@v4
+        with:
+          name: s503-native-build-${{ matrix.label }}
+          repository: qiangli/bashy
+          run-id: 40201076574
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/s503-whisper-admitted
+      - name: Verify signed whisper provenance and exact model and fixture bytes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python .github/scripts/s503-controlled-native-ci.py prepare
+          binary="$RUNNER_TEMP/s503-whisper-admitted/whisper-cli"
+          if [[ "$TARGET_OS" == Windows ]]; then binary="$binary.exe"; fi
+          gh attestation verify "$binary" \
+            --repo qiangli/bashy \
+            --signer-workflow qiangli/bashy/.github/workflows/s503-native-build.yml \
+            --source-digest 7abe1fd1ae59c78c21bd04bed469df092c0da1f7 \
+            --source-ref refs/heads/s503-contract-integration \
+            --deny-self-hosted-runners --format json > evidence/whisper-provenance.json
+
+      - name: Run real local audio/video, en/es automatic inference and script/skill gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="$RUNNER_TEMP/s503-controlled-native/manifest-online.json"
+          python examples/transcribe/verify-controlled-native.py "$manifest" --validate-only
+          python examples/transcribe/verify-controlled-native.py "$manifest" \
+            --output-dir "$RUNNER_TEMP/s503-controlled-native/pipeline-online"
+
+      - name: Establish external socket connectivity before network denial
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, socket
+          from pathlib import Path
+          with socket.create_connection(('1.1.1.1', 443), timeout=8):
+              pass
+          Path('evidence/network-baseline.json').write_text(json.dumps({
+              'schema': 's503-network-baseline-v1', 'target': '1.1.1.1:443',
+              'connected': True}, indent=2) + '\n')
+          PY
+      - name: Admit exact native OS offline enforcer
+        shell: bash
+        run: python .github/scripts/s503-controlled-native-ci.py enforcer
+
+      - name: Replay local media in a Linux network namespace
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          enforcer=$(python -c 'import json; print(json.load(open("evidence/offline-enforcer.json"))["path"])')
+          interpreter=$(python -c 'import json; print(json.load(open("evidence/manifest-online.json"))["python"])')
+          sudo "$enforcer" --net -- "$interpreter" \
+            .github/scripts/s503-controlled-native-ci.py offline
+
+      - name: Replay local media under macOS sandbox network denial
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          enforcer=$(python -c 'import json; print(json.load(open("evidence/offline-enforcer.json"))["path"])')
+          interpreter=$(python -c 'import json; print(json.load(open("evidence/manifest-online.json"))["python"])')
+          "$enforcer" -p '(version 1) (allow default) (deny network*)' \
+            "$interpreter" .github/scripts/s503-controlled-native-ci.py offline
+
+      - name: Replay local media with temporary Windows program firewall rules
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $m = Get-Content evidence/manifest-online.json -Raw | ConvertFrom-Json
+          $programs = @($m.python, $m.bashy, $m.helper, $m.webm_decoder,
+                        $m.whisper, (Get-Command bash.exe).Source,
+                        (Get-Command pwsh.exe).Source, (Get-Command curl.exe).Source)
+          $programs = @($programs | Sort-Object -Unique)
+          $rules = @()
+          $expected = @{}
+          try {
+            foreach ($program in $programs) {
+              if (-not (Test-Path -LiteralPath $program -PathType Leaf)) {
+                throw "Cannot firewall missing executable: $program"
+              }
+              $name = 'S503-controlled-offline-' + [guid]::NewGuid().ToString('N')
+              New-NetFirewallRule -Name $name -DisplayName $name -Enabled True `
+                -Direction Outbound -Action Block -Profile Any -Program $program | Out-Null
+              $rules += $name
+              $expected[$name] = $program
+            }
+            $active = @()
+            foreach ($name in $rules) {
+              $rule = Get-NetFirewallRule -Name $name
+              $filter = Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $rule
+              if ($rule.Enabled -ne 'True' -or $rule.Direction -ne 'Outbound' -or
+                  $rule.Action -ne 'Block' -or $filter.Program -ne $expected[$name]) {
+                throw "Firewall rule inactive: $name"
+              }
+              $active += [pscustomobject]@{ name=$name; program=$filter.Program;
+                                            action=$rule.Action.ToString();
+                                            enabled=$rule.Enabled.ToString() }
+            }
+            $active | ConvertTo-Json -Depth 4 | Set-Content evidence/windows-firewall-active.json
+            & $m.python .github/scripts/s503-controlled-native-ci.py offline
+            if ($LASTEXITCODE -ne 0) { throw "Offline gate failed: $LASTEXITCODE" }
+            foreach ($name in $rules) {
+              $rule = Get-NetFirewallRule -Name $name
+              if ($rule.Enabled -ne 'True') { throw "Firewall rule disabled: $name" }
+            }
+          } finally {
+            foreach ($name in $rules) {
+              Remove-NetFirewallRule -Name $name -ErrorAction Stop
+            }
+          }
+
+      - name: Admit native result only after both local runs and OS denial
+        shell: bash
+        run: python .github/scripts/s503-controlled-native-ci.py check
+      - name: Restore runner access to Linux network-namespace evidence
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="$(id -u):$(id -g)"
+          for owned in evidence "$RUNNER_TEMP/s503-controlled-native/pipeline-offline"; do
+            if [[ -e "$owned" ]]; then
+              sudo chown -R -- "$owner" "$owned"
+            fi
+          done
+      - name: Upload raw identity, transcript, receipt and cleanup evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s503-controlled-native-${{ matrix.label }}
+          path: |
+            evidence/
+            ${{ runner.temp }}/s503-controlled-native/pipeline-online/
+            ${{ runner.temp }}/s503-controlled-native/pipeline-offline/
+          if-no-files-found: warn
+          retention-days: 14

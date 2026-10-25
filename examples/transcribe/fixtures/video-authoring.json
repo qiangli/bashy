@@ -1,0 +1,16 @@
+{
+  "schema": "s503-controlled-video-authoring-v1",
+  "audio_source_sha256": "ad06a00c9331152d8a1e16277b086f3639a30335a5ad9becfd921891c4165090",
+  "fixture_sha256": "36c7fb05a66ec3f29d498fb0c97b8b72de0e9243092b51d2f34e02751bcc93de",
+  "bytes": 49475,
+  "duration_seconds": "11.000000",
+  "codecs": {
+    "video": "vp9",
+    "audio": "opus"
+  },
+  "ffmpeg": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers",
+  "ffmpeg_ubuntu_package_version": "7:6.1.1-3ubuntu5",
+  "transformation_command": "ffmpeg -hide_banner -loglevel error -nostdin -y -f lavfi -i color=c=black:s=32x32:r=1 -i examples/transcribe/webm-opus/testdata/speech-long.webm -map 0:v:0 -map 1:a:0 -c:v libvpx-vp9 -b:v 25k -c:a copy -t 10.66 -f webm evidence/speech-video.webm",
+  "authoring_tool_boundary": "FFmpeg is used only on hosted CI to author the fixture; it is not a runtime decoder or shipped product dependency.",
+  "candidate_commit": "10d88eb38c89beeb0d4324425a08b084c401c82d"
+}

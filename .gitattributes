@@ -4,5 +4,14 @@
 # makes every line differ while printing identically.
 *.bpp text eol=lf
 *.expected text eol=lf
+# The hosted transcription gate compares these checkout bytes to the commit.
+# Windows autocrlf must not rewrite the authored report or executable sources.
+examples/transcribe/*.py text eol=lf
+examples/transcribe/*.bsh text eol=lf
+examples/transcribe/fixtures/*.json text eol=lf
+examples/transcribe/fixtures/*.wav binary
+examples/transcribe/fixtures/*.webm binary
+skills/bashy/commands/transcribe.md text eol=lf
+skills/bashy/commands/transcribe.dhnt text eol=lf
 # Unified patches contain context lines prefixed by one space before tabs.
 docs/patches/*.diff -whitespace

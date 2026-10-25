@@ -10,7 +10,7 @@ import difflib
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import platform
 import re
 import shutil
@@ -208,6 +208,28 @@ def run(argv, env, timeout=60, check=True):
     return proc
 
 
+def reported_output_matches(reported, expected, home=None):
+    """Accept Bashy's leading $HOME display abbreviation only for this path."""
+    actual = reported.strip()
+    if actual == str(expected):
+        return True
+    # MSYS stages report forward-slash drive paths; native Windows Python
+    # renders the same absolute path with backslashes.
+    if re.fullmatch(r"[A-Za-z]:[/\\][^\r\n$%]+", actual):
+        parts = re.split(r"[/\\]", actual[3:])
+        if all(part not in ("", ".", "..") for part in parts):
+            target = PureWindowsPath(str(expected))
+            if target.is_absolute() and PureWindowsPath(actual) == target:
+                return True
+    if not actual.startswith('$HOME/'):
+        return False
+    suffix = actual[len('$HOME/'):]
+    if not suffix or any(part in ('', '.', '..') for part in suffix.split('/')):
+        return False
+    base = Path(home) if home is not None else Path.home()
+    return base.is_absolute() and base.joinpath(*suffix.split('/')) == expected
+
+
 def add_record(bashy, env, name, executable, role, effects, accepts=None):
     args = [bashy, "commands", "add", name]
     for index, value in enumerate(executable):
@@ -267,7 +289,8 @@ def invoke(m, env, source, media, label, orientation, fmt, outdir, skill_record)
                 "skill receipt identity/validity mismatch")
         require(receipt.get("capability") == skill_record["capability"],
                 "skill receipt capability mismatch")
-    require(result.read_text().strip() == str(output), "pipeline returned wrong output path")
+    require(reported_output_matches(result.read_text(), output),
+            "pipeline returned wrong output path")
     require(output.is_file() and output.stat().st_size > 0, "published transcript missing")
     return output
 

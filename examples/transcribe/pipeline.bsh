@@ -47,6 +47,16 @@ input=$1
 [[ -n $input && -n $model && -n $language && $device == cpu ]] || usage
 case "$format" in txt|srt|vtt) ;; *) usage ;; esac
 
+# Git Bash tools return /c/... for temporary directories on Windows. Native
+# stage adapters use Windows filesystem paths, so convert at this boundary.
+absolute_native_path() {
+    if [[ ${OS:-} == Windows_NT ]]; then
+        cygpath -a -m "$1"
+    else
+        realpath -m -s -- "$1"
+    fi
+}
+
 # Export beside the requested path and publish only after validation.
 if [[ -z $output ]]; then
     case "$input" in
@@ -54,7 +64,7 @@ if [[ -z $output ]]; then
         *) name=${input##*/}; name=${name%.*}; output=${name:-transcript}.$format ;;
     esac
 fi
-final=$(realpath -m -s -- "$output") || exit 2
+final=$(absolute_native_path "$output") || exit 2
 parent=$(dirname -- "$final") || exit 2
 [[ -d $parent ]] || { echo "transcribe-pipeline: output directory does not exist: $parent" >&2; exit 2; }
 
@@ -82,12 +92,20 @@ select_stage() {
 }
 
 stage_run() {
-    local stage=$1 selected=$2 request=$3 result=$4 path
+    local stage=$1 selected=$2 request=$3 result=$4 path stderr_file
     export TRANSCRIBE_JSON_STAGE="$stage"
-    if ! bashy transcribe stage "$stage" --provider "$selected" "$request" > "$result"; then
+    stderr_file="$work/$stage-stderr.txt"
+    if ! bashy transcribe stage "$stage" --provider "$selected" "$request" > "$result" 2> "$stderr_file"; then
+        if [[ -s $result ]]; then
+            jq -r 'if .error then (.error.code // "stage_error") + ": " + (.error.message // "") else empty end' "$result" >&2 || true
+        fi
+        if [[ -s $stderr_file ]]; then
+            tail -c 2048 "$stderr_file" >&2 || true
+        fi
         echo "transcribe-pipeline: $stage provider $selected failed" >&2
         return 1
     fi
+    if [[ -s $stderr_file ]]; then cat "$stderr_file" >&2; fi
     if ! jq -e '
         .version == "bashy-transcribe-stage-v1" and
         .stage == env.TRANSCRIBE_JSON_STAGE and .error == null and
@@ -128,8 +146,9 @@ agentic function transcribe_pipeline() {
     published=0
     work=$(mktemp -d) || return 1
     trap cleanup EXIT
-    work=$(realpath -m -s -- "$work") || return 1
+    work=$(absolute_native_path "$work") || return 1
     outdir=$(mktemp -d "$parent/.transcribe.XXXXXXXX") || return 1
+    outdir=$(absolute_native_path "$outdir") || return 1
     trap 'exit 130' INT TERM HUP
     export TRANSCRIBE_JSON_WORK_DIR="$work"
     export TRANSCRIBE_JSON_INPUT="$input" TRANSCRIBE_JSON_MODEL="$model"

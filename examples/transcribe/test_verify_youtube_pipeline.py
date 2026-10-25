@@ -3,7 +3,7 @@
 
 import importlib.util
 import json
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import tempfile
 import unittest
 from unittest import mock
@@ -16,6 +16,25 @@ spec.loader.exec_module(gate)
 
 
 class GateValidationTest(unittest.TestCase):
+    def test_reported_output_home_abbreviation_is_exact_and_bounded(self):
+        expected = Path('/home/runner/work/_temp/transcript.txt')
+        self.assertTrue(gate.reported_output_matches(str(expected) + '\n', expected,
+                                                     '/home/runner'))
+        self.assertTrue(gate.reported_output_matches('$HOME/work/_temp/transcript.txt\n',
+                                                     expected, '/home/runner'))
+        for wrong in ('$HOME/work/_temp/other.txt', '$HOME/../runner/work/_temp/transcript.txt',
+                      '$HOME/work/./_temp/transcript.txt', '${HOME}/work/_temp/transcript.txt',
+                      '$OTHER/work/_temp/transcript.txt', '$HOME/work/_temp/transcript.txt\nother'):
+            self.assertFalse(gate.reported_output_matches(wrong, expected, '/home/runner'))
+
+    def test_reported_output_windows_native_slashes_are_exact_and_bounded(self):
+        expected = PureWindowsPath(r'D:\a path\transcript.txt')
+        self.assertTrue(gate.reported_output_matches('D:/a path/transcript.txt\n', expected))
+        for wrong in ('D:/a path/other.txt', 'D:/a path/../transcript.txt',
+                      'D:/a path/./transcript.txt', 'D://a path/transcript.txt',
+                      'D:/a path/$HOME/transcript.txt', 'D:/a path/transcript.txt\nother'):
+            self.assertFalse(gate.reported_output_matches(wrong, expected))
+
     def test_reference_tolerance_requires_meaningful_speech(self):
         reference = "the model runs four real tests on a macbook"
         self.assertEqual(gate.reference_score("The model runs four real tests on a MacBook.", reference), 1)

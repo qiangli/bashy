@@ -1,7 +1,7 @@
 {
   "schema": "s503-native-transcription-admission-v2",
-  "whisper_build_run_id": 40195543786,
-  "whisper_build_commit": "c59c3aa134588e21e1039750515fc00159cc2cb6",
+  "whisper_build_run_id": 40201076574,
+  "whisper_build_commit": "7abe1fd1ae59c78c21bd04bed469df092c0da1f7",
   "deno": {
     "ubuntu-24.04": {
       "archive_url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-unknown-linux-gnu.zip",
@@ -36,22 +36,22 @@
   },
   "whisper": {
     "ubuntu-24.04": {
-      "executable_sha256": "e4be4bfdd6d9a97dc059a515468e4e9190359960dedff2971643b9e454c08e1c"
+      "executable_sha256": "1b3a836f005dc98e315baf9009ed7268472b66afcbbbb57fd655764971bc8977"
     },
     "ubuntu-24.04-arm": {
-      "executable_sha256": "9f16af5e93ebbe3621be2e60338109d9f4d41f2a8fe7a39d30c390680da450b0"
+      "executable_sha256": "318f972f6ca306d5ab47f2ab267d758d21f72a4e4f33dd56cc8a59ef8014fa87"
     },
     "macos-15-intel": {
-      "executable_sha256": "d72f0bcdf516912f6e915005ec12cfc640edb7079ad9611e58d9526eac082a90"
+      "executable_sha256": "0c902c37efcf1e03815163cf25000b169cd31bdcf8d348a4612d8d77abf047f5"
     },
     "macos-15": {
-      "executable_sha256": "1af8eb29d5478143212de7d9aef1eee174c0f904ee5aece8b80c24b5db3974de"
+      "executable_sha256": "20675eeaca1fed471ab7adc5e23c0dc48159c19e81111e38124da47b7b1af0b0"
     },
     "windows-2025": {
-      "executable_sha256": "0f2505d8bcd7a2c3a299f3061ce6bab1b180a6fc493ab17c1920e395672e4106"
+      "executable_sha256": "f842ae94d0cd86350ba3c22563316b1a9f8a3dfc17745d240f5a791546c04551"
     },
     "windows-11-arm": {
-      "executable_sha256": "5fa6aa37bf80e12d713d14228ff73a04b05ee730da228d691a513e63fdd926bf"
+      "executable_sha256": "fef0a20eb2189cad86e40b4ef21d79f319da910b13a7d6ca361cbb096f6ddf16"
     }
   },
   "yt_dlp_sha256": "b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14",
