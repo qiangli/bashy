@@ -1,0 +1,147 @@
+{
+  "candidate_commit": "1016ee89b7bfdde657d51c4b3724bc9817a59b9b",
+  "open_gates": [
+    "Host-provided GPL GCC runtime exception policy and target-host ABI compatibility remain unreviewed.",
+    "GCC direct startup objects crtbeginS.o and crtendS.o still require source/license mapping.",
+    "This experimental binary has not undergone the full six-target transcription or operator video gates."
+  ],
+  "prior_failed_run": {
+    "arm64_reason": "Nine outlined-atomic helpers still linked from static libgcc.a; corrected with -mno-outline-atomics for both C and C++.",
+    "run_id": 40214278199
+  },
+  "product_admitted": false,
+  "run_conclusion": "success",
+  "run_id": 40214442392,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40214442392",
+  "schema": "s503-linux-shared-gcc-review-v1",
+  "signed_provenance": "gh attestation verify passed for both binaries and matched both SHA-256 values",
+  "targets": [
+    {
+      "binary_sha256": "aa5226930f182cc7baee73b7a9cb6a072f96270b793ead4a6b01d3bc8078a927",
+      "compile_commands_sha256": "80396d3c9cdf825756ebbd94f4448e422f126e6fba7f5a54b9b57e8de268eab5",
+      "dynamic_needed": [
+        "libc.so.6",
+        "libgcc_s.so.1",
+        "libm.so.6",
+        "libstdc++.so.6"
+      ],
+      "elf_dynamic_sha256": "d3775c3971c4197c70cd329cb1021f8deddbc422d98f317858ecfa02f8a8ca27",
+      "elf_versions_sha256": "2ecee1f8fe97854415b3072430cce50951431d58d078853d573dafb76489b9a5",
+      "gcc_direct_objects": [
+        "/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/crti.o",
+        "/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/crtn.o",
+        "/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/Scrt1.o",
+        "/usr/lib/gcc/x86_64-linux-gnu/13/crtbeginS.o",
+        "/usr/lib/gcc/x86_64-linux-gnu/13/crtendS.o"
+      ],
+      "link_inventory_sha256": "5ca3b80f3af5f91f7885f3a0b5a665c241b409085381490d5526c6093426104b",
+      "map_sha256": "275b6c59457269d329245fa6e7d5b8fc427b394643ec368198dab925d4af8419",
+      "probe_report_sha256": "679b70ff6e6ca9279a0956c0be1e7bfc712401e14e05570e7df923c9d4ee8b5b",
+      "product_admitted": false,
+      "runner_label": "ubuntu-24.04",
+      "shared_gcc_archive_member_count": 0,
+      "static_gcc_archive_member_count": 100,
+      "target": "linux/amd64",
+      "version_requirements": {
+        "CXXABI": [
+          "CXXABI_1.3",
+          "CXXABI_1.3.8",
+          "CXXABI_1.3.9"
+        ],
+        "GCC": [
+          "GCC_3.0"
+        ],
+        "GLIBC": [
+          "GLIBC_2.14",
+          "GLIBC_2.17",
+          "GLIBC_2.2.5",
+          "GLIBC_2.27",
+          "GLIBC_2.29",
+          "GLIBC_2.3.2",
+          "GLIBC_2.3.4",
+          "GLIBC_2.32",
+          "GLIBC_2.33",
+          "GLIBC_2.34",
+          "GLIBC_2.38",
+          "GLIBC_2.4",
+          "GLIBC_2.7"
+        ],
+        "GLIBCXX": [
+          "GLIBCXX_3.4",
+          "GLIBCXX_3.4.11",
+          "GLIBCXX_3.4.14",
+          "GLIBCXX_3.4.15",
+          "GLIBCXX_3.4.17",
+          "GLIBCXX_3.4.18",
+          "GLIBCXX_3.4.20",
+          "GLIBCXX_3.4.21",
+          "GLIBCXX_3.4.22",
+          "GLIBCXX_3.4.26",
+          "GLIBCXX_3.4.29",
+          "GLIBCXX_3.4.9"
+        ]
+      }
+    },
+    {
+      "binary_sha256": "95e0b4bb7716af747770959e0cf76eb97f2ed642505aa0f291b0458d7b987b0b",
+      "compile_commands_sha256": "7e869ab52dc752d691c0b36ae8d9ce1f4ff2538f3959e67ac6bc21b360ab2ffc",
+      "dynamic_needed": [
+        "ld-linux-aarch64.so.1",
+        "libc.so.6",
+        "libgcc_s.so.1",
+        "libm.so.6",
+        "libstdc++.so.6"
+      ],
+      "elf_dynamic_sha256": "53d73c194dbed475819a923b4ffceda9e813e35a2894a60082fe9cc6b8d6ab9d",
+      "elf_versions_sha256": "d6ed8ee8d3c3fb5bc8c07d7be88380bc0ae375c249aa7fde3d6806f2ab21bc82",
+      "gcc_direct_objects": [
+        "/usr/lib/gcc/aarch64-linux-gnu/13/../../../aarch64-linux-gnu/crti.o",
+        "/usr/lib/gcc/aarch64-linux-gnu/13/../../../aarch64-linux-gnu/crtn.o",
+        "/usr/lib/gcc/aarch64-linux-gnu/13/../../../aarch64-linux-gnu/Scrt1.o",
+        "/usr/lib/gcc/aarch64-linux-gnu/13/crtbeginS.o",
+        "/usr/lib/gcc/aarch64-linux-gnu/13/crtendS.o"
+      ],
+      "link_inventory_sha256": "f07c93c19262af592cd6996deb583486aa12c081b1daf6901663d2bc3934e27d",
+      "map_sha256": "e3cac236082e2ad8ef58537015a0705483a6c52f6b5374f557cbf236cb3b8942",
+      "probe_report_sha256": "e7d99f15079811d1727f5062928f63077576f7b8f6f3d350bc95888bbfa990c6",
+      "product_admitted": false,
+      "runner_label": "ubuntu-24.04-arm",
+      "shared_gcc_archive_member_count": 0,
+      "static_gcc_archive_member_count": 111,
+      "target": "linux/arm64",
+      "version_requirements": {
+        "CXXABI": [
+          "CXXABI_1.3",
+          "CXXABI_1.3.8",
+          "CXXABI_1.3.9"
+        ],
+        "GCC": [
+          "GCC_3.0"
+        ],
+        "GLIBC": [
+          "GLIBC_2.17",
+          "GLIBC_2.27",
+          "GLIBC_2.29",
+          "GLIBC_2.32",
+          "GLIBC_2.33",
+          "GLIBC_2.34",
+          "GLIBC_2.38"
+        ],
+        "GLIBCXX": [
+          "GLIBCXX_3.4",
+          "GLIBCXX_3.4.11",
+          "GLIBCXX_3.4.14",
+          "GLIBCXX_3.4.15",
+          "GLIBCXX_3.4.17",
+          "GLIBCXX_3.4.18",
+          "GLIBCXX_3.4.20",
+          "GLIBCXX_3.4.21",
+          "GLIBCXX_3.4.22",
+          "GLIBCXX_3.4.26",
+          "GLIBCXX_3.4.29",
+          "GLIBCXX_3.4.9"
+        ]
+      }
+    }
+  ]
+}
