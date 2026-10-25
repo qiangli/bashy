@@ -95,6 +95,14 @@ The separate `operator-python-admission.json` currently blocks `--install` and
 installer and installed-interpreter pins are recorded. The CI executable hash
 does not establish the post-install Python.org interpreter hash. No mode uses
 an `actions/setup-python` tool-cache archive as a product installer.
+On Windows, an admitted `--verify-existing` would first check the installed
+`python.exe` hash, native System32 VC files and app-local `VCRUNTIME140.dll`
+hash before starting Python, then run a hash-pinned isolated
+probe under that selected interpreter. The probe requires the actual loaded
+`MSVCP140.dll` from System32 and `VCRUNTIME140.dll` from the Python install
+directory to match the exact amd64 or arm64 hashes in
+`windows-external-runtime.json`. A System32 prerequisite check alone does not
+establish the loaded module. All six targets remain unadmitted.
 
 `source_youtube.py` requires `BASHY_TRANSCRIBE_PYTHON` to name the Python
 interpreter running that adapter. Before it invokes the reviewed yt-dlp zipapp,

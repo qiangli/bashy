@@ -104,7 +104,7 @@ case "$target" in
         installer_sha=$(jq -er ".targets[\"$target\"].archive_sha256" "$policy") || fail 'macOS package pin missing'
         default_python=/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12 ;;
     windows/*)
-        [ "$(hash_file "$windows_policy")" = 22fdf176901b22b7cbc32be79f57feffcd566767dddd8c2523d58eee493771e0 ] ||
+        [ "$(hash_file "$windows_policy")" = 4cb64c7c2376947ed2a30ca3e9dd8ce7d0b0cb50270a78144273102ac97f484f ] ||
             fail 'Windows VC/runtime policy bytes changed'
         if [ "$target" = windows/amd64 ]; then arch_key=AMD64; else arch_key=ARM64; fi
         jq -e '.schema == "s503-windows-external-runtime-v1" and
@@ -165,15 +165,36 @@ windows_vc_check() {
     ' || fail 'Windows System32 VC prerequisite rejected before Python execution'
 }
 
+windows_loaded_vc_check() {
+    # This is a probe only. A host is not reported verified until the actual
+    # modules resolved by the selected Python process match their owner paths
+    # and reviewed bytes. The System32 prerequisite alone cannot establish it.
+    local probe=$script_dir/probe_python_loaded_vc.py app_local_vc expected_vc_sha
+    app_local_vc=$(dirname -- "$1")/VCRUNTIME140.dll
+    expected_vc_sha=$(jq -er ".targets.$arch_key.python_loaded[\"VCRUNTIME140.dll\"].sha256" "$windows_policy") ||
+        fail 'reviewed app-local VCRUNTIME140.dll pin is missing'
+    [ "$(jq -er ".targets.$arch_key.python_loaded[\"VCRUNTIME140.dll\"].owner" "$windows_policy")" = 'Python install directory' ] ||
+        fail 'app-local VCRUNTIME140.dll owner is not reviewed'
+    [ ! -L "$app_local_vc" ] || fail 'app-local VCRUNTIME140.dll is a symlink'
+    [ "$(hash_file "$app_local_vc")" = "$expected_vc_sha" ] ||
+        fail 'app-local VCRUNTIME140.dll differs from reviewed SHA-256 before Python execution'
+    [ "$(hash_file "$probe")" = e299944ed3be94a83d957b455d69e58c3ff85896fc0388716bcc97c111663c67 ] ||
+        fail 'Windows loaded VC probe bytes changed'
+    "$1" -I -S "$probe" "$windows_policy" "$arch_key" "$1" ||
+        fail 'Windows loaded VC runtime rejected before host verification'
+}
+
 verify_existing() {
     local selected observed
     selected=$(realpath -- "$1") || fail 'installed interpreter path is absent'
     [ -f "$selected" ] || fail 'installed interpreter is not a file'
     observed=$(hash_file "$selected")
     [ "$observed" = "$installed_python_sha" ] || fail 'installed interpreter differs from reviewed operator-host Python SHA-256'
-    case "$target" in windows/*) windows_vc_check ;; esac
-    [ "$("$selected" -I -S -c 'import sys; print(sys.version.split()[0])')" = "$version" ] ||
-        fail 'installed interpreter version differs from reviewed patch'
+    case "$target" in
+        windows/*) windows_vc_check; windows_loaded_vc_check "$selected" ;;
+        *) [ "$("$selected" -I -S -c 'import sys; print(sys.version.split()[0])')" = "$version" ] ||
+               fail 'installed interpreter version differs from reviewed patch' ;;
+    esac
     printf 'target=%s\npython=%s\npython_sha256=%s\nstatus=operator_host_verified\n' \
         "$target" "$selected" "$observed"
 }

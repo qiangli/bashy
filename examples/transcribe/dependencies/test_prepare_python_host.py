@@ -47,6 +47,20 @@ class PythonHostPolicyTests(unittest.TestCase):
                 self.assertTrue(companion["python_official_installer"]["url"].startswith("https://www.python.org/"))
                 self.assertEqual(set(companion["system32"]), {"MSVCP140.dll", "VCRUNTIME140.dll"})
 
+    def test_windows_preexecution_order_and_policy_pins(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        windows = HERE / "windows-external-runtime.json"
+        probe = HERE / "probe_python_loaded_vc.py"
+        self.assertIn(hashlib.sha256(windows.read_bytes()).hexdigest(), source)
+        self.assertIn(hashlib.sha256(probe.read_bytes()).hexdigest(), source)
+        gate = source.split("windows_loaded_vc_check() {", 1)[1].split("\n}", 1)[0]
+        self.assertLess(gate.index('hash_file "$app_local_vc"'), gate.index('"$1" -I -S "$probe"'))
+        verify = source.split("verify_existing() {", 1)[1].split("\n}", 1)[0]
+        self.assertLess(verify.index('hash_file "$selected"'), verify.index('windows_vc_check'))
+        self.assertLess(verify.index('windows_vc_check'), verify.index('windows_loaded_vc_check "$selected"'))
+        self.assertLess(verify.index('windows_loaded_vc_check "$selected"'),
+                        verify.index('status=operator_host_verified'))
+
 
 @unittest.skipUnless(shutil.which("bashy") and platform.system() == "Darwin", "native macOS Bashy gate")
 class MacHostPreparationTests(unittest.TestCase):
