@@ -1,0 +1,110 @@
+name: S503 Linux Python source candidate validation
+
+on:
+  push:
+    branches: [s503-python-source-native]
+    paths:
+      - .github/workflows/s503-python-source-native.yml
+      - .github/scripts/s503-python-source-evidence.py
+      - examples/transcribe/dependencies/setup_python_source.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: s503-python-source-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  source-build:
+    name: Python.org 3.12.15 ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: ubuntu-24.04, target: linux/amd64}
+          - {runner: ubuntu-24.04-arm, target: linux/arm64}
+    env:
+      TARGET: ${{ matrix.target }}
+      CANDIDATE_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check runner and download fixed Python.org inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          input="$RUNNER_TEMP/s503-python-source-input"
+          mkdir -m 700 "$input"
+          echo "SOURCE_INPUT=$input" >> "$GITHUB_ENV"
+          python3 .github/scripts/s503-python-source-evidence.py preflight --target "$TARGET" \
+            --candidate "$CANDIDATE_COMMIT" > evidence/preflight.json
+          base=https://www.python.org/ftp/python/3.12.15/Python-3.12.15.tar.xz
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            --retry 2 --connect-timeout 20 --max-time 180 --max-filesize 20829824 \
+            --output "$input/Python-3.12.15.tar.xz" "$base"
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            --retry 2 --connect-timeout 20 --max-time 60 --max-filesize 4096 \
+            --output "$input/Python-3.12.15.tar.xz.asc" "$base.asc"
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            --retry 2 --connect-timeout 20 --max-time 60 --max-filesize 65536 \
+            --output "$input/thomas-wouters.gpg" https://github.com/Yhg1s.gpg
+          python3 .github/scripts/s503-python-source-evidence.py inputs \
+            --input-dir "$input" > evidence/inputs.json
+
+      - name: Build and audit source candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=$(mktemp -d "$HOME/s503-python-XXXXXX")
+          prefix="$root/prefix"
+          echo "SOURCE_PREFIX=$prefix" >> "$GITHUB_ENV"
+          script=examples/transcribe/dependencies/setup_python_source.py
+          if ! python3 "$script" \
+              --source-archive "$SOURCE_INPUT/Python-3.12.15.tar.xz" \
+              --signature "$SOURCE_INPUT/Python-3.12.15.tar.xz.asc" \
+              --release-key "$SOURCE_INPUT/thomas-wouters.gpg" \
+              --work-dir "$root/work" --prefix "$prefix" --jobs 2 \
+              > "$RUNNER_TEMP/s503-python-build.log" 2>&1; then
+            tail -n 80 "$RUNNER_TEMP/s503-python-build.log"
+            exit 1
+          fi
+          tail -n 1 "$RUNNER_TEMP/s503-python-build.log" > evidence/setup-result.json
+          cp "$prefix/source-build-receipt.json" evidence/source-build-receipt.json
+
+      - name: Recheck installed bytes with OS network denied
+        shell: bash
+        run: |
+          set -euo pipefail
+          parent_ns=$(readlink /proc/self/ns/net)
+          interpreter=$(command -v python3)
+          unshare_bin=$(command -v unshare)
+          # Redirection deliberately writes evidence as the runner user.
+          # shellcheck disable=SC2024
+          sudo env HOME="$HOME" PARENT_NETNS="$parent_ns" PATH=/usr/bin:/bin \
+            "$unshare_bin" --net -- "$interpreter" \
+            .github/scripts/s503-python-source-evidence.py offline \
+            --prefix "$SOURCE_PREFIX" > evidence/offline.json
+
+      - name: Record hashes, module set and system library license status
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/s503-python-source-evidence.py summarize \
+            --prefix "$SOURCE_PREFIX" --target "$TARGET" \
+            --candidate "$CANDIDATE_COMMIT" \
+            --receipt evidence/source-build-receipt.json \
+            --offline evidence/offline.json > evidence/native-validation.json
+
+      - name: Upload evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s503-python-source-${{ matrix.runner }}
+          path: evidence/*.json
+          if-no-files-found: warn
+          retention-days: 14
