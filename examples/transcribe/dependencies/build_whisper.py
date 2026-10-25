@@ -60,6 +60,14 @@ TARGET_RUNNER_MAP: Dict[Tuple[str, str], str] = {
     v: k for k, v in RUNNER_TARGET_MAP.items()
 }
 
+# whisper.cpp v1.9.5 enables several of these by default when a native
+# (non-cross) build requests GGML_NATIVE=OFF. Pin the x86 baseline explicitly.
+X86_BASELINE_OFF_OPTIONS = (
+    "GGML_SSE42", "GGML_AVX", "GGML_AVX_VNNI", "GGML_AVX2", "GGML_BMI2",
+    "GGML_AVX512", "GGML_AVX512_VBMI", "GGML_AVX512_VNNI", "GGML_AVX512_BF16",
+    "GGML_FMA", "GGML_F16C",
+)
+
 
 def normalize_system() -> str:
     s = platform.system().lower()
@@ -232,6 +240,7 @@ def get_cmake_build_flags(os_name: str, arch_name: str, toolchain: Dict[str, str
         # whisper.cpp v1.9.5 otherwise defaults this to ON for native builds,
         # adding -march=native or probing ARM extensions from the CI host.
         "-DGGML_NATIVE=OFF",
+        "-DGGML_CPU_ALL_VARIANTS=OFF",
         "-DGGML_OPENMP=OFF",
         "-DGGML_CUDA=OFF",
         "-DGGML_VULKAN=OFF",
@@ -239,6 +248,12 @@ def get_cmake_build_flags(os_name: str, arch_name: str, toolchain: Dict[str, str
         "-DGGML_KOMPUTE=OFF",
         "-DGGML_CANN=OFF",
     ]
+
+    if arch_name == "amd64":
+        # FMA/F16C are separate CMake options on non-MSVC compilers. On MSVC
+        # they are implied by AVX2; typed -D values remain auditable even if
+        # upstream does not declare those two separate options there.
+        flags.extend(f"-D{key}:BOOL=OFF" for key in X86_BASELINE_OFF_OPTIONS)
 
     if os_name == "darwin":
         # Keep CPU-only: disable Metal and GPU backends
@@ -344,15 +359,7 @@ def verify_cmake_portable_cpu(cache_file: Path, arch_name: str) -> None:
 
     required_off = ["GGML_NATIVE", "GGML_CPU_ALL_VARIANTS"]
     if arch_name == "amd64":
-        # These are the x86 SIMD options declared in pinned ggml/CMakeLists.txt.
-        # With GGML_NATIVE=OFF they default OFF; check that the configure result
-        # actually kept them off, including through future upstream changes.
-        required_off += [
-            "GGML_SSE42", "GGML_AVX", "GGML_AVX_VNNI", "GGML_AVX2", "GGML_BMI2",
-            "GGML_AVX512", "GGML_AVX512_VBMI", "GGML_AVX512_VNNI", "GGML_AVX512_BF16",
-        ]
-        # MSVC does not declare FMA/F16C separately; it implies both with AVX2.
-        required_off += [key for key in ("GGML_FMA", "GGML_F16C") if key in cache]
+        required_off += X86_BASELINE_OFF_OPTIONS
 
     for key in required_off:
         if cache.get(key) != ("BOOL", "OFF"):

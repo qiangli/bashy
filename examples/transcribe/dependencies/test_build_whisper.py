@@ -112,6 +112,10 @@ class TestWhisperBuildRecipe(unittest.TestCase):
             self.assertIn("-DWHISPER_BUILD_TESTS=OFF", flags, f"Tests must be OFF on {runner}")
             self.assertIn("-DCMAKE_BUILD_TYPE=Release", flags, f"Release mode on {runner}")
             self.assertIn("-DGGML_NATIVE=OFF", flags, f"Host CPU tuning must be OFF on {runner}")
+            self.assertIn("-DGGML_CPU_ALL_VARIANTS=OFF", flags, f"Variant build must be OFF on {runner}")
+            if arch_name == "amd64":
+                for option in build_whisper.X86_BASELINE_OFF_OPTIONS:
+                    self.assertIn(f"-D{option}:BOOL=OFF", flags, f"{option} must be OFF on {runner}")
 
             # Specific platform rules
             if os_name == "darwin":
