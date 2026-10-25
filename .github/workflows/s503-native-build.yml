@@ -155,7 +155,8 @@ jobs:
           assert report['whisper_version'] == '1.9.5'
           assert report['source_archive_sha256'] == 'ff1a9053feb509ff9d7729703355541ae9690073a6b1c40eb692c962e0dc1720'
           assert report['status'] == 'built_and_cached'
-          assert report['cpu_only'] and report['openmp_disabled'] and report['gpl_free']
+          assert report['cpu_only'] and report['portable_cpu'] and report['openmp_disabled'] and report['gpl_free']
+          assert '-DGGML_NATIVE=OFF' in report['build_flags']
           source = Path(report['cached_executable_path'])
           artifact = Path('evidence') / source.name
           shutil.copy2(source, artifact)

@@ -229,6 +229,9 @@ def get_cmake_build_flags(os_name: str, arch_name: str, toolchain: Dict[str, str
         "-DBUILD_SHARED_LIBS=OFF",
         "-DWHISPER_BUILD_EXAMPLES=ON",
         "-DWHISPER_BUILD_TESTS=OFF",
+        # whisper.cpp v1.9.5 otherwise defaults this to ON for native builds,
+        # adding -march=native or probing ARM extensions from the CI host.
+        "-DGGML_NATIVE=OFF",
         "-DGGML_OPENMP=OFF",
         "-DGGML_CUDA=OFF",
         "-DGGML_VULKAN=OFF",
@@ -330,6 +333,32 @@ def verify_cmake_compilers(cache_file: Path, toolchain: Dict[str, str]) -> None:
             raise RuntimeError(f"CMake compiler provenance mismatch for {key}: expected {expected}, got {actual}")
 
 
+def verify_cmake_portable_cpu(cache_file: Path, arch_name: str) -> None:
+    """Reject host-specific CPU options in the resolved upstream CMake cache."""
+    cache = {}
+    for line in cache_file.read_text().splitlines():
+        if ":" in line and "=" in line:
+            key, value = line.split("=", 1)
+            name, option_type = key.split(":", 1)
+            cache[name] = (option_type, value)
+
+    required_off = ["GGML_NATIVE", "GGML_CPU_ALL_VARIANTS"]
+    if arch_name == "amd64":
+        # These are the x86 SIMD options declared in pinned ggml/CMakeLists.txt.
+        # With GGML_NATIVE=OFF they default OFF; check that the configure result
+        # actually kept them off, including through future upstream changes.
+        required_off += [
+            "GGML_SSE42", "GGML_AVX", "GGML_AVX_VNNI", "GGML_AVX2", "GGML_BMI2",
+            "GGML_AVX512", "GGML_AVX512_VBMI", "GGML_AVX512_VNNI", "GGML_AVX512_BF16",
+        ]
+        # MSVC does not declare FMA/F16C separately; it implies both with AVX2.
+        required_off += [key for key in ("GGML_FMA", "GGML_F16C") if key in cache]
+
+    for key in required_off:
+        if cache.get(key) != ("BOOL", "OFF"):
+            raise RuntimeError(f"CMake portable CPU audit failed for {key}: expected BOOL=OFF, got {cache.get(key)}")
+
+
 def build_whisper(
     work_dir: Path,
     cache_dir: Optional[Path] = None,
@@ -407,6 +436,7 @@ def _build_verified_source(
     # Confirm CMake used the compilers we requested rather than an implicit
     # generator default or a compiler inherited from ambient configuration.
     verify_cmake_compilers(build_dir / "CMakeCache.txt", toolchain)
+    verify_cmake_portable_cpu(build_dir / "CMakeCache.txt", arch_name)
 
     cmake_ver_res = subprocess.run(
         [cmake_bin, "--version"], capture_output=True, text=True, check=False
@@ -507,6 +537,7 @@ def _build_verified_source(
         "cached_executable_path": str(target_cache_cli),
         "imported_libraries": imported_libs,
         "cpu_only": True,
+        "portable_cpu": True,
         "openmp_disabled": True,
         "gpl_free": True,
         "status": "built_and_cached",

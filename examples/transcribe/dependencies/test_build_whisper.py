@@ -111,6 +111,7 @@ class TestWhisperBuildRecipe(unittest.TestCase):
             self.assertIn("-DWHISPER_BUILD_EXAMPLES=ON", flags, f"Examples must be ON on {runner}")
             self.assertIn("-DWHISPER_BUILD_TESTS=OFF", flags, f"Tests must be OFF on {runner}")
             self.assertIn("-DCMAKE_BUILD_TYPE=Release", flags, f"Release mode on {runner}")
+            self.assertIn("-DGGML_NATIVE=OFF", flags, f"Host CPU tuning must be OFF on {runner}")
 
             # Specific platform rules
             if os_name == "darwin":
@@ -120,6 +121,40 @@ class TestWhisperBuildRecipe(unittest.TestCase):
                     any("-static-libgcc" in f for f in flags),
                     f"Linux must avoid dynamic GCC/GPL dependencies on {runner}",
                 )
+
+    def test_cmake_cache_rejects_native_cpu_optimizations(self):
+        """The resolved CMake options must keep x86 and ARM binaries portable."""
+        x86_options = (
+            "GGML_SSE42", "GGML_AVX", "GGML_AVX_VNNI", "GGML_AVX2", "GGML_BMI2",
+            "GGML_AVX512", "GGML_AVX512_VBMI", "GGML_AVX512_VNNI", "GGML_AVX512_BF16",
+            "GGML_FMA", "GGML_F16C",
+        )
+        with tempfile.TemporaryDirectory() as td:
+            cache = Path(td) / "CMakeCache.txt"
+            portable = {key: "OFF" for key in ("GGML_NATIVE", "GGML_CPU_ALL_VARIANTS", *x86_options)}
+
+            def write_cache(options):
+                cache.write_text("".join(f"{key}:BOOL={value}\n" for key, value in options.items()))
+
+            write_cache(portable)
+            build_whisper.verify_cmake_portable_cpu(cache, "amd64")
+            build_whisper.verify_cmake_portable_cpu(cache, "arm64")
+
+            for key in ("GGML_NATIVE", "GGML_CPU_ALL_VARIANTS", "GGML_AVX2", "GGML_FMA"):
+                with self.subTest(option=key):
+                    write_cache({**portable, key: "ON"})
+                    with self.assertRaisesRegex(RuntimeError, key):
+                        build_whisper.verify_cmake_portable_cpu(cache, "amd64")
+
+            # Missing cache entries are not evidence that CMake honored them.
+            write_cache({key: value for key, value in portable.items() if key != "GGML_NATIVE"})
+            with self.assertRaisesRegex(RuntimeError, "GGML_NATIVE"):
+                build_whisper.verify_cmake_portable_cpu(cache, "arm64")
+
+            write_cache(portable)
+            cache.write_text(cache.read_text().replace("GGML_NATIVE:BOOL", "GGML_NATIVE:UNINITIALIZED"))
+            with self.assertRaisesRegex(RuntimeError, "GGML_NATIVE"):
+                build_whisper.verify_cmake_portable_cpu(cache, "arm64")
 
     def test_cache_dir_resolution(self):
         """Coordination cache path must match platform standards."""
