@@ -1,0 +1,13 @@
+{
+  "schema": "s503-deno-runtime-v1",
+  "version": "2.9.8",
+  "provenance": "Official v2.9.8 archive executable members, verified on six native runners in GitHub Actions run 40196010350; archive pins and metadata are in yoke/pkg/binmgr/pins.go and .github/workflows/s503-deno-admission.yml.",
+  "targets": {
+    "linux/amd64": "368bca08999e02c6911b8f248167b582276b1f547db5712b6e736d7eda1dbda7",
+    "linux/arm64": "b484f780e5149ca05c673f1f79f7fb466f12a2295933bdad917af4a8a5c020e8",
+    "darwin/amd64": "5d206ba69742549cc161db06e86f1d93c5622e1dbc8ba9d15a618e538fbc92f4",
+    "darwin/arm64": "d1e99265e5e6ee096c5780d88ff7d3e6cfdf33b1953a118b4889cab8ca6980ba",
+    "windows/amd64": "924397800533d3eb0ed0c889b20ad70e18b970d93acd8135bc043f425e528266",
+    "windows/arm64": "40d161bc35657cc7432a2e3832290922939cd63fddd29f66db2261d291e42478"
+  }
+}

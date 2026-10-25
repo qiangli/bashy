@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import signal
 import subprocess
@@ -27,6 +28,7 @@ from dependencies import external_python
 VERSION = "bashy-transcribe-stage-v1"
 STAGE = "acquire"
 YTDLP_SHA256 = "b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14"
+DENO_POLICY_PATH = Path(__file__).parent / "dependencies" / "deno-runtime.json"
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 MEDIA_TYPES = {
     ".m4a": "audio/mp4",
@@ -93,6 +95,24 @@ def _youtube_host(url: str) -> bool:
     return host in {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtu.be"}
 
 
+def _verify_deno(runtime_path: Path) -> None:
+    """Recheck the admitted native Deno bytes immediately before yt-dlp uses them."""
+    policy = json.loads(DENO_POLICY_PATH.read_text(encoding="utf-8"))
+    if (not isinstance(policy, dict)
+            or policy.get("schema") != "s503-deno-runtime-v1"
+            or policy.get("version") != "2.9.8"
+            or not isinstance(policy.get("targets"), dict)
+            or set(policy["targets"]) != external_python.TARGETS):
+        raise RuntimeError("Deno policy lacks the reviewed six-target pin set")
+    target_name = (external_python.normalize_os(platform.system()) + "/"
+                   + external_python.normalize_arch(platform.machine()))
+    pin = policy["targets"].get(target_name)
+    if not isinstance(pin, str) or not re.fullmatch(r"[0-9a-f]{64}", pin):
+        raise RuntimeError(f"Deno executable pin is missing for {target_name}")
+    if _sha256(runtime_path) != pin:
+        raise RuntimeError(f"Deno executable SHA-256 differs from the reviewed {target_name} pin")
+
+
 def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> tuple[Path, str, str, int, str | None]:
     try:
         python = str(external_python.verify_selected_python(os.environ.get("BASHY_TRANSCRIBE_PYTHON", "")))
@@ -123,6 +143,10 @@ def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> tuple[Path, st
                 "dependency_unavailable",
                 "YouTube requires an admitted Deno runtime and matching yt-dlp-ejs package; set BASHY_TRANSCRIBE_JS_RUNTIME",
             )
+        try:
+            _verify_deno(runtime_path)
+        except (OSError, ValueError, RuntimeError, TypeError) as exc:
+            raise AcquisitionError("dependency_unavailable", f"Deno prerequisite rejected: {exc}") from exc
         js_options += ["--no-js-runtimes", "--js-runtimes", "deno:" + str(runtime_path)]
 
     rate = os.environ.get("BASHY_TRANSCRIBE_DOWNLOAD_RATE", "")

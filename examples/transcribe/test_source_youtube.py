@@ -24,6 +24,7 @@ from dependencies import external_python
 from pathlib import Path
 external_python.POLICY_PATH = Path(sys.argv[4])
 external_python._verify_windows_vc = lambda *args: None
+source_youtube.DENO_POLICY_PATH = Path(sys.argv[5])
 source_youtube.YTDLP_SHA256 = sys.argv[2]
 raise SystemExit(source_youtube.main(["source_youtube.py", sys.argv[3]]))
 '''
@@ -81,6 +82,16 @@ class YouTubeSourceTests(unittest.TestCase):
         self.zipapp_hash = hashlib.sha256(self.zipapp.read_bytes()).hexdigest()
         self.runtime = self.root / "admitted deno"
         self.runtime.write_bytes(b"controlled runtime fixture")
+        self.deno_policy = self.root / "deno-runtime.json"
+        self.deno_policy.write_text(json.dumps({
+            "schema": "s503-deno-runtime-v1",
+            "version": "2.9.8",
+            "targets": {target: hashlib.sha256(self.runtime.read_bytes()).hexdigest()
+                        for target in (
+                            "linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64",
+                            "windows/amd64", "windows/arm64",
+                        )},
+        }), encoding="utf-8")
         self.log = self.root / "argv.jsonl"
         self.request = self.root / "request.json"
         self.runtime_policy = self.root / "external-python-runtime.json"
@@ -125,7 +136,7 @@ class YouTubeSourceTests(unittest.TestCase):
         )
         return subprocess.run(
             [sys.executable, "-c", TEST_RUNNER, str(ADAPTER.parent), self.zipapp_hash,
-             str(self.request), str(self.runtime_policy)],
+             str(self.request), str(self.runtime_policy), str(self.deno_policy)],
             text=True,
             capture_output=True,
             env=self.env,
@@ -187,6 +198,12 @@ class YouTubeSourceTests(unittest.TestCase):
         self.assertIn("--no-remote-components", calls[0])
         self.assertIn("deno:" + str(self.runtime.resolve()), calls[0])
         self.assertEqual([path.resolve() for path in self.work.iterdir()], [media_path.resolve()])
+
+    def test_tampered_deno_is_rejected_before_yt_dlp_runs(self) -> None:
+        self.runtime.write_bytes(b"replaced runtime")
+        result = self.invoke("https://youtu.be/fixture01")
+        self.assertEqual(json.loads(result.stdout)["error"]["code"], "dependency_unavailable")
+        self.assertFalse(self.log.exists())
 
     def test_adapter_accepts_other_ytdlp_supported_sites_when_selected(self) -> None:
         url = "https://media.example.test/watch?id=fixture01"
@@ -274,7 +291,7 @@ class YouTubeSourceTests(unittest.TestCase):
         )
         proc = subprocess.Popen(
             [sys.executable, "-c", TEST_RUNNER, str(ADAPTER.parent), self.zipapp_hash,
-             str(self.request), str(self.runtime_policy)],
+             str(self.request), str(self.runtime_policy), str(self.deno_policy)],
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -302,7 +319,7 @@ class YouTubeSourceTests(unittest.TestCase):
         runner = TEST_RUNNER.replace("source_youtube.YTDLP_SHA256 = sys.argv[2]", "")
         result = subprocess.run(
             [sys.executable, "-c", runner, str(ADAPTER.parent), self.zipapp_hash,
-             str(self.request), str(self.runtime_policy)],
+             str(self.request), str(self.runtime_policy), str(self.deno_policy)],
             text=True, capture_output=True, env=self.env, timeout=10,
         )
         self.assertNotEqual(result.returncode, 0)
