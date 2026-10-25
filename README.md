@@ -49,16 +49,8 @@ locale gate. See [build evidence](docs/public-claims-evidence.md).
 
 ## Ten minutes
 
-```sh
-# macOS (Apple Silicon)
-curl -fsSLO https://github.com/qiangli/bashy/releases/latest/download/bashy-darwin-arm64.tar.gz
-tar -xzf bashy-darwin-arm64.tar.gz
-# for your user (no sudo):
-mkdir -p ~/.local/bin && install bashy ~/.local/bin/bashy && export PATH="$HOME/.local/bin:$PATH"
-# or system-wide, if you are an administrator:
-#   sudo install bashy /usr/local/bin/bashy
-bashy --version
-```
+Install bashy using one of the methods in [Install bashy](#install-bashy), then
+check it with `bashy --version`.
 
 Then take the tour — 27 small programs with pinned transcripts and one
 script that runs them all on your machine, also written as a procedure your
@@ -232,28 +224,65 @@ Python packages used across the repos, with CPython 3.15 wheel readiness:
 Setting up a new machine end to end (install, pairing, with or without an AI
 agent, locally or from another machine): see [docs/setup.md](docs/setup.md).
 
-### Download a release binary
+### Install bashy
 
-Grab the archive for your platform from the
-[Releases](https://github.com/qiangli/bashy/releases) page and put `bashy` on
-your `PATH`:
+The installers fetch the current stable release, verify its archive against
+`checksums.txt`, then run `bashy self install`.
 
-| Platform | Asset |
-| --- | --- |
-| Linux x86-64 | `bashy-linux-amd64.tar.gz` |
-| Linux arm64 | `bashy-linux-arm64.tar.gz` |
-| macOS Intel | `bashy-darwin-amd64.tar.gz` |
-| macOS Apple Silicon | `bashy-darwin-arm64.tar.gz` |
-| Windows x86-64 | `bashy-windows-amd64.zip` |
-| Windows arm64 | `bashy-windows-arm64.zip` |
+**macOS or Linux (curl):**
 
 ```sh
-# Linux/macOS example
-tar -xzf bashy-linux-amd64.tar.gz
-mkdir -p ~/.local/bin && install bashy ~/.local/bin/bashy   # put ~/.local/bin on PATH
-# or system-wide, if you are an administrator: sudo install bashy /usr/local/bin/bashy
-bashy --version
+curl -fsSL https://dhnt.io/install.sh | sh
 ```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://dhnt.io/install.ps1 | iex
+```
+
+**macOS (Homebrew):**
+
+```sh
+brew install dhnt/tap/bashy
+```
+
+**Windows (Scoop):**
+
+```powershell
+scoop bucket add dhnt https://github.com/dhnt/scoop-bucket
+scoop install dhnt/bashy
+```
+
+These script, Homebrew, and Scoop installs show no operating-system prompt.
+If PowerShell blocks Scoop's shim, allow current-user scripts once with
+`Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force`.
+
+The v1.0 macOS and Windows binaries are not yet code-signed. A browser-downloaded
+archive prompts at launch: on macOS, right-click the executable and choose
+**Open**, or remove quarantine from it with
+`xattr -d com.apple.quarantine <file>`; on Windows, choose **More info → Run
+anyway**, or unblock the downloaded file with `Unblock-File <file>`. DHNT Inc.
+signed builds arrive in v1.0.x.
+
+**Linux tarball:** download the matching `bashy-linux-amd64.tar.gz` or
+`bashy-linux-arm64.tar.gz` from the
+[latest release](https://github.com/qiangli/bashy/releases/latest), then
+verify and install it (this example selects the host architecture):
+
+```sh
+case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) echo "unsupported architecture" >&2; exit 1 ;; esac
+asset="bashy-linux-$arch.tar.gz"
+curl -fSLO "https://github.com/qiangli/bashy/releases/latest/download/$asset"
+curl -fsSLO https://github.com/qiangli/bashy/releases/latest/download/checksums.txt
+grep "  $asset\$" checksums.txt | sha256sum -c -
+tar -xzf "$asset"
+./bashy self install --dir "$HOME/.local/bin"
+```
+
+Linux releases also publish `.deb`, `.rpm`, and `.apk` packages alongside the
+tarballs. macOS and Windows archive names are `bashy-darwin-{amd64,arm64}.tar.gz`
+and `bashy-windows-{amd64,arm64}.zip`.
 
 A prerelease (a `-rc.N-dev` tag) is not `latest`: download it from its tag,
 `https://github.com/qiangli/bashy/releases/download/<tag>/<asset>`.
