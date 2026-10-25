@@ -134,8 +134,9 @@ python3 examples/transcribe/dependencies/setup_python_source.py \
 
 The recipe disables `readline`, `_dbm` and `_gdbm` in `Modules/Setup.local`
 and passes `--without-readline` with fatal unknown-option checking. It removes
-the `ensurepip` bundled pip wheel directory before inventory. It rejects those builtins/extensions after
-installation and rejects loaded libraries with readline, gdbm or Berkeley DB
+the `ensurepip` bundled pip wheel directory and the standard-library test tree
+before inventory; the pinned source also contains test-only wheels. It rejects
+those builtins/extensions after installation and rejects loaded libraries with readline, gdbm or Berkeley DB
 names. It also requires SSL, hashing and archive modules used by yt-dlp.
 Its local `source-build-receipt.json` inventories each installed file and
 extension module by SHA-256, the executable's ELF architecture, each loaded

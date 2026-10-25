@@ -174,14 +174,15 @@ def freeze_prefix(prefix: Path) -> None:
 
 
 def remove_bundled_pip(prefix: Path) -> None:
-    """Omit ensurepip's vendored wheel; yt-dlp runs as a zipapp without pip."""
-    bundled = prefix / "lib/python3.12/ensurepip/_bundled"
-    if bundled.is_symlink():
-        raise RuntimeError("ensurepip bundled wheel directory is a symlink")
-    if bundled.exists():
-        if not bundled.is_dir():
-            raise RuntimeError("ensurepip bundled wheel path is not a directory")
-        shutil.rmtree(bundled)
+    """Omit bundled pip and test wheels; yt-dlp needs neither pip nor tests."""
+    for relative in ("lib/python3.12/ensurepip/_bundled", "lib/python3.12/test"):
+        directory = prefix / relative
+        if directory.is_symlink():
+            raise RuntimeError(f"installed wheel directory is a symlink: {relative}")
+        if directory.exists():
+            if not directory.is_dir():
+                raise RuntimeError(f"installed wheel path is not a directory: {relative}")
+            shutil.rmtree(directory)
     if any(prefix.rglob("*.whl")):
         raise RuntimeError("installed Python still contains a bundled wheel")
 

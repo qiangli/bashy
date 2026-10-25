@@ -204,10 +204,14 @@ class SourceSetupTests(unittest.TestCase):
     def test_bundled_pip_wheel_removed_before_inventory(self):
         prefix = self.root / "installed"
         bundled = prefix / "lib/python3.12/ensurepip/_bundled"
+        test_data = prefix / "lib/python3.12/test/wheeldata"
         bundled.mkdir(parents=True)
+        test_data.mkdir(parents=True)
         (bundled / "pip-fixture.whl").write_bytes(b"wheel")
+        (test_data / "test-fixture.whl").write_bytes(b"wheel")
         setup.remove_bundled_pip(prefix)
         self.assertFalse(bundled.exists())
+        self.assertFalse(test_data.parent.exists())
 
     def test_dedicated_prefix_is_frozen_after_receipt(self):
         prefix = self.root / "python-prefix"
