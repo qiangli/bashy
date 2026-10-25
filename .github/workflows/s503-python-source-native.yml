@@ -2,7 +2,7 @@ name: S503 Linux Python source candidate validation
 
 on:
   push:
-    branches: [s503-python-source-native]
+    branches: [s503-contract-integration, s503-python-source-native]
     paths:
       - .github/workflows/s503-python-source-native.yml
       - .github/scripts/s503-python-source-evidence.py
