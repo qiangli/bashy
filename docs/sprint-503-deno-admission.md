@@ -129,7 +129,11 @@ commit `fe7ed012d92c642fd8e5607ac5a45d517538b5c5`. It pins that file,
 imports and resolved provider hashes, plus a machine-readable list of packages
 in the tagged source lockfile. Collection uses no Deno build or installation.
 
-The report is deliberately `BLOCKED` and the job fails while unknowns remain.
+The transitive report is deliberately `BLOCKED` while unknowns remain. The
+existing job's `PASS` continues to mean only that Deno/EJS bytes and the
+external CI runtime were verified; its separate `transitive_research` field
+points to the blocked report. A collector error yields a blocked fallback
+report rather than changing that earlier byte/runtime verdict.
 The whole source lockfile includes packages unused by a particular binary; it
 does not identify the exact linked Rust, V8, zlib-ng, embedded JavaScript or
 native component closure. A source MIT license, verified executable hash and

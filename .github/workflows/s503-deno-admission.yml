@@ -258,19 +258,38 @@ jobs:
                                     'zipapp_bytes': yt.stat().st_size, 'zipapp_sha256': sha(yt),
                                     'ejs_version': match.group(1), 'ejs_script_sha256': ejs_hashes}
               evidence['checks']['yt_dlp_offline_ejs'] = 'PASS'
-              # This separate native collector deliberately returns nonzero while
-              # binary-specific component linkage or notices remain unknown.
-              # Keep its BLOCKED report even when this admission job fails.
-              evidence['checks']['deno_transitive_notices'] = 'BLOCKED'
-              subprocess.run([sys.executable,
-                  'examples/transcribe/dependencies/collect_deno_transitive.py',
-                  '--archive', str(archive),
-                  '--archive-sha256', os.environ['DENO_ARCHIVE_SHA256'],
-                  '--executable', str(executable),
-                  '--executable-sha256', os.environ['DENO_EXECUTABLE_SHA256'],
-                  '--target', os.environ['TARGET_OS'].lower().replace('macos', 'darwin') + '/' + os.environ['TARGET_ARCH'],
-                  '--out-dir', 'evidence'], check=True, timeout=180)
-              evidence['checks']['deno_transitive_notices'] = 'PASS'
+              # Research evidence is a separate, blocked product gate. Its
+              # unknowns must not rewrite the byte/runtime result below.
+              evidence['transitive_research'] = {
+                  'status': 'BLOCKED', 'product_admitted': False,
+                  'report': 'deno-transitive-candidate.json'}
+              transitive_report = Path('evidence/deno-transitive-candidate.json')
+              try:
+                  collected = subprocess.run([sys.executable,
+                      'examples/transcribe/dependencies/collect_deno_transitive.py',
+                      '--archive', str(archive),
+                      '--archive-sha256', os.environ['DENO_ARCHIVE_SHA256'],
+                      '--executable', str(executable),
+                      '--executable-sha256', os.environ['DENO_EXECUTABLE_SHA256'],
+                      '--target', os.environ['TARGET_OS'].lower().replace('macos', 'darwin') + '/' + os.environ['TARGET_ARCH'],
+                      '--out-dir', 'evidence'], check=False, timeout=180)
+                  evidence['transitive_research']['collector_exit_code'] = collected.returncode
+                  candidate = json.loads(transitive_report.read_text())
+                  require(candidate.get('status') == 'BLOCKED' and
+                          candidate.get('product_admitted') is False and
+                          candidate.get('binary', {}).get('executable_sha256') == actual_executable,
+                          'transitive collector report missing blocked binary identity')
+              except Exception as collection_error:
+                  evidence['transitive_research']['collection_error'] = str(collection_error)
+                  transitive_report.write_text(json.dumps({
+                      'schema': 's503-deno-transitive-candidate-v1',
+                      'status': 'BLOCKED', 'product_admitted': False,
+                      'unknowns': ['Native transitive evidence collection incomplete'],
+                      'collection_error': str(collection_error),
+                      'binary': {'archive_sha256': actual_archive,
+                                 'executable_sha256': actual_executable},
+                  }, indent=2, sort_keys=True) + '\n')
+              evidence['result_scope'] = 'Deno/EJS bytes and external CI runtime only'
               evidence['result'] = 'PASS'
           except Exception as error:
               evidence['error'] = str(error)
