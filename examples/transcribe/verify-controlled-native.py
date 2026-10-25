@@ -115,6 +115,57 @@ def detected_language(m, env, item, root):
     return {'language': result['media']['language'], 'segments': len(result['segments'])}
 
 
+def retain_receipts(env, outdir, skill):
+    """Retain bounded, validated receipt projections without private run paths."""
+    function_summary = checks.verify_function_receipts(env)
+    ledgers = Path(env['BASHY_SKILLS_DIR']) / 'attest'
+    specs = (
+        ('skill', ledgers / 'transcribe.jsonl', 9, 'transcribe', skill['identity'],
+         skill['capability'], 'skill-receipts.projection.json'),
+        ('function', ledgers / 'transcribe_pipeline.jsonl', 18, 'transcribe_pipeline',
+         function_summary['identity'], None, 'function-receipts.projection.jsonl'),
+    )
+    evidence = {'schema': 's503-controlled-receipt-projections-v1'}
+    for kind, source, count, name, identity, capability, filename in specs:
+        checks.require(source.is_file() and source.stat().st_size <= 262144,
+                       kind + ' receipt ledger missing or too large')
+        raw = source.read_bytes()
+        lines = [line for line in raw.splitlines() if line.strip()]
+        checks.require(len(lines) == count, kind + ' receipt count differs from completed cases')
+        projections = []
+        for line in lines:
+            record = json.loads(line)
+            attest = record.get('attest', {})
+            passed = attest.get('Passed')
+            failed = attest.get('Failed') or []
+            effects = attest.get('Effects') or []
+            checks.require(record.get('name') == name and attest.get('Skill') == identity and
+                           attest.get('Valid') is True and isinstance(passed, list) and
+                           len(passed) > 0 and isinstance(failed, list) and not failed and
+                           isinstance(effects, list) and
+                           (kind == 'function' and record.get('status') == 0 or
+                            kind == 'skill' and record.get('capability') == capability),
+                           kind + ' receipt differs from the validated run')
+            # Source ledgers can contain host coordinates and world details.
+            # Retain their hashes and contract verdicts, never their raw fields.
+            projections.append({'name': name, 'identity': identity, 'valid': True,
+                                'capability': capability if kind == 'skill' else None,
+                                'status': 0 if kind == 'function' else None,
+                                'passed_count': len(passed), 'failed_count': 0,
+                                'effects_count': len(effects),
+                                'source_record_sha256': hashlib.sha256(line).hexdigest()})
+        target = outdir / filename
+        if kind == 'skill':
+            target.write_text(json.dumps(projections, indent=2) + '\n')
+        else:
+            target.write_text(''.join(json.dumps(row, sort_keys=True) + '\n'
+                                      for row in projections))
+        evidence[kind] = {'file': filename, 'sha256': checks.digest(target),
+                          'source_ledger_sha256': hashlib.sha256(raw).hexdigest(),
+                          'count': count}
+    return function_summary, evidence
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('manifest', type=Path)
@@ -158,7 +209,7 @@ def main():
                                 'formats': artifacts})
         languages = {label: detected_language(m, env, m['cases'][label], root)
                      for label in ('en-audio', 'es-audio')}
-        receipts = checks.verify_function_receipts(env)
+        receipts, receipt_evidence = retain_receipts(env, outdir, skill)
         cancel_m = dict(m, controlled_webm=m['cases']['en-video']['path'],
                         decoder={'name': 'transcribe-webm-opus'})
         cleanup = checks.failure_and_cancel(cancel_m, env, outdir, tempdir, False)
@@ -168,7 +219,8 @@ def main():
                    'offline': args.offline, 'offline_enforcement': enforcement,
                    'fixture_sha256': {k: v['sha256'] for k, v in m['cases'].items()},
                    'source_sha256': m['source_sha256'], 'skill_identity': skill['identity'],
-                   'function_receipts': receipts, 'detected_languages': languages,
+                   'function_receipts': receipts, 'receipt_evidence': receipt_evidence,
+                   'detected_languages': languages,
                    'results': results, 'failure_cleanup': 'pass',
                    'local_pipeline_cancellation': cleanup}
         (outdir / 'result.json').write_text(json.dumps(summary, indent=2) + '\n')

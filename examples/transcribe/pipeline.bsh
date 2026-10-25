@@ -51,7 +51,13 @@ case "$format" in txt|srt|vtt) ;; *) usage ;; esac
 # stage adapters use Windows filesystem paths, so convert at this boundary.
 absolute_native_path() {
     if [[ ${OS:-} == Windows_NT ]]; then
-        cygpath -a -m "$1"
+        # Bashy's built-in cygpath supports -m and converts the absolute
+        # /c/... spelling used by Git Bash. It deliberately rejects -a.
+        local value=$1
+        if [[ $value != /* && $value != [A-Za-z]:/* && $value != [A-Za-z]:\\* ]]; then
+            value="${PWD%/}/$value"
+        fi
+        cygpath -m "$value"
     else
         realpath -m -s -- "$1"
     fi
