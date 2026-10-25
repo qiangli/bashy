@@ -116,3 +116,26 @@ runtime. S503.6 still needs product install and transitive-notice policy review;
 S503.8 still needs the operator video, transcript, timing and proved offline
 native pipeline evidence on all six targets. Neither a Deno/EJS PASS nor a
 native whisper build alone closes those gates.
+
+## Transitive candidate evidence (pending native run)
+
+The native admission workflow now runs
+`examples/transcribe/dependencies/collect_deno_transitive.py` after its existing
+archive, executable, yt-dlp and EJS byte checks. The collector rechecks the
+same Deno hashes, records every archive member and any embedded license or
+notice member, and retains Deno's official `v2.9.8` source `LICENSE.md` from
+commit `fe7ed012d92c642fd8e5607ac5a45d517538b5c5`. It pins that file,
+`Cargo.lock` and `cli/Cargo.toml` by SHA-256. Each native runner records binary
+imports and resolved provider hashes, plus a machine-readable list of packages
+in the tagged source lockfile. Collection uses no Deno build or installation.
+
+The report is deliberately `BLOCKED` and the job fails while unknowns remain.
+The whole source lockfile includes packages unused by a particular binary; it
+does not identify the exact linked Rust, V8, zlib-ng, embedded JavaScript or
+native component closure. A source MIT license, verified executable hash and
+provider path cannot supply missing third-party notice texts or establish
+binary-to-source linkage. The retained report and source license are candidates
+for review, **not** a binary-specific SBOM, notice bundle, or product admission.
+Resolving this gate requires trustworthy per-binary build provenance/component
+mapping and reviewed applicable notices for each target, followed by the
+separate product distribution and operator-host installation decisions.

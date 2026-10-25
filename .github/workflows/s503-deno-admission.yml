@@ -5,6 +5,7 @@ on:
     branches: [s503-contract-integration]
     paths:
       - .github/workflows/s503-deno-admission.yml
+      - examples/transcribe/dependencies/collect_deno_transitive.py
       - examples/transcribe/dependencies/probe_runtime.py
       - docs/sprint-503-deno-admission.md
   workflow_dispatch:
@@ -257,6 +258,19 @@ jobs:
                                     'zipapp_bytes': yt.stat().st_size, 'zipapp_sha256': sha(yt),
                                     'ejs_version': match.group(1), 'ejs_script_sha256': ejs_hashes}
               evidence['checks']['yt_dlp_offline_ejs'] = 'PASS'
+              # This separate native collector deliberately returns nonzero while
+              # binary-specific component linkage or notices remain unknown.
+              # Keep its BLOCKED report even when this admission job fails.
+              evidence['checks']['deno_transitive_notices'] = 'BLOCKED'
+              subprocess.run([sys.executable,
+                  'examples/transcribe/dependencies/collect_deno_transitive.py',
+                  '--archive', str(archive),
+                  '--archive-sha256', os.environ['DENO_ARCHIVE_SHA256'],
+                  '--executable', str(executable),
+                  '--executable-sha256', os.environ['DENO_EXECUTABLE_SHA256'],
+                  '--target', os.environ['TARGET_OS'].lower().replace('macos', 'darwin') + '/' + os.environ['TARGET_ARCH'],
+                  '--out-dir', 'evidence'], check=True, timeout=180)
+              evidence['checks']['deno_transitive_notices'] = 'PASS'
               evidence['result'] = 'PASS'
           except Exception as error:
               evidence['error'] = str(error)
@@ -270,5 +284,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: s503-deno-ejs-${{ matrix.label }}
-          path: evidence/deno-ejs-admission.json
-          if-no-files-found: warn
+          path: evidence/
+          if-no-files-found: error
