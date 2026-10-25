@@ -48,7 +48,9 @@ FORBIDDEN = re.compile(
     r"(?:\.[aso][^/\\() ]*)?|crtbegin[^/\\() ]*\.o|crtend[^/\\() ]*\.o)"
     r"(?:$|[/\\() ])", re.I)
 MAP_INPUT = re.compile(r"(?P<path>[^\s()]+\.(?:a|o|obj))(?:\((?P<member>[^()]+)\))?:\(")
-TRACE_INPUT = re.compile(r"^\s*(?P<path>/\S+\.(?:a|o|obj))\s*$", re.M)
+MAP_HEADER = re.compile(r"^\s*VMA\s+LMA\s+Size\s+Align\s+Out\s+In\s+Symbol\s*$")
+MAP_ROW = re.compile(r"^\s*[0-9a-fA-F]+\s+[0-9a-fA-F]+\s+[0-9a-fA-F]+\s+\d+\s+")
+LINK_INPUT_SUFFIXES = (".a", ".o", ".obj")
 MUSL_NAMES = {"libc.a", "libm.a", "libpthread.a", "libdl.a", "librt.a",
               "libcrypt.a", "libutil.a", "crt1.o", "Scrt1.o", "rcrt1.o",
               "crti.o", "crtn.o"}
@@ -137,6 +139,36 @@ def compiler_wrapper(path: Path, zig: Path, language: str, target: str) -> None:
     path.chmod(0o755)
 
 
+def extract_printed_map(build_log: str, destination: Path) -> None:
+    """Retain Zig 0.15's supported --print-map output from the final link."""
+    lines = build_log.splitlines(keepends=True)
+    headers = [index for index, line in enumerate(lines) if MAP_HEADER.fullmatch(line.strip())]
+    if len(headers) != 1:
+        raise RuntimeError(f"expected one final LLD --print-map header, found {len(headers)}")
+    first = headers[0]
+    last = first + 1
+    while last < len(lines) and MAP_ROW.match(lines[last]):
+        last += 1
+    if last - first < 5:
+        raise RuntimeError("LLD --print-map lacks input-section rows")
+    destination.write_text("".join(lines[first:last]), encoding="utf-8")
+
+
+def verbose_link_inputs(build_log: str) -> tuple[str, set[str]]:
+    """Read the exact ld.lld argv printed by Zig --verbose-link."""
+    commands = [line for line in build_log.splitlines()
+                if line.startswith("ld.lld ") and re.search(r"(?:^|/)whisper-cli(?:\s|$)", line)]
+    if len(commands) != 1:
+        raise RuntimeError(f"expected one verbose whisper-cli ld.lld invocation, found {len(commands)}")
+    args = shlex.split(commands[0])
+    if any(arg.startswith("-l") and arg != "ld.lld" for arg in args):
+        raise RuntimeError("verbose LLD invocation has an unresolved -l library")
+    inputs = {arg for arg in args if arg.endswith(LINK_INPUT_SUFFIXES)}
+    if not inputs:
+        raise RuntimeError("verbose LLD invocation has no object or archive inputs")
+    return commands[0], inputs
+
+
 def check_link_inputs(map_file: Path, build_log: str, build: Path,
                       zig_root: Path, zig_cache: Path,
                       retain_dir: Path | None = None) -> dict:
@@ -145,11 +177,11 @@ def check_link_inputs(map_file: Path, build_log: str, build: Path,
         raise RuntimeError("missing or unrecognized LLD ELF link map")
     extracted = {(match.group("path"), match.group("member") or "")
                  for match in MAP_INPUT.finditer(contents)}
-    traced = {match.group("path") for match in TRACE_INPUT.finditer(build_log)}
-    if not extracted or not traced:
-        raise RuntimeError("link map/trace did not enumerate inputs")
+    link_command, direct = verbose_link_inputs(build_log)
+    if not extracted:
+        raise RuntimeError("link map did not enumerate input sections")
     allowed_roots = tuple(root.resolve() for root in (build, zig_root, zig_cache))
-    inputs = sorted({path for path, _ in extracted} | traced)
+    inputs = sorted({path for path, _ in extracted} | direct)
     inventory = []
     retained_bytes = 0
     if retain_dir is not None:
@@ -192,8 +224,8 @@ def check_link_inputs(map_file: Path, build_log: str, build: Path,
                 raise RuntimeError(f"retained link input differs: {resolved}")
             item["retained_path"] = str(retained.relative_to(retain_dir.parent))
         inventory.append(item)
-    return {"map_input_count": len(extracted), "trace_input_count": len(traced),
-            "inputs": inventory}
+    return {"map_input_count": len(extracted), "direct_link_input_count": len(direct),
+            "verbose_link_command": link_command, "inputs": inventory}
 
 
 def inspect_elf(binary: Path, output: Path, arch: str) -> dict:
@@ -282,7 +314,7 @@ def main() -> int:
                                              {"c_compiler": str(cc), "cxx_compiler": str(cxx)})
         flags = [flag for flag in flags if not flag.startswith("-DCMAKE_EXE_LINKER_FLAGS=")]
         flags.extend(("-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
-                      f"-DCMAKE_EXE_LINKER_FLAGS=-static -Wl,-Map={map_file} -Wl,--trace"))
+                      "-DCMAKE_EXE_LINKER_FLAGS=-static -Wl,--print-map --verbose-link"))
         if any("static-libgcc" in flag or "static-libstdc++" in flag for flag in flags):
             raise RuntimeError("GCC static-runtime flag remained in Zig build")
         report["cmake_flags"] = flags
@@ -310,11 +342,13 @@ def main() -> int:
             raise RuntimeError("build log exceeds 32 MiB evidence ceiling")
         final_links = [line for line in build_log.splitlines()
                        if re.search(r"(?:^|\s)-o\s+\S*bin/whisper-cli(?:\s|$)", line)
-                       and "-static" in line and f"-Wl,-Map={map_file}" in line]
+                       and "-static" in line and "-Wl,--print-map" in line
+                       and "--verbose-link" in line]
         if len(final_links) != 1 or str(cxx) not in final_links[0]:
             raise RuntimeError("one exact Zig static final link command was not retained")
         (output / "final-link-command.txt").write_text(final_links[0] + "\n")
         report["final_link_command_sha256"] = sha256(output / "final-link-command.txt")
+        extract_printed_map(build_log, map_file)
         binary = build / "bin" / "whisper-cli"
         if not binary.is_file() or not map_file.is_file():
             raise RuntimeError("binary or LLD map missing")

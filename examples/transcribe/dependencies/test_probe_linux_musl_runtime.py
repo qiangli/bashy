@@ -24,7 +24,8 @@ class LinkInputPolicyTest(unittest.TestCase):
         self.map_file.write_text(
             "VMA LMA Size Align Out In Symbol\n" +
             f"    1000 1000 10 4 {path}(member.o):(.text)\n")
-        return probe.check_link_inputs(self.map_file, str(path) + "\n",
+        link_log = f"ld.lld -o {self.build}/bin/whisper-cli {path}\n"
+        return probe.check_link_inputs(self.map_file, link_log,
                                        self.build, self.zig, self.cache,
                                        self.root / "evidence" / "inputs" if retain else None)
 
@@ -54,6 +55,32 @@ class LinkInputPolicyTest(unittest.TestCase):
         probe.assert_no_undefined_symbols("$ nm -u whisper-cli\n")
         with self.assertRaisesRegex(RuntimeError, "undefined symbols"):
             probe.assert_no_undefined_symbols("$ nm -u whisper-cli\n                 U _Unwind_Resume\n")
+
+    def test_supported_print_map_is_extracted_from_final_build_log(self):
+        source = (
+            "$ cmake --build ...\n"
+            "ld.lld -o /tmp/bin/whisper-cli /tmp/libc.a\n"
+            "VMA LMA Size Align Out In Symbol\n"
+            "1000 1000 10 4 .text\n"
+            "1000 1000 10 4 /tmp/libc.a(start.o):(.text)\n"
+            "1010 1010 8 4 .data\n"
+            "1010 1010 8 4 /tmp/libc.a(start.o):(.data)\n"
+            "ninja: build complete\n"
+        )
+        probe.extract_printed_map(source, self.map_file)
+        extracted = self.map_file.read_text()
+        self.assertIn("/tmp/libc.a(start.o)", extracted)
+        self.assertNotIn("ninja: build complete", extracted)
+        with self.assertRaisesRegex(RuntimeError, "one final LLD"):
+            probe.extract_printed_map("no map", self.map_file)
+        with self.assertRaisesRegex(RuntimeError, "found 2"):
+            probe.extract_printed_map(source + source, self.map_file)
+
+    def test_link_command_must_identify_direct_inputs_without_library_aliases(self):
+        with self.assertRaisesRegex(RuntimeError, "unresolved -l"):
+            probe.verbose_link_inputs("ld.lld -o /tmp/bin/whisper-cli -lstdc++ /tmp/start.o\n")
+        with self.assertRaisesRegex(RuntimeError, "no object or archive inputs"):
+            probe.verbose_link_inputs("ld.lld -o /tmp/bin/whisper-cli\n")
 
 
 if __name__ == "__main__":

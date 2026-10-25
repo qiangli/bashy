@@ -50,14 +50,20 @@ The first experiment should use two small executable wrappers (`zig cc
 -target <triple>` and `zig c++ -target <triple>`) as CMake's C and C++
 compilers. Configure with `CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY` and
 `CMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY` where Zig's virtual sysroot permits
-it, `CMAKE_EXE_LINKER_FLAGS=-static -Wl,-Map=<path>`, and no Linux branch
-`-static-libgcc`/`-static-libstdc++` flags. Run the Clang driver in verbose
-mode for the final link, save the complete command and map, and fail if CMake
-finds host headers or libraries. **The proposed flags are hypotheses until
-the native CMake cache and link trace show their actual effect.** In
-particular, determine whether Zig 0.15.2 supplies the C++/unwind link
-automatically and whether its `-Wl,-Map` works; do not paper over missing
-components with Ubuntu `libstdc++`, `libgcc`, or glibc.
+it, and no Linux branch `-static-libgcc`/`-static-libstdc++` flags. The
+[first hosted run](evidence/linux-musl-40218138727-failure.md) showed that
+Zig 0.15.2 rejects `-Wl,-Map=<path>` during CMake's compiler check. The
+corrected candidate uses `CMAKE_EXE_LINKER_FLAGS=-static -Wl,--print-map
+--verbose-link`. Zig's [argument parser](https://github.com/ziglang/zig/blob/0.15.2/src/main.zig)
+accepts both options, and its [LLD path](https://github.com/ziglang/zig/blob/0.15.2/src/link/Lld.zig)
+prints the map and exact linker argv. The probe extracts the final link map
+from the build log, inventories its loaded archive members and the direct
+object/archive argv, and stops if either evidence stream is absent. Save the
+complete command and map, and fail if CMake finds host headers or libraries.
+**The corrected flags remain a hypothesis until native CMake and link
+evidence confirms their effect.** Determine whether Zig 0.15.2 supplies the
+C++/unwind link automatically; do not paper over missing components with
+Ubuntu `libstdc++`, `libgcc`, or glibc.
 
 The desired ELF graph is one static `whisper-cli` composed of whisper.cpp/GGML
 and Zig's musl/libc++/libc++abi/libunwind/compiler-runtime inputs. It has no
