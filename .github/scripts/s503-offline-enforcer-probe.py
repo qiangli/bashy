@@ -37,14 +37,18 @@ def probe():
         with socket.create_connection(TARGET, timeout=5):
             pass
         return {'connected': True, 'denied': False, 'error': '', 'errno': None,
+                'raw_errno': None, 'winerror': None,
                 'elapsed_seconds': round(time.monotonic() - started, 3)}
     except OSError as exc:
-        number = (getattr(exc, 'winerror', None) or exc.errno) if platform.system() == 'Windows' else exc.errno
+        raw_errno = exc.errno
+        winerror = getattr(exc, 'winerror', None)
+        number = (winerror or raw_errno) if platform.system() == 'Windows' else raw_errno
         # Windows Firewall can report a socket timeout rather than WSAEACCES.
         if platform.system() == 'Windows' and isinstance(exc, TimeoutError):
             number = 10060
         return {'connected': False, 'denied': number in DENIED_ERRNOS[platform.system()],
                 'error': str(exc), 'errno': number,
+                'raw_errno': raw_errno, 'winerror': winerror,
                 'elapsed_seconds': round(time.monotonic() - started, 3)}
 
 
@@ -132,6 +136,12 @@ def main():
                 errors.append(name + ' was not OS-denied')
         if 'policy-attempt' in evidence and not evidence['policy-attempt'].get('success'):
             errors.append('policy application or cleanup failed')
+        if 'identity' in evidence and evidence['identity']['os'] == 'Windows':
+            attempt = evidence.get('policy-attempt', {})
+            if not (attempt.get('active') and attempt.get('cleaned') and
+                    (args.out / 'windows-active-rule.json').is_file() and
+                    (args.out / 'windows-netsecurity-module.json').is_file()):
+                errors.append('Windows exact program rule or NetSecurity evidence missing')
         if 'enforcer' in evidence and len(evidence['enforcer'].get('sha256', '')) != 64:
             errors.append('enforcer SHA-256 missing')
         if 'identity' in evidence:

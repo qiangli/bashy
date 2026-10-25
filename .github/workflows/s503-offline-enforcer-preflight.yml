@@ -115,6 +115,12 @@ jobs:
               ConvertTo-Json | Set-Content (Join-Path $root 'windows-active-rule.json')
             & $program $probe policy --out $root
             if ($LASTEXITCODE -ne 0) { throw "TCP denial probe failed: $LASTEXITCODE" }
+            $afterRule = Get-NetFirewallRule -Name $name
+            $afterFilter = Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $afterRule
+            if ($afterRule.Enabled -ne 'True' -or $afterRule.Action -ne 'Block' -or
+                $afterFilter.Program -ne $program) {
+              throw 'Windows outbound program rule changed during both probes'
+            }
           } catch { $errors += $_.Exception.Message }
           finally {
             try {
