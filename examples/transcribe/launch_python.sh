@@ -74,6 +74,7 @@ case "$expected" in
 esac
 [ "${#expected}" -eq 64 ] || fail 'expected Python hash is invalid'
 actual=$(sha256sum -- "$python") || fail 'cannot hash selected Python'
-[ "${actual%% *}" = "$expected" ] || fail 'selected Python SHA-256 differs from reviewed bytes'
+[ "${actual%% *}" = "$expected" ] ||
+    fail "selected Python SHA-256 differs from reviewed bytes (actual=${actual%% *}; expected=$expected; path=$python)"
 
 exec "$python" "$script_dir/source_youtube.py" "$1"
