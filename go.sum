@@ -1049,8 +1049,8 @@ github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb h1:sZ0O1FtouYq/i
 github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb/go.mod h1:G9TZ3lljDx9Cy/MDxevTV4W+VmBelEAF+SJIHLc+zrQ=
 github.com/qiangli/readline v0.1.4-0.20261013004858-df59d4e258e4 h1:jFEDhq2xCnc71hq0C/qEYzIuWQSwINigzSrYUGTvYHc=
 github.com/qiangli/readline v0.1.4-0.20261013004858-df59d4e258e4/go.mod h1:a0jdwCqW+MTJWBjQRHa9kRNipGLv1Y8Ep26hoLGNTQ8=
-github.com/qiangli/sh/v3 v3.0.0-20261019130812-6bf0a3d23481 h1:qYYqUupRccI2Yruuu6TkwuIqzkFaSFCbbTCcoxmrEn4=
-github.com/qiangli/sh/v3 v3.0.0-20261019130812-6bf0a3d23481/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
+github.com/qiangli/sh/v3 v3.0.0-20261025021234-6663c93a2d3c h1:KmvBfGiXUn2eFBcS3ATtNG4SACJjpqnkeqoxtQHK09U=
+github.com/qiangli/sh/v3 v3.0.0-20261025021234-6663c93a2d3c/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
 github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb h1:LLfdQXY/uXHpJm9eYP0sdcFg4IHQHzIOUwslX9TpqxI=
 github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb/go.mod h1:tcNzv5p84E0skkmJn038y+hWJbLQXQqEnQfeh5r2JLM=
 github.com/qiangli/yamux v0.1.0 h1:nmfx1HPvOMR3x6ZkctdBuk98fmUHSp2DOxnbYA7gGR0=
