@@ -1,0 +1,11 @@
+{
+  "schema": "s503-operator-python-admission-v1",
+  "targets": {
+    "darwin/amd64": {"status": "unadmitted", "installer_review": "pending_native_review", "installed_python_sha256": null},
+    "darwin/arm64": {"status": "unadmitted", "installer_review": "pending_native_review", "installed_python_sha256": null},
+    "linux/amd64": {"status": "unadmitted", "installer_review": "pending_license_and_native_review", "installed_python_sha256": null},
+    "linux/arm64": {"status": "unadmitted", "installer_review": "pending_license_and_native_review", "installed_python_sha256": null},
+    "windows/amd64": {"status": "unadmitted", "installer_review": "pending_native_review", "installed_python_sha256": null},
+    "windows/arm64": {"status": "unadmitted", "installer_review": "pending_native_review", "installed_python_sha256": null}
+  }
+}

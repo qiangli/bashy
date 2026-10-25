@@ -84,6 +84,18 @@ the Windows VC runtime, and the compiler toolchain remains a separate gate.
 
 ## External Python prerequisite for YouTube acquisition
 
+For operator-host preparation, run
+`bashy examples/transcribe/dependencies/prepare_python_host.sh --plan` on the
+native target. The [six-target procedure and remaining admission gates](../../../docs/sprint-503/python-operator-install-plan.md)
+cover the pinned Python.org macOS/Windows installer artifacts, native signature
+checks, Windows System32 VC prerequisite, and the existing Linux signed-source
+route. `--verify-artifact` checks the pinned package without installation.
+The separate `operator-python-admission.json` currently blocks `--install` and
+`--verify-existing` on every target until independently measured and approved
+installer and installed-interpreter pins are recorded. The CI executable hash
+does not establish the post-install Python.org interpreter hash. No mode uses
+an `actions/setup-python` tool-cache archive as a product installer.
+
 `source_youtube.py` requires `BASHY_TRANSCRIBE_PYTHON` to name the Python
 interpreter running that adapter. Before it invokes the reviewed yt-dlp zipapp,
 it checks the interpreter's exact patch, executable SHA-256, process and native
