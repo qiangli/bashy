@@ -1,0 +1,454 @@
+{
+  "collector_limitations": {
+    "coverage": "The inventory records direct ELF/Mach-O/PE imports and entire Cargo.lock candidates. It does not prove per-binary linked Rust or native components, nested runtime loads, or applicable third-party notices.",
+    "linux": "readelf lists ld-linux as NEEDED, and raw ldd shows its bare absolute /lib path; the collector regex only accepts NAME => /path and therefore labels the loader unresolved. Resolve the ELF interpreter path separately and retain provider provenance.",
+    "macos": "otool records system dylib and framework paths, but Path.is_file does not resolve dyld shared-cache providers. The report cannot prove they are missing or hash their actual provider from those paths; classify as shared-cache or unverified runtime providers pending a native resolution method.",
+    "windows": "api-ms-win-core-synch-l1-2-0.dll is a Windows API-set contract; a missing physical System32 DLL path does not prove a missing runtime provider. Map the API-set host and verify its provider, or keep it explicitly unverified."
+  },
+  "reviewer": "Codex",
+  "run": {
+    "artifact_count": 6,
+    "candidate_commit": "646e4f2d110cd5f03d0a554bf6ff6ffa756980d5",
+    "id": 40216228510,
+    "job_count": 6,
+    "repository": "qiangli/bashy",
+    "url": "https://github.com/qiangli/bashy/actions/runs/40216228510"
+  },
+  "schema": "s503-deno-transitive-independent-review-v1",
+  "shared_evidence": {
+    "byte_runtime_checks_pass_all_targets": {
+      "deno_archive_executable_runtime": "PASS",
+      "external_runtime_identity": "PASS",
+      "native_identity": "PASS",
+      "upstream_checksum_files": "PASS",
+      "yt_dlp_offline_ejs": "PASS"
+    },
+    "candidate_component_license": "UNKNOWN",
+    "candidate_component_linked_to_binary": "UNKNOWN",
+    "candidate_component_scope": "entire Cargo.lock; overinclusive and not binary-linked",
+    "candidate_component_source_classes": {
+      "registry": 1048,
+      "workspace_or_unknown": 82
+    },
+    "candidate_components_per_target": 1130,
+    "collector_fallback_count": 0,
+    "common_unknowns": [
+      "No trusted per-binary link from official release bytes to source components",
+      "Cargo.lock lacks dependency license text and includes unused packages",
+      "V8, zlib-ng and embedded JavaScript/native inputs lack binary-specific notice closure",
+      "Native provider license and redistribution obligations have not been reviewed"
+    ],
+    "deno_version": "2.9.8",
+    "ejs_script_sha256": {
+      "yt_dlp_ejs/yt/solver/core.min.js": "18da6ce0758b416e7ae645084f4f8801f9f9d59d6c477c05eaa0ff94ebd8cc00",
+      "yt_dlp_ejs/yt/solver/lib.min.js": "c55987fe697e5b9ee18830163f7af85327e9bb5c3e674b969d38c8d205eaa577"
+    },
+    "ejs_version": "0.8.0",
+    "embedded_notice_members_per_target": 0,
+    "retained_source_license_hash_matches": true,
+    "source_commit": "fe7ed012d92c642fd8e5607ac5a45d517538b5c5",
+    "source_file_hashes_independently_refetched": true,
+    "source_files": {
+      "Cargo.lock": {
+        "bytes": 295518,
+        "sha256": "36aab78913808a9fb2e5a3a3a27a74a1a1045011133f28beaac6eabf57fc9895"
+      },
+      "LICENSE.md": {
+        "bytes": 1074,
+        "sha256": "f62497fffecc0852960c8d3e6934b9db86d16396e9b604072e923892cae3a588"
+      },
+      "cli/Cargo.toml": {
+        "bytes": 8509,
+        "sha256": "ac2ca211c59b910c2b05ecd9ecdd28b3b6b529a29c8002a19695b75e5a669de4"
+      }
+    },
+    "yt_dlp_version": "2026.10.21",
+    "yt_dlp_zipapp_sha256": "b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14"
+  },
+  "targets": [
+    {
+      "artifact_id": 12608230350,
+      "artifact_name": "s503-deno-ejs-ubuntu-24.04",
+      "byte_runtime": {
+        "result": "PASS",
+        "result_scope": "Deno/EJS bytes and external CI runtime only"
+      },
+      "deno": {
+        "archive_bytes": 41963064,
+        "archive_member": "deno",
+        "archive_sha256": "e890975bc2549807bbcc0b584ffafda72cc7c93349dd99c80483dd784f6c4609",
+        "executable_bytes": 96055992,
+        "executable_sha256": "368bca08999e02c6911b8f248167b582276b1f547db5712b6e736d7eda1dbda7"
+      },
+      "external_ci_runtime": {
+        "python_sha256": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+        "python_version": "3.12.15",
+        "windows_vc_runtime": {}
+      },
+      "job_id": 121237832326,
+      "native_identity": {
+        "native_arch": "amd64",
+        "process_arch": "amd64",
+        "system": "Linux",
+        "translated": "0"
+      },
+      "runner_label": "ubuntu-24.04",
+      "target": "linux/amd64",
+      "transitive_research": {
+        "candidate_components": 1130,
+        "collection_error": null,
+        "collector_exit_code": 1,
+        "embedded_notices": 0,
+        "fallback_used": false,
+        "native_imports": {
+          "method": "readelf -d plus ldd",
+          "resolved_file_hashed": 6,
+          "total": 7,
+          "unresolved": [
+            {
+              "class": "ELF_loader_name_missed_by_ldd_regex",
+              "name": "ld-linux-x86-64.so.2"
+            }
+          ]
+        },
+        "product_admitted": false,
+        "status": "BLOCKED",
+        "target_unknown": "Unresolved native imports: ld-linux-x86-64.so.2"
+      }
+    },
+    {
+      "artifact_id": 12607357292,
+      "artifact_name": "s503-deno-ejs-ubuntu-24.04-arm",
+      "byte_runtime": {
+        "result": "PASS",
+        "result_scope": "Deno/EJS bytes and external CI runtime only"
+      },
+      "deno": {
+        "archive_bytes": 40120596,
+        "archive_member": "deno",
+        "archive_sha256": "d49596c20b9788cf8f5d8ddf644103d4bde56ed239753f0bdb92ba9361d51905",
+        "executable_bytes": 85561832,
+        "executable_sha256": "b484f780e5149ca05c673f1f79f7fb466f12a2295933bdad917af4a8a5c020e8"
+      },
+      "external_ci_runtime": {
+        "python_sha256": "5fa9ce7be3c3a2ef767c1999625a370c04ec3102d082472ff7f228225dd590d0",
+        "python_version": "3.12.15",
+        "windows_vc_runtime": {}
+      },
+      "job_id": 121237832406,
+      "native_identity": {
+        "native_arch": "arm64",
+        "process_arch": "arm64",
+        "system": "Linux",
+        "translated": "0"
+      },
+      "runner_label": "ubuntu-24.04-arm",
+      "target": "linux/arm64",
+      "transitive_research": {
+        "candidate_components": 1130,
+        "collection_error": null,
+        "collector_exit_code": 1,
+        "embedded_notices": 0,
+        "fallback_used": false,
+        "native_imports": {
+          "method": "readelf -d plus ldd",
+          "resolved_file_hashed": 5,
+          "total": 6,
+          "unresolved": [
+            {
+              "class": "ELF_loader_name_missed_by_ldd_regex",
+              "name": "ld-linux-aarch64.so.1"
+            }
+          ]
+        },
+        "product_admitted": false,
+        "status": "BLOCKED",
+        "target_unknown": "Unresolved native imports: ld-linux-aarch64.so.1"
+      }
+    },
+    {
+      "artifact_id": 12608285232,
+      "artifact_name": "s503-deno-ejs-macos-15-intel",
+      "byte_runtime": {
+        "result": "PASS",
+        "result_scope": "Deno/EJS bytes and external CI runtime only"
+      },
+      "deno": {
+        "archive_bytes": 42797031,
+        "archive_member": "deno",
+        "archive_sha256": "4b2f5edd2639b7470f034238b321d7002d8dfb4726d8558f52c17afac370eb2c",
+        "executable_bytes": 98799200,
+        "executable_sha256": "5d206ba69742549cc161db06e86f1d93c5622e1dbc8ba9d15a618e538fbc92f4"
+      },
+      "external_ci_runtime": {
+        "python_sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+        "python_version": "3.12.10",
+        "windows_vc_runtime": {}
+      },
+      "job_id": 121237832386,
+      "native_identity": {
+        "native_arch": "amd64",
+        "process_arch": "amd64",
+        "system": "macOS",
+        "translated": "0"
+      },
+      "runner_label": "macos-15-intel",
+      "target": "darwin/amd64",
+      "transitive_research": {
+        "candidate_components": 1130,
+        "collection_error": null,
+        "collector_exit_code": 1,
+        "embedded_notices": 0,
+        "fallback_used": false,
+        "native_imports": {
+          "method": "otool -L",
+          "resolved_file_hashed": 0,
+          "total": 11,
+          "unresolved": [
+            {
+              "class": "dyld_path_not_regular_file_on_runner",
+              "name": "/System/Library/Frameworks/Security.framework/Versions/A/Security"
+            },
+            {
+              "class": "dyld_path_not_regular_file_on_runner",
+              "name": "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation"
+            },
+            {
+              "class": "dyld_path_not_regular_file_on_runner",
+              "name": "/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices"
+            },
+            {
+              "class": "dyld_path_not_regular_file_on_runner",
+              "name": "/usr/lib/libSystem.B.dylib"
+            },
+            {
+              "class": "dyld_path_not_regular_file_on_runner",
+              "name": "/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore"
+            },
+            {
+              "class": "dyld_path_not_regular_file_on_runner",
+              "name": "/System/Library/Frameworks/Metal.framework/Versions/A/Metal"
+            },
+            {
+              "class": "dyld_path_not_regular_file_on_runner",
+              "name": "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation"
+            },
+            {
+              "class": "dyld_path_not_regular_file_on_runner",
+              "name": "/usr/lib/libobjc.A.dylib"
+            },
+            {
+              "class": "dyld_path_not_regular_file_on_runner",
+              "name": "/usr/lib/libiconv.2.dylib"
+            },
+            {
+              "class": "dyld_path_not_regular_file_on_runner",
+              "name": "/System/Library/Frameworks/MetalPerformanceShaders.framework/Versions/A/MetalPerformanceShaders"
+            },
+            {
+              "class": "dyld_path_not_regular_file_on_runner",
+              "name": "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics"
+            }
+          ]
+        },
+        "product_admitted": false,
+        "status": "BLOCKED",
+        "target_unknown": "Unresolved native imports: /System/Library/Frameworks/Security.framework/Versions/A/Security, /System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation, /System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices, /usr/lib/libSystem.B.dylib, /System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore, /System/Library/Frameworks/Metal.framework/Versions/A/Metal, /System/Library/Frameworks/Foundation.framework/Versions/C/Foundation, /usr/lib/libobjc.A.dylib, /usr/lib/libiconv.2.dylib, /System/Library/Frameworks/MetalPerformanceShaders.framework/Versions/A/MetalPerformanceShaders, /System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics"
+      }
+    },
+    {
+      "artifact_id": 12607996025,
+      "artifact_name": "s503-deno-ejs-macos-15",
+      "byte_runtime": {
+        "result": "PASS",
+        "result_scope": "Deno/EJS bytes and external CI runtime only"
+      },
+      "deno": {
+        "archive_bytes": 38770795,
+        "archive_member": "deno",
+        "archive_sha256": "9f0bf660393da2eaff044cdc7444cb08c73f235849b61d224d825a194ce7c98e",
+        "executable_bytes": 81512928,
+        "executable_sha256": "d1e99265e5e6ee096c5780d88ff7d3e6cfdf33b1953a118b4889cab8ca6980ba"
+      },
+      "external_ci_runtime": {
+        "python_sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+        "python_version": "3.12.10",
+        "windows_vc_runtime": {}
+      },
+      "job_id": 121237832233,
+      "native_identity": {
+        "native_arch": "arm64",
+        "process_arch": "arm64",
+        "system": "macOS",
+        "translated": "0"
+      },
+      "runner_label": "macos-15",
+      "target": "darwin/arm64",
+      "transitive_research": {
+        "candidate_components": 1130,
+        "collection_error": null,
+        "collector_exit_code": 1,
+        "embedded_notices": 0,
+        "fallback_used": false,
+        "native_imports": {
+          "method": "otool -L",
+          "resolved_file_hashed": 0,
+          "total": 3,
+          "unresolved": [
+            {
+              "class": "dyld_path_not_regular_file_on_runner",
+              "name": "/usr/lib/libSystem.B.dylib"
+            },
+            {
+              "class": "dyld_path_not_regular_file_on_runner",
+              "name": "/usr/lib/libobjc.A.dylib"
+            },
+            {
+              "class": "dyld_path_not_regular_file_on_runner",
+              "name": "/usr/lib/libiconv.2.dylib"
+            }
+          ]
+        },
+        "product_admitted": false,
+        "status": "BLOCKED",
+        "target_unknown": "Unresolved native imports: /usr/lib/libSystem.B.dylib, /usr/lib/libobjc.A.dylib, /usr/lib/libiconv.2.dylib"
+      }
+    },
+    {
+      "artifact_id": 12607696723,
+      "artifact_name": "s503-deno-ejs-windows-2025",
+      "byte_runtime": {
+        "result": "PASS",
+        "result_scope": "Deno/EJS bytes and external CI runtime only"
+      },
+      "deno": {
+        "archive_bytes": 42917472,
+        "archive_member": "deno.exe",
+        "archive_sha256": "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf",
+        "executable_bytes": 98081568,
+        "executable_sha256": "924397800533d3eb0ed0c889b20ad70e18b970d93acd8135bc043f425e528266"
+      },
+      "external_ci_runtime": {
+        "python_sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a",
+        "python_version": "3.12.10",
+        "windows_vc_runtime": {
+          "MSVCP140.dll": {
+            "sha256": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca",
+            "version": "14.51.36247.0"
+          },
+          "VCRUNTIME140.dll": {
+            "sha256": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7",
+            "version": "14.51.36247.0"
+          }
+        }
+      },
+      "job_id": 121237832346,
+      "native_identity": {
+        "native_arch": "amd64",
+        "process_arch": "amd64",
+        "system": "Windows",
+        "translated": "0"
+      },
+      "runner_label": "windows-2025",
+      "target": "windows/amd64",
+      "transitive_research": {
+        "candidate_components": 1130,
+        "collection_error": null,
+        "collector_exit_code": 1,
+        "embedded_notices": 0,
+        "fallback_used": false,
+        "native_imports": {
+          "method": "PE import and delay-import directories",
+          "resolved_file_hashed": 20,
+          "total": 21,
+          "unresolved": [
+            {
+              "class": "Windows_API_set_contract_not_physical_System32_DLL",
+              "name": "api-ms-win-core-synch-l1-2-0.dll"
+            }
+          ]
+        },
+        "product_admitted": false,
+        "status": "BLOCKED",
+        "target_unknown": "Unresolved native imports: api-ms-win-core-synch-l1-2-0.dll"
+      }
+    },
+    {
+      "artifact_id": 12607377257,
+      "artifact_name": "s503-deno-ejs-windows-11-arm",
+      "byte_runtime": {
+        "result": "PASS",
+        "result_scope": "Deno/EJS bytes and external CI runtime only"
+      },
+      "deno": {
+        "archive_bytes": 41163152,
+        "archive_member": "deno.exe",
+        "archive_sha256": "b413b92b735b50c198e8fe3b85af1aa50e29d5f72e229aab701d132286e14cef",
+        "executable_bytes": 89512224,
+        "executable_sha256": "40d161bc35657cc7432a2e3832290922939cd63fddd29f66db2261d291e42478"
+      },
+      "external_ci_runtime": {
+        "python_sha256": "7f1ebbbb04164caf8f8073aafa7f82321fb44695e10fe6a9ebaf2138b63892c4",
+        "python_version": "3.12.10",
+        "windows_vc_runtime": {
+          "MSVCP140.dll": {
+            "sha256": "167ceac85c2d726c4cd9e39b8881fafdc6de1520c0e67c4f6b271235f9d2a6c5",
+            "version": "14.51.36247.0"
+          },
+          "VCRUNTIME140.dll": {
+            "sha256": "3c56f4167e2b3d8e6338497731e6aae8cd7ec46bd6789f9423a8d9cf9a630310",
+            "version": "14.51.36247.0"
+          }
+        }
+      },
+      "job_id": 121237832402,
+      "native_identity": {
+        "native_arch": "arm64",
+        "process_arch": "arm64",
+        "system": "Windows",
+        "translated": "0"
+      },
+      "runner_label": "windows-11-arm",
+      "target": "windows/arm64",
+      "transitive_research": {
+        "candidate_components": 1130,
+        "collection_error": null,
+        "collector_exit_code": 1,
+        "embedded_notices": 0,
+        "fallback_used": false,
+        "native_imports": {
+          "method": "PE import and delay-import directories",
+          "resolved_file_hashed": 20,
+          "total": 21,
+          "unresolved": [
+            {
+              "class": "Windows_API_set_contract_not_physical_System32_DLL",
+              "name": "api-ms-win-core-synch-l1-2-0.dll"
+            }
+          ]
+        },
+        "product_admitted": false,
+        "status": "BLOCKED",
+        "target_unknown": "Unresolved native imports: api-ms-win-core-synch-l1-2-0.dll"
+      }
+    }
+  ],
+  "verdict": {
+    "byte_runtime": {
+      "result": "PASS",
+      "result_scope": "Deno/EJS bytes and external CI runtime only",
+      "targets_passed": 6
+    },
+    "scope_note": "No binary-specific SBOM, notice closure, product admission, operator-host install, or transcription result is established by this run.",
+    "transitive_research": {
+      "product_admitted": false,
+      "status": "BLOCKED",
+      "targets_blocked": 6
+    }
+  },
+  "workflow_assessment": {
+    "recommended_collector_correction": "Classify and resolve ELF loaders, dyld shared-cache dependencies, and Windows API-set contracts without treating their absent ordinary files as proof of missing runtime dependencies.",
+    "scoped_result_split": "Correct: retain byte/runtime PASS separately from BLOCKED transitive research; collector exit 1 is deliberate and no fallback was used.",
+    "trigger_gap": "The push path filter omits examples/transcribe/dependencies/deno-runtime.json, so a pin-only change there will not automatically run this workflow."
+  }
+}
