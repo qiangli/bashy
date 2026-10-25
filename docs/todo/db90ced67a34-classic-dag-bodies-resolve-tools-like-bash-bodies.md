@@ -9,9 +9,6 @@ labels:
     - dag
     - release
 created: 2026-10-17T15:14:20.725686Z
-sprint: 407
-sprint_id: 90546935-fbc2-5d09-94b0-19c380846681
-sprint_title: bashy 1.0.0 release gates pending external dependencies (follow-up to Sprint 379)
 ---
 
 Carved 2026-10-17 from post-1.0 story d4d97e6da1e5 (S367.1 part D, Sprint 403 closed). For v1.0.0: classic and Bash# dag bodies must not resolve tools differently, and the dag examples must not require build tools on PATH.

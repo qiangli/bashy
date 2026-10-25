@@ -10,9 +10,6 @@ labels:
     - dag
     - ci
 created: 2026-10-17T15:14:11.182068Z
-sprint: 407
-sprint_id: 90546935-fbc2-5d09-94b0-19c380846681
-sprint_title: bashy 1.0.0 release gates pending external dependencies (follow-up to Sprint 379)
 ---
 
 Carved 2026-10-17 from post-1.0 story c3e3127810d5 (S367.4, Sprint 403 closed) for the v1.0.0 launch bar (Sprint 128 p5d CI smoke test; p5b release CI green on three OSes).
