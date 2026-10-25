@@ -37,7 +37,7 @@ out = a.output
 (out / 'bucket').mkdir(parents=True, exist_ok=True)
 # A formula (not a cask) supplies brew services' service DSL.
 formula = ['class Bashy < Formula', '  desc "Bashy userland and outpost service"',
-           '  homepage "https://github.com/qiangli/bashy"',
+           '  homepage "https://dhnt.io"',
            f'  version "{version}"', '  license all_of: ["BSD-3-Clause", "MIT"]']
 for os_name, block in [('darwin', 'on_macos'), ('linux', 'on_linux')]:
     formula.append(f'  {block} do')
@@ -57,7 +57,7 @@ formula += ['  def install', '    bin.install "bashy", "outpost"',
             '  end', 'end', '']
 (out / 'Formula/bashy.rb').write_text('\n'.join(formula))
 scoop = {'version': version, 'description': 'Bashy userland and outpost service',
-         'homepage': 'https://github.com/qiangli/bashy', 'license': {'identifier': 'BSD-3-Clause AND MIT'},
+         'homepage': 'https://dhnt.io', 'license': {'identifier': 'BSD-3-Clause AND MIT'},
          'architecture': {}, 'bin': ['bashy.exe', 'outpost.exe', 'bash.exe', 'sh.exe']}
 for arch, scoop_arch in [('amd64', '64bit'), ('arm64', 'arm64')]:
     url, sha = artifact('windows', arch)
@@ -67,13 +67,14 @@ for arch, scoop_arch in [('amd64', '64bit'), ('arm64', 'arm64')]:
 # ships both x64 and arm64, so emit the normal three-file manifest set.
 winget_dir = out / 'winget'
 winget_dir.mkdir(parents=True, exist_ok=True)
-common = ['PackageIdentifier: qiangli.bashy', f'PackageVersion: {json.dumps(version)}']
-(winget_dir / 'qiangli.bashy.yaml').write_text('\n'.join([
+common = ['PackageIdentifier: DHNT.bashy', f'PackageVersion: {json.dumps(version)}']
+(winget_dir / 'DHNT.bashy.yaml').write_text('\n'.join([
     '# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json',
     *common, 'DefaultLocale: en-US', 'ManifestType: version', 'ManifestVersion: 1.6.0', '']))
-(winget_dir / 'qiangli.bashy.locale.en-US.yaml').write_text('\n'.join([
+(winget_dir / 'DHNT.bashy.locale.en-US.yaml').write_text('\n'.join([
     '# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json',
-    *common, 'PackageLocale: en-US', 'Publisher: Qiang Li', 'PackageName: bashy',
+    *common, 'PackageLocale: en-US', 'Publisher: DHNT Inc.', 'PublisherUrl: https://dhnt.io',
+    'PackageName: bashy', 'PackageUrl: https://dhnt.io',
     'License: BSD-3-Clause AND MIT', 'ShortDescription: Bashy userland and outpost service',
     'ManifestType: defaultLocale', 'ManifestVersion: 1.6.0', '']))
 winget = ['# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json',
@@ -85,5 +86,5 @@ for arch, winget_arch in [('amd64', 'x64'), ('arm64', 'arm64')]:
     url, sha = artifact('windows', arch)
     winget += [f'  - Architecture: {winget_arch}', f'    InstallerUrl: {url}', f'    InstallerSha256: {sha.upper()}']
 winget += ['ManifestType: installer', 'ManifestVersion: 1.6.0', '']
-(winget_dir / 'qiangli.bashy.installer.yaml').write_text('\n'.join(winget))
+(winget_dir / 'DHNT.bashy.installer.yaml').write_text('\n'.join(winget))
 print(f'Generated Homebrew, Scoop and Winget manifests at {out}; publication and native installation remain separate gates.')
