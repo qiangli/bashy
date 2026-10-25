@@ -1,10 +1,15 @@
 name: S503 QuickJS-NG native EJS evidence pilot
 
-# Evidence only. No automatic trigger, product installation, or release gate.
-# workflow_dispatch requires this reviewed workflow to be registered on the
-# repository default branch before a manager can launch it.
+# Evidence only. This branch-scoped trigger runs the reviewed two-target pilot;
+# it cannot install or release a product binary.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - s503-contract-integration
+    paths:
+      - .github/workflows/s503-quickjs-native-pilot.yml
+      - .github/scripts/s503_quickjs_native_pilot.py
 
 permissions:
   contents: read

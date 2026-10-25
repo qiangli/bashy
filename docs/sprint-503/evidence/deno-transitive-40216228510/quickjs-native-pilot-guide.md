@@ -1,12 +1,13 @@
 # QuickJS-NG native pilot: execution and acceptance boundary
 
-The manual [pilot workflow](../../../../.github/workflows/s503-quickjs-native-pilot.yml)
+The [pilot workflow](../../../../.github/workflows/s503-quickjs-native-pilot.yml)
 is an **S503.6 research gate**, not a product release or installation path.
-It has no push trigger and has not been launched. GitHub requires a workflow
-registered on the repository default branch before `workflow_dispatch` can
-launch it; the sprint manager decides when and how to register this reviewed
-workflow. Two jobs, `ubuntu-24.04` and `windows-11-arm`, each have a 30-minute
-timeout and retain evidence even on failure.
+It runs only when the reviewed workflow or pilot script changes on the
+`s503-contract-integration` branch. `workflow_dispatch` additionally requires
+registration on the repository default branch. Two jobs, `ubuntu-24.04` and
+`windows-11-arm`, each have a 30-minute timeout and retain evidence even on
+failure. A passing CI status remains a research result until the retained
+native artifacts receive independent review.
 
 The [pilot script](../../../../.github/scripts/s503_quickjs_native_pilot.py)
 downloads the exact QuickJS-NG `v0.17.0` commit archive
