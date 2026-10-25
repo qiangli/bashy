@@ -1,0 +1,80 @@
+name: S503 macOS fresh-prefix Python source research
+
+on:
+  push:
+    branches: [s503-contract-integration]
+    paths:
+      - .github/workflows/s503-python-macos-fresh-source.yml
+      - .github/scripts/s503-python-macos-fresh-source.py
+      - .github/scripts/test_s503_python_macos_fresh_source.py
+      - examples/transcribe/dependencies/setup_python_source.py
+      - examples/transcribe/dependencies/operator-python-admission.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: s503-python-macos-source-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  fresh-prefix:
+    name: Python.org 3.12.15 ${{ matrix.target }} fresh prefix
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: macos-15-intel, target: darwin/amd64}
+          - {runner: macos-15, target: darwin/arm64}
+    env:
+      EXPECTED_TARGET: ${{ matrix.target }}
+      RUNNER_LABEL: ${{ matrix.runner }}
+      CANDIDATE_COMMIT: ${{ github.sha }}
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check native runner and private build inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/python-macos-source
+          python3 -m unittest discover -s .github/scripts \
+            -p 'test_s503_python_macos_fresh_source.py' -v
+          python3 .github/scripts/s503-python-macos-fresh-source.py preflight \
+            --evidence evidence/python-macos-source
+      - name: Download exact Python.org source and signer inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          input="$RUNNER_TEMP/s503-python-macos-source-input"
+          mkdir -m 700 "$input"
+          echo "SOURCE_INPUT=$input" >> "$GITHUB_ENV"
+          base=https://www.python.org/ftp/python/3.12.15/Python-3.12.15.tar.xz
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            --retry 2 --connect-timeout 20 --max-time 180 --max-filesize 20829824 \
+            --output "$input/Python-3.12.15.tar.xz" "$base"
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            --retry 2 --connect-timeout 20 --max-time 60 --max-filesize 4096 \
+            --output "$input/Python-3.12.15.tar.xz.asc" "$base.asc"
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            --retry 2 --connect-timeout 20 --max-time 60 --max-filesize 65536 \
+            --output "$input/thomas-wouters.gpg" https://github.com/Yhg1s.gpg
+          python3 .github/scripts/s503-python-macos-fresh-source.py inputs \
+            --input-dir "$input" --evidence evidence/python-macos-source
+      - name: Build under a new RUNNER_TEMP prefix and audit native closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/s503-python-macos-fresh-source.py build \
+            --input-dir "$SOURCE_INPUT" --evidence evidence/python-macos-source
+      - name: Retain receipts and notices, never source or build bytes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s503-python-macos-source-${{ matrix.runner }}
+          path: evidence/python-macos-source/
+          if-no-files-found: warn
+          retention-days: 14

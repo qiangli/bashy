@@ -84,6 +84,27 @@ identified macOS framework, failed command, wrong architecture or absent stdlib
 module fails the research job. Passing this job supplies evidence for review;
 it does not change any operator admission status or authorize redistribution.
 
+The separate [fresh-prefix macOS source research workflow](../../.github/workflows/s503-python-macos-fresh-source.yml)
+is manual and runs only on disposable native `macos-15-intel` and `macos-15`
+GitHub-hosted runners. It builds official Python.org 3.12.15 source under an
+absent, private `RUNNER_TEMP` prefix, never invokes the `.pkg` installer and
+never writes to `/Library/Frameworks`. The tarball, detached signature and
+release key must match the exact Linux source-lane pins; the detached signature
+must verify under Thomas Wouters' pinned release key. It disables readline,
+DBM and bundled pip wheels, explicitly uses the runner's Homebrew `openssl@3`,
+and records the formula metadata, library and header hashes, and copied notices.
+Its evidence hashes every installed file, verifies the executing interpreter and
+all tested module paths lie in the fresh prefix, checks codecs and OpenSSL,
+records every native Mach-O module and resolved dependency, and compares the
+preexisting system framework and package receipts before and after. Source,
+OpenSSL and installed notice files are retained with exact hashes and byte
+copies; source and build bytes are not uploaded. The macOS system shared-cache
+libraries have no standalone file hashes and remain explicit review items.
+This is a 3.12.15 source-build candidate, so it does not establish a fresh
+3.12.10 `.pkg` install or an operator-host installer path. Product and operator
+admission remain false until native receipts are independently reviewed and the
+remaining license and host gates close.
+
 ## Host procedure
 
 1. Claim the native host under the sprint's resource rules. Record the actual
