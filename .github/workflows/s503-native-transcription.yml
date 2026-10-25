@@ -4,10 +4,7 @@ on:
   push:
     branches: [s503-contract-integration]
     paths:
-      - .github/workflows/s503-native-transcription.yml
       - docs/sprint-503/evidence/native-transcription-admission.json
-      - examples/transcribe/**
-      - scripts/go-product.sh
   workflow_dispatch:
 
 permissions:

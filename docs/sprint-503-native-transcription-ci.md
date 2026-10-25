@@ -1,7 +1,8 @@
 # S503 native transcription workflow admission
 
 `.github/workflows/s503-native-transcription.yml` is a separate six-runner
-workflow triggered by a push to `s503-contract-integration`. It is deliberately
+workflow triggered when the reviewed admission record is pushed to
+`s503-contract-integration`. It is deliberately
 **blocked** until the operator evidence and exact native dependencies can be
 admitted. A build or a downloaded media file cannot turn the job green.
 
