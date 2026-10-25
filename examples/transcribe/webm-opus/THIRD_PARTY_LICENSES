@@ -1,0 +1,40 @@
+Runtime dependency closure reviewed 2026-10-25
+
+Pion Opus v0.1.0, commit eb60bfd0e51a58e122fcfd0c0df027b014db7daa
+https://github.com/pion/opus/tree/eb60bfd0e51a58e122fcfd0c0df027b014db7daa
+MIT. Full upstream LICENSE retained in licenses/PION-MIT.txt.
+Source SPDX notice: Copyright 2026 The Pion community <https://pion.ly>.
+Module zip: h1:GgK/a3DNDrffKjUFsK39rZKqfv7bQ2S2eqRKt0BnqAE=
+go.mod: h1:t5Xog2n682JnawoykACE6nKVmupFvmJvkpM7x6bTv6g=
+
+`GOWORK=off go list -deps` contains only this adapter, Pion's opus,
+internal/{bitdepth,rangecoding,slicetools,celt,resample/silk,silk}, and the Go
+standard library (BSD-3-Clause distribution; license retained in licenses).
+No at-wat/ebml-go package is imported or linked. v0.19.4 is Apache-2.0, but
+its convenience reader failed the previous review; this adapter does not
+inherit its goroutines, panic path or metadata loss. No cgo, libopus, FFmpeg,
+models, executable downloads or third-party services are runtime dependencies.
+
+Pion's declared graph includes upstream TEST dependencies below. Their pinned
+license files were inspected; none appears in this adapter's runtime or test
+package closure. They remain in go.sum as module checksum closure:
+- github.com/stretchr/testify v1.11.1: MIT
+- github.com/davecgh/go-spew v1.1.1: ISC
+- github.com/pmezard/go-difflib v1.0.0: BSD-3-Clause
+- gopkg.in/yaml.v3 v3.0.1: MIT (listed libyaml-derived files) and Apache-2.0
+  (remaining files), with upstream NOTICE.
+`GOWORK=off go mod verify` passes. No upstream Pion fuzz/seed data is copied.
+
+Test-only media:
+- Wikispeech-sample2.opus, Sebastian Berlin (WMSE), CC0-1.0. Two seconds
+  remuxed into speech.webm; independent decoded reference PCM shares CC0.
+- stereo.webm and its reference PCM: authored sine signals, dedicated CC0.
+Full provenance/hashes are in testdata/README.md and testdata/manifest.json.
+- Fixture authoring used an already installed libopus 1.6.1 (BSD-3-Clause,
+  COPYING inspected), solely to encode the authored stereo test signal and
+  produce independent reference PCM. No library/source/binary is shipped.
+  testdata/generate.py is optional authoring tooling, never a test/build step.
+
+This is source license closure, not a release SBOM, vulnerability scan,
+signature or six-target artifact admission. Include these notices and their
+license files with distributed binaries.
