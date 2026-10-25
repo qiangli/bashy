@@ -1,0 +1,95 @@
+{
+  "schema": "s503-python-macos-fresh-source-independent-review-v1",
+  "run_id": 40218780251,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40218780251",
+  "run_conclusion": "success",
+  "candidate_commit": "5085d568cc9e32acf7ebc0a522151efa01d4c2ff",
+  "scope": "Alternate Python.org 3.12.15 source-build research on two disposable GitHub-hosted native macOS runners; neither the pinned 3.12.10 external installer nor an operator host was installed by this run.",
+  "source": {
+    "url": "https://www.python.org/ftp/python/3.12.15/Python-3.12.15.tar.xz",
+    "archive_bytes": 20829824,
+    "archive_sha256": "c2c4321961fab0fb999d66e0cecf521c2ab3994c7992873ea99e306c1094fd5a",
+    "detached_signature_sha256": "e80124b35dabf82264f254dbb291697df96768f6e4ee0e43d7e8f110a9ea50b6",
+    "release_key_file_sha256": "33c3af79f23a83c2a8a569bfd546601be400cb26dd7eb31f6d5e5b621667c391",
+    "release_key_fingerprint": "7169605F62C751356D054A26A821E680E5FA6305",
+    "hosted_signature_check": "PASS_CANDIDATE_ONLY"
+  },
+  "operator_policy_sha256": "bfedfa9d97509788c7532ad6675a334c2c7bbf84222b3c6a077cd0e0bc371d3f",
+  "product_admitted": false,
+  "operator_admitted": false,
+  "independent_checks": [
+    "Downloaded both raw artifact ZIPs and rehashed each against the GitHub artifact API digest.",
+    "Rehashed result.json, retained source/installed/OpenSSL notice copies, compiler smoke output, OpenSSL formula metadata and bounded build/configuration log copies against the native receipts.",
+    "Compared each runtime module origin and SHA-256 with the private-prefix installed-file manifest; checked native architecture and matched all 75 installed Mach-O executable/modules to the 78-entry dependency closure.",
+    "Compared the preflight system Python framework hash and all Python 3.12 pkgutil receipt strings with the post-build snapshot; all were identical.",
+    "Confirmed both OpenSSL libraries and exact recorded hashes occur in each Mach-O closure, and no closure or tested module path references the preinstalled Python.framework."
+  ],
+  "targets": [
+    {
+      "target": "darwin/arm64",
+      "runner_label": "macos-15",
+      "artifact_id": 12608715548,
+      "artifact_zip_bytes": 198625,
+      "artifact_zip_sha256": "14b3993a121b590016a956d50ca0ced4b6a1485b93b93c9fa68a08c44a846b4e",
+      "result_json_sha256": "4e7f10a545f16d604faebec72205897e4c0cbbb4180bf6cbd567904801ea6a96",
+      "result": "FRESH_PREFIX_EVIDENCE_CAPTURED_UNADMITTED",
+      "fresh_prefix_absent_before": true,
+      "version": "3.12.15",
+      "machine": "arm64",
+      "installed_executable_sha256": "d2ee51d9c66fcc33e91d27d2dae321e0b691d663f925d2d176b50970db0d107c",
+      "stdlib_codec_roundtrips": "zlib,bz2,lzma PASS",
+      "openssl_formula": "openssl@3 3.6.4",
+      "openssl_version": "OpenSSL 3.6.4 25 Aug 2026",
+      "openssl_libssl_sha256": "a53b324db78c1146ff9ce68700f952e3997f4a1965ee6c6a802f6d3bdcd625ad",
+      "openssl_libcrypto_sha256": "48c160c3aaa46cb69e5874370d820c2bc8be0712f6ee690fa10581ad966474a7",
+      "installed_file_count": 3359,
+      "installed_native_file_count": 75,
+      "macho_closure_file_count": 78,
+      "source_notice_count": 7,
+      "installed_notice_count": 1,
+      "openssl_notice_count": 1,
+      "system_framework_before_after_sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+      "external_liblzma": {
+        "path": "/opt/homebrew/Cellar/xz/5.8.3/lib/liblzma.5.dylib",
+        "sha256": "7a9e58053dfa9296d25076c886b47b6c29ad5e6ae8031789a5bf86b641aa63af",
+        "license_status": "native_host_review_required"
+      }
+    },
+    {
+      "target": "darwin/amd64",
+      "runner_label": "macos-15-intel",
+      "artifact_id": 12609195800,
+      "artifact_zip_bytes": 198717,
+      "artifact_zip_sha256": "ef07cbc8743d4ca7d6cc0794fee0a292b40430316d959ba480b67db8682fd663",
+      "result_json_sha256": "3e0b54882a3823bbd4a60d2fb8d7f20eba3b0bed1e12834c855413ec222fab0d",
+      "result": "FRESH_PREFIX_EVIDENCE_CAPTURED_UNADMITTED",
+      "fresh_prefix_absent_before": true,
+      "version": "3.12.15",
+      "machine": "x86_64",
+      "installed_executable_sha256": "db94a44a866274b0c1d0de738ab85aceb6be1600a3ba11fe45da86e0cf5671d4",
+      "stdlib_codec_roundtrips": "zlib,bz2,lzma PASS",
+      "openssl_formula": "openssl@3 3.6.3",
+      "openssl_version": "OpenSSL 3.6.3 9 Jun 2026",
+      "openssl_libssl_sha256": "911539d760dec81d595547b21ad535f6abfd37a68ed4acd0b260fc7a9a1335ab",
+      "openssl_libcrypto_sha256": "639559f31782c798d6f5a9b6d3f86f0d13f95d94a921be0ad3d988068744ef50",
+      "installed_file_count": 3359,
+      "installed_native_file_count": 75,
+      "macho_closure_file_count": 78,
+      "source_notice_count": 7,
+      "installed_notice_count": 1,
+      "openssl_notice_count": 1,
+      "system_framework_before_after_sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+      "external_liblzma": {
+        "path": "/usr/local/Cellar/xz/5.8.3/lib/liblzma.5.dylib",
+        "sha256": "edd095b60d8aa82cfad8620308acf460525a4df1976a1e1154fa287c03a9f387",
+        "license_status": "native_host_review_required"
+      }
+    }
+  ],
+  "remaining_limits": [
+    "This proves a fresh private source prefix on the two hosted macOS images, not a fresh 3.12.10 .pkg installation or an operator-host installation.",
+    "Source archives, installed binaries and system shared-cache libraries were not uploaded; their runtime hashes and origins are native receipts, with internal consistency and retained notice copies independently rechecked.",
+    "Homebrew xz/liblzma and macOS shared-cache dependency licenses still need product-policy review; no redistribution or product dependency path is admitted.",
+    "The native source-build check does not change operator-python-admission.json; product and operator admission remain false."
+  ]
+}
