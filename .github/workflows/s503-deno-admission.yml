@@ -1,0 +1,259 @@
+name: S503 Deno and EJS dependency admission
+
+on:
+  push:
+    branches: [s503-contract-integration]
+    paths:
+      - .github/workflows/s503-deno-admission.yml
+      - docs/sprint-503-deno-admission.md
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-dependency-evidence:
+    name: ${{ matrix.label }} Deno and offline EJS
+    runs-on: ${{ matrix.label }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: ubuntu-24.04
+            os: Linux
+            arch: amd64
+            python_arch: x64
+            triple: x86_64-unknown-linux-gnu
+            archive_sha256: e890975bc2549807bbcc0b584ffafda72cc7c93349dd99c80483dd784f6c4609
+            archive_sum_sha256: f41fbb4278955d03b735c37f957470a1432bdae643d673866e913eea6e4a7855
+            executable_sha256: 368bca08999e02c6911b8f248167b582276b1f547db5712b6e736d7eda1dbda7
+            executable_sum_sha256: 76e956515add2a4a309291910e865418ab52fed761ab39fa87a355599d8c7ae8
+          - label: ubuntu-24.04-arm
+            os: Linux
+            arch: arm64
+            python_arch: arm64
+            triple: aarch64-unknown-linux-gnu
+            archive_sha256: d49596c20b9788cf8f5d8ddf644103d4bde56ed239753f0bdb92ba9361d51905
+            archive_sum_sha256: 8eb865b23b330c730e109461eb3c1e185049ace2cd20a2002e7be1c023e284d0
+            executable_sha256: b484f780e5149ca05c673f1f79f7fb466f12a2295933bdad917af4a8a5c020e8
+            executable_sum_sha256: dbbbdf66ec97f9793bf4608934b767ed55ef50fc7dc7b0fb84933edf09a2bf2f
+          - label: macos-15-intel
+            os: macOS
+            arch: amd64
+            python_arch: x64
+            triple: x86_64-apple-darwin
+            archive_sha256: 4b2f5edd2639b7470f034238b321d7002d8dfb4726d8558f52c17afac370eb2c
+            archive_sum_sha256: bd12f308c1d793fdb2131cd2b47a1288191b32321d4ce0e20656f151d5b6fb70
+            executable_sha256: 5d206ba69742549cc161db06e86f1d93c5622e1dbc8ba9d15a618e538fbc92f4
+            executable_sum_sha256: 4af009c8722536813a381182ce8afcd2504ccb8ef59dca34854bae72bec4562d
+          - label: macos-15
+            os: macOS
+            arch: arm64
+            python_arch: arm64
+            triple: aarch64-apple-darwin
+            archive_sha256: 9f0bf660393da2eaff044cdc7444cb08c73f235849b61d224d825a194ce7c98e
+            archive_sum_sha256: 1ca4234e7c94173c442249c0399070cdce09cc841092c0a6d205101bbde7dca3
+            executable_sha256: d1e99265e5e6ee096c5780d88ff7d3e6cfdf33b1953a118b4889cab8ca6980ba
+            executable_sum_sha256: 4e72750a8ca8de982942967718e1af6a32f3107f91b4ddbbcef49be371ee5f8a
+          - label: windows-2025
+            os: Windows
+            arch: amd64
+            python_arch: x64
+            triple: x86_64-pc-windows-msvc
+            archive_sha256: cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf
+            archive_sum_sha256: 0fdedd625087373992be0dff62a3c3a3a9b254a0cf01d46d54c559c451c86413
+            executable_sha256: 924397800533d3eb0ed0c889b20ad70e18b970d93acd8135bc043f425e528266
+            executable_sum_sha256: c2b2404be2a5b850b76a9c6ffd797c2178064f06d3bdf9806f53adcf0e021e4d
+          - label: windows-11-arm
+            os: Windows
+            arch: arm64
+            python_arch: arm64
+            triple: aarch64-pc-windows-msvc
+            archive_sha256: b413b92b735b50c198e8fe3b85af1aa50e29d5f72e229aab701d132286e14cef
+            archive_sum_sha256: fdbe4f38869dcbf70beefda0c7a1fe02c9b52c6f23c46e0b6eea898a742e6fa2
+            executable_sha256: 40d161bc35657cc7432a2e3832290922939cd63fddd29f66db2261d291e42478
+            executable_sum_sha256: 5f2157e98cd351418e7e5fdb6b3ce6dbce66a38914e3bc04687478f3d8eba89e
+    env:
+      TARGET_LABEL: ${{ matrix.label }}
+      TARGET_OS: ${{ matrix.os }}
+      TARGET_ARCH: ${{ matrix.arch }}
+      TARGET_TRIPLE: ${{ matrix.triple }}
+      DENO_ARCHIVE_SHA256: ${{ matrix.archive_sha256 }}
+      DENO_ARCHIVE_SUM_SHA256: ${{ matrix.archive_sum_sha256 }}
+      DENO_EXECUTABLE_SHA256: ${{ matrix.executable_sha256 }}
+      DENO_EXECUTABLE_SUM_SHA256: ${{ matrix.executable_sum_sha256 }}
+      CANDIDATE_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.python_arch }}
+      - name: Verify native Deno and bundled EJS from upstream bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import platform
+          import re
+          import shutil
+          import subprocess
+          import sys
+          import urllib.request
+          import zipfile
+
+          evidence = {'schema': 's503-deno-ejs-admission-v1',
+                      'candidate_commit': os.environ['CANDIDATE_COMMIT'],
+                      'runner_label': os.environ['TARGET_LABEL'], 'checks': {},
+                      'result': 'BLOCKED'}
+          work = Path(os.environ['RUNNER_TEMP']) / 's503-deno-admission'
+          work.mkdir(parents=True, exist_ok=True)
+
+          def require(ok, message):
+              if not ok:
+                  raise RuntimeError(message)
+
+          def digest(data):
+              return hashlib.sha256(data).hexdigest()
+
+          def download(url, name, max_bytes):
+              path = work / name
+              request = urllib.request.Request(url, headers={'User-Agent': 's503-deno-admission'})
+              with urllib.request.urlopen(request, timeout=120) as source, path.open('wb') as target:
+                  total = 0
+                  while block := source.read(1024 * 1024):
+                      total += len(block)
+                      require(total <= max_bytes, 'oversize release asset: ' + name)
+                      target.write(block)
+              return path
+
+          def sha(path):
+              h = hashlib.sha256()
+              with path.open('rb') as source:
+                  for block in iter(lambda: source.read(1024 * 1024), b''):
+                      h.update(block)
+              return h.hexdigest()
+
+          def published_hash(path, expected_sum_sha, expected_payload_sha):
+              raw = path.read_bytes()
+              require(digest(raw) == expected_sum_sha, 'upstream checksum-file digest drift: ' + path.name)
+              text = raw.decode('ascii')
+              # Deno's Unix checksum files use sha256sum; its Windows files
+              # use PowerShell Format-List output. Match the one pinned hash.
+              hashes = re.findall(r'(?i)\b[0-9a-f]{64}\b', text)
+              require(len(hashes) == 1 and hashes[0].lower() == expected_payload_sha,
+                      'upstream published payload hash drift: ' + path.name)
+
+          try:
+              system = platform.system()
+              system = {'Darwin': 'macOS'}.get(system, system)
+              machine = platform.machine()
+              arch = {'x86_64': 'amd64', 'AMD64': 'amd64', 'X64': 'amd64',
+                      'aarch64': 'arm64', 'arm64': 'arm64', 'ARM64': 'arm64'}.get(machine, machine)
+              translated = '0'
+              if system == 'macOS':
+                  probe = subprocess.run(['sysctl', '-n', 'sysctl.proc_translated'],
+                                         capture_output=True, text=True)
+                  if probe.returncode == 0:
+                      translated = probe.stdout.strip()
+              if system == 'Windows':
+                  native = subprocess.check_output(['pwsh', '-NoProfile', '-Command',
+                      '[System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()'], text=True).strip()
+                  native_arch = {'X64': 'amd64', 'Arm64': 'arm64'}.get(native, native)
+              else:
+                  native_arch = arch
+              evidence['identity'] = {'system': system, 'process_machine': machine,
+                                      'process_arch': arch, 'native_arch': native_arch,
+                                      'translated': translated, 'python': sys.version.split()[0]}
+              require((system, arch, native_arch, translated) ==
+                      (os.environ['TARGET_OS'], os.environ['TARGET_ARCH'], os.environ['TARGET_ARCH'], '0'),
+                      'runner or Python process is not native to target')
+              evidence['checks']['native_identity'] = 'PASS'
+
+              base = 'https://github.com/denoland/deno/releases/download/v2.9.8/'
+              stem = 'deno-' + os.environ['TARGET_TRIPLE']
+              archive_name = stem + '.zip'
+              archive_sum = download(base + archive_name + '.sha256sum', archive_name + '.sha256sum', 1024)
+              executable_sum = download(base + stem + '.sha256sum', stem + '.sha256sum', 1024)
+              published_hash(archive_sum, os.environ['DENO_ARCHIVE_SUM_SHA256'],
+                             os.environ['DENO_ARCHIVE_SHA256'])
+              published_hash(executable_sum, os.environ['DENO_EXECUTABLE_SUM_SHA256'],
+                             os.environ['DENO_EXECUTABLE_SHA256'])
+              evidence['checks']['upstream_checksum_files'] = 'PASS'
+              archive = download(base + archive_name, archive_name, 50_000_000)
+              actual_archive = sha(archive)
+              require(actual_archive == os.environ['DENO_ARCHIVE_SHA256'], 'Deno archive hash mismatch')
+              executable_name = 'deno.exe' if system == 'Windows' else 'deno'
+              executable = work / executable_name
+              with zipfile.ZipFile(archive) as package:
+                  members = [member for member in package.infolist()
+                             if member.filename == executable_name and not member.is_dir()]
+                  require(len(members) == 1, 'Deno archive lacks one expected executable')
+                  with package.open(members[0]) as source, executable.open('wb') as target:
+                      shutil.copyfileobj(source, target)
+              actual_executable = sha(executable)
+              require(actual_executable == os.environ['DENO_EXECUTABLE_SHA256'],
+                      'Deno executable hash mismatch')
+              executable.chmod(0o755)
+              version = subprocess.check_output([str(executable), '--version'], text=True, timeout=30).splitlines()[0]
+              require(version.startswith('deno 2.9.8 '), 'unexpected Deno version: ' + version)
+              eval_version = subprocess.check_output([str(executable), 'eval',
+                  'console.log(Deno.version.deno)'], text=True, timeout=30).strip()
+              require(eval_version == '2.9.8', 'Deno JavaScript runtime failed offline smoke')
+              evidence['deno'] = {'version': version, 'archive_url': base + archive_name,
+                                  'archive_bytes': archive.stat().st_size,
+                                  'archive_sha256': actual_archive,
+                                  'executable_bytes': executable.stat().st_size,
+                                  'executable_sha256': actual_executable}
+              evidence['checks']['deno_archive_executable_runtime'] = 'PASS'
+
+              yt_base = 'https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.21/'
+              yt_sum = download(yt_base + 'SHA2-256SUMS', 'SHA2-256SUMS', 4096)
+              require(sha(yt_sum) == 'ea1a0e0274b6e8451d9c78d6645edd5a6241465e08a2a615f08a5e4221f8b62f',
+                      'yt-dlp upstream checksum-file digest drift')
+              require('b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14  yt-dlp'
+                      in yt_sum.read_text().splitlines(), 'yt-dlp published zipapp hash drift')
+              yt = download(yt_base + 'yt-dlp', 'yt-dlp', 5_000_000)
+              require(sha(yt) == 'b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14',
+                      'yt-dlp zipapp hash mismatch')
+              with zipfile.ZipFile(yt) as package:
+                  source = package.read('yt_dlp_ejs/_version.py').decode('utf-8')
+                  match = re.search(r"^__version__ = version = '([^']+)'$", source, re.M)
+                  require(match is not None and match.group(1) == '0.8.0',
+                          'yt-dlp zipapp does not bundle EJS 0.8.0')
+                  scripts = {
+                      'yt_dlp_ejs/yt/solver/core.min.js':
+                          '18da6ce0758b416e7ae645084f4f8801f9f9d59d6c477c05eaa0ff94ebd8cc00',
+                      'yt_dlp_ejs/yt/solver/lib.min.js':
+                          'c55987fe697e5b9ee18830163f7af85327e9bb5c3e674b969d38c8d205eaa577',
+                  }
+                  ejs_hashes = {name: digest(package.read(name)) for name in scripts}
+                  require(ejs_hashes == scripts, 'bundled offline EJS scripts differ from 0.8.0 release assets')
+              yt_version = subprocess.check_output([sys.executable, '-I', str(yt), '--version'],
+                                                   text=True, timeout=30).strip()
+              require(yt_version == '2026.10.21', 'yt-dlp zipapp version mismatch')
+              evidence['yt_dlp'] = {'version': yt_version, 'zipapp_url': yt_base + 'yt-dlp',
+                                    'zipapp_bytes': yt.stat().st_size, 'zipapp_sha256': sha(yt),
+                                    'ejs_version': match.group(1), 'ejs_script_sha256': ejs_hashes}
+              evidence['checks']['yt_dlp_offline_ejs'] = 'PASS'
+              evidence['result'] = 'PASS'
+          except Exception as error:
+              evidence['error'] = str(error)
+              raise
+          finally:
+              Path('evidence/deno-ejs-admission.json').write_text(
+                  json.dumps(evidence, indent=2, sort_keys=True) + '\n')
+          PY
+      - name: Upload dependency evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s503-deno-ejs-${{ matrix.label }}
+          path: evidence/deno-ejs-admission.json
+          if-no-files-found: warn
