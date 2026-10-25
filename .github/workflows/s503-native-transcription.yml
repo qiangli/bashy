@@ -37,6 +37,7 @@ jobs:
           labels = {'ubuntu-24.04', 'ubuntu-24.04-arm', 'macos-15-intel',
                     'macos-15', 'windows-2025', 'windows-11-arm'}
           digest = re.compile(r'[0-9a-f]{64}\Z')
+          commit = re.compile(r'[0-9a-f]{40}\Z')
           def require(ok, why):
               if not ok:
                   raise SystemExit('BLOCKED: ' + why)
@@ -113,11 +114,28 @@ jobs:
               value = a.get(key, '')
               require(isinstance(value, str) and len(value.split()) >= 6 and
                       'FILL' not in value and 'TODO' not in value,
-                      key + ' human-reviewed excerpt')
+                      key + ' transcript reference')
           for key in ('operator_min_score', 'controlled_min_score'):
               require(isinstance(a.get(key), (int, float)) and 0.5 <= a[key] <= 1,
                       key + ' reviewed transcript tolerance')
-          require(a.get('review_evidence'), 'reviewed source for both excerpts')
+          reference_status = a.get('operator_reference_status')
+          require(reference_status in ('provisional_machine_agreement', 'human_confirmed'),
+                  'operator reference review status')
+          review = a.get('review_evidence')
+          require(isinstance(review, dict) and review.get('controlled') and
+                  isinstance(review.get('operator'), dict),
+                  'recorded source for both excerpts')
+          if reference_status == 'provisional_machine_agreement':
+              operator = review['operator']
+              require(operator.get('caption_sha256') ==
+                      'd9ee83c631c1e94319bb88085263ce7c6f3f8209583f9ceb85231e3a6e7e8f61' and
+                      operator.get('whisper_srt_sha256') ==
+                      'cafd81895866bbd0739ccc1447d93e734e5fc7379df8949dc79b255450305788' and
+                      operator.get('human_confirmation') is None,
+                      'provisional operator line must be tied to two machine sources')
+          else:
+              require(review['operator'].get('human_confirmation'),
+                      'human confirmation record for operator excerpt')
           require(digest.fullmatch(a.get('controlled_webm_sha256', '')) and
                   a['controlled_webm_sha256'] !=
                   'dfa1a92759f3ab64c793d16140204efcd9e7c8b84e367a28efd31548da1f04b4',
@@ -128,7 +146,7 @@ jobs:
           require(isinstance(fixture.get('run_id'), int) and fixture['run_id'] > 0 and
                   fixture.get('artifact_name') == 's503-controlled-speech' and
                   isinstance(fixture.get('bytes'), int) and fixture['bytes'] > 0 and
-                  digest.fullmatch(fixture.get('source_commit', '')) and
+                  commit.fullmatch(fixture.get('source_commit', '')) and
                   fixture.get('license_evidence') and fixture.get('review_evidence'),
                   'reviewed licensed controlled speech artifact coordinates')
           offline = a.get('offline_canary', {})
@@ -138,7 +156,8 @@ jobs:
                       digest.fullmatch(item.get('enforcer_sha256', '')) and
                       item.get('probe_command') == ['python-socket-connect', '1.1.1.1:443'],
                       label + ' reviewed OS network-denial enforcer and probe')
-          print('PASS: reviewed exact-hash and excerpt admission record has six targets')
+          print('PASS: exact-hash admission has six targets; operator reference status=' +
+                reference_status)
           PY
 
   native-transcription:
@@ -774,6 +793,10 @@ jobs:
                   raise SystemExit('BLOCKED: native URL download cancellation proof is incomplete')
               if report['local_pipeline_cancellation'] != 'pass':
                   raise SystemExit('BLOCKED: native local pipeline cancellation remains untested')
+          admission = json.loads(Path('docs/sprint-503/evidence/native-transcription-admission.json').read_text())
+          if admission['operator_reference_status'] != 'human_confirmed':
+              raise SystemExit('BLOCKED: operator transcript reference remains provisional; '
+                               'native evidence was collected but cannot be accepted yet')
           PY
 
       - name: Upload native identity, transcripts and denial evidence

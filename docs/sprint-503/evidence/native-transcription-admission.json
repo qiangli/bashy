@@ -1,0 +1,210 @@
+{
+  "schema": "s503-native-transcription-admission-v2",
+  "whisper_build_run_id": 40195543786,
+  "whisper_build_commit": "c59c3aa134588e21e1039750515fc00159cc2cb6",
+  "deno": {
+    "ubuntu-24.04": {
+      "archive_url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-unknown-linux-gnu.zip",
+      "archive_sha256": "e890975bc2549807bbcc0b584ffafda72cc7c93349dd99c80483dd784f6c4609",
+      "executable_sha256": "368bca08999e02c6911b8f248167b582276b1f547db5712b6e736d7eda1dbda7"
+    },
+    "ubuntu-24.04-arm": {
+      "archive_url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-aarch64-unknown-linux-gnu.zip",
+      "archive_sha256": "d49596c20b9788cf8f5d8ddf644103d4bde56ed239753f0bdb92ba9361d51905",
+      "executable_sha256": "b484f780e5149ca05c673f1f79f7fb466f12a2295933bdad917af4a8a5c020e8"
+    },
+    "macos-15-intel": {
+      "archive_url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-apple-darwin.zip",
+      "archive_sha256": "4b2f5edd2639b7470f034238b321d7002d8dfb4726d8558f52c17afac370eb2c",
+      "executable_sha256": "5d206ba69742549cc161db06e86f1d93c5622e1dbc8ba9d15a618e538fbc92f4"
+    },
+    "macos-15": {
+      "archive_url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-aarch64-apple-darwin.zip",
+      "archive_sha256": "9f0bf660393da2eaff044cdc7444cb08c73f235849b61d224d825a194ce7c98e",
+      "executable_sha256": "d1e99265e5e6ee096c5780d88ff7d3e6cfdf33b1953a118b4889cab8ca6980ba"
+    },
+    "windows-2025": {
+      "archive_url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-pc-windows-msvc.zip",
+      "archive_sha256": "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf",
+      "executable_sha256": "924397800533d3eb0ed0c889b20ad70e18b970d93acd8135bc043f425e528266"
+    },
+    "windows-11-arm": {
+      "archive_url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-aarch64-pc-windows-msvc.zip",
+      "archive_sha256": "b413b92b735b50c198e8fe3b85af1aa50e29d5f72e229aab701d132286e14cef",
+      "executable_sha256": "40d161bc35657cc7432a2e3832290922939cd63fddd29f66db2261d291e42478"
+    }
+  },
+  "whisper": {
+    "ubuntu-24.04": {
+      "executable_sha256": "e4be4bfdd6d9a97dc059a515468e4e9190359960dedff2971643b9e454c08e1c"
+    },
+    "ubuntu-24.04-arm": {
+      "executable_sha256": "9f16af5e93ebbe3621be2e60338109d9f4d41f2a8fe7a39d30c390680da450b0"
+    },
+    "macos-15-intel": {
+      "executable_sha256": "d72f0bcdf516912f6e915005ec12cfc640edb7079ad9611e58d9526eac082a90"
+    },
+    "macos-15": {
+      "executable_sha256": "1af8eb29d5478143212de7d9aef1eee174c0f904ee5aece8b80c24b5db3974de"
+    },
+    "windows-2025": {
+      "executable_sha256": "0f2505d8bcd7a2c3a299f3061ce6bab1b180a6fc493ab17c1920e395672e4106"
+    },
+    "windows-11-arm": {
+      "executable_sha256": "5fa6aa37bf80e12d713d14228ff73a04b05ee730da228d691a513e63fdd926bf"
+    }
+  },
+  "yt_dlp_sha256": "b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14",
+  "model_sha256": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
+  "model_bytes": 77691713,
+  "operator_media": {
+    "canonical": {
+      "sha256": "f6aba46f43523ad83a604cec1a05821d4f4288fc55b18db9ad2dea7ccac50ff3",
+      "review_evidence": "docs/sprint-503/evidence/darwin-arm64-acquisition/summary.json"
+    },
+    "shortened": {
+      "sha256": "f6aba46f43523ad83a604cec1a05821d4f4288fc55b18db9ad2dea7ccac50ff3",
+      "review_evidence": "docs/sprint-503/evidence/darwin-arm64-acquisition/summary.json"
+    }
+  },
+  "operator_duration_ms": 499000,
+  "operator_reference": "I timed every run, counted every token, and added up every cent",
+  "operator_min_score": 0.75,
+  "controlled_reference": "a text-to-speech tool, to make Wikimedia's projects more accessible",
+  "controlled_min_score": 0.75,
+  "review_evidence": {
+    "controlled": "https://commons.wikimedia.org/w/index.php?title=File:Wikispeech-sample2.opus&oldid=1042404750",
+    "operator": {
+      "caption_sha256": "d9ee83c631c1e94319bb88085263ce7c6f3f8209583f9ceb85231e3a6e7e8f61",
+      "whisper_srt_sha256": "cafd81895866bbd0739ccc1447d93e734e5fc7379df8949dc79b255450305788",
+      "human_confirmation": null,
+      "source": "docs/sprint-503/evidence/darwin-arm64-operator-video.md; machine agreement only"
+    }
+  },
+  "controlled_webm_sha256": "ad06a00c9331152d8a1e16277b086f3639a30335a5ad9becfd921891c4165090",
+  "controlled_duration_ms": 10660,
+  "controlled_fixture": {
+    "run_id": 40197393964,
+    "artifact_name": "s503-controlled-speech",
+    "bytes": 48733,
+    "source_commit": "533f05cd250d027acc8c986a40909aa9c54eee29",
+    "license_evidence": "https://commons.wikimedia.org/w/index.php?title=File:Wikispeech-sample2.opus&oldid=1042404750",
+    "review_evidence": "docs/sprint-503/evidence/darwin-arm64-operator-cc0-speech.json"
+  },
+  "offline_canary": {
+    "macos-15": {
+      "method": "macos-sandbox-deny-network",
+      "enforcer_sha256": "2ff75194b3e5689debee061c69f27f873ca21ff8fc54b7d49cbf5f2fb673f6ea",
+      "probe_command": [
+        "python-socket-connect",
+        "1.1.1.1:443"
+      ],
+      "preflight_run_id": 40197732754
+    },
+    "macos-15-intel": {
+      "method": "macos-sandbox-deny-network",
+      "enforcer_sha256": "2ff75194b3e5689debee061c69f27f873ca21ff8fc54b7d49cbf5f2fb673f6ea",
+      "probe_command": [
+        "python-socket-connect",
+        "1.1.1.1:443"
+      ],
+      "preflight_run_id": 40197732754
+    },
+    "ubuntu-24.04": {
+      "method": "linux-unshare-net",
+      "enforcer_sha256": "a23c8863860669003dc4660039fe642f5795c8c2195898ebc5d01afa1ac3d11c",
+      "probe_command": [
+        "python-socket-connect",
+        "1.1.1.1:443"
+      ],
+      "preflight_run_id": 40197732754
+    },
+    "ubuntu-24.04-arm": {
+      "method": "linux-unshare-net",
+      "enforcer_sha256": "e0c145c3d4c06686544b1362ed64da819539166a5e1e6fd96093aea4d2539b6a",
+      "probe_command": [
+        "python-socket-connect",
+        "1.1.1.1:443"
+      ],
+      "preflight_run_id": 40197732754
+    },
+    "windows-11-arm": {
+      "method": "windows-firewall-program-block",
+      "enforcer_sha256": "532aceda5485f1c2728baa0549a498d594f7056022a89cd71eb97df68e33672c",
+      "probe_command": [
+        "python-socket-connect",
+        "1.1.1.1:443"
+      ],
+      "preflight_run_id": 40197732754
+    },
+    "windows-2025": {
+      "method": "windows-firewall-program-block",
+      "enforcer_sha256": "fa2c8bb1e35cdd62ad15cd06a1d8f2c5961e9725a9bfa1e7cfd2c322f49e9619",
+      "probe_command": [
+        "python-socket-connect",
+        "1.1.1.1:443"
+      ],
+      "preflight_run_id": 40197732754
+    }
+  },
+  "python": {
+    "macos-15": {
+      "source": "actions/setup-python@v5 runner tool cache",
+      "version": "3.12.10",
+      "sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b"
+    },
+    "macos-15-intel": {
+      "source": "actions/setup-python@v5 runner tool cache",
+      "version": "3.12.10",
+      "sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b"
+    },
+    "ubuntu-24.04": {
+      "source": "actions/setup-python@v5 runner tool cache",
+      "version": "3.12.15",
+      "sha256": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e"
+    },
+    "ubuntu-24.04-arm": {
+      "source": "actions/setup-python@v5 runner tool cache",
+      "version": "3.12.15",
+      "sha256": "5fa9ce7be3c3a2ef767c1999625a370c04ec3102d082472ff7f228225dd590d0"
+    },
+    "windows-11-arm": {
+      "source": "actions/setup-python@v5 runner tool cache",
+      "version": "3.12.10",
+      "sha256": "7f1ebbbb04164caf8f8073aafa7f82321fb44695e10fe6a9ebaf2138b63892c4"
+    },
+    "windows-2025": {
+      "source": "actions/setup-python@v5 runner tool cache",
+      "version": "3.12.10",
+      "sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a"
+    }
+  },
+  "windows_vc_runtime": {
+    "windows-11-arm": {
+      "MSVCP140.dll": {
+        "source": "external Windows System32",
+        "version": "14.51.36247.0",
+        "sha256": "167ceac85c2d726c4cd9e39b8881fafdc6de1520c0e67c4f6b271235f9d2a6c5"
+      },
+      "VCRUNTIME140.dll": {
+        "source": "external Windows System32",
+        "version": "14.51.36247.0",
+        "sha256": "3c56f4167e2b3d8e6338497731e6aae8cd7ec46bd6789f9423a8d9cf9a630310"
+      }
+    },
+    "windows-2025": {
+      "MSVCP140.dll": {
+        "source": "external Windows System32",
+        "version": "14.51.36247.0",
+        "sha256": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca"
+      },
+      "VCRUNTIME140.dll": {
+        "source": "external Windows System32",
+        "version": "14.51.36247.0",
+        "sha256": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7"
+      }
+    }
+  },
+  "blocking_review": "Provisional machine agreement permits native evidence collection. Final acceptance requires a human-reviewed operator excerpt and a new human_confirmed admission.",
+  "operator_reference_status": "provisional_machine_agreement"
+}
