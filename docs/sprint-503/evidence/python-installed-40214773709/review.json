@@ -1,0 +1,118 @@
+{
+  "schema": "s503-python-installed-windows-review-v1",
+  "source": {
+    "repository": "qiangli/bashy",
+    "run_id": 40214773709,
+    "candidate_commit": "b8d799be87cf098ee96fef2a238bf7dc0ce72bd5",
+    "workflow_conclusion": "failure",
+    "scope": "Independent review of the two Windows installed-Python research artifacts only; both macOS jobs failed before installation."
+  },
+  "windows": {
+    "amd64": {
+      "job_id": 121233415477,
+      "artifact_id": 12606948383,
+      "artifact_name": "s503-python-installed-windows-2025",
+      "uploaded_zip_sha256": "7816077cfa7cfbbc428c45fcf888b435506d40b4f612644fa7f27474f24b4c57",
+      "result_json_sha256": "ff0870bf5200e9ad55213445ce7546523ff698ea391f400a1d4c3eebbf573207",
+      "installer": {
+        "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe",
+        "sha256": "67b5635e80ea51072b87941312d00ec8927c4db9ba18938f7ad2d27b328b95fb",
+        "pre_and_post_install_hash_match": true,
+        "authenticode_status": "Valid",
+        "signer": "Python Software Foundation",
+        "signer_thumbprint": "DE01DAAE82D04F466A576E178F6B07A839238953"
+      },
+      "native_architecture": {
+        "os": "X64",
+        "process": "X64",
+        "interpreter_platform": "win-amd64",
+        "interpreter_machine": "AMD64",
+        "pointer_bits": 64
+      },
+      "installed_python_exe_sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a",
+      "loaded_vc": {
+        "MSVCP140.dll": {
+          "owner": "Windows System32",
+          "sha256": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca"
+        },
+        "VCRUNTIME140.dll": {
+          "owner": "Python install directory",
+          "sha256": "052ad6a20d375957e82aa6a3c441ea548d89be0981516ca7eb306e063d5027f4"
+        }
+      },
+      "system32_vcruntime140_sha256_not_loaded": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7",
+      "stdlib_roundtrip": {
+        "zlib": true,
+        "bz2": true,
+        "lzma": true
+      },
+      "installed_extension_sha256": {
+        "_bz2.pyd": "65f610646d10d5babea080e060d244b546ec52c54012e5e937dc72dcc2e2e7bc",
+        "_lzma.pyd": "e3deecc1f59a3b811c608861decd84de1e8df8bafd5e2b39188861318c5a38cf"
+      },
+      "python_registry_after_install": "HKCU PythonCore 3.12 points to the Bashy install directory",
+      "result": "INSTALLED_EVIDENCE_CAPTURED_UNADMITTED",
+      "product_admitted": false,
+      "operator_admitted": false
+    },
+    "arm64": {
+      "job_id": 121233415463,
+      "artifact_id": 12607261333,
+      "artifact_name": "s503-python-installed-windows-11-arm",
+      "uploaded_zip_sha256": "2d468ee77908c62645af0ea5b5d93a0b1ce2a34e599853e7ff99afe354f011cb",
+      "result_json_sha256": "6740624be541d84b6ed78b23ab5695a3f3d69bbacf6c8c1c5bc6c33273fc1200",
+      "installer": {
+        "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-arm64.exe",
+        "sha256": "377ac8fd478987940088e879441e702a71b53164d2a1e6f1d51ff77a7e470258",
+        "pre_and_post_install_hash_match": true,
+        "authenticode_status": "Valid",
+        "signer": "Python Software Foundation",
+        "signer_thumbprint": "DE01DAAE82D04F466A576E178F6B07A839238953"
+      },
+      "native_architecture": {
+        "os": "Arm64",
+        "process": "Arm64",
+        "interpreter_platform": "win-arm64",
+        "interpreter_machine": "ARM64",
+        "pointer_bits": 64
+      },
+      "installed_python_exe_sha256": "7f1ebbbb04164caf8f8073aafa7f82321fb44695e10fe6a9ebaf2138b63892c4",
+      "loaded_vc": {
+        "MSVCP140.dll": {
+          "owner": "Windows System32",
+          "sha256": "167ceac85c2d726c4cd9e39b8881fafdc6de1520c0e67c4f6b271235f9d2a6c5"
+        },
+        "VCRUNTIME140.dll": {
+          "owner": "Python install directory",
+          "sha256": "560cd0ab1ec81b8b2197b119e198453a9c23d2f9e846f15c79a26bf5d75b68c4"
+        }
+      },
+      "system32_vcruntime140_sha256_not_loaded": "3c56f4167e2b3d8e6338497731e6aae8cd7ec46bd6789f9423a8d9cf9a630310",
+      "stdlib_roundtrip": {
+        "zlib": true,
+        "bz2": true,
+        "lzma": true
+      },
+      "installed_extension_sha256": {
+        "_bz2.pyd": "7907408913e97380475eecaa5596169a615d24d0a985d122f75ff932a2c84b62",
+        "_lzma.pyd": "35491cc5437eddd47d9dba3875b5c1ebdc436c6f1593964542f1dbb50e6c2f1f"
+      },
+      "python_registry_after_install": "No PythonCore 3.12 registration returned; the installed interpreter ran by absolute path",
+      "result": "INSTALLED_EVIDENCE_CAPTURED_UNADMITTED",
+      "product_admitted": false,
+      "operator_admitted": false
+    }
+  },
+  "retained_notices_both_architectures": {
+    "LICENSE.txt_sha256": "e502c6b880ff58d614901495a9009c136539cd0b1e2a2abb8fc00b934c203419",
+    "copyright.html_sha256": "2a27338f315735a6ab5d5583de51d86b1d42bd2a33dbc0db5d4418282f64039f",
+    "license.html_sha256": "4633449165a1a6f16f5e2497458ecbf94f1f9a20f08606553ee5d3d948c1a12a",
+    "license_observation": "Installed LICENSE.txt includes PSF License Version 2, bzip2 and libffi terms, and Windows Microsoft Distributable Code conditions. The receipt's third_party_notice_candidates=0 counts separate files; it does not mean the LICENSE.txt lacks third-party terms."
+  },
+  "admission_gaps": [
+    "These are disposable hosted-runner installations, not an operator or bare-host product admission.",
+    "The run does not establish a product installer policy or full third-party and VC redistribution review.",
+    "The overall workflow failed because both macOS jobs failed before installation."
+  ],
+  "review_method": "Downloaded both Actions artifacts, rehashed result.json and all retained notice files, checked raw probe and signature receipt hashes against result.json, and confirmed pre/post signature receipts were byte-identical."
+}
